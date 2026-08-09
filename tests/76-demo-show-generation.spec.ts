@@ -179,7 +179,6 @@ test("DEMO-GENERATOR-001 @api › installs the exact Plan 76 lighting patch from
 		"Beam Show Circle",
 		"Beam Show PWM",
 		"LED Show Random",
-		"LED Show Random Strobe",
 		"Sunstrip Rain",
 		"Beam Auxiliary Show Circle",
 		"Beam Auxiliary Show PWM",

@@ -2,11 +2,15 @@ import { expect, type Locator, type Page } from "@playwright/test";
 import { HttpGroupManagementTransport } from "../../../apps/light-desktop/src/api/GroupManagementTransport";
 import { HttpGroupRecordingTransport } from "../../../apps/light-desktop/src/api/GroupRecordingTransport";
 import type { StoredGroup } from "../../../apps/light-desktop/src/api/types";
-import type { ApiDriver } from "../core/api";
+import type {
+	GroupRecordingOutcome,
+	GroupRecordOperation,
+} from "../../../apps/light-desktop/src/features/groupRecording/contracts";
 import type { BrowserCommands } from "../command-selection/commandScenario";
+import type { BrowserSelection } from "../command-selection/selectionScenario";
+import type { ApiDriver } from "../core/api";
 import type { DeskDriver } from "../core/desk";
 import type { SimulatedHardware } from "../hardware/hardwareScenario";
-import type { BrowserSelection } from "../command-selection/selectionScenario";
 
 export enum StoreMode {
 	Overwrite = "overwrite",
@@ -154,6 +158,72 @@ export class BrowserGroups {
 		return new GroupExpectation(this, validNumber(number));
 	}
 
+	snapshot(number: number) {
+		return this.object(validNumber(number));
+	}
+
+	recordViaApi(
+		number: number,
+		operation: GroupRecordOperation,
+		expectedObjectRevision: number,
+		requestId = crypto.randomUUID(),
+	): Promise<GroupRecordingOutcome> {
+		const session = this.session();
+		return new HttpGroupRecordingTransport({
+			baseUrl: this.api.baseUrl,
+			sessionToken: session.token,
+		}).record(this.showId(), {
+			requestId,
+			groupId: String(validNumber(number)),
+			operation,
+			expectedObjectRevision,
+		});
+	}
+
+	async expectApiAuthenticationRejected(
+		number: number,
+		expectedObjectRevision: number,
+	) {
+		const body = JSON.stringify({
+			request_id: crypto.randomUUID(),
+			group_id: String(validNumber(number)),
+			operation: "merge",
+			expected_object_revision: expectedObjectRevision,
+		});
+		for (const authorization of [null, "Bearer invalid"] as const) {
+			const headers: Record<string, string> = {
+				"content-type": "application/json",
+				"x-tosk-show": this.showId(),
+			};
+			if (authorization) headers.authorization = authorization;
+			const response = await fetch(`${this.api.baseUrl}/api/v2/groups/record`, {
+				method: "POST",
+				headers,
+				body,
+			});
+			expect(response.status).toBe(401);
+			expect(await response.json()).toMatchObject({
+				error: expect.any(String),
+			});
+		}
+	}
+
+	async expectStaleApiRecordRejected(
+		number: number,
+		operation: GroupRecordOperation,
+		expectedObjectRevision: number,
+		currentRevision: number,
+	) {
+		await expect(
+			this.recordViaApi(number, operation, expectedObjectRevision),
+		).rejects.toMatchObject({
+			kind: "conflict",
+			status: 409,
+			currentRevision,
+			retryable: false,
+		});
+	}
+
 	async storeVia(route: GroupRoute, number: number, mode: StoreMode) {
 		number = validNumber(number);
 		const before = await this.object(number);
@@ -164,20 +234,15 @@ export class BrowserGroups {
 			mode,
 		);
 		if (route === "api") {
-			const session = this.session();
-			await new HttpGroupRecordingTransport({
-				baseUrl: this.api.baseUrl,
-				sessionToken: session.token,
-			}).record(this.showId(), {
-				requestId: crypto.randomUUID(),
-				groupId: String(number),
-				operation: mode,
-				expectedObjectRevision: before?.revision ?? 0,
-			});
+			await this.recordViaApi(number, mode, before?.revision ?? 0);
 		} else if (route === "pool") {
 			if (mode === StoreMode.Subtract)
-				throw new Error("Group pool does not expose Subtract; use keypad, API, or OSC");
-			await this.desk.click(this.page.locator(".global-store-button:visible").first());
+				throw new Error(
+					"Group pool does not expose Subtract; use keypad, API, or OSC",
+				);
+			await this.desk.click(
+				this.page.locator(".global-store-button:visible").first(),
+			);
 			await this.desk.click(this.groupCard(number));
 			const choice = this.page.getByRole("button", {
 				name: mode === StoreMode.Merge ? "Merge" : "Overwrite",
@@ -218,7 +283,11 @@ export class BrowserGroups {
 		await this.selection.expectSelection({ kind: "group", number });
 	}
 
-	async editVia(route: GroupRoute, number: number, properties: GroupProperties) {
+	async editVia(
+		route: GroupRoute,
+		number: number,
+		properties: GroupProperties,
+	) {
 		number = validNumber(number);
 		const group = await this.requiredObject(number);
 		if (route === "api") {
@@ -246,7 +315,7 @@ export class BrowserGroups {
 					? `${group.body.fixtures.length} fixtures`
 					: "Group is empty",
 			);
-			await card.click({ button: "right" });
+			await longPress(card);
 			const dialog = this.page.getByRole("dialog", {
 				name: `Group ${number} settings`,
 				exact: true,
@@ -314,7 +383,11 @@ export class BrowserGroups {
 	}
 
 	async object(number: number) {
-		return this.api.showObject<StoredGroup>(this.showId(), "group", String(number));
+		return this.api.showObject<StoredGroup>(
+			this.showId(),
+			"group",
+			String(number),
+		);
 	}
 
 	async requiredObject(number: number) {
@@ -375,7 +448,8 @@ export class BrowserGroups {
 	}
 
 	private session() {
-		if (!this.api.session) throw new Error("Group helper requires an API session");
+		if (!this.api.session)
+			throw new Error("Group helper requires an API session");
 		return this.api.session;
 	}
 }
@@ -386,10 +460,23 @@ function storedFixturesAfter(
 	mode: StoreMode,
 ) {
 	if (mode === StoreMode.Overwrite) return [...new Set(selected)];
-	if (mode === StoreMode.Merge)
-		return [...new Set([...current, ...selected])];
+	if (mode === StoreMode.Merge) return [...new Set([...current, ...selected])];
 	const removed = new Set(selected);
 	return current.filter((fixture) => !removed.has(fixture));
+}
+
+async function longPress(target: Locator) {
+	await target.dispatchEvent("pointerdown", {
+		pointerId: 1,
+		pointerType: "mouse",
+		button: 0,
+	});
+	await target.page().waitForTimeout(700);
+	await target.dispatchEvent("pointerup", {
+		pointerId: 1,
+		pointerType: "mouse",
+		button: 0,
+	});
 }
 
 function validNumber(number: number) {

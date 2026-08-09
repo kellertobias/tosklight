@@ -227,6 +227,7 @@ fn move_in_black_obeys_same_priority_ltp_and_numeric_priority() {
     let programmers = ProgrammerRegistry::with_clock(shared);
     let (fixture, logical) = moving_fixture(1, true, 0);
     let mut snapshot = mib_snapshot(vec![fixture], &[logical]);
+    Arc::make_mut(&mut snapshot.playbacks)[0].auto_off = false;
 
     let mut newer_list = snapshot.cue_lists[0].clone();
     newer_list.id = light_core::CueListId::new();
@@ -279,8 +280,9 @@ fn move_in_black_obeys_same_priority_ltp_and_numeric_priority() {
     snapshot.revision += 1;
     engine.replace_snapshot(snapshot).unwrap();
     let values = engine.resolved_values();
+    let pan = normalized(&values, logical, "pan");
     assert!(
-        (normalized(&values, logical, "pan") - 0.8).abs() < 0.001,
-        "numeric priority overrides a newer lower-priority MIB source"
+        (pan - 0.8).abs() < 0.001,
+        "numeric priority overrides a newer lower-priority MIB source: {pan}"
     );
 }

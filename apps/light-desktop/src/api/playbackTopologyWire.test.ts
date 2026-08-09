@@ -262,6 +262,113 @@ describe("Playback topology v2 wire", () => {
 		});
 	});
 
+	it("normalizes an omitted Dynamic spatial mapping in a Virtual Playback outcome", () => {
+		const fallback = {
+			id: "dynamic-one",
+			pool_number: 1,
+			name: "Beam Show PWM",
+			revision: 4,
+			lanes: [],
+			random_groups: [],
+			target_binding: { type: "live_group", group_id: "group-beams" },
+			spatial_mapping: {
+				projection: { type: "inherit" },
+				shape: { type: "inherit" },
+			},
+		};
+		const assignment = {
+			dynamic_id: "dynamic-one",
+			last_known_pool_number: 1,
+			embedded_fallback: fallback,
+			revision: 2,
+			target_scope: null,
+			fader_mode: "size_and_master",
+			priority: 0,
+			activation_override: null,
+			resume_policy: "follow_dynamic",
+			local_speed_multiplier: { numerator: 1, denominator: 1 },
+			learned_duration_millis: null,
+			crossfade_non_intensity: false,
+			auto_off_at_zero: false,
+			auto_off_flash_release: false,
+			auto_off_full_control: true,
+		};
+		const requested = {
+			...playback(1901),
+			name: "Beam Show PWM",
+			target: { type: "dynamic", assignment },
+		} as unknown as PlaybackDefinition;
+		const action: PlaybackTopologyRequest = {
+			requestId: REQUEST_ID,
+			action: {
+				type: "configure_virtual",
+				page: 4,
+				playbackNumber: 1901,
+				expectedPageRevision: 7,
+				expectedPageObjectId: "legacy-page-four",
+				playback: requested,
+			},
+		};
+		const { dynamic_id, last_known_pool_number, embedded_fallback, ...wire } =
+			assignment;
+		const wirePlayback = {
+			...requested,
+			target: {
+				type: "dynamic",
+				assignment: {
+					...wire,
+					dynamic: {
+						dynamic_id,
+						last_known_pool_number,
+						embedded_fallback: {
+							definition: {
+								...embedded_fallback,
+								spatial_mapping: undefined,
+							},
+						},
+					},
+				},
+			},
+		};
+		const page = {
+			...pageObject({}),
+			body: {
+				...pageObject({}).body,
+				virtual_playbacks: { "1901": wirePlayback },
+			},
+		};
+
+		const outcome = decodePlaybackTopologyOutcome(
+			changedOutcome({
+				resolution: {
+					kind: "virtual",
+					page: 4,
+					playback_number: 1901,
+				},
+				objects: [page],
+			}),
+			action,
+			11,
+		);
+
+		expect(outcome).toMatchObject({
+			status: "changed",
+			objects: [
+				{
+					body: {
+						virtual_playbacks: {
+							"1901": {
+								target: {
+									assignment: { embedded_fallback: fallback },
+								},
+							},
+						},
+					},
+				},
+			],
+		});
+	});
+
 	it("encodes every independently assigned wider control", () => {
 		const expanded = request();
 		if (expanded.action.type !== "configure_slot")

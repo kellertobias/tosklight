@@ -103,16 +103,7 @@ impl FixtureMode {
                         .clamp(0.0, 1.0)
                         .powf(1.0 / emitter.response_curve)
                         .clamp(0.0, emitter.maximum_level);
-                    let max = channel.resolution.max_raw();
-                    let raw = (drive * max as f32).round() as u32;
-                    output.insert(
-                        channel.id,
-                        if channel.invert {
-                            max.saturating_sub(raw)
-                        } else {
-                            raw
-                        },
-                    );
+                    output.insert(channel.id, normalized_raw(channel, drive));
                 }
             }
             ColorSystem::Subtractive {
@@ -133,16 +124,7 @@ impl FixtureMode {
                         .ok_or_else(|| {
                             ProfileError::Invalid("CMY system references a missing channel".into())
                         })?;
-                    let max = channel.resolution.max_raw();
-                    let raw = (level.clamp(0.0, 1.0) * max as f32).round() as u32;
-                    output.insert(
-                        id,
-                        if channel.invert {
-                            max.saturating_sub(raw)
-                        } else {
-                            raw
-                        },
-                    );
+                    output.insert(id, normalized_raw(channel, level));
                 }
             }
             ColorSystem::HueSaturation {
@@ -166,16 +148,7 @@ impl FixtureMode {
                                 "hue/saturation system references a missing channel".into(),
                             )
                         })?;
-                    let max = channel.resolution.max_raw();
-                    let raw = (level.clamp(0.0, 1.0) * max as f32).round() as u32;
-                    output.insert(
-                        id,
-                        if channel.invert {
-                            max.saturating_sub(raw)
-                        } else {
-                            raw
-                        },
-                    );
+                    output.insert(id, normalized_raw(channel, level));
                 }
             }
             ColorSystem::DiscreteWheel { channel_id, slots } => {
@@ -196,6 +169,16 @@ impl FixtureMode {
             }
         }
         Ok(output)
+    }
+}
+
+fn normalized_raw(channel: &super::FixtureChannel, level: f32) -> u32 {
+    let max = channel.resolution.max_raw();
+    let raw = (level.clamp(0.0, 1.0) * max as f32).round() as u32;
+    if channel.invert {
+        max.saturating_sub(raw)
+    } else {
+        raw
     }
 }
 

@@ -19,6 +19,8 @@ fn cue_list(cues: Vec<Cue>) -> CueList {
         restart_mode: RestartMode::FirstCue,
         force_cue_timing: false,
         disable_cue_timing: false,
+        auto_off_at_zero: false,
+        auto_off_flash_release: false,
         chaser_xfade_millis: 0,
         chaser_xfade_percent: None,
         speed_multiplier: 1.0,
@@ -81,16 +83,24 @@ fn follow_trigger_emits_its_cause_after_completion_and_delay() {
 }
 
 #[test]
-fn wait_trigger_emits_its_distinct_cause() {
+fn time_trigger_counts_from_the_preceding_cues_go() {
+    let mut first = Cue::new(1.0);
+    first.fade_millis = 100;
     let mut next = Cue::new(2.0);
     next.trigger = CueTrigger::Wait { delay_millis: 25 };
-    let list = cue_list(vec![Cue::new(1.0), next]);
+    let list = cue_list(vec![first, next]);
     let id = list.id;
     let started = Utc::now();
     let mut playback = PlaybackEngine::default();
     playback.register(list).unwrap();
     playback.go_at(id, started).unwrap();
 
+    assert!(
+        playback
+            .tick(started + ChronoDuration::milliseconds(24), None)
+            .transitions
+            .is_empty()
+    );
     let event = only_transition(
         playback
             .tick(started + ChronoDuration::milliseconds(25), None)
@@ -98,6 +108,36 @@ fn wait_trigger_emits_its_distinct_cause() {
     );
     assert_eq!(event.cause, AutomaticPlaybackTransitionCause::Wait);
     assert_eq!(event.current.number, 2.0);
+}
+
+#[test]
+fn looping_time_trigger_starts_cue_one_from_cue_twos_go() {
+    let mut first = Cue::new(1.0);
+    first.trigger = CueTrigger::Wait { delay_millis: 25 };
+    let list = cue_list(vec![first, Cue::new(2.0)]);
+    let mut list = list;
+    list.wrap_mode = Some(WrapMode::Reset);
+    let id = list.id;
+    let started = Utc::now();
+    let mut playback = PlaybackEngine::default();
+    playback.register(list).unwrap();
+    playback.go_at(id, started).unwrap();
+    playback.go_at(id, started).unwrap();
+
+    assert!(
+        playback
+            .tick(started + ChronoDuration::milliseconds(24), None)
+            .transitions
+            .is_empty()
+    );
+    let event = only_transition(
+        playback
+            .tick(started + ChronoDuration::milliseconds(25), None)
+            .transitions,
+    );
+    assert_eq!(event.cause, AutomaticPlaybackTransitionCause::Wait);
+    assert_eq!(event.previous.number, 2.0);
+    assert_eq!(event.current.number, 1.0);
 }
 
 #[test]

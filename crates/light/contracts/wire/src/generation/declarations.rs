@@ -11,6 +11,7 @@ use crate::v2::desk_management::*;
 use crate::v2::discovery::*;
 use crate::v2::dynamics::*;
 use crate::v2::events::*;
+use crate::v2::extensions::*;
 use crate::v2::files::*;
 use crate::v2::fixture_library::*;
 use crate::v2::group_management::*;
@@ -50,6 +51,7 @@ pub(super) fn all(config: &Config) -> Vec<String> {
     declarations.extend(discovery(config));
     declarations.extend(dynamics(config));
     declarations.extend(event_subscription(config));
+    declarations.extend(extensions(config));
     declarations.extend(files(config));
     declarations.extend(programming(config));
     declarations.extend(programming_update(config));
@@ -74,6 +76,17 @@ pub(super) fn all(config: &Config) -> Vec<String> {
     declarations.extend(interaction(config));
     declarations.extend(live_actions(config));
     declarations
+}
+
+fn extensions(config: &Config) -> Vec<String> {
+    vec![
+        ExtensionDiagnostic::decl(config),
+        ExtensionPackageSnapshot::decl(config),
+        ExtensionInstanceSnapshot::decl(config),
+        ExtensionInstanceDiagnosticSnapshot::decl(config),
+        ExtensionRuntimeSnapshot::decl(config),
+        ExtensionRescanRequest::decl(config),
+    ]
 }
 
 fn attribute_configuration(config: &Config) -> Vec<String> {
@@ -533,7 +546,7 @@ fn event_subscription(config: &Config) -> Vec<String> {
 }
 
 fn programming(config: &Config) -> Vec<String> {
-    vec![
+    let mut declarations = vec![
         ProgrammingLifecycleSession::decl(config),
         ProgrammingLifecycleProgrammer::decl(config),
         ProgrammingLifecycleProjection::decl(config),
@@ -573,36 +586,9 @@ fn programming(config: &Config) -> Vec<String> {
         ProgrammingValuesActionOutcome::decl(config),
         ProgrammingValuesErrorKind::decl(config),
         ProgrammingValuesErrorResponse::decl(config),
-        ProgrammingPreloadColorXyz::decl(config),
-        ProgrammingPreloadAttributeValue::decl(config),
-        ProgrammingPreloadFixtureValue::decl(config),
-        ProgrammingPreloadGroupValue::decl(config),
-        ProgrammingPreloadValuesProjection::decl(config),
-        ProgrammingPreloadValuesChange::decl(config),
-        ProgrammingPreloadValuesSnapshot::decl(config),
-        ProgrammingPreloadValueTiming::decl(config),
-        ProgrammingPreloadValueMutation::decl(config),
-        ProgrammingPreloadValueOperation::decl(config),
-        ProgrammingPreloadValuesAction::decl(config),
-        ProgrammingPreloadValuesActionRequest::decl(config),
-        ProgrammingPreloadValuesActionState::decl(config),
-        ProgrammingPreloadValuesActionOutcome::decl(config),
-        ProgrammingPreloadValuesErrorKind::decl(config),
-        ProgrammingPreloadValuesErrorResponse::decl(config),
-        ProgrammingPreloadPlaybackAction::decl(config),
-        ProgrammingPreloadPlaybackSurface::decl(config),
-        ProgrammingPreloadPlaybackQueueItem::decl(config),
-        ProgrammingPreloadPlaybackQueueProjection::decl(config),
-        ProgrammingPreloadPlaybackQueueChange::decl(config),
-        ProgrammingPreloadPlaybackQueueSnapshot::decl(config),
-        ProgrammingPreloadLifecycleAction::decl(config),
-        ProgrammingPreloadLifecycleRequest::decl(config),
-        ProgrammingPreloadRuntimeOutcome::decl(config),
-        ProgrammingPreloadCommitOutcome::decl(config),
-        ProgrammingPreloadLifecycleState::decl(config),
-        ProgrammingPreloadLifecycleOutcome::decl(config),
-        ProgrammingPreloadLifecycleErrorKind::decl(config),
-        ProgrammingPreloadLifecycleErrorResponse::decl(config),
+    ];
+    declarations.extend(programming_preload(config));
+    declarations.extend([
         PresetRecordingFamily::decl(config),
         PresetRecordingAddress::decl(config),
         PresetRecordingMode::decl(config),
@@ -614,6 +600,7 @@ fn programming(config: &Config) -> Vec<String> {
         PresetRecallRequest::decl(config),
         RecalledPresetProjection::decl(config),
         PresetRecallDisposition::decl(config),
+        PresetRecallTarget::decl(config),
         PresetRecallActionState::decl(config),
         PresetRecallOutcome::decl(config),
         PresetRecallErrorKind::decl(config),
@@ -685,6 +672,42 @@ fn programming(config: &Config) -> Vec<String> {
         CueTransferOutcome::decl(config),
         CueTransferErrorKind::decl(config),
         CueTransferErrorResponse::decl(config),
+    ]);
+    declarations
+}
+
+fn programming_preload(config: &Config) -> Vec<String> {
+    vec![
+        ProgrammingPreloadColorXyz::decl(config),
+        ProgrammingPreloadAttributeValue::decl(config),
+        ProgrammingPreloadFixtureValue::decl(config),
+        ProgrammingPreloadGroupValue::decl(config),
+        ProgrammingPreloadValuesProjection::decl(config),
+        ProgrammingPreloadValuesChange::decl(config),
+        ProgrammingPreloadValuesSnapshot::decl(config),
+        ProgrammingPreloadValueTiming::decl(config),
+        ProgrammingPreloadValueMutation::decl(config),
+        ProgrammingPreloadValueOperation::decl(config),
+        ProgrammingPreloadValuesAction::decl(config),
+        ProgrammingPreloadValuesActionRequest::decl(config),
+        ProgrammingPreloadValuesActionState::decl(config),
+        ProgrammingPreloadValuesActionOutcome::decl(config),
+        ProgrammingPreloadValuesErrorKind::decl(config),
+        ProgrammingPreloadValuesErrorResponse::decl(config),
+        ProgrammingPreloadPlaybackAction::decl(config),
+        ProgrammingPreloadPlaybackSurface::decl(config),
+        ProgrammingPreloadPlaybackQueueItem::decl(config),
+        ProgrammingPreloadPlaybackQueueProjection::decl(config),
+        ProgrammingPreloadPlaybackQueueChange::decl(config),
+        ProgrammingPreloadPlaybackQueueSnapshot::decl(config),
+        ProgrammingPreloadLifecycleAction::decl(config),
+        ProgrammingPreloadLifecycleRequest::decl(config),
+        ProgrammingPreloadRuntimeOutcome::decl(config),
+        ProgrammingPreloadCommitOutcome::decl(config),
+        ProgrammingPreloadLifecycleState::decl(config),
+        ProgrammingPreloadLifecycleOutcome::decl(config),
+        ProgrammingPreloadLifecycleErrorKind::decl(config),
+        ProgrammingPreloadLifecycleErrorResponse::decl(config),
     ]
 }
 
@@ -700,6 +723,9 @@ fn playback_projection(config: &Config) -> Vec<String> {
         PlaybackRuntimeIdentity::decl(config),
         PlaybackShowScope::decl(config),
         PlaybackCueReference::decl(config),
+        CueTriggerTimingKind::decl(config),
+        CueTriggerTimingProjection::decl(config),
+        CueTimingRuntimeProjection::decl(config),
         ManualXFadeDirection::decl(config),
         SoundLossReason::decl(config),
         SpeedSource::decl(config),
@@ -729,6 +755,7 @@ fn event_payload(config: &Config) -> Vec<String> {
         OutputProtocol::decl(config),
         OutputDeliveryMode::decl(config),
         OutputRoute::decl(config),
+        OutputRouteTarget::decl(config),
         OutputRouteChange::decl(config),
         OutputRuntimeIdentity::decl(config),
         OutputRuntimeScope::decl(config),

@@ -1,4 +1,4 @@
-//! The status surface: the two lines along the bottom of the window, and the plan's labels.
+//! The status surface: the two lines along the bottom of the window, and Stage fixture labels.
 //!
 //! It says what the visualizer is connected to, what it is drawing, and what is wrong when
 //! something is — which is the whole of an operator's feedback when the picture looks right but
@@ -530,9 +530,13 @@ fn build_second_row(
     // own cursor so the two never collide.
 }
 
-/// Mark every fixture in a plan view with the colour it is emitting, and label it with its
-/// number and patch address.
-pub fn build_plot_labels(
+/// Draw screen-space fixture labels in every Stage view.
+///
+/// Labels are operator annotations, so they deliberately remain visible when rendered geometry
+/// crosses their world anchor. Collision dropping and a small coverage budget keep that useful
+/// visibility from turning a dense rig into a wall of text. Plan views additionally keep their
+/// existing live-colour dots.
+pub fn build_fixture_labels(
     overlay: &mut Overlay,
     scene: &Scene,
     values: &SceneValues,
@@ -551,9 +555,134 @@ pub fn build_plot_labels(
         1.0,
     ]);
 
+    if !show_labels && !view.mode.is_plot() {
+        return;
+    }
+
     // The colour a fixture is emitting, taken from its brightest head.
+    let lit = fixture_lighting(scene, values);
+
+    if view.mode.is_plot() {
+        build_plot_fixture_labels(
+            overlay,
+            scene,
+            camera,
+            width,
+            height,
+            scale,
+            line,
+            label_ink,
+            show_labels,
+            &lit,
+        );
+        return;
+    }
+
+    // A 3D picture with overlapping labels is unreadable, so a label is dropped when it would collide
+    // with one already placed. Near fixtures win deterministically, which prevents a label behind
+    // the rig from hiding the fixture in front without pretending the overlay is depth-tested.
+    // Zooming in makes room and the rest appear.
+    let mut placed: Vec<[f32; 4]> = Vec::with_capacity(scene.fixtures.len());
+    let mut used_area = 0.0_f32;
+    let mut order: Vec<usize> = (0..scene.fixtures.len()).collect();
+    order.sort_by(|left, right| {
+        let depth = |index: usize| {
+            -camera
+                .view
+                .transform_point3(scene.fixtures[index].position)
+                .z
+        };
+        depth(*left)
+            .total_cmp(&depth(*right))
+            .then_with(|| {
+                scene.fixtures[*left]
+                    .number
+                    .cmp(&scene.fixtures[*right].number)
+            })
+            .then_with(|| {
+                scene.fixtures[*left]
+                    .address
+                    .cmp(&scene.fixtures[*right].address)
+            })
+            .then_with(|| {
+                scene.fixtures[*left]
+                    .instance_id
+                    .cmp(&scene.fixtures[*right].instance_id)
+            })
+    });
+    for index in order {
+        let fixture = &scene.fixtures[index];
+        let Some((x, y)) = camera.project(fixture.position, width, height) else {
+            continue;
+        };
+        // Keep labels off the bottom status bar and the top-left mark.
+        if y > height - 40.0 * ui_scale(width) {
+            continue;
+        }
+
+        let number = fixture
+            .number
+            .map(|number| number.to_string())
+            .unwrap_or_else(|| fixture.name.chars().take(18).collect());
+        let address = match fixture.address {
+            Some((universe, address)) => format!("{universe}.{address}"),
+            None => "unpatched".to_owned(),
+        };
+        let text_width = Overlay::measure(&number, scale).max(Overlay::measure(&address, scale));
+        let offset = 9.0 * scale;
+        let right = x + offset;
+        let label_x = if right + text_width <= width - 4.0 {
+            right
+        } else {
+            x - offset - text_width
+        };
+        let label_y = y - line;
+        if label_x < 4.0 || label_y < 4.0 || label_y + line * 2.0 > height - 40.0 * ui_scale(width)
+        {
+            continue;
+        }
+        let rect = [label_x, label_y, text_width, line * 2.0];
+        let pad = 2.0 * scale;
+        let collision_rect = [
+            rect[0] - pad,
+            rect[1] - pad,
+            rect[2] + pad * 2.0,
+            rect[3] + pad * 2.0,
+        ];
+        if placed
+            .iter()
+            .any(|existing| overlaps(*existing, collision_rect))
+        {
+            continue;
+        }
+        let label_area = collision_rect[2] * collision_rect[3];
+        if used_area + label_area > width * height * 0.14 {
+            continue;
+        }
+        used_area += label_area;
+        placed.push(collision_rect);
+        let panel = match theme {
+            Theme::LightOnDark => srgb([0.015, 0.02, 0.03, 0.72]),
+            Theme::DarkOnLight => srgb([0.94, 0.95, 0.97, 0.78]),
+        };
+        overlay.rect(
+            collision_rect[0],
+            collision_rect[1],
+            collision_rect[2],
+            collision_rect[3],
+            panel,
+        );
+        if !number.is_empty() {
+            // The number is what an operator looks for first, so it carries the extra weight.
+            overlay.bold_text(rect[0], rect[1], scale, label_ink, &number);
+        }
+        overlay.text(rect[0], y, scale, label_ink, &address);
+    }
+}
+
+fn fixture_lighting(scene: &Scene, values: &SceneValues) -> Vec<Option<(f32, [f32; 3])>> {
     let fallback = viz_scene::EmitterValues::default();
-    let mut lit: Vec<Option<(f32, [f32; 3])>> = vec![None; scene.fixtures.len()];
+    let mut lit = vec![None; scene.fixtures.len()];
     for (index, emitter) in scene.emitters.iter().enumerate() {
         if emitter.kind == viz_scene::EmitterKind::Atmosphere {
             continue;
@@ -567,21 +696,32 @@ pub fn build_plot_labels(
             *slot = Some((intensity, value.colour));
         }
     }
+    lit
+}
 
-    // A plan with overlapping labels is unreadable, so a label is dropped when it would collide
-    // with one already placed. Zooming in makes room and the rest appear.
+#[allow(clippy::too_many_arguments)]
+fn build_plot_fixture_labels(
+    overlay: &mut Overlay,
+    scene: &Scene,
+    camera: &ResolvedCamera,
+    width: f32,
+    height: f32,
+    scale: f32,
+    line: f32,
+    label_ink: [f32; 4],
+    show_labels: bool,
+    lit: &[Option<(f32, [f32; 3])>],
+) {
+    // Preserve the established plan contract exactly: emission dots remain even with labels
+    // hidden, text follows scene order, and only direct label collisions drop text.
     let mut placed: Vec<[f32; 4]> = Vec::with_capacity(scene.fixtures.len());
     for (index, fixture) in scene.fixtures.iter().enumerate() {
         let Some((x, y)) = camera.project(fixture.position, width, height) else {
             continue;
         };
-        // Keep labels off the bottom status bar and the top-left mark.
         if y > height - 40.0 * ui_scale(width) {
             continue;
         }
-
-        // The colour dot is the point of a lit plan, so it is drawn whether or not the operator
-        // wants the numbers, and only for a fixture that is actually emitting.
         if let Some((intensity, colour)) = lit[index].filter(|(level, _)| *level > 0.004) {
             let level = 0.35 + 0.65 * intensity;
             overlay.disc(
@@ -591,7 +731,6 @@ pub fn build_plot_labels(
                 [colour[0] * level, colour[1] * level, colour[2] * level, 1.0],
             );
         }
-
         if !show_labels {
             continue;
         }
@@ -604,14 +743,12 @@ pub fn build_plot_labels(
             None => "unpatched".to_owned(),
         };
         let text_width = Overlay::measure(&number, scale).max(Overlay::measure(&address, scale));
-        let offset = 9.0 * scale;
-        let rect = [x + offset, y - line, text_width, line * 2.0];
+        let rect = [x + 9.0 * scale, y - line, text_width, line * 2.0];
         if placed.iter().any(|existing| overlaps(*existing, rect)) {
             continue;
         }
         placed.push(rect);
         if !number.is_empty() {
-            // The number is what an operator looks for first, so it carries the extra weight.
             overlay.bold_text(rect[0], rect[1], scale, label_ink, &number);
         }
         overlay.text(rect[0], y, scale, label_ink, &address);
@@ -623,4 +760,163 @@ fn overlaps(left: [f32; 4], right: [f32; 4]) -> bool {
         && right[0] < left[0] + left[2]
         && left[1] < right[1] + right[3]
         && right[1] < left[1] + left[3]
+}
+
+#[cfg(test)]
+mod fixture_label_tests {
+    use super::*;
+    use glam::Vec3;
+    use viz_scene::{
+        Camera, EmitterInstance, EmitterKind, EmitterLayoutCells, EmitterOptics, FixtureBody,
+        FixtureInstance, Scene, SceneValues, ViewConfiguration, ViewMode,
+    };
+
+    fn fixture(number: u32, position: Vec3) -> FixtureInstance {
+        FixtureInstance {
+            instance_id: viz_scene::uuid::Uuid::new_v4(),
+            fixture_id: viz_scene::uuid::Uuid::new_v4(),
+            name: format!("Fixture {number}"),
+            number: Some(number),
+            position,
+            rotation_degrees: Vec3::ZERO,
+            bracket_degrees: 0.0,
+            shaper_degrees: None,
+            installed_colour: [1.0; 3],
+            installed_shaper_angles_degrees: [0.0; 4],
+            body: FixtureBody::default(),
+            patched: true,
+            address: Some((1, number as u16)),
+            model: None,
+            fallback: None,
+        }
+    }
+
+    fn labels(scene: &Scene, show_labels: bool) -> Overlay {
+        let mut view = ViewConfiguration::default();
+        view.show_labels = show_labels;
+        let camera =
+            ResolvedCamera::resolve(&Camera::default(), view.mode, 1600.0 / 900.0, scene.bounds);
+        let mut overlay = Overlay::default();
+        build_fixture_labels(
+            &mut overlay,
+            scene,
+            &SceneValues::default(),
+            &camera,
+            &view,
+            1600.0,
+            900.0,
+        );
+        overlay
+    }
+
+    #[test]
+    fn full_3d_labels_are_screen_space_and_obey_the_authoritative_switch() {
+        let mut near = Scene::default();
+        near.fixtures.push(fixture(7, Vec3::new(0.0, 3.0, 0.0)));
+        near.recompute_bounds();
+        let visible = labels(&near, true);
+        assert!(!visible.quads.is_empty(), "Full 3D receives a fixture tag");
+        assert!(
+            labels(&near, false).quads.is_empty(),
+            "show_labels is authoritative"
+        );
+
+        let mut far = Scene::default();
+        far.fixtures.push(fixture(7, Vec3::new(0.0, 3.0, -6.0)));
+        far.recompute_bounds();
+        let far = labels(&far, true);
+        assert_eq!(
+            visible.quads[0].rect[3], far.quads[0].rect[3],
+            "tag height is constant in physical pixels instead of shrinking with distance"
+        );
+    }
+
+    #[test]
+    fn dense_overlap_keeps_only_the_nearest_label_deterministically() {
+        let camera = Camera::default();
+        let near_position = camera.target;
+        let far_position = camera.position + (camera.target - camera.position) * 1.5;
+        let near = fixture(1, near_position);
+        let mut single = Scene::default();
+        single.fixtures.push(near.clone());
+        single.recompute_bounds();
+        let expected = labels(&single, true);
+
+        let mut dense = Scene::default();
+        for number in 100..180 {
+            dense.fixtures.push(fixture(number, far_position));
+        }
+        // Deliberately append the near fixture after every far one: depth, not source order, wins.
+        dense.fixtures.push(near);
+        dense.recompute_bounds();
+        let actual = labels(&dense, true);
+
+        assert_eq!(
+            actual.quads.len(),
+            expected.quads.len(),
+            "colliding far labels are dropped instead of blanketing the rig"
+        );
+        assert_eq!(actual.quads[0].rect, expected.quads[0].rect);
+    }
+
+    #[test]
+    fn plan_colour_dot_and_plain_text_contract_are_unchanged() {
+        let mut scene = Scene::default();
+        scene.fixtures.push(fixture(7, Vec3::new(0.0, 3.0, 0.0)));
+        scene.emitters.push(EmitterInstance {
+            fixture_index: 0,
+            head_index: 0,
+            label: "Main".into(),
+            local_origin: Vec3::ZERO,
+            tilt_pivot: Vec3::ZERO,
+            local_orientation_degrees: Vec3::ZERO,
+            pan: None,
+            tilt: None,
+            beam_angle_degrees: 10.0,
+            field_angle_degrees: 20.0,
+            optics: EmitterOptics::default(),
+            kind: EmitterKind::Beam,
+            cells: EmitterLayoutCells::single(),
+            laser: None,
+            live_shaper_angle_roles: [false; 4],
+            shaper_roles: [false; 4],
+            live_shaper_rotation_role: false,
+        });
+        scene.recompute_bounds();
+        let mut values = SceneValues::default();
+        values.resize(1);
+        values.emitters[0].intensity = 1.0;
+        values.emitters[0].held_intensity = 1.0;
+        let render = |show_labels| {
+            let mut view = ViewConfiguration::default();
+            view.mode = ViewMode::TopDown;
+            view.show_labels = show_labels;
+            let camera = ResolvedCamera::resolve(
+                &Camera::framed(view.mode, scene.bounds),
+                view.mode,
+                1600.0 / 900.0,
+                scene.bounds,
+            );
+            let mut overlay = Overlay::default();
+            build_fixture_labels(&mut overlay, &scene, &values, &camera, &view, 1600.0, 900.0);
+            overlay
+        };
+
+        let dots_only = render(false);
+        let labelled = render(true);
+        assert_eq!(
+            dots_only.quads.len(),
+            7,
+            "the established seven-span colour dot remains"
+        );
+        assert_eq!(
+            labelled.quads.len(),
+            12,
+            "dot plus plain number/address glyphs, no panel"
+        );
+        for (labelled_dot, original_dot) in labelled.quads[..7].iter().zip(&dots_only.quads) {
+            assert_eq!(labelled_dot.rect, original_dot.rect);
+            assert_eq!(labelled_dot.colour, original_dot.colour);
+        }
+    }
 }

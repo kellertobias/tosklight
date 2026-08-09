@@ -84,14 +84,7 @@ impl FixtureMode {
     }
 
     fn validate_for_patch_policy(&self, patch_policy: PatchPolicy) -> Result<(), ProfileError> {
-        if self.name.trim().is_empty() {
-            return Err(ProfileError::Invalid("mode name is required".into()));
-        }
-        if self.splits.is_empty() || self.heads.is_empty() {
-            return Err(ProfileError::Invalid(
-                "a mode needs a split and a head".into(),
-            ));
-        }
+        validate_mode_shape(self)?;
         let split_map = self
             .splits
             .iter()
@@ -386,6 +379,18 @@ impl FixtureMode {
         }
         Ok(())
     }
+}
+
+fn validate_mode_shape(mode: &FixtureMode) -> Result<(), ProfileError> {
+    if mode.name.trim().is_empty() {
+        return Err(ProfileError::Invalid("mode name is required".into()));
+    }
+    if mode.splits.is_empty() || mode.heads.is_empty() {
+        return Err(ProfileError::Invalid(
+            "a mode needs a split and a head".into(),
+        ));
+    }
+    Ok(())
 }
 
 impl FixtureChannel {

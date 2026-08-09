@@ -242,6 +242,7 @@ async fn active_object_undo_is_lossless_atomic_contextual_and_failure_safe() {
                 "id": "9",
                 "name": "Current",
                 "programming": {},
+                "source": {"type": "explicit", "fixture_ids": []},
                 "grid": {
                     "method": "stage2d",
                     "axis_origin": {"x": 0.0, "y": 0.0, "z": 0.0}

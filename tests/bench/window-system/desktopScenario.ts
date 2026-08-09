@@ -80,6 +80,35 @@ export class DesktopConfiguration {
 	async apply(): Promise<void> {
 		await this.desktop.apply(this.name, this.panes);
 	}
+
+	async expectStagePane(
+		handle: PaneHandle<PaneType.Stage>,
+		expected: {
+			lane: "live" | "preload";
+			view: StageView;
+			followPreload: boolean;
+			nativeRendererAvailable: boolean;
+		},
+	): Promise<void> {
+		const root = handle.root();
+		await expect(root.locator(".stage-window")).toHaveAttribute(
+			"data-visualization-lane",
+			expected.lane,
+		);
+		await expect(root.locator("[data-stage-view]")).toHaveAttribute(
+			"data-stage-view",
+			expected.view,
+		);
+		const follow = root.getByRole("button", { name: "Follow Preload" });
+		if (expected.followPreload) await expect(follow).toHaveClass(/\bactive\b/);
+		else await expect(follow).not.toHaveClass(/\bactive\b/);
+		if (!expected.nativeRendererAvailable) {
+			await expect(root.getByRole("status")).toContainText(
+				"No Stage on this screen",
+			);
+			await expect(root.locator("canvas")).toHaveCount(0);
+		}
+	}
 }
 
 export class PaneHandle<T extends PaneType> {
@@ -237,7 +266,10 @@ export class BrowserDesktops {
 		await this.openSettings(this.desktopButton(name));
 		const dialog = this.page.getByRole("dialog", { name: "Desktop settings" });
 		await dialog.getByRole("button", { name: "Delete desktop" }).click();
-		await dialog.getByRole("button", { name: "Confirm delete" }).click();
+		await this.page
+			.getByRole("alertdialog", { name: "Delete desktop" })
+			.getByRole("button", { name: "Confirm delete" })
+			.click();
 		await expect(this.desktopButton(name)).toHaveCount(0);
 	}
 
@@ -354,12 +386,17 @@ export class BrowserDesktops {
 		handle: PaneHandle<T>,
 	): Promise<void> {
 		const pane = this.locatorFor(handle);
-		const settings = pane.getByRole("button", { name: "Settings", exact: true });
+		const settings = pane.getByRole("button", {
+			name: "Settings",
+			exact: true,
+		});
 		await expect(settings).toBeVisible();
 		const paneBox = await pane.boundingBox();
 		const settingsBox = await settings.boundingBox();
 		if (!paneBox || !settingsBox)
-			throw new Error(`Pane "${handle.slug}" has no measurable Settings button`);
+			throw new Error(
+				`Pane "${handle.slug}" has no measurable Settings button`,
+			);
 		expect(
 			Math.round(settingsBox.x - paneBox.x),
 			`Settings of the "${handle.slug}" pane is clipped by its left edge`,
@@ -560,18 +597,22 @@ async function applyPaneConfiguration<T extends PaneType>(
 	if (type === "stage") {
 		await dialog.getByRole("tab", { name: "Stage" }).click();
 		if (options.view) {
+			const name =
+				options.view === StageView.Visualization
+					? "3D Viz"
+					: options.view === StageView.ThreeDimensional
+						? "3D"
+						: "2D";
 			const view = dialog.getByRole("radio", {
-				name: options.view === StageView.ThreeDimensional ? "3D" : "2D",
+				name,
+				exact: true,
 			});
 			await view.click();
 			await expect(view).toBeChecked();
 		}
 		await setSwitch(dialog, "Preload source", options.followPreload);
 		await setSwitch(dialog, "Beam direction guidelines", options.beamGuides);
-		if (
-			options.renderQuality &&
-			options.view !== StageView.TwoDimensional
-		) {
+		if (options.renderQuality && options.view !== StageView.TwoDimensional) {
 			const quality = dialog.getByRole("radio", {
 				name: String(options.renderQuality as StageRenderQuality),
 				exact: true,

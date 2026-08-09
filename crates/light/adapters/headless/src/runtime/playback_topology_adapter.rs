@@ -15,6 +15,7 @@ pub(super) struct ServerPlaybackTopologyPorts {
     active: ServerActiveShowPorts,
     session: Session,
     show_id: ShowId,
+    active_show_held: bool,
 }
 
 impl ServerPlaybackTopologyPorts {
@@ -24,6 +25,17 @@ impl ServerPlaybackTopologyPorts {
             state,
             session,
             show_id,
+            active_show_held: false,
+        }
+    }
+
+    pub(super) fn within_active_show(state: AppState, session: Session, show_id: ShowId) -> Self {
+        Self {
+            active: ServerActiveShowPorts::show_objects(state.clone()),
+            state,
+            session,
+            show_id,
+            active_show_held: true,
         }
     }
 
@@ -87,7 +99,8 @@ impl ActiveShowPorts for ServerPlaybackTopologyPorts {
         _show_id: ShowId,
         operation: impl FnOnce() -> Result<T, ActionError>,
     ) -> Result<T, ActionError> {
-        let _activation = self.state.active_show.acquire_blocking();
+        let _activation =
+            (!self.active_show_held).then(|| self.state.active_show.acquire_blocking());
         operation()
     }
 

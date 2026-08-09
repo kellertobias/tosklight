@@ -128,6 +128,9 @@ async fn command_keyboard_and_websocket_cue_recording_share_the_typed_action() {
 #[tokio::test]
 async fn real_osc_record_touch_creates_exact_page_target_and_suppresses_control() {
     let scenario = CommandHttpScenario::new().await;
+    scenario.state.installation.update_configuration(|configuration| {
+        configuration.start_after_first_recording = true;
+    });
     let _show_id = scenario.create_and_open_show("OSC Cue record").await;
     set_cue_record_value(&scenario);
     let source: SocketAddr = "127.0.0.1:9027".parse().unwrap();
@@ -196,6 +199,289 @@ async fn real_osc_record_touch_creates_exact_page_target_and_suppresses_control(
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
 
+#[tokio::test]
+async fn real_osc_set_touch_selects_current_or_explicit_page_target_and_suppresses_control() {
+    let scenario = CommandHttpScenario::new().await;
+    let show_id = scenario.create_and_open_show("OSC SET Playback target").await;
+    set_cue_record_value(&scenario);
+    assert_eq!(
+        scenario
+            .execute("set-target-record", Some("RECORD SET 41 CUE 1"))
+            .await
+            .status(),
+        StatusCode::OK
+    );
+    let mapped = dispatch_live_action(
+        &scenario.state,
+        &scenario.session,
+        live_action_frame(
+            &scenario.session,
+            "set-target-map",
+            light_wire::v2::live_action::LiveAction::CommandLineExecute(
+                light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
+                    value: "SET 41 AT 4 . 7".into(),
+                },
+            ),
+        ),
+    );
+    assert!(mapped.ok, "{:?}", mapped.error);
+    scenario
+        .state
+        .installation
+        .set_desk_page(
+            scenario.session.desk.id,
+            light_core::ShowId(Uuid::parse_str(&show_id).unwrap()),
+            4,
+        )
+        .unwrap();
+    let source: SocketAddr = "127.0.0.1:9028".parse().unwrap();
+    scenario.state.integrations.register_osc_subscriber(
+        "set-playback-touch".into(),
+        OscSubscriber {
+            desk_alias: scenario.session.desk.osc_alias.clone(),
+            target: source,
+            command_source: source,
+            session_id: scenario.session.id,
+            last_seen: Instant::now(),
+            shifted: false,
+            shift_held: false,
+            update_record_started: None,
+            update_first_release: None,
+            last_highlight_action: None,
+        },
+    );
+
+    scenario
+        .state
+        .programming
+        .set_command_line(scenario.session.id, "SET".into());
+    let current_address = format!(
+        "/light/{}/page-playback/7/button/1",
+        scenario.session.desk.osc_alias
+    );
+    assert!(handle_playback_osc(
+        &scenario.state,
+        &current_address,
+        &[OscArgument::Bool(true)],
+        Some("127.0.0.1:9028"),
+    ));
+    let current = scenario
+        .state
+        .events
+        .audit_events()
+        .into_iter()
+        .rev()
+        .find(|event| event.kind == "playback_target_selected")
+        .unwrap_or_else(|| {
+            panic!(
+                "missing SET target event; audit kinds: {:?}",
+                scenario
+                    .state
+                    .events
+                    .audit_events()
+                    .iter()
+                    .map(|event| (&event.kind, &event.payload))
+                    .collect::<Vec<_>>()
+            )
+        });
+    assert_eq!(
+        current.payload["target"],
+        serde_json::json!({"addressing":"current_page","slot":7})
+    );
+    assert_eq!(
+        scenario
+            .state
+            .programming
+            .get(scenario.session.id)
+            .unwrap()
+            .command_line,
+        ""
+    );
+    assert!(!has_runtime_for_playback(&scenario, 41));
+    let after_current_press = scenario.state.events.latest_sequence();
+    handle_playback_osc(
+        &scenario.state,
+        &current_address,
+        &[OscArgument::Bool(false)],
+        Some("127.0.0.1:9028"),
+    );
+    assert_eq!(scenario.state.events.latest_sequence(), after_current_press);
+
+    scenario
+        .state
+        .programming
+        .set_command_line(scenario.session.id, "SET".into());
+    let explicit_address = "/light/playback/4/7/fader";
+    handle_playback_osc(
+        &scenario.state,
+        explicit_address,
+        &[OscArgument::Float(0.25)],
+        Some("127.0.0.1:9028"),
+    );
+    let explicit = scenario
+        .state
+        .events
+        .audit_events()
+        .into_iter()
+        .rev()
+        .find(|event| event.kind == "playback_target_selected")
+        .unwrap();
+    assert_eq!(
+        explicit.payload["target"],
+        serde_json::json!({"addressing":"explicit_page","page":4,"slot":7})
+    );
+    assert!(!has_runtime_for_playback(&scenario, 41));
+    let after_explicit_sample = scenario.state.events.latest_sequence();
+    handle_playback_osc(
+        &scenario.state,
+        explicit_address,
+        &[OscArgument::Float(0.75)],
+        Some("127.0.0.1:9028"),
+    );
+    assert_eq!(scenario.state.events.latest_sequence(), after_explicit_sample);
+    assert!(!has_runtime_for_playback(&scenario, 41));
+
+    assert_eq!(
+        scenario
+            .execute("set-group-source", Some("RECORD GROUP 4"))
+            .await
+            .status(),
+        StatusCode::OK
+    );
+    scenario
+        .state
+        .programming
+        .set_command_line(scenario.session.id, "SET GROUP 4".into());
+    handle_playback_osc(
+        &scenario.state,
+        "/light/playback/4/7/label",
+        &[OscArgument::Bool(true)],
+        Some("127.0.0.1:9028"),
+    );
+    let snapshot = scenario.state.output.snapshot();
+    let group_master_number = snapshot
+        .playback_pages
+        .iter()
+        .find(|page| page.number == 4)
+        .unwrap()
+        .slots[&7];
+    assert!(snapshot.playbacks.iter().any(|playback| {
+        playback.number == group_master_number
+            && matches!(
+                &playback.target,
+                light_playback::PlaybackTarget::Group { group_id, .. } if group_id.as_str() == "4"
+            )
+    }));
+
+    assert_eq!(
+        scenario
+            .execute("set-cuelist-source", Some("RECORD SET 42 CUE 1"))
+            .await
+            .status(),
+        StatusCode::OK
+    );
+    scenario
+        .state
+        .programming
+        .set_command_line(scenario.session.id, "SET 42".into());
+    handle_playback_osc(
+        &scenario.state,
+        "/light/playback/4/8/label",
+        &[OscArgument::Bool(true)],
+        Some("127.0.0.1:9028"),
+    );
+    assert_eq!(
+        scenario
+            .state
+            .output
+            .snapshot()
+            .playback_pages
+            .iter()
+            .find(|page| page.number == 4)
+            .unwrap()
+            .slots[&8],
+        42
+    );
+
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}
+
+#[tokio::test]
+async fn osc_copy_move_and_delete_do_not_guess_a_whole_playback_mutation() {
+    let scenario = CommandHttpScenario::new().await;
+    let _show_id = scenario
+        .create_and_open_show("OSC unsupported Playback targets")
+        .await;
+    set_cue_record_value(&scenario);
+    assert_eq!(
+        scenario
+            .execute("unsupported-target-record", Some("RECORD SET 42 CUE 1"))
+            .await
+            .status(),
+        StatusCode::OK
+    );
+    let mapped = dispatch_live_action(
+        &scenario.state,
+        &scenario.session,
+        live_action_frame(
+            &scenario.session,
+            "unsupported-target-map",
+            light_wire::v2::live_action::LiveAction::CommandLineExecute(
+                light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
+                    value: "SET 42 AT 4 . 8".into(),
+                },
+            ),
+        ),
+    );
+    assert!(mapped.ok, "{:?}", mapped.error);
+    let source: SocketAddr = "127.0.0.1:9029".parse().unwrap();
+    scenario.state.integrations.register_osc_subscriber(
+        "unsupported-playback-touch".into(),
+        OscSubscriber {
+            desk_alias: scenario.session.desk.osc_alias.clone(),
+            target: source,
+            command_source: source,
+            session_id: scenario.session.id,
+            last_seen: Instant::now(),
+            shifted: false,
+            shift_held: false,
+            update_record_started: None,
+            update_first_release: None,
+            last_highlight_action: None,
+        },
+    );
+    for (index, operation) in ["COPY", "MOVE", "DELETE"].into_iter().enumerate() {
+        scenario
+            .state
+            .programming
+            .set_command_line(scenario.session.id, operation.into());
+        let value = 0.2 + index as f32 * 0.2;
+        handle_playback_osc(
+            &scenario.state,
+            "/light/playback/4/8/fader",
+            &[OscArgument::Float(value)],
+            Some("127.0.0.1:9029"),
+        );
+        assert_eq!(runtime_for_page_slot(&scenario, 8).master, value);
+        assert_eq!(
+            scenario
+                .state
+                .programming
+                .get(scenario.session.id)
+                .unwrap()
+                .command_line,
+            operation
+        );
+    }
+    assert!(!scenario
+        .state
+        .events
+        .audit_events()
+        .iter()
+        .any(|event| event.kind == "playback_target_selected"));
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}
+
 fn assert_osc_surface_records(
     scenario: &CommandHttpScenario,
     slot: u8,
@@ -203,6 +489,7 @@ fn assert_osc_surface_records(
     press: OscArgument,
     release: Option<OscArgument>,
 ) {
+    set_cue_record_value(scenario);
     scenario
         .state
         .programming
@@ -269,6 +556,15 @@ fn runtime_for_page_slot(
         .find(|runtime| runtime.playback.playback_number == Some(playback))
         .unwrap()
         .playback
+}
+
+fn has_runtime_for_playback(scenario: &CommandHttpScenario, playback: u16) -> bool {
+    scenario
+        .state
+        .output
+        .playback_runtime_status()
+        .iter()
+        .any(|runtime| runtime.playback.playback_number == Some(playback))
 }
 
 fn stored_cue_list(

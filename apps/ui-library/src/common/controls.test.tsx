@@ -94,6 +94,40 @@ describe("shared controls", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Decrease value" }));
 		expect(change).toHaveBeenCalledWith("2");
 	});
+	it("snaps step buttons to adjacent increments and wraps at bounds", () => {
+		const commit = vi.fn();
+		const { rerender } = render(
+			<NumberField
+				label="Angle"
+				defaultValue={13}
+				step={45}
+				min={-180}
+				max={180}
+				stepBehavior="snap"
+				wrapStepAtBounds
+				onStepCommit={commit}
+			/>,
+		);
+		fireEvent.click(screen.getByRole("button", { name: "Increase value" }));
+		expect(commit).toHaveBeenLastCalledWith("45");
+		fireEvent.click(screen.getByRole("button", { name: "Decrease value" }));
+		expect(commit).toHaveBeenLastCalledWith("0");
+
+		rerender(
+			<NumberField
+				label="Angle"
+				value={-180}
+				step={45}
+				min={-180}
+				max={180}
+				stepBehavior="snap"
+				wrapStepAtBounds
+				onStepCommit={commit}
+			/>,
+		);
+		fireEvent.click(screen.getByRole("button", { name: "Decrease value" }));
+		expect(commit).toHaveBeenLastCalledWith("180");
+	});
 	it("opens a number-pad modal and commits its draft", () => {
 		const change = vi.fn(),
 			keyboardCommit = vi.fn();
@@ -317,9 +351,7 @@ describe("shared controls", () => {
 		);
 		fireEvent.click(screen.getByRole("checkbox", { name: "Dock" }));
 		fireEvent.click(screen.getByRole("switch", { name: "Fullscreen" }));
-		fireEvent.click(
-			screen.getByRole("radio", { name: "Replace by position" }),
-		);
+		fireEvent.click(screen.getByRole("radio", { name: "Replace by position" }));
 		expect(change).toHaveBeenCalledTimes(3);
 		expect(
 			container.querySelectorAll(".ui-form-field.labels-side"),

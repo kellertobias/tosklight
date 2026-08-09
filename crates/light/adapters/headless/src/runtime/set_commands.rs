@@ -142,7 +142,8 @@ fn assign_group_page_slot(
             },
         },
     };
-    let ports = ServerPlaybackTopologyPorts::new(state.clone(), session.clone(), entry.id);
+    let ports =
+        ServerPlaybackTopologyPorts::within_active_show(state.clone(), session.clone(), entry.id);
     state
         .playback
         .handle_topology(action, &ports)

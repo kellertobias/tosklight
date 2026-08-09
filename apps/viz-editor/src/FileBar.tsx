@@ -30,74 +30,12 @@ export function FileBar({
 		path: string;
 		preview: MvrPreview;
 	} | null>(null);
-
-	async function createShow() {
-		const path = await save({ filters: SHOW_FILTER });
-		if (!path) return null;
-		const name = fileStem(path);
-		onDocument(await documentSession.create(path, name));
-		onReloadProfiles();
-		return `Created ${name}`;
-	}
-
-	async function openShow() {
-		const path = await open({ filters: SHOW_FILTER, multiple: false });
-		if (typeof path !== "string") return null;
-		const summary = await documentSession.open(path);
-		onDocument(summary);
-		onReloadProfiles();
-		return `Opened ${summary.name}`;
-	}
-
-	/**
-	 * The packaged demo, as a document of the operator's own.
-	 *
-	 * No file dialog: the whole point is that a rig appears without anyone having to know where a
-	 * show file lives. The copy is named after the demo it came from, and the status line says
-	 * where it was written so the operator can find it again.
-	 */
-	async function openDemoShow() {
-		const summary = await documentSession.openDemoShow();
-		onDocument(summary);
-		onReloadProfiles();
-		return `Opened ${summary.name}, a copy of the packaged Demo Show, at ${summary.path}`;
-	}
-
-	async function saveShowAs() {
-		const path = await save({ filters: SHOW_FILTER });
-		if (!path) return null;
-		await documentSession.saveAs(path);
-		return `Saved to ${path}`;
-	}
+	const actions = useFileActions(onDocument, onReloadProfiles, setPendingMvr);
 
 	function finishMvr(summary: string, imported: boolean) {
 		setPendingMvr(null);
 		setStatus(summary);
 		if (imported) onReloadDocument();
-	}
-
-	/** Nothing is written until the operator has seen what the archive holds and decided about
-	 * the fixtures that need a decision. */
-	async function readMvr() {
-		const path = await open({ filters: MVR_FILTER, multiple: false });
-		if (typeof path !== "string") return null;
-		const preview = await documentSession.previewMvr(path);
-		setPendingMvr({ path, preview });
-		return `Read ${preview.fixtures.length} fixtures from the archive`;
-	}
-
-	async function exportMvr() {
-		const path = await save({ filters: MVR_FILTER });
-		if (!path) return null;
-		const fixtures = await documentSession.exportMvr(path);
-		return `Exported ${fixtures} fixtures`;
-	}
-
-	async function loadFrom(desk: DeskPeer) {
-		const summary = await documentSession.loadFromDesk(desk.instance);
-		onDocument(summary);
-		onReloadProfiles();
-		return `Loaded ${summary.name} from ${desk.name}`;
 	}
 
 	/** Every file action reports what it did; none of them happen silently. */
@@ -120,16 +58,22 @@ export function FileBar({
 			<h1>{document ? document.name : "ToskLight Viz"}</h1>
 			<p className="viz-editor-path">{document?.path ?? "No show open"}</p>
 			<div className="viz-editor-file-actions">
-				<Button disabled={busy} onClick={() => void run("Creating", createShow)}>
+				<Button
+					disabled={busy}
+					onClick={() => void run("Creating", actions.createShow)}
+				>
 					New
 				</Button>
-				<Button disabled={busy} onClick={() => void run("Opening", openShow)}>
+				<Button
+					disabled={busy}
+					onClick={() => void run("Opening", actions.openShow)}
+				>
 					Open
 				</Button>
 				<Button
 					disabled={busy}
 					title="Open a fresh copy of the demo rig that ships with ToskLight"
-					onClick={() => void run("Opening", openDemoShow)}
+					onClick={() => void run("Opening", actions.openDemoShow)}
 				>
 					Open Demo Show
 				</Button>
@@ -138,23 +82,26 @@ export function FileBar({
 						key={desk.instance}
 						disabled={busy}
 						title={`${desk.name} at ${desk.address}`}
-						onClick={() => void run("Loading", () => loadFrom(desk))}
+						onClick={() => void run("Loading", () => actions.loadFrom(desk))}
 					>
 						Load from Desk · {desk.name}: {desk.show}
 					</Button>
 				))}
 				<Button
 					disabled={busy || !document}
-					onClick={() => void run("Saving", saveShowAs)}
+					onClick={() => void run("Saving", actions.saveShowAs)}
 				>
 					Save As
 				</Button>
-				<Button disabled={busy || !document} onClick={() => void run("Reading", readMvr)}>
+				<Button
+					disabled={busy || !document}
+					onClick={() => void run("Reading", actions.readMvr)}
+				>
 					Import MVR
 				</Button>
 				<Button
 					disabled={busy || !document}
-					onClick={() => void run("Exporting", exportMvr)}
+					onClick={() => void run("Exporting", actions.exportMvr)}
 				>
 					Export MVR
 				</Button>
@@ -168,12 +115,68 @@ export function FileBar({
 					path={pendingMvr.path}
 					preview={pendingMvr.preview}
 					onImported={(summary) => finishMvr(summary, true)}
-					onCancel={() => finishMvr("Import cancelled; nothing was changed", false)}
+					onCancel={() =>
+						finishMvr("Import cancelled; nothing was changed", false)
+					}
 					onError={onError}
 				/>
 			)}
 		</header>
 	);
+}
+
+function useFileActions(
+	onDocument: (summary: DocumentSummary) => void,
+	onReloadProfiles: () => void,
+	setPendingMvr: (value: { path: string; preview: MvrPreview } | null) => void,
+) {
+	const accept = (summary: DocumentSummary) => {
+		onDocument(summary);
+		onReloadProfiles();
+		return summary;
+	};
+	return {
+		createShow: async () => {
+			const path = await save({ filters: SHOW_FILTER });
+			if (!path) return null;
+			const name = fileStem(path);
+			accept(await documentSession.create(path, name));
+			return `Created ${name}`;
+		},
+		openShow: async () => {
+			const path = await open({ filters: SHOW_FILTER, multiple: false });
+			if (typeof path !== "string") return null;
+			const summary = accept(await documentSession.open(path));
+			return `Opened ${summary.name}`;
+		},
+		openDemoShow: async () => {
+			const summary = accept(await documentSession.openDemoShow());
+			return `Opened ${summary.name}, a copy of the packaged Demo Show, at ${summary.path}`;
+		},
+		saveShowAs: async () => {
+			const path = await save({ filters: SHOW_FILTER });
+			if (!path) return null;
+			await documentSession.saveAs(path);
+			return `Saved to ${path}`;
+		},
+		readMvr: async () => {
+			// Nothing is written until the operator has reviewed the archive and made its decisions.
+			const path = await open({ filters: MVR_FILTER, multiple: false });
+			if (typeof path !== "string") return null;
+			const preview = await documentSession.previewMvr(path);
+			setPendingMvr({ path, preview });
+			return `Read ${preview.fixtures.length} fixtures from the archive`;
+		},
+		exportMvr: async () => {
+			const path = await save({ filters: MVR_FILTER });
+			if (!path) return null;
+			return `Exported ${await documentSession.exportMvr(path)} fixtures`;
+		},
+		loadFrom: async (desk: DeskPeer) => {
+			const summary = accept(await documentSession.loadFromDesk(desk.instance));
+			return `Loaded ${summary.name} from ${desk.name}`;
+		},
+	};
 }
 
 function fileStem(path: string) {

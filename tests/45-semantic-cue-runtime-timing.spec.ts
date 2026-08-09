@@ -1,8 +1,8 @@
 // @bench-semantic-world
 
-import { PlaybackButton } from "./bench/playbacks/playbackScenario";
-import { scenario } from "./bench/core/scenario";
 import { fixture } from "./bench/command-selection/selectionContract";
+import { scenario } from "./bench/core/scenario";
+import { PlaybackButton } from "./bench/playbacks/playbackScenario";
 import { Show } from "./bench/show/showScenario";
 
 scenario(
@@ -41,6 +41,8 @@ scenario(
 
 		await t.playback.goBack(playback);
 		await t.clock.advanceBy("0ms");
+		await t.expectFixtureDMX(fixture(1), { Intensity: 255 });
+		await t.clock.advanceBy("4s");
 		await t.expectFixtureDMX(fixture(1), { Intensity: 0 });
 		await t.playback.release(playback);
 		await t.clock.advanceBy("0ms");

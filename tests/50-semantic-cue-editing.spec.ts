@@ -28,6 +28,7 @@ scenario(
 			name: "CUE-011 Sequence",
 			buttons: [PlaybackButton.GoBack, PlaybackButton.Go, PlaybackButton.Off],
 		});
+		await t.playback.via.api.go(playback);
 		await t.playback.expect(playback).runtime({ current_cue_number: 1 });
 
 		let editor = await t.cue.openEditor(playback);

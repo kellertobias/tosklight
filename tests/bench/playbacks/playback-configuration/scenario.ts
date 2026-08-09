@@ -190,8 +190,11 @@ export class BrowserPlaybackConfiguration {
 		if (!Number.isFinite(value) || value < 0 || value > 1)
 			throw new Error("Playback fader values run from 0 through 1");
 		await openPlaybackMode(this.page);
-		await playbackSlider(this.page, slot).fill(String(value * 100));
 		const target = (await playbackAt(this.api, 1, slot)).body.target;
+		const slider = playbackSlider(this.page, slot);
+		if (target.type === "group" || target.type === "grand_master")
+			await slider.fill("100");
+		await slider.fill(String(value * 100));
 		if (target.type === "group")
 			await expect
 				.poll(async () => {

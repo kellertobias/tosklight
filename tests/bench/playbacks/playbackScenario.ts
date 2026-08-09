@@ -473,9 +473,36 @@ export class BrowserPlaybacks {
 	}
 
 	async runtime(number: number) {
-		return (await this.snapshot()).active.find(
-			(item) => item.playback_number === number,
+		const session = this.session();
+		const snapshot = await this.api.request<any>(
+			"POST",
+			"/api/v2/playback-runtime/snapshot",
+			{
+				identities: [{ kind: "playback", playback_number: number }],
+			},
+			true,
+			undefined,
+			{ showId: this.showId(), deskId: session.desk.id },
 		);
+		const projection = snapshot.projections?.[0];
+		if (projection?.target === "cue_list") {
+			const runtime = projection.runtime;
+			return runtime
+				? {
+						...runtime,
+						current_cue_number: runtime.current?.number ?? null,
+						loaded_cue_number: runtime.loaded?.number ?? null,
+					}
+				: {
+						enabled: false,
+						flash: false,
+						temporary_active: false,
+						swap_active: false,
+						current_cue_number: null,
+						loaded_cue_number: null,
+					};
+		}
+		return projection;
 	}
 
 	private async visibleCard(number: number): Promise<Locator> {

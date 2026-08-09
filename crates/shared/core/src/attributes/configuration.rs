@@ -194,6 +194,21 @@ impl AttributeConfiguration {
     /// placements and singleton activation groups are removed. Authored layouts that assign a
     /// different meaning to both identities are rejected so loading cannot silently choose one.
     pub fn migrate_canonical_attributes(mut self) -> Result<Self, AttributeConfigurationError> {
+        self.migrate_retired_canonical_pairs()?;
+        for (attribute, group, page, slot) in [
+            ("control.mode", EncoderGroup::Control, 1, 1),
+            ("control.speed", EncoderGroup::Control, 1, 2),
+            ("media.grayscale", EncoderGroup::Media, 2, 4),
+        ] {
+            self.remove_legacy_default_encoder(attribute, EncoderPlacement::new(group, page, slot));
+        }
+        self.move_legacy_default_encoders();
+        self.remove_legacy_default_whole_color_encoder();
+        self.remove_legacy_default_tint_encoder();
+        Ok(self)
+    }
+
+    fn migrate_retired_canonical_pairs(&mut self) -> Result<(), AttributeConfigurationError> {
         for (source, target, legacy_encoder) in [
             (
                 "color.cyan",
@@ -278,13 +293,10 @@ impl AttributeConfiguration {
         ] {
             self.migrate_canonical_configuration_pair(source, target, legacy_encoder)?;
         }
-        for (attribute, group, page, slot) in [
-            ("control.mode", EncoderGroup::Control, 1, 1),
-            ("control.speed", EncoderGroup::Control, 1, 2),
-            ("media.grayscale", EncoderGroup::Media, 2, 4),
-        ] {
-            self.remove_legacy_default_encoder(attribute, EncoderPlacement::new(group, page, slot));
-        }
+        Ok(())
+    }
+
+    fn move_legacy_default_encoders(&mut self) {
         for (attribute, from, to) in [
             (
                 "color.lime",
@@ -384,9 +396,6 @@ impl AttributeConfiguration {
         ] {
             self.move_legacy_default_encoder(attribute, from, to);
         }
-        self.remove_legacy_default_whole_color_encoder();
-        self.remove_legacy_default_tint_encoder();
-        Ok(self)
     }
 
     fn remove_legacy_default_whole_color_encoder(&mut self) {
@@ -648,6 +657,15 @@ impl AttributeConfiguration {
             }
         }
 
+        self.validate_activation_groups(&descriptors, &placements)?;
+        Ok(())
+    }
+
+    fn validate_activation_groups<'a>(
+        &'a self,
+        descriptors: &HashMap<&'a str, (AttributeValueType, bool)>,
+        placements: &HashMap<&'a str, EncoderPlacement>,
+    ) -> Result<(), AttributeConfigurationError> {
         let mut group_ids = HashSet::new();
         let mut activated = HashSet::new();
         for group in &self.activation_groups {
@@ -708,7 +726,7 @@ impl AttributeConfiguration {
                 }
             }
         }
-        for (id, (value_type, recordable)) in descriptors {
+        for (&id, &(value_type, recordable)) in descriptors {
             if !built_in_attribute_is_retired(id)
                 && !built_in_attribute_is_special_dialog_only(id)
                 && recordable
@@ -868,332 +886,8 @@ fn recommended_activation_group(
 mod placements;
 use placements::recommended_builtin_placements;
 
-/// Built-in attribute registry. Custom attributes remain valid and use their persisted identifier
-/// as the operator label until a desk extension supplies richer metadata.
-pub const ATTRIBUTE_REGISTRY: &[AttributeDescriptor] = &[
-    continuous(
-        "intensity",
-        "Intensity",
-        AttributeClass::Intensity,
-        "percent",
-    ),
-    indexed("shutter", "Shutter / Strobe", AttributeClass::Intensity),
-    continuous("strobe", "Strobe", AttributeClass::Intensity, "hz"),
-    continuous("volume", "Volume", AttributeClass::Intensity, "percent"),
-    color("color", "Color", AttributeClass::Color),
-    continuous("color.red", "Red", AttributeClass::Color, "percent"),
-    continuous("color.green", "Green", AttributeClass::Color, "percent"),
-    continuous("color.blue", "Blue", AttributeClass::Color, "percent"),
-    continuous("color.cyan", "Cyan", AttributeClass::Color, "percent"),
-    continuous("color.magenta", "Magenta", AttributeClass::Color, "percent"),
-    continuous("color.yellow", "Yellow", AttributeClass::Color, "percent"),
-    continuous("color.amber", "Amber", AttributeClass::Color, "percent"),
-    continuous("color.white", "White", AttributeClass::Color, "percent"),
-    continuous("color.uv", "UV", AttributeClass::Color, "percent"),
-    continuous(
-        "color.cold_white",
-        "Cold White",
-        AttributeClass::Color,
-        "percent",
-    ),
-    continuous(
-        "color.warm_white",
-        "Warm White",
-        AttributeClass::Color,
-        "percent",
-    ),
-    continuous("color.lime", "Lime", AttributeClass::Color, "percent"),
-    continuous("color.indigo", "Indigo", AttributeClass::Color, "percent"),
-    continuous("color.mint", "Mint", AttributeClass::Color, "percent"),
-    continuous(
-        "color.temperature",
-        "Color Temperature",
-        AttributeClass::Color,
-        "K",
-    ),
-    continuous("color.tint", "Tint", AttributeClass::Color, "percent"),
-    projection_continuous("color.hue", "Hue", AttributeClass::Color, "deg"),
-    projection_continuous(
-        "color.saturation",
-        "Saturation",
-        AttributeClass::Color,
-        "percent",
-    ),
-    projection_continuous(
-        "color.brightness",
-        "Color Brightness",
-        AttributeClass::Color,
-        "percent",
-    ),
-    indexed("color.wheel.1", "Color Wheel 1", AttributeClass::Color),
-    continuous(
-        "color.wheel.1.rotation",
-        "Color Wheel 1 Rotation",
-        AttributeClass::Color,
-        "percent",
-    ),
-    indexed("color.wheel.2", "Color Wheel 2", AttributeClass::Color),
-    continuous(
-        "color.wheel.2.rotation",
-        "Color Wheel 2 Rotation",
-        AttributeClass::Color,
-        "percent",
-    ),
-    continuous("pan", "Pan", AttributeClass::Position, "deg"),
-    continuous("tilt", "Tilt", AttributeClass::Position, "deg"),
-    continuous(
-        "camera.position.x",
-        "Camera X",
-        AttributeClass::Position,
-        "m",
-    ),
-    continuous(
-        "camera.position.y",
-        "Camera Y",
-        AttributeClass::Position,
-        "m",
-    ),
-    continuous(
-        "camera.position.z",
-        "Camera Z",
-        AttributeClass::Position,
-        "m",
-    ),
-    cyclic_continuous("camera.yaw", "Camera Yaw", AttributeClass::Position, "deg"),
-    cyclic_continuous(
-        "camera.pitch",
-        "Camera Pitch",
-        AttributeClass::Position,
-        "deg",
-    ),
-    cyclic_continuous(
-        "camera.roll",
-        "Camera Roll",
-        AttributeClass::Position,
-        "deg",
-    ),
-    continuous(
-        "pan.continuous",
-        "Continuous Pan",
-        AttributeClass::Position,
-        "percent",
-    ),
-    continuous(
-        "tilt.continuous",
-        "Continuous Tilt",
-        AttributeClass::Position,
-        "percent",
-    ),
-    continuous("pan.time", "Pan Time", AttributeClass::Position, "s"),
-    continuous("tilt.time", "Tilt Time", AttributeClass::Position, "s"),
-    continuous(
-        "position.time",
-        "Pan/Tilt Time",
-        AttributeClass::Position,
-        "s",
-    ),
-    continuous(
-        "position.speed",
-        "Position Speed",
-        AttributeClass::Position,
-        "percent",
-    ),
-    indexed("position.mode", "Position Mode", AttributeClass::Position),
-    continuous(
-        "position.movement",
-        "Position Movement",
-        AttributeClass::Position,
-        "percent",
-    ),
-    cyclic_continuous(
-        "position.rotation",
-        "Head Rotation",
-        AttributeClass::Position,
-        "deg",
-    ),
-    indexed("gobo.1", "Gobo 1", AttributeClass::Beam),
-    continuous(
-        "gobo.1.rotation",
-        "Gobo 1 Rotation",
-        AttributeClass::Beam,
-        "percent",
-    ),
-    indexed("gobo.2", "Gobo 2", AttributeClass::Beam),
-    continuous(
-        "gobo.2.rotation",
-        "Gobo 2 Rotation",
-        AttributeClass::Beam,
-        "percent",
-    ),
-    indexed("prism.1", "Prism 1", AttributeClass::Beam),
-    continuous(
-        "prism.1.rotation",
-        "Prism 1 Rotation",
-        AttributeClass::Beam,
-        "percent",
-    ),
-    indexed("prism.2", "Prism 2", AttributeClass::Beam),
-    continuous(
-        "prism.2.rotation",
-        "Prism 2 Rotation",
-        AttributeClass::Beam,
-        "percent",
-    ),
-    indexed("animation.1", "Animation Wheel 1", AttributeClass::Beam),
-    continuous(
-        "animation.1.rotation",
-        "Animation Rotation 1",
-        AttributeClass::Beam,
-        "percent",
-    ),
-    indexed("beam.effect.1", "Beam Effect 1", AttributeClass::Beam),
-    indexed("beam.effect.2", "Beam Effect 2", AttributeClass::Beam),
-    continuous("beam", "Beam", AttributeClass::Beam, "percent"),
-    continuous("iris", "Iris", AttributeClass::Shapers, "percent"),
-    continuous(
-        "shaper.blade.1.position",
-        "Blade 1 Position",
-        AttributeClass::Shapers,
-        "percent",
-    ),
-    continuous(
-        "shaper.blade.1.angle",
-        "Blade 1 Angle",
-        AttributeClass::Shapers,
-        "deg",
-    ),
-    continuous(
-        "shaper.blade.2.position",
-        "Blade 2 Position",
-        AttributeClass::Shapers,
-        "percent",
-    ),
-    continuous(
-        "shaper.blade.2.angle",
-        "Blade 2 Angle",
-        AttributeClass::Shapers,
-        "deg",
-    ),
-    cyclic_continuous(
-        "shaper.rotation",
-        "Shaper Rotation",
-        AttributeClass::Shapers,
-        "deg",
-    ),
-    continuous(
-        "shaper.blade.3.position",
-        "Blade 3 Position",
-        AttributeClass::Shapers,
-        "percent",
-    ),
-    continuous(
-        "shaper.blade.3.angle",
-        "Blade 3 Angle",
-        AttributeClass::Shapers,
-        "deg",
-    ),
-    continuous(
-        "shaper.blade.4.position",
-        "Blade 4 Position",
-        AttributeClass::Shapers,
-        "percent",
-    ),
-    continuous(
-        "shaper.blade.4.angle",
-        "Blade 4 Angle",
-        AttributeClass::Shapers,
-        "deg",
-    ),
-    continuous(
-        "shaper.keystone.x",
-        "Keystone X",
-        AttributeClass::Shapers,
-        "percent",
-    ),
-    continuous(
-        "shaper.keystone.y",
-        "Keystone Y",
-        AttributeClass::Shapers,
-        "percent",
-    ),
-    continuous("focus", "Focus", AttributeClass::Focus, "percent"),
-    continuous("zoom", "Zoom", AttributeClass::Focus, "deg"),
-    continuous("camera.zoom", "Camera Zoom", AttributeClass::Focus, "mm"),
-    continuous("softness", "Softness", AttributeClass::Focus, "percent"),
-    continuous("frost.1", "Frost 1", AttributeClass::Focus, "percent"),
-    continuous("frost.2", "Frost 2", AttributeClass::Focus, "percent"),
-    continuous("beam.edge", "Beam Edge", AttributeClass::Focus, "percent"),
-    indexed("control.mode", "Fixture Mode", AttributeClass::Control),
-    continuous(
-        "control.speed",
-        "Fixture Control Speed",
-        AttributeClass::Control,
-        "percent",
-    ),
-    control("control", "Control", AttributeClass::Control),
-    indexed("media.folder", "Media Folder", AttributeClass::Media),
-    indexed("media.file", "Media File", AttributeClass::Media),
-    indexed("media.mask.folder", "Mask Folder", AttributeClass::Media),
-    indexed("media.mask.file", "Mask File", AttributeClass::Media),
-    continuous(
-        "media.opacity",
-        "Layer Opacity",
-        AttributeClass::Media,
-        "percent",
-    ),
-    color("media.tint", "Layer Tint", AttributeClass::Media),
-    indexed("media.play_mode", "Play Mode", AttributeClass::Media),
-    continuous(
-        "media.playback_speed",
-        "Playback Speed",
-        AttributeClass::Media,
-        "percent",
-    ),
-    continuous(
-        "media.playback_bpm",
-        "Playback BPM",
-        AttributeClass::Media,
-        "bpm",
-    ),
-    continuous(
-        "media.grayscale",
-        "Grayscale",
-        AttributeClass::Media,
-        "percent",
-    ),
-    indexed("media.scaling_mode", "Scaling Mode", AttributeClass::Media),
-    cyclic_continuous(
-        "media.rotation",
-        "Layer Rotation",
-        AttributeClass::Media,
-        "deg",
-    ),
-    continuous(
-        "media.position.x",
-        "Position X",
-        AttributeClass::Media,
-        "percent",
-    ),
-    continuous(
-        "media.position.y",
-        "Position Y",
-        AttributeClass::Media,
-        "percent",
-    ),
-    continuous("media.scale.x", "Scale X", AttributeClass::Media, "percent"),
-    continuous("media.scale.y", "Scale Y", AttributeClass::Media, "percent"),
-    continuous(
-        "media.mask.opacity",
-        "Mask Opacity",
-        AttributeClass::Media,
-        "percent",
-    ),
-    indexed("media.mask.invert", "Invert Mask", AttributeClass::Media),
-    indexed("media.effect.1", "Media Effect 1", AttributeClass::Media),
-    indexed("media.effect.2", "Media Effect 2", AttributeClass::Media),
-    indexed("media.effect.3", "Media Effect 3", AttributeClass::Media),
-    indexed("media.effect.4", "Media Effect 4", AttributeClass::Media),
-];
+mod registry;
+pub use registry::ATTRIBUTE_REGISTRY;
 
 const fn continuous(
     id: &'static str,

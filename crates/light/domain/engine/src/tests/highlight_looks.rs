@@ -1,4 +1,6 @@
 use super::*;
+use light_programmer::{HighlightOutputLayer, HighlightOutputRole};
+use std::collections::HashSet;
 
 #[test]
 fn semantic_highlight_applies_only_authored_identification_attributes() {
@@ -433,5 +435,71 @@ fn hazardous_blackout_safe_raw_value_wins_over_non_intensity_highlight() {
             .unwrap()
             .universes[&1][0],
         37
+    );
+}
+
+#[test]
+fn high_low_and_explicit_attribute_suppression_are_temporary_and_exact() {
+    let (mut fixture, fixture_id) = schema_v2_fixture(&[
+        ("intensity", false, false, false, false, false),
+        ("shutter", true, false, false, false, false),
+    ]);
+    let mode = &mut fixture.definition.profile_snapshot.as_mut().unwrap().modes[0];
+    mode.channels[0].default_raw = 64;
+    mode.channels[1].default_raw = 7;
+    mode.channels[1].functions = vec![ChannelFunction {
+        id: uuid::Uuid::new_v4(),
+        name: "Open".into(),
+        dmx_from: 80,
+        dmx_to: 110,
+        attribute: AttributeKey("shutter".into()),
+        priority: 0,
+        behavior: light_fixture::ChannelFunctionBehavior::Fixed {
+            semantic_id: "open".into(),
+            label: "Open".into(),
+            raw_value: 96,
+        },
+    }];
+    let engine = Engine::new(ProgrammerRegistry::default());
+    engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![fixture].into(),
+            revision: 1,
+            ..Default::default()
+        })
+        .unwrap();
+    engine
+        .set_highlight_look(light_fixture::HighlightLook::default())
+        .unwrap();
+    let ordinary = engine.render(RenderOptions::default()).unwrap().universes[&1];
+    assert_eq!(&ordinary[0..2], &[64, 7]);
+
+    engine.set_highlight_layers([HighlightOutputLayer {
+        fixture_id,
+        role: HighlightOutputRole::LowLight,
+        suppressed_attributes: HashSet::new(),
+    }]);
+    assert_eq!(
+        &engine.render(RenderOptions::default()).unwrap().universes[&1][0..2],
+        &[26, 96],
+        "Low Light is 10% with the same authored safe Open identification"
+    );
+
+    engine.set_highlight_layers([HighlightOutputLayer {
+        fixture_id,
+        role: HighlightOutputRole::Highlight,
+        suppressed_attributes: HashSet::from([AttributeKey::intensity()]),
+    }]);
+    assert_eq!(
+        &engine.render(RenderOptions::default()).unwrap().universes[&1][0..2],
+        &[64, 96],
+        "the explicit intensity falls through while untouched shutter remains temporary"
+    );
+
+    engine.clear_highlighted_fixtures();
+    assert_eq!(
+        engine.render(RenderOptions::default()).unwrap().universes[&1],
+        ordinary,
+        "removing the temporary layer restores the exact ordinary render"
     );
 }

@@ -134,18 +134,22 @@ test.describe(CUE_SEMANTIC_CONTRACTS, () => {
 		await setSequenceMasterFade(api, 0);
 		const fixtures = await fixtureIdsByNumber(api);
 		await installPlaybackSequence(api, 1, [
-			fixtureCue(1, [
-				[fixtures[1], "intensity", 1],
-				[fixtures[2], "intensity", 0],
-				[fixtures[3], "intensity", 1],
-				[fixtures[4], "intensity", 0],
-			]),
+			fixtureCue(
+				1,
+				[
+					[fixtures[1], "intensity", 1],
+					[fixtures[2], "intensity", 0],
+					[fixtures[3], "intensity", 1],
+					[fixtures[4], "intensity", 0],
+				],
+				{ out_delay_millis: 500, out_fade_millis: 2_000 },
+			),
 			fixtureCue(
 				2,
 				[
 					[fixtures[1], "intensity", 0],
 					[fixtures[2], "intensity", 1],
-					[fixtures[3], "intensity", 0, { fade_millis: 500 }],
+					[fixtures[3], "intensity", 0, { delay_millis: 0, fade_millis: 500 }],
 					[
 						fixtures[4],
 						"intensity",
@@ -153,11 +157,7 @@ test.describe(CUE_SEMANTIC_CONTRACTS, () => {
 						{ delay_millis: 1_000, fade_millis: 500 },
 					],
 				],
-				{
-					fade_millis: 1_000,
-					out_delay_millis: 500,
-					out_fade_millis: 2_000,
-				},
+				{ fade_millis: 1_000 },
 			),
 			fixtureCue(3, [], {
 				trigger: { type: "follow", delay_millis: 0 },
@@ -175,7 +175,9 @@ test.describe(CUE_SEMANTIC_CONTRACTS, () => {
 		expect(slot(await bench.tick(500), 4)).toBe(0);
 		expect(slot(await bench.tick(250), 4)).toBe(128);
 		expect(slot(await bench.tick(250), 4)).toBe(255);
-		expect(slot(await bench.tick(999), 1)).toBeGreaterThan(0);
+		// The final sub-slot level rounds to DMX zero one millisecond before completion; the
+		// authoritative Cue runtime still proves FOLLOW remains gated until the exact boundary.
+		expect(slot(await bench.tick(999), 1)).toBe(0);
 		expect((await runtime(api, 1)).current_cue_number).toBe(2);
 		expect(slot(await bench.tick(1), 1)).toBe(0);
 		expect((await runtime(api, 1)).current_cue_number).toBe(3);

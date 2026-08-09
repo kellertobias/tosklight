@@ -33,9 +33,7 @@ export type PreloadCaptureMask = Pick<
 
 export interface PendingPreloadExpectation {
 	groupIds: string[];
-	playbackActions: Array<
-		[number | VirtualPlaybackIdentity, string, string]
-	>;
+	playbackActions: Array<[number | VirtualPlaybackIdentity, string, string]>;
 }
 
 interface ProgrammerPreloadProjection {
@@ -327,7 +325,7 @@ export class PreloadSettings {
 			this.page.getByRole("button", { name: "Outputs", exact: true }),
 		);
 		await this.desk.click(
-			this.page.getByRole("button", { name: "Programmer", exact: true }),
+			this.page.getByRole("button", { name: "Others", exact: true }),
 		);
 	}
 
@@ -427,7 +425,7 @@ export class BrowserPreload {
 			this.page.getByRole("button", { name: "Enter Setup", exact: true }),
 		);
 		await this.desk.click(
-			this.page.getByRole("button", { name: "Programmer", exact: true }),
+			this.page.getByRole("button", { name: "Others", exact: true }),
 		);
 		await expect(
 			this.page.getByRole("switch", {
@@ -565,7 +563,9 @@ export class BrowserPreload {
 		};
 	}
 
-	private async virtualRuntime(identity: VirtualPlaybackIdentity): Promise<any> {
+	private async virtualRuntime(
+		identity: VirtualPlaybackIdentity,
+	): Promise<any> {
 		const session = this.session();
 		const snapshot = await this.api.request<any>(
 			"POST",

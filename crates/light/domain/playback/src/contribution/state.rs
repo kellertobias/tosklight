@@ -11,6 +11,8 @@ pub(super) struct PlaybackFrame<'a> {
     pub(super) playback: &'a ActivePlayback,
     pub(super) cue_list: &'a CueList,
     pub(super) cue: &'a Cue,
+    pub(super) outgoing_cue: Option<&'a Cue>,
+    pub(super) outgoing_cue_fade_millis: Option<u64>,
     pub(super) compiled: &'a CompiledCueList,
     pub(super) source: SequenceMasterSource,
     pub(super) sequence_master: f32,
@@ -40,10 +42,6 @@ impl<'a> PlaybackFrame<'a> {
             playback.tracking_wrap && playback.manual_xfade_to_index.is_none();
         let previous = previous_state(playback);
         let cue = &cue_list.cues[target_index];
-        let effective_now = playback.paused_at.unwrap_or(context.now);
-        let elapsed = (effective_now - playback.activated_at)
-            .num_milliseconds()
-            .max(0) as u64;
         let cue_fade_millis = effective_cue_fade_millis(
             cue_list,
             cue,
@@ -51,10 +49,34 @@ impl<'a> PlaybackFrame<'a> {
             context.engine.sequence_master_fade_millis,
             &context.engine.speed_groups_bpm,
         );
+        let outgoing_cue = playback
+            .manual_xfade_from_index
+            .or(playback.previous_index)
+            .and_then(|index| cue_list.cues.get(index));
+        let outgoing_cue_fade_millis = outgoing_cue.map(|outgoing| {
+            let outgoing_fade = effective_cue_fade_millis(
+                cue_list,
+                outgoing,
+                playback,
+                context.engine.sequence_master_fade_millis,
+                &context.engine.speed_groups_bpm,
+            );
+            if outgoing.fade_millis == 0 {
+                cue_fade_millis
+            } else {
+                outgoing_fade
+            }
+        });
+        let effective_now = playback.paused_at.unwrap_or(context.now);
+        let elapsed = (effective_now - playback.activated_at)
+            .num_milliseconds()
+            .max(0) as u64;
         Self {
             playback,
             cue_list,
             cue,
+            outgoing_cue,
+            outgoing_cue_fade_millis,
             compiled,
             source,
             sequence_master,

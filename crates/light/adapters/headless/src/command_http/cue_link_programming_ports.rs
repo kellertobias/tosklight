@@ -94,7 +94,7 @@ impl ServerProgrammingPorts<'_> {
             .map_err(|error| error.to_string())?
             .value();
         let context = recording_context(context, "cue-link").with_expected_revision(show_revision);
-        let ports = super::super::ServerPlaybackTopologyPorts::new(
+        let ports = super::super::ServerPlaybackTopologyPorts::within_active_show(
             self.state().clone(),
             self.session().clone(),
             entry.id,

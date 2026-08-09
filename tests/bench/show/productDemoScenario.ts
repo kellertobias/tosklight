@@ -387,19 +387,8 @@ export class BrowserProductDemo {
 			const demo = page.getByTestId("product-demo");
 			const app = demo.locator(".product-demo-application");
 			const keypad = demo.locator(".demo-number-block");
+			const stage = await ensureStagePane3d(desk, app);
 			await verifyDemoFrame(demo, app, stage);
-			const stageWindow = stage.locator(
-				"xpath=ancestor::*[contains(@class,'stage-window')][1]",
-			);
-			await expect(stageWindow).toHaveAttribute(
-				"data-live-visualization-state",
-				"ready",
-				{ timeout: 20_000 },
-			);
-			await expect(stageWindow).not.toHaveAttribute(
-				"data-visualization-revision",
-				"",
-			);
 			await desk.productIntro();
 			await desk.titleCard(
 				"SHOW SETUP",
@@ -1266,10 +1255,8 @@ async function addPatchLayerThroughTouchUi(
 		},
 	);
 	desk.setRecordingClickPace("compact");
-	if (await dialog.isVisible())
-		await desk.click(
-			dialog.getByRole("button", { name: "Add layer", exact: true }),
-		);
+	// The touch keyboard's Enter action is the form commit. Do not race that
+	// asynchronous commit with a second click on a dialog that is being removed.
 	await expect(dialog).toBeHidden();
 	await demoPause(page, options.afterCommitFrames ?? 0);
 }
@@ -1486,7 +1473,7 @@ async function spreadPhysicalPatchVectorThroughTouchUi(
 		);
 		await expect(addressLayer).toBeHidden();
 	}
-	const offset = kind === "location" ? 12 : 15;
+	const offset = kind === "location" ? 9 : 12;
 	const cell = offset + { X: 0, Y: 1, Z: 2 }[axis];
 	await desk.setDemoAction(
 		`Arrange the selected ACL physical instances with ${kind} ${axis}: ${keys
@@ -1691,15 +1678,10 @@ async function verifyDemoFrame(demo: Locator, app: Locator, stage: Locator) {
 	await expect(
 		app.locator(".control-section.hardware-connected"),
 	).toBeVisible();
-	await expect(stage.locator("canvas")).toBeVisible();
-	await stage.locator("canvas").evaluate((canvas) => {
-		canvas.dataset.recordingCanvas = "stable";
-	});
-	await expect(stage).toHaveAttribute("data-camera-position", "10,8,11");
-	await expect(stage).toHaveAttribute("data-camera-target", "0,1.8,-4");
-	await expect(stage).toHaveAttribute("data-environment-brightness", "1");
-	await expect(stage).toHaveAttribute("data-floor-grid", "off");
-	await expect(stage).toHaveAttribute("data-beam-guides", "off");
+	const renderer = stage.locator("[data-stage-view]");
+	await expect(renderer).toHaveAttribute("data-stage-view", "3d-viz");
+	await expect(renderer.locator(".stage-native-pane")).toBeVisible();
+	await expect(renderer).toHaveAttribute("data-stage-renderer", "unavailable");
 	for (const universe of [1, 2, 3, 4]) {
 		await expect(
 			demo
@@ -1852,7 +1834,6 @@ async function buildGroups(
 		desk,
 		page,
 		app,
-		keypad,
 		1,
 		"Beam Stage",
 		markEditBoundary,
@@ -1922,10 +1903,13 @@ async function buildGroups(
 	await desk.click(groupTile(app, 2));
 	await desk.click(keypad.getByRole("button", { name: "RECORD", exact: true }));
 	await desk.click(groupTile(app, 4));
-	await desk.click(keypad.getByRole("button", { name: "SET", exact: true }));
+	await expect
+		.poll(async () => api.showObject(showId, "group", "4"))
+		.not.toBeNull();
+	await keypadCommand(desk, keypad, ["SET", "GRP", "4", "ENT"]);
 	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.groupTileHoldFrames);
-	await desk.click(groupTile(app, 4));
-	const properties = page.getByRole("dialog", { name: "Group properties" });
+	const properties = page.getByRole("dialog", { name: "Group 4 settings" });
+	await expect(properties).toBeVisible();
 	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.groupPropertiesHoldFrames);
 	await touchTypeText(desk, properties.getByLabel("Group name"), "Beam Show", {
 		beforeConfirmFrames: PRODUCT_DEMO_SCRIPT.pacing.groupNameConfirmHoldFrames,
@@ -1934,8 +1918,9 @@ async function buildGroups(
 	await selectGroupIconThroughTouch(desk, page, properties, "Beam Show", true);
 	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.groupSaveHoldFrames);
 	await desk.click(
-		properties.getByRole("button", { name: "Save group", exact: true }),
+		properties.getByRole("button", { name: "Close settings", exact: true }),
 	);
+	await expect(properties).toBeHidden();
 
 	await desk.setDemoAction(
 		"Derive the Beam Show odd and even selections and store both through simulated hardware buttons.",
@@ -1978,33 +1963,27 @@ async function buildGroups(
 
 	await desk.titleCard(
 		"ASSIGNING GROUP MASTERS",
-		"Assign one Group Master by touch, a second by command line, then fast-forward the remaining assignments.",
+		"Assign one Group Master through the pool target, a second by command line, then fast-forward the remaining assignments.",
 	);
 	await toggleProgrammerPlaybacks(desk, demo);
 	await expect(demo.locator(".mode-toggle")).toHaveClass(/playbacks-active/u);
 	const commandLine = page.getByRole("textbox", { name: "Command line" });
-	const setButton = keypad.getByRole("button", { name: "SET", exact: true });
-	await desk.click(setButton);
-	await expect(setButton).toHaveClass(/patch-set-armed/u);
-	await desk.click(groupTile(app, 6));
+	await groupTile(app, 6).click({ button: "right" });
 	await expect(commandLine).toHaveValue("SET GROUP 6");
 	await desk.click(demo.locator('[data-playback-slot="1"]'));
 	await expect
-		.poll(async () => playbackTarget(api, showId, 1))
+		.poll(async () => playbackTargetAtPhysicalSlot(api, showId, 1, 1))
 		.toMatchObject({
 			type: "group",
 			group_id: "6",
 		});
 	await desk.setDemoAction(
-		"Assign Beam Show Even to Playback 2 through the command line: SET GROUP 7 AT 1.2.",
+		"Assign Beam Show Even to Playback 2 through the command line: SET GROUP 7 AT 1 . 2.",
 	);
-	await desk.click(commandLine);
-	await commandLine.press("ControlOrMeta+A");
-	await commandLine.pressSequentially("SET GROUP 7 AT 1.2", { delay: 35 });
+	await submitVisibleCommand(page, api, "SET GROUP 7 AT 1 . 2");
 	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.groupTileHoldFrames);
-	await commandLine.press("Enter");
 	await expect
-		.poll(async () => playbackTarget(api, showId, 2))
+		.poll(async () => playbackTargetAtPhysicalSlot(api, showId, 1, 2))
 		.toMatchObject({
 			type: "group",
 			group_id: "7",
@@ -2035,8 +2014,7 @@ async function buildDynamicsSetup(
 		"Select Beam Show, then build a two-axis Circle Dynamic from familiar Pan sine and Tilt cosine functions.",
 	);
 	await clearProgrammer(desk, keypad, api);
-	await openGroups(desk, keypad);
-	await desk.click(groupTile(app, 4));
+	await selectLiveGroupThroughPool(desk, app, keypad, 4);
 	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.dynamicsResultHoldFrames);
 	await openBuiltIn(desk, app, "Dynamics");
 	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.dynamicsSurfaceHoldFrames);
@@ -2058,8 +2036,7 @@ async function buildDynamicsSetup(
 		"Create the Beam Show PWM chaser through the same production Dynamic editor.",
 	);
 	await clearSelection(desk, keypad, api);
-	await openGroups(desk, keypad);
-	await desk.click(groupTile(app, 4));
+	await selectLiveGroupThroughPool(desk, app, keypad, 4);
 	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.dynamicsResultHoldFrames);
 	await openBuiltIn(desk, app, "Dynamics");
 	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.dynamicsSurfaceHoldFrames);
@@ -2087,12 +2064,11 @@ async function buildDynamicsSetup(
 		"You do not need to assign a playback to a hardware button.",
 	);
 	const pane = await createVirtualPlaybackDesktop(desk, page);
-	await assignVirtualDynamic(desk, page, pane, keypad, 1, "Beam Show PWM", 1);
+	await assignVirtualDynamic(desk, page, pane, 1, "Beam Show PWM", 1);
 	await assignVirtualDynamic(
 		desk,
 		page,
 		pane,
-		keypad,
 		19,
 		"Beam Show Circle",
 		19,
@@ -2640,8 +2616,10 @@ async function demonstrateBuskingAndPreload(
 		demo.page(),
 		PRODUCT_DEMO_SCRIPT.pacing.preloadProgrammingStepFrames,
 	);
-	await openGroups(desk, keypad);
-	await desk.click(groupTile(app, 2));
+	await keypadCommand(desk, keypad, ["GRP", "2", "ENT"]);
+	await expect
+		.poll(async () => (await programmer(api)).selected)
+		.toEqual(preparedLook.beamFixtureIds);
 	await demoPause(
 		demo.page(),
 		PRODUCT_DEMO_SCRIPT.pacing.preloadProgrammingStepFrames,
@@ -2848,16 +2826,12 @@ async function demonstrateBuskingAndPreload(
 		beamFixtureIds: visibleBeamFixtures,
 	});
 	await desk.setDemoAction(
-		"Open the Programming desktop, switch its Stage pane to 3D, and hold the non-uniform blue-and-yellow moving-light look.",
+		"Open the Programming desktop, switch its Stage pane to 3D Viz, and hold the non-uniform blue-and-yellow moving-light look.",
 	);
 	await openDesktop(desk, app, "Programming");
 	const finalStage = await ensureStagePane3d(desk, app);
 	await expect(finalStage).toBeVisible();
-	await expect(finalStage).toHaveAttribute(
-		"data-live-visualization-state",
-		"ready",
-	);
-	await expect(finalStage.locator(".stage-3d-canvas")).toBeVisible();
+	await expect(finalStage.locator(".stage-native-pane")).toBeVisible();
 	await demoPause(demo.page(), PRODUCT_DEMO_SCRIPT.pacing.finalLookHoldFrames);
 }
 
@@ -3289,35 +3263,41 @@ async function openDesktop(desk: DeskDriver, app: Locator, name: string) {
 
 async function ensureStagePane3d(desk: DeskDriver, app: Locator) {
 	const stage = app.locator(".stage-window");
-	const canvas = stage.locator(".stage-3d-canvas");
+	const renderer = stage.locator("[data-stage-view]");
 	const pane = stage.locator(
 		"xpath=ancestor::*[contains(@class,'desk-pane')][1]",
 	);
 	await desk.click(pane.getByRole("button", { name: "Settings", exact: true }));
 	const settings = app.page().getByRole("dialog", { name: "Pane Settings" });
 	await desk.click(settings.getByRole("tab", { name: "Stage", exact: true }));
-	if (!(await canvas.count()))
-		await desk.click(settings.getByRole("radio", { name: "3D", exact: true }));
-	if ((await canvas.getAttribute("data-render-quality")) !== "lines_and_beams")
+	if ((await renderer.getAttribute("data-stage-view")) !== "3d-viz")
 		await desk.click(
-			settings
-				.getByRole("radiogroup", { name: "Render quality", exact: true })
-				.getByRole("radio", { name: "Lines + beams", exact: true }),
+			settings.getByRole("radio", { name: "3D Viz", exact: true }),
 		);
-	await desk.click(settings.getByRole("button", { name: "Reset 3D view" }));
 	await desk.click(
 		settings.getByRole("button", { name: "Close settings", exact: true }),
 	);
-	await expect(canvas).toBeVisible();
-	await expect(canvas).toHaveAttribute("data-camera-position", "10,8,11");
-	await expect(canvas).toHaveAttribute("data-camera-target", "0,1.8,-4");
-	await expect(canvas).toHaveAttribute("data-render-quality", "lines_and_beams");
+	await expect(renderer).toHaveAttribute("data-stage-view", "3d-viz");
+	await expect(renderer.locator(".stage-native-pane")).toBeVisible();
 	return stage;
 }
 
 async function openGroups(desk: DeskDriver, keypad: Locator) {
 	await desk.click(keypad.getByRole("button", { name: "SHIFT", exact: true }));
 	await desk.click(keypad.getByRole("button", { name: "1", exact: true }));
+}
+
+async function selectLiveGroupThroughPool(
+	desk: DeskDriver,
+	app: Locator,
+	keypad: Locator,
+	groupNumber: number,
+) {
+	await openGroups(desk, keypad);
+	const tile = groupTile(app, groupNumber);
+	if (!(await tile.evaluate((element) => element.classList.contains("selected"))))
+		await desk.click(tile);
+	await expect(tile).toHaveClass(/\bselected\b/u);
 }
 
 async function toggleProgrammerPlaybacks(desk: DeskDriver, demo: Locator) {
@@ -3538,7 +3518,6 @@ async function assignVirtualDynamic(
 	desk: DeskDriver,
 	page: Page,
 	pane: Locator,
-	keypad: Locator,
 	cell: number,
 	name: string,
 	poolNumber: number,
@@ -3546,14 +3525,12 @@ async function assignVirtualDynamic(
 	await desk.setDemoAction(
 		`Assign ${name} to stable Virtual Playback ${1000 + cell} through Playback Configuration.`,
 	);
-	await desk.click(keypad.getByRole("button", { name: "SET", exact: true }));
-	await desk.click(
-		pane.getByRole("button", {
-			name: new RegExp(
-				`Virtual playback ${1000 + cell} page 1 cell ${cell} empty`,
-			),
-		}),
-	);
+	const target = pane.getByRole("button", {
+		name: new RegExp(
+			`Virtual playback ${1000 + cell} page 1 cell ${cell} empty`,
+		),
+	});
+	await desk.click(target, { button: "right" });
 	const modal = page.getByRole("dialog", { name: "Playback Configuration" });
 	await expect(modal).toBeVisible();
 	await demoPause(
@@ -3784,7 +3761,9 @@ async function nameGroupThroughTouch(
 		`Name Group ${groupId} ${name} and assign its ${plannedDemoGroupIcon(name)} family icon.`,
 	);
 	await keypadCommand(desk, keypad, ["SET", "GRP", ...digits(groupId), "ENT"]);
-	const properties = page.getByRole("dialog", { name: "Group properties" });
+	const properties = page.getByRole("dialog", {
+		name: `Group ${groupId} settings`,
+	});
 	await expect(properties).toBeVisible();
 	await demoPause(
 		page,
@@ -3802,7 +3781,7 @@ async function nameGroupThroughTouch(
 		pause ? PRODUCT_DEMO_SCRIPT.pacing.groupSaveHoldFrames : 0,
 	);
 	await desk.click(
-		properties.getByRole("button", { name: "Save group", exact: true }),
+		properties.getByRole("button", { name: "Close settings", exact: true }),
 	);
 	await expect(properties).toBeHidden();
 }
@@ -3811,20 +3790,23 @@ async function nameGroupThroughTouchTile(
 	desk: DeskDriver,
 	page: Page,
 	app: Locator,
-	keypad: Locator,
 	groupId: number,
 	name: string,
 	markEditBoundary: DemoEditBoundary,
 ) {
 	await desk.setDemoAction(
-		`Name Group ${groupId} ${name}, inspect the Fixture type icon set, and save Profile Moving Light: press [SET], then touch Group tile ${groupId}.`,
+		`Name Group ${groupId} ${name}, inspect the Fixture type icon set, and save Profile Moving Light: hold Group tile ${groupId} to open its settings.`,
 	);
-	const commandLine = page.getByRole("textbox", { name: "Command line" });
-	await desk.click(keypad.getByRole("button", { name: "SET", exact: true }));
-	await expect(commandLine).toHaveValue("SET");
-	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.groupTileHoldFrames);
-	await desk.click(groupTile(app, groupId));
-	const properties = page.getByRole("dialog", { name: "Group properties" });
+	const target = groupTile(app, groupId);
+	const box = await target.boundingBox();
+	if (!box) throw new Error(`Group tile ${groupId} is not visible`);
+	await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+	await page.mouse.down();
+	await page.waitForTimeout(700);
+	await page.mouse.up();
+	const properties = page.getByRole("dialog", {
+		name: `Group ${groupId} settings`,
+	});
 	await expect(properties).toBeVisible();
 	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.groupPropertiesHoldFrames);
 	await touchTypeText(desk, properties.getByLabel("Group name"), name, {
@@ -3838,10 +3820,6 @@ async function nameGroupThroughTouchTile(
 		markEditBoundary,
 	);
 	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.groupSaveHoldFrames);
-	await desk.click(
-		properties.getByRole("button", { name: "Save group", exact: true }),
-	);
-	await expect(properties).toBeHidden();
 	const savedTile = groupTile(app, groupId);
 	const savedIcon = savedTile.locator("img.pool-card-icon-image");
 	await expect(savedIcon).toBeVisible();
@@ -3849,6 +3827,10 @@ async function nameGroupThroughTouchTile(
 		"data-icon-value",
 		"icon:fixture-type/profile-moving-light",
 	);
+	await desk.click(
+		properties.getByRole("button", { name: "Close settings", exact: true }),
+	);
+	await expect(properties).toBeHidden();
 	markEditBoundary("first-group-icon-saved");
 	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.groupIconSavedHoldFrames);
 }
@@ -3923,6 +3905,21 @@ async function playbackTarget(api: ApiDriver, showId: string, number: number) {
 		(candidate) => candidate.body.number === number,
 	);
 	return playback?.body.target ?? null;
+}
+
+async function playbackTargetAtPhysicalSlot(
+	api: ApiDriver,
+	showId: string,
+	pageNumber: number,
+	slot: number,
+) {
+	const page = (await api.showObjects<any>(showId, "playback_page")).find(
+		(candidate) => candidate.body.number === pageNumber,
+	);
+	const playbackNumber = page?.body.slots?.[String(slot)];
+	return playbackNumber == null
+		? null
+		: playbackTarget(api, showId, Number(playbackNumber));
 }
 
 async function installRemainingGroupMasters(api: ApiDriver, showId: string) {
@@ -4159,6 +4156,20 @@ async function keypadCommand(
 		await desk.click(keypad.getByRole("button", { name: label, exact: true }));
 		if (!RECORDING) await keypad.page().waitForTimeout(20);
 	}
+}
+
+async function submitVisibleCommand(
+	page: Page,
+	api: ApiDriver,
+	command: string,
+) {
+	const commandLine = page.getByRole("textbox", { name: "Command line" });
+	await commandLine.fill(command);
+	await expect
+		.poll(async () => (await api.getCommandLine()).commandLine.text)
+		.toBe(command);
+	await expect(commandLine).toHaveValue(command);
+	await commandLine.press("Enter");
 }
 
 async function clearSelection(

@@ -27,29 +27,9 @@ pub(in crate::runtime) fn application_command(
             expected_revision: input_revision(expected_revision, "expected_revision")?,
             expected_object_id,
         },
-        wire::PlaybackTopologyAction::ConfigureSlot {
-            page,
-            slot,
-            expected_page_revision,
-            expected_page_object_id,
-            expected_playback_revision,
-            expected_playback_object_id,
-            playback,
-        } => application::PlaybackTopologyAction::ConfigureSlot {
-            page,
-            slot,
-            expected_page_revision: input_revision(
-                expected_page_revision,
-                "expected_page_revision",
-            )?,
-            expected_page_object_id: expected_page_object_id.into_option(),
-            expected_playback_revision: input_revision(
-                expected_playback_revision,
-                "expected_playback_revision",
-            )?,
-            expected_playback_object_id: expected_playback_object_id.into_option(),
-            playback: application_playback(playback)?,
-        },
+        action @ wire::PlaybackTopologyAction::ConfigureSlot { .. } => {
+            application_configure_slot(action)?
+        }
         wire::PlaybackTopologyAction::AssignGroupMaster {
             group_object_id,
             expected_group_revision,
@@ -78,29 +58,9 @@ pub(in crate::runtime) fn application_command(
             expected_page_object_id: expected_page_object_id.into_option(),
             playback: application_playback(playback)?,
         },
-        wire::PlaybackTopologyAction::MapExistingPlayback {
-            page,
-            slot,
-            playback_number,
-            expected_page_revision,
-            expected_page_object_id,
-            expected_playback_revision,
-            expected_playback_object_id,
-        } => application::PlaybackTopologyAction::MapExistingPlayback {
-            page,
-            slot,
-            playback_number,
-            expected_page_revision: input_revision(
-                expected_page_revision,
-                "expected_page_revision",
-            )?,
-            expected_page_object_id: expected_page_object_id.into_option(),
-            expected_playback_revision: input_revision(
-                expected_playback_revision,
-                "expected_playback_revision",
-            )?,
-            expected_playback_object_id: expected_playback_object_id.into_option(),
-        },
+        action @ wire::PlaybackTopologyAction::MapExistingPlayback { .. } => {
+            application_map_existing_playback(action)?
+        }
         wire::PlaybackTopologyAction::CreatePage {
             page,
             expected_page_revision,
@@ -167,6 +127,64 @@ pub(in crate::runtime) fn application_command(
         request_id,
         application::PlaybackTopologyCommand { show_id, action },
     ))
+}
+
+fn application_configure_slot(
+    action: wire::PlaybackTopologyAction,
+) -> Result<application::PlaybackTopologyAction, String> {
+    let wire::PlaybackTopologyAction::ConfigureSlot {
+        page,
+        slot,
+        expected_page_revision,
+        expected_page_object_id,
+        expected_playback_revision,
+        expected_playback_object_id,
+        playback,
+    } = action
+    else {
+        unreachable!("caller passes only ConfigureSlot")
+    };
+    Ok(application::PlaybackTopologyAction::ConfigureSlot {
+        page,
+        slot,
+        expected_page_revision: input_revision(expected_page_revision, "expected_page_revision")?,
+        expected_page_object_id: expected_page_object_id.into_option(),
+        expected_playback_revision: input_revision(
+            expected_playback_revision,
+            "expected_playback_revision",
+        )?,
+        expected_playback_object_id: expected_playback_object_id.into_option(),
+        playback: application_playback(playback)?,
+    })
+}
+
+fn application_map_existing_playback(
+    action: wire::PlaybackTopologyAction,
+) -> Result<application::PlaybackTopologyAction, String> {
+    let wire::PlaybackTopologyAction::MapExistingPlayback {
+        page,
+        slot,
+        playback_number,
+        expected_page_revision,
+        expected_page_object_id,
+        expected_playback_revision,
+        expected_playback_object_id,
+    } = action
+    else {
+        unreachable!("caller passes only MapExistingPlayback")
+    };
+    Ok(application::PlaybackTopologyAction::MapExistingPlayback {
+        page,
+        slot,
+        playback_number,
+        expected_page_revision: input_revision(expected_page_revision, "expected_page_revision")?,
+        expected_page_object_id: expected_page_object_id.into_option(),
+        expected_playback_revision: input_revision(
+            expected_playback_revision,
+            "expected_playback_revision",
+        )?,
+        expected_playback_object_id: expected_playback_object_id.into_option(),
+    })
 }
 
 fn application_save_cue_list(

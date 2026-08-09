@@ -18,6 +18,7 @@ impl CommandContractScenario {
         connected: true,
         desk: control_desk,
     };
+    state.sessions.insert_session(session.clone());
     state.programming.start(session.id, user.id);
     let show_path = data_dir.join("shows/commands.show");
     let show_id = initialise_show(&show_path, "Commands").unwrap();
@@ -324,7 +325,10 @@ fn new_cuelist_and_playback_record_is_one_active_show_batch() {
     else {
         panic!("expected one typed object batch");
     };
-    assert_eq!(change.changes.len(), 2);
+    assert_eq!(change.changes.len(), 3);
+    assert_eq!(change.changes[0].kind, light_application::ActiveShowObjectKind::CueList);
+    assert_eq!(change.changes[1].kind, light_application::ActiveShowObjectKind::Playback);
+    assert_eq!(change.changes[2].kind, light_application::ActiveShowObjectKind::Group);
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
 
@@ -576,7 +580,12 @@ fn typed_speed_execution_resets_the_authoritative_command_line() {
 #[test]
 fn typed_link_command_stores_the_destination_cue_identity() {
     let scenario = CommandContractScenario::new();
-    execute_programmer_command(&scenario.state, &scenario.session, "GROUP 1 AT 50").unwrap();
+    execute_programmer_command(
+        &scenario.state,
+        &scenario.session,
+        "GROUP 1 AT 50 DELAY 1 TIME 2",
+    )
+    .unwrap();
     scenario.verify_cue_creation_and_timing();
     let command = "LINK SET 25 CUE 1 AT CUE 7 DELAY 0.25";
     assert!(

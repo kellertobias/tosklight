@@ -364,27 +364,11 @@ impl DeskProvider {
             self.connection.bind_interface,
         )
     }
-}
 
-impl SceneProvider for DeskProvider {
-    fn capabilities(&self) -> ProviderCapabilities {
-        ProviderCapabilities {
-            kind: ProviderKind::LightingDesk,
-            available: true,
-            unavailable_reason: None,
-            default_host: "127.0.0.1".into(),
-            default_port: 5000,
-            uses_network_input: true,
-        }
-    }
-
-    fn poll(&mut self) -> Vec<ProviderEvent> {
-        let mut events = Vec::new();
+    fn drain_messages(&mut self, events: &mut Vec<ProviderEvent>) {
         loop {
             match self.inbox.try_recv() {
-                Ok(Message::Connection(state)) => {
-                    events.push(ProviderEvent::Connection(state));
-                }
+                Ok(Message::Connection(state)) => events.push(ProviderEvent::Connection(state)),
                 Ok(Message::Scene {
                     plan,
                     bindings,
@@ -403,27 +387,16 @@ impl SceneProvider for DeskProvider {
                 }) => {
                     self.apply_delta(*plan, bindings, external_camera, mappings, *diagnostics);
                 }
-                Ok(Message::Diagnostics(diagnostics)) => {
-                    self.diagnostics = *diagnostics;
-                }
-                Ok(Message::Preview(preview)) => {
-                    self.preview = *preview;
-                }
-                Ok(Message::DeskOutput(output)) => {
-                    self.desk_output = Some(*output);
-                }
-                Ok(Message::Preload2(preload)) => {
-                    self.preload_projection = *preload;
-                }
+                Ok(Message::Diagnostics(value)) => self.diagnostics = *value,
+                Ok(Message::Preview(value)) => self.preview = *value,
+                Ok(Message::DeskOutput(value)) => self.desk_output = Some(*value),
+                Ok(Message::Preload2(value)) => self.preload_projection = *value,
                 Ok(Message::View(view)) => {
-                    let changed = self
+                    self.pending_view = self
                         .view
                         .as_ref()
                         .is_none_or(|current| current.revision != view.revision);
                     self.view = Some(*view);
-                    // A re-read that says what the renderer is already doing is not an
-                    // instruction, and must not take the camera back off the operator.
-                    self.pending_view = changed;
                 }
                 Ok(Message::Resync(reason)) => {
                     events.push(ProviderEvent::ResyncRequired { reason });
@@ -438,7 +411,9 @@ impl SceneProvider for DeskProvider {
                 }
             }
         }
+    }
 
+    fn emit_pending_scene(&mut self, events: &mut Vec<ProviderEvent>) {
         if self.pending_snapshot
             && let Some(scene) = &self.scene
         {
@@ -450,33 +425,54 @@ impl SceneProvider for DeskProvider {
                 view,
             });
         }
-
         if self.pending_view {
             self.pending_view = false;
             if let Some(view) = self.effective_view() {
                 events.push(ProviderEvent::View(view));
             }
         }
-
         if self.pending_delta
             && let Some(scene) = &self.scene
         {
             self.pending_delta = false;
             events.push(ProviderEvent::SceneDelta(Box::new(scene.clone())));
         }
+    }
+
+    fn update_real_universes(&mut self) {
+        if let Some(receivers) = &self.receivers {
+            self.real_universes.extend(
+                receivers
+                    .universes()
+                    .into_iter()
+                    .filter(|universe| universe.accepted > 0)
+                    .map(|universe| universe.universe),
+            );
+        }
+    }
+}
+
+impl SceneProvider for DeskProvider {
+    fn capabilities(&self) -> ProviderCapabilities {
+        ProviderCapabilities {
+            kind: ProviderKind::LightingDesk,
+            available: true,
+            unavailable_reason: None,
+            default_host: "127.0.0.1".into(),
+            default_port: 5000,
+            uses_network_input: true,
+        }
+    }
+
+    fn poll(&mut self) -> Vec<ProviderEvent> {
+        let mut events = Vec::new();
+        self.drain_messages(&mut events);
+        self.emit_pending_scene(&mut events);
 
         // Live values come from the network, and — for a planning source only — from the preview
         // plane on universes the network has never claimed.
         // A universe that has ever accepted a real packet belongs to the network from then on.
-        if let Some(receivers) = &self.receivers {
-            let claimed: Vec<u16> = receivers
-                .universes()
-                .into_iter()
-                .filter(|universe| universe.accepted > 0)
-                .map(|universe| universe.universe)
-                .collect();
-            self.real_universes.extend(claimed);
-        }
+        self.update_real_universes();
         // The editor's own frames, for the universes it still owns. Rebuilt every poll, and
         // re-applied whenever the operator changes something — including when a real source has
         // just taken a universe away, because the frame the decoder holds is a merge of everything

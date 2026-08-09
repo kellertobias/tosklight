@@ -58,12 +58,8 @@ test("PATCH-PLACEMENT-001 @ui › the server commits the independently arranged 
     .filter({ has: page.getByText("Dimmer", { exact: true }) })
     .first();
   await desk.click(family);
-  const mode = browser.locator(".fixture-mode-detail select");
-  const eightBit = await mode.locator("option").evaluateAll((options) =>
-    options.find((option) => option.textContent?.startsWith("8-bit"))?.getAttribute("value"),
-  );
-  expect(eightBit).toBeTruthy();
-  await mode.selectOption(eightBit!);
+  await browser.locator(".fixture-mode-detail .ui-select-trigger").click();
+  await page.getByRole("option", { name: /^8-bit\b/ }).click();
   await desk.click(
     browser.locator(".fixture-mode-detail").getByRole("button", {
       name: "Add fixture",

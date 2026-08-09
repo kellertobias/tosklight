@@ -153,14 +153,7 @@ async function downloadFixturePackage(
 	URL.revokeObjectURL(url);
 }
 
-export function useFixtureLibraryTransfers({
-	selectedMode,
-	setSelectedFamilyKey,
-	setSelectedModeKey,
-}: FixtureLibraryTransfersOptions) {
-	const server = useFixtureLibrary();
-	const attributeActions = useAttributeConfigurationActions();
-	const attributeRegistry = useAttributeRegistry() ?? [];
+function useFixtureTransferState() {
 	const [busy, setBusy] = useState(false);
 	const [modal, setModal] = useState<FixtureImportModal>(null);
 	const [error, setError] = useState<string | null>(null);
@@ -179,7 +172,6 @@ export function useFixtureLibraryTransfers({
 		useState<AttributeConfigurationSnapshot | null>(null);
 	const [customAttributeDraft, setCustomAttributeDraft] =
 		useState<ImportedCustomAttributeDraft | null>(null);
-
 	const selectModal = (next: FixtureImportModal) => {
 		setError(null);
 		setPendingPackage(null);
@@ -190,21 +182,52 @@ export function useFixtureLibraryTransfers({
 		setCustomAttributeDraft(null);
 		setModal(next);
 	};
+	return {
+		busy,
+		setBusy,
+		modal,
+		selectModal,
+		error,
+		setError,
+		pendingPackage,
+		setPendingPackage,
+		pendingGdtf,
+		setPendingGdtf,
+		requirements,
+		setRequirements,
+		mappings,
+		setMappings,
+		createdAttributes,
+		setCreatedAttributes,
+		customAttributeSnapshot,
+		setCustomAttributeSnapshot,
+		customAttributeDraft,
+		setCustomAttributeDraft,
+	};
+}
 
+type FixtureTransferState = ReturnType<typeof useFixtureTransferState>;
+
+function customAttributeOperations(
+	state: FixtureTransferState,
+	attributeActions: ReturnType<typeof useAttributeConfigurationActions>,
+) {
 	const beginCustomAttribute = async (
 		requirement: FixtureImportRequirement,
 	) => {
 		if (!attributeActions?.canWrite) {
-			setError("The primary desk is not ready to create show attributes.");
+			state.setError(
+				"The primary desk is not ready to create show attributes.",
+			);
 			return;
 		}
-		setError(null);
-		setBusy(true);
+		state.setError(null);
+		state.setBusy(true);
 		try {
 			const snapshot = await attributeActions.load();
 			const encoderGroup = defaultEncoderGroup(requirement.value_type);
-			setCustomAttributeSnapshot(snapshot);
-			setCustomAttributeDraft({
+			state.setCustomAttributeSnapshot(snapshot);
+			state.setCustomAttributeDraft({
 				sourceAttribute: requirement.attribute,
 				label: importedAttributeLabel(requirement.attribute),
 				valueType: requirement.value_type,
@@ -216,27 +239,26 @@ export function useFixtureLibraryTransfers({
 				physicalUnit: "",
 			});
 		} catch (reason) {
-			setError(reason instanceof Error ? reason.message : String(reason));
+			state.setError(reason instanceof Error ? reason.message : String(reason));
 		} finally {
-			setBusy(false);
+			state.setBusy(false);
 		}
 	};
-
 	const editCustomAttribute = (
 		patch: Partial<ImportedCustomAttributeDraft>,
 	) => {
-		setCustomAttributeDraft((current) => {
+		state.setCustomAttributeDraft((current) => {
 			if (!current) return current;
 			if (
 				patch.encoderGroup &&
 				patch.encoderGroup !== current.encoderGroup &&
-				customAttributeSnapshot
+				state.customAttributeSnapshot
 			)
 				return {
 					...current,
 					...patch,
 					...nextAvailablePlacement(
-						customAttributeSnapshot,
+						state.customAttributeSnapshot,
 						patch.encoderGroup,
 					),
 					activationGroupId: current.valueType === "control" ? "" : "__new__",
@@ -244,17 +266,16 @@ export function useFixtureLibraryTransfers({
 			return { ...current, ...patch };
 		});
 	};
-
 	const createCustomAttribute = async () => {
-		const draft = customAttributeDraft;
-		const snapshot = customAttributeSnapshot;
+		const draft = state.customAttributeDraft;
+		const snapshot = state.customAttributeSnapshot;
 		if (!draft || !snapshot || !attributeActions?.canWrite) return;
 		if (!draft.label.trim()) {
-			setError("Enter a display label for the custom attribute.");
+			state.setError("Enter a display label for the custom attribute.");
 			return;
 		}
-		setError(null);
-		setBusy(true);
+		state.setError(null);
+		state.setBusy(true);
 		try {
 			const id = customAttributeId(draft.label);
 			const custom = {
@@ -303,41 +324,57 @@ export function useFixtureLibraryTransfers({
 			const created = updated.descriptors.find(
 				(descriptor) => descriptor.id === id,
 			);
-			if (created) setCreatedAttributes((current) => [...current, created]);
-			setMappings((current) => ({
+			if (created)
+				state.setCreatedAttributes((current) => [...current, created]);
+			state.setMappings((current) => ({
 				...current,
 				[draft.sourceAttribute]: id,
 			}));
-			setCustomAttributeSnapshot(null);
-			setCustomAttributeDraft(null);
+			state.setCustomAttributeSnapshot(null);
+			state.setCustomAttributeDraft(null);
 		} catch (reason) {
-			setError(reason instanceof Error ? reason.message : String(reason));
+			state.setError(reason instanceof Error ? reason.message : String(reason));
 		} finally {
-			setBusy(false);
+			state.setBusy(false);
 		}
 	};
+	return { beginCustomAttribute, editCustomAttribute, createCustomAttribute };
+}
 
-	const selectImportedProfile = (profile: {
-		id: string;
-		revision: number;
-		manufacturer: string;
-		name: string;
-		short_name: string;
-		modes: { id: string }[];
-	}) => {
-		setSelectedFamilyKey(
-			`${profile.manufacturer}\0${profile.short_name || profile.name}`,
-		);
-		setSelectedModeKey(
-			`${profile.id}:${profile.revision}:${profile.modes[0]?.id ?? profile.id}`,
-		);
-		setModal(null);
+type ImportedProfileSelection = {
+	id: string;
+	revision: number;
+	manufacturer: string;
+	name: string;
+	short_name: string;
+	modes: { id: string }[];
+};
+
+function gdtfOperations(
+	state: FixtureTransferState,
+	server: ReturnType<typeof useFixtureLibrary>,
+	attributeRegistry: NonNullable<ReturnType<typeof useAttributeRegistry>>,
+	selectImportedProfile: (profile: ImportedProfileSelection) => void,
+) {
+	const saveGdtfProfile = async (
+		profile: FixtureProfile,
+		source: Uint8Array,
+	) => {
+		const saved = await server?.saveFixtureProfile(profile, 0);
+		if (
+			saved &&
+			(await server?.saveFixtureProfileSourceGdtf(
+				saved.id,
+				saved.revision,
+				source,
+			))
+		)
+			selectImportedProfile(saved);
 	};
-
 	const importGdtfFile = async (file?: File) => {
 		if (!file) return;
-		setError(null);
-		setBusy(true);
+		state.setError(null);
+		state.setBusy(true);
 		try {
 			const source = new Uint8Array(await file.arrayBuffer());
 			const imported = await importGdtfData(source, file.name);
@@ -380,64 +417,113 @@ export function useFixtureLibraryTransfers({
 				new Set(attributeRegistry.map(({ id }) => id)),
 			);
 			if (unresolved.length) {
-				setPendingGdtf({ profile, source });
-				setRequirements(unresolved);
-				setMappings({});
+				state.setPendingGdtf({ profile, source });
+				state.setRequirements(unresolved);
+				state.setMappings({});
 				return;
 			}
 			await saveGdtfProfile(profile, source);
 		} catch (reason) {
-			setError(reason instanceof Error ? reason.message : String(reason));
+			state.setError(reason instanceof Error ? reason.message : String(reason));
 		} finally {
-			setBusy(false);
+			state.setBusy(false);
 		}
 	};
-
-	const saveGdtfProfile = async (
-		profile: FixtureProfile,
-		source: Uint8Array,
-	) => {
-		const saved = await server?.saveFixtureProfile(profile, 0);
-		if (
-			saved &&
-			(await server?.saveFixtureProfileSourceGdtf(
-				saved.id,
-				saved.revision,
-				source,
-			))
-		) {
-			selectImportedProfile(saved);
-		}
-	};
-
 	const confirmGdtfMappings = async () => {
-		if (!pendingGdtf || requirements.length === 0) return;
-		if (requirements.some((requirement) => !mappings[requirement.attribute])) {
-			setError("Choose a compatible descriptor for every GDTF attribute.");
+		if (!state.pendingGdtf || state.requirements.length === 0) return;
+		if (
+			state.requirements.some(
+				(requirement) => !state.mappings[requirement.attribute],
+			)
+		) {
+			state.setError(
+				"Choose a compatible descriptor for every GDTF attribute.",
+			);
 			return;
 		}
-		setError(null);
-		setBusy(true);
+		state.setError(null);
+		state.setBusy(true);
 		try {
-			const profile = applyGdtfMappings(pendingGdtf.profile, mappings);
-			if (server?.rememberFixtureSourceMapping) {
+			const profile = applyGdtfMappings(
+				state.pendingGdtf.profile,
+				state.mappings,
+			);
+			if (server?.rememberFixtureSourceMapping)
 				await Promise.all(
-					requirements.map((requirement) =>
+					state.requirements.map((requirement) =>
 						server.rememberFixtureSourceMapping?.({
 							sourceFormat: "gdtf",
 							sourceAttribute: requirement.attribute.slice("GDTF:".length),
-							targetAttribute: mappings[requirement.attribute] ?? null,
+							targetAttribute: state.mappings[requirement.attribute] ?? null,
 						}),
 					),
 				);
-			}
-			await saveGdtfProfile(profile, pendingGdtf.source);
+			await saveGdtfProfile(profile, state.pendingGdtf.source);
 		} catch (reason) {
-			setError(reason instanceof Error ? reason.message : String(reason));
+			state.setError(reason instanceof Error ? reason.message : String(reason));
 		} finally {
-			setBusy(false);
+			state.setBusy(false);
 		}
 	};
+	return { importGdtfFile, confirmGdtfMappings };
+}
+
+export function useFixtureLibraryTransfers({
+	selectedMode,
+	setSelectedFamilyKey,
+	setSelectedModeKey,
+}: FixtureLibraryTransfersOptions) {
+	const server = useFixtureLibrary();
+	const attributeActions = useAttributeConfigurationActions();
+	const attributeRegistry = useAttributeRegistry() ?? [];
+	const state = useFixtureTransferState();
+	const { beginCustomAttribute, editCustomAttribute, createCustomAttribute } =
+		customAttributeOperations(state, attributeActions);
+	const {
+		busy,
+		modal,
+		error,
+		pendingPackage,
+		requirements,
+		mappings,
+		createdAttributes,
+		customAttributeSnapshot,
+		customAttributeDraft,
+	} = state;
+	const {
+		setBusy,
+		setError,
+		setPendingPackage,
+		setRequirements,
+		setMappings,
+		setCustomAttributeSnapshot,
+		setCustomAttributeDraft,
+		selectModal,
+	} = state;
+
+	const selectImportedProfile = (profile: {
+		id: string;
+		revision: number;
+		manufacturer: string;
+		name: string;
+		short_name: string;
+		modes: { id: string }[];
+	}) => {
+		setSelectedFamilyKey(
+			`${profile.manufacturer}\0${profile.short_name || profile.name}`,
+		);
+		setSelectedModeKey(
+			`${profile.id}:${profile.revision}:${profile.modes[0]?.id ?? profile.id}`,
+		);
+		selectModal(null);
+	};
+
+	const { importGdtfFile, confirmGdtfMappings } = gdtfOperations(
+		state,
+		server,
+		attributeRegistry,
+		selectImportedProfile,
+	);
 
 	const importPackage = async (file?: File) => {
 		if (!file) return;

@@ -177,8 +177,11 @@ export interface NumberInputProps
 	allowDecimal?: boolean;
 	allowThrough?: boolean;
 	showStepButtons?: boolean;
+	stepBehavior?: "increment" | "snap";
+	wrapStepAtBounds?: boolean;
 	keyboardLabel?: string;
 	onValueChange?: (value: string) => void;
+	onStepCommit?: (value: string) => void;
 	onKeyboardCommit?: (value: string) => void;
 	onRangeCommit?: (points: number[]) => void;
 	modalFader?: ModalNumberFaderConfig;
@@ -328,25 +331,66 @@ function OpenNumberPadButton({
 	);
 }
 
+function steppedNumber(
+	current: string,
+	direction: -1 | 1,
+	step: number | string,
+	behavior: "increment" | "snap",
+	wrap: boolean,
+	min: number | string | undefined,
+	max: number | string | undefined,
+) {
+	const numeric = Number(current) || 0;
+	const increment = Number(step);
+	let next =
+		behavior === "snap"
+			? direction === 1
+				? (Math.floor(numeric / increment) + 1) * increment
+				: (Math.ceil(numeric / increment) - 1) * increment
+			: numeric + increment * direction;
+	const lower = min == null ? -Infinity : Number(min);
+	const upper = max == null ? Infinity : Number(max);
+	if (wrap && next < lower) next = upper;
+	else if (wrap && next > upper) next = lower;
+	else next = clampNumber(next, min, max);
+	return String(next);
+}
+
+function commitNumberModal(
+	next: string,
+	allowThrough: boolean,
+	onRangeCommit: ((points: number[]) => void) | undefined,
+	commit: (value: string) => string,
+	close: () => void,
+	onKeyboardCommit: ((value: string) => void) | undefined,
+) {
+	if (allowThrough && /\bTHRU\b/i.test(next) && onRangeCommit) {
+		const points = next
+			.split(/\s+THRU\s+/i)
+			.map((point) => Number(point.trim()));
+		if (points.length > 1 && points.every(Number.isFinite)) {
+			onRangeCommit(points);
+			close();
+			return;
+		}
+	}
+	const committed = commit(next);
+	close();
+	onKeyboardCommit?.(committed);
+}
+
 export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(
-	function NumberInput(
-		{
+	function NumberInput(inputProps, ref) {
+		const {
 			className = "",
 			value,
 			defaultValue,
 			onChange,
 			onValueChange,
-			onKeyboardCommit,
-			onRangeCommit,
-			modalFader,
-			modalPresets,
-			onModalRelease,
-			modalReleaseLabel,
 			allowDecimal = false,
-			allowThrough = false,
 			showStepButtons = true,
-			keyboardLabel,
-			unit,
+			stepBehavior = "increment",
+			wrapStepAtBounds = false,
 			keyboardRequest = 0,
 			disabled,
 			readOnly,
@@ -354,9 +398,7 @@ export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(
 			max,
 			step = 1,
 			...props
-		},
-		ref,
-	) {
+		} = inputProps;
 		const [open, setOpen] = useState(false);
 		const lastKeyboardRequest = useRef(keyboardRequest);
 		const [modalValue, setModalValue] = useState("");
@@ -384,34 +426,30 @@ export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(
 			return committed;
 		};
 		const bump = (direction: -1 | 1) => {
-			update(
-				String(
-					clampNumber(
-						(Number(current) || 0) + Number(step) * direction,
-						min,
-						max,
-					),
-				),
+			const committed = steppedNumber(
+				current,
+				direction,
+				step,
+				stepBehavior,
+				wrapStepAtBounds,
+				min,
+				max,
 			);
+			update(committed);
+			inputProps.onStepCommit?.(committed);
 		};
 		const close = () => {
 			setOpen(false);
 		};
-		const commitModal = (next: string) => {
-			if (allowThrough && /\bTHRU\b/i.test(next) && onRangeCommit) {
-				const points = next
-					.split(/\s+THRU\s+/i)
-					.map((point) => Number(point.trim()));
-				if (points.length > 1 && points.every(Number.isFinite)) {
-					onRangeCommit(points);
-					close();
-					return;
-				}
-			}
-			const committed = commit(next);
-			close();
-			onKeyboardCommit?.(committed);
-		};
+		const commitModal = (next: string) =>
+			commitNumberModal(
+				next,
+				inputProps.allowThrough ?? false,
+				inputProps.onRangeCommit,
+				commit,
+				close,
+				inputProps.onKeyboardCommit,
+			);
 		return (
 			<span
 				className={`ui-number-control ${showStepButtons ? "with-steppers" : "without-steppers"}`}
@@ -465,27 +503,27 @@ export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(
 				{open && (
 					<NumberInputModal
 						allowDecimal={allowDecimal}
-						allowThrough={allowThrough}
+						allowThrough={inputProps.allowThrough ?? false}
 						current={current}
-						fader={modalFader}
+						fader={inputProps.modalFader}
 						keyboardLabel={
-							keyboardLabel ?? props["aria-label"] ?? "Number input"
+							inputProps.keyboardLabel ?? props["aria-label"] ?? "Number input"
 						}
 						modalValue={modalValue}
 						onChange={setModalValue}
 						onClose={close}
 						onCommit={(next = modalValue) => commitModal(next)}
 						onRelease={
-							onModalRelease
+							inputProps.onModalRelease
 								? () => {
-										onModalRelease();
+										inputProps.onModalRelease?.();
 										close();
 									}
 								: undefined
 						}
-						presets={modalPresets}
-						releaseLabel={modalReleaseLabel}
-						unit={unit}
+						presets={inputProps.modalPresets}
+						releaseLabel={inputProps.modalReleaseLabel}
+						unit={inputProps.unit}
 					/>
 				)}
 			</span>

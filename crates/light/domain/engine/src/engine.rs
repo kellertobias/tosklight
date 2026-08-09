@@ -5,12 +5,12 @@ use crate::{
 use arc_swap::ArcSwap;
 use chrono::{DateTime, Utc};
 use light_core::{FixtureId, SharedClock};
-use light_fixture::HighlightLook;
+use light_fixture::{HighlightLook, HighlightLookCompatibility};
 use light_playback::PlaybackEngine;
-use light_programmer::ProgrammerRegistry;
+use light_programmer::{HighlightOutputLayer, ProgrammerRegistry};
 use parking_lot::{Mutex, RwLock};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     sync::{
         Arc,
         atomic::{AtomicBool, AtomicU64, Ordering},
@@ -35,7 +35,7 @@ pub struct Engine {
     pub(crate) group_master_transitions: Mutex<HashMap<String, GroupMasterTransition>>,
     /// Live Highlight is an output overlay, not programmer/show data. Ownership and remembered
     /// selection live in the server; the engine only needs the currently lit fixture identities.
-    pub(crate) highlighted_fixtures: RwLock<HashSet<FixtureId>>,
+    pub(crate) highlight_layers: RwLock<HashMap<FixtureId, HighlightOutputLayer>>,
     /// Installation-owned Highlight intent. A bare engine starts in review-required compatibility
     /// mode so callers that have not installed desk configuration retain exact legacy raw output.
     pub(crate) highlight_look: RwLock<HighlightLook>,
@@ -83,8 +83,11 @@ impl Engine {
             move_in_black: Mutex::new(HashMap::new()),
             group_master_flashes: RwLock::new(HashMap::new()),
             group_master_transitions: Mutex::new(HashMap::new()),
-            highlighted_fixtures: RwLock::new(HashSet::new()),
-            highlight_look: RwLock::new(HighlightLook::default()),
+            highlight_layers: RwLock::new(HashMap::new()),
+            highlight_look: RwLock::new(HighlightLook {
+                compatibility: HighlightLookCompatibility::NeedsReview,
+                ..HighlightLook::default()
+            }),
             clock,
         }
     }

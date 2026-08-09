@@ -737,6 +737,18 @@ export class BrowserScreens {
 			await row.getByLabel("Buttons").fill(String(desired.buttons));
 		}
 		await dialog.getByRole("button", { name: "Save", exact: true }).click();
+		await expect(dialog).toBeHidden();
+		const screenId = await card.getAttribute("data-screen-id");
+		if (!screenId) throw new Error("Configured screen has no runtime identity");
+		await expect
+			.poll(async () => {
+				const snapshot = await this.api.request<{
+					screens: Array<{ id: string; page_mode: string }>;
+				}>("GET", "/api/v2/screens");
+				return snapshot.screens.find((screen) => screen.id === screenId)
+					?.page_mode;
+			})
+			.toBe(playback.pageMode === "dedicated" ? "independent" : "follow_main");
 	}
 }
 

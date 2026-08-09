@@ -272,4 +272,19 @@ describe("desk SET interaction owner", () => {
 		);
 		release();
 	});
+
+	it("leaves an extended SET Group command for normal command execution", async () => {
+		mocks.command.text = "SET GROUP 4 AT 1 . 2";
+		render(<View />);
+		let consumed = true;
+		await act(async () => {
+			await controller?.arm("touch");
+			await controller?.chooseGroup(
+				{ objectId: "4", objectRevision: 12 },
+				"touch",
+			);
+			consumed = (await controller?.enter("touch")) ?? true;
+		});
+		expect(consumed).toBe(false);
+	});
 });

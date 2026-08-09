@@ -245,9 +245,23 @@ fn migrate_cue_list(object: PortableShowCandidateObject<'_>) -> Result<Value, Ac
         .get_mut("cues")
         .and_then(Value::as_array_mut)
         .ok_or_else(|| invalid_object(object, "cues must be an array"))?;
-    for cue in cues.iter_mut() {
+    let mut cue_ids = std::collections::HashSet::with_capacity(cues.len());
+    for (index, cue) in cues.iter_mut().enumerate() {
         if let Some(cue) = cue.as_object_mut() {
             cue.remove("phasers");
+            if let Some(id) = cue
+                .get("id")
+                .and_then(Value::as_str)
+                .and_then(|id| uuid::Uuid::parse_str(id).ok())
+                && !cue_ids.insert(id)
+            {
+                let replacement = uuid::Uuid::new_v5(
+                    &cue_list.id.0,
+                    format!("duplicate-cue-id:{id}:{index}").as_bytes(),
+                );
+                cue.insert("id".into(), Value::String(replacement.to_string()));
+                cue_ids.insert(replacement);
+            }
         }
     }
     for index in missing_cue_ids {
@@ -273,6 +287,8 @@ fn migrate_cue_list(object: PortableShowCandidateObject<'_>) -> Result<Value, Ac
         "restart_mode",
         "force_cue_timing",
         "disable_cue_timing",
+        "auto_off_at_zero",
+        "auto_off_flash_release",
         "speed_multiplier",
     ] {
         if !body.contains_key(field)

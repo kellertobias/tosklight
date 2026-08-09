@@ -51,7 +51,7 @@ export interface CommandLineProps {
 	historyOpen: boolean;
 	status: CommandStatus;
 	onReplace: (value: string, pristine?: boolean) => void;
-	onExecute: () => void | Promise<void>;
+	onExecute: (value?: string) => void | Promise<void>;
 	/** Omitted while the surface carries one section only, which hides the mode toggle. */
 	onToggleMode?: () => void;
 	onHistoryOpenChange: (open: boolean) => void;
@@ -133,7 +133,7 @@ function CommandInputSurface(
 					onKeyDown={(event) => {
 						if (event.key !== "Enter") return;
 						event.stopPropagation();
-						void props.onExecute();
+						void props.onExecute(event.currentTarget.value);
 					}}
 				/>
 				{!props.hardware && (

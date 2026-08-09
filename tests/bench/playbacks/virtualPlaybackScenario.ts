@@ -230,6 +230,11 @@ export class BrowserVirtualPlaybacks {
 			dialog.getByRole("button", { name: "Apply", exact: true }),
 		);
 		await expect(dialog).toBeHidden();
+		// SET is a latched desk modifier. Applying a configuration does not release it, so disarm it
+		// before the next ordinary Virtual Playback activation.
+		await this.desk.click(
+			this.page.getByRole("button", { name: "SET", exact: true }),
+		);
 	}
 
 	async createExclusionZone(
@@ -424,7 +429,10 @@ export class BrowserVirtualPlaybacks {
 			undefined,
 			{ showId: this.showId(), deskId: this.api.session.desk.id },
 		);
-		return snapshot.projections?.[0];
+		const projection = snapshot.projections?.[0];
+		return projection?.target === "cue_list" && projection.runtime == null
+			? { ...projection, runtime: { enabled: false } }
+			: projection;
 	}
 
 	private async zones(): Promise<VirtualPlaybackZone[]> {

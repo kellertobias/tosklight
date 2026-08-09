@@ -34,6 +34,7 @@ interface DynamicEditorSurfaceProps {
 	runtime: DynamicRuntimeSnapshotProjection | null;
 	speedGroupBpms?: Partial<Record<SpeedGroupId, number>>;
 	selection: readonly string[];
+	selectionAvailable: boolean;
 	view: DynamicEditorView;
 	lane: DynamicLaneProjection | undefined;
 	selectedLanes: ReadonlySet<string>;
@@ -174,7 +175,7 @@ function DynamicEditorSettings({
 	settingsAnchor,
 	status,
 	running,
-	selection,
+	selectionAvailable,
 	onSettingsAnchor,
 	onTakeSelection,
 	onClearSelection,
@@ -203,7 +204,7 @@ function DynamicEditorSettings({
 							dynamic={dynamic}
 							status={status}
 							running={running}
-							selectionCount={selection.length}
+							selectionCount={selectionAvailable ? 1 : 0}
 							onTakeSelection={onTakeSelection}
 							onClearSelection={onClearSelection}
 						/>
@@ -348,7 +349,7 @@ function PhaseWorkspace(props: DynamicEditorSurfaceProps) {
 				dynamic={props.dynamic}
 				lane={props.lane}
 				running={props.running}
-				selectionCount={props.selection.length}
+				selectionCount={props.selectionAvailable ? 1 : 0}
 				onSelectLane={(id) => props.onSelectLane(id, false)}
 				onTakeSelection={props.onTakeSelection}
 				onClearSelection={props.onClearSelection}

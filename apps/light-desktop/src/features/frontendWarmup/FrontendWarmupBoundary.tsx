@@ -111,7 +111,9 @@ type WarmupAuthorities = {
 	programmerValues: NonNullable<
 		ReturnType<typeof useProgrammerValuesAuthority>
 	>;
-	captureMode: NonNullable<ReturnType<typeof useProgrammerCaptureModeAuthority>>;
+	captureMode: NonNullable<
+		ReturnType<typeof useProgrammerCaptureModeAuthority>
+	>;
 	programmerLifecycle: NonNullable<
 		ReturnType<typeof useProgrammerLifecycleAuthority>
 	>;
@@ -146,10 +148,16 @@ function startFrontendWarmup(
 	authorities: WarmupAuthorities,
 ) {
 	if (frontendWarmupDisabled()) return markUsablePaintOnly();
+	let readyReported = false;
 	const coordinator = new FrontendWarmupCoordinator({
 		concurrency: 2,
-		onDiagnostics: (diagnostics) =>
-			frontendPerformanceDiagnostics.setWarmup(diagnostics),
+		onDiagnostics: (diagnostics) => {
+			frontendPerformanceDiagnostics.setWarmup(diagnostics);
+			if (!readyReported && diagnostics.status === "ready") {
+				readyReported = true;
+				console.debug("[ToskLight] frontend warm-up ready");
+			}
+		},
 	});
 	enqueueWarmupTasks(coordinator, state, authorities);
 	let cancelled = false;
@@ -302,8 +310,7 @@ async function acquirePlaybackRegistryLease(
 		throw reason;
 	}
 	return {
-		release: () =>
-			releasePlaybackRegistry(unsubscribe, releases, releaseDesk),
+		release: () => releasePlaybackRegistry(unsubscribe, releases, releaseDesk),
 		retainedBytes: serializedModelBytes(playback.store.getSnapshot()),
 	};
 }
@@ -317,8 +324,7 @@ function synchronizePlaybackIdentities(
 	const nextKeys = new Set(identities.map(identityKey));
 	for (const identity of identities) {
 		const key = identityKey(identity);
-		if (!releases.has(key))
-			releases.set(key, playback.activateWarm(identity));
+		if (!releases.has(key)) releases.set(key, playback.activateWarm(identity));
 	}
 	for (const [key, release] of releases) {
 		if (nextKeys.has(key)) continue;
@@ -346,7 +352,9 @@ function playbackIdentities(
 	>,
 ) {
 	return [
-		...snapshot.groups.map(({ id }) => groupIdentity(id)),
+		...snapshot.playbacks.flatMap(({ body }) =>
+			body.target.type === "group" ? [groupIdentity(body.target.group_id)] : [],
+		),
 		...snapshot.cueLists.map(({ id }) => cueListIdentity(id)),
 		...snapshot.playbacks.map(({ body }) => playbackIdentity(body.number)),
 	]

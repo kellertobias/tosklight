@@ -45,7 +45,7 @@ scenario(
 		await t.clock.advanceBy("1999ms");
 		await t.expectFixtureValue(fixture(101), { pan: 0.2 });
 		await t.moveInBlack.expectState(101, {
-			state: "blocked",
+			state: "delaying",
 			currentCue: 2,
 			targetCue: 3,
 		});

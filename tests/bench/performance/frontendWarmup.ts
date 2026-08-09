@@ -63,34 +63,25 @@ export async function measureFrontendWarmup(
 	cdp.on("Network.loadingFinished", ({ encodedDataLength }) => {
 		networkTransferredBytes += encodedDataLength;
 	});
+	const warmupReady = options.warm
+		? page
+				.waitForEvent("console", {
+					predicate: (message) =>
+						message.type() === "debug" &&
+						message.text() === "[ToskLight] frontend warm-up ready",
+					timeout: 30_000,
+				})
+				.then(() => undefined)
+		: undefined;
 	await desk.enableControllableDesktop();
 	await desk.open(
 		options.warm ? baseUrl : `${baseUrl}?frontend-warmup-disabled`,
+		{ beforeReadinessChecks: warmupReady },
 	);
 	await world.app.expect.ready();
-	await expect
-		.poll(
-			() =>
-				page.evaluate(
-					() =>
-						window.__TOSKLIGHT_FRONTEND_PERFORMANCE__?.snapshot()
-							.firstUsablePaintAt ?? null,
-				),
-			{ timeout: 15_000 },
-		)
-		.not.toBeNull();
-	if (options.warm)
-		await expect
-			.poll(
-				() =>
-					page.evaluate(
-						() =>
-							window.__TOSKLIGHT_FRONTEND_PERFORMANCE__?.snapshot().warmup
-								?.status ?? null,
-					),
-				{ timeout: 30_000 },
-			)
-			.toBe("ready");
+	const opened = await frontendProgress(page);
+	expect(opened.firstUsablePaintAt).not.toBeNull();
+	if (options.warm) expect(opened.warmupStatus).toBe("ready");
 	if (options.warm && options.emitReconciliationEvent) {
 		await options.emitReconciliationEvent();
 		await expect
@@ -98,8 +89,8 @@ export async function measureFrontendWarmup(
 				() =>
 					page.evaluate(
 						() =>
-							window.__TOSKLIGHT_FRONTEND_PERFORMANCE__?.snapshot().eventLags
-								.length ?? 0,
+							window.__TOSKLIGHT_FRONTEND_PERFORMANCE__?.progress()
+								.eventLagCount ?? 0,
 					),
 				{ timeout: 10_000 },
 			)
@@ -109,10 +100,8 @@ export async function measureFrontendWarmup(
 				() =>
 					page.evaluate(
 						() =>
-							window.__TOSKLIGHT_FRONTEND_PERFORMANCE__
-								?.snapshot()
-								.snapshotRequests.some(({ status }) => status === "running") ??
-							false,
+							window.__TOSKLIGHT_FRONTEND_PERFORMANCE__?.progress()
+								.snapshotRequestRunning ?? false,
 					),
 				{ timeout: 10_000 },
 			)
@@ -140,9 +129,9 @@ export async function measureFrontendWarmup(
 			loadingPlaceholders.add(text);
 	}
 	for (let index = 0; index < 40; index++) {
-		await page.locator(".mode-toggle").click();
+		await world.builtIn.open(builtIns[index % builtIns.length]);
 		await page
-			.locator(".control-section")
+			.getByRole("main")
 			.evaluate((element) => element.getBoundingClientRect().width);
 		for (const text of await visibleLoadingText(page))
 			loadingPlaceholders.add(text);
@@ -206,6 +195,14 @@ export async function measureFrontendWarmup(
 	await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
 	await cdp.detach();
 	return evidence;
+}
+
+async function frontendProgress(page: Page) {
+	return page.evaluate(() => {
+		const progress = window.__TOSKLIGHT_FRONTEND_PERFORMANCE__?.progress();
+		if (!progress) throw new Error("Frontend progress is unavailable");
+		return progress;
+	});
 }
 
 async function startTrace(cdp: CDPSession) {

@@ -40,6 +40,11 @@ export type ControlSurfaceIntent =
 			action: DeskShortcut;
 	  }
 	| {
+			type: "desk_command";
+			source: ControlSurfaceSource;
+			command: DeskCommand;
+	  }
+	| {
 			type: "configure_playback";
 			source: "context_menu";
 			surfaceId: string;
@@ -69,6 +74,19 @@ export type DeskShortcut =
 	| "shift_7"
 	| "shift_8"
 	| "shift_9";
+
+export type DeskCommand =
+	| "home"
+	| "stage"
+	| "fixtures"
+	| "channels"
+	| "groups"
+	| "presets"
+	| "cues"
+	| "playbacks"
+	| "setup"
+	| "help"
+	| "menu";
 
 export interface ControlSurfaceTarget {
 	id: string;
@@ -133,6 +151,7 @@ function intentLabel(intent: ControlSurfaceIntent) {
 		return `File Manager ${intent.action}`;
 	if (intent.type === "desk_shortcut")
 		return intent.action.replaceAll("_", " ");
+	if (intent.type === "desk_command") return intent.command;
 	if (intent.type === "configure_playback") return "playback configuration";
 	if (intent.type === "select_group_live") return "live Group selection";
 	if (intent.type === "select_group_frozen") return "frozen Group selection";

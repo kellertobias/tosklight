@@ -3,7 +3,8 @@ use crate::{
     ActionEnvelope, ActionError, ActionErrorKind, ProgrammingPresetRecallDisposition,
     ProgrammingPresetRecallEnvironment, ProgrammingPresetRecallOutcome,
     ProgrammingPresetRecallPorts, ProgrammingPresetRecallRequest, ProgrammingPresetRecallResult,
-    ProgrammingPresetRecallRevisionExpectation, ProgrammingRecalledPresetProjection,
+    ProgrammingPresetRecallRevisionExpectation, ProgrammingPresetRecallTarget,
+    ProgrammingRecalledPresetProjection,
 };
 use light_core::{SessionId, UserId};
 use light_programmer::SelectionExpression;
@@ -35,14 +36,18 @@ impl ProgrammingService {
         ports.authorize_preset_recall(&action.context)?;
         self.assert_recall_owner(identity.session_id, identity.user_id)?;
         validate_request(&action.command)?;
+        let (capture_mode_revision, target) = self.assert_recall_capture_revision(
+            identity.session_id,
+            identity.user_id,
+            action.command.expected_capture_mode_revision,
+        )?;
         let values_revision = self.assert_recall_values_revision(
             identity.user_id,
             action.command.expected_values_revision,
         )?;
-        let capture_mode_revision = self.assert_recall_capture_revision(
-            identity.session_id,
+        let preload_values_revision = self.assert_recall_preload_values_revision(
             identity.user_id,
-            action.command.expected_capture_mode_revision,
+            action.command.expected_preload_values_revision,
         )?;
         let selection = self
             .programmers
@@ -71,7 +76,9 @@ impl ProgrammingService {
                 before,
                 environment,
                 values_revision,
+                preload_values_revision,
                 capture_mode_revision,
+                target,
             );
         }
         let mutations = super::super::preset_recall_plan::plan(
@@ -80,17 +87,64 @@ impl ProgrammingService {
             &environment.groups,
             environment.programmer_fade_millis,
         )?;
-        let active_context = format!("preset:{}", action.command.address.storage_key());
-        let transition = self
-            .programmers
-            .apply_normal_preset_recall(identity.session_id, &mutations, active_context.clone())
-            .ok_or_else(recall_unavailable)?;
+        let preset_context = format!("preset:{}", action.command.address.storage_key());
+        let normal_changed = if target == ProgrammingPresetRecallTarget::Programmer {
+            self.programmers
+                .apply_normal_preset_recall(identity.session_id, &mutations, preset_context.clone())
+                .ok_or_else(recall_unavailable)?
+                .changed()
+        } else {
+            false
+        };
+        let preload_changed = if target == ProgrammingPresetRecallTarget::Preload {
+            let mutations = super::super::preset_recall_plan::as_preload(&mutations);
+            self.programmers
+                .apply_preload_values(identity.session_id, &mutations)
+        } else {
+            false
+        };
         let after = Snapshot::read(
             &self.programmers,
             action.context.desk_id,
             identity.session_id,
             identity.user_id,
         )?;
+        self.finish_applied_preset_recall(
+            action,
+            ports,
+            identity,
+            before,
+            after,
+            environment,
+            selection.selected.len(),
+            values_revision,
+            preload_values_revision,
+            capture_mode_revision,
+            target,
+            preset_context,
+            normal_changed,
+            preload_changed,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn finish_applied_preset_recall(
+        &self,
+        action: ActionEnvelope<ProgrammingPresetRecallRequest>,
+        ports: &dyn ProgrammingPresetRecallPorts,
+        identity: RecallIdentity,
+        before: Snapshot,
+        after: Snapshot,
+        environment: ProgrammingPresetRecallEnvironment,
+        applied_fixtures: usize,
+        values_revision: u64,
+        preload_values_revision: u64,
+        capture_mode_revision: u64,
+        target: ProgrammingPresetRecallTarget,
+        preset_context: String,
+        normal_changed: bool,
+        preload_changed: bool,
+    ) -> Result<ProgrammingPresetRecallResult, ActionError> {
         let interaction = interaction_change(
             &self.programmers,
             action.context.desk_id,
@@ -98,38 +152,91 @@ impl ProgrammingService {
             &before,
             &after,
         );
-        let values_change = self.values_change(
-            identity.user_id,
-            &before.values_content,
-            &after.values_content,
-        )?;
-        let changed = transition.changed() || interaction.is_some();
+        let values_change = (target == ProgrammingPresetRecallTarget::Programmer)
+            .then(|| {
+                self.values_change(
+                    identity.user_id,
+                    &before.values_content,
+                    &after.values_content,
+                )
+            })
+            .transpose()?
+            .flatten();
+        let preload_values_change = (target == ProgrammingPresetRecallTarget::Preload)
+            .then(|| {
+                self.preload_values_change(
+                    identity.user_id,
+                    identity.session_id,
+                    before.preload_values_generation,
+                    after.preload_values_generation,
+                )
+            })
+            .transpose()?
+            .flatten();
+        let changed = normal_changed || preload_changed || interaction.is_some();
         let warning = changed
-            .then(|| ports.persist_preset_recall(&action.context, "preset.apply"))
+            .then(|| {
+                ports.persist_preset_recall(
+                    &action.context,
+                    match target {
+                        ProgrammingPresetRecallTarget::Programmer => "preset.apply",
+                        ProgrammingPresetRecallTarget::Preload => "preset.apply_preload",
+                    },
+                )
+            })
             .flatten();
         let interaction_event_sequence = self.publish_interaction(&action.context, interaction);
-        let (projection, values_event_sequence, resulting_revision) =
-            self.complete_recall_values(&action, values_change, values_revision);
-        let outcome = if changed {
-            ProgrammingPresetRecallOutcome::Changed {
-                values_revision: resulting_revision,
-                projection,
-                values_event_sequence,
+        let outcome = match target {
+            ProgrammingPresetRecallTarget::Programmer if changed => {
+                let (projection, values_event_sequence, resulting_revision) =
+                    self.complete_recall_values(&action, values_change, values_revision);
+                ProgrammingPresetRecallOutcome::Changed {
+                    values_revision: resulting_revision,
+                    projection,
+                    values_event_sequence,
+                }
             }
-        } else {
-            ProgrammingPresetRecallOutcome::NoChange {
-                values_revision: resulting_revision,
+            ProgrammingPresetRecallTarget::Preload if changed => {
+                let (projection, preload_values_event_sequence, resulting_revision) = self
+                    .complete_recall_preload_values(
+                        &action,
+                        preload_values_change,
+                        preload_values_revision,
+                    );
+                ProgrammingPresetRecallOutcome::PreloadChanged {
+                    values_revision,
+                    preload_values_revision: resulting_revision,
+                    projection,
+                    preload_values_event_sequence,
+                }
             }
+            _ => ProgrammingPresetRecallOutcome::NoChange { values_revision },
+        };
+        let resulting_preload_values_revision = match &outcome {
+            ProgrammingPresetRecallOutcome::PreloadChanged {
+                preload_values_revision,
+                ..
+            } => *preload_values_revision,
+            _ => preload_values_revision,
+        };
+        let active_context = match target {
+            ProgrammingPresetRecallTarget::Programmer => Some(preset_context),
+            ProgrammingPresetRecallTarget::Preload => self
+                .programmers
+                .get(identity.session_id)
+                .and_then(|programmer| programmer.active_context),
         };
         let result = ProgrammingPresetRecallResult {
             context: action.context.clone(),
+            target,
+            preload_values_revision: resulting_preload_values_revision,
             disposition: ProgrammingPresetRecallDisposition::Recalled,
-            applied_fixtures: selection.selected.len(),
+            applied_fixtures,
             selected_targets: 0,
             selection_revision: after.selection_revision,
             interaction_event_sequence,
             capture_mode_revision,
-            active_context: Some(active_context),
+            active_context,
             preset: recalled_projection(environment),
             outcome,
             warning,
@@ -147,7 +254,9 @@ impl ProgrammingService {
         before: Snapshot,
         environment: ProgrammingPresetRecallEnvironment,
         values_revision: u64,
+        preload_values_revision: u64,
         capture_mode_revision: u64,
+        target: ProgrammingPresetRecallTarget,
     ) -> Result<ProgrammingPresetRecallResult, ActionError> {
         let target_plan = super::super::preset_recall_plan::target_selection(
             &environment.preset,
@@ -199,6 +308,8 @@ impl ProgrammingService {
         };
         let result = ProgrammingPresetRecallResult {
             context: action.context.clone(),
+            target,
+            preload_values_revision,
             disposition: ProgrammingPresetRecallDisposition::TargetsSelected,
             applied_fixtures: 0,
             selected_targets: target_plan.selected.len(),
@@ -232,6 +343,25 @@ impl ProgrammingService {
         (Some(projection), event_sequence, revision)
     }
 
+    fn complete_recall_preload_values(
+        &self,
+        action: &ActionEnvelope<ProgrammingPresetRecallRequest>,
+        change: Option<crate::ProgrammingPreloadValuesChange>,
+        revision_before: u64,
+    ) -> (
+        Option<Arc<crate::ProgrammingPreloadValuesProjection>>,
+        Option<u64>,
+        u64,
+    ) {
+        let Some(change) = change else {
+            return (None, None, revision_before);
+        };
+        let projection = Arc::clone(&change.projection);
+        let revision = projection.revision;
+        let event_sequence = self.publish_preload_values(&action.context, Some(change));
+        (Some(projection), event_sequence, revision)
+    }
+
     fn assert_recall_owner(&self, session: SessionId, user_id: UserId) -> Result<(), ActionError> {
         match self.programmers.user_id(session) {
             Some(owner) if owner == user_id => Ok(()),
@@ -253,27 +383,36 @@ impl ProgrammingService {
         Ok(actual)
     }
 
+    fn assert_recall_preload_values_revision(
+        &self,
+        user_id: UserId,
+        expected: ProgrammingPresetRecallRevisionExpectation,
+    ) -> Result<u64, ActionError> {
+        let actual = self.programmers.preload_values_revision(user_id);
+        assert_expected(expected, actual, "Preload values", actual)?;
+        Ok(actual)
+    }
+
     fn assert_recall_capture_revision(
         &self,
         session: SessionId,
         user_id: UserId,
         expected: ProgrammingPresetRecallRevisionExpectation,
-    ) -> Result<u64, ActionError> {
+    ) -> Result<(u64, ProgrammingPresetRecallTarget), ActionError> {
         let actual = self.programmers.capture_mode_revision(user_id);
         assert_expected(expected, actual, "Programmer capture-mode", actual)?;
         let mode = self
             .programmers
             .capture_mode(session)
             .ok_or_else(recall_unavailable)?;
-        if mode.redirects_normal_values_to_preload() {
-            return Err(ActionError::new(
-                ActionErrorKind::Conflict,
-                "Preset recall is unavailable while Programmer capture is redirected to Preload",
-            )
-            .at_revision(self.programmers.normal_values_revision(user_id))
-            .at_related_revision(actual));
-        }
-        Ok(actual)
+        Ok((
+            actual,
+            if mode.redirects_normal_values_to_preload() {
+                ProgrammingPresetRecallTarget::Preload
+            } else {
+                ProgrammingPresetRecallTarget::Programmer
+            },
+        ))
     }
 }
 

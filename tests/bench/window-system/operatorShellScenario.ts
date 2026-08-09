@@ -51,7 +51,10 @@ export class BrowserOperatorShell {
 		await this.longPress(clone);
 		settings = this.page.getByRole("dialog", { name: "Desktop settings" });
 		await settings.getByRole("button", { name: "Delete desktop" }).click();
-		await settings.getByRole("button", { name: "Confirm delete" }).click();
+		await this.page
+			.getByRole("alertdialog", { name: "Delete desktop" })
+			.getByRole("button", { name: "Confirm delete" })
+			.click();
 		await expect(clone).toHaveCount(0);
 		const bootstrap = await this.api.request<any>(
 			"GET",

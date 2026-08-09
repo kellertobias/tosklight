@@ -1,4 +1,5 @@
 import { expect, type Page } from "@playwright/test";
+import { HttpCueRecordingTransport } from "../../../apps/light-desktop/src/api/CueRecordingTransport";
 import { HttpCueTransferTransport } from "../../../apps/light-desktop/src/api/CueTransferTransport";
 import type { CueMoveCopyChoice } from "../../../apps/light-desktop/src/api/generated/light-wire";
 import { HttpPlaybackTopologyTransport } from "../../../apps/light-desktop/src/api/PlaybackTopologyTransport";
@@ -11,6 +12,7 @@ import type { BrowserCommands } from "../command-selection/commandScenario";
 import type { ApiDriver } from "../core/api";
 import { type ClockDuration, parseClockDuration } from "../core/clockScenario";
 import type { DeskDriver } from "../core/desk";
+import { deleteCue } from "./cueDeletion";
 
 export enum CueRecordMode {
 	Overwrite = "overwrite",
@@ -165,7 +167,11 @@ class CueEditorExpectation {
 			"No.",
 			"Name",
 			"Trigger",
-			"Fade",
+			"Trigger Time",
+			"In Delay",
+			"In Fade",
+			"Out Delay",
+			"Out Fade",
 		]);
 		await expect(this.owner.page.locator(".cue-table thead")).not.toContainText(
 			"Status",
@@ -186,9 +192,9 @@ class CueEditorExpectation {
 		if (values.name != null)
 			await expect(this.owner.field("Title")).toHaveValue(values.name);
 		if (values.fade != null)
-			await expect(this.owner.field("Fade")).toHaveValue(values.fade);
+			await expect(this.owner.field("In Fade")).toHaveValue(values.fade);
 		if (values.delay != null)
-			await expect(this.owner.field("Delay")).toHaveValue(values.delay);
+			await expect(this.owner.field("In Delay")).toHaveValue(values.delay);
 		if (values.triggerTime != null)
 			await expect(this.owner.field("Trigger time")).toHaveValue(
 				values.triggerTime,
@@ -224,8 +230,8 @@ export class CueEditor {
 			"Edit the selected Cue through the visible Cuelist View fields.",
 		);
 		if (values.name != null) await this.commit("Title", values.name);
-		if (values.fade != null) await this.commit("Fade", values.fade);
-		if (values.delay != null) await this.commit("Delay", values.delay);
+		if (values.fade != null) await this.commit("In Fade", values.fade);
+		if (values.delay != null) await this.commit("In Delay", values.delay);
 		if (values.trigger != null) await this.chooseTrigger(values.trigger);
 		if (values.triggerTime != null)
 			await this.commit("Trigger time", values.triggerTime);
@@ -234,8 +240,8 @@ export class CueEditor {
 	async reject(cue: number, values: CueEditorValues) {
 		await this.select(cue);
 		if (values.fade != null) {
-			await this.field("Fade").fill(values.fade);
-			await this.field("Fade").press("Enter");
+			await this.field("In Fade").fill(values.fade);
+			await this.field("In Fade").press("Enter");
 		}
 		await expect(
 			this.page
@@ -390,6 +396,34 @@ export class BrowserRecording {
 		return this.cueVia("ui", intent);
 	}
 
+	async recordViaApi(intent: RecordCueIntent) {
+		const session = this.api.session;
+		if (!session) throw new Error("Cue recording requires an API session");
+		const snapshot = await this.api.request<{
+			desk: { scope: { show_revision: number } };
+		}>(
+			"POST",
+			"/api/v2/playback-runtime/snapshot",
+			{ identities: [] },
+			true,
+			undefined,
+			{ showId: this.showId(), deskId: session.desk.id },
+		);
+		return new HttpCueRecordingTransport({
+			baseUrl: this.api.baseUrl,
+			sessionToken: session.token,
+		}).record(this.showId(), snapshot.desk.scope.show_revision, {
+			requestId: crypto.randomUUID(),
+			target: { kind: "pool", playbackNumber: intent.playback },
+			operation: intent.mode ?? CueRecordMode.Overwrite,
+			cueNumber: intent.cue,
+			timing: {},
+			cueOnly: false,
+			capturePolicy: "current_capture",
+			activationPolicy: "hold",
+		});
+	}
+
 	async append(playback: number) {
 		const location = await playbackLocation(
 			this.api,
@@ -432,9 +466,7 @@ export class BrowserRecording {
 		await expect(dialog).toBeVisible();
 		const cueOnly = dialog.getByLabel("Cue only", { exact: true });
 		if ((await cueOnly.isChecked()) !== checked)
-			await this.desk.click(
-				cueOnly.locator("..").locator(".ui-switch-track"),
-			);
+			await this.desk.click(cueOnly.locator("..").locator(".ui-switch-track"));
 		if (checked) await expect(cueOnly).toBeChecked();
 		else await expect(cueOnly).not.toBeChecked();
 		await this.desk.click(
@@ -677,6 +709,14 @@ export class BrowserCues {
 
 	delete(playback: number, cue: number) {
 		return this.deleteVia("ui", playback, cue);
+	}
+
+	deleteViaApi(playback: number, cue: number) {
+		return deleteCue(this.api, {
+			surface: "api",
+			address: { type: "pool", playbackNumber: playback },
+			cueNumber: cue,
+		});
 	}
 
 	move(playback: number, cue: number, destination: number) {

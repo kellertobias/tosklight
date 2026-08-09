@@ -27,7 +27,10 @@ scenario("BENCH-UI-002", "builds and operates a typed three-pane Desktop", async
 
 	const layout = t.desktop.configure("Bench Programming");
 	const stage = layout.addPane(PaneType.Stage, { slug: "main-stage", column: 1, row: 1, width: 12, height: 9 });
-	await stage.configure({ view: StageView.ThreeDimensional, followPreload: false, beamGuides: true });
+	await stage.configure({
+		view: StageView.ThreeDimensional,
+		followPreload: false,
+	});
 	const fixtures = layout.addPane(PaneType.Fixtures, { slug: "fixtures", column: 13, row: 1, width: 12, height: 9 });
 	await fixtures.configure({ showGroupShortcuts: true });
 	const presets = layout.addPane(PaneType.Presets, { slug: "presets", column: 1, row: 10, width: 24, height: 9 });

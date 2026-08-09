@@ -4,8 +4,8 @@
 //! its own overlays and status. This is the other shape the same renderer takes. The desk owns the
 //! window, the pane is a rectangle inside it that the web layout decides, and everything around the
 //! picture — menus, dialogs, the sheet — is the desk's web interface drawn above it. So there is no
-//! window to create here, no event loop to run, and no overlay to draw: the desk's chrome is the
-//! chrome.
+//! window to create here and no application chrome to draw. Fixture labels remain part of the
+//! picture itself and use the renderer's small screen-space overlay.
 //!
 //! Being a separate process is still the point. A GPU driver can end a process, and the desk's
 //! Programmer, playback and output engine must not be in that address space when it does.
@@ -24,7 +24,7 @@ use crate::helper_source::{Embedding, HelperSource};
 use std::time::{Duration, Instant};
 use viz_desk::{DeskConnection, DeskProvider};
 use viz_helper::protocol::{FrameTransport, PaneInput};
-use viz_render::{Overlay, Renderer};
+use viz_render::{Overlay, Renderer, ResolvedCamera};
 use viz_scene::{ProviderEvent, Scene, SceneProvider, SceneValues, ViewConfiguration};
 
 /// How long to wait for the desk to say where its pane is before giving up.
@@ -52,21 +52,7 @@ pub fn run(mut source: HelperSource) -> Result<(), String> {
      * Without an endpoint the pane draws an empty stage, which is what a desk too old to send one
      * would produce and is a picture rather than a failure.
      */
-    let mut rig: Option<Box<DeskProvider>> = embedding.desk.as_ref().map(|desk| {
-        Box::new(DeskProvider::start(
-            DeskConnection {
-                host: desk.host.clone(),
-                port: desk.port,
-                user: desk.user.clone(),
-                target: desk.target.clone(),
-                // This renderer is inside the desk's own window, so it reads the desk's output
-                // rather than waiting for it on a network that may carry nothing at all.
-                values_from_desk_output: true,
-                ..DeskConnection::default()
-            },
-            epoch,
-        ))
-    });
+    let mut rig = embedded_desk_provider(&embedding, epoch);
 
     loop {
         if let Some(rig) = rig.as_mut() {
@@ -183,10 +169,29 @@ pub fn run(mut source: HelperSource) -> Result<(), String> {
             // A frame that failed is not fatal on its own: a surface can be lost while a display
             // is reconfigured and be there again next frame. The desk is told, and the loop keeps
             // going rather than taking the pane away over one bad frame.
-            Err(detail) => source.report(&detail),
+            Err(detail) => {
+                source.report(&detail);
+            }
         }
         std::thread::sleep(IDLE_SLEEP);
     }
+}
+
+fn embedded_desk_provider(embedding: &Embedding, epoch: Instant) -> Option<Box<DeskProvider>> {
+    embedding.desk.as_ref().map(|desk| {
+        Box::new(DeskProvider::start(
+            DeskConnection {
+                host: desk.host.clone(),
+                port: desk.port,
+                user: desk.user.clone(),
+                target: desk.target.clone(),
+                // Embedded rendering reads the desk's output instead of waiting for network DMX.
+                values_from_desk_output: true,
+                ..DeskConnection::default()
+            },
+            epoch,
+        ))
+    })
 }
 
 /// Block until the desk says where its pane is.
@@ -294,6 +299,25 @@ impl PaneState {
         // A shared surface is a fixed size, so the next frame builds and announces a new one.
         self.shared = None;
         Ok(())
+    }
+
+    fn rebuild_fixture_overlay(&mut self) {
+        self.overlay.clear();
+        let camera = ResolvedCamera::resolve(
+            &self.view.camera,
+            self.view.mode,
+            self.size.0 as f32 / self.size.1.max(1) as f32,
+            self.scene.bounds,
+        );
+        crate::ui::build_fixture_labels(
+            &mut self.overlay,
+            &self.scene,
+            &self.values,
+            &camera,
+            &self.view,
+            self.size.0 as f32,
+            self.size.1 as f32,
+        );
     }
 
     /// Move the camera the way the operator asked.
@@ -545,6 +569,7 @@ impl PaneState {
         self.last_tick = now;
         self.values.apply_physical_motion(elapsed);
         let time = epoch.elapsed().as_secs_f32();
+        self.rebuild_fixture_overlay();
         let redraw_state = crate::redraw::RedrawState::new(
             self.scene.revision,
             &self.values,

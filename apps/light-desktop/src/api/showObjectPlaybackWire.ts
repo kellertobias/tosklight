@@ -317,7 +317,17 @@ function decodeDynamicAssignment(
 			`${path}.dynamic.last_known_pool_number`,
 			9_999,
 		),
-		embedded_fallback: definition,
+		embedded_fallback: {
+			...definition,
+			spatial_mapping:
+				definition.spatial_mapping &&
+				typeof definition.spatial_mapping === "object"
+					? definition.spatial_mapping
+					: {
+							projection: { type: "inherit" },
+							shape: { type: "inherit" },
+						},
+		},
 		revision: positiveIntegerAt(assignment.revision, `${path}.revision`, Number.MAX_SAFE_INTEGER),
 		target_scope: targetScope,
 		fader_mode: enumAt(assignment.fader_mode, `${path}.fader_mode`, [

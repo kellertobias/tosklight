@@ -7,6 +7,56 @@ use serde_json::json;
 use uuid::Uuid;
 
 #[test]
+fn legacy_midi_mappings_are_reported_and_removed_while_osc_is_lossless() {
+    let midi = json!({"name":"Go from MIDI","enabled":true,"trigger":{"type":"midi","status":144,"data1":7},"action":{"type":"cue_go","cue_list_id":Uuid::nil()},"future":{"kept":true}});
+    let osc = json!({"name":"Go from OSC","enabled":true,"trigger":{"type":"osc","address":"/go"},"action":{"type":"cue_go","cue_list_id":Uuid::nil()},"future":{"kept":true}});
+    let (_, document) = document_with_objects(&[
+        ("control_mapping", "midi-go", midi.clone()),
+        ("control_mapping", "osc-go", osc.clone()),
+    ]);
+    let mut transaction = document.transaction();
+    stage_candidate_migrations(&document, &mut transaction).unwrap();
+    let candidate = document.candidate(&transaction).unwrap();
+    assert!(candidate.object("control_mapping", "midi-go").is_none());
+    assert_eq!(
+        candidate
+            .object("control_mapping", "osc-go")
+            .unwrap()
+            .body(),
+        &osc
+    );
+    let report = candidate
+        .object(
+            "compatibility_report",
+            "removed-built-in-midi-control-mappings-v1",
+        )
+        .unwrap()
+        .body();
+    assert_eq!(report["removed_mappings"][0]["name"], "Go from MIDI");
+    assert_eq!(report["removed_mappings"][0]["status"], 144);
+    assert_eq!(report["removed_mappings"][0]["data1"], 7);
+    assert_eq!(report["removed_mappings"][0]["original"], midi);
+    let migrated = candidate
+        .objects()
+        .map(|object| {
+            (
+                object.key().kind().to_owned(),
+                object.key().id().to_owned(),
+                object.body().clone(),
+            )
+        })
+        .collect::<Vec<_>>();
+    let refs = migrated
+        .iter()
+        .map(|(kind, id, body)| (kind.as_str(), id.as_str(), body.clone()))
+        .collect::<Vec<_>>();
+    let (_, migrated_document) = document_with_objects(&refs);
+    let mut second = migrated_document.transaction();
+    stage_candidate_migrations(&migrated_document, &mut second).unwrap();
+    assert!(second.is_empty());
+}
+
+#[test]
 fn stage_layout_migration_generates_automatic_2d_and_preserves_legacy_manual_entries() {
     let (left, right) = (Uuid::new_v4(), Uuid::new_v4());
     let automatic = json!({
@@ -107,6 +157,8 @@ fn defaults_are_raw_preserving_side_effect_free_and_compile_equivalent() {
         restart_mode: RestartMode::FirstCue,
         force_cue_timing: false,
         disable_cue_timing: false,
+        auto_off_at_zero: false,
+        auto_off_flash_release: false,
         chaser_xfade_millis: 250,
         chaser_xfade_percent: None,
         speed_multiplier: 1.0,
@@ -137,6 +189,7 @@ fn defaults_are_raw_preserving_side_effect_free_and_compile_equivalent() {
         "future_playback": {"kept": true}
     });
     let route = OutputRoute {
+        target: Default::default(),
         protocol: Protocol::ArtNet,
         logical_universe: 1,
         destination_universe: 1,
@@ -694,6 +747,8 @@ fn legacy_dynamic_phase_ordering_migrates_losslessly_across_pool_cue_and_playbac
         restart_mode: RestartMode::FirstCue,
         force_cue_timing: false,
         disable_cue_timing: false,
+        auto_off_at_zero: false,
+        auto_off_flash_release: false,
         chaser_xfade_millis: 0,
         chaser_xfade_percent: None,
         speed_multiplier: 1.0,
@@ -1151,6 +1206,8 @@ fn retired_strobe_identity_migrates_losslessly_across_show_value_owners() {
         restart_mode: RestartMode::FirstCue,
         force_cue_timing: false,
         disable_cue_timing: false,
+        auto_off_at_zero: false,
+        auto_off_flash_release: false,
         chaser_xfade_millis: 0,
         chaser_xfade_percent: None,
         speed_multiplier: 1.0,
@@ -1649,6 +1706,8 @@ fn legacy_cmy_static_values_migrate_inverse_to_rgb_without_losing_unknown_data()
         restart_mode: RestartMode::FirstCue,
         force_cue_timing: false,
         disable_cue_timing: false,
+        auto_off_at_zero: false,
+        auto_off_flash_release: false,
         chaser_xfade_millis: 0,
         chaser_xfade_percent: None,
         speed_multiplier: 1.0,

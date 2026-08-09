@@ -243,9 +243,17 @@ function useEnterSetInteraction({
 }) {
 	return useCallback(
 		async (source: ControlSurfaceSource) => {
-			if (!scope || stateRef.current?.phase === "idle") return false;
-			if (stateRef.current?.phase === "set_armed") {
-				const commandText = text?.trim() ?? "";
+			const current = stateRef.current;
+			if (!scope || !current || current.phase === "idle") return false;
+			const commandText = text?.trim() ?? "";
+			if (
+				current.phase === "group_source_pending" &&
+				commandText !== "" &&
+				commandText.toUpperCase() !==
+					`SET GROUP ${current.group.objectId}`.toUpperCase()
+			)
+				return false;
+			if (current.phase === "set_armed") {
 				if (commandText.toUpperCase() !== "SET") {
 					const match = commandText.match(/^SET\s+GROUP\s+(\S+)$/i);
 					const group =
@@ -417,6 +425,15 @@ export function SetInteractionProvider({
 			direct,
 		],
 	);
+	return (
+		<SetInteractionBoundary value={value}>{children}</SetInteractionBoundary>
+	);
+}
+
+function SetInteractionBoundary({
+	value,
+	children,
+}: PropsWithChildren<{ value: SetInteractionController }>) {
 	return (
 		<SetInteractionContext.Provider value={value}>
 			{children}

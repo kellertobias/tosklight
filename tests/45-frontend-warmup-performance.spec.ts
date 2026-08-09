@@ -16,6 +16,10 @@ const profiles = [
 	{ name: "large", cpuThrottle: 4 },
 ] as const;
 
+// CPU-throttled performance samples must not compete with another sample from
+// this file; that would measure worker contention rather than the desk surface.
+test.describe.configure({ mode: "default" });
+
 for (const profile of profiles)
 	test(`FRONTEND-WARM-001 @ui @performance › ${profile.name} show at ${profile.cpuThrottle}× CPU switches from retained authority`, async ({
 		api,
@@ -66,9 +70,7 @@ function assertWarmAcceptance(
 	expect(warm.diagnostics.warmup?.concurrency).toBe(2);
 	expect(warm.diagnostics.warmup?.peakActive).toBeLessThanOrEqual(2);
 	expect(warm.snapshotRequestsDuringSwitches).toBe(0);
-	expect(warm.loadingPlaceholders).toEqual([
-		"Loading Live Stage visualization…",
-	]);
+	expect(warm.loadingPlaceholders).toEqual([]);
 	expect(warm.switchP95Ms / warm.cpuThrottle).toBeLessThanOrEqual(100);
 	expect(warm.diagnostics.firstUsablePaintAt).toBeLessThan(
 		performanceMark(warm, "warmup"),

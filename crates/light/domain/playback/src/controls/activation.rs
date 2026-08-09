@@ -1,4 +1,4 @@
-use crate::*;
+use crate::{engine::CuelistFlashState, *};
 
 impl PlaybackEngine {
     pub fn on_at(&mut self, identity: PlaybackIdentity) -> Result<(), String> {
@@ -15,6 +15,7 @@ impl PlaybackEngine {
                     );
                 };
                 let key = PlaybackKey::CueList(cue_list_id);
+                self.disarm_cuelist_flash(cue_list_id);
                 let had_runtime = self.active.contains_key(&key);
                 let was_enabled = self
                     .active
@@ -67,6 +68,7 @@ impl PlaybackEngine {
         }
         let id = self.cue_list_for(number)?;
         let key = PlaybackKey::CueList(id);
+        self.disarm_cuelist_flash(id);
         let had_runtime = self.active.contains_key(&key);
         let was_enabled = self
             .active
@@ -115,6 +117,7 @@ impl PlaybackEngine {
         active.deleted_cue_hold = None;
         active.deleted_cue_transition_source = None;
         active.activated_at = now;
+        active.completed_trigger_cue_id = None;
         true
     }
 
@@ -322,17 +325,15 @@ impl PlaybackEngine {
             return Err("virtual playback master is unavailable for this target".into());
         };
         let key = PlaybackKey::CueList(cue_list_id);
-        let mut changed = self
-            .active
-            .get(&key)
-            .is_some_and(|active| active.master != value);
-        if value > 0.0 && !self.active.contains_key(&key) {
+        let auto_off_at_zero = self.cue_lists[&cue_list_id].auto_off_at_zero;
+        if !self.active.contains_key(&key) {
             self.go_at_key(key, cue_list_id, self.clock.now())?;
-            changed = true;
         }
+        let mut changed = false;
         if let Some(active) = self.active.get_mut(&key) {
             active.playback_identity = Some(identity);
-            changed |= set_master_state(active, address.number().get(), value);
+            changed |=
+                apply_cuelist_master(active, address.number().get(), value, auto_off_at_zero);
         }
         let control_changed = self.retarget_physical_controls(cue_list_id, value, None);
         let addressed_effect = durable_effect(changed);
@@ -374,6 +375,23 @@ impl PlaybackEngine {
         self.set_cuelist_master_mutation(number, value, !allow_faderless)
     }
 
+    pub fn set_configured_fader_mutation(
+        &mut self,
+        number: u16,
+        mode: PlaybackFaderMode,
+        value: f32,
+    ) -> Result<PlaybackMutation<()>, String> {
+        if !value.is_finite() || !(0.0..=1.0).contains(&value) {
+            return Err("playback master must be within 0-1".into());
+        }
+        match mode {
+            PlaybackFaderMode::Temp => self.set_temp_fader_mutation(number, value),
+            PlaybackFaderMode::XFade => self.set_manual_xfade_inner_mutation(number, value, true),
+            PlaybackFaderMode::Master => self.set_cuelist_master_mutation(number, value, true),
+            _ => Err("fader mode is not handled by the Cuelist engine".into()),
+        }
+    }
+
     fn validate_master(
         &self,
         number: u16,
@@ -401,6 +419,7 @@ impl PlaybackEngine {
     ) -> Result<PlaybackMutation<()>, String> {
         let id = self.cue_list_for(number)?;
         let key = PlaybackKey::CueList(id);
+        let auto_off_at_zero = self.cue_lists[&id].auto_off_at_zero;
         let identity = PlaybackIdentity::physical(number)?;
         let mut control_changed = false;
         if physical {
@@ -444,13 +463,12 @@ impl PlaybackEngine {
                 control_changed = true;
             }
         }
-        let mut changed = false;
-        if value > 0.0 && !self.active.contains_key(&key) {
+        if !self.active.contains_key(&key) {
             self.go_at_key(key, id, self.clock.now())?;
-            changed = true;
         }
+        let mut changed = false;
         if let Some(active) = self.active.get_mut(&key) {
-            changed |= set_master_state(active, number, value);
+            changed |= apply_cuelist_master(active, number, value, auto_off_at_zero);
         }
         control_changed |= self.retarget_physical_controls(id, value, physical.then_some(identity));
         let addressed_effect = durable_effect(changed).combine(if control_changed {
@@ -483,25 +501,68 @@ impl PlaybackEngine {
         identity: PlaybackIdentity,
         pressed: bool,
     ) -> Result<PlaybackMutation<()>, String> {
-        self.definition_at(identity)
-            .ok_or("playback does not exist")?;
+        let definition = self
+            .definition_at(identity)
+            .ok_or("playback does not exist")?
+            .clone();
+        let PlaybackTarget::CueList { cue_list_id } = definition.target else {
+            return Err("Flash is available only for Cuelist playbacks".into());
+        };
         let key = (identity, TemporaryPlaybackKind::Flash);
         if pressed {
             if self.temporary.contains_key(&key) {
                 return Ok(PlaybackMutation::new((), PlaybackRuntimeEffect::None));
             }
+            let restore_off = !self
+                .active
+                .get(&PlaybackKey::CueList(cue_list_id))
+                .is_some_and(|playback| playback.enabled);
+            self.cuelist_flash_states
+                .insert(identity, CuelistFlashState { restore_off });
             let playback = self.temporary_playback_at(identity, 1.0, true)?;
             self.temporary.insert(key, playback);
             return Ok(PlaybackMutation::new((), PlaybackRuntimeEffect::Transient));
         }
+        let flash_state = self.cuelist_flash_states.remove(&identity);
         let Some(released) = self.temporary.remove(&key) else {
             return Ok(PlaybackMutation::new((), PlaybackRuntimeEffect::None));
         };
-        let promoted = self.definition_at(identity).unwrap().flash_release
-            == FlashReleaseMode::ReleaseIntensityOnly
+        let held_peer =
+            self.cuelist_flash_states.keys().copied().any(|peer| {
+                self.runtime_key_at(peer).ok() == Some(PlaybackKey::CueList(cue_list_id))
+            });
+        let auto_off = self.cue_lists[&cue_list_id].auto_off_flash_release
+            && flash_state.is_some_and(|state| state.restore_off)
+            && !held_peer;
+        let promoted = !auto_off
+            && definition.flash_release == FlashReleaseMode::ReleaseIntensityOnly
             && self.promote_intensity_release_at(identity, released, true);
-        let effect = PlaybackRuntimeEffect::Transient.combine(durable_effect(promoted));
+        let turned_off = if auto_off {
+            self.active
+                .get_mut(&PlaybackKey::CueList(cue_list_id))
+                .is_some_and(deactivate)
+        } else {
+            false
+        };
+        let effect =
+            PlaybackRuntimeEffect::Transient.combine(durable_effect(promoted || turned_off));
         Ok(PlaybackMutation::new((), effect))
+    }
+
+    pub(crate) fn disarm_cuelist_flash(&mut self, cue_list_id: CueListId) {
+        let identities = self
+            .cuelist_flash_states
+            .keys()
+            .copied()
+            .filter(|identity| {
+                self.runtime_key_at(*identity).ok() == Some(PlaybackKey::CueList(cue_list_id))
+            })
+            .collect::<Vec<_>>();
+        for identity in identities {
+            if let Some(state) = self.cuelist_flash_states.get_mut(&identity) {
+                state.restore_off = false;
+            }
+        }
     }
 }
 
@@ -514,6 +575,23 @@ fn durable_effect(changed: bool) -> PlaybackRuntimeEffect {
 }
 
 fn activate_normal(playback: &mut ActivePlayback, number: u16) -> bool {
+    // ON is idempotent while this Playback is already at its normal master.
+    // In particular, do not discard an in-flight Cue transition source merely
+    // because ON is repeated while that transition is running.
+    if playback.playback_number == Some(number)
+        && playback.master == 1.0
+        && playback.enabled
+        && !playback.temporary
+        && !playback.fader_zero_auto_off_armed
+        && playback.master_transition.is_none()
+        && !playback.transition_timing_bypassed
+        && playback.transition_fade_fallback_millis.is_none()
+        && playback.manual_xfade_from_index.is_none()
+        && playback.manual_xfade_to_index.is_none()
+        && playback.manual_xfade_progress == 0.0
+    {
+        return false;
+    }
     let changed = playback.playback_number != Some(number)
         || playback.master != 1.0
         || !playback.enabled
@@ -528,6 +606,7 @@ fn activate_normal(playback: &mut ActivePlayback, number: u16) -> bool {
     playback.playback_number = Some(number);
     playback.master = 1.0;
     playback.enabled = true;
+    playback.fader_zero_auto_off_armed = false;
     playback.temporary = false;
     playback.master_transition = None;
     playback.deleted_cue_transition_source = None;
@@ -542,8 +621,10 @@ fn deactivate(playback: &mut ActivePlayback) -> bool {
         || playback.deleted_cue_hold.is_some()
         || playback.deleted_cue_transition_source.is_some()
         || playback.loaded_cue_id.is_some()
-        || playback.loaded_cue_number.is_some();
+        || playback.loaded_cue_number.is_some()
+        || playback.fader_zero_auto_off_armed;
     playback.enabled = false;
+    playback.fader_zero_auto_off_armed = false;
     playback.activation = None;
     playback.flash = false;
     playback.master_transition = None;
@@ -554,19 +635,26 @@ fn deactivate(playback: &mut ActivePlayback) -> bool {
     changed
 }
 
-fn set_master_state(playback: &mut ActivePlayback, number: u16, value: f32) -> bool {
-    let enables = value > 0.0;
-    let changed = playback.playback_number != Some(number)
-        || playback.master != value
-        || playback.master_transition.is_some()
-        || playback.temporary
-        || (enables && !playback.enabled);
+fn apply_cuelist_master(
+    playback: &mut ActivePlayback,
+    number: u16,
+    value: f32,
+    auto_off_at_zero: bool,
+) -> bool {
+    let before = playback.clone();
+    let restart = value > 0.0 && !playback.enabled && playback.fader_zero_auto_off_armed;
+    let auto_off = value == 0.0 && playback.enabled && auto_off_at_zero;
+    if auto_off {
+        deactivate(playback);
+        playback.fader_zero_auto_off_armed = true;
+    }
     playback.playback_number = Some(number);
     playback.master = value;
     playback.master_transition = None;
     playback.temporary = false;
-    if enables {
+    if restart {
         playback.enabled = true;
+        playback.fader_zero_auto_off_armed = false;
     }
-    changed
+    *playback != before
 }

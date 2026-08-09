@@ -6,7 +6,6 @@ import { installDeterministicLargeStage } from "./bench/performance/stageLargeSc
 import { Show } from "./bench/show/showScenario";
 import {
 	PaneType,
-	StageRenderQuality,
 	StageView,
 } from "./bench/window-system/paneTypes";
 
@@ -82,15 +81,19 @@ test("PLAN76-LARGE-001 @ui @benchmark › keeps Fixture Sheet, Programmer, and o
 			height: 18,
 		});
 		await stage.configure({
-			view: StageView.ThreeDimensional,
+			view: StageView.Visualization,
 			followPreload: false,
-			renderQuality: StageRenderQuality.LinesAndBeams,
 		});
 		await desktop.apply();
 		await stage.expect.visible();
 		await fixtures.expect.visible();
 		await expect(fixtures.root().locator(".fixture-window")).toBeVisible();
-		await expect(stage.root().locator(".stage-3d-canvas canvas")).toBeVisible();
+		await desktop.expectStagePane(stage, {
+			lane: "live",
+			view: StageView.Visualization,
+			followPreload: false,
+			nativeRendererAvailable: false,
+		});
 		await expect(
 			fixtures.root().getByText("0 selected", { exact: true }),
 		).toBeVisible();
@@ -192,10 +195,12 @@ test("PLAN76-LARGE-001 @ui @benchmark › keeps Fixture Sheet, Programmer, and o
 		// output deadline misses remain enforced by the packaged performance benchmark, because
 		// hosted debug runners are not a representative output-rate target.
 
-		// Exact 1,000-instance Stage rendering may stutter. The capacity contract
-		// requires liveness and isolation instead of a real-time canvas cadence.
-		await world.stage.expectLane(stage, "live");
-		await expect(stage.root().locator(".stage-3d-canvas canvas")).toBeVisible();
+		// The browser runner has no sibling native renderer. It proves that an exact
+		// 1,000-instance Stage request remains isolated from the desk controls and output;
+		// packaged renderer throughput is measured by the native benchmark.
+		await expect(stage.root().getByRole("status")).toContainText(
+			"No Stage on this screen",
+		);
 		expect(page.isClosed()).toBe(false);
 
 		await testInfo.attach("plan76-interactive-large-isolation.json", {
@@ -219,6 +224,7 @@ test("PLAN76-LARGE-001 @ui @benchmark › keeps Fixture Sheet, Programmer, and o
 							after: outputAfter.output,
 						},
 						stage: {
+							nativeRendererAvailable: false,
 							realTimeCadenceRequired: false,
 							liveAndRecoverable: true,
 						},

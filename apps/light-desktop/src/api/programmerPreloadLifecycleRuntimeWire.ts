@@ -1,16 +1,16 @@
+import type { PlaybackProjection } from "../features/playbackRuntime/contracts";
 import type {
 	ProgrammerPreloadPlaybackAction,
 	ProgrammerPreloadPlaybackQueueEntry,
 	ProgrammerPreloadPlaybackSurface,
 } from "../features/programmerPreloadPlaybackQueue/contracts";
-import type { PlaybackProjection } from "../features/playbackRuntime/contracts";
-import { decodePlaybackProjection } from "./playbackWireProjection";
 import {
 	enumAt,
 	exactRecordAt,
 	integerAt,
 	recordAt,
 } from "./playbackWirePrimitives";
+import { decodePlaybackProjection } from "./playbackWireProjection";
 import { WireValidationError } from "./wireValidation";
 
 const ACTIONS = [
@@ -131,9 +131,9 @@ function assertIdentity(value: unknown, path: string) {
 			? "playback_number"
 			: kind === "virtual"
 				? "page"
-			: kind === "cue_list"
-				? "cue_list_id"
-				: "group_id",
+				: kind === "cue_list"
+					? "cue_list_id"
+					: "group_id",
 		...(kind === "virtual" ? ["playback_number"] : []),
 	]);
 }
@@ -149,6 +149,9 @@ function assertCueRuntime(value: unknown, path: string) {
 		"effective_next_is_loaded",
 		"paused",
 		"activated_at",
+		"paused_at",
+		"cue_timing",
+		"transition_ordinal",
 		"master",
 		"fader_position",
 		"fader_pickup_required",
@@ -167,6 +170,29 @@ function assertCueRuntime(value: unknown, path: string) {
 	for (const key of ["current", "loaded", "normal_next", "effective_next"])
 		if (runtime[key] != null)
 			exactRecordAt(runtime[key], `${path}.${key}`, ["id", "number"]);
+	if (runtime.cue_timing != null)
+		assertCueTiming(runtime.cue_timing, `${path}.cue_timing`);
+}
+
+function assertCueTiming(value: unknown, path: string) {
+	const timing = exactRecordAt(value, path, [
+		"cue_id",
+		"in_delay_millis",
+		"in_fade_millis",
+		"out_delay_millis",
+		"out_fade_millis",
+		"completion_millis",
+		"active_trigger",
+		"completed_trigger_cue_id",
+	]);
+	if (timing.active_trigger != null) {
+		const trigger = exactRecordAt(
+			timing.active_trigger,
+			`${path}.active_trigger`,
+			["cue", "kind", "started_at", "duration_millis"],
+		);
+		exactRecordAt(trigger.cue, `${path}.active_trigger.cue`, ["id", "number"]);
+	}
 }
 
 function assertSpeedRuntime(value: unknown, path: string) {

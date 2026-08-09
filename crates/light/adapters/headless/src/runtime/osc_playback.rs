@@ -333,46 +333,12 @@ pub(super) fn osc_playback_session(
     }))
 }
 
-pub(super) fn handle_playback_osc(
+fn osc_playback_context(
     state: &AppState,
-    address: &str,
-    arguments: &[OscArgument],
+    parts: &[&str],
     source: Option<&str>,
-) -> bool {
-    // Preserve the three established OSC address families as distinct typed intents:
-    //
-    // - `/light/playback/{page}/{slot}` always targets that explicit page.
-    // - `/light/{desk}/virtual-playback/{page}/{number}` targets one dedicated Virtual
-    //   Playback identity without aliasing a physical page slot.
-    // - `/light/{desk}/page-playback/{slot}` resolves the desk's current page under the
-    //   PlaybackService operation gate.
-    // - `/light/playback/{number}` and its Cuelist aliases address the global pool directly.
-    //
-    // Keeping this distinction until the application boundary prevents page changes from
-    // retargeting explicit hardware input while retaining current-page behavior for desk wings.
-    // Parsing stops at typed intent here; address resolution and mutation ordering stay in the
-    // application service, alongside the HTTP and compatibility WebSocket paths.
-    let parts = address.trim_matches('/').split('/').collect::<Vec<_>>();
-    let (pressed, value) = osc_playback_values(arguments);
+) -> Result<(Option<SocketAddr>, Option<ControlDesk>, Option<Session>), ()> {
     let source_socket = source.and_then(|source| source.parse::<SocketAddr>().ok());
-    if handle_osc_page(state, &parts, arguments) {
-        return false;
-    }
-    let Some((mut playback_address, action_index)) = osc_playback_address(&parts) else {
-        return false;
-    };
-    let Ok(_activation) = state.active_show.try_acquire() else {
-        return false;
-    };
-    let button = (parts[action_index] == "button")
-        .then(|| parts.get(action_index + 1)?.parse::<u8>().ok())
-        .flatten();
-    let mut input = PoolPlaybackInput {
-        value: value.map(|value| value.clamp(0.0, 1.0)),
-        pressed: Some(pressed),
-        button,
-        ..PoolPlaybackInput::default()
-    };
     let path_alias = if parts.get(2).is_some_and(|part| {
         *part == "page-playback" || *part == "paged-playback" || *part == "virtual-playback"
     }) {
@@ -399,7 +365,50 @@ pub(super) fn handle_playback_osc(
                 .map(|session| session.desk.clone())
         })
         .or_else(|| osc_control_desk(state, &action_alias));
-    let Ok(session) = osc_playback_session(state, source, &action_alias, action_desk.as_ref())
+    let session = osc_playback_session(state, source, &action_alias, action_desk.as_ref())?;
+    Ok((source_socket, action_desk, session))
+}
+
+pub(super) fn handle_playback_osc(
+    state: &AppState,
+    address: &str,
+    arguments: &[OscArgument],
+    source: Option<&str>,
+) -> bool {
+    // Preserve the three established OSC address families as distinct typed intents:
+    //
+    // - `/light/playback/{page}/{slot}` always targets that explicit page.
+    // - `/light/{desk}/virtual-playback/{page}/{number}` targets one dedicated Virtual
+    //   Playback identity without aliasing a physical page slot.
+    // - `/light/{desk}/page-playback/{slot}` resolves the desk's current page under the
+    //   PlaybackService operation gate.
+    // - `/light/playback/{number}` and its Cuelist aliases address the global pool directly.
+    //
+    // Keeping this distinction until the application boundary prevents page changes from
+    // retargeting explicit hardware input while retaining current-page behavior for desk wings.
+    // Parsing stops at typed intent here; address resolution and mutation ordering stay in the
+    // application service, alongside the HTTP and compatibility WebSocket paths.
+    let parts = address.trim_matches('/').split('/').collect::<Vec<_>>();
+    let (pressed, value) = osc_playback_values(arguments);
+    if handle_osc_page(state, &parts, arguments) {
+        return false;
+    }
+    let Some((mut playback_address, action_index)) = osc_playback_address(&parts) else {
+        return false;
+    };
+    let Ok(activation) = state.active_show.try_acquire() else {
+        return false;
+    };
+    let button = (parts[action_index] == "button")
+        .then(|| parts.get(action_index + 1)?.parse::<u8>().ok())
+        .flatten();
+    let mut input = PoolPlaybackInput {
+        value: value.map(|value| value.clamp(0.0, 1.0)),
+        pressed: Some(pressed),
+        button,
+        ..PoolPlaybackInput::default()
+    };
+    let Ok((source_socket, action_desk, session)) = osc_playback_context(state, &parts, source)
     else {
         return false;
     };
@@ -449,6 +458,10 @@ pub(super) fn handle_playback_osc(
     }) {
         return false;
     }
+    // Target-selection commands enter the same show mutation paths as typed commands. Release the
+    // read-side OSC activation before interception so Group/Cuelist assignment can acquire its own
+    // authoritative show transaction instead of deadlocking behind this ingress guard.
+    drop(activation);
     if let Some(session) = session.as_ref()
         && command_http::intercept_armed_cue_playback(
             state,
@@ -464,6 +477,9 @@ pub(super) fn handle_playback_osc(
         }
         return true;
     }
+    let Ok(_activation) = state.active_show.try_acquire() else {
+        return false;
+    };
     let Ok(result) = playback_service::osc_action(
         state,
         session.as_ref(),

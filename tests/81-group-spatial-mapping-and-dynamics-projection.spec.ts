@@ -70,7 +70,17 @@ test("GROUP-SPATIAL-010 @ui › Group settings author ranked output without reti
 		.locator(".group-card")
 		.filter({ has: page.getByText("All Dimmers", { exact: true }) })
 		.first();
-	await group.click({ button: "right" });
+	await group.dispatchEvent("pointerdown", {
+		pointerId: 1,
+		pointerType: "mouse",
+		button: 0,
+	});
+	await page.waitForTimeout(700);
+	await group.dispatchEvent("pointerup", {
+		pointerId: 1,
+		pointerType: "mouse",
+		button: 0,
+	});
 
 	const dialog = page.getByRole("dialog", { name: "Group 1 settings" });
 	await expect(dialog).toBeVisible();

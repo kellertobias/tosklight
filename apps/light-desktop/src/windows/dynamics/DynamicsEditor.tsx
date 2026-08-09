@@ -76,6 +76,23 @@ export interface DynamicEditorProps {
 	onCopy(poolNumber: number): void;
 }
 
+function activeEditorView(
+	controlled: DynamicEditorView | undefined,
+	session: ReturnType<typeof useDynamicEditorSession>["session"],
+	dynamicId: string,
+): DynamicEditorView {
+	return (
+		controlled ?? (session?.dynamicId === dynamicId ? session.task : "curves")
+	);
+}
+
+function activeEditorLane(dynamic: DynamicObject, primaryLane: string | null) {
+	return (
+		dynamic.body.lanes.find((candidate) => candidate.id === primaryLane) ??
+		dynamic.body.lanes[0]
+	);
+}
+
 /**
  * The production Dynamic editor composition boundary. The connected window owns
  * persistence and runtime refreshes; deterministic renderers can provide those
@@ -106,9 +123,7 @@ export function DynamicEditor({
 		open: openEditor,
 		update: updateEditor,
 	} = useDynamicEditorSession();
-	const view: DynamicEditorView =
-		controlledView ??
-		(session?.dynamicId === dynamic.id ? session.task : "curves");
+	const view = activeEditorView(controlledView, session, dynamic.id);
 	const [primaryLane, setPrimaryLane] = useState(
 		dynamic.body.lanes[0]?.id ?? null,
 	);
@@ -125,9 +140,7 @@ export function DynamicEditor({
 		session?.dynamicId === dynamic.id ? session.primaryKeyframeIndex : 0;
 	const setPrimaryKeyframeIndex = (index: number) =>
 		updateEditor({ primaryKeyframeIndex: index });
-	const lane =
-		dynamic.body.lanes.find((candidate) => candidate.id === primaryLane) ??
-		dynamic.body.lanes[0];
+	const lane = activeEditorLane(dynamic, primaryLane);
 	const replaceLane = createReplaceLaneAction(dynamic, onMutate);
 	const selectLane = useLaneSelection(
 		setPrimaryLane,
@@ -159,6 +172,7 @@ export function DynamicEditor({
 		view,
 		previewPhase: previewing ? previewPhase : 0,
 		selection,
+		selectionAvailable: selection.length > 0 || selectedGroupId !== null,
 		positions: stageLayout.positions,
 		positions3d: stageLayout.positions3d,
 		projected: projectedPlane,
@@ -194,6 +208,7 @@ export function DynamicEditor({
 			runtime={runtime}
 			speedGroupBpms={speedGroupBpms}
 			selection={selection}
+			selectionAvailable={selection.length > 0 || selectedGroupId !== null}
 			view={view}
 			lane={lane}
 			selectedLanes={selectedLanes}
@@ -318,6 +333,7 @@ function editorSupplementalContent({
 	view,
 	previewPhase,
 	selection,
+	selectionAvailable,
 	positions,
 	positions3d,
 	projected,
@@ -330,6 +346,7 @@ function editorSupplementalContent({
 	view: DynamicEditorView;
 	previewPhase: number;
 	selection: readonly string[];
+	selectionAvailable: boolean;
 	positions: ReturnType<typeof useStageLayout>["positions"];
 	positions3d: ReturnType<typeof useStageLayout>["positions3d"];
 	projected: ProjectedPlanePositions | undefined;
@@ -353,7 +370,7 @@ function editorSupplementalContent({
 			<DynamicPhaseQuickControls
 				phase={dynamic.body.phase}
 				running={running}
-				selectionCount={selection.length}
+				selectionCount={selectionAvailable ? 1 : 0}
 				targetless={dynamic.body.target_binding.type === "targetless"}
 				onPhasePatch={(patch) =>
 					void onMutate(dynamic, {

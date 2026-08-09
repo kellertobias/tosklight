@@ -16,9 +16,9 @@ import type {
 import type { DeskModel } from "../../../types";
 import { PlaybackLayoutModal } from "../PlaybackLayoutModal";
 import {
+	browserScreenUrl,
 	DEFAULT_FIXED_SCREEN_PANE,
 	DEFAULT_FIXED_SIDE_WIDTH_PERCENT,
-	browserScreenUrl,
 	playbackLayoutLegacyFields,
 	screenPlaybackLayout,
 	updateScreenConfiguration,
@@ -507,7 +507,7 @@ function ScreenLayoutFields({
 								? "Dock is unavailable with a fixed side pane."
 								: draft.content.type === "control_surface"
 									? "Dock is unavailable without Desktop content."
-							: undefined
+									: undefined
 					}
 					onChange={(event) => update({ show_dock: event.target.checked })}
 				/>
@@ -584,22 +584,20 @@ function ScreenPaneSettings({
 							}}
 						/>
 						{sideContent ? (
-							<>
-								<NumberField
-									label="Pane width (%)"
-									min={10}
-									max={80}
-									value={sideContent.width_percent}
-									onChange={(event) =>
-										update({
-											content: {
-												...sideContent,
-												width_percent: Number(event.target.value),
-											},
-										})
-									}
-								/>
-							</>
+							<NumberField
+								label="Pane width (%)"
+								min={10}
+								max={80}
+								value={sideContent.width_percent}
+								onChange={(event) =>
+									update({
+										content: {
+											...sideContent,
+											width_percent: Number(event.target.value),
+										},
+									})
+								}
+							/>
 						) : null}
 					</>
 				) : (
@@ -714,6 +712,139 @@ function ScreenSettingsFields(props: ScreenSettingsFieldsProps) {
 	);
 }
 
+function ScreenCardHeader(props: {
+	draft: ScreenConfiguration;
+	browserLink: string;
+	programmerOwner: boolean;
+	update: (changes: Partial<ScreenConfiguration>) => void;
+	copyBrowserLink: () => Promise<void>;
+	openPlaybackModal: () => void;
+	remove: () => void;
+}) {
+	return (
+		<header className="screen-settings-header">
+			<TextField
+				aria-label="Screen name"
+				value={props.draft.name}
+				onChange={(event) => props.update({ name: event.target.value })}
+			/>
+			<div className="screen-settings-actions">
+				<a
+					className="ui-button ui-secondary ui-default"
+					href={props.browserLink}
+					target="_blank"
+					rel="noreferrer"
+				>
+					Open in browser
+				</a>
+				<Button onClick={() => void props.copyBrowserLink()}>
+					Copy browser link
+				</Button>
+				<Button onClick={props.openPlaybackModal}>Configure Playbacks</Button>
+				<Button
+					variant={props.draft.desired_open ? "warning" : "success"}
+					onClick={() =>
+						props.update({ desired_open: !props.draft.desired_open })
+					}
+				>
+					{props.draft.desired_open ? "Close Screen" : "Open Screen"}
+				</Button>
+				<Button variant="danger" onClick={props.remove}>
+					Remove Screen
+				</Button>
+			</div>
+		</header>
+	);
+}
+
+function ScreenControlSurfaceNote({
+	draft,
+	programmerOwner,
+}: {
+	draft: ScreenConfiguration;
+	programmerOwner: boolean;
+}) {
+	const carries = hasControlSurface(draft.content);
+	if (carries && !programmerOwner)
+		return (
+			<p className="screen-settings-note" role="status">
+				This control layout becomes active when this screen carries the
+				encoders. Selecting it assigns that placement when saved.
+			</p>
+		);
+	if (programmerOwner && !carries)
+		return (
+			<p className="screen-settings-note" role="status">
+				The encoders appear below this content. When this screen also shows
+				Playbacks, the Playback/Encoders switch sits beside the section's own
+				controls.
+			</p>
+		);
+	if (programmerOwner)
+		return (
+			<p className="screen-settings-note" role="status">
+				This control layout carries the encoders over the full screen height.
+				When Playbacks are also enabled, the Playback/Encoders switch sits
+				beside the section's own controls.
+			</p>
+		);
+	return null;
+}
+
+function ScreenRemovalConfirmation(props: {
+	draft: ScreenConfiguration;
+	removing: boolean;
+	canUpdateOwner: boolean;
+	confirm: () => Promise<void>;
+	cancel: () => void;
+	error: string | null;
+}) {
+	return (
+		<div
+			className="screen-owner-remove-confirmation"
+			role="dialog"
+			aria-label={`Remove ${props.draft.name}`}
+		>
+			<b>{props.draft.name} carries the encoders.</b>
+			<p>
+				Removing it will move the encoders back to the main screen in the same
+				confirmed action.
+			</p>
+			<div>
+				<Button
+					variant="danger"
+					disabled={props.removing || !props.canUpdateOwner}
+					onClick={() => void props.confirm()}
+				>
+					{props.removing
+						? "Removing…"
+						: "Remove and use encoders on main screen"}
+				</Button>
+				<Button disabled={props.removing} onClick={props.cancel}>
+					Cancel
+				</Button>
+			</div>
+			{props.error && <p role="alert">{props.error}</p>}
+		</div>
+	);
+}
+
+async function copyScreenBrowserLink(
+	browserLink: string,
+	setStatus: (status: string) => void,
+) {
+	try {
+		if (!navigator.clipboard)
+			throw new Error("Clipboard access is unavailable in this browser.");
+		await navigator.clipboard.writeText(browserLink);
+		setStatus("Browser link copied.");
+	} catch (error) {
+		setStatus(
+			error instanceof Error ? error.message : "Could not copy browser link.",
+		);
+	}
+}
+
 export function ScreenSettingsCard({
 	screen,
 	desks = screen.layout.desks,
@@ -739,7 +870,9 @@ export function ScreenSettingsCard({
 }) {
 	const [draft, setDraft] = useState(screen);
 	const [playbackModalOpen, setPlaybackModalOpen] = useState(false);
-	const [browserLinkStatus, setBrowserLinkStatus] = useState<string | null>(null);
+	const [browserLinkStatus, setBrowserLinkStatus] = useState<string | null>(
+		null,
+	);
 	const [removeConfirmationOpen, setRemoveConfirmationOpen] = useState(false);
 	const [removeError, setRemoveError] = useState<string | null>(null);
 	const [removing, setRemoving] = useState(false);
@@ -761,7 +894,10 @@ export function ScreenSettingsCard({
 		saveQueue.current = saveQueue.current
 			.then(async () => {
 				await save(next);
-				if (hasControlSurface(next.content) && !hasControlSurface(previous.content))
+				if (
+					hasControlSurface(next.content) &&
+					!hasControlSurface(previous.content)
+				)
 					await updateProgrammerOwner?.({ owner_screen_id: next.id });
 				else if (
 					programmerOwner &&
@@ -775,18 +911,8 @@ export function ScreenSettingsCard({
 			});
 	};
 	const browserLink = browserScreenUrl(draft.id, window.location.href);
-	const copyBrowserLink = async () => {
-		try {
-			if (!navigator.clipboard)
-				throw new Error("Clipboard access is unavailable in this browser.");
-			await navigator.clipboard.writeText(browserLink);
-			setBrowserLinkStatus("Browser link copied.");
-		} catch (error) {
-			setBrowserLinkStatus(
-				error instanceof Error ? error.message : "Could not copy browser link.",
-			);
-		}
-	};
+	const copyBrowserLink = () =>
+		copyScreenBrowserLink(browserLink, setBrowserLinkStatus);
 	const confirmOwnerRemoval = async () => {
 		if (!updateProgrammerOwner || removing) return;
 		setRemoving(true);
@@ -796,7 +922,9 @@ export function ScreenSettingsCard({
 			await remove(draftRef.current);
 		} catch (error) {
 			setRemoveError(
-				error instanceof Error ? error.message : "Could not remove this screen.",
+				error instanceof Error
+					? error.message
+					: "Could not remove this screen.",
 			);
 			setRemoving(false);
 		}
@@ -807,101 +935,36 @@ export function ScreenSettingsCard({
 			aria-label={`Screen ${draft.name}`}
 			data-screen-id={draft.id}
 		>
-			<header className="screen-settings-header">
-				<TextField
-					aria-label="Screen name"
-					value={draft.name}
-					onChange={(event) => update({ name: event.target.value })}
-				/>
-				<div className="screen-settings-actions">
-					<a
-						className="ui-button ui-secondary ui-default"
-						href={browserLink}
-						target="_blank"
-						rel="noreferrer"
-					>
-						Open in browser
-					</a>
-					<Button onClick={() => void copyBrowserLink()}>
-						Copy browser link
-					</Button>
-					<Button onClick={() => setPlaybackModalOpen(true)}>
-						Configure Playbacks
-					</Button>
-					<Button
-						variant={draft.desired_open ? "warning" : "success"}
-						onClick={() => update({ desired_open: !draft.desired_open })}
-					>
-						{draft.desired_open ? "Close Screen" : "Open Screen"}
-					</Button>
-					<Button
-						variant="danger"
-						onClick={() =>
-							programmerOwner
-								? setRemoveConfirmationOpen(true)
-								: void remove(draft)
-						}
-					>
-						Remove Screen
-					</Button>
-				</div>
-			</header>
+			<ScreenCardHeader
+				draft={draft}
+				browserLink={browserLink}
+				programmerOwner={programmerOwner}
+				update={update}
+				copyBrowserLink={copyBrowserLink}
+				openPlaybackModal={() => setPlaybackModalOpen(true)}
+				remove={() =>
+					programmerOwner ? setRemoveConfirmationOpen(true) : void remove(draft)
+				}
+			/>
 			{browserLinkStatus && (
 				<small className="screen-browser-link-status" role="status">
 					{browserLinkStatus}
 				</small>
 			)}
 			{removeConfirmationOpen && (
-				<div
-					className="screen-owner-remove-confirmation"
-					role="dialog"
-					aria-label={`Remove ${draft.name}`}
-				>
-					<b>{draft.name} carries the encoders.</b>
-					<p>
-						Removing it will move the encoders back to the main screen in the
-						same confirmed action.
-					</p>
-					<div>
-						<Button
-							variant="danger"
-							disabled={removing || !updateProgrammerOwner}
-							onClick={() => void confirmOwnerRemoval()}
-						>
-							{removing
-								? "Removing…"
-								: "Remove and use encoders on main screen"}
-						</Button>
-						<Button
-							disabled={removing}
-							onClick={() => setRemoveConfirmationOpen(false)}
-						>
-							Cancel
-						</Button>
-					</div>
-					{removeError && <p role="alert">{removeError}</p>}
-				</div>
+				<ScreenRemovalConfirmation
+					draft={draft}
+					removing={removing}
+					canUpdateOwner={Boolean(updateProgrammerOwner)}
+					confirm={confirmOwnerRemoval}
+					cancel={() => setRemoveConfirmationOpen(false)}
+					error={removeError}
+				/>
 			)}
-			{hasControlSurface(draft.content) && !programmerOwner && (
-				<p className="screen-settings-note" role="status">
-					This control layout becomes active when this screen carries the
-					encoders. Selecting it assigns that placement when saved.
-				</p>
-			)}
-			{programmerOwner && !hasControlSurface(draft.content) && (
-				<p className="screen-settings-note" role="status">
-					The encoders appear below this content. When this screen also shows
-					Playbacks, the Playback/Encoders switch sits beside the section's own
-					controls.
-				</p>
-			)}
-			{programmerOwner && hasControlSurface(draft.content) && (
-				<p className="screen-settings-note" role="status">
-					This control layout carries the encoders over the full screen height.
-					When Playbacks are also enabled, the Playback/Encoders switch sits
-					beside the section's own controls.
-				</p>
-			)}
+			<ScreenControlSurfaceNote
+				draft={draft}
+				programmerOwner={programmerOwner}
+			/>
 			<ScreenSettingsFields
 				draft={draft}
 				desks={desks}

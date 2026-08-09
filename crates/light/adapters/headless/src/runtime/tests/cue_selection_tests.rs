@@ -12,6 +12,8 @@ fn cue_selection_snapshot(list_id: light_core::CueListId) -> EngineSnapshot {
         restart_mode: light_playback::RestartMode::FirstCue,
         force_cue_timing: false,
         disable_cue_timing: false,
+        auto_off_at_zero: false,
+        auto_off_flash_release: false,
         chaser_xfade_millis: 0,
         chaser_xfade_percent: Some(0),
         speed_multiplier: 1.0,
@@ -332,6 +334,18 @@ fn bare_multi_head_selection_expands_to_children_and_steps_without_parent_identi
         revision: 1,
         gesture_open: false,
     };
+    registry
+        .action(
+            desk,
+            user,
+            None,
+            HighlightAction::On,
+            &complete,
+            &fixtures,
+            &HashMap::new(),
+            false,
+        )
+        .unwrap();
     let first = registry
         .action(
             desk,

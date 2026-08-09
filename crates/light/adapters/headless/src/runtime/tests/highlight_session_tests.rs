@@ -64,7 +64,7 @@ async fn verify_bootstrapped_step_highlight(
         .iter()
         .find(|entry| entry["session_id"] == session.id.0.to_string())
         .unwrap();
-    assert_eq!(highlight["state"]["active"], false);
+    assert_eq!(highlight["state"]["active"], true);
     assert_eq!(highlight["state"]["mode"], "step");
     assert_eq!(highlight["state"]["remembered"].as_array().unwrap().len(), 3);
     assert_eq!(
@@ -74,10 +74,11 @@ async fn verify_bootstrapped_step_highlight(
     let event = state
         .events.audit_events()
         .iter()
+        .rev()
         .find(|event| event.kind == "highlight_changed" && event.payload["action"] == "next")
         .cloned()
         .unwrap();
-    assert_eq!(event.payload["state"]["active"], false);
+    assert_eq!(event.payload["state"]["active"], true);
     assert_eq!(event.payload["state"]["mode"], "step");
     assert_eq!(
         event.payload["state"]["remembered"]
@@ -89,7 +90,7 @@ async fn verify_bootstrapped_step_highlight(
 }
 
 #[tokio::test]
-async fn rest_prev_next_all_change_the_real_selection_while_high_remains_independent() {
+async fn rest_inactive_navigation_is_noop_and_active_navigation_uses_the_frozen_basis() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
     let (token, session_id) = login(&app, "Operator").await;
@@ -114,24 +115,16 @@ async fn rest_prev_next_all_change_the_real_selection_while_high_remains_indepen
         .unwrap();
     state.programming.select(session.id, fixture_ids.clone());
 
-    let before_next = state.events.latest_sequence();
+    let before_navigation = state.programming.selection(session.id).unwrap();
     let next = post_highlight_action(&app, &token, "next").await;
     assert_eq!(next["active"], false);
-    assert_eq!(next["mode"], "step");
+    assert_eq!(next["mode"], "selection");
     assert_eq!(
         state.programming.get(session.id).unwrap().selected,
-        fixture_ids[..1]
+        fixture_ids
     );
-    assert_programming_selection_event(
-        &state,
-        &session,
-        before_next,
-        light_application::ActionSource::Http,
-        &fixture_ids[..1],
-    );
-    verify_bootstrapped_step_highlight(&app, &state, &session, fixture_ids[0]).await;
+    assert_eq!(state.programming.selection(session.id).unwrap(), before_navigation);
 
-    let before_all = state.events.latest_sequence();
     let all = post_highlight_action(&app, &token, "all").await;
     assert_eq!(all["active"], false);
     assert_eq!(all["mode"], "selection");
@@ -139,25 +132,27 @@ async fn rest_prev_next_all_change_the_real_selection_while_high_remains_indepen
         state.programming.get(session.id).unwrap().selected,
         fixture_ids
     );
-    assert_programming_selection_event(
-        &state,
-        &session,
-        before_all,
-        light_application::ActionSource::Http,
-        &fixture_ids,
-    );
+    assert_eq!(state.programming.selection(session.id).unwrap(), before_navigation);
 
     let previous = post_highlight_action(&app, &token, "previous").await;
     assert_eq!(previous["active"], false);
     assert_eq!(
         state.programming.get(session.id).unwrap().selected,
-        fixture_ids[2..]
+        fixture_ids
     );
+    assert_eq!(state.programming.selection(session.id).unwrap(), before_navigation);
     let before_high = state.events.latest_sequence();
     let high = post_highlight_action(&app, &token, "on").await;
     assert_eq!(high["active"], true);
-    assert_eq!(high["mode"], "step");
-    assert_eq!(state.output.highlighted_fixtures(), fixture_ids[2..]);
+    assert_eq!(high["mode"], "selection");
+    assert_eq!(
+        state
+            .output
+            .highlighted_fixtures()
+            .into_iter()
+            .collect::<HashSet<_>>(),
+        fixture_ids.iter().copied().collect::<HashSet<_>>()
+    );
     let selection_filter = light_application::EventFilter::for_desk(session.desk.id).with_object(
         light_application::EventObject::programming_selection(session.desk.id),
     );
@@ -183,9 +178,24 @@ async fn rest_prev_next_all_change_the_real_selection_while_high_remains_indepen
         panic!("the focused Highlight history must remain replayable")
     };
     assert_eq!(highlight_events.len(), 1);
+    let before_active_next = state.events.latest_sequence();
+    let next = post_highlight_action(&app, &token, "next").await;
+    assert_eq!(next["active"], true);
+    assert_eq!(next["mode"], "step");
+    assert_eq!(
+        state.programming.get(session.id).unwrap().selected,
+        fixture_ids[..1]
+    );
+    assert_programming_selection_event(
+        &state,
+        &session,
+        before_active_next,
+        light_application::ActionSource::Http,
+        &fixture_ids[..1],
+    );
+    verify_bootstrapped_step_highlight(&app, &state, &session, fixture_ids[0]).await;
 
-    // An external selection write resets the step basis without toggling HIGH, including when
-    // the new source is live. Editing that Group before ALL is then re-resolved at action time.
+    // External selection and Group edits do not replace the basis frozen when HIGH was activated.
     state.programming.select_expression(
         session.id,
         fixture_ids.clone(),
@@ -196,17 +206,16 @@ async fn rest_prev_next_all_change_the_real_selection_while_high_remains_indepen
     );
     reconcile_highlight_selection(&state, &session, "test_external_group_selection");
     assert_eq!(
-        state
-            .output.highlighted_fixtures()
-            .into_iter()
-            .collect::<HashSet<_>>(),
-        fixture_ids.iter().copied().collect::<HashSet<_>>()
+        state.output.highlighted_fixtures(),
+        fixture_ids[..1]
     );
-    let stepped = post_highlight_action(&app, &token, "next").await;
+    // Use the opposite direction here so the cross-surface repeat guard does not collapse two
+    // synthetic NEXT presses into one physical press.
+    let stepped = post_highlight_action(&app, &token, "previous").await;
     assert_eq!(stepped["active"], true);
     assert_eq!(
         state.programming.get(session.id).unwrap().selected,
-        fixture_ids[..1]
+        fixture_ids[2..]
     );
 
     let mut snapshot = (*state.output.snapshot()).clone();
@@ -217,7 +226,7 @@ async fn rest_prev_next_all_change_the_real_selection_while_high_remains_indepen
     assert_eq!(restored["active"], true);
     assert_eq!(
         state.programming.get(session.id).unwrap().selected,
-        vec![fixture_ids[2], fixture_ids[1]]
+        fixture_ids
     );
     assert!(matches!(
         state
@@ -225,20 +234,32 @@ async fn rest_prev_next_all_change_the_real_selection_while_high_remains_indepen
             .get(session.id)
             .unwrap()
             .selection_expression,
-        Some(light_programmer::SelectionExpression::LiveGroup { ref group_id, .. })
-            if group_id == "1"
+        Some(light_programmer::SelectionExpression::Static)
     ));
 
-    // HIGH remains on with an empty actual selection, produces no output, and automatically
-    // follows the next external selection without another toggle.
+    // HIGH remains on and keeps the frozen output even when unrelated selection writes arrive.
     state.programming.select(session.id, []);
     reconcile_highlight_selection(&state, &session, "test_clear_selection");
-    assert!(state.output.highlighted_fixtures().is_empty());
+    assert_eq!(
+        state
+            .output
+            .highlighted_fixtures()
+            .into_iter()
+            .collect::<HashSet<_>>(),
+        fixture_ids.iter().copied().collect::<HashSet<_>>()
+    );
     let status = current_highlight_transition(&state, &session).unwrap();
     assert!(status.state.active);
     state.programming.select(session.id, [fixture_ids[1]]);
     reconcile_highlight_selection(&state, &session, "test_new_selection");
-    assert_eq!(state.output.highlighted_fixtures(), vec![fixture_ids[1]]);
+    assert_eq!(
+        state
+            .output
+            .highlighted_fixtures()
+            .into_iter()
+            .collect::<HashSet<_>>(),
+        fixture_ids.iter().copied().collect::<HashSet<_>>()
+    );
 
     let before_off = state.events.latest_sequence();
     let off = post_highlight_action(&app, &token, "off").await;
@@ -272,6 +293,7 @@ async fn rest_highlight_status_publishes_only_an_authoritative_selection_repair(
         })
         .unwrap();
     state.programming.select(session.id, fixture_ids.clone());
+    post_highlight_action(&app, &token, "on").await;
     post_highlight_action(&app, &token, "next").await;
 
     let mut snapshot = (*state.output.snapshot()).clone();

@@ -146,17 +146,7 @@ impl FixtureMode {
                 if parameter.components.is_empty() {
                     continue;
                 }
-                let resolution = match parameter.components.len() {
-                    1 => ChannelResolution::U8,
-                    2 => ChannelResolution::U16,
-                    3 => ChannelResolution::U24,
-                    4 => ChannelResolution::U32,
-                    _ => {
-                        return Err(ProfileError::Invalid(
-                            "legacy channel resolution is invalid".into(),
-                        ));
-                    }
-                };
+                let resolution = legacy_resolution(parameter.components.len())?;
                 let max = resolution.max_raw();
                 let fixture_attribute = parameter.attribute.clone();
                 let (attribute, canonical_transform) =
@@ -279,5 +269,17 @@ impl FixtureMode {
         };
         mode.apply_derived_highlight_defaults()?;
         Ok(mode)
+    }
+}
+
+fn legacy_resolution(components: usize) -> Result<ChannelResolution, ProfileError> {
+    match components {
+        1 => Ok(ChannelResolution::U8),
+        2 => Ok(ChannelResolution::U16),
+        3 => Ok(ChannelResolution::U24),
+        4 => Ok(ChannelResolution::U32),
+        _ => Err(ProfileError::Invalid(
+            "legacy channel resolution is invalid".into(),
+        )),
     }
 }

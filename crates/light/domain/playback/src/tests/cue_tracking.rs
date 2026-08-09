@@ -159,13 +159,15 @@ fn intensity_uses_independent_in_and_out_master_timing() {
     let incoming = FixtureId::new();
     let outgoing = FixtureId::new();
     let mut first = Cue::new(1.0);
+    first.out_fade_millis = Some(2_000);
+    first.out_delay_millis = Some(500);
     first.changes.push(value(incoming, "intensity", 0.0));
     first.changes.push(value(outgoing, "intensity", 1.0));
     let mut second = Cue::new(2.0);
     second.fade_millis = 1_000;
     second.delay_millis = 0;
-    second.out_fade_millis = Some(2_000);
-    second.out_delay_millis = Some(500);
+    second.out_fade_millis = Some(100);
+    second.out_delay_millis = Some(0);
     second.changes.push(value(incoming, "intensity", 1.0));
     second.changes.push(value(outgoing, "intensity", 0.0));
     let cue_list = list(vec![first, second]);
@@ -335,10 +337,10 @@ fn cue_changes_keep_independent_fade_and_delay_times() {
 fn per_value_force_and_disable_precedence_apply_to_outgoing_intensity() {
     let fixture = FixtureId::new();
     let mut first = Cue::new(1.0);
+    first.out_delay_millis = Some(1_000);
+    first.out_fade_millis = Some(4_000);
     first.changes.push(value(fixture, "intensity", 1.0));
     let mut second = Cue::new(2.0);
-    second.out_delay_millis = Some(1_000);
-    second.out_fade_millis = Some(4_000);
     let mut outgoing = value(fixture, "intensity", 0.0);
     outgoing.delay_millis = Some(0);
     outgoing.fade_millis = Some(500);

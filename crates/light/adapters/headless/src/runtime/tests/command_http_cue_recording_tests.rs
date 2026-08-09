@@ -347,6 +347,9 @@ async fn cue_record_route_rejects_missing_authority_and_forged_context() {
 #[tokio::test]
 async fn page_slot_recording_is_exact_activates_normal_and_holds_preload() {
     let scenario = CommandHttpScenario::new().await;
+    scenario.state.installation.update_configuration(|configuration| {
+        configuration.start_after_first_recording = true;
+    });
     let show_id = scenario.create_and_open_show("Cue page recording").await;
     set_cue_record_value(&scenario);
     let initial_revision = active_show_revision(&scenario);
@@ -424,6 +427,9 @@ async fn page_slot_recording_is_exact_activates_normal_and_holds_preload() {
 async fn already_current_cue_activation_can_complete_without_a_second_runtime_event() {
     let clock = Arc::new(ManualClock::new(chrono::Utc::now()));
     let scenario = CommandHttpScenario::with_clock(clock).await;
+    scenario.state.installation.update_configuration(|configuration| {
+        configuration.start_after_first_recording = true;
+    });
     let show_id = scenario.create_and_open_show("Already current Cue").await;
     let fixture = set_cue_record_value(&scenario);
     let first = scenario

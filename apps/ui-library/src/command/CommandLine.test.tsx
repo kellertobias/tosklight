@@ -63,7 +63,7 @@ describe("CommandLine", () => {
 		fireEvent.keyDown(screen.getByRole("textbox", { name: "Command line" }), {
 			key: "Enter",
 		});
-		expect(view.onExecute).toHaveBeenCalledOnce();
+		expect(view.onExecute).toHaveBeenCalledWith("FIXTURE 1 AT 68");
 		fireEvent.click(screen.getByRole("button", { name: /PROG/u }));
 		expect(view.onToggleMode).toHaveBeenCalledOnce();
 		fireEvent.click(screen.getByRole("button", { name: "ESC" }));

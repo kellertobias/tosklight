@@ -46,7 +46,14 @@ test("CUELIST-LAYOUT-001 @ui › compact Cue settings stay inline while Cuelist 
   expect(badgeStyle.background).not.toBe("rgba(0, 0, 0, 0)");
   expect(Number.parseFloat(badgeStyle.paddingLeft)).toBeGreaterThan(0);
   expect(Number.parseFloat(badgeStyle.paddingTop)).toBeGreaterThan(0);
-  await expect(sidebar.locator(".cue-settings-grid-measure > .ui-form-field > label")).toHaveText(["Title", "Fade", "Delay", "Trigger"]);
+  await expect(sidebar.locator(".cue-settings-grid-measure > .ui-form-field > label")).toHaveText([
+    "Title",
+    "In Delay",
+    "In Fade",
+    "Out Delay",
+    "Out Fade",
+    "Trigger",
+  ]);
   const fullEditorStyle = await sidebar.locator(".cue-settings-grid").evaluate((element) => {
     const style = getComputedStyle(element);
     const rows = element.querySelector(".cue-settings-grid-measure");
@@ -64,8 +71,8 @@ test("CUELIST-LAYOUT-001 @ui › compact Cue settings stay inline while Cuelist 
   await expect(sidebar.getByText("Press SET, then press an attribute value to edit it.")).toBeVisible();
   await page.getByRole("button", { name: "SET", exact: true }).click();
   await expect(sidebar.getByText("SET is active. Press an attribute value to edit it.")).toBeVisible();
-  await sidebar.getByRole("button", { name: "Set Cue Fade" }).click();
-  const fadeInput = page.getByRole("dialog", { name: "Fade" });
+  await sidebar.getByRole("button", { name: "Set Cue Intensity In Fade" }).click();
+  const fadeInput = page.getByRole("dialog", { name: "In Fade" });
   await expect(fadeInput).toBeVisible();
   await fadeInput.getByRole("button", { name: "5", exact: true }).click();
   await fadeInput.getByRole("button", { name: "ENTER", exact: true }).click();
