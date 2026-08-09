@@ -78,6 +78,7 @@ impl LibraryStorage {
 
         if from != to {
             self.rename(&from, &to)?;
+            self.rename_source_if_present(address, &current, address, &renamed)?;
             self.rename_thumbnail_if_present(address, address)?;
         }
         *catalog = proposed;
@@ -101,6 +102,7 @@ impl LibraryStorage {
                 &self.item_path(from_address, &name),
                 &self.item_path(to, &name),
             )?;
+            self.rename_source_if_present(from_address, &name, to, &name)?;
             self.rename_thumbnail_if_present(from_address, to)?;
         }
         *catalog = proposed;
@@ -133,6 +135,7 @@ impl LibraryStorage {
         self.rename(&first_path, &staging)?;
         self.rename(&second_path, &self.item_path(first_address, &second_name))?;
         self.rename(&staging, &self.item_path(second_address, &first_name))?;
+        self.swap_sources(first_address, &first_name, second_address, &second_name)?;
         self.swap_thumbnails(first_address, second_address)?;
 
         *catalog = proposed;
@@ -245,6 +248,101 @@ impl LibraryStorage {
             return Ok(());
         }
         self.rename(&source, &self.thumbnail_path(to))
+    }
+
+    fn rename_source_if_present(
+        &self,
+        from: MediaAddress,
+        from_name: &str,
+        to: MediaAddress,
+        to_name: &str,
+    ) -> Result<(), StorageError> {
+        let Some(source) = self.source_path(from, from_name) else {
+            return Ok(());
+        };
+        let extension = source
+            .extension()
+            .and_then(|value| value.to_str())
+            .unwrap_or_default();
+        let destination = self.source_destination(to, to_name, extension);
+        if source != destination {
+            self.rename(&source, &destination)?;
+        }
+        Ok(())
+    }
+
+    fn swap_sources(
+        &self,
+        first: MediaAddress,
+        first_name: &str,
+        second: MediaAddress,
+        second_name: &str,
+    ) -> Result<(), StorageError> {
+        let first_source = self.source_path(first, first_name);
+        let second_source = self.source_path(second, second_name);
+        match (first_source, second_source) {
+            (Some(a), Some(b)) => {
+                let a_extension = a
+                    .extension()
+                    .and_then(|value| value.to_str())
+                    .unwrap_or_default();
+                let b_extension = b
+                    .extension()
+                    .and_then(|value| value.to_str())
+                    .unwrap_or_default();
+                let staging = staging(&a);
+                self.rename(&a, &staging)?;
+                self.rename(
+                    &b,
+                    &self.source_destination(first, second_name, b_extension),
+                )?;
+                self.rename(
+                    &staging,
+                    &self.source_destination(second, first_name, a_extension),
+                )
+            }
+            (Some(a), None) => {
+                let extension = a
+                    .extension()
+                    .and_then(|value| value.to_str())
+                    .unwrap_or_default();
+                self.rename(&a, &self.source_destination(second, first_name, extension))
+            }
+            (None, Some(b)) => {
+                let extension = b
+                    .extension()
+                    .and_then(|value| value.to_str())
+                    .unwrap_or_default();
+                self.rename(&b, &self.source_destination(first, second_name, extension))
+            }
+            (None, None) => Ok(()),
+        }
+    }
+
+    fn source_path(&self, address: MediaAddress, name: &str) -> Option<PathBuf> {
+        let folder = self.root.join(naming::folder_directory(address.folder));
+        std::fs::read_dir(folder)
+            .ok()?
+            .flatten()
+            .map(|entry| entry.path())
+            .find(|path| {
+                path.file_name()
+                    .and_then(|value| value.to_str())
+                    .and_then(naming::parse_source_filename)
+                    .is_some_and(|(file, source_name)| file == address.file && source_name == name)
+            })
+    }
+
+    fn source_destination(&self, address: MediaAddress, name: &str, extension: &str) -> PathBuf {
+        let safe = naming::safe_name(name);
+        let stem = if safe.is_empty() {
+            format!("{:03}", address.file)
+        } else {
+            format!("{:03}-{safe}", address.file)
+        };
+        self.root
+            .join(naming::folder_directory(address.folder))
+            .join(format!("{stem}.{extension}"))
     }
 
     fn swap_thumbnails(
@@ -500,6 +598,34 @@ mod tests {
         assert!(!thumbnail.exists());
         let moved = library.storage.thumbnail_path(MediaAddress::new(1, 9));
         assert_eq!(std::fs::read(moved).unwrap(), b"thumb");
+    }
+
+    #[test]
+    fn preserved_import_sources_follow_renames_and_moves() {
+        let mut library = Library::new("sources-follow");
+        let id = library.add(1, 5, "Clip");
+        let source = library.storage.root().join("001/005-Clip.png");
+        std::fs::write(&source, b"original").unwrap();
+
+        library
+            .storage
+            .rename_item(&mut library.catalog, id, "Opening")
+            .unwrap();
+        assert!(!source.exists());
+        assert_eq!(
+            std::fs::read(library.storage.root().join("001/005-Opening.png")).unwrap(),
+            b"original"
+        );
+
+        library
+            .storage
+            .move_item(&mut library.catalog, id, MediaAddress::new(2, 8))
+            .unwrap();
+        assert!(!library.storage.root().join("001/005-Opening.png").exists());
+        assert_eq!(
+            std::fs::read(library.storage.root().join("002/008-Opening.png")).unwrap(),
+            b"original"
+        );
     }
 
     #[test]

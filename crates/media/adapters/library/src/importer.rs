@@ -228,6 +228,26 @@ fn run_one(inner: &Arc<Inner>, job: &Job) -> JobState {
     match media_codec::import::import(&job.source, &destination, &mut report) {
         Ok(0) => JobState::Cancelled,
         Ok(frames) => {
+            let extension = job
+                .source
+                .extension()
+                .and_then(|value| value.to_str())
+                .unwrap_or_default()
+                .to_ascii_lowercase();
+            let is_video = !["png", "jpg", "jpeg", "tif"].contains(&extension.as_str());
+            if let Err(error) =
+                crate::thumbnails::generate(&inner.storage, job.destination, &job.source, is_video)
+            {
+                // The clip is already complete and playable. Keep that successful import and
+                // expose the UI's explicit missing-thumbnail state rather than lying that the
+                // whole conversion failed after publication.
+                tracing::warn!(
+                    source = %job.source.display(),
+                    destination = %destination.display(),
+                    %error,
+                    "the imported clip has no thumbnail"
+                );
+            }
             tracing::info!(
                 source = %job.source.display(),
                 destination = %destination.display(),
@@ -391,6 +411,10 @@ mod tests {
             .resolve(MediaAddress::new(1, 1))
             .expect("the imported clip is addressable");
         assert_eq!(item.name, "Bars", "the name in the filename is kept");
+        assert!(
+            crate::thumbnails::exists(&storage, MediaAddress::new(1, 1)),
+            "the browser and CITP can identify the imported clip visually"
+        );
         assert!(
             crate::pending_imports(storage.root()).is_empty(),
             "and it is no longer waiting to be imported"
