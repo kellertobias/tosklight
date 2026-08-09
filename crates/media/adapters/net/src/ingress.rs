@@ -25,6 +25,9 @@ const RECEIVE_BUFFER: usize = 2048;
 pub struct UniverseFrame {
     pub universe: u16,
     pub source: CommandSource,
+    /// The winning sender an operator can identify: an IP for Art-Net, and the advertised source
+    /// name plus IP for sACN.
+    pub source_label: String,
     pub slots: Vec<u8>,
     pub received_at: Timestamp,
 }
@@ -192,6 +195,7 @@ impl ArtNetListener {
                     return UniverseFrame {
                         universe: packet.port_address,
                         source: CommandSource::ArtNet,
+                        source_label: from.ip().to_string(),
                         slots: packet.data.to_vec(),
                         received_at,
                     };
@@ -288,6 +292,7 @@ impl SacnListener {
                     return UniverseFrame {
                         universe: packet.universe,
                         source: CommandSource::Sacn,
+                        source_label: format!("{} ({})", packet.source_name, from.ip()),
                         slots: packet.data.to_vec(),
                         received_at,
                     };

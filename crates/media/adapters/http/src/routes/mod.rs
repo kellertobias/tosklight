@@ -29,6 +29,7 @@ use std::sync::Arc;
 
 use arc_swap::ArcSwap;
 use axum::Router;
+use axum::extract::DefaultBodyLimit;
 use axum::routing::{get, post};
 use media_application::MediaConfiguration;
 use media_domain::catalog::CatalogSnapshot;
@@ -91,6 +92,24 @@ pub fn router(state: ApiState) -> Router {
         .route("/api/v2/library/imports", get(library::imports))
         .route("/api/v2/library/import", post(library::start_import))
         .route(
+            "/api/v2/library/items/{id}/update",
+            post(library::update_item),
+        )
+        .route(
+            "/api/v2/library/folders/{folder}/update",
+            post(library::update_folder),
+        )
+        .route(
+            "/api/v2/library/{folder}/{file}/thumbnail",
+            get(library::thumbnail),
+        )
+        .route(
+            "/api/v2/library/{folder}/{file}/upload",
+            post(library::upload).layer(DefaultBodyLimit::max(
+                media_library::MAX_UPLOAD_BYTES as usize,
+            )),
+        )
+        .route(
             "/api/v2/library/imports/{job}/cancel",
             get(library::cancel_import),
         )
@@ -117,7 +136,16 @@ pub fn router(state: ApiState) -> Router {
             post(visualizers::update_visualizer),
         )
         .route("/api/v2/outputs", get(outputs::outputs))
+        .route(
+            "/api/v2/outputs/{output}/configuration",
+            get(outputs::output_configuration),
+        )
+        .route(
+            "/api/v2/outputs/{output}/configuration/update",
+            post(outputs::update_output_configuration),
+        )
         .route("/api/v2/outputs/{output}/state", get(outputs::output_state))
+        .route("/api/v2/outputs/{output}/dmx-map", get(outputs::dmx_map))
         .route(
             "/api/v2/outputs/{output}/layers/{layer}/update",
             post(outputs::update_layer),

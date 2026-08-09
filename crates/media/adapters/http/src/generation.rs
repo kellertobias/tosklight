@@ -12,11 +12,14 @@ use ts_rs::{Config, TS};
 use crate::error::ApiErrorBody;
 use crate::wire::{
     AddressView, AudioBandsView, AudioPanelView, AudioSettingsView, AudioView, CatalogFolderView,
-    CatalogItemView, CatalogView, CreateText, DeleteText, Health, ImportJobView, ImportsView,
-    LayerView, LogRecordView, LogsView, MaskView, MasterView, NetworkAddressesView, NetworkView,
-    OutputView, PendingImportView, SourceStatusView, StartImport, TelemetryFrame, TextSlotView,
-    TextStyleView, UpdateAudio, UpdateLayer, UpdateNetwork, UpdateText, UpdateVisualizer,
-    VisualizerParametersView, VisualizerView, WaveformView,
+    CatalogItemView, CatalogView, CreateText, DeleteText, DmxChannelGroupView, DmxChannelView,
+    DmxIngressView, DmxMapView, DmxPersonalityView, DmxResolutionView, DmxValueSetView, Health,
+    ImportJobView, ImportsView, LayerView, LogRecordView, LogsView, MaskView, MasterView,
+    NetworkAddressesView, NetworkView, OutputConfigurationView, OutputView, PendingImportView,
+    SourceStatusView, StartImport, TelemetryFrame, TextSlotView, TextStyleView, UpdateAudio,
+    UpdateLayer, UpdateLibraryFolder, UpdateLibraryItem, UpdateNetwork, UpdateOutputConfiguration,
+    UpdateText, UpdateVisualizer, UploadAcceptedView, VisualizerParametersView, VisualizerView,
+    WaveformView,
 };
 
 const TYPESCRIPT_PATH: &str = "apps/media/src/shared/api/generated/media-wire.ts";
@@ -70,6 +73,14 @@ fn declarations(config: &Config) -> Vec<String> {
         LayerView::decl(config),
         MasterView::decl(config),
         OutputView::decl(config),
+        OutputConfigurationView::decl(config),
+        DmxMapView::decl(config),
+        DmxIngressView::decl(config),
+        DmxPersonalityView::decl(config),
+        DmxChannelView::decl(config),
+        DmxChannelGroupView::decl(config),
+        DmxResolutionView::decl(config),
+        DmxValueSetView::decl(config),
         CatalogItemView::decl(config),
         CatalogFolderView::decl(config),
         CatalogView::decl(config),
@@ -91,6 +102,7 @@ fn declarations(config: &Config) -> Vec<String> {
         LogRecordView::decl(config),
         LogsView::decl(config),
         UpdateLayer::decl(config),
+        UpdateOutputConfiguration::decl(config),
         UpdateVisualizer::decl(config),
         UpdateNetwork::decl(config),
         CreateText::decl(config),
@@ -98,6 +110,9 @@ fn declarations(config: &Config) -> Vec<String> {
         DeleteText::decl(config),
         UpdateAudio::decl(config),
         StartImport::decl(config),
+        UpdateLibraryItem::decl(config),
+        UpdateLibraryFolder::decl(config),
+        UploadAcceptedView::decl(config),
     ]
 }
 

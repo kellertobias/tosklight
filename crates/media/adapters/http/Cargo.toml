@@ -12,6 +12,7 @@ arc-swap.workspace = true
 axum.workspace = true
 media-application = { path = "../../application" }
 media-domain = { path = "../../domain" }
+media-library = { path = "../library" }
 mime_guess = "2"
 rust-embed.workspace = true
 serde.workspace = true

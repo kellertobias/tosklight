@@ -4,7 +4,9 @@
 //! typed commands. The reducer applies them and publishes an immutable snapshot; the render loop
 //! reads that snapshot without ever taking a lock the network can hold.
 
+use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::Mutex;
 
 use arc_swap::ArcSwap;
 use media_application::configuration::{DmxProtocol, MediaConfiguration};
@@ -19,6 +21,55 @@ use crate::shutdown::Shutdown;
 /// The reducer is the only writer. A reader swaps in a whole new `Arc` rather than mutating, so
 /// the render loop never blocks on a packet arriving and never sees a half-applied frame.
 pub type SharedState = Arc<ArcSwap<MediaState>>;
+
+pub type SharedDiagnostics = Arc<Mutex<HashMap<OutputId, IngressSample>>>;
+
+#[derive(Debug, Clone)]
+pub struct IngressSample {
+    protocol: DmxProtocol,
+    universe: u16,
+    start_address: u16,
+    source: String,
+    frames_per_second: f32,
+    received_at: Timestamp,
+    slots: Vec<u8>,
+}
+
+pub fn diagnostics() -> SharedDiagnostics {
+    Arc::new(Mutex::new(HashMap::new()))
+}
+
+pub fn diagnostic_snapshot(
+    diagnostics: &SharedDiagnostics,
+    now: Timestamp,
+) -> Vec<media_http::DmxTelemetry> {
+    diagnostics
+        .lock()
+        .map(|samples| {
+            samples
+                .iter()
+                .map(|(output, sample)| {
+                    let age_millis = now.since(sample.received_at).as_millis() as u64;
+                    media_http::DmxTelemetry {
+                        output: *output,
+                        protocol: match sample.protocol {
+                            DmxProtocol::ArtNet => "art-net",
+                            DmxProtocol::Sacn => "sacn",
+                        }
+                        .to_owned(),
+                        universe: sample.universe,
+                        start_address: sample.start_address,
+                        source: sample.source.clone(),
+                        frames_per_second: sample.frames_per_second,
+                        age_millis,
+                        active: age_millis <= 2_500,
+                        slots: sample.slots.clone(),
+                    }
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
 
 /// Which outputs a universe feeds, and how to address them.
 #[derive(Debug, Clone)]
@@ -50,7 +101,12 @@ fn routes(configuration: &MediaConfiguration) -> Vec<Route> {
 ///
 /// A frame that does not reach an output's footprint is skipped with a reason rather than applied
 /// half-decoded.
-fn apply_frame(state: &SharedState, routes: &[Route], frame: &UniverseFrame) {
+fn apply_frame_with_diagnostics(
+    state: &SharedState,
+    routes: &[Route],
+    frame: &UniverseFrame,
+    diagnostics: &SharedDiagnostics,
+) {
     let matching: Vec<&Route> = routes
         .iter()
         .filter(|route| {
@@ -72,6 +128,30 @@ fn apply_frame(state: &SharedState, routes: &[Route], frame: &UniverseFrame) {
     let mut changed = false;
 
     for route in matching {
+        let start = usize::from(route.start_address.saturating_sub(1));
+        let end = start.saturating_add(usize::from(route.personality.footprint().total()));
+        if let Some(slots) = frame.slots.get(start..end) {
+            if let Ok(mut samples) = diagnostics.lock() {
+                let frames_per_second = samples
+                    .get(&route.output)
+                    .map(|previous| frame.received_at.since(previous.received_at).as_micros())
+                    .filter(|micros| *micros > 0)
+                    .map(|micros| 1_000_000.0 / micros as f32)
+                    .unwrap_or(0.0);
+                samples.insert(
+                    route.output,
+                    IngressSample {
+                        protocol: route.protocol,
+                        universe: route.universe,
+                        start_address: route.start_address,
+                        source: frame.source_label.clone(),
+                        frames_per_second,
+                        received_at: frame.received_at,
+                        slots: slots.to_vec(),
+                    },
+                );
+            }
+        }
         match decode::frame(route.personality, route.start_address, &frame.slots) {
             Ok(decoded) => {
                 let command = Command::new(
@@ -100,6 +180,11 @@ fn apply_frame(state: &SharedState, routes: &[Route], frame: &UniverseFrame) {
     }
 }
 
+#[cfg(test)]
+fn apply_frame(state: &SharedState, routes: &[Route], frame: &UniverseFrame) {
+    apply_frame_with_diagnostics(state, routes, frame, &diagnostics());
+}
+
 /// Starts the listeners the configuration calls for.
 ///
 /// Each protocol is bound only if some enabled output actually uses it, so a show that speaks only
@@ -109,6 +194,7 @@ pub fn spawn(
     state: SharedState,
     shutdown: Shutdown,
     started: std::time::Instant,
+    diagnostics: SharedDiagnostics,
 ) -> Result<(), IngressError> {
     let routes = routes(configuration);
     let resolved = configuration.network.resolved();
@@ -120,13 +206,18 @@ pub fn spawn(
     {
         let mut listener = ArtNetListener::bind(resolved.art_net_listen)?;
         tracing::info!(address = %resolved.art_net_listen, "listening for Art-Net");
-        let (routes, state, mut watcher, now) =
-            (routes.clone(), state.clone(), shutdown.watcher(), now);
+        let (routes, state, mut watcher, now, diagnostics) = (
+            routes.clone(),
+            state.clone(),
+            shutdown.watcher(),
+            now,
+            diagnostics.clone(),
+        );
         tokio::spawn(async move {
             loop {
                 tokio::select! {
                     _ = watcher.wait() => break,
-                    frame = listener.receive(&now) => apply_frame(&state, &routes, &frame),
+                    frame = listener.receive(&now) => apply_frame_with_diagnostics(&state, &routes, &frame, &diagnostics),
                 }
             }
         });
@@ -143,12 +234,17 @@ pub fn spawn(
             .collect();
         let mut listener = SacnListener::bind(resolved.sacn_listen, &universes)?;
         tracing::info!(address = %resolved.sacn_listen, ?universes, "listening for sACN");
-        let (routes, state, mut watcher) = (routes.clone(), state.clone(), shutdown.watcher());
+        let (routes, state, mut watcher, diagnostics) = (
+            routes.clone(),
+            state.clone(),
+            shutdown.watcher(),
+            diagnostics.clone(),
+        );
         tokio::spawn(async move {
             loop {
                 tokio::select! {
                     _ = watcher.wait() => break,
-                    frame = listener.receive(&now) => apply_frame(&state, &routes, &frame),
+                    frame = listener.receive(&now) => apply_frame_with_diagnostics(&state, &routes, &frame, &diagnostics),
                 }
             }
         });
@@ -209,6 +305,7 @@ mod tests {
             &UniverseFrame {
                 universe: 3,
                 source: media_domain::CommandSource::ArtNet,
+                source_label: "desk".to_owned(),
                 slots: slots(1),
                 received_at: Timestamp::from_millis(0),
             },
@@ -232,6 +329,7 @@ mod tests {
             &UniverseFrame {
                 universe: 9,
                 source: media_domain::CommandSource::ArtNet,
+                source_label: "desk".to_owned(),
                 slots: slots(1),
                 received_at: Timestamp::from_millis(0),
             },
@@ -254,6 +352,7 @@ mod tests {
             &UniverseFrame {
                 universe: 3,
                 source: media_domain::CommandSource::ArtNet,
+                source_label: "desk".to_owned(),
                 slots: slots(1),
                 received_at: Timestamp::from_millis(0),
             },
@@ -273,6 +372,7 @@ mod tests {
             &UniverseFrame {
                 universe: 0,
                 source: media_domain::CommandSource::ArtNet,
+                source_label: "desk".to_owned(),
                 slots: slots(100),
                 received_at: Timestamp::from_millis(0),
             },
@@ -295,6 +395,7 @@ mod tests {
             &UniverseFrame {
                 universe: 0,
                 source: media_domain::CommandSource::ArtNet,
+                source_label: "desk".to_owned(),
                 slots: vec![0u8; 512],
                 received_at: Timestamp::from_millis(0),
             },
@@ -319,6 +420,7 @@ mod tests {
                 &UniverseFrame {
                     universe: 3,
                     source,
+                    source_label: "desk".to_owned(),
                     slots: slots(1),
                     received_at: Timestamp::from_millis(0),
                 },
@@ -336,5 +438,36 @@ mod tests {
             make(&sacn, media_domain::CommandSource::Sacn),
             "identical payloads reach identical state whichever protocol carried them"
         );
+    }
+
+    #[test]
+    fn diagnostics_keep_the_exact_footprint_source_rate_and_staleness() {
+        let configuration = configuration(DmxProtocol::ArtNet, 3, 100);
+        let state = state_for(&configuration);
+        let diagnostics = diagnostics();
+        let id = configuration.outputs[0].id;
+        let mut frame = UniverseFrame {
+            universe: 3,
+            source: media_domain::CommandSource::ArtNet,
+            source_label: "10.0.0.8".to_owned(),
+            slots: slots(100),
+            received_at: Timestamp::from_millis(100),
+        };
+        apply_frame_with_diagnostics(&state, &routes(&configuration), &frame, &diagnostics);
+        frame.received_at = Timestamp::from_millis(140);
+        frame.slots[99] = 7;
+        apply_frame_with_diagnostics(&state, &routes(&configuration), &frame, &diagnostics);
+
+        let live = diagnostic_snapshot(&diagnostics, Timestamp::from_millis(200));
+        assert_eq!(live[0].output, id);
+        assert_eq!(live[0].source, "10.0.0.8");
+        assert_eq!(live[0].slots[0], 7);
+        assert_eq!(live[0].slots.len(), 75);
+        assert!((live[0].frames_per_second - 25.0).abs() < f32::EPSILON);
+        assert!(live[0].active);
+
+        let stale = diagnostic_snapshot(&diagnostics, Timestamp::from_millis(3_000));
+        assert!(!stale[0].active);
+        assert_eq!(stale[0].age_millis, 2_860);
     }
 }

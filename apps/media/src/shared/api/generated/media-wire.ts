@@ -39,6 +39,58 @@ export type OutputView = { id: string, name: string, layerCount: number, layers:
  * Whether an external desk currently owns this output's continuously controlled values.
  */
 dmxActive: boolean, };
+export type OutputConfigurationView = { id: string, name: string,
+/**
+ * `monitor` or `off-screen`.
+ */
+targetKind: string,
+/**
+ * `index` or `name` when the target is a monitor.
+ */
+monitorBy: string | null,
+/**
+ * A decimal index or the literal monitor name, depending on `monitorBy`.
+ */
+monitorValue: string | null, fullscreen: boolean, width: number, height: number,
+/**
+ * `display-synchronized`, `fixed-fps`, or `unlocked`.
+ */
+presentation: string, framesPerSecond: number | null,
+/**
+ * `two-layers` or `eight-layers`.
+ */
+personality: string,
+/**
+ * `art-net` or `sacn`.
+ */
+protocol: string, universe: number, startAddress: number,
+/**
+ * Output surfaces, clocks, personalities, and DMX ingress are created once at startup.
+ */
+takesEffectOnRestart: boolean, };
+export type DmxMapView = { outputId: string, outputName: string, universe: number,
+/**
+ * The configured one-based DMX address of the first layer slot.
+ */
+startAddress: number, personality: DmxPersonalityView, layerCount: number, channels: Array<DmxChannelView>, };
+export type DmxIngressView = { outputId: string, protocol: string, universe: number, startAddress: number, source: string, framesPerSecond: number, ageMillis: number, active: boolean, slots: Array<number>, };
+export type DmxPersonalityView = "twoLayers" | "eightLayers";
+export type DmxChannelView = {
+/**
+ * The one-based universe address an operator patches.
+ */
+absoluteChannel: number,
+/**
+ * The canonical zero-based offset within a layer or master block.
+ */
+localOffset: number, group: DmxChannelGroupView, name: string, resolution: DmxResolutionView,
+/**
+ * The complete logical default: 0..=255 for byte controls and 0..=65535 for coarse ones.
+ */
+defaultValue: number, valueSets: Array<DmxValueSetView>, implemented: boolean, implementationNote: string | null, };
+export type DmxChannelGroupView = { "kind": "layer", number: number, } | { "kind": "master" };
+export type DmxResolutionView = "byte" | "coarse" | "fine";
+export type DmxValueSetView = { name: string, from: number, to: number, step: number, implemented: boolean, };
 export type CatalogItemView = {
 /**
  * Stable across renames, moves, and reindexing — the identity a UI keys a row on.
@@ -196,7 +248,11 @@ export type TelemetryFrame = { audio: AudioView,
  * Every import this run has seen. Pushed rather than polled for the same reason as the
  * meters: a progress bar that has to ask is a progress bar that stutters.
  */
-imports: Array<ImportJobView>, };
+imports: Array<ImportJobView>,
+/**
+ * Winning, protocol-aware DMX ingress. Volatile state is pushed, never polled.
+ */
+dmx: Array<DmxIngressView>, };
 export type LogRecordView = {
 /**
  * Monotonically increasing, so a viewer asks for everything after what it already holds.
@@ -216,6 +272,7 @@ newest: number,
  */
 dropped: number, capacity: number, };
 export type UpdateLayer = { folder?: number | null, file?: number | null, dimmer?: number | null, };
+export type UpdateOutputConfiguration = { requestId: string, targetKind?: string | null, monitorBy?: string | null, monitorValue?: string | null, fullscreen?: boolean | null, width?: number | null, height?: number | null, presentation?: string | null, framesPerSecond?: number | null, personality?: string | null, protocol?: string | null, universe?: number | null, startAddress?: number | null, };
 export type UpdateVisualizer = {
 /**
  * Client-generated. A resend with the same id returns the first outcome.
@@ -246,3 +303,10 @@ export type UpdateAudio = { requestId: string,
  */
 deviceBy?: string | null, deviceValue?: string | null, inputGain?: number | null, beatSensitivity?: number | null, eqBass?: number | null, eqMid?: number | null, eqTreble?: number | null, };
 export type StartImport = { requestId: string, folder?: number | null, file?: number | null, };
+export type UpdateLibraryItem = { requestId: string, name?: string | null, folder?: number | null, file?: number | null,
+/**
+ * Exchange addresses when the destination is occupied. False refuses the edit.
+ */
+swap: boolean, };
+export type UpdateLibraryFolder = { requestId: string, name: string, };
+export type UploadAcceptedView = { jobId: string, address: AddressView, };

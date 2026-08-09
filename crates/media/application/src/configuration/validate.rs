@@ -9,7 +9,7 @@ use std::collections::HashSet;
 use media_domain::PresentationMode;
 use media_domain::personality::StartAddressError;
 
-use super::{MediaConfiguration, OutputConfiguration, migration::MigrationError};
+use super::{DmxProtocol, MediaConfiguration, OutputConfiguration, migration::MigrationError};
 
 /// Why a configuration cannot be used.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -32,6 +32,15 @@ pub enum ConfigurationError {
     EmptyResolution { output: String, axis: &'static str },
     #[error("output '{output}' requests a fixed rate of zero frames per second")]
     ZeroFixedRate { output: String },
+    #[error(
+        "output '{output}' requests {protocol} universe {universe}; {protocol} universes are {range}"
+    )]
+    UniverseOutOfRange {
+        output: String,
+        protocol: &'static str,
+        universe: u16,
+        range: &'static str,
+    },
     #[error(
         "outputs '{first}' and '{second}' both consume universe {universe} at address {start_address}"
     )]
@@ -63,6 +72,26 @@ pub(super) fn validate(configuration: &MediaConfiguration) -> Result<(), Configu
 
 fn validate_output(output: &OutputConfiguration) -> Result<(), ConfigurationError> {
     let name = output.name.to_string();
+
+    match output.protocol {
+        DmxProtocol::ArtNet if output.universe > 32_767 => {
+            return Err(ConfigurationError::UniverseOutOfRange {
+                output: name,
+                protocol: "Art-Net",
+                universe: output.universe,
+                range: "0 through 32767",
+            });
+        }
+        DmxProtocol::Sacn if !(1..=63_999).contains(&output.universe) => {
+            return Err(ConfigurationError::UniverseOutOfRange {
+                output: name,
+                protocol: "sACN",
+                universe: output.universe,
+                range: "1 through 63999",
+            });
+        }
+        DmxProtocol::ArtNet | DmxProtocol::Sacn => {}
+    }
 
     output
         .personality
@@ -234,6 +263,36 @@ mod tests {
             error,
             ConfigurationError::ZeroFixedRate {
                 output: "Main".to_owned()
+            }
+        );
+    }
+
+    #[test]
+    fn a_protocols_reserved_universes_are_rejected() {
+        let mut art_net = OutputConfiguration::new("Art-Net wall");
+        art_net.universe = 32_768;
+        let error = validate(&configuration(vec![art_net])).unwrap_err();
+        assert_eq!(
+            error,
+            ConfigurationError::UniverseOutOfRange {
+                output: "Art-Net wall".to_owned(),
+                protocol: "Art-Net",
+                universe: 32_768,
+                range: "0 through 32767",
+            }
+        );
+
+        let mut sacn = OutputConfiguration::new("sACN wall");
+        sacn.protocol = DmxProtocol::Sacn;
+        sacn.universe = 0;
+        let error = validate(&configuration(vec![sacn])).unwrap_err();
+        assert_eq!(
+            error,
+            ConfigurationError::UniverseOutOfRange {
+                output: "sACN wall".to_owned(),
+                protocol: "sACN",
+                universe: 0,
+                range: "1 through 63999",
             }
         );
     }

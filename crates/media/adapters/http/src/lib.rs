@@ -19,8 +19,9 @@ pub mod tolerant;
 pub mod wire;
 
 pub use diagnostics::{
-    AudioSource, AudioTelemetry, DeviceLister, Diagnostics, ImportJob, ImportOutcome, Imports,
-    LogEntry, LogPage, LogQuery, LogSource, PendingImport,
+    AudioSource, AudioTelemetry, DeviceLister, Diagnostics, DmxTelemetry, ImportJob, ImportOutcome,
+    Imports, LibraryAccess, LibraryEdit, LogEntry, LogPage, LogQuery, LogSource, PendingImport,
+    UploadStream,
 };
 pub use error::{ApiError, ApiErrorBody};
 pub use generation::{GeneratedArtifact, generated_artifacts, write_generated_artifacts};

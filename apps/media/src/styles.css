@@ -320,6 +320,78 @@ body {
 	font-weight: 500;
 }
 
+.media-folder-heading,
+.media-library-actions,
+.media-inline-editor {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: end;
+	gap: 0.5rem;
+}
+
+.media-folder-heading {
+	justify-content: space-between;
+}
+
+.media-folder-heading h2 {
+	margin: 0;
+}
+
+.media-inline-editor {
+	padding: 0.7rem;
+	background: var(--panel2);
+	border: 1px solid var(--line);
+	border-radius: 6px;
+}
+
+.media-inline-note,
+.media-inline-editor > label {
+	color: var(--muted);
+	font-size: 0.85rem;
+}
+
+.media-inline-editor input[type="file"] {
+	display: block;
+	min-height: 44px;
+	padding-top: 0.4rem;
+}
+
+.media-import-panel {
+	display: grid;
+	gap: 0.6rem;
+	padding: 0.9rem 1rem;
+	background: var(--panel);
+	border: 1px solid var(--line);
+	border-radius: 8px;
+}
+
+.media-import-panel h2,
+.media-import-panel p {
+	margin: 0;
+}
+
+.media-thumbnail {
+	display: block;
+	width: 96px;
+	height: 54px;
+	object-fit: contain;
+	background: #000;
+	border: 1px solid var(--line2);
+	border-radius: 4px;
+}
+
+.media-thumbnail-missing {
+	display: grid;
+	place-items: center;
+	width: 96px;
+	height: 54px;
+	color: var(--muted);
+	background: var(--panel2);
+	border: 1px dashed var(--line2);
+	border-radius: 4px;
+	font-size: 0.75rem;
+}
+
 /* Settings, text, audio, and the log. Every editor gets the same two-column form and the same
    action row, so an operator who has changed one has already learnt the others. */
 

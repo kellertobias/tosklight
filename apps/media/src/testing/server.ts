@@ -7,6 +7,7 @@ import { vi } from "vitest";
 import type {
 	AudioPanelView,
 	CatalogView,
+	DmxMapView,
 	Health,
 	ImportsView,
 	LogsView,
@@ -33,7 +34,9 @@ export interface StubbedServer {
 	writes: string[];
 }
 
-export function stubServer(overrides: Partial<StubbedServer> = {}): StubbedServer {
+export function stubServer(
+	overrides: Partial<StubbedServer> = {},
+): StubbedServer {
 	const server: StubbedServer = {
 		outputs: [anOutput()],
 		catalog: aCatalog(),
@@ -71,6 +74,15 @@ export function stubServer(overrides: Partial<StubbedServer> = {}): StubbedServe
 			if (path === "/catalog") return jsonResponse(server.catalog);
 			if (path === "/visualizers") return jsonResponse(server.visualizers);
 			if (path === "/outputs") return jsonResponse(server.outputs);
+			const dmxMap = path.match(/^\/outputs\/([^/]+)\/dmx-map$/u);
+			if (dmxMap) {
+				const output = server.outputs.find(
+					(candidate) => candidate.id === dmxMap[1],
+				);
+				return output
+					? jsonResponse(aDmxMap(output.id, output.name))
+					: jsonResponse({ code: "unknown-output", message: "no" }, 404);
+			}
 			if (path === "/network") return jsonResponse(server.network);
 			if (path === "/text") return jsonResponse(server.text);
 			if (path === "/audio") return jsonResponse(server.audio);
@@ -78,6 +90,8 @@ export function stubServer(overrides: Partial<StubbedServer> = {}): StubbedServe
 			if (path === "/library/imports") return jsonResponse(server.imports);
 			const imported = writeImport(server, path);
 			if (imported) return imported;
+			const library = writeLibrary(server, path, init);
+			if (library) return library;
 			if (path === "/network/update") {
 				const body = JSON.parse(String(init?.body ?? "{}"));
 				for (const field of [
@@ -86,7 +100,8 @@ export function stubServer(overrides: Partial<StubbedServer> = {}): StubbedServe
 					"citpListen",
 					"httpListen",
 				] as const) {
-					if (body[field] !== undefined) server.network.stored[field] = body[field];
+					if (body[field] !== undefined)
+						server.network.stored[field] = body[field];
 				}
 				if (body.sameComputerPreset !== undefined) {
 					server.network.sameComputerPreset = body.sameComputerPreset;
@@ -118,7 +133,10 @@ export function stubServer(overrides: Partial<StubbedServer> = {}): StubbedServe
 						candidate.address.file === Number(tuned[2]),
 				);
 				if (!found) {
-					return jsonResponse({ code: "unknown-visualizer", message: "no" }, 404);
+					return jsonResponse(
+						{ code: "unknown-visualizer", message: "no" },
+						404,
+					);
 				}
 				if (body.name !== undefined) found.name = body.name;
 				if (body.parameters !== undefined) found.parameters = body.parameters;
@@ -128,8 +146,11 @@ export function stubServer(overrides: Partial<StubbedServer> = {}): StubbedServe
 			const update = path.match(/^\/outputs\/([^/]+)\/layers\/(\d+)\/update$/u);
 			if (update) {
 				const body = JSON.parse(String(init?.body ?? "{}"));
-				const output = server.outputs.find((candidate) => candidate.id === update[1]);
-				if (!output) return jsonResponse({ code: "unknown-output", message: "no" }, 404);
+				const output = server.outputs.find(
+					(candidate) => candidate.id === update[1],
+				);
+				if (!output)
+					return jsonResponse({ code: "unknown-output", message: "no" }, 404);
 				const layer = output.layers[Number(update[2])];
 				if (body.dimmer !== undefined) layer.dimmer = body.dimmer;
 				if (body.folder !== undefined) layer.address.folder = body.folder;
@@ -142,10 +163,72 @@ export function stubServer(overrides: Partial<StubbedServer> = {}): StubbedServe
 	return server;
 }
 
+function writeLibrary(
+	server: StubbedServer,
+	path: string,
+	init?: RequestInit,
+): Response | undefined {
+	const itemUpdate = path.match(/^\/library\/items\/([^/]+)\/update$/u);
+	if (itemUpdate) {
+		const body = JSON.parse(String(init?.body ?? "{}"));
+		const located = server.catalog.folders
+			.flatMap((folder) => folder.items.map((item) => ({ folder, item })))
+			.find(({ item }) => item.id === decodeURIComponent(itemUpdate[1]));
+		if (!located)
+			return jsonResponse(
+				{ code: "library-item-not-updated", message: "no item" },
+				404,
+			);
+		if (body.name !== undefined) located.item.name = body.name;
+		if (body.folder !== undefined && body.file !== undefined) {
+			located.folder.items = located.folder.items.filter(
+				(candidate) => candidate.id !== located.item.id,
+			);
+			let destination = server.catalog.folders.find(
+				(candidate) => candidate.folder === body.folder,
+			);
+			if (!destination) {
+				destination = { folder: body.folder, name: null, items: [] };
+				server.catalog.folders.push(destination);
+			}
+			located.item.file = body.file;
+			destination.items.push(located.item);
+		}
+		return jsonResponse(server.catalog);
+	}
+	const folderUpdate = path.match(/^\/library\/folders\/(\d+)\/update$/u);
+	if (folderUpdate) {
+		const body = JSON.parse(String(init?.body ?? "{}"));
+		const folder = server.catalog.folders.find(
+			(candidate) => candidate.folder === Number(folderUpdate[1]),
+		);
+		if (!folder)
+			return jsonResponse(
+				{ code: "library-folder-not-updated", message: "no folder" },
+				404,
+			);
+		folder.name = body.name.trim() || null;
+		return jsonResponse(server.catalog);
+	}
+	const upload = path.match(/^\/library\/(\d+)\/(\d+)\/upload\?/u);
+	if (upload) {
+		return jsonResponse({
+			jobId: "upload-job",
+			address: {
+				folder: Number(upload[1]),
+				file: Number(upload[2]),
+				class: "library",
+			},
+		});
+	}
+	return undefined;
+}
 
 /// Starting and stopping imports.
-function writeImport(server: StubbedServer, path: string): Response | undefined {
-
+function writeImport(
+	server: StubbedServer,
+	path: string,
+): Response | undefined {
 	if (path === "/library/import") {
 		if (!server.imports.canImport) {
 			return jsonResponse(
@@ -169,8 +252,11 @@ function writeImport(server: StubbedServer, path: string): Response | undefined 
 
 	const cancelled = path.match(/^\/library\/imports\/([^/]+)\/cancel$/u);
 	if (cancelled) {
-		const job = server.imports.jobs.find((candidate) => candidate.id === cancelled[1]);
-		if (!job) return jsonResponse({ code: "unknown-import", message: "no" }, 404);
+		const job = server.imports.jobs.find(
+			(candidate) => candidate.id === cancelled[1],
+		);
+		if (!job)
+			return jsonResponse({ code: "unknown-import", message: "no" }, 404);
 		job.state = "cancelled";
 		return new Response(null, { status: 204 });
 	}
@@ -211,7 +297,8 @@ function writeText(
 				candidate.address.folder === Number(written[1]) &&
 				candidate.address.file === Number(written[2]),
 		);
-		if (at < 0) return jsonResponse({ code: "unknown-text", message: "no" }, 404);
+		if (at < 0)
+			return jsonResponse({ code: "unknown-text", message: "no" }, 404);
 		if (written[3] === "delete") {
 			server.text.splice(at, 1);
 			return jsonResponse(server.text);
@@ -283,7 +370,9 @@ export function aLayer(index: number): OutputView["layers"][number] {
 	};
 }
 
-export function aVisualizer(overrides: Partial<VisualizerView> = {}): VisualizerView {
+export function aVisualizer(
+	overrides: Partial<VisualizerView> = {},
+): VisualizerView {
 	return {
 		address: { folder: 220, file: 1, class: "generated-visualizer" },
 		typeId: 0,
@@ -356,6 +445,30 @@ export function aCatalog(): CatalogView {
 	};
 }
 
+export function aDmxMap(outputId: string, outputName: string): DmxMapView {
+	return {
+		outputId,
+		outputName,
+		universe: 3,
+		startAddress: 100,
+		personality: "twoLayers",
+		layerCount: 2,
+		channels: [
+			{
+				absoluteChannel: 100,
+				localOffset: 0,
+				group: { kind: "layer", number: 1 },
+				name: "Folder",
+				resolution: "byte",
+				defaultValue: 0,
+				valueSets: [],
+				implemented: true,
+				implementationNote: null,
+			},
+		],
+	};
+}
+
 export function aNetwork(overrides: Partial<NetworkView> = {}): NetworkView {
 	const stored = {
 		artNetListen: "0.0.0.0:6454",
@@ -401,7 +514,9 @@ export function aClock(overrides: Partial<TextSlotView> = {}): TextSlotView {
 	};
 }
 
-export function aCountdown(overrides: Partial<TextSlotView> = {}): TextSlotView {
+export function aCountdown(
+	overrides: Partial<TextSlotView> = {},
+): TextSlotView {
 	return {
 		address: { folder: 200, file: 2, class: "text-bank" },
 		name: "Ten minutes",
@@ -415,7 +530,9 @@ export function aCountdown(overrides: Partial<TextSlotView> = {}): TextSlotView 
 	};
 }
 
-export function anAudioPanel(overrides: Partial<AudioPanelView> = {}): AudioPanelView {
+export function anAudioPanel(
+	overrides: Partial<AudioPanelView> = {},
+): AudioPanelView {
 	return {
 		settings: {
 			deviceBy: "system-default",
@@ -470,7 +587,9 @@ export function aLog(overrides: Partial<LogsView> = {}): LogsView {
 	};
 }
 
-export function anImportState(overrides: Partial<ImportsView> = {}): ImportsView {
+export function anImportState(
+	overrides: Partial<ImportsView> = {},
+): ImportsView {
 	return {
 		canImport: true,
 		pending: [

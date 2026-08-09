@@ -10,6 +10,8 @@
 
 use std::sync::Arc;
 
+use media_domain::{AssetId, MediaAddress, OutputId};
+
 /// One instant of audio analysis, as the process publishes it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct AudioTelemetry {
@@ -100,6 +102,81 @@ pub struct Imports {
     pub available: bool,
 }
 
+/// One durable edit to the operator's media library.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LibraryEdit {
+    RenameItem {
+        id: AssetId,
+        name: String,
+    },
+    MoveItem {
+        id: AssetId,
+        destination: MediaAddress,
+        /// When occupied, exchange the two addresses instead of overwriting either file.
+        swap: bool,
+    },
+    RenameFolder {
+        folder: u8,
+        name: Option<String>,
+    },
+}
+
+/// A streaming upload owned by the runtime/library adapter.
+///
+/// Multipart framing stays in HTTP, but no HTTP route opens a file or invents a temporary path.
+pub trait UploadStream: Send {
+    fn write(&mut self, bytes: &[u8]) -> Result<(), String>;
+    /// Publishes the source and starts its import job. Returns that job's identity.
+    fn finish(self: Box<Self>) -> Result<String, String>;
+}
+
+/// Mutations and files the running library exposes to the API.
+#[derive(Clone)]
+pub struct LibraryAccess {
+    pub edit: Arc<dyn Fn(LibraryEdit) -> Result<(), String> + Send + Sync>,
+    pub thumbnail: Arc<dyn Fn(MediaAddress) -> Result<Vec<u8>, String> + Send + Sync>,
+    pub begin_upload: Arc<
+        dyn Fn(MediaAddress, &str, &str) -> Result<Box<dyn UploadStream>, String> + Send + Sync,
+    >,
+}
+
+impl Default for LibraryAccess {
+    fn default() -> Self {
+        Self {
+            edit: Arc::new(|_| Err("library editing is unavailable in this process".to_owned())),
+            thumbnail: Arc::new(|_| Err("no thumbnail exists at that address".to_owned())),
+            begin_upload: Arc::new(|_, _, _| {
+                Err("library upload is unavailable in this process".to_owned())
+            }),
+        }
+    }
+}
+
+impl std::fmt::Debug for LibraryAccess {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("LibraryAccess")
+            .finish_non_exhaustive()
+    }
+}
+
+/// The latest accepted DMX footprint for one configured output.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DmxTelemetry {
+    pub output: OutputId,
+    pub protocol: String,
+    pub universe: u16,
+    pub start_address: u16,
+    pub source: String,
+    pub frames_per_second: f32,
+    pub age_millis: u64,
+    pub active: bool,
+    /// Exact bytes in this output's configured footprint, starting at `start_address`.
+    pub slots: Vec<u8>,
+}
+
+pub type DmxSource = Arc<dyn Fn() -> Vec<DmxTelemetry> + Send + Sync>;
+
 impl Default for Imports {
     /// A process that imports nothing: it reports nothing waiting, and says it cannot import.
     fn default() -> Self {
@@ -170,6 +247,8 @@ pub struct Diagnostics {
     pub audio_devices: DeviceLister,
     pub logs: LogSource,
     pub imports: Imports,
+    pub library: LibraryAccess,
+    pub dmx: DmxSource,
 }
 
 impl Default for Diagnostics {
@@ -183,6 +262,8 @@ impl Default for Diagnostics {
             audio_devices: Arc::new(Vec::new),
             logs: Arc::new(|_| LogPage::default()),
             imports: Imports::default(),
+            library: LibraryAccess::default(),
+            dmx: Arc::new(Vec::new),
         }
     }
 }

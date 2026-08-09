@@ -14,6 +14,7 @@
 
 mod audio;
 mod catalog;
+mod dmx;
 mod health;
 mod library;
 mod logs;
@@ -27,10 +28,20 @@ pub use audio::{
     UpdateAudio, WaveformView,
 };
 pub use catalog::{CatalogFolderView, CatalogItemView, CatalogView};
+pub use dmx::{
+    DmxChannelGroupView, DmxChannelView, DmxIngressView, DmxMapView, DmxPersonalityView,
+    DmxResolutionView, DmxValueSetView,
+};
 pub use health::{AddressView, Health, SourceStatusView};
-pub use library::{ImportJobView, ImportsView, PendingImportView, StartImport};
+pub use library::{
+    ImportJobView, ImportsView, PendingImportView, StartImport, UpdateLibraryFolder,
+    UpdateLibraryItem, UploadAcceptedView,
+};
 pub use logs::{LogRecordView, LogsView};
 pub use network::{NetworkAddressesView, NetworkEditError, NetworkView, UpdateNetwork};
-pub use output::{LayerView, MaskView, MasterView, OutputView, UpdateLayer};
+pub use output::{
+    LayerView, MaskView, MasterView, OutputConfigurationEditError, OutputConfigurationView,
+    OutputView, UpdateLayer, UpdateOutputConfiguration,
+};
 pub use text::{CreateText, DeleteText, TextEditError, TextSlotView, TextStyleView, UpdateText};
 pub use visualizer::{UpdateVisualizer, VisualizerParametersView, VisualizerView};

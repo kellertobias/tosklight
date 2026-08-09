@@ -96,6 +96,38 @@ pub struct StartImport {
     pub file: Option<u8>,
 }
 
+/// Renaming or moving one stable catalog item.
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, Eq, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateLibraryItem {
+    pub request_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folder: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file: Option<u8>,
+    /// Exchange addresses when the destination is occupied. False refuses the edit.
+    #[serde(default)]
+    pub swap: bool,
+}
+
+/// Setting the visible label for one numbered folder. An empty name removes the label.
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, Eq, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateLibraryFolder {
+    pub request_id: String,
+    pub name: String,
+}
+
+/// The immediate answer after a browser upload has been accepted and queued.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct UploadAcceptedView {
+    pub job_id: String,
+    pub address: AddressView,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

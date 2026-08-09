@@ -1,16 +1,20 @@
 // What this server is, what it listens on, and what it sends to.
 //
-// The network settings are editable here; the outputs are not, because what an output *is* — its
-// monitor, its size, its presentation mode — is settled when its surface opens, and pretending
-// otherwise would show an operator a change that never happened.
+// Output identity is editable as stored configuration. The running surface is deliberately left
+// alone, and the page says so rather than pretending a monitor or resolution changed live.
 
 import { Button } from "@tosklight/ui/controls";
 import { ResourceState } from "../../app/ResourceState";
-import type { Health, NetworkView, OutputView } from "../../shared/api/generated/media-wire";
 import { api } from "../../shared/api/client";
 import { useEditing } from "../../shared/api/editing";
+import type {
+	Health,
+	NetworkView,
+	OutputView,
+} from "../../shared/api/generated/media-wire";
 import { useHealth, useNetwork, useOutputs } from "../../shared/api/queries";
 import { BoundAddresses, NetworkEditor } from "./NetworkEditor";
+import { OutputSettings } from "./OutputSettings";
 
 const HEALTH_POLL_MS = 15_000;
 
@@ -55,32 +59,41 @@ export function SettingsPage() {
 				empty="No outputs are enabled."
 			>
 				{(data) => (
-					<table className="media-table">
-						<caption>Outputs</caption>
-						<thead>
-							<tr>
-								<th scope="col">Name</th>
-								<th scope="col">Layers</th>
-								<th scope="col">Identifier</th>
-							</tr>
-						</thead>
-						<tbody>
-							{data.map((output: OutputView) => (
-								<tr key={output.id}>
-									<td>{output.name}</td>
-									<td>{output.layerCount}</td>
-									<td>
-										<code>{output.id}</code>
-									</td>
+					<>
+						<table className="media-table">
+							<caption>Outputs</caption>
+							<thead>
+								<tr>
+									<th scope="col">Name</th>
+									<th scope="col">Layers</th>
+									<th scope="col">Identifier</th>
 								</tr>
-							))}
-						</tbody>
-					</table>
+							</thead>
+							<tbody>
+								{data.map((output: OutputView) => (
+									<tr key={output.id}>
+										<td>{output.name}</td>
+										<td>{output.layerCount}</td>
+										<td>
+											<code>{output.id}</code>
+										</td>
+									</tr>
+								))}
+							</tbody>
+						</table>
+						{data.map((output: OutputView) => (
+							<OutputSettings
+								key={output.id}
+								outputId={output.id}
+								outputName={output.name}
+							/>
+						))}
+					</>
 				)}
 			</ResourceState>
 
 			<p className="media-state is-notice">
-				Outputs and the library folder are set in the server's configuration file.
+				The library folder is set in the server's configuration file.
 			</p>
 		</section>
 	);
@@ -120,8 +133,8 @@ function Network({
 			)}
 			{network.takesEffectOnRestart && (
 				<p className="media-state is-notice">
-					A saved change to these addresses is used the next time this server starts. The
-					sockets it is using now stay as they are.
+					A saved change to these addresses is used the next time this server
+					starts. The sockets it is using now stay as they are.
 				</p>
 			)}
 		</article>

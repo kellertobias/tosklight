@@ -99,12 +99,21 @@ pub fn run() -> anyhow::Result<()> {
 
     let importer = start_importer(&configuration, &catalog);
     let (audio, analysis) = start_audio(&configuration);
+    let dmx_diagnostics = dmx::diagnostics();
 
     // One configuration document, read by the outputs and written by the API. A second copy is a
     // second truth: an operator would edit one and watch the other.
     let live: SharedConfiguration =
         std::sync::Arc::new(arc_swap::ArcSwap::from_pointee(configuration.clone()));
-    let diagnostics = diagnostics_of(audio.as_ref(), &log, &importer, &configuration.library.root);
+    let diagnostics = diagnostics_of(
+        audio.as_ref(),
+        &log,
+        &importer,
+        &configuration.library.root,
+        &catalog,
+        &dmx_diagnostics,
+        started,
+    );
     let apply = applies_to(audio.as_ref());
 
     // What a subscribed console sees. Shared between the outputs, which capture, and the CITP
@@ -113,7 +122,13 @@ pub fn run() -> anyhow::Result<()> {
 
     // The desk drives the outputs, so the listeners come up before anything presents.
     runtime.block_on(async {
-        dmx::spawn(&configuration, state.clone(), shutdown.clone(), started)?;
+        dmx::spawn(
+            &configuration,
+            state.clone(),
+            shutdown.clone(),
+            started,
+            dmx_diagnostics,
+        )?;
         citp::spawn(
             &configuration,
             state.clone(),
@@ -290,8 +305,12 @@ fn diagnostics_of(
     log: &LogBuffer,
     importer: &media_library::Importer,
     library_root: &std::path::Path,
+    catalog: &presentation::SharedCatalog,
+    dmx_diagnostics: &dmx::SharedDiagnostics,
+    started: std::time::Instant,
 ) -> media_http::Diagnostics {
     let log = log.clone();
+    let dmx_diagnostics = dmx_diagnostics.clone();
     media_http::Diagnostics {
         audio: match audio {
             Some(service) => {
@@ -323,6 +342,108 @@ fn diagnostics_of(
         audio_devices: std::sync::Arc::new(media_audio::input_devices),
         logs: std::sync::Arc::new(move |query| log.page(query)),
         imports: imports_of(importer, library_root),
+        library: library_access(importer, library_root, catalog),
+        dmx: std::sync::Arc::new(move || {
+            dmx::diagnostic_snapshot(
+                &dmx_diagnostics,
+                Timestamp::from_micros(started.elapsed().as_micros() as u64),
+            )
+        }),
+    }
+}
+
+/// Durable library work stays in the runtime/library boundary. The HTTP adapter carries typed
+/// intent and bytes, but it never receives the library root or opens an operator-owned path.
+fn library_access(
+    importer: &media_library::Importer,
+    library_root: &std::path::Path,
+    catalog: &presentation::SharedCatalog,
+) -> media_http::LibraryAccess {
+    let storage = media_library::LibraryStorage::new(library_root.to_path_buf());
+    let editing = storage.clone();
+    let reading = storage.clone();
+    let uploading_root = library_root.to_path_buf();
+    let published = catalog.clone();
+    let edit_lock = std::sync::Arc::new(std::sync::Mutex::new(()));
+    let upload_importer = importer.clone();
+
+    media_http::LibraryAccess {
+        edit: std::sync::Arc::new(move |operation| {
+            let _guard = edit_lock
+                .lock()
+                .map_err(|_| "the library edit lock is unavailable".to_owned())?;
+            let mut next = (*published.load_full()).clone();
+            match operation {
+                media_http::LibraryEdit::RenameItem { id, name } => {
+                    editing.rename_item(&mut next, id, &name)
+                }
+                media_http::LibraryEdit::MoveItem {
+                    id,
+                    destination,
+                    swap,
+                } => {
+                    let occupant = next
+                        .folder(destination.folder)
+                        .and_then(|folder| folder.item(destination.file))
+                        .map(|item| item.id);
+                    match (occupant, swap) {
+                        (Some(other), true) => editing.swap_items(&mut next, id, other),
+                        _ => editing.move_item(&mut next, id, destination),
+                    }
+                }
+                media_http::LibraryEdit::RenameFolder { folder, name } => {
+                    editing.rename_folder(&mut next, folder, name.as_deref())
+                }
+            }
+            .map_err(|error| error.to_string())?;
+            published.store(std::sync::Arc::new(next));
+            Ok(())
+        }),
+        thumbnail: std::sync::Arc::new(move |address| {
+            let path = reading.thumbnail_path(address);
+            std::fs::read(&path)
+                .map_err(|error| format!("cannot read thumbnail {}: {error}", path.display()))
+        }),
+        begin_upload: std::sync::Arc::new(move |address, name, filename| {
+            let upload = media_library::Upload::begin(&uploading_root, address, name, filename)
+                .map_err(|error| error.to_string())?;
+            Ok(Box::new(RuntimeUpload {
+                upload: Some(upload),
+                importer: upload_importer.clone(),
+                address,
+                name: name.to_owned(),
+            }) as Box<dyn media_http::UploadStream>)
+        }),
+    }
+}
+
+struct RuntimeUpload {
+    upload: Option<media_library::Upload>,
+    importer: media_library::Importer,
+    address: media_domain::MediaAddress,
+    name: String,
+}
+
+impl media_http::UploadStream for RuntimeUpload {
+    fn write(&mut self, bytes: &[u8]) -> Result<(), String> {
+        self.upload
+            .as_mut()
+            .ok_or_else(|| "the upload is already complete".to_owned())?
+            .write(bytes)
+            .map_err(|error| error.to_string())
+    }
+
+    fn finish(mut self: Box<Self>) -> Result<String, String> {
+        let source = self
+            .upload
+            .take()
+            .ok_or_else(|| "the upload is already complete".to_owned())?
+            .finish()
+            .map_err(|error| error.to_string())?;
+        Ok(self
+            .importer
+            .submit(source, self.address, &self.name)
+            .to_string())
     }
 }
 

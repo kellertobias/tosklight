@@ -9,18 +9,24 @@ import type {
 	CatalogView,
 	CreateText,
 	DeleteText,
+	DmxMapView,
 	Health,
 	ImportsView,
 	LogsView,
 	NetworkView,
+	OutputConfigurationView,
 	OutputView,
 	StartImport,
 	TextSlotView,
 	UpdateAudio,
 	UpdateLayer,
+	UpdateLibraryFolder,
+	UpdateLibraryItem,
 	UpdateNetwork,
+	UpdateOutputConfiguration,
 	UpdateText,
 	UpdateVisualizer,
+	UploadAcceptedView,
 	VisualizerView,
 } from "./generated/media-wire";
 
@@ -54,7 +60,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 	try {
 		response = await fetch(`${BASE}${path}`, {
 			...init,
-			headers: init?.body ? { "content-type": "application/json" } : undefined,
+			headers:
+				init?.headers ??
+				(init?.body && !(init.body instanceof FormData)
+					? { "content-type": "application/json" }
+					: undefined),
 		});
 	} catch {
 		throw new ApiFailure(
@@ -92,7 +102,22 @@ export const api = {
 	catalog: () => request<CatalogView>("/catalog"),
 	visualizers: () => request<VisualizerView[]>("/visualizers"),
 	outputs: () => request<OutputView[]>("/outputs"),
-	outputState: (output: string) => request<OutputView>(`/outputs/${output}/state`),
+	outputState: (output: string) =>
+		request<OutputView>(`/outputs/${output}/state`),
+	outputConfiguration: (output: string) =>
+		request<OutputConfigurationView>(`/outputs/${output}/configuration`),
+	updateOutputConfiguration: (
+		output: string,
+		edit: UpdateOutputConfiguration,
+	) =>
+		request<OutputConfigurationView>(
+			`/outputs/${output}/configuration/update`,
+			{
+				method: "POST",
+				body: JSON.stringify(edit),
+			},
+		),
+	dmxMap: (output: string) => request<DmxMapView>(`/outputs/${output}/dmx-map`),
 
 	/** An intent-shaped write: only the fields being changed travel. */
 	updateLayer: (output: string, layer: number, update: UpdateLayer) =>
@@ -120,7 +145,35 @@ export const api = {
 			body: JSON.stringify(start),
 		}),
 	/** A payload-free action, exactly as the API exposes it. */
-	cancelImport: (job: string) => request<void>(`/library/imports/${job}/cancel`),
+	cancelImport: (job: string) =>
+		request<void>(`/library/imports/${job}/cancel`),
+	updateLibraryItem: (id: string, edit: UpdateLibraryItem) =>
+		request<CatalogView>(`/library/items/${encodeURIComponent(id)}/update`, {
+			method: "POST",
+			body: JSON.stringify(edit),
+		}),
+	updateLibraryFolder: (folder: number, edit: UpdateLibraryFolder) =>
+		request<CatalogView>(`/library/folders/${folder}/update`, {
+			method: "POST",
+			body: JSON.stringify(edit),
+		}),
+	thumbnailUrl: (folder: number, file: number) =>
+		`${BASE}/library/${folder}/${file}/thumbnail`,
+	uploadLibraryItem: (
+		folder: number,
+		file: number,
+		requestId: string,
+		name: string,
+		media: File,
+	) => {
+		const query = new URLSearchParams({ requestId, name });
+		const body = new FormData();
+		body.set("file", media);
+		return request<UploadAcceptedView>(
+			`/library/${folder}/${file}/upload?${query.toString()}`,
+			{ method: "POST", body },
+		);
+	},
 
 	network: () => request<NetworkView>("/network"),
 	updateNetwork: (edit: UpdateNetwork) =>

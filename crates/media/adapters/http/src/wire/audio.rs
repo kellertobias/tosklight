@@ -88,6 +88,8 @@ pub struct TelemetryFrame {
     /// Every import this run has seen. Pushed rather than polled for the same reason as the
     /// meters: a progress bar that has to ask is a progress bar that stutters.
     pub imports: Vec<crate::wire::ImportJobView>,
+    /// Winning, protocol-aware DMX ingress. Volatile state is pushed, never polled.
+    pub dmx: Vec<crate::wire::DmxIngressView>,
 }
 
 /// The audio settings, as the API reports them.
