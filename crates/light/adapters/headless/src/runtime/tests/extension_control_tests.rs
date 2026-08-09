@@ -398,6 +398,53 @@ fn canonical_extension_programmer_highlight_and_speed_controls_use_server_author
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
+#[tokio::test]
+async fn extension_programmer_keys_do_not_cross_an_active_show_transition() {
+    let (state, data_dir) = test_state();
+    let desk = state.installation.add_desk("Main", "main").unwrap();
+    let user = state.installation.users().unwrap().remove(0);
+    let session = Session {
+        id: light_core::SessionId::new(),
+        user: user.clone(),
+        token: "extension-transition".into(),
+        connected: true,
+        desk: desk.clone(),
+    };
+    state.programming.start(session.id, user.id);
+    state.sessions.insert_session(session.clone());
+    let host = HostControlContext {
+        extension_id: "de.tosklight.surface".into(),
+        extension_instance_id: "main-surface".into(),
+        desk_id: desk.osc_alias,
+        source: "native_extension",
+    };
+    let transition = state.active_show.acquire().await;
+
+    let error = extensions_runtime::apply_bound_control(
+        &state,
+        &host,
+        &BoundControlInput {
+            input: ControlInputEvent {
+                input_id: 1,
+                occurred_at_micros: 200,
+                control: ControlInput::Button {
+                    control_id: "one".into(),
+                    pressed: true,
+                },
+            },
+            intent: CanonicalControlIntent::ProgrammerKey {
+                key: ProgrammerKey::One,
+            },
+        },
+    )
+    .unwrap_err();
+
+    assert!(error.detail.contains("active show is changing"));
+    assert_eq!(state.programming.get(session.id).unwrap().command_line, "");
+    drop(transition);
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
 #[test]
 fn extension_timecode_uses_the_authoritative_priority_router() {
     let (state, data_dir) = test_state();

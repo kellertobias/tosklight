@@ -39,6 +39,7 @@ fn schema_v2_direct_fixture() -> (light_fixture::PatchedFixture, Uuid, [Uuid; 2]
                 dmx_to: 127,
                 attribute: light_core::AttributeKey("gobo.1".into()),
                 priority: 100,
+                angular_motion: None,
                 behavior: light_fixture::ChannelFunctionBehavior::Indexed {
                     semantic_id: "gobo.dots".into(),
                     label: "Dots".into(),

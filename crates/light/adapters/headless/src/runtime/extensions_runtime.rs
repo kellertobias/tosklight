@@ -721,6 +721,8 @@ fn apply_application_programmer_key(
     key: light_programmer::command_line::CommandKey,
     pressed: bool,
 ) -> Result<(), PortError> {
+    let _activation = super::programming_interaction::try_programming_activation(state)
+        .map_err(PortError::new)?;
     let result = command_http::run_service_with_source(
         state,
         session,

@@ -272,6 +272,57 @@ fn defaults_are_raw_preserving_side_effect_free_and_compile_equivalent() {
 }
 
 #[test]
+fn duplicate_cue_ids_are_repaired_deterministically_once_without_losing_raw_fields() {
+    let cue_list_id = CueListId::new();
+    let first = Cue::new(1.0);
+    let duplicate_id = first.id;
+    let mut second = Cue::new(2.0);
+    second.id = duplicate_id;
+    let cue_list = CueList {
+        id: cue_list_id,
+        name: "Duplicate Cue IDs".into(),
+        priority: 0,
+        mode: CueListMode::Sequence,
+        looped: false,
+        chaser_step_millis: 1_000,
+        speed_group: None,
+        intensity_priority_mode: IntensityPriorityMode::Htp,
+        wrap_mode: Some(WrapMode::Tracking),
+        restart_mode: RestartMode::FirstCue,
+        force_cue_timing: false,
+        disable_cue_timing: false,
+        auto_off_at_zero: false,
+        auto_off_flash_release: false,
+        chaser_xfade_millis: 0,
+        chaser_xfade_percent: Some(0),
+        speed_multiplier: 1.0,
+        cues: vec![first, second],
+    };
+    let mut legacy = serde_json::to_value(cue_list).unwrap();
+    legacy["cues"][1]["future_cue"] = json!({"kept": [2, 1]});
+    let (_, document) = document_with_objects(&[("cue_list", "1", legacy)]);
+
+    let mut transaction = document.transaction();
+    stage_candidate_migrations(&document, &mut transaction).unwrap();
+    let candidate = document.candidate(&transaction).unwrap();
+    let migrated = candidate.object("cue_list", "1").unwrap().body();
+    let replacement = Uuid::new_v5(
+        &cue_list_id.0,
+        format!("duplicate-cue-id:{duplicate_id}:1").as_bytes(),
+    );
+    assert_eq!(migrated["cues"][0]["id"], duplicate_id.to_string());
+    assert_eq!(migrated["cues"][1]["id"], replacement.to_string());
+    assert_eq!(migrated["cues"][1]["future_cue"], json!({"kept": [2, 1]}));
+    compile_show_candidate(candidate).unwrap();
+
+    let migrated = migrated.clone();
+    let (_, reopened) = document_with_objects(&[("cue_list", "1", migrated)]);
+    let mut second_pass = reopened.transaction();
+    stage_candidate_migrations(&reopened, &mut second_pass).unwrap();
+    assert!(second_pass.is_empty());
+}
+
+#[test]
 fn group_sources_backfill_losslessly_once_and_canonical_source_wins() {
     let first = "00000000-0000-0000-0000-000000000101";
     let second = "00000000-0000-0000-0000-000000000102";

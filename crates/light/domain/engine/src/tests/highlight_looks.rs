@@ -21,6 +21,7 @@ fn semantic_highlight_applies_only_authored_identification_attributes() {
         dmx_to: 110,
         attribute: AttributeKey("shutter".into()),
         priority: 0,
+        angular_motion: None,
         behavior: light_fixture::ChannelFunctionBehavior::Fixed {
             semantic_id: "open".into(),
             label: "Open".into(),
@@ -454,6 +455,7 @@ fn high_low_and_explicit_attribute_suppression_are_temporary_and_exact() {
         dmx_to: 110,
         attribute: AttributeKey("shutter".into()),
         priority: 0,
+        angular_motion: None,
         behavior: light_fixture::ChannelFunctionBehavior::Fixed {
             semantic_id: "open".into(),
             label: "Open".into(),

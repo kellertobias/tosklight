@@ -882,6 +882,7 @@ fn generated_presets_share_one_show_commit_backup_and_runtime_install() {
         dmx_to: 255,
         attribute: light_core::AttributeKey("gobo.1".into()),
         priority: 100,
+        angular_motion: None,
         behavior: light_fixture::ChannelFunctionBehavior::Indexed {
             semantic_id: "gobo.open".into(),
             label: "Open".into(),
