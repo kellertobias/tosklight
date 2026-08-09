@@ -278,6 +278,8 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use axum::http::StatusCode;
+    use http_body_util::BodyExt as _;
+    use tower::ServiceExt as _;
 
     use crate::diagnostics::{
         Diagnostics, ImportJob, ImportOutcome, Imports, LibraryAccess, LibraryEdit, PendingImport,
@@ -513,6 +515,15 @@ mod tests {
         )
         .await;
         assert_eq!(status, StatusCode::OK);
+        let (status, _) = send(
+            &bench.router,
+            post(
+                format!("/api/v2/library/items/{id}/update"),
+                r#"{"requestId":"move","folder":2,"file":8,"swap":true}"#,
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
 
         assert_eq!(
             edits.lock().unwrap().as_slice(),
@@ -525,8 +536,51 @@ mod tests {
                     folder: 7,
                     name: Some("Looks".to_owned()),
                 },
+                LibraryEdit::MoveItem {
+                    id: media_domain::AssetId::from_uuid(id),
+                    destination: media_domain::MediaAddress::new(2, 8),
+                    swap: true,
+                },
             ]
         );
+    }
+
+    #[tokio::test]
+    async fn a_thumbnail_is_a_jpeg_and_a_missing_one_says_so() {
+        let diagnostics = Diagnostics {
+            library: LibraryAccess {
+                thumbnail: Arc::new(|address| {
+                    if address == media_domain::MediaAddress::new(3, 7) {
+                        Ok(vec![0xff, 0xd8, 0xff, 0xd9])
+                    } else {
+                        Err("missing".to_owned())
+                    }
+                }),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let bench = bench_with(diagnostics);
+
+        let response = bench
+            .router
+            .clone()
+            .oneshot(get("/api/v2/library/3/7/thumbnail".into()))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response.headers()[axum::http::header::CONTENT_TYPE],
+            "image/jpeg"
+        );
+        assert_eq!(
+            response.into_body().collect().await.unwrap().to_bytes(),
+            &[0xff, 0xd8, 0xff, 0xd9][..]
+        );
+
+        let (status, body) = send(&bench.router, get("/api/v2/library/3/8/thumbnail".into())).await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert_eq!(body["code"], "thumbnail-not-found");
     }
 
     struct RecordedUpload {

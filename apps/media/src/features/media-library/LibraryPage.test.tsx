@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { aCatalog, stubServer } from "../../testing/server";
@@ -72,6 +72,44 @@ describe("the media library page", () => {
 		expect(
 			await screen.findByRole("cell", { name: "Opening haze" }),
 		).toBeInTheDocument();
+	});
+
+	it("moves a clip to an explicit address through its stable identity", async () => {
+		const server = stubServer();
+		render(<LibraryPage />);
+		await screen.findByRole("cell", { name: "Blue haze" });
+		await userEvent.click(screen.getAllByRole("button", { name: "Move" })[0]);
+		const form = screen
+			.getByRole("button", { name: "Move media" })
+			.closest("form");
+		expect(form).not.toBeNull();
+		if (!form) throw new Error("move form missing");
+		await userEvent.clear(within(form).getByLabelText("Folder"));
+		await userEvent.type(within(form).getByLabelText("Folder"), "2");
+		await userEvent.clear(within(form).getByLabelText("File"));
+		await userEvent.type(within(form).getByLabelText("File"), "8");
+		await userEvent.click(
+			within(form).getByLabelText("Exchange with the item already there"),
+		);
+		await userEvent.click(
+			within(form).getByRole("button", { name: "Move media" }),
+		);
+
+		expect(server.writes[0]).toBe("/library/items/asset-a/update");
+		expect(
+			await screen.findByRole("cell", { name: "002/008" }),
+		).toBeInTheDocument();
+	});
+
+	it("shows address-owned thumbnails and an explicit missing state", async () => {
+		stubServer();
+		render(<LibraryPage />);
+		const thumbnail = await screen.findByRole("img", {
+			name: "Blue haze thumbnail",
+		});
+		expect(thumbnail).toHaveAttribute("src", "/api/v2/library/1/1/thumbnail");
+		fireEvent.error(thumbnail);
+		expect(screen.getByText("No thumbnail")).toBeInTheDocument();
 	});
 
 	it("changes and clears the visible folder name", async () => {
