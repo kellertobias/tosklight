@@ -255,6 +255,8 @@ struct PaneState {
     /// takes it back. A camera that snapped home whenever the desk re-sent its view would be a
     /// camera nobody could aim.
     camera_is_local: bool,
+    redraw_gate: crate::redraw::RedrawGate,
+    last_tick: Instant,
 }
 
 impl PaneState {
@@ -273,6 +275,8 @@ impl PaneState {
             surface_service: embedding.surface_service.clone(),
             camera_is_local: false,
             following_preload: false,
+            redraw_gate: crate::redraw::RedrawGate::default(),
+            last_tick: Instant::now(),
         })
     }
 
@@ -533,7 +537,31 @@ impl PaneState {
     }
 
     fn draw(&mut self, epoch: Instant, source: &mut HelperSource) -> Result<(), String> {
+        let now = Instant::now();
+        let elapsed = now
+            .saturating_duration_since(self.last_tick)
+            .as_secs_f32()
+            .min(0.25);
+        self.last_tick = now;
+        self.values.apply_physical_motion(elapsed);
         let time = epoch.elapsed().as_secs_f32();
+        let redraw_state = crate::redraw::RedrawState::new(
+            self.scene.revision,
+            &self.values,
+            &self.view,
+            self.size,
+            &self.overlay.quads,
+        );
+        let persistence = viz_scene::PersistencePreference {
+            decay_seconds: 0.0,
+            ..viz_scene::PersistencePreference::default()
+        };
+        if !self.redraw_gate.should_draw(
+            redraw_state,
+            crate::redraw::is_time_driven(&self.values, &self.view, &persistence),
+        ) {
+            return Ok(());
+        }
         match self.transport {
             FrameTransport::Shared => self.draw_shared(time, source),
             FrameTransport::Copy => self.draw_copy(time, source),

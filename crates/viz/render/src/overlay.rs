@@ -30,7 +30,7 @@ const SOLID_CELL: usize = ATLAS_CELLS - 1;
 const GLYPH_V1: f32 = GLYPH_HEIGHT as f32 / ATLAS_HEIGHT as f32;
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, Pod, Zeroable)]
+#[derive(Clone, Copy, Debug, PartialEq, Pod, Zeroable)]
 pub struct OverlayQuad {
     /// `x`, `y`, `width`, `height` in physical pixels.
     pub rect: [f32; 4],

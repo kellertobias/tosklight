@@ -14,6 +14,7 @@ fn inverted_channel_mode() -> (FixtureMode, FixtureChannel) {
             dmx_to: 109,
             attribute: AttributeKey::intensity(),
             priority: 0,
+            angular_motion: None,
             behavior: ChannelFunctionBehavior::Continuous {
                 physical_min: 0.0,
                 physical_max: 1.0,
@@ -27,6 +28,7 @@ fn inverted_channel_mode() -> (FixtureMode, FixtureChannel) {
             dmx_to: 179,
             attribute: AttributeKey("shutter".into()),
             priority: 100,
+            angular_motion: None,
             behavior: ChannelFunctionBehavior::Fixed {
                 semantic_id: "open".into(),
                 label: "Open".into(),
@@ -40,6 +42,7 @@ fn inverted_channel_mode() -> (FixtureMode, FixtureChannel) {
             dmx_to: 255,
             attribute: AttributeKey("gobo".into()),
             priority: 100,
+            angular_motion: None,
             behavior: ChannelFunctionBehavior::Indexed {
                 semantic_id: "dots".into(),
                 label: "Dots".into(),
@@ -188,6 +191,7 @@ fn typed_control_action_owns_its_exact_channel_without_losing_function_precision
         dmx_to: 65_535,
         attribute: AttributeKey("shutter".into()),
         priority: 250,
+        angular_motion: None,
         behavior: ChannelFunctionBehavior::Fixed {
             semantic_id: "open".into(),
             label: "Open".into(),

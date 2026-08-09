@@ -77,6 +77,7 @@ enum Message {
     Scene {
         plan: Box<viz_scene::Scene>,
         bindings: Vec<viz_project::EmitterBinding>,
+        external_camera: Option<viz_project::ExternalCameraBinding>,
         mappings: Vec<viz_dmx::InputMapping>,
         diagnostics: Box<ProviderDiagnostics>,
     },
@@ -85,6 +86,7 @@ enum Message {
     Delta {
         plan: Box<viz_scene::Scene>,
         bindings: Vec<viz_project::EmitterBinding>,
+        external_camera: Option<viz_project::ExternalCameraBinding>,
         mappings: Vec<viz_dmx::InputMapping>,
         diagnostics: Box<ProviderDiagnostics>,
     },
@@ -213,6 +215,7 @@ impl DeskProvider {
         &mut self,
         scene: viz_scene::Scene,
         bindings: Vec<viz_project::EmitterBinding>,
+        external_camera: Option<viz_project::ExternalCameraBinding>,
         mappings: Vec<viz_dmx::InputMapping>,
         diagnostics: ProviderDiagnostics,
     ) {
@@ -220,15 +223,21 @@ impl DeskProvider {
         if let Some(mut receivers) = self.receivers.take() {
             receivers.shutdown();
         }
-        let decoder = Decoder::new(bindings);
+        let decoder = Decoder::with_external_camera(
+            bindings,
+            (!self.connection.values_from_desk_output)
+                .then_some(external_camera)
+                .flatten(),
+        );
         let mappings = self.resolved_mappings(mappings, &decoder);
         self.receivers = self
             .listens_on_the_network()
             .then(|| DmxReceiver::start(mappings.clone(), self.epoch));
         self.mappings = mappings;
-        self.decoder = Some(decoder);
         self.values = SceneValues::default();
         self.values.resize(scene.emitters.len());
+        decoder.initialize_motion(&scene, &mut self.values);
+        self.decoder = Some(decoder);
         self.reported_input_micros = 0;
         self.scene = Some(scene);
         self.diagnostics = diagnostics;
@@ -246,15 +255,21 @@ impl DeskProvider {
         &mut self,
         scene: viz_scene::Scene,
         bindings: Vec<viz_project::EmitterBinding>,
+        external_camera: Option<viz_project::ExternalCameraBinding>,
         mappings: Vec<viz_dmx::InputMapping>,
         diagnostics: ProviderDiagnostics,
     ) {
         let Some(previous) = self.scene.take() else {
             // Nothing is displayed yet, so there is nothing to preserve.
-            self.adopt_scene(scene, bindings, mappings, diagnostics);
+            self.adopt_scene(scene, bindings, external_camera, mappings, diagnostics);
             return;
         };
-        let decoder = Decoder::new(bindings);
+        let decoder = Decoder::with_external_camera(
+            bindings,
+            (!self.connection.values_from_desk_output)
+                .then_some(external_camera)
+                .flatten(),
+        );
         let mappings = self.resolved_mappings(mappings, &decoder);
         if mappings != self.mappings || self.receivers.is_none() {
             if let Some(mut receivers) = self.receivers.take() {
@@ -270,6 +285,8 @@ impl DeskProvider {
             receivers.refresh_all();
         }
         self.values.carry_over(&previous, &scene);
+        decoder.reconcile_external_camera(&mut self.values);
+        decoder.initialize_motion(&scene, &mut self.values);
         self.decoder = Some(decoder);
         self.scene = Some(scene);
         self.diagnostics = diagnostics;
@@ -371,18 +388,20 @@ impl SceneProvider for DeskProvider {
                 Ok(Message::Scene {
                     plan,
                     bindings,
+                    external_camera,
                     mappings,
                     diagnostics,
                 }) => {
-                    self.adopt_scene(*plan, bindings, mappings, *diagnostics);
+                    self.adopt_scene(*plan, bindings, external_camera, mappings, *diagnostics);
                 }
                 Ok(Message::Delta {
                     plan,
                     bindings,
+                    external_camera,
                     mappings,
                     diagnostics,
                 }) => {
-                    self.apply_delta(*plan, bindings, mappings, *diagnostics);
+                    self.apply_delta(*plan, bindings, external_camera, mappings, *diagnostics);
                 }
                 Ok(Message::Diagnostics(diagnostics)) => {
                     self.diagnostics = *diagnostics;
@@ -725,6 +744,7 @@ async fn connect_once(
     let _ = outbox.send(Message::Scene {
         plan: Box::new(plan.scene),
         bindings: plan.bindings,
+        external_camera: plan.external_camera,
         mappings,
         diagnostics: Box::new(diagnostics),
     });
@@ -947,6 +967,7 @@ async fn watch(
                 let _ = outbox.send(Message::Delta {
                     plan: Box::new(plan.scene),
                     bindings: plan.bindings,
+                    external_camera: plan.external_camera,
                     mappings,
                     diagnostics: Box::new(diagnostics),
                 });

@@ -36,12 +36,28 @@ pub struct StatusModel<'a> {
     /// What the GPU spent on a recent frame, where the adapter can time one.
     pub gpu_millis: Option<f32>,
     pub waiting_for_dmx: bool,
+    /// Who owns the dedicated external 3D presentation camera. This is always `None` for an
+    /// embedded Stage pane and for orthographic views.
+    pub camera_control: DmxCameraControlStatus,
     /// The fixture the operator clicked on: its number, name, address and level. Nothing selected
     /// is the ordinary case, and the bar says nothing at all then.
     pub selection: Option<String>,
     /// A short-lived word about something the operator just did — a snapshot taken, a Blender file
     /// written — and whether it is bad news.
     pub notice: Option<(String, bool)>,
+}
+
+/// Operator-facing ownership of the one DMX-controllable external camera.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum DmxCameraControlStatus {
+    #[default]
+    None,
+    Dmx,
+    /// The last DMX pose is held because the fixture is absent or input is stale.
+    Held,
+    Local {
+        can_release: bool,
+    },
 }
 
 impl StatusModel<'_> {
@@ -106,6 +122,9 @@ pub(super) enum SecondRowNote<'a> {
     /// Nothing is arriving, but the planning window is driving the rig, so the picture is lit on
     /// purpose. Saying "Waiting for DMX" over a rig that is visibly lit reads as a fault.
     EditorDriving,
+    LocalCameraRelease,
+    LocalCameraWaiting,
+    DmxCameraHeld,
 }
 
 impl SecondRowNote<'_> {
@@ -115,6 +134,9 @@ impl SecondRowNote<'_> {
             Self::EmptyRig => EMPTY_RIG,
             Self::WaitingForDmx => "Waiting for DMX",
             Self::EditorDriving => EDITOR_DRIVING,
+            Self::LocalCameraRelease => "Local camera control \u{2014} press C to return to DMX",
+            Self::LocalCameraWaiting => "Local camera control \u{2014} waiting for the DMX camera",
+            Self::DmxCameraHeld => "DMX camera unavailable \u{2014} holding its last pose",
         }
     }
 }
@@ -124,6 +146,16 @@ impl SecondRowNote<'_> {
 pub(super) fn second_row_note<'a>(model: &'a StatusModel<'a>) -> Option<SecondRowNote<'a>> {
     if let Some((notice, failure)) = model.notice.as_ref() {
         return Some(SecondRowNote::Notice(notice, *failure));
+    }
+    match model.camera_control {
+        DmxCameraControlStatus::Local { can_release: true } => {
+            return Some(SecondRowNote::LocalCameraRelease);
+        }
+        DmxCameraControlStatus::Local { can_release: false } => {
+            return Some(SecondRowNote::LocalCameraWaiting);
+        }
+        DmxCameraControlStatus::Held => return Some(SecondRowNote::DmxCameraHeld),
+        DmxCameraControlStatus::None | DmxCameraControlStatus::Dmx => {}
     }
     // Connected to something with no rig in it. Without this the window is simply empty, which
     // reads as a broken visualizer rather than as a document nobody has patched yet.

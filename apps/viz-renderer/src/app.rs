@@ -25,6 +25,12 @@ use winit::window::{Window, WindowId};
 /// to turn the camera the same amount on any screen.
 const LOOK_RADIANS_PER_UNIT: f32 = 0.0025;
 
+/// The patched virtual camera has exactly one target: this application's own perspective
+/// presentation. A helper embedded in the desk and every orthographic view remain local.
+fn is_external_camera_target(embed: bool, mode: ViewMode) -> bool {
+    !embed && !mode.is_orthographic()
+}
+
 struct WindowSurface(Arc<Window>);
 
 impl viz_render::PresentationSurface for WindowSurface {
@@ -93,7 +99,11 @@ pub struct Application {
     frames_per_second: f32,
     stats: FrameStats,
     overlay: Overlay,
+    redraw_gate: crate::redraw::RedrawGate,
     camera_is_local: bool,
+    /// Ownership of the dedicated external 3D presentation camera. Embedded Stage helpers never
+    /// consult this state: their camera remains the desk pane's local view.
+    external_camera: ExternalCameraOwnership,
     /// The private server started for a show file, when the operator opened one.
     hosted_show: Option<crate::showfile::HostedShow>,
     /// The desk's channel, when this process was started as its helper. Held until the provider
@@ -142,6 +152,73 @@ struct WalkKeys {
     back: bool,
     left: bool,
     right: bool,
+}
+
+/// Camera ownership for the one dedicated external 3D presentation.
+///
+/// `latest` is retained when the fixture is unpatched or its input becomes stale. That retention
+/// is intentional: silence is not a camera reset. A local gesture latches `local_override` until
+/// the operator explicitly releases it while current DMX data is available.
+#[derive(Default)]
+struct ExternalCameraOwnership {
+    latest: Option<Camera>,
+    live: bool,
+    local_override: bool,
+}
+
+impl ExternalCameraOwnership {
+    fn observe(&mut self, camera: Option<(Camera, bool)>) -> Option<Camera> {
+        match camera {
+            Some((camera, false)) => {
+                self.latest = Some(camera);
+                self.live = true;
+            }
+            Some((camera, true)) => {
+                // A stale snapshot still carries the last authoritative pose. Remember it, but do
+                // not call it live or offer a release-to-DMX action until input resumes.
+                self.latest = Some(camera);
+                self.live = false;
+            }
+            None => self.live = false,
+        }
+        (!self.local_override).then_some(self.latest).flatten()
+    }
+
+    fn latch_local(&mut self) {
+        if self.latest.is_some() {
+            self.local_override = true;
+        }
+    }
+
+    fn release_to_dmx(&mut self) -> Option<Camera> {
+        if !self.live {
+            return None;
+        }
+        self.local_override = false;
+        self.latest
+    }
+
+    fn has_pose(&self) -> bool {
+        self.latest.is_some()
+    }
+
+    fn local_override(&self) -> bool {
+        self.local_override
+    }
+
+    fn status(&self) -> crate::ui::DmxCameraControlStatus {
+        if self.local_override {
+            crate::ui::DmxCameraControlStatus::Local {
+                can_release: self.live,
+            }
+        } else if self.latest.is_some() && !self.live {
+            crate::ui::DmxCameraControlStatus::Held
+        } else if self.live {
+            crate::ui::DmxCameraControlStatus::Dmx
+        } else {
+            crate::ui::DmxCameraControlStatus::None
+        }
+    }
 }
 
 /// The session facts one benchmark frame needs, read before the session borrow ends.
@@ -195,7 +272,9 @@ impl Application {
             frames_per_second: 0.0,
             stats: FrameStats::default(),
             overlay: Overlay::default(),
+            redraw_gate: crate::redraw::RedrawGate::default(),
             camera_is_local: false,
+            external_camera: ExternalCameraOwnership::default(),
             hosted_show: None,
             helper_source: None,
             planning_window: None,
@@ -465,6 +544,29 @@ impl Application {
             .map_or(ViewMode::Full3d, |session| session.source_view.mode)
     }
 
+    /// A local camera gesture takes ownership only from the dedicated external 3D presentation.
+    /// Orthographic views keep their own local navigation and an embedded Stage is never a DMX
+    /// camera target.
+    fn latch_local_camera_control(&mut self) {
+        self.camera_is_local = true;
+        if is_external_camera_target(self.options.embed, self.view_mode()) {
+            self.external_camera.latch_local();
+        }
+    }
+
+    /// Return the dedicated external camera to the latest live DMX pose. There is deliberately no
+    /// release while the camera fixture is stale or absent: the last pose must be held instead of
+    /// pretending that zero or a framed view came from DMX.
+    fn release_local_camera_control(&mut self) {
+        if !is_external_camera_target(self.options.embed, self.view_mode()) {
+            return;
+        }
+        if let Some(camera) = self.external_camera.release_to_dmx() {
+            self.camera.adopt(&camera);
+            self.camera_is_local = false;
+        }
+    }
+
     fn set_view_mode(&mut self, mode: ViewMode) {
         let bounds = self
             .session
@@ -535,6 +637,9 @@ impl Application {
             }
             Key::Character("l") | Key::Character("L") => {
                 self.preferences.show_labels = !self.preferences.show_labels;
+            }
+            Key::Character("c") | Key::Character("C") => {
+                self.release_local_camera_control();
             }
             Key::Character("r") | Key::Character("R") => {
                 if let Some(session) = self.session.as_mut() {
@@ -954,7 +1059,7 @@ impl ApplicationHandler for Application {
                     // A notched wheel zooms, which is what a wheel does everywhere.
                     MouseScrollDelta::LineDelta(..) => {
                         self.camera.zoom((1.0 - amount * 0.08).clamp(0.5, 2.0));
-                        self.camera_is_local = true;
+                        self.latch_local_camera_control();
                     }
                     // Continuous two-axis scrolling is a hand moving, not a wheel turning: a
                     // trackpad, or a mouse utility that has claimed the right button for its own
@@ -964,7 +1069,7 @@ impl ApplicationHandler for Application {
                     MouseScrollDelta::PixelDelta(position) => {
                         if self.command_chord() {
                             self.camera.zoom((1.0 - amount * 0.08).clamp(0.5, 2.0));
-                            self.camera_is_local = true;
+                            self.latch_local_camera_control();
                         } else {
                             // The delta is in physical pixels; turning is calibrated on the hand.
                             let scale = self.window_scale();
@@ -1177,6 +1282,65 @@ mod tests {
         assert!(
             across_a_window < std::f32::consts::TAU * 0.75,
             "{across_a_window} is too fast"
+        );
+    }
+
+    #[test]
+    fn dmx_camera_targets_only_the_dedicated_external_perspective_view() {
+        for mode in [ViewMode::Full3d, ViewMode::Simple3d, ViewMode::Lines3d] {
+            assert!(is_external_camera_target(false, mode));
+            assert!(!is_external_camera_target(true, mode));
+        }
+        for mode in [
+            ViewMode::TopDown,
+            ViewMode::FrontToBack,
+            ViewMode::BackToFront,
+            ViewMode::LeftToRight,
+            ViewMode::RightToLeft,
+        ] {
+            assert!(!is_external_camera_target(false, mode));
+        }
+    }
+
+    fn dmx_camera(x: f32) -> Camera {
+        Camera {
+            position: [x, 2.0, 3.0].into(),
+            target: [x, 2.0, 2.0].into(),
+            ..Camera::default()
+        }
+    }
+
+    #[test]
+    fn local_camera_latches_until_live_dmx_is_explicitly_released() {
+        let mut ownership = ExternalCameraOwnership::default();
+        let first = dmx_camera(1.0);
+        assert_eq!(ownership.observe(Some((first, false))), Some(first));
+        ownership.latch_local();
+
+        let moved = dmx_camera(4.0);
+        assert_eq!(ownership.observe(Some((moved, false))), None);
+        assert_eq!(
+            ownership.status(),
+            ui::DmxCameraControlStatus::Local { can_release: true }
+        );
+        assert_eq!(ownership.release_to_dmx(), Some(moved));
+        assert_eq!(ownership.status(), ui::DmxCameraControlStatus::Dmx);
+    }
+
+    #[test]
+    fn stale_or_absent_dmx_holds_the_last_pose_and_cannot_fake_a_release() {
+        let mut ownership = ExternalCameraOwnership::default();
+        let last = dmx_camera(8.0);
+        ownership.observe(Some((last, false)));
+        assert_eq!(ownership.observe(Some((last, true))), Some(last));
+        assert_eq!(ownership.status(), ui::DmxCameraControlStatus::Held);
+
+        ownership.latch_local();
+        assert_eq!(ownership.observe(None), None);
+        assert_eq!(ownership.release_to_dmx(), None);
+        assert_eq!(
+            ownership.status(),
+            ui::DmxCameraControlStatus::Local { can_release: false }
         );
     }
 }

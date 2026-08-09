@@ -761,6 +761,182 @@ fn rare_capability_profiles_remain_independent_and_round_trip() {
 }
 
 #[test]
+fn visualizer_camera_package_keeps_its_exact_seventeen_slot_wire_contract() {
+    let profile = shipped_profile("generic--visualizer-camera.toskfixture");
+    assert_eq!(
+        profile.id.0.to_string(),
+        "ddf9c823-4062-490c-bd10-a15ca1c7cf4e"
+    );
+    assert_eq!(profile.manufacturer, "Generic");
+    assert_eq!(profile.name, "Visualizer Camera");
+    assert_eq!(profile.fixture_type, "visualizer_camera");
+    assert_eq!(profile.reserved_source, None);
+    assert_eq!(
+        profile.signal_loss_policy,
+        crate::SignalLossPolicy::HoldLast
+    );
+    assert!(profile.model_asset.is_none());
+    assert_eq!(profile.modes.len(), 1);
+
+    let mode = &profile.modes[0];
+    assert_eq!(mode.id.to_string(), "323405fd-2b08-4df7-838a-d8cf5bd1cfa5");
+    assert_eq!(mode.name, "External Camera 17-slot");
+    assert_eq!(
+        mode.splits,
+        [FixtureSplit {
+            number: 1,
+            footprint: 17,
+        }]
+    );
+    assert_eq!(mode.heads.len(), 1);
+    assert_eq!(
+        mode.heads[0].id.to_string(),
+        "672d3fa5-d967-4473-a4f9-1de97d31066a"
+    );
+    assert!(mode.heads[0].master_shared);
+    assert!(mode.geometry.nodes.is_empty());
+    assert!(mode.geometry.emitters.is_empty());
+
+    assert_eq!(
+        mode.channels
+            .iter()
+            .map(|channel| (
+                channel.fixture_attribute.0.as_str(),
+                channel.attribute.0.as_str(),
+                channel.resolution,
+                channel.secondary_slots.as_slice(),
+                channel.default_raw,
+                channel.highlight_raw,
+            ))
+            .collect::<Vec<_>>(),
+        [
+            (
+                "camera.position.x",
+                "camera.position.x",
+                ChannelResolution::U24,
+                &[2, 3][..],
+                0x80_0000,
+                0x80_0000,
+            ),
+            (
+                "camera.position.y",
+                "camera.position.y",
+                ChannelResolution::U24,
+                &[5, 6][..],
+                0x80_0000,
+                0x80_0000,
+            ),
+            (
+                "camera.position.z",
+                "camera.position.z",
+                ChannelResolution::U24,
+                &[8, 9][..],
+                0x80_0000,
+                0x80_0000,
+            ),
+            (
+                "camera.yaw",
+                "camera.yaw",
+                ChannelResolution::U16,
+                &[11][..],
+                0x8000,
+                0x8000,
+            ),
+            (
+                "camera.pitch",
+                "camera.pitch",
+                ChannelResolution::U16,
+                &[13][..],
+                0x8000,
+                0x8000,
+            ),
+            (
+                "camera.roll",
+                "camera.roll",
+                ChannelResolution::U16,
+                &[15][..],
+                0x8000,
+                0x8000,
+            ),
+            (
+                "camera.zoom",
+                "camera.zoom",
+                ChannelResolution::U16,
+                &[17][..],
+                0,
+                0,
+            ),
+        ]
+    );
+    let primary_slots = mode.primary_slots().unwrap();
+    assert_eq!(
+        mode.channels
+            .iter()
+            .map(|channel| primary_slots[&channel.id])
+            .collect::<Vec<_>>(),
+        [1, 4, 7, 10, 12, 14, 16]
+    );
+    let stable_ids = std::iter::once(profile.id.0)
+        .chain(std::iter::once(mode.id))
+        .chain(mode.heads.iter().map(|head| head.id))
+        .chain(mode.channels.iter().map(|channel| channel.id))
+        .chain(
+            mode.channels
+                .iter()
+                .flat_map(|channel| channel.functions.iter().map(|function| function.id)),
+        )
+        .collect::<std::collections::HashSet<_>>();
+    assert_eq!(
+        stable_ids.len(),
+        17,
+        "every semantic object has a unique stable ID"
+    );
+
+    for channel in &mode.channels[..3] {
+        assert_eq!(channel.physical_min, Some(-4_194.304));
+        assert_eq!(channel.physical_max, Some(4_194.3035));
+        assert_eq!(channel.unit.as_deref(), Some("m"));
+        assert_eq!(channel.functions.len(), 1);
+        assert_eq!(channel.functions[0].dmx_from, 0);
+        assert_eq!(channel.functions[0].dmx_to, 0xff_ffff);
+        assert!(channel.functions[0].angular_motion.is_none());
+    }
+    for channel in &mode.channels[3..6] {
+        assert_eq!(channel.physical_min, Some(-360.0));
+        assert_eq!(channel.physical_max, Some(360.0));
+        assert_eq!(channel.unit.as_deref(), Some("deg"));
+        assert_eq!(channel.functions[0].dmx_to, u32::from(u16::MAX));
+        assert!(channel.functions[0].angular_motion.is_none());
+    }
+    let zoom = &mode.channels[6];
+    assert_eq!(zoom.physical_min, Some(18.0));
+    assert_eq!(zoom.physical_max, Some(1_200.0));
+    assert_eq!(zoom.unit.as_deref(), Some("mm"));
+    assert!(profile.notes.contains("f = 18 * (1200 / 18)^(raw / 65535)"));
+
+    let mut frame = [0_u8; 512];
+    for (channel, raw) in mode.channels.iter().zip([
+        0x12_3456, 0xab_cdef, 0x80_0000, 0x1357, 0x2468, 0x8000, 0xffff,
+    ]) {
+        mode.encode_channel(&mut frame, 1, channel, raw).unwrap();
+    }
+    assert_eq!(
+        &frame[..17],
+        &[
+            0x12, 0x34, 0x56, 0xab, 0xcd, 0xef, 0x80, 0x00, 0x00, 0x13, 0x57, 0x24, 0x68, 0x80,
+            0x00, 0xff, 0xff,
+        ]
+    );
+
+    let exported = write_fixture_package(&profile).unwrap();
+    let restored = read_fixture_package(&exported).unwrap();
+    assert_eq!(
+        serde_json::to_value(restored).unwrap(),
+        serde_json::to_value(profile).unwrap()
+    );
+}
+
+#[test]
 fn shipped_library_keeps_compound_prism_and_motion_migration_evidence_explicit() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")

@@ -408,8 +408,18 @@ fn head_angles(scene: &Scene, values: &SceneValues) -> Vec<(f32, f32)> {
             let pan = value.map_or(0.5, |value| value.pan);
             let tilt = value.map_or(0.5, |value| value.tilt);
             (
-                emitter.pan.map_or(0.0, |axis| axis.degrees_at(pan)),
-                emitter.tilt.map_or(0.0, |axis| axis.degrees_at(tilt)),
+                value
+                    .filter(|value| value.pan_motion.target.is_some())
+                    .map_or_else(
+                        || emitter.pan.map_or(0.0, |axis| axis.degrees_at(pan)),
+                        |value| value.pan_motion.position_degrees,
+                    ),
+                value
+                    .filter(|value| value.tilt_motion.target.is_some())
+                    .map_or_else(
+                        || emitter.tilt.map_or(0.0, |axis| axis.degrees_at(tilt)),
+                        |value| value.tilt_motion.position_degrees,
+                    ),
             )
         })
         .collect()
@@ -828,9 +838,17 @@ fn push_emitters(
                     .to_array(),
                 optics: [
                     slot as f32,
-                    value.gobo_rotation * std::f32::consts::TAU,
+                    if value.gobo_rotation_motion.target.is_some() {
+                        value.gobo_rotation_motion.position_degrees.to_radians()
+                    } else {
+                        value.gobo_rotation * std::f32::consts::TAU
+                    },
                     value.prism_facets() as f32,
-                    value.prism_rotation * std::f32::consts::TAU,
+                    if value.prism_rotation_motion.target.is_some() {
+                        value.prism_rotation_motion.position_degrees.to_radians()
+                    } else {
+                        value.prism_rotation * std::f32::consts::TAU
+                    },
                 ],
                 shapers: value.shaper_blades,
                 shaper_angles,

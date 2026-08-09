@@ -75,7 +75,7 @@ impl Application {
                 hand_down * LOOK_RADIANS_PER_UNIT,
             );
         }
-        self.camera_is_local = true;
+        self.latch_local_camera_control();
     }
 
     /// Move the camera for one step of a held drag, in points of hand movement.
@@ -92,7 +92,7 @@ impl Application {
         let mode = self.view_mode();
         if self.panning_camera_plane {
             self.camera.pan_camera_plane(mode, -right, down);
-            self.camera_is_local = true;
+            self.latch_local_camera_control();
         }
         if self.turning {
             self.turn_camera(hand_right, hand_down, scale);
@@ -150,7 +150,7 @@ impl Application {
         let metres = (reach * 0.6).clamp(1.5, 40.0) * delta_seconds;
         self.camera
             .walk_floor_plane(mode, forward * metres, right * metres);
-        self.camera_is_local = true;
+        self.latch_local_camera_control();
     }
 
     /// Inspect whatever the operator clicked on.

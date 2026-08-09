@@ -530,6 +530,52 @@ describe("FixtureProfileEditor function behavior", () => {
 		choose("Function behavior", "Continuous mapping");
 		expect(screen.getByLabelText("Priority")).toHaveValue("0");
 	});
+
+	it("authors absolute and velocity motion metadata on continuous functions", () => {
+		const profile = validProfile();
+		profile.modes[0].channels = [blankChannel(profile.modes[0])];
+		render(
+			<FixtureProfileEditor
+				initialProfile={profile}
+				manufacturers={[]}
+				onSave={vi.fn()}
+				onClose={vi.fn()}
+			/>,
+		);
+		fireEvent.click(screen.getByRole("tab", { name: "Modes" }));
+		openModeEditor();
+		fireEvent.click(
+			screen.getByRole("button", { name: "Edit intensity channel" }),
+		);
+		fireEvent.click(
+			screen.getByRole("button", { name: "Channel functions (0)" }),
+		);
+		fireEvent.click(screen.getByRole("button", { name: "Add function" }));
+
+		choose("Angular motion", "Absolute angular position");
+		fireEvent.change(
+			screen.getByLabelText("Maximum speed (degrees per second)"),
+			{
+				target: { value: "540" },
+			},
+		);
+		fireEvent.change(
+			screen.getByLabelText("Acceleration (degrees per second squared)"),
+			{ target: { value: "720" } },
+		);
+		choose("Angular motion", "Signed angular velocity");
+
+		expect(
+			screen.getByLabelText("Maximum speed (degrees per second)"),
+		).toHaveValue("");
+		expect(
+			screen.getByLabelText("Deceleration (degrees per second squared)"),
+		).toBeInTheDocument();
+		choose("Function behavior", "Named fixed value");
+		expect(
+			screen.queryByText("Angular motion", { selector: "label" }),
+		).not.toBeInTheDocument();
+	});
 });
 
 describe("FixtureProfileEditor chrome and close guards", () => {

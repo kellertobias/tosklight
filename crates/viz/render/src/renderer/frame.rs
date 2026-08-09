@@ -19,8 +19,32 @@ use viz_scene::{Aabb, Scene, SceneValues, ViewConfiguration};
 struct FramePlan {
     plot: bool,
     draw_beams: bool,
+    passes: PassPlan,
+    volumetric_steps: u32,
+    shadow_budget: u32,
+    render_scale: f32,
+    adaptive_degraded: bool,
     exposure: f32,
     camera: ResolvedCamera,
+}
+
+/// Expensive light-simulation passes selected for a view.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct PassPlan {
+    cull: bool,
+    shadows: bool,
+    bloom: bool,
+}
+
+impl PassPlan {
+    fn for_view(view: &ViewConfiguration) -> Self {
+        let light = view.mode.simulates_light();
+        Self {
+            cull: light,
+            shadows: light && view.quality.shadow_budget() > 0,
+            bloom: light && view.quality.bloom_enabled(),
+        }
+    }
 }
 
 impl Renderer {
@@ -33,14 +57,29 @@ impl Renderer {
         time_seconds: f32,
     ) -> Result<FrameStats, RenderError> {
         let started = std::time::Instant::now();
+        // Progress asynchronous timestamp mappings without ever waiting for the GPU. Without this
+        // poll, native backends are allowed to leave a completed map callback queued forever.
+        let _ = self.gpu.device.poll(wgpu::PollType::Poll);
         if let Some(timer) = self.timer.as_mut() {
             timer.collect();
+        }
+        if let Some((sample_id, gpu_micros)) = self.timer.as_ref().and_then(|timer| {
+            timer
+                .timings()
+                .total_micros()
+                .map(|micros| (timer.sample_id(), micros))
+        }) && sample_id != self.last_timing_sample
+        {
+            self.last_timing_sample = sample_id;
+            if view.quality == viz_scene::RenderQuality::Ultra {
+                self.ultra_budget.observe(gpu_micros);
+            }
         }
         let plan = self.plan_frame(scene, values, view);
         let device = self.gpu.device.clone();
         let queue = self.gpu.queue.clone();
 
-        self.assign_shadows(view);
+        self.assign_shadows(view, plan.shadow_budget);
         self.upload_frame(scene, &device, &queue);
         self.write_globals(&plan, values, view, time_seconds, &queue);
 
@@ -63,8 +102,12 @@ impl Renderer {
             label: Some("viz frame"),
         });
 
-        self.cull_pass(&mut encoder);
-        self.shadow_pass(&mut encoder);
+        if plan.passes.cull {
+            self.cull_pass(&mut encoder);
+        }
+        if plan.passes.shadows {
+            self.shadow_pass(&mut encoder);
+        }
 
         // Multisampled colour is resolved by whichever shaded pass writes last, so the samples
         // are never resolved twice and the beams are anti-aliased with the geometry rather than
@@ -103,6 +146,11 @@ impl Renderer {
             queue.present(frame);
         }
 
+        let gpu_passes = self
+            .timer
+            .as_ref()
+            .map(crate::timing::GpuTimer::timings)
+            .unwrap_or_default();
         self.stats = FrameStats {
             cpu_micros: started.elapsed().as_micros() as u64,
             acquire_micros,
@@ -111,11 +159,14 @@ impl Renderer {
             instances: instance_total,
             draw_calls,
             // Only report degradation the renderer actually applied this frame.
-            degraded: self.frame.lights.len() as u32 > self.lights.length || self.beam_overflow,
-            gpu_micros: self
-                .timer
-                .as_ref()
-                .and_then(crate::timing::GpuTimer::micros),
+            degraded: self.frame.lights.len() as u32 > self.lights.length
+                || self.beam_overflow
+                || plan.adaptive_degraded,
+            gpu_micros: gpu_passes.total_micros(),
+            gpu_passes,
+            volumetric_steps: plan.volumetric_steps,
+            shadow_budget: plan.shadow_budget,
+            render_scale: plan.render_scale,
         };
         Ok(self.stats)
     }
@@ -128,12 +179,24 @@ impl Renderer {
         view: &ViewConfiguration,
     ) -> FramePlan {
         let plot = view.mode.is_plot();
+        let (volumetric_steps, shadow_budget, adaptive_scale, adaptive_degraded) =
+            if view.quality == viz_scene::RenderQuality::Ultra {
+                let (steps, shadows, scale) = self.ultra_budget.settings();
+                (steps, shadows, scale, self.ultra_budget.degraded())
+            } else {
+                (
+                    view.quality.volumetric_steps(),
+                    view.quality.shadow_budget(),
+                    1.0,
+                    false,
+                )
+            };
         // A plan is drawn at the display's own resolution whatever the tier says: a stage plot is
         // outlines and type, and a cheaper tier must not soften the lines an operator prints.
         self.set_target_scale(if plot {
             1.0
         } else {
-            view.quality.resolution_scale()
+            view.quality.resolution_scale() * adaptive_scale
         });
         let control = crate::camera::CameraControl::from_camera(&view.camera);
         let (plot_right, plot_up) = control.page_axes(view.mode);
@@ -178,6 +241,15 @@ impl Renderer {
         FramePlan {
             plot,
             draw_beams,
+            passes: PassPlan::for_view(view),
+            volumetric_steps,
+            shadow_budget,
+            render_scale: if plot {
+                1.0
+            } else {
+                view.quality.resolution_scale() * adaptive_scale
+            },
+            adaptive_degraded,
             exposure,
             camera,
         }
@@ -185,9 +257,9 @@ impl Renderer {
 
     /// Pick the shadow casters and stamp each chosen light with its tile before the light buffer
     /// is uploaded, so the shaders read the same frame the maps were drawn for.
-    fn assign_shadows(&mut self, view: &ViewConfiguration) {
+    fn assign_shadows(&mut self, view: &ViewConfiguration, quality_budget: u32) {
         let budget = if view.mode.renders_beams() {
-            view.quality.shadow_budget() as usize
+            quality_budget as usize
         } else {
             0
         };
@@ -284,7 +356,7 @@ impl Renderer {
             params: [exposure, values.atmosphere.density, camera.near, camera.far],
             params2: [
                 self.lights.length as f32,
-                view.quality.volumetric_steps() as f32,
+                plan.volumetric_steps as f32,
                 // The ambient level is what the operator sees on screen, so it is divided back
                 // out of the adaptation: a rig full of beams pulls the exposure down and would
                 // otherwise take the trusses with it.
@@ -311,9 +383,13 @@ impl Renderer {
     /// than every light in the show.
     fn cull_pass(&self, encoder: &mut wgpu::CommandEncoder) {
         if self.lights.length > 0 {
+            let timing = self
+                .timer
+                .as_ref()
+                .and_then(|timer| timer.compute_writes(crate::timing::GpuPass::Cull));
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("viz light cull"),
-                timestamp_writes: None,
+                timestamp_writes: timing,
             });
             pass.set_pipeline(&self.cull_pipeline);
             pass.set_bind_group(0, &self.cull_bind_group, &[]);
@@ -329,6 +405,10 @@ impl Renderer {
         if self.shadow_count == 0 {
             return;
         }
+        let timing = self
+            .timer
+            .as_ref()
+            .and_then(|timer| timer.render_writes(crate::timing::GpuPass::Shadow));
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("viz shadows"),
             color_attachments: &[],
@@ -340,7 +420,7 @@ impl Renderer {
                 }),
                 stencil_ops: None,
             }),
-            timestamp_writes: None,
+            timestamp_writes: timing,
             occlusion_query_set: None,
             multiview_mask: None,
         });
@@ -390,10 +470,10 @@ impl Renderer {
         let resolve_in_opaque = (!beams_drawn)
             .then(|| self.targets.resolve_target())
             .flatten();
-        let opening = self
+        let timing = self
             .timer
             .as_ref()
-            .and_then(crate::timing::GpuTimer::opening_writes);
+            .and_then(|timer| timer.render_writes(crate::timing::GpuPass::Opaque));
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("viz opaque"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -413,7 +493,7 @@ impl Renderer {
                 }),
                 stencil_ops: None,
             }),
-            timestamp_writes: opening,
+            timestamp_writes: timing,
             occlusion_query_set: None,
             multiview_mask: None,
         });
@@ -448,6 +528,10 @@ impl Renderer {
 
     /// The volumetric shafts, added into the picture the geometry left behind.
     fn beam_pass(&self, encoder: &mut wgpu::CommandEncoder) {
+        let timing = self
+            .timer
+            .as_ref()
+            .and_then(|timer| timer.render_writes(crate::timing::GpuPass::Beams));
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("viz beams"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -460,7 +544,7 @@ impl Renderer {
                 },
             })],
             depth_stencil_attachment: None,
-            timestamp_writes: None,
+            timestamp_writes: timing,
             occlusion_query_set: None,
             multiview_mask: None,
         });
@@ -479,6 +563,10 @@ impl Renderer {
     /// the beam is bright enough that even the little scattering an empty room provides shows
     /// it. That is why a laser show can run in a venue where a lantern's shaft is invisible.
     fn laser_pass(&self, encoder: &mut wgpu::CommandEncoder) {
+        let timing = self
+            .timer
+            .as_ref()
+            .and_then(|timer| timer.render_writes(crate::timing::GpuPass::Lasers));
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("viz lasers"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -491,7 +579,7 @@ impl Renderer {
                 },
             })],
             depth_stencil_attachment: None,
-            timestamp_writes: None,
+            timestamp_writes: timing,
             occlusion_query_set: None,
             multiview_mask: None,
         });
@@ -520,7 +608,7 @@ impl Renderer {
     ) {
         let exposure = plan.exposure;
         let drawn = plan.plot || !view.mode.simulates_light();
-        let bloom = view.quality.bloom_enabled() && !drawn;
+        let bloom = plan.passes.bloom;
         let composite_exposure = if drawn { 1.0 } else { exposure };
         if bloom {
             queue.write_buffer(
@@ -528,12 +616,17 @@ impl Renderer {
                 0,
                 bytemuck::cast_slice(&[exposure, 1.0_f32, 1.0, 0.0]),
             );
-            fullscreen_pass(
+            let bloom_opening = self
+                .timer
+                .as_ref()
+                .and_then(|timer| timer.render_opening(crate::timing::GpuPass::Bloom));
+            fullscreen_pass_timed(
                 encoder,
                 "viz bloom extract",
                 &self.extract_pipeline,
                 &[&self.bloom_extract_group],
                 &self.targets.bloom_a,
+                bloom_opening,
             );
             fullscreen_pass(
                 encoder,
@@ -547,12 +640,17 @@ impl Renderer {
                 0,
                 bytemuck::cast_slice(&[exposure, 1.0_f32, 0.0, 1.0]),
             );
-            fullscreen_pass(
+            let bloom_closing = self
+                .timer
+                .as_ref()
+                .and_then(|timer| timer.render_closing(crate::timing::GpuPass::Bloom));
+            fullscreen_pass_timed(
                 encoder,
                 "viz bloom blur v",
                 &self.blur_pipeline,
                 &[&self.bloom_blur_b_group],
                 &self.targets.bloom_a,
+                bloom_closing,
             );
         }
         queue.write_buffer(
@@ -565,19 +663,17 @@ impl Renderer {
                 0.0,
             ]),
         );
-        // The composite is the last pass that always runs, so the frame's GPU time is measured
-        // from the start of the geometry to the end of it.
-        let closing = self
+        let composite_timing = self
             .timer
             .as_ref()
-            .and_then(crate::timing::GpuTimer::closing_writes);
+            .and_then(|timer| timer.render_writes(crate::timing::GpuPass::Composite));
         fullscreen_pass_timed(
             encoder,
             "viz composite",
             &self.composite_pipeline,
             &[&self.composite_source_group, &self.composite_bloom_group],
             output,
-            closing,
+            composite_timing,
         );
     }
 
@@ -601,6 +697,10 @@ impl Renderer {
                 1.0 / self.gpu.config.height as f32,
             ]),
         );
+        let timing = self
+            .timer
+            .as_ref()
+            .and_then(|timer| timer.render_writes(crate::timing::GpuPass::Overlay));
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("viz overlay"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -613,7 +713,7 @@ impl Renderer {
                 },
             })],
             depth_stencil_attachment: None,
-            timestamp_writes: None,
+            timestamp_writes: timing,
             occlusion_query_set: None,
             multiview_mask: None,
         });
@@ -734,6 +834,31 @@ fn fullscreen_pass_timed(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn non_light_views_issue_no_cull_shadow_or_bloom_work() {
+        for mode in viz_scene::ViewMode::ALL {
+            let view = ViewConfiguration {
+                mode,
+                quality: viz_scene::RenderQuality::Ultra,
+                ..ViewConfiguration::default()
+            };
+            let passes = PassPlan::for_view(&view);
+            if mode.simulates_light() {
+                assert!(passes.cull, "{mode:?}");
+            } else {
+                assert_eq!(
+                    passes,
+                    PassPlan {
+                        cull: false,
+                        shadows: false,
+                        bloom: false,
+                    },
+                    "{mode:?}"
+                );
+            }
+        }
+    }
 
     fn light(radiance: f32) -> GpuLight {
         GpuLight {

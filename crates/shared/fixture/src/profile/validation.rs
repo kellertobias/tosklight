@@ -435,6 +435,40 @@ impl FixtureChannel {
                     "channel function ranges overlap".into(),
                 ));
             }
+            if let Some(motion) = function.angular_motion {
+                let valid_behavior = matches!(
+                    function.behavior,
+                    ChannelFunctionBehavior::Continuous { .. }
+                ) || matches!(
+                    (&function.behavior, motion.kind),
+                    (
+                        ChannelFunctionBehavior::Indexed { .. },
+                        super::AngularMotionKind::AbsolutePosition
+                    )
+                );
+                if !valid_behavior {
+                    return Err(ProfileError::Invalid(
+                        "angular motion requires a continuous function or indexed wheel slot"
+                            .into(),
+                    ));
+                }
+                for (name, value) in [
+                    (
+                        "angular motion maximum speed",
+                        motion.max_speed_degrees_per_second,
+                    ),
+                    (
+                        "angular motion acceleration",
+                        motion.acceleration_degrees_per_second_squared,
+                    ),
+                    (
+                        "angular motion deceleration",
+                        motion.deceleration_degrees_per_second_squared,
+                    ),
+                ] {
+                    validate_positive(name, value)?;
+                }
+            }
             match &function.behavior {
                 ChannelFunctionBehavior::Continuous {
                     physical_min,

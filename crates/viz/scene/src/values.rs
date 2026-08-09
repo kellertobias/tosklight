@@ -23,6 +23,13 @@ pub struct SceneValues {
     /// Receive timestamp of the newest input frame folded into these values, in monotonic
     /// microseconds since the renderer started. Used for packet-to-visible latency.
     pub newest_input_micros: u64,
+    /// Last decoded pose of the one dedicated external-Visualizer DMX camera.
+    ///
+    /// This is deliberately not part of [`crate::ViewConfiguration`]: embedded desk Stages use
+    /// their own view and can never be taken over by a patched fixture. Removing the binding or
+    /// losing its input leaves this value intact so the external Visualizer can hold its pose.
+    #[serde(default)]
+    pub external_camera: Option<ExternalCameraState>,
     /// Which fixtures the operator has selected.
     ///
     /// Live state rather than scene structure, which is why it sits here: a selection changes
@@ -31,6 +38,24 @@ pub struct SceneValues {
     /// renderer holding its own idea of it would be a second answer to the one question an
     /// operator has to be able to trust.
     pub selected_fixtures: std::collections::HashSet<uuid::Uuid>,
+}
+
+/// Absolute external-camera state decoded from the transferable 17-slot fixture.
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ExternalCameraState {
+    pub fixture_id: Uuid,
+    pub instance_id: Uuid,
+    pub position_metres: [f32; 3],
+    pub yaw_degrees: f32,
+    pub pitch_degrees: f32,
+    pub roll_degrees: f32,
+    pub focal_length_millimetres: f32,
+    pub vertical_fov_degrees: f32,
+    /// Whether the selected camera fixture still has a complete live patch binding.
+    #[serde(default)]
+    pub patched: bool,
+    /// True when the newest authoritative universe frame is stale. The pose remains usable.
+    pub stale: bool,
 }
 
 impl SceneValues {
@@ -53,6 +78,52 @@ impl SceneValues {
                 cell.held_intensity = preference.hold(cell.held_intensity, cell.intensity, elapsed);
             }
         }
+    }
+
+    /// Advance visual fixture mechanics on the display clock.
+    ///
+    /// The decoded values remain the desk's immediate targets. Only these parallel physical
+    /// states are rate limited, so output and network semantics are never delayed by a renderer.
+    pub fn apply_physical_motion(&mut self, elapsed: f32) {
+        for emitter in &mut self.emitters {
+            emitter.pan_motion.advance(elapsed);
+            emitter.tilt_motion.advance(elapsed);
+            emitter.gobo_rotation_motion.advance(elapsed);
+            emitter.prism_rotation_motion.advance(elapsed);
+            emitter.gobo_wheel_motion.advance(elapsed);
+            if let Some(index) = emitter.gobo_wheel_motion.visible_slot() {
+                emitter.gobo =
+                    (index as f32 + 0.5) / emitter.gobo_wheel_motion.slot_count.max(1) as f32;
+            }
+            emitter.colour_wheel_motion.advance(elapsed);
+            if let Some(index) = emitter.colour_wheel_motion.visible_slot()
+                && let Some(colour) = emitter.colour_wheel_palette.get(index)
+            {
+                emitter.colour = *colour;
+            }
+        }
+    }
+
+    /// Whether another display-clock tick can change the picture without a new input frame.
+    ///
+    /// This is deliberately about visible temporal state, not merely about having authored
+    /// motion metadata. A position target which has settled is static; a velocity target is
+    /// time-driven even while it is still accelerating from zero.
+    pub fn is_time_driven(&self, persistence: &PersistencePreference) -> bool {
+        self.emitters.iter().any(|emitter| {
+            (persistence.is_active()
+                && (emitter.held_intensity > emitter.visible_intensity() + f32::EPSILON
+                    || emitter
+                        .cells
+                        .iter()
+                        .any(|cell| cell.held_intensity > cell.intensity + f32::EPSILON)))
+                || emitter.pan_motion.is_moving()
+                || emitter.tilt_motion.is_moving()
+                || emitter.gobo_rotation_motion.is_moving()
+                || emitter.prism_rotation_motion.is_moving()
+                || emitter.gobo_wheel_motion.motion.is_moving()
+                || emitter.colour_wheel_motion.motion.is_moving()
+        }) || self.laser_scans.iter().any(|scan| !scan.points.is_empty())
     }
 
     /// Carry the values across a structural change to the scene.
@@ -102,8 +173,14 @@ pub struct EmitterValues {
     pub colour: [f32; 3],
     /// Pan parameter `0..=1` mapped through the emitter's pan axis.
     pub pan: f32,
+    /// Simulated physical Pan. Its authored zero is the geometry node's local transform.
+    #[serde(default)]
+    pub pan_motion: PhysicalMotionState,
     /// Tilt parameter `0..=1` mapped through the emitter's tilt axis.
     pub tilt: f32,
+    /// Simulated physical Tilt. Its authored zero is the geometry node's local transform.
+    #[serde(default)]
+    pub tilt_motion: PhysicalMotionState,
     /// Zoom parameter `0..=1`; `0` is the narrow beam angle, `1` the wide field angle.
     pub zoom: f32,
     /// Iris closure `0..=1`; `0` is fully open.
@@ -114,11 +191,23 @@ pub struct EmitterValues {
     pub focus: f32,
     /// Gobo wheel position `0..=1`. `0` is the open slot.
     pub gobo: f32,
+    /// Physical ordered-slot traversal for the first gobo wheel.
+    #[serde(default)]
+    pub gobo_wheel_motion: WheelMotionState,
     /// Gobo rotation as a signed rate, `-1..=1`, or a fixed index position.
     pub gobo_rotation: f32,
+    #[serde(default)]
+    pub gobo_rotation_motion: PhysicalMotionState,
     /// Prism wheel position `0..=1`. `0` is out of the beam.
     pub prism: f32,
     pub prism_rotation: f32,
+    #[serde(default)]
+    pub prism_rotation_motion: PhysicalMotionState,
+    /// Physical ordered-slot traversal for the first colour wheel.
+    #[serde(default)]
+    pub colour_wheel_motion: WheelMotionState,
+    #[serde(default)]
+    pub colour_wheel_palette: Vec<[f32; 3]>,
     /// Framing-shutter blade insertions `0..=1`, `0` fully open.
     pub shaper_blades: [f32; 4],
     /// Blade rotations in physical degrees. Only values backed by a live profile attribute are
@@ -151,15 +240,22 @@ impl Default for EmitterValues {
             intensity: 0.0,
             colour: [1.0, 1.0, 1.0],
             pan: 0.5,
+            pan_motion: PhysicalMotionState::default(),
             tilt: 0.5,
+            tilt_motion: PhysicalMotionState::default(),
             zoom: 0.5,
             iris: 0.0,
             frost: 0.0,
             focus: 0.5,
             gobo: 0.0,
+            gobo_wheel_motion: WheelMotionState::default(),
             gobo_rotation: 0.0,
+            gobo_rotation_motion: PhysicalMotionState::default(),
             prism: 0.0,
             prism_rotation: 0.0,
+            prism_rotation_motion: PhysicalMotionState::default(),
+            colour_wheel_motion: WheelMotionState::default(),
+            colour_wheel_palette: Vec::new(),
             shaper_blades: [0.0; 4],
             shaper_blade_angles_degrees: [0.0; 4],
             shaper_rotation: 0.0,
@@ -170,6 +266,192 @@ impl Default for EmitterValues {
             cells: Vec::new(),
             stale: false,
         }
+    }
+}
+
+/// A Visualizer-only physical target decoded from one DMX function range.
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum PhysicalMotionTarget {
+    Position {
+        degrees: f32,
+        max_speed: f32,
+        acceleration: f32,
+        deceleration: f32,
+    },
+    Velocity {
+        degrees_per_second: f32,
+        acceleration: f32,
+        deceleration: f32,
+    },
+}
+
+/// Current rendered position and velocity for one rotating physical attribute.
+#[derive(Clone, Copy, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct PhysicalMotionState {
+    pub position_degrees: f32,
+    pub velocity_degrees_per_second: f32,
+    #[serde(default)]
+    pub target: Option<PhysicalMotionTarget>,
+}
+
+/// Ordered wheel movement. Slot centres are evenly spaced around one physical revolution and
+/// follow the functions' raw-DMX order, so movement from slot 1 to slot 3 necessarily crosses 2.
+#[derive(Clone, Copy, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct WheelMotionState {
+    pub motion: PhysicalMotionState,
+    pub slot_count: u16,
+}
+
+impl WheelMotionState {
+    pub fn set_target(
+        &mut self,
+        slot_index: usize,
+        slot_count: usize,
+        max_speed: f32,
+        acceleration: f32,
+        deceleration: f32,
+    ) {
+        self.slot_count = slot_count.min(u16::MAX as usize) as u16;
+        if self.slot_count == 0 {
+            self.motion.target = None;
+            return;
+        }
+        let degrees_per_slot = 360.0 / f32::from(self.slot_count);
+        self.motion.set_target(PhysicalMotionTarget::Position {
+            degrees: slot_index as f32 * degrees_per_slot,
+            max_speed,
+            acceleration,
+            deceleration,
+        });
+    }
+
+    pub fn advance(&mut self, elapsed: f32) {
+        self.motion.advance(elapsed);
+    }
+
+    pub fn visible_slot(&self) -> Option<usize> {
+        if self.slot_count == 0 || self.motion.target.is_none() {
+            return None;
+        }
+        let degrees_per_slot = 360.0 / f32::from(self.slot_count);
+        Some(
+            (self.motion.position_degrees / degrees_per_slot)
+                .round()
+                .clamp(0.0, f32::from(self.slot_count - 1)) as usize,
+        )
+    }
+}
+
+impl PhysicalMotionState {
+    pub fn set_target(&mut self, target: PhysicalMotionTarget) {
+        self.target = Some(target);
+    }
+
+    /// Whether advancing the display clock can still alter this state.
+    pub fn is_moving(&self) -> bool {
+        match self.target {
+            Some(PhysicalMotionTarget::Position { degrees, .. }) => {
+                (degrees - self.position_degrees).abs() > 1.0e-4
+                    || self.velocity_degrees_per_second.abs() > 1.0e-3
+            }
+            Some(PhysicalMotionTarget::Velocity {
+                degrees_per_second, ..
+            }) => {
+                degrees_per_second.abs() > f32::EPSILON
+                    || self.velocity_degrees_per_second.abs() > 1.0e-3
+            }
+            None => false,
+        }
+    }
+
+    pub fn advance(&mut self, elapsed: f32) {
+        let elapsed = elapsed.clamp(0.0, 0.25);
+        if elapsed <= 0.0 {
+            return;
+        }
+        match self.target {
+            Some(PhysicalMotionTarget::Position {
+                degrees,
+                max_speed,
+                acceleration,
+                deceleration,
+            }) => self.advance_position(degrees, max_speed, acceleration, deceleration, elapsed),
+            Some(PhysicalMotionTarget::Velocity {
+                degrees_per_second,
+                acceleration,
+                deceleration,
+            }) => {
+                let reversing = self.velocity_degrees_per_second.abs() > f32::EPSILON
+                    && self.velocity_degrees_per_second.signum() != degrees_per_second.signum();
+                let rate = if reversing
+                    || degrees_per_second.abs() < self.velocity_degrees_per_second.abs()
+                {
+                    deceleration
+                } else {
+                    acceleration
+                };
+                self.velocity_degrees_per_second = approach(
+                    self.velocity_degrees_per_second,
+                    degrees_per_second,
+                    rate * elapsed,
+                );
+                self.position_degrees += self.velocity_degrees_per_second * elapsed;
+            }
+            None => {}
+        }
+    }
+
+    fn advance_position(
+        &mut self,
+        target: f32,
+        max_speed: f32,
+        acceleration: f32,
+        deceleration: f32,
+        elapsed: f32,
+    ) {
+        let error = target - self.position_degrees;
+        if error.abs() <= 1.0e-4 && self.velocity_degrees_per_second.abs() <= 1.0e-3 {
+            self.position_degrees = target;
+            self.velocity_degrees_per_second = 0.0;
+            return;
+        }
+        let direction = error.signum();
+        let moving_toward = self.velocity_degrees_per_second.signum() == direction;
+        let stopping_distance =
+            self.velocity_degrees_per_second.powi(2) / (2.0 * deceleration.max(f32::EPSILON));
+        let desired_velocity = if !moving_toward || stopping_distance >= error.abs() {
+            0.0
+        } else {
+            direction * max_speed
+        };
+        let rate = if desired_velocity.abs() < self.velocity_degrees_per_second.abs() {
+            deceleration
+        } else {
+            acceleration
+        };
+        self.velocity_degrees_per_second = approach(
+            self.velocity_degrees_per_second,
+            desired_velocity,
+            rate * elapsed,
+        )
+        .clamp(-max_speed, max_speed);
+        let next = self.position_degrees + self.velocity_degrees_per_second * elapsed;
+        if (target - next).signum() != direction {
+            self.position_degrees = target;
+            self.velocity_degrees_per_second = 0.0;
+        } else {
+            self.position_degrees = next;
+        }
+    }
+}
+
+fn approach(current: f32, target: f32, maximum_delta: f32) -> f32 {
+    let delta = target - current;
+    if delta.abs() <= maximum_delta {
+        target
+    } else {
+        current + delta.signum() * maximum_delta
     }
 }
 
@@ -312,6 +594,48 @@ mod tests {
         assert_eq!(values.emitters[1].intensity, 0.5);
     }
 
+    #[test]
+    fn static_values_do_not_request_display_clock_frames() {
+        let mut values = SceneValues::default();
+        values.resize(1);
+        assert!(!values.is_time_driven(&PersistencePreference::default()));
+    }
+
+    #[test]
+    fn persistence_and_unsettled_motion_request_display_clock_frames() {
+        let mut values = SceneValues::default();
+        values.resize(1);
+        values.emitters[0].held_intensity = 1.0;
+        assert!(values.is_time_driven(&PersistencePreference::default()));
+        values.emitters[0].held_intensity = 0.0;
+        values.emitters[0]
+            .pan_motion
+            .set_target(PhysicalMotionTarget::Position {
+                degrees: 90.0,
+                max_speed: 180.0,
+                acceleration: 360.0,
+                deceleration: 360.0,
+            });
+        assert!(values.is_time_driven(&PersistencePreference::default()));
+    }
+
+    #[test]
+    fn a_settled_position_target_is_static() {
+        let mut values = SceneValues::default();
+        values.resize(1);
+        values.emitters[0].pan_motion = PhysicalMotionState {
+            position_degrees: 90.0,
+            velocity_degrees_per_second: 0.0,
+            target: Some(PhysicalMotionTarget::Position {
+                degrees: 90.0,
+                max_speed: 180.0,
+                acceleration: 360.0,
+                deceleration: 360.0,
+            }),
+        };
+        assert!(!values.is_time_driven(&PersistencePreference::default()));
+    }
+
     /// Heads of one multi-head fixture are told apart by their head index, not by their order.
     #[test]
     fn each_head_of_a_fixture_keeps_its_own_value() {
@@ -335,6 +659,80 @@ mod tests {
         values.carry_over(&previous, &next);
         assert_eq!(values.emitters[0].intensity, 0.0);
         assert_eq!(values.emitters[1].intensity, 0.2);
+    }
+
+    #[test]
+    fn absolute_motion_preserves_multi_turn_targets_and_respects_limits() {
+        let mut motion = PhysicalMotionState::default();
+        motion.set_target(PhysicalMotionTarget::Position {
+            degrees: 630.0,
+            max_speed: 180.0,
+            acceleration: 360.0,
+            deceleration: 360.0,
+        });
+        motion.advance(0.25);
+        assert!(motion.position_degrees > 0.0 && motion.position_degrees < 630.0);
+        assert!(motion.velocity_degrees_per_second <= 180.0);
+        for _ in 0..200 {
+            motion.advance(0.1);
+        }
+        assert!((motion.position_degrees - 630.0).abs() < 0.001);
+        assert_eq!(motion.velocity_degrees_per_second, 0.0);
+    }
+
+    #[test]
+    fn a_replaced_target_is_followed_without_teleporting() {
+        let mut motion = PhysicalMotionState::default();
+        motion.set_target(PhysicalMotionTarget::Position {
+            degrees: 90.0,
+            max_speed: 90.0,
+            acceleration: 180.0,
+            deceleration: 180.0,
+        });
+        motion.advance(0.25);
+        let before = motion.position_degrees;
+        motion.set_target(PhysicalMotionTarget::Position {
+            degrees: -90.0,
+            max_speed: 90.0,
+            acceleration: 180.0,
+            deceleration: 180.0,
+        });
+        assert_eq!(motion.position_degrees, before);
+        motion.advance(0.25);
+        assert!(motion.position_degrees > -90.0);
+    }
+
+    #[test]
+    fn endless_motion_accelerates_to_an_authored_signed_velocity() {
+        let mut motion = PhysicalMotionState::default();
+        motion.set_target(PhysicalMotionTarget::Velocity {
+            degrees_per_second: -120.0,
+            acceleration: 240.0,
+            deceleration: 360.0,
+        });
+        motion.advance(0.25);
+        assert_eq!(motion.velocity_degrees_per_second, -60.0);
+        assert_eq!(motion.position_degrees, -15.0);
+        motion.advance(0.25);
+        assert_eq!(motion.velocity_degrees_per_second, -120.0);
+    }
+
+    #[test]
+    fn an_ordered_wheel_crosses_intermediate_slots() {
+        let mut wheel = WheelMotionState::default();
+        wheel.set_target(3, 4, 180.0, 720.0, 720.0);
+        let mut visited = Vec::new();
+        for _ in 0..20 {
+            wheel.advance(0.1);
+            let slot = wheel.visible_slot().unwrap();
+            if visited.last() != Some(&slot) {
+                visited.push(slot);
+            }
+        }
+        assert!(visited.windows(2).all(|pair| pair[0] <= pair[1]));
+        assert!(visited.contains(&1));
+        assert!(visited.contains(&2));
+        assert_eq!(visited.last(), Some(&3));
     }
 }
 

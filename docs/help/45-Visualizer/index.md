@@ -10,6 +10,15 @@ the fixture library ships several that do. A fixture whose profile carries no mo
 drawn as a grey box: ToskLight picks one of the models it ships from what the profile says
 about itself, so a rig of imported profiles still reads as a rig of lamps.
 
+Movement is physical in the Visualizer, while desk output remains immediate. A fixture profile
+can give each Pan, Tilt, wheel, or rotation function its exact angular endpoints and its maximum
+speed, acceleration, and deceleration. Absolute functions keep their authored winding, endless
+functions request a signed speed, and ordered colour and gobo wheels visibly cross intermediate
+slots. The channel's exact **Default raw** value is decoded as the home target; the model's authored
+local pose is physical 0°. Older profiles without these limits use deterministic responsive
+Visualizer defaults of 540°/s maximum speed and 1,080°/s² acceleration and deceleration instead
+of moving instantaneously.
+
 Lasers are the exception to all of that. What a laser draws is decided by a pattern engine
 inside the projector rather than by anything its channels describe, so a laser profile carries
 that engine as a small script and the Visualizer runs it to find the path the beam takes.

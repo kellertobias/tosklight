@@ -30,4 +30,5 @@ pub use overlay::{Overlay, OverlayQuad};
 pub use pick::{Pick, PickedElement, pick};
 pub use renderer::{CapturedImage, FrameStats, RenderError, Renderer};
 pub use targets::{MAX_LIGHTS_PER_TILE, TILE_SIZE};
+pub use timing::GpuPassTimings;
 pub use wgpu;

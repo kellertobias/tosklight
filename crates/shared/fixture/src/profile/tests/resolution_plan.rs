@@ -15,6 +15,7 @@ fn compiled_resolution_matches_dynamic_resolution_and_active_ownership() {
             dmx_to: 127,
             attribute: AttributeKey::intensity(),
             priority: 0,
+            angular_motion: None,
             behavior: ChannelFunctionBehavior::Continuous {
                 physical_min: 0.0,
                 physical_max: 1.0,
@@ -28,6 +29,7 @@ fn compiled_resolution_matches_dynamic_resolution_and_active_ownership() {
             dmx_to: 255,
             attribute: AttributeKey("shutter".into()),
             priority: 10,
+            angular_motion: None,
             behavior: ChannelFunctionBehavior::Fixed {
                 semantic_id: "open".into(),
                 label: "Open".into(),

@@ -5,7 +5,7 @@
 //! the scene the session holds, and the status surface built from both — and what to do with the
 //! result, including the capture and benchmark runs that exit after it.
 
-use super::{Application, Measured, paced_interval};
+use super::{Application, Measured, is_external_camera_target, paced_interval};
 use crate::session::Session;
 use crate::settings::Preferences;
 use crate::ui::QuickSettings;
@@ -28,6 +28,9 @@ impl Application {
             return;
         };
         session.pump(now);
+        let preserve_external_override =
+            is_external_camera_target(self.options.embed, session.source_view.mode)
+                && self.external_camera.local_override();
         adopt_view(
             session,
             &mut self.camera,
@@ -36,7 +39,34 @@ impl Application {
             &mut self.camera_is_local,
             &mut self.framed_revision,
             self.options.zoom,
+            preserve_external_override,
         );
+        // A patched camera targets this dedicated external presentation only. Orthographic views
+        // keep their own local navigation, and an embedded Stage helper never enters this branch.
+        let external_camera_target =
+            is_external_camera_target(self.options.embed, session.source_view.mode);
+        if external_camera_target {
+            let incoming = session
+                .values
+                .external_camera
+                .as_ref()
+                .map(|camera| (camera.as_camera(), camera.stale || !camera.patched));
+            if let Some(camera) = self.external_camera.observe(incoming) {
+                self.camera.adopt(&camera);
+            }
+            if self.external_camera.has_pose() {
+                // `camera_is_local` means the CameraControl projection is active rather than the
+                // source view. Keep it active even when `adopt_view` just received a source-view
+                // revision: a latched local override must not visibly jump back to the source.
+                // Its ownership is reported separately by `external_camera`.
+                self.camera_is_local = true;
+            }
+        }
+        let camera_control = if external_camera_target {
+            self.external_camera.status()
+        } else {
+            ui::DmxCameraControlStatus::None
+        };
         let mut view = session.effective_view(&self.preferences);
         if self.camera_is_local {
             view.camera = self.camera.camera(&view.camera, view.mode);
@@ -66,6 +96,7 @@ impl Application {
             .min(0.25);
         self.last_persistence = now;
         values.apply_persistence(&self.preferences.persistence, since_last_frame);
+        values.apply_physical_motion(since_last_frame);
 
         self.overlay.clear();
         self.hotspots.clear();
@@ -106,6 +137,7 @@ impl Application {
                 renderer,
                 self.frames_per_second,
                 notice,
+                camera_control,
             );
             build_overlay(
                 &mut self.overlay,
@@ -121,6 +153,26 @@ impl Application {
                 width,
                 height,
             );
+            let redraw_state = crate::redraw::RedrawState::new(
+                session.scene.revision,
+                &values,
+                &view,
+                (width as u32, height as u32),
+                &self.overlay.quads,
+            );
+            let time_driven =
+                crate::redraw::is_time_driven(&values, &view, &self.preferences.persistence);
+            let forced = self.options.capture.is_some()
+                || self.options.verify_only
+                || self.options.benchmark_seconds.is_some();
+            if !forced && !self.redraw_gate.should_draw(redraw_state, time_driven) {
+                session.values = values;
+                // Providers and input are still polled regularly, but an idle picture does not
+                // acquire a drawable or submit GPU work.
+                self.next_frame = now + Duration::from_millis(50);
+                return;
+            }
+            renderer.observe_frame_interval(view.quality, (delta * 1_000_000.0) as u64);
             if let Some(path) = self.options.capture.clone()
                 && self.presented_frames + 1 >= u64::from(self.options.capture_frames)
             {
@@ -185,6 +237,7 @@ fn status_model<'a>(
     renderer: &viz_render::Renderer,
     frames_per_second: f32,
     notice: Option<(String, bool)>,
+    camera_control: ui::DmxCameraControlStatus,
 ) -> StatusModel<'a> {
     StatusModel {
         connection: &session.connection,
@@ -209,6 +262,7 @@ fn status_model<'a>(
         renderer: gpu_label(renderer),
         gpu_millis: stats.gpu_micros.map(|micros| micros as f32 / 1000.0),
         waiting_for_dmx,
+        camera_control,
         selection: selection.clone(),
         notice,
     }
@@ -260,8 +314,9 @@ fn build_overlay(
 
 /// Adopt the view the source is asking for, and frame a newly loaded scene once.
 ///
-/// An operator's own camera holds until the source sends an authoritative view — the whole point
-/// of sending one is that the renderer obeys it — and a move of their own takes it back.
+/// An ordinary operator camera holds until the source sends an authoritative view. The dedicated
+/// external camera is the exception: once local control has been latched, only its explicit
+/// release action returns ownership to DMX, so a coincident source-view update cannot steal it.
 #[allow(clippy::too_many_arguments)]
 fn adopt_view(
     session: &mut Session,
@@ -271,10 +326,11 @@ fn adopt_view(
     camera_is_local: &mut bool,
     framed_revision: &mut Option<u64>,
     zoom: Option<f32>,
+    preserve_local_camera: bool,
 ) {
-    // The source has said which way to look. An operator's own selection holds until then;
-    // an authoritative view replaces it, because the whole point of sending one is that the
-    // renderer obeys it — and the local camera is let go so it actually does.
+    // The source has said which way to look. An ordinary operator selection holds until then; an
+    // authoritative view replaces it. A latched external-camera override is released only by its
+    // named operator action, so it records the source revision without moving the camera.
     if *adopted != session.source_view_epoch {
         *adopted = session.source_view_epoch;
         if let Some(mode) = requested.take() {
@@ -283,8 +339,10 @@ fn adopt_view(
             session.source_view.mode = mode;
             session.source_view.camera = Camera::framed(mode, session.scene.framing_bounds());
         }
-        camera.adopt(&session.source_view.camera);
-        *camera_is_local = false;
+        if !preserve_local_camera {
+            camera.adopt(&session.source_view.camera);
+            *camera_is_local = false;
+        }
         *framed_revision = Some(session.scene.revision);
     }
     // Frame a newly loaded scene once. An operator camera move takes over from then on.

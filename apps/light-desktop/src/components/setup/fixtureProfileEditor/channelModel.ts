@@ -83,6 +83,12 @@ export function replaceFunctionBehavior(
 	return {
 		...fn,
 		priority: type === "continuous" ? 0 : type === "control" ? 200 : 100,
+		angular_motion:
+			type === "continuous"
+				? fn.angular_motion
+				: type === "indexed" && fn.angular_motion?.kind === "absolute_position"
+					? fn.angular_motion
+					: null,
 		behavior: functionBehavior(type, channel),
 	};
 }

@@ -42,6 +42,7 @@ fn rejects_duplicate_components_and_overlapping_functions() {
         dmx_to: 200,
         attribute: AttributeKey("strobe".into()),
         priority: 100,
+        angular_motion: None,
         behavior: ChannelFunctionBehavior::Fixed {
             semantic_id: "strobe".into(),
             label: "Strobe".into(),
@@ -73,6 +74,116 @@ fn rejects_duplicate_components_and_overlapping_functions() {
     assert!(
         matches!(mode.primary_slots(), Err(ProfileError::Invalid(message)) if message.contains("duplicated"))
     );
+}
+
+#[test]
+fn angular_motion_round_trips_without_changing_continuous_endpoints() {
+    let mut profile = FixtureProfile::blank();
+    profile.manufacturer = "Test".into();
+    profile.name = "Angular motion".into();
+    let mode = &mut profile.modes[0];
+    mode.splits[0].footprint = 2;
+    let mut pan = channel(mode.heads[0].id, ChannelResolution::U16, vec![2]);
+    pan.functions[0].behavior = ChannelFunctionBehavior::Continuous {
+        physical_min: -270.0,
+        physical_max: 270.0,
+        unit: Some("deg".into()),
+    };
+    pan.functions[0].angular_motion = Some(AngularMotion {
+        kind: AngularMotionKind::AbsolutePosition,
+        max_speed_degrees_per_second: Some(540.0),
+        acceleration_degrees_per_second_squared: Some(720.0),
+        deceleration_degrees_per_second_squared: Some(660.0),
+    });
+    mode.channels = vec![pan];
+
+    let encoded = serde_json::to_value(&profile).unwrap();
+    let decoded: FixtureProfile = serde_json::from_value(encoded).unwrap();
+    decoded.validate().unwrap();
+    let function = &decoded.modes[0].channels[0].functions[0];
+    assert_eq!(
+        function.angular_motion,
+        Some(AngularMotion {
+            kind: AngularMotionKind::AbsolutePosition,
+            max_speed_degrees_per_second: Some(540.0),
+            acceleration_degrees_per_second_squared: Some(720.0),
+            deceleration_degrees_per_second_squared: Some(660.0),
+        })
+    );
+    assert!(matches!(
+        function.behavior,
+        ChannelFunctionBehavior::Continuous {
+            physical_min: -270.0,
+            physical_max: 270.0,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn legacy_functions_default_to_no_angular_motion() {
+    let mut profile = FixtureProfile::blank();
+    let mode = &mut profile.modes[0];
+    mode.channels = vec![channel(mode.heads[0].id, ChannelResolution::U8, vec![])];
+    let mut legacy = serde_json::to_value(profile).unwrap();
+    legacy["modes"][0]["channels"][0]["functions"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("angular_motion");
+    for schema_version in [2, 3] {
+        let mut value = legacy.clone();
+        value["schema_version"] = serde_json::json!(schema_version);
+        let migrated: FixtureProfile = serde_json::from_value(value).unwrap();
+        assert_eq!(
+            migrated.modes[0].channels[0].functions[0].angular_motion,
+            None
+        );
+    }
+}
+
+#[test]
+fn angular_motion_requires_continuous_behavior_and_positive_finite_limits() {
+    let head_id = Uuid::new_v4();
+    let mut fixture_channel = channel(head_id, ChannelResolution::U8, vec![]);
+    fixture_channel.functions[0].angular_motion = Some(AngularMotion {
+        kind: AngularMotionKind::AngularVelocity,
+        max_speed_degrees_per_second: Some(f32::NAN),
+        acceleration_degrees_per_second_squared: None,
+        deceleration_degrees_per_second_squared: None,
+    });
+    assert!(matches!(
+        fixture_channel.validate(),
+        Err(ProfileError::Invalid(message)) if message == "angular motion maximum speed must be positive"
+    ));
+
+    fixture_channel.functions[0].angular_motion = Some(AngularMotion {
+        kind: AngularMotionKind::AngularVelocity,
+        max_speed_degrees_per_second: None,
+        acceleration_degrees_per_second_squared: None,
+        deceleration_degrees_per_second_squared: None,
+    });
+    fixture_channel.functions[0].behavior = ChannelFunctionBehavior::Fixed {
+        semantic_id: "stop".into(),
+        label: "Stop".into(),
+        raw_value: 0,
+    };
+    assert!(matches!(
+        fixture_channel.validate(),
+        Err(ProfileError::Invalid(message)) if message == "angular motion requires a continuous function or indexed wheel slot"
+    ));
+
+    fixture_channel.functions[0].angular_motion = Some(AngularMotion {
+        kind: AngularMotionKind::AbsolutePosition,
+        max_speed_degrees_per_second: Some(360.0),
+        acceleration_degrees_per_second_squared: Some(720.0),
+        deceleration_degrees_per_second_squared: Some(540.0),
+    });
+    fixture_channel.functions[0].behavior = ChannelFunctionBehavior::Indexed {
+        semantic_id: "wheel.red".into(),
+        label: "Red".into(),
+        raw_value: 0,
+    };
+    fixture_channel.validate().unwrap();
 }
 
 #[test]

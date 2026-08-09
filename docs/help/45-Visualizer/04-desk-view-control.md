@@ -41,6 +41,19 @@ A Visualizer can also hold its own **rendering quality** locally, from its Quick
 A quality held that way says `(local)` on its status bar and is not replaced by the desk;
 setting it back to **Follow source** hands the choice back.
 
+## A camera patched as a fixture
+
+The Generic **Visualizer Camera** is a transferable 17-slot personality for a camera that must
+be recorded and played back with DMX. It controls the dedicated external 3D Visualizer only:
+embedded Stage panes and every 2D view keep their own camera.
+
+While current camera DMX is arriving, its X/Y/Z position, Yaw/Pitch/Roll orientation and Zoom are
+authoritative. Dragging, walking or zooming locally changes the status line to **Local camera
+control** and holds that override. Press `C` to release it and apply the current DMX pose
+immediately. If input is lost or the camera is unpatched, the Visualizer holds the last pose and
+local control remains available; it does not jump to defaults. A second patched Visualizer Camera
+is ambiguous, so camera routing is disabled and the connection warning names both fixtures.
+
 ## More than one Visualizer
 
 Each Visualizer follows one **renderer target**, and the desk keeps a view for each one.

@@ -217,7 +217,17 @@ export interface ChannelFunction {
 	dmx_to: number;
 	attribute: string;
 	priority: number;
+	angular_motion?: AngularMotion | null;
 	behavior: ChannelFunctionBehavior;
+}
+
+export type AngularMotionKind = "absolute_position" | "angular_velocity";
+
+export interface AngularMotion {
+	kind: AngularMotionKind;
+	max_speed_degrees_per_second?: number | null;
+	acceleration_degrees_per_second_squared?: number | null;
+	deceleration_degrees_per_second_squared?: number | null;
 }
 
 export type ChannelFunctionBehavior =

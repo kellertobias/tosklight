@@ -4,14 +4,18 @@
 //! parameters reach the render scene.
 
 use crate::colour;
-use crate::plan::{ColourBinding, EmitterBinding};
+use crate::plan::{ColourBinding, EmitterBinding, ExternalCameraBinding};
 use std::collections::HashMap;
 use viz_dmx::{DMX_SLOTS, UniverseFrame};
-use viz_scene::{CellValue, EmitterKind, EmitterValues, Scene, SceneValues};
+use viz_scene::{
+    CellValue, EmitterInstance, EmitterKind, EmitterValues, MotionAxis, PhysicalMotionState,
+    PhysicalMotionTarget, Scene, SceneValues,
+};
 
 /// Holds the latest frame per logical universe and applies it to the emitter values.
 pub struct Decoder {
     bindings: Vec<EmitterBinding>,
+    external_camera: Option<ExternalCameraBinding>,
     frames: HashMap<u16, [u8; DMX_SLOTS]>,
     stale: HashMap<u16, bool>,
     /// Emitter indices reading each logical universe.
@@ -25,6 +29,13 @@ pub struct Decoder {
 
 impl Decoder {
     pub fn new(bindings: Vec<EmitterBinding>) -> Self {
+        Self::with_external_camera(bindings, None)
+    }
+
+    pub fn with_external_camera(
+        bindings: Vec<EmitterBinding>,
+        external_camera: Option<ExternalCameraBinding>,
+    ) -> Self {
         let mut readers: HashMap<u16, Vec<usize>> = HashMap::new();
         for (index, binding) in bindings.iter().enumerate() {
             for universe in &binding.universes {
@@ -33,6 +44,7 @@ impl Decoder {
         }
         Self {
             bindings,
+            external_camera,
             frames: HashMap::new(),
             stale: HashMap::new(),
             readers,
@@ -45,8 +57,61 @@ impl Decoder {
     /// Logical universes this show actually reads, used to configure the receivers.
     pub fn required_universes(&self) -> Vec<u16> {
         let mut universes: Vec<u16> = self.readers.keys().copied().collect();
+        if let Some(camera) = &self.external_camera {
+            universes.extend(camera.universes.iter().copied());
+        }
         universes.sort_unstable();
+        universes.dedup();
         universes
+    }
+
+    /// Establish physical home targets from each channel's exact `default_raw` value.
+    /// The simulated position remains at the authored local 0-degree pose and travels to home
+    /// under the same limits as a later authoritative DMX update.
+    pub fn initialize_motion(&self, scene: &Scene, values: &mut SceneValues) {
+        values.resize(scene.emitters.len());
+        for (index, (binding, emitter)) in self.bindings.iter().zip(&scene.emitters).enumerate() {
+            let value = &mut values.emitters[index];
+            set_axis_default(
+                &mut value.pan_motion,
+                binding.pan.as_ref(),
+                emitter.pan.as_ref(),
+                binding.invert_pan,
+            );
+            set_axis_default(
+                &mut value.tilt_motion,
+                binding.tilt.as_ref(),
+                emitter.tilt.as_ref(),
+                binding.invert_tilt,
+            );
+            set_declared_rotation_default(
+                &mut value.gobo_rotation_motion,
+                binding.gobo_rotation.as_ref(),
+            );
+            set_declared_rotation_default(
+                &mut value.prism_rotation_motion,
+                binding.prism_rotation.as_ref(),
+            );
+            set_wheel_default(&mut value.gobo_wheel_motion, binding.gobo.as_ref());
+            set_wheel_default(
+                &mut value.colour_wheel_motion,
+                binding.colour.wheel.as_ref(),
+            );
+            value.colour_wheel_palette = wheel_palette(binding.colour.wheel.as_ref());
+        }
+    }
+
+    /// Reconcile a retained camera pose with the newly compiled patch without resetting it.
+    ///
+    /// Providers call this after carrying values across a scene delta. An absent or ambiguous
+    /// binding marks the held pose unavailable for DMX authority while keeping every coordinate
+    /// available to local control.
+    pub fn reconcile_external_camera(&self, values: &mut SceneValues) {
+        let Some(camera) = values.external_camera.as_mut() else {
+            return;
+        };
+        camera.patched = self.external_camera.is_some();
+        camera.stale = true;
     }
 
     /// Apply received frames. Returns the emitter indices that were re-decoded.
@@ -61,6 +126,11 @@ impl Decoder {
             return 0;
         }
         let mut affected: Vec<usize> = Vec::new();
+        let camera_affected = self.external_camera.as_ref().is_some_and(|camera| {
+            received
+                .iter()
+                .any(|frame| camera.universes.contains(&frame.logical_universe))
+        });
         for frame in received {
             self.frames.insert(frame.logical_universe, frame.slots);
             self.stale.insert(frame.logical_universe, frame.stale);
@@ -82,13 +152,7 @@ impl Decoder {
                 continue;
             };
             let mut value = values.emitters[*index].clone();
-            self.decode_emitter(
-                binding,
-                emitter.kind,
-                &mut value,
-                previous_time,
-                time_seconds,
-            );
+            self.decode_emitter(binding, emitter, &mut value, previous_time, time_seconds);
             values.emitters[*index] = value;
             // A laser's script reads raw slots, so the decoder's job for one is to capture the
             // footprint rather than to interpret it. Running the script here would put a
@@ -108,11 +172,67 @@ impl Decoder {
                 }));
             }
         }
+        if camera_affected {
+            self.decode_external_camera(values);
+        }
         self.last_time_seconds = Some(time_seconds);
         self.frame_counter += 1;
         values.frame = self.frame_counter;
         values.newest_input_micros = self.newest_input_micros;
-        affected.len()
+        affected.len() + usize::from(camera_affected)
+    }
+
+    fn decode_external_camera(&self, values: &mut SceneValues) {
+        let Some(binding) = &self.external_camera else {
+            return;
+        };
+        // A split camera only becomes authoritative after every part has arrived at least once.
+        // Until then an existing pose is retained instead of filling missing axes with zeroes.
+        if !binding
+            .universes
+            .iter()
+            .all(|universe| self.frames.contains_key(universe))
+        {
+            return;
+        }
+        let slots = |channel: &crate::binding::ChannelRef| self.slots(channel.logical_universe);
+        let Some(x) = binding.x.camera_position_metres(&slots(&binding.x)) else {
+            return;
+        };
+        let Some(y) = binding.y.camera_position_metres(&slots(&binding.y)) else {
+            return;
+        };
+        let Some(z) = binding.z.camera_position_metres(&slots(&binding.z)) else {
+            return;
+        };
+        let Some(yaw) = binding.yaw.camera_angle_degrees(&slots(&binding.yaw)) else {
+            return;
+        };
+        let Some(pitch) = binding.pitch.camera_angle_degrees(&slots(&binding.pitch)) else {
+            return;
+        };
+        let Some(roll) = binding.roll.camera_angle_degrees(&slots(&binding.roll)) else {
+            return;
+        };
+        let Some((focal_length, vertical_fov)) = binding.zoom.camera_lens(&slots(&binding.zoom))
+        else {
+            return;
+        };
+        values.external_camera = Some(viz_scene::ExternalCameraState {
+            fixture_id: binding.fixture_id,
+            instance_id: binding.instance_id,
+            position_metres: [x, y, z],
+            yaw_degrees: yaw,
+            pitch_degrees: pitch,
+            roll_degrees: roll,
+            focal_length_millimetres: focal_length,
+            vertical_fov_degrees: vertical_fov,
+            patched: true,
+            stale: binding
+                .universes
+                .iter()
+                .any(|universe| self.stale.get(universe).copied().unwrap_or(true)),
+        });
     }
 
     fn slots(&self, universe: u16) -> [u8; DMX_SLOTS] {
@@ -125,7 +245,7 @@ impl Decoder {
     fn decode_emitter(
         &self,
         binding: &EmitterBinding,
-        kind: EmitterKind,
+        emitter: &EmitterInstance,
         value: &mut EmitterValues,
         previous_seconds: f32,
         time_seconds: f32,
@@ -148,14 +268,45 @@ impl Decoder {
 
         value.pan = flip(read(&binding.pan).unwrap_or(0.5), binding.invert_pan);
         value.tilt = flip(read(&binding.tilt).unwrap_or(0.5), binding.invert_tilt);
+        set_axis_target(
+            &mut value.pan_motion,
+            binding.pan.as_ref(),
+            emitter.pan.as_ref(),
+            &reader,
+            binding.invert_pan,
+        );
+        set_axis_target(
+            &mut value.tilt_motion,
+            binding.tilt.as_ref(),
+            emitter.tilt.as_ref(),
+            &reader,
+            binding.invert_tilt,
+        );
         value.zoom = read(&binding.zoom).unwrap_or(0.5);
         value.iris = read(&binding.iris).unwrap_or(0.0);
         value.frost = read(&binding.frost).unwrap_or(0.0);
         value.focus = read(&binding.focus).unwrap_or(0.5);
         value.gobo = read(&binding.gobo).unwrap_or(0.0);
+        set_wheel_target(&mut value.gobo_wheel_motion, binding.gobo.as_ref(), &reader);
         value.gobo_rotation = read(&binding.gobo_rotation).unwrap_or(0.0);
         value.prism = read(&binding.prism).unwrap_or(0.0);
         value.prism_rotation = read(&binding.prism_rotation).unwrap_or(0.0);
+        set_declared_rotation_target(
+            &mut value.gobo_rotation_motion,
+            binding.gobo_rotation.as_ref(),
+            &reader,
+        );
+        set_wheel_target(
+            &mut value.colour_wheel_motion,
+            binding.colour.wheel.as_ref(),
+            &reader,
+        );
+        value.colour_wheel_palette = wheel_palette(binding.colour.wheel.as_ref());
+        set_declared_rotation_target(
+            &mut value.prism_rotation_motion,
+            binding.prism_rotation.as_ref(),
+            &reader,
+        );
         for (slot, blade) in value
             .shaper_blades
             .iter_mut()
@@ -194,7 +345,7 @@ impl Decoder {
             shutter
         };
 
-        if kind == EmitterKind::Atmosphere {
+        if emitter.kind == EmitterKind::Atmosphere {
             value.intensity = read(&binding.fog).unwrap_or(value.intensity);
         }
 
@@ -288,6 +439,193 @@ impl Decoder {
     }
 }
 
+fn set_axis_target<F>(
+    state: &mut PhysicalMotionState,
+    channel: Option<&crate::binding::ChannelRef>,
+    axis: Option<&MotionAxis>,
+    reader: &F,
+    invert: bool,
+) where
+    F: Fn(u16) -> [u8; DMX_SLOTS],
+{
+    let (Some(channel), Some(axis)) = (channel, axis) else {
+        return;
+    };
+    let frame = reader(channel.logical_universe);
+    let target = if channel
+        .function(&frame)
+        .and_then(|function| function.angular_motion)
+        .is_some()
+    {
+        channel.angular_motion_target(&frame, false).map(|target| {
+            if invert {
+                invert_motion_target(target)
+            } else {
+                target
+            }
+        })
+    } else {
+        Some(PhysicalMotionTarget::Position {
+            degrees: axis.degrees_at(flip(channel.normalised(&frame), invert)),
+            max_speed: crate::binding::FALLBACK_ANGULAR_SPEED,
+            acceleration: crate::binding::FALLBACK_ANGULAR_ACCELERATION,
+            deceleration: crate::binding::FALLBACK_ANGULAR_ACCELERATION,
+        })
+    };
+    if let Some(target) = target {
+        state.set_target(target);
+    }
+}
+
+fn set_axis_default(
+    state: &mut PhysicalMotionState,
+    channel: Option<&crate::binding::ChannelRef>,
+    axis: Option<&MotionAxis>,
+    invert: bool,
+) {
+    let (Some(channel), Some(axis)) = (channel, axis) else {
+        return;
+    };
+    let target = if channel
+        .functions
+        .iter()
+        .find(|function| {
+            channel.default_raw >= function.dmx_from && channel.default_raw <= function.dmx_to
+        })
+        .and_then(|function| function.angular_motion)
+        .is_some()
+    {
+        channel.angular_motion_default_target(false).map(|target| {
+            if invert {
+                invert_motion_target(target)
+            } else {
+                target
+            }
+        })
+    } else {
+        let mut level = channel.default_raw as f32 / channel.max_raw.max(1) as f32;
+        if channel.invert {
+            level = 1.0 - level;
+        }
+        Some(PhysicalMotionTarget::Position {
+            degrees: axis.degrees_at(flip(level, invert)),
+            max_speed: crate::binding::FALLBACK_ANGULAR_SPEED,
+            acceleration: crate::binding::FALLBACK_ANGULAR_ACCELERATION,
+            deceleration: crate::binding::FALLBACK_ANGULAR_ACCELERATION,
+        })
+    };
+    if let Some(target) = target {
+        state.set_target(target);
+    }
+}
+
+fn set_declared_rotation_target<F>(
+    state: &mut PhysicalMotionState,
+    channel: Option<&crate::binding::ChannelRef>,
+    reader: &F,
+) where
+    F: Fn(u16) -> [u8; DMX_SLOTS],
+{
+    let Some(channel) = channel else { return };
+    let frame = reader(channel.logical_universe);
+    if let Some(target) = channel.angular_motion_target(&frame, false) {
+        state.set_target(target);
+    }
+}
+
+fn set_declared_rotation_default(
+    state: &mut PhysicalMotionState,
+    channel: Option<&crate::binding::ChannelRef>,
+) {
+    let Some(channel) = channel else { return };
+    if let Some(target) = channel.angular_motion_default_target(false) {
+        state.set_target(target);
+    }
+}
+
+fn set_wheel_target<F>(
+    state: &mut viz_scene::WheelMotionState,
+    channel: Option<&crate::binding::ChannelRef>,
+    reader: &F,
+) where
+    F: Fn(u16) -> [u8; DMX_SLOTS],
+{
+    let Some(channel) = channel else { return };
+    let frame = reader(channel.logical_universe);
+    if let Some(target) = channel.wheel_target(&frame) {
+        state.set_target(
+            target.index,
+            target.count,
+            target.max_speed,
+            target.acceleration,
+            target.deceleration,
+        );
+    }
+}
+
+fn set_wheel_default(
+    state: &mut viz_scene::WheelMotionState,
+    channel: Option<&crate::binding::ChannelRef>,
+) {
+    let Some(channel) = channel else { return };
+    if let Some(target) = channel.wheel_default_target() {
+        state.set_target(
+            target.index,
+            target.count,
+            target.max_speed,
+            target.acceleration,
+            target.deceleration,
+        );
+    }
+}
+
+fn wheel_palette(channel: Option<&crate::binding::ChannelRef>) -> Vec<[f32; 3]> {
+    let Some(channel) = channel else {
+        return Vec::new();
+    };
+    let mut functions = channel
+        .functions
+        .iter()
+        .filter(|function| {
+            matches!(
+                function.behavior,
+                light_fixture::ChannelFunctionBehavior::Indexed { .. }
+                    | light_fixture::ChannelFunctionBehavior::Fixed { .. }
+            )
+        })
+        .collect::<Vec<_>>();
+    functions.sort_by_key(|function| function.dmx_from);
+    functions
+        .into_iter()
+        .map(|function| colour::named_colour(&function.name))
+        .collect()
+}
+
+fn invert_motion_target(target: PhysicalMotionTarget) -> PhysicalMotionTarget {
+    match target {
+        PhysicalMotionTarget::Position {
+            degrees,
+            max_speed,
+            acceleration,
+            deceleration,
+        } => PhysicalMotionTarget::Position {
+            degrees: -degrees,
+            max_speed,
+            acceleration,
+            deceleration,
+        },
+        PhysicalMotionTarget::Velocity {
+            degrees_per_second,
+            acceleration,
+            deceleration,
+        } => PhysicalMotionTarget::Velocity {
+            degrees_per_second: -degrees_per_second,
+            acceleration,
+            deceleration,
+        },
+    }
+}
+
 fn flip(value: f32, invert: bool) -> f32 {
     if invert { 1.0 - value } else { value }
 }
@@ -338,6 +676,10 @@ mod tests {
     use crate::binding::ChannelRef;
     use crate::plan::ColourBinding;
     use glam::Vec3;
+    use light_core::AttributeKey;
+    use light_fixture::{
+        AngularMotion, AngularMotionKind, ChannelFunction, ChannelFunctionBehavior,
+    };
     use viz_scene::{
         EmitterInstance, EmitterLayoutCells, EmitterOptics, FixtureBody, FixtureInstance,
     };
@@ -353,6 +695,40 @@ mod tests {
             snap: false,
             default_raw: 0,
             functions: Vec::new(),
+        }
+    }
+
+    fn camera_channel(first_slot: u16, bytes: usize) -> ChannelRef {
+        ChannelRef {
+            logical_universe: 1,
+            slots: (first_slot..first_slot + bytes as u16).collect(),
+            max_raw: match bytes {
+                2 => 0xffff,
+                3 => 0x00ff_ffff,
+                _ => unreachable!("camera channels are U16 or U24"),
+            },
+            invert: false,
+            physical_min: 0.0,
+            physical_max: 1.0,
+            snap: false,
+            default_raw: 0,
+            functions: Vec::new(),
+        }
+    }
+
+    fn external_camera_binding() -> ExternalCameraBinding {
+        ExternalCameraBinding {
+            fixture_id: uuid::Uuid::from_u128(1),
+            instance_id: uuid::Uuid::from_u128(2),
+            label: "Camera 1".into(),
+            x: camera_channel(1, 3),
+            y: camera_channel(4, 3),
+            z: camera_channel(7, 3),
+            yaw: camera_channel(10, 2),
+            pitch: camera_channel(12, 2),
+            roll: camera_channel(14, 2),
+            zoom: camera_channel(16, 2),
+            universes: vec![1],
         }
     }
 
@@ -433,6 +809,55 @@ mod tests {
     }
 
     #[test]
+    fn external_camera_decodes_the_exact_seventeen_slot_contract_and_holds_stale_pose() {
+        let mut decoder =
+            Decoder::with_external_camera(Vec::new(), Some(external_camera_binding()));
+        let scene = Scene::default();
+        let mut values = SceneValues::default();
+        let mut slots = [0_u8; DMX_SLOTS];
+        // X = exact zero, Y = +1 m, Z = minimum. Orientation = -360, near zero, +360.
+        slots[0..3].copy_from_slice(&[0x80, 0x00, 0x00]);
+        slots[3..6].copy_from_slice(&[0x80, 0x07, 0xd0]);
+        slots[6..9].copy_from_slice(&[0x00, 0x00, 0x00]);
+        slots[9..11].copy_from_slice(&[0x00, 0x00]);
+        slots[11..13].copy_from_slice(&[0x80, 0x00]);
+        slots[13..15].copy_from_slice(&[0xff, 0xff]);
+        slots[15..17].copy_from_slice(&[0x00, 0x00]);
+        let live = UniverseFrame {
+            logical_universe: 1,
+            slots,
+            received_micros: 1_000,
+            stale: false,
+        };
+        assert_eq!(decoder.apply(&scene, &[live.clone()], &mut values, 0.0), 1);
+        let camera = values.external_camera.expect("camera decoded");
+        assert_eq!(camera.position_metres, [0.0, 1.0, -4_194.304]);
+        assert_eq!(camera.yaw_degrees, -360.0);
+        assert!(camera.pitch_degrees.abs() < 0.006);
+        assert_eq!(camera.roll_degrees, 360.0);
+        assert!((camera.focal_length_millimetres - 18.0).abs() < 1e-5);
+        assert!((camera.vertical_fov_degrees - 67.380_135).abs() < 1e-4);
+        assert!(!camera.stale);
+
+        let stale = UniverseFrame {
+            stale: true,
+            ..live
+        };
+        decoder.apply(&scene, &[stale], &mut values, 1.0);
+        let held = values.external_camera.expect("last pose retained");
+        assert_eq!(held.position_metres, camera.position_metres);
+        assert!(held.stale);
+
+        Decoder::new(Vec::new()).reconcile_external_camera(&mut values);
+        let unpatched = values
+            .external_camera
+            .expect("unpatch retains the last pose");
+        assert_eq!(unpatched.position_metres, camera.position_metres);
+        assert!(!unpatched.patched);
+        assert!(unpatched.stale);
+    }
+
+    #[test]
     fn colour_channels_act_as_a_virtual_dimmer_without_an_intensity_channel() {
         let binding = EmitterBinding {
             colour: ColourBinding {
@@ -472,6 +897,81 @@ mod tests {
         decoder.apply(&scene, &[frame(&[(0, 255), (1, 255)])], &mut values, 0.0);
         assert_eq!(values.emitters[0].pan, 0.0);
         assert_eq!(values.emitters[0].tilt, 1.0);
+    }
+
+    #[test]
+    fn pan_uses_a_functions_exact_raw_span_and_declared_dynamics() {
+        let mut pan = channel(1);
+        pan.default_raw = 128;
+        pan.functions = vec![ChannelFunction {
+            id: uuid::Uuid::nil(),
+            name: "finite pan".into(),
+            dmx_from: 64,
+            dmx_to: 191,
+            attribute: AttributeKey("pan".into()),
+            priority: 0,
+            angular_motion: Some(AngularMotion {
+                kind: AngularMotionKind::AbsolutePosition,
+                max_speed_degrees_per_second: Some(180.0),
+                acceleration_degrees_per_second_squared: Some(360.0),
+                deceleration_degrees_per_second_squared: Some(240.0),
+            }),
+            behavior: ChannelFunctionBehavior::Continuous {
+                physical_min: -270.0,
+                physical_max: 270.0,
+                unit: Some("deg".into()),
+            },
+        }];
+        let binding = EmitterBinding {
+            pan: Some(pan),
+            universes: vec![1],
+            ..EmitterBinding::default()
+        };
+        let mut rig = scene(&[EmitterKind::Beam]);
+        rig.emitters[0].pan = Some(MotionAxis {
+            axis: Vec3::Y,
+            min_degrees: -270.0,
+            max_degrees: 270.0,
+        });
+        let mut values = SceneValues::default();
+        let mut decoder = Decoder::new(vec![binding]);
+        decoder.initialize_motion(&rig, &mut values);
+        assert!(matches!(
+            values.emitters[0].pan_motion.target,
+            Some(PhysicalMotionTarget::Position { degrees, .. }) if degrees.abs() < 3.0
+        ));
+        decoder.apply(&rig, &[frame(&[(0, 191)])], &mut values, 0.0);
+        assert_eq!(values.emitters[0].pan_motion.position_degrees, 0.0);
+        assert_eq!(
+            values.emitters[0].pan_motion.target,
+            Some(PhysicalMotionTarget::Position {
+                degrees: 270.0,
+                max_speed: 180.0,
+                acceleration: 360.0,
+                deceleration: 240.0,
+            })
+        );
+    }
+
+    #[test]
+    fn legacy_pan_gets_fast_physical_fallback_instead_of_teleporting() {
+        let binding = EmitterBinding {
+            pan: Some(channel(1)),
+            universes: vec![1],
+            ..EmitterBinding::default()
+        };
+        let mut rig = scene(&[EmitterKind::Beam]);
+        rig.emitters[0].pan = Some(MotionAxis {
+            axis: Vec3::Y,
+            min_degrees: -270.0,
+            max_degrees: 270.0,
+        });
+        let mut values = SceneValues::default();
+        Decoder::new(vec![binding]).apply(&rig, &[frame(&[(0, 255)])], &mut values, 0.0);
+        assert_eq!(values.emitters[0].pan_motion.position_degrees, 0.0);
+        values.apply_physical_motion(0.1);
+        assert!(values.emitters[0].pan_motion.position_degrees > 0.0);
+        assert!(values.emitters[0].pan_motion.position_degrees < 270.0);
     }
 
     #[test]
