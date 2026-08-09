@@ -1,0 +1,81 @@
+name: Media Server
+
+# The Media Server is a supported product on macOS, Windows, and Linux. A feature may report a
+# capability error when a machine genuinely lacks a device, codec, or GPU capability; it may not
+# be missing because one platform adapter was left unimplemented. This workflow is the gate that
+# keeps that honest: every Media package compiles and tests on all three systems.
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "apps/media/**"
+      - "crates/media/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/media.yml"
+  pull_request:
+    paths:
+      - "apps/media/**"
+      - "crates/media/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/media.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: media-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    name: Media / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # The supported matrix: macOS on Apple Silicon, Windows on x86_64, and Linux on both
+        # x86_64 and aarch64. A Raspberry Pi is a nice-to-have target and is not gated here.
+        os: [ubuntu-22.04, ubuntu-22.04-arm, macos-14, windows-2022]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: media-${{ matrix.os }}
+
+      # The reference renders need a driver, and audio capture needs ALSA's headers to build at
+      # all. Both are the machine genuinely lacking something rather than an unwritten adapter,
+      # so the runner is given them rather than the tests being skipped.
+      - name: Install a software Vulkan driver and the ALSA headers
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mesa-vulkan-drivers vulkan-tools libasound2-dev
+
+      - name: Format
+        run: cargo fmt --check -p media-domain -p media-application -p media-audio -p media-citp -p media-codec -p media-http -p media-library -p media-net -p media-playback -p media-render -p media-runtime -p media-server -p media-text
+
+      - name: Lint
+        run: >-
+          cargo clippy --all-targets
+          -p media-domain -p media-application -p media-audio -p media-citp -p media-codec -p media-http -p media-library -p media-net -p media-playback -p media-render -p media-runtime -p media-server -p media-text
+          -- -D warnings
+
+      - name: Test
+        run: cargo test -p media-domain -p media-application -p media-audio -p media-citp -p media-codec -p media-http -p media-library -p media-net -p media-playback -p media-render -p media-runtime -p media-server -p media-text
+
+      # A packaged smoke test exercises the real executable rather than a test harness, so a
+      # platform cannot pass by compiling alone.
+      - name: Packaged smoke test
+        run: cargo run -p media-server -- --check-configuration

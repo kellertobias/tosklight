@@ -35,6 +35,7 @@ const artifactPaths = Object.freeze({
   controlFrontend: artifact("LIGHT_CONTROL_FRONTEND_DIR", "FRONTEND_CONTROL"),
   hardwareFrontend: artifact("LIGHT_HARDWARE_FRONTEND_DIR", "FRONTEND_HARDWARE"),
   vizEditorFrontend: artifact("LIGHT_VIZ_EDITOR_FRONTEND_DIR", "FRONTEND_VIZ_EDITOR"),
+  mediaFrontend: artifact("LIGHT_MEDIA_FRONTEND_DIR", "FRONTEND_MEDIA"),
   storybook: artifact("LIGHT_STORYBOOK_UI_DIR", "STORYBOOK_UI"),
   viteCache: artifact("LIGHT_VITE_CACHE_DIR", "CACHE_VITE"),
   pythonCache: artifact("LIGHT_PYTHON_CACHE_DIR", "CACHE_PYTHON"),

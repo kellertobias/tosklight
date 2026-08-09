@@ -1,0 +1,20 @@
+[package]
+name = "media-library"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+authors.workspace = true
+
+# The library storage adapter: how the catalog is laid out on disk, discovered, and edited.
+# Filesystem names live here and nowhere else; the domain deals in identities and addresses.
+[dependencies]
+media-codec = { path = "../codec" }
+media-domain = { path = "../../domain" }
+# Only to read a legacy folder-name file, which the C++ application wrote as a JSON object.
+serde_json.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

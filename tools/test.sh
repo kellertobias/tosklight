@@ -11,7 +11,7 @@ HARDWARE_UI="$ROOT/apps/light-hardware-controls"
 CONTROL_TAURI_CONFIG="$LIGHT_TMP_DIR/tauri-control-artifacts.json"
 
 # Backs the root package.json test scripts; invoke via `npm run test:<name>`.
-usage(){ echo "Usage: npm run test:{unit|verify|architecture|ui-package|patch-package|viz-editor|storybook|e2e-build|e2e|e2e-api|e2e-ui|e2e-performance|app-icons|artifact-paths|documentation-screenshots|marketing-screenshots|help-screenshots|help-screenshots-live|record|demo|all}"; }
+usage(){ echo "Usage: npm run test:{unit|verify|architecture|ui-package|patch-package|viz-editor|media-app|storybook|e2e-build|e2e|e2e-api|e2e-ui|e2e-performance|app-icons|artifact-paths|documentation-screenshots|marketing-screenshots|help-screenshots|help-screenshots-live|record|demo|all}"; }
 build_e2e(){
   if [[ "${LIGHT_REUSE_E2E_BUILD:-0}" == "1" ]]; then
     local server="${LIGHT_E2E_SERVER:-$LIGHT_CARGO_TARGET_DIR/debug/light-headless}"
@@ -51,6 +51,7 @@ typescript_unit(){
   (cd "$ROOT" && npm run test:ui-package)
   (cd "$ROOT" && npm run test:patch-package)
   (cd "$ROOT" && npm run test:viz-editor)
+  (cd "$ROOT" && npm run test:media-app)
   (cd "$UI" && npm test)
   (cd "$HARDWARE_UI" && npm test)
 }
@@ -118,6 +119,7 @@ help_screenshots_live(){ build_e2e; (cd "$UI" && LIGHT_HELP_SCREENSHOTS=1 LIGHT_
 ui_package(){ npm run test:ui-package --prefix "$ROOT"; }
 patch_package(){ npm run test:patch-package --prefix "$ROOT"; }
 viz_editor(){ npm run test:viz-editor --prefix "$ROOT"; }
+media_app(){ npm run test:media-app --prefix "$ROOT"; }
 storybook(){ npm run test:storybook --prefix "$ROOT"; }
 command="${1:-}"; shift || true
 case "$command" in
@@ -138,6 +140,7 @@ case "$command" in
   ui-package) ui_package "$@" ;;
   patch-package) patch_package "$@" ;;
   viz-editor) viz_editor "$@" ;;
+  media-app) media_app "$@" ;;
   storybook) storybook "$@" ;;
   record) record "$@" ;;
   demo) demo "$@" ;;

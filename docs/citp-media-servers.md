@@ -10,7 +10,8 @@ supported because the parent remains authoritative.
 
 ## Transport and caching
 
-The server implements bounded CITP/MSEX 1.2 TCP requests on the standard port 4811 by default:
+The server implements bounded CITP/MSEX 1.2 TCP requests on the industry-standard port 4809 by
+default. Discovery announces the exact configured TCP listening port:
 
 - CInf version negotiation is sent immediately after connection.
 - GETh/EThn retrieves configured media thumbnails.

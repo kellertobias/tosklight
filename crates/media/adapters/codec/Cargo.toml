@@ -1,0 +1,24 @@
+[package]
+name = "media-codec"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+authors.workspace = true
+
+# The playback codec: HAP Alpha frames in a seekable container.
+#
+# Both halves are pure Rust and permissively licensed, so nothing copyleft is linked and the
+# behavior is identical on every supported platform. FFmpeg turns arbitrary sources into raw
+# frames out-of-process at import; this crate owns everything after that.
+[dependencies]
+media-domain = { path = "../../domain" }
+# Snappy, the compressor HAP specifies. BSD-3-Clause.
+snap = "1.1"
+# Pure-Rust BC1/BC3 compression, a port of libsquish. MIT.
+# `rayon` compresses a frame's block rows in parallel; import is throughput-bound, not
+# latency-bound, so it is worth the threads.
+texpresso = { version = "2.0", default-features = false, features = ["rayon"] }
+thiserror.workspace = true
+
+[lints]
+workspace = true

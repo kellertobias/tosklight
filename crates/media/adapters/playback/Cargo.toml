@@ -1,0 +1,19 @@
+[package]
+name = "media-playback"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+authors.workspace = true
+
+# Playback sessions: one per selected asset variant, owning its own clock, transport, and frame
+# delivery. Never one shared cache entry — two layers on the same video keep separate positions.
+[dependencies]
+media-codec = { path = "../codec" }
+media-domain = { path = "../../domain" }
+media-library = { path = "../library" }
+media-render = { path = "../render" }
+thiserror.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

@@ -5,6 +5,7 @@ mod definition;
 mod definition_model;
 mod encoding;
 mod error;
+pub mod gdtf;
 mod highlight_look;
 mod library;
 mod package;

@@ -1,0 +1,16 @@
+[package]
+name = "media-server"
+default-run = "media-server"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+authors.workspace = true
+
+# The Media Server executable. This package is a composition root only: lifecycle ownership,
+# HTTP bootstrap, and asset embedding. Reusable behavior belongs in `crates/media`.
+[dependencies]
+anyhow.workspace = true
+media-runtime = { path = "../../crates/media/adapters/runtime" }
+
+[lints]
+workspace = true

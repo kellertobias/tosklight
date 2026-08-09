@@ -1,0 +1,180 @@
+{
+    "200": {
+        "alignment": "center",
+        "countdownDuration": 300,
+        "countdownMode": "on_visible",
+        "enabled": true,
+        "fontFamily": "Arial",
+        "fontSize": 72,
+        "format": "mm:ss",
+        "isRichText": true,
+        "spans": [
+            {
+                "fontSize": 100,
+                "fontStyle": "normal",
+                "fontWeight": "bold",
+                "newLine": true,
+                "text": "Doors",
+                "type": "text"
+            },
+            {
+                "fontSize": 50,
+                "fontStyle": "normal",
+                "fontWeight": "normal",
+                "newLine": false,
+                "text": " open",
+                "type": "text"
+            },
+            {
+                "fontSize": 50,
+                "fontStyle": "italic",
+                "fontWeight": "normal",
+                "newLine": true,
+                "text": "Stand by",
+                "type": "text"
+            }
+        ],
+        "targetDatetime": "",
+        "text": "New Text",
+        "type": "static"
+    },
+    "201": {
+        "alignment": "center",
+        "countdownDuration": 60,
+        "countdownMode": "on_visible",
+        "enabled": true,
+        "fontFamily": "sans-serif",
+        "fontSize": 72,
+        "format": "mm:ss",
+        "isRichText": true,
+        "spans": [
+            {
+                "fontSize": 72,
+                "fontStyle": "normal",
+                "fontWeight": "normal",
+                "newLine": false,
+                "text": "Count: [countdown]",
+                "type": "text"
+            }
+        ],
+        "targetDatetime": "",
+        "text": "Count: [countdown]",
+        "type": "static"
+    },
+    "202": {
+        "alignment": "left",
+        "countdownDuration": 300,
+        "countdownMode": "target_datetime",
+        "enabled": true,
+        "fontFamily": "sans-serif",
+        "fontSize": 72,
+        "format": "mm:ss",
+        "isRichText": true,
+        "spans": [
+            {
+                "fontSize": 72,
+                "fontStyle": "normal",
+                "fontWeight": "normal",
+                "newLine": true,
+                "text": "[countdown]",
+                "type": "text"
+            },
+            {
+                "fontSize": 40,
+                "fontStyle": "normal",
+                "fontWeight": "normal",
+                "newLine": true,
+                "text": "",
+                "type": "text"
+            },
+            {
+                "fontSize": 40,
+                "fontStyle": "normal",
+                "fontWeight": "normal",
+                "newLine": false,
+                "text": "",
+                "type": "text"
+            },
+            {
+                "fontSize": 40,
+                "fontStyle": "normal",
+                "fontWeight": "normal",
+                "newLine": false,
+                "text": "",
+                "type": "text"
+            }
+        ],
+        "targetDatetime": "20:30:00",
+        "text": "Line1\nLine2",
+        "type": "static"
+    },
+    "203": {
+        "alignment": "center",
+        "countdownDuration": 60,
+        "countdownMode": "on_visible",
+        "enabled": true,
+        "fontFamily": "sans-serif",
+        "fontSize": 72,
+        "format": "mm:ss",
+        "isRichText": false,
+        "spans": [
+            {
+                "fontSize": 72,
+                "fontStyle": "normal",
+                "fontWeight": "normal",
+                "newLine": false,
+                "text": "",
+                "type": "text"
+            }
+        ],
+        "targetDatetime": "",
+        "text": "[countdown]",
+        "type": "static"
+    },
+    "204": {
+        "alignment": "center",
+        "countdownDuration": 300,
+        "countdownMode": "on_visible",
+        "enabled": false,
+        "fontFamily": "sans-serif",
+        "fontSize": 72,
+        "format": "mm:ss",
+        "isRichText": true,
+        "spans": [
+            {
+                "fontSize": 72,
+                "fontStyle": "normal",
+                "fontWeight": "normal",
+                "newLine": false,
+                "text": "",
+                "type": "text"
+            }
+        ],
+        "targetDatetime": "",
+        "text": "",
+        "type": "static"
+    },
+    "205": {
+        "alignment": "right",
+        "countdownDuration": 300,
+        "countdownMode": "target_datetime",
+        "enabled": true,
+        "fontFamily": "sans-serif",
+        "fontSize": 108,
+        "format": "HH:MM:SS",
+        "isRichText": false,
+        "spans": [
+            {
+                "fontSize": 72,
+                "fontStyle": "normal",
+                "fontWeight": "normal",
+                "newLine": false,
+                "text": "",
+                "type": "text"
+            }
+        ],
+        "targetDatetime": "02:00:00",
+        "text": "[clock]",
+        "type": "static"
+    }
+}

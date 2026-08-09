@@ -1,0 +1,743 @@
+/*
+ * Media's own layout. Colour, type, controls, and focus come from the shared package's tokens —
+ * nothing here restates a design decision, it only arranges what the package already styles.
+ */
+
+body {
+	margin: 0;
+	background: var(--bg);
+	color: var(--text);
+	font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.media-shell {
+	min-height: 100vh;
+	display: flex;
+	flex-direction: column;
+}
+
+.media-shell-header {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 1rem;
+	padding: 0.75rem 1rem;
+	border-bottom: 1px solid var(--line);
+	background: var(--panel);
+}
+
+.media-brand {
+	font-weight: 600;
+	letter-spacing: 0.02em;
+}
+
+.media-shell-header nav {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.25rem;
+	flex: 1;
+}
+
+.media-shell-header nav a {
+	/* Deliberately generous: this runs on a touch panel at the back of a room. */
+	padding: 0.6rem 0.9rem;
+	min-height: 44px;
+	display: inline-flex;
+	align-items: center;
+	border-radius: 6px;
+	color: var(--muted);
+	text-decoration: none;
+}
+
+.media-shell-header nav a:hover,
+.media-shell-header nav a:focus-visible {
+	color: var(--text);
+	background: var(--panel2);
+}
+
+.media-shell-header nav a[aria-current="page"] {
+	color: var(--text);
+	background: var(--panel2);
+	box-shadow: inset 0 -2px 0 var(--cyan);
+}
+
+/* Narrow enough that the header cannot be one row: the brand and the connection state share a
+   line, and the sections get a row of their own rather than one link per line. */
+@media (max-width: 640px) {
+	.media-shell-header {
+		display: grid;
+		grid-template-columns: 1fr auto;
+		gap: 0.5rem 1rem;
+	}
+
+	.media-shell-header nav {
+		grid-column: 1 / -1;
+		order: 2;
+		overflow-x: auto;
+		flex-wrap: nowrap;
+	}
+
+	.media-connection {
+		text-align: right;
+	}
+}
+
+.media-connection {
+	margin: 0;
+	color: var(--muted);
+	font-size: 0.85rem;
+}
+
+.media-connection.is-connected span {
+	color: var(--green);
+}
+
+.media-connection.is-disconnected span {
+	color: var(--red);
+}
+
+.media-shell-main {
+	padding: 1rem;
+	flex: 1;
+}
+
+.media-shell-main > h1 {
+	margin-top: 0;
+	font-size: 1.4rem;
+}
+
+.media-shell-main > h1:focus-visible {
+	outline: 2px solid var(--cyan);
+	outline-offset: 4px;
+}
+
+.media-page {
+	display: flex;
+	flex-direction: column;
+	gap: 1.25rem;
+}
+
+.media-state {
+	margin: 0;
+	padding: 0.75rem 1rem;
+	border-radius: 8px;
+	background: var(--panel);
+	border: 1px solid var(--line);
+	color: var(--muted);
+}
+
+.media-state.is-error {
+	border-color: var(--red);
+	color: var(--text);
+}
+
+.media-state.is-notice {
+	border-color: var(--amber);
+}
+
+.media-badge {
+	display: inline-block;
+	padding: 0.15rem 0.5rem;
+	border-radius: 999px;
+	font-size: 0.8rem;
+	border: 1px solid var(--line2);
+	color: var(--muted);
+}
+
+.media-badge.is-good {
+	border-color: var(--green);
+	color: var(--green);
+}
+
+.media-badge.is-busy {
+	border-color: var(--amber);
+	color: var(--amber);
+}
+
+.media-badge.is-bad {
+	border-color: var(--red);
+	color: var(--red);
+}
+
+.media-output-grid,
+.media-layer-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+	gap: 1rem;
+}
+
+.media-output-card,
+.media-layer-card {
+	display: flex;
+	flex-direction: column;
+	gap: 0.6rem;
+	padding: 1rem;
+	border: 1px solid var(--line);
+	border-radius: 10px;
+	background: var(--panel);
+}
+
+.media-output-card header,
+.media-layer-card header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.5rem;
+}
+
+.media-output-card h2,
+.media-layer-card h3 {
+	margin: 0;
+	font-size: 1rem;
+}
+
+.media-layer-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 0.25rem;
+}
+
+.media-layer-list li {
+	display: grid;
+	grid-template-columns: 1fr auto auto;
+	gap: 0.5rem;
+	align-items: center;
+	font-size: 0.9rem;
+}
+
+.media-layer-dimmer {
+	display: grid;
+	grid-template-columns: auto 1fr auto;
+	gap: 0.5rem;
+	align-items: center;
+}
+
+.media-layer-dimmer input[type="range"] {
+	width: 100%;
+	min-height: 44px;
+}
+
+.media-facts,
+.media-layer-facts {
+	display: grid;
+	grid-template-columns: auto 1fr;
+	gap: 0.25rem 1rem;
+	margin: 0;
+	font-size: 0.9rem;
+}
+
+.media-facts dt,
+.media-layer-facts dt {
+	color: var(--muted);
+}
+
+.media-facts dd,
+.media-layer-facts dd {
+	margin: 0;
+}
+
+.media-picker {
+	display: grid;
+	/* Two equal columns, never three: a squeezed folder list is unreadable on a touch panel. */
+	grid-template-columns: 1fr 1fr;
+	gap: 0.5rem;
+	align-items: end;
+}
+
+.media-picker .ui-select-trigger,
+.media-picker button {
+	width: 100%;
+}
+
+.media-address {
+	grid-column: 1 / -1;
+	margin: 0;
+	font-variant-numeric: tabular-nums;
+	color: var(--muted);
+}
+
+.media-visualizer-uses {
+	margin: 0;
+	color: var(--muted);
+	font-size: 0.85rem;
+}
+
+.media-visualizer-editor {
+	display: grid;
+	/* Wide enough that a stepper does not squeeze its own value out of view. */
+	grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+	gap: 0.6rem;
+	align-items: end;
+}
+
+.media-visualizer-editor > .media-visualizer-actions {
+	grid-column: 1 / -1;
+}
+
+.media-visualizer-flag,
+.media-visualizer-colour {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	min-height: 44px;
+	color: var(--muted);
+	font-size: 0.9rem;
+}
+
+.media-visualizer-colour input[type="color"] {
+	width: 44px;
+	height: 32px;
+	padding: 0;
+	background: none;
+	border: 1px solid var(--line2);
+	border-radius: 4px;
+}
+
+.media-visualizer-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+}
+
+.media-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 0.9rem;
+}
+
+.media-table th,
+.media-table td {
+	text-align: left;
+	padding: 0.5rem 0.6rem;
+	border-bottom: 1px solid var(--line);
+}
+
+.media-table th {
+	color: var(--muted);
+	font-weight: 500;
+}
+
+.media-folder-heading,
+.media-library-actions,
+.media-inline-editor {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: end;
+	gap: 0.5rem;
+}
+
+.media-folder-heading {
+	justify-content: space-between;
+}
+
+.media-folder-heading h2 {
+	margin: 0;
+}
+
+.media-inline-editor {
+	padding: 0.7rem;
+	background: var(--panel2);
+	border: 1px solid var(--line);
+	border-radius: 6px;
+}
+
+.media-inline-note,
+.media-inline-editor > label {
+	color: var(--muted);
+	font-size: 0.85rem;
+}
+
+.media-inline-editor input[type="file"] {
+	display: block;
+	min-height: 44px;
+	padding-top: 0.4rem;
+}
+
+.media-import-panel {
+	display: grid;
+	gap: 0.6rem;
+	padding: 0.9rem 1rem;
+	background: var(--panel);
+	border: 1px solid var(--line);
+	border-radius: 8px;
+}
+
+.media-import-panel h2,
+.media-import-panel p {
+	margin: 0;
+}
+
+.media-thumbnail {
+	display: block;
+	width: 96px;
+	height: 54px;
+	object-fit: contain;
+	background: #000;
+	border: 1px solid var(--line2);
+	border-radius: 4px;
+}
+
+.media-thumbnail-missing {
+	display: grid;
+	place-items: center;
+	width: 96px;
+	height: 54px;
+	color: var(--muted);
+	background: var(--panel2);
+	border: 1px dashed var(--line2);
+	border-radius: 4px;
+	font-size: 0.75rem;
+}
+
+/* Settings, text, audio, and the log. Every editor gets the same two-column form and the same
+   action row, so an operator who has changed one has already learnt the others. */
+
+.media-settings-section {
+	display: grid;
+	gap: 0.75rem;
+	padding: 0.9rem 1rem;
+	background: var(--panel);
+	border: 1px solid var(--line);
+	border-radius: 8px;
+}
+
+.media-settings-group {
+	display: grid;
+	gap: 0.75rem;
+}
+
+.media-settings-form {
+	display: grid;
+	gap: 0.9rem;
+}
+
+.media-settings-form fieldset {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+	gap: 0.7rem;
+	margin: 0;
+	padding: 0.8rem 1rem 1rem;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+}
+
+.media-settings-form legend {
+	padding: 0 0.4rem;
+	color: var(--muted);
+	font-size: 0.85rem;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+}
+
+.media-settings-form fieldset > .media-settings-note {
+	grid-column: 1 / -1;
+	margin: 0;
+	color: var(--muted);
+	font-size: 0.85rem;
+}
+
+.media-settings-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+}
+
+.media-text-editor {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+	gap: 0.7rem;
+	align-items: end;
+}
+
+.media-text-editor > fieldset,
+.media-text-editor > .media-settings-actions,
+.media-text-editor > .media-text-address {
+	grid-column: 1 / -1;
+}
+
+.media-text-editor > fieldset {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+	gap: 0.7rem;
+	align-items: end;
+	margin: 0;
+	padding: 0.8rem 1rem 1rem;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+}
+
+.media-text-address {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+	gap: 0.7rem;
+}
+
+.media-text-colour,
+.media-text-moment {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	min-height: 44px;
+	color: var(--muted);
+	font-size: 0.9rem;
+}
+
+.media-text-colour input[type="color"] {
+	width: 44px;
+	height: 32px;
+	padding: 0;
+	background: none;
+	border: 1px solid var(--line2);
+	border-radius: 4px;
+}
+
+.media-audio-monitor {
+	display: grid;
+	gap: 0.8rem;
+	padding: 0.9rem 1rem;
+	background: var(--panel);
+	border: 1px solid var(--line);
+	border-radius: 8px;
+}
+
+.media-audio-monitor header {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.5rem;
+}
+
+.media-audio-monitor h2 {
+	margin: 0;
+	font-size: 1rem;
+}
+
+.media-audio-bands {
+	display: grid;
+	gap: 0.35rem;
+}
+
+.media-audio-bar {
+	display: grid;
+	grid-template-columns: 5rem 1fr 3rem;
+	align-items: center;
+	gap: 0.6rem;
+	font-size: 0.85rem;
+	color: var(--muted);
+}
+
+.media-audio-bar-track {
+	height: 10px;
+	background: var(--line);
+	border-radius: 5px;
+	overflow: hidden;
+}
+
+.media-audio-bar-track > span {
+	display: block;
+	height: 100%;
+	background: var(--cyan);
+}
+
+/* Clipping is the one state a meter has to shout about. */
+.media-audio-bar-track.is-hot > span {
+	background: var(--red);
+}
+
+.media-audio-bar-value {
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+}
+
+.media-audio-waveform,
+.media-audio-spectrum {
+	width: 100%;
+	height: 90px;
+	background: var(--panel2);
+	border: 1px solid var(--line);
+	border-radius: 6px;
+}
+
+.media-audio-waveform path {
+	fill: none;
+	stroke: var(--cyan);
+	stroke-width: 1.5;
+}
+
+.media-audio-spectrum rect {
+	fill: var(--cyan);
+}
+
+.media-audio-empty {
+	margin: 0;
+	color: var(--muted);
+	font-size: 0.85rem;
+}
+
+.media-audio-beat {
+	display: inline-block;
+	width: 14px;
+	height: 14px;
+	border-radius: 50%;
+	background: var(--cyan);
+}
+
+.media-import-header {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.5rem;
+}
+
+.media-import-header h2 {
+	margin: 0;
+	font-size: 1rem;
+}
+
+.media-import-jobs {
+	display: grid;
+	gap: 0.4rem;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.media-import-job {
+	display: grid;
+	grid-template-columns: minmax(10rem, 1fr) minmax(6rem, 2fr) auto;
+	align-items: center;
+	gap: 0.6rem;
+	font-size: 0.85rem;
+}
+
+.media-import-name {
+	font-variant-numeric: tabular-nums;
+	overflow-wrap: anywhere;
+}
+
+.media-import-reason {
+	grid-column: 1 / -1;
+	color: var(--red);
+}
+
+.media-import-progress {
+	height: 10px;
+	background: var(--line);
+	border-radius: 5px;
+	overflow: hidden;
+}
+
+.media-import-progress > span {
+	display: block;
+	height: 100%;
+	background: var(--cyan);
+}
+
+/* A source whose frame count is unknown gets a moving bar rather than a made-up percentage. */
+.media-import-progress > span.is-indeterminate {
+	width: 35%;
+	animation: media-import-sliding 1.4s ease-in-out infinite;
+}
+
+@keyframes media-import-sliding {
+	from {
+		transform: translateX(-100%);
+	}
+	to {
+		transform: translateX(300%);
+	}
+}
+
+@media (max-width: 720px) {
+	.media-import-job {
+		grid-template-columns: 1fr auto;
+	}
+
+	.media-import-progress {
+		grid-column: 1 / -1;
+	}
+}
+
+.media-logs-controls {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: end;
+	gap: 0.8rem;
+}
+
+.media-log {
+	display: grid;
+	gap: 1px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	max-height: 70vh;
+	overflow: auto;
+	background: var(--panel);
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	/* A log is read as text, so it keeps a monospaced grid and its own alignment. */
+	font-family: ui-monospace, "SF Mono", Menlo, monospace;
+	font-size: 0.8rem;
+}
+
+.media-log li {
+	display: grid;
+	grid-template-columns: 4.5rem 4rem 1fr auto;
+	gap: 0.6rem;
+	padding: 0.3rem 0.6rem;
+	border-bottom: 1px solid var(--line);
+}
+
+.media-log-at,
+.media-log-level,
+.media-log-target {
+	color: var(--muted);
+}
+
+.media-log-message {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.media-log-warn .media-log-level {
+	color: var(--amber);
+}
+
+.media-log-error .media-log-level {
+	color: var(--red);
+}
+
+@media (max-width: 720px) {
+	.media-log li {
+		grid-template-columns: 4.5rem 1fr;
+	}
+
+	.media-log-target {
+		grid-column: 2;
+	}
+}
+
+.media-visually-hidden {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+	}
+}
