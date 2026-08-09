@@ -103,7 +103,7 @@ export function OutputSettings({
 			className="media-settings-section"
 			aria-label={`${output.name} output settings`}
 		>
-			<h2>{output.name} output</h2>
+			<h3>{output.name} output</h3>
 			{editing.failure && (
 				<p className="media-state is-error" role="alert">
 					{editing.failure.message}{" "}

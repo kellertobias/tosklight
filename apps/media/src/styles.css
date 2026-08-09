@@ -404,6 +404,11 @@ body {
 	border-radius: 8px;
 }
 
+.media-settings-group {
+	display: grid;
+	gap: 0.75rem;
+}
+
 .media-settings-form {
 	display: grid;
 	gap: 0.9rem;

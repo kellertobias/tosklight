@@ -124,7 +124,7 @@ export function NetworkEditor({
 
 			<div className="media-settings-actions">
 				<Button type="submit" variant="primary" loading={busy}>
-					Save
+					Save network settings
 				</Button>
 				<Button onClick={onCancel}>Cancel</Button>
 			</div>

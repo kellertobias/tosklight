@@ -10,7 +10,6 @@ import { useEditing } from "../../shared/api/editing";
 import type {
 	Health,
 	NetworkView,
-	OutputView,
 } from "../../shared/api/generated/media-wire";
 import { useHealth, useNetwork, useOutputs } from "../../shared/api/queries";
 import { BoundAddresses, NetworkEditor } from "./NetworkEditor";
@@ -26,8 +25,17 @@ export function SettingsPage() {
 
 	return (
 		<section className="media-page">
+			<p className="media-page-intro">
+				Configure this Media Server installation. Network and output changes are
+				stored here, then used after the server restarts.
+			</p>
 			<ResourceState resource={health} subject="server settings">
-				{(data) => <ServerSettings health={data} />}
+				{(data) => (
+					<article className="media-settings-section" aria-label="Server">
+						<h2>Server</h2>
+						<ServerSettings health={data} />
+					</article>
+				)}
 			</ResourceState>
 
 			{editing.failure && (
@@ -59,42 +67,29 @@ export function SettingsPage() {
 				empty="No outputs are enabled."
 			>
 				{(data) => (
-					<>
-						<table className="media-table">
-							<caption>Outputs</caption>
-							<thead>
-								<tr>
-									<th scope="col">Name</th>
-									<th scope="col">Layers</th>
-									<th scope="col">Identifier</th>
-								</tr>
-							</thead>
-							<tbody>
-								{data.map((output: OutputView) => (
-									<tr key={output.id}>
-										<td>{output.name}</td>
-										<td>{output.layerCount}</td>
-										<td>
-											<code>{output.id}</code>
-										</td>
-									</tr>
-								))}
-							</tbody>
-						</table>
-						{data.map((output: OutputView) => (
+					<section
+						className="media-settings-group"
+						aria-labelledby="outputs-heading"
+					>
+						<h2 id="outputs-heading">Outputs</h2>
+						{data.map((output) => (
 							<OutputSettings
 								key={output.id}
 								outputId={output.id}
 								outputName={output.name}
 							/>
 						))}
-					</>
+					</section>
 				)}
 			</ResourceState>
 
-			<p className="media-state is-notice">
-				The library folder is set in the server's configuration file.
-			</p>
+			<article className="media-settings-section" aria-label="Library">
+				<h2>Library</h2>
+				<p className="media-state is-notice">
+					The library folder is the <code>library.root</code> value in this
+					server's configuration file. Restart the server after changing it.
+				</p>
+			</article>
 		</section>
 	);
 }
@@ -116,6 +111,7 @@ function Network({
 }) {
 	return (
 		<article className="media-settings-section" aria-label="Network">
+			<h2>Network</h2>
 			{editing ? (
 				<NetworkEditor
 					network={network}

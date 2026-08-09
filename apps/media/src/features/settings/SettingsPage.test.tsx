@@ -38,6 +38,7 @@ describe("the settings page", () => {
 		expect(settings).toHaveTextContent("2 layers");
 		expect(settings).toHaveTextContent("sACN, universe 12, address 101");
 		expect(settings).toHaveTextContent(/next time this server starts/u);
+		expect(screen.queryByText(outputIdPattern)).not.toBeInTheDocument();
 	});
 
 	it("edits the complete output identity and makes the deferred effect explicit", async () => {
@@ -160,7 +161,9 @@ describe("the settings page", () => {
 		const artNet = screen.getByLabelText("Art-Net");
 		await userEvent.clear(artNet);
 		await userEvent.type(artNet, "192.168.1.40:6454");
-		await userEvent.click(screen.getByRole("button", { name: "Save" }));
+		await userEvent.click(
+			screen.getByRole("button", { name: "Save network settings" }),
+		);
 
 		await waitFor(() =>
 			expect(server.network.stored.artNetListen).toBe("192.168.1.40:6454"),
@@ -184,7 +187,9 @@ describe("the settings page", () => {
 			screen.getByLabelText("Speed Group stream"),
 			"192.168.1.9:9000",
 		);
-		await userEvent.click(screen.getByRole("button", { name: "Save" }));
+		await userEvent.click(
+			screen.getByRole("button", { name: "Save network settings" }),
+		);
 
 		await waitFor(() =>
 			expect(server.network.stored.speedGroupEndpoint).toBe("192.168.1.9:9000"),
@@ -210,7 +215,9 @@ describe("the settings page", () => {
 			await screen.findByRole("button", { name: "Change network settings" }),
 		);
 		await userEvent.clear(screen.getByLabelText("Speed Group stream"));
-		await userEvent.click(screen.getByRole("button", { name: "Save" }));
+		await userEvent.click(
+			screen.getByRole("button", { name: "Save network settings" }),
+		);
 
 		await waitFor(() =>
 			expect(server.network.stored.speedGroupEndpoint).toBeNull(),
@@ -230,13 +237,17 @@ describe("the settings page", () => {
 		await userEvent.click(
 			await screen.findByRole("button", { name: "Change network settings" }),
 		);
-		await userEvent.click(screen.getByRole("button", { name: "Save" }));
+		await userEvent.click(
+			screen.getByRole("button", { name: "Save network settings" }),
+		);
 
 		expect(await screen.findByRole("alert")).toHaveTextContent(
 			"citpListen is not an address",
 		);
 	});
 });
+
+const outputIdPattern = /11111111-1111-4111-8111-111111111111/u;
 
 type OutputConfiguration = {
 	id: string;
