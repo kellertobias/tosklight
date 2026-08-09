@@ -226,9 +226,10 @@ impl DeskProvider {
             .listens_on_the_network()
             .then(|| DmxReceiver::start(mappings.clone(), self.epoch));
         self.mappings = mappings;
-        self.decoder = Some(decoder);
         self.values = SceneValues::default();
         self.values.resize(scene.emitters.len());
+        decoder.initialize_motion(&scene, &mut self.values);
+        self.decoder = Some(decoder);
         self.reported_input_micros = 0;
         self.scene = Some(scene);
         self.diagnostics = diagnostics;
@@ -270,6 +271,7 @@ impl DeskProvider {
             receivers.refresh_all();
         }
         self.values.carry_over(&previous, &scene);
+        decoder.initialize_motion(&scene, &mut self.values);
         self.decoder = Some(decoder);
         self.scene = Some(scene);
         self.diagnostics = diagnostics;

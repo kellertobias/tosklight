@@ -213,6 +213,7 @@ impl FixtureMode {
                         dmx_to: max,
                         attribute,
                         priority: 0,
+                        angular_motion: None,
                         behavior: ChannelFunctionBehavior::Continuous {
                             physical_min: parameter.metadata.physical_min,
                             physical_max: parameter.metadata.physical_max,

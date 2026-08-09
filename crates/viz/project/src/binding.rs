@@ -1,7 +1,20 @@
 //! Compiled references from decoded fixture parameters back to physical DMX slots.
 
-use light_fixture::{ChannelFunction, ChannelFunctionBehavior};
+use light_fixture::{AngularMotionKind, ChannelFunction, ChannelFunctionBehavior};
 use viz_dmx::DMX_SLOTS;
+use viz_scene::PhysicalMotionTarget;
+
+pub const FALLBACK_ANGULAR_SPEED: f32 = 540.0;
+pub const FALLBACK_ANGULAR_ACCELERATION: f32 = 1_080.0;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct WheelTarget {
+    pub index: usize,
+    pub count: usize,
+    pub max_speed: f32,
+    pub acceleration: f32,
+    pub deceleration: f32,
+}
 
 /// One channel resolved to absolute universe and slot addresses.
 #[derive(Clone, Debug)]
@@ -68,6 +81,117 @@ impl ChannelRef {
             }
             _ => None,
         }
+    }
+
+    /// Decode the current function's physical motion without normalising away its raw span.
+    /// Legacy Pan/Tilt channels opt into an absolute target with deterministic fast defaults;
+    /// other rotating attributes require explicit metadata so an ordinary normalized channel is
+    /// never mistaken for degrees.
+    pub fn angular_motion_target(
+        &self,
+        frame: &[u8; DMX_SLOTS],
+        legacy_absolute: bool,
+    ) -> Option<PhysicalMotionTarget> {
+        let function = self.function(frame);
+        let motion = function.and_then(|function| function.angular_motion);
+        if motion.is_none() && !legacy_absolute {
+            return None;
+        }
+        let physical = self
+            .function_physical(frame)
+            .unwrap_or_else(|| self.physical(frame));
+        let maximum_speed = motion
+            .and_then(|motion| motion.max_speed_degrees_per_second)
+            .unwrap_or(FALLBACK_ANGULAR_SPEED);
+        let acceleration = motion
+            .and_then(|motion| motion.acceleration_degrees_per_second_squared)
+            .unwrap_or(FALLBACK_ANGULAR_ACCELERATION);
+        let deceleration = motion
+            .and_then(|motion| motion.deceleration_degrees_per_second_squared)
+            .unwrap_or(acceleration);
+        match motion.map(|motion| motion.kind) {
+            Some(AngularMotionKind::AngularVelocity) => Some(PhysicalMotionTarget::Velocity {
+                degrees_per_second: physical.clamp(-maximum_speed, maximum_speed),
+                acceleration,
+                deceleration,
+            }),
+            Some(AngularMotionKind::AbsolutePosition) | None => {
+                Some(PhysicalMotionTarget::Position {
+                    degrees: physical,
+                    max_speed: maximum_speed,
+                    acceleration,
+                    deceleration,
+                })
+            }
+        }
+    }
+
+    /// Decode the profile's exact home raw value through the same function table as live DMX.
+    pub fn angular_motion_default_target(
+        &self,
+        legacy_absolute: bool,
+    ) -> Option<PhysicalMotionTarget> {
+        let mut frame = [0_u8; DMX_SLOTS];
+        let bytes = self.default_raw.to_be_bytes();
+        let offset = bytes.len().saturating_sub(self.slots.len());
+        for (slot, byte) in self.slots.iter().zip(bytes[offset..].iter()) {
+            let index = usize::from(*slot).saturating_sub(1);
+            if let Some(destination) = frame.get_mut(index) {
+                *destination = *byte;
+            }
+        }
+        self.angular_motion_target(&frame, legacy_absolute)
+    }
+
+    /// Resolve a discrete wheel slot by function raw-range order, with dynamics authored on the
+    /// selected slot (or deterministic physical defaults for legacy profiles).
+    pub fn wheel_target(&self, frame: &[u8; DMX_SLOTS]) -> Option<WheelTarget> {
+        let selected = self.function(frame)?;
+        let mut slots = self
+            .functions
+            .iter()
+            .filter(|function| {
+                matches!(
+                    function.behavior,
+                    ChannelFunctionBehavior::Indexed { .. } | ChannelFunctionBehavior::Fixed { .. }
+                )
+            })
+            .collect::<Vec<_>>();
+        slots.sort_by_key(|function| function.dmx_from);
+        let index = slots
+            .iter()
+            .position(|function| function.id == selected.id)?;
+        let motion = selected
+            .angular_motion
+            .or_else(|| slots.iter().find_map(|function| function.angular_motion));
+        let max_speed = motion
+            .and_then(|motion| motion.max_speed_degrees_per_second)
+            .unwrap_or(FALLBACK_ANGULAR_SPEED);
+        let acceleration = motion
+            .and_then(|motion| motion.acceleration_degrees_per_second_squared)
+            .unwrap_or(FALLBACK_ANGULAR_ACCELERATION);
+        let deceleration = motion
+            .and_then(|motion| motion.deceleration_degrees_per_second_squared)
+            .unwrap_or(acceleration);
+        Some(WheelTarget {
+            index,
+            count: slots.len(),
+            max_speed,
+            acceleration,
+            deceleration,
+        })
+    }
+
+    pub fn wheel_default_target(&self) -> Option<WheelTarget> {
+        let mut frame = [0_u8; DMX_SLOTS];
+        let bytes = self.default_raw.to_be_bytes();
+        let offset = bytes.len().saturating_sub(self.slots.len());
+        for (slot, byte) in self.slots.iter().zip(bytes[offset..].iter()) {
+            if let Some(destination) = frame.get_mut(usize::from(*slot).saturating_sub(1)) {
+                *destination = *byte;
+            }
+        }
+        self.wheel_target(&frame)
     }
 }
 
@@ -136,6 +260,7 @@ mod tests {
                 dmx_to: 63,
                 attribute: AttributeKey("shutter".into()),
                 priority: 0,
+                angular_motion: None,
                 behavior: ChannelFunctionBehavior::Fixed {
                     semantic_id: "closed".into(),
                     label: "Closed".into(),
@@ -149,6 +274,7 @@ mod tests {
                 dmx_to: 200,
                 attribute: AttributeKey("shutter".into()),
                 priority: 1,
+                angular_motion: None,
                 behavior: ChannelFunctionBehavior::Continuous {
                     physical_min: 1.0,
                     physical_max: 25.0,

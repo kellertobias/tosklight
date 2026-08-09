@@ -1,13 +1,18 @@
+import { Button, NumberField, SelectField, TextField } from "@tosklight/ui";
 import type {
+	AngularMotion,
 	AttributeDescriptor,
 	ChannelFunctionBehavior,
 	FixtureChannel,
 } from "../../../api/types";
-import { Button, NumberField, SelectField, TextField } from "@tosklight/ui";
 import { maxRaw } from "../fixtureProfileModel";
 import { attributeOptions, replaceFunctionBehavior } from "./channelModel";
 
 type ChannelFunction = FixtureChannel["functions"][number];
+
+function optionalNumber(value: string): number | null {
+	return value.trim() === "" ? null : Number(value);
+}
 
 function FunctionBaseFields({
 	fn,
@@ -158,6 +163,101 @@ function FunctionBehaviorEditor({
 	);
 }
 
+function AngularMotionEditor({
+	functionValue,
+	onChange,
+}: {
+	functionValue: ChannelFunction;
+	onChange: (fn: ChannelFunction) => void;
+}) {
+	if (
+		functionValue.behavior.type !== "continuous" &&
+		functionValue.behavior.type !== "indexed"
+	)
+		return null;
+	const indexedWheelSlot = functionValue.behavior.type === "indexed";
+	const motion = functionValue.angular_motion ?? null;
+	const setMotionValue = <K extends keyof AngularMotion>(
+		key: K,
+		value: AngularMotion[K],
+	) =>
+		motion &&
+		onChange({ ...functionValue, angular_motion: { ...motion, [key]: value } });
+	return (
+		<>
+			<SelectField
+				label="Angular motion"
+				value={motion?.kind ?? ""}
+				options={[
+					{ value: "", label: "Not angular motion" },
+					{ value: "absolute_position", label: "Absolute angular position" },
+					...(indexedWheelSlot
+						? []
+						: [
+								{
+									value: "angular_velocity",
+									label: "Signed angular velocity",
+								},
+							]),
+				]}
+				onChange={(kind) =>
+					onChange({
+						...functionValue,
+						angular_motion: kind
+							? {
+									kind: kind as AngularMotion["kind"],
+									max_speed_degrees_per_second: null,
+									acceleration_degrees_per_second_squared: null,
+									deceleration_degrees_per_second_squared: null,
+								}
+							: null,
+					})
+				}
+			/>
+			{motion && (
+				<>
+					<NumberField
+						label="Maximum speed (degrees per second)"
+						allowDecimal
+						min={0}
+						value={motion.max_speed_degrees_per_second ?? ""}
+						onChange={(event) =>
+							setMotionValue(
+								"max_speed_degrees_per_second",
+								optionalNumber(event.target.value),
+							)
+						}
+					/>
+					<NumberField
+						label="Acceleration (degrees per second squared)"
+						allowDecimal
+						min={0}
+						value={motion.acceleration_degrees_per_second_squared ?? ""}
+						onChange={(event) =>
+							setMotionValue(
+								"acceleration_degrees_per_second_squared",
+								optionalNumber(event.target.value),
+							)
+						}
+					/>
+					<NumberField
+						label="Deceleration (degrees per second squared)"
+						allowDecimal
+						min={0}
+						value={motion.deceleration_degrees_per_second_squared ?? ""}
+						onChange={(event) =>
+							setMotionValue(
+								"deceleration_degrees_per_second_squared",
+								optionalNumber(event.target.value),
+							)
+						}
+					/>
+				</>
+			)}
+		</>
+	);
+}
+
 function FunctionActions({
 	fn,
 	index,
@@ -227,6 +327,7 @@ export function ChannelFunctionCard({
 				actionIds={actionIds}
 				onChange={(behavior) => onChange({ ...fn, behavior })}
 			/>
+			<AngularMotionEditor functionValue={fn} onChange={onChange} />
 			<FunctionActions
 				fn={fn}
 				index={index}

@@ -41,7 +41,10 @@ pub use scene::{
     SceneryKind, SceneryObject, SourceForm, euler_degrees,
 };
 pub use uuid;
-pub use values::{CellValue, EmitterValues, LaserScan, ScanPoint, SceneValues};
+pub use values::{
+    CellValue, EmitterValues, LaserScan, PhysicalMotionState, PhysicalMotionTarget, ScanPoint,
+    SceneValues, WheelMotionState,
+};
 pub use view::{Camera, RenderQuality, Theme, ViewConfiguration, ViewMode};
 
 /// Wire/protocol version of the semantic scene contract understood by this render core.

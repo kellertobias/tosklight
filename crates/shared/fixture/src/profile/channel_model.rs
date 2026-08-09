@@ -246,7 +246,29 @@ pub struct ChannelFunction {
     pub dmx_to: u32,
     pub attribute: AttributeKey,
     pub priority: i16,
+    /// Physical angular-motion meaning for this function. The continuous behavior's
+    /// `physical_min` and `physical_max` remain the exact DMX endpoint mapping.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub angular_motion: Option<AngularMotion>,
     pub behavior: ChannelFunctionBehavior,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AngularMotionKind {
+    AbsolutePosition,
+    AngularVelocity,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct AngularMotion {
+    pub kind: AngularMotionKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_speed_degrees_per_second: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub acceleration_degrees_per_second_squared: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deceleration_degrees_per_second_squared: Option<f32>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -281,6 +303,7 @@ impl ChannelFunction {
             dmx_to: max_raw,
             attribute,
             priority: 0,
+            angular_motion: None,
             behavior: ChannelFunctionBehavior::Continuous {
                 physical_min: 0.0,
                 physical_max: 1.0,

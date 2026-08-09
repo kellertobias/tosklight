@@ -66,6 +66,7 @@ impl Application {
             .min(0.25);
         self.last_persistence = now;
         values.apply_persistence(&self.preferences.persistence, since_last_frame);
+        values.apply_physical_motion(since_last_frame);
 
         self.overlay.clear();
         self.hotspots.clear();
