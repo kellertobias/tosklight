@@ -219,7 +219,11 @@ fn project_virtual(
                 .state
                 .output
                 .active_dynamic_playback_at(PlaybackIdentity::Virtual(address))
-                .map(|active| dynamic_runtime_projection(ports, snapshot, assignment, active)),
+                .map(|active| {
+                    Box::new(dynamic_runtime_projection(
+                        ports, snapshot, assignment, active,
+                    ))
+                }),
         },
         PlaybackTarget::Group { group_id, .. } => {
             group_projection(ports, snapshot, group_id, None)?
@@ -316,7 +320,11 @@ fn project_playback(
             runtime: PlaybackIdentity::physical(number)
                 .ok()
                 .and_then(|identity| ports.state.output.active_dynamic_playback_at(identity))
-                .map(|active| dynamic_runtime_projection(ports, snapshot, assignment, active)),
+                .map(|active| {
+                    Box::new(dynamic_runtime_projection(
+                        ports, snapshot, assignment, active,
+                    ))
+                }),
         },
         PlaybackTarget::Group { group_id, .. } => group_projection(
             ports,

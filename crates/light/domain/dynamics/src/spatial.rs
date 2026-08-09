@@ -783,11 +783,6 @@ fn cylinder_frame(
     ))
 }
 
-/// The unit direction the spherical projection is centred on, which is simply its direction.
-fn spherical_center(projection: &SpatialProjection) -> Vector3 {
-    normalize(projection.view_direction).unwrap_or(UNIT_X)
-}
-
 /// The angle in degrees between two directions, `0` through `180`.
 fn angle_between(a: Vector3, b: Vector3) -> f64 {
     dot(a, b).clamp(-1.0, 1.0).acos().to_degrees()

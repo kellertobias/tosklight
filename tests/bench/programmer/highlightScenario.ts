@@ -104,20 +104,37 @@ export function highlightOscPort(
 	hardware: Pick<OscHardware, "send">,
 	deskAlias: string,
 	api: ApiDriver,
+	options: { deliveryTimeoutMillis?: number; debounceMillis?: number } = {},
 ): HighlightActionPort {
+	const deliveryTimeoutMillis = options.deliveryTimeoutMillis ?? 2_000;
+	const debounceMillis = options.debounceMillis ?? 155;
 	let previous: { action: HighlightPowerAction; sentAt: number } | undefined;
 	return {
 		read: () => readHighlight(api),
 		act: async (action) => {
-			const now = Date.now();
-			if (previous?.action === action) {
-				const remaining = 155 - (now - previous.sentAt);
-				if (remaining > 0)
-					await new Promise<void>((resolve) => setTimeout(resolve, remaining));
+			const current = await readHighlight(api);
+			const expected = action === "toggle" ? !current.active : action === "on";
+			for (let attempt = 0; attempt < 2; attempt++) {
+				const now = Date.now();
+				if (previous?.action === action) {
+					const remaining = debounceMillis - (now - previous.sentAt);
+					if (remaining > 0)
+						await new Promise<void>((resolve) => setTimeout(resolve, remaining));
+				}
+				await hardware.send(`/light/${deskAlias}/highlight/${action}`, [true]);
+				await hardware.send(`/light/${deskAlias}/highlight/${action}`, [false]);
+				previous = { action, sentAt: Date.now() };
+				const applied = await waitForHighlightState(
+					api,
+					expected,
+					deliveryTimeoutMillis,
+				);
+				if (applied) return applied;
+				// OSC uses UDP. Only repeat after a fresh authoritative read proves
+				// that the first datagram did not cross the requested state boundary.
+				const latest = await readHighlight(api);
+				if (latest.active === expected) return latest;
 			}
-			await hardware.send(`/light/${deskAlias}/highlight/${action}`, [true]);
-			await hardware.send(`/light/${deskAlias}/highlight/${action}`, [false]);
-			previous = { action, sentAt: Date.now() };
 			return undefined;
 		},
 	};
@@ -190,6 +207,20 @@ function readHighlight(api: ApiDriver): Promise<HighlightState> {
 		undefined,
 		{ deskId: deskId(api) },
 	);
+}
+
+async function waitForHighlightState(
+	api: ApiDriver,
+	active: boolean,
+	timeoutMillis: number,
+): Promise<HighlightState | undefined> {
+	const deadline = Date.now() + timeoutMillis;
+	do {
+		const state = await readHighlight(api);
+		if (state.active === active) return state;
+		if (Date.now() >= deadline) return undefined;
+		await new Promise<void>((resolve) => setTimeout(resolve, 5));
+	} while (true);
 }
 
 function deskId(api: ApiDriver): string {

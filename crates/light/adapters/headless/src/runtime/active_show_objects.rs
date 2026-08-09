@@ -37,7 +37,9 @@ pub(super) fn put_active_show_object(
         kind,
         object_id: object_id.into(),
         expected_object_revision,
-        mutation: light_application::ActiveShowObjectMutationKind::Put { body },
+        mutation: light_application::ActiveShowObjectMutationKind::Put {
+            body: Box::new(body),
+        },
     })
 }
 

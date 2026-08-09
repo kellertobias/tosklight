@@ -256,11 +256,13 @@ fn attribute_configuration_is_a_validated_lossless_singleton() {
         object_id: "default".into(),
         expected_object_revision: 0,
         mutation: ActiveShowObjectMutationKind::Put {
-            body: ActiveShowObjectBody::decode(
-                ActiveShowObjectKind::AttributeConfiguration,
-                request.clone(),
-            )
-            .unwrap(),
+            body: Box::new(
+                ActiveShowObjectBody::decode(
+                    ActiveShowObjectKind::AttributeConfiguration,
+                    request.clone(),
+                )
+                .unwrap(),
+            ),
         },
     };
     let body = match &mutation.mutation {
@@ -322,7 +324,9 @@ fn attribute_configuration_rejects_invalid_model_and_non_default_storage_id() {
         kind: ActiveShowObjectKind::AttributeConfiguration,
         object_id: "default".into(),
         expected_object_revision: 0,
-        mutation: ActiveShowObjectMutationKind::Put { body: invalid_body },
+        mutation: ActiveShowObjectMutationKind::Put {
+            body: Box::new(invalid_body),
+        },
     };
     let body = match &invalid_mutation.mutation {
         ActiveShowObjectMutationKind::Put { body } => body,
@@ -339,7 +343,9 @@ fn attribute_configuration_rejects_invalid_model_and_non_default_storage_id() {
         kind: ActiveShowObjectKind::AttributeConfiguration,
         object_id: "other".into(),
         expected_object_revision: 0,
-        mutation: ActiveShowObjectMutationKind::Put { body: valid },
+        mutation: ActiveShowObjectMutationKind::Put {
+            body: Box::new(valid),
+        },
     };
     let body = match &wrong_id.mutation {
         ActiveShowObjectMutationKind::Put { body } => body,
@@ -504,7 +510,7 @@ fn mutation(kind: ActiveShowObjectKind, id: &str, body: Value) -> ActiveShowObje
         object_id: id.into(),
         expected_object_revision: 1,
         mutation: ActiveShowObjectMutationKind::Put {
-            body: ActiveShowObjectBody::decode(kind, body).unwrap(),
+            body: Box::new(ActiveShowObjectBody::decode(kind, body).unwrap()),
         },
     }
 }

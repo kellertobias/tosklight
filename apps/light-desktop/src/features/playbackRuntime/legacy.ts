@@ -93,6 +93,7 @@ export function legacyPlaybackRuntime(
 		normal_next_cue_number: runtime.normal_next?.number ?? null,
 		effective_next_cue_number: runtime.effective_next?.number ?? null,
 		effective_next_is_loaded: runtime.effective_next_is_loaded,
+		deleted_cue_hold: runtime.deleted_cue_hold,
 	};
 }
 

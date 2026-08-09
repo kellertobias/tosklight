@@ -829,7 +829,10 @@ mod tests {
             received_micros: 1_000,
             stale: false,
         };
-        assert_eq!(decoder.apply(&scene, &[live.clone()], &mut values, 0.0), 1);
+        assert_eq!(
+            decoder.apply(&scene, std::slice::from_ref(&live), &mut values, 0.0),
+            1
+        );
         let camera = values.external_camera.expect("camera decoded");
         assert_eq!(camera.position_metres, [0.0, 1.0, -4_194.304]);
         assert_eq!(camera.yaw_degrees, -360.0);

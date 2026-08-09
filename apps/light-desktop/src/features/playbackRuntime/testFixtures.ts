@@ -31,6 +31,7 @@ export function cueProjection(
 			normal_next: null,
 			effective_next: null,
 			effective_next_is_loaded: false,
+			deleted_cue_hold: null,
 			paused: false,
 			activated_at: "2026-07-19T10:00:00Z",
 			paused_at: null,

@@ -509,7 +509,21 @@ export class BrowserFiles {
 	}
 
 	private async expectText(path: string, text: string) {
-		await expect.poll(async () => (await this.readText(path)).text).toBe(text);
+		await expect
+			.poll(async () => {
+				try {
+					return (await this.readText(path)).text;
+				} catch (error) {
+					if (
+						error instanceof Error &&
+						error.message.includes("returned 404:") &&
+						error.message.includes('"error":"file not found"')
+					)
+						return null;
+					throw error;
+				}
+			})
+			.toBe(text);
 	}
 
 	private operation(

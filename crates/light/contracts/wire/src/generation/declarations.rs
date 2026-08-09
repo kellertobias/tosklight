@@ -723,6 +723,7 @@ fn playback_projection(config: &Config) -> Vec<String> {
         PlaybackRuntimeIdentity::decl(config),
         PlaybackShowScope::decl(config),
         PlaybackCueReference::decl(config),
+        DeletedCueHoldProjection::decl(config),
         CueTriggerTimingKind::decl(config),
         CueTriggerTimingProjection::decl(config),
         CueTimingRuntimeProjection::decl(config),

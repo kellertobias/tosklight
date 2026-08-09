@@ -187,6 +187,9 @@ pub(crate) fn send_control(
 }
 
 #[cfg(test)]
+// This application is a test-only hardware simulator. These tests are narrow
+// self-checks of the simulator's OSC encoding, not evidence of product hardware
+// behavior or operator acceptance.
 mod tests {
     use super::{control_address, json_argument};
     use light_control::OscArgument;

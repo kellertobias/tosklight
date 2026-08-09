@@ -235,16 +235,18 @@ pub(crate) fn resolve_profile_head(
             (channel.id, raw)
         }));
         return Ok(finalize_output(
-            fixture,
-            mode,
-            head,
-            owner,
-            head.head_id,
-            group_scale,
+            ProfileOutputContext {
+                fixture,
+                mode,
+                head,
+                owner,
+                head_id: head.head_id,
+                group_scale,
+                virtual_intensity,
+                requested_color: None,
+                options,
+            },
             &channels[channel_start..],
-            virtual_intensity,
-            None,
-            options,
         ));
     }
 
@@ -265,26 +267,30 @@ pub(crate) fn resolve_profile_head(
     resolve_requested_color(mode, &mut inputs, requested_color)?;
     let channel_start = channels.len();
     resolve_channels(
-        fixture,
-        mode,
-        head,
-        resolution,
-        &inputs,
-        virtual_intensity,
-        options,
+        ChannelResolutionContext {
+            fixture,
+            mode,
+            head,
+            resolution,
+            inputs: &inputs,
+            virtual_intensity,
+            options,
+        },
         channels,
     );
     Ok(finalize_output(
-        fixture,
-        mode,
-        head,
-        inputs.owner,
-        inputs.head_id,
-        inputs.group_scale,
+        ProfileOutputContext {
+            fixture,
+            mode,
+            head,
+            owner: inputs.owner,
+            head_id: inputs.head_id,
+            group_scale: inputs.group_scale,
+            virtual_intensity,
+            requested_color,
+            options,
+        },
         &channels[channel_start..],
-        virtual_intensity,
-        requested_color,
-        options,
     ))
 }
 
@@ -525,46 +531,52 @@ fn resolve_requested_color(
     Ok(())
 }
 
-fn resolve_channels(
-    fixture: &PatchedFixture,
-    mode: &FixtureMode,
-    head: &ProfileHeadPlan,
-    resolution: &BoundFixtureModeResolution<'_>,
-    inputs: &ProfileHeadInputs,
+struct ChannelResolutionContext<'a> {
+    fixture: &'a PatchedFixture,
+    mode: &'a FixtureMode,
+    head: &'a ProfileHeadPlan,
+    resolution: &'a BoundFixtureModeResolution<'a>,
+    inputs: &'a ProfileHeadInputs,
     virtual_intensity: f32,
     options: RenderOptions,
-    channels: &mut Vec<(uuid::Uuid, u32)>,
-) {
-    let intensity_master = inputs
+}
+
+fn resolve_channels(context: ChannelResolutionContext<'_>, channels: &mut Vec<(uuid::Uuid, u32)>) {
+    let intensity_master = context
+        .inputs
         .sequence_masters
         .get(&AttributeKey::intensity())
         .copied();
-    channels.extend(head.channel_indices.iter().map(|channel_index| {
-        let channel = &mode.channels[*channel_index];
-        let resolved = resolution.resolve_channel(
+    channels.extend(context.head.channel_indices.iter().map(|channel_index| {
+        let channel = &context.mode.channels[*channel_index];
+        let resolved = context.resolution.resolve_channel(
             *channel_index,
-            &inputs.values,
-            inputs.legacy_raw_highlight,
-            fixture.highlight_overrides.get(&channel.id).copied(),
+            &context.inputs.values,
+            context.inputs.legacy_raw_highlight,
+            context
+                .fixture
+                .highlight_overrides
+                .get(&channel.id)
+                .copied(),
             |active| {
                 let sequence_master =
-                    sequence_master_scale(channel, active, inputs, intensity_master);
+                    sequence_master_scale(channel, active, context.inputs, intensity_master);
                 let channel_intensity = if active.is_some_and(AttributeKey::is_intensity) {
                     1.0
                 } else {
-                    virtual_intensity
+                    context.virtual_intensity
                 };
                 ChannelScales {
                     virtual_intensity: channel_intensity,
                     sequence_master,
-                    group_master: inputs.group_scale,
-                    grand_master: grand_master(fixture, options),
+                    group_master: context.inputs.group_scale,
+                    grand_master: grand_master(context.fixture, context.options),
                 }
             },
         );
         let mut raw = resolved.raw;
-        if options.blackout {
-            raw = blackout_raw(mode, channel, raw);
+        if context.options.blackout {
+            raw = blackout_raw(context.mode, channel, raw);
         }
         (channel.id, raw)
     }))
@@ -597,29 +609,47 @@ fn grand_master(fixture: &PatchedFixture, options: RenderOptions) -> f32 {
     }
 }
 
-fn finalize_output(
-    fixture: &PatchedFixture,
-    mode: &FixtureMode,
-    head: &ProfileHeadPlan,
+struct ProfileOutputContext<'a> {
+    fixture: &'a PatchedFixture,
+    mode: &'a FixtureMode,
+    head: &'a ProfileHeadPlan,
     owner: FixtureId,
     head_id: uuid::Uuid,
     group_scale: f32,
-    channels: &[(uuid::Uuid, u32)],
     virtual_intensity: f32,
     requested_color: Option<Xyz>,
     options: RenderOptions,
+}
+
+fn finalize_output(
+    context: ProfileOutputContext<'_>,
+    channels: &[(uuid::Uuid, u32)],
 ) -> ResolvedProfileHeadOutput {
-    let physical_intensity = head
+    let physical_intensity = context
+        .head
         .intensity_channel_indices
         .iter()
-        .filter_map(|index| channel_visual_level(mode, channels, mode.channels[*index].id))
+        .filter_map(|index| {
+            channel_visual_level(context.mode, channels, context.mode.channels[*index].id)
+        })
         .reduce(f32::max);
-    let mut color = profile_visual_color(mode, head_id, channels, requested_color);
+    let mut color = profile_visual_color(
+        context.mode,
+        context.head_id,
+        channels,
+        context.requested_color,
+    );
     let intensity = physical_intensity.unwrap_or_else(|| {
-        visual_intensity(fixture, &mut color, virtual_intensity, group_scale, options)
+        visual_intensity(
+            context.fixture,
+            &mut color,
+            context.virtual_intensity,
+            context.group_scale,
+            context.options,
+        )
     });
     ResolvedProfileHeadOutput {
-        owner,
+        owner: context.owner,
         intensity,
         color,
     }

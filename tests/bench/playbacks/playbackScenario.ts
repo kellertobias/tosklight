@@ -490,8 +490,12 @@ export class BrowserPlaybacks {
 			return runtime
 				? {
 						...runtime,
+						playback_number: projection.playback_number,
 						current_cue_number: runtime.current?.number ?? null,
 						loaded_cue_number: runtime.loaded?.number ?? null,
+						normal_next_cue_number: runtime.normal_next?.number ?? null,
+						effective_next_cue_number:
+							runtime.effective_next?.number ?? null,
 					}
 				: {
 						enabled: false,

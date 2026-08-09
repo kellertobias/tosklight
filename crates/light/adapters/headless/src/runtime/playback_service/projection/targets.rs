@@ -1,9 +1,9 @@
 use light_application::{
     ActionError, CueListRuntimeProjection, CueTimingRuntimeProjection, CueTriggerTimingKind,
-    CueTriggerTimingProjection, GrandMasterRuntimeProjection, ManualXFadeDirection,
-    PlaybackCueReference, PlaybackRuntimeIdentity, PlaybackRuntimeProjection, PlaybackShowScope,
-    PlaybackTargetProjection, SoundLossReason, SoundStatus, SpeedGroupRuntimeProjection,
-    SpeedSource,
+    CueTriggerTimingProjection, DeletedCueHoldProjection, GrandMasterRuntimeProjection,
+    ManualXFadeDirection, PlaybackCueReference, PlaybackRuntimeIdentity, PlaybackRuntimeProjection,
+    PlaybackShowScope, PlaybackTargetProjection, SoundLossReason, SoundStatus,
+    SpeedGroupRuntimeProjection, SpeedSource,
 };
 use light_control::speed::{
     EffectiveSpeedSource, SoundLossReason as ControlSoundLossReason,
@@ -47,6 +47,14 @@ fn runtime_projection(status: &PlaybackRuntimeStatus) -> CueListRuntimeProjectio
             status.effective_next_cue_number,
         ),
         effective_next_is_loaded: status.effective_next_is_loaded,
+        deleted_cue_hold: playback
+            .deleted_cue_hold
+            .as_ref()
+            .map(|hold| DeletedCueHoldProjection {
+                deleted_number: hold.deleted_number,
+                previous_number: hold.previous_number,
+                next_number: hold.next_number,
+            }),
         paused: playback.paused,
         activated_at: playback.activated_at,
         paused_at: playback.paused_at,

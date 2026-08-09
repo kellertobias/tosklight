@@ -2,7 +2,7 @@
 
 This is the canonical catalog for executable acceptance coverage. Every stable ID listed here is registered in at least one repository-root Playwright test. Stable IDs must be retained when scenarios move between Rust integration tests and the Playwright browser bench. Every executable scenario records its actual action surface and oracle so a passing API-only, UI-only, integrated, or wire-protocol case is not mistaken for a different kind of coverage. Packaged desktop launchability is a CI build invariant rather than a Playwright scenario.
 
-[Testing conventions](../../testing/README.md) remain under `docs/testing`, along with the retained OSC/API contract whose incomplete assertions are not yet covered elsewhere. Implemented scenario procedures live with their repository-root Playwright tests. This catalog remains the authoritative ID and coverage index. The short **Actions** entries here are summaries, not manual procedures; do not infer missing operator gestures from them.
+[Testing conventions](../../engineering/test-map.md) are maintained in the engineering test map. Implemented scenario procedures live with their repository-root Playwright tests. This catalog remains the authoritative ID and coverage index. The short **Actions** entries here are summaries, not manual procedures; do not infer missing operator gestures from them.
 
 The Playwright bench runs an isolated server and data directory per test with a fixed application clock. Advancing virtual time renders and transmits one real output frame, allowing fades, chasers, and effects to be tested without wall-clock waits. Production mode continues to stream at its configured frame rate.
 

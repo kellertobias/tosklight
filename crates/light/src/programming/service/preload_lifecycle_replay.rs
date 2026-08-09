@@ -166,7 +166,7 @@ fn runtime_projection_retained_bytes(projection: &crate::PlaybackRuntimeProjecti
         } => size_of_val(runtime.as_ref()),
         PlaybackTargetProjection::Dynamic { runtime, .. } => {
             runtime.as_ref().map_or(0, |runtime| {
-                size_of_val(runtime)
+                size_of_val(runtime.as_ref())
                     + runtime.warning.as_ref().map_or(0, String::capacity)
                     + runtime.active.learn_intervals_millis.capacity() * size_of::<u64>()
             })

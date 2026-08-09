@@ -2685,35 +2685,17 @@ async function demonstrateBuskingAndPreload(
 	await desk.setDemoAction(
 		"At bar 16, commit the prepared look with [PRELOAD GO] and the two-second Programmer Fade.",
 	);
-	for (let attempt = 0; attempt < 3; attempt++) {
-		await desk.click(
-			keypad.getByRole("button", { name: "PRELOAD GO", exact: true }),
-		);
-		for (let step = 0; step < 8; step++) {
-			const fadeStepMillis =
-				PRODUCT_DEMO_SCRIPT.pacing.programmerFadeMillis / 8;
-			await bench.tick(fadeStepMillis);
-			await demoPause(
-				demo.page(),
-				(fadeStepMillis / 1_000) * PRODUCT_DEMO_SCRIPT.fps,
-			);
-		}
-		const state = await preloadState(api);
-		if (
-			!state.capturesValues &&
-			state.valueCount === 0 &&
-			state.playbackCount === 0
-		)
-			break;
-		if (
-			!state.capturesValues ||
-			state.valueCount === 0 ||
-			state.playbackCount === 0
-		)
-			throw new Error(
-				`Product demo PRELOAD GO reached an ambiguous partial commit: ${JSON.stringify(state)}`,
-			);
-	}
+	// Queue the running benchmark effects into the same Preload transaction so
+	// their Off actions and the operator-authored color look commit atomically.
+	// Stopping them after PRELOAD GO would make their later LTP values newer than
+	// the prepared look and obscure the very Stage state this flow is proving.
+	await stopPlannedDemoBenchmarkLook(api, showId);
+	await desk.click(
+		keypad.getByRole("button", { name: "PRELOAD GO", exact: true }),
+	);
+	// Observe the authoritative commit before advancing the deterministic clock.
+	// Otherwise the first tick can race ahead of the new Cue timing epoch and
+	// leave the two-second fade one interval short.
 	await expect
 		.poll(async () => preloadState(api))
 		.toEqual({
@@ -2721,10 +2703,18 @@ async function demonstrateBuskingAndPreload(
 			valueCount: 0,
 			playbackCount: 0,
 		});
+	for (let step = 0; step < 8; step++) {
+		const fadeStepMillis =
+			PRODUCT_DEMO_SCRIPT.pacing.programmerFadeMillis / 8;
+		await bench.tick(fadeStepMillis);
+		await demoPause(
+			demo.page(),
+			(fadeStepMillis / 1_000) * PRODUCT_DEMO_SCRIPT.fps,
+		);
+	}
 	await desk.setDemoAction(
 		"Resolve the concluding Stage proof to representative blue Wash and yellow Beam fixtures at controlled intensity.",
 	);
-	await stopPlannedDemoBenchmarkLook(api, showId);
 	if (
 		await keypad
 			.locator('[data-keypad-key="HIGH"]')

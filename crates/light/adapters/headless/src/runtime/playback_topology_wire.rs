@@ -103,6 +103,7 @@ fn application_target(
             }
         }
         wire::PlaybackTopologyTarget::Dynamic { assignment } => {
+            let assignment = *assignment;
             let definition = serde_json::from_value::<light_dynamics::DynamicDefinition>(
                 serde_json::to_value(assignment.embedded_fallback)
                     .map_err(|error| format!("Dynamic fallback is invalid: {error}"))?,

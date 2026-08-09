@@ -65,12 +65,41 @@ describe("Highlight acceptance intents", () => {
 	});
 
 	it("uses the documented desk-qualified OSC Highlight route", async () => {
-		const send = vi.fn(async () => undefined);
-		const port = highlightOscPort({ send }, "front-desk", apiDriver());
+		let state = highlightState(false);
+		const send = vi.fn(async (_address: string, arguments_: unknown[]) => {
+			if (arguments_[0] === true) state = highlightState(true);
+		});
+		const api = apiDriver();
+		vi.spyOn(api, "request").mockImplementation(async () => state);
+		const port = highlightOscPort({ send }, "front-desk", api);
 
 		await port.act("toggle");
 
 		expect(send.mock.calls).toEqual([
+			["/light/front-desk/highlight/toggle", [true]],
+			["/light/front-desk/highlight/toggle", [false]],
+		]);
+	});
+
+	it("resends one lost OSC toggle only while authority is unchanged", async () => {
+		let state = highlightState(true);
+		let presses = 0;
+		const send = vi.fn(async (_address: string, arguments_: unknown[]) => {
+			if (arguments_[0] !== true) return;
+			presses += 1;
+			if (presses === 2) state = highlightState(false);
+		});
+		const api = apiDriver();
+		vi.spyOn(api, "request").mockImplementation(async () => state);
+		const port = highlightOscPort({ send }, "front-desk", api, {
+			deliveryTimeoutMillis: 0,
+			debounceMillis: 0,
+		});
+
+		await expect(port.act("toggle")).resolves.toMatchObject({ active: false });
+		expect(send.mock.calls).toEqual([
+			["/light/front-desk/highlight/toggle", [true]],
+			["/light/front-desk/highlight/toggle", [false]],
 			["/light/front-desk/highlight/toggle", [true]],
 			["/light/front-desk/highlight/toggle", [false]],
 		]);

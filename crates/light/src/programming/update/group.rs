@@ -88,6 +88,6 @@ pub fn plan_group_update(
         target: preview.target.clone(),
         expected_revision,
         preview,
-        object: PlannedUpdateObject::Group(updated),
+        object: PlannedUpdateObject::Group(Box::new(updated)),
     })
 }

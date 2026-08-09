@@ -163,23 +163,25 @@ impl PlaybackEngine {
     fn first_identity_for_cue_list(&self, cue_list_id: CueListId) -> Option<PlaybackIdentity> {
         self.definitions
             .iter()
-            .filter_map(|(number, definition)| {
+            .filter(|(_, definition)| {
                 matches!(
                     definition.target,
                     PlaybackTarget::CueList { cue_list_id: assigned } if assigned == cue_list_id
                 )
-                .then(|| PlaybackIdentity::physical(*number).expect("registered physical number"))
+            })
+            .map(|(number, _)| {
+                PlaybackIdentity::physical(*number).expect("registered physical number")
             })
             .chain(
                 self.virtual_definitions
                     .iter()
-                    .filter_map(|(address, definition)| {
+                    .filter(|(_, definition)| {
                         matches!(
-                    definition.target,
-                    PlaybackTarget::CueList { cue_list_id: assigned } if assigned == cue_list_id
-                )
-                .then_some(PlaybackIdentity::Virtual(*address))
-                    }),
+                            definition.target,
+                            PlaybackTarget::CueList { cue_list_id: assigned } if assigned == cue_list_id
+                        )
+                    })
+                    .map(|(address, _)| PlaybackIdentity::Virtual(*address)),
             )
             .min()
     }

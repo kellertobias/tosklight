@@ -24,10 +24,10 @@ fn cue_list_mutation_drops_the_stored_zero_chaser_xfade_echo() {
                 object_id: storage_id.clone(),
                 expected_object_revision: 1,
                 mutation: ActiveShowObjectMutationKind::Put {
-                    body: typed(
+                    body: Box::new(typed(
                         ActiveShowObjectKind::CueList,
                         cue_list_body(cue_list_id, "Edited"),
-                    ),
+                    )),
                 },
             }]),
             &rig.ports,
@@ -74,10 +74,10 @@ fn committed_migration_write_backs_are_published_as_object_changes() {
                 object_id: "9".into(),
                 expected_object_revision: 0,
                 mutation: ActiveShowObjectMutationKind::Put {
-                    body: typed(
+                    body: Box::new(typed(
                         ActiveShowObjectKind::Group,
                         json!({"id":"9","name":"Unrelated","fixtures":[]}),
-                    ),
+                    )),
                 },
             }]),
             &rig.ports,

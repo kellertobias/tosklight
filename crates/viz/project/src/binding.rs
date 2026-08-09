@@ -288,7 +288,7 @@ mod tests {
         frame[..3].copy_from_slice(&[0x80, 0x00, 0x00]);
         assert_eq!(reference.camera_position_metres(&frame), Some(0.0));
         frame[..3].copy_from_slice(&[0xff, 0xff, 0xff]);
-        assert_eq!(reference.camera_position_metres(&frame), Some(4_194.3035));
+        assert_eq!(reference.camera_position_metres(&frame), Some(4_194.303_5));
     }
 
     #[test]

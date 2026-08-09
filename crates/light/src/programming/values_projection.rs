@@ -145,23 +145,23 @@ impl ProgrammingValuesContent {
             .map(|value| ((value.group_id.clone(), value.attribute.clone()), value))
             .collect::<HashMap<_, _>>();
         let dynamic_changed = !Arc::ptr_eq(&self.dynamic_values, &before.dynamic_values);
-        let before_dynamic = dynamic_changed
-            .then(|| {
-                before
-                    .dynamic_values
-                    .iter()
-                    .map(|value| ((value.fixture_id, value.attribute.clone()), value))
-                    .collect::<HashMap<_, _>>()
-            })
-            .unwrap_or_default();
-        let after_dynamic = dynamic_changed
-            .then(|| {
-                self.dynamic_values
-                    .iter()
-                    .map(|value| ((value.fixture_id, value.attribute.clone()), value))
-                    .collect::<HashMap<_, _>>()
-            })
-            .unwrap_or_default();
+        let before_dynamic = if dynamic_changed {
+            before
+                .dynamic_values
+                .iter()
+                .map(|value| ((value.fixture_id, value.attribute.clone()), value))
+                .collect::<HashMap<_, _>>()
+        } else {
+            HashMap::default()
+        };
+        let after_dynamic = if dynamic_changed {
+            self.dynamic_values
+                .iter()
+                .map(|value| ((value.fixture_id, value.attribute.clone()), value))
+                .collect::<HashMap<_, _>>()
+        } else {
+            HashMap::default()
+        };
 
         let delta = ProgrammingValuesDelta {
             fixture_values: self

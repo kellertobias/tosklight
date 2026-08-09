@@ -756,6 +756,7 @@ fn runtime_projection(show_id: ShowId, playback: u16, cue_id: Uuid) -> PlaybackR
                 normal_next: None,
                 effective_next: None,
                 effective_next_is_loaded: false,
+                deleted_cue_hold: None,
                 paused: false,
                 activated_at: Utc::now(),
                 paused_at: None,

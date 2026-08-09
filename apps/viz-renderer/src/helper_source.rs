@@ -151,6 +151,7 @@ impl HelperSource {
     }
 
     /// Where this helper may draw, if the desk has said. `None` means the whole window.
+    #[cfg(test)]
     pub fn pane(&self) -> Option<viz_helper::pane::PaneRect> {
         self.pane
     }
@@ -522,7 +523,7 @@ mod tests {
     #[test]
     fn a_helper_draws_the_whole_window_until_it_is_given_a_pane() {
         let channel = desk_channel(&[]);
-        let mut source =
+        let source =
             HelperSource::start(std::io::Cursor::new(channel), Vec::new(), "test".to_owned())
                 .expect("the handshake completes");
         assert_eq!(source.pane(), None);

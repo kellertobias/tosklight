@@ -542,8 +542,19 @@ export class ApiDriver {
 
   /** Replaces the visible command-line text against its current revision. */
   async setCommandLineText(text: string): Promise<RevisionedCommandLine> {
-    const { commandLine } = await this.getCommandLine();
-    return this.replaceCommandLine(text, commandLine.revision);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const { commandLine } = await this.getCommandLine();
+      try {
+        return await this.replaceCommandLine(text, commandLine.revision);
+      } catch (error) {
+        const isRevisionRace =
+          error instanceof Error &&
+          error.message.includes("returned 409:") &&
+          error.message.includes("command-line revision conflict");
+        if (!isRevisionRace || attempt === 1) throw error;
+      }
+    }
+    throw new Error("unreachable command-line revision retry state");
   }
 
   /**

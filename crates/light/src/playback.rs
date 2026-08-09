@@ -31,12 +31,13 @@ pub use operation::{PlaybackOperation, PlaybackOperationResult, PlaybackUnitOfWo
 pub use ports::PlaybackPorts;
 pub use projection::{
     CueListRuntimeProjection, CueTimingRuntimeProjection, CueTriggerTimingKind,
-    CueTriggerTimingProjection, DynamicPlaybackControllerStatus, DynamicPlaybackRuntimeProjection,
-    DynamicPlaybackRuntimeState, DynamicPlaybackSpeedSource, GrandMasterRuntimeProjection,
-    MAX_PLAYBACK_SNAPSHOT_IDENTITIES, ManualXFadeDirection, PlaybackCueReference,
-    PlaybackDeskProjection, PlaybackRuntimeIdentity, PlaybackRuntimeProjection,
-    PlaybackRuntimeSnapshot, PlaybackShowScope, PlaybackTargetProjection, SoundLossReason,
-    SoundStatus, SpeedGroupRuntimeProjection, SpeedSource,
+    CueTriggerTimingProjection, DeletedCueHoldProjection, DynamicPlaybackControllerStatus,
+    DynamicPlaybackRuntimeProjection, DynamicPlaybackRuntimeState, DynamicPlaybackSpeedSource,
+    GrandMasterRuntimeProjection, MAX_PLAYBACK_SNAPSHOT_IDENTITIES, ManualXFadeDirection,
+    PlaybackCueReference, PlaybackDeskProjection, PlaybackRuntimeIdentity,
+    PlaybackRuntimeProjection, PlaybackRuntimeSnapshot, PlaybackShowScope,
+    PlaybackTargetProjection, SoundLossReason, SoundStatus, SpeedGroupRuntimeProjection,
+    SpeedSource,
 };
 pub use service::PlaybackService;
 pub use telemetry::{PlaybackTelemetryDeltas, PlaybackTelemetryTick, telemetry_frame_divider};

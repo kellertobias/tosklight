@@ -116,7 +116,7 @@ pub(super) fn planned_preset(plan: AtomicUpdatePlan) -> Preset {
 
 pub(super) fn planned_group(plan: AtomicUpdatePlan) -> GroupDefinition {
     match plan.object {
-        PlannedUpdateObject::Group(group) => group,
+        PlannedUpdateObject::Group(group) => *group,
         _ => panic!("expected Group plan"),
     }
 }

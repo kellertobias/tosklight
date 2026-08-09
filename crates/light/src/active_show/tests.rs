@@ -65,7 +65,7 @@ fn group_batch_preserves_extensions_empty_state_and_ordered_membership() {
                     object_id: "7".into(),
                     expected_object_revision: 1,
                     mutation: ActiveShowObjectMutationKind::Put {
-                        body: typed(ActiveShowObjectKind::Group, ordered),
+                        body: Box::new(typed(ActiveShowObjectKind::Group, ordered)),
                     },
                 },
                 ActiveShowObjectMutation {
@@ -73,7 +73,7 @@ fn group_batch_preserves_extensions_empty_state_and_ordered_membership() {
                     object_id: "8".into(),
                     expected_object_revision: 0,
                     mutation: ActiveShowObjectMutationKind::Put {
-                        body: typed(ActiveShowObjectKind::Group, empty),
+                        body: Box::new(typed(ActiveShowObjectKind::Group, empty)),
                     },
                 },
             ]),
@@ -134,7 +134,7 @@ fn attribute_configuration_uses_one_lossless_non_deletable_default_object() {
                 object_id: "default".into(),
                 expected_object_revision: 0,
                 mutation: ActiveShowObjectMutationKind::Put {
-                    body: typed(ActiveShowObjectKind::AttributeConfiguration, body),
+                    body: Box::new(typed(ActiveShowObjectKind::AttributeConfiguration, body)),
                 },
             }]),
             &rig.ports,
@@ -204,7 +204,7 @@ fn cue_list_mutation_uses_one_prepared_boundary_and_keeps_action_context() {
         object_id: cue_list_id.0.to_string(),
         expected_object_revision: 0,
         mutation: ActiveShowObjectMutationKind::Put {
-            body: typed(ActiveShowObjectKind::CueList, body),
+            body: Box::new(typed(ActiveShowObjectKind::CueList, body)),
         },
     }]);
     let correlation_id = action.context.correlation_id;
@@ -284,7 +284,7 @@ fn playback_and_page_batch_prepares_backs_up_commits_and_installs_once() {
                     object_id: "1".into(),
                     expected_object_revision: 0,
                     mutation: ActiveShowObjectMutationKind::Put {
-                        body: typed(ActiveShowObjectKind::Playback, playback),
+                        body: Box::new(typed(ActiveShowObjectKind::Playback, playback)),
                     },
                 },
                 ActiveShowObjectMutation {
@@ -292,7 +292,7 @@ fn playback_and_page_batch_prepares_backs_up_commits_and_installs_once() {
                     object_id: "1".into(),
                     expected_object_revision: 0,
                     mutation: ActiveShowObjectMutationKind::Put {
-                        body: typed(ActiveShowObjectKind::PlaybackPage, page),
+                        body: Box::new(typed(ActiveShowObjectKind::PlaybackPage, page)),
                     },
                 },
             ]),
@@ -345,7 +345,7 @@ fn preset_address_is_validated_before_backup_and_commit() {
                 object_id: "2.1".into(),
                 expected_object_revision: 0,
                 mutation: ActiveShowObjectMutationKind::Put {
-                    body: typed(ActiveShowObjectKind::Preset, body),
+                    body: Box::new(typed(ActiveShowObjectKind::Preset, body)),
                 },
             }]),
             &rig.ports,
@@ -385,11 +385,11 @@ fn stale_member_of_a_batch_leaves_every_group_and_preset_unchanged() {
                     object_id: "1".into(),
                     expected_object_revision: 1,
                     mutation: ActiveShowObjectMutationKind::Put {
-                        body: typed(ActiveShowObjectKind::Group, {
+                        body: Box::new(typed(ActiveShowObjectKind::Group, {
                             let mut changed = group.clone();
                             changed["name"] = json!("After");
                             changed
-                        }),
+                        })),
                     },
                 },
                 ActiveShowObjectMutation {

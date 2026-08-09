@@ -505,7 +505,7 @@ impl PlaybackEngine {
         let peer_identities = self.dynamic_identities(target_id);
         let held_peers = peer_identities
             .iter()
-            .filter_map(|peer| self.dynamic_flash_states.get(&peer).copied())
+            .filter_map(|peer| self.dynamic_flash_states.get(peer).copied())
             .collect::<Vec<_>>();
         let Some(active) = self.active_dynamics.get_mut(&target_id) else {
             return Ok(PlaybackMutation::new((), PlaybackRuntimeEffect::None));

@@ -1261,11 +1261,13 @@ fn group_mutation(
                 object_id: id.into(),
                 expected_object_revision: 0,
                 mutation: crate::ActiveShowObjectMutationKind::Put {
-                    body: crate::ActiveShowObjectBody::decode(
-                        crate::ActiveShowObjectKind::Group,
-                        serde_json::to_value(group).unwrap(),
-                    )
-                    .unwrap(),
+                    body: Box::new(
+                        crate::ActiveShowObjectBody::decode(
+                            crate::ActiveShowObjectKind::Group,
+                            serde_json::to_value(group).unwrap(),
+                        )
+                        .unwrap(),
+                    ),
                 },
             }],
         },

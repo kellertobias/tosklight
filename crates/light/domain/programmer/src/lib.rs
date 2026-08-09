@@ -71,7 +71,7 @@ pub use preload_values::{
     PreloadProgrammerValueTiming, PreloadProgrammerValuesContent,
 };
 pub use presets::{Preset, PresetAddress, PresetFamily, PresetStoreMode};
-pub use registry::ProgrammerRegistry;
+pub use registry::{ActiveDynamicSessionSource, ProgrammerRegistry};
 pub use selection::{
     ProgrammerSelection, SelectionExpression, SelectionReference, SelectionReplaceError,
     SelectionRule, apply_selection_rule, resolve_selection_references,

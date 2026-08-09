@@ -461,12 +461,6 @@ async fn an_editor_with_no_document_has_nothing_to_download() {
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
-/// A profile with the channels Simple mode actually drives, so the projection is tested against
-/// fine bytes and colour rather than against a fixture that has neither.
-fn preview_profile() -> FixtureProfile {
-    preview_profile_with(light_fixture::CanonicalTransform::Identity)
-}
-
 /// The same profile, with `transform` on its colour channels, so a subtractive fixture can be
 /// tested against an additive one that is otherwise identical.
 fn preview_profile_with(transform: light_fixture::CanonicalTransform) -> FixtureProfile {

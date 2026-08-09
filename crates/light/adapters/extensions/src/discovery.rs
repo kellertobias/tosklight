@@ -400,7 +400,10 @@ pub fn effective_extensions_directory(mode: ExtensionsDirectoryMode<'_>) -> Path
 mod tests {
     use super::*;
     use crate::manifest::test_manifest;
+    use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    static NEXT_TEST_DIRECTORY: AtomicU64 = AtomicU64::new(0);
 
     struct TestDirectory(PathBuf);
     impl TestDirectory {
@@ -409,7 +412,9 @@ mod tests {
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
                 .as_nanos();
-            let path = PathBuf::from(".artifacts/tmp/extensions-host-tests").join(id.to_string());
+            let sequence = NEXT_TEST_DIRECTORY.fetch_add(1, Ordering::Relaxed);
+            let path = PathBuf::from(".artifacts/tmp/extensions-host-tests")
+                .join(format!("{}-{id}-{sequence}", std::process::id()));
             fs::create_dir_all(&path).unwrap();
             Self(path)
         }

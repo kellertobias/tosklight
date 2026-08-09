@@ -1193,11 +1193,13 @@ fn group_put(rig: &TestRig, id: &str) -> ActionEnvelope<MutateActiveShowObjectsC
                 object_id: id.into(),
                 expected_object_revision: 0,
                 mutation: ActiveShowObjectMutationKind::Put {
-                    body: ActiveShowObjectBody::decode(
-                        ActiveShowObjectKind::Group,
-                        json!({"id":id,"name":"Group","fixtures":[]}),
-                    )
-                    .unwrap(),
+                    body: Box::new(
+                        ActiveShowObjectBody::decode(
+                            ActiveShowObjectKind::Group,
+                            json!({"id":id,"name":"Group","fixtures":[]}),
+                        )
+                        .unwrap(),
+                    ),
                 },
             }],
         },

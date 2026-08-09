@@ -42,6 +42,15 @@ pub struct DynamicStartOutcome {
     pub started: bool,
 }
 
+struct ResolvedDynamicStart<'a> {
+    identity: DynamicsIdentity,
+    definition: &'a DynamicDefinition,
+    targets: Vec<FixtureId>,
+    stage_positions: HashMap<FixtureId, light_dynamics::SpatialPosition>,
+    inherited_spatial_mapping: Option<SpatialSelectionMapping>,
+    command: DynamicStartCommand,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct DynamicOffCommand {
     pub controller_id: Uuid,
@@ -215,12 +224,14 @@ impl DynamicsService {
         }
         let outcome = self.start_resolved(
             context,
-            identity,
-            definition,
-            targets,
-            stage_positions,
-            inherited_spatial_mapping,
-            command,
+            ResolvedDynamicStart {
+                identity,
+                definition,
+                targets,
+                stage_positions,
+                inherited_spatial_mapping,
+                command,
+            },
             ports,
         )?;
         self.remember(
@@ -259,12 +270,14 @@ impl DynamicsService {
         let stage_positions = snapshot.dynamic_stage_positions.as_ref().clone();
         let outcome = self.start_resolved(
             context,
-            identity,
-            definition,
-            targets,
-            stage_positions,
-            inherited_spatial_mapping,
-            command,
+            ResolvedDynamicStart {
+                identity,
+                definition,
+                targets,
+                stage_positions,
+                inherited_spatial_mapping,
+                command,
+            },
             ports,
         )?;
         self.remember(
@@ -366,14 +379,17 @@ impl DynamicsService {
     fn start_resolved(
         &self,
         context: &ActionContext,
-        identity: DynamicsIdentity,
-        definition: &DynamicDefinition,
-        targets: Vec<FixtureId>,
-        stage_positions: HashMap<FixtureId, light_dynamics::SpatialPosition>,
-        inherited_spatial_mapping: Option<SpatialSelectionMapping>,
-        command: DynamicStartCommand,
+        request: ResolvedDynamicStart<'_>,
         ports: &dyn DynamicsPorts,
     ) -> Result<DynamicStartOutcome, ActionError> {
+        let ResolvedDynamicStart {
+            identity,
+            definition,
+            targets,
+            stage_positions,
+            inherited_spatial_mapping,
+            command,
+        } = request;
         let state = self.programmers.get(identity.session).ok_or_else(|| {
             ActionError::new(ActionErrorKind::NotFound, "Programmer is unavailable")
         })?;

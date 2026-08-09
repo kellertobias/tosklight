@@ -409,10 +409,10 @@ impl<P: ExtensionApplicationPorts> ExtensionHost<P> {
 
         loop {
             drain_logs(&session.log_rx, &mut session.logs, shared);
-            if repair.load(Ordering::Acquire) {
-                if let Err(exit) = self.repair_feedback(&mut session, commands, shared, repair) {
-                    return session.requested(exit, self.limits.shutdown_timeout);
-                }
+            if repair.load(Ordering::Acquire)
+                && let Err(exit) = self.repair_feedback(&mut session, commands, shared, repair)
+            {
+                return session.requested(exit, self.limits.shutdown_timeout);
             }
             match session.child.try_wait() {
                 Ok(Some(status)) => {

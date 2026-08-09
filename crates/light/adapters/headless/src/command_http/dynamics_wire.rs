@@ -30,7 +30,7 @@ fn semantic_value(
             timing,
         } => Wire::DynamicOn {
             instance_link: *instance_link,
-            dynamic: reference(dynamic),
+            dynamic: Box::new(reference(dynamic)),
             lane_id: *lane_id,
             overrides: overrides_projection(overrides),
             timing: timing_projection(*timing),

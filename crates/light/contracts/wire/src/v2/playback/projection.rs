@@ -45,7 +45,7 @@ pub enum PlaybackTargetProjection {
         dynamic_id: Option<Uuid>,
         last_known_pool_number: u16,
         embedded: bool,
-        runtime: Option<DynamicPlaybackRuntimeProjection>,
+        runtime: Option<Box<DynamicPlaybackRuntimeProjection>>,
     },
     Group {
         group_id: String,
@@ -149,6 +149,7 @@ pub struct CueListRuntimeProjection {
     pub normal_next: Option<PlaybackCueReference>,
     pub effective_next: Option<PlaybackCueReference>,
     pub effective_next_is_loaded: bool,
+    pub deleted_cue_hold: Option<DeletedCueHoldProjection>,
     pub paused: bool,
     pub activated_at: String,
     pub paused_at: Option<String>,
@@ -169,6 +170,13 @@ pub struct CueListRuntimeProjection {
     pub manual_xfade_position: f32,
     pub manual_xfade_direction: ManualXFadeDirection,
     pub manual_xfade_progress: f32,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct DeletedCueHoldProjection {
+    pub deleted_number: f64,
+    pub previous_number: Option<f64>,
+    pub next_number: Option<f64>,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]

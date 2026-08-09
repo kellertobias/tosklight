@@ -238,7 +238,7 @@ pub enum PlaybackTopologyTarget {
         cue_list_id: Uuid,
     },
     Dynamic {
-        assignment: PlaybackTopologyDynamicAssignment,
+        assignment: Box<PlaybackTopologyDynamicAssignment>,
     },
     Group {
         group_id: String,

@@ -110,6 +110,16 @@
             }
           ]
         },
+        "deleted_cue_hold": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DeletedCueHoldProjection"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "effective_next": {
           "anyOf": [
             {
@@ -225,6 +235,7 @@
         "normal_next",
         "effective_next",
         "effective_next_is_loaded",
+        "deleted_cue_hold",
         "paused",
         "activated_at",
         "paused_at",
@@ -338,6 +349,34 @@
         "kind",
         "started_at",
         "duration_millis"
+      ]
+    },
+    "DeletedCueHoldProjection": {
+      "type": "object",
+      "properties": {
+        "deleted_number": {
+          "type": "number",
+          "format": "double"
+        },
+        "next_number": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "previous_number": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        }
+      },
+      "required": [
+        "deleted_number",
+        "previous_number",
+        "next_number"
       ]
     },
     "DynamicPlaybackControllerStatus": {

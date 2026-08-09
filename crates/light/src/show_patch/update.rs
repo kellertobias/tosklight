@@ -119,10 +119,10 @@ fn require_root(update: &PatchFixtureUpdateIntent) -> Result<(), ActionError> {
     }
 }
 
-fn exact_copy<'a>(
-    patch: &'a mut PatchedFixturePatch,
+fn exact_copy(
+    patch: &mut PatchedFixturePatch,
     instance_id: Option<uuid::Uuid>,
-) -> Result<Option<&'a mut MultiPatchInstance>, ActionError> {
+) -> Result<Option<&mut MultiPatchInstance>, ActionError> {
     let Some(instance_id) = instance_id else {
         return Ok(None);
     };

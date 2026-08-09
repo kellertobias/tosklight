@@ -69,7 +69,7 @@ pub enum ProgrammingDynamicSemanticValue {
     },
     DynamicOn {
         instance_link: Uuid,
-        dynamic: DynamicReferenceProjection,
+        dynamic: Box<DynamicReferenceProjection>,
         lane_id: Uuid,
         overrides: DynamicInstanceOverridesProjection,
         timing: DynamicValueTimingProjection,

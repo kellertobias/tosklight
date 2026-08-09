@@ -111,6 +111,7 @@ export class BrowserCommandHistory {
 
 	private async enter(value: string): Promise<void> {
 		const page = this.browser();
+		const historyLength = (await this.entries()).length;
 		const input = page.getByRole("textbox", {
 			name: "Command line",
 			exact: true,
@@ -121,6 +122,9 @@ export class BrowserCommandHistory {
 			await this.desk.click(page.locator(".command-escape:visible").first());
 		await input.fill(value);
 		await input.press("Enter");
+		await expect
+			.poll(async () => (await this.entries()).length)
+			.toBe(historyLength + 1);
 	}
 
 	private entries(): Promise<CommandHistoryEntry[]> {

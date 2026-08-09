@@ -7,7 +7,7 @@ use chrono::{DateTime, Utc};
 use light_core::{FixtureId, SharedClock};
 use light_fixture::{HighlightLook, HighlightLookCompatibility};
 use light_playback::PlaybackEngine;
-use light_programmer::{HighlightOutputLayer, ProgrammerRegistry};
+use light_programmer::{ActiveDynamicSessionSource, HighlightOutputLayer, ProgrammerRegistry};
 use parking_lot::{Mutex, RwLock};
 use std::{
     collections::HashMap,
@@ -45,12 +45,7 @@ pub struct Engine {
 #[derive(Default)]
 struct DynamicProgrammerCache {
     signature: Vec<(uuid::Uuid, i16, usize, usize, usize, usize)>,
-    sources: Vec<(
-        uuid::Uuid,
-        i16,
-        Arc<Vec<light_dynamics::DynamicAddressValue>>,
-        Arc<Vec<light_dynamics::DynamicAddressValue>>,
-    )>,
+    sources: Vec<ActiveDynamicSessionSource>,
     values: Arc<Vec<(uuid::Uuid, i16, light_dynamics::DynamicAddressValue)>>,
 }
 

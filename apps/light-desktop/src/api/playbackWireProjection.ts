@@ -160,6 +160,29 @@ function decodeCueRuntime(
 			runtime.effective_next_is_loaded,
 			`${path}.effective_next_is_loaded`,
 		),
+		deleted_cue_hold: nullable(
+			runtime.deleted_cue_hold,
+			`${path}.deleted_cue_hold`,
+			(value, holdPath) => {
+				const hold = recordAt(value, holdPath);
+				return {
+					deleted_number: numberAt(
+						hold.deleted_number,
+						`${holdPath}.deleted_number`,
+					),
+					previous_number: nullable(
+						hold.previous_number,
+						`${holdPath}.previous_number`,
+						numberAt,
+					),
+					next_number: nullable(
+						hold.next_number,
+						`${holdPath}.next_number`,
+						numberAt,
+					),
+				};
+			},
+		),
 		paused: booleanAt(runtime.paused, `${path}.paused`),
 		activated_at: stringAt(runtime.activated_at, `${path}.activated_at`),
 		paused_at: nullable(runtime.paused_at, `${path}.paused_at`, stringAt),

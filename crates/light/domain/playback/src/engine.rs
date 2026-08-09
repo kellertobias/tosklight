@@ -138,10 +138,10 @@ impl PlaybackEngine {
             PlaybackTarget::CueList { cue_list_id } => Some(*cue_list_id),
             _ => None,
         };
-        if let Some(cue_list_id) = cue_list_id {
-            if !self.cue_lists.contains_key(&cue_list_id) {
-                return Err("playback cue list does not exist".into());
-            }
+        if let Some(cue_list_id) = cue_list_id
+            && !self.cue_lists.contains_key(&cue_list_id)
+        {
+            return Err("playback cue list does not exist".into());
         }
         self.definitions.insert(definition.number, definition);
         Ok(())
@@ -331,18 +331,17 @@ impl PlaybackEngine {
         let group_id = group_id.clone();
         let identity = PlaybackIdentity::physical(number)?;
         let mut control_changed = false;
-        if !self.control_states.contains_key(&identity) {
-            self.control_states.insert(
-                identity,
-                PlaybackControlState {
+        let state = match self.control_states.entry(identity) {
+            std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
+            std::collections::hash_map::Entry::Vacant(entry) => {
+                control_changed = true;
+                entry.insert(PlaybackControlState {
                     fader_pickup_required: true,
                     fader_pickup_target: Some(authoritative),
                     ..PlaybackControlState::default()
-                },
-            );
-            control_changed = true;
-        }
-        let state = self.control_states.entry(identity).or_default();
+                })
+            }
+        };
         let previous = state.fader_position;
         let was_observed = state.observed;
         control_changed |= !was_observed || previous != value;

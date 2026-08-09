@@ -586,7 +586,7 @@ pub struct ActiveShowObjectMutation {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ActiveShowObjectMutationKind {
-    Put { body: ActiveShowObjectBody },
+    Put { body: Box<ActiveShowObjectBody> },
     Delete,
 }
 

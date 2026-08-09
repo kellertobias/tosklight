@@ -240,28 +240,31 @@ export class BrowserRoutedSelection {
 			return;
 		}
 		const before = (await this.api.getCommandLine()).commandLine.revision;
-		const mark = this.hardware.mark();
-		await this.hardware.send(address, [true]);
-		await this.hardware.expectAfter(
-			mark,
-			`/light/${alias}/feedback/command-line`,
-		);
-		await this.waitForCommandLineRevision(before, key);
-	}
-
-	private async waitForCommandLineRevision(
-		before: number,
-		key: KeypadKey,
-	): Promise<void> {
-		const deadline = Date.now() + 2_000;
-		do {
-			if ((await this.api.getCommandLine()).commandLine.revision > before)
-				return;
-			await new Promise<void>((resolve) => setTimeout(resolve, 5));
-		} while (Date.now() < deadline);
+		for (let attempt = 0; attempt < 2; attempt++) {
+			const mark = this.hardware.mark();
+			await this.hardware.send(address, [true]);
+			await this.hardware.expectAfter(
+				mark,
+				`/light/${alias}/feedback/command-line`,
+			);
+			if (await this.commandLineRevisionAdvanced(before)) return;
+			// UDP does not guarantee delivery. Re-read the authoritative revision
+			// before one bounded resend so an applied key can never be duplicated.
+			if ((await this.api.getCommandLine()).commandLine.revision > before) return;
+		}
 		throw new Error(
 			`Timed out waiting for OSC Programmer key ${key} to advance command-line revision ${before}`,
 		);
+	}
+
+	private async commandLineRevisionAdvanced(before: number): Promise<boolean> {
+		const deadline = Date.now() + 2_000;
+		do {
+			if ((await this.api.getCommandLine()).commandLine.revision > before)
+				return true;
+			await new Promise<void>((resolve) => setTimeout(resolve, 5));
+		} while (Date.now() < deadline);
+		return false;
 	}
 
 	private async transportAuthority(): Promise<SelectionTransportAuthority> {

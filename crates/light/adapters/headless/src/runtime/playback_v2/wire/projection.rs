@@ -96,7 +96,8 @@ pub(super) fn target_projection(
                     effective_speed_multiplier: runtime.effective_speed_multiplier,
                     effective_duration_millis: runtime.effective_duration_millis,
                     warning: runtime.warning.clone(),
-                }),
+                })
+                .map(Box::new),
         },
         App::Group {
             group_id,
@@ -138,6 +139,13 @@ fn cue_list_runtime(
         normal_next: runtime.normal_next.as_ref().map(cue_reference),
         effective_next: runtime.effective_next.as_ref().map(cue_reference),
         effective_next_is_loaded: runtime.effective_next_is_loaded,
+        deleted_cue_hold: runtime.deleted_cue_hold.as_ref().map(|hold| {
+            wire::DeletedCueHoldProjection {
+                deleted_number: hold.deleted_number,
+                previous_number: hold.previous_number,
+                next_number: hold.next_number,
+            }
+        }),
         paused: runtime.paused,
         activated_at: runtime.activated_at.to_rfc3339(),
         paused_at: runtime.paused_at.map(|at| at.to_rfc3339()),

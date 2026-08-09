@@ -238,7 +238,7 @@ fn validate_confirmed_cue_identity(command: &ProgrammingUpdateCommand) -> Result
 enum StoredUpdateObject {
     CueList(CueList),
     Preset(Preset),
-    Group(GroupDefinition),
+    Group(Box<GroupDefinition>),
 }
 
 fn plan_document<'a>(
@@ -299,7 +299,7 @@ fn plan_document<'a>(
                 content,
             )
             .map_err(update_error)?;
-            Ok((object, StoredUpdateObject::Group(group), plan))
+            Ok((object, StoredUpdateObject::Group(Box::new(group)), plan))
         }
         _ => Err(invalid("Update mode does not match its target family")),
     }

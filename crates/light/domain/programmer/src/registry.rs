@@ -8,6 +8,13 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+pub type ActiveDynamicSessionSource = (
+    uuid::Uuid,
+    i16,
+    Arc<Vec<light_dynamics::DynamicAddressValue>>,
+    Arc<Vec<light_dynamics::DynamicAddressValue>>,
+);
+
 #[derive(Clone)]
 pub struct ProgrammerRegistry {
     pub(crate) states: Arc<RwLock<HashMap<SessionId, ProgrammerState>>>,
@@ -525,14 +532,7 @@ impl ProgrammerRegistry {
             })
             .collect()
     }
-    pub fn active_dynamic_sources_for_sessions(
-        &self,
-    ) -> Vec<(
-        uuid::Uuid,
-        i16,
-        Arc<Vec<light_dynamics::DynamicAddressValue>>,
-        Arc<Vec<light_dynamics::DynamicAddressValue>>,
-    )> {
+    pub fn active_dynamic_sources_for_sessions(&self) -> Vec<ActiveDynamicSessionSource> {
         let states = self.states.read();
         self.sessions
             .read()

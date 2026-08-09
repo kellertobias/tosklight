@@ -11,7 +11,7 @@ use super::model::{CueSource, UpdatePreview, UpdateTargetIdentity};
 pub enum PlannedUpdateObject {
     CueList(CueList),
     Preset(Preset),
-    Group(GroupDefinition),
+    Group(Box<GroupDefinition>),
 }
 
 /// A complete, single-object mutation. Existing Only may alter events in several Cues, but the

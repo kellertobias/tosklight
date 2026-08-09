@@ -151,6 +151,11 @@ export interface PlaybackSnapshot {
 		normal_next_cue_number?: number | null;
 		effective_next_cue_number?: number | null;
 		effective_next_is_loaded?: boolean;
+		deleted_cue_hold?: {
+			deleted_number: number;
+			previous_number?: number | null;
+			next_number?: number | null;
+		} | null;
 	}>;
 	desk: ControlDesk;
 	active_page: number;

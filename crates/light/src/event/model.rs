@@ -137,7 +137,7 @@ pub enum DeliveryPolicy {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum PlaybackEvent {
-    RuntimeChanged(PlaybackRuntimeChange),
+    RuntimeChanged(Box<PlaybackRuntimeChange>),
     SpeedGroupsChanged(SpeedGroupChange),
     TelemetrySampled(crate::PlaybackTelemetryTick),
 }
@@ -597,7 +597,7 @@ impl EventDraft {
             } else {
                 DeliveryPolicy::Replaceable
             },
-            payload: ApplicationEvent::Playback(PlaybackEvent::RuntimeChanged(change)),
+            payload: ApplicationEvent::Playback(PlaybackEvent::RuntimeChanged(Box::new(change))),
         }
     }
 

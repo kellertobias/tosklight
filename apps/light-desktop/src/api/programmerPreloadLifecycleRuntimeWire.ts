@@ -147,6 +147,7 @@ function assertCueRuntime(value: unknown, path: string) {
 		"normal_next",
 		"effective_next",
 		"effective_next_is_loaded",
+		"deleted_cue_hold",
 		"paused",
 		"activated_at",
 		"paused_at",
@@ -170,6 +171,12 @@ function assertCueRuntime(value: unknown, path: string) {
 	for (const key of ["current", "loaded", "normal_next", "effective_next"])
 		if (runtime[key] != null)
 			exactRecordAt(runtime[key], `${path}.${key}`, ["id", "number"]);
+	if (runtime.deleted_cue_hold != null)
+		exactRecordAt(runtime.deleted_cue_hold, `${path}.deleted_cue_hold`, [
+			"deleted_number",
+			"previous_number",
+			"next_number",
+		]);
 	if (runtime.cue_timing != null)
 		assertCueTiming(runtime.cue_timing, `${path}.cue_timing`);
 }

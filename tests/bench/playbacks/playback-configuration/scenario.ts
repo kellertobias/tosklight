@@ -192,8 +192,13 @@ export class BrowserPlaybackConfiguration {
 		await openPlaybackMode(this.page);
 		const target = (await playbackAt(this.api, 1, slot)).body.target;
 		const slider = playbackSlider(this.page, slot);
-		if (target.type === "group" || target.type === "grand_master")
+		if (target.type === "group" || target.type === "grand_master") {
+			// A newly assigned master requires physical pickup at its authoritative
+			// 100% level. Move away first so filling 100 emits a real input event even
+			// when the rendered slider already displays that value.
+			await slider.fill("99");
 			await slider.fill("100");
+		}
 		await slider.fill(String(value * 100));
 		if (target.type === "group")
 			await expect

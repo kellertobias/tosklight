@@ -279,63 +279,56 @@ fn the_desk_asks_for_a_pane_and_the_renderer_draws_one() {
     );
 
     // The renderer has a scene of nothing, which still draws: an empty stage is a picture.
-    let deadline = Instant::now() + PATIENCE;
-    loop {
-        assert!(
-            Instant::now() < deadline,
-            "the renderer never produced a picture within {PATIENCE:?}"
-        );
-        match next(&mut from_renderer) {
-            FromHelper::Surface { width, height, .. } => {
-                assert_eq!(
-                    transport,
-                    FrameTransport::Shared,
-                    "a surface arrived for a transport that never asked for one"
-                );
-                // 640x360 points at 2x is the pane in the display's own pixels.
-                assert_eq!((width, height), (1_280, 720));
-                // The right travels out of band, because a surface has no name this channel can
-                // carry. Opening it is the whole claim of the shared transport.
-                #[cfg(target_os = "macos")]
-                {
-                    let rendezvous = rendezvous.as_ref().expect("a rendezvous was opened");
-                    let port = rendezvous
-                        .receive(Duration::from_secs(5))
-                        .expect("receiving the right")
-                        .expect("the renderer sent one");
-                    let device = test_device().expect("a device to open it with");
-                    let opened = viz_surface::import_from_port(&device, port, width, height);
-                    assert!(opened.is_ok(), "{:?}", opened.err());
-                }
-                return;
+    match next(&mut from_renderer) {
+        FromHelper::Surface { width, height, .. } => {
+            assert_eq!(
+                transport,
+                FrameTransport::Shared,
+                "a surface arrived for a transport that never asked for one"
+            );
+            // 640x360 points at 2x is the pane in the display's own pixels.
+            assert_eq!((width, height), (1_280, 720));
+            // The right travels out of band, because a surface has no name this channel can
+            // carry. Opening it is the whole claim of the shared transport.
+            #[cfg(target_os = "macos")]
+            {
+                let rendezvous = rendezvous.as_ref().expect("a rendezvous was opened");
+                let port = rendezvous
+                    .receive(Duration::from_secs(5))
+                    .expect("receiving the right")
+                    .expect("the renderer sent one");
+                let device = test_device().expect("a device to open it with");
+                let opened = viz_surface::import_from_port(&device, port, width, height);
+                assert!(opened.is_ok(), "{:?}", opened.err());
             }
-            FromHelper::Frame {
-                width,
-                height,
-                rgba,
-            } => {
-                assert_eq!(
-                    transport,
-                    FrameTransport::Copy,
-                    "pixels arrived for a transport that shares a surface"
-                );
-                assert_eq!((width, height), (1_280, 720));
-                assert_eq!(rgba.len(), 1_280 * 720 * 4, "a full pane of RGBA");
-                // One frame could be a one-shot. The pane is a loop, so a second has to follow
-                // without the desk asking for it.
-                let FromHelper::Frame { width, height, .. } = next(&mut from_renderer) else {
-                    panic!("the renderer drew once and stopped");
-                };
-                assert_eq!((width, height), (1_280, 720));
-                return;
-            }
-            // No GPU on this machine. That is a machine without an adapter, not a broken pane.
-            FromHelper::Error { detail } | FromHelper::Stopping { detail } => {
-                eprintln!("the renderer could not draw here: {detail}");
-                return;
-            }
-            other => panic!("unexpected answer while waiting for a picture: {other:?}"),
+            return;
         }
+        FromHelper::Frame {
+            width,
+            height,
+            rgba,
+        } => {
+            assert_eq!(
+                transport,
+                FrameTransport::Copy,
+                "pixels arrived for a transport that shares a surface"
+            );
+            assert_eq!((width, height), (1_280, 720));
+            assert_eq!(rgba.len(), 1_280 * 720 * 4, "a full pane of RGBA");
+            // One frame could be a one-shot. The pane is a loop, so a second has to follow
+            // without the desk asking for it.
+            let FromHelper::Frame { width, height, .. } = next(&mut from_renderer) else {
+                panic!("the renderer drew once and stopped");
+            };
+            assert_eq!((width, height), (1_280, 720));
+            return;
+        }
+        // No GPU on this machine. That is a machine without an adapter, not a broken pane.
+        FromHelper::Error { detail } | FromHelper::Stopping { detail } => {
+            eprintln!("the renderer could not draw here: {detail}");
+            return;
+        }
+        other => panic!("unexpected answer while waiting for a picture: {other:?}"),
     }
 }
 
