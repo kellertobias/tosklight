@@ -91,6 +91,22 @@ pub struct EmitterBinding {
     pub laser_window: Option<LaserWindow>,
 }
 
+/// The one fully patched virtual-camera fixture a dedicated external Visualizer may follow.
+#[derive(Clone, Debug)]
+pub struct ExternalCameraBinding {
+    pub fixture_id: Uuid,
+    pub instance_id: Uuid,
+    pub label: String,
+    pub x: ChannelRef,
+    pub y: ChannelRef,
+    pub z: ChannelRef,
+    pub yaw: ChannelRef,
+    pub pitch: ChannelRef,
+    pub roll: ChannelRef,
+    pub zoom: ChannelRef,
+    pub universes: Vec<u16>,
+}
+
 /// A laser fixture's raw DMX footprint, resolved to absolute addresses.
 #[derive(Clone, Debug)]
 pub struct LaserWindow {
@@ -203,6 +219,9 @@ impl EmitterMount {
 pub struct ScenePlan {
     pub scene: Scene,
     pub bindings: Vec<EmitterBinding>,
+    pub external_camera: Option<ExternalCameraBinding>,
+    /// Actionable reason no DMX camera was selected when camera fixtures were ambiguous/invalid.
+    pub external_camera_issue: Option<String>,
     pub warnings: Vec<String>,
 }
 
@@ -270,6 +289,8 @@ fn resolve_model(
 pub fn compile(fixtures: &[PatchedFixture]) -> ScenePlan {
     let mut scene = Scene::default();
     let mut bindings = Vec::new();
+    let mut external_camera = None;
+    let mut external_camera_issue = None;
     let mut warnings = Vec::new();
     let mut models: std::collections::HashMap<light_core::FixtureId, Option<u32>> =
         std::collections::HashMap::new();
@@ -439,6 +460,32 @@ pub fn compile(fixtures: &[PatchedFixture]) -> ScenePlan {
                 own
             };
             let channels = compile_channels(mode, &primary_slots, &addresses);
+            match external_camera_binding(fixture, instance, mode, &channels) {
+                Ok(Some(candidate))
+                    if external_camera.is_none() && external_camera_issue.is_none() =>
+                {
+                    external_camera = Some(candidate);
+                }
+                Ok(Some(candidate)) => {
+                    let first = external_camera
+                        .as_ref()
+                        .map(|binding: &ExternalCameraBinding| binding.label.as_str())
+                        .unwrap_or("another camera fixture");
+                    let detail = format!(
+                        "{} and {} both request the dedicated external 3D Visualizer camera; only one is supported, so DMX camera routing is disabled",
+                        first, candidate.label
+                    );
+                    external_camera = None;
+                    external_camera_issue = Some(detail.clone());
+                    warnings.push(detail);
+                }
+                Ok(None) => {}
+                Err(detail) => {
+                    external_camera = None;
+                    external_camera_issue = Some(detail.clone());
+                    warnings.push(detail);
+                }
+            }
             build_emitters(
                 &mut scene,
                 &mut bindings,
@@ -459,8 +506,74 @@ pub fn compile(fixtures: &[PatchedFixture]) -> ScenePlan {
     ScenePlan {
         scene,
         bindings,
+        external_camera,
+        external_camera_issue,
         warnings,
     }
+}
+
+fn external_camera_binding(
+    fixture: &PatchedFixture,
+    instance: &PhysicalInstance,
+    mode: &FixtureMode,
+    channels: &HashMap<Uuid, ChannelRef>,
+) -> Result<Option<ExternalCameraBinding>, String> {
+    let mut found: HashMap<&str, ChannelRef> = HashMap::new();
+    for channel in &mode.channels {
+        let identity = [
+            channel.attribute.0.as_str(),
+            channel.fixture_attribute.0.as_str(),
+        ]
+        .into_iter()
+        .find(|identity| identity.starts_with("camera."));
+        let Some(identity) = identity else { continue };
+        if let Some(reference) = channels.get(&channel.id) {
+            found.entry(identity).or_insert_with(|| reference.clone());
+        }
+    }
+    // A declared but unpatched virtual camera has no authority and leaves the last pose alone.
+    if found.is_empty() {
+        return Ok(None);
+    }
+    let label = format!("{} ({})", instance.name, fixture.profile.name);
+    let mut take = |identity: &'static str, bytes: usize| -> Result<ChannelRef, String> {
+        let reference = found
+            .remove(identity)
+            .ok_or_else(|| format!("{label} camera mode is missing {identity}"))?;
+        if reference.slots.len() != bytes {
+            return Err(format!(
+                "{label} {identity} must use {bytes} DMX bytes, got {}",
+                reference.slots.len()
+            ));
+        }
+        Ok(reference)
+    };
+    let x = take("camera.position.x", 3)?;
+    let y = take("camera.position.y", 3)?;
+    let z = take("camera.position.z", 3)?;
+    let yaw = take("camera.yaw", 2)?;
+    let pitch = take("camera.pitch", 2)?;
+    let roll = take("camera.roll", 2)?;
+    let zoom = take("camera.zoom", 2)?;
+    let mut universes = [&x, &y, &z, &yaw, &pitch, &roll, &zoom]
+        .into_iter()
+        .map(|reference| reference.logical_universe)
+        .collect::<Vec<_>>();
+    universes.sort_unstable();
+    universes.dedup();
+    Ok(Some(ExternalCameraBinding {
+        fixture_id: fixture.fixture_id,
+        instance_id: instance.instance_id,
+        label,
+        x,
+        y,
+        z,
+        yaw,
+        pitch,
+        roll,
+        zoom,
+        universes,
+    }))
 }
 
 /// Resolve the selected mode and its primary-slot map, recording a fixture-scoped warning when
@@ -1115,6 +1228,81 @@ mod model_tests {
                 installed_appearance: InstalledFixtureAppearance::default(),
             }],
         }
+    }
+
+    fn camera_fixture(name: &str, address: u16) -> PatchedFixture {
+        let mut fixture = patched("camera", ProfileOptics::default());
+        fixture.name = name.into();
+        fixture.instances[0].name = name.into();
+        fixture.instances[0].split_patches = vec![(1, Some((1, address)))];
+        let profile = Arc::get_mut(&mut fixture.profile).expect("sole profile owner");
+        profile.name = "Virtual Camera".into();
+        let mode = &mut profile.modes[0];
+        mode.splits[0].footprint = 17;
+        let head_id = mode.heads[0].id;
+        let definitions = [
+            ("camera.position.x", ChannelResolution::U24, 1, vec![2, 3]),
+            ("camera.position.y", ChannelResolution::U24, 4, vec![5, 6]),
+            ("camera.position.z", ChannelResolution::U24, 7, vec![8, 9]),
+            ("camera.yaw", ChannelResolution::U16, 10, vec![11]),
+            ("camera.pitch", ChannelResolution::U16, 12, vec![13]),
+            ("camera.roll", ChannelResolution::U16, 14, vec![15]),
+            ("camera.zoom", ChannelResolution::U16, 16, vec![17]),
+        ];
+        mode.channels = definitions
+            .into_iter()
+            .map(
+                |(identity, resolution, _primary, secondary_slots)| FixtureChannel {
+                    id: Uuid::new_v4(),
+                    head_id,
+                    split: 1,
+                    fixture_attribute: AttributeKey(identity.into()),
+                    attribute: AttributeKey(identity.into()),
+                    canonical_transform: CanonicalTransform::Identity,
+                    resolution,
+                    secondary_slots,
+                    default_raw: 0,
+                    highlight_raw: 0,
+                    physical_min: None,
+                    physical_max: None,
+                    unit: None,
+                    invert: false,
+                    snap: false,
+                    reacts_to_virtual_intensity: false,
+                    reacts_to_sequence_master: false,
+                    reacts_to_group_master: false,
+                    reacts_to_grand_master: false,
+                    behavior: ChannelBehavior::Controlled,
+                    functions: Vec::new(),
+                },
+            )
+            .collect();
+        fixture
+    }
+
+    #[test]
+    fn one_complete_camera_binds_all_seventeen_slots_and_a_second_disables_routing() {
+        let first = camera_fixture("Camera 1", 1);
+        let single = compile(std::slice::from_ref(&first));
+        let camera = single.external_camera.expect("one camera is routable");
+        assert_eq!(camera.x.slots, vec![1, 2, 3]);
+        assert_eq!(camera.y.slots, vec![4, 5, 6]);
+        assert_eq!(camera.z.slots, vec![7, 8, 9]);
+        assert_eq!(camera.yaw.slots, vec![10, 11]);
+        assert_eq!(camera.pitch.slots, vec![12, 13]);
+        assert_eq!(camera.roll.slots, vec![14, 15]);
+        assert_eq!(camera.zoom.slots, vec![16, 17]);
+
+        let multiple = compile(&[first, camera_fixture("Camera 2", 20)]);
+        assert!(
+            multiple.external_camera.is_none(),
+            "ambiguous DMX is never routed"
+        );
+        let issue = multiple
+            .external_camera_issue
+            .expect("actionable unsupported state");
+        assert!(issue.contains("Camera 1") && issue.contains("Camera 2"));
+        assert!(issue.contains("only one is supported"));
     }
 
     /// A bank of lamps on one address is a bank of lamps, not one lamp and three dark ones.

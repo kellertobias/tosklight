@@ -10,7 +10,7 @@ mod quick_settings;
 mod status;
 
 pub use quick_settings::{QuickSettings, QuickSettingsOutcome, Row, build_quick_settings};
-pub use status::{StatusModel, build_plot_labels, build_status};
+pub use status::{DmxCameraControlStatus, StatusModel, build_plot_labels, build_status};
 
 /// Palette for one theme. The plot themes have to work on paper as well as on a screen.
 #[derive(Clone, Copy)]
@@ -279,6 +279,7 @@ mod tests {
             renderer: "test".into(),
             gpu_millis: None,
             waiting_for_dmx,
+            camera_control: DmxCameraControlStatus::None,
             selection: None,
             notice,
         }
@@ -327,6 +328,7 @@ mod tests {
             renderer: "test".into(),
             gpu_millis: None,
             waiting_for_dmx: true,
+            camera_control: DmxCameraControlStatus::None,
             selection: None,
             notice,
         };
@@ -404,6 +406,38 @@ mod tests {
         };
         let connecting = status_model(&connecting, &diagnostics, 0, false, None);
         assert!(second_row_note(&connecting).is_none());
+    }
+
+    #[test]
+    fn local_camera_control_names_the_release_action_and_stale_hold() {
+        let connected = ConnectionState::Connected {
+            endpoint: "http://127.0.0.1:5310".into(),
+            revision: 1,
+        };
+        let diagnostics = ProviderDiagnostics::default();
+        let mut model = status_model(&connected, &diagnostics, 12, false, None);
+        model.camera_control = DmxCameraControlStatus::Local { can_release: true };
+        let note = second_row_note(&model).expect("local ownership is visible");
+        assert_eq!(
+            note.text(),
+            "Local camera control \u{2014} press C to return to DMX"
+        );
+
+        model.camera_control = DmxCameraControlStatus::Local { can_release: false };
+        assert!(
+            second_row_note(&model)
+                .expect("stale local ownership is visible")
+                .text()
+                .contains("waiting for the DMX camera")
+        );
+
+        model.camera_control = DmxCameraControlStatus::Held;
+        assert_eq!(
+            second_row_note(&model)
+                .expect("held pose is visible")
+                .text(),
+            "DMX camera unavailable \u{2014} holding its last pose"
+        );
     }
 
     #[test]
@@ -497,6 +531,7 @@ mod tests {
                 renderer: "test".into(),
                 gpu_millis: None,
                 waiting_for_dmx: false,
+                camera_control: DmxCameraControlStatus::None,
                 selection: None,
                 notice: None,
             };
@@ -709,6 +744,7 @@ mod tests {
             renderer: "test".into(),
             gpu_millis: None,
             waiting_for_dmx: false,
+            camera_control: DmxCameraControlStatus::None,
             selection: None,
             notice: None,
         };

@@ -28,6 +28,12 @@ pub(super) fn recommended_builtin_placements() -> Vec<AttributePlacement> {
         ("tilt.time", Position, 1, 6),
         ("position.movement", Position, 1, 3),
         ("position.rotation", Position, 1, 4),
+        ("camera.position.x", Position, 2, 1),
+        ("camera.position.y", Position, 2, 2),
+        ("camera.position.z", Position, 2, 3),
+        ("camera.yaw", Position, 2, 4),
+        ("camera.pitch", Position, 2, 5),
+        ("camera.roll", Position, 2, 6),
         ("gobo.1", Beam, 1, 1),
         ("gobo.1.rotation", Beam, 1, 2),
         ("gobo.2", Beam, 1, 3),
@@ -56,6 +62,9 @@ pub(super) fn recommended_builtin_placements() -> Vec<AttributePlacement> {
         ("focus", Focus, 1, 1),
         ("zoom", Focus, 1, 2),
         ("softness", Focus, 1, 3),
+        // Camera Zoom stays with the six pose encoders so its linked activation group never
+        // crosses control surfaces. It is still classified as Focus in the attribute registry.
+        ("camera.zoom", Position, 3, 1),
         ("control", Control, 1, 1),
         ("media.play_mode", Control, 1, 2),
         ("media.playback_speed", Control, 1, 3),

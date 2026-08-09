@@ -53,7 +53,10 @@ impl ResolvedCamera {
             )
         } else {
             Mat4::perspective_rh(
-                camera.fov_degrees.clamp(10.0, 120.0).to_radians(),
+                // Long-lens virtual cameras legitimately reach roughly 1.146 degrees at
+                // 1,200 mm on the defined 36 x 24 mm sensor. Keep only a numerical-safety floor;
+                // a presentation lens must not be silently widened by the renderer.
+                camera.fov_degrees.clamp(0.5, 120.0).to_radians(),
                 aspect.max(0.01),
                 near,
                 far,
@@ -416,6 +419,18 @@ mod tests {
         assert!(resolved.orthographic);
         let perspective = ResolvedCamera::resolve(&camera, ViewMode::Full3d, 1.6, bounds);
         assert!(!perspective.orthographic);
+    }
+
+    #[test]
+    fn a_long_virtual_lens_keeps_its_narrow_field_of_view() {
+        let camera = Camera {
+            fov_degrees: 1.145_877,
+            ..Camera::default()
+        };
+        let resolved =
+            ResolvedCamera::resolve(&camera, ViewMode::Full3d, 16.0 / 9.0, Aabb::default());
+        let expected = 1.0 / (camera.fov_degrees.to_radians() * 0.5).tan();
+        assert!((resolved.projection.y_axis.y - expected).abs() < 1e-3);
     }
 
     #[test]

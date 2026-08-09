@@ -50,6 +50,39 @@ impl ChannelRef {
         if self.invert { 1.0 - level } else { level }
     }
 
+    /// Absolute camera position in metres from an unsigned 24-bit offset-binary channel.
+    ///
+    /// Camera coordinates deliberately do not use a profile's physical range: the portable
+    /// camera contract assigns every raw increment exactly half a millimetre and reserves
+    /// `0x800000` as exact scene-origin zero.
+    pub fn camera_position_metres(&self, frame: &[u8; DMX_SLOTS]) -> Option<f32> {
+        (self.slots.len() == 3 && self.max_raw == 0x00ff_ffff).then(|| {
+            let signed = i64::from(self.raw(frame)) - 8_388_608;
+            (signed as f64 * 0.0005) as f32
+        })
+    }
+
+    /// Absolute camera Euler axis in degrees from its unsigned 16-bit wire value.
+    pub fn camera_angle_degrees(&self, frame: &[u8; DMX_SLOTS]) -> Option<f32> {
+        (self.slots.len() == 2 && self.max_raw == 0xffff)
+            .then(|| -360.0 + self.raw(frame) as f32 * (720.0 / 65_535.0))
+    }
+
+    /// Full-frame-equivalent focal length and vertical field of view from camera Zoom.
+    pub fn camera_lens(&self, frame: &[u8; DMX_SLOTS]) -> Option<(f32, f32)> {
+        if self.slots.len() != 2 || self.max_raw != 0xffff {
+            return None;
+        }
+        const WIDE_MILLIMETRES: f32 = 18.0;
+        const TELE_MILLIMETRES: f32 = 1_200.0;
+        const SENSOR_HEIGHT_MILLIMETRES: f32 = 24.0;
+        let level = self.raw(frame) as f32 / 65_535.0;
+        let focal_length = WIDE_MILLIMETRES * (TELE_MILLIMETRES / WIDE_MILLIMETRES).powf(level);
+        let vertical_fov =
+            (2.0 * (SENSOR_HEIGHT_MILLIMETRES / (2.0 * focal_length)).atan()).to_degrees();
+        Some((focal_length, vertical_fov))
+    }
+
     /// Physical value in the channel's declared unit.
     pub fn physical(&self, frame: &[u8; DMX_SLOTS]) -> f32 {
         let level = self.normalised(frame);
@@ -245,6 +278,34 @@ mod tests {
             value.abs() < 3.0,
             "midpoint should be near zero, got {value}"
         );
+    }
+
+    #[test]
+    fn camera_position_is_exact_offset_binary_in_half_millimetres() {
+        let reference = channel(vec![1, 2, 3], 0x00ff_ffff, false);
+        let mut frame = [0_u8; DMX_SLOTS];
+        assert_eq!(reference.camera_position_metres(&frame), Some(-4_194.304));
+        frame[..3].copy_from_slice(&[0x80, 0x00, 0x00]);
+        assert_eq!(reference.camera_position_metres(&frame), Some(0.0));
+        frame[..3].copy_from_slice(&[0xff, 0xff, 0xff]);
+        assert_eq!(reference.camera_position_metres(&frame), Some(4_194.3035));
+    }
+
+    #[test]
+    fn camera_orientation_and_zoom_use_the_stable_wire_mapping() {
+        let angle = channel(vec![1, 2], 0xffff, false);
+        let lens = channel(vec![3, 4], 0xffff, false);
+        let mut frame = [0_u8; DMX_SLOTS];
+        assert_eq!(angle.camera_angle_degrees(&frame), Some(-360.0));
+        let (wide, wide_fov) = lens.camera_lens(&frame).expect("wide lens");
+        assert!((wide - 18.0).abs() < 1e-5);
+        assert!((wide_fov - 67.380_135).abs() < 1e-4);
+        frame[..2].copy_from_slice(&[0xff, 0xff]);
+        frame[2..4].copy_from_slice(&[0xff, 0xff]);
+        assert_eq!(angle.camera_angle_degrees(&frame), Some(360.0));
+        let (tele, tele_fov) = lens.camera_lens(&frame).expect("tele lens");
+        assert!((tele - 1_200.0).abs() < 1e-3);
+        assert!((tele_fov - 1.145_877).abs() < 1e-4);
     }
 
     #[test]

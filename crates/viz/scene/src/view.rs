@@ -376,6 +376,29 @@ impl Camera {
     }
 }
 
+impl crate::values::ExternalCameraState {
+    /// Convert the DMX-facing Yaw/Pitch/Roll pose to the renderer's ambiguity-free camera.
+    ///
+    /// Zero looks straight along world `-Z` with `+Y` up. Euler axes stay at the fixture boundary;
+    /// the resulting direction/up vectors are what rendering and local override retain.
+    pub fn as_camera(&self) -> Camera {
+        let rotation = glam::Quat::from_euler(
+            glam::EulerRot::YXZ,
+            self.yaw_degrees.to_radians(),
+            self.pitch_degrees.to_radians(),
+            self.roll_degrees.to_radians(),
+        );
+        let position = Vec3::from_array(self.position_metres);
+        Camera {
+            position,
+            target: position + rotation * Vec3::NEG_Z,
+            up: rotation * Vec3::Y,
+            fov_degrees: self.vertical_fov_degrees,
+            orthographic_size: Camera::default().orthographic_size,
+        }
+    }
+}
+
 /// Which way round the picture is drawn.
 ///
 /// A rendered stage is naturally light on dark. A stage plot is traditionally printed dark on
@@ -551,6 +574,27 @@ mod tests {
             assert_eq!(ViewMode::from_wire(mode.wire()), Some(mode));
             assert!(!mode.label().is_empty());
         }
+    }
+
+    #[test]
+    fn external_camera_zero_pose_looks_forward_and_keeps_the_decoded_vertical_fov() {
+        let state = crate::values::ExternalCameraState {
+            fixture_id: uuid::Uuid::nil(),
+            instance_id: uuid::Uuid::nil(),
+            position_metres: [1.0, 2.0, 3.0],
+            yaw_degrees: 0.0,
+            pitch_degrees: 0.0,
+            roll_degrees: 0.0,
+            focal_length_millimetres: 50.0,
+            vertical_fov_degrees: 26.991_466,
+            patched: true,
+            stale: false,
+        };
+        let camera = state.as_camera();
+        assert_eq!(camera.position, Vec3::new(1.0, 2.0, 3.0));
+        assert!(camera.target.abs_diff_eq(Vec3::new(1.0, 2.0, 2.0), 1e-6));
+        assert!(camera.up.abs_diff_eq(Vec3::Y, 1e-6));
+        assert_eq!(camera.fov_degrees, state.vertical_fov_degrees);
     }
 
     #[test]

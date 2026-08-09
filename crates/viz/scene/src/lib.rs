@@ -42,8 +42,8 @@ pub use scene::{
 };
 pub use uuid;
 pub use values::{
-    CellValue, EmitterValues, LaserScan, PhysicalMotionState, PhysicalMotionTarget, ScanPoint,
-    SceneValues, WheelMotionState,
+    CellValue, EmitterValues, ExternalCameraState, LaserScan, PhysicalMotionState,
+    PhysicalMotionTarget, ScanPoint, SceneValues, WheelMotionState,
 };
 pub use view::{Camera, RenderQuality, Theme, ViewConfiguration, ViewMode};
 

@@ -23,6 +23,13 @@ pub struct SceneValues {
     /// Receive timestamp of the newest input frame folded into these values, in monotonic
     /// microseconds since the renderer started. Used for packet-to-visible latency.
     pub newest_input_micros: u64,
+    /// Last decoded pose of the one dedicated external-Visualizer DMX camera.
+    ///
+    /// This is deliberately not part of [`crate::ViewConfiguration`]: embedded desk Stages use
+    /// their own view and can never be taken over by a patched fixture. Removing the binding or
+    /// losing its input leaves this value intact so the external Visualizer can hold its pose.
+    #[serde(default)]
+    pub external_camera: Option<ExternalCameraState>,
     /// Which fixtures the operator has selected.
     ///
     /// Live state rather than scene structure, which is why it sits here: a selection changes
@@ -31,6 +38,24 @@ pub struct SceneValues {
     /// renderer holding its own idea of it would be a second answer to the one question an
     /// operator has to be able to trust.
     pub selected_fixtures: std::collections::HashSet<uuid::Uuid>,
+}
+
+/// Absolute external-camera state decoded from the transferable 17-slot fixture.
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ExternalCameraState {
+    pub fixture_id: Uuid,
+    pub instance_id: Uuid,
+    pub position_metres: [f32; 3],
+    pub yaw_degrees: f32,
+    pub pitch_degrees: f32,
+    pub roll_degrees: f32,
+    pub focal_length_millimetres: f32,
+    pub vertical_fov_degrees: f32,
+    /// Whether the selected camera fixture still has a complete live patch binding.
+    #[serde(default)]
+    pub patched: bool,
+    /// True when the newest authoritative universe frame is stale. The pose remains usable.
+    pub stale: bool,
 }
 
 impl SceneValues {

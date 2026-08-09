@@ -24,6 +24,6 @@ pub use decode::Decoder;
 pub use default_model::{DefaultModel, FixtureTraits, choose as choose_default_model};
 pub use fallback::{OpticalClass, classify};
 pub use plan::{
-    ColourBinding, EmitterBinding, GOBO_ARTWORK_EDGE, PatchedFixture, PhysicalInstance, ScenePlan,
-    compile, decode_gobo_artwork,
+    ColourBinding, EmitterBinding, ExternalCameraBinding, GOBO_ARTWORK_EDGE, PatchedFixture,
+    PhysicalInstance, ScenePlan, compile, decode_gobo_artwork,
 };

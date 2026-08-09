@@ -4,7 +4,7 @@
 //! parameters reach the render scene.
 
 use crate::colour;
-use crate::plan::{ColourBinding, EmitterBinding};
+use crate::plan::{ColourBinding, EmitterBinding, ExternalCameraBinding};
 use std::collections::HashMap;
 use viz_dmx::{DMX_SLOTS, UniverseFrame};
 use viz_scene::{
@@ -15,6 +15,7 @@ use viz_scene::{
 /// Holds the latest frame per logical universe and applies it to the emitter values.
 pub struct Decoder {
     bindings: Vec<EmitterBinding>,
+    external_camera: Option<ExternalCameraBinding>,
     frames: HashMap<u16, [u8; DMX_SLOTS]>,
     stale: HashMap<u16, bool>,
     /// Emitter indices reading each logical universe.
@@ -28,6 +29,13 @@ pub struct Decoder {
 
 impl Decoder {
     pub fn new(bindings: Vec<EmitterBinding>) -> Self {
+        Self::with_external_camera(bindings, None)
+    }
+
+    pub fn with_external_camera(
+        bindings: Vec<EmitterBinding>,
+        external_camera: Option<ExternalCameraBinding>,
+    ) -> Self {
         let mut readers: HashMap<u16, Vec<usize>> = HashMap::new();
         for (index, binding) in bindings.iter().enumerate() {
             for universe in &binding.universes {
@@ -36,6 +44,7 @@ impl Decoder {
         }
         Self {
             bindings,
+            external_camera,
             frames: HashMap::new(),
             stale: HashMap::new(),
             readers,
@@ -48,7 +57,11 @@ impl Decoder {
     /// Logical universes this show actually reads, used to configure the receivers.
     pub fn required_universes(&self) -> Vec<u16> {
         let mut universes: Vec<u16> = self.readers.keys().copied().collect();
+        if let Some(camera) = &self.external_camera {
+            universes.extend(camera.universes.iter().copied());
+        }
         universes.sort_unstable();
+        universes.dedup();
         universes
     }
 
@@ -88,6 +101,19 @@ impl Decoder {
         }
     }
 
+    /// Reconcile a retained camera pose with the newly compiled patch without resetting it.
+    ///
+    /// Providers call this after carrying values across a scene delta. An absent or ambiguous
+    /// binding marks the held pose unavailable for DMX authority while keeping every coordinate
+    /// available to local control.
+    pub fn reconcile_external_camera(&self, values: &mut SceneValues) {
+        let Some(camera) = values.external_camera.as_mut() else {
+            return;
+        };
+        camera.patched = self.external_camera.is_some();
+        camera.stale = true;
+    }
+
     /// Apply received frames. Returns the emitter indices that were re-decoded.
     pub fn apply(
         &mut self,
@@ -100,6 +126,11 @@ impl Decoder {
             return 0;
         }
         let mut affected: Vec<usize> = Vec::new();
+        let camera_affected = self.external_camera.as_ref().is_some_and(|camera| {
+            received
+                .iter()
+                .any(|frame| camera.universes.contains(&frame.logical_universe))
+        });
         for frame in received {
             self.frames.insert(frame.logical_universe, frame.slots);
             self.stale.insert(frame.logical_universe, frame.stale);
@@ -141,11 +172,67 @@ impl Decoder {
                 }));
             }
         }
+        if camera_affected {
+            self.decode_external_camera(values);
+        }
         self.last_time_seconds = Some(time_seconds);
         self.frame_counter += 1;
         values.frame = self.frame_counter;
         values.newest_input_micros = self.newest_input_micros;
-        affected.len()
+        affected.len() + usize::from(camera_affected)
+    }
+
+    fn decode_external_camera(&self, values: &mut SceneValues) {
+        let Some(binding) = &self.external_camera else {
+            return;
+        };
+        // A split camera only becomes authoritative after every part has arrived at least once.
+        // Until then an existing pose is retained instead of filling missing axes with zeroes.
+        if !binding
+            .universes
+            .iter()
+            .all(|universe| self.frames.contains_key(universe))
+        {
+            return;
+        }
+        let slots = |channel: &crate::binding::ChannelRef| self.slots(channel.logical_universe);
+        let Some(x) = binding.x.camera_position_metres(&slots(&binding.x)) else {
+            return;
+        };
+        let Some(y) = binding.y.camera_position_metres(&slots(&binding.y)) else {
+            return;
+        };
+        let Some(z) = binding.z.camera_position_metres(&slots(&binding.z)) else {
+            return;
+        };
+        let Some(yaw) = binding.yaw.camera_angle_degrees(&slots(&binding.yaw)) else {
+            return;
+        };
+        let Some(pitch) = binding.pitch.camera_angle_degrees(&slots(&binding.pitch)) else {
+            return;
+        };
+        let Some(roll) = binding.roll.camera_angle_degrees(&slots(&binding.roll)) else {
+            return;
+        };
+        let Some((focal_length, vertical_fov)) = binding.zoom.camera_lens(&slots(&binding.zoom))
+        else {
+            return;
+        };
+        values.external_camera = Some(viz_scene::ExternalCameraState {
+            fixture_id: binding.fixture_id,
+            instance_id: binding.instance_id,
+            position_metres: [x, y, z],
+            yaw_degrees: yaw,
+            pitch_degrees: pitch,
+            roll_degrees: roll,
+            focal_length_millimetres: focal_length,
+            vertical_fov_degrees: vertical_fov,
+            patched: true,
+            stale: binding
+                .universes
+                .iter()
+                .any(|universe| self.stale.get(universe).copied().unwrap_or(true)),
+        });
     }
 
     fn slots(&self, universe: u16) -> [u8; DMX_SLOTS] {
@@ -611,6 +698,40 @@ mod tests {
         }
     }
 
+    fn camera_channel(first_slot: u16, bytes: usize) -> ChannelRef {
+        ChannelRef {
+            logical_universe: 1,
+            slots: (first_slot..first_slot + bytes as u16).collect(),
+            max_raw: match bytes {
+                2 => 0xffff,
+                3 => 0x00ff_ffff,
+                _ => unreachable!("camera channels are U16 or U24"),
+            },
+            invert: false,
+            physical_min: 0.0,
+            physical_max: 1.0,
+            snap: false,
+            default_raw: 0,
+            functions: Vec::new(),
+        }
+    }
+
+    fn external_camera_binding() -> ExternalCameraBinding {
+        ExternalCameraBinding {
+            fixture_id: uuid::Uuid::from_u128(1),
+            instance_id: uuid::Uuid::from_u128(2),
+            label: "Camera 1".into(),
+            x: camera_channel(1, 3),
+            y: camera_channel(4, 3),
+            z: camera_channel(7, 3),
+            yaw: camera_channel(10, 2),
+            pitch: camera_channel(12, 2),
+            roll: camera_channel(14, 2),
+            zoom: camera_channel(16, 2),
+            universes: vec![1],
+        }
+    }
+
     pub(super) fn emitter(kind: EmitterKind) -> EmitterInstance {
         EmitterInstance {
             fixture_index: 0,
@@ -685,6 +806,55 @@ mod tests {
         assert_eq!(values.emitters[0].intensity, 1.0);
         decoder.apply(&scene, &[frame(&[(0, 0)])], &mut values, 0.0);
         assert_eq!(values.emitters[0].intensity, 0.0);
+    }
+
+    #[test]
+    fn external_camera_decodes_the_exact_seventeen_slot_contract_and_holds_stale_pose() {
+        let mut decoder =
+            Decoder::with_external_camera(Vec::new(), Some(external_camera_binding()));
+        let scene = Scene::default();
+        let mut values = SceneValues::default();
+        let mut slots = [0_u8; DMX_SLOTS];
+        // X = exact zero, Y = +1 m, Z = minimum. Orientation = -360, near zero, +360.
+        slots[0..3].copy_from_slice(&[0x80, 0x00, 0x00]);
+        slots[3..6].copy_from_slice(&[0x80, 0x07, 0xd0]);
+        slots[6..9].copy_from_slice(&[0x00, 0x00, 0x00]);
+        slots[9..11].copy_from_slice(&[0x00, 0x00]);
+        slots[11..13].copy_from_slice(&[0x80, 0x00]);
+        slots[13..15].copy_from_slice(&[0xff, 0xff]);
+        slots[15..17].copy_from_slice(&[0x00, 0x00]);
+        let live = UniverseFrame {
+            logical_universe: 1,
+            slots,
+            received_micros: 1_000,
+            stale: false,
+        };
+        assert_eq!(decoder.apply(&scene, &[live.clone()], &mut values, 0.0), 1);
+        let camera = values.external_camera.expect("camera decoded");
+        assert_eq!(camera.position_metres, [0.0, 1.0, -4_194.304]);
+        assert_eq!(camera.yaw_degrees, -360.0);
+        assert!(camera.pitch_degrees.abs() < 0.006);
+        assert_eq!(camera.roll_degrees, 360.0);
+        assert!((camera.focal_length_millimetres - 18.0).abs() < 1e-5);
+        assert!((camera.vertical_fov_degrees - 67.380_135).abs() < 1e-4);
+        assert!(!camera.stale);
+
+        let stale = UniverseFrame {
+            stale: true,
+            ..live
+        };
+        decoder.apply(&scene, &[stale], &mut values, 1.0);
+        let held = values.external_camera.expect("last pose retained");
+        assert_eq!(held.position_metres, camera.position_metres);
+        assert!(held.stale);
+
+        Decoder::new(Vec::new()).reconcile_external_camera(&mut values);
+        let unpatched = values
+            .external_camera
+            .expect("unpatch retains the last pose");
+        assert_eq!(unpatched.position_metres, camera.position_metres);
+        assert!(!unpatched.patched);
+        assert!(unpatched.stale);
     }
 
     #[test]
