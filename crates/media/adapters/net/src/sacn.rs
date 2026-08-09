@@ -141,7 +141,7 @@ pub fn encode(universe: u16, priority: u8, sequence: u8, source: [u8; 16], data:
     packet[18..22].copy_from_slice(&ROOT_VECTOR_DATA.to_be_bytes());
     packet[22..38].copy_from_slice(&source);
     packet[40..44].copy_from_slice(&FRAMING_VECTOR_DATA.to_be_bytes());
-    packet[44..51].copy_from_slice(b"ToskLig");
+    packet[44..53].copy_from_slice(b"ToskLight");
     packet[108] = priority;
     packet[111] = sequence;
     packet[113..115].copy_from_slice(&universe.to_be_bytes());
@@ -174,7 +174,7 @@ mod tests {
     #[test]
     fn the_source_name_is_readable() {
         let packet = encode(1, 100, 0, SOURCE, &[1]);
-        assert_eq!(parse(&packet).unwrap().source_name, "ToskLig");
+        assert_eq!(parse(&packet).unwrap().source_name, "ToskLight");
     }
 
     #[test]
