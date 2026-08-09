@@ -432,7 +432,7 @@ mod tests {
         assert_eq!(names.len(), total);
     }
 
-    fn matching_set<'a>(sets: &'a [ChannelValueSet], value: u8) -> &'a ChannelValueSet {
+    fn matching_set(sets: &[ChannelValueSet], value: u8) -> &ChannelValueSet {
         let value = u16::from(value);
         let matching: Vec<&ChannelValueSet> = sets
             .iter()
