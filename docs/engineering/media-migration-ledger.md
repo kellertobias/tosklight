@@ -42,6 +42,11 @@ fixture evidence, any deliberate difference, the target commit, and who accepted
 The Slice 8 source row deliberately names `DmxMap`: `GDTFGenerator.*` and `GDTFTemplates.h` exist
 only as dirty/untracked work in the old checkout, not in the frozen reference commit.
 
+Operational authority moves only through the
+[cutover and rollback runbook](media-cutover-and-rollback.md). The evidence below does not authorize
+running both servers against one live library or freezing the reference before the accepted target
+is on `main` with supported-platform CI green.
+
 ## Operator-facing parity closure
 
 The route and interface audit found nine capabilities an operator could reach in the frozen

@@ -34,3 +34,7 @@ Validate a configuration without starting anything:
 ```sh
 cargo run -p media-server -- --check-configuration
 ```
+
+For an existing standalone-server installation, follow the repository's
+[cutover and rollback runbook](../../docs/engineering/media-cutover-and-rollback.md). It keeps the
+legacy operator data untouched and rehearses against a copy before authority moves.
