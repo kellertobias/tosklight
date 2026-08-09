@@ -38,7 +38,18 @@ pub struct Channel {
     /// One-based offset of the coarse slot within the mode.
     pub offset: u16,
     pub width: Width,
-    pub default: u8,
+    /// Complete raw value in this channel's own resolution.
+    pub default: u32,
+    /// Ordered raw ranges an operator selects. The end of one set is immediately before the next.
+    pub sets: Vec<ChannelSet>,
+}
+
+/// One named range within a channel function.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChannelSet {
+    pub name: String,
+    /// Inclusive first raw value in the channel's own resolution.
+    pub from: u32,
 }
 
 impl Channel {
@@ -151,24 +162,33 @@ fn channel_xml(channel: &Channel) -> String {
         .map(u16::to_string)
         .collect::<Vec<_>>()
         .join(",");
-    // GDTF expresses a default in the channel's own resolution, so a 16-bit channel's default is
-    // the coarse byte scaled into its two bytes.
-    let default = match channel.width {
-        Width::Byte => format!("{}/1", channel.default),
-        Width::Sixteen => format!("{}/2", u32::from(channel.default) * 256),
+    let resolution = match channel.width {
+        Width::Byte => 1,
+        Width::Sixteen => 2,
     };
-    format!(
+    let default = format!("{}/{resolution}", channel.default);
+    let mut xml = format!(
         "          <DMXChannel DMXBreak=\"1\" Offset=\"{offsets}\" Default=\"{default}\" \
          Highlight=\"None\" Geometry=\"{GEOMETRY}\">\n\
          \x20           <LogicalChannel Attribute=\"{attribute}\" Snap=\"No\" Master=\"None\" \
          MibFade=\"0.000000\" DMXChangeTimeLimit=\"0.000000\">\n\
          \x20             <ChannelFunction Name=\"{name}\" Attribute=\"{attribute}\" \
          OriginalAttribute=\"\" DMXFrom=\"0/1\" Default=\"{default}\" PhysicalFrom=\"0.000000\" \
-         PhysicalTo=\"1.000000\" RealFade=\"0.000000\"/>\n\
-         \x20           </LogicalChannel>\n          </DMXChannel>\n",
+         PhysicalTo=\"1.000000\" RealFade=\"0.000000\">\n",
         attribute = escape(&channel.attribute),
         name = escape(&channel.name),
-    )
+    );
+    for set in &channel.sets {
+        xml.push_str(&format!(
+            "              <ChannelSet Name=\"{}\" DMXFrom=\"{}/{resolution}\"/>\n",
+            escape(&set.name),
+            set.from,
+        ));
+    }
+    xml.push_str(
+        "            </ChannelFunction>\n          </LogicalChannel>\n          </DMXChannel>\n",
+    );
+    xml
 }
 
 /// Every attribute the fixture's channels name, once each, in the order they first appear.
@@ -237,13 +257,15 @@ mod tests {
                         offset: 1,
                         width: Width::Byte,
                         default: 255,
+                        sets: vec![],
                     },
                     Channel {
                         name: "Position".into(),
                         attribute: "Position".into(),
                         offset: 2,
                         width: Width::Sixteen,
-                        default: 128,
+                        default: 32_768,
+                        sets: vec![],
                     },
                 ],
             }],
@@ -267,6 +289,7 @@ mod tests {
             offset: 4,
             width: Width::Byte,
             default: 0,
+            sets: vec![],
         });
 
         let xml = description_xml(&fixture);
@@ -286,6 +309,24 @@ mod tests {
             xml.contains("Offset=\"2,3\" Default=\"32768/2\""),
             "a 16-bit default is expressed across both bytes"
         );
+    }
+
+    #[test]
+    fn channel_sets_are_nested_in_the_function_at_their_raw_boundaries() {
+        let mut fixture = fixture();
+        fixture.modes[0].channels[0].sets = vec![
+            ChannelSet {
+                name: "Closed".into(),
+                from: 0,
+            },
+            ChannelSet {
+                name: "Open & live".into(),
+                from: 128,
+            },
+        ];
+        let xml = description_xml(&fixture);
+        assert!(xml.contains("<ChannelSet Name=\"Closed\" DMXFrom=\"0/1\"/>"));
+        assert!(xml.contains("<ChannelSet Name=\"Open &amp; live\" DMXFrom=\"128/1\"/>"));
     }
 
     #[test]

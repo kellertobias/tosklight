@@ -8,7 +8,9 @@
 //! per layer, and one master. That is why the domain names a single-layer and a master-only
 //! footprint.
 
-use light_fixture::gdtf::{Channel, FixtureType, Mode, Width, description_xml, package};
+use light_fixture::gdtf::{
+    Channel, ChannelSet, FixtureType, Mode, Width, description_xml, package,
+};
 use media_domain::personality::channels::{LAYER_CHANNELS, MASTER_CHANNELS, Resolution};
 
 /// Stable identifiers. A console keys a patched fixture on these, so a new build must never change
@@ -91,9 +93,36 @@ fn channels(table: &[media_domain::personality::channels::ChannelSpec]) -> Vec<C
                 Resolution::Coarse => Width::Sixteen,
                 Resolution::Byte | Resolution::Fine => Width::Byte,
             },
-            default: default_of(spec.name),
+            default: u32::from(spec.default_value),
+            sets: channel_sets(spec),
         })
         .collect()
+}
+
+/// Projects the canonical decoder ranges into the ordered GDTF boundaries a console reads.
+///
+/// A stepped range such as flip/mirror's modulo-four mapping cannot be represented as one GDTF
+/// interval, so each matching byte becomes a one-byte set. Sorting all starts together preserves
+/// the decoder exactly rather than turning four interleaved values into four false blocks.
+fn channel_sets(spec: &media_domain::personality::channels::ChannelSpec) -> Vec<ChannelSet> {
+    let mut projected = spec
+        .values
+        .sets()
+        .into_iter()
+        .flat_map(|set| {
+            let starts: Vec<u16> = if set.step == 1 {
+                vec![set.from]
+            } else {
+                (set.from..=set.to).step_by(usize::from(set.step)).collect()
+            };
+            starts.into_iter().map(move |from| ChannelSet {
+                name: set.name.clone(),
+                from: u32::from(from),
+            })
+        })
+        .collect::<Vec<_>>();
+    projected.sort_by_key(|set| set.from);
+    projected
 }
 
 /// The GDTF attribute name for a channel.
@@ -103,23 +132,6 @@ fn channels(table: &[media_domain::personality::channels::ChannelSpec]) -> Vec<C
 /// fading a folder number through a crossfade, for instance.
 fn attribute_of(name: &str) -> String {
     name.split_whitespace().collect::<Vec<_>>().concat()
-}
-
-/// What a console should send before an operator touches anything.
-///
-/// The defaults are the ones that make a freshly patched fixture do nothing visible rather than
-/// something surprising: nothing selected, full dimmer and full colour so a selection appears as
-/// soon as one is made.
-fn default_of(name: &str) -> u8 {
-    match name {
-        "Dimmer" | "Volume" | "Cyan" | "Magenta" | "Yellow" | "Master dimmer" | "Master volume"
-        | "Master cyan" | "Master magenta" | "Master yellow" => 255,
-        // Scale and mask scale sit at their neutral value, which is the middle of the range.
-        "Scale X" | "Scale Y" | "Mask scale X" | "Mask scale Y" => 128,
-        // Position and rotation are centred, which is also the middle.
-        "Position X" | "Position Y" | "Rotation" => 128,
-        _ => 0,
-    }
 }
 
 #[cfg(test)]
@@ -207,8 +219,36 @@ mod tests {
         assert_eq!(by_name("Folder"), 0, "nothing is selected");
         assert_eq!(by_name("File"), 0);
         assert_eq!(by_name("Dimmer"), 255, "but a selection appears at once");
-        assert_eq!(by_name("Scale X"), 128, "at its neutral scale");
+        assert_eq!(by_name("Scale X"), 32_768, "at its neutral scale");
         assert_eq!(by_name("Mask opacity"), 0, "and unmasked");
+        assert_eq!(by_name("Cyan"), 0, "colour defaults match the decoder");
+        assert_eq!(by_name("Magenta"), 0);
+        assert_eq!(by_name("Yellow"), 0);
+    }
+
+    #[test]
+    fn canonical_value_sets_reach_the_fixture_without_restatement() {
+        let layer = layer_fixture();
+        let play = layer.modes[0]
+            .channels
+            .iter()
+            .find(|channel| channel.name == "Play mode")
+            .unwrap();
+        assert_eq!(play.sets[0].name, "Loop");
+        assert_eq!(play.sets[0].from, 0);
+        assert!(play.sets.iter().any(|set| set.name == "Once — Transparent"));
+
+        let master = master_fixture();
+        let flip = master.modes[0]
+            .channels
+            .iter()
+            .find(|channel| channel.name == "Flip/mirror")
+            .unwrap();
+        assert_eq!(flip.sets.len(), 256, "every modulo-four byte stays exact");
+        assert_eq!(flip.sets[0].name, "None");
+        assert_eq!(flip.sets[1].name, "Horizontal");
+        assert_eq!(flip.sets[2].name, "Vertical");
+        assert_eq!(flip.sets[3].name, "Both");
     }
 
     #[test]
