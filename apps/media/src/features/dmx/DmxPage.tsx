@@ -25,6 +25,7 @@ export function DmxPage() {
 
 	return (
 		<section className="media-page">
+			<FixtureDownloads />
 			<ResourceState
 				resource={outputs}
 				subject="outputs"
@@ -43,6 +44,44 @@ export function DmxPage() {
 					))
 				}
 			</ResourceState>
+		</section>
+	);
+}
+
+function FixtureDownloads() {
+	const [fixtures, setFixtures] = useState<string[]>([]);
+	useEffect(() => {
+		let current = true;
+		void api
+			.fixtures()
+			.then((names) => {
+				if (current) setFixtures(names);
+			})
+			.catch(() => undefined);
+		return () => {
+			current = false;
+		};
+	}, []);
+	if (fixtures.length === 0) return null;
+	return (
+		<section className="media-settings-section" aria-label="GDTF fixtures">
+			<h2>GDTF fixtures</h2>
+			<p>
+				Download these generated fixtures to patch the same canonical channels
+				on a lighting console.
+			</p>
+			<div className="media-settings-actions">
+				{fixtures.map((name) => (
+					<a
+						className="ui-button ui-secondary ui-default"
+						href={api.fixtureUrl(name)}
+						download
+						key={name}
+					>
+						Download {name}
+					</a>
+				))}
+			</div>
 		</section>
 	);
 }

@@ -34,6 +34,14 @@ describe("DMX diagnostics", () => {
 		expect(
 			screen.getByRole("cell", { name: "No frame received" }),
 		).toBeInTheDocument();
+		expect(
+			await screen.findByRole("link", {
+				name: "Download ToskLight Media Layer.gdtf",
+			}),
+		).toHaveAttribute(
+			"href",
+			"/api/v2/fixtures/ToskLight%20Media%20Layer.gdtf",
+		);
 	});
 
 	it("shows pushed winning-source diagnostics and exact raw bytes", async () => {

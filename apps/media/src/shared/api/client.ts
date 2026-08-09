@@ -101,6 +101,8 @@ export const api = {
 	health: () => request<Health>("/health"),
 	catalog: () => request<CatalogView>("/catalog"),
 	visualizers: () => request<VisualizerView[]>("/visualizers"),
+	fixtures: () => request<string[]>("/fixtures"),
+	fixtureUrl: (name: string) => `${BASE}/fixtures/${encodeURIComponent(name)}`,
 	outputs: () => request<OutputView[]>("/outputs"),
 	outputState: (output: string) =>
 		request<OutputView>(`/outputs/${output}/state`),

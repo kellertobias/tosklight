@@ -73,6 +73,11 @@ export function stubServer(
 			if (path === "/health") return jsonResponse(server.health);
 			if (path === "/catalog") return jsonResponse(server.catalog);
 			if (path === "/visualizers") return jsonResponse(server.visualizers);
+			if (path === "/fixtures")
+				return jsonResponse([
+					"ToskLight Media Layer.gdtf",
+					"ToskLight Media Master.gdtf",
+				]);
 			if (path === "/outputs") return jsonResponse(server.outputs);
 			const dmxMap = path.match(/^\/outputs\/([^/]+)\/dmx-map$/u);
 			if (dmxMap) {

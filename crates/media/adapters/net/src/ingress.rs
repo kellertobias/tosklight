@@ -357,6 +357,7 @@ mod tests {
         let frame = listener.receive(now).await;
         assert_eq!(frame.universe, 3);
         assert_eq!(frame.source, CommandSource::ArtNet);
+        assert_eq!(frame.source_label, "127.0.0.1");
         assert_eq!(frame.slots, vec![1, 2, 3]);
     }
 
@@ -374,6 +375,8 @@ mod tests {
         let frame = listener.receive(now).await;
         assert_eq!(frame.universe, 7);
         assert_eq!(frame.source, CommandSource::Sacn);
+        assert!(frame.source_label.contains("ToskLight"));
+        assert!(frame.source_label.contains("127.0.0.1"));
         assert_eq!(frame.slots, vec![9, 8, 7]);
     }
 
