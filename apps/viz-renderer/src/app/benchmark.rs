@@ -8,6 +8,17 @@ use super::{Application, Measured};
 use std::time::Instant;
 use viz_scene::ViewMode;
 
+const GPU_PASS_LABELS: [&str; 8] = [
+    "cull",
+    "shadow",
+    "opaque",
+    "beams",
+    "lasers",
+    "bloom",
+    "composite",
+    "overlay",
+];
+
 /// One measured stretch of frames in one named view.
 pub(super) struct BenchmarkSample {
     mode: ViewMode,
@@ -24,6 +35,9 @@ pub(super) struct BenchmarkSample {
     /// What the GPU itself spent, where the adapter can time a frame. This is the headroom number:
     /// a frame rate held at the refresh interval says nothing about how much work is left over.
     gpu_millis: Vec<f32>,
+    /// Same sampled GPU frames as `gpu_millis`, kept apart so benchmark output identifies the
+    /// pass consuming the frame budget.
+    gpu_pass_millis: [Vec<f32>; 8],
     latency_p50: f32,
     latency_p95: f32,
     latency_max: f32,
@@ -42,6 +56,7 @@ impl BenchmarkSample {
             cpu_millis: Vec::new(),
             wait_millis: Vec::new(),
             gpu_millis: Vec::new(),
+            gpu_pass_millis: std::array::from_fn(|_| Vec::new()),
             latency_p50: 0.0,
             latency_p95: 0.0,
             latency_max: 0.0,
@@ -112,6 +127,15 @@ impl Application {
             sample.wait_millis.push(wait_millis);
             if let Some(micros) = self.stats.gpu_micros {
                 sample.gpu_millis.push(micros as f32 / 1000.0);
+            }
+            for (samples, micros) in sample
+                .gpu_pass_millis
+                .iter_mut()
+                .zip(self.stats.gpu_passes.as_array())
+            {
+                if let Some(micros) = micros {
+                    samples.push(micros as f32 / 1000.0);
+                }
             }
             sample.latency_p50 = p50;
             sample.latency_p95 = p95;
@@ -184,6 +208,15 @@ impl Application {
                 sample.dmx_hz,
                 sample.lights,
             );
+            let pass_p95 = GPU_PASS_LABELS
+                .iter()
+                .zip(&sample.gpu_pass_millis)
+                .filter(|(_, samples)| !samples.is_empty())
+                .map(|(label, samples)| format!("{label} {:.2}", percentile(samples, 0.95)))
+                .collect::<Vec<_>>();
+            if !pass_p95.is_empty() {
+                println!("  GPU pass p95 ms: {}", pass_p95.join("  |  "));
+            }
         }
         for input in &measured.inputs {
             println!(

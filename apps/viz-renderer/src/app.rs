@@ -93,6 +93,7 @@ pub struct Application {
     frames_per_second: f32,
     stats: FrameStats,
     overlay: Overlay,
+    redraw_gate: crate::redraw::RedrawGate,
     camera_is_local: bool,
     /// The private server started for a show file, when the operator opened one.
     hosted_show: Option<crate::showfile::HostedShow>,
@@ -195,6 +196,7 @@ impl Application {
             frames_per_second: 0.0,
             stats: FrameStats::default(),
             overlay: Overlay::default(),
+            redraw_gate: crate::redraw::RedrawGate::default(),
             camera_is_local: false,
             hosted_show: None,
             helper_source: None,

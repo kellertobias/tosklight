@@ -122,6 +122,26 @@ impl Application {
                 width,
                 height,
             );
+            let redraw_state = crate::redraw::RedrawState::new(
+                session.scene.revision,
+                &values,
+                &view,
+                (width as u32, height as u32),
+                &self.overlay.quads,
+            );
+            let time_driven =
+                crate::redraw::is_time_driven(&values, &view, &self.preferences.persistence);
+            let forced = self.options.capture.is_some()
+                || self.options.verify_only
+                || self.options.benchmark_seconds.is_some();
+            if !forced && !self.redraw_gate.should_draw(redraw_state, time_driven) {
+                session.values = values;
+                // Providers and input are still polled regularly, but an idle picture does not
+                // acquire a drawable or submit GPU work.
+                self.next_frame = now + Duration::from_millis(50);
+                return;
+            }
+            renderer.observe_frame_interval(view.quality, (delta * 1_000_000.0) as u64);
             if let Some(path) = self.options.capture.clone()
                 && self.presented_frames + 1 >= u64::from(self.options.capture_frames)
             {

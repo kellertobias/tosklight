@@ -16,6 +16,7 @@ mod menu;
 mod pacing;
 mod planner;
 mod png;
+mod redraw;
 mod session;
 mod settings;
 mod showfile;

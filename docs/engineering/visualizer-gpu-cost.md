@@ -9,19 +9,22 @@ Two complaints, and they have almost nothing in common:
 The first is waste. The second is a budget that is not bounded by anything. They need different
 answers, so they are listed separately, cheapest and most certain first.
 
-## What the renderer does per frame today
+## What the renderer does per frame now
 
-Every frame runs the same pipeline regardless of what is in the picture: light cull (compute) →
-shadow atlas → opaque → beams → lasers → bloom extract → two blur passes → composite → overlay.
-`Renderer::render` in `crates/viz/render/src/renderer/frame.rs` is the whole order.
+The pipeline remains readable in `Renderer::render`, but its expensive work is now conditional.
+Plans and 3D Lines issue no light cull, shadow or bloom pass. The standalone window and embedded
+Stage pane share one redraw gate and submit nothing when the scene revision, value frame, camera,
+view, size, selection and overlay are unchanged.
 
-Two things about that shape matter for both complaints:
+The gate deliberately keeps drawing while display time can change the picture: physical velocity
+or unsettled position motion, persistence decay, laser scans, and animated Ultra haze.
 
-- **It redraws whether or not anything changed.** A Stage looking at a rig nobody is touching costs
-  the same as one mid-cue.
-- **The passes are not conditional on the view.** A view that simulates no light still runs the
-  cull pass, still allocates and clears the HDR and bloom targets, and still runs a full-screen
-  composite.
+Two remaining constraints matter:
+
+- The unlit views still use the common HDR/composite target. Removing that copy is a separate
+  target-layout change, not required to stop their light-simulation work.
+- A benchmark intentionally forces redraws, so it measures the cost of a requested frame rather
+  than the static gate's near-zero steady-state submission rate.
 
 ## Cheap and certain: stop drawing frames nobody asked for
 
@@ -61,14 +64,25 @@ That is most of a frame's fixed cost removed from the cheap views, which is what
 GPU for what it draws" complaint. My expectation is that this plus redraw-on-change takes the
 outline view to near zero.
 
-## Ultra: give it a budget it cannot exceed
+## Ultra: a bounded adaptive budget
 
 Ultra is 64 ray-march steps per beam fragment, with a 3D noise lookup at every step, plus up to ten
 shadow-mapped lights. Nothing in that scales with how many beams are on screen or how large the
 pane is, which is why it saturates: a rig with sixty beams across a full-screen Stage is asking for
 roughly sixty times the work of one beam, and it gets it.
 
-Options, roughly in order of value for effort:
+Ultra now targets 16 ms of measured GPU work. Two consecutive over-budget samples step down a
+bounded ladder of volumetric steps, shadow maps, and shaded resolution; recovery requires 120
+samples below 12 ms so quality does not oscillate. The ladder runs from 64 steps, ten shadows and
+full resolution to 16 steps, no shadows and 60% resolution. `FrameStats.degraded` says when a rung
+below authored Ultra was used.
+
+Adapters with timestamp queries use named asynchronous measurements for cull, shadow, opaque,
+beams, lasers, bloom, composite and overlay. An adapter that does not deliver a completed sample
+uses presented-frame intervals until the first GPU sample arrives. That fallback keeps Ultra
+bounded without mislabelling a display interval as GPU time.
+
+Further options, roughly in order of value for effort:
 
 **4. March at a lower resolution and upsample.** Volumetrics are low-frequency — that is what makes
 this the standard trick. Render the beam pass at half resolution into its own target and composite
@@ -80,11 +94,10 @@ does not need the same march count as one filling the screen. Step count from th
 depth extent through the cone, bounded by the tier, keeps the near beam at full quality and makes
 the far ones nearly free.
 
-**6. Make the tier a target rather than a constant.** Measure the frame — the GPU timer is already
-there in `crates/viz/render/src/timing.rs` and already reports `gpu_micros` — and trim march steps
-and shadow count to hold a frame budget. Ultra becomes "spend up to 16 ms making this as good as
-possible" instead of "do 64 steps and take as long as that takes". This also fixes the same problem
-on a weaker GPU, where today Ultra is simply unusable rather than degraded.
+**6. Prefer timestamp feedback wherever the backend completes it.** Per-pass timing is implemented,
+but a native backend may advertise queries without completing mapped samples during a short run.
+The interval fallback is intentionally temporary and yields as soon as the first real sample is
+collected.
 
 **7. Cap the beam count that gets the expensive treatment.** Shadows are already ranked by radiance
 and budgeted; march quality is not. The same ranking would let the twelve brightest beams have the
@@ -94,20 +107,29 @@ full treatment and the rest a cheaper one.
 the pane at 60 is a one-line change that halves the cost on this hardware, and it should probably
 be a setting rather than a constant.
 
-## What I would do first
+## Measured result on the development Mac
 
-1. Redraw-on-change plus the time-driven exception (helps every view, most of all the cheap ones).
-2. Skip cull/shadow/bloom/composite for views that simulate no light.
-3. Half-resolution beam march with depth-aware upsample (the Ultra win).
+Measured 2026-08-09 on Apple M5 Max / Metal / 4× MSAA, using the deterministic 32-fixture demo
+scene and the real Visualizer window.
+
+| Case | Command | Before | After |
+| --- | --- | --- | --- |
+| 3D Lines requested frames | `--demo --view lines_3d --quality ultra --benchmark 3` | 60.0 fps, 16.49 ms median, 18.68 ms p95, 0.56 ms CPU p95 | 60.5 fps, 16.54 ms median, 18.58 ms p95, 0.50 ms CPU p95; cull/shadow/bloom disabled by the pass plan |
+| Full 3D Ultra | `--demo --view full_3d --quality ultra --benchmark 3` | 45.8 fps, 21.14 ms median, 28.80 ms p95 | 59.9 fps, 16.66 ms median, 18.63 ms p95; adaptive rung active on all 180 measured frames |
+
+The Metal adapter advertised timestamps but produced no completed mapped sample during these short
+runs, so the GPU and pass columns truthfully remain absent. Unit decoding and host-GPU capture
+tests cover the query path; the measured Ultra result above therefore used the documented frame-
+interval fallback. For static 3D Lines, the benchmark is the conservative forced-redraw case; the
+normal application gate issues no new renderer frame after the redraw identity is unchanged.
+
+## Next optimizations
+
+1. Render volumetrics into a dedicated lower-resolution target with depth-aware upsampling.
+2. Render unlit views directly to the output and remove their remaining composite copy.
+3. Tell an embedded renderer explicitly when its desk pane is occluded.
 
 Items 1 and 2 are contained and testable — the existing headless capture harness can assert that an
 unchanged scene produces no new frame, and that an outline view issues no compute pass. Item 3 is a
 real piece of rendering work and wants its own measurements before and after, which is what the GPU
 timer is for.
-
-## What is not yet measured
-
-None of the above is instrumented per pass today. `FrameStats` reports total `gpu_micros`, draw
-calls, instances and lights, but not the split between the beam pass and everything else. Before
-committing to item 3 it is worth adding per-pass timestamps — the timer already supports opening
-and closing writes, and it would turn "the beam pass is presumably dominant" into a number.

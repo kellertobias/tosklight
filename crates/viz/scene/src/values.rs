@@ -79,6 +79,28 @@ impl SceneValues {
         }
     }
 
+    /// Whether another display-clock tick can change the picture without a new input frame.
+    ///
+    /// This is deliberately about visible temporal state, not merely about having authored
+    /// motion metadata. A position target which has settled is static; a velocity target is
+    /// time-driven even while it is still accelerating from zero.
+    pub fn is_time_driven(&self, persistence: &PersistencePreference) -> bool {
+        self.emitters.iter().any(|emitter| {
+            (persistence.is_active()
+                && (emitter.held_intensity > emitter.visible_intensity() + f32::EPSILON
+                    || emitter
+                        .cells
+                        .iter()
+                        .any(|cell| cell.held_intensity > cell.intensity + f32::EPSILON)))
+                || emitter.pan_motion.is_moving()
+                || emitter.tilt_motion.is_moving()
+                || emitter.gobo_rotation_motion.is_moving()
+                || emitter.prism_rotation_motion.is_moving()
+                || emitter.gobo_wheel_motion.motion.is_moving()
+                || emitter.colour_wheel_motion.motion.is_moving()
+        }) || self.laser_scans.iter().any(|scan| !scan.points.is_empty())
+    }
+
     /// Carry the values across a structural change to the scene.
     ///
     /// Emitters are addressed by index, and a fixture added, removed or repatched moves every
@@ -299,6 +321,23 @@ impl WheelMotionState {
 impl PhysicalMotionState {
     pub fn set_target(&mut self, target: PhysicalMotionTarget) {
         self.target = Some(target);
+    }
+
+    /// Whether advancing the display clock can still alter this state.
+    pub fn is_moving(&self) -> bool {
+        match self.target {
+            Some(PhysicalMotionTarget::Position { degrees, .. }) => {
+                (degrees - self.position_degrees).abs() > 1.0e-4
+                    || self.velocity_degrees_per_second.abs() > 1.0e-3
+            }
+            Some(PhysicalMotionTarget::Velocity {
+                degrees_per_second, ..
+            }) => {
+                degrees_per_second.abs() > f32::EPSILON
+                    || self.velocity_degrees_per_second.abs() > 1.0e-3
+            }
+            None => false,
+        }
     }
 
     pub fn advance(&mut self, elapsed: f32) {
@@ -528,6 +567,48 @@ mod tests {
         assert_eq!(values.emitters.len(), 2);
         assert_eq!(values.emitters[0].intensity, 0.0);
         assert_eq!(values.emitters[1].intensity, 0.5);
+    }
+
+    #[test]
+    fn static_values_do_not_request_display_clock_frames() {
+        let mut values = SceneValues::default();
+        values.resize(1);
+        assert!(!values.is_time_driven(&PersistencePreference::default()));
+    }
+
+    #[test]
+    fn persistence_and_unsettled_motion_request_display_clock_frames() {
+        let mut values = SceneValues::default();
+        values.resize(1);
+        values.emitters[0].held_intensity = 1.0;
+        assert!(values.is_time_driven(&PersistencePreference::default()));
+        values.emitters[0].held_intensity = 0.0;
+        values.emitters[0]
+            .pan_motion
+            .set_target(PhysicalMotionTarget::Position {
+                degrees: 90.0,
+                max_speed: 180.0,
+                acceleration: 360.0,
+                deceleration: 360.0,
+            });
+        assert!(values.is_time_driven(&PersistencePreference::default()));
+    }
+
+    #[test]
+    fn a_settled_position_target_is_static() {
+        let mut values = SceneValues::default();
+        values.resize(1);
+        values.emitters[0].pan_motion = PhysicalMotionState {
+            position_degrees: 90.0,
+            velocity_degrees_per_second: 0.0,
+            target: Some(PhysicalMotionTarget::Position {
+                degrees: 90.0,
+                max_speed: 180.0,
+                acceleration: 360.0,
+                deceleration: 360.0,
+            }),
+        };
+        assert!(!values.is_time_driven(&PersistencePreference::default()));
     }
 
     /// Heads of one multi-head fixture are told apart by their head index, not by their order.
