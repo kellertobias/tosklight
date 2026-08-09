@@ -31,6 +31,7 @@ import {
 } from "@tosklight/ui/window-kit";
 import {
 	type CSSProperties,
+	type ComponentProps,
 	type MutableRefObject,
 	type ReactNode,
 	useCallback,
@@ -83,7 +84,6 @@ import { useSpeedGroupRuntimeView } from "../../features/speedGroupRuntime/Speed
 import { useApp } from "../../state/AppContext";
 import { useStageLayout } from "../stageWindow/useStageLayout";
 import type { DynamicEditorView } from "./DynamicsEditor";
-import { projectionEncoderSlots } from "./ProjectionEncoderSlots";
 import {
 	clamp,
 	defaultRandomGroup,
@@ -99,6 +99,7 @@ import {
 	sourceCurrent,
 	wrappedIndex,
 } from "./DynamicsEditor";
+import { projectionEncoderSlots } from "./ProjectionEncoderSlots";
 
 type PresetObject = ShowObject<"preset">;
 
@@ -115,6 +116,64 @@ interface DynamicEncoderDeckProps {
 		mutationGroup?: string,
 	): Promise<void>;
 	onMutate(intent: DynamicUpdateIntent, mutationGroup?: string): Promise<void>;
+}
+
+function dynamicEncoderSlots(
+	view: DynamicEditorView,
+	lane: DynamicLaneProjection | undefined,
+	dynamic: DynamicDefinitionProjection,
+	keyframeIndex: number,
+	onKeyframeIndex: (index: number) => void,
+	onLaneChange: DynamicEncoderDeckProps["onLaneChange"],
+	presets: readonly PresetObject[],
+	visibleEncoderCount: number,
+	onMutate: DynamicEncoderDeckProps["onMutate"],
+	phase: ReturnType<typeof dynamicPhaseBinding>["phase"],
+	applyPhase: ReturnType<typeof dynamicPhaseBinding>["applyPhase"],
+) {
+	if (view === "curves")
+		return curveEditorEncoderSlots(
+			lane,
+			dynamic,
+			keyframeIndex,
+			onKeyframeIndex,
+			onLaneChange,
+			presets,
+		);
+	if (view === "projection")
+		return projectionEncoderSlots(dynamic, visibleEncoderCount, onMutate);
+	if (view === "phase") return phaseEncoderSlots(phase, applyPhase);
+	return speedEncoderSlots(dynamic, onMutate);
+}
+
+function DynamicEncoderSurface({
+	view,
+	page,
+	items,
+	hardwareConnected,
+	callbacks,
+}: {
+	view: DynamicEditorView;
+	page: number;
+	items: ReturnType<typeof encoderSectionItems>;
+	hardwareConnected: boolean;
+	callbacks: ComponentProps<typeof EncoderSection>["callbacks"];
+}) {
+	return (
+		<div className="dynamic-encoder-deck">
+			<EncoderSection
+				showHeader={false}
+				model={{
+					id: `dynamics-${view}-${page}`,
+					label: `${view === "curves" ? "Lanes" : view === "phase" ? "Phase" : "Speed"} encoders`,
+					description: "Turn fine · press-turn coarse · center Set Value",
+					encoders: items,
+				}}
+				surface={hardwareConnected ? "hardware" : "touch"}
+				callbacks={callbacks}
+			/>
+		</div>
+	);
 }
 
 export function DynamicEncoderDeck({
@@ -151,26 +210,23 @@ export function DynamicEncoderDeck({
 		onLaneChange,
 		onMutate,
 	);
-	const allSlots =
-		view === "curves"
-			? curveEditorEncoderSlots(
-					lane,
-					dynamic,
-					keyframeIndex,
-					onKeyframeIndex,
-					onLaneChange,
-					presets,
-				)
-			: view === "projection"
-				? projectionEncoderSlots(dynamic, visibleEncoderCount, onMutate)
-				: view === "phase"
-					? phaseEncoderSlots(phase, applyPhase)
-					: speedEncoderSlots(dynamic, onMutate);
-	const pageCount = Math.max(
-		1,
-		Math.ceil(allSlots.length / visibleEncoderCount),
+	const allSlots = dynamicEncoderSlots(
+		view,
+		lane,
+		dynamic,
+		keyframeIndex,
+		onKeyframeIndex,
+		onLaneChange,
+		presets,
+		visibleEncoderCount,
+		onMutate,
+		phase,
+		applyPhase,
 	);
-	const visiblePage = Math.min(Math.max(1, page), pageCount);
+	const visiblePage = Math.min(
+		Math.max(1, page),
+		Math.max(1, Math.ceil(allSlots.length / visibleEncoderCount)),
+	);
 	const slots = allSlots.slice(
 		(visiblePage - 1) * visibleEncoderCount,
 		visiblePage * visibleEncoderCount,
@@ -253,27 +309,21 @@ export function DynamicEncoderDeck({
 		groupFor,
 	);
 	return (
-		<div className="dynamic-encoder-deck">
-			<EncoderSection
-				showHeader={false}
-				model={{
-					id: `dynamics-${view}-${visiblePage}`,
-					label: `${view === "curves" ? "Lanes" : view === "phase" ? "Phase" : "Speed"} encoders`,
-					description: "Turn fine · press-turn coarse · center Set Value",
-					encoders: items,
-				}}
-				surface={hardwareConnected ? "hardware" : "touch"}
-				callbacks={{
-					onRelativeChange: applyRelative,
-					onAbsoluteChange: applyAbsolute,
-					onRangeChange: applyRange,
-					onPresetSelect: selectPreset,
-					onHardwareDisplayRef: (slot, handle) => {
-						hardwareDisplays.current[slot - 1] = handle;
-					},
-				}}
-			/>
-		</div>
+		<DynamicEncoderSurface
+			view={view}
+			page={visiblePage}
+			items={items}
+			hardwareConnected={hardwareConnected}
+			callbacks={{
+				onRelativeChange: applyRelative,
+				onAbsoluteChange: applyAbsolute,
+				onRangeChange: applyRange,
+				onPresetSelect: selectPreset,
+				onHardwareDisplayRef: (slot, handle) => {
+					hardwareDisplays.current[slot - 1] = handle;
+				},
+			}}
+		/>
 	);
 }
 

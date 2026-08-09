@@ -109,6 +109,19 @@ impl HighlightPorts for HeadlessHighlightPorts<'_> {
         Ok(())
     }
 
+    fn synchronize_output_layers(
+        &self,
+        _context: &ActionContext,
+        layers: &[light_programmer::HighlightOutputLayer],
+    ) -> Result<(), ActionError> {
+        self.state.output.set_highlight_layers(
+            self.state
+                .highlight
+                .include_patch_preview_layers(layers.iter().cloned()),
+        );
+        Ok(())
+    }
+
     fn publish_programmer_changed(&self, context: &ActionContext, command: &HighlightCommand) {
         let payload = match command {
             HighlightCommand::Action {
@@ -116,6 +129,12 @@ impl HighlightPorts for HeadlessHighlightPorts<'_> {
                 publication: HighlightActionPublication::Standard,
             } if context.source == ActionSource::Osc => {
                 serde_json::json!({"session_id":self.session.id,"source":"osc_highlight","action":action})
+            }
+            HighlightCommand::Action {
+                action,
+                publication: HighlightActionPublication::Standard,
+            } if context.source == ActionSource::Extension => {
+                serde_json::json!({"session_id":self.session.id,"source":"extension","action":action})
             }
             HighlightCommand::Action {
                 action,
@@ -157,6 +176,16 @@ impl HighlightPorts for HeadlessHighlightPorts<'_> {
             HighlightCommand::Action {
                 action,
                 publication: HighlightActionPublication::Standard,
+            } if context.source == ActionSource::Extension => serde_json::json!({
+                "desk_id":self.session.desk.id,
+                "user_id":self.session.user.id,
+                "action":action,
+                "source":"extension",
+                "state":state,
+            }),
+            HighlightCommand::Action {
+                action,
+                publication: HighlightActionPublication::Standard,
             } => serde_json::json!({
                 "desk_id":self.session.desk.id,
                 "user_id":self.session.user.id,
@@ -188,6 +217,9 @@ impl HighlightPorts for HeadlessHighlightPorts<'_> {
         let source = match command {
             HighlightCommand::Action { .. } if context.source == ActionSource::Osc => {
                 Some("osc".to_owned())
+            }
+            HighlightCommand::Action { .. } if context.source == ActionSource::Extension => {
+                Some("extension".to_owned())
             }
             HighlightCommand::Reconcile { source } => Some(source.clone()),
             HighlightCommand::Action { .. } | HighlightCommand::Status => None,

@@ -9,7 +9,7 @@ Open the Show menu and choose **Enter Setup**.
 Work through these pages in order:
 
 1. [Screens and Desktop Layouts](01-screens-and-layouts.md)
-2. [OSC, MIDI, and Network Control](02-osc-midi-and-network.md)
+2. [OSC, Extensions, and Network Control](02-osc-midi-and-network.md)
 3. [DMX Output and Universe Routes](03-dmx-output.md)
 4. [Operators, Sessions, and Recovery](04-users-sessions-and-recovery.md)
 5. [Media Server](05-media-server.md)

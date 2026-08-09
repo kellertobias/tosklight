@@ -3,6 +3,7 @@ import {
 	fireEvent,
 	render as rtlRender,
 	screen,
+	waitFor,
 } from "@testing-library/react";
 import { ModalProvider } from "@tosklight/ui/modals";
 import type { PropsWithChildren } from "react";
@@ -266,6 +267,42 @@ afterEach(() => {
 });
 
 describe("ParameterControls projection lifecycle", () => {
+	it("shows fixture-profile Color defaults before a programmer value exists", () => {
+		server.selectedFixtures = ["fixture-1"];
+		server.patch.fixtures = [
+			{
+				fixture_id: "fixture-1",
+				logical_heads: [],
+				definition: {
+					heads: [
+						{
+							index: 0,
+							shared: true,
+							parameters: [
+								{ attribute: "color.red", default: 1, capabilities: [] },
+								{ attribute: "color.green", default: 1, capabilities: [] },
+								{ attribute: "color.blue", default: 1, capabilities: [] },
+							],
+						},
+					],
+				},
+			},
+		];
+
+		render(<ParameterControls />);
+		fireEvent.click(screen.getByRole("button", { name: "Color" }));
+
+		expect(
+			screen.getByRole("group", { name: "Enc 1 · color red" }),
+		).toHaveTextContent("100%");
+		expect(
+			screen.getByRole("group", { name: "Enc 2 · color green" }),
+		).toHaveTextContent("100%");
+		expect(
+			screen.getByRole("group", { name: "Enc 3 · color blue" }),
+		).toHaveTextContent("100%");
+	});
+
 	it("does not mount the visualization projection behind Stage command controls", () => {
 		state.stageMode = "setup";
 		state.builtIn = "stage";
@@ -1213,7 +1250,7 @@ describe("ParameterControls hardware encoders", () => {
 				type: "absolute_set",
 				value: { kind: "spread", value: [0, 0.5] },
 			},
-			timing: { fade: false, fadeMillis: null, delayMillis: null },
+			timing: { fade: true, fadeMillis: 3_000, delayMillis: null },
 		});
 	});
 });
@@ -1477,30 +1514,74 @@ describe("ParameterControls Group targets and alignment", () => {
 		expect(await screen.findByText("75%")).toBeInTheDocument();
 	});
 
-	it("starts off, cycles Out, Center, Left, Right, and Shift+Align turns it off", () => {
+	it("cycles the authoritative Left, Right, Out, In, Off modifier in every encoder family", async () => {
 		render(<ParameterControls />);
-		fireEvent.click(screen.getByRole("button", { name: "Position" }));
 		const align = screen.getByRole("button", { name: "Align Off" });
 		expect(align).toHaveClass("align-off");
 
-		for (const mode of ["out", "center", "left", "right"] as const) {
+		for (const mode of ["left", "right", "out", "in"] as const) {
 			fireEvent.click(align);
-			expect(server.alignSelection).toHaveBeenLastCalledWith("pan", mode);
+			await waitFor(() =>
+				expect(server.alignSelection).toHaveBeenLastCalledWith(mode),
+			);
 			expect(align).toHaveAccessibleName(
 				`Align ${mode[0].toUpperCase()}${mode.slice(1)}`,
 			);
 			expect(align).toHaveClass("align-active");
 		}
+		fireEvent.click(align);
+		await waitFor(() =>
+			expect(server.alignSelection).toHaveBeenLastCalledWith("off"),
+		);
+		expect(align).toHaveAccessibleName("Align Off");
 
+		fireEvent.click(screen.getByRole("button", { name: "Color" }));
+		expect(
+			screen.getByRole("button", { name: "Align Off" }),
+		).toBeInTheDocument();
+
+		fireEvent.click(align);
+		await waitFor(() => expect(align).toHaveAccessibleName("Align Left"));
 		state.shiftArmed = true;
 		fireEvent.click(align);
-		expect(align).toHaveAccessibleName("Align Off");
+		await waitFor(() => expect(align).toHaveAccessibleName("Align Off"));
 		expect(align).toHaveClass("align-off");
 		expect(dispatch).toHaveBeenCalledWith({
 			type: "SET_SHIFT_ARMED",
 			value: false,
 		});
-		expect(server.alignSelection).toHaveBeenCalledTimes(4);
+		expect(server.alignSelection).toHaveBeenLastCalledWith("off");
+	});
+
+	it("keeps Align Off when the authoritative activation is rejected", async () => {
+		server.alignSelection.mockRejectedValueOnce(new Error("Align unavailable"));
+		render(<ParameterControls />);
+		const align = screen.getByRole("button", { name: "Align Off" });
+
+		fireEvent.click(align);
+
+		await waitFor(() =>
+			expect(server.alignSelection).toHaveBeenCalledWith("left"),
+		);
+		expect(align).toHaveAccessibleName("Align Off");
+		expect(align).toHaveClass("align-off");
+	});
+
+	it("routes the attached-hardware Align gesture through the same authoritative mode cycle", async () => {
+		server.alignSelection.mockResolvedValueOnce(undefined);
+		render(<ParameterControls />);
+		const align = screen.getByRole("button", { name: "Align Off" });
+
+		window.dispatchEvent(
+			new CustomEvent("light:align-action", {
+				detail: { action: "align", request_id: "hardware-align-1" },
+			}),
+		);
+
+		await waitFor(() =>
+			expect(server.alignSelection).toHaveBeenCalledWith("left"),
+		);
+		expect(align).toHaveAccessibleName("Align Left");
 	});
 });
 

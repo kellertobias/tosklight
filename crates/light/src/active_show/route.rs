@@ -235,6 +235,7 @@ fn route_requires_termination(previous: &OutputRoute, next: Option<&OutputRoute>
     previous.enabled
         && next.is_none_or(|next| {
             !next.enabled
+                || previous.target != next.target
                 || previous.protocol != next.protocol
                 || previous.destination_universe != next.destination_universe
                 || previous.resolved_delivery_mode() != next.resolved_delivery_mode()

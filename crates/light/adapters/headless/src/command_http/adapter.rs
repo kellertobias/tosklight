@@ -265,7 +265,7 @@ pub(super) fn run_service(
     run_service_with_source(state, session, context, command, "http").map_err(action_error)
 }
 
-fn run_service_with_source(
+pub(crate) fn run_service_with_source(
     state: &AppState,
     session: &Session,
     context: ActionContext,

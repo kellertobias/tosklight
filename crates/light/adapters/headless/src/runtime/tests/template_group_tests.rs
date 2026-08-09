@@ -210,12 +210,20 @@ impl TemplateGroupScenario {
                 .collect(),
             ..self.populated_groups[2].clone()
         };
+        let expected_revision = self
+            .store
+            .objects("group")
+            .unwrap()
+            .into_iter()
+            .find(|object| object.id == "profile")
+            .expect("stored profile group")
+            .revision;
         self.store
             .put_object(
                 "group",
                 "profile",
                 &serde_json::to_value(expanded_profile).unwrap(),
-                2,
+                expected_revision,
             )
             .unwrap();
         self.state.programming.release_preload(self.session_id);

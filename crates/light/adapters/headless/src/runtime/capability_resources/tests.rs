@@ -173,6 +173,29 @@ mod tests {
     }
 
     #[test]
+    fn patch_preview_is_an_unconditional_highlight_layer() {
+        let highlight = HighlightResource::new(Arc::new(HighlightRegistry::default()));
+        let session_id = SessionId::new();
+        let fixture_id = light_core::FixtureId::new();
+        let attribute = light_core::AttributeKey("intensity".into());
+        assert!(highlight.set_patch_preview(session_id, HashSet::from([fixture_id])));
+
+        let layers =
+            highlight.include_patch_preview_layers([light_programmer::HighlightOutputLayer {
+                fixture_id,
+                role: light_programmer::HighlightOutputRole::LowLight,
+                suppressed_attributes: HashSet::from([attribute]),
+            }]);
+
+        assert_eq!(layers.len(), 1);
+        assert_eq!(
+            layers[0].role,
+            light_programmer::HighlightOutputRole::Highlight
+        );
+        assert!(layers[0].suppressed_attributes.is_empty());
+    }
+
+    #[test]
     fn integration_resource_operates_without_the_server_state_bag() {
         let integrations =
             IntegrationResource::new(Arc::new(matter::MatterBridgeAdapter::default()), None, None);
@@ -226,6 +249,9 @@ mod tests {
             OutputControlCapability::new(Arc::new(Mutex::new(OutputControl::default()))),
             Arc::new(Mutex::new(TimecodeRouter::default())),
             None,
+            Arc::new(light_output::UsbOutputFanout::new(Arc::new(
+                light_output::UnavailableUsbDriverFactory,
+            ))),
             Arc::default(),
             None,
             Arc::new(Mutex::new(std::array::from_fn(|index| {

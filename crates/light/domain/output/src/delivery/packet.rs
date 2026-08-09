@@ -21,7 +21,7 @@ pub fn encode_routes(
 ) -> io::Result<Vec<EncodedPacket>> {
     routes
         .iter()
-        .filter(|route| route.enabled)
+        .filter(|route| route.enabled && route.target.is_network())
         .map(|route| {
             encode_route(
                 route,

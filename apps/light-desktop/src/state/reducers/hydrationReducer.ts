@@ -76,6 +76,54 @@ function schedulerPaneLayout(pane: AppState["desks"][number]["panes"][number]) {
 			};
 }
 
+function hydrateDesks(
+	state: AppState,
+	action: Extract<Action, { type: "HYDRATE_LAYOUT" }>,
+): AppState["desks"] {
+	return action.desks.map((desk) => ({
+		...desk,
+		panes: desk.panes
+			.filter((pane) => !isRetiredWindow(pane.kind))
+			.map((pane) => {
+				const { layoutGroupId: _retiredPaneGroupId, ...activePane } = pane;
+				const kind = cueListWindowKind(pane.kind);
+				const migrated = {
+					...activePane,
+					kind,
+					title: cueListWindowTitle(pane.title, kind),
+					...(kind === "scheduler" ? schedulerPaneLayout(pane) : {}),
+					...(kind === "channels"
+						? {
+								channelDisplayMode: normalizeChannelDisplayMode(
+									pane.channelDisplayMode,
+								),
+							}
+						: {}),
+					...(kind === "fixtures"
+						? { fixtureSheetCompactMode: "off" as const }
+						: {}),
+				};
+				if (pane.kind !== "presets") return migrated;
+				const legacyDefault =
+					pane.title === "All Presets" ||
+					(pane.id === "presets" && pane.title === "Color & Position Presets");
+				return {
+					...migrated,
+					title: legacyDefault ? "Mixed Presets" : pane.title,
+					presetFamily: legacyDefault
+						? "Mixed"
+						: normalizePresetFamily(
+								pane.presetFamily,
+								normalizePresetFamily(
+									action.windowSettings?.presetFamily,
+									state.presetFamily,
+								),
+							),
+				};
+			}),
+	}));
+}
+
 export function reduceHydration(
 	state: AppState,
 	action: Action,
@@ -156,52 +204,7 @@ export function reduceHydration(
 					: cueListWindowKind(
 							action.windowSettings?.lastBuiltIn ?? state.lastBuiltIn,
 						),
-				desks: action.desks.map((desk) => ({
-					...desk,
-					panes: desk.panes
-						.filter((pane) => !isRetiredWindow(pane.kind))
-						.map((pane) => {
-							const { layoutGroupId: _retiredPaneGroupId, ...activePane } =
-								pane;
-							const kind = cueListWindowKind(pane.kind);
-							const migrated = {
-								...activePane,
-								kind,
-								title: cueListWindowTitle(pane.title, kind),
-								...(kind === "scheduler" ? schedulerPaneLayout(pane) : {}),
-								...(kind === "channels"
-									? {
-											channelDisplayMode: normalizeChannelDisplayMode(
-												pane.channelDisplayMode,
-											),
-										}
-									: {}),
-								...(kind === "fixtures"
-									? {
-											fixtureSheetCompactMode: "off" as const,
-										}
-									: {}),
-							};
-							if (pane.kind !== "presets") return migrated;
-							const legacyDefault =
-								pane.title === "All Presets" ||
-								(pane.id === "presets" &&
-									pane.title === "Color & Position Presets");
-							return {
-								...migrated,
-								title: legacyDefault ? "Mixed Presets" : pane.title,
-								presetFamily: legacyDefault
-									? "Mixed"
-									: normalizePresetFamily(
-											pane.presetFamily,
-											normalizePresetFamily(
-												action.windowSettings?.presetFamily,
-												state.presetFamily,
-											),
-										),
-							};
-						}),
-				})),
+				desks: hydrateDesks(state, action),
 				activeDeskId: action.desks.some(
 					(desk) => desk.id === action.activeDeskId,
 				)

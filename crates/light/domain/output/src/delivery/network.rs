@@ -113,7 +113,10 @@ impl NetworkOutput {
         routes: &[OutputRoute],
         sequences: &mut HashMap<(Protocol, Universe), u8>,
     ) -> io::Result<()> {
-        for route in routes.iter().filter(|route| route.enabled) {
+        for route in routes
+            .iter()
+            .filter(|route| route.enabled && route.target.is_network())
+        {
             if route.protocol == Protocol::Sacn {
                 self.terminate_sacn_route(route, sequences).await?;
             }
@@ -236,6 +239,9 @@ impl SendOutcome {
 }
 
 fn route_diagnostic(route: &OutputRoute) -> Option<RouteDiagnostic> {
+    if !route.target.is_network() {
+        return None;
+    }
     Some(RouteDiagnostic {
         protocol: route.protocol,
         universe: route.destination_universe,

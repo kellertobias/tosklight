@@ -106,18 +106,20 @@ describe("DynamicProjectionView", () => {
 			/>,
 		);
 
+		await screen.findByRole("radiogroup", { name: "Projection" });
+		expect(screen.queryByText("Projection", { selector: "h2" })).toBeNull();
 		expect(
-			await screen.findByText("Inherit group mapping \u00b7 Group front"),
-		).toBeTruthy();
+			screen.queryByText("Inherit group mapping \u00b7 Group front"),
+		).toBeNull();
 		// Shape configuration lives on its own tab now.
 		expect(screen.queryByText("Phase shape")).toBeNull();
 		// Nothing to apply: changes persist as they are made.
 		expect(screen.queryByRole("button", { name: "Apply" })).toBeNull();
 
-		fireEvent.click(screen.getByRole("radio", { name: "Override" }));
+		fireEvent.click(kindOption("Planar"));
 		// Planar looks along a direction and takes a view preset, and reads no position.
-		expect(screen.getByRole("radiogroup", { name: "View preset" })).toBeTruthy();
-		expect(screen.getByLabelText("Direction X")).toBeTruthy();
+		expect(screen.getByRole("button", { name: "Top" })).toBeTruthy();
+		expect(screen.getByLabelText("Azimuth")).toBeTruthy();
 		expect(screen.queryByLabelText("Position X")).toBeNull();
 
 		fireEvent.click(kindOption("Cylindrical"));
@@ -129,9 +131,7 @@ describe("DynamicProjectionView", () => {
 		expect(screen.getByLabelText("Elevation")).toBeTruthy();
 		expect(screen.getByLabelText("Rotation")).toBeTruthy();
 		expect(screen.queryByLabelText("Direction X")).toBeNull();
-		expect(
-			screen.queryByRole("radiogroup", { name: "View preset" }),
-		).toBeNull();
+		expect(screen.queryByRole("button", { name: "Top" })).toBeNull();
 
 		fireEvent.click(kindOption("Spherical"));
 		// A sphere is oriented the same way, so the two placed kinds read alike.
@@ -155,8 +155,13 @@ describe("DynamicProjectionView", () => {
 				)}
 			/>,
 		);
+		await screen.findByRole("radiogroup", { name: "Projection" });
+		expect(screen.queryByText("Selection order (no Group mapping)")).toBeNull();
+		expect(screen.queryByRole("alert")).toBeNull();
 		expect(
-			await screen.findByText("Selection order (no Group mapping)"),
+			screen.getByText(
+				"No projection to show. Targets keep their saved selection order.",
+			),
 		).toBeTruthy();
 	});
 
@@ -175,14 +180,17 @@ describe("DynamicProjectionView", () => {
 			/>,
 		);
 
-		await screen.findByText("Inherit group mapping \u00b7 Group front");
-		fireEvent.click(screen.getByRole("radio", { name: "Override" }));
-		const presets = screen.getByRole("radiogroup", { name: "View preset" });
-		expect(within(presets).getByRole("radio", { name: "Top" })).toBeChecked();
-		fireEvent.click(within(presets).getByRole("radio", { name: "Front" }));
+		await screen.findByRole("radiogroup", { name: "Projection" });
+		fireEvent.click(kindOption("Planar"));
+		expect(
+			screen.getByRole("button", { name: "Top" }).getAttribute("aria-pressed"),
+		).toBe("true");
+		fireEvent.click(screen.getByRole("button", { name: "Front" }));
 
 		// No Apply: the change saves itself once the operator stops editing.
 		await waitFor(() => expect(apply).toHaveBeenCalled());
+		expect(screen.queryByText("Saving…")).toBeNull();
+		expect(screen.queryByText("Saved")).toBeNull();
 		expect(apply.mock.calls[0]?.[0]).toMatchObject({
 			projection: {
 				type: "replace",
@@ -193,9 +201,10 @@ describe("DynamicProjectionView", () => {
 		// A conflict says so and leaves the operator's override in place.
 		await screen.findByText(/Authoritative values were reloaded/);
 		expect(
-			(screen.getByRole("radio", { name: "Override" }) as HTMLInputElement)
-				.checked,
-		).toBe(true);
+			screen
+				.getByRole("radio", { name: "Planar" })
+				.getAttribute("aria-checked"),
+		).toBe("true");
 	});
 
 	it("sends the new projection kinds to the server", async () => {
@@ -213,8 +222,7 @@ describe("DynamicProjectionView", () => {
 			/>,
 		);
 
-		await screen.findByText("Inherit group mapping \u00b7 Group front");
-		fireEvent.click(screen.getByRole("radio", { name: "Override" }));
+		await screen.findByRole("radiogroup", { name: "Projection" });
 		fireEvent.click(kindOption("Cylindrical"));
 
 		await waitFor(() => expect(apply).toHaveBeenCalled());

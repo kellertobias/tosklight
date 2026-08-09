@@ -2,6 +2,26 @@ import { type AppState, GRID_COLUMNS, GRID_ROWS } from "../../types";
 import type { Action } from "../appActions";
 import { clamp, overlaps } from "../reducerHelpers";
 
+function updatePane(
+	state: AppState,
+	id: string,
+	patch: Record<string, unknown>,
+): AppState {
+	return {
+		...state,
+		desks: state.desks.map((desk) =>
+			desk.id !== state.activeDeskId
+				? desk
+				: {
+						...desk,
+						panes: desk.panes.map((pane) =>
+							pane.id === id ? { ...pane, ...patch } : pane,
+						),
+					},
+		),
+	};
+}
+
 export function reducePaneGeometry(
 	state: AppState,
 	action: Action,
@@ -46,69 +66,21 @@ export function reducePaneGeometry(
 				}),
 			};
 		case "SET_PANE_GROUP_SHORTCUTS":
-			return {
-				...state,
-				desks: state.desks.map((desk) =>
-					desk.id !== state.activeDeskId
-						? desk
-						: {
-								...desk,
-								panes: desk.panes.map((pane) =>
-									pane.id === action.id
-										? { ...pane, showGroupShortcuts: action.value }
-										: pane,
-								),
-							},
-				),
-			};
+			return updatePane(state, action.id, { showGroupShortcuts: action.value });
 		case "SET_PANE_FIXTURE_ACTIVE_ONLY":
-			return {
-				...state,
-				desks: state.desks.map((desk) =>
-					desk.id !== state.activeDeskId
-						? desk
-						: {
-								...desk,
-								panes: desk.panes.map((pane) =>
-									pane.id === action.id
-										? { ...pane, fixtureSheetActiveOnly: action.value }
-										: pane,
-								),
-							},
-				),
-			};
+			return updatePane(state, action.id, {
+				fixtureSheetActiveOnly: action.value,
+			});
 		case "SET_PANE_FIXTURE_COMPACT_MODE":
-			return {
-				...state,
-				desks: state.desks.map((desk) =>
-					desk.id !== state.activeDeskId
-						? desk
-						: {
-								...desk,
-								panes: desk.panes.map((pane) =>
-									pane.id === action.id
-										? { ...pane, fixtureSheetCompactMode: action.mode }
-										: pane,
-								),
-							},
-				),
-			};
+			return updatePane(state, action.id, {
+				fixtureSheetCompactMode: action.mode,
+			});
 		case "SET_PANE_CUE_SIDEBAR":
-			return {
-				...state,
-				desks: state.desks.map((desk) =>
-					desk.id !== state.activeDeskId
-						? desk
-						: {
-								...desk,
-								panes: desk.panes.map((pane) =>
-									pane.id === action.id
-										? { ...pane, showCueSidebar: action.value }
-										: pane,
-								),
-							},
-				),
-			};
+			return updatePane(state, action.id, { showCueSidebar: action.value });
+		case "SET_PANE_CUELIST_COMPACT_ROWS":
+			return updatePane(state, action.id, {
+				cueListCompactRows: action.value,
+			});
 		case "SET_PANE_CUELIST":
 			return {
 				...state,

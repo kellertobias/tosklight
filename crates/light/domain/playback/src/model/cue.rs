@@ -176,6 +176,14 @@ pub struct CueList {
     pub force_cue_timing: bool,
     #[serde(default)]
     pub disable_cue_timing: bool,
+    /// Turn this Cuelist Off when an accepted Master fader value reaches zero.
+    ///
+    /// This is Cuelist-owned so every physical and virtual assignment shares one behavior.
+    #[serde(default)]
+    pub auto_off_at_zero: bool,
+    /// Turn this Cuelist Off when a Flash gesture which started it is released.
+    #[serde(default)]
+    pub auto_off_flash_release: bool,
     #[serde(default, skip_serializing_if = "is_zero_u64")]
     pub chaser_xfade_millis: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -212,6 +220,14 @@ pub(crate) fn cue_completion_millis(
         return 0;
     };
     let previous_index = playback.manual_xfade_from_index.or(playback.previous_index);
+    let outgoing_cue = previous_index.and_then(|index| cue_list.cues.get(index));
+    let outgoing_cue_fade_millis = outgoing_cue.map(|outgoing| {
+        if outgoing.fade_millis == 0 {
+            cue_fade_millis
+        } else {
+            outgoing.fade_millis
+        }
+    });
     let transition_source = playback
         .deleted_cue_transition_source
         .as_ref()
@@ -244,6 +260,7 @@ pub(crate) fn cue_completion_millis(
                     cue_list,
                     cue,
                     cue_fade_millis,
+                    outgoing_cue.zip(outgoing_cue_fade_millis),
                     attribute.timing(target_index),
                     outgoing,
                 );
@@ -280,6 +297,7 @@ pub(crate) fn effective_attribute_timing(
     cue_list: &CueList,
     cue: &Cue,
     cue_fade_millis: u64,
+    outgoing_cue: Option<(&Cue, u64)>,
     timing: Option<(Option<u64>, Option<u64>)>,
     outgoing_intensity: bool,
 ) -> (u64, u64) {
@@ -287,8 +305,9 @@ pub(crate) fn effective_attribute_timing(
         return (0, 0);
     }
     let master = if outgoing_intensity && cue_list.mode == CueListMode::Sequence {
+        let (cue, fade_millis) = outgoing_cue.unwrap_or((cue, cue_fade_millis));
         (
-            cue.out_fade_millis.unwrap_or(cue_fade_millis),
+            cue.out_fade_millis.unwrap_or(fade_millis),
             cue.out_delay_millis.unwrap_or(cue.delay_millis),
         )
     } else {

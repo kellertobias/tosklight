@@ -21,7 +21,7 @@ import {
 } from "./support/catalog";
 
 export function registerFixtureTimingTest(): void {
-	test("TIME-002 @supplemental-ui › touch-set fixture timing is stored and replayed as resolved light and DMX", async ({
+	test("TIME-002 @supplemental-ui › absolute fixture Set Value timing is stored and replayed as resolved light and DMX", async ({
 		api,
 		bench,
 		desk,
@@ -47,10 +47,10 @@ export function registerFixtureTimingTest(): void {
 
 			await expectEncoderTarget(page, 100);
 			await bench.tick(0);
-			await expectFixtureSheetDimmer(page, 1, 100);
+			await expectFixtureSheetDimmer(page, 1, 0);
 			await desk.recordStep(
-				"ENCODER TARGET AND OUTPUT 100% IMMEDIATELY",
-				"The encoder Set Value action bypasses the non-zero Programmer Fade for live output.",
+				"ENCODER TARGET 100%; OUTPUT STARTS AT 0%",
+				"The absolute encoder Set Value action captures the enabled 3 s Programmer Fade.",
 			);
 			await expect
 				.poll(async () => {
@@ -64,7 +64,11 @@ export function registerFixtureTimingTest(): void {
 						fadeMillis: value?.fade_millis ?? null,
 					};
 				})
-				.toEqual({ fade: false, fadeMillis: null });
+				.toEqual({ fade: true, fadeMillis: 3_000 });
+			await bench.tick(1_500);
+			await expectFixtureSheetDimmer(page, 1, 50);
+			await bench.tick(1_500);
+			await expectFixtureSheetDimmer(page, 1, 100);
 
 			const cue = await recordFirstCuelistThroughUi(api, page);
 			const change = cue.changes.find(
@@ -73,8 +77,8 @@ export function registerFixtureTimingTest(): void {
 					candidate.attribute === "intensity",
 			);
 			expect(change.value).toEqual({ kind: "normalized", value: 1 });
-			expect(change.fade).toBe(false);
-			expect(change.fade_millis ?? null).toBeNull();
+			expect(change.fade).toBe(true);
+			expect(change.fade_millis).toBe(3_000);
 
 			await clearProgrammerValues(api, {
 				surface: "api",
@@ -93,7 +97,7 @@ export function registerFixtureTimingTest(): void {
 }
 
 export function registerGroupTimingTest(): void {
-	test("TIME-002 @supplemental-ui › touch-set Group timing is stored and replayed for every member", async ({
+	test("TIME-002 @supplemental-ui › absolute Group Set Value timing is stored and replayed for every member", async ({
 		api,
 		bench,
 		desk,
@@ -118,10 +122,10 @@ export function registerGroupTimingTest(): void {
 			await bench.tick(0);
 			await openFixtures(page);
 			for (const number of [1, 2, 3, 4])
-				await expectFixtureSheetDimmer(page, number, 100);
+				await expectFixtureSheetDimmer(page, number, 0);
 			await desk.recordStep(
-				"GROUP ENCODER TARGET AND OUTPUT 100% IMMEDIATELY",
-				"The Group encoder Set Value action bypasses the non-zero Programmer Fade for live output.",
+				"GROUP ENCODER TARGET 100%; OUTPUT STARTS AT 0%",
+				"The absolute Group encoder Set Value action captures the enabled 3 s Programmer Fade.",
 			);
 			await expect
 				.poll(
@@ -133,7 +137,13 @@ export function registerGroupTimingTest(): void {
 						};
 					},
 				)
-				.toEqual({ fade: false, fadeMillis: null });
+				.toEqual({ fade: true, fadeMillis: 3_000 });
+			await bench.tick(1_500);
+			for (const number of [1, 2, 3, 4])
+				await expectFixtureSheetDimmer(page, number, 50);
+			await bench.tick(1_500);
+			for (const number of [1, 2, 3, 4])
+				await expectFixtureSheetDimmer(page, number, 100);
 
 			const cue = await recordFirstCuelistThroughUi(api, page);
 			const change = cue.group_changes.find(
@@ -141,8 +151,8 @@ export function registerGroupTimingTest(): void {
 					candidate.group_id === "3" && candidate.attribute === "intensity",
 			);
 			expect(change.value).toEqual({ kind: "normalized", value: 1 });
-			expect(change.fade).toBe(false);
-			expect(change.fade_millis ?? null).toBeNull();
+			expect(change.fade).toBe(true);
+			expect(change.fade_millis).toBe(3_000);
 
 			await clearProgrammerValues(api, {
 				surface: "api",

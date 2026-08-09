@@ -102,6 +102,8 @@ export function reduceNavigation(
 				controlMode:
 					state.controlMode === "programmer" ? "playbacks" : "programmer",
 			};
+		case "SET_CONTROL_MODE":
+			return { ...state, controlMode: action.value };
 		case "SET_PANE_SETTINGS":
 			return { ...state, paneSettingsId: action.id };
 		case "SET_VIRTUAL_PLAYBACK_ZONE_EDIT":

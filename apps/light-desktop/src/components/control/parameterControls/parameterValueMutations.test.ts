@@ -15,6 +15,7 @@ function projection(
 	return {
 		programmerActions: null,
 		programmerFadeMillis: 1_250,
+		directEntryUsesProgrammerFade: true,
 		state: {} as ParameterProjection["state"],
 		active: true,
 		selectedFixtureIds: ["fixture-3", "fixture-1", "fixture-2"],
@@ -183,7 +184,7 @@ describe("parameter value mutation builders", () => {
 		});
 	});
 
-	it("submits an absolute selection without expanding fixture writes locally", async () => {
+	it("submits an absolute selection with configured Programmer Fade without expanding locally", async () => {
 		const actions = {
 			batch: vi.fn(),
 			applyIntent: vi.fn(async () => ({ status: "changed" })),
@@ -204,8 +205,28 @@ describe("parameter value mutation builders", () => {
 				type: "absolute_set",
 				value: { kind: "spread", value: [0, 0.5, 1] },
 			},
-			timing: { fade: false, fadeMillis: null, delayMillis: null },
+			timing: { fade: true, fadeMillis: 1_250, delayMillis: null },
 		});
+	});
+
+	it("keeps absolute direct entry immediate when its setting is disabled", async () => {
+		const actions = {
+			batch: vi.fn(),
+			applyIntent: vi.fn(async () => ({ status: "changed" })),
+		};
+		await submitParameterAbsoluteIntent(
+			actions,
+			projection({ directEntryUsesProgrammerFade: false }),
+			"intensity",
+			{ kind: "normalized", value: 0.5 },
+			() => "absolute-immediate",
+		);
+		expect(actions.applyIntent).toHaveBeenCalledWith(
+			expect.objectContaining({
+				requestId: "absolute-immediate",
+				timing: { fade: false, fadeMillis: null, delayMillis: null },
+			}),
+		);
 	});
 
 	it("submits a live Group tick as one server-owned Group intent", async () => {

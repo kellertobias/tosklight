@@ -623,6 +623,53 @@
 	filter: none;
 	opacity: 1;
 }
+.playback-fader-bank article.playback-command-target {
+	position: relative;
+	outline: 3px double currentColor;
+	outline-offset: -4px;
+}
+.playback-fader-bank article.command-target-record {
+	outline-color: var(--red);
+}
+.playback-fader-bank article.command-target-set {
+	outline-color: var(--cyan);
+}
+.playback-command-target-badge {
+	position: absolute;
+	z-index: 25;
+	top: 5px;
+	left: 50%;
+	transform: translateX(-50%);
+	max-width: calc(100% - 12px);
+	padding: 2px 6px;
+	border: 1px solid currentColor;
+	border-radius: 999px;
+	background: #080b0ff2;
+	font-size: 9px;
+	font-weight: 800;
+	line-height: 1.2;
+	letter-spacing: 0.08em;
+	white-space: nowrap;
+	pointer-events: none;
+}
+.playback-command-target-badge.record {
+	color: var(--red);
+}
+.playback-command-target-badge.set {
+	color: var(--cyan);
+}
+.group-card:not(.pool-card):is(.record-target, .store-target) {
+	border: 3px solid var(--pool-record-color, #ff4e55);
+	background: color-mix(in srgb, #68737c 14%, var(--panel2));
+}
+.group-card:not(.pool-card).set-target {
+	border: 3px solid var(--pool-set-color, #1bd6ec);
+	background: color-mix(in srgb, #68737c 14%, var(--panel2));
+}
+.group-card:not(.pool-card).delete-target {
+	border: 3px solid var(--pool-delete-color, #ff4e55);
+	background: color-mix(in srgb, #68737c 14%, var(--panel2));
+}
 .playback-assignment-target.ui-button {
 	position: absolute;
 	z-index: 20;
@@ -2286,6 +2333,23 @@ button:not(:disabled):active {
 	border: 0;
 	background: transparent;
 	color: var(--cyan);
+}
+.patch-set-targets .patch-table button:is(.patch-value, .patch-address) {
+	position: relative;
+	border: 3px solid var(--pool-set-color, #1bd6ec);
+}
+.patch-set-targets .patch-table button:is(.patch-value, .patch-address)::after {
+	position: absolute;
+	right: 3px;
+	bottom: 2px;
+	padding: 1px 4px;
+	border-radius: 3px;
+	background: #081014e8;
+	color: #fff;
+	content: "SET";
+	font-size: 8px;
+	font-weight: 800;
+	line-height: 1.2;
 }
 .patch-table select {
 	height: 32px;

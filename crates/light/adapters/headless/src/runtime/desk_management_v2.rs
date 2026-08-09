@@ -468,12 +468,6 @@ fn patched_configuration(
     if let Some(value) = patch.art_timecode_bind {
         configuration.art_timecode_bind = parse_socket(value, "art_timecode_bind")?;
     }
-    if let Some(value) = patch.midi_inputs {
-        configuration.midi_inputs = value;
-    }
-    if let Some(value) = patch.rtp_midi_bind {
-        configuration.rtp_midi_bind = parse_socket(value, "rtp_midi_bind")?;
-    }
     if let Some(value) = patch.timecode_sources {
         configuration.timecode_sources = value
             .into_iter()
@@ -517,6 +511,15 @@ fn patched_configuration(
     }
     if let Some(value) = patch.sequence_master_fade_millis {
         configuration.sequence_master_fade_millis = value;
+    }
+    if let Some(value) = patch.cuelist_auto_off_at_zero_default {
+        configuration.cuelist_auto_off_at_zero_default = value;
+    }
+    if let Some(value) = patch.cuelist_auto_off_flash_release_default {
+        configuration.cuelist_auto_off_flash_release_default = value;
+    }
+    if let Some(value) = patch.start_after_first_recording {
+        configuration.start_after_first_recording = value;
     }
     if let Some(value) = patch.preload_programmer_changes {
         configuration.preload_programmer_changes = value;
@@ -826,5 +829,21 @@ mod highlight_compatibility_tests {
 
         let legacy = patched_configuration(semantic, highlight_patch("legacy_raw")).unwrap();
         assert!(!legacy.highlight_legacy_overrides_acknowledged);
+    }
+
+    #[test]
+    fn playback_recording_defaults_patch_independently() {
+        let patch: wire::ConfigurationPatch = serde_json::from_value(serde_json::json!({
+            "cuelist_auto_off_at_zero_default": true,
+            "cuelist_auto_off_flash_release_default": true,
+            "start_after_first_recording": true,
+        }))
+        .unwrap();
+
+        let configuration = patched_configuration(DeskConfiguration::default(), patch).unwrap();
+        assert!(configuration.cuelist_auto_off_at_zero_default);
+        assert!(configuration.cuelist_auto_off_flash_release_default);
+        assert!(configuration.start_after_first_recording);
+        assert!(configuration.preload_programmer_changes);
     }
 }

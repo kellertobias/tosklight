@@ -62,27 +62,6 @@ pub(super) fn control_input_tasks(
             Ok(())
         }));
     }
-    for port in configuration.midi_inputs {
-        let state = state.clone();
-        let cancel = cancel.clone();
-        tasks.push(Box::pin(async move {
-            let input = MidiControlInput::open(&port)
-                .map_err(|error| anyhow::anyhow!("MIDI input could not open {port}: {error}"))?;
-            drive_control_input(state, cancel, input).await;
-            Ok(())
-        }));
-    }
-    if let Some(address) = configuration.rtp_midi_bind {
-        let state = state.clone();
-        let cancel = cancel.clone();
-        tasks.push(Box::pin(async move {
-            let input = RtpMidiInput::bind(address, "Light")
-                .await
-                .with_context(|| format!("RTP-MIDI input could not bind {address}"))?;
-            drive_control_input(state, cancel, input).await;
-            Ok(())
-        }));
-    }
     tasks
 }
 

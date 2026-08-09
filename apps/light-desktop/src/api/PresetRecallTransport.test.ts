@@ -24,6 +24,7 @@ function request(
 		expectedPresetRevision: 4,
 		expectedShowRevision: 12,
 		expectedProgrammerRevision: 6,
+		expectedPreloadValuesRevision: null,
 		expectedCaptureModeRevision: 3,
 		expectedSelectionRevision: 8,
 		selectedFixtureCount: 1,
@@ -49,6 +50,10 @@ function projection(revision = 7) {
 		group_values: [],
 		dynamic_values: [],
 	};
+}
+
+function preloadProjection(revision = 6) {
+	return projection(revision);
 }
 
 function preset() {
@@ -99,13 +104,14 @@ describe("Preset recall v2 wire", () => {
 		);
 	});
 
-	it("decodes a lossless values change", () => {
+	it("decodes a legacy normal response without a target discriminator", () => {
 		const decoded = decodePresetRecallOutcome(
 			changedOutcome(),
 			USER_ID,
 			request(),
 		);
 		expect(decoded).toMatchObject({
+			target: "programmer",
 			status: "changed",
 			programmerRevision: 7,
 			disposition: "recalled",
@@ -117,6 +123,38 @@ describe("Preset recall v2 wire", () => {
 				body: { future_extension: { retained: true } },
 			},
 		});
+	});
+
+	it("decodes redirected Preload authority without retyping normal Programmer values", () => {
+		const redirectedRequest = request({ expectedPreloadValuesRevision: 5 });
+		const redirected = {
+			...changedOutcome(),
+			target: "preload",
+			programmer_revision: 6,
+			preload_values_revision: 6,
+			preload_projection: preloadProjection(),
+			preload_event_sequence: 44,
+			active_context: null,
+		};
+		delete (redirected as Partial<typeof redirected>).projection;
+		delete (redirected as Partial<typeof redirected>).event_sequence;
+
+		expect(
+			decodePresetRecallOutcome(redirected, USER_ID, redirectedRequest),
+		).toMatchObject({
+			target: "preload",
+			programmerRevision: 6,
+			preloadValuesRevision: 6,
+			eventSequence: 44,
+			projection: { userId: USER_ID, revision: 6 },
+		});
+		expect(() =>
+			decodePresetRecallOutcome(
+				{ ...redirected, projection: projection() },
+				USER_ID,
+				redirectedRequest,
+			),
+		).toThrow(/absent for preload target/);
 	});
 
 	it("accepts interaction-only, context-only, and no-change sparse outcomes", () => {

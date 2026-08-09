@@ -91,7 +91,10 @@ export class DeskDriver {
 		this.sessionHandoffs.clear();
 	}
 
-	async open(baseUrl: string): Promise<void> {
+	async open(
+		baseUrl: string,
+		options: { beforeReadinessChecks?: Promise<void> } = {},
+	): Promise<void> {
 		this.baseUrl = baseUrl;
 		const handoff = await this.prepareSessionHandoff(this.page);
 		const checkpoint = handoff.checkpoint();
@@ -101,6 +104,7 @@ export class DeskDriver {
 			}, this.controlDeskId);
 		}
 		await this.page.goto(baseUrl);
+		await options.beforeReadinessChecks;
 		await handoff.adoptCurrentDocument();
 		await expect(this.page.locator(".connection-cover")).toBeHidden({
 			timeout: 10_000,

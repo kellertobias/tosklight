@@ -48,6 +48,7 @@ describe("Media pane Storybook boundary", () => {
 			/from\s+["']\.\.\/\.\.\/\.\.\/ui-library\/storybook\/fixtures\/media["']/,
 		);
 		expect(stories).toMatch(/export\s+const\s+FullBuiltIn\b/);
+		expect(stories).toMatch(/export\s+const\s+FullDeskPreview\b/);
 		expect(stories).toMatch(/export\s+const\s+ConfigurablePane\b/);
 		expect(stories).toMatch(/\bPaneView\b/);
 		expect(stories).toMatch(/\bMediaPaneSurface\b/);

@@ -60,6 +60,7 @@ impl ProgrammingService {
         context: &ActionContext,
         ports: &dyn ProgrammingPorts,
     ) -> Result<ProgrammingOutcome, ActionError> {
+        self.programmers.deactivate_alignment(session);
         let programmer = self
             .programmers
             .get(session)
@@ -114,6 +115,7 @@ fn clear_staged(
     session: SessionId,
     command: &CommandLineState,
 ) -> Result<ProgrammingAction, String> {
+    staged.deactivate_alignment(session);
     let programmer = staged.get(session).ok_or("programmer does not exist")?;
     let action = if programmer.blind {
         staged.clear_preload_pending(session);

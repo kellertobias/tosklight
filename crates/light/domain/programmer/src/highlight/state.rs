@@ -1,6 +1,6 @@
 use crate::SelectionExpression;
-use light_core::{FixtureId, UserId};
-use std::collections::HashMap;
+use light_core::{AttributeKey, FixtureId, UserId};
+use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 use uuid::Uuid;
 
@@ -12,6 +12,7 @@ pub(super) struct OperatorState {
     pub(super) remembered_expression: Option<SelectionExpression>,
     pub(super) stepping: bool,
     pub(super) active_fixture: Option<FixtureId>,
+    pub(super) explicit_attributes: HashMap<FixtureId, HashSet<AttributeKey>>,
     /// Revision of the actual programmer selection last observed or explicitly acknowledged as
     /// our own PREV/NEXT/ALL write.
     pub(super) observed_selection_revision: Option<u64>,

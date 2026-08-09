@@ -26,12 +26,6 @@ pub struct ConfigurationPatch {
     pub art_timecode_bind: Option<Option<String>>,
     #[serde(default)]
     #[ts(optional = nullable)]
-    pub midi_inputs: Option<Vec<String>>,
-    #[serde(default)]
-    #[ts(optional = nullable)]
-    pub rtp_midi_bind: Option<Option<String>>,
-    #[serde(default)]
-    #[ts(optional = nullable)]
     pub timecode_sources: Option<Vec<TimecodeSourceConfiguration>>,
     #[serde(default)]
     #[ts(optional = nullable)]
@@ -54,6 +48,15 @@ pub struct ConfigurationPatch {
     #[ts(optional = nullable)]
     #[ts(type = "number")]
     pub sequence_master_fade_millis: Option<u64>,
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub cuelist_auto_off_at_zero_default: Option<bool>,
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub cuelist_auto_off_flash_release_default: Option<bool>,
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub start_after_first_recording: Option<bool>,
     #[serde(default)]
     #[ts(optional = nullable)]
     pub preload_programmer_changes: Option<bool>,

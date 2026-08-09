@@ -166,7 +166,9 @@ export function createSlotInterceptors(
 			return;
 		}
 		if (controller.state.storeArmed) {
-			event.preventDefault();
+			// Recording is committed by the click interceptor. Cancelling pointer-down
+			// can suppress that compatibility click in the desktop webview, forcing a
+			// second press before the Record target sees it.
 			event.stopPropagation();
 			return;
 		}

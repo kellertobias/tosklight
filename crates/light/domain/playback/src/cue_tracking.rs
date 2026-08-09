@@ -54,6 +54,7 @@ impl PlaybackEngine {
                 paused: false,
                 activated_at: now,
                 paused_at: None,
+                completed_trigger_cue_id: None,
                 master: 1.0,
                 fader_position: 1.0,
                 fader_pickup_required: false,
@@ -62,6 +63,7 @@ impl PlaybackEngine {
                 master_transition: None,
                 temporary: false,
                 enabled: true,
+                fader_zero_auto_off_armed: false,
                 flash_restore_off: false,
                 transition_timing_bypassed: false,
                 transition_fade_fallback_millis: None,
@@ -100,6 +102,7 @@ impl PlaybackEngine {
                     playback.paused = false;
                     playback.paused_at = None;
                     playback.activated_at = now;
+                    playback.completed_trigger_cue_id = None;
                     playback.transition_ordinal = transition_ordinal;
                     reset_manual_transition(playback);
                     return Ok(playback);
@@ -115,6 +118,7 @@ impl PlaybackEngine {
                         playback.current_cue_number = Some(next);
                         playback.tracking_wrap = false;
                         playback.activated_at = now;
+                        playback.completed_trigger_cue_id = None;
                         playback.transition_ordinal = transition_ordinal;
                     } else {
                         playback.deleted_cue_hold = Some(hold);
@@ -141,6 +145,7 @@ impl PlaybackEngine {
                         playback.deleted_cue_transition_source = interrupted_source;
                     }
                     playback.activated_at = now;
+                    playback.completed_trigger_cue_id = None;
                 }
                 playback.transition_ordinal = transition_ordinal;
                 playback.current_cue_number = Some(cue_list.cues[playback.cue_index].number);
@@ -192,6 +197,7 @@ impl PlaybackEngine {
             paused: false,
             activated_at: now,
             paused_at: None,
+            completed_trigger_cue_id: None,
             master: 1.0,
             fader_position: 1.0,
             fader_pickup_required: false,
@@ -200,6 +206,7 @@ impl PlaybackEngine {
             master_transition: None,
             temporary: false,
             enabled: true,
+            fader_zero_auto_off_armed: false,
             flash_restore_off: false,
             transition_timing_bypassed: false,
             transition_fade_fallback_millis: None,
@@ -232,6 +239,7 @@ impl PlaybackEngine {
         playback.paused = false;
         playback.paused_at = None;
         playback.activated_at = now;
+        playback.completed_trigger_cue_id = None;
         playback.transition_ordinal = transition_ordinal;
         reset_manual_transition(playback);
         Ok(playback)
@@ -272,6 +280,7 @@ impl PlaybackEngine {
                 playback.current_cue_number = Some(previous);
                 playback.tracking_wrap = false;
                 playback.activated_at = now;
+                playback.completed_trigger_cue_id = None;
                 playback.transition_ordinal = transition_ordinal;
                 playback.paused = false;
                 playback.paused_at = None;
@@ -287,6 +296,7 @@ impl PlaybackEngine {
         playback.current_cue_number = Some(self.cue_lists[&id].cues[playback.cue_index].number);
         playback.tracking_wrap = false;
         playback.activated_at = now;
+        playback.completed_trigger_cue_id = None;
         playback.transition_ordinal = transition_ordinal;
         playback.paused = false;
         playback.paused_at = None;

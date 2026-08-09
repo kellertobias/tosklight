@@ -35,6 +35,48 @@ function validOutcome() {
 }
 
 describe("Playback wire validation", () => {
+	it("decodes exact Cuelist phase and trigger timing authority", () => {
+		const projection = cueProjection();
+		if (projection.target !== "cue_list" || !projection.runtime)
+			throw new Error("fixture must contain a running Cuelist");
+		const timing = {
+			cue_id: "44444444-4444-4444-8444-444444444444",
+			in_delay_millis: 100,
+			in_fade_millis: 900,
+			out_delay_millis: 200,
+			out_fade_millis: 1_800,
+			completion_millis: 2_000,
+			active_trigger: {
+				cue: {
+					id: "55555555-5555-4555-8555-555555555555",
+					number: 2,
+				},
+				kind: "wait",
+				started_at: "2026-08-08T12:00:02Z",
+				duration_millis: 300,
+			},
+			completed_trigger_cue_id: null,
+		} as const;
+		const decoded = decodePlaybackOutcome({
+			...validOutcome(),
+			projection: {
+				...projection,
+				runtime: {
+					...projection.runtime,
+					paused: true,
+					paused_at: "2026-08-08T12:00:02.150Z",
+					cue_timing: timing,
+				},
+			},
+		});
+		expect(decoded.projection.target).toBe("cue_list");
+		if (decoded.projection.target !== "cue_list") return;
+		expect(decoded.projection.runtime?.paused_at).toBe(
+			"2026-08-08T12:00:02.150Z",
+		);
+		expect(decoded.projection.runtime?.cue_timing).toEqual(timing);
+	});
+
 	it("preserves the authoritative pickup target independently of master and physical position", () => {
 		const projection = cueProjection();
 		if (projection.target !== "cue_list" || !projection.runtime)

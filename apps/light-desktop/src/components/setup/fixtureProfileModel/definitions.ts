@@ -123,7 +123,7 @@ function colorSystemsFromDefinition(
 	heads: FixtureHead[],
 	channels: FixtureChannel[],
 ): HeadColorSystem[] {
-	return heads.flatMap<HeadColorSystem>((head) => {
+	return heads.flatMap<HeadColorSystem>((head, headIndex) => {
 		const hue = channels.find(
 			(channel) =>
 				channel.head_id === head.id && channel.attribute === "color.hue",
@@ -170,13 +170,32 @@ function colorSystemsFromDefinition(
 				const canonicalAttribute = canonicalAttributeProjection(
 					`color.${name}`,
 				).attribute;
+				const sourceAttributes =
+					definition.heads[headIndex]?.parameters
+						.filter((parameter) => {
+							const projection = canonicalAttributeProjection(parameter.attribute);
+							return (
+								projection.attribute === canonicalAttribute &&
+								projection.canonicalTransform === "identity"
+							);
+						})
+						.map(
+							(parameter) => parameter.source_attribute ?? parameter.attribute,
+						) ?? [];
+				const sourceChannels = channels.filter(
+					(candidate) =>
+						candidate.head_id === head.id &&
+						sourceAttributes.includes(candidate.fixture_attribute),
+				);
 				const canonicalChannels = channels.filter(
 					(candidate) =>
 						candidate.head_id === head.id &&
-						candidate.attribute === canonicalAttribute,
+						candidate.attribute === canonicalAttribute &&
+						candidate.canonical_transform !== "invert_normalized",
 				);
 				const channel =
 					fixtureChannel ??
+					(sourceChannels.length === 1 ? sourceChannels[0] : undefined) ??
 					(canonicalChannels.length === 1 ? canonicalChannels[0] : undefined);
 				return channel
 					? [

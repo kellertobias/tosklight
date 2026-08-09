@@ -351,7 +351,13 @@ fn emitter_face(model: &FixtureModel, bounds_min: Vec3, bounds_max: Vec3) -> Opt
     let smallest = parts
         .iter()
         .map(|(part_min, part_max)| *part_max - *part_min)
-        .reduce(|best, extent| if span(extent) < span(best) { extent } else { best })
+        .reduce(|best, extent| {
+            if span(extent) < span(best) {
+                extent
+            } else {
+                best
+            }
+        })
         .unwrap_or(max - min);
     let spans: Vec<f32> = (0..3)
         .filter(|index| across[*index] > 0.5)

@@ -235,8 +235,6 @@ pub(super) struct DeskConfiguration {
     pub(super) output_bind_ip: IpAddr,
     pub(super) osc_bind: Option<SocketAddr>,
     pub(super) art_timecode_bind: Option<SocketAddr>,
-    pub(super) midi_inputs: Vec<String>,
-    pub(super) rtp_midi_bind: Option<SocketAddr>,
     pub(super) timecode_sources: Vec<TimecodeSourceConfig>,
     pub(super) osc_timecode: Option<OscTimecodeConfig>,
     pub(super) backup_retention: usize,
@@ -257,6 +255,14 @@ pub(super) struct DeskConfiguration {
     /// is immediate and records no per-value zero-second override.
     pub(super) command_line_at_uses_programmer_fade: bool,
     pub(super) sequence_master_fade_millis: u64,
+    /// Installation default copied onto each newly created Cuelist. Existing Cuelists retain
+    /// their persisted behavior when this default changes.
+    pub(super) cuelist_auto_off_at_zero_default: bool,
+    /// Installation default copied onto each newly created Cuelist. Flash auto-off remains
+    /// independent from fader-zero auto-off.
+    pub(super) cuelist_auto_off_flash_release_default: bool,
+    /// Start only a transactionally new Playback/Cuelist/first-Cue topology after recording.
+    pub(super) start_after_first_recording: bool,
     pub(super) preload_programmer_changes: bool,
     pub(super) preload_physical_playback_actions: bool,
     pub(super) preload_virtual_playback_actions: bool,
@@ -296,8 +302,6 @@ impl Default for DeskConfiguration {
             output_bind_ip: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
             osc_bind: Some(SocketAddr::from(([127, 0, 0, 1], 9000))),
             art_timecode_bind: None,
-            midi_inputs: Vec::new(),
-            rtp_midi_bind: None,
             timecode_sources: vec![
                 TimecodeSourceConfig {
                     source_prefix: "artnet:".into(),
@@ -306,20 +310,14 @@ impl Default for DeskConfiguration {
                     loss_timeout_millis: 500,
                 },
                 TimecodeSourceConfig {
-                    source_prefix: "midi:".into(),
-                    priority: 20,
-                    fallback: true,
-                    loss_timeout_millis: 500,
-                },
-                TimecodeSourceConfig {
-                    source_prefix: "rtp:".into(),
-                    priority: 20,
-                    fallback: true,
-                    loss_timeout_millis: 500,
-                },
-                TimecodeSourceConfig {
                     source_prefix: "osc:".into(),
                     priority: 10,
+                    fallback: true,
+                    loss_timeout_millis: 500,
+                },
+                TimecodeSourceConfig {
+                    source_prefix: "extension:".into(),
+                    priority: 20,
                     fallback: true,
                     loss_timeout_millis: 500,
                 },
@@ -333,6 +331,9 @@ impl Default for DeskConfiguration {
             programmer_fade_millis: 3_000,
             command_line_at_uses_programmer_fade: true,
             sequence_master_fade_millis: 3_000,
+            cuelist_auto_off_at_zero_default: false,
+            cuelist_auto_off_flash_release_default: false,
+            start_after_first_recording: false,
             preload_programmer_changes: true,
             preload_physical_playback_actions: true,
             preload_virtual_playback_actions: false,
@@ -476,6 +477,24 @@ fn wire_highlight_look(
 #[cfg(test)]
 mod highlight_look_tests {
     use super::*;
+
+    #[test]
+    fn playback_recording_defaults_are_disabled_for_fresh_and_legacy_installations() {
+        let fresh = DeskConfiguration::default();
+        assert!(!fresh.cuelist_auto_off_at_zero_default);
+        assert!(!fresh.cuelist_auto_off_flash_release_default);
+        assert!(!fresh.start_after_first_recording);
+
+        let mut legacy = serde_json::to_value(&fresh).unwrap();
+        let legacy_object = legacy.as_object_mut().unwrap();
+        legacy_object.remove("cuelist_auto_off_at_zero_default");
+        legacy_object.remove("cuelist_auto_off_flash_release_default");
+        legacy_object.remove("start_after_first_recording");
+        let decoded: DeskConfiguration = serde_json::from_value(legacy).unwrap();
+        assert!(!decoded.cuelist_auto_off_at_zero_default);
+        assert!(!decoded.cuelist_auto_off_flash_release_default);
+        assert!(!decoded.start_after_first_recording);
+    }
 
     #[test]
     fn fresh_and_legacy_configuration_use_the_semantic_white_default_look() {

@@ -48,7 +48,11 @@ impl Scene {
         for fixture in &self.fixtures {
             bounds.expand(fixture.position);
         }
-        if bounds.is_empty() { self.bounds } else { bounds }
+        if bounds.is_empty() {
+            self.bounds
+        } else {
+            bounds
+        }
     }
 
     pub fn recompute_bounds(&mut self) {
@@ -138,7 +142,7 @@ pub struct FixtureInstance {
     pub body: FixtureBody,
     /// `false` while the fixture is part of the show but has no DMX address.
     pub patched: bool,
-    /// Logical universe and start address of the first patched split, for the plan-view label.
+    /// Logical universe and start address of the first patched split, for the Stage label.
     pub address: Option<(u16, u16)>,
     /// Index into [`Scene::models`] when this fixture's profile carries one it could read.
     pub model: Option<u32>,

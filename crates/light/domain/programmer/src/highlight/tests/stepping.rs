@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use uuid::Uuid;
 
 #[test]
-fn prev_next_all_write_real_selection_wrap_and_never_activate_high() {
+fn active_prev_next_all_write_real_selection_and_wrap() {
     let registry = HighlightRegistry::default();
     let desk = Uuid::new_v4();
     let user = UserId::new();
@@ -17,6 +17,33 @@ fn prev_next_all_write_real_selection_wrap_and_never_activate_high() {
         .collect::<Vec<_>>();
     let groups = no_groups();
     let complete = selection(ids.clone(), Some(SelectionExpression::Static), 1);
+
+    let inactive_next = registry
+        .action(
+            desk,
+            user,
+            None,
+            HighlightAction::Next,
+            &complete,
+            &fixtures,
+            &groups,
+            false,
+        )
+        .unwrap();
+    assert!(inactive_next.working_selection.is_none());
+    assert!(!inactive_next.state.can_next && !inactive_next.state.can_previous);
+    registry
+        .action(
+            desk,
+            user,
+            None,
+            HighlightAction::On,
+            &complete,
+            &fixtures,
+            &groups,
+            false,
+        )
+        .unwrap();
 
     let next = registry
         .action(
@@ -30,7 +57,7 @@ fn prev_next_all_write_real_selection_wrap_and_never_activate_high() {
             false,
         )
         .unwrap();
-    assert!(!next.state.active);
+    assert!(next.state.active);
     assert_eq!(
         next.working_selection.as_ref().unwrap().selected,
         vec![ids[0]]
@@ -91,7 +118,7 @@ fn prev_next_all_write_real_selection_wrap_and_never_activate_high() {
 }
 
 #[test]
-fn external_same_membership_revision_resets_step_but_value_changes_do_not() {
+fn active_step_keeps_its_frozen_basis_across_external_selection_revisions() {
     let registry = HighlightRegistry::default();
     let desk = Uuid::new_v4();
     let user = UserId::new();
@@ -102,6 +129,18 @@ fn external_same_membership_revision_resets_step_but_value_changes_do_not() {
         .collect::<Vec<_>>();
     let groups = no_groups();
     let complete = selection(ids.clone(), Some(SelectionExpression::Static), 1);
+    registry
+        .action(
+            desk,
+            user,
+            None,
+            HighlightAction::On,
+            &complete,
+            &fixtures,
+            &groups,
+            false,
+        )
+        .unwrap();
     let first = registry
         .action(
             desk,
@@ -120,11 +159,10 @@ fn external_same_membership_revision_resets_step_but_value_changes_do_not() {
     let unchanged = registry.status(desk, user, None, &stepped, &fixtures, &groups, false);
     assert_eq!(unchanged.state.mode, HighlightMode::Step);
 
-    // A deliberate external selection operation has a new revision even if it resolves to the
-    // same singleton ID, so it becomes a new complete basis.
+    // A deliberate external selection revision cannot replace the original activation set.
     let external_same = selection(stepped.selected.clone(), stepped.expression.clone(), 3);
-    let reset = registry.status(desk, user, None, &external_same, &fixtures, &groups, false);
-    assert_eq!(reset.state.mode, HighlightMode::Selection);
+    let frozen = registry.status(desk, user, None, &external_same, &fixtures, &groups, false);
+    assert_eq!(frozen.state.mode, HighlightMode::Step);
     let next = registry
         .action(
             desk,
@@ -137,11 +175,11 @@ fn external_same_membership_revision_resets_step_but_value_changes_do_not() {
             false,
         )
         .unwrap();
-    assert_eq!(next.working_selection.unwrap().selected, vec![ids[0]]);
+    assert_eq!(next.working_selection.unwrap().selected, vec![ids[1]]);
 }
 
 #[test]
-fn all_reresolves_the_live_group_source_after_membership_changes() {
+fn active_all_restores_the_frozen_group_snapshot_after_membership_changes() {
     let registry = HighlightRegistry::default();
     let desk = Uuid::new_v4();
     let user = UserId::new();
@@ -166,6 +204,18 @@ fn all_reresolves_the_live_group_source_after_membership_changes() {
         }),
         1,
     );
+    registry
+        .action(
+            desk,
+            user,
+            None,
+            HighlightAction::On,
+            &complete,
+            &fixtures,
+            &groups,
+            false,
+        )
+        .unwrap();
     let first = registry
         .action(
             desk,
@@ -194,11 +244,11 @@ fn all_reresolves_the_live_group_source_after_membership_changes() {
         .unwrap();
     assert_eq!(
         all.working_selection.as_ref().unwrap().selected,
-        vec![ids[3], ids[1]]
+        ids[..3].to_vec()
     );
     assert!(matches!(
         all.working_selection.unwrap().expression,
-        Some(SelectionExpression::LiveGroup { ref group_id, .. }) if group_id == "1"
+        Some(SelectionExpression::Static)
     ));
 }
 

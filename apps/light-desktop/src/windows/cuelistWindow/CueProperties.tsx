@@ -1,5 +1,11 @@
 import { Button, ModalPortal, ModalTitleBar } from "@tosklight/ui";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+	type MouseEvent as ReactMouseEvent,
+	useEffect,
+	useLayoutEffect,
+	useRef,
+	useState,
+} from "react";
 import type { Cue } from "../../api/types";
 import { useControlSurfaceTarget } from "../../features/controlSurfaceInteraction/useControlSurfaceTarget";
 import {
@@ -78,11 +84,15 @@ function CompactCueProperties({
 	cues: Cue[];
 	setArmed: boolean;
 	onDisarm: () => void;
-	onOpenInput: (field: CueKeyboardField) => void;
+	onOpenInput: (field: CueKeyboardField, direct?: boolean) => void;
 	onOpenTrigger: () => void;
 }) {
 	const kind = cueTriggerKind(actions.draft);
 	const triggerMillis = Number(actions.draft.trigger.delay_millis ?? 0);
+	const openDirect = (field: CueKeyboardField) => (event: ReactMouseEvent) => {
+		event.preventDefault();
+		onOpenInput(field, true);
+	};
 	return (
 		<section
 			className="cue-settings-compact-fallback"
@@ -98,6 +108,7 @@ function CompactCueProperties({
 					aria-label="Set Cue Title"
 					active={setArmed}
 					onClick={() => onOpenInput("title")}
+					onContextMenu={openDirect("title")}
 				>
 					<small>Title</small>
 					<b>{actions.draft.name || "Untitled"}</b>
@@ -106,6 +117,7 @@ function CompactCueProperties({
 					aria-label="Set Cue Intensity In Fade"
 					active={setArmed}
 					onClick={() => onOpenInput("fade")}
+					onContextMenu={openDirect("fade")}
 				>
 					<small>In Fade</small>
 					<b>{formatCueSeconds(actions.draft.fade_millis)}</b>
@@ -114,6 +126,7 @@ function CompactCueProperties({
 					aria-label="Set Cue Intensity In Delay"
 					active={setArmed}
 					onClick={() => onOpenInput("delay")}
+					onContextMenu={openDirect("delay")}
 				>
 					<small>In Delay</small>
 					<b>{formatCueSeconds(actions.draft.delay_millis)}</b>
@@ -122,6 +135,7 @@ function CompactCueProperties({
 					aria-label="Set Cue Intensity Out Fade"
 					active={setArmed}
 					onClick={() => onOpenInput("outFade")}
+					onContextMenu={openDirect("outFade")}
 				>
 					<small>Out Fade</small>
 					<b>
@@ -134,6 +148,7 @@ function CompactCueProperties({
 					aria-label="Set Cue Intensity Out Delay"
 					active={setArmed}
 					onClick={() => onOpenInput("outDelay")}
+					onContextMenu={openDirect("outDelay")}
 				>
 					<small>Out Delay</small>
 					<b>
@@ -150,6 +165,11 @@ function CompactCueProperties({
 						onDisarm();
 						onOpenTrigger();
 					}}
+					onContextMenu={(event) => {
+						event.preventDefault();
+						onDisarm();
+						onOpenTrigger();
+					}}
 				>
 					<small>Trigger</small>
 					<b>{kind.toUpperCase()}</b>
@@ -160,6 +180,11 @@ function CompactCueProperties({
 						active={setArmed}
 						onClick={() => {
 							if (!setArmed) return;
+							onDisarm();
+							onOpenTrigger();
+						}}
+						onContextMenu={(event) => {
+							event.preventDefault();
 							onDisarm();
 							onOpenTrigger();
 						}}
@@ -178,6 +203,7 @@ function CompactCueProperties({
 						}
 						active={setArmed}
 						onClick={() => onOpenInput("triggerTime")}
+						onContextMenu={openDirect("triggerTime")}
 					>
 						<small>{kind === "link" ? "Link delay" : "Trigger time"}</small>
 						<b>{formatCueSeconds(triggerMillis)}</b>
@@ -197,6 +223,13 @@ function CueTriggerModal({
 	cues: Cue[];
 	close: () => void;
 }) {
+	const triggerDescriptions = {
+		go: "Wait for a manual GO.",
+		follow: "Start after the preceding Cue has finished.",
+		time: "Start after this time from the preceding Cue's GO.",
+		timecode: "Start when external timecode reaches this Cue's frame.",
+		link: "After this Cue finishes, jump to the selected Cue after its delay.",
+	} as const;
 	const kind = cueTriggerKind(actions.draft);
 	const triggerMillis = Number(actions.draft.trigger.delay_millis ?? 0);
 	const linkCandidates = cues.filter(
@@ -259,7 +292,8 @@ function CueTriggerModal({
 								active={kind === value}
 								onClick={() => choose(value)}
 							>
-								{value.toUpperCase()}
+								<span>{value.toUpperCase()}</span>
+								<small>{triggerDescriptions[value]}</small>
 							</Button>
 						))}
 					</div>
@@ -317,8 +351,8 @@ export function CueProperties({
 	const [keyboardRequests, setKeyboardRequests] = useState<
 		Partial<Record<CueKeyboardField, number>>
 	>({});
-	const openInput = (field: CueKeyboardField) => {
-		if (!layout.setArmed) return;
+	const openInput = (field: CueKeyboardField, direct = false) => {
+		if (!layout.setArmed && !direct) return;
 		layout.setSetArmed(false);
 		setKeyboardRequests((requests) => ({
 			...requests,

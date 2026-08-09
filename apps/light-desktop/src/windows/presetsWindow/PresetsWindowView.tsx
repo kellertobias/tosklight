@@ -28,6 +28,10 @@ import {
 import { resolveConfiguredPoolPresentation } from "../../features/poolPresentation/poolPresentation";
 import type { PresetCard } from "../../features/presetRecording/presetCards";
 import {
+	poolMutationTargetState,
+	type PoolMutationTarget,
+} from "../../features/controlSurfaceInteraction/poolCommandTarget";
+import {
 	normalizePresetFamily,
 	PRESET_FAMILIES,
 	type PresetFamily,
@@ -92,7 +96,9 @@ interface PresetCardGridProps {
 	storeArmed: boolean;
 	updateArmed: boolean;
 	setArmed: boolean;
+	mutationTarget?: PoolMutationTarget | null;
 	onActivate(index: number): void;
+	onConfigure?(index: number): void;
 }
 
 export function PresetCardGrid({
@@ -108,7 +114,9 @@ export function PresetCardGrid({
 	storeArmed,
 	updateArmed,
 	setArmed,
+	mutationTarget = null,
 	onActivate,
+	onConfigure,
 }: PresetCardGridProps) {
 	const slots: PoolSlotViewModel<string>[] = cards.flatMap((preset, index) =>
 		preset
@@ -146,6 +154,17 @@ export function PresetCardGrid({
 					const id =
 						preset?.id ?? presetStorageKey(presetAddress(family, index + 1));
 					const customization = customizations[id];
+					const mutationEligible =
+						mutationTarget?.phase === "source"
+							? preset !== null && !filtered
+							: mutationTarget?.phase === "destination"
+								? preset === null &&
+									mutationTarget.source.split(".")[0] ===
+										presetStorageKey(presetAddress(family, 1)).split(".")[0]
+								: false;
+					const mutationState = mutationEligible
+						? poolMutationTargetState(mutationTarget)
+						: null;
 					const presentation = resolveConfiguredPoolPresentation(
 						poolPresentation,
 						{
@@ -164,6 +183,7 @@ export function PresetCardGrid({
 								...(storeArmed ? (["store-target"] as const) : []),
 								...(updateArmed ? (["update-target"] as const) : []),
 								...(setArmed ? (["set-target"] as const) : []),
+								...(mutationState ? [mutationState] : []),
 							],
 						},
 					);
@@ -177,12 +197,17 @@ export function PresetCardGrid({
 										!recallReady &&
 										!storeArmed &&
 										!updateArmed &&
-										!setArmed,
+										!setArmed &&
+										!mutationEligible,
 								)
 							}
 							className={`preset-card preset-family-${preset ? storedFamily.toLowerCase() : family.toLowerCase()} ${presentation.className} ${filtered ? "filtered" : ""}`}
 							style={presentation.style}
 							onClick={() => onActivate(index)}
+							onContextMenu={(event) => {
+								event.preventDefault();
+								onConfigure?.(index);
+							}}
 							model={{
 								number: preset?.body.number ?? index + 1,
 								primary: filtered

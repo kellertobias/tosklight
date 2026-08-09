@@ -186,6 +186,7 @@ fn no_change(
     PreparedActiveShowTransaction::NoChange(PreparedRecording {
         result: ProgrammingCueCommitResult {
             changed: false,
+            created_topology: false,
             projections: ProgrammingCueProjections {
                 show_id: document.id(),
                 cue_list: stored_projection(ActiveShowObjectKind::CueList, cue_list),
@@ -226,6 +227,7 @@ fn candidate_result(
         .or_else(|| target.page.as_ref().map(|item| item.object_id.as_str()));
     Ok(ProgrammingCueCommitResult {
         changed: true,
+        created_topology: target.creates_topology(),
         projections: ProgrammingCueProjections {
             show_id: commit.show_id,
             cue_list: candidate_projection(

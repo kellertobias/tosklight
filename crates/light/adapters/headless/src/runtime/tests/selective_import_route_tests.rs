@@ -55,7 +55,7 @@ async fn v2_selective_import_previews_replace_mode_and_applies_one_atomic_revisi
     )
     .await;
     assert_eq!(replaced.status(), StatusCode::OK);
-    assert_eq!(replaced.headers()[header::ETAG], "\"2\"");
+    assert_eq!(replaced.headers()[header::ETAG], "\"3\"");
     let replaced = json(replaced).await;
     assert_eq!(replaced["can_apply"], true);
     assert_eq!(replaced["conflicts"][0]["key"]["id"], "front");
@@ -78,7 +78,7 @@ async fn v2_selective_import_previews_replace_mode_and_applies_one_atomic_revisi
     let ready = json(ready).await;
     assert_eq!(ready["can_apply"], true);
     assert_eq!(ready["source_revision"], 2);
-    assert_eq!(ready["target_revision"], 2);
+    assert_eq!(ready["target_revision"], 3);
     assert_eq!(state.events.latest_sequence(), baseline_sequence);
 
     let applied = post_import(
@@ -87,11 +87,11 @@ async fn v2_selective_import_previews_replace_mode_and_applies_one_atomic_revisi
         target_id,
         source_id,
         "apply",
-        Some(2),
+        Some(3),
         serde_json::json!({
             "request_id":"replace-front",
             "expected_source_revision":2,
-            "expected_target_revision":2,
+            "expected_target_revision":3,
             "mode":"replace_by_position",
             "selected_objects":[{"kind":"group","id":"front"}],
             "conflict_resolutions":[{
@@ -103,10 +103,10 @@ async fn v2_selective_import_previews_replace_mode_and_applies_one_atomic_revisi
     )
     .await;
     assert_eq!(applied.status(), StatusCode::OK);
-    assert_eq!(applied.headers()[header::ETAG], "\"3\"");
+    assert_eq!(applied.headers()[header::ETAG], "\"4\"");
     let applied = json(applied).await;
     assert_eq!(applied["changed"], true);
-    assert_eq!(applied["show_revision"], 3);
+    assert_eq!(applied["show_revision"], 4);
     assert_eq!(applied["event_sequence"], baseline_sequence + 1);
     assert_eq!(applied["objects"].as_array().unwrap().len(), 1);
     assert_eq!(
@@ -151,7 +151,7 @@ async fn v2_selective_import_previews_replace_mode_and_applies_one_atomic_revisi
             .unwrap()
             .revision()
             .value(),
-        4
+        5
     );
     let _ = std::fs::remove_dir_all(data_dir);
 }

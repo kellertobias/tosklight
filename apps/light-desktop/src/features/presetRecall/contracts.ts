@@ -1,4 +1,5 @@
 import type { PresetAddress } from "../../presetFamilies";
+import type { ProgrammerPreloadValuesProjection } from "../programmerPreloadValues/contracts";
 import type { ProgrammerValuesProjection } from "../programmerValues/contracts";
 import type { ShowObject } from "../showObjects/contracts";
 
@@ -16,6 +17,7 @@ export interface PresetRecallRequest {
 	expectedPresetRevision: number;
 	expectedShowRevision: number;
 	expectedProgrammerRevision: number;
+	expectedPreloadValuesRevision: number | null;
 	expectedCaptureModeRevision: number;
 	expectedSelectionRevision: number;
 	selectedFixtureCount: number;
@@ -26,6 +28,7 @@ interface PresetRecallOutcomeBase {
 	disposition: "recalled" | "targets_selected";
 	showRevision: number;
 	programmerRevision: number;
+	preloadValuesRevision: number | null;
 	captureModeRevision: number;
 	selectionRevision: number;
 	interactionEventSequence: number | null;
@@ -36,19 +39,30 @@ interface PresetRecallOutcomeBase {
 	warning: string | null;
 }
 
+type PresetRecallChangedOutcome =
+	| {
+			target: "programmer";
+			status: "changed";
+			projection: ProgrammerValuesProjection | null;
+			eventSequence: number | null;
+	  }
+	| {
+			target: "preload";
+			status: "changed";
+			projection: ProgrammerPreloadValuesProjection | null;
+			eventSequence: number | null;
+	  };
+
+type PresetRecallNoChangeOutcome = {
+	target: "programmer" | "preload";
+	status: "no_change";
+	projection: null;
+	eventSequence: null;
+};
+
+/** Server-authored values authority selected by the captured capture mode. */
 export type PresetRecallOutcome = PresetRecallOutcomeBase &
-	(
-		| {
-				status: "changed";
-				projection: ProgrammerValuesProjection | null;
-				eventSequence: number | null;
-		  }
-		| {
-				status: "no_change";
-				projection: null;
-				eventSequence: null;
-		  }
-	);
+	(PresetRecallChangedOutcome | PresetRecallNoChangeOutcome);
 
 export interface RecallPresetInput {
 	objectId: string;

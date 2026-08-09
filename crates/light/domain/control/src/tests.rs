@@ -27,25 +27,6 @@ fn rejects_out_of_range_art_timecode() {
 }
 
 #[test]
-fn decodes_complete_mtc_quarter_frame_cycle() {
-    let mut decoder = MidiTimecodeDecoder::default();
-    let messages = [0x02, 0x11, 0x23, 0x30, 0x44, 0x50, 0x66, 0x74];
-    let mut result = None;
-    for message in messages {
-        result = decoder
-            .push_quarter_frame(message, "port-1")
-            .unwrap()
-            .or(result);
-    }
-    let result = result.unwrap();
-    assert_eq!(
-        (result.hours, result.minutes, result.seconds, result.frames),
-        (6, 4, 3, 18)
-    );
-    assert_eq!(result.rate, FrameRate::Fps2997Drop);
-}
-
-#[test]
 fn parses_typed_osc_message() {
     let packet = b"/light/go\0\0\0,ifsT\0\0\0\0\0\0*?\xc0\0\0main\0\0\0\0";
     let result = parse_osc_message(packet).unwrap();
@@ -106,7 +87,7 @@ fn timecode_router_obeys_priority_and_explicit_fallback() {
             loss_timeout_millis: 1000,
         },
         TimecodeSourceConfig {
-            source_prefix: "midi:".into(),
+            source_prefix: "extension:primary:".into(),
             priority: 20,
             fallback: false,
             loss_timeout_millis: 0,
@@ -114,27 +95,9 @@ fn timecode_router_obeys_priority_and_explicit_fallback() {
     ]);
     router.ingest(tc("osc:backup"));
     assert_eq!(router.active_source(), Some("osc:backup"));
-    router.ingest(tc("midi:primary"));
-    assert_eq!(router.active_source(), Some("midi:primary"));
+    router.ingest(tc("extension:primary:frame"));
+    assert_eq!(router.active_source(), Some("extension:primary:frame"));
     std::thread::sleep(Duration::from_millis(1));
     router.poll_loss();
     assert_eq!(router.active_source(), Some("osc:backup"));
-}
-
-#[test]
-fn parses_rtp_midi_commands_and_running_status() {
-    let mut packet = vec![
-        0x80, 0x61, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0x06, 0x90, 60, 127, 0, 61, 0,
-    ];
-    let messages = parse_rtp_midi(&packet).unwrap();
-    assert_eq!(messages, vec![vec![0x90, 60, 127], vec![0x90, 61, 0]]);
-    packet[12] = 0x20 | 0x07;
-    packet.insert(13, 0);
-    assert_eq!(parse_rtp_midi(&packet).unwrap().len(), 2);
-}
-
-#[test]
-fn rejects_truncated_rtp_midi_command_section() {
-    let packet = [0x80, 0x61, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0x0f, 0x90, 60];
-    assert!(parse_rtp_midi(&packet).is_err());
 }

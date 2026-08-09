@@ -44,7 +44,7 @@ impl Engine {
         let profile_values = crate::ProfileValueIndex::new(&resolved);
         let group_masters = generation.group_masters();
         let group_master_flashes = self.group_master_flashes.read();
-        let highlighted_fixtures = self.highlighted_fixtures.read();
+        let highlight_layers = self.highlight_layers.read();
         let highlight_look = self.highlight_look.read();
         let mut projected = HashMap::new();
         for fixture in snapshot.fixtures.iter() {
@@ -71,7 +71,7 @@ impl Engine {
                 options,
                 group_masters,
                 &group_master_flashes,
-                &highlighted_fixtures,
+                &highlight_layers,
                 &highlight_look,
                 AxisInversion {
                     pan: fixture.invert_pan,

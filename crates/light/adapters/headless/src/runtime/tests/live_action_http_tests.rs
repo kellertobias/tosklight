@@ -28,10 +28,7 @@ async fn programming_align_http_and_websocket_reject_the_same_empty_selection() 
         .await;
     let request = light_wire::v2::live_action::ProgrammingAlignLiveActionRequest {
         request_id: "align-empty-selection".into(),
-        attribute: "intensity".into(),
         mode: light_wire::v2::live_action::ProgrammingAlignMode::Left,
-        from: 0.0,
-        to: 1.0,
     };
     let websocket = dispatch_live_action(
         &scenario.state,
@@ -49,10 +46,7 @@ async fn programming_align_http_and_websocket_reject_the_same_empty_selection() 
         &show_id,
         "/api/v2/programming-align/actions",
         serde_json::json!({
-            "attribute":request.attribute,
             "mode":request.mode,
-            "from":request.from,
-            "to":request.to,
             "future_field":"accepted",
         }),
     )
@@ -60,6 +54,90 @@ async fn programming_align_http_and_websocket_reject_the_same_empty_selection() 
     assert_eq!(http.status(), StatusCode::BAD_REQUEST);
     let error = json(http).await["error"].as_str().unwrap().to_owned();
     assert_eq!(websocket.error.as_deref(), Some(error.as_str()));
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}
+
+#[tokio::test]
+async fn programming_align_activation_and_mode_changes_are_value_neutral() {
+    let scenario = CommandHttpScenario::new().await;
+    let show_id = scenario
+        .create_and_open_show("Value-neutral Align modifier")
+        .await;
+    let fixtures = [light_core::FixtureId::new(), light_core::FixtureId::new()];
+    scenario
+        .state
+        .programming
+        .select(scenario.session.id, fixtures);
+    let undo_before = scenario
+        .state
+        .programming
+        .get(scenario.session.id)
+        .unwrap()
+        .undo
+        .len();
+    let request = light_wire::v2::live_action::ProgrammingAlignLiveActionRequest {
+        request_id: "align-value-neutral".into(),
+        mode: light_wire::v2::live_action::ProgrammingAlignMode::Left,
+    };
+
+    let websocket = dispatch_live_action(
+        &scenario.state,
+        &scenario.session,
+        live_action_frame(
+            &scenario.session,
+            &request.request_id,
+            light_wire::v2::live_action::LiveAction::ProgrammingAlign(request.clone()),
+        ),
+    );
+    assert!(websocket.ok, "{:?}", websocket.error);
+    let websocket_payload = websocket.payload.unwrap();
+    assert_eq!(websocket_payload["mode"], "left");
+    assert_eq!(websocket_payload["fixture_count"], 2);
+    assert_eq!(websocket_payload["bound_attribute"], serde_json::Value::Null);
+    let programmer = scenario
+        .state
+        .programming
+        .get(scenario.session.id)
+        .unwrap();
+    assert!(programmer.values.is_empty());
+    assert!(programmer.group_values.is_empty());
+    assert_eq!(programmer.undo.len(), undo_before);
+
+    let switched = post_live_action(
+        &scenario,
+        &show_id,
+        "/api/v2/programming-align/actions",
+        serde_json::json!({"mode":"out","future_field":"accepted"}),
+    )
+    .await;
+    assert_eq!(switched.status(), StatusCode::OK);
+    let switched = json(switched).await;
+    assert_eq!(switched["mode"], "out");
+    assert_eq!(switched["fixture_count"], 2);
+    assert_eq!(switched["bound_attribute"], serde_json::Value::Null);
+    assert_eq!(
+        scenario
+            .state
+            .programming
+            .get(scenario.session.id)
+            .unwrap()
+            .undo
+            .len(),
+        undo_before,
+    );
+
+    let off = post_live_action(
+        &scenario,
+        &show_id,
+        "/api/v2/programming-align/actions",
+        serde_json::json!({"mode":"off"}),
+    )
+    .await;
+    assert_eq!(off.status(), StatusCode::OK);
+    let off = json(off).await;
+    assert_eq!(off["mode"], "off");
+    assert_eq!(off["revision"], serde_json::Value::Null);
+    assert_eq!(off["fixture_count"], 0);
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
 

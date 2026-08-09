@@ -2,7 +2,7 @@ import type {
 	MouseEvent as ReactMouseEvent,
 	PointerEvent as ReactPointerEvent,
 } from "react";
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import type { FileConflictChoice, FileEntry } from "../../api/types";
 import { useFiles } from "../../features/files/FilesContext";
 import type { FilesContextValue } from "../../features/files/types";
@@ -327,7 +327,16 @@ export function useFileOperationActions(
 	enabled = true,
 ) {
 	const server = useFiles();
-	const commandLine = useCommandLineSurface({ enabled, observeCommand: false });
+	const commandLine = useCommandLineSurface({ enabled, observeCommand: true });
+	const pendingCommandOperation = operationFromCommandLine(commandLine.text);
+	useEffect(() => {
+		if (
+			fileOperationOwnership.claimed !== null ||
+			state.operationRef.current
+		)
+			return;
+		fileOperationOwnership.pending = pendingCommandOperation;
+	}, [pendingCommandOperation, state.operationRef]);
 	const setOperation = useCallback((next: FileOperationState | null) => {
 		state.operationRef.current = next;
 		state.setOperationState(next);

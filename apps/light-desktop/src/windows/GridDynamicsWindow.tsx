@@ -287,6 +287,181 @@ function GroupRows({
 	);
 }
 
+function GridDynamicsHeader({
+	props,
+	setModal,
+}: {
+	props: GridDynamicsWindowProps;
+	setModal(value: "groups" | "speed" | "grid" | "preset" | "lane" | null): void;
+}) {
+	const columnsPerBeat = props.config.columns / props.config.beats;
+	return (
+		<WindowHeader
+			title={`Grid Dynamic · ${props.name}`}
+			info={{
+				primary: `${props.config.columns} steps · ${props.config.beats} beats`,
+				secondary: `${columnsPerBeat} steps / beat · ${
+					props.config.speedSource === "speed-group"
+						? `Speed Group ${props.config.speedGroup}`
+						: `${props.config.internalBpm} BPM internal`
+				}${
+					props.pendingPlaying
+						? " · Preloaded · Play queued"
+						: props.preload
+							? " · Preload armed"
+							: ""
+				}`,
+			}}
+			actions={[
+				[
+					{
+						id: "groups",
+						label: "Select Groups",
+						onClick: () => setModal("groups"),
+					},
+					{
+						id: "speed",
+						label: "Configure Speed Group",
+						onClick: () => setModal("speed"),
+					},
+					{
+						id: "grid",
+						label: "Configure Grid",
+						onClick: () => setModal("grid"),
+					},
+				],
+				[
+					{
+						id: "transport",
+						label: props.playing || props.pendingPlaying ? "Stop" : "Play",
+						active: props.playing || props.pendingPlaying,
+						onClick: () =>
+							props.onPlaying(!(props.playing || props.pendingPlaying)),
+					},
+				],
+			]}
+		/>
+	);
+}
+
+function GridDynamicsRuler({ props }: { props: GridDynamicsWindowProps }) {
+	const columnsPerBeat = props.config.columns / props.config.beats;
+	return (
+		<div className="grid-dynamic-ruler-shell">
+			<div className="grid-dynamic-ruler-label">
+				<strong>Beat grid</strong>
+				<small>Long-press a tile to choose the preset brush</small>
+			</div>
+			<div
+				className="grid-dynamic-ruler"
+				style={{
+					gridTemplateColumns: `repeat(${props.config.columns}, minmax(2.75rem, 1fr))`,
+				}}
+			>
+				{Array.from({ length: props.config.columns }, (_, column) => {
+					const beat = column / columnsPerBeat;
+					const beatStart = Number.isInteger(beat);
+					return (
+						<Button
+							type="button"
+							key={column}
+							className={`${beatStart ? "is-beat" : ""} ${props.playhead === column ? "is-playhead" : ""}`}
+							onClick={() => props.onPlayhead(column)}
+						>
+							<strong>{column + 1}</strong>
+							<small>{beatStart ? `Beat ${beat + 1}` : "·"}</small>
+						</Button>
+					);
+				})}
+			</div>
+		</div>
+	);
+}
+
+function GridDynamicsStatus({
+	props,
+	selectedLane,
+	selectedCell,
+}: {
+	props: GridDynamicsWindowProps;
+	selectedLane: GridDynamicLane | undefined;
+	selectedCell: GridDynamicCell | undefined;
+}) {
+	return (
+		<footer className="grid-dynamic-status">
+			<span className={props.playing ? "is-running" : ""}>
+				<i />{" "}
+				{props.pendingPlaying
+					? "Preloaded · Play queued"
+					: props.playing
+						? "Playing live"
+						: "Stopped"}
+			</span>
+			<span>
+				Brush <b>{presetById(props.activePreset)?.label}</b>
+			</span>
+			<span>
+				Selected{" "}
+				<b>
+					{selectedLane?.label ?? "—"} · Step {props.selection.column + 1}
+				</b>
+			</span>
+			<span>
+				Attack <b>{selectedCell?.attack ?? 0}%</b> · Decay{" "}
+				<b>{selectedCell?.decay ?? 0}%</b>
+			</span>
+		</footer>
+	);
+}
+
+function selectGridGroups(props: GridDynamicsWindowProps, ids: string[]) {
+	return initialGroupChoices
+		.filter((choice) => ids.includes(choice.id))
+		.map((choice) => {
+			const existing = props.groups.find((group) => group.id === choice.id);
+			return existing ?? createGridGroup(choice, props.config.columns);
+		});
+}
+
+function paintGridCell(
+	props: GridDynamicsWindowProps,
+	selection: GridCellSelection,
+	forcedPreset?: string,
+) {
+	const group = props.groups.find(
+		(candidate) => candidate.id === selection.groupId,
+	);
+	const lane = group?.lanes.find(
+		(candidate) => candidate.id === selection.laneId,
+	);
+	if (!group || !lane) return;
+	const brush = presetById(forcedPreset ?? props.activePreset);
+	if (!brush || brush.kind !== lane.kind) return;
+	props.onGroups(
+		props.groups.map((candidate) =>
+			candidate.id !== group.id
+				? candidate
+				: {
+						...candidate,
+						lanes: candidate.lanes.map((candidateLane) => {
+							if (candidateLane.id !== lane.id) return candidateLane;
+							const cells = [...candidateLane.cells];
+							const current = cells[selection.column];
+							cells[selection.column] =
+								current.preset === brush.id
+									? {
+											...current,
+											preset: current.alternate,
+											alternate: current.preset,
+										}
+									: { ...current, preset: brush.id, alternate: current.preset };
+							return { ...candidateLane, cells };
+						}),
+					},
+		),
+	);
+}
+
 export function GridDynamicsWindow(props: GridDynamicsWindowProps) {
 	const [modal, setModal] = useState<
 		"groups" | "speed" | "grid" | "preset" | "lane" | null
@@ -296,133 +471,14 @@ export function GridDynamicsWindow(props: GridDynamicsWindowProps) {
 		.find((group) => group.id === props.selection.groupId)
 		?.lanes.find((lane) => lane.id === props.selection.laneId);
 	const selectedCell = selectedLane?.cells[props.selection.column];
-	const columnsPerBeat = props.config.columns / props.config.beats;
 
-	const paint = (selection: GridCellSelection, forcedPreset?: string) => {
-		const group = props.groups.find(
-			(candidate) => candidate.id === selection.groupId,
-		);
-		const lane = group?.lanes.find(
-			(candidate) => candidate.id === selection.laneId,
-		);
-		if (!group || !lane) return;
-		const brush = presetById(forcedPreset ?? props.activePreset);
-		if (!brush || brush.kind !== lane.kind) return;
-		props.onGroups(
-			props.groups.map((candidate) =>
-				candidate.id !== group.id
-					? candidate
-					: {
-							...candidate,
-							lanes: candidate.lanes.map((candidateLane) => {
-								if (candidateLane.id !== lane.id) return candidateLane;
-								const cells = [...candidateLane.cells];
-								const current = cells[selection.column];
-								cells[selection.column] =
-									current.preset === brush.id
-										? {
-												...current,
-												preset: current.alternate,
-												alternate: current.preset,
-											}
-										: {
-												...current,
-												preset: brush.id,
-												alternate: current.preset,
-											};
-								return { ...candidateLane, cells };
-							}),
-						},
-			),
-		);
-	};
-
-	const setGroups = (ids: string[]) => {
-		props.onGroups(
-			initialGroupChoices
-				.filter((choice) => ids.includes(choice.id))
-				.map((choice) => {
-					const existing = props.groups.find((group) => group.id === choice.id);
-					return existing ?? createGridGroup(choice, props.config.columns);
-				}),
-		);
-	};
+	const paint = (selection: GridCellSelection, forcedPreset?: string) =>
+		paintGridCell(props, selection, forcedPreset);
 
 	return (
 		<section className="grid-dynamics-window">
-			<WindowHeader
-				title={`Grid Dynamic · ${props.name}`}
-				info={{
-					primary: `${props.config.columns} steps · ${props.config.beats} beats`,
-					secondary: `${columnsPerBeat} steps / beat · ${
-						props.config.speedSource === "speed-group"
-							? `Speed Group ${props.config.speedGroup}`
-							: `${props.config.internalBpm} BPM internal`
-					}${
-						props.pendingPlaying
-							? " · Preloaded · Play queued"
-							: props.preload
-								? " · Preload armed"
-								: ""
-					}`,
-				}}
-				actions={[
-					[
-						{
-							id: "groups",
-							label: "Select Groups",
-							onClick: () => setModal("groups"),
-						},
-						{
-							id: "speed",
-							label: "Configure Speed Group",
-							onClick: () => setModal("speed"),
-						},
-						{
-							id: "grid",
-							label: "Configure Grid",
-							onClick: () => setModal("grid"),
-						},
-					],
-					[
-						{
-							id: "transport",
-							label: props.playing || props.pendingPlaying ? "Stop" : "Play",
-							active: props.playing || props.pendingPlaying,
-							onClick: () =>
-								props.onPlaying(!(props.playing || props.pendingPlaying)),
-						},
-					],
-				]}
-			/>
-			<div className="grid-dynamic-ruler-shell">
-				<div className="grid-dynamic-ruler-label">
-					<strong>Beat grid</strong>
-					<small>Long-press a tile to choose the preset brush</small>
-				</div>
-				<div
-					className="grid-dynamic-ruler"
-					style={{
-						gridTemplateColumns: `repeat(${props.config.columns}, minmax(2.75rem, 1fr))`,
-					}}
-				>
-					{Array.from({ length: props.config.columns }, (_, column) => {
-						const beat = column / columnsPerBeat;
-						const beatStart = Number.isInteger(beat);
-						return (
-							<Button
-								type="button"
-								key={column}
-								className={`${beatStart ? "is-beat" : ""} ${props.playhead === column ? "is-playhead" : ""}`}
-								onClick={() => props.onPlayhead(column)}
-							>
-								<strong>{column + 1}</strong>
-								<small>{beatStart ? `Beat ${beat + 1}` : "·"}</small>
-							</Button>
-						);
-					})}
-				</div>
-			</div>
+			<GridDynamicsHeader props={props} setModal={setModal} />
+			<GridDynamicsRuler props={props} />
 			<div className="grid-dynamic-workspace">
 				<WindowScrollArea>
 					<div className="grid-dynamic-groups">
@@ -448,34 +504,16 @@ export function GridDynamicsWindow(props: GridDynamicsWindowProps) {
 					</div>
 				</WindowScrollArea>
 			</div>
-			<footer className="grid-dynamic-status">
-				<span className={props.playing ? "is-running" : ""}>
-					<i />{" "}
-					{props.pendingPlaying
-						? "Preloaded · Play queued"
-						: props.playing
-							? "Playing live"
-							: "Stopped"}
-				</span>
-				<span>
-					Brush <b>{presetById(props.activePreset)?.label}</b>
-				</span>
-				<span>
-					Selected{" "}
-					<b>
-						{selectedLane?.label ?? "—"} · Step {props.selection.column + 1}
-					</b>
-				</span>
-				<span>
-					Attack <b>{selectedCell?.attack ?? 0}%</b> · Decay{" "}
-					<b>{selectedCell?.decay ?? 0}%</b>
-				</span>
-			</footer>
+			<GridDynamicsStatus
+				props={props}
+				selectedLane={selectedLane}
+				selectedCell={selectedCell}
+			/>
 			{modal === "groups" && (
 				<GroupSelectionModal
 					selected={props.groups.map((group) => group.id)}
 					onSave={(ids) => {
-						setGroups(ids);
+						props.onGroups(selectGridGroups(props, ids));
 						setModal(null);
 					}}
 					onClose={() => setModal(null)}
@@ -637,6 +675,7 @@ function GroupSelectionModal({
 						label={`${group.number} · ${group.name}`}
 						description={`${group.fixtureCount} fixtures`}
 						checked={ids.includes(group.id)}
+						stateLabel={ids.includes(group.id) ? "Included" : "Excluded"}
 						onChange={(event) =>
 							setIds((current) =>
 								event.target.checked

@@ -2,7 +2,7 @@ use crate::engine::GroupMasterTransition;
 use crate::{Engine, EngineError, GroupMasterGenerationUpdate, RuntimeGeneration};
 use light_core::FixtureId;
 use light_fixture::{ChannelFunctionBehavior, HighlightLook};
-use std::cell::Cell;
+use std::{cell::Cell, collections::HashSet};
 
 impl Engine {
     /// Updates one output-runtime Group master without rebuilding Playback or refreshing live
@@ -123,22 +123,50 @@ impl Engine {
     /// Replace the transient Highlight output set. This deliberately does not touch programmer
     /// state, undo history, or the persisted engine snapshot.
     pub fn set_highlighted_fixtures(&self, fixtures: impl IntoIterator<Item = FixtureId>) {
-        *self.highlighted_fixtures.write() = fixtures.into_iter().collect();
+        self.set_highlight_layers(fixtures.into_iter().map(|fixture_id| {
+            light_programmer::HighlightOutputLayer {
+                fixture_id,
+                role: light_programmer::HighlightOutputRole::Highlight,
+                suppressed_attributes: HashSet::new(),
+            }
+        }));
     }
 
     pub fn clear_highlighted_fixtures(&self) {
-        self.highlighted_fixtures.write().clear();
+        self.highlight_layers.write().clear();
     }
 
     pub fn highlighted_fixtures(&self) -> Vec<FixtureId> {
         let mut fixtures = self
-            .highlighted_fixtures
+            .highlight_layers
             .read()
-            .iter()
-            .copied()
+            .values()
+            .filter(|layer| layer.role == light_programmer::HighlightOutputRole::Highlight)
+            .map(|layer| layer.fixture_id)
             .collect::<Vec<_>>();
         fixtures.sort_by_key(|fixture| fixture.0);
         fixtures
+    }
+
+    pub fn set_highlight_layers(
+        &self,
+        layers: impl IntoIterator<Item = light_programmer::HighlightOutputLayer>,
+    ) {
+        *self.highlight_layers.write() = layers
+            .into_iter()
+            .map(|layer| (layer.fixture_id, layer))
+            .collect();
+    }
+
+    pub fn highlight_layers(&self) -> Vec<light_programmer::HighlightOutputLayer> {
+        let mut layers = self
+            .highlight_layers
+            .read()
+            .values()
+            .cloned()
+            .collect::<Vec<_>>();
+        layers.sort_by_key(|layer| layer.fixture_id.0);
+        layers
     }
 
     /// Replace the installation-owned semantic Highlight look without touching show or

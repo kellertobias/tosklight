@@ -19,6 +19,7 @@ import { HardwareCueRows } from "./HardwareCueRows";
 import { playbackRowUnits } from "./projection";
 import {
 	PlaybackAssignmentTarget,
+	PlaybackCommandTargetBadge,
 	PlaybackConfigurationTarget,
 } from "./SlotControls";
 import type { PlaybackSlotProjection, PlaybackSnapshotActive } from "./types";
@@ -37,6 +38,7 @@ type HardwarePlaybackCardProps = {
 	actions: VerticalTouchFaderAction[];
 	className: string;
 	cardStyle: CSSProperties | undefined;
+	commandTarget: "record" | "set" | null;
 	interceptPointer: (event: ReactPointerEvent<HTMLElement>) => void;
 	interceptClick: (event: ReactMouseEvent<HTMLElement>) => void;
 };
@@ -55,6 +57,7 @@ export function HardwarePlaybackCard({
 	actions,
 	className,
 	cardStyle,
+	commandTarget,
 	interceptPointer,
 	interceptClick,
 }: HardwarePlaybackCardProps) {
@@ -100,6 +103,9 @@ export function HardwarePlaybackCard({
 			slots={{
 				overlays: (
 					<>
+						{commandTarget === "record" ? (
+							<PlaybackCommandTargetBadge command="record" />
+						) : null}
 						<ExpandedPlaybackControls
 							controller={controller}
 							slotData={slotData}

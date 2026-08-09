@@ -94,6 +94,9 @@ fn test_state_with_programmers(
                 OutputControlCapability::new(Arc::new(Mutex::new(OutputControl::default()))),
                 Arc::new(Mutex::new(TimecodeRouter::default())),
                 None,
+                Arc::new(light_output::UsbOutputFanout::new(Arc::new(
+                    light_output::UnavailableUsbDriverFactory,
+                ))),
                 Arc::default(),
                 manual_clock,
                 Arc::new(Mutex::new(std::array::from_fn(|index| {
@@ -116,6 +119,10 @@ fn test_state_with_programmers(
                 SelectiveShowImportService::new(active_show_service),
             ),
             events: EventResource::new(application_events),
+            extensions: crate::runtime::extensions_runtime::ExtensionResource::start(
+                data_dir.join("extensions"),
+                data_dir.join("extensions.json"),
+            ),
             integrations: IntegrationResource::new(
                 Arc::new(matter::MatterBridgeAdapter::default()),
                 None,

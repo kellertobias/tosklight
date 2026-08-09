@@ -17,8 +17,17 @@ export function armEdit(
 	kind: Exclude<EditKind, null>,
 	axis?: VectorAxis,
 ) {
-	const { ui, appState } = controller;
-	if (!appState.patchSetArmed) return;
+	if (!controller.appState.patchSetArmed) return;
+	beginFixtureEdit(controller, fixture, kind, axis);
+}
+
+function beginFixtureEdit(
+	controller: PatchController,
+	fixture: PatchedFixture,
+	kind: Exclude<EditKind, null>,
+	axis?: VectorAxis,
+) {
+	const { ui } = controller;
 	ui.setEditError("");
 	ui.setSelectedFixture(fixture.fixture_id);
 	if (kind === "number") ui.setEditText(String(fixtureDisplayId(fixture)));
@@ -73,25 +82,21 @@ function panTiltChoice(fixture: PatchedFixture) {
 	);
 }
 
-export function armEditFromContextMenu(
+export function beginFixtureEditFromContextMenu(
 	controller: PatchController,
 	fixture: PatchedFixture,
-	kind: "location" | "rotation",
-	axis: VectorAxis,
+	kind: Exclude<EditKind, null>,
+	axis?: VectorAxis,
 ) {
-	controller.dispatch({ type: "SET_PATCH_ARMED", value: true });
-	controller.ui.setEditError("");
-	controller.ui.setSelectedFixture(fixture.fixture_id);
-	controller.ui.setVector(fixture[kind] ?? { x: 0, y: 0, z: 0 });
-	controller.ui.setEditText(
-		String(
-			kind === "location"
-				? (fixture[kind]?.[axis] ?? 0) / 1_000
-				: (fixture[kind]?.[axis] ?? 0),
-		),
-	);
-	controller.ui.setEditAxis(axis);
-	controller.ui.setEdit(kind);
+	beginFixtureEdit(controller, fixture, kind, axis);
+	if ((kind === "location" || kind === "rotation") && axis)
+		controller.ui.setEditText(
+			String(
+				kind === "location"
+					? (fixture[kind]?.[axis] ?? 0) / 1_000
+					: (fixture[kind]?.[axis] ?? 0),
+			),
+		);
 }
 
 export function selectSplitAddress(
@@ -109,6 +114,19 @@ export function selectSplitAddress(
 	ui.setEditError("");
 	ui.setEditSplitDrafts(splitDraftValues(fixture));
 	if (appState.patchSetArmed) ui.setEdit("address");
+}
+
+export function beginSplitAddressEditFromContextMenu(
+	controller: PatchController,
+	fixture: PatchedFixture,
+	split: number,
+) {
+	const { ui } = controller;
+	ui.setSelectedFixture(fixture.fixture_id);
+	ui.setEditingSplit(split);
+	ui.setEditError("");
+	ui.setEditSplitDrafts(splitDraftValues(fixture));
+	ui.setEdit("address");
 }
 
 export async function finishEdit(

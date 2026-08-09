@@ -93,6 +93,11 @@ export function HardwareControlSummary() {
 			setRenamePage(activePage);
 		} else setPagesOpen(true);
 	};
+	const openPageRename = () => {
+		if (!pageReady || !activePage) return;
+		dispatch({ type: "SET_PLAYBACK_SET_ARMED", value: false });
+		setRenamePage(activePage);
+	};
 	const submitTime = () => {
 		const value = Math.max(
 			0,
@@ -125,6 +130,7 @@ export function HardwareControlSummary() {
 					display: String(page ?? "—"),
 					disabled: !pageReady,
 					ariaLabel: pageReady ? `Page ${page}` : "Playback page loading",
+					settings: true,
 				},
 			]}
 			speedGroups={(["A", "B", "C", "D", "E"] as const).map((group, index) => ({
@@ -136,6 +142,9 @@ export function HardwareControlSummary() {
 				if (id === "programmer-fade") openTime("prog", prog);
 				else if (id === "cue-fade") openTime("cue", cue);
 				else openPagesOrRename();
+			}}
+			onValueSettings={(id) => {
+				if (id === "page") openPageRename();
 			}}
 			onSpeedPointerDown={(group, event) =>
 				speedGroupInteraction.beginHold(

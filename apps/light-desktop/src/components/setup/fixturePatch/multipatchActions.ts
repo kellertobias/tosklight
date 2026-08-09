@@ -80,8 +80,29 @@ export function beginMultipatchEdit(
 	kind: NonNullable<MultiPatchEdit>["kind"],
 	axis?: NonNullable<MultiPatchEdit>["axis"],
 ) {
+	beginMultipatchEditInternal(controller, fixture, instance, kind, axis, false);
+}
+
+export function beginMultipatchEditFromContextMenu(
+	controller: PatchController,
+	fixture: PatchController["data"]["all"][number],
+	instance: MultiPatchInstance,
+	kind: NonNullable<MultiPatchEdit>["kind"],
+	axis?: NonNullable<MultiPatchEdit>["axis"],
+) {
+	beginMultipatchEditInternal(controller, fixture, instance, kind, axis, true);
+}
+
+function beginMultipatchEditInternal(
+	controller: PatchController,
+	fixture: PatchController["data"]["all"][number],
+	instance: MultiPatchInstance,
+	kind: NonNullable<MultiPatchEdit>["kind"],
+	axis: NonNullable<MultiPatchEdit>["axis"] | undefined,
+	direct: boolean,
+) {
 	const { ui } = controller;
-	if (kind === "pan_tilt" && !controller.appState.patchSetArmed) return;
+	if (kind === "pan_tilt" && !direct && !controller.appState.patchSetArmed) return;
 	ui.setEditError("");
 	ui.setSelectedFixture(fixture.fixture_id);
 	ui.setMultipatchEdit({
@@ -153,7 +174,6 @@ export function beginMultipatchVectorEditFromContextMenu(
 	kind: "location" | "rotation",
 	axis: "x" | "y" | "z",
 ) {
-	controller.dispatch({ type: "SET_PATCH_ARMED", value: true });
 	const selected =
 		controller.ui.physicalSelectionFixture === fixture.fixture_id &&
 		controller.ui.physicalSelectionIds.includes(instance.id)

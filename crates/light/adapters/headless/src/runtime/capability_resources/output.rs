@@ -12,6 +12,8 @@ pub(in crate::runtime) struct OutputResource {
     control: OutputControlCapability,
     timecode: Arc<Mutex<TimecodeRouter>>,
     network: Option<Arc<NetworkOutput>>,
+    usb: Arc<light_output::UsbOutputFanout>,
+    usb_configuration_lock: Arc<tokio::sync::Mutex<()>>,
     sequences: Arc<tokio::sync::Mutex<HashMap<(light_output::Protocol, u16), u8>>>,
     manual_clock: Option<Arc<ManualClock>>,
     test_clock_lock: Arc<tokio::sync::Mutex<()>>,
@@ -127,6 +129,7 @@ impl OutputResource {
         control: OutputControlCapability,
         timecode: Arc<Mutex<TimecodeRouter>>,
         network: Option<Arc<NetworkOutput>>,
+        usb: Arc<light_output::UsbOutputFanout>,
         sequences: Arc<tokio::sync::Mutex<HashMap<(light_output::Protocol, u16), u8>>>,
         manual_clock: Option<Arc<ManualClock>>,
         speed_groups: Arc<Mutex<[SpeedGroupController; 5]>>,
@@ -143,6 +146,8 @@ impl OutputResource {
             control,
             timecode,
             network,
+            usb,
+            usb_configuration_lock: Arc::default(),
             sequences,
             manual_clock,
             test_clock_lock: Arc::default(),
@@ -589,6 +594,13 @@ impl OutputResource {
         self.engine.set_highlighted_fixtures(fixtures);
     }
 
+    pub(in crate::runtime) fn set_highlight_layers(
+        &self,
+        layers: impl IntoIterator<Item = light_programmer::HighlightOutputLayer>,
+    ) {
+        self.engine.set_highlight_layers(layers);
+    }
+
     pub(in crate::runtime) fn clear_highlighted_fixtures(&self) {
         self.engine.clear_highlighted_fixtures();
     }
@@ -826,6 +838,23 @@ impl OutputResource {
             .as_ref()
             .map(|output| output.route_send_errors())
             .unwrap_or_default()
+    }
+
+    pub(in crate::runtime) fn usb_diagnostics(&self) -> Vec<light_output::UsbEndpointDiagnostic> {
+        self.usb.diagnostics()
+    }
+
+    pub(in crate::runtime) fn configure_usb_endpoints(
+        &self,
+        document: &light_output::UsbEndpointDocument,
+    ) -> Result<(), String> {
+        self.usb.configure(document)
+    }
+
+    pub(in crate::runtime) async fn lock_usb_configuration(
+        &self,
+    ) -> tokio::sync::OwnedMutexGuard<()> {
+        Arc::clone(&self.usb_configuration_lock).lock_owned().await
     }
 
     pub(in crate::runtime) fn take_send_errors(&self) -> u64 {

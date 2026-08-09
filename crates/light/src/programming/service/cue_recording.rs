@@ -1,10 +1,10 @@
 use super::{ProgrammingService, support::Snapshot};
 use crate::{
     ActionEnvelope, ActionError, ActionErrorKind, ProgrammingCueActivationCompletion,
-    ProgrammingCueActivationPolicy, ProgrammingCueActivationResult, ProgrammingCueCapturePolicy,
-    ProgrammingCueCommit, ProgrammingCueCommitResult, ProgrammingCueRecordOutcome,
-    ProgrammingCueRecordRequest, ProgrammingCueRecordResult, ProgrammingCueRecordingPorts,
-    ProgrammingShowUndoObject, ProgrammingShowUndoOperation, ProgrammingShowUndoTarget,
+    ProgrammingCueActivationResult, ProgrammingCueCapturePolicy, ProgrammingCueCommit,
+    ProgrammingCueCommitResult, ProgrammingCueRecordOutcome, ProgrammingCueRecordRequest,
+    ProgrammingCueRecordResult, ProgrammingCueRecordingPorts, ProgrammingShowUndoObject,
+    ProgrammingShowUndoOperation, ProgrammingShowUndoTarget,
 };
 use light_core::{SessionId, UserId};
 use light_programmer::{
@@ -60,6 +60,7 @@ impl ProgrammingService {
         if let Some(result) = self.cached_cue_recording(&identity, &envelope.command)? {
             return Ok(result);
         }
+        self.programmers.deactivate_alignment(identity.session_id);
         let environment = ports.cue_recording_environment(&envelope.context, &envelope.command)?;
         validate_environment(&envelope.command, &environment)?;
         let capture = self.capture_cue(identity.session_id, envelope.command.capture_policy)?;
@@ -68,14 +69,18 @@ impl ProgrammingService {
         let commit = ProgrammingCueCommit::new(envelope.command.clone(), environment, capture);
         let completion = ports.commit_cue(&envelope.context, &commit)?;
         validate_completion(&envelope.command, &commit, &completion)?;
-        let runtime = activate_if_requested(&envelope, &completion, captured_source, ports)?;
+        let activation =
+            activate_if_authorized(&envelope, &commit, &completion, captured_source, ports)?;
+        if activation.succeeded {
+            self.clear_recorded_values_after_activation(&envelope, &identity)?;
+        }
         self.release_active_fallback(&envelope, &identity, release_before)?;
         let result = complete_result(
             &envelope,
             &identity.request_id,
             captured_source,
             completion,
-            runtime,
+            activation.runtime,
         );
         if result.outcome.show_event_sequence().is_some() {
             let projections = result.outcome.projections();
@@ -115,6 +120,37 @@ impl ProgrammingService {
         }
         self.remember_cue_recording(identity, envelope.command, result.clone());
         Ok(result)
+    }
+
+    fn clear_recorded_values_after_activation(
+        &self,
+        envelope: &ActionEnvelope<ProgrammingCueRecordRequest>,
+        identity: &RecordingIdentity,
+    ) -> Result<(), ActionError> {
+        let lifecycle_before = self.active_lifecycle_programmer(identity.user_id);
+        let before = Snapshot::read(
+            &self.programmers,
+            identity.desk_id,
+            identity.session_id,
+            identity.user_id,
+        )?;
+        if !self.programmers.clear_normal_values(identity.session_id) {
+            return Ok(());
+        }
+        let after = Snapshot::read(
+            &self.programmers,
+            identity.desk_id,
+            identity.session_id,
+            identity.user_id,
+        )?;
+        let values = self.values_change(
+            identity.user_id,
+            &before.values_content,
+            &after.values_content,
+        )?;
+        self.publish_values(&envelope.context, values);
+        self.publish_lifecycle_for_context(&envelope.context, lifecycle_before);
+        Ok(())
     }
 
     fn assert_cue_owner(&self, session: SessionId, user_id: UserId) -> Result<(), ActionError> {
@@ -245,14 +281,23 @@ impl ProgrammingService {
     }
 }
 
-fn activate_if_requested(
+struct FirstRecordActivation {
+    runtime: Option<ProgrammingCueActivationResult>,
+    succeeded: bool,
+}
+
+fn activate_if_authorized(
     envelope: &ActionEnvelope<ProgrammingCueRecordRequest>,
+    commit: &ProgrammingCueCommit,
     completion: &ProgrammingCueCommitResult,
     source: CueRecordingCapturedSource,
     ports: &dyn ProgrammingCueRecordingPorts,
-) -> Result<Option<ProgrammingCueActivationResult>, ActionError> {
-    if !should_activate(&envelope.command, completion, source) {
-        return Ok(None);
+) -> Result<FirstRecordActivation, ActionError> {
+    if !should_activate(commit, completion, source) {
+        return Ok(FirstRecordActivation {
+            runtime: None,
+            succeeded: false,
+        });
     }
     let playback = completion
         .concrete_playback_number
@@ -260,10 +305,16 @@ fn activate_if_requested(
     let Some(activation) =
         ports.activate_recorded_cue(&envelope.context, playback, completion.recorded_cue.number)
     else {
-        return Ok(None);
+        return Ok(FirstRecordActivation {
+            runtime: None,
+            succeeded: false,
+        });
     };
     validate_activation(playback, completion, &activation)?;
-    Ok(emitted_activation(activation))
+    Ok(FirstRecordActivation {
+        runtime: emitted_activation(activation),
+        succeeded: true,
+    })
 }
 
 fn emitted_activation(
@@ -278,14 +329,15 @@ fn emitted_activation(
 }
 
 fn should_activate(
-    request: &ProgrammingCueRecordRequest,
+    commit: &ProgrammingCueCommit,
     completion: &ProgrammingCueCommitResult,
     source: CueRecordingCapturedSource,
 ) -> bool {
     completion.changed
+        && completion.created_topology
         && !completion.recorded_cue.deleted
         && source == CueRecordingCapturedSource::Normal
-        && request.activation_policy == ProgrammingCueActivationPolicy::GoToIfNormal
+        && commit.environment().start_after_first_recording
         && completion.concrete_playback_number.is_some()
 }
 

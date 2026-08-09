@@ -331,13 +331,10 @@ fn dispatch_action(
                 .map_err(|error| error.message);
             ActionOutput::plain(response)
         }),
-        LiveAction::ProgrammingAlign(request) => run_interaction(state, session, context, || {
-            ActionOutput::plain(ws_programmer_align(
-                state,
-                session,
-                &action_request(request, context),
-            ))
-        }),
+        LiveAction::ProgrammingAlign(request) => ActionOutput::plain(
+            ws_programmer_align(state, request, context, ports)
+                .and_then(|outcome| serde_json::to_value(outcome).map_err(|e| e.to_string())),
+        ),
         LiveAction::FixtureControl(request) => {
             dispatch_fixture_control(state, session, request, context)
         }

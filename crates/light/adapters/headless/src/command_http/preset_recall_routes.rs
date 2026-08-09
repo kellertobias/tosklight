@@ -40,6 +40,10 @@ async fn recall_preset(
         expected_preset_revision: expectation(request.expected_preset_revision),
         expected_show_revision: expectation(request.expected_show_revision),
         expected_values_revision: expectation(request.expected_programmer_revision),
+        expected_preload_values_revision: request.expected_preload_values_revision.map_or(
+            light_application::ProgrammingPresetRecallRevisionExpectation::Current,
+            expectation,
+        ),
         expected_capture_mode_revision: expectation(request.expected_capture_mode_revision),
         expected_selection_revision: expectation(request.expected_selection_revision),
     };

@@ -84,6 +84,7 @@ export function semanticHighlightRaw(
 			"color.white",
 			"color.cold_white",
 			"color.warm_white",
+			"color.amber",
 		].includes(attribute)
 	) {
 		return endpoint(true);
@@ -230,13 +231,9 @@ function additiveWhiteLevels(
 export function semanticHighlightDefaultsForMode(mode: FixtureMode) {
 	const values = new Map(
 		mode.channels.map((channel) => {
-			const fixtureProjection = canonicalAttributeProjection(
-				channel.fixture_attribute,
-			);
-			const highlightAttribute =
-				fixtureProjection.attribute !== channel.fixture_attribute
-					? channel.fixture_attribute
-					: channel.attribute;
+			const inverted =
+				channel.invert !==
+				(channel.canonical_transform === "invert_normalized");
 			const choices = channel.functions.flatMap((fn) =>
 				fn.behavior.type === "fixed" || fn.behavior.type === "indexed"
 					? [
@@ -251,10 +248,10 @@ export function semanticHighlightDefaultsForMode(mode: FixtureMode) {
 			return [
 				channel.id,
 				semanticHighlightRaw(
-					highlightAttribute,
+					channel.attribute,
 					channel.resolution,
 					channel.default_raw,
-					channel.invert,
+					inverted,
 					choices,
 				),
 			] as const;

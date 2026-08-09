@@ -121,30 +121,25 @@ async fn programming_align(
     let outcome_request_id = request_id.clone();
     let action_request = ProgrammingAlignLiveActionRequest {
         request_id: request_id.clone(),
-        attribute: request.attribute,
         mode: request.mode,
-        from: request.from,
-        to: request.to,
     };
-    run_http_programming_action(state, session, request_id, move |state, session, action| {
-        #[derive(Deserialize)]
-        struct AlignPayload {
-            unsupported_fixtures: Vec<Uuid>,
-        }
-        let value = ws_programmer_align(
-            state,
-            session,
-            &typed_action_request(action, action_request),
-        )?;
-        let payload: AlignPayload =
-            serde_json::from_value(value).map_err(|error| error.to_string())?;
-        Ok(ProgrammingAlignOutcome {
-            request_id: outcome_request_id,
-            unsupported_fixtures: payload.unsupported_fixtures,
-        })
+    let activation = state.active_show.acquire().await;
+    let worker_state = state.clone();
+    let worker_session = session.clone();
+    let completed = tokio::task::spawn_blocking(move || {
+        let context = programming_context(
+            &worker_session,
+            light_application::ActionSource::Http,
+            Some(&outcome_request_id),
+        );
+        let ports =
+            command_http::ServerProgrammingPorts::new(&worker_state, &worker_session, "http", true);
+        ws_programmer_align(&worker_state, action_request, &context, &ports)
     })
     .await
-    .map(Json)
+    .map_err(|error| ApiError::internal(format!("Programming Align task failed: {error}")))?;
+    drop(activation);
+    completed.map(Json).map_err(action_api_error)
 }
 
 async fn fixture_control(

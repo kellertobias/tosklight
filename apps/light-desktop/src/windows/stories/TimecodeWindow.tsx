@@ -13,7 +13,7 @@ import {
 	useRef,
 	useState,
 } from "react";
-import "./TimecodeWindow.css";
+import "../TimecodeWindow.css";
 
 export const TIMECODE_HZ = 44;
 export const TIMECODE_DURATION_SECONDS = 75;

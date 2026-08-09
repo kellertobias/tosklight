@@ -1,6 +1,9 @@
 import { useMemo } from "react";
 import type { VisualizationSnapshot } from "../../../api/types";
-import { useProgrammerFadeMillis } from "../../../features/configuration/ConfigurationState";
+import {
+	useDirectEntryUsesProgrammerFade,
+	useProgrammerFadeMillis,
+} from "../../../features/configuration/ConfigurationState";
 import {
 	useAttributeRegistry,
 	useHardwareConnected,
@@ -70,6 +73,7 @@ function useSupportedAttributes(
 function useResolvedValues(
 	visualization: VisualizationSnapshot | null,
 	selectedFixtureIds: readonly string[],
+	fixtures: ReturnType<typeof useSelectedPatchedFixtures>,
 ) {
 	return useMemo(() => {
 		const selected = new Set(selectedFixtureIds);
@@ -77,11 +81,15 @@ function useResolvedValues(
 		const normalizedByFixture = new Map<string, Map<string, number>>();
 		const discrete = new Map<string, string>();
 		const discreteByFixture = new Map<string, Map<string, string>>();
+		const defaultsByFixture = fixtureParameterDefaults(fixtures);
+		for (const fixtureId of selectedFixtureIds) {
+			const defaults = defaultsByFixture.get(fixtureId);
+			if (!defaults) continue;
+			normalizedByFixture.set(fixtureId, new Map(defaults));
+		}
 		for (const entry of visualization?.values ?? []) {
 			if (!selected.has(entry.fixture_id)) continue;
 			if (entry.value.kind === "normalized") {
-				if (!normalized.has(entry.attribute))
-					normalized.set(entry.attribute, entry.value.value);
 				const values = normalizedByFixture.get(entry.fixture_id) ?? new Map();
 				values.set(entry.attribute, entry.value.value);
 				normalizedByFixture.set(entry.fixture_id, values);
@@ -93,8 +101,34 @@ function useResolvedValues(
 				discreteByFixture.set(entry.fixture_id, values);
 			}
 		}
+		for (const fixtureId of selectedFixtureIds)
+			for (const [attribute, value] of
+				normalizedByFixture.get(fixtureId) ?? [])
+				if (!normalized.has(attribute)) normalized.set(attribute, value);
 		return { normalized, normalizedByFixture, discrete, discreteByFixture };
-	}, [visualization, selectedFixtureIds]);
+	}, [visualization, selectedFixtureIds, fixtures]);
+}
+
+function fixtureParameterDefaults(
+	fixtures: ReturnType<typeof useSelectedPatchedFixtures>,
+) {
+	const defaults = new Map<string, Map<string, number>>();
+	for (const fixture of fixtures) {
+		for (const head of fixture.definition.heads) {
+			const owner = head.shared
+				? fixture.fixture_id
+				: fixture.logical_heads.find(
+						(logical) => logical.head_index === head.index,
+					)?.fixture_id;
+			if (!owner) continue;
+			const values = defaults.get(owner) ?? new Map<string, number>();
+			for (const parameter of head.parameters)
+				if (typeof parameter.default === "number")
+					values.set(parameter.attribute, parameter.default);
+			defaults.set(owner, values);
+		}
+	}
+	return defaults;
 }
 
 const FAMILY_GROUPS: Record<
@@ -189,8 +223,13 @@ export function useParameterProjection(
 		active,
 	);
 	const programmerFadeMillis = useProgrammerFadeMillis();
+	const directEntryUsesProgrammerFade = useDirectEntryUsesProgrammerFade();
 	const registry = useAttributeRegistry();
-	const values = useResolvedValues(visualization, selectedFixtureIds);
+	const values = useResolvedValues(
+		visualization,
+		selectedFixtureIds,
+		selectedFixtures,
+	);
 	const encoderGroups = useMemo(
 		() =>
 			attributeEncoderGroups(
@@ -233,6 +272,7 @@ export function useParameterProjection(
 		state,
 		active,
 		programmerFadeMillis: programmerFadeMillis ?? undefined,
+		directEntryUsesProgrammerFade,
 		selectedFixtureIds,
 		selectedFixtures,
 		selectionRevision: selection?.revision ?? 0,

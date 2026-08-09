@@ -5,19 +5,43 @@ pub(crate) fn outcome(
     result: application::ProgrammingPresetRecallResult,
 ) -> wire::PresetRecallOutcome {
     let programmer_revision = result.outcome.values_revision();
-    let outcome = match result.outcome {
+    let target = match result.target {
+        application::ProgrammingPresetRecallTarget::Programmer => None,
+        application::ProgrammingPresetRecallTarget::Preload => {
+            Some(wire::PresetRecallTarget::Preload)
+        }
+    };
+    let (outcome, preload_projection, preload_event_sequence) = match result.outcome {
         application::ProgrammingPresetRecallOutcome::Changed {
             projection,
             values_event_sequence,
             ..
-        } => wire::PresetRecallActionState::Changed {
-            projection: projection
+        } => (
+            wire::PresetRecallActionState::Changed {
+                projection: projection
+                    .as_deref()
+                    .map(super::values_wire::values_projection),
+                event_sequence: values_event_sequence,
+            },
+            None,
+            None,
+        ),
+        application::ProgrammingPresetRecallOutcome::PreloadChanged {
+            projection,
+            preload_values_event_sequence,
+            ..
+        } => (
+            wire::PresetRecallActionState::Changed {
+                projection: None,
+                event_sequence: None,
+            },
+            projection
                 .as_deref()
-                .map(super::values_wire::values_projection),
-            event_sequence: values_event_sequence,
-        },
+                .map(super::preload_values_wire::projection_from_application),
+            preload_values_event_sequence,
+        ),
         application::ProgrammingPresetRecallOutcome::NoChange { .. } => {
-            wire::PresetRecallActionState::NoChange
+            (wire::PresetRecallActionState::NoChange, None, None)
         }
     };
     wire::PresetRecallOutcome {
@@ -32,6 +56,12 @@ pub(crate) fn outcome(
         },
         show_revision: result.preset.show_revision.value(),
         programmer_revision,
+        target,
+        preload_values_revision: (result.target
+            == application::ProgrammingPresetRecallTarget::Preload)
+            .then_some(result.preload_values_revision),
+        preload_projection,
+        preload_event_sequence,
         capture_mode_revision: result.capture_mode_revision,
         selection_revision: result.selection_revision,
         interaction_event_sequence: result.interaction_event_sequence,

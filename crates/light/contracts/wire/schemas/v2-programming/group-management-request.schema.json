@@ -218,6 +218,7 @@
       "type": "string",
       "enum": [
         "top",
+        "bottom",
         "front",
         "back",
         "left",

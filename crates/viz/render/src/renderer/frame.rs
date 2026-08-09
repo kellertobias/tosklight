@@ -155,7 +155,9 @@ impl Renderer {
             // has one — it is a drawing on a page with its own scale — so it is not drawn there.
             floor_grid: view.floor_grid && !plot,
             scenery: match view.mode {
-                viz_scene::ViewMode::Lines3d => |kind| viz_scene::ViewMode::Lines3d.draws_scenery(kind),
+                viz_scene::ViewMode::Lines3d => {
+                    |kind| viz_scene::ViewMode::Lines3d.draws_scenery(kind)
+                }
                 _ => |_| true,
             },
         };

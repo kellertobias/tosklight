@@ -27,8 +27,6 @@ export interface DeskConfiguration {
 	output_bind_ip: string;
 	osc_bind: string | null;
 	art_timecode_bind: string | null;
-	midi_inputs: string[];
-	rtp_midi_bind: string | null;
 	timecode_sources: Array<{
 		source_prefix: string;
 		priority: number;
@@ -42,6 +40,9 @@ export interface DeskConfiguration {
 	programmer_fade_millis: number;
 	command_line_at_uses_programmer_fade?: boolean;
 	sequence_master_fade_millis: number;
+	cuelist_auto_off_at_zero_default: boolean;
+	cuelist_auto_off_flash_release_default: boolean;
+	start_after_first_recording: boolean;
 	preload_programmer_changes: boolean;
 	preload_physical_playback_actions: boolean;
 	preload_virtual_playback_actions: boolean;

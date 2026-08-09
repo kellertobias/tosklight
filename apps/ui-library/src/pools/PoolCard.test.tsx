@@ -57,7 +57,7 @@ describe("PoolCard", () => {
 		expect(select).toHaveBeenCalledOnce();
 	});
 
-	it("maps high-level workflow states to Record, Update, and Set", () => {
+	it("maps high-level workflow states to their literal target actions", () => {
 		const { rerender } = render(
 			<PoolCard
 				model={{
@@ -86,6 +86,24 @@ describe("PoolCard", () => {
 			/>,
 		);
 		expect(screen.getByText("Set")).toHaveClass("set");
+
+		for (const operation of ["Copy", "Move", "Delete"] as const) {
+			rerender(
+				<PoolCard
+					model={{
+						number: 1,
+						primary: `${operation} target`,
+						states: [
+							`${operation.toLowerCase()}-target` as
+								| "copy-target"
+								| "move-target"
+								| "delete-target",
+						],
+					}}
+				/>,
+			);
+			expect(screen.getByText(operation)).toHaveClass(operation.toLowerCase());
+		}
 	});
 
 	it("supports independently colored icon foreground and media background", () => {

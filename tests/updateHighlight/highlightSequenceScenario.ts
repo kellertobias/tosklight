@@ -1,7 +1,7 @@
+import { replaceProgrammingSelection } from "../bench/command-selection/programmingSelection";
 import { expect } from "../bench/core/fixtures";
 import { pairedScenario } from "../bench/core/pairedScenario";
 import { setProgrammerFixtureValue } from "../bench/programmer/programmerValues";
-import { replaceProgrammingSelection } from "../bench/command-selection/programmingSelection";
 import {
 	loadCanonicalCopy,
 	object,
@@ -33,11 +33,11 @@ interface HighlightSequenceState {
 	observedSequence: string[][];
 	singletonGroupId: string;
 	completeGroupId: string;
-	highStayedOff?: boolean;
+	highWasActive?: boolean;
 	wrappedForward?: boolean;
 	wrappedBackward?: boolean;
 	highSurvivedEmpty?: boolean;
-	highFollowedSelection?: boolean;
+	highKeptOriginalSet?: boolean;
 	removedCaptureRejected?: boolean;
 	altCaptureWasNoOp?: boolean;
 	geometryVerified?: boolean;
@@ -48,7 +48,7 @@ interface HighlightSequenceState {
 pairedScenario<HighlightSequenceState>({
 	id: "HIGHLIGHT-003",
 	title:
-		"PREV NEXT ALL mutate the real selection and preserve exact Programmer keypad geometry",
+		"active Highlight PREV NEXT ALL focus the frozen set and preserve exact Programmer keypad geometry",
 	surfaces: ["api"],
 	arrange: async ({ api, bench }, surface) => {
 		const show = await loadCanonicalCopy(
@@ -80,6 +80,7 @@ pairedScenario<HighlightSequenceState>({
 		};
 	},
 	api: async ({ api }, state) => {
+		await highlightAction(api, "on");
 		for (const action of [
 			"next",
 			"next",
@@ -91,7 +92,7 @@ pairedScenario<HighlightSequenceState>({
 			await highlightAction(api, action);
 			state.observedSequence.push([...(await programmer(api)).selected]);
 		}
-		state.highStayedOff = !(await highlightState(api)).active;
+		state.highWasActive = (await highlightState(api)).active;
 
 		await highlightAction(api, "next");
 		await highlightAction(api, "next");
@@ -113,13 +114,10 @@ pairedScenario<HighlightSequenceState>({
 			value: { kind: "normalized", value: 0.72 },
 			timing: { fade: true, fadeMillis: 3_000, delayMillis: null },
 		});
-		await api.executeCommandLine(
-			`RECORD GROUP ${state.singletonGroupId}`,
-		);
+		await api.executeCommandLine(`RECORD GROUP ${state.singletonGroupId}`);
 		await highlightAction(api, "all");
 		await api.executeCommandLine(`RECORD GROUP ${state.completeGroupId}`);
 
-		await highlightAction(api, "on");
 		await replaceProgrammingSelection(api, {
 			surface: "api",
 			showId: state.showId,
@@ -131,7 +129,13 @@ pairedScenario<HighlightSequenceState>({
 			showId: state.showId,
 			fixtures: [state.fixtures[2].id, state.fixtures[3].id],
 		});
-		state.highFollowedSelection = (await highlightState(api)).active;
+		const frozen = await highlightState(api);
+		state.highKeptOriginalSet =
+			frozen.active &&
+			selectionsEqual(
+				frozen.remembered.map((fixture) => fixture.fixture_id),
+				fixtureIds(state.fixtures),
+			);
 		await highlightAction(api, "off");
 		const removedActions = await Promise.all(
 			["capture", "reset"].map(async (action) => {
@@ -151,13 +155,14 @@ pairedScenario<HighlightSequenceState>({
 	ui: async ({ api, bench, desk, page }, state) => {
 		await desk.open(bench.baseUrl);
 		await expectSelection(api, fixtureIds(state.fixtures));
+		await clickHighlightKey(page, api, "HIGH");
 		for (const [index, key] of (
 			["NEXT", "NEXT", "ALL", "PREV", "PREV", "PREV"] as const
 		).entries()) {
 			await clickHighlightKey(page, api, key, state.expectedSequence[index]);
 			state.observedSequence.push([...(await programmer(api)).selected]);
 		}
-		state.highStayedOff = !(await highlightState(api)).active;
+		state.highWasActive = (await highlightState(api)).active;
 
 		await clickHighlightKey(page, api, "NEXT", [state.fixtures[2].id]);
 		await clickHighlightKey(page, api, "NEXT", [state.fixtures[3].id]);
@@ -189,7 +194,6 @@ pairedScenario<HighlightSequenceState>({
 			state.fixtures,
 			state.fixtures[0].number,
 		);
-		await clickHighlightKey(page, api, "HIGH");
 		await assertFixtureSheetStep(
 			page,
 			state.fixtures,
@@ -203,7 +207,13 @@ pairedScenario<HighlightSequenceState>({
 		await fixtureSheetRowById(page, state.fixtures[2].id).click();
 		await fixtureSheetRowById(page, state.fixtures[3].id).click();
 		await expectSelection(api, [state.fixtures[2].id, state.fixtures[3].id]);
-		state.highFollowedSelection = (await highlightState(api)).active;
+		const frozen = await highlightState(api);
+		state.highKeptOriginalSet =
+			frozen.active &&
+			selectionsEqual(
+				frozen.remembered.map((fixture) => fixture.fixture_id),
+				fixtureIds(state.fixtures),
+			);
 		await clickHighlightKey(page, api, "HIGH");
 		await expectSelection(api, [state.fixtures[2].id, state.fixtures[3].id]);
 
@@ -239,11 +249,11 @@ pairedScenario<HighlightSequenceState>({
 	},
 	assert: async ({ api }, state, surface) => {
 		expect(state.observedSequence).toEqual(state.expectedSequence);
-		expect(state.highStayedOff).toBe(true);
+		expect(state.highWasActive).toBe(true);
 		expect(state.wrappedForward).toBe(true);
 		expect(state.wrappedBackward).toBe(true);
 		expect(state.highSurvivedEmpty).toBe(true);
-		expect(state.highFollowedSelection).toBe(true);
+		expect(state.highKeptOriginalSet).toBe(true);
 		expect(
 			(await object<any>(api, "group", state.singletonGroupId)).body.fixtures,
 		).toEqual([state.fixtures[1].id]);

@@ -229,7 +229,7 @@ describe("ParameterControls selection projection", () => {
 					fixtureId: FIXTURE_1,
 					attribute: "intensity",
 					value: { kind: "normalized", value: 0.5 },
-					timing: { fade: false, fadeMillis: null, delayMillis: null },
+					timing: { fade: true, fadeMillis: 3000, delayMillis: null },
 				},
 			],
 		});
@@ -254,7 +254,7 @@ describe("ParameterControls selection projection", () => {
 						fixtureId: FIXTURE_2,
 						attribute: "intensity",
 						value: { kind: "normalized", value: 0.5 },
-						timing: { fade: false, fadeMillis: null, delayMillis: null },
+						timing: { fade: true, fadeMillis: 3000, delayMillis: null },
 					},
 				],
 			}),

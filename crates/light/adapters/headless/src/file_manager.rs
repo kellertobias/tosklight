@@ -25,7 +25,7 @@ use super::AppState;
 
 #[allow(unused_imports)]
 pub(crate) use input_context::{
-    FileInputAction, FileInputContext, release_session_input, route_osc_input,
+    FileInputAction, FileInputContext, release_session_input, route_control_input, route_osc_input,
     try_claim_input_context,
 };
 pub(crate) use paths::ConfiguredRoot;

@@ -181,22 +181,14 @@ export class ProgrammingApiClient {
 		);
 	}
 
-	align(
-		attribute: string,
-		mode: "left" | "right" | "center" | "out",
-		from = 0,
-		to = 1,
-	) {
+	align(mode: "off" | "left" | "right" | "out" | "in") {
 		const requestId = crypto.randomUUID();
 		return this.transport.sendAction(
 			{
 				type: "programming_align",
 				request: {
 					request_id: requestId,
-					attribute,
 					mode,
-					from,
-					to,
 				},
 			},
 			requestId,

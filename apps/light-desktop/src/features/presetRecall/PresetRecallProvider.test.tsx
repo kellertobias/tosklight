@@ -4,6 +4,9 @@ import { describe, expect, it, vi } from "vitest";
 import { ProgrammerCaptureModeViewProvider } from "../programmerCaptureMode/ProgrammerCaptureModeView";
 import { ProgrammerCaptureModeStore } from "../programmerCaptureMode/store";
 import { FakeProgrammerCaptureModeTransport } from "../programmerCaptureMode/testFixtures";
+import { ProgrammerPreloadValuesViewProvider } from "../programmerPreloadValues/ProgrammerPreloadValuesView";
+import { ProgrammerPreloadValuesStore } from "../programmerPreloadValues/store";
+import { FakeProgrammerPreloadValuesTransport } from "../programmerPreloadValues/testFixtures";
 import { ProgrammerValuesViewProvider } from "../programmerValues/ProgrammerValuesView";
 import { ProgrammerValuesStore } from "../programmerValues/store";
 import { FakeProgrammerValuesTransport } from "../programmerValues/testFixtures";
@@ -60,10 +63,12 @@ describe("PresetRecallProvider", () => {
 		unrelatedRenders = 0;
 		const showStore = new ShowObjectsStore();
 		const valuesStore = new ProgrammerValuesStore();
+		const preloadValuesStore = new ProgrammerPreloadValuesStore();
 		const captureModeStore = new ProgrammerCaptureModeStore();
 		const programmingStore = new ProgrammingInteractionStore();
 		const showTransport = new FakeShowTransport();
 		const valuesTransport = new FakeProgrammerValuesTransport();
+		const preloadValuesTransport = new FakeProgrammerPreloadValuesTransport();
 		const captureModeTransport = new FakeProgrammerCaptureModeTransport();
 		const programmingTransport = new FakeProgrammingTransport();
 		const loadCollection = vi.fn(
@@ -107,6 +112,15 @@ describe("PresetRecallProvider", () => {
 				preloadCaptureProgrammer: false,
 			},
 		}));
+		const loadPreloadValues = vi.fn(async () => ({
+			cursor: 30,
+			projection: {
+				userId: USER_ID,
+				revision: 5,
+				fixtureValues: [],
+				groupValues: [],
+			},
+		}));
 		const loadProgramming = vi.fn(async () => ({
 			cursor: 30,
 			projection: {
@@ -147,36 +161,45 @@ describe("PresetRecallProvider", () => {
 					transport={captureModeTransport}
 					loadSnapshot={loadCaptureMode}
 				>
-					<ProgrammerValuesViewProvider
+					<ProgrammerPreloadValuesViewProvider
 						showId={SHOW_ID}
 						userId={USER_ID}
 						authorityKey="session-a"
-						store={valuesStore}
-						transport={valuesTransport}
-						loadSnapshot={loadValues}
+						store={preloadValuesStore}
+						transport={preloadValuesTransport}
+						loadSnapshot={loadPreloadValues}
 					>
-						<ProgrammingInteractionViewProvider
+						<ProgrammerValuesViewProvider
 							showId={SHOW_ID}
-							deskId={DESK_ID}
+							userId={USER_ID}
 							authorityKey="session-a"
-							store={programmingStore}
-							transport={programmingTransport}
-							loadSnapshot={loadProgramming}
+							store={valuesStore}
+							transport={valuesTransport}
+							loadSnapshot={loadValues}
 						>
-							<PresetRecallProvider
+							<ProgrammingInteractionViewProvider
 								showId={SHOW_ID}
-								userId={USER_ID}
 								deskId={DESK_ID}
 								authorityKey="session-a"
-								showStore={showStore}
-								transport={presetTransport}
-								loadPreset={loadPreset}
+								store={programmingStore}
+								transport={programmingTransport}
+								loadSnapshot={loadProgramming}
 							>
-								<PresetRecallProbe enabled={enabled} />
-								<UnrelatedConsumer />
-							</PresetRecallProvider>
-						</ProgrammingInteractionViewProvider>
-					</ProgrammerValuesViewProvider>
+								<PresetRecallProvider
+									showId={SHOW_ID}
+									userId={USER_ID}
+									deskId={DESK_ID}
+									authorityKey="session-a"
+									showStore={showStore}
+									transport={presetTransport}
+									loadPreset={loadPreset}
+								>
+									<PresetRecallProbe enabled={enabled} />
+									<UnrelatedConsumer />
+								</PresetRecallProvider>
+							</ProgrammingInteractionViewProvider>
+						</ProgrammerValuesViewProvider>
+					</ProgrammerPreloadValuesViewProvider>
 				</ProgrammerCaptureModeViewProvider>
 			</ShowObjectsViewProvider>
 		);
@@ -186,10 +209,12 @@ describe("PresetRecallProvider", () => {
 		expect(loadCollection).not.toHaveBeenCalled();
 		expect(loadValues).not.toHaveBeenCalled();
 		expect(loadCaptureMode).not.toHaveBeenCalled();
+		expect(loadPreloadValues).not.toHaveBeenCalled();
 		expect(loadProgramming).not.toHaveBeenCalled();
 		expect(showTransport.subscriptions).toHaveLength(0);
 		expect(valuesTransport.subscriptions).toHaveLength(0);
 		expect(captureModeTransport.subscriptions).toHaveLength(0);
+		expect(preloadValuesTransport.subscriptions).toHaveLength(0);
 		expect(programmingTransport.subscriptions).toHaveLength(0);
 		expect(recall).not.toHaveBeenCalled();
 		expect(loadPreset).not.toHaveBeenCalled();
@@ -198,11 +223,15 @@ describe("PresetRecallProvider", () => {
 		await waitFor(() => expect(loadCollection).toHaveBeenCalledOnce());
 		await waitFor(() => expect(loadValues).toHaveBeenCalledOnce());
 		await waitFor(() => expect(loadCaptureMode).toHaveBeenCalledOnce());
+		await waitFor(() => expect(loadPreloadValues).toHaveBeenCalledOnce());
 		await waitFor(() => expect(loadProgramming).toHaveBeenCalledOnce());
 		await waitFor(() => expect(showTransport.subscriptions).toHaveLength(1));
 		await waitFor(() => expect(valuesTransport.subscriptions).toHaveLength(1));
 		await waitFor(() =>
 			expect(captureModeTransport.subscriptions).toHaveLength(1),
+		);
+		await waitFor(() =>
+			expect(preloadValuesTransport.subscriptions).toHaveLength(1),
 		);
 		await waitFor(() =>
 			expect(programmingTransport.subscriptions).toHaveLength(1),

@@ -11,6 +11,7 @@ pub mod desk_management;
 pub mod discovery;
 pub mod dynamics;
 pub mod events;
+pub mod extensions;
 pub mod files;
 pub mod fixture_library;
 pub mod group_management;

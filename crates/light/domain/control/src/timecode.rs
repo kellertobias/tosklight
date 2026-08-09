@@ -129,54 +129,6 @@ pub fn parse_art_timecode(packet: &[u8], source: &str) -> Result<SmpteTimecode, 
     Ok(timecode)
 }
 
-#[derive(Clone, Debug, Default)]
-pub struct MidiTimecodeDecoder {
-    nibbles: [u8; 8],
-    seen: u8,
-}
-
-impl MidiTimecodeDecoder {
-    /// Pushes an MTC quarter-frame data byte (the payload following MIDI status 0xF1).
-    /// A complete normalized value is returned after all eight message types have arrived.
-    pub fn push_quarter_frame(
-        &mut self,
-        data: u8,
-        source: &str,
-    ) -> Result<Option<SmpteTimecode>, ParseError> {
-        if data & 0x80 != 0 {
-            return Err(ParseError("invalid MTC quarter-frame data"));
-        }
-        let piece = data >> 4;
-        let nibble = data & 0x0f;
-        if piece > 7 {
-            return Err(ParseError("invalid MTC piece"));
-        }
-        self.nibbles[piece as usize] = nibble;
-        self.seen |= 1 << piece;
-        if self.seen != 0xff {
-            return Ok(None);
-        }
-        let rate = match self.nibbles[7] >> 1 {
-            0 => FrameRate::Fps24,
-            1 => FrameRate::Fps25,
-            2 => FrameRate::Fps2997Drop,
-            3 => FrameRate::Fps30,
-            _ => unreachable!(),
-        };
-        let timecode = SmpteTimecode {
-            frames: self.nibbles[0] | ((self.nibbles[1] & 0x01) << 4),
-            seconds: self.nibbles[2] | ((self.nibbles[3] & 0x03) << 4),
-            minutes: self.nibbles[4] | ((self.nibbles[5] & 0x03) << 4),
-            hours: self.nibbles[6] | ((self.nibbles[7] & 0x01) << 4),
-            rate,
-            source: format!("midi:{source}"),
-            received_at: Utc::now(),
-        };
-        validate_timecode(&timecode)?;
-        Ok(Some(timecode))
-    }
-}
-
 fn validate_timecode(timecode: &SmpteTimecode) -> Result<(), ParseError> {
     if timecode.hours >= 24
         || timecode.minutes >= 60

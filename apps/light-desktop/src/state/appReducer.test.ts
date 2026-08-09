@@ -453,6 +453,48 @@ describe("appReducer Stage and Development pane settings", () => {
 });
 
 describe("appReducer Cues pane settings", () => {
+	it("persists compact rows per Cues pane while legacy panes remain standard", () => {
+		const state = {
+			...initialState,
+			activeDeskId: "cues",
+			desks: [
+				{
+					id: "cues",
+					name: "Cues",
+					panes: [
+						{
+							id: "cues-1",
+							kind: "cues" as const,
+							title: "One",
+							x: 1,
+							y: 1,
+							width: 12,
+							height: 12,
+						},
+						{
+							id: "cues-2",
+							kind: "cues" as const,
+							title: "Two",
+							x: 13,
+							y: 1,
+							width: 12,
+							height: 12,
+						},
+					],
+				},
+			],
+		};
+		expect(state.desks[0].panes[0]).not.toHaveProperty("cueListCompactRows");
+
+		const compact = appReducer(state, {
+			type: "SET_PANE_CUELIST_COMPACT_ROWS",
+			id: "cues-1",
+			value: true,
+		});
+		expect(compact.desks[0].panes[0].cueListCompactRows).toBe(true);
+		expect(compact.desks[0].panes[1].cueListCompactRows).toBeUndefined();
+	});
+
 	it("persists Cue sidebar visibility while older pane layouts keep it visible", () => {
 		const desks = [
 			{

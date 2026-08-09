@@ -29,6 +29,7 @@ pub struct GroupMappingVector3 {
 #[serde(rename_all = "snake_case")]
 pub enum GroupMappingProjectionPreset {
     Top,
+    Bottom,
     Front,
     Back,
     Left,

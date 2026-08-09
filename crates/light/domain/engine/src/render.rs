@@ -34,7 +34,7 @@ impl Engine {
         let profile_values = crate::ProfileValueIndex::new(&resolved);
         let group_masters = generation.group_masters();
         let group_master_flashes = self.group_master_flashes.read();
-        let highlighted_fixtures = self.highlighted_fixtures.read();
+        let highlight_layers = self.highlight_layers.read();
         let highlight_look = self.highlight_look.read();
         let mut universes = HashMap::new();
         let mut patched_slots: HashMap<Universe, u16> = HashMap::new();
@@ -79,7 +79,7 @@ impl Engine {
                     options,
                     group_masters,
                     &group_master_flashes,
-                    &highlighted_fixtures,
+                    &highlight_layers,
                     &highlight_look,
                     AxisInversion {
                         pan: fixture.invert_pan,
@@ -109,7 +109,7 @@ impl Engine {
                         options,
                         group_masters,
                         &group_master_flashes,
-                        &highlighted_fixtures,
+                        &highlight_layers,
                         &highlight_look,
                         AxisInversion {
                             pan: instance.invert_pan,

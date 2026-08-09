@@ -6,6 +6,7 @@ import { ModalTitleBar } from "@tosklight/ui";
 import { SelectionTree, WindowScrollArea, type SelectionListOption } from "@tosklight/ui/window-kit";
 import { useShowObjectView } from "../../features/showObjects/ShowObjectsView";
 import { useCueLists, useDynamics, usePortableGroups } from "../../features/showObjects/ShowObjectsState";
+import { cueListWriteBasis, useCueListTopologyWriter } from "../../features/playbackTopology/useCueListTopologyWriter";
 import { RootConfinedFilePickerButton } from "../files/RootConfinedFilePickerButton";
 
 export const PLAYBACK_COLORS = DEFAULT_COLORS;
@@ -84,6 +85,7 @@ export function PlaybackConfigurationDialog({ playback, page, slot, empty = fals
   const groups = usePortableGroups();
   const dynamics = useDynamics();
   const cueListObjects = useCueLists();
+  const saveCueList = useCueListTopologyWriter();
   const cueLists = useMemo(() => cueListObjects.map(({ body }) => ({ id: body.id, name: body.name || body.id })), [cueListObjects]);
   const [initialDraft] = useState(() => normalizePlaybackTopology(playback, fallbackButtons, !virtual));
   const [draft, setDraft] = useState(initialDraft);
@@ -92,6 +94,18 @@ export function PlaybackConfigurationDialog({ playback, page, slot, empty = fals
   const [tab, setTab] = useState<PlaybackTab>("function");
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
+  const selectedCueListId = draft.target.type === "cue_list" ? draft.target.cue_list_id : undefined;
+  const selectedCueList = selectedCueListId ? cueListObjects.find((object) => object.body.id === selectedCueListId) : undefined;
+  const [cueListBehavior, setCueListBehavior] = useState(() => selectedCueList ? {
+    auto_off_at_zero: Boolean(selectedCueList.body.auto_off_at_zero),
+    auto_off_flash_release: Boolean(selectedCueList.body.auto_off_flash_release),
+  } : null);
+  useEffect(() => {
+    setCueListBehavior(selectedCueList ? {
+      auto_off_at_zero: Boolean(selectedCueList.body.auto_off_at_zero),
+      auto_off_flash_release: Boolean(selectedCueList.body.auto_off_flash_release),
+    } : null);
+  }, [selectedCueList?.id, selectedCueList?.revision]);
   useEffect(() => {
     if (failure && error && failure !== error) setFailure(error);
   }, [error, failure]);
@@ -105,15 +119,22 @@ export function PlaybackConfigurationDialog({ playback, page, slot, empty = fals
   const targetValid = family === "none" || ((draft.target.type !== "cue_list" || Boolean(draft.target.cue_list_id)) && (draft.target.type !== "group" || Boolean(draft.target.group_id)) && (draft.target.type !== "dynamic" || Boolean(draft.target.assignment.dynamic_id)) && dynamicScopeValid);
   const currentPayload = cleanPresentation(normalizePlaybackTopology(draft, draft.button_count ?? 3, Boolean(draft.has_fader)));
   const initialPayload = cleanPresentation(initialDraft);
-  const isDirty = family === "none" ? !empty : family !== initialFamily || !playbackDefinitionsEqual(currentPayload, initialPayload);
+  const cueListBehaviorDirty = Boolean(selectedCueList && cueListBehavior && (
+    cueListBehavior.auto_off_at_zero !== Boolean(selectedCueList.body.auto_off_at_zero)
+    || cueListBehavior.auto_off_flash_release !== Boolean(selectedCueList.body.auto_off_flash_release)
+  ));
+  const isDirty = family === "none" ? !empty : family !== initialFamily || !playbackDefinitionsEqual(currentPayload, initialPayload) || cueListBehaviorDirty;
   const topology = `${draft.button_count ?? 3} button${draft.button_count === 1 ? "" : "s"} · ${draft.has_fader ? "fader" : "faderless"}`;
   const options = useMemo(() => layoutActions(draft).map((value) => ({ value, label: buttonLabels[value], description: layoutActionDescription(draft, value) })), [draft.target.type]);
 
   const apply = async () => {
     setBusy(true); setFailure(null);
-    const succeeded = family === "none"
+    let succeeded = family === "none"
       ? await clear(page, slot)
       : await save(page, slot, cleanPresentation(normalizePlaybackTopology(draft, draft.button_count ?? 3, Boolean(draft.has_fader))));
+    if (succeeded && selectedCueList && cueListBehaviorDirty && cueListBehavior) {
+      succeeded = Boolean(await saveCueList(cueListWriteBasis(selectedCueList), { ...selectedCueList.body, ...cueListBehavior }));
+    }
     setBusy(false);
     if (succeeded) onClose();
     else setFailure(error ?? (family === "none" ? "Playback could not be cleared." : "Playback configuration could not be saved."));
@@ -143,7 +164,7 @@ export function PlaybackConfigurationDialog({ playback, page, slot, empty = fals
       </nav>
       <div className="playback-configuration-body">
         {tab === "function" && <PlaybackFunctionTab family={family} draft={draft} virtual={virtual} presentation={presentation} cueLists={cueLists} dynamics={dynamics} groups={groups} onFamilyChange={chooseFamily} onSpecialChange={chooseSpecial} onPresentationChange={setPresentation} onDraftChange={setDraft}/>}
-        {tab === "behavior" && <WindowScrollArea className="playback-tab-scroll"><div className="playback-tab-scroll-content">{family === "none" ? <InactivePlaybackDetail/> : <PlaybackBehaviorTab draft={draft} dynamics={dynamics} groups={groups} onDraftChange={setDraft}/>}</div></WindowScrollArea>}
+        {tab === "behavior" && <WindowScrollArea className="playback-tab-scroll"><div className="playback-tab-scroll-content">{family === "none" ? <InactivePlaybackDetail/> : <PlaybackBehaviorTab draft={draft} dynamics={dynamics} groups={groups} cueListBehavior={cueListBehavior} onCueListBehaviorChange={setCueListBehavior} onDraftChange={setDraft}/>}</div></WindowScrollArea>}
         {tab === "layout" && <WindowScrollArea className="playback-tab-scroll"><div className="playback-tab-scroll-content">{family === "none" ? <InactivePlaybackDetail/> : <PlaybackLayoutTab draft={draft} virtual={virtual} options={options} onDraftChange={setDraft}/>}</div></WindowScrollArea>}
         {failure && <p role="alert" className="modal-error">{failure}</p>}
       </div>
@@ -215,7 +236,7 @@ export function playbackImageDataUrl(file: File): Promise<string> {
   });
 }
 
-function PlaybackBehaviorTab({ draft, dynamics, groups, onDraftChange }: { draft: PlaybackDefinition; dynamics: ReturnType<typeof useDynamics>; groups: ReadonlyArray<{ id: string; body: { name?: string } }>; onDraftChange: (playback: PlaybackDefinition) => void }) {
+function PlaybackBehaviorTab({ draft, dynamics, groups, cueListBehavior, onCueListBehaviorChange, onDraftChange }: { draft: PlaybackDefinition; dynamics: ReturnType<typeof useDynamics>; groups: ReadonlyArray<{ id: string; body: { name?: string } }>; cueListBehavior: { auto_off_at_zero: boolean; auto_off_flash_release: boolean } | null; onCueListBehaviorChange: (value: { auto_off_at_zero: boolean; auto_off_flash_release: boolean } | null) => void; onDraftChange: (playback: PlaybackDefinition) => void }) {
   const cueList = draft.target.type === "cue_list";
   if (draft.target.type === "dynamic") {
     const assignment = draft.target.assignment;
@@ -242,19 +263,45 @@ function PlaybackBehaviorTab({ draft, dynamics, groups, onDraftChange }: { draft
       <NumberField label="Local speed numerator" value={assignment.local_speed_multiplier.numerator} min={1} max={1024} step={1} onChange={(event) => update({ local_speed_multiplier: { ...assignment.local_speed_multiplier, numerator: Number(event.target.value) } })}/>
       <NumberField label="Local speed denominator" value={assignment.local_speed_multiplier.denominator} min={1} max={1024} step={1} onChange={(event) => update({ local_speed_multiplier: { ...assignment.local_speed_multiplier, denominator: Number(event.target.value) } })}/>
       <SwitchField label="Crossfade non-intensity" offLabel="Switch by LTP" onLabel="Crossfade" description="When Master contributes to this fader mode, crossfade Position, Color, Beam, and Focus instead of switching them at full ownership." checked={assignment.crossfade_non_intensity} onChange={(event) => update({ crossfade_non_intensity: event.target.checked })}/>
-      <SwitchField label="Auto-off at fader zero" offLabel="Keep synchronized" onLabel="Turn Off" checked={assignment.auto_off_at_zero} onChange={(event) => update({ auto_off_at_zero: event.target.checked })}/>
-      <SwitchField label="Auto-off after Flash release" offLabel="Return to prior state" onLabel="Turn Off" checked={assignment.auto_off_flash_release} onChange={(event) => update({ auto_off_flash_release: event.target.checked })}/>
+      <PlaybackAutoOffSettings
+        autoOffAtZero={assignment.auto_off_at_zero}
+        autoOffFlashRelease={assignment.auto_off_flash_release}
+        onAutoOffAtZeroChange={(auto_off_at_zero) => update({ auto_off_at_zero })}
+        onAutoOffFlashReleaseChange={(auto_off_flash_release) => update({ auto_off_flash_release })}
+      />
       <SwitchField label="Turn off when other playbacks take full control" offLabel="Keep hidden" onLabel="Auto off" checked={assignment.auto_off_full_control} onChange={(event) => update({ auto_off_full_control: event.target.checked })}/>
       <SwitchField label="Protect from Swap" offLabel="Affected by Swap" onLabel="Protected" checked={Boolean(draft.protect_from_swap)} onChange={(event) => onDraftChange({ ...draft, protect_from_swap: event.target.checked })}/>
     </FormLayout>;
   }
   return <FormLayout labelPlacement="side">
     {cueList ? <>
+      {cueListBehavior && <>
+        <PlaybackAutoOffSettings
+          autoOffAtZero={cueListBehavior.auto_off_at_zero}
+          autoOffFlashRelease={cueListBehavior.auto_off_flash_release}
+          onAutoOffAtZeroChange={(auto_off_at_zero) => onCueListBehaviorChange({ ...cueListBehavior, auto_off_at_zero })}
+          onAutoOffFlashReleaseChange={(auto_off_flash_release) => onCueListBehaviorChange({ ...cueListBehavior, auto_off_flash_release })}
+        />
+        <p className="playback-topology-note">These Auto-off settings are shared by every playback using this Cuelist.</p>
+      </>}
       <MultiValueToggleField label="When Flash or Swap is released" description="Release all removes the temporary values and restores the prior state. Intensity only leaves this Cue List active at zero intensity, retaining values such as color and position." value={draft.flash_release ?? "release_all"} onChange={(flash_release) => onDraftChange({ ...draft, flash_release })} options={[{ value: "release_all", label: "Release all" }, { value: "release_intensity_only", label: "Intensity only" }]}/>
       <SwitchField label="Turn off when other playbacks take full control" offLabel="Keep active" onLabel="Auto off" description="Automatically turns this Cue List off once other normal playbacks at full level control every value it was outputting. Partial takeovers, Flash, and Temp do not count." checked={draft.auto_off} onChange={(event) => onDraftChange({ ...draft, auto_off: event.target.checked })}/>
     </> : <p className="playback-topology-note">Flash/Swap release and automatic turn-off are available for Cue Lists only.</p>}
     <SwitchField label="Protect from Swap" offLabel="Affected by Swap" onLabel="Protected" description="Keeps this playback at its current level while another playback’s Swap button is held." checked={Boolean(draft.protect_from_swap)} onChange={(event) => onDraftChange({ ...draft, protect_from_swap: event.target.checked })}/>
   </FormLayout>;
+}
+
+function PlaybackAutoOffSettings({ autoOffAtZero, autoOffFlashRelease, onAutoOffAtZeroChange, onAutoOffFlashReleaseChange }: {
+  autoOffAtZero: boolean;
+  autoOffFlashRelease: boolean;
+  onAutoOffAtZeroChange: (enabled: boolean) => void;
+  onAutoOffFlashReleaseChange: (enabled: boolean) => void;
+}) {
+  return <fieldset className="playback-auto-off-settings">
+    <legend>Auto-off</legend>
+    <SwitchField label="When fader reaches zero" offLabel="Keep running" onLabel="Turn Off" checked={autoOffAtZero} onChange={(event) => onAutoOffAtZeroChange(event.target.checked)}/>
+    <SwitchField label="When Flash is released" offLabel="Keep running" onLabel="Turn Off" checked={autoOffFlashRelease} onChange={(event) => onAutoOffFlashReleaseChange(event.target.checked)}/>
+  </fieldset>;
 }
 
 function PlaybackLayoutTab({ draft, virtual, options, onDraftChange }: { draft: PlaybackDefinition; virtual: boolean; options: Array<{ value: PlaybackButtonAction; label: string; description: string }>; onDraftChange: (playback: PlaybackDefinition) => void }) {

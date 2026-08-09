@@ -6,12 +6,13 @@ export function createProgrammerAlignmentActions(
 ): Pick<ServerCapabilities, "alignSelection"> {
 	const { api, setError } = model;
 	return {
-		alignSelection: async (attribute, mode) => {
+		alignSelection: async (mode) => {
 			try {
-				await api.programming.align(attribute, mode);
+				await api.programming.align(mode);
 				setError(null);
 			} catch (reason) {
 				setError(reason instanceof Error ? reason.message : String(reason));
+				throw reason;
 			}
 		},
 	};

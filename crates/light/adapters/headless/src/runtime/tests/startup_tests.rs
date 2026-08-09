@@ -24,6 +24,84 @@ fn startup_rebases_show_paths_after_the_desk_data_directory_moves() {
     let _ = std::fs::remove_dir_all(root);
 }
 
+#[test]
+fn startup_preserves_removed_midi_configuration_and_cleans_the_live_document() {
+    let root = std::env::temp_dir().join(format!("light-midi-migration-{}", Uuid::new_v4()));
+    std::fs::create_dir_all(&root).unwrap();
+    let desk = DeskStore::open(root.join("desk.sqlite")).unwrap();
+    desk.set_setting(
+        "server_configuration",
+        &serde_json::json!({
+            "midi_inputs": ["Launch Control XL", "DIN input"],
+            "rtp_midi_bind": "0.0.0.0:5004",
+            "osc_bind": "127.0.0.1:9100",
+            "programmer_fade_millis": 275,
+            "future_setting": {"preserved_by_tolerant_decode": true}
+        })
+        .to_string(),
+    )
+    .unwrap();
+
+    let configuration = startup_state::load_configuration(&desk, None, None).unwrap();
+    assert_eq!(configuration.osc_bind.unwrap().port(), 9100);
+    assert_eq!(configuration.programmer_fade_millis, 275);
+    let report: serde_json::Value = serde_json::from_str(
+        &desk.setting("removed_midi_inputs_report").unwrap().unwrap(),
+    )
+    .unwrap();
+    assert_eq!(report["midi_inputs"], serde_json::json!(["Launch Control XL", "DIN input"]));
+    assert_eq!(report["rtp_midi_bind"], "0.0.0.0:5004");
+    let cleaned: serde_json::Value = serde_json::from_str(
+        &desk.setting("server_configuration").unwrap().unwrap(),
+    )
+    .unwrap();
+    assert!(cleaned.get("midi_inputs").is_none());
+    assert!(cleaned.get("rtp_midi_bind").is_none());
+    assert_eq!(
+        cleaned["future_setting"],
+        serde_json::json!({"preserved_by_tolerant_decode": true})
+    );
+    assert_eq!(
+        startup_state::load_configuration(&desk, None, None)
+            .unwrap()
+            .programmer_fade_millis,
+        275
+    );
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(
+            &desk.setting("removed_midi_inputs_report").unwrap().unwrap()
+        )
+        .unwrap(),
+        report
+    );
+    let _ = std::fs::remove_dir_all(root);
+}
+
+#[test]
+fn malformed_server_configuration_is_preserved_and_recovers_to_safe_defaults() {
+    let root = std::env::temp_dir().join(format!("light-config-recovery-{}", Uuid::new_v4()));
+    std::fs::create_dir_all(&root).unwrap();
+    let desk = DeskStore::open(root.join("desk.sqlite")).unwrap();
+    desk.set_setting("server_configuration", "{not valid json").unwrap();
+
+    let configuration = startup_state::load_configuration(&desk, None, None).unwrap();
+    assert_eq!(configuration.programmer_fade_millis, DeskConfiguration::default().programmer_fade_millis);
+    let report: serde_json::Value = serde_json::from_str(
+        &desk
+            .setting("server_configuration_recovery_report")
+            .unwrap()
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(report["original"], "{not valid json");
+    assert!(report["error"].as_str().is_some_and(|error| !error.is_empty()));
+    assert!(serde_json::from_str::<serde_json::Value>(
+        &desk.setting("server_configuration").unwrap().unwrap()
+    )
+    .is_ok());
+    let _ = std::fs::remove_dir_all(root);
+}
+
 #[tokio::test]
 async fn clean_default_load_creates_a_pristine_copy_without_replacing_manual_changes() {
     let (state, data_dir) = test_state();
@@ -418,6 +496,8 @@ fn automatic_chaser_transition_checkpoints_its_order_before_restart() {
         restart_mode: light_playback::RestartMode::FirstCue,
         force_cue_timing: false,
         disable_cue_timing: false,
+        auto_off_at_zero: false,
+        auto_off_flash_release: false,
         chaser_xfade_millis: 0,
         chaser_xfade_percent: Some(0),
         speed_multiplier: 1.0,
@@ -438,14 +518,15 @@ fn automatic_chaser_transition_checkpoints_its_order_before_restart() {
         .unwrap();
 
     clock.set(started + chrono::Duration::milliseconds(100));
-    let playback_desk = Mutex::new(DeskStore::open(data_dir.join("desk.sqlite")).unwrap());
+    let playback_persistence =
+        OutputPersistenceResource::open(&data_dir).expect("output persistence opens");
     let rendered = output_scheduler::render_with_playback_events(
         &engine,
         &state.active_show.output_projection(),
         &state.playback.render_capability(),
         RenderOptions::default(),
         &[],
-        Some(&playback_desk),
+        Some(&playback_persistence),
     )
     .unwrap();
     assert!(rendered.automatic_playback_transitions.is_empty());
@@ -682,6 +763,8 @@ fn restored_exclusion_snapshot(cue_list_id: light_core::CueListId) -> EngineSnap
                 restart_mode: light_playback::RestartMode::FirstCue,
                 force_cue_timing: false,
                 disable_cue_timing: false,
+                auto_off_at_zero: false,
+                auto_off_flash_release: false,
                 chaser_xfade_millis: 0,
                 chaser_xfade_percent: Some(0),
                 speed_multiplier: 1.0,

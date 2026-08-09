@@ -150,6 +150,7 @@ fn cross_list_writes(
         writes.push((source.clone(), desired_source, None));
     }
     let mut desired_destination = destination.typed.clone();
+    repair_duplicate_cue_ids(&mut desired_destination);
     desired_destination.cues.push(transferred.clone());
     sort_cues(&mut desired_destination);
     writes.push((
@@ -163,6 +164,19 @@ fn cross_list_writes(
         )?),
     ));
     Ok(writes)
+}
+
+fn repair_duplicate_cue_ids(cue_list: &mut CueList) {
+    let mut seen = std::collections::HashSet::with_capacity(cue_list.cues.len());
+    for (index, cue) in cue_list.cues.iter_mut().enumerate() {
+        if !seen.insert(cue.id) {
+            cue.id = Uuid::new_v5(
+                &cue_list.id.0,
+                format!("duplicate-cue-id:{}:{index}", cue.id).as_bytes(),
+            );
+            seen.insert(cue.id);
+        }
+    }
 }
 
 struct TransferredRaw {
@@ -272,6 +286,14 @@ fn lossless_cue(
         .iter()
         .enumerate()
         .find(|(_, cue)| cue.id == desired.id && cue.number == desired.number)
+        .or_else(|| {
+            stored
+                .typed
+                .cues
+                .iter()
+                .enumerate()
+                .find(|(_, cue)| cue.number == desired.number)
+        })
     else {
         return serde_json::to_value(desired).map_err(|error| invalid(error.to_string()));
     };

@@ -53,6 +53,7 @@ impl ProgrammingService {
             return Ok(result);
         }
         self.assert_lifecycle_revisions(identity.session_id, identity.user_id, &action.command)?;
+        self.programmers.deactivate_alignment(identity.session_id);
         let result = self.mutate_preload_lifecycle(&action, ports, &identity)?;
         self.preload_lifecycle_replay.lock().insert(
             replay_identity,

@@ -1,7 +1,7 @@
 use super::*;
 use crate::{ActionErrorKind, EventObject};
 use light_core::{AttributeKey, AttributeValue};
-use light_programmer::SelectionReference;
+use light_programmer::{ProgrammerAlignmentMode, SelectionReference};
 use std::collections::{HashMap, HashSet};
 use std::sync::Barrier;
 
@@ -9,6 +9,7 @@ use std::sync::Barrier;
 struct ValuesPorts {
     environment: ProgrammingValuesEnvironment,
     persisted: Mutex<Vec<&'static str>>,
+    highlight_explicit: Mutex<Vec<Vec<(FixtureId, AttributeKey)>>>,
 }
 
 impl ProgrammingPorts for ValuesPorts {
@@ -34,11 +35,49 @@ impl ProgrammingPorts for ValuesPorts {
         None
     }
 
+    fn mark_highlight_explicit_fixture_attributes(
+        &self,
+        _context: &ActionContext,
+        touched: &[(FixtureId, AttributeKey)],
+    ) {
+        self.highlight_explicit.lock().push(touched.to_vec());
+    }
+
     fn reconcile(&self, _context: &ActionContext, _reason: ProgrammingReconciliation) {}
 
     fn commit_preload(&self, _context: &ActionContext) -> Result<Option<String>, String> {
         Ok(None)
     }
+}
+
+#[test]
+fn explicit_fixture_sets_notify_highlight_even_when_the_programmer_value_is_unchanged() {
+    let setup = ValuesSetup::new();
+    let fixture_id = setup.fixtures[0];
+    let command = ProgrammingValuesCommand::SetFixture {
+        fixture_id,
+        attribute: AttributeKey::intensity(),
+        value: AttributeValue::Normalized(0.4),
+        timing: Default::default(),
+    };
+    setup.handle("highlight-explicit-first", 0, command.clone());
+    setup.handle("highlight-explicit-same", 1, command);
+    setup.handle(
+        "highlight-release",
+        1,
+        ProgrammingValuesCommand::ReleaseFixture {
+            fixture_id,
+            attribute: AttributeKey::intensity(),
+        },
+    );
+
+    assert_eq!(
+        *setup.ports.highlight_explicit.lock(),
+        vec![
+            vec![(fixture_id, AttributeKey::intensity())],
+            vec![(fixture_id, AttributeKey::intensity())],
+        ]
+    );
 }
 
 struct ValuesSetup {
@@ -141,6 +180,132 @@ impl ValuesSetup {
         };
         events
     }
+}
+
+#[test]
+fn align_modifies_future_relative_steps_and_reanchors_without_mutating_on_activation() {
+    let mut setup = ValuesSetup::new();
+    let pan = AttributeKey("pan".into());
+    let tilt = AttributeKey("tilt".into());
+    setup.registry.select(setup.session, setup.fixtures);
+    for fixture in setup.fixtures {
+        setup
+            .ports
+            .environment
+            .supported_attributes
+            .entry(fixture)
+            .or_default()
+            .extend([pan.clone(), tilt.clone()]);
+        setup
+            .ports
+            .environment
+            .current_values
+            .insert((fixture, pan.clone()), AttributeValue::Normalized(0.4));
+        setup
+            .ports
+            .environment
+            .current_values
+            .insert((fixture, tilt.clone()), AttributeValue::Normalized(0.2));
+    }
+
+    let activated = setup
+        .service
+        .set_alignment(
+            &setup.context,
+            &setup.ports,
+            Some(ProgrammerAlignmentMode::Left),
+        )
+        .unwrap()
+        .expect("Align should activate");
+    assert_eq!(activated.fixtures, setup.fixtures);
+    assert_eq!(setup.registry.normal_values_revision(setup.user), 0);
+    assert!(setup.registry.get(setup.session).unwrap().values.is_empty());
+
+    let request = setup.action(
+        "aligned-pan",
+        0,
+        ProgrammingValuesCommand::ApplyIntent {
+            intent: ProgrammingValueIntent {
+                fixture_ids: vec![setup.fixtures[0]],
+                group_id: None,
+                attribute: pan.clone(),
+                operation: ProgrammingValueOperation::RelativeStep(0.2),
+                undo_group: Some("encoder-pan".into()),
+                timing: Default::default(),
+            },
+        },
+    );
+    let first = setup
+        .service
+        .handle_values(request.clone(), &setup.ports)
+        .unwrap();
+    let ProgrammingValuesOutcome::Changed { projection, .. } = &first.outcome else {
+        panic!("the aligned encoder step should change Programmer values")
+    };
+    let values = projection
+        .fixture_values
+        .iter()
+        .map(|value| value.value.normalized().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(values, vec![0.4, 0.5, 0.6]);
+
+    let replay = setup.service.handle_values(request, &setup.ports).unwrap();
+    assert!(replay.replayed);
+    assert_eq!(replay.outcome, first.outcome);
+    assert_eq!(setup.registry.alignment(setup.session).unwrap().revision, 2);
+
+    setup
+        .service
+        .set_alignment(
+            &setup.context,
+            &setup.ports,
+            Some(ProgrammerAlignmentMode::Out),
+        )
+        .unwrap();
+    setup.handle(
+        "aligned-pan-out",
+        1,
+        ProgrammingValuesCommand::ApplyIntent {
+            intent: ProgrammingValueIntent {
+                fixture_ids: setup.fixtures.to_vec(),
+                group_id: None,
+                attribute: pan,
+                operation: ProgrammingValueOperation::RelativeStep(0.2),
+                undo_group: Some("encoder-pan-out".into()),
+                timing: Default::default(),
+            },
+        },
+    );
+    let content = setup.registry.get(setup.session).unwrap().update_content();
+    let values = content
+        .fixture_values
+        .iter()
+        .filter_map(|value| {
+            value
+                .value
+                .normalized()
+                .map(|normalized| (value.fixture_id, normalized))
+        })
+        .collect::<HashMap<_, _>>();
+    assert_eq!(values.get(&setup.fixtures[0]), Some(&0.6));
+    assert_eq!(values.get(&setup.fixtures[1]), Some(&0.5));
+    assert_eq!(values.get(&setup.fixtures[2]), Some(&0.8));
+
+    setup.handle(
+        "different-attribute",
+        2,
+        ProgrammingValuesCommand::ApplyIntent {
+            intent: ProgrammingValueIntent {
+                fixture_ids: vec![setup.fixtures[0]],
+                group_id: None,
+                attribute: tilt,
+                operation: ProgrammingValueOperation::RelativeStep(0.1),
+                undo_group: None,
+                timing: Default::default(),
+            },
+        },
+    );
+    assert!(setup.registry.alignment(setup.session).is_none());
 }
 
 #[test]

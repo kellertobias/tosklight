@@ -67,6 +67,9 @@ fn spatial_mapping(
                 }),
             preset: value.projection.preset.map(|preset| match preset {
                 wire::GroupMappingProjectionPreset::Top => light_dynamics::ProjectionPreset::Top,
+                wire::GroupMappingProjectionPreset::Bottom => {
+                    light_dynamics::ProjectionPreset::Bottom
+                }
                 wire::GroupMappingProjectionPreset::Front => {
                     light_dynamics::ProjectionPreset::Front
                 }
@@ -280,6 +283,9 @@ fn wire_spatial_mapping(
             },
             preset: value.projection.preset.map(|preset| match preset {
                 light_dynamics::ProjectionPreset::Top => wire::GroupMappingProjectionPreset::Top,
+                light_dynamics::ProjectionPreset::Bottom => {
+                    wire::GroupMappingProjectionPreset::Bottom
+                }
                 light_dynamics::ProjectionPreset::Front => {
                     wire::GroupMappingProjectionPreset::Front
                 }

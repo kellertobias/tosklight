@@ -65,6 +65,10 @@ fn debug_data_dir() -> PathBuf {
         })
 }
 
+fn debug_extensions_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../.artifacts/runtime/extensions")
+}
+
 fn binary_name() -> &'static str {
     if cfg!(windows) {
         "light-headless.exe"
@@ -106,7 +110,16 @@ fn launch(app: &tauri::AppHandle) -> Result<Option<Child>, Box<dyn std::error::E
             app.path().app_data_dir()?
         });
     let fixture_package_dir = app.path().resource_dir()?.join("fixture-library");
+    let extensions_dir = std::env::var_os("LIGHT_EXTENSIONS_DIR")
+        .or_else(|| std::env::var_os("LIGHT_RUNTIME_EXTENSIONS_DIR"))
+        .map(PathBuf::from)
+        .unwrap_or(if cfg!(debug_assertions) {
+            debug_extensions_dir()
+        } else {
+            data_dir.join("extensions")
+        });
     std::fs::create_dir_all(&data_dir)?;
+    std::fs::create_dir_all(&extensions_dir)?;
     let log_path = data_dir.join("light-headless.log");
     let stdout = OpenOptions::new()
         .create(true)
@@ -119,6 +132,8 @@ fn launch(app: &tauri::AppHandle) -> Result<Option<Child>, Box<dyn std::error::E
         .arg(&data_dir)
         .arg("--fixture-package-dir")
         .arg(&fixture_package_dir)
+        .arg("--extensions-dir")
+        .arg(&extensions_dir)
         .arg("--bind")
         .arg(address.to_string())
         .stdout(Stdio::from(stdout))

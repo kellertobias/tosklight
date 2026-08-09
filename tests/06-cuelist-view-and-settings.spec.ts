@@ -97,7 +97,17 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
 
       await expect(page.locator(".ui-window-header")).toContainText("Cuelist View · Cuelist 1");
       await expect(page.locator(".ui-window-header")).toContainText(installed.name);
-      await expect(page.locator(".cue-table thead th")).toHaveText(["Preview", "No.", "Name", "Trigger", "Fade"]);
+      await expect(page.locator(".cue-table thead th")).toHaveText([
+        "Preview",
+        "No.",
+        "Name",
+        "Trigger",
+        "Trigger Time",
+        "In Delay",
+        "In Fade",
+        "Out Delay",
+        "Out Fade",
+      ]);
       await expect(page.locator(".cue-table thead")).not.toContainText("Status");
       for (const action of ["GO", "GO −", "Toggle", "Off"]) {
         await expect(page.locator(".cue-properties > button").filter({ hasText: new RegExp(`^${action}$`, "i") })).toHaveCount(0);
@@ -120,9 +130,9 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
 
       await commitField(page, api, installed.id, "Title", "Center transition", (body) => body.cues[1].name);
       await expect(rows.nth(1)).toContainText("Center transition");
-      await commitField(page, api, installed.id, "Fade", "2.5", (body) => body.cues[1].fade_millis);
+      await commitField(page, api, installed.id, "In Fade", "2.5", (body) => body.cues[1].fade_millis);
       await expect.poll(async () => (await object<any>(api, "cue_list", installed.id)).body.cues[1].fade_millis).toBe(2_500);
-      await commitField(page, api, installed.id, "Delay", "1.25", (body) => body.cues[1].delay_millis);
+      await commitField(page, api, installed.id, "In Delay", "1.25", (body) => body.cues[1].delay_millis);
       await expect.poll(async () => (await object<any>(api, "cue_list", installed.id)).body.cues[1].delay_millis).toBe(1_250);
 
       await chooseCueTrigger(page, api, installed.id, "GO", "FOLLOW");
@@ -138,8 +148,8 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
       await expect(page.getByLabel("Title")).toHaveValue("Cue 3");
       await rows.nth(1).click();
       await expect(page.getByLabel("Title")).toHaveValue("Center transition");
-      await expect(page.getByLabel("Fade")).toHaveValue("2.5");
-      await expect(page.getByLabel("Delay")).toHaveValue("1.25");
+      await expect(page.getByLabel("In Fade")).toHaveValue("2.5");
+      await expect(page.getByLabel("In Delay")).toHaveValue("1.25");
       await expect(page.getByLabel("Trigger time")).toHaveValue("4");
 
       await page.getByRole("button", { name: "Cuelist Settings", exact: true }).click();
@@ -149,8 +159,8 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
       await expect(rows.nth(1)).toHaveClass(/selected/);
 
       const lastValid = await object<any>(api, "cue_list", installed.id);
-      await page.getByLabel("Fade").fill("-1");
-      await page.getByLabel("Fade").press("Enter");
+      await page.getByLabel("In Fade").fill("-1");
+      await page.getByLabel("In Fade").press("Enter");
       await expect(page.getByRole("alert").filter({ hasText: "Cue edit was not saved" })).toBeVisible({ timeout: 10_000 });
       const afterInvalid = await object<any>(api, "cue_list", installed.id);
       expect(afterInvalid.revision).toBe(lastValid.revision);
@@ -163,8 +173,8 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
       await openCuelistFromCurrentDesk(page, installed.name);
       await page.locator(".cue-table tbody tr").nth(1).click();
       await expect(page.getByLabel("Title")).toHaveValue("Center transition");
-      await expect(page.getByLabel("Fade")).toHaveValue("2.5");
-      await expect(page.getByLabel("Delay")).toHaveValue("1.25");
+      await expect(page.getByLabel("In Fade")).toHaveValue("2.5");
+      await expect(page.getByLabel("In Delay")).toHaveValue("1.25");
       await expect(page.getByLabel("Trigger time")).toHaveValue("4");
       state.completed = true;
     },
@@ -331,11 +341,12 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
       const mark = (await audit(api)).length;
       await expect(page.getByRole("button", { name: "Delete Cue", exact: true })).toHaveCount(0);
       await page.getByRole("button", { name: "ESC", exact: true }).click();
-      for (const key of ["DEL", "SET", "1", "CUE", "2"]) {
-        await page.getByRole("button", { name: key, exact: true }).click();
-      }
-      await expect(page.getByLabel("Command line")).toHaveValue("DELETE SET 1 CUE 2");
-      await page.getByRole("button", { name: "ENT", exact: true }).click();
+      await page.getByRole("button", { name: "DEL", exact: true }).click();
+      await expect(page.getByLabel("Command line")).toHaveValue("DELETE");
+      const deleteTarget = page.locator(".cue-table tbody tr").nth(1);
+      await expect(deleteTarget).toHaveClass(/delete-target/);
+      await expect(deleteTarget).toContainText("Delete");
+      await deleteTarget.locator("td").nth(2).click();
       await expect.poll(async () => (await object<any>(api, "cue_list", installed.id)).body.cues.map((cue: any) => cue.number)).toEqual([1, 3]);
       const deleted = await object<any>(api, "cue_list", installed.id);
       expect(deleted.revision).toBeGreaterThan(before.revision);

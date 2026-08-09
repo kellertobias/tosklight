@@ -20,7 +20,6 @@ import type {
 	DeskConfiguration,
 	DeskLockState,
 	DeskUser,
-	HighlightLookConfiguration,
 	MatterBridgeStatus,
 	OutputHealth,
 	PoolPresentationConfiguration,
@@ -49,6 +48,88 @@ export interface ConfigurationUpdateResult {
 	replayed: boolean;
 }
 
+export interface ExtensionPackageSnapshot {
+	id: string | null;
+	name: string | null;
+	version: string | null;
+	directory: string;
+	package_digest: string | null;
+	readiness: string;
+	locally_approved_unsigned: boolean;
+	diagnostics: Array<{ code: string; detail: string }>;
+}
+
+export interface ExtensionInstanceSnapshot {
+	id: string;
+	extension_id: string;
+	package_digest: string;
+	executable: string;
+	state: string;
+	last_error: string | null;
+	launches: number;
+	crashes: number;
+	protocol_errors: number;
+	inbound_drops: number;
+	outbound_drops: number;
+}
+
+export interface ExtensionRuntimeSnapshot {
+	extensions_directory: string;
+	configuration_path: string;
+	configuration_diagnostic: string | null;
+	packages: ExtensionPackageSnapshot[];
+	instances: ExtensionInstanceSnapshot[];
+	instance_diagnostics: Array<{
+		instance_id: string;
+		code: string;
+		detail: string;
+	}>;
+}
+
+export type UsbDmxDriverKind = "open_dmx" | "enttec_usb_pro_v144";
+
+export interface UsbDeviceIdentity {
+	vendor_id: number;
+	product_id: number;
+	manufacturer?: string | null;
+	product?: string | null;
+	usb_serial?: string | null;
+	widget_serial?: string | null;
+	port_topology_hint?: string | null;
+}
+
+export interface UsbDmxEndpoint {
+	endpoint_id: string;
+	driver: UsbDmxDriverKind;
+	identity: UsbDeviceIdentity;
+	enabled: boolean;
+}
+
+export interface UsbDmxEndpointSnapshot {
+	document: { revision: number; endpoints: UsbDmxEndpoint[] };
+	diagnostics: Array<{
+		endpoint_id: string;
+		code: string;
+		message: string;
+		dropped_frames: number;
+		driver_health?: {
+			online: boolean;
+			reconnecting: boolean;
+			accepted_frames: number;
+			reconnect_attempts: number;
+			last_error?: string | null;
+		} | null;
+	}>;
+	discovered_devices: Array<{
+		port_name: string;
+		identity: UsbDeviceIdentity;
+	}>;
+	discovery_error?: string | null;
+	configuration_error?: string | null;
+	request_id?: string | null;
+	replayed: boolean;
+}
+
 export interface DeskLockInput {
 	message: string;
 	wallpaper: string | null;
@@ -72,6 +153,38 @@ export class DeskManagementApiClient {
 
 	configuration(): Promise<ConfigurationSnapshot> {
 		return this.transport.request("/api/v2/configuration");
+	}
+
+	extensions(): Promise<ExtensionRuntimeSnapshot> {
+		return this.transport.request("/api/v2/extensions");
+	}
+
+	rescanExtensions(): Promise<ExtensionRuntimeSnapshot> {
+		return this.transport.request(
+			"/api/v2/extensions/rescan",
+			jsonRequest("POST", { request_id: crypto.randomUUID() }),
+		);
+	}
+
+	usbDmxEndpoints(): Promise<UsbDmxEndpointSnapshot> {
+		return this.transport.request("/api/v2/usb-dmx/endpoints");
+	}
+
+	updateUsbDmxEndpoints(
+		expectedRevision: number,
+		action:
+			| { action: "upsert"; endpoint: UsbDmxEndpoint }
+			| { action: "remove"; endpoint_id: string }
+			| { action: "reset_malformed" },
+	): Promise<UsbDmxEndpointSnapshot> {
+		return this.transport.request(
+			"/api/v2/usb-dmx/endpoints/update",
+			jsonRequest("POST", {
+				request_id: crypto.randomUUID(),
+				expected_revision: expectedRevision,
+				action,
+			}),
+		);
 	}
 
 	updateConfiguration(
@@ -229,14 +342,12 @@ function soundConfiguration(
 
 function configurationPatch(
 	configuration: DeskConfiguration,
-): ConfigurationPatch & { highlight_look: HighlightLookConfiguration } {
+): ConfigurationPatch {
 	return {
 		frame_rate_hz: configuration.frame_rate_hz,
 		output_bind_ip: configuration.output_bind_ip,
 		osc_bind: configuration.osc_bind,
 		art_timecode_bind: configuration.art_timecode_bind,
-		midi_inputs: configuration.midi_inputs,
-		rtp_midi_bind: configuration.rtp_midi_bind,
 		timecode_sources: configuration.timecode_sources,
 		osc_timecode: configuration.osc_timecode,
 		backup_retention: configuration.backup_retention,
@@ -245,6 +356,11 @@ function configurationPatch(
 		command_line_at_uses_programmer_fade:
 			configuration.command_line_at_uses_programmer_fade,
 		sequence_master_fade_millis: configuration.sequence_master_fade_millis,
+		cuelist_auto_off_at_zero_default:
+			configuration.cuelist_auto_off_at_zero_default,
+		cuelist_auto_off_flash_release_default:
+			configuration.cuelist_auto_off_flash_release_default,
+		start_after_first_recording: configuration.start_after_first_recording,
 		preload_programmer_changes: configuration.preload_programmer_changes,
 		preload_physical_playback_actions:
 			configuration.preload_physical_playback_actions,

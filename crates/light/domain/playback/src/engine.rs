@@ -7,6 +7,7 @@ pub struct PlaybackEngine {
     pub(crate) active: HashMap<PlaybackKey, ActivePlayback>,
     pub(crate) control_states: HashMap<PlaybackIdentity, PlaybackControlState>,
     pub(crate) active_dynamics: HashMap<uuid::Uuid, ActiveDynamicPlayback>,
+    pub(crate) cuelist_flash_states: HashMap<PlaybackIdentity, CuelistFlashState>,
     pub(crate) dynamic_flash_states: HashMap<PlaybackIdentity, DynamicFlashState>,
     pub(crate) temporary: HashMap<(PlaybackIdentity, TemporaryPlaybackKind), ActivePlayback>,
     pub(crate) swap_held: HashSet<PlaybackIdentity>,
@@ -35,6 +36,7 @@ impl PlaybackEngine {
             active: HashMap::new(),
             control_states: HashMap::new(),
             active_dynamics: HashMap::new(),
+            cuelist_flash_states: HashMap::new(),
             dynamic_flash_states: HashMap::new(),
             temporary: HashMap::new(),
             swap_held: HashSet::new(),
@@ -381,5 +383,10 @@ impl PlaybackEngine {
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(crate) struct DynamicFlashState {
+    pub(crate) restore_off: bool,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(crate) struct CuelistFlashState {
     pub(crate) restore_off: bool,
 }

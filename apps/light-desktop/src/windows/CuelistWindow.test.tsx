@@ -287,7 +287,17 @@ describe("CuelistWindow Cue settings", () => {
 		).toBeInTheDocument();
 		expect(
 			screen.getAllByRole("columnheader").map((cell) => cell.textContent),
-		).toEqual(["Preview", "No.", "Name", "Trigger", "Fade"]);
+		).toEqual([
+			"Preview",
+			"No.",
+			"Name",
+			"Trigger",
+			"Trigger Time",
+			"In Delay",
+			"In Fade",
+			"Out Delay",
+			"Out Fade",
+		]);
 		fireEvent.click(screen.getByText("Opening"));
 		expect(
 			screen.queryByRole("button", { name: "GO −" }),
@@ -354,21 +364,77 @@ describe("CuelistWindow Cue settings", () => {
 		expect(
 			screen.getByText("Press SET, then press an attribute value to edit it."),
 		).toBeInTheDocument();
+		for (const [buttonName, dialogName, closeName] of [
+			["Set Cue Title", "Title", "Close input"],
+			["Set Cue Intensity In Fade", "In Fade", "Close In Fade"],
+			["Set Cue Intensity In Delay", "In Delay", "Close In Delay"],
+			["Set Cue Intensity Out Fade", "Out Fade", "Close Out Fade"],
+			["Set Cue Intensity Out Delay", "Out Delay", "Close Out Delay"],
+		] as const) {
+			expect(
+				fireEvent.contextMenu(screen.getByRole("button", { name: buttonName })),
+			).toBe(false);
+			expect(
+				screen.getByRole("dialog", { name: dialogName }),
+			).toBeInTheDocument();
+			fireEvent.click(screen.getByRole("button", { name: closeName }));
+		}
+		expect(
+			fireEvent.contextMenu(
+				screen.getByRole("button", { name: "Set Cue Trigger" }),
+			),
+		).toBe(false);
+		expect(
+			screen.getByRole("dialog", { name: "Cue Trigger" }),
+		).toBeInTheDocument();
+		fireEvent.click(screen.getByRole("button", { name: "Close Cue Trigger" }));
 		act(() => {
 			routeControlSurfaceIntent({ type: "set", source: "hardware" });
 		});
 		expect(
 			screen.getByText("SET is active. Press an attribute value to edit it."),
 		).toBeInTheDocument();
+		expect(
+			screen
+				.getByRole("button", { name: "Set Cue Intensity In Fade" })
+				.closest("button"),
+		).toHaveClass("is-active");
 		fireEvent.click(
 			screen.getByRole("button", { name: "Set Cue Intensity In Fade" }),
 		);
 		expect(screen.getByRole("dialog", { name: "In Fade" })).toBeInTheDocument();
 		fireEvent.click(screen.getByRole("button", { name: "Close In Fade" }));
+		act(() => {
+			routeControlSurfaceIntent({ type: "set", source: "hardware" });
+		});
+		fireEvent.click(screen.getByRole("button", { name: "Set Cue Trigger" }));
+		const triggerModal = screen.getByRole("dialog", { name: "Cue Trigger" });
+		expect(triggerModal).toHaveTextContent("Wait for a manual GO.");
+		expect(triggerModal).toHaveTextContent(
+			"Start after the preceding Cue has finished.",
+		);
+		expect(triggerModal).toHaveTextContent(
+			"Start after this time from the preceding Cue's GO.",
+		);
+		expect(triggerModal).toHaveTextContent(
+			"Start when external timecode reaches this Cue's frame.",
+		);
 		vi.unstubAllGlobals();
 	});
 
 	it("shows a Link destination by stable Cue identity in the table and editor", () => {
+		let measure: ResizeObserverCallback = () => undefined;
+		vi.stubGlobal(
+			"ResizeObserver",
+			class {
+				constructor(callback: ResizeObserverCallback) {
+					measure = callback;
+				}
+				observe() {}
+				disconnect() {}
+				unobserve() {}
+			},
+		);
 		const destination = {
 			id: "cue-blackout",
 			number: 12,
@@ -394,6 +460,45 @@ describe("CuelistWindow Cue settings", () => {
 		expect(ui.getByText("Link Cue")).toBeInTheDocument();
 		expect(ui.getByText("Link delay")).toBeInTheDocument();
 		expect(ui.getAllByText("Cue 12 · Blackout").length).toBeGreaterThan(0);
+		const sidebar = document.querySelector(".cue-properties") as HTMLElement;
+		const preview = document.querySelector(
+			".cue-selected-preview",
+		) as HTMLElement;
+		const fields = document.querySelector(
+			".cue-settings-grid-measure",
+		) as HTMLElement;
+		Object.defineProperty(sidebar, "clientHeight", {
+			configurable: true,
+			value: 150,
+		});
+		Object.defineProperty(preview, "offsetHeight", {
+			configurable: true,
+			value: 74,
+		});
+		Object.defineProperty(fields, "scrollHeight", {
+			configurable: true,
+			value: 220,
+		});
+		act(() => measure([], {} as ResizeObserver));
+
+		expect(
+			fireEvent.contextMenu(
+				ui.getByRole("button", { name: "Set Cue Link destination" }),
+			),
+		).toBe(false);
+		expect(
+			screen.getByRole("dialog", { name: "Cue Trigger" }),
+		).toBeInTheDocument();
+		fireEvent.click(screen.getByRole("button", { name: "Close Cue Trigger" }));
+		expect(
+			fireEvent.contextMenu(
+				ui.getByRole("button", { name: "Set Cue Link delay" }),
+			),
+		).toBe(false);
+		expect(
+			screen.getByRole("dialog", { name: "Link delay" }),
+		).toBeInTheDocument();
+		vi.unstubAllGlobals();
 	});
 });
 
@@ -431,6 +536,42 @@ describe("CuelistWindow pane selection", () => {
 		);
 		expect(container.querySelector(".cue-properties")).not.toBeInTheDocument();
 		expect(within(container).getByRole("table")).toBeInTheDocument();
+	});
+
+	it("uses compact rows without the Preview column while retaining the sidebar preview", () => {
+		mocks.state.storeArmed = false;
+		mocks.playbacks.cue_lists = [editableCueList()];
+		const { container } = render(
+			<CuelistWindow
+				compact
+				cueListTab="cues"
+				cueListCompactRows
+				thumbnails={{ 0: "data:image/png;base64,preview" }}
+			/>,
+		);
+
+		expect(
+			within(container)
+				.getAllByRole("columnheader")
+				.map((cell) => cell.textContent),
+		).toEqual([
+			"No.",
+			"Name",
+			"Trigger",
+			"Trigger Time",
+			"In Delay",
+			"In Fade",
+			"Out Delay",
+			"Out Fade",
+		]);
+		expect(container.querySelector(".cue-table")).toHaveClass(
+			"compact-cue-rows",
+		);
+		expect(container.querySelector(".cue-table img")).not.toBeInTheDocument();
+		expect(container.querySelector(".cue-selected-thumbnail")).toHaveAttribute(
+			"src",
+			"data:image/png;base64,preview",
+		);
 	});
 });
 
@@ -639,6 +780,13 @@ describe("CuelistWindow pane and Cuelist settings", () => {
 			type: "SET_PANE_CUE_SIDEBAR",
 			id: "cues-1",
 			value: false,
+		});
+
+		fireEvent.click(screen.getByRole("switch", { name: "Compact Cue rows" }));
+		expect(mocks.dispatch).toHaveBeenCalledWith({
+			type: "SET_PANE_CUELIST_COMPACT_ROWS",
+			id: "cues-1",
+			value: true,
 		});
 	});
 
@@ -1232,12 +1380,65 @@ describe("CuelistWindow pool recording", () => {
 				xfade_millis: 0,
 			},
 		];
-		render(<CuelistWindow compact cueListTab="pool" />);
-		fireEvent.click(screen.getByText("Main sequence").closest("button")!);
+		const { container } = render(<CuelistWindow compact cueListTab="pool" />);
+		const cards =
+			container.querySelectorAll<HTMLButtonElement>(".cuelist-card");
+		const source = screen.getByText("Main sequence").closest("button")!;
+		expect(source).toHaveClass("set-target");
+		expect(source).toHaveTextContent("Set");
+		expect(cards[1]).not.toHaveClass("set-target");
+		fireEvent.click(source);
 		expect(mocks.dispatch).toHaveBeenCalledWith({
 			type: "SET_CUELIST_SET_TARGET",
 			value: 7,
 		});
+	});
+
+	it("right-click selects the same Cuelist source and suppresses the native menu", () => {
+		mocks.state.storeArmed = false;
+		mocks.state.cueListSetArmed = true;
+		mocks.playbacks.pool = [
+			{
+				number: 7,
+				name: "Main sequence",
+				target: { type: "cue_list", cue_list_id: "main" },
+				buttons: ["go", "go_minus", "flash"],
+				fader: "master",
+				go_activates: true,
+				auto_off: true,
+				xfade_millis: 0,
+			},
+		];
+		render(<CuelistWindow compact cueListTab="pool" />);
+		const source = screen.getByText("Main sequence").closest("button")!;
+		const contextMenu = new MouseEvent("contextmenu", {
+			bubbles: true,
+			cancelable: true,
+		});
+		source.dispatchEvent(contextMenu);
+
+		expect(contextMenu.defaultPrevented).toBe(true);
+		expect(mocks.dispatch).toHaveBeenCalledWith({
+			type: "SET_CUELIST_SET_TARGET",
+			value: 7,
+		});
+	});
+
+	it("right-click on an empty Cuelist reports the exact SET-click guidance", () => {
+		mocks.state.storeArmed = false;
+		mocks.state.cueListSetArmed = true;
+		const { container } = render(
+			<CuelistWindow compact cueListTab="pool" />,
+		);
+		const empty = container.querySelector<HTMLButtonElement>(".cuelist-card")!;
+		fireEvent.contextMenu(empty);
+
+		expect(container.querySelector(".pool-message")).toHaveTextContent(
+			"Cuelist 1 is empty · record it before assigning it to a playback.",
+		);
+		expect(mocks.dispatch).not.toHaveBeenCalledWith(
+			expect.objectContaining({ type: "SET_CUELIST_SET_TARGET" }),
+		);
 	});
 
 	it("shows the Set workflow in the header's secondary amber status line", () => {

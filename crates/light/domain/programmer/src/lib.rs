@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 //! User-scoped selection and programmer state, shared by all of a user's sessions.
 
+mod alignment;
 mod capture_mode;
 mod command_choice;
 mod command_state;
@@ -28,6 +29,11 @@ mod values;
 
 pub mod command_line;
 
+pub use alignment::{
+    ProgrammerAlignedFixtureValue, ProgrammerAlignmentBase, ProgrammerAlignmentBinding,
+    ProgrammerAlignmentError, ProgrammerAlignmentMode, ProgrammerAlignmentPlan,
+    ProgrammerAlignmentState, apply_programmer_alignment_delta, programmer_alignment_weight,
+};
 pub use capture_mode::ProgrammerCaptureMode;
 pub use command_choice::{
     CueMoveCopyChoice, CueTransferOperation, DynamicInstanceChoice, DynamicInstanceChoiceOption,
@@ -50,9 +56,9 @@ pub use groups::{
     merge_ordered_group_membership, resolve_group, resolve_group_spatial,
 };
 pub use highlight::{
-    HighlightAction, HighlightError, HighlightFixture, HighlightMode, HighlightRegistry,
-    HighlightSelectionWrite, HighlightState, HighlightTransition, OSC_REPEAT_GUARD,
-    is_duplicate_osc_action,
+    HighlightAction, HighlightError, HighlightFixture, HighlightMode, HighlightOutputLayer,
+    HighlightOutputRole, HighlightRegistry, HighlightSelectionWrite, HighlightState,
+    HighlightTransition, OSC_REPEAT_GUARD, is_duplicate_osc_action,
 };
 pub use lifecycle_projection::{ProgrammerLifecycleSession, ProgrammerLifecycleSummary};
 pub use normal_values::{

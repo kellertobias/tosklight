@@ -121,7 +121,8 @@ export function useParameterValueActions(projection: ParameterProjection) {
 			projection,
 			attribute,
 			{ kind: "normalized", value: level },
-			projection.programmerValuesRoute === "normal"
+			projection.programmerValuesRoute === "normal" &&
+				!projection.directEntryUsesProgrammerFade
 				? { fade: false, fadeMillis: null, delayMillis: null }
 				: undefined,
 		);

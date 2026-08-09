@@ -6,7 +6,9 @@ use crate::{
 };
 use light_core::{FixtureId, SessionId, UserId};
 use light_programmer::command_line::{CommandKey, CommandKeyPhase};
-use light_programmer::{HighlightRegistry, ProgrammerRegistry, ProgrammerSelection};
+use light_programmer::{
+    HighlightRegistry, ProgrammerAlignmentMode, ProgrammerRegistry, ProgrammerSelection,
+};
 use parking_lot::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, mpsc};
@@ -161,6 +163,40 @@ impl LiveSetup {
     fn selection_filter(&self) -> EventFilter {
         EventFilter::for_desk(self.context.desk_id)
             .with_object(EventObject::programming_selection(self.context.desk_id))
+    }
+}
+
+#[test]
+fn escape_clear_record_and_legacy_preload_deactivate_align_without_reverting_values() {
+    for key in [
+        CommandKey::Escape,
+        CommandKey::Clear,
+        CommandKey::Record,
+        CommandKey::Preload,
+    ] {
+        let setup = LiveSetup::new(8);
+        let registry = setup.ports.registry.as_ref().unwrap();
+        registry.select(
+            SessionId(setup.context.session_id.unwrap()),
+            [FixtureId::new()],
+        );
+        setup
+            .service
+            .set_alignment(
+                &setup.context,
+                &setup.ports,
+                Some(ProgrammerAlignmentMode::Left),
+            )
+            .unwrap();
+
+        setup.press(key);
+
+        assert!(
+            registry
+                .alignment(SessionId(setup.context.session_id.unwrap()))
+                .is_none(),
+            "{key:?} must deactivate Align",
+        );
     }
 }
 

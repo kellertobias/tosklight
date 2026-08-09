@@ -579,20 +579,14 @@ export class ApiDriver {
   }
 
   alignProgrammerSelection(
-    attribute: "pan" | "tilt",
-    mode: "left" | "right" | "center" | "out",
-    from = 0,
-    to = 1,
+    mode: "off" | "left" | "right" | "out" | "in",
   ): Promise<CommandResponse> {
     const requestId = crypto.randomUUID();
     return this.liveAction({
       type: "programming_align",
       request: {
         request_id: requestId,
-        attribute,
         mode,
-        from,
-        to,
       },
     }, requestId);
   }

@@ -45,10 +45,6 @@ pub enum OscArgument {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ControlEvent {
-    Midi {
-        status: u8,
-        data: Vec<u8>,
-    },
     Osc {
         address: String,
         arguments: Vec<OscArgument>,
@@ -62,7 +58,6 @@ pub enum ControlEvent {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ControlTrigger {
     Osc { address: String },
-    Midi { status: u8, data1: Option<u8> },
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -107,13 +102,6 @@ impl ControlMapping {
             (ControlTrigger::Osc { address: expected }, ControlEvent::Osc { address, .. }) => {
                 expected == address
             }
-            (
-                ControlTrigger::Midi {
-                    status: expected,
-                    data1,
-                },
-                ControlEvent::Midi { status, data },
-            ) => expected == status && data1.is_none_or(|expected| data.first() == Some(&expected)),
             _ => false,
         }
     }

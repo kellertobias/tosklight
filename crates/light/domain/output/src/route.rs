@@ -20,8 +20,27 @@ pub enum DeliveryMode {
     Unicast,
 }
 
+#[derive(Clone, Debug, Default, Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum OutputRouteTarget {
+    #[default]
+    Network,
+    UsbEndpoint {
+        endpoint_id: String,
+    },
+}
+
+impl OutputRouteTarget {
+    pub fn is_network(&self) -> bool {
+        matches!(self, Self::Network)
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct OutputRoute {
+    /// Historical routes omit this and remain byte-for-byte network routes when reserialized.
+    #[serde(default, skip_serializing_if = "OutputRouteTarget::is_network")]
+    pub target: OutputRouteTarget,
     pub protocol: Protocol,
     pub logical_universe: Universe,
     pub destination_universe: Universe,
@@ -47,6 +66,15 @@ impl OutputRoute {
     }
 
     pub fn validate(&self) -> Result<(), String> {
+        if let OutputRouteTarget::UsbEndpoint { endpoint_id } = &self.target {
+            if endpoint_id.trim().is_empty()
+                || endpoint_id.len() > 128
+                || endpoint_id.chars().any(char::is_control)
+            {
+                return Err("USB endpoint ID must contain 1 to 128 printable characters".into());
+            }
+            return Ok(());
+        }
         let mode = self.resolved_delivery_mode();
         validate_delivery_mode(self.protocol, mode)?;
         validate_universe(self.protocol, self.destination_universe)?;
@@ -55,6 +83,9 @@ impl OutputRoute {
     }
 
     pub fn resolved_destination(&self) -> Result<SocketAddr, String> {
+        if !self.target.is_network() {
+            return Err("USB endpoint routes do not have a network destination".into());
+        }
         self.validate()?;
         match self.resolved_delivery_mode() {
             DeliveryMode::Broadcast => Ok(artnet_broadcast_destination()),

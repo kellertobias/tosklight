@@ -63,7 +63,11 @@ export interface VirtualPlaybackGridCallbacks {
 	onAction?(slot: number, position: number): void;
 	onActionPress?(slot: number, position: number): void;
 	onActionRelease?(slot: number, position: number): void;
-	onConfigure?(slot: number, position: number): void;
+	onConfigure?(
+		slot: number,
+		position: number,
+		source: "touch" | "context_menu",
+	): void;
 	onAssign?(slot: number, position: number): void;
 	onUpdate?(slot: number, position: number): void;
 	onZoneSelection?(slot: number, position: number): void;
@@ -423,7 +427,7 @@ function VirtualPlaybackBox({
 		else if (box.selectingExclusionZone)
 			callbacks.onZoneSelection?.(box.slot, box.position);
 		else if (box.configurationTarget)
-			callbacks.onConfigure?.(box.slot, box.position);
+			callbacks.onConfigure?.(box.slot, box.position, "touch");
 		else if (box.assignmentTarget) callbacks.onAssign?.(box.slot, box.position);
 		else if (assigned && !box.heldAction)
 			callbacks.onAction?.(box.slot, box.position);
@@ -461,8 +465,8 @@ function VirtualPlaybackBox({
 				vacant && "vacant",
 				box.running && "running",
 				actionHeld && "held-active",
-				box.configurationTarget && "configuration-armed",
-				box.assignmentTarget && "assignment-pending",
+				box.configurationTarget && !unavailable && "configuration-armed",
+				box.assignmentTarget && !unavailable && "assignment-pending",
 				box.updateTarget && "update-target",
 				box.exclusionMember && "exclusion-member",
 				box.exclusionFence?.top && "exclusion-fence-top",
@@ -494,10 +498,10 @@ function VirtualPlaybackBox({
 						: box.exclusionSelected
 							? "Exclusion selected"
 							: undefined,
-				workflow: box.configurationTarget
-					? "Configure Playback"
-					: box.assignmentTarget
-						? "Record"
+				workflow: box.configurationTarget && !unavailable
+					? "Set"
+					: box.assignmentTarget && !unavailable
+						? "Set"
 						: box.updateTarget
 							? "Update"
 							: undefined,
@@ -507,7 +511,7 @@ function VirtualPlaybackBox({
 			onPointerDown={pointerDown}
 			onContextMenu={(event) => {
 				event.preventDefault();
-				callbacks.onConfigure?.(box.slot, box.position);
+				callbacks.onConfigure?.(box.slot, box.position, "context_menu");
 			}}
 			onPointerUp={() => {
 				if (held.current) release(false);
@@ -554,7 +558,9 @@ function virtualPlaybackStates(
 	return [
 		...(unavailable ? ["disabled" as const] : []),
 		...(box.running || actionHeld ? ["active" as const] : []),
-		...(box.assignmentTarget ? ["record-target" as const] : []),
+		...(!unavailable && (box.configurationTarget || box.assignmentTarget)
+			? (["set-target"] as const)
+			: []),
 		...(box.updateTarget ? ["update-target" as const] : []),
 	];
 }

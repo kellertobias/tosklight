@@ -1,5 +1,5 @@
 use crate::{EngineSnapshot, ProfileEncodingIndex, ProfileProjectionIndex, profile_head_owner};
-use light_core::{AttributeKey, FixtureId};
+use light_core::{AttributeKey, AttributeValue, FixtureId};
 use light_output::OutputRoute;
 use light_playback::{PlaybackEngine, PlaybackTarget};
 use light_programmer::{GroupDefinition, resolve_group, resolve_group_spatial};
@@ -20,6 +20,7 @@ pub(crate) struct RuntimeGeneration {
     groups: Arc<HashMap<String, GroupDefinition>>,
     routes: Arc<[OutputRoute]>,
     snap_attributes: Arc<HashMap<FixtureId, HashSet<AttributeKey>>>,
+    default_values: Arc<HashMap<(FixtureId, AttributeKey), AttributeValue>>,
     group_rankings: Arc<HashMap<String, light_dynamics::RankedSelection>>,
     group_masters: Arc<GroupMasterIndex>,
     profile_encodings: Arc<ProfileEncodingIndex>,
@@ -43,6 +44,7 @@ impl RuntimeGeneration {
     ) -> Self {
         let routes = Arc::from(snapshot.routes.as_slice());
         let snap_attributes = compile_snap_attributes(&snapshot);
+        let default_values = compile_default_values(&snapshot);
         let group_rankings = compile_group_rankings(&groups, &snapshot);
         let group_masters = GroupMasterIndex::compile(&groups, &snapshot, None);
         Self {
@@ -51,6 +53,7 @@ impl RuntimeGeneration {
             groups,
             routes,
             snap_attributes: Arc::new(snap_attributes),
+            default_values: Arc::new(default_values),
             group_rankings: Arc::new(group_rankings),
             group_masters: Arc::new(group_masters),
             profile_encodings,
@@ -86,6 +89,11 @@ impl RuntimeGeneration {
         } else {
             Arc::clone(&current.snap_attributes)
         };
+        let default_values = if fixtures_changed {
+            Arc::new(compile_default_values(&snapshot))
+        } else {
+            Arc::clone(&current.default_values)
+        };
         let group_masters = if !preserve_group_master_levels
             || playbacks_changed
             || playback_pages_changed
@@ -110,6 +118,7 @@ impl RuntimeGeneration {
             groups,
             routes,
             snap_attributes,
+            default_values,
             group_rankings,
             group_masters,
             profile_encodings,
@@ -135,6 +144,7 @@ impl RuntimeGeneration {
                 groups: Arc::clone(&current.groups),
                 routes: Arc::clone(&current.routes),
                 snap_attributes: Arc::clone(&current.snap_attributes),
+                default_values: Arc::clone(&current.default_values),
                 group_rankings: Arc::clone(&current.group_rankings),
                 group_masters: Arc::new(group_masters),
                 profile_encodings: Arc::clone(&current.profile_encodings),
@@ -190,6 +200,14 @@ impl RuntimeGeneration {
             .is_some_and(|attributes| attributes.contains(attribute))
     }
 
+    pub(crate) fn default_value(
+        &self,
+        fixture_id: FixtureId,
+        attribute: &AttributeKey,
+    ) -> Option<&AttributeValue> {
+        self.default_values.get(&(fixture_id, attribute.clone()))
+    }
+
     pub(crate) fn group_masters(&self) -> &GroupMasterIndex {
         &self.group_masters
     }
@@ -211,6 +229,43 @@ impl RuntimeGeneration {
     ) -> Option<&crate::FixtureProjectionPlan> {
         self.profile_projections.fixture(fixture_id)
     }
+}
+
+fn compile_default_values(
+    snapshot: &EngineSnapshot,
+) -> HashMap<(FixtureId, AttributeKey), AttributeValue> {
+    let mut values = HashMap::new();
+    for fixture in snapshot.fixtures.iter() {
+        for parameter in fixture
+            .definition
+            .heads
+            .iter()
+            .filter(|head| head.shared)
+            .flat_map(|head| &head.parameters)
+        {
+            values.insert(
+                (fixture.fixture_id, parameter.attribute.clone()),
+                AttributeValue::Normalized(parameter.default),
+            );
+        }
+        for logical in &fixture.logical_heads {
+            let Some(head) = fixture
+                .definition
+                .heads
+                .iter()
+                .find(|head| head.index == logical.head_index)
+            else {
+                continue;
+            };
+            for parameter in &head.parameters {
+                values.insert(
+                    (logical.fixture_id, parameter.attribute.clone()),
+                    AttributeValue::Normalized(parameter.default),
+                );
+            }
+        }
+    }
+    values
 }
 
 fn compile_group_rankings(

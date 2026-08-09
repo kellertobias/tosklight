@@ -96,6 +96,10 @@ pub struct ActivePlayback {
     pub paused: bool,
     pub activated_at: DateTime<Utc>,
     pub paused_at: Option<DateTime<Utc>>,
+    /// Trigger-time row whose automatic interval most recently completed. It remains visible as
+    /// complete until another Cue transition starts, including after a REST repair snapshot.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub completed_trigger_cue_id: Option<Uuid>,
     #[serde(default = "default_master")]
     pub master: f32,
     /// Last physical control position. On deliberately does not move this value.
@@ -115,6 +119,10 @@ pub struct ActivePlayback {
     pub temporary: bool,
     #[serde(default = "default_true")]
     pub enabled: bool,
+    /// A later non-zero Master may resume this exact current Cue only when its own accepted
+    /// zero-Master gesture caused the Off state. Every other Off path clears this marker.
+    #[serde(default, skip_serializing)]
+    pub fader_zero_auto_off_armed: bool,
     #[serde(default)]
     pub flash_restore_off: bool,
     /// Fast navigation bypasses Cue and per-attribute delay/fade for only this transition.
@@ -175,6 +183,36 @@ pub struct PlaybackRuntimeStatus {
     pub temporary_active: bool,
     pub temporary_master: f32,
     pub swap_active: bool,
+    pub cue_timing: Option<CueTimingRuntimeStatus>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CueTriggerTimingKind {
+    Follow,
+    Wait,
+    Link,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct CueTriggerTimingStatus {
+    pub cue_id: Uuid,
+    pub cue_number: f64,
+    pub kind: CueTriggerTimingKind,
+    pub started_at: DateTime<Utc>,
+    pub duration_millis: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct CueTimingRuntimeStatus {
+    pub cue_id: Uuid,
+    pub in_delay_millis: u64,
+    pub in_fade_millis: u64,
+    pub out_delay_millis: u64,
+    pub out_fade_millis: u64,
+    pub completion_millis: u64,
+    pub active_trigger: Option<CueTriggerTimingStatus>,
+    pub completed_trigger_cue_id: Option<Uuid>,
 }
 
 /// Tracked Dynamic-layer value for one active Cuelist source.
@@ -365,6 +403,7 @@ pub(crate) fn new_active_playback(
         paused: false,
         activated_at: now,
         paused_at: None,
+        completed_trigger_cue_id: None,
         master,
         fader_position: master,
         fader_pickup_required: false,
@@ -373,6 +412,7 @@ pub(crate) fn new_active_playback(
         master_transition: None,
         temporary: false,
         enabled,
+        fader_zero_auto_off_armed: false,
         flash_restore_off: false,
         transition_timing_bypassed: false,
         transition_fade_fallback_millis: None,

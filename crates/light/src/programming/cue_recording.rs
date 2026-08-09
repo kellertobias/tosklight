@@ -99,6 +99,11 @@ pub struct ProgrammingCuePageSlot {
 pub struct ProgrammingCueRecordingEnvironment {
     pub target: ProgrammingCueResolvedTarget,
     pub active_cue: Option<PlaybackCueReference>,
+    /// Frozen installation defaults used only if this recording creates a Cuelist.
+    pub cuelist_auto_off_at_zero_default: bool,
+    pub cuelist_auto_off_flash_release_default: bool,
+    /// Frozen server authority for taking the first Cue live after creating its topology.
+    pub start_after_first_recording: bool,
 }
 
 /// Private action-time capture passed to one adapter-owned show transaction.
@@ -159,6 +164,8 @@ impl ProgrammingCueCommit {
             name,
             self.content(),
             self.request.cue_number.map(CueNumber::value),
+            self.environment.cuelist_auto_off_at_zero_default,
+            self.environment.cuelist_auto_off_flash_release_default,
         )
     }
 
@@ -264,6 +271,8 @@ pub struct ProgrammingRecordedCue {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ProgrammingCueCommitResult {
     pub changed: bool,
+    /// True only when this transaction created the Playback/Cuelist topology.
+    pub created_topology: bool,
     pub projections: ProgrammingCueProjections,
     pub recorded_cue: ProgrammingRecordedCue,
     pub show_revision: PortableShowRevision,

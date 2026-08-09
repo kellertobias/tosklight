@@ -140,6 +140,8 @@ fn install_playback(state: &AppState) {
         restart_mode: light_playback::RestartMode::FirstCue,
         force_cue_timing: false,
         disable_cue_timing: false,
+        auto_off_at_zero: false,
+        auto_off_flash_release: false,
         chaser_xfade_millis: 0,
         chaser_xfade_percent: Some(0),
         speed_multiplier: 1.0,

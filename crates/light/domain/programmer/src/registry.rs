@@ -1,3 +1,4 @@
+use crate::alignment::ProgrammerAlignmentState;
 use crate::command_state::CommandLineState;
 use crate::selection::{ProgrammerSelection, SelectionContext};
 use crate::state::{ProgrammerOutputState, ProgrammerState};
@@ -14,7 +15,9 @@ pub struct ProgrammerRegistry {
     pub(crate) command_contexts: Arc<RwLock<HashMap<SessionId, SessionId>>>,
     pub(crate) command_states: Arc<RwLock<HashMap<SessionId, CommandLineState>>>,
     pub(crate) selection_contexts: Arc<RwLock<HashMap<SessionId, SelectionContext>>>,
+    pub(crate) alignment_contexts: Arc<RwLock<HashMap<SessionId, ProgrammerAlignmentState>>>,
     pub(crate) selection_revision: Arc<AtomicU64>,
+    pub(crate) alignment_revision: Arc<AtomicU64>,
     pub(crate) programmer_order: Arc<AtomicU64>,
     /// Cheap write stamp for normal recordable values. Low-level helpers may advance this more
     /// than once while composing one application action; the application boundary uses it only
@@ -64,7 +67,9 @@ impl ProgrammerRegistry {
             command_contexts: Arc::default(),
             command_states: Arc::default(),
             selection_contexts: Arc::default(),
+            alignment_contexts: Arc::default(),
             selection_revision: Arc::default(),
+            alignment_revision: Arc::default(),
             programmer_order: Arc::default(),
             normal_values_generations: Arc::default(),
             normal_values_revisions: Arc::default(),
@@ -224,7 +229,9 @@ impl ProgrammerRegistry {
             self.command_contexts.write().clear();
             self.command_states.write().clear();
             self.selection_contexts.write().clear();
+            self.alignment_contexts.write().clear();
             self.selection_revision.store(0, Ordering::Relaxed);
+            self.alignment_revision.store(0, Ordering::Relaxed);
             self.programmer_order.store(0, Ordering::Relaxed);
             self.normal_values_generations.write().clear();
             self.normal_values_revisions.write().clear();

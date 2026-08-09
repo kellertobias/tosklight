@@ -46,18 +46,12 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
 			await expect(
 				registry.getByRole("heading", { name: group, exact: true }),
 			).toBeVisible();
-		await expect(
-			registry.getByText("media.folder · page 1, encoder 1", {
-				exact: true,
-			}),
-		).toBeVisible();
-		await expect(
-			registry.getByText("shaper.blade.4.angle · page 2, encoder 4", {
-				exact: true,
-			}),
-		).toBeVisible();
+		const mediaFolderSlot = registry.getByLabel("media page 1 encoder 1");
+		await expect(mediaFolderSlot).toContainText("Media Folder");
+		const bladeFourAngleSlot = registry.getByLabel("shapers page 2 encoder 4");
+		await expect(bladeFourAngleSlot).toContainText("Blade 4 Angle");
 
-		await registry.getByRole("tab", { name: "Custom attributes" }).click();
+		await page.getByRole("button", { name: "Attributes", exact: true }).click();
 		await registry
 			.getByLabel("New custom attribute")
 			.fill("Test aperture mode");

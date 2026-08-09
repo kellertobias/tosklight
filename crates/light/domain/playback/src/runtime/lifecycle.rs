@@ -57,6 +57,7 @@ impl PlaybackEngine {
         for key in release {
             if let Some(playback) = self.active.get_mut(&key) {
                 playback.enabled = false;
+                playback.fader_zero_auto_off_armed = false;
                 playback.activation = None;
             }
         }
@@ -338,6 +339,7 @@ impl PlaybackEngine {
                     control_states: HashMap::new(),
                     active_dynamics: HashMap::new(),
                     dynamic_flash_states: HashMap::new(),
+                    cuelist_flash_states: HashMap::new(),
                     temporary: HashMap::new(),
                     swap_held: HashSet::new(),
                     dynamics_paused_at: None,

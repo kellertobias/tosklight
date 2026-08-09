@@ -184,6 +184,308 @@ for (const story of stories) {
 	});
 }
 
+test("Media pane follows the three-column pool and settings contract", async ({
+	page,
+}) => {
+	await page.setViewportSize({ width: 1280, height: 720 });
+	await page.goto(
+		"/iframe.html?id=tosklight-windows-media-pane--full-built-in&viewMode=story",
+	);
+	await page.evaluate(() => document.fonts.ready);
+
+	const layers = page.getByRole("list", { name: "Media layers" });
+	await expect(layers.getByRole("button")).toHaveCount(8);
+	await expect(
+		page.getByRole("button", { name: "Master output" }),
+	).toBeVisible();
+	const masterBounds = await page
+		.getByRole("button", { name: "Master output" })
+		.boundingBox();
+	expect((masterBounds?.width ?? 0) / (masterBounds?.height ?? 1)).toBeCloseTo(
+		16 / 9,
+		1,
+	);
+	const layerPreviewBounds = await layers
+		.locator(".media-layer-thumbnail")
+		.first()
+		.boundingBox();
+	expect(
+		(layerPreviewBounds?.width ?? 0) / (layerPreviewBounds?.height ?? 1),
+	).toBeCloseTo(16 / 9, 1);
+	await page.getByRole("button", { name: "Master output" }).click();
+	await expect(
+		page.getByRole("button", { name: "Master output selected" }),
+	).toHaveAttribute("aria-pressed", "true");
+
+	const folderPool = page.getByRole("region", { name: "Media folders" });
+	await expect(folderPool.locator(".pool-window-grid")).toHaveCount(1);
+	await expect(folderPool.locator(".pool-card")).toHaveCount(10);
+	await expect(folderPool.locator(".pool-card.selected")).toHaveAttribute(
+		"data-pool-slot-id",
+		"folder-city",
+	);
+	const folderOverflow = await folderPool.evaluate((element) => ({
+		clientWidth: element.clientWidth,
+		scrollWidth: element.scrollWidth,
+		maskImage: getComputedStyle(element).maskImage,
+	}));
+	expect(folderOverflow.scrollWidth).toBeGreaterThan(
+		folderOverflow.clientWidth,
+	);
+	expect(folderOverflow.maskImage).not.toBe("none");
+	await folderPool.evaluate((element) => {
+		element.scrollLeft = element.scrollWidth;
+		element.dispatchEvent(new Event("scroll"));
+	});
+	await expect(folderPool).toHaveClass(/fade-left-none/u);
+
+	await folderPool.locator('[data-pool-slot-id="folder-tour"]').click();
+	await expect(folderPool.locator(".pool-card.selected")).toHaveAttribute(
+		"data-pool-slot-id",
+		"folder-tour",
+	);
+	const files = page.getByRole("region", { name: "Media files" });
+	await expect(files.locator(".pool-window-grid")).toHaveCount(1);
+	await expect(page.getByText("Media File", { exact: true })).toBeVisible();
+	await expect(files.locator(".pool-card")).toHaveCount(40);
+	await expect(files.locator(".pool-card.empty")).toHaveCount(38);
+	await expect(files.locator(".pool-card.selected")).toHaveAttribute(
+		"data-pool-slot-id",
+		"file-tour-titles",
+	);
+	await expect(files.getByText("001", { exact: true })).toBeVisible();
+	await expect(files.getByText("Tour Titles", { exact: true })).toBeVisible();
+	await expect(files.locator("img").first()).toHaveCSS(
+		"object-position",
+		"50% 100%",
+	);
+	const mediaCardBounds = await files
+		.locator(".pool-card")
+		.first()
+		.boundingBox();
+	const mediaImageBounds = await files
+		.locator(".pool-card-media")
+		.first()
+		.boundingBox();
+	expect(
+		(mediaImageBounds?.x ?? 0) - (mediaCardBounds?.x ?? 0),
+	).toBeLessThanOrEqual(2);
+	expect(
+		(mediaCardBounds?.y ?? 0) +
+			(mediaCardBounds?.height ?? 0) -
+			((mediaImageBounds?.y ?? 0) + (mediaImageBounds?.height ?? 0)),
+	).toBeLessThanOrEqual(2);
+	await expect(page.getByText("BROWSING DRAFT", { exact: true })).toHaveCount(
+		0,
+	);
+
+	await expect(
+		page.getByRole("radiogroup", { name: "Media control section" }),
+	).toBeVisible();
+	await page.getByRole("radio", { name: "Position" }).click();
+	await expect(page.getByRole("slider", { name: "X position" })).toBeVisible();
+	await page.getByRole("radio", { name: "Frame" }).click();
+	await expect(page.getByRole("slider", { name: "Keystone" })).toBeVisible();
+	await page.getByRole("radio", { name: "Effects" }).click();
+	await expect(page.getByRole("slider", { name: "Amount" })).toBeVisible();
+
+	await page.getByRole("button", { name: "Settings" }).click();
+	const settings = page.getByRole("dialog", { name: "Media pane settings" });
+	await expect(settings.getByRole("switch")).toHaveCount(1);
+	await settings.getByText("Visible", { exact: true }).click();
+	await expect(
+		page.getByRole("region", { name: "Media secondary controls" }),
+	).toHaveCount(0);
+	await expect(
+		page.getByRole("radiogroup", { name: "Media control section" }),
+	).toHaveCount(0);
+	await expect(
+		page.getByRole("radiogroup", { name: "Content or Mask browser" }),
+	).toHaveCount(0);
+	const unifiedSections = page.getByRole("radiogroup", {
+		name: "Media window section",
+	});
+	await expect(unifiedSections).toBeVisible();
+	await expect(unifiedSections.getByRole("radio")).toHaveCount(6);
+	await expect(
+		page.getByRole("button", { name: "Settings", exact: true }),
+	).toBeVisible();
+	await page.getByRole("button", { name: "Close settings" }).click();
+	await unifiedSections.getByRole("radio", { name: "Position" }).click();
+	await expect(
+		page.getByRole("region", { name: "Media library browser" }),
+	).toHaveCount(0);
+	await expect(
+		page.getByRole("region", { name: "Media secondary controls" }),
+	).toBeVisible();
+	await expect(page.getByRole("slider", { name: "X position" })).toBeVisible();
+	await unifiedSections.getByRole("radio", { name: "Content" }).click();
+	await expect(
+		page.getByRole("region", { name: "Media library browser" }),
+	).toBeVisible();
+	await expect(
+		page.getByRole("region", { name: "Media secondary controls" }),
+	).toHaveCount(0);
+});
+
+test("Media desk preview uses the regular Media encoders", async ({ page }) => {
+	await page.setViewportSize({ width: 1280, height: 720 });
+	await page.goto(
+		"/iframe.html?id=tosklight-windows-media-pane--full-desk-preview&viewMode=story",
+	);
+	await page.evaluate(() => document.fonts.ready);
+
+	await expect(
+		page.getByRole("application", { name: "ToskLight application" }),
+	).toBeVisible();
+	const applicationBounds = await page
+		.getByRole("application", { name: "ToskLight application" })
+		.boundingBox();
+	expect(applicationBounds?.height).toBeGreaterThanOrEqual(860);
+	const header = page.locator(".media-pane-surface > .ui-window-header");
+	const headerTitleBounds = await header
+		.locator(".ui-window-title")
+		.boundingBox();
+	const headerToolsBounds = await header
+		.locator(".media-pane-header-tools")
+		.boundingBox();
+	expect(headerToolsBounds?.x ?? 0).toBeGreaterThan(
+		(headerTitleBounds?.x ?? 0) + (headerTitleBounds?.width ?? 0) + 100,
+	);
+	await expect(
+		header.getByText("DUMMY · LOCAL ONLY", { exact: true }),
+	).toHaveCount(0);
+	const firstLayer = page
+		.getByRole("list", { name: "Media layers" })
+		.getByRole("button")
+		.first();
+	await expect(
+		firstLayer.locator(".media-layer-title > span").first(),
+	).toHaveText("Layer 1");
+	await expect(firstLayer.locator(".media-layer-name")).toHaveText("Main");
+	const layerThumbnailBounds = await firstLayer
+		.locator(".media-layer-thumbnail")
+		.boundingBox();
+	const layerCopyBounds = await firstLayer
+		.locator(".media-layer-copy")
+		.boundingBox();
+	expect(layerCopyBounds?.x ?? 0).toBeGreaterThanOrEqual(
+		(layerThumbnailBounds?.x ?? 0) + (layerThumbnailBounds?.width ?? 0),
+	);
+	await expect(
+		page.getByRole("button", { name: "Media", exact: true }),
+	).toBeVisible();
+	await expect(
+		page.getByRole("group", { name: "Enc 1 · Media Folder" }),
+	).toBeVisible();
+	await expect(
+		page.getByRole("group", { name: "Enc 2 · Media File" }),
+	).toBeVisible();
+
+	await page
+		.getByRole("button", { name: "Set Enc 1 · Media Folder value" })
+		.click();
+	await page.getByRole("slider", { name: "Enc 1 · Media Folder" }).fill("11");
+	await expect(
+		page.locator('[aria-label="Media folders"] .pool-card.selected'),
+	).toHaveAttribute("data-pool-slot-id", "folder-tour");
+	await page
+		.getByRole("button", { name: "Close Enc 1 · Media Folder value" })
+		.click();
+	await page.getByRole("button", { name: "Save changes" }).click();
+
+	await page
+		.getByRole("button", { name: "Set Enc 2 · Media File value" })
+		.click();
+	await page.getByRole("slider", { name: "Enc 2 · Media File" }).fill("100");
+	await expect(
+		page.locator('[aria-label="Media files"] .pool-card.selected'),
+	).toHaveAttribute("data-pool-slot-id", "file-night-forest");
+});
+
+test("Media layer titles stay visible in every primary composition", async ({
+	page,
+}) => {
+	for (const story of [
+		"full-built-in",
+		"configurable-desktop-pane",
+		"full-desk-preview",
+	]) {
+		await page.goto(
+			`/iframe.html?id=tosklight-windows-media-pane--${story}&viewMode=story`,
+		);
+		await page.evaluate(() => document.fonts.ready);
+		const titles = page.locator(".media-layer-title");
+		await expect(titles).toHaveCount(8);
+		for (let index = 0; index < 8; index += 1) {
+			const title = titles.nth(index);
+			await expect(title.locator("span").first()).toHaveText(
+				`Layer ${index + 1}`,
+			);
+			await expect(title.locator(".media-layer-name")).not.toBeEmpty();
+			const bounds = await title.boundingBox();
+			expect(bounds?.width).toBeGreaterThan(30);
+			expect(bounds?.height).toBeGreaterThan(8);
+		}
+	}
+
+	await page.setViewportSize({ width: 1280, height: 720 });
+	await page.goto(
+		"/iframe.html?id=tosklight-windows-media-pane--full-desk-preview&viewMode=story",
+	);
+	await page.evaluate(() => document.fonts.ready);
+	const compactFirstLayer = page
+		.getByRole("list", { name: "Media layers" })
+		.getByRole("button")
+		.first();
+	const compactThumbnailBounds = await compactFirstLayer
+		.locator(".media-layer-thumbnail")
+		.boundingBox();
+	expect(
+		(compactThumbnailBounds?.width ?? 0) /
+			(compactThumbnailBounds?.height ?? 1),
+	).toBeCloseTo(16 / 9, 2);
+	await expect(
+		compactFirstLayer.locator(".media-layer-title > span").first(),
+	).toHaveText("Layer 1");
+	await expect(compactFirstLayer.locator(".media-layer-source")).toBeVisible();
+	await expect(compactFirstLayer.locator(".media-layer-opacity")).toBeVisible();
+	await expect(compactFirstLayer.locator(".media-layer-name")).toBeHidden();
+	await expect(compactFirstLayer.locator(".media-layer-mask")).toBeHidden();
+	await expect(compactFirstLayer.locator(".media-layer-color")).toBeHidden();
+	await expect(compactFirstLayer.locator(".media-layer-effect")).toBeHidden();
+
+	await page.setViewportSize({ width: 1440, height: 1080 });
+	await page.goto(
+		"/iframe.html?id=tosklight-windows-media-pane--full-desk-preview&viewMode=story",
+	);
+	await page.evaluate(() => document.fonts.ready);
+	const tallFirstLayer = page
+		.getByRole("list", { name: "Media layers" })
+		.getByRole("button")
+		.first();
+	const tallThumbnailBounds = await tallFirstLayer
+		.locator(".media-layer-thumbnail")
+		.boundingBox();
+	const tallCopyBounds = await tallFirstLayer
+		.locator(".media-layer-copy")
+		.boundingBox();
+	const tallStatusBounds = await tallFirstLayer
+		.locator(":scope > i")
+		.boundingBox();
+	expect(
+		(tallThumbnailBounds?.width ?? 0) / (tallThumbnailBounds?.height ?? 1),
+	).toBeCloseTo(16 / 9, 2);
+	expect(tallThumbnailBounds?.width).toBeLessThanOrEqual(116);
+	expect(tallCopyBounds?.x ?? 0).toBeGreaterThan(
+		(tallThumbnailBounds?.x ?? 0) + (tallThumbnailBounds?.width ?? 0),
+	);
+	expect(tallCopyBounds?.width).toBeGreaterThan(80);
+	expect(
+		(tallCopyBounds?.x ?? 0) + (tallCopyBounds?.width ?? 0),
+	).toBeLessThanOrEqual(tallStatusBounds?.x ?? 0);
+});
+
 test("Dynamics lane layout preserves full-width geometry and isolated interactions", async ({
 	page,
 }, testInfo) => {

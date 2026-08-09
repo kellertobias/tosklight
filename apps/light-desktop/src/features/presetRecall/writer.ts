@@ -4,6 +4,9 @@ import {
 	type ProgrammerCaptureModeProjection,
 } from "../programmerCaptureMode/contracts";
 import type { ProgrammerCaptureModeStore } from "../programmerCaptureMode/store";
+import type { ProgrammerPreloadValuesProjection } from "../programmerPreloadValues/contracts";
+import type { ProgrammerPreloadValuesStore } from "../programmerPreloadValues/store";
+import { ProgrammerPreloadValuesProtocolError } from "../programmerPreloadValues/transport";
 import type { ProgrammerValuesProjection } from "../programmerValues/contracts";
 import type { ProgrammerValuesStore } from "../programmerValues/store";
 import { ProgrammerValuesProtocolError } from "../programmerValues/transport";
@@ -30,6 +33,7 @@ export interface PresetRecallWriterOptions {
 	scope: PresetRecallScope;
 	showStore: ShowObjectsStore;
 	valuesStore: ProgrammerValuesStore;
+	preloadValuesStore: ProgrammerPreloadValuesStore;
 	captureModeStore: ProgrammerCaptureModeStore;
 	programmingStore: ProgrammingInteractionStore;
 	transport: PresetRecallTransport;
@@ -38,6 +42,7 @@ export interface PresetRecallWriterOptions {
 		objectId: string,
 	): Promise<PresetAuthoritySnapshot>;
 	repairValues(error: Error): Promise<void>;
+	repairPreloadValues(error: Error): Promise<void>;
 	repairCaptureMode(error: Error): Promise<void>;
 	repairSelection(error: Error): Promise<void>;
 	onError?: (error: Error | null) => void;
@@ -47,8 +52,10 @@ interface RecallAuthority {
 	showGeneration: number;
 	presetStamp: ShowObjectAuthorityStamp<"preset">;
 	valuesScope: number;
+	preloadValuesScope: number;
 	captureModeScope: number;
 	programmingScope: number;
+	target: "programmer" | "preload";
 	request: PresetRecallRequest;
 }
 
@@ -72,7 +79,12 @@ export class PresetRecallWriter implements PresetRecallActions {
 				try {
 					const outcome = await this.send(authority);
 					if (!this.isCurrent(authority)) return null;
-					assertOutcome(authority.request, outcome, this.options.scope.userId);
+					assertOutcome(
+						authority.request,
+						outcome,
+						this.options.scope.userId,
+						authority.target,
+					);
 					if (!(await this.reconcile(authority, outcome))) return null;
 					this.options.onError?.(
 						outcome.warning ? new Error(outcome.warning) : null,
@@ -145,29 +157,45 @@ export class PresetRecallWriter implements PresetRecallActions {
 		if (showRevision === null)
 			throw new Error("Authoritative Show revision is unavailable");
 		const valuesScope = this.options.valuesStore.captureScope();
+		const preloadValuesScope = this.options.preloadValuesStore.captureScope();
 		const captureModeScope = this.options.captureModeStore.captureScope();
 		const programmingScope = this.options.programmingStore.captureScope();
-		const values = this.readyValues(valuesScope);
 		const captureMode = this.readyCaptureMode(captureModeScope);
+		const target = capturesProgrammerWrites(captureMode)
+			? "preload"
+			: "programmer";
+		const values = this.readyValues(valuesScope);
+		const preloadValues =
+			target === "preload" ? this.readyPreloadValues(preloadValuesScope) : null;
 		const selection = this.readySelection(programmingScope);
 		const presetStamp = this.options.showStore.captureObjectAuthority(
 			this.options.scope.showId,
 			"preset",
 			input.objectId,
 		);
-		if (!values || !captureMode || !selection || !presetStamp || !preset)
+		if (
+			!values ||
+			(target === "preload" && !preloadValues) ||
+			!captureMode ||
+			!selection ||
+			!presetStamp ||
+			!preset
+		)
 			throw new Error("Preset recall authority is still loading");
 		return {
 			showGeneration: show.authorityGeneration,
 			presetStamp,
 			valuesScope,
+			preloadValuesScope,
 			captureModeScope,
 			programmingScope,
+			target,
 			request: request(
 				input,
 				preset,
 				showRevision,
 				values,
+				preloadValues,
 				captureMode,
 				selection,
 			),
@@ -215,8 +243,24 @@ export class PresetRecallWriter implements PresetRecallActions {
 			state.status !== "ready" ||
 			state.repairRequired ||
 			!state.projection ||
-			!this.options.captureModeStore.isScopeCurrent(scope) ||
-			capturesProgrammerWrites(state.projection)
+			!this.options.captureModeStore.isScopeCurrent(scope)
+		)
+			return null;
+		return state.projection;
+	}
+
+	private readyPreloadValues(
+		scope: number,
+	): ProgrammerPreloadValuesProjection | null {
+		const state = this.options.preloadValuesStore.getSnapshot();
+		if (
+			state.showId !== this.options.scope.showId ||
+			state.userId !== this.options.scope.userId ||
+			state.status !== "ready" ||
+			state.repairRequired ||
+			state.pendingRequestIds.length > 0 ||
+			!state.projection ||
+			!this.options.preloadValuesStore.isScopeCurrent(scope)
 		)
 			return null;
 		return state.projection;
@@ -259,6 +303,8 @@ export class PresetRecallWriter implements PresetRecallActions {
 		outcome: PresetRecallOutcome,
 	) {
 		if (!outcome.projection || outcome.eventSequence === null) return true;
+		if (outcome.target === "preload")
+			return this.reconcilePreloadValues(authority, outcome);
 		try {
 			if (
 				!this.options.valuesStore.applyProjection(
@@ -272,6 +318,29 @@ export class PresetRecallWriter implements PresetRecallActions {
 			await this.options.repairValues(asError(reason));
 		}
 		return this.valuesRevisionAtLeast(authority, outcome.programmerRevision);
+	}
+
+	private async reconcilePreloadValues(
+		authority: RecallAuthority,
+		outcome: PresetRecallOutcome & { target: "preload"; status: "changed" },
+	) {
+		if (!outcome.projection || outcome.eventSequence === null) return true;
+		try {
+			if (
+				!this.options.preloadValuesStore.applyProjection(
+					outcome.projection,
+					outcome.eventSequence,
+					authority.preloadValuesScope,
+				)
+			)
+				return false;
+		} catch (reason) {
+			await this.options.repairPreloadValues(asError(reason));
+		}
+		return this.preloadValuesRevisionAtLeast(
+			authority,
+			outcome.preloadValuesRevision ?? -1,
+		);
 	}
 
 	private async reconcileSelection(
@@ -292,6 +361,18 @@ export class PresetRecallWriter implements PresetRecallActions {
 			this.isCurrent(authority) &&
 			(this.options.valuesStore.authoritativeRevision(authority.valuesScope) ??
 				-1) >= revision
+		);
+	}
+
+	private preloadValuesRevisionAtLeast(
+		authority: RecallAuthority,
+		revision: number,
+	) {
+		return (
+			this.isCurrent(authority) &&
+			(this.options.preloadValuesStore.authoritativeRevision(
+				authority.preloadValuesScope,
+			) ?? -1) >= revision
 		);
 	}
 
@@ -318,6 +399,9 @@ export class PresetRecallWriter implements PresetRecallActions {
 	private async repairConflict(error: Error, authority: RecallAuthority) {
 		await Promise.allSettled([
 			this.options.repairValues(error),
+			...(authority.target === "preload"
+				? [this.options.repairPreloadValues(error)]
+				: []),
 			this.options.repairCaptureMode(error),
 			this.options.repairSelection(error),
 			this.repairPreset(authority),
@@ -348,6 +432,10 @@ export class PresetRecallWriter implements PresetRecallActions {
 			show.showId === this.options.scope.showId &&
 			show.authorityGeneration === authority.showGeneration &&
 			this.options.valuesStore.isScopeCurrent(authority.valuesScope) &&
+			(authority.target !== "preload" ||
+				this.options.preloadValuesStore.isScopeCurrent(
+					authority.preloadValuesScope,
+				)) &&
 			this.options.captureModeStore.isScopeCurrent(
 				authority.captureModeScope,
 			) &&
@@ -366,6 +454,7 @@ function request(
 	preset: ShowObject<"preset">,
 	showRevision: number,
 	values: ProgrammerValuesProjection,
+	preloadValues: ProgrammerPreloadValuesProjection | null,
 	captureMode: ProgrammerCaptureModeProjection,
 	selection: { revision: number; selected: readonly string[] },
 ): PresetRecallRequest {
@@ -376,6 +465,7 @@ function request(
 		expectedPresetRevision: preset.revision,
 		expectedShowRevision: showRevision,
 		expectedProgrammerRevision: values.revision,
+		expectedPreloadValuesRevision: preloadValues?.revision ?? null,
 		expectedCaptureModeRevision: captureMode.revision,
 		expectedSelectionRevision: selection.revision,
 		selectedFixtureCount: selection.selected.length,
@@ -386,14 +476,21 @@ function assertOutcome(
 	request: PresetRecallRequest,
 	outcome: PresetRecallOutcome,
 	userId: string,
+	target: "programmer" | "preload",
 ) {
 	if (outcome.preset.id !== request.presetId)
 		throw new Error("Preset recall response object does not match");
-	if (outcome.projection && outcome.projection.userId !== userId)
-		throw new ProgrammerValuesProtocolError(
-			"Preset recall returned another user's Programmer values",
-			outcome.eventSequence,
-		);
+	if (outcome.target !== target)
+		throw new Error("Preset recall response values target does not match");
+	if (outcome.projection && outcome.projection.userId !== userId) {
+		const message = `Preset recall returned another user's ${outcome.target === "preload" ? "Preload Programmer" : "Programmer"} values`;
+		if (outcome.target === "preload")
+			throw new ProgrammerPreloadValuesProtocolError(
+				message,
+				outcome.eventSequence,
+			);
+		throw new ProgrammerValuesProtocolError(message, outcome.eventSequence);
+	}
 }
 
 function asError(reason: unknown) {

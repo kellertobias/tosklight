@@ -141,13 +141,15 @@ export function projectionForPreset(
 		view_direction:
 			preset === "top"
 				? { x: 0, y: 0, z: -1 }
-				: preset === "front"
-					? { x: 0, y: 1, z: 0 }
-					: preset === "back"
-						? { x: 0, y: -1, z: 0 }
-						: preset === "left"
-							? { x: 1, y: 0, z: 0 }
-							: { x: -1, y: 0, z: 0 },
+				: preset === "bottom"
+					? { x: 0, y: 0, z: 1 }
+					: preset === "front"
+						? { x: 0, y: 1, z: 0 }
+						: preset === "back"
+							? { x: 0, y: -1, z: 0 }
+							: preset === "left"
+								? { x: 1, y: 0, z: 0 }
+								: { x: -1, y: 0, z: 0 },
 		rotation_degrees: 0,
 		preset,
 	};

@@ -9,8 +9,9 @@ Select fixtures, press `[REC]`, and choose a Group target or enter its number. N
 A Group reference remains connected to its source; dereference it when a frozen fixture list is required. Derived Groups retain their ordering rule and source relationship. See [Command Line Reference](../30-Programmer/01-command-line.md) for exact syntax.
 
 Plain-click a Group to select its live membership. Double-press it quickly to select the current
-members as frozen fixtures. Right-click, touch-hold, or enter `[SET] [GRP] <number> [ENTER]` to open
-the same Group settings modal. **General** contains only name, icon, and color. **Projection** maps
+members as frozen fixtures. Right-clicking a populated Group is the pointer shortcut for `[SET]`
+then tapping that Group: it selects the Group as the source for a Playback assignment. Touch-hold,
+or enter `[SET] [GRP] <number> [ENTER]`, to open the Group settings modal. **General** contains only name, icon, and color. **Projection** maps
 Stage X/Y/Z positions into a 2D plane. **Phase** ranks that plane into the one-dimensional order
 each fixture takes its phase from, as Grid, Radial, or Radar. Fixtures that share a rank receive the
 same point of a `THRU` spread; members without a valid Stage position remain visible and receive

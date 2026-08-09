@@ -112,6 +112,28 @@ export function AppProvider({ children }: PropsWithChildren) {
 			if (kind) dispatch({ type: "OPEN_BUILTIN", kind });
 		},
 	});
+	useControlSurfaceTarget({
+		id: "app-desk-commands",
+		priority: 100,
+		accepts: ({ type }) => type === "desk_command",
+		handle: (intent) => {
+			if (intent.type !== "desk_command") return;
+			if (intent.command === "home") {
+				dispatch({ type: "SET_DOCK_MODE", mode: "desks" });
+				return;
+			}
+			if (intent.command === "playbacks") {
+				dispatch({ type: "SET_CONTROL_MODE", value: "playbacks" });
+				return;
+			}
+			if (intent.command === "setup" || intent.command === "menu") {
+				dispatch({ type: "SET_MODAL", modal: "setupOpen", value: true });
+				return;
+			}
+			const kind = intent.command === "cues" ? "cuelists" : intent.command;
+			dispatch({ type: "OPEN_BUILTIN", kind });
+		},
+	});
 	const value = useMemo(() => ({ state, dispatch }), [state]);
 	return (
 		<AppContext.Provider value={value}>

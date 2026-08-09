@@ -11,10 +11,10 @@ pub(crate) struct ProgrammerTransition {
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub(crate) struct ProgrammerTransitionKey {
-    programmer_id: ProgrammerId,
-    source: ProgrammerTransitionSource,
-    fixture_id: FixtureId,
-    attribute: AttributeKey,
+    pub(crate) programmer_id: ProgrammerId,
+    pub(crate) source: ProgrammerTransitionSource,
+    pub(crate) fixture_id: FixtureId,
+    pub(crate) attribute: AttributeKey,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -27,6 +27,35 @@ pub(crate) enum ProgrammerTransitionSource {
 }
 
 impl Engine {
+    pub(crate) fn programmer_transition_key(
+        &self,
+        value: &TimedValue,
+        programmer_id: ProgrammerId,
+        source: ProgrammerTransitionSource,
+    ) -> ProgrammerTransitionKey {
+        ProgrammerTransitionKey {
+            programmer_id,
+            source,
+            fixture_id: value.fixture_id,
+            attribute: value.attribute.clone(),
+        }
+    }
+
+    pub(crate) fn track_immediate_programmer_value(
+        &self,
+        key: ProgrammerTransitionKey,
+        value: &TimedValue,
+    ) {
+        self.programmer_transitions.lock().insert(
+            key,
+            ProgrammerTransition {
+                changed_at: value.changed_at,
+                from: value.value.clone(),
+                target: value.value.clone(),
+            },
+        );
+    }
+
     pub(crate) fn faded_programmer_value(
         &self,
         mut value: TimedValue,
@@ -36,12 +65,7 @@ impl Engine {
         source: ProgrammerTransitionSource,
         snap: bool,
     ) -> TimedValue {
-        let key = ProgrammerTransitionKey {
-            programmer_id,
-            source,
-            fixture_id: value.fixture_id,
-            attribute: value.attribute.clone(),
-        };
+        let key = self.programmer_transition_key(&value, programmer_id, source);
         if snap {
             self.programmer_transitions.lock().remove(&key);
             let elapsed = (now - value.changed_at).num_milliseconds().max(0) as u64;

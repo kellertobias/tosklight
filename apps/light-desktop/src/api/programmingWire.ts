@@ -133,7 +133,7 @@ function validateEventSource(value: unknown, path: string) {
 			"keyboard",
 			"osc",
 			"http",
-			"midi",
+			"extension",
 			"matter",
 			"cue",
 			"timecode",

@@ -280,7 +280,7 @@ fn route_programmer_osc_action(
             serde_json::json!({"desk_alias":desk_alias,"desk_id":session.desk.id,"session_id":session.id,"request_id":request_id,"action":"set","source":"osc"}),
         );
         true
-    } else if matches!(action, "escape" | "menu" | "prog-playback") {
+    } else if matches!(action, "align" | "escape" | "menu" | "prog-playback") {
         emit(
             state,
             "desk_action",

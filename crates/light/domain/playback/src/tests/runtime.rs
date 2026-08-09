@@ -1,6 +1,106 @@
 use super::*;
 
 #[test]
+fn runtime_timing_projects_effective_phases_and_retains_completed_trigger_until_retrigger() {
+    let outgoing = FixtureId::new();
+    let incoming = FixtureId::new();
+    let mut first = Cue::new(1.0);
+    first.out_delay_millis = Some(200);
+    first.out_fade_millis = Some(1_800);
+    first.changes.push(value(outgoing, "intensity", 1.0));
+    first.changes.push(value(incoming, "intensity", 0.0));
+    let mut second = Cue::new(2.0);
+    second.delay_millis = 100;
+    second.fade_millis = 900;
+    second.out_delay_millis = Some(200);
+    second.out_fade_millis = Some(1_800);
+    second.changes.push(value(outgoing, "intensity", 0.0));
+    second.changes.push(value(incoming, "intensity", 1.0));
+    let mut third = Cue::new(3.0);
+    third.trigger = CueTrigger::Wait { delay_millis: 300 };
+    let third_id = third.id;
+    let cue_list = list(vec![first, second, third]);
+    let id = cue_list.id;
+    let started = Utc::now();
+    let mut engine = PlaybackEngine::default();
+    engine.register(cue_list).unwrap();
+    engine.go_at(id, started).unwrap();
+    engine.go_at(id, started).unwrap();
+
+    let status = engine.runtime_status().remove(0);
+    let timing = status.cue_timing.unwrap();
+    assert_eq!(
+        (
+            timing.in_delay_millis,
+            timing.in_fade_millis,
+            timing.out_delay_millis,
+            timing.out_fade_millis,
+            timing.completion_millis,
+        ),
+        (100, 900, 200, 1_800, 2_000)
+    );
+    let trigger = timing.active_trigger.unwrap();
+    assert_eq!(trigger.cue_id, third_id);
+    assert_eq!(trigger.kind, CueTriggerTimingKind::Wait);
+    assert_eq!(trigger.started_at, started);
+    assert_eq!(trigger.duration_millis, 300);
+
+    engine.tick(started + ChronoDuration::milliseconds(2_300), None);
+    let timing = engine.runtime_status().remove(0).cue_timing.unwrap();
+    assert_eq!(timing.cue_id, third_id);
+    assert_eq!(timing.completed_trigger_cue_id, Some(third_id));
+
+    engine
+        .jump_at(id, 3.0, started + ChronoDuration::milliseconds(2_400))
+        .unwrap();
+    let status = engine.runtime_status().remove(0);
+    assert_eq!(
+        status.playback.activated_at,
+        started + ChronoDuration::milliseconds(2_400)
+    );
+    assert_eq!(
+        status.cue_timing.unwrap().completed_trigger_cue_id,
+        None,
+        "a manual same-Cue retrigger starts a fresh timing generation"
+    );
+}
+
+#[test]
+fn runtime_timing_associates_link_delay_with_its_source_row() {
+    let mut source = Cue::new(1.0);
+    let skipped = Cue::new(2.0);
+    let destination = Cue::new(3.0);
+    source.trigger = CueTrigger::Link {
+        cue_id: destination.id,
+        delay_millis: 250,
+    };
+    let source_id = source.id;
+    let destination_id = destination.id;
+    let cue_list = list(vec![source, skipped, destination]);
+    let id = cue_list.id;
+    let started = Utc::now();
+    let mut engine = PlaybackEngine::default();
+    engine.register(cue_list).unwrap();
+    engine.go_at(id, started).unwrap();
+
+    let trigger = engine
+        .runtime_status()
+        .remove(0)
+        .cue_timing
+        .unwrap()
+        .active_trigger
+        .unwrap();
+    assert_eq!(trigger.cue_id, source_id);
+    assert_eq!(trigger.kind, CueTriggerTimingKind::Link);
+    assert_eq!(trigger.started_at, started);
+
+    engine.tick(started + ChronoDuration::milliseconds(250), None);
+    let timing = engine.runtime_status().remove(0).cue_timing.unwrap();
+    assert_eq!(timing.cue_id, destination_id);
+    assert_eq!(timing.completed_trigger_cue_id, Some(source_id));
+}
+
+#[test]
 fn active_cue_dynamic_projection_tracks_fat_and_honors_release() {
     let fixture = FixtureId::new();
     let mut one = Cue::new(1.0);

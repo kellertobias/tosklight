@@ -6,6 +6,7 @@ use crate::{
 use chrono::{DateTime, Utc};
 use light_core::{AttributeKey, MergeMode, ProgrammerId, TimedValue};
 use light_programmer::{GroupProgrammerValue, ProgrammerOutputState};
+use std::{cell::RefCell, collections::HashSet};
 use std::{collections::HashMap, sync::Arc};
 
 type GroupValues = HashMap<String, HashMap<AttributeKey, GroupProgrammerValue>>;
@@ -21,7 +22,7 @@ enum ProgrammerValueSource<'a> {
 }
 
 struct SourceContext {
-    transition: Option<ProgrammerTransitionSource>,
+    transition: ProgrammerTransitionSource,
     replacement: Option<ContributionSourceId>,
 }
 
@@ -34,6 +35,7 @@ struct ProgrammerValueResolver<'a> {
     programmer_id: ProgrammerId,
     priority: i16,
     has_replacements: bool,
+    active_transition_keys: RefCell<HashSet<crate::ProgrammerTransitionKey>>,
 }
 
 pub(crate) fn programmers_need_underlay(programmers: &[ProgrammerOutputState]) -> bool {
@@ -68,6 +70,13 @@ impl Engine {
         sampled: &[ContributionBatch],
     ) -> Vec<EngineContribution> {
         let has_replacements = sampled.iter().any(ContributionBatch::has_replacements);
+        let active_programmers = programmers
+            .iter()
+            .map(|programmer| programmer.id)
+            .collect::<HashSet<_>>();
+        self.programmer_transitions
+            .lock()
+            .retain(|key, _| active_programmers.contains(&key.programmer_id));
         programmers
             .into_iter()
             .flat_map(|programmer| {
@@ -112,6 +121,7 @@ impl Engine {
             programmer_id: id,
             priority,
             has_replacements,
+            active_transition_keys: RefCell::new(HashSet::new()),
         };
         let mut contributions = resolver.fixture_values(values, ProgrammerValueSource::Live);
         for action in transient_values {
@@ -123,6 +133,10 @@ impl Engine {
         contributions
             .extend(resolver.fixture_values(preload_active, ProgrammerValueSource::Preload));
         contributions.extend(resolver.group_values(group_values, preload_group_active));
+        let active_transition_keys = resolver.active_transition_keys.into_inner();
+        self.programmer_transitions
+            .lock()
+            .retain(|key, _| key.programmer_id != id || active_transition_keys.contains(key));
         programmer_winners(contributions)
     }
 
@@ -135,8 +149,9 @@ impl Engine {
         programmer_id: ProgrammerId,
         source: ProgrammerTransitionSource,
     ) -> TimedValue {
-        let underlying =
-            underlay.and_then(|values| values.value(value.fixture_id, &value.attribute));
+        let underlying = underlay
+            .and_then(|values| values.value(value.fixture_id, &value.attribute))
+            .or_else(|| generation.default_value(value.fixture_id, &value.attribute));
         let snap = generation.attribute_is_snap(value.fixture_id, &value.attribute);
         self.faded_programmer_value(value, now, underlying, programmer_id, source, snap)
     }
@@ -148,7 +163,7 @@ impl ProgrammerValueResolver<'_> {
         values: Vec<TimedValue>,
         source: ProgrammerValueSource<'_>,
     ) -> Vec<TimedValue> {
-        let context = self.source_context(source, values.iter().any(|value| value.fade));
+        let context = self.source_context(source);
         values
             .into_iter()
             .filter_map(|value| self.resolve_value(value, &context))
@@ -187,8 +202,7 @@ impl ProgrammerValueResolver<'_> {
         let Some(ranking) = self.generation.group_ranking(group_id) else {
             return Vec::new();
         };
-        let context =
-            self.source_context(source, attributes.values().any(|attribute| attribute.fade));
+        let context = self.source_context(source);
         let count = ranking.rank_count;
         ranking
             .ordered_fixture_ids
@@ -218,9 +232,9 @@ impl ProgrammerValueResolver<'_> {
             .collect()
     }
 
-    fn source_context(&self, source: ProgrammerValueSource<'_>, fades: bool) -> SourceContext {
+    fn source_context(&self, source: ProgrammerValueSource<'_>) -> SourceContext {
         SourceContext {
-            transition: fades.then(|| source.transition()),
+            transition: source.transition(),
             replacement: self
                 .has_replacements
                 .then(|| source.replacement(self.programmer_id)),
@@ -228,6 +242,14 @@ impl ProgrammerValueResolver<'_> {
     }
 
     fn resolve_value(&self, value: TimedValue, source: &SourceContext) -> Option<TimedValue> {
+        let transition_key = self.engine.programmer_transition_key(
+            &value,
+            self.programmer_id,
+            source.transition.clone(),
+        );
+        self.active_transition_keys
+            .borrow_mut()
+            .insert(transition_key.clone());
         let value = if value.fade {
             self.engine.resolve_programmer_fade(
                 value,
@@ -235,12 +257,11 @@ impl ProgrammerValueResolver<'_> {
                 self.now,
                 self.underlay,
                 self.programmer_id,
-                source
-                    .transition
-                    .clone()
-                    .expect("faded sources have transition identity"),
+                source.transition.clone(),
             )
         } else {
+            self.engine
+                .track_immediate_programmer_value(transition_key, &value);
             value
         };
         let replaced = source

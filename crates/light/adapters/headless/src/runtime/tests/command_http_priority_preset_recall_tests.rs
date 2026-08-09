@@ -355,6 +355,151 @@ async fn preset_recall_uses_one_portable_show_graph_and_one_values_event() {
 }
 
 #[tokio::test]
+async fn preset_recall_http_redirects_fixture_and_live_group_values_to_pending_preload() {
+    let scenario = CommandHttpScenario::new().await;
+    let show_id = scenario.create_and_open_show("Preload Preset recall route").await;
+    let fixture = light_core::FixtureId::new();
+    let intensity = light_core::AttributeKey::intensity();
+    let pan = light_core::AttributeKey("pan".into());
+    let group = light_programmer::GroupDefinition {
+        id: "5".into(),
+        name: "Live Preload group".into(),
+        fixtures: vec![fixture],
+        ..Default::default()
+    };
+    assert_eq!(
+        scenario
+            .put_active_object(
+                &show_id,
+                "group",
+                "5",
+                0,
+                serde_json::to_value(group).unwrap(),
+            )
+            .await
+            .status(),
+        StatusCode::OK
+    );
+    let preset = light_programmer::Preset {
+        name: "Pending look".into(),
+        family: light_programmer::PresetFamily::Intensity,
+        number: 1,
+        values: HashMap::from([(
+            fixture,
+            HashMap::from([(
+                intensity,
+                light_core::AttributeValue::Normalized(0.4),
+            )]),
+        )]),
+        group_values: HashMap::from([(
+            "5".into(),
+            HashMap::from([(pan, light_core::AttributeValue::Normalized(0.7))]),
+        )]),
+    };
+    assert_eq!(
+        scenario
+            .put_active_object(
+                &show_id,
+                "preset",
+                "1.1",
+                0,
+                serde_json::to_value(preset).unwrap(),
+            )
+            .await
+            .status(),
+        StatusCode::OK
+    );
+    let show = scenario.state.active_show.current().clone().unwrap();
+    let show_revision = ShowStore::open(&show.path)
+        .unwrap()
+        .portable_revision()
+        .unwrap()
+        .value();
+    let engine_revision = scenario.state.output.snapshot().revision;
+    scenario
+        .state
+        .output
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![operational_fixture(fixture)].into(),
+            revision: engine_revision + 1,
+            ..EngineSnapshot::default()
+        })
+        .unwrap();
+    let selection_revision = scenario.state.programming.select_expression(
+        scenario.session.id,
+        vec![fixture],
+        light_programmer::SelectionExpression::LiveGroup {
+            group_id: "5".into(),
+            rule: light_programmer::SelectionRule::All,
+        },
+    );
+    assert!(
+        scenario
+            .state
+            .programming
+            .arm_preload(scenario.session.id, true)
+    );
+
+    let mut request =
+        preset_recall_request("preset-recall-preload", show_revision, selection_revision, 0);
+    request["expected_preload_values_revision"] = serde_json::json!(0);
+    let response = scenario
+        .preset_recall_action(&show_id, Some(&scenario.token), request)
+        .await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers()[header::ETAG], "\"0\"");
+    let recalled: light_wire::v2::preset_recall::PresetRecallOutcome =
+        serde_json::from_value(json(response).await).unwrap();
+    assert_eq!(
+        recalled.target,
+        Some(light_wire::v2::preset_recall::PresetRecallTarget::Preload)
+    );
+    assert_eq!(recalled.programmer_revision, 0);
+    assert_eq!(recalled.preload_values_revision, Some(1));
+    assert!(recalled.preload_event_sequence.is_some());
+    assert!(matches!(
+        recalled.outcome,
+        light_wire::v2::preset_recall::PresetRecallActionState::Changed {
+            projection: None,
+            event_sequence: None,
+        }
+    ));
+    let projection = recalled
+        .preload_projection
+        .expect("redirected recall returns pending Preload authority");
+    assert_eq!(projection.revision, 1);
+    assert_eq!(projection.fixture_values.len(), 1);
+    assert_eq!(projection.group_values.len(), 1);
+    let programmer = scenario
+        .state
+        .programming
+        .get(scenario.session.id)
+        .unwrap();
+    assert!(programmer.values.is_empty());
+    assert!(programmer.group_values.is_empty());
+    assert!(programmer.preload_active.is_empty());
+    assert!(programmer.preload_group_active.is_empty());
+    assert_eq!(programmer.active_context, None);
+    assert_eq!(
+        scenario
+            .state
+            .programming
+            .normal_values_revision(scenario.session.user.id),
+        0
+    );
+    assert_eq!(
+        values_event_count(&scenario.state, scenario.session.user.id.0),
+        0
+    );
+    assert_eq!(
+        preload_values_event_count(&scenario.state, scenario.session.user.id.0),
+        1
+    );
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}
+
+#[tokio::test]
 async fn priority_and_preset_typed_ws_actions_keep_exact_authority_and_lock_policy() {
     let scenario = CommandHttpScenario::new().await;
     let priority = || {
@@ -434,6 +579,7 @@ async fn priority_and_preset_typed_ws_actions_keep_exact_authority_and_lock_poli
                         expected_preset_revision: 1,
                         expected_show_revision: show_revision,
                         expected_programmer_revision: 0,
+                        expected_preload_values_revision: None,
                         expected_capture_mode_revision: 0,
                         expected_selection_revision: selection_revision,
                     },
@@ -446,6 +592,7 @@ async fn priority_and_preset_typed_ws_actions_keep_exact_authority_and_lock_poli
     let payload = first.payload.unwrap();
     assert_eq!(payload["status"], "changed");
     assert_eq!(payload["disposition"], "recalled");
+    assert!(payload.get("target").is_none());
     assert_eq!(payload["preset"]["id"], "1.3");
     let repeated = dispatch_live_action(&scenario.state, &scenario.session, recall());
     assert!(!repeated.ok);
@@ -493,6 +640,15 @@ fn values_event_count(state: &AppState, user_id: Uuid) -> usize {
         state.events.replay(0, &filter)
     else {
         panic!("values events should remain replayable")
+    };
+    events.len()
+}
+
+fn preload_values_event_count(state: &AppState, user_id: Uuid) -> usize {
+    let filter = light_application::EventFilter::default()
+        .with_object(light_application::EventObject::programming_preload_values(user_id));
+    let light_application::EventReplay::Events(events) = state.events.replay(0, &filter) else {
+        panic!("Preload values events should remain replayable")
     };
     events.len()
 }

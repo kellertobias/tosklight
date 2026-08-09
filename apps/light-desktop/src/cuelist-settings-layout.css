@@ -174,8 +174,28 @@
 }
 
 .cue-settings-compact-fallback .ui-button.is-active {
+	position: relative;
+	padding-right: 38px;
 	color: var(--cyan);
-	box-shadow: inset 3px 0 var(--cyan);
+	box-shadow: inset 0 0 0 3px var(--pool-set-color, #1bd6ec);
+}
+
+.cue-settings-compact-fallback .ui-button.is-active::after {
+	position: absolute;
+	top: 50%;
+	right: 4px;
+	transform: translateY(-50%);
+	padding: 2px 4px;
+	border: 1px solid currentColor;
+	border-radius: 3px;
+	background: #080b0fe8;
+	color: var(--pool-set-color, #1bd6ec);
+	content: "SET";
+	font-size: 8px;
+	font-weight: 800;
+	line-height: 1;
+	letter-spacing: 0.08em;
+	pointer-events: none;
 }
 
 .cue-trigger-modal {
@@ -190,6 +210,13 @@
 
 .cue-trigger-options .ui-button {
 	min-height: 64px;
+}
+
+.cue-trigger-options .ui-button small {
+	display: block;
+	margin-top: 4px;
+	font-weight: 400;
+	line-height: 1.25;
 }
 
 .cuelist-settings-backdrop {
@@ -303,6 +330,36 @@
 
 .cue-table tbody tr[aria-disabled="true"] {
 	cursor: default;
+}
+
+.cue-table tbody tr.cue-command-target {
+	position: relative;
+	box-shadow: inset 0 0 0 3px var(--cue-command-target-color);
+}
+
+.cue-table tbody tr.cue-command-target.copy-target {
+	--cue-command-target-color: var(--pool-copy-color, #57a8ff);
+}
+
+.cue-table tbody tr.cue-command-target.move-target {
+	--cue-command-target-color: var(--pool-move-color, #b988ff);
+}
+
+.cue-table tbody tr.cue-command-target.delete-target {
+	--cue-command-target-color: var(--pool-delete-color, #ff4e55);
+}
+
+.cue-command-target-badge {
+	display: inline-flex;
+	margin-left: 6px;
+	padding: 2px 5px;
+	border: 1px solid currentColor;
+	border-radius: 3px;
+	color: var(--cue-command-target-color);
+	font-size: 9px;
+	font-weight: 800;
+	line-height: 1;
+	text-transform: none;
 }
 
 .cuelist-settings-close-confirm {

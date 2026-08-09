@@ -150,7 +150,7 @@ pub enum EventActionSource {
     Keyboard,
     Osc,
     Http,
-    Midi,
+    Extension,
     Matter,
     Cue,
     Timecode,
@@ -725,6 +725,9 @@ pub struct OutputRouteChange {
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 pub struct OutputRoute {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub target: Option<OutputRouteTarget>,
     pub protocol: OutputProtocol,
     pub logical_universe: u16,
     pub destination_universe: u16,
@@ -732,6 +735,13 @@ pub struct OutputRoute {
     pub destination: Option<String>,
     pub enabled: bool,
     pub minimum_slots: u16,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum OutputRouteTarget {
+    Network,
+    UsbEndpoint { endpoint_id: String },
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

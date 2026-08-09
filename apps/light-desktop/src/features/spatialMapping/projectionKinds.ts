@@ -35,6 +35,7 @@ export const PROJECTION_PRESETS: ReadonlyArray<{
 	label: string;
 }> = [
 	{ value: "top", label: "Top" },
+	{ value: "bottom", label: "Bottom" },
 	{ value: "front", label: "Front" },
 	{ value: "back", label: "Back" },
 	{ value: "left", label: "Left" },
@@ -46,6 +47,11 @@ const FALLBACK_DIRECTION: Position3d = { x: 0, y: 0, z: -1 };
 
 function clamp(value: number, minimum: number, maximum: number) {
 	return Math.max(minimum, Math.min(maximum, value));
+}
+
+function cleanAngle(value: number) {
+	const rounded = Math.round(value * 1_000_000_000) / 1_000_000_000;
+	return Object.is(rounded, -0) ? 0 : rounded;
 }
 
 /**
@@ -60,8 +66,10 @@ export function directionAngles(direction: Position3d) {
 	const length = Math.hypot(direction.x, direction.y, direction.z);
 	if (length <= 1e-12) return { azimuth: 0, elevation: -90 };
 	return {
-		azimuth: (Math.atan2(direction.y, direction.x) * 180) / Math.PI,
-		elevation: (Math.asin(clamp(direction.z / length, -1, 1)) * 180) / Math.PI,
+		azimuth: cleanAngle((Math.atan2(direction.y, direction.x) * 180) / Math.PI),
+		elevation: cleanAngle(
+			(Math.asin(clamp(direction.z / length, -1, 1)) * 180) / Math.PI,
+		),
 	};
 }
 
@@ -115,10 +123,8 @@ export function withProjectionKind(
  * Planar keeps its position in the data because the Radial and Radar shapes measure their
  * centres from it, but the projection itself does not read it, so it is not offered.
  *
- * The two placed kinds are aimed by angle rather than by direction components: azimuth swings
- * the axis, elevation pivots it, and Rotation is the last turn about it — where the spread
- * starts. Planar keeps its components, because a view preset names one and the numbers are how
- * a preset reads back.
+ * Every kind is aimed by the same operator-facing angles: azimuth swings the direction,
+ * elevation pivots it, and Rotation is the last turn about it — where the spread starts.
  */
 export function projectionFields(projection: SpatialProjection): ReadonlyArray<{
 	key: string;
@@ -138,16 +144,6 @@ export function projectionFields(projection: SpatialProjection): ReadonlyArray<{
 			preset: null,
 		}),
 	});
-	const direction = (axis: "x" | "y" | "z") => ({
-		key: `direction-${axis}`,
-		label: `Direction ${axis.toUpperCase()}`,
-		value: projection.view_direction[axis],
-		apply: (next: number) => ({
-			...projection,
-			view_direction: { ...projection.view_direction, [axis]: next },
-			preset: null,
-		}),
-	});
 	const rotation = {
 		key: "rotation",
 		label: "Rotation",
@@ -159,9 +155,6 @@ export function projectionFields(projection: SpatialProjection): ReadonlyArray<{
 			preset: null,
 		}),
 	};
-
-	if (kind === "planar")
-		return [direction("x"), direction("y"), direction("z"), rotation];
 
 	const angles = directionAngles(projection.view_direction);
 	const aim = (which: "azimuth" | "elevation") => ({
@@ -179,9 +172,7 @@ export function projectionFields(projection: SpatialProjection): ReadonlyArray<{
 		}),
 	});
 	return [
-		position("x"),
-		position("y"),
-		position("z"),
+		...(kind === "planar" ? [] : [position("x"), position("y"), position("z")]),
 		aim("azimuth"),
 		aim("elevation"),
 		rotation,

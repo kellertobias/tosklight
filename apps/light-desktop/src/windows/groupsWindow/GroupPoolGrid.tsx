@@ -7,6 +7,7 @@ import { WindowScrollArea } from "@tosklight/ui/window-kit";
 import { type MutableRefObject, useRef } from "react";
 import type { CommandLineSurface } from "../../components/control/commandLine/useCommandLineSurface";
 import { requestUpdateTarget } from "../../components/control/updateWorkflow";
+import { poolMutationTarget } from "../../features/controlSurfaceInteraction/poolCommandTarget";
 import { useSetInteraction } from "../../features/controlSurfaceInteraction/SetInteractionProvider";
 import { useActiveShowId } from "../../features/deskSnapshot/DeskSnapshotState";
 import {
@@ -30,11 +31,14 @@ interface GroupPoolCardSlotProps
 	selected: boolean;
 	storeArmed: boolean;
 	updateArmed: boolean;
+	setTarget: boolean;
+	deleteTarget: boolean;
 	poolPresentation: ReturnType<typeof usePoolPresentationConfiguration>;
 	showId: string;
 	surfaceKey: string;
 	setInteraction: ReturnType<typeof useSetInteraction>;
 	select(): void;
+	chooseSetSource(group: Group): void;
 	dereference(group: Group): void;
 	onOpenSettings(id: string): void;
 	hold: MutableRefObject<number | null>;
@@ -47,11 +51,14 @@ function GroupPoolCardSlot({
 	selected,
 	storeArmed,
 	updateArmed,
+	setTarget,
+	deleteTarget,
 	poolPresentation,
 	showId,
 	surfaceKey,
 	setInteraction,
 	select,
+	chooseSetSource,
 	dereference,
 	onOpenSettings,
 	knownFixtureIds,
@@ -84,6 +91,8 @@ function GroupPoolCardSlot({
 			selected={selected}
 			storeArmed={storeArmed}
 			updateArmed={updateArmed}
+			setTarget={setTarget}
+			deleteTarget={deleteTarget}
 			poolPresentation={poolPresentation}
 			showId={showId}
 			surfaceKey={surfaceKey}
@@ -102,11 +111,66 @@ function GroupPoolCardSlot({
 				held.current = false;
 				return consumed;
 			}}
-			openSettings={() => openSettings("context_menu")}
+			openSettings={() => group && chooseSetSource(group)}
 			dereference={() => group && dereference(group)}
 			select={select}
 		/>
 	);
+}
+
+function groupPoolSlots(cards: (Group | null)[]): PoolSlotViewModel<string>[] {
+	return cards.flatMap((group, index) =>
+		group
+			? [
+					{
+						id: group.id,
+						position: index,
+						card: {
+							number: index + 1,
+							primary: group.body.name ?? `Group ${index + 1}`,
+						},
+					},
+				]
+			: [],
+	);
+}
+
+function groupSetSourceChooser(
+	setInteraction: ReturnType<typeof useSetInteraction>,
+	command: CommandLineSurface,
+	dispatch: ReturnType<typeof useApp>["dispatch"],
+) {
+	return async (group: Group) => {
+		if (!setInteraction?.state) {
+			await command.replace(`SET GROUP ${group.id}`, false);
+			dispatch({ type: "SET_PLAYBACK_SET_ARMED", value: false });
+			return;
+		}
+		if (setInteraction.state.phase === "idle") {
+			if (!(await setInteraction.arm("context_menu"))) return;
+		} else if (setInteraction.state.phase !== "set_armed") return;
+		await setInteraction.chooseGroup(
+			{ objectId: group.id, objectRevision: group.revision },
+			"context_menu",
+		);
+	};
+}
+
+function groupDereferencer(
+	setInteraction: ReturnType<typeof useSetInteraction>,
+	groupSelection: ReturnType<typeof useGroupSelectionActions>,
+) {
+	return (group: Group) => {
+		const scope = setInteraction?.state?.scope;
+		if (scope)
+			void setInteraction.direct({
+				type: "select_group_frozen",
+				source: "touch",
+				scope,
+				group: { objectId: group.id, objectRevision: group.revision },
+			});
+		void groupSelection.selectFrozen(group);
+	};
 }
 
 export function GroupPoolGrid({
@@ -136,12 +200,30 @@ export function GroupPoolGrid({
 	const poolPresentation = usePoolPresentationConfiguration();
 	const showId = useActiveShowId() ?? "unresolved";
 	const surfaceKey = poolSurfaceKey(showId, "group", paneId);
+	const chooseSetSource = groupSetSourceChooser(
+		setInteraction,
+		command,
+		dispatch,
+	);
+	const dereference = groupDereferencer(setInteraction, groupSelection);
 	const hold = useRef<number | null>(null);
 	const held = useRef(false);
+	const mutationTarget = poolMutationTarget(command.text);
+	const setTargetArmed =
+		setInteraction?.state?.phase === "set_armed" ||
+		/^SET$/iu.test(command.text.trim());
 	const selectCard = (group: Group | null, index: number) => {
 		const id = group?.id ?? String(index + 1);
 		if (state.updateArmed) {
 			requestUpdateTarget({ family: { type: "group" }, object_id: id });
+			return;
+		}
+		if (
+			group &&
+			mutationTarget?.operation === "delete" &&
+			mutationTarget.phase === "source"
+		) {
+			void command.execute(`DELETE GROUP ${group.id}`);
 			return;
 		}
 		if (group && setInteraction?.state?.phase === "set_armed") {
@@ -191,32 +273,7 @@ export function GroupPoolGrid({
 				: emptyGroupRecordingTarget(id),
 		).finally(() => dispatch({ type: "SET_STORE_ARMED", value: false }));
 	};
-	const slots: PoolSlotViewModel<string>[] = cards.flatMap((group, index) =>
-		group
-			? [
-					{
-						id: group.id,
-						position: index,
-						card: {
-							number: index + 1,
-							primary: group.body.name ?? `Group ${index + 1}`,
-						},
-					},
-				]
-			: [],
-	);
-	const dereference = (group: Group) => {
-		const scope = setInteraction?.state?.scope;
-		if (scope)
-			void setInteraction.direct({
-				type: "select_group_frozen",
-				source: "touch",
-				scope,
-				group: { objectId: group.id, objectRevision: group.revision },
-			});
-		void groupSelection.selectFrozen(group);
-	};
-
+	const slots = groupPoolSlots(cards);
 	return (
 		<WindowScrollArea>
 			<PoolGrid
@@ -238,11 +295,18 @@ export function GroupPoolGrid({
 							selected={command.selectedGroupId === group?.id}
 							storeArmed={state.storeArmed}
 							updateArmed={state.updateArmed}
+							setTarget={Boolean(group && setTargetArmed)}
+							deleteTarget={Boolean(
+								group &&
+									mutationTarget?.operation === "delete" &&
+									mutationTarget.phase === "source",
+							)}
 							poolPresentation={poolPresentation}
 							showId={showId}
 							surfaceKey={surfaceKey}
 							setInteraction={setInteraction}
 							select={() => selectCard(group, index)}
+							chooseSetSource={(target) => void chooseSetSource(target)}
 							dereference={dereference}
 							onOpenSettings={onOpenSettings}
 							knownFixtureIds={knownFixtureIds}

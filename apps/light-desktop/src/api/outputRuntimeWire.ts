@@ -40,7 +40,7 @@ const ACTION_SOURCES = [
 	"keyboard",
 	"osc",
 	"http",
-	"midi",
+	"extension",
 	"matter",
 	"cue",
 	"timecode",

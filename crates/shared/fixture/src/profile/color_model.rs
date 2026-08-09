@@ -123,7 +123,7 @@ pub(super) fn semantic_highlight_raw(
     }
     match attribute.0.as_str() {
         "color.red" | "color.green" | "color.blue" | "color.white" | "color.cold_white"
-        | "color.warm_white" => {
+        | "color.warm_white" | "color.amber" => {
             return semantic_endpoint(max, true, invert);
         }
         "color.cyan" | "color.magenta" | "color.yellow" => {

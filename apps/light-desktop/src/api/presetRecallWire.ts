@@ -20,6 +20,7 @@ import {
 	recordAt,
 	stringAt,
 } from "./playbackWirePrimitives";
+import { decodeProgrammerPreloadValuesProjection } from "./programmerPreloadValuesWireProjection";
 import { decodeProgrammerValuesProjection } from "./programmerValuesWireProjection";
 import { WireValidationError } from "./wireValidation";
 
@@ -50,6 +51,12 @@ export function encodePresetRecallRequest(
 		expected_preset_revision: request.expectedPresetRevision,
 		expected_show_revision: request.expectedShowRevision,
 		expected_programmer_revision: request.expectedProgrammerRevision,
+		...(request.expectedPreloadValuesRevision === null
+			? {}
+			: {
+					expected_preload_values_revision:
+						request.expectedPreloadValuesRevision,
+				}),
 		expected_capture_mode_revision: request.expectedCaptureModeRevision,
 		expected_selection_revision: request.expectedSelectionRevision,
 	};
@@ -66,14 +73,24 @@ export function decodePresetRecallOutcome(
 		"recalled",
 		"targets_selected",
 	]);
+	const target =
+		response.target == null
+			? "programmer"
+			: enumAt(response.target, "$.target", ["programmer", "preload"]);
 	assertOutcomeFields(response);
+	assertIsolatedValuesFields(response, target);
 	const projection = optionalProjection(
 		response,
 		expectedUserId,
 		expectedRequest,
 		status,
+		target,
 	);
-	const eventSequence = optionalInteger(response, "event_sequence", "$");
+	const eventSequence = optionalInteger(
+		response,
+		target === "preload" ? "preload_event_sequence" : "event_sequence",
+		"$",
+	);
 	assertValuesPair(status, projection, eventSequence, expectedRequest);
 	const interactionEventSequence = optionalInteger(
 		response,
@@ -90,6 +107,7 @@ export function decodePresetRecallOutcome(
 		expectedRequest,
 	);
 	const base = {
+		target,
 		correlationId: uuidAt(response.correlation_id, "$.correlation_id"),
 		disposition,
 		showRevision: exactRevision(
@@ -99,7 +117,13 @@ export function decodePresetRecallOutcome(
 		),
 		programmerRevision: programmerRevision(
 			response.programmer_revision,
-			projection,
+			target === "programmer" ? projection : null,
+			expectedRequest,
+		),
+		preloadValuesRevision: preloadValuesRevision(
+			response.preload_values_revision,
+			target,
+			target === "preload" ? projection : null,
 			expectedRequest,
 		),
 		captureModeRevision: exactRevision(
@@ -115,6 +139,7 @@ export function decodePresetRecallOutcome(
 			response.active_context,
 			expectedRequest,
 			disposition,
+			target,
 		),
 		preset: decodeRecalledPreset(response.preset, expectedRequest),
 		warning: optionalString(response, "warning", "$"),
@@ -123,6 +148,27 @@ export function decodePresetRecallOutcome(
 	return status === "changed"
 		? { ...base, status, projection, eventSequence }
 		: { ...base, status, projection: null, eventSequence: null };
+}
+
+function assertIsolatedValuesFields(
+	response: Record<string, unknown>,
+	target: "programmer" | "preload",
+) {
+	const inactive =
+		target === "preload"
+			? ["projection", "event_sequence"]
+			: [
+					"preload_values_revision",
+					"preload_projection",
+					"preload_event_sequence",
+				];
+	for (const key of inactive)
+		if (response[key] != null)
+			throw new WireValidationError(
+				`$.${key}`,
+				`absent for ${target} target`,
+				response[key],
+			);
 }
 
 function assertDispositionCounts(
@@ -159,26 +205,64 @@ function optionalProjection(
 	expectedUserId: string,
 	request: PresetRecallRequest,
 	status: "changed" | "no_change",
+	target: "programmer" | "preload",
 ) {
-	if (response.projection == null) return null;
+	const key = target === "preload" ? "preload_projection" : "projection";
+	if (response[key] == null) return null;
 	if (status === "no_change")
 		throw new WireValidationError(
 			"$.projection",
 			"absent for no_change",
-			response.projection,
+			response[key],
 		);
-	const projection = decodeProgrammerValuesProjection(
-		response.projection,
-		"$.projection",
-		expectedUserId,
-	);
-	if (projection.revision !== request.expectedProgrammerRevision + 1)
-		throw mismatch(
-			"$.projection.revision",
-			request.expectedProgrammerRevision + 1,
-			projection.revision,
-		);
+	const projection =
+		target === "preload"
+			? decodeProgrammerPreloadValuesProjection(
+					response[key],
+					`$.${key}`,
+					expectedUserId,
+				)
+			: decodeProgrammerValuesProjection(
+					response[key],
+					`$.${key}`,
+					expectedUserId,
+				);
+	const expectedRevision =
+		target === "preload"
+			? (request.expectedPreloadValuesRevision ?? -1) + 1
+			: request.expectedProgrammerRevision + 1;
+	if (projection.revision !== expectedRevision)
+		throw mismatch(`$.${key}.revision`, expectedRevision, projection.revision);
 	return projection;
+}
+
+function preloadValuesRevision(
+	value: unknown,
+	target: "programmer" | "preload",
+	projection: PresetRecallOutcome["projection"],
+	request: PresetRecallRequest,
+) {
+	if (target === "programmer") {
+		if (value != null)
+			throw new WireValidationError(
+				"$.preload_values_revision",
+				"absent for Programmer target",
+				value,
+			);
+		return null;
+	}
+	if (request.expectedPreloadValuesRevision === null)
+		throw new WireValidationError(
+			"$.target",
+			"programmer when no Preload revision was captured",
+			target,
+		);
+	const revision = integerAt(value, "$.preload_values_revision");
+	const expected =
+		projection?.revision ?? request.expectedPreloadValuesRevision;
+	if (revision !== expected)
+		throw mismatch("$.preload_values_revision", expected, revision);
+	return revision;
 }
 
 function assertValuesPair(
@@ -285,8 +369,9 @@ function activeContextAt(
 	value: unknown,
 	request: PresetRecallRequest,
 	disposition: "recalled" | "targets_selected",
+	target: "programmer" | "preload",
 ) {
-	if (disposition === "targets_selected")
+	if (disposition === "targets_selected" || target === "preload")
 		return value == null ? null : stringAt(value, "$.active_context");
 	const context = stringAt(value, "$.active_context");
 	const expected = `preset:${presetStorageKey(request.address)}`;
@@ -315,6 +400,11 @@ function validateRequest(request: PresetRecallRequest) {
 		["selectedFixtureCount", request.selectedFixtureCount],
 	] as const)
 		integerAt(revision, `$.${path}`);
+	if (request.expectedPreloadValuesRevision !== null)
+		integerAt(
+			request.expectedPreloadValuesRevision,
+			"$.expectedPreloadValuesRevision",
+		);
 }
 
 function assertOutcomeFields(response: Record<string, unknown>) {
@@ -323,6 +413,8 @@ function assertOutcomeFields(response: Record<string, unknown>) {
 		"disposition",
 		"show_revision",
 		"programmer_revision",
+		"target",
+		"preload_values_revision",
 		"capture_mode_revision",
 		"selection_revision",
 		"interaction_event_sequence",
@@ -333,6 +425,8 @@ function assertOutcomeFields(response: Record<string, unknown>) {
 		"status",
 		"projection",
 		"event_sequence",
+		"preload_projection",
+		"preload_event_sequence",
 		"warning",
 	]);
 }

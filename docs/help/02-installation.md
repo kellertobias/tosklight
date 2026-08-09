@@ -23,7 +23,7 @@ When the server is reachable over a LAN, set `LIGHT_DESK_TOKEN` before starting 
 - The status in Desk Setup is connected and an `Operator` user exists.
 - A new show can be created and appears in the show library.
 - The correct physical screens are assigned.
-- OSC, MIDI, RTP-MIDI, Art-Net, and sACN are disabled until intentionally configured.
+- OSC, native extensions, Art-Net, and sACN are disabled until intentionally configured.
 - The DMX view reports the expected frame rate with no send errors.
 - A named revision can be created and loaded as a separate autosaved copy before real programming begins, without rewinding the original show's Latest Autosave.
 

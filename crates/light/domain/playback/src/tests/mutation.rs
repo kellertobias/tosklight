@@ -149,7 +149,7 @@ fn master_and_pickup_changes_are_detected_without_runtime_snapshots() {
     let (mut engine, _) = single_cue_engine();
     assert_eq!(
         engine.set_master_mutation(1, 0.0).unwrap().effect,
-        PlaybackRuntimeEffect::Transient
+        PlaybackRuntimeEffect::Durable
     );
     assert_eq!(
         engine.set_master_mutation(1, 0.4).unwrap().effect,

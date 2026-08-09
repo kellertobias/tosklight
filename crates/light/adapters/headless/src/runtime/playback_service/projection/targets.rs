@@ -1,5 +1,6 @@
 use light_application::{
-    ActionError, CueListRuntimeProjection, GrandMasterRuntimeProjection, ManualXFadeDirection,
+    ActionError, CueListRuntimeProjection, CueTimingRuntimeProjection, CueTriggerTimingKind,
+    CueTriggerTimingProjection, GrandMasterRuntimeProjection, ManualXFadeDirection,
     PlaybackCueReference, PlaybackRuntimeIdentity, PlaybackRuntimeProjection, PlaybackShowScope,
     PlaybackTargetProjection, SoundLossReason, SoundStatus, SpeedGroupRuntimeProjection,
     SpeedSource,
@@ -48,6 +49,40 @@ fn runtime_projection(status: &PlaybackRuntimeStatus) -> CueListRuntimeProjectio
         effective_next_is_loaded: status.effective_next_is_loaded,
         paused: playback.paused,
         activated_at: playback.activated_at,
+        paused_at: playback.paused_at,
+        cue_timing: status
+            .cue_timing
+            .as_ref()
+            .map(|timing| CueTimingRuntimeProjection {
+                cue_id: timing.cue_id,
+                in_delay_millis: timing.in_delay_millis,
+                in_fade_millis: timing.in_fade_millis,
+                out_delay_millis: timing.out_delay_millis,
+                out_fade_millis: timing.out_fade_millis,
+                completion_millis: timing.completion_millis,
+                active_trigger: timing.active_trigger.as_ref().map(|trigger| {
+                    CueTriggerTimingProjection {
+                        cue: PlaybackCueReference {
+                            id: trigger.cue_id,
+                            number: trigger.cue_number,
+                        },
+                        kind: match trigger.kind {
+                            light_playback::CueTriggerTimingKind::Follow => {
+                                CueTriggerTimingKind::Follow
+                            }
+                            light_playback::CueTriggerTimingKind::Wait => {
+                                CueTriggerTimingKind::Wait
+                            }
+                            light_playback::CueTriggerTimingKind::Link => {
+                                CueTriggerTimingKind::Link
+                            }
+                        },
+                        started_at: trigger.started_at,
+                        duration_millis: trigger.duration_millis,
+                    }
+                }),
+                completed_trigger_cue_id: timing.completed_trigger_cue_id,
+            }),
         transition_ordinal: playback.transition_ordinal,
         master: playback.master,
         fader_position: playback.fader_position,

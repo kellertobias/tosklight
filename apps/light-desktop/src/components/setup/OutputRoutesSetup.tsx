@@ -8,6 +8,7 @@ import {
 	TextField,
 } from "@tosklight/ui";
 import { useMemo, useState } from "react";
+import type { UsbDmxEndpoint } from "../../api/client/deskManagement";
 import type { OutputRoute, VersionedObject } from "../../api/types";
 
 interface RouteDraft {
@@ -28,6 +29,7 @@ export interface OutputRoutesSetupProps {
 	onCreateRange: (range: OutputRouteRangeIntent) => Promise<boolean>;
 	onDelete: (id: string, revision: number) => Promise<boolean>;
 	outputBindIp?: string;
+	usbEndpoints?: UsbDmxEndpoint[];
 }
 
 export interface OutputRouteRangeIntent {
@@ -85,6 +87,11 @@ function validate(route: OutputRoute, outputBindIp?: string): string {
 		route.logical_universe > 65_535
 	)
 		return "Logical universe must be a whole number from 1 to 65535.";
+	if (route.target?.kind === "usb_endpoint") {
+		if (!route.target.endpoint_id.trim())
+			return "Choose a claimed USB DMX endpoint.";
+		return "";
+	}
 	const maximumUniverse = route.protocol === "art_net" ? 32_767 : 63_999;
 	if (
 		!Number.isInteger(route.destination_universe) ||
@@ -122,6 +129,7 @@ function validate(route: OutputRoute, outputBindIp?: string): string {
 }
 
 function modeLabel(route: OutputRoute): string {
+	if (route.target?.kind === "usb_endpoint") return "USB DMX";
 	if (route.protocol === "art_net")
 		return route.delivery_mode === "unicast"
 			? "Art-Net Unicast"
@@ -135,6 +143,7 @@ export function OutputRoutesSetup({
 	onCreateRange,
 	onDelete,
 	outputBindIp,
+	usbEndpoints = [],
 }: OutputRoutesSetupProps) {
 	const [draft, setDraft] = useState<RouteDraft | null>(null);
 	const [error, setError] = useState("");
@@ -169,11 +178,16 @@ export function OutputRoutesSetup({
 	const save = async () => {
 		if (!draft) return;
 		const logicalUniverses = parseUniverseExpression(draft.logicalUniverse);
-		const destinationUniverses = parseUniverseExpression(
-			draft.destinationUniverse,
-		);
+		const usbTarget = draft.body.target?.kind === "usb_endpoint";
+		const destinationUniverses = usbTarget
+			? logicalUniverses
+			: parseUniverseExpression(draft.destinationUniverse);
 		if (!logicalUniverses || !destinationUniverses) {
 			setError("Universe values must be a number or a range such as 1 THRU 8.");
+			return;
+		}
+		if (usbTarget && logicalUniverses.length !== 1) {
+			setError("A USB DMX endpoint accepts one logical universe per route.");
 			return;
 		}
 		if (
@@ -205,8 +219,9 @@ export function OutputRoutesSetup({
 			setError("One range can create at most 128 output routes.");
 			return;
 		}
-		const destination =
-			draft.body.delivery_mode === "unicast"
+		const destination = usbTarget
+			? null
+			: draft.body.delivery_mode === "unicast"
 				? draft.body.destination?.trim() || null
 				: null;
 		const routesToSave = logicalUniverses.map((logicalUniverse, index) => ({
@@ -280,15 +295,18 @@ export function OutputRoutesSetup({
 						<span>
 							<b>
 								Logical {route.body.logical_universe} →{" "}
-								{route.body.protocol === "art_net" ? "Art-Net" : "sACN"}{" "}
-								{route.body.destination_universe}
+								{route.body.target?.kind === "usb_endpoint"
+									? `USB ${route.body.target.endpoint_id}`
+									: `${route.body.protocol === "art_net" ? "Art-Net" : "sACN"} ${route.body.destination_universe}`}
 							</b>
 							<small>
 								{modeLabel(route.body)} ·{" "}
-								{route.body.destination ||
-									(route.body.protocol === "art_net"
-										? "255.255.255.255:6454"
-										: `239.255.${route.body.destination_universe >> 8}.${route.body.destination_universe & 255}:5568`)}{" "}
+								{route.body.target?.kind === "usb_endpoint"
+									? "Final DMX frame over the claimed local endpoint"
+									: route.body.destination ||
+										(route.body.protocol === "art_net"
+											? "255.255.255.255:6454"
+											: `239.255.${route.body.destination_universe >> 8}.${route.body.destination_universe & 255}:5568`)}{" "}
 								· Minimum {route.body.minimum_slots ?? 512} slots
 							</small>
 						</span>
@@ -330,53 +348,106 @@ export function OutputRoutesSetup({
 							</h2>
 							<FormLayout labelPlacement="side">
 								<SelectField
-									label="Protocol"
-									value={draft.body.protocol}
-									onChange={(protocol) =>
+									label="Output transport"
+									value={draft.body.target?.kind ?? "network"}
+									onChange={(kind) =>
 										setDraft({
 											...draft,
 											body: {
 												...draft.body,
-												protocol,
-												delivery_mode:
-													protocol === "art_net" ? "broadcast" : "multicast",
-												destination: null,
+												target:
+													kind === "usb_endpoint"
+														? {
+																kind,
+																endpoint_id: usbEndpoints[0]?.endpoint_id ?? "",
+															}
+														: undefined,
 											},
 										})
 									}
 									options={[
-										{ value: "art_net", label: "Art-Net" },
-										{ value: "sacn", label: "sACN" },
+										{ value: "network", label: "Network (Art-Net / sACN)" },
+										{
+											value: "usb_endpoint",
+											label: "USB DMX endpoint",
+											disabled: !usbEndpoints.length,
+										},
 									]}
 								/>
-								<SelectField
-									label="Delivery mode"
-									value={draft.body.delivery_mode}
-									onChange={(delivery_mode) =>
-										setDraft({
-											...draft,
-											body: {
-												...draft.body,
-												delivery_mode,
-												destination:
-													delivery_mode === "unicast"
-														? draft.body.destination
-														: null,
-											},
-										})
-									}
-									options={
-										draft.body.protocol === "art_net"
-											? [
-													{ value: "broadcast", label: "Broadcast" },
-													{ value: "unicast", label: "Unicast" },
-												]
-											: [
-													{ value: "multicast", label: "Multicast" },
-													{ value: "unicast", label: "Unicast" },
-												]
-									}
-								/>
+								{draft.body.target?.kind === "usb_endpoint" && (
+									<SelectField
+										label="USB DMX endpoint"
+										value={draft.body.target.endpoint_id}
+										onChange={(endpoint_id) =>
+											setDraft({
+												...draft,
+												body: {
+													...draft.body,
+													target: { kind: "usb_endpoint", endpoint_id },
+												},
+											})
+										}
+										options={usbEndpoints.map((endpoint) => ({
+											value: endpoint.endpoint_id,
+											label: endpoint.endpoint_id,
+											disabled: !endpoint.enabled,
+										}))}
+									/>
+								)}
+								{draft.body.target?.kind !== "usb_endpoint" && (
+									<>
+										<SelectField
+											label="Protocol"
+											value={draft.body.protocol}
+											onChange={(protocol) =>
+												setDraft({
+													...draft,
+													body: {
+														...draft.body,
+														protocol,
+														delivery_mode:
+															protocol === "art_net"
+																? "broadcast"
+																: "multicast",
+														destination: null,
+													},
+												})
+											}
+											options={[
+												{ value: "art_net", label: "Art-Net" },
+												{ value: "sacn", label: "sACN" },
+											]}
+										/>
+										<SelectField
+											label="Delivery mode"
+											value={draft.body.delivery_mode}
+											onChange={(delivery_mode) =>
+												setDraft({
+													...draft,
+													body: {
+														...draft.body,
+														delivery_mode,
+														destination:
+															delivery_mode === "unicast"
+																? draft.body.destination
+																: null,
+													},
+												})
+											}
+											options={
+												draft.body.protocol === "art_net"
+													? [
+															{ value: "broadcast", label: "Broadcast" },
+															{ value: "unicast", label: "Unicast" },
+														]
+													: [
+															{ value: "multicast", label: "Multicast" },
+															{ value: "unicast", label: "Unicast" },
+														]
+											}
+										/>
+									</>
+								)}
 								<NumberField
 									label="Logical universe"
 									min="1"
@@ -398,30 +469,32 @@ export function OutputRoutesSetup({
 										})
 									}
 								/>
-								<NumberField
-									label="Destination universe"
-									min="1"
-									max={draft.body.protocol === "art_net" ? "32767" : "63999"}
-									value={draft.destinationUniverse}
-									allowThrough={draft.revision === 0}
-									description={
-										draft.revision
-											? "One universe while editing."
-											: "Use the same range length as the logical universes."
-									}
-									onChange={(event) =>
-										setDraft({
-											...draft,
-											destinationUniverse: event.target.value,
-										})
-									}
-									onRangeCommit={(points) =>
-										setDraft({
-											...draft,
-											destinationUniverse: points.join(" THRU "),
-										})
-									}
-								/>
+								{draft.body.target?.kind !== "usb_endpoint" && (
+									<NumberField
+										label="Destination universe"
+										min="1"
+										max={draft.body.protocol === "art_net" ? "32767" : "63999"}
+										value={draft.destinationUniverse}
+										allowThrough={draft.revision === 0}
+										description={
+											draft.revision
+												? "One universe while editing."
+												: "Use the same range length as the logical universes."
+										}
+										onChange={(event) =>
+											setDraft({
+												...draft,
+												destinationUniverse: event.target.value,
+											})
+										}
+										onRangeCommit={(points) =>
+											setDraft({
+												...draft,
+												destinationUniverse: points.join(" THRU "),
+											})
+										}
+									/>
+								)}
 								<NumberField
 									label="Minimum universe size"
 									min="1"
@@ -438,35 +511,38 @@ export function OutputRoutesSetup({
 										})
 									}
 								/>
-								{draft.body.delivery_mode === "unicast" && (
-									<TextField
-										label="Destination"
-										value={draft.body.destination ?? ""}
-										description="Required IPv4 address and port, for example 10.0.0.20:6454."
-										onChange={(event) =>
-											setDraft({
-												...draft,
-												body: {
-													...draft.body,
-													destination: event.target.value,
-												},
-											})
-										}
-									/>
-								)}
-								{draft.body.delivery_mode === "broadcast" && (
-									<p className="field-description">
-										Art-Net Broadcast uses the global destination
-										255.255.255.255:6454. The desk's output bind address selects
-										the lighting-network interface.
-									</p>
-								)}
-								{draft.body.delivery_mode === "multicast" && (
-									<p className="field-description">
-										sACN Multicast derives its 239.255.x.y:5568 destination from
-										the destination universe.
-									</p>
-								)}
+								{draft.body.target?.kind !== "usb_endpoint" &&
+									draft.body.delivery_mode === "unicast" && (
+										<TextField
+											label="Destination"
+											value={draft.body.destination ?? ""}
+											description="Required IPv4 address and port, for example 10.0.0.20:6454."
+											onChange={(event) =>
+												setDraft({
+													...draft,
+													body: {
+														...draft.body,
+														destination: event.target.value,
+													},
+												})
+											}
+										/>
+									)}
+								{draft.body.target?.kind !== "usb_endpoint" &&
+									draft.body.delivery_mode === "broadcast" && (
+										<p className="field-description">
+											Art-Net Broadcast uses the global destination
+											255.255.255.255:6454. The desk's output bind address
+											selects the lighting-network interface.
+										</p>
+									)}
+								{draft.body.target?.kind !== "usb_endpoint" &&
+									draft.body.delivery_mode === "multicast" && (
+										<p className="field-description">
+											sACN Multicast derives its 239.255.x.y:5568 destination
+											from the destination universe.
+										</p>
+									)}
 								<SwitchField
 									label="Route state"
 									offLabel="Disabled"

@@ -351,12 +351,17 @@ fn build_app_state(
     startup: StartupState,
     resources: &RuntimeResources,
 ) -> anyhow::Result<AppState> {
+    let extensions = super::extensions_runtime::ExtensionResource::start(
+        startup.persistent.extensions_dir.clone(),
+        startup.persistent.data_dir.join("extensions.json"),
+    );
     let installed_attributes =
         InstalledAttributeConfiguration::for_entry(startup.persistent.active_show.as_ref());
     let discovery = start_discovery(&startup);
     let output = resources.scheduler.network_output();
     let output_sequences = resources.scheduler.sequences();
     let output_control = resources.scheduler.control_capability();
+    let usb_output = resources.scheduler.usb_output();
     let matter_transport = Arc::new(matter::MatterTransport::new(&startup.persistent.data_dir));
     let osc_feedback = Arc::new(UdpSocket::bind("0.0.0.0:0")?);
     let application_events = resources.events.clone();
@@ -369,7 +374,7 @@ fn build_app_state(
     );
     let playback_topology = PlaybackTopologyService::new(active_show_service.clone());
     let selective_import = SelectiveShowImportService::new(active_show_service.clone());
-    Ok(AppState {
+    let state = AppState {
         action_timing: resources.action_timing.clone(),
         attributes: AttributeConfigurationResource::new(installed_attributes),
         installation: InstallationResource::new(
@@ -397,6 +402,7 @@ fn build_app_state(
             output_control,
             Arc::clone(&resources.timecode_router),
             Some(output),
+            usb_output,
             output_sequences,
             startup.manual_clock,
             startup.speed_groups,
@@ -413,6 +419,7 @@ fn build_app_state(
             selective_import,
         ),
         events: EventResource::new(application_events),
+        extensions,
         integrations: IntegrationResource::new(
             Arc::clone(&resources.matter_bridge),
             Some(matter_transport),
@@ -422,7 +429,9 @@ fn build_app_state(
         replay: ReplayResource::default(),
         lifecycle: LifecycleResource::new(resources.cancellation.clone()),
         discovery,
-    })
+    };
+    state.extensions.attach_state(state.clone());
+    Ok(state)
 }
 
 /// Announce this desk to the network, and start listening for the other ToskLights.

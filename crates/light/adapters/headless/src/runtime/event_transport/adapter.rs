@@ -162,7 +162,7 @@ fn wire_action_source(source: application::ActionSource) -> wire::EventActionSou
         App::Keyboard => wire::EventActionSource::Keyboard,
         App::Osc => wire::EventActionSource::Osc,
         App::Http => wire::EventActionSource::Http,
-        App::Midi => wire::EventActionSource::Midi,
+        App::Extension => wire::EventActionSource::Extension,
         App::Matter => wire::EventActionSource::Matter,
         App::Cue => wire::EventActionSource::Cue,
         App::Timecode => wire::EventActionSource::Timecode,
@@ -690,6 +690,14 @@ fn wire_output_route_change(change: &application::OutputRouteChange) -> wire::Ou
 
 fn wire_output_route(route: &light_output::OutputRoute) -> wire::OutputRoute {
     wire::OutputRoute {
+        target: match &route.target {
+            light_output::OutputRouteTarget::Network => None,
+            light_output::OutputRouteTarget::UsbEndpoint { endpoint_id } => {
+                Some(wire::OutputRouteTarget::UsbEndpoint {
+                    endpoint_id: endpoint_id.clone(),
+                })
+            }
+        },
         protocol: match route.protocol {
             light_output::Protocol::ArtNet => wire::OutputProtocol::ArtNet,
             light_output::Protocol::Sacn => wire::OutputProtocol::Sacn,

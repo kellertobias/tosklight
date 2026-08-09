@@ -104,8 +104,10 @@ impl MatterTransport {
         let shape = endpoint_shape(&transport_lights);
         let mut state = self.state.lock();
         if runtime_needs_restart(state.runtime.as_ref(), &shape) {
-            stop_runtime(&mut state.runtime);
-            self.start_locked(&mut state, shape, transport_lights);
+            let startup_shape = shape.clone();
+            replace_runtime_for_shape(&mut state.runtime, &shape, || {
+                self.start_locked(startup_shape, transport_lights)
+            });
         } else {
             self.reconcile_running(&mut state, transport_lights);
         }
@@ -148,22 +150,21 @@ impl MatterTransport {
 
     fn start_locked(
         &self,
-        state: &mut TransportState,
         shape: Vec<EndpointShape>,
         lights: Vec<TransportLight>,
-    ) {
+    ) -> Option<RuntimeHandle> {
         let identity = match load_or_create_identity(&self.storage_dir) {
             Ok(identity) => identity,
             Err(error) => {
                 self.set_failed(format!("Matter identity persistence failed: {error}"));
-                return;
+                return None;
             }
         };
         let pairing = match pairing_data(&identity) {
             Ok(pairing) => pairing,
             Err(error) => {
                 self.set_failed(format!("Matter pairing payload failed: {error}"));
-                return;
+                return None;
             }
         };
         *self.snapshot.write() = MatterTransportSnapshot {
@@ -200,37 +201,38 @@ impl MatterTransport {
             Ok(join) => join,
             Err(error) => {
                 self.set_failed(format!("could not spawn Matter transport thread: {error}"));
-                return;
+                return None;
             }
         };
-        self.finish_start(state, shape, control_tx, ready_rx, join);
+        self.finish_start(shape, control_tx, ready_rx, join)
     }
 
     fn finish_start(
         &self,
-        state: &mut TransportState,
         shape: Vec<EndpointShape>,
         control: Sender<ControlCommand>,
         ready: Receiver<Result<model::StartupReady, String>>,
         join: thread::JoinHandle<()>,
-    ) {
+    ) -> Option<RuntimeHandle> {
         match ready.recv_timeout(START_TIMEOUT) {
             Ok(Ok(ready)) => {
                 self.set_running(&ready);
-                state.runtime = Some(RuntimeHandle {
+                Some(RuntimeHandle {
                     shape,
                     control,
                     join,
-                });
+                })
             }
             Ok(Err(error)) => {
                 let _ = join.join();
                 self.set_failed(error);
+                None
             }
             Err(_) => {
                 let _ = control.send(ControlCommand::Shutdown);
                 let _ = join.join();
                 self.set_failed("Matter transport startup timed out".into());
+                None
             }
         }
     }
@@ -258,6 +260,19 @@ impl Drop for MatterTransport {
 
 fn runtime_needs_restart(runtime: Option<&RuntimeHandle>, shape: &[EndpointShape]) -> bool {
     runtime.is_none_or(|runtime| runtime.shape != shape || runtime.join.is_finished())
+}
+
+fn replace_runtime_for_shape(
+    runtime: &mut Option<RuntimeHandle>,
+    shape: &[EndpointShape],
+    start: impl FnOnce() -> Option<RuntimeHandle>,
+) -> bool {
+    if !runtime_needs_restart(runtime.as_ref(), shape) {
+        return false;
+    }
+    stop_runtime(runtime);
+    *runtime = start();
+    true
 }
 
 fn stop_runtime(runtime: &mut Option<RuntimeHandle>) {

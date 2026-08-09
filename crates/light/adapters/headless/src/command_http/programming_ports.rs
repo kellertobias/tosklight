@@ -364,6 +364,31 @@ impl ProgrammingPorts for ServerProgrammingPorts<'_> {
         )
     }
 
+    fn programmer_attribute_wraps(
+        &self,
+        _context: &ActionContext,
+        fixture_id: light_core::FixtureId,
+        attribute: &light_core::AttributeKey,
+    ) -> bool {
+        super::values_environment::attribute_wraps(self.state, fixture_id, attribute)
+    }
+
+    fn mark_highlight_explicit_fixture_attributes(
+        &self,
+        context: &ActionContext,
+        touched: &[(light_core::FixtureId, light_core::AttributeKey)],
+    ) {
+        if self.state.highlight.mark_explicit_fixture_attributes(
+            context.desk_id,
+            self.session.user.id,
+            touched.iter().cloned(),
+        ) {
+            self.state
+                .output
+                .set_highlight_layers(self.state.highlight.output_layers());
+        }
+    }
+
     fn undo_show_recording(
         &self,
         context: &ActionContext,

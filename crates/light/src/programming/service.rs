@@ -11,6 +11,8 @@ use light_programmer::{HighlightRegistry, ProgrammerRegistry};
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::sync::Arc;
+#[path = "service/alignment.rs"]
+mod alignment;
 #[path = "service/cue_deletion.rs"]
 mod cue_deletion;
 #[path = "service/cue_deletion_replay.rs"]
@@ -332,6 +334,15 @@ impl ProgrammingService {
         context: &crate::ActionContext,
         ports: &dyn ProgrammingPorts,
     ) -> Result<ProgrammingOutcome, ActionError> {
+        if phase == light_programmer::command_line::CommandKeyPhase::Press
+            && matches!(
+                key,
+                light_programmer::command_line::CommandKey::Escape
+                    | light_programmer::command_line::CommandKey::Record
+            )
+        {
+            self.programmers.deactivate_alignment(session);
+        }
         let current = command_line(&self.programmers, session)?;
         match command_key_intent(&current, key, phase) {
             CommandKeyIntent::NoOp => Ok(accepted(ProgrammingAction::IgnoredRelease, None, None)),

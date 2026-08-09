@@ -42,6 +42,9 @@ pub(super) fn resolve_remembered(
     valid_fixtures: &[HighlightFixture],
     groups: &HashMap<String, GroupDefinition>,
 ) -> Vec<FixtureId> {
+    if operator.active {
+        return valid_selection(&operator.remembered, valid_fixtures);
+    }
     let resolved = operator
         .remembered_expression
         .as_ref()
@@ -76,9 +79,16 @@ pub(super) fn synchronize_actual_selection(
     valid_fixtures: &[HighlightFixture],
     groups: &HashMap<String, GroupDefinition>,
 ) -> Option<HighlightSelectionWrite> {
-    if operator.observed_selection_revision != Some(current_selection.revision) {
+    if operator.observed_selection_revision != Some(current_selection.revision) && !operator.active
+    {
         reset_basis(operator, current_selection, valid_fixtures, groups);
         return None;
+    }
+    if operator.observed_selection_revision != Some(current_selection.revision) {
+        // Once HIGH is active its basis is frozen. NEXT/ALL still write the real Programmer
+        // selection, but an unrelated selection revision cannot silently replace the original
+        // activation set.
+        operator.observed_selection_revision = Some(current_selection.revision);
     }
 
     let previous = operator.remembered.clone();

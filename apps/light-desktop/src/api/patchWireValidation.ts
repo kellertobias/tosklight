@@ -35,7 +35,7 @@ const EVENT_ACTION_SOURCES = new Set([
 	"keyboard",
 	"osc",
 	"http",
-	"midi",
+	"extension",
 	"matter",
 	"cue",
 	"timecode",

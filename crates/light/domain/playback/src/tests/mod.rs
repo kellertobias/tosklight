@@ -19,6 +19,8 @@ fn list(cues: Vec<Cue>) -> CueList {
         restart_mode: RestartMode::FirstCue,
         force_cue_timing: false,
         disable_cue_timing: false,
+        auto_off_at_zero: false,
+        auto_off_flash_release: false,
         chaser_step_millis: 1_000,
         chaser_xfade_millis: 0,
         chaser_xfade_percent: Some(0),

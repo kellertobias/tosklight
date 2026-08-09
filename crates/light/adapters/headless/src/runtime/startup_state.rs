@@ -124,6 +124,7 @@ pub(super) fn ensure_default_show_available(
 
 pub(super) struct PersistentState {
     pub(super) data_dir: PathBuf,
+    pub(super) extensions_dir: PathBuf,
     pub(super) bind: SocketAddr,
     pub(super) test_bench: bool,
     pub(super) desk: DeskStore,
@@ -138,12 +139,15 @@ impl PersistentState {
             data_dir,
             show_file,
             fixture_package_dir,
+            extensions_dir,
             bind,
             test_bench,
             osc_bind_override,
             output_bind_override,
         } = options;
         let fixture_package_dir = fixture_package_directory(fixture_package_dir);
+        let extensions_dir = extensions_directory(extensions_dir)?;
+        tracing::info!(path=%extensions_dir.display(), configuration=%data_dir.join("extensions.json").display(), "resolved native extensions installation paths");
         std::fs::create_dir_all(data_dir.join("shows"))?;
         tracing::info!(path=%data_dir.display(), "opening desk data");
         let desk = DeskStore::open(data_dir.join("desk.sqlite"))?;
@@ -161,6 +165,7 @@ impl PersistentState {
         tracing::info!(active_show=?active_show.as_ref().map(|show| &show.name), "desk state loaded");
         Ok(Self {
             data_dir,
+            extensions_dir,
             bind,
             test_bench,
             desk,
@@ -169,6 +174,17 @@ impl PersistentState {
             active_show,
         })
     }
+}
+
+fn extensions_directory(configured: Option<PathBuf>) -> anyhow::Result<PathBuf> {
+    if let Some(configured) = configured {
+        return Ok(configured);
+    }
+    let executable = env::current_exe()
+        .context("cannot resolve the headless executable for the Extensions folder")?;
+    Ok(light_extensions_host::effective_extensions_directory(
+        light_extensions_host::ExtensionsDirectoryMode::Portable(&executable),
+    ))
 }
 
 fn fixture_package_directory(configured: Option<PathBuf>) -> Option<PathBuf> {
@@ -180,16 +196,82 @@ fn fixture_package_directory(configured: Option<PathBuf>) -> Option<PathBuf> {
     })
 }
 
-fn load_configuration(
+pub(super) fn load_configuration(
     desk: &DeskStore,
     osc_bind_override: Option<SocketAddr>,
     output_bind_override: Option<IpAddr>,
 ) -> anyhow::Result<DeskConfiguration> {
-    let mut configuration: DeskConfiguration = desk
-        .setting("server_configuration")?
-        .map(|json| serde_json::from_str(&json))
+    let stored = desk.setting("server_configuration")?;
+    let parsed = stored
+        .as_deref()
+        .map(serde_json::from_str::<serde_json::Value>)
+        .transpose();
+    let mut recovered_malformed = false;
+    let raw = match parsed {
+        Ok(raw) => raw,
+        Err(error) => {
+            recovered_malformed = true;
+            if desk
+                .setting("server_configuration_recovery_report")?
+                .is_none()
+            {
+                desk.set_setting(
+                    "server_configuration_recovery_report",
+                    &serde_json::to_string_pretty(&serde_json::json!({
+                        "schema_version": 1,
+                        "summary": "Malformed server configuration was preserved here and replaced with safe defaults.",
+                        "error": error.to_string(),
+                        "original": stored,
+                    }))?,
+                )?;
+            }
+            None
+        }
+    };
+    let has_legacy = if let Some(raw) = raw.as_ref() {
+        let midi_inputs = raw
+            .get("midi_inputs")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let rtp_midi_bind = raw
+            .get("rtp_midi_bind")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let has_legacy = midi_inputs
+            .as_array()
+            .is_some_and(|ports| !ports.is_empty())
+            || !rtp_midi_bind.is_null();
+        if has_legacy && desk.setting("removed_midi_inputs_report")?.is_none() {
+            desk.set_setting("removed_midi_inputs_report", &serde_json::to_string_pretty(&serde_json::json!({
+                "schema_version": 1,
+                "migration": "removed_builtin_midi_and_rtp_midi",
+                "summary": "Built-in MIDI and RTP-MIDI inputs were removed. Recreate these endpoints in an approved native extension package.",
+                "midi_inputs": midi_inputs,
+                "rtp_midi_bind": rtp_midi_bind,
+            }))?)?;
+        }
+        raw.get("midi_inputs").is_some() || raw.get("rtp_midi_bind").is_some()
+    } else {
+        false
+    };
+    let mut configuration: DeskConfiguration = raw
+        .clone()
+        .map(serde_json::from_value)
         .transpose()?
         .unwrap_or_default();
+    if has_legacy {
+        let mut cleaned = raw.expect("legacy configuration must have parsed");
+        if let Some(object) = cleaned.as_object_mut() {
+            object.remove("midi_inputs");
+            object.remove("rtp_midi_bind");
+        }
+        desk.set_setting("server_configuration", &serde_json::to_string(&cleaned)?)?;
+    } else if recovered_malformed {
+        desk.set_setting(
+            "server_configuration",
+            &serde_json::to_string(&configuration)?,
+        )?;
+    }
     configuration.migrate_speed_group_sources();
     configuration.migrate_highlight_look();
     configuration.osc_bind = osc_bind_override

@@ -49,6 +49,8 @@ export function GroupCard({
 	selected,
 	storeArmed,
 	updateArmed,
+	setTarget,
+	deleteTarget,
 	poolPresentation,
 	showId,
 	surfaceKey,
@@ -67,6 +69,8 @@ export function GroupCard({
 	selected: boolean;
 	storeArmed: boolean;
 	updateArmed: boolean;
+	setTarget: boolean;
+	deleteTarget: boolean;
 	poolPresentation: PoolPresentationConfiguration;
 	showId: string;
 	surfaceKey: string;
@@ -113,9 +117,11 @@ export function GroupCard({
 		states: [
 			...(selected ? (["selected"] as const) : []),
 			...(!group || !group.body.fixtures.length ? (["empty"] as const) : []),
-			...(storeArmed && !group ? (["record-target"] as const) : []),
-			...(storeArmed && !group ? (["store-target"] as const) : []),
+			...(storeArmed ? (["record-target"] as const) : []),
+			...(storeArmed ? (["store-target"] as const) : []),
 			...(updateArmed ? (["update-target"] as const) : []),
+			...(setTarget ? (["set-target"] as const) : []),
+			...(deleteTarget ? (["delete-target"] as const) : []),
 		],
 	});
 	const attributesLabel =

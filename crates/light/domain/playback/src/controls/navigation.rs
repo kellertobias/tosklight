@@ -16,6 +16,7 @@ impl PlaybackEngine {
                     return Err("virtual playback does not have cues".into());
                 };
                 let key = PlaybackKey::CueList(cue_list_id);
+                self.disarm_cuelist_flash(cue_list_id);
                 let was_active = self
                     .active
                     .get(&key)
@@ -38,6 +39,7 @@ impl PlaybackEngine {
                     .expect("Virtual GO inserted active playback");
                 result.playback_number = Some(address.number().get());
                 result.playback_identity = Some(identity);
+                result.fader_zero_auto_off_armed = false;
                 if definition.go_activates && !was_active {
                     result.master = 1.0;
                     result.enabled = true;
@@ -63,6 +65,7 @@ impl PlaybackEngine {
             return Err("group playback does not have cues".into());
         };
         let key = PlaybackKey::CueList(cue_list_id);
+        self.disarm_cuelist_flash(cue_list_id);
         let was_active = self
             .active
             .get(&key)
@@ -84,6 +87,7 @@ impl PlaybackEngine {
             .get_mut(&key)
             .expect("go inserted active playback");
         result.playback_number = Some(number);
+        result.fader_zero_auto_off_armed = false;
         if definition.go_activates && !was_active {
             result.master = 1.0;
             result.enabled = true;
@@ -96,6 +100,10 @@ impl PlaybackEngine {
 
     pub fn back_playback(&mut self, number: u16) -> Result<&ActivePlayback, String> {
         let id = self.cue_list_for(number)?;
+        self.disarm_cuelist_flash(id);
+        if let Some(playback) = self.active.get_mut(&PlaybackKey::CueList(id)) {
+            playback.fader_zero_auto_off_armed = false;
+        }
         self.back_at_key(PlaybackKey::CueList(id), id, self.clock.now())
     }
 
@@ -112,6 +120,10 @@ impl PlaybackEngine {
                 let PlaybackTarget::CueList { cue_list_id } = definition.target else {
                     return Err("virtual playback does not have cues".into());
                 };
+                self.disarm_cuelist_flash(cue_list_id);
+                if let Some(playback) = self.active.get_mut(&PlaybackKey::CueList(cue_list_id)) {
+                    playback.fader_zero_auto_off_armed = false;
+                }
                 self.back_at_key(
                     PlaybackKey::CueList(cue_list_id),
                     cue_list_id,
@@ -196,6 +208,7 @@ impl PlaybackEngine {
             .ok_or("cue does not exist")?;
         let (cue_id, cue_number) = (cue.id, cue.number);
         let key = PlaybackKey::CueList(id);
+        self.disarm_cuelist_flash(id);
         let now = self.clock.now();
         let changed = self
             .active
@@ -206,6 +219,7 @@ impl PlaybackEngine {
         playback.playback_number = Some(number);
         playback.master = 1.0;
         playback.enabled = true;
+        playback.fader_zero_auto_off_armed = false;
         playback.loaded_cue_id = None;
         playback.loaded_cue_number = None;
         let addressed_effect = runtime_effect(changed);
@@ -245,6 +259,7 @@ impl PlaybackEngine {
             .ok_or("cue does not exist")?;
         let (cue_id, cue_number) = (cue.id, cue.number);
         let key = PlaybackKey::CueList(cue_list_id);
+        self.disarm_cuelist_flash(cue_list_id);
         let now = self.clock.now();
         let changed = self.active.get(&key).is_none_or(|playback| {
             playback.playback_identity != Some(identity)
@@ -256,6 +271,7 @@ impl PlaybackEngine {
         playback.playback_identity = Some(identity);
         playback.master = 1.0;
         playback.enabled = true;
+        playback.fader_zero_auto_off_armed = false;
         playback.loaded_cue_id = None;
         playback.loaded_cue_number = None;
         let addressed_effect = runtime_effect(changed);
@@ -404,6 +420,7 @@ fn inactive_playback(number: u16, cue_list_id: CueListId, now: DateTime<Utc>) ->
         paused: false,
         activated_at: now,
         paused_at: None,
+        completed_trigger_cue_id: None,
         master: 0.0,
         fader_position: 0.0,
         fader_pickup_required: false,
@@ -412,6 +429,7 @@ fn inactive_playback(number: u16, cue_list_id: CueListId, now: DateTime<Utc>) ->
         master_transition: None,
         temporary: false,
         enabled: false,
+        fader_zero_auto_off_armed: false,
         flash_restore_off: false,
         transition_timing_bypassed: false,
         transition_fade_fallback_millis: None,

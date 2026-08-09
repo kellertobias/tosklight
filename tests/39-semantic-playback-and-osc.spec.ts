@@ -1,20 +1,18 @@
 // @bench-semantic-world
 
 import {
-	CueRecordMode,
-} from "./bench/playbacks/cuePlaybackScenario";
-import { PaneType } from "./bench/window-system/paneTypes";
-import {
-	currentPagePlayback,
-	explicitPagePlayback,
-} from "./bench/playbacks/playbackScenario";
-import { scenario } from "./bench/core/scenario";
-import {
 	fixture,
 	fixtureRange,
 	groupRange,
 } from "./bench/command-selection/selectionContract";
+import { scenario } from "./bench/core/scenario";
+import { CueRecordMode } from "./bench/playbacks/cuePlaybackScenario";
+import {
+	currentPagePlayback,
+	explicitPagePlayback,
+} from "./bench/playbacks/playbackScenario";
 import { Show } from "./bench/show/showScenario";
+import { PaneType } from "./bench/window-system/paneTypes";
 
 scenario(
 	"BENCH-CUE-PLAYBACK-001",
@@ -151,7 +149,7 @@ scenario(
 		await t.expect.selection(fixture(1), fixture(3), fixture(2));
 
 		await t.selection.clear();
-		await t.selection.fixtures.via.stage.range(1, 4);
+		await t.selection.fixtures.via.fixtureSheet.range(1, 4);
 		await t.expect.selection(fixtureRange(1, 4));
 
 		await t.selection.clear();

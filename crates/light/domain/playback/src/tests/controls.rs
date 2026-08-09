@@ -95,8 +95,63 @@ fn off_requires_zero_pickup_without_moving_the_recorded_fader() {
     );
     assert!(!engine.runtime()[0].enabled);
     engine.set_master(1, 0.4).unwrap();
-    assert!(engine.runtime()[0].enabled);
+    assert!(!engine.runtime()[0].enabled);
     assert_eq!(engine.runtime()[0].master, 0.4);
+}
+
+#[test]
+fn cuelist_zero_auto_off_resumes_only_its_own_current_cue() {
+    let fixture = FixtureId::new();
+    let mut one = Cue::new(1.0);
+    one.changes.push(value(fixture, "intensity", 0.5));
+    let mut two = Cue::new(2.0);
+    two.changes.push(value(fixture, "intensity", 1.0));
+    let mut cue_list = list(vec![one, two]);
+    cue_list.auto_off_at_zero = true;
+    let cue_list_id = cue_list.id;
+    let mut engine = PlaybackEngine::default();
+    engine.register(cue_list).unwrap();
+    engine
+        .register_definition(definition(1, cue_list_id))
+        .unwrap();
+    engine.goto_playback(1, 2.0).unwrap();
+    let cue_id = engine.runtime()[0].current_cue_id;
+
+    engine.set_master(1, 1.0).unwrap();
+    engine.set_master(1, 0.0).unwrap();
+    assert!(!engine.runtime()[0].enabled);
+    assert!(engine.runtime()[0].fader_zero_auto_off_armed);
+    engine.set_master(1, 0.6).unwrap();
+
+    let runtime = &engine.runtime()[0];
+    assert!(runtime.enabled);
+    assert_eq!(runtime.master, 0.6);
+    assert_eq!(runtime.current_cue_id, cue_id);
+    assert_eq!(runtime.current_cue_number, Some(2.0));
+    assert!(!runtime.fader_zero_auto_off_armed);
+}
+
+#[test]
+fn cuelist_flash_auto_off_is_armed_only_by_the_flash_that_started_it() {
+    let mut cue = Cue::new(1.0);
+    cue.changes.push(value(FixtureId::new(), "intensity", 1.0));
+    let mut cue_list = list(vec![cue]);
+    cue_list.auto_off_flash_release = true;
+    let cue_list_id = cue_list.id;
+    let mut engine = PlaybackEngine::default();
+    engine.register(cue_list).unwrap();
+    engine
+        .register_definition(definition(1, cue_list_id))
+        .unwrap();
+
+    engine.set_flash(1, true).unwrap();
+    engine.set_flash(1, false).unwrap();
+    assert!(engine.runtime().is_empty());
+
+    engine.on(1).unwrap();
+    engine.set_flash(1, true).unwrap();
+    engine.set_flash(1, false).unwrap();
+    assert!(engine.runtime()[0].enabled);
 }
 
 #[test]
@@ -790,6 +845,27 @@ fn dynamic_flash_release_without_auto_off_promotes_the_shared_target_on() {
     assert!(active.enabled);
     assert!(!active.flash);
     assert!(!active.flash_restore_off);
+}
+
+#[test]
+fn dynamic_flash_auto_off_is_armed_only_when_that_flash_started_the_target() {
+    let definition = dynamic_playback_definition(54, DynamicPlaybackFaderMode::Master, false);
+    let mut engine = PlaybackEngine::default();
+    engine.register_definition(definition).unwrap();
+
+    engine.on(54).unwrap();
+    engine.set_dynamic_flash_mutation(54, true).unwrap();
+    engine.set_dynamic_flash_mutation(54, false).unwrap();
+    let active = &engine.active_dynamic_playbacks()[0];
+    assert!(active.enabled);
+    assert!(!active.flash);
+
+    engine.off(54).unwrap();
+    engine.set_dynamic_flash_mutation(54, true).unwrap();
+    engine.set_dynamic_flash_mutation(54, false).unwrap();
+    let active = &engine.active_dynamic_playbacks()[0];
+    assert!(!active.enabled);
+    assert!(!active.flash);
 }
 
 #[test]

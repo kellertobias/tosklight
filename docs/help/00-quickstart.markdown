@@ -8,7 +8,7 @@ ToskLight is organized around a desk configuration, a portable show file, one pr
 
 - Install and start ToskLight, then open **Desk Setup** from the Show menu.
 - In **Screens & playback**, assign each connected screen and choose whether its playback page follows the main page or remains independent.
-- In **Inputs**, enable only the MIDI, RTP-MIDI, OSC, and software-keypad controls used on this desk.
+- In **Network & Inputs**, enable only the approved native extensions, OSC, and software-keypad controls used on this desk.
 - In **Outputs**, set the engine frame rate and bind address, then create and verify Art-Net or sACN universe routes in **DMX**.
 
 Continue with [Installation and First Start](02-installation.md), [Application Layout and Window Manager](01-application-layout.md), and [Desk Setup](10-Desk-Setup/index.md).

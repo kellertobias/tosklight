@@ -5,23 +5,17 @@ import {
 	SwitchField,
 	TextField,
 } from "@tosklight/ui";
-import {
-	type PointerEvent as ReactPointerEvent,
-	useEffect,
-	useState,
-} from "react";
+import { type PointerEvent as ReactPointerEvent, useState } from "react";
 import type {
 	AttributeConfiguration,
 	AttributeEncoderGroup,
 	ConfiguredAttributeDescriptor,
 	CustomAttributeDescriptor,
 } from "../../api/client/attributeConfiguration";
-import type { FixtureSourceMapping } from "../../api/client/fixtures";
 import {
 	attributeEncoderGroups,
 	projectPushTurnPlacements,
 } from "../../components/control/parameterControls/attributeEncoderPages";
-import { useFixtureLibrary } from "../../features/fixtureLibrary/FixtureLibraryContext";
 import { useScreensOptional } from "../../features/screens/ScreensContext";
 import {
 	ACTIVATION_PRESETS,
@@ -31,13 +25,15 @@ import {
 	removeActivationMember,
 	renameActivationGroup,
 } from "./activationPresets";
+import { customAttributeId, nextPlacement } from "./attributeRegistryHelpers";
+import type { SetupWindowController } from "./controller";
 import {
 	type EncoderSlotTarget,
 	moveAttributeToSlot,
 	unplacedDescriptors,
 } from "./encoderLayoutModel";
+import { SourceAttributeMappings } from "./SourceAttributeMappings";
 import { useEncoderSlotDrag } from "./useEncoderSlotDrag";
-import type { SetupWindowController } from "./controller";
 
 const ENCODER_GROUPS: Array<{
 	id: AttributeEncoderGroup;
@@ -86,7 +82,14 @@ export function AttributeRegistrySettings({
 			{activeTab === "attributes" && (
 				<div className="attribute-tabpanel" role="tabpanel">
 					<AttributeGroups snapshot={snapshot} onChange={update} mode="all" />
-					<SourceAttributeMappings snapshot={snapshot} />
+					<SourceAttributeMappings
+						targets={projectedDescriptors(snapshot)
+							.filter((descriptor) => !descriptor.retired)
+							.map((descriptor) => ({
+								value: descriptor.id,
+								label: `${descriptor.label} (${descriptor.id})`,
+							}))}
+					/>
 				</div>
 			)}
 			{controller.attributeConfigurationError && (
@@ -98,147 +101,6 @@ export function AttributeRegistrySettings({
 	);
 }
 
-/**
- * Desk-local aliases from a fixture-source attribute name onto an attribute this desk already
- * has. An import fills these in when it meets an unknown channel; the operator can also declare
- * one up front, so a GDTF that calls Media Folder "MediaRank" lands on the built-in control.
- */
-function SourceAttributeMappings({
-	snapshot,
-}: {
-	snapshot: NonNullable<SetupWindowController["attributeConfiguration"]>;
-}) {
-	const fixtureLibrary = useFixtureLibrary();
-	const [mappings, setMappings] = useState<FixtureSourceMapping[]>([]);
-	const [sourceAttribute, setSourceAttribute] = useState("");
-	const [targetAttribute, setTargetAttribute] = useState("");
-	const [error, setError] = useState<string | null>(null);
-	useEffect(() => {
-		let active = true;
-		void fixtureLibrary
-			?.fixtureSourceMappings?.()
-			.then((next) => active && setMappings(next))
-			.catch(
-				(reason) =>
-					active &&
-					setError(reason instanceof Error ? reason.message : String(reason)),
-			);
-		return () => {
-			active = false;
-		};
-	}, [fixtureLibrary]);
-	if (!fixtureLibrary?.fixtureSourceMappings) return null;
-	const targets = projectedDescriptors(snapshot)
-		.filter((descriptor) => !descriptor.retired)
-		.map((descriptor) => ({
-			value: descriptor.id,
-			label: `${descriptor.label} (${descriptor.id})`,
-		}));
-	const setTarget = async (
-		sourceFormat: string,
-		source: string,
-		target: string | null,
-	) => {
-		try {
-			const saved = await fixtureLibrary.rememberFixtureSourceMapping?.({
-				sourceFormat,
-				sourceAttribute: source,
-				targetAttribute: target,
-			});
-			setMappings((current) => [
-				...current.filter(
-					(mapping) =>
-						mapping.source_format !== sourceFormat ||
-						mapping.source_attribute !== source,
-				),
-				...(saved ? [saved] : []),
-			]);
-			setError(null);
-		} catch (reason) {
-			setError(reason instanceof Error ? reason.message : String(reason));
-		}
-	};
-	const create = async () => {
-		const trimmed = sourceAttribute.trim();
-		if (!trimmed || !targetAttribute) return;
-		await setTarget("gdtf", trimmed, targetAttribute);
-		setSourceAttribute("");
-	};
-	return (
-		<article>
-			<header>
-				<b>Imported attribute names</b>
-				<small>
-					Desk-local, and kept out of the show file. Fixture revisions retain
-					their already-resolved mapping.
-				</small>
-			</header>
-			<p className="attribute-registry-note">
-				Map a name a GDTF file uses onto the attribute this desk already
-				programs — for example a GDTF <code>MediaRank</code> onto{" "}
-				<code>media.folder</code>. Use <b>New custom attribute</b> instead when
-				the source channel means something the desk does not have yet.
-			</p>
-			{mappings.length > 0 && (
-				<ul className="plain-list attribute-mapping-list">
-					{mappings.map((mapping) => (
-						<li key={`${mapping.source_format}:${mapping.source_attribute}`}>
-							<code>
-								{mapping.source_format.toUpperCase()}:{mapping.source_attribute}
-							</code>
-							<SelectField
-								ariaLabel={`Map ${mapping.source_format.toUpperCase()}:${mapping.source_attribute} to existing attribute`}
-								value={mapping.target_attribute}
-								options={targets}
-								onChange={(target) =>
-									void setTarget(
-										mapping.source_format,
-										mapping.source_attribute,
-										target,
-									)
-								}
-							/>
-							<Button
-								onClick={() =>
-									void setTarget(
-										mapping.source_format,
-										mapping.source_attribute,
-										null,
-									)
-								}
-							>
-								Forget mapping
-							</Button>
-						</li>
-					))}
-				</ul>
-			)}
-			<FormLayout labelPlacement="side">
-				<TextField
-					label="GDTF attribute name"
-					value={sourceAttribute}
-					onChange={(event) => setSourceAttribute(event.target.value)}
-					description="The attribute name as the GDTF file spells it, without the GDTF: prefix."
-				/>
-				<SelectField
-					label="Means this attribute"
-					ariaLabel="Means this attribute"
-					value={targetAttribute}
-					options={[{ value: "", label: "Choose an attribute" }, ...targets]}
-					onChange={setTargetAttribute}
-				/>
-			</FormLayout>
-			<Button
-				disabled={!sourceAttribute.trim() || !targetAttribute}
-				onClick={() => void create()}
-			>
-				Map imported name
-			</Button>
-			{error && <p role="alert">{error}</p>}
-		</article>
-	);
-}
-
 function EncoderLayoutEditor({
 	snapshot,
 	onChange,
@@ -247,7 +109,8 @@ function EncoderLayoutEditor({
 	onChange(configuration: AttributeConfiguration): void;
 }) {
 	const screens = useScreensOptional();
-	const width = screens?.screens?.programmer_control_surface.visible_encoders ?? 6;
+	const width =
+		screens?.screens?.programmer_control_surface.visible_encoders ?? 6;
 	const configuration = snapshot.configuration;
 	const placed = projectedDescriptors(snapshot).filter(
 		(descriptor) => !descriptor.retired,
@@ -400,11 +263,7 @@ function EncoderSlot({
 	dragging?: boolean;
 	dropTarget: boolean;
 	onChange(configuration: AttributeConfiguration): void;
-	onDragBegin(
-		event: ReactPointerEvent,
-		attribute: string,
-		label: string,
-	): void;
+	onDragBegin(event: ReactPointerEvent, attribute: string, label: string): void;
 	onDragOver(target: EncoderSlotTarget): void;
 }) {
 	const { group, page, slot } = target;
@@ -416,8 +275,8 @@ function EncoderSlot({
 		dropTarget ? "is-drop-target" : "",
 	];
 	return (
-		// biome-ignore lint/a11y/useSemanticElements: The slot is a drop target that already contains its own controls.
 		<div
+			role="group"
 			className={classes.filter(Boolean).join(" ")}
 			aria-label={`${group} page ${page} encoder ${slot}`}
 			onPointerDown={(event) =>
@@ -931,6 +790,80 @@ function CustomAttributeControls({
 	);
 }
 
+function ActivationGroupCard({
+	configuration,
+	group,
+	unassigned,
+	label,
+	onChange,
+}: {
+	configuration: AttributeConfiguration;
+	group: AttributeConfiguration["activation_groups"][number];
+	unassigned: ReturnType<typeof projectedDescriptors>;
+	label(id: string): string;
+	onChange(configuration: AttributeConfiguration): void;
+}) {
+	return (
+		<article className="activation-group">
+			<header className="activation-group-header">
+				<TextField
+					aria-label={`${group.label} name`}
+					value={group.label}
+					onChange={(event) =>
+						onChange(
+							renameActivationGroup(
+								configuration,
+								group.id,
+								event.target.value,
+							),
+						)
+					}
+				/>
+				<Button
+					variant="danger"
+					aria-label={`Delete ${group.label}`}
+					onClick={() =>
+						onChange(deleteActivationGroup(configuration, group.id))
+					}
+				>
+					Delete
+				</Button>
+			</header>
+			<div className="activation-group-members">
+				{group.members.map((id) => (
+					<Button
+						key={id}
+						className="activation-member"
+						aria-label={`Remove ${label(id)} from ${group.label}`}
+						onClick={() =>
+							onChange(removeActivationMember(configuration, group.id, id))
+						}
+					>
+						{label(id)} <span aria-hidden="true">×</span>
+					</Button>
+				))}
+				{unassigned.length > 0 && (
+					<SelectField
+						ariaLabel={`Add attribute to ${group.label}`}
+						value=""
+						options={[
+							{ value: "", label: "Add attribute" },
+							...unassigned.map((descriptor) => ({
+								value: descriptor.id,
+								label: descriptor.label,
+							})),
+						]}
+						onChange={(value) =>
+							value &&
+							onChange(addActivationMember(configuration, group.id, value))
+						}
+					/>
+				)}
+			</div>
+		</article>
+	);
+}
+
 function ActivationGroups({
 	snapshot,
 	onChange,
@@ -1010,63 +943,14 @@ function ActivationGroups({
 				</div>
 			</article>
 			{configuration.activation_groups.map((group) => (
-				<article key={group.id} className="activation-group">
-					<header className="activation-group-header">
-						<TextField
-							aria-label={`${group.label} name`}
-							value={group.label}
-							onChange={(event) =>
-								onChange(
-									renameActivationGroup(
-										configuration,
-										group.id,
-										event.target.value,
-									),
-								)
-							}
-						/>
-						<Button
-							variant="danger"
-							aria-label={`Delete ${group.label}`}
-							onClick={() =>
-								onChange(deleteActivationGroup(configuration, group.id))
-							}
-						>
-							Delete
-						</Button>
-					</header>
-					<div className="activation-group-members">
-						{group.members.map((id) => (
-							<Button
-								key={id}
-								className="activation-member"
-								aria-label={`Remove ${label(id)} from ${group.label}`}
-								onClick={() =>
-									onChange(removeActivationMember(configuration, group.id, id))
-								}
-							>
-								{label(id)} <span aria-hidden="true">×</span>
-							</Button>
-						))}
-						{unassigned.length > 0 && (
-							<SelectField
-								ariaLabel={`Add attribute to ${group.label}`}
-								value=""
-								options={[
-									{ value: "", label: "Add attribute" },
-									...unassigned.map((descriptor) => ({
-										value: descriptor.id,
-										label: descriptor.label,
-									})),
-								]}
-								onChange={(value) =>
-									value &&
-									onChange(addActivationMember(configuration, group.id, value))
-								}
-							/>
-						)}
-					</div>
-				</article>
+				<ActivationGroupCard
+					key={group.id}
+					configuration={configuration}
+					group={group}
+					unassigned={unassigned}
+					label={label}
+					onChange={onChange}
+				/>
 			))}
 			<article>
 				<header>
@@ -1190,32 +1074,6 @@ function projectedDescriptors(
 			left.encoder_page - right.encoder_page ||
 			left.encoder_slot - right.encoder_slot,
 	);
-}
-
-function customAttributeId(label: string) {
-	const slug =
-		label
-			.toLowerCase()
-			.replace(/[^a-z0-9]+/g, ".")
-			.replace(/^\.+|\.+$/g, "") || "attribute";
-	return `custom.${slug}.${crypto.randomUUID()}`;
-}
-
-function nextPlacement(
-	configuration: AttributeConfiguration,
-	group: AttributeEncoderGroup,
-) {
-	const occupied = new Set(
-		configuration.placements
-			.filter((placement) => placement.encoder_group === group)
-			.map(
-				(placement) => `${placement.encoder_page}:${placement.encoder_slot}`,
-			),
-	);
-	for (let page = 1; ; page += 1)
-		for (let slot = 1; slot <= 6; slot += 1)
-			if (!occupied.has(`${page}:${slot}`))
-				return { encoder_page: page, encoder_slot: slot };
 }
 
 function activationGroupId(

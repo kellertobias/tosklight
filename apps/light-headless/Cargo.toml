@@ -7,8 +7,7 @@ license-file.workspace = true
 authors.workspace = true
 
 [features]
-default = ["native-midi"]
-native-midi = ["light-headless-runtime/native-midi"]
+default = []
 e2e-embedded-ui = ["light-headless-runtime/e2e-embedded-ui"]
 
 [dependencies]

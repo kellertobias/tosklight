@@ -1,5 +1,7 @@
 import type {
 	CueListRuntimeProjection,
+	CueTimingRuntimeProjection,
+	CueTriggerTimingProjection,
 	DynamicPlaybackRuntimeProjection,
 	PlaybackDeskProjection,
 	PlaybackRuntimeIdentity,
@@ -77,6 +79,59 @@ function decodeCueReference(value: unknown, path: string) {
 	};
 }
 
+function decodeCueTriggerTiming(
+	value: unknown,
+	path: string,
+): CueTriggerTimingProjection {
+	const trigger = recordAt(value, path);
+	return {
+		cue: decodeCueReference(trigger.cue, `${path}.cue`),
+		kind: enumAt(trigger.kind, `${path}.kind`, ["follow", "wait", "link"]),
+		started_at: stringAt(trigger.started_at, `${path}.started_at`),
+		duration_millis: integerAt(
+			trigger.duration_millis,
+			`${path}.duration_millis`,
+		),
+	};
+}
+
+function decodeCueTiming(value: unknown, path: string): CueTimingRuntimeProjection {
+	const timing = recordAt(value, path);
+	return {
+		cue_id: stringAt(timing.cue_id, `${path}.cue_id`),
+		in_delay_millis: integerAt(
+			timing.in_delay_millis,
+			`${path}.in_delay_millis`,
+		),
+		in_fade_millis: integerAt(
+			timing.in_fade_millis,
+			`${path}.in_fade_millis`,
+		),
+		out_delay_millis: integerAt(
+			timing.out_delay_millis,
+			`${path}.out_delay_millis`,
+		),
+		out_fade_millis: integerAt(
+			timing.out_fade_millis,
+			`${path}.out_fade_millis`,
+		),
+		completion_millis: integerAt(
+			timing.completion_millis,
+			`${path}.completion_millis`,
+		),
+		active_trigger: nullable(
+			timing.active_trigger,
+			`${path}.active_trigger`,
+			decodeCueTriggerTiming,
+		),
+		completed_trigger_cue_id: nullable(
+			timing.completed_trigger_cue_id,
+			`${path}.completed_trigger_cue_id`,
+			stringAt,
+		),
+	};
+}
+
 function decodeCueRuntime(
 	value: unknown,
 	path: string,
@@ -107,6 +162,12 @@ function decodeCueRuntime(
 		),
 		paused: booleanAt(runtime.paused, `${path}.paused`),
 		activated_at: stringAt(runtime.activated_at, `${path}.activated_at`),
+		paused_at: nullable(runtime.paused_at, `${path}.paused_at`, stringAt),
+		cue_timing: nullable(
+			runtime.cue_timing,
+			`${path}.cue_timing`,
+			decodeCueTiming,
+		),
 		transition_ordinal: integerAt(
 			runtime.transition_ordinal,
 			`${path}.transition_ordinal`,

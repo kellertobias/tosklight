@@ -1,4 +1,5 @@
 mod attribute_aliases;
+mod control_mappings;
 mod objects;
 mod patch;
 mod patch_heads;
@@ -63,6 +64,7 @@ fn stage_candidate_migrations_preserving(
     preserved: Option<&PortableShowObjectKey>,
 ) -> Result<(), ActionError> {
     let mut staged = transaction.clone();
+    control_mappings::stage_removal_report(document, &mut staged)?;
     stage_object_migrations(document, &mut staged, preserved)?;
     patch::stage_inline_migrations(document, &mut staged, preserved)?;
     patch::stage_lean_migrations(document, &mut staged, preserved)?;

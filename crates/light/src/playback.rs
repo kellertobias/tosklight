@@ -30,7 +30,8 @@ pub use group_id::{MAX_PLAYBACK_GROUP_ID_BYTES, PlaybackGroupId, PlaybackGroupId
 pub use operation::{PlaybackOperation, PlaybackOperationResult, PlaybackUnitOfWork};
 pub use ports::PlaybackPorts;
 pub use projection::{
-    CueListRuntimeProjection, DynamicPlaybackControllerStatus, DynamicPlaybackRuntimeProjection,
+    CueListRuntimeProjection, CueTimingRuntimeProjection, CueTriggerTimingKind,
+    CueTriggerTimingProjection, DynamicPlaybackControllerStatus, DynamicPlaybackRuntimeProjection,
     DynamicPlaybackRuntimeState, DynamicPlaybackSpeedSource, GrandMasterRuntimeProjection,
     MAX_PLAYBACK_SNAPSHOT_IDENTITIES, ManualXFadeDirection, PlaybackCueReference,
     PlaybackDeskProjection, PlaybackRuntimeIdentity, PlaybackRuntimeProjection,

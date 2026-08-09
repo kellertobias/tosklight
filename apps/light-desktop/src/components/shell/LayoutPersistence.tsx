@@ -6,12 +6,59 @@ import {
 } from "../../features/deskSnapshot/DeskSnapshotState";
 import { deskLayoutScopeKey } from "../../features/server/contracts";
 import { useApp } from "../../state/AppContext";
+import type { AppState } from "../../types";
 import {
 	collectFixtureSheetCompactModes,
 	desksWithoutFixtureSheetCompactModes,
 	fixtureSheetCompactModeStorageKey,
 	readFixtureSheetCompactModes,
 } from "./fixtureSheetCompactModePersistence";
+
+function persistedWindowSettings(state: AppState) {
+	return {
+		dockMode: state.dockMode,
+		builtIn: state.builtIn,
+		lastBuiltIn: state.lastBuiltIn,
+		presetFamily: state.presetFamily,
+		presetPoolColors: state.presetPoolColors,
+		playbackColumns: state.playbackColumns,
+		playbackRows: state.playbackRows,
+		playbackPage: state.playbackPage,
+		stageMode: state.stageMode,
+		stageView: state.stageView,
+		stageZoom: state.stageZoom,
+		stagePanX: state.stagePanX,
+		stagePanY: state.stagePanY,
+		stageOrbitX: state.stageOrbitX,
+		stageOrbitY: state.stageOrbitY,
+		stageGroupsVisible: state.stageGroupsVisible,
+		stageShowSelection: state.stageShowSelection,
+		stageShowFloorGrid: state.stageShowFloorGrid,
+		stage2dSide: state.stage2dSide,
+		stageVizBackground: state.stageVizBackground,
+		stageVizQuality: state.stageVizQuality,
+		stageVizAtmosphere: state.stageVizAtmosphere,
+		stageVizExposure: state.stageVizExposure,
+		stageVizLaserBrightness: state.stageVizLaserBrightness,
+		stageVizShowLabels: state.stageVizShowLabels,
+		stageEnvironmentBrightness: state.stageEnvironmentBrightness,
+		dmxDotSize: state.dmxDotSize,
+		fixtureSheetOrder: state.fixtureSheetOrder,
+		fixtureSheetActiveOnly: state.fixtureSheetActiveOnly,
+		fixtureSheetCueListId: state.fixtureSheetCueListId,
+		fixtureSheetColumns: state.fixtureSheetColumns,
+		fixtureSheetShowType: state.fixtureSheetShowType,
+		fixtureSheetIncludedHeads: state.fixtureSheetIncludedHeads,
+		fixtureGroupsVisible: state.fixtureGroupsVisible,
+		presetGroupsVisible: state.presetGroupsVisible,
+	};
+}
+
+function compactStorageScope(showId?: string | null, deskId?: string | null) {
+	return showId && deskId
+		? fixtureSheetCompactModeStorageKey(showId, deskId)
+		: null;
+}
 
 export function LayoutPersistence() {
 	const connection = useDeskConnection();
@@ -26,10 +73,7 @@ export function LayoutPersistence() {
 		connection?.saveDeskLayout ?? (async () => undefined),
 	);
 	const scope = deskLayoutScopeKey(activeShowId ?? undefined, session?.user.id);
-	const compactScope =
-		activeShowId && session?.desk.id
-			? fixtureSheetCompactModeStorageKey(activeShowId, session.desk.id)
-			: null;
+	const compactScope = compactStorageScope(activeShowId, session?.desk.id);
 	const portableDesksSignature = JSON.stringify(
 		desksWithoutFixtureSheetCompactModes(state.desks),
 	);
@@ -116,45 +160,7 @@ export function LayoutPersistence() {
 				void saveDeskLayout.current({
 					desks: desksWithoutFixtureSheetCompactModes(state.desks),
 					activeDeskId: state.activeDeskId,
-					windowSettings: {
-						dockMode: state.dockMode,
-						builtIn: state.builtIn,
-						lastBuiltIn: state.lastBuiltIn,
-						presetFamily: state.presetFamily,
-						presetPoolColors: state.presetPoolColors,
-						playbackColumns: state.playbackColumns,
-						playbackRows: state.playbackRows,
-						playbackPage: state.playbackPage,
-						stageMode: state.stageMode,
-						stageView: state.stageView,
-						stageZoom: state.stageZoom,
-						stagePanX: state.stagePanX,
-						stagePanY: state.stagePanY,
-						stageOrbitX: state.stageOrbitX,
-						stageOrbitY: state.stageOrbitY,
-						stageGroupsVisible: state.stageGroupsVisible,
-						stageShowSelection: state.stageShowSelection,
-						stageShowFloorGrid: state.stageShowFloorGrid,
-						stage2dSide: state.stage2dSide,
-						stageVizBackground: state.stageVizBackground,
-						// The renderer's own settings are the operator's choice on this machine, so
-						// they belong with the installation rather than being reset every launch.
-						stageVizQuality: state.stageVizQuality,
-						stageVizAtmosphere: state.stageVizAtmosphere,
-						stageVizExposure: state.stageVizExposure,
-						stageVizLaserBrightness: state.stageVizLaserBrightness,
-						stageVizShowLabels: state.stageVizShowLabels,
-						stageEnvironmentBrightness: state.stageEnvironmentBrightness,
-						dmxDotSize: state.dmxDotSize,
-						fixtureSheetOrder: state.fixtureSheetOrder,
-						fixtureSheetActiveOnly: state.fixtureSheetActiveOnly,
-						fixtureSheetCueListId: state.fixtureSheetCueListId,
-						fixtureSheetColumns: state.fixtureSheetColumns,
-						fixtureSheetShowType: state.fixtureSheetShowType,
-						fixtureSheetIncludedHeads: state.fixtureSheetIncludedHeads,
-						fixtureGroupsVisible: state.fixtureGroupsVisible,
-						presetGroupsVisible: state.presetGroupsVisible,
-					},
+					windowSettings: persistedWindowSettings(state),
 				}),
 			600,
 		);

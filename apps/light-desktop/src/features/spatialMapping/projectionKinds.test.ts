@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { SpatialProjection } from "./contracts";
 import {
+	directionAngles,
+	directionFromAngles,
+	PROJECTION_PRESETS,
 	projectionFields,
 	projectionKind,
 	supportsPreset,
@@ -19,20 +22,32 @@ function labels(projection: SpatialProjection) {
 }
 
 describe("projection kinds", () => {
+	it("offers all six face presets", () => {
+		expect(PROJECTION_PRESETS.map(({ label }) => label)).toEqual([
+			"Top",
+			"Bottom",
+			"Front",
+			"Back",
+			"Left",
+			"Right",
+		]);
+	});
+
+	it("cleans exact operator angles after vector conversion", () => {
+		expect(directionAngles(directionFromAngles(45, 45))).toEqual({
+			azimuth: 45,
+			elevation: 45,
+		});
+	});
+
 	it("reads a stored projection with no kind as planar", () => {
 		expect(projectionKind(planar)).toBe("planar");
 		expect(supportsPreset(planar)).toBe(true);
 	});
 
 	it("offers a position and a direction, and nothing else", () => {
-		// Planar reads no position, so it is not offered one. It keeps components because a view
-		// preset names one and the numbers are how a preset reads back.
-		expect(labels(planar)).toEqual([
-			"Direction X",
-			"Direction Y",
-			"Direction Z",
-			"Rotation",
-		]);
+		// Planar reads no position, but is aimed with the same operator-facing turns.
+		expect(labels(planar)).toEqual(["Azimuth", "Elevation", "Rotation"]);
 
 		// The placed kinds are aimed by the two turns that aim them, then rolled about the result.
 		const placed = ["Position X", "Position Y", "Position Z"];

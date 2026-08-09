@@ -57,6 +57,26 @@ describe("frontend performance diagnostics", () => {
 		expect(second?.snapshotRequests).toEqual([]);
 	});
 
+	it("publishes scalar progress without constructing a full snapshot", async () => {
+		const { frontendPerformanceDiagnostics: diagnostics } = await import(
+			"./diagnostics"
+		);
+		const finish = diagnostics.beginSnapshotRequest("show-objects:preset");
+		expect(window.__TOSKLIGHT_FRONTEND_PERFORMANCE__?.progress()).toMatchObject(
+			{
+				warmupStatus: null,
+				eventLagCount: 0,
+				snapshotRequestRunning: true,
+			},
+		);
+		finish({ objects: [] });
+		expect(window.__TOSKLIGHT_FRONTEND_PERFORMANCE__?.progress()).toMatchObject(
+			{
+				snapshotRequestRunning: false,
+			},
+		);
+	});
+
 	it("records bounded event receipt lag from the authoritative envelope time", async () => {
 		const { frontendPerformanceDiagnostics: diagnostics } = await import(
 			"./diagnostics"

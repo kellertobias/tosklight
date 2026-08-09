@@ -5,6 +5,23 @@ impl ActiveShowResource {
         self.active.read().clone()
     }
 
+    pub(in crate::runtime) fn compatibility_reports(
+        &self,
+    ) -> Result<Vec<serde_json::Value>, light_show::StoreError> {
+        let Some(show) = self.current() else {
+            return Ok(Vec::new());
+        };
+        let document =
+            super::super::capabilities::active_show::repository::ActiveShowRepository::open(
+                &show.path,
+            )?
+            .portable_document()?;
+        Ok(document
+            .objects_of_kind("compatibility_report")
+            .map(|object| object.body().clone())
+            .collect())
+    }
+
     pub(in crate::runtime) fn mutate_objects<P: light_application::ActiveShowPorts>(
         &self,
         action: light_application::ActionEnvelope<

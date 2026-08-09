@@ -1,8 +1,9 @@
 import { type GridRect, PaneView } from "@tosklight/ui/desktop";
 import { useRef, useState } from "react";
+import { poolMutationTarget } from "../../features/controlSurfaceInteraction/poolCommandTarget";
 import {
 	useProgrammingCommandLineActions,
-	useProgrammingDeleteCommandActive,
+	useProgrammingCommandLineView,
 	useProgrammingSelectionView,
 } from "../../features/programmingInteraction/ProgrammingInteractionView";
 import { useApp } from "../../state/AppContext";
@@ -31,7 +32,10 @@ export function Pane({
 		active && (pane.kind === "stage" || pane.kind === "fixtures"),
 	);
 	const commandLineActions = useProgrammingCommandLineActions();
-	const deleteArmed = useProgrammingDeleteCommandActive();
+	const commandLine = useProgrammingCommandLineView();
+	const paneTarget = poolMutationTarget(commandLine?.text ?? "");
+	const deleteArmed =
+		paneTarget?.operation === "delete" && paneTarget.phase === "source";
 	const lastFollowToggle = useRef(0);
 	const [chromeInfo, setChromeInfo] = useState<HTMLSpanElement | null>(null);
 	const [chromeToolbar, setChromeToolbar] = useState<HTMLSpanElement | null>(
@@ -173,6 +177,7 @@ function PaneContent({
 				fixtureSheetActiveOnly={Boolean(pane.fixtureSheetActiveOnly)}
 				fixtureSheetCompactMode={pane.fixtureSheetCompactMode ?? "off"}
 				showCueSidebar={pane.showCueSidebar ?? true}
+				cueListCompactRows={pane.cueListCompactRows ?? false}
 				cueListSource={pane.cueListSource ?? "fixed"}
 				fixedCueListNumber={pane.fixedCueListNumber}
 				stageView={pane.stageView ?? state.stageView}

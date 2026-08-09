@@ -85,6 +85,24 @@ fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
     handle_control_event(
         &state,
         ControlEvent::Osc {
+            address: "/light/main/programmer/align".into(),
+            arguments: vec![
+                OscArgument::Bool(true),
+                OscArgument::String("hardware-align-1".into()),
+            ],
+            source: Some("127.0.0.1:9010".into()),
+        },
+    );
+    assert!(state.events.audit_events().iter().any(|event| {
+        event.kind == "desk_action"
+            && event.payload["action"] == "align"
+            && event.payload["request_id"] == "hardware-align-1"
+            && event.payload["session_id"] == serde_json::json!(session.id)
+    }));
+    let timings_before_release = state.action_timing.snapshot().len();
+    handle_control_event(
+        &state,
+        ControlEvent::Osc {
             address: "/light/main/programmer/set".into(),
             arguments: vec![
                 OscArgument::Bool(false),
@@ -95,7 +113,7 @@ fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
     );
     assert_eq!(
         state.action_timing.snapshot().len(),
-        1,
+        timings_before_release,
         "Programmer key release is not measured as another action"
     );
     state

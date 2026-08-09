@@ -279,7 +279,7 @@ fn selective_import_maps_exact_raw_changes_and_related_routes() {
 #[test]
 fn global_output_change_keeps_identity_source_and_correlation() {
     let bus = EventBus::new(4);
-    let context = context(ActionSource::Midi);
+    let context = context(ActionSource::Extension);
     let event = bus.publish(EventDraft::output_runtime_changed(
         &context,
         OutputRuntimeChange {
@@ -311,7 +311,7 @@ fn global_output_change_keeps_identity_source_and_correlation() {
     assert_eq!(
         event.source,
         wire::EventSource::Action {
-            source: wire::EventActionSource::Midi
+            source: wire::EventActionSource::Extension
         }
     );
     assert_eq!(event.correlation_id, Some(context.correlation_id));

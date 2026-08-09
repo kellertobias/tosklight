@@ -6,7 +6,10 @@ use crate::{
     ProgrammingValuesRequest, ProgrammingValuesResult,
 };
 use light_core::{AttributeValue, SessionId, UserId};
-use light_programmer::{NormalProgrammerValueMutation, NormalProgrammerValueTiming};
+use light_programmer::{
+    NormalProgrammerValueMutation, NormalProgrammerValueTiming, ProgrammerAlignmentBase,
+    ProgrammerAlignmentPlan,
+};
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
@@ -76,40 +79,59 @@ impl ProgrammingService {
             .then(|| ports.values_environment(&action.context))
             .transpose()?;
         let planned;
+        let mut alignment_plan = None;
         let mutations = if let Some(intent) = action.command.command.intent() {
             let active_content = self
                 .programmers
                 .get(session)
                 .map(|state| state.update_content())
                 .unwrap_or_default();
-            planned = plan_value_intent(
+            let active_values = active_content
+                .fixture_values
+                .iter()
+                .map(|value| {
+                    (
+                        (value.fixture_id, value.attribute.clone()),
+                        value.value.clone(),
+                    )
+                })
+                .collect::<HashMap<_, _>>();
+            let active_group_values = active_content
+                .group_values
+                .iter()
+                .map(|value| {
+                    (
+                        (value.group_id.clone(), value.attribute.clone()),
+                        value.value.clone(),
+                    )
+                })
+                .collect::<HashMap<_, _>>();
+            let values_environment = environment
+                .as_ref()
+                .expect("non-clear actions load a values environment");
+            if let Some((aligned, plan)) = self.plan_aligned_value_intent(
+                &action.context,
+                ports,
+                session,
                 intent,
-                environment
-                    .as_ref()
-                    .expect("non-clear actions load a values environment"),
-                active_content
-                    .fixture_values
-                    .iter()
-                    .map(|value| {
-                        (
-                            (value.fixture_id, value.attribute.clone()),
-                            value.value.clone(),
-                        )
-                    })
-                    .collect(),
-                active_content
-                    .group_values
-                    .iter()
-                    .map(|value| {
-                        (
-                            (value.group_id.clone(), value.attribute.clone()),
-                            value.value.clone(),
-                        )
-                    })
-                    .collect(),
-            )?;
+                values_environment,
+                &active_values,
+            )? {
+                planned = aligned;
+                alignment_plan = Some(plan);
+            } else {
+                planned = plan_value_intent(
+                    intent,
+                    values_environment,
+                    active_values,
+                    active_group_values,
+                )?;
+            }
             std::borrow::Cow::Owned(planned)
         } else {
+            if action.command.command.is_clear() {
+                self.programmers.deactivate_alignment(session);
+            }
             action.command.command.mutations()
         };
         if !mutations.is_empty() {
@@ -122,6 +144,30 @@ impl ProgrammingService {
         }
         let changed =
             self.mutate_normal_values(session, &action.command.command, mutations.as_ref());
+        if let Some(plan) = alignment_plan {
+            self.programmers
+                .commit_alignment_plan(session, plan)
+                .map_err(super::alignment::alignment_error)?;
+        }
+        let explicit_fixture_attributes = mutations
+            .iter()
+            .filter_map(|mutation| match mutation {
+                ProgrammingValueMutation::SetFixture {
+                    fixture_id,
+                    attribute,
+                    ..
+                } => Some((*fixture_id, attribute.clone())),
+                ProgrammingValueMutation::ReleaseFixture { .. }
+                | ProgrammingValueMutation::SetGroup { .. }
+                | ProgrammingValueMutation::ReleaseGroup { .. } => None,
+            })
+            .collect::<Vec<_>>();
+        if !explicit_fixture_attributes.is_empty() {
+            ports.mark_highlight_explicit_fixture_attributes(
+                &action.context,
+                &explicit_fixture_attributes,
+            );
+        }
         let warning = changed
             .then(|| ports.persist(&action.context, "programmer.values"))
             .flatten();
@@ -145,6 +191,89 @@ impl ProgrammingService {
             replayed: false,
             warning,
         })
+    }
+
+    fn plan_aligned_value_intent(
+        &self,
+        context: &crate::ActionContext,
+        ports: &dyn ProgrammingPorts,
+        session: SessionId,
+        intent: &ProgrammingValueIntent,
+        environment: &ProgrammingValuesEnvironment,
+        active_values: &HashMap<(light_core::FixtureId, light_core::AttributeKey), AttributeValue>,
+    ) -> Result<Option<(Vec<ProgrammingValueMutation>, ProgrammerAlignmentPlan)>, ActionError> {
+        let Some(alignment) = self.programmers.alignment(session) else {
+            return Ok(None);
+        };
+        let ProgrammingValueOperation::RelativeStep(delta) = intent.operation else {
+            self.programmers.deactivate_alignment(session);
+            return Ok(None);
+        };
+        if alignment
+            .binding
+            .as_ref()
+            .is_some_and(|binding| binding.attribute != intent.attribute)
+        {
+            self.programmers.deactivate_alignment(session);
+            return Ok(None);
+        }
+        let bases = alignment.binding.as_ref().map_or_else(
+            || {
+                alignment_bases_from_environment(
+                    ports,
+                    context,
+                    &alignment.fixtures,
+                    &intent.attribute,
+                    environment,
+                    active_values,
+                )
+            },
+            |_| Vec::new(),
+        );
+        let plan = self
+            .programmers
+            .plan_alignment_delta(session, intent.attribute.clone(), delta, &bases)
+            .map_err(super::alignment::alignment_error)?;
+        let mut mutations = Vec::new();
+        let mut addresses = HashSet::new();
+        for aligned in &plan.values {
+            push_intent_value(
+                &mut mutations,
+                &mut addresses,
+                aligned.fixture_id,
+                intent.attribute.clone(),
+                AttributeValue::Normalized(aligned.value),
+                intent.timing,
+            );
+            for linked in environment
+                .activation_links
+                .get(&intent.attribute)
+                .into_iter()
+                .flatten()
+            {
+                let address = (aligned.fixture_id, linked.clone());
+                if active_values.contains_key(&address)
+                    || !environment
+                        .supported_attributes
+                        .get(&aligned.fixture_id)
+                        .is_some_and(|attributes| attributes.contains(linked))
+                {
+                    continue;
+                }
+                let Some(value) = environment.current_values.get(&address).cloned() else {
+                    continue;
+                };
+                push_intent_value(
+                    &mut mutations,
+                    &mut addresses,
+                    aligned.fixture_id,
+                    linked.clone(),
+                    value,
+                    intent.timing,
+                );
+            }
+        }
+        Ok(Some((mutations, plan)))
     }
 
     fn mutate_normal_values(
@@ -284,6 +413,38 @@ impl ProgrammingService {
             result,
         );
     }
+}
+
+fn alignment_bases_from_environment(
+    ports: &dyn ProgrammingPorts,
+    context: &crate::ActionContext,
+    fixtures: &[light_core::FixtureId],
+    attribute: &light_core::AttributeKey,
+    environment: &ProgrammingValuesEnvironment,
+    active_values: &HashMap<(light_core::FixtureId, light_core::AttributeKey), AttributeValue>,
+) -> Vec<ProgrammerAlignmentBase> {
+    fixtures
+        .iter()
+        .filter(|fixture_id| {
+            environment
+                .supported_attributes
+                .get(fixture_id)
+                .is_some_and(|attributes| attributes.contains(attribute))
+        })
+        .filter_map(|fixture_id| {
+            let address = (*fixture_id, attribute.clone());
+            active_values
+                .get(&address)
+                .or_else(|| environment.current_values.get(&address))
+                .or_else(|| environment.default_values.get(&address))
+                .and_then(AttributeValue::normalized)
+                .map(|value| ProgrammerAlignmentBase {
+                    fixture_id: *fixture_id,
+                    value,
+                    wraps: ports.programmer_attribute_wraps(context, *fixture_id, attribute),
+                })
+        })
+        .collect()
 }
 
 // @tour value-spreading:40 Expand once at the application boundary

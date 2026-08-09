@@ -1,6 +1,12 @@
 /** Feature-owned spatial models. Generated wire DTOs are decoded at the API boundary. */
 
-export type ProjectionPreset = "top" | "front" | "back" | "left" | "right";
+export type ProjectionPreset =
+	| "top"
+	| "bottom"
+	| "front"
+	| "back"
+	| "left"
+	| "right";
 export type RankDirection = "ascending" | "descending";
 export type RadialDirection = "outward" | "inward";
 export type RadarSweep = "clockwise" | "counter_clockwise";

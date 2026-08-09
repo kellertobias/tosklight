@@ -497,7 +497,7 @@ pub struct ViewConfiguration {
     /// showing an audience what the night looks like. So it is the operator's, like the fog.
     pub laser_brightness: f32,
     pub theme: Theme,
-    /// Draw fixture numbers and patch addresses beside each fixture in the plan views.
+    /// Draw screen-space fixture numbers and patch addresses beside fixtures in every Stage view.
     pub show_labels: bool,
     /// The colour behind everything, linear RGB.
     ///

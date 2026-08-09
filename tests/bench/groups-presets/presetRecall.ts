@@ -1,5 +1,6 @@
 import { HttpPresetRecallTransport } from "../../../apps/light-desktop/src/api/PresetRecallTransport";
 import { HttpProgrammerCaptureModeTransport } from "../../../apps/light-desktop/src/api/ProgrammerCaptureModeTransport";
+import { HttpProgrammerPreloadValuesTransport } from "../../../apps/light-desktop/src/api/ProgrammerPreloadValuesTransport";
 import { HttpProgrammerValuesTransport } from "../../../apps/light-desktop/src/api/ProgrammerValuesTransport";
 import { programmerValuesUuidAt } from "../../../apps/light-desktop/src/api/programmerValuesWireProjection";
 import { decodeProgrammingInteractionSnapshot } from "../../../apps/light-desktop/src/api/programmingWire";
@@ -17,8 +18,8 @@ import {
 import type { ApiDriver } from "../core/api";
 import {
 	type IntentHttpDependencies,
-	intentFetch,
 	intentContextHeaders,
+	intentFetch,
 	intentRequestId,
 	intentSession,
 	intentUrl,
@@ -48,16 +49,18 @@ export async function recallPreset(
 		family: intent.preset.family,
 		number: intent.preset.number,
 	};
-	const [presetSnapshot, values, captureMode, interaction] = await Promise.all([
-		showObjects(api, session.token, fetch).object(
-			intent.showId,
-			"preset",
-			intent.preset.objectId,
-		),
-		programmerValues(api, session.token, fetch).loadSnapshot(scope),
-		captureModes(api, session.token, fetch).loadSnapshot(scope),
-		loadInteraction(api, fetch),
-	]);
+	const [presetSnapshot, values, preloadValues, captureMode, interaction] =
+		await Promise.all([
+			showObjects(api, session.token, fetch).object(
+				intent.showId,
+				"preset",
+				intent.preset.objectId,
+			),
+			programmerValues(api, session.token, fetch).loadSnapshot(scope),
+			programmerPreloadValues(api, session.token, fetch).loadSnapshot(scope),
+			captureModes(api, session.token, fetch).loadSnapshot(scope),
+			loadInteraction(api, fetch),
+		]);
 	const preset = presetSnapshot.object;
 	if (preset === null)
 		throw new Error(`Preset ${intent.preset.objectId} does not exist`);
@@ -69,6 +72,7 @@ export async function recallPreset(
 		expectedPresetRevision: preset.revision,
 		expectedShowRevision: presetSnapshot.showRevision,
 		expectedProgrammerRevision: values.projection.revision,
+		expectedPreloadValuesRevision: preloadValues.projection.revision,
 		expectedCaptureModeRevision: captureMode.projection.revision,
 		expectedSelectionRevision: interaction.projection.selection.revision,
 		selectedFixtureCount: interaction.projection.selection.selected.length,
@@ -81,6 +85,19 @@ export async function recallPreset(
 		},
 		request,
 	);
+}
+
+function programmerPreloadValues(
+	api: ApiDriver,
+	sessionToken: string,
+	fetch: typeof globalThis.fetch,
+) {
+	return new HttpProgrammerPreloadValuesTransport({
+		baseUrl: api.baseUrl,
+		sessionToken,
+		authenticatedUserId: intentSession(api).user.id,
+		fetch,
+	});
 }
 
 function showObjects(

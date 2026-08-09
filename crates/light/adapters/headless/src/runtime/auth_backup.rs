@@ -154,5 +154,7 @@ async fn install_activated_snapshot(
         drop(activation);
     })
     .await
-    .map_err(|error| ApiError::internal(format!("show activation task failed: {error}")))
+    .map_err(|error| ApiError::internal(format!("show activation task failed: {error}")))?;
+    state.extensions.refresh_feedback_snapshots();
+    Ok(())
 }

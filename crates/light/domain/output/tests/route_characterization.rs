@@ -1,11 +1,12 @@
 use light_output::{
-    DMX_SLOTS, DeliveryMode, OutputRoute, Protocol, artnet_broadcast_destination, encode_routes,
-    sacn_multicast_destination,
+    DMX_SLOTS, DeliveryMode, OutputRoute, OutputRouteTarget, Protocol,
+    artnet_broadcast_destination, encode_routes, sacn_multicast_destination,
 };
 use std::{collections::HashMap, net::SocketAddr};
 
 fn route(protocol: Protocol, logical: u16, destination: u16) -> OutputRoute {
     OutputRoute {
+        target: Default::default(),
         protocol,
         logical_universe: logical,
         destination_universe: destination,
@@ -209,6 +210,7 @@ fn legacy_route_without_minimum_slots_keeps_full_universe_payloads() {
     }))
     .unwrap();
     assert_eq!(route.minimum_slots, 512);
+    assert_eq!(route.target, OutputRouteTarget::Network);
     assert_eq!(route.resolved_delivery_mode(), DeliveryMode::Broadcast);
 
     let legacy_unicast: OutputRoute = serde_json::from_value(serde_json::json!({
@@ -223,4 +225,29 @@ fn legacy_route_without_minimum_slots_keeps_full_universe_payloads() {
         legacy_unicast.resolved_delivery_mode(),
         DeliveryMode::Unicast
     );
+}
+
+#[test]
+fn network_route_json_stays_unchanged_and_usb_targets_never_reach_udp_encoding() {
+    let network = route(Protocol::ArtNet, 1, 1);
+    let serialized = serde_json::to_value(&network).unwrap();
+    assert!(serialized.get("target").is_none());
+
+    let mut usb = network;
+    usb.target = OutputRouteTarget::UsbEndpoint {
+        endpoint_id: "front-of-house".into(),
+    };
+    usb.delivery_mode = Some(DeliveryMode::Multicast); // ignored for a USB target
+    assert!(usb.validate().is_ok());
+    let packets = encode_routes(
+        &[usb],
+        &HashMap::from([(1, [0x55; DMX_SLOTS])]),
+        &HashMap::new(),
+        &mut HashMap::new(),
+        [0; 16],
+        "USB isolation",
+        100,
+    )
+    .unwrap();
+    assert!(packets.is_empty());
 }

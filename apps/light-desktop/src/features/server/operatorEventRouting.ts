@@ -28,9 +28,21 @@ function routeDeskAction(
 			payload.session_id === session.session_id ||
 			payload.desk_id === session.desk.id)
 	) {
-		if (payload.action === "set")
+		if (payload.action === "align") {
+			window.dispatchEvent(new CustomEvent("light:align-action", { detail }));
+			return;
+		} else if (payload.action === "set")
 			routeControlSurfaceIntentWithFeedback({ type: "set", source: "osc" });
 		else {
+			const command = deskCommand(payload.action);
+			if (command) {
+				routeControlSurfaceIntentWithFeedback({
+					type: "desk_command",
+					source: "hardware",
+					command,
+				});
+				return;
+			}
 			const fileAction = fileOperationKey(payload.action);
 			if (fileAction)
 				routeControlSurfaceIntentWithFeedback({
@@ -57,8 +69,42 @@ function routeDeskAction(
 			payload.desk_id === session.desk.id) &&
 		(payload.control.startsWith("encode/") || payload.control === "nav")
 	) {
+		if (
+			payload.control === "nav" &&
+			(payload.value === "page-up" || payload.value === "page-down")
+		) {
+			window.dispatchEvent(
+				new CustomEvent("light:playback-page-step", {
+					detail: payload.value === "page-up" ? 1 : -1,
+				}),
+			);
+			return;
+		}
 		window.dispatchEvent(new CustomEvent("light:encoder-action", { detail }));
 	}
+}
+
+function deskCommand(action: string) {
+	const normalized = action.toLowerCase();
+	if (normalized === "menu") return "menu" as const;
+	if (!normalized.startsWith("desk-")) return null;
+	const command = normalized.slice(5);
+	if (
+		[
+			"home",
+			"stage",
+			"fixtures",
+			"channels",
+			"groups",
+			"presets",
+			"cues",
+			"playbacks",
+			"setup",
+			"help",
+		].includes(command)
+	)
+		return command as import("../controlSurfaceInteraction/registry").DeskCommand;
+	return null;
 }
 
 function deskShortcut(action: string) {

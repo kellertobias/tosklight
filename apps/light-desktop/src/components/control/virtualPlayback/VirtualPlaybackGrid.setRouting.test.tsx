@@ -80,6 +80,9 @@ describe("Virtual Playback SET routing", () => {
 		);
 		expect(card).not.toBeNull();
 		if (!card) throw new Error("Expected the real Virtual Playback card");
+		expect(card).toHaveClass("configuration-armed");
+		expect(card).toHaveClass("set-target");
+		expect(card.querySelector(".pool-card-workflow")).toHaveTextContent("Set");
 		fireEvent.pointerDown(card, { pointerId: 1 });
 		fireEvent.pointerUp(card, { pointerId: 1 });
 
@@ -94,5 +97,52 @@ describe("Virtual Playback SET routing", () => {
 			"touch",
 		);
 		expect(virtualPlaybackAction).not.toHaveBeenCalled();
+	});
+
+	it("routes non-held click and right-click through the same pending Group assignment", () => {
+		const onConfigure = vi.fn();
+		const nonHeld: PlaybackDefinition = {
+			...playback,
+			buttons: ["go", "none", "none"],
+		};
+		const view = render(
+			<VirtualPlaybackGrid
+				pageNumber={2}
+				page={{ ...page, virtual_playbacks: { "1301": nonHeld } }}
+				pageObjectId="page-two"
+				pageObjectRevision={7}
+				rows={1}
+				columns={1}
+				playbacks={new Map()}
+				cueLists={new Map()}
+				runtimes={new Map()}
+				runtimeActions={null}
+				zones={[]}
+				selectedSlots={[]}
+				configurationArmed={false}
+				updateArmed={false}
+				shiftArmed={false}
+				onConfigure={onConfigure}
+				onToggleZone={vi.fn()}
+			/>,
+		);
+		const card = view.container.querySelector<HTMLElement>(
+			'[data-virtual-playback-slot="1"]',
+		)!;
+
+		fireEvent.click(card);
+		fireEvent.contextMenu(card);
+
+		expect(mocks.choosePlayback).toHaveBeenNthCalledWith(
+			1,
+			expect.objectContaining({ playbackNumber: 1301 }),
+			"touch",
+		);
+		expect(mocks.choosePlayback).toHaveBeenNthCalledWith(
+			2,
+			expect.objectContaining({ playbackNumber: 1301 }),
+			"context_menu",
+		);
+		expect(onConfigure).not.toHaveBeenCalled();
 	});
 });

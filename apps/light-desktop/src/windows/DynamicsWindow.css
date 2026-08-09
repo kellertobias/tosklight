@@ -1241,17 +1241,8 @@
 	border-bottom: 1px solid var(--line);
 }
 
-.dynamic-projection-fields {
-	display: grid;
-	grid-template-columns: repeat(2, minmax(8rem, 1fr));
-	gap: 0.55rem;
-}
-
-/* The two segmented choices are one control each, so they take the whole row. */
-.dynamic-projection-fields .dynamic-projection-help,
-.dynamic-projection-fields .dynamic-projection-kinds,
-.dynamic-projection-fields .dynamic-projection-presets {
-	grid-column: 1 / -1;
+.group-projection-fields.dynamic-projection-fields {
+	min-height: 0;
 }
 
 .dynamic-projection-kinds .ui-multi-value-toggle,
@@ -1262,7 +1253,7 @@
 }
 
 .dynamic-projection-kinds button {
-	flex: 1 1 6rem;
+	flex: 1 1 5rem;
 }
 
 .dynamic-projection-columns {
@@ -1375,20 +1366,6 @@
 	fill: #eaf6ff;
 	stroke: var(--cyan, #4fd1e0);
 	stroke-width: 1;
-}
-
-.dynamic-projection-fields label {
-	display: grid;
-	gap: 0.2rem;
-}
-
-.dynamic-projection-fields input,
-.dynamic-projection-fields select {
-	min-height: 2.5rem;
-	border: 1px solid #394b59;
-	border-radius: 0.3rem;
-	background: #070b0f;
-	color: inherit;
 }
 
 .dynamic-projection-preview ol {

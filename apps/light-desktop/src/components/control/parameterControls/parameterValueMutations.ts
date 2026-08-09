@@ -223,7 +223,8 @@ export function submitParameterAbsoluteIntent(
 		operation: { type: "absolute_set", value },
 		...(undoGroup ? { undoGroup } : {}),
 		timing:
-			projection.programmerValuesRoute === "preload"
+			projection.programmerValuesRoute === "preload" ||
+			projection.directEntryUsesProgrammerFade
 				? parameterValueTiming(projection.programmerFadeMillis)
 				: immediateParameterTiming(),
 	});

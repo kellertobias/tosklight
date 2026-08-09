@@ -489,6 +489,32 @@
 .pane-drag-handle:active {
 	cursor: grabbing;
 }
+.desk-pane > .ui-window-header > .ui-window-title-action {
+	position: relative;
+	margin: 3px 0;
+	padding: 0 62px 0 5px;
+	border: 2px solid var(--pool-delete-color, #ff4e55);
+	border-radius: 4px;
+	color: var(--pool-delete-color, #ff4e55);
+	box-shadow: inset 0 0 0 1px #0008;
+}
+.desk-pane > .ui-window-header > .ui-window-title-action::after {
+	position: absolute;
+	top: 50%;
+	right: 5px;
+	transform: translateY(-50%);
+	padding: 2px 5px;
+	border: 1px solid currentColor;
+	border-radius: 3px;
+	background: #080b0fe8;
+	color: inherit;
+	content: "DELETE";
+	font-size: 8px;
+	font-weight: 800;
+	line-height: 1.2;
+	letter-spacing: 0.08em;
+	pointer-events: none;
+}
 .touch-select {
 	position: relative;
 	padding: 8px;
@@ -2565,4 +2591,3 @@ textarea,
 	font-size: 0.8rem;
 	line-height: 1.45;
 }
-

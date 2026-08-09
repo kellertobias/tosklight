@@ -1,6 +1,7 @@
 use crate::SelectionExpression;
-use light_core::{FixtureId, UserId};
+use light_core::{AttributeKey, FixtureId, UserId};
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::time::{Duration, Instant};
 
 /// OSC buttons commonly repeat a press while a physical contact settles. Treat aliases for the
@@ -15,8 +16,8 @@ pub struct HighlightFixture {
     pub number: Option<u32>,
 }
 
-/// Selection stepping is independent of whether HIGH is active. `Selection` means the complete
-/// remembered source is the actual programmer selection; `Step` means one item is selected.
+/// `Selection` means the complete frozen activation set is the actual Programmer selection;
+/// `Step` means active Highlight navigation has singled out one item.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum HighlightMode {
@@ -33,6 +34,25 @@ pub enum HighlightAction {
     Next,
     Previous,
     All,
+}
+
+/// One transport-neutral temporary output layer installed above ordinary resolution.
+///
+/// The layer is runtime-only. `suppressed_attributes` names attributes for which the operator has
+/// explicitly authored a real Programmer value during the current Highlight activation; those
+/// attributes fall through to ordinary resolution while every untouched look attribute remains
+/// temporary.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct HighlightOutputLayer {
+    pub fixture_id: FixtureId,
+    pub role: HighlightOutputRole,
+    pub suppressed_attributes: HashSet<AttributeKey>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum HighlightOutputRole {
+    LowLight,
+    Highlight,
 }
 
 impl HighlightAction {
@@ -89,6 +109,9 @@ pub struct HighlightTransition {
     pub state: HighlightState,
     /// Fixture identities whose raw Highlight Look should be overlaid by the engine.
     pub output_fixtures: Vec<FixtureId>,
+    /// Complete temporary output projection. Unlike `output_fixtures`, this includes Low Light
+    /// members and exact per-attribute suppression.
+    pub output_layers: Vec<HighlightOutputLayer>,
     /// Authoritative actual programmer selection requested by PREV, NEXT, ALL, or reconciliation
     /// after an item disappeared. Attribute values are never touched by this write.
     pub working_selection: Option<HighlightSelectionWrite>,

@@ -41,12 +41,18 @@ export function usePlaybackPageControl() {
 		setRenamePage(null);
 	}, [operation.generation]);
 	const pages = topology.pages.map((page) => page.body);
-	const previousPageNumber = ready && activePageNumber != null
-		? existingPageNumber(pages, activePageNumber - 1)
-		: null;
+	const previousPageNumber =
+		ready && activePageNumber != null
+			? existingPageNumber(pages, activePageNumber - 1)
+			: null;
 	const openPageMenu = () => {
 		if (!ready) return;
 		if (!state.playbackSetArmed) return setPagePickerOpen(true);
+		dispatch({ type: "SET_PLAYBACK_SET_ARMED", value: false });
+		setRenamePage(activePage);
+	};
+	const openPageRename = () => {
+		if (!ready) return;
 		dispatch({ type: "SET_PLAYBACK_SET_ARMED", value: false });
 		setRenamePage(activePage);
 	};
@@ -73,7 +79,8 @@ export function usePlaybackPageControl() {
 				return finishFailedCreate(operation, token, target, setPagePickerOpen);
 			const created = await createPage(target);
 			if (!operation.isCurrent(token)) return;
-			if (!created) return finishFailedCreate(operation, token, target, setPagePickerOpen);
+			if (!created)
+				return finishFailedCreate(operation, token, target, setPagePickerOpen);
 		}
 		const selected = await setActivePage(target);
 		if (!operation.complete(token, selected ? null : selectionFailure(target)))
@@ -100,6 +107,7 @@ export function usePlaybackPageControl() {
 		closeRename: () => setRenamePage(null),
 		nextPage,
 		openPageMenu,
+		openPageRename,
 		selectPage,
 	};
 }

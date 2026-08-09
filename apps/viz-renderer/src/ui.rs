@@ -10,7 +10,7 @@ mod quick_settings;
 mod status;
 
 pub use quick_settings::{QuickSettings, QuickSettingsOutcome, Row, build_quick_settings};
-pub use status::{StatusModel, build_plot_labels, build_status};
+pub use status::{StatusModel, build_fixture_labels, build_status};
 
 /// Palette for one theme. The plot themes have to work on paper as well as on a screen.
 #[derive(Clone, Copy)]

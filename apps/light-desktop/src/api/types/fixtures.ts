@@ -440,6 +440,7 @@ export interface MediaServerFixture {
 }
 
 export interface OutputRoute {
+	target?: { kind: "network" } | { kind: "usb_endpoint"; endpoint_id: string };
 	protocol: "art_net" | "sacn";
 	logical_universe: number;
 	destination_universe: number;

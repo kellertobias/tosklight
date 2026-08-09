@@ -128,8 +128,13 @@ pub(super) fn validate_completion(
         }
         (ProgrammingCueShowRevisionExpectation::Current, _) => true,
     };
+    let creation_matches = completion.created_topology
+        == (completion.changed
+            && completion.projections.cue_list.object_revision == 1
+            && completion.projections.playback.is_some());
     if event_matches
         && revision_matches
+        && creation_matches
         && validate_projections(commit, completion)
         && topology_matches(commit, completion)
         && completion.recorded_cue.number.value().is_finite()

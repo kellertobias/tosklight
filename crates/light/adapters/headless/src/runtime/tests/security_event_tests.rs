@@ -15,7 +15,16 @@ async fn bootstrap_does_not_relock_the_desk_store() {
     assert_eq!(response.status(), StatusCode::OK);
     let body = json(response).await;
     let attributes = body["attribute_registry"].as_array().unwrap();
-    assert_eq!(attributes.len(), light_core::ATTRIBUTE_REGISTRY.len());
+    let recommended = light_core::AttributeConfiguration::recommended();
+    let expected_visible_attributes = light_core::ATTRIBUTE_REGISTRY
+        .iter()
+        .filter(|descriptor| {
+            recommended
+                .attribute_placement_for(&light_core::AttributeKey(descriptor.id.into()))
+                .is_some()
+        })
+        .count();
+    assert_eq!(attributes.len(), expected_visible_attributes);
     let zoom = attributes
         .iter()
         .find(|attribute| attribute["id"] == "zoom")

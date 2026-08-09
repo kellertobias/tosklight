@@ -1,6 +1,16 @@
 use super::*;
 
 impl ProgrammingResource {
+    pub(in crate::runtime) fn set_alignment(
+        &self,
+        context: &light_application::ActionContext,
+        ports: &dyn light_application::ProgrammingPorts,
+        mode: Option<light_programmer::ProgrammerAlignmentMode>,
+    ) -> Result<Option<light_programmer::ProgrammerAlignmentState>, light_application::ActionError>
+    {
+        self.service.set_alignment(context, ports, mode)
+    }
+
     pub(in crate::runtime) fn remember_selective_import(
         &self,
         context: &light_application::ActionContext,
@@ -132,6 +142,18 @@ impl ProgrammingResource {
             .select_expression(session_id, fixtures, expression)
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(in crate::runtime) fn set(
+        &self,
+        session_id: SessionId,
+        fixture_id: light_core::FixtureId,
+        attribute: light_core::AttributeKey,
+        value: light_core::AttributeValue,
+    ) {
+        self.programmers
+            .set(session_id, fixture_id, attribute, value);
+    }
+
     #[cfg(test)]
     pub(in crate::runtime) fn apply_selection_gesture(
         &self,
@@ -145,17 +167,6 @@ impl ProgrammingResource {
 
     pub(in crate::runtime) fn finish_selection_gesture(&self, session_id: SessionId) -> bool {
         self.programmers.finish_selection_gesture(session_id)
-    }
-
-    pub(in crate::runtime) fn set(
-        &self,
-        session_id: SessionId,
-        fixture_id: light_core::FixtureId,
-        attribute: light_core::AttributeKey,
-        value: light_core::AttributeValue,
-    ) {
-        self.programmers
-            .set(session_id, fixture_id, attribute, value);
     }
 
     pub(in crate::runtime) fn set_many(
@@ -431,13 +442,17 @@ impl ProgrammingResource {
         self.programmers.activate_preload(session_id)
     }
 
-    pub(in crate::runtime) fn activate_preload_at(
+    pub(in crate::runtime) fn activate_preload_at_with_fade(
         &self,
         session_id: SessionId,
         committed_at: chrono::DateTime<chrono::Utc>,
+        programmer_fade_millis: u64,
     ) -> bool {
-        self.programmers
-            .activate_preload_at(session_id, committed_at)
+        self.programmers.activate_preload_at_with_fade(
+            session_id,
+            committed_at,
+            programmer_fade_millis,
+        )
     }
 
     pub(in crate::runtime) fn release_preload(&self, session_id: SessionId) -> bool {

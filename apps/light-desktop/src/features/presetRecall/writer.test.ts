@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { ProgrammerCaptureModeStore } from "../programmerCaptureMode/store";
+import { ProgrammerPreloadValuesStore } from "../programmerPreloadValues/store";
 import { ProgrammerValuesStore } from "../programmerValues/store";
 import { ProgrammingInteractionStore } from "../programmingInteraction/store";
 import { ShowObjectsStore } from "../showObjects/store";
@@ -51,6 +52,25 @@ function valuesProjection(revision = 6, level = 0.25) {
 	};
 }
 
+function preloadValuesProjection(revision = 6, level = 0.8) {
+	return {
+		userId: USER_ID,
+		revision,
+		fixtureValues: [
+			{
+				fixtureId: FIXTURE_ID,
+				attribute: "intensity",
+				value: { kind: "normalized" as const, value: level },
+				programmerOrder: 1,
+				fade: false,
+				fadeMillis: null,
+				delayMillis: null,
+			},
+		],
+		groupValues: [],
+	};
+}
+
 function outcome(
 	_request: PresetRecallRequest,
 	overrides: Partial<PresetRecallOutcome> = {},
@@ -60,6 +80,8 @@ function outcome(
 		disposition: "recalled",
 		showRevision: 12,
 		programmerRevision: 7,
+		preloadValuesRevision: null,
+		target: "programmer",
 		captureModeRevision: 3,
 		selectionRevision: 8,
 		interactionEventSequence: null,
@@ -114,6 +136,17 @@ function harness(
 	const valuesStore = new ProgrammerValuesStore();
 	valuesStore.reset(SHOW_ID, USER_ID, "session-a");
 	valuesStore.installSnapshot({ cursor: 30, projection: valuesProjection() });
+	const preloadValuesStore = new ProgrammerPreloadValuesStore();
+	preloadValuesStore.reset(SHOW_ID, USER_ID, "session-a");
+	preloadValuesStore.installSnapshot({
+		cursor: 30,
+		projection: {
+			userId: USER_ID,
+			revision: 5,
+			fixtureValues: [],
+			groupValues: [],
+		},
+	});
 	const captureModeStore = new ProgrammerCaptureModeStore();
 	captureModeStore.reset(SHOW_ID, USER_ID, "session-a");
 	captureModeStore.installSnapshot({
@@ -151,6 +184,7 @@ function harness(
 		recallImplementation ?? (async (_scope, request) => outcome(request)),
 	);
 	const repairValues = vi.fn(async () => undefined);
+	const repairPreloadValues = vi.fn(async () => undefined);
 	const repairCaptureMode = vi.fn(async () => undefined);
 	const repairSelection = vi.fn(async () => undefined);
 	const loadPreset = vi.fn(async () => ({
@@ -162,11 +196,13 @@ function harness(
 		scope: { showId: SHOW_ID, userId: USER_ID, deskId: DESK_ID },
 		showStore,
 		valuesStore,
+		preloadValuesStore,
 		captureModeStore,
 		programmingStore,
 		transport: { recall },
 		loadPreset,
 		repairValues,
+		repairPreloadValues,
 		repairCaptureMode,
 		repairSelection,
 		onError,
@@ -175,10 +211,12 @@ function harness(
 		writer,
 		showStore,
 		valuesStore,
+		preloadValuesStore,
 		captureModeStore,
 		programmingStore,
 		recall,
 		repairValues,
+		repairPreloadValues,
 		repairCaptureMode,
 		repairSelection,
 		loadPreset,
@@ -341,6 +379,33 @@ describe("PresetRecallWriter", () => {
 		expect(setup.loadPreset).toHaveBeenCalledOnce();
 	});
 
+	it("repairs normal and Preload revisions after a redirected response loss", async () => {
+		const setup = harness(async () => {
+			throw new PresetRecallTransportError(
+				"response lost",
+				"unavailable",
+				0,
+				null,
+				null,
+				true,
+			);
+		});
+		setup.captureModeStore.applyProjection(
+			{
+				userId: USER_ID,
+				revision: 4,
+				blind: true,
+				preview: false,
+				preloadCaptureProgrammer: true,
+			},
+			31,
+		);
+
+		await expect(setup.writer.recall(input)).resolves.toBeNull();
+		expect(setup.repairValues).toHaveBeenCalledOnce();
+		expect(setup.repairPreloadValues).toHaveBeenCalledOnce();
+	});
+
 	it("handles context-only changed and no-change without materializing values", async () => {
 		const setup = harness();
 		setup.recall.mockImplementationOnce(async (_scope, request) =>
@@ -452,7 +517,7 @@ describe("PresetRecallWriter", () => {
 		await expect(first).resolves.toMatchObject({ status: "changed" });
 	});
 
-	it("refuses missing, pending, and redirected authority", async () => {
+	it("refuses missing authority and routes redirected capture to Preload", async () => {
 		const loading = harness();
 		loading.showStore.markCollectionDormant("preset");
 		await expect(loading.writer.recall(input)).resolves.toBeNull();
@@ -469,8 +534,27 @@ describe("PresetRecallWriter", () => {
 			},
 			31,
 		);
-		await expect(redirected.writer.recall(input)).resolves.toBeNull();
-		expect(redirected.recall).not.toHaveBeenCalled();
+		redirected.recall.mockImplementationOnce(async (_scope, request) =>
+			outcome(request, {
+				target: "preload",
+				programmerRevision: 6,
+				preloadValuesRevision: 6,
+				projection: preloadValuesProjection(),
+			}),
+		);
+		await expect(redirected.writer.recall(input)).resolves.toMatchObject({
+			target: "preload",
+			preloadValuesRevision: 6,
+		});
+		expect(redirected.recall).toHaveBeenCalledOnce();
+		expect(redirected.recall.mock.calls[0][1]).toMatchObject({
+			expectedProgrammerRevision: 6,
+			expectedPreloadValuesRevision: 5,
+		});
+		expect(
+			redirected.preloadValuesStore.getSnapshot().projection?.revision,
+		).toBe(6);
+		expect(redirected.valuesStore.getSnapshot().projection?.revision).toBe(6);
 	});
 
 	it("drops late outcomes after session, Show, and writer replacement", async () => {

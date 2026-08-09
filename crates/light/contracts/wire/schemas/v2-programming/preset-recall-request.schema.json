@@ -11,6 +11,14 @@
       "format": "uint64",
       "minimum": 0
     },
+    "expected_preload_values_revision": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint64",
+      "minimum": 0
+    },
     "expected_preset_revision": {
       "type": "integer",
       "format": "uint64",

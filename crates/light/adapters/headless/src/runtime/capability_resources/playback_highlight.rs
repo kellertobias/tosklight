@@ -234,8 +234,51 @@ impl HighlightResource {
         }
     }
 
+    #[cfg(test)]
     pub(in crate::runtime) fn output_fixtures(&self) -> HashSet<light_core::FixtureId> {
         self.include_patch_previews(self.registry.output_fixtures())
+    }
+
+    pub(in crate::runtime) fn output_layers(&self) -> Vec<light_programmer::HighlightOutputLayer> {
+        self.include_patch_preview_layers(self.registry.output_layers())
+    }
+
+    pub(in crate::runtime) fn mark_explicit_fixture_attributes(
+        &self,
+        desk_id: Uuid,
+        user_id: light_core::UserId,
+        touched: impl IntoIterator<Item = (light_core::FixtureId, light_core::AttributeKey)>,
+    ) -> bool {
+        self.registry
+            .mark_explicit_fixture_attributes(desk_id, user_id, touched)
+    }
+
+    pub(in crate::runtime) fn include_patch_preview_layers(
+        &self,
+        layers: impl IntoIterator<Item = light_programmer::HighlightOutputLayer>,
+    ) -> Vec<light_programmer::HighlightOutputLayer> {
+        let mut layers = layers
+            .into_iter()
+            .map(|layer| (layer.fixture_id, layer))
+            .collect::<HashMap<_, _>>();
+        for fixture_id in self
+            .patch_preview
+            .lock()
+            .values()
+            .flat_map(|preview| preview.iter().copied())
+        {
+            layers.insert(
+                fixture_id,
+                light_programmer::HighlightOutputLayer {
+                    fixture_id,
+                    role: light_programmer::HighlightOutputRole::Highlight,
+                    suppressed_attributes: HashSet::new(),
+                },
+            );
+        }
+        let mut layers = layers.into_values().collect::<Vec<_>>();
+        layers.sort_by_key(|layer| layer.fixture_id.0);
+        layers
     }
 
     pub(in crate::runtime) fn include_patch_previews(

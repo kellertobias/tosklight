@@ -17,12 +17,36 @@ import {
 	usePoolPresentationConfiguration,
 } from "../../../features/poolPresentation/poolPresentation";
 import { formatSpeedGroupBpm } from "../speedGroupFormatting";
+import { isPlaybackSetClickArmed } from "./actions";
 import type { PlaybackBankController } from "./controller";
 import { playbackFaderValue } from "./feedback";
 import { HardwarePlaybackCard } from "./HardwarePlaybackCard";
 import { buildPlaybackActions, createSlotInterceptors } from "./slotActions";
 import { TouchPlaybackCard } from "./TouchPlaybackCard";
 import type { PlaybackSlotProjection } from "./types";
+
+function playbackCommandTarget(controller: PlaybackBankController) {
+	if (controller.state.storeArmed) return "record" as const;
+	if (
+		controller.assignmentPending ||
+		controller.setInteractionArmed ||
+		controller.groupAssignmentPending ||
+		isPlaybackSetClickArmed(controller)
+	)
+		return "set" as const;
+	return null;
+}
+
+function useReleasePlaybackSlot(
+	controller: PlaybackBankController,
+	playback: PlaybackDefinition | null | undefined,
+	slot: number,
+) {
+	useEffect(
+		() => () => controller.heldActions.releaseSlot(slot),
+		[controller.heldActions, playback, slot],
+	);
+}
 
 export function PlaybackSlot({
 	controller,
@@ -49,10 +73,7 @@ export function PlaybackSlot({
 	const value = playbackFaderValue(playback, active, runtimeProjection);
 	const kind = playbackKind(playback?.target.type);
 	const playbackColor = resolvePlaybackColor(kind, playback?.color);
-	useEffect(
-		() => () => controller.heldActions.releaseSlot(slot),
-		[controller.heldActions, playback, slot],
-	);
+	useReleasePlaybackSlot(controller, playback, slot);
 	const currentCue =
 		cue && active && active.cue_index >= 0 ? cue.cues[active.cue_index] : null;
 	const baseSummary: PlaybackCardSummary | undefined = playback
@@ -87,6 +108,7 @@ export function PlaybackSlot({
 		slot,
 		currentCue,
 	);
+	const commandTarget = playbackCommandTarget(controller);
 	const representedType =
 		playback?.target.type === "group"
 			? "group"
@@ -116,7 +138,7 @@ export function PlaybackSlot({
 				],
 			})
 		: null;
-	const className = `${playback ? "playback-colored" : ""} ${presentation?.className ?? ""} ${active?.enabled !== false && active ? "running" : ""} ${active?.loaded_cue_number != null ? "loaded" : ""} ${active?.swap_active ? "swap-active" : ""} ${selected ? "selected" : ""} ${!playback ? "empty" : ""} ${controller.assignmentPending ? "assignment-pending" : ""} ${controller.state.storeArmed ? "store-target" : ""} ${controller.state.updateArmed ? "update-target" : ""}`;
+	const className = `${playback ? "playback-colored" : ""} ${presentation?.className ?? ""} ${active?.enabled !== false && active ? "running" : ""} ${active?.loaded_cue_number != null ? "loaded" : ""} ${active?.swap_active ? "swap-active" : ""} ${selected ? "selected" : ""} ${!playback ? "empty" : ""} ${controller.assignmentPending ? "assignment-pending" : ""} ${controller.state.storeArmed ? "store-target" : ""} ${controller.state.updateArmed ? "update-target" : ""} ${commandTarget ? `playback-command-target command-target-${commandTarget}` : ""}`;
 	const cardStyle = playback
 		? ({
 				"--playback-color": playbackColor,
@@ -150,6 +172,7 @@ export function PlaybackSlot({
 				actions={faderActions}
 				className={className}
 				cardStyle={cardStyle}
+				commandTarget={commandTarget}
 				interceptPointer={interceptPointer}
 				interceptClick={interceptClick}
 			/>
@@ -169,6 +192,7 @@ export function PlaybackSlot({
 			touchActions={touchActions}
 			className={className}
 			cardStyle={cardStyle}
+			commandTarget={commandTarget}
 			interceptPointer={interceptPointer}
 			interceptClick={interceptClick}
 		/>

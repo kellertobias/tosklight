@@ -76,7 +76,7 @@ Configure two enabled routes for logical universe 1: Art-Net universe 1 to the b
 - **Starting show:** Fresh Default Stage Show and compact-rig copies with Programmer Fade at five seconds, including mixed and unpatched selections.
 - **Surface:** Software touch encoder zones and Set Value, wheel/keyboard accessibility, hardware-connected display, physical/OSC encoder events, channel faders, typed WebSocket plus HTTP action mirror, Preset recall, and PRELOAD GO.
 - **Actions:** Apply fine/coarse steps, continuous hold-drag, absolute Set Value, hardware/OSC turns, and channel fader movement; record and replay the resulting value; use Preset and PRELOAD as negative timing controls.
-- **Pass:** Encoder and channel-fader output is immediate and carries no explicit `0s` recording override; mixed offsets clamp safely; a drag shares one undo entry; software and hardware feedback agree; Preset and PRELOAD transitions retain Programmer Fade.
+- **Pass:** Relative encoder and channel-fader output is immediate and carries no explicit `0s` recording override; absolute encoder Set Value follows **Direct entry uses Programmer Fade** exactly like command-line `AT`; mixed offsets clamp safely; a drag shares one undo entry; software and hardware feedback agree; Preset and PRELOAD transitions retain Programmer Fade.
 - **Executable scenario:** [TIME-002](../../../tests/05-virtual-time-persistence-and-recovery.spec.ts), encoder component/application tests, and cross-surface encoder coverage.
 
 ### CROSS-004 — Attribute activation groups and Indexed Presets
@@ -132,6 +132,15 @@ Configure two enabled routes for logical universe 1: Art-Net universe 1 to the b
 - **Oracle:** Desk-selected playback number, opened concrete Cuelist View, exact target Cuelist revision, unchanged other Cuelist, current programmer Group selection, persistent identity across page changes, and absence of nested representation buttons.
 - **Pass:** The card owns one selection action, real controls remain independent outside Record, Cuelist and Group workflows stay distinct, Record makes the whole card target the concrete page/playback without operating its controls, and UI, API, and OSC converge on the same desk-local selected playback.
 - **Executable scenario:** [PLAYBACK-SELECT-001](../../../tests/28-hardware-connected-playback-selection.spec.ts)
+
+### CUELIST-LAYOUT-001 — Cuelist table density and authoritative phase progress
+
+- **Starting show:** An isolated `compact-rig.show` copy with a three-Cue Sequence. Give the second Cue distinct Trigger Time, In Delay, In Fade, Out Delay, and Out Fade values so incoming and outgoing phases overlap, and store representative Cue preview pictures.
+- **Surface:** Cuelist View as a full window and as fixed and follow-selection Cues panes in software-only and hardware-connected layouts.
+- **Actions:** Inspect the default table, select rows without executing them, enable **Compact Cue rows**, run the timed Cue with the virtual clock, pause and resume during a phase, close and reopen the view after completion, then trigger the same Cue again.
+- **Oracle:** Exact nine-column order and bounds; Preview-column and selected-Cue image visibility; authoritative trigger/transition identity; per-phase 0–1 progress applied to each timing cell background; playback paused state; and unchanged Cue-list revision/output during row selection.
+- **Pass:** All default columns are simultaneously visible. Compact rows hide only table imagery and retain the selected-Cue preview. Empty timing backgrounds mean not started; Trigger Time begins with the actual trigger interval; In/Out delays and fades begin with their own phases and can overlap; pause freezes and resume continues each fill; completion remains filled across row, pane, and view changes; and only a new authoritative transition of that same Cue resets its cells.
+- **Executable coverage:** Static table/editor behavior and selection-only safety are exercised by [CUE-011](../../../tests/06-cuelist-view-and-settings.spec.ts). The per-phase virtual-time case must use pushed authoritative runtime progress rather than reconstructing phase time in Playwright or the browser.
 
 ### COMMAND-HISTORY-001 — Inspect and reuse recent desk commands
 
@@ -241,6 +250,82 @@ The executable workflows that use this patch are cataloged under the concrete Gr
 - **Executable scenarios:**
   [BENCH-CLOCK-DMX-001–002](../../../tests/testBench/04-clock-dmx-and-output.spec.ts)
 
+## Highlight, Stage, and Matter proof boundaries
+
+These three integrations span deterministic domain tests, browser semantics, and native or
+network facilities that the browser bench does not provide. Report each layer separately rather
+than treating one green browser scenario as proof of the whole boundary.
+
+### Highlight
+
+The executable browser roots in
+[`57-semantic-system-integrations.spec.ts`](../../../tests/57-semantic-system-integrations.spec.ts)
+cover visible HIGH stepping, external and empty selection, and the error overlay. Ownership and
+alert geometry are registered directly by
+[`11-update-highlight-fixture-profiles-and-matter.spec.ts`](../../../tests/11-update-highlight-fixture-profiles-and-matter.spec.ts).
+The older `pairedScenario` declarations imported by that file are compatibility descriptions and
+do not register tests; their broader output, Fixture Sheet, Stage, and geometry assertions must
+not be reported as executed evidence.
+
+Run the active deterministic layers with:
+
+```sh
+cargo test -p light-programmer highlight
+cargo test -p light-headless-runtime --no-default-features highlight
+cargo test -p light-fixture highlight
+cargo test -p light-engine highlight
+cd apps/light-desktop
+npm test -- HighlightControls.test.tsx FixtureSheetWindow.highlight.test.tsx StageWindow.highlight.test.ts HardwareControlSummary.highlight.test.tsx
+cd ../..
+npm run test:e2e -- tests/57-semantic-system-integrations.spec.ts --grep HIGHLIGHT
+npm run test:e2e -- tests/11-update-highlight-fixture-profiles-and-matter.spec.ts --grep 'HIGHLIGHT-004|HIGHLIGHT-005'
+```
+
+### Stage visualization
+
+[`STAGE-001`](../../../tests/66-semantic-stage-visualizer.spec.ts) proves the strongest Stage
+contract available to the browser bench: two operator-visible panes retain independent Live and
+Follow Preload lane configuration, both remain 2D, and a browser without the native Tauri renderer
+shows the explicit unavailable state instead of a client-local substitute canvas.
+
+Deterministic transport and renderer tests separately cover bounded latest-frame delivery, lane
+throttling, Live/Preload multiplexing, reconnect snapshots, stale-scope rejection, the four render
+representations, retained scene resources, and Stage picking. Run those layers with:
+
+```sh
+cargo test -p light-headless-runtime visualization_transport
+cd apps/light-desktop
+npm test -- VisualizationRuntimeTransport.test.ts visualizationRuntime stage3dScene.test.ts stageWindow
+cd ../..
+npm run test:e2e -- tests/66-semantic-stage-visualizer.spec.ts
+```
+
+There is currently no automated `STAGE-PERF-001` or `STAGE-PERF-002`, packaged-WebView collector,
+cross-platform GPU run, five-minute output comparison, 30-minute resource-release gate, or attached
+`stage-visualization-timing.json`. Source-to-canvas latency, compositor screenshots, WebGL recovery
+in the packaged application, and DMX continuity while a native renderer is stalled remain missing
+native/performance evidence.
+
+### Matter playback bridge
+
+Matter runtime tests cover stable explicit page/playback endpoint derivation, writes, tracking,
+identity persistence, lifecycle, and filtering. Empty slots and unsupported target families are
+omitted; an assigned control without a physical dimmable fader is intentionally exposed through
+its authoritative virtual level and is not an omission case. The migrated browser root currently
+proves only the persisted enable toggle. There is no direct `MatterBridgeSettings` component suite;
+`DeskSettingsModal.test.tsx` tests Desktop clone/delete behavior and is not Matter evidence.
+
+Run the active layers with:
+
+```sh
+cargo test -p light-headless-runtime --no-default-features matter
+npm run test:e2e -- tests/57-semantic-system-integrations.spec.ts --grep MATTER-001
+cargo test -p light-headless-runtime --no-default-features matter::transport::tests::commissionable_network_transport_smoke -- --ignored --test-threads=1
+```
+
+The ignored smoke requires host access to UDP 5540 and shared mDNS 5353. A real controller remains
+the interoperability gate for fabric commissioning and subscriptions.
+
 ## Required coverage matrix
 
 | IDs | Area | Required cases | Primary oracle |
@@ -270,7 +355,7 @@ The executable workflows that use this patch are cataloged under the concrete Gr
 | PBK-001–006 | Playback configuration | Set interception on every playback control, assignment/color/clear persistence, type-safe button and fader layouts, Cuelist actions, Master/X-fade/Temp, Flash/Temp LTP restoration, Swap protection, specialized masters | persisted playback definition, action verb, playback runtime, temporary ownership, master state, exact output |
 | CMD-001–002 | Command line | fixture/Group default modes, ranges and dereferencing, plus Speed Group value/synchronization commands | visible command text, programmer state, audit, Speed Group state |
 | CUE-001–014 | Cue/playback | record, tracking, cue-only restore, active-Cue deletion with held output/navigation, GO/back, Go To/Load, pause, release, per-value/Cue timing, GO/FOLLOW/TIME triggers, Cuelist View editing and transactional renumbering, Chaser/Speed Group settings with normalized crossfade percentage and legacy conversion, Intensity HTP/LTP, wrapping, First/Continue restart, timing bypass | playback state, persisted Cuelist data, exact virtual timestamps and 0/50/100-percent fade boundaries, UI selection without execution |
-| CUELIST-LAYOUT-001 | Cuelist and Cue Settings layout | full-width preview and frameless compact selected-Cue rows, height-driven non-scrolling SET/value modal fallback, modal three-column Cuelist Settings with title-bar Mode/Renumber/Save, always-visible selection-only Cue table, object-level field ownership, dirty Save/Discard/Stay decision, and narrow software/hardware-connected reachability | production element bounds and clipping, tall/constrained-height switching, physical/software SET routing, number-pad persistence, modal/sidebar ownership, visible table/selection state, component save/discard mutation counts, and persisted object revisions |
+| CUELIST-LAYOUT-001 | Cuelist and Cue Settings layout | default `Preview`, `No.`, `Name`, `Trigger`, `Trigger Time`, `In Delay`, `In Fade`, `Out Delay`, `Out Fade` order with every column visible; optional compact table rows that hide only row imagery while retaining the selected-Cue full-width preview; frameless selected-Cue rows; height-driven non-scrolling SET/value modal fallback; modal three-column Cuelist Settings with title-bar Mode/Renumber/Save; selection-only Cue table; authoritative phase backgrounds for Trigger Time and independent In/Out Delay/Fade; completed-fill retention, same-Cue retrigger reset, and pause/resume; object-level field ownership; dirty Save/Discard/Stay decision; and narrow software/hardware-connected reachability | production header/cell and image bounds, table and selected-preview image visibility, tall/constrained-height switching, pushed per-phase runtime at exact 0/50/100-percent virtual-time boundaries, stable completed fills after view close/reopen, transition identity on reset, frozen/resumed progress, physical/software SET routing, number-pad persistence, modal/sidebar ownership, component save/discard mutation counts, and persisted object revisions |
 | SOUND-001 | Sound to Light | one desk/browser-local input selected in Desk Setup, ordinary tap tempo, Shift/hold settings entry, Manual/Speed Group/Sound to Light source state, recursion rejection, dirty-close choices, title actions, frequency/gain/confidence/smoothing/range/hold/ratio configuration, recorded 120 BPM analysis, authoritative mapping, manual fallback and ownership boundaries | persisted Speed Group config, desk-local device mapping, live analysis, authoritative Speed snapshot |
 | MIB-001 | Move in Black | per-fixture enable/default, safety delay after resolved zero, future lit-position lookup, disabled comparison, cancellation, Cue-edit invalidation | patch persistence, normalized MIB runtime state, exact Position DMX boundaries |
 | MERGE-001–003 | HTP/LTP | programmer priority/recency, programmer/playback arbitration, automatic full-overwrite release, and reversible Flash/Temp ownership | resolved source state and exact DMX |

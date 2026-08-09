@@ -1681,7 +1681,15 @@
 	opacity: 1;
 }
 
-.pool-card.empty:not(.record-target, .store-target, .update-target, .set-target)
+.pool-card.empty:not(
+	.record-target,
+	.store-target,
+	.update-target,
+	.set-target,
+	.copy-target,
+	.move-target,
+	.delete-target
+)
 	> :is(.number, .pool-card-name, .pool-card-information) {
 	opacity: 0.45;
 }
@@ -1705,6 +1713,27 @@
 .pool-card.set-target,
 .pool-presentation.set-target {
 	border: 3px solid var(--pool-set-color, #1bd6ec);
+	background: color-mix(in srgb, #68737c 14%, var(--panel2));
+	box-shadow: none;
+}
+
+.pool-card.copy-target,
+.pool-presentation.copy-target {
+	border: 3px solid var(--pool-copy-color, #57a8ff);
+	background: color-mix(in srgb, #68737c 14%, var(--panel2));
+	box-shadow: none;
+}
+
+.pool-card.move-target,
+.pool-presentation.move-target {
+	border: 3px solid var(--pool-move-color, #b988ff);
+	background: color-mix(in srgb, #68737c 14%, var(--panel2));
+	box-shadow: none;
+}
+
+.pool-card.delete-target,
+.pool-presentation.delete-target {
+	border: 3px solid var(--pool-delete-color, #ff4e55);
 	background: color-mix(in srgb, #68737c 14%, var(--panel2));
 	box-shadow: none;
 }
@@ -1879,12 +1908,12 @@
 }
 
 .virtual-playback-box.configuration-armed {
-	outline: 2px solid var(--cyan);
+	outline: 3px double var(--cyan);
 	outline-offset: -3px;
 }
 
 .virtual-playback-box.assignment-pending {
-	outline: 2px solid var(--amber);
+	outline: 3px double var(--cyan);
 	outline-offset: -3px;
 }
 

@@ -21,6 +21,7 @@ export interface WindowProps {
 	fixtureSheetColumns?: FixtureSheetColumn[];
 	fixtureSheetShowType?: boolean;
 	showCueSidebar?: boolean;
+	cueListCompactRows?: boolean;
 	cueListSource?: "fixed" | "follow-selection";
 	fixedCueListNumber?: number;
 	fixedCueListId?: string;

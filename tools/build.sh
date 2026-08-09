@@ -486,6 +486,7 @@ print_artifact_path() {
     release) printf '%s\n' "$LIGHT_RELEASE_DIR" ;;
     performance) printf '%s\n' "$LIGHT_PERFORMANCE_DIR" ;;
     runtime) printf '%s\n' "$LIGHT_RUNTIME_DATA_DIR" ;;
+    extensions) printf '%s\n' "$LIGHT_RUNTIME_EXTENSIONS_DIR" ;;
     tmp) printf '%s\n' "$LIGHT_TMP_DIR" ;;
     test-results) printf '%s\n' "$LIGHT_TEST_RESULTS_DIR" ;;
     playwright-report) printf '%s\n' "$LIGHT_PLAYWRIGHT_REPORT_DIR" ;;

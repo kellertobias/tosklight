@@ -1,39 +1,3 @@
-pub(super) fn aligned_normalized(
-    mode: &str,
-    index: usize,
-    count: usize,
-    from: f32,
-    to: f32,
-    wraps: bool,
-) -> Result<f32, String> {
-    if !from.is_finite()
-        || !to.is_finite()
-        || !(0.0..=1.0).contains(&from)
-        || !(0.0..=1.0).contains(&to)
-    {
-        return Err("alignment endpoints must be within 0-1".into());
-    }
-    let last = count.saturating_sub(1).max(1) as f32;
-    let t = index as f32 / last;
-    let shaped = match mode {
-        "left" => t,
-        "right" => 1.0 - t,
-        "center" => (t - 0.5).abs() * 2.0,
-        "out" => 1.0 - (t - 0.5).abs() * 2.0,
-        _ => return Err("alignment mode must be left, right, center, or out".into()),
-    };
-    let mut delta = to - from;
-    if wraps && delta.abs() > 0.5 {
-        delta -= delta.signum();
-    }
-    let value = from + delta * shaped;
-    Ok(if wraps {
-        value.rem_euclid(1.0)
-    } else {
-        value.clamp(0.0, 1.0)
-    })
-}
-
 pub(super) fn resolve_fixture_reference(
     fixtures: &[light_fixture::PatchedFixture],
     reference: &str,

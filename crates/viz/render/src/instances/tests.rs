@@ -865,7 +865,11 @@ mod lines_view {
         let values = SceneValues::default();
 
         let frame = build(&scene, &values, &lines_style());
-        assert_eq!(frame.lines.len(), 24, "one box outline, not a modelled body");
+        assert_eq!(
+            frame.lines.len(),
+            24,
+            "one box outline, not a modelled body"
+        );
         let extent = |axis: usize| {
             let values = frame.lines.iter().map(|vertex| vertex.position[axis]);
             let max = values.clone().fold(f32::MIN, f32::max);
@@ -946,6 +950,7 @@ mod floor_grid {
 /// change — so it is the one thing allowed to stand out, and it has to be told rather than guessed.
 mod selection {
     use super::*;
+    use viz_scene::{FixtureModel, ModelPart, ModelPartKind};
 
     fn outline_style() -> FrameStyle {
         FrameStyle {
@@ -953,6 +958,28 @@ mod selection {
             fixture_models: false,
             floor_grid: false,
             ..FrameStyle::default()
+        }
+    }
+
+    fn fixture_model() -> FixtureModel {
+        FixtureModel {
+            parts: vec![ModelPart {
+                name: "body".into(),
+                kind: ModelPartKind::Base,
+                positions: vec![[-0.2, -0.3, 0.0], [0.2, -0.3, 0.0], [0.0, 0.3, 0.0]],
+                normals: vec![[0.0, 0.0, 1.0]; 3],
+                indices: vec![0, 1, 2],
+                colour: [0.08, 0.09, 0.1],
+                roughness: 0.5,
+                metallic: 0.3,
+            }],
+            extent: Vec3::new(0.4, 0.6, 0.2),
+            head_pivot: Vec3::ZERO,
+            emitter_anchor: None,
+            emitter_size: None,
+            emitter_axis: None,
+            has_head: false,
+            warnings: Vec::new(),
         }
     }
 
@@ -1007,6 +1034,121 @@ mod selection {
                 (Vec3::from_slice(&vertex.colour[..3]) - style.selected_ink).length() > 1e-4
             }),
             "no selection, no selection ink"
+        );
+    }
+
+    #[test]
+    fn selected_full_output_model_gets_an_additive_cage_and_unselected_models_do_not_change() {
+        let mut scene = Scene::default();
+        scene.models.push(fixture_model());
+        let mut chosen = fixture();
+        chosen.fixture_id = viz_scene::uuid::Uuid::from_u128(7);
+        chosen.position = Vec3::new(0.0, 6.0, 0.0);
+        chosen.model = Some(0);
+        let mut other = fixture();
+        other.fixture_id = viz_scene::uuid::Uuid::from_u128(8);
+        other.position = Vec3::new(5.0, 6.0, 0.0);
+        other.model = Some(0);
+        scene.fixtures.extend([chosen, other]);
+        scene.emitters.push(emitter());
+
+        let style = FrameStyle {
+            floor_grid: false,
+            ..FrameStyle::default()
+        };
+        let mut values = SceneValues::default();
+        values.resize(1);
+        values.emitters[0].intensity = 1.0;
+        values.emitters[0].held_intensity = 1.0;
+        let unselected = build(&scene, &values, &style);
+
+        values
+            .selected_fixtures
+            .insert(viz_scene::uuid::Uuid::from_u128(9));
+        let unknown_selection = build(&scene, &values, &style);
+        assert!(
+            unknown_selection.lines.is_empty(),
+            "the renderer does not infer a selection that the desk did not provide"
+        );
+
+        values.selected_fixtures.clear();
+        values
+            .selected_fixtures
+            .insert(viz_scene::uuid::Uuid::from_u128(7));
+        let selected = build(&scene, &values, &style);
+
+        assert_eq!(selected.lines.len(), 24, "one twelve-edge selection cage");
+        assert!(selected.beams.len() == unselected.beams.len() && !selected.beams.is_empty());
+        assert!(selected.lines.iter().all(|vertex| {
+            (Vec3::from_slice(&vertex.colour[..3]) - style.selected_ink).length() < 1e-5
+                && (vertex.colour[3] - 1.0).abs() < 1e-6
+        }));
+        assert!(
+            selected
+                .lines
+                .iter()
+                .all(|vertex| vertex.position[0].abs() < 1.0),
+            "only the chosen model at x=0 receives a cage; the other is at x=5"
+        );
+        assert_eq!(selected.meshes.len(), unselected.meshes.len());
+        for ((selected_kind, selected_instances), (plain_kind, plain_instances)) in
+            selected.meshes.iter().zip(&unselected.meshes)
+        {
+            assert_eq!(selected_kind, plain_kind);
+            assert_eq!(
+                bytemuck::cast_slice::<MeshInstance, u8>(selected_instances),
+                bytemuck::cast_slice::<MeshInstance, u8>(plain_instances),
+                "selection must not recolour or replace either fixture model"
+            );
+        }
+
+        values.selected_fixtures.clear();
+        assert!(
+            build(&scene, &values, &style).lines.is_empty(),
+            "deselecting removes the additive mark"
+        );
+    }
+
+    #[test]
+    fn proxy_instances_sharing_one_selected_fixture_id_each_get_a_cage() {
+        let selected_id = viz_scene::uuid::Uuid::from_u128(7);
+        let mut first = fixture();
+        first.fixture_id = selected_id;
+        first.position = Vec3::new(-3.0, 6.0, 0.0);
+        let mut second = fixture();
+        second.fixture_id = selected_id;
+        second.position = Vec3::new(3.0, 6.0, 0.0);
+        let mut unrelated = fixture();
+        unrelated.fixture_id = viz_scene::uuid::Uuid::from_u128(8);
+        unrelated.position = Vec3::new(8.0, 6.0, 0.0);
+        let mut scene = Scene::default();
+        scene.fixtures.extend([first, second, unrelated]);
+
+        let mut values = SceneValues::default();
+        values.selected_fixtures.insert(selected_id);
+        let frame = build(
+            &scene,
+            &values,
+            &FrameStyle {
+                draw_beams: false,
+                floor_grid: false,
+                ..FrameStyle::default()
+            },
+        );
+
+        assert_eq!(
+            frame.lines.len(),
+            48,
+            "two cages, one per selected instance"
+        );
+        assert!(
+            frame.lines.iter().all(|vertex| vertex.position[0] < 4.0),
+            "the unrelated proxy at x=8 remains plain"
+        );
+        assert!(
+            frame.lines.iter().any(|vertex| vertex.position[0] < -2.0)
+                && frame.lines.iter().any(|vertex| vertex.position[0] > 2.0),
+            "both physical instances of the selected logical fixture are marked"
         );
     }
 }

@@ -82,6 +82,9 @@ pub enum OutputRouteAction {
 pub struct OutputRoutePatch {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional = nullable)]
+    pub target: Option<super::events::OutputRouteTarget>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
     pub protocol: Option<OutputProtocol>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional = nullable)]

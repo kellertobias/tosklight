@@ -4,10 +4,43 @@ import type {
 	FileOperationState,
 } from "./types";
 
-export const fileOperationOwnership: {
-	pending: FileManagerOperationKind | null;
-	claimed: string | null;
-} = { pending: null, claimed: null };
+let pending: FileManagerOperationKind | null = null;
+let claimed: string | null = null;
+let revision = 0;
+const listeners = new Set<() => void>();
+
+function changed() {
+	revision += 1;
+	for (const listener of listeners) listener();
+}
+
+export const fileOperationOwnership = {
+	get pending() {
+		return pending;
+	},
+	set pending(value: FileManagerOperationKind | null) {
+		if (pending === value) return;
+		pending = value;
+		changed();
+	},
+	get claimed() {
+		return claimed;
+	},
+	set claimed(value: string | null) {
+		if (claimed === value) return;
+		claimed = value;
+		changed();
+	},
+};
+
+export function subscribeFileOperationOwnership(listener: () => void) {
+	listeners.add(listener);
+	return () => listeners.delete(listener);
+}
+
+export function fileOperationOwnershipRevision() {
+	return revision;
+}
 
 export function emptyOperation(
 	kind: FileManagerOperationKind,

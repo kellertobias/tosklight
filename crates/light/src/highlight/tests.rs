@@ -137,6 +137,16 @@ fn stepping_persists_selection_before_output_and_publication() {
         },
     ];
     let service = HighlightService::new(Arc::new(HighlightRegistry::default()));
+    service
+        .handle(
+            ActionEnvelope {
+                context: context(crate::ActionSource::Osc),
+                command: HighlightCommand::action(HighlightAction::On),
+            },
+            &ports,
+        )
+        .unwrap();
+    ports.calls.lock().clear();
 
     let result = service
         .handle(

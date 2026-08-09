@@ -264,14 +264,16 @@ impl OutputResource {
             .network
             .as_ref()
             .ok_or_else(|| std::io::Error::other("network output is unavailable"))?;
-        output
+        let network = output
             .send_routes(
                 routes,
                 frames,
                 patched_slots,
                 &mut *self.sequences.lock().await,
             )
-            .await
+            .await;
+        let usb = self.usb.enqueue_routes(routes, frames);
+        crate::runtime::output_scheduler::combined_delivery_result(network, usb)
     }
 
     pub(in crate::runtime) async fn terminate_routes(&self, routes: &[light_output::OutputRoute]) {
@@ -280,6 +282,7 @@ impl OutputResource {
                 .terminate_routes(routes, &mut *self.sequences.lock().await)
                 .await;
         }
+        self.usb.terminate_routes(routes);
     }
 
     pub(in crate::runtime) fn reset_speed_groups(
@@ -504,6 +507,28 @@ impl OutputResource {
         };
         if action == "learn" {
             self.sound_capture_owners.lock()[index] = None;
+        }
+        Ok(affected)
+    }
+
+    pub(in crate::runtime) fn set_speed_group_level(
+        &self,
+        index: usize,
+        now: u64,
+        level: f32,
+    ) -> Result<Vec<usize>, ApiError> {
+        if !level.is_finite() || !(0.0..=1.0).contains(&level) {
+            return Err(ApiError::bad_request(
+                "Speed Group level must be finite and within 0-1",
+            ));
+        }
+        let mut controllers = self.speed_groups.lock();
+        let affected = speed_groups::speed_group_action_indices(&controllers, index);
+        for &affected_index in &affected {
+            controllers[affected_index]
+                .set_speed_master_scale(f64::from(level))
+                .map_err(|error| ApiError::bad_request(error.to_string()))?;
+            controllers[affected_index].set_paused_at(level == 0.0, now);
         }
         Ok(affected)
     }

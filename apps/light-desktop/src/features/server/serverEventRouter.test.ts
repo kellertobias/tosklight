@@ -31,8 +31,7 @@ function event(
 					action: (payload.action as string | undefined) ?? null,
 					control: (payload.control as string | undefined) ?? null,
 					value: (payload.value as string | undefined) ?? null,
-					request_id:
-						(payload.request_id as string | undefined) ?? null,
+					request_id: (payload.request_id as string | undefined) ?? null,
 					session_id: (payload.session_id as string | undefined) ?? null,
 					desk_id: (payload.desk_id as string | undefined) ?? null,
 					desk_alias: (payload.desk_alias as string | undefined) ?? null,
@@ -367,6 +366,74 @@ describe("server event routing", () => {
 			]);
 		} finally {
 			window.removeEventListener("light:encoder-action", listener);
+		}
+	});
+
+	it("routes canonical extension page and desk commands through their owning surfaces", () => {
+		const commands: unknown[] = [];
+		const steps: number[] = [];
+		const release = registerControlSurfaceTarget({
+			id: "extension-desk-command-test",
+			priority: 1,
+			accepts: ({ type }) => type === "desk_command",
+			handle: (intent) => commands.push(intent),
+		});
+		const listener = ((event: CustomEvent<number>) => {
+			steps.push(event.detail);
+		}) as EventListener;
+		window.addEventListener("light:playback-page-step", listener);
+		try {
+			routeOperatorEvent(
+				event("desk_action", {
+					action: "desk-stage",
+					desk_id: session.desk.id,
+				}),
+				session,
+				{} as ServerState,
+			);
+			routeOperatorEvent(
+				event("desk_action", {
+					control: "nav",
+					value: "page-up",
+					desk_alias: session.desk.osc_alias,
+				}),
+				session,
+				{} as ServerState,
+			);
+			expect(commands).toEqual([
+				{ type: "desk_command", source: "hardware", command: "stage" },
+			]);
+			expect(steps).toEqual([1]);
+		} finally {
+			release();
+			window.removeEventListener("light:playback-page-step", listener);
+		}
+	});
+
+	it("routes attached ALIGN to the active parameter controller", () => {
+		const received: unknown[] = [];
+		const listener = ((event: CustomEvent<unknown>) => {
+			received.push(event.detail);
+		}) as EventListener;
+		window.addEventListener("light:align-action", listener);
+		try {
+			routeOperatorEvent(
+				event("desk_action", {
+					action: "align",
+					request_id: "align-gesture-1",
+					desk_id: session.desk.id,
+				}),
+				session,
+				{} as ServerState,
+			);
+			expect(received).toEqual([
+				expect.objectContaining({
+					action: "align",
+					request_id: "align-gesture-1",
+				}),
+			]);
+		} finally {
+			window.removeEventListener("light:align-action", listener);
 		}
 	});
 

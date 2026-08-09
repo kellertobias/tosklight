@@ -151,6 +151,8 @@ pub struct CueListRuntimeProjection {
     pub effective_next_is_loaded: bool,
     pub paused: bool,
     pub activated_at: String,
+    pub paused_at: Option<String>,
+    pub cue_timing: Option<CueTimingRuntimeProjection>,
     #[ts(type = "number")]
     pub transition_ordinal: u64,
     pub master: f32,
@@ -167,6 +169,40 @@ pub struct CueListRuntimeProjection {
     pub manual_xfade_position: f32,
     pub manual_xfade_direction: ManualXFadeDirection,
     pub manual_xfade_progress: f32,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct CueTimingRuntimeProjection {
+    pub cue_id: Uuid,
+    #[ts(type = "number")]
+    pub in_delay_millis: u64,
+    #[ts(type = "number")]
+    pub in_fade_millis: u64,
+    #[ts(type = "number")]
+    pub out_delay_millis: u64,
+    #[ts(type = "number")]
+    pub out_fade_millis: u64,
+    #[ts(type = "number")]
+    pub completion_millis: u64,
+    pub active_trigger: Option<CueTriggerTimingProjection>,
+    pub completed_trigger_cue_id: Option<Uuid>,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct CueTriggerTimingProjection {
+    pub cue: PlaybackCueReference,
+    pub kind: CueTriggerTimingKind,
+    pub started_at: String,
+    #[ts(type = "number")]
+    pub duration_millis: u64,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum CueTriggerTimingKind {
+    Follow,
+    Wait,
+    Link,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

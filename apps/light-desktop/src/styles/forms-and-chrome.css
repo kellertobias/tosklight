@@ -699,6 +699,7 @@
 }
 .cue-table {
 	width: 100%;
+	min-width: 850px;
 	border-collapse: collapse;
 	table-layout: fixed;
 }
@@ -714,20 +715,17 @@
 	font-size: 11px;
 	text-align: left;
 }
-.cue-table th:nth-child(1) {
+.cue-table .cue-preview-column {
 	width: 96px;
 }
-.cue-table th:nth-child(2) {
+.cue-table .cue-number-column {
 	width: 62px;
 }
-.cue-table th:nth-child(4) {
+.cue-table .cue-trigger-column {
 	width: 100px;
 }
-.cue-table th:nth-child(5) {
-	width: 82px;
-}
-.cue-table th:nth-child(6) {
-	width: 92px;
+.cue-table .cue-timing-column {
+	width: 84px;
 }
 .cue-table td {
 	height: 54px;
@@ -763,6 +761,36 @@
 	object-fit: cover;
 	border: 1px solid var(--line2);
 	border-radius: 3px;
+}
+.cue-table.compact-cue-rows {
+	min-width: 700px;
+}
+.cue-table.compact-cue-rows td {
+	height: 32px;
+	padding-top: 2px;
+	padding-bottom: 2px;
+}
+.cue-timing-cell-value {
+	--cue-timing-progress: 0%;
+	display: grid;
+	min-height: 100%;
+	margin: -4px -9px;
+	padding: 4px 9px;
+	align-items: center;
+	background-image: linear-gradient(
+		90deg,
+		color-mix(in srgb, var(--cyan) 24%, transparent) 0,
+		color-mix(in srgb, var(--cyan) 24%, transparent)
+			var(--cue-timing-progress),
+		transparent var(--cue-timing-progress),
+		transparent 100%
+	);
+}
+.compact-cue-rows .cue-timing-cell-value {
+	margin-top: -2px;
+	margin-bottom: -2px;
+	padding-top: 2px;
+	padding-bottom: 2px;
 }
 
 .cue-dynamics-marker {

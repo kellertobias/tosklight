@@ -1,9 +1,12 @@
 import { Button } from "@tosklight/ui";
 import type { MultiPatchInstance, PatchedFixture } from "../../../api/types";
 import { usePatchController } from "./controller";
-import { armEdit } from "./editSession";
+import { armEdit, beginFixtureEditFromContextMenu } from "./editSession";
 import { fixtureDisplayId } from "./fixtureIds";
-import { beginMultipatchEdit } from "./multipatchActions";
+import {
+	beginMultipatchEdit,
+	beginMultipatchEditFromContextMenu,
+} from "./multipatchActions";
 import { fixturePolicyApplicability } from "./patchModel";
 
 /** Multi-patch rows inherit fixture-level policy; repeating it adds no information. */
@@ -32,6 +35,11 @@ export function FixtureModeCell({
 				aria-label={`Fixture and mode ${fixtureDisplayId(fixture)}: ${product} · ${fixture.definition.mode}`}
 				title={`${product} · ${mode}`}
 				onClick={() => armEdit(controller, fixture, "mode")}
+				onContextMenu={(event) => {
+					event.preventDefault();
+					event.stopPropagation();
+					beginFixtureEditFromContextMenu(controller, fixture, "mode");
+				}}
 			>
 				<span className="patch-stacked-line">{product}</span>
 				<span className="patch-stacked-line patch-stacked-detail">{mode}</span>
@@ -97,6 +105,11 @@ export function MastersCell({
 				className="patch-value"
 				aria-label={`Masters ${fixtureDisplayId(fixture)}`}
 				onClick={() => armEdit(controller, fixture, "masters")}
+				onContextMenu={(event) => {
+					event.preventDefault();
+					event.stopPropagation();
+					beginFixtureEditFromContextMenu(controller, fixture, "masters");
+				}}
 			>
 				{summary}
 			</Button>
@@ -136,6 +149,23 @@ export function PanTiltCell({
 						beginMultipatchEdit(controller, fixture, instance, "pan_tilt");
 					else armEdit(controller, fixture, "pan_tilt");
 				}}
+				onContextMenu={(event) => {
+					event.preventDefault();
+					event.stopPropagation();
+					if (instance)
+						beginMultipatchEditFromContextMenu(
+							controller,
+							fixture,
+							instance,
+							"pan_tilt",
+						);
+					else
+						beginFixtureEditFromContextMenu(
+							controller,
+							fixture,
+							"pan_tilt",
+						);
+				}}
 			>
 				{inherited ? INHERITED : summary}
 			</Button>
@@ -170,6 +200,11 @@ export function MibCell({
 				className="patch-value"
 				aria-label={`MIB ${fixtureDisplayId(fixture)}: ${value}`}
 				onClick={() => armEdit(controller, fixture, "mib")}
+				onContextMenu={(event) => {
+					event.preventDefault();
+					event.stopPropagation();
+					beginFixtureEditFromContextMenu(controller, fixture, "mib");
+				}}
 			>
 				{value}
 			</Button>

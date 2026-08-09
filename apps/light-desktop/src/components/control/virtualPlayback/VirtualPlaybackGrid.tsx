@@ -55,6 +55,9 @@ interface VirtualPlaybackGridProps {
 export function VirtualPlaybackGrid(props: VirtualPlaybackGridProps) {
 	const heldActions = useHeldPlaybackActions(props.runtimeActions);
 	const setInteraction = useSetInteraction();
+	const setTargetArmed =
+		props.configurationArmed ||
+		(setInteraction?.state != null && setInteraction.state.phase !== "idle");
 	const poolPresentation = usePoolPresentationConfiguration();
 	const showId = useActiveShowId() ?? "unresolved";
 	const surfaceKey = poolSurfaceKey(showId, "cuelist", props.paneId);
@@ -62,7 +65,10 @@ export function VirtualPlaybackGrid(props: VirtualPlaybackGridProps) {
 		const number = virtualPlaybackNumber(props.pageNumber, slot);
 		return props.page?.virtual_playbacks?.[String(number)] ?? null;
 	};
-	const chooseSetPlayback = (slot: number) => {
+	const chooseSetPlayback = (
+		slot: number,
+		source: "touch" | "context_menu" = "touch",
+	) => {
 		if (!setInteraction?.state || setInteraction.state.phase === "idle")
 			return false;
 		void setInteraction.choosePlayback(
@@ -73,7 +79,7 @@ export function VirtualPlaybackGrid(props: VirtualPlaybackGridProps) {
 				pageObjectId: props.pageObjectId,
 				pageObjectRevision: props.pageObjectRevision,
 			},
-			"touch",
+			source,
 		);
 		return true;
 	};
@@ -85,6 +91,7 @@ export function VirtualPlaybackGrid(props: VirtualPlaybackGridProps) {
 			boxAt={(position) =>
 				boxViewModel(
 					props,
+					setTargetArmed,
 					position + 1,
 					position,
 					poolPresentation,
@@ -116,7 +123,14 @@ export function VirtualPlaybackGrid(props: VirtualPlaybackGridProps) {
 					if (playback) heldActions.press(slot, props.pageNumber, playback);
 				},
 				onActionRelease: (slot) => heldActions.release(slot),
-				onConfigure: (slot) => props.onConfigure(playbackAt(slot), slot),
+				onConfigure: (slot, _position, source) => {
+					if (
+						setInteraction?.state?.phase === "group_source_pending" &&
+						chooseSetPlayback(slot, source)
+					)
+						return;
+					props.onConfigure(playbackAt(slot), slot);
+				},
 				onUpdate: (slot) => requestPlaybackUpdate(props, slot),
 				onZoneSelection: props.onToggleZone,
 			}}
@@ -126,6 +140,7 @@ export function VirtualPlaybackGrid(props: VirtualPlaybackGridProps) {
 
 function boxViewModel(
 	props: VirtualPlaybackGridProps,
+	setTargetArmed: boolean,
 	slot: number,
 	position: number,
 	poolPresentation: ReturnType<typeof usePoolPresentationConfiguration>,
@@ -205,7 +220,7 @@ function boxViewModel(
 			runtime?.cue_index == null
 				? undefined
 				: `Cue ${currentCue?.number ?? runtime.cue_index + 1}`,
-		configurationTarget: props.configurationArmed,
+		configurationTarget: setTargetArmed && available,
 		updateTarget: props.updateArmed,
 		exclusionMember: containingZones.length > 0,
 		exclusionZones: containingZones.map((zone) => zone.name),

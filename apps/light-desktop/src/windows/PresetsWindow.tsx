@@ -23,6 +23,11 @@ import {
 import { submitPresetRecording } from "../features/presetRecording/submitRecording";
 import { useProgrammerActions } from "../features/programmerActions/ProgrammerActionsContext";
 import { useProgrammerPreloadLifecycleView } from "../features/programmerPreloadLifecycle/ProgrammerPreloadLifecycleView";
+import {
+	canonicalPoolMutationOperation,
+	poolMutationTarget,
+	type PoolMutationTarget,
+} from "../features/controlSurfaceInteraction/poolCommandTarget";
 import { usePresets } from "../features/showObjects/ShowObjectsState";
 import {
 	normalizePresetFamily,
@@ -67,6 +72,30 @@ interface PresetActivationOptions {
 	onConfigure(index: number, draft: PresetCustomization): void;
 	onStore(index: number, occupied: boolean): void;
 	onDisarmSet(): void;
+	mutationTarget: PoolMutationTarget | null;
+	replaceCommand(value: string): Promise<boolean>;
+	executeCommand(value: string): Promise<boolean>;
+}
+
+function presetCommandAddress(preset: PresetCard) {
+	return presetStorageKey(
+		presetAddress(
+			normalizePresetFamily(preset.body.family),
+			preset.body.number,
+		),
+	);
+}
+
+function presetMutationEligible(
+	preset: PresetCard | null,
+	family: ReturnType<typeof presetAddress>["family"],
+	target: PoolMutationTarget | null,
+) {
+	if (!target) return false;
+	if (target.phase === "source")
+		return preset !== null && normalizePresetFamily(preset.body.family) === family;
+	const familyPrefix = presetStorageKey(presetAddress(family, 1)).split(".")[0];
+	return preset === null && target.source.split(".")[0] === familyPrefix;
 }
 
 function activatePreset(options: PresetActivationOptions) {
@@ -86,6 +115,19 @@ function activatePreset(options: PresetActivationOptions) {
 				saved.color ?? preset?.body.color ?? INDIVIDUAL_POOL_COLOR_FALLBACK,
 		});
 		options.onDisarmSet();
+		return;
+	}
+	if (presetMutationEligible(preset, family, options.mutationTarget)) {
+		const target = options.mutationTarget;
+		if (!target) return;
+		const operation = canonicalPoolMutationOperation(target.operation);
+		if (target.phase === "source" && preset) {
+			const address = presetCommandAddress(preset);
+			if (target.operation === "delete")
+				void options.executeCommand(`${operation} ${address}`);
+			else void options.replaceCommand(`${operation} ${address} AT`);
+		} else if (target.phase === "destination")
+			void options.executeCommand(`${operation} ${target.source} AT ${index + 1}`);
 		return;
 	}
 	if (!preset && !options.storeArmed) return;
@@ -118,7 +160,7 @@ function usePresetsWindowModel({
 	const preload = useProgrammerPreloadLifecycleView(active);
 	const command = useCommandLineSurface({
 		enabled: active,
-		observeCommand: false,
+		observeCommand: true,
 	});
 	const { state, dispatch } = useApp();
 	const poolSettings = usePoolPresentationSettings();
@@ -159,6 +201,7 @@ function usePresetsWindowModel({
 	const fallback = fallbackPresets(!bootstrapReady);
 	const stored = activeShowId !== null ? storedPresets : fallback;
 	const cards = resolvePresetCards(stored, family);
+	const mutationTarget = poolMutationTarget(command.text);
 	const cancelRecording = () => {
 		setRecordPresetIndex(null);
 		dispatch({ type: "SET_STORE_ARMED", value: false });
@@ -178,15 +221,15 @@ function usePresetsWindowModel({
 		if (outcome) await command.reset();
 	};
 
-	const activate = (index: number) =>
+	const activate = (index: number, configure = false) =>
 		activatePreset({
 			index,
 			cards,
 			family,
 			customizations,
-			updateArmed: state.updateArmed,
-			setArmed: state.presetSetArmed,
-			storeArmed: state.storeArmed,
+			updateArmed: configure ? false : state.updateArmed,
+			setArmed: configure || state.presetSetArmed,
+			storeArmed: configure ? false : state.storeArmed,
 			actions: presetRecall.actions,
 			onConfigure: (target, draft) => {
 				setConfigureIndex(target);
@@ -198,6 +241,9 @@ function usePresetsWindowModel({
 					: void recordPreset(target, "overwrite"),
 			onDisarmSet: () =>
 				dispatch({ type: "SET_PRESET_SET_ARMED", value: false }),
+			mutationTarget: configure ? null : mutationTarget,
+			replaceCommand: command.replace,
+			executeCommand: command.execute,
 		});
 	const saveCustomization = () => {
 		if (configureIndex == null) return;
@@ -226,11 +272,13 @@ function usePresetsWindowModel({
 		storeArmed: state.storeArmed,
 		updateArmed: state.updateArmed,
 		setArmed: state.presetSetArmed,
+		mutationTarget,
 		settingsAnchor,
 		recordPresetIndex,
 		configureIndex,
 		configureDraft,
 		activate,
+		configure: (index: number) => activate(index, true),
 		setFamily,
 		setSettingsAnchor,
 		cancelRecording,
@@ -269,7 +317,9 @@ export function PresetsWindow(props: WindowProps) {
 				storeArmed={model.storeArmed}
 				updateArmed={model.updateArmed}
 				setArmed={model.setArmed}
+				mutationTarget={model.mutationTarget}
 				onActivate={model.activate}
+				onConfigure={model.configure}
 			/>
 			{model.groupsVisible && <GroupStrip active={model.active} />}
 			<PresetWindowOverlays

@@ -46,7 +46,7 @@ async fn rest_session_show_and_revision_flow() {
         .unwrap();
     assert_eq!(objects.status(), StatusCode::OK);
     let objects = json(objects).await;
-    assert_eq!(objects["show_revision"], 2);
+    assert_eq!(objects["show_revision"], 3);
     assert_eq!(objects["objects"].as_array().unwrap().len(), 1);
     let exact = app
         .clone()
@@ -56,7 +56,7 @@ async fn rest_session_show_and_revision_flow() {
         .await
         .unwrap();
     assert_eq!(exact.status(), StatusCode::OK);
-    assert_eq!(json(exact).await["show_revision"], 2);
+    assert_eq!(json(exact).await["show_revision"], 3);
     let missing = app
         .clone()
         .oneshot(
@@ -66,7 +66,7 @@ async fn rest_session_show_and_revision_flow() {
         .unwrap();
     assert_eq!(missing.status(), StatusCode::OK);
     let missing = json(missing).await;
-    assert_eq!(missing["show_revision"], 2);
+    assert_eq!(missing["show_revision"], 3);
     assert!(missing["object"].is_null());
     assert!(
         std::fs::read_dir(data_dir.join("backups"))

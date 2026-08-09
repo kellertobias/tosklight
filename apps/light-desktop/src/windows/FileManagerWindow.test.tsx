@@ -709,6 +709,32 @@ describe("FileManager operation contracts", () => {
 	beforeEach(resetFileManagerMocks);
 	afterEach(cleanupFileManagerTest);
 
+	it.each([
+		"list",
+		"grid",
+	] as const)("right-click targets exactly one %s entry through the SET Rename action", async (view) => {
+		render(<FileManager instanceId={`right-click-${view}`} />);
+		await screen.findByRole("button", { name: "alpha.txt, file" });
+		if (view === "grid") chooseHeaderAction("View", "Grid");
+		fireEvent.click(screen.getByRole("button", { name: "image.png, file" }));
+
+		const target = screen.getByRole("button", { name: "alpha.txt, file" });
+		expect(fireEvent.contextMenu(target)).toBe(false);
+
+		expect(
+			screen.getByRole("region", { name: "Rename item" }),
+		).toBeInTheDocument();
+		expect(screen.getByRole("textbox", { name: "New name" })).toHaveValue(
+			"alpha.txt",
+		);
+		expect(target).toHaveClass("selected", "set-target");
+		expect(mocks.server.claimFileInput).toHaveBeenCalledWith(
+			`right-click-${view}`,
+			"rename",
+			"toolbar",
+		);
+	});
+
 	it("replaces toolbar mutations with operation controls and confirms permanent delete", async () => {
 		render(<FileManager instanceId="operations" />);
 		const alpha = await screen.findByRole("button", {
@@ -961,6 +987,9 @@ describe("FileManager input ownership", () => {
 		await act(authority.settle);
 		const manager = await screen.findByRole("region", { name: "File Manager" });
 		fireEvent.focus(manager);
+		expect(
+			within(manager).getByRole("button", { name: "alpha.txt, file" }),
+		).toHaveClass("copy-target");
 		expect(mocks.server.resetCommandLine).not.toHaveBeenCalled();
 		fireEvent.pointerDown(
 			within(manager).getByRole("heading", { name: "Locations" }),
@@ -985,9 +1014,12 @@ describe("FileManager input ownership", () => {
 		expect(
 			await within(manager).findByRole("button", { name: "Copy Here" }),
 		).toBeVisible();
-		fireEvent.click(
-			await within(manager).findByRole("button", { name: "alpha.txt, file" }),
-		);
+		const source = await within(manager).findByRole("button", {
+			name: "alpha.txt, file",
+		});
+		expect(source).toHaveClass("copy-target");
+		expect(source).toHaveTextContent("Copy");
+		fireEvent.click(source);
 		fireEvent.keyDown(window, { key: "Enter" });
 		await waitFor(() =>
 			expect(mocks.server.fileOperation).toHaveBeenCalledWith(

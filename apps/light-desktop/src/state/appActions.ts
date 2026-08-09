@@ -15,6 +15,7 @@ export type Action =
 	| { type: "OPEN_BUILTIN"; kind: BuiltInWindow }
 	| { type: "CLOSE_FILE_MANAGER" }
 	| { type: "TOGGLE_CONTROL_MODE" }
+	| { type: "SET_CONTROL_MODE"; value: AppState["controlMode"] }
 	| { type: "SET_PANE_SETTINGS"; id: string | null }
 	| {
 			type: "SET_VIRTUAL_PLAYBACK_ZONE_EDIT";
@@ -31,6 +32,7 @@ export type Action =
 	| { type: "SET_PANE_POOL_COLUMNS"; id: string; value: number }
 	| { type: "DISMISS_LAYOUT_MIGRATION_NOTICE" }
 	| { type: "SET_PANE_CUE_SIDEBAR"; id: string; value: boolean }
+	| { type: "SET_PANE_CUELIST_COMPACT_ROWS"; id: string; value: boolean }
 	| {
 			type: "SET_PANE_CUELIST";
 			id: string;

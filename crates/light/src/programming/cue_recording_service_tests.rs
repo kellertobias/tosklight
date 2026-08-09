@@ -24,6 +24,7 @@ fn replay_skips_environment_capture_commit_activation_and_active_preload_release
         .service
         .handle_cue_recording(envelope.clone(), &ports)
         .unwrap();
+    let values_revision_after_first = setup.registry.normal_values_revision(setup.user);
     let replay = setup
         .service
         .handle_cue_recording(envelope, &ports)
@@ -34,6 +35,10 @@ fn replay_skips_environment_capture_commit_activation_and_active_preload_release
     assert_eq!(ports.environments.load(Ordering::Relaxed), 1);
     assert_eq!(ports.commits.load(Ordering::Relaxed), 1);
     assert_eq!(ports.activations.load(Ordering::Relaxed), 1);
+    assert_eq!(
+        setup.registry.normal_values_revision(setup.user),
+        values_revision_after_first
+    );
     assert!(matches!(
         replay.outcome,
         ProgrammingCueRecordOutcome::Changed {
@@ -68,6 +73,120 @@ fn already_authoritative_take_live_succeeds_without_a_runtime_event_and_replays(
         .unwrap();
     assert!(replay.replayed);
     assert_eq!(ports.activations.load(Ordering::Relaxed), 1);
+}
+
+#[test]
+fn frozen_server_setting_starts_only_new_normal_topology_and_ignores_client_policy() {
+    let enabled = Setup::normal();
+    let enabled_ports = TestPorts::changed(enabled.show_id, 7);
+    enabled
+        .service
+        .handle_cue_recording(
+            enabled.envelope("server-enabled", ProgrammingCueActivationPolicy::Hold),
+            &enabled_ports,
+        )
+        .unwrap();
+    assert_eq!(enabled_ports.activations.load(Ordering::Relaxed), 1);
+
+    let disabled = Setup::normal();
+    let disabled_ports = TestPorts::changed(disabled.show_id, 7).start_disabled();
+    disabled
+        .service
+        .handle_cue_recording(
+            disabled.envelope(
+                "server-disabled",
+                ProgrammingCueActivationPolicy::GoToIfNormal,
+            ),
+            &disabled_ports,
+        )
+        .unwrap();
+    assert_eq!(disabled_ports.activations.load(Ordering::Relaxed), 0);
+    assert!(
+        !disabled
+            .registry
+            .get(disabled.session)
+            .unwrap()
+            .values
+            .is_empty()
+    );
+
+    let existing = Setup::normal();
+    let existing_ports = TestPorts::changed(existing.show_id, 7).existing_topology();
+    existing
+        .service
+        .handle_cue_recording(
+            existing.envelope(
+                "existing-topology",
+                ProgrammingCueActivationPolicy::GoToIfNormal,
+            ),
+            &existing_ports,
+        )
+        .unwrap();
+    assert_eq!(existing_ports.activations.load(Ordering::Relaxed), 0);
+    assert!(
+        !existing
+            .registry
+            .get(existing.session)
+            .unwrap()
+            .values
+            .is_empty()
+    );
+}
+
+#[test]
+fn successful_first_record_activation_clears_values_but_preserves_ordered_selection() {
+    let setup = Setup::normal();
+    let first = FixtureId::new();
+    let second = FixtureId::new();
+    setup.registry.set(
+        setup.session,
+        first,
+        AttributeKey::intensity(),
+        AttributeValue::Normalized(0.7),
+    );
+    setup.registry.set(
+        setup.session,
+        second,
+        AttributeKey::intensity(),
+        AttributeValue::Normalized(0.8),
+    );
+    setup.registry.select(setup.session, [second, first]);
+    let selection_before = setup.registry.selection(setup.session).unwrap();
+
+    let ports = TestPorts::changed(setup.show_id, 7);
+    setup
+        .service
+        .handle_cue_recording(
+            setup.envelope("clear-after-start", ProgrammingCueActivationPolicy::Hold),
+            &ports,
+        )
+        .unwrap();
+
+    let state = setup.registry.get(setup.session).unwrap();
+    assert!(state.values.is_empty());
+    assert!(state.group_values.is_empty());
+    assert!(state.dynamic_values.is_empty());
+    assert_eq!(
+        setup.registry.selection(setup.session).unwrap(),
+        selection_before
+    );
+}
+
+#[test]
+fn failed_first_record_activation_preserves_programmer_values() {
+    let setup = Setup::normal();
+    let ports = TestPorts::changed(setup.show_id, 7).activation_failed();
+
+    setup
+        .service
+        .handle_cue_recording(
+            setup.envelope("failed-start", ProgrammingCueActivationPolicy::Hold),
+            &ports,
+        )
+        .unwrap();
+
+    assert_eq!(ports.activations.load(Ordering::Relaxed), 1);
+    assert!(!setup.registry.get(setup.session).unwrap().values.is_empty());
 }
 
 #[test]
@@ -264,7 +383,7 @@ fn deleting_a_cue_never_attempts_to_activate_the_removed_cue() {
 #[test]
 fn replay_scope_includes_user_desk_and_session_and_foreign_ownership_is_rejected() {
     let setup = Setup::normal();
-    let ports = TestPorts::changed(setup.show_id, 7);
+    let ports = TestPorts::changed(setup.show_id, 7).start_disabled();
     let first = setup.envelope("shared-id", ProgrammingCueActivationPolicy::Hold);
     setup
         .service
@@ -431,6 +550,9 @@ struct TestPorts {
     fail: bool,
     deleted: bool,
     activation_event: bool,
+    activation_succeeds: bool,
+    created_topology: bool,
+    start_after_first_recording: bool,
     cue_id: Uuid,
     environments: AtomicUsize,
     commits: AtomicUsize,
@@ -474,12 +596,30 @@ impl TestPorts {
             fail,
             deleted,
             activation_event,
+            activation_succeeds: true,
+            created_topology: changed,
+            start_after_first_recording: changed,
             cue_id: Uuid::new_v4(),
             environments: AtomicUsize::new(0),
             commits: AtomicUsize::new(0),
             activations: AtomicUsize::new(0),
             last_context: Mutex::new(None),
         }
+    }
+
+    fn start_disabled(mut self) -> Self {
+        self.start_after_first_recording = false;
+        self
+    }
+
+    fn existing_topology(mut self) -> Self {
+        self.created_topology = false;
+        self
+    }
+
+    fn activation_failed(mut self) -> Self {
+        self.activation_succeeds = false;
+        self
     }
 
     fn completion(&self) -> ProgrammingCueCommitResult {
@@ -501,6 +641,8 @@ impl TestPorts {
             restart_mode: light_playback::RestartMode::FirstCue,
             force_cue_timing: false,
             disable_cue_timing: false,
+            auto_off_at_zero: false,
+            auto_off_flash_release: false,
             chaser_xfade_millis: 0,
             chaser_xfade_percent: Some(0),
             speed_multiplier: 1.0,
@@ -510,12 +652,13 @@ impl TestPorts {
             light_playback::PlaybackDefinition::new_cue_list(self.playback, "Test", cue_list_id);
         ProgrammingCueCommitResult {
             changed: self.changed,
+            created_topology: self.created_topology,
             projections: ProgrammingCueProjections {
                 show_id: self.show_id,
                 cue_list: ProgrammingCueObjectProjection {
                     kind: crate::ActiveShowObjectKind::CueList,
                     object_id: cue_list_id.0.to_string(),
-                    object_revision: if self.changed { 2 } else { 1 },
+                    object_revision: if self.created_topology { 1 } else { 2 },
                     raw_body: Arc::new(serde_json::to_value(cue_list).unwrap()),
                 },
                 playback: Some(ProgrammingCueObjectProjection {
@@ -556,6 +699,9 @@ impl ProgrammingCueRecordingPorts for TestPorts {
                 page_slot: None,
             },
             active_cue: None,
+            cuelist_auto_off_at_zero_default: false,
+            cuelist_auto_off_flash_release_default: false,
+            start_after_first_recording: self.start_after_first_recording,
         })
     }
 
@@ -579,6 +725,9 @@ impl ProgrammingCueRecordingPorts for TestPorts {
         _cue_number: CueNumber,
     ) -> Option<ProgrammingCueActivationCompletion> {
         self.activations.fetch_add(1, Ordering::Relaxed);
+        if !self.activation_succeeds {
+            return None;
+        }
         Some(ProgrammingCueActivationCompletion {
             projection: runtime_projection(self.show_id, playback_number, self.cue_id),
             event_sequence: self.activation_event.then_some(42),
@@ -609,6 +758,8 @@ fn runtime_projection(show_id: ShowId, playback: u16, cue_id: Uuid) -> PlaybackR
                 effective_next_is_loaded: false,
                 paused: false,
                 activated_at: Utc::now(),
+                paused_at: None,
+                cue_timing: None,
                 transition_ordinal: 0,
                 master: 1.0,
                 fader_position: 1.0,

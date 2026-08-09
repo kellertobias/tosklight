@@ -1,7 +1,9 @@
 import { WindowHeader } from "@tosklight/ui/window-kit";
+import { useCommandLineSurface } from "../../components/control/commandLine/useCommandLineSurface";
 import type { WindowProps } from "../windowTypes";
 import { CueProperties } from "./CueProperties";
 import { CueTable, type CueTableEmptyState } from "./CueTable";
+import { useCueTimingProgress } from "./cueTimingProgress";
 import { useCueEditor } from "./useCueEditor";
 import { useSelectedCuelist } from "./useCuelistSelection";
 import { useCueThumbnails } from "./useCueThumbnails";
@@ -55,6 +57,7 @@ interface CuelistDetailProps {
 	cueListTab: WindowProps["cueListTab"];
 	cueListSource: WindowProps["cueListSource"];
 	showCueSidebar: boolean;
+	compactRows: boolean;
 	selectedCuelist: number | null;
 	settingsOpen: boolean;
 	settings: React.ReactNode;
@@ -81,6 +84,11 @@ export function CuelistDetail(props: CuelistDetailProps) {
 	});
 	const generatedThumbnails = useCueThumbnails(cues, props.active);
 	const thumbnails = props.thumbnails ?? generatedThumbnails;
+	const timingProgressByRow = useCueTimingProgress(cues, selection.active);
+	const command = useCommandLineSurface({
+		enabled: props.active && !props.viewOnly,
+		observeCommand: true,
+	});
 	const showProperties =
 		!props.viewOnly &&
 		props.showCueSidebar &&
@@ -129,6 +137,10 @@ export function CuelistDetail(props: CuelistDetailProps) {
 					)}
 					onSelectCue={editor.setSelectedCue}
 					interactive={!props.viewOnly}
+					compactRows={props.compactRows}
+					timingProgressByRow={timingProgressByRow}
+					playbackNumber={props.selectedCuelist}
+					command={command}
 				/>
 				{showProperties && editor.cueDraft && (
 					<CueProperties

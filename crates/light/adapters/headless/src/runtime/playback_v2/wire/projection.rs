@@ -140,6 +140,37 @@ fn cue_list_runtime(
         effective_next_is_loaded: runtime.effective_next_is_loaded,
         paused: runtime.paused,
         activated_at: runtime.activated_at.to_rfc3339(),
+        paused_at: runtime.paused_at.map(|at| at.to_rfc3339()),
+        cue_timing: runtime
+            .cue_timing
+            .as_ref()
+            .map(|timing| wire::CueTimingRuntimeProjection {
+                cue_id: timing.cue_id,
+                in_delay_millis: timing.in_delay_millis,
+                in_fade_millis: timing.in_fade_millis,
+                out_delay_millis: timing.out_delay_millis,
+                out_fade_millis: timing.out_fade_millis,
+                completion_millis: timing.completion_millis,
+                active_trigger: timing.active_trigger.as_ref().map(|trigger| {
+                    wire::CueTriggerTimingProjection {
+                        cue: cue_reference(&trigger.cue),
+                        kind: match trigger.kind {
+                            application::CueTriggerTimingKind::Follow => {
+                                wire::CueTriggerTimingKind::Follow
+                            }
+                            application::CueTriggerTimingKind::Wait => {
+                                wire::CueTriggerTimingKind::Wait
+                            }
+                            application::CueTriggerTimingKind::Link => {
+                                wire::CueTriggerTimingKind::Link
+                            }
+                        },
+                        started_at: trigger.started_at.to_rfc3339(),
+                        duration_millis: trigger.duration_millis,
+                    }
+                }),
+                completed_trigger_cue_id: timing.completed_trigger_cue_id,
+            }),
         transition_ordinal: runtime.transition_ordinal,
         master: runtime.master,
         fader_position: runtime.fader_position,

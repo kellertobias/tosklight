@@ -8,13 +8,17 @@ import {
 } from "react";
 import type { DeskConfiguration } from "../../api/types";
 import {
+	selectCuelistAutoOffAtZeroDefault,
+	selectCuelistAutoOffFlashReleaseDefault,
 	selectDeskConfiguration,
+	selectDirectEntryUsesProgrammerFade,
 	selectFileManagerSystemPickerFallback,
 	selectMatterEnabled,
 	selectPatchPreviewHighlightDmx,
 	selectProgrammerFadeMillis,
 	selectSequenceMasterFadeMillis,
 	selectSpeedGroupsBpm,
+	selectStartAfterFirstRecording,
 } from "./selectors";
 import {
 	type ConfigurationSnapshot,
@@ -40,9 +44,29 @@ export function useProgrammerFadeMillis(): number | null {
 	return useConfigurationSelector(selectProgrammerFadeMillis, Object.is);
 }
 
+/** Whether deliberate absolute value entry uses Programmer Fade. */
+export function useDirectEntryUsesProgrammerFade(): boolean {
+	return useConfigurationSelector(selectDirectEntryUsesProgrammerFade, Object.is);
+}
+
 /** Sequence master fade in milliseconds, or null while the desk configuration is unknown. */
 export function useSequenceMasterFadeMillis(): number | null {
 	return useConfigurationSelector(selectSequenceMasterFadeMillis, Object.is);
+}
+
+export function useCuelistAutoOffAtZeroDefault(): boolean {
+	return useConfigurationSelector(selectCuelistAutoOffAtZeroDefault, Object.is);
+}
+
+export function useCuelistAutoOffFlashReleaseDefault(): boolean {
+	return useConfigurationSelector(
+		selectCuelistAutoOffFlashReleaseDefault,
+		Object.is,
+	);
+}
+
+export function useStartAfterFirstRecording(): boolean {
+	return useConfigurationSelector(selectStartAfterFirstRecording, Object.is);
 }
 
 export function useSpeedGroupsBpm():

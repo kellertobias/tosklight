@@ -20,8 +20,7 @@ export interface ServerProgrammingContext {
 		fixtureIds: string[],
 	) => Promise<import("../../api/types").GeneratedFixturePresetResult | null>;
 	alignSelection: (
-		attribute: string,
-		mode: "left" | "right" | "center" | "out",
+		mode: "off" | "left" | "right" | "out" | "in",
 	) => Promise<void>;
 	storePreload: (
 		input: {

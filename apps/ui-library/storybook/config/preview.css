@@ -20,6 +20,10 @@ body {
 		"Segoe UI", sans-serif;
 }
 
+body[data-documentation-shot] {
+	background: var(--bg);
+}
+
 button,
 input,
 select,

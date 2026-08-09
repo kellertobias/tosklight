@@ -55,6 +55,11 @@ export interface MediaPaneLayer {
 	statusLabel?: string;
 	thumbnailSrc?: string;
 	liveSourceLabel?: string;
+	opacityPercent?: number;
+	maskLabel?: string;
+	colorValue?: string;
+	grayscalePercent?: number;
+	effectLabel?: string;
 }
 
 export interface MediaBrowseSelection {
@@ -76,6 +81,7 @@ export interface MediaLibraryItem {
 interface MediaControlBase {
 	id: string;
 	label: string;
+	group?: string;
 	description?: string;
 	disabled?: boolean;
 }
@@ -128,14 +134,18 @@ export interface MediaPaneModel {
 	layers: MediaPaneLayer[];
 	browserMode: MediaBrowserMode;
 	maskBrowser: "supported" | "unsupported" | "hidden";
-	libraryPath: string[];
-	libraryItems: MediaLibraryItem[];
+	libraryFolders: MediaLibraryItem[];
+	libraryFiles: MediaLibraryItem[];
+	draftFolderId: string;
+	draftFileId: string | null;
 	liveSelection: MediaBrowseSelection;
 	draftSelection: MediaBrowseSelection;
 	liveSelectionLabel: string;
 	draftSelectionLabel: string;
 	controlSections: MediaControlSection[];
 	selectedControlSectionId: string;
+	mainSectionId: string;
+	rightPaneVisible: boolean;
 }
 
 export interface MediaPaneUiCallbacks {
@@ -145,11 +155,10 @@ export interface MediaPaneUiCallbacks {
 	onBrowseItem(mode: MediaBrowserMode, item: MediaLibraryItem): void;
 	onSelectControlSection(sectionId: string): void;
 	onChangeControl(controlId: string, value: string | number): void;
-	onOpenSettings?(anchor: HTMLElement): void;
+	onSetRightPaneVisible(visible: boolean): void;
 }
 
 export interface MediaPaneSurfaceProps extends MediaPaneUiCallbacks {
 	model: MediaPaneModel;
-	dummyDataBadge: ReactNode;
 	compact?: boolean;
 }

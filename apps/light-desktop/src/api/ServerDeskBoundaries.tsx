@@ -1,18 +1,23 @@
-import { type PropsWithChildren, useCallback } from "react";
+import { type PropsWithChildren, useCallback, useMemo } from "react";
 import { CommandHistoryStateProvider } from "../features/commandHistory/CommandHistoryState";
-import { CueThumbnailActionsProvider } from "../features/cueThumbnails/CueThumbnailActions";
 import { ConfigurationActionsProvider } from "../features/configuration/ConfigurationActionsProvider";
 import { ConfigurationStateProvider } from "../features/configuration/ConfigurationState";
+import { CueThumbnailActionsProvider } from "../features/cueThumbnails/CueThumbnailActions";
 import { DeskLockActionsProvider } from "../features/deskLock/DeskLockActionsProvider";
 import { DeskLockStateProvider } from "../features/deskLock/DeskLockState";
 import { DeskSnapshotStateProvider } from "../features/deskSnapshot/DeskSnapshotState";
+import { ExtensionRuntimeActionsProvider } from "../features/extensions/ExtensionRuntimeActions";
 import { PoolPresentationLegacyMigration } from "../features/poolPresentation/PoolPresentationLegacyMigration";
 import type { useServerState } from "../features/server/useServerState";
 import type { SessionRole } from "../features/session/ownership";
 import { ShellStatusStateProvider } from "../features/shellStatus/ShellStatusState";
 import { StageLayoutActionsProvider } from "../features/stageLayout/StageLayoutActions";
 import { StageLayoutStateProvider } from "../features/stageLayout/StageLayoutState";
-import type { ConfigurationUpdateResult } from "./client/deskManagement";
+import { UsbDmxActionsProvider } from "../features/usbDmx/UsbDmxActions";
+import type {
+	ConfigurationUpdateResult,
+	UsbDmxEndpoint,
+} from "./client/deskManagement";
 
 type ServerState = ReturnType<typeof useServerState>;
 
@@ -57,6 +62,33 @@ export function ServerDeskBoundaries({
 			state.api.desk.updatePoolPresentation(...args),
 		[state.api],
 	);
+	const extensionActions = useMemo(
+		() => ({
+			load: () => state.api.desk.extensions(),
+			rescan: () => state.api.desk.rescanExtensions(),
+		}),
+		[state.api],
+	);
+	const usbDmxActions = useMemo(
+		() => ({
+			load: () => state.api.desk.usbDmxEndpoints(),
+			upsert: (revision: number, endpoint: UsbDmxEndpoint) =>
+				state.api.desk.updateUsbDmxEndpoints(revision, {
+					action: "upsert",
+					endpoint,
+				}),
+			remove: (revision: number, endpointId: string) =>
+				state.api.desk.updateUsbDmxEndpoints(revision, {
+					action: "remove",
+					endpoint_id: endpointId,
+				}),
+			resetMalformed: (revision: number) =>
+				state.api.desk.updateUsbDmxEndpoints(revision, {
+					action: "reset_malformed",
+				}),
+		}),
+		[state.api],
+	);
 	return (
 		<DeskSnapshotStateProvider store={state.deskSnapshotStore}>
 			<CommandHistoryStateProvider store={state.commandHistoryStore}>
@@ -87,16 +119,22 @@ export function ServerDeskBoundaries({
 												state.status === "connected"
 											}
 										>
-											<CueThumbnailActionsProvider
-												client={state.api.cueThumbnails}
-												showId={state.bootstrap?.active_show?.id ?? null}
-												canWrite={
-													sessionRole === "primary" &&
-													state.status === "connected"
-												}
+											<ExtensionRuntimeActionsProvider
+												actions={extensionActions}
 											>
-												{children}
-											</CueThumbnailActionsProvider>
+												<UsbDmxActionsProvider actions={usbDmxActions}>
+													<CueThumbnailActionsProvider
+														client={state.api.cueThumbnails}
+														showId={state.bootstrap?.active_show?.id ?? null}
+														canWrite={
+															sessionRole === "primary" &&
+															state.status === "connected"
+														}
+													>
+														{children}
+													</CueThumbnailActionsProvider>
+												</UsbDmxActionsProvider>
+											</ExtensionRuntimeActionsProvider>
 										</StageLayoutActionsProvider>
 									</StageLayoutStateProvider>
 								</ConfigurationActionsProvider>

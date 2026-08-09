@@ -59,6 +59,7 @@ scenario(
 		await t.app.open();
 		await t.app.expect.ready();
 		await t.selection.fixtures.via.api.items(101, 102, 103, 104);
+		await t.highlight.on();
 		await t.keypad.press(["NEXT"]);
 		await t.highlight.expectSelection(101);
 		await t.highlight.waitForControlDebounce();
@@ -70,6 +71,7 @@ scenario(
 		await t.highlight.waitForControlDebounce();
 		await t.keypad.press(["PREV"]);
 		await t.highlight.expectSelection(104);
+		await t.highlight.off();
 	},
 );
 

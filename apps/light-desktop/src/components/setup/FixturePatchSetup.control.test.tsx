@@ -366,7 +366,202 @@ afterEach(() => {
 	vi.restoreAllMocks();
 });
 
+function expectContextEditWithoutSetArm(options?: {
+	allowPatchSelection?: boolean;
+}) {
+	expect(state.patchSetArmed).toBe(false);
+	expect(dispatch).not.toHaveBeenCalledWith({
+		type: "SET_PATCH_ARMED",
+		value: true,
+	});
+	expect(programming.actions.replace).not.toHaveBeenCalled();
+	if (!options?.allowPatchSelection)
+		expect(patchFeature.selectPatchInstance).not.toHaveBeenCalled();
+}
+
+function rightClick(target: HTMLElement) {
+	expect(fireEvent.contextMenu(target)).toBe(false);
+}
+
+describe("Patch right-click SET parity", () => {
+	it.each([
+		{ label: "name", cell: 2, heading: "Set fixture name" },
+		{ label: "fixture and mode", cell: 3, heading: "Set fixture mode" },
+		{ label: "masters", cell: 5, heading: "Set fixture Masters" },
+		{ label: "pan and tilt", cell: 6, heading: "Set fixture Pan / Tilt" },
+		{ label: "MIB", cell: 7, heading: "Set fixture MIB" },
+	])("opens the $label editor directly without arming SET", ({ cell, heading }) => {
+		server.patch.fixtures = [policyFixture()];
+		render(<FixturePatchSetup />);
+		const row = screen.getByRole("row", {
+			name: /17 Split Wash 17/,
+		}) as HTMLTableRowElement;
+
+		rightClick(within(row.cells[cell]).getByRole("button"));
+
+		expect(screen.getByRole("heading", { name: heading })).toBeInTheDocument();
+		expectContextEditWithoutSetArm();
+	});
+
+	it("opens primary and split addresses directly without selecting the row", () => {
+		const single = splitFixture();
+		const mode = single.definition.profile_snapshot?.modes[0];
+		if (!mode) throw new Error("single-patch fixture mode is missing");
+		mode.splits = [];
+		single.split_patches = [];
+		server.patch.fixtures = [single];
+		render(<FixturePatchSetup />);
+		let row = screen.getByRole("row", {
+			name: /17 Split Wash 17/,
+		}) as HTMLTableRowElement;
+
+		rightClick(within(row.cells[4]).getByRole("button"));
+		expect(
+			screen.getByRole("dialog", { name: "Fixture Address" }),
+		).toBeInTheDocument();
+		expectContextEditWithoutSetArm();
+
+		cleanup();
+		dispatch.mockClear();
+		programming.actions.replace.mockClear();
+		patchFeature.selectPatchInstance.mockClear();
+		server.patch.fixtures = [splitFixture()];
+		render(<FixturePatchSetup />);
+		row = screen.getByRole("row", {
+			name: /17 Split Wash 17/,
+		}) as HTMLTableRowElement;
+		rightClick(
+			within(row.cells[4]).getByRole("button", {
+				name: "Split 3 patch 2.201",
+			}),
+		);
+		expect(
+			screen.getByRole("dialog", { name: "Fixture Address" }),
+		).toBeInTheDocument();
+		expectContextEditWithoutSetArm();
+	});
+
+	it("opens layer selection and keeps the fixture row action untouched", () => {
+		server.patch.fixtures = [policyFixture()];
+		render(<FixturePatchSetup />);
+		const row = screen.getByRole("row", {
+			name: /17 Split Wash 17/,
+		}) as HTMLTableRowElement;
+
+		rightClick(within(row.cells[15]).getByRole("button"));
+
+		expect(
+			screen.getByRole("heading", { name: "Select layer" }),
+		).toBeInTheDocument();
+		expectContextEditWithoutSetArm();
+	});
+
+	it("opens primary and multi-patch light-source editors without arming SET", () => {
+		server.patch.fixtures = [appearanceFixture()];
+		render(<FixturePatchSetup />);
+		rightClick(
+			screen.getByRole("button", { name: /Light source 17:/ }),
+		);
+		expect(
+			screen.getByRole("dialog", { name: "Set light source 17" }),
+		).toBeInTheDocument();
+		expectContextEditWithoutSetArm({ allowPatchSelection: true });
+		expect(patchFeature.selectPatchInstance).toHaveBeenCalledWith({
+			fixtureId: "fixture-split",
+			multipatchInstanceId: null,
+		});
+
+		cleanup();
+		dispatch.mockClear();
+		programming.actions.replace.mockClear();
+		patchFeature.selectPatchInstance.mockClear();
+		render(<FixturePatchSetup />);
+		rightClick(
+			screen.getByRole("button", { name: /Light source Opposite hang:/ }),
+		);
+		expect(
+			screen.getByRole("dialog", {
+				name: "Set light source Opposite hang",
+			}),
+		).toBeInTheDocument();
+		expectContextEditWithoutSetArm({ allowPatchSelection: true });
+		expect(patchFeature.selectPatchInstance).toHaveBeenCalledWith({
+			fixtureId: "fixture-split",
+			multipatchInstanceId: "physical-copy",
+		});
+	});
+
+	it("opens multi-patch address and Pan/Tilt editors without arming SET", () => {
+		server.patch.fixtures = [policyFixture()];
+		render(<FixturePatchSetup />);
+		let row = screen.getByRole("row", {
+			name: "Multi-patch Opposite hang",
+		}) as HTMLTableRowElement;
+		rightClick(within(row.cells[4]).getByRole("button"));
+		expect(
+			screen.getByRole("dialog", { name: "Multi-patch Address" }),
+		).toBeInTheDocument();
+		expectContextEditWithoutSetArm();
+
+		cleanup();
+		dispatch.mockClear();
+		programming.actions.replace.mockClear();
+		patchFeature.selectPatchInstance.mockClear();
+		render(<FixturePatchSetup />);
+		row = screen.getByRole("row", {
+			name: "Multi-patch Opposite hang",
+		}) as HTMLTableRowElement;
+		rightClick(within(row.cells[6]).getByRole("button"));
+		expect(
+			screen.getByRole("heading", { name: "Set multi-patch Pan / Tilt" }),
+		).toBeInTheDocument();
+		expectContextEditWithoutSetArm();
+	});
+
+	it("opens primary and multi-patch vector pads without arming SET", () => {
+		server.patch.fixtures = [policyFixture()];
+		render(<FixturePatchSetup />);
+		let row = screen.getByRole("row", {
+			name: /17 Split Wash 17/,
+		}) as HTMLTableRowElement;
+		rightClick(within(row.cells[9]).getByRole("button"));
+		expect(
+			screen.getByRole("dialog", { name: "Location X (meter)" }),
+		).toBeInTheDocument();
+		expectContextEditWithoutSetArm();
+
+		cleanup();
+		dispatch.mockClear();
+		programming.actions.replace.mockClear();
+		patchFeature.selectPatchInstance.mockClear();
+		render(<FixturePatchSetup />);
+		row = screen.getByRole("row", {
+			name: "Multi-patch Opposite hang",
+		}) as HTMLTableRowElement;
+		rightClick(within(row.cells[13]).getByRole("button"));
+		expect(
+			screen.getByRole("dialog", { name: "Rotation Y (degree)" }),
+		).toBeInTheDocument();
+		expectContextEditWithoutSetArm();
+	});
+});
+
 describe("fixture output policy cells", () => {
+	it("outlines each eligible nested SET target without outlining the whole fixture row", () => {
+		server.patch.fixtures = [policyFixture()];
+		state.patchSetArmed = true;
+		render(<FixturePatchSetup />);
+
+		const table = screen.getByRole("table");
+		expect(table.closest(".patch-table-wrap")).toHaveClass("patch-set-targets");
+		expect(screen.getByRole("button", { name: "Masters 17" })).toHaveClass(
+			"patch-value",
+		);
+		expect(screen.getByRole("row", { name: /17 Split Wash 17/ })).not.toHaveClass(
+			"set-target",
+		);
+	});
+
 	it("does not expose per-fixture raw Highlight Look editing", () => {
 		server.patch.fixtures = [policyFixture()];
 		state.patchSetArmed = true;

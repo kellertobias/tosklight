@@ -70,6 +70,7 @@ describe("fixture profile model Highlight defaults", () => {
 		expect(semanticHighlightRaw("intensity", "u8", 0, true)).toBe(0);
 		expect(semanticHighlightRaw("color.cyan", "u16", 123)).toBe(0);
 		expect(semanticHighlightRaw("color.cyan", "u16", 123, true)).toBe(65_535);
+		expect(semanticHighlightRaw("color.amber", "u8", 19)).toBe(255);
 		expect(
 			semanticHighlightRaw("color.wheel.1", "u8", 7, false, [
 				{ name: "Open / White", dmx_from: 10, dmx_to: 20 },

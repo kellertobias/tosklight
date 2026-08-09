@@ -1,12 +1,13 @@
 //! Network-output scheduling and safe shutdown for the server runtime.
 
 use super::capability_resources::{
-    ActiveShowCoordinator, ActiveShowProjection, OutputControlCapability, PlaybackRenderCapability,
+    ActiveShowCoordinator, ActiveShowProjection, OutputControlCapability,
+    OutputPersistenceResource, PlaybackRenderCapability,
 };
 use super::visualization_frame::VisualizationFrameHub;
 use super::{
-    ActionTimingResource, ApiError, AppState, DeskStore, OutputControl, PersistedOutputRuntime,
-    active_playbacks_setting, playback_service,
+    ActionTimingResource, ApiError, AppState, OutputControl, PersistedOutputRuntime,
+    playback_service,
 };
 use light_application::{
     PlaybackOperation, PlaybackShowScope, PlaybackUnitOfWork, automatic_playback_events,
@@ -18,7 +19,8 @@ use light_engine::{
     ContributionBatch, ContributionSample, Engine, EngineError, RenderOptions, RenderResult,
 };
 use light_output::{
-    DmxFrame, NetworkOutput, OutputHealth, Protocol, run_scheduler_dynamic_wakeable,
+    DmxFrame, NetworkOutput, OutputHealth, Protocol, UsbEndpointDocument, UsbOutputFanout,
+    run_scheduler_dynamic_wakeable,
 };
 use light_playback::PlaybackIdentity;
 use light_wire::v2::visualization::VisualizationScope;
@@ -85,6 +87,7 @@ pub(super) struct OutputScheduler {
     pub(super) output: Arc<NetworkOutput>,
     pub(super) sequences: SharedSequences,
     pub(super) control: Arc<Mutex<OutputControl>>,
+    pub(super) usb: Arc<UsbOutputFanout>,
     start: Option<tokio::sync::oneshot::Sender<()>>,
     task: OutputTask,
 }
@@ -93,7 +96,8 @@ struct SharedResources {
     pub(super) output: Arc<NetworkOutput>,
     pub(super) sequences: SharedSequences,
     pub(super) control: Arc<Mutex<OutputControl>>,
-    playback_desk: Arc<Mutex<DeskStore>>,
+    pub(super) usb: Arc<UsbOutputFanout>,
+    persistence: OutputPersistenceResource,
     programmer_reconciliation_cache: Arc<ProgrammerReconciliationCache>,
 }
 
@@ -103,6 +107,7 @@ struct Runtime {
     pub(super) output: Arc<NetworkOutput>,
     pub(super) sequences: SharedSequences,
     pub(super) control: Arc<Mutex<OutputControl>>,
+    pub(super) usb: Arc<UsbOutputFanout>,
     pub(super) timecode: Arc<Mutex<TimecodeRouter>>,
     pub(super) playback: PlaybackRenderCapability,
     pub(super) active_show: ActiveShowProjection,
@@ -115,7 +120,7 @@ struct Runtime {
     pub(super) visualization_frames: Arc<VisualizationFrameHub>,
     pub(super) action_timing: ActionTimingResource,
     pub(super) programmer_reconciliation_cache: Arc<ProgrammerReconciliationCache>,
-    pub(super) playback_desk: Arc<Mutex<DeskStore>>,
+    pub(super) persistence: OutputPersistenceResource,
 }
 
 pub(super) async fn start(config: Config) -> anyhow::Result<OutputScheduler> {
@@ -236,7 +241,7 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
             &runtime.playback,
             options,
             &sampled,
-            Some(&runtime.playback_desk),
+            Some(&runtime.persistence),
         )
         .map_err(io::Error::other)?;
         (
@@ -263,7 +268,7 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
     };
     let publish = publish_started.elapsed();
     let send_started = Instant::now();
-    let result = runtime
+    let network = runtime
         .output
         .send_routes(
             &routes,
@@ -272,6 +277,8 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
             &mut *runtime.sequences.lock().await,
         )
         .await;
+    let usb = runtime.usb.enqueue_routes(&routes, &frames);
+    let result = combined_delivery_result(network, usb);
     let send = send_started.elapsed();
     trace_slow_output_phases(tick_started.elapsed(), dynamic, engine, publish, send);
     if result.is_ok() {
@@ -291,7 +298,7 @@ async fn send_retained_output(runtime: &Runtime) -> io::Result<u64> {
         )
     };
     let send_started = Instant::now();
-    let result = runtime
+    let network = runtime
         .output
         .send_routes(
             &routes,
@@ -300,6 +307,8 @@ async fn send_retained_output(runtime: &Runtime) -> io::Result<u64> {
             &mut *runtime.sequences.lock().await,
         )
         .await;
+    let usb = runtime.usb.enqueue_routes(&routes, &frames);
+    let result = combined_delivery_result(network, usb);
     trace_slow_output_phases(
         tick_started.elapsed(),
         Duration::ZERO,
@@ -308,6 +317,17 @@ async fn send_retained_output(runtime: &Runtime) -> io::Result<u64> {
         send_started.elapsed(),
     );
     result
+}
+
+pub(in crate::runtime) fn combined_delivery_result(
+    network: io::Result<u64>,
+    usb: u64,
+) -> io::Result<u64> {
+    match (network, usb) {
+        (Ok(network), usb) => Ok(network + usb),
+        (Err(_), usb) if usb > 0 => Ok(usb),
+        (Err(error), _) => Err(error),
+    }
 }
 
 /// Runs one test-bench frame through the same render, routing, sequence, health-facing output
@@ -390,7 +410,7 @@ pub(super) fn render_with_playback_events(
     playback: &PlaybackRenderCapability,
     options: RenderOptions,
     sampled: &[ContributionBatch],
-    playback_desk: Option<&Mutex<DeskStore>>,
+    persistence: Option<&OutputPersistenceResource>,
 ) -> Result<RenderResult, EngineError> {
     playback
         .run_unit_of_work(AutomaticRender {
@@ -399,7 +419,7 @@ pub(super) fn render_with_playback_events(
             options,
             playback,
             sampled,
-            playback_desk,
+            persistence,
         })
         .output
 }
@@ -410,7 +430,7 @@ struct AutomaticRender<'a> {
     options: RenderOptions,
     playback: &'a PlaybackRenderCapability,
     sampled: &'a [ContributionBatch],
-    playback_desk: Option<&'a Mutex<DeskStore>>,
+    persistence: Option<&'a OutputPersistenceResource>,
 }
 
 impl PlaybackUnitOfWork for AutomaticRender<'_> {
@@ -427,8 +447,9 @@ impl PlaybackUnitOfWork for AutomaticRender<'_> {
         let transitions = std::mem::take(&mut rendered.automatic_playback_transitions);
         let show_id = self.active_show.current().as_ref().map(|show| show.id.0);
         if !transitions.is_empty()
-            && let (Some(show_id), Some(desk)) = (show_id, self.playback_desk)
-            && let Err(error) = checkpoint_automatic_playback_runtime(self.engine, desk, show_id)
+            && let (Some(show_id), Some(persistence)) = (show_id, self.persistence)
+            && let Err(error) =
+                checkpoint_automatic_playback_runtime(self.engine, persistence, show_id)
         {
             tracing::warn!(error = %error.message, "automatic Playback runtime persistence is pending");
         }
@@ -461,15 +482,12 @@ impl PlaybackUnitOfWork for AutomaticRender<'_> {
 
 fn checkpoint_automatic_playback_runtime(
     engine: &Engine,
-    desk: &Mutex<DeskStore>,
+    persistence: &OutputPersistenceResource,
     show_id: Uuid,
 ) -> Result<(), ApiError> {
     let serialized = super::serialize_active_playbacks(&engine.playback_runtime())?;
-    desk.lock()
-        .set_setting(
-            &active_playbacks_setting(light_core::ShowId(show_id)),
-            &serialized,
-        )
+    persistence
+        .checkpoint_active_playbacks(light_core::ShowId(show_id), &serialized)
         .map_err(ApiError::store)
 }
 
@@ -542,6 +560,7 @@ async fn shut_down_safely(runtime: &Runtime) {
         .output
         .terminate_routes(&routes, &mut *runtime.sequences.lock().await)
         .await;
+    runtime.usb.shutdown();
 }
 
 async fn send_safe_frame(runtime: &Runtime) -> Option<Arc<[light_output::OutputRoute]>> {
@@ -556,6 +575,7 @@ async fn send_safe_frame(runtime: &Runtime) -> Option<Arc<[light_output::OutputR
             &mut *runtime.sequences.lock().await,
         )
         .await;
+    runtime.usb.enqueue_routes(&safe.routes, &safe.universes);
     Some(safe.routes)
 }
 
@@ -586,6 +606,10 @@ impl OutputScheduler {
         OutputControlCapability::new(Arc::clone(&self.control))
     }
 
+    pub(super) fn usb_output(&self) -> Arc<UsbOutputFanout> {
+        Arc::clone(&self.usb)
+    }
+
     pub(super) fn into_task(mut self) -> OutputTask {
         self.start.take();
         self.task
@@ -594,13 +618,29 @@ impl OutputScheduler {
 
 impl SharedResources {
     async fn create(config: &Config) -> anyhow::Result<Self> {
+        let persistence = OutputPersistenceResource::open(&config.data_dir)?;
+        let usb_document = persistence
+            .setting(super::usb_output::USB_ENDPOINTS_SETTING)
+            .ok()
+            .flatten()
+            .and_then(|value| match serde_json::from_str::<UsbEndpointDocument>(&value) {
+                Ok(document) if document.validate().is_ok() => Some(document),
+                Ok(_) | Err(_) => {
+                    tracing::warn!("ignoring malformed USB endpoint installation document; original setting is preserved");
+                    None
+                }
+            })
+            .unwrap_or_default();
+        let usb = Arc::new(UsbOutputFanout::new(Arc::new(
+            light_usb_dmx_serial::SerialUsbDriverFactory,
+        )));
+        usb.configure(&usb_document).map_err(anyhow::Error::msg)?;
         Ok(Self {
             output: bind_output(config.bind_ip).await?,
             sequences: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
             control: create_control(&config.persisted_runtime),
-            playback_desk: Arc::new(Mutex::new(DeskStore::open(
-                config.data_dir.join("desk.sqlite"),
-            )?)),
+            usb,
+            persistence,
             programmer_reconciliation_cache: Arc::new(ProgrammerReconciliationCache::default()),
         })
     }
@@ -611,6 +651,7 @@ impl SharedResources {
             output: Arc::clone(&self.output),
             sequences: Arc::clone(&self.sequences),
             control: Arc::clone(&self.control),
+            usb: Arc::clone(&self.usb),
             timecode: Arc::clone(&config.timecode),
             playback: config.playback.clone(),
             active_show: config.active_show.clone(),
@@ -623,7 +664,7 @@ impl SharedResources {
             visualization_frames: Arc::clone(&config.visualization_frames),
             action_timing: config.action_timing.clone(),
             programmer_reconciliation_cache: Arc::clone(&self.programmer_reconciliation_cache),
-            playback_desk: Arc::clone(&self.playback_desk),
+            persistence: self.persistence.clone(),
         }
     }
 
@@ -636,6 +677,7 @@ impl SharedResources {
             output: self.output,
             sequences: self.sequences,
             control: self.control,
+            usb: self.usb,
             start: Some(start),
             task,
         }

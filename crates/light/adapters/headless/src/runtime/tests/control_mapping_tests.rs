@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn mapped_cue_action_uses_playback_service_and_publishes_one_midi_event() {
+fn mapped_cue_action_uses_playback_service_and_publishes_one_osc_event() {
     let (state, data_dir) = test_state();
     let cue_list = mapped_test_cue_list();
     let cue_list_id = cue_list.id;
@@ -9,16 +9,17 @@ fn mapped_cue_action_uses_playback_service_and_publishes_one_midi_event() {
         .output
         .replace_snapshot(EngineSnapshot {
             cue_lists: vec![cue_list].into(),
-            control_mappings: vec![midi_mapping(ControlAction::CueGo { cue_list_id })].into(),
+            control_mappings: vec![osc_mapping(ControlAction::CueGo { cue_list_id })].into(),
             ..EngineSnapshot::default()
         })
         .unwrap();
 
     handle_control_event(
         &state,
-        ControlEvent::Midi {
-            status: 144,
-            data: vec![7, 127],
+        ControlEvent::Osc {
+            address: "/mapped/cue".into(),
+            arguments: Vec::new(),
+            source: Some("127.0.0.1:19000".into()),
         },
     );
 
@@ -36,7 +37,7 @@ fn mapped_cue_action_uses_playback_service_and_publishes_one_midi_event() {
     assert_eq!(events[0].desk_id, None);
     assert_eq!(
         events[0].source,
-        light_application::EventSource::Action(light_application::ActionSource::Midi)
+        light_application::EventSource::Action(light_application::ActionSource::Osc)
     );
     assert!(matches!(
         &events[0].payload,
@@ -128,10 +129,8 @@ fn configured_grand_master_playback_keeps_playback_and_output_events() {
             ..EngineSnapshot::default()
         })
         .unwrap();
-    let context = light_application::ActionContext::system(
-        Uuid::nil(),
-        light_application::ActionSource::Midi,
-    );
+    let context =
+        light_application::ActionContext::system(Uuid::nil(), light_application::ActionSource::Osc);
     playback_service::execute(
         &state,
         None,
@@ -169,7 +168,7 @@ fn configured_grand_master_playback_keeps_playback_and_output_events() {
     assert_eq!(output_events.len(), 1);
     assert_eq!(
         output_events[0].source,
-        light_application::EventSource::Action(light_application::ActionSource::Midi)
+        light_application::EventSource::Action(light_application::ActionSource::Osc)
     );
     let light_application::ApplicationEvent::Output(
         light_application::OutputEvent::RuntimeChanged(change),
@@ -211,13 +210,12 @@ fn configured_grand_master_playback_keeps_playback_and_output_events() {
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
-fn midi_mapping(action: ControlAction) -> light_control::ControlMapping {
+fn osc_mapping(action: ControlAction) -> light_control::ControlMapping {
     light_control::ControlMapping {
         name: "Mapped Cue".into(),
         enabled: true,
-        trigger: light_control::ControlTrigger::Midi {
-            status: 144,
-            data1: Some(7),
+        trigger: light_control::ControlTrigger::Osc {
+            address: "/mapped/cue".into(),
         },
         action,
     }
@@ -237,6 +235,8 @@ fn mapped_test_cue_list() -> light_playback::CueList {
         restart_mode: light_playback::RestartMode::FirstCue,
         force_cue_timing: false,
         disable_cue_timing: false,
+        auto_off_at_zero: false,
+        auto_off_flash_release: false,
         chaser_xfade_millis: 0,
         chaser_xfade_percent: Some(0),
         speed_multiplier: 1.0,

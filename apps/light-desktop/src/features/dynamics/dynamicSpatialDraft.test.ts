@@ -44,23 +44,24 @@ describe("Dynamic spatial mapping draft", () => {
 		});
 	});
 
-	it("requires a complete spatial override when no inherited mapping exists", () => {
+	it("allows independent stage overrides without an inherited mapping", () => {
 		expect(
 			validateDynamicSpatialDraft(
 				{
 					projection: { type: "replace", value: projection },
 					shape: { type: "inherit" },
 				},
-				false,
 			),
-		).toMatch(/both be overridden/);
+		).toBeNull();
 		expect(
 			validateDynamicSpatialDraft(
 				{
-					projection: { type: "replace", value: projection },
-					shape: { type: "inherit" },
+					projection: { type: "inherit" },
+					shape: {
+						type: "replace",
+						value: { type: "grid", angle_degrees: 0, direction: "ascending" },
+					},
 				},
-				true,
 			),
 		).toBeNull();
 	});
@@ -72,7 +73,6 @@ describe("Dynamic spatial mapping draft", () => {
 					projection: { type: "inherit" },
 					shape: { type: "replace", value: { type: "random", seed: 42 } },
 				},
-				false,
 			),
 		).toBeNull();
 		expect(
@@ -81,7 +81,6 @@ describe("Dynamic spatial mapping draft", () => {
 					projection: { type: "inherit" },
 					shape: { type: "replace", value: { type: "random", seed: -1 } },
 				},
-				false,
 			),
 		).toMatch(/non-negative/);
 	});

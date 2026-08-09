@@ -22,6 +22,7 @@ const render = (ui: ReactElement) => rtlRender(ui, { wrapper: ModalProvider });
 const mocks = vi.hoisted(() => ({
 	savePlaybackSlot: vi.fn(),
 	clearPlaybackSlot: vi.fn(),
+	saveCueList: vi.fn(),
 	error: null as string | null,
 	playbacks: {
 		desk: { buttons: 3 },
@@ -33,7 +34,7 @@ const mocks = vi.hoisted(() => ({
 	scopedCueLists: [
 		{ id: "cue-1", name: "Main sequence" },
 		{ id: "cue-2", name: "Encore" },
-	] as Array<{ id: string; name: string; storageId?: string }>,
+	] as Array<{ id: string; name: string; storageId?: string; auto_off_at_zero?: boolean; auto_off_flash_release?: boolean }>,
 	groups: [{ id: "group-1", body: { name: "Front Wash" } }],
 	dynamics: [
 		{
@@ -79,8 +80,12 @@ vi.mock("../../features/showObjects/ShowObjectsState", () => ({
 			id: body.storageId ?? body.id,
 			revision: 1,
 			updated_at: "",
-			body: { id: body.id, name: body.name },
+			body,
 		})),
+}));
+vi.mock("../../features/playbackTopology/useCueListTopologyWriter", () => ({
+	cueListWriteBasis: (object: { body: { id: string }; id: string; revision: number }) => ({ cueListId: object.body.id, expectedObjectId: object.id, expectedRevision: object.revision }),
+	useCueListTopologyWriter: () => mocks.saveCueList,
 }));
 
 const base: PlaybackDefinition = {
@@ -103,6 +108,7 @@ afterEach(cleanup);
 beforeEach(() => {
 	mocks.savePlaybackSlot.mockReset().mockResolvedValue(true);
 	mocks.clearPlaybackSlot.mockReset().mockResolvedValue(true);
+	mocks.saveCueList.mockReset().mockImplementation(async (_basis, body) => ({ id: body.id, revision: 2, body }));
 	mocks.error = null;
 	mocks.playbacks.cue_lists = [
 		{ id: "cue-1", name: "Main sequence" },
@@ -152,6 +158,19 @@ function choose(label: string, option: string) {
 }
 
 describe("PlaybackConfigurationModal function and behavior", () => {
+	it("persists shared Cuelist Auto-off options independently", async () => {
+		mocks.scopedCueLists[0] = { ...mocks.scopedCueLists[0], auto_off_at_zero: false, auto_off_flash_release: false };
+		show();
+		fireEvent.click(screen.getByRole("button", { name: "Behavior" }));
+		const group = screen.getByRole("group", { name: "Auto-off" });
+		fireEvent.click(within(group).getByText("When fader reaches zero"));
+		fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+		await waitFor(() => expect(mocks.saveCueList).toHaveBeenCalledTimes(1));
+		expect(mocks.saveCueList.mock.calls[0][1]).toMatchObject({
+			auto_off_at_zero: true,
+			auto_off_flash_release: false,
+		});
+	});
 	it("preserves a zero Group Master seed while editing physical or virtual presentation", async () => {
 		for (const virtual of [false, true]) {
 			show(
@@ -553,6 +572,51 @@ describe("PlaybackConfigurationModal layout and persistence", () => {
 });
 
 describe("PlaybackConfigurationModal topology defaults", () => {
+	it("persists the two Dynamic Auto-off options independently", async () => {
+		show(
+			withFunctionDefaults(
+				base,
+				"dynamic",
+				"cue-1",
+				"group-1",
+				mocks.dynamics[0] as never,
+			),
+		);
+		fireEvent.click(screen.getByRole("button", { name: "Behavior" }));
+		choose("Target scope", "Live Group");
+		choose("Live Group", "group-1 · Front Wash");
+
+		const group = screen.getByRole("group", { name: "Auto-off" });
+		const atZero = within(group).getByRole("switch", {
+			name: "When fader reaches zero",
+		});
+		const afterFlash = within(group).getByRole("switch", {
+			name: "When Flash is released",
+		});
+		expect(atZero).not.toBeChecked();
+		expect(afterFlash).not.toBeChecked();
+
+		fireEvent.click(atZero);
+		expect(atZero).toBeChecked();
+		expect(afterFlash).not.toBeChecked();
+		fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+
+		await waitFor(() => expect(mocks.savePlaybackSlot).toHaveBeenCalledOnce());
+		expect(mocks.savePlaybackSlot).toHaveBeenCalledWith(
+			2,
+			4,
+			expect.objectContaining({
+				target: expect.objectContaining({
+					type: "dynamic",
+					assignment: expect.objectContaining({
+						auto_off_at_zero: true,
+						auto_off_flash_release: false,
+					}),
+				}),
+			}),
+		);
+	});
+
 	it("uses the server Dynamic Playback defaults", () => {
 		show(
 			withFunctionDefaults(

@@ -381,12 +381,14 @@ function decodeSpatialMapping(
 		"view_direction",
 		"rotation_degrees",
 		"preset",
+		"kind",
 	]);
 	const preset =
 		projection.preset == null
 			? null
 			: enumAt(projection.preset, `${path}.projection.preset`, [
 					"top",
+					"bottom",
 					"front",
 					"back",
 					"left",
@@ -404,6 +406,14 @@ function decodeSpatialMapping(
 				`${path}.projection.rotation_degrees`,
 			),
 			preset,
+			kind:
+				projection.kind == null
+					? undefined
+					: enumAt(projection.kind, `${path}.projection.kind`, [
+							"planar",
+							"cylindrical",
+							"spherical",
+						]),
 		},
 		shape: decodeShape(mapping.shape, `${path}.shape`),
 	};

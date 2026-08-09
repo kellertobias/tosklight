@@ -202,6 +202,19 @@ function CuePaneSettings({
 					})
 				}
 			/>
+			<SwitchField
+				label="Compact Cue rows"
+				offLabel="Standard"
+				onLabel="Compact"
+				checked={pane.cueListCompactRows ?? false}
+				onChange={(event) =>
+					dispatch({
+						type: "SET_PANE_CUELIST_COMPACT_ROWS",
+						id: pane.id,
+						value: event.target.checked,
+					})
+				}
+			/>
 		</FormLayout>
 	);
 }

@@ -203,6 +203,28 @@ describe("GroupsWindow action routing", () => {
 		expect(cards[199]).toHaveAttribute("data-pool-slot-id", "200");
 	});
 
+	it("outlines every Record target and routes bare Delete through the whole occupied card", async () => {
+		mocks.state.storeArmed = true;
+		const view = render(<GroupsWindow />);
+		let cards = view.container.querySelectorAll<HTMLButtonElement>(".group-card");
+		expect(cards[0]).toHaveClass("record-target");
+		expect(cards[3]).toHaveClass("record-target");
+		expect(cards[4]).toHaveClass("record-target");
+
+		mocks.state.storeArmed = false;
+		mocks.commandLine = "DELETE";
+		view.rerender(<GroupsWindow />);
+		cards = view.container.querySelectorAll<HTMLButtonElement>(".group-card");
+		expect(cards[0]).not.toHaveClass("delete-target");
+		expect(cards[3]).toHaveClass("delete-target");
+		expect(cards[3]).toHaveTextContent("Delete");
+		fireEvent.click(cards[3]);
+		await waitFor(() =>
+			expect(mocks.executeCommand).toHaveBeenCalledWith("DELETE GROUP 4"),
+		);
+		expect(mocks.selectLive).not.toHaveBeenCalled();
+	});
+
 	it("opens the three-tab Group settings modal on a touch hold", () => {
 		vi.useFakeTimers();
 		render(<GroupsWindow />);
@@ -263,23 +285,29 @@ describe("GroupsWindow action routing", () => {
 		expect(mocks.selectLive).not.toHaveBeenCalled();
 	});
 
-	it("right-click opens settings and suppresses retired Group management", () => {
+	it("right-click chooses the Group SET source and suppresses the native menu", async () => {
 		render(<GroupsWindow />);
-		fireEvent.contextMenu(buttonForText("Stored Empty"));
+		const button = buttonForText("Stored Empty");
+		const contextMenu = new MouseEvent("contextmenu", {
+			bubbles: true,
+			cancelable: true,
+		});
+		button.dispatchEvent(contextMenu);
 
+		expect(contextMenu.defaultPrevented).toBe(true);
+		await waitFor(() =>
+			expect(mocks.replaceCommand).toHaveBeenCalledWith("SET GROUP 4", false),
+		);
 		expect(
-			screen.getByRole("dialog", { name: "Group 4 settings" }),
-		).toBeInTheDocument();
-		expect(screen.queryByText(/^Master$/)).toBeNull();
-		expect(screen.queryByText("Select live group")).toBeNull();
-		expect(screen.queryByText("Replace membership with selection")).toBeNull();
-		expect(screen.queryByText("Undo membership/programming change")).toBeNull();
-		expect(mocks.setGroupMaster).not.toHaveBeenCalled();
+			screen.queryByRole("dialog", { name: "Group 4 settings" }),
+		).toBeNull();
 	});
 
-	it("does not reopen old Group settings after authority replacement", () => {
+	it("does not reopen long-held Group settings after authority replacement", () => {
+		vi.useFakeTimers();
 		const view = render(<GroupsWindow />);
-		fireEvent.contextMenu(buttonForText("Stored Empty"));
+		fireEvent.pointerDown(buttonForText("Stored Empty"));
+		act(() => vi.advanceTimersByTime(650));
 		expect(
 			screen.getByRole("dialog", { name: "Group 4 settings" }),
 		).toBeInTheDocument();

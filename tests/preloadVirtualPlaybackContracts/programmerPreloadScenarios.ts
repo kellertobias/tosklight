@@ -193,6 +193,7 @@ const preload001ApiSupplement = async ({
 	expect(await visualizationLevel(api, group1Fixture)).toBeCloseTo(before1, 5);
 	expect(await visualizationLevel(api, group2Fixture)).toBeCloseTo(before2, 5);
 
+	await setCaptureMask(api, true, false, false, 4_000, 7_000);
 	const committed = (
 		await goProgrammerPreload(api, {
 			surface: "api",
@@ -210,10 +211,18 @@ const preload001ApiSupplement = async ({
 			activeProgrammer.preload_group_active["2"].intensity.changed_at,
 		),
 	).toBe(timestampMillis(committed.committedAt));
+	expect(activeProgrammer.preload_group_active["1"].intensity.fade_millis).toBe(
+		4_000,
+	);
+	expect(activeProgrammer.preload_group_active["2"].intensity.fade_millis).toBe(
+		4_000,
+	);
+	expect(committed.programmerFadeMillis).toBe(4_000);
 	expect(committed.executed).toEqual([]);
-	await bench.tick(1_000);
-	expect(await visualizationLevel(api, group1Fixture)).toBeCloseTo(1 / 6, 2);
-	expect(await visualizationLevel(api, group2Fixture)).toBeCloseTo(0.7, 2);
+	await setCaptureMask(api, true, false, false, 1_000, 7_000);
+	await bench.tick(2_000);
+	expect(await visualizationLevel(api, group1Fixture)).toBeCloseTo(0.25, 2);
+	expect(await visualizationLevel(api, group2Fixture)).toBeCloseTo(0.35, 2);
 	await bench.tick(2_000);
 	expect(await visualizationLevel(api, group1Fixture)).toBeCloseTo(0.5, 2);
 	expect(await visualizationLevel(api, group2Fixture)).toBeCloseTo(0.7, 2);
@@ -272,7 +281,7 @@ const preload001UiSupplement = async ({
 		.toBe(1);
 	await desk.recordStep(
 		"COMMIT AT ONE MARK",
-		"The explicit 1 s value and the 3 s Programmer Fade fallback start now.",
+		"Both pending values capture the 3 s Programmer Fade at Preload GO; edit-time timing is not retained.",
 	);
 	await page.getByRole("button", { name: /^PRELOAD GO\b/ }).click();
 	await expect
@@ -288,13 +297,14 @@ const preload001UiSupplement = async ({
 		0.5,
 		5,
 	);
-	expect(state.preload_group_active["2"].intensity.fade_millis).toBe(1_000);
+	expect(state.preload_group_active["1"].intensity.fade_millis).toBe(3_000);
+	expect(state.preload_group_active["2"].intensity.fade_millis).toBe(3_000);
 };
 
 export function registerProgrammerPreloadScenarios(): void {
 	pairedScenario(preload001Scenario);
 	test(
-		"PRELOAD-001 @supplemental › API timing and source ownership at exact virtual-time checkpoints",
+		"PRELOAD-001 @api › GO captures one Programmer Fade for all pending values",
 		preload001ApiSupplement,
 	);
 	test(

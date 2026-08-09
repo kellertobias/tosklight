@@ -118,8 +118,9 @@ function useHighlightInvocation(
 		(action: HighlightAction) => {
 			if (pendingRef.current || !state) return false;
 			if (ownedByOther && !state.capture_only) return false;
-			if (action === "next") return state.can_next;
-			if (action === "previous") return state.can_previous;
+			if (action === "next") return state.active && state.can_next;
+			if (action === "previous") return state.active && state.can_previous;
+			if (action === "all") return state.active;
 			return true;
 		},
 		[ownedByOther, state],

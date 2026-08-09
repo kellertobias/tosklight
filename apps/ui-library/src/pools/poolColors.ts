@@ -35,7 +35,10 @@ export type PoolPresentationState =
 	| "store-target"
 	| "record-target"
 	| "update-target"
-	| "set-target";
+	| "set-target"
+	| "copy-target"
+	| "move-target"
+	| "delete-target";
 
 export const DEFAULT_POOL_COLOR_PALETTE: Readonly<PoolColorPalette> = {
 	group: "#d8ad55",

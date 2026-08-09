@@ -11,6 +11,41 @@ use super::*;
 #[cfg(test)]
 type InstallationDeskStore = DeskStore;
 
+/// Durable output-loop state behind a capability boundary.
+///
+/// The scheduler owns timing, not SQLite. Keeping the store here prevents the output loop from
+/// becoming a second installation-persistence owner while still allowing automatic transitions
+/// to checkpoint before the next process start.
+#[derive(Clone)]
+pub(in crate::runtime) struct OutputPersistenceResource {
+    desk: Arc<Mutex<DeskStore>>,
+}
+
+impl OutputPersistenceResource {
+    pub(in crate::runtime) fn open(data_dir: &std::path::Path) -> anyhow::Result<Self> {
+        Ok(Self {
+            desk: Arc::new(Mutex::new(DeskStore::open(data_dir.join("desk.sqlite"))?)),
+        })
+    }
+
+    pub(in crate::runtime) fn setting(
+        &self,
+        key: &str,
+    ) -> Result<Option<String>, light_show::StoreError> {
+        self.desk.lock().setting(key)
+    }
+
+    pub(in crate::runtime) fn checkpoint_active_playbacks(
+        &self,
+        show_id: light_core::ShowId,
+        serialized: &str,
+    ) -> Result<(), light_show::StoreError> {
+        self.desk
+            .lock()
+            .set_setting(&active_playbacks_setting(show_id), serialized)
+    }
+}
+
 #[derive(Clone)]
 pub(in crate::runtime) struct InstallationResource {
     desk: Arc<Mutex<DeskStore>>,

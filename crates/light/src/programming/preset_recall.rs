@@ -18,6 +18,7 @@ pub struct ProgrammingPresetRecallRequest {
     pub expected_preset_revision: ProgrammingPresetRecallRevisionExpectation,
     pub expected_show_revision: ProgrammingPresetRecallRevisionExpectation,
     pub expected_values_revision: ProgrammingPresetRecallRevisionExpectation,
+    pub expected_preload_values_revision: ProgrammingPresetRecallRevisionExpectation,
     pub expected_capture_mode_revision: ProgrammingPresetRecallRevisionExpectation,
     pub expected_selection_revision: ProgrammingPresetRecallRevisionExpectation,
 }
@@ -68,6 +69,18 @@ pub enum ProgrammingPresetRecallOutcome {
     NoChange {
         values_revision: u64,
     },
+    PreloadChanged {
+        values_revision: u64,
+        preload_values_revision: u64,
+        projection: Option<Arc<super::ProgrammingPreloadValuesProjection>>,
+        preload_values_event_sequence: Option<u64>,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProgrammingPresetRecallTarget {
+    Programmer,
+    Preload,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -82,7 +95,10 @@ impl ProgrammingPresetRecallOutcome {
             Self::Changed {
                 values_revision, ..
             }
-            | Self::NoChange { values_revision } => *values_revision,
+            | Self::NoChange { values_revision }
+            | Self::PreloadChanged {
+                values_revision, ..
+            } => *values_revision,
         }
     }
 
@@ -92,6 +108,10 @@ impl ProgrammingPresetRecallOutcome {
                 values_event_sequence,
                 ..
             } => *values_event_sequence,
+            Self::PreloadChanged {
+                preload_values_event_sequence,
+                ..
+            } => *preload_values_event_sequence,
             Self::NoChange { .. } => None,
         }
     }
@@ -100,6 +120,8 @@ impl ProgrammingPresetRecallOutcome {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ProgrammingPresetRecallResult {
     pub context: ActionContext,
+    pub target: ProgrammingPresetRecallTarget,
+    pub preload_values_revision: u64,
     pub disposition: ProgrammingPresetRecallDisposition,
     pub applied_fixtures: usize,
     pub selected_targets: usize,

@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
 	replaceCommand: vi.fn(),
 	selectFrozen: vi.fn(),
 	resetCommand: vi.fn(),
+	commandLine: "",
 	refresh: vi.fn(),
 	recordGroup: vi.fn(),
 	state: { storeArmed: false, updateArmed: false },
@@ -46,12 +47,17 @@ vi.mock("../../api/ServerContext", () => ({
 vi.mock("../control/commandLine/useCommandLineSurface", () => ({
 	useCommandLineSurface: () => ({
 		ready: true,
-		text: "",
+		text: mocks.commandLine,
 		target: "GROUP" as const,
 		pristine: true,
 		selected: [],
 		selectedGroupId: null,
-		read: () => ({ text: "", target: "GROUP", pristine: true, ready: true }),
+		read: () => ({
+			text: mocks.commandLine,
+			target: "GROUP",
+			pristine: true,
+			ready: true,
+		}),
 		replace: mocks.replaceCommand,
 		reset: mocks.resetCommand,
 		execute: mocks.executeCommand,
@@ -92,6 +98,7 @@ describe("GroupStrip action routing", () => {
 		mocks.resetCommand.mockReset().mockResolvedValue(true);
 		mocks.state.storeArmed = false;
 		mocks.state.updateArmed = false;
+		mocks.commandLine = "";
 		mocks.groups = [
 			{
 				id: "1",
@@ -121,6 +128,22 @@ describe("GroupStrip action routing", () => {
 			screen.getByText("Shortcut Group").closest("button")!,
 		);
 		expect(mocks.selectFrozen).toHaveBeenCalledWith(mocks.groups[0]);
+		expect(mocks.selectLive).not.toHaveBeenCalled();
+	});
+
+	it("right-click chooses the same Group SET source and suppresses the native menu", async () => {
+		render(<GroupStrip />);
+		const shortcut = screen.getByText("Shortcut Group").closest("button")!;
+		const contextMenu = new MouseEvent("contextmenu", {
+			bubbles: true,
+			cancelable: true,
+		});
+		shortcut.dispatchEvent(contextMenu);
+
+		expect(contextMenu.defaultPrevented).toBe(true);
+		await waitFor(() =>
+			expect(mocks.replaceCommand).toHaveBeenCalledWith("SET GROUP 1", false),
+		);
 		expect(mocks.selectLive).not.toHaveBeenCalled();
 	});
 
@@ -154,6 +177,26 @@ describe("GroupStrip action routing", () => {
 		});
 		expect(mocks.selectLive).not.toHaveBeenCalled();
 		release();
+	});
+
+	it("shows literal full-entry Record and Delete targeting on populated shortcuts", async () => {
+		mocks.state.storeArmed = true;
+		const view = render(<GroupStrip />);
+		let shortcut = screen.getByText("Shortcut Group").closest("button")!;
+		expect(shortcut).toHaveClass("record-target");
+		expect(shortcut).toHaveTextContent("Record");
+
+		mocks.state.storeArmed = false;
+		mocks.commandLine = "DELETE";
+		view.rerender(<GroupStrip />);
+		shortcut = screen.getByText("Shortcut Group").closest("button")!;
+		expect(shortcut).toHaveClass("delete-target");
+		expect(shortcut).toHaveTextContent("Delete");
+		fireEvent.click(shortcut);
+		await waitFor(() =>
+			expect(mocks.executeCommand).toHaveBeenCalledWith("DELETE GROUP 1"),
+		);
+		expect(mocks.selectLive).not.toHaveBeenCalled();
 	});
 
 	it("records directly into stored empty shortcut groups", async () => {

@@ -1,13 +1,13 @@
 import type { Page } from "@playwright/test";
 import { oscProgrammerActionForKey } from "@tosklight/ui/programmer-keypad";
 import type { ApiDriver } from "../core/api";
+import type { DeskDriver } from "../core/desk";
+import type { SimulatedHardware } from "../hardware/hardwareScenario";
 import type {
 	BrowserCommands,
 	BrowserKeypad,
 	KeypadKey,
 } from "./commandScenario";
-import type { DeskDriver } from "../core/desk";
-import type { SimulatedHardware } from "../hardware/hardwareScenario";
 import {
 	fixture,
 	fixtureRange,
@@ -105,7 +105,6 @@ export class BrowserRoutedSelection {
 		const keypadMutation = this.keypadMutation.bind(this);
 		const oscMutation = this.oscMutation.bind(this);
 		const fixtureSheet = visible.fixtures.via.fixtureSheet;
-		const stage = visible.fixtures.via.stage;
 		const pool = visible.groups.via.pool;
 		this.routeChoice = new SeededSelectionRouteChoice(seed, [
 			adapter("api", apiMutation),
@@ -121,9 +120,7 @@ export class BrowserRoutedSelection {
 				ui: fixtureSheet,
 				touch: fixtureSheet.via.touch,
 				fixtureSheet,
-				stage,
-				click: stage.via.click,
-				shiftClick: stage.via.shiftClick as SelectionItemRoute,
+				click: fixtureSheet.via.click,
 			},
 		);
 		this.groups = new RoutedItems(
@@ -285,7 +282,6 @@ export class BrowserRoutedSelection {
 			groupNumbers: groups.map((candidate) => Number(candidate.id)),
 		};
 	}
-
 }
 
 function adapter(

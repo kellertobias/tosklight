@@ -21,6 +21,9 @@ const mocks = vi.hoisted(() => ({
 	presets: [] as Array<Record<string, unknown>>,
 	record: vi.fn(),
 	commandReset: vi.fn(async () => true),
+	commandReplace: vi.fn(async () => true),
+	commandExecute: vi.fn(async () => true),
+	commandText: "",
 	storePreload: vi.fn(async () => true),
 	recall: vi.fn(async () => null),
 	updateTarget: vi.fn(),
@@ -66,7 +69,12 @@ vi.mock(
 	() => ({ useProgrammerPreloadLifecycleView: () => mocks.preload }),
 );
 vi.mock("../components/control/commandLine/useCommandLineSurface", () => ({
-	useCommandLineSurface: () => ({ reset: mocks.commandReset }),
+	useCommandLineSurface: () => ({
+		text: mocks.commandText,
+		reset: mocks.commandReset,
+		replace: mocks.commandReplace,
+		execute: mocks.commandExecute,
+	}),
 }));
 vi.mock("../components/control/updateWorkflow", () => ({
 	requestUpdateTarget: mocks.updateTarget,
@@ -90,6 +98,9 @@ beforeEach(() => {
 	mocks.record.mockReset();
 	mocks.record.mockResolvedValue(null);
 	mocks.commandReset.mockClear();
+	mocks.commandReplace.mockClear();
+	mocks.commandExecute.mockClear();
+	mocks.commandText = "";
 	mocks.storePreload.mockClear();
 	mocks.recall.mockClear();
 	mocks.updateTarget.mockClear();
@@ -112,6 +123,13 @@ describe("PresetsWindow normal recording boundary", () => {
 					family: "Color",
 					values: {},
 				},
+			},
+			{
+				kind: "preset",
+				id: "4.2",
+				revision: 1,
+				updated_at: "",
+				body: { name: "Other family", number: 2, family: "Beam", values: {} },
 			},
 		];
 		const { container } = render(<PresetsWindow compact />);
@@ -138,6 +156,64 @@ describe("PresetsWindow normal recording boundary", () => {
 			"update-target",
 			"set-target",
 		);
+	});
+
+	it("right-click opens the SET customization flow and suppresses the native menu", async () => {
+		mocks.state.storeArmed = false;
+		render(<PresetsWindow compact />);
+		const cell = firstPresetCell();
+		const contextMenu = new MouseEvent("contextmenu", {
+			bubbles: true,
+			cancelable: true,
+		});
+		fireEvent(cell, contextMenu);
+
+		expect(contextMenu.defaultPrevented).toBe(true);
+		expect(
+			await screen.findByRole("dialog", { name: "Configure preset button" }),
+		).toBeInTheDocument();
+		expect(mocks.dispatch).toHaveBeenCalledWith({
+			type: "SET_PRESET_SET_ARMED",
+			value: false,
+		});
+		expect(mocks.recall).not.toHaveBeenCalled();
+	});
+
+	it("targets only eligible whole Preset cards for Copy, Move, and Delete", () => {
+		mocks.state.storeArmed = false;
+		mocks.presets = [
+			{
+				kind: "preset",
+				id: "2.1",
+				revision: 1,
+				updated_at: "",
+				body: { name: "Source", number: 1, family: "Color", values: {} },
+			},
+		];
+		mocks.commandText = "COPY";
+		const { container, rerender } = render(<PresetsWindow compact />);
+		let cards = container.querySelectorAll<HTMLButtonElement>(".preset-card");
+		expect(cards[0]).toHaveClass("copy-target");
+		expect(cards[0]).toHaveTextContent("Copy");
+		expect(cards[1]).not.toHaveClass("copy-target");
+		fireEvent.click(cards[0]);
+		expect(mocks.commandReplace).toHaveBeenCalledWith("COPY 2.1 AT");
+
+		mocks.commandText = "MOVE 2.1 AT";
+		rerender(<PresetsWindow compact />);
+		cards = container.querySelectorAll<HTMLButtonElement>(".preset-card");
+		expect(cards[0]).not.toHaveClass("move-target");
+		expect(cards[1]).toHaveClass("move-target");
+		fireEvent.click(cards[1]);
+		expect(mocks.commandExecute).toHaveBeenCalledWith("MOVE 2.1 AT 2");
+
+		mocks.commandText = "DELETE";
+		rerender(<PresetsWindow compact />);
+		cards = container.querySelectorAll<HTMLButtonElement>(".preset-card");
+		expect(cards[0]).toHaveClass("delete-target");
+		expect(cards[1]).not.toHaveClass("delete-target");
+		fireEvent.click(cards[0]);
+		expect(mocks.commandExecute).toHaveBeenCalledWith("DELETE 2.1");
 	});
 
 	it("recalls an existing Preset through the scoped typed action", () => {

@@ -44,6 +44,8 @@ mod discovery_route_tests;
 mod engine_selection_refresh_tests;
 #[path = "event_transport_route_tests.rs"]
 mod event_transport_route_tests;
+#[path = "extension_control_tests.rs"]
+mod extension_control_tests;
 #[path = "output_runtime_tests.rs"]
 mod output_runtime_tests;
 #[path = "playback_topology_map_existing_route_tests.rs"]
@@ -84,6 +86,8 @@ mod show_patch_route_tests;
 mod speed_group_v2_tests;
 #[path = "stage_layout_route_tests.rs"]
 mod stage_layout_route_tests;
+#[path = "usb_output_route_tests.rs"]
+mod usb_output_route_tests;
 #[path = "virtual_playback_zones_route_tests.rs"]
 mod virtual_playback_zones_route_tests;
 #[path = "visualizer_view_route_tests.rs"]
@@ -98,7 +102,6 @@ include!("citp_support.rs");
 include!("fixture_startup_tests.rs");
 include!("runtime_support.rs");
 include!("startup_tests.rs");
-include!("alignment_tests.rs");
 include!("highlight_schema_tests.rs");
 include!("highlight_timing_support.rs");
 include!("highlight_timing_tests.rs");

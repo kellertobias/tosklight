@@ -38,4 +38,46 @@ describe("Desk Management Highlight Look configuration", () => {
 		const body = JSON.parse(String(init?.body));
 		expect(body.patch.highlight_look).toEqual(configuration.highlight_look);
 	});
+
+	it("serializes the installation playback recording defaults", async () => {
+		const request = vi.fn(async (_path: string, _init?: RequestInit) => ({
+			configuration: {},
+			requires_restart: false,
+			matter: {},
+			request_id: "configuration-2",
+			replayed: false,
+		}));
+		const client = new DeskManagementApiClient({
+			request,
+			blob: vi.fn(),
+			absoluteUrl: vi.fn(),
+			currentDeskId: vi.fn(),
+			sendAction: vi.fn(),
+		} as unknown as LiveClientTransport);
+		const configuration = {
+			frame_rate_hz: 44,
+			cuelist_auto_off_at_zero_default: true,
+			cuelist_auto_off_flash_release_default: false,
+			start_after_first_recording: true,
+			highlight_look: {
+				intensity: 1,
+				color: "white",
+				iris: null,
+				zoom: null,
+				focus: null,
+				frost: null,
+				compatibility: "semantic",
+			},
+		} as DeskConfiguration;
+
+		await client.updateConfiguration(configuration);
+
+		const [, init] = request.mock.calls[0];
+		const body = JSON.parse(String(init?.body));
+		expect(body.patch).toMatchObject({
+			cuelist_auto_off_at_zero_default: true,
+			cuelist_auto_off_flash_release_default: false,
+			start_after_first_recording: true,
+		});
+	});
 });

@@ -31,6 +31,10 @@ impl LifecycleResource {
         self.shutdown.cancel();
     }
 
+    pub(in crate::runtime) async fn cancelled(&self) {
+        self.shutdown.cancelled().await;
+    }
+
     pub(in crate::runtime) fn schedule(
         &self,
         task: impl std::future::Future<Output = anyhow::Result<()>> + Send + 'static,

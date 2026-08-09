@@ -43,9 +43,7 @@ pub(super) async fn update_configuration(
         .configure_timecode(configuration.timecode_sources.clone());
     let requires_restart = configuration.output_bind_ip != previous.output_bind_ip
         || configuration.osc_bind != previous.osc_bind
-        || configuration.art_timecode_bind != previous.art_timecode_bind
-        || configuration.midi_inputs != previous.midi_inputs
-        || configuration.rtp_midi_bind != previous.rtp_midi_bind;
+        || configuration.art_timecode_bind != previous.art_timecode_bind;
     state
         .installation
         .replace_configuration(configuration.clone());

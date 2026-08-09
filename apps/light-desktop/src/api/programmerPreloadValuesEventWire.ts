@@ -128,7 +128,7 @@ function validateSource(value: unknown) {
 		"keyboard",
 		"osc",
 		"http",
-		"midi",
+		"extension",
 		"matter",
 		"cue",
 		"timecode",

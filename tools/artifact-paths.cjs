@@ -48,6 +48,10 @@ const artifactPaths = Object.freeze({
     Object.hasOwn(process.env, "LIGHT_DATA_DIR") ? "LIGHT_DATA_DIR" : "LIGHT_RUNTIME_DATA_DIR",
     path.join(artifactRoot, layout.RUNTIME_DATA),
   )),
+  extensions: absolute(configured(
+    "LIGHT_RUNTIME_EXTENSIONS_DIR",
+    configured("LIGHT_EXTENSIONS_DIR", path.join(artifactRoot, layout.RUNTIME_EXTENSIONS)),
+  )),
   coverage: artifact("LIGHT_TEST_COVERAGE_DIR", "TEST_COVERAGE"),
   report: artifact("LIGHT_PLAYWRIGHT_REPORT_DIR", "TEST_REPORT"),
   results: artifact("LIGHT_TEST_RESULTS_DIR", "TEST_RESULTS"),

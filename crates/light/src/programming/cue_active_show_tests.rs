@@ -129,6 +129,70 @@ fn merge_active_without_existing_topology_creates_the_first_pool_cue() {
 }
 
 #[test]
+fn frozen_cuelist_defaults_apply_only_when_recording_creates_topology() {
+    let new_rig = TestRig::new();
+    let new_commit = new_rig.commit_with_defaults(
+        ProgrammingCueRecordTarget::Pool { playback_number: 8 },
+        ProgrammingCueResolvedTarget::Playback {
+            playback_number: 8,
+            page_slot: None,
+        },
+        ProgrammingCueRecordOperation::Overwrite,
+        None,
+        capture(0.5),
+        true,
+        true,
+    );
+    let created = new_rig
+        .service
+        .commit_programming_cue(&new_rig.context(), &new_commit, &new_rig.ports)
+        .unwrap();
+    assert!(created.created_topology);
+    assert_eq!(
+        created.projections.cue_list.raw_body["auto_off_at_zero"],
+        true
+    );
+    assert_eq!(
+        created.projections.cue_list.raw_body["auto_off_flash_release"],
+        true
+    );
+
+    let existing_rig = TestRig::new();
+    let cue_list_id = CueListId::new();
+    existing_rig.seed(
+        "cue_list",
+        &cue_list_id.0.to_string(),
+        cue_list(cue_list_id, Uuid::new_v4(), 0.4),
+    );
+    let existing_commit = existing_rig.commit_with_defaults(
+        ProgrammingCueRecordTarget::CueList { cue_list_id },
+        ProgrammingCueResolvedTarget::CueList { cue_list_id },
+        ProgrammingCueRecordOperation::Overwrite,
+        Some(1.0),
+        capture(0.7),
+        true,
+        true,
+    );
+    let updated = existing_rig
+        .service
+        .commit_programming_cue(
+            &existing_rig.context(),
+            &existing_commit,
+            &existing_rig.ports,
+        )
+        .unwrap();
+    assert!(!updated.created_topology);
+    assert_eq!(
+        updated.projections.cue_list.raw_body["auto_off_at_zero"],
+        false
+    );
+    assert_eq!(
+        updated.projections.cue_list.raw_body["auto_off_flash_release"],
+        false
+    );
+}
+
+#[test]
 fn identical_overwrite_is_no_change_before_prepare_backup_commit_and_event() {
     let rig = TestRig::new();
     let cue_list_id = CueListId::new();
@@ -362,6 +426,22 @@ impl TestRig {
         cue_number: Option<f64>,
         capture: CueRecordingCapture,
     ) -> ProgrammingCueCommit {
+        self.commit_with_defaults(
+            target, resolved, operation, cue_number, capture, false, false,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn commit_with_defaults(
+        &self,
+        target: ProgrammingCueRecordTarget,
+        resolved: ProgrammingCueResolvedTarget,
+        operation: ProgrammingCueRecordOperation,
+        cue_number: Option<f64>,
+        capture: CueRecordingCapture,
+        auto_off_at_zero: bool,
+        auto_off_flash_release: bool,
+    ) -> ProgrammingCueCommit {
         ProgrammingCueCommit::new(
             ProgrammingCueRecordRequest {
                 show_id: self.show_id,
@@ -378,6 +458,9 @@ impl TestRig {
             ProgrammingCueRecordingEnvironment {
                 target: resolved,
                 active_cue: None,
+                cuelist_auto_off_at_zero_default: auto_off_at_zero,
+                cuelist_auto_off_flash_release_default: auto_off_flash_release,
+                start_after_first_recording: false,
             },
             capture,
         )
@@ -535,6 +618,8 @@ fn cue_list(id: CueListId, cue_id: Uuid, level: f32) -> Value {
         restart_mode: RestartMode::FirstCue,
         force_cue_timing: false,
         disable_cue_timing: false,
+        auto_off_at_zero: false,
+        auto_off_flash_release: false,
         chaser_xfade_millis: 0,
         chaser_xfade_percent: Some(0),
         speed_multiplier: 1.0,

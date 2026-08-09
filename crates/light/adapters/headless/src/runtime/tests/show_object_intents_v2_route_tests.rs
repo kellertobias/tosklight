@@ -457,13 +457,13 @@ async fn dynamic_spatial_mapping_update_and_draft_preview_use_saved_live_group_a
         .output
         .replace_snapshot(spatial_snapshot(None))
         .unwrap();
-    let (status, incomplete) = post_show_object_intent(
+    let (status, fallback) = post_show_object_intent(
         &app,
         &token,
         &show_id,
         &format!("/api/v2/dynamics/{dynamic_id}/update"),
         serde_json::json!({
-            "request_id":"spatial-incomplete",
+            "request_id":"spatial-fallback",
             "expected_revision":1,
             "intent":{
                 "type":"set_spatial_mapping",
@@ -475,7 +475,15 @@ async fn dynamic_spatial_mapping_update_and_draft_preview_use_saved_live_group_a
         }),
     )
     .await;
-    assert_eq!(status, StatusCode::BAD_REQUEST, "{incomplete}");
+    assert_eq!(status, StatusCode::OK, "{fallback}");
+    assert_eq!(fallback["object"]["revision"], 2);
+    assert_eq!(
+        fallback["object"]["body"]["spatial_mapping"],
+        serde_json::json!({
+            "projection":{"type":"inherit"},
+            "shape":{"type":"replace","value":{"type":"grid","angle_degrees":0.0,"direction":"ascending"}}
+        })
+    );
 
     state
         .output
@@ -488,7 +496,7 @@ async fn dynamic_spatial_mapping_update_and_draft_preview_use_saved_live_group_a
         &format!("/api/v2/dynamics/{dynamic_id}/update"),
         serde_json::json!({
             "request_id":"spatial-random",
-            "expected_revision":1,
+            "expected_revision":2,
             "intent":{
                 "type":"set_spatial_mapping",
                 "spatial_mapping":{
@@ -500,6 +508,7 @@ async fn dynamic_spatial_mapping_update_and_draft_preview_use_saved_live_group_a
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{updated}");
+    assert_eq!(updated["object"]["revision"], 3);
     assert_eq!(
         updated["object"]["body"]["target_binding"],
         serde_json::json!({"type":"live_group","group_id":"front"})
@@ -1267,6 +1276,8 @@ fn test_cue_list() -> light_playback::CueList {
         restart_mode: light_playback::RestartMode::FirstCue,
         force_cue_timing: false,
         disable_cue_timing: false,
+        auto_off_at_zero: false,
+        auto_off_flash_release: false,
         chaser_xfade_millis: 0,
         chaser_xfade_percent: Some(0),
         speed_multiplier: 1.0,

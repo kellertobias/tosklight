@@ -33,5 +33,5 @@ objc2-core-foundation = { version = "0.3", features = [
 # created is a platform call with a raw handle on both sides, and there is no safe spelling of it.
 # The workspace forbids unsafe everywhere else precisely so that it is confined here, where it is
 # a few dozen reviewed lines rather than a habit.
-[lints.rust]
-unsafe_code = "allow"
+[lints]
+workspace = true

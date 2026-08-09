@@ -262,7 +262,7 @@ pub(super) fn reconcile_highlight_selection(
 pub(super) fn sync_highlight_output(state: &AppState) {
     state
         .output
-        .set_highlighted_fixtures(state.highlight.output_fixtures());
+        .set_highlight_layers(state.highlight.output_layers());
 }
 
 pub(super) async fn patch_preview_highlight(

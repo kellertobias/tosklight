@@ -1,5 +1,11 @@
+import type {
+	CueTimingRuntimeProjection,
+	PlaybackCueTransition as GeneratedPlaybackCueTransition,
+} from "../generated/light-wire";
 import type { SpeedSnapshot } from "./configuration";
 import type { ControlDesk } from "./desk";
+
+export type PlaybackCueTransition = GeneratedPlaybackCueTransition;
 
 export interface Cue {
 	id?: string;
@@ -104,6 +110,8 @@ export interface CueList {
 	restart_mode?: "first_cue" | "continue_current_cue";
 	force_cue_timing?: boolean;
 	disable_cue_timing?: boolean;
+	auto_off_at_zero?: boolean;
+	auto_off_flash_release?: boolean;
 	chaser_step_millis?: number;
 	chaser_xfade_millis?: number;
 	chaser_xfade_percent?: number;
@@ -122,6 +130,9 @@ export interface PlaybackSnapshot {
 		previous_index?: number | null;
 		paused: boolean;
 		activated_at?: string;
+		paused_at?: string | null;
+		cue_timing?: CueTimingRuntimeProjection | null;
+		transition_ordinal?: number;
 		master: number;
 		fader_position?: number;
 		fader_pickup_required?: boolean;

@@ -1,6 +1,9 @@
-//! Action-time Preset recall into one atomic normal Programmer-values batch.
+//! Action-time Preset recall into one server-selected normal or pending-Preload values batch.
 
-use super::{preset_recording::PresetRecordingAddress, programming::ProgrammingValuesProjection};
+use super::{
+    preload_values::ProgrammingPreloadValuesProjection, preset_recording::PresetRecordingAddress,
+    programming::ProgrammingValuesProjection,
+};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -16,6 +19,9 @@ pub struct PresetRecallRequest {
     pub expected_show_revision: u64,
     #[ts(type = "number")]
     pub expected_programmer_revision: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(as = "Option<f64>", optional = nullable)]
+    pub expected_preload_values_revision: Option<u64>,
     #[ts(type = "number")]
     pub expected_capture_mode_revision: u64,
     #[ts(type = "number")]
@@ -40,6 +46,18 @@ pub struct PresetRecallOutcome {
     pub show_revision: u64,
     #[ts(type = "number")]
     pub programmer_revision: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub target: Option<PresetRecallTarget>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(as = "Option<f64>", optional = nullable)]
+    pub preload_values_revision: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub preload_projection: Option<ProgrammingPreloadValuesProjection>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(as = "Option<f64>", optional = nullable)]
+    pub preload_event_sequence: Option<u64>,
     #[ts(type = "number")]
     pub capture_mode_revision: u64,
     #[ts(type = "number")]
@@ -60,6 +78,13 @@ pub struct PresetRecallOutcome {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional = nullable)]
     pub warning: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum PresetRecallTarget {
+    Programmer,
+    Preload,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -120,12 +145,14 @@ mod tests {
             "expected_preset_revision": 2,
             "expected_show_revision": 3,
             "expected_programmer_revision": 4,
+            "expected_preload_values_revision": 7,
             "expected_capture_mode_revision": 5,
             "expected_selection_revision": 6,
             "values": []
         });
         let request = serde_json::from_value::<PresetRecallRequest>(value).unwrap();
         assert_eq!(request.expected_programmer_revision, 4);
+        assert_eq!(request.expected_preload_values_revision, Some(7));
     }
 
     #[test]

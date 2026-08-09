@@ -17,6 +17,18 @@ fn authoritative_repeat_guard_prevents_cross_surface_double_steps() {
         .collect::<Vec<_>>();
     let groups = no_groups();
     let complete = selection(ids, Some(SelectionExpression::Static), 1);
+    registry
+        .action(
+            desk,
+            user,
+            None,
+            HighlightAction::On,
+            &complete,
+            &fixtures,
+            &groups,
+            false,
+        )
+        .unwrap();
     let software = registry
         .action_guarded(
             desk,

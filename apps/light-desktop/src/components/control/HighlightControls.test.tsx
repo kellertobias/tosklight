@@ -72,7 +72,14 @@ afterEach(() => {
 });
 
 describe("HighlightControls keypad actions", () => {
-	it("renders only the four corrected keypad labels and routes ALL to restoration", async () => {
+	it("renders only the four corrected keypad labels and routes active ALL to restoration", async () => {
+		server.highlight = {
+			...offState,
+			active: true,
+			remembered: fixtures,
+			can_previous: true,
+			can_next: true,
+		};
 		render(<HighlightControls />);
 
 		const controls = screen.getByRole("region", {
@@ -89,7 +96,7 @@ describe("HighlightControls keypad actions", () => {
 			),
 		).toEqual(["HIGH", "PREV", "NEXT", "ALL"]);
 		expect(
-			screen.getByRole("button", { name: "Turn Highlight on" }),
+			screen.getByRole("button", { name: "Turn Highlight off" }),
 		).toHaveTextContent(/^HIGH$/);
 		expect(screen.queryByText(/capture/i)).not.toBeInTheDocument();
 
@@ -133,7 +140,7 @@ describe("HighlightControls keypad actions", () => {
 	it("keeps PREV and NEXT available at the ends so authoritative stepping can wrap", async () => {
 		server.highlight = {
 			...offState,
-			active: false,
+			active: true,
 			mode: "step",
 			remembered: fixtures,
 			active_index: 2,
@@ -171,12 +178,31 @@ describe("HighlightControls keypad actions", () => {
 			expect(server.highlightAction).toHaveBeenCalledWith("previous"),
 		);
 	});
+
+	it("keeps PREV, NEXT, and ALL inactive until HIGH is active", () => {
+		server.highlight = {
+			...offState,
+			remembered: fixtures,
+			can_previous: true,
+			can_next: true,
+		};
+		render(<HighlightControls />);
+
+		for (const name of [
+			"Previous selection item",
+			"Next selection item",
+			"Restore complete selection",
+		]) {
+			expect(screen.getByRole("button", { name })).toBeDisabled();
+		}
+	});
 });
 
 describe("HighlightControls shortcuts and ownership", () => {
 	it("binds Alt+H, Alt+A, and Alt+Left/Right while removing Alt+C", async () => {
 		server.highlight = {
 			...offState,
+			active: true,
 			remembered: fixtures,
 			can_previous: true,
 			can_next: true,
@@ -286,6 +312,7 @@ describe("HighlightControls shifted retired combinations", () => {
 	it("leaves physical Shift+ALL/PREV/NEXT unassigned", () => {
 		server.highlight = {
 			...offState,
+			active: true,
 			remembered: fixtures,
 			can_previous: true,
 			can_next: true,
@@ -302,6 +329,7 @@ describe("HighlightControls shifted retired combinations", () => {
 		server.shiftArmed = true;
 		server.highlight = {
 			...offState,
+			active: true,
 			remembered: fixtures,
 			can_previous: true,
 			can_next: true,

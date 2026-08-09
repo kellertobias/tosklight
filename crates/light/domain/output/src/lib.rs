@@ -8,6 +8,7 @@ pub mod frame;
 pub mod health;
 pub mod route;
 pub mod scheduler;
+pub mod usb;
 
 pub use codec::{
     ARTNET_PORT, SACN_PORT, artdmx_packet, artnet_broadcast_destination, sacn_data_packet,
@@ -23,5 +24,11 @@ pub use external::{
 };
 pub use frame::{DMX_SLOTS, DmxFrame};
 pub use health::{OUTPUT_TICK_DURATION_BUCKET_BOUNDS_MICROS, OutputHealth};
-pub use route::{DeliveryMode, OutputRoute, Protocol};
+pub use route::{DeliveryMode, OutputRoute, OutputRouteTarget, Protocol};
 pub use scheduler::{run_scheduler, run_scheduler_dynamic, run_scheduler_dynamic_wakeable};
+pub use usb::{
+    UnavailableUsbDriverFactory, UsbDeviceIdentity, UsbEndpointConfiguration,
+    UsbEndpointDiagnostic, UsbEndpointDiagnosticCode, UsbEndpointDocument, UsbEndpointDriver,
+    UsbEndpointDriverHealth, UsbEndpointDriverKind, UsbEndpointShutdown, UsbOutputFanout,
+    UsbPlatformDriverFactory,
+};

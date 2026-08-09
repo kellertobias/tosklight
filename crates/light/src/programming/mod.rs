@@ -116,7 +116,7 @@ pub use preset_recall::{
     ProgrammingPresetRecallDisposition, ProgrammingPresetRecallEnvironment,
     ProgrammingPresetRecallOutcome, ProgrammingPresetRecallPorts, ProgrammingPresetRecallRequest,
     ProgrammingPresetRecallResult, ProgrammingPresetRecallRevisionExpectation,
-    ProgrammingRecalledPresetProjection,
+    ProgrammingPresetRecallTarget, ProgrammingRecalledPresetProjection,
 };
 pub use preset_recording::{
     ProgrammingPresetActiveShowPorts, ProgrammingPresetCommit, ProgrammingPresetCommitResult,

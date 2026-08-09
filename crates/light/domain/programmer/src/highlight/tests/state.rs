@@ -5,20 +5,24 @@ use light_core::UserId;
 use uuid::Uuid;
 
 #[test]
-fn high_is_independent_accepts_empty_selection_and_follows_later_external_selection() {
+fn high_freezes_the_non_empty_selection_captured_on_activation() {
     let registry = HighlightRegistry::default();
     let desk = Uuid::new_v4();
     let user = UserId::new();
     let fixtures = vec![fixture(1), fixture(2)];
     let groups = no_groups();
-    let empty = selection(Vec::new(), Some(SelectionExpression::Static), 1);
+    let original = selection(
+        vec![fixtures[0].fixture_id],
+        Some(SelectionExpression::Static),
+        1,
+    );
     let on = registry
         .action(
             desk,
             user,
             None,
             HighlightAction::On,
-            &empty,
+            &original,
             &fixtures,
             &groups,
             false,
@@ -26,7 +30,7 @@ fn high_is_independent_accepts_empty_selection_and_follows_later_external_select
         .unwrap();
     assert!(on.state.active);
     assert!(on.state.output_enabled);
-    assert!(on.output_fixtures.is_empty());
+    assert_eq!(on.output_fixtures, vec![fixtures[0].fixture_id]);
 
     let selected = selection(
         vec![fixtures[1].fixture_id],
@@ -36,5 +40,253 @@ fn high_is_independent_accepts_empty_selection_and_follows_later_external_select
     let followed = registry.status(desk, user, None, &selected, &fixtures, &groups, false);
     assert!(followed.state.active);
     assert_eq!(followed.state.mode, HighlightMode::Selection);
-    assert_eq!(followed.output_fixtures, vec![fixtures[1].fixture_id]);
+    assert_eq!(followed.output_fixtures, vec![fixtures[0].fixture_id]);
+    assert_eq!(followed.output_layers[0].fixture_id, fixtures[0].fixture_id);
+}
+
+#[test]
+fn next_projects_high_and_low_layers_and_explicit_attributes_survive_navigation() {
+    use crate::highlight::HighlightOutputRole;
+    use light_core::AttributeKey;
+
+    let registry = HighlightRegistry::default();
+    let desk = Uuid::new_v4();
+    let user = UserId::new();
+    let fixtures = vec![fixture(1), fixture(2), fixture(3)];
+    let ids = fixtures
+        .iter()
+        .map(|fixture| fixture.fixture_id)
+        .collect::<Vec<_>>();
+    let groups = no_groups();
+    let complete = selection(ids.clone(), Some(SelectionExpression::Static), 1);
+    registry
+        .action(
+            desk,
+            user,
+            None,
+            HighlightAction::On,
+            &complete,
+            &fixtures,
+            &groups,
+            false,
+        )
+        .unwrap();
+    let next = registry
+        .action(
+            desk,
+            user,
+            None,
+            HighlightAction::Next,
+            &complete,
+            &fixtures,
+            &groups,
+            false,
+        )
+        .unwrap();
+    let write = next.working_selection.as_ref().unwrap();
+    let stepped = selection(write.selected.clone(), write.expression.clone(), 2);
+    registry.acknowledge_internal_selection(desk, user, &stepped);
+
+    let layers = registry.output_layers();
+    assert_eq!(
+        layers
+            .iter()
+            .filter(|layer| layer.role == HighlightOutputRole::Highlight)
+            .count(),
+        1
+    );
+    assert_eq!(
+        layers
+            .iter()
+            .filter(|layer| layer.role == HighlightOutputRole::LowLight)
+            .count(),
+        2
+    );
+    assert!(registry.mark_explicit_fixture_attributes(
+        desk,
+        user,
+        [
+            (ids[0], AttributeKey::intensity()),
+            (ids[1], AttributeKey("color".into()))
+        ],
+    ));
+    let layers = registry.output_layers();
+    assert!(
+        layers
+            .iter()
+            .find(|layer| layer.fixture_id == ids[0])
+            .unwrap()
+            .suppressed_attributes
+            .contains(&AttributeKey::intensity())
+    );
+    assert!(
+        layers
+            .iter()
+            .find(|layer| layer.fixture_id == ids[1])
+            .unwrap()
+            .suppressed_attributes
+            .is_empty()
+    );
+
+    let next_again = registry
+        .action(
+            desk,
+            user,
+            None,
+            HighlightAction::Next,
+            &stepped,
+            &fixtures,
+            &groups,
+            false,
+        )
+        .unwrap();
+    let write = next_again.working_selection.as_ref().unwrap();
+    let stepped_again = selection(write.selected.clone(), write.expression.clone(), 3);
+    registry.acknowledge_internal_selection(desk, user, &stepped_again);
+    let all = registry
+        .action(
+            desk,
+            user,
+            None,
+            HighlightAction::All,
+            &stepped_again,
+            &fixtures,
+            &groups,
+            false,
+        )
+        .unwrap();
+    assert!(
+        all.output_layers
+            .iter()
+            .all(|layer| layer.role == HighlightOutputRole::Highlight)
+    );
+    assert!(
+        all.output_layers
+            .iter()
+            .find(|layer| layer.fixture_id == ids[0])
+            .unwrap()
+            .suppressed_attributes
+            .contains(&AttributeKey::intensity())
+    );
+    let restored = selection(
+        all.working_selection.as_ref().unwrap().selected.clone(),
+        all.working_selection.as_ref().unwrap().expression.clone(),
+        4,
+    );
+    registry.acknowledge_internal_selection(desk, user, &restored);
+    let off = registry
+        .action(
+            desk,
+            user,
+            None,
+            HighlightAction::Off,
+            &restored,
+            &fixtures,
+            &groups,
+            false,
+        )
+        .unwrap();
+    assert!(off.output_layers.is_empty());
+    let reactivated = registry
+        .action(
+            desk,
+            user,
+            None,
+            HighlightAction::On,
+            &restored,
+            &fixtures,
+            &groups,
+            false,
+        )
+        .unwrap();
+    assert!(
+        reactivated
+            .output_layers
+            .iter()
+            .all(|layer| layer.suppressed_attributes.is_empty())
+    );
+}
+
+#[test]
+fn combined_layers_prefer_high_and_require_unanimous_suppression() {
+    use crate::highlight::HighlightOutputRole;
+    use light_core::AttributeKey;
+
+    let registry = HighlightRegistry::default();
+    let users = [UserId::new(), UserId::new()];
+    let desks = [Uuid::new_v4(), Uuid::new_v4()];
+    let fixtures = vec![fixture(1), fixture(2)];
+    let ids = fixtures
+        .iter()
+        .map(|fixture| fixture.fixture_id)
+        .collect::<Vec<_>>();
+    let groups = no_groups();
+    let complete = selection(ids.clone(), Some(SelectionExpression::Static), 1);
+    for (desk, user) in desks.into_iter().zip(users) {
+        registry
+            .action(
+                desk,
+                user,
+                None,
+                HighlightAction::On,
+                &complete,
+                &fixtures,
+                &groups,
+                false,
+            )
+            .unwrap();
+    }
+    registry.mark_explicit_fixture_attributes(
+        desks[0],
+        users[0],
+        [(ids[0], AttributeKey::intensity())],
+    );
+    let combined = registry.output_layers();
+    assert!(
+        !combined
+            .iter()
+            .find(|layer| layer.fixture_id == ids[0])
+            .unwrap()
+            .suppressed_attributes
+            .contains(&AttributeKey::intensity())
+    );
+    registry.mark_explicit_fixture_attributes(
+        desks[1],
+        users[1],
+        [(ids[0], AttributeKey::intensity())],
+    );
+    assert!(
+        registry
+            .output_layers()
+            .iter()
+            .find(|layer| layer.fixture_id == ids[0])
+            .unwrap()
+            .suppressed_attributes
+            .contains(&AttributeKey::intensity())
+    );
+
+    let next = registry
+        .action(
+            desks[0],
+            users[0],
+            None,
+            HighlightAction::Next,
+            &complete,
+            &fixtures,
+            &groups,
+            false,
+        )
+        .unwrap();
+    let stepped = selection(
+        next.working_selection.as_ref().unwrap().selected.clone(),
+        next.working_selection.as_ref().unwrap().expression.clone(),
+        2,
+    );
+    registry.acknowledge_internal_selection(desks[0], users[0], &stepped);
+    let combined = registry.output_layers();
+    assert!(
+        combined
+            .iter()
+            .all(|layer| layer.role == HighlightOutputRole::Highlight)
+    );
 }

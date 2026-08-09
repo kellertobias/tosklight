@@ -34,7 +34,7 @@ describe("Preset recall acceptance intent", () => {
 			preset: { id: "2.1", revision: 4, body: presetBody() },
 			appliedFixtures: 1,
 		});
-		expect(calls).toHaveLength(5);
+		expect(calls).toHaveLength(6);
 		expect(calls.filter((call) => call.init?.method === "POST")).toHaveLength(
 			1,
 		);
@@ -42,6 +42,7 @@ describe("Preset recall acceptance intent", () => {
 			expect.arrayContaining([
 				"http://desk.local/api/v2/objects/preset/2.1",
 				`http://desk.local/api/v2/users/${USER_ID}/programmer-values/snapshot`,
+				`http://desk.local/api/v2/users/${USER_ID}/programmer-preload-values/snapshot`,
 				`http://desk.local/api/v2/users/${USER_ID}/programmer-capture-mode/snapshot`,
 				"http://desk.local/api/v2/programming-interaction/snapshot",
 				"http://desk.local/api/v2/presets/recall",
@@ -56,6 +57,7 @@ describe("Preset recall acceptance intent", () => {
 			expected_preset_revision: 4,
 			expected_show_revision: 12,
 			expected_programmer_revision: 6,
+			expected_preload_values_revision: 2,
 			expected_capture_mode_revision: 3,
 			expected_selection_revision: 8,
 		});
@@ -156,6 +158,8 @@ function responseFor(url: string, init?: RequestInit) {
 		});
 	if (url.includes("programmer-values/snapshot"))
 		return json(valuesSnapshot(), 200);
+	if (url.includes("programmer-preload-values/snapshot"))
+		return json(preloadValuesSnapshot(), 200);
 	if (url.includes("programmer-capture-mode/snapshot"))
 		return json(captureModeSnapshot(), 200);
 	if (url.includes("programming-interaction/snapshot"))
@@ -194,6 +198,19 @@ function valuesSnapshot() {
 		projection: {
 			user_id: USER_ID,
 			revision: 6,
+			fixture_values: [],
+			group_values: [],
+			dynamic_values: [],
+		},
+	};
+}
+
+function preloadValuesSnapshot() {
+	return {
+		cursor: { sequence: 10 },
+		projection: {
+			user_id: USER_ID,
+			revision: 2,
 			fixture_values: [],
 			group_values: [],
 			dynamic_values: [],
@@ -241,6 +258,7 @@ function noChangeOutcome() {
 		correlation_id: CORRELATION_ID,
 		show_revision: 12,
 		programmer_revision: 6,
+		target: "programmer",
 		capture_mode_revision: 3,
 		selection_revision: 8,
 		applied_fixtures: 1,

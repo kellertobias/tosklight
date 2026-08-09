@@ -611,8 +611,13 @@ describe("PlaybackFaderBank layout and configuration surfaces", () => {
 	])("SET intercepts the %s without executing it and Close is inert", (_surface, target) => {
 		assignPlayback();
 		mocks.state.playbackSetArmed = true;
-		render(<PlaybackFaderBank count={1} />);
-		fireEvent.click(target());
+		const { container } = render(<PlaybackFaderBank count={1} />);
+		expect(container.querySelector("article")).toHaveClass(
+			"playback-command-target",
+			"command-target-set",
+		);
+		expect(screen.getByText("SET TARGET")).toBeInTheDocument();
+		fireEvent.pointerDown(target(), { pointerId: 3 });
 		expect(
 			screen.getByRole("dialog", { name: "Playback Configuration" }),
 		).toHaveAttribute("data-page", "1");
@@ -625,6 +630,32 @@ describe("PlaybackFaderBank layout and configuration surfaces", () => {
 		expect(mocks.poolPlaybackAction).not.toHaveBeenCalled();
 		expect(mocks.savePlaybackSlot).not.toHaveBeenCalled();
 		expect(mocks.clearPlaybackSlot).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		["card label", () => screen.getByText("Front Wash")],
+		["top button", () => screen.getByRole("button", { name: "GO +" })],
+		["middle button", () => screen.getByRole("button", { name: "GO −" })],
+		["bottom button", () => screen.getByRole("button", { name: "FLASH" })],
+		[
+			"fader track and handle",
+			() => screen.getByRole("slider", { name: "Page 1 playback 1 fader" }),
+		],
+	])("SET intercepts the hardware-layout %s", (_surface, target) => {
+		assignPlayback();
+		mocks.hardwareConnected = true;
+		mocks.state.playbackSetArmed = true;
+		const { container } = render(<PlaybackFaderBank count={1} />);
+		expect(container.querySelector("article")).toHaveClass(
+			"playback-command-target",
+			"command-target-set",
+		);
+		expect(screen.getByText("SET TARGET")).toBeInTheDocument();
+		fireEvent.pointerDown(target(), { pointerId: 3 });
+		expect(
+			screen.getByRole("dialog", { name: "Playback Configuration" }),
+		).toHaveAttribute("data-slot", "1");
+		expect(mocks.poolPlaybackAction).not.toHaveBeenCalled();
 	});
 
 	it("opens an empty slot without fabricating a playback number and allocates a changed draft on Apply", async () => {
@@ -914,7 +945,12 @@ describe("PlaybackFaderBank Record targets", () => {
 			<PlaybackFaderBank pageNumber={3} count={1} />,
 		);
 		const card = container.querySelector("article")!;
-		expect(card).toHaveClass("store-target");
+		expect(card).toHaveClass(
+			"store-target",
+			"playback-command-target",
+			"command-target-record",
+		);
+		expect(screen.getByText("RECORD TARGET")).toBeInTheDocument();
 		const surfaces = hardware
 			? [
 					card.querySelector("header")!,
@@ -931,9 +967,9 @@ describe("PlaybackFaderBank Record targets", () => {
 					screen.getByRole("button", { name: "GO −" }),
 					screen.getByRole("button", { name: "FLASH" }),
 					screen.getByRole("slider", { name: "Master" }),
-				];
+		];
 		for (const surface of surfaces) {
-			fireEvent.pointerDown(surface, { pointerId: 4 });
+			expect(fireEvent.pointerDown(surface, { pointerId: 4 })).toBe(true);
 			fireEvent.click(surface);
 		}
 		await waitFor(() =>

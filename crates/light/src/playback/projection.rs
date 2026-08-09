@@ -152,6 +152,8 @@ pub struct CueListRuntimeProjection {
     pub effective_next_is_loaded: bool,
     pub paused: bool,
     pub activated_at: DateTime<Utc>,
+    pub paused_at: Option<DateTime<Utc>>,
+    pub cue_timing: Option<CueTimingRuntimeProjection>,
     pub transition_ordinal: u64,
     pub master: f32,
     pub fader_position: f32,
@@ -167,6 +169,33 @@ pub struct CueListRuntimeProjection {
     pub manual_xfade_position: f32,
     pub manual_xfade_direction: ManualXFadeDirection,
     pub manual_xfade_progress: f32,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct CueTimingRuntimeProjection {
+    pub cue_id: Uuid,
+    pub in_delay_millis: u64,
+    pub in_fade_millis: u64,
+    pub out_delay_millis: u64,
+    pub out_fade_millis: u64,
+    pub completion_millis: u64,
+    pub active_trigger: Option<CueTriggerTimingProjection>,
+    pub completed_trigger_cue_id: Option<Uuid>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct CueTriggerTimingProjection {
+    pub cue: PlaybackCueReference,
+    pub kind: CueTriggerTimingKind,
+    pub started_at: DateTime<Utc>,
+    pub duration_millis: u64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CueTriggerTimingKind {
+    Follow,
+    Wait,
+    Link,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

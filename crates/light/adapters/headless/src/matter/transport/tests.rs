@@ -127,6 +127,69 @@ fn endpoint_metadata_removes_empty_playbacks_without_renumbering_survivors() {
 }
 
 #[test]
+fn endpoint_removal_replaces_runtime_shape_without_touching_persisted_kv_storage() {
+    let directory = std::env::temp_dir().join(format!("light-matter-{}", uuid::Uuid::new_v4()));
+    // This is deliberately an offline orchestration test, not controller commissioning proof.
+    // It verifies the restart seam keeps the rs-matter KV directory that owns fabric state.
+    let kv_sentinel = directory
+        .join("matter")
+        .join("kv")
+        .join("persisted-sentinel");
+    fs::create_dir_all(kv_sentinel.parent().unwrap()).unwrap();
+    fs::write(&kv_sentinel, b"persisted-kv").unwrap();
+    let initial_shape = vec![
+        EndpointShape {
+            endpoint_id: 1,
+            name: "First".into(),
+        },
+        EndpointShape {
+            endpoint_id: 128,
+            name: "Second page".into(),
+        },
+    ];
+    let (control, control_rx) = mpsc::channel();
+    let (stopped_tx, stopped_rx) = mpsc::channel();
+    let join = std::thread::spawn(move || {
+        if matches!(control_rx.recv(), Ok(ControlCommand::Shutdown)) {
+            let _ = stopped_tx.send(());
+        }
+    });
+    let mut runtime = Some(RuntimeHandle {
+        shape: initial_shape.clone(),
+        control,
+        join,
+    });
+    let survivor_shape = initial_shape[1..].to_vec();
+    let (replacement_control, replacement_rx) = mpsc::channel();
+    let replacement_shape = survivor_shape.clone();
+
+    assert!(replace_runtime_for_shape(
+        &mut runtime,
+        &survivor_shape,
+        move || {
+            Some(RuntimeHandle {
+                shape: replacement_shape,
+                control: replacement_control,
+                join: std::thread::spawn(move || {
+                    let _ = replacement_rx.recv();
+                }),
+            })
+        }
+    ));
+    stopped_rx.recv().unwrap();
+    assert_eq!(runtime.as_ref().unwrap().shape, survivor_shape);
+    assert_eq!(fs::read(&kv_sentinel).unwrap(), b"persisted-kv");
+    assert!(!replace_runtime_for_shape(
+        &mut runtime,
+        &survivor_shape,
+        || panic!("value-only reconciliation must not replace the runtime")
+    ));
+
+    stop_runtime(&mut runtime);
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn outbound_tracking_updates_change_only_the_subscription_attributes_that_moved() {
     let (sender, _receiver) = mpsc::channel();
     let handler = BridgeLights::new(

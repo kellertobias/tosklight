@@ -6,6 +6,7 @@ import {
 	useMemo,
 } from "react";
 import { useProgrammerCaptureModeAuthority } from "../programmerCaptureMode/ProgrammerCaptureModeView";
+import { useProgrammerPreloadValuesAuthority } from "../programmerPreloadValues/ProgrammerPreloadValuesView";
 import { useProgrammerValuesAuthority } from "../programmerValues/ProgrammerValuesView";
 import {
 	useProgrammingSelectionAuthority,
@@ -51,6 +52,7 @@ export function PresetRecallProvider({
 	onError,
 }: PropsWithChildren<PresetRecallProviderProps>) {
 	const values = useProgrammerValuesAuthority();
+	const preloadValues = useProgrammerPreloadValuesAuthority();
 	const captureMode = useProgrammerCaptureModeAuthority();
 	const selection = useProgrammingSelectionAuthority();
 	const scope = useMemo<PresetRecallScope | null>(
@@ -59,16 +61,18 @@ export function PresetRecallProvider({
 	);
 	const writer = useMemo(
 		() =>
-			scope && transport && values && captureMode && selection
+			scope && transport && values && preloadValues && captureMode && selection
 				? new PresetRecallWriter({
 						scope,
 						showStore,
 						valuesStore: values.store,
+						preloadValuesStore: preloadValues.store,
 						captureModeStore: captureMode.store,
 						programmingStore: selection.store,
 						transport,
 						loadPreset,
 						repairValues: values.repairAuthority,
+						repairPreloadValues: preloadValues.repairAuthority,
 						repairCaptureMode: captureMode.repairAuthority,
 						repairSelection: selection.repairAuthority,
 						onError,
@@ -79,6 +83,7 @@ export function PresetRecallProvider({
 			captureMode,
 			loadPreset,
 			onError,
+			preloadValues,
 			scope,
 			selection,
 			showStore,
@@ -98,17 +103,20 @@ export function PresetRecallProvider({
 export function usePresetRecall(enabled = true) {
 	const actions = useContext(PresetRecallContext);
 	const values = useProgrammerValuesAuthority();
+	const preloadValues = useProgrammerPreloadValuesAuthority();
 	const captureMode = useProgrammerCaptureModeAuthority();
 	useShowObjectView("preset", enabled);
 	const selection = useProgrammingSelectionView(enabled);
 	useEffect(() => {
 		if (!enabled) return;
 		const releaseValues = values?.activate();
+		const releasePreloadValues = preloadValues?.activate();
 		const releaseCaptureMode = captureMode?.activate();
 		return () => {
 			releaseValues?.();
+			releasePreloadValues?.();
 			releaseCaptureMode?.();
 		};
-	}, [captureMode, enabled, values]);
+	}, [captureMode, enabled, preloadValues, values]);
 	return { actions: enabled ? actions : null, selection };
 }

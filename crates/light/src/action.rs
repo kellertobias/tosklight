@@ -18,7 +18,7 @@ pub enum ActionSource {
     Keyboard,
     Osc,
     Http,
-    Midi,
+    Extension,
     Matter,
     Cue,
     Timecode,

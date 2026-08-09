@@ -139,6 +139,56 @@ describe("OutputRoutesSetup", () => {
 		await waitFor(() => expect(remove).toHaveBeenCalledWith("front-artnet", 4));
 	});
 
+	it("assigns one logical universe to a claimed USB DMX endpoint", async () => {
+		const save = vi.fn().mockResolvedValue(true);
+		render(
+			<OutputRoutesSetup
+				routes={[]}
+				usbEndpoints={[
+					{
+						endpoint_id: "front-usb",
+						driver: "enttec_usb_pro_v144",
+						identity: {
+							vendor_id: 0x403,
+							product_id: 0x6001,
+							usb_serial: "TL-USB-1",
+						},
+						enabled: true,
+					},
+				]}
+				onSave={save}
+				onCreateRange={vi.fn().mockResolvedValue(true)}
+				onDelete={vi.fn().mockResolvedValue(true)}
+			/>,
+		);
+
+		fireEvent.click(screen.getByRole("button", { name: "Add route" }));
+		fireEvent.click(
+			screen.getByRole("button", { name: "Network (Art-Net / sACN)" }),
+		);
+		fireEvent.click(screen.getByRole("option", { name: "USB DMX endpoint" }));
+		expect(screen.getByLabelText("Logical universe")).toBeVisible();
+		expect(
+			screen.queryByLabelText("Destination universe"),
+		).not.toBeInTheDocument();
+		fireEvent.change(screen.getByLabelText("Logical universe"), {
+			target: { value: "7" },
+		});
+		fireEvent.click(screen.getByRole("button", { name: "Save route" }));
+
+		await waitFor(() =>
+			expect(save).toHaveBeenCalledWith(
+				expect.stringMatching(/^route-/),
+				expect.objectContaining({
+					target: { kind: "usb_endpoint", endpoint_id: "front-usb" },
+					logical_universe: 7,
+					destination: null,
+				}),
+				0,
+			),
+		);
+	});
+
 	it("creates paired universe ranges with one atomic action", async () => {
 		const save = vi.fn().mockResolvedValue(true);
 		const createRange = vi.fn().mockResolvedValue(true);

@@ -285,6 +285,10 @@ pub struct RuntimeDiagnosticsSnapshot {
     #[ts(type = "unknown")]
     pub programmer_action_timing: serde_json::Value,
     pub visualization: RuntimeVisualizationDiagnostics,
+    #[ts(type = "unknown")]
+    pub extensions: serde_json::Value,
+    #[ts(type = "unknown")]
+    pub compatibility_reports: serde_json::Value,
 }
 
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TS)]

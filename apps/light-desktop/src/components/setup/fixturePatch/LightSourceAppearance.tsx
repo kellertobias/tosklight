@@ -52,6 +52,15 @@ export function LightSourceCell({
 				onClick={() =>
 					beginLightSourceEdit(controller, fixture, instance?.id ?? null)
 				}
+				onContextMenu={(event) => {
+					event.preventDefault();
+					event.stopPropagation();
+					beginLightSourceEditFromContextMenu(
+						controller,
+						fixture,
+						instance?.id ?? null,
+					);
+				}}
 			>
 				<span className="patch-stacked-line" title={source}>
 					{source}
@@ -184,6 +193,23 @@ function beginLightSourceEdit(
 ) {
 	if (!controller.appState.patchSetArmed || !hasGeometryEmitter(fixture))
 		return;
+	openLightSourceEdit(controller, fixture, multipatchInstanceId);
+}
+
+function beginLightSourceEditFromContextMenu(
+	controller: PatchController,
+	fixture: PatchedFixture,
+	multipatchInstanceId: string | null,
+) {
+	if (!hasGeometryEmitter(fixture)) return;
+	openLightSourceEdit(controller, fixture, multipatchInstanceId);
+}
+
+function openLightSourceEdit(
+	controller: PatchController,
+	fixture: PatchedFixture,
+	multipatchInstanceId: string | null,
+) {
 	controller.ui.setSelectedFixture(fixture.fixture_id);
 	controller.patch.selectPatchInstance({
 		fixtureId: fixture.fixture_id,

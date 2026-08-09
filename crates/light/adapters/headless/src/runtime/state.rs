@@ -13,6 +13,7 @@ pub(super) struct AppState {
     pub(super) output: OutputResource,
     pub(super) active_show: ActiveShowResource,
     pub(super) events: EventResource,
+    pub(super) extensions: extensions_runtime::ExtensionResource,
     pub(super) integrations: IntegrationResource,
     pub(super) media: MediaResource,
     pub(super) replay: ReplayResource,

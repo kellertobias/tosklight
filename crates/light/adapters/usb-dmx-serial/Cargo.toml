@@ -1,0 +1,14 @@
+[package]
+name = "light-usb-dmx-serial"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+
+[dependencies]
+light-output = { path = "../../domain/output" }
+light-usb-dmx-core = { path = "../usb-dmx-core" }
+serialport.workspace = true
+serde.workspace = true
+
+[lints]
+workspace = true

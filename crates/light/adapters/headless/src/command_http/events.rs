@@ -94,7 +94,7 @@ fn publish_osc_applied(
     );
 }
 
-pub(super) fn publish_service_result(
+pub(crate) fn publish_service_result(
     state: &AppState,
     session: &Session,
     result: &ProgrammingResult,
@@ -114,7 +114,7 @@ pub(super) fn publish_service_result(
         source,
         request_id,
     );
-    publish_operation_event(state, session, result, request_id, supplied_command);
+    publish_operation_event(state, session, result, source, request_id, supplied_command);
     persistence_warning
 }
 
@@ -133,12 +133,13 @@ fn publish_operation_event(
     state: &AppState,
     session: &Session,
     result: &ProgrammingResult,
+    source: &str,
     request_id: Option<&str>,
     supplied_command: Option<&str>,
 ) {
     match &result.outcome {
         ProgrammingOutcome::Accepted { action, .. } => {
-            publish_accepted_event(state, session, result, *action, request_id)
+            publish_accepted_event(state, session, result, *action, source, request_id)
         }
         ProgrammingOutcome::ChoiceRequired { pending_choice }
             if result.interaction_event_sequence.is_some() =>
@@ -153,9 +154,15 @@ fn publish_operation_event(
             )
         }
         ProgrammingOutcome::ChoiceRequired { .. } => {}
-        ProgrammingOutcome::Rejected { error } => {
-            publish_rejection_event(state, session, result, error, request_id, supplied_command)
-        }
+        ProgrammingOutcome::Rejected { error } => publish_rejection_event(
+            state,
+            session,
+            result,
+            error,
+            source,
+            request_id,
+            supplied_command,
+        ),
     }
 }
 
@@ -164,9 +171,10 @@ fn publish_accepted_event(
     session: &Session,
     result: &ProgrammingResult,
     action: ProgrammingAction,
+    source: &str,
     request_id: Option<&str>,
 ) {
-    if publish_key_phase_if_needed(state, session, action, request_id) {
+    if publish_key_phase_if_needed(state, session, action, source, request_id) {
         return;
     }
     if action == ProgrammingAction::Executed {
@@ -179,12 +187,12 @@ fn publish_accepted_event(
                 "session_id":session.id,
                 "user_id":session.user.id,
                 "command":"programmer.execute",
-                "source":"http",
+                "source":source,
             }),
         );
     }
     if changes_programmer(action) {
-        publish_programmer_changed(state, session, result, action, request_id);
+        publish_programmer_changed(state, session, result, action, source, request_id);
     }
 }
 
@@ -192,6 +200,7 @@ fn publish_key_phase_if_needed(
     state: &AppState,
     session: &Session,
     action: ProgrammingAction,
+    source: &str,
     request_id: Option<&str>,
 ) -> bool {
     if !matches!(
@@ -209,7 +218,7 @@ fn publish_key_phase_if_needed(
             "user_id":session.user.id,
             "key":"SHIFT",
             "phase":if action == ProgrammingAction::ShiftPressed { "press" } else { "release" },
-            "source":"http",
+            "source":source,
             "request_id":request_id,
         }),
     );
@@ -221,6 +230,7 @@ fn publish_programmer_changed(
     session: &Session,
     result: &ProgrammingResult,
     action: ProgrammingAction,
+    source: &str,
     request_id: Option<&str>,
 ) {
     super::super::emit(
@@ -231,7 +241,7 @@ fn publish_programmer_changed(
             "session_id":session.id,
             "user_id":session.user.id,
             "command":action_name(action),
-            "source":"http",
+            "source":source,
             "request_id":request_id,
             "preload_armed":action == ProgrammingAction::PreloadEntered,
             "command_revision":result.command_line.revision,
@@ -245,6 +255,7 @@ fn publish_rejection_event(
     session: &Session,
     result: &ProgrammingResult,
     error: &str,
+    source: &str,
     request_id: Option<&str>,
     supplied_command: Option<&str>,
 ) {
@@ -260,7 +271,7 @@ fn publish_rejection_event(
             "user_id":session.user.id,
             "command":audit_command,
             "error":if sensitive { "Sensitive input omitted" } else { error },
-            "source":"http",
+            "source":source,
         }),
     );
 }

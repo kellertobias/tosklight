@@ -43,10 +43,10 @@ The **Desk key** is the button shown on the touchscreen keypad or console. The *
 | `[TIME]` | Time | - | Give a value or recorded Cue an explicit fade time; press twice for `DELAY`. |
 | `[SHIFT]` | Shift | - | Latch the shifted keypad layer for the next desk key. With Record it enters Update. |
 | `[.]` | Dot | `[KBD:.]` | Separate address/value parts or enter a decimal point. Press `[.][.]` for `[AT] 0 [ENT]`. |
-| `[HIGH]` | Highlight | `[KBD:ALT]` + `[KBD:H]` | Toggle the transient Highlight Look for the actual current selection without changing that selection. |
-| `[PREV]` | Previous selection item | `[KBD:ALT]` + `[KBD:LEFT]` | From ALL, select the last item; while stepped, select the previous item and wrap at the start. |
-| `[NEXT]` | Next selection item | `[KBD:ALT]` + `[KBD:RIGHT]` | From ALL, select the first item; while stepped, select the next item and wrap at the end. |
-| `[ALL]` | Restore complete selection | `[KBD:ALT]` + `[KBD:A]` | Re-resolve the remembered live selection source and restore its complete current ordered membership. |
+| `[HIGH]` | Highlight | `[KBD:ALT]` + `[KBD:H]` | Toggle Highlight and capture the current ordered selection as its frozen original set. |
+| `[PREV]` | Previous Highlight item | `[KBD:ALT]` + `[KBD:LEFT]` | While HIGH is active, single the previous original member and wrap at the start. |
+| `[NEXT]` | Next Highlight item | `[KBD:ALT]` + `[KBD:RIGHT]` | While HIGH is active, single the next original member and wrap at the end. |
+| `[ALL]` | Highlight all | `[KBD:ALT]` + `[KBD:A]` | Restore the frozen original set as the actual selection and put every member in Highlight. |
 | `[DIV]` | Division | `[KBD:´]` | Edit a selection or separate multiple values. Hold for selection options. |
 | `[GRP]` | Group | `[KBD:SHIFT]` + `[KBD:^]` | Select a group; press twice to reference its fixtures instead. |
 | `[CUE]` | Cue | `[KBD:SHIFT]` + `[KBD:?]` | Separate a playback address from its cue number. |
@@ -219,10 +219,12 @@ identifies its exact fixture scope. These are fixture functions, not numbered sh
 
 With multiple fixtures selected, Direct input accepts `0 [THRU] 50 [ENTER]` and spreads that
 attribute over the ordered selection exactly like the command line. Relative steps, continuous
-encoder movement, encoder Set Value, fixed/indexed choices, attached hardware/OSC encoder turns,
-and channel faders update the encoder target, Fixture Sheet, Stage, and physical output immediately
-even when Programmer Fade is non-zero. These immediate operations store no explicit zero-second
-timing override, so a later Cue still uses its normal Cue or playback timing fallback. Momentary,
+encoder movement, fixed/indexed choices, attached hardware/OSC encoder turns, and channel faders
+update the encoder target, Fixture Sheet, Stage, and physical output immediately even when
+Programmer Fade is non-zero. **Direct entry uses Programmer Fade** controls deliberate absolute
+values entered through encoder Set Value or command-line `AT`; disabling it makes those entries
+immediate too. Immediate operations store no explicit zero-second timing override, so a later Cue
+still uses its normal Cue or playback timing fallback. Momentary,
 timed, latched, multi-channel, and hazardous control functions retain their authored action and
 safety behavior. Preset recall and **PRELOAD GO** retain Programmer Fade where documented.
 
@@ -277,11 +279,21 @@ Append `[TIME] <seconds>` to set an explicit fade for only the values in this co
 | Delay then fade | `<selection> [AT] 100 [TIME][TIME] 1 [TIME] 2 [ENTER]` | Display `DELAY 1 TIME 2`, wait one second, then fade for two seconds. |
 | Fade then delay | `<selection> [AT] 100 [TIME] 2 [TIME][TIME] 1 [ENTER]` | Produce the same timing with the clauses entered in the opposite order. |
 
-The programmer remembers explicit fade and start delay on each changed value. The desk setting **AT uses Programmer Fade** is enabled by default for compatibility: with it enabled, an `AT` command without `[TIME]` captures the current Programmer Fade. Disable it when ordinary command-line `AT` should be immediate and should retain no per-value fade override. Explicit `[TIME]` remains authoritative in either mode. Recording several values with different command times into one Cue preserves those individual timings. A value with no retained per-value fade uses the Cue's master Fade, then the configured Cue Fade fallback. A value without an explicit start delay uses the Cue's master Delay. Cue Delay is edited in the Cuelist View. `DELAY` has a different scope in a Cue-record command: there it stores the Cue's GO/FOLLOW/TIME trigger as described below, not Cue Delay or an attribute start delay.
+The programmer remembers explicit fade and start delay on each changed value. The desk setting **Direct entry uses Programmer Fade** is enabled by default for compatibility: with it enabled, command-line `AT` without `[TIME]` and absolute encoder Set Value capture the current Programmer Fade. Disable it when those direct entries should be immediate and should retain no per-value fade override. Explicit `[TIME]` remains authoritative in either mode. Recording several values with different command times into one Cue preserves those individual timings. A value with no retained per-value fade uses the Cue's master Fade, then the configured Cue Fade fallback. A value without an explicit start delay uses the Cue's master Delay. Cue Delay is edited in the Cuelist View. `DELAY` has a different scope in a Cue-record command: there it stores the Cue's GO/FOLLOW/TIME trigger as described below, not Cue Delay or an attribute start delay.
 
 ## Recording
 
-After building a scene in the programmer, press `[REC]` and choose a recordable target in the UI. Targets include presets, groups, and Cuelists in their pools, as well as the whole playback area on physical or simulated hardware. While Record is armed, touching a playback label, button, or fader records to that playback instead of operating the touched control. Recording a Cuelist in the pool does not assign it to any playback page.
+After building a scene in the programmer, press `[REC]` and choose a recordable target in the UI. Targets include presets, groups, and Cuelists in their pools, as well as the complete Playback card on touch, hardware-layout, physical, and simulated surfaces. The outlined Playback target includes its full label area, every assigned button, and its fader. Touching any part records to that Playback once and suppresses the touched control's normal press, hold, release, or fader action. Recording a Cuelist in the pool does not assign it to any playback page.
+
+### Command target outlines
+
+Bare **Record**, **Set**, **Copy**, **Move**, and **Delete** commands outline only entries that already support the corresponding operation. The literal operation appears inside every outlined target, so the target is not identified by color alone. Press anywhere inside the complete outline; nested controls belong to the outlined target while the command is active.
+
+The command does not turn unsupported entries into new storage operations. For example, whole Playback cards accept Record and Set but not Copy, Move, or Delete. Group cards accept Record, Set, and Delete. Preset cards accept all five operations: Copy and Move first outline occupied sources, then outline only empty destinations in the same Preset family. Dynamic tiles accept their existing Set and Delete operations. Ineligible entries are not outlined.
+
+View changes, Playback page controls, pool navigation, scrolling, search, settings, and other navigation remain ordinary navigation while a target command is armed. Attached Playback controls follow the same rule: an eligible Record or Set target is intercepted for the whole gesture, while Page, NAV, MENU, PROG/PLAYBACK, ESCAPE, and Speed Group controls retain their navigation function.
+
+A Pane supports only bare **Delete**: it outlines the Pane title with a literal **DELETE** badge, and touching that title removes the Pane after its normal confirmation. The Pane body, Settings button, and all Pane navigation remain ordinary controls. Record, Set, Copy, and Move never outline a Pane title.
 
 The key immediately after `[REC]` chooses the record operation:
 
@@ -361,7 +373,7 @@ Press `[KBD:SHIFT]` + `[KBD:Z]` to enter `SELECT`, then touch a playback to make
 | Cue on a page playback | `[REC] [SET] <page> [ . ] <playback-number> [CUE] <Cue-number> [ENTER]` | Record at a specified Cue in the assigned Cuelist. |
 | Cue with explicit fade | `[REC] [SET] <Cuelist-number> [CUE] <Cue-number> [TIME] 3 [ENTER]` | Record the Cue with a three-second default fade while retaining per-value timing overrides. |
 | Cue with FOLLOW trigger | `[REC] [SET] <Cuelist-number> [CUE] <Cue-number> [TIME] [TIME] 0 [ENTER]` | The second consecutive Time becomes `DELAY`; zero, or `DELAY` confirmed without a number, stores FOLLOW. This Cue starts when the preceding Cue has finished all value delays and fades. |
-| Cue with TIME trigger | `[REC] [SET] <Cuelist-number> [CUE] <Cue-number> [TIME] [TIME] 4 [ENTER]` | Store `DELAY 4`, displayed as a TIME trigger of four seconds. This Cue starts four seconds after the preceding Cue has completely finished. |
+| Cue with TIME trigger | `[REC] [SET] <Cuelist-number> [CUE] <Cue-number> [TIME] [TIME] 4 [ENTER]` | Store `DELAY 4`, displayed as a TIME trigger of four seconds. This Cue starts four seconds after the preceding Cue receives GO. |
 | Link from one Cue | `[LINK] [SET] <Cuelist-number> [CUE] <source-Cue> [AT] [CUE] <destination-Cue> [ENTER]` | Store the destination Cue's stable identity on the source Cue. After the source completes, playback jumps to that identity. Omit SET and the Cuelist number to use the selected playback. Page form: `[LINK] [SET] <page> [ . ] <playback> [CUE] <source> [AT] [CUE] <destination> [ENTER]`. |
 | Delayed Link | `[LINK] [SET] <Cuelist-number> [CUE] <source-Cue> [AT] [CUE] <destination-Cue> [TIME] [TIME] 2 [ENTER]` | Add a two-second Link delay after the source Cue's latest actual incoming/outgoing completion. |
 | Merge into a Cue | `[REC] [+] [SET] <Cuelist-number> [CUE] <Cue-number> [ENTER]` | Add the programmer's fixture/group attribute addresses to the existing Cue; an incoming address replaces the value already stored at that same address. |
@@ -372,7 +384,7 @@ Dots after `[CUE]` form decimal Cue numbers. For example, `[REC] [SET] 1 [CUE] 2
 
 The two initial Cue keys are the operation: one means Go To and two consecutive keys mean Load. The later Cue key after `SET ...` is only the address separator. Load is transient and visibly replaces the ordinary next Cue; GO minus preserves it, while Off or release clears it. Renumbering follows the Cue's stable identity, deleting the loaded Cue clears the override, and reopening the show does not persist a Load. A missing selection, missing Cue, incomplete address, unassigned target, or ambiguous Cuelist assignment is rejected without moving any playback or fader.
 
-A Cue-record command without `DELAY` stores the Cue with a **GO** trigger, so it waits indefinitely for GO. Bare `DELAY` and `DELAY 0` normalize to **FOLLOW**. A positive `DELAY <seconds>` stores **TIME** with that duration. The trigger belongs to the Cue being recorded: if Cue 1 takes two seconds to finish and Cue 2 is TIME 4, Cue 2 starts six seconds after Cue 1's GO. FOLLOW and TIME always measure from the latest value `start delay + fade` endpoint of the preceding Cue.
+A Cue-record command without `DELAY` stores the Cue with a **GO** trigger, so it waits indefinitely for GO. Bare `DELAY` and `DELAY 0` normalize to **FOLLOW**. A positive `DELAY <seconds>` stores **TIME** with that duration. The trigger belongs to the Cue being recorded: FOLLOW starts after the preceding Cue's latest value `start delay + fade` endpoint, while TIME counts from the preceding Cue's GO. A Cue 2 set to TIME 4 can therefore begin four seconds after Cue 1's GO even while Cue 1 still fades.
 
 LINK is an explicit Cue edit and captures no programmer values. Its source and destination numbers are resolved inside one Cuelist when Enter is pressed; the stored destination is the Cue's stable identity. Renumbering keeps the Link, while a missing destination, self-link, or cycle rejects the complete command without changing the show or output. LINK timing starts after the source Cue's latest actual incoming/outgoing completion. A delayed Link uses the same `DELAY` entry produced by pressing Time twice. Live Timecode is authoritative and suppresses Link execution until Timecode is absent.
 
@@ -421,7 +433,9 @@ Group to that explicit Playback instead. Pressing `[SET]` and a Playback without
 Group always opens Playback Configuration, regardless of the current fixture or Group selection.
 `[CLR]`, `[ESC]`, a show/desk change, or leaving the originating surface cancels the pending source.
 
-In the Tauri app and browser UI, right-clicking an element is a shortcut for pressing `[SET]` and then left-clicking that same element. Use it wherever `[SET]` followed by a click configures an element or starts a SET assignment; the native context menu does not open. On a touchscreen, continue to press `[SET]` and then tap the element.
+In the Tauri app and browser UI, right-clicking an element is a shortcut for pressing `[SET]` and then left-clicking that same element. Use it wherever `[SET]` followed by a click configures an element, edits a SET-only value, renames an entry, or starts a SET assignment; the native context menu does not open. This includes Presets, Cuelist and Group assignment sources, Dynamics, Playback Page rename, File Manager rename, compact Cue values, and editable Patch values. On a touchscreen, continue to press `[SET]` and then tap the element.
+
+Right-click follows the SET-click action even when another gesture opens settings. For example, right-clicking a Group chooses it as an assignment source, while touch-hold or `[SET] [GRP] <Group-number> [ENTER]` opens Group settings. Right-clicking a Dynamic chooses it as an assignment source, while Shift-click or touch-hold opens its editor.
 
 To configure an assigned page playback, press `[SET]` and then tap the playback, press `[SHIFT]` and then its first button, or right-click anywhere on the playback. All three gestures open the same Playback configuration modal. **Unassign Playback** removes the Cuelist or Group from that page position and leaves the playback slot empty.
 

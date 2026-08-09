@@ -19,43 +19,13 @@ import { useDeskConnection } from "../../features/deskConnection/DeskConnectionC
 import { useProgrammingUpdate } from "../../features/programmingUpdate/ProgrammingUpdateProvider";
 import type { AttributeSettingsTab, SetupSection } from "./SetupChrome";
 
-export function useSetupWindowController() {
-	const connection = useDeskConnection();
-	const configurationActions = useConfigurationActions();
-	const attributeActions = useAttributeConfigurationActions();
-	const configuration = useDeskConfiguration();
-	const programmingUpdate = useProgrammingUpdate();
-	const [section, setSection] = useState<SetupSection>("shows");
+function useDeskConfigurationDraft(configuration: DeskConfiguration | null) {
 	const [draft, setDraft] = useState<DeskConfiguration | null>(configuration);
-	const {
-		recordSettings,
-		setRecordSettings,
-		updateSettings,
-		setUpdateSettings,
-		programmerSettingsLoaded,
-		programmerSettingsError,
-		setProgrammerSettingsError,
-	} = useProgrammerSetupSettings(programmingUpdate, section);
-	const [attributeConfiguration, setAttributeConfiguration] =
-		useState<AttributeConfigurationSnapshot | null>(null);
-	const [attributeConfigurationError, setAttributeConfigurationError] =
-		useState<string | null>(null);
-	const [restartRequired, setRestartRequired] = useState(false);
-	const [serverUrl, setServerUrl] = useState(configuredServerUrl());
-	const [fixtureLibraryOpen, setFixtureLibraryOpen] = useState(false);
-	const [deskLockSettingsOpen, setDeskLockSettingsOpen] = useState(false);
-	const [screenCanUndo, setScreenCanUndo] = useState(false);
-	const [attributeTab, setAttributeTab] =
-		useState<AttributeSettingsTab>("encoder-groups");
-	const screenUndo = useRef<(() => void) | null>(null);
 	const pendingSave = useRef<{
 		fields: DeskConfigurationField[];
 		configuration: DeskConfiguration;
 	} | null>(null);
 	const dirtyFields = useRef(new Set<DeskConfigurationField>());
-	const savedAttributeConfiguration =
-		useRef<AttributeConfigurationSnapshot | null>(null);
-
 	useEffect(() => {
 		if (!configuration) return;
 		setDraft((current) => {
@@ -78,6 +48,41 @@ export function useSetupWindowController() {
 			return merged;
 		});
 	}, [configuration]);
+	return { draft, setDraft, pendingSave, dirtyFields };
+}
+
+export function useSetupWindowController() {
+	const connection = useDeskConnection();
+	const configurationActions = useConfigurationActions();
+	const attributeActions = useAttributeConfigurationActions();
+	const configuration = useDeskConfiguration();
+	const programmingUpdate = useProgrammingUpdate();
+	const [section, setSection] = useState<SetupSection>("shows");
+	const { draft, setDraft, pendingSave, dirtyFields } =
+		useDeskConfigurationDraft(configuration);
+	const {
+		recordSettings,
+		setRecordSettings,
+		updateSettings,
+		setUpdateSettings,
+		programmerSettingsLoaded,
+		programmerSettingsError,
+		setProgrammerSettingsError,
+	} = useProgrammerSetupSettings(programmingUpdate, section);
+	const [attributeConfiguration, setAttributeConfiguration] =
+		useState<AttributeConfigurationSnapshot | null>(null);
+	const [attributeConfigurationError, setAttributeConfigurationError] =
+		useState<string | null>(null);
+	const [restartRequired, setRestartRequired] = useState(false);
+	const [serverUrl, setServerUrl] = useState(configuredServerUrl());
+	const [fixtureLibraryOpen, setFixtureLibraryOpen] = useState(false);
+	const [deskLockSettingsOpen, setDeskLockSettingsOpen] = useState(false);
+	const [screenCanUndo, setScreenCanUndo] = useState(false);
+	const [attributeTab, setAttributeTab] =
+		useState<AttributeSettingsTab>("encoder-groups");
+	const screenUndo = useRef<(() => void) | null>(null);
+	const savedAttributeConfiguration =
+		useRef<AttributeConfigurationSnapshot | null>(null);
 
 	useEffect(() => {
 		if (section !== "preferences-attributes") return;
@@ -260,8 +265,6 @@ const CONFIGURATION_FIELDS = Object.keys({
 	osc_bind: true,
 	art_timecode_bind: true,
 	osc_timecode: true,
-	midi_inputs: true,
-	rtp_midi_bind: true,
 	timecode_sources: true,
 	backup_retention: true,
 	autosave_interval_seconds: true,
@@ -269,6 +272,9 @@ const CONFIGURATION_FIELDS = Object.keys({
 	programmer_fade_millis: true,
 	command_line_at_uses_programmer_fade: true,
 	sequence_master_fade_millis: true,
+	cuelist_auto_off_at_zero_default: true,
+	cuelist_auto_off_flash_release_default: true,
+	start_after_first_recording: true,
 	preload_programmer_changes: true,
 	preload_physical_playback_actions: true,
 	preload_virtual_playback_actions: true,
@@ -298,6 +304,12 @@ export function configurationFieldsForSection(
 				"preload_programmer_changes",
 				"preload_physical_playback_actions",
 				"preload_virtual_playback_actions",
+			];
+		case "preferences-defaults":
+			return [
+				"cuelist_auto_off_at_zero_default",
+				"cuelist_auto_off_flash_release_default",
+				"start_after_first_recording",
 			];
 		default:
 			return [];

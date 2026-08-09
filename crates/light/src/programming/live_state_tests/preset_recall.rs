@@ -2,7 +2,7 @@ use super::*;
 use crate::{
     ActionError, ActionErrorKind, ProgrammingPresetRecallEnvironment,
     ProgrammingPresetRecallOutcome, ProgrammingPresetRecallPorts, ProgrammingPresetRecallRequest,
-    ProgrammingPresetRecallRevisionExpectation,
+    ProgrammingPresetRecallRevisionExpectation, ProgrammingPresetRecallTarget,
 };
 use chrono::{TimeZone, Utc};
 use light_core::{AttributeKey, AttributeValue, ManualClock, ShowId};
@@ -141,6 +141,7 @@ impl RecallSetup {
                 expected_preset_revision: exact(7),
                 expected_show_revision: exact(11),
                 expected_values_revision: exact(0),
+                expected_preload_values_revision: exact(0),
                 expected_capture_mode_revision: exact(0),
                 expected_selection_revision: exact(selection_revision),
             },
@@ -344,6 +345,105 @@ fn empty_selection_first_tap_selects_targets_without_recalling_then_second_tap_r
 }
 
 #[test]
+fn active_preload_recall_atomically_writes_pending_fixture_and_group_values_only() {
+    let setup = RecallSetup::new();
+    let session = SessionId(setup.context.session_id.unwrap());
+    assert!(setup.registry.arm_preload(session, true));
+    setup.registry.select_expression(
+        session,
+        setup.fixtures.to_vec(),
+        light_programmer::SelectionExpression::LiveGroup {
+            group_id: "5".into(),
+            rule: light_programmer::SelectionRule::All,
+        },
+    );
+    let mut request = setup.request.clone();
+    request.expected_selection_revision =
+        exact(setup.registry.selection(session).unwrap().revision);
+
+    let result = setup.apply("recall-preload", request);
+
+    assert_eq!(result.target, ProgrammingPresetRecallTarget::Preload);
+    let ProgrammingPresetRecallOutcome::PreloadChanged {
+        values_revision,
+        preload_values_revision,
+        projection: Some(projection),
+        preload_values_event_sequence: Some(event_sequence),
+    } = &result.outcome
+    else {
+        panic!("Preload recall should publish one complete pending-values transition")
+    };
+    assert_eq!(
+        (*values_revision, *preload_values_revision, *event_sequence),
+        (0, 1, 1)
+    );
+    assert_eq!(result.preload_values_revision, 1);
+    assert_eq!(projection.fixture_values.len(), 3);
+    assert_eq!(projection.group_values.len(), 1);
+    assert!(projection.fixture_values.iter().all(|value| {
+        value.fade && value.fade_millis == Some(900) && value.delay_millis.is_none()
+    }));
+    assert!(projection.group_values.iter().all(|value| {
+        value.fade && value.fade_millis == Some(900) && value.delay_millis.is_none()
+    }));
+    let programmer = setup.registry.get(session).unwrap();
+    assert!(programmer.values.is_empty());
+    assert!(programmer.group_values.is_empty());
+    assert!(programmer.preload_active.is_empty());
+    assert!(programmer.preload_group_active.is_empty());
+    assert_eq!(programmer.active_context, None);
+    assert_eq!(*setup.ports.persisted.lock(), vec!["preset.apply_preload"]);
+}
+
+#[test]
+fn active_preload_empty_selection_first_tap_selects_then_second_tap_writes_pending_values() {
+    let mut setup = RecallSetup::new();
+    let session = SessionId(setup.context.session_id.unwrap());
+    assert!(setup.registry.arm_preload(session, true));
+    let request = setup.clear_selection_request();
+
+    let result = setup.apply("select-preload-targets", request);
+
+    assert_eq!(result.target, ProgrammingPresetRecallTarget::Preload);
+    assert_eq!(result.preload_values_revision, 0);
+    assert!(matches!(
+        result.outcome,
+        ProgrammingPresetRecallOutcome::Changed {
+            values_revision: 0,
+            projection: None,
+            values_event_sequence: None,
+        }
+    ));
+    let programmer = setup.registry.get(session).unwrap();
+    assert!(programmer.values.is_empty());
+    assert!(programmer.preload_pending.is_empty());
+    assert!(programmer.preload_active.is_empty());
+    assert_eq!(setup.events.latest_sequence(), 1);
+
+    let mut recall = setup.request.clone();
+    recall.expected_selection_revision = exact(result.selection_revision);
+    let recalled = setup.apply("recall-preload-second-tap", recall);
+    let ProgrammingPresetRecallOutcome::PreloadChanged {
+        values_revision: 0,
+        preload_values_revision: 1,
+        projection: Some(projection),
+        preload_values_event_sequence: Some(event_sequence),
+    } = recalled.outcome
+    else {
+        panic!("second Preload tap should publish pending values")
+    };
+    assert_eq!(event_sequence, 2);
+    assert_eq!(projection.fixture_values.len(), 3);
+    assert!(projection.group_values.is_empty());
+    let programmer = setup.registry.get(session).unwrap();
+    assert!(programmer.values.is_empty());
+    assert!(programmer.group_values.is_empty());
+    assert!(programmer.preload_active.is_empty());
+    assert!(programmer.preload_group_active.is_empty());
+    assert_eq!(setup.registry.normal_values_revision(programmer.user_id), 0);
+}
+
+#[test]
 fn color_position_and_mixed_presets_share_empty_selection_target_behavior() {
     for family in [
         PresetFamily::Color,
@@ -492,6 +592,42 @@ fn stale_preset_or_programmer_revision_is_rejected_before_mutation() {
     assert_eq!(error.current_revision, Some(0));
     assert_eq!(*setup.ports.environment_reads.lock(), 0);
     assert!(setup.ports.persisted.lock().is_empty());
+    assert_eq!(setup.events.latest_sequence(), 0);
+}
+
+#[test]
+fn stale_preload_revision_is_rejected_before_resolving_or_mutating_the_preset() {
+    let setup = RecallSetup::new();
+    let session = SessionId(setup.context.session_id.unwrap());
+    assert!(setup.registry.arm_preload(session, true));
+    let mut stale = setup.request.clone();
+    stale.expected_preload_values_revision = exact(9);
+
+    let error = setup
+        .service
+        .handle_preset_recall(
+            ActionEnvelope {
+                context: setup
+                    .context
+                    .clone()
+                    .with_request_id("stale-preload-recall"),
+                command: stale,
+            },
+            &setup.ports,
+        )
+        .unwrap_err();
+
+    assert_eq!(error.kind, ActionErrorKind::Conflict);
+    assert_eq!(error.current_revision, Some(0));
+    assert_eq!(*setup.ports.environment_reads.lock(), 0);
+    assert!(
+        setup
+            .registry
+            .get(session)
+            .unwrap()
+            .preload_pending
+            .is_empty()
+    );
     assert_eq!(setup.events.latest_sequence(), 0);
 }
 

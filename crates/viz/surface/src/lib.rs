@@ -1,3 +1,5 @@
+#![allow(unsafe_code, reason = "reviewed platform shared-surface boundary")]
+
 //! A GPU surface two processes on one machine can both address.
 //!
 //! The desk draws its Stage with a renderer that runs in another process, because a GPU driver can

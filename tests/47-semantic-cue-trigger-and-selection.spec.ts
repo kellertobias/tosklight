@@ -7,7 +7,7 @@ import { Show } from "./bench/show/showScenario";
 
 scenario(
 	"CUE-005",
-	"GO, FOLLOW, and TIME measure from the preceding Cue's latest value endpoint",
+	"GO, FOLLOW, and TIME retain their distinct Cue trigger meanings",
 	async (t) => {
 		await t.show.use(Show.CompactRig);
 		await t.app.open();

@@ -91,7 +91,17 @@ test("BENCH-DISCRETE-SPECIAL-002 @bench @ui › Position, Beam, Shapers, and Con
 		timing: { fade: false, fadeMillis: null, delayMillis: null },
 	});
 	await special.position.alignViaApi("left");
-	await expect.poll(async () => programmerValues(api, "pan")).toEqual([0, 1]);
+	await applyProgrammerSelectionValue(api, {
+		surface: "api",
+		showId: show.id,
+		fixtureIds,
+		attribute: "pan",
+		operation: { type: "relative_step", delta: 0.2 },
+		timing: { fade: false, fadeMillis: null, delayMillis: null },
+	});
+	await expect
+		.poll(async () => programmerValues(api, "pan"))
+		.toEqual([0.4, 0.6]);
 	await special.position.returnHome();
 	const home = 0.5019608;
 	await expect.poll(async () => programmerValues(api, "pan")).toEqual([home, home]);

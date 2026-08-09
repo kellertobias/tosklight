@@ -70,7 +70,7 @@ fn disabled_bridge_exposes_nothing_and_does_not_churn_revision() {
 }
 
 #[test]
-fn every_assigned_playback_is_exposed_in_global_address_order() {
+fn eligible_assigned_playbacks_with_values_are_exposed_in_global_address_order() {
     let adapter = MatterBridgeAdapter::default();
     let pages = [
         PlaybackPage {
@@ -89,6 +89,7 @@ fn every_assigned_playback_is_exposed_in_global_address_order() {
     let values = HashMap::from([
         (10, PlaybackValue::new(0.5, true)),
         (20, PlaybackValue::new(1.0, true)),
+        (30, PlaybackValue::new(0.25, true)),
     ]);
     let status = adapter.reconcile(
         true,
@@ -115,7 +116,7 @@ fn every_assigned_playback_is_exposed_in_global_address_order() {
                 light.level
             ))
             .collect::<Vec<_>>(),
-        vec![(1, 2, 10, 127), (2, 1, 20, 254), (2, 3, 30, 0)]
+        vec![(1, 2, 10, 127), (2, 1, 20, 254), (2, 3, 30, 64)]
     );
     assert_eq!(status.lights[2].name, "Page 2 Playback 3: Button only");
     assert_eq!(status.lights[2].endpoint_id, endpoint_id(2, 3).unwrap());
@@ -126,6 +127,31 @@ fn every_assigned_playback_is_exposed_in_global_address_order() {
             .all(|light| light.playback_number != 40)
     );
     assert!(status.limitation.is_some());
+}
+
+#[test]
+fn eligible_assignment_without_an_authoritative_value_is_not_exposed() {
+    let adapter = MatterBridgeAdapter::default();
+    let page = PlaybackPage {
+        number: 1,
+        name: "Main".into(),
+        slots: HashMap::from([(1, 7), (2, 8)]),
+        virtual_playbacks: HashMap::new(),
+    };
+
+    let status = adapter.reconcile(
+        true,
+        &[page],
+        &[
+            definition(7, "Available", true),
+            definition(8, "Missing", true),
+        ],
+        &HashMap::from([(7, PlaybackValue::new(1.0, true))]),
+    );
+
+    assert_eq!(status.lights.len(), 1);
+    assert_eq!(status.lights[0].playback_number, 7);
+    assert_eq!(status.lights[0].endpoint_id, endpoint_id(1, 1).unwrap());
 }
 
 #[test]

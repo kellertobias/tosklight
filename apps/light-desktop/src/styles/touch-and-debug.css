@@ -681,9 +681,38 @@
 }
 .file-list > button,
 .file-grid > button {
+	position: relative;
 	border: 0;
 	background: transparent;
 	color: inherit;
+}
+.file-list > button:is(.set-target, .copy-target, .move-target, .delete-target),
+.file-grid > button:is(.set-target, .copy-target, .move-target, .delete-target) {
+	border: 3px solid var(--file-command-target-color, #1bd6ec);
+}
+.file-list > button.copy-target,
+.file-grid > button.copy-target {
+	--file-command-target-color: #57a8ff;
+}
+.file-list > button.move-target,
+.file-grid > button.move-target {
+	--file-command-target-color: #b988ff;
+}
+.file-list > button.delete-target,
+.file-grid > button.delete-target {
+	--file-command-target-color: #ff4e55;
+}
+.file-command-target-badge {
+	position: absolute;
+	right: 5px;
+	bottom: 4px;
+	padding: 2px 5px;
+	border-radius: 3px;
+	background: #081014e8;
+	font-size: 9px;
+	font-weight: 800;
+	line-height: 1.2;
+	text-transform: uppercase;
 }
 .file-list > button.selected,
 .file-grid > button.selected {

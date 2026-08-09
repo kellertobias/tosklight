@@ -5,8 +5,7 @@ edition.workspace = true
 license-file.workspace = true
 
 [features]
-default = ["native-midi"]
-native-midi = ["light-control/native-midi", "light-engine/native-midi"]
+default = []
 e2e-embedded-ui = ["rust-embed/debug-embed"]
 
 [dependencies]
@@ -22,10 +21,13 @@ light-application.workspace = true
 light-core = { path = "../../../shared/core" }
 light-control = { path = "../../domain/control", default-features = false }
 light-engine = { path = "../../domain/engine", default-features = false }
+light-extensions-host = { path = "../extensions" }
+light-extensions-contract = { path = "../../contracts/extensions" }
 light-media = { path = "../media" }
 light-mvr = { path = "../../../shared/mvr" }
 light-fixture = { path = "../../../shared/fixture" }
 light-output = { path = "../../domain/output" }
+light-usb-dmx-serial = { path = "../usb-dmx-serial" }
 light-playback = { path = "../../domain/playback" }
 light-programmer = { path = "../../domain/programmer" }
 light-dynamics = { path = "../../domain/dynamics" }

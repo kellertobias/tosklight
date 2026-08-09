@@ -148,6 +148,8 @@ describe("Group settings modal", () => {
 
 	it("saves a General field immediately with the observed revision", async () => {
 		renderDialog();
+		const status = document.querySelector(".group-settings-status");
+		expect(status).toBeInTheDocument();
 		fireEvent.change(screen.getByLabelText("Group name"), {
 			target: { value: "FOH Movers" },
 		});
@@ -168,6 +170,8 @@ describe("Group settings modal", () => {
 				},
 			}),
 		);
+		expect(document.querySelector(".group-settings-status")).toBe(status);
+		expect(screen.queryByText("Saved.")).toBeNull();
 	});
 
 	it("shows the projection without enabling writes when the typed server action is absent", () => {
@@ -180,7 +184,184 @@ describe("Group settings modal", () => {
 		// Everything that would write is unusable, but the values are still readable.
 		expect(screen.getByRole("button", { name: "Top" })).toBeDisabled();
 		expect(screen.getByRole("radio", { name: "Cylindrical" })).toBeDisabled();
-		expect(screen.getByLabelText("Direction X")).toBeDisabled();
+		expect(screen.getByLabelText("Azimuth")).toBeDisabled();
+	});
+
+	it("gives Projection type a full row and separates position from direction", () => {
+		const base = defaultSpatialMapping();
+		const mapping = {
+			...base,
+			projection: {
+				...base.projection,
+				kind: "cylindrical" as const,
+				preset: null,
+			},
+		};
+		const target = group({ mapping });
+		settings.mockResolvedValue(settingsSnapshot(target));
+		renderDialog(target);
+		fireEvent.click(screen.getByRole("tab", { name: "Projection" }));
+
+		const projectionType = document.querySelector(".group-projection-kinds");
+		expect(projectionType).toBeInTheDocument();
+		expect(
+			projectionType?.closest(".group-mapping-fields"),
+		).toBeInTheDocument();
+
+		const position = screen.getByRole("group", { name: "Position" });
+		const direction = screen.getByRole("group", { name: "Direction" });
+		expect(within(position).getByLabelText("Position X")).toBeInTheDocument();
+		expect(within(position).getByLabelText("Position Y")).toBeInTheDocument();
+		expect(within(position).getByLabelText("Position Z")).toBeInTheDocument();
+		expect(
+			within(position).queryByRole("button", { name: "Decrease value" }),
+		).toBeNull();
+		expect(within(position).queryByLabelText("Azimuth")).toBeNull();
+		expect(within(direction).getByLabelText("Azimuth")).toBeInTheDocument();
+		expect(within(direction).getByLabelText("Elevation")).toBeInTheDocument();
+		expect(within(direction).getByLabelText("Rotation")).toBeInTheDocument();
+		expect(within(direction).queryByLabelText("Position X")).toBeNull();
+	});
+
+	it("changes projection kind immediately while its revisioned save is in flight", async () => {
+		const base = defaultSpatialMapping();
+		const mapping = {
+			...base,
+			projection: { ...base.projection, kind: "cylindrical" as const },
+		};
+		const target = group({ mapping });
+		settings.mockResolvedValue(settingsSnapshot(target));
+		let settleSave: ((value: unknown) => void) | undefined;
+		manage.mockReturnValueOnce(
+			new Promise((resolve) => {
+				settleSave = resolve;
+			}),
+		);
+		renderDialog(target);
+		fireEvent.click(screen.getByRole("tab", { name: "Projection" }));
+		await waitFor(() => expect(settings).toHaveBeenCalled());
+
+		fireEvent.click(screen.getByRole("radio", { name: "Planar" }));
+
+		expect(screen.getByRole("radio", { name: "Planar" })).toHaveAttribute(
+			"aria-checked",
+			"true",
+		);
+		expect(screen.getByLabelText("Azimuth")).toBeInTheDocument();
+		expect(screen.queryByLabelText("Position X")).toBeNull();
+		expect(manage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				operation: expect.objectContaining({
+					type: "set_spatial_mapping",
+					mapping: expect.objectContaining({
+						projection: expect.objectContaining({ kind: "planar" }),
+					}),
+				}),
+			}),
+		);
+		settleSave?.({
+			status: "changed",
+			group: { revision: 8 },
+			showRevision: 13,
+			persistenceWarning: null,
+		});
+	});
+
+	it("keeps stable-height containers while Projection and Phase variants change", async () => {
+		const base = defaultSpatialMapping();
+		const mapping = {
+			...base,
+			projection: { ...base.projection, kind: "cylindrical" as const },
+		};
+		const target = group({ mapping });
+		settings.mockResolvedValue(settingsSnapshot(target));
+		renderDialog(target);
+
+		fireEvent.click(screen.getByRole("tab", { name: "Projection" }));
+		await waitFor(() => expect(settings).toHaveBeenCalled());
+		const projection = document.querySelector(".group-projection-fields");
+		expect(projection).toBeInTheDocument();
+		for (const kind of ["Planar", "Spherical", "Cylindrical"]) {
+			fireEvent.click(screen.getByRole("radio", { name: kind }));
+			expect(document.querySelector(".group-projection-fields")).toBe(
+				projection,
+			);
+		}
+
+		fireEvent.click(screen.getByRole("tab", { name: "Phase" }));
+		const phase = document.querySelector(".group-phase-fields");
+		expect(phase).toBeInTheDocument();
+		for (const shape of ["Radial", "Radar", "Grid"]) {
+			fireEvent.click(screen.getByRole("radio", { name: shape }));
+			expect(document.querySelector(".group-phase-fields")).toBe(phase);
+		}
+	});
+
+	it("keeps six Planar presets in three paired rows and compact stepped directions", async () => {
+		const target = group({ mapping: defaultSpatialMapping() });
+		settings.mockResolvedValue(settingsSnapshot(target));
+		renderDialog(target);
+		fireEvent.click(screen.getByRole("tab", { name: "Projection" }));
+		const presets = screen.getByRole("group", { name: "Presets" });
+		const direction = screen.getByRole("group", { name: "Direction" });
+		expect(
+			within(presets)
+				.getAllByRole("button")
+				.map((button) => button.textContent),
+		).toEqual(["Top", "Bottom", "Front", "Back", "Left", "Right"]);
+		expect(
+			presets.querySelector(".group-projection-presets"),
+		).toBeInTheDocument();
+		const azimuth = screen
+			.getByLabelText("Azimuth")
+			.closest<HTMLElement>(".ui-form-field")!;
+		fireEvent.click(
+			within(azimuth).getByRole("button", { name: "Decrease value" }),
+		);
+		await waitFor(() => expect(manage).toHaveBeenCalled());
+
+		manage.mockClear();
+		fireEvent.click(
+			within(azimuth).getByRole("button", { name: "Open number pad" }),
+		);
+		fireEvent.click(screen.getByRole("button", { name: "9" }));
+		fireEvent.click(screen.getByRole("button", { name: "ENTER" }));
+		await waitFor(() =>
+			expect(manage).toHaveBeenCalledWith(
+				expect.objectContaining({
+					operation: expect.objectContaining({
+						type: "set_spatial_mapping",
+						mapping: expect.objectContaining({
+							projection: expect.objectContaining({
+								view_direction: expect.any(Object),
+							}),
+						}),
+					}),
+				}),
+			),
+		);
+	});
+
+	it("uses the default Selection Order placeholder and aligned Phase rows", async () => {
+		renderDialog(group({ mapping: defaultSpatialMapping() }));
+		fireEvent.click(screen.getByRole("tab", { name: "Phase" }));
+		expect(
+			screen.getByRole("radio", { name: "Selection Order" }),
+		).toHaveAttribute("aria-checked", "true");
+		expect(
+			screen.getByText(/order in which the fixtures were selected/),
+		).toBeInTheDocument();
+		fireEvent.click(screen.getByRole("radio", { name: "Radar" }));
+		await waitFor(() =>
+			expect(document.querySelectorAll(".group-phase-row")).toHaveLength(2),
+		);
+		expect(screen.getByLabelText("Centre U")).toBeInTheDocument();
+		expect(screen.getByLabelText("Sweep")).toBeInTheDocument();
+		expect(
+			screen.getByLabelText("Sweep").closest(".ui-form-field"),
+		).toHaveClass("labels-top");
+		fireEvent.click(screen.getByRole("radio", { name: "Fixture ID" }));
+		expect(screen.getByText(/lowest ID to the highest/)).toBeInTheDocument();
 	});
 
 	it("sends one complete revisioned mapping when a Phase shape changes", async () => {

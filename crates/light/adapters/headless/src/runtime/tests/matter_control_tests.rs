@@ -376,7 +376,7 @@ fn matter_virtual_master_controls_and_tracks_a_faderless_assignment() {
 }
 
 #[test]
-fn matter_writes_reach_every_assignable_faderless_target_family() {
+fn matter_writes_reach_eligible_faderless_groups_and_reject_ineligible_targets() {
     let (state, data_dir) = test_state();
     state.installation.update_configuration(|configuration| configuration.matter_enabled = true);
     let definition = |number, target, fader| light_playback::PlaybackDefinition {
@@ -443,6 +443,7 @@ fn matter_writes_reach_every_assignable_faderless_target_family() {
             ..Default::default()
         })
         .unwrap();
+    let original_configuration = state.installation.configuration();
 
     let activation = state.active_show.acquire_blocking();
     let rejected = apply_matter_playback_write(
@@ -458,9 +459,17 @@ fn matter_writes_reach_every_assignable_faderless_target_family() {
     assert_eq!(state.output.group_master("front"), Some(1.0));
     drop(activation);
 
-    let output_cursor = state.events.latest_sequence();
-    for playback in 1..=5 {
-        apply_matter_playback_write(
+    apply_matter_playback_write(
+        &state,
+        matter::endpoint_id(1, 1).unwrap(),
+        matter::MatterPlaybackWrite {
+            on: None,
+            level: Some(127),
+        },
+    )
+    .unwrap();
+    for playback in 2..=5 {
+        let rejected = apply_matter_playback_write(
             &state,
             matter::endpoint_id(1, playback).unwrap(),
             matter::MatterPlaybackWrite {
@@ -468,7 +477,12 @@ fn matter_writes_reach_every_assignable_faderless_target_family() {
                 level: Some(127),
             },
         )
-        .unwrap();
+        .unwrap_err();
+        assert_eq!(rejected.status, StatusCode::BAD_REQUEST);
+        assert_eq!(
+            rejected.message,
+            format!("Matter endpoint {playback} is not exposed")
+        );
     }
 
     assert!(
@@ -480,33 +494,15 @@ fn matter_writes_reach_every_assignable_faderless_target_family() {
         (matter_values[&1].level - 0.5).abs() < 0.001,
         "Matter feedback uses the shared Group Master runtime level"
     );
-    let speed = state
-        .output
-        .speed_group_snapshot(0, application_millis(&state));
-    assert!((speed.manual_bpm - 150.0).abs() < 0.001);
-    assert!((speed.speed_master_scale - 1.0).abs() < 0.001);
     let configuration = state.installation.configuration();
-    assert_eq!(configuration.programmer_fade_millis, 10_000);
-    assert_eq!(configuration.sequence_master_fade_millis, 30_000);
-    assert!((state.output.control_projection().grand_master - 0.5).abs() < 0.001);
-    let light_application::EventReplay::Events(output_events) = state.events.replay(
-        output_cursor,
-        &light_application::EventFilter::default()
-            .with_object(light_application::EventObject::global_output()),
-    ) else {
-        panic!("Matter output event should be retained");
-    };
-    assert_eq!(output_events.len(), 1);
     assert_eq!(
-        output_events[0].source,
-        light_application::EventSource::Action(light_application::ActionSource::Matter)
+        configuration.programmer_fade_millis,
+        original_configuration.programmer_fade_millis
     );
-    let light_application::ApplicationEvent::Output(
-        light_application::OutputEvent::RuntimeChanged(change),
-    ) = &output_events[0].payload
-    else {
-        panic!("expected output-runtime event");
-    };
-    assert_eq!(change.projection.revision, 1);
+    assert_eq!(
+        configuration.sequence_master_fade_millis,
+        original_configuration.sequence_master_fade_millis
+    );
+    assert!((state.output.control_projection().grand_master - 1.0).abs() < 0.001);
     let _ = std::fs::remove_dir_all(data_dir);
 }

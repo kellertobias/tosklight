@@ -1,12 +1,12 @@
-import { dynamicSpatialDraft } from "../../../features/dynamics/dynamicSpatialDraft";
-import { projectionKind } from "../../../features/spatialMapping/projectionKinds";
 import { Button } from "@tosklight/ui";
 import { EncoderGroupTabs } from "@tosklight/ui/encoders";
 import type { DynamicDefinitionProjection } from "../../../api/types";
 import type { DynamicEditorTask } from "../../../features/dynamics/DynamicEditorSessionContext";
 import { useDynamicEditorSession } from "../../../features/dynamics/DynamicEditorSessionContext";
+import { dynamicSpatialDraft } from "../../../features/dynamics/dynamicSpatialDraft";
 import { useLowerSectionSwitch } from "../../../features/screens/LowerSectionSwitch";
 import { useDynamics } from "../../../features/showObjects/ShowObjectsState";
+import { projectionKind } from "../../../features/spatialMapping/projectionKinds";
 import {
 	alignModes,
 	compactFamilyLabels,
@@ -36,28 +36,34 @@ function alignLabel(mode: ParameterController["alignMode"]) {
 }
 
 function AlignmentControl({ controller }: { controller: ParameterController }) {
-	if (controller.family !== "Position") return null;
 	const label = alignLabel(controller.alignMode);
+	const setMode = async (mode: ParameterController["alignMode"]) => {
+		if (!controller.programmerActions) return;
+		try {
+			await controller.programmerActions.alignSelection(mode ?? "off");
+			controller.setAlignMode(mode);
+		} catch {
+			// The server error is already projected by the programming action owner.
+		}
+	};
 	return (
 		<Button
 			aria-label={`Align ${label}`}
 			className={`align-cycle ${controller.alignMode ? "align-active" : "align-off"}`}
 			onClick={(event) => {
 				if (event.shiftKey || controller.state.shiftArmed) {
-					controller.setAlignMode(null);
+					void setMode(null);
 					if (controller.state.shiftArmed)
 						controller.dispatch({ type: "SET_SHIFT_ARMED", value: false });
 					return;
 				}
-				const next =
-					alignModes[
-						(controller.alignMode == null
-							? 0
-							: alignModes.indexOf(controller.alignMode) + 1) %
-							alignModes.length
-					];
-				void controller.programmerActions?.alignSelection("pan", next);
-				controller.setAlignMode(next);
+				const nextIndex =
+					controller.alignMode == null
+						? 0
+						: alignModes.indexOf(controller.alignMode) + 1;
+				void setMode(
+					nextIndex >= alignModes.length ? null : alignModes[nextIndex],
+				);
 			}}
 		>
 			<span className="align-label-full">

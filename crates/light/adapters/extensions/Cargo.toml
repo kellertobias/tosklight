@@ -1,0 +1,23 @@
+[package]
+name = "light-extensions-host"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+publish = false
+autobins = false
+
+[dependencies]
+light-extensions-contract = { path = "../../contracts/extensions" }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+uuid.workspace = true
+
+[[bin]]
+name = "tl-extension-conformance-child"
+path = "tests/support/synthetic_extension.rs"
+test = false
+bench = false
+
+[lints]
+workspace = true

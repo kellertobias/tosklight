@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Editable Media pane concept.
+  This is a design source, not a generated screenshot.  Each major region has
+  an id and all labels remain SVG text so it can be adjusted in a vector editor.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" role="img" aria-labelledby="title description">
+  <title id="title">ToskLight Media pane editable concept</title>
+  <desc id="description">A dark operator-facing Media pane with program preview, layers, media library, and playback controls.</desc>
+  <defs>
+    <linearGradient id="program-gradient" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#0a223d"/><stop offset="1" stop-color="#7a215d"/>
+    </linearGradient>
+    <linearGradient id="city-gradient" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#12395d"/><stop offset="1" stop-color="#14233a"/>
+    </linearGradient>
+    <linearGradient id="gold-gradient" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#5a3b12"/><stop offset="1" stop-color="#171111"/>
+    </linearGradient>
+    <linearGradient id="title-gradient" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#5d1e63"/><stop offset="1" stop-color="#19182f"/>
+    </linearGradient>
+    <pattern id="checker" width="24" height="24" patternUnits="userSpaceOnUse">
+      <rect width="24" height="24" fill="#0e1216"/><path d="M0 0h12v12H0zM12 12h12v12H12z" fill="#151a1f"/>
+    </pattern>
+    <style>
+      .panel { fill:#11171c; stroke:#35434e; stroke-width:1; }
+      .subpanel { fill:#151c22; stroke:#35434e; stroke-width:1; }
+      .tile { fill:#182129; stroke:#3b4a55; stroke-width:1; }
+      .selected { fill:#203748; stroke:#55c2dc; stroke-width:2; }
+      .label { fill:#aebdc6; font: 12px system-ui, sans-serif; }
+      .small { fill:#84949e; font: 11px system-ui, sans-serif; }
+      .title { fill:#edf6f8; font: 600 14px system-ui, sans-serif; }
+      .heading { fill:#edf6f8; font: 700 16px system-ui, sans-serif; }
+      .control-label { fill:#b9c5cd; font: 12px system-ui, sans-serif; }
+      .button-label { fill:#dce8ec; font: 600 12px system-ui, sans-serif; }
+      .active { fill:#0e2d3b; stroke:#4abed8; stroke-width:1; }
+      .green { fill:#65ce98; } .amber { fill:#ffc75e; } .red { fill:#f3757e; }
+    </style>
+  </defs>
+
+  <g id="media-pane">
+    <rect width="1440" height="900" fill="#0c1115"/>
+
+    <g id="window-header">
+      <rect class="panel" x="0" y="0" width="1440" height="58"/>
+      <text class="heading" x="18" y="28">Media</text>
+      <text class="small" x="18" y="45">Aurora Media · Deterministic local presentation</text>
+      <rect x="1248" y="16" width="142" height="26" rx="4" fill="#3a2a0f" stroke="#b6812e"/>
+      <text x="1260" y="33" fill="#ffd47b" font-family="system-ui, sans-serif" font-size="11" font-weight="700" letter-spacing=".7">DUMMY · LOCAL ONLY</text>
+      <g id="settings-button"><rect class="tile" x="1398" y="16" width="26" height="26" rx="4"/><circle cx="1411" cy="29" r="6" fill="none" stroke="#aebdc6" stroke-width="2"/><circle cx="1411" cy="29" r="2" fill="#aebdc6"/></g>
+    </g>
+
+    <g id="server-bar">
+      <rect class="subpanel" x="0" y="58" width="1440" height="58"/>
+      <text class="small" x="18" y="78">MEDIA SERVER</text>
+      <rect class="tile" x="18" y="83" width="340" height="25" rx="3"/>
+      <text class="button-label" x="28" y="100">Aurora Media</text><path d="M338 93l7 7 7-7" fill="none" stroke="#aebdc6" stroke-width="2"/>
+      <text class="small" x="376" y="100">10.42.0.21 · Dummy</text>
+    </g>
+
+    <g id="overview">
+      <rect class="panel" x="0" y="116" width="1440" height="326"/>
+      <g id="program-composite">
+        <rect x="14" y="130" width="650" height="298" rx="6" fill="url(#checker)" stroke="#4a5b67"/>
+        <rect x="15" y="131" width="648" height="296" rx="5" fill="url(#program-gradient)"/>
+        <circle cx="495" cy="238" r="78" fill="#ffb44a" fill-opacity=".72"/>
+        <path d="M15 374l132-98 97 64 110-118 110 92 82-69 117 86v96H15z" fill="#07101f" fill-opacity=".76"/>
+        <rect x="67" y="155" width="544" height="216" fill="none" stroke="#ffffff" stroke-opacity=".28" stroke-dasharray="6 5"/>
+        <rect x="15" y="395" width="648" height="32" fill="#05080b" fill-opacity=".86"/>
+        <text x="28" y="416" fill="#edf6f8" font-family="system-ui, sans-serif" font-size="11" font-weight="700">PROGRAM / COMPOSITE</text>
+        <text x="543" y="416" fill="#b9d6df" font-family="system-ui, sans-serif" font-size="11">Mock preview · 21:16:32</text>
+      </g>
+
+      <g id="layers">
+        <text class="title" x="682" y="148">Layers</text><text class="small" x="1333" y="148" text-anchor="end">3 mock layers</text>
+        <g id="layer-1"><rect class="selected" x="682" y="160" width="360" height="116" rx="5"/>
+          <rect x="690" y="168" width="112" height="100" rx="2" fill="url(#city-gradient)"/><circle cx="772" cy="198" r="23" fill="#77c8ff" fill-opacity=".65"/><path d="M690 246l25-22 22 16 20-27 24 24 21-16v47h-112z" fill="#07101f" fill-opacity=".72"/>
+          <text class="title" x="814" y="198">1 · Main</text><text class="small" x="814" y="219">City / City Loop</text><circle class="green" cx="1026" cy="218" r="5"/>
+        </g>
+        <g id="layer-2"><rect class="tile" x="1056" y="160" width="360" height="116" rx="5"/>
+          <rect x="1064" y="168" width="112" height="100" rx="2" fill="url(#gold-gradient)"/><circle cx="1127" cy="203" r="24" fill="#ffd269" fill-opacity=".7"/><circle cx="1095" cy="226" r="6" fill="#ffd269"/><circle cx="1150" cy="238" r="4" fill="#ffd269"/>
+          <text class="title" x="1188" y="198">2 · Particles</text><text class="small" x="1188" y="219">City / Gold Particles</text><circle class="amber" cx="1400" cy="218" r="5"/>
+        </g>
+        <g id="layer-3"><rect class="tile" x="682" y="290" width="360" height="116" rx="5"/>
+          <rect x="690" y="298" width="112" height="100" rx="2" fill="url(#title-gradient)"/><text x="706" y="350" fill="#ef7aff" font-family="system-ui, sans-serif" font-size="15" font-weight="700">TOUR</text><path d="M690 376l30-30 20 16 28-39 34 33v42h-112z" fill="#07101f" fill-opacity=".72"/>
+          <text class="title" x="814" y="328">3 · Titles</text><text class="small" x="814" y="349">Tour Package / Tour Titles</text><circle class="red" cx="1026" cy="348" r="5"/>
+        </g>
+        <g id="empty-layer-slot"><rect x="1056" y="290" width="360" height="116" rx="5" fill="#12191e" stroke="#2b3942" stroke-dasharray="5 5"/><text class="small" x="1236" y="352" text-anchor="middle">No layer selected</text></g>
+      </g>
+    </g>
+
+    <g id="workspace">
+      <rect class="panel" x="0" y="442" width="1440" height="458"/>
+      <g id="media-library">
+        <rect class="subpanel" x="0" y="442" width="940" height="458"/>
+        <g id="browser-tabs"><rect x="0" y="442" width="940" height="45" fill="#11171c"/><rect class="active" x="10" y="449" width="82" height="30" rx="3"/><text class="button-label" x="51" y="468" text-anchor="middle">Media</text><rect class="tile" x="96" y="449" width="80" height="30" rx="3"/><text class="button-label" x="136" y="468" text-anchor="middle">Mask</text></g>
+        <g id="selection-authority"><rect x="0" y="487" width="470" height="35" fill="#151c22"/><rect x="470" y="487" width="470" height="35" fill="#1c1b1b"/><text x="12" y="509" fill="#65ce98" font-family="system-ui, sans-serif" font-size="11" font-weight="700">LIVE</text><text class="small" x="48" y="509">City / City Loop</text><text x="484" y="509" fill="#ffc75e" font-family="system-ui, sans-serif" font-size="11" font-weight="700">BROWSING DRAFT</text><text x="607" y="509" fill="#ffe0a0" font-family="system-ui, sans-serif" font-size="11">Library · Not sent</text></g>
+        <g id="library-path"><rect x="0" y="522" width="940" height="31" fill="#11171c"/><text class="small" x="12" y="542">Media</text><text class="small" x="53" y="542">/</text><text class="small" x="66" y="542">Library</text></g>
+        <g id="library-items">
+          <g id="folder-city"><rect class="tile" x="12" y="566" width="206" height="180" rx="4"/><rect x="19" y="573" width="192" height="116" rx="2" fill="#263744"/><path d="M75 615h42l12 12h43v40H75z" fill="#e6ba65"/><text class="title" x="24" y="714">City</text><text class="small" x="24" y="733">2 mock files</text></g>
+          <g id="folder-tour"><rect class="tile" x="231" y="566" width="206" height="180" rx="4"/><rect x="238" y="573" width="192" height="116" rx="2" fill="#263744"/><path d="M294 615h42l12 12h43v40h-97z" fill="#e6ba65"/><text class="title" x="243" y="714">Tour Package</text><text class="small" x="243" y="733">2 mock files</text></g>
+          <g id="media-file-preview"><rect class="tile" x="450" y="566" width="206" height="180" rx="4"/><rect x="457" y="573" width="192" height="116" rx="2" fill="url(#city-gradient)"/><circle cx="590" cy="617" r="36" fill="#77c8ff" fill-opacity=".6"/><path d="M457 675l36-35 32 22 31-40 38 36 25-24 30 26v29H457z" fill="#07101f" fill-opacity=".72"/><path d="M547 611l0 35 30-17z" fill="#fff" fill-opacity=".9"/><text class="title" x="462" y="714">City Loop</text><text class="small" x="462" y="733">00:24 · 1920×1080</text></g>
+          <g id="media-file-particles"><rect class="tile" x="669" y="566" width="206" height="180" rx="4"/><rect x="676" y="573" width="192" height="116" rx="2" fill="url(#gold-gradient)"/><circle cx="790" cy="621" r="37" fill="#ffd269" fill-opacity=".7"/><circle cx="730" cy="641" r="7" fill="#ffd269"/><circle cx="841" cy="650" r="5" fill="#ffd269"/><path d="M766 611l0 35 30-17z" fill="#fff" fill-opacity=".9"/><text class="title" x="681" y="714">Gold Particles</text><text class="small" x="681" y="733">00:18 · 1920×1080</text></g>
+        </g>
+        <g id="program-draft-button"><rect x="12" y="850" width="916" height="36" rx="4" fill="#252d32" stroke="#45545c"/><text x="470" y="873" fill="#83929a" font-family="system-ui, sans-serif" font-size="12" font-weight="600" text-anchor="middle">Program draft · unavailable in this editable concept</text></g>
+      </g>
+
+      <g id="secondary-controls">
+        <rect class="subpanel" x="940" y="442" width="500" height="458"/>
+        <g id="control-tabs"><rect x="940" y="442" width="500" height="45" fill="#11171c"/><rect class="active" x="948" y="449" width="88" height="30" rx="3"/><text class="button-label" x="992" y="468" text-anchor="middle">Playback</text><rect class="tile" x="1040" y="449" width="88" height="30" rx="3"/><text class="button-label" x="1084" y="468" text-anchor="middle">Geometry</text><rect class="tile" x="1132" y="449" width="62" height="30" rx="3"/><text class="button-label" x="1163" y="468" text-anchor="middle">Audio</text><rect class="tile" x="1198" y="449" width="75" height="30" rx="3"/><text class="button-label" x="1235" y="468" text-anchor="middle">Shapers</text><rect class="tile" x="1277" y="449" width="72" height="30" rx="3"/><text class="button-label" x="1313" y="468" text-anchor="middle">Effects</text></g>
+        <text class="heading" x="958" y="520">Playback</text>
+        <g id="play-mode-control"><text class="control-label" x="958" y="553">Play mode</text><rect class="tile" x="958" y="562" width="222" height="34" rx="3"/><text class="button-label" x="970" y="584">Loop</text><path d="M1158 575l7 7 7-7" fill="none" stroke="#aebdc6" stroke-width="2"/></g>
+        <g id="speed-control"><text class="control-label" x="958" y="637">Speed</text><text class="small" x="1180" y="637" text-anchor="end">1.00×</text><rect x="958" y="651" width="222" height="7" rx="4" fill="#30414a"/><rect x="958" y="651" width="111" height="7" rx="4" fill="#55c2dc"/><circle cx="1069" cy="654.5" r="9" fill="#dff8ff" stroke="#55c2dc" stroke-width="2"/><text class="small" x="958" y="680">-2.00×</text><text class="small" x="1180" y="680" text-anchor="end">2.00×</text></g>
+        <g id="opacity-control"><text class="control-label" x="1200" y="553">Opacity / Dimmer</text><text class="small" x="1420" y="553" text-anchor="end">82%</text><rect x="1200" y="568" width="220" height="7" rx="4" fill="#30414a"/><rect x="1200" y="568" width="180" height="7" rx="4" fill="#55c2dc"/><circle cx="1380" cy="571.5" r="9" fill="#dff8ff" stroke="#55c2dc" stroke-width="2"/></g>
+        <g id="rotation-control"><text class="control-label" x="1200" y="637">Rotation</text><text class="small" x="1420" y="637" text-anchor="end">0°</text><rect x="1200" y="651" width="220" height="7" rx="4" fill="#30414a"/><circle cx="1310" cy="654.5" r="9" fill="#dff8ff" stroke="#55c2dc" stroke-width="2"/><text class="small" x="1200" y="680">-180°</text><text class="small" x="1420" y="680" text-anchor="end">180°</text></g>
+        <g id="tint-control"><text class="control-label" x="958" y="727">Tint</text><rect class="tile" x="958" y="738" width="222" height="43" rx="3"/><rect x="967" y="747" width="25" height="25" rx="3" fill="#7fd9ff"/><text class="button-label" x="1002" y="765">#7FD9FF</text></g>
+        <g id="frame-readout"><rect class="tile" x="1200" y="727" width="220" height="54" rx="4"/><text class="small" x="1211" y="748">Frame</text><text class="button-label" x="1211" y="770">Top 0 · Right 0 · Bottom 0 · Left 0</text></g>
+      </g>
+    </g>
+  </g>
+</svg>

@@ -54,6 +54,7 @@ impl ProgrammingService {
         if let Some(result) = self.cached_group_recording(&identity, &envelope.command)? {
             return Ok(result);
         }
+        self.programmers.deactivate_alignment(identity.session_id);
         let capture = self
             .programmers
             .capture_group_recording_selection(identity.session_id)

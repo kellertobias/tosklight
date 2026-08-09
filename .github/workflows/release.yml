@@ -97,7 +97,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf \
-            libgtk-3-dev libsoup-3.0-dev libasound2-dev build-essential
+            libgtk-3-dev libsoup-3.0-dev libudev-dev build-essential
 
       - name: Install workspace dependencies
         run: npm ci
@@ -133,10 +133,81 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
+      - name: Install USB serial development files
+        run: sudo apt-get update && sudo apt-get install -y libudev-dev pkg-config
+
       - name: Install workspace dependencies
         run: npm ci
 
       - run: npm run test:verify
+
+  native-extension-draft:
+    name: Tests / Native extension draft / ${{ matrix.label }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: macOS
+            runner: macos-14
+          - label: Windows
+            runner: windows-2022
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
+        with:
+          key: native-extension-draft-${{ runner.os }}
+
+      - name: Verify the draft contract and supervised child host
+        run: cargo test -p light-extensions-contract -p light-extensions-host --locked
+
+      - name: Lint the portable extension boundary
+        run: cargo clippy -p light-extensions-contract -p light-extensions-host --all-targets --locked -- -D warnings
+
+  usb-dmx:
+    name: Tests / USB DMX / ${{ matrix.label }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Linux
+            runner: ubuntu-22.04
+          - label: macOS
+            runner: macos-14
+          - label: Windows
+            runner: windows-2022
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
+        with:
+          toolchain: stable
+          components: clippy
+
+      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
+        with:
+          key: usb-dmx-${{ runner.os }}
+
+      - name: Install Linux USB serial development files
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libudev-dev pkg-config
+
+      - name: Verify USB DMX protocol and serial adapters
+        run: cargo test -p light-usb-dmx-core -p light-usb-dmx-serial --locked
+
+      - name: Lint USB DMX protocol and serial adapters
+        run: cargo clippy -p light-usb-dmx-core -p light-usb-dmx-serial --all-targets --locked -- -D warnings
 
   e2e-build:
     name: Tests / Build Playwright application
@@ -581,7 +652,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf \
-            libgtk-3-dev libsoup-3.0-dev libasound2-dev build-essential xvfb
+            libgtk-3-dev libsoup-3.0-dev libudev-dev build-essential xvfb
 
       - name: Install the cross-compilation toolchain
         if: matrix.cross

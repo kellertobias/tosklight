@@ -14,6 +14,9 @@ function configuration(
 		autosave_interval_seconds: 30,
 		backup_retention: 20,
 		command_line_at_uses_programmer_fade: true,
+		cuelist_auto_off_at_zero_default: false,
+		cuelist_auto_off_flash_release_default: false,
+		start_after_first_recording: false,
 		preload_programmer_changes: true,
 		preload_physical_playback_actions: true,
 		preload_virtual_playback_actions: true,
@@ -24,7 +27,11 @@ function configuration(
 
 describe("Desk Setup page-scoped configuration saves", () => {
 	it("assigns each editable Preferences page only its owned configuration fields", () => {
-		expect(configurationFieldsForSection("preferences-defaults")).toEqual([]);
+		expect(configurationFieldsForSection("preferences-defaults")).toEqual([
+			"cuelist_auto_off_at_zero_default",
+			"cuelist_auto_off_flash_release_default",
+			"start_after_first_recording",
+		]);
 		expect(configurationFieldsForSection("preferences-attributes")).toEqual([]);
 		expect(configurationFieldsForSection("preferences-highlight")).toEqual([
 			"highlight_look",
@@ -36,6 +43,34 @@ describe("Desk Setup page-scoped configuration saves", () => {
 			"preload_physical_playback_actions",
 			"preload_virtual_playback_actions",
 		]);
+	});
+
+	it("saves Cuelist playback defaults without absorbing fields from another page", () => {
+		const saved = configuration({
+			cuelist_auto_off_at_zero_default: false,
+			cuelist_auto_off_flash_release_default: false,
+			start_after_first_recording: false,
+			patch_preview_highlight_dmx: false,
+		});
+		const draft = configuration({
+			cuelist_auto_off_at_zero_default: true,
+			cuelist_auto_off_flash_release_default: true,
+			start_after_first_recording: true,
+			patch_preview_highlight_dmx: true,
+		});
+
+		expect(
+			mergeConfigurationFields(
+				saved,
+				draft,
+				configurationFieldsForSection("preferences-defaults"),
+			),
+		).toMatchObject({
+			cuelist_auto_off_at_zero_default: true,
+			cuelist_auto_off_flash_release_default: true,
+			start_after_first_recording: true,
+			patch_preview_highlight_dmx: false,
+		});
 	});
 
 	it("does not absorb an unsaved field from another Preferences page", () => {

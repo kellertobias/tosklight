@@ -81,6 +81,23 @@ export const dummyMediaFolders: DummyMediaFolder[] = [
 				thumbnail: previews.particles,
 				detail: "00:18 · 1920×1080",
 			},
+			...Array.from({ length: 10 }, (_, index) => ({
+				id: `file-city-extra-${index + 1}`,
+				name: [
+					"Neon Street",
+					"Blue Skyline",
+					"Traffic Trails",
+					"Glass Towers",
+					"Night Drive",
+					"Metro Map",
+					"Rain Window",
+					"Tunnel Run",
+					"City Grid",
+					"Dawn Roofs",
+				][index],
+				thumbnail: index % 2 === 0 ? previews.city : previews.particles,
+				detail: `${String(index + 3).padStart(2, "0")}:00 · 1920×1080`,
+			})),
 		],
 	},
 	{
@@ -101,6 +118,27 @@ export const dummyMediaFolders: DummyMediaFolder[] = [
 			},
 		],
 	},
+	...Array.from({ length: 8 }, (_, index) => ({
+		id: `folder-pack-${index + 1}`,
+		name: [
+			"Floral Patterns",
+			"Abstract",
+			"Architecture",
+			"Atmospheres",
+			"Brand Loops",
+			"Concert",
+			"Textures",
+			"Utility",
+		][index],
+		assets: [
+			{
+				id: `file-pack-${index + 1}`,
+				name: `${["Floral", "Abstract", "Architecture", "Atmosphere", "Brand", "Concert", "Texture", "Utility"][index]} 01`,
+				thumbnail: index % 2 === 0 ? previews.forest : previews.titles,
+				detail: "00:20 · 1920×1080",
+			},
+		],
+	})),
 ];
 
 export const dummyMaskFolders: DummyMediaFolder[] = [
@@ -158,6 +196,17 @@ const readyLayers: DummyMediaLayer[] = [
 		maskFolderId: "mask-shapes",
 		maskFileId: "mask-checker",
 	},
+	...Array.from({ length: 5 }, (_, index) => ({
+		id: `layer-${index + 4}`,
+		name: `Layer ${index + 4} · ${["Background", "Lyrics", "Accents", "Camera", "Overlay"][index]}`,
+		status: "ready" as const,
+		statusDetail: "Preview current",
+		preview: index % 2 === 0 ? previews.forest : previews.city,
+		liveFolderId: index % 2 === 0 ? "folder-tour" : "folder-city",
+		liveFileId: index % 2 === 0 ? "file-night-forest" : "file-city-loop",
+		maskFolderId: index === 0 ? "mask-shapes" : null,
+		maskFileId: index === 0 ? "mask-soft-circle" : null,
+	})),
 ];
 
 export const dummyMediaServers: DummyMediaServer[] = [

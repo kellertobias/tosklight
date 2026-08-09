@@ -212,7 +212,7 @@ pub(super) const fn source_name(source: ActionSource) -> &'static str {
     match source {
         ActionSource::Osc => "osc",
         ActionSource::Matter => "matter",
-        ActionSource::Midi => "midi",
+        ActionSource::Extension => "extension",
         ActionSource::Keyboard => "keyboard",
         ActionSource::UserInterface | ActionSource::Http => "ui",
         _ => "application",

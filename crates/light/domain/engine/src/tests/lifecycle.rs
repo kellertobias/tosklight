@@ -257,6 +257,7 @@ fn render_retains_one_generation_across_concurrent_installation() {
 fn snapshot_with_route(revision: u64, destination_universe: u16) -> EngineSnapshot {
     EngineSnapshot {
         routes: vec![light_output::OutputRoute {
+            target: Default::default(),
             protocol: light_output::Protocol::ArtNet,
             logical_universe: 1,
             destination_universe,

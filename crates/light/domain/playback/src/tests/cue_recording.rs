@@ -60,6 +60,8 @@ fn cue_list(cues: Vec<Cue>) -> CueList {
         restart_mode: RestartMode::FirstCue,
         force_cue_timing: false,
         disable_cue_timing: false,
+        auto_off_at_zero: false,
+        auto_off_flash_release: false,
         chaser_xfade_millis: 0,
         chaser_xfade_percent: Some(0),
         speed_multiplier: 1.0,
@@ -147,7 +149,7 @@ fn new_recording_and_playback_use_backend_canonical_defaults_and_explicit_zeroes
         ..Default::default()
     };
 
-    let plan = CueList::new_recording(cue_list_id, "Cuelist 7", first, None).unwrap();
+    let plan = CueList::new_recording(cue_list_id, "Cuelist 7", first, None, false, false).unwrap();
     let list = &plan.cue_list;
     let first = &list.cues[0];
     assert!(plan.changed);

@@ -231,6 +231,15 @@ pub(super) fn pending_file_action(command_line: &str) -> Option<FileInputAction>
 }
 
 pub(crate) fn route_osc_input(state: &AppState, session: &Session, action: &str) -> bool {
+    route_control_input(state, session, action, "osc")
+}
+
+pub(crate) fn route_control_input(
+    state: &AppState,
+    session: &Session,
+    action: &str,
+    source: &'static str,
+) -> bool {
     prune_input_contexts(state);
     match state.sessions.route_file_input(
         session.desk.id,
@@ -240,7 +249,7 @@ pub(crate) fn route_osc_input(state: &AppState, session: &Session, action: &str)
         SessionFileInputRoute::Unclaimed => false,
         SessionFileInputRoute::Claimed => true,
         SessionFileInputRoute::Dispatch(context) => {
-            emit_input_action(state, session, &context, action);
+            emit_input_action(state, session, &context, action, source);
             true
         }
     }
@@ -251,6 +260,7 @@ fn emit_input_action(
     session: &Session,
     context: &FileInputContext,
     action: &str,
+    source: &'static str,
 ) {
     emit(
         state,
@@ -262,7 +272,7 @@ fn emit_input_action(
             "instance_id":context.instance_id,
             "operation":context.action,
             "action":if action == "enter" { "enter" } else { "escape" },
-            "source":"osc",
+            "source":source,
         }),
     );
 }

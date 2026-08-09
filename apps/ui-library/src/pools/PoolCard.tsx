@@ -302,6 +302,12 @@ function resolveWorkflow(model: PoolCardViewModel) {
 		return { kind: "record", label: model.workflow ?? "Record" } as const;
 	if (states.has("set-target"))
 		return { kind: "set", label: model.workflow ?? "Set" } as const;
+	if (states.has("copy-target"))
+		return { kind: "copy", label: model.workflow ?? "Copy" } as const;
+	if (states.has("move-target"))
+		return { kind: "move", label: model.workflow ?? "Move" } as const;
+	if (states.has("delete-target"))
+		return { kind: "delete", label: model.workflow ?? "Delete" } as const;
 	if (model.workflow != null)
 		return { kind: "custom", label: model.workflow } as const;
 	return null;

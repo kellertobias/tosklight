@@ -249,6 +249,42 @@ fn preload_go_restamps_every_programmer_value_and_release_is_idempotent() {
 }
 
 #[test]
+fn preload_go_captures_one_trigger_time_programmer_fade_for_all_static_values() {
+    let entered_at = chrono::DateTime::parse_from_rfc3339("2026-07-16T12:00:00Z")
+        .unwrap()
+        .with_timezone(&Utc);
+    let registry = ProgrammerRegistry::with_clock(Arc::new(ManualClock::new(entered_at)));
+    let session = SessionId::new();
+    let fixture = FixtureId::new();
+    registry.start(session, UserId::new());
+    assert!(registry.arm_preload(session, true));
+    registry.set(
+        session,
+        fixture,
+        AttributeKey::intensity(),
+        AttributeValue::Normalized(0.5),
+    );
+    assert!(registry.set_group_faded_with_timing(
+        session,
+        "back".into(),
+        AttributeKey::intensity(),
+        AttributeValue::Normalized(0.7),
+        Some(1_000),
+        None,
+    ));
+
+    let committed_at = entered_at + chrono::Duration::seconds(2);
+    assert!(registry.activate_preload_at_with_fade(session, committed_at, 4_000));
+    let active = registry.get(session).unwrap();
+    assert!(active.preload_active[0].fade);
+    assert_eq!(active.preload_active[0].fade_millis, Some(4_000));
+    let group = &active.preload_group_active["back"][&AttributeKey::intensity()];
+    assert!(group.fade);
+    assert_eq!(group.fade_millis, Some(4_000));
+    assert_eq!(group.changed_at, committed_at);
+}
+
+#[test]
 fn disabled_programmer_domain_stays_live_and_playback_verbs_retain_order() {
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();

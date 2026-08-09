@@ -11,6 +11,7 @@ import type { SetupWindowController } from "./controller";
 import {
 	HighlightLookSettings,
 	PatchHighlightSettings,
+	PlaybackDefaultsSettings,
 } from "./ProgrammerSection";
 
 afterEach(cleanup);
@@ -163,5 +164,35 @@ describe("Desk Setup Highlight patch", () => {
 		).toBeChecked();
 		expect(screen.getByText("Stage only")).toBeInTheDocument();
 		expect(screen.getByText("Stage and DMX")).toBeInTheDocument();
+	});
+});
+
+describe("Desk Setup Cuelist playback defaults", () => {
+	it("shows the literal independent defaults and edits only the selected setting", () => {
+		const draft = {
+			frame_rate_hz: 44,
+			cuelist_auto_off_at_zero_default: false,
+			cuelist_auto_off_flash_release_default: true,
+			start_after_first_recording: false,
+		} as DeskConfiguration;
+		const editDraft = vi.fn();
+		render(
+			<PlaybackDefaultsSettings
+				controller={{ draft, editDraft } as unknown as SetupWindowController}
+			/>,
+		);
+
+		expect(screen.getByText("Cuelist playback defaults")).toBeInTheDocument();
+		expect(screen.getByLabelText("When fader reaches zero")).not.toBeChecked();
+		expect(screen.getByLabelText("When Flash is released")).toBeChecked();
+		expect(
+			screen.getByLabelText("Start after first recording"),
+		).not.toBeChecked();
+
+		fireEvent.click(screen.getByLabelText("When fader reaches zero"));
+		expect(editDraft).toHaveBeenCalledWith({
+			...draft,
+			cuelist_auto_off_at_zero_default: true,
+		});
 	});
 });

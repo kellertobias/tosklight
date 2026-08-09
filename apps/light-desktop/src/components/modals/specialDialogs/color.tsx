@@ -40,6 +40,90 @@ interface ColorDialogController {
 	startColor: (event: PointerEvent<HTMLDivElement>) => void;
 }
 
+async function applyColorRange(
+	selectedFixtureIds: readonly string[],
+	valueWrites: ProgrammerValuesMutationQueueController,
+	programmerFadeMillis: number | undefined,
+	start: PickerColor,
+	end: PickerColor,
+	hueTravel: number,
+	mode: "latest" | "barrier",
+) {
+	if (!selectedFixtureIds.length) return;
+	const mutations = [
+		colorRangeMutation(
+			selectedFixtureIds,
+			start,
+			end,
+			hueTravel,
+			end.brightness,
+			programmerFadeMillis,
+		),
+	];
+	if (mode === "barrier") await valueWrites.submitBarrier(mutations);
+	else
+		await valueWrites.submitLatest(
+			programmerValuesMutationKey(mutations),
+			mutations,
+		);
+}
+
+function submitAuxiliaryColor(
+	fixtureIds: readonly string[],
+	attribute: "color.tint" | "media.grayscale",
+	value: number,
+	programmerFadeMillis: number | undefined,
+	valueWrites: ProgrammerValuesMutationQueueController,
+) {
+	const mutations = normalizedFixtureMutations(
+		fixtureIds.map((fixtureId) => ({ fixtureId, attribute, value })),
+		programmerFadeMillis,
+	);
+	void valueWrites.submitBarrier(mutations);
+}
+
+function useAuxiliaryColorControls(
+	valueWrites: ProgrammerValuesMutationQueueController,
+	tintFixtureIds: readonly string[],
+	grayscaleFixtureIds: readonly string[],
+	programmerFadeMillis: number | undefined,
+) {
+	const [tint, setTint] = useState(0.5);
+	const [grayscale, setGrayscale] = useState(0);
+	const change = (
+		current: number,
+		delta: number,
+		fixtureIds: readonly string[],
+		attribute: "color.tint" | "media.grayscale",
+		setValue: (value: number) => void,
+	) => {
+		if (!valueWrites.canWrite || !fixtureIds.length) return;
+		const value = Math.max(0, Math.min(1, current + delta));
+		setValue(value);
+		submitAuxiliaryColor(
+			fixtureIds,
+			attribute,
+			value,
+			programmerFadeMillis,
+			valueWrites,
+		);
+	};
+	return {
+		tint,
+		grayscale,
+		changeTint: (delta: number) =>
+			change(tint, delta, tintFixtureIds, "color.tint", setTint),
+		changeGrayscale: (delta: number) =>
+			change(
+				grayscale,
+				delta,
+				grayscaleFixtureIds,
+				"media.grayscale",
+				setGrayscale,
+			),
+	};
+}
+
 export function useColorDialog(
 	selectedFixtureIds: readonly string[],
 	shiftArmed: boolean,
@@ -51,8 +135,13 @@ export function useColorDialog(
 	const [hue, setHue] = useState(0.52);
 	const [saturation, setSaturation] = useState(0.8);
 	const [brightness, setBrightness] = useState(0.85);
-	const [tint, setTint] = useState(0.5);
-	const [grayscale, setGrayscale] = useState(0);
+	const { tint, grayscale, changeTint, changeGrayscale } =
+		useAuxiliaryColorControls(
+			valueWrites,
+			tintFixtureIds,
+			grayscaleFixtureIds,
+			programmerFadeMillis,
+		);
 	const [colorRangePreview, setColorRangePreview] =
 		useState<ColorRangePreview | null>(null);
 	const colorSheet = useRef<HTMLDivElement>(null);
@@ -63,33 +152,6 @@ export function useColorDialog(
 		hueTravel: number;
 		lastHue: number;
 	} | null>(null);
-
-	// The server interpolates the range and resolves each fixture's RGB/CMY channels; the
-	// dialog only ships the gesture (endpoints, winding, brightness).
-	const applyColorRange = async (
-		start: PickerColor,
-		end: PickerColor,
-		hueTravel: number,
-		mode: "latest" | "barrier",
-	) => {
-		if (!selectedFixtureIds.length) return;
-		const mutations = [
-			colorRangeMutation(
-				selectedFixtureIds,
-				start,
-				end,
-				hueTravel,
-				end.brightness,
-				programmerFadeMillis,
-			),
-		];
-		if (mode === "barrier") await valueWrites.submitBarrier(mutations);
-		else
-			await valueWrites.submitLatest(
-				programmerValuesMutationKey(mutations),
-				mutations,
-			);
-	};
 
 	const pickerColor = (event: PointerEvent<HTMLDivElement>): PickerColor => {
 		const next = normalizedPointerPosition(event, colorSheet);
@@ -108,7 +170,15 @@ export function useColorDialog(
 			setColorRangePreview({ start: gesture.start, end: next, active: true });
 			return;
 		}
-		void applyColorRange(next, next, 0, "latest");
+		void applyColorRange(
+			selectedFixtureIds,
+			valueWrites,
+			programmerFadeMillis,
+			next,
+			next,
+			0,
+			"latest",
+		);
 	};
 
 	const startColor = (event: PointerEvent<HTMLDivElement>) => {
@@ -140,7 +210,15 @@ export function useColorDialog(
 		setColorRangePreview({ start: gesture.start, end, active: false });
 		if (!valueWrites.canWrite) return;
 		const hueTravel = gesture.hueTravel + (end.hue - gesture.lastHue);
-		void applyColorRange(gesture.start, end, hueTravel, "barrier");
+		void applyColorRange(
+			selectedFixtureIds,
+			valueWrites,
+			programmerFadeMillis,
+			gesture.start,
+			end,
+			hueTravel,
+			"barrier",
+		);
 	};
 
 	const cancelColor = (event: PointerEvent<HTMLDivElement>) => {
@@ -154,37 +232,16 @@ export function useColorDialog(
 		const value = Math.max(0, Math.min(1, brightness + delta));
 		setBrightness(value);
 		const color = { hue, saturation, brightness: value };
-		void applyColorRange(color, color, 0, "barrier");
-	};
-	const changeTint = (delta: number) => {
-		if (!valueWrites.canWrite || !tintFixtureIds.length) return;
-		const value = Math.max(0, Math.min(1, tint + delta));
-		setTint(value);
-		const mutations = normalizedFixtureMutations(
-			tintFixtureIds.map((fixtureId) => ({
-				fixtureId,
-				attribute: "color.tint",
-				value,
-			})),
+		void applyColorRange(
+			selectedFixtureIds,
+			valueWrites,
 			programmerFadeMillis,
+			color,
+			color,
+			0,
+			"barrier",
 		);
-		void valueWrites.submitBarrier(mutations);
 	};
-	const changeGrayscale = (delta: number) => {
-		if (!valueWrites.canWrite || !grayscaleFixtureIds.length) return;
-		const value = Math.max(0, Math.min(1, grayscale + delta));
-		setGrayscale(value);
-		const mutations = normalizedFixtureMutations(
-			grayscaleFixtureIds.map((fixtureId) => ({
-				fixtureId,
-				attribute: "media.grayscale",
-				value,
-			})),
-			programmerFadeMillis,
-		);
-		void valueWrites.submitBarrier(mutations);
-	};
-
 	const color = hsvToRgb({ hue, saturation, brightness });
 	const swatch = `rgb(${color.map((channel) => Math.round(channel * 255)).join(",")})`;
 	return {

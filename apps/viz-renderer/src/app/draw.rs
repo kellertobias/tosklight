@@ -214,7 +214,7 @@ fn status_model<'a>(
     }
 }
 
-/// Everything drawn over the picture: the splash when there is none, the plan's labels, the
+/// Everything drawn over the picture: the splash when there is none, fixture labels, the
 /// status surface, and Quick Settings.
 #[allow(clippy::too_many_arguments)]
 fn build_overlay(
@@ -238,24 +238,21 @@ fn build_overlay(
             ui::build_splash(overlay, &splash, width, height);
         }
     } else if !overlays_hidden {
-        // Fixture numbers and addresses belong on the plan, beside the symbol.
-        if view.mode.is_plot() {
-            let camera = ResolvedCamera::resolve(
-                &view.camera,
-                view.mode,
-                width / height.max(1.0),
-                session.scene.bounds,
-            );
-            ui::build_plot_labels(
-                overlay,
-                &session.scene,
-                values,
-                &camera,
-                view,
-                width,
-                height,
-            );
-        }
+        let camera = ResolvedCamera::resolve(
+            &view.camera,
+            view.mode,
+            width / height.max(1.0),
+            session.scene.bounds,
+        );
+        ui::build_fixture_labels(
+            overlay,
+            &session.scene,
+            values,
+            &camera,
+            view,
+            width,
+            height,
+        );
         *hotspots = ui::build_status(overlay, model, width, height);
         ui::build_quick_settings(overlay, quick_settings, preferences, model, width, height);
     }

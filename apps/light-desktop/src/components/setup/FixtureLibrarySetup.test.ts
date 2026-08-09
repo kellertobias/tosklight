@@ -35,11 +35,13 @@ describe("fixture library editor", () => {
       <DMXChannel Offset="6" Geometry="Cell 1"><LogicalChannel Attribute="ColorAdd_R"><ChannelFunction /></LogicalChannel></DMXChannel>
       <DMXChannel Offset="7" Geometry="Cell 1"><LogicalChannel Attribute="ColorAdd_G"><ChannelFunction /></LogicalChannel></DMXChannel>
       <DMXChannel Offset="8" Geometry="Cell 1"><LogicalChannel Attribute="ColorAdd_B"><ChannelFunction /></LogicalChannel></DMXChannel>
+      <DMXChannel Offset="9" Geometry="Cell 1"><LogicalChannel Attribute="ColorSub_M"><ChannelFunction /></LogicalChannel></DMXChannel>
+      <DMXChannel Offset="10" Geometry="Cell 1"><LogicalChannel Attribute="ColorSub_Y"><ChannelFunction /></LogicalChannel></DMXChannel>
     </DMXChannels></DMXMode></DMXModes></FixtureType></GDTF>`);
     zip.file("models/orbit.glb", new Uint8Array([1, 2, 3]));
     const definitions = await importGdtfData(await zip.generateAsync({ type: "uint8array" }), "orbit.gdtf");
     expect(definitions).toHaveLength(1);
-    expect(definitions[0]).toMatchObject({ manufacturer: "Acme", model: "Orbit", mode: "Extended", footprint: 8, device_type: "wash mover", physical: { pan_range_degrees: 540 } });
+    expect(definitions[0]).toMatchObject({ manufacturer: "Acme", model: "Orbit", mode: "Extended", footprint: 10, device_type: "wash mover", physical: { pan_range_degrees: 540 } });
     expect(definitions[0].heads.map((head) => head.name)).toEqual(["Master", "Cell 1"]);
     expect(definitions[0].heads[0].parameters[0].default).toBeCloseTo(.5, 3);
     expect(definitions[0].heads[1].parameters[0].capabilities[1]).toMatchObject({ name: "Dots", dmx_from: 32, dmx_to: 63, preset_family: "gobo" });
@@ -55,17 +57,16 @@ describe("fixture library editor", () => {
     );
     expect(bySource.get("GDTF:Pan")?.attribute).toBe("pan");
     expect(bySource.get("GDTF:Gobo1")?.attribute).toBe("gobo1");
-    const cyan = bySource.get("GDTF:ColorSub_C");
-    expect(cyan?.attribute).toBe("color.red");
-    expect(cyan?.canonical_transform).toBe("invert_normalized");
-    // FIXME: this channel's `highlight_raw` is 255 and was 0 before subtractive channels were
-    // canonicalised, and the additive assertion below fails for the same reason. Traced to
-    // `semanticHighlightDefaultsForMode`, which overwrites every channel's highlight after
-    // `channelsFromDefinition` has set it — patching the latter has no effect. It judges a
-    // canonicalised subtractive channel as the additive one it is now named after (`color.cyan`
-    // is `color.red` carrying `invert_normalized`) and puts it at full, so Highlight would take
-    // the red out of a CMY fixture. The channel's own `invert` is false here, so the transform is
-    // the only inversion in play. Left unasserted rather than pinned to the current value.
+    for (const [source, attribute] of [
+      ["GDTF:ColorSub_C", "color.red"],
+      ["GDTF:ColorSub_M", "color.green"],
+      ["GDTF:ColorSub_Y", "color.blue"],
+    ] as const) {
+      const subtractive = bySource.get(source);
+      expect(subtractive?.attribute).toBe(attribute);
+      expect(subtractive?.canonical_transform).toBe("invert_normalized");
+      expect(subtractive?.highlight_raw).toBe(0);
+    }
     expect(bySource.get("GDTF:Color1")?.highlight_raw).toBe(7);
     const highlights = Object.fromEntries(
       profile.modes[0].channels.map((channel) => [
@@ -78,9 +79,33 @@ describe("fixture library editor", () => {
       highlights["GDTF:ColorAdd_G"],
       highlights["GDTF:ColorAdd_B"],
     ];
+    const additiveOnlyDefinition = structuredClone(definitions[0]);
+    for (const head of additiveOnlyDefinition.heads)
+      head.parameters = head.parameters.filter(
+        (parameter) => !parameter.source_attribute?.startsWith("GDTF:ColorSub_"),
+      );
+    const additiveOnly = fixtureProfileFromDefinition(additiveOnlyDefinition);
+    const additiveOnlyBySource = new Map(
+      additiveOnly.modes[0].channels.map((channel) => [
+        channel.fixture_attribute,
+        channel.highlight_raw,
+      ]),
+    );
+    expect(additive).toEqual([
+      additiveOnlyBySource.get("GDTF:ColorAdd_R"),
+      additiveOnlyBySource.get("GDTF:ColorAdd_G"),
+      additiveOnlyBySource.get("GDTF:ColorAdd_B"),
+    ]);
     expect(additive.every((raw) => raw > 0)).toBe(true);
     expect(additive).not.toEqual([255, 255, 255]);
-    expect(profile.modes[0].color_systems[0].system).toMatchObject({ type: "additive", emitters: [{ name: "Red" }, { name: "Green" }, { name: "Blue" }] });
+    const system = profile.modes[0].color_systems[0].system;
+    expect(system).toMatchObject({ type: "additive", emitters: [{ name: "Red" }, { name: "Green" }, { name: "Blue" }] });
+    if (system.type !== "additive") throw new Error("expected additive color system");
+    expect(system.emitters.map((emitter) => emitter.channel_id)).toEqual([
+      bySource.get("GDTF:ColorAdd_R")?.id,
+      bySource.get("GDTF:ColorAdd_G")?.id,
+      bySource.get("GDTF:ColorAdd_B")?.id,
+    ]);
   });
 
   it("imports native GDTF hue and saturation as one whole-color system", async () => {

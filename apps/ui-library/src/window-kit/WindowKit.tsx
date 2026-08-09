@@ -294,6 +294,7 @@ export function WindowSettings({
 type WindowFrameProps = {
 	title: ReactNode;
 	info?: WindowInfo;
+	toolbar?: ReactNode;
 	actions?: WindowAction[][];
 	settingsTabs?: WindowSettingsTab[];
 	settingsTitle?: string;
@@ -307,6 +308,7 @@ type WindowFrameProps = {
 export function WindowFrame({
 	title,
 	info,
+	toolbar,
 	actions,
 	settingsTabs = [],
 	settingsTitle = "Settings",
@@ -333,6 +335,7 @@ export function WindowFrame({
 				<WindowHeader
 					title={title}
 					info={info}
+					toolbar={toolbar}
 					{...searchFeature}
 					actions={actions}
 					settings={settingsTabs.length > 0}

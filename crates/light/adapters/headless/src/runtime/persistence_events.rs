@@ -165,6 +165,7 @@ pub(super) fn serialize_active_playbacks(
             }),
             activation: source.activation.as_ref(),
             transition_ordinal: source.transition_ordinal,
+            fader_zero_auto_off_armed: source.fader_zero_auto_off_armed,
         })
         .collect::<Vec<_>>();
     let serialized =
@@ -194,10 +195,40 @@ struct PersistedActivePlayback<'a> {
     activation: Option<&'a light_playback::PlaybackActivationProvenance>,
     #[serde(skip_serializing_if = "is_zero")]
     transition_ordinal: u64,
+    #[serde(skip_serializing_if = "is_false")]
+    fader_zero_auto_off_armed: bool,
 }
 
 const fn is_zero(value: &u64) -> bool {
     *value == 0
+}
+const fn is_false(value: &bool) -> bool {
+    !*value
+}
+
+#[cfg(test)]
+mod auto_off_persistence_tests {
+    use super::*;
+
+    #[test]
+    fn fader_zero_restart_origin_survives_the_private_runtime_sidecar() {
+        let mut runtime: light_playback::ActivePlayback =
+            serde_json::from_value(serde_json::json!({
+                "cue_list_id": light_core::CueListId::new(),
+                "cue_index": 0,
+                "previous_index": null,
+                "paused": false,
+                "activated_at": chrono::Utc::now(),
+                "paused_at": null
+            }))
+            .unwrap();
+        runtime.fader_zero_auto_off_armed = true;
+
+        let serialized = serialize_active_playbacks(&[runtime]).unwrap();
+        let restored: Vec<light_playback::ActivePlayback> =
+            serde_json::from_str(&serialized).unwrap();
+        assert!(restored[0].fader_zero_auto_off_armed);
+    }
 }
 pub(super) fn emit(state: &AppState, kind: &str, payload: serde_json::Value) -> u64 {
     let revision = state.events.record_audit(kind, payload.clone());

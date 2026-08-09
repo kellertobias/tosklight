@@ -92,6 +92,7 @@ const fn may_change_unprojected_runtime(action: PoolPlaybackAction) -> bool {
         PoolPlaybackAction::On
             | PoolPlaybackAction::Load(_)
             | PoolPlaybackAction::SetMaster(_)
+            | PoolPlaybackAction::SetConfiguredFader { .. }
             | PoolPlaybackAction::SetVirtualMaster(_)
             | PoolPlaybackAction::XFade(_)
     )
@@ -140,7 +141,10 @@ pub(super) fn apply_playback_master(
             execute_pool_with_exclusions(
                 state,
                 definition.number,
-                PoolPlaybackAction::SetMaster(value),
+                PoolPlaybackAction::SetConfiguredFader {
+                    mode: definition.fader,
+                    value,
+                },
                 exclusion_zones,
                 activation_origin,
             )

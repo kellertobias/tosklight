@@ -293,12 +293,12 @@ function CommandLineTimingSettings({
 	return (
 		<article>
 			<header>
-				<b>Command line timing</b>
+				<b>Direct value timing</b>
 				<small>Explicit TIME always remains authoritative.</small>
 			</header>
 			<FormLayout labelPlacement="side">
 				<SwitchField
-					label="AT uses Programmer Fade"
+					label="Direct entry uses Programmer Fade"
 					offLabel="Immediate"
 					onLabel="Programmer Fade"
 					checked={draft.command_line_at_uses_programmer_fade ?? true}
@@ -365,10 +365,69 @@ export function DefaultsSection({
 					onChange={controller.setUpdateSettings}
 				/>
 			</article>
+			<PlaybackDefaultsSettings controller={controller} />
 			<article>
 				<PoolPaletteSettings />
 			</article>
 		</PreferencesPage>
+	);
+}
+
+export function PlaybackDefaultsSettings({
+	controller,
+}: {
+	controller: SetupWindowController;
+}) {
+	const { draft } = controller;
+	if (!draft) return null;
+	return (
+		<article>
+			<header>
+				<b>Cuelist playback defaults</b>
+				<small>
+					Applied when a new Cuelist playback is created. Existing Cuelists keep
+					their saved behavior.
+				</small>
+			</header>
+			<FormLayout labelPlacement="side">
+				<SwitchField
+					label="When fader reaches zero"
+					offLabel="Keep running"
+					onLabel="Turn Off"
+					checked={draft.cuelist_auto_off_at_zero_default}
+					onChange={(event) =>
+						controller.editDraft({
+							...draft,
+							cuelist_auto_off_at_zero_default: event.target.checked,
+						})
+					}
+				/>
+				<SwitchField
+					label="When Flash is released"
+					offLabel="Keep running"
+					onLabel="Turn Off"
+					checked={draft.cuelist_auto_off_flash_release_default}
+					onChange={(event) =>
+						controller.editDraft({
+							...draft,
+							cuelist_auto_off_flash_release_default: event.target.checked,
+						})
+					}
+				/>
+				<SwitchField
+					label="Start after first recording"
+					offLabel="Leave Off"
+					onLabel="Start at 100%"
+					checked={draft.start_after_first_recording}
+					onChange={(event) =>
+						controller.editDraft({
+							...draft,
+							start_after_first_recording: event.target.checked,
+						})
+					}
+				/>
+			</FormLayout>
+		</article>
 	);
 }
 

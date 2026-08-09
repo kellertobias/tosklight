@@ -208,7 +208,7 @@ describe("VirtualPlaybackGridView", () => {
 				screen.getByRole("button", { name: new RegExp(name, "i") }),
 			);
 
-		expect(callbacks.onConfigure).toHaveBeenCalledWith(1, 0);
+		expect(callbacks.onConfigure).toHaveBeenCalledWith(1, 0, "touch");
 		expect(callbacks.onAssign).toHaveBeenCalledWith(2, 1);
 		expect(callbacks.onUpdate).toHaveBeenCalledWith(3, 2);
 		expect(callbacks.onZoneSelection).toHaveBeenCalledWith(4, 3);
@@ -228,22 +228,46 @@ describe("VirtualPlaybackGridView", () => {
 		);
 		expect(
 			document.querySelector('[data-grid-position="0"] .pool-card-workflow'),
-		).toHaveTextContent("Configure Playback");
+		).toHaveTextContent("Set");
 		expect(
 			document.querySelector('[data-grid-position="1"] .pool-card-workflow'),
-		).toHaveTextContent("Record");
+		).toHaveTextContent("Set");
 		expect(
 			document.querySelector('[data-grid-position="2"] .pool-card-workflow'),
 		).toHaveTextContent("Update");
 	});
 
+	it("does not outline an unavailable Set target", () => {
+		renderGrid({
+			boxes: [
+				{
+					slot: 1,
+					position: 0,
+					availability: "unavailable",
+					configurationTarget: true,
+				},
+			],
+		});
+		const box = document.querySelector('[data-grid-position="0"]');
+		expect(box).not.toBeNull();
+		expect(box).not.toHaveClass("configuration-armed", "set-target");
+		expect(box?.querySelector(".pool-card-workflow")).toBeNull();
+	});
+
 	it("opens playback configuration from the context menu", () => {
 		const onConfigure = vi.fn();
 		renderGrid({ callbacks: { onConfigure } });
+		const contextMenu = new MouseEvent("contextmenu", {
+			bubbles: true,
+			cancelable: true,
+		});
 
-		fireEvent.contextMenu(screen.getByRole("button", { name: /cell 1 Main/ }));
+		screen
+			.getByRole("button", { name: /cell 1 Main/ })
+			.dispatchEvent(contextMenu);
 
-		expect(onConfigure).toHaveBeenCalledWith(1, 0);
+		expect(contextMenu.defaultPrevented).toBe(true);
+		expect(onConfigure).toHaveBeenCalledWith(1, 0, "context_menu");
 	});
 
 	it("uses bottom-right icon or image artwork and keeps color contrast metadata", () => {

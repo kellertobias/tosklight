@@ -86,6 +86,30 @@ export function replaceHeadColorSystem(
 	];
 }
 
+function newColorSystem(
+	next: string,
+	channels: FixtureMode["channels"],
+): ColorSystem | null {
+	if (next === "none") return null;
+	const first = channels[0]?.id ?? "";
+	if (next === "additive") return { type: next, emitters: [] };
+	if (next === "subtractive")
+		return {
+			type: next,
+			cyan_channel_id: first,
+			magenta_channel_id: first,
+			yellow_channel_id: first,
+		};
+	if (next === "hue_saturation")
+		return {
+			type: next,
+			hue_channel_id: first,
+			saturation_channel_id: channels[1]?.id ?? first,
+			intensity_channel_id: null,
+		};
+	return { type: "discrete_wheel", channel_id: first, slots: [] };
+}
+
 export function ColorEditor({
 	mode,
 	onChange,
@@ -159,29 +183,7 @@ export function ColorEditor({
 									{ value: "discrete_wheel", label: "Discrete color wheel" },
 								]}
 								onChange={(next) => {
-									if (next === "none") return setSystem(head.id, null);
-									const first = channels[0]?.id ?? "";
-									if (next === "additive")
-										return setSystem(head.id, { type: next, emitters: [] });
-									if (next === "subtractive")
-										return setSystem(head.id, {
-											type: next,
-											cyan_channel_id: first,
-											magenta_channel_id: first,
-											yellow_channel_id: first,
-										});
-									if (next === "hue_saturation")
-										return setSystem(head.id, {
-											type: next,
-											hue_channel_id: first,
-											saturation_channel_id: channels[1]?.id ?? first,
-											intensity_channel_id: null,
-										});
-									setSystem(head.id, {
-										type: next,
-										channel_id: first,
-										slots: [],
-									});
+									setSystem(head.id, newColorSystem(next, channels));
 								}}
 							/>
 						</header>

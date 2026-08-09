@@ -26,6 +26,7 @@ fn frame_selection_applies_overrides_and_reuses_held_frames() {
 fn held_output_reuses_one_coherent_route_frame_and_slot_snapshot() {
     let mut control = OutputControl::default();
     let live_route = OutputRoute {
+        target: Default::default(),
         protocol: Protocol::ArtNet,
         logical_universe: 1,
         destination_universe: 1,
@@ -414,4 +415,18 @@ fn frames_with_value(universe: Universe, value: u8) -> HashMap<Universe, DmxFram
     let mut frame = [0; light_output::DMX_SLOTS];
     frame[0] = value;
     HashMap::from([(universe, frame)])
+}
+
+#[test]
+fn healthy_usb_delivery_isolated_from_total_network_failure() {
+    let outcome =
+        combined_delivery_result(std::io::Result::Err(std::io::Error::other("udp")), 1).unwrap();
+    assert_eq!(outcome, 1);
+}
+
+#[test]
+fn total_delivery_failure_remains_visible_when_usb_accepts_nothing() {
+    let error = combined_delivery_result(std::io::Result::Err(std::io::Error::other("udp")), 0)
+        .unwrap_err();
+    assert_eq!(error.to_string(), "udp");
 }

@@ -8,7 +8,11 @@ members = [
   "apps/viz-editor/src-tauri",
   "crates/light",
   "crates/light/adapters/headless",
+  "crates/light/adapters/extensions",
   "crates/light/adapters/media",
+  "crates/light/adapters/usb-dmx-core",
+  "crates/light/adapters/usb-dmx-serial",
+  "crates/light/contracts/extensions",
   "crates/light/contracts/wire",
   "crates/light/domain/control",
   "crates/light/domain/dynamics",
@@ -74,6 +78,7 @@ schemars = "1.2"
 serde = { version = "1.0", features = ["derive", "rc"] }
 serde_ignored = "0.1"
 serde_json = "1.0"
+serialport = "4.9"
 sha2 = "0.10"
 thiserror = "2.0"
 tokio = { version = "1.44", features = ["macros", "rt-multi-thread", "net", "sync", "time", "signal", "fs", "io-util"] }
@@ -83,7 +88,6 @@ tower = { version = "0.5", features = ["util"] }
 ts-rs = "12.0"
 http-body-util = "0.1"
 jiff = "0.2"
-midir = "0.11"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1.16", features = ["v4", "v5", "serde"] }
@@ -117,7 +121,7 @@ viz-render = { path = "crates/viz/render" }
 viz-snapshot = { path = "crates/viz/snapshot" }
 
 [workspace.lints.rust]
-unsafe_code = "forbid"
+unsafe_code = "deny"
 
 # The desk's development build is also the normal `npm run open` and Playwright runtime.
 # Keep assertions and debug information, but optimize the per-frame semantic/output loops so

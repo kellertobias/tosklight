@@ -187,8 +187,7 @@ export function DynamicsWindow({
 			updateArmed={appState.updateArmed}
 			storeArmed={appState.storeArmed}
 			setArmed={
-				appState.playbackSetArmed ||
-				/^SET\\s*$/i.test(command.read().text.trim())
+				appState.playbackSetArmed || /^SET$/i.test(command.read().text.trim())
 			}
 			onClearShift={() => dispatch({ type: "SET_SHIFT_ARMED", value: false })}
 		/>
@@ -293,18 +292,7 @@ function useDynamicsMutations({
 	return { toggle, create, mutate };
 }
 
-function ConnectedDynamicEditor({
-	selected,
-	showId,
-	api,
-	soundToLight,
-	run,
-	onBack,
-	onDeleted,
-	onCopied,
-	onMutate,
-	...view
-}: Omit<
+type ConnectedDynamicEditorProps = Omit<
 	DynamicEditorProps,
 	"dynamic" | "onBack" | "onDelete" | "onMove" | "onCopy" | "onSpeedGroupTap"
 > & {
@@ -316,7 +304,13 @@ function ConnectedDynamicEditor({
 	onBack(): void;
 	onDeleted(): void;
 	onCopied(id: string): void;
-}) {
+};
+
+function useDynamicSpatialCallbacks({
+	selected,
+	showId,
+	api,
+}: Pick<ConnectedDynamicEditorProps, "selected" | "showId" | "api">) {
 	const showObjectsStore = useShowObjectsStore();
 	const showRevision = useSyncExternalStore(
 		showObjectsStore.subscribe,
@@ -404,6 +398,27 @@ function ConnectedDynamicEditor({
 		},
 		[api.showObjects, selected.id, selected.revision, showId, showObjectsStore],
 	);
+	return { loadSpatialPreview, applySpatialMapping };
+}
+
+function ConnectedDynamicEditor({
+	selected,
+	showId,
+	api,
+	soundToLight,
+	run,
+	onBack,
+	onDeleted,
+	onCopied,
+	onMutate,
+	...view
+}: ConnectedDynamicEditorProps) {
+	const { loadSpatialPreview, applySpatialMapping } =
+		useDynamicSpatialCallbacks({
+			selected,
+			showId,
+			api,
+		});
 	return (
 		<DynamicEditor
 			{...view}
@@ -589,7 +604,13 @@ function DynamicPoolTile({
 				iconColor: dynamic?.body.color ?? "#4edcff",
 				color: dynamic?.body.color ?? "#4edcff",
 				kind: "generic",
-				states: [...(!dynamic ? (["empty"] as const) : [])],
+				states: [
+					...(!dynamic ? (["empty"] as const) : []),
+					...(dynamic && actions.setArmed ? (["set-target"] as const) : []),
+					...(dynamic && actions.deleteArmed
+						? (["delete-target"] as const)
+						: []),
+				],
 			}}
 			onClick={(event) => {
 				if (actions.deleteArmed) {
@@ -612,7 +633,7 @@ function DynamicPoolTile({
 			}}
 			onContextMenu={(event) => {
 				event.preventDefault();
-				open();
+				if (dynamic) actions.onSet(poolNumber);
 			}}
 			onPressHold={open}
 		/>

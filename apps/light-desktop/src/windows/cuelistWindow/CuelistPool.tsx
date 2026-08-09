@@ -64,6 +64,7 @@ interface PoolSlotProps {
 	onPointerDown: () => void;
 	onPointerEnd: () => void;
 	onClick: () => void;
+	onContextMenu: () => void;
 	presentation: ResolvedPoolPresentation;
 }
 
@@ -115,7 +116,10 @@ function CuelistPoolSlot(props: PoolSlotProps) {
 			onPointerDown={props.onPointerDown}
 			onPointerUp={props.onPointerEnd}
 			onPointerCancel={props.onPointerEnd}
-			onContextMenu={(event) => event.preventDefault()}
+			onContextMenu={(event) => {
+				event.preventDefault();
+				props.onContextMenu();
+			}}
 			onClick={props.onClick}
 		/>
 	);
@@ -141,6 +145,20 @@ function useCuelistPoolActions(props: CuelistPoolProps) {
 			held.current = true;
 			props.onOpenSettings(number);
 		}, 650);
+	};
+	const selectSetSource = (
+		number: number,
+		playback: PlaybackDefinition | null,
+	) => {
+		if (!playback) {
+			props.onMessage(
+				`Cuelist ${number} is empty · record it before assigning it to a playback.`,
+			);
+			return;
+		}
+		if (!props.builtIn) props.onSelectLocalCuelist(number);
+		dispatch({ type: "SET_CUELIST_SET_TARGET", value: number });
+		dispatch({ type: "SET_PRESET_SET_ARMED", value: false });
 	};
 	const click = (number: number, playback: PlaybackDefinition | null) => {
 		if (held.current) {
@@ -174,22 +192,14 @@ function useCuelistPoolActions(props: CuelistPoolProps) {
 			return;
 		}
 		if (state.cueListSetArmed) {
-			if (!playback) {
-				props.onMessage(
-					`Cuelist ${number} is empty · record it before assigning it to a playback.`,
-				);
-				return;
-			}
-			if (!props.builtIn) props.onSelectLocalCuelist(number);
-			dispatch({ type: "SET_CUELIST_SET_TARGET", value: number });
-			dispatch({ type: "SET_PRESET_SET_ARMED", value: false });
+			selectSetSource(number, playback);
 			return;
 		}
 		if (!playback) return;
 		props.onMessage("");
 		props.onOpenCuelist(number);
 	};
-	return { state, clearHold, startHold, click };
+	return { state, clearHold, startHold, click, selectSetSource };
 }
 
 function usePoolSlots(
@@ -249,6 +259,7 @@ function resolveCuelistPresentation({
 	storeArmed,
 	updateArmed,
 	setTarget,
+	setArmed,
 }: {
 	slot: CuelistPoolItem;
 	configuration: PoolPresentationConfiguration;
@@ -258,6 +269,7 @@ function resolveCuelistPresentation({
 	storeArmed: boolean;
 	updateArmed: boolean;
 	setTarget: boolean;
+	setArmed: boolean;
 }) {
 	const itemId =
 		slot.playback?.target.type === "cue_list"
@@ -278,7 +290,9 @@ function resolveCuelistPresentation({
 			...(storeArmed ? (["record-target"] as const) : []),
 			...(storeArmed ? (["store-target"] as const) : []),
 			...(updateArmed ? (["update-target"] as const) : []),
-			...(setTarget ? (["set-target"] as const) : []),
+			...(slot.playback && (setArmed || setTarget)
+				? (["set-target"] as const)
+				: []),
 		],
 	});
 }
@@ -293,9 +307,11 @@ function CuelistPoolCards({
 	storeArmed,
 	updateArmed,
 	setTarget,
+	setArmed,
 	startHold,
 	clearHold,
 	click,
+	selectSetSource,
 }: {
 	slots: readonly CuelistPoolItem[];
 	search: string;
@@ -306,9 +322,14 @@ function CuelistPoolCards({
 	storeArmed: boolean;
 	updateArmed: boolean;
 	setTarget: number | null;
+	setArmed: boolean;
 	startHold: (number: number, playback: PlaybackDefinition | null) => void;
 	clearHold: () => void;
 	click: (number: number, playback: PlaybackDefinition | null) => void;
+	selectSetSource: (
+		number: number,
+		playback: PlaybackDefinition | null,
+	) => void;
 }) {
 	const poolSlots = poolSlotViewModels(slots);
 	const renderSlot = (slot: CuelistPoolItem, poolPosition: number) => {
@@ -322,6 +343,7 @@ function CuelistPoolCards({
 			storeArmed,
 			updateArmed,
 			setTarget: isSetTarget,
+			setArmed,
 		});
 		return (
 			<CuelistPoolSlot
@@ -335,6 +357,7 @@ function CuelistPoolCards({
 				onPointerDown={() => startHold(slot.number, slot.playback)}
 				onPointerEnd={clearHold}
 				onClick={() => click(slot.number, slot.playback)}
+				onContextMenu={() => selectSetSource(slot.number, slot.playback)}
 				presentation={presentation}
 			/>
 		);
@@ -434,7 +457,8 @@ function CuelistPoolSettings({
 }
 
 export function CuelistPool(props: CuelistPoolProps) {
-	const { state, clearHold, startHold, click } = useCuelistPoolActions(props);
+	const { state, clearHold, startHold, click, selectSetSource } =
+		useCuelistPoolActions(props);
 	const [search, setSearch] = useState("");
 	const [colorSettingsAnchor, setColorSettingsAnchor] =
 		useState<DOMRect | null>(null);
@@ -456,9 +480,11 @@ export function CuelistPool(props: CuelistPoolProps) {
 	const workflowMessage =
 		state.cueListSetTarget != null
 			? `Cuelist ${state.cueListSetTarget} selected · touch a playback fader to assign it.`
+			: props.message
+				? props.message
 			: state.cueListSetArmed
 				? "Select a Cuelist, then touch the playback fader where it should be assigned."
-				: props.message;
+				: "";
 	return (
 		<div className="cuelist-window cuelist-pool-window pool-window">
 			{!props.compact && (
@@ -483,9 +509,11 @@ export function CuelistPool(props: CuelistPoolProps) {
 				storeArmed={state.storeArmed}
 				updateArmed={state.updateArmed}
 				setTarget={state.cueListSetTarget}
+				setArmed={state.cueListSetArmed}
 				startHold={startHold}
 				clearHold={clearHold}
 				click={click}
+				selectSetSource={selectSetSource}
 			/>
 			{props.settings}
 			{colorSettingsAnchor && (

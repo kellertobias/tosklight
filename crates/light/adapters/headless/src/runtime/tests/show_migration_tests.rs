@@ -85,6 +85,75 @@ fn legacy_multipatch_without_appearance(id: Uuid, name: &str) -> serde_json::Val
 }
 
 #[test]
+fn startup_backs_up_reports_and_removes_legacy_midi_mappings_once() {
+    let data_dir =
+        std::env::temp_dir().join(format!("light-midi-show-startup-{}", Uuid::new_v4()));
+    let path = data_dir.join("shows/legacy-midi.show");
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let show_id = default_show::initialise(&path).unwrap();
+    let store = ShowStore::open(&path).unwrap();
+    let midi = serde_json::json!({
+        "name": "Legacy MIDI Go",
+        "enabled": true,
+        "trigger": {"type": "midi", "status": 144, "data1": 7},
+        "action": {"type": "cue_go", "cue_list_id": Uuid::nil()},
+        "future": {"preserve": true}
+    });
+    let osc = serde_json::json!({
+        "name": "OSC Go",
+        "enabled": true,
+        "trigger": {"type": "osc", "address": "/go"},
+        "action": {"type": "cue_go", "cue_list_id": Uuid::nil()},
+        "future": {"preserve": true}
+    });
+    store.put_object("control_mapping", "midi-go", &midi, 0).unwrap();
+    store.put_object("control_mapping", "osc-go", &osc, 0).unwrap();
+    let source_revision = store.portable_revision().unwrap();
+    drop(store);
+    let entry = migration_test_entry(&path, show_id, "Legacy MIDI mappings");
+
+    let engine = Engine::new(ProgrammerRegistry::default());
+    assert_eq!(
+        compile_active_show_for_startup(&engine, &entry, &data_dir, 5),
+        None
+    );
+    let migrated = ShowStore::open(&path).unwrap().portable_document().unwrap();
+    assert!(migrated.revision() > source_revision);
+    assert!(migrated.object("control_mapping", "midi-go").is_none());
+    assert_eq!(
+        migrated.object("control_mapping", "osc-go").unwrap().body(),
+        &osc
+    );
+    let report = migrated
+        .object(
+            "compatibility_report",
+            "removed-built-in-midi-control-mappings-v1",
+        )
+        .unwrap();
+    assert_eq!(report.body()["removed_mappings"][0]["original"], midi);
+    let migrated_revision = migrated.revision();
+    let backups = migration_backup_files(&data_dir);
+    assert_eq!(backups.len(), 1);
+    let backup = ShowStore::open(&backups[0]).unwrap().portable_document().unwrap();
+    assert_eq!(
+        backup.object("control_mapping", "midi-go").unwrap().body(),
+        &midi
+    );
+
+    let reopened = Engine::new(ProgrammerRegistry::default());
+    assert_eq!(
+        compile_active_show_for_startup(&reopened, &entry, &data_dir, 5),
+        None
+    );
+    assert_eq!(
+        ShowStore::open(&path).unwrap().portable_revision().unwrap(),
+        migrated_revision
+    );
+    assert_eq!(migration_backup_files(&data_dir), backups);
+    std::fs::remove_dir_all(data_dir).unwrap();
+}
+
+#[test]
 fn startup_defaults_absent_installed_appearance_without_rewriting_the_legacy_fields() {
     let data_dir =
         std::env::temp_dir().join(format!("light-appearance-startup-{}", Uuid::new_v4()));

@@ -1,7 +1,7 @@
 use crate::command_state::CommandLineState;
 use crate::history::HISTORY_LIMIT;
 use crate::selection::SelectionContext;
-use crate::{ProgrammerRegistry, ProgrammerState};
+use crate::{ProgrammerAlignmentState, ProgrammerRegistry, ProgrammerState};
 use light_core::SessionId;
 use parking_lot::{ReentrantMutex, RwLock};
 use std::collections::HashMap;
@@ -20,6 +20,7 @@ pub struct ProgrammerTransactionSnapshot {
     interaction_context: SessionId,
     selection: Option<SelectionContext>,
     command_line: Option<CommandLineState>,
+    alignment: Option<ProgrammerAlignmentState>,
 }
 
 impl ProgrammerRegistry {
@@ -185,6 +186,7 @@ impl ProgrammerRegistry {
             .unwrap_or(state.last_activity);
         let selection = self.selection_contexts.read().get(&context).cloned();
         let command = self.command_states.read().get(&context).cloned();
+        let alignment = self.alignment_contexts.read().get(&context).cloned();
         Some(ProgrammerRegistry {
             states: Arc::new(RwLock::new(HashMap::from([(state_key, state)]))),
             sessions: Arc::new(RwLock::new(HashMap::from([(session, state_key)]))),
@@ -199,7 +201,13 @@ impl ProgrammerRegistry {
                     .map(|selection| HashMap::from([(context, selection)]))
                     .unwrap_or_default(),
             )),
+            alignment_contexts: Arc::new(RwLock::new(
+                alignment
+                    .map(|alignment| HashMap::from([(context, alignment)]))
+                    .unwrap_or_default(),
+            )),
             selection_revision: Arc::clone(&self.selection_revision),
+            alignment_revision: Arc::clone(&self.alignment_revision),
             programmer_order: Arc::clone(&self.programmer_order),
             normal_values_generations: Arc::new(RwLock::new(HashMap::from([(
                 user_id,
@@ -284,6 +292,7 @@ impl ProgrammerRegistry {
             .unwrap_or(state.last_activity);
         let selection = staged.selection_contexts.read().get(&context).cloned();
         let command = staged.command_states.read().get(&context).cloned();
+        let alignment = staged.alignment_contexts.read().get(&context).cloned();
 
         // Populate every replacement before releasing any write guard. A reader that needs more
         // than one projection either sees the complete previous set or waits and sees the complete
@@ -291,6 +300,7 @@ impl ProgrammerRegistry {
         let mut states = self.states.write();
         let mut commands = self.command_states.write();
         let mut selections = self.selection_contexts.write();
+        let mut alignments = self.alignment_contexts.write();
         states.insert(live_state_key, state);
         match command {
             Some(command) => {
@@ -308,6 +318,15 @@ impl ProgrammerRegistry {
                 selections.remove(&context);
             }
         }
+        match alignment {
+            Some(alignment) => {
+                alignments.insert(context, alignment);
+            }
+            None => {
+                alignments.remove(&context);
+            }
+        }
+        drop(alignments);
         drop(selections);
         drop(commands);
         drop(states);
@@ -373,6 +392,11 @@ impl ProgrammerRegistry {
             .read()
             .get(&interaction_context)
             .cloned();
+        let alignment = self
+            .alignment_contexts
+            .read()
+            .get(&interaction_context)
+            .cloned();
         Some(ProgrammerTransactionSnapshot {
             state_key,
             state,
@@ -383,6 +407,7 @@ impl ProgrammerRegistry {
             interaction_context,
             selection,
             command_line,
+            alignment,
         })
     }
 
@@ -423,6 +448,16 @@ impl ProgrammerRegistry {
             }
             None => {
                 commands.remove(&snapshot.interaction_context);
+            }
+        }
+        drop(commands);
+        let mut alignments = self.alignment_contexts.write();
+        match snapshot.alignment {
+            Some(alignment) => {
+                alignments.insert(snapshot.interaction_context, alignment);
+            }
+            None => {
+                alignments.remove(&snapshot.interaction_context);
             }
         }
     }

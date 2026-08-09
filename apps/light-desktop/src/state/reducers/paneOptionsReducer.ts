@@ -29,103 +29,41 @@ function updateActivePane(
 	};
 }
 
-export function reducePaneOptions(state: AppState, action: Action): AppState | undefined {
+export function reducePaneOptions(
+	state: AppState,
+	action: Action,
+): AppState | undefined {
 	switch (action.type) {
 		case "SET_PANE_POOL_COLUMNS":
-			return {
-				...state,
-				desks: state.desks.map((desk) =>
-					desk.id !== state.activeDeskId
-						? desk
-						: {
-								...desk,
-								panes: desk.panes.map((pane) =>
-									pane.id === action.id
-										? {
-												...pane,
-												poolColumns: clamp(
-													Math.trunc(action.value) || 1,
-													1,
-													24,
-												),
-											}
-										: pane,
-								),
-							},
-				),
-			};
+			return updateActivePane(state, action.id, (pane) => ({
+				...pane,
+				poolColumns: clamp(Math.trunc(action.value) || 1, 1, 24),
+			}));
 		case "SET_PANE_STAGE_OPTION":
-			return {
-				...state,
-				desks: state.desks.map((desk) =>
-					desk.id !== state.activeDeskId
-						? desk
-						: {
-								...desk,
-								panes: desk.panes.map((pane) =>
-									pane.id === action.id
-										? { ...pane, [action.option]: action.value }
-										: pane,
-								),
-							},
-				),
-			};
+			return updateActivePane(state, action.id, (pane) => ({
+				...pane,
+				[action.option]: action.value,
+			}));
 		case "SET_PANE_PRESET_FAMILY":
-			return {
-				...state,
-				desks: state.desks.map((desk) =>
-					desk.id !== state.activeDeskId
-						? desk
-						: {
-								...desk,
-								panes: desk.panes.map((pane) =>
-									pane.id === action.id
-										? { ...pane, presetFamily: action.family }
-										: pane,
-								),
-							},
-				),
-			};
+			return updateActivePane(state, action.id, (pane) => ({
+				...pane,
+				presetFamily: action.family,
+			}));
 		case "SET_PANE_PRESET_COLORS":
-			return {
-				...state,
-				desks: state.desks.map((desk) =>
-					desk.id !== state.activeDeskId
-						? desk
-						: {
-								...desk,
-								panes: desk.panes.map((pane) =>
-									pane.id === action.id
-										? { ...pane, presetPoolColors: action.value }
-										: pane,
-								),
-							},
-				),
-			};
+			return updateActivePane(state, action.id, (pane) => ({
+				...pane,
+				presetPoolColors: action.value,
+			}));
 		case "SET_PANE_CHANNEL_DISPLAY_MODE":
 			return updateActivePane(state, action.id, (pane) =>
 				Object.assign({}, pane, { channelDisplayMode: action.mode }),
 			);
 		case "SET_PANE_SCHEDULER_LAYOUT":
-			return {
-				...state,
-				desks: state.desks.map((desk) =>
-					desk.id !== state.activeDeskId
-						? desk
-						: {
-								...desk,
-								panes: desk.panes.map((pane) =>
-									pane.id === action.id
-										? {
-												...pane,
-												schedulerShowList: action.showList,
-												schedulerShowCalendar: action.showCalendar,
-											}
-										: pane,
-								),
-							},
-				),
-			};
+			return updateActivePane(state, action.id, (pane) => ({
+				...pane,
+				schedulerShowList: action.showList,
+				schedulerShowCalendar: action.showCalendar,
+			}));
 		case "SET_VIRTUAL_PLAYBACK_GRID": {
 			const grid = normalizeVirtualPlaybackGrid(
 				action.rows,

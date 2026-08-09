@@ -1,6 +1,6 @@
 use super::model::{
-    HighlightAction, HighlightError, HighlightFixture, HighlightMode, HighlightSelectionWrite,
-    HighlightState,
+    HighlightAction, HighlightError, HighlightFixture, HighlightMode, HighlightOutputLayer,
+    HighlightOutputRole, HighlightSelectionWrite, HighlightState,
 };
 use super::selection::resolve_remembered;
 use super::state::{HighlightRuntime, OperatorState};
@@ -30,10 +30,11 @@ pub(super) fn apply_action(
             disable_highlight(runtime, operator, context);
         }
         HighlightAction::Toggle => enable_highlight(runtime, operator, context)?,
-        HighlightAction::Next | HighlightAction::Previous => {
+        HighlightAction::Next | HighlightAction::Previous if operator.active => {
             return Ok(Some(step_selection(operator, action, context)));
         }
-        HighlightAction::All => return Ok(restore_selection(operator, context)),
+        HighlightAction::All if operator.active => return Ok(restore_selection(operator, context)),
+        HighlightAction::Next | HighlightAction::Previous | HighlightAction::All => {}
     }
     Ok(None)
 }
@@ -57,6 +58,9 @@ fn enable_highlight(
     operator: &mut OperatorState,
     context: &ActionContext<'_>,
 ) -> Result<(), HighlightError> {
+    if !operator.active {
+        operator.explicit_attributes.clear();
+    }
     operator.active = true;
     if context.capture_only {
         operator.output_enabled = false;
@@ -75,6 +79,8 @@ fn disable_highlight(
 ) {
     operator.active = false;
     operator.output_enabled = false;
+    operator.explicit_attributes.clear();
+    operator.observed_selection_revision = None;
     if runtime.output_owners.get(&context.desk_id) == Some(&context.user_id) {
         runtime.output_owners.remove(&context.desk_id);
     }
@@ -146,7 +152,11 @@ fn restore_selection(
     operator.active_fixture = None;
     Some(HighlightSelectionWrite {
         selected: operator.remembered.clone(),
-        expression: operator.remembered_expression.clone(),
+        expression: if operator.active {
+            Some(SelectionExpression::Static)
+        } else {
+            operator.remembered_expression.clone()
+        },
     })
 }
 
@@ -209,6 +219,30 @@ pub(super) fn output_fixture_ids(operator: &OperatorState) -> Vec<FixtureId> {
     }
 }
 
+pub(super) fn output_layers(operator: &OperatorState) -> Vec<HighlightOutputLayer> {
+    if !operator.active || !operator.output_enabled {
+        return Vec::new();
+    }
+    operator
+        .remembered
+        .iter()
+        .copied()
+        .map(|fixture_id| HighlightOutputLayer {
+            fixture_id,
+            role: if !operator.stepping || operator.active_fixture == Some(fixture_id) {
+                HighlightOutputRole::Highlight
+            } else {
+                HighlightOutputRole::LowLight
+            },
+            suppressed_attributes: operator
+                .explicit_attributes
+                .get(&fixture_id)
+                .cloned()
+                .unwrap_or_default(),
+        })
+        .collect()
+}
+
 pub(super) fn response(
     operator: &OperatorState,
     fixtures: &[HighlightFixture],
@@ -230,7 +264,7 @@ pub(super) fn response(
         .then_some(operator.active_fixture)
         .flatten()
         .and_then(|fixture| by_id.get(&fixture).cloned());
-    let can_step = !operator.remembered.is_empty();
+    let can_step = operator.active && !operator.remembered.is_empty();
     HighlightState {
         active: operator.active,
         mode: highlight_mode(operator),

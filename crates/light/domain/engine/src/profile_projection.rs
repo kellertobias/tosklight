@@ -11,6 +11,7 @@ use light_fixture::{
     HighlightLookCompatibility, HighlightShutterPolicy, PatchedFixture, SignalLossPolicy,
 };
 use light_output::DmxFrame;
+use light_programmer::{HighlightOutputLayer, HighlightOutputRole};
 use std::collections::{HashMap, HashSet};
 
 // @tour fixture-semantics:30 Resolve semantic values for every logical head
@@ -27,7 +28,7 @@ pub(crate) fn resolve_profile_fixture(
     options: RenderOptions,
     group_masters: &GroupMasterIndex,
     group_master_flashes: &HashMap<String, f32>,
-    highlighted_fixtures: &HashSet<FixtureId>,
+    highlight_layers: &HashMap<FixtureId, HighlightOutputLayer>,
     highlight_look: &HighlightLook,
     axis_inversion: AxisInversion,
 ) -> Result<ResolvedProfileFixtureOutput, EngineError> {
@@ -53,7 +54,7 @@ pub(crate) fn resolve_profile_fixture(
             options,
             group_masters,
             group_master_flashes,
-            highlighted_fixtures,
+            highlight_layers,
             highlight_look,
             axis_inversion,
             &mut fixture_output.channels,
@@ -98,9 +99,50 @@ struct ProfileHeadInputs {
     output_highlighted: bool,
     legacy_raw_highlight: bool,
     semantic_highlight_color: Option<HighlightColor>,
+    suppressed_highlight_attributes: HashSet<AttributeKey>,
     group_scale: f32,
     values: HashMap<AttributeKey, AttributeValue>,
     sequence_masters: HashMap<AttributeKey, ApplicableSequenceMaster>,
+}
+
+fn look_for_role(role: HighlightOutputRole, highlight_look: &HighlightLook) -> HighlightLook {
+    match role {
+        HighlightOutputRole::Highlight => highlight_look.clone(),
+        HighlightOutputRole::LowLight => HighlightLook {
+            intensity: 0.1,
+            color: Some(HighlightColor::Blue),
+            ..HighlightLook::default()
+        },
+    }
+}
+
+fn resolved_highlight_layer(
+    fixture_id: FixtureId,
+    owner: FixtureId,
+    layers: &HashMap<FixtureId, HighlightOutputLayer>,
+) -> Option<HighlightOutputLayer> {
+    let root = layers.get(&fixture_id).cloned();
+    if owner == fixture_id {
+        return root;
+    }
+    let head = layers.get(&owner).cloned();
+    match (root, head) {
+        (None, layer) | (layer, None) => layer,
+        (Some(root), Some(head)) if root.role > head.role => Some(root),
+        (Some(_), Some(head)) if head.role > HighlightOutputRole::LowLight => Some(head),
+        (Some(mut root), Some(head)) => {
+            root.suppressed_attributes
+                .retain(|attribute| head.suppressed_attributes.contains(attribute));
+            Some(root)
+        }
+    }
+}
+
+fn is_highlight_attribute_suppressed(inputs: &ProfileHeadInputs, name: &str) -> bool {
+    inputs
+        .suppressed_highlight_attributes
+        .iter()
+        .any(|attribute| attribute.0.eq_ignore_ascii_case(name))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -113,17 +155,21 @@ pub(crate) fn resolve_profile_head(
     options: RenderOptions,
     group_masters: &GroupMasterIndex,
     group_master_flashes: &HashMap<String, f32>,
-    highlighted_fixtures: &HashSet<FixtureId>,
+    highlight_layers: &HashMap<FixtureId, HighlightOutputLayer>,
     highlight_look: &HighlightLook,
     axis_inversion: AxisInversion,
     channels: &mut Vec<(uuid::Uuid, u32)>,
 ) -> Result<ResolvedProfileHeadOutput, EngineError> {
     let owner = head.owner;
-    let highlighted =
-        highlighted_fixtures.contains(&fixture.fixture_id) || highlighted_fixtures.contains(&owner);
-    let output_highlighted = highlighted && !(fixture.definition.hazardous && options.blackout);
-    let legacy_raw_highlight =
-        output_highlighted && highlight_look.compatibility != HighlightLookCompatibility::Semantic;
+    let layer = resolved_highlight_layer(fixture.fixture_id, owner, highlight_layers);
+    let output_highlighted = layer.is_some() && !(fixture.definition.hazardous && options.blackout);
+    let selected_look = layer
+        .as_ref()
+        .map(|layer| look_for_role(layer.role, highlight_look));
+    let legacy_raw_highlight = output_highlighted
+        && selected_look
+            .as_ref()
+            .is_some_and(|look| look.compatibility != HighlightLookCompatibility::Semantic);
     let group_scale = if output_highlighted || !fixture.group_masters_enabled {
         1.0
     } else {
@@ -143,7 +189,7 @@ pub(crate) fn resolve_profile_head(
         && (!output_highlighted || legacy_raw_highlight)
     {
         let virtual_intensity = if output_highlighted {
-            1.0
+            selected_look.as_ref().map_or(1.0, |look| look.intensity)
         } else {
             values
                 .value_named(owner, "intensity")
@@ -210,7 +256,7 @@ pub(crate) fn resolve_profile_head(
         options,
         group_masters,
         group_master_flashes,
-        highlighted_fixtures,
+        highlight_layers,
         highlight_look,
         axis_inversion,
     )?;
@@ -263,16 +309,20 @@ fn prepare_head_inputs(
     options: RenderOptions,
     group_masters: &GroupMasterIndex,
     group_master_flashes: &HashMap<String, f32>,
-    highlighted_fixtures: &HashSet<FixtureId>,
+    highlight_layers: &HashMap<FixtureId, HighlightOutputLayer>,
     highlight_look: &HighlightLook,
     axis_inversion: AxisInversion,
 ) -> Result<ProfileHeadInputs, EngineError> {
     let owner = head.owner;
-    let highlighted =
-        highlighted_fixtures.contains(&fixture.fixture_id) || highlighted_fixtures.contains(&owner);
-    let output_highlighted = highlighted && !(fixture.definition.hazardous && options.blackout);
-    let legacy_raw_highlight =
-        output_highlighted && highlight_look.compatibility != HighlightLookCompatibility::Semantic;
+    let layer = resolved_highlight_layer(fixture.fixture_id, owner, highlight_layers);
+    let output_highlighted = layer.is_some() && !(fixture.definition.hazardous && options.blackout);
+    let selected_look = layer
+        .as_ref()
+        .map(|layer| look_for_role(layer.role, highlight_look));
+    let legacy_raw_highlight = output_highlighted
+        && selected_look
+            .as_ref()
+            .is_some_and(|look| look.compatibility != HighlightLookCompatibility::Semantic);
     let group_scale = if output_highlighted || !fixture.group_masters_enabled {
         1.0
     } else {
@@ -284,6 +334,9 @@ fn prepare_head_inputs(
         output_highlighted,
         legacy_raw_highlight,
         semantic_highlight_color: None,
+        suppressed_highlight_attributes: layer
+            .map(|layer| layer.suppressed_attributes)
+            .unwrap_or_default(),
         group_scale,
         values: values.values(owner),
         sequence_masters: values.sequence_masters(owner),
@@ -291,7 +344,9 @@ fn prepare_head_inputs(
     apply_control_loss(fixture, mode, options, &mut inputs);
     apply_hazardous_blackout(fixture, options, &mut inputs.values);
     apply_axis_inversion(axis_inversion, &mut inputs.values);
-    apply_semantic_highlight(mode, head, highlight_look, &mut inputs)?;
+    if let Some(look) = selected_look.as_ref() {
+        apply_semantic_highlight(mode, head, look, &mut inputs)?;
+    }
     Ok(inputs)
 }
 
@@ -304,10 +359,15 @@ fn apply_semantic_highlight(
     if !inputs.output_highlighted || look.compatibility != HighlightLookCompatibility::Semantic {
         return Ok(());
     }
-    inputs.values.insert(
-        AttributeKey::intensity(),
-        AttributeValue::Normalized(look.intensity),
-    );
+    if !inputs
+        .suppressed_highlight_attributes
+        .contains(&AttributeKey::intensity())
+    {
+        inputs.values.insert(
+            AttributeKey::intensity(),
+            AttributeValue::Normalized(look.intensity),
+        );
+    }
     let has_authored_shutter_open = head.channel_indices.iter().any(|index| {
         mode.channels[*index].functions.iter().any(|function| {
             function.attribute.0.eq_ignore_ascii_case("shutter")
@@ -319,13 +379,18 @@ fn apply_semantic_highlight(
                 )
         })
     });
-    if look.shutter == HighlightShutterPolicy::Open && has_authored_shutter_open {
+    if look.shutter == HighlightShutterPolicy::Open
+        && has_authored_shutter_open
+        && !is_highlight_attribute_suppressed(inputs, "shutter")
+    {
         inputs.values.insert(
             AttributeKey("shutter".into()),
             AttributeValue::Discrete("open".into()),
         );
     }
-    if let Some(color) = look.color {
+    if let Some(color) = look.color
+        && !is_highlight_attribute_suppressed(inputs, "color")
+    {
         let supported = !mode
             .resolve_highlight_color(inputs.head_id, color)
             .map_err(|error| EngineError::Invalid(error.to_string()))?
@@ -345,6 +410,9 @@ fn apply_semantic_highlight(
         ("frost", look.frost),
     ] {
         if let Some(value) = value {
+            if is_highlight_attribute_suppressed(inputs, name) {
+                continue;
+            }
             inputs
                 .values
                 .insert(AttributeKey(name.into()), AttributeValue::Normalized(value));
@@ -403,15 +471,11 @@ fn apply_hazardous_blackout(
 }
 
 fn virtual_intensity(inputs: &ProfileHeadInputs) -> f32 {
-    if inputs.output_highlighted {
-        1.0
-    } else {
-        inputs
-            .values
-            .get(&AttributeKey::intensity())
-            .and_then(AttributeValue::normalized)
-            .unwrap_or(1.0)
-    }
+    inputs
+        .values
+        .get(&AttributeKey::intensity())
+        .and_then(AttributeValue::normalized)
+        .unwrap_or(1.0)
 }
 
 fn requested_color(values: &HashMap<AttributeKey, AttributeValue>) -> Option<Xyz> {

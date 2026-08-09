@@ -5,7 +5,8 @@ import { isDmxPatchable } from "../patchUtils";
 import { usePatchController } from "./controller";
 import {
 	armEdit,
-	armEditFromContextMenu,
+	beginFixtureEditFromContextMenu,
+	beginSplitAddressEditFromContextMenu,
 	selectSplitAddress,
 } from "./editSession";
 import { selectPatchFixture } from "./fixtureActions";
@@ -14,6 +15,7 @@ import { fixtureDisplayId } from "./fixtureIds";
 import { LightSourceCell } from "./LightSourceAppearance";
 import {
 	beginMultipatchEdit,
+	beginMultipatchEditFromContextMenu,
 	beginMultipatchVectorEditFromContextMenu,
 	PRIMARY_PHYSICAL_PATCH,
 	selectPhysicalPatchRow,
@@ -53,7 +55,11 @@ const columns = [
 export function PatchTable() {
 	const controller = usePatchController();
 	return (
-		<section className="patch-table-wrap">
+		<section
+			className={`patch-table-wrap ${
+				controller.appState.patchSetArmed ? "patch-set-targets" : ""
+			}`}
+		>
 			<table className="patch-table">
 				<thead>
 					<tr>
@@ -152,6 +158,11 @@ function FixtureIdentityCells({ fixture }: { fixture: PatchedFixture }) {
 				<Button
 					className="patch-value"
 					onClick={() => armEdit(controller, fixture, "name")}
+					onContextMenu={(event) => {
+						event.preventDefault();
+						event.stopPropagation();
+						beginFixtureEditFromContextMenu(controller, fixture, "name");
+					}}
 				>
 					{fixture.name || fixture.definition.name}
 				</Button>
@@ -175,6 +186,11 @@ function FixturePatchCell({ fixture }: { fixture: PatchedFixture }) {
 				<Button
 					className="patch-address split-patch-summary"
 					onClick={() => armEdit(controller, fixture, "address")}
+					onContextMenu={(event) => {
+						event.preventDefault();
+						event.stopPropagation();
+						beginFixtureEditFromContextMenu(controller, fixture, "address");
+					}}
 				>
 					{formatFixturePatch(fixture)}
 				</Button>
@@ -206,6 +222,15 @@ function FixturePatchCell({ fixture }: { fixture: PatchedFixture }) {
 							event.stopPropagation();
 							selectSplitAddress(controller, fixture, patch.split);
 						}}
+						onContextMenu={(event) => {
+							event.preventDefault();
+							event.stopPropagation();
+							beginSplitAddressEditFromContextMenu(
+								controller,
+								fixture,
+								patch.split,
+							);
+						}}
 					>
 						S{patch.split}{" "}
 						{patch.universe && patch.address
@@ -230,7 +255,13 @@ function FixtureTransformCells({ fixture }: { fixture: PatchedFixture }) {
 						onClick={() => armEdit(controller, fixture, "location", axis)}
 						onContextMenu={(event) => {
 							event.preventDefault();
-							armEditFromContextMenu(controller, fixture, "location", axis);
+							event.stopPropagation();
+							beginFixtureEditFromContextMenu(
+								controller,
+								fixture,
+								"location",
+								axis,
+							);
 						}}
 					>
 						{((fixture.location?.[axis] ?? 0) / 1000).toFixed(3)} m
@@ -245,7 +276,13 @@ function FixtureTransformCells({ fixture }: { fixture: PatchedFixture }) {
 						onClick={() => armEdit(controller, fixture, "rotation", axis)}
 						onContextMenu={(event) => {
 							event.preventDefault();
-							armEditFromContextMenu(controller, fixture, "rotation", axis);
+							event.stopPropagation();
+							beginFixtureEditFromContextMenu(
+								controller,
+								fixture,
+								"rotation",
+								axis,
+							);
 						}}
 					>
 						{Number((fixture.rotation?.[axis] ?? 0).toFixed(3))}°
@@ -267,6 +304,12 @@ function FixtureLayerCell({ fixture }: { fixture: PatchedFixture }) {
 						controller.ui.setSelectedFixture(fixture.fixture_id);
 						controller.ui.setLayerModal("select");
 					}
+				}}
+				onContextMenu={(event) => {
+					event.preventDefault();
+					event.stopPropagation();
+					controller.ui.setSelectedFixture(fixture.fixture_id);
+					controller.ui.setLayerModal("select");
 				}}
 			>
 				{controller.data.layers.find(
@@ -316,6 +359,16 @@ function MultiPatchRow({
 						onClick={() =>
 							beginMultipatchEdit(controller, fixture, instance, "address")
 						}
+						onContextMenu={(event) => {
+							event.preventDefault();
+							event.stopPropagation();
+							beginMultipatchEditFromContextMenu(
+								controller,
+								fixture,
+								instance,
+								"address",
+							);
+						}}
 					>
 						{formatInstancePatch(fixture.definition, instance)}
 					</Button>

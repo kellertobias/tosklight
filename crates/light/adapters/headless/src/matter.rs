@@ -353,7 +353,9 @@ fn build_lights(
             let Some(definition) = definitions.get(&playback_number) else {
                 continue;
             };
-            let value = values.get(&playback_number).copied().unwrap_or_default();
+            let Some(value) = values.get(&playback_number).copied() else {
+                continue;
+            };
             let normalized = if value.active && value.level.is_finite() {
                 value.level.clamp(0.0, 1.0)
             } else {

@@ -223,6 +223,7 @@ impl PlaybackEngine {
             || active.flash
             || (clear_restore_off && active.flash_restore_off);
         active.enabled = true;
+        active.fader_zero_auto_off_armed = false;
         active.master = 0.0;
         active.temporary = false;
         active.flash = false;

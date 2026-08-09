@@ -168,27 +168,22 @@ pub struct ProgrammerCaptureModeOutcome {
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct ProgrammingAlignLiveActionRequest {
     pub request_id: String,
-    pub attribute: String,
     pub mode: ProgrammingAlignMode,
-    pub from: f32,
-    pub to: f32,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct ProgrammingAlignHttpActionRequest {
-    pub attribute: String,
     pub mode: ProgrammingAlignMode,
-    pub from: f32,
-    pub to: f32,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(rename_all = "snake_case")]
 pub enum ProgrammingAlignMode {
+    Off,
     Left,
     Right,
-    Center,
     Out,
+    In,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -226,7 +221,11 @@ pub struct FixtureControlsLiveActionRequest {
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct ProgrammingAlignOutcome {
     pub request_id: String,
-    pub unsupported_fixtures: Vec<Uuid>,
+    pub mode: ProgrammingAlignMode,
+    #[ts(type = "number | null")]
+    pub revision: Option<u64>,
+    pub bound_attribute: Option<String>,
+    pub fixture_count: usize,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

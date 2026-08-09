@@ -25,7 +25,7 @@ import {
 	type TimecodeLane,
 	type TimecodeSelection,
 	TimecodeWindow,
-} from "./TimecodeWindow";
+} from "./stories/TimecodeWindow";
 
 const meta = {
 	title: "ToskLight/Windows/Timecode",

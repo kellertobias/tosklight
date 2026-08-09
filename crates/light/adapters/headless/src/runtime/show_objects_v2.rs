@@ -233,6 +233,7 @@ fn apply_route_patch(
         };
     }
     patch!(protocol);
+    patch!(target);
     patch!(logical_universe);
     patch!(destination_universe);
     patch!(delivery_mode);
@@ -340,6 +341,14 @@ mod validation_tests {
 
 fn wire_route(route: &light_output::OutputRoute) -> event_wire::OutputRoute {
     event_wire::OutputRoute {
+        target: match &route.target {
+            light_output::OutputRouteTarget::Network => None,
+            light_output::OutputRouteTarget::UsbEndpoint { endpoint_id } => {
+                Some(event_wire::OutputRouteTarget::UsbEndpoint {
+                    endpoint_id: endpoint_id.clone(),
+                })
+            }
+        },
         protocol: match route.protocol {
             light_output::Protocol::ArtNet => event_wire::OutputProtocol::ArtNet,
             light_output::Protocol::Sacn => event_wire::OutputProtocol::Sacn,

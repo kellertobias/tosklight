@@ -4,6 +4,7 @@ use chrono::Utc;
 use light_core::{AttributeKey, AttributeValue, ShowId};
 use light_programmer::{
     PreloadPlaybackQueueAction, PreloadPlaybackQueueSurface, PreloadProgrammerValueMutation,
+    ProgrammerAlignmentMode,
 };
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
@@ -198,6 +199,42 @@ impl LifecycleSetup {
             PreloadPlaybackQueueSurface::Physical,
         ));
     }
+}
+
+#[test]
+fn typed_preload_enter_and_go_deactivate_align() {
+    let setup = LifecycleSetup::new();
+    let fixture = FixtureId::new();
+    setup.registry.select(setup.session, [fixture]);
+    setup
+        .service
+        .set_alignment(
+            &setup.context,
+            &LivePorts::default(),
+            Some(ProgrammerAlignmentMode::Left),
+        )
+        .unwrap();
+    setup
+        .handle(setup.exact_action(
+            "align-preload-enter",
+            ProgrammingPreloadLifecycleAction::Enter,
+        ))
+        .unwrap();
+    assert!(setup.registry.alignment(setup.session).is_none());
+
+    setup.arm_and_set_pending(fixture);
+    setup
+        .service
+        .set_alignment(
+            &setup.context,
+            &LivePorts::default(),
+            Some(ProgrammerAlignmentMode::Out),
+        )
+        .unwrap();
+    setup
+        .handle(setup.exact_action("align-preload-go", setup.go()))
+        .unwrap();
+    assert!(setup.registry.alignment(setup.session).is_none());
 }
 
 #[test]

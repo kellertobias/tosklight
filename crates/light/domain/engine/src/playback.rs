@@ -62,8 +62,18 @@ pub enum PoolPlaybackAction {
     GoTo(f64),
     Load(f64),
     SetMaster(f32),
-    SetGroupMasterFader { value: f32, authoritative: f32 },
-    SetMasterTransition { value: f32, duration_millis: u64 },
+    SetConfiguredFader {
+        mode: light_playback::PlaybackFaderMode,
+        value: f32,
+    },
+    SetGroupMasterFader {
+        value: f32,
+        authoritative: f32,
+    },
+    SetMasterTransition {
+        value: f32,
+        duration_millis: u64,
+    },
     SetVirtualMaster(f32),
     SetManualXFade(f32),
     XFade(bool),
@@ -665,6 +675,9 @@ fn execute_pool(
         PoolPlaybackAction::GoTo(cue) => playback.goto_playback_mutation(number, cue)?.into(),
         PoolPlaybackAction::Load(cue) => playback.load_playback_mutation(number, cue)?.into(),
         PoolPlaybackAction::SetMaster(value) => playback.set_master_mutation(number, value)?.into(),
+        PoolPlaybackAction::SetConfiguredFader { mode, value } => playback
+            .set_configured_fader_mutation(number, mode, value)?
+            .into(),
         PoolPlaybackAction::SetGroupMasterFader {
             value,
             authoritative,

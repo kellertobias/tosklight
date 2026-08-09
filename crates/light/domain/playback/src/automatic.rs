@@ -68,6 +68,7 @@ impl PlaybackEngine {
             self.retarget_physical_controls(cue_list_id, master, None);
             if release && let Some(playback) = self.active.get_mut(&key) {
                 playback.enabled = false;
+                playback.fader_zero_auto_off_armed = false;
                 playback.activation = None;
             }
         }
@@ -240,6 +241,7 @@ fn advance_link(
         return None;
     }
     let previous_index = playback.cue_index;
+    playback.completed_trigger_cue_id = Some(current.id);
     install_transition_source(playback, transition_source, previous_index);
     set_current_cue(playback, cue_list, target_index);
     playback.tracking_wrap = false;
@@ -283,6 +285,7 @@ fn advance_timecode(
         return None;
     }
     let previous_index = playback.cue_index;
+    playback.completed_trigger_cue_id = None;
     install_transition_source(playback, transition_source, previous_index);
     set_current_cue(playback, cue_list, index);
     playback.deleted_cue_hold = None;
@@ -323,6 +326,7 @@ fn advance_chaser(
     let previous_index = playback.cue_index;
     let advanced_steps = advance_chaser_steps(playback, cue_list, requested_steps);
     if advanced_steps > 0 {
+        playback.completed_trigger_cue_id = None;
         playback.deleted_cue_transition_source = transition_source.map(<[TimedValue]>::to_vec);
     }
     advance_chaser_clock(playback, step_millis, requested_steps);
@@ -366,10 +370,19 @@ fn advance_follow_or_wait(
     } else {
         trigger_delay
     };
-    if elapsed_since_activation(playback, timing.now) < completion.saturating_add(trigger_delay) {
+    let trigger_start = match cause {
+        AutomaticPlaybackTransitionCause::Follow => completion,
+        // TIME is counted from the preceding Cue's GO, rather than waiting for its values to
+        // settle. This permits overlapping Cue transitions when the programmed time is shorter.
+        AutomaticPlaybackTransitionCause::Wait => 0,
+        _ => unreachable!("only Follow and Wait reach automatic cue advancement"),
+    };
+    if elapsed_since_activation(playback, timing.now) < trigger_start.saturating_add(trigger_delay)
+    {
         return None;
     }
     let previous_index = playback.cue_index;
+    playback.completed_trigger_cue_id = Some(cue_list.cues[next_index].id);
     install_transition_source(playback, transition_source, previous_index);
     set_current_cue(playback, cue_list, next_index);
     if next_index == 0 {

@@ -3,8 +3,9 @@ use crate::{
 };
 use light_core::{FixtureId, UserId};
 use light_programmer::{
-    GroupDefinition, HighlightAction, HighlightError, HighlightFixture, HighlightRegistry,
-    HighlightSelectionWrite, HighlightState, HighlightTransition, ProgrammerSelection,
+    GroupDefinition, HighlightAction, HighlightError, HighlightFixture, HighlightOutputLayer,
+    HighlightRegistry, HighlightSelectionWrite, HighlightState, HighlightTransition,
+    ProgrammerSelection,
 };
 use std::{collections::HashMap, sync::Arc};
 
@@ -92,6 +93,22 @@ pub trait HighlightPorts: Send + Sync {
         fixtures: &[FixtureId],
     ) -> Result<(), ActionError>;
 
+    /// Installs the complete Highlight/Low Light projection. The compatibility default keeps
+    /// existing adapters source-compatible until they adopt roles and attribute suppression.
+    fn synchronize_output_layers(
+        &self,
+        context: &ActionContext,
+        layers: &[HighlightOutputLayer],
+    ) -> Result<(), ActionError> {
+        self.synchronize_output(
+            context,
+            &layers
+                .iter()
+                .map(|layer| layer.fixture_id)
+                .collect::<Vec<_>>(),
+        )
+    }
+
     fn publish_programmer_changed(&self, context: &ActionContext, command: &HighlightCommand);
 
     fn publish_highlight_changed(
@@ -135,7 +152,7 @@ impl HighlightService {
             false
         };
 
-        ports.synchronize_output(&envelope.context, &self.registry.output_fixtures())?;
+        ports.synchronize_output_layers(&envelope.context, &self.registry.output_layers())?;
         if selection_changed && publishes_programmer_change(&envelope.command) {
             ports.publish_programmer_changed(&envelope.context, &envelope.command);
         }

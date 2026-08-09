@@ -65,7 +65,10 @@ const fn wire_target(target: light_programmer::CommandTarget) -> WireCommandTarg
 fn wire_source(source: &str) -> CommandHttpSource {
     match source {
         "http" => CommandHttpSource::Http,
-        "http_key" => CommandHttpSource::HttpKey,
+        // Extensions enter through the same typed key path as the attached desk surface. The
+        // command-line wire contract intentionally distinguishes transport HTTP from key input,
+        // while the accompanying operation event retains the precise `extension` provenance.
+        "http_key" | "extension" => CommandHttpSource::HttpKey,
         _ => unreachable!("the command HTTP adapter has a bounded source enum"),
     }
 }

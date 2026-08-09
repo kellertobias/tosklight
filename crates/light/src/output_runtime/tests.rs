@@ -22,7 +22,7 @@ fn combined_global_output_change_publishes_one_installation_event() {
     let events = crate::EventBus::new(8);
     let service = OutputRuntimeService::new(events.clone());
     let ports = FakePorts::default();
-    let context = context(ActionSource::Midi);
+    let context = context(ActionSource::Extension);
     let result = service
         .handle(
             envelope(
@@ -45,7 +45,10 @@ fn combined_global_output_change_publishes_one_installation_event() {
     };
     assert_eq!(retained.len(), 1);
     assert_eq!(retained[0].desk_id, None);
-    assert_eq!(retained[0].source, EventSource::Action(ActionSource::Midi));
+    assert_eq!(
+        retained[0].source,
+        EventSource::Action(ActionSource::Extension)
+    );
     assert_eq!(retained[0].correlation_id, Some(context.correlation_id));
     let ApplicationEvent::Output(OutputEvent::RuntimeChanged(change)) = &retained[0].payload else {
         panic!("expected global-output projection event");
@@ -168,7 +171,7 @@ fn exact_request_replay_precedes_newer_projection_validation() {
     service
         .handle(
             envelope(
-                context(ActionSource::Midi),
+                context(ActionSource::Extension),
                 OutputRuntimeCommand::new(None, Some(true)),
             ),
             &ports,

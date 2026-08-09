@@ -423,6 +423,26 @@ describe("PlaybackTools", () => {
 		);
 	});
 
+	it("opens the same scoped page rename on right-click", () => {
+		render(<PlaybackTools />);
+		const page = screen.getByRole("button", {
+			name: "Select playback page. Page 1 Main",
+		});
+
+		expect(fireEvent.contextMenu(page)).toBe(false);
+
+		expect(
+			screen.getByRole("dialog", { name: "Rename playback page 1" }),
+		).toBeInTheDocument();
+		expect(
+			screen.queryByRole("dialog", { name: "Playback pages" }),
+		).not.toBeInTheDocument();
+		expect(dispatch).toHaveBeenCalledWith({
+			type: "SET_PLAYBACK_SET_ARMED",
+			value: false,
+		});
+	});
+
 	it("keeps a failed rename open with operation-owned feedback", async () => {
 		topologyActions.error = new Error("Page revision changed");
 		topologyActions.renamePage.mockResolvedValueOnce(null);

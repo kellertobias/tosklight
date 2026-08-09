@@ -57,6 +57,7 @@ impl ProgrammingService {
         if let Some(result) = self.cached_preset_recording(&identity, &envelope.command)? {
             return Ok(result);
         }
+        self.programmers.deactivate_alignment(identity.session_id);
         self.assert_normal_capture(identity.session_id)?;
         let captured = self.capture_preset(identity.session_id, &envelope.command)?;
         let commit = ProgrammingPresetCommit::new(&envelope.command, captured);

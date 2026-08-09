@@ -4,13 +4,17 @@ import {
 	HorizontalFader,
 	MultiValueToggle,
 	SelectField,
+	SwitchField,
 } from "@tosklight/ui";
-import { WindowHeader, WindowScrollArea } from "@tosklight/ui/window-kit";
+import { PoolGrid, type PoolSlotViewModel } from "@tosklight/ui/pools";
+import { WindowFrame } from "@tosklight/ui/window-kit";
+import { Fragment, type ReactNode, useEffect, useRef, useState } from "react";
 import type {
 	MediaBrowserMode,
 	MediaControlSection,
 	MediaLibraryItem,
 	MediaPaneLayer,
+	MediaPaneModel,
 	MediaPaneSurfaceProps,
 	MediaPreviewState,
 	MediaSecondaryControl,
@@ -33,7 +37,6 @@ export type {
 
 export function MediaPaneSurface({
 	model,
-	dummyDataBadge,
 	compact = false,
 	onSelectServer,
 	onSelectLayer,
@@ -41,46 +44,92 @@ export function MediaPaneSurface({
 	onBrowseItem,
 	onSelectControlSection,
 	onChangeControl,
-	onOpenSettings,
+	onSetRightPaneVisible,
 }: MediaPaneSurfaceProps) {
 	const server = model.servers.find(
 		(candidate) => candidate.id === model.selectedServerId,
 	);
+	const mainShowsBrowser =
+		model.rightPaneVisible ||
+		model.mainSectionId === "content" ||
+		model.mainSectionId === "mask";
 	return (
-		<section
+		<WindowFrame
 			className={`media-pane-surface ${compact ? "compact" : ""}`}
-			aria-label="Media"
+			title="Media"
+			toolbar={
+				<div className="media-pane-header-tools">
+					{model.rightPaneVisible ? (
+						<>
+							<MultiValueToggle
+								ariaLabel="Content or Mask browser"
+								value={model.browserMode}
+								options={browserOptions(model.maskBrowser)}
+								onChange={onSelectBrowserMode}
+							/>
+							<MultiValueToggle
+								ariaLabel="Media control section"
+								value={model.selectedControlSectionId}
+								options={model.controlSections.map((section) => ({
+									value: section.id,
+									label: section.label,
+								}))}
+								onChange={onSelectControlSection}
+							/>
+						</>
+					) : (
+						<MultiValueToggle
+							ariaLabel="Media window section"
+							value={model.mainSectionId}
+							options={mainSectionOptions(model)}
+							onChange={(sectionId) => {
+								if (sectionId === "content") onSelectBrowserMode("media");
+								else if (sectionId === "mask") onSelectBrowserMode("mask");
+								else onSelectControlSection(sectionId);
+							}}
+						/>
+					)}
+					<SelectField
+						className="media-pane-server-select"
+						label="Server"
+						ariaLabel="Media server"
+						size="compact"
+						value={model.selectedServerId}
+						options={model.servers.map((candidate) => ({
+							value: candidate.id,
+							label: candidate.name,
+							disabled: candidate.disabled,
+						}))}
+						onChange={onSelectServer}
+					/>
+				</div>
+			}
+			settingsTitle="Media pane settings"
+			settingsTabs={[
+				{
+					id: "pane",
+					label: "Pane",
+					content: (
+						<SwitchField
+							label="Right pane"
+							offLabel="Hidden"
+							onLabel="Visible"
+							checked={model.rightPaneVisible}
+							onChange={(event) => onSetRightPaneVisible(event.target.checked)}
+						/>
+					),
+				},
+			]}
 		>
-			<WindowHeader
-				title="Media"
-				info={{
-					primary: server?.name ?? "No patched media server",
-					secondary: server?.statusLabel ?? "Missing patch",
-				}}
-				toolbar={
-					<strong className="media-pane-dummy-badge" role="status">
-						{dummyDataBadge}
-					</strong>
-				}
-				settings={Boolean(onOpenSettings)}
-				onSettings={onOpenSettings}
-			/>
-			<div className="media-pane-server-bar">
-				<SelectField
-					label="Media server"
-					value={model.selectedServerId}
-					options={model.servers.map((candidate) => ({
-						value: candidate.id,
-						label: candidate.name,
-						disabled: candidate.disabled,
-					}))}
-					onChange={onSelectServer}
-				/>
-				<span>{server?.detail ?? "Select a patched media-server master."}</span>
-			</div>
 			<div className="media-pane-body">
 				<section className="media-pane-overview" aria-label="Media output">
-					<MediaCompositePreview preview={model.preview} />
+					<MediaCompositePreview
+						preview={model.preview}
+						selected={model.selectedLayerId === "master"}
+						onSelect={() => onSelectLayer("master")}
+						serverLabel={server?.name ?? "No patched media server"}
+						statusLabel={server?.statusLabel ?? "Missing patch"}
+					/>
 					<MediaLayerStrip
 						layers={model.layers}
 						selectedLayerId={model.selectedLayerId}
@@ -88,43 +137,104 @@ export function MediaPaneSurface({
 					/>
 				</section>
 				<section className="media-pane-workspace">
-					<MediaLibraryBrowser
-						mode={model.browserMode}
-						maskBrowser={model.maskBrowser}
-						path={model.libraryPath}
-						items={model.libraryItems}
-						liveLabel={model.liveSelectionLabel}
-						draftLabel={model.draftSelectionLabel}
-						onSelectMode={onSelectBrowserMode}
-						onBrowseItem={onBrowseItem}
-					/>
-					<MediaSecondaryControls
-						sections={model.controlSections}
-						selectedSectionId={model.selectedControlSectionId}
-						onSelectSection={onSelectControlSection}
-						onChange={onChangeControl}
-					/>
+					{mainShowsBrowser && (
+						<MediaLibraryBrowser
+							mode={model.browserMode}
+							folders={model.libraryFolders}
+							files={model.libraryFiles}
+							draftFolderId={model.draftFolderId}
+							draftFileId={model.draftFileId}
+							onBrowseItem={onBrowseItem}
+						/>
+					)}
+					{(model.rightPaneVisible || !mainShowsBrowser) && (
+						<MediaSecondaryControls
+							sections={model.controlSections}
+							selectedSectionId={
+								model.rightPaneVisible
+									? model.selectedControlSectionId
+									: model.mainSectionId
+							}
+							onChange={onChangeControl}
+						/>
+					)}
 				</section>
 			</div>
-		</section>
+		</WindowFrame>
 	);
 }
 
-function MediaCompositePreview({ preview }: { preview: MediaPreviewState }) {
+function mainSectionOptions(model: MediaPaneModel) {
+	return [
+		{ value: "content", label: "Content" },
+		...(model.maskBrowser === "hidden"
+			? []
+			: [
+					{
+						value: "mask",
+						label:
+							model.maskBrowser === "unsupported"
+								? "Mask · Unsupported"
+								: "Mask",
+						disabled: model.maskBrowser === "unsupported",
+					},
+				]),
+		...model.controlSections.map((section) => ({
+			value: section.id,
+			label: section.label,
+		})),
+	];
+}
+
+function browserOptions(maskBrowser: "supported" | "unsupported" | "hidden") {
+	return [
+		{ value: "media" as const, label: "Content" },
+		...(maskBrowser === "hidden"
+			? []
+			: [
+					{
+						value: "mask" as const,
+						label:
+							maskBrowser === "unsupported" ? "Mask · Unsupported" : "Mask",
+						disabled: maskBrowser === "unsupported",
+					},
+				]),
+	];
+}
+
+function MediaCompositePreview({
+	preview,
+	selected,
+	onSelect,
+	serverLabel,
+	statusLabel,
+}: {
+	preview: MediaPreviewState;
+	selected: boolean;
+	onSelect(): void;
+	serverLabel: string;
+	statusLabel: string;
+}) {
 	const imageSrc = "imageSrc" in preview ? preview.imageSrc : undefined;
 	return (
-		<figure
-			className={`media-composite-frame state-${preview.kind}`}
+		<Button
+			type="button"
+			className={`media-composite-frame state-${preview.kind} ${selected ? "selected" : ""}`}
 			data-preview-state={preview.kind}
-			aria-label="Program composite preview"
+			aria-label={`Master output ${selected ? "selected" : ""}`.trim()}
+			aria-pressed={selected}
+			onClick={onSelect}
 		>
 			{imageSrc && <img src={imageSrc} alt="Mock program composite" />}
 			<div className="media-composite-safe-area" aria-hidden="true" />
-			<figcaption>
-				<strong>PROGRAM / COMPOSITE</strong>
+			<span className="media-composite-caption">
+				<strong>MASTER OUTPUT</strong>
+				<small>
+					{serverLabel} · {statusLabel}
+				</small>
 				<PreviewStateMessage preview={preview} />
-			</figcaption>
-		</figure>
+			</span>
+		</Button>
 	);
 }
 
@@ -180,33 +290,60 @@ function MediaLayerStrip({
 }) {
 	return (
 		<div className="media-layer-region">
-			<header>
-				<strong>Layers</strong>
-				<small className="media-layer-count">{layers.length} mock layers</small>
-			</header>
 			<ul className="media-layer-strip" aria-label="Media layers">
-				{layers.map((layer) => (
-					<li key={layer.id}>
-						<Button
-							className={`media-layer-tile status-${layer.status}`}
-							active={layer.id === selectedLayerId}
-							aria-pressed={layer.id === selectedLayerId}
-							aria-label={`Layer ${layer.number} ${layer.name} · ${layer.statusLabel ?? layer.status}`}
-							onClick={() => onSelectLayer(layer.id)}
-						>
-							<span className="media-layer-thumbnail">
-								{layer.thumbnailSrc && <img src={layer.thumbnailSrc} alt="" />}
-							</span>
-							<span>
-								<b>
-									{layer.number} · {layer.name}
-								</b>
-								<small>{layer.liveSourceLabel ?? "No live source"}</small>
-							</span>
-							<i aria-hidden="true" />
-						</Button>
-					</li>
-				))}
+				{layers.map((layer) => {
+					const opacity = Math.max(
+						0,
+						Math.min(100, layer.opacityPercent ?? 100),
+					);
+					return (
+						<li key={layer.id}>
+							<Button
+								className={`media-layer-tile status-${layer.status}`}
+								active={layer.id === selectedLayerId}
+								aria-pressed={layer.id === selectedLayerId}
+								aria-label={`Layer ${layer.number} ${layer.name} · ${layer.statusLabel ?? layer.status}`}
+								onClick={() => onSelectLayer(layer.id)}
+							>
+								<span className="media-layer-thumbnail">
+									{layer.thumbnailSrc && (
+										<img src={layer.thumbnailSrc} alt="" />
+									)}
+								</span>
+								<span className="media-layer-copy">
+									<b className="media-layer-title">
+										<span>Layer {layer.number}</span>
+										<span className="media-layer-name">{layer.name}</span>
+									</b>
+									<small className="media-layer-source">
+										{layer.liveSourceLabel ?? layer.name}
+									</small>
+									<span
+										className="media-layer-opacity"
+										aria-label={`Opacity ${opacity}%`}
+										title={`Opacity ${opacity}%`}
+									>
+										<i aria-hidden="true" style={{ opacity: opacity / 100 }} />
+									</span>
+									<small className="media-layer-mask">
+										<strong>Mask:</strong> {layer.maskLabel ?? "None / None"}
+									</small>
+									<span className="media-layer-color">
+										<i
+											aria-hidden="true"
+											style={{ backgroundColor: layer.colorValue ?? "#ffffff" }}
+										/>
+										<small>Grey {layer.grayscalePercent ?? 100}%</small>
+									</span>
+									<small className="media-layer-effect">
+										<strong>Effect:</strong> {layer.effectLabel ?? "None"}
+									</small>
+								</span>
+								<i aria-hidden="true" />
+							</Button>
+						</li>
+					);
+				})}
 			</ul>
 		</div>
 	);
@@ -214,107 +351,171 @@ function MediaLayerStrip({
 
 function MediaLibraryBrowser({
 	mode,
-	maskBrowser,
-	path,
-	items,
-	liveLabel,
-	draftLabel,
-	onSelectMode,
+	folders,
+	files,
+	draftFolderId,
+	draftFileId,
 	onBrowseItem,
 }: {
 	mode: MediaBrowserMode;
-	maskBrowser: "supported" | "unsupported" | "hidden";
-	path: string[];
-	items: MediaLibraryItem[];
-	liveLabel: string;
-	draftLabel: string;
-	onSelectMode(mode: MediaBrowserMode): void;
+	folders: MediaLibraryItem[];
+	files: MediaLibraryItem[];
+	draftFolderId: string;
+	draftFileId: string | null;
 	onBrowseItem(mode: MediaBrowserMode, item: MediaLibraryItem): void;
 }) {
-	const browserOptions = [
-		{ value: "media" as const, label: "Media" },
-		...(maskBrowser === "hidden"
-			? []
-			: [
-					{
-						value: "mask" as const,
-						label:
-							maskBrowser === "unsupported" ? "Mask · Unsupported" : "Mask",
-						disabled: maskBrowser === "unsupported",
-					},
-				]),
-	];
+	const folderSlots = mediaPoolSlots(folders, draftFolderId, false);
+	const fileSlots = withMediaFilePlaceholders(
+		mediaPoolSlots(files, draftFileId, true),
+		40,
+	);
 	return (
 		<section
 			className="media-library-browser"
 			aria-label="Media library browser"
 		>
-			<header>
-				<MultiValueToggle
-					ariaLabel="Media or Mask browser"
-					value={mode}
-					options={browserOptions}
-					onChange={onSelectMode}
+			<HorizontalMediaPool
+				label={`${mode === "mask" ? "Mask" : "Media"} folders`}
+				className="media-folder-pool"
+			>
+				<PoolGrid
+					className="media-folder-pool-grid"
+					slots={folderSlots}
+					fillEmptySlots={false}
+					emptySlot={emptyMediaPoolSlot}
+					minimumCardWidth={104}
+					onSlotClick={(id) => {
+						const item = folders.find((candidate) => candidate.id === id);
+						if (item) onBrowseItem(mode, item);
+					}}
 				/>
+			</HorizontalMediaPool>
+			<header className="media-library-title">
+				<strong>{mode === "mask" ? "Mask File" : "Media File"}</strong>
 			</header>
 			<section
-				className="media-library-authority"
-				aria-label="Live and browsing selections"
+				className="media-file-pool"
+				aria-label={`${mode === "mask" ? "Mask" : "Media"} files`}
 			>
-				<span>
-					<b>LIVE</b> {liveLabel}
-				</span>
-				<span className="draft">
-					<b>BROWSING DRAFT</b> {draftLabel} · Not sent
-				</span>
+				{files.length === 0 ? (
+					<div className="media-file-empty">
+						<strong>This folder is empty</strong>
+						<span>
+							The live selection stays unchanged until a file is chosen.
+						</span>
+					</div>
+				) : (
+					<PoolGrid
+						className="media-file-pool-grid"
+						slots={fileSlots}
+						fillEmptySlots={false}
+						emptySlot={emptyMediaPoolSlot}
+						minimumCardWidth={112}
+						onSlotClick={(id) => {
+							const item = files.find((candidate) => candidate.id === id);
+							if (item) onBrowseItem(mode, item);
+						}}
+					/>
+				)}
 			</section>
-			<nav className="media-library-path" aria-label="Library path">
-				{path.map((part, index) => (
-					<span key={`${part}-${index}`}>
-						{index > 0 && <i aria-hidden="true">/</i>}
-						{part}
-					</span>
-				))}
-			</nav>
-			<WindowScrollArea
-				emptyState={
-					items.length === 0
-						? {
-								title: "No mock media in this folder",
-								description: "The live source remains unchanged.",
-							}
-						: null
-				}
-			>
-				<div className="media-library-grid">
-					{items.map((item) => (
-						<Button
-							key={item.id}
-							className={`media-library-item kind-${item.kind}`}
-							disabled={item.disabled}
-							aria-label={`${mode === "mask" ? "Mask" : "Media"} ${item.kind} ${item.name}`}
-							onClick={() => onBrowseItem(mode, item)}
-						>
-							<span className="media-library-thumbnail">
-								{item.thumbnailSrc ? (
-									<img src={item.thumbnailSrc} alt="" />
-								) : (
-									<span aria-hidden="true">
-										{item.kind === "folder" ? "▰" : "▶"}
-									</span>
-								)}
-							</span>
-							<b>{item.name}</b>
-							<small>{item.detail ?? item.kind}</small>
-						</Button>
-					))}
-				</div>
-			</WindowScrollArea>
-			<footer>
-				<Button disabled fullWidth>
-					Program draft · unavailable in Storybook
-				</Button>
-			</footer>
+		</section>
+	);
+}
+
+function withMediaFilePlaceholders(
+	slots: PoolSlotViewModel<string>[],
+	minimumCount: number,
+): PoolSlotViewModel<string>[] {
+	return [
+		...slots,
+		...Array.from(
+			{ length: Math.max(0, minimumCount - slots.length) },
+			(_, index) => {
+				const position = slots.length + index;
+				return {
+					id: `media-unavailable-${position + 1}`,
+					position,
+					card: {
+						number: String(position + 1).padStart(3, "0"),
+						primary: "",
+						states: ["empty" as const],
+					},
+				};
+			},
+		),
+	];
+}
+
+function emptyMediaPoolSlot(index: number): PoolSlotViewModel<string> {
+	return {
+		id: `empty-${index}`,
+		position: index,
+		card: { number: index + 1, primary: "Empty", states: ["empty"] },
+	};
+}
+
+function mediaPoolSlots(
+	items: MediaLibraryItem[],
+	selectedId: string | null,
+	withImage: boolean,
+): PoolSlotViewModel<string>[] {
+	return items.map((item, index) => ({
+		id: item.id,
+		position: index,
+		card: {
+			number: String(index + 1).padStart(3, "0"),
+			primary: item.name,
+			secondary: item.detail,
+			kind: "generic",
+			icon: withImage ? undefined : "▰",
+			image:
+				withImage && item.thumbnailSrc
+					? { src: item.thumbnailSrc, alt: "" }
+					: undefined,
+			states: [
+				...(item.id === selectedId ? (["selected"] as const) : []),
+				...(item.disabled ? (["disabled"] as const) : []),
+			],
+		},
+	}));
+}
+
+function HorizontalMediaPool({
+	label,
+	className,
+	children,
+}: {
+	label: string;
+	className: string;
+	children: ReactNode;
+}) {
+	const ref = useRef<HTMLElement>(null);
+	const [edges, setEdges] = useState({ left: false, right: true });
+	useEffect(() => {
+		const element = ref.current;
+		if (!element) return;
+		const update = () =>
+			setEdges({
+				left: element.scrollLeft > 1,
+				right:
+					element.scrollLeft + element.clientWidth < element.scrollWidth - 1,
+			});
+		update();
+		element.addEventListener("scroll", update, { passive: true });
+		const observer = new ResizeObserver(update);
+		observer.observe(element);
+		return () => {
+			element.removeEventListener("scroll", update);
+			observer.disconnect();
+		};
+	}, []);
+	return (
+		<section
+			ref={ref}
+			className={`${className} fade-${edges.left ? "left" : "none"}-${edges.right ? "right" : "none"}`}
+			aria-label={label}
+		>
+			{children}
 		</section>
 	);
 }
@@ -322,12 +523,10 @@ function MediaLibraryBrowser({
 function MediaSecondaryControls({
 	sections,
 	selectedSectionId,
-	onSelectSection,
 	onChange,
 }: {
 	sections: MediaControlSection[];
 	selectedSectionId: string;
-	onSelectSection(sectionId: string): void;
 	onChange(controlId: string, value: string | number): void;
 }) {
 	const section =
@@ -338,24 +537,7 @@ function MediaSecondaryControls({
 			className="media-secondary-controls"
 			aria-label="Media secondary controls"
 		>
-			<div
-				className="media-control-tabs"
-				role="tablist"
-				aria-label="Control groups"
-			>
-				{sections.map((candidate) => (
-					<Button
-						key={candidate.id}
-						role="tab"
-						aria-selected={candidate.id === section?.id}
-						active={candidate.id === section?.id}
-						onClick={() => onSelectSection(candidate.id)}
-					>
-						{candidate.label}
-					</Button>
-				))}
-			</div>
-			<WindowScrollArea>
+			<div className="media-control-scroll">
 				{section && (
 					<div
 						className="media-control-panel"
@@ -374,18 +556,23 @@ function MediaSecondaryControls({
 							)}
 						</header>
 						<div className="media-control-grid">
-							{section.controls.map((control) => (
-								<MediaControl
-									key={control.id}
-									control={control}
-									sectionDisabled={section.capability === "unsupported"}
-									onChange={onChange}
-								/>
+							{section.controls.map((control, index) => (
+								<Fragment key={control.id}>
+									{control.group &&
+										control.group !== section.controls[index - 1]?.group && (
+											<h3>{control.group}</h3>
+										)}
+									<MediaControl
+										control={control}
+										sectionDisabled={section.capability === "unsupported"}
+										onChange={onChange}
+									/>
+								</Fragment>
 							))}
 						</div>
 					</div>
 				)}
-			</WindowScrollArea>
+			</div>
 		</section>
 	);
 }
@@ -402,14 +589,16 @@ function MediaControl({
 	const disabled = sectionDisabled || control.disabled;
 	if (control.kind === "choice")
 		return (
-			<SelectField
-				label={control.label}
-				description={control.description}
-				disabled={disabled}
-				value={control.value}
-				options={control.options}
-				onChange={(value) => onChange(control.id, value)}
-			/>
+			<div className={`media-choice-control ${disabled ? "disabled" : ""}`}>
+				<strong>{control.label}</strong>
+				<MultiValueToggle
+					ariaLabel={control.label}
+					value={control.value}
+					options={control.options}
+					onChange={(value) => onChange(control.id, value)}
+				/>
+				{control.description && <small>{control.description}</small>}
+			</div>
 		);
 	if (control.kind === "value")
 		return (

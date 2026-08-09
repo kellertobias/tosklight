@@ -100,7 +100,7 @@ export function GroupSettingsDialog({
 		}
 		setExpectedRevision(outcome.group.revision);
 		setExpectedShowRevision(outcome.showRevision);
-		setStatus(outcome.persistenceWarning ?? "Saved.");
+		setStatus(outcome.persistenceWarning ?? null);
 	};
 
 	const commitMapping = async (next: SpatialSelectionMapping | null) => {
@@ -118,6 +118,18 @@ export function GroupSettingsDialog({
 			setStatus("Authoritative Group settings are still loading.");
 			return;
 		}
+		// Reflect the accepted operator gesture while the revisioned write is in flight. A
+		// rejection repairs from authority below; waiting for the round trip made projection-kind
+		// changes appear not to work, especially when the selected kind changed the whole form.
+		setMapping(next);
+		setMappingPresentation(
+			next
+				? { type: "local", label: "Local override", mapping: next }
+				: resolveMappingPresentation(
+						{ ...group, body: { ...group.body, mapping: undefined } } as Group,
+						groups,
+					),
+		);
 		const outcome = await groupManagement.manage({
 			objectId: group.id,
 			expectedObjectRevision: objectRevision,
@@ -136,17 +148,8 @@ export function GroupSettingsDialog({
 		}
 		setExpectedRevision(outcome.group.revision);
 		setExpectedShowRevision(outcome.showRevision);
-		setMapping(next);
-		setMappingPresentation(
-			next
-				? { type: "local", label: "Local override", mapping: next }
-				: resolveMappingPresentation(
-						{ ...group, body: { ...group.body, mapping: undefined } } as Group,
-						groups,
-					),
-		);
 		await refreshSettings();
-		setStatus("Saved.");
+		setStatus(null);
 	};
 
 	const editingUnavailable = !groupManagement
@@ -384,7 +387,6 @@ function ProjectionSettingsPanel(
 	props: MappingPanelProps & { editingUnavailable: string | null },
 ) {
 	const {
-		mappingPresentation,
 		displayedMapping,
 		saving,
 		commitMapping,
@@ -406,7 +408,6 @@ function ProjectionSettingsPanel(
 				<ProjectionEditor
 					mapping={editable}
 					disabled={!hasManagement || saving}
-					inherited={mappingPresentation.type !== "local"}
 					onChange={(next) => void commitMapping(next)}
 				/>
 			</div>
@@ -434,7 +435,9 @@ function PhaseSettingsPanel({
 						unplaced={resolvedSpatial.warnings.length}
 					/>
 				) : (
-					<p className="phase-order-empty">Loading authoritative Stage ranks…</p>
+					<p className="phase-order-empty">
+						Loading authoritative Stage ranks…
+					</p>
 				)}
 			</div>
 			<div className="group-settings-controls">
@@ -451,22 +454,30 @@ function PhaseSettingsPanel({
 function ProjectionEditor({
 	mapping,
 	disabled,
-	inherited,
 	onChange,
 }: {
 	mapping: SpatialSelectionMapping;
 	disabled: boolean;
-	inherited: boolean;
 	onChange: (mapping: SpatialSelectionMapping) => void;
 }) {
 	// The same editor the Dynamics projection tab uses, so a Group and the Dynamics that
 	// inherit from it are configured the same way.
 	const projection = mapping.projection;
 	const kind = projectionKind(projection);
+	const fields = projectionFields(projection);
+	const positionFields = fields.filter((field) =>
+		field.key.startsWith("position-"),
+	);
+	const directionFields = fields.filter(
+		(field) => !field.key.startsWith("position-"),
+	);
 	const updateProjection = (next: SpatialSelectionMapping["projection"]) =>
 		onChange({ ...mapping, projection: next });
 	return (
-		<fieldset disabled={disabled} className="group-mapping-fields">
+		<fieldset
+			disabled={disabled}
+			className="group-mapping-fields group-projection-fields"
+		>
 			<legend>Projection</legend>
 			<MultiValueToggleField
 				className="group-projection-kinds"
@@ -479,41 +490,58 @@ function ProjectionEditor({
 					)
 				}
 			/>
-			{supportsPreset(projection) && (
-				<fieldset className="group-projection-presets">
-					<legend>Projection preset</legend>
-					{PROJECTION_PRESETS.map(({ value, label }) => (
-						<Button
-							key={value}
-							aria-pressed={projection.preset === value}
-							onClick={() =>
-								updateProjection({
-									...projectionForPreset(value),
-									anchor: projection.anchor,
-								})
-							}
-						>
-							{label}
-						</Button>
+			<div className="group-vector-fields">
+				{supportsPreset(projection) ? (
+					<fieldset className="group-vector-column group-preset-fields">
+						<legend>Presets</legend>
+						<div className="group-projection-presets">
+							{PROJECTION_PRESETS.map(({ value, label }) => (
+								<Button
+									key={value}
+									aria-pressed={projection.preset === value}
+									onClick={() =>
+										updateProjection({
+											...projectionForPreset(value),
+											anchor: projection.anchor,
+										})
+									}
+								>
+									{label}
+								</Button>
+							))}
+						</div>
+					</fieldset>
+				) : positionFields.length > 0 ? (
+					<fieldset className="group-vector-column group-position-fields">
+						<legend>Position</legend>
+						{positionFields.map((field) => (
+							<NumberField
+								key={`${kind}-${field.key}`}
+								label={field.label}
+								unit={field.unit}
+								value={field.value}
+								showStepButtons={false}
+								onCommit={(value) => updateProjection(field.apply(value))}
+							/>
+						))}
+					</fieldset>
+				) : null}
+				<fieldset className="group-vector-column group-direction-fields">
+					<legend>Direction</legend>
+					{directionFields.map((field) => (
+						<NumberField
+							key={`${kind}-${field.key}`}
+							label={field.label}
+							unit={field.unit}
+							value={field.value}
+							angle={field.unit === "°"}
+							onCommit={(value) => updateProjection(field.apply(value))}
+						/>
 					))}
 				</fieldset>
-			)}
-			<div className="group-vector-fields">
-				{projectionFields(projection).map((field) => (
-					<NumberField
-						key={`${kind}-${field.key}`}
-						label={field.label}
-						unit={field.unit}
-						value={field.value}
-						onCommit={(value) => updateProjection(field.apply(value))}
-					/>
-				))}
 			</div>
 			<p className="group-mapping-help">
 				{PROJECTION_KINDS.find((entry) => entry.value === kind)?.detail}
-				{inherited
-					? " Changing anything here makes this projection this Group's own."
-					: ""}
 			</p>
 		</fieldset>
 	);
@@ -531,111 +559,162 @@ function PhaseEditor({
 	const updateShape = (shape: SpatialSelectionShape) =>
 		onChange({ ...mapping, shape });
 	const shape = mapping.shape;
+	const [orderingMode, setOrderingMode] = useState<
+		"fixture-id" | "selection-order" | SpatialSelectionShape["type"]
+	>("selection-order");
+	const spatialMode =
+		orderingMode === "grid" ||
+		orderingMode === "radial" ||
+		orderingMode === "radar";
+	// A revisioned write may still be fetching authority when an operator changes modes. Render
+	// the chosen shape immediately rather than briefly showing the previous shape's controls.
+	const activeShape =
+		spatialMode && shape.type !== orderingMode
+			? defaultShape(orderingMode)
+			: shape;
 	return (
-		<fieldset disabled={disabled} className="group-mapping-fields">
+		<fieldset
+			disabled={disabled}
+			className="group-mapping-fields group-phase-fields"
+		>
 			<legend>Phase ordering</legend>
 			<MultiValueToggleField
 				className="group-shape-choices"
 				label="Ordering mode"
-				value={shape.type}
+				value={orderingMode}
 				options={[
+					{ value: "selection-order", label: "Selection Order" },
+					{ value: "fixture-id", label: "Fixture ID" },
 					{ value: "grid", label: "Grid" },
 					{ value: "radial", label: "Radial" },
 					{ value: "radar", label: "Radar" },
 				]}
-				onChange={(type) =>
-					updateShape(defaultShape(type as SpatialSelectionShape["type"]))
-				}
+				onChange={(type) => {
+					const next = type as typeof orderingMode;
+					setOrderingMode(next);
+					if (next === "grid" || next === "radial" || next === "radar")
+						updateShape(defaultShape(next));
+				}}
 			/>
-			<p className="group-mapping-help">
-				Orders the projected plane for every Dynamic inheriting from this Group.
-				Linear and Random order a Dynamic's own targets, so they are set per
-				Dynamic rather than here.
-			</p>
-			<FormLayout labelPlacement="top">
-				{shape.type === "grid" && (
-					<>
-						<NumberField
-							label="Grid angle"
-							unit="°"
-							value={shape.angle_degrees}
-							onCommit={(angle_degrees) =>
-								updateShape({ ...shape, angle_degrees })
-							}
-						/>
-						<SelectField
-							label="Rank direction"
-							value={shape.direction}
-							options={[
-								["ascending", "Ascending"],
-								["descending", "Descending"],
-							]}
-							onChange={(direction) =>
-								updateShape({
-									...shape,
-									direction: direction as "ascending" | "descending",
-								})
-							}
-						/>
-					</>
-				)}
-				{shape.type !== "grid" && (
-					<>
-						<NumberField
-							label="Centre U"
-							value={shape.center_u}
-							onCommit={(center_u) => updateShape({ ...shape, center_u })}
-						/>
-						<NumberField
-							label="Centre V"
-							value={shape.center_v}
-							onCommit={(center_v) => updateShape({ ...shape, center_v })}
-						/>
-					</>
-				)}
-				{shape.type === "radial" && (
-					<SelectField
-						label="Radial direction"
-						value={shape.direction}
-						options={[
-							["outward", "Outward"],
-							["inward", "Inward"],
-						]}
-						onChange={(direction) =>
-							updateShape({
-								...shape,
-								direction: direction as "outward" | "inward",
-							})
-						}
-					/>
-				)}
-				{shape.type === "radar" && (
-					<>
-						<NumberField
-							label="Start angle"
-							unit="°"
-							value={shape.start_angle_degrees}
-							onCommit={(start_angle_degrees) =>
-								updateShape({ ...shape, start_angle_degrees })
-							}
-						/>
-						<SelectField
-							label="Sweep"
-							value={shape.sweep}
-							options={[
-								["clockwise", "Clockwise"],
-								["counter_clockwise", "Counter-clockwise"],
-							]}
-							onChange={(sweep) =>
-								updateShape({
-									...shape,
-									sweep: sweep as "clockwise" | "counter_clockwise",
-								})
-							}
-						/>
-					</>
-				)}
-			</FormLayout>
+			{!spatialMode ? (
+				<div className="group-phase-no-settings">
+					<strong>
+						{orderingMode === "selection-order"
+							? "Selection Order"
+							: "Fixture ID"}
+					</strong>
+					<p>
+						{orderingMode === "selection-order"
+							? "Uses the order in which the fixtures were selected when the Group was stored."
+							: "Orders fixtures by Fixture ID, from the lowest ID to the highest."}
+					</p>
+				</div>
+			) : (
+				<>
+					<p className="group-mapping-help">
+						Orders the projected plane for every Dynamic inheriting from this
+						Group. Linear and Random order a Dynamic's own targets, so they are
+						set per Dynamic rather than here.
+					</p>
+					<FormLayout labelPlacement="top">
+						{activeShape.type === "grid" && (
+							<div className="group-phase-row">
+								<NumberField
+									label="Grid angle"
+									labelPlacement="top"
+									unit="°"
+									value={activeShape.angle_degrees}
+									onCommit={(angle_degrees) =>
+										updateShape({ ...activeShape, angle_degrees })
+									}
+								/>
+								<SelectField
+									label="Rank direction"
+									labelPlacement="top"
+									value={activeShape.direction}
+									options={[
+										["ascending", "Ascending"],
+										["descending", "Descending"],
+									]}
+									onChange={(direction) =>
+										updateShape({
+											...activeShape,
+											direction: direction as "ascending" | "descending",
+										})
+									}
+								/>
+							</div>
+						)}
+						{activeShape.type !== "grid" && (
+							<div className="group-phase-row">
+								<NumberField
+									label="Centre U"
+									labelPlacement="top"
+									value={activeShape.center_u}
+									onCommit={(center_u) =>
+										updateShape({ ...activeShape, center_u })
+									}
+								/>
+								<NumberField
+									label="Centre V"
+									labelPlacement="top"
+									value={activeShape.center_v}
+									onCommit={(center_v) =>
+										updateShape({ ...activeShape, center_v })
+									}
+								/>
+							</div>
+						)}
+						{activeShape.type === "radial" && (
+							<div className="group-phase-row group-phase-single">
+								<SelectField
+									label="Radial direction"
+									labelPlacement="top"
+									value={activeShape.direction}
+									options={[
+										["outward", "Outward"],
+										["inward", "Inward"],
+									]}
+									onChange={(direction) =>
+										updateShape({
+											...activeShape,
+											direction: direction as "outward" | "inward",
+										})
+									}
+								/>
+							</div>
+						)}
+						{activeShape.type === "radar" && (
+							<div className="group-phase-row">
+								<NumberField
+									label="Start angle"
+									labelPlacement="top"
+									unit="°"
+									value={activeShape.start_angle_degrees}
+									onCommit={(start_angle_degrees) =>
+										updateShape({ ...activeShape, start_angle_degrees })
+									}
+								/>
+								<SelectField
+									label="Sweep"
+									labelPlacement="top"
+									value={activeShape.sweep}
+									options={[
+										["clockwise", "Clockwise"],
+										["counter_clockwise", "Counter-clockwise"],
+									]}
+									onChange={(sweep) =>
+										updateShape({
+											...activeShape,
+											sweep: sweep as "clockwise" | "counter_clockwise",
+										})
+									}
+								/>
+							</div>
+						)}
+					</FormLayout>
+				</>
+			)}
 		</fieldset>
 	);
 }
@@ -644,21 +723,35 @@ function NumberField({
 	label,
 	value,
 	unit,
+	angle = false,
+	showStepButtons = angle,
+	labelPlacement = "side",
 	onCommit,
 }: {
 	label: string;
 	value: number;
 	unit?: string;
+	angle?: boolean;
+	showStepButtons?: boolean;
+	labelPlacement?: "side" | "top";
 	onCommit: (value: number) => void;
 }) {
 	return (
 		<UiNumberField
-			className="group-number-field"
+			className="group-number-input"
 			label={label}
+			labelPlacement={labelPlacement}
 			unit={unit}
 			defaultValue={value}
 			allowDecimal
-			showStepButtons={false}
+			showStepButtons={showStepButtons}
+			step={angle ? 45 : undefined}
+			stepBehavior={angle ? "snap" : undefined}
+			wrapStepAtBounds={angle}
+			min={angle ? -180 : undefined}
+			max={angle ? 180 : undefined}
+			onStepCommit={(next) => onCommit(Number(next))}
+			onKeyboardCommit={(next) => onCommit(Number(next))}
 			onBlur={(event) => onCommit(Number(event.currentTarget.value))}
 			onKeyDown={(event) => {
 				if (event.key === "Enter") event.currentTarget.blur();
@@ -671,17 +764,20 @@ function SelectField({
 	label,
 	value,
 	options,
+	labelPlacement = "side",
 	onChange,
 }: {
 	label: string;
 	value: string;
 	options: Array<[string, string]>;
+	labelPlacement?: "side" | "top";
 	onChange: (value: string) => void;
 }) {
 	return (
 		<UiSelectField
-			className="group-number-field"
+			className="group-select-field"
 			label={label}
+			labelPlacement={labelPlacement}
 			ariaLabel={label}
 			value={value}
 			options={options.map(([option, title]) => ({
@@ -731,10 +827,9 @@ function SaveStatus({
 	status: string | null;
 	saving: boolean;
 }) {
-	if (!status && !saving) return null;
 	return (
 		<p className="group-settings-status" role="status">
-			{saving ? "Saving…" : status}
+			{saving ? "Saving…" : (status ?? "")}
 		</p>
 	);
 }

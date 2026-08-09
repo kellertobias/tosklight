@@ -1,6 +1,75 @@
 use super::*;
 
 #[test]
+fn programmer_fade_starts_from_unowned_fixture_profile_default() {
+    let started = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap();
+    let clock = Arc::new(ManualClock::new(started));
+    let shared: SharedClock = clock.clone();
+    let programmers = ProgrammerRegistry::with_clock(shared);
+    let session = SessionId::new();
+    programmers.start(session, UserId::new());
+    let (mut fixture, logical) = fixture();
+    fixture.definition.heads[0].parameters[0].default = 0.8;
+    let engine = Engine::new(programmers.clone());
+    engine.set_control_timing([120.0; 5], 1_000, 0);
+    engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![fixture].into(),
+            revision: 1,
+            ..Default::default()
+        })
+        .unwrap();
+
+    programmers.set_faded(
+        session,
+        logical,
+        AttributeKey::intensity(),
+        AttributeValue::Normalized(0.2),
+    );
+    assert!((normalized(&engine.resolved_values(), logical, "intensity") - 0.8).abs() < 0.001);
+    clock.set(started + ChronoDuration::milliseconds(500));
+    assert!((normalized(&engine.resolved_values(), logical, "intensity") - 0.5).abs() < 0.001);
+}
+
+#[test]
+fn programmer_fade_starts_from_current_immediate_programmer_value() {
+    let started = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap();
+    let clock = Arc::new(ManualClock::new(started));
+    let shared: SharedClock = clock.clone();
+    let programmers = ProgrammerRegistry::with_clock(shared);
+    let session = SessionId::new();
+    programmers.start(session, UserId::new());
+    let (fixture, logical) = fixture();
+    let engine = Engine::new(programmers.clone());
+    engine.set_control_timing([120.0; 5], 1_000, 0);
+    engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![fixture].into(),
+            revision: 1,
+            ..Default::default()
+        })
+        .unwrap();
+
+    programmers.set(
+        session,
+        logical,
+        AttributeKey::intensity(),
+        AttributeValue::Normalized(0.8),
+    );
+    assert!((normalized(&engine.resolved_values(), logical, "intensity") - 0.8).abs() < 0.001);
+    clock.set(started + ChronoDuration::milliseconds(100));
+    programmers.set_faded(
+        session,
+        logical,
+        AttributeKey::intensity(),
+        AttributeValue::Normalized(0.2),
+    );
+    assert!((normalized(&engine.resolved_values(), logical, "intensity") - 0.8).abs() < 0.001);
+    clock.set(started + ChronoDuration::milliseconds(600));
+    assert!((normalized(&engine.resolved_values(), logical, "intensity") - 0.5).abs() < 0.001);
+}
+
+#[test]
 fn programmer_fade_starts_from_resolved_playback_underlay_and_release_reveals_it() {
     let started = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap();
     let clock = Arc::new(ManualClock::new(started));

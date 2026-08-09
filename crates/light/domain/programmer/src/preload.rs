@@ -40,10 +40,31 @@ impl ProgrammerRegistry {
         self.activate_preload_at(session, self.clock.now())
     }
 
-    /// Publishes every pending programmer value at the one application timestamp owned by
-    /// Preload GO. Values deliberately keep their explicit fade/delay metadata; only their
-    /// transition origin moves from the blind-edit time to the commit time.
+    /// Publishes pending values at one timestamp while preserving their stored timing.
+    /// Production Preload GO uses `activate_preload_at_with_fade` so trigger-time Programmer Fade
+    /// replaces blind-edit fade metadata.
     pub fn activate_preload_at(&self, session: SessionId, committed_at: DateTime<Utc>) -> bool {
+        self.activate_preload_at_with_timing(session, committed_at, None)
+    }
+
+    /// Publish pending values at one GO-owned timestamp and capture the supplied Programmer Fade
+    /// for every static value. Blind-edit timing must not leak into the transition that starts at
+    /// GO; changing the setting after this call likewise cannot alter the running fade.
+    pub fn activate_preload_at_with_fade(
+        &self,
+        session: SessionId,
+        committed_at: DateTime<Utc>,
+        programmer_fade_millis: u64,
+    ) -> bool {
+        self.activate_preload_at_with_timing(session, committed_at, Some(programmer_fade_millis))
+    }
+
+    fn activate_preload_at_with_timing(
+        &self,
+        session: SessionId,
+        committed_at: DateTime<Utc>,
+        programmer_fade_millis: Option<u64>,
+    ) -> bool {
         let mutation_gate = self.mutation_gate(session);
         let _mutation_guard = mutation_gate.lock();
         let (user_id, pending_values_changed) = {
@@ -57,6 +78,10 @@ impl ProgrammerRegistry {
             state.checkpoint();
             for mut incoming in std::mem::take(&mut state.preload_pending) {
                 incoming.changed_at = committed_at;
+                if let Some(fade_millis) = programmer_fade_millis {
+                    incoming.fade = true;
+                    incoming.fade_millis = Some(fade_millis);
+                }
                 state.preload_active.retain(|value| {
                     !(value.fixture_id == incoming.fixture_id
                         && value.attribute == incoming.attribute)
@@ -66,6 +91,10 @@ impl ProgrammerRegistry {
             for (group, mut attributes) in std::mem::take(&mut state.preload_group_pending) {
                 for value in attributes.values_mut() {
                     value.changed_at = committed_at;
+                    if let Some(fade_millis) = programmer_fade_millis {
+                        value.fade = true;
+                        value.fade_millis = Some(fade_millis);
+                    }
                 }
                 state
                     .preload_group_active

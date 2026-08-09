@@ -137,6 +137,7 @@ fn wire_projection(value: &domain::SpatialProjection) -> wire::DynamicSpatialPro
         },
         preset: value.preset.map(|preset| match preset {
             domain::ProjectionPreset::Top => group_wire::GroupMappingProjectionPreset::Top,
+            domain::ProjectionPreset::Bottom => group_wire::GroupMappingProjectionPreset::Bottom,
             domain::ProjectionPreset::Front => group_wire::GroupMappingProjectionPreset::Front,
             domain::ProjectionPreset::Back => group_wire::GroupMappingProjectionPreset::Back,
             domain::ProjectionPreset::Left => group_wire::GroupMappingProjectionPreset::Left,

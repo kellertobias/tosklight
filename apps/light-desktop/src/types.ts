@@ -96,6 +96,7 @@ export interface PaneModel extends GridRect {
 	fixtureSheetActiveOnly?: boolean;
 	fixtureSheetCompactMode?: FixtureSheetCompactMode;
 	showCueSidebar?: boolean;
+	cueListCompactRows?: boolean;
 	cueListSource?: "fixed" | "follow-selection";
 	fixedCueListNumber?: number;
 	stageView?: StageView;

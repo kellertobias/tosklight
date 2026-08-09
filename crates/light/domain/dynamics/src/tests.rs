@@ -1050,6 +1050,14 @@ fn runtime_reconciliation_rejects_invalid_mapping_atomically() {
         })
         .unwrap();
     let before = runtime.snapshot();
+    let mut invalid_inherited = SpatialSelectionMapping {
+        projection: SpatialProjection::from_preset(ProjectionPreset::Top, Position3d::default()),
+        shape: SpatialSelectionShape::Grid {
+            angle_degrees: 0.0,
+            direction: RankDirection::Ascending,
+        },
+    };
+    invalid_inherited.projection.view_direction = Vector3::default();
 
     assert!(matches!(
         runtime.reconcile_instance_targets(
@@ -1058,7 +1066,7 @@ fn runtime_reconciliation_rejects_invalid_mapping_atomically() {
                 ordered_targets: targets.into_iter().rev().collect(),
             },
             &HashMap::new(),
-            None,
+            Some(&invalid_inherited),
         ),
         Err(DynamicRuntimeError::InvalidSpatialMapping(_))
     ));

@@ -1,4 +1,3 @@
-import type { PlaybackCueTransition } from "../../api/generated/light-wire";
 import type {
 	PlaybackActionOutcome,
 	PlaybackDeskProjection,
@@ -8,6 +7,7 @@ import type {
 	PlaybackTelemetrySample,
 	PlaybackTelemetryTick,
 } from "../../api/types";
+import type { PlaybackCueTransition } from "../../api/types/playback";
 
 export type PlaybackIdentity = PlaybackRuntimeIdentity;
 export type PlaybackProjection = PlaybackRuntimeProjection;

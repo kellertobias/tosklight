@@ -79,6 +79,19 @@ pub(super) async fn diagnostics(
         programmer_action_timing: serde_json::to_value(state.action_timing.snapshot())
             .map_err(|error| ApiError::internal(error.to_string()))?,
         visualization,
+        extensions: serde_json::to_value(state.extensions.snapshot())
+            .map_err(|error| ApiError::internal(error.to_string()))?,
+        compatibility_reports: serde_json::json!({
+            "installation": state
+                .installation
+                .setting("removed_midi_inputs_report")
+                .map_err(ApiError::store)?
+                .and_then(|report| serde_json::from_str::<serde_json::Value>(&report).ok()),
+            "active_show": state
+                .active_show
+                .compatibility_reports()
+                .map_err(ApiError::store)?,
+        }),
     }))
 }
 

@@ -317,6 +317,7 @@ impl ProgrammerRegistry {
             .get(&previous)
             .cloned()
             .unwrap_or_default();
+        let previous_alignment = self.alignment_contexts.read().get(&previous).cloned();
         let promote_previous = self
             .command_states
             .read()
@@ -338,6 +339,12 @@ impl ProgrammerRegistry {
                 .entry(context)
                 .or_insert(previous_selection);
         }
+        if let Some(previous_alignment) = previous_alignment {
+            self.alignment_contexts
+                .write()
+                .entry(context)
+                .or_insert(previous_alignment);
+        }
 
         if previous == session
             && !self
@@ -348,6 +355,7 @@ impl ProgrammerRegistry {
         {
             self.command_states.write().remove(&previous);
             self.selection_contexts.write().remove(&previous);
+            self.alignment_contexts.write().remove(&previous);
         }
         true
     }

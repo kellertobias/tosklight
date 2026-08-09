@@ -28,8 +28,7 @@ export interface ProgrammerActions {
 		fixtureIds: string[],
 	) => Promise<GeneratedFixturePresetResult | null>;
 	alignSelection: (
-		attribute: string,
-		mode: "left" | "right" | "center" | "out",
+		mode: "off" | "left" | "right" | "out" | "in",
 	) => Promise<void>;
 	storePreload: (
 		input: {

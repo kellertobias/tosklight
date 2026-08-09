@@ -283,13 +283,20 @@ export function useCommandLineShortcuts(
 		const current = () => context.current as ShortcutContext;
 		const keydown = (event: KeyboardEvent) => handleKeyDown(current(), event);
 		const keyup = (event: KeyboardEvent) => handleKeyUp(current(), event);
+		const pageStep = ((event: CustomEvent<number>) => {
+			const shortcut = current();
+			if (shortcut.authority.ready)
+				stepPlaybackPage(shortcut, event.detail > 0 ? 1 : -1);
+		}) as EventListener;
 		const blur = () => heldActions.releaseAll();
 		window.addEventListener("keydown", keydown);
 		window.addEventListener("keyup", keyup);
+		window.addEventListener("light:playback-page-step", pageStep);
 		window.addEventListener("blur", blur);
 		return () => {
 			window.removeEventListener("keydown", keydown);
 			window.removeEventListener("keyup", keyup);
+			window.removeEventListener("light:playback-page-step", pageStep);
 			window.removeEventListener("blur", blur);
 			releaseHeldControls(current());
 		};

@@ -159,13 +159,10 @@ pub(super) fn matter_playback_values(
                 .map(|number| (number, status))
         })
         .collect::<HashMap<_, _>>();
-    let now = application_millis(state);
-    let speeds = state.output.speed_group_snapshots(now);
-    let configuration = state.installation.configuration();
-    let grand_master = state.output.control_projection().grand_master;
     snapshot
         .playbacks
         .iter()
+        .filter(|definition| matter_exposes_target(&definition.target))
         .map(|definition| {
             use light_playback::PlaybackTarget;
             let value = match &definition.target {
@@ -200,25 +197,11 @@ pub(super) fn matter_playback_values(
                     .group_master(group_id)
                     .map(|master| matter::PlaybackValue::new(master, master > 0.0))
                     .unwrap_or_default(),
-                PlaybackTarget::SpeedGroup { group } => speed_group_index(group)
-                    .ok()
-                    .map(|index| {
-                        let level = matter_speed_fader_level(speeds[index], definition.fader);
-                        matter::PlaybackValue::new(level, level > 0.0)
-                    })
-                    .unwrap_or_default(),
-                PlaybackTarget::ProgrammerFade => {
-                    let level =
-                        (configuration.programmer_fade_millis as f32 / 20_000.0).clamp(0.0, 1.0);
-                    matter::PlaybackValue::new(level, level > 0.0)
-                }
-                PlaybackTarget::CueFade => {
-                    let level = (configuration.sequence_master_fade_millis as f32 / 60_000.0)
-                        .clamp(0.0, 1.0);
-                    matter::PlaybackValue::new(level, level > 0.0)
-                }
-                PlaybackTarget::GrandMaster => {
-                    matter::PlaybackValue::new(grand_master, grand_master > 0.0)
+                PlaybackTarget::SpeedGroup { .. }
+                | PlaybackTarget::ProgrammerFade
+                | PlaybackTarget::CueFade
+                | PlaybackTarget::GrandMaster => {
+                    unreachable!("Matter target eligibility is filtered before value projection")
                 }
             };
             (definition.number, value)
@@ -226,28 +209,13 @@ pub(super) fn matter_playback_values(
         .collect()
 }
 
-pub(super) fn matter_speed_fader_level(
-    snapshot: SpeedSnapshot,
-    fader: light_playback::PlaybackFaderMode,
-) -> f32 {
-    use light_playback::PlaybackFaderMode;
-    let level = match fader {
-        PlaybackFaderMode::DirectBpm => {
-            if snapshot.speed_master_scale == 0.0 {
-                0.0
-            } else {
-                snapshot.manual_bpm / 300.0
-            }
-        }
-        PlaybackFaderMode::CenteredRelative => {
-            snapshot.speed_master_scale.max(f64::MIN_POSITIVE).log(4.0) / 2.0 + 0.5
-        }
-        PlaybackFaderMode::LearnedPercentage | PlaybackFaderMode::Speed => {
-            snapshot.speed_master_scale
-        }
-        _ => 0.0,
-    };
-    level.clamp(0.0, 1.0) as f32
+fn matter_exposes_target(target: &light_playback::PlaybackTarget) -> bool {
+    matches!(
+        target,
+        light_playback::PlaybackTarget::CueList { .. }
+            | light_playback::PlaybackTarget::Dynamic { .. }
+            | light_playback::PlaybackTarget::Group { .. }
+    )
 }
 
 /// Apply the protocol-independent result of a Matter On/Off or Level Control write through the

@@ -33,10 +33,7 @@ export function dynamicMappingBaseLabel(
 		: "Selection order (no Group mapping)";
 }
 
-export function validateDynamicSpatialDraft(
-	draft: DynamicSpatialMappingDraft,
-	hasInheritedMapping: boolean,
-) {
+export function validateDynamicSpatialDraft(draft: DynamicSpatialMappingDraft) {
 	const shapeOverride =
 		draft.shape.type === "replace" ? draft.shape.value : null;
 	if (shapeOverride?.type === "random") {
@@ -52,11 +49,6 @@ export function validateDynamicSpatialDraft(
 		const shapeError = validateShape(draft.shape.value);
 		if (shapeError) return shapeError;
 	}
-	if (
-		!hasInheritedMapping &&
-		(draft.projection.type === "replace") !== (draft.shape.type === "replace")
-	)
-		return "Without a Group mapping, Projection and Shape must both be overridden or both use selection order.";
 	return null;
 }
 

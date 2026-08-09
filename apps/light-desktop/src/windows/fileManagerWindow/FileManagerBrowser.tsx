@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
 import { Button } from "@tosklight/ui";
+import { type ReactNode, useSyncExternalStore } from "react";
 import { useFiles } from "../../features/files/FilesContext";
 import {
 	extension,
@@ -14,6 +14,11 @@ import {
 	textExtensions,
 	validItemName,
 } from "./fileUtilities";
+import {
+	fileOperationOwnership,
+	fileOperationOwnershipRevision,
+	subscribeFileOperationOwnership,
+} from "./operationOwnership";
 import type { FileManagerController } from "./useFileManagerController";
 
 function FileManagerToolbar({
@@ -262,9 +267,27 @@ function DirectoryContents({
 	const server = useFiles();
 	const { state, navigation, operations, editor, picker } = controller;
 	const normalizedQuery = state.query.trim().toLocaleLowerCase();
+	useSyncExternalStore(
+		subscribeFileOperationOwnership,
+		fileOperationOwnershipRevision,
+		fileOperationOwnershipRevision,
+	);
 	const visibleEntries = (state.listing?.entries ?? []).filter((entry) =>
 		entry.name.toLocaleLowerCase().includes(normalizedQuery),
 	);
+	const targetOperation =
+		state.operation?.kind ??
+		(fileOperationOwnership.claimed === null
+			? fileOperationOwnership.pending
+			: null);
+	const targetClass = targetOperation
+		? `${targetOperation === "rename" ? "set" : targetOperation}-target`
+		: "";
+	const targetLabel = targetOperation
+		? targetOperation === "rename"
+			? "Set"
+			: `${targetOperation[0].toUpperCase()}${targetOperation.slice(1)}`
+		: null;
 	return (
 		<main
 			className={state.view === "grid" ? "file-grid" : "file-list"}
@@ -291,10 +314,15 @@ function DirectoryContents({
 					<Button
 						variant="ghost"
 						key={item.path}
-						className={`${selectedItem ? "selected" : ""} ${picker && !pickerAllowed ? "picker-invalid" : ""}`}
+						className={`${selectedItem ? "selected" : ""} ${picker && !pickerAllowed ? "picker-invalid" : ""} ${targetClass}`}
 						aria-pressed={selectedItem}
 						aria-label={`${item.name}, ${item.kind}`}
 						onClick={(event) => operations.selectEntry(item, event)}
+						onContextMenu={(event) => {
+							if (picker || state.busy) return;
+							event.preventDefault();
+							operations.beginOperation("rename", [value]);
+						}}
 						onDoubleClick={() => {
 							if (item.kind === "folder")
 								navigation.navigate({
@@ -333,6 +361,11 @@ function DirectoryContents({
 								</span>
 								<span>{formatTime(item.modified_millis)}</span>
 							</>
+						)}
+						{targetLabel && (
+							<span className={`file-command-target-badge ${targetClass}`}>
+								{targetLabel}
+							</span>
 						)}
 					</Button>
 				);

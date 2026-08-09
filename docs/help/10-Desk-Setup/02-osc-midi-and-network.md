@@ -1,6 +1,6 @@
-# OSC, MIDI, and Network Control
+# OSC, Extensions, and Network Control
 
-Preload capture configuration lives in **Desk Setup > Preferences > Others**. MIDI, OSC, RTP-MIDI, Sound-to-Light input, Matter, and remote-server status are peer groups under **Desk Setup > Network & Inputs**.
+Preload capture configuration lives in **Desk Setup > Preferences > Others**. Native extensions, OSC, Sound-to-Light input, Matter, and remote-server status are peer groups under **Desk Setup > Network & Inputs**.
 
 ![Desk input status and Preload capture settings](../assets/screenshots/workflows/desk-setup-inputs.png)
 
@@ -16,9 +16,25 @@ Network & Inputs reports the active OSC bind address; it does not edit that bind
 
 After binding, test a harmless selection and confirm the command text and result in the application. Avoid exposing OSC to untrusted networks; OSC itself does not provide the desk-token boundary used by remote application connections.
 
-## MIDI and RTP-MIDI
+## Native extensions
 
-Network & Inputs reports selected native MIDI inputs and the active RTP-MIDI bind; those values are not editable from this screen. Configure them in the installation/server configuration and return here to verify the running state. Timecode source priority and fallback are reported separately under **Timecode**.
+Built-in MIDI and RTP-MIDI transports have been removed from the server. Native device and protocol integrations are installed as separately approved extension packages. **Network & Inputs > Native extensions** shows the effective package folder and configuration file, manifest and digest validation, local approval state, configured instances, process health, restarts, protocol errors, and bounded queue drops. A missing, invalid, unapproved, or crashing extension does not prevent the desk from becoming ready.
+
+To install one, copy its complete package folder into the exact **Extensions folder** shown by diagnostics, then use the authenticated **Rescan extensions** action. Portable/headless archives normally use `extensions` beside the server executable; the desktop uses `extensions` in its application-data folder; repository development uses `.artifacts/runtime/extensions`. Do not copy individual files into a live package folder. Stage the complete folder elsewhere and replace it atomically so a rescan cannot observe half an update.
+
+Approval and assignment are deliberately file-based in this version. Edit `extensions.json` in the reported Light data folder. Its version-1 document maps the extension's exact manifest ID to the package digest shown by diagnostics, then defines enabled instances with a stable local ID, desk ID or alias, stable device identity, extension settings, and logical control bindings. Restart or rescan after saving. A new digest is a new approval decision; ToskLight disables a changed package until the document names that digest. Never approve a digest copied from an untrusted source without comparing it to the validated local package.
+
+Disable or remove an instance in `extensions.json` before unplugging or deleting its package. The host requests graceful release, then terminates a child that does not stop within the deadline. Removing the package without changing the file leaves an actionable missing-package diagnostic and does not affect software control. Device paths such as `/dev/tty*` and `COM4` are locators, not identities; use a USB serial, HID identity, MIDI endpoint identity, or another stable identifier supplied by the package. An ambiguous device remains unclaimed.
+
+Platform trust remains the operator's responsibility. On macOS, review quarantine and input/device permissions for an unsigned package before approval. On Windows, review the publisher and device-driver requirements. HID, serial, USB, MIDI, and network permissions belong to the extension executable, not to shows or Macro code. Extension stderr and host health are bounded in the normal runtime log and authenticated diagnostics; no extension may add a settings page or render its own UI.
+
+When an older installation is first opened, its exact MIDI input names and RTP-MIDI bind are preserved in **Diagnostics > Compatibility reports**. Older portable shows receive a recovery backup; unsupported MIDI Control Mappings are removed from the active object set and copied verbatim into the show compatibility report. OSC mappings remain unchanged. Recreate a removed integration only after installing and approving the intended extension package—ToskLight never guesses which package should receive legacy settings or mappings.
+
+Timecode source priority and fallback remain server-owned and are reported separately under **Timecode**. Extension-provided timecode enters that same authoritative router under its extension/instance source identity. A telemetry-only extension reports typed channel values, units, quality, stale/loss, and rate errors in diagnostics; telemetry never enters fixture output or the DMX scheduler.
+
+For package authors, the complete package, manifest, private IPC, input, feedback-output, telemetry,
+timecode, lifecycle, and conformance contract is in
+[Developing Native Hardware Extensions](../99-Development/05-native-extension-development.md).
 
 ## Sound-to-Light audio input
 

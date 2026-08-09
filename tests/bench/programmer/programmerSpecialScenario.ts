@@ -7,7 +7,7 @@ import type { DeskDriver } from "../core/desk";
 import type { SimulatedHardware } from "../hardware/hardwareScenario";
 import { batchProgrammerValues } from "./programmerValues";
 
-export type PositionAlignMode = "out" | "center" | "left" | "right";
+export type PositionAlignMode = "left" | "right" | "out" | "in";
 export type ControlSemantic =
 	| "lamp_on"
 	| "lamp_off"
@@ -458,7 +458,7 @@ export class BrowserProgrammerSpecials {
 
 	private async align(mode: PositionAlignMode): Promise<void> {
 		await this.chooseFamily("Position");
-		const order: PositionAlignMode[] = ["out", "center", "left", "right"];
+		const order: PositionAlignMode[] = ["left", "right", "out", "in"];
 		for (let index = 0; index <= order.indexOf(mode); index += 1) {
 			const current = index === 0 ? "Off" : title(order[index - 1]);
 			await this.desk.click(
@@ -481,7 +481,7 @@ export class BrowserProgrammerSpecials {
 			"POSITION ALIGN",
 			`Align selected Pan values ${mode} through the production command boundary.`,
 		);
-		await this.api.alignProgrammerSelection("pan", mode);
+		await this.api.alignProgrammerSelection(mode);
 	}
 
 	private async controlAction(semantic: ControlSemantic): Promise<void> {

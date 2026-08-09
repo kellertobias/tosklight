@@ -7,6 +7,7 @@ use light_core::{
 use std::collections::HashMap;
 use std::sync::Arc;
 
+mod alignment;
 mod capture_mode;
 mod cue_recording;
 mod dynamic_values;

@@ -92,7 +92,7 @@ describe("projection encoder slots", () => {
 
 	it("fits a planar projection on one page", () => {
 		expect(pages(dynamic())).toEqual([
-			["Projection", "Direction X", "Direction Y", "Direction Z", "Rotation"],
+			["Projection", "Azimuth", "Elevation", "Rotation"],
 		]);
 	});
 
@@ -102,13 +102,22 @@ describe("projection encoder slots", () => {
 				(intent: DynamicUpdateIntent, group?: string) => Promise<undefined>
 			>(async () => undefined);
 		const slots = projectionEncoderSlots(dynamic(), 6, onMutate);
-		const directionX = slots.find((slot) => slot.label === "Direction X");
-		await directionX?.apply(0.5, "group-1");
+		const elevation = slots.find((slot) => slot.label === "Elevation");
+		await elevation?.apply(-45, "group-1");
 		expect(onMutate).toHaveBeenCalledOnce();
 		expect(onMutate.mock.calls[0]?.[0]).toMatchObject({
 			type: "set_spatial_mapping",
 			spatial_mapping: {
-				projection: { type: "replace", value: { view_direction: { x: 0.5 } } },
+				projection: {
+					type: "replace",
+					value: {
+						view_direction: {
+							x: expect.closeTo(Math.SQRT1_2),
+							y: expect.closeTo(0),
+							z: expect.closeTo(-Math.SQRT1_2),
+						},
+					},
+				},
 			},
 		});
 	});

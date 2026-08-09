@@ -85,6 +85,8 @@ fn operational_cue_list(
         restart_mode: light_playback::RestartMode::FirstCue,
         force_cue_timing: false,
         disable_cue_timing: false,
+        auto_off_at_zero: false,
+        auto_off_flash_release: false,
         chaser_step_millis: 1_000,
         chaser_xfade_millis: 0,
         chaser_xfade_percent: Some(0),
@@ -96,6 +98,7 @@ fn operational_cue_list(
 
 fn operational_route() -> light_output::OutputRoute {
     light_output::OutputRoute {
+        target: Default::default(),
         protocol: light_output::Protocol::Sacn,
         logical_universe: 1,
         destination_universe: 1,

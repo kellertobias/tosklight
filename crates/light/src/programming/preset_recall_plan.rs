@@ -1,8 +1,9 @@
 use crate::{ActionError, ActionErrorKind};
 use light_core::{AttributeKey, FixtureId};
 use light_programmer::{
-    NormalProgrammerValueMutation, NormalProgrammerValueTiming, Preset, ProgrammerSelection,
-    SelectionExpression, SelectionReference, SelectionRule,
+    NormalProgrammerValueMutation, NormalProgrammerValueTiming, PreloadProgrammerValueMutation,
+    PreloadProgrammerValueTiming, Preset, ProgrammerSelection, SelectionExpression,
+    SelectionReference, SelectionRule,
 };
 use std::collections::{HashMap, HashSet};
 
@@ -150,6 +151,60 @@ pub(super) fn plan(
     }
     append_live_group_values(&mut planned, preset, &live_groups, timing);
     Ok(retain_last_address(planned))
+}
+
+pub(super) fn as_preload(
+    mutations: &[NormalProgrammerValueMutation],
+) -> Vec<PreloadProgrammerValueMutation> {
+    mutations
+        .iter()
+        .map(|mutation| match mutation {
+            NormalProgrammerValueMutation::SetFixture {
+                fixture_id,
+                attribute,
+                value,
+                timing,
+            } => PreloadProgrammerValueMutation::SetFixture {
+                fixture_id: *fixture_id,
+                attribute: attribute.clone(),
+                value: value.clone(),
+                timing: preload_timing(*timing),
+            },
+            NormalProgrammerValueMutation::ReleaseFixture {
+                fixture_id,
+                attribute,
+            } => PreloadProgrammerValueMutation::ReleaseFixture {
+                fixture_id: *fixture_id,
+                attribute: attribute.clone(),
+            },
+            NormalProgrammerValueMutation::SetGroup {
+                group_id,
+                attribute,
+                value,
+                timing,
+            } => PreloadProgrammerValueMutation::SetGroup {
+                group_id: group_id.clone(),
+                attribute: attribute.clone(),
+                value: value.clone(),
+                timing: preload_timing(*timing),
+            },
+            NormalProgrammerValueMutation::ReleaseGroup {
+                group_id,
+                attribute,
+            } => PreloadProgrammerValueMutation::ReleaseGroup {
+                group_id: group_id.clone(),
+                attribute: attribute.clone(),
+            },
+        })
+        .collect()
+}
+
+const fn preload_timing(timing: NormalProgrammerValueTiming) -> PreloadProgrammerValueTiming {
+    PreloadProgrammerValueTiming {
+        fade: timing.fade,
+        fade_millis: timing.fade_millis,
+        delay_millis: timing.delay_millis,
+    }
 }
 
 fn live_group_targets(selection: &ProgrammerSelection) -> Vec<String> {

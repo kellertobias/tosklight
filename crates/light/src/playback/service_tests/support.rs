@@ -20,6 +20,8 @@ pub(super) fn cue_projection(number: u16, cue_number: f64) -> PlaybackRuntimePro
                 effective_next_is_loaded: false,
                 paused: false,
                 activated_at: chrono::Utc::now(),
+                paused_at: None,
+                cue_timing: None,
                 transition_ordinal: 0,
                 master: 1.0,
                 fader_position: 1.0,

@@ -8,8 +8,9 @@ mod selection;
 mod state;
 
 pub use model::{
-    HighlightAction, HighlightError, HighlightFixture, HighlightMode, HighlightSelectionWrite,
-    HighlightState, HighlightTransition, OSC_REPEAT_GUARD, is_duplicate_osc_action,
+    HighlightAction, HighlightError, HighlightFixture, HighlightMode, HighlightOutputLayer,
+    HighlightOutputRole, HighlightSelectionWrite, HighlightState, HighlightTransition,
+    OSC_REPEAT_GUARD, is_duplicate_osc_action,
 };
 pub use registry::HighlightRegistry;
 

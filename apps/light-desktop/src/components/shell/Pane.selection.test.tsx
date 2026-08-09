@@ -8,15 +8,20 @@ const selectionView = vi.hoisted(() =>
 		enabled ? { selected: ["fixture-a", "fixture-b"] } : null,
 	),
 );
-const deleteCommandActive = vi.hoisted(() => vi.fn(() => false));
+const commandLineView = vi.hoisted(() =>
+	vi.fn<() => { text: string } | null>(() => null),
+);
 const commandLineReset = vi.hoisted(() => vi.fn(() => Promise.resolve(true)));
 const dispatch = vi.hoisted(() => vi.fn());
 
-vi.mock("../../features/programmingInteraction/ProgrammingInteractionView", () => ({
-	useProgrammingSelectionView: selectionView,
-	useProgrammingDeleteCommandActive: deleteCommandActive,
-	useProgrammingCommandLineActions: () => ({ reset: commandLineReset }),
-}));
+vi.mock(
+	"../../features/programmingInteraction/ProgrammingInteractionView",
+	() => ({
+		useProgrammingSelectionView: selectionView,
+		useProgrammingCommandLineView: commandLineView,
+		useProgrammingCommandLineActions: () => ({ reset: commandLineReset }),
+	}),
+);
 vi.mock("../../state/AppContext", () => ({
 	useApp: () => ({
 		state: {
@@ -50,20 +55,30 @@ vi.mock("@tosklight/ui/window-kit", async (importOriginal) => {
 			info,
 			onTitleClick,
 			titleActionLabel,
+			settings,
+			onSettings,
 		}: {
 			info?: { primary: React.ReactNode };
 			onTitleClick?: () => void;
 			titleActionLabel?: string;
+			settings?: boolean;
+			onSettings?: () => void;
 		}) => (
 			<header>
 				{info?.primary}
 				{onTitleClick && (
 					<button
 						type="button"
+						className="ui-window-title ui-window-title-action"
 						aria-label={titleActionLabel}
 						onClick={onTitleClick}
 					>
 						Title action
+					</button>
+				)}
+				{settings && (
+					<button type="button" onClick={onSettings}>
+						Settings
 					</button>
 				)}
 			</header>
@@ -89,8 +104,8 @@ function pane(kind: PaneModel["kind"]): PaneModel {
 afterEach(() => {
 	cleanup();
 	selectionView.mockClear();
-	deleteCommandActive.mockReset();
-	deleteCommandActive.mockReturnValue(false);
+	commandLineView.mockReset();
+	commandLineView.mockReturnValue(null);
 	commandLineReset.mockClear();
 	dispatch.mockClear();
 });
@@ -124,7 +139,7 @@ describe("Pane selection scope", () => {
 	});
 
 	it("removes the pane from its title and clears the shared command when DELETE is active", () => {
-		deleteCommandActive.mockReturnValue(true);
+		commandLineView.mockReturnValue({ text: "DELETE" });
 		render(
 			<Pane
 				pane={pane("file_manager")}
@@ -134,14 +149,62 @@ describe("Pane selection scope", () => {
 			/>,
 		);
 
-		fireEvent.click(
-			screen.getByRole("button", { name: "Remove File Manager pane" }),
-		);
+		const title = screen.getByRole("button", {
+			name: "Remove File Manager pane",
+		});
+		expect(title).toHaveClass("ui-window-title-action");
+		fireEvent.click(title);
 
 		expect(dispatch).toHaveBeenCalledWith({
 			type: "REMOVE_PANE",
 			id: "file_manager",
 		});
 		expect(commandLineReset).toHaveBeenCalledOnce();
+	});
+
+	it.each([
+		"COPY",
+		"MOVE",
+		"RECORD",
+		"SET",
+		"DELETE PANE 1",
+	])("does not outline or activate a Pane title for unsupported %s targeting", (command) => {
+		commandLineView.mockReturnValue({ text: command });
+		const rendered = render(
+			<Pane pane={pane("groups")} active maximized={false} editing={false} />,
+		);
+
+		expect(
+			rendered.container.querySelector(".ui-window-title-action"),
+		).not.toBeInTheDocument();
+		expect(screen.queryByText("DELETE")).not.toBeInTheDocument();
+	});
+
+	it("uses the shared DEL alias as the supported Pane Delete target", () => {
+		commandLineView.mockReturnValue({ text: "DEL" });
+		render(
+			<Pane pane={pane("groups")} active maximized={false} editing={false} />,
+		);
+
+		expect(
+			screen.getByRole("button", { name: "Remove groups pane" }),
+		).toBeInTheDocument();
+	});
+
+	it("keeps Pane body and Settings navigation ordinary while Delete is armed", () => {
+		commandLineView.mockReturnValue({ text: "DELETE" });
+		render(
+			<Pane pane={pane("groups")} active maximized={false} editing={false} />,
+		);
+
+		fireEvent.click(screen.getByText("Group body"));
+		fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+
+		expect(dispatch).toHaveBeenCalledTimes(1);
+		expect(dispatch).toHaveBeenCalledWith({
+			type: "SET_PANE_SETTINGS",
+			id: "groups",
+		});
+		expect(commandLineReset).not.toHaveBeenCalled();
 	});
 });

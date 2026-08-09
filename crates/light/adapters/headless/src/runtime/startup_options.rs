@@ -5,7 +5,7 @@ use std::{
     path::PathBuf,
 };
 
-pub(super) const HELP: &str = "light-headless [--data-dir PATH] [--show PATH] [--fixture-package-dir PATH] [--bind ADDRESS] [--test-bench] [--osc-bind ADDRESS] [--output-bind-ip ADDRESS]";
+pub(super) const HELP: &str = "light-headless [--data-dir PATH] [--show PATH] [--fixture-package-dir PATH] [--extensions-dir PATH] [--bind ADDRESS] [--test-bench] [--osc-bind ADDRESS] [--output-bind-ip ADDRESS]";
 
 #[derive(Debug, Eq, PartialEq)]
 pub(super) enum StartupAction {
@@ -19,6 +19,7 @@ pub(super) struct StartupOptions {
     /// Show file to open and make active at startup, replacing whatever was active before.
     pub(super) show_file: Option<PathBuf>,
     pub(super) fixture_package_dir: Option<PathBuf>,
+    pub(super) extensions_dir: Option<PathBuf>,
     pub(super) bind: SocketAddr,
     pub(super) test_bench: bool,
     pub(super) osc_bind_override: Option<SocketAddr>,
@@ -29,14 +30,19 @@ pub(super) fn from_process() -> anyhow::Result<StartupAction> {
     parse(
         env::args().skip(1),
         env::var_os("LIGHT_DATA_DIR").map(PathBuf::from),
+        env::var_os("LIGHT_EXTENSIONS_DIR")
+            .or_else(|| env::var_os("LIGHT_RUNTIME_EXTENSIONS_DIR"))
+            .map(PathBuf::from),
     )
 }
 
 fn parse(
     args: impl IntoIterator<Item = String>,
     environment_data_dir: Option<PathBuf>,
+    environment_extensions_dir: Option<PathBuf>,
 ) -> anyhow::Result<StartupAction> {
-    let mut options = StartupOptions::with_data_dir(environment_data_dir);
+    let mut options =
+        StartupOptions::with_directories(environment_data_dir, environment_extensions_dir);
     let mut args = args.into_iter();
     while let Some(argument) = args.next() {
         if apply_argument(&mut options, &argument, &mut args)? {
@@ -60,6 +66,10 @@ fn apply_argument(
         "--fixture-package-dir" => {
             options.fixture_package_dir =
                 Some(required(values, "--fixture-package-dir requires a path")?.into());
+        }
+        "--extensions-dir" => {
+            options.extensions_dir =
+                Some(required(values, "--extensions-dir requires a path")?.into())
         }
         "--bind" => options.bind = required(values, "--bind requires an address")?.parse()?,
         "--test-bench" => options.test_bench = true,
@@ -92,11 +102,15 @@ fn validate(options: &StartupOptions) -> anyhow::Result<()> {
 }
 
 impl StartupOptions {
-    fn with_data_dir(environment_data_dir: Option<PathBuf>) -> Self {
+    fn with_directories(
+        environment_data_dir: Option<PathBuf>,
+        environment_extensions_dir: Option<PathBuf>,
+    ) -> Self {
         Self {
             data_dir: environment_data_dir.unwrap_or_else(|| PathBuf::from("light-data")),
             show_file: None,
             fixture_package_dir: None,
+            extensions_dir: environment_extensions_dir,
             bind: SocketAddr::from((Ipv4Addr::LOCALHOST, 5000)),
             test_bench: false,
             osc_bind_override: None,
@@ -111,12 +125,13 @@ mod tests {
 
     #[test]
     fn defaults_match_the_existing_server_contract() {
-        let options = run_options(&[], None);
+        let options = run_options(&[], None, None);
 
         assert_eq!(options.data_dir, PathBuf::from("light-data"));
         assert_eq!(options.bind, SocketAddr::from((Ipv4Addr::LOCALHOST, 5000)));
         assert!(!options.test_bench);
         assert_eq!(options.fixture_package_dir, None);
+        assert_eq!(options.extensions_dir, None);
     }
 
     #[test]
@@ -127,6 +142,8 @@ mod tests {
                 "cli-data",
                 "--fixture-package-dir",
                 "fixtures",
+                "--extensions-dir",
+                "extensions",
                 "--bind",
                 "127.0.0.2:5100",
                 "--test-bench",
@@ -136,10 +153,12 @@ mod tests {
                 "127.0.0.2",
             ],
             Some("environment-data"),
+            Some("environment-extensions"),
         );
 
         assert_eq!(options.data_dir, PathBuf::from("cli-data"));
         assert_eq!(options.fixture_package_dir, Some(PathBuf::from("fixtures")));
+        assert_eq!(options.extensions_dir, Some(PathBuf::from("extensions")));
         assert_eq!(options.bind, "127.0.0.2:5100".parse().unwrap());
         assert_eq!(
             options.osc_bind_override,
@@ -154,14 +173,22 @@ mod tests {
 
     #[test]
     fn environment_data_directory_is_used_without_a_command_line_override() {
-        let options = run_options(&[], Some("environment-data"));
+        let options = run_options(
+            &[],
+            Some("environment-data"),
+            Some("environment-extensions"),
+        );
 
         assert_eq!(options.data_dir, PathBuf::from("environment-data"));
+        assert_eq!(
+            options.extensions_dir,
+            Some(PathBuf::from("environment-extensions"))
+        );
     }
 
     #[test]
     fn help_stops_parsing_immediately() {
-        let action = parse(strings(&["--help", "--unknown"]), None).unwrap();
+        let action = parse(strings(&["--help", "--unknown"]), None, None).unwrap();
 
         assert_eq!(action, StartupAction::ShowHelp);
     }
@@ -169,21 +196,26 @@ mod tests {
     #[test]
     fn value_options_report_their_existing_missing_value_errors() {
         for (option, message) in missing_value_cases() {
-            let error = parse(strings(&[option]), None).unwrap_err();
+            let error = parse(strings(&[option]), None, None).unwrap_err();
             assert_eq!(error.to_string(), message);
         }
     }
 
     #[test]
     fn unknown_options_are_rejected() {
-        let error = parse(strings(&["--unknown"]), None).unwrap_err();
+        let error = parse(strings(&["--unknown"]), None, None).unwrap_err();
 
         assert_eq!(error.to_string(), "unknown option: --unknown");
     }
 
     #[test]
     fn test_bench_requires_a_loopback_http_bind() {
-        let error = parse(strings(&["--test-bench", "--bind", "0.0.0.0:5000"]), None).unwrap_err();
+        let error = parse(
+            strings(&["--test-bench", "--bind", "0.0.0.0:5000"]),
+            None,
+            None,
+        )
+        .unwrap_err();
 
         assert_eq!(
             error.to_string(),
@@ -191,10 +223,19 @@ mod tests {
         );
     }
 
-    fn run_options(arguments: &[&str], environment_data_dir: Option<&str>) -> StartupOptions {
+    fn run_options(
+        arguments: &[&str],
+        environment_data_dir: Option<&str>,
+        environment_extensions_dir: Option<&str>,
+    ) -> StartupOptions {
         let environment_data_dir = environment_data_dir.map(PathBuf::from);
-        let StartupAction::Run(options) = parse(strings(arguments), environment_data_dir).unwrap()
-        else {
+        let environment_extensions_dir = environment_extensions_dir.map(PathBuf::from);
+        let StartupAction::Run(options) = parse(
+            strings(arguments),
+            environment_data_dir,
+            environment_extensions_dir,
+        )
+        .unwrap() else {
             panic!("expected runnable startup options");
         };
         options
@@ -204,9 +245,10 @@ mod tests {
         values.iter().map(|value| (*value).to_owned()).collect()
     }
 
-    fn missing_value_cases() -> [(&'static str, &'static str); 5] {
+    fn missing_value_cases() -> [(&'static str, &'static str); 6] {
         [
             ("--data-dir", "--data-dir requires a path"),
+            ("--extensions-dir", "--extensions-dir requires a path"),
             (
                 "--fixture-package-dir",
                 "--fixture-package-dir requires a path",

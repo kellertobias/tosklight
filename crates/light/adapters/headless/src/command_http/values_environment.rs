@@ -26,6 +26,28 @@ pub(super) fn values_environment(state: &AppState) -> ProgrammingValuesEnvironme
     }
 }
 
+pub(super) fn attribute_wraps(
+    state: &AppState,
+    fixture_id: FixtureId,
+    attribute: &AttributeKey,
+) -> bool {
+    state.output.snapshot().fixtures.iter().any(|fixture| {
+        let owns_parent = fixture.fixture_id == fixture_id;
+        fixture.definition.heads.iter().any(|head| {
+            let owns_head = (head.shared && owns_parent)
+                || fixture.logical_heads.iter().any(|patched| {
+                    patched.fixture_id == fixture_id && patched.head_index == head.index
+                });
+            owns_head
+                && head.parameters.iter().any(|parameter| {
+                    parameter.attribute == *attribute
+                        && parameter.capabilities.is_empty()
+                        && parameter.metadata.wrap
+                })
+        })
+    })
+}
+
 fn profile_defaults(
     fixtures: &[light_fixture::PatchedFixture],
 ) -> HashMap<(FixtureId, AttributeKey), AttributeValue> {

@@ -7,6 +7,8 @@ impl CueList {
         name: impl Into<String>,
         content: CueRecordingContent,
         cue_number: Option<f64>,
+        auto_off_at_zero: bool,
+        auto_off_flash_release: bool,
     ) -> Result<CueListRecordingPlan, CueRecordingPlanError> {
         validate_content(&content)?;
         require_values(&content)?;
@@ -26,6 +28,8 @@ impl CueList {
             restart_mode: RestartMode::FirstCue,
             force_cue_timing: false,
             disable_cue_timing: false,
+            auto_off_at_zero,
+            auto_off_flash_release,
             chaser_xfade_millis: 0,
             chaser_xfade_percent: Some(0),
             speed_multiplier: 1.0,

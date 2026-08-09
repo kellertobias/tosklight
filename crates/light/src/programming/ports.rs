@@ -105,6 +105,27 @@ pub trait ProgrammingPorts: Send + Sync {
 
     fn persist(&self, context: &ActionContext, operation: &'static str) -> Option<String>;
 
+    /// Whether relative movement for one normalized fixture attribute wraps at its endpoints.
+    /// The default keeps transports without fixture-profile metadata on ordinary clamp behavior.
+    fn programmer_attribute_wraps(
+        &self,
+        _context: &ActionContext,
+        _fixture_id: FixtureId,
+        _attribute: &AttributeKey,
+    ) -> bool {
+        false
+    }
+
+    /// Notifies transient Highlight state that exact fixture attributes were explicitly authored.
+    /// This is intentionally infallible and idempotent: the Programmer mutation is authoritative,
+    /// while adapters use the callback only to remove matching temporary look attributes.
+    fn mark_highlight_explicit_fixture_attributes(
+        &self,
+        _context: &ActionContext,
+        _touched: &[(FixtureId, AttributeKey)],
+    ) {
+    }
+
     fn undo_show_recording(
         &self,
         _context: &ActionContext,

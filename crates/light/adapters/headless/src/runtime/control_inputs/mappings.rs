@@ -17,11 +17,6 @@ pub(super) fn mapped_control_origin(state: &AppState, event: &ControlEvent) -> M
                 light_application::PlaybackSurface::Osc,
             )
         }
-        ControlEvent::Midi { .. } => (
-            light_application::ActionSource::Midi,
-            None,
-            light_application::PlaybackSurface::Physical,
-        ),
         ControlEvent::Timecode(_) => (
             light_application::ActionSource::Timecode,
             None,

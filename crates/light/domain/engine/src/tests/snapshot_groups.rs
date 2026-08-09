@@ -27,6 +27,8 @@ fn active_group_cue_survives_snapshot_swap_and_gains_new_members() {
         restart_mode: light_playback::RestartMode::FirstCue,
         force_cue_timing: false,
         disable_cue_timing: false,
+        auto_off_at_zero: false,
+        auto_off_flash_release: false,
         chaser_step_millis: 1_000,
         chaser_xfade_millis: 0,
         chaser_xfade_percent: Some(0),
@@ -187,6 +189,7 @@ fn canonical_group_rules_and_spatial_mappings_are_validated() {
             view_direction: light_dynamics::Vector3::default(),
             rotation_degrees: 0.0,
             preset: None,
+            kind: light_dynamics::ProjectionKind::Planar,
         },
         shape: light_dynamics::SpatialSelectionShape::Grid {
             angle_degrees: 0.0,

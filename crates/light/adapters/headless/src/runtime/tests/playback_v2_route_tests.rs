@@ -1094,6 +1094,72 @@ async fn v2_snapshot_returns_only_requested_runtime_and_a_pre_read_cursor() {
 }
 
 #[tokio::test]
+async fn v2_cuelist_runtime_projects_authoritative_phase_and_trigger_timing() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let desk_id = session_desk_id(&state, &token);
+    open_playback_test_show(&app, &token).await;
+    install_playback_test_state(&state);
+    let mut snapshot = (*state.output.snapshot()).clone();
+    let cue_lists = std::sync::Arc::make_mut(&mut snapshot.cue_lists);
+    cue_lists[0].cues[0].delay_millis = 100;
+    cue_lists[0].cues[0].fade_millis = 200;
+    cue_lists[0].cues[1].trigger = light_playback::CueTrigger::Wait { delay_millis: 300 };
+    let trigger_cue_id = cue_lists[0].cues[1].id;
+    state.output.replace_snapshot(snapshot).unwrap();
+
+    let outcome = json(
+        post_action(
+            &app,
+            Some(&token),
+            desk_id,
+            action_request(
+                "project-cue-timing",
+                1,
+                serde_json::json!({"type":"go","pressed":true}),
+            ),
+        )
+        .await,
+    )
+    .await;
+    let runtime = &outcome["projection"]["runtime"];
+    assert!(runtime["activated_at"].is_string());
+    assert!(runtime["paused_at"].is_null());
+    assert_eq!(runtime["cue_timing"]["in_delay_millis"], 100);
+    assert_eq!(runtime["cue_timing"]["in_fade_millis"], 200);
+    assert_eq!(runtime["cue_timing"]["completion_millis"], 0);
+    assert_eq!(
+        runtime["cue_timing"]["active_trigger"]["cue"]["id"],
+        trigger_cue_id.to_string()
+    );
+    assert_eq!(runtime["cue_timing"]["active_trigger"]["kind"], "wait");
+    assert_eq!(
+        runtime["cue_timing"]["active_trigger"]["duration_millis"],
+        300
+    );
+    assert!(runtime["cue_timing"]["completed_trigger_cue_id"].is_null());
+
+    let paused = json(
+        post_action(
+            &app,
+            Some(&token),
+            desk_id,
+            action_request(
+                "pause-cue-timing",
+                1,
+                serde_json::json!({"type":"pause","pressed":true}),
+            ),
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(paused["projection"]["runtime"]["paused"], true);
+    assert!(paused["projection"]["runtime"]["paused_at"].is_string());
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
 async fn v2_group_runtime_actions_use_assigned_runtime_authority() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
@@ -1410,7 +1476,7 @@ async fn v2_group_runtime_preserves_peer_desk_scope_and_rejects_stale_show() {
         second_desk.id,
         group_action_request(
             "foreign-desk-group-master",
-            "side",
+            "front",
             serde_json::json!({"type":"master","value":0.3}),
         ),
     )
@@ -1424,7 +1490,7 @@ async fn v2_group_runtime_preserves_peer_desk_scope_and_rejects_stale_show() {
         second_desk.id,
         group_action_request(
             "stale-show-group-master",
-            "side",
+            "front",
             serde_json::json!({"type":"master","value":0.3}),
         ),
     )
@@ -1438,7 +1504,7 @@ async fn v2_group_runtime_preserves_peer_desk_scope_and_rejects_stale_show() {
         second_desk.id,
         group_action_request(
             "peer-desk-group-master",
-            "side",
+            "front",
             serde_json::json!({"type":"master","value":0.3}),
         ),
     )
@@ -1448,9 +1514,9 @@ async fn v2_group_runtime_preserves_peer_desk_scope_and_rejects_stale_show() {
     assert_eq!(accepted["projection"]["master"], 0.3);
 
     let first_filter = light_application::EventFilter::for_desk(first_desk)
-        .with_object(light_application::EventObject::group("side"));
+        .with_object(light_application::EventObject::group("front"));
     let second_filter = light_application::EventFilter::for_desk(second_desk.id)
-        .with_object(light_application::EventObject::group("side"));
+        .with_object(light_application::EventObject::group("front"));
     let light_application::EventReplay::Events(first_events) =
         state.events.replay(cursor, &first_filter)
     else {
@@ -1470,7 +1536,7 @@ async fn v2_group_runtime_preserves_peer_desk_scope_and_rejects_stale_show() {
             &app,
             Some(token),
             desk_id,
-            serde_json::json!({"identities":[{"kind":"group","group_id":"side"}]}),
+            serde_json::json!({"identities":[{"kind":"group","group_id":"front"}]}),
         )
         .await;
         assert_eq!(snapshot.status(), StatusCode::OK);
@@ -2854,6 +2920,8 @@ fn playback_test_cue_list() -> light_playback::CueList {
         restart_mode: light_playback::RestartMode::FirstCue,
         force_cue_timing: false,
         disable_cue_timing: false,
+        auto_off_at_zero: false,
+        auto_off_flash_release: false,
         chaser_xfade_millis: 0,
         chaser_xfade_percent: Some(0),
         speed_multiplier: 1.0,

@@ -152,6 +152,7 @@ impl PlaybackEngine {
                     list.cues.iter().find(|cue| cue.id == cue_id)
                 });
                 let effective = loaded.or(linked).or(normal);
+                let cue_timing = cue_list.and_then(|list| self.cue_timing_status(&playback, list));
                 PlaybackRuntimeStatus {
                     normal_next_cue_id: normal.map(|cue| cue.id),
                     normal_next_cue_number: normal.map(|cue| cue.number),
@@ -161,10 +162,74 @@ impl PlaybackEngine {
                     temporary_active,
                     temporary_master,
                     swap_active,
+                    cue_timing,
                     playback,
                 }
             })
             .collect()
+    }
+
+    fn cue_timing_status(
+        &self,
+        playback: &ActivePlayback,
+        cue_list: &CueList,
+    ) -> Option<CueTimingRuntimeStatus> {
+        let current_index = current_cue_index(playback, cue_list)?;
+        let cue = cue_list.cues.get(current_index)?;
+        let outgoing_cue = playback
+            .manual_xfade_from_index
+            .or(playback.previous_index)
+            .and_then(|index| cue_list.cues.get(index));
+        let compiled = self.compiled_cue_lists.get(&playback.cue_list_id)?;
+        let in_fade_millis = effective_cue_fade_millis(
+            cue_list,
+            cue,
+            playback,
+            self.sequence_master_fade_millis,
+            &self.speed_groups_bpm,
+        );
+        let in_delay_millis = if cue_list.disable_cue_timing {
+            0
+        } else {
+            cue.delay_millis
+        };
+        let out_fade_millis = if cue_list.disable_cue_timing {
+            0
+        } else {
+            outgoing_cue
+                .map(|outgoing| {
+                    outgoing.out_fade_millis.unwrap_or_else(|| {
+                        effective_cue_fade_millis(
+                            cue_list,
+                            outgoing,
+                            playback,
+                            self.sequence_master_fade_millis,
+                            &self.speed_groups_bpm,
+                        )
+                    })
+                })
+                .unwrap_or(in_fade_millis)
+        };
+        let out_delay_millis = if cue_list.disable_cue_timing {
+            0
+        } else {
+            outgoing_cue
+                .and_then(|outgoing| outgoing.out_delay_millis.or(Some(outgoing.delay_millis)))
+                .unwrap_or(in_delay_millis)
+        };
+        let completion_millis = cue_completion_millis(cue_list, compiled, playback, in_fade_millis);
+        let active_trigger =
+            active_trigger_timing(playback, cue_list, current_index, completion_millis);
+        Some(CueTimingRuntimeStatus {
+            cue_id: cue.id,
+            in_delay_millis,
+            in_fade_millis,
+            out_delay_millis,
+            out_fade_millis,
+            completion_millis,
+            active_trigger,
+            completed_trigger_cue_id: playback.completed_trigger_cue_id,
+        })
     }
 
     /// Composes one assignment-local control projection over its target-owned Cuelist runtime.
@@ -335,6 +400,57 @@ impl PlaybackEngine {
             values,
         })
     }
+}
+
+fn active_trigger_timing(
+    playback: &ActivePlayback,
+    cue_list: &CueList,
+    current_index: usize,
+    completion_millis: u64,
+) -> Option<CueTriggerTimingStatus> {
+    let current = cue_list.cues.get(current_index)?;
+    let (cue, kind, duration_millis) = match current.trigger {
+        CueTrigger::Link { delay_millis, .. } => {
+            (current, CueTriggerTimingKind::Link, delay_millis)
+        }
+        _ => {
+            let next_index = if current_index + 1 < cue_list.cues.len() {
+                current_index + 1
+            } else if cue_list.effective_wrap_mode() != WrapMode::Off {
+                0
+            } else {
+                return None;
+            };
+            let next = &cue_list.cues[next_index];
+            match next.trigger {
+                CueTrigger::Follow { delay_millis } => {
+                    (next, CueTriggerTimingKind::Follow, delay_millis)
+                }
+                CueTrigger::Wait { delay_millis } => {
+                    (next, CueTriggerTimingKind::Wait, delay_millis)
+                }
+                _ => return None,
+            }
+        }
+    };
+    let duration_millis = if cue_list.disable_cue_timing {
+        0
+    } else {
+        duration_millis
+    };
+    let start_offset_millis = match kind {
+        CueTriggerTimingKind::Wait => 0,
+        CueTriggerTimingKind::Follow | CueTriggerTimingKind::Link => completion_millis,
+    };
+    let offset =
+        ChronoDuration::milliseconds(i64::try_from(start_offset_millis).unwrap_or(i64::MAX));
+    Some(CueTriggerTimingStatus {
+        cue_id: cue.id,
+        cue_number: cue.number,
+        kind,
+        started_at: playback.activated_at + offset,
+        duration_millis,
+    })
 }
 
 fn current_cue_index(playback: &ActivePlayback, cue_list: &CueList) -> Option<usize> {

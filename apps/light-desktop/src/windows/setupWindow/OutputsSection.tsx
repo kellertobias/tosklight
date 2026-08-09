@@ -1,5 +1,8 @@
 import { FormLayout, NumberField, TextField } from "@tosklight/ui";
+import { useState } from "react";
+import type { UsbDmxEndpointSnapshot } from "../../api/client/deskManagement";
 import { OutputRoutesSetup } from "../../components/setup/OutputRoutesSetup";
+import { UsbDmxEndpointsSetup } from "../../components/setup/UsbDmxEndpointsSetup";
 import { useDmxDiagnostics } from "../../features/dmxDiagnostics/DmxDiagnosticsContext";
 import type { SetupWindowController } from "./controller";
 
@@ -10,6 +13,7 @@ export function OutputsSection({
 }) {
 	const { draft } = controller;
 	const dmx = useDmxDiagnostics();
+	const [usb, setUsb] = useState<UsbDmxEndpointSnapshot | null>(null);
 	if (!draft) return null;
 	return (
 		<>
@@ -55,12 +59,14 @@ export function OutputsSection({
 					}
 				/>
 			</FormLayout>
+			<UsbDmxEndpointsSetup onSnapshot={setUsb} />
 			<OutputRoutesSetup
 				routes={dmx?.outputRoutes ?? []}
 				onSave={dmx?.saveOutputRoute ?? (async () => false)}
 				onCreateRange={dmx?.createOutputRouteRange ?? (async () => false)}
 				onDelete={dmx?.deleteOutputRoute ?? (async () => false)}
 				outputBindIp={draft.output_bind_ip}
+				usbEndpoints={usb?.document.endpoints ?? []}
 			/>
 		</>
 	);

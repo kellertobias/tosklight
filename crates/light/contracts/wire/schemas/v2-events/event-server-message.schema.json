@@ -166,6 +166,16 @@
           "format": "uint",
           "minimum": 0
         },
+        "cue_timing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CueTimingRuntimeProjection"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "current": {
           "anyOf": [
             {
@@ -247,6 +257,12 @@
         "paused": {
           "type": "boolean"
         },
+        "paused_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "previous_index": {
           "type": [
             "integer",
@@ -287,6 +303,8 @@
         "effective_next_is_loaded",
         "paused",
         "activated_at",
+        "paused_at",
+        "cue_timing",
         "transition_ordinal",
         "master",
         "fader_position",
@@ -357,11 +375,105 @@
         "cue_move_copy"
       ]
     },
+    "CueTimingRuntimeProjection": {
+      "type": "object",
+      "properties": {
+        "active_trigger": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CueTriggerTimingProjection"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "completed_trigger_cue_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "completion_millis": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "cue_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "in_delay_millis": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "in_fade_millis": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "out_delay_millis": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "out_fade_millis": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "cue_id",
+        "in_delay_millis",
+        "in_fade_millis",
+        "out_delay_millis",
+        "out_fade_millis",
+        "completion_millis",
+        "active_trigger",
+        "completed_trigger_cue_id"
+      ]
+    },
     "CueTransferOperation": {
       "type": "string",
       "enum": [
         "copy",
         "move"
+      ]
+    },
+    "CueTriggerTimingKind": {
+      "type": "string",
+      "enum": [
+        "follow",
+        "wait",
+        "link"
+      ]
+    },
+    "CueTriggerTimingProjection": {
+      "type": "object",
+      "properties": {
+        "cue": {
+          "$ref": "#/$defs/PlaybackCueReference"
+        },
+        "duration_millis": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "kind": {
+          "$ref": "#/$defs/CueTriggerTimingKind"
+        },
+        "started_at": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "cue",
+        "kind",
+        "started_at",
+        "duration_millis"
       ]
     },
     "DeskActionNotification": {
@@ -1897,7 +2009,7 @@
         "keyboard",
         "osc",
         "http",
-        "midi",
+        "extension",
         "matter",
         "cue",
         "timecode",
@@ -2704,6 +2816,7 @@
       "type": "string",
       "enum": [
         "top",
+        "bottom",
         "front",
         "back",
         "left",
@@ -3038,6 +3151,16 @@
         },
         "protocol": {
           "$ref": "#/$defs/OutputProtocol"
+        },
+        "target": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OutputRouteTarget"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -3091,6 +3214,38 @@
         "object_revision",
         "route",
         "deleted"
+      ]
+    },
+    "OutputRouteTarget": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "network"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "endpoint_id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "usb_endpoint"
+            }
+          },
+          "required": [
+            "kind",
+            "endpoint_id"
+          ]
+        }
       ]
     },
     "OutputRuntimeChange": {

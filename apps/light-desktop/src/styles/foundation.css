@@ -1368,6 +1368,41 @@ button {
 .network-settings-group .network-input-list {
 	margin-top: 0;
 }
+.native-extension-status > div:first-child,
+.native-extension-package,
+.native-extension-instance {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+}
+.native-extension-status > .ui-button {
+	justify-self: end;
+}
+.native-extension-status > details {
+	grid-column: 1 / -1;
+	margin-top: 5px;
+	padding-top: 8px;
+	border-top: 1px solid var(--line);
+}
+.native-extension-status dl {
+	display: grid;
+	grid-template-columns: max-content minmax(0, 1fr);
+	gap: 4px 10px;
+}
+.native-extension-status dt {
+	color: var(--muted);
+}
+.native-extension-status dd {
+	margin: 0;
+	overflow-wrap: anywhere;
+}
+.native-extension-package,
+.native-extension-instance {
+	margin-top: 8px;
+	padding: 8px;
+	border: 1px solid var(--line);
+	border-radius: 5px;
+}
 .modal-backdrop {
 	position: fixed;
 	z-index: 200;

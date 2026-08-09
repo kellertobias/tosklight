@@ -146,8 +146,6 @@ const configuration: DeskConfiguration = {
 	output_bind_ip: "0.0.0.0",
 	osc_bind: "0.0.0.0:8000",
 	art_timecode_bind: null,
-	midi_inputs: ["ToskLight MIDI"],
-	rtp_midi_bind: null,
 	timecode_sources: [
 		{
 			source_prefix: "ltc:",
@@ -169,6 +167,9 @@ const configuration: DeskConfiguration = {
 	programmer_fade_millis: 500,
 	command_line_at_uses_programmer_fade: true,
 	sequence_master_fade_millis: 500,
+	cuelist_auto_off_at_zero_default: false,
+	cuelist_auto_off_flash_release_default: false,
+	start_after_first_recording: false,
 	preload_programmer_changes: true,
 	preload_physical_playback_actions: true,
 	preload_virtual_playback_actions: true,

@@ -519,6 +519,8 @@ fn demo_playback_for_groups(group_ids: &[String]) -> (CueList, PlaybackDefinitio
         restart_mode: RestartMode::FirstCue,
         force_cue_timing: false,
         disable_cue_timing: false,
+        auto_off_at_zero: false,
+        auto_off_flash_release: false,
         chaser_xfade_millis: 0,
         chaser_xfade_percent: Some(0),
         speed_multiplier: 1.0,
@@ -560,6 +562,7 @@ pub(super) fn routes(
                 .protocols()
                 .iter()
                 .map(move |protocol| OutputRoute {
+                    target: Default::default(),
                     protocol: *protocol,
                     logical_universe: universe,
                     destination_universe: universe,

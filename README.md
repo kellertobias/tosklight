@@ -43,7 +43,7 @@ and current release downloads.
 - Ordered fixture Groups, reusable Presets, sparse tracked Cues, Cuelists, Playbacks, and group
   masters.
 - Fixture Sheet, Channels and DMX inspection, plus built-in 2D and 3D Stage views.
-- Dynamics, fade/follow/timecode playback, ArtTimeCode, MTC, OSC, MIDI, and attached OSC hardware.
+- Dynamics, fade/follow/timecode playback, ArtTimeCode, OSC, native extensions, and attached OSC hardware.
 - Art-Net and sACN output, including explicit routing and health diagnostics.
 - GDTF-style fixture packages, multi-head fixtures, multi-patch Stage instances, MVR workflows,
   and CITP/MSEX media-server integration.
@@ -83,9 +83,8 @@ for the documentation workflow.
 | Raspberry Pi | Use the browser desk from another computer | Pi 4 or Pi 5, 64-bit Raspberry Pi OS, ARM64 archive |
 
 The release builds are currently unsigned. Cross-compiling the non-macOS server archives requires
-the Rust targets used by the build script, `zig`, and `cargo-zigbuild`. Portable Linux server
-binaries omit native USB-MIDI because that transport depends on the target system's ALSA library;
-RTP-MIDI, OSC, and network output remain available.
+the Rust targets used by the build script, `zig`, and `cargo-zigbuild`. Native device and protocol
+integrations run as separately approved extension packages; OSC and network output remain built in.
 
 ## How ToskLight is structured
 

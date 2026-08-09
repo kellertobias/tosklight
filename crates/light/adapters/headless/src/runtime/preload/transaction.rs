@@ -23,9 +23,14 @@ pub(super) fn commit_preload_transaction(
     // The active-show coordinator excludes output ticks around this transaction. Publish the
     // latest compiled Dynamic definitions before Programmer and Playback state become Live.
     state.output.set_dynamic_definitions_pinned(false);
-    if let Err(error) =
-        install_preload_commit(state, session, pending, committed_at, prepared_playback)
-    {
+    if let Err(error) = install_preload_commit(
+        state,
+        session,
+        pending,
+        committed_at,
+        programmer_fade_millis,
+        prepared_playback,
+    ) {
         state.output.set_dynamic_definitions_pinned(true);
         return Err(error);
     }
@@ -136,11 +141,14 @@ fn install_preload_commit(
     session: &Session,
     pending: Vec<light_programmer::PreloadPlaybackAction>,
     committed_at: chrono::DateTime<chrono::Utc>,
+    programmer_fade_millis: u64,
     prepared_playback: light_engine::PreparedPlaybackBatch,
 ) -> Result<(), String> {
-    state
-        .programming
-        .activate_preload_at(session.id, committed_at);
+    state.programming.activate_preload_at_with_fade(
+        session.id,
+        committed_at,
+        programmer_fade_millis,
+    );
     let drained = state.programming.take_preload_playback_actions(session.id);
     if drained != pending {
         return Err("the Preload queue changed while GO was being prepared".into());

@@ -13,6 +13,7 @@ pub(super) fn environment(
 ) -> Result<ProgrammingCueRecordingEnvironment, ActionError> {
     let snapshot = state.output.snapshot();
     let resolved = resolve_target(state, context, request.target, &snapshot)?;
+    let configuration = state.installation.configuration();
     Ok(ProgrammingCueRecordingEnvironment {
         target: resolved,
         active_cue: if needs_active_cue(request) {
@@ -20,6 +21,10 @@ pub(super) fn environment(
         } else {
             None
         },
+        cuelist_auto_off_at_zero_default: configuration.cuelist_auto_off_at_zero_default,
+        cuelist_auto_off_flash_release_default: configuration
+            .cuelist_auto_off_flash_release_default,
+        start_after_first_recording: configuration.start_after_first_recording,
     })
 }
 

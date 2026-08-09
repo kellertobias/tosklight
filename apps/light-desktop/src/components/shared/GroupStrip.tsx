@@ -3,6 +3,7 @@ import { ButtonGrid } from "@tosklight/ui/window-kit";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { PoolPresentationConfiguration } from "../../api/types";
 import { groups } from "../../data/mockData";
+import { poolMutationTarget } from "../../features/controlSurfaceInteraction/poolCommandTarget";
 import { useSetInteraction } from "../../features/controlSurfaceInteraction/SetInteractionProvider";
 import {
 	useActiveShowId,
@@ -75,6 +76,8 @@ function GroupShortcut({
 	selected,
 	storeArmed,
 	updateArmed,
+	setTarget,
+	deleteTarget,
 	onClick,
 	onDoubleClick,
 	onContextMenu,
@@ -87,6 +90,8 @@ function GroupShortcut({
 	selected: boolean;
 	storeArmed: boolean;
 	updateArmed: boolean;
+	setTarget: boolean;
+	deleteTarget: boolean;
 	onClick: () => void;
 	onDoubleClick: () => void;
 	onContextMenu: () => void;
@@ -110,9 +115,11 @@ function GroupShortcut({
 		states: [
 			...(selected ? (["selected"] as const) : []),
 			...(group ? [] : (["empty"] as const)),
-			...(storeArmed && !group ? (["record-target"] as const) : []),
-			...(storeArmed && !group ? (["store-target"] as const) : []),
+			...(storeArmed ? (["record-target"] as const) : []),
+			...(storeArmed ? (["store-target"] as const) : []),
 			...(updateArmed ? (["update-target"] as const) : []),
+			...(setTarget ? (["set-target"] as const) : []),
+			...(deleteTarget ? (["delete-target"] as const) : []),
 		],
 	});
 	return (
@@ -154,6 +161,17 @@ function GroupShortcut({
 			<span className="number">{index + 1}</span>
 			<b>{group?.body.name ?? "Empty"}</b>
 			<small>{shortcutDescription(group, storeArmed, updateArmed)}</small>
+			{(storeArmed || setTarget || deleteTarget) && (
+				<span className="pool-card-status-row">
+					<span
+						className={`pool-card-workflow ${
+							storeArmed ? "record" : setTarget ? "set" : "delete"
+						}`}
+					>
+						{storeArmed ? "Record" : setTarget ? "Set" : "Delete"}
+					</span>
+				</span>
+			)}
 		</Button>
 	);
 }
@@ -168,6 +186,8 @@ function GroupShortcutList({
 	poolPresentation,
 	showId,
 	viewOnly,
+	mutationTarget,
+	setTargetArmed,
 }: {
 	visible: readonly (ShortcutGroup | null)[];
 	command: ReturnType<typeof useCommandLineSurface>;
@@ -178,6 +198,8 @@ function GroupShortcutList({
 	poolPresentation: PoolPresentationConfiguration;
 	showId: string;
 	viewOnly: boolean;
+	mutationTarget: ReturnType<typeof poolMutationTarget>;
+	setTargetArmed: boolean;
 }) {
 	return (
 		<>
@@ -189,6 +211,12 @@ function GroupShortcutList({
 					selected={command.selectedGroupId === group?.id}
 					storeArmed={state.storeArmed}
 					updateArmed={state.updateArmed}
+					setTarget={Boolean(group && setTargetArmed)}
+					deleteTarget={Boolean(
+						group &&
+							mutationTarget?.operation === "delete" &&
+							mutationTarget.phase === "source",
+					)}
 					onClick={() => activateShortcut(group, index)}
 					onDoubleClick={() => {
 						if (group && !state.updateArmed) {
@@ -205,14 +233,19 @@ function GroupShortcutList({
 					}}
 					onContextMenu={() => {
 						if (!group || state.updateArmed) return;
-						const scope = setInteraction?.state?.scope;
-						if (!scope) return;
-						void setInteraction.direct({
-							type: "open_group_settings",
-							source: "context_menu",
-							scope,
-							group: { objectId: group.id, objectRevision: group.revision },
-						});
+						void (async () => {
+							if (!setInteraction?.state) {
+								await command.replace(`SET GROUP ${group.id}`, false);
+								return;
+							}
+							if (setInteraction.state.phase === "idle") {
+								if (!(await setInteraction.arm("context_menu"))) return;
+							} else if (setInteraction.state.phase !== "set_armed") return;
+							await setInteraction.chooseGroup(
+								{ objectId: group.id, objectRevision: group.revision },
+								"context_menu",
+							);
+						})();
 					}}
 					poolPresentation={poolPresentation}
 					showId={showId}
@@ -237,7 +270,7 @@ export function GroupStrip({
 	const commandLine = useCommandLineSurface({
 		selection: true,
 		enabled: interactionActive,
-		observeCommand: false,
+		observeCommand: true,
 	});
 	const storedGroups = usePortableGroups(active);
 	const groupSelection = useGroupSelectionActions(interactionActive);
@@ -246,28 +279,18 @@ export function GroupStrip({
 	const { gridRef, slotCount } = useGroupShortcutCount(active);
 	const poolPresentation = usePoolPresentationConfiguration();
 	const showId = useActiveShowId() ?? "unresolved";
+	const mutationTarget = poolMutationTarget(commandLine.text);
+	const setTargetArmed =
+		setInteraction?.state?.phase === "set_armed" ||
+		/^SET$/iu.test(commandLine.text.trim());
 	const [recordTarget, setRecordTarget] = useState<GroupRecordingTarget | null>(
 		null,
 	);
-	const stored: readonly ShortcutGroup[] = bootstrapReady
-		? storedGroups
-		: groups.map((group) => ({
-				id: String(group.id),
-				revision: 1,
-				kind: "group",
-				updated_at: "",
-				body: {
-					name: group.name,
-					fixtures: Array.from({ length: group.fixtures }, (_, index) =>
-						String(index),
-					),
-				},
-			}));
-	const visible = Array.from(
-		{ length: slotCount },
-		(_, index) =>
-			stored.find((group) => group.id === String(index + 1)) ?? null,
+	const stored: readonly ShortcutGroup[] = fallbackGroups(
+		bootstrapReady,
+		storedGroups,
 	);
+	const visible = visibleGroups(stored, slotCount);
 	const disarmRecord = () => {
 		setRecordTarget(null);
 		dispatch({ type: "SET_STORE_ARMED", value: false });
@@ -310,6 +333,14 @@ export function GroupStrip({
 		const id = group?.id ?? String(index + 1);
 		if (state.updateArmed) {
 			requestUpdateTarget({ family: { type: "group" }, object_id: id });
+			return;
+		}
+		if (
+			group &&
+			mutationTarget?.operation === "delete" &&
+			mutationTarget.phase === "source"
+		) {
+			void commandLine.execute(`DELETE GROUP ${group.id}`);
 			return;
 		}
 		if (group && !state.storeArmed) {
@@ -355,6 +386,8 @@ export function GroupStrip({
 					poolPresentation={poolPresentation}
 					showId={showId}
 					viewOnly={viewOnly}
+					mutationTarget={mutationTarget}
+					setTargetArmed={setTargetArmed}
 				/>
 			</ButtonGrid>
 			{recordTarget && (
@@ -366,4 +399,31 @@ export function GroupStrip({
 			)}
 		</section>
 	);
+}
+
+function visibleGroups(stored: readonly ShortcutGroup[], slotCount: number) {
+	return Array.from(
+		{ length: slotCount },
+		(_, index) =>
+			stored.find((group) => group.id === String(index + 1)) ?? null,
+	);
+}
+
+function fallbackGroups(
+	bootstrapReady: boolean,
+	stored: readonly ShortcutGroup[],
+) {
+	if (bootstrapReady) return stored;
+	return groups.map((group) => ({
+		id: String(group.id),
+		revision: 1,
+		kind: "group" as const,
+		updated_at: "",
+		body: {
+			name: group.name,
+			fixtures: Array.from({ length: group.fixtures }, (_, index) =>
+				String(index),
+			),
+		},
+	}));
 }

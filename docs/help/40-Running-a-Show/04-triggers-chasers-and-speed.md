@@ -4,7 +4,7 @@ Cuelists can advance manually, after a follow delay, at a timed delay, through a
 
 ## Follow and timed triggers
 
-Follow starts its delay from the preceding Cue's execution and advances automatically. Timed triggers use the stored timing rule. Confirm pause, release, loop, and end-of-list behavior for every automatic sequence.
+FOLLOW starts after the preceding Cue's values have finished. TIME starts its stored duration immediately when the preceding Cue receives GO, so its Cue can begin while that preceding Cue is still fading. Confirm pause, release, loop, and end-of-list behavior for every automatic sequence.
 
 ## Link triggers
 
@@ -14,7 +14,7 @@ LINK belongs to the source Cue. After that Cue's latest real incoming or outgoin
 
 ## Timecode
 
-Configure timecode sources, priority, and fallback under Desk Setup. Supported transport includes configured ArtTimeCode and MIDI timecode paths. Verify source identity and fallback by disconnecting the preferred source during rehearsal; never assume visible time alone proves the intended source is driving.
+Configure timecode sources, priority, and fallback under Desk Setup. Built-in ArtTimeCode and approved native extensions feed the same authoritative timecode router. Verify source identity and fallback by disconnecting the preferred source during rehearsal; never assume visible time alone proves the intended source is driving.
 
 The current Timecode page reports source prefixes, priority, and fallback state; it does not edit those sources.
 

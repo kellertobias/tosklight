@@ -141,6 +141,7 @@ fn effective_timing(
         frame.cue_list,
         frame.cue,
         frame.cue_fade_millis,
+        frame.outgoing_cue.zip(frame.outgoing_cue_fade_millis),
         timing,
         outgoing_intensity,
     )

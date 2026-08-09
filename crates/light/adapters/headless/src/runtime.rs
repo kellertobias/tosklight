@@ -9,6 +9,7 @@ mod discovery_http;
 mod dynamics_adapter;
 mod dynamics_http;
 mod event_transport;
+mod extensions_runtime;
 #[path = "file_manager.rs"]
 mod file_manager;
 #[path = "file_manager_support.rs"]
@@ -30,6 +31,7 @@ mod programming_update_wire_output;
 mod runtime_wire;
 mod startup_options;
 mod startup_state;
+mod usb_output;
 mod visualization_frame;
 mod visualization_transport;
 
@@ -61,9 +63,8 @@ use light_control::speed::{
     SoundObservation, SoundToLightConfig, SpeedGroupController, SpeedSnapshot,
 };
 use light_control::{
-    ControlAction, ControlEvent, ControlInput, FrameRate, MidiControlInput, OscArgument,
-    RtpMidiInput, SmpteTimecode, TimecodeRouter, TimecodeSourceConfig, UdpControlInput,
-    UdpInputProtocol, encode_osc_message,
+    ControlAction, ControlEvent, ControlInput, FrameRate, OscArgument, SmpteTimecode,
+    TimecodeRouter, TimecodeSourceConfig, UdpControlInput, UdpInputProtocol, encode_osc_message,
 };
 use light_core::{ApplicationClock, ManualClock, SessionId};
 use light_engine::{

@@ -86,6 +86,7 @@ impl PlaybackEngine {
         changed |= active.playback_number != Some(number) || (on && !active.enabled);
         if on {
             active.enabled = true;
+            active.fader_zero_auto_off_armed = false;
         }
         active.playback_number = Some(number);
         if duration == 0 {
@@ -94,6 +95,7 @@ impl PlaybackEngine {
             active.master = target;
             if !on {
                 active.enabled = false;
+                active.fader_zero_auto_off_armed = false;
                 active.activation = None;
             }
         } else {
@@ -147,6 +149,7 @@ impl PlaybackEngine {
         changed |= active.playback_identity != Some(identity) || (on && !active.enabled);
         if on {
             active.enabled = true;
+            active.fader_zero_auto_off_armed = false;
         }
         active.playback_number = Some(address.number().get());
         active.playback_identity = Some(identity);
@@ -156,6 +159,7 @@ impl PlaybackEngine {
             active.master = target;
             if !on {
                 active.enabled = false;
+                active.fader_zero_auto_off_armed = false;
                 active.activation = None;
             }
         } else {
@@ -274,6 +278,7 @@ fn apply_manual_xfade(
         || active.manual_xfade_position != value;
     active.playback_number = Some(number);
     active.enabled = true;
+    active.fader_zero_auto_off_armed = false;
     active.fader_position = value;
     active.manual_xfade_position = value;
     let progress = manual_xfade_progress(active.manual_xfade_direction, value);
@@ -329,6 +334,7 @@ fn complete_manual_xfade(active: &mut ActivePlayback, cue_list: &CueList, now: D
     active.transition_timing_bypassed = true;
     active.tracking_wrap = target == 0 && cue_list.effective_wrap_mode() == WrapMode::Tracking;
     active.activated_at = now;
+    active.completed_trigger_cue_id = None;
     active.manual_xfade_from_index = None;
     active.manual_xfade_to_index = None;
     active.manual_xfade_progress = 0.0;
@@ -422,6 +428,7 @@ fn set_transition_timing(
         || playback.transition_timing_bypassed
         || playback.transition_fade_fallback_millis != Some(fallback_millis);
     playback.activated_at = started_at;
+    playback.completed_trigger_cue_id = None;
     playback.transition_timing_bypassed = false;
     playback.transition_fade_fallback_millis = Some(fallback_millis);
     changed

@@ -146,7 +146,7 @@ pub enum ToHelper {
         /// reference — how strong a beam looks depends on the haze, the room and the eye — so it
         /// is the operator's, like the fog.
         laser_brightness: f32,
-        /// Fixture numbers and patch addresses beside each fixture.
+        /// Screen-space fixture numbers and patch addresses beside fixtures in every Stage view.
         show_labels: bool,
         /// Lay the reference grid on the ground plane.
         floor_grid: bool,

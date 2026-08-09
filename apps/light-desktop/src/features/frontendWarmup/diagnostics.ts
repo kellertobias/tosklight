@@ -695,6 +695,17 @@ class FrontendPerformanceDiagnostics {
 		};
 	}
 
+	progress() {
+		return {
+			firstUsablePaintAt: this.firstUsablePaintAt,
+			warmupStatus: this.warmup?.status ?? null,
+			eventLagCount: this.eventLags.length,
+			snapshotRequestRunning: this.requests.some(
+				({ status }) => status === "running",
+			),
+		};
+	}
+
 	async browserMemoryBytes() {
 		const performance = globalThis.performance as
 			| PerformanceWithMemory
@@ -777,6 +788,7 @@ if (typeof window !== "undefined") {
 		configurable: true,
 		value: {
 			snapshot: () => frontendPerformanceDiagnostics.snapshot(),
+			progress: () => frontendPerformanceDiagnostics.progress(),
 			browserMemoryBytes: () =>
 				frontendPerformanceDiagnostics.browserMemoryBytes(),
 		},
@@ -842,6 +854,12 @@ declare global {
 	interface Window {
 		__TOSKLIGHT_FRONTEND_PERFORMANCE__?: {
 			snapshot(): FrontendPerformanceSnapshot;
+			progress(): {
+				firstUsablePaintAt: number | null;
+				warmupStatus: string | null;
+				eventLagCount: number;
+				snapshotRequestRunning: boolean;
+			};
 			browserMemoryBytes(): Promise<number | null>;
 		};
 	}

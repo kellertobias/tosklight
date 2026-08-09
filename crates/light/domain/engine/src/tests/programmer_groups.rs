@@ -253,6 +253,8 @@ fn explicit_cue_change_wins_when_group_expansion_targets_same_attribute() {
         restart_mode: light_playback::RestartMode::FirstCue,
         force_cue_timing: false,
         disable_cue_timing: false,
+        auto_off_at_zero: false,
+        auto_off_flash_release: false,
         chaser_step_millis: 1_000,
         chaser_xfade_millis: 0,
         chaser_xfade_percent: Some(0),

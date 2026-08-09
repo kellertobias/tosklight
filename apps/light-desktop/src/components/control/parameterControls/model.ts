@@ -44,7 +44,7 @@ export type SpecialParameterFamily =
 	| "Beam"
 	| "Shapers"
 	| "Control";
-export const alignModes = ["out", "center", "left", "right"] as const;
+export const alignModes = ["left", "right", "out", "in"] as const;
 export type AlignMode = (typeof alignModes)[number];
 
 export const compactFamilyLabels: Record<ParameterFamily, string> = {

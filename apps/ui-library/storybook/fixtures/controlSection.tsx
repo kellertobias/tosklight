@@ -32,9 +32,17 @@ const speedGroups: readonly SpeedGroupViewModel[] = [120, 96, 72, 48, 24].map(
 		active: true,
 	}),
 );
-function ProgrammerSurface({ hardware }: { hardware: boolean }) {
+function ProgrammerSurface({
+	hardware,
+	initialFamily = "Intensity",
+	onValue,
+}: {
+	hardware: boolean;
+	initialFamily?: ParameterFamily;
+	onValue?: (attribute: string, value: number) => void;
+}) {
 	const { state, dispatch } = useApp();
-	const [family, setFamily] = useState<ParameterFamily>("Intensity");
+	const [family, setFamily] = useState<ParameterFamily>(initialFamily);
 	const [encoderPage, setEncoderPage] = useState(1);
 	const [dynamicsMode, setDynamicsMode] = useState(false);
 	const [normalized, setNormalized] = useState(
@@ -50,6 +58,11 @@ function ProgrammerSurface({ hardware }: { hardware: boolean }) {
 				["pan", 0.42],
 				["tilt", 0.58],
 				["zoom", 0.7],
+				["media.folder", 0],
+				["media.file", 0],
+				["media.mask.folder", 0],
+				["media.mask.file", 0],
+				["media.mask.invert", 0],
 			]),
 	);
 	const attributes: Record<ParameterFamily, Array<string | null>> = {
@@ -87,8 +100,10 @@ function ProgrammerSurface({ hardware }: { hardware: boolean }) {
 			"media.mask.invert",
 		],
 	};
-	const update = (attribute: string, value: number) =>
+	const update = (attribute: string, value: number) => {
 		setNormalized((current) => new Map(current).set(attribute, value));
+		onValue?.(attribute, value);
+	};
 	const controller = {
 		state,
 		dispatch,
@@ -118,6 +133,7 @@ function ProgrammerSurface({ hardware }: { hardware: boolean }) {
 		programmerValues: [],
 		groupProgrammerValues: [],
 		encoderSlots: attributes[family],
+		encoderPushTurnSlots: [],
 		encoderPageCount: 1,
 		attributeLabels: new Map<string, string>(),
 		normalized,
@@ -435,6 +451,10 @@ export interface CommandSectionFixtureProps {
 	programmer?: ReactNode;
 	/** Reuse an enclosing application provider in full-application stories. */
 	inheritAppState?: boolean;
+	/** Initial regular Programmer family for full-application review stories. */
+	initialProgrammerFamily?: ParameterFamily;
+	/** Observe regular Programmer value changes without introducing custom encoders. */
+	onProgrammerValue?: (attribute: string, value: number) => void;
 }
 
 function CommandSectionFixtureContent({
@@ -445,6 +465,8 @@ function CommandSectionFixtureContent({
 	nextEnabled = true,
 	preloadArmed = false,
 	programmer,
+	initialProgrammerFamily,
+	onProgrammerValue,
 }: CommandSectionFixtureProps) {
 	const [mode, setMode] = useState(initialMode);
 	return (
@@ -466,7 +488,15 @@ function CommandSectionFixtureContent({
 					}
 				/>
 			}
-			programmer={programmer ?? <ProgrammerSurface hardware={hardware} />}
+			programmer={
+				programmer ?? (
+					<ProgrammerSurface
+						hardware={hardware}
+						initialFamily={initialProgrammerFamily}
+						onValue={onProgrammerValue}
+					/>
+				)
+			}
 			playbacks={<PlaybackSurface hardware={hardware} />}
 			programmerTools={
 				<ProgrammerToolsFixture

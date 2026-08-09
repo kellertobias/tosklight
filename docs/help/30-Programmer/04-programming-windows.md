@@ -13,7 +13,7 @@ Use the window that gives the clearest view of the current task; all of them ope
 | Cuelists / Cues | Cue content, order, timing, triggers, tracking, and execution. |
 | DMX | Final universe output and diagnostic overrides. |
 
-Selections made in Stage, Fixtures, Groups, Presets, or the command line are the same actual programmer selection. While using [Highlight and Step Through](02-selecting-and-setting-values.md#highlight-and-step-through), PREV and NEXT replace that actual selection with one item, ALL restores the current membership of the remembered live source, and any ordinary selection from one of these windows becomes the new complete step basis. Preset, encoder, dialog, and other value changes use the actual selection but do not reset the basis. HIGH remains independent and follows whatever is actually selected.
+Selections made in Stage, Fixtures, Groups, Presets, or the command line are the same actual programmer selection. Activating [Highlight and Step Through](02-selecting-and-setting-values.md#highlight-and-step-through) freezes that ordered selection as its original set. PREV and NEXT replace the actual selection with one original member; ALL restores the whole frozen set. Preset, encoder, dialog, and other value changes use that actual focus and immediately reveal the real value for each touched attribute.
 
 In the Dynamics Speed view, choose **Loop** to repeat until Off or **One-shot** to run one complete effective cycle and stop automatically. Run Mode is separate from Start now, Join sync now, and Next boundary, which determine when and where the cycle begins. A completed one-shot does not restart merely because its Cue, Programmer, or Playback value remains active; trigger it again with a new deliberate activation.
 
@@ -68,7 +68,7 @@ The first selected fixture receives the start color, the last receives the end c
 
 The complete range lands once on release as one normal Programmer Fade and Undo gesture. Leaving or cancelling the pointer gesture applies nothing. Blind, Preview, Preload, Record, and Update use the same programmer behavior as other Color edits.
 
-The Fixture Sheet is also the on-desk step-state view: remembered-base rows remain subtly selected while the actual step is prominent, including on multi-head rows and master rows shown while subheads are hidden. The indication remains with HIGH off. The command bar replaces its DMX-rate text with `Highlight` while HIGH is active but adds no separate status panel; neither does the hardware simulator.
+The Fixture Sheet is also the on-desk Highlight-state view: original-set rows remain subtly selected while the active step is prominent, including on multi-head rows and master rows shown while subheads are hidden. The command bar replaces its DMX-rate text with `Highlight` while HIGH is active but adds no separate status panel; neither does the hardware simulator.
 
 Pane settings are local to that pane. A Stage pane can follow Preload while another shows live output; a Preset pane can remain on Position while another shows Color.
 

@@ -195,6 +195,64 @@ describe("group management wire", () => {
 		expect(snapshot.resolvedSpatial.warnings).toHaveLength(1);
 	});
 
+	it("decodes projection kinds while keeping legacy planar responses compatible", () => {
+		const fixture = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+		const response = {
+			show_id: SHOW_ID,
+			show_revision: 7,
+			group: {
+				object_id: "front",
+				object_revision: 3,
+				body: { name: "Front", fixtures: [fixture] },
+			},
+			resolved_spatial: {
+				source_order: [fixture],
+				effective_mapping: {
+					projection: {
+						anchor: { x: 0, y: 0, z: 0 },
+						view_direction: { x: 0, y: 0, z: -1 },
+						rotation_degrees: 0,
+						preset: null,
+						kind: "cylindrical",
+					},
+					shape: {
+						type: "grid",
+						angle_degrees: 0,
+						direction: "ascending",
+					},
+				},
+				mapping_provenance: { type: "local", group_id: "front" },
+				ordered_fixture_ids: [fixture],
+				projected_positions: [],
+				ranks: [],
+				rank_count: 0,
+				warnings: [],
+			},
+		};
+
+		expect(
+			decodeGroupSettingsSnapshot(response, "front").resolvedSpatial
+				.effective_mapping?.projection.kind,
+		).toBe("cylindrical");
+
+		const { kind: _kind, ...legacyProjection } =
+			response.resolved_spatial.effective_mapping.projection;
+		const legacyPlanar = {
+			...response,
+			resolved_spatial: {
+				...response.resolved_spatial,
+				effective_mapping: {
+					...response.resolved_spatial.effective_mapping,
+					projection: legacyProjection,
+				},
+			},
+		};
+		expect(
+			decodeGroupSettingsSnapshot(legacyPlanar, "front").resolvedSpatial
+				.effective_mapping?.projection.kind,
+		).toBeUndefined();
+	});
+
 	it("rejects undeclared response fields", () => {
 		expect(() =>
 			decodeGroupManagementOutcome(changed({ unexpected: true }), request()),

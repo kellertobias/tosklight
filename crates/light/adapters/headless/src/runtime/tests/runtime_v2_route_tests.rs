@@ -125,7 +125,40 @@ async fn runtime_v2_preserves_diagnostics_auth_and_recovery_reporting() {
         .await
         .unwrap();
     assert_eq!(diagnostics.status(), StatusCode::OK);
-    assert!(json(diagnostics).await["snapshot_revision"].is_number());
+    let diagnostics = json(diagnostics).await;
+    assert!(diagnostics["snapshot_revision"].is_number());
+    assert!(diagnostics["extensions"]["extensions_directory"].is_string());
+    let extensions = app
+        .clone()
+        .oneshot(
+            Request::get("/api/v2/extensions")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(extensions.status(), StatusCode::OK);
+    let extensions = json(extensions).await;
+    assert!(extensions["packages"].is_array());
+    let rescan = app
+        .clone()
+        .oneshot(
+            Request::post("/api/v2/extensions/rescan")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"request_id":"runtime-test-rescan","future_field":true}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(rescan.status(), StatusCode::OK);
+    assert_eq!(
+        json(rescan).await["extensions_directory"],
+        extensions["extensions_directory"]
+    );
     let performance = app
         .clone()
         .oneshot(

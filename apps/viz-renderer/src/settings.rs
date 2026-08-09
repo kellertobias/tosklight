@@ -476,7 +476,7 @@ pub struct Preferences {
     /// eye, not of the show.
     pub laser_brightness: f32,
     pub theme: Theme,
-    /// Show fixture numbers and patch addresses in the plan views.
+    /// Show screen-space fixture numbers and patch addresses in every Stage view.
     pub show_labels: bool,
     /// Hide every overlay so the picture can be looked at on its own.
     ///

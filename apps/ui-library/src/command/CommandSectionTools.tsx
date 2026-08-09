@@ -221,12 +221,14 @@ export interface HardwareControlValue {
 	display: string;
 	disabled?: boolean;
 	ariaLabel?: string;
+	settings?: boolean;
 }
 
 export interface HardwareControlSummaryViewProps {
 	values: readonly HardwareControlValue[];
 	speedGroups: readonly SpeedGroupViewModel[];
 	onValue: (id: HardwareControlValue["id"]) => void;
+	onValueSettings?: (id: HardwareControlValue["id"]) => void;
 	onSpeedPointerDown?: (
 		group: SpeedGroupViewModel["id"],
 		event: React.PointerEvent<HTMLButtonElement>,
@@ -244,6 +246,7 @@ export function HardwareControlSummaryView({
 	values,
 	speedGroups,
 	onValue,
+	onValueSettings,
 	onSpeedPointerDown,
 	onSpeedPointerEnd,
 	onSpeedActivate,
@@ -259,6 +262,14 @@ export function HardwareControlSummaryView({
 						disabled={value.disabled}
 						key={value.id}
 						onClick={() => onValue(value.id)}
+						onContextMenu={
+							value.settings && onValueSettings
+								? (event) => {
+										event.preventDefault();
+										onValueSettings(value.id);
+									}
+								: undefined
+						}
 					>
 						<small>{value.label}</small>
 						<b>{value.display}</b>

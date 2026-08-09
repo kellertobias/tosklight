@@ -20,6 +20,7 @@ function ModalState() {
 			</span>
 			<span>built-in-{state.builtIn ?? "none"}</span>
 			<span>{state.shiftArmed ? "shift-held" : "shift-released"}</span>
+			<span>control-{state.controlMode}</span>
 		</>
 	);
 }
@@ -79,6 +80,30 @@ afterEach(() => {
 });
 
 describe("desk shortcuts", () => {
+	it("routes canonical extension desk commands to the normal application surfaces", () => {
+		render(
+			<AppProvider>
+				<ModalState />
+			</AppProvider>,
+		);
+		act(() =>
+			routeControlSurfaceIntent({
+				type: "desk_command",
+				source: "hardware",
+				command: "stage",
+			}),
+		);
+		expect(screen.getByText("built-in-stage")).toBeInTheDocument();
+		act(() =>
+			routeControlSurfaceIntent({
+				type: "desk_command",
+				source: "hardware",
+				command: "playbacks",
+			}),
+		);
+		expect(screen.getByText("control-playbacks")).toBeInTheDocument();
+	});
+
 	it("opens the running menu for hardware Shift Clear", () => {
 		render(
 			<AppProvider>

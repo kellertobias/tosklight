@@ -19,23 +19,72 @@ import { useApp } from "../../state/AppContext";
 import { compatibleSpecialDialogActions } from "./SpecialDialogsModal";
 import { ActiveProgrammersModal } from "./systemControls/ActiveProgrammersModal";
 import { OutputControls } from "./systemControls/OutputControls";
-import { VisualizerControls } from "./systemControls/VisualizerControls";
 import { RunningSections } from "./systemControls/RunningSections";
 import { useRunningDynamicsAuthority } from "./systemControls/runningDynamicsAuthority";
-import { useVisualizerViewControls } from "./systemControls/useVisualizerViewControls";
 import { useRunningPlaybackAuthority } from "./systemControls/runningPlaybackAuthority";
+import { useVisualizerViewControls } from "./systemControls/useVisualizerViewControls";
+import { VisualizerControls } from "./systemControls/VisualizerControls";
 
 const EMPTY_FIXTURE_IDS: readonly string[] = [];
 const EMPTY_PROGRAMMERS = [] as const;
+
+type FixtureActions = Map<
+	ControlActionSemantic,
+	ReturnType<typeof compatibleSpecialDialogActions>
+>;
+
+function useFixtureActionTrigger(
+	fixtureActions: FixtureActions,
+	programmerActions: ReturnType<typeof useProgrammerActions>,
+) {
+	const [result, setResult] = useState("");
+	const [latched, setLatched] = useState<Set<string>>(() => new Set());
+	const trigger = async (
+		semantic: ControlActionSemantic,
+		phase: "click" | "press" | "release",
+	) => {
+		const compatible = fixtureActions.get(semantic) ?? [];
+		const actions = compatible.filter((action) =>
+			phase === "click"
+				? action.kind !== "momentary"
+				: action.kind === "momentary",
+		);
+		const nextLatched = new Set(latched);
+		await Promise.all(
+			actions.map((action) => {
+				const key = `${action.fixtureId}:${action.actionId}`;
+				const active =
+					action.kind === "latched" ? !latched.has(key) : phase !== "release";
+				if (action.kind === "latched") {
+					if (active) nextLatched.add(key);
+					else nextLatched.delete(key);
+				}
+				return programmerActions?.controlFixtureAction(
+					action.fixtureId,
+					action.actionId,
+					active,
+				);
+			}),
+		);
+		if (actions.some((action) => action.kind === "latched"))
+			setLatched(nextLatched);
+		const supported = new Set(compatible.map((item) => item.fixtureId));
+		const actionName = semantic
+			.split("_")
+			.map((part) => `${part[0]?.toUpperCase() ?? ""}${part.slice(1)}`)
+			.join(" ");
+		setResult(
+			`${actionName} sent to ${supported.size} fixture${supported.size === 1 ? "" : "s"}`,
+		);
+	};
+	return { result, trigger };
+}
 
 function useSystemControlsModel() {
 	const { state, dispatch } = useApp();
 	const programmerActions = useProgrammerActions();
 	const dynamicsActions = useDynamicsActions();
 	const session = useSessionSnapshot();
-	const [fixtureActionResult, setFixtureActionResult] = useState("");
-	const [activeLatchedFixtureActions, setActiveLatchedFixtureActions] =
-		useState<Set<string>>(() => new Set());
 	const [stoppingAll, setStoppingAll] = useState(false);
 	const output = useOutputRuntimeView(state.systemControlsOpen);
 	const outputActions = useOutputRuntimeActions(state.systemControlsOpen);
@@ -100,47 +149,8 @@ function useSystemControlsModel() {
 		],
 		[playbackAuthority.sources],
 	);
-	const triggerFixtureAction = async (
-		semantic: ControlActionSemantic,
-		phase: "click" | "press" | "release",
-	) => {
-		const compatible = fixtureActions.get(semantic) ?? [];
-		const actions = compatible.filter((action) =>
-			phase === "click"
-				? action.kind !== "momentary"
-				: action.kind === "momentary",
-		);
-		const nextLatchedActions = new Set(activeLatchedFixtureActions);
-		await Promise.all(
-			actions.map((action) => {
-				const key = `${action.fixtureId}:${action.actionId}`;
-				const active =
-					action.kind === "latched"
-						? !activeLatchedFixtureActions.has(key)
-						: phase !== "release";
-				if (action.kind === "latched") {
-					if (active) nextLatchedActions.add(key);
-					else nextLatchedActions.delete(key);
-				}
-				return programmerActions?.controlFixtureAction(
-					action.fixtureId,
-					action.actionId,
-					active,
-				);
-			}),
-		);
-		if (actions.some((action) => action.kind === "latched")) {
-			setActiveLatchedFixtureActions(nextLatchedActions);
-		}
-		const supported = new Set(compatible.map((item) => item.fixtureId));
-		const actionName = semantic
-			.split("_")
-			.map((part) => `${part[0]?.toUpperCase() ?? ""}${part.slice(1)}`)
-			.join(" ");
-		setFixtureActionResult(
-			`${actionName} sent to ${supported.size} fixture${supported.size === 1 ? "" : "s"}`,
-		);
-	};
+	const { result: fixtureActionResult, trigger: triggerFixtureAction } =
+		useFixtureActionTrigger(fixtureActions, programmerActions);
 	const stopAllRunning = async () => {
 		if (
 			!playbackAuthority.ready ||
@@ -154,9 +164,7 @@ function useSystemControlsModel() {
 		setStoppingAll(true);
 		try {
 			await Promise.all([
-				...runningSources.map((source) =>
-					playbackAuthority.release(source),
-				),
+				...runningSources.map((source) => playbackAuthority.release(source)),
 				...dynamicsAuthority.rows.map((dynamic) =>
 					dynamicsAuthority.off(dynamic),
 				),

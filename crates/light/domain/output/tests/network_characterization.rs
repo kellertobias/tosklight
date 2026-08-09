@@ -8,6 +8,7 @@ use tokio::net::UdpSocket;
 
 fn unicast_route(protocol: Protocol, universe: u16, destination: SocketAddr) -> OutputRoute {
     OutputRoute {
+        target: Default::default(),
         protocol,
         logical_universe: 1,
         destination_universe: universe,

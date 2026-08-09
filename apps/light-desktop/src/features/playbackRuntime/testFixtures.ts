@@ -33,6 +33,8 @@ export function cueProjection(
 			effective_next_is_loaded: false,
 			paused: false,
 			activated_at: "2026-07-19T10:00:00Z",
+			paused_at: null,
+			cue_timing: null,
 			transition_ordinal: 1,
 			master: 1,
 			fader_position: 1,

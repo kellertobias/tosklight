@@ -121,6 +121,7 @@ fn legacy_migration_derives_invert_aware_full_white_and_open_wheel_highlight() {
         ("color.green", 0.0, false),
         ("color.blue", 0.0, false),
         ("color.white", 0.0, false),
+        ("color.amber", 0.0, false),
         ("color.cyan", 0.0, true),
         ("color.magenta", 0.0, false),
         ("color.yellow", 0.0, false),
@@ -225,6 +226,7 @@ fn legacy_migration_derives_invert_aware_full_white_and_open_wheel_highlight() {
     assert_eq!(highlights["color.green"], 255);
     assert_eq!(highlights["color.blue"], 255);
     assert_eq!(highlights["color.white"], 255);
+    assert_eq!(highlights["color.amber"], 255);
     assert_eq!(highlights["color.cyan"], 255, "inverted no-filter endpoint");
     assert_eq!(highlights["color.magenta"], 0);
     assert_eq!(highlights["color.yellow"], 0);
