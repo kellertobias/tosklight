@@ -468,7 +468,7 @@ mod tests {
     #[test]
     fn discovery_announces_the_port_a_console_should_connect_to() {
         let message = peer_location(&Presence {
-            listening_port: 4811,
+            listening_port: 14_809,
             kind: "MediaServer",
             name: "ToskLight Media",
             state: "Running",
@@ -476,7 +476,7 @@ mod tests {
         let framed = body_of(&message);
 
         assert_eq!(framed.content_type, content::PLOC);
-        assert_eq!(Reader::new(&framed.body).u16(0), 4811);
+        assert_eq!(Reader::new(&framed.body).u16(0), 14_809);
         assert!(
             framed
                 .body

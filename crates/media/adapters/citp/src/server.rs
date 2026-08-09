@@ -151,6 +151,7 @@ impl Sessions {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Identity<'a> {
     pub name: &'a str,
+    pub listening_port: u16,
     pub layers: u8,
     pub preview_width: u16,
     pub preview_height: u16,
@@ -183,7 +184,7 @@ pub fn respond(
     now_millis: u64,
 ) -> Vec<Vec<u8>> {
     if message.content_type == content::PLOC {
-        return vec![announcement(identity.name, crate::MSEX_PORT)];
+        return vec![announcement(identity.name, identity.listening_port)];
     }
 
     let version = negotiate(message.version);
@@ -359,6 +360,7 @@ mod tests {
     fn identity() -> Identity<'static> {
         Identity {
             name: "ToskLight Media",
+            listening_port: 14_809,
             layers: 8,
             preview_width: 320,
             preview_height: 180,
@@ -480,9 +482,12 @@ mod tests {
         };
         let replies = respond(&ploc, &identity(), &Shelf, &mut sessions, 0);
         assert_eq!(replies.len(), 1);
+        let reply = parse(&replies[0]).expect("frames");
+        assert_eq!(reply.content_type, content::PLOC);
         assert_eq!(
-            parse(&replies[0]).expect("frames").content_type,
-            content::PLOC
+            u16::from_le_bytes(reply.body[..2].try_into().unwrap()),
+            14_809,
+            "a reply announces the configured listener, not a hard-coded default"
         );
     }
 

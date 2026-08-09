@@ -10,8 +10,11 @@
 
 import { Button, CheckboxField, TextField } from "@tosklight/ui/controls";
 import { useState } from "react";
-import type { NetworkView, UpdateNetwork } from "../../shared/api/generated/media-wire";
 import { requestId } from "../../shared/api/editing";
+import type {
+	NetworkView,
+	UpdateNetwork,
+} from "../../shared/api/generated/media-wire";
 
 export interface NetworkEditorProps {
 	network: NetworkView;
@@ -35,7 +38,8 @@ const LISTENERS = [
 	{
 		field: "citpListen",
 		label: "CITP",
-		description: "TCP 4811. A console discovers this server and watches its preview here.",
+		description:
+			"TCP 4809. A console discovers this server and watches its preview here.",
 	},
 	{
 		field: "httpListen",
@@ -46,7 +50,12 @@ const LISTENERS = [
 
 type ListenField = (typeof LISTENERS)[number]["field"];
 
-export function NetworkEditor({ network, busy, onSave, onCancel }: NetworkEditorProps) {
+export function NetworkEditor({
+	network,
+	busy,
+	onSave,
+	onCancel,
+}: NetworkEditorProps) {
 	const [preset, setPreset] = useState(network.sameComputerPreset);
 	const [listeners, setListeners] = useState<Record<ListenField, string>>({
 		artNetListen: network.stored.artNetListen,
@@ -54,7 +63,9 @@ export function NetworkEditor({ network, busy, onSave, onCancel }: NetworkEditor
 		citpListen: network.stored.citpListen,
 		httpListen: network.stored.httpListen,
 	});
-	const [endpoint, setEndpoint] = useState(network.stored.speedGroupEndpoint ?? "");
+	const [endpoint, setEndpoint] = useState(
+		network.stored.speedGroupEndpoint ?? "",
+	);
 
 	return (
 		<form
@@ -74,8 +85,9 @@ export function NetworkEditor({ network, busy, onSave, onCancel }: NetworkEditor
 			<fieldset>
 				<legend>Where this server listens</legend>
 				<p className="media-settings-note">
-					An address and a port, such as <code>0.0.0.0:6454</code> for every interface on
-					this machine, or one interface's own address to listen only there.
+					An address and a port, such as <code>0.0.0.0:6454</code> for every
+					interface on this machine, or one interface's own address to listen
+					only there.
 				</p>
 				{LISTENERS.map((listener) => (
 					<TextField
@@ -147,10 +159,14 @@ export function BoundAddresses({ network }: { network: NetworkView }) {
 				<tr>
 					<th scope="row">Speed Group stream</th>
 					<td>
-						<code>{network.stored.speedGroupEndpoint ?? "not following one"}</code>
+						<code>
+							{network.stored.speedGroupEndpoint ?? "not following one"}
+						</code>
 					</td>
 					<td>
-						<code>{network.resolved.speedGroupEndpoint ?? "not following one"}</code>
+						<code>
+							{network.resolved.speedGroupEndpoint ?? "not following one"}
+						</code>
 					</td>
 				</tr>
 			</tbody>

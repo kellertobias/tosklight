@@ -127,6 +127,7 @@ fn jpeg_size(jpeg: &[u8]) -> Option<(u16, u16)> {
 #[derive(Clone)]
 struct Service {
     name: String,
+    listening_port: u16,
     preview: crate::preview::SharedPreview,
     state: SharedState,
     catalog: SharedCatalog,
@@ -138,6 +139,7 @@ impl Service {
     fn identity(&self) -> Identity<'_> {
         Identity {
             name: &self.name,
+            listening_port: self.listening_port,
             layers: self.layers,
             // The preview size a console is offered. The program output is read back at whatever
             // a subscriber asks for; this is only what the source advertises.
@@ -198,8 +200,10 @@ pub fn spawn(
     preview: crate::preview::SharedPreview,
     shutdown: Shutdown,
 ) {
+    let listen = configuration.network.resolved().citp_listen;
     let service = Service {
         name: format!("ToskLight Media — {}", configuration.instance_id.as_str()),
+        listening_port: listen.port(),
         preview,
         state,
         catalog,
@@ -209,8 +213,6 @@ pub fn spawn(
             .first()
             .map_or(8, |output| output.personality.layer_count().min(255) as u8),
     };
-    let listen = configuration.network.resolved().citp_listen;
-
     tokio::spawn(announce(service.clone(), shutdown.clone()));
     tokio::spawn(listen_for_consoles(service, listen, shutdown));
 }
@@ -229,7 +231,7 @@ async fn announce(service: Service, shutdown: Shutdown) {
     }
 
     let group = SocketAddr::from((Ipv4Addr::from(MULTICAST_GROUP), media_citp::CITP_PORT));
-    let announcement = media_citp::announcement(&service.name, media_citp::MSEX_PORT);
+    let announcement = media_citp::announcement(&service.name, service.listening_port);
     let mut ticker = tokio::time::interval(ANNOUNCE_INTERVAL);
     let mut watcher = shutdown.watcher();
     let mut stopping = Box::pin(watcher.wait());

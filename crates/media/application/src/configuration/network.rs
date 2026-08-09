@@ -12,9 +12,9 @@ use serde::{Deserialize, Serialize};
 pub const ART_NET_PORT: u16 = 6454;
 /// E1.31 (sACN)'s fixed UDP port.
 pub const SACN_PORT: u16 = 5568;
-/// CITP/MSEX 1.2 listens on TCP 4811. One configured port, published in discovery and status;
+/// CITP/MSEX 1.2 listens on TCP 4809. One configured port, published in discovery and status;
 /// neither product may silently substitute a different one.
-pub const CITP_PORT: u16 = 4811;
+pub const CITP_PORT: u16 = 4809;
 /// The administration HTTP service, matching the legacy application's port.
 pub const HTTP_PORT: u16 = 8080;
 
@@ -131,9 +131,9 @@ mod tests {
         let resolved = NetworkConfiguration::default().resolved();
         assert_eq!(resolved.art_net_listen.port(), 6454);
         assert_eq!(resolved.sacn_listen.port(), 5568);
-        assert_eq!(resolved.citp_listen.port(), 4811);
+        assert_eq!(resolved.citp_listen.port(), 4809);
         assert_eq!(resolved.http_listen.port(), 8080);
-        assert_eq!(resolved.citp_advertised_port, 4811);
+        assert_eq!(resolved.citp_advertised_port, 4809);
     }
 
     #[test]

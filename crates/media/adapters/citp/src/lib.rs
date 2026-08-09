@@ -28,6 +28,6 @@ pub use server::{Identity, Library, Sessions, announcement, greeting, negotiate,
 /// The port CITP uses. Both the discovery socket and the request listener sit on it.
 pub const CITP_PORT: u16 = 4809;
 /// The TCP port a media server listens for MSEX requests on.
-pub const MSEX_PORT: u16 = 4811;
+pub const MSEX_PORT: u16 = CITP_PORT;
 /// The group discovery is announced to.
 pub const MULTICAST_GROUP: [u8; 4] = [224, 0, 0, 180];

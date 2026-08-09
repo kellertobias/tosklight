@@ -487,7 +487,7 @@ export function aNetwork(overrides: Partial<NetworkView> = {}): NetworkView {
 	const stored = {
 		artNetListen: "0.0.0.0:6454",
 		sacnListen: "0.0.0.0:5568",
-		citpListen: "0.0.0.0:4811",
+		citpListen: "0.0.0.0:4809",
 		httpListen: "127.0.0.1:8080",
 		speedGroupEndpoint: null,
 	};
@@ -495,7 +495,7 @@ export function aNetwork(overrides: Partial<NetworkView> = {}): NetworkView {
 		sameComputerPreset: false,
 		stored,
 		resolved: { ...stored },
-		citpAdvertisedPort: 4811,
+		citpAdvertisedPort: 4809,
 		takesEffectOnRestart: true,
 		...overrides,
 	};

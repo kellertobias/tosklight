@@ -125,7 +125,7 @@ describe("the settings page", () => {
 				resolved: {
 					artNetListen: "127.0.0.1:6454",
 					sacnListen: "127.0.0.1:5568",
-					citpListen: "127.0.0.1:4811",
+					citpListen: "127.0.0.1:4809",
 					httpListen: "127.0.0.1:8080",
 					speedGroupEndpoint: null,
 				},
@@ -198,7 +198,7 @@ describe("the settings page", () => {
 				stored: {
 					artNetListen: "0.0.0.0:6454",
 					sacnListen: "0.0.0.0:5568",
-					citpListen: "0.0.0.0:4811",
+					citpListen: "0.0.0.0:4809",
 					httpListen: "127.0.0.1:8080",
 					speedGroupEndpoint: "192.168.1.9:9000",
 				},
@@ -221,7 +221,7 @@ describe("the settings page", () => {
 		stubSettingsServer({
 			refuseWrites: {
 				code: "network-invalid",
-				message: "citpListen is not an address and port, such as 0.0.0.0:4811",
+				message: "citpListen is not an address and port, such as 0.0.0.0:4809",
 				status: 400,
 			},
 		});

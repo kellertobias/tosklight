@@ -76,7 +76,7 @@ installation meets all of them at once:
 | Play mode `128` | `Once` — five bands over the channel | `Reverse Synced` — the v2 three-block layout (D1) |
 | Layer pitch | 32 slots | 34 slots, so every channel after the third differs |
 | Dimmer at slot 13 | layer 1's dimmer | a different channel of layer 1 |
-| CITP port | TCP/UDP **4809** | UDP discovery **4809**, but configured/default advertised TCP **4811** |
+| CITP port | TCP/UDP **4809** | TCP/UDP **4809** by default; a custom TCP port is advertised exactly |
 | GDTF attributes | standard names (`Gobo2` for Folder, `Shutter1` for Play mode, `Pan`/`Tilt` for position) | Media's own attributes, so a console cannot apply unrelated semantics (D13) |
 | Text addressing | folder `200`, file = slot − 200, so slot `200` was file `0` | file `0` is a blank sentinel; slot `200`'s content is moved and the move is reported |
 
@@ -92,9 +92,8 @@ document version 2 drops the stored field. There is one personality, and it is t
 speaks. A version 1 document still loads: the migration removes the field rather than refusing the
 document, so a development installation is not stranded on something it wrote itself.
 
-The maintainer has resolved that split: discovery and the default advertised TCP endpoint both use
-the industry-standard port **4809**. The target change and its running proof are the next ordered
-ledger item.
+The maintainer resolved that split: discovery and the default advertised TCP endpoint both use the
+industry-standard port **4809**. A configured custom TCP port is preserved and advertised exactly.
 
 ## Acceptance rule
 

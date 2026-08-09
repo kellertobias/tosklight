@@ -260,7 +260,7 @@ mod tests {
             view.resolved.art_net_listen, "127.0.0.1:6454",
             "the preset is visible without destroying the LAN setting"
         );
-        assert_eq!(view.citp_advertised_port, 4811);
+        assert_eq!(view.citp_advertised_port, 4809);
         assert!(view.takes_effect_on_restart);
     }
 
@@ -345,7 +345,7 @@ mod tests {
             }
         );
 
-        let tcp = edit(r#"{"requestId":"b","httpListen":"0.0.0.0:4811"}"#)
+        let tcp = edit(r#"{"requestId":"b","httpListen":"0.0.0.0:4809"}"#)
             .applied(&NetworkConfiguration::default())
             .expect_err("refused");
         assert!(tcp.to_string().contains("TCP"));

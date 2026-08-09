@@ -52,7 +52,7 @@ mod tests {
         assert_eq!(body["stored"]["artNetListen"], "0.0.0.0:6454");
         assert_eq!(body["resolved"]["artNetListen"], "0.0.0.0:6454");
         assert_eq!(body["stored"]["httpListen"], "127.0.0.1:8080");
-        assert_eq!(body["citpAdvertisedPort"], 4811);
+        assert_eq!(body["citpAdvertisedPort"], 4809);
         assert_eq!(body["sameComputerPreset"], false);
         assert_eq!(
             body["takesEffectOnRestart"], true,
@@ -132,7 +132,7 @@ mod tests {
         assert!(bench.stored.lock().unwrap().is_empty());
         assert_eq!(
             bench.configuration.load().network.citp_listen.port(),
-            4811,
+            4809,
             "the running configuration is untouched"
         );
     }
