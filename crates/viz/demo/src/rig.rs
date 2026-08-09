@@ -65,6 +65,33 @@ pub const DEMO_RIG: &[RigBlock] = &[
         step: (2_000, 0, 0),
         rotation: (-35.0, 0.0, 0.0),
     },
+    // Representative conventional faces for close visualizer evidence. These are deliberately
+    // single fixtures: their purpose is to make the compact ACL lens and Fresnel glass inspectable,
+    // not to add another repeated wash to the demo design.
+    RigBlock {
+        manufacturer: "Generic",
+        profile: "ACL",
+        mode: "16-bit",
+        label: "ACL",
+        count: 1,
+        universe: 5,
+        first_number: 501,
+        origin: (-1_000, -4_500, 6_000),
+        step: (0, 0, 0),
+        rotation: (-35.0, 0.0, 0.0),
+    },
+    RigBlock {
+        manufacturer: "Generic",
+        profile: "Dimmer Fresnel",
+        mode: "16-bit",
+        label: "Fresnel",
+        count: 1,
+        universe: 5,
+        first_number: 502,
+        origin: (1_000, -4_500, 6_000),
+        step: (0, 0, 0),
+        rotation: (-35.0, 0.0, 0.0),
+    },
     // Mid truss: the washes and the profile movers.
     RigBlock {
         manufacturer: "ROBE",
@@ -234,6 +261,8 @@ mod tests {
             "Blinder",
             "Strobe",
             "Dimmer PAR Can",
+            "ACL",
+            "Dimmer Fresnel",
             "Robin 600X LEDWash",
             "Trackspot",
             "Laser",

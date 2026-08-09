@@ -25,6 +25,7 @@ const USAGE: &str = "viz-capture --show FILE --output DIR [options]
   --step SECONDS    Scene time between frames (default 1/30).
   --settle N        Frames rendered and discarded first, so time-based motion has run (default 30).
   --haze PERCENT    Haze the beams are drawn through (default 50).
+  --fixture NAME    Frame close on fixtures whose name starts with NAME.
   --view NAME       full3d | simple3d | lines3d | top-down | left-to-right |
                     right-to-left | front-to-back | back-to-front (default full3d).";
 
@@ -37,6 +38,7 @@ struct Options {
     step: f32,
     settle: u32,
     view: ViewMode,
+    fixture: Option<String>,
     /// Haze, `0..=1`. Renderer-local by design — a hazer's DMX says how hard the machine is
     /// working, not what the room ends up like — so the capture states it rather than reading it
     /// from the show.
@@ -56,6 +58,7 @@ impl Default for Options {
             step: 1.0 / 30.0,
             settle: 30,
             view: ViewMode::Full3d,
+            fixture: None,
             haze: viz_scene::DEFAULT_DENSITY,
         }
     }
@@ -102,14 +105,27 @@ fn run(options: &Options) -> Result<u32, String> {
     // the same show always yields the same shot.
     // The rig for the house view and the whole room for a plan, exactly as the desk's pane frames
     // them, so a capture is the picture an operator gets rather than a differently framed one.
-    view.camera = viz_scene::Camera::framed(
-        options.view,
-        if options.view.is_orthographic() {
-            scene.bounds
-        } else {
-            scene.rig_bounds()
-        },
-    );
+    let framing = if let Some(fixture) = options.fixture.as_deref() {
+        fixture_bounds(&scene, fixture)?
+    } else if options.view.is_orthographic() {
+        scene.bounds
+    } else {
+        scene.rig_bounds()
+    };
+    view.camera = viz_scene::Camera::framed(options.view, framing);
+    if options.fixture.is_some() && !options.view.is_orthographic() {
+        // A named fixture capture is inspection evidence, not another whole-stage shot. Stand
+        // close, slightly below the fixture, and look at its centre so a down-facing lens and the
+        // body carrying it are both visible. This camera is deterministic and exists only for an
+        // explicit inspection capture; the ordinary product-demo camera remains the house view.
+        let centre = framing.centre();
+        let radius = framing.radius().max(0.25);
+        view.camera.position =
+            centre + viz_scene::glam::Vec3::new(0.0, -radius * 0.5, radius * 3.0);
+        view.camera.target = centre;
+        view.camera.up = viz_scene::glam::Vec3::Y;
+        view.camera.fov_degrees = 35.0;
+    }
     let overlay = viz_render::Overlay::default();
     let mut values = SceneValues::default();
     values.resize(scene.emitters.len());
@@ -156,6 +172,31 @@ fn run(options: &Options) -> Result<u32, String> {
         written += 1;
     }
     Ok(written)
+}
+
+/// Bounds for one named fixture class in the demo rig.
+///
+/// Fixture names carry numbers after a stable class label (`Wash 1`, `Wash 2`, ...), so a prefix
+/// frames the complete named class. The body extent is included rather than framing only on rig
+/// points; otherwise a single fixture has effectively zero size and remains too distant to judge.
+fn fixture_bounds(scene: &Scene, prefix: &str) -> Result<viz_scene::Aabb, String> {
+    let folded = prefix.trim().to_lowercase();
+    let mut bounds = viz_scene::Aabb::empty();
+    for fixture in &scene.fixtures {
+        if !fixture.name.to_lowercase().starts_with(&folded) {
+            continue;
+        }
+        let half = fixture.body.size * 0.6;
+        bounds.expand(fixture.position - half);
+        bounds.expand(fixture.position + half);
+    }
+    if bounds.is_empty() {
+        Err(format!(
+            "the show has no fixture whose name starts with {prefix:?}"
+        ))
+    } else {
+        Ok(bounds)
+    }
 }
 
 /// Build the scene from a show file, through the same projection the renderer uses against a desk.
@@ -269,6 +310,7 @@ fn parse(arguments: impl Iterator<Item = String>) -> Result<Option<Options>, Str
             "--width" => options.width = number(&mut arguments, "--width")?,
             "--height" => options.height = number(&mut arguments, "--height")?,
             "--frames" => options.frames = number(&mut arguments, "--frames")?,
+            "--fixture" => options.fixture = Some(required(&mut arguments, "--fixture")?),
             "--settle" => options.settle = number(&mut arguments, "--settle")?,
             "--haze" => {
                 options.haze = required(&mut arguments, "--haze")?
@@ -358,6 +400,53 @@ mod tests {
             .kind
     }
 
+    #[test]
+    fn a_named_fixture_capture_frames_the_fixture_body() {
+        let scene = demo_scene("fixture-framing");
+        let bounds = fixture_bounds(&scene, "Sunstrip").expect("the demo carries Sunstrips");
+        assert!(
+            bounds.extent().x > 0.5,
+            "the one-metre extrusion is in frame"
+        );
+        assert!(
+            fixture_bounds(&scene, "Not in this show").is_err(),
+            "a typo must fail rather than silently capture the whole rig"
+        );
+    }
+
+    #[test]
+    fn the_shipped_sunstrip_has_ten_cells_inside_its_extrusion() {
+        let scene = demo_scene("sunstrip-face-bounds");
+        let (fixture_index, fixture) = scene
+            .fixtures
+            .iter()
+            .enumerate()
+            .find(|(_, fixture)| fixture.name == "Sunstrip 1")
+            .expect("the representative strip");
+        let emitters: Vec<_> = scene
+            .emitters
+            .iter()
+            .filter(|emitter| emitter.fixture_index == fixture_index as u32)
+            .collect();
+        assert_eq!(
+            emitters.len(),
+            10,
+            "the shared master is not an eleventh cell"
+        );
+
+        let left = emitters
+            .iter()
+            .map(|emitter| emitter.local_origin.x - emitter.optics.source.width * 0.5)
+            .fold(f32::INFINITY, f32::min);
+        let right = emitters
+            .iter()
+            .map(|emitter| emitter.local_origin.x + emitter.optics.source.width * 0.5)
+            .fold(f32::NEG_INFINITY, f32::max);
+        let body_half = fixture.body.size.x * 0.5;
+        assert!(left >= -body_half - 1e-6, "left cell overhangs: {left}");
+        assert!(right <= body_half + 1e-6, "right cell overhangs: {right}");
+    }
+
     /// The golden scene the plan asks for: every class the renderer has to draw, resolving to the
     /// body it is meant to resolve to rather than merely to something visible.
     ///
@@ -380,6 +469,8 @@ mod tests {
             // Static lanterns on a clamp.
             ("FOH", BodyKind::Lantern),
             ("PAR", BodyKind::Lantern),
+            ("ACL", BodyKind::Lantern),
+            ("Fresnel", BodyKind::Lantern),
             // Machines that make no light of their own, and the laser, which is its own thing.
             ("Hazer", BodyKind::Machine),
             ("Laser", BodyKind::Machine),

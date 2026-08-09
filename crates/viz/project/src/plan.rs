@@ -173,9 +173,7 @@ impl EmitterMount {
         let scale = model.scale_to(body_size);
         Self {
             // The model is drawn at the fixture's size, so its lens scales with it.
-            face: model
-                .emitter_size
-                .map(|size| size * scale),
+            face: model.emitter_size.map(|size| size * scale),
             origin: anchor * scale,
             // Only a model with something that tilts has trunnions worth turning about.
             pivot: if model.has_head {
@@ -714,6 +712,24 @@ fn build_emitters(
     }
 }
 
+/// Heads that represent emitting hardware in an invented fallback layout.
+///
+/// A shared master is a control group for its children. It is retained only when it is the
+/// profile's sole head, where there is no child geometry to stand in for it.
+fn physical_head_indices(mode: &FixtureMode) -> Vec<usize> {
+    let physical: Vec<usize> = mode
+        .heads
+        .iter()
+        .enumerate()
+        .filter_map(|(index, head)| (!head.master_shared).then_some(index))
+        .collect();
+    if physical.is_empty() {
+        (0..mode.heads.len()).collect()
+    } else {
+        physical
+    }
+}
+
 /// Build the deliberately invented emitter layout used when a profile has no emitter geometry.
 #[allow(clippy::too_many_arguments)]
 fn build_fallback_emitters(
@@ -733,11 +749,21 @@ fn build_fallback_emitters(
     steered: bool,
 ) {
     let head_channels = group_by_head(mode, channels);
+    // A shared master head is a control group, not another physical lamp. Profiles for pixel bars
+    // commonly put it before the real cells; counting it in the fallback layout creates one extra
+    // face and spreads the row past both ends of the body.
+    let physical_heads = physical_head_indices(mode);
+    let physical_head_count = physical_heads.len();
+    let body_width = scene
+        .fixtures
+        .get(fixture_index as usize)
+        .map_or_else(|| head_span(class), |fixture| fixture.body.size.x);
     // The layout below is invented, so the faces it places have to be trimmed to it: a row of
     // lamp lenses wider than the pitch they are spread at would merge into one smear.
-    let head_optics = fitted_to_head_pitch(&optics, mode, class);
+    let head_optics = fitted_to_head_pitch(&optics, physical_head_count, body_width);
     // Fallback: one emitter per logical head, aimed along the head's rest direction.
-    for (head_index, head) in mode.heads.iter().enumerate() {
+    for (physical_index, head_index) in physical_heads.into_iter().enumerate() {
+        let head = &mode.heads[head_index];
         // An unpatched head has no channels. It stays in the scene and stays visible; only
         // its DMX is suppressed until the fixture is patched again.
         let owned = head_channels
@@ -751,7 +777,13 @@ fn build_fallback_emitters(
             fixture_index,
             head_index: head_index as u16,
             label: head.name.clone(),
-            local_origin: mount.origin + head_offset(mode, head_index, class),
+            local_origin: mount.origin
+                + head_offset(
+                    physical_index,
+                    physical_head_count,
+                    head_optics.source.width,
+                    body_width,
+                ),
             tilt_pivot: mount.pivot,
             local_orientation_degrees: mount.rest_orientation(),
             pan: steered.then(|| pan_axis(motion, &binding)).flatten(),
@@ -978,13 +1010,14 @@ fn cone_angles(class: OpticalClass, binding: &EmitterBinding) -> (f32, f32) {
 }
 
 /// Spread fallback heads along the body so a bar's heads do not stack on one point.
-fn head_offset(mode: &FixtureMode, head_index: usize, class: OpticalClass) -> Vec3 {
-    let count = mode.heads.len();
+fn head_offset(head_index: usize, count: usize, face_width: f32, body_width: f32) -> Vec3 {
     if count <= 1 {
         return Vec3::ZERO;
     }
     let position = head_index as f32 / (count - 1) as f32 - 0.5;
-    Vec3::new(position * head_span(class), 0.0, 0.0)
+    // Leave half a face at either end. Even a generously modelled merged `source-array` can no
+    // longer push the first or last cell outside the fixture carrying it.
+    Vec3::new(position * (body_width - face_width).max(0.0), 0.0, 0.0)
 }
 
 /// How far along the body the fallback layout spreads a fixture's heads, in metres.
@@ -1003,14 +1036,14 @@ fn head_span(class: OpticalClass) -> f32 {
 /// round lenses reads as one continuous glowing tube instead of as the row of lamps it is.
 fn fitted_to_head_pitch(
     optics: &EmitterOptics,
-    mode: &FixtureMode,
-    class: OpticalClass,
+    head_count: usize,
+    body_width: f32,
 ) -> EmitterOptics {
     let mut fitted = optics.clone();
-    if mode.heads.len() < 2 {
+    if head_count < 2 {
         return fitted;
     }
-    let pitch = head_span(class) / (mode.heads.len() - 1) as f32;
+    let pitch = body_width / head_count as f32;
     let bound = (pitch * 0.9).max(0.01);
     fitted.source.width = fitted.source.width.min(bound);
     fitted.source.height = fitted.source.height.min(bound);
@@ -1051,8 +1084,8 @@ mod model_tests {
     use super::*;
     use light_core::AttributeKey;
     use light_fixture::{
-        CanonicalTransform, ChannelBehavior, ChannelResolution, FixtureChannel, GelAssignment,
-        ProfileLightSource,
+        CanonicalTransform, ChannelBehavior, ChannelResolution, FixtureChannel, FixtureHead,
+        GelAssignment, ProfileLightSource,
     };
 
     /// One patched fixture of a named type, for the optics questions below.
@@ -1374,5 +1407,39 @@ mod model_tests {
             height_millimetres: 300.0,
         });
         assert!((optics_of(small).source.width - 0.3).abs() < 1e-6);
+    }
+
+    /// A Sunstrip-style profile has one shared control head followed by ten physical lamps. The
+    /// control head must not become an eleventh glowing face, and the real row must stay inside
+    /// the one-metre extrusion even when the model exposes one merged `source-array` part.
+    #[test]
+    fn fallback_strip_cells_fit_inside_their_body() {
+        let mut mode = FixtureProfile::blank().modes.remove(0);
+        mode.heads = std::iter::once(FixtureHead {
+            id: Uuid::new_v4(),
+            name: "Main".into(),
+            master_shared: true,
+        })
+        .chain((1..=10).map(|number| FixtureHead {
+            id: Uuid::new_v4(),
+            name: format!("Lamp {number}"),
+            master_shared: false,
+        }))
+        .collect();
+
+        let physical = physical_head_indices(&mode);
+        assert_eq!(physical, (1..=10).collect::<Vec<_>>());
+
+        let mut optics = EmitterOptics::default();
+        optics.source.width = 1.0; // the merged model part, not one cell
+        optics.source.height = 0.16;
+        let fitted = fitted_to_head_pitch(&optics, physical.len(), 1.0);
+        let first = head_offset(0, physical.len(), fitted.source.width, 1.0).x;
+        let last = head_offset(physical.len() - 1, physical.len(), fitted.source.width, 1.0).x;
+        let half_face = fitted.source.width * 0.5;
+
+        assert!(first - half_face >= -0.5 - 1e-6);
+        assert!(last + half_face <= 0.5 + 1e-6);
+        assert!(fitted.source.width <= 0.09 + 1e-6);
     }
 }
