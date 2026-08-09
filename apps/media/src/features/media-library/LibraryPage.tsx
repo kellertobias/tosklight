@@ -105,133 +105,184 @@ function Folders({
 	return (
 		<>
 			{folders.map((folder) => (
-				<section
+				<FolderSection
 					key={folder.folder}
-					className="media-folder"
-					aria-label={folderLabel(folder)}
+					folder={folder}
+					editing={editing}
+					busy={busy}
+					onBegin={onBegin}
+					onCancel={onCancel}
+					onSave={onSave}
+				/>
+			))}
+		</>
+	);
+}
+
+function FolderSection({
+	folder,
+	editing,
+	busy,
+	onBegin,
+	onCancel,
+	onSave,
+}: {
+	folder: CatalogView["folders"][number];
+	editing: string | undefined;
+	busy: boolean;
+	onBegin: (key: string) => void;
+	onCancel: () => void;
+	onSave: (save: () => Promise<unknown>) => Promise<void>;
+}) {
+	return (
+		<section className="media-folder" aria-label={folderLabel(folder)}>
+			<div className="media-folder-heading">
+				<h2>{folderLabel(folder)}</h2>
+				<Button
+					size="compact"
+					onClick={() => onBegin(`folder-${folder.folder}`)}
 				>
-					<div className="media-folder-heading">
-						<h2>{folderLabel(folder)}</h2>
-						<Button
-							size="compact"
-							onClick={() => onBegin(`folder-${folder.folder}`)}
-						>
-							Change folder name
-						</Button>
-					</div>
-					{editing === `folder-${folder.folder}` && (
-						<FolderNameForm
-							folder={folder.folder}
-							name={folder.name ?? ""}
+					Change folder name
+				</Button>
+			</div>
+			{editing === `folder-${folder.folder}` && (
+				<FolderNameForm
+					folder={folder.folder}
+					name={folder.name ?? ""}
+					busy={busy}
+					onCancel={onCancel}
+					onSave={(name) =>
+						void onSave(() =>
+							api.updateLibraryFolder(folder.folder, {
+								requestId: requestId(),
+								name,
+							}),
+						)
+					}
+				/>
+			)}
+			<FolderItemsTable
+				{...{ folder, editing, busy, onBegin, onCancel, onSave }}
+			/>
+		</section>
+	);
+}
+
+interface FolderEditingProps {
+	editing: string | undefined;
+	busy: boolean;
+	onBegin: (key: string) => void;
+	onCancel: () => void;
+	onSave: (save: () => Promise<unknown>) => Promise<void>;
+}
+
+function FolderItemsTable({
+	folder,
+	...editingProps
+}: { folder: CatalogView["folders"][number] } & FolderEditingProps) {
+	return (
+		<table className="media-table">
+			<caption className="media-visually-hidden">
+				Items in {folderLabel(folder)}
+			</caption>
+			<thead>
+				<tr>
+					<th scope="col">Thumbnail</th>
+					<th scope="col">Address</th>
+					<th scope="col">Name</th>
+					<th scope="col">Detail</th>
+					<th scope="col">Tempo</th>
+					<th scope="col">Actions</th>
+				</tr>
+			</thead>
+			<tbody>
+				{folder.items.map((item) => (
+					<LibraryItemRows
+						key={item.id}
+						folder={folder.folder}
+						item={item}
+						{...editingProps}
+					/>
+				))}
+			</tbody>
+		</table>
+	);
+}
+
+function LibraryItemRows({
+	folder,
+	item,
+	editing,
+	busy,
+	onBegin,
+	onCancel,
+	onSave,
+}: {
+	folder: number;
+	item: CatalogView["folders"][number]["items"][number];
+} & FolderEditingProps) {
+	return (
+		<Fragment>
+			<tr>
+				<td>
+					<Thumbnail folder={folder} file={item.file} name={item.name} />
+				</td>
+				<td>{addressLabel(folder, item.file)}</td>
+				<td>{item.name}</td>
+				<td>{itemDetail(item)}</td>
+				<td>{item.intrinsicBpm === null ? "—" : `${item.intrinsicBpm} BPM`}</td>
+				<td className="media-library-actions">
+					<Button size="compact" onClick={() => onBegin(`rename-${item.id}`)}>
+						Rename
+					</Button>
+					<Button size="compact" onClick={() => onBegin(`move-${item.id}`)}>
+						Move
+					</Button>
+				</td>
+			</tr>
+			{editing === `rename-${item.id}` && (
+				<tr>
+					<td colSpan={6}>
+						<RenameItemForm
+							name={item.name}
 							busy={busy}
 							onCancel={onCancel}
 							onSave={(name) =>
 								void onSave(() =>
-									api.updateLibraryFolder(folder.folder, {
+									api.updateLibraryItem(item.id, {
 										requestId: requestId(),
 										name,
+										swap: false,
 									}),
 								)
 							}
 						/>
-					)}
-					<table className="media-table">
-						<caption className="media-visually-hidden">
-							Items in {folderLabel(folder)}
-						</caption>
-						<thead>
-							<tr>
-								<th scope="col">Thumbnail</th>
-								<th scope="col">Address</th>
-								<th scope="col">Name</th>
-								<th scope="col">Detail</th>
-								<th scope="col">Tempo</th>
-								<th scope="col">Actions</th>
-							</tr>
-						</thead>
-						<tbody>
-							{folder.items.map((item) => (
-								<Fragment key={item.id}>
-									<tr>
-										<td>
-											<Thumbnail
-												folder={folder.folder}
-												file={item.file}
-												name={item.name}
-											/>
-										</td>
-										<td>{addressLabel(folder.folder, item.file)}</td>
-										<td>{item.name}</td>
-										<td>{itemDetail(item)}</td>
-										<td>
-											{item.intrinsicBpm === null
-												? "—"
-												: `${item.intrinsicBpm} BPM`}
-										</td>
-										<td className="media-library-actions">
-											<Button
-												size="compact"
-												onClick={() => onBegin(`rename-${item.id}`)}
-											>
-												Rename
-											</Button>
-											<Button
-												size="compact"
-												onClick={() => onBegin(`move-${item.id}`)}
-											>
-												Move
-											</Button>
-										</td>
-									</tr>
-									{editing === `rename-${item.id}` && (
-										<tr>
-											<td colSpan={6}>
-												<RenameItemForm
-													name={item.name}
-													busy={busy}
-													onCancel={onCancel}
-													onSave={(name) =>
-														void onSave(() =>
-															api.updateLibraryItem(item.id, {
-																requestId: requestId(),
-																name,
-																swap: false,
-															}),
-														)
-													}
-												/>
-											</td>
-										</tr>
-									)}
-									{editing === `move-${item.id}` && (
-										<tr>
-											<td colSpan={6}>
-												<MoveItemForm
-													folder={folder.folder}
-													file={item.file}
-													busy={busy}
-													onCancel={onCancel}
-													onSave={(destinationFolder, destinationFile, swap) =>
-														void onSave(() =>
-															api.updateLibraryItem(item.id, {
-																requestId: requestId(),
-																folder: destinationFolder,
-																file: destinationFile,
-																swap,
-															}),
-														)
-													}
-												/>
-											</td>
-										</tr>
-									)}
-								</Fragment>
-							))}
-						</tbody>
-					</table>
-				</section>
-			))}
-		</>
+					</td>
+				</tr>
+			)}
+			{editing === `move-${item.id}` && (
+				<tr>
+					<td colSpan={6}>
+						<MoveItemForm
+							folder={folder}
+							file={item.file}
+							busy={busy}
+							onCancel={onCancel}
+							onSave={(destinationFolder, destinationFile, swap) =>
+								void onSave(() =>
+									api.updateLibraryItem(item.id, {
+										requestId: requestId(),
+										folder: destinationFolder,
+										file: destinationFile,
+										swap,
+									}),
+								)
+							}
+						/>
+					</td>
+				</tr>
+			)}
+		</Fragment>
 	);
 }
 
@@ -373,6 +424,7 @@ function MoveItemForm({
 			/>
 			<CheckboxField
 				label="Exchange with the item already there"
+				stateLabel="Move by safely swapping the two media items"
 				checked={swap}
 				onChange={(event) => setSwap(event.target.checked)}
 			/>

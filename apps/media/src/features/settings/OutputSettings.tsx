@@ -10,6 +10,7 @@ import {
 	SelectField,
 	TextField,
 } from "@tosklight/ui/controls";
+import type { Dispatch, SetStateAction } from "react";
 import { useCallback, useEffect, useState } from "react";
 import { ApiFailure, api } from "../../shared/api/client";
 import { requestId, useEditing } from "../../shared/api/editing";
@@ -187,6 +188,135 @@ function RestartNotice() {
 	);
 }
 
+function PictureFields({
+	width,
+	height,
+	presentation,
+	framesPerSecond,
+	setWidth,
+	setHeight,
+	setPresentation,
+	setFramesPerSecond,
+}: {
+	width: number;
+	height: number;
+	presentation: OutputConfigurationView["presentation"];
+	framesPerSecond: number;
+	setWidth: Dispatch<SetStateAction<number>>;
+	setHeight: Dispatch<SetStateAction<number>>;
+	setPresentation: Dispatch<
+		SetStateAction<OutputConfigurationView["presentation"]>
+	>;
+	setFramesPerSecond: Dispatch<SetStateAction<number>>;
+}) {
+	return (
+		<fieldset>
+			<legend>Picture</legend>
+			<NumberField
+				label="Width"
+				description="Pixels. This is the render width, including on a full-screen monitor."
+				min={1}
+				step={1}
+				value={String(width)}
+				onChange={(event) => setWidth(Number(event.target.value))}
+			/>
+			<NumberField
+				label="Height"
+				description="Pixels. This is the render height, including on a full-screen monitor."
+				min={1}
+				step={1}
+				value={String(height)}
+				onChange={(event) => setHeight(Number(event.target.value))}
+			/>
+			<SelectField
+				label="Presentation"
+				value={presentation}
+				options={[
+					{ value: "display-synchronized", label: "Display synchronized" },
+					{ value: "fixed-fps", label: "Fixed frame rate" },
+					{ value: "unlocked", label: "Unlocked (diagnostic)" },
+				]}
+				onChange={setPresentation}
+			/>
+			{presentation === "fixed-fps" && (
+				<NumberField
+					label="Frames per second"
+					description="1 to 65535. Display synchronization is preferable for a monitor."
+					min={1}
+					max={65_535}
+					step={1}
+					value={String(framesPerSecond)}
+					onChange={(event) => setFramesPerSecond(Number(event.target.value))}
+				/>
+			)}
+		</fieldset>
+	);
+}
+
+function DmxInputFields({
+	personality,
+	protocol,
+	universe,
+	startAddress,
+	setPersonality,
+	setProtocol,
+	setUniverse,
+	setStartAddress,
+}: {
+	personality: OutputConfigurationView["personality"];
+	protocol: OutputConfigurationView["protocol"];
+	universe: number;
+	startAddress: number;
+	setPersonality: Dispatch<
+		SetStateAction<OutputConfigurationView["personality"]>
+	>;
+	setProtocol: Dispatch<SetStateAction<OutputConfigurationView["protocol"]>>;
+	setUniverse: Dispatch<SetStateAction<number>>;
+	setStartAddress: Dispatch<SetStateAction<number>>;
+}) {
+	const highestStartAddress = personality === "two-layers" ? 438 : 234;
+	return (
+		<fieldset>
+			<legend>DMX input</legend>
+			<SelectField
+				label="Personality"
+				value={personality}
+				options={[
+					{ value: "two-layers", label: "2 layers (75 slots)" },
+					{ value: "eight-layers", label: "8 layers (279 slots)" },
+				]}
+				onChange={setPersonality}
+			/>
+			<SelectField
+				label="Protocol"
+				value={protocol}
+				options={[
+					{ value: "art-net", label: "Art-Net" },
+					{ value: "sacn", label: "sACN" },
+				]}
+				onChange={setProtocol}
+			/>
+			<NumberField
+				label="Universe"
+				min={protocol === "sacn" ? 1 : 0}
+				max={protocol === "sacn" ? 63_999 : 32_767}
+				step={1}
+				value={String(universe)}
+				onChange={(event) => setUniverse(Number(event.target.value))}
+			/>
+			<NumberField
+				label="Start address"
+				description={`1 to ${highestStartAddress}; the complete ${personality === "two-layers" ? "75" : "279"}-slot personality must fit in one universe.`}
+				min={1}
+				max={highestStartAddress}
+				step={1}
+				value={String(startAddress)}
+				onChange={(event) => setStartAddress(Number(event.target.value))}
+			/>
+		</fieldset>
+	);
+}
+
 export function OutputEditor({
 	output,
 	busy,
@@ -212,7 +342,6 @@ export function OutputEditor({
 	const [protocol, setProtocol] = useState(output.protocol);
 	const [universe, setUniverse] = useState(output.universe);
 	const [startAddress, setStartAddress] = useState(output.startAddress);
-	const highestStartAddress = personality === "two-layers" ? 438 : 234;
 
 	return (
 		<form
@@ -285,85 +414,31 @@ export function OutputEditor({
 				)}
 			</fieldset>
 
-			<fieldset>
-				<legend>Picture</legend>
-				<NumberField
-					label="Width"
-					description="Pixels. This is the render width, including on a full-screen monitor."
-					min={1}
-					step={1}
-					value={String(width)}
-					onChange={(event) => setWidth(Number(event.target.value))}
-				/>
-				<NumberField
-					label="Height"
-					description="Pixels. This is the render height, including on a full-screen monitor."
-					min={1}
-					step={1}
-					value={String(height)}
-					onChange={(event) => setHeight(Number(event.target.value))}
-				/>
-				<SelectField
-					label="Presentation"
-					value={presentation}
-					options={[
-						{ value: "display-synchronized", label: "Display synchronized" },
-						{ value: "fixed-fps", label: "Fixed frame rate" },
-						{ value: "unlocked", label: "Unlocked (diagnostic)" },
-					]}
-					onChange={setPresentation}
-				/>
-				{presentation === "fixed-fps" && (
-					<NumberField
-						label="Frames per second"
-						description="1 to 65535. Display synchronization is preferable for a monitor."
-						min={1}
-						max={65_535}
-						step={1}
-						value={String(framesPerSecond)}
-						onChange={(event) => setFramesPerSecond(Number(event.target.value))}
-					/>
-				)}
-			</fieldset>
+			<PictureFields
+				{...{
+					width,
+					height,
+					presentation,
+					framesPerSecond,
+					setWidth,
+					setHeight,
+					setPresentation,
+					setFramesPerSecond,
+				}}
+			/>
 
-			<fieldset>
-				<legend>DMX input</legend>
-				<SelectField
-					label="Personality"
-					value={personality}
-					options={[
-						{ value: "two-layers", label: "2 layers (75 slots)" },
-						{ value: "eight-layers", label: "8 layers (279 slots)" },
-					]}
-					onChange={setPersonality}
-				/>
-				<SelectField
-					label="Protocol"
-					value={protocol}
-					options={[
-						{ value: "art-net", label: "Art-Net" },
-						{ value: "sacn", label: "sACN" },
-					]}
-					onChange={setProtocol}
-				/>
-				<NumberField
-					label="Universe"
-					min={protocol === "sacn" ? 1 : 0}
-					max={protocol === "sacn" ? 63_999 : 32_767}
-					step={1}
-					value={String(universe)}
-					onChange={(event) => setUniverse(Number(event.target.value))}
-				/>
-				<NumberField
-					label="Start address"
-					description={`1 to ${highestStartAddress}; the complete ${personality === "two-layers" ? "75" : "279"}-slot personality must fit in one universe.`}
-					min={1}
-					max={highestStartAddress}
-					step={1}
-					value={String(startAddress)}
-					onChange={(event) => setStartAddress(Number(event.target.value))}
-				/>
-			</fieldset>
+			<DmxInputFields
+				{...{
+					personality,
+					protocol,
+					universe,
+					startAddress,
+					setPersonality,
+					setProtocol,
+					setUniverse,
+					setStartAddress,
+				}}
+			/>
 
 			{output.takesEffectOnRestart && <RestartNotice />}
 

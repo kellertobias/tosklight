@@ -36,6 +36,58 @@ const SERVER_LEVELS = [
 /// How many records to keep on screen. Beyond this the browser, not the server, is the bottleneck.
 const KEEP = 2_000;
 
+function ServerLogLevelControl({
+	serverLevel,
+	selectedServerLevel,
+	changing,
+	onSelect,
+	onApply,
+}: {
+	serverLevel: string | undefined;
+	selectedServerLevel: string;
+	changing: boolean;
+	onSelect: (level: string) => void;
+	onApply: () => void;
+}) {
+	return (
+		<article className="media-settings-section" aria-label="Server log level">
+			<div className="media-logs-controls">
+				<SelectField
+					label="Server log level"
+					value={selectedServerLevel}
+					options={[
+						...(serverLevel &&
+						!SERVER_LEVELS.some(({ value }) => value === serverLevel)
+							? [
+									{
+										value: serverLevel,
+										label: `Environment filter: ${serverLevel}`,
+									},
+								]
+							: []),
+						...SERVER_LEVELS,
+					]}
+					onChange={onSelect}
+				/>
+				<Button
+					disabled={
+						changing ||
+						serverLevel === undefined ||
+						selectedServerLevel === serverLevel
+					}
+					onClick={onApply}
+				>
+					{changing ? "Applying…" : "Apply server level"}
+				</Button>
+			</div>
+			<p className="media-settings-note">
+				This changes what the running server records. It resets from MEDIA_LOG
+				when the server restarts. Show below filters the browser only.
+			</p>
+		</article>
+	);
+}
+
 export function LogsPage() {
 	const [level, setLevel] = useState<string>("info");
 	const [following, setFollowing] = useState(true);
@@ -120,41 +172,13 @@ export function LogsPage() {
 
 	return (
 		<section className="media-page">
-			<article className="media-settings-section" aria-label="Server log level">
-				<div className="media-logs-controls">
-					<SelectField
-						label="Server log level"
-						value={selectedServerLevel}
-						options={[
-							...(serverLevel &&
-							!SERVER_LEVELS.some(({ value }) => value === serverLevel)
-								? [
-										{
-											value: serverLevel,
-											label: `Environment filter: ${serverLevel}`,
-										},
-									]
-								: []),
-							...SERVER_LEVELS,
-						]}
-						onChange={setSelectedServerLevel}
-					/>
-					<Button
-						disabled={
-							changingServerLevel ||
-							serverLevel === undefined ||
-							selectedServerLevel === serverLevel
-						}
-						onClick={() => void changeServerLevel()}
-					>
-						{changingServerLevel ? "Applying…" : "Apply server level"}
-					</Button>
-				</div>
-				<p className="media-settings-note">
-					This changes what the running server records. It resets from MEDIA_LOG
-					when the server restarts. Show below filters the browser only.
-				</p>
-			</article>
+			<ServerLogLevelControl
+				serverLevel={serverLevel}
+				selectedServerLevel={selectedServerLevel}
+				changing={changingServerLevel}
+				onSelect={setSelectedServerLevel}
+				onApply={() => void changeServerLevel()}
+			/>
 
 			<div className="media-logs-controls">
 				<SelectField

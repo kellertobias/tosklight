@@ -642,6 +642,8 @@ pub async fn serve_with(services: Services) -> anyhow::Result<()> {
         apply,
         diagnostics,
         replays: std::sync::Arc::new(media_http::Replays::new()),
+        // Multipart framing adds a small amount around the library's authoritative payload bound.
+        upload_body_limit: media_library::MAX_UPLOAD_BYTES as usize + 1024 * 1024,
     };
 
     let listener = tokio::net::TcpListener::bind(resolved.http_listen).await.map_err(|error| {

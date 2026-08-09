@@ -75,6 +75,7 @@ pub(crate) fn bench_with(diagnostics: Diagnostics) -> Bench {
         }),
         diagnostics,
         replays: Arc::new(crate::replay::Replays::new()),
+        upload_body_limit: 8 * 1024 * 1024 * 1024 + 1024 * 1024,
     };
     Bench {
         router: router(api),

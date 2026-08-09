@@ -67,6 +67,8 @@ pub struct ApiState {
     pub diagnostics: Diagnostics,
     /// What recent edits produced, so a retry is answered rather than executed again.
     pub replays: Arc<crate::replay::Replays>,
+    /// Maximum multipart request size, supplied by the process that owns the upload adapter.
+    pub upload_body_limit: usize,
 }
 
 impl std::fmt::Debug for ApiState {
@@ -85,6 +87,7 @@ pub fn applies_nothing() -> ApplyConfiguration {
 /// The version is in the path because an incompatible change gets a new one rather than silently
 /// altering what `/v2` means to a client already deployed against it.
 pub fn router(state: ApiState) -> Router {
+    let upload_body_limit = state.upload_body_limit;
     Router::new()
         .route("/api/v2/health", get(health::health))
         .route("/api/v2/catalog", get(health::catalog))
@@ -107,9 +110,7 @@ pub fn router(state: ApiState) -> Router {
         )
         .route(
             "/api/v2/library/{folder}/{file}/upload",
-            post(library::upload).layer(DefaultBodyLimit::max(
-                media_library::MAX_UPLOAD_BYTES as usize,
-            )),
+            post(library::upload).layer(DefaultBodyLimit::max(upload_body_limit)),
         )
         .route(
             "/api/v2/library/imports/{job}/cancel",
