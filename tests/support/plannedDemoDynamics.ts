@@ -123,7 +123,7 @@ export function plannedDemoDynamicDefinitions() {
 			"LED Show Random Strobe",
 			"18",
 			"C",
-			[lane("strobe", "random", "sinus", "strobe")],
+			[lane("intensity", "random", "pwm", "strobe")],
 			[randomGroup("strobe")],
 		),
 	);

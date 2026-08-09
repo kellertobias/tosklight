@@ -2065,14 +2065,7 @@ async function buildDynamicsSetup(
 	);
 	const pane = await createVirtualPlaybackDesktop(desk, page);
 	await assignVirtualDynamic(desk, page, pane, 1, "Beam Show PWM", 1);
-	await assignVirtualDynamic(
-		desk,
-		page,
-		pane,
-		19,
-		"Beam Show Circle",
-		19,
-	);
+	await assignVirtualDynamic(desk, page, pane, 19, "Beam Show Circle", 19);
 	await desk.fastForward(
 		"Assigning every remaining Dynamic to its stable Virtual Playback and completing the Programming and Theater desktops before grouping related effects.",
 		async () => {
@@ -2610,7 +2603,6 @@ async function demonstrateBuskingAndPreload(
 				),
 				washColorValues,
 			),
-		() => setPreloadFixtureValues(api, washColorValues),
 	);
 	await demoPause(
 		demo.page(),
@@ -2650,7 +2642,6 @@ async function demonstrateBuskingAndPreload(
 				),
 				beamPositionValues,
 			),
-		() => setPreloadFixtureValues(api, beamPositionValues),
 	);
 	await demoPause(
 		demo.page(),
@@ -2674,7 +2665,6 @@ async function demonstrateBuskingAndPreload(
 				),
 				beamColorValues,
 			),
-		() => setPreloadFixtureValues(api, beamColorValues),
 	);
 	await expect
 		.poll(async () =>
@@ -2878,58 +2868,11 @@ async function recallPresetThroughTouchWithRetry(
 	desk: DeskDriver,
 	tile: Locator,
 	applied: () => Promise<boolean>,
-	reconcile: () => Promise<void>,
 ) {
 	await desk.click(tile);
 	await desk.page.waitForTimeout(500);
-	if (!(await applied())) await tile.click();
-	await desk.page.waitForTimeout(500);
-	if (!(await applied())) await reconcile();
+	if (!(await applied())) await desk.click(tile);
 	await expect.poll(applied).toBe(true);
-}
-
-async function setPreloadFixtureValues(
-	api: ApiDriver,
-	values: Record<string, number>,
-) {
-	const userId = api.session?.user.id;
-	if (!userId)
-		throw new Error("The product demo requires an authenticated user");
-	const [capture, preload] = await Promise.all([
-		api.request<any>(
-			"GET",
-			`/api/v2/users/${userId}/programmer-capture-mode/snapshot`,
-		),
-		api.request<any>(
-			"GET",
-			`/api/v2/users/${userId}/programmer-preload-values/snapshot`,
-		),
-	]);
-	const requestId = crypto.randomUUID();
-	await api.liveAction(
-		{
-			type: "programmer_preload_values",
-			request: {
-				request_id: requestId,
-				expected_revision: preload.projection.revision,
-				expected_capture_mode_revision: capture.projection.revision,
-				action: {
-					type: "batch",
-					mutations: Object.entries(values).map(([key, value]) => {
-						const separator = key.indexOf(":");
-						return {
-							type: "set_fixture" as const,
-							fixture_id: key.slice(0, separator),
-							attribute: key.slice(separator + 1),
-							value: { kind: "normalized" as const, value },
-							timing: { fade: false },
-						};
-					}),
-				},
-			},
-		},
-		requestId,
-	);
 }
 
 async function setProgrammerFixtureValues(
@@ -3295,7 +3238,9 @@ async function selectLiveGroupThroughPool(
 ) {
 	await openGroups(desk, keypad);
 	const tile = groupTile(app, groupNumber);
-	if (!(await tile.evaluate((element) => element.classList.contains("selected"))))
+	if (
+		!(await tile.evaluate((element) => element.classList.contains("selected")))
+	)
 		await desk.click(tile);
 	await expect(tile).toHaveClass(/\bselected\b/u);
 }

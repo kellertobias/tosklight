@@ -6,6 +6,7 @@ export const PLANNED_DEMO_BENCHMARK_ASSIGNMENTS = [
 	{ name: "Beam Show Circle", kind: "virtual", playbackNumber: 1019 },
 	{ name: "Beam Show PWM", kind: "virtual", playbackNumber: 1001 },
 	{ name: "LED Show Random", kind: "virtual", playbackNumber: 1014 },
+	{ name: "LED Show Random Strobe", kind: "virtual", playbackNumber: 1030 },
 	{ name: "Sunstrip Rain", kind: "virtual", playbackNumber: 1029 },
 	{ name: "Beam Auxiliary Show Circle", kind: "virtual", playbackNumber: 1021 },
 	{ name: "Beam Auxiliary Show PWM", kind: "virtual", playbackNumber: 1004 },

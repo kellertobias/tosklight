@@ -48,5 +48,14 @@ describe("Plan 76 Dynamic library", () => {
 			type: "grid_linear",
 			angle_degrees: 90,
 		});
+		expect(definitions[29].lanes).toEqual([
+			expect.objectContaining({
+				attribute: "intensity",
+				mode: "random",
+				max_min: expect.objectContaining({ function: "pwm" }),
+				random_group_id: definitions[29].random_groups[0].id,
+			}),
+		]);
+		expect(definitions[29].random_groups).toHaveLength(1);
 	});
 });
