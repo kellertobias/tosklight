@@ -12,6 +12,7 @@ Work through these pages in order:
 2. [OSC, MIDI, and Network Control](02-osc-midi-and-network.md)
 3. [DMX Output and Universe Routes](03-dmx-output.md)
 4. [Operators, Sessions, and Recovery](04-users-sessions-and-recovery.md)
+5. [Media Server](05-media-server.md)
 
 **Preferences** contains the focused **Defaults**, **Attributes & encoders**, **Highlight**, and **Others** pages. Operator switching is available from **Show > Change User**, not from Desk Setup.
 
