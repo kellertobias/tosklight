@@ -16,10 +16,10 @@ use crate::wire::{
     DmxIngressView, DmxMapView, DmxPersonalityView, DmxResolutionView, DmxValueSetView, Health,
     ImportJobView, ImportsView, LayerView, LogRecordView, LogsView, MaskView, MasterView,
     NetworkAddressesView, NetworkView, OutputConfigurationView, OutputView, PendingImportView,
-    SourceStatusView, StartImport, TelemetryFrame, TextSlotView, TextStyleView, UpdateAudio,
-    UpdateLayer, UpdateLibraryFolder, UpdateLibraryItem, UpdateNetwork, UpdateOutputConfiguration,
-    UpdateText, UpdateVisualizer, UploadAcceptedView, VisualizerParametersView, VisualizerView,
-    WaveformView,
+    ServerLogLevelView, SourceStatusView, StartImport, TelemetryFrame, TextSlotView, TextStyleView,
+    UpdateAudio, UpdateLayer, UpdateLibraryFolder, UpdateLibraryItem, UpdateNetwork,
+    UpdateOutputConfiguration, UpdateServerLogLevel, UpdateText, UpdateVisualizer,
+    UploadAcceptedView, VisualizerParametersView, VisualizerView, WaveformView,
 };
 
 const TYPESCRIPT_PATH: &str = "apps/media/src/shared/api/generated/media-wire.ts";
@@ -101,6 +101,7 @@ fn declarations(config: &Config) -> Vec<String> {
         TelemetryFrame::decl(config),
         LogRecordView::decl(config),
         LogsView::decl(config),
+        ServerLogLevelView::decl(config),
         UpdateLayer::decl(config),
         UpdateOutputConfiguration::decl(config),
         UpdateVisualizer::decl(config),
@@ -112,6 +113,7 @@ fn declarations(config: &Config) -> Vec<String> {
         StartImport::decl(config),
         UpdateLibraryItem::decl(config),
         UpdateLibraryFolder::decl(config),
+        UpdateServerLogLevel::decl(config),
         UploadAcceptedView::decl(config),
     ]
 }

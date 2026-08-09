@@ -271,6 +271,11 @@ newest: number,
  * How many records have been discarded since the process started.
  */
 dropped: number, capacity: number, };
+export type ServerLogLevelView = { level: string,
+/**
+ * This is always true: the maintainer chose parity with the reference's runtime-only control.
+ */
+resetsOnRestart: boolean, };
 export type UpdateLayer = { folder?: number | null, file?: number | null, dimmer?: number | null, };
 export type UpdateOutputConfiguration = { requestId: string, targetKind?: string | null, monitorBy?: string | null, monitorValue?: string | null, fullscreen?: boolean | null, width?: number | null, height?: number | null, presentation?: string | null, framesPerSecond?: number | null, personality?: string | null, protocol?: string | null, universe?: number | null, startAddress?: number | null, };
 export type UpdateVisualizer = {
@@ -309,4 +314,5 @@ export type UpdateLibraryItem = { requestId: string, name?: string | null, folde
  */
 swap: boolean, };
 export type UpdateLibraryFolder = { requestId: string, name: string, };
+export type UpdateServerLogLevel = { requestId: string, level: string, };
 export type UploadAcceptedView = { jobId: string, address: AddressView, };

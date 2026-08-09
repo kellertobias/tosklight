@@ -23,7 +23,7 @@ mod text_sources;
 pub use dmx::SharedState;
 pub use layer_sources::LayerSources;
 pub use log_buffer::LogBuffer;
-pub use logging::install_logging;
+pub use logging::{InstalledLogging, install_logging};
 pub use presentation::{Diagnostics, SharedConfiguration};
 pub use shutdown::{Shutdown, ShutdownReason};
 pub use startup::{ConfigurationSource, StartupError, load_configuration};
@@ -52,7 +52,7 @@ pub const PLAY_ARGUMENT: &str = "--play";
 /// to the outputs. A process whose outputs are all off-screen never builds an event loop and
 /// simply blocks on the services.
 pub fn run() -> anyhow::Result<()> {
-    let log = install_logging();
+    let logging = install_logging();
     let arguments: Vec<String> = std::env::args().collect();
     let source = ConfigurationSource::from_environment();
     let mut configuration = load_configuration(&source)?;
@@ -107,7 +107,7 @@ pub fn run() -> anyhow::Result<()> {
         std::sync::Arc::new(arc_swap::ArcSwap::from_pointee(configuration.clone()));
     let diagnostics = diagnostics_of(
         audio.as_ref(),
-        &log,
+        &logging,
         &importer,
         &configuration.library.root,
         &catalog,
@@ -302,14 +302,14 @@ fn applies_to(audio: Option<&media_audio::AudioService>) -> media_http::ApplyCon
 /// request arrives on another.
 fn diagnostics_of(
     audio: Option<&media_audio::AudioService>,
-    log: &LogBuffer,
+    logging: &logging::InstalledLogging,
     importer: &media_library::Importer,
     library_root: &std::path::Path,
     catalog: &presentation::SharedCatalog,
     dmx_diagnostics: &dmx::SharedDiagnostics,
     started: std::time::Instant,
 ) -> media_http::Diagnostics {
-    let log = log.clone();
+    let log = logging.window.clone();
     let dmx_diagnostics = dmx_diagnostics.clone();
     media_http::Diagnostics {
         audio: match audio {
@@ -341,6 +341,7 @@ fn diagnostics_of(
         },
         audio_devices: std::sync::Arc::new(media_audio::input_devices),
         logs: std::sync::Arc::new(move |query| log.page(query)),
+        log_level: logging.control(),
         imports: imports_of(importer, library_root),
         library: library_access(importer, library_root, catalog),
         dmx: std::sync::Arc::new(move || {

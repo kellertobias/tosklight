@@ -37,7 +37,7 @@ pub use library::{
     ImportJobView, ImportsView, PendingImportView, StartImport, UpdateLibraryFolder,
     UpdateLibraryItem, UploadAcceptedView,
 };
-pub use logs::{LogRecordView, LogsView};
+pub use logs::{LogRecordView, LogsView, ServerLogLevelView, UpdateServerLogLevel};
 pub use network::{NetworkAddressesView, NetworkEditError, NetworkView, UpdateNetwork};
 pub use output::{
     LayerView, MaskView, MasterView, OutputConfigurationEditError, OutputConfigurationView,

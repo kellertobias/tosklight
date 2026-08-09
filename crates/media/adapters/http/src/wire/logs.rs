@@ -10,6 +10,32 @@ use ts_rs::TS;
 
 use crate::diagnostics::{LogEntry, LogPage};
 
+/// The tracing filter currently installed for this process.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct ServerLogLevelView {
+    pub level: String,
+    /// This is always true: the maintainer chose parity with the reference's runtime-only control.
+    pub resets_on_restart: bool,
+}
+
+impl ServerLogLevelView {
+    pub fn of(level: String) -> Self {
+        Self {
+            level,
+            resets_on_restart: true,
+        }
+    }
+}
+
+/// Changes the process tracing filter without writing configuration.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct UpdateServerLogLevel {
+    pub request_id: String,
+    pub level: String,
+}
+
 /// One emitted record.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, TS)]
 #[serde(rename_all = "camelCase")]

@@ -16,6 +16,7 @@ import type {
 	NetworkView,
 	OutputConfigurationView,
 	OutputView,
+	ServerLogLevelView,
 	StartImport,
 	TextSlotView,
 	UpdateAudio,
@@ -24,6 +25,7 @@ import type {
 	UpdateLibraryItem,
 	UpdateNetwork,
 	UpdateOutputConfiguration,
+	UpdateServerLogLevel,
 	UpdateText,
 	UpdateVisualizer,
 	UploadAcceptedView,
@@ -220,6 +222,12 @@ export const api = {
 		const search = parameters.toString();
 		return request<LogsView>(`/logs${search ? `?${search}` : ""}`);
 	},
+	serverLogLevel: () => request<ServerLogLevelView>("/logs/level"),
+	updateServerLogLevel: (edit: UpdateServerLogLevel) =>
+		request<ServerLogLevelView>("/logs/level/update", {
+			method: "POST",
+			body: JSON.stringify(edit),
+		}),
 };
 
 /**

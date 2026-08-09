@@ -130,27 +130,27 @@ fn apply_frame_with_diagnostics(
     for route in matching {
         let start = usize::from(route.start_address.saturating_sub(1));
         let end = start.saturating_add(usize::from(route.personality.footprint().total()));
-        if let Some(slots) = frame.slots.get(start..end) {
-            if let Ok(mut samples) = diagnostics.lock() {
-                let frames_per_second = samples
-                    .get(&route.output)
-                    .map(|previous| frame.received_at.since(previous.received_at).as_micros())
-                    .filter(|micros| *micros > 0)
-                    .map(|micros| 1_000_000.0 / micros as f32)
-                    .unwrap_or(0.0);
-                samples.insert(
-                    route.output,
-                    IngressSample {
-                        protocol: route.protocol,
-                        universe: route.universe,
-                        start_address: route.start_address,
-                        source: frame.source_label.clone(),
-                        frames_per_second,
-                        received_at: frame.received_at,
-                        slots: slots.to_vec(),
-                    },
-                );
-            }
+        if let Some(slots) = frame.slots.get(start..end)
+            && let Ok(mut samples) = diagnostics.lock()
+        {
+            let frames_per_second = samples
+                .get(&route.output)
+                .map(|previous| frame.received_at.since(previous.received_at).as_micros())
+                .filter(|micros| *micros > 0)
+                .map(|micros| 1_000_000.0 / micros as f32)
+                .unwrap_or(0.0);
+            samples.insert(
+                route.output,
+                IngressSample {
+                    protocol: route.protocol,
+                    universe: route.universe,
+                    start_address: route.start_address,
+                    source: frame.source_label.clone(),
+                    frames_per_second,
+                    received_at: frame.received_at,
+                    slots: slots.to_vec(),
+                },
+            );
         }
         match decode::frame(route.personality, route.start_address, &frame.slots) {
             Ok(decoded) => {

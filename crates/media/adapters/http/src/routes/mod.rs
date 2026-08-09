@@ -89,6 +89,8 @@ pub fn router(state: ApiState) -> Router {
         .route("/api/v2/health", get(health::health))
         .route("/api/v2/catalog", get(health::catalog))
         .route("/api/v2/logs", get(logs::logs))
+        .route("/api/v2/logs/level", get(logs::server_level))
+        .route("/api/v2/logs/level/update", post(logs::update_server_level))
         .route("/api/v2/library/imports", get(library::imports))
         .route("/api/v2/library/import", post(library::start_import))
         .route(

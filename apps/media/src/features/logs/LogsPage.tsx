@@ -11,6 +11,7 @@
 import { Button, CheckboxField, SelectField } from "@tosklight/ui/controls";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiFailure, api } from "../../shared/api/client";
+import { requestId } from "../../shared/api/editing";
 import type { LogRecordView } from "../../shared/api/generated/media-wire";
 
 /// How often to ask for what has arrived. A log is not a meter; a couple of seconds is plenty.
@@ -24,6 +25,14 @@ const LEVELS = [
 	{ value: "error", label: "Errors only" },
 ] as const;
 
+const SERVER_LEVELS = [
+	{ value: "error", label: "Errors" },
+	{ value: "warn", label: "Warnings and errors" },
+	{ value: "info", label: "Information and above" },
+	{ value: "debug", label: "Debug and above" },
+	{ value: "trace", label: "Everything" },
+] as const;
+
 /// How many records to keep on screen. Beyond this the browser, not the server, is the bottleneck.
 const KEEP = 2_000;
 
@@ -33,9 +42,49 @@ export function LogsPage() {
 	const [records, setRecords] = useState<LogRecordView[]>([]);
 	const [dropped, setDropped] = useState(0);
 	const [failure, setFailure] = useState<ApiFailure | undefined>(undefined);
+	const [serverLevel, setServerLevel] = useState<string | undefined>(undefined);
+	const [selectedServerLevel, setSelectedServerLevel] =
+		useState<string>("info");
+	const [changingServerLevel, setChangingServerLevel] = useState(false);
 	// The newest record held, so the next read asks only for what came after it. A ref rather than
 	// state because the follow timer reads it without wanting to be restarted by it.
 	const cursor = useRef<number | undefined>(undefined);
+
+	useEffect(() => {
+		void api
+			.serverLogLevel()
+			.then((view) => {
+				setServerLevel(view.level);
+				setSelectedServerLevel(view.level);
+			})
+			.catch((error) => {
+				setFailure(
+					error instanceof ApiFailure
+						? error
+						: new ApiFailure("unexpected-error", String(error), 0),
+				);
+			});
+	}, []);
+
+	const changeServerLevel = useCallback(async () => {
+		setChangingServerLevel(true);
+		try {
+			const changed = await api.updateServerLogLevel({
+				requestId: requestId(),
+				level: selectedServerLevel,
+			});
+			setServerLevel(changed.level);
+			setFailure(undefined);
+		} catch (error) {
+			setFailure(
+				error instanceof ApiFailure
+					? error
+					: new ApiFailure("unexpected-error", String(error), 0),
+			);
+		} finally {
+			setChangingServerLevel(false);
+		}
+	}, [selectedServerLevel]);
 
 	const read = useCallback(async () => {
 		try {
@@ -71,11 +120,50 @@ export function LogsPage() {
 
 	return (
 		<section className="media-page">
+			<article className="media-settings-section" aria-label="Server log level">
+				<div className="media-logs-controls">
+					<SelectField
+						label="Server log level"
+						value={selectedServerLevel}
+						options={[
+							...(serverLevel &&
+							!SERVER_LEVELS.some(({ value }) => value === serverLevel)
+								? [
+										{
+											value: serverLevel,
+											label: `Environment filter: ${serverLevel}`,
+										},
+									]
+								: []),
+							...SERVER_LEVELS,
+						]}
+						onChange={setSelectedServerLevel}
+					/>
+					<Button
+						disabled={
+							changingServerLevel ||
+							serverLevel === undefined ||
+							selectedServerLevel === serverLevel
+						}
+						onClick={() => void changeServerLevel()}
+					>
+						{changingServerLevel ? "Applying…" : "Apply server level"}
+					</Button>
+				</div>
+				<p className="media-settings-note">
+					This changes what the running server records. It resets from MEDIA_LOG
+					when the server restarts. Show below filters the browser only.
+				</p>
+			</article>
+
 			<div className="media-logs-controls">
 				<SelectField
 					label="Show"
 					value={level}
-					options={LEVELS.map((entry) => ({ value: entry.value, label: entry.label }))}
+					options={LEVELS.map((entry) => ({
+						value: entry.value,
+						label: entry.label,
+					}))}
 					onChange={setLevel}
 				/>
 				<CheckboxField
@@ -97,8 +185,9 @@ export function LogsPage() {
 
 			{dropped > 0 && (
 				<p className="media-state is-notice">
-					This server has discarded {dropped} older {dropped === 1 ? "record" : "records"}{" "}
-					to stay within the window it keeps in memory.
+					This server has discarded {dropped} older{" "}
+					{dropped === 1 ? "record" : "records"} to stay within the window it
+					keeps in memory.
 				</p>
 			)}
 
@@ -110,7 +199,9 @@ export function LogsPage() {
 				<ol className="media-log" aria-label="Log records">
 					{records.map((record) => (
 						<li key={record.sequence} className={`media-log-${record.level}`}>
-							<span className="media-log-at">{elapsed(record.millisSinceStart)}</span>
+							<span className="media-log-at">
+								{elapsed(record.millisSinceStart)}
+							</span>
 							<span className="media-log-level">{record.level}</span>
 							<span className="media-log-message">{record.message}</span>
 							<span className="media-log-target">{record.target}</span>

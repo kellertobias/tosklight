@@ -130,14 +130,15 @@ pub trait UploadStream: Send {
     fn finish(self: Box<Self>) -> Result<String, String>;
 }
 
+pub type BeginUpload =
+    Arc<dyn Fn(MediaAddress, &str, &str) -> Result<Box<dyn UploadStream>, String> + Send + Sync>;
+
 /// Mutations and files the running library exposes to the API.
 #[derive(Clone)]
 pub struct LibraryAccess {
     pub edit: Arc<dyn Fn(LibraryEdit) -> Result<(), String> + Send + Sync>,
     pub thumbnail: Arc<dyn Fn(MediaAddress) -> Result<Vec<u8>, String> + Send + Sync>,
-    pub begin_upload: Arc<
-        dyn Fn(MediaAddress, &str, &str) -> Result<Box<dyn UploadStream>, String> + Send + Sync,
-    >,
+    pub begin_upload: BeginUpload,
 }
 
 impl Default for LibraryAccess {
@@ -240,12 +241,43 @@ pub type DeviceLister = Arc<dyn Fn() -> Vec<String> + Send + Sync>;
 /// Recent log records.
 pub type LogSource = Arc<dyn Fn(&LogQuery) -> LogPage + Send + Sync>;
 
+/// The process-wide tracing filter an operator may change for this run.
+///
+/// This is deliberately not configuration: the selected level is ephemeral and startup restores
+/// the filter from `MEDIA_LOG`. The runtime owns the subscriber and hands HTTP only these narrow
+/// operations.
+#[derive(Clone)]
+pub struct LogLevelControl {
+    pub current: Arc<dyn Fn() -> String + Send + Sync>,
+    pub update: LogLevelUpdate,
+}
+
+pub type LogLevelUpdate = Arc<dyn Fn(&str) -> Result<(), String> + Send + Sync>;
+
+impl Default for LogLevelControl {
+    fn default() -> Self {
+        Self {
+            current: Arc::new(|| "info".to_owned()),
+            update: Arc::new(|_| Err("the process log level cannot be changed".to_owned())),
+        }
+    }
+}
+
+impl std::fmt::Debug for LogLevelControl {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("LogLevelControl")
+            .finish_non_exhaustive()
+    }
+}
+
 /// The diagnostics the API can read from the running process.
 #[derive(Clone)]
 pub struct Diagnostics {
     pub audio: AudioSource,
     pub audio_devices: DeviceLister,
     pub logs: LogSource,
+    pub log_level: LogLevelControl,
     pub imports: Imports,
     pub library: LibraryAccess,
     pub dmx: DmxSource,
@@ -261,6 +293,7 @@ impl Default for Diagnostics {
             audio: Arc::new(AudioTelemetry::default),
             audio_devices: Arc::new(Vec::new),
             logs: Arc::new(|_| LogPage::default()),
+            log_level: LogLevelControl::default(),
             imports: Imports::default(),
             library: LibraryAccess::default(),
             dmx: Arc::new(Vec::new),

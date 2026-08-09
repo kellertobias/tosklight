@@ -5,13 +5,16 @@
 //! cannot show a record twice or step over one.
 
 use axum::extract::{Query, State};
+use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use serde::Deserialize;
 
 use crate::diagnostics::LogQuery;
 use crate::error::ApiError;
 use crate::routes::ApiState;
-use crate::wire::LogsView;
+use crate::routes::edit::{self, Proceed};
+use crate::tolerant::TolerantJson;
+use crate::wire::{LogsView, ServerLogLevelView, UpdateServerLogLevel};
 
 /// How many records one read may carry.
 ///
@@ -34,10 +37,7 @@ pub(super) async fn logs(
     Query(query): Query<LogsQuery>,
 ) -> Result<Response, ApiError> {
     if let Some(level) = &query.level
-        && !matches!(
-            level.as_str(),
-            "error" | "warn" | "info" | "debug" | "trace"
-        )
+        && !is_level(level)
     {
         return Err(ApiError::bad_request(
             "unknown-level",
@@ -53,6 +53,50 @@ pub(super) async fn logs(
     Ok(axum::Json(LogsView::of(&page)).into_response())
 }
 
+/// The process filter, separate from the viewer filter above.
+pub(super) async fn server_level(State(state): State<ApiState>) -> impl IntoResponse {
+    axum::Json(ServerLogLevelView::of((state
+        .diagnostics
+        .log_level
+        .current)()))
+}
+
+/// Changes the tracing filter for this process only.
+///
+/// This carries request identity because it is an operator edit, but it intentionally skips the
+/// configuration commit path: restart restores `MEDIA_LOG`, exactly as the selected decision says.
+pub(super) async fn update_server_level(
+    State(state): State<ApiState>,
+    TolerantJson(body): TolerantJson<UpdateServerLogLevel>,
+) -> Result<Response, ApiError> {
+    if let Proceed::Replay(response) = edit::begin(&state, &body.request_id)? {
+        return Ok(response);
+    }
+    if !is_level(&body.level) {
+        return Err(ApiError::bad_request(
+            "unknown-level",
+            format!("no log level is called {}", body.level),
+        ));
+    }
+
+    (state.diagnostics.log_level.update)(&body.level).map_err(|detail| {
+        tracing::error!(%detail, "the process log level could not be changed");
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "log-level-not-changed",
+            "the server log level could not be changed",
+        )
+    })?;
+    let view = ServerLogLevelView::of((state.diagnostics.log_level.current)());
+    let serialized = serde_json::to_string(&view).unwrap_or_default();
+    state.replays.remember(&body.request_id, serialized.clone());
+    Ok(([(header::CONTENT_TYPE, "application/json")], serialized).into_response())
+}
+
+fn is_level(level: &str) -> bool {
+    matches!(level, "error" | "warn" | "info" | "debug" | "trace")
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
@@ -60,7 +104,7 @@ mod tests {
 
     use axum::http::StatusCode;
 
-    use crate::diagnostics::{Diagnostics, LogEntry, LogPage, LogQuery};
+    use crate::diagnostics::{Diagnostics, LogEntry, LogLevelControl, LogPage, LogQuery};
     use crate::routes::bench::{bench, bench_with, get, send};
 
     /// A log that records what it was asked for, so a test can prove the cursor travelled.
@@ -152,5 +196,65 @@ mod tests {
         let (status, body) = send(&bench.router, get("/api/v2/logs".into())).await;
         assert_eq!(status, StatusCode::OK);
         assert!(body["records"].as_array().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn the_process_level_changes_for_this_run_and_replays_safely() {
+        let level = Arc::new(Mutex::new("info".to_owned()));
+        let reads = Arc::clone(&level);
+        let writes = Arc::clone(&level);
+        let diagnostics = Diagnostics {
+            log_level: LogLevelControl {
+                current: Arc::new(move || reads.lock().unwrap().clone()),
+                update: Arc::new(move |next| {
+                    *writes.lock().unwrap() = next.to_owned();
+                    Ok(())
+                }),
+            },
+            ..Default::default()
+        };
+        let bench = bench_with(diagnostics);
+
+        let (status, before) = send(&bench.router, get("/api/v2/logs/level".into())).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(before["level"], "info");
+        assert_eq!(before["resetsOnRestart"], true);
+
+        let request = r#"{"requestId":"level-1","level":"debug"}"#;
+        let (status, changed) = send(
+            &bench.router,
+            crate::routes::bench::post("/api/v2/logs/level/update".into(), request),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(changed["level"], "debug");
+
+        *level.lock().unwrap() = "trace".to_owned();
+        let (_, replayed) = send(
+            &bench.router,
+            crate::routes::bench::post("/api/v2/logs/level/update".into(), request),
+        )
+        .await;
+        assert_eq!(replayed["level"], "debug", "a retry gets its first answer");
+        assert_eq!(
+            *level.lock().unwrap(),
+            "trace",
+            "a retry was not applied again"
+        );
+    }
+
+    #[tokio::test]
+    async fn an_unknown_process_level_is_refused_without_calling_the_runtime() {
+        let bench = bench();
+        let (status, body) = send(
+            &bench.router,
+            crate::routes::bench::post(
+                "/api/v2/logs/level/update".into(),
+                r#"{"requestId":"level-2","level":"notice"}"#,
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(body["code"], "unknown-level");
     }
 }

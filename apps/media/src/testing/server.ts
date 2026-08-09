@@ -13,6 +13,7 @@ import type {
 	LogsView,
 	NetworkView,
 	OutputView,
+	ServerLogLevelView,
 	TextSlotView,
 	VisualizerView,
 } from "../shared/api/generated/media-wire";
@@ -27,6 +28,7 @@ export interface StubbedServer {
 	text: TextSlotView[];
 	audio: AudioPanelView;
 	logs: LogsView;
+	serverLogLevel: ServerLogLevelView;
 	imports: ImportsView;
 	/** Set to make the next write fail with this code and status. */
 	refuseWrites: { code: string; message: string; status: number } | undefined;
@@ -45,6 +47,7 @@ export function stubServer(
 		text: [aClock(), aCountdown()],
 		audio: anAudioPanel(),
 		logs: aLog(),
+		serverLogLevel: { level: "info", resetsOnRestart: true },
 		imports: anImportState(),
 		health: {
 			status: "ok",
@@ -91,6 +94,12 @@ export function stubServer(
 			if (path === "/network") return jsonResponse(server.network);
 			if (path === "/text") return jsonResponse(server.text);
 			if (path === "/audio") return jsonResponse(server.audio);
+			if (path === "/logs/level") return jsonResponse(server.serverLogLevel);
+			if (path === "/logs/level/update") {
+				const body = JSON.parse(String(init?.body ?? "{}"));
+				server.serverLogLevel.level = body.level;
+				return jsonResponse(server.serverLogLevel);
+			}
 			if (path.startsWith("/logs")) return jsonResponse(server.logs);
 			if (path === "/library/imports") return jsonResponse(server.imports);
 			const imported = writeImport(server, path);

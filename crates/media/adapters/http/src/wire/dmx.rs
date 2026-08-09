@@ -307,7 +307,7 @@ mod tests {
     #[test]
     fn the_group_is_a_typed_wire_discriminator() {
         let view = DmxMapView::of(&configured_output());
-        let layer = serde_json::to_value(&view.channels[0].group).unwrap();
+        let layer = serde_json::to_value(view.channels[0].group).unwrap();
         assert_eq!(layer, serde_json::json!({ "kind": "layer", "number": 1 }));
         let master = serde_json::to_value(DmxChannelGroupView::Master).unwrap();
         assert_eq!(master, serde_json::json!({ "kind": "master" }));
