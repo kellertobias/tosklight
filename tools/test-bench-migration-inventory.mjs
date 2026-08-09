@@ -6,15 +6,24 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const output = path.join(root, "docs/engineering/test-bench-migration-inventory.md");
+const output = path.join(
+	root,
+	"docs/engineering/test-bench-migration-inventory.md",
+);
 const playwright = path.join(root, "node_modules/.bin/playwright");
-const report = JSON.parse(execFileSync(playwright, [
-	"test",
-	"--config",
-	path.join(root, "playwright.config.ts"),
-	"--list",
-	"--reporter=json",
-], { cwd: root, encoding: "utf8" }));
+const report = JSON.parse(
+	execFileSync(
+		playwright,
+		[
+			"test",
+			"--config",
+			path.join(root, "playwright.config.ts"),
+			"--list",
+			"--reporter=json",
+		],
+		{ cwd: root, encoding: "utf8" },
+	),
+);
 
 const rows = [];
 for (const suite of report.suites) {
@@ -51,8 +60,16 @@ function collect(suite, context) {
 }
 
 const ignoredEntrypoints = [
-	["02-help-screenshots.spec.ts", "serial generated screenshots", "generated-boundary"],
-	["visual-recording.spec.ts", "serial video catalog assembly", "generated-boundary"],
+	[
+		"02-help-screenshots.spec.ts",
+		"serial generated screenshots",
+		"generated-boundary",
+	],
+	[
+		"visual-recording.spec.ts",
+		"serial video catalog assembly",
+		"generated-boundary",
+	],
 ];
 
 const markdown = `# Test-bench migration inventory
@@ -96,17 +113,23 @@ if (process.argv.includes("--write")) {
 } else if (process.argv.includes("--check")) {
 	const current = fs.existsSync(output) ? fs.readFileSync(output, "utf8") : "";
 	if (current !== markdown) {
-		console.error("Test-bench migration inventory is stale; run node tools/test-bench-migration-inventory.mjs --write");
+		console.error(
+			"Test-bench migration inventory is stale; run node tools/test-bench-migration-inventory.mjs --write",
+		);
 		process.exitCode = 1;
 	} else {
-		console.log(`Test-bench migration inventory covers ${rows.length} root cases.`);
+		console.log(
+			`Test-bench migration inventory covers ${rows.length} root cases.`,
+		);
 	}
 } else {
 	process.stdout.write(markdown);
 }
 
 function tagsIn(title) {
-	return [...title.matchAll(/(^|\s)(@[a-z-]+)/gu)].map((match) => match[2]).join(" ");
+	return [...title.matchAll(/(^|\s)(@[a-z-]+)/gu)]
+		.map((match) => match[2])
+		.join(" ");
 }
 
 function migrationStatus(surfaces, migrated) {
@@ -127,7 +150,11 @@ function artifactContract(file) {
 }
 
 function executionConstraint(file) {
-	if (/generate-show|help-screenshot|product-demo|visual-recording/u.test(file))
+	if (
+		/generate-show|help-screenshot|product-demo|visual-recording|frontend-warmup-performance/u.test(
+			file,
+		)
+	)
 		return "serial";
 	if (/desktop-process/u.test(file)) return "macOS desktop";
 	return "parallel";

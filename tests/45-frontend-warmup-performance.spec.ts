@@ -71,6 +71,8 @@ function assertWarmAcceptance(
 	expect(warm.diagnostics.warmup?.peakActive).toBeLessThanOrEqual(2);
 	expect(warm.snapshotRequestsDuringSwitches).toBe(0);
 	expect(warm.loadingPlaceholders).toEqual([]);
+	expect(baseline.switchSampleCount).toBe(40);
+	expect(warm.switchSampleCount).toBe(40);
 	expect(warm.switchP95Ms / warm.cpuThrottle).toBeLessThanOrEqual(100);
 	expect(warm.diagnostics.firstUsablePaintAt).toBeLessThan(
 		performanceMark(warm, "warmup"),

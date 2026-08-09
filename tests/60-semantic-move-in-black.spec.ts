@@ -43,7 +43,7 @@ scenario(
 		await t.playback.go(1);
 
 		await t.clock.advanceBy("1999ms");
-		await t.expectFixtureValue(fixture(101), { pan: 0.2 });
+		await t.expectFixtureValue(fixture(101), { pan: 0.1999 });
 		await t.moveInBlack.expectState(101, {
 			state: "delaying",
 			currentCue: 2,
@@ -51,7 +51,7 @@ scenario(
 		});
 
 		await t.clock.advanceBy("1ms");
-		await t.expectFixtureValue(fixture(101), { intensity: 0 });
+		await t.expectFixtureValue(fixture(101), { intensity: 0, pan: 0.2 });
 		await t.moveInBlack.expectState(101, {
 			state: "delaying",
 			currentCue: 2,
@@ -65,17 +65,17 @@ scenario(
 		});
 
 		await t.clock.advanceBy("999ms");
-		await t.expectFixtureValue(fixture(101), { pan: 0.2 });
+		await t.expectFixtureValue(fixture(101), { pan: 0.1999 });
 		await t.clock.advanceBy("1ms");
 		await t.moveInBlack.expectState(101, {
 			state: "moving",
 			currentCue: 2,
 			targetCue: 3,
 		});
-		await t.expectFixtureValue(fixture(101), { pan: 0.2 });
+		await t.expectFixtureValue(fixture(101), { pan: 0.2001 });
 
 		await t.clock.advanceBy("1500ms");
-		await t.expectFixtureValue(fixture(101), { intensity: 0, pan: 0.5 });
+		await t.expectFixtureValue(fixture(101), { intensity: 0, pan: 0.50015 });
 		await t.expectFixtureValue(fixture(102), { pan: 0.2 });
 		await t.clock.advanceBy("1500ms");
 		await t.expectFixtureValue(fixture(101), { intensity: 0, pan: 0.8 });

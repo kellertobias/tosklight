@@ -30,9 +30,7 @@ export class FixtureValueAssertions {
 				.poll(async () => this.normalizedValue(fixtureId, attribute), {
 					message: `Fixture ${target.number} ${attribute} should resolve to ${value}`,
 				})
-				// Logical normalized values cross the Rust f32 wire boundary; compare at operator-
-				// meaningful precision rather than requiring f64-identical decimal literals.
-				.toBeCloseTo(value, 3);
+				.toBeCloseTo(value, 5);
 		}
 	}
 

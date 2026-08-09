@@ -32,6 +32,7 @@ export interface FrontendWarmupEvidence {
 		surfaceSwitches: Array<{ durationMs: number }>;
 	};
 	browserMemoryBytes: number | null;
+	switchSampleCount: number;
 	switchP50Ms: number;
 	switchP95Ms: number;
 	snapshotRequestsDuringSwitches: number;
@@ -113,7 +114,6 @@ export async function measureFrontendWarmup(
 				),
 		);
 	}
-	const before = await frontendDiagnostics(page);
 	const loadingPlaceholders = new Set<string>();
 	const builtIns = [
 		"stage",
@@ -128,6 +128,7 @@ export async function measureFrontendWarmup(
 		for (const text of await visibleLoadingText(page))
 			loadingPlaceholders.add(text);
 	}
+	const before = await frontendDiagnostics(page);
 	for (let index = 0; index < 40; index++) {
 		await world.builtIn.open(builtIns[index % builtIns.length]);
 		await page
@@ -160,6 +161,7 @@ export async function measureFrontendWarmup(
 		networkTransferredBytes,
 		diagnostics,
 		browserMemoryBytes,
+		switchSampleCount: samples.length,
 		switchP50Ms: percentile(samples, 0.5),
 		switchP95Ms: percentile(samples, 0.95),
 		snapshotRequestsDuringSwitches:
