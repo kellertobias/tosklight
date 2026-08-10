@@ -1,3 +1,6 @@
+import fs from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { expect, test } from "./bench/core/fixtures";
 import { activeShowId, loadCanonicalCopy } from "./support/catalog";
 import {
@@ -7,6 +10,10 @@ import {
 } from "./support/plannedDemoBenchmark";
 import { generatePlannedDemo } from "./support/plannedDemoGenerator";
 import { PLANNED_DEMO_VIRTUAL_PLAYBACK_EXCLUSION_ZONES } from "./support/plannedDemoVirtualPlaybackZones";
+
+const DEMO_SHOW_ASSET = process.env.LIGHT_DEMO_SHOW_OUTPUT
+	? path.resolve(process.env.LIGHT_DEMO_SHOW_OUTPUT)
+	: fileURLToPath(new URL("../assets/demo.show", import.meta.url));
 
 test("DEMO-GENERATOR-001 @api › installs the exact Plan 76 lighting patch from one manifest", async ({
 	api,
@@ -44,6 +51,8 @@ test("DEMO-GENERATOR-001 @api › installs the exact Plan 76 lighting patch from
 		);
 
 	const generatedShow = await generatePlannedDemo(api, showId, layers);
+	expect(generatedShow.outputRoutes).toHaveLength(8);
+	expect(await api.showObjects(showId, "route")).toHaveLength(8);
 	const generated = generatedShow.patch;
 	expect(generated).toMatchObject({
 		fixtureRecords: 231,
@@ -214,4 +223,22 @@ test("DEMO-GENERATOR-001 @api › installs the exact Plan 76 lighting patch from
 		),
 		JSON.stringify(runtimeSummary, null, 2),
 	).toBe(true);
+
+	if (process.env.LIGHT_UPDATE_DEMO_SHOW === "1") {
+		for (const route of await api.showObjects<any>(showId, "route")) {
+			const port = route.body.protocol === "sacn" ? 5568 : 6454;
+			await api.seedShowObject(
+				showId,
+				"route",
+				route.id,
+				{ ...route.body, destination: `127.0.0.1:${port}` },
+				route.revision,
+			);
+		}
+		const generated = await api.downloadShow(showId);
+		const temporary = `${DEMO_SHOW_ASSET}.${process.pid}.${crypto.randomUUID()}.tmp`;
+		await fs.mkdir(path.dirname(DEMO_SHOW_ASSET), { recursive: true });
+		await fs.writeFile(temporary, generated);
+		await fs.rename(temporary, DEMO_SHOW_ASSET);
+	}
 });

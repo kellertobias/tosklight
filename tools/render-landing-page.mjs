@@ -90,6 +90,12 @@ const PLATFORMS = [
     ],
   },
 ];
+const PORTABLE_ASSETS = [
+  {
+    kind: "Default demo show (portable show file)",
+    file: (v) => `tosklight-demo-show-${v}.show`,
+  },
+];
 
 const target = process.argv[2];
 if (!target) {
@@ -132,7 +138,7 @@ const releaseUrl = `https://github.com/${REPOSITORY}/releases/tag/${tag}`;
 const downloadUrl = (file) =>
   `https://github.com/${REPOSITORY}/releases/download/${tag}/${file}`;
 
-const downloads = PLATFORMS.map(({ title, note, assets }) => {
+const downloadCard = ({ title, note, assets }) => {
   const rows = assets
     .map(({ kind, file }) => {
       const name = file(version);
@@ -149,7 +155,15 @@ const downloads = PLATFORMS.map(({ title, note, assets }) => {
     `<p class="platform-note">${escapeHtml(note)}</p>` +
     `<ul class="download-list">${rows}</ul></div>`
   );
-}).join("\n        ");
+};
+const downloads = [
+  downloadCard({
+    title: "Portable show",
+    note: "The reviewed completed demo show that a new desk opens as Default Stage Show.",
+    assets: PORTABLE_ASSETS,
+  }),
+  ...PLATFORMS.map(downloadCard),
+].join("\n        ");
 
 let performanceCandidate;
 if (PERFORMANCE_STATUS_FILE && existsSync(PERFORMANCE_STATUS_FILE)) {
@@ -234,7 +248,8 @@ for (const [placeholder, replacement] of [
   page = page.replaceAll(placeholder, replacement);
 }
 writeFileSync(target, page);
-const assetCount = PLATFORMS.reduce((total, { assets }) => total + assets.length, 0);
+const assetCount =
+  PORTABLE_ASSETS.length + PLATFORMS.reduce((total, { assets }) => total + assets.length, 0);
 console.log(
   `Stamped ${target} with version ${version}, ${GALLERY.length} screenshots, ` +
     `${assetCount} download links for ${tag}`,

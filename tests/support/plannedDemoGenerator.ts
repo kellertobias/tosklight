@@ -15,6 +15,7 @@ export async function generatePlannedDemo(
 	layers: Readonly<Record<string, string>> = {},
 ) {
 	const resolvedLayers = await ensurePlannedDemoLayers(api, showId, layers);
+	const outputRoutes = await installPlannedDemoOutputRoutes(api, showId);
 	const scenery = await installPlannedDemoScenery(api, showId, resolvedLayers);
 	const patch = await installPlannedDemoPatch(api, showId, resolvedLayers);
 	const groups = await installPlannedDemoGroups(api, showId, patch.fixtures);
@@ -29,6 +30,7 @@ export async function generatePlannedDemo(
 		await installPlannedDemoVirtualPlaybackExclusionZones(api, showId);
 	const layout = await installPlannedDemoLayout(api, showId);
 	return {
+		outputRoutes,
 		patch,
 		scenery,
 		groups,
@@ -38,6 +40,32 @@ export async function generatePlannedDemo(
 		virtualPlaybackExclusionZones,
 		layout,
 	};
+}
+
+export async function installPlannedDemoOutputRoutes(
+	api: ApiDriver,
+	showId: string,
+) {
+	for (const route of await api.showObjects<any>(showId, "route"))
+		await api.deleteSeededShowObject(showId, "route", route.id, route.revision);
+	const routes = Array.from({ length: 8 }, (_, index) => {
+		const universe = index + 1;
+		return {
+			id: `planned-demo-artnet-${universe}`,
+			body: {
+				protocol: "art_net",
+				logical_universe: universe,
+				destination_universe: universe,
+				delivery_mode: "unicast",
+				destination: "127.0.0.1:6454",
+				enabled: true,
+				minimum_slots: 128,
+			},
+		};
+	});
+	for (const route of routes)
+		await putPlannedDemoObject(api, showId, "route", route.id, route.body);
+	return routes;
 }
 
 const LAYER_NAMES = [

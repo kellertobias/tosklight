@@ -339,10 +339,8 @@ test("release workflow separates measured degradation from infrastructure failur
 
 	assert.match(release, /needs:[\s\S]*?- build/u);
 	assert.doesNotMatch(release, /- benchmark|- pages-build/u);
-	assert.match(performance, /needs: \[metadata, release, visual-assets\]/u);
-	assert.match(performance, /name: product-demo/u);
-	assert.match(performance, /--canonical-demo-performance/u);
-	assert.match(performance, /test -f "\$canonical_demo"/u);
+	assert.match(performance, /needs: \[metadata, release\]/u);
+	assert.doesNotMatch(performance, /product-demo|--canonical-demo-performance/u);
 	assert.match(performance, /gh release download/u);
 	assert.match(performance, /tools\/run-release-performance\.mjs/u);
 	assert.doesNotMatch(performance, /continue-on-error: true/u);

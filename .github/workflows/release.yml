@@ -12,8 +12,8 @@ on:
     inputs:
       promote_marketing:
         description: >-
-          Promote the previewed marketing gallery and demo video to the live prefix the website
-          serves. Look at the preview first; nothing else publishes it.
+          Promote the previewed marketing gallery to the live prefix the website serves. Look at
+          the preview first; nothing else publishes it.
         type: boolean
         default: false
 
@@ -651,23 +651,17 @@ jobs:
           path: .artifacts/generated/manual
           if-no-files-found: error
 
-  visual-assets:
-    name: Documentation / Product demo
+  demo-show:
+    name: Release / Generate default demo show
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [metadata, unit, e2e]
+    needs: [metadata, unit, e2e-build, e2e]
     runs-on: ubuntu-22.04
+    env:
+      LIGHT_REUSE_E2E_BUILD: "1"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ github.sha }}
-
-      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
-        with:
-          toolchain: stable
-
-      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
-        with:
-          key: visual-assets
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -678,27 +672,22 @@ jobs:
       - name: Install workspace dependencies
         run: npm ci
 
-      - name: Install Chrome and video tooling
-        run: |
-          npx playwright install --with-deps chrome
-          sudo apt-get install -y ffmpeg libudev-dev libasound2-dev pkg-config
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: playwright-application-${{ github.sha }}
+          path: .artifacts/build/cargo/debug
 
-      - name: Generate the product-demo video
-        run: npm run test:demo
+      - name: Make the Playwright server executable
+        run: chmod +x .artifacts/build/cargo/debug/light-headless
+
+      - name: Generate and validate the completed portable demo show through the API
+        run: npm run test:demo-show
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        if: always()
         with:
-          name: product-demo
-          path: .artifacts/test/visual-inspection/product-demo
-          if-no-files-found: warn
-
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        if: failure()
-        with:
-          name: visual-playwright-results
-          path: .artifacts/test
-          if-no-files-found: ignore
+          name: default-demo-show
+          path: assets/demo.show
+          if-no-files-found: error
 
   build:
     name: Build / Release archive / ${{ matrix.label }}
@@ -706,7 +695,7 @@ jobs:
     # The help screenshots are embedded into the binary, so they have to exist before anything is
     # compiled. This is what makes what ships the current interface rather than whatever was last
     # committed by hand.
-    needs: [metadata, help-screenshots, workspace]
+    needs: [metadata, help-screenshots, workspace, demo-show]
     runs-on: ${{ matrix.runner }}
     env:
       LIGHT_RELEASE_VERSION: ${{ needs.metadata.outputs.version }}
@@ -748,6 +737,11 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ github.sha }}
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: default-demo-show
+          path: assets
 
       # Populates docs/help/assets/screenshots, which rust-embed compiles into the binary. The
       # directory is not in git: it is generated every run, so the shipped help cannot go stale.
@@ -876,6 +870,7 @@ jobs:
               cp "$bundle"/deb/*.deb "$out/tosklight-$version-linux-amd64.deb"
               ;;
             linux-arm64)
+              cp "assets/demo.show" "$out/tosklight-demo-show-$version.show"
               ;;
             windows-amd64)
               # Named rather than globbed: the Viz Editor writes its own installer into the same
@@ -932,8 +927,19 @@ jobs:
             macOS) bundle_args=(--bundles app) ;;
             Windows) bundle_args=(--bundles nsis) ;;
           esac
-          npm run --prefix apps/viz-editor tauri:build -- \
-            --target ${{ matrix.target }} --config "$config" "${bundle_args[@]}"
+          if output="$(npm run --prefix apps/viz-editor tauri:build -- \
+            --target ${{ matrix.target }} --config "$config" "${bundle_args[@]}" 2>&1)"; then
+            printf '%s\n' "$output"
+          else
+            status=$?
+            printf '%s\n' "$output" >&2
+            output="$(printf '%s' "$output" | tail -c 8000)"
+            output="${output//'%'/'%25'}"
+            output="${output//$'\r'/'%0D'}"
+            output="${output//$'\n'/'%0A'}"
+            printf '::error title=Viz Editor release build failure on %s::%s\n' "$RUNNER_OS" "$output" >&2
+            exit "$status"
+          fi
 
       - name: Stage the Viz release artifacts
         if: matrix.viz
@@ -1009,19 +1015,16 @@ jobs:
       needs.metadata.result == 'success' &&
       needs.manual.result == 'success' &&
       needs.help-screenshots.result == 'success' &&
-      needs.visual-assets.result == 'success' &&
       (needs['release-performance'].result == 'success' ||
        needs['release-performance'].result == 'failure')
     needs:
       - metadata
       - manual
       - help-screenshots
-      - visual-assets
       - release-performance
     runs-on: ubuntu-22.04
     env:
       LIGHT_RELEASE_VERSION: ${{ needs.metadata.outputs.version }}
-      LIGHT_REQUIRE_DEMO_VIDEO: "1"
       LIGHT_REUSE_MANUAL: "1"
       LIGHT_PERFORMANCE_STATUS_FILE: .artifacts/performance/status.json
     steps:
@@ -1061,11 +1064,6 @@ jobs:
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: product-demo
-          path: .artifacts/test/visual-inspection/product-demo
-
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
           name: release-performance
           path: .artifacts/performance
 
@@ -1092,27 +1090,6 @@ jobs:
           MARKETING_SCREENSHOTS_S3_BASE_PATH: ${{ secrets.MARKETING_SCREENSHOTS_S3_BASE_PATH }}
         run: bash tools/upload-marketing-screenshots.sh preview
 
-      # The demo video beside it, so there is somewhere to watch it that does not expire the way
-      # a workflow artifact does.
-      - name: Publish the product demo video preview
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
-          AWS_REGION: ${{ secrets.AWS_REGION }}
-          BUCKET: ${{ secrets.MARKETING_SCREENSHOTS_S3_BUCKET }}
-          BASE_PATH: ${{ secrets.MARKETING_SCREENSHOTS_S3_BASE_PATH }}
-        run: |
-          set -euo pipefail
-          source=".artifacts/test/visual-inspection/product-demo"
-          if [[ ! -d "$source" ]]; then
-            echo "no product-demo directory to publish" >&2
-            exit 0
-          fi
-          aws s3 cp "$source/" "s3://$BUCKET/${BASE_PATH#/}/preview/demo/" \
-            --recursive --only-show-errors
-          echo "Published the product demo to s3://$BUCKET/${BASE_PATH#/}/preview/demo/"
-
   release:
     name: Release / Tag and publish
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -1123,7 +1100,6 @@ jobs:
       - e2e
       - manual
       - help-screenshots
-      - visual-assets
       - build
     runs-on: ubuntu-22.04
     permissions:
@@ -1170,7 +1146,8 @@ jobs:
             "tosklight-$VERSION-windows-amd64-setup.exe" \
             "tosklight-viz-$VERSION-macos-arm64.zip" \
             "tosklight-viz-$VERSION-windows-amd64-setup.exe" \
-            "tosklight-visualizer-$VERSION-windows-amd64.zip"
+            "tosklight-visualizer-$VERSION-windows-amd64.zip" \
+            "tosklight-demo-show-$VERSION.show"
           do
             test -f ".artifacts/release/$required"
           done
@@ -1213,7 +1190,7 @@ jobs:
   release-performance:
     name: Release / Measure published artifact
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [metadata, release, visual-assets]
+    needs: [metadata, release]
     runs-on: ubuntu-22.04
     permissions:
       contents: write
@@ -1230,11 +1207,6 @@ jobs:
         with:
           node-version: 22
 
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: product-demo
-          path: .artifacts/test/visual-inspection/product-demo
-
       - name: Measure the published release or reuse its latest status
         shell: bash
         run: |
@@ -1242,9 +1214,6 @@ jobs:
           out=".artifacts/performance"
           mkdir -p "$out"
           release_url="https://github.com/${GITHUB_REPOSITORY}/releases/tag/v${VERSION}"
-          canonical_demo=".artifacts/test/visual-inspection/product-demo/canonical-demo-performance.json"
-          test -f "$canonical_demo"
-
           if [[ "$RELEASE_CREATED" == "true" ]]; then
             archive="light-headless-${VERSION}-linux-amd64.zip"
             tmp=".artifacts/tmp/release-performance"
@@ -1274,8 +1243,7 @@ jobs:
               --version "$VERSION" \
               --commit "$GITHUB_SHA" \
               --release-url "$release_url" \
-              --hardware-label "GitHub Actions ubuntu-22.04" \
-              --canonical-demo-performance "$canonical_demo"
+              --hardware-label "GitHub Actions ubuntu-22.04"
 
             if [[ ! -f "$out/status.json" ]]; then
               node -e '
@@ -1405,8 +1373,8 @@ jobs:
         run: |
           set -euo pipefail
           base="s3://$BUCKET/${BASE_PATH#/}"
-          # Copied rather than synced: the live prefix holds the demo video and anything else
-          # published beside the gallery, and a sync would delete what this preview does not
+          # Copied rather than synced: the live prefix may hold reviewed offline media or anything
+          # else published beside the gallery, and a sync would delete what this preview does not
           # happen to contain.
           aws s3 cp "$base/preview/" "$base/" --recursive --only-show-errors
           echo "Promoted $base/preview/ to $base/"

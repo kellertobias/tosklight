@@ -45,7 +45,8 @@ test("Playwright exposes only UI and API-exception suites", () => {
 	assert.doesNotMatch(workflow, /Supplemental|test:e2e-supplemental/u);
 	assert.doesNotMatch(workflow, /^\s{2}desktop-smoke:/mu);
 	assert.match(workflow, /node tools\/ci-smoke-built-desktop\.mjs/u);
-	assert.match(workflow, /npm run test:demo/u);
+	assert.match(workflow, /npm run test:demo-show/u);
+	assert.doesNotMatch(workflow, /npm run test:demo(?!-show)/u);
 	assert.match(
 		testScript,
 		/e2e_ui\(\)\{ e2e --grep '@ui' --grep-invert '@\(demo\|docs\|performance\)\\b'/u,

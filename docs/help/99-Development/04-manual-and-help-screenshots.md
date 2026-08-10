@@ -71,7 +71,7 @@ release build, the manual and the Pages job all download that artifact: the buil
 images are embedded into the binary, the other two before rendering. GitHub deploys the complete
 Pages site from mirrored `main`; pull-request code receives no release or deployment credentials.
 
-The marketing gallery is published to the S3 preview prefix on every run, together with the product
-demo video, so both can be looked at without being shipped. Promoting the preview to the prefix the
-website serves is a manual `workflow_dispatch` with **Promote marketing** ticked, and nothing else
-does it.
+The marketing gallery is published to the S3 preview prefix on every run. Product-demo video capture
+is an offline operator-computer workflow and is not generated or published by CI. Promoting the
+gallery preview to the prefix the website serves is a manual `workflow_dispatch` with **Promote
+marketing** ticked, and nothing else does it.
