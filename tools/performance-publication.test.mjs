@@ -266,9 +266,17 @@ test("landing-page assembly writes the same normalized object used by the HTML",
 	try {
 		const target = resolve(directory, "index.html");
 		const statusFile = resolve(directory, "input-status.json");
+		const screenshots = resolve(directory, "source-screenshots");
 		const status = measuredStatus("degraded");
 		copyFileSync(resolve(ROOT, "docs/site/index.html"), target);
 		writeFileSync(statusFile, `${JSON.stringify(status, null, 2)}\n`);
+		mkdirSync(screenshots, { recursive: true });
+		const manifest = JSON.parse(
+			readFileSync(resolve(ROOT, "docs/marketing/screenshot-manifest.json"), "utf8"),
+		);
+		for (const entry of manifest.entries) {
+			writeFileSync(resolve(screenshots, entry.file), "fixture image");
+		}
 
 		const result = spawnSync(
 			process.execPath,
@@ -278,6 +286,7 @@ test("landing-page assembly writes the same normalized object used by the HTML",
 				encoding: "utf8",
 				env: {
 					...process.env,
+					LIGHT_MARKETING_SCREENSHOTS_DIR: screenshots,
 					LIGHT_RELEASE_VERSION: status.release.version,
 					LIGHT_PERFORMANCE_STATUS_FILE: statusFile,
 				},

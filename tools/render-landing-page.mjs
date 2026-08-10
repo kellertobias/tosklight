@@ -12,7 +12,10 @@ import {
 } from "./performance-publication.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const SCREENSHOTS = resolve(ROOT, "docs/marketing/assets/screenshots");
+const SCREENSHOTS = resolve(
+  process.env.LIGHT_MARKETING_SCREENSHOTS_DIR ??
+    resolve(ROOT, "docs/marketing/assets/screenshots"),
+);
 const MARKETING_MANIFEST = resolve(ROOT, "docs/marketing/screenshot-manifest.json");
 const DEMO_DIRECTORY = resolve(artifactPaths.visual, "product-demo");
 const PERFORMANCE_STATUS_FILE = process.env.LIGHT_PERFORMANCE_STATUS_FILE;
