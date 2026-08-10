@@ -106,7 +106,10 @@ mod tests {
             "{}/007-thumb.jpg",
             crate::naming::THUMBNAIL_DIRECTORY
         )));
-        assert!(path.to_str().unwrap().contains("/003/"));
+        assert!(
+            path.components()
+                .any(|component| component.as_os_str() == "003")
+        );
         let _ = std::fs::remove_dir_all(storage.root());
     }
 
