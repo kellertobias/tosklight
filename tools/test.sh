@@ -27,23 +27,34 @@ build_e2e(){
   light_with_cargo_command_lock "npm run test:e2e build" \
     cargo build --manifest-path "$ROOT/Cargo.toml" -p light-headless --no-default-features --features e2e-embedded-ui
 }
+architecture_check(){
+  local label="$1"
+  shift
+  if "$@"; then
+    return 0
+  else
+    local status=$?
+  fi
+  printf '::error title=Architecture check failed::%s\n' "$label" >&2
+  return "$status"
+}
 architecture(){
-  "$ROOT/tools/test-artifact-paths.sh"
-  node --test "$ROOT/tools/cargo-workspace-lints.test.mjs"
-  node --test "$ROOT/tools/check-control-state-labels.test.mjs"
-  node --test "$ROOT/tools/programmer-action-timing.test.mjs"
-  node --test "$ROOT/tools/performance-publication.test.mjs"
-  node --test "$ROOT/tools/run-release-performance.test.mjs"
-  node --test "$ROOT/tools/run-sustained-output-benchmark.test.mjs"
-  node --test "$ROOT/tools/semantic-test-docs/"*.test.mjs
-  node "$ROOT/tools/check-architecture.mjs"
-  node "$ROOT/tools/test-app-icons.mjs"
-  node --test "$ROOT/tools/source-size/source-size.test.mjs"
-  node --test "$ROOT/tools/test-command-boundaries.test.mjs"
-  node --test "$ROOT/tools/build-command-boundaries.test.mjs"
-  node --test "$ROOT/tools/test-private-boundaries.test.mjs"
-  node --test "$ROOT/tools/test-semantic-world-boundaries.test.mjs"
-  node "$ROOT/tools/check-source-size.mjs"
+  architecture_check "Artifact paths and repository root" "$ROOT/tools/test-artifact-paths.sh"
+  architecture_check "Cargo workspace lint inheritance" node --test "$ROOT/tools/cargo-workspace-lints.test.mjs"
+  architecture_check "Control state labels" node --test "$ROOT/tools/check-control-state-labels.test.mjs"
+  architecture_check "Programmer action timing" node --test "$ROOT/tools/programmer-action-timing.test.mjs"
+  architecture_check "Performance publication" node --test "$ROOT/tools/performance-publication.test.mjs"
+  architecture_check "Release performance runner" node --test "$ROOT/tools/run-release-performance.test.mjs"
+  architecture_check "Sustained output benchmark" node --test "$ROOT/tools/run-sustained-output-benchmark.test.mjs"
+  architecture_check "Semantic test documentation" node --test "$ROOT/tools/semantic-test-docs/"*.test.mjs
+  architecture_check "Dependency directions" node "$ROOT/tools/check-architecture.mjs"
+  architecture_check "Application icons" node "$ROOT/tools/test-app-icons.mjs"
+  architecture_check "Source-size scanner" node --test "$ROOT/tools/source-size/source-size.test.mjs"
+  architecture_check "Test command boundaries" node --test "$ROOT/tools/test-command-boundaries.test.mjs"
+  architecture_check "Build command boundaries" node --test "$ROOT/tools/build-command-boundaries.test.mjs"
+  architecture_check "Private test boundaries" node --test "$ROOT/tools/test-private-boundaries.test.mjs"
+  architecture_check "Semantic world boundaries" node --test "$ROOT/tools/test-semantic-world-boundaries.test.mjs"
+  architecture_check "Source-size ratchet" node "$ROOT/tools/check-source-size.mjs"
 }
 typescript_unit(){
   (cd "$ROOT" && npm run test:bench-types)
