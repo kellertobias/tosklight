@@ -124,10 +124,6 @@ jobs:
         with:
           toolchain: stable
 
-      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
-        with:
-          key: unit
-
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
@@ -147,6 +143,12 @@ jobs:
 
       - name: Run architecture checks
         run: npm run test:architecture
+
+      # Cache setup may materialize Cargo bookkeeping. Keep it after the architecture gate, whose
+      # first contract deliberately checks that checkout and dependency setup left the root clean.
+      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
+        with:
+          key: unit
 
       - name: Run unit tests
         env:
@@ -181,7 +183,7 @@ jobs:
       - name: Run the GPU-less Rust workspace suite
         env:
           TOSKLIGHT_EMBEDDED_PANE_WGPU_BACKEND: noop
-        run: npm run test:verify
+        run: bash tools/test.sh rust-workspace
 
   native-extension-draft:
     name: Tests / Native extension draft / ${{ matrix.label }}

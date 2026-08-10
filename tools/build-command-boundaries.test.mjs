@@ -81,7 +81,7 @@ test("fast unit tests and comprehensive verification remain distinct", () => {
 		testScript,
 		/verify\(\)\{[\s\S]*architecture[\s\S]*rust_workspace/u,
 	);
-	assert.match(workflow, /npm run test:verify/u);
+	assert.match(workflow, /bash tools\/test\.sh rust-workspace/u);
 });
 
 test("release packaging and Pages cover the supported product matrix", () => {

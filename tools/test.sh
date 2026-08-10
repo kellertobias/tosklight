@@ -11,7 +11,7 @@ HARDWARE_UI="$ROOT/apps/light-hardware-controls"
 CONTROL_TAURI_CONFIG="$LIGHT_TMP_DIR/tauri-control-artifacts.json"
 
 # Backs the root package.json test scripts; invoke via `npm run test:<name>`.
-usage(){ echo "Usage: npm run test:{unit|verify|architecture|ui-package|patch-package|viz-editor|media-app|storybook|e2e-build|e2e|e2e-api|e2e-ui|e2e-performance|app-icons|artifact-paths|documentation-screenshots|marketing-screenshots|help-screenshots|help-screenshots-live|record|demo|all}"; }
+usage(){ echo "Usage: npm run test:{unit|verify|rust-workspace|architecture|ui-package|patch-package|viz-editor|media-app|storybook|e2e-build|e2e|e2e-api|e2e-ui|e2e-performance|app-icons|artifact-paths|documentation-screenshots|marketing-screenshots|help-screenshots|help-screenshots-live|record|demo|all}"; }
 build_e2e(){
   if [[ "${LIGHT_REUSE_E2E_BUILD:-0}" == "1" ]]; then
     local server="${LIGHT_E2E_SERVER:-$LIGHT_CARGO_TARGET_DIR/debug/light-headless}"
@@ -128,6 +128,7 @@ case "$command" in
   artifact-paths) "$ROOT/tools/test-artifact-paths.sh" ;;
   unit) unit ;;
   verify) verify ;;
+  rust-workspace) rust_workspace ;;
   e2e-build) build_e2e ;;
   e2e) e2e "$@" ;;
   e2e-api) e2e_api "$@" ;;
