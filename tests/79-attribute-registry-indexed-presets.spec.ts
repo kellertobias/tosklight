@@ -61,7 +61,13 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
 		await expect(
 			registry.getByText("Test aperture mode").first(),
 		).toBeVisible();
+		const updateCompleted = page.waitForResponse(
+			(response) =>
+				response.url().endsWith("/api/v2/attribute-configuration/update") &&
+				response.request().method() === "POST",
+		);
 		await page.getByRole("button", { name: "Save changes" }).click();
+		expect((await updateCompleted).ok()).toBe(true);
 
 		await expect
 			.poll(async () => {

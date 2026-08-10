@@ -88,6 +88,10 @@ export class BrowserCrossSurface {
 				0,
 				`/light/${session.desk.osc_alias}/feedback/speed-group/5`,
 			);
+			// The subscription snapshot is a multi-message datagram burst. Drain all of it
+			// before marking the page-change cycle so a slower runner cannot mix the tail
+			// of the initial snapshot into the exactly-once assertion below.
+			await waitForFeedbackToSettle(hardware.messages);
 			const pageNumber = Number(pageName.match(/\d+/)?.[0]);
 			if (!Number.isSafeInteger(pageNumber))
 				throw new Error(`Page name "${pageName}" has no page number`);
