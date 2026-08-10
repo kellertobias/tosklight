@@ -67,7 +67,12 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
 				response.request().method() === "POST",
 		);
 		await page.getByRole("button", { name: "Save changes" }).click();
-		expect((await updateCompleted).ok()).toBe(true);
+		const updateResponse = await updateCompleted;
+		const updateBody = await updateResponse.text();
+		expect(
+			updateResponse.ok(),
+			`Attribute configuration update returned ${updateResponse.status()}: ${updateBody}`,
+		).toBe(true);
 
 		await expect
 			.poll(async () => {
