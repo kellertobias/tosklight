@@ -1,10 +1,11 @@
+import { ApiRequestError } from "../ApiRequestError";
 import type {
 	AttributeConfigurationPatch,
 	AttributeConfigurationSnapshot,
 } from "../attributeConfigurationModels";
 import type {
-	AttributeConfigurationPatch as WireAttributeConfigurationPatch,
 	AttributeConfigurationUpdateRequest,
+	AttributeConfigurationPatch as WireAttributeConfigurationPatch,
 	AttributeConfigurationSnapshot as WireAttributeConfigurationSnapshot,
 	AttributeConfigurationUpdateOutcome as WireAttributeConfigurationUpdateOutcome,
 } from "../generated/light-wire";
@@ -32,7 +33,7 @@ export class AttributeConfigurationApiClient {
 		return mapSnapshot(snapshot);
 	}
 
-	update(
+	async update(
 		showId: string,
 		snapshot: AttributeConfigurationSnapshot,
 		patch: AttributeConfigurationPatch,
@@ -49,11 +50,27 @@ export class AttributeConfigurationApiClient {
 					}
 				: {}),
 		};
+		try {
+			return await this.sendUpdate(showId, snapshot, wirePatch);
+		} catch (error) {
+			if (!(error instanceof ApiRequestError) || error.status !== 409)
+				throw error;
+			const latest = await this.snapshot(showId);
+			if (latest.object_revision !== snapshot.object_revision) throw error;
+			return this.sendUpdate(showId, latest, wirePatch);
+		}
+	}
+
+	private sendUpdate(
+		showId: string,
+		snapshot: AttributeConfigurationSnapshot,
+		patch: WireAttributeConfigurationPatch,
+	): Promise<{ snapshot: AttributeConfigurationSnapshot }> {
 		const request: AttributeConfigurationUpdateRequest = {
 			request_id: crypto.randomUUID(),
 			expected_show_revision: snapshot.show_revision,
 			expected_object_revision: snapshot.object_revision,
-			patch: wirePatch,
+			patch,
 		};
 		const init = jsonRequest("POST", request);
 		return this.transport
