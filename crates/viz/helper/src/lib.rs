@@ -236,6 +236,36 @@ mod tests {
         SupervisedHelper::new("/usr/bin/false", Vec::new())
     }
 
+    fn wait_for_exit(helper: &mut SupervisedHelper, now: Instant) {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while helper.state().is_running() {
+            helper.poll(now);
+            if helper.state().is_running() {
+                assert!(
+                    Instant::now() < deadline,
+                    "the helper did not exit before the test deadline"
+                );
+                std::thread::sleep(Duration::from_millis(1));
+            }
+        }
+    }
+
+    fn drive_quitter_to_give_up(helper: &mut SupervisedHelper) {
+        let mut now = Instant::now();
+        loop {
+            wait_for_exit(helper, now);
+            if matches!(helper.state(), HelperState::GaveUp { .. }) {
+                return;
+            }
+
+            // Advance past whatever backoff was set, then let the supervisor start the next
+            // attempt. The following loop waits for that real child to exit instead of assuming
+            // a loaded CI runner will schedule `/usr/bin/false` within a fixed sleep.
+            now += RETRY_CEILING * 2;
+            helper.poll(now);
+        }
+    }
+
     #[test]
     fn a_helper_that_will_not_start_is_reported_rather_than_pretended() {
         let mut helper = SupervisedHelper::new("/definitely/not/here", Vec::new());
@@ -256,9 +286,7 @@ mod tests {
     fn a_helper_that_dies_is_noticed_and_scheduled_to_return() {
         let mut helper = quitter();
         helper.start().expect("false starts");
-        // Give it a moment to exit, then notice.
-        std::thread::sleep(Duration::from_millis(50));
-        helper.poll(Instant::now());
+        wait_for_exit(&mut helper, Instant::now());
         match helper.state() {
             HelperState::Restarting { failures, .. } => assert_eq!(*failures, 1),
             other => panic!("expected a restart, got {other:?}"),
@@ -271,13 +299,7 @@ mod tests {
     fn a_helper_that_keeps_dying_is_eventually_left_down() {
         let mut helper = quitter();
         helper.start().expect("false starts");
-        let mut now = Instant::now();
-        for _ in 0..GIVE_UP_AFTER * 2 {
-            std::thread::sleep(Duration::from_millis(20));
-            // Advance past whatever backoff was set, so the supervisor keeps trying.
-            now += RETRY_CEILING * 2;
-            helper.poll(now);
-        }
+        drive_quitter_to_give_up(&mut helper);
         match helper.state() {
             HelperState::GaveUp { failures, .. } => assert!(*failures >= GIVE_UP_AFTER),
             other => panic!("expected it to give up, got {other:?}"),
@@ -294,17 +316,12 @@ mod tests {
     fn starting_again_clears_a_helper_that_gave_up() {
         let mut helper = quitter();
         helper.start().expect("starts");
-        let mut now = Instant::now();
-        for _ in 0..GIVE_UP_AFTER * 2 {
-            std::thread::sleep(Duration::from_millis(20));
-            now += RETRY_CEILING * 2;
-            helper.poll(now);
-        }
+        drive_quitter_to_give_up(&mut helper);
         assert!(matches!(helper.state(), HelperState::GaveUp { .. }));
 
-        let mut helper = sleeper();
         helper.start().expect("a fresh start");
         assert!(helper.state().is_running());
+        assert_eq!(helper.failures, 0);
     }
 
     /// The channel is the whole reason the helper is a child rather than a thread, so a frame has
