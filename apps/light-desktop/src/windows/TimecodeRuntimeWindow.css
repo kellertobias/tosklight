@@ -51,14 +51,18 @@
 	align-items: center;
 }
 .timecode-timeline-editor {
-	display: grid;
+	display: flex;
+	flex: 1 1 auto;
+	flex-direction: column;
 	min-height: 0;
+	overflow: hidden;
 	margin: 0.7rem;
 	border: 1px solid #343644;
 	background: #0e0f16;
 }
 .timecode-timeline-tools {
 	display: flex;
+	flex: 0 0 auto;
 	flex-wrap: wrap;
 	min-height: 3.2rem;
 	align-items: center;
@@ -77,6 +81,15 @@
 	width: 9rem;
 	accent-color: #9365d8;
 }
+.timecode-timeline-tools .timecode-timeline-zoom {
+	width: 10rem;
+	min-height: 2.5rem;
+	margin-left: auto;
+	padding: 0.35rem 0.5rem;
+}
+.timecode-timeline-tools .timecode-timeline-zoom strong {
+	font-size: 1rem;
+}
 .timecode-timeline-tools select,
 .timecode-selection-inspector select {
 	min-height: 2.25rem;
@@ -88,6 +101,7 @@
 }
 .timecode-csv-panel {
 	display: grid;
+	flex: 0 0 auto;
 	grid-template-columns: minmax(16rem, 1fr) 10rem auto;
 	align-items: end;
 	gap: 0.6rem;
@@ -124,7 +138,8 @@
 	color: #ff8c99;
 }
 .timecode-timeline-scroll {
-	min-height: 20rem;
+	flex: 1 1 12rem;
+	min-height: 12rem;
 	overflow: auto;
 	overscroll-behavior: contain;
 }
@@ -293,6 +308,7 @@
 }
 .timecode-selection-inspector {
 	display: flex;
+	flex: 0 0 auto;
 	flex-wrap: wrap;
 	min-height: 2.8rem;
 	align-items: center;

@@ -9,7 +9,7 @@ import { GridDesktop, PaneView } from "@tosklight/ui/desktop";
 import { useMemo, useState } from "react";
 import { CommandSectionFixture } from "../../../ui-library/storybook/fixtures/controlSection";
 import { ApplicationStateHarness } from "../../../ui-library/storybook/providers/ApplicationStateHarness";
-import type { TimecodeDefinition } from "../api/generated/light-wire";
+import type { TimecodeDefinition } from "../api/types/timecode";
 import { AppShellView } from "../components/shell/AppShell";
 import { Clock } from "../components/shell/Clock";
 import { LeftDock } from "../components/shell/LeftDock";

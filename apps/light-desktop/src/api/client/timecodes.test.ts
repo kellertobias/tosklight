@@ -34,6 +34,26 @@ describe("TimecodesApiClient", () => {
 
 	it("uses the authoritative list, snapshot and transport routes", async () => {
 		const wire = transport();
+		wire.request
+			.mockResolvedValueOnce({ show_revision: 0, objects: [] })
+			.mockResolvedValueOnce([])
+			.mockResolvedValueOnce({
+				timecode_id: "timecode/a",
+				revision: 1,
+				state: "stopped",
+				frame: 0,
+				duration_frame: 440,
+				audio_linked: false,
+			})
+			.mockResolvedValueOnce({ peaks: [] })
+			.mockResolvedValueOnce({
+				timecode_id: "timecode/a",
+				revision: 2,
+				state: "paused",
+				frame: 220,
+				duration_frame: 440,
+				audio_linked: false,
+			});
 		const client = new TimecodesApiClient(wire);
 		await client.objects("show-a");
 		await client.runtime("show-a");

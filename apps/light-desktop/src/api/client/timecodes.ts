@@ -1,33 +1,52 @@
 import type {
 	ShowObjectActionOutcome,
+	TimecodeCollectionSnapshot as WireTimecodeCollectionSnapshot,
+	TimecodeDefinition as WireTimecodeDefinition,
+	TimecodeObjectAction as WireTimecodeObjectAction,
+	TimecodeTransportSnapshot as WireTimecodeTransportSnapshot,
+} from "../generated/light-wire";
+import type {
 	TimecodeAudioImportResult,
 	TimecodeAudioOutputDevices,
 	TimecodeAudioWaveform,
+	TimecodeCollectionSnapshot,
 	TimecodeDefinition,
 	TimecodeObjectAction,
+	TimecodeObjectRecord,
 	TimecodePatch,
 	TimecodeTransportAction,
 	TimecodeTransportSnapshot,
-} from "../generated/light-wire";
+} from "../types/timecode";
 import { type ClientTransport, jsonRequest } from "./transport";
 
-export interface TimecodeObjectRecord {
-	revision: number;
-	definition: TimecodeDefinition;
-}
-
-export interface TimecodeCollectionSnapshot {
-	show_revision: number;
-	objects: TimecodeObjectRecord[];
-}
+export type {
+	TimecodeAudioImportResult,
+	TimecodeAudioOutputDevices,
+	TimecodeAudioWaveform,
+	TimecodeCollectionSnapshot,
+	TimecodeDefinition,
+	TimecodeObjectAction,
+	TimecodeObjectRecord,
+	TimecodePatch,
+	TimecodeTransportAction,
+	TimecodeTransportSnapshot,
+} from "../types/timecode";
 
 export class TimecodesApiClient {
 	constructor(private readonly transport: ClientTransport) {}
 
-	objects(showId: string): Promise<TimecodeCollectionSnapshot> {
-		return this.transport.request("/api/v2/timecodes", {
-			headers: showHeaders(showId),
-		});
+	async objects(showId: string): Promise<TimecodeCollectionSnapshot> {
+		const snapshot =
+			await this.transport.request<WireTimecodeCollectionSnapshot>(
+				"/api/v2/timecodes",
+				{
+					headers: showHeaders(showId),
+				},
+			);
+		return {
+			show_revision: snapshot.show_revision,
+			objects: snapshot.objects.map(timecodeObject),
+		};
 	}
 
 	mutate(showId: string, action: TimecodeObjectAction) {
@@ -36,7 +55,7 @@ export class TimecodesApiClient {
 			showId,
 			{
 				request_id: crypto.randomUUID(),
-				action,
+				action: wireAction(action),
 			},
 		);
 	}
@@ -67,22 +86,27 @@ export class TimecodesApiClient {
 		});
 	}
 
-	runtime(showId: string): Promise<TimecodeTransportSnapshot[]> {
-		return this.transport.request("/api/v2/timecodes/runtime", {
+	async runtime(showId: string): Promise<TimecodeTransportSnapshot[]> {
+		const snapshots = await this.transport.request<
+			WireTimecodeTransportSnapshot[]
+		>("/api/v2/timecodes/runtime", {
 			headers: showHeaders(showId),
 		});
+		return snapshots.map(timecodeSnapshot);
 	}
 
 	snapshot(
 		showId: string,
 		timecodeId: string,
 	): Promise<TimecodeTransportSnapshot> {
-		return this.transport.request(
-			`/api/v2/timecodes/${encodeURIComponent(timecodeId)}/runtime`,
-			{
-				headers: showHeaders(showId),
-			},
-		);
+		return this.transport
+			.request<WireTimecodeTransportSnapshot>(
+				`/api/v2/timecodes/${encodeURIComponent(timecodeId)}/runtime`,
+				{
+					headers: showHeaders(showId),
+				},
+			)
+			.then(timecodeSnapshot);
 	}
 
 	transportAction(
@@ -90,11 +114,11 @@ export class TimecodesApiClient {
 		timecodeId: string,
 		action: TimecodeTransportAction,
 	) {
-		return this.post<TimecodeTransportSnapshot>(
+		return this.post<WireTimecodeTransportSnapshot>(
 			`/api/v2/timecodes/${encodeURIComponent(timecodeId)}/transport`,
 			showId,
 			{ timecode_id: timecodeId, action },
-		);
+		).then(timecodeSnapshot);
 	}
 
 	outputDevices(): Promise<TimecodeAudioOutputDevices> {
@@ -129,6 +153,61 @@ export class TimecodesApiClient {
 			headers: { ...request.headers, ...showHeaders(showId) },
 		});
 	}
+}
+
+function timecodeObject(object: {
+	revision: number;
+	definition: WireTimecodeDefinition;
+}): TimecodeObjectRecord {
+	return {
+		revision: object.revision,
+		definition: timecodeDefinition(object.definition),
+	};
+}
+
+function timecodeDefinition(
+	definition: WireTimecodeDefinition,
+): TimecodeDefinition {
+	return {
+		...definition,
+		audio: definition.audio ? { ...definition.audio } : definition.audio,
+		markers: definition.markers.map((marker) => ({ ...marker })),
+		lanes: definition.lanes.map((lane) => ({
+			...lane,
+			content: cloneLaneContent(lane.content),
+		})),
+	};
+}
+
+function cloneLaneContent(
+	content: WireTimecodeDefinition["lanes"][number]["content"],
+): TimecodeDefinition["lanes"][number]["content"] {
+	if (content.kind === "cue_list") {
+		return { ...content, clips: content.clips.map((clip) => ({ ...clip })) };
+	}
+	if (content.kind === "speed_group") {
+		return {
+			...content,
+			keyframes: content.keyframes.map((keyframe) => ({ ...keyframe })),
+		};
+	}
+	return {
+		...content,
+		keyframes: content.keyframes.map((keyframe) => ({ ...keyframe })),
+	};
+}
+
+function wireAction(action: TimecodeObjectAction): WireTimecodeObjectAction {
+	if (action.type === "create") {
+		return { type: "create", definition: action.definition };
+	}
+	return { ...action };
+}
+
+function timecodeSnapshot(
+	snapshot: WireTimecodeTransportSnapshot,
+): TimecodeTransportSnapshot {
+	return { ...snapshot };
 }
 
 function showHeaders(showId: string): HeadersInit {

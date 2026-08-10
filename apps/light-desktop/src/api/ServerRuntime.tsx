@@ -45,9 +45,11 @@ import { TimecodeActionsProvider } from "../features/timecode/TimecodeActionsCon
 import { VirtualPlaybackZonesProvider } from "../features/virtualPlaybackZones/VirtualPlaybackZonesContext";
 import { VisualizerViewProvider } from "../features/visualizerView/VisualizerViewContext";
 import type { VisualizerViewPatch } from "./client/visualizerView";
+import { supplementalEventSource } from "./runtimeModels";
 import { ServerDeskBoundaries } from "./ServerDeskBoundaries";
 import { ServerProgrammingProviders } from "./ServerProgrammingProviders";
 import { ServerVisualizationRuntimeBoundary } from "./ServerVisualizationRuntimeBoundary";
+import type { TimecodeTransportSnapshot } from "./types/timecode";
 import { useServerFeatureBoundaries } from "./useServerFeatureBoundaries";
 
 export type {
@@ -506,6 +508,37 @@ function ServerShowProviderStack({
 	);
 }
 
+function useRuntimeActionSources(state: ReturnType<typeof useServerState>) {
+	const runningRuntimeActions = useMemo(
+		() => ({
+			macros: state.api.macros,
+			timecodes: {
+				runtime: (showId: string) => state.api.timecodes.runtime(showId),
+				stop: (showId: string, timecodeId: string) =>
+					state.api.timecodes.transportAction(showId, timecodeId, {
+						type: "stop",
+					}),
+			},
+			showObjects: state.api.showObjects,
+			events: supplementalEventSource(state.api.runtime),
+		}),
+		[state.api],
+	);
+	const timecodeEvents = useMemo(
+		() => ({
+			onRuntimeChanged: (
+				listener: (snapshot: TimecodeTransportSnapshot) => void,
+			) =>
+				state.api.runtime.onEvent((event) => {
+					if (event.type === "timecode_runtime_changed")
+						listener(event.snapshot);
+				}),
+		}),
+		[state.api.runtime],
+	);
+	return { runningRuntimeActions, timecodeEvents };
+}
+
 // @tour frontend-slice:10 Compose focused server capabilities
 // The root runtime owns connection state and assembles narrow providers for data, actions, and
 // feature stores. Views consume focused capabilities instead of one mutable global server object.
@@ -569,26 +602,20 @@ export function ServerRuntime({
 		canWrite: sessionRole === "primary" && state.status === "connected",
 		reportError: state.setError,
 	});
-	const runningRuntimeActions = useMemo(
-		() => ({
-			macros: state.api.macros,
-			timecodes: {
-				runtime: (showId: string) => state.api.timecodes.runtime(showId),
-				stop: (showId: string, timecodeId: string) =>
-					state.api.timecodes.transportAction(showId, timecodeId, {
-						type: "stop",
-					}),
-			},
-			showObjects: state.api.showObjects,
-			events: state.api.runtime,
-		}),
-		[state.api],
-	);
+	const { runningRuntimeActions, timecodeEvents } =
+		useRuntimeActionSources(state);
 	return (
 		<MacroActionsProvider
-			actions={{ macros: state.api.macros, showObjects: state.api.showObjects, events: state.api.runtime }}
+			actions={{
+				macros: state.api.macros,
+				showObjects: state.api.showObjects,
+				events: supplementalEventSource(state.api.runtime),
+			}}
 		>
-			<TimecodeActionsProvider api={state.api.timecodes} events={state.api.runtime}>
+			<TimecodeActionsProvider
+				api={state.api.timecodes}
+				events={timecodeEvents}
+			>
 				<RunningRuntimeActionsProvider actions={runningRuntimeActions}>
 					<AttributeConfigurationActionsProvider
 						client={state.api.attributes}

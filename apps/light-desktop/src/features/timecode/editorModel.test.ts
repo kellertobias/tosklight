@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { TimecodeDefinition } from "../../api/generated/light-wire";
+import type { TimecodeDefinition } from "../../api/types/timecode";
 import {
 	copyTimelineItem,
 	deleteTimelineItem,

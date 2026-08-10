@@ -16,7 +16,7 @@ impl ProgrammingResource {
                     service: light_application::ProgrammingService::new(
                         detached_programmers.clone(),
                         self.service.events().clone(),
-                        Arc::new(light_programmer::HighlightRegistry::default()),
+                        HighlightResource::detached_registry(),
                     ),
                     command_history: Arc::new(Mutex::new(HashMap::new())),
                 };

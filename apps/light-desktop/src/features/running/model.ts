@@ -1,8 +1,8 @@
 import type {
-	MacroExecutionSnapshot,
-	TimecodeDefinition,
-	TimecodeTransportSnapshot,
-} from "../../api/generated/light-wire";
+	MacroExecution,
+	RunningTimecodeDefinition,
+	TimecodeRuntime,
+} from "../../api/runtimeModels";
 import type { VersionedObject } from "../../api/types";
 import type { RunningDynamicController } from "../../components/modals/systemControls/runningDynamicsAuthority";
 import type { RunningCueListSource } from "../../components/modals/systemControls/runningPlaybackAuthority";
@@ -39,12 +39,12 @@ export interface RunningDynamicRow extends RunningRowBase {
 
 export interface RunningTimecodeRow extends RunningRowBase {
 	kind: "timecode";
-	snapshot: TimecodeTransportSnapshot;
+	snapshot: TimecodeRuntime;
 }
 
 export interface RunningMacroRow extends RunningRowBase {
 	kind: "macro";
-	execution: MacroExecutionSnapshot;
+	execution: MacroExecution;
 }
 
 export type RunningRow =
@@ -56,9 +56,9 @@ export type RunningRow =
 export interface RunningModelInput {
 	playbacks: readonly RunningCueListSource[];
 	dynamics: readonly RunningDynamicController[];
-	timecodes: readonly TimecodeTransportSnapshot[];
-	timecodeDefinitions?: readonly VersionedObject<TimecodeDefinition>[];
-	macros: readonly MacroExecutionSnapshot[];
+	timecodes: readonly TimecodeRuntime[];
+	timecodeDefinitions?: readonly VersionedObject<RunningTimecodeDefinition>[];
+	macros: readonly MacroExecution[];
 	releasePlayback(source: RunningCueListSource): Promise<unknown>;
 	turnOffDynamic(controller: RunningDynamicController): Promise<unknown>;
 	stopTimecode(timecodeId: string): Promise<unknown>;
@@ -187,11 +187,11 @@ function isContainedDynamicSource(source: string): boolean {
 	return source === "Cue" || source.startsWith("Playback ");
 }
 
-function isActiveMacro(execution: MacroExecutionSnapshot): boolean {
+function isActiveMacro(execution: MacroExecution): boolean {
 	return ["queued", "validating", "running"].includes(execution.state);
 }
 
-function macroStatus(state: MacroExecutionSnapshot["state"]): string {
+function macroStatus(state: MacroExecution["state"]): string {
 	switch (state) {
 		case "queued":
 			return "Queued";

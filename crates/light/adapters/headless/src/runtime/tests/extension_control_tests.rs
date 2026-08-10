@@ -446,11 +446,20 @@ async fn extension_programmer_keys_do_not_cross_an_active_show_transition() {
 }
 
 #[test]
-fn extension_timecode_uses_the_authoritative_priority_router() {
+fn extension_timecode_uses_the_exact_selected_authoritative_source() {
     let (state, data_dir) = test_state();
+    let mut configuration = DeskConfiguration::default();
+    configuration.timecode_source = TimecodeSourceSelection::External {
+        source: "extension:de.tosklight.timecode:mtc-one".into(),
+    };
+    configuration.timecode_frame_rate = Some(DeskTimecodeFrameRate {
+        numerator: 25,
+        denominator: 1,
+        drop_frame: false,
+    });
     state
         .output
-        .configure_timecode(DeskConfiguration::default().timecode_router_config());
+        .configure_timecode(configuration.timecode_router_config());
     extensions_runtime::ingest_extension_timecode(
         &state,
         &TimecodeEnvelope {

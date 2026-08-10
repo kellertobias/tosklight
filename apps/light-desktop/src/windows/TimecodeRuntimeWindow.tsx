@@ -14,14 +14,12 @@ import { WindowHeader, WindowScrollArea } from "@tosklight/ui/window-kit";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createLightApi } from "../api/client/api";
 import {
+	type TimecodeDefinition,
 	type TimecodeObjectRecord,
 	TimecodesApiClient,
+	type TimecodeTransportAction,
+	type TimecodeTransportSnapshot,
 } from "../api/client/timecodes";
-import type {
-	TimecodeDefinition,
-	TimecodeTransportAction,
-	TimecodeTransportSnapshot,
-} from "../api/generated/light-wire";
 import { useActiveShowId } from "../features/deskSnapshot/DeskSnapshotState";
 import { useCueLists } from "../features/showObjects/ShowObjectsState";
 import { useShowObjectView } from "../features/showObjects/ShowObjectsView";
@@ -83,11 +81,8 @@ export function TimecodeRuntimeWindow({
 		let cancelled = false;
 		const update = () =>
 			void refresh().catch((reason) => !cancelled && setError(String(reason)));
-		const unsubscribe = configured?.events?.onEvent((event) => {
-			if (event.type !== "timecode_runtime_changed") return;
-			setRuntime((current) =>
-				mergeTimecodeSnapshots(current, [event.snapshot]),
-			);
+		const unsubscribe = configured?.events?.onRuntimeChanged((snapshot) => {
+			setRuntime((current) => mergeTimecodeSnapshots(current, [snapshot]));
 		});
 		update();
 		return () => {
@@ -222,55 +217,49 @@ function newTimecode(number: number): NewTimecode {
 	};
 }
 
-function TimecodeEditor({
-	showId,
-	item,
-	api,
-	snapshot,
-	cueLists,
-	onClose,
-	onSaved,
-}: {
-	showId: string | null;
-	item: TimecodeObjectRecord | NewTimecode;
-	api: TimecodesApiClient;
-	snapshot?: TimecodeTransportSnapshot;
-	cueLists: Array<{
-		id: string;
-		name: string;
-		cues: Array<{ id: string; number: number; name: string }>;
-	}>;
-	onClose(): void;
-	onSaved(): Promise<void>;
-}) {
-	const {
-		draft,
-		commit: setDraft,
-		preview: previewDraft,
-		beginGesture,
-		endGesture,
-		undo,
-		redo,
-		canUndo,
-		canRedo,
-	} = useTimecodeEditorHistory(item.definition);
-	const [busy, setBusy] = useState(false);
-	const [audioImporting, setAudioImporting] = useState(false);
+function useTimecodeWaveform(
+	showId: string | null,
+	isNew: boolean,
+	draft: TimecodeDefinition,
+	api: TimecodesApiClient,
+) {
 	const [waveformPeaks, setWaveformPeaks] = useState<number[] | undefined>();
-	const [editorFrame, setEditorFrame] = useState(snapshot?.frame ?? 0);
-	const [error, setError] = useState<string | null>(null);
-	const isNew = "isNew" in item;
+	const [waveformError, setWaveformError] = useState<string | null>(null);
 	useEffect(() => {
 		if (!showId || isNew || !draft.audio || waveformPeaks) return;
 		let cancelled = false;
 		void api
 			.waveform(showId, draft.id)
 			.then((waveform) => !cancelled && setWaveformPeaks(waveform.peaks))
-			.catch((reason) => !cancelled && setError(String(reason)));
+			.catch((reason) => !cancelled && setWaveformError(String(reason)));
 		return () => {
 			cancelled = true;
 		};
 	}, [api, draft.audio, draft.id, isNew, showId, waveformPeaks]);
+	return { waveformPeaks, setWaveformPeaks, waveformError };
+}
+
+function useTimecodeEditorOperations({
+	showId,
+	item,
+	api,
+	draft,
+	setDraft,
+	setWaveformPeaks,
+	onSaved,
+}: {
+	showId: string | null;
+	item: TimecodeObjectRecord | NewTimecode;
+	api: TimecodesApiClient;
+	draft: TimecodeDefinition;
+	setDraft(value: TimecodeDefinition): void;
+	setWaveformPeaks(value: number[] | undefined): void;
+	onSaved(): Promise<void>;
+}) {
+	const [busy, setBusy] = useState(false);
+	const [audioImporting, setAudioImporting] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+	const isNew = "isNew" in item;
 	const act = async (action: TimecodeTransportAction) => {
 		if (!showId || isNew) return;
 		setBusy(true);
@@ -316,12 +305,11 @@ function TimecodeEditor({
 				api.importAudio(showId, file),
 				decodeAudioPeaks(file).catch(() => undefined),
 			]);
-			const audioDuration = Math.ceil(
-				(imported.sample_frames * FPS) / imported.sample_rate,
-			);
 			setDraft({
 				...draft,
-				duration_frame: audioDuration,
+				duration_frame: Math.ceil(
+					(imported.sample_frames * FPS) / imported.sample_rate,
+				),
 				audio: {
 					asset_id: imported.asset_id,
 					asset_revision: imported.asset_revision,
@@ -345,6 +333,76 @@ function TimecodeEditor({
 			setBusy(false);
 		}
 	};
+	return {
+		busy,
+		audioImporting,
+		error,
+		setError,
+		isNew,
+		act,
+		save,
+		importAudio,
+		remove,
+	};
+}
+
+function TimecodeEditor({
+	showId,
+	item,
+	api,
+	snapshot,
+	cueLists,
+	onClose,
+	onSaved,
+}: {
+	showId: string | null;
+	item: TimecodeObjectRecord | NewTimecode;
+	api: TimecodesApiClient;
+	snapshot?: TimecodeTransportSnapshot;
+	cueLists: Array<{
+		id: string;
+		name: string;
+		cues: Array<{ id: string; number: number; name: string }>;
+	}>;
+	onClose(): void;
+	onSaved(): Promise<void>;
+}) {
+	const {
+		draft,
+		commit: setDraft,
+		preview: previewDraft,
+		beginGesture,
+		endGesture,
+		undo,
+		redo,
+		canUndo,
+		canRedo,
+	} = useTimecodeEditorHistory(item.definition);
+	const [editorFrame, setEditorFrame] = useState(snapshot?.frame ?? 0);
+	const isNew = "isNew" in item;
+	const { waveformPeaks, setWaveformPeaks, waveformError } =
+		useTimecodeWaveform(showId, isNew, draft, api);
+	const {
+		busy,
+		audioImporting,
+		error,
+		setError,
+		act,
+		save,
+		importAudio,
+		remove,
+	} = useTimecodeEditorOperations({
+		showId,
+		item,
+		api,
+		draft,
+		setDraft,
+		setWaveformPeaks,
+		onSaved,
+	});
+	useEffect(() => {
+		if (waveformError) setError(waveformError);
+	}, [waveformError]);
 	const duration = draft.duration_frame ?? 0;
 	const frame = Math.min(editorFrame, duration);
 	return (
@@ -363,123 +421,23 @@ function TimecodeEditor({
 					{error}
 				</p>
 			)}
-			<div className="timecode-editor-toolbar">
-				<Button onClick={onClose}>Back</Button>
-				<Button onClick={() => void save()} disabled={busy}>
-					Save
-				</Button>
-				<Button onClick={undo} disabled={!canUndo || busy}>
-					Undo
-				</Button>
-				<Button onClick={redo} disabled={!canRedo || busy}>
-					Redo
-				</Button>
-				{!isNew && (
-					<Button onClick={() => void remove()} disabled={busy}>
-						Delete
-					</Button>
-				)}
-			</div>
-			<fieldset className="timecode-transport" aria-label="Timecode transport">
-				<Button
-					onClick={() => void act({ type: "go" })}
-					disabled={isNew || busy}
-				>
-					Go
-				</Button>
-				<Button
-					onClick={() => void act({ type: "pause" })}
-					disabled={isNew || busy}
-				>
-					Pause
-				</Button>
-				<Button
-					onClick={() => void act({ type: "stop" })}
-					disabled={isNew || busy}
-				>
-					Stop
-				</Button>
-				<Button
-					onClick={() => void act({ type: "rewind" })}
-					disabled={isNew || busy}
-				>
-					Rewind
-				</Button>
-				<Button
-					onClick={() => void act({ type: "seek", frame })}
-					disabled={isNew || busy}
-				>
-					Seek runtime to playhead
-				</Button>
-				<strong>{formatFrame(snapshot?.frame ?? 0)}</strong>
-			</fieldset>
-			<div className="timecode-fields">
-				<NumberField
-					label="Number"
-					min={1}
-					value={draft.number}
-					onChange={(event) =>
-						setDraft({ ...draft, number: Number(event.currentTarget.value) })
-					}
-				/>
-				<TextField
-					label="Name"
-					value={draft.name}
-					onChange={(event) =>
-						setDraft({ ...draft, name: event.currentTarget.value })
-					}
-				/>
-				<NumberField
-					label="Duration frames"
-					min={1}
-					value={duration}
-					onChange={(event) =>
-						setDraft({
-							...draft,
-							duration_frame: Number(event.currentTarget.value),
-						})
-					}
-				/>
-				<NumberField
-					label="Transport offset"
-					min={0}
-					value={draft.transport_offset_frame}
-					onChange={(event) =>
-						setDraft({
-							...draft,
-							transport_offset_frame: Number(event.currentTarget.value),
-						})
-					}
-				/>
-				<CheckboxField
-					className="timecode-checkbox"
-					label="Auto-start"
-					checked={draft.auto_start}
-					onChange={(event) =>
-						setDraft({ ...draft, auto_start: event.currentTarget.checked })
-					}
-				/>
-				<label className="timecode-audio-import" htmlFor="timecode-audio-file">
-					<span>Audio file</span>
-					<Input
-						id="timecode-audio-file"
-						type="file"
-						accept="audio/wav,audio/x-wav,audio/mpeg,.wav,.mp3"
-						disabled={busy || audioImporting}
-						onChange={(event) => {
-							const file = event.currentTarget.files?.[0];
-							if (file) void importAudio(file);
-						}}
-					/>
-					<small>
-						{audioImporting
-							? "Importing and normalizing…"
-							: draft.audio
-								? `Managed audio ${draft.audio.asset_id}`
-								: "WAV or MP3; MP3 is normalized to managed WAV."}
-					</small>
-				</label>
-			</div>
+			<EditorToolbar
+				{...{
+					onClose,
+					save,
+					undo,
+					redo,
+					remove,
+					canUndo,
+					canRedo,
+					busy,
+					isNew,
+				}}
+			/>
+			<TransportControls {...{ act, frame, snapshot, busy, isNew }} />
+			<TimecodeFields
+				{...{ draft, setDraft, duration, busy, audioImporting, importAudio }}
+			/>
 			<TimecodeTimelineEditor
 				definition={draft}
 				frame={frame}
@@ -493,6 +451,174 @@ function TimecodeEditor({
 				onEndGesture={endGesture}
 			/>
 		</section>
+	);
+}
+
+function EditorToolbar({
+	onClose,
+	save,
+	undo,
+	redo,
+	remove,
+	canUndo,
+	canRedo,
+	busy,
+	isNew,
+}: {
+	onClose(): void;
+	save(): Promise<void>;
+	undo(): void;
+	redo(): void;
+	remove(): Promise<void>;
+	canUndo: boolean;
+	canRedo: boolean;
+	busy: boolean;
+	isNew: boolean;
+}) {
+	return (
+		<div className="timecode-editor-toolbar">
+			<Button onClick={onClose}>Back</Button>
+			<Button onClick={() => void save()} disabled={busy}>
+				Save
+			</Button>
+			<Button onClick={undo} disabled={!canUndo || busy}>
+				Undo
+			</Button>
+			<Button onClick={redo} disabled={!canRedo || busy}>
+				Redo
+			</Button>
+			{!isNew && (
+				<Button onClick={() => void remove()} disabled={busy}>
+					Delete
+				</Button>
+			)}
+		</div>
+	);
+}
+
+function TransportControls({
+	act,
+	frame,
+	snapshot,
+	busy,
+	isNew,
+}: {
+	act(action: TimecodeTransportAction): Promise<void>;
+	frame: number;
+	snapshot?: TimecodeTransportSnapshot;
+	busy: boolean;
+	isNew: boolean;
+}) {
+	const disabled = isNew || busy;
+	return (
+		<fieldset className="timecode-transport" aria-label="Timecode transport">
+			<Button onClick={() => void act({ type: "go" })} disabled={disabled}>
+				Go
+			</Button>
+			<Button onClick={() => void act({ type: "pause" })} disabled={disabled}>
+				Pause
+			</Button>
+			<Button onClick={() => void act({ type: "stop" })} disabled={disabled}>
+				Stop
+			</Button>
+			<Button onClick={() => void act({ type: "rewind" })} disabled={disabled}>
+				Rewind
+			</Button>
+			<Button
+				onClick={() => void act({ type: "seek", frame })}
+				disabled={disabled}
+			>
+				Seek runtime to playhead
+			</Button>
+			<strong>{formatFrame(snapshot?.frame ?? 0)}</strong>
+		</fieldset>
+	);
+}
+
+function TimecodeFields({
+	draft,
+	setDraft,
+	duration,
+	busy,
+	audioImporting,
+	importAudio,
+}: {
+	draft: TimecodeDefinition;
+	setDraft(value: TimecodeDefinition): void;
+	duration: number;
+	busy: boolean;
+	audioImporting: boolean;
+	importAudio(file: File): Promise<void>;
+}) {
+	return (
+		<div className="timecode-fields">
+			<NumberField
+				label="Number"
+				min={1}
+				value={draft.number}
+				onChange={(event) =>
+					setDraft({ ...draft, number: Number(event.currentTarget.value) })
+				}
+			/>
+			<TextField
+				label="Name"
+				value={draft.name}
+				onChange={(event) =>
+					setDraft({ ...draft, name: event.currentTarget.value })
+				}
+			/>
+			<NumberField
+				label="Duration frames"
+				min={1}
+				value={duration}
+				onChange={(event) =>
+					setDraft({
+						...draft,
+						duration_frame: Number(event.currentTarget.value),
+					})
+				}
+			/>
+			<NumberField
+				label="Transport offset"
+				min={0}
+				value={draft.transport_offset_frame}
+				onChange={(event) =>
+					setDraft({
+						...draft,
+						transport_offset_frame: Number(event.currentTarget.value),
+					})
+				}
+			/>
+			<CheckboxField
+				className="timecode-checkbox"
+				label="Auto-start"
+				stateLabel="Start with external Timecode"
+				checked={draft.auto_start}
+				onChange={(event) =>
+					setDraft({ ...draft, auto_start: event.currentTarget.checked })
+				}
+			/>
+			<label className="timecode-audio-import" htmlFor="timecode-audio-file">
+				<span>Audio file</span>
+				<Input
+					id="timecode-audio-file"
+					type="file"
+					accept="audio/wav,audio/x-wav,audio/mpeg,.wav,.mp3"
+					disabled={busy || audioImporting}
+					onChange={(event) => {
+						const file = event.currentTarget.files?.[0];
+						if (file) void importAudio(file);
+					}}
+				/>
+				<small>
+					{audioImporting
+						? "Importing and normalizing…"
+						: draft.audio
+							? `Managed audio ${draft.audio.asset_id}`
+							: "WAV or MP3; MP3 is normalized to managed WAV."}
+				</small>
+			</label>
+		</div>
 	);
 }
 

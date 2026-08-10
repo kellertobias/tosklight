@@ -3,8 +3,30 @@ import { MacrosApiClient } from "./macros";
 import type { ClientTransport } from "./transport";
 
 function transport() {
+	const request = vi.fn().mockResolvedValue({});
+	request.mockImplementation((path: string) =>
+		Promise.resolve(
+			path.endsWith("/runtime")
+				? { desk_id: "desk-a", active: [], recent: [] }
+				: path.endsWith("/undo-line")
+					? { execution_id: "execution/a", message: "Undone" }
+					: {
+							execution_id: "execution/a",
+							macro_id: "macro/a",
+							macro_number: 71,
+							macro_name: "Preset fixtures",
+							source_revision: 4,
+							desk_id: "desk-a",
+							user_id: "user-a",
+							session_id: "session-a",
+							state: "succeeded",
+							trigger: { type: "pool" },
+							started_at: "2026-08-10T10:00:00Z",
+						},
+		),
+	);
 	return {
-		request: vi.fn().mockResolvedValue({}),
+		request,
 		blob: vi.fn(),
 		absoluteUrl: vi.fn(),
 	} satisfies ClientTransport;

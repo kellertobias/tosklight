@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { TimecodeDefinition } from "../../api/generated/light-wire";
+import type { TimecodeDefinition } from "../../api/types/timecode";
 import { TimecodeTimelineEditor } from "./TimecodeTimelineEditor";
 
 const definition: TimecodeDefinition = {
@@ -83,7 +83,7 @@ describe("TimecodeTimelineEditor", () => {
 		fireEvent.change(screen.getByLabelText("Marker CSV"), {
 			target: { value: "position,name\n00:00:02:00,Verse" },
 		});
-		expect(screen.getByDisplayValue("Append")).toBeTruthy();
+		expect(screen.getByRole("button", { name: "Append" })).toBeTruthy();
 		fireEvent.click(screen.getByRole("button", { name: "Apply marker CSV" }));
 		expect(onCommit).toHaveBeenCalledWith(
 			expect.objectContaining({

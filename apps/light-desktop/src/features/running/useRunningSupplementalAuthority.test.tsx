@@ -2,14 +2,14 @@
 
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { EventPayload } from "../../api/generated/light-wire";
+import type { SupplementalRuntimeEvent } from "../../api/runtimeModels";
 import { useRunningSupplementalAuthority } from "./useRunningSupplementalAuthority";
 
 afterEach(cleanup);
 
 describe("useRunningSupplementalAuthority", () => {
 	it("hydrates once and follows ordered Macro and Timecode events without polling", async () => {
-		let listener: ((event: EventPayload) => void) | undefined;
+		let listener: ((event: SupplementalRuntimeEvent) => void) | undefined;
 		const runtime = vi.fn().mockResolvedValue({
 			desk_id: "desk-a",
 			active: [macro("running")],
@@ -21,7 +21,7 @@ describe("useRunningSupplementalAuthority", () => {
 			timecodes: { runtime: timecodes, stop: vi.fn() },
 			showObjects: { objects: vi.fn().mockResolvedValue([]) },
 			events: {
-				onEvent: vi.fn((next: (event: EventPayload) => void) => {
+				onEvent: vi.fn((next: (event: SupplementalRuntimeEvent) => void) => {
 					listener = next;
 					return vi.fn();
 				}),

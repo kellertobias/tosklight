@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { MacroExecutionSnapshot } from "../../api/generated/light-wire";
+import type { MacroExecution } from "../../api/runtimeModels";
 import type { RunningDynamicController } from "../../components/modals/systemControls/runningDynamicsAuthority";
 import type { RunningCueListSource } from "../../components/modals/systemControls/runningPlaybackAuthority";
 import { buildRunningRows, filterRunningRows } from "./model";
@@ -63,7 +63,7 @@ function dynamic(
 	};
 }
 
-function macro(executionId: string): MacroExecutionSnapshot {
+function macro(executionId: string): MacroExecution {
 	return {
 		execution_id: executionId,
 		macro_id: "macro-a",

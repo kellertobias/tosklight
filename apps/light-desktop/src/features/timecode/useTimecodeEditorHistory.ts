@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import type { TimecodeDefinition } from "../../api/generated/light-wire";
+import type { TimecodeDefinition } from "../../api/types/timecode";
 
 interface HistoryState {
 	past: TimecodeDefinition[];

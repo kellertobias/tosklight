@@ -1,18 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
-	MacroExecutionSnapshot,
-	TimecodeDefinition,
-	TimecodeTransportSnapshot,
-} from "../../api/generated/light-wire";
+	MacroExecution,
+	RunningTimecodeDefinition,
+	TimecodeRuntime,
+} from "../../api/runtimeModels";
 import type { VersionedObject } from "../../api/types";
 import type { RunningRuntimeActions } from "./RunningRuntimeActionsContext";
 
 interface RunningSupplementalState {
 	loading: boolean;
 	error: string | null;
-	macros: MacroExecutionSnapshot[];
-	timecodes: TimecodeTransportSnapshot[];
-	timecodeDefinitions: VersionedObject<TimecodeDefinition>[];
+	macros: MacroExecution[];
+	timecodes: TimecodeRuntime[];
+	timecodeDefinitions: VersionedObject<RunningTimecodeDefinition>[];
 }
 
 const EMPTY_STATE: RunningSupplementalState = {
@@ -46,7 +46,7 @@ export function useRunningSupplementalAuthority(
 						await Promise.all([
 							actions.macros.runtime(showId),
 							actions.timecodes.runtime(showId),
-							actions.showObjects.objects<TimecodeDefinition>(
+							actions.showObjects.objects<RunningTimecodeDefinition>(
 								showId,
 								"timecode",
 							),
@@ -122,9 +122,9 @@ export function useRunningSupplementalAuthority(
 }
 
 function mergeTimecodes(
-	current: readonly TimecodeTransportSnapshot[],
-	incoming: readonly TimecodeTransportSnapshot[],
-): TimecodeTransportSnapshot[] {
+	current: readonly TimecodeRuntime[],
+	incoming: readonly TimecodeRuntime[],
+): TimecodeRuntime[] {
 	const next = new Map(
 		current.map((snapshot) => [snapshot.timecode_id, snapshot]),
 	);
@@ -138,9 +138,9 @@ function mergeTimecodes(
 }
 
 function mergeMacroExecutions(
-	current: readonly MacroExecutionSnapshot[],
-	incoming: readonly MacroExecutionSnapshot[],
-): MacroExecutionSnapshot[] {
+	current: readonly MacroExecution[],
+	incoming: readonly MacroExecution[],
+): MacroExecution[] {
 	const next = new Map(
 		current.map((execution) => [execution.execution_id, execution]),
 	);

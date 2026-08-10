@@ -1,7 +1,7 @@
 import type {
 	TimecodeDefinition,
 	TimecodeMarker,
-} from "../../api/generated/light-wire";
+} from "../../api/types/timecode";
 
 export type TimecodeEditorSelection =
 	| { kind: "marker"; itemId: string }

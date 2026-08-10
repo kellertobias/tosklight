@@ -51,17 +51,11 @@ pub(super) fn output_devices() -> Vec<String> {
 
 pub(super) struct NativeTimecodeAudioOutput {
     store: Arc<dyn ManagedAssetStore>,
-    commands: std::sync::mpsc::Sender<DeviceCommand>,
     latency_micros: u64,
-    worker: Mutex<Option<std::thread::JoinHandle<()>>>,
+    worker: super::TimecodeAudioWorkerResource,
 }
 
-struct DeviceCommand {
-    command: NativeCommand,
-    reply: std::sync::mpsc::Sender<Result<(), String>>,
-}
-
-enum NativeCommand {
+pub(in crate::runtime) enum NativeCommand {
     Prepare {
         timecode_id: TimecodeId,
         decoded: DecodedWav,
@@ -100,25 +94,9 @@ impl NativeTimecodeAudioOutput {
             .map_err(|_| "Timecode audio output worker stopped during startup".to_owned())??;
         Ok(Self {
             store,
-            commands,
             latency_micros,
-            worker: Mutex::new(Some(worker)),
+            worker: super::TimecodeAudioWorkerResource::new(commands, worker),
         })
-    }
-}
-
-impl Drop for NativeTimecodeAudioOutput {
-    fn drop(&mut self) {
-        let (reply, _response) = std::sync::mpsc::channel();
-        let _ = self.commands.send(DeviceCommand {
-            command: NativeCommand::Shutdown,
-            reply,
-        });
-        if let Ok(worker) = self.worker.get_mut()
-            && let Some(worker) = worker.take()
-        {
-            let _ = worker.join();
-        }
     }
 }
 
@@ -149,13 +127,7 @@ impl TimecodeAudioOutput for NativeTimecodeAudioOutput {
             }
             other => NativeCommand::Transport(other),
         };
-        let (reply, response) = std::sync::mpsc::channel();
-        self.commands
-            .send(DeviceCommand { command, reply })
-            .map_err(|_| "Timecode audio output worker is unavailable".to_owned())?;
-        response.recv().map_err(|_| {
-            "Timecode audio output worker stopped before applying a command".to_owned()
-        })?
+        self.worker.request(command)
     }
 }
 
@@ -163,7 +135,7 @@ fn run_device(
     device: cpal::Device,
     config: cpal::StreamConfig,
     format: cpal::SampleFormat,
-    receiver: std::sync::mpsc::Receiver<DeviceCommand>,
+    receiver: std::sync::mpsc::Receiver<super::TimecodeAudioWorkerRequest>,
     clock: Arc<dyn TimecodeClock>,
     started: std::sync::mpsc::Sender<Result<(), String>>,
 ) {
@@ -377,7 +349,7 @@ fn build_stream<T: OutputSample>(
         .map_err(|error| format!("Timecode audio output could not be opened: {error}"))
 }
 
-struct DecodedWav {
+pub(in crate::runtime) struct DecodedWav {
     samples: Vec<f32>,
     sample_rate: u32,
     channels: u16,

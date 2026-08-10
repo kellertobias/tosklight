@@ -157,7 +157,8 @@ test.describe("docs/testing/15-macros-and-timecode.md", () => {
 		await editor
 			.getByLabel("Marker CSV")
 			.fill("position,name,color\n00:00:05:00,Verse,#a67cff");
-		await editor.getByLabel("Import mode").selectOption("replace");
+		await editor.getByRole("button", { name: "Append" }).click();
+		await page.getByRole("option", { name: "Replace" }).click();
 		await editor.getByRole("button", { name: "Apply marker CSV" }).click();
 		await page.getByRole("button", { name: "Save", exact: true }).click();
 

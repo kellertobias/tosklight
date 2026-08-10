@@ -1,10 +1,25 @@
 import { describe, expect, it, vi } from "vitest";
+import { TimecodeRunningApiClient } from "../../api/client/runningRuntime";
 import type { ClientTransport } from "../../api/client/transport";
-import { TimecodeRunningApiClient } from "./RunningRuntimeActionsContext";
 
 function transport() {
+	const request = vi.fn().mockResolvedValue({});
+	request.mockImplementation((path: string) =>
+		Promise.resolve(
+			path.endsWith("/runtime")
+				? []
+				: {
+						timecode_id: "timecode/a",
+						revision: 1,
+						state: "stopped",
+						frame: 0,
+						duration_frame: 1,
+						audio_linked: false,
+					},
+		),
+	);
 	return {
-		request: vi.fn().mockResolvedValue({}),
+		request,
 		blob: vi.fn(),
 		absoluteUrl: vi.fn(),
 	} satisfies ClientTransport;

@@ -103,7 +103,28 @@ export function TimecodeSection({
 		};
 	}, [timecodes]);
 	if (!draft) return null;
-	const external = draft.timecode_source.type === "external";
+	return (
+		<>
+			<h2>Timecode</h2>
+			<div className="setup-form-grid">
+				<TimecodeSourceFields controller={controller} />
+				<TimecodeAudioFields
+					controller={controller}
+					audioOutputs={audioOutputs}
+					audioOutputError={audioOutputError}
+				/>
+			</div>
+		</>
+	);
+}
+
+function TimecodeSourceFields({
+	controller,
+}: {
+	controller: SetupWindowController;
+}) {
+	const draft = controller.draft;
+	if (!draft) return null;
 	const externalSource =
 		draft.timecode_source.type === "external"
 			? draft.timecode_source.source
@@ -112,144 +133,158 @@ export function TimecodeSection({
 		? draft.timecode_frame_rate.numerator /
 			draft.timecode_frame_rate.denominator
 		: 0;
+	return (
+		<>
+			<TextField
+				label="ArtTimeCode UDP bind"
+				value={draft.art_timecode_bind ?? ""}
+				description="Listen for Art-Net ArtTimeCode on this local address, for example 0.0.0.0:6454. Leave empty to disable the network source."
+				onChange={(event) =>
+					controller.editDraft({
+						...draft,
+						art_timecode_bind: event.target.value || null,
+					})
+				}
+			/>
+			<SelectField
+				label="Authoritative source"
+				value={draft.timecode_source.type}
+				options={[
+					{ value: "internal", label: "Internal generator" },
+					{ value: "external", label: "Explicit external source" },
+				]}
+				onChange={(value) =>
+					controller.editDraft({
+						...draft,
+						timecode_source:
+							value === "external"
+								? { type: "external", source: "" }
+								: { type: "internal" },
+					})
+				}
+			/>
+			{draft.timecode_source.type === "external" && (
+				<TextField
+					label="External source identity"
+					value={externalSource}
+					description="Use the exact normalized identity shown by the input adapter. No other sender can take over."
+					onChange={(event) =>
+						controller.editDraft({
+							...draft,
+							timecode_source: {
+								type: "external",
+								source: event.target.value,
+							},
+						})
+					}
+				/>
+			)}
+			<NumberField
+				label="Timecode frame rate"
+				value={frameRate}
+				min={0}
+				max={240}
+				description="0 follows the desk DMX frame rate. A non-zero value converts known incoming rates with a warning."
+				onChange={(event) => {
+					const value = Number(event.target.value);
+					controller.editDraft({
+						...draft,
+						timecode_frame_rate:
+							value > 0
+								? { numerator: value, denominator: 1, drop_frame: false }
+								: null,
+					});
+				}}
+			/>
+		</>
+	);
+}
+
+function TimecodeAudioFields({
+	controller,
+	audioOutputs,
+	audioOutputError,
+}: {
+	controller: SetupWindowController;
+	audioOutputs: readonly string[];
+	audioOutputError: string | null;
+}) {
+	const draft = controller.draft;
+	if (!draft) return null;
 	const selectedOutput =
 		draft.timecode_audio_output_device ?? "$system_default";
 	const outputTrim =
 		draft.timecode_audio_latency_trim_micros_by_output?.[selectedOutput] ?? 0;
 	return (
 		<>
-			<h2>Timecode</h2>
-			<div className="setup-form-grid">
-				<TextField
-					label="ArtTimeCode UDP bind"
-					value={draft.art_timecode_bind ?? ""}
-					description="Listen for Art-Net ArtTimeCode on this local address, for example 0.0.0.0:6454. Leave empty to disable the network source."
-					onChange={(event) =>
-						controller.editDraft({
-							...draft,
-							art_timecode_bind: event.target.value || null,
-						})
-					}
-				/>
-				<SelectField
-					label="Authoritative source"
-					value={draft.timecode_source.type}
-					options={[
-						{ value: "internal", label: "Internal generator" },
-						{ value: "external", label: "Explicit external source" },
-					]}
-					onChange={(value) =>
-						controller.editDraft({
-							...draft,
-							timecode_source:
-								value === "external"
-									? { type: "external", source: "" }
-									: { type: "internal" },
-						})
-					}
-				/>
-				{external && (
-					<TextField
-						label="External source identity"
-						value={externalSource}
-						description="Use the exact normalized identity shown by the input adapter. No other sender can take over."
-						onChange={(event) =>
-							controller.editDraft({
-								...draft,
-								timecode_source: {
-									type: "external",
-									source: event.target.value,
-								},
-							})
-						}
-					/>
-				)}
-				<NumberField
-					label="Timecode frame rate"
-					value={frameRate}
-					min={0}
-					max={240}
-					description="0 follows the desk DMX frame rate. A non-zero value converts known incoming rates with a warning."
-					onChange={(event) => {
-						const value = Number(event.target.value);
-						controller.editDraft({
-							...draft,
-							timecode_frame_rate:
-								value > 0
-									? { numerator: value, denominator: 1, drop_frame: false }
-									: null,
-						});
-					}}
-				/>
-				<SelectField
-					label="External source loss"
-					value={draft.timecode_external_loss_policy}
-					options={[
-						{ value: "continue_internal", label: "Continue internally" },
-						{ value: "pause", label: "Pause" },
-						{ value: "stop", label: "Stop" },
-					]}
-					onChange={(value) =>
-						controller.editDraft({
-							...draft,
-							timecode_external_loss_policy: value as
-								| "continue_internal"
-								| "pause"
-								| "stop",
-						})
-					}
-				/>
-				<NumberField
-					label="Loss timeout"
-					value={draft.timecode_external_loss_timeout_millis}
-					min={1}
-					max={60_000}
-					unit="ms"
-					onChange={(event) =>
-						controller.editDraft({
-							...draft,
-							timecode_external_loss_timeout_millis: Number(event.target.value),
-						})
-					}
-				/>
-				<SelectField
-					label="Timecode audio output"
-					value={selectedOutput}
-					options={[
-						{ value: "$system_default", label: "System default" },
-						...audioOutputs.map((device) => ({ value: device, label: device })),
-					]}
-					description={
-						audioOutputError
-							? `Output discovery unavailable: ${audioOutputError}`
-							: "The server opens this exact device after restart; System default follows the operating system."
-					}
-					onChange={(value) =>
-						controller.editDraft({
-							...draft,
-							timecode_audio_output_device:
-								value === "$system_default" ? null : value,
-						})
-					}
-				/>
-				<NumberField
-					label="Audio latency trim"
-					value={outputTrim}
-					min={-5_000_000}
-					max={5_000_000}
-					unit="µs"
-					description="Stored separately for the selected output and added to the backend-reported latency."
-					onChange={(event) =>
-						controller.editDraft({
-							...draft,
-							timecode_audio_latency_trim_micros_by_output: {
-								...draft.timecode_audio_latency_trim_micros_by_output,
-								[selectedOutput]: Number(event.target.value),
-							},
-						})
-					}
-				/>
-			</div>
+			<SelectField
+				label="External source loss"
+				value={draft.timecode_external_loss_policy}
+				options={[
+					{ value: "continue_internal", label: "Continue internally" },
+					{ value: "pause", label: "Pause" },
+					{ value: "stop", label: "Stop" },
+				]}
+				onChange={(value) =>
+					controller.editDraft({
+						...draft,
+						timecode_external_loss_policy: value as
+							| "continue_internal"
+							| "pause"
+							| "stop",
+					})
+				}
+			/>
+			<NumberField
+				label="Loss timeout"
+				value={draft.timecode_external_loss_timeout_millis}
+				min={1}
+				max={60_000}
+				unit="ms"
+				onChange={(event) =>
+					controller.editDraft({
+						...draft,
+						timecode_external_loss_timeout_millis: Number(event.target.value),
+					})
+				}
+			/>
+			<SelectField
+				label="Timecode audio output"
+				value={selectedOutput}
+				options={[
+					{ value: "$system_default", label: "System default" },
+					...audioOutputs.map((device) => ({ value: device, label: device })),
+				]}
+				description={
+					audioOutputError
+						? `Output discovery unavailable: ${audioOutputError}`
+						: "The server opens this exact device after restart; System default follows the operating system."
+				}
+				onChange={(value) =>
+					controller.editDraft({
+						...draft,
+						timecode_audio_output_device:
+							value === "$system_default" ? null : value,
+					})
+				}
+			/>
+			<NumberField
+				label="Audio latency trim"
+				value={outputTrim}
+				min={-5_000_000}
+				max={5_000_000}
+				unit="µs"
+				description="Stored separately for the selected output and added to the backend-reported latency."
+				onChange={(event) =>
+					controller.editDraft({
+						...draft,
+						timecode_audio_latency_trim_micros_by_output: {
+							...draft.timecode_audio_latency_trim_micros_by_output,
+							[selectedOutput]: Number(event.target.value),
+						},
+					})
+				}
+			/>
 		</>
 	);
 }
