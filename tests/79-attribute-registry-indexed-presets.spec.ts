@@ -64,7 +64,8 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
 		const updateCompleted = page.waitForResponse(
 			(response) =>
 				response.url().endsWith("/api/v2/attribute-configuration/update") &&
-				response.request().method() === "POST",
+				response.request().method() === "POST" &&
+				response.ok(),
 		);
 		await page.getByRole("button", { name: "Save changes" }).click();
 		const updateResponse = await updateCompleted;
