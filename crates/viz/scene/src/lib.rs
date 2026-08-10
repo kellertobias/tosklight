@@ -37,15 +37,16 @@ pub use provider::{
 };
 pub use scene::{
     Aabb, BodyKind, EmitterInstance, EmitterKind, EmitterLayoutCells, EmitterOptics, FixtureBody,
-    FixtureInstance, GoboArtwork, GoboSlot, LaserOptics, LightSource, MotionAxis, Scene,
-    SceneryKind, SceneryObject, SourceForm, euler_degrees,
+    FixtureInstance, FixturePlanBinding, GoboArtwork, GoboSlot, LaserOptics, LightSource,
+    MotionAxis, PlanArtwork, PlanFallback, Scene, SceneryKind, SceneryObject, SourceForm,
+    euler_degrees,
 };
 pub use uuid;
 pub use values::{
     CellValue, EmitterValues, ExternalCameraState, LaserScan, PhysicalMotionState,
     PhysicalMotionTarget, ScanPoint, SceneValues, WheelMotionState,
 };
-pub use view::{Camera, RenderQuality, Theme, ViewConfiguration, ViewMode};
+pub use view::{Camera, ProjectionView, RenderQuality, Theme, ViewConfiguration, ViewMode};
 
 /// Wire/protocol version of the semantic scene contract understood by this render core.
 pub const SCENE_PROTOCOL_VERSION: u32 = 1;

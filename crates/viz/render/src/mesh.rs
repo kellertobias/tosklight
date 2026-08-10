@@ -290,7 +290,7 @@ pub fn procedural(kind: MeshKind) -> Option<(&'static str, MeshData)> {
         MeshKind::Sphere => Some(("sphere", unit_sphere(8, 14))),
         MeshKind::Lens => Some(("lens", unit_lens(24, 3))),
         MeshKind::Plane => Some(("plane", unit_plane())),
-        MeshKind::ModelPart(..) => None,
+        MeshKind::ModelPart(..) | MeshKind::PlanArtwork(..) => None,
     }
 }
 
@@ -306,6 +306,7 @@ mod tests {
             assert!(!mesh.vertices.is_empty(), "{name} drew nothing");
         }
         assert!(procedural(MeshKind::ModelPart(0, 0)).is_none());
+        assert!(procedural(MeshKind::PlanArtwork(0)).is_none());
     }
 
     #[test]

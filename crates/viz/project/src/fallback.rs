@@ -250,6 +250,53 @@ pub fn classify(fixture_type: &str) -> OpticalClass {
     OpticalClass::Profile
 }
 
+/// Whether the plan renderer owns a recognizable type drawing for this declaration.
+///
+/// Optical fallback deliberately maps unknown lights to a safe projector. Plan artwork needs a
+/// separate answer so a genuinely unknown body reaches the visibly plain box promised by the
+/// package contract instead of masquerading as a profile lantern.
+pub fn has_generic_plan_type(fixture_type: &str) -> bool {
+    let normalised = fixture_type
+        .trim()
+        .to_ascii_lowercase()
+        .replace(['_', '-'], " ");
+    let known = [
+        "acl",
+        "beam",
+        "blinder",
+        "dimmer",
+        "emissive",
+        "fan",
+        "flood",
+        "fog",
+        "fogger",
+        "fresnel",
+        "haze",
+        "hazer",
+        "laser",
+        "machine",
+        "moving head",
+        "other",
+        "par",
+        "parcan",
+        "pixel",
+        "profile",
+        "relay",
+        "scanner",
+        "spot",
+        "strobe",
+        "strip",
+        "sunstrip",
+        "venue",
+        "wash",
+    ];
+    known.iter().any(|name| {
+        normalised == *name
+            || normalised.split_whitespace().any(|word| word == *name)
+            || (name.contains(' ') && normalised.contains(name))
+    })
+}
+
 /// Whether a profile describes a moving head, decided by the presence of pan or tilt movement
 /// rather than by its name.
 pub fn is_moving(has_pan: bool, has_tilt: bool) -> bool {

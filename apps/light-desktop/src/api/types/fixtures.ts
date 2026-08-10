@@ -99,7 +99,7 @@ export interface SplitPatch {
 }
 
 export interface FixtureProfile {
-	schema_version: 2;
+	schema_version: 2 | 3;
 	id: string;
 	revision: number;
 	manufacturer: string;
@@ -112,6 +112,7 @@ export interface FixtureProfile {
 	stage_icon_asset: string | null;
 	model_asset: string | null;
 	model_units?: "auto" | "metres";
+	projection_assets?: FixtureProjectionSet | null;
 	physical: FixtureProfilePhysical;
 	optics?: FixtureProfileOptics;
 	modes: FixtureMode[];
@@ -119,6 +120,37 @@ export interface FixtureProfile {
 	direct_control_protocols: Array<"citp">;
 	signal_loss_policy: { type: string; duration_millis?: number };
 	reserved_source: string | null;
+}
+
+export type FixtureProjectionView = "top" | "left" | "right" | "front" | "back";
+export type FixtureProjectionOrientation =
+	| "x_right_z_down"
+	| "z_right_y_up"
+	| "z_left_y_up"
+	| "x_right_y_up"
+	| "x_left_y_up";
+export type FixtureProjectionPose =
+	| "authored_home"
+	| "moving_down"
+	| "moving_forward";
+
+export interface FixtureProjectionAsset {
+	view: FixtureProjectionView;
+	artwork_asset: string;
+	view_box_millimetres: [number, number, number, number];
+	physical_width_millimetres: number;
+	physical_height_millimetres: number;
+	origin_millimetres: [number, number];
+	orientation: FixtureProjectionOrientation;
+	pose: FixtureProjectionPose;
+}
+
+export interface FixtureProjectionSet {
+	source_model_sha256: string;
+	generator: string;
+	generator_version: string;
+	pose_contract_version: number;
+	views: FixtureProjectionAsset[];
 }
 
 /**

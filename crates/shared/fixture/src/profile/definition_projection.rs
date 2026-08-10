@@ -67,6 +67,7 @@ impl FixtureProfile {
             stage_icon_asset: self.stage_icon_asset.clone(),
             model_asset: self.model_asset.clone(),
             model_units: self.model_units,
+            projection_assets: self.projection_assets.clone(),
             physical: self.physical.clone(),
             optics: self.optics,
             laser: self.laser.clone(),

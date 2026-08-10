@@ -15,7 +15,8 @@ use std::sync::Arc;
 use uuid::Uuid;
 use viz_scene::{
     EmitterInstance, EmitterKind, EmitterLayoutCells, EmitterOptics, FallbackReason, FixtureBody,
-    FixtureInstance, LaserOptics, LightSource, MotionAxis, Scene, SourceForm,
+    FixtureInstance, FixturePlanBinding, LaserOptics, LightSource, MotionAxis, PlanFallback, Scene,
+    SourceForm,
 };
 
 /// One physical placement of a logical fixture: the root fixture or one multi-patch instance.
@@ -284,6 +285,37 @@ fn resolve_model(
     }
 }
 
+fn resolve_plan_artwork(
+    fixture: &PatchedFixture,
+    scene: &mut Scene,
+    cache: &mut HashMap<light_core::FixtureId, [Option<u32>; 5]>,
+    warnings: &mut Vec<String>,
+) -> [Option<u32>; 5] {
+    if let Some(indices) = cache.get(&fixture.profile.id) {
+        return *indices;
+    }
+    let mut indices = [None; 5];
+    if let Some(projections) = fixture.profile.projection_assets.as_ref() {
+        for projection in &projections.views {
+            match assets::read_plan_artwork(projection) {
+                Ok(artwork) => {
+                    let index = scene.plan_artwork.len() as u32;
+                    indices[artwork.view.index()] = Some(index);
+                    scene.plan_artwork.push(artwork);
+                }
+                Err(reason) => warnings.push(format!(
+                    "{} {} {} projection: {reason}; using renderer fallback",
+                    fixture.profile.manufacturer,
+                    fixture.profile.name,
+                    projection.view.wire()
+                )),
+            }
+        }
+    }
+    cache.insert(fixture.profile.id, indices);
+    indices
+}
+
 /// Compile the patch into a scene. Fixtures with `VisualOnly` policy become scenery elsewhere and
 /// are skipped here.
 pub fn compile(fixtures: &[PatchedFixture]) -> ScenePlan {
@@ -301,6 +333,7 @@ pub fn compile(fixtures: &[PatchedFixture]) -> ScenePlan {
     // decodes each piece of glass once.
     let mut artwork: std::collections::HashMap<String, Option<u32>> =
         std::collections::HashMap::new();
+    let mut plan_artwork: HashMap<light_core::FixtureId, [Option<u32>; 5]> = HashMap::new();
 
     for fixture in fixtures {
         let Some((mode, primary_slots)) = selected_mode(fixture, &mut warnings) else {
@@ -320,6 +353,18 @@ pub fn compile(fixtures: &[PatchedFixture]) -> ScenePlan {
             &mut defaults,
             &mut warnings,
         );
+        let plan_projections =
+            resolve_plan_artwork(fixture, &mut scene, &mut plan_artwork, &mut warnings);
+        let plan_fallback = if fallback::has_generic_plan_type(&fixture.profile.fixture_type) {
+            PlanFallback::GenericType
+        } else {
+            PlanFallback::UnknownBox
+        };
+        scene.fixture_plan.push(FixturePlanBinding {
+            fixture_id: fixture.fixture_id,
+            artwork: plan_projections,
+            fallback: plan_fallback,
+        });
 
         let body_size = fallback::body_size(
             class,

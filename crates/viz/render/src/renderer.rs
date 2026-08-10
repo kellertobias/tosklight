@@ -611,6 +611,45 @@ impl Renderer {
                 );
             }
         }
+        for (artwork_index, artwork) in scene.plan_artwork.iter().enumerate() {
+            let kind = MeshKind::PlanArtwork(artwork_index as u32);
+            if self.meshes.contains_key(&kind)
+                || artwork.vertices.is_empty()
+                || artwork.indices.is_empty()
+            {
+                continue;
+            }
+            let vertices = artwork
+                .vertices
+                .iter()
+                .zip(&artwork.normals)
+                .map(|(position, normal)| Vertex {
+                    position: *position,
+                    normal: *normal,
+                    uv: [0.0, 0.0],
+                })
+                .collect::<Vec<_>>();
+            self.meshes.insert(
+                kind,
+                GpuMesh::new(
+                    &device,
+                    "fixture SVG projection",
+                    &mesh::MeshData {
+                        vertices,
+                        indices: artwork.indices.clone(),
+                    },
+                ),
+            );
+            self.mesh_instances.insert(
+                kind,
+                DynamicBuffer::new(
+                    &device,
+                    "viz plan artwork instances",
+                    BufferUsages::VERTEX,
+                    (size_of::<MeshInstance>() * 256) as u64,
+                ),
+            );
+        }
     }
 
     /// Upload the scene's gobo artwork when it is not the artwork already on the GPU.

@@ -113,7 +113,11 @@ running function rather than a value, and the Stage does not reproduce one to gu
 
 - **2D** is the renderer's plan of the rig, projected from where the operator chooses to stand:
   above it, from the house, from upstage, or from either wing. It is drawn from the fixtures' own
-  positions, so changing the side changes the picture and nothing in the show.
+  positions, so changing the side changes the picture and nothing in the show. A fixture package's
+  physical-scale SVG for that named view is preferred. Without one, the renderer uses its own
+  vector convention for the declared fixture type; an unknown type remains a simple box. Opaque
+  filled regions participate in plan depth, so a foreground fixture hides the truss or scenery it
+  actually covers while deliberate empty regions remain open.
 - **3D** is an outline diagram. Every fixture is a box the size of the fixture, every stage,
   platform and wall is the outline of its own box, and every directional emitter carries a dotted
   aim guideline whether or not it is lit — a lit one adds its own line in its live colour over the

@@ -17,6 +17,14 @@ The wrapper is:
 }
 ```
 
+An optional `projection_assets` set is revision-owned beside `model_asset` and contains exactly
+top, left, right, front, and back SVGs at `assets/projections/<view>.svg`. It records the source GLB
+SHA-256, generator/version, pose-contract version, physical millimetre `viewBox`, fixture origin,
+page orientation, and deterministic pose. SVGs use only opaque closed move/line paths. Scripts,
+events, CSS, text/fonts, images, links, external resources, transforms, animation, filters, and
+environment-dependent references are invalid. Raster output is derived from this canonical SVG.
+Generation writes a separate package and never mutates an installed library revision.
+
 The profile is schema v3 and must have `reserved_source: null` or omit catalog ownership. Schema-v2 profiles migrate to explicit identity mappings when read. Optional assets are relative paths under `assets/`: photograph and stage icon in PNG/JPEG/WebP, a self-contained GLB 2.0 model, and — for a laser only — a UTF-8 JavaScript scan engine at `assets/scan.js`, referenced from `profile.laser.scan_script_asset` and capped at 256 KiB. A fixture with a gobo wheel declares it as `profile.gobos`, one entry per slot with the open slot counted as zero: `{ "slot": 3, "name": "Breakup", "artwork_asset": "assets/gobo-3.png" }`. The artwork is a PNG/JPEG/WebP mask where light passes through white, at most 2048 pixels square and 1 MiB, resampled once on the way to a renderer; colour in it is ignored, because a gobo takes the colour of whatever the fixture puts through it. A declared wheel also decides how many slots the gobo channel is divided into, so a fixture with five gobos and an open slot no longer inherits a guess. A slot may name itself and carry no artwork, and a profile that declares no wheel keeps the visualizer's own drawn patterns. Imports preserve the stable profile ID. Changed content for the same manufacturer/name becomes a new local revision; an ID collision with a different family is invalid.
 
 Startup reads the same archives through `FixtureLibrary::load_fixture_package_directory`. Package updates apply only while the last package-installed revision is current. A later operator revision is preserved. Patched shows remain insulated by their embedded profile snapshot.

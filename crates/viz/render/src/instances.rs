@@ -25,6 +25,8 @@ pub enum MeshKind {
     /// A part is its own mesh because pan and tilt move the yoke and the head but not the base,
     /// so they cannot share one instance transform.
     ModelPart(u32, u32),
+    /// One package-owned SVG projection parsed into physical local-space triangles.
+    PlanArtwork(u32),
 }
 
 impl MeshKind {
@@ -258,6 +260,7 @@ pub struct FrameStyle {
     /// Screen-plane axes used to billboard plot symbols so they read from any plan direction.
     pub plot_right: Vec3,
     pub plot_up: Vec3,
+    pub projection_view: viz_scene::ProjectionView,
     /// World size one plot symbol should occupy, chosen so a symbol keeps a constant on-screen
     /// size however far the plan is zoomed out.
     pub symbol_metres: f32,
@@ -291,6 +294,7 @@ impl Default for FrameStyle {
             plot: false,
             plot_right: Vec3::X,
             plot_up: Vec3::Y,
+            projection_view: viz_scene::ProjectionView::Top,
             symbol_metres: 0.3,
             beam_ink: Vec3::new(1.0, 0.82, 0.25),
             ink: Vec3::splat(0.85),
@@ -324,16 +328,7 @@ pub fn build(scene: &Scene, values: &SceneValues, style: &FrameStyle) -> FrameIn
         style,
         &values.selected_fixtures,
     );
-    push_emitters(
-        &mut frame,
-        scene,
-        values,
-        &head_angles,
-        style.draw_beams,
-        style.draw_aim_lines,
-        style.aim_guides,
-        style,
-    );
+    push_emitters(&mut frame, scene, values, &head_angles, style);
     frame
 }
 
@@ -735,9 +730,6 @@ fn push_emitters(
     scene: &Scene,
     values: &SceneValues,
     head_angles: &[(f32, f32)],
-    draw_beams: bool,
-    draw_lines: bool,
-    draw_guides: bool,
     style: &FrameStyle,
 ) {
     let fallback = EmitterValues::default();
@@ -807,7 +799,7 @@ fn push_emitters(
              * count. What an operator needs the dashes for is the lamp that is off.
              */
             let lit = cell_intensity > 0.002;
-            if draw_guides && !lit {
+            if style.aim_guides && !lit {
                 push_aim_guide(frame, origin, pose, style.faint_ink);
             }
             if !lit {
@@ -825,7 +817,7 @@ fn push_emitters(
                 optics,
                 apex_offset,
             );
-            if draw_beams {
+            if style.draw_beams {
                 push_beam(
                     frame,
                     origin,
@@ -836,7 +828,7 @@ fn push_emitters(
                     apex_offset,
                 );
             }
-            if draw_lines {
+            if style.draw_aim_lines {
                 push_aim_line(frame, origin, pose, cell_intensity, cell_colour);
             }
         }
