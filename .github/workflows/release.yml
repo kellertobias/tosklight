@@ -97,7 +97,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf \
-            libgtk-3-dev libsoup-3.0-dev libudev-dev build-essential
+            libgtk-3-dev libsoup-3.0-dev libudev-dev libasound2-dev build-essential
 
       - name: Install workspace dependencies
         run: npm ci
@@ -133,13 +133,21 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
-      - name: Install USB serial development files
-        run: sudo apt-get update && sudo apt-get install -y libudev-dev pkg-config
+      - name: Install Linux workspace development files
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf \
+            libgtk-3-dev libsoup-3.0-dev libudev-dev libasound2-dev libxdo-dev \
+            mesa-vulkan-drivers build-essential pkg-config
 
       - name: Install workspace dependencies
         run: npm ci
 
-      - run: npm run test:verify
+      - name: Run the GPU-less unit and architecture suite
+        env:
+          TOSKLIGHT_EMBEDDED_PANE_WGPU_BACKEND: noop
+        run: npm run test:verify
 
   native-extension-draft:
     name: Tests / Native extension draft / ${{ matrix.label }}
@@ -234,6 +242,9 @@ jobs:
       - name: Install workspace dependencies
         run: npm ci
 
+      - name: Install USB serial and audio development files
+        run: sudo apt-get update && sudo apt-get install -y libudev-dev libasound2-dev pkg-config
+
       - name: Build the Playwright application once
         run: bash tools/test.sh e2e-build
 
@@ -322,7 +333,7 @@ jobs:
 
       - name: Install Blender
         run: |
-          sudo snap install blender --classic
+          sudo snap install blender --classic --channel=4.5lts/stable
           blender --version
 
       # Rebuilding proves the builders still produce what is committed, and rendering
@@ -557,7 +568,7 @@ jobs:
       - name: Install Chrome and video tooling
         run: |
           npx playwright install --with-deps chrome
-          sudo apt-get install -y ffmpeg
+          sudo apt-get install -y ffmpeg libudev-dev libasound2-dev pkg-config
 
       - name: Generate the product-demo video
         run: npm run test:demo
@@ -603,6 +614,7 @@ jobs:
             slug: linux-amd64
             headless_binary: light-headless
             desktop: true
+            viz: true
           - label: Linux (ARM64 / Raspberry Pi)
             runner: ubuntu-22.04
             target: aarch64-unknown-linux-musl
@@ -652,7 +664,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf \
-            libgtk-3-dev libsoup-3.0-dev libudev-dev build-essential xvfb
+            libgtk-3-dev libsoup-3.0-dev libudev-dev libasound2-dev libxdo-dev \
+            mesa-vulkan-drivers vulkan-tools build-essential xvfb
 
       - name: Install the cross-compilation toolchain
         if: matrix.cross
@@ -759,15 +772,33 @@ jobs:
           esac
           ls -la "$out"
 
-      # The Viz products are a separate deliverable: the editor is the window an operator opens,
-      # and the visualizer is the picture it drives. They ship for the two desktop platforms an
-      # operator plans a rig on; the Linux and Raspberry Pi legs stay headless-only.
+      # The Viz products are separate deliverables: the editor is the window an operator opens,
+      # and the visualizer is the picture it drives. Both ship on every desktop platform; the
+      # Raspberry Pi leg stays headless-only.
       - name: Build the standalone visualizer
         if: matrix.viz
         shell: bash
         run: >-
           cargo build --release --locked --target ${{ matrix.target }}
           -p viz-renderer --bin viz-renderer
+
+      - name: Smoke-test the standalone visualizer
+        if: matrix.viz
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          suffix=""
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            suffix=".exe"
+          fi
+          binary=".artifacts/build/cargo/$TARGET/release/viz-renderer$suffix"
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            xvfb-run -a "$binary" --demo --verify
+          else
+            "$binary" --demo --verify
+          fi
 
       # The demo the editor offers is generated from this commit's rig and fixture packages, not
       # copied from a file somebody exported once. It has to exist before the bundle is assembled,
@@ -802,6 +833,11 @@ jobs:
           case "$SLUG" in
             macos-arm64)
               bash tools/bundle-visualizer-macos.sh "$release/viz-renderer" "$bundle/macos"
+              cp "$release/light-headless" \
+                "$bundle/macos/ToskLight Visualizer.app/Contents/MacOS/light-headless"
+              ditto -c -k --sequesterRsrc --keepParent \
+                "$bundle/macos/ToskLight Visualizer.app" \
+                "$out/tosklight-visualizer-$version-macos-arm64.zip"
               # The editor owns the session and the visualizer is the picture it drives, so the
               # visualizer travels inside the editor rather than as a second thing to install.
               resources="$bundle/macos/ToskLight Viz Editor.app/Contents/Resources"
@@ -813,14 +849,27 @@ jobs:
             windows-amd64)
               cp "$bundle"/nsis/"ToskLight Viz Editor"_*-setup.exe \
                 "$out/tosklight-viz-$version-windows-amd64-setup.exe"
-              # The Windows installer does not carry the visualizer yet, so it ships beside it.
               stage_root="$(mktemp -d ".artifacts/tmp/viz-stage.XXXXXX")"
               trap 'rm -rf -- "$stage_root"' EXIT
               stage="$stage_root/tosklight-visualizer-$version-windows-amd64"
               mkdir -p "$stage"
               cp "$release/viz-renderer.exe" "$stage/"
+              cp "$release/light-headless.exe" "$stage/"
+              cp "$release/viz-editor.exe" "$stage/"
               (cd "$stage_root" && 7z a -tzip \
                 "$OLDPWD/$out/tosklight-visualizer-$version-windows-amd64.zip" \
+                "$(basename "$stage")")
+              ;;
+            linux-amd64)
+              stage_root="$(mktemp -d ".artifacts/tmp/viz-stage.XXXXXX")"
+              trap 'rm -rf -- "$stage_root"' EXIT
+              stage="$stage_root/tosklight-visualizer-$version-linux-amd64"
+              mkdir -p "$stage"
+              cp "$release/viz-renderer" "$stage/"
+              cp "$release/light-headless" "$stage/"
+              cp "$release/viz-editor" "$stage/"
+              (cd "$stage_root" && zip -q -r \
+                "$OLDPWD/$out/tosklight-visualizer-$version-linux-amd64.zip" \
                 "$(basename "$stage")")
               ;;
           esac
@@ -992,9 +1041,11 @@ jobs:
           for required in \
             "light-headless-$VERSION-macos-arm64.zip" \
             "tosklight-$VERSION-macos-arm64.zip" \
+            "tosklight-visualizer-$VERSION-macos-arm64.zip" \
             "light-headless-$VERSION-linux-amd64.zip" \
             "tosklight-$VERSION-linux-amd64.AppImage" \
             "tosklight-$VERSION-linux-amd64.deb" \
+            "tosklight-visualizer-$VERSION-linux-amd64.zip" \
             "light-headless-$VERSION-linux-arm64.zip" \
             "light-headless-$VERSION-windows-amd64.zip" \
             "tosklight-$VERSION-windows-amd64-setup.exe" \
@@ -1005,10 +1056,18 @@ jobs:
             test -f ".artifacts/release/$required"
           done
           unzip -Z1 ".artifacts/release/light-headless-$VERSION-linux-amd64.zip" |
-            grep -Eq '/light-benchmark$'
+            grep -E '/light-benchmark$' >/dev/null
           # The macOS editor is only shippable if it carries the visualizer it drives.
           unzip -Z1 ".artifacts/release/tosklight-viz-$VERSION-macos-arm64.zip" |
-            grep -Fq 'Contents/Resources/ToskLight Visualizer.app/Contents/MacOS/ToskLight Visualizer'
+            grep -F 'Contents/Resources/ToskLight Visualizer.app/Contents/MacOS/ToskLight Visualizer' >/dev/null
+          unzip -Z1 ".artifacts/release/tosklight-visualizer-$VERSION-macos-arm64.zip" |
+            grep -F 'ToskLight Visualizer.app/Contents/MacOS/light-headless' >/dev/null
+          for binary in viz-renderer light-headless viz-editor; do
+            unzip -Z1 ".artifacts/release/tosklight-visualizer-$VERSION-linux-amd64.zip" |
+              grep -E "/$binary$" >/dev/null
+            unzip -Z1 ".artifacts/release/tosklight-visualizer-$VERSION-windows-amd64.zip" |
+              grep -E "/$binary\\.exe$" >/dev/null
+          done
           (cd .artifacts/release && sha256sum * > SHA256SUMS)
 
       - name: Create the tag-only semantic release

@@ -40,7 +40,13 @@ const IDLE_SLEEP: Duration = Duration::from_millis(2);
 /// Run the embedded pane until the desk's channel ends.
 pub fn run(mut source: HelperSource) -> Result<(), String> {
     let embedding = wait_for_embedding(&mut source)?;
-    let mut state = PaneState::new(&embedding)?;
+    let mut state = match PaneState::new(&embedding) {
+        Ok(state) => state,
+        Err(detail) => {
+            source.report(&detail);
+            return Ok(());
+        }
+    };
     let epoch = Instant::now();
 
     /*

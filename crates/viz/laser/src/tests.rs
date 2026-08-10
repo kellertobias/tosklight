@@ -194,8 +194,11 @@ fn an_absurd_point_count_is_refused() {
     );
     let scan = engine().scan(0, &request(&source, 1, &[]));
     assert!(
-        scan.fault.is_some_and(|fault| fault.contains("more than")),
-        "an oversized scan must be refused"
+        scan.fault
+            .as_deref()
+            .is_some_and(|fault| { fault.contains("more than") || fault.contains("time budget") }),
+        "an oversized scan must be refused by its point or execution budget: {:?}",
+        scan.fault
     );
 }
 

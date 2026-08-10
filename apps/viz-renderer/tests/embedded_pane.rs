@@ -32,13 +32,16 @@ impl Drop for Renderer {
 }
 
 fn start() -> Renderer {
-    let child = Command::new(env!("CARGO_BIN_EXE_viz-renderer"))
+    let mut command = Command::new(env!("CARGO_BIN_EXE_viz-renderer"));
+    command
         .arg("--embed")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-        .expect("the renderer beside this test");
+        .stderr(Stdio::null());
+    if let Ok(backend) = std::env::var("TOSKLIGHT_EMBEDDED_PANE_WGPU_BACKEND") {
+        command.env("WGPU_BACKEND", backend);
+    }
+    let child = command.spawn().expect("the renderer beside this test");
     Renderer { child }
 }
 
@@ -168,7 +171,14 @@ fn embed(to: &mut impl Write, from: &mut impl Read) -> Option<FrameTransport> {
             surface_service: None,
         },
     );
-    Some(transport)
+    match next(from) {
+        FromHelper::Frame { .. } | FromHelper::Surface { .. } => Some(transport),
+        FromHelper::Error { detail } | FromHelper::Stopping { detail } => {
+            eprintln!("the renderer could not draw here: {detail}");
+            None
+        }
+        other => panic!("unexpected answer while waiting for the first picture: {other:?}"),
+    }
 }
 
 /// The next camera the renderer reports, ignoring frames on the way.

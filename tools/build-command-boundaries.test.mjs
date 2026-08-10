@@ -83,3 +83,50 @@ test("fast unit tests and comprehensive verification remain distinct", () => {
 	);
 	assert.match(workflow, /npm run test:verify/u);
 });
+
+test("release packaging and Pages cover the supported product matrix", () => {
+	const workflow = read(".github/workflows/release.yml");
+	const mediaWorkflow = read(".github/workflows/media-release.yml");
+	const mediaQualityWorkflow = read(".github/workflows/media.yml");
+	const landingPage = read("tools/render-landing-page.mjs");
+
+	for (const asset of [
+		"tosklight-$VERSION-macos-arm64.zip",
+		"light-headless-$VERSION-macos-arm64.zip",
+		"tosklight-visualizer-$VERSION-macos-arm64.zip",
+		"tosklight-$VERSION-windows-amd64-setup.exe",
+		"light-headless-$VERSION-windows-amd64.zip",
+		"tosklight-visualizer-$VERSION-windows-amd64.zip",
+		"tosklight-$VERSION-linux-amd64.AppImage",
+		"light-headless-$VERSION-linux-amd64.zip",
+		"tosklight-visualizer-$VERSION-linux-amd64.zip",
+		"light-headless-$VERSION-linux-arm64.zip",
+	]) {
+		assert.ok(workflow.includes(asset), `release workflow should require ${asset}`);
+	}
+	assert.match(
+		workflow,
+		/slug: linux-amd64[\s\S]*?desktop: true[\s\S]*?viz: true/u,
+	);
+	assert.match(workflow, /binary="[^"]*viz-renderer\$suffix"[\s\S]*--demo --verify/u);
+	assert.match(mediaWorkflow, /echo "build=true" >> "\$GITHUB_OUTPUT"/u);
+	assert.doesNotMatch(mediaWorkflow, /MEDIA_PATHS|git diff --quiet/u);
+	assert.match(mediaQualityWorkflow, /\.github\/workflows\/media-release\.yml/u);
+
+	for (const slug of ["macos-arm64", "windows-amd64", "linux-amd64", "linux-arm64"]) {
+		assert.ok(
+			mediaWorkflow.includes(`slug: ${slug}`),
+			`Media release should build ${slug}`,
+		);
+		assert.ok(
+			landingPage.includes(`tosklight-media-\${v}-${slug}.zip`),
+			`Pages should link the Media Server for ${slug}`,
+		);
+	}
+	for (const slug of ["macos-arm64", "windows-amd64", "linux-amd64"]) {
+		assert.ok(
+			landingPage.includes(`tosklight-visualizer-\${v}-${slug}.zip`),
+			`Pages should link ToskLight PreViz for ${slug}`,
+		);
+	}
+});

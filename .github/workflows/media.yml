@@ -14,6 +14,7 @@ on:
       - "Cargo.toml"
       - "Cargo.lock"
       - ".github/workflows/media.yml"
+      - ".github/workflows/media-release.yml"
   pull_request:
     paths:
       - "apps/media/**"
@@ -21,6 +22,7 @@ on:
       - "Cargo.toml"
       - "Cargo.lock"
       - ".github/workflows/media.yml"
+      - ".github/workflows/media-release.yml"
   workflow_dispatch:
 
 permissions:

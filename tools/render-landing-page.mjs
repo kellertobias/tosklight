@@ -40,7 +40,12 @@ const PLATFORMS = [
         kind: "Viz Editor application, with the 3D visualizer inside it",
         file: (v) => `tosklight-viz-${v}-macos-arm64.zip`,
       },
+      {
+        kind: "ToskLight PreViz (standalone 3D visualizer)",
+        file: (v) => `tosklight-visualizer-${v}-macos-arm64.zip`,
+      },
       { kind: "Standalone server", file: (v) => `light-headless-${v}-macos-arm64.zip` },
+      { kind: "Media Server", file: (v) => `tosklight-media-${v}-macos-arm64.zip` },
     ],
   },
   {
@@ -49,8 +54,12 @@ const PLATFORMS = [
     assets: [
       { kind: "Desktop installer", file: (v) => `tosklight-${v}-windows-amd64-setup.exe` },
       { kind: "Viz Editor installer", file: (v) => `tosklight-viz-${v}-windows-amd64-setup.exe` },
-      { kind: "3D visualizer", file: (v) => `tosklight-visualizer-${v}-windows-amd64.zip` },
+      {
+        kind: "ToskLight PreViz (standalone 3D visualizer)",
+        file: (v) => `tosklight-visualizer-${v}-windows-amd64.zip`,
+      },
       { kind: "Standalone server", file: (v) => `light-headless-${v}-windows-amd64.zip` },
+      { kind: "Media Server", file: (v) => `tosklight-media-${v}-windows-amd64.zip` },
     ],
   },
   {
@@ -59,7 +68,12 @@ const PLATFORMS = [
     assets: [
       { kind: "Desktop application (AppImage)", file: (v) => `tosklight-${v}-linux-amd64.AppImage` },
       { kind: "Desktop package (.deb)", file: (v) => `tosklight-${v}-linux-amd64.deb` },
+      {
+        kind: "ToskLight PreViz (standalone 3D visualizer)",
+        file: (v) => `tosklight-visualizer-${v}-linux-amd64.zip`,
+      },
       { kind: "Standalone server", file: (v) => `light-headless-${v}-linux-amd64.zip` },
+      { kind: "Media Server", file: (v) => `tosklight-media-${v}-linux-amd64.zip` },
     ],
   },
   {
@@ -69,6 +83,7 @@ const PLATFORMS = [
       "release. Server only — run the desk from a browser on another machine.",
     assets: [
       { kind: "Standalone server (ARM64)", file: (v) => `light-headless-${v}-linux-arm64.zip` },
+      { kind: "Media Server (ARM64)", file: (v) => `tosklight-media-${v}-linux-arm64.zip` },
     ],
   },
 ];

@@ -289,20 +289,13 @@ application merely to validate a build.
 `cargo clippy -- -D warnings`, the tests, and a packaged `--check-configuration` smoke test, over
 every Media package on macOS, Windows, and Linux x86_64 and aarch64.
 
-`.github/workflows/media-release.yml` packages it. Media does **not** ship inside `release.yml`: it
-is a separate product, most releases do not change it, and four platform builds on every release of
-the desk would be waste. Instead the workflow runs as a follow-up (`workflow_run` on the release
-pipeline, `completed`, and only when that run concluded successfully on `main`), and it ships only
-when Media changed.
-
-`workflow_run` supports no path filters, so the change is detected in the workflow's first job: it
-finds the `v*` tag the released commit carries, finds the previous one, and diffs the two over
-`apps/media`, `crates/media`, `crates/light/adapters/media`, `Cargo.toml`, and `Cargo.lock`. A
-successful pipeline run that published no release does nothing. Comparing releases rather than
-pushes is deliberate — a Media change that landed in a commit which produced no release would
-otherwise never ship — and it needs nothing from `release.yml`, so editing that pipeline cannot
-silently break this one. `Cargo.lock` counts as a Media change because a bumped dependency does
-change the shipped binary; the rule errs toward shipping.
+`.github/workflows/media-release.yml` packages it. Media does **not** ship inside `release.yml`:
+it remains a separate product and the workflow runs as a follow-up (`workflow_run` on the release
+pipeline, `completed`, and only when that run concluded successfully on `main`). Every actual
+ToskLight release builds all four Media targets and attaches them to that version, so the static
+Pages download matrix never points at a current-version Media asset that was omitted merely because
+Media itself had not changed. A successful pipeline run that published no release still does
+nothing.
 
 The four archives are named `tosklight-media-<version>-<slug>.zip` and are attached, with their own
 `MEDIA-SHA256SUMS`, to the **same** GitHub release the pipeline just published — never a second

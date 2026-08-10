@@ -1,19 +1,10 @@
 name: Media release
 
-# The Media Server ships on its own schedule, as a follow-up to the release pipeline rather than
-# inside it. Media is a separate product from the desk: most releases do not change it, and paying
-# four platform builds on every release of Light would be waste. So this workflow runs after a
-# successful release run, works out whether Media actually changed since the previous release, and
-# only then builds — attaching its archives to the release that run just published.
-#
-# WHY THE CHANGE IS DETECTED HERE RATHER THAN REPORTED BY THE PIPELINE.
-# `workflow_run` supports no path filters, so the change has to be found some other way. The
-# pipeline could publish a "media changed" flag for this workflow to read, but that answers the
-# wrong question: it would say whether Media changed *in the push that released*, and a Media
-# change that landed in a commit which produced no release (a `chore`, say) would then never ship
-# at all. Diffing the new release tag against the previous one answers the question that matters —
-# has Media changed since the last release an operator could install — and it needs nothing from
-# the pipeline, so it cannot go stale when that pipeline is edited.
+# The Media Server is a separate product, but every published ToskLight version has a complete,
+# predictable download matrix. This workflow follows a successful release pipeline, builds Media
+# for every supported target, and attaches those archives to the release that run just published.
+# Keeping the build in a follow-up preserves the product boundary without leaving current-version
+# Pages links pointing at assets that were skipped because Media happened not to change.
 
 on:
   workflow_run:
@@ -31,8 +22,6 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  # Every path whose change means the shipped Media Server is different.
-  MEDIA_PATHS: apps/media crates/media crates/light/adapters/media Cargo.toml Cargo.lock
 
 jobs:
   decide:
@@ -55,7 +44,7 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
-      - name: Work out whether Media changed since the previous release
+      - name: Resolve the release version and publication mode
         id: decide
         shell: bash
         env:
@@ -85,25 +74,7 @@ jobs:
           version="${tag#v}"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "publish=$([[ "$DISPATCHED" == "true" ]] && echo false || echo true)" >> "$GITHUB_OUTPUT"
-
-          previous="$(git tag --list 'v[0-9]*' --sort=-version:refname |
-            grep -v "^$tag$" | head -1 || true)"
-          if [[ -z "$previous" ]]; then
-            echo "No previous release, so this is Media's first one."
-            echo "build=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          # shellcheck disable=SC2086
-          if git diff --quiet "$previous" "$tag" -- $MEDIA_PATHS; then
-            echo "Media is unchanged between $previous and $tag; it does not ship again."
-            echo "build=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "Media changed between $previous and $tag:"
-            # shellcheck disable=SC2086
-            git diff --stat "$previous" "$tag" -- $MEDIA_PATHS
-            echo "build=true" >> "$GITHUB_OUTPUT"
-          fi
+          echo "build=true" >> "$GITHUB_OUTPUT"
 
   build:
     name: Media release / ${{ matrix.label }}
