@@ -59,6 +59,7 @@
 }
 .timecode-timeline-tools {
 	display: flex;
+	flex-wrap: wrap;
 	min-height: 3.2rem;
 	align-items: center;
 	gap: 0.45rem;
@@ -75,6 +76,15 @@
 .timecode-timeline-tools input {
 	width: 9rem;
 	accent-color: #9365d8;
+}
+.timecode-timeline-tools select,
+.timecode-selection-inspector select {
+	min-height: 2.25rem;
+	padding: 0.3rem;
+	border: 1px solid #444758;
+	border-radius: 0.25rem;
+	background: #090a10;
+	color: #fff;
 }
 .timecode-csv-panel {
 	display: grid;
@@ -283,6 +293,7 @@
 }
 .timecode-selection-inspector {
 	display: flex;
+	flex-wrap: wrap;
 	min-height: 2.8rem;
 	align-items: center;
 	gap: 0.8rem;
@@ -291,6 +302,21 @@
 	color: #9da1b1;
 }
 .timecode-selection-inspector strong {
+	color: #fff;
+}
+.timecode-selection-inspector label {
+	display: grid;
+	min-width: 7rem;
+	gap: 0.15rem;
+	color: #aeb2c1;
+	font-size: 0.7rem;
+}
+.timecode-selection-inspector input {
+	min-height: 2.25rem;
+	padding: 0.3rem;
+	border: 1px solid #444758;
+	border-radius: 0.25rem;
+	background: #090a10;
 	color: #fff;
 }
 @media (max-width: 800px) {

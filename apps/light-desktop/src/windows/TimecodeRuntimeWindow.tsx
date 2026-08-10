@@ -23,6 +23,8 @@ import type {
 	TimecodeTransportSnapshot,
 } from "../api/generated/light-wire";
 import { useActiveShowId } from "../features/deskSnapshot/DeskSnapshotState";
+import { useCueLists } from "../features/showObjects/ShowObjectsState";
+import { useShowObjectView } from "../features/showObjects/ShowObjectsView";
 import { useTimecodeActions } from "../features/timecode/TimecodeActionsContext";
 import { TimecodeTimelineEditor } from "../features/timecode/TimecodeTimelineEditor";
 import { useTimecodeEditorHistory } from "../features/timecode/useTimecodeEditorHistory";
@@ -37,6 +39,19 @@ export function TimecodeRuntimeWindow({
 	compact = false,
 }: WindowProps) {
 	const showId = useActiveShowId();
+	const cueLists = useCueLists(active);
+	useShowObjectView("cue_list", active);
+	const timelineCueLists = useMemo(
+		() =>
+			cueLists.map((cueList) => ({
+				id: cueList.body.id,
+				name: cueList.body.name,
+				cues: cueList.body.cues.flatMap((cue) =>
+					cue.id ? [{ id: cue.id, number: cue.number, name: cue.name }] : [],
+				),
+			})),
+		[cueLists],
+	);
 	const fallback = useMemo(
 		() =>
 			new TimecodesApiClient(createLightApi().runtime.capabilityTransport()),
@@ -88,6 +103,7 @@ export function TimecodeRuntimeWindow({
 				item={editing}
 				api={api}
 				snapshot={runtime.get(editing.definition.id)}
+				cueLists={timelineCueLists}
 				onClose={() => setEditing(null)}
 				onSaved={async () => {
 					await refresh();
@@ -211,6 +227,7 @@ function TimecodeEditor({
 	item,
 	api,
 	snapshot,
+	cueLists,
 	onClose,
 	onSaved,
 }: {
@@ -218,6 +235,11 @@ function TimecodeEditor({
 	item: TimecodeObjectRecord | NewTimecode;
 	api: TimecodesApiClient;
 	snapshot?: TimecodeTransportSnapshot;
+	cueLists: Array<{
+		id: string;
+		name: string;
+		cues: Array<{ id: string; number: number; name: string }>;
+	}>;
 	onClose(): void;
 	onSaved(): Promise<void>;
 }) {
@@ -462,6 +484,7 @@ function TimecodeEditor({
 				definition={draft}
 				frame={frame}
 				fps={FPS}
+				cueLists={cueLists}
 				waveformPeaks={waveformPeaks}
 				onScrub={setEditorFrame}
 				onCommit={setDraft}

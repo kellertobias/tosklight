@@ -148,6 +148,8 @@ test.describe("docs/testing/15-macros-and-timecode.md", () => {
 		const editor = page.getByLabel("Timecode timeline editor");
 		await expect(editor).toBeVisible();
 		await editor.getByLabel("Timeline zoom").fill("2");
+		await editor.getByRole("button", { name: "Add speed lane" }).click();
+		await editor.getByRole("button", { name: "+ keyframe" }).last().click();
 		await editor
 			.getByRole("button", { name: "Add marker at playhead" })
 			.click();
@@ -173,6 +175,14 @@ test.describe("docs/testing/15-macros-and-timecode.md", () => {
 							color: "#a67cff",
 						}),
 					],
+					lanes: expect.arrayContaining([
+						expect.objectContaining({
+							content: expect.objectContaining({
+								kind: "speed_group",
+								keyframes: [expect.objectContaining({ bpm: 120, phase: 0 })],
+							}),
+						}),
+					]),
 				},
 			},
 		});

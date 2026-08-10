@@ -143,6 +143,24 @@ function ProductionEditorStory() {
 				definition={history.draft}
 				frame={frame}
 				fps={44}
+				cueLists={[
+					{
+						id: "00000000-0000-0000-0000-000000000080",
+						name: "Opening",
+						cues: [
+							{
+								id: "00000000-0000-0000-0000-000000000081",
+								number: 1,
+								name: "Preset",
+							},
+							{
+								id: "00000000-0000-0000-0000-000000000082",
+								number: 2,
+								name: "Hit",
+							},
+						],
+					},
+				]}
 				waveformPeaks={peaks}
 				onScrub={setFrame}
 				onCommit={history.commit}

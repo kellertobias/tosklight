@@ -18,7 +18,7 @@ Assign one Macro to physical and Virtual Playbacks. Start it from pool, physical
 
 Create a duration-only Timecode with ordered same-frame Cuelist and Speed Group actions, markers, and a loop. Place and move keyframes with frame snapping and marker snapping. Compare continuous play, direct seek, and a loop into the same frame: the authoritative reconstructed Cuelist, Speed Group phase/BPM, and continuous values are identical, while discrete triggers are neither lost nor duplicated.
 
-Zoom and scroll the production editor, scrub without changing live output, then explicitly seek the runtime to the editor playhead. Copy and delete each supported timeline item and use editor Undo/Redo. Import marker CSV once with **Append** and once with **Replace**, using both frame-number and `HH:MM:SS:FF` positions; malformed or out-of-range rows must reject the complete import.
+Zoom and scroll the production editor, scrub without changing live output, then explicitly seek the runtime to the editor playhead. From a new empty Timecode add audio-volume, Speed Group, and Cuelist lanes; add keyframes and a Cuelist clip, then edit BPM/phase, volume/fade/curve, Cue range, and clip start/end behavior. Copy and delete each supported timeline item and use editor Undo/Redo. Import marker CSV once with **Append** and once with **Replace**, using both frame-number and `HH:MM:SS:FF` positions; malformed or out-of-range rows must reject the complete import.
 
 ## TIMECODE-002 — Cuelist clips and safe Preload
 
