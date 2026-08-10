@@ -100,7 +100,7 @@ test("documentation screenshots share one Storybook build", () => {
 
 	assert.match(
 		screenshotJob,
-		/run: bash tools\/test\.sh documentation-screenshots/u,
+		/bash tools\/test\.sh documentation-screenshots/u,
 	);
 	// The captures generate; nothing compares them to a previous run. An update switch reappearing
 	// here would mean the gallery had quietly become a baseline again.

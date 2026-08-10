@@ -79,6 +79,10 @@ test("fast unit tests and comprehensive verification remain distinct", () => {
 	assert.match(testScript, /unit\(\)\{ typescript_unit; rust_unit; \}/u);
 	assert.match(
 		testScript,
+		/rust_workspace\(\)\{[\s\S]*\(cd "\$UI" && npm run build\)[\s\S]*cargo test/u,
+	);
+	assert.match(
+		testScript,
 		/verify\(\)\{[\s\S]*architecture[\s\S]*rust_workspace/u,
 	);
 	assert.match(workflow, /bash tools\/test\.sh rust-workspace/u);

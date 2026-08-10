@@ -82,6 +82,10 @@ rust_unit(){
     cargo test --manifest-path "$ROOT/Cargo.toml" --no-default-features --lib -p light-application
 }
 rust_workspace(){
+  # light-headless embeds the operator UI even when the desktop crates themselves are excluded.
+  # Build it here so this gate also works from a clean checkout instead of inheriting artifacts
+  # from an earlier frontend or E2E job.
+  (cd "$UI" && npm run build)
   light_with_cargo_command_lock "npm run test:verify Rust workspace" \
     cargo test --manifest-path "$ROOT/Cargo.toml" --workspace \
       --exclude light-desktop --exclude light-hardware-controls --no-default-features
