@@ -183,7 +183,19 @@ jobs:
       - name: Run the GPU-less Rust workspace suite
         env:
           TOSKLIGHT_EMBEDDED_PANE_WGPU_BACKEND: noop
-        run: bash tools/test.sh rust-workspace
+        run: |
+          if output="$(bash tools/test.sh rust-workspace 2>&1)"; then
+            printf '%s\n' "$output"
+          else
+            status=$?
+            printf '%s\n' "$output" >&2
+            output="$(printf '%s' "$output" | tail -c 3000)"
+            output="${output//'%'/'%25'}"
+            output="${output//$'\r'/'%0D'}"
+            output="${output//$'\n'/'%0A'}"
+            printf '::error title=Rust workspace failure::%s\n' "$output" >&2
+            exit "$status"
+          fi
 
   native-extension-draft:
     name: Tests / Native extension draft / ${{ matrix.label }}
@@ -441,7 +453,19 @@ jobs:
         run: npx playwright install --with-deps chrome
 
       - name: Build Storybook once and generate the screenshots a story can show
-        run: bash tools/test.sh documentation-screenshots
+        run: |
+          if output="$(bash tools/test.sh documentation-screenshots 2>&1)"; then
+            printf '%s\n' "$output"
+          else
+            status=$?
+            printf '%s\n' "$output" >&2
+            output="$(printf '%s' "$output" | tail -c 3000)"
+            output="${output//'%'/'%25'}"
+            output="${output//$'\r'/'%0D'}"
+            output="${output//$'\n'/'%0A'}"
+            printf '::error title=Documentation screenshot failure::%s\n' "$output" >&2
+            exit "$status"
+          fi
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -509,7 +533,19 @@ jobs:
         run: chmod +x .artifacts/build/cargo/debug/light-headless
 
       - name: Capture the screenshots only a running desk can show
-        run: bash tools/test.sh help-screenshots-live
+        run: |
+          if output="$(bash tools/test.sh help-screenshots-live 2>&1)"; then
+            printf '%s\n' "$output"
+          else
+            status=$?
+            printf '%s\n' "$output" >&2
+            output="$(printf '%s' "$output" | tail -c 3000)"
+            output="${output//'%'/'%25'}"
+            output="${output//$'\r'/'%0D'}"
+            output="${output//$'\n'/'%0A'}"
+            printf '::error title=Live help screenshot failure::%s\n' "$output" >&2
+            exit "$status"
+          fi
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
