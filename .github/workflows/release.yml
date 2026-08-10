@@ -357,7 +357,20 @@ jobs:
       # Each Playwright worker launches its own browser, Rust server, UDP listeners,
       # and isolated show. Keep one worker per runner to prevent local port/timing
       # contention; the matrix shards retain parallel throughput across runners.
-      - run: npm run test:e2e-${{ matrix.suite }} -- --shard=${{ matrix.shard }} --workers=1
+      - name: Run Playwright shard
+        run: |
+          if output="$(npm run test:e2e-${{ matrix.suite }} -- --shard=${{ matrix.shard }} --workers=1 2>&1)"; then
+            printf '%s\n' "$output"
+          else
+            status=$?
+            printf '%s\n' "$output" >&2
+            output="$(printf '%s' "$output" | tail -c 8000)"
+            output="${output//'%'/'%25'}"
+            output="${output//$'\r'/'%0D'}"
+            output="${output//$'\n'/'%0A'}"
+            printf '::error title=Playwright %s shard %s failure::%s\n' '${{ matrix.suite }}' '${{ matrix.shard }}' "$output" >&2
+            exit "$status"
+          fi
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
@@ -468,7 +481,7 @@ jobs:
           else
             status=$?
             printf '%s\n' "$output" >&2
-            output="$(printf '%s' "$output" | tail -c 3000)"
+            output="$(printf '%s' "$output" | tail -c 8000)"
             output="${output//'%'/'%25'}"
             output="${output//$'\r'/'%0D'}"
             output="${output//$'\n'/'%0A'}"
@@ -548,7 +561,7 @@ jobs:
           else
             status=$?
             printf '%s\n' "$output" >&2
-            output="$(printf '%s' "$output" | tail -c 3000)"
+            output="$(printf '%s' "$output" | tail -c 8000)"
             output="${output//'%'/'%25'}"
             output="${output//$'\r'/'%0D'}"
             output="${output//$'\n'/'%0A'}"

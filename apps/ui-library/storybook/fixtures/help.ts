@@ -54,7 +54,7 @@ export const helpQuickStartTopic: HelpTopic = {
 
 ToskLight is organized around a desk configuration, a portable show file, one programmer per operator, and playbacks that turn stored programming into live output.
 
-![The default programming desk](storybook-quick-start.png)
+![The ToskLight application icon](storybook-quick-start.png)
 
 ## Set up the desk
 

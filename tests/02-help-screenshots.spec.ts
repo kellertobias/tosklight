@@ -62,7 +62,6 @@ test("captures help and README screenshots from the default show desk @ui @docs"
   await setStagePaneTo3d(page);
   await expect(page.locator(".group-strip .group-card").filter({ hasText: "Front Fresnels" })).toBeVisible();
   await expect(page.locator(".control-section")).toContainText("50%");
-  await expect(page.locator("canvas")).toBeVisible();
   await page.waitForTimeout(500);
   await page.locator(".control-section.programmer").screenshot({ path: shot("software-keypad.png") });
   await page.screenshot({ path: shot("default-desk-overview.png"), fullPage: true });
@@ -76,11 +75,13 @@ test("captures help and README screenshots from the default show desk @ui @docs"
   await showDockMode(page, "builtins");
   await page.locator(".dock-entry").filter({ hasText: "Fixtures" }).click();
   await expect(page.locator(".fixture-window")).toBeVisible();
+  await api.request("POST", "/api/v2/output/highlight/actions", { request_id: crypto.randomUUID(), action: "on" }, true, undefined, { deskId: api.session!.desk.id });
+  await page.waitForTimeout(175);
   await api.request("POST", "/api/v2/output/highlight/actions", { request_id: crypto.randomUUID(), action: "next" }, true, undefined, { deskId: api.session!.desk.id });
   await expect(page.locator('.fixture-window [data-step-selection="active"]')).toHaveCount(1);
   await expect(page.locator('.fixture-window [data-step-selection="base"]').first()).toBeVisible();
   await page.screenshot({ path: shot("fixture-sheet-programmer.png"), fullPage: true });
-  await api.request("POST", "/api/v2/output/highlight/actions", { request_id: crypto.randomUUID(), action: "all" }, true, undefined, { deskId: api.session!.desk.id });
+  await api.request("POST", "/api/v2/output/highlight/actions", { request_id: crypto.randomUUID(), action: "off" }, true, undefined, { deskId: api.session!.desk.id });
 
   await captureWorkflowReference(page);
   const patch = await api.patch();
@@ -95,11 +96,14 @@ test("captures help and README screenshots from the default show desk @ui @docs"
   await page.screenshot({ path: shot("help-command-line.png"), fullPage: true });
 
   const expectedPaneFiles = screenshotManifest.entries
-    .filter((entry) => entry.file.startsWith("panes/"))
+    .filter((entry) => entry.source === "live-app" && entry.file.startsWith("panes/"))
     .map((entry) => path.basename(entry.file))
     .sort();
-  await expect.poll(async () => (await fs.readdir(PANE_SCREENSHOT_DIR)).filter((file) => file.endsWith(".png")).sort()).toEqual(expectedPaneFiles);
-  await expect.poll(async () => (await fs.readdir(WORKFLOW_SCREENSHOT_DIR)).filter((file) => file.endsWith(".png")).sort()).toEqual(workflowScreenshots);
+  await expect.poll(async () => (await fs.readdir(PANE_SCREENSHOT_DIR)).filter((file) => liveScreenshotFiles.has(`panes/${file}`)).sort()).toEqual(expectedPaneFiles);
+  const expectedWorkflowFiles = workflowScreenshots.filter((file) =>
+    liveScreenshotFiles.has(`workflows/${file}`),
+  );
+  await expect.poll(async () => (await fs.readdir(WORKFLOW_SCREENSHOT_DIR)).filter((file) => liveScreenshotFiles.has(`workflows/${file}`)).sort()).toEqual(expectedWorkflowFiles);
 });
 
 function shot(file: string): string {
@@ -455,11 +459,14 @@ async function setStagePaneTo3d(page: Page) {
   const stagePane = page.locator(".desk-pane").filter({ hasText: "Stage · Main floor" });
   await stagePane.getByRole("button", { name: "Settings" }).click();
   await page.getByRole("tab", { name: "Stage", exact: true }).click();
-  await page.getByRole("radio", { name: "3D" }).click();
+  await page.getByRole("radio", { name: "3D", exact: true }).click();
   await page.getByRole("tab", { name: "Shortcuts", exact: true }).click();
   await page.getByRole("switch", { name: "Group shortcuts", exact: true }).check({ force: true });
   await page.getByRole("button", { name: "Close settings" }).click();
-  await expect(stagePane.locator("canvas")).toBeVisible();
+  await expect(stagePane.locator('[data-stage-view="3d"]')).toBeVisible();
+  // Browser screenshot runners have no sibling native renderer. The requested view must persist,
+  // while the pane truthfully reports that this screen cannot draw it instead of faking a canvas.
+  await expect(stagePane.getByRole("status")).toContainText("No Stage on this screen");
 }
 
 async function openCuelistDetailWithPlayback(page: Page) {

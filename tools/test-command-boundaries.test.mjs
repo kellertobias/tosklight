@@ -40,7 +40,6 @@ test("Playwright exposes only UI and API-exception suites", () => {
 		path.join(repositoryRoot, "tools/test.sh"),
 		"utf8",
 	);
-
 	assert.equal(packageManifest.scripts["test:e2e-supplemental"], undefined);
 	assert.equal(packageManifest.scripts["test:desktop-smoke"], undefined);
 	assert.doesNotMatch(workflow, /Supplemental|test:e2e-supplemental/u);
@@ -93,6 +92,13 @@ test("documentation screenshots share one Storybook build", () => {
 		path.join(repositoryRoot, "tools/test.sh"),
 		"utf8",
 	);
+	const helpStory = fs.readFileSync(
+		path.join(
+			repositoryRoot,
+			"apps/light-desktop/src/windows/HelpWindow.stories.tsx",
+		),
+		"utf8",
+	);
 	const screenshotJob =
 		/^ {2}documentation-screenshots:\n([\s\S]*?)(?=^ {2}[\w-]+:\n)/mu.exec(
 			workflow,
@@ -108,6 +114,7 @@ test("documentation screenshots share one Storybook build", () => {
 		workflow,
 		/UPDATE_HELP_SCREENSHOTS|UPDATE_MARKETING_SCREENSHOTS/u,
 	);
+	assert.doesNotMatch(helpStory, /docs\/help\/assets\/screenshots/u);
 	// The Storybook job owns only the entries a story can render; the live desk owns the rest, and
 	// only the assembly job may claim the whole set.
 	assert.match(screenshotJob, /name: help-screenshots-storybook/u);
