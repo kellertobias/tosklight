@@ -66,6 +66,14 @@ impl MultiPatchInstance {
 /// legacy universe/address fallback to understand its patch.
 pub fn migrate_patched_fixture_to_v2(fixture: &mut PatchedFixture) -> Result<bool, FixtureError> {
     let original = serde_json::to_value(&*fixture)?;
+    if fixture.definition.schema_version == 2 {
+        // Schema-2 definitions already carry the authoritative profile snapshot. Its custom
+        // deserializer migrates the nested profile to the current schema before this boundary is
+        // reached, so promote the outer marker as well. Keeping the definition projections
+        // untouched makes this lossless until the show compiler materializes the snapshot as an
+        // immutable profile revision and replaces the inline definition with a lean reference.
+        fixture.definition.schema_version = crate::FIXTURE_PROFILE_SCHEMA_VERSION;
+    }
     if fixture.definition.schema_version == 1 {
         let legacy = fixture.definition.clone();
         let mut profile = FixtureProfile::from_legacy_modes(std::slice::from_ref(&legacy))

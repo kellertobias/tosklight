@@ -149,6 +149,42 @@ fn schema_one_fixture_is_materialized_and_compiled_in_one_candidate() {
 }
 
 #[test]
+fn schema_two_inline_fixture_is_upgraded_and_materialized_in_one_candidate() {
+    let (_, fixture, reference) = portable_fixture();
+    let mut legacy_body = serde_json::to_value(&fixture).unwrap();
+    legacy_body["definition"]["schema_version"] = json!(2);
+    legacy_body["definition"]["profile_snapshot"]["schema_version"] = json!(2);
+
+    let (_, document) = document_with_objects(&[(
+        "patched_fixture",
+        &fixture.fixture_id.0.to_string(),
+        legacy_body,
+    )]);
+    let mut transaction = document.transaction();
+    stage_candidate_migrations(&document, &mut transaction).unwrap();
+    let candidate = document.candidate(&transaction).unwrap();
+    let migrated = candidate
+        .object("patched_fixture", &fixture.fixture_id.0.to_string())
+        .unwrap()
+        .body();
+
+    assert!(migrated.get("definition").is_none());
+    assert_eq!(
+        candidate
+            .fixture_profile_revision(reference.profile_id, reference.profile_revision)
+            .unwrap()
+            .profile()["schema_version"],
+        2
+    );
+    let compiled = compile_show_candidate(candidate).unwrap();
+    assert_eq!(compiled.fixtures.len(), 1);
+    assert_eq!(
+        compiled.fixtures[0].definition.schema_version,
+        light_fixture::FIXTURE_PROFILE_SCHEMA_VERSION
+    );
+}
+
+#[test]
 fn legacy_non_uuid_object_key_remains_loadable() {
     let (profile, fixture, _) = portable_fixture();
     let mut legacy_body = serde_json::to_value(&fixture).unwrap();
