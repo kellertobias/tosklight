@@ -199,7 +199,7 @@ async fn selection_action_ws_accepts_the_complete_action_union() {
         &token,
         &show_id.to_string(),
         "group",
-        "1",
+        "test-selection-group",
         0,
         serde_json::json!({
             "name": "WS selection group",
@@ -243,7 +243,7 @@ async fn selection_action_ws_accepts_the_complete_action_union() {
             serde_json::json!({
                 "request_id": "selection-group",
                 "action": "select_group",
-                "group_id": "1",
+                "group_id": "test-selection-group",
                 "frozen": false,
                 "rule": {"type": "all"},
                 "expected_revision": revision + 2

@@ -29,7 +29,7 @@ impl SpreadRecallRig {
         // Resolve command values instantly; the spread rule under test is fade-independent.
         state.installation.update_configuration(|configuration| configuration.programmer_fade_millis = 0);
         let show_path = data_dir.join(format!("shows/{name}.show"));
-        let show_id = default_show::initialise(&show_path).unwrap();
+        let show_id = default_show::initialise_legacy_test_show(&show_path).unwrap();
         let entry = ShowEntry {
             id: show_id,
             name: name.into(),

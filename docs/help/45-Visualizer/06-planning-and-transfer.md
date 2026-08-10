@@ -98,3 +98,15 @@ Discovery is a convenience and never a requirement. A network with no discovery,
 blocks it, or a machine where the responder will not start costs the button and nothing else:
 both applications start, run, and open files exactly as they did before. A show file opened
 through **Open** or **Show from USB** is the same show file either button would have fetched.
+
+## Fixture drawings in plans and documents
+
+The Visualizer and rigging-document consumers use the same named top, left, right, front, and back
+SVG drawings carried by an immutable fixture-package revision. The SVG's millimetre coordinate
+space, origin, and orientation place it at physical scale. If that package has no usable drawing,
+the renderer's fixture-type vector is used, followed by a plain box for an unknown type.
+
+SVG remains the source for both on-screen and printable plans. HTML retains the vector artwork;
+PDF or PNG output rasterizes that SVG at the requested output size rather than maintaining a
+separate bitmap asset. Plan composition uses world depth and explicit opaque/empty regions, so its
+occlusion does not depend on package file order or incidental 3D material names.

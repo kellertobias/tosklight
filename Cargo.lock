@@ -3564,6 +3564,7 @@ dependencies = [
  "base64 0.22.1",
  "image",
  "light-core",
+ "quick-xml 0.38.4",
  "rusqlite",
  "serde",
  "serde_json",
@@ -8192,12 +8193,14 @@ dependencies = [
 name = "viz-project"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "glam",
  "image",
  "light-core",
  "light-fixture",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "uuid",
  "viz-dmx",
  "viz-scene",

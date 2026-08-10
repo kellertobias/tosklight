@@ -5,6 +5,7 @@ use crate::{
     PositionMovementRepresentation,
 };
 use base64::{Engine as _, engine::general_purpose::STANDARD};
+use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::{Cursor, Write};
 use std::path::Path;
@@ -894,7 +895,7 @@ fn visualizer_camera_package_keeps_its_exact_seventeen_slot_wire_contract() {
 
     for channel in &mode.channels[..3] {
         assert_eq!(channel.physical_min, Some(-4_194.304));
-        assert_eq!(channel.physical_max, Some(4_194.3035));
+        assert_eq!(channel.physical_max, Some(4_194.303_5));
         assert_eq!(channel.unit.as_deref(), Some("m"));
         assert_eq!(channel.functions.len(), 1);
         assert_eq!(channel.functions[0].dmx_from, 0);
@@ -1107,6 +1108,41 @@ fn minimal_glb(external_uri: bool) -> Vec<u8> {
     result
 }
 
+fn projection_set(model: &[u8]) -> crate::ProfileProjectionSet {
+    let hash = Sha256::digest(model)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    crate::ProfileProjectionSet {
+        source_model_sha256: hash,
+        generator: "test-generator".into(),
+        generator_version: "1".into(),
+        pose_contract_version: 1,
+        views: crate::ProfileProjectionView::ALL
+            .into_iter()
+            .map(|view| {
+                let svg = format!(
+                    "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"-5 -10 10 20\" width=\"10mm\" height=\"20mm\" data-tosklight-view=\"{}\"><path d=\"M -5 -10 L 5 -10 L 0 10 Z\" fill=\"#445566\" fill-rule=\"nonzero\"/></svg>",
+                    view.wire()
+                );
+                crate::ProfileProjectionAsset {
+                    view,
+                    artwork_asset: format!(
+                        "data:image/svg+xml;base64,{}",
+                        STANDARD.encode(svg)
+                    ),
+                    view_box_millimetres: [-5.0, -10.0, 10.0, 20.0],
+                    physical_width_millimetres: 10.0,
+                    physical_height_millimetres: 20.0,
+                    origin_millimetres: [0.0, 0.0],
+                    orientation: view.orientation(),
+                    pose: crate::ProfileProjectionPose::AuthoredHome,
+                }
+            })
+            .collect(),
+    }
+}
+
 fn archive(entries: &[(&str, &[u8])]) -> Vec<u8> {
     let mut zip = ZipWriter::new(Cursor::new(Vec::new()));
     for (name, bytes) in entries {
@@ -1148,6 +1184,81 @@ fn round_trips_profile_and_embedded_assets() {
             "assets/model.glb"
         ]
     );
+}
+
+#[test]
+fn round_trips_five_safe_svg_projections_at_canonical_paths() {
+    let mut profile = profile();
+    let model = minimal_glb(false);
+    profile.model_asset = Some(format!(
+        "data:model/gltf-binary;base64,{}",
+        STANDARD.encode(&model)
+    ));
+    profile.projection_assets = Some(projection_set(&model));
+
+    let bytes = write_fixture_package(&profile).unwrap();
+    let restored = read_fixture_package(&bytes).unwrap();
+    assert_eq!(restored.projection_assets, profile.projection_assets);
+
+    let mut zip = ZipArchive::new(Cursor::new(bytes)).unwrap();
+    let names = (0..zip.len())
+        .map(|index| zip.by_index(index).unwrap().name().to_owned())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        names,
+        [
+            "fixture.json",
+            "assets/model.glb",
+            "assets/projections/top.svg",
+            "assets/projections/left.svg",
+            "assets/projections/right.svg",
+            "assets/projections/front.svg",
+            "assets/projections/back.svg",
+        ]
+    );
+}
+
+#[test]
+fn rejects_active_or_external_svg_content() {
+    for unsafe_svg in [
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1 1\" width=\"1mm\" height=\"1mm\" data-tosklight-view=\"top\"><script/></svg>",
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1 1\" width=\"1mm\" height=\"1mm\" data-tosklight-view=\"top\"><path d=\"M 0 0 L 1 0 L 0 1 Z\" fill=\"#000000\" onerror=\"alert(1)\"/></svg>",
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1 1\" width=\"1mm\" height=\"1mm\" data-tosklight-view=\"top\"><image href=\"https://example.invalid/a.png\"/></svg>",
+    ] {
+        let mut profile = profile();
+        let model = minimal_glb(false);
+        profile.model_asset = Some(format!(
+            "data:model/gltf-binary;base64,{}",
+            STANDARD.encode(&model)
+        ));
+        let mut projections = projection_set(&model);
+        projections.views[0].artwork_asset =
+            format!("data:image/svg+xml;base64,{}", STANDARD.encode(unsafe_svg));
+        profile.projection_assets = Some(projections);
+        assert!(
+            write_fixture_package(&profile).is_err(),
+            "accepted {unsafe_svg}"
+        );
+    }
+}
+
+#[test]
+fn rejects_projection_cache_metadata_after_the_model_changes() {
+    let mut profile = profile();
+    let model = minimal_glb(false);
+    profile.model_asset = Some(format!(
+        "data:model/gltf-binary;base64,{}",
+        STANDARD.encode(&model)
+    ));
+    profile.projection_assets = Some(projection_set(&model));
+    let mut changed = model;
+    changed.push(0);
+    profile.model_asset = Some(format!(
+        "data:model/gltf-binary;base64,{}",
+        STANDARD.encode(changed)
+    ));
+    let error = write_fixture_package(&profile).unwrap_err().to_string();
+    assert!(error.contains("stale"), "unexpected error: {error}");
 }
 
 /// A gobo wheel is the only asset list in a package — every other asset is a single field — so

@@ -13,6 +13,7 @@ mod decode;
 mod default_model;
 mod fallback;
 mod plan;
+mod projection;
 
 pub use appearance::{
     MAX_COLOUR_TEMPERATURE_KELVIN, MIN_COLOUR_TEMPERATURE_KELVIN, apply_installed_appearance,
@@ -26,4 +27,9 @@ pub use fallback::{OpticalClass, classify};
 pub use plan::{
     ColourBinding, EmitterBinding, ExternalCameraBinding, GOBO_ARTWORK_EDGE, PatchedFixture,
     PhysicalInstance, ScenePlan, compile, decode_gobo_artwork,
+};
+pub use projection::{
+    GENERATOR_ID as FIXTURE_PROJECTION_GENERATOR,
+    GENERATOR_VERSION as FIXTURE_PROJECTION_GENERATOR_VERSION, ProjectionError,
+    generate_profile_projections, projection_cache_is_current,
 };

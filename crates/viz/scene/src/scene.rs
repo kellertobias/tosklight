@@ -29,6 +29,10 @@ pub struct Scene {
     pub scenery: Vec<SceneryObject>,
     /// Fixture models read from the library, referenced by [`FixtureInstance::model`].
     pub models: Vec<crate::FixtureModel>,
+    /// Safe package-owned SVG geometry, parsed once and shared by every matching fixture.
+    pub plan_artwork: Vec<PlanArtwork>,
+    /// Per-logical-fixture artwork selection; multipatch instances share this immutable binding.
+    pub fixture_plan: Vec<FixturePlanBinding>,
     /// Gobo artwork read from the profiles in this scene, referenced by [`GoboSlot::artwork`].
     /// One image per distinct piece of glass, however many wheels point at it.
     pub gobo_artwork: Vec<GoboArtwork>,
@@ -148,6 +152,30 @@ pub struct FixtureInstance {
     pub model: Option<u32>,
     /// Present when the scene had to substitute generic behaviour for this fixture.
     pub fallback: Option<FallbackReason>,
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct FixturePlanBinding {
+    pub fixture_id: Uuid,
+    /// Indices into [`Scene::plan_artwork`] in top, left, right, front, back order.
+    pub artwork: [Option<u32>; 5],
+    pub fallback: PlanFallback,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum PlanFallback {
+    GenericType,
+    #[default]
+    UnknownBox,
+}
+
+/// One opaque SVG projection triangulated into the fixture's local physical coordinate space.
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
+pub struct PlanArtwork {
+    pub view: crate::ProjectionView,
+    pub vertices: Vec<[f32; 3]>,
+    pub normals: Vec<[f32; 3]>,
+    pub indices: Vec<u32>,
 }
 
 impl FixtureInstance {

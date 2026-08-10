@@ -7,6 +7,145 @@
 
 use viz_scene::Scene;
 
+/// Parse the generator's safe move/line SVG subset into physical local-space triangles.
+pub(super) fn read_plan_artwork(
+    projection: &light_fixture::ProfileProjectionAsset,
+) -> Result<viz_scene::PlanArtwork, String> {
+    let encoded = projection
+        .artwork_asset
+        .strip_prefix("data:image/svg+xml;base64,")
+        .ok_or_else(|| "the SVG projection is not an inline data URL".to_owned())?;
+    let bytes =
+        decode_base64(encoded).ok_or_else(|| "the SVG projection is not base64".to_owned())?;
+    let source = std::str::from_utf8(&bytes).map_err(|error| error.to_string())?;
+    let root_end = source
+        .find('>')
+        .ok_or_else(|| "the SVG projection root is incomplete".to_owned())?;
+    let root = &source[..=root_end];
+    let declared_view = attribute(root, "data-tosklight-view")
+        .ok_or_else(|| "the SVG projection has no named view".to_owned())?;
+    if declared_view != projection.view.wire() {
+        return Err("the SVG named view does not match the profile metadata".into());
+    }
+    let root_view_box = attribute(root, "viewBox")
+        .and_then(|value| parse_numbers(value).ok())
+        .ok_or_else(|| "the SVG projection viewBox is invalid".to_owned())?;
+    if root_view_box.len() != 4
+        || root_view_box
+            .iter()
+            .zip(projection.view_box_millimetres)
+            .any(|(actual, expected)| (*actual - expected).abs() > 0.01)
+    {
+        return Err("the SVG viewBox does not match the profile metadata".into());
+    }
+    let view = plan_view(projection.view);
+    let normal = view_normal(view);
+    let origin = glam::Vec2::from_array(projection.origin_millimetres);
+    let mut vertices = Vec::new();
+    let mut normals = Vec::new();
+    let mut indices = Vec::new();
+    let mut rest = &source[root_end + 1..];
+    while let Some(start) = rest.find("<path") {
+        rest = &rest[start..];
+        let end = rest
+            .find("/>")
+            .ok_or_else(|| "the SVG projection path is incomplete".to_owned())?;
+        let element = &rest[..end + 2];
+        let data = attribute(element, "d")
+            .ok_or_else(|| "the SVG projection path has no geometry".to_owned())?;
+        let numbers = parse_path_numbers(data)?;
+        if numbers.len() < 6 || numbers.len() % 2 != 0 {
+            return Err("the SVG projection path is not a closed polygon".into());
+        }
+        let points = numbers
+            .chunks_exact(2)
+            .map(|pair| glam::Vec2::new(pair[0], pair[1]) - origin)
+            .collect::<Vec<_>>();
+        for triangle in 1..points.len() - 1 {
+            let mut local = [
+                local_point(points[0], view),
+                local_point(points[triangle], view),
+                local_point(points[triangle + 1], view),
+            ];
+            if (local[1] - local[0]).cross(local[2] - local[0]).dot(normal) < 0.0 {
+                local.swap(1, 2);
+            }
+            let base = vertices.len() as u32;
+            for point in local {
+                vertices.push(point.to_array());
+                normals.push(normal.to_array());
+            }
+            indices.extend_from_slice(&[base, base + 1, base + 2]);
+        }
+        rest = &rest[end + 2..];
+    }
+    if indices.is_empty() {
+        return Err("the SVG projection contains no filled regions".into());
+    }
+    Ok(viz_scene::PlanArtwork {
+        view,
+        vertices,
+        normals,
+        indices,
+    })
+}
+
+fn attribute<'a>(element: &'a str, name: &str) -> Option<&'a str> {
+    let start = element.find(&format!(" {name}=\""))? + name.len() + 3;
+    let rest = &element[start..];
+    Some(&rest[..rest.find('"')?])
+}
+
+fn parse_numbers(value: &str) -> Result<Vec<f32>, String> {
+    value
+        .split(|character: char| character.is_ascii_whitespace() || character == ',')
+        .filter(|part| !part.is_empty())
+        .map(|part| part.parse::<f32>().map_err(|error| error.to_string()))
+        .collect()
+}
+
+fn parse_path_numbers(value: &str) -> Result<Vec<f32>, String> {
+    let numeric = value
+        .chars()
+        .map(|character| match character {
+            'M' | 'm' | 'L' | 'l' | 'Z' | 'z' | ',' => ' ',
+            other => other,
+        })
+        .collect::<String>();
+    parse_numbers(&numeric)
+}
+
+fn plan_view(view: light_fixture::ProfileProjectionView) -> viz_scene::ProjectionView {
+    match view {
+        light_fixture::ProfileProjectionView::Top => viz_scene::ProjectionView::Top,
+        light_fixture::ProfileProjectionView::Left => viz_scene::ProjectionView::Left,
+        light_fixture::ProfileProjectionView::Right => viz_scene::ProjectionView::Right,
+        light_fixture::ProfileProjectionView::Front => viz_scene::ProjectionView::Front,
+        light_fixture::ProfileProjectionView::Back => viz_scene::ProjectionView::Back,
+    }
+}
+
+fn local_point(point_millimetres: glam::Vec2, view: viz_scene::ProjectionView) -> glam::Vec3 {
+    let point = point_millimetres / 1000.0;
+    match view {
+        viz_scene::ProjectionView::Top => glam::Vec3::new(point.x, 0.0, point.y),
+        viz_scene::ProjectionView::Left => glam::Vec3::new(0.0, -point.y, point.x),
+        viz_scene::ProjectionView::Right => glam::Vec3::new(0.0, -point.y, -point.x),
+        viz_scene::ProjectionView::Front => glam::Vec3::new(point.x, -point.y, 0.0),
+        viz_scene::ProjectionView::Back => glam::Vec3::new(-point.x, -point.y, 0.0),
+    }
+}
+
+fn view_normal(view: viz_scene::ProjectionView) -> glam::Vec3 {
+    match view {
+        viz_scene::ProjectionView::Top => glam::Vec3::Y,
+        viz_scene::ProjectionView::Left => glam::Vec3::NEG_X,
+        viz_scene::ProjectionView::Right => glam::Vec3::X,
+        viz_scene::ProjectionView::Front => glam::Vec3::Z,
+        viz_scene::ProjectionView::Back => glam::Vec3::NEG_Z,
+    }
+}
+
 /// A packaged script arrives as a data URL, exactly as the photograph and the model do.
 pub(super) fn decode_script(asset: &str) -> Option<String> {
     let payload = asset.strip_prefix("data:")?;

@@ -22,6 +22,84 @@ pub enum ModelUnits {
     Metres,
 }
 
+/// One of the five stable orthographic fixture-package drawings.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProfileProjectionView {
+    Top,
+    Left,
+    Right,
+    Front,
+    Back,
+}
+
+impl ProfileProjectionView {
+    pub const ALL: [Self; 5] = [Self::Top, Self::Left, Self::Right, Self::Front, Self::Back];
+
+    pub fn wire(self) -> &'static str {
+        match self {
+            Self::Top => "top",
+            Self::Left => "left",
+            Self::Right => "right",
+            Self::Front => "front",
+            Self::Back => "back",
+        }
+    }
+
+    pub fn orientation(self) -> ProfileProjectionOrientation {
+        match self {
+            Self::Top => ProfileProjectionOrientation::XRightZDown,
+            Self::Left => ProfileProjectionOrientation::ZRightYUp,
+            Self::Right => ProfileProjectionOrientation::ZLeftYUp,
+            Self::Front => ProfileProjectionOrientation::XRightYUp,
+            Self::Back => ProfileProjectionOrientation::XLeftYUp,
+        }
+    }
+}
+
+/// The physical axes represented by page right and page up.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProfileProjectionOrientation {
+    XRightZDown,
+    ZRightYUp,
+    ZLeftYUp,
+    XRightYUp,
+    XLeftYUp,
+}
+
+/// The deterministic mechanical pose used while a drawing was generated.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProfileProjectionPose {
+    AuthoredHome,
+    MovingDown,
+    MovingForward,
+}
+
+/// One package-owned SVG projection and the physical coordinate contract around it.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ProfileProjectionAsset {
+    pub view: ProfileProjectionView,
+    pub artwork_asset: String,
+    pub view_box_millimetres: [f32; 4],
+    pub physical_width_millimetres: f32,
+    pub physical_height_millimetres: f32,
+    pub origin_millimetres: [f32; 2],
+    pub orientation: ProfileProjectionOrientation,
+    pub pose: ProfileProjectionPose,
+}
+
+/// Revision-owned projections generated from one exact source-model and generator version.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ProfileProjectionSet {
+    pub source_model_sha256: String,
+    pub generator: String,
+    pub generator_version: String,
+    pub pose_contract_version: u16,
+    pub views: Vec<ProfileProjectionAsset>,
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct FixtureProfile {
     pub schema_version: u16,
@@ -43,6 +121,8 @@ pub struct FixtureProfile {
     pub model_asset: Option<String>,
     #[serde(default)]
     pub model_units: ModelUnits,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub projection_assets: Option<ProfileProjectionSet>,
     #[serde(default)]
     pub physical: ProfilePhysicalProperties,
     #[serde(default)]
@@ -84,6 +164,8 @@ struct FixtureProfileCanonical {
     model_asset: Option<String>,
     #[serde(default)]
     model_units: ModelUnits,
+    #[serde(default)]
+    projection_assets: Option<ProfileProjectionSet>,
     #[serde(default)]
     physical: ProfilePhysicalProperties,
     #[serde(default)]
@@ -151,6 +233,7 @@ impl<'de> Deserialize<'de> for FixtureProfile {
             stage_icon_asset: canonical.stage_icon_asset,
             model_asset: canonical.model_asset,
             model_units: canonical.model_units,
+            projection_assets: canonical.projection_assets,
             physical: canonical.physical,
             optics: canonical.optics,
             laser: canonical.laser,

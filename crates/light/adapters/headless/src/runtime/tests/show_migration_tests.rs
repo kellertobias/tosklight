@@ -90,7 +90,7 @@ fn startup_backs_up_reports_and_removes_legacy_midi_mappings_once() {
         std::env::temp_dir().join(format!("light-midi-show-startup-{}", Uuid::new_v4()));
     let path = data_dir.join("shows/legacy-midi.show");
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-    let show_id = default_show::initialise(&path).unwrap();
+    let show_id = default_show::initialise_legacy_test_show(&path).unwrap();
     let store = ShowStore::open(&path).unwrap();
     let midi = serde_json::json!({
         "name": "Legacy MIDI Go",
@@ -159,7 +159,7 @@ fn startup_defaults_absent_installed_appearance_without_rewriting_the_legacy_fie
         std::env::temp_dir().join(format!("light-appearance-startup-{}", Uuid::new_v4()));
     let path = data_dir.join("shows/legacy-appearance.show");
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-    let show_id = default_show::initialise(&path).unwrap();
+    let show_id = default_show::initialise_legacy_test_show(&path).unwrap();
     let store = ShowStore::open(&path).unwrap();
     let object = store
         .objects("patched_fixture")
@@ -263,7 +263,7 @@ fn startup_defaults_absent_installed_appearance_in_a_lean_show_without_any_rewri
         std::env::temp_dir().join(format!("light-lean-appearance-startup-{}", Uuid::new_v4()));
     let path = data_dir.join("shows/lean-appearance.show");
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-    let show_id = default_show::initialise(&path).unwrap();
+    let show_id = default_show::initialise_legacy_test_show(&path).unwrap();
     let bootstrap_entry = migration_test_entry(&path, show_id, default_show::name());
 
     // Establish the already-lean compatibility input independently. The assertions below begin
@@ -398,7 +398,7 @@ fn assert_malformed_installed_appearance_enters_recovery(
     ));
     let path = data_dir.join("shows/malformed-appearance.show");
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-    let show_id = default_show::initialise(&path).unwrap();
+    let show_id = default_show::initialise_legacy_test_show(&path).unwrap();
     let store = ShowStore::open(&path).unwrap();
     let object = store
         .objects("patched_fixture")
@@ -483,7 +483,7 @@ fn startup_migrates_legacy_patch_to_lean_once_and_reopens_at_the_relocated_addre
         std::env::temp_dir().join(format!("light-lean-startup-{}", Uuid::new_v4()));
     let path = data_dir.join("shows/default.show");
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-    let show_id = default_show::initialise(&path).unwrap();
+    let show_id = default_show::initialise_legacy_test_show(&path).unwrap();
     let store = ShowStore::open(&path).unwrap();
     let mut retained_id = None;
     for object in store.objects("patched_fixture").unwrap() {
@@ -611,7 +611,7 @@ fn startup_moves_assigned_group_master_to_playback_and_reopens_without_a_sidecar
         std::env::temp_dir().join(format!("light-group-master-startup-{}", Uuid::new_v4()));
     let path = data_dir.join("shows/group-master.show");
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-    let show_id = default_show::initialise(&path).unwrap();
+    let show_id = default_show::initialise_legacy_test_show(&path).unwrap();
     let store = ShowStore::open(&path).unwrap();
     store
         .put_object(
@@ -700,7 +700,7 @@ fn failed_legacy_candidate_leaves_the_stored_document_unchanged_and_enters_recov
         std::env::temp_dir().join(format!("light-failed-migration-{}", Uuid::new_v4()));
     let path = data_dir.join("shows/damaged.show");
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-    let show_id = default_show::initialise(&path).unwrap();
+    let show_id = default_show::initialise_legacy_test_show(&path).unwrap();
     let store = ShowStore::open(&path).unwrap();
     let object = store.objects("patched_fixture").unwrap().remove(0);
     let mut damaged = object.body;

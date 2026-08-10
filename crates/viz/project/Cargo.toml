@@ -5,6 +5,7 @@ edition.workspace = true
 license-file.workspace = true
 
 [dependencies]
+base64.workspace = true
 glam.workspace = true
 # Gobo artwork arrives as a PNG inside the profile snapshot, and the gate needs it as a mask.
 image = { version = "0.25", default-features = false, features = ["png"] }
@@ -12,9 +13,14 @@ light-core = { path = "../../shared/core" }
 light-fixture = { path = "../../shared/fixture" }
 serde.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
 uuid.workspace = true
 viz-dmx.workspace = true
 viz-scene.workspace = true
+
+[[bin]]
+name = "fixture-projection"
+path = "src/bin/fixture-projection.rs"
 
 [lints]
 workspace = true

@@ -206,6 +206,10 @@ impl Renderer {
             plot,
             plot_right,
             plot_up,
+            projection_view: view
+                .mode
+                .projection_view()
+                .unwrap_or(viz_scene::ProjectionView::Top),
             symbol_metres: symbol_metres(view),
             beam_ink: Vec3::from(view.theme.beam_ink()),
             ink: Vec3::from(view.theme.ink()),

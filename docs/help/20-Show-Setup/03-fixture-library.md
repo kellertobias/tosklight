@@ -40,6 +40,11 @@ fixture.json
 assets/photograph.png    optional PNG, JPEG, or WebP
 assets/icon.png          optional PNG, JPEG, or WebP stage icon
 assets/model.glb         optional self-contained glTF Binary 2.0 model
+assets/projections/top.svg    optional generated physical-scale vector views
+assets/projections/left.svg
+assets/projections/right.svg
+assets/projections/front.svg
+assets/projections/back.svg
 assets/gobo-3.png        optional artwork for gobo slot 3, and one file per further slot
 assets/scan.js           a laser's scan engine, and only a laser's
 ```
@@ -90,9 +95,31 @@ glass.
 
 The `profile` is the same schema-v3 fixture profile edited by the Fixture Library and embedded in patched shows. Schema-v2 profiles normally load through an explicit identity-mapping migration; the unambiguous legacy aliases in the [Attribute Reference](06-attribute-reference-and-activation.md) instead project to their documented canonical identity. A DMX profile uses `"patch_policy": "dmx"`, a 1–512 slot split footprint, and its channels. A scenic object uses `"patch_policy": "visual_only"`, a zero-footprint split, no channels/color/control actions, and geometry; the desk then guarantees that it cannot receive a universe, address, or direct-control endpoint. `"model_units": "metres"` preserves authored GLB dimensions exactly, while the backward-compatible `"auto"` value normalizes a conventional lamp model to its profile dimensions. Use an exported package as the safest complete template. Asset fields are either `null` or relative paths under `assets/`. Do not use absolute paths, parent paths, data URLs, external GLB textures, or network URLs inside a package. The package must contain exactly the referenced files and no unreferenced extras.
 
+### Generated plan projections
+
+A package with a 3D model may also carry exactly five generated SVG drawings: top, left, right,
+front, and back. Generate them without changing the installed library revision:
+
+```sh
+cargo run -p viz-project --bin fixture-projection -- generate source.toskfixture --output projected.toskfixture
+```
+
+The command refuses to overwrite its input. Importing the new package follows the normal immutable
+revision flow. Each SVG uses millimetres, records its physical `viewBox`, fixture origin, page
+orientation, named view, deterministic pose, source-model SHA-256, generator version, and pose
+contract version. Front and side drawings pose a moving head down; top poses it toward the front;
+fixed fixtures retain their authored home pose.
+
+SVG is the canonical artwork. Printed or bitmap output is rasterized from that SVG and is never a
+second authored package asset. The package accepts only opaque move/line paths: no script, event
+handler, CSS, font, image, external resource, link, transform, animation, filter, or
+environment-dependent reference is allowed. A changed source-model hash or generator/pose version
+makes the stored projection cache stale. Regeneration produces a new package; it never rewrites an
+operator's installed revision.
+
 To author one manually, export a similar fixture, rename `.toskfixture` to `.zip`, unpack it, edit `fixture.json`, add or replace assets, ZIP `fixture.json` and `assets/` at the archive root, then restore the `.toskfixture` extension. Keep existing UUIDs when correcting the same fixture; generate new UUIDs for a genuinely different fixture, mode, head, channel, or function. Never derive identity from display text or DMX row position.
 
-For safety, import rejects unsafe or duplicate paths, symbolic links, unsupported compression, undeclared files, invalid raster data, non-self-contained GLBs, archives over 64 MiB compressed or 128 MiB expanded, more than 32 entries, and manifests over 64 MiB. The supported MIME type is `application/vnd.tosklight.fixture+zip`.
+For safety, import rejects unsafe or duplicate paths, symbolic links, unsupported compression, undeclared files, invalid raster data, unsafe or metadata-mismatched SVGs, stale projection hashes, non-self-contained GLBs, archives over 64 MiB compressed or 128 MiB expanded, more than 32 entries, and manifests over 64 MiB. The supported MIME type is `application/vnd.tosklight.fixture+zip`.
 
 If a new package uses a canonical attribute ID that the active show does not know, import pauses
 without storing the profile. The import dialog names every unknown ID and lets you map each one to

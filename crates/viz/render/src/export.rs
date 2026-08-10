@@ -120,6 +120,15 @@ fn mesh_for(kind: MeshKind, scene: &Scene) -> Option<GeometryMesh> {
             indices: part.indices.clone(),
         });
     }
+    if let MeshKind::PlanArtwork(artwork_index) = kind {
+        let artwork = scene.plan_artwork.get(artwork_index as usize)?;
+        return Some(GeometryMesh {
+            name: format!("plan artwork {artwork_index}"),
+            positions: artwork.vertices.clone(),
+            normals: artwork.normals.clone(),
+            indices: artwork.indices.clone(),
+        });
+    }
     let (name, data) = mesh::procedural(kind)?;
     Some(GeometryMesh {
         name: name.to_owned(),

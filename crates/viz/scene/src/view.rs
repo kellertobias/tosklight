@@ -3,6 +3,32 @@
 use crate::scene::Aabb;
 use glam::Vec3;
 
+#[derive(
+    Clone, Copy, Debug, Default, Eq, Hash, PartialEq, serde::Serialize, serde::Deserialize,
+)]
+pub enum ProjectionView {
+    #[default]
+    Top,
+    Left,
+    Right,
+    Front,
+    Back,
+}
+
+impl ProjectionView {
+    pub const ALL: [Self; 5] = [Self::Top, Self::Left, Self::Right, Self::Front, Self::Back];
+
+    pub const fn index(self) -> usize {
+        match self {
+            Self::Top => 0,
+            Self::Left => 1,
+            Self::Right => 2,
+            Self::Front => 3,
+            Self::Back => 4,
+        }
+    }
+}
+
 /// The eight named modes. Source-visible names and wire values map one to one.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum ViewMode {
@@ -69,6 +95,17 @@ impl ViewMode {
                 | Self::FrontToBack
                 | Self::BackToFront
         )
+    }
+
+    pub fn projection_view(self) -> Option<ProjectionView> {
+        match self {
+            Self::TopDown => Some(ProjectionView::Top),
+            Self::LeftToRight => Some(ProjectionView::Left),
+            Self::RightToLeft => Some(ProjectionView::Right),
+            Self::FrontToBack => Some(ProjectionView::Front),
+            Self::BackToFront => Some(ProjectionView::Back),
+            _ => None,
+        }
     }
 
     /// Whether this mode draws beams and surface lighting at all.

@@ -1,8 +1,12 @@
-use super::assets::{extract_asset_field, resolve_asset_field};
+use super::assets::{
+    extract_asset_field, resolve_asset_field, validate_inline_projection_set,
+    validate_projection_svg_contract,
+};
 use super::manifest::AssetKind;
 use super::manifest::*;
 use super::{invalid, validate_profile, validate_zip_entry};
 use crate::FixtureProfile;
+use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::io::{Cursor, Read, Write};
 use zip::{CompressionMethod, ZipArchive, ZipWriter, write::SimpleFileOptions};
@@ -69,6 +73,35 @@ pub fn read_fixture_package(bytes: &[u8]) -> Result<FixtureProfile, FixturePacka
         ));
     }
 
+    if let Some(projections) = manifest.profile.projection_assets.as_ref() {
+        let model_path = manifest
+            .profile
+            .model_asset
+            .as_deref()
+            .ok_or_else(|| invalid("SVG projections require their source 3D model"))?;
+        let model = files
+            .get(model_path)
+            .ok_or_else(|| invalid(format!("3D model asset {model_path} is missing")))?;
+        let actual_hash = Sha256::digest(model)
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+        if actual_hash != projections.source_model_sha256 {
+            return Err(invalid(
+                "SVG projections are stale for the package's source 3D model",
+            ));
+        }
+        for projection in &projections.views {
+            let bytes = files.get(&projection.artwork_asset).ok_or_else(|| {
+                invalid(format!(
+                    "SVG projection asset {} is missing",
+                    projection.artwork_asset
+                ))
+            })?;
+            validate_projection_svg_contract(bytes, projection)?;
+        }
+    }
+
     resolve_asset_field(
         &mut manifest.profile.photograph_asset,
         AssetKind::Photograph,
@@ -84,6 +117,13 @@ pub fn read_fixture_package(bytes: &[u8]) -> Result<FixtureProfile, FixturePacka
         AssetKind::Model,
         &mut files,
     )?;
+    if let Some(projections) = manifest.profile.projection_assets.as_mut() {
+        for projection in &mut projections.views {
+            let mut artwork = Some(std::mem::take(&mut projection.artwork_asset));
+            resolve_asset_field(&mut artwork, AssetKind::Projection, &mut files)?;
+            projection.artwork_asset = artwork.expect("a projection asset remains present");
+        }
+    }
     if let Some(laser) = manifest.profile.laser.as_mut() {
         resolve_asset_field(
             &mut laser.scan_script_asset,
@@ -105,6 +145,7 @@ pub fn read_fixture_package(bytes: &[u8]) -> Result<FixtureProfile, FixturePacka
 /// Data URL assets are extracted into canonical files referenced by `fixture.json`.
 pub fn write_fixture_package(profile: &FixtureProfile) -> Result<Vec<u8>, FixturePackageError> {
     validate_profile(profile)?;
+    validate_inline_projection_set(profile)?;
     let mut portable = profile.clone();
     // A transferable package never carries ownership of an application catalog.
     portable.reserved_source = None;
@@ -127,6 +168,18 @@ pub fn write_fixture_package(profile: &FixtureProfile) -> Result<Vec<u8>, Fixtur
         "assets/model",
         &mut assets,
     )?;
+    if let Some(projections) = portable.projection_assets.as_mut() {
+        for projection in &mut projections.views {
+            let mut artwork = Some(std::mem::take(&mut projection.artwork_asset));
+            extract_asset_field(
+                &mut artwork,
+                AssetKind::Projection,
+                &format!("assets/projections/{}", projection.view.wire()),
+                &mut assets,
+            )?;
+            projection.artwork_asset = artwork.expect("a projection asset remains present");
+        }
+    }
     if let Some(laser) = portable.laser.as_mut() {
         extract_asset_field(
             &mut laser.scan_script_asset,
