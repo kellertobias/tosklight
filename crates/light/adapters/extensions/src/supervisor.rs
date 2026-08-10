@@ -251,6 +251,21 @@ impl ActiveSession {
             failure,
         )
     }
+
+    fn failed_after_inbound_end(
+        self,
+        shared: &SharedHealth,
+        fallback_detail: String,
+    ) -> SessionResult {
+        if shared.inbound_drops.load(Ordering::Relaxed) > self.inbound_drops_before {
+            self.failed(
+                "extension inbound queue overflowed; reconnect requires a full snapshot".into(),
+                (false, true),
+            )
+        } else {
+            self.failed(fallback_detail, (true, false))
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -417,7 +432,7 @@ impl<P: ExtensionApplicationPorts> ExtensionHost<P> {
             match session.child.try_wait() {
                 Ok(Some(status)) => {
                     let detail = exit_detail(status);
-                    return session.failed(detail, (true, false));
+                    return session.failed_after_inbound_end(shared, detail);
                 }
                 Err(error) => {
                     let detail = error.to_string();
@@ -448,24 +463,12 @@ impl<P: ExtensionApplicationPorts> ExtensionHost<P> {
                     return session.failed(detail, (false, true));
                 }
                 Ok(ReaderEvent::Closed) => {
-                    return session.failed("extension stdout closed".into(), (true, false));
+                    return session
+                        .failed_after_inbound_end(shared, "extension stdout closed".into());
                 }
                 Err(RecvTimeoutError::Disconnected) => {
-                    let overflowed =
-                        shared.inbound_drops.load(Ordering::Relaxed) > session.inbound_drops_before;
-                    return session.failed(
-                        if overflowed {
-                            "extension inbound queue overflowed; reconnect requires a full snapshot"
-                                .into()
-                        } else {
-                            "extension reader stopped".into()
-                        },
-                        if overflowed {
-                            (false, true)
-                        } else {
-                            (true, false)
-                        },
-                    );
+                    return session
+                        .failed_after_inbound_end(shared, "extension reader stopped".into());
                 }
                 Err(RecvTimeoutError::Timeout) => {}
             }
