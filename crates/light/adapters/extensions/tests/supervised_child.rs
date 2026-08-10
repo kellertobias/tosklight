@@ -19,6 +19,7 @@ use light_extensions_host::{
 #[derive(Default)]
 struct FakePorts {
     revision: AtomicU64,
+    revision_after_snapshot: AtomicU64,
     snapshots: Mutex<Vec<u64>>,
     controls: Mutex<Vec<(HostControlContext, BoundControlInput)>>,
     telemetry: Mutex<Vec<TelemetryEnvelope>>,
@@ -36,6 +37,11 @@ impl FakePorts {
     fn set_revision(&self, revision: u64) {
         self.revision.store(revision, Ordering::Release);
     }
+
+    fn set_revision_after_next_snapshot(&self, revision: u64) {
+        self.revision_after_snapshot
+            .store(revision, Ordering::Release);
+    }
 }
 
 impl ExtensionApplicationPorts for FakePorts {
@@ -49,6 +55,10 @@ impl ExtensionApplicationPorts for FakePorts {
             .lock()
             .expect("snapshots mutex")
             .push(revision);
+        let next_revision = self.revision_after_snapshot.swap(0, Ordering::AcqRel);
+        if next_revision != 0 {
+            self.revision.store(next_revision, Ordering::Release);
+        }
         FeedbackSnapshot {
             context: feedback_context(),
             revision,
@@ -473,20 +483,19 @@ fn malformed_and_oversized_frames_fault_only_the_child_session() {
 #[test]
 fn crash_restarts_with_backoff_and_recovers_from_a_new_snapshot() {
     let ports = FakePorts::at_revision(7);
+    // Advance the authoritative state immediately after the first snapshot callback. This makes
+    // the restart assertion independent of observing the deliberately transient Restarting state.
+    ports.set_revision_after_next_snapshot(12);
     let mut retrying_limits = limits();
     retrying_limits.maximum_failures = 3;
     let mut extension = start("crash_once", Arc::clone(&ports), retrying_limits);
-    let restarting = wait_for(&extension, Duration::from_secs(2), |health| {
-        matches!(health.state, ExtensionState::Restarting { failures: 1, .. })
-    });
-    assert_eq!(restarting.crashes, 1);
-    ports.set_revision(12);
     let health = wait_for(&extension, Duration::from_secs(3), |health| {
         health.launches >= 2
             && matches!(health.state, ExtensionState::Running)
             && ports.controls.lock().expect("controls mutex").len() == 2
     });
     assert_eq!(health.launches, 2);
+    assert_eq!(health.crashes, 1);
     assert_eq!(
         ports.snapshots.lock().expect("snapshots mutex").as_slice(),
         &[7, 12],

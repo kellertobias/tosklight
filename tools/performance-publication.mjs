@@ -113,9 +113,7 @@ export function performanceReportUrl(performance) {
 	);
 	if (explicit) return explicit;
 	const releaseUrl = safePublicUrl(performance.release?.url);
-	const version = performance.release?.version;
-	if (!releaseUrl || typeof version !== "string" || version.length === 0)
-		return null;
+	if (!releaseUrl) return null;
 	const parsed = new URL(releaseUrl);
 	const tagMarker = "/releases/tag/";
 	const marker = parsed.pathname.indexOf(tagMarker);
@@ -124,7 +122,7 @@ export function performanceReportUrl(performance) {
 	if (!tag) return null;
 	parsed.pathname =
 		`${parsed.pathname.slice(0, marker)}/releases/download/${tag}/` +
-		`tosklight-performance-report-${version}.zip`;
+		"report-performance.zip";
 	parsed.search = "";
 	parsed.hash = "";
 	return parsed.href;

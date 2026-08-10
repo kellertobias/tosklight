@@ -219,7 +219,7 @@ function runStage(
 
 function reportDownloadUrl(options) {
 	const base = options["release-url"].replace("/tag/", "/download/");
-	return `${base}/tosklight-performance-report-${options.version}.zip`;
+	return `${base}/report-performance.zip`;
 }
 
 function scenarioEvidence(validation) {
