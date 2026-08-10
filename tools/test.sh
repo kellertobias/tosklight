@@ -29,13 +29,21 @@ build_e2e(){
 }
 architecture_check(){
   local label="$1"
+  local output
+  local status
   shift
-  if "$@"; then
-    return 0
+  if output="$("$@" 2>&1)"; then
+    printf '%s\n' "$output"
+    return
   else
-    local status=$?
+    status=$?
   fi
-  printf '::error title=Architecture check failed::%s\n' "$label" >&2
+  printf '%s\n' "$output" >&2
+  output="$(printf '%s' "$output" | tail -c 3000)"
+  output="${output//'%'/'%25'}"
+  output="${output//$'\r'/'%0D'}"
+  output="${output//$'\n'/'%0A'}"
+  printf '::error title=Architecture check failed - %s::%s\n' "$label" "$output" >&2
   return "$status"
 }
 architecture(){
