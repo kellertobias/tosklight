@@ -45,6 +45,29 @@ test("repository Tauri overlays disable a duplicate frontend build", () => {
 	assert.match(configWriter, /beforeBuildCommand: ""/u);
 });
 
+test("the Viz release builds only the bundle format its staging step consumes", () => {
+	const workflow = read(".github/workflows/release.yml");
+	const buildStart = workflow.indexOf(
+		"- name: Build the ToskLight Viz Editor application",
+	);
+	const stageStart = workflow.indexOf(
+		"- name: Stage the Viz release artifacts",
+		buildStart,
+	);
+	assert.notEqual(buildStart, -1, "the Viz release build should exist");
+	assert.notEqual(
+		stageStart,
+		-1,
+		"Viz artifact staging should follow its build",
+	);
+	const buildStep = workflow.slice(buildStart, stageStart);
+
+	assert.match(buildStep, /bundle_args=\(--no-bundle\)/u);
+	assert.match(buildStep, /macOS\) bundle_args=\(--bundles app\)/u);
+	assert.match(buildStep, /Windows\) bundle_args=\(--bundles nsis\)/u);
+	assert.doesNotMatch(buildStep, /--bundles all/u);
+});
+
 test("open:viz builds every helper path it exports", () => {
 	const buildScript = read("tools/build.sh");
 	const helperBuild = shellFunction(

@@ -927,7 +927,13 @@ jobs:
         run: |
           config="$(npm run --silent artifact-path -- tmp)/tauri-viz-editor-release.json"
           node tools/write-tauri-artifact-config.mjs viz-editor "$config"
-          npm run --prefix apps/viz-editor tauri:build -- --target ${{ matrix.target }} --config "$config"
+          bundle_args=(--no-bundle)
+          case "$RUNNER_OS" in
+            macOS) bundle_args=(--bundles app) ;;
+            Windows) bundle_args=(--bundles nsis) ;;
+          esac
+          npm run --prefix apps/viz-editor tauri:build -- \
+            --target ${{ matrix.target }} --config "$config" "${bundle_args[@]}"
 
       - name: Stage the Viz release artifacts
         if: matrix.viz
