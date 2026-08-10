@@ -47,6 +47,9 @@ test("repository Tauri overlays disable a duplicate frontend build", () => {
 
 test("the Viz release builds only the bundle format its staging step consumes", () => {
 	const workflow = read(".github/workflows/release.yml");
+	const frontendStart = workflow.indexOf(
+		"- name: Build the ToskLight Viz Editor frontend",
+	);
 	const buildStart = workflow.indexOf(
 		"- name: Build the ToskLight Viz Editor application",
 	);
@@ -54,7 +57,16 @@ test("the Viz release builds only the bundle format its staging step consumes", 
 		"- name: Stage the Viz release artifacts",
 		buildStart,
 	);
+	assert.notEqual(frontendStart, -1, "the Viz frontend build should exist");
 	assert.notEqual(buildStart, -1, "the Viz release build should exist");
+	assert.ok(
+		frontendStart < buildStart,
+		"the Viz frontend should be built before Tauri packages it",
+	);
+	assert.match(
+		workflow.slice(frontendStart, buildStart),
+		/npm run --prefix apps\/viz-editor build/u,
+	);
 	assert.notEqual(
 		stageStart,
 		-1,

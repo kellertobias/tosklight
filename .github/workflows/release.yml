@@ -916,6 +916,11 @@ jobs:
         shell: bash
         run: npm run demo-show
 
+      - name: Build the ToskLight Viz Editor frontend
+        if: matrix.viz
+        shell: bash
+        run: npm run --prefix apps/viz-editor build
+
       - name: Build the ToskLight Viz Editor application
         if: matrix.viz
         shell: bash
