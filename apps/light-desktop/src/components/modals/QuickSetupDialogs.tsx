@@ -323,7 +323,7 @@ function LoadShowLibrary({ model }: ModelProps) {
 			<article className="built-in-default-show">
 				<span>
 					<b>Built-in Default Stage Show</b>
-					<small>Untouched 49-fixture factory rig</small>
+					<small>Untouched completed demo show</small>
 				</span>
 				<Button
 					variant="primary"

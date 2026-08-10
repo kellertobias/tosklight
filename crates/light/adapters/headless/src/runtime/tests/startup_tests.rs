@@ -114,7 +114,7 @@ async fn clean_default_load_creates_a_pristine_copy_without_replacing_manual_cha
         .objects("patched_fixture")
         .unwrap()
         .into_iter()
-        .find(|object| object.body["name"] == "Stage Hazer")
+        .find(|object| object.body["name"] == "Hazer Stage Left")
         .unwrap();
     assert!(
         working_store
@@ -138,11 +138,11 @@ async fn clean_default_load_creates_a_pristine_copy_without_replacing_manual_cha
     assert_eq!(opened["name"], "Default Stage Show Clean Copy");
     let clean_store = ShowStore::open(opened["path"].as_str().unwrap()).unwrap();
     let clean_fixtures = clean_store.objects("patched_fixture").unwrap();
-    assert_eq!(clean_fixtures.len(), 49);
+    assert_eq!(clean_fixtures.len(), 264);
     assert!(
         clean_fixtures
             .iter()
-            .any(|object| object.body["name"] == "Stage Hazer")
+            .any(|object| object.body["name"] == "Hazer Stage Left")
     );
     assert_eq!(
         ShowStore::open(&working.path)
@@ -150,7 +150,7 @@ async fn clean_default_load_creates_a_pristine_copy_without_replacing_manual_cha
             .objects("patched_fixture")
             .unwrap()
             .len(),
-        48
+        263
     );
     let _ = std::fs::remove_dir_all(data_dir);
 }

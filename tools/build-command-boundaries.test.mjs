@@ -132,6 +132,7 @@ test("release packaging and Pages cover the supported product matrix", () => {
 		"light-headless-$VERSION-linux-amd64.zip",
 		"tosklight-visualizer-$VERSION-linux-amd64.zip",
 		"light-headless-$VERSION-linux-arm64.zip",
+		"tosklight-demo-show-$VERSION.show",
 	]) {
 		assert.ok(workflow.includes(asset), `release workflow should require ${asset}`);
 	}
@@ -160,6 +161,18 @@ test("release packaging and Pages cover the supported product matrix", () => {
 			`Pages should link ToskLight PreViz for ${slug}`,
 		);
 	}
+	assert.match(landingPage, /tosklight-demo-show-\$\{v\}\.show/u);
+	assert.match(workflow, /name: Release \/ Generate default demo show/u);
+	assert.match(workflow, /npm run test:demo-show/u);
+	assert.match(
+		workflow,
+		/Generate and validate the completed portable demo show through the API/u,
+	);
+	assert.match(workflow, /name: playwright-application-\$\{\{ github\.sha \}\}/u);
+	assert.doesNotMatch(
+		workflow,
+		/npm run test:demo(?!-show)|name: product-demo|Documentation \/ Product demo/u,
+	);
 });
 
 test("non-main branch pushes run validation without release work", () => {

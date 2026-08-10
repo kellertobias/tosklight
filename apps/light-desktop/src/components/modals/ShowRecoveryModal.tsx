@@ -42,7 +42,7 @@ export function ShowRecoveryModal() {
         {alternatives.map((show) => <Button key={show.id} disabled={busy} aria-label={`Load Latest Autosave for ${show.name}`} onClick={() => void load(show.id)}>Load Latest Autosave · {show.name}</Button>)}
       </section>}
       <Button variant="primary" disabled={busy} onClick={() => void loadCleanDefault()}>{busy ? "Loading…" : "Load Clean Built-in Default"}</Button>
-      <small>This creates and activates a separate show from the untouched built-in 49-fixture rig. The damaged file remains available for recovery.</small>
+      <small>This creates and activates a separate show from the untouched completed demo show. The damaged file remains available for recovery.</small>
       <Button disabled={busy} onClick={() => void initialize()}>{busy ? "Initializing…" : "Initialize New Empty Show"}</Button>
       <small>This creates and activates a separate empty show. The damaged file remains available for recovery.</small>
       <ServerErrorNotice />

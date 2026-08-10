@@ -115,6 +115,10 @@ demo(){
   (cd "$UI" && LIGHT_VISUAL_RECORDING=1 LIGHT_UPDATE_DEMO_SHOW=1 LIGHT_TEST_RESULTS_DIR="$LIGHT_ARTIFACTS_DIR/test/product-demo-results" npm run test:e2e -- --workers=1 product-demo.spec.ts "$@")
   node "$ROOT/tools/encode-product-demo.mjs"
 }
+demo_show(){
+  build_e2e
+  (cd "$UI" && LIGHT_UPDATE_DEMO_SHOW=1 LIGHT_TEST_RESULTS_DIR="$LIGHT_ARTIFACTS_DIR/test/demo-show-results" npm run test:e2e -- --workers=1 "$ROOT/tests/76-demo-show-generation.spec.ts" "$@")
+}
 run_help_screenshots(){
   (cd "$ROOT" && npx playwright test --config apps/ui-library/storybook/playwright.config.ts apps/ui-library/storybook/tests/help-screenshots.spec.ts "$@")
 }
@@ -167,6 +171,7 @@ case "$command" in
   media-app) media_app "$@" ;;
   storybook) storybook "$@" ;;
   record) record "$@" ;;
+  demo-show) demo_show "$@" ;;
   demo) demo "$@" ;;
   all) verify; e2e "$@" ;;
   *) usage >&2; exit 2 ;;

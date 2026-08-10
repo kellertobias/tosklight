@@ -1,5 +1,5 @@
 use light_fixture::{PatchedFixture, PortablePatchedFixtureRecord};
-use light_show::{PortableShowDocument, PortableShowTransaction, StoreError};
+use light_show::{PortableShowDocument, PortableShowTransaction, ShowStore, StoreError};
 use serde_json::Value;
 use std::path::Path;
 
@@ -9,6 +9,7 @@ mod definition;
 mod seed;
 
 const DEFAULT_SHOW_NAME: &str = "Default Stage Show";
+const PACKAGED_DEFAULT_SHOW: &[u8] = include_bytes!("../../../../../assets/demo.show");
 
 pub fn name() -> &'static str {
     DEFAULT_SHOW_NAME
@@ -209,7 +210,28 @@ fn merge_typed_delta(stored: &mut Value, before: &Value, after: &Value) {
 }
 
 pub fn initialise(path: impl AsRef<Path>) -> Result<light_core::ShowId, StoreError> {
-    seed::initialise(path)
+    let path = path.as_ref();
+    if path.exists() {
+        return ShowStore::open(path)?.id();
+    }
+    let temporary = path.with_extension(format!("show.{}.tmp", uuid::Uuid::new_v4()));
+    std::fs::write(&temporary, PACKAGED_DEFAULT_SHOW).map_err(|error| {
+        StoreError::Invalid(format!(
+            "could not stage the packaged default show at {}: {error}",
+            temporary.display()
+        ))
+    })?;
+    if let Err(error) = std::fs::rename(&temporary, path) {
+        let _ = std::fs::remove_file(&temporary);
+        return Err(StoreError::Invalid(format!(
+            "could not install the packaged default show at {}: {error}",
+            path.display()
+        )));
+    }
+    let store = ShowStore::open(path)?;
+    let id = light_core::ShowId(uuid::Uuid::new_v4());
+    store.set_identity(id, DEFAULT_SHOW_NAME, None)?;
+    Ok(id)
 }
 
 #[cfg(test)]

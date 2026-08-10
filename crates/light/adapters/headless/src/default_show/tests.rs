@@ -280,27 +280,23 @@ fn assert_layout(store: &ShowStore, fixtures: &[PatchedFixture]) {
 }
 
 #[test]
-fn seeds_the_complete_non_overlapping_default_rig() {
+fn installs_the_generated_product_demo_as_the_default_show() {
     let path = std::env::temp_dir().join(format!(
         "tosklight-default-show-{}.show",
         uuid::Uuid::new_v4()
     ));
     initialise(&path).unwrap();
     let store = ShowStore::open(&path).unwrap();
-    let fixtures = store
-        .objects("patched_fixture")
-        .unwrap()
-        .into_iter()
-        .map(|object| serde_json::from_value::<PatchedFixture>(object.body).unwrap())
-        .collect::<Vec<_>>();
-    light_fixture::validate_patch(&fixtures).unwrap();
-    assert_eq!(fixtures.len(), 49);
-    assert_numbering(&fixtures);
-    assert_hazer(&fixtures);
-    assert_sunstrip_definition(&fixtures);
-    assert_sunstrip_selection(&fixtures);
-    assert_patch(&fixtures);
-    assert_layout(&store, &fixtures);
+    let fixtures = store.objects("patched_fixture").unwrap();
+    assert_eq!(store.name().unwrap(), DEFAULT_SHOW_NAME);
+    assert_eq!(fixtures.len(), 264);
+    assert_eq!(store.objects("patch_layer").unwrap().len(), 12);
+    assert_eq!(store.objects("group").unwrap().len(), 35);
+    assert_eq!(store.objects("cue_list").unwrap().len(), 8);
+    assert_eq!(store.objects("playback").unwrap().len(), 14);
+    assert_eq!(store.objects("preset").unwrap().len(), 30);
+    assert_eq!(store.objects("dynamic").unwrap().len(), 30);
+    assert_eq!(store.objects("user_layout").unwrap().len(), 1);
     drop(store);
     std::fs::remove_file(path).unwrap();
 }
@@ -311,9 +307,21 @@ fn upgrades_the_legacy_single_universe_default_patch() {
         "tosklight-default-show-upgrade-{}.show",
         uuid::Uuid::new_v4()
     ));
-    initialise(&path).unwrap();
+    seed::initialise(&path).unwrap();
     let store = ShowStore::open(&path).unwrap();
-    for object in store.objects("patched_fixture").unwrap() {
+    let objects = store.objects("patched_fixture").unwrap();
+    let initial_fixtures = objects
+        .iter()
+        .map(|object| serde_json::from_value::<PatchedFixture>(object.body.clone()).unwrap())
+        .collect::<Vec<_>>();
+    light_fixture::validate_patch(&initial_fixtures).unwrap();
+    assert_numbering(&initial_fixtures);
+    assert_hazer(&initial_fixtures);
+    assert_sunstrip_definition(&initial_fixtures);
+    assert_sunstrip_selection(&initial_fixtures);
+    assert_patch(&initial_fixtures);
+    assert_layout(&store, &initial_fixtures);
+    for object in objects {
         let mut fixture: PatchedFixture = serde_json::from_value(object.body).unwrap();
         fixture.universe = Some(1);
         fixture.split_patches = vec![light_fixture::SplitPatch {

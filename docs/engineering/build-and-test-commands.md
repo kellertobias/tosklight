@@ -104,7 +104,8 @@ code.**
 | `npm run screenshots:help` | Regenerates the whole help gallery: the Storybook capture and the live-desk capture. A fresh clone has no help images until this runs. |
 | `npm run test:help-screenshots-live` | Smaller, separately named production browser/server path for manifest entries still marked `live-app`; Storybook-owned captures cannot be overwritten by this command. |
 | `npm run test:record` | Serial narrated video of the whole catalog, assembled with ffmpeg into `.artifacts/test/visual-inspection/`. |
-| `npm run test:demo` | The product walkthrough; refreshes `assets/demo.show`. |
+| `npm run test:demo-show` | Fast API-only generation and validation of `assets/demo.show`; release CI uses this path. |
+| `npm run test:demo` | Offline product walkthrough and video capture on the operator computer; also refreshes `assets/demo.show`. |
 | `npm run test:app-icons` | Asserts the required Tauri icon set for both apps. |
 | `npm run test:artifact-paths` | Self-test of the artifact path bindings across bash, Node, and Python. |
 | `npm run test:all` | `verify` then `e2e`. |
