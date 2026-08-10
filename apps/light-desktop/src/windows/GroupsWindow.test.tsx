@@ -387,7 +387,9 @@ describe("GroupsWindow action routing", () => {
 		mocks.state.storeArmed = true;
 		const view = render(<GroupsWindow />);
 		fireEvent.click(buttonForText("Stored Populated"));
-		await screen.findByRole("button", { name: "Merge" });
+		// A single pool press intentionally waits out the 240 ms double-press window.
+		// Give that operator gesture room under the fully loaded CI unit-test runner.
+		await screen.findByRole("button", { name: "Merge" }, { timeout: 5_000 });
 		mocks.groups[1].revision = 9;
 		view.rerender(<GroupsWindow />);
 		fireEvent.click(screen.getByRole("button", { name: "Merge" }));
