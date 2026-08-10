@@ -172,6 +172,8 @@ function useProviderDataSources(
 			mediaPreviewUrls: value.mediaPreviewUrls,
 			refreshMediaPreview: value.refreshMediaPreview,
 			refreshMediaThumbnails: value.refreshMediaThumbnails,
+			inspectMediaServer: value.inspectMediaServer,
+			mediaThumbnail: value.mediaThumbnail,
 			matter: value.matter,
 		}),
 		[
@@ -179,6 +181,8 @@ function useProviderDataSources(
 			value.mediaPreviewUrls,
 			value.refreshMediaPreview,
 			value.refreshMediaThumbnails,
+			value.inspectMediaServer,
+			value.mediaThumbnail,
 			value.matter,
 		],
 	);

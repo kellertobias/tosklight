@@ -65,6 +65,22 @@ export type Action =
 			showCalendar: boolean;
 	  }
 	| {
+			type: "SET_PANE_MEDIA_STATE";
+			id: string;
+			state: {
+				serverId?: string;
+				layerId?: string;
+				browserMode?: "media" | "mask";
+				mainSectionId?: string;
+				rightPaneVisible?: boolean;
+			};
+	  }
+	| {
+			type: "SET_PANE_RUNNING_FILTER";
+			id: string;
+			filter: "all" | "cue_list" | "dynamic" | "timecode" | "macro";
+	  }
+	| {
 			type: "SET_VIRTUAL_PLAYBACK_GRID";
 			id: string;
 			rows: number;

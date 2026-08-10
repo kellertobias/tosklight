@@ -46,6 +46,8 @@ mod engine_selection_refresh_tests;
 mod event_transport_route_tests;
 #[path = "extension_control_tests.rs"]
 mod extension_control_tests;
+#[path = "macro_playback_convergence_tests.rs"]
+mod macro_playback_convergence_tests;
 #[path = "output_runtime_tests.rs"]
 mod output_runtime_tests;
 #[path = "playback_topology_map_existing_route_tests.rs"]

@@ -69,6 +69,7 @@ mod controls;
 mod cue_recording;
 mod cue_tracking;
 mod identity;
+mod macro_target;
 mod master;
 mod mutation;
 mod runtime;

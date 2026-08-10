@@ -4448,6 +4448,23 @@
         {
           "type": "object",
           "properties": {
+            "macro_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "target": {
+              "type": "string",
+              "const": "macro"
+            }
+          },
+          "required": [
+            "target",
+            "macro_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
             "fader_pickup_required": {
               "type": "boolean"
             },
@@ -6574,6 +6591,34 @@
             },
             "kind": {
               "type": "string",
+              "const": "macro"
+            },
+            "object_id": {
+              "type": "string"
+            },
+            "object_revision": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "kind",
+            "object_id",
+            "object_revision",
+            "body",
+            "deleted"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "body": true,
+            "deleted": {
+              "type": "boolean"
+            },
+            "kind": {
+              "type": "string",
               "const": "patch_layer"
             },
             "object_id": {
@@ -6715,6 +6760,34 @@
             "kind": {
               "type": "string",
               "const": "stage_layout"
+            },
+            "object_id": {
+              "type": "string"
+            },
+            "object_revision": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "kind",
+            "object_id",
+            "object_revision",
+            "body",
+            "deleted"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "body": true,
+            "deleted": {
+              "type": "boolean"
+            },
+            "kind": {
+              "type": "string",
+              "const": "timecode"
             },
             "object_id": {
               "type": "string"

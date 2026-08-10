@@ -20,7 +20,14 @@ pub(super) async fn media_servers(
         .fixtures
         .iter()
         .filter_map(|fixture| {
-            fixture.direct_control.as_ref().map(|endpoint| {
+            fixture
+                .direct_control
+                .as_ref()
+                .filter(|endpoint| {
+                    endpoint.protocol == light_fixture::DirectControlProtocol::Citp
+                        && !fixture.logical_heads.is_empty()
+                })
+                .map(|endpoint| {
                 let status = state.media.status(fixture.fixture_id);
                 serde_json::json!({
                     "fixture_id": fixture.fixture_id,
@@ -33,6 +40,39 @@ pub(super) async fn media_servers(
         })
         .collect::<Vec<_>>();
     Ok(Json(serde_json::json!({ "fixtures": fixtures })))
+}
+
+pub(super) async fn inspect_media_server(
+    State(state): State<AppState>,
+    Path(fixture_id): Path<light_core::FixtureId>,
+    show: ShowContext,
+    headers: HeaderMap,
+) -> Result<Json<light_media::MediaServerSnapshot>, ApiError> {
+    let session = authenticate(&state, &headers)?;
+    show.verify(&state)?;
+    let address = media_endpoint(&state, fixture_id)?;
+    match async {
+        let mut client = CitpClient::connect(address, Duration::from_secs(3)).await?;
+        client.inspect().await
+    }
+    .await
+    {
+        Ok(snapshot) => {
+            state.media.record_status(fixture_id, None);
+            emit(
+                &state,
+                "media_inspected",
+                serde_json::json!({"session_id":session.id,"fixture_id":fixture_id}),
+            );
+            Ok(Json(snapshot))
+        }
+        Err(error) => {
+            state
+                .media
+                .record_status(fixture_id, Some(error.to_string()));
+            Err(ApiError::unavailable(error.to_string()))
+        }
+    }
 }
 
 pub(super) async fn refresh_media_thumbnails(
@@ -176,6 +216,28 @@ pub(super) async fn media_preview(
     )
 }
 
+pub(super) async fn media_thumbnail(
+    State(state): State<AppState>,
+    Path((fixture_id, folder, element)): Path<(light_core::FixtureId, u8, u8)>,
+    show: ShowContext,
+    headers: HeaderMap,
+) -> Result<Response, ApiError> {
+    let _session = authenticate(&state, &headers)?;
+    show.verify(&state)?;
+    cached_image_response(
+        state.media.thumbnail(&ThumbnailKey {
+            fixture: fixture_id.0.to_string(),
+            library_type: 1,
+            library: LibraryId {
+                level: 1,
+                ids: [folder, 0, 0],
+            },
+            element,
+        }),
+        "thumbnail",
+    )
+}
+
 pub(super) fn media_endpoint(
     state: &AppState,
     fixture_id: light_core::FixtureId,
@@ -190,6 +252,11 @@ pub(super) fn media_endpoint(
         .direct_control
         .as_ref()
         .ok_or_else(|| ApiError::bad_request("fixture has no direct-control endpoint"))?;
+    if endpoint.protocol != light_fixture::DirectControlProtocol::Citp {
+        return Err(ApiError::bad_request(
+            "fixture direct-control endpoint is not CITP",
+        ));
+    }
     Ok(SocketAddr::new(endpoint.ip_address, endpoint.port))
 }
 pub(super) fn library_id(
@@ -214,6 +281,13 @@ pub(super) fn cached_image_response(
         header::CACHE_CONTROL,
         header::HeaderValue::from_static("private, max-age=5"),
     );
+    if let Ok(received_at) = image.received_at.duration_since(std::time::UNIX_EPOCH) {
+        response.headers_mut().insert(
+            header::HeaderName::from_static("x-light-received-at-millis"),
+            header::HeaderValue::from_str(&received_at.as_millis().to_string())
+                .expect("valid received-at header"),
+        );
+    }
     response.headers_mut().insert(
         header::HeaderName::from_static("x-light-image-width"),
         header::HeaderValue::from_str(&image.image.width.to_string()).expect("valid width header"),

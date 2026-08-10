@@ -54,6 +54,9 @@ pub(super) fn apply_specialized_master(
         PlaybackTarget::ProgrammerFade | PlaybackTarget::CueFade => {
             apply_time_master_fader(state, definition, value).map(PlaybackTargetOutcome::changed)
         }
+        PlaybackTarget::Macro { .. } => {
+            Err(ApiError::bad_request("Macro playbacks do not have a fader"))
+        }
         PlaybackTarget::CueList { .. } | PlaybackTarget::Dynamic { .. } => {
             unreachable!("Cuelist and Dynamic masters use the pool boundary")
         }
@@ -83,9 +86,41 @@ pub(super) fn apply_specialized_target_action(
         PlaybackTarget::ProgrammerFade | PlaybackTarget::CueFade => {
             apply_time_master_action(state, definition, action).map(PlaybackTargetOutcome::changed)
         }
+        PlaybackTarget::Macro { macro_id } => {
+            apply_macro_action(state, session, definition.number, *macro_id, action)
+        }
         PlaybackTarget::CueList { .. } | PlaybackTarget::Dynamic { .. } => {
             unreachable!("Cuelist and Dynamic actions use the pool boundary")
         }
+    }
+}
+
+fn apply_macro_action(
+    state: &AppState,
+    session: Option<&Session>,
+    playback_number: u16,
+    macro_id: uuid::Uuid,
+    action: Action,
+) -> Result<PlaybackTargetOutcome, ApiError> {
+    match macro_action_runs(action)? {
+        true => {
+            let session = session.ok_or_else(|| {
+                ApiError::bad_request("Macro playback activation requires an operator session")
+            })?;
+            macros_v2::start_macro_from_playback(state, session, macro_id, playback_number)?;
+            Ok(PlaybackTargetOutcome::changed(true))
+        }
+        false => Ok(PlaybackTargetOutcome::changed(false)),
+    }
+}
+
+fn macro_action_runs(action: Action) -> Result<bool, ApiError> {
+    match action {
+        Action::Go => Ok(true),
+        Action::None => Ok(false),
+        _ => Err(ApiError::bad_request(
+            "action is incompatible with a Macro playback",
+        )),
     }
 }
 
@@ -295,7 +330,14 @@ fn set_if_changed<T: PartialEq>(current: &mut T, value: T) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{Action, set_if_changed, time_master_action_value};
+    use super::{Action, macro_action_runs, set_if_changed, time_master_action_value};
+
+    #[test]
+    fn macro_playback_dispatches_only_go_press_semantics() {
+        assert!(macro_action_runs(Action::Go).unwrap());
+        assert!(!macro_action_runs(Action::None).unwrap());
+        assert!(macro_action_runs(Action::Flash).is_err());
+    }
 
     #[test]
     fn exact_assignments_do_not_report_a_change() {

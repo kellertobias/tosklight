@@ -253,12 +253,14 @@
         "cue_list",
         "dynamic",
         "group",
+        "macro",
         "patch_layer",
         "playback",
         "playback_page",
         "preset",
         "schedule",
         "stage_layout",
+        "timecode",
         "user_layout"
       ]
     }

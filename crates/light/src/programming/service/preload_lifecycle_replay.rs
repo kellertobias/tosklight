@@ -177,6 +177,7 @@ fn runtime_projection_retained_bytes(projection: &crate::PlaybackRuntimeProjecti
         }
         PlaybackTargetProjection::Missing
         | PlaybackTargetProjection::CueList { runtime: None, .. }
+        | PlaybackTargetProjection::Macro { .. }
         | PlaybackTargetProjection::GrandMaster(_)
         | PlaybackTargetProjection::ProgrammerFade { .. }
         | PlaybackTargetProjection::CueFade { .. } => 0,

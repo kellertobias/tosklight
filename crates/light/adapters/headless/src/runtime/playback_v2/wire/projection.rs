@@ -99,6 +99,9 @@ pub(super) fn target_projection(
                 })
                 .map(Box::new),
         },
+        App::Macro { macro_id } => wire::PlaybackTargetProjection::Macro {
+            macro_id: *macro_id,
+        },
         App::Group {
             group_id,
             master,

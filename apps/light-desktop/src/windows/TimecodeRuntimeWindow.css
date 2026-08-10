@@ -1,0 +1,15 @@
+.timecode-window { display: flex; min-height: 0; height: 100%; flex-direction: column; background: #090a10; color: #eef0f5; }
+.timecode-error { margin: 0; padding: .55rem .8rem; background: rgb(179 48 64 / 28%); border-bottom: 1px solid #d7606e; }
+.timecode-editor-toolbar, .timecode-transport { display: flex; align-items: center; gap: .45rem; padding: .5rem .7rem; border-bottom: 1px solid #272936; }
+.timecode-transport strong { margin-left: auto; font-variant-numeric: tabular-nums; color: #c7a9f4; }
+.timecode-fields { display: grid; grid-template-columns: 7rem minmax(12rem, 1fr) 11rem 11rem auto; gap: .6rem; padding: .7rem; }
+.timecode-fields label { display: grid; gap: .2rem; color: #a8abb8; font-size: .72rem; }
+.timecode-fields input { min-width: 0; padding: .45rem; border: 1px solid #393b49; border-radius: .25rem; background: #12131a; color: #fff; }
+.timecode-fields .timecode-checkbox { display: flex; flex-direction: row; align-items: center; }
+.timecode-timeline { position: relative; min-height: 10rem; margin: .7rem; overflow: hidden; border: 1px solid #343644; background: repeating-linear-gradient(90deg, transparent 0 9.9%, rgb(255 255 255 / 8%) 10%), #11121a; }
+.timecode-playhead { position: absolute; z-index: 2; top: 0; bottom: 0; width: 2px; background: #ff6a62; }
+.timecode-marker { position: absolute; top: .5rem; transform: translateX(-50%); border: 0; border-left: 2px solid #d2b6ff; background: #2b2440; color: #fff; }
+.timecode-seek { margin: 0 .7rem; accent-color: #9365d8; }
+.timecode-lanes { margin: .7rem; }
+.timecode-lanes article { display: flex; justify-content: space-between; margin-bottom: .3rem; padding: .6rem; border: 1px solid #343644; background: #12131a; text-transform: capitalize; }
+@media (max-width: 800px) { .timecode-fields { grid-template-columns: 1fr 1fr; } }

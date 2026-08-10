@@ -3,7 +3,13 @@ import type { ServerCapabilities } from "./capabilityContracts";
 
 export function createMediaActions(
 	model: ServerController,
-): Pick<ServerCapabilities, "refreshMediaPreview" | "refreshMediaThumbnails"> {
+): Pick<
+	ServerCapabilities,
+	| "refreshMediaPreview"
+	| "refreshMediaThumbnails"
+	| "inspectMediaServer"
+	| "mediaThumbnail"
+> {
 	const {
 		api,
 		setError,
@@ -13,15 +19,24 @@ export function createMediaActions(
 		mediaPreviewUrlsRef,
 	} = model;
 	return {
+		inspectMediaServer: (fixtureId) =>
+			api.mediaOutput.inspectMediaServer(fixtureId),
+		mediaThumbnail: (fixtureId, folder, element) =>
+			api.mediaOutput.mediaThumbnail(fixtureId, folder, element),
 		refreshMediaPreview: async (fixtureId, source = 0) => {
 			try {
 				await api.mediaOutput.refreshMediaPreview(fixtureId, source);
 				const blob = await api.mediaOutput.mediaPreview(fixtureId, source);
 				const url = URL.createObjectURL(blob);
 				setMediaPreviewUrls((current) => {
-					const previous = current[fixtureId];
+					const sourceKey = `${fixtureId}:${source}`;
+					const previous = current[sourceKey];
 					if (previous) URL.revokeObjectURL(previous);
-					const next = { ...current, [fixtureId]: url };
+					const next = {
+						...current,
+						[sourceKey]: url,
+					};
+					if (source === 0) next[fixtureId] = url;
 					mediaPreviewUrlsRef.current = next;
 					return next;
 				});
@@ -40,9 +55,13 @@ export function createMediaActions(
 				return false;
 			}
 		},
-		refreshMediaThumbnails: async (fixtureId, elements) => {
+		refreshMediaThumbnails: async (fixtureId, folder, elements) => {
 			try {
-				await api.mediaOutput.refreshMediaThumbnails(fixtureId, elements);
+				await api.mediaOutput.refreshMediaThumbnails(
+					fixtureId,
+					folder,
+					elements,
+				);
 				setMediaServers((await api.mediaOutput.mediaServers()).fixtures);
 				setError(null);
 			} catch (reason) {

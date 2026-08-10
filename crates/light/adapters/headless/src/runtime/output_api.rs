@@ -198,6 +198,7 @@ pub(super) fn matter_playback_values(
                     .map(|master| matter::PlaybackValue::new(master, master > 0.0))
                     .unwrap_or_default(),
                 PlaybackTarget::SpeedGroup { .. }
+                | PlaybackTarget::Macro { .. }
                 | PlaybackTarget::ProgrammerFade
                 | PlaybackTarget::CueFade
                 | PlaybackTarget::GrandMaster => {

@@ -8,6 +8,8 @@ pub(super) struct AppState {
     pub(super) sessions: SessionResource,
     pub(super) programming: ProgrammingResource,
     pub(super) dynamics: light_application::DynamicsService,
+    pub(super) macros: light_application::CommandMacroExecutionService,
+    pub(super) timecodes: light_application::timeline::TimecodeRuntimeService,
     pub(super) playback: PlaybackResource,
     pub(super) highlight: HighlightResource,
     pub(super) output: OutputResource,

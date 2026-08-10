@@ -8,12 +8,16 @@ import { FileManagerWindow } from "./FileManagerWindow";
 import { FixtureSheetWindow } from "./FixtureSheetWindow";
 import { GroupsWindow } from "./GroupsWindow";
 import { HelpWindow } from "./HelpWindow";
+import { MacrosWindow } from "./MacrosWindow";
+import { MediaPaneWindow } from "./MediaPaneWindow";
 import { PatchWindow } from "./PatchWindow";
 import { PresetsWindow } from "./PresetsWindow";
+import { RunningWindow } from "./RunningWindow";
 import { SchedulerWindow } from "./SchedulerWindow";
 import { SetupWindow } from "./SetupWindow";
 import { StageWindow } from "./StageWindow";
 import { TextEditorWindow } from "./TextEditorWindow";
+import { TimecodeRuntimeWindow } from "./TimecodeRuntimeWindow";
 import { VirtualPlaybacksWindow } from "./VirtualPlaybacksWindow";
 import type { WindowProps } from "./windowTypes";
 
@@ -46,6 +50,10 @@ export const windowRegistry: Record<
 	file_manager: FileManagerWindow,
 	text_editor: TextEditorWindow,
 	dynamics: DynamicsWindow,
+	macros: MacrosWindow,
+	media: MediaPaneWindow,
+	running: RunningWindow,
+	timecode: TimecodeRuntimeWindow,
 	scheduler: SchedulerWindow,
 	channels: ChannelsWindow,
 	dmx: DmxWindow,

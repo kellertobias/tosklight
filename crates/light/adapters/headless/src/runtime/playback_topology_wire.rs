@@ -181,6 +181,9 @@ fn application_target(
                 },
             }
         }
+        wire::PlaybackTopologyTarget::Macro { macro_id } => playback::PlaybackTarget::Macro {
+            macro_id: non_nil(macro_id, "playback.target.macro_id")?,
+        },
         wire::PlaybackTopologyTarget::Group {
             group_id,
             initial_master,
@@ -377,11 +380,13 @@ fn wire_kind(
         Input::PlaybackPage => Ok(Output::PlaybackPage),
         Input::AttributeConfiguration
         | Input::Group
+        | Input::Macro
         | Input::Dynamic
         | Input::PatchLayer
         | Input::Preset
         | Input::Schedule
         | Input::StageLayout
+        | Input::Timecode
         | Input::UserLayout => Err(application::ActionError::new(
             application::ActionErrorKind::Internal,
             "Playback topology returned an unrelated object kind",

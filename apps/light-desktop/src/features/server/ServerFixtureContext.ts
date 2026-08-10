@@ -11,13 +11,21 @@ import type {
 	FixtureProfile,
 	PatchLayer,
 } from "../../api/types";
+import type { MediaServerInspection } from "../../api/client/mediaOutput";
 
 export interface ServerFixtureContext {
 	refreshMediaPreview: (fixtureId: string, source?: number) => Promise<boolean>;
 	refreshMediaThumbnails: (
 		fixtureId: string,
+		folder: number,
 		elements: number[],
 	) => Promise<void>;
+	inspectMediaServer: (fixtureId: string) => Promise<MediaServerInspection>;
+	mediaThumbnail: (
+		fixtureId: string,
+		folder: number,
+		element: number,
+	) => Promise<Blob>;
 	saveFixtureDefinition: (definition: FixtureDefinition) => Promise<boolean>;
 	deleteFixtureDefinition: (id: string, revision: number) => Promise<void>;
 	saveFixtureProfile: (

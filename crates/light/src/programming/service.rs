@@ -187,27 +187,80 @@ impl ProgrammingService {
         let session = required_session(&action)?;
         let user_id = context_user(&action.context)?;
         self.with_user_and_desk_gate(action.context.desk_id, user_id, || {
-            ports.authorize(&action.context)?;
-            if let Some(mut cached) = self.cached(&action, session)? {
-                cached.command_line = command_line(&self.programmers, session)?;
-                return Ok(cached);
-            }
-            let lifecycle_before = self.active_lifecycle_programmer(user_id);
-            let mut applied = self.apply(&action, session, user_id, ports)?;
-            applied.result.interaction_event_sequence =
-                self.publish_interaction(&action.context, applied.interaction);
-            applied.result.capture_mode_event_sequence =
-                self.publish_capture_mode(&action.context, applied.capture_mode);
-            applied.result.values_event_sequence =
-                self.publish_values(&action.context, applied.values);
-            applied.result.preload_values_event_sequence =
-                self.publish_preload_values(&action.context, applied.preload_values);
-            applied.result.preload_playback_queue_event_sequence = self
-                .publish_preload_playback_queue(&action.context, applied.preload_playback_queue);
-            self.publish_lifecycle_for_context(&action.context, lifecycle_before);
-            self.remember(&action, session, &applied.result);
-            Ok(applied.result)
+            self.handle_locked(&action, session, user_id, ports)
         })
+    }
+
+    /// Runs a complete sequence under one user-and-desk interaction gate. `before_each` is checked
+    /// between commands, allowing a Macro cancellation request without permitting manual command
+    /// state to interleave with the accepted sequence.
+    pub fn handle_sequence_while(
+        &self,
+        actions: &[ActionEnvelope<ProgrammingCommand>],
+        ports: &dyn ProgrammingPorts,
+        mut before_each: impl FnMut() -> bool,
+    ) -> Result<(Vec<ProgrammingResult>, bool), ActionError> {
+        let first = actions.first().ok_or_else(|| {
+            ActionError::new(
+                crate::ActionErrorKind::Invalid,
+                "Programming sequence is empty",
+            )
+        })?;
+        let session = required_session(first)?;
+        let user_id = context_user(&first.context)?;
+        if actions.iter().any(|action| {
+            action.context.desk_id != first.context.desk_id
+                || action.context.session_id != first.context.session_id
+                || action.context.user_id != first.context.user_id
+        }) {
+            return Err(ActionError::new(
+                crate::ActionErrorKind::Invalid,
+                "Programming sequence must retain one desk, user, and session context",
+            ));
+        }
+        self.with_user_and_desk_gate(first.context.desk_id, user_id, || {
+            let mut results = Vec::with_capacity(actions.len());
+            for action in actions {
+                if !before_each() {
+                    return Ok((results, true));
+                }
+                let result = self.handle_locked(action, session, user_id, ports)?;
+                let accepted = matches!(result.outcome, ProgrammingOutcome::Accepted { .. });
+                results.push(result);
+                if !accepted {
+                    break;
+                }
+            }
+            Ok((results, false))
+        })
+    }
+
+    fn handle_locked(
+        &self,
+        action: &ActionEnvelope<ProgrammingCommand>,
+        session: SessionId,
+        user_id: UserId,
+        ports: &dyn ProgrammingPorts,
+    ) -> Result<ProgrammingResult, ActionError> {
+        ports.authorize(&action.context)?;
+        if let Some(mut cached) = self.cached(action, session)? {
+            cached.command_line = command_line(&self.programmers, session)?;
+            return Ok(cached);
+        }
+        let lifecycle_before = self.active_lifecycle_programmer(user_id);
+        let mut applied = self.apply(action, session, user_id, ports)?;
+        applied.result.interaction_event_sequence =
+            self.publish_interaction(&action.context, applied.interaction);
+        applied.result.capture_mode_event_sequence =
+            self.publish_capture_mode(&action.context, applied.capture_mode);
+        applied.result.values_event_sequence = self.publish_values(&action.context, applied.values);
+        applied.result.preload_values_event_sequence =
+            self.publish_preload_values(&action.context, applied.preload_values);
+        applied.result.preload_playback_queue_event_sequence =
+            self.publish_preload_playback_queue(&action.context, applied.preload_playback_queue);
+        self.publish_lifecycle_for_context(&action.context, lifecycle_before);
+        self.remember(action, session, &applied.result);
+        Ok(applied.result)
     }
 
     fn apply(

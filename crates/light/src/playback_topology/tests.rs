@@ -29,6 +29,92 @@ mod page_actions;
 mod virtual_playbacks;
 
 #[test]
+fn macro_playback_assignment_requires_and_persists_portable_macro_identity() {
+    let rig = TestRig::new();
+    let macro_id = Uuid::from_u128(71);
+    let macro_body = serde_json::to_value(crate::CommandMacroDefinition {
+        id: macro_id,
+        number: 71,
+        name: "Preset fixtures".into(),
+        source: "Fixture 1 At 50".into(),
+        presentation: crate::MacroPresentation::default(),
+    })
+    .unwrap();
+    rig.seed("macro", &macro_id.to_string(), &macro_body);
+    let target = PlaybackTarget::Macro { macro_id };
+    let mut requested = playback(0, "Macro 71");
+    requested.target = target.clone();
+    requested.buttons = PlaybackDefinition::default_buttons(&target);
+    requested.fader = PlaybackDefinition::default_fader(&target);
+    requested.has_fader = false;
+
+    let result = rig
+        .handle(
+            "assign-macro",
+            rig.show_revision(),
+            PlaybackTopologyAction::ConfigureSlot {
+                page: 1,
+                slot: 1,
+                expected_page_revision: 0,
+                expected_page_object_id: None,
+                expected_playback_revision: 0,
+                expected_playback_object_id: None,
+                playback: requested,
+            },
+        )
+        .unwrap();
+
+    assert!(matches!(
+        result.outcome,
+        PlaybackTopologyOutcome::Changed { .. }
+    ));
+    let document = rig.document();
+    let stored: PlaybackDefinition = serde_json::from_value(
+        document
+            .objects_of_kind("playback")
+            .next()
+            .unwrap()
+            .body()
+            .clone(),
+    )
+    .unwrap();
+    assert_eq!(stored.target, target);
+    assert!(!stored.has_fader);
+}
+
+#[test]
+fn macro_playback_assignment_rejects_a_missing_macro_without_mutation() {
+    let rig = TestRig::new();
+    let macro_id = Uuid::from_u128(118);
+    let target = PlaybackTarget::Macro { macro_id };
+    let mut requested = playback(0, "Missing Macro");
+    requested.target = target.clone();
+    requested.buttons = PlaybackDefinition::default_buttons(&target);
+    requested.has_fader = false;
+    let before = rig.show_revision();
+
+    let error = rig
+        .handle(
+            "assign-missing-macro",
+            before,
+            PlaybackTopologyAction::ConfigureSlot {
+                page: 1,
+                slot: 1,
+                expected_page_revision: 0,
+                expected_page_object_id: None,
+                expected_playback_revision: 0,
+                expected_playback_object_id: None,
+                playback: requested,
+            },
+        )
+        .unwrap_err();
+
+    assert_eq!(error.kind, ActionErrorKind::NotFound);
+    assert_eq!(rig.show_revision(), before);
+    assert!(rig.document().objects_of_kind("playback").next().is_none());
+}
+
+#[test]
 fn save_cue_list_is_lossless_and_semantic_repetition_is_no_change() {
     let rig = TestRig::new();
     let cue_list_id = CueListId::new();

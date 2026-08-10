@@ -240,6 +240,9 @@ pub enum PlaybackTopologyTarget {
     Dynamic {
         assignment: Box<PlaybackTopologyDynamicAssignment>,
     },
+    Macro {
+        macro_id: Uuid,
+    },
     Group {
         group_id: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]

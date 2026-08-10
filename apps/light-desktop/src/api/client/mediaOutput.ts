@@ -31,6 +31,39 @@ export interface MediaPreviewRefresh {
 	height: number;
 }
 
+export interface MediaServerInspection {
+	server: { name: string; layer_count: number };
+	folders: Array<{ id: number; name: string; element_count: number }>;
+	files: Array<{
+		folder_id: number;
+		id: number;
+		name: string;
+		width: number;
+		height: number;
+		length_frames: number;
+		fps: number;
+	}>;
+	preview_sources: Array<{
+		id: number;
+		name: string;
+		physical_output: number;
+		layer: number | null;
+		width: number;
+		height: number;
+	}>;
+	layers: Array<{
+		layer: number;
+		physical_output: number;
+		folder: number;
+		file: number;
+		name: string;
+		position_frames: number;
+		length_frames: number;
+		fps: number;
+		flags: number;
+	}>;
+}
+
 export class MediaOutputApiClient {
 	constructor(private readonly transport: LiveClientTransport) {}
 
@@ -45,6 +78,12 @@ export class MediaOutputApiClient {
 
 	mediaServers(): Promise<{ fixtures: MediaServerFixture[] }> {
 		return this.transport.request("/api/v2/media-servers");
+	}
+
+	inspectMediaServer(fixtureId: string): Promise<MediaServerInspection> {
+		return this.transport.request(
+			`/api/v2/media-servers/${fixtureId}/inspect`,
+		);
 	}
 
 	refreshMediaPreview(
@@ -70,16 +109,27 @@ export class MediaOutputApiClient {
 		);
 	}
 
+	mediaThumbnail(
+		fixtureId: string,
+		folder: number,
+		element: number,
+	): Promise<Blob> {
+		return this.transport.blob(
+			`/api/v2/media-servers/${fixtureId}/thumbnails/${folder}/${element}`,
+		);
+	}
+
 	refreshMediaThumbnails(
 		fixtureId: string,
+		folder: number,
 		elements: number[],
 		width = 128,
 		height = 72,
 	): Promise<{ fixture_id: string; count: number }> {
 		const request = {
 			library_type: 1,
-			library_level: 0,
-			library_1: 0,
+			library_level: 1,
+			library_1: folder,
 			library_2: 0,
 			library_3: 0,
 			elements,

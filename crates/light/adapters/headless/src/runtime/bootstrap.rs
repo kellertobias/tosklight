@@ -62,6 +62,7 @@ struct RuntimeResources {
     pub(super) output_rate: Arc<AtomicU16>,
     pub(super) playback_telemetry: Arc<playback_telemetry::PlaybackTelemetrySampler>,
     pub(super) timecode_router: Arc<Mutex<TimecodeRouter>>,
+    pub(super) timecodes: light_application::timeline::TimecodeRuntimeService,
     pub(super) matter_bridge: Arc<matter::MatterBridgeAdapter>,
     pub(super) cancellation: CancellationToken,
     pub(super) output_cancellation: CancellationToken,
@@ -82,6 +83,7 @@ impl RuntimeResources {
         let action_timing = ActionTimingResource::default();
         let output_health = Arc::new(std::sync::Mutex::new(OutputHealth::default()));
         let timecode_router = Arc::new(Mutex::new(TimecodeRouter::default()));
+        let timecodes = super::timecode_v2::new_service();
         timecode_router
             .lock()
             .configure(configuration.timecode_sources.clone());
@@ -130,6 +132,7 @@ impl RuntimeResources {
             health: Arc::clone(&output_health),
             rate: Arc::clone(&output_rate),
             timecode: Arc::clone(&timecode_router),
+            timecodes: timecodes.clone(),
             cancellation: output_cancellation.clone(),
             persisted_runtime,
             playback: PlaybackRenderCapability::new(
@@ -153,6 +156,7 @@ impl RuntimeResources {
             output_rate,
             playback_telemetry,
             timecode_router,
+            timecodes,
             matter_bridge,
             cancellation,
             output_cancellation,
@@ -386,6 +390,8 @@ fn build_app_state(
         ),
         sessions: SessionResource::new(),
         dynamics: light_application::DynamicsService::new(startup.programmers.clone()),
+        macros: light_application::CommandMacroExecutionService::default(),
+        timecodes: resources.timecodes.clone(),
         programming: ProgrammingResource::new(startup.programmers, programming),
         playback: PlaybackResource::new(
             resources.playback_service.clone(),

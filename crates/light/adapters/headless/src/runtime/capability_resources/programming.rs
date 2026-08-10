@@ -1,6 +1,17 @@
 use super::*;
 
 impl ProgrammingResource {
+    pub(in crate::runtime) fn handle_sequence_while(
+        &self,
+        actions: &[light_application::ActionEnvelope<light_application::ProgrammingCommand>],
+        ports: &dyn light_application::ProgrammingPorts,
+        before_each: impl FnMut() -> bool,
+    ) -> Result<(Vec<light_application::ProgrammingResult>, bool), light_application::ActionError>
+    {
+        self.service
+            .handle_sequence_while(actions, ports, before_each)
+    }
+
     pub(in crate::runtime) fn set_alignment(
         &self,
         context: &light_application::ActionContext,

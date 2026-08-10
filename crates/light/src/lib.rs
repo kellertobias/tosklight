@@ -5,6 +5,8 @@
 
 pub mod action;
 pub mod active_show;
+pub mod command_macro;
+pub mod command_macro_runtime;
 pub mod dynamics;
 pub mod event;
 pub mod fixture_position;
@@ -39,6 +41,16 @@ pub use active_show::{
     StagePositions2dConfig, StagePositions2dProvenance, StageProjection2d,
     UndoActiveShowObjectCommand, UndoActiveShowObjectResult, UndoActiveShowRecordingCommand,
     UndoActiveShowRecordingObject, UndoActiveShowRecordingOperation, UserLayout,
+};
+pub use command_macro::{
+    CommandMacroDefinition, CommandMacroLine, MAX_MACRO_LINE_BYTES, MAX_MACRO_NAME_BYTES,
+    MAX_MACRO_NUMBER, MAX_MACRO_SOURCE_BYTES, MacroPresentation,
+};
+pub use command_macro_runtime::{
+    CommandMacroExecutionError, CommandMacroExecutionHost, CommandMacroExecutionService,
+    CommandMacroExecutionSnapshot, CommandMacroExecutionState, CommandMacroOwnedLine,
+    CommandMacroRunRequest, CommandMacroRuntimeSnapshot, CommandMacroSequenceOutcome,
+    CommandMacroTrigger, DEFAULT_MACRO_HISTORY_LIMIT,
 };
 pub use dynamics::{
     DynamicControllerUpdate, DynamicFixAtCommand, DynamicOffCommand, DynamicStartCommand,

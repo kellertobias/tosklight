@@ -56,7 +56,6 @@ impl MediaResource {
         Ok(())
     }
 
-    #[cfg(test)]
     pub(in crate::runtime) fn thumbnail(
         &self,
         key: &ThumbnailKey,

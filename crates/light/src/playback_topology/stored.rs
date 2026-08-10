@@ -51,6 +51,17 @@ pub(super) fn find_group(
     Ok(Some(stored))
 }
 
+pub(super) fn find_macro(
+    document: &PortableShowDocument,
+    id: uuid::Uuid,
+) -> Result<Option<Stored<crate::CommandMacroDefinition>>, ActionError> {
+    find_unique(
+        document,
+        "macro",
+        |value: &crate::CommandMacroDefinition| value.id == id,
+    )
+}
+
 pub(super) fn pages(
     document: &PortableShowDocument,
 ) -> Result<Vec<Stored<PlaybackPage>>, ActionError> {

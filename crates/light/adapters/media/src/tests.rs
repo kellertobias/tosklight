@@ -16,6 +16,17 @@ async fn read_wire_packet(stream: &mut TcpStream) -> Vec<u8> {
     packet
 }
 
+fn sinf(layers: u8) -> Vec<u8> {
+    vec![0, 0, 0, 1, layers]
+}
+
+fn push_ucs2(output: &mut Vec<u8>, value: &str) {
+    for unit in value.encode_utf16() {
+        output.extend_from_slice(&unit.to_le_bytes());
+    }
+    output.extend_from_slice(&0_u16.to_le_bytes());
+}
+
 #[tokio::test]
 async fn negotiates_and_retrieves_thumbnail_and_preview() {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -25,7 +36,7 @@ async fn negotiates_and_retrieves_thumbnail_and_preview() {
         let cinf = read_wire_packet(&mut stream).await;
         assert_eq!(&cinf[22..26], b"CInf");
         stream
-            .write_all(&encode_packet((1, 2), 1, *b"SInf", &[]))
+            .write_all(&encode_packet((1, 2), 1, *b"SInf", &sinf(1)))
             .await
             .unwrap();
         let geth = read_wire_packet(&mut stream).await;
@@ -76,7 +87,7 @@ async fn honors_legacy_msex_version_and_thumbnail_layout() {
         let (mut stream, _) = listener.accept().await.unwrap();
         let _ = read_wire_packet(&mut stream).await;
         stream
-            .write_all(&encode_packet((1, 0), 1, *b"SInf", &[]))
+            .write_all(&encode_packet((1, 0), 1, *b"SInf", &sinf(1)))
             .await
             .unwrap();
         let geth = read_wire_packet(&mut stream).await;
@@ -122,7 +133,7 @@ async fn reassembles_ordered_citp_fragments() {
         let (mut stream, _) = listener.accept().await.unwrap();
         let _ = read_wire_packet(&mut stream).await;
         stream
-            .write_all(&encode_packet((1, 2), 1, *b"SInf", &[]))
+            .write_all(&encode_packet((1, 2), 1, *b"SInf", &sinf(1)))
             .await
             .unwrap();
         let _ = read_wire_packet(&mut stream).await;
@@ -151,6 +162,83 @@ async fn reassembles_ordered_citp_fragments() {
         .await
         .unwrap();
     assert_eq!(images[0].1.bytes, [1, 2, 3, 4]);
+    server.await.unwrap();
+}
+
+#[tokio::test]
+async fn inspects_advertised_library_sources_and_layer_status_without_conflating_ids() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        let (mut stream, _) = listener.accept().await.unwrap();
+        let _ = read_wire_packet(&mut stream).await;
+        let mut server_info = Vec::new();
+        push_ucs2(&mut server_info, "Peer");
+        server_info.extend_from_slice(&[0, 1, 1]);
+        stream
+            .write_all(&encode_packet((1, 1), 1, *b"SInf", &server_info))
+            .await
+            .unwrap();
+
+        assert_eq!(&read_wire_packet(&mut stream).await[22..26], b"GELI");
+        let mut folders = vec![1, 1, 1, 2, 0, 0, 2, 2];
+        push_ucs2(&mut folders, "Clips");
+        folders.extend_from_slice(&[0, 1]);
+        stream
+            .write_all(&encode_packet((1, 1), 2, *b"ELIn", &folders))
+            .await
+            .unwrap();
+
+        assert_eq!(&read_wire_packet(&mut stream).await[22..26], b"GEIn");
+        let mut files = vec![1, 2, 0, 0, 1, 7, 7, 7];
+        push_ucs2(&mut files, "Look");
+        files.extend_from_slice(&42_u64.to_le_bytes());
+        files.extend_from_slice(&1920_u16.to_le_bytes());
+        files.extend_from_slice(&1080_u16.to_le_bytes());
+        files.extend_from_slice(&250_u32.to_le_bytes());
+        files.push(25);
+        stream
+            .write_all(&encode_packet((1, 1), 3, *b"MEIn", &files))
+            .await
+            .unwrap();
+
+        assert_eq!(&read_wire_packet(&mut stream).await[22..26], b"GVSr");
+        let mut sources = 1_u16.to_le_bytes().to_vec();
+        sources.extend_from_slice(&9_u16.to_le_bytes());
+        push_ucs2(&mut sources, "Program");
+        sources.extend_from_slice(&[3, u8::MAX]);
+        sources.extend_from_slice(&0_u16.to_le_bytes());
+        sources.extend_from_slice(&320_u16.to_le_bytes());
+        sources.extend_from_slice(&180_u16.to_le_bytes());
+        stream
+            .write_all(&encode_packet((1, 1), 4, *b"VSrc", &sources))
+            .await
+            .unwrap();
+
+        let mut status = vec![1, 5, 3, 2, 7];
+        push_ucs2(&mut status, "Look");
+        status.extend_from_slice(&10_u32.to_le_bytes());
+        status.extend_from_slice(&250_u32.to_le_bytes());
+        status.push(25);
+        status.extend_from_slice(&1_u32.to_le_bytes());
+        stream
+            .write_all(&encode_packet((1, 0), 0, *b"LSta", &status))
+            .await
+            .unwrap();
+    });
+
+    let mut client = CitpClient::connect(address, Duration::from_secs(1))
+        .await
+        .unwrap();
+    let snapshot = client.inspect().await.unwrap();
+    assert_eq!(snapshot.server.name, "Peer");
+    assert_eq!(snapshot.folders[0].id, 2);
+    assert_eq!(snapshot.files[0].folder_id, 2);
+    assert_eq!(snapshot.files[0].id, 7);
+    assert_eq!(snapshot.preview_sources[0].id, 9);
+    assert_eq!(snapshot.preview_sources[0].physical_output, 3);
+    assert_eq!(snapshot.layers[0].layer, 5);
+    assert_eq!(snapshot.layers[0].folder, 2);
     server.await.unwrap();
 }
 

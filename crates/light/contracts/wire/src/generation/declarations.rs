@@ -17,6 +17,7 @@ use crate::v2::fixture_library::*;
 use crate::v2::group_management::*;
 use crate::v2::group_recording::*;
 use crate::v2::live_action::*;
+use crate::v2::macros::*;
 use crate::v2::output_control::*;
 use crate::v2::output_runtime::*;
 use crate::v2::patch::*;
@@ -39,6 +40,7 @@ use crate::v2::show_library::*;
 use crate::v2::show_objects::*;
 use crate::v2::speed_group::*;
 use crate::v2::stage_layout::*;
+use crate::v2::timecode::*;
 use crate::v2::virtual_playback_zones::*;
 use crate::v2::visualization::*;
 use crate::v2::visualizer_view::*;
@@ -75,7 +77,59 @@ pub(super) fn all(config: &Config) -> Vec<String> {
     declarations.extend(show_library(config));
     declarations.extend(interaction(config));
     declarations.extend(live_actions(config));
+    declarations.extend(macros(config));
+    declarations.extend(timecode(config));
     declarations
+}
+
+fn timecode(config: &Config) -> Vec<String> {
+    vec![
+        TimecodeFrameRate::decl(config),
+        TimecodeDefinition::decl(config),
+        TimecodeObjectRecord::decl(config),
+        TimecodeCollectionSnapshot::decl(config),
+        TimecodeAudio::decl(config),
+        TimecodeMarker::decl(config),
+        TimecodeLane::decl(config),
+        TimecodeLaneContent::decl(config),
+        TimecodeClipStart::decl(config),
+        TimecodeClipEnd::decl(config),
+        TimecodeCueListClip::decl(config),
+        TimecodeSpeedKeyframe::decl(config),
+        TimecodeCurve::decl(config),
+        TimecodeVolumeKeyframe::decl(config),
+        TimecodeObjectActionRequest::decl(config),
+        TimecodeObjectAction::decl(config),
+        TimecodePatch::decl(config),
+        TimecodeTransportAction::decl(config),
+        TimecodeTransportActionRequest::decl(config),
+        TimecodeTransportState::decl(config),
+        TimecodeTransportSnapshot::decl(config),
+    ]
+}
+
+fn macros(config: &Config) -> Vec<String> {
+    vec![
+        MacroPresentation::decl(config),
+        MacroDefinition::decl(config),
+        MacroLineStatus::decl(config),
+        MacroToken::decl(config),
+        MacroTokenKind::decl(config),
+        MacroLineDiagnostic::decl(config),
+        MacroValidationRequest::decl(config),
+        MacroValidation::decl(config),
+        MacroObjectActionRequest::decl(config),
+        MacroObjectAction::decl(config),
+        MacroPatch::decl(config),
+        MacroObjectActionOutcome::decl(config),
+        MacroRunActionRequest::decl(config),
+        MacroRunLineActionRequest::decl(config),
+        MacroCancelActionRequest::decl(config),
+        MacroTrigger::decl(config),
+        MacroExecutionState::decl(config),
+        MacroExecutionSnapshot::decl(config),
+        MacroRuntimeSnapshot::decl(config),
+    ]
 }
 
 fn extensions(config: &Config) -> Vec<String> {

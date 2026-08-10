@@ -127,3 +127,59 @@ pub struct CachedImage {
     pub image: MediaImage,
     pub received_at: SystemTime,
 }
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct MediaServerInformation {
+    pub name: String,
+    pub layer_count: u8,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct MediaLibraryFolder {
+    pub id: u8,
+    pub name: String,
+    pub element_count: u8,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct MediaLibraryElement {
+    pub folder_id: u8,
+    pub id: u8,
+    pub name: String,
+    pub width: u16,
+    pub height: u16,
+    pub length_frames: u32,
+    pub fps: u8,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct MediaPreviewSource {
+    pub id: u16,
+    pub name: String,
+    pub physical_output: u8,
+    pub layer: Option<u8>,
+    pub width: u16,
+    pub height: u16,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct MediaLayerStatus {
+    pub layer: u8,
+    pub physical_output: u8,
+    pub folder: u8,
+    pub file: u8,
+    pub name: String,
+    pub position_frames: u32,
+    pub length_frames: u32,
+    pub fps: u8,
+    pub flags: u32,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct MediaServerSnapshot {
+    pub server: MediaServerInformation,
+    pub folders: Vec<MediaLibraryFolder>,
+    pub files: Vec<MediaLibraryElement>,
+    pub preview_sources: Vec<MediaPreviewSource>,
+    pub layers: Vec<MediaLayerStatus>,
+}

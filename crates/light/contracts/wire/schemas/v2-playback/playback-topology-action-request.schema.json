@@ -2004,6 +2004,23 @@
         {
           "type": "object",
           "properties": {
+            "macro_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": {
+              "type": "string",
+              "const": "macro"
+            }
+          },
+          "required": [
+            "type",
+            "macro_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
             "group_id": {
               "type": "string"
             },

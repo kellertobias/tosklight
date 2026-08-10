@@ -136,6 +136,7 @@ mod highlight_service_adapter;
 mod indexed_presets;
 mod lifecycle;
 mod live_action_http;
+mod macros_v2;
 mod media_api;
 mod mvr_apply;
 mod mvr_apply_store;
@@ -208,6 +209,7 @@ mod state;
 mod store_api;
 mod store_preload_targets;
 mod test_bench;
+mod timecode_v2;
 mod update_api;
 
 pub(crate) use capabilities::active_show::repository::ActiveShowRepository;

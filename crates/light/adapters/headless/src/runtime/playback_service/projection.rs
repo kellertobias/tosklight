@@ -225,6 +225,9 @@ fn project_virtual(
                     ))
                 }),
         },
+        PlaybackTarget::Macro { macro_id } => PlaybackTargetProjection::Macro {
+            macro_id: *macro_id,
+        },
         PlaybackTarget::Group { group_id, .. } => {
             group_projection(ports, snapshot, group_id, None)?
         }
@@ -325,6 +328,9 @@ fn project_playback(
                         ports, snapshot, assignment, active,
                     ))
                 }),
+        },
+        PlaybackTarget::Macro { macro_id } => PlaybackTargetProjection::Macro {
+            macro_id: *macro_id,
         },
         PlaybackTarget::Group { group_id, .. } => group_projection(
             ports,

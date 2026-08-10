@@ -9,10 +9,12 @@ mod protocol;
 pub use cache::MediaCache;
 pub use client::CitpClient;
 pub use model::{
-    CachedImage, ImageFormat, LibraryId, MediaError, MediaImage, PreviewKey, ThumbnailKey,
+    CachedImage, ImageFormat, LibraryId, MediaError, MediaImage, MediaLayerStatus,
+    MediaLibraryElement, MediaLibraryFolder, MediaPreviewSource, MediaServerInformation,
+    MediaServerSnapshot, PreviewKey, ThumbnailKey,
 };
 
-pub const DEFAULT_CITP_PORT: u16 = 4811;
+pub const DEFAULT_CITP_PORT: u16 = 4809;
 
 #[cfg(test)]
 mod tests;

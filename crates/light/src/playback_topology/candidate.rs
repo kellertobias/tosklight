@@ -8,9 +8,10 @@ use super::{
     page::configured_page,
     page_actions::{create_page, rename_page},
     stored::{
-        Stored, cue_list_object_id, find_cue_list, find_group, find_page, find_playback, invalid,
-        next_playback_number, next_revision, not_found, page_object_id, pages, playback_object_id,
-        same_typed, stored_projection, validate_identity, validate_revision,
+        Stored, cue_list_object_id, find_cue_list, find_group, find_macro, find_page,
+        find_playback, invalid, next_playback_number, next_revision, not_found, page_object_id,
+        pages, playback_object_id, same_typed, stored_projection, validate_identity,
+        validate_revision,
     },
     validation::{validate_page_slot, validate_show},
 };
@@ -279,6 +280,7 @@ fn configure_virtual(
     playback.button_count = 1;
     playback.buttons[1] = light_playback::PlaybackButtonAction::None;
     playback.buttons[2] = light_playback::PlaybackButtonAction::None;
+    validate_macro_target(document, &playback)?;
     playback.validate().map_err(invalid)?;
     let mut page = stored.as_ref().map_or_else(
         || light_playback::PlaybackPage {
@@ -531,6 +533,7 @@ fn configure_slot(
     )?;
     let mut normalized = requested.clone();
     normalized.number = number;
+    validate_macro_target(document, &normalized)?;
     normalized.validate().map_err(invalid)?;
     let desired_page = configured_page(page.as_ref(), page_number, slot, number)?;
     let playback_changed = match playback.as_ref() {
@@ -579,6 +582,19 @@ fn configure_slot(
         ));
     }
     changed_configure(document, command, resolution, writes, playback, page)
+}
+
+fn validate_macro_target(
+    document: &PortableShowDocument,
+    playback: &PlaybackDefinition,
+) -> Result<(), ActionError> {
+    let PlaybackTarget::Macro { macro_id } = &playback.target else {
+        return Ok(());
+    };
+    if find_macro(document, *macro_id)?.is_none() {
+        return Err(not_found(format!("Macro {macro_id} does not exist")));
+    }
+    Ok(())
 }
 
 fn assign_group_master(

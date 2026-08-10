@@ -220,7 +220,7 @@ function isMediaFixture(fixture: PatchedFixture): boolean {
 function fixtureDraft(fixture: PatchedFixture): Draft {
 	return {
 		ip: fixture.direct_control?.ip_address ?? "",
-		port: fixture.direct_control?.port ?? 4811,
+		port: fixture.direct_control?.port ?? 4809,
 	};
 }
 
@@ -286,6 +286,7 @@ async function refreshThumbnails(
 	try {
 		await server?.refreshMediaThumbnails(
 			fixtureId,
+			0,
 			Array.from({ length: 16 }, (_, index) => index),
 		);
 	} finally {

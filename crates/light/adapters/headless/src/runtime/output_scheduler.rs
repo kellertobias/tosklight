@@ -69,6 +69,7 @@ pub(super) struct Config {
     pub health: Arc<std::sync::Mutex<OutputHealth>>,
     pub rate: Arc<AtomicU16>,
     pub timecode: Arc<Mutex<TimecodeRouter>>,
+    pub timecodes: light_application::timeline::TimecodeRuntimeService,
     pub cancellation: CancellationToken,
     pub persisted_runtime: PersistedOutputRuntime,
     pub playback: PlaybackRenderCapability,
@@ -109,6 +110,7 @@ struct Runtime {
     pub(super) control: Arc<Mutex<OutputControl>>,
     pub(super) usb: Arc<UsbOutputFanout>,
     pub(super) timecode: Arc<Mutex<TimecodeRouter>>,
+    pub(super) timecodes: light_application::timeline::TimecodeRuntimeService,
     pub(super) playback: PlaybackRenderCapability,
     pub(super) active_show: ActiveShowProjection,
     pub(super) activation: ActiveShowCoordinator,
@@ -209,6 +211,7 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
     let tick_started = Instant::now();
     let action_timing = runtime.action_timing.begin_output_render();
     update_timecode(&runtime);
+    runtime.timecodes.tick();
     let options = runtime.control.lock().render_options();
     let (rendered, visualization_scope, dynamic, engine) = {
         let Ok(_activation) = runtime.activation.try_acquire() else {
@@ -653,6 +656,7 @@ impl SharedResources {
             control: Arc::clone(&self.control),
             usb: Arc::clone(&self.usb),
             timecode: Arc::clone(&config.timecode),
+            timecodes: config.timecodes.clone(),
             playback: config.playback.clone(),
             active_show: config.active_show.clone(),
             activation: config.activation.clone(),

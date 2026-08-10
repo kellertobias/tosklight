@@ -39,6 +39,9 @@ pub enum PlaybackTargetProjection {
         embedded: bool,
         runtime: Option<Box<DynamicPlaybackRuntimeProjection>>,
     },
+    Macro {
+        macro_id: Uuid,
+    },
     Group {
         group_id: String,
         master: f32,

@@ -136,6 +136,11 @@ pub enum PlaybackTarget {
     Dynamic {
         assignment: DynamicPlaybackAssignment,
     },
+    /// One-shot command Macro. Press activation queues the referenced portable Macro through the
+    /// desk's authoritative Macro execution service; the Playback owns no parallel runtime state.
+    Macro {
+        macro_id: uuid::Uuid,
+    },
     Group {
         group_id: String,
         /// Portable compatibility seed for the shared runtime Group Master.
@@ -348,6 +353,11 @@ impl PlaybackDefinition {
                 PlaybackButtonAction::Pause,
                 PlaybackButtonAction::Flash,
             ],
+            PlaybackTarget::Macro { .. } => [
+                PlaybackButtonAction::Go,
+                PlaybackButtonAction::None,
+                PlaybackButtonAction::None,
+            ],
             PlaybackTarget::Group { .. } => [
                 PlaybackButtonAction::Select,
                 PlaybackButtonAction::SelectDereferenced,
@@ -442,6 +452,12 @@ impl PlaybackDefinition {
                     | PlaybackButtonAction::DynamicLearnSpeed
                     | PlaybackButtonAction::None
             ),
+            PlaybackTarget::Macro { .. } => {
+                matches!(
+                    action,
+                    PlaybackButtonAction::Go | PlaybackButtonAction::None
+                )
+            }
             PlaybackTarget::Group { .. } => matches!(
                 action,
                 PlaybackButtonAction::Select
@@ -481,6 +497,7 @@ impl PlaybackDefinition {
                 PlaybackFaderMode::Master | PlaybackFaderMode::Temp | PlaybackFaderMode::XFade
             ),
             PlaybackTarget::Dynamic { .. } => fader == PlaybackFaderMode::Master,
+            PlaybackTarget::Macro { .. } => fader == PlaybackFaderMode::Master,
             PlaybackTarget::SpeedGroup { .. } => matches!(
                 fader,
                 PlaybackFaderMode::DirectBpm
@@ -558,6 +575,11 @@ impl PlaybackDefinition {
                         .into(),
                 );
             }
+        }
+        if let PlaybackTarget::Macro { macro_id } = &self.target
+            && macro_id.is_nil()
+        {
+            return Err("Macro Playback target id must not be nil".into());
         }
         if let PlaybackTarget::Group {
             initial_master: Some(initial_master),

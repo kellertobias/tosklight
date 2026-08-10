@@ -332,6 +332,12 @@ pub(super) fn playback_descriptor(
             "group",
             &mut descriptor,
         )?,
+        Some("macro") => add_optional_direct_reference(
+            object.body(),
+            "/target/macro_id",
+            "macro",
+            &mut descriptor,
+        )?,
         Some("dynamic") => {
             add_optional_direct_reference(
                 object.body(),

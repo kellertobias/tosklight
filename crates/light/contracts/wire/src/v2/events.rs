@@ -603,6 +603,14 @@ pub enum ShowObjectChange {
         body: Option<serde_json::Value>,
         deleted: bool,
     },
+    Macro {
+        object_id: String,
+        #[ts(type = "number")]
+        object_revision: u64,
+        #[ts(type = "unknown | null")]
+        body: Option<serde_json::Value>,
+        deleted: bool,
+    },
     PatchLayer {
         object_id: String,
         #[ts(type = "number")]
@@ -651,6 +659,14 @@ pub enum ShowObjectChange {
         body: Option<serde_json::Value>,
         deleted: bool,
     },
+    Timecode {
+        object_id: String,
+        #[ts(type = "number")]
+        object_revision: u64,
+        #[ts(type = "unknown | null")]
+        body: Option<serde_json::Value>,
+        deleted: bool,
+    },
     UserLayout {
         object_id: String,
         #[ts(type = "number")]
@@ -668,12 +684,14 @@ pub enum ShowObjectKind {
     CueList,
     Dynamic,
     Group,
+    Macro,
     PatchLayer,
     Playback,
     PlaybackPage,
     Preset,
     Schedule,
     StageLayout,
+    Timecode,
     UserLayout,
 }
 

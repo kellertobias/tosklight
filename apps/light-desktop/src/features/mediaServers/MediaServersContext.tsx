@@ -1,5 +1,6 @@
 import { createContext, type PropsWithChildren, useContext } from "react";
 import type { MatterBridgeStatus, MediaServerFixture } from "../../api/types";
+import type { MediaServerInspection } from "../../api/client/mediaOutput";
 
 /**
  * Scoped media-server and Matter-bridge desk state for the setup surfaces: matched media
@@ -11,8 +12,15 @@ export interface MediaServersState {
 	refreshMediaPreview: (fixtureId: string, source?: number) => Promise<boolean>;
 	refreshMediaThumbnails: (
 		fixtureId: string,
+		folder: number,
 		elements: number[],
 	) => Promise<void>;
+	inspectMediaServer: (fixtureId: string) => Promise<MediaServerInspection>;
+	mediaThumbnail: (
+		fixtureId: string,
+		folder: number,
+		element: number,
+	) => Promise<Blob>;
 	matter: MatterBridgeStatus | null;
 }
 

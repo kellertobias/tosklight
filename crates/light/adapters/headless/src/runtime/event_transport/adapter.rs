@@ -667,12 +667,14 @@ fn wire_show_object_change(change: &application::ActiveShowObjectChange) -> wire
             }
         }
         application::ActiveShowObjectKind::Group => variant!(Group),
+        application::ActiveShowObjectKind::Macro => variant!(Macro),
         application::ActiveShowObjectKind::PatchLayer => variant!(PatchLayer),
         application::ActiveShowObjectKind::Playback => variant!(Playback),
         application::ActiveShowObjectKind::PlaybackPage => variant!(PlaybackPage),
         application::ActiveShowObjectKind::Preset => variant!(Preset),
         application::ActiveShowObjectKind::Schedule => variant!(Schedule),
         application::ActiveShowObjectKind::StageLayout => variant!(StageLayout),
+        application::ActiveShowObjectKind::Timecode => variant!(Timecode),
         application::ActiveShowObjectKind::UserLayout => variant!(UserLayout),
     }
 }

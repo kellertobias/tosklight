@@ -1,0 +1,47 @@
+.running-window {
+	display: flex;
+	min-height: 0;
+	height: 100%;
+	flex-direction: column;
+	background: var(--surface-1, #15171b);
+}
+
+.running-list {
+	display: grid;
+	gap: 0.5rem;
+	padding: 0.75rem;
+}
+
+.running-row {
+	display: flex;
+	min-height: 3.5rem;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.75rem;
+	padding: 0.6rem 0.75rem;
+	border: 1px solid var(--border-subtle, #383c44);
+	border-radius: 0.35rem;
+	background: var(--surface-2, #202329);
+}
+
+.running-row > span {
+	display: grid;
+	min-width: 0;
+	gap: 0.2rem;
+}
+
+.running-row b,
+.running-row small {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.running-row small {
+	color: var(--text-muted, #aeb4bf);
+}
+
+.running-error {
+	margin: 0;
+	color: var(--danger-text, #ff9ca8);
+}

@@ -1,18 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { decodeShowObjectBody } from "../api/showObjectBodyWire";
-import { windowChoices } from "../components/modals/WindowPicker";
+import { availableWindowChoices, windowChoices } from "../components/modals/WindowPicker";
 import { builtIns } from "../components/shell/LeftDock";
 import builtInWindowTypes from "../types.ts?raw";
 import stories from "./MediaPaneWindow.stories.tsx?raw";
 import surface from "./media/MediaPaneSurface.tsx?raw";
 import { windowRegistry } from "./WindowRegistry";
 
-describe("Media pane Storybook boundary", () => {
-	it("keeps the pure Media surface outside every production window launch and persistence surface", () => {
-		expect(builtInWindowTypes).not.toMatch(/^\s*\|\s*"media"\s*$/m);
-		expect("media" in (windowRegistry as Record<string, unknown>)).toBe(false);
-		expect(builtIns.map(([kind]) => String(kind))).not.toContain("media");
-		expect(windowChoices.map(([kind]) => String(kind))).not.toContain("media");
+describe("Media pane production boundary", () => {
+	it("registers Media in production launch and portable layout surfaces", () => {
+		expect(builtInWindowTypes).toMatch(/^\s*\|\s*"media"\s*$/m);
+		expect("media" in (windowRegistry as Record<string, unknown>)).toBe(true);
+		expect(builtIns.map(([kind]) => String(kind))).toContain("media");
+		expect(windowChoices.map(([kind]) => String(kind))).toContain("media");
+		expect(availableWindowChoices(false).map(([kind]) => kind)).not.toContain("media");
+		expect(availableWindowChoices(true).map(([kind]) => kind)).toContain("media");
 		expect(() =>
 			decodeShowObjectBody(
 				"user_layout",
@@ -39,7 +41,7 @@ describe("Media pane Storybook boundary", () => {
 				},
 				"Media Storybook boundary",
 			),
-		).toThrow(/known pane kind/);
+		).not.toThrow();
 	});
 
 	it("owns deterministic data and both review compositions in Storybook", () => {

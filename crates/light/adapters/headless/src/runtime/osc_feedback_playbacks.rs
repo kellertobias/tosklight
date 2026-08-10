@@ -29,6 +29,8 @@ fn playback_level(
             )
             .map(|playback| playback.fader_value)
             .unwrap_or(0.0),
+        // Macros are one-shot actions and intentionally have no latched fader level.
+        light_playback::PlaybackTarget::Macro { .. } => 0.0,
         light_playback::PlaybackTarget::Group { group_id, .. } => {
             state.output.group_master(group_id).unwrap_or(0.0)
         }
