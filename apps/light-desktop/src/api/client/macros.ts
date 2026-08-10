@@ -96,9 +96,13 @@ export class MacrosApiClient {
 		);
 	}
 
-	cancel(showId: string, executionId: string) {
+	cancel(showId: string, executionId: string): Promise<MacroExecutionSnapshot> {
 		const body: MacroCancelActionRequest = { execution_id: executionId };
-		return this.request("/api/v2/macros/executions/cancel", showId, body);
+		return this.request<MacroExecutionSnapshot>(
+			"/api/v2/macros/executions/cancel",
+			showId,
+			body,
+		);
 	}
 
 	undoRunLine(
