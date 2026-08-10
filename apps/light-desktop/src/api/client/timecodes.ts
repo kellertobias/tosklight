@@ -1,5 +1,7 @@
 import type {
 	ShowObjectActionOutcome,
+	TimecodeAudioImportResult,
+	TimecodeAudioOutputDevices,
 	TimecodeDefinition,
 	TimecodeObjectAction,
 	TimecodePatch,
@@ -28,17 +30,26 @@ export class TimecodesApiClient {
 	}
 
 	mutate(showId: string, action: TimecodeObjectAction) {
-		return this.post<ShowObjectActionOutcome>("/api/v2/timecodes/actions", showId, {
-			request_id: crypto.randomUUID(),
-			action,
-		});
+		return this.post<ShowObjectActionOutcome>(
+			"/api/v2/timecodes/actions",
+			showId,
+			{
+				request_id: crypto.randomUUID(),
+				action,
+			},
+		);
 	}
 
 	create(showId: string, definition: TimecodeDefinition) {
 		return this.mutate(showId, { type: "create", definition });
 	}
 
-	update(showId: string, timecodeId: string, expectedRevision: number, patch: TimecodePatch) {
+	update(
+		showId: string,
+		timecodeId: string,
+		expectedRevision: number,
+		patch: TimecodePatch,
+	) {
 		return this.mutate(showId, {
 			type: "update",
 			timecode_id: timecodeId,
@@ -56,20 +67,50 @@ export class TimecodesApiClient {
 	}
 
 	runtime(showId: string): Promise<TimecodeTransportSnapshot[]> {
-		return this.transport.request("/api/v2/timecodes/runtime", { headers: showHeaders(showId) });
-	}
-
-	snapshot(showId: string, timecodeId: string): Promise<TimecodeTransportSnapshot> {
-		return this.transport.request(`/api/v2/timecodes/${encodeURIComponent(timecodeId)}/runtime`, {
+		return this.transport.request("/api/v2/timecodes/runtime", {
 			headers: showHeaders(showId),
 		});
 	}
 
-	transportAction(showId: string, timecodeId: string, action: TimecodeTransportAction) {
+	snapshot(
+		showId: string,
+		timecodeId: string,
+	): Promise<TimecodeTransportSnapshot> {
+		return this.transport.request(
+			`/api/v2/timecodes/${encodeURIComponent(timecodeId)}/runtime`,
+			{
+				headers: showHeaders(showId),
+			},
+		);
+	}
+
+	transportAction(
+		showId: string,
+		timecodeId: string,
+		action: TimecodeTransportAction,
+	) {
 		return this.post<TimecodeTransportSnapshot>(
 			`/api/v2/timecodes/${encodeURIComponent(timecodeId)}/transport`,
 			showId,
 			{ timecode_id: timecodeId, action },
+		);
+	}
+
+	outputDevices(): Promise<TimecodeAudioOutputDevices> {
+		return this.transport.request("/api/v2/timecodes/audio/outputs");
+	}
+
+	importAudio(showId: string, file: File): Promise<TimecodeAudioImportResult> {
+		return this.transport.request(
+			`/api/v2/timecodes/audio/import?name=${encodeURIComponent(file.name)}`,
+			{
+				method: "POST",
+				headers: {
+					"content-type": file.type || mediaTypeForName(file.name),
+					...showHeaders(showId),
+				},
+				body: file,
+			},
 		);
 	}
 
@@ -84,4 +125,8 @@ export class TimecodesApiClient {
 
 function showHeaders(showId: string): HeadersInit {
 	return { "x-tosk-show": showId };
+}
+
+function mediaTypeForName(name: string): string {
+	return name.toLowerCase().endsWith(".mp3") ? "audio/mpeg" : "audio/wav";
 }

@@ -132,7 +132,8 @@ mod wire;
 
 pub(super) use adapter::{
     ExistingCommandOutcome, ExistingCommandPolicy, execute_existing_command,
-    route_osc_command_key_outcome, run_service_with_source,
+    prevalidate_external_command, prevalidate_typed_command, route_osc_command_key_outcome,
+    run_service_with_source,
 };
 pub(super) use color_attributes::color_attribute_index;
 pub(crate) use cue_deletion_ports::ServerProgrammingCueDeletionPorts;

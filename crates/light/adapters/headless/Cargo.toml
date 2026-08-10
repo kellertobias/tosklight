@@ -59,6 +59,7 @@ rand = { version = "0.8", features = ["std", "std_rng"] }
 reqwest.workspace = true
 rs-matter = { version = "0.2.0", features = ["async-io", "max-groups-per-fabric-12", "max-group-keys-per-fabric-2", "max-group-endpoints-per-fabric-3", "max-sessions-32"] }
 socket2 = { version = "0.5", features = ["all"] }
+cpal = "0.16"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

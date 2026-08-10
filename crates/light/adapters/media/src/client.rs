@@ -4,8 +4,8 @@ use crate::protocol::{
     parse_stream_frame, parse_thumbnail,
 };
 use crate::{
-    ImageFormat, LibraryId, MediaError, MediaImage, MediaLayerStatus, MediaServerInformation,
-    MediaServerSnapshot,
+    ImageFormat, LibraryId, MediaError, MediaImage, MediaLayerStatus, MediaProviderCapabilities,
+    MediaServerInformation, MediaServerSnapshot,
 };
 use std::{net::SocketAddr, time::Duration};
 use tokio::{
@@ -66,12 +66,19 @@ impl CitpClient {
         let sources_packet = self.receive_relevant(*b"VSrc", request).await?;
         let preview_sources = parse_preview_sources(&sources_packet.payload)?;
         self.receive_optional_layer_status().await?;
+        let library_revision = library_revision(&folders, &files);
         Ok(MediaServerSnapshot {
+            library_revision,
             server: self.server.clone(),
             folders,
             files,
             preview_sources,
             layers: self.latest_layers.clone(),
+            capabilities: MediaProviderCapabilities {
+                provider: "citp_msex".into(),
+                native_action: None,
+                layers: Vec::new(),
+            },
         })
     }
 
@@ -284,6 +291,35 @@ impl CitpClient {
             payload: rest[6..].to_vec(),
         })
     }
+}
+
+fn library_revision(
+    folders: &[crate::MediaLibraryFolder],
+    files: &[crate::MediaLibraryElement],
+) -> String {
+    // FNV-1a keeps the wire revision deterministic without turning the provider crate into a
+    // cryptographic identity service. The revision is an opaque stale-write precondition only.
+    let mut hash = 0xcbf29ce484222325_u64;
+    let mut update = |bytes: &[u8]| {
+        for byte in bytes {
+            hash ^= u64::from(*byte);
+            hash = hash.wrapping_mul(0x100000001b3);
+        }
+    };
+    for folder in folders {
+        update(&[folder.id, folder.element_count]);
+        update(folder.name.as_bytes());
+        update(&[0]);
+    }
+    for file in files {
+        update(&[file.folder_id, file.id]);
+        update(file.name.as_bytes());
+        update(&file.width.to_le_bytes());
+        update(&file.height.to_le_bytes());
+        update(&file.length_frames.to_le_bytes());
+        update(&[file.fps, 0]);
+    }
+    format!("citp-{hash:016x}")
 }
 
 fn preview_payload(source: u16, width: u16, height: u16) -> Vec<u8> {

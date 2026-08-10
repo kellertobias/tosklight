@@ -9,9 +9,9 @@ use super::{
     page_actions::{create_page, rename_page},
     stored::{
         Stored, cue_list_object_id, find_cue_list, find_group, find_macro, find_page,
-        find_playback, invalid, next_playback_number, next_revision, not_found, page_object_id,
-        pages, playback_object_id, same_typed, stored_projection, validate_identity,
-        validate_revision,
+        find_playback, find_timecode, invalid, next_playback_number, next_revision, not_found,
+        page_object_id, pages, playback_object_id, same_typed, stored_projection,
+        validate_identity, validate_revision,
     },
     validation::{validate_page_slot, validate_show},
 };
@@ -281,6 +281,7 @@ fn configure_virtual(
     playback.buttons[1] = light_playback::PlaybackButtonAction::None;
     playback.buttons[2] = light_playback::PlaybackButtonAction::None;
     validate_macro_target(document, &playback)?;
+    validate_timecode_target(document, &playback)?;
     playback.validate().map_err(invalid)?;
     let mut page = stored.as_ref().map_or_else(
         || light_playback::PlaybackPage {
@@ -397,6 +398,7 @@ fn save_cue_list(
         return Err(invalid("Cuelist body does not match its typed candidate"));
     }
     cue_list.validate().map_err(invalid)?;
+    validate_timecode_graph_for_cue_list(document, cue_list)?;
     let stored = find_cue_list(document, cue_list_id)?;
     validate_identity(
         stored.as_ref(),
@@ -432,6 +434,26 @@ fn save_cue_list(
         vec![(ActiveShowObjectKind::CueList, object_id, body)],
         Vec::new(),
     )
+}
+
+fn validate_timecode_graph_for_cue_list(
+    document: &PortableShowDocument,
+    candidate: &CueList,
+) -> Result<(), ActionError> {
+    let mut cue_lists = document
+        .objects_of_kind("cue_list")
+        .filter_map(|object| serde_json::from_value::<CueList>(object.body().clone()).ok())
+        .filter(|cue_list| cue_list.id != candidate.id)
+        .collect::<Vec<_>>();
+    cue_lists.push(candidate.clone());
+    let timecodes = document
+        .objects_of_kind("timecode")
+        .map(|object| {
+            serde_json::from_value::<light_playback::TimecodeDefinition>(object.body().clone())
+                .map_err(invalid)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    crate::validate_cue_timecode_graph(&cue_lists, &timecodes).map_err(invalid)
 }
 
 fn preserve_omitted_out_timing(
@@ -534,6 +556,7 @@ fn configure_slot(
     let mut normalized = requested.clone();
     normalized.number = number;
     validate_macro_target(document, &normalized)?;
+    validate_timecode_target(document, &normalized)?;
     normalized.validate().map_err(invalid)?;
     let desired_page = configured_page(page.as_ref(), page_number, slot, number)?;
     let playback_changed = match playback.as_ref() {
@@ -593,6 +616,22 @@ fn validate_macro_target(
     };
     if find_macro(document, *macro_id)?.is_none() {
         return Err(not_found(format!("Macro {macro_id} does not exist")));
+    }
+    Ok(())
+}
+
+fn validate_timecode_target(
+    document: &PortableShowDocument,
+    playback: &PlaybackDefinition,
+) -> Result<(), ActionError> {
+    let PlaybackTarget::Timecode { timecode_id } = &playback.target else {
+        return Ok(());
+    };
+    if find_timecode(document, *timecode_id)?.is_none() {
+        return Err(not_found(format!(
+            "Timecode {} does not exist",
+            timecode_id.0
+        )));
     }
     Ok(())
 }

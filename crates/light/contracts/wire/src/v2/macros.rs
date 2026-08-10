@@ -152,6 +152,13 @@ pub struct MacroCancelActionRequest {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct MacroRunLineUndoOutcome {
+    pub execution_id: Uuid,
+    pub changed: bool,
+    pub message: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum MacroTrigger {
     Pool,

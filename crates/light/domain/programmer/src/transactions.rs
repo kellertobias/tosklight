@@ -24,6 +24,26 @@ pub struct ProgrammerTransactionSnapshot {
 }
 
 impl ProgrammerRegistry {
+    /// Runs an operation against an isolated copy of one operator's Programmer without committing
+    /// any of its mutations. This is the authoritative dry-run seam for callers that need the
+    /// normal command grammar and current Programmer context during preflight validation.
+    pub fn with_detached_transaction<T, E, F>(
+        &self,
+        session: SessionId,
+        operation: F,
+    ) -> Result<T, E>
+    where
+        E: From<String>,
+        F: FnOnce(&ProgrammerRegistry) -> Result<T, E>,
+    {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
+        let detached = self
+            .detached_session(session)
+            .ok_or_else(|| E::from("programmer does not exist".to_owned()))?;
+        operation(&detached)
+    }
+
     /// Execute a fallible compound Programmer mutation atomically for one user.
     ///
     /// Every public mutator uses this same reentrant per-user gate, so a transaction may freely

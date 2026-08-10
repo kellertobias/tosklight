@@ -5,7 +5,14 @@ import {
 	type PoolSlotViewModel,
 } from "@tosklight/ui/pools";
 import { WindowHeader, WindowScrollArea } from "@tosklight/ui/window-kit";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+	forwardRef,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { createLightApi } from "../api/client/api";
 import { MacrosApiClient } from "../api/client/macros";
 import type {
@@ -17,7 +24,10 @@ import type {
 import type { VersionedObject } from "../api/types";
 import { useCommandLineSurface } from "../components/control/commandLine/useCommandLineSurface";
 import { useActiveShowId } from "../features/deskSnapshot/DeskSnapshotState";
-import { useMacroActions } from "../features/macros/MacroActionsContext";
+import {
+	type MacroActions,
+	useMacroActions,
+} from "../features/macros/MacroActionsContext";
 import { resolveMacroPoolGesture } from "../features/macros/poolGesture";
 import type { WindowProps } from "./windowTypes";
 import "./MacrosWindow.css";
@@ -33,7 +43,7 @@ export function MacrosWindow({ active = true, compact = false }: WindowProps) {
 		enabled: active,
 		observeCommand: false,
 	});
-	const fallback = useMemo(() => {
+	const fallback = useMemo<MacroActions>(() => {
 		const api = createLightApi();
 		return {
 			macros: new MacrosApiClient(api.runtime.capabilityTransport()),
@@ -66,24 +76,29 @@ export function MacrosWindow({ active = true, compact = false }: WindowProps) {
 			void refresh().catch((reason) => {
 				if (!cancelled) setError(String(reason));
 			});
+		const unsubscribe = actions.events?.onEvent((event) => {
+			if (event.type !== "macro_execution_changed") return;
+			setExecutions((current) =>
+				upsertMacroExecution(current, event.execution),
+			);
+		});
 		update();
-		const timer = window.setInterval(update, 1_000);
 		return () => {
 			cancelled = true;
-			window.clearInterval(timer);
+			unsubscribe?.();
 		};
-	}, [active, refresh, showId]);
+	}, [actions.events, active, refresh, showId]);
 
 	const run = async (macro: MacroObject) => {
 		if (!showId || busy) return;
 		setBusy(true);
 		setError(null);
 		try {
-			await actions.macros.run(showId, macro.id, {
+			const execution = await actions.macros.run(showId, macro.id, {
 				source_revision: macro.revision,
 				trigger: { type: "pool" },
 			});
-			await refresh();
+			setExecutions((current) => upsertMacroExecution(current, execution));
 		} catch (reason) {
 			setError(String(reason));
 		} finally {
@@ -205,6 +220,35 @@ export function MacrosWindow({ active = true, compact = false }: WindowProps) {
 	);
 }
 
+function upsertMacroExecution(
+	current: readonly MacroExecutionSnapshot[],
+	next: MacroExecutionSnapshot,
+): MacroExecutionSnapshot[] {
+	const existing = current.find(
+		(execution) => execution.execution_id === next.execution_id,
+	);
+	if (existing && executionRank(existing.state) > executionRank(next.state)) {
+		return [...current];
+	}
+	return [
+		next,
+		...current.filter(
+			(execution) => execution.execution_id !== next.execution_id,
+		),
+	];
+}
+
+function executionRank(state: MacroExecutionSnapshot["state"]): number {
+	return [
+		"queued",
+		"validating",
+		"running",
+		"succeeded",
+		"failed",
+		"cancelled",
+	].indexOf(state);
+}
+
 interface NewMacro {
 	id: string;
 	revision: 0;
@@ -253,8 +297,17 @@ function MacroEditor({
 		body: MacroDefinition;
 		revision: number;
 	} | null>(null);
+	const [runLineUndo, setRunLineUndo] = useState<{
+		executionId: string;
+		line: number;
+	} | null>(null);
 	const editor = useRef<HTMLTextAreaElement | null>(null);
+	const highlightOverlay = useRef<HTMLPreElement | null>(null);
 	const isNew = "isNew" in macro;
+	const editDraft = (next: MacroDefinition) => {
+		setDraft(next);
+		setRunLineUndo(null);
+	};
 
 	useEffect(() => {
 		if (!showId) return;
@@ -306,6 +359,7 @@ function MacroEditor({
 				presentation: undo.body.presentation,
 			});
 			setDraft(undo.body);
+			setRunLineUndo(null);
 			setSavedBody(undo.body);
 			setRevision(outcome.object.revision);
 			setUndo(null);
@@ -328,10 +382,41 @@ function MacroEditor({
 			.slice(0, editor.current?.selectionStart ?? 0)
 			.split("\n").length;
 		try {
-			await api.runLine(showId, macro.id, { source_revision: revision, line });
-			setNotice(`Queued line ${line}`);
+			setRunLineUndo(null);
+			const started = await api.runLine(showId, macro.id, {
+				source_revision: revision,
+				line,
+			});
+			let completed = started;
+			while (["queued", "validating", "running"].includes(completed.state)) {
+				await new Promise((resolve) => window.setTimeout(resolve, 25));
+				completed = await api.execution(showId, started.execution_id);
+			}
+			if (completed.state === "succeeded") {
+				setRunLineUndo({ executionId: completed.execution_id, line });
+				setNotice(
+					`Ran line ${line}; Undo last run is available until another change`,
+				);
+			} else {
+				setNotice(completed.message ?? `Line ${line} ${completed.state}`);
+			}
 		} catch (reason) {
 			setNotice(String(reason));
+		}
+	};
+
+	const undoLastRun = async () => {
+		if (!showId || !runLineUndo || busy) return;
+		setBusy(true);
+		try {
+			const outcome = await api.undoRunLine(showId, runLineUndo.executionId);
+			setRunLineUndo(null);
+			setNotice(outcome.message);
+		} catch (reason) {
+			setRunLineUndo(null);
+			setNotice(`Undo last run is unavailable: ${String(reason)}`);
+		} finally {
+			setBusy(false);
 		}
 	};
 
@@ -397,6 +482,12 @@ function MacroEditor({
 							onClick: () => void runLine(),
 						},
 						{
+							id: "undo-run-line",
+							label: "Undo last run",
+							disabled: !runLineUndo || busy,
+							onClick: () => void undoLastRun(),
+						},
+						{
 							id: "copy",
 							label: "Copy",
 							disabled: isNew || busy,
@@ -422,19 +513,19 @@ function MacroEditor({
 					label="Number"
 					value={String(draft.number)}
 					onChange={(event) =>
-						setDraft({ ...draft, number: Number(event.target.value) })
+						editDraft({ ...draft, number: Number(event.target.value) })
 					}
 				/>
 				<TextField
 					label="Name"
 					value={draft.name}
-					onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+					onChange={(event) => editDraft({ ...draft, name: event.target.value })}
 				/>
 				<TextField
 					label="Icon"
 					value={draft.presentation.icon ?? ""}
 					onChange={(event) =>
-						setDraft({
+						editDraft({
 							...draft,
 							presentation: {
 								...draft.presentation,
@@ -458,24 +549,38 @@ function MacroEditor({
 					source={draft.source}
 					diagnostics={validation?.diagnostics ?? []}
 				/>
-				<TextArea
-					ref={editor}
-					aria-label="Macro command lines"
-					value={draft.source}
-					spellCheck={false}
-					onChange={(event) =>
-						setDraft({ ...draft, source: event.target.value })
-					}
-					onKeyDown={(event) => {
-						if (
-							(event.metaKey || event.ctrlKey) &&
-							event.key.toLowerCase() === "s"
-						) {
-							event.preventDefault();
-							void save();
+				<div className="macro-source-stack">
+					<HighlightedSource
+						ref={highlightOverlay}
+						source={draft.source}
+						diagnostics={validation?.diagnostics ?? []}
+					/>
+					<TextArea
+						ref={editor}
+						aria-label="Macro command lines"
+						value={draft.source}
+						spellCheck={false}
+						onScroll={(event) => {
+							if (!highlightOverlay.current) return;
+							highlightOverlay.current.scrollTop =
+								event.currentTarget.scrollTop;
+							highlightOverlay.current.scrollLeft =
+								event.currentTarget.scrollLeft;
+						}}
+						onChange={(event) =>
+							editDraft({ ...draft, source: event.target.value })
 						}
-					}}
-				/>
+						onKeyDown={(event) => {
+							if (
+								(event.metaKey || event.ctrlKey) &&
+								event.key.toLowerCase() === "s"
+							) {
+								event.preventDefault();
+								void save();
+							}
+						}}
+					/>
+				</div>
 			</div>
 			<MacroDiagnostics diagnostics={validation?.diagnostics ?? []} />
 			{notice && (
@@ -492,6 +597,47 @@ function MacroEditor({
 		</section>
 	);
 }
+
+const HighlightedSource = forwardRef<
+	HTMLPreElement,
+	{ source: string; diagnostics: MacroLineDiagnostic[] }
+>(function HighlightedSource({ source, diagnostics }, ref) {
+	const byLine = new Map(
+		diagnostics.map((diagnostic) => [diagnostic.line, diagnostic.tokens]),
+	);
+	return (
+		<pre ref={ref} className="macro-source-highlight" aria-hidden="true">
+			{source.split("\n").map((line, lineIndex) => {
+				const tokens = [...(byLine.get(lineIndex + 1) ?? [])].sort(
+					(left, right) => left.start - right.start,
+				);
+				const fragments: React.ReactNode[] = [];
+				let cursor = 0;
+				for (const [tokenIndex, token] of tokens.entries()) {
+					const start = Math.max(cursor, Math.min(line.length, token.start));
+					const end = Math.max(start, Math.min(line.length, token.end));
+					if (start > cursor) fragments.push(line.slice(cursor, start));
+					fragments.push(
+						<span
+							key={`${lineIndex}:${tokenIndex}:${start}`}
+							className={`macro-token-${token.kind}`}
+						>
+							{line.slice(start, end)}
+						</span>,
+					);
+					cursor = end;
+				}
+				if (cursor < line.length) fragments.push(line.slice(cursor));
+				return (
+					<span key={`line:${lineIndex}`}>
+						{fragments}
+						{lineIndex < source.split("\n").length - 1 ? "\n" : null}
+					</span>
+				);
+			})}
+		</pre>
+	);
+});
 
 function LineNumbers({
 	source,

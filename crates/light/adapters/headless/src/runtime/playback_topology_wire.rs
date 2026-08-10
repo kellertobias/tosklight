@@ -184,6 +184,14 @@ fn application_target(
         wire::PlaybackTopologyTarget::Macro { macro_id } => playback::PlaybackTarget::Macro {
             macro_id: non_nil(macro_id, "playback.target.macro_id")?,
         },
+        wire::PlaybackTopologyTarget::Timecode { timecode_id } => {
+            playback::PlaybackTarget::Timecode {
+                timecode_id: playback::TimecodeId(non_nil(
+                    timecode_id,
+                    "playback.target.timecode_id",
+                )?),
+            }
+        }
         wire::PlaybackTopologyTarget::Group {
             group_id,
             initial_master,

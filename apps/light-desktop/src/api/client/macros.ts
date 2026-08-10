@@ -6,6 +6,7 @@ import type {
 	MacroObjectActionRequest,
 	MacroRunActionRequest,
 	MacroRunLineActionRequest,
+	MacroRunLineUndoOutcome,
 	MacroRuntimeSnapshot,
 	MacroValidation,
 	MacroValidationRequest,
@@ -98,6 +99,17 @@ export class MacrosApiClient {
 	cancel(showId: string, executionId: string) {
 		const body: MacroCancelActionRequest = { execution_id: executionId };
 		return this.request("/api/v2/macros/executions/cancel", showId, body);
+	}
+
+	undoRunLine(
+		showId: string,
+		executionId: string,
+	): Promise<MacroRunLineUndoOutcome> {
+		return this.request(
+			`/api/v2/macros/executions/${encodeURIComponent(executionId)}/undo-line`,
+			showId,
+			{},
+		);
 	}
 
 	private request<T>(path: string, showId: string, body: unknown): Promise<T> {

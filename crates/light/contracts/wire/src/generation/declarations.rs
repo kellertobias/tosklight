@@ -89,6 +89,8 @@ fn timecode(config: &Config) -> Vec<String> {
         TimecodeObjectRecord::decl(config),
         TimecodeCollectionSnapshot::decl(config),
         TimecodeAudio::decl(config),
+        TimecodeAudioOutputDevices::decl(config),
+        TimecodeAudioImportResult::decl(config),
         TimecodeMarker::decl(config),
         TimecodeLane::decl(config),
         TimecodeLaneContent::decl(config),
@@ -125,6 +127,7 @@ fn macros(config: &Config) -> Vec<String> {
         MacroRunActionRequest::decl(config),
         MacroRunLineActionRequest::decl(config),
         MacroCancelActionRequest::decl(config),
+        MacroRunLineUndoOutcome::decl(config),
         MacroTrigger::decl(config),
         MacroExecutionState::decl(config),
         MacroExecutionSnapshot::decl(config),
@@ -321,7 +324,9 @@ fn desk_management(config: &Config) -> Vec<String> {
         PresetPoolColorPalette::decl(config),
         PoolColorMode::decl(config),
         PoolItemPresentation::decl(config),
-        TimecodeSourceConfiguration::decl(config),
+        TimecodeSourceSelectionConfiguration::decl(config),
+        TimecodeFrameRateConfiguration::decl(config),
+        ExternalTimecodeLossPolicyConfiguration::decl(config),
         OscTimecodeConfiguration::decl(config),
         FileManagerRoot::decl(config),
         SpeedGroupSettingsUpdateRequest::decl(config),
@@ -349,6 +354,9 @@ fn output_control(config: &Config) -> Vec<String> {
         PatchPreviewHighlightRequest::decl(config),
         MediaThumbnailRefreshRequest::decl(config),
         MediaPreviewRefreshRequest::decl(config),
+        MediaLibraryKind::decl(config),
+        MediaLibrarySelectionRequest::decl(config),
+        MediaLibrarySelectionOutcome::decl(config),
     ]
 }
 

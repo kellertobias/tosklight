@@ -12,10 +12,12 @@ import {
 	HighlightActionsProvider,
 	HighlightStateProvider,
 } from "../features/highlight/HighlightState";
+import { MacroActionsProvider } from "../features/macros/MacroActionsContext";
 import { MediaServersProvider } from "../features/mediaServers/MediaServersContext";
 import { PlaybackTopologyProvider } from "../features/playbackTopology/PlaybackTopologyProvider";
 import { PresetRecordingProvider } from "../features/presetRecording/PresetRecordingProvider";
 import { ProgrammerActionsProvider } from "../features/programmerActions/ProgrammerActionsContext";
+import { RunningRuntimeActionsProvider } from "../features/running/RunningRuntimeActionsContext";
 import { SchedulerProvider } from "../features/scheduler/SchedulerContext";
 import { useServerSchedulerController } from "../features/scheduler/useServerSchedulerController";
 import { ScreensProvider } from "../features/screens/ScreensContext";
@@ -39,6 +41,7 @@ import { ShellStatusActionsProvider } from "../features/shellStatus/ShellStatusA
 import { ShowLifecycleProvider } from "../features/showLifecycle/ShowLifecycleContext";
 import { ShowObjectsViewProvider } from "../features/showObjects/ShowObjectsView";
 import { SoundToLightProvider } from "../features/soundToLight/SoundToLightContext";
+import { TimecodeActionsProvider } from "../features/timecode/TimecodeActionsContext";
 import { VirtualPlaybackZonesProvider } from "../features/virtualPlaybackZones/VirtualPlaybackZonesContext";
 import { VisualizerViewProvider } from "../features/visualizerView/VisualizerViewContext";
 import type { VisualizerViewPatch } from "./client/visualizerView";
@@ -173,6 +176,7 @@ function useProviderDataSources(
 			refreshMediaPreview: value.refreshMediaPreview,
 			refreshMediaThumbnails: value.refreshMediaThumbnails,
 			inspectMediaServer: value.inspectMediaServer,
+			applyMediaLibrarySelection: value.applyMediaLibrarySelection,
 			mediaThumbnail: value.mediaThumbnail,
 			matter: value.matter,
 		}),
@@ -182,6 +186,7 @@ function useProviderDataSources(
 			value.refreshMediaPreview,
 			value.refreshMediaThumbnails,
 			value.inspectMediaServer,
+			value.applyMediaLibrarySelection,
 			value.mediaThumbnail,
 			value.matter,
 		],
@@ -564,59 +569,82 @@ export function ServerRuntime({
 		canWrite: sessionRole === "primary" && state.status === "connected",
 		reportError: state.setError,
 	});
+	const runningRuntimeActions = useMemo(
+		() => ({
+			macros: state.api.macros,
+			timecodes: {
+				runtime: (showId: string) => state.api.timecodes.runtime(showId),
+				stop: (showId: string, timecodeId: string) =>
+					state.api.timecodes.transportAction(showId, timecodeId, {
+						type: "stop",
+					}),
+			},
+			showObjects: state.api.showObjects,
+			events: state.api.runtime,
+		}),
+		[state.api],
+	);
 	return (
-		<AttributeConfigurationActionsProvider
-			client={state.api.attributes}
-			showId={state.bootstrap?.active_show?.id ?? null}
-			canWrite={sessionRole === "primary" && state.status === "connected"}
-			onApplied={refreshAttributeRegistry}
+		<MacroActionsProvider
+			actions={{ macros: state.api.macros, showObjects: state.api.showObjects, events: state.api.runtime }}
 		>
-			<SchedulerProvider controller={scheduler}>
-				<ServerConnectionOwner
-					state={state}
-					loadShowObjects={loadShowObjects}
-					sessionRole={sessionRole}
-				>
-					<ServerActionProviderStack
-						state={state}
-						data={{
-							fileSource,
-							screenSource,
-							showLifecycle,
-							deskConnection,
-							fixtureLibraryState,
-							mediaServersState,
-						}}
-						actions={{
-							highlightActions,
-							programmerActions,
-							dmxDiagnostics,
-							soundToLightActions,
-							shellStatusActions,
-						}}
-						dynamicsActions={dynamicsActions}
-						visualizerViewActions={visualizerViewActions}
+			<TimecodeActionsProvider api={state.api.timecodes} events={state.api.runtime}>
+				<RunningRuntimeActionsProvider actions={runningRuntimeActions}>
+					<AttributeConfigurationActionsProvider
+						client={state.api.attributes}
+						showId={state.bootstrap?.active_show?.id ?? null}
+						canWrite={sessionRole === "primary" && state.status === "connected"}
+						onApplied={refreshAttributeRegistry}
 					>
-						<ServerShowProviderStack
-							state={state}
-							boundaries={boundaries}
-							value={value}
-							data={{
-								fileSource,
-								screenSource,
-								showLifecycle,
-								deskConnection,
-								fixtureLibraryState,
-								mediaServersState,
-							}}
-							selectiveImportSource={selectiveImportSource}
-							sessionRole={sessionRole}
-						>
-							{children}
-						</ServerShowProviderStack>
-					</ServerActionProviderStack>
-				</ServerConnectionOwner>
-			</SchedulerProvider>
-		</AttributeConfigurationActionsProvider>
+						<SchedulerProvider controller={scheduler}>
+							<ServerConnectionOwner
+								state={state}
+								loadShowObjects={loadShowObjects}
+								sessionRole={sessionRole}
+							>
+								<ServerActionProviderStack
+									state={state}
+									data={{
+										fileSource,
+										screenSource,
+										showLifecycle,
+										deskConnection,
+										fixtureLibraryState,
+										mediaServersState,
+									}}
+									actions={{
+										highlightActions,
+										programmerActions,
+										dmxDiagnostics,
+										soundToLightActions,
+										shellStatusActions,
+									}}
+									dynamicsActions={dynamicsActions}
+									visualizerViewActions={visualizerViewActions}
+								>
+									<ServerShowProviderStack
+										state={state}
+										boundaries={boundaries}
+										value={value}
+										data={{
+											fileSource,
+											screenSource,
+											showLifecycle,
+											deskConnection,
+											fixtureLibraryState,
+											mediaServersState,
+										}}
+										selectiveImportSource={selectiveImportSource}
+										sessionRole={sessionRole}
+									>
+										{children}
+									</ServerShowProviderStack>
+								</ServerActionProviderStack>
+							</ServerConnectionOwner>
+						</SchedulerProvider>
+					</AttributeConfigurationActionsProvider>
+				</RunningRuntimeActionsProvider>
+			</TimecodeActionsProvider>
+		</MacroActionsProvider>
 	);
 }

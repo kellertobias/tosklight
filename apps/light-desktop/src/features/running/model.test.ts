@@ -135,6 +135,7 @@ describe("buildRunningRows", () => {
 		const cancel = vi.fn();
 		const timecode = {
 			timecode_id: "timecode-a",
+			revision: 1,
 			state: "playing" as const,
 			frame: 44,
 			duration_frame: 100,
@@ -192,6 +193,7 @@ describe("buildRunningRows", () => {
 			timecodes: [
 				{
 					timecode_id: "tc",
+					revision: 1,
 					state: "paused",
 					frame: 0,
 					duration_frame: 1,

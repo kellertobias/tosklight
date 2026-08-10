@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import type { LiveClientTransport } from "./transport";
 import { MediaOutputApiClient } from "./mediaOutput";
+import type { LiveClientTransport } from "./transport";
 
 describe("Media output advertised-resource client", () => {
 	it("keeps advertised source and library IDs in typed routes", async () => {
@@ -12,6 +12,13 @@ describe("Media output advertised-resource client", () => {
 		} as unknown as LiveClientTransport);
 
 		await client.inspectMediaServer("master-a");
+		await client.applyMediaLibrarySelection("master-a", {
+			expected_library_revision: "citp-revision-a",
+			layer_fixture_id: "00000000-0000-4000-8000-000000000007",
+			kind: "content",
+			folder: 2,
+			file: 7,
+		});
 		await client.refreshMediaPreview("master-a", 9, 640, 360);
 		await client.mediaPreview("master-a", 9);
 		await client.refreshMediaThumbnails("master-a", 2, [7, 8], 128, 72);
@@ -23,6 +30,15 @@ describe("Media output advertised-resource client", () => {
 		);
 		expect(request).toHaveBeenNthCalledWith(
 			2,
+			"/api/v2/media-servers/master-a/library-selection",
+			expect.objectContaining({
+				body: expect.stringContaining(
+					'"expected_library_revision":"citp-revision-a"',
+				),
+			}),
+		);
+		expect(request).toHaveBeenNthCalledWith(
+			3,
 			"/api/v2/media-servers/master-a/preview/refresh",
 			expect.objectContaining({
 				body: JSON.stringify({ source: 9, width: 640, height: 360 }),
@@ -33,7 +49,7 @@ describe("Media output advertised-resource client", () => {
 			"/api/v2/media-servers/master-a/preview/9",
 		);
 		expect(request).toHaveBeenNthCalledWith(
-			3,
+			4,
 			"/api/v2/media-servers/master-a/thumbnails/refresh",
 			expect.objectContaining({
 				body: JSON.stringify({

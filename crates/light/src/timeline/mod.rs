@@ -17,7 +17,9 @@ use crate::{
     PlaybackService, SchedulerError, SchedulerErrorKind,
 };
 
+mod audio;
 mod runtime_service;
+pub use audio::*;
 pub use runtime_service::*;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]

@@ -141,6 +141,11 @@ pub enum PlaybackTarget {
     Macro {
         macro_id: uuid::Uuid,
     },
+    /// Portable Timecode assignment. Every control surface addresses the same logical runtime
+    /// identified by this show-owned Timecode id.
+    Timecode {
+        timecode_id: TimecodeId,
+    },
     Group {
         group_id: String,
         /// Portable compatibility seed for the shared runtime Group Master.
@@ -358,6 +363,11 @@ impl PlaybackDefinition {
                 PlaybackButtonAction::None,
                 PlaybackButtonAction::None,
             ],
+            PlaybackTarget::Timecode { .. } => [
+                PlaybackButtonAction::Go,
+                PlaybackButtonAction::Pause,
+                PlaybackButtonAction::Off,
+            ],
             PlaybackTarget::Group { .. } => [
                 PlaybackButtonAction::Select,
                 PlaybackButtonAction::SelectDereferenced,
@@ -458,6 +468,13 @@ impl PlaybackDefinition {
                     PlaybackButtonAction::Go | PlaybackButtonAction::None
                 )
             }
+            PlaybackTarget::Timecode { .. } => matches!(
+                action,
+                PlaybackButtonAction::Off
+                    | PlaybackButtonAction::Go
+                    | PlaybackButtonAction::Pause
+                    | PlaybackButtonAction::None
+            ),
             PlaybackTarget::Group { .. } => matches!(
                 action,
                 PlaybackButtonAction::Select
@@ -497,7 +514,9 @@ impl PlaybackDefinition {
                 PlaybackFaderMode::Master | PlaybackFaderMode::Temp | PlaybackFaderMode::XFade
             ),
             PlaybackTarget::Dynamic { .. } => fader == PlaybackFaderMode::Master,
-            PlaybackTarget::Macro { .. } => fader == PlaybackFaderMode::Master,
+            PlaybackTarget::Macro { .. } | PlaybackTarget::Timecode { .. } => {
+                fader == PlaybackFaderMode::Master
+            }
             PlaybackTarget::SpeedGroup { .. } => matches!(
                 fader,
                 PlaybackFaderMode::DirectBpm
@@ -580,6 +599,11 @@ impl PlaybackDefinition {
             && macro_id.is_nil()
         {
             return Err("Macro Playback target id must not be nil".into());
+        }
+        if let PlaybackTarget::Timecode { timecode_id } = &self.target
+            && timecode_id.0.is_nil()
+        {
+            return Err("Timecode Playback target id must not be nil".into());
         }
         if let PlaybackTarget::Group {
             initial_master: Some(initial_master),

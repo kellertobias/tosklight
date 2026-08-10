@@ -23,7 +23,7 @@ const EMPTY_STATE: RunningSupplementalState = {
 	timecodeDefinitions: [],
 };
 
-/** Polls only runtimes that do not yet publish complete projection events. */
+/** Hydrates once, then follows ordered Macro and Timecode runtime projection events. */
 export function useRunningSupplementalAuthority(
 	enabled: boolean,
 	showId: string | null,
@@ -39,16 +39,8 @@ export function useRunningSupplementalAuthority(
 			return;
 		}
 		let mounted = true;
-		let running: Promise<void> | null = null;
-		let invalidated = false;
 		const refresh = (): Promise<void> => {
-			if (running) {
-				invalidated = true;
-				return running;
-			}
-			running = (async () => {
-				do {
-					invalidated = false;
+			return (async () => {
 					try {
 						const [macroRuntime, timecodes, timecodeDefinitions] =
 							await Promise.all([
@@ -60,13 +52,13 @@ export function useRunningSupplementalAuthority(
 								),
 							]);
 						if (!mounted) return;
-						setState({
+						setState((current) => ({
 							loading: false,
 							error: null,
-							macros: macroRuntime.active,
-							timecodes,
+							macros: mergeMacroExecutions(current.macros, macroRuntime.active),
+							timecodes: mergeTimecodes(current.timecodes, timecodes),
 							timecodeDefinitions,
-						});
+						}));
 					} catch (cause) {
 						if (!mounted) return;
 						setState((current) => ({
@@ -75,19 +67,27 @@ export function useRunningSupplementalAuthority(
 							error: cause instanceof Error ? cause.message : String(cause),
 						}));
 					}
-				} while (mounted && invalidated);
-			})().finally(() => {
-				running = null;
-			});
-			return running;
+			})();
 		};
 		refreshRef.current = refresh;
 		setState({ ...EMPTY_STATE, loading: true });
+		const unsubscribe = actions.events?.onEvent((event) => {
+			if (event.type === "macro_execution_changed") {
+				setState((current) => ({
+					...current,
+					macros: mergeMacroExecutions(current.macros, [event.execution]),
+				}));
+			} else if (event.type === "timecode_runtime_changed") {
+				setState((current) => ({
+					...current,
+					timecodes: mergeTimecodes(current.timecodes, [event.snapshot]),
+				}));
+			}
+		});
 		void refresh();
-		const timer = window.setInterval(() => void refresh(), 500);
 		return () => {
 			mounted = false;
-			window.clearInterval(timer);
+			unsubscribe?.();
 			if (refreshRef.current === refresh)
 				refreshRef.current = async () => undefined;
 		};
@@ -97,7 +97,7 @@ export function useRunningSupplementalAuthority(
 		async (timecodeId: string) => {
 			if (!showId || !actions) return;
 			await actions.timecodes.stop(showId, timecodeId);
-			await refreshRef.current();
+			if (!actions.events) await refreshRef.current();
 		},
 		[actions, showId],
 	);
@@ -105,10 +105,33 @@ export function useRunningSupplementalAuthority(
 		async (executionId: string) => {
 			if (!showId || !actions) return;
 			await actions.macros.cancel(showId, executionId);
-			await refreshRef.current();
+			if (!actions.events) await refreshRef.current();
 		},
 		[actions, showId],
 	);
 
 	return { ...state, stopTimecode, cancelMacro };
+}
+
+function mergeTimecodes(
+	current: readonly TimecodeTransportSnapshot[],
+	incoming: readonly TimecodeTransportSnapshot[],
+): TimecodeTransportSnapshot[] {
+	const next = new Map(current.map((snapshot) => [snapshot.timecode_id, snapshot]));
+	for (const snapshot of incoming) {
+		const previous = next.get(snapshot.timecode_id);
+		if (!previous || snapshot.revision >= previous.revision) {
+			next.set(snapshot.timecode_id, snapshot);
+		}
+	}
+	return [...next.values()];
+}
+
+function mergeMacroExecutions(
+	current: readonly MacroExecutionSnapshot[],
+	incoming: readonly MacroExecutionSnapshot[],
+): MacroExecutionSnapshot[] {
+	const next = new Map(current.map((execution) => [execution.execution_id, execution]));
+	for (const execution of incoming) next.set(execution.execution_id, execution);
+	return [...next.values()];
 }

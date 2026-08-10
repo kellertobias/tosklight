@@ -9,6 +9,9 @@ use light_playback::{
     TimecodeTransportAction, TimecodeTransportState,
 };
 
+use super::{TimecodeAudioService, WavMetadata};
+use crate::AssetReference;
+
 pub trait TimecodeClock: Send + Sync {
     fn now_micros(&self) -> u64;
 }
@@ -40,6 +43,7 @@ pub trait TimecodeChangePublisher: Send + Sync {
 pub enum TimecodeRuntimeChangeCause {
     Installed,
     Action(TimecodeTransportAction),
+    ExternalSync { transport_frame: TimecodeFrame },
     Tick { completed_loops: u64 },
 }
 
@@ -51,6 +55,7 @@ pub struct TimecodeRuntimeSnapshot {
     pub frame: TimecodeFrame,
     pub duration: TimecodeFrame,
     pub reconstructed: TimecodeReconstructedState,
+    pub audio_linked: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -84,6 +89,7 @@ pub struct TimecodeRuntimeService {
     publisher: Arc<dyn TimecodeChangePublisher>,
     rate: TimecodeFrameRate,
     runtimes: Arc<Mutex<BTreeMap<TimecodeId, Runtime>>>,
+    audio: Option<Arc<TimecodeAudioService>>,
 }
 
 impl TimecodeRuntimeService {
@@ -97,7 +103,30 @@ impl TimecodeRuntimeService {
             publisher,
             rate,
             runtimes: Arc::new(Mutex::new(BTreeMap::new())),
+            audio: None,
         }
+    }
+
+    /// Attaches the server-owned audio transport to the same clock and lifecycle as Timecode.
+    pub fn with_audio(mut self, audio: Arc<TimecodeAudioService>) -> Self {
+        self.audio = Some(audio);
+        self
+    }
+
+    pub fn prepare_audio(
+        &self,
+        timecode_id: TimecodeId,
+        asset: AssetReference,
+        metadata: WavMetadata,
+        looping: bool,
+    ) -> Result<TimecodeFrame, TimecodeRuntimeError> {
+        self.audio
+            .as_ref()
+            .ok_or_else(|| {
+                TimecodeRuntimeError::new("native Timecode audio output is unavailable")
+            })?
+            .prepare(timecode_id, asset, metadata, self.rate, looping)
+            .map_err(TimecodeRuntimeError::new)
     }
 
     pub fn install(
@@ -118,7 +147,7 @@ impl TimecodeRuntimeService {
         }
         let id = definition.id;
         let runtime = Runtime::new(definition, duration);
-        let snapshot = runtime.snapshot();
+        let snapshot = runtime.snapshot(self.audio.as_deref());
         self.runtimes
             .lock()
             .expect("Timecode runtime lock poisoned")
@@ -138,7 +167,7 @@ impl TimecodeRuntimeService {
             .lock()
             .expect("Timecode runtime lock poisoned")
             .get(&id)
-            .map(Runtime::snapshot)
+            .map(|runtime| runtime.snapshot(self.audio.as_deref()))
             .ok_or_else(|| TimecodeRuntimeError::new("Timecode runtime is not installed"))
     }
 
@@ -147,7 +176,7 @@ impl TimecodeRuntimeService {
             .lock()
             .expect("Timecode runtime lock poisoned")
             .values()
-            .map(Runtime::snapshot)
+            .map(|runtime| runtime.snapshot(self.audio.as_deref()))
             .collect()
     }
 
@@ -166,6 +195,17 @@ impl TimecodeRuntimeService {
         action: TimecodeTransportAction,
     ) -> Result<TimecodeRuntimeOutcome, TimecodeRuntimeError> {
         let now = self.clock.now_micros();
+        // Reject a missing runtime before touching the output transport. Once installed, the
+        // in-memory action cannot fail; applying audio first avoids advertising a transport state
+        // that the device rejected.
+        let installed = self.snapshot(id)?;
+        if installed.audio_linked
+            && let Some(audio) = &self.audio
+        {
+            audio
+                .handle(id, action, now)
+                .map_err(TimecodeRuntimeError::new)?;
+        }
         let (changed, snapshot) = {
             let mut runtimes = self
                 .runtimes
@@ -181,15 +221,44 @@ impl TimecodeRuntimeService {
             if changed {
                 runtime.revision = runtime.revision.saturating_add(1);
             }
-            (changed, runtime.snapshot())
+            (changed, runtime.snapshot(self.audio.as_deref()))
         };
         if changed {
+            if snapshot.audio_linked
+                && let Some(audio) = &self.audio
+            {
+                audio
+                    .synchronize(
+                        id,
+                        snapshot.frame,
+                        f64::from(snapshot.reconstructed.audio_volume),
+                        now,
+                    )
+                    .map_err(TimecodeRuntimeError::new)?;
+            }
             self.publisher.publish(&TimecodeRuntimeChange {
                 cause: TimecodeRuntimeChangeCause::Action(action),
                 snapshot: snapshot.clone(),
             });
         }
         Ok(TimecodeRuntimeOutcome { changed, snapshot })
+    }
+
+    pub fn remaining_millis(
+        &self,
+        id: TimecodeId,
+        start: TimecodeFrame,
+    ) -> Result<u64, TimecodeRuntimeError> {
+        let snapshot = self.snapshot(id)?;
+        let frames = snapshot
+            .duration
+            .0
+            .saturating_sub(start.0.min(snapshot.duration.0));
+        let micros = u128::from(frames)
+            .saturating_mul(u128::from(self.rate.denominator()))
+            .saturating_mul(1_000_000)
+            / u128::from(self.rate.numerator());
+        Ok(u64::try_from((micros.saturating_add(999)) / 1_000).unwrap_or(u64::MAX))
     }
 
     /// Advances every running Timecode in stable object-id order.
@@ -209,11 +278,110 @@ impl TimecodeRuntimeService {
                         cause: TimecodeRuntimeChangeCause::Tick {
                             completed_loops: advance.completed_loops,
                         },
-                        snapshot: runtime.snapshot(),
+                        snapshot: runtime.snapshot(self.audio.as_deref()),
                     })
                 })
                 .collect::<Vec<_>>()
         };
+        for change in &changes {
+            if change.snapshot.audio_linked
+                && let Some(audio) = &self.audio
+                && let Err(error) = audio.synchronize(
+                    change.snapshot.timecode_id,
+                    change.snapshot.frame,
+                    f64::from(change.snapshot.reconstructed.audio_volume),
+                    now,
+                )
+            {
+                // A device failure must not stop DMX and playback scheduler progress. The
+                // transport route still reports synchronous output errors to its caller.
+                tracing::warn!(
+                    timecode_id = %change.snapshot.timecode_id.0,
+                    %error,
+                    "Timecode audio synchronization failed"
+                );
+            }
+            self.publisher.publish(change);
+        }
+        changes
+    }
+
+    /// Synchronizes eligible Timecodes to an authoritative external transport frame.
+    ///
+    /// Every definition applies its own offset. An auto-start definition begins exactly when the
+    /// source reaches that offset; an operator-started definition continues to follow the source;
+    /// an inactive, non-auto definition is intentionally untouched.
+    pub fn synchronize_external(
+        &self,
+        transport_frame: TimecodeFrame,
+    ) -> Vec<TimecodeRuntimeChange> {
+        let now = self.clock.now_micros();
+        let (changes, started) = {
+            let mut runtimes = self
+                .runtimes
+                .lock()
+                .expect("Timecode runtime lock poisoned");
+            let mut started = Vec::new();
+            let changes = runtimes
+                .values_mut()
+                .filter_map(|runtime| {
+                    let eligible =
+                        runtime.external_armed || runtime.state == TimecodeTransportState::Playing;
+                    if !eligible {
+                        return None;
+                    }
+                    let Some(local) = runtime.definition.local_frame_at_transport(transport_frame)
+                    else {
+                        return None;
+                    };
+                    let before = runtime.operator_state();
+                    if runtime.external_armed {
+                        runtime.external_armed = false;
+                        runtime.state = TimecodeTransportState::Playing;
+                        if runtime.definition.audio.is_some() {
+                            started.push(runtime.definition.id);
+                        }
+                    }
+                    runtime.frame = TimecodeFrame(local.0 % runtime.duration.0);
+                    // This anchor is dormant while an external source is locked, then gives
+                    // Continue Internal a seamless takeover point if that source is lost.
+                    runtime.start(now);
+                    if runtime.operator_state() == before {
+                        return None;
+                    }
+                    runtime.revision = runtime.revision.saturating_add(1);
+                    Some(TimecodeRuntimeChange {
+                        cause: TimecodeRuntimeChangeCause::ExternalSync { transport_frame },
+                        snapshot: runtime.snapshot(self.audio.as_deref()),
+                    })
+                })
+                .collect::<Vec<_>>();
+            (changes, started)
+        };
+        if let Some(audio) = &self.audio {
+            for id in started {
+                if let Err(error) = audio.handle(id, TimecodeTransportAction::Go, now) {
+                    tracing::warn!(timecode_id = %id.0, %error, "Timecode audio auto-start failed");
+                }
+            }
+            for change in &changes {
+                if !change.snapshot.audio_linked {
+                    continue;
+                }
+                if let Err(error) = audio.synchronize(
+                    change.snapshot.timecode_id,
+                    change.snapshot.frame,
+                    f64::from(change.snapshot.reconstructed.audio_volume),
+                    now,
+                ) {
+                    tracing::warn!(
+                        timecode_id = %change.snapshot.timecode_id.0,
+                        %error,
+                        "external Timecode audio synchronization failed"
+                    );
+                }
+            }
+        }
         for change in &changes {
             self.publisher.publish(change);
         }
@@ -229,6 +397,7 @@ struct Runtime {
     state: TimecodeTransportState,
     frame: TimecodeFrame,
     running: Option<RunningAnchor>,
+    external_armed: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -246,6 +415,7 @@ struct TickAdvance {
 
 impl Runtime {
     fn new(definition: TimecodeDefinition, duration: TimecodeFrame) -> Self {
+        let external_armed = definition.auto_start;
         Self {
             definition,
             duration,
@@ -253,10 +423,11 @@ impl Runtime {
             state: TimecodeTransportState::Stopped,
             frame: TimecodeFrame::ZERO,
             running: None,
+            external_armed,
         }
     }
 
-    fn snapshot(&self) -> TimecodeRuntimeSnapshot {
+    fn snapshot(&self, audio: Option<&TimecodeAudioService>) -> TimecodeRuntimeSnapshot {
         TimecodeRuntimeSnapshot {
             timecode_id: self.definition.id,
             revision: self.revision,
@@ -264,6 +435,7 @@ impl Runtime {
             frame: self.frame,
             duration: self.duration,
             reconstructed: self.definition.state_at(self.frame),
+            audio_linked: audio.is_some_and(|audio| audio.is_prepared(self.definition.id)),
         }
     }
 
@@ -292,6 +464,7 @@ impl Runtime {
     fn apply(&mut self, action: TimecodeTransportAction, now: u64) -> bool {
         match action {
             TimecodeTransportAction::Go | TimecodeTransportAction::Rewind => {
+                self.external_armed = false;
                 self.state = TimecodeTransportState::Playing;
                 self.frame = TimecodeFrame::ZERO;
                 self.start(now);
@@ -311,6 +484,7 @@ impl Runtime {
                 TimecodeTransportState::Stopped => false,
             },
             TimecodeTransportAction::Stop => {
+                self.external_armed = false;
                 let changed = self.state != TimecodeTransportState::Stopped
                     || self.frame != TimecodeFrame::ZERO;
                 self.state = TimecodeTransportState::Stopped;

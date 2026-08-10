@@ -17,6 +17,10 @@ pub(super) fn router() -> Router<AppState> {
             "/api/v2/macros/executions/{execution_id}",
             get(execution_snapshot),
         )
+        .route(
+            "/api/v2/macros/executions/{execution_id}/undo-line",
+            post(undo_run_line),
+        )
         .route("/api/v2/macros/executions/cancel", post(cancel_execution))
 }
 
@@ -117,7 +121,54 @@ fn start_execution(
             "state": "queued",
         }),
     );
+    state
+        .events
+        .publish(light_application::EventDraft::macro_execution_changed(
+            started.clone(),
+        ));
+    watch_execution(
+        state.clone(),
+        started.desk_id,
+        started.execution_id,
+        started.state,
+    );
     Ok(Json(execution_wire(started)))
+}
+
+fn watch_execution(
+    state: AppState,
+    desk_id: Uuid,
+    execution_id: Uuid,
+    mut last_state: light_application::CommandMacroExecutionState,
+) {
+    std::thread::Builder::new()
+        .name(format!("macro-execution-{execution_id}"))
+        .spawn(move || {
+            loop {
+                let Some(snapshot) = state.macros.execution(desk_id, execution_id) else {
+                    return;
+                };
+                if snapshot.state != last_state {
+                    last_state = snapshot.state;
+                    state
+                        .events
+                        .publish(light_application::EventDraft::macro_execution_changed(
+                            snapshot.clone(),
+                        ));
+                    emit(
+                        &state,
+                        "macro_execution_changed",
+                        serde_json::to_value(execution_wire(snapshot.clone()))
+                            .expect("Macro execution snapshots serialize"),
+                    );
+                }
+                if snapshot.state.is_terminal() {
+                    return;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
+        })
+        .expect("spawn Macro execution event watcher");
 }
 
 /// Queue a Macro through the same authenticated execution service used by pool/editor actions.
@@ -145,6 +196,45 @@ pub(super) fn start_macro_from_playback(
         show_id,
     )?;
     Ok(())
+}
+
+/// Starts a numbered Macro from the shared command line without allowing Macro-to-Macro calls.
+#[allow(private_interfaces)]
+pub(crate) fn start_macro_from_command_line(
+    state: &AppState,
+    session: &Session,
+    macro_number: u16,
+) -> Result<Uuid, ApiError> {
+    let show_id = state
+        .active_show
+        .current()
+        .as_ref()
+        .map(|show| show.id)
+        .ok_or_else(|| ApiError::bad_request("no show is open"))?;
+    let entry = active_entry(state, show_id)?;
+    let (_, objects) = ActiveShowRepository::open(&entry.path)
+        .map_err(ApiError::store)?
+        .objects_with_portable_revision("macro")
+        .map_err(ApiError::store)?;
+    let object = objects
+        .into_iter()
+        .find(|object| {
+            serde_json::from_value::<light_application::CommandMacroDefinition>(object.body.clone())
+                .is_ok_and(|definition| definition.number == macro_number)
+        })
+        .ok_or_else(|| ApiError::not_found(format!("Macro {macro_number} does not exist")))?;
+    let definition = serde_json::from_value(object.body)
+        .map_err(|error| ApiError::internal(format!("stored Macro is invalid: {error}")))?;
+    let started = start_execution(
+        state,
+        session,
+        definition,
+        object.revision,
+        wire::MacroTrigger::CommandLine,
+        None,
+        show_id,
+    )?;
+    Ok(started.0.execution_id)
 }
 
 async fn runtime_snapshot(
@@ -192,6 +282,106 @@ async fn cancel_execution(
         .map_err(|error| ApiError::not_found(error.message))
 }
 
+async fn undo_run_line(
+    State(state): State<AppState>,
+    Path(execution_id): Path<Uuid>,
+    context: ShowContext,
+    desk: DeskContext,
+    headers: HeaderMap,
+) -> Result<Json<wire::MacroRunLineUndoOutcome>, ApiError> {
+    let session = command_http::authenticate_desk_mutation(&state, &headers, &desk)?;
+    let show_id = context.resolve(&state)?;
+    let execution = state
+        .macros
+        .execution(session.desk.id, execution_id)
+        .ok_or_else(|| ApiError::not_found("Macro execution does not exist"))?;
+    if execution.user_id != session.user.id.0 || execution.session_id != session.id.0 {
+        return Err(ApiError::forbidden(
+            "Run-line Undo belongs to the initiating operator session",
+        ));
+    }
+    if execution.state != light_application::CommandMacroExecutionState::Succeeded
+        || execution.trigger != light_application::CommandMacroTrigger::Editor
+        || execution.line.is_none()
+    {
+        return Err(ApiError::conflict(
+            "Only a successfully completed editor Run line can be undone",
+        ));
+    }
+    let runtime = state.macros.snapshot(session.desk.id);
+    if runtime.recent.first().map(|entry| entry.execution_id) != Some(execution_id) {
+        return Err(ApiError::conflict(
+            "Undo last run is unavailable because a newer Macro execution exists",
+        ));
+    }
+    let (current_revision, _) = macro_for_run(&state, show_id, execution.macro_id)?;
+    if current_revision != execution.source_revision {
+        return Err(ApiError::conflict(
+            "Undo last run is unavailable because the Macro revision changed",
+        ));
+    }
+    let line = execution
+        .line
+        .expect("Run-line execution has a source line");
+    let expected_request_id = format!(
+        "macro:{execution_id}:{}:{}:{line}",
+        execution.macro_id, execution.source_revision
+    );
+    let newest = state
+        .programming
+        .command_history(session.desk.id)
+        .into_iter()
+        .next()
+        .ok_or_else(|| ApiError::conflict("Undo last run has no compatible command history"))?;
+    if newest.session_id != session.id
+        || newest.source != "macro"
+        || newest.status != "accepted"
+        || newest.request_id.as_deref() != Some(expected_request_id.as_str())
+    {
+        return Err(ApiError::conflict(
+            "Undo last run is unavailable because another command or edit intervened",
+        ));
+    }
+    let mut action_context =
+        operator_action_context(&session, light_application::ActionSource::Macro);
+    action_context.request_id = Some(format!("macro-undo:{execution_id}"));
+    let result = command_http::run_service_with_source(
+        &state,
+        &session,
+        action_context,
+        light_application::ProgrammingCommand::Undo,
+        "macro",
+    )
+    .map_err(|error| ApiError::conflict(error.message))?;
+    let changed = matches!(
+        &result.outcome,
+        light_application::ProgrammingOutcome::Accepted {
+            action: light_application::ProgrammingAction::Undone,
+            ..
+        }
+    );
+    if !changed {
+        return Err(ApiError::conflict(
+            "The command family has no compatible Undo entry",
+        ));
+    }
+    if let Some(warning) = command_http::publish_service_result(
+        &state,
+        &session,
+        &result,
+        "macro",
+        result.context.request_id.as_deref(),
+        None,
+    ) {
+        return Err(ApiError::internal(warning));
+    }
+    Ok(Json(wire::MacroRunLineUndoOutcome {
+        execution_id,
+        changed,
+        message: "Undid the exact newest Run-line application change".into(),
+    }))
+}
+
 async fn validate_macro(
     State(state): State<AppState>,
     context: ShowContext,
@@ -199,9 +389,15 @@ async fn validate_macro(
     headers: HeaderMap,
     TolerantJson(request): TolerantJson<wire::MacroValidationRequest>,
 ) -> Result<Json<wire::MacroValidation>, ApiError> {
-    let _session = session_for_desk(&state, &headers, &desk)?;
+    let session = session_for_desk(&state, &headers, &desk)?;
     context.verify(&state)?;
-    Ok(Json(analyze_source(&request.source)))
+    let action_context = operator_action_context(&session, light_application::ActionSource::Http);
+    Ok(Json(analyze_source_for_context(
+        &request.source,
+        &state,
+        &session,
+        &action_context,
+    )))
 }
 
 async fn macro_object_action(
@@ -492,6 +688,46 @@ fn analyze_source(source: &str) -> wire::MacroValidation {
     }
 }
 
+fn analyze_source_for_context(
+    source: &str,
+    state: &AppState,
+    session: &Session,
+    context: &light_application::ActionContext,
+) -> wire::MacroValidation {
+    let mut validation = analyze_source(source);
+    if !validation.valid {
+        return validation;
+    }
+    let executable = source
+        .lines()
+        .enumerate()
+        .filter_map(|(index, raw)| {
+            let command = raw.trim();
+            (!command.is_empty() && !command.starts_with('#') && !command.starts_with("//"))
+                .then_some(((index + 1) as u32, command))
+        })
+        .collect::<Vec<_>>();
+    let commands = executable
+        .iter()
+        .map(|(_, command)| *command)
+        .collect::<Vec<_>>();
+    if let Err((index, error)) =
+        super::prevalidate_programmer_commands_from(state, session, &commands, context)
+    {
+        if let Some((line, _)) = executable.get(index)
+            && let Some(diagnostic) = validation
+                .diagnostics
+                .iter_mut()
+                .find(|diagnostic| diagnostic.line == *line)
+        {
+            diagnostic.status = wire::MacroLineStatus::Invalid;
+            diagnostic.message = error;
+            validation.valid = false;
+        }
+    }
+    validation
+}
+
 fn interaction_required(tokens: &[String]) -> bool {
     matches!(tokens, [target] if matches!(target.as_str(), "RECORD" | "REC" | "DELETE" | "DEL" | "MOVE" | "MOV" | "COPY" | "CPY" | "SET"))
         || matches!(
@@ -574,6 +810,21 @@ impl light_application::CommandMacroExecutionHost for ServerMacroExecutionHost {
             .join("\n");
         let validation = analyze_source(&source);
         if validation.valid {
+            let commands = lines
+                .iter()
+                .map(|line| line.command.as_str())
+                .collect::<Vec<_>>();
+            if let Err((index, error)) = super::prevalidate_programmer_commands_from(
+                &self.state,
+                &self.session,
+                &commands,
+                &self.context,
+            ) {
+                let line = lines.get(index).map_or(0, |line| line.number);
+                return Err(light_application::CommandMacroExecutionError::new(format!(
+                    "Macro line {line} cannot run: {error}"
+                )));
+            }
             return Ok(());
         }
         let message = validation
@@ -775,7 +1026,7 @@ fn trigger_wire(trigger: light_application::CommandMacroTrigger) -> wire::MacroT
     }
 }
 
-fn execution_wire(
+pub(super) fn execution_wire(
     snapshot: light_application::CommandMacroExecutionSnapshot,
 ) -> wire::MacroExecutionSnapshot {
     wire::MacroExecutionSnapshot {

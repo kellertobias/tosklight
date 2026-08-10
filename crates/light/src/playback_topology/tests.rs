@@ -115,6 +115,87 @@ fn macro_playback_assignment_rejects_a_missing_macro_without_mutation() {
 }
 
 #[test]
+fn timecode_target_persists_for_physical_and_virtual_playbacks() {
+    for (virtual_playback, expected_number) in [(false, 1_u16), (true, 1001_u16)] {
+        let rig = TestRig::new();
+        let timecode_id = light_playback::TimecodeId(Uuid::from_u128(70));
+        let timecode = light_playback::TimecodeDefinition {
+            id: timecode_id,
+            number: 70,
+            name: "House timeline".into(),
+            duration: Some(light_playback::TimecodeFrame(1_000)),
+            transport_offset: light_playback::TimecodeFrame::ZERO,
+            auto_start: false,
+            audio: None,
+            markers: Vec::new(),
+            lanes: Vec::new(),
+        };
+        rig.seed(
+            "timecode",
+            &timecode_id.0.to_string(),
+            &serde_json::to_value(timecode).unwrap(),
+        );
+        let target = PlaybackTarget::Timecode { timecode_id };
+        let mut requested = playback(0, "Timecode 70");
+        requested.target = target.clone();
+        requested.buttons = PlaybackDefinition::default_buttons(&target);
+        requested.has_fader = false;
+
+        let action = if virtual_playback {
+            PlaybackTopologyAction::ConfigureVirtual {
+                page: 1,
+                number: expected_number,
+                expected_page_revision: 0,
+                expected_page_object_id: None,
+                playback: requested,
+            }
+        } else {
+            PlaybackTopologyAction::ConfigureSlot {
+                page: 1,
+                slot: 1,
+                expected_page_revision: 0,
+                expected_page_object_id: None,
+                expected_playback_revision: 0,
+                expected_playback_object_id: None,
+                playback: requested,
+            }
+        };
+        rig.handle("assign-timecode", rig.show_revision(), action)
+            .unwrap();
+
+        let document = rig.document();
+        let stored = if virtual_playback {
+            let page: light_playback::PlaybackPage = serde_json::from_value(
+                document
+                    .objects_of_kind("playback_page")
+                    .next()
+                    .unwrap()
+                    .body()
+                    .clone(),
+            )
+            .unwrap();
+            page.virtual_playbacks
+                .get(&expected_number)
+                .unwrap()
+                .clone()
+        } else {
+            serde_json::from_value::<PlaybackDefinition>(
+                document
+                    .objects_of_kind("playback")
+                    .next()
+                    .unwrap()
+                    .body()
+                    .clone(),
+            )
+            .unwrap()
+        };
+        assert_eq!(stored.target, target);
+        assert!(!stored.has_fader);
+        assert_eq!(stored.buttons[0], light_playback::PlaybackButtonAction::Go);
+    }
+}
+
+#[test]
 fn save_cue_list_is_lossless_and_semantic_repetition_is_no_change() {
     let rig = TestRig::new();
     let cue_list_id = CueListId::new();

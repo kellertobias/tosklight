@@ -1,6 +1,6 @@
 use crate::*;
 use chrono::Utc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 #[test]
 fn parses_art_timecode_with_stream_identity() {
@@ -77,27 +77,83 @@ fn tc(source: &str) -> SmpteTimecode {
 }
 
 #[test]
-fn timecode_router_obeys_priority_and_explicit_fallback() {
+fn timecode_router_uses_only_the_explicit_source_and_relocks_after_loss() {
     let mut router = TimecodeRouter::default();
-    router.configure(vec![
-        TimecodeSourceConfig {
-            source_prefix: "osc:".into(),
-            priority: 10,
-            fallback: true,
-            loss_timeout_millis: 1000,
+    router.configure(TimecodeRouterConfig {
+        selected_source: TimecodeSourceSelection::External {
+            source: "extension:primary:frame".into(),
         },
-        TimecodeSourceConfig {
-            source_prefix: "extension:primary:".into(),
-            priority: 20,
-            fallback: false,
-            loss_timeout_millis: 0,
-        },
-    ]);
-    router.ingest(tc("osc:backup"));
-    assert_eq!(router.active_source(), Some("osc:backup"));
-    router.ingest(tc("extension:primary:frame"));
+        desk_rate: FrameRate::Fps25,
+        external_loss_policy: ExternalTimecodeLossPolicy::Pause,
+        loss_timeout_millis: 10,
+    });
+    let start = Instant::now();
+    assert!(router.ingest_at(tc("osc:backup"), start).is_none());
+    assert_eq!(router.active_source(), None);
+
+    router.ingest_at(tc("extension:primary:frame"), start);
     assert_eq!(router.active_source(), Some("extension:primary:frame"));
-    std::thread::sleep(Duration::from_millis(1));
-    router.poll_loss();
-    assert_eq!(router.active_source(), Some("osc:backup"));
+    assert_eq!(
+        router.take_transition(),
+        Some(TimecodeSourceTransition::ExternalLocked {
+            source: "extension:primary:frame".into()
+        })
+    );
+
+    router.poll_loss_at(start + Duration::from_millis(11));
+    assert_eq!(router.active_source(), None);
+    assert!(!router.uses_internal_clock());
+    assert_eq!(
+        router.take_transition(),
+        Some(TimecodeSourceTransition::ExternalLost {
+            policy: ExternalTimecodeLossPolicy::Pause
+        })
+    );
+
+    router.ingest_at(
+        tc("extension:primary:frame"),
+        start + Duration::from_millis(12),
+    );
+    assert_eq!(router.active_source(), Some("extension:primary:frame"));
+    assert!(matches!(
+        router.take_transition(),
+        Some(TimecodeSourceTransition::ExternalLocked { .. })
+    ));
+}
+
+#[test]
+fn timecode_router_converts_known_rates_and_exposes_a_warning() {
+    let mut router = TimecodeRouter::default();
+    router.configure(TimecodeRouterConfig {
+        selected_source: TimecodeSourceSelection::External {
+            source: "artnet:10.0.0.1:2".into(),
+        },
+        desk_rate: FrameRate::Fps30,
+        ..TimecodeRouterConfig::default()
+    });
+    let mut incoming = tc("artnet:10.0.0.1:2");
+    incoming.frames = 24;
+    let converted = router.ingest(incoming).unwrap();
+    assert_eq!(converted.rate, FrameRate::Fps30);
+    assert_eq!(converted.frames, 28);
+    assert_eq!(
+        router.rate_warning(),
+        Some(&TimecodeRateWarning {
+            source_rate: FrameRate::Fps25,
+            desk_rate: FrameRate::Fps30
+        })
+    );
+}
+
+#[test]
+fn internal_generator_selection_rejects_external_frames() {
+    let mut router = TimecodeRouter::default();
+    router.configure(TimecodeRouterConfig {
+        selected_source: TimecodeSourceSelection::Internal,
+        ..TimecodeRouterConfig::default()
+    });
+    assert!(router.ingest(tc("artnet:10.0.0.1:2")).is_none());
+    assert_eq!(router.active_source(), Some("internal"));
+    assert!(router.current().is_none());
+    assert!(router.uses_internal_clock());
 }

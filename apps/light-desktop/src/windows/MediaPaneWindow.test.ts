@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { mediaFileMutations } from "./MediaPaneWindow";
+import {
+	mediaCapabilitiesForLayer,
+	mediaDraftForLayer,
+	mediaFileMutations,
+} from "./MediaPaneWindow";
 
 describe("Media pane programmer transaction", () => {
 	it("commits folder and file together for the exact logical layer", () => {
@@ -19,5 +23,74 @@ describe("Media pane programmer transaction", () => {
 				timing: { fade: false, fadeMillis: null, delayMillis: null },
 			},
 		]);
+	});
+
+	it("exposes only the exact layer capabilities advertised by the provider", () => {
+		const inspection = {
+			library_revision: "citp-revision",
+			server: { name: "Server", layer_count: 1 },
+			folders: [],
+			files: [],
+			preview_sources: [],
+			layers: [],
+			capabilities: {
+				provider: "citp_msex",
+				native_action: null,
+				layers: [
+					{
+						layer: 7,
+						content_library: true,
+						mask_library: true,
+						secondary_controls: [{ attribute: "media.opacity" }],
+					},
+				],
+			},
+		};
+		expect(mediaCapabilitiesForLayer(inspection, 7)).toEqual(
+			inspection.capabilities.layers[0],
+		);
+		expect(mediaCapabilitiesForLayer(inspection, 8)).toBeUndefined();
+	});
+
+	it("resets a switched logical layer draft to that layer's advertised live pair", () => {
+		const inspection = {
+			library_revision: "citp-test",
+			server: { name: "Server", layer_count: 2 },
+			folders: [],
+			files: [],
+			preview_sources: [],
+			layers: [
+				{
+					layer: 7,
+					physical_output: 1,
+					folder: 2,
+					file: 19,
+					name: "Layer 7",
+					position_frames: 0,
+					length_frames: 100,
+					fps: 25,
+					flags: 0,
+				},
+			],
+			capabilities: {
+				provider: "citp_msex",
+				native_action: null,
+				layers: [],
+			},
+		};
+		expect(
+			mediaDraftForLayer(
+				inspection,
+				[{ fixture_id: "layer-7", head_index: 7 }],
+				"layer-7",
+			),
+		).toEqual({ folderId: "2", fileId: "19" });
+		expect(
+			mediaDraftForLayer(
+				inspection,
+				[{ fixture_id: "layer-7", head_index: 7 }],
+				"master",
+			),
+		).toBeNull();
 	});
 });

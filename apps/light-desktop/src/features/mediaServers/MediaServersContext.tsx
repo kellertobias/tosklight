@@ -1,6 +1,6 @@
 import { createContext, type PropsWithChildren, useContext } from "react";
-import type { MatterBridgeStatus, MediaServerFixture } from "../../api/types";
 import type { MediaServerInspection } from "../../api/client/mediaOutput";
+import type { MatterBridgeStatus, MediaServerFixture } from "../../api/types";
 
 /**
  * Scoped media-server and Matter-bridge desk state for the setup surfaces: matched media
@@ -16,6 +16,16 @@ export interface MediaServersState {
 		elements: number[],
 	) => Promise<void>;
 	inspectMediaServer: (fixtureId: string) => Promise<MediaServerInspection>;
+	applyMediaLibrarySelection: (
+		fixtureId: string,
+		input: {
+			expected_library_revision: string;
+			layer_fixture_id: string;
+			kind: "content" | "mask";
+			folder: number;
+			file: number;
+		},
+	) => Promise<unknown>;
 	mediaThumbnail: (
 		fixtureId: string,
 		folder: number,

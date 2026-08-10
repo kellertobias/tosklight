@@ -450,7 +450,7 @@ fn extension_timecode_uses_the_authoritative_priority_router() {
     let (state, data_dir) = test_state();
     state
         .output
-        .configure_timecode(DeskConfiguration::default().timecode_sources);
+        .configure_timecode(DeskConfiguration::default().timecode_router_config());
     extensions_runtime::ingest_extension_timecode(
         &state,
         &TimecodeEnvelope {

@@ -1,8 +1,10 @@
-import { Button, NumberField } from "@tosklight/ui";
+import { Button, NumberField, SelectField, TextField } from "@tosklight/ui";
+import { useEffect, useState } from "react";
 import { ShowRecoveryFileManager } from "../../components/setup/ShowRecoveryFileManager";
 import { useBootstrapSnapshot } from "../../features/deskSnapshot/DeskSnapshotState";
 import { useConnectionStatus } from "../../features/shellStatus/ShellStatusState";
 import { useShowLifecycle } from "../../features/showLifecycle/ShowLifecycleContext";
+import { useTimecodeActions } from "../../features/timecode/TimecodeActionsContext";
 import { useApp } from "../../state/AppContext";
 import type { SetupWindowController } from "./controller";
 
@@ -78,19 +80,164 @@ export function TimecodeSection({
 }: {
 	controller: SetupWindowController;
 }) {
+	const draft = controller.draft;
+	const timecodes = useTimecodeActions();
+	const [audioOutputs, setAudioOutputs] = useState<readonly string[]>([]);
+	const [audioOutputError, setAudioOutputError] = useState<string | null>(null);
+	useEffect(() => {
+		let active = true;
+		if (!timecodes) return;
+		void timecodes.api
+			.outputDevices()
+			.then((result) => {
+				if (active) setAudioOutputs(result.devices);
+			})
+			.catch((reason) => {
+				if (active)
+					setAudioOutputError(
+						reason instanceof Error ? reason.message : String(reason),
+					);
+			});
+		return () => {
+			active = false;
+		};
+	}, [timecodes]);
+	if (!draft) return null;
+	const external = draft.timecode_source.type === "external";
+	const externalSource =
+		draft.timecode_source.type === "external"
+			? draft.timecode_source.source
+			: "";
+	const frameRate = draft.timecode_frame_rate
+		? draft.timecode_frame_rate.numerator /
+			draft.timecode_frame_rate.denominator
+		: 0;
+	const selectedOutput =
+		draft.timecode_audio_output_device ?? "$system_default";
+	const outputTrim =
+		draft.timecode_audio_latency_trim_micros_by_output?.[selectedOutput] ?? 0;
 	return (
 		<>
 			<h2>Timecode</h2>
-			<div className="setup-list">
-				{controller.draft?.timecode_sources.map((source) => (
-					<article key={source.source_prefix}>
-						<b>{source.source_prefix}</b>
-						<span>Priority {source.priority}</span>
-						<small>
-							{source.fallback ? "Fallback allowed" : "Explicit source only"}
-						</small>
-					</article>
-				))}
+			<div className="setup-form-grid">
+				<SelectField
+					label="Authoritative source"
+					value={draft.timecode_source.type}
+					options={[
+						{ value: "internal", label: "Internal generator" },
+						{ value: "external", label: "Explicit external source" },
+					]}
+					onChange={(value) =>
+						controller.editDraft({
+							...draft,
+							timecode_source:
+								value === "external"
+									? { type: "external", source: "" }
+									: { type: "internal" },
+						})
+					}
+				/>
+				{external && (
+					<TextField
+						label="External source identity"
+						value={externalSource}
+						description="Use the exact normalized identity shown by the input adapter. No other sender can take over."
+						onChange={(event) =>
+							controller.editDraft({
+								...draft,
+								timecode_source: {
+									type: "external",
+									source: event.target.value,
+								},
+							})
+						}
+					/>
+				)}
+				<NumberField
+					label="Timecode frame rate"
+					value={frameRate}
+					min={0}
+					max={240}
+					description="0 follows the desk DMX frame rate. A non-zero value converts known incoming rates with a warning."
+					onChange={(event) => {
+						const value = Number(event.target.value);
+						controller.editDraft({
+							...draft,
+							timecode_frame_rate:
+								value > 0
+									? { numerator: value, denominator: 1, drop_frame: false }
+									: null,
+						});
+					}}
+				/>
+				<SelectField
+					label="External source loss"
+					value={draft.timecode_external_loss_policy}
+					options={[
+						{ value: "continue_internal", label: "Continue internally" },
+						{ value: "pause", label: "Pause" },
+						{ value: "stop", label: "Stop" },
+					]}
+					onChange={(value) =>
+						controller.editDraft({
+							...draft,
+							timecode_external_loss_policy: value as
+								| "continue_internal"
+								| "pause"
+								| "stop",
+						})
+					}
+				/>
+				<NumberField
+					label="Loss timeout"
+					value={draft.timecode_external_loss_timeout_millis}
+					min={1}
+					max={60_000}
+					unit="ms"
+					onChange={(event) =>
+						controller.editDraft({
+							...draft,
+							timecode_external_loss_timeout_millis: Number(event.target.value),
+						})
+					}
+				/>
+				<SelectField
+					label="Timecode audio output"
+					value={selectedOutput}
+					options={[
+						{ value: "$system_default", label: "System default" },
+						...audioOutputs.map((device) => ({ value: device, label: device })),
+					]}
+					description={
+						audioOutputError
+							? `Output discovery unavailable: ${audioOutputError}`
+							: "The server opens this exact device after restart; System default follows the operating system."
+					}
+					onChange={(value) =>
+						controller.editDraft({
+							...draft,
+							timecode_audio_output_device:
+								value === "$system_default" ? null : value,
+						})
+					}
+				/>
+				<NumberField
+					label="Audio latency trim"
+					value={outputTrim}
+					min={-5_000_000}
+					max={5_000_000}
+					unit="µs"
+					description="Stored separately for the selected output and added to the backend-reported latency."
+					onChange={(event) =>
+						controller.editDraft({
+							...draft,
+							timecode_audio_latency_trim_micros_by_output: {
+								...draft.timecode_audio_latency_trim_micros_by_output,
+								[selectedOutput]: Number(event.target.value),
+							},
+						})
+					}
+				/>
 			</div>
 		</>
 	);

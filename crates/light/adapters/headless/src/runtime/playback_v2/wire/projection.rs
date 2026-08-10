@@ -102,6 +102,9 @@ pub(super) fn target_projection(
         App::Macro { macro_id } => wire::PlaybackTargetProjection::Macro {
             macro_id: *macro_id,
         },
+        App::Timecode { timecode_id } => wire::PlaybackTargetProjection::Timecode {
+            timecode_id: timecode_id.0,
+        },
         App::Group {
             group_id,
             master,

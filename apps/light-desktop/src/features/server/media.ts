@@ -1,5 +1,5 @@
-import type { ServerController } from "./model";
 import type { ServerCapabilities } from "./capabilityContracts";
+import type { ServerController } from "./model";
 
 export function createMediaActions(
 	model: ServerController,
@@ -8,6 +8,7 @@ export function createMediaActions(
 	| "refreshMediaPreview"
 	| "refreshMediaThumbnails"
 	| "inspectMediaServer"
+	| "applyMediaLibrarySelection"
 	| "mediaThumbnail"
 > {
 	const {
@@ -21,6 +22,8 @@ export function createMediaActions(
 	return {
 		inspectMediaServer: (fixtureId) =>
 			api.mediaOutput.inspectMediaServer(fixtureId),
+		applyMediaLibrarySelection: (fixtureId, input) =>
+			api.mediaOutput.applyMediaLibrarySelection(fixtureId, input),
 		mediaThumbnail: (fixtureId, folder, element) =>
 			api.mediaOutput.mediaThumbnail(fixtureId, folder, element),
 		refreshMediaPreview: async (fixtureId, source = 0) => {

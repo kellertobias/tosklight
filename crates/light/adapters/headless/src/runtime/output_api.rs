@@ -199,6 +199,7 @@ pub(super) fn matter_playback_values(
                     .unwrap_or_default(),
                 PlaybackTarget::SpeedGroup { .. }
                 | PlaybackTarget::Macro { .. }
+                | PlaybackTarget::Timecode { .. }
                 | PlaybackTarget::ProgrammerFade
                 | PlaybackTarget::CueFade
                 | PlaybackTarget::GrandMaster => {

@@ -231,6 +231,9 @@ async fn inspects_advertised_library_sources_and_layer_status_without_conflating
         .await
         .unwrap();
     let snapshot = client.inspect().await.unwrap();
+    assert!(snapshot.library_revision.starts_with("citp-"));
+    assert_eq!(snapshot.capabilities.provider, "citp_msex");
+    assert!(snapshot.capabilities.native_action.is_none());
     assert_eq!(snapshot.server.name, "Peer");
     assert_eq!(snapshot.folders[0].id, 2);
     assert_eq!(snapshot.files[0].folder_id, 2);

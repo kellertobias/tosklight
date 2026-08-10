@@ -109,7 +109,63 @@ async fn macro_playback_http_and_ui_ws_actions_converge_on_one_execution_service
             && execution.trigger
                 == light_application::CommandMacroTrigger::Playback { playback_number: 7 }
     }));
+
+    let command_line = app
+        .clone()
+        .oneshot(
+            Request::post("/api/v2/command-line/execute")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header("x-tosk-desk", session.desk.id.to_string())
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "request_id": "command-line-macro-start",
+                        "command": "MACRO 71"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        command_line.status(),
+        StatusCode::OK,
+        "{}",
+        json(command_line).await
+    );
+    let all = wait_for_macro_executions(&state, session.desk.id, 3).await;
+    assert!(all.iter().any(|execution| {
+        execution.macro_id == macro_id
+            && execution.trigger == light_application::CommandMacroTrigger::CommandLine
+    }));
+    wait_for_terminal_macro_events(&state, 3).await;
     let _ = std::fs::remove_dir_all(data_dir);
+}
+
+async fn wait_for_terminal_macro_events(state: &AppState, expected: usize) {
+    for _ in 0..100 {
+        let terminal = state
+            .events
+            .audit_events()
+            .into_iter()
+            .filter(|event| event.kind == "macro_execution_changed")
+            .filter(|event| {
+                matches!(
+                    event
+                        .payload
+                        .get("state")
+                        .and_then(serde_json::Value::as_str),
+                    Some("succeeded" | "failed" | "cancelled")
+                )
+            })
+            .count();
+        if terminal >= expected {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    panic!("Macro terminal execution events did not reach {expected}")
 }
 
 fn install_macro_playback(state: &AppState, macro_id: Uuid) {

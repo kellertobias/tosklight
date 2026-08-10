@@ -2021,6 +2021,23 @@
         {
           "type": "object",
           "properties": {
+            "timecode_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": {
+              "type": "string",
+              "const": "timecode"
+            }
+          },
+          "required": [
+            "type",
+            "timecode_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
             "group_id": {
               "type": "string"
             },

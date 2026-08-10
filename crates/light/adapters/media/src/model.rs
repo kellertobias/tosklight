@@ -176,10 +176,35 @@ pub struct MediaLayerStatus {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct MediaControlCapability {
+    /// Exact fixture-profile attribute identity. Providers do not invent display names.
+    pub attribute: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct MediaLayerCapabilities {
+    pub layer: u16,
+    pub content_library: bool,
+    pub mask_library: bool,
+    pub secondary_controls: Vec<MediaControlCapability>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct MediaProviderCapabilities {
+    pub provider: String,
+    /// An opaque advertised action identity, absent for generic CITP/MSEX peers.
+    pub native_action: Option<String>,
+    pub layers: Vec<MediaLayerCapabilities>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct MediaServerSnapshot {
+    /// Opaque deterministic revision of the exact library inspected from this peer.
+    pub library_revision: String,
     pub server: MediaServerInformation,
     pub folders: Vec<MediaLibraryFolder>,
     pub files: Vec<MediaLibraryElement>,
     pub preview_sources: Vec<MediaPreviewSource>,
     pub layers: Vec<MediaLayerStatus>,
+    pub capabilities: MediaProviderCapabilities,
 }

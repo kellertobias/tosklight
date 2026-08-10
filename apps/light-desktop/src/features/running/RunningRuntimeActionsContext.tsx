@@ -4,6 +4,7 @@ import type { ShowObjectsApiClient } from "../../api/client/showObjects";
 import type { ClientTransport } from "../../api/client/transport";
 import { jsonRequest } from "../../api/client/transport";
 import type {
+	EventPayload,
 	TimecodeTransportActionRequest,
 	TimecodeTransportSnapshot,
 } from "../../api/generated/light-wire";
@@ -17,6 +18,7 @@ export interface RunningRuntimeActions {
 	macros: Pick<MacrosApiClient, "runtime" | "cancel">;
 	timecodes: TimecodeRunningApi;
 	showObjects: Pick<ShowObjectsApiClient, "objects">;
+	events?: { onEvent(listener: (event: EventPayload) => void): () => unknown };
 }
 
 const RunningRuntimeActionsContext =

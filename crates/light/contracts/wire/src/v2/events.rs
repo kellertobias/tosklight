@@ -2,6 +2,7 @@
 
 use super::{
     command_line::ProgrammingInteractionChange,
+    macros::MacroExecutionSnapshot,
     playback::{PlaybackDeskProjection, PlaybackRuntimeChange, PlaybackTelemetryTick},
     preload_playback_queue::ProgrammingPreloadPlaybackQueueChange,
     preload_values::ProgrammingPreloadValuesChange,
@@ -11,6 +12,7 @@ use super::{
     runtime::RuntimeHighlightState,
     schedules::ScheduleRuntimeChange,
     speed_group::SpeedGroupChange,
+    timecode::TimecodeTransportSnapshot,
     virtual_playback_zones::VirtualPlaybackExclusionZonesChange,
 };
 
@@ -188,6 +190,12 @@ pub enum EventPayload {
     },
     PlaybackViewChanged {
         projection: PlaybackDeskProjection,
+    },
+    MacroExecutionChanged {
+        execution: MacroExecutionSnapshot,
+    },
+    TimecodeRuntimeChanged {
+        snapshot: TimecodeTransportSnapshot,
     },
     PlaybackTelemetrySampled {
         tick: PlaybackTelemetryTick,

@@ -62,6 +62,17 @@ pub(super) fn find_macro(
     )
 }
 
+pub(super) fn find_timecode(
+    document: &PortableShowDocument,
+    id: light_playback::TimecodeId,
+) -> Result<Option<Stored<light_playback::TimecodeDefinition>>, ActionError> {
+    find_unique(
+        document,
+        "timecode",
+        |value: &light_playback::TimecodeDefinition| value.id == id,
+    )
+}
+
 pub(super) fn pages(
     document: &PortableShowDocument,
 ) -> Result<Vec<Stored<PlaybackPage>>, ActionError> {

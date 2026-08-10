@@ -40,7 +40,7 @@ pub(super) async fn update_configuration(
         .map_err(|error| ApiError::internal(error.to_string()))?;
     state
         .output
-        .configure_timecode(configuration.timecode_sources.clone());
+        .configure_timecode(configuration.timecode_router_config());
     let requires_restart = configuration.output_bind_ip != previous.output_bind_ip
         || configuration.osc_bind != previous.osc_bind
         || configuration.art_timecode_bind != previous.art_timecode_bind;

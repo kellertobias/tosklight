@@ -45,7 +45,7 @@ describe("MacrosApiClient", () => {
 		});
 	});
 
-	it("uses typed run, run-line, runtime and cancellation routes", async () => {
+	it("uses typed run, run-line, guarded undo, runtime and cancellation routes", async () => {
 		const wire = transport();
 		const client = new MacrosApiClient(wire);
 
@@ -57,19 +57,21 @@ describe("MacrosApiClient", () => {
 			source_revision: 4,
 			line: 2,
 		});
+		await client.undoRunLine("show-a", "execution/a");
 		await client.runtime("show-a");
 		await client.cancel("show-a", "execution/a");
 
 		expect(wire.request.mock.calls.map(([path]) => path)).toEqual([
 			"/api/v2/macros/macro%2Fa/run",
 			"/api/v2/macros/macro%2Fa/run-line",
+			"/api/v2/macros/executions/execution%2Fa/undo-line",
 			"/api/v2/macros/runtime",
 			"/api/v2/macros/executions/cancel",
 		]);
 		for (const [, init] of wire.request.mock.calls) {
 			expect(new Headers(init.headers).get("x-tosk-show")).toBe("show-a");
 		}
-		expect(JSON.parse(String(wire.request.mock.calls[3]?.[1].body))).toEqual({
+		expect(JSON.parse(String(wire.request.mock.calls[4]?.[1].body))).toEqual({
 			execution_id: "execution/a",
 		});
 	});

@@ -10,6 +10,7 @@ pub(super) struct AppState {
     pub(super) dynamics: light_application::DynamicsService,
     pub(super) macros: light_application::CommandMacroExecutionService,
     pub(super) timecodes: light_application::timeline::TimecodeRuntimeService,
+    pub(super) managed_assets: Arc<dyn light_application::ManagedAssetStore>,
     pub(super) playback: PlaybackResource,
     pub(super) highlight: HighlightResource,
     pub(super) output: OutputResource,

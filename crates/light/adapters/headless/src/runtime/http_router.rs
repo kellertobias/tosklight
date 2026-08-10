@@ -64,6 +64,10 @@ fn media_and_output_routes() -> Router<AppState> {
             get(inspect_media_server),
         )
         .route(
+            "/api/v2/media-servers/{fixture_id}/library-selection",
+            post(apply_media_library_selection),
+        )
+        .route(
             "/api/v2/media-servers/{fixture_id}/thumbnails/refresh",
             post(refresh_media_thumbnails),
         )

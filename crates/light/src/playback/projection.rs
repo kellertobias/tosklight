@@ -42,6 +42,9 @@ pub enum PlaybackTargetProjection {
     Macro {
         macro_id: Uuid,
     },
+    Timecode {
+        timecode_id: light_playback::TimecodeId,
+    },
     Group {
         group_id: String,
         master: f32,

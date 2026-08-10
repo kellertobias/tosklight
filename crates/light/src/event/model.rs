@@ -159,6 +159,8 @@ pub enum DeskEvent {
     ConfigurationChanged(NotificationRevision),
     ScreensChanged(ScreenNotification),
     HardwareConnectionChanged(HardwareConnectionNotification),
+    MacroExecutionChanged(crate::CommandMacroExecutionSnapshot),
+    TimecodeRuntimeChanged(crate::timeline::TimecodeRuntimeChange),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -430,6 +432,60 @@ pub struct EventDraft {
 }
 
 impl EventDraft {
+    pub fn macro_execution_changed(change: crate::CommandMacroExecutionSnapshot) -> Self {
+        Self {
+            desk_id: Some(change.desk_id),
+            class: if change.state.is_terminal() {
+                EventClass::CommandOutcome
+            } else {
+                EventClass::Transition
+            },
+            object: Some(EventObject::new(
+                EventCapability::Desk,
+                format!("macro-runtime:{}", change.desk_id),
+            )),
+            related_objects: vec![EventObject::new(
+                EventCapability::Show,
+                format!("macro:{}", change.macro_id),
+            )],
+            source: EventSource::Runtime,
+            correlation_id: None,
+            delivery: DeliveryPolicy::Lossless,
+            payload: ApplicationEvent::Desk(DeskEvent::MacroExecutionChanged(change)),
+        }
+    }
+
+    pub fn timecode_runtime_changed(change: crate::timeline::TimecodeRuntimeChange) -> Self {
+        Self {
+            desk_id: None,
+            class: match change.cause {
+                crate::timeline::TimecodeRuntimeChangeCause::Tick { .. }
+                | crate::timeline::TimecodeRuntimeChangeCause::ExternalSync { .. } => {
+                    EventClass::Projection
+                }
+                crate::timeline::TimecodeRuntimeChangeCause::Installed
+                | crate::timeline::TimecodeRuntimeChangeCause::Action(_) => EventClass::Transition,
+            },
+            object: Some(EventObject::new(EventCapability::Desk, "timecode-runtime")),
+            related_objects: vec![EventObject::new(
+                EventCapability::Show,
+                format!("timecode:{}", change.snapshot.timecode_id.0),
+            )],
+            source: EventSource::Runtime,
+            correlation_id: None,
+            delivery: if matches!(
+                change.cause,
+                crate::timeline::TimecodeRuntimeChangeCause::Tick { .. }
+                    | crate::timeline::TimecodeRuntimeChangeCause::ExternalSync { .. }
+            ) {
+                DeliveryPolicy::Replaceable
+            } else {
+                DeliveryPolicy::Lossless
+            },
+            payload: ApplicationEvent::Desk(DeskEvent::TimecodeRuntimeChanged(change)),
+        }
+    }
+
     pub fn system_event(event: SystemEvent) -> Self {
         Self::runtime_projection(
             EventCapability::System,

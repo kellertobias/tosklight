@@ -2042,6 +2042,23 @@
         {
           "type": "object",
           "properties": {
+            "target": {
+              "type": "string",
+              "const": "timecode"
+            },
+            "timecode_id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "target",
+            "timecode_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
             "fader_pickup_required": {
               "type": "boolean"
             },

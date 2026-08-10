@@ -40,6 +40,34 @@ Use **Cuelist Pool** for a permanent pool surface and **Cues - Cuelist** for a p
 
 ![Cuelists pane](../assets/screenshots/panes/cuelists.png)
 
+## Running
+
+The Running window collects one row for every independently stoppable runtime object. It shows running Cuelists, standalone Dynamics, Timecodes, and Macros by default. Several software, hardware, OSC, API, or playback controls that address the same shared runtime still produce one row.
+
+A Cuelist row uses the Cuelist's own number and name and shows its current Cue number. It does not use a playback page or fader-assignment number. A Dynamic contained by that Cuelist is subordinate activity and does not receive another row; **Off** on the Cuelist row releases the containing Cuelist. A standalone Dynamic, running Timecode, or active Macro execution receives its own row, its own stable identity where defined, and the explicit **Cue —** value.
+
+Every **Off** button targets exactly the object named by its row: release Cuelist, stop standalone Dynamic, stop Timecode, or cancel Macro execution. The button reports progress while that action is pending and cannot submit a duplicate action. Start, current-Cue, pause, resume, completion, release, cancellation, and stop changes reconcile from authoritative runtime state while the window remains open.
+
+Use **All**, **Cuelists**, **Dynamics**, **Timecodes**, or **Macros** to restrict the list. An empty filtered list says which kind is not running instead of appearing broken.
+
+**Pane configuration:** **Running kind** stores All, Cuelists, Dynamics, Timecodes, or Macros for this pane. Common size and removal controls also apply. The full built-in exposes the same filter in its window header.
+
+## Macros
+
+The Macro Pool stores portable, show-owned sequences of ordinary command-line commands. A normal tap runs the complete Macro immediately. Right-click, or press **SET** and then tap the Macro, to open its editor without running it. Copy, Move, Delete, pool numbering, naming, presentation, show export/import, and selective import follow the same show-object rules as the other pools.
+
+The editor numbers every command line and validates the complete document through the desk's authoritative command grammar before Save or Run. Blank lines and comments are ignored. A command which needs another pool click, modal choice, hardware destination, or other interaction is invalid in a Macro. **Run line** executes only the selected complete line. After a successful compatible line, **Undo last run** remains available only while that exact execution is still the newest safe Undo entry for the same operator, show, and object revision.
+
+A full run executes validated lines in source order with the initiating user's ordinary desk authority. It stops at the first runtime error; already accepted commands remain applied. **Cancel** is observed between lines. Another Macro or a manual command cannot interleave a partial command interaction. A Macro assigned to a physical or Virtual Playback starts on the Playback's press action and has no Cue, Pause, fader, or tracking state.
+
+## Timecode
+
+The Timecode Pool stores portable numbered timelines. Tap a Timecode to open its live editor. Transport provides **GO**, **Pause/Resume**, **Stop**, **Rewind**, and frame seek against the server-owned clock; reopening the window reconstructs the authoritative position. A duration-only timeline requires no audio. When a managed audio asset is linked, transport, seek, loop, and volume follow the same clock and the configured server audio output.
+
+The editor shows duration, transport offset, auto-start, markers, and ordered lanes. Markers label and snap positions but do not execute output. Cuelist clips, Speed Group keyframes, and audio-volume lanes reconstruct deterministically at any frame, so continuous play, seek, and loop reach the same state. Missing referenced show objects remain visible errors and are skipped rather than silently retargeted.
+
+Choose the single desk Timecode source, frame rate, external-loss behavior, audio device, and latency trim in Desk Setup. Several software, physical, Virtual Playback, OSC, WebSocket, or HTTP controls addressing the same Timecode operate one shared runtime, not independent copies.
+
 ## Virtual Playbacks
 
 Virtual Playbacks create a touch-button surface without consuming a physical playback

@@ -6,12 +6,12 @@ import type {
 	GelCatalogImportPreview,
 	GelCatalogImportTarget,
 } from "../../api/client/fixtures";
+import type { MediaServerInspection } from "../../api/client/mediaOutput";
 import type {
 	FixtureDefinition,
 	FixtureProfile,
 	PatchLayer,
 } from "../../api/types";
-import type { MediaServerInspection } from "../../api/client/mediaOutput";
 
 export interface ServerFixtureContext {
 	refreshMediaPreview: (fixtureId: string, source?: number) => Promise<boolean>;
@@ -21,6 +21,16 @@ export interface ServerFixtureContext {
 		elements: number[],
 	) => Promise<void>;
 	inspectMediaServer: (fixtureId: string) => Promise<MediaServerInspection>;
+	applyMediaLibrarySelection: (
+		fixtureId: string,
+		input: {
+			expected_library_revision: string;
+			layer_fixture_id: string;
+			kind: "content" | "mask";
+			folder: number;
+			file: number;
+		},
+	) => Promise<unknown>;
 	mediaThumbnail: (
 		fixtureId: string,
 		folder: number,

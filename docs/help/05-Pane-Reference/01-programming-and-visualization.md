@@ -77,6 +77,20 @@ A column only reports attributes the lantern actually carries. A fixture without
 
 ![Full Fixture Sheet column controls](../assets/screenshots/workflows/fixture-sheet-settings-columns.png)
 
+## Media
+
+The Media window is the operating surface for patched media-server fixtures. It is offered only when the show contains an eligible physical media-server master with a configured CITP/MSEX connection and at least one logical layer head. Endpoint setup remains under **Show Patch > Media Servers**.
+
+Choose the physical master in **Server**, then choose one of its advertised logical layers. A layer touch replaces the desk's shared fixture selection with that exact logical head, so the Programmer, OSC, attached controls, and other panes continue to describe one authoritative selection. The Program output and layer thumbnails use the preview-source and layer identities advertised by the server; source number, layer number, and fixture sub-ID are not assumed to be interchangeable. Loading, stale, failed, unsupported, and offline states are shown beside the preview rather than drawn into the program image.
+
+The folder and file pools separate browsing from live output. Touching a folder changes only the local draft and loads its files; it does not change Programmer values or DMX. Touching a file commits that folder and file together as one Programmer operation and one Undo step. It never exposes the newly browsed folder with the old live file. Media encoders remain immediate and do not use this staged touch workflow.
+
+When the server advertises masks, **Media / Mask** selects the corresponding folder/file browser. Unsupported masks or secondary controls are absent or explicitly unavailable; the window does not invent controls the fixture and connection do not advertise. Library administration and connection setup stay outside this window.
+
+A saved Media pane keeps its selected server, layer, Media/Mask choice, content section, and secondary-region visibility as desk-local state. A disconnect, missing patch, or temporarily unsupported capability does not delete that pane or silently select another server. The pane explains the unavailable state and resumes the same stable identities when they return.
+
+**Pane configuration:** the selected server and layer, browser choice, main content section, and secondary-region visibility belong to this pane. Common size and removal controls also apply.
+
 ## Stage
 
 The Stage is the spatial selection and visualization surface. In 2D it shows fixture symbols, position, color, intensity, and direction. In 3D it renders patched fixtures, multi-patch physical instances, beams, and visual-only Venue fixtures. Tap or marquee fixtures to select them; Shift extends a range and Control/Command toggles fixtures. **Follow Preload** changes the Stage from live output to the pending Preload visualization.

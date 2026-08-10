@@ -5,6 +5,24 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use uuid::Uuid;
 
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct TimecodeAudioOutputDevices {
+    pub devices: Vec<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct TimecodeAudioImportResult {
+    pub asset_id: Uuid,
+    #[ts(type = "number")]
+    pub asset_revision: u64,
+    pub name: String,
+    pub media_type: String,
+    pub sample_rate: u32,
+    pub channels: u16,
+    #[ts(type = "number")]
+    pub sample_frames: u64,
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 pub struct TimecodeFrameRate {
     pub numerator: u32,
@@ -195,6 +213,9 @@ pub struct TimecodePatch {
     pub auto_start: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional = nullable)]
+    pub audio: Option<TimecodeAudio>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
     pub markers: Option<Vec<TimecodeMarker>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional = nullable)]
@@ -231,6 +252,8 @@ pub enum TimecodeTransportState {
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 pub struct TimecodeTransportSnapshot {
     pub timecode_id: Uuid,
+    #[ts(type = "number")]
+    pub revision: u64,
     pub state: TimecodeTransportState,
     #[ts(type = "number")]
     pub frame: u64,

@@ -136,6 +136,47 @@ describe("LightClientRuntime", () => {
 		expect(listener).toHaveBeenCalledOnce();
 	});
 
+	it("delivers typed volatile Macro and Timecode runtime projections", async () => {
+		const client = connectedClient();
+		const listener = vi.fn();
+		client.onEvent(listener);
+		const socket = await openEvents(client);
+		const macro = {
+			type: "macro_execution_changed",
+			execution: {
+				execution_id: "execution-a",
+				macro_id: "macro-a",
+				macro_number: 7,
+				macro_name: "Blackout",
+				source_revision: 2,
+				desk_id: "desk-a",
+				user_id: "user-a",
+				session_id: "session-a",
+				state: "succeeded",
+				trigger: { type: "pool" },
+				started_at: "2026-08-10T18:00:00Z",
+				finished_at: "2026-08-10T18:00:01Z",
+			},
+		} satisfies EventPayload;
+		const timecode = {
+			type: "timecode_runtime_changed",
+			snapshot: {
+				timecode_id: "timecode-a",
+				revision: 12,
+				state: "playing",
+				frame: 88,
+				duration_frame: 440,
+				audio_linked: true,
+			},
+		} satisfies EventPayload;
+
+		socket.emitMessage(typedEvent(macro));
+		socket.emitMessage(typedEvent(timecode));
+
+		expect(listener).toHaveBeenNthCalledWith(1, macro);
+		expect(listener).toHaveBeenNthCalledWith(2, timecode);
+	});
+
 	it("maps typed operator notifications without a generic facade payload", async () => {
 		const client = connectedClient();
 		const listener = vi.fn();

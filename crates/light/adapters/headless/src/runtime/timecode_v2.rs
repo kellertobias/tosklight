@@ -11,21 +11,40 @@ use light_playback::{TimecodeFrame, TimecodeFrameRate, TimecodeId};
 use light_wire::v2::show_objects::ShowObjectActionOutcome;
 use light_wire::v2::timecode as wire;
 
-struct RoutePublisher;
+struct RoutePublisher(light_application::EventBus);
 
 impl TimecodeChangePublisher for RoutePublisher {
-    fn publish(&self, _change: &TimecodeRuntimeChange) {
-        // The route records a capability event after each accepted action. Scheduler-owned ticks
-        // will move to the typed application event bus when the output scheduler installs them.
+    fn publish(&self, change: &TimecodeRuntimeChange) {
+        self.0
+            .publish(light_application::EventDraft::timecode_runtime_changed(
+                change.clone(),
+            ));
     }
 }
 
 pub(super) fn new_service() -> TimecodeRuntimeService {
-    TimecodeRuntimeService::new(
+    new_service_with_clock(
         Arc::new(SystemTimecodeClock::default()),
-        Arc::new(RoutePublisher),
-        TimecodeFrameRate::whole_frames(44).expect("44 fps Timecode rate is valid"),
+        None,
+        light_application::EventBus::default(),
     )
+}
+
+pub(super) fn new_service_with_clock(
+    clock: Arc<dyn light_application::timeline::TimecodeClock>,
+    output: Option<Arc<dyn light_application::TimecodeAudioOutput>>,
+    events: light_application::EventBus,
+) -> TimecodeRuntimeService {
+    let service = TimecodeRuntimeService::new(
+        clock,
+        Arc::new(RoutePublisher(events)),
+        TimecodeFrameRate::whole_frames(44).expect("44 fps Timecode rate is valid"),
+    );
+    output.map_or(service.clone(), |output| {
+        service.with_audio(Arc::new(light_application::TimecodeAudioService::new(
+            output,
+        )))
+    })
 }
 
 pub(super) fn router() -> Router<AppState> {
@@ -33,6 +52,8 @@ pub(super) fn router() -> Router<AppState> {
         .route("/api/v2/timecodes", get(timecode_objects))
         .route("/api/v2/timecodes/actions", post(object_action))
         .route("/api/v2/timecodes/runtime", get(runtime_snapshots))
+        .route("/api/v2/timecodes/audio/outputs", get(audio_outputs))
+        .route("/api/v2/timecodes/audio/import", post(import_audio))
         .route(
             "/api/v2/timecodes/{timecode_id}/runtime",
             get(runtime_snapshot),
@@ -41,6 +62,82 @@ pub(super) fn router() -> Router<AppState> {
             "/api/v2/timecodes/{timecode_id}/transport",
             post(transport_action),
         )
+}
+
+#[derive(Deserialize)]
+struct AudioImportQuery {
+    name: String,
+}
+
+struct RequestAudioSource {
+    bytes: Option<Vec<u8>>,
+}
+
+impl light_application::AssetChunkSource for RequestAudioSource {
+    fn read_chunk(
+        &mut self,
+        _maximum_bytes: usize,
+    ) -> Result<Option<Vec<u8>>, light_application::AssetError> {
+        Ok(self.bytes.take())
+    }
+}
+
+async fn import_audio(
+    State(state): State<AppState>,
+    context: ShowContext,
+    Query(query): Query<AudioImportQuery>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Result<Json<wire::TimecodeAudioImportResult>, ApiError> {
+    authenticate(&state, &headers)?;
+    let show_id = context.resolve(&state)?;
+    if query.name.trim().is_empty() {
+        return Err(ApiError::bad_request(
+            "Timecode audio name must not be empty",
+        ));
+    }
+    let content_type = headers
+        .get(axum::http::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or_default();
+    let mut source = RequestAudioSource {
+        bytes: Some(body.to_vec()),
+    };
+    let importer = light_application::TimecodeWavImporter::new(Arc::clone(&state.managed_assets));
+    let namespace = light_application::AssetNamespace(format!("show:{}", show_id.0));
+    let imported = if matches!(content_type, "audio/mpeg" | "audio/mp3")
+        || query.name.to_ascii_lowercase().ends_with(".mp3")
+    {
+        importer.import_mp3(None, namespace, query.name, &mut source)
+    } else if matches!(content_type, "audio/wav" | "audio/x-wav")
+        || query.name.to_ascii_lowercase().ends_with(".wav")
+    {
+        importer.import(None, namespace, query.name, &mut source)
+    } else {
+        return Err(ApiError::bad_request(
+            "Timecode audio import accepts MP3 or WAV",
+        ));
+    }
+    .map_err(|error| ApiError::bad_request(error.message))?;
+    Ok(Json(wire::TimecodeAudioImportResult {
+        asset_id: imported.descriptor.asset.id.0,
+        asset_revision: imported.descriptor.asset.revision.0,
+        name: imported.descriptor.name,
+        media_type: imported.descriptor.media_type,
+        sample_rate: imported.metadata.sample_rate,
+        channels: imported.metadata.channels,
+        sample_frames: imported.metadata.sample_frames,
+    }))
+}
+
+async fn audio_outputs(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<wire::TimecodeAudioOutputDevices>, ApiError> {
+    authenticate(&state, &headers)?;
+    Ok(Json(wire::TimecodeAudioOutputDevices {
+        devices: super::timecode_audio_output::output_devices(),
+    }))
 }
 
 async fn timecode_objects(
@@ -179,6 +276,7 @@ fn timecode_mutation(
             if previous.is_some() {
                 return Err(ApiError::conflict("Timecode id already exists"));
             }
+            validate_timecode_graph(store, Some(&definition), None)?;
             Ok((
                 put_active_show_object(
                     light_application::ActiveShowObjectKind::Timecode,
@@ -222,6 +320,13 @@ fn timecode_mutation(
             if let Some(auto_start) = patch.auto_start {
                 definition.auto_start = auto_start;
             }
+            if let Some(audio) = &patch.audio {
+                definition.audio = Some(light_playback::TimecodeAudio {
+                    asset_id: audio.asset_id,
+                    asset_revision: audio.asset_revision,
+                    end_fade_frames: audio.end_fade_frames,
+                });
+            }
             if let Some(markers) = &patch.markers {
                 definition.markers = markers.iter().cloned().map(domain_marker).collect();
             }
@@ -231,6 +336,7 @@ fn timecode_mutation(
             definition
                 .validate()
                 .map_err(|error| ApiError::bad_request(error.message))?;
+            validate_timecode_graph(store, Some(&definition), None)?;
             Ok((
                 put_active_show_object(
                     light_application::ActiveShowObjectKind::Timecode,
@@ -253,6 +359,7 @@ fn timecode_mutation(
                     previous.revision
                 )));
             }
+            validate_timecode_graph(store, None, Some(TimecodeId(*timecode_id)))?;
             Ok((
                 delete_active_show_object(
                     light_application::ActiveShowObjectKind::Timecode,
@@ -263,6 +370,42 @@ fn timecode_mutation(
             ))
         }
     }
+}
+
+fn validate_timecode_graph(
+    store: &ActiveShowRepository,
+    replacement: Option<&light_playback::TimecodeDefinition>,
+    removed: Option<TimecodeId>,
+) -> Result<(), ApiError> {
+    let cue_lists = store
+        .objects_with_portable_revision("cue_list")
+        .map_err(ApiError::store)?
+        .1
+        .into_iter()
+        .map(|object| {
+            serde_json::from_value(object.body)
+                .map_err(|error| ApiError::internal(error.to_string()))
+        })
+        .collect::<Result<Vec<light_playback::CueList>, _>>()?;
+    let mut timecodes = store
+        .objects_with_portable_revision("timecode")
+        .map_err(ApiError::store)?
+        .1
+        .into_iter()
+        .map(|object| {
+            serde_json::from_value(object.body)
+                .map_err(|error| ApiError::internal(error.to_string()))
+        })
+        .collect::<Result<Vec<light_playback::TimecodeDefinition>, _>>()?;
+    if let Some(replacement) = replacement {
+        timecodes.retain(|value| value.id != replacement.id);
+        timecodes.push(replacement.clone());
+    }
+    if let Some(removed) = removed {
+        timecodes.retain(|value| value.id != removed);
+    }
+    light_application::validate_cue_timecode_graph(&cue_lists, &timecodes)
+        .map_err(ApiError::bad_request)
 }
 
 fn load_timecode(
@@ -524,10 +667,7 @@ async fn transport_action(
     let show_id = context.resolve(&state)?;
     let id = TimecodeId(timecode_id);
     ensure_installed(&state, show_id, id)?;
-    let outcome = state
-        .timecodes
-        .handle(id, domain_action(request.action))
-        .map_err(|error| ApiError::bad_request(error.message))?;
+    let outcome = apply_transport_action(&state, id, domain_action(request.action))?;
     emit(
         &state,
         "timecode_runtime_changed",
@@ -540,6 +680,87 @@ async fn transport_action(
         }),
     );
     Ok(Json(wire_snapshot(outcome.snapshot)))
+}
+
+pub(super) fn apply_transport_action(
+    state: &AppState,
+    id: TimecodeId,
+    action: light_playback::TimecodeTransportAction,
+) -> Result<light_application::timeline::TimecodeRuntimeOutcome, ApiError> {
+    state
+        .timecodes
+        .handle(id, action)
+        .map_err(|error| ApiError::bad_request(error.message))
+}
+
+pub(super) fn apply_cue_action(
+    state: &AppState,
+    action: &light_playback::CueAction,
+) -> Result<Option<u64>, ApiError> {
+    let show_id = state
+        .active_show
+        .current()
+        .as_ref()
+        .ok_or_else(|| ApiError::bad_request("no show is open"))?
+        .id;
+    let id = match action {
+        light_playback::CueAction::TimecodeStart { timecode_id, .. }
+        | light_playback::CueAction::TimecodeStop { timecode_id } => *timecode_id,
+    };
+    ensure_installed(state, show_id, id)?;
+    let entry = active_entry(state, show_id)?;
+    apply_installed_cue_action(&state.timecodes, &entry.path, action)
+}
+
+pub(super) fn apply_installed_cue_action(
+    timecodes: &light_application::timeline::TimecodeRuntimeService,
+    show_path: &str,
+    action: &light_playback::CueAction,
+) -> Result<Option<u64>, ApiError> {
+    let (id, transport, completion) = match action {
+        light_playback::CueAction::TimecodeStop { timecode_id } => (
+            *timecode_id,
+            light_playback::TimecodeTransportAction::Stop,
+            None,
+        ),
+        light_playback::CueAction::TimecodeStart { timecode_id, start } => {
+            let frame = match start {
+                light_playback::CueTimecodeStart::Frame { frame } => *frame,
+                light_playback::CueTimecodeStart::Marker { marker_id } => {
+                    let object = ActiveShowRepository::open(show_path)
+                        .map_err(ApiError::store)?
+                        .object_with_portable_revision("timecode", &timecode_id.0.to_string())
+                        .map_err(ApiError::store)?
+                        .1
+                        .ok_or_else(|| ApiError::not_found("Timecode does not exist"))?;
+                    let definition: light_playback::TimecodeDefinition =
+                        serde_json::from_value(object.body)
+                            .map_err(|error| ApiError::internal(error.to_string()))?;
+                    definition
+                        .markers
+                        .iter()
+                        .find(|marker| marker.id == *marker_id)
+                        .map(|marker| marker.frame)
+                        .ok_or_else(|| ApiError::bad_request("Timecode marker does not exist"))?
+                }
+            };
+            timecodes
+                .handle(*timecode_id, light_playback::TimecodeTransportAction::Go)
+                .map_err(|error| ApiError::bad_request(error.message))?;
+            let completion = timecodes
+                .remaining_millis(*timecode_id, frame)
+                .map_err(|error| ApiError::bad_request(error.message))?;
+            (
+                *timecode_id,
+                light_playback::TimecodeTransportAction::Seek { frame },
+                Some(completion),
+            )
+        }
+    };
+    timecodes
+        .handle(id, transport)
+        .map_err(|error| ApiError::bad_request(error.message))?;
+    Ok(completion)
 }
 
 fn install_show_timecodes(state: &AppState, show_id: light_core::ShowId) -> Result<(), ApiError> {
@@ -583,9 +804,10 @@ fn ensure_installed(
 fn install_object(state: &AppState, object: light_show::VersionedObject) -> Result<(), ApiError> {
     let definition: light_playback::TimecodeDefinition = serde_json::from_value(object.body)
         .map_err(|error| ApiError::internal(format!("stored Timecode is invalid: {error}")))?;
+    let audio_duration = prepare_audio_if_present(state, &definition)?;
     state
         .timecodes
-        .install(definition, None)
+        .install(definition, audio_duration)
         .map(|_| ())
         .map_err(|error| ApiError::bad_request(error.message))
 }
@@ -596,15 +818,60 @@ fn install_object_if_runnable(
 ) -> Result<(), ApiError> {
     let definition: light_playback::TimecodeDefinition = serde_json::from_value(object.body)
         .map_err(|error| ApiError::internal(format!("stored Timecode is invalid: {error}")))?;
-    if definition.duration.is_none() {
+    let audio_duration = prepare_audio_if_present(state, &definition)?;
+    if definition.duration.is_none() && audio_duration.is_none() {
         state.timecodes.uninstall(definition.id);
         return Ok(());
     }
     state
         .timecodes
-        .install(definition, None)
+        .install(definition, audio_duration)
         .map(|_| ())
         .map_err(|error| ApiError::bad_request(error.message))
+}
+
+#[derive(Default)]
+struct AudioBytes(Vec<u8>);
+
+impl light_application::AssetChunkSink for AudioBytes {
+    fn write_chunk(&mut self, bytes: &[u8]) -> Result<(), light_application::AssetError> {
+        self.0.extend_from_slice(bytes);
+        Ok(())
+    }
+}
+
+fn prepare_audio_if_present(
+    state: &AppState,
+    definition: &light_playback::TimecodeDefinition,
+) -> Result<Option<TimecodeFrame>, ApiError> {
+    let Some(audio) = &definition.audio else {
+        return Ok(None);
+    };
+    let asset = light_application::AssetReference {
+        id: light_application::AssetId(audio.asset_id),
+        revision: light_application::AssetRevision(audio.asset_revision),
+    };
+    let mut bytes = AudioBytes::default();
+    state
+        .managed_assets
+        .stream(asset, &mut bytes)
+        .map_err(|error| ApiError::bad_request(error.message))?;
+    let metadata = light_application::parse_wav_metadata(&bytes.0)
+        .map_err(|error| ApiError::bad_request(error.message))?;
+    match state
+        .timecodes
+        .prepare_audio(definition.id, asset, metadata, true)
+    {
+        Ok(duration) => Ok(Some(duration)),
+        Err(error) if error.message == "native Timecode audio output is unavailable" => {
+            tracing::warn!(
+                timecode_id = %definition.id.0,
+                "Timecode audio is valid but this server has no native output device"
+            );
+            Ok(None)
+        }
+        Err(error) => Err(ApiError::bad_request(error.message)),
+    }
 }
 
 fn domain_action(action: wire::TimecodeTransportAction) -> light_playback::TimecodeTransportAction {
@@ -621,11 +888,12 @@ fn domain_action(action: wire::TimecodeTransportAction) -> light_playback::Timec
     }
 }
 
-fn wire_snapshot(
+pub(super) fn wire_snapshot(
     snapshot: light_application::timeline::TimecodeRuntimeSnapshot,
 ) -> wire::TimecodeTransportSnapshot {
     wire::TimecodeTransportSnapshot {
         timecode_id: snapshot.timecode_id.0,
+        revision: snapshot.revision,
         state: match snapshot.transport {
             light_playback::TimecodeTransportState::Stopped => {
                 wire::TimecodeTransportState::Stopped
@@ -637,7 +905,7 @@ fn wire_snapshot(
         },
         frame: snapshot.frame.0,
         duration_frame: snapshot.duration.0,
-        audio_linked: false,
+        audio_linked: snapshot.audio_linked,
     }
 }
 

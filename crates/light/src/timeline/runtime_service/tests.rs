@@ -9,6 +9,9 @@ use light_playback::{
 use uuid::Uuid;
 
 use super::*;
+use crate::timeline::{
+    TimecodeAudioCommand, TimecodeAudioOutput, TimecodeAudioService, WavEncoding, WavMetadata,
+};
 
 #[derive(Default)]
 struct ManualTimecodeClock(Mutex<u64>);
@@ -37,6 +40,20 @@ impl RecordingPublisher {
 impl TimecodeChangePublisher for RecordingPublisher {
     fn publish(&self, change: &TimecodeRuntimeChange) {
         self.0.lock().unwrap().push(change.clone());
+    }
+}
+
+#[derive(Default)]
+struct RecordingAudioOutput(Mutex<Vec<TimecodeAudioCommand>>);
+
+impl TimecodeAudioOutput for RecordingAudioOutput {
+    fn output_latency_micros(&self) -> u64 {
+        5_000
+    }
+
+    fn apply(&self, command: TimecodeAudioCommand) -> Result<(), String> {
+        self.0.lock().unwrap().push(command);
+        Ok(())
     }
 }
 
@@ -217,4 +234,146 @@ fn installed_runtimes_tick_in_stable_timecode_id_order() {
     let changes = service.tick();
     assert_eq!(changes[0].snapshot.timecode_id, earlier.id);
     assert_eq!(changes[1].snapshot.timecode_id, later.id);
+}
+
+#[test]
+fn authoritative_transport_and_ticks_drive_prepared_audio() {
+    let clock = Arc::new(ManualTimecodeClock::default());
+    let output = Arc::new(RecordingAudioOutput::default());
+    let audio = Arc::new(TimecodeAudioService::new(output.clone()));
+    let rate = TimecodeFrameRate::whole_frames(25).unwrap();
+    let id = definition().id;
+    audio
+        .prepare(
+            id,
+            crate::AssetReference {
+                id: crate::AssetId(Uuid::from_u128(90)),
+                revision: crate::AssetRevision(1),
+            },
+            WavMetadata {
+                encoding: WavEncoding::PcmInteger,
+                channels: 2,
+                sample_rate: 48_000,
+                bits_per_sample: 16,
+                data_bytes: 192_000,
+                sample_frames: 48_000,
+            },
+            rate,
+            true,
+        )
+        .unwrap();
+    let service =
+        TimecodeRuntimeService::new(clock.clone(), Arc::new(RecordingPublisher::default()), rate)
+            .with_audio(audio);
+    service
+        .install(definition(), Some(TimecodeFrame(25)))
+        .unwrap();
+
+    service.handle(id, TimecodeTransportAction::Go).unwrap();
+    clock.advance(40_000);
+    service.tick();
+    service
+        .handle(
+            id,
+            TimecodeTransportAction::Seek {
+                frame: TimecodeFrame(12),
+            },
+        )
+        .unwrap();
+
+    let commands = output.0.lock().unwrap();
+    assert!(commands.contains(&TimecodeAudioCommand::Play {
+        timecode_id: id,
+        source_frame: TimecodeFrame::ZERO,
+        audible_at_micros: 5_000,
+    }));
+    assert!(commands.contains(&TimecodeAudioCommand::Seek {
+        timecode_id: id,
+        source_frame: TimecodeFrame(1),
+        audible_at_micros: 45_000,
+    }));
+    assert!(commands.contains(&TimecodeAudioCommand::Seek {
+        timecode_id: id,
+        source_frame: TimecodeFrame(12),
+        audible_at_micros: 45_000,
+    }));
+}
+
+#[test]
+fn duration_only_timecode_ignores_available_audio_output() {
+    let clock = Arc::new(ManualTimecodeClock::default());
+    let output = Arc::new(RecordingAudioOutput::default());
+    let audio = Arc::new(TimecodeAudioService::new(output.clone()));
+    let rate = TimecodeFrameRate::whole_frames(25).unwrap();
+    let definition = definition();
+    let id = definition.id;
+    let service =
+        TimecodeRuntimeService::new(clock.clone(), Arc::new(RecordingPublisher::default()), rate)
+            .with_audio(audio);
+    service.install(definition, None).unwrap();
+
+    service.handle(id, TimecodeTransportAction::Go).unwrap();
+    clock.advance(40_000);
+    service.tick();
+
+    assert!(output.0.lock().unwrap().is_empty());
+    assert!(!service.snapshot(id).unwrap().audio_linked);
+}
+
+#[test]
+fn external_sync_applies_offsets_and_only_starts_armed_or_running_timecodes() {
+    let (service, _clock, publisher) = service();
+    let mut armed = definition();
+    armed.auto_start = true;
+    armed.transport_offset = TimecodeFrame(50);
+    let mut inactive = definition();
+    inactive.id = TimecodeId(Uuid::from_u128(20));
+    inactive.auto_start = false;
+    inactive.transport_offset = TimecodeFrame(10);
+    let mut running = definition();
+    running.id = TimecodeId(Uuid::from_u128(30));
+    running.auto_start = false;
+    running.transport_offset = TimecodeFrame(10);
+    service.install(armed.clone(), None).unwrap();
+    service.install(inactive.clone(), None).unwrap();
+    service.install(running.clone(), None).unwrap();
+    service
+        .handle(running.id, TimecodeTransportAction::Go)
+        .unwrap();
+
+    let before_offset = service.synchronize_external(TimecodeFrame(49));
+    assert_eq!(before_offset.len(), 1);
+    assert_eq!(
+        service.snapshot(running.id).unwrap().frame,
+        TimecodeFrame(39)
+    );
+    assert_eq!(
+        service.snapshot(armed.id).unwrap().transport,
+        TimecodeTransportState::Stopped
+    );
+    let changes = service.synchronize_external(TimecodeFrame(50));
+    assert_eq!(changes.len(), 2);
+    assert_eq!(
+        service.snapshot(armed.id).unwrap().transport,
+        TimecodeTransportState::Playing
+    );
+    assert_eq!(
+        service.snapshot(armed.id).unwrap().frame,
+        TimecodeFrame::ZERO
+    );
+    assert_eq!(
+        service.snapshot(running.id).unwrap().frame,
+        TimecodeFrame(40)
+    );
+    assert_eq!(
+        service.snapshot(inactive.id).unwrap().transport,
+        TimecodeTransportState::Stopped
+    );
+    assert!(publisher.changes().iter().any(|change| {
+        change.cause
+            == TimecodeRuntimeChangeCause::ExternalSync {
+                transport_frame: TimecodeFrame(50),
+            }
+            && change.snapshot.timecode_id == armed.id
+    }));
 }

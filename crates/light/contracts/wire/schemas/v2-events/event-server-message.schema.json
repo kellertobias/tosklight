@@ -2319,6 +2319,38 @@
         {
           "type": "object",
           "properties": {
+            "execution": {
+              "$ref": "#/$defs/MacroExecutionSnapshot"
+            },
+            "type": {
+              "type": "string",
+              "const": "macro_execution_changed"
+            }
+          },
+          "required": [
+            "type",
+            "execution"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "snapshot": {
+              "$ref": "#/$defs/TimecodeTransportSnapshot"
+            },
+            "type": {
+              "type": "string",
+              "const": "timecode_runtime_changed"
+            }
+          },
+          "required": [
+            "type",
+            "snapshot"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
             "tick": {
               "$ref": "#/$defs/PlaybackTelemetryTick"
             },
@@ -2939,6 +2971,235 @@
         "action",
         "source",
         "state"
+      ]
+    },
+    "MacroExecutionSnapshot": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "desk_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "execution_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "finished_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "line": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "macro_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "macro_name": {
+          "type": "string"
+        },
+        "macro_number": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "message": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "session_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "source_revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "started_at": {
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/MacroExecutionState"
+        },
+        "trigger": {
+          "$ref": "#/$defs/MacroTrigger"
+        },
+        "user_id": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "execution_id",
+        "macro_id",
+        "macro_number",
+        "macro_name",
+        "source_revision",
+        "desk_id",
+        "user_id",
+        "session_id",
+        "state",
+        "trigger",
+        "started_at"
+      ]
+    },
+    "MacroExecutionState": {
+      "type": "string",
+      "enum": [
+        "queued",
+        "validating",
+        "running",
+        "succeeded",
+        "failed",
+        "cancelled"
+      ]
+    },
+    "MacroTrigger": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "pool"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "editor"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "playback_number": {
+              "type": "integer",
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0
+            },
+            "type": {
+              "type": "string",
+              "const": "playback"
+            }
+          },
+          "required": [
+            "type",
+            "playback_number"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "command_line"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "http"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "web_socket"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "osc"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "hardware"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "schedule"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "timecode"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        }
       ]
     },
     "ManagedAssetReference": {
@@ -4460,6 +4721,23 @@
           "required": [
             "target",
             "macro_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "target": {
+              "type": "string",
+              "const": "timecode"
+            },
+            "timecode_id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "target",
+            "timecode_id"
           ]
         },
         {
@@ -7128,6 +7406,52 @@
         "sound",
         "held_sound",
         "manual_fallback"
+      ]
+    },
+    "TimecodeTransportSnapshot": {
+      "type": "object",
+      "properties": {
+        "audio_linked": {
+          "type": "boolean"
+        },
+        "duration_frame": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "frame": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "state": {
+          "$ref": "#/$defs/TimecodeTransportState"
+        },
+        "timecode_id": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "timecode_id",
+        "revision",
+        "state",
+        "frame",
+        "duration_frame",
+        "audio_linked"
+      ]
+    },
+    "TimecodeTransportState": {
+      "type": "string",
+      "enum": [
+        "stopped",
+        "playing",
+        "paused"
       ]
     },
     "UpdateTargetFamilyNotification": {

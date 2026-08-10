@@ -5,6 +5,8 @@ import type {
 import type {
 	DmxOverrideRequest,
 	HighlightActionRequest,
+	MediaLibrarySelectionOutcome,
+	MediaLibrarySelectionRequest,
 	MediaPreviewRefreshRequest,
 	MediaThumbnailRefreshRequest,
 	PatchPreviewHighlightRequest,
@@ -32,6 +34,7 @@ export interface MediaPreviewRefresh {
 }
 
 export interface MediaServerInspection {
+	library_revision: string;
 	server: { name: string; layer_count: number };
 	folders: Array<{ id: number; name: string; element_count: number }>;
 	files: Array<{
@@ -62,6 +65,16 @@ export interface MediaServerInspection {
 		fps: number;
 		flags: number;
 	}>;
+	capabilities: {
+		provider: string;
+		native_action: string | null;
+		layers: Array<{
+			layer: number;
+			content_library: boolean;
+			mask_library: boolean;
+			secondary_controls: Array<{ attribute: string }>;
+		}>;
+	};
 }
 
 export class MediaOutputApiClient {
@@ -81,8 +94,20 @@ export class MediaOutputApiClient {
 	}
 
 	inspectMediaServer(fixtureId: string): Promise<MediaServerInspection> {
+		return this.transport.request(`/api/v2/media-servers/${fixtureId}/inspect`);
+	}
+
+	applyMediaLibrarySelection(
+		fixtureId: string,
+		input: Omit<MediaLibrarySelectionRequest, "request_id">,
+	): Promise<MediaLibrarySelectionOutcome> {
+		const request: MediaLibrarySelectionRequest = {
+			...input,
+			request_id: crypto.randomUUID(),
+		};
 		return this.transport.request(
-			`/api/v2/media-servers/${fixtureId}/inspect`,
+			`/api/v2/media-servers/${fixtureId}/library-selection`,
+			jsonRequest("POST", request),
 		);
 	}
 

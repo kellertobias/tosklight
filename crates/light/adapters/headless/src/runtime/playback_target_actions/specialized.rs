@@ -54,9 +54,9 @@ pub(super) fn apply_specialized_master(
         PlaybackTarget::ProgrammerFade | PlaybackTarget::CueFade => {
             apply_time_master_fader(state, definition, value).map(PlaybackTargetOutcome::changed)
         }
-        PlaybackTarget::Macro { .. } => {
-            Err(ApiError::bad_request("Macro playbacks do not have a fader"))
-        }
+        PlaybackTarget::Macro { .. } | PlaybackTarget::Timecode { .. } => Err(
+            ApiError::bad_request("this playback target does not have a fader"),
+        ),
         PlaybackTarget::CueList { .. } | PlaybackTarget::Dynamic { .. } => {
             unreachable!("Cuelist and Dynamic masters use the pool boundary")
         }
@@ -89,10 +89,33 @@ pub(super) fn apply_specialized_target_action(
         PlaybackTarget::Macro { macro_id } => {
             apply_macro_action(state, session, definition.number, *macro_id, action)
         }
+        PlaybackTarget::Timecode { timecode_id } => {
+            apply_timecode_action(state, *timecode_id, action)
+        }
         PlaybackTarget::CueList { .. } | PlaybackTarget::Dynamic { .. } => {
             unreachable!("Cuelist and Dynamic actions use the pool boundary")
         }
     }
+}
+
+fn apply_timecode_action(
+    state: &AppState,
+    timecode_id: light_playback::TimecodeId,
+    action: Action,
+) -> Result<PlaybackTargetOutcome, ApiError> {
+    let action = match action {
+        Action::Go => light_playback::TimecodeTransportAction::Go,
+        Action::Pause => light_playback::TimecodeTransportAction::Pause,
+        Action::Off => light_playback::TimecodeTransportAction::Stop,
+        Action::None => return Ok(PlaybackTargetOutcome::changed(false)),
+        _ => {
+            return Err(ApiError::bad_request(
+                "action is incompatible with a Timecode playback",
+            ));
+        }
+    };
+    let outcome = timecode_v2::apply_transport_action(state, timecode_id, action)?;
+    Ok(PlaybackTargetOutcome::changed(outcome.changed))
 }
 
 fn apply_macro_action(

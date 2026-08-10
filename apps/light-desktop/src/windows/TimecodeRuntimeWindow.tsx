@@ -40,7 +40,8 @@ export function TimecodeRuntimeWindow({
 			new TimecodesApiClient(createLightApi().runtime.capabilityTransport()),
 		[],
 	);
-	const api = useTimecodeActions() ?? fallback;
+	const configured = useTimecodeActions();
+	const api = configured?.api ?? fallback;
 	const [objects, setObjects] = useState<TimecodeObjectRecord[]>([]);
 	const [runtime, setRuntime] = useState<
 		Map<string, TimecodeTransportSnapshot>
@@ -57,9 +58,7 @@ export function TimecodeRuntimeWindow({
 			api.runtime(showId),
 		]);
 		setObjects(collection.objects);
-		setRuntime(
-			new Map(snapshots.map((snapshot) => [snapshot.timecode_id, snapshot])),
-		);
+		setRuntime((current) => mergeTimecodeSnapshots(current, snapshots));
 	}, [api, showId]);
 
 	useEffect(() => {
@@ -67,13 +66,18 @@ export function TimecodeRuntimeWindow({
 		let cancelled = false;
 		const update = () =>
 			void refresh().catch((reason) => !cancelled && setError(String(reason)));
+		const unsubscribe = configured?.events?.onEvent((event) => {
+			if (event.type !== "timecode_runtime_changed") return;
+			setRuntime((current) =>
+				mergeTimecodeSnapshots(current, [event.snapshot]),
+			);
+		});
 		update();
-		const timer = window.setInterval(update, 250);
 		return () => {
 			cancelled = true;
-			window.clearInterval(timer);
+			unsubscribe?.();
 		};
-	}, [active, refresh, showId]);
+	}, [active, configured?.events, refresh, showId]);
 
 	if (editing) {
 		return (
@@ -163,6 +167,20 @@ export function TimecodeRuntimeWindow({
 	);
 }
 
+function mergeTimecodeSnapshots(
+	current: ReadonlyMap<string, TimecodeTransportSnapshot>,
+	incoming: readonly TimecodeTransportSnapshot[],
+): Map<string, TimecodeTransportSnapshot> {
+	const next = new Map(current);
+	for (const snapshot of incoming) {
+		const previous = next.get(snapshot.timecode_id);
+		if (!previous || snapshot.revision >= previous.revision) {
+			next.set(snapshot.timecode_id, snapshot);
+		}
+	}
+	return next;
+}
+
 interface NewTimecode {
 	revision: 0;
 	definition: TimecodeDefinition;
@@ -203,6 +221,7 @@ function TimecodeEditor({
 }) {
 	const [draft, setDraft] = useState(item.definition);
 	const [busy, setBusy] = useState(false);
+	const [audioImporting, setAudioImporting] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const isNew = "isNew" in item;
 	const act = async (action: TimecodeTransportAction) => {
@@ -230,6 +249,7 @@ function TimecodeEditor({
 					duration_frame: draft.duration_frame,
 					transport_offset_frame: draft.transport_offset_frame,
 					auto_start: draft.auto_start,
+					audio: draft.audio ?? null,
 					markers: draft.markers,
 					lanes: draft.lanes,
 				});
@@ -238,6 +258,29 @@ function TimecodeEditor({
 			setError(String(reason));
 		} finally {
 			setBusy(false);
+		}
+	};
+	const importAudio = async (file: File) => {
+		if (!showId) return;
+		setAudioImporting(true);
+		setError(null);
+		try {
+			const imported = await api.importAudio(showId, file);
+			const audioDuration = Math.ceil(
+				(imported.sample_frames * FPS) / imported.sample_rate,
+			);
+			setDraft((current) => ({
+				...current,
+				duration_frame: audioDuration,
+				audio: {
+					asset_id: imported.asset_id,
+					asset_revision: imported.asset_revision,
+				},
+			}));
+		} catch (reason) {
+			setError(reason instanceof Error ? reason.message : String(reason));
+		} finally {
+			setAudioImporting(false);
 		}
 	};
 	const remove = async () => {
@@ -353,6 +396,26 @@ function TimecodeEditor({
 						setDraft({ ...draft, auto_start: event.currentTarget.checked })
 					}
 				/>
+				<label className="timecode-audio-import" htmlFor="timecode-audio-file">
+					<span>Audio file</span>
+					<Input
+						id="timecode-audio-file"
+						type="file"
+						accept="audio/wav,audio/x-wav,audio/mpeg,.wav,.mp3"
+						disabled={busy || audioImporting}
+						onChange={(event) => {
+							const file = event.currentTarget.files?.[0];
+							if (file) void importAudio(file);
+						}}
+					/>
+					<small>
+						{audioImporting
+							? "Importing and normalizing…"
+							: draft.audio
+								? `Managed audio ${draft.audio.asset_id}`
+								: "WAV or MP3; MP3 is normalized to managed WAV."}
+					</small>
+				</label>
 			</div>
 			<div className="timecode-timeline">
 				<div

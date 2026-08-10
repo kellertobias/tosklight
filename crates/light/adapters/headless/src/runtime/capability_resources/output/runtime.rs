@@ -207,9 +207,9 @@ impl OutputResource {
 
     pub(in crate::runtime) fn configure_timecode(
         &self,
-        sources: Vec<light_control::TimecodeSourceConfig>,
+        config: light_control::TimecodeRouterConfig,
     ) {
-        self.timecode.lock().configure(sources);
+        self.timecode.lock().configure(config);
     }
 
     pub(in crate::runtime) fn ingest_timecode(

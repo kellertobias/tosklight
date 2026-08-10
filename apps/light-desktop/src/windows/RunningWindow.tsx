@@ -86,7 +86,8 @@ function RunningWindowAuthority({
 			loading={playbacks.loading || dynamics.loading || supplemental.loading}
 			error={dynamics.error ?? supplemental.error}
 			compact={compact}
-			filter={runningFilter}
+			initialFilter={runningFilter}
+			filter={onRunningFilterChange ? runningFilter : undefined}
 			onFilterChange={onRunningFilterChange}
 		/>
 	);

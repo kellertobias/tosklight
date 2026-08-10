@@ -1,99 +1,218 @@
 use crate::{FrameRate, ParseError, SmpteTimecode};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, time::Duration};
+use std::time::{Duration, Instant};
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct TimecodeSourceConfig {
-    pub source_prefix: String,
-    pub priority: i16,
-    pub fallback: bool,
+/// The one Timecode authority selected for this desk.
+///
+/// External identities are the normalized identities emitted by an input adapter (for example
+/// `artnet:10.0.0.1:2`). They are exact on purpose: selecting Art-Net must not make a second
+/// sender or stream take over the desk silently.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum TimecodeSourceSelection {
+    Internal,
+    External { source: String },
+}
+
+impl Default for TimecodeSourceSelection {
+    fn default() -> Self {
+        Self::Internal
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExternalTimecodeLossPolicy {
+    #[default]
+    ContinueInternal,
+    Pause,
+    Stop,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct TimecodeRouterConfig {
+    pub selected_source: TimecodeSourceSelection,
+    pub desk_rate: FrameRate,
+    pub external_loss_policy: ExternalTimecodeLossPolicy,
     pub loss_timeout_millis: u64,
 }
 
-#[derive(Clone, Debug)]
-struct TimecodeSourceState {
-    config: TimecodeSourceConfig,
-    last: SmpteTimecode,
-    last_seen: std::time::Instant,
+impl Default for TimecodeRouterConfig {
+    fn default() -> Self {
+        Self {
+            selected_source: TimecodeSourceSelection::Internal,
+            desk_rate: FrameRate::Fps30,
+            external_loss_policy: ExternalTimecodeLossPolicy::ContinueInternal,
+            loss_timeout_millis: 500,
+        }
+    }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum TimecodeSourceTransition {
+    ExternalLocked { source: String },
+    ExternalLost { policy: ExternalTimecodeLossPolicy },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TimecodeRateWarning {
+    pub source_rate: FrameRate,
+    pub desk_rate: FrameRate,
+}
+
+#[derive(Clone, Debug)]
 pub struct TimecodeRouter {
-    configured: Vec<TimecodeSourceConfig>,
-    sources: HashMap<String, TimecodeSourceState>,
-    active: Option<String>,
+    config: TimecodeRouterConfig,
+    current: Option<SmpteTimecode>,
+    last_seen: Option<Instant>,
+    external_locked: bool,
+    transition: Option<TimecodeSourceTransition>,
+    rate_warning: Option<TimecodeRateWarning>,
+}
+
+impl Default for TimecodeRouter {
+    fn default() -> Self {
+        Self {
+            config: TimecodeRouterConfig::default(),
+            current: None,
+            last_seen: None,
+            external_locked: false,
+            transition: None,
+            rate_warning: None,
+        }
+    }
 }
 
 impl TimecodeRouter {
-    pub fn configure(&mut self, configured: Vec<TimecodeSourceConfig>) {
-        self.configured = configured;
-        self.sources.clear();
-        self.active = None;
+    pub fn configure(&mut self, config: TimecodeRouterConfig) {
+        self.config = config;
+        self.current = None;
+        self.last_seen = None;
+        self.external_locked = false;
+        self.transition = None;
+        self.rate_warning = None;
     }
 
+    pub fn config(&self) -> &TimecodeRouterConfig {
+        &self.config
+    }
+
+    /// Accepts only the explicitly selected external identity. Known SMPTE rates are converted to
+    /// the desk rate before they become authoritative; a warning remains available to operator
+    /// surfaces until the source or configuration changes.
     pub fn ingest(&mut self, timecode: SmpteTimecode) -> Option<&SmpteTimecode> {
-        let config = self
-            .configured
-            .iter()
-            .filter(|config| timecode.source.starts_with(&config.source_prefix))
-            .max_by_key(|config| config.priority)?
-            .clone();
-        let source = timecode.source.clone();
-        self.sources.insert(
-            source.clone(),
-            TimecodeSourceState {
-                config,
-                last: timecode,
-                last_seen: std::time::Instant::now(),
-            },
-        );
-        match &self.active {
-            None => self.active = Some(source),
-            Some(active) if active == &source => {}
-            Some(active) => {
-                let active_priority = self
-                    .sources
-                    .get(active)
-                    .map(|state| state.config.priority)
-                    .unwrap_or(i16::MIN);
-                let candidate = &self.sources[&source];
-                if candidate.config.priority > active_priority {
-                    self.active = Some(source);
-                }
-            }
-        }
-        self.current()
+        self.ingest_at(timecode, Instant::now())
     }
 
     pub fn poll_loss(&mut self) -> Option<&SmpteTimecode> {
-        let active = self.active.clone()?;
-        let lost = self.sources.get(&active).is_none_or(|state| {
-            state.last_seen.elapsed() > Duration::from_millis(state.config.loss_timeout_millis)
+        self.poll_loss_at(Instant::now())
+    }
+
+    pub fn current(&self) -> Option<&SmpteTimecode> {
+        self.current.as_ref()
+    }
+
+    pub fn active_source(&self) -> Option<&str> {
+        match &self.config.selected_source {
+            TimecodeSourceSelection::Internal => Some("internal"),
+            TimecodeSourceSelection::External { source } if self.external_locked => Some(source),
+            TimecodeSourceSelection::External { .. } => None,
+        }
+    }
+
+    pub fn rate_warning(&self) -> Option<&TimecodeRateWarning> {
+        self.rate_warning.as_ref()
+    }
+
+    /// Whether running Timecodes should advance from the desk's internal generator on this tick.
+    /// An external source owns position while locked; Continue Internal takes over only for the
+    /// loss interval and immediately yields again on the next selected-source frame.
+    pub fn uses_internal_clock(&self) -> bool {
+        match self.config.selected_source {
+            TimecodeSourceSelection::Internal => true,
+            TimecodeSourceSelection::External { .. } => {
+                !self.external_locked
+                    && self.config.external_loss_policy
+                        == ExternalTimecodeLossPolicy::ContinueInternal
+            }
+        }
+    }
+
+    /// Returns each lock/loss edge once. Consumers use the loss edge to apply the configured
+    /// continue, pause, or stop behavior to running Timecodes.
+    pub fn take_transition(&mut self) -> Option<TimecodeSourceTransition> {
+        self.transition.take()
+    }
+
+    pub(crate) fn ingest_at(
+        &mut self,
+        timecode: SmpteTimecode,
+        now: Instant,
+    ) -> Option<&SmpteTimecode> {
+        let TimecodeSourceSelection::External { source } = &self.config.selected_source else {
+            return None;
+        };
+        if &timecode.source != source || validate_timecode(&timecode).is_err() {
+            return None;
+        }
+
+        let source_rate = timecode.rate;
+        let converted = convert_rate(timecode, self.config.desk_rate);
+        self.rate_warning = (source_rate != self.config.desk_rate).then_some(TimecodeRateWarning {
+            source_rate,
+            desk_rate: self.config.desk_rate,
         });
-        if lost {
-            self.active = self
-                .sources
-                .iter()
-                .filter(|(_, state)| {
-                    state.config.fallback
-                        && state.last_seen.elapsed()
-                            <= Duration::from_millis(state.config.loss_timeout_millis)
-                })
-                .max_by_key(|(_, state)| state.config.priority)
-                .map(|(source, _)| source.clone());
+        self.current = Some(converted);
+        self.last_seen = Some(now);
+        if !self.external_locked {
+            self.external_locked = true;
+            self.transition = Some(TimecodeSourceTransition::ExternalLocked {
+                source: source.clone(),
+            });
         }
         self.current()
     }
 
-    pub fn current(&self) -> Option<&SmpteTimecode> {
-        self.active
-            .as_ref()
-            .and_then(|active| self.sources.get(active))
-            .map(|state| &state.last)
+    pub(crate) fn poll_loss_at(&mut self, now: Instant) -> Option<&SmpteTimecode> {
+        if self.external_locked
+            && self.last_seen.is_some_and(|last_seen| {
+                now.saturating_duration_since(last_seen)
+                    > Duration::from_millis(self.config.loss_timeout_millis)
+            })
+        {
+            self.external_locked = false;
+            self.current = None;
+            self.transition = Some(TimecodeSourceTransition::ExternalLost {
+                policy: self.config.external_loss_policy,
+            });
+        }
+        self.current()
     }
-    pub fn active_source(&self) -> Option<&str> {
-        self.active.as_deref()
+}
+
+fn convert_rate(mut timecode: SmpteTimecode, target: FrameRate) -> SmpteTimecode {
+    if timecode.rate == target {
+        return timecode;
+    }
+    let (source_numerator, source_denominator) = rate_ratio(timecode.rate);
+    let (target_numerator, target_denominator) = rate_ratio(target);
+    let numerator = u64::from(timecode.frames) * target_numerator * source_denominator;
+    let denominator = source_numerator * target_denominator;
+    timecode.frames = u8::try_from(numerator / denominator)
+        .unwrap_or(u8::MAX)
+        .min(target.nominal_frames().saturating_sub(1));
+    timecode.rate = target;
+    timecode
+}
+
+const fn rate_ratio(rate: FrameRate) -> (u64, u64) {
+    match rate {
+        FrameRate::Fps24 => (24, 1),
+        FrameRate::Fps25 => (25, 1),
+        FrameRate::Fps2997Drop => (30_000, 1_001),
+        FrameRate::Fps30 => (30, 1),
+        FrameRate::FpsCustom(rate) => (rate as u64, 1),
     }
 }
 

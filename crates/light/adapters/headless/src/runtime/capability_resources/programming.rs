@@ -1,6 +1,29 @@
 use super::*;
 
 impl ProgrammingResource {
+    pub(in crate::runtime) fn with_detached_command<T, E>(
+        &self,
+        session_id: SessionId,
+        operation: impl FnOnce(&Self) -> Result<T, E>,
+    ) -> Result<T, E>
+    where
+        E: From<String>,
+    {
+        self.programmers
+            .with_detached_transaction(session_id, |detached_programmers| {
+                let detached = Self {
+                    programmers: detached_programmers.clone(),
+                    service: light_application::ProgrammingService::new(
+                        detached_programmers.clone(),
+                        self.service.events().clone(),
+                        Arc::new(light_programmer::HighlightRegistry::default()),
+                    ),
+                    command_history: Arc::new(Mutex::new(HashMap::new())),
+                };
+                operation(&detached)
+            })
+    }
+
     pub(in crate::runtime) fn handle_sequence_while(
         &self,
         actions: &[light_application::ActionEnvelope<light_application::ProgrammingCommand>],

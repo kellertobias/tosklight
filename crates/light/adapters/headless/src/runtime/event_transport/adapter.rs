@@ -215,6 +215,16 @@ fn wire_payload(
                     },
                 }
             }
+            application::DeskEvent::MacroExecutionChanged(change) => {
+                wire::EventPayload::MacroExecutionChanged {
+                    execution: super::super::macros_v2::execution_wire(change.clone()),
+                }
+            }
+            application::DeskEvent::TimecodeRuntimeChanged(change) => {
+                wire::EventPayload::TimecodeRuntimeChanged {
+                    snapshot: super::super::timecode_v2::wire_snapshot(change.snapshot.clone()),
+                }
+            }
         },
         application::ApplicationEvent::Output(event) => match event {
             application::OutputEvent::RuntimeChanged(change) => {

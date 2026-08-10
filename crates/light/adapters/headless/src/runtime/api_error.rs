@@ -5,6 +5,11 @@ pub(super) struct ApiError {
     pub(super) status: StatusCode,
     pub(super) message: String,
 }
+impl std::fmt::Display for ApiError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.message)
+    }
+}
 impl ApiError {
     pub(super) fn fixture(error: light_fixture::FixtureError) -> Self {
         match error {
