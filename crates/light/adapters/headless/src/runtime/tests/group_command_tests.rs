@@ -90,7 +90,7 @@ fn mixed_selection_sources_dereference_only_the_addressed_term_and_replay_left_t
     attach_session_command_context(&state, &session);
 
     let show_path = data_dir.join("shows/mixed-selection.show");
-    let show_id = default_show::initialise(&show_path).unwrap();
+    let show_id = default_show::initialise_legacy_test_show(&show_path).unwrap();
     let entry = ShowEntry {
         id: show_id,
         name: "Mixed selection".into(),

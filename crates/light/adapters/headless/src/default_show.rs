@@ -235,5 +235,12 @@ pub fn initialise(path: impl AsRef<Path>) -> Result<light_core::ShowId, StoreErr
 }
 
 #[cfg(test)]
+pub(crate) fn initialise_legacy_test_show(
+    path: impl AsRef<Path>,
+) -> Result<light_core::ShowId, StoreError> {
+    seed::initialise(path)
+}
+
+#[cfg(test)]
 #[path = "default_show/tests.rs"]
 mod tests;

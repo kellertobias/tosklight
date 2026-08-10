@@ -356,7 +356,7 @@ async fn move_selection_defaults_patched_fixtures_without_any_stored_position() 
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
     let seeded_path = data_dir.join("seeded-default.show");
-    default_show::initialise(&seeded_path).unwrap();
+    default_show::initialise_legacy_test_show(&seeded_path).unwrap();
     let upload = app
         .clone()
         .oneshot(show_action_request(

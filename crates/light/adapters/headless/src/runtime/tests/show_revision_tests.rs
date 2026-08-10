@@ -55,7 +55,7 @@ async fn named_revision_load_creates_an_independent_provenanced_copy() {
         .unwrap()
         .unwrap();
     let seed_path = data_dir.join("legacy-revision-seed.show");
-    default_show::initialise(&seed_path).unwrap();
+    default_show::initialise_legacy_test_show(&seed_path).unwrap();
     let legacy_fixture = ShowStore::open(&seed_path)
         .unwrap()
         .objects("patched_fixture")
