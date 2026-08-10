@@ -95,6 +95,7 @@ export class BrowserCrossSurface {
 			const pageNumber = Number(pageName.match(/\d+/)?.[0]);
 			if (!Number.isSafeInteger(pageNumber))
 				throw new Error(`Page name "${pageName}" has no page number`);
+			const mark = hardware.mark();
 			await this.api.request(
 				"POST",
 				`/api/v2/control-desks/${session.desk.id}/actions`,
@@ -110,8 +111,6 @@ export class BrowserCrossSurface {
 				undefined,
 				{ showId: this.showId(), deskId: session.desk.id },
 			);
-			const mark = hardware.mark();
-			await this.bench.tick(0);
 			const requiredAddresses = [
 				"page",
 				"locked",
