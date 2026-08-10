@@ -12,6 +12,9 @@ fn checked_in_contract_artifacts_match_the_rust_dtos() {
                 artifact.path
             )
         });
+        // Git may materialize a text checkout with CRLF on Windows even though the checked-in
+        // blob and generator are canonical LF. Compare text content, not checkout policy.
+        let actual = actual.replace("\r\n", "\n");
         assert_eq!(
             actual, artifact.contents,
             "generated wire artifact {} is stale; run cargo run -p media-http --example generate-contracts",
