@@ -120,6 +120,17 @@ export function TimecodeSection({
 		<>
 			<h2>Timecode</h2>
 			<div className="setup-form-grid">
+				<TextField
+					label="ArtTimeCode UDP bind"
+					value={draft.art_timecode_bind ?? ""}
+					description="Listen for Art-Net ArtTimeCode on this local address, for example 0.0.0.0:6454. Leave empty to disable the network source."
+					onChange={(event) =>
+						controller.editDraft({
+							...draft,
+							art_timecode_bind: event.target.value || null,
+						})
+					}
+				/>
 				<SelectField
 					label="Authoritative source"
 					value={draft.timecode_source.type}

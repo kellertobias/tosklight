@@ -64,9 +64,15 @@ A full run executes validated lines in source order with the initiating user's o
 
 The Timecode Pool stores portable numbered timelines. Tap a Timecode to open its live editor. Transport provides **GO**, **Pause/Resume**, **Stop**, **Rewind**, and frame seek against the server-owned clock; reopening the window reconstructs the authoritative position. A duration-only timeline requires no audio. When a managed audio asset is linked, transport, seek, loop, and volume follow the same clock and the configured server audio output.
 
+The editor timeline scrolls and zooms without changing live output. Touch or click the ruler to scrub the editor playhead. Use **Seek runtime to playhead** when the running Timecode should move to that exact frame. Clips, Speed Group keyframes, audio-volume keyframes, and markers show their target and trigger time directly on the lane. Drag an item horizontally for frame-accurate movement; it snaps to zero, the end, and nearby markers. Selection exposes touch-visible **Copy** and **Delete** actions. **Undo** and **Redo** cover the current unsaved editor history.
+
+**Add marker at playhead** creates a non-executing marker. **Import marker CSV** accepts `position,name,color`, where position is a frame number or `HH:MM:SS:FF`; name and color are optional. Choose **Append** or **Replace** explicitly before applying the CSV. Importing WAV or MP3 stores managed portable audio, normalizes MP3 to WAV, sets the timeline duration, and displays decoded waveform peaks. The original file path is not needed after import.
+
 The editor shows duration, transport offset, auto-start, markers, and ordered lanes. Markers label and snap positions but do not execute output. Cuelist clips, Speed Group keyframes, and audio-volume lanes reconstruct deterministically at any frame, so continuous play, seek, and loop reach the same state. Missing referenced show objects remain visible errors and are skipped rather than silently retargeted.
 
 Choose the single desk Timecode source, frame rate, external-loss behavior, audio device, and latency trim in Desk Setup. Several software, physical, Virtual Playback, OSC, WebSocket, or HTTP controls addressing the same Timecode operate one shared runtime, not independent copies.
+
+For Art-Net ArtTimeCode, configure **ArtTimeCode UDP bind** in Desk Setup and select the exact normalized external source identity reported by that input. ArtTimeCode is a Timecode source; CITP/MSEX remains the separate media-server preview and library protocol.
 
 ## Virtual Playbacks
 

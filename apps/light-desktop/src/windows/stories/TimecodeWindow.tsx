@@ -1,9 +1,4 @@
-/**
- * FUTURE FEATURE — STORYBOOK PRODUCT-DESIGN PROTOTYPE.
- *
- * This surface deliberately fakes Timecode data, audio, and transport locally.
- * It is not a runtime, persistence, or backend contract.
- */
+/** Historical full-desk composition retained for visual comparison with the production editor. */
 import { Button, Input, WindowHeader } from "@tosklight/ui";
 import {
 	type CSSProperties,

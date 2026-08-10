@@ -55,6 +55,10 @@ pub(super) fn router() -> Router<AppState> {
         .route("/api/v2/timecodes/audio/outputs", get(audio_outputs))
         .route("/api/v2/timecodes/audio/import", post(import_audio))
         .route(
+            "/api/v2/timecodes/{timecode_id}/audio/waveform",
+            get(audio_waveform),
+        )
+        .route(
             "/api/v2/timecodes/{timecode_id}/runtime",
             get(runtime_snapshot),
         )
@@ -62,6 +66,116 @@ pub(super) fn router() -> Router<AppState> {
             "/api/v2/timecodes/{timecode_id}/transport",
             post(transport_action),
         )
+}
+
+struct WaveformSink(Vec<u8>);
+
+impl light_application::AssetChunkSink for WaveformSink {
+    fn write_chunk(&mut self, bytes: &[u8]) -> Result<(), light_application::AssetError> {
+        self.0.extend_from_slice(bytes);
+        Ok(())
+    }
+}
+
+async fn audio_waveform(
+    State(state): State<AppState>,
+    context: ShowContext,
+    Path(timecode_id): Path<Uuid>,
+    headers: HeaderMap,
+) -> Result<Json<wire::TimecodeAudioWaveform>, ApiError> {
+    authenticate(&state, &headers)?;
+    let show_id = context.resolve(&state)?;
+    let entry = active_entry(&state, show_id)?;
+    let store = ActiveShowRepository::open(&entry.path).map_err(ApiError::store)?;
+    let object = load_timecode(&store, timecode_id)?;
+    let definition = serde_json::from_value::<light_playback::TimecodeDefinition>(object.body)
+        .map_err(|error| ApiError::internal(format!("stored Timecode is invalid: {error}")))?;
+    let audio = definition
+        .audio
+        .ok_or_else(|| ApiError::not_found("Timecode has no linked audio"))?;
+    let mut sink = WaveformSink(Vec::new());
+    state
+        .managed_assets
+        .stream(
+            light_application::AssetReference {
+                id: light_application::AssetId(audio.asset_id),
+                revision: light_application::AssetRevision(audio.asset_revision),
+            },
+            &mut sink,
+        )
+        .map_err(|error| ApiError::internal(error.message))?;
+    let peaks = pcm_waveform_peaks(&sink.0, 220)
+        .map_err(|message| ApiError::bad_request(format!("linked audio waveform: {message}")))?;
+    Ok(Json(wire::TimecodeAudioWaveform { peaks }))
+}
+
+fn pcm_waveform_peaks(bytes: &[u8], bucket_count: usize) -> Result<Vec<f32>, String> {
+    if bytes.len() < 12 || &bytes[0..4] != b"RIFF" || &bytes[8..12] != b"WAVE" {
+        return Err("asset is not a RIFF/WAVE file".into());
+    }
+    let mut cursor = 12usize;
+    let mut format = None;
+    let mut channels = None;
+    let mut bits = None;
+    let mut samples = None;
+    while cursor.checked_add(8).is_some_and(|end| end <= bytes.len()) {
+        let id = &bytes[cursor..cursor + 4];
+        let length = u32::from_le_bytes(bytes[cursor + 4..cursor + 8].try_into().unwrap()) as usize;
+        let start = cursor + 8;
+        let end = start
+            .checked_add(length)
+            .ok_or_else(|| "chunk length overflow".to_string())?;
+        if end > bytes.len() {
+            return Err("truncated WAV chunk".into());
+        }
+        if id == b"fmt " && length >= 16 {
+            format = Some(u16::from_le_bytes(
+                bytes[start..start + 2].try_into().unwrap(),
+            ));
+            channels = Some(u16::from_le_bytes(
+                bytes[start + 2..start + 4].try_into().unwrap(),
+            ));
+            bits = Some(u16::from_le_bytes(
+                bytes[start + 14..start + 16].try_into().unwrap(),
+            ));
+        } else if id == b"data" {
+            samples = Some(&bytes[start..end]);
+        }
+        cursor = end + (length & 1);
+    }
+    let format = format.ok_or_else(|| "missing fmt chunk".to_string())?;
+    let channels = usize::from(channels.ok_or_else(|| "missing channel count".to_string())?);
+    let bits = bits.ok_or_else(|| "missing sample width".to_string())?;
+    let samples = samples.ok_or_else(|| "missing data chunk".to_string())?;
+    let bytes_per_sample = usize::from(bits / 8);
+    if channels == 0 || !matches!((format, bits), (1, 16) | (3, 32)) {
+        return Err("only PCM16 or IEEE-float32 WAV waveform data is supported".into());
+    }
+    let frame_bytes = channels * bytes_per_sample;
+    let frame_count = samples.len() / frame_bytes;
+    if frame_count == 0 {
+        return Err("audio contains no samples".into());
+    }
+    let count = bucket_count.clamp(1, frame_count);
+    let mut peaks = vec![0.0f32; count];
+    for (bucket, peak) in peaks.iter_mut().enumerate() {
+        let first = bucket * frame_count / count;
+        let last = ((bucket + 1) * frame_count / count).max(first + 1);
+        for frame in first..last {
+            for channel in 0..channels {
+                let offset = frame * frame_bytes + channel * bytes_per_sample;
+                let value = if format == 1 {
+                    f32::from(i16::from_le_bytes(
+                        samples[offset..offset + 2].try_into().unwrap(),
+                    )) / f32::from(i16::MAX)
+                } else {
+                    f32::from_le_bytes(samples[offset..offset + 4].try_into().unwrap())
+                };
+                *peak = peak.max(value.abs().min(1.0));
+            }
+        }
+    }
+    Ok(peaks)
 }
 
 #[derive(Deserialize)]
@@ -914,5 +1028,39 @@ fn transport_name(state: light_playback::TimecodeTransportState) -> &'static str
         light_playback::TimecodeTransportState::Stopped => "stopped",
         light_playback::TimecodeTransportState::Playing => "playing",
         light_playback::TimecodeTransportState::Paused => "paused",
+    }
+}
+
+#[cfg(test)]
+mod waveform_tests {
+    use super::pcm_waveform_peaks;
+
+    #[test]
+    fn waveform_uses_actual_pcm_samples_and_bounds_the_projection() {
+        let samples = [0i16, i16::MAX, i16::MIN, 0];
+        let data = samples
+            .into_iter()
+            .flat_map(i16::to_le_bytes)
+            .collect::<Vec<_>>();
+        let mut wav = Vec::new();
+        wav.extend_from_slice(b"RIFF");
+        wav.extend_from_slice(&(36u32 + data.len() as u32).to_le_bytes());
+        wav.extend_from_slice(b"WAVEfmt ");
+        wav.extend_from_slice(&16u32.to_le_bytes());
+        wav.extend_from_slice(&1u16.to_le_bytes());
+        wav.extend_from_slice(&1u16.to_le_bytes());
+        wav.extend_from_slice(&44_100u32.to_le_bytes());
+        wav.extend_from_slice(&88_200u32.to_le_bytes());
+        wav.extend_from_slice(&2u16.to_le_bytes());
+        wav.extend_from_slice(&16u16.to_le_bytes());
+        wav.extend_from_slice(b"data");
+        wav.extend_from_slice(&(data.len() as u32).to_le_bytes());
+        wav.extend_from_slice(&data);
+
+        let peaks = pcm_waveform_peaks(&wav, 2).unwrap();
+        assert_eq!(peaks.len(), 2);
+        assert!((peaks[0] - 1.0).abs() < 0.0001);
+        assert!((peaks[1] - 1.0).abs() < 0.0001);
+        assert!(pcm_waveform_peaks(b"not wav", 2).is_err());
     }
 }

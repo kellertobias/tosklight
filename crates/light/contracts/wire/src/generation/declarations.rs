@@ -91,6 +91,7 @@ fn timecode(config: &Config) -> Vec<String> {
         TimecodeAudio::decl(config),
         TimecodeAudioOutputDevices::decl(config),
         TimecodeAudioImportResult::decl(config),
+        TimecodeAudioWaveform::decl(config),
         TimecodeMarker::decl(config),
         TimecodeLane::decl(config),
         TimecodeLaneContent::decl(config),

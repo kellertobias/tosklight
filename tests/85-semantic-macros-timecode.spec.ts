@@ -1,3 +1,4 @@
+import type { Page, Route } from "@playwright/test";
 import { expect, test } from "./bench/core/fixtures";
 
 test.describe("docs/testing/15-macros-and-timecode.md", () => {
@@ -111,4 +112,117 @@ test.describe("docs/testing/15-macros-and-timecode.md", () => {
 		);
 		expect(stopped).toMatchObject({ state: "stopped", frame: 0 });
 	});
+
+	test("TIMECODE-001 @ui › production editor zooms, imports markers, edits keyframes, and saves one revision-safe object", async ({
+		api,
+		desk,
+		page,
+	}) => {
+		const definition = editableTimecode();
+		let mutation: Record<string, unknown> | null = null;
+		await page.route("**/api/v2/timecodes", async (route) => {
+			await fulfillJson(route, {
+				show_revision: 1,
+				objects: [{ revision: 4, definition }],
+			});
+		});
+		await page.route("**/api/v2/timecodes/runtime", async (route) => {
+			await fulfillJson(route, []);
+		});
+		await page.route("**/api/v2/timecodes/actions", async (route) => {
+			mutation = route.request().postDataJSON() as Record<string, unknown>;
+			await fulfillJson(route, { request_id: "saved", replayed: false });
+		});
+
+		await desk.open(api.baseUrl);
+		await expect(page.locator(".connection-cover")).toBeHidden();
+		await openBuiltIns(page);
+		await page
+			.locator("[aria-label='Built-ins']")
+			.getByRole("button", { name: "Timecode", exact: true })
+			.click();
+		await page
+			.getByRole("button", { name: "Timecode 7 Opening track" })
+			.click();
+
+		const editor = page.getByLabel("Timecode timeline editor");
+		await expect(editor).toBeVisible();
+		await editor.getByLabel("Timeline zoom").fill("2");
+		await editor
+			.getByRole("button", { name: "Add marker at playhead" })
+			.click();
+		await editor.getByRole("button", { name: "Import marker CSV" }).click();
+		await editor
+			.getByLabel("Marker CSV")
+			.fill("position,name,color\n00:00:05:00,Verse,#a67cff");
+		await editor.getByLabel("Import mode").selectOption("replace");
+		await editor.getByRole("button", { name: "Apply marker CSV" }).click();
+		await page.getByRole("button", { name: "Save", exact: true }).click();
+
+		await expect.poll(() => mutation).not.toBeNull();
+		expect(mutation).toMatchObject({
+			action: {
+				type: "update",
+				timecode_id: definition.id,
+				expected_revision: 4,
+				patch: {
+					markers: [
+						expect.objectContaining({
+							frame: 220,
+							name: "Verse",
+							color: "#a67cff",
+						}),
+					],
+				},
+			},
+		});
+	});
 });
+
+async function openBuiltIns(page: Page): Promise<void> {
+	const toggle = page.getByRole("button", {
+		name: "Desktops / Built-ins",
+		exact: true,
+	});
+	if ((await toggle.getAttribute("data-dock-mode")) !== "builtins")
+		await toggle.click();
+}
+
+async function fulfillJson(route: Route, body: unknown): Promise<void> {
+	await route.fulfill({
+		status: 200,
+		contentType: "application/json",
+		body: JSON.stringify(body),
+	});
+}
+
+function editableTimecode() {
+	return {
+		id: "00000000-0000-4000-8000-000000000077",
+		number: 7,
+		name: "Opening track",
+		duration_frame: 44 * 30,
+		transport_offset_frame: 0,
+		auto_start: false,
+		audio: null,
+		markers: [],
+		lanes: [
+			{
+				id: "00000000-0000-4000-8000-000000000078",
+				name: "Main audio",
+				content: {
+					kind: "audio_volume",
+					keyframes: [
+						{
+							id: "00000000-0000-4000-8000-000000000079",
+							frame: 44,
+							value: 1,
+							fade_frames: 0,
+							curve: "linear",
+						},
+					],
+				},
+			},
+		],
+	};
+}

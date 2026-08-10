@@ -2,6 +2,7 @@ import type {
 	ShowObjectActionOutcome,
 	TimecodeAudioImportResult,
 	TimecodeAudioOutputDevices,
+	TimecodeAudioWaveform,
 	TimecodeDefinition,
 	TimecodeObjectAction,
 	TimecodePatch,
@@ -111,6 +112,13 @@ export class TimecodesApiClient {
 				},
 				body: file,
 			},
+		);
+	}
+
+	waveform(showId: string, timecodeId: string): Promise<TimecodeAudioWaveform> {
+		return this.transport.request(
+			`/api/v2/timecodes/${encodeURIComponent(timecodeId)}/audio/waveform`,
+			{ headers: showHeaders(showId) },
 		);
 	}
 

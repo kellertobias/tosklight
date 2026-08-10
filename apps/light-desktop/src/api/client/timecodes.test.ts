@@ -38,6 +38,7 @@ describe("TimecodesApiClient", () => {
 		await client.objects("show-a");
 		await client.runtime("show-a");
 		await client.snapshot("show-a", "timecode/a");
+		await client.waveform("show-a", "timecode/a");
 		await client.transportAction("show-a", "timecode/a", {
 			type: "seek",
 			frame: 220,
@@ -46,6 +47,7 @@ describe("TimecodesApiClient", () => {
 			"/api/v2/timecodes",
 			"/api/v2/timecodes/runtime",
 			"/api/v2/timecodes/timecode%2Fa/runtime",
+			"/api/v2/timecodes/timecode%2Fa/audio/waveform",
 			"/api/v2/timecodes/timecode%2Fa/transport",
 		]);
 	});

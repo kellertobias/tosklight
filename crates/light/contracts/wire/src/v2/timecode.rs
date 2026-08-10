@@ -23,6 +23,11 @@ pub struct TimecodeAudioImportResult {
     pub sample_frames: u64,
 }
 
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct TimecodeAudioWaveform {
+    pub peaks: Vec<f32>,
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 pub struct TimecodeFrameRate {
     pub numerator: u32,

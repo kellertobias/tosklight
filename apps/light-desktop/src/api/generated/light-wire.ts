@@ -1105,6 +1105,7 @@ export type TimecodeCollectionSnapshot = { show_revision: number, objects: Array
 export type TimecodeAudio = { asset_id: string, asset_revision: number, end_fade_frames?: number | null, };
 export type TimecodeAudioOutputDevices = { devices: Array<string>, };
 export type TimecodeAudioImportResult = { asset_id: string, asset_revision: number, name: string, media_type: string, sample_rate: number, channels: number, sample_frames: number, };
+export type TimecodeAudioWaveform = { peaks: Array<number>, };
 export type TimecodeMarker = { id: string, frame: number, name: string, color?: string | null, };
 export type TimecodeLane = { id: string, name: string, content: TimecodeLaneContent, };
 export type TimecodeLaneContent = { "kind": "cue_list", cue_list_id: string, clips: Array<TimecodeCueListClip>, } | { "kind": "speed_group", group: string, keyframes: Array<TimecodeSpeedKeyframe>, } | { "kind": "audio_volume", keyframes: Array<TimecodeVolumeKeyframe>, };

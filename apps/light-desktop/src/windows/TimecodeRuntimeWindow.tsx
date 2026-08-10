@@ -24,6 +24,8 @@ import type {
 } from "../api/generated/light-wire";
 import { useActiveShowId } from "../features/deskSnapshot/DeskSnapshotState";
 import { useTimecodeActions } from "../features/timecode/TimecodeActionsContext";
+import { TimecodeTimelineEditor } from "../features/timecode/TimecodeTimelineEditor";
+import { useTimecodeEditorHistory } from "../features/timecode/useTimecodeEditorHistory";
 import type { WindowProps } from "./windowTypes";
 import "./TimecodeRuntimeWindow.css";
 
@@ -219,11 +221,34 @@ function TimecodeEditor({
 	onClose(): void;
 	onSaved(): Promise<void>;
 }) {
-	const [draft, setDraft] = useState(item.definition);
+	const {
+		draft,
+		commit: setDraft,
+		preview: previewDraft,
+		beginGesture,
+		endGesture,
+		undo,
+		redo,
+		canUndo,
+		canRedo,
+	} = useTimecodeEditorHistory(item.definition);
 	const [busy, setBusy] = useState(false);
 	const [audioImporting, setAudioImporting] = useState(false);
+	const [waveformPeaks, setWaveformPeaks] = useState<number[] | undefined>();
+	const [editorFrame, setEditorFrame] = useState(snapshot?.frame ?? 0);
 	const [error, setError] = useState<string | null>(null);
 	const isNew = "isNew" in item;
+	useEffect(() => {
+		if (!showId || isNew || !draft.audio || waveformPeaks) return;
+		let cancelled = false;
+		void api
+			.waveform(showId, draft.id)
+			.then((waveform) => !cancelled && setWaveformPeaks(waveform.peaks))
+			.catch((reason) => !cancelled && setError(String(reason)));
+		return () => {
+			cancelled = true;
+		};
+	}, [api, draft.audio, draft.id, isNew, showId, waveformPeaks]);
 	const act = async (action: TimecodeTransportAction) => {
 		if (!showId || isNew) return;
 		setBusy(true);
@@ -265,18 +290,22 @@ function TimecodeEditor({
 		setAudioImporting(true);
 		setError(null);
 		try {
-			const imported = await api.importAudio(showId, file);
+			const [imported, peaks] = await Promise.all([
+				api.importAudio(showId, file),
+				decodeAudioPeaks(file).catch(() => undefined),
+			]);
 			const audioDuration = Math.ceil(
 				(imported.sample_frames * FPS) / imported.sample_rate,
 			);
-			setDraft((current) => ({
-				...current,
+			setDraft({
+				...draft,
 				duration_frame: audioDuration,
 				audio: {
 					asset_id: imported.asset_id,
 					asset_revision: imported.asset_revision,
 				},
-			}));
+			});
+			setWaveformPeaks(peaks);
 		} catch (reason) {
 			setError(reason instanceof Error ? reason.message : String(reason));
 		} finally {
@@ -295,7 +324,7 @@ function TimecodeEditor({
 		}
 	};
 	const duration = draft.duration_frame ?? 0;
-	const frame = Math.min(snapshot?.frame ?? 0, duration);
+	const frame = Math.min(editorFrame, duration);
 	return (
 		<section className="timecode-window timecode-editor" aria-busy={busy}>
 			<WindowHeader
@@ -316,6 +345,12 @@ function TimecodeEditor({
 				<Button onClick={onClose}>Back</Button>
 				<Button onClick={() => void save()} disabled={busy}>
 					Save
+				</Button>
+				<Button onClick={undo} disabled={!canUndo || busy}>
+					Undo
+				</Button>
+				<Button onClick={redo} disabled={!canRedo || busy}>
+					Redo
 				</Button>
 				{!isNew && (
 					<Button onClick={() => void remove()} disabled={busy}>
@@ -347,6 +382,12 @@ function TimecodeEditor({
 					disabled={isNew || busy}
 				>
 					Rewind
+				</Button>
+				<Button
+					onClick={() => void act({ type: "seek", frame })}
+					disabled={isNew || busy}
+				>
+					Seek runtime to playhead
 				</Button>
 				<strong>{formatFrame(snapshot?.frame ?? 0)}</strong>
 			</fieldset>
@@ -417,52 +458,49 @@ function TimecodeEditor({
 					</small>
 				</label>
 			</div>
-			<div className="timecode-timeline">
-				<div
-					className="timecode-playhead"
-					style={{ left: `${duration ? (frame / duration) * 100 : 0}%` }}
-				/>
-				{draft.markers.map((marker) => (
-					<Button
-						key={marker.id}
-						className="timecode-marker"
-						style={{
-							left: `${duration ? (marker.frame / duration) * 100 : 0}%`,
-						}}
-						title={marker.name}
-						onClick={() => void act({ type: "seek", frame: marker.frame })}
-					>
-						{marker.name}
-					</Button>
-				))}
-			</div>
-			<Input
-				className="timecode-seek"
-				aria-label="Seek Timecode"
-				type="range"
-				min={0}
-				max={Math.max(1, duration)}
-				value={frame}
-				disabled={isNew || busy}
-				onChange={(event) =>
-					void act({ type: "seek", frame: Number(event.currentTarget.value) })
-				}
+			<TimecodeTimelineEditor
+				definition={draft}
+				frame={frame}
+				fps={FPS}
+				waveformPeaks={waveformPeaks}
+				onScrub={setEditorFrame}
+				onCommit={setDraft}
+				onPreview={previewDraft}
+				onBeginGesture={beginGesture}
+				onEndGesture={endGesture}
 			/>
-			<div className="timecode-lanes">
-				<h2>Lanes</h2>
-				{draft.lanes.length ? (
-					draft.lanes.map((lane) => (
-						<article key={lane.id}>
-							<b>{lane.name}</b>
-							<span>{lane.content.kind.replaceAll("_", " ")}</span>
-						</article>
-					))
-				) : (
-					<p>No lanes configured.</p>
-				)}
-			</div>
 		</section>
 	);
+}
+
+async function decodeAudioPeaks(file: File, count = 220): Promise<number[]> {
+	const AudioContextConstructor = window.AudioContext;
+	const context = new AudioContextConstructor();
+	try {
+		const buffer = await context.decodeAudioData(await file.arrayBuffer());
+		const peaks = Array.from({ length: count }, () => 0);
+		for (let channel = 0; channel < buffer.numberOfChannels; channel += 1) {
+			const samples = buffer.getChannelData(channel);
+			for (let index = 0; index < count; index += 1) {
+				const start = Math.floor((index * samples.length) / count);
+				const end = Math.max(
+					start + 1,
+					Math.floor(((index + 1) * samples.length) / count),
+				);
+				let peak = 0;
+				for (
+					let sample = start;
+					sample < end;
+					sample += Math.max(1, Math.floor((end - start) / 128))
+				)
+					peak = Math.max(peak, Math.abs(samples[sample] ?? 0));
+				peaks[index] = Math.max(peaks[index], peak);
+			}
+		}
+		return peaks;
+	} finally {
+		void context.close();
+	}
 }
 
 export function formatFrame(frame: number): string {
