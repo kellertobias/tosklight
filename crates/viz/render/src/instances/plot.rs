@@ -14,6 +14,16 @@ pub(super) fn push_plot(
     style: &FrameStyle,
 ) {
     for object in &scene.scenery {
+        frame.mesh(MeshKind::Cube).push(MeshInstance::new(
+            Mat4::from_rotation_translation(
+                euler_degrees(object.rotation_degrees),
+                object.position,
+            ) * Mat4::from_scale(object.size),
+            Vec3::ZERO,
+            1.0,
+            style.faint_ink * 0.12,
+            0.0,
+        ));
         push_box_outline(
             frame,
             object.position,
@@ -52,7 +62,50 @@ pub(super) fn push_plot(
         } else {
             (style.faint_ink * 0.7, 0.7)
         };
-        push_symbol(frame, fixture, style, ink, opacity);
+        let plan = scene
+            .fixture_plan
+            .iter()
+            .find(|binding| binding.fixture_id == fixture.fixture_id);
+        let packaged = plan.and_then(|binding| binding.artwork[style.projection_view.index()]);
+        let transform = Mat4::from_rotation_translation(fixture.orientation(), fixture.position);
+        if let Some(artwork) = packaged {
+            frame
+                .mesh(MeshKind::PlanArtwork(artwork))
+                .push(MeshInstance::new(
+                    transform,
+                    Vec3::ZERO,
+                    1.0,
+                    ink * 0.72,
+                    0.0,
+                ));
+            if selected {
+                push_symbol(frame, fixture, style, style.selected_ink, 1.0);
+            }
+        } else {
+            // Both renderer fallbacks are explicit opaque regions, so their depth can hide truss
+            // and scenery. Recognized types add the renderer-owned vector convention; a truly
+            // unknown declaration deliberately remains the final simple box.
+            frame.mesh(MeshKind::Cube).push(MeshInstance::new(
+                transform * Mat4::from_scale(fixture.body.size),
+                Vec3::ZERO,
+                1.0,
+                ink * 0.18,
+                0.0,
+            ));
+            if plan.is_some_and(|binding| binding.fallback == viz_scene::PlanFallback::GenericType)
+            {
+                push_symbol(frame, fixture, style, ink, opacity);
+            } else {
+                push_box_outline(
+                    frame,
+                    fixture.position,
+                    fixture.body.size,
+                    fixture.orientation(),
+                    ink,
+                    opacity,
+                );
+            }
+        }
     }
 
     for (index, emitter) in scene.emitters.iter().enumerate() {

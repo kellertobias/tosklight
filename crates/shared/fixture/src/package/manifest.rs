@@ -21,6 +21,7 @@ pub const MAX_FIXTURE_SCAN_SCRIPT_BYTES: usize = 256 * 1024;
 /// A gobo is a mask, and a wheel of them travels inside every patched show that uses the fixture.
 /// One megabyte is a generous greyscale image and mean enough to keep a photograph out.
 pub const MAX_FIXTURE_GOBO_BYTES: usize = 1024 * 1024;
+pub const MAX_FIXTURE_PROJECTION_BYTES: usize = 2 * 1024 * 1024;
 
 pub(super) const MAX_PHOTOGRAPH_DIMENSION: u32 = 8_192;
 pub(super) const MAX_ICON_DIMENSION: u32 = 2_048;
@@ -70,6 +71,8 @@ pub(super) enum AssetKind {
     ScanScript,
     /// One slot's artwork on a gobo wheel.
     Gobo,
+    /// Safe, package-owned vector artwork for one named orthographic view.
+    Projection,
 }
 
 impl AssetKind {
@@ -80,6 +83,7 @@ impl AssetKind {
             Self::Model => "3D model",
             Self::ScanScript => "scan script",
             Self::Gobo => "gobo artwork",
+            Self::Projection => "SVG projection",
         }
     }
 
@@ -90,6 +94,7 @@ impl AssetKind {
             Self::Model => MAX_FIXTURE_MODEL_BYTES,
             Self::ScanScript => MAX_FIXTURE_SCAN_SCRIPT_BYTES,
             Self::Gobo => MAX_FIXTURE_GOBO_BYTES,
+            Self::Projection => MAX_FIXTURE_PROJECTION_BYTES,
         }
     }
 }

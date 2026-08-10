@@ -249,6 +249,65 @@ fn fixture() -> FixtureInstance {
     }
 }
 
+#[test]
+fn plot_prefers_packaged_artwork_before_renderer_fallbacks() {
+    let fixture = fixture();
+    let fixture_id = fixture.fixture_id;
+    let mut scene = Scene {
+        fixtures: vec![fixture],
+        plan_artwork: vec![viz_scene::PlanArtwork {
+            view: viz_scene::ProjectionView::Top,
+            vertices: vec![[-0.1, 0.0, -0.1], [0.1, 0.0, -0.1], [0.0, 0.0, 0.1]],
+            normals: vec![[0.0, 1.0, 0.0]; 3],
+            indices: vec![0, 1, 2],
+        }],
+        fixture_plan: vec![viz_scene::FixturePlanBinding {
+            fixture_id,
+            artwork: [Some(0), None, None, None, None],
+            fallback: viz_scene::PlanFallback::GenericType,
+        }],
+        ..Scene::default()
+    };
+    let style = FrameStyle {
+        plot: true,
+        projection_view: viz_scene::ProjectionView::Top,
+        ..FrameStyle::default()
+    };
+    let packaged = build(&scene, &SceneValues::default(), &style);
+    assert!(
+        packaged
+            .meshes
+            .iter()
+            .any(|(kind, instances)| { *kind == MeshKind::PlanArtwork(0) && instances.len() == 1 })
+    );
+    assert!(
+        !packaged
+            .meshes
+            .iter()
+            .any(|(kind, _)| *kind == MeshKind::Cube)
+    );
+
+    scene.fixture_plan[0].artwork = [None; 5];
+    let generic = build(&scene, &SceneValues::default(), &style);
+    assert!(
+        generic
+            .meshes
+            .iter()
+            .any(|(kind, _)| *kind == MeshKind::Cube)
+    );
+    let generic_lines = generic.lines.len();
+
+    scene.fixture_plan[0].fallback = viz_scene::PlanFallback::UnknownBox;
+    let unknown = build(&scene, &SceneValues::default(), &style);
+    assert!(
+        unknown
+            .meshes
+            .iter()
+            .any(|(kind, _)| *kind == MeshKind::Cube)
+    );
+    assert_ne!(unknown.lines.len(), generic_lines);
+}
+
 fn emitter() -> EmitterInstance {
     EmitterInstance {
         fixture_index: 0,

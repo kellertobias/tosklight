@@ -36,6 +36,84 @@ impl FixtureProfile {
         validate_positive("color temperature", self.physical.color_temperature_kelvin)?;
         validate_positive("luminous output", self.physical.luminous_output_lumens)?;
         validate_positive("beam angle", self.physical.beam_angle_degrees)?;
+        if let Some(projections) = &self.projection_assets {
+            if projections.source_model_sha256.len() != 64
+                || !projections
+                    .source_model_sha256
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+            {
+                return Err(ProfileError::Invalid(
+                    "projection source-model hash must be 64 lowercase hexadecimal characters"
+                        .into(),
+                ));
+            }
+            if projections.generator.trim().is_empty()
+                || projections.generator_version.trim().is_empty()
+                || projections.pose_contract_version == 0
+            {
+                return Err(ProfileError::Invalid(
+                    "projection generator, version, and pose-contract version are required".into(),
+                ));
+            }
+            let mut views = HashSet::new();
+            for projection in &projections.views {
+                if !views.insert(projection.view) {
+                    return Err(ProfileError::Invalid(format!(
+                        "projection view {} is declared twice",
+                        projection.view.wire()
+                    )));
+                }
+                if projection.artwork_asset.trim().is_empty() {
+                    return Err(ProfileError::Invalid(format!(
+                        "projection view {} has no SVG artwork",
+                        projection.view.wire()
+                    )));
+                }
+                if projection.orientation != projection.view.orientation() {
+                    return Err(ProfileError::Invalid(format!(
+                        "projection view {} has the wrong physical orientation",
+                        projection.view.wire()
+                    )));
+                }
+                let [x, y, width, height] = projection.view_box_millimetres;
+                if ![x, y, width, height].into_iter().all(f32::is_finite)
+                    || width <= 0.0
+                    || height <= 0.0
+                    || !projection.physical_width_millimetres.is_finite()
+                    || !projection.physical_height_millimetres.is_finite()
+                    || projection.physical_width_millimetres <= 0.0
+                    || projection.physical_height_millimetres <= 0.0
+                    || !projection
+                        .origin_millimetres
+                        .into_iter()
+                        .all(f32::is_finite)
+                {
+                    return Err(ProfileError::Invalid(format!(
+                        "projection view {} must have finite positive physical bounds",
+                        projection.view.wire()
+                    )));
+                }
+                if (width - projection.physical_width_millimetres).abs() > 0.01
+                    || (height - projection.physical_height_millimetres).abs() > 0.01
+                {
+                    return Err(ProfileError::Invalid(format!(
+                        "projection view {} physical size must match its SVG viewBox",
+                        projection.view.wire()
+                    )));
+                }
+            }
+            if views.len() != super::ProfileProjectionView::ALL.len()
+                || !super::ProfileProjectionView::ALL
+                    .into_iter()
+                    .all(|view| views.contains(&view))
+            {
+                return Err(ProfileError::Invalid(
+                    "projection assets must contain exactly top, left, right, front, and back"
+                        .into(),
+                ));
+            }
+        }
         if let Some(cri) = self.physical.color_rendering_index
             && (!cri.is_finite() || !(0.0..=100.0).contains(&cri))
         {
