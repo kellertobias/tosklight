@@ -130,3 +130,35 @@ test("release packaging and Pages cover the supported product matrix", () => {
 		);
 	}
 });
+
+test("non-main branch pushes run validation without release work", () => {
+	const workflow = read(".github/workflows/release.yml");
+	const mediaRelease = read(".github/workflows/media-release.yml");
+
+	assert.match(workflow, /push:[\s\S]*?branches: \["\*\*"\]/u);
+	for (const job of [
+		"metadata",
+		"workspace",
+		"native-extension-draft",
+		"usb-dmx",
+		"e2e-build",
+	]) {
+		assert.match(
+			workflow,
+			new RegExp(`\\n  ${job}:\\n[\\s\\S]*?\\n    if: github\\.ref == 'refs/heads/main'`),
+			`${job} should be main-only`,
+		);
+	}
+	assert.match(
+		workflow,
+		/unit:[\s\S]*?run: npm run test:architecture[\s\S]*?run: npm run test:unit/u,
+	);
+	assert.match(
+		workflow,
+		/publish-marketing:[\s\S]*?github\.ref == 'refs\/heads\/main'/u,
+	);
+	assert.match(
+		mediaRelease,
+		/workflow_dispatch' && github\.ref == 'refs\/heads\/main'/u,
+	);
+});

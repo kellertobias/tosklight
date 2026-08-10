@@ -27,9 +27,9 @@ jobs:
   decide:
     name: Media release / Decide
     # Only a successful release run of `main` can have published a release to attach to. A manual
-    # dispatch builds without publishing, which is why it is allowed through too.
+    # dispatch of `main` builds without publishing, which is why it is allowed through too.
     if: >-
-      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
       (github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.head_branch == 'main' &&
        github.event.workflow_run.event == 'push')

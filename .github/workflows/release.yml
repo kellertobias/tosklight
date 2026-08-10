@@ -30,6 +30,7 @@ env:
 jobs:
   metadata:
     name: Release / Select version
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-22.04
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -144,13 +145,47 @@ jobs:
       - name: Install workspace dependencies
         run: npm ci
 
-      - name: Run the GPU-less unit and architecture suite
+      - name: Run architecture checks
+        run: npm run test:architecture
+
+      - name: Run unit tests
+        env:
+          TOSKLIGHT_EMBEDDED_PANE_WGPU_BACKEND: noop
+        run: npm run test:unit
+
+  workspace:
+    name: Tests / Comprehensive Rust workspace
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
+        with:
+          toolchain: stable
+
+      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
+        with:
+          key: workspace
+
+      - name: Install Linux workspace development files
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf \
+            libgtk-3-dev libsoup-3.0-dev libudev-dev libasound2-dev libxdo-dev \
+            mesa-vulkan-drivers build-essential pkg-config
+
+      - name: Run the GPU-less Rust workspace suite
         env:
           TOSKLIGHT_EMBEDDED_PANE_WGPU_BACKEND: noop
         run: npm run test:verify
 
   native-extension-draft:
     name: Tests / Native extension draft / ${{ matrix.label }}
+    if: github.ref == 'refs/heads/main'
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -182,6 +217,7 @@ jobs:
 
   usb-dmx:
     name: Tests / USB DMX / ${{ matrix.label }}
+    if: github.ref == 'refs/heads/main'
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -219,6 +255,7 @@ jobs:
 
   e2e-build:
     name: Tests / Build Playwright application
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -332,17 +369,33 @@ jobs:
         run: npm run models:verify
 
       - name: Install Blender
+        env:
+          BLENDER_VERSION: 4.5.12
+          BLENDER_LINUX_SHA256: 95e3a2dfedba3bd32ca54fc355eac6b15a11986954ccb02815a07535d0120a25
         run: |
-          sudo snap install blender --classic --channel=4.5lts/stable
-          blender --version
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y xvfb libxkbcommon0
+          tmp="$(npm run --silent artifact-path -- tmp)"
+          archive="$tmp/blender-$BLENDER_VERSION-linux-x64.tar.xz"
+          install_root="$tmp/blender-$BLENDER_VERSION-linux-x64"
+          curl --fail --location --retry 3 \
+            --output "$archive" \
+            "https://download.blender.org/release/Blender4.5/blender-$BLENDER_VERSION-linux-x64.tar.xz"
+          echo "$BLENDER_LINUX_SHA256  $archive" | sha256sum --check
+          tar --extract --file "$archive" --directory "$tmp"
+          echo "$install_root" >> "$GITHUB_PATH"
+          "$install_root/blender" --version
 
       # Rebuilding proves the builders still produce what is committed, and rendering
       # proves every committed .glb still imports. Both write into the working tree, so
       # a drift check afterwards is what turns them into a gate.
       - name: Rebuild the models and render one PNG each
+        env:
+          LIBGL_ALWAYS_SOFTWARE: "1"
         run: |
-          npm run models
-          npm run models:render
+          xvfb-run --auto-servernum npm run models
+          xvfb-run --auto-servernum npm run models:render
 
       # Compared on the manifest and the generated page rather than on the .glb and .png
       # bytes: the glTF exporter stamps its own version into every file it writes, so a
@@ -593,7 +646,7 @@ jobs:
     # The help screenshots are embedded into the binary, so they have to exist before anything is
     # compiled. This is what makes what ships the current interface rather than whatever was last
     # committed by hand.
-    needs: [metadata, help-screenshots]
+    needs: [metadata, help-screenshots, workspace]
     runs-on: ${{ matrix.runner }}
     env:
       LIGHT_RELEASE_VERSION: ${{ needs.metadata.outputs.version }}
@@ -1269,7 +1322,10 @@ jobs:
   # tab once you have looked at the preview and are happy with it.
   publish-marketing:
     name: Marketing / Promote the previewed gallery
-    if: github.event_name == 'workflow_dispatch' && inputs.promote_marketing
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      inputs.promote_marketing
     runs-on: ubuntu-22.04
     steps:
       - name: Promote the previewed gallery and demo to the live prefix
