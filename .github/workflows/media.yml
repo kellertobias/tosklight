@@ -75,7 +75,21 @@ jobs:
           -- -D warnings
 
       - name: Test
-        run: cargo test -p media-domain -p media-application -p media-audio -p media-citp -p media-codec -p media-http -p media-library -p media-net -p media-playback -p media-render -p media-runtime -p media-server -p media-text
+        shell: bash
+        run: |
+          set -o pipefail
+          if output="$(cargo test -p media-domain -p media-application -p media-audio -p media-citp -p media-codec -p media-http -p media-library -p media-net -p media-playback -p media-render -p media-runtime -p media-server -p media-text 2>&1)"; then
+            printf '%s\n' "$output"
+          else
+            status=$?
+            printf '%s\n' "$output" >&2
+            output="$(printf '%s' "$output" | tail -c 3000)"
+            output="${output//'%'/'%25'}"
+            output="${output//$'\r'/'%0D'}"
+            output="${output//$'\n'/'%0A'}"
+            printf '::error title=Media test failure on %s::%s\n' '${{ matrix.os }}' "$output" >&2
+            exit "$status"
+          fi
 
       # A packaged smoke test exercises the real executable rather than a test harness, so a
       # platform cannot pass by compiling alone.
