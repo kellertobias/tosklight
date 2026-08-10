@@ -70,6 +70,8 @@ test("fast unit tests and comprehensive verification remain distinct", () => {
 	const packageManifest = JSON.parse(read("package.json"));
 	const testScript = read("tools/test.sh");
 	const workflow = read(".github/workflows/release.yml");
+	const workspaceJob =
+		/^ {2}workspace:\n([\s\S]*?)(?=^ {2}[\w-]+:\n)/mu.exec(workflow)?.[1] ?? "";
 
 	assert.equal(packageManifest.scripts["test:unit"], "bash tools/test.sh unit");
 	assert.equal(
@@ -81,6 +83,8 @@ test("fast unit tests and comprehensive verification remain distinct", () => {
 		testScript,
 		/rust_workspace\(\)\{[\s\S]*\(cd "\$UI" && npm run build\)[\s\S]*cargo test/u,
 	);
+	assert.match(workspaceJob, /actions\/setup-node/u);
+	assert.match(workspaceJob, /run: npm ci/u);
 	assert.match(
 		testScript,
 		/verify\(\)\{[\s\S]*architecture[\s\S]*rust_workspace/u,
