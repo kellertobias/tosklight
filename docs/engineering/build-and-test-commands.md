@@ -290,15 +290,13 @@ application merely to validate a build.
 `cargo clippy -- -D warnings`, the tests, and a packaged `--check-configuration` smoke test, over
 every Media package on macOS, Windows, and Linux x86_64 and aarch64.
 
-`.github/workflows/media-release.yml` packages it. Media does **not** ship inside `release.yml`:
-it remains a separate product and the workflow runs as a follow-up (`workflow_run` on the release
-pipeline, `completed`, and only when that run concluded successfully on `main`). Every actual
-ToskLight release builds all four Media targets and attaches them to that version, so the static
-Pages download matrix never points at a current-version Media asset that was omitted merely because
-Media itself had not changed. A successful pipeline run that published no release still does
-nothing.
+`.github/workflows/media-release.yml` is a reusable four-platform component build called by
+`release.yml` immediately after version selection. Media remains a separate product, but its build
+now runs alongside the regular release work instead of following an already-published release.
+Publication still waits for the complete quality gate and for platform-bundle assembly.
 
-The four archives are named `tosklight-media-<version>-<slug>.zip` and are attached, with their own
-`MEDIA-SHA256SUMS`, to the **same** GitHub release the pipeline just published — never a second
-release. `workflow_dispatch` builds the archives without publishing them, for checking that
-packaging still works.
+Each supported platform publishes one `tosklight-bundle-<os>_<arch>.zip`. macOS, Windows, and
+Linux x86_64 bundles contain Desk, Headless, PreViz, and Media; Linux ARM64 contains its supported
+Headless and Media products. The portable show and handbook ship separately as
+`assets-demo-show.show` and `assets-handbook.pdf`; checksums and performance evidence use the
+`report-` prefix.

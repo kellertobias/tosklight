@@ -1,93 +1,30 @@
-name: Media release
+name: Media release components
 
-# The Media Server is a separate product, but every published ToskLight version has a complete,
-# predictable download matrix. This workflow follows a successful release pipeline, builds Media
-# for every supported target, and attaches those archives to the release that run just published.
-# Keeping the build in a follow-up preserves the product boundary without leaving current-version
-# Pages links pointing at assets that were skipped because Media happened not to change.
-
+# Called by the main release pipeline immediately after version selection. Media remains a
+# separate product and build matrix, but no longer waits for an already-published core release.
+# The caller assembles these platform components with Desk, Headless, and PreViz only after every
+# required quality gate succeeds.
 on:
-  workflow_run:
-    workflows: ["CI, release, and Pages"]
-    types: [completed]
-  # Building the archives without publishing them, for anyone checking that packaging still works.
-  workflow_dispatch:
+  workflow_call:
+    inputs:
+      version:
+        description: Semantic release version selected by the caller
+        required: true
+        type: string
 
 permissions:
   contents: read
-
-concurrency:
-  group: media-release-${{ github.event.workflow_run.head_sha || github.sha }}
-  cancel-in-progress: false
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  decide:
-    name: Media release / Decide
-    # Only a successful release run of `main` can have published a release to attach to. A manual
-    # dispatch of `main` builds without publishing, which is why it is allowed through too.
-    if: >-
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
-      (github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.head_branch == 'main' &&
-       github.event.workflow_run.event == 'push')
-    runs-on: ubuntu-22.04
-    outputs:
-      build: ${{ steps.decide.outputs.build }}
-      publish: ${{ steps.decide.outputs.publish }}
-      version: ${{ steps.decide.outputs.version }}
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          fetch-depth: 0
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
-
-      - name: Resolve the release version and publication mode
-        id: decide
-        shell: bash
-        env:
-          HEAD_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
-          DISPATCHED: ${{ github.event_name == 'workflow_dispatch' }}
-        run: |
-          set -euo pipefail
-          git fetch --force --tags origin
-
-          # A successful pipeline run does not necessarily mean a release: a run whose commits were
-          # all `chore` or `docs` publishes nothing, and there is then nothing to attach to.
-          tag="$(git tag --points-at "$HEAD_SHA" --list 'v[0-9]*' | sort -V | tail -1)"
-          if [[ -z "$tag" ]]; then
-            if [[ "$DISPATCHED" != "true" ]]; then
-              echo "That run published no release; there is nothing to attach Media to."
-              {
-                echo "build=false"
-                echo "publish=false"
-                echo "version="
-              } >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-            # A dispatch builds whatever is checked out, against the newest known version.
-            tag="$(git tag --list 'v[0-9]*' --sort=-version:refname | head -1)"
-          fi
-
-          version="${tag#v}"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "publish=$([[ "$DISPATCHED" == "true" ]] && echo false || echo true)" >> "$GITHUB_OUTPUT"
-          echo "build=true" >> "$GITHUB_OUTPUT"
-
   build:
-    name: Media release / ${{ matrix.label }}
-    needs: [decide]
-    if: needs.decide.outputs.build == 'true'
+    name: Media component / ${{ matrix.label }}
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
-        # The supported matrix from the settled decision: macOS on Apple Silicon, Windows on
-        # x86_64, and Linux on both x86_64 and aarch64. Each is built on its own architecture
-        # rather than cross-compiled, because the Media Server links a platform audio host and a
-        # GPU backend and a native build is what the CI gate already proves.
         include:
           - label: macOS (Apple Silicon)
             runner: macos-14
@@ -112,8 +49,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          fetch-depth: 0
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ github.sha }}
 
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
         with:
@@ -130,9 +66,7 @@ jobs:
         with:
           key: media-release-${{ matrix.target }}
 
-      # Audio capture needs ALSA's headers to build at all. The machine genuinely lacking them is
-      # not a platform adapter left unwritten, so the runner is given them.
-      - name: Install the Linux build dependencies
+      - name: Install the Linux audio development files
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
@@ -141,8 +75,6 @@ jobs:
       - name: Install workspace dependencies
         run: npm ci
 
-      # The administration interface is compiled into the executable, so it is built first. What
-      # ships is therefore this commit's interface rather than whatever was last built by hand.
       - name: Build the administration interface
         run: npm run build --prefix apps/media
 
@@ -152,8 +84,6 @@ jobs:
           cargo build --release --locked --target ${{ matrix.target }}
           -p media-server --bin media-server
 
-      # The real executable on the real platform, rather than a test harness: a platform must not
-      # pass packaging by compiling alone.
       - name: Smoke-test the built server
         shell: bash
         env:
@@ -162,83 +92,33 @@ jobs:
           set -euo pipefail
           "$BINARY" --check-configuration
 
-      - name: Stage the release archive
+      - name: Stage the independently built component
         shell: bash
         env:
           SLUG: ${{ matrix.slug }}
           TARGET: ${{ matrix.target }}
           BINARY: ${{ matrix.binary }}
-          VERSION: ${{ needs.decide.outputs.version }}
+          VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
           out=".artifacts/release"
-          tmp="$(npm run --silent artifact-path -- tmp)"
-          mkdir -p "$out" "$tmp"
-
-          stage_root="$(mktemp -d "$tmp/media-release-stage.XXXXXX")"
+          source tools/artifact-paths.sh
+          light_init_artifact_paths "$PWD"
+          mkdir -p "$out" "$LIGHT_TMP_DIR"
+          stage_root="$(mktemp -d "$LIGHT_TMP_DIR/media-component.XXXXXX")"
           trap 'rm -rf -- "$stage_root"' EXIT
           stage="$stage_root/tosklight-media-$VERSION-$SLUG"
           mkdir -p "$stage"
-          # One file: the interface is embedded and nothing is read from disk at startup, so a
-          # Media Server is an executable an operator copies to a machine and runs.
           cp ".artifacts/build/cargo/$TARGET/release/$BINARY" "$stage/"
-
           archive="tosklight-media-$VERSION-$SLUG.zip"
           if [[ "$RUNNER_OS" == "Windows" ]]; then
-            (cd "$(dirname "$stage")" && 7z a -tzip "$OLDPWD/$out/$archive" "$(basename "$stage")")
+            (cd "$stage_root" && 7z a -tzip "$OLDPWD/$out/$archive" "$(basename "$stage")")
           else
-            (cd "$(dirname "$stage")" && zip -q -r "$OLDPWD/$out/$archive" "$(basename "$stage")")
+            (cd "$stage_root" && zip -q -r "$OLDPWD/$out/$archive" "$(basename "$stage")")
           fi
-          ls -la "$out"
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: media-release-${{ matrix.slug }}
-          path: .artifacts/release
+          name: component-media-${{ matrix.slug }}
+          path: .artifacts/release/*
           if-no-files-found: error
-
-  attach:
-    name: Media release / Attach to the release
-    needs: [decide, build]
-    if: needs.decide.outputs.publish == 'true'
-    runs-on: ubuntu-22.04
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
-
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          pattern: media-release-*
-          path: .artifacts/release
-          merge-multiple: true
-
-      - name: Verify every platform produced an archive
-        shell: bash
-        env:
-          VERSION: ${{ needs.decide.outputs.version }}
-        run: |
-          set -euo pipefail
-          for slug in macos-arm64 linux-amd64 linux-arm64 windows-amd64; do
-            test -f ".artifacts/release/tosklight-media-$VERSION-$slug.zip"
-          done
-          # A checksum file of its own, so adding these to an existing release does not have to
-          # rewrite the checksums the pipeline already published.
-          (cd .artifacts/release && sha256sum ./*.zip > MEDIA-SHA256SUMS)
-          ls -la .artifacts/release
-
-      # The same release the pipeline just published, not a second one: an operator looking for
-      # version 2.4.0 finds the desk and the Media Server in one place.
-      - name: Attach the archives to the release
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ needs.decide.outputs.version }}
-        run: |
-          set -euo pipefail
-          gh release view "v$VERSION" --json tagName --jq .tagName
-          gh release upload "v$VERSION" --clobber \
-            .artifacts/release/tosklight-media-"$VERSION"-*.zip \
-            .artifacts/release/MEDIA-SHA256SUMS

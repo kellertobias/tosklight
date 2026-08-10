@@ -166,7 +166,7 @@ test("the 1,024-fixture indicator uses 60 Hz green and 40 Hz yellow thresholds",
 	assert.equal(status.patch.server.single_fixture.p95_microseconds, 0);
 	assert.match(
 		status.report_url,
-		/tosklight-performance-report-1\.2\.3\.zip$/u,
+		/report-performance\.zip$/u,
 	);
 
 	const yellow = statusDocument(

@@ -689,6 +689,16 @@ jobs:
           path: assets/demo.show
           if-no-files-found: error
 
+  # Media is built as its own four-platform matrix as soon as the release version is known. The
+  # platform bundle gate below is what joins products; Media does not wait for a published release.
+  media-build:
+    name: Build / Media release components
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: metadata
+    uses: ./.github/workflows/media-release.yml
+    with:
+      version: ${{ needs.metadata.outputs.version }}
+
   build:
     name: Build / Release archive / ${{ matrix.label }}
     if: github.event_name != 'pull_request'
@@ -869,9 +879,7 @@ jobs:
               cp "$bundle"/appimage/*.AppImage "$out/tosklight-$version-linux-amd64.AppImage"
               cp "$bundle"/deb/*.deb "$out/tosklight-$version-linux-amd64.deb"
               ;;
-            linux-arm64)
-              cp "assets/demo.show" "$out/tosklight-demo-show-$version.show"
-              ;;
+            linux-arm64) ;;
             windows-amd64)
               # Named rather than globbed: the Viz Editor writes its own installer into the same
               # directory, and a bare *-setup.exe would pick up whichever one it found first.
@@ -908,13 +916,17 @@ jobs:
             "$binary" --demo --verify
           fi
 
-      # The demo the editor offers is generated from this commit's rig and fixture packages, not
-      # copied from a file somebody exported once. It has to exist before the bundle is assembled,
-      # because the bundle packages it.
-      - name: Generate the packaged demo show
+      # The API-generated show is produced once by the dedicated demo-show job. Stage that exact
+      # artifact where the Tauri resource overlay expects it instead of regenerating it per target.
+      - name: Stage the generated demo show for application bundles
         if: matrix.viz
         shell: bash
-        run: npm run demo-show
+        run: |
+          set -euo pipefail
+          source tools/artifact-paths.sh
+          light_init_artifact_paths "$PWD"
+          mkdir -p "$LIGHT_DEMO_SHOW_DIR"
+          cp assets/demo.show "$LIGHT_DEMO_SHOW_DIR/demo-show.show"
 
       - name: Build the ToskLight Viz Editor frontend
         if: matrix.viz
@@ -1007,8 +1019,65 @@ jobs:
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: release-${{ matrix.slug }}
+          name: component-core-${{ matrix.slug }}
           path: .artifacts/release/*
+          if-no-files-found: error
+
+  bundle:
+    name: Build / Product bundle / ${{ matrix.label }}
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [metadata, build, media-build]
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: macOS (Apple Silicon)
+            runner: macos-14
+            slug: macos-arm64
+          - label: Linux (x86_64)
+            runner: ubuntu-22.04
+            slug: linux-amd64
+          - label: Linux (ARM64 / Raspberry Pi)
+            runner: ubuntu-22.04
+            slug: linux-arm64
+          - label: Windows (x86_64)
+            runner: windows-2022
+            slug: windows-amd64
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: component-core-${{ matrix.slug }}
+          path: .artifacts/components
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: component-media-${{ matrix.slug }}
+          path: .artifacts/components
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        if: matrix.slug == 'linux-amd64' || matrix.slug == 'windows-amd64'
+        with:
+          name: default-demo-show
+          path: .artifacts/components
+
+      - name: Assemble one operator-facing platform bundle
+        shell: bash
+        run: >-
+          bash tools/assemble-release-bundle.sh
+          ${{ matrix.slug }}
+          ${{ needs.metadata.outputs.version }}
+          .artifacts/components
+          .artifacts/release
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-bundle-${{ matrix.slug }}
+          path: .artifacts/release/tosklight-bundle-*.zip
           if-no-files-found: error
 
   pages-build:
@@ -1106,6 +1175,7 @@ jobs:
       - manual
       - help-screenshots
       - build
+      - bundle
     runs-on: ubuntu-22.04
     permissions:
       contents: write
@@ -1132,44 +1202,49 @@ jobs:
           path: .artifacts/release
           merge-multiple: true
 
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: operator-manual
+          path: .artifacts/generated/manual
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: default-demo-show
+          path: .artifacts/generated/demo-show
+
       - name: Verify release artifacts and generate checksums
         shell: bash
         env:
           VERSION: ${{ needs.metadata.outputs.version }}
         run: |
           set -euo pipefail
+          cp .artifacts/generated/demo-show/demo.show \
+            .artifacts/release/assets-demo-show.show
+          cp .artifacts/generated/manual/pdf/tosklight-manual.pdf \
+            .artifacts/release/assets-handbook.pdf
           for required in \
-            "light-headless-$VERSION-macos-arm64.zip" \
-            "tosklight-$VERSION-macos-arm64.zip" \
-            "tosklight-visualizer-$VERSION-macos-arm64.zip" \
-            "light-headless-$VERSION-linux-amd64.zip" \
-            "tosklight-$VERSION-linux-amd64.AppImage" \
-            "tosklight-$VERSION-linux-amd64.deb" \
-            "tosklight-visualizer-$VERSION-linux-amd64.zip" \
-            "light-headless-$VERSION-linux-arm64.zip" \
-            "light-headless-$VERSION-windows-amd64.zip" \
-            "tosklight-$VERSION-windows-amd64-setup.exe" \
-            "tosklight-viz-$VERSION-macos-arm64.zip" \
-            "tosklight-viz-$VERSION-windows-amd64-setup.exe" \
-            "tosklight-visualizer-$VERSION-windows-amd64.zip" \
-            "tosklight-demo-show-$VERSION.show"
+            "tosklight-bundle-macos_arm64.zip" \
+            "tosklight-bundle-linux_amd64.zip" \
+            "tosklight-bundle-linux_arm64.zip" \
+            "tosklight-bundle-windows_amd64.zip" \
+            "assets-demo-show.show" \
+            "assets-handbook.pdf"
           do
             test -f ".artifacts/release/$required"
           done
-          unzip -Z1 ".artifacts/release/light-headless-$VERSION-linux-amd64.zip" |
-            grep -E '/light-benchmark$' >/dev/null
-          # The macOS editor is only shippable if it carries the visualizer it drives.
-          unzip -Z1 ".artifacts/release/tosklight-viz-$VERSION-macos-arm64.zip" |
-            grep -F 'Contents/Resources/ToskLight Visualizer.app/Contents/MacOS/ToskLight Visualizer' >/dev/null
-          unzip -Z1 ".artifacts/release/tosklight-visualizer-$VERSION-macos-arm64.zip" |
-            grep -F 'ToskLight Visualizer.app/Contents/MacOS/light-headless' >/dev/null
-          for binary in viz-renderer light-headless viz-editor; do
-            unzip -Z1 ".artifacts/release/tosklight-visualizer-$VERSION-linux-amd64.zip" |
-              grep -E "/$binary$" >/dev/null
-            unzip -Z1 ".artifacts/release/tosklight-visualizer-$VERSION-windows-amd64.zip" |
-              grep -E "/$binary\\.exe$" >/dev/null
+          for slug in macos_arm64 linux_amd64 windows_amd64; do
+            for product in desk headless previz media; do
+              unzip -Z1 ".artifacts/release/tosklight-bundle-$slug.zip" |
+                grep -F "tosklight-$product-$slug" >/dev/null
+            done
           done
-          (cd .artifacts/release && sha256sum * > SHA256SUMS)
+          for product in headless media; do
+            unzip -Z1 .artifacts/release/tosklight-bundle-linux_arm64.zip |
+              grep -F "tosklight-$product-linux_arm64" >/dev/null
+          done
+          unzip -Z1 .artifacts/release/tosklight-bundle-linux_amd64.zip |
+            grep -E '/light-benchmark$' >/dev/null
+          (cd .artifacts/release && sha256sum * > report-checksums.txt)
 
       - name: Create the tag-only semantic release
         env:
@@ -1220,7 +1295,7 @@ jobs:
           mkdir -p "$out"
           release_url="https://github.com/${GITHUB_REPOSITORY}/releases/tag/v${VERSION}"
           if [[ "$RELEASE_CREATED" == "true" ]]; then
-            archive="light-headless-${VERSION}-linux-amd64.zip"
+            archive="tosklight-bundle-linux_amd64.zip"
             tmp=".artifacts/tmp/release-performance"
             rm -rf -- "$tmp"
             mkdir -p "$tmp/unpacked"
@@ -1263,18 +1338,18 @@ jobs:
               ' "$out/status.json" "$release_url"
             fi
 
-            cp "$out/status.json" "$out/tosklight-performance-status-${VERSION}.json"
-            (cd "$out" && zip -q "tosklight-performance-report-${VERSION}.zip" ./*.json ./*.log ./*.md 2>/dev/null || \
-              zip -q "tosklight-performance-report-${VERSION}.zip" ./*.json)
+            cp "$out/status.json" "$out/report-performance-status.json"
+            (cd "$out" && zip -q "report-performance.zip" ./*.json ./*.log ./*.md 2>/dev/null || \
+              zip -q "report-performance.zip" ./*.json)
             gh release upload "v${VERSION}" --clobber \
-              "$out/tosklight-performance-status-${VERSION}.json#Performance status" \
-              "$out/tosklight-performance-report-${VERSION}.zip#Detailed performance report"
+              "$out/report-performance-status.json#Performance status" \
+              "$out/report-performance.zip#Detailed performance report"
           else
             gh release download "v${VERSION}" \
-              --pattern "tosklight-performance-status-${VERSION}.json" \
+              --pattern "report-performance-status.json" \
               --dir "$out" || true
-            if [[ -f "$out/tosklight-performance-status-${VERSION}.json" ]]; then
-              cp "$out/tosklight-performance-status-${VERSION}.json" "$out/status.json"
+            if [[ -f "$out/report-performance-status.json" ]]; then
+              cp "$out/report-performance-status.json" "$out/status.json"
             else
               node -e '
                 const fs = require("node:fs");

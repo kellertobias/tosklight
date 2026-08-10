@@ -134,17 +134,15 @@ test("release packaging and Pages cover the supported product matrix", () => {
 	const landingPage = read("tools/render-landing-page.mjs");
 
 	for (const asset of [
-		"tosklight-$VERSION-macos-arm64.zip",
-		"light-headless-$VERSION-macos-arm64.zip",
-		"tosklight-visualizer-$VERSION-macos-arm64.zip",
-		"tosklight-$VERSION-windows-amd64-setup.exe",
-		"light-headless-$VERSION-windows-amd64.zip",
-		"tosklight-visualizer-$VERSION-windows-amd64.zip",
-		"tosklight-$VERSION-linux-amd64.AppImage",
-		"light-headless-$VERSION-linux-amd64.zip",
-		"tosklight-visualizer-$VERSION-linux-amd64.zip",
-		"light-headless-$VERSION-linux-arm64.zip",
-		"tosklight-demo-show-$VERSION.show",
+		"tosklight-bundle-macos_arm64.zip",
+		"tosklight-bundle-windows_amd64.zip",
+		"tosklight-bundle-linux_amd64.zip",
+		"tosklight-bundle-linux_arm64.zip",
+		"assets-demo-show.show",
+		"assets-handbook.pdf",
+		"report-checksums.txt",
+		"report-performance-status.json",
+		"report-performance.zip",
 	]) {
 		assert.ok(workflow.includes(asset), `release workflow should require ${asset}`);
 	}
@@ -153,33 +151,29 @@ test("release packaging and Pages cover the supported product matrix", () => {
 		/slug: linux-amd64[\s\S]*?desktop: true[\s\S]*?viz: true/u,
 	);
 	assert.match(workflow, /binary="[^"]*viz-renderer\$suffix"[\s\S]*--demo --verify/u);
-	assert.match(mediaWorkflow, /echo "build=true" >> "\$GITHUB_OUTPUT"/u);
-	assert.doesNotMatch(mediaWorkflow, /MEDIA_PATHS|git diff --quiet/u);
+	assert.match(workflow, /media-build:[\s\S]*?uses: \.\/\.github\/workflows\/media-release\.yml/u);
+	assert.match(mediaWorkflow, /workflow_call:/u);
+	assert.doesNotMatch(mediaWorkflow, /workflow_run|gh release upload/u);
 	assert.match(mediaQualityWorkflow, /\.github\/workflows\/media-release\.yml/u);
 
+	for (const slug of ["macos_arm64", "windows_amd64", "linux_amd64", "linux_arm64"]) {
+		assert.ok(
+			landingPage.includes(`tosklight-bundle-${slug}.zip`),
+			`Pages should link the platform bundle for ${slug}`,
+		);
+	}
 	for (const slug of ["macos-arm64", "windows-amd64", "linux-amd64", "linux-arm64"]) {
-		assert.ok(
-			mediaWorkflow.includes(`slug: ${slug}`),
-			`Media release should build ${slug}`,
-		);
-		assert.ok(
-			landingPage.includes(`tosklight-media-\${v}-${slug}.zip`),
-			`Pages should link the Media Server for ${slug}`,
-		);
+		assert.ok(mediaWorkflow.includes(`slug: ${slug}`), `Media should build ${slug}`);
 	}
-	for (const slug of ["macos-arm64", "windows-amd64", "linux-amd64"]) {
-		assert.ok(
-			landingPage.includes(`tosklight-visualizer-\${v}-${slug}.zip`),
-			`Pages should link ToskLight PreViz for ${slug}`,
-		);
-	}
-	assert.match(landingPage, /tosklight-demo-show-\$\{v\}\.show/u);
+	assert.match(landingPage, /assets-demo-show\.show/u);
+	assert.match(landingPage, /assets-handbook\.pdf/u);
 	assert.match(workflow, /name: Release \/ Generate default demo show/u);
 	assert.match(workflow, /npm run test:demo-show/u);
 	assert.match(
 		workflow,
 		/Generate and validate the completed portable demo show through the API/u,
 	);
+	assert.doesNotMatch(workflow, /run: npm run demo-show(?:\s|$)/u);
 	assert.match(workflow, /name: playwright-application-\$\{\{ github\.sha \}\}/u);
 	assert.doesNotMatch(
 		workflow,
@@ -207,14 +201,17 @@ test("non-main branch pushes run validation without release work", () => {
 	}
 	assert.match(
 		workflow,
+		/\n  media-build:\n[\s\S]*?\n    if: [^\n]*github\.ref == 'refs\/heads\/main'/u,
+		"media-build should be main-only",
+	);
+	assert.match(
+		workflow,
 		/unit:[\s\S]*?run: npm run test:architecture[\s\S]*?run: npm run test:unit/u,
 	);
 	assert.match(
 		workflow,
 		/publish-marketing:[\s\S]*?github\.ref == 'refs\/heads\/main'/u,
 	);
-	assert.match(
-		mediaRelease,
-		/workflow_dispatch' && github\.ref == 'refs\/heads\/main'/u,
-	);
+	assert.match(mediaRelease, /workflow_call:/u);
+	assert.doesNotMatch(mediaRelease, /workflow_dispatch|workflow_run/u);
 });

@@ -35,7 +35,7 @@ function measuredStatus(status = "healthy") {
 			url: "https://github.com/kellertobias/tosklight/releases/tag/v2.4.6",
 		},
 		report_url:
-			"https://github.com/kellertobias/tosklight/releases/download/v2.4.6/tosklight-performance-report-2.4.6.zip",
+			"https://github.com/kellertobias/tosklight/releases/download/v2.4.6/report-performance.zip",
 		evidence: {
 			kind: "measured",
 			baseline: {
@@ -254,7 +254,7 @@ test("the performance report link is a direct release asset URL", () => {
 	delete status.report_url;
 	assert.equal(
 		performanceReportUrl(status),
-		"https://github.com/kellertobias/tosklight/releases/download/v2.4.6/tosklight-performance-report-2.4.6.zip",
+		"https://github.com/kellertobias/tosklight/releases/download/v2.4.6/report-performance.zip",
 	);
 });
 
@@ -304,7 +304,7 @@ test("landing-page assembly writes the same normalized object used by the HTML",
 			"utf8",
 		);
 		assert.match(page, /87\.5 Hz/u);
-		assert.match(page, /tosklight-performance-report-2\.4\.6\.zip/u);
+		assert.match(page, /report-performance\.zip/u);
 	} finally {
 		rmSync(directory, { recursive: true, force: true });
 	}
