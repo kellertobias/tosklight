@@ -122,9 +122,11 @@ export function useSetupWindowController() {
 		const deskFields = configurationFieldsForSection(section).filter((field) =>
 			dirtyFields.current.has(field),
 		);
-		const deskConfiguration = configuration
-			? mergeConfigurationFields(configuration, draft, deskFields)
-			: null;
+		const deskConfiguration = configurationForSave(
+			configuration,
+			draft,
+			deskFields,
+		);
 		pendingSave.current = deskConfiguration
 			? { fields: deskFields, configuration: deskConfiguration }
 			: null;
@@ -324,6 +326,15 @@ export function mergeConfigurationFields(
 	const merged = { ...base };
 	for (const field of fields) assignField(merged, draft, field);
 	return merged;
+}
+
+export function configurationForSave(
+	base: DeskConfiguration | null,
+	draft: DeskConfiguration,
+	fields: readonly DeskConfigurationField[],
+) {
+	if (!base || fields.length === 0) return null;
+	return mergeConfigurationFields(base, draft, fields);
 }
 
 function assignField(

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { DeskConfiguration } from "../../api/types";
 import {
+	configurationForSave,
 	configurationFieldsForSection,
 	mergeConfigurationFields,
 } from "./controller";
@@ -43,6 +44,19 @@ describe("Desk Setup page-scoped configuration saves", () => {
 			"preload_physical_playback_actions",
 			"preload_virtual_playback_actions",
 		]);
+	});
+
+	it("does not issue an unrelated desk write from the Attributes page", () => {
+		const saved = configuration();
+		const draft = configuration();
+
+		expect(
+			configurationForSave(
+				saved,
+				draft,
+				configurationFieldsForSection("preferences-attributes"),
+			),
+		).toBeNull();
 	});
 
 	it("saves Cuelist playback defaults without absorbing fields from another page", () => {
