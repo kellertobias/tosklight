@@ -268,6 +268,19 @@ impl Options {
     /// bare launch is somebody opening the application on its own, with no console and no file in
     /// mind: that is the planning window's case, not an empty picture.
     pub fn startup(&self) -> Startup {
+        self.startup_with_recent_show(viz_document::standalone::recent_show(), desk_launched())
+    }
+
+    /// Resolve launch precedence from already-discovered machine state.
+    ///
+    /// Keeping discovery outside the decision makes the ordering testable without reading the
+    /// operator's real recent-show record. Native launch verification deliberately creates that
+    /// record, and a unit test must have the same answer before and after the product is exercised.
+    fn startup_with_recent_show(
+        &self,
+        recent_show: Option<PathBuf>,
+        launched_by_desk: bool,
+    ) -> Startup {
         // The desk started this and owns it completely: it says what to draw over the channel, so
         // nothing else — not a remembered document, not the planning window — may take over.
         if self.helper {
@@ -279,14 +292,14 @@ impl Options {
         if let Some(path) = self.show.as_ref() {
             return Startup::Show(path.clone());
         }
-        if self.desk_requested || desk_launched() {
+        if self.desk_requested || launched_by_desk {
             return Startup::Desk;
         }
         // Nothing was named, so this is somebody opening the product on its own. Show them the rig
         // they were last looking at rather than an empty picture: one application means the
         // document the editor had open is this launch's document too. A record naming a show that
         // has since been moved or deleted is no record at all, and falls through to the editor.
-        if let Some(recent) = viz_document::standalone::recent_show() {
+        if let Some(recent) = recent_show {
             return Startup::Show(recent);
         }
         Startup::Planning
@@ -605,7 +618,13 @@ impl Preferences {
             match key {
                 // A launch that named what to look at has already chosen its source; only a
                 // launch that named nothing goes back to the one the operator left selected.
-                "source" if matches!(options.startup(), Startup::Planning) => {
+                "source"
+                    if !options.helper
+                        && !options.demo
+                        && options.show.is_none()
+                        && !options.desk_requested
+                        && !desk_launched() =>
+                {
                     if let Some(source) = ProviderKind::from_wire(value) {
                         self.source = source;
                     }
@@ -766,7 +785,10 @@ mod tests {
         // Nobody named a console and nobody named a file: there is nothing to draw and no way to
         // say what to draw, so the operator gets somewhere to choose.
         let options = Options::from_arguments(arguments(&[])).unwrap();
-        assert_eq!(options.startup(), Startup::Planning);
+        assert_eq!(
+            options.startup_with_recent_show(None, false),
+            Startup::Planning
+        );
     }
 
     #[test]

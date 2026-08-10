@@ -674,6 +674,14 @@ visualizer_names_a_source() {
   return 1
 }
 
+# A standalone visualizer can open a show file after launch, including from its planning session.
+# Build the private server before exporting its path so the native UI never advertises a helper
+# that does not exist yet.
+build_visualizer_headless() {
+  echo "Building the standalone visualizer's private show server..."
+  cargo build --release --manifest-path "$ROOT/Cargo.toml" -p light-headless --bin light-headless
+}
+
 open_visualizer() {
   require cargo
   require curl
@@ -682,12 +690,10 @@ open_visualizer() {
   # The planning window is the patch sheet the visualizer opens when nothing else was named, so it
   # is part of opening the visualizer rather than a separate thing to remember to build.
   build_viz_editor
+  build_visualizer_headless
   if visualizer_names_a_source "$@"; then
-    # A named show file is served by a private server the visualizer starts itself, so that binary
-    # has to exist; a named desk is the running one.
-    if printf '%s\n' "$@" | grep -qx -- "--show"; then
-      cargo build --release --manifest-path "$ROOT/Cargo.toml" -p light-headless --bin light-headless
-    else
+    # A named desk is the running one. A named show uses the private server built above.
+    if ! printf '%s\n' "$@" | grep -qx -- "--show"; then
       ensure_desk_server_for_visualizer
     fi
   else

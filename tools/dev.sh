@@ -48,7 +48,19 @@ run_headless() {
   if [[ "$reload" == true ]]; then
     ensure_cargo_watch
     echo "Starting Light headless with hot reload (restarts on .rs changes)..."
-    exec cargo watch --why -x "run ${args[*]}"
+    # The workspace target directory lives under .artifacts instead of Cargo's conventional
+    # target/. Scope the watcher to Rust workspace inputs so cargo-watch cannot recursively scan
+    # generated artifacts before its first run or retrigger itself from compiler output. With
+    # explicit source roots there is also no reason to crawl the repository for ignore files.
+    exec cargo watch \
+      --why \
+      --no-vcs-ignores \
+      --no-dot-ignores \
+      --watch "$ROOT/apps/light-headless" \
+      --watch "$ROOT/crates" \
+      --watch "$ROOT/Cargo.toml" \
+      --watch "$ROOT/Cargo.lock" \
+      -x "run ${args[*]}"
   fi
   echo "Starting Light headless..."
   exec cargo run "${args[@]}"

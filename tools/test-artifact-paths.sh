@@ -192,4 +192,13 @@ grep -Fq 'cacheDir: `${artifactPaths.viteCache}/ui-library-storybook`' "$ROOT/ap
 grep -Fq 'cacheDir: `${artifactPaths.viteCache}/root`' "$ROOT/vitest.config.ts"
 grep -Fq 'config="$(npm run --silent artifact-path -- tmp)/tauri-control-release.json"' "$ROOT/.github/workflows/release.yml"
 
+# The canonical headless hot-reload command must not scan the custom Cargo target under
+# .artifacts. Explicit source roots keep first startup bounded and avoid compiler-output feedback.
+grep -Fq -- '--no-vcs-ignores' "$ROOT/tools/dev.sh"
+grep -Fq -- '--no-dot-ignores' "$ROOT/tools/dev.sh"
+grep -Fq -- '--watch "$ROOT/apps/light-headless"' "$ROOT/tools/dev.sh"
+grep -Fq -- '--watch "$ROOT/crates"' "$ROOT/tools/dev.sh"
+grep -Fq -- '--watch "$ROOT/Cargo.toml"' "$ROOT/tools/dev.sh"
+grep -Fq -- '--watch "$ROOT/Cargo.lock"' "$ROOT/tools/dev.sh"
+
 echo "Artifact path, migration, override, and cleanup safety tests passed."

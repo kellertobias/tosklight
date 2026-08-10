@@ -45,6 +45,27 @@ test("repository Tauri overlays disable a duplicate frontend build", () => {
 	assert.match(configWriter, /beforeBuildCommand: ""/u);
 });
 
+test("open:viz builds every helper path it exports", () => {
+	const buildScript = read("tools/build.sh");
+	const helperBuild = shellFunction(
+		buildScript,
+		"build_visualizer_headless",
+		"open_visualizer",
+	);
+	const openStart = buildScript.indexOf("open_visualizer() {");
+	const openEnd = buildScript.indexOf("\ncase ", openStart);
+	assert.notEqual(openStart, -1, "open_visualizer should exist");
+	assert.notEqual(openEnd, -1, "the command dispatcher should follow open_visualizer");
+	const openVisualizer = buildScript.slice(openStart, openEnd);
+
+	assert.match(helperBuild, /-p light-headless --bin light-headless/u);
+	assert.match(openVisualizer, /build_visualizer_headless/u);
+	assert.match(
+		openVisualizer,
+		/TOSKLIGHT_VIZ_HEADLESS="\$TARGET_DIR\/release\/light-headless"/u,
+	);
+});
+
 test("fast unit tests and comprehensive verification remain distinct", () => {
 	const packageManifest = JSON.parse(read("package.json"));
 	const testScript = read("tools/test.sh");
