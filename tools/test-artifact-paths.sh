@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 
-set -euo pipefail
+set -Eeuo pipefail
+
+report_failure() {
+  local status=$?
+  local line="${BASH_LINENO[0]:-1}"
+  printf '::error file=tools/test-artifact-paths.sh,line=%s,title=Artifact path contract failed::Assertion or command exited with status %s\n' "$line" "$status" >&2
+  exit "$status"
+}
+trap report_failure ERR
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/tools/artifact-paths.sh"
