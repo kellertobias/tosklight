@@ -2,6 +2,7 @@ import { CommandLine, type CommandStatus } from "@tosklight/ui";
 import {
 	type Dispatch,
 	type SetStateAction,
+	useCallback,
 	useEffect,
 	useMemo,
 	useRef,
@@ -13,7 +14,6 @@ import {
 	useContentErrorHistory,
 } from "../../features/commandHistory/useContentErrorHistory";
 import { useSetInteraction } from "../../features/controlSurfaceInteraction/SetInteractionProvider";
-import { useControlSurfacePolicy } from "./ControlSurfaceMode";
 import {
 	useActiveTimecode,
 	useFrameRateHz,
@@ -27,17 +27,18 @@ import {
 	useServerError,
 } from "../../features/shellStatus/ShellStatusState";
 import { useApp } from "../../state/AppContext";
+import { useControlSurfacePolicy } from "./ControlSurfaceMode";
 import { useCommandLineShortcuts } from "./commandLine/useCommandLineShortcuts";
 import { useCommandLineSurface } from "./commandLine/useCommandLineSurface";
 import { useRecordGesture } from "./commandLine/useRecordGesture";
 import { useNumericPadController } from "./numericPad/useNumericPadController";
 import "./CommandLineHistory.css";
+import { useDeskStateDiagnostics } from "../../features/deskState/DeskStateDiagnosticsState";
+import { requestSystemControlsTab } from "../../features/deskState/deskStateDiagnostics";
 import { useProgrammerPreloadLifecycleView } from "../../features/programmerPreloadLifecycle/ProgrammerPreloadLifecycleView";
 import { useProgrammerPreloadPlaybackQueueView } from "../../features/programmerPreloadPlaybackQueue/ProgrammerPreloadPlaybackQueueView";
 import { useProgrammerValuesActivity } from "../../features/programmerValues/useProgrammerValuesActivity";
 import { openUpdateTargetMenu } from "./updateWorkflow";
-import { requestSystemControlsTab } from "../../features/deskState/deskStateDiagnostics";
-import { useDeskStateDiagnostics } from "../../features/deskState/DeskStateDiagnosticsState";
 
 const queuedPlaybackLabels = {
 	back: "GO MINUS",
@@ -70,15 +71,23 @@ function useCommandErrors(setCompleted: Dispatch<SetStateAction<boolean>>) {
 	const shellStatus = useShellStatusActions();
 	const serverError = useServerError();
 	const [commandError, setCommandError] = useState<string | null>(null);
+	const commandErrorRef = useRef<string | null>(null);
+	const updateCommandError = useCallback((error: string | null) => {
+		commandErrorRef.current = error;
+		setCommandError(error);
+	}, []);
 	const [persistentError, setPersistentError] = useState<string | null>(null);
 	const [errorOpen, setErrorOpen] = useState(false);
 	useEffect(() => {
 		if (serverError) setPersistentError(serverError);
 	}, [serverError]);
 	useEffect(() => {
+		if (commandError && serverError) updateCommandError(serverError);
+	}, [serverError, commandError, updateCommandError]);
+	useEffect(() => {
 		const showCommandError = (event: Event) => {
 			setCompleted(false);
-			setCommandError(
+			updateCommandError(
 				(event as CustomEvent<string>).detail ||
 					"The command could not be executed.",
 			);
@@ -86,9 +95,9 @@ function useCommandErrors(setCompleted: Dispatch<SetStateAction<boolean>>) {
 		window.addEventListener("light:command-error", showCommandError);
 		return () =>
 			window.removeEventListener("light:command-error", showCommandError);
-	}, [setCompleted]);
+	}, [setCompleted, updateCommandError]);
 	const acknowledgeCommand = () => {
-		setCommandError(null);
+		updateCommandError(null);
 		shellStatus?.dismissError();
 	};
 	const acknowledgePersistent = () => {
@@ -98,7 +107,8 @@ function useCommandErrors(setCompleted: Dispatch<SetStateAction<boolean>>) {
 	};
 	return {
 		commandError,
-		setCommandError,
+		setCommandError: updateCommandError,
+		hasCommandError: () => commandErrorRef.current !== null,
 		persistentError,
 		errorOpen,
 		setErrorOpen,
@@ -175,6 +185,10 @@ function useCommandLineBarModel() {
 			dispatch({ type: "SET_STORE_ARMED", value: false });
 		if (ok && state.updateArmed)
 			dispatch({ type: "SET_UPDATE_ARMED", value: false });
+		if (!ok && !errors.hasCommandError())
+			errors.setCommandError(
+				serverError ?? "The command could not be executed.",
+			);
 	};
 	const toggleRecord = () => {
 		const armed = !state.storeArmed;

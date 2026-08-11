@@ -1,4 +1,85 @@
 #[tokio::test]
+async fn rejected_command_line_does_not_poison_later_preload_execution() {
+    let (state, data_dir) = test_state();
+    let base = schema_v2_direct_fixture().0;
+    let fixtures = (1..=3)
+        .map(|number| {
+            let mut fixture = base.clone();
+            fixture.fixture_id = light_core::FixtureId::new();
+            fixture.fixture_number = Some(number);
+            fixture.address = Some(1 + (number as u16 - 1) * 3);
+            fixture
+        })
+        .collect::<Vec<_>>();
+    state
+        .output
+        .replace_snapshot(EngineSnapshot {
+            fixtures: fixtures.clone().into(),
+            revision: 1,
+            ..EngineSnapshot::default()
+        })
+        .unwrap();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let session = authenticate_token(&state, &token).unwrap();
+    assert!(state.programming.arm_preload(session.id, true));
+
+    let execute = |request_id: &str, value: &str| {
+        dispatch_live_action(
+            &state,
+            &session,
+            live_action_frame(
+                &session,
+                request_id,
+                serde_json::from_value(serde_json::json!({
+                    "type": "command_line_execute",
+                    "request": {"value": value}
+                }))
+                .unwrap(),
+            ),
+        )
+    };
+
+    let first = execute("preload-valid-before", "FIXTURE 1 AT 25");
+    assert!(first.ok, "{:?}", first.error);
+
+    let invalid_command = "FIXTURE 2 THRU 3 + 1 AT NOPE";
+    let invalid = execute("preload-invalid-between", invalid_command);
+    assert!(!invalid.ok);
+    assert_eq!(invalid.error.as_deref(), Some("level must be a percentage or FULL"));
+    let after_invalid = state.programming.get(session.id).unwrap();
+    assert_eq!(after_invalid.command_line, invalid_command);
+    assert_eq!(after_invalid.selected, vec![fixtures[0].fixture_id]);
+    assert_eq!(after_invalid.preload_pending.len(), 1);
+
+    let last = execute("preload-valid-after", "AT 75");
+    assert!(last.ok, "{:?}", last.error);
+    let programmer = state.programming.get(session.id).unwrap();
+    assert_eq!(programmer.selected, vec![fixtures[0].fixture_id]);
+    assert_eq!(programmer.preload_pending.len(), 1);
+    assert_eq!(
+        programmer.preload_pending[0].fixture_id,
+        fixtures[0].fixture_id
+    );
+    assert_eq!(
+        programmer.preload_pending[0].value,
+        light_core::AttributeValue::Normalized(0.75)
+    );
+    assert!(programmer
+        .preload_pending
+        .iter()
+        .all(|value| value.fixture_id != fixtures[1].fixture_id
+            && value.fixture_id != fixtures[2].fixture_id));
+    let history = state.programming.command_history(session.desk.id);
+    assert!(history.iter().any(|entry| {
+        entry.command == invalid_command
+            && entry.status == "rejected"
+            && entry.feedback == "level must be a percentage or FULL"
+    }));
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
 async fn programmer_set_many_validates_then_applies_one_faded_undo_step() {
     let (state, data_dir) = test_state();
     let fixture = schema_v2_direct_fixture().0;

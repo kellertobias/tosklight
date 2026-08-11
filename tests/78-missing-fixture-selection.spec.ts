@@ -63,6 +63,52 @@ test("FIXTURE-SELECTION-005 @ui › missing fixture IDs are skipped and Fixture 
 	);
 });
 
+test("TL-164 @ui › a rejected THRU/PLUS entry cannot poison later Preload work", async ({
+	api,
+	desk,
+	page,
+	show,
+}) => {
+	const fixtureOne = (await readPatchSnapshot(api, show.id)).fixtures.find(
+		(fixture) => fixture.fixture_number === 1,
+	);
+	if (!fixtureOne) throw new Error("The default show is missing Fixture 1");
+	await desk.open(api.baseUrl);
+	await page.getByRole("button", { name: "PRELOAD", exact: true }).click();
+
+	await executeVisibleCommand(page, "FIXTURE 1 AT 25");
+	const invalid = "FIXTURE 2 THRU 3 + 1 AT NOPE";
+	await executeVisibleCommand(page, invalid, false);
+	const input = page.getByRole("textbox", { name: "Command line" });
+	await expect(input).toHaveValue(invalid);
+	await expect(
+		page
+			.getByRole("dialog", { name: "Command line history" })
+			.getByRole("alert"),
+	).toContainText("level must be a percentage or FULL");
+
+	await input.fill("AT 75");
+	await input.press("Enter");
+	await expect(input).toHaveClass(/completed/u);
+	await expectProgrammer(api, (programmer) => {
+		expect(programmer.preload_pending).toHaveLength(1);
+		expect(programmer.preload_pending[0]).toMatchObject({
+			fixture_id: fixtureOne.fixture_id,
+			value: { kind: "normalized", value: 0.75 },
+		});
+	});
+
+	await page.getByRole("button", { name: /^PRELOAD GO\b/u }).click();
+	await expectProgrammer(api, (programmer) => {
+		expect(programmer.preload_pending).toEqual([]);
+		expect(programmer.preload_active).toHaveLength(1);
+		expect(programmer.preload_active[0]).toMatchObject({
+			fixture_id: fixtureOne.fixture_id,
+			value: { kind: "normalized", value: 0.75 },
+		});
+	});
+});
+
 test("CLOCK-002 @ui › larger clock seconds stay inside the unchanged clock layout with and without attached hardware", async ({
 	api,
 	bench,

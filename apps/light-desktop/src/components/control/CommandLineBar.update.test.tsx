@@ -8,6 +8,11 @@ import {
 import { Button } from "@tosklight/ui";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { registerControlSurfaceTarget } from "../../features/controlSurfaceInteraction/registry";
+import { DeskStateDiagnosticsProvider } from "../../features/deskState/DeskStateDiagnosticsState";
+import {
+	requestSystemControlsTab,
+	useRequestedSystemControlsTab,
+} from "../../features/deskState/deskStateDiagnostics";
 import { ProgrammingInteractionViewProvider } from "../../features/programmingInteraction/ProgrammingInteractionView";
 import { ProgrammingInteractionStore } from "../../features/programmingInteraction/store";
 import {
@@ -21,11 +26,6 @@ import {
 } from "../../features/programmingInteraction/testFixtures";
 import { createCommandLineTestAuthority } from "../../features/programmingInteraction/testing/commandLineTestAuthority";
 import { CommandLineBar } from "./CommandLineBar";
-import {
-	requestSystemControlsTab,
-	useRequestedSystemControlsTab,
-} from "../../features/deskState/deskStateDiagnostics";
-import { DeskStateDiagnosticsProvider } from "../../features/deskState/DeskStateDiagnosticsState";
 
 const activity = vi.hoisted(() => ({
 	current: {
@@ -399,6 +399,46 @@ describe("scoped command-line integration", () => {
 			"FIXTURE 12",
 		);
 		expect(server.setCommandLine).not.toHaveBeenCalled();
+	});
+
+	it("retains a rejected THRU/PLUS command with actionable inline feedback", async () => {
+		const command = "FIXTURE 2 THRU 3 + 1 AT NOPE";
+		const feedback = "level must be a percentage or FULL";
+		const store = new ProgrammingInteractionStore();
+		const transport = new FakeProgrammingTransport();
+		render(
+			<ProgrammingInteractionViewProvider
+				showId={SHOW_ID}
+				deskId={DESK_ID}
+				store={store}
+				transport={transport}
+				loadSnapshot={async () =>
+					programmingSnapshot({ command: commandLine(1, command) })
+				}
+				replaceCommandLine={async (_deskId, value, revision) =>
+					commandLine(revision + 1, value)
+				}
+				executeCommand={async () => {
+					window.dispatchEvent(
+						new CustomEvent("light:command-error", { detail: feedback }),
+					);
+					return false;
+				}}
+			>
+				<CommandLineBar />
+			</ProgrammingInteractionViewProvider>,
+		);
+		await act(settleSession);
+
+		const input = screen.getByRole("textbox", { name: "Command line" });
+		fireEvent.keyDown(input, { key: "Enter" });
+		await act(settleSession);
+
+		expect(input).toHaveValue(command);
+		expect(screen.getByText(feedback)).toBeInTheDocument();
+		expect(
+			screen.getByRole("dialog", { name: "Command line history" }),
+		).toHaveTextContent(feedback);
 	});
 });
 

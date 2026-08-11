@@ -92,6 +92,13 @@ pub(crate) enum ExistingCommandPolicy {
     AtomicProgrammer,
 }
 
+pub(crate) fn ordered_ui_command_policy(command: &str) -> ExistingCommandPolicy {
+    match compatibility_only_family(command) {
+        Ok(Some(_)) => ExistingCommandPolicy::Compatibility,
+        Ok(None) | Err(_) => ExistingCommandPolicy::AtomicProgrammer,
+    }
+}
+
 /// Executes the existing grammar while keeping transport envelopes out of the domain path.
 pub(crate) fn execute_existing_command(
     state: &AppState,
@@ -503,6 +510,23 @@ pub(crate) fn osc_command_key(action: &str) -> Option<CommandKey> {
         "dot" => CommandKey::Dot,
         _ => return None,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ordered_ui_stages_programmer_grammar_without_disabling_compatibility_families() {
+        assert!(matches!(
+            ordered_ui_command_policy("FIXTURE 1 THRU 3 + 5 AT 50"),
+            ExistingCommandPolicy::AtomicProgrammer
+        ));
+        assert!(matches!(
+            ordered_ui_command_policy("FIXTURE 1 DYNAMIC SINE"),
+            ExistingCommandPolicy::Compatibility
+        ));
+    }
 }
 
 fn action_error(error: ActionError) -> ApiError {

@@ -131,7 +131,7 @@ mod values_wire;
 mod wire;
 
 pub(super) use adapter::{
-    ExistingCommandOutcome, ExistingCommandPolicy, execute_existing_command,
+    ExistingCommandOutcome, execute_existing_command, ordered_ui_command_policy,
     prevalidate_external_command, prevalidate_typed_command, route_osc_command_key_outcome,
     run_service_with_source,
 };

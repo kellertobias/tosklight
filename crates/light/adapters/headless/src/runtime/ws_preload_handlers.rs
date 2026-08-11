@@ -139,6 +139,7 @@ pub(super) fn ws_programmer_execute(
         )
         .with_request_id(&command.request_id)
     });
+    let policy = command_http::ordered_ui_command_policy(&input.value);
     let outcome = ws_typed_recording(state, session, &input.value, &context).unwrap_or_else(|| {
         command_http::execute_existing_command(
             state,
@@ -146,7 +147,7 @@ pub(super) fn ws_programmer_execute(
             &input.value,
             "software",
             &context,
-            command_http::ExistingCommandPolicy::Compatibility,
+            policy,
         )
     });
     finish_ws_execution(state, session, &input.value, outcome)
