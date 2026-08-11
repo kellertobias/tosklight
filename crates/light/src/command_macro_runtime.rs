@@ -62,6 +62,7 @@ pub struct CommandMacroExecutionSnapshot {
     pub session_id: Uuid,
     pub state: CommandMacroExecutionState,
     pub line: Option<u32>,
+    pub statement: Option<u32>,
     pub command: Option<String>,
     pub message: Option<String>,
     pub trigger: CommandMacroTrigger,
@@ -149,6 +150,7 @@ pub enum CommandMacroSequenceOutcome {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CommandMacroOwnedLine {
     pub number: u32,
+    pub statement: u32,
     pub command: String,
 }
 
@@ -210,6 +212,7 @@ impl CommandMacroExecutionService {
             session_id,
             state: CommandMacroExecutionState::Queued,
             line: None,
+            statement: None,
             command: None,
             message: None,
             trigger: request.trigger,
@@ -357,25 +360,38 @@ struct QueueItem {
 fn selected_lines(
     request: &CommandMacroRunRequest,
 ) -> Result<Vec<CommandMacroOwnedLine>, CommandMacroExecutionError> {
-    let all = request
-        .definition
-        .lines()
-        .map(|line| CommandMacroOwnedLine {
+    let all = crate::compile_macro_source(&request.definition.source)
+        .map_err(|error| {
+            CommandMacroExecutionError::new(format!(
+                "Macro line {} cannot run: {}",
+                error.line, error.message
+            ))
+        })?
+        .lines
+        .into_iter()
+        .enumerate()
+        .map(|(statement, line)| CommandMacroOwnedLine {
             number: line.number as u32,
-            command: line.command.to_owned(),
+            statement: statement as u32 + 1,
+            command: line.command,
         })
         .collect::<Vec<_>>();
     let Some(only_line) = request.only_line else {
         return Ok(all);
     };
-    all.into_iter()
-        .find(|line| line.number == only_line)
-        .map(|line| vec![line])
-        .ok_or_else(|| {
+    let selected = all
+        .into_iter()
+        .filter(|line| line.number == only_line)
+        .collect::<Vec<_>>();
+    if selected.is_empty() {
+        Err({
             CommandMacroExecutionError::new(format!(
                 "Macro source line {only_line} is blank, a comment, or does not exist"
             ))
         })
+    } else {
+        Ok(selected)
+    }
 }
 
 fn run_item(shared: &Shared, item: QueueItem) {
@@ -477,6 +493,7 @@ fn update_state(
     record.snapshot.state = state;
     if let Some(line) = line {
         record.snapshot.line = Some(line.number);
+        record.snapshot.statement = Some(line.statement);
         record.snapshot.command = Some(line.command.clone());
     }
     record.snapshot.message = message;
@@ -652,6 +669,20 @@ mod tests {
         );
         assert_eq!(first.events(), ["validate:3", "FIRST", "SECOND"]);
         assert_eq!(second.events(), ["validate:1", "AFTER"]);
+    }
+
+    #[test]
+    fn run_line_executes_each_semicolon_statement_with_unique_identity() {
+        let service = CommandMacroExecutionService::new(10);
+        let host = Arc::new(RecordingHost::default());
+        let mut selected = request("FIRST; SECOND\nTHIRD");
+        selected.only_line = Some(1);
+        let started = service.start(selected, host.clone()).unwrap();
+        let finished = wait_terminal(&service, started.execution_id);
+        assert_eq!(finished.state, CommandMacroExecutionState::Succeeded);
+        assert_eq!(finished.line, Some(1));
+        assert_eq!(finished.statement, Some(2));
+        assert_eq!(host.events(), ["validate:2", "FIRST", "SECOND"]);
     }
 
     #[test]

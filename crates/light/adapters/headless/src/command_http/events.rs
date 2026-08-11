@@ -315,6 +315,7 @@ const fn changes_programmer(action: ProgrammingAction) -> bool {
             | ProgrammingAction::PreloadEntered
             | ProgrammingAction::PreloadCommitted
             | ProgrammingAction::SelectionReplaced
+            | ProgrammingAction::SelectionRestored
             | ProgrammingAction::SelectionGestureApplied
             | ProgrammingAction::GroupSelected
             | ProgrammingAction::SelectionRuleApplied
@@ -331,6 +332,7 @@ const fn action_name(action: ProgrammingAction) -> &'static str {
         ProgrammingAction::PreloadEntered => "preload.enter",
         ProgrammingAction::PreloadCommitted => "preload.go",
         ProgrammingAction::SelectionReplaced => "programmer.selection.replace",
+        ProgrammingAction::SelectionRestored => "programmer.selection.restore",
         ProgrammingAction::SelectionGestureApplied => "programmer.selection.gesture",
         ProgrammingAction::GroupSelected => "programmer.selection.group",
         ProgrammingAction::SelectionRuleApplied => "programmer.selection.rule",
@@ -368,6 +370,7 @@ const fn base_change_categories(action: ProgrammingAction) -> &'static [&'static
         | ProgrammingAction::ShiftReleased
         | ProgrammingAction::IgnoredRelease => &["interaction"],
         ProgrammingAction::SelectionReplaced
+        | ProgrammingAction::SelectionRestored
         | ProgrammingAction::SelectionGestureApplied
         | ProgrammingAction::GroupSelected
         | ProgrammingAction::SelectionRuleApplied => &["interaction"],

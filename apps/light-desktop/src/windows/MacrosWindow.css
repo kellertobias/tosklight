@@ -20,20 +20,8 @@
 	color: #fff;
 }
 
-.macro-editor-identity {
-	display: grid;
-	grid-template-columns: minmax(7rem, 0.35fr) minmax(12rem, 1fr) minmax(
-			8rem,
-			0.55fr
-		) auto;
-	gap: 0.75rem;
-	align-items: end;
-	padding: 0.75rem;
-	border-bottom: 1px solid var(--border-subtle, #393c3f);
-}
-
-.macro-editor-identity .danger {
-	background: #7a2632;
+.macro-settings-content {
+	padding: 1rem;
 }
 
 .macro-source-editor {
@@ -51,6 +39,11 @@
 	);
 	font-size: 0.95rem;
 	line-height: 1.55;
+}
+
+.macro-source-editor:focus-within {
+	outline: 2px solid var(--blue, #378eff);
+	outline-offset: -2px;
 }
 
 .macro-source-stack {
@@ -83,14 +76,21 @@
 	margin: 0;
 	overflow: hidden;
 	white-space: pre;
+	z-index: 2;
 	pointer-events: none;
 }
 
 .macro-source-editor textarea {
 	position: relative;
+	z-index: 1;
 	caret-color: #fff;
 	color: transparent;
 	-webkit-text-fill-color: transparent;
+}
+
+.macro-source-editor textarea:focus {
+	outline: 0;
+	box-shadow: none;
 }
 
 .macro-source-editor textarea::selection {
@@ -121,6 +121,60 @@
 
 .macro-token-text {
 	color: #f1f1f1;
+}
+
+.macro-token-definition {
+	position: relative;
+	color: #d5a8ff;
+	pointer-events: auto;
+	text-decoration: underline dotted;
+	text-underline-offset: 0.18em;
+}
+
+.macro-source-line {
+	display: block;
+	min-height: 1.55em;
+	padding: 0 0.8rem;
+	margin: 0 -0.8rem;
+}
+
+.macro-source-line.alternate {
+	background: rgb(255 255 255 / 3.5%);
+}
+
+.macro-suggestions {
+	position: absolute;
+	z-index: 4;
+	left: 0.75rem;
+	top: 3.1rem;
+	display: grid;
+	width: min(28rem, calc(100% - 1.5rem));
+	max-height: 15rem;
+	overflow: auto;
+	border: 1px solid var(--cyan, #70e8f7);
+	border-radius: 0.35rem;
+	background: var(--surface-3, #262a30);
+	box-shadow: 0 0.65rem 1.5rem rgb(0 0 0 / 42%);
+}
+
+.macro-suggestions button {
+	display: grid;
+	gap: 0.15rem;
+	padding: 0.5rem 0.65rem;
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+	color: inherit;
+	text-align: left;
+}
+
+.macro-suggestions button[aria-selected="true"],
+.macro-suggestions button:hover {
+	background: rgb(74 163 255 / 22%);
+}
+
+.macro-suggestions small {
+	color: var(--text-secondary, #aab1b8);
 }
 
 .macro-line-numbers {
@@ -175,10 +229,4 @@
 
 .macro-validation-ok {
 	color: #9bd5aa;
-}
-
-@media (max-width: 760px) {
-	.macro-editor-identity {
-		grid-template-columns: 1fr 2fr;
-	}
 }

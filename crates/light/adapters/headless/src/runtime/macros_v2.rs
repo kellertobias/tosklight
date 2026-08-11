@@ -92,11 +92,18 @@ fn start_execution(
     only_line: Option<u32>,
     show_id: light_core::ShowId,
 ) -> Result<Json<wire::MacroExecutionSnapshot>, ApiError> {
+    let initial_selection = state
+        .programming
+        .programmers()
+        .selection(session.id)
+        .map(|selection| selection.selected)
+        .unwrap_or_default();
     let host = Arc::new(ServerMacroExecutionHost {
         state: state.clone(),
         session: session.clone(),
         show_id,
         context: operator_action_context(session, light_application::ActionSource::Macro),
+        initial_selection,
     });
     let started = state
         .macros
@@ -196,6 +203,69 @@ pub(super) fn start_macro_from_playback(
         show_id,
     )?;
     Ok(())
+}
+
+/// Ordered desk-WebSocket entry point for Macro pool and editor execution.
+pub(super) fn run_macro_live_action(
+    state: &AppState,
+    session: &Session,
+    action: wire::MacroLiveAction,
+) -> Result<serde_json::Value, String> {
+    let show_id = state
+        .active_show
+        .current()
+        .as_ref()
+        .map(|show| show.id)
+        .ok_or_else(|| "no show is open".to_owned())?;
+    match action {
+        wire::MacroLiveAction::Run {
+            macro_id,
+            source_revision,
+            trigger,
+        } => {
+            let (revision, definition) =
+                macro_for_run(state, show_id, macro_id).map_err(|error| error.message)?;
+            if source_revision.is_some_and(|expected| expected != revision) {
+                return Err(format!(
+                    "Macro revision conflict: expected {}, current {revision}",
+                    source_revision.expect("checked revision")
+                ));
+            }
+            serde_json::to_value(
+                start_execution(state, session, definition, revision, trigger, None, show_id)
+                    .map_err(|error| error.message)?
+                    .0,
+            )
+            .map_err(|error| error.to_string())
+        }
+        wire::MacroLiveAction::RunLine {
+            macro_id,
+            source_revision,
+            line,
+        } => {
+            let (revision, definition) =
+                macro_for_run(state, show_id, macro_id).map_err(|error| error.message)?;
+            if source_revision != revision {
+                return Err(format!(
+                    "Macro revision conflict: expected {source_revision}, current {revision}"
+                ));
+            }
+            serde_json::to_value(
+                start_execution(
+                    state,
+                    session,
+                    definition,
+                    revision,
+                    wire::MacroTrigger::Editor,
+                    Some(line),
+                    show_id,
+                )
+                .map_err(|error| error.message)?
+                .0,
+            )
+            .map_err(|error| error.to_string())
+        }
+    }
 }
 
 /// Starts a numbered Macro from the shared command line without allowing Macro-to-Macro calls.
@@ -323,8 +393,11 @@ async fn undo_run_line(
     let line = execution
         .line
         .expect("Run-line execution has a source line");
+    let statement = execution
+        .statement
+        .expect("Run-line execution has a source statement");
     let expected_request_id = format!(
-        "macro:{execution_id}:{}:{}:{line}",
+        "macro:{execution_id}:{}:{}:{line}:{statement}",
         execution.macro_id, execution.source_revision
     );
     let newest = state
@@ -394,6 +467,7 @@ async fn validate_macro(
     let action_context = operator_action_context(&session, light_application::ActionSource::Http);
     Ok(Json(analyze_source_for_context(
         &request.source,
+        request.cursor,
         &state,
         &session,
         &action_context,
@@ -555,6 +629,39 @@ fn macro_mutation(
                 Some(previous),
             ))
         }
+        wire::MacroObjectAction::Copy {
+            source_macro_id,
+            expected_revision,
+            pool_number,
+        } => {
+            let source = load_macro(store, *source_macro_id)?;
+            if source.revision != *expected_revision {
+                return Err(ApiError::conflict(format!(
+                    "Macro revision conflict: expected {expected_revision}, current {}",
+                    source.revision
+                )));
+            }
+            let mut definition =
+                serde_json::from_value::<light_application::CommandMacroDefinition>(source.body)
+                    .map_err(|error| {
+                        ApiError::internal(format!("stored Macro is invalid: {error}"))
+                    })?;
+            definition.id = Uuid::new_v4();
+            definition.number = *pool_number;
+            definition.name = copied_macro_name(&definition.name);
+            definition.validate().map_err(ApiError::bad_request)?;
+            ensure_pool_identity_free(store, &definition, None)?;
+            Ok((
+                put_active_show_object(
+                    light_application::ActiveShowObjectKind::Macro,
+                    definition.id.to_string(),
+                    0,
+                    serde_json::to_value(definition)
+                        .map_err(|error| ApiError::internal(error.to_string()))?,
+                )?,
+                None,
+            ))
+        }
         wire::MacroObjectAction::Delete {
             macro_id,
             expected_revision,
@@ -576,6 +683,15 @@ fn macro_mutation(
             ))
         }
     }
+}
+
+fn copied_macro_name(source: &str) -> String {
+    const SUFFIX: &str = " Copy";
+    let mut prefix_bytes = light_application::MAX_MACRO_NAME_BYTES - SUFFIX.len();
+    while !source.is_char_boundary(prefix_bytes.min(source.len())) {
+        prefix_bytes = prefix_bytes.saturating_sub(1);
+    }
+    format!("{}{}", &source[..prefix_bytes.min(source.len())], SUFFIX)
 }
 
 fn application_definition(
@@ -639,8 +755,9 @@ fn ensure_pool_identity_free(
     Ok(())
 }
 
-fn analyze_source(source: &str) -> wire::MacroValidation {
-    let diagnostics = source
+fn analyze_source(source: &str, cursor: Option<u32>) -> wire::MacroValidation {
+    let definitions = source_definitions(source);
+    let mut diagnostics = source
         .lines()
         .enumerate()
         .filter_map(|(index, raw)| {
@@ -657,68 +774,123 @@ fn analyze_source(source: &str) -> wire::MacroValidation {
                         start: 0,
                         end: raw.len() as u32,
                         kind: wire::MacroTokenKind::Comment,
+                        expansion: None,
                     }],
                 });
             }
-            let result = tokenize_programmer_command(command);
-            let (status, message) = match result {
-                Ok((tokens, _)) if tokens.is_empty() => {
-                    (wire::MacroLineStatus::Invalid, "Command is empty".into())
-                }
-                Ok((tokens, _)) if interaction_required(&tokens) => (
-                    wire::MacroLineStatus::InteractionRequired,
-                    "Command requires an operator choice or destination".into(),
-                ),
-                Ok(_) => (wire::MacroLineStatus::Valid, "Valid command line".into()),
-                Err(error) => (wire::MacroLineStatus::Invalid, error),
+            let statements = command
+                .split(';')
+                .map(str::trim)
+                .filter(|statement| !statement.is_empty())
+                .collect::<Vec<_>>();
+            let mut status = wire::MacroLineStatus::Valid;
+            let mut message = if statements.len() > 1 {
+                format!("{} valid commands", statements.len())
+            } else {
+                "Valid command line".into()
             };
+            for statement in statements {
+                if statement.starts_with("#") || statement.starts_with("//") {
+                    break;
+                }
+                if starts_with_macro_keyword(statement, "DEFINE")
+                    || statement.eq_ignore_ascii_case(light_application::RESTORE_SELECTION_COMMAND)
+                {
+                    continue;
+                }
+                let expanded = expand_statement_for_validation(statement, &definitions);
+                let result = expanded
+                    .as_deref()
+                    .map_err(Clone::clone)
+                    .and_then(tokenize_programmer_command);
+                match result {
+                    Ok((tokens, _)) if tokens.is_empty() => {
+                        status = wire::MacroLineStatus::Invalid;
+                        message = "Command is empty".into();
+                        break;
+                    }
+                    Ok((tokens, _)) if interaction_required(&tokens) => {
+                        status = wire::MacroLineStatus::InteractionRequired;
+                        message = "Command requires an operator choice or destination".into();
+                        break;
+                    }
+                    Ok(_) => {}
+                    Err(error) => {
+                        status = wire::MacroLineStatus::Invalid;
+                        message = error;
+                        break;
+                    }
+                }
+            }
             Some(wire::MacroLineDiagnostic {
                 line: (index + 1) as u32,
                 status,
                 message,
-                tokens: highlight_tokens(raw),
+                tokens: highlight_tokens(raw, &definitions),
             })
         })
         .collect::<Vec<_>>();
+    if let Err(error) = light_application::compile_macro_source(source) {
+        if let Some(diagnostic) = diagnostics
+            .iter_mut()
+            .find(|diagnostic| diagnostic.line == error.line as u32)
+        {
+            diagnostic.status = wire::MacroLineStatus::Invalid;
+            diagnostic.message = error.message;
+        } else {
+            diagnostics.push(wire::MacroLineDiagnostic {
+                line: error.line as u32,
+                status: wire::MacroLineStatus::Invalid,
+                message: error.message,
+                tokens: Vec::new(),
+            });
+        }
+    }
     wire::MacroValidation {
         valid: diagnostics
             .iter()
             .all(|diagnostic| matches!(diagnostic.status, wire::MacroLineStatus::Valid)),
         diagnostics,
+        suggestions: macro_suggestions(source, cursor, &definitions),
     }
 }
 
 fn analyze_source_for_context(
     source: &str,
+    cursor: Option<u32>,
     state: &AppState,
     session: &Session,
     context: &light_application::ActionContext,
 ) -> wire::MacroValidation {
-    let mut validation = analyze_source(source);
+    let mut validation = analyze_source(source, cursor);
     if !validation.valid {
         return validation;
     }
-    let executable = source
-        .lines()
-        .enumerate()
-        .filter_map(|(index, raw)| {
-            let command = raw.trim();
-            (!command.is_empty() && !command.starts_with('#') && !command.starts_with("//"))
-                .then_some(((index + 1) as u32, command))
-        })
-        .collect::<Vec<_>>();
+    let executable = light_application::compile_macro_source(source)
+        .expect("valid Macro source compiles")
+        .lines;
     let commands = executable
         .iter()
-        .map(|(_, command)| *command)
+        .map(|line| line.command.as_str())
         .collect::<Vec<_>>();
-    if let Err((index, error)) =
-        super::prevalidate_programmer_commands_from(state, session, &commands, context)
-    {
-        if let Some((line, _)) = executable.get(index)
+    let initial_selection = state
+        .programming
+        .programmers()
+        .selection(session.id)
+        .map(|selection| selection.selected)
+        .unwrap_or_default();
+    if let Err((index, error)) = super::prevalidate_macro_commands_from(
+        state,
+        session,
+        &commands,
+        &initial_selection,
+        context,
+    ) {
+        if let Some(line) = executable.get(index)
             && let Some(diagnostic) = validation
                 .diagnostics
                 .iter_mut()
-                .find(|diagnostic| diagnostic.line == *line)
+                .find(|diagnostic| diagnostic.line == line.number as u32)
         {
             diagnostic.status = wire::MacroLineStatus::Invalid;
             diagnostic.message = error;
@@ -736,7 +908,10 @@ fn interaction_required(tokens: &[String]) -> bool {
         )
 }
 
-fn highlight_tokens(raw: &str) -> Vec<wire::MacroToken> {
+fn highlight_tokens(
+    raw: &str,
+    definitions: &std::collections::BTreeMap<String, String>,
+) -> Vec<wire::MacroToken> {
     let keywords = [
         "RECORD", "REC", "UPDATE", "DELETE", "DEL", "MOVE", "MOV", "COPY", "CPY", "SET", "AT",
         "THRU", "TIME", "DELAY", "FULL", "OFF", "GO", "PAUSE",
@@ -745,16 +920,16 @@ fn highlight_tokens(raw: &str) -> Vec<wire::MacroToken> {
         "FIXTURE", "GROUP", "CUE", "DYNAMIC", "PRESET", "PLAYBACK", "SET",
     ];
     let timings = ["TIME", "DELAY"];
-    raw.split_whitespace()
-        .scan(0usize, |cursor, token| {
-            let relative = raw[*cursor..].find(token)?;
-            let start = *cursor + relative;
-            let end = start + token.len();
-            *cursor = end;
+    source_tokens(raw)
+        .into_iter()
+        .map(|(start, end, token)| {
             let normalized = token
                 .trim_matches(|character: char| matches!(character, '+' | '-' | ',' | '.'))
                 .to_ascii_uppercase();
-            let kind = if timings.contains(&normalized.as_str()) {
+            let expansion = definitions.get(token).cloned();
+            let kind = if expansion.is_some() || valid_define_token(token) {
+                wire::MacroTokenKind::Definition
+            } else if timings.contains(&normalized.as_str()) {
                 wire::MacroTokenKind::Timing
             } else if targets.contains(&normalized.as_str()) {
                 wire::MacroTokenKind::Target
@@ -767,13 +942,231 @@ fn highlight_tokens(raw: &str) -> Vec<wire::MacroToken> {
             } else {
                 wire::MacroTokenKind::Text
             };
-            Some(wire::MacroToken {
+            wire::MacroToken {
                 start: start as u32,
                 end: end as u32,
                 kind,
-            })
+                expansion,
+            }
         })
         .collect()
+}
+
+fn source_tokens(raw: &str) -> Vec<(usize, usize, &str)> {
+    let mut tokens = Vec::new();
+    let mut start = None;
+    for (index, character) in raw.char_indices() {
+        if character.is_whitespace() || character == ';' {
+            if let Some(token_start) = start.take() {
+                tokens.push((token_start, index, &raw[token_start..index]));
+            }
+        } else if start.is_none() {
+            start = Some(index);
+        }
+    }
+    if let Some(token_start) = start {
+        tokens.push((token_start, raw.len(), &raw[token_start..]));
+    }
+    tokens
+}
+
+fn source_definitions(source: &str) -> std::collections::BTreeMap<String, String> {
+    let mut definitions = std::collections::BTreeMap::new();
+    for line in source.lines() {
+        for statement in line.split(';') {
+            let statement = statement.trim();
+            if statement.starts_with('#') || statement.starts_with("//") {
+                break;
+            }
+            let mut parts = statement.trim().splitn(3, char::is_whitespace);
+            if !parts
+                .next()
+                .is_some_and(|keyword| keyword.eq_ignore_ascii_case("DEFINE"))
+            {
+                continue;
+            }
+            let identifier = parts.next().unwrap_or_default();
+            let expansion = parts.next().unwrap_or_default().trim();
+            if valid_define_token(identifier) && !expansion.is_empty() {
+                definitions.insert(identifier.to_owned(), expansion.to_owned());
+            }
+        }
+    }
+    definitions
+}
+
+fn starts_with_macro_keyword(command: &str, keyword: &str) -> bool {
+    command
+        .split_whitespace()
+        .next()
+        .is_some_and(|candidate| candidate.eq_ignore_ascii_case(keyword))
+}
+
+fn valid_define_token(token: &str) -> bool {
+    token.starts_with('_')
+        && token.len() > 1
+        && token
+            .bytes()
+            .skip(1)
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+}
+
+fn expand_statement_for_validation(
+    statement: &str,
+    definitions: &std::collections::BTreeMap<String, String>,
+) -> Result<String, String> {
+    let mut source = definitions
+        .iter()
+        .map(|(identifier, expansion)| format!("DEFINE {identifier} {expansion}"))
+        .collect::<Vec<_>>();
+    source.push(statement.to_owned());
+    light_application::compile_macro_source(&source.join("\n"))
+        .map_err(|error| error.message)?
+        .lines
+        .last()
+        .map(|line| line.command.clone())
+        .ok_or_else(|| "Command is empty".into())
+}
+
+fn macro_suggestions(
+    source: &str,
+    cursor: Option<u32>,
+    definitions: &std::collections::BTreeMap<String, String>,
+) -> Vec<wire::MacroSuggestion> {
+    let Some(cursor) = cursor else {
+        return Vec::new();
+    };
+    let cursor_byte = utf16_to_byte(source, cursor);
+    let bytes = source.as_bytes();
+    let mut start = cursor_byte;
+    while start > 0 && suggestion_character(bytes[start - 1]) {
+        start -= 1;
+    }
+    let mut end = cursor_byte;
+    while end < bytes.len() && suggestion_character(bytes[end]) {
+        end += 1;
+    }
+    let prefix = source[start..cursor_byte].to_ascii_uppercase();
+    if prefix.is_empty() {
+        return Vec::new();
+    }
+    let statement_start = source[..cursor_byte]
+        .rfind(['\n', ';'])
+        .map_or(0, |separator| separator + 1);
+    let before = source[statement_start..start].trim();
+    let previous = before
+        .split_whitespace()
+        .next_back()
+        .map(str::to_ascii_uppercase);
+    let context = if before.is_empty() {
+        MacroSuggestionContext::CommandStart
+    } else if previous.as_deref() == Some("AT") {
+        MacroSuggestionContext::Value
+    } else {
+        MacroSuggestionContext::Continuation
+    };
+    let mut choices = suggestion_choices(context)
+        .into_iter()
+        .map(|(label, insert_text, detail)| {
+            (label.to_owned(), insert_text.to_owned(), detail.to_owned())
+        })
+        .collect::<Vec<_>>();
+    choices.extend(definitions.iter().map(|(identifier, expansion)| {
+        (
+            identifier.clone(),
+            identifier.clone(),
+            format!("Expands to {expansion}"),
+        )
+    }));
+    choices
+        .into_iter()
+        .filter(|(label, _, _)| label.to_ascii_uppercase().starts_with(&prefix))
+        .map(|(label, insert_text, detail)| wire::MacroSuggestion {
+            label,
+            insert_text,
+            detail,
+            replace_start: byte_to_utf16(source, start),
+            replace_end: byte_to_utf16(source, end),
+        })
+        .collect()
+}
+
+#[derive(Clone, Copy)]
+enum MacroSuggestionContext {
+    CommandStart,
+    Value,
+    Continuation,
+}
+
+fn suggestion_choices(
+    context: MacroSuggestionContext,
+) -> Vec<(&'static str, &'static str, &'static str)> {
+    match context {
+        MacroSuggestionContext::CommandStart => vec![
+            ("FIXTURE", "FIXTURE ", "Select fixtures by number or range"),
+            ("GROUP", "GROUP ", "Address a stored Group"),
+            ("PRESET", "PRESET ", "Recall or address a Preset"),
+            ("CUE", "CUE ", "Address a Cue"),
+            ("DYNAMIC", "DYNAMIC ", "Address a Dynamic"),
+            ("PLAYBACK", "PLAYBACK ", "Address a Playback"),
+            (
+                "RECORD",
+                "RECORD ",
+                "Record through the authoritative command grammar",
+            ),
+            ("UPDATE", "UPDATE ", "Update an existing show object"),
+            (
+                "DELETE",
+                "DELETE ",
+                "Delete through the authoritative command grammar",
+            ),
+            ("MOVE", "MOVE ", "Move a pool object"),
+            ("COPY", "COPY ", "Copy a pool object"),
+            ("SET", "SET ", "Open or address configuration"),
+            (
+                "RESTORE SELECTION",
+                "RESTORE SELECTION",
+                "Restore this Macro run's initiating selection",
+            ),
+            (
+                "DEFINE",
+                "DEFINE _",
+                "Define an underscore-prefixed command substitution",
+            ),
+        ],
+        MacroSuggestionContext::Value => vec![
+            ("FULL", "FULL ", "Use the canonical full-level value"),
+            ("PRESET", "PRESET ", "Apply a Preset value"),
+        ],
+        MacroSuggestionContext::Continuation => vec![
+            ("AT", "AT ", "Apply a value to the current target"),
+            ("THRU", "THRU ", "Continue an address range"),
+            ("TIME", "TIME ", "Set command timing"),
+            ("DELAY", "DELAY ", "Set command delay"),
+        ],
+    }
+}
+
+fn suggestion_character(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || byte == b'_'
+}
+
+fn utf16_to_byte(value: &str, offset: u32) -> usize {
+    let mut utf16 = 0u32;
+    for (byte, character) in value.char_indices() {
+        if utf16 >= offset {
+            return byte;
+        }
+        utf16 += character.len_utf16() as u32;
+        if utf16 > offset {
+            return byte;
+        }
+    }
+    value.len()
+}
+
+fn byte_to_utf16(value: &str, byte: usize) -> u32 {
+    value[..byte].encode_utf16().count() as u32
 }
 
 fn macro_for_run(
@@ -796,6 +1189,7 @@ struct ServerMacroExecutionHost {
     session: Session,
     show_id: light_core::ShowId,
     context: light_application::ActionContext,
+    initial_selection: Vec<light_core::FixtureId>,
 }
 
 impl light_application::CommandMacroExecutionHost for ServerMacroExecutionHost {
@@ -808,16 +1202,17 @@ impl light_application::CommandMacroExecutionHost for ServerMacroExecutionHost {
             .map(|line| line.command.as_str())
             .collect::<Vec<_>>()
             .join("\n");
-        let validation = analyze_source(&source);
+        let validation = analyze_source(&source, None);
         if validation.valid {
             let commands = lines
                 .iter()
                 .map(|line| line.command.as_str())
                 .collect::<Vec<_>>();
-            if let Err((index, error)) = super::prevalidate_programmer_commands_from(
+            if let Err((index, error)) = super::prevalidate_macro_commands_from(
                 &self.state,
                 &self.session,
                 &commands,
+                &self.initial_selection,
                 &self.context,
             ) {
                 let line = lines.get(index).map_or(0, |line| line.number);
@@ -863,17 +1258,27 @@ impl light_application::CommandMacroExecutionHost for ServerMacroExecutionHost {
         }
         let mut context = self.context.clone();
         context.request_id = Some(format!(
-            "macro:{execution_id}:{macro_id}:{macro_revision}:{}",
-            line.number
+            "macro:{execution_id}:{macro_id}:{macro_revision}:{}:{}",
+            line.number, line.statement
         ));
+        let command = if line
+            .command
+            .eq_ignore_ascii_case(light_application::RESTORE_SELECTION_COMMAND)
+        {
+            light_application::ProgrammingCommand::RestoreSelection {
+                fixtures: self.initial_selection.clone(),
+            }
+        } else {
+            light_application::ProgrammingCommand::Execute {
+                command: Some(line.command.clone()),
+                policy: light_application::ExecutionPolicy::Compatibility,
+            }
+        };
         let result = command_http::run_service_with_source(
             &self.state,
             &self.session,
             context,
-            light_application::ProgrammingCommand::Execute {
-                command: Some(line.command.clone()),
-                policy: light_application::ExecutionPolicy::Compatibility,
-            },
+            command,
             "macro",
         )
         .map_err(|error| light_application::CommandMacroExecutionError::new(error.message))?;
@@ -927,16 +1332,23 @@ impl light_application::CommandMacroExecutionHost for ServerMacroExecutionHost {
             .map(|line| {
                 let mut context = self.context.clone();
                 context.request_id = Some(format!(
-                    "macro:{execution_id}:{macro_id}:{macro_revision}:{}",
-                    line.number
+                    "macro:{execution_id}:{macro_id}:{macro_revision}:{}:{}",
+                    line.number, line.statement
                 ));
-                light_application::ActionEnvelope {
-                    context,
-                    command: light_application::ProgrammingCommand::Execute {
+                let command = if line
+                    .command
+                    .eq_ignore_ascii_case(light_application::RESTORE_SELECTION_COMMAND)
+                {
+                    light_application::ProgrammingCommand::RestoreSelection {
+                        fixtures: self.initial_selection.clone(),
+                    }
+                } else {
+                    light_application::ProgrammingCommand::Execute {
                         command: Some(line.command.clone()),
                         policy: light_application::ExecutionPolicy::Compatibility,
-                    },
-                }
+                    }
+                };
+                light_application::ActionEnvelope { context, command }
             })
             .collect::<Vec<_>>();
         let ports =
@@ -1059,6 +1471,7 @@ pub(super) fn execution_wire(
             }
         },
         line: snapshot.line,
+        statement: snapshot.statement,
         command: snapshot.command,
         message: snapshot.message,
         trigger: trigger_wire(snapshot.trigger),
@@ -1083,8 +1496,10 @@ mod tests {
 
     #[test]
     fn validation_preserves_lines_and_rejects_interactions() {
-        let validation =
-            analyze_source("# note\nGROUP 1 AT 50 TIME 2\nRECORD GROUP\nSET GROUP 10 AT 1 . 4");
+        let validation = analyze_source(
+            "# note\nGROUP 1 AT 50 TIME 2\nRECORD GROUP\nSET GROUP 10 AT 1 . 4",
+            None,
+        );
         assert!(!validation.valid);
         assert_eq!(validation.diagnostics.len(), 4);
         assert_eq!(validation.diagnostics[0].line, 1);
@@ -1092,5 +1507,79 @@ mod tests {
             validation.diagnostics[2].status,
             wire::MacroLineStatus::InteractionRequired
         );
+    }
+
+    #[test]
+    fn validation_offers_authoritative_fixture_completion_at_the_cursor() {
+        let validation = analyze_source("F", Some(1));
+        assert_eq!(
+            validation
+                .suggestions
+                .iter()
+                .map(|suggestion| suggestion.label.as_str())
+                .collect::<Vec<_>>(),
+            ["FIXTURE"]
+        );
+        let suggestion = &validation.suggestions[0];
+        assert_eq!(suggestion.insert_text, "FIXTURE ");
+        assert_eq!((suggestion.replace_start, suggestion.replace_end), (0, 1));
+
+        let value = analyze_source("FIXTURE 1 AT F", Some(14));
+        assert_eq!(
+            value
+                .suggestions
+                .iter()
+                .map(|suggestion| suggestion.label.as_str())
+                .collect::<Vec<_>>(),
+            ["FULL"]
+        );
+    }
+
+    #[test]
+    fn validation_expands_underscore_definitions_across_semicolon_statements() {
+        let validation = analyze_source("DEFINE _front FIXTURE 1; _front AT 50", None);
+        assert!(validation.valid, "{:?}", validation.diagnostics);
+        assert!(validation.diagnostics.iter().any(|diagnostic| {
+            diagnostic
+                .tokens
+                .iter()
+                .any(|token| token.expansion.as_deref() == Some("FIXTURE 1"))
+        }));
+    }
+
+    #[test]
+    fn validation_rejects_bare_definition_identifiers() {
+        let validation = analyze_source("DEFINE front FIXTURE 1\nfront AT 50", None);
+        assert!(!validation.valid);
+        assert!(
+            validation
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.message.contains("underscore"))
+        );
+    }
+
+    #[test]
+    fn highlighting_preserves_definition_expansion_before_a_semicolon() {
+        let validation = analyze_source("DEFINE _front FIXTURE 1\n_front; AT 50", None);
+        assert!(
+            validation.diagnostics[1]
+                .tokens
+                .iter()
+                .any(|token| token.expansion.as_deref() == Some("FIXTURE 1")
+                    && token.start == 0
+                    && token.end == 6)
+        );
+    }
+
+    #[test]
+    fn copied_names_stay_valid_at_utf8_and_byte_limits() {
+        let ascii = copied_macro_name(&"a".repeat(light_application::MAX_MACRO_NAME_BYTES));
+        assert_eq!(ascii.len(), light_application::MAX_MACRO_NAME_BYTES);
+        assert!(ascii.ends_with(" Copy"));
+        let unicode = copied_macro_name(&"é".repeat(64));
+        assert!(unicode.is_char_boundary(unicode.len()));
+        assert!(unicode.len() <= light_application::MAX_MACRO_NAME_BYTES);
+        assert!(unicode.ends_with(" Copy"));
     }
 }

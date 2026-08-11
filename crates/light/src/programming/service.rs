@@ -322,6 +322,7 @@ impl ProgrammingService {
                 self.preload(session, *capture_programmer, &action.context, ports)?
             }
             command @ (ProgrammingCommand::ReplaceSelection { .. }
+            | ProgrammingCommand::RestoreSelection { .. }
             | ProgrammingCommand::ApplySelectionGesture { .. }
             | ProgrammingCommand::SelectGroup { .. }
             | ProgrammingCommand::ApplySelectionRule { .. }) => {

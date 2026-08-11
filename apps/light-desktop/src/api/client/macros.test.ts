@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { MacrosApiClient } from "./macros";
-import type { ClientTransport } from "./transport";
+import type { LiveClientTransport } from "./transport";
 
 function transport() {
 	const request = vi.fn().mockResolvedValue({});
@@ -29,10 +29,58 @@ function transport() {
 		request,
 		blob: vi.fn(),
 		absoluteUrl: vi.fn(),
-	} satisfies ClientTransport;
+		currentDeskId: vi.fn(() => "desk-a"),
+		sendAction: vi.fn().mockResolvedValue({
+			execution_id: "execution/a",
+			macro_id: "macro/a",
+			macro_number: 71,
+			macro_name: "Preset fixtures",
+			source_revision: 4,
+			desk_id: "desk-a",
+			user_id: "user-a",
+			session_id: "session-a",
+			state: "succeeded",
+			trigger: { type: "pool" },
+			started_at: "2026-08-10T10:00:00Z",
+		}),
+	} satisfies LiveClientTransport;
 }
 
 describe("MacrosApiClient", () => {
+	it("sends the live cursor and maps authoritative command suggestions", async () => {
+		const wire = transport();
+		wire.request.mockResolvedValueOnce({
+			valid: true,
+			diagnostics: [],
+			suggestions: [
+				{
+					label: "FIXTURE",
+					insert_text: "FIXTURE ",
+					detail: "Select fixtures by number or range",
+					replace_start: 0,
+					replace_end: 1,
+				},
+			],
+		});
+		const client = new MacrosApiClient(wire);
+
+		const validation = await client.validate("show-a", "F", 1);
+
+		expect(JSON.parse(String(wire.request.mock.calls[0]?.[1].body))).toEqual({
+			source: "F",
+			cursor: 1,
+		});
+		expect(validation.suggestions).toEqual([
+			{
+				label: "FIXTURE",
+				insertText: "FIXTURE ",
+				detail: "Select fixtures by number or range",
+				replaceStart: 0,
+				replaceEnd: 1,
+			},
+		]);
+	});
+
 	it("creates portable Macros through an idempotent show-scoped action", async () => {
 		const wire = transport();
 		const client = new MacrosApiClient(wire);
@@ -83,9 +131,27 @@ describe("MacrosApiClient", () => {
 		await client.runtime("show-a");
 		await client.cancel("show-a", "execution/a");
 
+		expect(wire.sendAction.mock.calls.map(([action]) => action)).toEqual([
+			{
+				type: "macro",
+				request: {
+					type: "run",
+					macro_id: "macro/a",
+					source_revision: 4,
+					trigger: { type: "pool" },
+				},
+			},
+			{
+				type: "macro",
+				request: {
+					type: "run_line",
+					macro_id: "macro/a",
+					source_revision: 4,
+					line: 2,
+				},
+			},
+		]);
 		expect(wire.request.mock.calls.map(([path]) => path)).toEqual([
-			"/api/v2/macros/macro%2Fa/run",
-			"/api/v2/macros/macro%2Fa/run-line",
 			"/api/v2/macros/executions/execution%2Fa/undo-line",
 			"/api/v2/macros/runtime",
 			"/api/v2/macros/executions/cancel",
@@ -93,8 +159,28 @@ describe("MacrosApiClient", () => {
 		for (const [, init] of wire.request.mock.calls) {
 			expect(new Headers(init.headers).get("x-tosk-show")).toBe("show-a");
 		}
-		expect(JSON.parse(String(wire.request.mock.calls[4]?.[1].body))).toEqual({
+		expect(JSON.parse(String(wire.request.mock.calls[2]?.[1].body))).toEqual({
 			execution_id: "execution/a",
+		});
+	});
+
+	it("copies a Macro through a server-owned show intent", async () => {
+		const wire = transport();
+		const client = new MacrosApiClient(wire);
+		vi.spyOn(crypto, "randomUUID").mockReturnValue(
+			"00000000-0000-4000-8000-000000000160",
+		);
+
+		await client.copy("show-a", "macro/a", 4, 2);
+
+		expect(JSON.parse(String(wire.request.mock.calls[0]?.[1].body))).toEqual({
+			request_id: "00000000-0000-4000-8000-000000000160",
+			action: {
+				type: "copy",
+				source_macro_id: "macro/a",
+				expected_revision: 4,
+				pool_number: 2,
+			},
 		});
 	});
 });

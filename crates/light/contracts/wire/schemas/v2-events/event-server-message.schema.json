@@ -3038,6 +3038,14 @@
         "state": {
           "$ref": "#/$defs/MacroExecutionState"
         },
+        "statement": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
         "trigger": {
           "$ref": "#/$defs/MacroTrigger"
         },

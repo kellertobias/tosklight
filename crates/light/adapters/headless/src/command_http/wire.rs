@@ -67,6 +67,7 @@ fn wire_action(action: ProgrammingAction) -> CommandAcceptedAction {
         ProgrammingAction::ShiftReleased => CommandAcceptedAction::ShiftReleased,
         ProgrammingAction::IgnoredRelease => CommandAcceptedAction::IgnoredRelease,
         ProgrammingAction::SelectionReplaced
+        | ProgrammingAction::SelectionRestored
         | ProgrammingAction::SelectionGestureApplied
         | ProgrammingAction::GroupSelected
         | ProgrammingAction::SelectionRuleApplied => {

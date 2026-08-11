@@ -110,6 +110,32 @@ async fn macro_playback_http_and_ui_ws_actions_converge_on_one_execution_service
                 == light_application::CommandMacroTrigger::Playback { playback_number: 7 }
     }));
 
+    let editor_ws_id = "ui-ws-macro-editor";
+    let editor_ws = dispatch_live_action(
+        &state,
+        &session,
+        live_action_frame(
+            &session,
+            editor_ws_id,
+            serde_json::from_value(serde_json::json!({
+                "type": "macro",
+                "request": {
+                    "type": "run",
+                    "macro_id": macro_id,
+                    "source_revision": 1,
+                    "trigger": {"type": "web_socket"}
+                }
+            }))
+            .unwrap(),
+        ),
+    );
+    assert!(editor_ws.ok, "{:?}", editor_ws.error);
+    let editor_runs = wait_for_macro_executions(&state, session.desk.id, 3).await;
+    assert!(editor_runs.iter().any(|execution| {
+        execution.macro_id == macro_id
+            && execution.trigger == light_application::CommandMacroTrigger::WebSocket
+    }));
+
     let command_line = app
         .clone()
         .oneshot(
@@ -134,12 +160,12 @@ async fn macro_playback_http_and_ui_ws_actions_converge_on_one_execution_service
         "{}",
         json(command_line).await
     );
-    let all = wait_for_macro_executions(&state, session.desk.id, 3).await;
+    let all = wait_for_macro_executions(&state, session.desk.id, 4).await;
     assert!(all.iter().any(|execution| {
         execution.macro_id == macro_id
             && execution.trigger == light_application::CommandMacroTrigger::CommandLine
     }));
-    wait_for_terminal_macro_events(&state, 3).await;
+    wait_for_terminal_macro_events(&state, 4).await;
     let _ = std::fs::remove_dir_all(data_dir);
 }
 

@@ -38,6 +38,7 @@ impl From<String> for CommandPrevalidationFailure {
 /// levels, spreads, presets, and current-selection requirements are checked without publishing or
 /// committing a mutation. Families that own external runtime/show mutations expose their parser
 /// through `command_http` and are checked there instead of being executed speculatively.
+#[cfg(test)]
 pub(super) fn prevalidate_programmer_commands_from(
     state: &AppState,
     session: &Session,
@@ -50,6 +51,45 @@ pub(super) fn prevalidate_programmer_commands_from(
             let mut detached_state = state.clone();
             detached_state.programming = detached_programming.clone();
             for (index, command_line) in command_lines.iter().enumerate() {
+                prevalidate_programmer_command_in_state(
+                    &detached_state,
+                    session,
+                    command_line,
+                    context,
+                )
+                .map_err(|message| CommandPrevalidationFailure { index, message })?;
+            }
+            Ok(())
+        })
+        .map_err(|error: CommandPrevalidationFailure| (error.index, error.message))
+}
+
+/// Detached Macro preflight including the Macro-only execution-local selection restoration.
+/// The concrete initiating selection is injected into the detached programmer only; no live desk
+/// state, Group, or show object is mutated during validation.
+pub(super) fn prevalidate_macro_commands_from(
+    state: &AppState,
+    session: &Session,
+    command_lines: &[&str],
+    initial_selection: &[light_core::FixtureId],
+    context: &light_application::ActionContext,
+) -> Result<(), (usize, String)> {
+    state
+        .programming
+        .with_detached_command(session.id, |detached_programming| {
+            let mut detached_state = state.clone();
+            detached_state.programming = detached_programming.clone();
+            for (index, command_line) in command_lines.iter().enumerate() {
+                if command_line
+                    .trim()
+                    .eq_ignore_ascii_case(light_application::RESTORE_SELECTION_COMMAND)
+                {
+                    detached_state
+                        .programming
+                        .programmers()
+                        .select(session.id, initial_selection.iter().copied());
+                    continue;
+                }
                 prevalidate_programmer_command_in_state(
                     &detached_state,
                     session,

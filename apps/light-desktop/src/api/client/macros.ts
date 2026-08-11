@@ -17,7 +17,7 @@ import {
 	type MacroRuntime,
 	macroExecutionFromWire,
 } from "../runtimeModels";
-import { type ClientTransport, jsonRequest } from "./transport";
+import { jsonRequest, type LiveClientTransport } from "./transport";
 
 export interface MacroDefinition {
 	id: string;
@@ -42,20 +42,35 @@ export interface MacroLineDiagnostic {
 			| "number"
 			| "timing"
 			| "comment"
-			| "text";
+			| "text"
+			| "definition";
+		expansion?: string | null;
 	}>;
+}
+
+export interface MacroSuggestion {
+	label: string;
+	insertText: string;
+	detail: string;
+	replaceStart: number;
+	replaceEnd: number;
 }
 
 export interface MacroValidation {
 	valid: boolean;
 	diagnostics: MacroLineDiagnostic[];
+	suggestions: MacroSuggestion[];
 }
 
 export class MacrosApiClient {
-	constructor(private readonly transport: ClientTransport) {}
+	constructor(private readonly transport: LiveClientTransport) {}
 
-	validate(showId: string, source: string): Promise<MacroValidation> {
-		const body: MacroValidationRequest = { source };
+	validate(
+		showId: string,
+		source: string,
+		cursor?: number,
+	): Promise<MacroValidation> {
+		const body: MacroValidationRequest = { source, cursor };
 		return this.request<WireMacroValidation>(
 			"/api/v2/macros/validate",
 			showId,
@@ -65,6 +80,13 @@ export class MacrosApiClient {
 			diagnostics: validation.diagnostics.map((diagnostic) => ({
 				...diagnostic,
 				tokens: diagnostic.tokens.map((token) => ({ ...token })),
+			})),
+			suggestions: (validation.suggestions ?? []).map((suggestion) => ({
+				label: suggestion.label,
+				insertText: suggestion.insert_text,
+				detail: suggestion.detail,
+				replaceStart: suggestion.replace_start,
+				replaceEnd: suggestion.replace_end,
 			})),
 		}));
 	}
@@ -109,16 +131,37 @@ export class MacrosApiClient {
 		});
 	}
 
+	copy(
+		showId: string,
+		sourceMacroId: string,
+		expectedRevision: number,
+		poolNumber: number,
+	) {
+		return this.mutate(showId, {
+			type: "copy",
+			source_macro_id: sourceMacroId,
+			expected_revision: expectedRevision,
+			pool_number: poolNumber,
+		});
+	}
+
 	run(
 		showId: string,
 		macroId: string,
 		request: MacroRunActionRequest = {},
 	): Promise<MacroExecution> {
-		return this.request<MacroExecutionSnapshot>(
-			`/api/v2/macros/${encodeURIComponent(macroId)}/run`,
-			showId,
-			request,
-		).then(macroExecutionFromWire);
+		void showId;
+		return this.transport
+			.sendAction({
+				type: "macro",
+				request: {
+					type: "run",
+					macro_id: macroId,
+					source_revision: request.source_revision,
+					trigger: request.trigger ?? { type: "web_socket" },
+				},
+			})
+			.then((snapshot) => macroExecutionFromWire(snapshot as MacroExecutionSnapshot));
 	}
 
 	runLine(
@@ -126,11 +169,18 @@ export class MacrosApiClient {
 		macroId: string,
 		request: MacroRunLineActionRequest,
 	): Promise<MacroExecution> {
-		return this.request<MacroExecutionSnapshot>(
-			`/api/v2/macros/${encodeURIComponent(macroId)}/run-line`,
-			showId,
-			request,
-		).then(macroExecutionFromWire);
+		void showId;
+		return this.transport
+			.sendAction({
+				type: "macro",
+				request: {
+					type: "run_line",
+					macro_id: macroId,
+					source_revision: request.source_revision,
+					line: request.line,
+				},
+			})
+			.then((snapshot) => macroExecutionFromWire(snapshot as MacroExecutionSnapshot));
 	}
 
 	runtime(showId: string): Promise<MacroRuntime> {

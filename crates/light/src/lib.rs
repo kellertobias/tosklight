@@ -44,8 +44,10 @@ pub use active_show::{
     UndoActiveShowRecordingObject, UndoActiveShowRecordingOperation, UserLayout,
 };
 pub use command_macro::{
-    CommandMacroDefinition, CommandMacroLine, MAX_MACRO_LINE_BYTES, MAX_MACRO_NAME_BYTES,
-    MAX_MACRO_NUMBER, MAX_MACRO_SOURCE_BYTES, MacroPresentation,
+    CommandMacroCompilation, CommandMacroCompileError, CommandMacroCompiledLine,
+    CommandMacroDefinition, CommandMacroDefinitionExpansion, CommandMacroLine,
+    MAX_MACRO_LINE_BYTES, MAX_MACRO_NAME_BYTES, MAX_MACRO_NUMBER, MAX_MACRO_SOURCE_BYTES,
+    MacroPresentation, RESTORE_SELECTION_COMMAND, compile_macro_source,
 };
 pub use command_macro_runtime::{
     CommandMacroExecutionError, CommandMacroExecutionHost, CommandMacroExecutionService,

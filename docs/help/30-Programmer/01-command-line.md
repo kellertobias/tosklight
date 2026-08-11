@@ -451,6 +451,8 @@ To configure an assigned page playback, press `[SET]` and then tap the playback,
 
 `MACRO <pool-number>` starts that show-owned Macro through the same authenticated, desk-scoped execution queue as a pool tap or assigned Playback. The command returns after the one-shot execution is queued; the Macro and Running windows show its live result. A Macro body cannot use `MACRO` to call another Macro, because Macro lines deliberately contain only non-interactive ordinary programming commands and have no call or recursion feature.
 
+Inside a Macro source document, either a newline or `;` ends a command; the final semicolon on a line is optional. `DEFINE _name <expansion>` declares an underscore-prefixed, no-space identifier whose expansion can contain arbitrary command text. The editor validates the expanded command through this same authoritative grammar and shows the expansion when the identifier is hovered. `RESTORE SELECTION` restores the concrete ordered fixtures selected when that individual Macro run began; it does not store or recall a Group. `DEFINE` and `RESTORE SELECTION` are Macro-source instructions, not commands for ordinary interactive entry.
+
 ## OSC playback addressing
 
 Every keypad key is also accepted at `/light/{desk}/programmer/{key}` with a pressed value. The new inputs are `minus` (alias `subtract`), `time`, `delay`, and `shift`; digits use `digit-0` through `digit-9`. OSC `[SHIFT]` is latched exactly like the software key, so `shift` followed by `digit-1` opens Stage. Existing inputs such as `plus`, `at`, `thru`, `set`, `record`, `enter`, and `backspace` continue to use the same address family.

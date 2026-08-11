@@ -35,6 +35,11 @@ pub enum ProgrammingCommand {
         fixtures: Vec<FixtureId>,
         expected_revision: u64,
     },
+    /// Execution-local restoration of a previously captured concrete selection. Macro adapters
+    /// use this without persisting a Group or retaining a live Group expression.
+    RestoreSelection {
+        fixtures: Vec<FixtureId>,
+    },
     ApplySelectionGesture {
         source: SelectionGestureSource,
         remove: bool,
@@ -55,6 +60,7 @@ impl ProgrammingCommand {
         matches!(
             self,
             Self::ReplaceSelection { .. }
+                | Self::RestoreSelection { .. }
                 | Self::ApplySelectionGesture { .. }
                 | Self::SelectGroup { .. }
                 | Self::ApplySelectionRule { .. }
@@ -91,6 +97,7 @@ pub enum ProgrammingAction {
     ShiftReleased,
     IgnoredRelease,
     SelectionReplaced,
+    SelectionRestored,
     SelectionGestureApplied,
     GroupSelected,
     SelectionRuleApplied,

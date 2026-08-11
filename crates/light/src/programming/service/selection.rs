@@ -46,6 +46,7 @@ impl SelectionOperation<'_> {
                 fixtures,
                 expected_revision,
             } => self.replace_selection(fixtures, *expected_revision),
+            ProgrammingCommand::RestoreSelection { fixtures } => self.restore_selection(fixtures),
             ProgrammingCommand::ApplySelectionGesture { source, remove } => {
                 self.apply_selection_gesture(source, *remove)
             }
@@ -80,6 +81,31 @@ impl SelectionOperation<'_> {
         self.accept(
             ProgrammingAction::SelectionReplaced,
             "programmer.selection.replace",
+        )
+    }
+
+    fn restore_selection(&self, fixtures: &[FixtureId]) -> Result<ProgrammingOutcome, ActionError> {
+        let revision = self
+            .service
+            .programmers
+            .selection(self.session)
+            .ok_or_else(unknown_programmer)?
+            .revision;
+        let environment =
+            self.environment(ProgrammingSelectionQuery::Fixtures(fixtures.to_vec()))?;
+        let fixtures = expand_fixtures(fixtures, &environment)?;
+        self.service
+            .programmers
+            .replace_selection_if_revision(
+                self.session,
+                revision,
+                fixtures,
+                SelectionExpression::Static,
+            )
+            .map_err(selection_replace_error)?;
+        self.accept(
+            ProgrammingAction::SelectionRestored,
+            "programmer.selection.restore",
         )
     }
 

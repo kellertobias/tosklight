@@ -4,12 +4,16 @@ import {
 	type PoolSlotViewModel,
 } from "@tosklight/ui/pools";
 import { WindowHeader, WindowScrollArea } from "@tosklight/ui/window-kit";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createLightApi } from "../api/client/api";
 import { type MacroDefinition, MacrosApiClient } from "../api/client/macros";
 import type { MacroExecution } from "../api/runtimeModels";
 import type { VersionedObject } from "../api/types";
 import { useCommandLineSurface } from "../components/control/commandLine/useCommandLineSurface";
+import {
+	poolMutationTarget,
+	poolMutationTargetState,
+} from "../features/controlSurfaceInteraction/poolCommandTarget";
 import { useActiveShowId } from "../features/deskSnapshot/DeskSnapshotState";
 import {
 	type MacroActions,
@@ -29,7 +33,7 @@ export function MacrosWindow({ active = true, compact = false }: WindowProps) {
 	const showId = useActiveShowId();
 	const command = useCommandLineSurface({
 		enabled: active,
-		observeCommand: false,
+		observeCommand: true,
 	});
 	const fallback = useMemo<MacroActions>(() => {
 		const api = createLightApi();
@@ -44,6 +48,7 @@ export function MacrosWindow({ active = true, compact = false }: WindowProps) {
 	const [editing, setEditing] = useState<MacroObject | NewMacro | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
+	const copyPending = useRef(false);
 
 	const refresh = useCallback(async () => {
 		if (!showId) return;
@@ -100,6 +105,43 @@ export function MacrosWindow({ active = true, compact = false }: WindowProps) {
 	};
 
 	const byNumber = new Map(macros.map((macro) => [macro.body.number, macro]));
+	const mutationTarget = poolMutationTarget(command.text);
+	const copyFromCommand = async (number: number) => {
+		if (
+			!showId ||
+			busy ||
+			copyPending.current ||
+			mutationTarget?.operation !== "copy"
+		)
+			return false;
+		if (mutationTarget.phase === "source") {
+			if (!byNumber.has(number)) return false;
+			await command.replace(`COPY ${number} AT`);
+			return true;
+		}
+		const source = byNumber.get(Number(mutationTarget.source));
+		if (!source) {
+			setError(`Macro ${mutationTarget.source} does not exist.`);
+			return true;
+		}
+		if (byNumber.has(number)) {
+			setError(`Macro ${number} is already occupied.`);
+			return true;
+		}
+		setBusy(true);
+		copyPending.current = true;
+		try {
+			await actions.macros.copy(showId, source.id, source.revision, number);
+			await refresh();
+			await command.reset();
+		} catch (reason) {
+			setError(`Copy failed: ${String(reason)}`);
+		} finally {
+			copyPending.current = false;
+			setBusy(false);
+		}
+		return true;
+	};
 	const running = new Set(
 		executions
 			.filter((execution) =>
@@ -146,7 +188,9 @@ export function MacrosWindow({ active = true, compact = false }: WindowProps) {
 					byNumber={byNumber}
 					running={running}
 					setClick={setClick}
+					mutationTarget={mutationTarget}
 					onCreate={(number) => setEditing(newMacro(number))}
+					onCopyTarget={(number) => void copyFromCommand(number)}
 					onOpen={(macro) => void open(macro)}
 					onRun={(macro) => void run(macro)}
 				/>
@@ -161,7 +205,9 @@ function MacroPool({
 	byNumber,
 	running,
 	setClick,
+	mutationTarget,
 	onCreate,
+	onCopyTarget,
 	onOpen,
 	onRun,
 }: {
@@ -170,7 +216,9 @@ function MacroPool({
 	byNumber: Map<number, MacroObject>;
 	running: Set<string>;
 	setClick: boolean;
+	mutationTarget: ReturnType<typeof poolMutationTarget>;
 	onCreate(number: number): void;
+	onCopyTarget(number: number): void;
 	onOpen(macro: MacroObject): void;
 	onRun(macro: MacroObject): void;
 }) {
@@ -200,8 +248,18 @@ function MacroPool({
 								: `Empty Macro ${number}`
 						}
 						aria-pressed={macro ? running.has(macro.id) : undefined}
-						model={macroPoolCard(number, macro, running, setClick)}
+						model={macroPoolCard(
+							number,
+							macro,
+							running,
+							setClick,
+							mutationTarget,
+						)}
 						onClick={() => {
+							if (mutationTarget?.operation === "copy") {
+								onCopyTarget(number);
+								return;
+							}
 							const outcome = gesture(false);
 							if (outcome === "create") onCreate(number);
 							else if (outcome === "edit" && macro) onOpen(macro);
@@ -225,6 +283,7 @@ function macroPoolCard(
 	macro: MacroObject | undefined,
 	running: Set<string>,
 	setClick: boolean,
+	mutationTarget: ReturnType<typeof poolMutationTarget> = null,
 ) {
 	return {
 		number,
@@ -238,6 +297,11 @@ function macroPoolCard(
 			...(!macro ? (["empty"] as const) : []),
 			...(macro && running.has(macro.id) ? (["active"] as const) : []),
 			...(macro && setClick ? (["set-target"] as const) : []),
+			...(mutationTarget?.operation === "copy" &&
+			((mutationTarget.phase === "source" && macro) ||
+				(mutationTarget.phase === "destination" && !macro))
+				? [poolMutationTargetState(mutationTarget)!]
+				: []),
 		],
 	};
 }

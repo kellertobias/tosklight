@@ -1,10 +1,19 @@
-import { Button, TextArea, TextField } from "@tosklight/ui";
+import {
+	Button,
+	FormLayout,
+	IconPickerField,
+	ModalPortal,
+	ModalTitleBar,
+	TextArea,
+	TextField,
+} from "@tosklight/ui";
 import { WindowHeader } from "@tosklight/ui/window-kit";
-import { forwardRef, useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useId, useRef, useState } from "react";
 import type {
 	MacroDefinition,
 	MacroLineDiagnostic,
 	MacrosApiClient,
+	MacroSuggestion,
 	MacroValidation,
 } from "../../api/client/macros";
 import type { VersionedObject } from "../../api/types";
@@ -26,25 +35,25 @@ interface MacroEditorProps {
 
 export function MacroEditor(props: MacroEditorProps) {
 	const controller = useMacroEditorController(props);
+	const noticeIsError = controller.notice
+		? /conflict|error|fail|refus|unavailable|invalid/iu.test(controller.notice)
+		: false;
 	return (
 		<section
 			className="macro-editor"
 			aria-label={`Edit Macro ${controller.draft.number}`}
 		>
 			<MacroEditorHeader {...props} controller={controller} />
-			<MacroIdentity controller={controller} />
+			{controller.settingsOpen && (
+				<MacroSettings controller={controller} />
+			)}
 			<MacroSource controller={controller} />
 			<MacroDiagnostics
 				diagnostics={controller.validation?.diagnostics ?? []}
 			/>
 			{controller.notice && (
 				<p
-					role={
-						controller.notice.includes("failure") ||
-						controller.notice.includes("refused")
-							? "alert"
-							: "status"
-					}
+					role={noticeIsError ? "alert" : "status"}
 				>
 					{controller.notice}
 				</p>
@@ -65,16 +74,20 @@ function useMacroEditorController({
 	const [validation, setValidation] = useState<MacroValidation | null>(null);
 	const [notice, setNotice] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
-	const [undo, setUndo] = useState<{
-		body: MacroDefinition;
-		revision: number;
-	} | null>(null);
+	const [settingsOpen, setSettingsOpen] = useState(false);
+	const [cursor, setCursor] = useState(0);
+	const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+	const [suggestionIndex, setSuggestionIndex] = useState(0);
 	const [runLineUndo, setRunLineUndo] = useState<{
 		executionId: string;
 		line: number;
 	} | null>(null);
 	const editor = useRef<HTMLTextAreaElement | null>(null);
 	const highlightOverlay = useRef<HTMLPreElement | null>(null);
+	const pendingCaret = useRef<number | null>(null);
+	const validationGeneration = useRef(0);
+	const suggestionListId = useId();
+	const definitionHelpId = useId();
 	const isNew = "isNew" in macro;
 	const editDraft = (next: MacroDefinition) => {
 		setDraft(next);
@@ -83,14 +96,48 @@ function useMacroEditorController({
 
 	useEffect(() => {
 		if (!showId) return;
+		const generation = ++validationGeneration.current;
+		setSuggestionsOpen(false);
 		const timer = window.setTimeout(() => {
 			void api
-				.validate(showId, draft.source)
-				.then(setValidation)
-				.catch((reason) => setNotice(String(reason)));
+				.validate(showId, draft.source, cursor)
+				.then((next) => {
+					if (validationGeneration.current !== generation) return;
+					setValidation(next);
+					setSuggestionsOpen(next.suggestions.length > 0);
+					setSuggestionIndex(0);
+				})
+				.catch((reason) => {
+					if (validationGeneration.current === generation)
+						setNotice(String(reason));
+				});
 		}, 180);
-		return () => window.clearTimeout(timer);
-	}, [api, draft.source, showId]);
+		return () => {
+			window.clearTimeout(timer);
+			if (validationGeneration.current === generation)
+				validationGeneration.current += 1;
+		};
+	}, [api, cursor, draft.source, showId]);
+
+	useEffect(() => {
+		if (pendingCaret.current === null || !editor.current) return;
+		editor.current.focus();
+		editor.current.setSelectionRange(pendingCaret.current, pendingCaret.current);
+		setCursor(pendingCaret.current);
+		pendingCaret.current = null;
+	}, [draft.source]);
+
+	const insertSuggestion = (suggestion: MacroSuggestion) => {
+		const source = draft.source;
+		const next =
+			source.slice(0, suggestion.replaceStart) +
+			suggestion.insertText +
+			source.slice(suggestion.replaceEnd);
+		pendingCaret.current =
+			suggestion.replaceStart + suggestion.insertText.length;
+		editDraft({ ...draft, source: next });
+		setSuggestionsOpen(false);
+	};
 
 	const persistence = useMacroPersistence({
 		showId,
@@ -102,12 +149,9 @@ function useMacroEditorController({
 		revision,
 		validation,
 		busy,
-		undo,
 		setDraft,
 		setSavedBody,
 		setRevision,
-		setUndo,
-		setRunLineUndo,
 		setNotice,
 		setBusy,
 	});
@@ -131,7 +175,17 @@ function useMacroEditorController({
 		validation,
 		notice,
 		busy,
-		undo,
+		settingsOpen,
+		setSettingsOpen,
+		cursor,
+		setCursor,
+		suggestionsOpen,
+		setSuggestionsOpen,
+		suggestionIndex,
+		setSuggestionIndex,
+		insertSuggestion,
+		suggestionListId,
+		definitionHelpId,
 		runLineUndo,
 		isNew,
 		editor,
@@ -148,12 +202,9 @@ interface MacroPersistenceOptions extends Omit<MacroEditorProps, "onClose"> {
 	revision: number;
 	validation: MacroValidation | null;
 	busy: boolean;
-	undo: { body: MacroDefinition; revision: number } | null;
 	setDraft(value: MacroDefinition): void;
 	setSavedBody(value: MacroDefinition): void;
 	setRevision(value: number): void;
-	setUndo(value: { body: MacroDefinition; revision: number } | null): void;
-	setRunLineUndo(value: null): void;
 	setNotice(value: string): void;
 	setBusy(value: boolean): void;
 }
@@ -169,12 +220,8 @@ function useMacroPersistence(options: MacroPersistenceOptions) {
 		revision,
 		validation,
 		busy,
-		undo,
-		setDraft,
 		setSavedBody,
 		setRevision,
-		setUndo,
-		setRunLineUndo,
 		setNotice,
 		setBusy,
 	} = options;
@@ -184,7 +231,6 @@ function useMacroPersistence(options: MacroPersistenceOptions) {
 		setBusy(true);
 		setNotice("");
 		try {
-			const before = savedBody;
 			const outcome = isNew
 				? await api.create(showId, draft)
 				: await api.update(showId, macro.id, revision, {
@@ -194,7 +240,6 @@ function useMacroPersistence(options: MacroPersistenceOptions) {
 						presentation: draft.presentation,
 					});
 			setRevision(outcome.object.revision);
-			setUndo({ body: before, revision: outcome.object.revision });
 			setSavedBody(draft);
 			setNotice("Saved");
 			if (isNew) await onSaved();
@@ -202,57 +247,6 @@ function useMacroPersistence(options: MacroPersistenceOptions) {
 			setNotice(
 				`Save conflict or failure: ${String(reason)}. Your draft is preserved.`,
 			);
-		} finally {
-			setBusy(false);
-		}
-	};
-	const undoSave = async () => {
-		if (!showId || !undo || busy) return;
-		setBusy(true);
-		try {
-			const outcome = await api.update(showId, macro.id, undo.revision, {
-				number: undo.body.number,
-				name: undo.body.name,
-				source: undo.body.source,
-				presentation: undo.body.presentation,
-			});
-			setDraft(undo.body);
-			setRunLineUndo(null);
-			setSavedBody(undo.body);
-			setRevision(outcome.object.revision);
-			setUndo(null);
-			setNotice("Last save undone as a new guarded revision");
-		} catch (reason) {
-			setNotice(
-				`Undo refused because the saved Macro changed: ${String(reason)}`,
-			);
-		} finally {
-			setBusy(false);
-		}
-	};
-	const copy = async () => {
-		if (!showId || isNew || busy) return;
-		const requested = window.prompt(
-			"Copy to Macro number",
-			String(draft.number + 1),
-		);
-		if (requested == null) return;
-		const number = Number(requested);
-		if (!Number.isInteger(number) || number < 1 || number > 65_535) {
-			setNotice("Enter a Macro number from 1 to 65535.");
-			return;
-		}
-		setBusy(true);
-		try {
-			await api.create(showId, {
-				...savedBody,
-				id: crypto.randomUUID(),
-				number,
-				name: `${savedBody.name} Copy`,
-			});
-			setNotice(`Copied to Macro ${number}`);
-		} catch (reason) {
-			setNotice(`Copy failed: ${String(reason)}`);
 		} finally {
 			setBusy(false);
 		}
@@ -274,7 +268,7 @@ function useMacroPersistence(options: MacroPersistenceOptions) {
 			setBusy(false);
 		}
 	};
-	return { save, undoSave, copy, remove };
+	return { save, remove };
 }
 
 interface MacroLineOptions
@@ -291,6 +285,48 @@ interface MacroLineOptions
 }
 
 function useMacroLineActions(options: MacroLineOptions) {
+	const awaitCompletion = async (
+		started: Awaited<ReturnType<MacrosApiClient["run"]>>,
+	) => {
+		let completed = started;
+		while (["queued", "validating", "running"].includes(completed.state)) {
+			await new Promise((resolve) => window.setTimeout(resolve, 25));
+			completed = await options.api.execution(
+				options.showId ?? "",
+				started.execution_id,
+			);
+		}
+		return completed;
+	};
+	const runMacro = async () => {
+		const { showId, macro, api, draft, savedBody, revision, busy } = options;
+		if (
+			!showId ||
+			busy ||
+			"isNew" in macro ||
+			!sameMacroDefinition(draft, savedBody)
+		) {
+			options.setNotice("Save this revision before running the Macro.");
+			return;
+		}
+		options.setBusy(true);
+		options.setRunLineUndo(null);
+		try {
+			const completed = await awaitCompletion(
+				await api.run(showId, macro.id, {
+					source_revision: revision,
+					trigger: { type: "editor" },
+				}),
+			);
+			options.setNotice(
+				completed.message ?? `Macro ${completed.state}`,
+			);
+		} catch (reason) {
+			options.setNotice(`Run Macro failed: ${String(reason)}`);
+		} finally {
+			options.setBusy(false);
+		}
+	};
 	const runLine = async () => {
 		const { showId, macro, api, draft, savedBody, revision, editor } = options;
 		if (!showId || "isNew" in macro || draft.source !== savedBody.source) {
@@ -306,11 +342,7 @@ function useMacroLineActions(options: MacroLineOptions) {
 				source_revision: revision,
 				line,
 			});
-			let completed = started;
-			while (["queued", "validating", "running"].includes(completed.state)) {
-				await new Promise((resolve) => window.setTimeout(resolve, 25));
-				completed = await api.execution(showId, started.execution_id);
-			}
+			const completed = await awaitCompletion(started);
 			if (completed.state === "succeeded") {
 				options.setRunLineUndo({ executionId: completed.execution_id, line });
 				options.setNotice(
@@ -340,7 +372,17 @@ function useMacroLineActions(options: MacroLineOptions) {
 			options.setBusy(false);
 		}
 	};
-	return { runLine, undoLastRun };
+	return { runMacro, runLine, undoLastRun };
+}
+
+function sameMacroDefinition(left: MacroDefinition, right: MacroDefinition) {
+	return (
+		left.number === right.number &&
+		left.name === right.name &&
+		left.source === right.source &&
+		left.presentation.color === right.presentation.color &&
+		left.presentation.icon === right.presentation.icon
+	);
 }
 
 type MacroEditorController = ReturnType<typeof useMacroEditorController>;
@@ -351,14 +393,28 @@ function MacroEditorHeader({
 }: Pick<MacroEditorProps, "onClose"> & { controller: MacroEditorController }) {
 	return (
 		<WindowHeader
-			title={`Macro ${controller.draft.number} · ${controller.draft.name}`}
+			title="Macro"
 			info={{
-				primary:
+				primary: controller.draft.name,
+				secondary:
 					controller.validation?.valid === false ? "Invalid" : "Command Macro",
 			}}
 			actions={[
 				[
-					{ id: "back", label: "Back", onClick: onClose },
+					{ id: "back", label: "← Macros", onClick: onClose },
+				],
+				[
+					{
+						id: "run-macro",
+						label: (
+							<span>
+								<span aria-hidden="true">▶</span> Run Macro
+							</span>
+						),
+						ariaLabel: "Run Macro",
+						disabled: controller.isNew || controller.busy,
+						onClick: () => void controller.runMacro(),
+					},
 					{
 						id: "run-line",
 						label: "Run line",
@@ -370,17 +426,12 @@ function MacroEditorHeader({
 						disabled: !controller.runLineUndo || controller.busy,
 						onClick: () => void controller.undoLastRun(),
 					},
+				],
+				[
 					{
-						id: "copy",
-						label: "Copy",
-						disabled: controller.isNew || controller.busy,
-						onClick: () => void controller.copy(),
-					},
-					{
-						id: "undo",
-						label: "Undo save",
-						disabled: !controller.undo,
-						onClick: () => void controller.undoSave(),
+						id: "settings",
+						label: "Settings",
+						onClick: () => controller.setSettingsOpen(true),
 					},
 					{
 						id: "save",
@@ -394,50 +445,78 @@ function MacroEditorHeader({
 	);
 }
 
-function MacroIdentity({ controller }: { controller: MacroEditorController }) {
+function MacroSettings({ controller }: { controller: MacroEditorController }) {
 	const { draft, editDraft } = controller;
+	const close = () => controller.setSettingsOpen(false);
 	return (
-		<div className="macro-editor-identity">
-			<TextField
-				label="Number"
-				value={String(draft.number)}
-				onChange={(event) =>
-					editDraft({ ...draft, number: Number(event.target.value) })
+		<ModalPortal onClose={close}>
+			<div
+				className="stacked-modal-layer"
+				onPointerDown={(event) =>
+					event.target === event.currentTarget && close()
 				}
-			/>
-			<TextField
-				label="Name"
-				value={draft.name}
-				onChange={(event) => editDraft({ ...draft, name: event.target.value })}
-			/>
-			<TextField
-				label="Icon"
-				value={draft.presentation.icon ?? ""}
-				onChange={(event) =>
-					editDraft({
-						...draft,
-						presentation: {
-							...draft.presentation,
-							icon: event.target.value || undefined,
-						},
-					})
-				}
-			/>
-			{!controller.isNew && (
-				<Button
-					className="danger"
-					disabled={controller.busy}
-					onClick={() => void controller.remove()}
+			>
+				<section
+					className="nested-modal macro-settings-modal"
+					role="dialog"
+					aria-modal="true"
+					aria-label="Macro Settings"
 				>
-					Delete
-				</Button>
-			)}
-		</div>
+					<ModalTitleBar
+						title="Macro Settings"
+						actions={
+							!controller.isNew ? (
+								<Button
+									className="danger"
+									disabled={controller.busy}
+									onClick={() => void controller.remove()}
+								>
+									Delete Macro
+								</Button>
+							) : undefined
+						}
+						closeLabel="Close Macro Settings"
+						onClose={close}
+					/>
+					<div className="macro-settings-content">
+						<FormLayout labelPlacement="side">
+							<TextField
+								label="Name"
+								value={draft.name}
+								onChange={(event) =>
+									editDraft({ ...draft, name: event.target.value })
+								}
+							/>
+							<IconPickerField
+								label="Icon"
+								value={draft.presentation.icon ?? ""}
+								onChange={(icon) =>
+									editDraft({
+										...draft,
+										presentation: {
+											...draft.presentation,
+											icon: icon || undefined,
+										},
+									})
+								}
+							/>
+						</FormLayout>
+					</div>
+				</section>
+			</div>
+		</ModalPortal>
 	);
 }
 
 function MacroSource({ controller }: { controller: MacroEditorController }) {
 	const diagnostics = controller.validation?.diagnostics ?? [];
+	const suggestions = controller.validation?.suggestions ?? [];
+	const updateCursor = (target: HTMLTextAreaElement) =>
+		controller.setCursor(target.selectionStart);
+	const expansions = diagnostics
+		.flatMap((diagnostic) => diagnostic.tokens)
+		.flatMap((token) => (token.expansion ? [token.expansion] : []))
+		.filter((expansion, index, all) => all.indexOf(expansion) === index);
 	return (
 		<div className="macro-source-editor">
 			<LineNumbers source={controller.draft.source} diagnostics={diagnostics} />
@@ -446,12 +525,35 @@ function MacroSource({ controller }: { controller: MacroEditorController }) {
 					ref={controller.highlightOverlay}
 					source={controller.draft.source}
 					diagnostics={diagnostics}
+					onDefinitionPointerDown={(offset) => {
+						controller.editor.current?.focus();
+						controller.editor.current?.setSelectionRange(offset, offset);
+						controller.setCursor(offset);
+					}}
 				/>
 				<TextArea
 					ref={controller.editor}
 					aria-label="Macro command lines"
 					value={controller.draft.source}
 					spellCheck={false}
+					aria-autocomplete="list"
+					aria-controls={
+						controller.suggestionsOpen
+							? controller.suggestionListId
+							: undefined
+					}
+					aria-describedby={
+						expansions.length ? controller.definitionHelpId : undefined
+					}
+					aria-expanded={controller.suggestionsOpen}
+					aria-activedescendant={
+						controller.suggestionsOpen && suggestions.length
+							? `${controller.suggestionListId}-${controller.suggestionIndex}`
+							: undefined
+					}
+					onSelect={(event) => updateCursor(event.currentTarget)}
+					onClick={(event) => updateCursor(event.currentTarget)}
+					onKeyUp={(event) => updateCursor(event.currentTarget)}
 					onScroll={(event) => {
 						if (!controller.highlightOverlay.current) return;
 						controller.highlightOverlay.current.scrollTop =
@@ -466,6 +568,29 @@ function MacroSource({ controller }: { controller: MacroEditorController }) {
 						})
 					}
 					onKeyDown={(event) => {
+						if (controller.suggestionsOpen && suggestions.length) {
+							if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+								event.preventDefault();
+								const direction = event.key === "ArrowDown" ? 1 : -1;
+								controller.setSuggestionIndex(
+									(controller.suggestionIndex + direction + suggestions.length) %
+										suggestions.length,
+								);
+								return;
+							}
+							if (event.key === "Enter") {
+								event.preventDefault();
+								controller.insertSuggestion(
+									suggestions[controller.suggestionIndex]!,
+								);
+								return;
+							}
+							if (event.key === "Escape") {
+								event.preventDefault();
+								controller.setSuggestionsOpen(false);
+								return;
+							}
+						}
 						if (
 							(event.metaKey || event.ctrlKey) &&
 							event.key.toLowerCase() === "s"
@@ -475,6 +600,33 @@ function MacroSource({ controller }: { controller: MacroEditorController }) {
 						}
 					}}
 				/>
+				{controller.suggestionsOpen && suggestions.length > 0 && (
+					<div
+						id={controller.suggestionListId}
+						className="macro-suggestions"
+						role="listbox"
+						aria-label="Macro command suggestions"
+					>
+						{suggestions.map((suggestion, index) => (
+							<Button
+								key={`${suggestion.label}:${suggestion.replaceStart}`}
+								id={`${controller.suggestionListId}-${index}`}
+								role="option"
+								aria-selected={index === controller.suggestionIndex}
+								onPointerDown={(event) => event.preventDefault()}
+								onClick={() => controller.insertSuggestion(suggestion)}
+							>
+								<b>{suggestion.label}</b>
+								<small>{suggestion.detail}</small>
+							</Button>
+						))}
+					</div>
+				)}
+				{expansions.length > 0 && (
+					<p id={controller.definitionHelpId} className="sr-only">
+						Defined command expansions: {expansions.join("; ")}
+					</p>
+				)}
 			</div>
 		</div>
 	);
@@ -482,15 +634,29 @@ function MacroSource({ controller }: { controller: MacroEditorController }) {
 
 const HighlightedSource = forwardRef<
 	HTMLPreElement,
-	{ source: string; diagnostics: MacroLineDiagnostic[] }
->(function HighlightedSource({ source, diagnostics }, ref) {
+	{
+		source: string;
+		diagnostics: MacroLineDiagnostic[];
+		onDefinitionPointerDown(offset: number): void;
+	}
+>(function HighlightedSource(
+	{ source, diagnostics, onDefinitionPointerDown },
+	ref,
+) {
 	const lines = source.split("\n");
 	const byLine = new Map(
 		diagnostics.map((diagnostic) => [diagnostic.line, diagnostic.tokens]),
 	);
+	const lineOffsets: number[] = [];
+	let documentOffset = 0;
+	for (const line of lines) {
+		lineOffsets.push(documentOffset);
+		documentOffset += line.length + 1;
+	}
 	return (
 		<pre ref={ref} className="macro-source-highlight" aria-hidden="true">
 			{lines.map((line, lineIndex) => {
+				const lineOffset = lineOffsets[lineIndex] ?? 0;
 				const tokens = [...(byLine.get(lineIndex + 1) ?? [])].sort(
 					(left, right) => left.start - right.start,
 				);
@@ -504,6 +670,15 @@ const HighlightedSource = forwardRef<
 						<span
 							key={`${lineIndex}:${tokenIndex}:${start}`}
 							className={`macro-token-${token.kind}`}
+							title={token.expansion ? `${line.slice(start, end)} → ${token.expansion}` : undefined}
+							onPointerDown={
+								token.expansion
+									? (event) => {
+											event.preventDefault();
+											onDefinitionPointerDown(lineOffset + end);
+										}
+									: undefined
+							}
 						>
 							{line.slice(start, end)}
 						</span>,
@@ -512,9 +687,11 @@ const HighlightedSource = forwardRef<
 				}
 				if (cursor < line.length) fragments.push(line.slice(cursor));
 				return (
-					<span key={`line:${lineIndex}`}>
+					<span
+						key={`line:${lineIndex}`}
+						className={`macro-source-line ${lineIndex % 2 ? "alternate" : ""}`}
+					>
 						{fragments}
-						{lineIndex < lines.length - 1 ? "\n" : null}
 					</span>
 				);
 			})}

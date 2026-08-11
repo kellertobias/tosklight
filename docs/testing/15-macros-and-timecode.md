@@ -1,6 +1,6 @@
 # Macros and Timecode
 
-These scenarios are the operator acceptance contract for TL-71 Macros and TL-70 Timecode. Use one authenticated desk session, one second session on the same desk, one physical Playback, one Virtual Playback, an OSC control path, and—where named—an actual audio output and external Timecode source.
+These scenarios are the operator acceptance contract for TL-71 and TL-160 Macros and TL-70 Timecode. Use one authenticated desk session, one second session on the same desk, one physical Playback, one Virtual Playback, an OSC control path, and—where named—an actual audio output and external Timecode source.
 
 ## MACRO-001 — Pool gestures and authoritative validation
 
@@ -13,6 +13,14 @@ Start a multi-line Macro and attempt a manual command and a second Macro from an
 ## MACRO-003 — One-shot Playback convergence
 
 Assign one Macro to physical and Virtual Playbacks. Start it from pool, physical Playback, Virtual Playback, OSC, HTTP, and WebSocket. Every path creates the same one-shot execution model and authenticated provenance. Cue, GO-minus, Pause, fader, tracking, and persistent-runtime controls are absent or inert with an explanation.
+
+## MACRO-004 — Refined editor, IntelliCode, statements, and selection restoration
+
+Open an existing Macro and confirm the editor title contains no Macro number. **Macro Settings** owns Name, Icon, and Delete; **Back to Macros** returns to the pool. The editor has **Run Macro** with a play icon, **Run line**, and the guarded **Undo last run**, but no editor Copy or save-Undo. Enter **COPY** in the shared command line, tap an occupied Macro, and tap an empty destination to prove external pool Copy still works.
+
+Focus the source and confirm the complete field has one blue focus outline with no broken green edge, and adjacent physical lines use alternating source colors. Type `F` in the middle of existing text, choose the server-provided **FIXTURE** IntelliCode result, and confirm canonical text replaces only the active token. Enter newline- and semicolon-separated commands, including multiple statements on one physical line and an optional trailing semicolon; validation, **Run Macro**, and **Run line** agree on the statement boundaries.
+
+Define `_front` with an arbitrary command-text expansion, use it later, and confirm hover assistance shows the expansion. A bare or space-containing DEFINE identifier is rejected before execution. Select an ordered fixture set without storing a Group, run a Macro that changes selection, uses `RESTORE SELECTION`, and then applies a value; the value reaches exactly the initiating fixtures. Start the same Macro from every supported trigger and from two sessions, changing selection after each start, to confirm each run owns its initiating snapshot and no Group is created or altered.
 
 ## TIMECODE-001 — Deterministic edit, seek, and loop
 

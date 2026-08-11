@@ -125,6 +125,7 @@ fn live_action_timing(action: &LiveAction) -> Option<(&'static str, bool)> {
         | LiveAction::DynamicPhase(_)
         | LiveAction::DynamicFixAt(_) => Some(("dynamic", true)),
         LiveAction::Playback(request) => Some((playback_action_timing(&request.action), true)),
+        LiveAction::Macro(_) => Some(("macro_run", true)),
         LiveAction::SpeedGroup(_)
         | LiveAction::OutputRuntime(_)
         | LiveAction::DmxOverride(_)
@@ -300,6 +301,11 @@ fn dispatch_action(
                 session,
                 &action_request(request, context),
                 Some(context),
+            ))
+        }),
+        LiveAction::Macro(request) => run_interaction(state, session, context, || {
+            ActionOutput::plain(super::macros_v2::run_macro_live_action(
+                state, session, request,
             ))
         }),
         LiveAction::CommandLineSet(request) => run_interaction(state, session, context, || {

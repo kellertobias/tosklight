@@ -603,6 +603,7 @@ fn macro_execution_change_is_a_typed_lossless_desk_delivery() {
             session_id: Uuid::from_u128(75),
             state: application::CommandMacroExecutionState::Succeeded,
             line: Some(2),
+            statement: Some(2),
             command: Some("GROUP 1 AT 0".into()),
             message: None,
             trigger: application::CommandMacroTrigger::Pool,

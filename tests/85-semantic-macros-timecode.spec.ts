@@ -57,6 +57,117 @@ test.describe("docs/testing/15-macros-and-timecode.md", () => {
 			.toMatchObject({ macro_id: macroId, trigger: { type: "command_line" } });
 	});
 
+	test("MACRO-004 @ui › refined editor exposes settings, focus, alternating lines, and IntelliCode", async ({
+		api,
+		desk,
+		page,
+	}) => {
+		const definition = {
+			id: "00000000-0000-4000-8000-000000000160",
+			number: 160,
+			name: "Front wash",
+			source: "F\nDEFINE _front FIXTURE 1\n_front",
+			presentation: { color: "#315cab", icon: "play" },
+		};
+		await page.route("**/api/v2/objects/macro", async (route) => {
+			await fulfillJson(route, {
+				show_revision: 8,
+				objects: [
+					{
+						kind: "macro",
+						id: definition.id,
+						revision: 4,
+						updated_at: "2026-08-11T12:00:00Z",
+						body: definition,
+					},
+				],
+			});
+		});
+		await page.route("**/api/v2/macros/runtime", async (route) => {
+			await fulfillJson(route, { desk_id: "desk-a", active: [], recent: [] });
+		});
+		await page.route("**/api/v2/macros/validate", async (route) => {
+			await fulfillJson(route, {
+				valid: true,
+				diagnostics: [
+					{
+						line: 1,
+						status: "valid",
+						message: "Valid command",
+						tokens: [],
+					},
+					{
+						line: 2,
+						status: "valid",
+						message: "Valid command",
+						tokens: [],
+					},
+					{
+						line: 3,
+						status: "valid",
+						message: "Valid command",
+						tokens: [
+							{
+								start: 0,
+								end: 6,
+								kind: "definition",
+								expansion: "FIXTURE 1",
+							},
+						],
+					},
+				],
+				suggestions: [
+					{
+						label: "FIXTURE",
+						insert_text: "FIXTURE ",
+						detail: "Select fixtures by number or range",
+						replace_start: 0,
+						replace_end: 1,
+					},
+				],
+			});
+		});
+
+		await desk.open(api.baseUrl);
+		await expect(page.locator(".connection-cover")).toBeHidden();
+		await openBuiltIns(page);
+		await page
+			.locator("[aria-label='Built-ins']")
+			.getByRole("button", { name: "Macros", exact: true })
+			.click();
+		await page
+			.getByRole("button", { name: "Macro 160 Front wash" })
+			.click({ button: "right" });
+
+		await expect(page.getByText("Macro", { exact: true }).first()).toBeVisible();
+		await expect(page.getByText("Macro 160", { exact: true })).toHaveCount(0);
+		await expect(page.getByRole("button", { name: "Run Macro" })).toContainText(
+			"▶ Run Macro",
+		);
+		await expect(page.getByRole("button", { name: /copy/i })).toHaveCount(0);
+		await page.getByRole("button", { name: "Settings" }).click();
+		const settings = page.getByRole("dialog", { name: "Macro Settings" });
+		await expect(settings.getByRole("textbox", { name: "Name" })).toHaveValue(
+			"Front wash",
+		);
+		await expect(settings.getByText("Icon", { exact: true })).toBeVisible();
+		await expect(settings.getByRole("button", { name: "Delete Macro" })).toBeVisible();
+		await settings.getByRole("button", { name: "Close Macro Settings" }).click();
+
+		const source = page.getByRole("textbox", { name: "Macro command lines" });
+		await source.focus();
+		await expect(page.locator(".macro-source-editor")).toHaveCSS(
+			"outline-color",
+			"rgb(55, 142, 255)",
+		);
+		await expect(page.locator(".macro-source-line.alternate")).toHaveCount(1);
+		await expect(page.getByTitle("_front → FIXTURE 1")).toBeVisible();
+		await page.getByRole("option", { name: /FIXTURE/ }).click();
+		await expect(source).toHaveValue(
+			"FIXTURE \nDEFINE _front FIXTURE 1\n_front",
+		);
+	});
+
 	test("TIMECODE-003 @api › transport routes address one authoritative runtime", async ({
 		api,
 		show,

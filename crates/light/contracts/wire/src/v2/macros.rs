@@ -38,6 +38,9 @@ pub struct MacroToken {
     pub start: u32,
     pub end: u32,
     pub kind: MacroTokenKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub expansion: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -51,6 +54,7 @@ pub enum MacroTokenKind {
     Timing,
     Comment,
     Text,
+    Definition,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -64,12 +68,26 @@ pub struct MacroLineDiagnostic {
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 pub struct MacroValidationRequest {
     pub source: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub cursor: Option<u32>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct MacroSuggestion {
+    pub label: String,
+    pub insert_text: String,
+    pub detail: String,
+    pub replace_start: u32,
+    pub replace_end: u32,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 pub struct MacroValidation {
     pub valid: bool,
     pub diagnostics: Vec<MacroLineDiagnostic>,
+    #[serde(default)]
+    pub suggestions: Vec<MacroSuggestion>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -89,6 +107,12 @@ pub enum MacroObjectAction {
         #[ts(type = "number")]
         expected_revision: u64,
         patch: MacroPatch,
+    },
+    Copy {
+        source_macro_id: Uuid,
+        #[ts(type = "number")]
+        expected_revision: u64,
+        pool_number: u16,
     },
     Delete {
         macro_id: Uuid,
@@ -147,6 +171,24 @@ pub struct MacroRunLineActionRequest {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum MacroLiveAction {
+    Run {
+        macro_id: Uuid,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(as = "Option<f64>", optional = nullable)]
+        source_revision: Option<u64>,
+        trigger: MacroTrigger,
+    },
+    RunLine {
+        macro_id: Uuid,
+        #[ts(type = "number")]
+        source_revision: u64,
+        line: u32,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 pub struct MacroCancelActionRequest {
     pub execution_id: Uuid,
 }
@@ -199,6 +241,9 @@ pub struct MacroExecutionSnapshot {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional = nullable)]
     pub line: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub statement: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional = nullable)]
     pub command: Option<String>,

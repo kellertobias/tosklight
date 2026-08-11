@@ -126,7 +126,9 @@ fn selection_action(
     action: ProgrammingAction,
 ) -> Result<ProgrammingSelectionAcceptedAction, ApiError> {
     match action {
-        ProgrammingAction::SelectionReplaced => Ok(ProgrammingSelectionAcceptedAction::Replaced),
+        ProgrammingAction::SelectionReplaced | ProgrammingAction::SelectionRestored => {
+            Ok(ProgrammingSelectionAcceptedAction::Replaced)
+        }
         ProgrammingAction::SelectionGestureApplied => {
             Ok(ProgrammingSelectionAcceptedAction::GestureApplied)
         }
