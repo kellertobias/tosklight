@@ -36,6 +36,8 @@ import { useProgrammerPreloadLifecycleView } from "../../features/programmerPrel
 import { useProgrammerPreloadPlaybackQueueView } from "../../features/programmerPreloadPlaybackQueue/ProgrammerPreloadPlaybackQueueView";
 import { useProgrammerValuesActivity } from "../../features/programmerValues/useProgrammerValuesActivity";
 import { openUpdateTargetMenu } from "./updateWorkflow";
+import { requestSystemControlsTab } from "../../features/deskState/deskStateDiagnostics";
+import { useDeskStateDiagnostics } from "../../features/deskState/DeskStateDiagnosticsState";
 
 const queuedPlaybackLabels = {
 	back: "GO MINUS",
@@ -123,6 +125,7 @@ function useCommandLineBarModel() {
 	const blackout = useOutputRuntimeBlackout() === true;
 	const highlight = useHighlightSnapshot()?.active === true;
 	const serverError = useServerError();
+	const deskDiagnostics = useDeskStateDiagnostics(serverError);
 	const command = useCommandLineSurface({ selection: true });
 	const programmerActivity = useProgrammerValuesActivity();
 	const preloadPlaybackQueue = useProgrammerPreloadPlaybackQueueView();
@@ -205,12 +208,14 @@ function useCommandLineBarModel() {
 		if (!preload.ready || !preload.actions) return;
 		await preload.actions.release();
 	};
-	const openSystemControls = () =>
+	const openSystemControls = () => {
+		requestSystemControlsTab(deskDiagnostics.length ? "desk-state" : "running");
 		dispatch({
 			type: "SET_MODAL",
 			modal: "systemControlsOpen",
 			value: true,
 		});
+	};
 	const toggleControlMode = () => dispatch({ type: "TOGGLE_CONTROL_MODE" });
 	useCommandLineShortcuts(hardware, {
 		completed,
@@ -234,6 +239,7 @@ function useCommandLineBarModel() {
 		timecode,
 		blackout,
 		highlight,
+		deskError: deskDiagnostics[0]?.title ?? null,
 	};
 	return {
 		state,

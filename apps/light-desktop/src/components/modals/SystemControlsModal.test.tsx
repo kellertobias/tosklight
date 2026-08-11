@@ -8,12 +8,14 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SystemControlsModal } from "./SystemControlsModal";
 import type { RunningCueListSource } from "./systemControls/runningPlaybackAuthority";
+import { requestSystemControlsTab } from "../../features/deskState/deskStateDiagnostics";
 
 const dispatch = vi.fn();
 const clearProgrammer = vi.fn().mockResolvedValue(undefined);
 const release = vi.fn().mockResolvedValue(null);
 const authorityCalls: boolean[] = [];
 const appState = { systemControlsOpen: true };
+const deskState = vi.hoisted(() => ({ error: null as string | null }));
 const lifecycle = vi.hoisted(() => ({
 	projection: {
 		revision: 1,
@@ -199,6 +201,9 @@ vi.mock("../../api/ServerContext", () => ({ useServer: () => server }));
 vi.mock("../../features/deskSnapshot/DeskSnapshotState", () => ({
 	useSessionSnapshot: () => server.session,
 }));
+vi.mock("../../features/shellStatus/ShellStatusState", () => ({
+	useServerError: () => deskState.error,
+}));
 vi.mock(
 	"../../features/programmerActions/ProgrammerActionsContext",
 	async (importOriginal) => ({
@@ -273,6 +278,8 @@ afterEach(() => {
 		canStop: true,
 	});
 	appState.systemControlsOpen = true;
+	deskState.error = null;
+	requestSystemControlsTab("running");
 	Object.assign(playbackAuthority, {
 		ready: true,
 		loading: false,
@@ -298,6 +305,44 @@ afterEach(() => {
 });
 
 describe("SystemControlsModal", () => {
+	it("keeps Desk state available when healthy and opens a requested duplicate conflict directly", () => {
+		const { rerender } = render(<SystemControlsModal />);
+
+		fireEvent.click(screen.getByRole("tab", { name: "Desk state" }));
+		expect(screen.getByText("No desk errors")).toBeInTheDocument();
+		expect(
+			screen.getByText("Output and desk authorities have no current global fault."),
+		).toBeInTheDocument();
+
+		deskState.error =
+			"Fixture fixture-17 has more than one Programmer value for intensity. This is an internal Programmer authority duplication, not a DMX patch overlap. Reload the desk state; if it returns, inspect that fixture's profile, heads, and multipatch data.";
+		requestSystemControlsTab("desk-state");
+		rerender(<SystemControlsModal />);
+
+		expect(
+			screen.getByRole("tab", { name: "Desk state · 1" }),
+		).toHaveAttribute("aria-selected", "true");
+		const conflict = screen.getByRole("link", {
+			name: "Programmer conflict · Fixture fixture-17 · intensity",
+		});
+		expect(conflict).toHaveAttribute(
+			"href",
+			"#programmer-fixture-fixture-17-intensity",
+		);
+		expect(
+			screen.getByText(
+				"Fixture fixture-17 has two Programmer values for intensity. The desk cannot choose one authoritative value until the conflict is repaired. This is not a DMX patch overlap.",
+			),
+		).toBeInTheDocument();
+		expect(
+			screen.getByText(
+				"Reload the desk state. If the conflict returns, inspect Fixture fixture-17's profile, logical heads, and multipatch data.",
+			),
+		).toBeInTheDocument();
+		expect(
+			screen.queryByText(/internal Programmer authority duplication/u),
+		).not.toBeInTheDocument();
+	});
 	it("shows each scoped running source without reading broad Playback state", () => {
 		render(<SystemControlsModal />);
 
@@ -312,6 +357,7 @@ describe("SystemControlsModal", () => {
 		);
 		expect(screen.getByRole("button", { name: "All Off" })).toHaveClass(
 			"system-controls-all-off",
+			"ui-danger",
 		);
 		expect(titleBar).toContainElement(
 			screen.getByRole("button", { name: "Active Programmers (1)" }),

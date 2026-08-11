@@ -4,6 +4,7 @@ import { CueRecordingProvider } from "../features/cueRecording/CueRecordingProvi
 import { DeskConnectionProvider } from "../features/deskConnection/DeskConnectionContext";
 import { DeskLoadingStateProvider } from "../features/deskLoading/DeskLoadingState";
 import { DmxDiagnosticsProvider } from "../features/dmxDiagnostics/DmxDiagnosticsContext";
+import { DeskStateDiagnosticsProvider } from "../features/deskState/DeskStateDiagnosticsState";
 import { DynamicsActionsProvider } from "../features/dynamics/DynamicsActionsContext";
 import { FilesProvider } from "../features/files/FilesContext";
 import { FixtureLibraryProvider } from "../features/fixtureLibrary/FixtureLibraryContext";
@@ -544,6 +545,10 @@ export function ServerRuntime({
 	} = useProviderActionSources(value);
 	const dynamicsActions = useDynamicsActionSource(state);
 	const visualizerViewActions = useVisualizerViewActionSource(state);
+	const readDeskStateDiagnostics = useCallback(
+		() => state.api.runtime.diagnostics(),
+		[state.api],
+	);
 	const refreshAttributeRegistry = useCallback(async () => {
 		const next = await state.api.runtime.bootstrap();
 		state.setBootstrap((current) =>
@@ -573,30 +578,13 @@ export function ServerRuntime({
 					loadShowObjects={loadShowObjects}
 					sessionRole={sessionRole}
 				>
-					<ServerActionProviderStack
-						state={state}
-						data={{
-							fileSource,
-							screenSource,
-							showLifecycle,
-							deskConnection,
-							fixtureLibraryState,
-							mediaServersState,
-						}}
-						actions={{
-							highlightActions,
-							programmerActions,
-							dmxDiagnostics,
-							soundToLightActions,
-							shellStatusActions,
-						}}
-						dynamicsActions={dynamicsActions}
-						visualizerViewActions={visualizerViewActions}
+					<DeskStateDiagnosticsProvider
+						enabled={state.status === "connected" && state.session !== null}
+						readDiagnostics={readDeskStateDiagnostics}
+						outputRoutes={state.outputRoutes}
 					>
-						<ServerShowProviderStack
+						<ServerActionProviderStack
 							state={state}
-							boundaries={boundaries}
-							value={value}
 							data={{
 								fileSource,
 								screenSource,
@@ -605,12 +593,35 @@ export function ServerRuntime({
 								fixtureLibraryState,
 								mediaServersState,
 							}}
-							selectiveImportSource={selectiveImportSource}
-							sessionRole={sessionRole}
+							actions={{
+								highlightActions,
+								programmerActions,
+								dmxDiagnostics,
+								soundToLightActions,
+								shellStatusActions,
+							}}
+							dynamicsActions={dynamicsActions}
+							visualizerViewActions={visualizerViewActions}
 						>
-							{children}
-						</ServerShowProviderStack>
-					</ServerActionProviderStack>
+							<ServerShowProviderStack
+								state={state}
+								boundaries={boundaries}
+								value={value}
+								data={{
+									fileSource,
+									screenSource,
+									showLifecycle,
+									deskConnection,
+									fixtureLibraryState,
+									mediaServersState,
+								}}
+								selectiveImportSource={selectiveImportSource}
+								sessionRole={sessionRole}
+							>
+								{children}
+							</ServerShowProviderStack>
+						</ServerActionProviderStack>
+					</DeskStateDiagnosticsProvider>
 				</ServerConnectionOwner>
 			</SchedulerProvider>
 		</AttributeConfigurationActionsProvider>

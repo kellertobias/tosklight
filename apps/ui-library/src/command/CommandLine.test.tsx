@@ -143,6 +143,42 @@ describe("CommandLine", () => {
 		).toBeVisible();
 	});
 
+	it("replaces both healthy status rows with one desk-error route and restores them when healthy", () => {
+		const open = vi.fn();
+		const view = props({
+			onOpenStatus: open,
+			status: {
+				connection: "connected",
+				frequency: 44,
+				timecode: "01:02:03:12",
+				blackout: false,
+				highlight: false,
+				deskError: "Programmer authority conflict",
+			},
+		});
+		const { rerender } = render(<CommandLine {...view} />);
+
+		const warning = screen.getByRole("button", {
+			name: "Desk error. Open Running & Output Desk state",
+		});
+		expect(
+			warning.querySelector(".command-status-warning-triangle"),
+		).toBeInTheDocument();
+		expect(screen.queryByText("DMX 44Hz")).not.toBeInTheDocument();
+		expect(screen.queryByText("01:02:03:12")).not.toBeInTheDocument();
+		fireEvent.click(warning);
+		expect(open).toHaveBeenCalledOnce();
+
+		rerender(
+			<CommandLine
+				{...view}
+				status={{ ...view.status, deskError: null, timecode: null }}
+			/>,
+		);
+		expect(screen.getByText("DMX 44Hz")).toBeVisible();
+		expect(screen.getByText("No Timecode")).toBeVisible();
+	});
+
 	it("keeps pending preload details in the title without adding them beside PRELOAD GO", () => {
 		render(
 			<CommandLine
