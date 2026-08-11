@@ -83,6 +83,7 @@ pub struct FrameRateReport {
     pub wall_clock_average_completed_hz: f64,
     pub minimum_one_second_completed_hz: f64,
     pub p95_one_second_completed_hz: f64,
+    pub maximum_one_second_completed_hz: f64,
     pub one_second_windows: u64,
     pub windows_below_minimum: u64,
     pub gate_met: bool,

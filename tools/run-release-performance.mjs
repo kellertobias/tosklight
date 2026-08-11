@@ -40,7 +40,7 @@ function validateStage(stage, { mutations }) {
 	const scenario = observedScenario(report);
 	if (
 		!report ||
-		report.schema_version !== 6 ||
+		report.schema_version !== 7 ||
 		report.benchmark !== BENCHMARK_IDENTITY ||
 		typeof report.required_floor_met !== "boolean" ||
 		typeof report.reference?.hardware_label !== "string" ||
@@ -99,7 +99,7 @@ function validateHeadlessStress(stage) {
 	const scenario = report?.scenarios?.[0];
 	if (
 		stage?.exit_code !== 0 ||
-		report?.schema_version !== 6 ||
+		report?.schema_version !== 7 ||
 		report?.benchmark !== BENCHMARK_IDENTITY ||
 		scenario?.profile !== "headless_stress" ||
 		scenario?.expectation !== "informational_capacity" ||
@@ -309,7 +309,13 @@ function scenarioEvidence(validation) {
 			scenario.frame_rate.minimum_one_second_completed_hz,
 		p95_one_second_completed_hz:
 			scenario.frame_rate.p95_one_second_completed_hz ?? null,
+		maximum_one_second_completed_hz:
+			scenario.frame_rate.maximum_one_second_completed_hz ?? null,
 		windows_below_minimum: scenario.frame_rate.windows_below_minimum,
+		dynamic_definition_count: scenario.dynamic_definition_count ?? null,
+		dynamic_lane_attributes: scenario.dynamic_lane_attributes ?? [],
+		dynamic_excluded_fixture_count:
+			scenario.dynamic_excluded_fixture_count ?? null,
 		deadline_misses: scenario.deadline.deadline_misses,
 		dropped_ticks: scenario.deadline.dropped_ticks,
 		deferred_ticks: scenario.deadline.deferred_ticks,
@@ -516,7 +522,13 @@ export function statusDocument(
 				observed?.minimum_one_second_completed_hz ?? null,
 			p95_one_second_completed_hz:
 				observed?.p95_one_second_completed_hz ?? null,
+			maximum_one_second_completed_hz:
+				observed?.maximum_one_second_completed_hz ?? null,
 			windows_below_minimum: observed?.windows_below_minimum ?? null,
+			dynamic_definition_count: observed?.dynamic_definition_count ?? null,
+			dynamic_lane_attributes: observed?.dynamic_lane_attributes ?? [],
+			dynamic_excluded_fixture_count:
+				observed?.dynamic_excluded_fixture_count ?? null,
 			deadline_misses: observed?.deadline_misses ?? null,
 			dropped_ticks: observed?.dropped_ticks ?? null,
 			deferred_ticks: observed?.deferred_ticks ?? null,
@@ -539,7 +551,15 @@ export function statusDocument(
 						twoThousandObserved.minimum_one_second_completed_hz,
 					p95_one_second_completed_hz:
 						twoThousandObserved.p95_one_second_completed_hz,
+					maximum_one_second_completed_hz:
+						twoThousandObserved.maximum_one_second_completed_hz,
 					windows_below_minimum: twoThousandObserved.windows_below_minimum,
+					requested_rate_hz: twoThousandObserved.requested_rate_hz,
+					dynamic_definition_count:
+						twoThousandObserved.dynamic_definition_count,
+					dynamic_lane_attributes: twoThousandObserved.dynamic_lane_attributes,
+					dynamic_excluded_fixture_count:
+						twoThousandObserved.dynamic_excluded_fixture_count,
 					resources: twoThousandValidation.report.process_resources ?? null,
 				}
 			: {
@@ -570,7 +590,15 @@ export function statusDocument(
 					average_completed_hz: doubledObserved?.average_completed_hz ?? null,
 					p95_one_second_completed_hz:
 						doubledObserved?.p95_one_second_completed_hz ?? null,
+					maximum_one_second_completed_hz:
+						doubledObserved?.maximum_one_second_completed_hz ?? null,
 					windows_below_minimum: doubledObserved?.windows_below_minimum ?? null,
+					dynamic_definition_count:
+						doubledObserved?.dynamic_definition_count ?? null,
+					dynamic_lane_attributes:
+						doubledObserved?.dynamic_lane_attributes ?? [],
+					dynamic_excluded_fixture_count:
+						doubledObserved?.dynamic_excluded_fixture_count ?? null,
 					deadline_misses: doubledObserved?.deadline_misses ?? null,
 					dropped_ticks: doubledObserved?.dropped_ticks ?? null,
 					deferred_ticks: doubledObserved?.deferred_ticks ?? null,
@@ -592,7 +620,11 @@ export function statusDocument(
 					minimum_one_second_completed_hz: null,
 					average_completed_hz: null,
 					p95_one_second_completed_hz: null,
+					maximum_one_second_completed_hz: null,
 					windows_below_minimum: null,
+					dynamic_definition_count: null,
+					dynamic_lane_attributes: [],
+					dynamic_excluded_fixture_count: null,
 					deadline_misses: null,
 					dropped_ticks: null,
 					deferred_ticks: null,

@@ -186,23 +186,50 @@
       .signing-note { margin: 1.5rem 0 0; color: var(--muted); font-size: 0.85rem; }
       a.version { text-decoration: none; }
       a.version:hover { border-color: var(--accent); color: var(--text); }
-      .performance-status {
-        padding: 1.25rem;
-        background: var(--panel);
-        border: 1px solid var(--edge);
-        border-left-width: 0.4rem;
-        border-radius: 0.7rem;
+      .performance-table-scroll { overflow-x: auto; }
+      .performance-compact {
+        width: 100%;
+        min-width: 58rem;
+        border-collapse: separate;
+        border-spacing: 0 0.45rem;
       }
-      .performance-status strong { display: block; font-size: 1.05rem; }
-      .performance-status p { margin: 0.35rem 0; color: var(--muted); }
-      .performance-status a { font-size: 0.9rem; }
-      .performance-healthy { border-left-color: var(--healthy); }
-      .performance-healthy strong { color: var(--healthy); }
-      .performance-warning { border-left-color: var(--warning); }
-      .performance-warning strong { color: var(--warning); }
-      .performance-degraded { border-left-color: var(--degraded); }
-      .performance-degraded strong { color: var(--degraded); }
-      .performance-unknown { border-left-color: var(--muted); }
+      .performance-compact th,
+      .performance-compact td {
+        padding: 0.75rem 0.9rem;
+        text-align: left;
+        vertical-align: top;
+      }
+      .performance-compact thead th {
+        color: var(--muted);
+        font-size: 0.75rem;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      .performance-row th:first-child { border-radius: 0.55rem 0 0 0.55rem; }
+      .performance-row td:last-child { border-radius: 0 0.55rem 0.55rem 0; }
+      .performance-row strong { display: block; color: var(--text); font-size: 1rem; }
+      .performance-row small {
+        display: block;
+        margin-top: 0.15rem;
+        color: var(--muted);
+        font-size: 0.72rem;
+        line-height: 1.35;
+        white-space: nowrap;
+      }
+      .performance-row-healthy > * { background: rgb(57 217 138 / 0.12); }
+      .performance-row-warning > * { background: rgb(255 176 32 / 0.16); }
+      .performance-row-degraded > * { background: rgb(255 107 107 / 0.15); }
+      .performance-row-unknown > * { background: rgb(154 165 184 / 0.1); }
+      .performance-legend,
+      .performance-details,
+      .performance-empty { color: var(--muted); font-size: 0.82rem; }
+      .performance-legend { margin: 0.85rem 0 0; }
+      .performance-details { margin: 0.35rem 0 0; }
+      .legend-healthy { color: var(--healthy); }
+      .legend-warning { color: var(--accent); }
+      .legend-degraded { color: var(--degraded); }
+      .legend-unknown { color: var(--muted); }
       .specs {
         display: grid;
         gap: 1rem;
@@ -369,9 +396,9 @@
       <section id="performance">
         <h2>Release performance</h2>
         <p class="section-lede">
-          Measured after publication using the released Linux benchmark artifact. The 1,024-fixture
-          indicator is green at 60 Hz, yellow from 40 Hz, and red below 40 Hz. The 2,048-fixture
-          run diagnoses the current limit without blocking the release.
+          Output-cadence runs measured after publication using the released Linux benchmark artifact.
+          Each row summarizes the test set, concurrent load, refresh statistics, time below target,
+          and measured CPU evidence.
         </p>
         __PERFORMANCE__
       </section>

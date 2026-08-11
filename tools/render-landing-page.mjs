@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { artifactPaths } from "./artifact-paths.mjs";
 import {
 	normalizePublicPerformanceStatus,
+	renderCompactPerformanceSummary,
 	renderPerformancePage,
 } from "./performance-publication.mjs";
 
@@ -178,18 +179,7 @@ writeFileSync(
   resolve(siteRoot, "performance", "index.html"),
   renderPerformancePage(performance),
 );
-const performanceLabel = {
-  healthy: "Performance healthy",
-  warning: "Performance warning",
-  degraded: "Performance critical",
-  unknown: "Performance unknown",
-}[performance.status];
-const performanceMarkup =
-  `<div class="performance-status performance-${escapeHtml(performance.status)}">` +
-  `<strong>${escapeHtml(performanceLabel)}</strong>` +
-  `<p>${escapeHtml(performance.summary)}</p>` +
-  `<a href="performance/">Performance details and raw report →</a>` +
-  `</div>`;
+const performanceMarkup = renderCompactPerformanceSummary(performance);
 
 const demoSources = [
   {

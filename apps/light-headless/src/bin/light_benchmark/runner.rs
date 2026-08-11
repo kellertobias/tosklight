@@ -72,7 +72,7 @@ pub fn run(arguments: &Arguments) -> Result<BenchmarkReport, String> {
         .then(crate::light_benchmark::patch_mutation::run)
         .transpose()?;
     Ok(BenchmarkReport {
-        schema_version: 6,
+        schema_version: 7,
         benchmark: "tosklight_render_to_protocol_encoding_pipeline",
         reference: metadata::capture(arguments.hardware_label.as_deref()),
         configuration: RunConfiguration {
@@ -508,6 +508,7 @@ fn frame_rate_report(
         .div_ceil(100)
         .saturating_sub(1);
     let p95 = sorted_windows.get(p95_index).copied().unwrap_or(0);
+    let maximum = sorted_windows.last().copied().unwrap_or(0);
     let windows_below_minimum = completed_ticks_by_second
         .iter()
         .filter(|completed| **completed < required)
@@ -519,10 +520,11 @@ fn frame_rate_report(
         wall_clock_average_completed_hz: completed_ticks as f64 / elapsed.as_secs_f64(),
         minimum_one_second_completed_hz: minimum as f64,
         p95_one_second_completed_hz: p95 as f64,
+        maximum_one_second_completed_hz: maximum as f64,
         one_second_windows: completed_ticks_by_second.len() as u64,
         windows_below_minimum,
         gate_met: average >= f64::from(required_minimum_hz) && windows_below_minimum == 0,
-        definition: "average uses completed scheduled frames over the configured measurement duration; minimum is the fewest completed scheduled frames in any non-overlapping one-second interval",
+        definition: "average uses completed scheduled frames over the configured measurement duration; minimum, p95, and maximum describe completed scheduled frames in non-overlapping one-second intervals",
     }
 }
 

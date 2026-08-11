@@ -40,6 +40,7 @@ fn frame_rate_report_requires_every_measured_second_to_meet_the_floor() {
     assert_eq!(passing.average_completed_hz, 100.0);
     assert_eq!(passing.minimum_one_second_completed_hz, 100.0);
     assert_eq!(passing.p95_one_second_completed_hz, 100.0);
+    assert_eq!(passing.maximum_one_second_completed_hz, 100.0);
     assert_eq!(passing.windows_below_minimum, 0);
     assert!(passing.gate_met);
 
@@ -47,6 +48,7 @@ fn frame_rate_report_requires_every_measured_second_to_meet_the_floor() {
     assert_eq!(dropped.average_completed_hz, 99.5);
     assert_eq!(dropped.minimum_one_second_completed_hz, 99.0);
     assert_eq!(dropped.p95_one_second_completed_hz, 100.0);
+    assert_eq!(dropped.maximum_one_second_completed_hz, 100.0);
     assert_eq!(dropped.windows_below_minimum, 1);
     assert!(!dropped.gate_met);
 }
@@ -58,4 +60,5 @@ fn frame_rate_report_uses_nearest_rank_for_p95() {
     ];
     let report = frame_rate_report(&windows, 20, 40, 1_865, Duration::from_secs(20));
     assert_eq!(report.p95_one_second_completed_hz, 103.0);
+    assert_eq!(report.maximum_one_second_completed_hz, 104.0);
 }

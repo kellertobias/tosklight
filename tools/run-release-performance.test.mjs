@@ -37,7 +37,7 @@ function report({
 	deadlineMisses = 0,
 } = {}) {
 	return {
-		schema_version: 6,
+		schema_version: 7,
 		benchmark: "tosklight_render_to_protocol_encoding_pipeline",
 		reference: {
 			hardware_label: "<CI runner>",
@@ -65,8 +65,12 @@ function report({
 					average_completed_hz: achieved,
 					minimum_one_second_completed_hz: minimum,
 					p95_one_second_completed_hz: achieved + 1,
+					maximum_one_second_completed_hz: achieved + 2,
 					windows_below_minimum: deadlineMisses,
 				},
+				dynamic_definition_count: 4,
+				dynamic_lane_attributes: ["intensity"],
+				dynamic_excluded_fixture_count: 0,
 				deadline: {
 					deadline_misses: deadlineMisses,
 					dropped_ticks: 0,
@@ -171,6 +175,11 @@ test("the 1,024-fixture indicator uses 60 Hz green and 40 Hz yellow thresholds",
 	assert.equal(status.required_floor.parameter_count, 16_384);
 	assert.equal(status.required_floor.average_completed_hz, 63.25);
 	assert.equal(status.required_floor.p95_one_second_completed_hz, 64.25);
+	assert.equal(status.required_floor.maximum_one_second_completed_hz, 65.25);
+	assert.equal(status.required_floor.dynamic_definition_count, 4);
+	assert.deepEqual(status.required_floor.dynamic_lane_attributes, [
+		"intensity",
+	]);
 	assert.equal(
 		status.required_floor.resources.peak_resident_bytes,
 		512 * 1024 ** 2,
@@ -258,6 +267,8 @@ test("passing baseline remains healthy when the optional density probe degrades"
 	assert.equal(status.doubled_density.achieved_ticks_per_second, 82);
 	assert.equal(status.doubled_density.deadline_misses, 2);
 	assert.equal(status.doubled_density.windows_below_minimum, 2);
+	assert.equal(status.doubled_density.maximum_one_second_completed_hz, 84);
+	assert.equal(status.doubled_density.dynamic_definition_count, 4);
 });
 
 test("the exact 2,000-fixture shipped-mode workload is retained separately", () => {
@@ -285,6 +296,8 @@ test("the exact 2,000-fixture shipped-mode workload is retained separately", () 
 	assert.equal(status.two_thousand_show.parameter_count, 37_720);
 	assert.equal(status.two_thousand_show.universes, 74);
 	assert.equal(status.two_thousand_show.average_completed_hz, 100);
+	assert.equal(status.two_thousand_show.maximum_one_second_completed_hz, 102);
+	assert.equal(status.two_thousand_show.dynamic_definition_count, 4);
 });
 
 test("CLI accepts a parsed measured failure but rejects invalid JSON", () => {

@@ -15,6 +15,7 @@ import { artifactPaths } from "./artifact-paths.mjs";
 import {
 	normalizePublicPerformanceStatus,
 	performanceReportUrl,
+	renderCompactPerformanceSummary,
 	renderPerformancePage,
 } from "./performance-publication.mjs";
 
@@ -77,7 +78,11 @@ function measuredStatus(status = "healthy") {
 			minimum_one_second_completed_hz: status === "healthy" ? 100 : 82,
 			average_completed_hz: status === "healthy" ? 100.1 : 87.5,
 			p95_one_second_completed_hz: status === "healthy" ? 101 : 91,
+			maximum_one_second_completed_hz: status === "healthy" ? 102 : 94,
 			windows_below_minimum: status === "healthy" ? 0 : 3,
+			dynamic_definition_count: 4,
+			dynamic_lane_attributes: ["intensity"],
+			dynamic_excluded_fixture_count: 0,
 			deadline_misses: status === "healthy" ? 0 : 3,
 			dropped_ticks: 0,
 			deferred_ticks: 0,
@@ -114,7 +119,19 @@ function measuredStatus(status = "healthy") {
 			minimum_one_second_completed_hz: 57,
 			average_completed_hz: 60,
 			p95_one_second_completed_hz: 62,
+			maximum_one_second_completed_hz: 64,
 			windows_below_minimum: 1,
+			requested_rate_hz: 100,
+			dynamic_definition_count: 20,
+			dynamic_lane_attributes: [
+				"intensity",
+				"color.red",
+				"color.green",
+				"color.blue",
+				"pan",
+				"tilt",
+			],
+			dynamic_excluded_fixture_count: 920,
 			resources: { peak_resident_bytes: 700 * 1024 ** 2 },
 		},
 		show_mutation: {
@@ -160,7 +177,12 @@ function measuredStatus(status = "healthy") {
 			minimum_one_second_completed_hz: 69,
 			average_completed_hz: 72,
 			p95_one_second_completed_hz: 74,
+			maximum_one_second_completed_hz: 76,
 			windows_below_minimum: 2,
+			requested_rate_hz: 100,
+			dynamic_definition_count: 4,
+			dynamic_lane_attributes: ["intensity"],
+			dynamic_excluded_fixture_count: 0,
 			deadline_misses: 8,
 			dropped_ticks: 0,
 			deferred_ticks: 1,
@@ -207,6 +229,33 @@ test("healthy and degraded measured statuses retain their public evidence", () =
 	assert.match(page, /Runner configuration/u);
 	assert.match(page, /Logical cores<\/th><td>4/u);
 	assert.match(page, /RAM<\/th><td>16\.0 GiB/u);
+});
+
+test("compact landing summary includes only measured runs and explains row colors", () => {
+	const summary = renderCompactPerformanceSummary(measuredStatus("degraded"));
+	assert.equal(summary.match(/class="performance-row /gu)?.length, 3);
+	assert.match(
+		summary,
+		/<th>Test set<\/th><th>Load<\/th><th>Statistics<\/th>/u,
+	);
+	assert.match(summary, /<strong>2,000 fixtures<\/strong>/u);
+	assert.match(summary, /37,720 parameters · 74 DMX universes/u);
+	assert.match(summary, /<strong>20 dyn\.<\/strong>/u);
+	assert.match(summary, /6 Dynamic lane attributes/u);
+	assert.match(summary, /<strong>62 Hz p95<\/strong>/u);
+	assert.match(summary, /57 \/ 60 \/ 64 Hz · min \/ avg \/ max/u);
+	assert.match(
+		summary,
+		/<strong>1 s<\/strong><small>below 100 Hz output target/u,
+	);
+	assert.match(
+		summary,
+		/Not measured<\/strong><small>application CPU unavailable/u,
+	);
+	assert.match(summary, /performance-row-warning/u);
+	assert.match(summary, /Orange<\/span>: warning, minimum 40–&lt;60 Hz/u);
+	assert.match(summary, /Detailed tests, run information, and raw report/u);
+	assert.doesNotMatch(summary, /295 fixtures|100 fixtures/u);
 });
 
 test("warning is a valid measured public state", () => {
@@ -339,12 +388,17 @@ test("landing-page assembly writes the same normalized object used by the HTML",
 			),
 			status,
 		);
-		const page = readFileSync(
+		const detailPage = readFileSync(
 			resolve(directory, "performance/index.html"),
 			"utf8",
 		);
-		assert.match(page, /87\.5 Hz/u);
-		assert.match(page, /report-performance\.zip/u);
+		assert.match(detailPage, /87\.5 Hz/u);
+		assert.match(detailPage, /report-performance\.zip/u);
+		const landingPage = readFileSync(target, "utf8");
+		assert.match(landingPage, /class="performance-compact"/u);
+		assert.match(landingPage, /2,000 fixtures/u);
+		assert.match(landingPage, /20 dyn\./u);
+		assert.match(landingPage, /Orange<\/span>: warning/u);
 	} finally {
 		rmSync(directory, { recursive: true, force: true });
 	}
