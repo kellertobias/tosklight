@@ -17,8 +17,10 @@ impl MeasurementSampler {
             let state = LinuxMeasurementState::start();
             return Self { state };
         }
-        #[allow(unreachable_code)]
-        Self {}
+        #[cfg(not(target_os = "linux"))]
+        {
+            Self {}
+        }
     }
 
     pub(super) fn sample_if_due(&mut self) {
