@@ -1838,6 +1838,9 @@ async fn assert_action_is_no_change(
 #[tokio::test]
 async fn captured_preload_queue_is_replay_safe_snapshot_owned_and_drained_once_by_go() {
     let (state, data_dir) = test_state();
+    state.installation.update_configuration(|configuration| {
+        configuration.preload_physical_playback_actions = true;
+    });
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
     let session = session_for_token(&state, &token);
@@ -1935,6 +1938,9 @@ async fn captured_preload_queue_is_replay_safe_snapshot_owned_and_drained_once_b
 #[tokio::test]
 async fn all_no_op_preload_batch_drains_without_runtime_event_or_persistence() {
     let (state, data_dir) = test_state();
+    state.installation.update_configuration(|configuration| {
+        configuration.preload_physical_playback_actions = true;
+    });
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
     let session = session_for_token(&state, &token);
@@ -1984,6 +1990,9 @@ async fn all_no_op_preload_batch_drains_without_runtime_event_or_persistence() {
 #[tokio::test]
 async fn transient_preload_cancellation_drains_without_runtime_event_or_persistence() {
     let (state, data_dir) = test_state();
+    state.installation.update_configuration(|configuration| {
+        configuration.preload_physical_playback_actions = true;
+    });
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
     let session = session_for_token(&state, &token);
@@ -2135,6 +2144,9 @@ async fn same_user_preload_commit_keeps_captured_originating_desk_with_show_scop
 #[tokio::test]
 async fn preload_hidden_addressed_change_emits_one_equal_projection_event() {
     let (state, data_dir) = test_state();
+    state.installation.update_configuration(|configuration| {
+        configuration.preload_physical_playback_actions = true;
+    });
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
     let session = session_for_token(&state, &token);
@@ -2191,6 +2203,9 @@ async fn preload_hidden_addressed_change_emits_one_equal_projection_event() {
 #[tokio::test]
 async fn failed_preload_go_rolls_back_queue_generation_and_emits_no_projection() {
     let (state, data_dir) = test_state();
+    state.installation.update_configuration(|configuration| {
+        configuration.preload_physical_playback_actions = true;
+    });
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
     let session = session_for_token(&state, &token);

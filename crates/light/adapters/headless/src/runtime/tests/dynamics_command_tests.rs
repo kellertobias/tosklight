@@ -784,6 +784,9 @@ fn live_and_preload_visualization_resolve_different_dynamic_layers_authoritative
 #[test]
 fn dynamic_command_line_routes_toggle_parameters_and_off_through_one_controller() {
     let (state, data_dir) = test_state();
+    state.installation.update_configuration(|configuration| {
+        configuration.command_line_at_uses_programmer_fade = true;
+    });
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         id: SessionId::new(),
