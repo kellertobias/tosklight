@@ -38,6 +38,9 @@ export class BrowserSystemIntegrations {
 	async expectMatterBridgeToggle(): Promise<void> {
 		await this.enterSetup();
 		await this.openSetupSection("Network & Inputs");
+		await this.page
+			.getByRole("button", { name: "Bridges", exact: true })
+			.click();
 		const settings = this.page.getByLabel("Matter bridge settings");
 		await expect(
 			settings.getByText(
@@ -48,7 +51,8 @@ export class BrowserSystemIntegrations {
 			name: "Matter server",
 			exact: true,
 		});
-		if (!(await matterSwitch.isChecked())) await matterSwitch.click();
+		const matterTrack = matterSwitch.locator("..").locator(".ui-switch-track");
+		if (!(await matterSwitch.isChecked())) await matterTrack.click();
 		await expect(matterSwitch).toBeChecked();
 		await expect
 			.poll(
@@ -57,7 +61,7 @@ export class BrowserSystemIntegrations {
 						.configuration.matter_enabled,
 			)
 			.toBe(true);
-		await matterSwitch.click();
+		await matterTrack.click();
 		await expect
 			.poll(
 				async () =>

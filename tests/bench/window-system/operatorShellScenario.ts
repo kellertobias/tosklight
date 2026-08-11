@@ -256,7 +256,7 @@ export class BrowserOperatorShell {
 				.getByRole("button", { name: "Screens & playback", exact: true })
 				.click();
 			await this.page
-				.getByRole("button", { name: "Desk Lock", exact: true })
+				.getByRole("button", { name: "Configure desk lock", exact: true })
 				.click();
 			await this.page
 				.getByRole("button", { name: "Choose lock wallpaper", exact: true })

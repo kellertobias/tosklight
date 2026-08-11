@@ -41,6 +41,7 @@ scenario(
 		await t.app.open();
 		await t.app.expect.ready();
 		await openProgrammingPools(t);
+		await t.timing.programmerFade.setCommandLineAtEnabled(true);
 		await t.timing.programmerFade.via.api.set("3s");
 		await t.selection.fixtures.via.ui.item(1);
 		await t.encoder.intensity.dimmer.via.ui.set(0);
@@ -69,6 +70,7 @@ scenario(
 		await t.app.open();
 		await t.app.expect.ready();
 		await openProgrammingPools(t);
+		await t.timing.programmerFade.setCommandLineAtEnabled(true);
 		await t.timing.programmerFade.via.api.set("3s");
 		await t.selection.groups.via.pool.item(3);
 		await t.encoder.intensity.dimmer.via.ui.set(0);

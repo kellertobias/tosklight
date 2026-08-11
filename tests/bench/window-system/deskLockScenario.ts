@@ -137,7 +137,7 @@ export class BrowserDeskLock {
 			.toBe(false);
 
 		await this.page
-			.getByRole("button", { name: "Desk Lock", exact: true })
+			.getByRole("button", { name: "Configure desk lock", exact: true })
 			.click();
 		const settings = this.page.getByRole("dialog", { name: "Desk Lock" });
 		const titleBar = settings.locator(":scope > .ui-modal-titlebar");
