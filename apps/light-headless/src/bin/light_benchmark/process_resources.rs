@@ -1,86 +1,117 @@
 use crate::light_benchmark::report::{MeasurementResourceReport, ProcessResourceReport};
+use std::time::Duration;
 #[cfg(target_os = "linux")]
 use std::time::Instant;
-use std::{
-    sync::mpsc::{self, Receiver, Sender},
-    thread,
-    time::Duration,
-};
 
 const SAMPLE_INTERVAL: Duration = Duration::from_millis(100);
 
 pub(super) struct MeasurementSampler {
-    stop: Sender<()>,
-    worker: Option<thread::JoinHandle<MeasurementResourceReport>>,
+    #[cfg(target_os = "linux")]
+    state: Result<LinuxMeasurementState, String>,
 }
 
 impl MeasurementSampler {
     pub(super) fn start() -> Self {
-        let (stop, receiver) = mpsc::channel();
-        let ticks_per_second = clock_ticks_per_second();
-        let worker = thread::spawn(move || sample_measurement(receiver, ticks_per_second));
-        Self {
-            stop,
-            worker: Some(worker),
+        #[cfg(target_os = "linux")]
+        {
+            let state = LinuxMeasurementState::start();
+            return Self { state };
+        }
+        #[allow(unreachable_code)]
+        Self {}
+    }
+
+    pub(super) fn sample_if_due(&mut self) {
+        #[cfg(target_os = "linux")]
+        if let Ok(state) = &mut self.state {
+            state.sample_if_due();
         }
     }
 
-    pub(super) fn finish(mut self) -> MeasurementResourceReport {
-        let _ = self.stop.send(());
-        self.worker
-            .take()
-            .and_then(|worker| worker.join().ok())
-            .unwrap_or_else(|| unavailable_measurement("resource sampler thread failed".into()))
+    pub(super) fn finish(self) -> MeasurementResourceReport {
+        #[cfg(target_os = "linux")]
+        {
+            return match self.state {
+                Ok(mut state) => state.finish(),
+                Err(reason) => unavailable_measurement(reason),
+            };
+        }
+        #[allow(unreachable_code)]
+        unavailable_measurement("timed CPU and RAM sampling is currently available on Linux".into())
     }
 }
 
 #[cfg(target_os = "linux")]
-fn sample_measurement(
-    stop: Receiver<()>,
-    ticks_per_second: Option<u64>,
-) -> MeasurementResourceReport {
-    let Some(ticks_per_second) = ticks_per_second else {
-        return unavailable_measurement("getconf CLK_TCK returned no clock rate".into());
-    };
-    let mut previous = match linux_sample() {
-        Ok(sample) => sample,
-        Err(reason) => return unavailable_measurement(reason),
-    };
-    let mut cpu_total = 0.0;
-    let mut cpu_max = 0.0_f64;
-    let mut cpu_samples = 0_u64;
-    let mut peak_resident = previous.resident_bytes;
-    loop {
-        match stop.recv_timeout(SAMPLE_INTERVAL) {
-            Ok(()) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
-            Err(mpsc::RecvTimeoutError::Timeout) => {}
+struct LinuxMeasurementState {
+    ticks_per_second: u64,
+    previous: LinuxSample,
+    next_sample_at: Instant,
+    cpu_total: f64,
+    cpu_max: f64,
+    cpu_samples: u64,
+    peak_resident: u64,
+    error: Option<String>,
+}
+
+#[cfg(target_os = "linux")]
+impl LinuxMeasurementState {
+    fn start() -> Result<Self, String> {
+        let ticks_per_second = clock_ticks_per_second()
+            .ok_or_else(|| "getconf CLK_TCK returned no clock rate".to_owned())?;
+        let previous = linux_sample()?;
+        Ok(Self {
+            ticks_per_second,
+            next_sample_at: previous.at + SAMPLE_INTERVAL,
+            peak_resident: previous.resident_bytes,
+            previous,
+            cpu_total: 0.0,
+            cpu_max: 0.0,
+            cpu_samples: 0,
+            error: None,
+        })
+    }
+
+    fn sample_if_due(&mut self) {
+        if self.error.is_some() || Instant::now() < self.next_sample_at {
+            return;
         }
         let current = match linux_sample() {
             Ok(sample) => sample,
-            Err(reason) => return unavailable_measurement(reason),
+            Err(reason) => {
+                self.error = Some(reason);
+                return;
+            }
         };
-        let elapsed = current.at.duration_since(previous.at).as_secs_f64();
+        let elapsed = current.at.duration_since(self.previous.at).as_secs_f64();
         if elapsed > 0.0 {
-            let cpu = current.cpu_ticks.saturating_sub(previous.cpu_ticks) as f64
-                / ticks_per_second as f64
+            let cpu = current.cpu_ticks.saturating_sub(self.previous.cpu_ticks) as f64
+                / self.ticks_per_second as f64
                 / elapsed
                 * 100.0;
-            cpu_total += cpu;
-            cpu_max = cpu_max.max(cpu);
-            cpu_samples += 1;
+            self.cpu_total += cpu;
+            self.cpu_max = self.cpu_max.max(cpu);
+            self.cpu_samples += 1;
         }
-        peak_resident = peak_resident.max(current.resident_bytes);
-        previous = current;
+        self.peak_resident = self.peak_resident.max(current.resident_bytes);
+        self.next_sample_at = current.at + SAMPLE_INTERVAL;
+        self.previous = current;
     }
-    MeasurementResourceReport {
-        application_cpu_average_percent: (cpu_samples > 0)
-            .then_some(cpu_total / cpu_samples as f64),
-        application_cpu_max_percent: (cpu_samples > 0).then_some(cpu_max),
-        application_peak_resident_bytes: Some(peak_resident),
-        samples: cpu_samples,
-        sample_interval_milliseconds: SAMPLE_INTERVAL.as_millis() as u64,
-        measurement: "Light benchmark process only, sampled from /proc during the timed window",
-        unavailable_reason: None,
+
+    fn finish(&mut self) -> MeasurementResourceReport {
+        self.sample_if_due();
+        if let Some(reason) = self.error.take() {
+            return unavailable_measurement(reason);
+        }
+        MeasurementResourceReport {
+            application_cpu_average_percent: (self.cpu_samples > 0)
+                .then_some(self.cpu_total / self.cpu_samples as f64),
+            application_cpu_max_percent: (self.cpu_samples > 0).then_some(self.cpu_max),
+            application_peak_resident_bytes: Some(self.peak_resident),
+            samples: self.cpu_samples,
+            sample_interval_milliseconds: SAMPLE_INTERVAL.as_millis() as u64,
+            measurement: "Light benchmark process only, sampled from /proc during the timed window",
+            unavailable_reason: None,
+        }
     }
 }
 
@@ -118,14 +149,6 @@ fn linux_sample() -> Result<LinuxSample, String> {
     })
 }
 
-#[cfg(not(target_os = "linux"))]
-fn sample_measurement(
-    _stop: Receiver<()>,
-    _ticks_per_second: Option<u64>,
-) -> MeasurementResourceReport {
-    unavailable_measurement("timed CPU and RAM sampling is currently available on Linux".into())
-}
-
 #[cfg(target_os = "linux")]
 fn clock_ticks_per_second() -> Option<u64> {
     let output = std::process::Command::new("getconf")
@@ -137,11 +160,6 @@ fn clock_ticks_per_second() -> Option<u64> {
         .success()
         .then(|| String::from_utf8_lossy(&output.stdout).trim().parse().ok())
         .flatten()
-}
-
-#[cfg(not(target_os = "linux"))]
-const fn clock_ticks_per_second() -> Option<u64> {
-    None
 }
 
 fn unavailable_measurement(reason: String) -> MeasurementResourceReport {

@@ -115,61 +115,13 @@ fn run_scenario(
     required_minimum_hz: u16,
 ) -> Result<ScenarioReport, String> {
     let (loopback, scenario) = prepare_scenario(arguments, config)?;
-    let mut state = TickState::new(arguments.seconds);
-    let warmup_started = Instant::now();
-    let warmup_duration = Duration::from_secs(arguments.warmup_seconds);
-    let mut warmup_ticks = 0_u64;
-    while warmup_started.elapsed() < warmup_duration {
-        run_tick(
-            &scenario,
-            loopback.as_ref(),
-            &mut state.sequences,
-            warmup_ticks,
-            config.rate_hz,
-        )?;
-        warmup_ticks += 1;
-    }
-    let warmup_elapsed = warmup_started.elapsed();
-
-    let expected_ticks = u64::from(config.rate_hz) * arguments.seconds;
-    let resource_sampler = crate::light_benchmark::process_resources::MeasurementSampler::start();
-    let measured_at = Instant::now();
-    let mut tick = 0_u64;
-    let mut previous_pipeline_completion = measured_at;
-    while tick < expected_ticks {
-        let scheduled = measured_at + scheduled_offset(tick, config.rate_hz);
-        let deadline = measured_at + scheduled_offset(tick + 1, config.rate_hz);
-        let now = Instant::now();
-        if now < scheduled {
-            thread::sleep(scheduled - now);
-        }
-        let now = Instant::now();
-        if now >= deadline {
-            let current_tick = tick_at(now.duration_since(measured_at), config.rate_hz);
-            let skipped = current_tick.saturating_sub(tick).min(expected_ticks - tick);
-            state.dropped_ticks += skipped;
-            tick += skipped;
-            continue;
-        }
-        if previous_pipeline_completion > scheduled {
-            state.deferred_ticks += 1;
-        }
-        let sample = run_tick(
-            &scenario,
-            loopback.as_ref(),
-            &mut state.sequences,
-            warmup_ticks + tick,
-            config.rate_hz,
-        )?;
-        previous_pipeline_completion = sample.pipeline_completed_at;
-        if sample.pipeline_completed_at > deadline {
-            state.deadline_misses += 1;
-        }
-        state.record(sample, tick, config.rate_hz);
-        tick += 1;
-    }
-    let elapsed = measured_at.elapsed();
-    let measurement_resources = resource_sampler.finish();
+    let timed = execute_timed_run(arguments, config, &scenario, loopback.as_ref())?;
+    let state = timed.state;
+    let warmup_ticks = timed.warmup_ticks;
+    let warmup_elapsed = timed.warmup_elapsed;
+    let expected_ticks = timed.expected_ticks;
+    let elapsed = timed.elapsed;
+    let measurement_resources = timed.measurement_resources;
     let sampled_contributions = crate::light_benchmark::sampled::measure(
         &scenario,
         warmup_ticks + expected_ticks,
@@ -260,6 +212,86 @@ fn run_scenario(
         },
         sampled_contributions,
         loopback: loopback_summary,
+    })
+}
+
+struct TimedScenarioRun {
+    state: TickState,
+    warmup_ticks: u64,
+    warmup_elapsed: Duration,
+    expected_ticks: u64,
+    elapsed: Duration,
+    measurement_resources: crate::light_benchmark::report::MeasurementResourceReport,
+}
+
+fn execute_timed_run(
+    arguments: &Arguments,
+    config: ProfileConfig,
+    scenario: &BenchmarkScenario,
+    loopback: Option<&LoopbackDelivery>,
+) -> Result<TimedScenarioRun, String> {
+    let mut state = TickState::new(arguments.seconds);
+    let warmup_started = Instant::now();
+    let warmup_duration = Duration::from_secs(arguments.warmup_seconds);
+    let mut warmup_ticks = 0_u64;
+    while warmup_started.elapsed() < warmup_duration {
+        run_tick(
+            scenario,
+            loopback,
+            &mut state.sequences,
+            warmup_ticks,
+            config.rate_hz,
+        )?;
+        warmup_ticks += 1;
+    }
+    let warmup_elapsed = warmup_started.elapsed();
+    let expected_ticks = u64::from(config.rate_hz) * arguments.seconds;
+    let mut resource_sampler =
+        crate::light_benchmark::process_resources::MeasurementSampler::start();
+    let measured_at = Instant::now();
+    let mut tick = 0_u64;
+    let mut previous_pipeline_completion = measured_at;
+    while tick < expected_ticks {
+        let scheduled = measured_at + scheduled_offset(tick, config.rate_hz);
+        let deadline = measured_at + scheduled_offset(tick + 1, config.rate_hz);
+        let now = Instant::now();
+        if now < scheduled {
+            thread::sleep(scheduled - now);
+        }
+        let now = Instant::now();
+        if now >= deadline {
+            let current_tick = tick_at(now.duration_since(measured_at), config.rate_hz);
+            let skipped = current_tick.saturating_sub(tick).min(expected_ticks - tick);
+            state.dropped_ticks += skipped;
+            tick += skipped;
+            resource_sampler.sample_if_due();
+            continue;
+        }
+        if previous_pipeline_completion > scheduled {
+            state.deferred_ticks += 1;
+        }
+        let sample = run_tick(
+            scenario,
+            loopback,
+            &mut state.sequences,
+            warmup_ticks + tick,
+            config.rate_hz,
+        )?;
+        previous_pipeline_completion = sample.pipeline_completed_at;
+        if sample.pipeline_completed_at > deadline {
+            state.deadline_misses += 1;
+        }
+        state.record(sample, tick, config.rate_hz);
+        resource_sampler.sample_if_due();
+        tick += 1;
+    }
+    Ok(TimedScenarioRun {
+        state,
+        warmup_ticks,
+        warmup_elapsed,
+        expected_ticks,
+        elapsed: measured_at.elapsed(),
+        measurement_resources: resource_sampler.finish(),
     })
 }
 
