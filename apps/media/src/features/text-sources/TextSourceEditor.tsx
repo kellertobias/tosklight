@@ -4,9 +4,18 @@
 // clock or for words on a countdown. Appearance travels with the content because it is the same
 // edit: a slot is what it says and how it looks.
 
-import { Button, CheckboxField, NumberField, SelectField, TextField } from "@tosklight/ui/controls";
-import { useState } from "react";
-import type { TextSlotView, TextStyleView } from "../../shared/api/generated/media-wire";
+import {
+	Button,
+	CheckboxField,
+	NumberField,
+	SelectField,
+	TextAreaField,
+	TextField,
+} from "@tosklight/ui/controls";
+import type {
+	TextSlotView,
+	TextStyleView,
+} from "../../shared/api/generated/media-wire";
 
 /// The kinds, in the order an operator meets them.
 export const KINDS = [
@@ -41,7 +50,8 @@ export function draftOf(slot: TextSlotView): TextDraft {
 		kind: slot.kind,
 		text: slot.text ?? "",
 		durationSeconds: slot.durationSeconds ?? 600,
-		target: slot.targetUnixMillis === null ? "" : localMoment(slot.targetUnixMillis),
+		target:
+			slot.targetUnixMillis === null ? "" : localMoment(slot.targetUnixMillis),
 		style: slot.style,
 	};
 }
@@ -79,7 +89,9 @@ export function payloadOf(draft: TextDraft): {
 		case "countdown-duration":
 			return { durationSeconds: draft.durationSeconds };
 		case "countdown-target":
-			return { targetUnixMillis: draft.target ? Date.parse(draft.target) : Date.now() };
+			return {
+				targetUnixMillis: draft.target ? Date.parse(draft.target) : Date.now(),
+			};
 		default:
 			return {};
 	}
@@ -150,13 +162,17 @@ export function TextSourceEditor({
 			<SelectField
 				label="Shows"
 				value={draft.kind}
-				options={KINDS.map((kind) => ({ value: kind.value, label: kind.label }))}
+				options={KINDS.map((kind) => ({
+					value: kind.value,
+					label: kind.label,
+				}))}
 				onChange={(next) => set("kind", next)}
 			/>
 
 			{draft.kind === "static" && (
-				<TextField
+				<TextAreaField
 					label="Words"
+					description="Line breaks are kept in the rendered source."
 					value={draft.text}
 					onChange={(event) => set("text", event.target.value)}
 				/>
@@ -168,7 +184,9 @@ export function TextSourceEditor({
 					min={0}
 					step={1}
 					value={String(draft.durationSeconds)}
-					onChange={(event) => set("durationSeconds", Number(event.target.value))}
+					onChange={(event) =>
+						set("durationSeconds", Number(event.target.value))
+					}
 				/>
 			)}
 			{draft.kind === "countdown-target" && (
@@ -211,8 +229,10 @@ function Appearance({
 	draft: TextDraft;
 	onChange: (draft: TextDraft) => void;
 }) {
-	const setStyle = <K extends keyof TextStyleView>(field: K, value: TextStyleView[K]) =>
-		onChange({ ...draft, style: { ...draft.style, [field]: value } });
+	const setStyle = <K extends keyof TextStyleView>(
+		field: K,
+		value: TextStyleView[K],
+	) => onChange({ ...draft, style: { ...draft.style, [field]: value } });
 
 	return (
 		<fieldset>
@@ -289,5 +309,9 @@ function toHex(red: number, green: number, blue: number): string {
 
 function fromHex(hex: string): [number, number, number] {
 	const value = Number.parseInt(hex.replace("#", ""), 16);
-	return [((value >> 16) & 0xff) / 255, ((value >> 8) & 0xff) / 255, (value & 0xff) / 255];
+	return [
+		((value >> 16) & 0xff) / 255,
+		((value >> 8) & 0xff) / 255,
+		(value & 0xff) / 255,
+	];
 }

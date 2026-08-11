@@ -1,49 +1,31 @@
-// The generated sources, and how to reach them.
-//
-// A visualizer is selected the same way a clip is — by address — so this page's job is to show
-// which address reaches which visualizer, and to let an operator put one on a layer without
-// looking the number up first.
-
-import { Button, SelectField } from "@tosklight/ui/controls";
-import { useVisualizerEditing } from "./editing";
-import { VisualizerEditor } from "./VisualizerEditor";
-import { useState } from "react";
+import { Button } from "@tosklight/ui/controls";
+import { useEffect, useState } from "react";
 import { ResourceState } from "../../app/ResourceState";
 import { addressLabel } from "../../entities/catalog";
+import {
+	MediaListDetail,
+	MediaPreview,
+} from "../../operator/MediaServerSurface";
 import type {
-	OutputView,
 	UpdateVisualizer,
 	VisualizerView,
 } from "../../shared/api/generated/media-wire";
 import { useVisualizers } from "../../shared/api/queries";
-import { useLayerControl, useOutputsForControl } from "../../shared/api/layerControl";
+import { useVisualizerEditing } from "./editing";
+import { VisualizerEditor } from "./VisualizerEditor";
 
 export function VisualizersPage() {
 	const visualizers = useVisualizers();
-	const outputs = useOutputsForControl();
-	const control = useLayerControl(outputs.data);
-	const [layer, setLayer] = useState(0);
 	const editing = useVisualizerEditing(visualizers.reload);
+	const [selectedKey, setSelectedKey] = useState("");
+
+	useEffect(() => {
+		if (!selectedKey && visualizers.data?.[0])
+			setSelectedKey(key(visualizers.data[0]));
+	}, [selectedKey, visualizers.data]);
 
 	return (
 		<section className="media-page">
-			{control.refusal && (
-				<p className="media-state is-error" role="alert">
-					{control.refusal.deskOwnsIt
-						? "That selection was not applied: a lighting desk is driving this output."
-						: control.refusal.message}{" "}
-					<Button size="compact" onClick={control.dismissRefusal}>
-						Dismiss
-					</Button>
-				</p>
-			)}
-
-			<LayerChoice
-				outputs={outputs.data ?? []}
-				layer={layer}
-				onChange={setLayer}
-			/>
-
 			{editing.failure && (
 				<p className="media-state is-error" role="alert">
 					{editing.failure.message}{" "}
@@ -52,99 +34,90 @@ export function VisualizersPage() {
 					</Button>
 				</p>
 			)}
-
 			<ResourceState
 				resource={visualizers}
 				subject="the visualizers"
 				isEmpty={(data) => data.length === 0}
 				empty="No generated visualizers are assigned to an address."
 			>
-				{(data) => (
-					<div className="media-output-grid">
-						{data.map((visualizer) => (
-							<VisualizerCard
-								key={`${visualizer.address.folder}/${visualizer.address.file}`}
-								visualizer={visualizer}
-								outputs={outputs.data ?? []}
-								editing={editing.editing === key(visualizer)}
-								busy={editing.busy}
-								onEdit={() => editing.begin(key(visualizer))}
-								onCancel={editing.cancel}
-								onSave={(edit) => void editing.save(visualizer, edit)}
-								onSelect={(output) =>
-									void control.update(output, layer, {
-										folder: visualizer.address.folder,
-										file: visualizer.address.file,
-									})
-								}
-							/>
-						))}
-					</div>
-				)}
+				{(data) => {
+					const selected =
+						data.find((visualizer) => key(visualizer) === selectedKey) ??
+						data[0];
+					return (
+						<MediaListDetail
+							label="Visualizers"
+							items={data.map((visualizer) => ({
+								id: key(visualizer),
+								title: visualizer.name,
+								detail: visualizer.kind,
+								meta: addressLabel(
+									visualizer.address.folder,
+									visualizer.address.file,
+								),
+							}))}
+							selectedId={key(selected)}
+							onSelect={(next) => {
+								editing.cancel();
+								setSelectedKey(next);
+							}}
+							detail={
+								<VisualizerDetail
+									visualizer={selected}
+									editing={editing.editing === key(selected)}
+									busy={editing.busy}
+									onEdit={() => editing.begin(key(selected))}
+									onCancel={editing.cancel}
+									onSave={(edit) => void editing.save(selected, edit)}
+								/>
+							}
+						/>
+					);
+				}}
 			</ResourceState>
 		</section>
 	);
 }
 
-function LayerChoice({
-	outputs,
-	layer,
-	onChange,
-}: {
-	outputs: OutputView[];
-	layer: number;
-	onChange: (layer: number) => void;
-}) {
-	// Every output has at least as many layers as the smallest personality here, so the choice is
-	// a layer number rather than one list per output.
-	const layers = Math.max(1, ...outputs.map((output) => output.layerCount));
-	return (
-		<SelectField
-			label="Put the chosen visualizer on"
-			value={String(layer)}
-			options={Array.from({ length: layers }, (_, index) => ({
-				value: String(index),
-				label: `Layer ${index + 1}`,
-			}))}
-			onChange={(next) => onChange(Number(next))}
-		/>
-	);
-}
-
-/** One visualizer's identity in the editing state, which is its address. */
 export function key(visualizer: VisualizerView): string {
 	return `${visualizer.address.folder}/${visualizer.address.file}`;
 }
 
-function VisualizerCard({
+function VisualizerDetail({
 	visualizer,
-	outputs,
 	editing,
 	busy,
 	onEdit,
 	onCancel,
 	onSave,
-	onSelect,
 }: {
 	visualizer: VisualizerView;
-	outputs: OutputView[];
 	editing: boolean;
 	busy: boolean;
 	onEdit: () => void;
 	onCancel: () => void;
 	onSave: (edit: UpdateVisualizer) => void;
-	onSelect: (output: OutputView) => void;
 }) {
-	const address = addressLabel(visualizer.address.folder, visualizer.address.file);
 	return (
-		<article className="media-output-card" aria-label={visualizer.name}>
-			<header>
-				<h2>{visualizer.name}</h2>
-				<span className="media-address">{address}</span>
+		<>
+			<MediaPreview
+				title={visualizer.name}
+				variant={
+					visualizer.kind.toLowerCase().includes("particle")
+						? "particles"
+						: "aurora"
+				}
+			/>
+			<header className="media-detail-heading">
+				<div>
+					<h2>{visualizer.name}</h2>
+					<p>
+						{visualizer.kind} ·{" "}
+						{addressLabel(visualizer.address.folder, visualizer.address.file)}
+					</p>
+				</div>
+				{!editing && <Button onClick={onEdit}>Tune visualizer</Button>}
 			</header>
-			<p>
-				{visualizer.kind} · type {visualizer.typeId}
-			</p>
 			{editing ? (
 				<VisualizerEditor
 					visualizer={visualizer}
@@ -153,20 +126,10 @@ function VisualizerCard({
 					onCancel={onCancel}
 				/>
 			) : (
-				<p className="media-visualizer-uses">Controls: {visualizer.uses.join(", ")}</p>
+				<p className="media-visualizer-uses">
+					Controls: {visualizer.uses.join(", ")}
+				</p>
 			)}
-			<div className="media-visualizer-actions">
-				{!editing && <Button onClick={onEdit}>Tune</Button>}
-				{outputs.map((output) => (
-					<Button
-						key={output.id}
-						disabled={output.dmxActive}
-						onClick={() => onSelect(output)}
-					>
-						{outputs.length === 1 ? "Select" : `Select on ${output.name}`}
-					</Button>
-				))}
-			</div>
-		</article>
+		</>
 	);
 }

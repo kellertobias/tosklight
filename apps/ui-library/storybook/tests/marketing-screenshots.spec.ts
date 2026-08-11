@@ -51,7 +51,7 @@ test("captures the complete reviewed marketing gallery from Storybook", async ({
 		await fs.readFile(MANIFEST_PATH, "utf8"),
 	) as MarketingScreenshotManifest;
 	expect(manifest.version).toBe(1);
-	expect(manifest.entries).toHaveLength(14);
+	expect(manifest.entries).toHaveLength(18);
 	await fs.rm(ACTUAL_ROOT, { recursive: true, force: true });
 	await fs.mkdir(ACTUAL_ROOT, { recursive: true });
 	await fs.mkdir(REVIEWED_ROOT, { recursive: true });
@@ -250,7 +250,6 @@ async function assertNotBlank(
 		`${label} has no meaningful contrast`,
 	).toBeGreaterThan(12);
 }
-
 
 async function imageMetrics(
 	page: import("@playwright/test").Page,

@@ -63,9 +63,11 @@ function useOutputConfiguration(outputId: string): ConfigurationResource {
 export function OutputSettings({
 	outputId,
 	outputName,
+	mode = "all",
 }: {
 	outputId: string;
 	outputName: string;
+	mode?: "all" | "picture" | "dmx";
 }) {
 	const configuration = useOutputConfiguration(outputId);
 	const editing = useEditing(configuration.reload);
@@ -101,7 +103,7 @@ export function OutputSettings({
 	return (
 		<article
 			className="media-settings-section"
-			aria-label={`${output.name} output settings`}
+			aria-label={`${output.name} ${mode === "dmx" ? "DMX input" : "output"} settings`}
 		>
 			<h3>{output.name} output</h3>
 			{editing.failure && (
@@ -116,6 +118,7 @@ export function OutputSettings({
 			{editing.editing === output.id ? (
 				<OutputEditor
 					output={output}
+					mode={mode}
 					busy={editing.busy}
 					onCancel={editing.cancel}
 					onSave={(edit) =>
@@ -126,11 +129,11 @@ export function OutputSettings({
 				/>
 			) : (
 				<>
-					<OutputFacts output={output} />
+					<OutputFacts output={output} mode={mode} />
 					{output.takesEffectOnRestart && <RestartNotice />}
 					<div className="media-settings-actions">
 						<Button onClick={() => editing.begin(output.id)}>
-							Change output settings
+							{mode === "dmx" ? "Change DMX input" : "Change output settings"}
 						</Button>
 					</div>
 				</>
@@ -139,24 +142,40 @@ export function OutputSettings({
 	);
 }
 
-function OutputFacts({ output }: { output: OutputConfigurationView }) {
+function OutputFacts({
+	output,
+	mode,
+}: {
+	output: OutputConfigurationView;
+	mode: "all" | "picture" | "dmx";
+}) {
 	return (
 		<dl className="media-facts">
-			<dt>Target</dt>
-			<dd>{describeTarget(output)}</dd>
-			<dt>Resolution</dt>
-			<dd>
-				{output.width} × {output.height}
-			</dd>
-			<dt>Presentation</dt>
-			<dd>{describePresentation(output)}</dd>
-			<dt>Personality</dt>
-			<dd>{output.personality === "two-layers" ? "2 layers" : "8 layers"}</dd>
-			<dt>DMX input</dt>
-			<dd>
-				{output.protocol === "art-net" ? "Art-Net" : "sACN"}, universe{" "}
-				{output.universe}, address {output.startAddress}
-			</dd>
+			{mode !== "dmx" && (
+				<>
+					<dt>Target</dt>
+					<dd>{describeTarget(output)}</dd>
+					<dt>Resolution</dt>
+					<dd>
+						{output.width} × {output.height}
+					</dd>
+					<dt>Presentation</dt>
+					<dd>{describePresentation(output)}</dd>
+				</>
+			)}
+			{mode !== "picture" && (
+				<>
+					<dt>Personality</dt>
+					<dd>
+						{output.personality === "two-layers" ? "2 layers" : "8 layers"}
+					</dd>
+					<dt>DMX input</dt>
+					<dd>
+						{output.protocol === "art-net" ? "Art-Net" : "sACN"}, universe{" "}
+						{output.universe}, address {output.startAddress}
+					</dd>
+				</>
+			)}
 		</dl>
 	);
 }
@@ -322,11 +341,13 @@ export function OutputEditor({
 	busy,
 	onSave,
 	onCancel,
+	mode = "all",
 }: {
 	output: OutputConfigurationView;
 	busy: boolean;
 	onSave: (edit: UpdateOutputConfiguration) => void;
 	onCancel: () => void;
+	mode?: "all" | "picture" | "dmx";
 }) {
 	const [targetKind, setTargetKind] = useState(output.targetKind);
 	const [monitorBy, setMonitorBy] = useState(output.monitorBy ?? "index");
@@ -365,86 +386,92 @@ export function OutputEditor({
 				});
 			}}
 		>
-			<fieldset>
-				<legend>Output target</legend>
-				<SelectField
-					label="Target"
-					value={targetKind}
-					options={[
-						{ value: "off-screen", label: "Off-screen (no window)" },
-						{ value: "monitor", label: "Monitor" },
-					]}
-					onChange={setTargetKind}
+			{mode !== "dmx" && (
+				<fieldset>
+					<legend>Output target</legend>
+					<SelectField
+						label="Target"
+						value={targetKind}
+						options={[
+							{ value: "off-screen", label: "Off-screen (no window)" },
+							{ value: "monitor", label: "Monitor" },
+						]}
+						onChange={setTargetKind}
+					/>
+					{targetKind === "monitor" && (
+						<>
+							<SelectField
+								label="Find monitor by"
+								value={monitorBy}
+								options={[
+									{ value: "index", label: "Monitor number" },
+									{ value: "name", label: "Monitor name" },
+								]}
+								onChange={setMonitorBy}
+							/>
+							{monitorBy === "index" ? (
+								<NumberField
+									label="Monitor number"
+									description="The zero-based number reported by this machine. An unavailable monitor is an error, never a fallback to another display."
+									min={0}
+									step={1}
+									value={monitorValue}
+									onChange={(event) => setMonitorValue(event.target.value)}
+								/>
+							) : (
+								<TextField
+									label="Monitor name"
+									description="Exactly as this machine reports it. An unavailable monitor is an error, never a fallback to another display."
+									value={monitorValue}
+									onChange={(event) => setMonitorValue(event.target.value)}
+								/>
+							)}
+							<CheckboxField
+								label="Full-screen"
+								stateLabel="Use the entire monitor"
+								checked={fullscreen}
+								onChange={(event) => setFullscreen(event.target.checked)}
+							/>
+						</>
+					)}
+				</fieldset>
+			)}
+
+			{mode !== "dmx" && (
+				<PictureFields
+					{...{
+						width,
+						height,
+						presentation,
+						framesPerSecond,
+						setWidth,
+						setHeight,
+						setPresentation,
+						setFramesPerSecond,
+					}}
 				/>
-				{targetKind === "monitor" && (
-					<>
-						<SelectField
-							label="Find monitor by"
-							value={monitorBy}
-							options={[
-								{ value: "index", label: "Monitor number" },
-								{ value: "name", label: "Monitor name" },
-							]}
-							onChange={setMonitorBy}
-						/>
-						{monitorBy === "index" ? (
-							<NumberField
-								label="Monitor number"
-								description="The zero-based number reported by this machine. An unavailable monitor is an error, never a fallback to another display."
-								min={0}
-								step={1}
-								value={monitorValue}
-								onChange={(event) => setMonitorValue(event.target.value)}
-							/>
-						) : (
-							<TextField
-								label="Monitor name"
-								description="Exactly as this machine reports it. An unavailable monitor is an error, never a fallback to another display."
-								value={monitorValue}
-								onChange={(event) => setMonitorValue(event.target.value)}
-							/>
-						)}
-						<CheckboxField
-							label="Full-screen"
-							stateLabel="Use the entire monitor"
-							checked={fullscreen}
-							onChange={(event) => setFullscreen(event.target.checked)}
-						/>
-					</>
-				)}
-			</fieldset>
+			)}
 
-			<PictureFields
-				{...{
-					width,
-					height,
-					presentation,
-					framesPerSecond,
-					setWidth,
-					setHeight,
-					setPresentation,
-					setFramesPerSecond,
-				}}
-			/>
-
-			<DmxInputFields
-				{...{
-					personality,
-					protocol,
-					universe,
-					startAddress,
-					setPersonality,
-					setProtocol,
-					setUniverse,
-					setStartAddress,
-				}}
-			/>
+			{mode !== "picture" && (
+				<DmxInputFields
+					{...{
+						personality,
+						protocol,
+						universe,
+						startAddress,
+						setPersonality,
+						setProtocol,
+						setUniverse,
+						setStartAddress,
+					}}
+				/>
+			)}
 
 			{output.takesEffectOnRestart && <RestartNotice />}
 
 			<div className="media-settings-actions">
 				<Button type="submit" variant="primary" loading={busy}>
-					Save output settings
+					{mode === "dmx" ? "Save DMX input" : "Save output settings"}
 				</Button>
 				<Button onClick={onCancel}>Cancel</Button>
 			</div>

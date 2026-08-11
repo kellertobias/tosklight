@@ -165,6 +165,46 @@
 			"theme": "dark",
 			"mode": "software",
 			"interactions": []
+		},
+		{
+			"file": "media-server-dashboard.png",
+			"title": "Media Server dashboard",
+			"caption": "The dedicated Media Server operator surface identifies the active show and summarizes output, library, and DMX health.",
+			"storyId": "tosklight-media-server--dashboard",
+			"viewport": { "width": 1440, "height": 900 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": []
+		},
+		{
+			"file": "media-server-visualizers.png",
+			"title": "Media Server visualizers",
+			"caption": "Generated visualizers use a focused list-and-detail surface with a representative picture preview and direct parameter editing.",
+			"storyId": "tosklight-media-server--visualizers",
+			"viewport": { "width": 1440, "height": 900 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": []
+		},
+		{
+			"file": "media-server-text.png",
+			"title": "Media Server text",
+			"caption": "Addressable text sources combine a picture preview with multiline authoring and the controls needed to shape their on-screen appearance.",
+			"storyId": "tosklight-media-server--text",
+			"viewport": { "width": 1440, "height": 900 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": []
+		},
+		{
+			"file": "media-server-network-inputs.png",
+			"title": "Media Server network and inputs",
+			"caption": "Network listeners, DMX personality and address, and audio input live together in the Media Server settings language.",
+			"storyId": "tosklight-media-server--settings-network-and-inputs",
+			"viewport": { "width": 1440, "height": 900 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": []
 		}
 	]
 }

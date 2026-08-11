@@ -2,20 +2,20 @@
 // and restore focus to the new page so a keyboard operator is never dropped at the document top.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { type RoutePath, normalizePath } from "./routes";
+import { normalizePath, type RoutePath } from "./routes";
 
 export interface Router {
 	path: RoutePath;
 	navigate: (to: RoutePath) => void;
 	/** Attach to the page heading; it receives focus after every navigation. */
-	headingRef: React.RefObject<HTMLHeadingElement | null>;
+	headingRef: React.RefObject<HTMLDivElement | null>;
 }
 
 export function useRouter(): Router {
 	const [path, setPath] = useState<RoutePath>(() =>
 		normalizePath(window.location.pathname),
 	);
-	const headingRef = useRef<HTMLHeadingElement | null>(null);
+	const headingRef = useRef<HTMLDivElement | null>(null);
 	const navigated = useRef(false);
 
 	useEffect(() => {

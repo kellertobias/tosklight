@@ -5,20 +5,24 @@
 
 export const ROUTES = [
 	{ path: "/", label: "Dashboard" },
-	{ path: "/layers", label: "Layers" },
-	{ path: "/library", label: "Media library" },
+	{ path: "/media", label: "Media" },
+	{ path: "/library", label: "Library" },
 	{ path: "/visualizers", label: "Visualizers" },
 	{ path: "/text", label: "Text" },
-	{ path: "/audio", label: "Audio" },
-	{ path: "/dmx", label: "DMX" },
 	{ path: "/settings", label: "Settings" },
-	{ path: "/logs", label: "Log" },
 ] as const;
 
 export type RoutePath = (typeof ROUTES)[number]["path"];
 
 export function normalizePath(pathname: string): RoutePath {
 	const trimmed = pathname.replace(/\/+$/u, "") || "/";
-	const match = ROUTES.find((route) => route.path === trimmed);
+	const legacy = {
+		"/layers": "/media",
+		"/audio": "/settings",
+		"/dmx": "/settings",
+		"/logs": "/settings",
+	} as const;
+	const canonical = legacy[trimmed as keyof typeof legacy] ?? trimmed;
+	const match = ROUTES.find((route) => route.path === canonical);
 	return match ? match.path : "/";
 }

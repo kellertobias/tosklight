@@ -1,33 +1,34 @@
-// The text a desk can address.
-//
-// A text source is selected exactly like a clip — by address — so this page's job is the same as
-// the visualizers': show which address reaches which words, let an operator write their own, and
-// let them put one on a layer without looking the number up first.
-
 import { Button, SelectField } from "@tosklight/ui/controls";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ResourceState } from "../../app/ResourceState";
 import { addressLabel } from "../../entities/catalog";
+import {
+	MediaListDetail,
+	MediaPreview,
+} from "../../operator/MediaServerSurface";
 import { api } from "../../shared/api/client";
 import { requestId, useEditing } from "../../shared/api/editing";
-import type { OutputView, TextSlotView } from "../../shared/api/generated/media-wire";
-import { useLayerControl, useOutputsForControl } from "../../shared/api/layerControl";
+import type {
+	OutputView,
+	TextSlotView,
+} from "../../shared/api/generated/media-wire";
+import {
+	useLayerControl,
+	useOutputsForControl,
+} from "../../shared/api/layerControl";
 import { useText } from "../../shared/api/queries";
 import {
-	KINDS,
-	type TextDraft,
-	TextSourceEditor,
 	draftOf,
 	emptyDraft,
+	KINDS,
 	payloadOf,
+	type TextDraft,
+	TextSourceEditor,
 } from "./TextSourceEditor";
 
-/// The identity of a slot in the editing state, which is its address.
 export function key(slot: TextSlotView): string {
 	return `${slot.address.folder}/${slot.address.file}`;
 }
-
-/// The key the creation form is open under. Not an address, so it cannot collide with a slot.
 const NEW = "new";
 
 export function TextSourcesPage() {
@@ -38,6 +39,11 @@ export function TextSourcesPage() {
 	const editing = useEditing(text.reload);
 	const [draft, setDraft] = useState<TextDraft>(emptyDraft());
 	const [address, setAddress] = useState({ folder: 200, file: 3 });
+	const [selectedKey, setSelectedKey] = useState("");
+
+	useEffect(() => {
+		if (!selectedKey && text.data?.[0]) setSelectedKey(key(text.data[0]));
+	}, [selectedKey, text.data]);
 
 	const beginNew = () => {
 		setDraft(emptyDraft());
@@ -57,9 +63,11 @@ export function TextSourcesPage() {
 					</Button>
 				</p>
 			)}
-
-			<LayerChoice outputs={outputs.data ?? []} layer={layer} onChange={setLayer} />
-
+			<LayerChoice
+				outputs={outputs.data ?? []}
+				layer={layer}
+				onChange={setLayer}
+			/>
 			{editing.failure && (
 				<p className="media-state is-error" role="alert">
 					{editing.failure.message}{" "}
@@ -68,121 +76,145 @@ export function TextSourcesPage() {
 					</Button>
 				</p>
 			)}
-
-			{editing.editing === NEW ? (
-				<article className="media-output-card" aria-label="New text source">
-					<header>
-						<h2>New text source</h2>
-					</header>
-					<TextSourceEditor
-						draft={draft}
-						address={address}
-						onAddress={setAddress}
-						busy={editing.busy}
-						submitLabel="Create"
-						onChange={setDraft}
-						onCancel={editing.cancel}
-						onSave={() =>
-							void editing.save(() =>
-								api.createText({
-									requestId: requestId(),
-									folder: address.folder,
-									file: address.file,
-									name: draft.name,
-									kind: draft.kind,
-									style: draft.style,
-									...payloadOf(draft),
-								}),
-							)
-						}
-					/>
-				</article>
-			) : (
-				<div className="media-settings-actions">
-					<Button onClick={beginNew}>Write a new text source</Button>
-				</div>
-			)}
-
+			<div className="media-settings-actions">
+				<Button onClick={beginNew}>Write a new text source</Button>
+			</div>
 			<ResourceState
 				resource={text}
 				subject="the text sources"
 				isEmpty={(data) => data.length === 0}
 				empty="No text is assigned to an address yet."
 			>
-				{(data) => (
-					<div className="media-output-grid">
-						{data.map((slot) => (
-							<TextCard
-								key={key(slot)}
-								slot={slot}
-								outputs={outputs.data ?? []}
-								editing={editing.editing === key(slot)}
-								busy={editing.busy}
-								draft={draft}
-								onDraft={setDraft}
-								onEdit={() => {
-									setDraft(draftOf(slot));
-									editing.begin(key(slot));
-								}}
-								onCancel={editing.cancel}
-								onSave={() =>
-									void editing.save(() =>
-										api.updateText(slot.address.folder, slot.address.file, {
-											requestId: requestId(),
-											name: draft.name,
-											enabled: draft.enabled,
-											kind: draft.kind,
-											style: draft.style,
-											...payloadOf(draft),
-										}),
-									)
-								}
-								onDelete={() =>
-									void editing.save(() =>
-										api.deleteText(slot.address.folder, slot.address.file, {
-											requestId: requestId(),
-										}),
-									)
-								}
-								onSelect={(output) =>
-									void control.update(output, layer, {
-										folder: slot.address.folder,
-										file: slot.address.file,
-									})
-								}
-							/>
-						))}
-					</div>
-				)}
+				{(data) => {
+					const selected =
+						data.find((slot) => key(slot) === selectedKey) ?? data[0];
+					return (
+						<MediaListDetail
+							label="Text sources"
+							items={data.map((slot) => ({
+								id: key(slot),
+								title: slot.name,
+								detail: describe(slot),
+								meta: addressLabel(slot.address.folder, slot.address.file),
+							}))}
+							selectedId={editing.editing === NEW ? "" : key(selected)}
+							onSelect={(next) => {
+								editing.cancel();
+								setSelectedKey(next);
+							}}
+							detail={
+								editing.editing === NEW ? (
+									<NewTextDetail
+										draft={draft}
+										address={address}
+										busy={editing.busy}
+										onDraft={setDraft}
+										onAddress={setAddress}
+										onCancel={editing.cancel}
+										onSave={() =>
+											void editing.save(() =>
+												api.createText({
+													requestId: requestId(),
+													folder: address.folder,
+													file: address.file,
+													name: draft.name,
+													kind: draft.kind,
+													style: draft.style,
+													...payloadOf(draft),
+												}),
+											)
+										}
+									/>
+								) : (
+									<TextDetail
+										slot={selected}
+										outputs={outputs.data ?? []}
+										editing={editing.editing === key(selected)}
+										busy={editing.busy}
+										draft={draft}
+										onDraft={setDraft}
+										onEdit={() => {
+											setDraft(draftOf(selected));
+											editing.begin(key(selected));
+										}}
+										onCancel={editing.cancel}
+										onSave={() =>
+											void editing.save(() =>
+												api.updateText(
+													selected.address.folder,
+													selected.address.file,
+													{
+														requestId: requestId(),
+														name: draft.name,
+														enabled: draft.enabled,
+														kind: draft.kind,
+														style: draft.style,
+														...payloadOf(draft),
+													},
+												),
+											)
+										}
+										onDelete={() =>
+											void editing.save(() =>
+												api.deleteText(
+													selected.address.folder,
+													selected.address.file,
+													{ requestId: requestId() },
+												),
+											)
+										}
+										onSelect={(output) =>
+											void control.update(output, layer, {
+												folder: selected.address.folder,
+												file: selected.address.file,
+											})
+										}
+									/>
+								)
+							}
+						/>
+					);
+				}}
 			</ResourceState>
 		</section>
 	);
 }
 
-function LayerChoice({
-	outputs,
-	layer,
-	onChange,
+function NewTextDetail({
+	draft,
+	address,
+	busy,
+	onDraft,
+	onAddress,
+	onCancel,
+	onSave,
 }: {
-	outputs: OutputView[];
-	layer: number;
-	onChange: (layer: number) => void;
+	draft: TextDraft;
+	address: { folder: number; file: number };
+	busy: boolean;
+	onDraft: (draft: TextDraft) => void;
+	onAddress: (address: { folder: number; file: number }) => void;
+	onCancel: () => void;
+	onSave: () => void;
 }) {
-	const layers = Math.max(1, ...outputs.map((output) => output.layerCount));
 	return (
-		<SelectField
-			label="Put the chosen text on"
-			value={String(layer)}
-			options={Array.from({ length: layers }, (_, index) => ({
-				value: String(index),
-				label: `Layer ${index + 1}`,
-			}))}
-			onChange={(next) => onChange(Number(next))}
-		/>
+		<>
+			<h2>New text source</h2>
+			<TextSourceEditor
+				draft={draft}
+				address={address}
+				onAddress={onAddress}
+				busy={busy}
+				submitLabel="Create"
+				onChange={onDraft}
+				onCancel={onCancel}
+				onSave={onSave}
+			/>
+		</>
 	);
 }
 
-function TextCard({
+function TextDetail({
 	slot,
 	outputs,
 	editing,
@@ -207,17 +239,24 @@ function TextCard({
 	onDelete: () => void;
 	onSelect: (output: OutputView) => void;
 }) {
-	const address = addressLabel(slot.address.folder, slot.address.file);
 	return (
-		<article className="media-output-card" aria-label={slot.name}>
-			<header>
-				<h2>{slot.name}</h2>
-				<span className="media-address">{address}</span>
+		<>
+			<MediaPreview title={slot.name} variant="text">
+				<span className="media-text-preview-words">
+					{slot.text ?? describe(slot)}
+				</span>
+			</MediaPreview>
+			<header className="media-detail-heading">
+				<div>
+					<h2>{slot.name}</h2>
+					<p>
+						{addressLabel(slot.address.folder, slot.address.file)}{" "}
+						{!slot.enabled && (
+							<span className="media-badge is-busy">Parked</span>
+						)}
+					</p>
+				</div>
 			</header>
-			<p>
-				{describe(slot)}
-				{!slot.enabled && <span className="media-badge is-busy">Parked</span>}
-			</p>
 			{editing ? (
 				<TextSourceEditor
 					draft={draft}
@@ -237,35 +276,59 @@ function TextCard({
 							disabled={output.dmxActive}
 							onClick={() => onSelect(output)}
 						>
-							{outputs.length === 1 ? "Select" : `Select on ${output.name}`}
+							{outputs.length === 1
+								? "Select on output"
+								: `Select on ${output.name}`}
 						</Button>
 					))}
 				</div>
 			)}
-		</article>
+		</>
 	);
 }
 
-/// What a slot shows, in one line an operator can read in a list.
+function LayerChoice({
+	outputs,
+	layer,
+	onChange,
+}: {
+	outputs: OutputView[];
+	layer: number;
+	onChange: (layer: number) => void;
+}) {
+	const layers = Math.max(1, ...outputs.map((output) => output.layerCount));
+	return (
+		<SelectField
+			label="Target layer for manual selection"
+			value={String(layer)}
+			options={Array.from({ length: layers }, (_, index) => ({
+				value: String(index),
+				label: `Layer ${index + 1}`,
+			}))}
+			onChange={(next) => onChange(Number(next))}
+		/>
+	);
+}
+
 function describe(slot: TextSlotView): string {
-	const kind = KINDS.find((candidate) => candidate.value === slot.kind)?.label ?? slot.kind;
-	if (slot.text !== null) return `${kind} · “${slot.text}”`;
-	if (slot.durationSeconds !== null) return `${kind} · ${slot.durationSeconds} s`;
-	if (slot.targetUnixMillis !== null) {
+	const kind =
+		KINDS.find((candidate) => candidate.value === slot.kind)?.label ??
+		slot.kind;
+	if (slot.text !== null) return `${kind} · ${slot.text.replace(/\s+/gu, " ")}`;
+	if (slot.durationSeconds !== null)
+		return `${kind} · ${slot.durationSeconds} s`;
+	if (slot.targetUnixMillis !== null)
 		return `${kind} · ${new Date(slot.targetUnixMillis).toLocaleString()}`;
-	}
 	return kind;
 }
 
-/// The first address in the text range nothing answers at, so a new slot starts somewhere usable.
-export function nextFreeAddress(slots: TextSlotView[]): { folder: number; file: number } {
+export function nextFreeAddress(slots: TextSlotView[]): {
+	folder: number;
+	file: number;
+} {
 	const taken = new Set(slots.map(key));
-	for (let folder = 200; folder <= 219; folder += 1) {
-		for (let file = 1; file <= 254; file += 1) {
+	for (let folder = 200; folder <= 219; folder += 1)
+		for (let file = 1; file <= 254; file += 1)
 			if (!taken.has(`${folder}/${file}`)) return { folder, file };
-		}
-	}
-	// Every address in the text range is in use, which is 5080 text sources. Land on the first and
-	// let the server refuse it rather than silently overwriting one.
 	return { folder: 200, file: 1 };
 }

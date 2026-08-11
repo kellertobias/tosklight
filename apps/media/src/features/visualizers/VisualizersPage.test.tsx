@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { aVisualizer, anOutput, stubServer } from "../../testing/server";
+import { anOutput, aVisualizer, stubServer } from "../../testing/server";
 import { VisualizersPage } from "./VisualizersPage";
 
 afterEach(() => {
@@ -14,27 +14,39 @@ describe("the visualizers page", () => {
 		stubServer();
 		render(<VisualizersPage />);
 
-		expect(await screen.findByRole("article", { name: "Equalizer Bars" })).toBeInTheDocument();
-		expect(screen.getByText("220/001")).toBeInTheDocument();
-		expect(screen.getByText(/type 0/u)).toBeInTheDocument();
+		expect(
+			await screen.findByRole("button", { name: /Equalizer Bars/ }),
+		).toHaveAttribute("aria-current", "true");
+		expect(
+			screen.getByRole("figure", { name: "Equalizer Bars preview" }),
+		).toBeInTheDocument();
+		expect(screen.getAllByText("220/001")).not.toHaveLength(0);
+		expect(
+			screen.getByRole("heading", { name: "Equalizer Bars" }),
+		).toBeInTheDocument();
 	});
 
-	it("selects a visualizer onto a layer by its address", async () => {
+	it("does not offer a separate action that puts a visualizer on an output", async () => {
 		const server = stubServer();
 		render(<VisualizersPage />);
 
-		await userEvent.click(await screen.findByRole("button", { name: "Select" }));
-
-		await waitFor(() =>
-			expect(server.outputs[0].layers[0].address).toMatchObject({ folder: 220, file: 1 }),
-		);
+		await screen.findByRole("button", { name: /Equalizer Bars/ });
+		expect(
+			screen.queryByRole("button", { name: /select|put/iu }),
+		).not.toBeInTheDocument();
+		expect(server.outputs[0].layers[0].address).not.toMatchObject({
+			folder: 220,
+			file: 1,
+		});
 	});
 
 	it("tunes a visualizer through the edit path, with a request id", async () => {
 		const server = stubServer();
 		render(<VisualizersPage />);
 
-		await userEvent.click(await screen.findByRole("button", { name: "Tune" }));
+		await userEvent.click(
+			await screen.findByRole("button", { name: "Tune visualizer" }),
+		);
 		const name = screen.getByLabelText("Name");
 		await userEvent.clear(name);
 		await userEvent.type(name, "House bars");
@@ -48,7 +60,9 @@ describe("the visualizers page", () => {
 	it("only offers the controls the kind actually reads", async () => {
 		stubServer();
 		render(<VisualizersPage />);
-		await userEvent.click(await screen.findByRole("button", { name: "Tune" }));
+		await userEvent.click(
+			await screen.findByRole("button", { name: "Tune visualizer" }),
+		);
 
 		// The stub publishes count, size, and primary — and nothing else should appear.
 		expect(screen.getByLabelText("Count")).toBeInTheDocument();
@@ -66,19 +80,24 @@ describe("the visualizers page", () => {
 		};
 		render(<VisualizersPage />);
 
-		await userEvent.click(await screen.findByRole("button", { name: "Tune" }));
+		await userEvent.click(
+			await screen.findByRole("button", { name: "Tune visualizer" }),
+		);
 		await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
 		expect(await screen.findByText(/could not be saved/iu)).toBeInTheDocument();
 	});
 
-	it("cannot select onto an output a desk is driving", async () => {
+	it("keeps output-selection absent while a desk is driving the output", async () => {
 		stubServer({
 			outputs: [anOutput({ dmxActive: true })],
 			visualizers: [aVisualizer()],
 		});
 		render(<VisualizersPage />);
 
-		expect(await screen.findByRole("button", { name: "Select" })).toBeDisabled();
+		await screen.findByRole("button", { name: /Equalizer Bars/ });
+		expect(
+			screen.queryByRole("button", { name: /select|put/iu }),
+		).not.toBeInTheDocument();
 	});
 });

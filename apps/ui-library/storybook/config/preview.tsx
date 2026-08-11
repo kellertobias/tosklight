@@ -1,5 +1,5 @@
 import type { Preview } from "@storybook/react-vite";
-import { useEffect, useState, type ReactNode } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { ModalProvider } from "../../src/modals";
 import "../../src/styles.css";
 import "./preview.css";
@@ -27,77 +27,78 @@ function DocumentationCanvas({
 			active = false;
 		};
 	}, [application]);
-  useEffect(() => {
-    if (!stylesReady) return;
-    document.body.dataset.documentationReady = "true";
-    document.body.setAttribute("data-documentation-shot", "");
-    return () => {
-      delete document.body.dataset.documentationReady;
-      document.body.removeAttribute("data-documentation-shot");
-    };
-  }, [stylesReady]);
-  if (!stylesReady) return null;
-  return <div className="storybook-canvas">{children}</div>;
+	useEffect(() => {
+		if (!stylesReady) return;
+		document.body.dataset.documentationReady = "true";
+		document.body.setAttribute("data-documentation-shot", "");
+		return () => {
+			delete document.body.dataset.documentationReady;
+			document.body.removeAttribute("data-documentation-shot");
+		};
+	}, [stylesReady]);
+	if (!stylesReady) return null;
+	return <div className="storybook-canvas">{children}</div>;
 }
 
 const preview: Preview = {
-  decorators: [
-    (Story, context) => (
-      <DocumentationCanvas application={context.title.startsWith("ToskLight/")}>
-        <ModalProvider>
-          <Story />
-        </ModalProvider>
-      </DocumentationCanvas>
-    ),
-  ],
-  parameters: {
-    controls: { expanded: true },
-    options: {
-      storySort: {
-        order: [
-          "Controls",
-          [
-            "Buttons",
-            "Forms",
-            "Keyboard and numpad",
-            "Faders",
-            "Encoders",
-            "Playbacks",
-          ],
-          "Tables and Grids",
-          [
-            "Generic table",
-            "Fixture grid",
-            "Pools",
-            "Virtual playback grid",
-            "DMX patch grid",
-          ],
-          "Window System",
-          ["Modals", "Production window kit", "Desktop"],
-          "ToskLight",
-          [
-            "Windows",
-            "Shell and control",
-            "Virtual Playbacks",
-            "Modal workflows",
-            "Command line",
-            "Command section",
-            "Marketing",
-          ],
-        ],
-      },
-    },
-  },
-  globalTypes: {
-    mode: {
-      description: "Operator surface mode",
-      defaultValue: "software",
-      toolbar: {
-        icon: "mirror",
-        items: ["software", "hardware"],
-      },
-    },
-  },
+	decorators: [
+		(Story, context) => (
+			<DocumentationCanvas application={context.title.startsWith("ToskLight/")}>
+				<ModalProvider>
+					<Story />
+				</ModalProvider>
+			</DocumentationCanvas>
+		),
+	],
+	parameters: {
+		controls: { expanded: true },
+		options: {
+			storySort: {
+				order: [
+					"Controls",
+					[
+						"Buttons",
+						"Forms",
+						"Keyboard and numpad",
+						"Faders",
+						"Encoders",
+						"Playbacks",
+					],
+					"Tables and Grids",
+					[
+						"Generic table",
+						"Fixture grid",
+						"Pools",
+						"Virtual playback grid",
+						"DMX patch grid",
+					],
+					"Window System",
+					["Modals", "Production window kit", "Desktop"],
+					"ToskLight",
+					[
+						"Windows",
+						"Shell and control",
+						"Virtual Playbacks",
+						"Modal workflows",
+						"Command line",
+						"Command section",
+						"Marketing",
+						"Media Server",
+					],
+				],
+			},
+		},
+	},
+	globalTypes: {
+		mode: {
+			description: "Operator surface mode",
+			defaultValue: "software",
+			toolbar: {
+				icon: "mirror",
+				items: ["software", "hardware"],
+			},
+		},
+	},
 };
 
 export default preview;

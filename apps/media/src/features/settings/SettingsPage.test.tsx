@@ -26,6 +26,7 @@ describe("the settings page", () => {
 			startAddress: 101,
 		});
 		render(<SettingsPage />);
+		await openSettings("Outputs");
 
 		const settings = await screen.findByRole("article", {
 			name: "Main output settings",
@@ -35,15 +36,21 @@ describe("the settings page", () => {
 		);
 		expect(settings).toHaveTextContent("3840 × 2160");
 		expect(settings).toHaveTextContent("Fixed at 50 frames per second");
-		expect(settings).toHaveTextContent("2 layers");
-		expect(settings).toHaveTextContent("sACN, universe 12, address 101");
 		expect(settings).toHaveTextContent(/next time this server starts/u);
 		expect(screen.queryByText(outputIdPattern)).not.toBeInTheDocument();
+
+		await openSettings("Network & Inputs");
+		const dmx = await screen.findByRole("article", {
+			name: "Main DMX input settings",
+		});
+		expect(dmx).toHaveTextContent("2 layers");
+		expect(dmx).toHaveTextContent("sACN, universe 12, address 101");
 	});
 
 	it("edits the complete output identity and makes the deferred effect explicit", async () => {
 		const output = stubOutputConfiguration();
 		render(<SettingsPage />);
+		await openSettings("Outputs");
 
 		await userEvent.click(
 			await screen.findByRole("button", { name: "Change output settings" }),
@@ -65,11 +72,6 @@ describe("the settings page", () => {
 		await replaceNumber("Height", "2160");
 		await choose("Display synchronized", "Fixed frame rate");
 		await replaceNumber("Frames per second", "50");
-		await choose("8 layers (279 slots)", "2 layers (75 slots)");
-		await choose("Art-Net", "sACN");
-		await replaceNumber("Universe", "12");
-		await replaceNumber("Start address", "101");
-
 		await userEvent.click(
 			screen.getByRole("button", { name: "Save output settings" }),
 		);
@@ -84,10 +86,10 @@ describe("the settings page", () => {
 			height: 2160,
 			presentation: "fixed-fps",
 			framesPerSecond: 50,
-			personality: "two-layers",
-			protocol: "sacn",
-			universe: 12,
-			startAddress: 101,
+			personality: "eight-layers",
+			protocol: "art-net",
+			universe: 0,
+			startAddress: 1,
 		});
 		expect(output.writes[0]?.requestId).toEqual(expect.any(String));
 	});
@@ -100,6 +102,7 @@ describe("the settings page", () => {
 			fullscreen: true,
 		});
 		render(<SettingsPage />);
+		await openSettings("Outputs");
 
 		await userEvent.click(
 			await screen.findByRole("button", { name: "Change output settings" }),
@@ -119,6 +122,40 @@ describe("the settings page", () => {
 		expect(output.writes[0]).not.toHaveProperty("framesPerSecond");
 	});
 
+	it("edits DMX personality and address under Network & Inputs without changing the picture", async () => {
+		const output = stubOutputConfiguration({
+			targetKind: "monitor",
+			monitorBy: "name",
+			monitorValue: "Stage projector",
+			fullscreen: true,
+		});
+		render(<SettingsPage />);
+		await openSettings("Network & Inputs");
+
+		await userEvent.click(
+			await screen.findByRole("button", { name: "Change DMX input" }),
+		);
+		await choose("8 layers (279 slots)", "2 layers (75 slots)");
+		await choose("Art-Net", "sACN");
+		await replaceNumber("Universe", "12");
+		await replaceNumber("Start address", "101");
+		await userEvent.click(
+			screen.getByRole("button", { name: "Save DMX input" }),
+		);
+
+		await waitFor(() => expect(output.writes).toHaveLength(1));
+		expect(output.writes[0]).toMatchObject({
+			personality: "two-layers",
+			protocol: "sacn",
+			universe: 12,
+			startAddress: 101,
+			targetKind: "monitor",
+			monitorBy: "name",
+			monitorValue: "Stage projector",
+			fullscreen: true,
+		});
+	});
+
 	it("shows what was configured beside what this run actually bound", async () => {
 		stubSettingsServer({
 			network: aNetwork({
@@ -133,6 +170,7 @@ describe("the settings page", () => {
 			}),
 		});
 		render(<SettingsPage />);
+		await openSettings("Network & Inputs");
 
 		const row = (
 			await screen.findByRole("rowheader", { name: "Art-Net" })
@@ -145,6 +183,7 @@ describe("the settings page", () => {
 	it("says a saved address is used on the next start rather than implying a rebind", async () => {
 		stubSettingsServer();
 		render(<SettingsPage />);
+		await openSettings("Network & Inputs");
 
 		expect(
 			await screen.findByText(/used the next time this server starts/u),
@@ -154,6 +193,7 @@ describe("the settings page", () => {
 	it("edits a listen address through the write path, with a request id", async () => {
 		const server = stubSettingsServer();
 		render(<SettingsPage />);
+		await openSettings("Network & Inputs");
 
 		await userEvent.click(
 			await screen.findByRole("button", { name: "Change network settings" }),
@@ -174,6 +214,7 @@ describe("the settings page", () => {
 	it("keeps a destination separate from every listen address", async () => {
 		const server = stubSettingsServer();
 		render(<SettingsPage />);
+		await openSettings("Network & Inputs");
 
 		await userEvent.click(
 			await screen.findByRole("button", { name: "Change network settings" }),
@@ -210,6 +251,7 @@ describe("the settings page", () => {
 			}),
 		});
 		render(<SettingsPage />);
+		await openSettings("Network & Inputs");
 
 		await userEvent.click(
 			await screen.findByRole("button", { name: "Change network settings" }),
@@ -233,6 +275,7 @@ describe("the settings page", () => {
 			},
 		});
 		render(<SettingsPage />);
+		await openSettings("Network & Inputs");
 
 		await userEvent.click(
 			await screen.findByRole("button", { name: "Change network settings" }),
@@ -351,4 +394,10 @@ async function replaceNumber(label: string, value: string) {
 	const field = screen.getByLabelText(label);
 	await userEvent.clear(field);
 	await userEvent.type(field, value);
+}
+
+async function openSettings(
+	name: "Libraries" | "Outputs" | "Network & Inputs" | "Logs",
+) {
+	await userEvent.click(screen.getByRole("button", { name }));
 }

@@ -1,0 +1,321 @@
+import type { Meta, StoryObj } from "@storybook/react-vite";
+import { type ReactNode, useState } from "react";
+import {
+	DashboardScreen,
+	LibrariesSettings,
+	LibraryScreen,
+	LogsSettings,
+	MediaScreen,
+	NetworkInputsSettings,
+	type OperatorTextSource,
+	OutputsSettings,
+	SettingsScreen,
+	TextScreen,
+	VisualizersScreen,
+} from "./MediaServerScreens";
+import {
+	MediaListDetail,
+	MediaMetric,
+	MediaPanel,
+	MediaPreview,
+	type MediaServerSection,
+	MediaServerShell,
+} from "./MediaServerSurface";
+import "../styles.css";
+import "./mediaServerSurface.css";
+
+const NOW = new Date("2026-08-12T21:31:00+02:00");
+
+const outputs = [
+	{
+		id: "main",
+		name: "Main output",
+		target: "Display 2",
+		resolution: "1920 × 1080",
+		status: "Live",
+		layers: [
+			{ id: "1", name: "Layer 1", source: "Storm Clouds", level: "100%" },
+			{ id: "2", name: "Layer 2", source: "Prospero title", level: "82%" },
+			{ id: "3", name: "Layer 3", source: "Aurora Field", level: "35%" },
+		],
+	},
+	{
+		id: "foh",
+		name: "FOH confidence",
+		target: "Off-screen surface",
+		resolution: "1280 × 720",
+		status: "Live",
+		layers: [
+			{ id: "1", name: "Layer 1", source: "Running order", level: "100%" },
+			{ id: "2", name: "Layer 2", source: "Blank", level: "0%" },
+		],
+	},
+];
+
+const library = [
+	{
+		id: "storm",
+		name: "Storm Clouds",
+		address: "1 / 12",
+		type: "HAP Alpha video",
+	},
+	{
+		id: "island",
+		name: "Island sunrise",
+		address: "1 / 18",
+		type: "HAP Alpha video",
+	},
+	{ id: "cloth", name: "Golden cloth", address: "2 / 4", type: "Still image" },
+	{
+		id: "mask",
+		name: "Proscenium mask",
+		address: "10 / 1",
+		type: "Alpha mask",
+	},
+];
+
+const visualizers = [
+	{
+		id: "aurora",
+		name: "Aurora Field",
+		address: "220 / 3",
+		kind: "Reactive field",
+		controls: ["Speed", "Amount", "Reactivity", "Smoothing"],
+		variant: "aurora" as const,
+	},
+	{
+		id: "particles",
+		name: "Ember Particles",
+		address: "220 / 4",
+		kind: "Particle system",
+		controls: ["Count", "Size", "Gravity", "Lifetime"],
+		variant: "particles" as const,
+	},
+	{
+		id: "equalizer",
+		name: "Band Equalizer",
+		address: "220 / 5",
+		kind: "Audio bars",
+		controls: ["Amount", "Decay", "Smoothing", "Mirror"],
+		variant: "particles" as const,
+	},
+];
+
+const initialText: OperatorTextSource[] = [
+	{
+		id: "prospero",
+		name: "Prospero title",
+		address: "200 / 3",
+		kind: "Fixed words",
+		text: "We are such stuff\nas dreams are made on",
+		enabled: true,
+	},
+	{
+		id: "interval",
+		name: "Interval countdown",
+		address: "200 / 4",
+		kind: "Countdown",
+		text: "Interval · 12:34",
+		enabled: true,
+	},
+	{
+		id: "doors",
+		name: "Doors open",
+		address: "200 / 5",
+		kind: "Clock",
+		text: "Doors 19:00",
+		enabled: false,
+	},
+];
+
+function Frame({
+	active,
+	children,
+}: {
+	active: MediaServerSection;
+	children: ReactNode;
+}) {
+	const [section, setSection] = useState(active);
+	return (
+		<div className="marketing-screenshot-viewport">
+			<MediaServerShell
+				active={section}
+				connected
+				instance="Media Server · Stage Rack"
+				now={NOW}
+				onNavigate={setSection}
+			>
+				{children}
+			</MediaServerShell>
+		</div>
+	);
+}
+
+function StatefulLibrary() {
+	const [selected, setSelected] = useState("storm");
+	return (
+		<Frame active="library">
+			<LibraryScreen
+				items={library}
+				selectedId={selected}
+				onSelect={setSelected}
+			/>
+		</Frame>
+	);
+}
+
+function StatefulVisualizers() {
+	const [selected, setSelected] = useState("aurora");
+	return (
+		<Frame active="visualizers">
+			<VisualizersScreen
+				items={visualizers}
+				selectedId={selected}
+				onSelect={setSelected}
+			/>
+		</Frame>
+	);
+}
+
+function StatefulText() {
+	const [items, setItems] = useState(initialText);
+	const [selected, setSelected] = useState("prospero");
+	return (
+		<Frame active="text">
+			<TextScreen
+				items={items}
+				selectedId={selected}
+				onSelect={setSelected}
+				onTextChange={(text) =>
+					setItems((current) =>
+						current.map((item) =>
+							item.id === selected ? { ...item, text } : item,
+						),
+					)
+				}
+			/>
+		</Frame>
+	);
+}
+
+const meta = {
+	title: "ToskLight/Media Server",
+	parameters: { layout: "fullscreen" },
+} satisfies Meta;
+
+export default meta;
+type Story = StoryObj<typeof meta>;
+
+export const Components: Story = {
+	render: () => (
+		<div style={{ padding: 24, display: "grid", gap: 16 }}>
+			<div className="media-metric-grid">
+				<MediaMetric
+					label="Connected desk"
+					value="The Tempest"
+					detail="Active show"
+					tone="good"
+				/>
+				<MediaMetric
+					label="DMX input"
+					value="44 Hz"
+					detail="Art-Net · Universe 1"
+				/>
+				<MediaMetric label="Library" value="286" detail="Addressable items" />
+				<MediaMetric
+					label="Output 2"
+					value="Restart"
+					detail="Stored picture changed"
+					tone="warn"
+				/>
+			</div>
+			<MediaPanel title="Operator panel" detail="Production surface grouping">
+				<p>
+					Panels, metrics, previews, and list selection share one Media Server
+					language.
+				</p>
+			</MediaPanel>
+			<MediaPreview title="Aurora Field" />
+			<MediaListDetail
+				label="Component example"
+				items={visualizers.map((item) => ({
+					id: item.id,
+					title: item.name,
+					detail: item.kind,
+					meta: item.address,
+				}))}
+				selectedId="aurora"
+				detail={<p>Selected detail remains visible on the right.</p>}
+			/>
+		</div>
+	),
+};
+
+export const Dashboard: Story = {
+	render: () => (
+		<Frame active="dashboard">
+			<DashboardScreen
+				instance="Stage Rack"
+				showName="The Tempest"
+				outputs={outputs}
+				libraryItems={286}
+				dmxRate="44 Hz"
+				recent={
+					<ul>
+						<li>23:31 · Light Desk identified The Tempest</li>
+						<li>23:29 · Main output synchronized to Display 2</li>
+						<li>23:27 · Storm Clouds import finished</li>
+					</ul>
+				}
+			/>
+		</Frame>
+	),
+};
+
+export const Media: Story = {
+	render: () => (
+		<Frame active="media">
+			<MediaScreen outputs={outputs} />
+		</Frame>
+	),
+};
+export const Library: Story = { render: () => <StatefulLibrary /> };
+export const Visualizers: Story = { render: () => <StatefulVisualizers /> };
+export const Text: Story = { render: () => <StatefulText /> };
+
+export const SettingsLibraries: Story = {
+	render: () => (
+		<Frame active="settings">
+			<SettingsScreen active="libraries">
+				<LibrariesSettings />
+			</SettingsScreen>
+		</Frame>
+	),
+};
+export const SettingsOutputs: Story = {
+	render: () => (
+		<Frame active="settings">
+			<SettingsScreen active="outputs">
+				<OutputsSettings />
+			</SettingsScreen>
+		</Frame>
+	),
+};
+export const SettingsNetworkAndInputs: Story = {
+	render: () => (
+		<Frame active="settings">
+			<SettingsScreen active="network-inputs">
+				<NetworkInputsSettings />
+			</SettingsScreen>
+		</Frame>
+	),
+};
+export const SettingsLogs: Story = {
+	render: () => (
+		<Frame active="settings">
+			<SettingsScreen active="logs">
+				<LogsSettings />
+			</SettingsScreen>
+		</Frame>
+	),
+};
