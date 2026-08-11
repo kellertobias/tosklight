@@ -24,12 +24,21 @@ CODESAFARI_VERSION="1.0.0"
 usage() {
   cat <<'EOF'
 tools/build.sh is invoked by the root package.json scripts:
-  npm run open                 Build debug server and app, stop old instances, and open ToskLight
-  npm run open:media [ARGS...] Build the Media Server and open its outputs on their monitors
+  npm run open                 Open the latest debug ToskLight build without rebuilding
+  npm run build:open           Build debug server and app, stop old instances, and open ToskLight
+  npm run open:hardware-controls
+                               Open the latest Hardware Controls build without rebuilding
+  npm run build:hardware-controls:open
+                               Build and open Hardware Controls
+  npm run open:media [ARGS...] Open the latest Media Server build on its monitors
+  npm run build:media:open     Build and open the Media Server
   npm run build:media          Build the Media Server only
-  npm run open:viz [ARGS...]   Build the visualizer and the Viz editor, and open the visualizer with it
+  npm run open:viz [ARGS...]   Open the latest visualizer build with the latest Viz editor
+  npm run build:viz:open       Build and open the visualizer with the Viz editor
   npm run build:viz            Build the standalone visualizer only
-  npm run open:viz-editor      Build the Viz rig-planning editor and open it
+  npm run open:viz-editor      Open the latest Viz rig-planning editor build
+  npm run build:viz-editor:open
+                               Build and open the Viz rig-planning editor
   npm run build:viz-editor     Build the Viz rig-planning editor only
   npm run demo-show            Generate the canonical demo show from the shipped fixture packages
   npm run demo-capture         Render demo-show frames with the native core, with no window
@@ -51,7 +60,7 @@ tools/build.sh is invoked by the root package.json scripts:
                                Remove only stale Cargo incremental objects
   npm run artifact-path NAME   Print a resolved artifact path (for CI and tooling)
 
-Direct subcommands: open | open-media [ARGS...] | build-media | open-viz [ARGS...] | build-viz | open-viz-editor [ARGS...] | build-viz-editor | demo-show | demo-capture | manual | icon-contact-sheets | models [verify|render|open] | safari | pages | pages-serve [PORT] | codesafari |
+Direct subcommands: open | build-open | open-hardware-controls | build-hardware-controls-open | open-media [ARGS...] | build-media-open [ARGS...] | build-media | open-viz [ARGS...] | build-viz-open [ARGS...] | build-viz | open-viz-editor [ARGS...] | build-viz-editor-open [ARGS...] | build-viz-editor | demo-show | demo-capture | manual | icon-contact-sheets | models [verify|render|open] | safari | pages | pages-serve [PORT] | codesafari |
   archive [install] | migrate-artifacts | clean-root | clean-cargo-incremental | clean-artifacts [runtime PATH] | path NAME
 EOF
 }
@@ -244,6 +253,26 @@ require() {
   }
 }
 
+require_built_file() {
+  local artifact="$1"
+  local build_command="$2"
+  [[ -x "$artifact" ]] || {
+    echo "error: no runnable build found at $artifact" >&2
+    echo "Build it first with: $build_command" >&2
+    exit 1
+  }
+}
+
+require_built_app() {
+  local artifact="$1"
+  local build_command="$2"
+  [[ -d "$artifact" ]] || {
+    echo "error: no application build found at $artifact" >&2
+    echo "Build it first with: $build_command" >&2
+    exit 1
+  }
+}
+
 stop_running() {
   echo "Stopping running Light instances..."
   launchctl remove "$DEV_SERVER_LABEL" 2>/dev/null || true
@@ -319,6 +348,28 @@ start_server() {
   wait_for_server "$pid"
 }
 
+open_debug_app() {
+  require curl
+  require open
+
+  local app="$TARGET_DIR/debug/bundle/macos/ToskLight.app"
+  local server="$TARGET_DIR/debug/light-headless"
+  require_built_app "$app" "npm run build:open"
+  require_built_file "$server" "npm run build:open"
+  light_check_runtime_migration
+
+  if curl -fsS http://127.0.0.1:5000/api/v2/readiness >/dev/null 2>&1; then
+    echo "Using the Light server already answering on http://127.0.0.1:5000"
+  else
+    echo "Starting the latest built Light headless service..."
+    launchctl remove "$DEV_SERVER_LABEL" 2>/dev/null || true
+    launchctl submit -l "$DEV_SERVER_LABEL" -o "$DATA_DIR/light-headless.log" -e "$DATA_DIR/light-headless.log" -- "$server" --data-dir "$DATA_DIR" --fixture-package-dir "$FIXTURE_LIBRARY_DIR"
+    wait_for_launchd_server
+  fi
+  open "$app"
+  echo "ToskLight is open. Server log: $DATA_DIR/light-headless.log"
+}
+
 build_debug_and_open() {
   require node
   require cargo
@@ -331,7 +382,7 @@ build_debug_and_open() {
   write_tauri_configs
   node "$ROOT/tools/ensure-workspace-dependencies.mjs"
   node "$ROOT/tools/ensure-control-frontend.mjs"
-  light_with_cargo_command_lock "npm run open" build_debug_app_bundle
+  light_with_cargo_command_lock "npm run build:open" build_debug_app_bundle
   cp "$TARGET_DIR/debug/light-headless" "$TARGET_DIR/debug/bundle/macos/ToskLight.app/Contents/MacOS/light-headless"
   # The visualizer ships inside the desk, beside it, because the desk supervises it as a helper
   # rather than launching a second application. It is built here rather than assumed present: a
@@ -343,6 +394,26 @@ build_debug_and_open() {
   wait_for_launchd_server
   open "$TARGET_DIR/debug/bundle/macos/ToskLight.app"
   echo "ToskLight is open. Server log: $DATA_DIR/light-headless.log"
+}
+
+open_hardware_controls() {
+  require open
+  local app="$TARGET_DIR/debug/bundle/macos/ToskLight Hardware Controls.app"
+  require_built_app "$app" "npm run build:hardware-controls:open"
+  open "$app"
+  echo "ToskLight Hardware Controls is open."
+}
+
+build_hardware_controls_and_open() {
+  require node
+  require npm
+  write_tauri_configs
+  node "$ROOT/tools/ensure-workspace-dependencies.mjs"
+  echo "Building Hardware Controls frontend..."
+  (cd "$HARDWARE_DIR" && npm run build)
+  echo "Building debug Hardware Controls app..."
+  (cd "$HARDWARE_DIR" && npm run tauri:build -- --debug --bundles app --config "$HARDWARE_TAURI_CONFIG")
+  open_hardware_controls
 }
 
 build_debug_app_bundle() {
@@ -547,12 +618,22 @@ build_viz_editor() {
 }
 
 open_viz_editor() {
-  build_viz_editor
+  require_built_file "$TARGET_DIR/release/viz-editor" "npm run build:viz-editor:open"
+  [[ -f "$LIGHT_DEMO_SHOW_DIR/demo-show.show" ]] || {
+    echo "error: no demo show build found at $LIGHT_DEMO_SHOW_DIR/demo-show.show" >&2
+    echo "Build it first with: npm run build:viz-editor:open" >&2
+    exit 1
+  }
   echo "Opening the Viz editor."
   # A development build is not a bundle, so it has no resource directory to find the packaged demo
   # in. The generated artefact is the same file a release packages, so it is named directly.
   TOSKLIGHT_VIZ_DEMO_SHOW="$LIGHT_DEMO_SHOW_DIR/demo-show.show" \
     "$TARGET_DIR/release/viz-editor" "$@"
+}
+
+build_viz_editor_and_open() {
+  build_viz_editor
+  open_viz_editor "$@"
 }
 
 # The Media Server is a separate product with its own build. Building or opening ToskLight never
@@ -607,7 +688,7 @@ JSON
 }
 
 open_media() {
-  build_media
+  require_built_file "$TARGET_DIR/release/media-server" "npm run build:media:open"
   seed_media_configuration
   local data_dir
   data_dir="$(media_data_dir)"
@@ -616,6 +697,11 @@ open_media() {
   MEDIA_CONFIG="$data_dir/media-server.json" \
   MEDIA_LOG="${MEDIA_LOG:-info}" \
     "$TARGET_DIR/release/media-server" "$@"
+}
+
+build_media_and_open() {
+  build_media
+  open_media "$@"
 }
 
 # The visualizer is a separate product with its own build. Building or opening ToskLight never
@@ -649,14 +735,10 @@ ensure_desk_server_for_visualizer() {
     echo "Using the desk already answering on http://127.0.0.1:5000"
     return 0
   fi
-  echo "No desk is answering on http://127.0.0.1:5000; starting the development server..."
+  echo "No desk is answering on http://127.0.0.1:5000; starting the latest built development server..."
   light_check_runtime_migration
-  if [[ ! -f "$LIGHT_CONTROL_FRONTEND_DIR/index.html" ]]; then
-    require npm
-    echo "Building control UI assets the headless server embeds..."
-    (cd "$UI_DIR" && npm run build)
-  fi
-  cargo build --manifest-path "$ROOT/Cargo.toml" -p light-headless --bin light-headless
+  require_built_file "$TARGET_DIR/debug/light-headless" "npm run build:open"
+  launchctl remove "$DEV_SERVER_LABEL" 2>/dev/null || true
   launchctl submit -l "$DEV_SERVER_LABEL" -o "$DATA_DIR/light-headless.log" -e "$DATA_DIR/light-headless.log" -- "$TARGET_DIR/debug/light-headless" --data-dir "$DATA_DIR" --fixture-package-dir "$FIXTURE_LIBRARY_DIR"
   wait_for_launchd_server
   echo "Server log: $DATA_DIR/light-headless.log"
@@ -683,14 +765,15 @@ build_visualizer_headless() {
 }
 
 open_visualizer() {
-  require cargo
   require curl
-  # Build the visualizer first: a compile error should not leave a freshly started desk behind.
-  build_visualizer
-  # The planning window is the patch sheet the visualizer opens when nothing else was named, so it
-  # is part of opening the visualizer rather than a separate thing to remember to build.
-  build_viz_editor
-  build_visualizer_headless
+  require_built_file "$(visualizer_executable)" "npm run build:viz:open"
+  require_built_file "$TARGET_DIR/release/viz-editor" "npm run build:viz:open"
+  require_built_file "$TARGET_DIR/release/light-headless" "npm run build:viz:open"
+  [[ -f "$LIGHT_DEMO_SHOW_DIR/demo-show.show" ]] || {
+    echo "error: no demo show build found at $LIGHT_DEMO_SHOW_DIR/demo-show.show" >&2
+    echo "Build it first with: npm run build:viz:open" >&2
+    exit 1
+  }
   if visualizer_names_a_source "$@"; then
     # A named desk is the running one. A named show uses the private server built above.
     if ! printf '%s\n' "$@" | grep -qx -- "--show"; then
@@ -715,10 +798,30 @@ open_visualizer() {
     "$(visualizer_executable)" "$@"
 }
 
+build_visualizer_and_open() {
+  # Build every helper before starting a desk, so a compile error cannot leave a new service behind.
+  build_visualizer
+  build_viz_editor
+  build_visualizer_headless
+  open_visualizer "$@"
+}
+
 case "${1:-}" in
+  open-hardware-controls)
+    [[ $# -eq 1 ]] || { usage >&2; exit 2; }
+    open_hardware_controls
+    ;;
+  build-hardware-controls-open)
+    [[ $# -eq 1 ]] || { usage >&2; exit 2; }
+    build_hardware_controls_and_open
+    ;;
   open-media)
     shift
     open_media "$@"
+    ;;
+  build-media-open)
+    shift
+    build_media_and_open "$@"
     ;;
   build-media)
     [[ $# -eq 1 ]] || { usage >&2; exit 2; }
@@ -728,9 +831,17 @@ case "${1:-}" in
     shift
     open_visualizer "$@"
     ;;
+  build-viz-open)
+    shift
+    build_visualizer_and_open "$@"
+    ;;
   open-viz-editor)
     shift
     open_viz_editor "$@"
+    ;;
+  build-viz-editor-open)
+    shift
+    build_viz_editor_and_open "$@"
     ;;
   build-viz-editor)
     [[ $# -eq 1 ]] || { usage >&2; exit 2; }
@@ -782,6 +893,10 @@ case "${1:-}" in
     serve_pages "${2:-}"
     ;;
   open)
+    [[ $# -eq 1 ]] || { usage >&2; exit 2; }
+    open_debug_app
+    ;;
+  build-open)
     [[ $# -eq 1 ]] || { usage >&2; exit 2; }
     build_debug_and_open
     ;;

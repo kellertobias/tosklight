@@ -138,7 +138,7 @@ failing application assertion; rerun the same command unrestricted and report bo
 For native behavior:
 
 ```sh
-npm run open
+npm run build:open
 curl -fsS http://127.0.0.1:5000/api/v2/readiness
 ```
 
@@ -147,7 +147,7 @@ macOS, Linux, and Windows desktop binaries for five seconds. That probe is
 CI-only and rejects any application that exits before the workflow terminates
 it.
 
-After `npm run open`, inspect `.artifacts/runtime/light-data/light-headless.log`. If readiness is
+After `npm run build:open`, inspect `.artifacts/runtime/light-data/light-headless.log`. If readiness is
 healthy but the UI appears stuck, time `/api/v2/readiness` and `/api/v2/bootstrap` separately and
 confirm the bundle opened by `build` before changing UI code.
 
@@ -186,5 +186,5 @@ npm run test:e2e -- tests/<focused-spec>.spec.ts --grep '<scenario-id>'
 
 Before final release handoff, widen to the applicable unrestricted socket tests, all Playwright
 surfaces, Hardware Controls tests/build, release benchmarks, manual build, the CI-only packaged
-desktop launch probes, and `npm run open` operator-path verification. Compare failures by stable scenario ID and behavior,
+desktop launch probes, and `npm run build:open` operator-path verification. Compare failures by stable scenario ID and behavior,
 not only by raw failure count.

@@ -20,12 +20,30 @@ function shellFunction(source, name, nextName) {
 	return source.slice(start, end);
 }
 
-test("open reuses dependencies and builds only the main desktop application", () => {
+test("open launches the existing main desktop build without rebuilding", () => {
+	const buildScript = read("tools/build.sh");
+	const openFunction = shellFunction(
+		buildScript,
+		"open_debug_app",
+		"build_debug_and_open",
+	);
+
+	assert.match(openFunction, /require_built_app/u);
+	assert.match(openFunction, /require_built_file/u);
+	assert.match(openFunction, /npm run build:open/u);
+	assert.match(openFunction, /already answering/u);
+	assert.doesNotMatch(
+		openFunction,
+		/cargo build|ensure-control-frontend|build_debug_app_bundle|stop_running/u,
+	);
+});
+
+test("build:open preserves the focused main desktop rebuild", () => {
 	const buildScript = read("tools/build.sh");
 	const openFunction = shellFunction(
 		buildScript,
 		"build_debug_and_open",
-		"build_debug_app_bundle",
+		"open_hardware_controls",
 	);
 	const appBuildFunction = shellFunction(
 		buildScript,
@@ -35,10 +53,56 @@ test("open reuses dependencies and builds only the main desktop application", ()
 
 	assert.match(openFunction, /ensure-workspace-dependencies\.mjs/u);
 	assert.match(openFunction, /ensure-control-frontend\.mjs/u);
+	assert.match(openFunction, /stop_running/u);
+	assert.match(openFunction, /npm run build:open/u);
 	assert.doesNotMatch(openFunction, /npm ci|build_icon_contact_sheets/u);
 	assert.match(appBuildFunction, /light-headless/u);
 	assert.match(appBuildFunction, /CONTROL_TAURI_CONFIG/u);
 	assert.doesNotMatch(appBuildFunction, /HARDWARE_DIR|HARDWARE_TAURI_CONFIG/u);
+});
+
+test("package scripts split launch-only and build-and-open commands", () => {
+	const scripts = JSON.parse(read("package.json")).scripts;
+
+	assert.equal(scripts.open, "bash tools/build.sh open");
+	assert.equal(scripts["build:open"], "bash tools/build.sh build-open");
+	for (const [app, directName] of [
+		["hardware-controls", "hardware-controls"],
+		["media", "media"],
+		["viz", "viz"],
+		["viz-editor", "viz-editor"],
+	]) {
+		assert.equal(
+			scripts[`open:${app}`],
+			`bash tools/build.sh open-${directName}`,
+		);
+		assert.equal(
+			scripts[`build:${app}:open`],
+			`bash tools/build.sh build-${directName}-open`,
+		);
+	}
+});
+
+test("secondary app open functions only consume existing artifacts", () => {
+	const buildScript = read("tools/build.sh");
+	for (const [openName, nextName, buildCommand] of [
+		[
+			"open_hardware_controls",
+			"build_hardware_controls_and_open",
+			"npm run build:hardware-controls:open",
+		],
+		[
+			"open_viz_editor",
+			"build_viz_editor_and_open",
+			"npm run build:viz-editor:open",
+		],
+		["open_media", "build_media_and_open", "npm run build:media:open"],
+	]) {
+		const openFunction = shellFunction(buildScript, openName, nextName);
+		assert.match(openFunction, /require_built_(?:file|app)/u);
+		assert.ok(openFunction.includes(buildCommand));
+		assert.doesNotMatch(openFunction, /cargo build|npm run tauri:build/u);
+	}
 });
 
 test("repository Tauri overlays disable a duplicate frontend build", () => {
@@ -199,7 +263,7 @@ test("the Viz release builds only the bundle format its staging step consumes", 
 	assert.doesNotMatch(buildStep, /--bundles all/u);
 });
 
-test("open:viz builds every helper path it exports", () => {
+test("open:viz requires every helper path it exports without rebuilding", () => {
 	const buildScript = read("tools/build.sh");
 	const helperBuild = shellFunction(
 		buildScript,
@@ -207,21 +271,43 @@ test("open:viz builds every helper path it exports", () => {
 		"open_visualizer",
 	);
 	const openStart = buildScript.indexOf("open_visualizer() {");
-	const openEnd = buildScript.indexOf("\ncase ", openStart);
+	const openEnd = buildScript.indexOf(
+		"\nbuild_visualizer_and_open() {",
+		openStart,
+	);
 	assert.notEqual(openStart, -1, "open_visualizer should exist");
 	assert.notEqual(
 		openEnd,
 		-1,
-		"the command dispatcher should follow open_visualizer",
+		"build_visualizer_and_open should follow open_visualizer",
 	);
 	const openVisualizer = buildScript.slice(openStart, openEnd);
 
 	assert.match(helperBuild, /-p light-headless --bin light-headless/u);
-	assert.match(openVisualizer, /build_visualizer_headless/u);
+	assert.match(openVisualizer, /require_built_file/u);
+	assert.match(openVisualizer, /npm run build:viz:open/u);
+	assert.doesNotMatch(
+		openVisualizer,
+		/build_visualizer\n|build_viz_editor\n|build_visualizer_headless\n/u,
+	);
 	assert.match(
 		openVisualizer,
 		/TOSKLIGHT_VIZ_HEADLESS="\$TARGET_DIR\/release\/light-headless"/u,
 	);
+});
+
+test("build:viz:open builds every helper before using launch-only open", () => {
+	const buildScript = read("tools/build.sh");
+	const start = buildScript.indexOf("build_visualizer_and_open() {");
+	const end = buildScript.indexOf("\ncase ", start);
+	assert.notEqual(start, -1);
+	assert.notEqual(end, -1);
+	const buildAndOpen = buildScript.slice(start, end);
+
+	assert.match(buildAndOpen, /build_visualizer/u);
+	assert.match(buildAndOpen, /build_viz_editor/u);
+	assert.match(buildAndOpen, /build_visualizer_headless/u);
+	assert.match(buildAndOpen, /open_visualizer/u);
 });
 
 test("fast unit tests and comprehensive verification remain distinct", () => {

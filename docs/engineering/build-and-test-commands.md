@@ -22,7 +22,8 @@ npm run dev                        # Light headless + Tauri app with UI hot relo
 npm run storybook                  # shared operator components, no Light server
 npm run storybook:build            # deterministic static Storybook artifact
 npm run screenshots:marketing      # regenerate the marketing screenshot gallery
-npm run open                       # incremental main-desk build, then open the app
+npm run open                       # open the latest main-desk build; do not rebuild
+npm run build:open                 # incremental main-desk rebuild, then open the app
 npm run manual                     # PDF and HTML manuals from docs/help
 npm run bundle [install]           # release artifacts for macOS, Windows, Linux
 npm run clean                      # remove reproducible artifacts
@@ -61,7 +62,10 @@ Open `http://127.0.0.1:5000`. A new desk contains one enabled `Operator` user.
 
 | Command | What it does |
 | --- | --- |
-| `npm run open` | The authoritative desktop path. Checks runtime migration, stops running instances, reuses `node_modules` when its lockfile signature is current, reuses the control UI bundle when its source-content signature is current, builds `light-headless` and the main Tauri debug bundle, copies the headless binary into the app, submits it as launchd job `de.tokenet.tosklight.dev-server`, verifies readiness belongs to that PID, and opens the app. It no longer builds icon contact sheets or the separate Hardware Controls app. Set `LIGHT_FORCE_NPM_CI=1` or `LIGHT_FORCE_FRONTEND_BUILD=1` to force the corresponding clean step. |
+| `npm run open` | Launches the latest existing main-desk debug bundle without invoking npm, Cargo, or Tauri builds. It keeps an already-ready server running; otherwise it starts the latest built debug `light-headless`. If an artifact is missing, it points to `npm run build:open`. |
+| `npm run build:open` | The authoritative rebuild-and-launch desktop path. Checks runtime migration, stops running instances, reuses `node_modules` when its lockfile signature is current, reuses the control UI bundle when its source-content signature is current, builds `light-headless` and the main Tauri debug bundle, copies the headless and Stage renderer binaries into the app, submits the server as launchd job `de.tokenet.tosklight.dev-server`, verifies readiness belongs to that PID, and opens the app. Set `LIGHT_FORCE_NPM_CI=1` or `LIGHT_FORCE_FRONTEND_BUILD=1` to force the corresponding clean step. |
+| `npm run open:<app>` | Launches the latest existing `hardware-controls`, `media`, `viz`, or `viz-editor` build without rebuilding it. |
+| `npm run build:<app>:open` | Builds and opens the named app. The existing build-only commands such as `build:media`, `build:viz`, and `build:viz-editor` remain available. |
 | `npm run storybook` | Serves the tracked `@tosklight/ui` package and its deterministic mock stories at `http://127.0.0.1:6006`, without a Light server or mutable show. |
 | `npm run storybook:build` | Builds the static review artifact under `.artifacts/build/storybook/ui`. |
 | `npm run screenshots:marketing` | Builds static Storybook and recreates every manifest-owned marketing PNG under `docs/marketing/assets/screenshots`; CI publishes this directory as the `marketing-screenshots` artifact consumed by the Pages build. |
@@ -74,7 +78,15 @@ Open `http://127.0.0.1:5000`. A new desk contains one enabled `Operator` user.
 | `npm run clean -- runtime PATH` | Removes runtime data. Deliberately separate and requires the exact absolute path, because it includes local shows and desk state. |
 | `npm run artifact-path -- NAME` | Prints a resolved path: `root, cargo, manual-pdf, manual-html, release, runtime, test-results, playwright-report, visual-inspection`. |
 
-After `npm run open`:
+Why can `npm run build:open` still take minutes after a small UI change? The production web bundle
+is embedded in both the headless server (`crates/light/adapters/headless`) and the Tauri app. A new
+bundle therefore invalidates both Rust consumers and requires two native links. On the measured
+August 2026 rebuild, the frontend took under one second while `light-headless` took about 1 minute
+47 seconds and the Tauri app another 1 minute 4 seconds; the already-cached Stage renderer took
+under one second. Use `npm run dev` for hot reload, `npm run open` to relaunch existing bits, and
+`npm run build:open` when the packaged result itself must be refreshed.
+
+After either open command:
 
 ```sh
 curl -fsS http://127.0.0.1:5000/api/v2/readiness
@@ -235,7 +247,7 @@ Start with the smallest relevant check, then widen by risk.
 | `docs/help/` content | `npm run dev` to check live help, then `npm run manual` |
 | Storybook-owned panes or help images | `npm run screenshots:help`, then review and commit the accepted PNG changes |
 | Manifest entries still marked live-app | `npm run test:help-screenshots-live`, then review only those image diffs |
-| Real operator behaviour, before handoff | `npm run open` |
+| Real operator behaviour, before handoff | `npm run build:open` |
 
 Use `cargo fmt` for Rust formatting. Do not run standalone `rustfmt` against workspace files.
 
@@ -282,9 +294,8 @@ artifact).
 | `e2e` | Ubuntu, sharded over API exceptions and UI/OSC coverage | `npm run test:e2e-*`, uploading `.artifacts/test/results` |
 | `build` | macOS, Linux, Windows | Builds release artifacts, then launches each newly built desktop application for five seconds and fails if it exits early |
 
-The launch probe is intentionally CI-only. Local `npm run open` and
-`npm run bundle` behavior is unchanged and does not automatically launch an
-application merely to validate a build.
+The launch probe is intentionally CI-only. Local build-only and bundle commands do not
+automatically launch an application merely to validate a build.
 
 `.github/workflows/release.yml` builds Media in the same early four-platform matrix as the other
 products. Each OS job smoke-tests its Media executable and directly assembles the final platform

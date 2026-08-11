@@ -95,12 +95,13 @@ npm run test:e2e-api
 npm run test:e2e-ui
 npm run test:e2e -- tests/<focused-spec>.spec.ts
 npm run test:desktop-smoke
-npm run open
+npm run build:open
 ```
 
 For direct package checks, use the current repository scripts and manifests. Prefer `cargo fmt` for Rust formatting; do not run standalone `rustfmt` against workspace files.
 
-When real operator behavior changed, `npm run open` is the authoritative desktop path. After launch:
+When real operator behavior changed, `npm run build:open` is the authoritative rebuild-and-launch
+path. Use `npm run open` to relaunch the latest existing build without rebuilding. After launch:
 
 ```sh
 curl -fsS http://127.0.0.1:5000/api/v2/readiness

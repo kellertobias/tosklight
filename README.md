@@ -52,14 +52,15 @@ and current release downloads.
 
 ## Development
 
-Start the complete desktop application through the authoritative development path:
+Build and open the complete desktop application through the authoritative development path:
 
 ```sh
-npm run open
+npm run build:open
 ```
 
 This builds the frontend, Rust server, and Tauri applications, starts the app-owned server, checks
-its readiness, and opens ToskLight.
+its readiness, and opens ToskLight. For later launches of that existing build, use `npm run open`;
+it does not rebuild or stop an already-ready server.
 
 | Task | Command | Result |
 | --- | --- | --- |

@@ -72,7 +72,7 @@ profile with Stage disabled and is not Stage capacity evidence.
 
 ## Packaged Tauri WebView collector
 
-After `npm run open` has built the debug bundle and left its headless service
+After `npm run build:open` has built the debug bundle and left its headless service
 ready, run the packaged collector with a duration in seconds and an explicit
 scene profile:
 
