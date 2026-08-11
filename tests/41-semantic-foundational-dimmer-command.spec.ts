@@ -1,11 +1,11 @@
 // @bench-semantic-world
 
-import { scenario } from "./bench/core/scenario";
 import {
 	fixture,
 	fixtureRange,
 	group,
 } from "./bench/command-selection/selectionContract";
+import { scenario } from "./bench/core/scenario";
 import { Show } from "./bench/show/showScenario";
 
 scenario(
@@ -39,10 +39,11 @@ scenario(
 		await t.app.open();
 		await t.app.expect.ready();
 
+		await t.timing.programmerFade.setCommandLineAtEnabled(true);
 		await t.command.execute("GROUP 1 AT 50");
-		await t.clock.advanceBy("2.999s");
-		await t.expectFixtureDMX(fixtureRange(1, 12), { Intensity: 127 });
-		await t.clock.advanceBy("1ms");
+		await t.clock.advanceBy("1.5s");
+		await t.expectFixtureDMX(fixtureRange(1, 12), { Intensity: 64 });
+		await t.clock.advanceBy("1.5s");
 		await t.expectFixtureDMX(fixtureRange(1, 12), { Intensity: 128 });
 		await t.clock.advanceBy("1ms");
 		await t.expectFixtureDMX(fixtureRange(1, 12), { Intensity: 128 });
