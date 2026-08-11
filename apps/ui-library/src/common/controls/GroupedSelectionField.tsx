@@ -21,6 +21,28 @@ export interface GroupedSelectionClearAction<T extends string> {
 	value: T;
 }
 
+export function SelectionCardContent({
+	label,
+	description,
+	icon,
+}: Pick<GroupedSelectionOption<string>, "label" | "description" | "icon">) {
+	return (
+		<span
+			className={`ui-grouped-selection-option ${icon ? "has-icon" : "has-no-icon"}`}
+		>
+			{icon && (
+				<span className="ui-grouped-selection-icon" aria-hidden="true">
+					{icon}
+				</span>
+			)}
+			<span className="ui-grouped-selection-copy">
+				<b>{label}</b>
+				{description && <small>{description}</small>}
+			</span>
+		</span>
+	);
+}
+
 export interface GroupedSelectionFieldProps<T extends string> {
 	label?: ReactNode;
 	ariaLabel?: string;
@@ -127,24 +149,7 @@ export function GroupedSelectionField<T extends string>({
 											contentAlign="left"
 											onClick={() => choose(option.value)}
 										>
-											<span
-												className={`ui-grouped-selection-option ${option.icon ? "has-icon" : "has-no-icon"}`}
-											>
-												{option.icon && (
-													<span
-														className="ui-grouped-selection-icon"
-														aria-hidden="true"
-													>
-														{option.icon}
-													</span>
-												)}
-												<span className="ui-grouped-selection-copy">
-													<b>{option.label}</b>
-													{option.description && (
-														<small>{option.description}</small>
-													)}
-												</span>
-											</span>
+											<SelectionCardContent {...option} />
 										</Button>
 									))}
 								</div>

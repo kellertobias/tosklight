@@ -287,6 +287,12 @@ button {
 	margin-top: 8px;
 	color: var(--muted);
 }
+.ui-modal-stack-layer > .window-picker-modal {
+	width: min(960px, 100%);
+}
+.window-picker-options {
+	grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
 .size-grid {
 	display: grid;
 	grid-template-columns: 1fr 1fr;

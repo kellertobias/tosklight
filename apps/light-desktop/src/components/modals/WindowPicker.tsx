@@ -1,58 +1,199 @@
-import { Button, ModalRegistration } from "@tosklight/ui";
+import {
+	Button,
+	ModalFrame,
+	SelectionCardContent,
+} from "@tosklight/ui";
+import { useState } from "react";
 import { useMediaServers } from "../../features/mediaServers/MediaServersContext";
 import { useApp } from "../../state/AppContext";
 import type { BuiltInWindow } from "../../types";
 
-export const windowChoices: Array<[BuiltInWindow, string]> = [
-	["presets", "Preset pool"],
-	["groups", "Group pool"],
-	["fixtures", "Fixture sheet"],
-	["stage", "Stage"],
-	["cuelist_pool", "Cuelist Pool"],
-	["cues", "Cues · Cuelist"],
-	["cuelists", "Cuelists (tabs)"],
-	["virtual_playbacks", "Virtual Playbacks"],
-	["macros", "Macro Pool"],
-	["media", "Media"],
-	["running", "Running"],
-	["timecode", "Timecode"],
-	["file_manager", "File Manager"],
-	["text_editor", "Text Editor"],
-	["channels", "Channels"],
-	["dynamics", "Dynamics"],
-	["scheduler", "Scheduler"],
-	["dmx", "DMX output"],
-	["help", "Help"],
+export type WindowCategoryId = "programming" | "playback" | "show";
+
+export interface WindowChoice {
+	kind: BuiltInWindow;
+	title: string;
+	description: string;
+}
+
+export interface WindowChoiceCategory {
+	id: WindowCategoryId;
+	label: string;
+	choices: readonly WindowChoice[];
+}
+
+export const windowCategories: readonly WindowChoiceCategory[] = [
+	{
+		id: "programming",
+		label: "Programming",
+		choices: [
+			{
+				kind: "presets",
+				title: "Preset pool",
+				description: "Store and recall reusable attribute values.",
+			},
+			{
+				kind: "groups",
+				title: "Group pool",
+				description: "Build and recall ordered fixture selections.",
+			},
+			{
+				kind: "fixtures",
+				title: "Fixture sheet",
+				description: "Select fixtures and inspect their current values.",
+			},
+			{
+				kind: "channels",
+				title: "Channels",
+				description: "Inspect output by DMX channel.",
+			},
+			{
+				kind: "dynamics",
+				title: "Dynamics",
+				description: "Create and control animated attribute values.",
+			},
+			{
+				kind: "text_editor",
+				title: "Text Editor",
+				description: "Open and edit show text files.",
+			},
+		],
+	},
+	{
+		id: "playback",
+		label: "Playback & Automation",
+		choices: [
+			{
+				kind: "cuelist_pool",
+				title: "Cuelist Pool",
+				description: "Choose and manage Cuelists.",
+			},
+			{
+				kind: "cues",
+				title: "Cues",
+				description: "View Cues for a selected Cuelist.",
+			},
+			{
+				kind: "cuelists",
+				title: "Cuelists",
+				description: "Work across the pool, Cues, and Cuelist settings.",
+			},
+			{
+				kind: "virtual_playbacks",
+				title: "Virtual Playbacks",
+				description: "Place playback actions on a configurable grid.",
+			},
+			{
+				kind: "running",
+				title: "Running",
+				description: "Monitor and stop active runtime objects.",
+			},
+			{
+				kind: "macros",
+				title: "Macro Pool",
+				description: "Run and edit reusable command sequences.",
+			},
+			{
+				kind: "timecode",
+				title: "Timecode",
+				description: "Program and control timed show automation.",
+			},
+			{
+				kind: "scheduler",
+				title: "Scheduler",
+				description: "Schedule show actions by date and time.",
+			},
+		],
+	},
+	{
+		id: "show",
+		label: "Show & Visual",
+		choices: [
+			{
+				kind: "stage",
+				title: "Stage",
+				description: "View and arrange the show in 2D or 3D.",
+			},
+			{
+				kind: "media",
+				title: "Media",
+				description: "Browse and control an available media server.",
+			},
+			{
+				kind: "file_manager",
+				title: "File Manager",
+				description: "Manage files exposed by the desk server.",
+			},
+			{
+				kind: "dmx",
+				title: "DMX output",
+				description: "Inspect live universe values and diagnostics.",
+			},
+			{
+				kind: "help",
+				title: "Help",
+				description: "Read the operator manual inside ToskLight.",
+			},
+		],
+	},
 ];
+
+export const windowChoices: Array<[BuiltInWindow, string]> = windowCategories.flatMap(
+	(category) => category.choices.map(({ kind, title }) => [kind, title]),
+);
+
 export const availableWindowChoices = (mediaAvailable: boolean) =>
 	windowChoices.filter(([kind]) => kind !== "media" || mediaAvailable);
+
+export const availableWindowCategoryChoices = (
+	category: WindowCategoryId,
+	mediaAvailable: boolean,
+) =>
+	windowCategories
+		.find(({ id }) => id === category)!
+		.choices.filter(({ kind }) => kind !== "media" || mediaAvailable);
+
 export function WindowPicker() {
 	const { state, dispatch } = useApp();
 	const mediaAvailable = (useMediaServers()?.mediaServers.length ?? 0) > 0;
+	const [category, setCategory] = useState<WindowCategoryId>("programming");
 	if (!state.windowPicker) return null;
 	const close = () => dispatch({ type: "OPEN_WINDOW_PICKER", rect: null });
+	const activeCategory = windowCategories.find(({ id }) => id === category)!;
+	const choices = availableWindowCategoryChoices(category, mediaAvailable);
 	return (
-		<ModalRegistration onClose={close}>
+		<ModalFrame
+			id="window-picker"
+			ariaLabel="Open Window"
+			title="Open Window"
+			className="ui-modal-wide window-picker-layer"
+			dialogClassName="window-picker-modal"
+			tabs={windowCategories.map(({ id, label }) => ({ id, label }))}
+			activeTab={category}
+			onTabChange={(id) => setCategory(id as WindowCategoryId)}
+			onClose={close}
+			closeLabel="Close Open Window"
+		>
 			<div
-				className="floating-dialog window-picker"
-				role="dialog"
-				aria-label="Open Window"
+				className="ui-grouped-selection-options window-picker-options"
+				role="tabpanel"
+				aria-label={activeCategory.label}
 			>
-				<h2>Open Window</h2>
-				<div className="dialog-grid">
-					{availableWindowChoices(mediaAvailable).map(([kind, label]) => (
-						<Button
-							key={kind}
-							onClick={() => dispatch({ type: "ADD_WINDOW", kind })}
-						>
-							{label}
-						</Button>
-					))}
-				</div>
-				<Button className="dialog-done" onClick={close}>
-					Cancel
-				</Button>
+				{choices.map((choice) => (
+					<Button
+						key={choice.kind}
+						contentAlign="left"
+						onClick={() =>
+							dispatch({ type: "ADD_WINDOW", kind: choice.kind })
+						}
+					>
+						<SelectionCardContent
+							label={choice.title}
+							description={choice.description}
+						/>
+					</Button>
+				))}
 			</div>
-		</ModalRegistration>
+		</ModalFrame>
 	);
 }
