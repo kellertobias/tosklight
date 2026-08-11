@@ -305,43 +305,23 @@ afterEach(() => {
 });
 
 describe("SystemControlsModal", () => {
-	it("keeps Desk state available when healthy and opens a requested duplicate conflict directly", () => {
-		const { rerender } = render(<SystemControlsModal />);
+	it("switches all three states through title-bar tabs in one modal", () => {
+		render(<SystemControlsModal />);
 
-		fireEvent.click(screen.getByRole("tab", { name: "Desk state" }));
+		expect(screen.getByRole("tab", { name: "Running" })).toHaveAttribute(
+			"aria-selected",
+			"true",
+		);
+		expect(screen.getAllByRole("dialog")).toHaveLength(1);
+		fireEvent.click(screen.getByRole("tab", { name: "Desk State" }));
 		expect(screen.getByText("No desk errors")).toBeInTheDocument();
 		expect(
 			screen.getByText("Output and desk authorities have no current global fault."),
 		).toBeInTheDocument();
 
-		deskState.error =
-			"Fixture fixture-17 has more than one Programmer value for intensity. This is an internal Programmer authority duplication, not a DMX patch overlap. Reload the desk state; if it returns, inspect that fixture's profile, heads, and multipatch data.";
-		requestSystemControlsTab("desk-state");
-		rerender(<SystemControlsModal />);
-
-		expect(
-			screen.getByRole("tab", { name: "Desk state · 1" }),
-		).toHaveAttribute("aria-selected", "true");
-		const conflict = screen.getByRole("link", {
-			name: "Programmer conflict · Fixture fixture-17 · intensity",
-		});
-		expect(conflict).toHaveAttribute(
-			"href",
-			"#programmer-fixture-fixture-17-intensity",
-		);
-		expect(
-			screen.getByText(
-				"Fixture fixture-17 has two Programmer values for intensity. The desk cannot choose one authoritative value until the conflict is repaired. This is not a DMX patch overlap.",
-			),
-		).toBeInTheDocument();
-		expect(
-			screen.getByText(
-				"Reload the desk state. If the conflict returns, inspect Fixture fixture-17's profile, logical heads, and multipatch data.",
-			),
-		).toBeInTheDocument();
-		expect(
-			screen.queryByText(/internal Programmer authority duplication/u),
-		).not.toBeInTheDocument();
+		fireEvent.click(screen.getByRole("tab", { name: "Active Programmers" }));
+		expect(screen.getByText("Operator · Current user")).toBeInTheDocument();
+		expect(screen.getAllByRole("dialog")).toHaveLength(1);
 	});
 	it("shows each scoped running source without reading broad Playback state", () => {
 		render(<SystemControlsModal />);
@@ -360,7 +340,7 @@ describe("SystemControlsModal", () => {
 			"ui-danger",
 		);
 		expect(titleBar).toContainElement(
-			screen.getByRole("button", { name: "Active Programmers (1)" }),
+			screen.getByRole("tab", { name: "Active Programmers" }),
 		);
 		expect(
 			screen.queryByText("Shift + Clear / Shift + Delete"),
@@ -369,9 +349,7 @@ describe("SystemControlsModal", () => {
 		expect(screen.getByText("Virtual Cuelist")).toBeInTheDocument();
 		expect(screen.getByText("Circle · Dynamic 7")).toBeInTheDocument();
 		expect(screen.queryByText("Operator · Current user")).not.toBeInTheDocument();
-		fireEvent.click(
-			screen.getByRole("button", { name: "Active Programmers (1)" }),
-		);
+		fireEvent.click(screen.getByRole("tab", { name: "Active Programmers" }));
 		expect(screen.getByText("Operator · Current user")).toBeInTheDocument();
 		expect(
 			screen.queryByRole("button", { name: "Close" }),
@@ -398,9 +376,7 @@ describe("SystemControlsModal", () => {
 				name: "Turn off Dynamic 7 Circle from Playback 12",
 			}),
 		);
-		fireEvent.click(
-			screen.getByRole("button", { name: "Active Programmers (1)" }),
-		);
+		fireEvent.click(screen.getByRole("tab", { name: "Active Programmers" }));
 		fireEvent.click(
 			screen.getByRole("button", { name: "Clear programmer operator" }),
 		);
@@ -427,9 +403,7 @@ describe("SystemControlsModal", () => {
 		});
 
 		render(<SystemControlsModal />);
-		fireEvent.click(
-			screen.getByRole("button", { name: "Active Programmers (2)" }),
-		);
+		fireEvent.click(screen.getByRole("tab", { name: "Active Programmers" }));
 
 		expect(screen.getAllByText(/3 values/)).toHaveLength(2);
 		expect(
@@ -447,9 +421,7 @@ describe("SystemControlsModal", () => {
 	it("never falls back to stale bootstrap Programmers while loading", () => {
 		lifecycle.projection = null;
 		render(<SystemControlsModal />);
-		fireEvent.click(
-			screen.getByRole("button", { name: "Active Programmers (0)" }),
-		);
+		fireEvent.click(screen.getByRole("tab", { name: "Active Programmers" }));
 
 		expect(screen.getByText("Programmers loading…")).toBeInTheDocument();
 		expect(screen.queryByText(/2 values/)).not.toBeInTheDocument();

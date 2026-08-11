@@ -512,22 +512,19 @@
 	color: var(--green);
 	font-size: 14px;
 }
-.system-controls-titlebar .ui-modal-title-copy,
-.active-programmers-titlebar .ui-modal-title-copy {
-	max-width: none;
+.system-controls-titlebar .ui-modal-title-copy {
+	max-width: 180px;
 	flex-direction: row;
 	align-items: center;
 	gap: 7px;
 }
-.system-controls-titlebar .ui-modal-title-heading,
-.active-programmers-titlebar .ui-modal-title-heading {
+.system-controls-titlebar .ui-modal-title-heading {
 	max-width: none;
 	align-self: auto;
 	display: block;
 	padding: 0;
 }
-.system-controls-titlebar .ui-modal-title-details,
-.active-programmers-titlebar .ui-modal-title-details {
+.system-controls-titlebar .ui-modal-title-details {
 	display: flex;
 	align-items: baseline;
 	margin: 0;
@@ -561,21 +558,12 @@
 	gap: 12px;
 	min-height: min(560px, calc(100vh - 130px));
 }
-.system-controls-tabs {
-	display: flex;
-	gap: 4px;
-	padding: 8px 12px 0;
-	border-bottom: 1px solid var(--line);
+.system-controls-titlebar .ui-modal-title-tabs > .ui-button {
+	padding-inline: 11px;
 }
-.system-controls-tabs .ui-button {
-	min-width: 120px;
-	min-height: 38px;
-	border-radius: 7px 7px 0 0;
-}
-.system-controls-tabs .ui-button.active {
-	border-color: var(--blue);
-	background: #10243a;
-	color: var(--blue);
+.system-controls-programmers {
+	min-height: min(560px, calc(100vh - 130px));
+	padding: 16px;
 }
 .desk-state-panel {
 	min-height: min(560px, calc(100vh - 180px));
@@ -778,16 +766,6 @@
 	color: var(--muted);
 	font-size: 10px;
 	pointer-events: none;
-}
-.active-programmers-modal {
-	width: min(680px, calc(100vw - 48px));
-}
-.active-programmers-titlebar .ui-modal-title-copy {
-	padding-inline: 16px;
-}
-.active-programmers-modal > .programmer-list,
-.active-programmers-modal > section > .programmer-list {
-	max-height: min(60vh, 520px);
 }
 @media (max-width: 900px) {
 	.system-controls-body {

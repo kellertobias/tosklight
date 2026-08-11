@@ -9,7 +9,6 @@ import {
 } from "../../features/programmerValues/useProgrammerValuesMutationQueue";
 import { useProgrammingSelectionView } from "../../features/programmingInteraction/ProgrammingInteractionView";
 import { useApp } from "../../state/AppContext";
-import { ServerErrorNotice } from "../shell/ServerErrorNotice";
 import { selectedFixtureIdsSupportingAttribute } from "./specialColor";
 import {
 	availableSpecialDialogAttributes,
@@ -143,7 +142,6 @@ export function SpecialDialogsModal() {
 							<ControlDialog selectedFixtureIds={selectedFixtureIds} />
 						)}
 					</div>
-					<ServerErrorNotice alert />
 				</section>
 			</div>
 		</ModalPortal>

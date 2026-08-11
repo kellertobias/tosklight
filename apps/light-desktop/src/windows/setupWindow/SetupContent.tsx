@@ -1,6 +1,5 @@
 import { WindowScrollArea } from "@tosklight/ui/window-kit";
 import { ScreensSetup } from "../../components/setup/ScreensSetup";
-import { ServerErrorNotice } from "../../components/shell/ServerErrorNotice";
 import type { SetupWindowController } from "./controller";
 import { ShowsRecoverySection, TimecodeSection } from "./GeneralSections";
 import { NetworkSection } from "./NetworkSection";
@@ -55,7 +54,6 @@ export function SetupContent({
 							onUndoAvailabilityChange={controller.updateScreenUndoAvailability}
 						/>
 					</div>
-					<ServerErrorNotice />
 				</div>
 			</WindowScrollArea>
 		</main>

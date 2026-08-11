@@ -1,4 +1,3 @@
-import { ServerErrorNotice } from "../shell/ServerErrorNotice";
 import { useEffect, useMemo, useState } from "react";
 import { useProgrammerActions } from "../../features/programmerActions/ProgrammerActionsContext";
 import { useCueRecording } from "../../features/cueRecording/CueRecordingProvider";
@@ -135,7 +134,6 @@ export function PreloadStoreModal() {
 							Existing target revision {targetObject.revision}; normal conflict protection applies.
 						</small>
 					)}
-					<ServerErrorNotice />
 				</section>
 			</div>
 		</ModalPortal>

@@ -1,4 +1,3 @@
-import { ServerErrorNotice } from "../shell/ServerErrorNotice";
 import { useEffect, useState } from "react";
 import {
 	Button,
@@ -83,7 +82,6 @@ export function DeskLockSettingsModal({ onClose }: { onClose: () => void }) {
 						{wallpaper && <Button onClick={() => setWallpaper(null)}>Use default wallpaper</Button>}
 					</FormField>
 				</FormLayout>
-				<ServerErrorNotice alert />
 			</section>
 			</div>
 		</ModalRegistration>

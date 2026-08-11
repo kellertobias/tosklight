@@ -1,4 +1,3 @@
-import { ServerErrorNotice } from "../shell/ServerErrorNotice";
 import { useState } from "react";
 import {
 	useActiveShowError,
@@ -45,7 +44,6 @@ export function ShowRecoveryModal() {
       <small>This creates and activates a separate show from the untouched completed demo show. The damaged file remains available for recovery.</small>
       <Button disabled={busy} onClick={() => void initialize()}>{busy ? "Initializing…" : "Initialize New Empty Show"}</Button>
       <small>This creates and activates a separate empty show. The damaged file remains available for recovery.</small>
-      <ServerErrorNotice />
     </section>
   </div></ModalRegistration>;
 }

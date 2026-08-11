@@ -28,7 +28,7 @@ export interface CommandStatus {
 	timecode: string | null;
 	blackout: boolean;
 	highlight: boolean;
-	/** A desk-level fault replaces the normal DMX and timecode readouts. */
+	/** An actionable Desk State fault adds a warning beside the DMX opener. */
 	deskError?: string | null;
 }
 
@@ -180,36 +180,30 @@ function CommandStatusButton({
 	status: CommandStatus;
 	onOpen: () => void;
 }) {
-	if (status.deskError) {
-		return (
-			<Button
-				aria-label="Desk error. Open Running & Output Desk state"
-				className="command-status command-status-desk-error"
-				title="Open Desk state"
-				onClick={onOpen}
-			>
-				<span aria-hidden="true" className="command-status-warning-triangle" />
-			</Button>
-		);
-	}
+	const statusLabel = status.highlight
+		? "DMX, Highlight active"
+		: `DMX ${status.frequency}Hz`;
+	const accessibleLabel = status.deskError
+		? `${statusLabel}; Desk State needs attention: ${status.deskError}. Open Running & Output Desk State`
+		: `${statusLabel}; ${status.timecode ?? "No Timecode"}. Open Running & Output`;
 	return (
 		<Button
-			aria-label={`${status.highlight ? "Highlight active" : `DMX ${status.frequency}Hz`}; ${status.timecode ?? "No Timecode"}. Open running and output controls`}
-			className={`command-status ${status.connection}`}
-			title="Open running and output controls"
+			aria-label={accessibleLabel}
+			className={`command-status ${status.connection} ${status.deskError ? "command-status-desk-error" : ""}`.trim()}
+			title={status.deskError ? "Open Desk State" : "Open Running & Output"}
 			onClick={onOpen}
 		>
 			<span
-				className={
+				className={`command-status-primary ${
 					status.highlight
 						? "highlight-status"
 						: status.blackout
 							? "blackout-status"
 							: ""
-				}
+				}`.trim()}
 			>
 				{status.highlight ? (
-					<>Highlight</>
+					<>DMX · Highlight</>
 				) : status.blackout ? (
 					<>
 						<i>
@@ -221,8 +215,14 @@ function CommandStatusButton({
 				) : (
 					<>
 						<span className="status-label-full">DMX {status.frequency}Hz</span>
-						<span className="status-label-compact">{status.frequency}Hz</span>
+						<span className="status-label-compact">DMX {status.frequency}Hz</span>
 					</>
+				)}
+				{status.deskError && (
+					<span
+						aria-hidden="true"
+						className="command-status-warning-triangle"
+					/>
 				)}
 			</span>
 			<span

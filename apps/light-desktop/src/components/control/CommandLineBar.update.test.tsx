@@ -251,9 +251,7 @@ function RequestedSystemControlsTab() {
 }
 
 describe("scoped command-line integration", () => {
-	it("opens a global warning on the exact Desk state tab", () => {
-		server.error =
-			"Fixture fixture-17 has more than one Programmer value for intensity.";
+	it("marks a rejected command locally without turning it into a Desk State warning", () => {
 		render(
 			<>
 				<CommandLineBar />
@@ -261,21 +259,22 @@ describe("scoped command-line integration", () => {
 			</>,
 		);
 
-		expect(screen.queryByText(/DMX 60Hz/u)).not.toBeInTheDocument();
-		fireEvent.click(
-			screen.getByRole("button", {
-				name: "Desk error. Open Running & Output Desk state",
+		fireEvent(
+			window,
+			new CustomEvent("light:command-error", {
+				detail: "Fixture 17 is not patched. Patch it and retry.",
 			}),
 		);
-
-		expect(
-			screen.getByLabelText("Requested system controls tab"),
-		).toHaveTextContent("desk-state");
-		expect(dispatch).toHaveBeenCalledWith({
-			type: "SET_MODAL",
-			modal: "systemControlsOpen",
-			value: true,
-		});
+		expect(screen.getByRole("alert")).toHaveTextContent(
+			"Fixture 17 is not patched. Patch it and retry.",
+		);
+		expect(screen.getByRole("textbox", { name: "Command line" })).toHaveClass(
+			"error",
+		);
+		expect(screen.queryByLabelText(/Desk State needs attention/u)).toBeNull();
+		expect(screen.getByLabelText("Requested system controls tab")).toHaveTextContent(
+			"running",
+		);
 	});
 
 	it("opens current duplicate output diagnostics on the exact Desk state tab", async () => {
@@ -311,7 +310,7 @@ describe("scoped command-line integration", () => {
 
 		fireEvent.click(
 			screen.getByRole("button", {
-				name: "Desk error. Open Running & Output Desk state",
+				name: /Desk State needs attention: Duplicate output/u,
 			}),
 		);
 		expect(
@@ -523,7 +522,7 @@ describe("Shift+Record Update gestures", () => {
 
 		fireEvent.click(input);
 		fireEvent.pointerDown(
-			screen.getByRole("button", { name: /Open running and output controls/ }),
+			screen.getByRole("button", { name: /Open Running & Output/ }),
 		);
 		expect(
 			screen.queryByRole("dialog", { name: "Command line history" }),
@@ -547,7 +546,7 @@ describe("Shift+Record Update gestures", () => {
 		highlight.active = true;
 		render(<CommandLineBar />);
 
-		expect(screen.getByText("Highlight")).toHaveClass("highlight-status");
+		expect(screen.getByText("DMX · Highlight")).toHaveClass("highlight-status");
 		expect(screen.queryByText("DMX 60Hz")).not.toBeInTheDocument();
 	});
 

@@ -9,7 +9,6 @@ import {
 import { useEffect, useState } from "react";
 import type { DiscoveredPeer } from "../../api/client/discovery";
 import { RootConfinedFilePickerButton } from "../files/RootConfinedFilePickerButton";
-import { ServerErrorNotice } from "../shell/ServerErrorNotice";
 import type { QuickSetupModel } from "./QuickSetupModal";
 import { SelectiveShowImportModal } from "./SelectiveShowImportModal";
 import { StackedModal } from "./StackedModal";
@@ -248,7 +247,6 @@ function OverwriteDialog({ model }: ModelProps) {
 							: `Replace ${overwriteTarget.name} Latest Autosave`}
 					</Button>
 				</div>
-				<ServerErrorNotice alert />
 			</div>
 		</StackedModal>
 	);

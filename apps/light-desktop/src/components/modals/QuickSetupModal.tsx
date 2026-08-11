@@ -6,7 +6,6 @@ import {
 	useState,
 } from "react";
 import { useApp } from "../../state/AppContext";
-import { ServerErrorNotice } from "../shell/ServerErrorNotice";
 import { useDeskLockActions } from "../../features/deskLock/DeskLockActionsProvider";
 import {
 	useBootstrapSnapshot,
@@ -670,7 +669,6 @@ function QuickSetupModalView({ model }: { model: QuickSetupModel }) {
 					<QuickSetupShowDetails model={model} />
 					<QuickSetupNavigation model={model} />
 					<QuickSetupDialogs model={model} />
-					<ServerErrorNotice />
 				</section>
 			</div>
 		</ModalRegistration>

@@ -16,6 +16,7 @@ import { LeftDock } from "./LeftDock";
 import { NativeDragStrip } from "./NativeDragStrip";
 import { ScreenWindowManager } from "./ScreenWindowManager";
 import { SectionNameMap } from "./SectionNameMap";
+import { ServerErrorToast } from "./ServerErrorToast";
 import { WorkspaceView } from "./WorkspaceView";
 
 export function AppShell() {
@@ -41,7 +42,12 @@ export function AppShell() {
 					<ShowRecoveryModal />
 				</>
 			}
-			connectionState={<ConnectionState />}
+			connectionState={
+				<>
+					<ConnectionState />
+					<ServerErrorToast />
+				</>
+			}
 			loadingOverlay={<DeskLoadingOverlay />}
 		/>
 	);

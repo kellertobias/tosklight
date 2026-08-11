@@ -154,17 +154,20 @@
 	cursor: pointer;
 }
 .command-status.command-status-desk-error {
-	display: grid;
-	place-items: center;
-	grid-template-rows: 1fr;
 	border-color: #ff3947;
 	background: #321014;
-	color: #ff3947;
+}
+.command-status .command-status-primary {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 5px;
 }
 .command-status .command-status-warning-triangle {
 	position: relative;
-	width: 30px;
-	height: 27px;
+	width: 14px;
+	height: 13px;
+	flex: 0 0 14px;
 	display: grid;
 	place-items: end center;
 	overflow: visible;
@@ -177,16 +180,48 @@
 	width: 0;
 	height: 0;
 	transform: translateX(-50%);
-	border-right: 15px solid transparent;
-	border-bottom: 27px solid #ff3947;
-	border-left: 15px solid transparent;
+	border-right: 7px solid transparent;
+	border-bottom: 13px solid #ff3947;
+	border-left: 7px solid transparent;
 }
 .command-status .command-status-warning-triangle::after {
 	content: "!";
 	position: relative;
-	padding-bottom: 2px;
-	color: #160306;
-	font: 900 19px/1 ui-sans-serif, system-ui, sans-serif;
+	padding-bottom: 1px;
+	color: #fff;
+	font: 900 9px/1 ui-sans-serif, system-ui, sans-serif;
+}
+.server-error-toast {
+	position: fixed;
+	z-index: 1250;
+	top: 12px;
+	left: 50%;
+	width: min(680px, calc(100vw - 24px));
+	transform: translateX(-50%);
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	padding: 12px 14px;
+	border: 1px solid #ff3947;
+	border-radius: 8px;
+	background: #321014;
+	box-shadow: 0 12px 36px #000b;
+}
+.server-error-toast > div {
+	min-width: 0;
+	display: grid;
+	gap: 3px;
+}
+.server-error-toast strong {
+	color: #ff6872;
+}
+.server-error-toast span,
+.server-error-toast small {
+	overflow-wrap: anywhere;
+}
+.server-error-toast small {
+	color: var(--muted);
 }
 .system-controls-card {
 	width: min(680px, calc(100vw - 30px));

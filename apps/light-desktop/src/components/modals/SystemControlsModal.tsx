@@ -20,11 +20,10 @@ import {
 	type SystemControlsTab,
 	useRequestedSystemControlsTab,
 } from "../../features/deskState/deskStateDiagnostics";
-import { useServerError } from "../../features/shellStatus/ShellStatusState";
 import { useDeskStateDiagnostics } from "../../features/deskState/DeskStateDiagnosticsState";
 import { compatibleSpecialDialogActions } from "./SpecialDialogsModal";
-import { ActiveProgrammersModal } from "./systemControls/ActiveProgrammersModal";
 import { OutputControls } from "./systemControls/OutputControls";
+import { ProgrammerList } from "./systemControls/ProgrammerList";
 import { RunningSections } from "./systemControls/RunningSections";
 import { useRunningDynamicsAuthority } from "./systemControls/runningDynamicsAuthority";
 import { useRunningPlaybackAuthority } from "./systemControls/runningPlaybackAuthority";
@@ -225,10 +224,8 @@ function useSystemControlsModel() {
 
 function SystemControlsTitleActions({
 	model,
-	onOpenProgrammers,
 }: {
 	model: ReturnType<typeof useSystemControlsModel>;
-	onOpenProgrammers: () => void;
 }) {
 	const nothingRunning =
 		!model.playbackAuthority.sources.length &&
@@ -245,19 +242,14 @@ function SystemControlsTitleActions({
 			!model.dynamicsAuthority.canStop) ||
 		nothingRunning;
 	return (
-		<>
-			<Button onClick={onOpenProgrammers}>
-				Active Programmers ({model.programmers.length})
-			</Button>
-			<Button
-				variant="danger"
-				className="system-controls-all-off"
-				disabled={cannotStop}
-				onClick={() => void model.stopAllRunning()}
-			>
-				{model.stoppingAll ? "Turning off…" : "All Off"}
-			</Button>
-		</>
+		<Button
+			variant="danger"
+			className="system-controls-all-off"
+			disabled={cannotStop}
+			onClick={() => void model.stopAllRunning()}
+		>
+			{model.stoppingAll ? "Turning off…" : "All Off"}
+		</Button>
 	);
 }
 
@@ -265,10 +257,8 @@ export function SystemControlsModal() {
 	const model = useSystemControlsModel();
 	const visualizer = useVisualizerViewControls(model.open);
 	const requestedTab = useRequestedSystemControlsTab();
-	const deskError = useServerError();
-	const deskDiagnostics = useDeskStateDiagnostics(deskError);
+	const deskDiagnostics = useDeskStateDiagnostics();
 	const [tab, setTab] = useState<SystemControlsTab>(requestedTab);
-	const [programmersOpen, setProgrammersOpen] = useState(false);
 	useEffect(() => {
 		if (model.open) setTab(requestedTab);
 	}, [model.open, requestedTab]);
@@ -294,44 +284,48 @@ export function SystemControlsModal() {
 					<ModalTitleBar
 						className="system-controls-titlebar"
 						title="Running & Output"
+						tabs={[
+							{ id: "running", label: "Running" },
+							{
+								id: "desk-state",
+								label: deskDiagnostics.length
+									? `Desk State · ${deskDiagnostics.length}`
+									: "Desk State",
+							},
+							{ id: "active-programmers", label: "Active Programmers" },
+						]}
+						activeTab={tab}
+						onTabChange={(next) => setTab(next as SystemControlsTab)}
 						details={
 							<span className="system-controls-active-items">
 								<b>{activeItems}</b> active items
 							</span>
 						}
 						actions={
-							<SystemControlsTitleActions
-								model={model}
-								onOpenProgrammers={() => setProgrammersOpen(true)}
-							/>
+							tab === "running" ? (
+								<SystemControlsTitleActions model={model} />
+							) : null
 						}
 						closeLabel="Close Running & Output"
 						onClose={model.close}
 					/>
-					<div
-						className="system-controls-tabs"
-						role="tablist"
-						aria-label="Running & Output sections"
-					>
-						<Button
-							role="tab"
-							aria-selected={tab === "running"}
-							className={tab === "running" ? "active" : ""}
-							onClick={() => setTab("running")}
-						>
-							Running
-						</Button>
-						<Button
-							role="tab"
-							aria-selected={tab === "desk-state"}
-							className={tab === "desk-state" ? "active" : ""}
-							onClick={() => setTab("desk-state")}
-						>
-							Desk state{deskDiagnostics.length ? ` · ${deskDiagnostics.length}` : ""}
-						</Button>
-					</div>
 					{tab === "desk-state" ? (
 						<DeskStatePanel diagnostics={deskDiagnostics} />
+					) : tab === "active-programmers" ? (
+						<section
+							className="system-controls-programmers"
+							aria-label="Active Programmers"
+						>
+							<ProgrammerList
+								programmers={model.programmers}
+								loading={model.lifecycle === null}
+								currentUserId={model.session?.user.id ?? null}
+								currentUserName={model.session?.user.name ?? null}
+								onClear={(sessionId) =>
+									void model.programmerActions?.clearProgrammer(sessionId)
+								}
+							/>
+						</section>
 					) : (
 						<div className="system-controls-body">
 							<OutputControls
@@ -384,17 +378,6 @@ export function SystemControlsModal() {
 						</div>
 					)}
 				</section>
-				<ActiveProgrammersModal
-					open={programmersOpen}
-					programmers={model.programmers}
-					loading={model.lifecycle === null}
-					currentUserId={model.session?.user.id ?? null}
-					currentUserName={model.session?.user.name ?? null}
-					onClear={(sessionId) =>
-						void model.programmerActions?.clearProgrammer(sessionId)
-					}
-					onClose={() => setProgrammersOpen(false)}
-				/>
 			</div>
 		</ModalPortal>
 	);

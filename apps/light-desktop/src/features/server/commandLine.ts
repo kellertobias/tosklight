@@ -19,7 +19,6 @@ export function createCommandLineActions(
 > {
 	const {
 		api,
-		setError,
 		setCommandTargetMode,
 		commandTargetModeRef,
 		commandLine,
@@ -73,7 +72,6 @@ export function createCommandLineActions(
 					setCommandLinePristine(true);
 					await api.programming.setCommandTarget(nextTarget);
 					await persistCommandLine(nextTarget);
-					setError(null);
 					return true;
 				}
 				const result = (await api.programming.executeCommandLine(value)) as
@@ -89,7 +87,6 @@ export function createCommandLineActions(
 					  }
 					| undefined;
 				if (result?.pending_choice) {
-					setError(null);
 					return true;
 				}
 				if (result?.programmer?.selected) {
@@ -105,12 +102,10 @@ export function createCommandLineActions(
 				setCommandLineState(target);
 				setCommandLinePristine(true);
 				if (!interaction) await persistCommandLine(target);
-				setError(null);
 				return true;
 			} catch (reason) {
 				const message =
 					reason instanceof Error ? reason.message : String(reason);
-				setError(message);
 				window.dispatchEvent(
 					new CustomEvent("light:command-error", { detail: message }),
 				);

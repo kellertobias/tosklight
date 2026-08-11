@@ -76,9 +76,6 @@ function useCommandErrors(setCompleted: Dispatch<SetStateAction<boolean>>) {
 		if (serverError) setPersistentError(serverError);
 	}, [serverError]);
 	useEffect(() => {
-		if (commandError && serverError) setCommandError(serverError);
-	}, [serverError, commandError]);
-	useEffect(() => {
 		const showCommandError = (event: Event) => {
 			setCompleted(false);
 			setCommandError(
@@ -133,7 +130,7 @@ function useCommandLineBarModel() {
 	const blackout = useOutputRuntimeBlackout() === true;
 	const highlight = useHighlightSnapshot()?.active === true;
 	const serverError = useServerError();
-	const deskDiagnostics = useDeskStateDiagnostics(serverError);
+	const deskDiagnostics = useDeskStateDiagnostics();
 	const command = useCommandLineSurface({ selection: true });
 	const programmerActivity = useProgrammerValuesActivity();
 	const preloadPlaybackQueue = useProgrammerPreloadPlaybackQueueView();
@@ -178,10 +175,6 @@ function useCommandLineBarModel() {
 			dispatch({ type: "SET_STORE_ARMED", value: false });
 		if (ok && state.updateArmed)
 			dispatch({ type: "SET_UPDATE_ARMED", value: false });
-		if (!ok)
-			errors.setCommandError(
-				serverError ?? "The command could not be executed.",
-			);
 	};
 	const toggleRecord = () => {
 		const armed = !state.storeArmed;

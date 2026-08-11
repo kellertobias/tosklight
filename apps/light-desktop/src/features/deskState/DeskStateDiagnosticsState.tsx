@@ -11,10 +11,7 @@ import type {
 	RuntimeDiagnostics,
 	VersionedObject,
 } from "../../api/types";
-import {
-	deskStateDiagnostic,
-	type DeskStateDiagnostic,
-} from "./deskStateDiagnostics";
+import type { DeskStateDiagnostic } from "./deskStateDiagnostics";
 
 type ReadDiagnostics = () => Promise<RuntimeDiagnostics>;
 
@@ -68,12 +65,8 @@ export function DeskStateDiagnosticsProvider({
 	);
 }
 
-export function useDeskStateDiagnostics(shellError: string | null) {
-	const output = useContext(OutputDiagnosticsContext);
-	return useMemo(
-		() => (shellError ? [deskStateDiagnostic(shellError), ...output] : output),
-		[shellError, output],
-	);
+export function useDeskStateDiagnostics() {
+	return useContext(OutputDiagnosticsContext);
 }
 
 interface OutputRouteDiagnostic {

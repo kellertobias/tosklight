@@ -70,7 +70,7 @@ describe("CommandLine", () => {
 		expect(view.onReplace).toHaveBeenCalledWith("", true);
 		fireEvent.click(
 			screen.getByRole("button", {
-				name: /Open running and output controls/u,
+				name: /Open Running & Output/u,
 			}),
 		);
 		expect(view.onOpenStatus).toHaveBeenCalledOnce();
@@ -135,7 +135,7 @@ describe("CommandLine", () => {
 			/>,
 		);
 
-		expect(screen.getByText("Highlight")).toBeVisible();
+		expect(screen.getByText("DMX · Highlight")).toBeVisible();
 		expect(screen.queryByText("DMX 44Hz")).not.toBeInTheDocument();
 		expect(container.querySelector(".highlight-status")).toBeVisible();
 		expect(
@@ -143,7 +143,7 @@ describe("CommandLine", () => {
 		).toBeVisible();
 	});
 
-	it("replaces both healthy status rows with one desk-error route and restores them when healthy", () => {
+	it("keeps the DMX opener visible and adds an accessible Desk State warning", () => {
 		const open = vi.fn();
 		const view = props({
 			onOpenStatus: open,
@@ -159,13 +159,14 @@ describe("CommandLine", () => {
 		const { rerender } = render(<CommandLine {...view} />);
 
 		const warning = screen.getByRole("button", {
-			name: "Desk error. Open Running & Output Desk state",
+			name: /Desk State needs attention: Programmer authority conflict/u,
 		});
 		expect(
 			warning.querySelector(".command-status-warning-triangle"),
 		).toBeInTheDocument();
-		expect(screen.queryByText("DMX 44Hz")).not.toBeInTheDocument();
-		expect(screen.queryByText("01:02:03:12")).not.toBeInTheDocument();
+		expect(screen.getAllByText("DMX 44Hz")[0]).toBeVisible();
+		expect(screen.getByText("01:02:03:12")).toBeVisible();
+		expect(warning).toHaveAttribute("title", "Open Desk State");
 		fireEvent.click(warning);
 		expect(open).toHaveBeenCalledOnce();
 
@@ -175,7 +176,7 @@ describe("CommandLine", () => {
 				status={{ ...view.status, deskError: null, timecode: null }}
 			/>,
 		);
-		expect(screen.getByText("DMX 44Hz")).toBeVisible();
+		expect(screen.getAllByText("DMX 44Hz")[0]).toBeVisible();
 		expect(screen.getByText("No Timecode")).toBeVisible();
 	});
 
