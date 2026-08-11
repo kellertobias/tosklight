@@ -99,6 +99,27 @@ async fn physical_http_and_virtual_ui_ws_playbacks_control_one_timecode_runtime(
         state.timecodes.snapshot(timecode_id).unwrap().transport,
         light_playback::TimecodeTransportState::Paused
     );
+    let timecode_ws = dispatch_live_action(
+        &state,
+        &session,
+        live_action_frame(
+            &session,
+            "ui-ws-timecode-seek",
+            serde_json::from_value(serde_json::json!({
+                "type": "timecode",
+                "request": {
+                    "timecode_id": timecode_id.0,
+                    "action": {"type": "seek", "frame": 333}
+                }
+            }))
+            .unwrap(),
+        ),
+    );
+    assert!(timecode_ws.ok, "{:?}", timecode_ws.error);
+    assert_eq!(
+        state.timecodes.snapshot(timecode_id).unwrap().frame,
+        light_playback::TimecodeFrame(333)
+    );
     timecode_v2::apply_cue_action(
         &state,
         &light_playback::CueAction::TimecodeStart {

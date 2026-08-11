@@ -770,22 +770,38 @@ async fn transport_action(
             "Timecode request identity does not match the route",
         ));
     }
-    let show_id = context.resolve(&state)?;
+    context.resolve(&state)?;
+    let snapshot = apply_transport_request(&state, session.desk.id, request)?;
+    Ok(Json(snapshot))
+}
+
+pub(super) fn apply_transport_request(
+    state: &AppState,
+    desk_id: Uuid,
+    request: wire::TimecodeTransportActionRequest,
+) -> Result<wire::TimecodeTransportSnapshot, ApiError> {
+    let show_id = state
+        .active_show
+        .current()
+        .as_ref()
+        .ok_or_else(|| ApiError::bad_request("no show is open"))?
+        .id;
+    let timecode_id = request.timecode_id;
     let id = TimecodeId(timecode_id);
-    ensure_installed(&state, show_id, id)?;
-    let outcome = apply_transport_action(&state, id, domain_action(request.action))?;
+    ensure_installed(state, show_id, id)?;
+    let outcome = apply_transport_action(state, id, domain_action(request.action))?;
     emit(
-        &state,
+        state,
         "timecode_runtime_changed",
         serde_json::json!({
-            "desk_id": session.desk.id,
+            "desk_id": desk_id,
             "timecode_id": timecode_id,
             "revision": outcome.snapshot.revision,
             "state": transport_name(outcome.snapshot.transport),
             "frame": outcome.snapshot.frame.0,
         }),
     );
-    Ok(Json(wire_snapshot(outcome.snapshot)))
+    Ok(wire_snapshot(outcome.snapshot))
 }
 
 pub(super) fn apply_transport_action(

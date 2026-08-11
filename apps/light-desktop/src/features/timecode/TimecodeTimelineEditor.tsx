@@ -4,12 +4,17 @@ import {
 	HorizontalFader,
 	NumberField,
 	SelectField,
-	TextAreaField,
 	TextField,
 } from "@tosklight/ui";
 import {
+	forwardRef,
 	type PointerEvent as ReactPointerEvent,
+	type RefObject,
+	useEffect,
+	useImperativeHandle,
+	useLayoutEffect,
 	useMemo,
+	useRef,
 	useState,
 } from "react";
 import type { TimecodeDefinition } from "../../api/types/timecode";
@@ -38,6 +43,13 @@ interface Props {
 	onEndGesture(): void;
 }
 
+export interface TimecodeTimelineEditorHandle {
+	addMarker(): void;
+	addAudioLane(): void;
+	addSpeedLane(): void;
+	addCueListLane(): void;
+}
+
 function TimelineTools(props: {
 	definition: TimecodeDefinition;
 	selection: TimecodeEditorSelection | null;
@@ -48,11 +60,7 @@ function TimelineTools(props: {
 	cueLists: readonly TimecodeCueListOption[];
 	zoom: number;
 	setZoom(value: number): void;
-	addMarker(): void;
-	addAudioLane(): void;
-	addSpeedLane(): void;
-	addCueListLane(): void;
-	setCsvOpen(update: (open: boolean) => boolean): void;
+	maximumZoom: number;
 	setSelection(value: TimecodeEditorSelection | null): void;
 	onCommit(value: TimecodeDefinition): void;
 	fps: number;
@@ -86,15 +94,6 @@ function TimelineTools(props: {
 	};
 	return (
 		<div className="timecode-timeline-tools">
-			<Button onClick={props.addMarker}>Add marker at playhead</Button>
-			<Button
-				onClick={props.addAudioLane}
-				disabled={definition.lanes.some(
-					(lane) => lane.content.kind === "audio_volume",
-				)}
-			>
-				Add audio lane
-			</Button>
 			<SelectField
 				label="Speed Group"
 				value={speedGroup}
@@ -104,7 +103,6 @@ function TimelineTools(props: {
 					label: group,
 				}))}
 			/>
-			<Button onClick={props.addSpeedLane}>Add speed lane</Button>
 			<SelectField
 				label="Cuelist"
 				value={cueListId}
@@ -115,12 +113,6 @@ function TimelineTools(props: {
 					label: cueList.name,
 				}))}
 			/>
-			<Button onClick={props.addCueListLane} disabled={!cueListId}>
-				Add Cuelist lane
-			</Button>
-			<Button onClick={() => props.setCsvOpen((open) => !open)}>
-				Import marker CSV
-			</Button>
 			<Button disabled={!selection} onClick={copy}>
 				Copy
 			</Button>
@@ -130,43 +122,13 @@ function TimelineTools(props: {
 			<HorizontalFader
 				className="timecode-timeline-zoom"
 				label="Timeline zoom"
-				minimum={0.25}
-				maximum={4}
+				minimum={1}
+				maximum={props.maximumZoom}
 				step={0.25}
 				value={zoom}
 				display={`${zoom}×`}
 				onChange={setZoom}
 			/>
-		</div>
-	);
-}
-
-function CsvPanel(props: {
-	csvSource: string;
-	setCsvSource(value: string): void;
-	csvMode: "append" | "replace";
-	setCsvMode(value: "append" | "replace"): void;
-	csvError: string | null;
-	importCsv(): void;
-}) {
-	return (
-		<div className="timecode-csv-panel">
-			<TextAreaField
-				label="Marker CSV"
-				value={props.csvSource}
-				onChange={(event) => props.setCsvSource(event.currentTarget.value)}
-			/>
-			<SelectField
-				label="Import mode"
-				value={props.csvMode}
-				onChange={props.setCsvMode}
-				options={[
-					{ value: "append", label: "Append" },
-					{ value: "replace", label: "Replace" },
-				]}
-			/>
-			<Button onClick={props.importCsv}>Apply marker CSV</Button>
-			{props.csvError && <p role="alert">{props.csvError}</p>}
 		</div>
 	);
 }
@@ -184,6 +146,7 @@ function TimelineCanvas(props: {
 	pixelsPerFrame: number;
 	items: readonly TimelineItem[];
 	selection: TimecodeEditorSelection | null;
+	scrollRef: RefObject<HTMLDivElement | null>;
 	onScrub(frame: number): void;
 	startDrag(
 		event: ReactPointerEvent,
@@ -207,10 +170,15 @@ function TimelineCanvas(props: {
 		);
 	};
 	return (
-		<div className="timecode-timeline-scroll">
+		<section
+			ref={props.scrollRef}
+			className="timecode-timeline-scroll"
+			aria-label="Timecode timeline viewport"
+		>
 			<div
 				className="timecode-timeline-canvas"
 				style={{ width: props.width }}
+				data-pixels-per-frame={props.pixelsPerFrame}
 				onPointerDown={scrub}
 			>
 				<Ruler
@@ -247,7 +215,7 @@ function TimelineCanvas(props: {
 					<span>{formatFrame(props.frame, props.fps)}</span>
 				</div>
 			</div>
-		</div>
+		</section>
 	);
 }
 
@@ -366,35 +334,62 @@ export interface TimecodeCueListOption {
 	cues: readonly { id: string; number: number; name: string }[];
 }
 
-const BASE_PIXELS_PER_SECOND = 84;
+const TARGET_MAX_PIXELS_PER_FRAME = 17.5;
+const FALLBACK_VIEWPORT_WIDTH = 720;
 
-export function TimecodeTimelineEditor({
-	definition,
-	frame,
-	fps,
-	cueLists,
-	waveformPeaks,
-	onScrub,
-	onCommit,
-	onPreview,
-	onBeginGesture,
-	onEndGesture,
-}: Props) {
+export function timelineZoomGeometry(
+	durationFrames: number,
+	viewportWidth: number,
+) {
+	const duration = Math.max(1, durationFrames);
+	const viewport = Math.max(1, viewportWidth);
+	const fitPixelsPerFrame = Math.min(
+		TARGET_MAX_PIXELS_PER_FRAME,
+		viewport / duration,
+	);
+	return {
+		fitPixelsPerFrame,
+		maximumZoom: Math.max(
+			1,
+			Math.ceil((TARGET_MAX_PIXELS_PER_FRAME / fitPixelsPerFrame) * 4) / 4,
+		),
+	};
+}
+
+export const TimecodeTimelineEditor = forwardRef<
+	TimecodeTimelineEditorHandle,
+	Props
+>(function TimecodeTimelineEditor(
+	{
+		definition,
+		frame,
+		fps,
+		cueLists,
+		waveformPeaks,
+		onScrub,
+		onCommit,
+		onPreview,
+		onBeginGesture,
+		onEndGesture,
+	},
+	ref,
+) {
 	const [zoom, setZoom] = useState(1);
 	const [selection, setSelection] = useState<TimecodeEditorSelection | null>(
 		null,
 	);
-	const [csvOpen, setCsvOpen] = useState(false);
-	const [csvSource, setCsvSource] = useState(
-		"position,name,color\n00:00:05:00,Intro,#a67cff",
-	);
-	const [csvMode, setCsvMode] = useState<"append" | "replace">("append");
-	const [csvError, setCsvError] = useState<string | null>(null);
 	const [speedGroup, setSpeedGroup] = useState("A");
 	const [cueListId, setCueListId] = useState(cueLists[0]?.id ?? "");
+	const scrollRef = useRef<HTMLDivElement>(null);
+	const [viewportWidth, setViewportWidth] = useState(FALLBACK_VIEWPORT_WIDTH);
 	const duration = Math.max(1, definition.duration_frame ?? fps * 60);
-	const pixelsPerFrame = (BASE_PIXELS_PER_SECOND * zoom) / fps;
-	const width = Math.max(720, duration * pixelsPerFrame);
+	const geometry = timelineZoomGeometry(duration, viewportWidth);
+	const maximumZoom = geometry.maximumZoom;
+	const pixelsPerFrame = Math.min(
+		TARGET_MAX_PIXELS_PER_FRAME,
+		geometry.fitPixelsPerFrame * zoom,
+	);
+	const width = Math.max(viewportWidth, duration * pixelsPerFrame);
 	const items = useMemo(() => timelineItems(definition), [definition]);
 	const selected = items.find((item) =>
 		sameSelection(item.selection, selection),
@@ -416,7 +411,6 @@ export function TimecodeTimelineEditor({
 		addSpeedLane,
 		addCueListLane,
 		addClip,
-		importCsv,
 	} = useTimelineActions({
 		definition,
 		frame,
@@ -425,13 +419,34 @@ export function TimecodeTimelineEditor({
 		cueLists,
 		speedGroup,
 		cueListId,
-		csvSource,
-		csvMode,
 		onCommit,
 		setSelection,
-		setCsvError,
-		setCsvOpen,
 	});
+	useImperativeHandle(
+		ref,
+		() => ({ addMarker, addAudioLane, addSpeedLane, addCueListLane }),
+		[addAudioLane, addCueListLane, addMarker, addSpeedLane],
+	);
+	useEffect(() => {
+		if (zoom > maximumZoom) setZoom(maximumZoom);
+	}, [maximumZoom, zoom]);
+	useEffect(() => {
+		if (!cueLists.some((cueList) => cueList.id === cueListId))
+			setCueListId(cueLists[0]?.id ?? "");
+	}, [cueListId, cueLists]);
+	useLayoutEffect(() => {
+		const element = scrollRef.current;
+		if (!element) return;
+		const measure = () =>
+			setViewportWidth(
+				element.clientWidth > 0 ? element.clientWidth : FALLBACK_VIEWPORT_WIDTH,
+			);
+		measure();
+		if (typeof ResizeObserver === "undefined") return;
+		const observer = new ResizeObserver(measure);
+		observer.observe(element);
+		return () => observer.disconnect();
+	}, []);
 
 	return (
 		<section
@@ -449,28 +464,12 @@ export function TimecodeTimelineEditor({
 					cueLists,
 					zoom,
 					setZoom,
-					addMarker,
-					addAudioLane,
-					addSpeedLane,
-					addCueListLane,
-					setCsvOpen,
+					maximumZoom,
 					setSelection,
 					onCommit,
 					fps,
 				}}
 			/>
-			{csvOpen && (
-				<CsvPanel
-					{...{
-						csvSource,
-						setCsvSource,
-						csvMode,
-						setCsvMode,
-						csvError,
-						importCsv,
-					}}
-				/>
-			)}
 			<TimelineCanvas
 				{...{
 					definition,
@@ -483,6 +482,7 @@ export function TimecodeTimelineEditor({
 					pixelsPerFrame,
 					items,
 					selection,
+					scrollRef,
 					onScrub,
 					startDrag,
 					addKeyframe,
@@ -499,7 +499,7 @@ export function TimecodeTimelineEditor({
 			/>
 		</section>
 	);
-}
+});
 
 function SelectionInspector({
 	definition,
@@ -912,7 +912,13 @@ function Ruler({
 	return (
 		<div className="timecode-ruler">
 			{ticks.map((tick) => (
-				<span key={tick} style={{ left: tick * pixelsPerFrame }}>
+				<span
+					key={tick}
+					className={
+						tick === duration ? "timecode-ruler-final-tick" : undefined
+					}
+					style={{ left: tick * pixelsPerFrame }}
+				>
 					{formatFrame(tick, fps)}
 				</span>
 			))}

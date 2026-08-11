@@ -6,7 +6,6 @@ import {
 import type { TimecodeDefinition } from "../../api/types/timecode";
 import {
 	moveTimelineItem,
-	parseMarkerCsv,
 	snapTimelineFrame,
 	type TimecodeEditorSelection,
 } from "./editorModel";
@@ -90,12 +89,8 @@ export function useTimelineActions({
 	cueLists,
 	speedGroup,
 	cueListId,
-	csvSource,
-	csvMode,
 	onCommit,
 	setSelection,
-	setCsvError,
-	setCsvOpen,
 }: {
 	definition: TimecodeDefinition;
 	frame: number;
@@ -104,12 +99,8 @@ export function useTimelineActions({
 	cueLists: readonly CueListOption[];
 	speedGroup: string;
 	cueListId: string;
-	csvSource: string;
-	csvMode: "append" | "replace";
 	onCommit(value: TimecodeDefinition): void;
 	setSelection(value: TimecodeEditorSelection | null): void;
-	setCsvError(value: string | null): void;
-	setCsvOpen(value: boolean): void;
 }) {
 	const addMarker = () => {
 		const id = crypto.randomUUID();
@@ -176,22 +167,6 @@ export function useTimelineActions({
 		);
 		setSelection({ kind: "clip", laneId, itemId: id });
 	};
-	const importCsv = () => {
-		try {
-			const imported = parseMarkerCsv(csvSource, fps, duration);
-			onCommit({
-				...definition,
-				markers:
-					csvMode === "append"
-						? [...definition.markers, ...imported]
-						: imported,
-			});
-			setCsvError(null);
-			setCsvOpen(false);
-		} catch (reason) {
-			setCsvError(reason instanceof Error ? reason.message : String(reason));
-		}
-	};
 	return {
 		addMarker,
 		addKeyframe,
@@ -199,7 +174,6 @@ export function useTimelineActions({
 		addSpeedLane,
 		addCueListLane,
 		addClip,
-		importCsv,
 	};
 }
 

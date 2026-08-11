@@ -17,7 +17,7 @@ import type {
 	TimecodeTransportAction,
 	TimecodeTransportSnapshot,
 } from "../types/timecode";
-import { type ClientTransport, jsonRequest } from "./transport";
+import { jsonRequest, type LiveClientTransport } from "./transport";
 
 export type {
 	TimecodeAudioImportResult,
@@ -33,7 +33,7 @@ export type {
 } from "../types/timecode";
 
 export class TimecodesApiClient {
-	constructor(private readonly transport: ClientTransport) {}
+	constructor(private readonly transport: LiveClientTransport) {}
 
 	async objects(showId: string): Promise<TimecodeCollectionSnapshot> {
 		const snapshot =
@@ -109,16 +109,16 @@ export class TimecodesApiClient {
 			.then(timecodeSnapshot);
 	}
 
-	transportAction(
-		showId: string,
+	async transportAction(
+		_showId: string,
 		timecodeId: string,
 		action: TimecodeTransportAction,
 	) {
-		return this.post<WireTimecodeTransportSnapshot>(
-			`/api/v2/timecodes/${encodeURIComponent(timecodeId)}/transport`,
-			showId,
-			{ timecode_id: timecodeId, action },
-		).then(timecodeSnapshot);
+		const value = await this.transport.sendAction({
+			type: "timecode",
+			request: { timecode_id: timecodeId, action },
+		});
+		return timecodeSnapshot(value as WireTimecodeTransportSnapshot);
 	}
 
 	outputDevices(): Promise<TimecodeAudioOutputDevices> {

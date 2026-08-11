@@ -1,13 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
 import { TimecodesApiClient } from "./timecodes";
-import type { ClientTransport } from "./transport";
+import type { LiveClientTransport } from "./transport";
 
 function transport() {
 	return {
 		request: vi.fn().mockResolvedValue({}),
 		blob: vi.fn(),
 		absoluteUrl: vi.fn(),
-	} satisfies ClientTransport;
+		currentDeskId: vi.fn().mockReturnValue("desk-a"),
+		sendAction: vi.fn().mockResolvedValue({}),
+	} satisfies LiveClientTransport;
 }
 
 describe("TimecodesApiClient", () => {
@@ -32,7 +34,7 @@ describe("TimecodesApiClient", () => {
 		});
 	});
 
-	it("uses the authoritative list, snapshot and transport routes", async () => {
+	it("uses snapshots for reads and one ordered live frame for transport", async () => {
 		const wire = transport();
 		wire.request
 			.mockResolvedValueOnce({ show_revision: 0, objects: [] })
@@ -45,15 +47,15 @@ describe("TimecodesApiClient", () => {
 				duration_frame: 440,
 				audio_linked: false,
 			})
-			.mockResolvedValueOnce({ peaks: [] })
-			.mockResolvedValueOnce({
-				timecode_id: "timecode/a",
-				revision: 2,
-				state: "paused",
-				frame: 220,
-				duration_frame: 440,
-				audio_linked: false,
-			});
+			.mockResolvedValueOnce({ peaks: [] });
+		wire.sendAction.mockResolvedValueOnce({
+			timecode_id: "timecode/a",
+			revision: 2,
+			state: "paused",
+			frame: 220,
+			duration_frame: 440,
+			audio_linked: false,
+		});
 		const client = new TimecodesApiClient(wire);
 		await client.objects("show-a");
 		await client.runtime("show-a");
@@ -68,8 +70,15 @@ describe("TimecodesApiClient", () => {
 			"/api/v2/timecodes/runtime",
 			"/api/v2/timecodes/timecode%2Fa/runtime",
 			"/api/v2/timecodes/timecode%2Fa/audio/waveform",
-			"/api/v2/timecodes/timecode%2Fa/transport",
 		]);
+		expect(wire.sendAction).toHaveBeenCalledOnce();
+		expect(wire.sendAction).toHaveBeenCalledWith({
+			type: "timecode",
+			request: {
+				timecode_id: "timecode/a",
+				action: { type: "seek", frame: 220 },
+			},
+		});
 	});
 
 	it("discovers server outputs and uploads audio as a show-scoped raw import", async () => {

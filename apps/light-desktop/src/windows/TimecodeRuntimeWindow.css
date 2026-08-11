@@ -13,31 +13,37 @@
 	border-bottom: 1px solid #d7606e;
 }
 .timecode-editor-toolbar,
-.timecode-transport {
+.timecode-runtime-seek {
 	display: flex;
 	align-items: center;
 	gap: 0.45rem;
 	padding: 0.5rem 0.7rem;
 	border-bottom: 1px solid #272936;
 }
-.timecode-transport strong {
+.timecode-runtime-seek strong {
 	margin-left: auto;
 	font-variant-numeric: tabular-nums;
 	color: #c7a9f4;
 }
-.timecode-fields {
+.timecode-settings-fields {
 	display: grid;
-	grid-template-columns: 7rem minmax(12rem, 1fr) 11rem 11rem auto;
+	grid-template-columns: minmax(9rem, 1fr) minmax(12rem, 2fr);
 	gap: 0.6rem;
 	padding: 0.7rem;
 }
-.timecode-fields label {
+.timecode-settings-fields label,
+.timecode-duration-readout {
 	display: grid;
 	gap: 0.2rem;
 	color: #a8abb8;
 	font-size: 0.72rem;
 }
-.timecode-fields input {
+.timecode-duration-readout strong {
+	padding: 0.45rem 0;
+	color: #eef0f5;
+	font-variant-numeric: tabular-nums;
+}
+.timecode-settings-fields input {
 	min-width: 0;
 	padding: 0.45rem;
 	border: 1px solid #393b49;
@@ -45,10 +51,54 @@
 	background: #12131a;
 	color: #fff;
 }
-.timecode-fields .timecode-checkbox {
+.timecode-settings-fields .timecode-checkbox {
 	display: flex;
 	flex-direction: row;
 	align-items: center;
+}
+.timecode-settings-fields .timecode-audio-import,
+.timecode-settings-fields .timecode-csv-panel {
+	grid-column: 1 / -1;
+}
+.timecode-header-toolbar,
+.timecode-header-group {
+	display: flex;
+	align-items: stretch;
+}
+.timecode-header-toolbar {
+	gap: 0.45rem;
+}
+.timecode-header-group {
+	min-inline-size: 0;
+	margin: 0;
+	padding: 0;
+	border: 1px solid #424553;
+	border-radius: 0.25rem;
+}
+.timecode-header-group > .ui-button {
+	border: 0;
+	border-radius: 0;
+}
+.timecode-header-group > .ui-button + .ui-button {
+	border-left: 1px solid #424553;
+}
+.timecode-add-menu-layer {
+	position: fixed;
+	z-index: 10000;
+	inset: 0;
+}
+.timecode-add-menu {
+	position: fixed;
+	display: grid;
+	min-width: 12rem;
+	padding: 0.35rem;
+	border: 1px solid #4b4e5d;
+	border-radius: 0.35rem;
+	background: #171823;
+	box-shadow: 0 0.8rem 2rem rgb(0 0 0 / 45%);
+}
+.timecode-add-menu > .ui-button {
+	justify-content: flex-start;
 }
 .timecode-timeline-editor {
 	display: flex;
@@ -106,7 +156,8 @@
 	align-items: end;
 	gap: 0.6rem;
 	padding: 0.7rem;
-	border-bottom: 1px solid #343644;
+	border: 1px solid #343644;
+	border-radius: 0.3rem;
 	background: #151620;
 }
 .timecode-csv-panel label {
@@ -141,10 +192,12 @@
 	flex: 1 1 12rem;
 	min-height: 12rem;
 	overflow: auto;
+	scrollbar-gutter: stable;
 	overscroll-behavior: contain;
 }
 .timecode-timeline-canvas {
 	position: relative;
+	box-sizing: border-box;
 	min-height: 20rem;
 	padding-top: 2rem;
 	background:
@@ -176,6 +229,13 @@
 	padding-left: 0.25rem;
 	border-left: 1px solid #626679;
 	white-space: nowrap;
+}
+.timecode-ruler .timecode-ruler-final-tick {
+	padding-right: 0.25rem;
+	padding-left: 0;
+	border-right: 1px solid #626679;
+	border-left: 0;
+	transform: translateX(-100%);
 }
 .timecode-audio-lane {
 	position: relative;

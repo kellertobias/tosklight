@@ -3,6 +3,8 @@ import {
 	CheckboxField,
 	Input,
 	NumberField,
+	SelectField,
+	TextAreaField,
 	TextField,
 } from "@tosklight/ui";
 import {
@@ -10,8 +12,20 @@ import {
 	PoolGrid,
 	type PoolSlotViewModel,
 } from "@tosklight/ui/pools";
-import { WindowHeader, WindowScrollArea } from "@tosklight/ui/window-kit";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+	WindowHeader,
+	WindowScrollArea,
+	WindowSettings,
+} from "@tosklight/ui/window-kit";
+import {
+	type RefObject,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
+import { createPortal } from "react-dom";
 import { createLightApi } from "../api/client/api";
 import {
 	type TimecodeDefinition,
@@ -23,8 +37,13 @@ import {
 import { useActiveShowId } from "../features/deskSnapshot/DeskSnapshotState";
 import { useCueLists } from "../features/showObjects/ShowObjectsState";
 import { useShowObjectView } from "../features/showObjects/ShowObjectsView";
+import { parseMarkerCsv } from "../features/timecode/editorModel";
 import { useTimecodeActions } from "../features/timecode/TimecodeActionsContext";
-import { TimecodeTimelineEditor } from "../features/timecode/TimecodeTimelineEditor";
+import { TimecodeAutosaveWriter } from "../features/timecode/TimecodeAutosaveWriter";
+import {
+	TimecodeTimelineEditor,
+	type TimecodeTimelineEditorHandle,
+} from "../features/timecode/TimecodeTimelineEditor";
 import { useTimecodeEditorHistory } from "../features/timecode/useTimecodeEditorHistory";
 import type { WindowProps } from "./windowTypes";
 import "./TimecodeRuntimeWindow.css";
@@ -99,8 +118,7 @@ export function TimecodeRuntimeWindow({
 				api={api}
 				snapshot={runtime.get(editing.definition.id)}
 				cueLists={timelineCueLists}
-				onClose={() => setEditing(null)}
-				onSaved={async () => {
+				onClose={async () => {
 					await refresh();
 					setEditing(null);
 				}}
@@ -239,61 +257,99 @@ function useTimecodeWaveform(
 	return { waveformPeaks, setWaveformPeaks, waveformError };
 }
 
-function useTimecodeEditorOperations({
+export function TimecodeEditor({
 	showId,
 	item,
 	api,
-	draft,
-	setDraft,
-	setWaveformPeaks,
-	onSaved,
+	snapshot,
+	cueLists,
+	onClose,
 }: {
 	showId: string | null;
 	item: TimecodeObjectRecord | NewTimecode;
 	api: TimecodesApiClient;
-	draft: TimecodeDefinition;
-	setDraft(value: TimecodeDefinition): void;
-	setWaveformPeaks(value: number[] | undefined): void;
-	onSaved(): Promise<void>;
+	snapshot?: TimecodeTransportSnapshot;
+	cueLists: Array<{
+		id: string;
+		name: string;
+		cues: Array<{ id: string; number: number; name: string }>;
+	}>;
+	onClose(): Promise<void>;
 }) {
-	const [busy, setBusy] = useState(false);
-	const [audioImporting, setAudioImporting] = useState(false);
+	const {
+		draft,
+		commit: setDraft,
+		preview: previewDraft,
+		beginGesture,
+		endGesture,
+		undo,
+		redo,
+		canUndo,
+		canRedo,
+	} = useTimecodeEditorHistory(item.definition);
+	const [editorFrame, setEditorFrame] = useState(snapshot?.frame ?? 0);
 	const [error, setError] = useState<string | null>(null);
-	const isNew = "isNew" in item;
+	const [actionBusy, setActionBusy] = useState(false);
+	const [audioImporting, setAudioImporting] = useState(false);
+	const [settingsAnchor, setSettingsAnchor] = useState<DOMRect | null>(null);
+	const [settingsOpen, setSettingsOpen] = useState(false);
+	const [csvSource, setCsvSource] = useState(
+		"position,name,color\n00:00:05:00,Intro,#a67cff",
+	);
+	const [csvMode, setCsvMode] = useState<"append" | "replace">("append");
+	const [csvError, setCsvError] = useState<string | null>(null);
+	const timelineRef = useRef<TimecodeTimelineEditorHandle>(null);
+	const initialRecord = "isNew" in item ? null : item;
+	const writer = useMemo(
+		() =>
+			showId ? new TimecodeAutosaveWriter(showId, initialRecord, api) : null,
+		[api, item, showId],
+	);
+	const [record, setRecord] = useState<TimecodeObjectRecord | null>(
+		initialRecord,
+	);
+	const [saving, setSaving] = useState(Boolean(writer && !initialRecord));
+	useEffect(() => {
+		if (!writer) return;
+		let current = true;
+		setSaving(true);
+		void writer
+			.enqueue(draft)
+			.then((saved) => {
+				if (!current) return;
+				setRecord(saved);
+				setError(null);
+			})
+			.catch((reason) => {
+				if (current)
+					setError(
+						`Autosave failed: ${reason instanceof Error ? reason.message : String(reason)}`,
+					);
+			})
+			.finally(() => current && setSaving(false));
+		return () => {
+			current = false;
+		};
+	}, [draft, writer]);
+	const isNew = !record;
+	const { waveformPeaks, setWaveformPeaks, waveformError } =
+		useTimecodeWaveform(showId, isNew, draft, api);
+	useEffect(() => {
+		if (waveformError) setError(waveformError);
+	}, [waveformError]);
+	const duration = draft.duration_frame ?? 0;
+	const frame = Math.min(editorFrame, duration);
+	const busy = saving || actionBusy;
 	const act = async (action: TimecodeTransportAction) => {
-		if (!showId || isNew) return;
-		setBusy(true);
+		if (!showId || !record) return;
+		setActionBusy(true);
 		setError(null);
 		try {
 			await api.transportAction(showId, draft.id, action);
 		} catch (reason) {
 			setError(String(reason));
 		} finally {
-			setBusy(false);
-		}
-	};
-	const save = async () => {
-		if (!showId) return;
-		setBusy(true);
-		setError(null);
-		try {
-			if (isNew) await api.create(showId, draft);
-			else
-				await api.update(showId, draft.id, item.revision, {
-					number: draft.number,
-					name: draft.name,
-					duration_frame: draft.duration_frame,
-					transport_offset_frame: draft.transport_offset_frame,
-					auto_start: draft.auto_start,
-					audio: draft.audio ?? null,
-					markers: draft.markers,
-					lanes: draft.lanes,
-				});
-			await onSaved();
-		} catch (reason) {
-			setError(String(reason));
-		} finally {
-			setBusy(false);
+			setActionBusy(false);
 		}
 	};
 	const importAudio = async (file: File) => {
@@ -322,89 +378,41 @@ function useTimecodeEditorOperations({
 			setAudioImporting(false);
 		}
 	};
-	const remove = async () => {
-		if (!showId || isNew) return;
-		setBusy(true);
+	const close = async () => {
 		try {
-			await api.delete(showId, draft.id, item.revision);
-			await onSaved();
+			await writer?.flush();
+			await onClose();
 		} catch (reason) {
-			setError(String(reason));
-			setBusy(false);
+			setError(`Could not close before autosave completed: ${String(reason)}`);
 		}
 	};
-	return {
-		busy,
-		audioImporting,
-		error,
-		setError,
-		isNew,
-		act,
-		save,
-		importAudio,
-		remove,
+	const remove = async () => {
+		if (!showId || !writer) return;
+		setActionBusy(true);
+		try {
+			const saved = await writer.flush();
+			if (!saved) return;
+			await api.delete(showId, saved.definition.id, saved.revision);
+			await onClose();
+		} catch (reason) {
+			setError(String(reason));
+		} finally {
+			setActionBusy(false);
+		}
 	};
-}
-
-function TimecodeEditor({
-	showId,
-	item,
-	api,
-	snapshot,
-	cueLists,
-	onClose,
-	onSaved,
-}: {
-	showId: string | null;
-	item: TimecodeObjectRecord | NewTimecode;
-	api: TimecodesApiClient;
-	snapshot?: TimecodeTransportSnapshot;
-	cueLists: Array<{
-		id: string;
-		name: string;
-		cues: Array<{ id: string; number: number; name: string }>;
-	}>;
-	onClose(): void;
-	onSaved(): Promise<void>;
-}) {
-	const {
-		draft,
-		commit: setDraft,
-		preview: previewDraft,
-		beginGesture,
-		endGesture,
-		undo,
-		redo,
-		canUndo,
-		canRedo,
-	} = useTimecodeEditorHistory(item.definition);
-	const [editorFrame, setEditorFrame] = useState(snapshot?.frame ?? 0);
-	const isNew = "isNew" in item;
-	const { waveformPeaks, setWaveformPeaks, waveformError } =
-		useTimecodeWaveform(showId, isNew, draft, api);
-	const {
-		busy,
-		audioImporting,
-		error,
-		setError,
-		act,
-		save,
-		importAudio,
-		remove,
-	} = useTimecodeEditorOperations({
-		showId,
-		item,
-		api,
-		draft,
-		setDraft,
-		setWaveformPeaks,
-		onSaved,
-	});
-	useEffect(() => {
-		if (waveformError) setError(waveformError);
-	}, [waveformError]);
-	const duration = draft.duration_frame ?? 0;
-	const frame = Math.min(editorFrame, duration);
+	const importCsv = () => {
+		try {
+			const imported = parseMarkerCsv(csvSource, FPS, Math.max(1, duration));
+			setDraft({
+				...draft,
+				markers:
+					csvMode === "append" ? [...draft.markers, ...imported] : imported,
+			});
+			setCsvError(null);
+		} catch (reason) {
+			setCsvError(reason instanceof Error ? reason.message : String(reason));
+		}
+	};
 	return (
 		<section className="timecode-window timecode-editor" aria-busy={busy}>
 			<WindowHeader
@@ -413,9 +421,55 @@ function TimecodeEditor({
 					primary: snapshot
 						? `${formatFrame(snapshot.frame)} · ${snapshot.state}`
 						: "Stopped",
+					secondary: saving
+						? "Saving changes…"
+						: record
+							? "Saved"
+							: "Creating…",
 				}}
-				actions={[]}
+				toolbar={
+					<TimecodeHeaderToolbar
+						{...{ act, busy, isNew, timelineRef, draft, cueLists }}
+					/>
+				}
+				settings
+				onSettings={(anchor) => {
+					setSettingsAnchor(anchor.getBoundingClientRect());
+					setSettingsOpen(true);
+				}}
 			/>
+			{settingsOpen && (
+				<WindowSettings
+					modal={false}
+					anchor={settingsAnchor}
+					title="Timecode Settings"
+					onClose={() => setSettingsOpen(false)}
+					tabs={[
+						{
+							id: "settings",
+							label: "Settings",
+							content: (
+								<TimecodeSettings
+									{...{
+										draft,
+										setDraft,
+										duration,
+										busy,
+										audioImporting,
+										importAudio,
+										csvSource,
+										setCsvSource,
+										csvMode,
+										setCsvMode,
+										csvError,
+										importCsv,
+									}}
+								/>
+							),
+						},
+					]}
+				/>
+			)}
 			{error && (
 				<p className="timecode-error" role="alert">
 					{error}
@@ -423,8 +477,7 @@ function TimecodeEditor({
 			)}
 			<EditorToolbar
 				{...{
-					onClose,
-					save,
+					onClose: close,
 					undo,
 					redo,
 					remove,
@@ -434,11 +487,9 @@ function TimecodeEditor({
 					isNew,
 				}}
 			/>
-			<TransportControls {...{ act, frame, snapshot, busy, isNew }} />
-			<TimecodeFields
-				{...{ draft, setDraft, duration, busy, audioImporting, importAudio }}
-			/>
+			<RuntimeSeekControls {...{ act, frame, snapshot, busy, isNew }} />
 			<TimecodeTimelineEditor
+				ref={timelineRef}
 				definition={draft}
 				frame={frame}
 				fps={FPS}
@@ -456,7 +507,6 @@ function TimecodeEditor({
 
 function EditorToolbar({
 	onClose,
-	save,
 	undo,
 	redo,
 	remove,
@@ -465,8 +515,7 @@ function EditorToolbar({
 	busy,
 	isNew,
 }: {
-	onClose(): void;
-	save(): Promise<void>;
+	onClose(): Promise<void>;
 	undo(): void;
 	redo(): void;
 	remove(): Promise<void>;
@@ -477,9 +526,8 @@ function EditorToolbar({
 }) {
 	return (
 		<div className="timecode-editor-toolbar">
-			<Button onClick={onClose}>Back</Button>
-			<Button onClick={() => void save()} disabled={busy}>
-				Save
+			<Button onClick={() => void onClose()} disabled={busy}>
+				Back
 			</Button>
 			<Button onClick={undo} disabled={!canUndo || busy}>
 				Undo
@@ -496,7 +544,7 @@ function EditorToolbar({
 	);
 }
 
-function TransportControls({
+function RuntimeSeekControls({
 	act,
 	frame,
 	snapshot,
@@ -511,19 +559,7 @@ function TransportControls({
 }) {
 	const disabled = isNew || busy;
 	return (
-		<fieldset className="timecode-transport" aria-label="Timecode transport">
-			<Button onClick={() => void act({ type: "go" })} disabled={disabled}>
-				Go
-			</Button>
-			<Button onClick={() => void act({ type: "pause" })} disabled={disabled}>
-				Pause
-			</Button>
-			<Button onClick={() => void act({ type: "stop" })} disabled={disabled}>
-				Stop
-			</Button>
-			<Button onClick={() => void act({ type: "rewind" })} disabled={disabled}>
-				Rewind
-			</Button>
+		<fieldset className="timecode-runtime-seek" aria-label="Runtime seek">
 			<Button
 				onClick={() => void act({ type: "seek", frame })}
 				disabled={disabled}
@@ -535,13 +571,19 @@ function TransportControls({
 	);
 }
 
-function TimecodeFields({
+function TimecodeSettings({
 	draft,
 	setDraft,
 	duration,
 	busy,
 	audioImporting,
 	importAudio,
+	csvSource,
+	setCsvSource,
+	csvMode,
+	setCsvMode,
+	csvError,
+	importCsv,
 }: {
 	draft: TimecodeDefinition;
 	setDraft(value: TimecodeDefinition): void;
@@ -549,9 +591,15 @@ function TimecodeFields({
 	busy: boolean;
 	audioImporting: boolean;
 	importAudio(file: File): Promise<void>;
+	csvSource: string;
+	setCsvSource(value: string): void;
+	csvMode: "append" | "replace";
+	setCsvMode(value: "append" | "replace"): void;
+	csvError: string | null;
+	importCsv(): void;
 }) {
 	return (
-		<div className="timecode-fields">
+		<div className="timecode-settings-fields">
 			<NumberField
 				label="Number"
 				min={1}
@@ -567,8 +615,12 @@ function TimecodeFields({
 					setDraft({ ...draft, name: event.currentTarget.value })
 				}
 			/>
+			<div className="timecode-duration-readout">
+				<span>Duration</span>
+				<strong>{formatFrame(duration)}</strong>
+			</div>
 			<NumberField
-				label="Duration frames"
+				label="Frames"
 				min={1}
 				value={duration}
 				onChange={(event) =>
@@ -602,6 +654,7 @@ function TimecodeFields({
 				<span>Audio file</span>
 				<Input
 					id="timecode-audio-file"
+					aria-label="Audio file"
 					type="file"
 					accept="audio/wav,audio/x-wav,audio/mpeg,.wav,.mp3"
 					disabled={busy || audioImporting}
@@ -618,7 +671,145 @@ function TimecodeFields({
 							: "WAV or MP3; MP3 is normalized to managed WAV."}
 				</small>
 			</label>
+			<div className="timecode-csv-panel">
+				<TextAreaField
+					label="Marker CSV"
+					value={csvSource}
+					onChange={(event) => setCsvSource(event.currentTarget.value)}
+				/>
+				<SelectField
+					label="Import mode"
+					value={csvMode}
+					onChange={setCsvMode}
+					options={[
+						{ value: "append", label: "Append" },
+						{ value: "replace", label: "Replace" },
+					]}
+				/>
+				<Button onClick={importCsv}>Apply marker CSV</Button>
+				{csvError && <p role="alert">{csvError}</p>}
+			</div>
 		</div>
+	);
+}
+
+function TimecodeHeaderToolbar({
+	act,
+	busy,
+	isNew,
+	timelineRef,
+	draft,
+	cueLists,
+}: {
+	act(action: TimecodeTransportAction): Promise<void>;
+	busy: boolean;
+	isNew: boolean;
+	timelineRef: RefObject<TimecodeTimelineEditorHandle | null>;
+	draft: TimecodeDefinition;
+	cueLists: readonly unknown[];
+}) {
+	const [addAnchor, setAddAnchor] = useState<DOMRect | null>(null);
+	const disabled = busy || isNew;
+	const runAdd = (action: () => void) => {
+		setAddAnchor(null);
+		action();
+	};
+	return (
+		<>
+			<div className="timecode-header-toolbar">
+				<fieldset
+					className="timecode-header-group"
+					aria-label="Timecode transport"
+				>
+					<Button onClick={() => void act({ type: "go" })} disabled={disabled}>
+						Go
+					</Button>
+					<Button
+						onClick={() => void act({ type: "pause" })}
+						disabled={disabled}
+					>
+						Pause
+					</Button>
+					<Button
+						onClick={() => void act({ type: "stop" })}
+						disabled={disabled}
+					>
+						Stop
+					</Button>
+					<Button
+						onClick={() => void act({ type: "rewind" })}
+						disabled={disabled}
+					>
+						Rewind
+					</Button>
+				</fieldset>
+				<div className="timecode-header-group">
+					<Button
+						aria-haspopup="menu"
+						aria-expanded={Boolean(addAnchor)}
+						onClick={(event) =>
+							setAddAnchor((current) =>
+								current ? null : event.currentTarget.getBoundingClientRect(),
+							)
+						}
+					>
+						Add
+					</Button>
+				</div>
+			</div>
+			{addAnchor &&
+				createPortal(
+					<div
+						className="timecode-add-menu-layer"
+						onPointerDown={(event) =>
+							event.target === event.currentTarget && setAddAnchor(null)
+						}
+					>
+						<div
+							className="timecode-add-menu"
+							role="menu"
+							aria-label="Add"
+							style={{ top: addAnchor.bottom + 3, left: addAnchor.left }}
+						>
+							<Button
+								role="menuitem"
+								onClick={() => runAdd(() => timelineRef.current?.addMarker())}
+							>
+								Add Marker
+							</Button>
+							<Button
+								role="menuitem"
+								disabled={draft.lanes.some(
+									(lane) => lane.content.kind === "audio_volume",
+								)}
+								onClick={() =>
+									runAdd(() => timelineRef.current?.addAudioLane())
+								}
+							>
+								Add Audio Lane
+							</Button>
+							<Button
+								role="menuitem"
+								onClick={() =>
+									runAdd(() => timelineRef.current?.addSpeedLane())
+								}
+							>
+								Add Speed Lane
+							</Button>
+							<Button
+								role="menuitem"
+								disabled={!cueLists.length}
+								onClick={() =>
+									runAdd(() => timelineRef.current?.addCueListLane())
+								}
+							>
+								Add Cuelist Lane
+							</Button>
+						</div>
+					</div>,
+					document.body,
+				)}
+		</>
 	);
 }
 

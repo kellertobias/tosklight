@@ -224,13 +224,14 @@ test.describe("docs/testing/15-macros-and-timecode.md", () => {
 		expect(stopped).toMatchObject({ state: "stopped", frame: 0 });
 	});
 
-	test("TIMECODE-001 @ui › production editor zooms, imports markers, edits keyframes, and saves one revision-safe object", async ({
+	test("TIMECODE-001 @ui › title actions, Settings autosave, Add menu, CSV, and zoom geometry match the operator contract", async ({
 		api,
 		desk,
 		page,
 	}) => {
 		const definition = editableTimecode();
-		let mutation: Record<string, unknown> | null = null;
+		const mutations: Record<string, unknown>[] = [];
+		let revision = 4;
 		await page.route("**/api/v2/timecodes", async (route) => {
 			await fulfillJson(route, {
 				show_revision: 1,
@@ -241,8 +242,25 @@ test.describe("docs/testing/15-macros-and-timecode.md", () => {
 			await fulfillJson(route, []);
 		});
 		await page.route("**/api/v2/timecodes/actions", async (route) => {
-			mutation = route.request().postDataJSON() as Record<string, unknown>;
-			await fulfillJson(route, { request_id: "saved", replayed: false });
+			const mutation = route.request().postDataJSON() as Record<
+				string,
+				unknown
+			>;
+			mutations.push(mutation);
+			revision += 1;
+			await fulfillJson(route, {
+				request_id: `saved-${revision}`,
+				replayed: false,
+				show_id: "00000000-0000-4000-8000-000000000001",
+				show_revision: revision,
+				object: {
+					kind: "timecode",
+					id: definition.id,
+					revision,
+					updated_at: "2026-08-11T00:00:00Z",
+					body: definition,
+				},
+			});
 		});
 
 		await desk.open(api.baseUrl);
@@ -258,46 +276,99 @@ test.describe("docs/testing/15-macros-and-timecode.md", () => {
 
 		const editor = page.getByLabel("Timecode timeline editor");
 		await expect(editor).toBeVisible();
-		await editor.getByLabel("Timeline zoom").fill("2");
-		await editor.getByRole("button", { name: "Add speed lane" }).click();
+		await expect(
+			page.getByRole("button", { name: "Save", exact: true }),
+		).toHaveCount(0);
+		const transport = page.getByLabel("Timecode transport");
+		for (const label of ["Go", "Pause", "Stop", "Rewind"])
+			await expect(
+				transport.getByRole("button", { name: label }),
+			).toBeVisible();
+
+		await page.getByRole("button", { name: "Add", exact: true }).click();
+		const addMenu = page.getByRole("menu", { name: "Add" });
+		await expect(addMenu.getByRole("menuitem")).toHaveText([
+			"Add Marker",
+			"Add Audio Lane",
+			"Add Speed Lane",
+			"Add Cuelist Lane",
+		]);
+		await expect(addMenu.getByText("Add Playhead")).toHaveCount(0);
+		await addMenu.getByRole("menuitem", { name: "Add Speed Lane" }).click();
 		await editor.getByRole("button", { name: "+ keyframe" }).last().click();
-		await editor
-			.getByRole("button", { name: "Add marker at playhead" })
-			.click();
-		await editor.getByRole("button", { name: "Import marker CSV" }).click();
-		await editor
+
+		const viewport = editor.getByLabel("Timecode timeline viewport");
+		await expect
+			.poll(() =>
+				viewport.evaluate((node) => node.scrollWidth - node.clientWidth),
+			)
+			.toBeLessThanOrEqual(1);
+		const zoom = editor.getByLabel("Timeline zoom");
+		await zoom.fill((await zoom.getAttribute("max")) ?? "1");
+		await expect
+			.poll(() =>
+				editor
+					.locator(".timecode-timeline-canvas")
+					.getAttribute("data-pixels-per-frame"),
+			)
+			.toBe("17.5");
+
+		await page.getByRole("button", { name: "Settings" }).click();
+		const settings = page.getByRole("dialog", { name: "Timecode Settings" });
+		await settings.getByLabel("Name").fill("Opening sequence");
+		await settings
 			.getByLabel("Marker CSV")
 			.fill("position,name,color\n00:00:05:00,Verse,#a67cff");
-		await editor.getByRole("button", { name: "Append" }).click();
+		await settings.getByRole("button", { name: "Append" }).click();
 		await page.getByRole("option", { name: "Replace" }).click();
-		await editor.getByRole("button", { name: "Apply marker CSV" }).click();
-		await page.getByRole("button", { name: "Save", exact: true }).click();
+		await settings.getByRole("button", { name: "Apply marker CSV" }).click();
 
-		await expect.poll(() => mutation).not.toBeNull();
-		expect(mutation).toMatchObject({
-			action: {
-				type: "update",
-				timecode_id: definition.id,
-				expected_revision: 4,
-				patch: {
-					markers: [
-						expect.objectContaining({
-							frame: 220,
-							name: "Verse",
-							color: "#a67cff",
+		await expect
+			.poll(() =>
+				mutations.find((entry) =>
+					JSON.stringify(entry).includes('"name":"Verse"'),
+				),
+			)
+			.toBeTruthy();
+		expect(mutations).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					action: expect.objectContaining({
+						type: "update",
+						timecode_id: definition.id,
+						patch: {
+							markers: [
+								expect.objectContaining({
+									frame: 220,
+									name: "Verse",
+									color: "#a67cff",
+								}),
+							],
+						},
+					}),
+				}),
+			]),
+		);
+		expect(mutations).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					action: expect.objectContaining({
+						patch: expect.objectContaining({
+							lanes: expect.arrayContaining([
+								expect.objectContaining({
+									content: expect.objectContaining({
+										kind: "speed_group",
+										keyframes: [
+											expect.objectContaining({ bpm: 120, phase: 0 }),
+										],
+									}),
+								}),
+							]),
 						}),
-					],
-					lanes: expect.arrayContaining([
-						expect.objectContaining({
-							content: expect.objectContaining({
-								kind: "speed_group",
-								keyframes: [expect.objectContaining({ bpm: 120, phase: 0 })],
-							}),
-						}),
-					]),
-				},
-			},
-		});
+					}),
+				}),
+			]),
+		);
 	});
 });
 

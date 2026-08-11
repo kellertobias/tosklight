@@ -1,8 +1,13 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen } from "@testing-library/react";
+import { createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { TimecodeDefinition } from "../../api/types/timecode";
-import { TimecodeTimelineEditor } from "./TimecodeTimelineEditor";
+import {
+	TimecodeTimelineEditor,
+	type TimecodeTimelineEditorHandle,
+	timelineZoomGeometry,
+} from "./TimecodeTimelineEditor";
 
 const definition: TimecodeDefinition = {
 	id: "00000000-0000-0000-0000-000000000001",
@@ -20,10 +25,12 @@ const definition: TimecodeDefinition = {
 };
 
 describe("TimecodeTimelineEditor", () => {
-	it("offers touch-visible editing, waveform, zoom and explicit CSV mode", () => {
+	it("fits the whole timeline at 1x and reaches 17.5 CSS pixels per frame", () => {
 		const onCommit = vi.fn();
+		const ref = createRef<TimecodeTimelineEditorHandle>();
 		render(
 			<TimecodeTimelineEditor
+				ref={ref}
 				definition={definition}
 				frame={44}
 				fps={44}
@@ -48,14 +55,25 @@ describe("TimecodeTimelineEditor", () => {
 				onEndGesture={vi.fn()}
 			/>,
 		);
-		expect(screen.getByLabelText("Timeline zoom")).toBeTruthy();
+		const viewport = screen.getByLabelText("Timecode timeline viewport");
+		const canvas = viewport.querySelector<HTMLElement>(
+			".timecode-timeline-canvas",
+		);
+		expect(canvas?.style.width).toBe("720px");
+		expect(Number(canvas?.dataset.pixelsPerFrame)).toBeCloseTo(720 / 440);
+		const { maximumZoom } = timelineZoomGeometry(440, 720);
+		fireEvent.input(screen.getByLabelText("Timeline zoom"), {
+			target: { value: maximumZoom },
+		});
+		expect(Number(canvas?.dataset.pixelsPerFrame)).toBeCloseTo(17.5);
+		expect(Number.parseFloat(canvas?.style.width ?? "0")).toBeCloseTo(7700);
 		expect(
 			screen.getByLabelText("Linked audio waveform").querySelectorAll("line"),
 		).toHaveLength(3);
 		expect(
 			screen.getByRole("button", { name: "Copy" }).hasAttribute("disabled"),
 		).toBe(true);
-		fireEvent.click(screen.getByRole("button", { name: "Add audio lane" }));
+		ref.current?.addAudioLane();
 		expect(onCommit).toHaveBeenCalledWith(
 			expect.objectContaining({
 				lanes: [
@@ -65,7 +83,7 @@ describe("TimecodeTimelineEditor", () => {
 				],
 			}),
 		);
-		fireEvent.click(screen.getByRole("button", { name: "Add Cuelist lane" }));
+		ref.current?.addCueListLane();
 		expect(onCommit).toHaveBeenCalledWith(
 			expect.objectContaining({
 				lanes: [
@@ -78,17 +96,7 @@ describe("TimecodeTimelineEditor", () => {
 				],
 			}),
 		);
-
-		fireEvent.click(screen.getByRole("button", { name: "Import marker CSV" }));
-		fireEvent.change(screen.getByLabelText("Marker CSV"), {
-			target: { value: "position,name\n00:00:02:00,Verse" },
-		});
-		expect(screen.getByRole("button", { name: "Append" })).toBeTruthy();
-		fireEvent.click(screen.getByRole("button", { name: "Apply marker CSV" }));
-		expect(onCommit).toHaveBeenCalledWith(
-			expect.objectContaining({
-				markers: [expect.objectContaining({ frame: 88, name: "Verse" })],
-			}),
-		);
+		expect(screen.queryByLabelText("Marker CSV")).toBeNull();
+		expect(screen.queryByRole("button", { name: "Add Marker" })).toBeNull();
 	});
 });

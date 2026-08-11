@@ -126,11 +126,25 @@ fn live_action_timing(action: &LiveAction) -> Option<(&'static str, bool)> {
         | LiveAction::DynamicFixAt(_) => Some(("dynamic", true)),
         LiveAction::Playback(request) => Some((playback_action_timing(&request.action), true)),
         LiveAction::Macro(_) => Some(("macro_run", true)),
+        LiveAction::Timecode(request) => Some((timecode_action_timing(&request.action), true)),
         LiveAction::SpeedGroup(_)
         | LiveAction::OutputRuntime(_)
         | LiveAction::DmxOverride(_)
         | LiveAction::Highlight(_)
         | LiveAction::PatchPreviewHighlight(_) => None,
+    }
+}
+
+fn timecode_action_timing(
+    action: &light_wire::v2::timecode::TimecodeTransportAction,
+) -> &'static str {
+    use light_wire::v2::timecode::TimecodeTransportAction;
+    match action {
+        TimecodeTransportAction::Go => "timecode_go",
+        TimecodeTransportAction::Pause => "timecode_pause",
+        TimecodeTransportAction::Stop => "timecode_stop",
+        TimecodeTransportAction::Rewind => "timecode_rewind",
+        TimecodeTransportAction::Seek { .. } => "timecode_seek",
     }
 }
 
@@ -308,6 +322,14 @@ fn dispatch_action(
                 state, session, request,
             ))
         }),
+        LiveAction::Timecode(request) => ActionOutput::plain(
+            timecode_v2::apply_transport_request(state, session.desk.id, request)
+                .and_then(|snapshot| {
+                    serde_json::to_value(snapshot)
+                        .map_err(|error| ApiError::internal(error.to_string()))
+                })
+                .map_err(|error| error.message),
+        ),
         LiveAction::CommandLineSet(request) => run_interaction(state, session, context, || {
             ActionOutput::plain(ws_programmer_command_line(
                 state,

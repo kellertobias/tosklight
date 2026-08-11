@@ -21,6 +21,7 @@ use super::{
     programmer_priority::ProgrammerPriorityActionRequest,
     programming::ProgrammingValuesActionRequest,
     speed_group::SpeedGroupActionRequest,
+    timecode::TimecodeTransportActionRequest,
 };
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
@@ -71,6 +72,7 @@ pub enum LiveAction {
     DynamicSpeed(DynamicControllerLiveActionRequest),
     DynamicPhase(DynamicControllerLiveActionRequest),
     DynamicFixAt(DynamicFixAtActionRequest),
+    Timecode(TimecodeTransportActionRequest),
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -309,6 +311,7 @@ impl LiveAction {
             | Self::DynamicSpeed(request)
             | Self::DynamicPhase(request) => Some(&request.request.request_id),
             Self::DynamicFixAt(request) => Some(&request.request_id),
+            Self::Timecode(_) => None,
         }
     }
 }
