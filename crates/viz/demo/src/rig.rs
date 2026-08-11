@@ -192,8 +192,8 @@ pub const DEMO_RIG: &[RigBlock] = &[
         rotation: (-80.0, 0.0, 0.0),
     },
     RigBlock {
-        manufacturer: "Generic",
-        profile: "Laser",
+        manufacturer: "ToskLight",
+        profile: "Visualizer Laser",
         mode: "12 Channel",
         label: "Laser",
         count: 2,
@@ -265,7 +265,7 @@ mod tests {
             "Dimmer Fresnel",
             "Robin 600X LEDWash",
             "Trackspot",
-            "Laser",
+            "Visualizer Laser",
             "Sharpy",
         ] {
             assert!(
