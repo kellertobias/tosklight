@@ -61,6 +61,7 @@ pub struct Arguments {
     pub mutation_gate: bool,
     pub patch_gate: bool,
     pub fixtures_per_universe: Option<u16>,
+    pub universes: Option<u16>,
     pub rate_hz: Option<u16>,
     pub sustained_show: bool,
     pub headless_stress_fixtures: Option<usize>,
@@ -143,6 +144,7 @@ impl Default for Arguments {
             mutation_gate: false,
             patch_gate: false,
             fixtures_per_universe: None,
+            universes: None,
             rate_hz: None,
             sustained_show: false,
             headless_stress_fixtures: None,
@@ -198,12 +200,15 @@ impl Arguments {
                         128,
                         "fixtures per universe",
                     )? as u16;
-                    if 512 % value != 0 {
-                        return Err(
-                            "fixtures per universe must divide the 512 DMX slots evenly".into()
-                        );
-                    }
                     parsed.fixtures_per_universe = Some(value);
+                }
+                "--universes" => {
+                    parsed.universes = Some(parse_bounded_u64(
+                        &required_value(&mut arguments, &argument)?,
+                        1,
+                        512,
+                        "universes",
+                    )? as u16);
                 }
                 "--rate-hz" => {
                     parsed.rate_hz = Some(parse_bounded_u64(
@@ -263,8 +268,9 @@ impl Arguments {
            --seconds N                 Measurement duration, 1-300 (default: 5)\n\
            --warmup-seconds N          Unpaced warmup duration, 0-60 (default: 1)\n\
           --hardware-label TEXT        Reference-machine description included in JSON\n\
-          --fixtures-per-universe N    Equal-size fixtures filling every universe (1-128)\n\
-          --rate-hz N                  Scheduled output rate, 1-240 (profile floor still applies)\n\
+          --fixtures-per-universe N    Equal-size fixtures packed into every universe (1-128)\n\
+          --universes N                Override the profile universe count (1-512)\n\
+          --rate-hz N                  Scheduled output target, 1-240\n\
           --sustained-show             Use the mixed-fixture sustained benchmark show\n\
           --headless-stress-fixtures N Run the informational mixed-mode headless tier (2000 or 4000)\n\
           --fixture-package-dir PATH   Fixture packages used by shipped-mode workloads\n\
@@ -364,6 +370,7 @@ mod tests {
         assert_eq!(arguments.warmup_seconds, 2);
         assert_eq!(arguments.hardware_label.as_deref(), Some("Test host"));
         assert_eq!(arguments.fixtures_per_universe, Some(32));
+        assert_eq!(arguments.universes, None);
         assert_eq!(arguments.rate_hz, Some(110));
         assert!(arguments.sustained_show);
         assert_eq!(arguments.headless_stress_fixtures, None);
@@ -377,12 +384,17 @@ mod tests {
 
     #[test]
     fn rejects_removed_codec_only_arguments_and_invalid_bounds() {
-        assert!(Arguments::parse(["--universes".into(), "64".into()]).is_err());
+        assert_eq!(parsed(&["--universes", "64"]).universes, Some(64));
+        assert!(Arguments::parse(["--universes".into(), "0".into()]).is_err());
+        assert!(Arguments::parse(["--universes".into(), "513".into()]).is_err());
         assert!(Arguments::parse(["--seconds".into(), "0".into()]).is_err());
         assert!(Arguments::parse(["--protocol".into(), "udp".into()]).is_err());
         assert!(Arguments::parse(["--rate-hz".into(), "0".into()]).is_err());
         assert!(Arguments::parse(["--rate-hz".into(), "241".into()]).is_err());
-        assert!(Arguments::parse(["--fixtures-per-universe".into(), "3".into()]).is_err());
+        assert_eq!(
+            parsed(&["--fixtures-per-universe", "36"]).fixtures_per_universe,
+            Some(36)
+        );
         assert!(Arguments::parse(["--fixtures-per-universe".into(), "256".into()]).is_err());
     }
 

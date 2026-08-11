@@ -220,19 +220,45 @@ function compactNumber(value_) {
 	}).format(numeric);
 }
 
+function compactDuration(value_) {
+	if (!Number.isFinite(value_)) return "—";
+	return new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(value_);
+}
+
 function compactScenarioStatus(scenario, thresholds) {
-	const minimum = scenario.minimum_one_second_completed_hz;
-	if (!Number.isFinite(minimum)) return "unknown";
-	if (minimum >= thresholds.green) return "healthy";
-	if (minimum >= thresholds.yellow) return "warning";
-	return "degraded";
+	const cadence = scenario.p95_one_second_completed_hz;
+	if (!Number.isFinite(cadence)) return "unknown";
+	if (cadence < thresholds.red_below_hz) return "degraded";
+	if (cadence < thresholds.yellow_below_hz) return "warning";
+	return "healthy";
 }
 
 function compactScenarioRows(performance) {
+	if (Array.isArray(performance.benchmark_scenarios)) {
+		return performance.benchmark_scenarios
+			.filter(
+				(scenario) =>
+					Number.isFinite(scenario.fixture_count) &&
+					Number.isFinite(scenario.minimum_one_second_completed_hz) &&
+					Number.isFinite(scenario.average_completed_hz) &&
+					Number.isFinite(scenario.p95_one_second_completed_hz),
+			)
+			.map((scenario) => ({
+				...scenario,
+				compact_status: compactScenarioStatus(scenario, scenario.thresholds),
+				output_target_hz: scenario.requested_rate_hz,
+			}))
+			.sort(
+				(left, right) =>
+					(left.animated_attribute_count ?? Number.MAX_SAFE_INTEGER) -
+						(right.animated_attribute_count ?? Number.MAX_SAFE_INTEGER) ||
+					String(left.execution_mode).localeCompare(String(right.execution_mode)),
+			);
+	}
 	const required = performance.required_floor ?? {};
 	const thresholds = {
-		green: required.green_threshold_hz ?? 60,
-		yellow: required.yellow_threshold_hz ?? 40,
+		red_below_hz: required.yellow_threshold_hz ?? 40,
+		yellow_below_hz: required.green_threshold_hz ?? 60,
 	};
 	return [
 		performance.two_thousand_show?.attempted === true &&
@@ -261,38 +287,58 @@ function compactScenarioRows(performance) {
 }
 
 function compactCpu(resources) {
-	const maximum = resources?.application_cpu_max;
-	const average = resources?.application_cpu_average;
+	const maximum =
+		resources?.application_cpu_max_percent ?? resources?.application_cpu_max;
+	const average =
+		resources?.application_cpu_average_percent ??
+		resources?.application_cpu_average;
 	if (!Number.isFinite(maximum) || !Number.isFinite(average)) {
 		return `<strong>Not measured</strong><small>application CPU unavailable</small>`;
 	}
+	const ram =
+		resources?.application_peak_resident_bytes ?? resources?.peak_resident_bytes;
 	return (
 		`<strong>${compactNumber(maximum)}% max</strong>` +
-		`<small>${compactNumber(average)}% average application CPU</small>`
+		`<small>${compactNumber(average)}% avg Light CPU · ${bytes(ram)} max RAM</small>`
 	);
 }
 
 function compactScenarioRow(scenario) {
-	const attributes = Array.isArray(scenario.dynamic_lane_attributes)
+	const lanes = Number.isFinite(scenario.master_lane_count)
+		? scenario.master_lane_count
+		: scenario.dynamic_definition_count;
+	const dynamics = Number.isFinite(scenario.animated_attribute_count)
+		? `${compactNumber(scenario.animated_attribute_count)} dyn. attr.`
+		: Number.isFinite(scenario.dynamic_definition_count)
+			? `${compactNumber(scenario.dynamic_definition_count)} dyn.`
+			: "Not measured";
+	const legacyAttributes = Array.isArray(scenario.dynamic_lane_attributes)
 		? scenario.dynamic_lane_attributes.length
 		: null;
-	const dynamics = Number.isFinite(scenario.dynamic_definition_count)
-		? `${compactNumber(scenario.dynamic_definition_count)} dyn.`
-		: "Not measured";
-	const dynamicsDetail = Number.isFinite(attributes)
-		? `${compactNumber(attributes)} Dynamic lane attribute${attributes === 1 ? "" : "s"}`
-		: "Dynamic workload unavailable";
+	const dynamicsDetail = Number.isFinite(scenario.animated_attribute_count) && Number.isFinite(lanes)
+		? `${compactNumber(lanes)} master lane${lanes === 1 ? "" : "s"}`
+		: Number.isFinite(legacyAttributes)
+			? `${compactNumber(legacyAttributes)} Dynamic lane attribute${legacyAttributes === 1 ? "" : "s"}`
+			: "Dynamic workload unavailable";
 	const maximum = compactNumber(scenario.maximum_one_second_completed_hz);
-	const target = compactNumber(scenario.output_target_hz);
+	const target = compactNumber(scenario.below_target_hz ?? 44);
+	const below = scenario.windows_below_target ?? scenario.windows_below_minimum;
+	const elapsed = scenario.measurement_seconds;
+	const critical =
+		scenario.thresholds?.critical_below_hz != null &&
+		scenario.p95_one_second_completed_hz < scenario.thresholds.critical_below_hz
+			? `<small>Critical: below ${compactNumber(scenario.thresholds.critical_below_hz)} Hz</small>`
+			: "";
+	const mode = scenario.execution_mode === "one_core" ? "locked to 1 core" : "unrestricted";
 	return (
 		`<tr class="performance-row performance-row-${escapePerformanceText(scenario.compact_status)}">` +
-		`<th scope="row"><strong>${compactNumber(scenario.fixture_count)} fixtures</strong>` +
-		`<small>${compactNumber(scenario.parameter_count)} parameters · ${compactNumber(scenario.universes)} DMX universes</small></th>` +
+		`<th scope="row"><strong>${escapePerformanceText(scenario.case_name ?? `${compactNumber(scenario.fixture_count)} fixtures`)}</strong>` +
+		`<small>${compactNumber(scenario.fixture_count)} fixtures · ${compactNumber(scenario.parameter_count)} parameters · ${compactNumber(scenario.universes)} DMX universes · ${mode}</small></th>` +
 		`<td><strong>${dynamics}</strong><small>${escapePerformanceText(dynamicsDetail)}</small></td>` +
 		`<td><strong>${compactNumber(scenario.p95_one_second_completed_hz)} Hz p95</strong>` +
-		`<small>${compactNumber(scenario.minimum_one_second_completed_hz)} / ${compactNumber(scenario.average_completed_hz)} / ${maximum} Hz · min / avg / max</small></td>` +
-		`<td><strong>${compactNumber(scenario.windows_below_minimum)} s</strong>` +
-		`<small>below ${target} Hz output target</small></td>` +
+		`<small>${compactNumber(scenario.minimum_one_second_completed_hz)} / ${compactNumber(scenario.average_completed_hz)} / ${maximum} Hz · min / avg / max</small>${critical}</td>` +
+		`<td><strong>${compactNumber(below)} / ${compactDuration(elapsed)} s</strong>` +
+		`<small>one-second windows below ${target} Hz / total test time</small></td>` +
 		`<td>${compactCpu(scenario.resources)}</td></tr>`
 	);
 }
@@ -307,10 +353,10 @@ export function renderCompactPerformanceSummary(performance) {
 		: `<p class="performance-empty">No measured output-cadence run is available for this release.</p>`;
 	return (
 		`<div class="performance-summary">${table}` +
-		`<p class="performance-legend"><span class="legend-healthy">Green</span>: minimum ≥60 Hz · ` +
-		`<span class="legend-warning">Orange</span>: warning, minimum 40–&lt;60 Hz · ` +
-		`<span class="legend-degraded">Red</span>: critical, minimum &lt;40 Hz · ` +
-		`<span class="legend-unknown">Gray</span>: incomplete evidence.</p>` +
+		`<p class="performance-legend">Rows use the scenario-specific p95 thresholds. <span class="legend-healthy">Green</span>: target met · ` +
+		`<span class="legend-warning">Yellow</span>: warning · ` +
+		`<span class="legend-degraded">Red</span>: below the scenario floor · ` +
+		`<span class="legend-unknown">Gray</span>: incomplete evidence. Every run requests 60 Hz; “below target” always counts one-second windows below 44 Hz.</p>` +
 		`<p class="performance-details"><a href="performance/">Detailed tests, run information, and raw report →</a></p></div>`
 	);
 }

@@ -98,6 +98,7 @@ pub(super) fn build(
     package_dir: &Path,
 ) -> Result<BenchmarkScenario, String> {
     let layout = prepare_layout(fixture_count, package_dir)?;
+    let animated_attribute_count = layout.dynamic_targets.len() * 6;
     config.universes = u16::try_from(layout.expected_patched_slots.len())
         .map_err(|_| "headless stress universe count exceeds u16".to_owned())?;
     let logical_start = benchmark_start();
@@ -156,6 +157,7 @@ pub(super) fn build(
         workload_tier: "headless_stress",
         physical_instance_count: fixture_count,
         dynamic_definition_count: 20,
+        animated_attribute_count,
         dynamic_lane_attributes: &[
             "intensity",
             "color.red",

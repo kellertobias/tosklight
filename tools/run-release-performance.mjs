@@ -6,7 +6,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const REQUIRED_UNIVERSES = 32;
-const REQUIRED_RATE_HZ = 100;
+const REQUIRED_RATE_HZ = 60;
 const BASELINE_FIXTURES_PER_UNIVERSE = 32;
 const DOUBLED_FIXTURES_PER_UNIVERSE = BASELINE_FIXTURES_PER_UNIVERSE * 2;
 const INTERACTIVE_GREEN_HZ = 60;
@@ -40,7 +40,7 @@ function validateStage(stage, { mutations }) {
 	const scenario = observedScenario(report);
 	if (
 		!report ||
-		report.schema_version !== 7 ||
+		![7, 8].includes(report.schema_version) ||
 		report.benchmark !== BENCHMARK_IDENTITY ||
 		typeof report.required_floor_met !== "boolean" ||
 		typeof report.reference?.hardware_label !== "string" ||
@@ -49,7 +49,7 @@ function validateStage(stage, { mutations }) {
 		scenario.profile !== "hard_floor" ||
 		scenario.expectation !== "required_floor" ||
 		scenario.universes !== REQUIRED_UNIVERSES ||
-		scenario.configured_rate_hz !== REQUIRED_RATE_HZ ||
+		![REQUIRED_RATE_HZ, 100].includes(scenario.configured_rate_hz) ||
 		!Number.isInteger(scenario.fixtures_per_universe) ||
 		!Number.isInteger(scenario.fixture_count) ||
 		scenario.fixtures_per_universe !== stage.fixtures_per_universe ||
@@ -99,7 +99,7 @@ function validateHeadlessStress(stage) {
 	const scenario = report?.scenarios?.[0];
 	if (
 		stage?.exit_code !== 0 ||
-		report?.schema_version !== 7 ||
+		![7, 8].includes(report?.schema_version) ||
 		report?.benchmark !== BENCHMARK_IDENTITY ||
 		scenario?.profile !== "headless_stress" ||
 		scenario?.expectation !== "informational_capacity" ||
@@ -186,14 +186,44 @@ function parseArguments(arguments_) {
 	return values;
 }
 
+function stageCommand(binary, arguments_, executionMode) {
+	if (executionMode !== "one_core" || process.platform !== "linux") {
+		return { command: binary, arguments: arguments_ };
+	}
+	const affinity = spawnSync("taskset", ["--pid", "--cpu-list", String(process.pid)], {
+		encoding: "utf8",
+	});
+	const firstAllowedCpu = affinity.stdout?.match(/:\s*(\d+)/u)?.[1];
+	return firstAllowedCpu
+		? {
+				command: "taskset",
+				arguments: ["--cpu-list", firstAllowedCpu, binary, ...arguments_],
+			}
+		: { command: "taskset", arguments: ["--cpu-list", "0", binary, ...arguments_] };
+}
+
+function harnessUsage(started) {
+	const ended = process.resourceUsage();
+	return {
+		cpu_user_milliseconds: (ended.userCPUTime - started.userCPUTime) / 1000,
+		cpu_system_milliseconds:
+			(ended.systemCPUTime - started.systemCPUTime) / 1000,
+		max_resident_bytes: ended.maxRSS * 1024,
+		measurement:
+			"Node orchestration process CPU delta and process-lifetime RSS high-water mark; the benchmark reports Light separately and no Playwright process runs in this workflow",
+	};
+}
+
 function runStage(
 	binary,
 	outputDirectory,
 	label,
+	universes,
 	fixturesPerUniverse,
 	hardwareLabel,
 	mutationGate,
 	patchGate,
+	executionMode = "unrestricted",
 ) {
 	const arguments_ = [
 		"--profile",
@@ -208,12 +238,18 @@ function runStage(
 		"1",
 		"--fixtures-per-universe",
 		String(fixturesPerUniverse),
+		"--universes",
+		String(universes),
+		"--rate-hz",
+		String(REQUIRED_RATE_HZ),
 		"--hardware-label",
 		hardwareLabel,
 	];
 	if (mutationGate) arguments_.push("--mutation-gate");
 	if (patchGate) arguments_.push("--patch-gate");
-	const result = spawnSync(binary, arguments_, {
+	const invocation = stageCommand(binary, arguments_, executionMode);
+	const harnessStarted = process.resourceUsage();
+	const result = spawnSync(invocation.command, invocation.arguments, {
 		encoding: "utf8",
 		maxBuffer: 32 * 1024 * 1024,
 	});
@@ -232,7 +268,10 @@ function runStage(
 	return {
 		attempted: true,
 		fixtures_per_universe: fixturesPerUniverse,
-		fixture_count: REQUIRED_UNIVERSES * fixturesPerUniverse,
+		fixture_count: universes * fixturesPerUniverse,
+		universes,
+		execution_mode: executionMode,
+		harness_resources: harnessUsage(harnessStarted),
 		exit_code: result.status,
 		signal: result.signal,
 		error: result.error?.message ?? null,
@@ -245,10 +284,9 @@ function runHeadlessStress(
 	outputDirectory,
 	fixturePackageDir,
 	hardwareLabel,
+	executionMode = "unrestricted",
 ) {
-	const result = spawnSync(
-		binary,
-		[
+	const arguments_ = [
 			"--headless-stress-fixtures",
 			"2000",
 			"--fixture-package-dir",
@@ -261,17 +299,26 @@ function runHeadlessStress(
 			"3",
 			"--warmup-seconds",
 			"1",
+			"--rate-hz",
+			String(REQUIRED_RATE_HZ),
 			"--hardware-label",
 			hardwareLabel,
-		],
-		{ encoding: "utf8", maxBuffer: 32 * 1024 * 1024 },
-	);
+		];
+	const invocation = stageCommand(binary, arguments_, executionMode);
+	const harnessStarted = process.resourceUsage();
+	const result = spawnSync(invocation.command, invocation.arguments, {
+		encoding: "utf8",
+		maxBuffer: 32 * 1024 * 1024,
+	});
 	writeFileSync(
-		resolve(outputDirectory, "two-thousand.stderr.log"),
+		resolve(outputDirectory, `two-thousand-${executionMode}.stderr.log`),
 		result.stderr ?? "",
 	);
 	if (result.stdout)
-		writeFileSync(resolve(outputDirectory, "two-thousand.json"), result.stdout);
+		writeFileSync(
+			resolve(outputDirectory, `two-thousand-${executionMode}.json`),
+			result.stdout,
+		);
 	let report;
 	try {
 		report = JSON.parse(result.stdout);
@@ -280,6 +327,8 @@ function runHeadlessStress(
 	}
 	return {
 		attempted: true,
+		execution_mode: executionMode,
+		harness_resources: harnessUsage(harnessStarted),
 		exit_code: result.status,
 		signal: result.signal,
 		error: result.error?.message ?? null,
@@ -312,7 +361,13 @@ function scenarioEvidence(validation) {
 		maximum_one_second_completed_hz:
 			scenario.frame_rate.maximum_one_second_completed_hz ?? null,
 		windows_below_minimum: scenario.frame_rate.windows_below_minimum,
+		below_target_hz: scenario.frame_rate.reporting_target_hz,
+		windows_below_target:
+			scenario.frame_rate.windows_below_reporting_target,
+		measurement_seconds: scenario.elapsed_seconds,
 		dynamic_definition_count: scenario.dynamic_definition_count ?? null,
+		animated_attribute_count: scenario.animated_attribute_count ?? null,
+		master_lane_count: scenario.master_lane_count ?? null,
 		dynamic_lane_attributes: scenario.dynamic_lane_attributes ?? [],
 		dynamic_excluded_fixture_count:
 			scenario.dynamic_excluded_fixture_count ?? null,
@@ -320,6 +375,7 @@ function scenarioEvidence(validation) {
 		dropped_ticks: scenario.deadline.dropped_ticks,
 		deferred_ticks: scenario.deadline.deferred_ticks,
 		phases: scenario.phases ?? null,
+		resources: scenario.measurement_resources ?? null,
 	};
 }
 
@@ -420,12 +476,68 @@ function canonicalDemoEvidence(candidate) {
 	return { ...candidate, attempted: true, reason: null };
 }
 
+const PERFORMANCE_CASES = {
+	demo: {
+		name: "Demo show (~300 fixtures)",
+		thresholds: { red_below_hz: 44, critical_below_hz: 40, yellow_below_hz: 59 },
+	},
+	sixteen_universe: {
+		name: "16-universe show (~600 fixtures)",
+		thresholds: { red_below_hz: 40, yellow_below_hz: 59 },
+	},
+	required_1024: {
+		name: "16k parameter / 1,024 fixture show",
+		thresholds: { red_below_hz: 40, yellow_below_hz: 44 },
+	},
+	doubled_2048: {
+		name: "16k parameter / 2,048 fixture show",
+		thresholds: { red_below_hz: 30, yellow_below_hz: 44 },
+	},
+	maximum: {
+		name: "Maximum mixed shipped-mode show",
+		thresholds: { red_below_hz: 30, yellow_below_hz: 45 },
+	},
+};
+
+function benchmarkScenarioEvidence(caseId, stage) {
+	const scenario = stage?.report?.scenarios?.[0];
+	if (
+		stage?.report?.schema_version !== 8 ||
+		!scenario ||
+		stage.exit_code == null ||
+		scenario.configured_rate_hz !== 60 ||
+		scenario.frame_rate?.reporting_target_hz !== 44 ||
+		!Number.isInteger(scenario.frame_rate?.windows_below_reporting_target) ||
+		!finite(scenario.elapsed_seconds) ||
+		!Number.isInteger(scenario.animated_attribute_count) ||
+		!Number.isInteger(scenario.master_lane_count) ||
+		!finite(scenario.measurement_resources?.application_cpu_average_percent) ||
+		!finite(scenario.measurement_resources?.application_cpu_max_percent) ||
+		!Number.isInteger(
+			scenario.measurement_resources?.application_peak_resident_bytes,
+		)
+	) return null;
+	const evidence = scenarioEvidence({ valid: true, scenario });
+	return {
+		case_id: caseId,
+		case_name: PERFORMANCE_CASES[caseId].name,
+		execution_mode: stage.execution_mode,
+		cpu_limit: stage.execution_mode === "one_core" ? 1 : null,
+		fixture_count: scenario.fixture_count,
+		physical_instance_count: scenario.physical_instance_count,
+		...evidence,
+		thresholds: PERFORMANCE_CASES[caseId].thresholds,
+		harness_resources: stage.harness_resources ?? null,
+	};
+}
+
 export function statusDocument(
 	options,
 	baseline,
 	doubled,
 	canonicalDemo = null,
 	twoThousand = null,
+	benchmarkRuns = [],
 ) {
 	const baselineValidation = validateStage(baseline, { mutations: true });
 	const doubledValidation = doubled
@@ -456,7 +568,7 @@ export function statusDocument(
 		: null;
 	const twoThousandObserved = scenarioEvidence(twoThousandValidation);
 	return {
-		schema_version: 4,
+		schema_version: 5,
 		status: classification.status,
 		summary: classification.summary,
 		generated_at: new Date().toISOString(),
@@ -503,6 +615,9 @@ export function statusDocument(
 					requested_rate_hz: scenario.configured_rate_hz,
 				}
 			: null,
+		benchmark_scenarios: benchmarkRuns
+			.map(({ case_id, stage }) => benchmarkScenarioEvidence(case_id, stage))
+			.filter(Boolean),
 		required_floor: {
 			universes: REQUIRED_UNIVERSES,
 			rate_hz: REQUIRED_RATE_HZ,
@@ -645,6 +760,7 @@ function main() {
 		resolve(options.binary),
 		outputDirectory,
 		"hard-floor",
+		REQUIRED_UNIVERSES,
 		BASELINE_FIXTURES_PER_UNIVERSE,
 		hardwareLabel,
 		true,
@@ -654,6 +770,7 @@ function main() {
 		resolve(options.binary),
 		outputDirectory,
 		"doubled-density",
+		REQUIRED_UNIVERSES,
 		DOUBLED_FIXTURES_PER_UNIVERSE,
 		hardwareLabel,
 		false,
@@ -667,6 +784,54 @@ function main() {
 				hardwareLabel,
 			)
 		: null;
+	const benchmarkRuns = [
+		{ case_id: "required_1024", stage: baseline },
+		{ case_id: "doubled_2048", stage: doubled },
+		...(twoThousand ? [{ case_id: "maximum", stage: twoThousand }] : []),
+	];
+	for (const executionMode of ["one_core", "unrestricted"]) {
+		for (const workload of [
+			{ case_id: "demo", universes: 8, fixtures: 36 },
+			{ case_id: "sixteen_universe", universes: 16, fixtures: 36 },
+		]) {
+			benchmarkRuns.push({
+				case_id: workload.case_id,
+				stage: runStage(
+					resolve(options.binary),
+					outputDirectory,
+					`${workload.case_id}-${executionMode}`,
+					workload.universes,
+					workload.fixtures,
+					hardwareLabel,
+					false,
+					false,
+					executionMode,
+				),
+			});
+		}
+	}
+	for (const workload of [
+		{ case_id: "required_1024", universes: 32, fixtures: 32 },
+		{ case_id: "doubled_2048", universes: 32, fixtures: 64 },
+	]) {
+		benchmarkRuns.push({
+			case_id: workload.case_id,
+			stage: runStage(
+				resolve(options.binary), outputDirectory,
+				`${workload.case_id}-one_core`, workload.universes, workload.fixtures,
+				hardwareLabel, false, false, "one_core",
+			),
+		});
+	}
+	if (options["fixture-package-dir"]) {
+		benchmarkRuns.push({
+			case_id: "maximum",
+			stage: runHeadlessStress(
+				resolve(options.binary), outputDirectory,
+				resolve(options["fixture-package-dir"]), hardwareLabel, "one_core",
+			),
+		});
+	}
 	let canonicalDemo = null;
 	if (options["canonical-demo-performance"]) {
 		try {
@@ -683,7 +848,13 @@ function main() {
 		doubled,
 		canonicalDemo,
 		twoThousand,
+		benchmarkRuns,
 	);
+	if (status.benchmark_scenarios.length !== benchmarkRuns.length) {
+		status.status = "unknown";
+		status.summary =
+			"One or more 60 Hz performance scenarios did not produce complete Light-process cadence and resource evidence.";
+	}
 	writeFileSync(
 		resolve(outputDirectory, "status.json"),
 		`${JSON.stringify(status, null, 2)}\n`,

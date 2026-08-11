@@ -37,7 +37,7 @@ function report({
 	deadlineMisses = 0,
 } = {}) {
 	return {
-		schema_version: 7,
+		schema_version: 8,
 		benchmark: "tosklight_render_to_protocol_encoding_pipeline",
 		reference: {
 			hardware_label: "<CI runner>",
@@ -59,16 +59,21 @@ function report({
 				fixture_count: 1024,
 				fixtures_per_universe: 32,
 				fixture_footprint: 16,
-				configured_rate_hz: 100,
+				configured_rate_hz: 60,
 				achieved_ticks_per_second: achieved,
+				elapsed_seconds: 3.04,
 				frame_rate: {
 					average_completed_hz: achieved,
 					minimum_one_second_completed_hz: minimum,
 					p95_one_second_completed_hz: achieved + 1,
 					maximum_one_second_completed_hz: achieved + 2,
 					windows_below_minimum: deadlineMisses,
+					reporting_target_hz: 44,
+					windows_below_reporting_target: Math.min(deadlineMisses, 3),
 				},
 				dynamic_definition_count: 4,
+				animated_attribute_count: 1024,
+				master_lane_count: 4,
 				dynamic_lane_attributes: ["intensity"],
 				dynamic_excluded_fixture_count: 0,
 				deadline: {
@@ -82,6 +87,11 @@ function report({
 					protocol_encoding: distribution(50, 75),
 					loopback_datagram_delivery: null,
 					benchmark_validation_overhead: distribution(10, 20),
+				},
+				measurement_resources: {
+					application_cpu_average_percent: 72,
+					application_cpu_max_percent: 91,
+					application_peak_resident_bytes: 512 * 1024 ** 2,
 				},
 			},
 		],
@@ -121,6 +131,8 @@ function stage(value, exitCode = 0) {
 		report: value,
 		fixtures_per_universe: scenario?.fixtures_per_universe,
 		fixture_count: scenario?.fixture_count,
+		execution_mode: "unrestricted",
+		harness_resources: { cpu_user_milliseconds: 2, max_resident_bytes: 10 },
 	};
 }
 
@@ -342,6 +354,22 @@ test("CLI accepts a parsed measured failure but rejects invalid JSON", () => {
 	assert.equal(
 		JSON.parse(readFileSync(resolve(output, "status.json"))).status,
 		"healthy",
+	);
+	const measuredStatus = JSON.parse(
+		readFileSync(resolve(output, "status.json")),
+	);
+	assert.equal(measuredStatus.benchmark_scenarios.length, 8);
+	assert.deepEqual(
+		new Set(measuredStatus.benchmark_scenarios.map((scenario) => scenario.case_id)),
+		new Set(["demo", "sixteen_universe", "required_1024", "doubled_2048"]),
+	);
+	assert.ok(
+		measuredStatus.benchmark_scenarios.every(
+			(scenario) =>
+				scenario.requested_rate_hz === 60 &&
+				scenario.below_target_hz === 44 &&
+				Number.isFinite(scenario.resources.application_cpu_average_percent),
+		),
 	);
 	assert.equal(
 		JSON.parse(readFileSync(resolve(output, "status.json"))).canonical_demo

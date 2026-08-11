@@ -67,6 +67,7 @@ pub struct BenchmarkScenario {
     pub workload_tier: &'static str,
     pub physical_instance_count: usize,
     pub dynamic_definition_count: usize,
+    pub animated_attribute_count: usize,
     pub dynamic_lane_attributes: &'static [&'static str],
     pub dynamic_excluded_fixture_count: usize,
     pub active_ui_surfaces: &'static [&'static str],
@@ -158,7 +159,7 @@ impl BenchmarkScenario {
                 scenario: "synthetic_equal_footprint",
                 entries: vec![FixtureInventoryEntry {
                     manufacturer: "ToskLight Benchmark".into(),
-                    name: format!("Fully packed {fixture_footprint}-slot fixture"),
+                    name: format!("Packed {fixture_footprint}-slot fixture"),
                     mode: "Synthetic".into(),
                     quantity: fixture_count,
                     footprint: fixture_footprint,
@@ -169,11 +170,12 @@ impl BenchmarkScenario {
                 total_slots: fixture_count * usize::from(fixture_footprint),
             },
             expected_patched_slots: (1..=config.universes)
-                .map(|universe| (universe, SLOTS_PER_UNIVERSE))
+                .map(|universe| (universe, config.fixtures_per_universe * fixture_footprint))
                 .collect(),
             workload_tier: "synthetic_release_floor",
             physical_instance_count: fixture_count,
             dynamic_definition_count: 4,
+            animated_attribute_count: fixture_count,
             dynamic_lane_attributes: &["intensity"],
             dynamic_excluded_fixture_count: 0,
             active_ui_surfaces: &[],
@@ -245,7 +247,7 @@ fn packed_definition(footprint: u16) -> Result<light_fixture::FixtureDefinition,
     profile.id = FixtureId(fixed_uuid(0x40, 1));
     profile.revision = 1;
     profile.manufacturer = "ToskLight Benchmark".into();
-    profile.name = format!("Fully packed {footprint}-slot fixture");
+    profile.name = format!("Packed {footprint}-slot fixture");
     profile.short_name = format!("Packed{footprint}");
     let mode_id = {
         let mode = &mut profile.modes[0];

@@ -57,6 +57,8 @@ pub struct ScenarioReport {
     pub fixture_footprint: Option<u16>,
     pub fixture_inventory: crate::light_benchmark::scenario::ScenarioFixtureInventory,
     pub dynamic_definition_count: usize,
+    pub animated_attribute_count: usize,
+    pub master_lane_count: usize,
     pub dynamic_lane_attributes: &'static [&'static str],
     pub dynamic_excluded_fixture_count: usize,
     pub configured_rate_hz: u16,
@@ -66,6 +68,7 @@ pub struct ScenarioReport {
     pub completed_ticks: u64,
     pub achieved_ticks_per_second: f64,
     pub elapsed_seconds: f64,
+    pub measurement_resources: MeasurementResourceReport,
     pub met_configured_rate: bool,
     pub frame_rate: FrameRateReport,
     pub deadline: DeadlineReport,
@@ -86,8 +89,21 @@ pub struct FrameRateReport {
     pub maximum_one_second_completed_hz: f64,
     pub one_second_windows: u64,
     pub windows_below_minimum: u64,
+    pub reporting_target_hz: u16,
+    pub windows_below_reporting_target: u64,
     pub gate_met: bool,
     pub definition: &'static str,
+}
+
+#[derive(Debug, Serialize)]
+pub struct MeasurementResourceReport {
+    pub application_cpu_average_percent: Option<f64>,
+    pub application_cpu_max_percent: Option<f64>,
+    pub application_peak_resident_bytes: Option<u64>,
+    pub samples: u64,
+    pub sample_interval_milliseconds: u64,
+    pub measurement: &'static str,
+    pub unavailable_reason: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -194,8 +210,8 @@ pub fn coverage(transport: Transport) -> MeasurementCoverage {
         },
         socket_delivery,
         cpu_usage: CoverageItem {
-            status: "not_measured",
-            note: "no portable process-CPU sampler is installed; latency and deadline results must not be read as CPU utilization",
+            status: "measured_on_linux",
+            note: "the Light benchmark process is sampled during each timed window; orchestration and browser processes are excluded",
         },
         allocation_rate: CoverageItem {
             status: "not_measured",

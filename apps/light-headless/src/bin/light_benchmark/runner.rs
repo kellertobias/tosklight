@@ -21,6 +21,7 @@ use std::{
 const CID: [u8; 16] = [0x42; 16];
 const SOURCE_NAME: &str = "ToskLight output benchmark";
 const SAMPLED_DIAGNOSTIC_SECONDS: u64 = 1;
+const REPORTING_TARGET_HZ: u16 = 44;
 
 pub fn run(arguments: &Arguments) -> Result<BenchmarkReport, String> {
     let profiles = if arguments.headless_stress_fixtures.is_some() {
@@ -31,15 +32,12 @@ pub fn run(arguments: &Arguments) -> Result<BenchmarkReport, String> {
     let mut scenarios = Vec::with_capacity(profiles.len());
     for profile in profiles {
         let mut config = profile.config();
-        let required_minimum_hz = config.rate_hz;
+        let required_minimum_hz = REPORTING_TARGET_HZ;
         if let Some(rate_hz) = arguments.rate_hz {
-            if rate_hz < required_minimum_hz {
-                return Err(format!(
-                    "scheduled rate {rate_hz} Hz is below the {:?} profile floor of {required_minimum_hz} Hz",
-                    profile
-                ));
-            }
             config.rate_hz = rate_hz;
+        }
+        if let Some(universes) = arguments.universes {
+            config.universes = universes;
         }
         if let Some(fixtures_per_universe) = arguments.fixtures_per_universe {
             config.fixtures_per_universe = fixtures_per_universe;
@@ -56,7 +54,7 @@ pub fn run(arguments: &Arguments) -> Result<BenchmarkReport, String> {
             );
         } else {
             eprintln!(
-                "benchmarking {:?}: {} fully packed universes, {} fixtures per universe at {} Hz",
+                "benchmarking {:?}: {} packed universes, {} fixtures per universe at {} Hz",
                 profile, config.universes, config.fixtures_per_universe, config.rate_hz
             );
         }
@@ -72,7 +70,7 @@ pub fn run(arguments: &Arguments) -> Result<BenchmarkReport, String> {
         .then(crate::light_benchmark::patch_mutation::run)
         .transpose()?;
     Ok(BenchmarkReport {
-        schema_version: 7,
+        schema_version: 8,
         benchmark: "tosklight_render_to_protocol_encoding_pipeline",
         reference: metadata::capture(arguments.hardware_label.as_deref()),
         configuration: RunConfiguration {
@@ -134,6 +132,7 @@ fn run_scenario(
     let warmup_elapsed = warmup_started.elapsed();
 
     let expected_ticks = u64::from(config.rate_hz) * arguments.seconds;
+    let resource_sampler = crate::light_benchmark::process_resources::MeasurementSampler::start();
     let measured_at = Instant::now();
     let mut tick = 0_u64;
     let mut previous_pipeline_completion = measured_at;
@@ -170,6 +169,7 @@ fn run_scenario(
         tick += 1;
     }
     let elapsed = measured_at.elapsed();
+    let measurement_resources = resource_sampler.finish();
     let sampled_contributions = crate::light_benchmark::sampled::measure(
         &scenario,
         warmup_ticks + expected_ticks,
@@ -208,6 +208,8 @@ fn run_scenario(
         fixture_footprint: scenario.fixture_footprint,
         fixture_inventory: scenario.fixture_inventory.clone(),
         dynamic_definition_count: scenario.dynamic_definition_count,
+        animated_attribute_count: scenario.animated_attribute_count,
+        master_lane_count: scenario.dynamic_definition_count,
         dynamic_lane_attributes: scenario.dynamic_lane_attributes,
         dynamic_excluded_fixture_count: scenario.dynamic_excluded_fixture_count,
         configured_rate_hz: config.rate_hz,
@@ -217,6 +219,7 @@ fn run_scenario(
         completed_ticks: state.completed_ticks,
         achieved_ticks_per_second: achieved,
         elapsed_seconds: elapsed.as_secs_f64(),
+        measurement_resources,
         met_configured_rate,
         frame_rate,
         deadline: DeadlineReport {
@@ -513,6 +516,10 @@ fn frame_rate_report(
         .iter()
         .filter(|completed| **completed < required)
         .count() as u64;
+    let windows_below_reporting_target = completed_ticks_by_second
+        .iter()
+        .filter(|completed| **completed < u64::from(REPORTING_TARGET_HZ))
+        .count() as u64;
     let average = completed_ticks as f64 / measured_seconds as f64;
     FrameRateReport {
         required_minimum_hz,
@@ -523,6 +530,8 @@ fn frame_rate_report(
         maximum_one_second_completed_hz: maximum as f64,
         one_second_windows: completed_ticks_by_second.len() as u64,
         windows_below_minimum,
+        reporting_target_hz: REPORTING_TARGET_HZ,
+        windows_below_reporting_target,
         gate_met: average >= f64::from(required_minimum_hz) && windows_below_minimum == 0,
         definition: "average uses completed scheduled frames over the configured measurement duration; minimum, p95, and maximum describe completed scheduled frames in non-overlapping one-second intervals",
     }

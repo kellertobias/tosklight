@@ -236,6 +236,7 @@ pub fn build(
         workload_tier: "sustained_release_floor",
         physical_instance_count: fixture_ids.len(),
         dynamic_definition_count: 4,
+        animated_attribute_count: fixture_ids.len(),
         dynamic_lane_attributes: &["intensity"],
         dynamic_excluded_fixture_count: 0,
         active_ui_surfaces: &[],

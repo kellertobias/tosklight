@@ -42,6 +42,8 @@ fn frame_rate_report_requires_every_measured_second_to_meet_the_floor() {
     assert_eq!(passing.p95_one_second_completed_hz, 100.0);
     assert_eq!(passing.maximum_one_second_completed_hz, 100.0);
     assert_eq!(passing.windows_below_minimum, 0);
+    assert_eq!(passing.reporting_target_hz, 44);
+    assert_eq!(passing.windows_below_reporting_target, 0);
     assert!(passing.gate_met);
 
     let dropped = frame_rate_report(&[100, 99], 2, 100, 199, Duration::from_secs_f64(1.991));
@@ -50,6 +52,7 @@ fn frame_rate_report_requires_every_measured_second_to_meet_the_floor() {
     assert_eq!(dropped.p95_one_second_completed_hz, 100.0);
     assert_eq!(dropped.maximum_one_second_completed_hz, 100.0);
     assert_eq!(dropped.windows_below_minimum, 1);
+    assert_eq!(dropped.windows_below_reporting_target, 0);
     assert!(!dropped.gate_met);
 }
 

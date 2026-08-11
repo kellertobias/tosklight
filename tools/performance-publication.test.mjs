@@ -192,6 +192,58 @@ function measuredStatus(status = "healthy") {
 				p95_microseconds: 1200,
 			},
 		},
+		benchmark_scenarios: [
+			{
+				case_name: "Maximum mixed shipped-mode show",
+				execution_mode: "unrestricted",
+				fixture_count: 2_000,
+				parameter_count: 37_720,
+				universes: 74,
+				requested_rate_hz: 60,
+				minimum_one_second_completed_hz: 42,
+				average_completed_hz: 51,
+				p95_one_second_completed_hz: 44,
+				maximum_one_second_completed_hz: 58,
+				below_target_hz: 44,
+				windows_below_target: 1,
+				measurement_seconds: 3.04,
+				animated_attribute_count: 6_480,
+				master_lane_count: 20,
+				thresholds: { red_below_hz: 30, yellow_below_hz: 45 },
+				resources: {
+					application_cpu_average_percent: 83,
+					application_cpu_max_percent: 97,
+					application_peak_resident_bytes: 700 * 1024 ** 2,
+				},
+			},
+			...(["unrestricted", "one_core"].map((execution_mode) => ({
+				case_name: "Demo show (~300 fixtures)",
+				execution_mode,
+				fixture_count: 295,
+				parameter_count: 4_096,
+				universes: 8,
+				requested_rate_hz: 60,
+				minimum_one_second_completed_hz: 58,
+				average_completed_hz: 59.5,
+				p95_one_second_completed_hz: 59,
+				maximum_one_second_completed_hz: 60,
+				below_target_hz: 44,
+				windows_below_target: 0,
+				measurement_seconds: 3.01,
+				animated_attribute_count: 295,
+				master_lane_count: 5,
+				thresholds: {
+					red_below_hz: 44,
+					critical_below_hz: 40,
+					yellow_below_hz: 59,
+				},
+				resources: {
+					application_cpu_average_percent: 25,
+					application_cpu_max_percent: 31,
+					application_peak_resident_bytes: 256 * 1024 ** 2,
+				},
+			}))),
+		],
 	};
 }
 
@@ -238,24 +290,26 @@ test("compact landing summary includes only measured runs and explains row color
 		summary,
 		/<th>Test set<\/th><th>Load<\/th><th>Statistics<\/th>/u,
 	);
-	assert.match(summary, /<strong>2,000 fixtures<\/strong>/u);
+	assert.match(summary, /Maximum mixed shipped-mode show/u);
 	assert.match(summary, /37,720 parameters · 74 DMX universes/u);
-	assert.match(summary, /<strong>20 dyn\.<\/strong>/u);
-	assert.match(summary, /6 Dynamic lane attributes/u);
-	assert.match(summary, /<strong>62 Hz p95<\/strong>/u);
-	assert.match(summary, /57 \/ 60 \/ 64 Hz · min \/ avg \/ max/u);
+	assert.match(summary, /<strong>6,480 dyn\. attr\.<\/strong>/u);
+	assert.match(summary, /20 master lanes/u);
+	assert.match(summary, /<strong>44 Hz p95<\/strong>/u);
 	assert.match(
 		summary,
-		/<strong>1 s<\/strong><small>below 100 Hz output target/u,
+		/<strong>1 \/ 3\.04 s<\/strong><small>one-second windows below 44 Hz \/ total test time/u,
 	);
 	assert.match(
 		summary,
-		/Not measured<\/strong><small>application CPU unavailable/u,
+		/97% max<\/strong><small>83% avg Light CPU · 0\.68 GiB max RAM/u,
 	);
 	assert.match(summary, /performance-row-warning/u);
-	assert.match(summary, /Orange<\/span>: warning, minimum 40–&lt;60 Hz/u);
+	assert.match(summary, /Yellow<\/span>: warning/u);
+	assert.ok(summary.indexOf("Demo show") < summary.indexOf("Maximum mixed"));
+	assert.match(summary, /locked to 1 core/u);
+	assert.match(summary, /unrestricted/u);
 	assert.match(summary, /Detailed tests, run information, and raw report/u);
-	assert.doesNotMatch(summary, /295 fixtures|100 fixtures/u);
+	assert.doesNotMatch(summary, /100 fixtures/u);
 });
 
 test("warning is a valid measured public state", () => {
@@ -396,9 +450,9 @@ test("landing-page assembly writes the same normalized object used by the HTML",
 		assert.match(detailPage, /report-performance\.zip/u);
 		const landingPage = readFileSync(target, "utf8");
 		assert.match(landingPage, /class="performance-compact"/u);
-		assert.match(landingPage, /2,000 fixtures/u);
-		assert.match(landingPage, /20 dyn\./u);
-		assert.match(landingPage, /Orange<\/span>: warning/u);
+		assert.match(landingPage, /Maximum mixed shipped-mode show/u);
+		assert.match(landingPage, /6,480 dyn\. attr\./u);
+		assert.match(landingPage, /Yellow<\/span>: warning/u);
 	} finally {
 		rmSync(directory, { recursive: true, force: true });
 	}
