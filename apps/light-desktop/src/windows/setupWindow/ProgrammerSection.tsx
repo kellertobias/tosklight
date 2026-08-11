@@ -332,7 +332,10 @@ export function DefaultsSection({
 }) {
 	return (
 		<PreferencesPage title="Defaults" controller={controller}>
-			<div hidden={controller.defaultsTab !== "record-update"}>
+			<div
+				className="defaults-record-update"
+				hidden={controller.defaultsTab !== "record-update"}
+			>
 				<article>
 					<header>
 						<b>Record defaults</b>

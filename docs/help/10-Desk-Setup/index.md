@@ -14,7 +14,7 @@ Work through these pages in order:
 4. [Operators, Sessions, and Recovery](04-users-sessions-and-recovery.md)
 5. [Media Server](05-media-server.md)
 
-**Preferences** contains the focused **Defaults**, **Attributes & encoders**, **Highlight**, and **Others** pages. **Defaults** selects **Record & Update**, **Playback**, or **Pools** from the window title. Switching these tabs keeps unfinished field edits in place; **Save changes** retains the existing ownership of each setting. Operator switching is available from **Show > Change User**, not from Desk Setup.
+**Preferences** contains the focused **Defaults**, **Attributes & encoders**, **Highlight**, and **Others** pages. **Defaults** selects **Record & Update**, **Playback**, or **Pool colors** from the window title. Desk Setup saves each change immediately through the service that owns that setting; there is no separate Save changes step. Operator switching is available from **Show > Change User**, not from Desk Setup.
 
 **Attributes & encoders** selects its section from the window title: **Encoder groups**, **Attribute
 activation groups**, and **Attributes**.

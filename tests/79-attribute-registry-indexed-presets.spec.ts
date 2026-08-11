@@ -55,19 +55,18 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
 		await registry
 			.getByLabel("New custom attribute")
 			.fill("Test aperture mode");
-		await registry
-			.getByRole("button", { name: "Create custom attribute" })
-			.click();
-		await expect(
-			registry.getByText("Test aperture mode").first(),
-		).toBeVisible();
 		const updateCompleted = page.waitForResponse(
 			(response) =>
 				response.url().endsWith("/api/v2/attribute-configuration/update") &&
 				response.request().method() === "POST" &&
 				response.ok(),
 		);
-		await page.getByRole("button", { name: "Save changes" }).click();
+		await registry
+			.getByRole("button", { name: "Create custom attribute" })
+			.click();
+		await expect(
+			registry.getByText("Test aperture mode").first(),
+		).toBeVisible();
 		const updateResponse = await updateCompleted;
 		const updateBody = await updateResponse.text();
 		expect(

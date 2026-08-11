@@ -204,9 +204,6 @@ const preload005UiSupplement = async ({
 			if ((await control.isChecked()) !== desired)
 				await control.locator("..").locator(".ui-switch-track").click();
 		}
-		await page
-			.getByRole("button", { name: "Save changes", exact: true })
-			.click();
 		await expect
 			.poll(async () => {
 				const current = await configuration(api);

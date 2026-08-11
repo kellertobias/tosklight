@@ -58,7 +58,6 @@ describe("Desk Setup focused title tabs", () => {
 			section: "network",
 			draft: {} as SetupWindowController["draft"],
 			restartRequired: false,
-			save: vi.fn(),
 			networkTab: "control-server",
 			setNetworkTab: vi.fn(),
 			defaultsTab: "record-update",
@@ -84,8 +83,11 @@ describe("Desk Setup focused title tabs", () => {
 
 		const defaults = controller({ section: "preferences-defaults" });
 		rerender(<SetupHeader controller={defaults} />);
-		for (const label of ["Record & Update", "Playback", "Pools"])
+		for (const label of ["Record & Update", "Playback", "Pool colors"])
 			expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
+		expect(
+			screen.queryByRole("button", { name: "Save changes" }),
+		).not.toBeInTheDocument();
 		fireEvent.click(screen.getByRole("button", { name: "Playback" }));
 		expect(defaults.setDefaultsTab).toHaveBeenCalledWith("playback");
 	});

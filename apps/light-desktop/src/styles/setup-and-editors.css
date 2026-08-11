@@ -201,6 +201,10 @@
 	max-width: 980px;
 	gap: 12px;
 }
+.defaults-record-update {
+	display: grid;
+	gap: 8px;
+}
 /* The attribute tabs render several sibling cards, so the panel itself must not become a box. */
 .attribute-tabpanel {
 	display: contents;

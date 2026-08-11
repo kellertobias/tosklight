@@ -65,7 +65,7 @@ const DEFAULTS_SETTINGS_TABS: ReadonlyArray<{
 }> = [
 	{ id: "record-update", label: "Record & Update" },
 	{ id: "playback", label: "Playback" },
-	{ id: "pools", label: "Pools" },
+	{ id: "pools", label: "Pool colors" },
 ];
 
 export function setupSectionLabel(section: SetupSection) {
@@ -137,17 +137,6 @@ export function SetupHeader({
 								})),
 							]
 						: []),
-					[
-						{
-							id: "save",
-							label: "Save changes",
-							disabled:
-								!controller.draft ||
-								(controller.section === "preferences-defaults" &&
-									!controller.programmerSettingsLoaded),
-							onClick: () => void controller.save(),
-						},
-					],
 				];
 	return (
 		<WindowHeader

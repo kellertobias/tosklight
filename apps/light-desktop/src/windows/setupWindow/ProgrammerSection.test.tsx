@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DeskConfiguration } from "../../api/types";
 import type { SetupWindowController } from "./controller";
 import {
+	DefaultsSection,
 	HighlightLookSettings,
 	OthersSection,
 	PatchHighlightSettings,
@@ -16,6 +17,40 @@ import {
 } from "./ProgrammerSection";
 
 afterEach(cleanup);
+
+describe("Desk Setup Defaults layout", () => {
+	it("keeps Record and Update defaults in a dedicated spaced group", () => {
+		const { container } = render(
+			<DefaultsSection
+				controller={
+					{
+						defaultsTab: "record-update",
+						programmerSettingsError: null,
+						recordSettings: {
+							mode: "merge",
+							cueOnly: false,
+							mergeActiveCue: false,
+						},
+						setRecordSettings: vi.fn(),
+						updateSettings: {
+							cue_mode: "add_to_current_cue",
+							preset_mode: "update_existing",
+							group_mode: "update_existing",
+							show_update_modal_on_touch: false,
+						},
+						setUpdateSettings: vi.fn(),
+					} as unknown as SetupWindowController
+				}
+			/>,
+		);
+
+		const group = container.querySelector(".defaults-record-update");
+		expect(group).not.toBeNull();
+		expect(group?.querySelectorAll(":scope > article")).toHaveLength(2);
+		expect(screen.getByText("Record defaults")).toBeInTheDocument();
+		expect(screen.getByText("Update defaults")).toBeInTheDocument();
+	});
+});
 
 function renderSettings(
 	highlight_look: NonNullable<DeskConfiguration["highlight_look"]>,

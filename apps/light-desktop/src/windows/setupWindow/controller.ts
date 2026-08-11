@@ -64,6 +64,8 @@ function useAttributeConfigurationSetup(
 		useState<AttributeConfigurationSnapshot | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const saved = useRef<AttributeConfigurationSnapshot | null>(null);
+	const current = useRef<AttributeConfigurationSnapshot | null>(null);
+	const saveQueue = useRef(Promise.resolve());
 	useEffect(() => {
 		if (section !== "preferences-attributes") return;
 		let active = true;
@@ -73,6 +75,7 @@ function useAttributeConfigurationSetup(
 			.then((snapshot) => {
 				if (!active) return;
 				saved.current = snapshot;
+				current.current = snapshot;
 				setConfiguration(snapshot);
 				setError(snapshot.validation_error);
 			})
@@ -86,7 +89,35 @@ function useAttributeConfigurationSetup(
 			active = false;
 		};
 	}, [actions, section]);
-	return { configuration, setConfiguration, error, setError, saved };
+	const editConfiguration = useCallback(
+		(nextConfiguration: AttributeConfiguration) => {
+			const snapshot = current.current;
+			if (!snapshot) return;
+			const next = { ...snapshot, configuration: nextConfiguration };
+			current.current = next;
+			setConfiguration(next);
+			saveQueue.current = saveQueue.current.then(async () => {
+				const savedSnapshot = saved.current;
+				const latest = current.current;
+				if (!savedSnapshot || !latest) return;
+				const result = await saveAttributeConfiguration(
+					actions,
+					savedSnapshot,
+					latest,
+				);
+				if (!result) {
+					setError("Attribute configuration was not saved.");
+					return;
+				}
+				saved.current = result;
+				current.current = { ...result, configuration: latest.configuration };
+				setConfiguration(current.current);
+				setError(result.validation_error);
+			});
+		},
+		[actions],
+	);
+	return { configuration, editConfiguration, error };
 }
 
 export function useSetupWindowController() {
@@ -105,14 +136,11 @@ export function useSetupWindowController() {
 		setUpdateSettings,
 		programmerSettingsLoaded,
 		programmerSettingsError,
-		setProgrammerSettingsError,
 	} = useProgrammerSetupSettings(programmingUpdate, section);
 	const {
 		configuration: attributeConfiguration,
-		setConfiguration: setAttributeConfiguration,
+		editConfiguration: editAttributeConfiguration,
 		error: attributeConfigurationError,
-		setError: setAttributeConfigurationError,
-		saved: savedAttributeConfiguration,
 	} = useAttributeConfigurationSetup(attributeActions, section);
 	const [restartRequired, setRestartRequired] = useState(false);
 	const [serverUrl, setServerUrl] = useState(configuredServerUrl());
@@ -127,6 +155,8 @@ export function useSetupWindowController() {
 	const [defaultsTab, setDefaultsTab] =
 		useState<DefaultsSettingsTab>("record-update");
 	const screenUndo = useRef<(() => void) | null>(null);
+	const deskSaveQueue = useRef(Promise.resolve());
+	const lastQueuedConfiguration = useRef<string | null>(null);
 
 	const editDraft = (next: DeskConfiguration) => {
 		if (draft)
@@ -135,50 +165,23 @@ export function useSetupWindowController() {
 					dirtyFields.current.add(field);
 		setDraft(next);
 	};
-	const save = async () => {
-		if (!draft) return;
-		const deskFields = configurationFieldsForSection(section).filter((field) =>
+	useEffect(() => {
+		if (!configuration || !configurationActions || !draft) return;
+		const fields = CONFIGURATION_FIELDS.filter((field) =>
 			dirtyFields.current.has(field),
 		);
-		const deskConfiguration = configurationForSave(
-			configuration,
-			draft,
-			deskFields,
-		);
-		pendingSave.current = deskConfiguration
-			? { fields: deskFields, configuration: deskConfiguration }
-			: null;
-		const [requiresRestart, updateSaved, attributesSaved] = await Promise.all([
-			deskConfiguration
-				? (configurationActions?.saveConfiguration(deskConfiguration) ??
-					Promise.resolve(false))
-				: Promise.resolve(false),
-			section === "preferences-defaults" && programmerSettingsLoaded
-				? saveUpdateSettings(programmingUpdate, updateSettings)
-				: Promise.resolve(true),
-			section === "preferences-attributes"
-				? saveAttributeConfiguration(
-						attributeActions,
-						savedAttributeConfiguration.current,
-						attributeConfiguration,
-					)
-				: Promise.resolve(attributeConfiguration),
-		]);
-		if (section === "preferences-defaults") saveRecordSettings(recordSettings);
-		if (attributesSaved) {
-			savedAttributeConfiguration.current = attributesSaved;
-			setAttributeConfiguration(attributesSaved);
-		}
-		setRestartRequired(requiresRestart);
-		setProgrammerSettingsError(
-			updateSaved ? null : "Update defaults were not saved.",
-		);
-		setAttributeConfigurationError(
-			attributesSaved
-				? attributesSaved.validation_error
-				: "Attribute configuration was not saved.",
-		);
-	};
+		if (!fields.length) return;
+		const next = mergeConfigurationFields(configuration, draft, fields);
+		const fingerprint = JSON.stringify(next);
+		if (lastQueuedConfiguration.current === fingerprint) return;
+		lastQueuedConfiguration.current = fingerprint;
+		pendingSave.current = { fields, configuration: next };
+		deskSaveQueue.current = deskSaveQueue.current.then(async () => {
+			const requiresRestart =
+				await configurationActions.saveConfiguration(next);
+			setRestartRequired((current) => current || requiresRestart);
+		});
+	}, [configuration, configurationActions, draft, dirtyFields, pendingSave]);
 	const updateScreenUndoAvailability = useCallback(
 		(available: boolean) => setScreenCanUndo(available),
 		[],
@@ -195,17 +198,13 @@ export function useSetupWindowController() {
 		editDraft,
 		attributeConfiguration,
 		attributeConfigurationError,
-		editAttributeConfiguration: (configuration: AttributeConfiguration) =>
-			setAttributeConfiguration((current) =>
-				current ? { ...current, configuration } : current,
-			),
+		editAttributeConfiguration,
 		fixtureLibraryOpen,
 		programmerSettingsError,
 		programmerSettingsLoaded,
 		recordSettings,
 		restartRequired,
 		networkTab,
-		save,
 		screenCanUndo,
 		screenUndo,
 		section,
@@ -241,6 +240,7 @@ function useProgrammerSetupSettings(
 	const [programmerSettingsError, setProgrammerSettingsError] = useState<
 		string | null
 	>(null);
+	const updateSaveQueue = useRef(Promise.resolve());
 	useEffect(() => {
 		if (section !== "preferences-defaults" || loadedOnce.current) return;
 		loadedOnce.current = true;
@@ -268,14 +268,30 @@ function useProgrammerSetupSettings(
 			setProgrammerSettingsError("Update defaults are unavailable.");
 		}
 	}, [programmingUpdate, section]);
+	const editRecordSettings = useCallback((settings: RecordSettings) => {
+		setRecordSettings(settings);
+		saveRecordSettings(settings);
+	}, []);
+	const editUpdateSettings = useCallback(
+		(settings: UpdateSettings) => {
+			setUpdateSettings(settings);
+			if (!programmerSettingsLoaded) return;
+			updateSaveQueue.current = updateSaveQueue.current.then(async () => {
+				const saved = await saveUpdateSettings(programmingUpdate, settings);
+				setProgrammerSettingsError(
+					saved ? null : "Update defaults were not saved.",
+				);
+			});
+		},
+		[programmerSettingsLoaded, programmingUpdate],
+	);
 	return {
 		recordSettings,
-		setRecordSettings,
+		setRecordSettings: editRecordSettings,
 		updateSettings,
-		setUpdateSettings,
+		setUpdateSettings: editUpdateSettings,
 		programmerSettingsLoaded,
 		programmerSettingsError,
-		setProgrammerSettingsError,
 	};
 }
 

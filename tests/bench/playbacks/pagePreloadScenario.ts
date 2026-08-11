@@ -308,9 +308,6 @@ export class PreloadSettings {
 					control.locator("..").locator(".ui-switch-track"),
 				);
 		}
-		await this.desk.click(
-			this.page.getByRole("button", { name: "Save changes", exact: true }),
-		);
 		await expect
 			.poll(async () => {
 				const configuration = await this.configuration();
