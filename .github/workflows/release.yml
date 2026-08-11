@@ -812,6 +812,51 @@ jobs:
           cargo build --release --locked --target ${{ matrix.target }}
           --no-default-features -p light-headless --bin light-benchmark
 
+      - name: Build the standalone visualizer
+        if: matrix.viz
+        shell: bash
+        run: >-
+          cargo build --release --locked --target ${{ matrix.target }}
+          -p viz-renderer --bin viz-renderer
+
+      - name: Smoke-test the standalone visualizer
+        if: matrix.viz
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          suffix=""
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            suffix=".exe"
+          fi
+          binary=".artifacts/build/cargo/$TARGET/release/viz-renderer$suffix"
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            xvfb-run -a "$binary" --demo --verify
+          else
+            "$binary" --demo --verify
+          fi
+
+      - name: Stage the Desk server and Stage renderer sidecars
+        if: matrix.desktop
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          suffix=""
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            suffix=".exe"
+          fi
+          sidecars="$(npm run --silent artifact-path -- tmp)/desktop-sidecars"
+          mkdir -p "$sidecars"
+          cp ".artifacts/build/cargo/$TARGET/release/light-headless$suffix" \
+            "$sidecars/light-headless-$TARGET$suffix"
+          cp ".artifacts/build/cargo/$TARGET/release/viz-renderer$suffix" \
+            "$sidecars/viz-renderer-$TARGET$suffix"
+          echo "LIGHT_DESKTOP_SIDECAR_DIR=$sidecars" >> "$GITHUB_ENV"
+          echo "LIGHT_DESKTOP_SIDECAR_TARGET=$TARGET" >> "$GITHUB_ENV"
+
       - name: Build the ToskLight desktop application
         if: matrix.desktop
         shell: bash
@@ -819,14 +864,6 @@ jobs:
           config="$(npm run --silent artifact-path -- tmp)/tauri-control-release.json"
           node tools/write-tauri-artifact-config.mjs control "$config"
           npm run --prefix apps/light-desktop tauri:build -- --target ${{ matrix.target }} --config "$config"
-
-      - name: Bundle the headless application into the macOS app
-        if: runner.os == 'macOS' && matrix.desktop
-        shell: bash
-        run: >-
-          cp
-          ".artifacts/build/cargo/${{ matrix.target }}/release/light-headless"
-          ".artifacts/build/cargo/${{ matrix.target }}/release/bundle/macos/ToskLight.app/Contents/MacOS/light-headless"
 
       - name: Smoke-test the built desktop application
         if: matrix.desktop
@@ -887,34 +924,6 @@ jobs:
               ;;
           esac
           ls -la "$out"
-
-      # The Viz products are separate deliverables: the editor is the window an operator opens,
-      # and the visualizer is the picture it drives. Both ship on every desktop platform; the
-      # Raspberry Pi leg stays headless-only.
-      - name: Build the standalone visualizer
-        if: matrix.viz
-        shell: bash
-        run: >-
-          cargo build --release --locked --target ${{ matrix.target }}
-          -p viz-renderer --bin viz-renderer
-
-      - name: Smoke-test the standalone visualizer
-        if: matrix.viz
-        shell: bash
-        env:
-          TARGET: ${{ matrix.target }}
-        run: |
-          set -euo pipefail
-          suffix=""
-          if [[ "$RUNNER_OS" == "Windows" ]]; then
-            suffix=".exe"
-          fi
-          binary=".artifacts/build/cargo/$TARGET/release/viz-renderer$suffix"
-          if [[ "$RUNNER_OS" == "Linux" ]]; then
-            xvfb-run -a "$binary" --demo --verify
-          else
-            "$binary" --demo --verify
-          fi
 
       # The API-generated show is produced once by the dedicated demo-show job. Stage that exact
       # artifact where the Tauri resource overlay expects it instead of regenerating it per target.
@@ -1241,6 +1250,10 @@ jobs:
           for product in headless media; do
             unzip -Z1 .artifacts/release/tosklight-bundle-linux_arm64.zip |
               grep -F "tosklight-$product-linux_arm64" >/dev/null
+          done
+          for helper in light-headless viz-renderer; do
+            unzip -Z1 .artifacts/release/tosklight-bundle-macos_arm64.zip |
+              grep -F "tosklight-desk-macos_arm64.app/Contents/MacOS/$helper" >/dev/null
           done
           unzip -Z1 .artifacts/release/tosklight-bundle-linux_amd64.zip |
             grep -E '/light-benchmark$' >/dev/null

@@ -26,6 +26,13 @@ const executable =
 			);
 
 await fs.access(executable);
+const executableDirectory = path.dirname(executable);
+const executableSuffix = process.platform === "win32" ? ".exe" : "";
+for (const helper of ["light-headless", "viz-renderer"]) {
+	await fs.access(
+		path.join(executableDirectory, `${helper}${executableSuffix}`),
+	);
+}
 await fs.mkdir(artifactPaths.tmp, { recursive: true });
 const dataDirectory = await fs.mkdtemp(
 	path.join(artifactPaths.tmp, "tosklight-ci-launch-"),
@@ -51,22 +58,9 @@ for (const stream of [child.stdout, child.stderr]) {
 }
 
 try {
-	const earlyExit = await Promise.race([
-		new Promise((resolve) =>
-			child.once("exit", (code, signal) => resolve({ code, signal })),
-		),
-		new Promise((resolve) =>
-			child.once("error", (error) => resolve({ error: error.message })),
-		),
-		new Promise((resolve) => setTimeout(() => resolve(undefined), 5_000)),
-	]);
-	if (earlyExit) {
-		throw new Error(
-			`ToskLight exited during its five-second launch probe (${JSON.stringify(earlyExit)}).`,
-		);
-	}
+	await waitForReadiness(child, port);
 	console.log(
-		`ToskLight stayed alive for five seconds on ${process.platform}.`,
+		`Packaged ToskLight reached healthy readiness on ${process.platform}.`,
 	);
 } catch (error) {
 	const detail = output.join("").trim();
@@ -76,6 +70,32 @@ try {
 } finally {
 	await terminateProcessTree(child.pid);
 	await fs.rm(dataDirectory, { recursive: true, force: true });
+}
+
+async function waitForReadiness(child, port) {
+	const deadline = Date.now() + 60_000;
+	while (Date.now() < deadline) {
+		if (child.exitCode !== null || child.signalCode !== null) {
+			throw new Error(
+				`ToskLight exited before readiness (${JSON.stringify({ code: child.exitCode, signal: child.signalCode })}).`,
+			);
+		}
+		try {
+			const response = await fetch(
+				`http://127.0.0.1:${port}/api/v2/readiness`,
+				{ signal: AbortSignal.timeout(2_000) },
+			);
+			if (response.ok) {
+				const readiness = await response.json();
+				if (readiness.status === "ready" && readiness.recovery_mode === false)
+					return;
+			}
+		} catch {}
+		await new Promise((resolve) => setTimeout(resolve, 250));
+	}
+	throw new Error(
+		"ToskLight did not reach healthy readiness within 60 seconds.",
+	);
 }
 
 async function freePort() {

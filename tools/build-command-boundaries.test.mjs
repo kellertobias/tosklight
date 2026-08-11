@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
@@ -43,6 +44,67 @@ test("open reuses dependencies and builds only the main desktop application", ()
 test("repository Tauri overlays disable a duplicate frontend build", () => {
 	const configWriter = read("tools/write-tauri-artifact-config.mjs");
 	assert.match(configWriter, /beforeBuildCommand: ""/u);
+	assert.match(configWriter, /externalBin/u);
+	assert.match(configWriter, /light-headless/u);
+	assert.match(configWriter, /viz-renderer/u);
+});
+
+test("the control Tauri overlay resolves both target-specific sidecars", () => {
+	const temporaryParent = path.join(repositoryRoot, ".artifacts", "tmp");
+	fs.mkdirSync(temporaryParent, { recursive: true });
+	const temporary = fs.mkdtempSync(
+		path.join(temporaryParent, "tauri-sidecar-contract."),
+	);
+	try {
+		const target = "aarch64-apple-darwin";
+		for (const binary of ["light-headless", "viz-renderer"]) {
+			fs.writeFileSync(path.join(temporary, `${binary}-${target}`), binary);
+		}
+		const output = path.join(temporary, "control.json");
+		execFileSync(
+			process.execPath,
+			[
+				path.join(repositoryRoot, "tools/write-tauri-artifact-config.mjs"),
+				"control",
+				output,
+			],
+			{
+				env: {
+					...process.env,
+					LIGHT_DESKTOP_SIDECAR_DIR: temporary,
+					LIGHT_DESKTOP_SIDECAR_TARGET: target,
+				},
+			},
+		);
+		const config = JSON.parse(fs.readFileSync(output, "utf8"));
+		assert.deepEqual(config.bundle.externalBin, [
+			path.join(temporary, "light-headless"),
+			path.join(temporary, "viz-renderer"),
+		]);
+	} finally {
+		fs.rmSync(temporary, { recursive: true, force: true });
+	}
+});
+
+test("release Desk bundles both supervised helpers before packaging", () => {
+	const workflow = read(".github/workflows/release.yml");
+	const visualizer = workflow.indexOf(
+		"- name: Build the standalone visualizer",
+	);
+	const sidecars = workflow.indexOf(
+		"- name: Stage the Desk server and Stage renderer sidecars",
+	);
+	const desktop = workflow.indexOf(
+		"- name: Build the ToskLight desktop application",
+	);
+	assert.ok(visualizer >= 0 && visualizer < sidecars);
+	assert.ok(sidecars < desktop);
+	assert.match(workflow.slice(sidecars, desktop), /light-headless/u);
+	assert.match(workflow.slice(sidecars, desktop), /viz-renderer/u);
+	const smoke = read("tools/ci-smoke-built-desktop.mjs");
+	assert.match(smoke, /light-headless/u);
+	assert.match(smoke, /viz-renderer/u);
+	assert.match(smoke, /api\/v2\/readiness/u);
 });
 
 test("the Viz release builds only the bundle format its staging step consumes", () => {
@@ -90,7 +152,11 @@ test("open:viz builds every helper path it exports", () => {
 	const openStart = buildScript.indexOf("open_visualizer() {");
 	const openEnd = buildScript.indexOf("\ncase ", openStart);
 	assert.notEqual(openStart, -1, "open_visualizer should exist");
-	assert.notEqual(openEnd, -1, "the command dispatcher should follow open_visualizer");
+	assert.notEqual(
+		openEnd,
+		-1,
+		"the command dispatcher should follow open_visualizer",
+	);
 	const openVisualizer = buildScript.slice(openStart, openEnd);
 
 	assert.match(helperBuild, /-p light-headless --bin light-headless/u);
@@ -144,26 +210,51 @@ test("release packaging and Pages cover the supported product matrix", () => {
 		"report-performance-status.json",
 		"report-performance.zip",
 	]) {
-		assert.ok(workflow.includes(asset), `release workflow should require ${asset}`);
+		assert.ok(
+			workflow.includes(asset),
+			`release workflow should require ${asset}`,
+		);
 	}
 	assert.match(
 		workflow,
 		/slug: linux-amd64[\s\S]*?desktop: true[\s\S]*?viz: true/u,
 	);
-	assert.match(workflow, /binary="[^"]*viz-renderer\$suffix"[\s\S]*--demo --verify/u);
-	assert.match(workflow, /media-build:[\s\S]*?uses: \.\/\.github\/workflows\/media-release\.yml/u);
+	assert.match(
+		workflow,
+		/binary="[^"]*viz-renderer\$suffix"[\s\S]*--demo --verify/u,
+	);
+	assert.match(
+		workflow,
+		/media-build:[\s\S]*?uses: \.\/\.github\/workflows\/media-release\.yml/u,
+	);
 	assert.match(mediaWorkflow, /workflow_call:/u);
 	assert.doesNotMatch(mediaWorkflow, /workflow_run|gh release upload/u);
-	assert.match(mediaQualityWorkflow, /\.github\/workflows\/media-release\.yml/u);
+	assert.match(
+		mediaQualityWorkflow,
+		/\.github\/workflows\/media-release\.yml/u,
+	);
 
-	for (const slug of ["macos_arm64", "windows_amd64", "linux_amd64", "linux_arm64"]) {
+	for (const slug of [
+		"macos_arm64",
+		"windows_amd64",
+		"linux_amd64",
+		"linux_arm64",
+	]) {
 		assert.ok(
 			landingPage.includes(`tosklight-bundle-${slug}.zip`),
 			`Pages should link the platform bundle for ${slug}`,
 		);
 	}
-	for (const slug of ["macos-arm64", "windows-amd64", "linux-amd64", "linux-arm64"]) {
-		assert.ok(mediaWorkflow.includes(`slug: ${slug}`), `Media should build ${slug}`);
+	for (const slug of [
+		"macos-arm64",
+		"windows-amd64",
+		"linux-amd64",
+		"linux-arm64",
+	]) {
+		assert.ok(
+			mediaWorkflow.includes(`slug: ${slug}`),
+			`Media should build ${slug}`,
+		);
 	}
 	assert.match(landingPage, /assets-demo-show\.show/u);
 	assert.match(landingPage, /assets-handbook\.pdf/u);
@@ -174,7 +265,10 @@ test("release packaging and Pages cover the supported product matrix", () => {
 		/Generate and validate the completed portable demo show through the API/u,
 	);
 	assert.doesNotMatch(workflow, /run: npm run demo-show(?:\s|$)/u);
-	assert.match(workflow, /name: playwright-application-\$\{\{ github\.sha \}\}/u);
+	assert.match(
+		workflow,
+		/name: playwright-application-\$\{\{ github\.sha \}\}/u,
+	);
 	assert.doesNotMatch(
 		workflow,
 		/npm run test:demo(?!-show)|name: product-demo|Documentation \/ Product demo/u,
@@ -195,13 +289,15 @@ test("non-main branch pushes run validation without release work", () => {
 	]) {
 		assert.match(
 			workflow,
-			new RegExp(`\\n  ${job}:\\n[\\s\\S]*?\\n    if: github\\.ref == 'refs/heads/main'`),
+			new RegExp(
+				`\\n  ${job}:\\n[\\s\\S]*?\\n    if: github\\.ref == 'refs/heads/main'`,
+			),
 			`${job} should be main-only`,
 		);
 	}
 	assert.match(
 		workflow,
-		/\n  media-build:\n[\s\S]*?\n    if: [^\n]*github\.ref == 'refs\/heads\/main'/u,
+		/\n {2}media-build:\n[\s\S]*?\n {4}if: [^\n]*github\.ref == 'refs\/heads\/main'/u,
 		"media-build should be main-only",
 	);
 	assert.match(
