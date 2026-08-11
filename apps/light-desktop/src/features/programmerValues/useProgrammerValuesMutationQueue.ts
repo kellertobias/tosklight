@@ -7,7 +7,10 @@ import type {
 } from "./contracts";
 import { LatestProgrammerValuesWriteQueue } from "./LatestProgrammerValuesWriteQueue";
 import { useProgrammerValuesActions } from "./ProgrammerValuesView";
-import { useProgrammerValuesActivity } from "./useProgrammerValuesActivity";
+import {
+	type ProgrammerValuesActivity,
+	useProgrammerValuesActivity,
+} from "./useProgrammerValuesActivity";
 
 interface ProgrammerValuesBatchPort {
 	batch(input: BatchProgrammerValuesInput): Promise<unknown>;
@@ -21,6 +24,7 @@ export interface NormalizedProgrammerAssignment {
 
 export interface ProgrammerValuesMutationQueueController {
 	canWrite: boolean;
+	unavailableReason: string | null;
 	route: "normal" | "preload" | null;
 	submitLatest(
 		key: string,
@@ -56,6 +60,11 @@ export function useProgrammerValuesMutationQueue(
 	);
 	return {
 		canWrite: enabled && activity.ready && actions !== null,
+		unavailableReason: programmerValuesWriteUnavailableReason(
+			enabled,
+			activity,
+			actions !== null,
+		),
 		route:
 			activity.ready && activity.authority !== "loading"
 				? activity.authority
@@ -73,6 +82,24 @@ export function useProgrammerValuesMutationQueue(
 			[queue, submit],
 		),
 	};
+}
+
+export function programmerValuesWriteUnavailableReason(
+	enabled: boolean,
+	activity: Pick<ProgrammerValuesActivity, "authority" | "ready">,
+	actionsAvailable: boolean,
+): string | null {
+	if (!enabled) return "Channel controls are inactive";
+	if (activity.authority === "loading") return "Programmer mode is loading";
+	if (!activity.ready)
+		return activity.authority === "preload"
+			? "Preload values are loading"
+			: "Programmer values are loading";
+	if (!actionsAvailable)
+		return activity.authority === "preload"
+			? "Preload control is unavailable"
+			: "Programmer control is unavailable";
+	return null;
 }
 
 export function normalizedFixtureMutations(

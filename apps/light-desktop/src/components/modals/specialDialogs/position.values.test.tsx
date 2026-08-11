@@ -68,6 +68,7 @@ vi.mock(
 
 const writes = {
 	canWrite: true,
+	unavailableReason: null,
 	route: "normal",
 	submitLatest: vi.fn(async () => ({})),
 	submitBarrier: vi.fn(async () => ({})),

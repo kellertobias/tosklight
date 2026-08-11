@@ -181,7 +181,7 @@ Stage receives authoritative Live and Preload output from the engine. A disconne
 
 ## Channels
 
-The Channels pane is a direct programming bank ordered by Fixture ID. In the default **Intensity only** mode, it assigns one fader to each fixture. Faders fill each page from left to right across the first row and then continue on the second row. Each fader is labelled **Fixture _ID_**, followed by **Intensity**, and shows the resolved percentage. Moving it writes an intensity value into the programmer; tapping its card selects the fixture. Empty positions are disabled.
+The Channels pane is a direct programming bank ordered by Fixture ID. In the default **Intensity only** mode, it assigns one fader to each fixture. Faders fill each page from left to right across the first row and then continue on the second row. Each fader is labelled **Fixture _ID_**, followed by **Intensity**, and shows the resolved percentage. Moving it writes an intensity value into the programmer; tapping its card selects the fixture. A disabled fader replaces the attribute label with its current reason, such as **Empty position**, **Programmer values are loading**, or **Preload control is unavailable**. The reason disappears as soon as that fader becomes available.
 
 In **Pane Settings → Channels**, choose **Intensity only** or **All channels** for that pane. **All channels** keeps fixtures grouped in Fixture ID order and shows each fixture's attributes in profile-authored order. Each fader identifies the fixture and attribute it controls. The full Channels window offers the same display choice in **Channel Settings**, along with the number of faders per row.
 

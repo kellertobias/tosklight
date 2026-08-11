@@ -33,6 +33,10 @@ vi.mock("../features/patch/PatchState", async (importOriginal) => ({
 	...(await importOriginal<Record<string, unknown>>()),
 	usePatchedFixturesView: (enabled = true) =>
 		enabled ? mocks.server.patch.fixtures : [],
+	usePatchStatus: (enabled = true) => ({
+		status: enabled ? "ready" : "loading",
+		error: null,
+	}),
 }));
 
 vi.mock("..//features/configuration/ConfigurationState", async (importOriginal) => ({
@@ -49,6 +53,7 @@ const mocks = vi.hoisted(() => {
 	const selectionAccess = vi.fn();
 	const mutationQueue = {
 		canWrite: true,
+		unavailableReason: null as string | null,
 		route: "normal" as const,
 		submitLatest: vi.fn(async () => undefined),
 		submitBarrier: vi.fn(async () => undefined),
@@ -151,15 +156,23 @@ vi.mock("../state/AppContext", () => ({
 vi.mock("../components/control/VerticalTouchFader", () => ({
 	VerticalTouchFader: ({
 		label,
+		mode,
 		disabled,
 		onChange,
 	}: {
 		label: string;
+		mode?: string;
 		disabled?: boolean;
 		onChange?: (value: number) => void;
 	}) => (
-		<button type="button" disabled={disabled} onClick={() => onChange?.(42)}>
+		<button
+			type="button"
+			aria-label={label}
+			disabled={disabled}
+			onClick={() => onChange?.(42)}
+		>
 			{label}
+			{mode && <small>{mode}</small>}
 		</button>
 	),
 }));
@@ -320,6 +333,7 @@ beforeEach(() => {
 	mocks.server.readVisualization.mockClear();
 	mocks.server.setPatchPreviewHighlight.mockClear();
 	mocks.mutationQueue.canWrite = true;
+	mocks.mutationQueue.unavailableReason = null;
 	mocks.mutationQueue.submitLatest.mockClear();
 	mocks.mutationQueue.submitBarrier.mockClear();
 	mocks.mutationQueueUse.mockClear();
@@ -446,14 +460,27 @@ describe("window selection projections", () => {
 		);
 	});
 
-	it("disables Channel value writes while scoped authority is loading", async () => {
+	it("explains scoped-authority loading and removes the reason after recovery", async () => {
 		mocks.mutationQueue.canWrite = false;
-		renderSelectionView(<ChannelsWindow compact />);
+		mocks.mutationQueue.unavailableReason = "Programmer values are loading";
+		const rendered = renderSelectionView(<ChannelsWindow compact />);
 
 		expect(
 			await screen.findByRole("button", { name: "Fixture 1" }),
 		).toBeDisabled();
+		expect(selectedChannel(0)).toHaveTextContent("Programmer values are loading");
 		expect(mocks.mutationQueue.submitLatest).not.toHaveBeenCalled();
+
+		mocks.mutationQueue.canWrite = true;
+		mocks.mutationQueue.unavailableReason = null;
+		rendered.rerender(rendered.view(<ChannelsWindow compact />));
+		expect(
+			await screen.findByRole("button", { name: "Fixture 1" }),
+		).toBeEnabled();
+		expect(selectedChannel(0)).not.toHaveTextContent(
+			"Programmer values are loading",
+		);
+		expect(selectedChannel(2)).toHaveTextContent("Empty position");
 	});
 
 	it("optimistically applies Fixture Sheet logical-target gestures", async () => {

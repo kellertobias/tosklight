@@ -1,6 +1,10 @@
 import { type CSSProperties, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { usePatchedFixturesView } from "../features/patch/PatchState";
+import {
+	type PatchStatus,
+	usePatchedFixturesView,
+	usePatchStatus,
+} from "../features/patch/PatchState";
 import type { PatchedFixture, VisualizationSnapshot } from "../api/types";
 import { Button, ModalRegistration } from "@tosklight/ui";
 import { VerticalTouchFader } from "../components/control/VerticalTouchFader";
@@ -61,6 +65,7 @@ export function ChannelsWindow({
 		[selection?.selected],
 	);
 	const fixtures = usePatchedFixturesView(active);
+	const patchStatus = usePatchStatus(active);
 	const channels = channelProjection(
 		fixtures,
 		visualization,
@@ -92,6 +97,8 @@ export function ChannelsWindow({
 			pagePickerOpen={pagePickerOpen}
 			selectedFixtureIds={selectedFixtureIds}
 			valuesReady={values.canWrite}
+			valuesUnavailableReason={values.unavailableReason}
+			patchUnavailableReason={channelPatchUnavailableReason(active, patchStatus)}
 			onPage={setPage}
 			onPagePickerOpen={setPagePickerOpen}
 			columns={columns}
@@ -126,6 +133,8 @@ export function ChannelsWindowView({
 	pagePickerOpen,
 	selectedFixtureIds,
 	valuesReady,
+	valuesUnavailableReason,
+	patchUnavailableReason,
 	onPage,
 	onPagePickerOpen,
 	onSelect,
@@ -142,6 +151,8 @@ export function ChannelsWindowView({
 	pagePickerOpen: boolean;
 	selectedFixtureIds: ReadonlySet<string>;
 	valuesReady: boolean;
+	valuesUnavailableReason?: string | null;
+	patchUnavailableReason?: string | null;
 	onPage(page: number): void;
 	onPagePickerOpen(open: boolean): void;
 	onSelect(fixtureId: string): void;
@@ -226,6 +237,8 @@ export function ChannelsWindowView({
 				page={page}
 				selectedFixtureIds={selectedFixtureIds}
 				valuesReady={valuesReady}
+				valuesUnavailableReason={valuesUnavailableReason}
+				patchUnavailableReason={patchUnavailableReason}
 				onSelect={onSelect}
 				onSetValue={onSetValue}
 			/>
@@ -350,6 +363,8 @@ function ChannelFaderBank({
 	page,
 	selectedFixtureIds,
 	valuesReady,
+	valuesUnavailableReason,
+	patchUnavailableReason,
 	onSelect,
 	onSetValue,
 }: {
@@ -358,6 +373,8 @@ function ChannelFaderBank({
 	page: number;
 	selectedFixtureIds: ReadonlySet<string>;
 	valuesReady: boolean;
+	valuesUnavailableReason?: string | null;
+	patchUnavailableReason?: string | null;
 	onSelect(fixtureId: string): void;
 	onSetValue(fixtureId: string, attribute: string, level: number): void;
 }) {
@@ -373,6 +390,12 @@ function ChannelFaderBank({
 		>
 			{visible.map((channel, index) => {
 				const number = page * columns * ROWS + index + 1;
+				const disabledReason = channelFaderDisabledReason(
+					Boolean(channel),
+					valuesReady,
+					valuesUnavailableReason,
+					patchUnavailableReason,
+				);
 				return (
 					<article
 						className={`channel-fader ${channel ? "" : "empty"} ${channel && selectedFixtureIds.has(channel.fixture.fixture_id) ? "selected" : ""}`}
@@ -384,9 +407,9 @@ function ChannelFaderBank({
 						onClick={() => channel && onSelect(channel.fixture.fixture_id)}
 					>
 						<VerticalTouchFader
-							disabled={!channel || !valuesReady}
+							disabled={disabledReason !== null}
 							label={channel ? `Fixture ${channel.fixtureLabel}` : "Empty"}
-							mode={channel?.attributeLabel ?? "Unpatched"}
+							mode={disabledReason ?? channel?.attributeLabel ?? "Unpatched"}
 							value={channel?.level ?? 0}
 							display={channel ? `${channel.level}%` : "—"}
 							onChange={(value) =>
@@ -403,6 +426,29 @@ function ChannelFaderBank({
 			})}
 		</FaderView>
 	);
+}
+
+export function channelPatchUnavailableReason(
+	active: boolean,
+	patch: PatchStatus,
+): string | null {
+	if (!active) return "Channel controls are inactive";
+	if (patch.status === "loading") return "Patch is loading";
+	if (patch.status === "repairing") return "Patch is resynchronizing";
+	if (patch.status === "error") return "Patch is unavailable";
+	return null;
+}
+
+export function channelFaderDisabledReason(
+	channelPresent: boolean,
+	valuesReady: boolean,
+	valuesUnavailableReason?: string | null,
+	patchUnavailableReason?: string | null,
+): string | null {
+	if (!channelPresent) return patchUnavailableReason ?? "Empty position";
+	if (!valuesReady)
+		return valuesUnavailableReason ?? "Programmer control is unavailable";
+	return null;
 }
 
 function ChannelPagePicker({

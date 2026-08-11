@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { PatchedFixture } from "../api/types";
-import { channelProjection } from "./ChannelsWindow";
+import {
+	channelFaderDisabledReason,
+	channelPatchUnavailableReason,
+	channelProjection,
+} from "./ChannelsWindow";
 
 function fixture(number: number, attributes: string[]): PatchedFixture {
 	return {
@@ -73,5 +77,42 @@ describe("Channel projection", () => {
 			["2", "intensity", "Intensity"],
 			["20", "color.red", "Red"],
 		]);
+	});
+});
+
+describe("Channel fader availability", () => {
+	it.each([
+		[false, "loading", "Channel controls are inactive"],
+		[true, "loading", "Patch is loading"],
+		[true, "repairing", "Patch is resynchronizing"],
+		[true, "error", "Patch is unavailable"],
+		[true, "ready", null],
+	] as const)("explains active=%s Patch status=%s", (active, status, expected) => {
+		expect(channelPatchUnavailableReason(active, { status, error: null })).toBe(
+			expected,
+		);
+	});
+
+	it("distinguishes Patch absence, empty slots, value authority, and recovery", () => {
+		expect(
+			channelFaderDisabledReason(
+				false,
+				false,
+				"Programmer values are loading",
+				"Patch is loading",
+			),
+		).toBe("Patch is loading");
+		expect(channelFaderDisabledReason(false, true, null, null)).toBe(
+			"Empty position",
+		);
+		expect(
+			channelFaderDisabledReason(
+				true,
+				false,
+				"Preload values are loading",
+				null,
+			),
+		).toBe("Preload values are loading");
+		expect(channelFaderDisabledReason(true, true, null, null)).toBeNull();
 	});
 });
