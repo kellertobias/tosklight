@@ -105,6 +105,9 @@ test("release Desk bundles both supervised helpers before packaging", () => {
 	assert.match(smoke, /light-headless/u);
 	assert.match(smoke, /viz-renderer/u);
 	assert.match(smoke, /api\/v2\/readiness/u);
+	assert.match(smoke, /bundle\/appimage/u);
+	assert.match(smoke, /APPIMAGE_EXTRACT_AND_RUN/u);
+	assert.match(smoke, /Bundled Light server log/u);
 });
 
 test("macOS release apps are sealed only after their final helpers and resources", () => {
@@ -128,7 +131,10 @@ test("macOS release apps are sealed only after their final helpers and resources
 	assert.match(sealer, /codesign --verify --deep --strict/u);
 	assert.match(workflow, /ToskLight Visualizer\.app[\s\S]*seal-macos-app\.sh/u);
 	assert.match(workflow, /ToskLight Viz Editor\.app[\s\S]*seal-macos-app\.sh/u);
-	assert.match(mediaWorkflow, /bundle-media-macos\.sh[\s\S]*seal-macos-app\.sh/u);
+	assert.match(
+		mediaWorkflow,
+		/bundle-media-macos\.sh[\s\S]*seal-macos-app\.sh/u,
+	);
 	assert.match(assembler, /codesign --verify --deep --strict/u);
 	assert.match(assembler, /macos-first-start\.txt/u);
 	assert.match(assembler, /sign-macos-apps-locally\.sh/u);
