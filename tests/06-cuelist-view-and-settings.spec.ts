@@ -8,6 +8,52 @@ import { activeShowId, fixtureIdsByNumber, loadCanonicalCopy, object, putObject 
 test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
   test.beforeEach(({}, testInfo) => testInfo.setTimeout(90_000));
 
+  test("TL-162 @ui › context click opens Cuelist settings while its image owns preview", async ({ api, bench, desk, page }) => {
+    await loadCanonicalCopy(api, bench, "tl-162-cuelist-context", "compact-rig");
+    const previewImage = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='640' height='360'%3E%3Crect width='640' height='360' fill='%2320c997'/%3E%3C/svg%3E";
+    const installed = await installCuelist(api, {
+      name: "Context Preview Sequence",
+      numbers: [1, 2],
+      presentationImage: previewImage,
+    });
+    await desk.open(bench.baseUrl);
+    await openCuelistPoolFromCurrentDesk(page);
+    const card = page.locator(".cuelist-card").filter({ hasText: installed.name });
+
+    await card.click({ button: "right" });
+    const settings = page.getByRole("dialog", { name: "Cuelist Settings" });
+    await expect(settings).toContainText(installed.name);
+    await expect(page.getByText(/selected · touch a playback fader/i)).toHaveCount(0);
+    await settings.getByRole("button", { name: "Close Cuelist Settings" }).click();
+
+    const previewButton = page.getByRole("button", {
+      name: `Open ${installed.name} Playback preview`,
+    });
+    await previewButton.click();
+    const preview = page.getByRole("dialog", {
+      name: `${installed.name} Playback preview image`,
+    });
+    const enlarged = preview.getByRole("img", {
+      name: `${installed.name} Playback preview`,
+    });
+    await expect(enlarged).toHaveAttribute("src", previewImage);
+    const buttonBox = await previewButton.boundingBox();
+    const imageBox = await enlarged.boundingBox();
+    if (!buttonBox || !imageBox) {
+      throw new Error("Expected visible Cuelist preview button and enlarged image");
+    }
+    expect(imageBox.width).toBeGreaterThan(buttonBox.width * 3);
+    await page.keyboard.press("Escape");
+    await expect(preview).toBeHidden();
+    await expect(previewButton).toBeFocused();
+
+    await page.getByRole("button", { name: "SET", exact: true }).click();
+    await card.click();
+    await expect(
+      page.getByText("Cuelist 1 selected · touch a playback fader to assign it."),
+    ).toBeVisible();
+  });
+
   pairedScenario<{ completed: boolean }>({
     id: "CUE-011",
     title: "Cue edits and atomic renumber preserve runtime identity, output, and persisted bytes",
@@ -747,6 +793,7 @@ interface InstallOptions {
   legacy?: boolean;
   looped?: boolean;
   cueFactory?: (number: number, index: number) => any;
+  presentationImage?: string;
 }
 
 async function installCuelist(api: ApiDriver, options: InstallOptions): Promise<{ id: string; name: string }> {
@@ -790,6 +837,9 @@ async function installCuelist(api: ApiDriver, options: InstallOptions): Promise<
     color: "#20c997",
     flash_release: "release_all",
     protect_from_swap: false,
+    ...(options.presentationImage
+      ? { presentation_image: options.presentationImage }
+      : {}),
   });
   let page: any;
   try {
@@ -834,13 +884,17 @@ async function openCuelistView(page: Page, desk: any, baseUrl: string, name: str
 }
 
 async function openCuelistFromCurrentDesk(page: Page, name: string): Promise<void> {
+  await openCuelistPoolFromCurrentDesk(page);
+  await page.locator(".cuelist-card").filter({ hasText: name }).click();
+  await expect(page.locator(".cue-table")).toBeVisible();
+}
+
+async function openCuelistPoolFromCurrentDesk(page: Page): Promise<void> {
   const shift = page.getByRole("button", { name: "SHIFT", exact: true });
   if (!(await shift.isVisible().catch(() => false))) await page.locator(".mode-toggle").click();
   await shift.click();
   await page.getByRole("button", { name: "4", exact: true }).click();
   await expect(page.locator(".cuelist-pool-window")).toBeVisible();
-  await page.locator(".cuelist-card").filter({ hasText: name }).click();
-  await expect(page.locator(".cue-table")).toBeVisible();
 }
 
 async function commitField(page: Page, api: ApiDriver, cueListId: string, label: string, value: string, read: (body: any) => unknown): Promise<void> {

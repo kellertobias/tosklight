@@ -1,3 +1,5 @@
+import { Button } from "@tosklight/ui";
+import { ModalFrame } from "@tosklight/ui/modals";
 import {
 	DEFAULT_POOL_CARD_MINIMUM_WIDTH,
 	PoolCard,
@@ -65,6 +67,7 @@ interface PoolSlotProps {
 	onPointerEnd: () => void;
 	onClick: () => void;
 	onContextMenu: () => void;
+	onPreviewImage: () => void;
 	presentation: ResolvedPoolPresentation;
 }
 
@@ -73,55 +76,71 @@ const CUELIST_POOL_KINDS = ["cue_list", "playback", "playback_page"] as const;
 function CuelistPoolSlot(props: PoolSlotProps) {
 	const { number, playback, runtimeMaster, usage } = props;
 	return (
-		<PoolCard
-			data-pool-slot-id={number}
-			data-pool-position={props.poolPosition}
-			className={`cuelist-card ${props.presentation.className} ${runtimeMaster != null ? "running" : ""}`}
-			style={props.presentation.style}
-			aria-pressed={props.selectedCuelist === number && Boolean(playback)}
-			model={{
-				number,
-				primary: playback?.name ?? "Empty",
-				secondary: playback
-					? props.updateArmed
-						? "Touch to choose Update mode"
-						: `Cuelist · ${runtimeMaster != null ? `${Math.round(runtimeMaster * 100)}%` : "Off"}`
-					: props.updateArmed
-						? "Touch to check Update eligibility"
-						: props.storeArmed
-							? "Tap to record Cuelist"
-							: "Press Rec first",
-				details: playback
-					? [
-							usage.length
-								? `Playbacks on pages ${usage.join(", ")}`
-								: "Not assigned to a playback",
-						]
-					: undefined,
-				color: playback?.color,
-				icon: playback?.presentation_icon,
-				image: playback?.presentation_image
-					? {
-							src: playback.presentation_image,
-							alt: `${playback.name} presentation`,
-						}
-					: undefined,
-				kind: "cuelist",
-				status:
-					runtimeMaster != null
-						? `Active · ${Math.round(runtimeMaster * 100)}%`
+		<div className="cuelist-card-slot">
+			<PoolCard
+				data-pool-slot-id={number}
+				data-pool-position={props.poolPosition}
+				className={`cuelist-card ${props.presentation.className} ${runtimeMaster != null ? "running" : ""}`}
+				style={props.presentation.style}
+				aria-pressed={props.selectedCuelist === number && Boolean(playback)}
+				model={{
+					number,
+					primary: playback?.name ?? "Empty",
+					secondary: playback
+						? props.updateArmed
+							? "Touch to choose Update mode"
+							: `Cuelist · ${runtimeMaster != null ? `${Math.round(runtimeMaster * 100)}%` : "Off"}`
+						: props.updateArmed
+							? "Touch to check Update eligibility"
+							: props.storeArmed
+								? "Tap to record Cuelist"
+								: "Press Rec first",
+					details: playback
+						? [
+								usage.length
+									? `Playbacks on pages ${usage.join(", ")}`
+									: "Not assigned to a playback",
+							]
 						: undefined,
-				states: props.presentation.states,
-			}}
-			onPointerDown={props.onPointerDown}
-			onPointerUp={props.onPointerEnd}
-			onPointerCancel={props.onPointerEnd}
-			onContextMenu={(event) => {
-				event.preventDefault();
-				props.onContextMenu();
-			}}
-			onClick={props.onClick}
-		/>
+					color: playback?.color,
+					icon: playback?.presentation_icon,
+					image: playback?.presentation_image
+						? {
+								src: playback.presentation_image,
+								alt: `${playback.name} presentation`,
+							}
+						: undefined,
+					kind: "cuelist",
+					status:
+						runtimeMaster != null
+							? `Active · ${Math.round(runtimeMaster * 100)}%`
+							: undefined,
+					states: props.presentation.states,
+				}}
+				onPointerDown={props.onPointerDown}
+				onPointerUp={props.onPointerEnd}
+				onPointerCancel={props.onPointerEnd}
+				onContextMenu={(event) => {
+					event.preventDefault();
+					props.onContextMenu();
+				}}
+				onClick={props.onClick}
+			/>
+			{playback?.presentation_image && (
+				<Button
+					type="button"
+					className="cuelist-preview-button"
+					aria-label={`Open ${playback.name} preview`}
+					onClick={props.onPreviewImage}
+					onContextMenu={(event) => {
+						event.preventDefault();
+						props.onContextMenu();
+					}}
+				>
+					<img src={playback.presentation_image} alt="" />
+				</Button>
+			)}
+		</div>
 	);
 }
 
@@ -159,6 +178,19 @@ function useCuelistPoolActions(props: CuelistPoolProps) {
 		if (!props.builtIn) props.onSelectLocalCuelist(number);
 		dispatch({ type: "SET_CUELIST_SET_TARGET", value: number });
 		dispatch({ type: "SET_PRESET_SET_ARMED", value: false });
+	};
+	const openContextSettings = (
+		number: number,
+		playback: PlaybackDefinition | null,
+	) => {
+		if (!playback) {
+			props.onMessage(
+				`Cuelist ${number} is empty · record it before opening settings.`,
+			);
+			return;
+		}
+		props.onMessage("");
+		props.onOpenSettings(number);
 	};
 	const click = (number: number, playback: PlaybackDefinition | null) => {
 		if (held.current) {
@@ -199,7 +231,13 @@ function useCuelistPoolActions(props: CuelistPoolProps) {
 		props.onMessage("");
 		props.onOpenCuelist(number);
 	};
-	return { state, clearHold, startHold, click, selectSetSource };
+	return {
+		state,
+		clearHold,
+		startHold,
+		click,
+		openContextSettings,
+	};
 }
 
 function usePoolSlots(
@@ -311,7 +349,8 @@ function CuelistPoolCards({
 	startHold,
 	clearHold,
 	click,
-	selectSetSource,
+	openContextSettings,
+	onPreviewImage,
 }: {
 	slots: readonly CuelistPoolItem[];
 	search: string;
@@ -326,10 +365,11 @@ function CuelistPoolCards({
 	startHold: (number: number, playback: PlaybackDefinition | null) => void;
 	clearHold: () => void;
 	click: (number: number, playback: PlaybackDefinition | null) => void;
-	selectSetSource: (
+	openContextSettings: (
 		number: number,
 		playback: PlaybackDefinition | null,
 	) => void;
+	onPreviewImage: (number: number, playback: PlaybackDefinition) => void;
 }) {
 	const poolSlots = poolSlotViewModels(slots);
 	const renderSlot = (slot: CuelistPoolItem, poolPosition: number) => {
@@ -357,7 +397,10 @@ function CuelistPoolCards({
 				onPointerDown={() => startHold(slot.number, slot.playback)}
 				onPointerEnd={clearHold}
 				onClick={() => click(slot.number, slot.playback)}
-				onContextMenu={() => selectSetSource(slot.number, slot.playback)}
+				onContextMenu={() => openContextSettings(slot.number, slot.playback)}
+				onPreviewImage={() =>
+					slot.playback && onPreviewImage(slot.number, slot.playback)
+				}
 				presentation={presentation}
 			/>
 		);
@@ -457,9 +500,14 @@ function CuelistPoolSettings({
 }
 
 export function CuelistPool(props: CuelistPoolProps) {
-	const { state, clearHold, startHold, click, selectSetSource } =
+	const { state, clearHold, startHold, click, openContextSettings } =
 		useCuelistPoolActions(props);
 	const [search, setSearch] = useState("");
+	const [preview, setPreview] = useState<{
+		number: number;
+		name: string;
+		src: string;
+	} | null>(null);
 	const [colorSettingsAnchor, setColorSettingsAnchor] =
 		useState<DOMRect | null>(null);
 	const pool = useCuelistPool();
@@ -482,9 +530,9 @@ export function CuelistPool(props: CuelistPoolProps) {
 			? `Cuelist ${state.cueListSetTarget} selected · touch a playback fader to assign it.`
 			: props.message
 				? props.message
-			: state.cueListSetArmed
-				? "Select a Cuelist, then touch the playback fader where it should be assigned."
-				: "";
+				: state.cueListSetArmed
+					? "Select a Cuelist, then touch the playback fader where it should be assigned."
+					: "";
 	return (
 		<div className="cuelist-window cuelist-pool-window pool-window">
 			{!props.compact && (
@@ -513,9 +561,23 @@ export function CuelistPool(props: CuelistPoolProps) {
 				startHold={startHold}
 				clearHold={clearHold}
 				click={click}
-				selectSetSource={selectSetSource}
+				openContextSettings={openContextSettings}
+				onPreviewImage={(number, playback) => {
+					if (!playback.presentation_image) return;
+					setPreview({
+						number,
+						name: playback.name,
+						src: playback.presentation_image,
+					});
+				}}
 			/>
 			{props.settings}
+			{preview && (
+				<CuelistPreviewModal
+					preview={preview}
+					onClose={() => setPreview(null)}
+				/>
+			)}
 			{colorSettingsAnchor && (
 				<CuelistPoolSettings
 					anchor={colorSettingsAnchor}
@@ -524,5 +586,28 @@ export function CuelistPool(props: CuelistPoolProps) {
 				/>
 			)}
 		</div>
+	);
+}
+
+function CuelistPreviewModal({
+	preview,
+	onClose,
+}: {
+	preview: { number: number; name: string; src: string };
+	onClose: () => void;
+}) {
+	return (
+		<ModalFrame
+			id={`cuelist-preview-${preview.number}`}
+			ariaLabel={`${preview.name} preview image`}
+			title={`Cuelist ${preview.number} · ${preview.name}`}
+			closeLabel="Close Cuelist preview"
+			dialogClassName="cuelist-preview-modal"
+			onClose={onClose}
+		>
+			<div className="cuelist-preview-modal-body">
+				<img src={preview.src} alt={`${preview.name} preview`} />
+			</div>
+		</ModalFrame>
 	);
 }

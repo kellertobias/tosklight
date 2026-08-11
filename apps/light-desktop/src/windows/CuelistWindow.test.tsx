@@ -952,37 +952,29 @@ describe("CuelistWindow pool recording", () => {
 		});
 	});
 
-	it("right-click selects the same Cuelist source and suppresses the native menu", () => {
+	it("right-click opens that exact Cuelist's settings without starting assignment", () => {
 		mocks.state.storeArmed = false;
 		mocks.state.cueListSetArmed = true;
-		mocks.playbacks.pool = [
-			{
-				number: 7,
-				name: "Main sequence",
-				target: { type: "cue_list", cue_list_id: "main" },
-				buttons: ["go", "go_minus", "flash"],
-				fader: "master",
-				go_activates: true,
-				auto_off: true,
-				xfade_millis: 0,
-			},
-		];
+		showEditableCueList();
+		mocks.state.cueListSetArmed = true;
 		render(<CuelistWindow compact cueListTab="pool" />);
-		const source = screen.getByText("Main sequence").closest("button")!;
+		const source = screen.getByText("Main").closest("button")!;
 		const contextMenu = new MouseEvent("contextmenu", {
 			bubbles: true,
 			cancelable: true,
 		});
-		source.dispatchEvent(contextMenu);
+		fireEvent(source, contextMenu);
 
 		expect(contextMenu.defaultPrevented).toBe(true);
-		expect(mocks.dispatch).toHaveBeenCalledWith({
-			type: "SET_CUELIST_SET_TARGET",
-			value: 7,
-		});
+		expect(
+			screen.getByRole("dialog", { name: "Cuelist Settings" }),
+		).toHaveTextContent("Main");
+		expect(mocks.dispatch).not.toHaveBeenCalledWith(
+			expect.objectContaining({ type: "SET_CUELIST_SET_TARGET" }),
+		);
 	});
 
-	it("right-click on an empty Cuelist reports the exact SET-click guidance", () => {
+	it("right-click on an empty Cuelist reports settings guidance without assignment", () => {
 		mocks.state.storeArmed = false;
 		mocks.state.cueListSetArmed = true;
 		const { container } = render(<CuelistWindow compact cueListTab="pool" />);
@@ -990,11 +982,77 @@ describe("CuelistWindow pool recording", () => {
 		fireEvent.contextMenu(empty);
 
 		expect(container.querySelector(".pool-message")).toHaveTextContent(
-			"Cuelist 1 is empty · record it before assigning it to a playback.",
+			"Cuelist 1 is empty · record it before opening settings.",
 		);
 		expect(mocks.dispatch).not.toHaveBeenCalledWith(
 			expect.objectContaining({ type: "SET_CUELIST_SET_TARGET" }),
 		);
+	});
+
+	it("keeps the touch hold shortcut for opening exact Cuelist settings", () => {
+		vi.useFakeTimers();
+		mocks.state.storeArmed = false;
+		showEditableCueList();
+		const { container } = render(<CuelistWindow compact cueListTab="pool" />);
+		const source = screen.getByText("Main").closest("button");
+		expect(source).not.toBeNull();
+		if (!source) throw new Error("Expected Main Cuelist pool card");
+		fireEvent.pointerDown(source, { pointerType: "touch" });
+		act(() => vi.advanceTimersByTime(650));
+		fireEvent.pointerUp(source, { pointerType: "touch" });
+
+		expect(
+			screen.getByRole("dialog", { name: "Cuelist Settings" }),
+		).toHaveTextContent("Main");
+		expect(container.querySelector(".cue-table")).not.toBeInTheDocument();
+		expect(mocks.dispatch).not.toHaveBeenCalledWith(
+			expect.objectContaining({ type: "SET_CUELIST_SET_TARGET" }),
+		);
+		vi.useRealTimers();
+	});
+
+	it("opens the presentation image in a modal and restores image-button focus", async () => {
+		mocks.state.storeArmed = false;
+		showEditableCueList();
+		mocks.playbacks.pool[0].presentation_image =
+			"data:image/png;base64,cHJldmlldw==";
+		const { container } = render(<CuelistWindow compact cueListTab="pool" />);
+		const preview = screen.getByRole("button", {
+			name: "Open Main preview",
+		});
+		preview.focus();
+		fireEvent.click(preview);
+
+		let dialog = screen.getByRole("dialog", { name: "Main preview image" });
+		expect(
+			within(dialog).getByRole("img", { name: "Main preview" }),
+		).toHaveAttribute("src", "data:image/png;base64,cHJldmlldw==");
+		fireEvent.click(
+			within(dialog).getByRole("button", { name: "Close Cuelist preview" }),
+		);
+		await waitFor(() =>
+			expect(
+				screen.queryByRole("dialog", { name: "Main preview image" }),
+			).not.toBeInTheDocument(),
+		);
+
+		fireEvent.click(preview);
+		dialog = screen.getByRole("dialog", { name: "Main preview image" });
+		await waitFor(() =>
+			expect(
+				within(dialog).getByRole("button", {
+					name: "Close Cuelist preview",
+				}),
+			).toHaveFocus(),
+		);
+		fireEvent.keyDown(document, { key: "Escape" });
+		await waitFor(() =>
+			expect(
+				screen.queryByRole("dialog", { name: "Main preview image" }),
+			).not.toBeInTheDocument(),
+		);
+		await waitFor(() => expect(preview).toHaveFocus());
+		expect(container.querySelector(".cue-table")).not.toBeInTheDocument();
 	});
 
 	it("shows the Set workflow in the header's secondary amber status line", () => {
