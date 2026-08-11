@@ -2,6 +2,7 @@
 
 use super::{
     command_line::ProgrammingInteractionChange,
+    macros::MacroExecutionSnapshot,
     playback::{PlaybackDeskProjection, PlaybackRuntimeChange, PlaybackTelemetryTick},
     preload_playback_queue::ProgrammingPreloadPlaybackQueueChange,
     preload_values::ProgrammingPreloadValuesChange,
@@ -11,6 +12,7 @@ use super::{
     runtime::RuntimeHighlightState,
     schedules::ScheduleRuntimeChange,
     speed_group::SpeedGroupChange,
+    timecode::TimecodeTransportSnapshot,
     virtual_playback_zones::VirtualPlaybackExclusionZonesChange,
 };
 
@@ -188,6 +190,12 @@ pub enum EventPayload {
     },
     PlaybackViewChanged {
         projection: PlaybackDeskProjection,
+    },
+    MacroExecutionChanged {
+        execution: MacroExecutionSnapshot,
+    },
+    TimecodeRuntimeChanged {
+        snapshot: TimecodeTransportSnapshot,
     },
     PlaybackTelemetrySampled {
         tick: PlaybackTelemetryTick,
@@ -603,6 +611,14 @@ pub enum ShowObjectChange {
         body: Option<serde_json::Value>,
         deleted: bool,
     },
+    Macro {
+        object_id: String,
+        #[ts(type = "number")]
+        object_revision: u64,
+        #[ts(type = "unknown | null")]
+        body: Option<serde_json::Value>,
+        deleted: bool,
+    },
     PatchLayer {
         object_id: String,
         #[ts(type = "number")]
@@ -651,6 +667,14 @@ pub enum ShowObjectChange {
         body: Option<serde_json::Value>,
         deleted: bool,
     },
+    Timecode {
+        object_id: String,
+        #[ts(type = "number")]
+        object_revision: u64,
+        #[ts(type = "unknown | null")]
+        body: Option<serde_json::Value>,
+        deleted: bool,
+    },
     UserLayout {
         object_id: String,
         #[ts(type = "number")]
@@ -668,12 +692,14 @@ pub enum ShowObjectKind {
     CueList,
     Dynamic,
     Group,
+    Macro,
     PatchLayer,
     Playback,
     PlaybackPage,
     Preset,
     Schedule,
     StageLayout,
+    Timecode,
     UserLayout,
 }
 

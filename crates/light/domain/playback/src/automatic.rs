@@ -431,6 +431,7 @@ fn elapsed_since_activation(playback: &ActivePlayback, now: DateTime<Utc>) -> u6
 }
 
 fn set_current_cue(playback: &mut ActivePlayback, cue_list: &CueList, index: usize) {
+    playback.external_completion_millis = 0;
     playback.cue_index = index;
     playback.current_cue_id = Some(cue_list.cues[index].id);
     playback.current_cue_number = Some(cue_list.cues[index].number);

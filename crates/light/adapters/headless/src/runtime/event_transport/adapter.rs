@@ -215,6 +215,16 @@ fn wire_payload(
                     },
                 }
             }
+            application::DeskEvent::MacroExecutionChanged(change) => {
+                wire::EventPayload::MacroExecutionChanged {
+                    execution: super::super::macros_v2::execution_wire(change.clone()),
+                }
+            }
+            application::DeskEvent::TimecodeRuntimeChanged(change) => {
+                wire::EventPayload::TimecodeRuntimeChanged {
+                    snapshot: super::super::timecode_v2::wire_snapshot(change.snapshot.clone()),
+                }
+            }
         },
         application::ApplicationEvent::Output(event) => match event {
             application::OutputEvent::RuntimeChanged(change) => {
@@ -667,12 +677,14 @@ fn wire_show_object_change(change: &application::ActiveShowObjectChange) -> wire
             }
         }
         application::ActiveShowObjectKind::Group => variant!(Group),
+        application::ActiveShowObjectKind::Macro => variant!(Macro),
         application::ActiveShowObjectKind::PatchLayer => variant!(PatchLayer),
         application::ActiveShowObjectKind::Playback => variant!(Playback),
         application::ActiveShowObjectKind::PlaybackPage => variant!(PlaybackPage),
         application::ActiveShowObjectKind::Preset => variant!(Preset),
         application::ActiveShowObjectKind::Schedule => variant!(Schedule),
         application::ActiveShowObjectKind::StageLayout => variant!(StageLayout),
+        application::ActiveShowObjectKind::Timecode => variant!(Timecode),
         application::ActiveShowObjectKind::UserLayout => variant!(UserLayout),
     }
 }

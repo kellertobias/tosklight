@@ -22,6 +22,68 @@ pub(crate) enum ExistingCommandOutcome {
     },
 }
 
+pub(crate) fn prevalidate_typed_command(
+    state: &AppState,
+    _session: &Session,
+    command: &str,
+    _context: &ActionContext,
+) -> Result<bool, String> {
+    let show_id = state.active_show.current().map(|entry| entry.id);
+    let parsed = group_record_command(command)?.is_some()
+        || preset_record_address(command)?.is_some()
+        || super::cue_recording_command::parse(command)?.is_some()
+        || super::cue_link_command::parse(command)?.is_some()
+        || super::cue_deletion_command::parse(command)?.is_some()
+        || if super::cue_transfer_command::is_cue_transfer(command) {
+            super::cue_transfer_command::parse(
+                command,
+                show_id.ok_or_else(|| "no show is open".to_owned())?,
+            )?
+            .is_some()
+        } else {
+            false
+        }
+        || super::cue_navigation_command::parse(command)?.is_some()
+        || super::speed_group_command::parse(command)?.is_some();
+    if parsed && state.active_show.current().is_none() {
+        return Err("no show is open".into());
+    }
+    Ok(parsed)
+}
+
+pub(crate) fn prevalidate_external_command(
+    state: &AppState,
+    _session: &Session,
+    command: &str,
+    _context: &ActionContext,
+) -> Result<(), String> {
+    let (tokens, _) = super::super::tokenize_programmer_command(command)?;
+    if state.active_show.current().is_none() {
+        return Err("no show is open".into());
+    }
+    match tokens.first().map(String::as_str) {
+        Some("CUE") => super::cue_navigation_command::parse(command)?
+            .is_some()
+            .then_some(())
+            .ok_or_else(|| "CUE command is invalid".into()),
+        Some("SPD") => super::speed_group_command::parse(command)?
+            .is_some()
+            .then_some(())
+            .ok_or_else(|| "SPD GRP command is invalid".into()),
+        Some(
+            "RECORD" | "REC" | "UPDATE" | "DELETE" | "DEL" | "MOVE" | "MOV" | "COPY" | "CPY"
+            | "SET",
+        ) => {
+            if tokens.len() < 2 {
+                Err(format!("{} requires a target", tokens[0]))
+            } else {
+                compatibility_only_family(command).map(|_| ())
+            }
+        }
+        _ => Err("command family is invalid".into()),
+    }
+}
+
 #[derive(Clone, Copy)]
 pub(crate) enum ExistingCommandPolicy {
     /// Temporary adapter for the legacy WebSocket and OSC grammar while owning services migrate.
@@ -40,6 +102,46 @@ pub(crate) fn execute_existing_command(
     policy: ExistingCommandPolicy,
 ) -> ExistingCommandOutcome {
     let request_id = context.request_id.as_deref();
+    match macro_command_number(command) {
+        Ok(Some(number)) => {
+            return match crate::runtime::macros_v2::start_macro_from_command_line(
+                state, session, number,
+            ) {
+                Ok(execution_id) => {
+                    let feedback = format!("Started Macro {number} as execution {execution_id}");
+                    super::super::record_command_history(
+                        state, session, command, "accepted", &feedback, source, request_id,
+                    );
+                    ExistingCommandOutcome::Accepted {
+                        applied: 1,
+                        persistence_warning: None,
+                        replayed: false,
+                    }
+                }
+                Err(error) => {
+                    super::super::record_command_history(
+                        state,
+                        session,
+                        command,
+                        "rejected",
+                        &error.to_string(),
+                        source,
+                        request_id,
+                    );
+                    ExistingCommandOutcome::Rejected {
+                        error: error.to_string(),
+                    }
+                }
+            };
+        }
+        Err(error) => {
+            super::super::record_command_history(
+                state, session, command, "rejected", &error, source, request_id,
+            );
+            return ExistingCommandOutcome::Rejected { error };
+        }
+        Ok(None) => {}
+    }
     if let Some(error) = atomic_policy_error(command, policy) {
         super::super::record_command_history(
             state, session, command, "rejected", &error, source, request_id,
@@ -48,6 +150,26 @@ pub(crate) fn execute_existing_command(
     }
     let result = execute_with_policy(state, session, command, context, policy);
     finish_existing_command(state, session, command, source, request_id, result)
+}
+
+fn macro_command_number(command: &str) -> Result<Option<u16>, String> {
+    let tokens = command.split_whitespace().collect::<Vec<_>>();
+    if !tokens
+        .first()
+        .is_some_and(|token| token.eq_ignore_ascii_case("MACRO"))
+    {
+        return Ok(None);
+    }
+    let [_, number] = tokens.as_slice() else {
+        return Err("MACRO requires exactly one pool number".into());
+    };
+    let number = number
+        .parse::<u16>()
+        .map_err(|_| "MACRO pool number must be a whole number".to_owned())?;
+    if number == 0 {
+        return Err("MACRO pool number must be positive".into());
+    }
+    Ok(Some(number))
 }
 
 fn atomic_policy_error(command: &str, policy: ExistingCommandPolicy) -> Option<String> {
@@ -392,5 +514,20 @@ fn action_error(error: ActionError) -> ApiError {
         ActionErrorKind::Conflict | ActionErrorKind::Busy => ApiError::conflict(error.message),
         ActionErrorKind::Unavailable => ApiError::unavailable(error.message),
         ActionErrorKind::Internal => ApiError::internal(error.message),
+    }
+}
+
+#[cfg(test)]
+mod macro_command_tests {
+    use super::macro_command_number;
+
+    #[test]
+    fn macro_command_is_one_positive_pool_number() {
+        assert_eq!(macro_command_number("MACRO 17").unwrap(), Some(17));
+        assert_eq!(macro_command_number("macro 2").unwrap(), Some(2));
+        assert_eq!(macro_command_number("GROUP 17").unwrap(), None);
+        assert!(macro_command_number("MACRO").is_err());
+        assert!(macro_command_number("MACRO 0").is_err());
+        assert!(macro_command_number("MACRO 1 GO").is_err());
     }
 }

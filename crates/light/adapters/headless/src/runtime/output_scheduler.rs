@@ -12,7 +12,9 @@ use super::{
 use light_application::{
     PlaybackOperation, PlaybackShowScope, PlaybackUnitOfWork, automatic_playback_events,
 };
-use light_control::{SmpteTimecode, TimecodeRouter};
+use light_control::{
+    ExternalTimecodeLossPolicy, SmpteTimecode, TimecodeRouter, TimecodeSourceTransition,
+};
 use light_core::{AttributeKey, AttributeValue, FixtureId, MergeMode, TimedValue, Universe};
 use light_dynamics::ScalarSourceResolver;
 use light_engine::{
@@ -22,7 +24,7 @@ use light_output::{
     DmxFrame, NetworkOutput, OutputHealth, Protocol, UsbEndpointDocument, UsbOutputFanout,
     run_scheduler_dynamic_wakeable,
 };
-use light_playback::PlaybackIdentity;
+use light_playback::{PlaybackIdentity, TimecodeTransportAction, TimecodeTransportState};
 use light_wire::v2::visualization::VisualizationScope;
 use parking_lot::Mutex;
 use std::{
@@ -69,6 +71,7 @@ pub(super) struct Config {
     pub health: Arc<std::sync::Mutex<OutputHealth>>,
     pub rate: Arc<AtomicU16>,
     pub timecode: Arc<Mutex<TimecodeRouter>>,
+    pub timecodes: light_application::timeline::TimecodeRuntimeService,
     pub cancellation: CancellationToken,
     pub persisted_runtime: PersistedOutputRuntime,
     pub playback: PlaybackRenderCapability,
@@ -109,6 +112,7 @@ struct Runtime {
     pub(super) control: Arc<Mutex<OutputControl>>,
     pub(super) usb: Arc<UsbOutputFanout>,
     pub(super) timecode: Arc<Mutex<TimecodeRouter>>,
+    pub(super) timecodes: light_application::timeline::TimecodeRuntimeService,
     pub(super) playback: PlaybackRenderCapability,
     pub(super) active_show: ActiveShowProjection,
     pub(super) activation: ActiveShowCoordinator,
@@ -208,8 +212,16 @@ async fn run(
 async fn render_tick(runtime: Runtime) -> io::Result<u64> {
     let tick_started = Instant::now();
     let action_timing = runtime.action_timing.begin_output_render();
-    update_timecode(&runtime);
+    if update_timecode(&runtime) {
+        runtime.timecodes.tick();
+    }
     let options = runtime.control.lock().render_options();
+    let before_cues = runtime
+        .engine
+        .playback_runtime_status()
+        .into_iter()
+        .map(|status| (status.playback.cue_list_id, status.playback.current_cue_id))
+        .collect::<HashMap<_, _>>();
     let (rendered, visualization_scope, dynamic, engine) = {
         let Ok(_activation) = runtime.activation.try_acquire() else {
             return send_retained_output(&runtime).await;
@@ -251,6 +263,12 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
             engine_started.elapsed(),
         )
     };
+    dispatch_automatic_cue_actions(
+        &runtime.engine,
+        &runtime.timecodes,
+        &runtime.active_show,
+        &before_cues,
+    );
     let publish_started = Instant::now();
     let (routes, frames, patched_slots) = {
         let mut control = runtime.control.lock();
@@ -285,6 +303,46 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
         runtime.action_timing.complete_output_render(action_timing);
     }
     result
+}
+
+fn dispatch_automatic_cue_actions(
+    engine: &Engine,
+    timecodes: &light_application::timeline::TimecodeRuntimeService,
+    active_show: &ActiveShowProjection,
+    before: &HashMap<light_core::CueListId, Option<Uuid>>,
+) {
+    let Some(show) = active_show.current() else {
+        return;
+    };
+    let snapshot = engine.snapshot();
+    for status in engine.playback_runtime_status() {
+        let cue_list_id = status.playback.cue_list_id;
+        let Some(current) = status
+            .playback
+            .current_cue_id
+            .filter(|current| before.get(&cue_list_id).copied().flatten() != Some(*current))
+        else {
+            continue;
+        };
+        let Some(cue) = snapshot
+            .cue_lists
+            .iter()
+            .find(|cue_list| cue_list.id == cue_list_id)
+            .and_then(|cue_list| cue_list.cues.iter().find(|cue| cue.id == current))
+        else {
+            continue;
+        };
+        let mut completion = 0;
+        for action in &cue.actions {
+            match super::timecode_v2::apply_installed_cue_action(timecodes, &show.path, action) {
+                Ok(value) => completion = completion.max(value.unwrap_or(0)),
+                Err(error) => {
+                    tracing::warn!(error = %error.message, "automatic Cue Timecode action failed")
+                }
+            }
+        }
+        engine.set_cue_external_completion_millis(cue_list_id, completion);
+    }
 }
 
 async fn send_retained_output(runtime: &Runtime) -> io::Result<u64> {
@@ -335,6 +393,12 @@ pub(in crate::runtime) fn combined_delivery_result(
 pub(super) async fn render_test_tick(state: AppState) -> io::Result<u64> {
     let tick_started = Instant::now();
     let action_timing = state.action_timing.begin_output_render();
+    let before_cues = state
+        .output
+        .playback_runtime_status()
+        .into_iter()
+        .map(|status| (status.playback.cue_list_id, status.playback.current_cue_id))
+        .collect::<HashMap<_, _>>();
     let (rendered, semantic_timing, visualization_scope) = {
         let _activation = state.active_show.acquire_shared().await;
         let visualization_scope = VisualizationScope {
@@ -351,6 +415,12 @@ pub(super) async fn render_test_tick(state: AppState) -> io::Result<u64> {
             .map_err(io::Error::other)?;
         (rendered, semantic_timing, visualization_scope)
     };
+    dispatch_automatic_cue_actions(
+        state.output.engine(),
+        &state.timecodes,
+        &state.active_show.output_projection(),
+        &before_cues,
+    );
     let publish_started = Instant::now();
     let frames = state
         .output
@@ -491,11 +561,42 @@ fn checkpoint_automatic_playback_runtime(
         .map_err(ApiError::store)
 }
 
-fn update_timecode(runtime: &Runtime) {
-    let current = runtime.timecode.lock().poll_loss().cloned();
+fn update_timecode(runtime: &Runtime) -> bool {
+    let (current, transition, uses_internal_clock) = {
+        let mut router = runtime.timecode.lock();
+        let current = router.poll_loss().cloned();
+        let transition = router.take_transition();
+        (current, transition, router.uses_internal_clock())
+    };
     runtime
         .engine
         .set_timecode_frame(current.as_ref().map(timecode_frame));
+    if let Some(TimecodeSourceTransition::ExternalLost { policy }) = transition {
+        apply_external_timecode_loss(runtime, policy);
+    }
+    uses_internal_clock
+}
+
+fn apply_external_timecode_loss(runtime: &Runtime, policy: ExternalTimecodeLossPolicy) {
+    let action = match policy {
+        ExternalTimecodeLossPolicy::ContinueInternal => return,
+        ExternalTimecodeLossPolicy::Pause => TimecodeTransportAction::Pause,
+        ExternalTimecodeLossPolicy::Stop => TimecodeTransportAction::Stop,
+    };
+    for snapshot in runtime.timecodes.snapshots() {
+        let eligible = match policy {
+            ExternalTimecodeLossPolicy::Pause => {
+                snapshot.transport == TimecodeTransportState::Playing
+            }
+            ExternalTimecodeLossPolicy::Stop => {
+                snapshot.transport != TimecodeTransportState::Stopped
+            }
+            ExternalTimecodeLossPolicy::ContinueInternal => false,
+        };
+        if eligible {
+            let _ = runtime.timecodes.handle(snapshot.timecode_id, action);
+        }
+    }
 }
 
 fn timecode_frame(timecode: &SmpteTimecode) -> u64 {
@@ -653,6 +754,7 @@ impl SharedResources {
             control: Arc::clone(&self.control),
             usb: Arc::clone(&self.usb),
             timecode: Arc::clone(&config.timecode),
+            timecodes: config.timecodes.clone(),
             playback: config.playback.clone(),
             active_show: config.active_show.clone(),
             activation: config.activation.clone(),

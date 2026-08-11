@@ -191,7 +191,7 @@ pub(super) fn http_context(session: &Session, request_id: Option<&str>) -> Actio
     request_id.map_or(context.clone(), |id| context.with_request_id(id))
 }
 
-pub(super) fn authenticate_desk_mutation(
+pub(crate) fn authenticate_desk_mutation(
     state: &AppState,
     headers: &HeaderMap,
     desk: &DeskContext,

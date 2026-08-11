@@ -26,6 +26,165 @@ fn typed_route(body: Value) -> light_show::LosslessBody<light_output::OutputRout
     light_show::LosslessBody::decode(body).unwrap()
 }
 
+fn macro_body(id: Uuid, number: u16, name: &str, source: &str) -> Value {
+    serde_json::to_value(crate::CommandMacroDefinition {
+        id,
+        number,
+        name: name.into(),
+        source: source.into(),
+        presentation: crate::MacroPresentation::default(),
+    })
+    .unwrap()
+}
+
+fn timecode_body(id: Uuid, number: u32, name: &str) -> Value {
+    serde_json::to_value(light_playback::TimecodeDefinition {
+        id: light_playback::TimecodeId(id),
+        number,
+        name: name.into(),
+        duration: Some(light_playback::TimecodeFrame(1_000)),
+        transport_offset: light_playback::TimecodeFrame::ZERO,
+        auto_start: false,
+        audio: None,
+        markers: Vec::new(),
+        lanes: Vec::new(),
+    })
+    .unwrap()
+}
+
+#[test]
+fn timecode_mutation_normalizes_identity_and_preserves_future_fields() {
+    let rig = TestRig::new();
+    let id = Uuid::from_u128(0x7001);
+    let mut body = timecode_body(Uuid::from_u128(1), 4, " Opener ");
+    body["futureTimecodeField"] = json!({"kept": true});
+
+    rig.service
+        .mutate_objects(
+            rig.object_action(vec![ActiveShowObjectMutation {
+                kind: ActiveShowObjectKind::Timecode,
+                object_id: id.to_string(),
+                expected_object_revision: 0,
+                mutation: ActiveShowObjectMutationKind::Put {
+                    body: Box::new(typed(ActiveShowObjectKind::Timecode, body)),
+                },
+            }]),
+            &rig.ports,
+        )
+        .unwrap();
+
+    let stored = rig.object_body("timecode", &id.to_string());
+    assert_eq!(stored["id"], id.to_string());
+    assert_eq!(stored["name"], "Opener");
+    assert_eq!(stored["futureTimecodeField"], json!({"kept": true}));
+}
+
+#[test]
+fn macro_mutation_is_lossless_normalized_and_pool_unique() {
+    let rig = TestRig::new();
+    let first_id = Uuid::from_u128(0x7101);
+    let second_id = Uuid::from_u128(0x7102);
+    let mut first = macro_body(Uuid::from_u128(1), 7, " House Open ", "GROUP 1 AT 50");
+    first["futureMacroField"] = json!({"kept": true});
+
+    rig.service
+        .mutate_objects(
+            rig.object_action(vec![ActiveShowObjectMutation {
+                kind: ActiveShowObjectKind::Macro,
+                object_id: first_id.to_string(),
+                expected_object_revision: 0,
+                mutation: ActiveShowObjectMutationKind::Put {
+                    body: Box::new(typed(ActiveShowObjectKind::Macro, first)),
+                },
+            }]),
+            &rig.ports,
+        )
+        .unwrap();
+
+    let stored = rig.object_body("macro", &first_id.to_string());
+    assert_eq!(stored["id"], first_id.to_string());
+    assert_eq!(stored["name"], "House Open");
+    assert_eq!(stored["futureMacroField"], json!({"kept": true}));
+
+    for (number, name, expected) in [
+        (7, "Different", "Macro number 7"),
+        (8, "house open", "Macro name"),
+    ] {
+        let error = rig
+            .service
+            .mutate_objects(
+                rig.object_action(vec![ActiveShowObjectMutation {
+                    kind: ActiveShowObjectKind::Macro,
+                    object_id: second_id.to_string(),
+                    expected_object_revision: 0,
+                    mutation: ActiveShowObjectMutationKind::Put {
+                        body: Box::new(typed(
+                            ActiveShowObjectKind::Macro,
+                            macro_body(second_id, number, name, "GROUP 2"),
+                        )),
+                    },
+                }]),
+                &rig.ports,
+            )
+            .unwrap_err();
+        assert_eq!(error.kind, ActionErrorKind::Invalid);
+        assert!(error.message.contains(expected), "{}", error.message);
+    }
+}
+
+#[test]
+fn macro_numbers_can_be_swapped_atomically_in_one_show_transaction() {
+    let rig = TestRig::new();
+    let first_id = Uuid::from_u128(0x7111);
+    let second_id = Uuid::from_u128(0x7112);
+    rig.seed_object(
+        "macro",
+        &first_id.to_string(),
+        macro_body(first_id, 1, "One", "GROUP 1"),
+    );
+    rig.seed_object(
+        "macro",
+        &second_id.to_string(),
+        macro_body(second_id, 2, "Two", "GROUP 2"),
+    );
+
+    rig.service
+        .mutate_objects(
+            rig.object_action(vec![
+                ActiveShowObjectMutation {
+                    kind: ActiveShowObjectKind::Macro,
+                    object_id: first_id.to_string(),
+                    expected_object_revision: 1,
+                    mutation: ActiveShowObjectMutationKind::Put {
+                        body: Box::new(typed(
+                            ActiveShowObjectKind::Macro,
+                            macro_body(first_id, 2, "One", "GROUP 1"),
+                        )),
+                    },
+                },
+                ActiveShowObjectMutation {
+                    kind: ActiveShowObjectKind::Macro,
+                    object_id: second_id.to_string(),
+                    expected_object_revision: 1,
+                    mutation: ActiveShowObjectMutationKind::Put {
+                        body: Box::new(typed(
+                            ActiveShowObjectKind::Macro,
+                            macro_body(second_id, 1, "Two", "GROUP 2"),
+                        )),
+                    },
+                },
+            ]),
+            &rig.ports,
+        )
+        .unwrap();
+
+    assert_eq!(rig.object_body("macro", &first_id.to_string())["number"], 2);
+    assert_eq!(
+        rig.object_body("macro", &second_id.to_string())["number"],
+        1
+    );
+}
+
 #[test]
 fn group_batch_preserves_extensions_empty_state_and_ordered_membership() {
     let rig = TestRig::new();

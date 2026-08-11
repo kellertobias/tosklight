@@ -268,12 +268,14 @@ pub struct DynamicInstanceChoiceOption {
     pub command: String,
 }
 
-/// Source names currently emitted by the v2 HTTP command-line adapter.
+/// Source names emitted by the command-line adapter, including command Macros which intentionally
+/// pass through the same authoritative Programming service.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(rename_all = "snake_case")]
 pub enum CommandHttpSource {
     Http,
     HttpKey,
+    Macro,
 }
 
 /// Typed payload for the existing command-line change compatibility event.

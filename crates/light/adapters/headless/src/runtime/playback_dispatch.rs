@@ -27,7 +27,11 @@ pub(super) fn dispatch_playback_action(
     input: &PoolPlaybackInput,
     context: PlaybackDispatchContext<'_>,
 ) -> Result<PlaybackDispatchOutcome, ApiError> {
+    let before_cue = current_cue_id(state, definition);
     let outcome = dispatch_playback_action_inner(state, definition, action_name, input, &context)?;
+    if outcome.changed {
+        dispatch_entered_cue_actions(state, definition, before_cue)?;
+    }
     if !outcome.released_playbacks.is_empty()
         && let Some(desk) = context.desk
     {
@@ -59,6 +63,50 @@ pub(super) fn dispatch_playback_action(
         addressed_event_required: outcome.addressed_event_required,
         persistence_pending: outcome.persistence_pending || !failures.is_empty(),
     })
+}
+
+fn current_cue_id(
+    state: &AppState,
+    definition: &light_playback::PlaybackDefinition,
+) -> Option<uuid::Uuid> {
+    let light_playback::PlaybackTarget::CueList { cue_list_id } = definition.target else {
+        return None;
+    };
+    state
+        .output
+        .playback_runtime_status_for_cue_list(cue_list_id)
+        .and_then(|status| status.playback.current_cue_id)
+}
+
+fn dispatch_entered_cue_actions(
+    state: &AppState,
+    definition: &light_playback::PlaybackDefinition,
+    before: Option<uuid::Uuid>,
+) -> Result<(), ApiError> {
+    let light_playback::PlaybackTarget::CueList { cue_list_id } = definition.target else {
+        return Ok(());
+    };
+    let Some(current) =
+        current_cue_id(state, definition).filter(|current| Some(*current) != before)
+    else {
+        return Ok(());
+    };
+    let snapshot = state.output.snapshot();
+    let cue = snapshot
+        .cue_lists
+        .iter()
+        .find(|cue_list| cue_list.id == cue_list_id)
+        .and_then(|cue_list| cue_list.cues.iter().find(|cue| cue.id == current))
+        .ok_or_else(|| ApiError::internal("entered Cue is missing from the runtime snapshot"))?;
+    let mut completion = 0;
+    for action in &cue.actions {
+        completion =
+            completion.max(super::timecode_v2::apply_cue_action(state, action)?.unwrap_or(0));
+    }
+    state
+        .output
+        .set_cue_external_completion_millis(cue_list_id, completion);
+    Ok(())
 }
 
 fn persist_playback_plan(

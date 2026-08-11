@@ -268,6 +268,18 @@ impl Engine {
             .runtime_status_for_cue_list(cue_list_id)
     }
 
+    pub fn set_cue_external_completion_millis(
+        &self,
+        cue_list_id: light_core::CueListId,
+        duration_millis: u64,
+    ) -> bool {
+        self.generation
+            .load()
+            .playback()
+            .write()
+            .set_external_completion_millis(cue_list_id, duration_millis)
+    }
+
     pub fn active_dynamic_playbacks(&self) -> Vec<ActiveDynamicPlayback> {
         self.generation
             .load()

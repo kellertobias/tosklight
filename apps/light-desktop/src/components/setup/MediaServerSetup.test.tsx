@@ -82,7 +82,7 @@ describe("Media server Patch authority", () => {
 				direct_control: {
 					protocol: "citp",
 					ip_address: "192.168.1.50",
-					port: 4811,
+					port: 4809,
 				},
 			}),
 		);
@@ -98,7 +98,7 @@ describe("Media server Patch authority", () => {
 			direct_control: {
 				protocol: "citp",
 				ip_address: "192.168.1.60",
-				port: 4811,
+				port: 4809,
 			},
 		};
 		patchFixtures = [fixture];
@@ -122,7 +122,7 @@ describe("Media server Patch authority", () => {
 			direct_control: {
 				protocol: "citp",
 				ip_address: "192.168.1.70",
-				port: 4811,
+				port: 4809,
 			},
 		};
 		patchFixtures = [fixture];
@@ -133,7 +133,7 @@ describe("Media server Patch authority", () => {
 				endpoint: {
 					protocol: "citp",
 					ip_address: "192.168.1.60",
-					port: 4811,
+					port: 4809,
 				},
 				layers: [],
 				status: {

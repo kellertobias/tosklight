@@ -656,8 +656,10 @@ pub(super) fn ingest_timecode(state: &AppState, timecode: SmpteTimecode) {
         let seconds = u64::from(timecode.hours) * 3600
             + u64::from(timecode.minutes) * 60
             + u64::from(timecode.seconds);
+        let frame = seconds * fps + u64::from(timecode.frames);
+        state.output.set_timecode_frame(Some(frame));
         state
-            .output
-            .set_timecode_frame(Some(seconds * fps + u64::from(timecode.frames)));
+            .timecodes
+            .synchronize_external(light_playback::TimecodeFrame(frame));
     }
 }

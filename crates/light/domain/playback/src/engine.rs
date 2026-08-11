@@ -55,6 +55,19 @@ impl PlaybackEngine {
     pub fn clock(&self) -> SharedClock {
         Arc::clone(&self.clock)
     }
+
+    pub fn set_external_completion_millis(
+        &mut self,
+        cue_list_id: CueListId,
+        duration_millis: u64,
+    ) -> bool {
+        let Some(playback) = self.active.get_mut(&PlaybackKey::CueList(cue_list_id)) else {
+            return false;
+        };
+        let changed = playback.external_completion_millis != duration_millis;
+        playback.external_completion_millis = duration_millis;
+        changed
+    }
     pub fn set_control_timing(
         &mut self,
         speed_groups_bpm: [f64; 5],

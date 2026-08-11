@@ -468,16 +468,36 @@ fn patched_configuration(
     if let Some(value) = patch.art_timecode_bind {
         configuration.art_timecode_bind = parse_socket(value, "art_timecode_bind")?;
     }
-    if let Some(value) = patch.timecode_sources {
-        configuration.timecode_sources = value
-            .into_iter()
-            .map(|source| TimecodeSourceConfig {
-                source_prefix: source.source_prefix,
-                priority: source.priority,
-                fallback: source.fallback,
-                loss_timeout_millis: source.loss_timeout_millis,
-            })
-            .collect();
+    if let Some(value) = patch.timecode_source {
+        configuration.timecode_source = match value {
+            wire::TimecodeSourceSelectionConfiguration::Internal => {
+                TimecodeSourceSelection::Internal
+            }
+            wire::TimecodeSourceSelectionConfiguration::External { source } => {
+                TimecodeSourceSelection::External { source }
+            }
+        };
+    }
+    if let Some(value) = patch.timecode_frame_rate {
+        configuration.timecode_frame_rate = value.map(|rate| DeskTimecodeFrameRate {
+            numerator: rate.numerator,
+            denominator: rate.denominator,
+            drop_frame: rate.drop_frame,
+        });
+    }
+    if let Some(value) = patch.timecode_external_loss_policy {
+        configuration.timecode_external_loss_policy = match value {
+            wire::ExternalTimecodeLossPolicyConfiguration::ContinueInternal => {
+                ExternalTimecodeLossPolicy::ContinueInternal
+            }
+            wire::ExternalTimecodeLossPolicyConfiguration::Pause => {
+                ExternalTimecodeLossPolicy::Pause
+            }
+            wire::ExternalTimecodeLossPolicyConfiguration::Stop => ExternalTimecodeLossPolicy::Stop,
+        };
+    }
+    if let Some(value) = patch.timecode_external_loss_timeout_millis {
+        configuration.timecode_external_loss_timeout_millis = value;
     }
     if let Some(value) = patch.osc_timecode {
         configuration.osc_timecode = value
@@ -496,6 +516,12 @@ fn patched_configuration(
                 })
             })
             .transpose()?;
+    }
+    if let Some(value) = patch.timecode_audio_output_device {
+        configuration.timecode_audio_output_device = value.map(|device| device.trim().to_owned());
+    }
+    if let Some(value) = patch.timecode_audio_latency_trim_micros_by_output {
+        configuration.timecode_audio_latency_trim_micros_by_output = value;
     }
     if let Some(value) = patch.backup_retention {
         configuration.backup_retention = value;
@@ -845,5 +871,81 @@ mod highlight_compatibility_tests {
         assert!(configuration.cuelist_auto_off_flash_release_default);
         assert!(configuration.start_after_first_recording);
         assert!(configuration.preload_programmer_changes);
+    }
+
+    #[test]
+    fn timecode_patch_selects_one_source_rate_and_loss_policy() {
+        let patch: wire::ConfigurationPatch = serde_json::from_value(serde_json::json!({
+            "timecode_source": {
+                "type": "external",
+                "source": "artnet:10.0.0.1:2"
+            },
+            "timecode_frame_rate": {
+                "numerator": 30000,
+                "denominator": 1001,
+                "drop_frame": true
+            },
+            "timecode_external_loss_policy": "pause",
+            "timecode_external_loss_timeout_millis": 750
+        }))
+        .unwrap();
+
+        let configuration = patched_configuration(DeskConfiguration::default(), patch).unwrap();
+        assert_eq!(
+            configuration.timecode_source,
+            TimecodeSourceSelection::External {
+                source: "artnet:10.0.0.1:2".into()
+            }
+        );
+        assert_eq!(
+            configuration.timecode_router_config().desk_rate,
+            FrameRate::Fps2997Drop
+        );
+        assert_eq!(
+            configuration.timecode_external_loss_policy,
+            ExternalTimecodeLossPolicy::Pause
+        );
+        assert_eq!(configuration.timecode_external_loss_timeout_millis, 750);
+    }
+
+    #[test]
+    fn timecode_rate_null_follows_the_dmx_rate() {
+        let patch: wire::ConfigurationPatch = serde_json::from_value(serde_json::json!({
+            "frame_rate_hz": 44,
+            "timecode_frame_rate": null
+        }))
+        .unwrap();
+        let configuration = patched_configuration(DeskConfiguration::default(), patch).unwrap();
+        assert_eq!(
+            configuration.timecode_router_config().desk_rate,
+            FrameRate::FpsCustom(44)
+        );
+    }
+
+    #[test]
+    fn timecode_audio_destination_and_per_output_trim_patch_persistently() {
+        let patch: wire::ConfigurationPatch = serde_json::from_value(serde_json::json!({
+            "timecode_audio_output_device": "Desk USB Out",
+            "timecode_audio_latency_trim_micros_by_output": {
+                "$system_default": -2500,
+                "Desk USB Out": 13750
+            }
+        }))
+        .unwrap();
+        let configuration = patched_configuration(DeskConfiguration::default(), patch).unwrap();
+        assert_eq!(
+            configuration.timecode_audio_output_device.as_deref(),
+            Some("Desk USB Out")
+        );
+        assert_eq!(
+            configuration.timecode_audio_latency_trim_micros_by_output["Desk USB Out"],
+            13_750
+        );
+        let restored: DeskConfiguration =
+            serde_json::from_value(serde_json::to_value(configuration).unwrap()).unwrap();
+        assert_eq!(
+            restored.timecode_audio_latency_trim_micros_by_output["$system_default"],
+            -2_500
+        );
     }
 }

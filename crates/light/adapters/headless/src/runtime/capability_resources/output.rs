@@ -119,6 +119,9 @@ impl TestClockDriver {
 }
 
 impl OutputResource {
+    pub(in crate::runtime) fn engine(&self) -> &Engine {
+        &self.engine
+    }
     #[allow(clippy::too_many_arguments)]
     pub(in crate::runtime) fn new(
         runtime_service: OutputRuntimeService,
@@ -532,6 +535,15 @@ impl OutputResource {
     ) -> Option<light_playback::PlaybackRuntimeStatus> {
         self.engine
             .playback_runtime_status_for_cue_list(cue_list_id)
+    }
+
+    pub(in crate::runtime) fn set_cue_external_completion_millis(
+        &self,
+        cue_list_id: light_core::CueListId,
+        duration_millis: u64,
+    ) -> bool {
+        self.engine
+            .set_cue_external_completion_millis(cue_list_id, duration_millis)
     }
 
     pub(in crate::runtime) fn active_dynamic_playback_at(

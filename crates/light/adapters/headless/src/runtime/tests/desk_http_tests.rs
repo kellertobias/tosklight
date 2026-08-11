@@ -233,7 +233,7 @@ async fn citp_thumbnail_api_uses_patched_parent_endpoint_and_cache() {
         let (mut stream, _) = listener.accept().await.unwrap();
         let cinf = read_citp_test_packet(&mut stream).await;
         assert_eq!(&cinf[22..26], b"CInf");
-        let mut info = citp_test_packet(*b"SInf", &[]);
+        let mut info = citp_test_packet(*b"SInf", &[0, 0, 0, 1, 1]);
         info[6..8].copy_from_slice(&1_u16.to_le_bytes());
         stream.write_all(&info).await.unwrap();
         let request = read_citp_test_packet(&mut stream).await;
@@ -257,7 +257,7 @@ async fn citp_thumbnail_api_uses_patched_parent_endpoint_and_cache() {
             Request::post(format!("/api/v2/media-servers/{}/thumbnails/refresh", fixture_id.0))
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(r#"{"elements":[7],"width":64,"height":64}"#))
+                .body(Body::from(r#"{"library_level":1,"library_1":2,"elements":[7],"width":64,"height":64}"#))
                 .unwrap(),
         )
         .await
@@ -269,14 +269,33 @@ async fn citp_thumbnail_api_uses_patched_parent_endpoint_and_cache() {
             fixture: fixture_id.0.to_string(),
             library_type: 1,
             library: LibraryId {
-                level: 0,
-                ids: [0, 0, 0],
+                level: 1,
+                ids: [2, 0, 0],
             },
             element: 7,
         })
         .expect("refreshed thumbnail is cached");
     assert_eq!(cached.image.format, light_media::ImageFormat::Jpeg);
     assert_eq!(cached.image.bytes, vec![1, 2, 3]);
+    let thumbnail = app
+        .clone()
+        .oneshot(
+            Request::get(format!(
+                "/api/v2/media-servers/{}/thumbnails/2/7",
+                fixture_id.0
+            ))
+            .header(header::AUTHORIZATION, format!("Bearer {token}"))
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(thumbnail.status(), StatusCode::OK);
+    assert_eq!(
+        thumbnail.headers()[header::CONTENT_TYPE],
+        "image/jpeg"
+    );
+    assert!(thumbnail.headers().contains_key("x-light-received-at-millis"));
     let status = app
         .oneshot(
             Request::get("/api/v2/media-servers")

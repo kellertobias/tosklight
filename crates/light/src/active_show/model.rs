@@ -15,12 +15,14 @@ pub enum ActiveShowObjectKind {
     CueList,
     Dynamic,
     Group,
+    Macro,
     PatchLayer,
     Playback,
     PlaybackPage,
     Preset,
     Schedule,
     StageLayout,
+    Timecode,
     UserLayout,
 }
 
@@ -33,12 +35,14 @@ pub enum ActiveShowObjectBody {
     CueList(LosslessBody<CueList>),
     Dynamic(LosslessBody<DynamicDefinition>),
     Group(LosslessBody<GroupDefinition>),
+    Macro(LosslessBody<crate::CommandMacroDefinition>),
     PatchLayer(LosslessBody<PatchLayer>),
     Playback(LosslessBody<PlaybackDefinition>),
     PlaybackPage(LosslessBody<PlaybackPage>),
     Preset(LosslessBody<Preset>),
     Schedule(LosslessBody<crate::ScheduleDefinition>),
     StageLayout(LosslessBody<StageLayout>),
+    Timecode(LosslessBody<light_playback::TimecodeDefinition>),
     UserLayout(LosslessBody<UserLayout>),
 }
 
@@ -52,12 +56,14 @@ impl ActiveShowObjectBody {
             ActiveShowObjectKind::CueList => Self::CueList(LosslessBody::decode(raw)?),
             ActiveShowObjectKind::Dynamic => Self::Dynamic(LosslessBody::decode(raw)?),
             ActiveShowObjectKind::Group => Self::Group(LosslessBody::decode(raw)?),
+            ActiveShowObjectKind::Macro => Self::Macro(LosslessBody::decode(raw)?),
             ActiveShowObjectKind::PatchLayer => Self::PatchLayer(LosslessBody::decode(raw)?),
             ActiveShowObjectKind::Playback => Self::Playback(LosslessBody::decode(raw)?),
             ActiveShowObjectKind::PlaybackPage => Self::PlaybackPage(LosslessBody::decode(raw)?),
             ActiveShowObjectKind::Preset => Self::Preset(LosslessBody::decode(raw)?),
             ActiveShowObjectKind::Schedule => Self::Schedule(LosslessBody::decode(raw)?),
             ActiveShowObjectKind::StageLayout => Self::StageLayout(LosslessBody::decode(raw)?),
+            ActiveShowObjectKind::Timecode => Self::Timecode(LosslessBody::decode(raw)?),
             ActiveShowObjectKind::UserLayout => Self::UserLayout(LosslessBody::decode(raw)?),
         })
     }
@@ -68,12 +74,14 @@ impl ActiveShowObjectBody {
             Self::CueList(_) => ActiveShowObjectKind::CueList,
             Self::Dynamic(_) => ActiveShowObjectKind::Dynamic,
             Self::Group(_) => ActiveShowObjectKind::Group,
+            Self::Macro(_) => ActiveShowObjectKind::Macro,
             Self::PatchLayer(_) => ActiveShowObjectKind::PatchLayer,
             Self::Playback(_) => ActiveShowObjectKind::Playback,
             Self::PlaybackPage(_) => ActiveShowObjectKind::PlaybackPage,
             Self::Preset(_) => ActiveShowObjectKind::Preset,
             Self::Schedule(_) => ActiveShowObjectKind::Schedule,
             Self::StageLayout(_) => ActiveShowObjectKind::StageLayout,
+            Self::Timecode(_) => ActiveShowObjectKind::Timecode,
             Self::UserLayout(_) => ActiveShowObjectKind::UserLayout,
         }
     }
@@ -84,12 +92,14 @@ impl ActiveShowObjectBody {
             Self::CueList(body) => body.encode(),
             Self::Dynamic(body) => body.encode(),
             Self::Group(body) => body.encode(),
+            Self::Macro(body) => body.encode(),
             Self::PatchLayer(body) => body.encode(),
             Self::Playback(body) => body.encode(),
             Self::PlaybackPage(body) => body.encode(),
             Self::Preset(body) => body.encode(),
             Self::Schedule(body) => body.encode(),
             Self::StageLayout(body) => body.encode(),
+            Self::Timecode(body) => body.encode(),
             Self::UserLayout(body) => body.encode(),
         }
     }
@@ -118,6 +128,13 @@ impl ActiveShowObjectBody {
     pub(crate) fn group(&self) -> Option<&LosslessBody<GroupDefinition>> {
         match self {
             Self::Group(body) => Some(body),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn macro_definition(&self) -> Option<&LosslessBody<crate::CommandMacroDefinition>> {
+        match self {
+            Self::Macro(body) => Some(body),
             _ => None,
         }
     }
@@ -167,6 +184,13 @@ impl ActiveShowObjectBody {
     pub(crate) fn user_layout(&self) -> Option<&LosslessBody<UserLayout>> {
         match self {
             Self::UserLayout(body) => Some(body),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn timecode(&self) -> Option<&LosslessBody<light_playback::TimecodeDefinition>> {
+        match self {
+            Self::Timecode(body) => Some(body),
             _ => None,
         }
     }
@@ -229,6 +253,7 @@ fn validate_family_shape(
             "default_activation",
         ],
         ActiveShowObjectKind::Group => unreachable!("handled above"),
+        ActiveShowObjectKind::Macro => &["id", "number", "name", "source"],
         ActiveShowObjectKind::PatchLayer => &["id", "name", "order"],
         ActiveShowObjectKind::Playback => &["number", "name", "target"],
         ActiveShowObjectKind::PlaybackPage => &["number", "name", "slots", "virtual_playbacks"],
@@ -236,6 +261,15 @@ fn validate_family_shape(
         ActiveShowObjectKind::Preset => &["name", "family", "number"],
         ActiveShowObjectKind::Schedule => &["id", "name", "enabled", "trigger", "target"],
         ActiveShowObjectKind::StageLayout => unreachable!("handled above"),
+        ActiveShowObjectKind::Timecode => &[
+            "id",
+            "number",
+            "name",
+            "transport_offset",
+            "auto_start",
+            "markers",
+            "lanes",
+        ],
         ActiveShowObjectKind::UserLayout => &["desks", "activeDeskId"],
     };
     if let Some(field) = required.iter().find(|field| !object.contains_key(**field)) {
@@ -304,7 +338,17 @@ fn looks_like_other_family(object: &serde_json::Map<String, serde_json::Value>) 
             "activation_groups",
         ][..],
         &["id", "name", "cues"][..],
+        &["id", "number", "name", "source"],
         &["id", "pool_number", "revision", "target_binding", "lanes"],
+        &[
+            "id",
+            "number",
+            "name",
+            "transport_offset",
+            "auto_start",
+            "markers",
+            "lanes",
+        ],
         &["name", "order"],
         &["number", "name", "target"],
         &["number", "name", "slots", "virtual_playbacks"],
@@ -547,12 +591,14 @@ impl ActiveShowObjectKind {
             "cue_list" => Some(Self::CueList),
             "dynamic" => Some(Self::Dynamic),
             "group" => Some(Self::Group),
+            "macro" => Some(Self::Macro),
             "patch_layer" => Some(Self::PatchLayer),
             "playback" => Some(Self::Playback),
             "playback_page" => Some(Self::PlaybackPage),
             "preset" => Some(Self::Preset),
             "schedule" => Some(Self::Schedule),
             "stage_layout" => Some(Self::StageLayout),
+            "timecode" => Some(Self::Timecode),
             "user_layout" => Some(Self::UserLayout),
             _ => None,
         }
@@ -564,12 +610,14 @@ impl ActiveShowObjectKind {
             Self::CueList => "cue_list",
             Self::Dynamic => "dynamic",
             Self::Group => "group",
+            Self::Macro => "macro",
             Self::PatchLayer => "patch_layer",
             Self::Playback => "playback",
             Self::PlaybackPage => "playback_page",
             Self::Preset => "preset",
             Self::Schedule => "schedule",
             Self::StageLayout => "stage_layout",
+            Self::Timecode => "timecode",
             Self::UserLayout => "user_layout",
         }
     }

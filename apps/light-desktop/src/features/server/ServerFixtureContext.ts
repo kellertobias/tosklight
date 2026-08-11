@@ -6,6 +6,7 @@ import type {
 	GelCatalogImportPreview,
 	GelCatalogImportTarget,
 } from "../../api/client/fixtures";
+import type { MediaServerInspection } from "../../api/client/mediaOutput";
 import type {
 	FixtureDefinition,
 	FixtureProfile,
@@ -16,8 +17,25 @@ export interface ServerFixtureContext {
 	refreshMediaPreview: (fixtureId: string, source?: number) => Promise<boolean>;
 	refreshMediaThumbnails: (
 		fixtureId: string,
+		folder: number,
 		elements: number[],
 	) => Promise<void>;
+	inspectMediaServer: (fixtureId: string) => Promise<MediaServerInspection>;
+	applyMediaLibrarySelection: (
+		fixtureId: string,
+		input: {
+			expected_library_revision: string;
+			layer_fixture_id: string;
+			kind: "content" | "mask";
+			folder: number;
+			file: number;
+		},
+	) => Promise<unknown>;
+	mediaThumbnail: (
+		fixtureId: string,
+		folder: number,
+		element: number,
+	) => Promise<Blob>;
 	saveFixtureDefinition: (definition: FixtureDefinition) => Promise<boolean>;
 	deleteFixtureDefinition: (id: string, revision: number) => Promise<void>;
 	saveFixtureProfile: (

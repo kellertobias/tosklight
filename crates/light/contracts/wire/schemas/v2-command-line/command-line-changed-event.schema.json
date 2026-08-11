@@ -55,11 +55,12 @@
   ],
   "$defs": {
     "CommandHttpSource": {
-      "description": "Source names currently emitted by the v2 HTTP command-line adapter.",
+      "description": "Source names emitted by the command-line adapter, including command Macros which intentionally\npass through the same authoritative Programming service.",
       "type": "string",
       "enum": [
         "http",
-        "http_key"
+        "http_key",
+        "macro"
       ]
     },
     "CommandTarget": {

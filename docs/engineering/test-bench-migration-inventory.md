@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **171 root cases across 68 files**.
+Default catalog: **176 root cases across 70 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -184,6 +184,11 @@ Default catalog: **171 root cases across 68 files**.
 | 82-fixture-sheet-filtering-and-compact-mode.spec.ts | FIXTURE-SHEET-002-001 @ui › independent scenery identities stay out of the programmable sheet | repository contract | @ui | fixture-sheet-filtering-and-compact-mode | standard failure evidence | parallel | pending-semantic-migration |
 | 82-fixture-sheet-filtering-and-compact-mode.spec.ts | FIXTURE-SHEET-002-003 @ui › a Dynamic changes DMX while the Fixture Sheet base stays stable | repository contract | @ui | fixture-sheet-filtering-and-compact-mode | standard failure evidence | parallel | pending-semantic-migration |
 | 83-show-patch-installed-appearance.spec.ts | PATCH-APPEARANCE-003-001 @ui › exact table, combined MIB, and emitterless source state survive reopen | repository contract | @ui | show-patch-installed-appearance | standard failure evidence | parallel | pending-semantic-migration |
+| 84-semantic-media-running-panes.spec.ts | MEDIA-001 @ui › Media is absent without an eligible patched server | docs/testing/14-media-and-running-panes.md | @ui | semantic-media-running-panes | standard failure evidence | parallel | pending-semantic-migration |
+| 84-semantic-media-running-panes.spec.ts | RUNNING-003 @ui › a Macro row filters and cancels through its exact live Off action | docs/testing/14-media-and-running-panes.md | @ui | semantic-media-running-panes | standard failure evidence | parallel | pending-semantic-migration |
+| 85-semantic-macros-timecode.spec.ts | MACRO-003 @api › command-line start uses the shared one-shot execution | docs/testing/15-macros-and-timecode.md | @api | semantic-macros-timecode | standard failure evidence | parallel | reviewed-low-level-boundary |
+| 85-semantic-macros-timecode.spec.ts | TIMECODE-003 @api › transport routes address one authoritative runtime | docs/testing/15-macros-and-timecode.md | @api | semantic-macros-timecode | standard failure evidence | parallel | reviewed-low-level-boundary |
+| 85-semantic-macros-timecode.spec.ts | TIMECODE-001 @ui › production editor zooms, imports markers, edits keyframes, and saves one revision-safe object | docs/testing/15-macros-and-timecode.md | @ui | semantic-macros-timecode | standard failure evidence | parallel | pending-semantic-migration |
 | playwright-react-tsx-transform.spec.tsx | Playwright transforms repository React TSX with the React runtime | repository contract | none | playwright-react-tsx-transform.spec.tsx | standard failure evidence | parallel | reviewed-low-level-boundary |
 | product-demo.spec.ts | BENCH-PRODUCT-DEMO-001 @bench @ui @demo › narrates the complete Full HD product demo surface in one regression run | repository contract | @bench @ui @demo | product-demo | generated show/video | serial | migrated-semantic-world |
 

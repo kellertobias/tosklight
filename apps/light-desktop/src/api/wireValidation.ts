@@ -47,6 +47,7 @@ const CUE_TRANSFER_OPERATIONS = enumSet<CueTransferOperation>({
 const HTTP_SOURCES = enumSet<CommandHttpSource>({
 	http: true,
 	http_key: true,
+	macro: true,
 });
 const OUTCOMES = enumSet<CommandOperationOutcome["outcome"]>({
 	accepted: true,

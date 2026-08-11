@@ -21,6 +21,10 @@ pub enum FrameRate {
     Fps25,
     Fps2997Drop,
     Fps30,
+    /// Desk-local whole-frame rate used by the internal generator and conversion target. External
+    /// SMPTE adapters never emit this variant, but the desk's Timecode rate may deliberately
+    /// follow a non-SMPTE DMX rate such as 44 Hz.
+    FpsCustom(u8),
 }
 
 impl FrameRate {
@@ -29,7 +33,17 @@ impl FrameRate {
             Self::Fps24 => 24,
             Self::Fps25 => 25,
             Self::Fps2997Drop | Self::Fps30 => 30,
+            Self::FpsCustom(rate) => rate,
         }
+    }
+
+    pub fn whole_frames(rate: u8) -> Option<Self> {
+        (rate > 0).then_some(match rate {
+            24 => Self::Fps24,
+            25 => Self::Fps25,
+            30 => Self::Fps30,
+            value => Self::FpsCustom(value),
+        })
     }
 }
 

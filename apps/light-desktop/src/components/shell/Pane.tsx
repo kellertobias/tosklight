@@ -197,6 +197,28 @@ function PaneContent({
 						showCalendar,
 					})
 				}
+				mediaPaneState={{
+					serverId: pane.mediaServerId,
+					layerId: pane.mediaLayerId,
+					browserMode: pane.mediaBrowserMode,
+					mainSectionId: pane.mediaMainSectionId,
+					rightPaneVisible: pane.mediaRightPaneVisible,
+				}}
+				onMediaPaneStateChange={(mediaState) =>
+					dispatch({
+						type: "SET_PANE_MEDIA_STATE",
+						id: pane.id,
+						state: mediaState,
+					})
+				}
+				runningFilter={pane.runningFilter ?? "all"}
+				onRunningFilterChange={(filter) =>
+					dispatch({
+						type: "SET_PANE_RUNNING_FILTER",
+						id: pane.id,
+						filter,
+					})
+				}
 			/>
 		</PaneChromeProvider>
 	);

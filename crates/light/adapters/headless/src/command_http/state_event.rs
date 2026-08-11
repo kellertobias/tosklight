@@ -69,6 +69,7 @@ fn wire_source(source: &str) -> CommandHttpSource {
         // command-line wire contract intentionally distinguishes transport HTTP from key input,
         // while the accompanying operation event retains the precise `extension` provenance.
         "http_key" | "extension" => CommandHttpSource::HttpKey,
+        "macro" => CommandHttpSource::Macro,
         _ => unreachable!("the command HTTP adapter has a bounded source enum"),
     }
 }

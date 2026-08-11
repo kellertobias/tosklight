@@ -132,6 +132,9 @@ pub struct ActivePlayback {
     /// per-attribute timings remain authoritative; this replaces only the Cue Fade master.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub transition_fade_fallback_millis: Option<u64>,
+    /// Runtime-only completion contributed by actions started on the current Cue.
+    #[serde(default, skip_serializing)]
+    pub external_completion_millis: u64,
     #[serde(default)]
     pub manual_xfade_position: f32,
     #[serde(default)]
@@ -378,6 +381,7 @@ fn default_master() -> f32 {
 }
 
 pub(crate) fn reset_manual_transition(playback: &mut ActivePlayback) {
+    playback.external_completion_millis = 0;
     playback.transition_timing_bypassed = false;
     playback.transition_fade_fallback_millis = None;
     playback.manual_xfade_from_index = None;
@@ -416,6 +420,7 @@ pub(crate) fn new_active_playback(
         flash_restore_off: false,
         transition_timing_bypassed: false,
         transition_fade_fallback_millis: None,
+        external_completion_millis: 0,
         manual_xfade_position: 0.0,
         manual_xfade_direction: ManualXFadeDirection::TowardsHigh,
         manual_xfade_from_index: None,

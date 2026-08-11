@@ -74,6 +74,18 @@ fn test_state_with_programmers(
             installation: InstallationResource::open_test_installation(data_dir.clone()).unwrap(),
             sessions: SessionResource::new(),
             dynamics: light_application::DynamicsService::new(programmers.clone()),
+            macros: light_application::CommandMacroExecutionService::default(),
+            timecodes: crate::runtime::timecode_v2::new_service_with_clock(
+                Arc::new(light_application::timeline::SystemTimecodeClock::default()),
+                None,
+                application_events.clone(),
+            ),
+            managed_assets: Arc::new(
+                light_application::FilesystemManagedAssetStore::open(
+                    data_dir.join("managed-assets"),
+                )
+                .unwrap(),
+            ),
             programming: ProgrammingResource::new(programmers, programming),
             playback: PlaybackResource::new(
                 PlaybackService::new(application_events.clone()),

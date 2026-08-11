@@ -93,11 +93,13 @@ fn projection_for_kind(
         ActiveShowObjectKind::PlaybackPage => result.projections.page.as_ref(),
         ActiveShowObjectKind::AttributeConfiguration
         | ActiveShowObjectKind::Group
+        | ActiveShowObjectKind::Macro
         | ActiveShowObjectKind::Dynamic
         | ActiveShowObjectKind::PatchLayer
         | ActiveShowObjectKind::Preset
         | ActiveShowObjectKind::Schedule
         | ActiveShowObjectKind::StageLayout
+        | ActiveShowObjectKind::Timecode
         | ActiveShowObjectKind::UserLayout => None,
     }
 }

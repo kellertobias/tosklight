@@ -113,7 +113,7 @@ export function registerPbk006GroupMasterHtpScenario(): void {
 			await page.locator(".mode-toggle").click();
 			await pressCommandAndWait(page, "GROUP 7 AT 100", "G7 AT 100");
 			await openPlaybackMode(page);
-			await playbackSlider(page, 2).fill("80");
+			await setMasterFader(page, 2, "80");
 			await expect
 				.poll(
 					async () =>
@@ -125,7 +125,7 @@ export function registerPbk006GroupMasterHtpScenario(): void {
 			await expectSlotsAfterTick(bench, 3_000, alternatingSlots(204));
 
 			await assignGroupMaster(page, 3, "Group 5");
-			await playbackSlider(page, 3).fill("60");
+			await setMasterFader(page, 3, "60");
 			await expect
 				.poll(
 					async () =>
@@ -137,7 +137,7 @@ export function registerPbk006GroupMasterHtpScenario(): void {
 			await expectSlotsAfterTick(bench, 0, alternatingSlots(204));
 
 			await assignGrandMaster(page, 4);
-			await playbackSlider(page, 4).fill("50");
+			await setMasterFader(page, 4, "50");
 			await expect
 				.poll(async () => (await controls(api)).grand_master.level)
 				.toBeCloseTo(0.5, 5);
@@ -218,6 +218,19 @@ async function assignGrandMaster(
 	await modal.getByRole("radio", { name: "Grand Master", exact: true }).click();
 	await modal.getByRole("button", { name: "Apply", exact: true }).click();
 	await expect(modal).toBeHidden();
+}
+
+async function setMasterFader(
+	page: Parameters<typeof openPlaybackMode>[0],
+	slot: number,
+	value: string,
+): Promise<void> {
+	const slider = playbackSlider(page, slot);
+	// A newly assigned master starts at its authoritative 100% value and uses
+	// pickup. Cross that value explicitly before requesting the operator level.
+	await slider.fill("99");
+	await slider.fill("100");
+	await slider.fill(value);
 }
 
 function alternatingSlots(level: number): number[] {

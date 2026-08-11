@@ -62,6 +62,8 @@ struct RuntimeResources {
     pub(super) output_rate: Arc<AtomicU16>,
     pub(super) playback_telemetry: Arc<playback_telemetry::PlaybackTelemetrySampler>,
     pub(super) timecode_router: Arc<Mutex<TimecodeRouter>>,
+    pub(super) timecodes: light_application::timeline::TimecodeRuntimeService,
+    pub(super) managed_assets: Arc<dyn light_application::ManagedAssetStore>,
     pub(super) matter_bridge: Arc<matter::MatterBridgeAdapter>,
     pub(super) cancellation: CancellationToken,
     pub(super) output_cancellation: CancellationToken,
@@ -82,9 +84,47 @@ impl RuntimeResources {
         let action_timing = ActionTimingResource::default();
         let output_health = Arc::new(std::sync::Mutex::new(OutputHealth::default()));
         let timecode_router = Arc::new(Mutex::new(TimecodeRouter::default()));
+        let events = EventBus::default();
+        let managed_assets: Arc<dyn light_application::ManagedAssetStore> = Arc::new(
+            light_application::FilesystemManagedAssetStore::open(
+                startup.persistent.data_dir.join("managed-assets"),
+            )
+            .map_err(|error| anyhow::anyhow!(error.message))?,
+        );
+        let timecode_clock: Arc<dyn light_application::timeline::TimecodeClock> =
+            Arc::new(light_application::timeline::SystemTimecodeClock::default());
+        let audio_device = configuration.timecode_audio_output_device.as_ref().map_or(
+            super::timecode_audio_output::OutputDeviceSelector::SystemDefault,
+            |device| super::timecode_audio_output::OutputDeviceSelector::Name(device.clone()),
+        );
+        let trim_key = configuration
+            .timecode_audio_output_device
+            .as_deref()
+            .unwrap_or("$system_default");
+        let audio_configuration = super::timecode_audio_output::NativeTimecodeAudioConfig {
+            device: audio_device,
+            latency_trim_micros: configuration
+                .timecode_audio_latency_trim_micros_by_output
+                .get(trim_key)
+                .copied()
+                .unwrap_or(0),
+        };
+        let audio_output = super::timecode_audio_output::NativeTimecodeAudioOutput::open(
+            Arc::clone(&managed_assets),
+            Arc::clone(&timecode_clock),
+            &audio_configuration,
+        )
+        .map(|output| Arc::new(output) as Arc<dyn light_application::TimecodeAudioOutput>)
+        .map_err(|error| tracing::warn!(%error, "native Timecode audio is unavailable"))
+        .ok();
+        let timecodes = super::timecode_v2::new_service_with_clock(
+            timecode_clock,
+            audio_output,
+            events.clone(),
+        );
         timecode_router
             .lock()
-            .configure(configuration.timecode_sources.clone());
+            .configure(configuration.timecode_router_config());
         let output_rate = Arc::new(AtomicU16::new(configuration.frame_rate_hz));
         let playback_telemetry = Arc::new(playback_telemetry::PlaybackTelemetrySampler::new(
             Arc::clone(&output_rate),
@@ -92,7 +132,6 @@ impl RuntimeResources {
         let matter_bridge = Arc::new(matter::MatterBridgeAdapter::default());
         let cancellation = CancellationToken::new();
         let output_cancellation = cancellation.child_token();
-        let events = EventBus::default();
         let playback_service = PlaybackService::new(events.clone());
         let active_show = Arc::new(RwLock::new(startup.persistent.active_show.clone()));
         let activation = ActiveShowCoordinator::new();
@@ -130,6 +169,7 @@ impl RuntimeResources {
             health: Arc::clone(&output_health),
             rate: Arc::clone(&output_rate),
             timecode: Arc::clone(&timecode_router),
+            timecodes: timecodes.clone(),
             cancellation: output_cancellation.clone(),
             persisted_runtime,
             playback: PlaybackRenderCapability::new(
@@ -153,6 +193,8 @@ impl RuntimeResources {
             output_rate,
             playback_telemetry,
             timecode_router,
+            timecodes,
+            managed_assets,
             matter_bridge,
             cancellation,
             output_cancellation,
@@ -386,6 +428,9 @@ fn build_app_state(
         ),
         sessions: SessionResource::new(),
         dynamics: light_application::DynamicsService::new(startup.programmers.clone()),
+        macros: light_application::CommandMacroExecutionService::default(),
+        timecodes: resources.timecodes.clone(),
+        managed_assets: Arc::clone(&resources.managed_assets),
         programming: ProgrammingResource::new(startup.programmers, programming),
         playback: PlaybackResource::new(
             resources.playback_service.clone(),

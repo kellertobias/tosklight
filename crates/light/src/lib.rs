@@ -5,6 +5,8 @@
 
 pub mod action;
 pub mod active_show;
+pub mod command_macro;
+pub mod command_macro_runtime;
 pub mod dynamics;
 pub mod event;
 pub mod fixture_position;
@@ -16,6 +18,7 @@ pub mod mvr_export;
 pub mod mvr_import;
 pub mod output_runtime;
 pub mod playback;
+mod playback_timecode_graph;
 pub mod playback_topology;
 pub mod programming;
 pub mod scheduling;
@@ -39,6 +42,16 @@ pub use active_show::{
     StagePositions2dConfig, StagePositions2dProvenance, StageProjection2d,
     UndoActiveShowObjectCommand, UndoActiveShowObjectResult, UndoActiveShowRecordingCommand,
     UndoActiveShowRecordingObject, UndoActiveShowRecordingOperation, UserLayout,
+};
+pub use command_macro::{
+    CommandMacroDefinition, CommandMacroLine, MAX_MACRO_LINE_BYTES, MAX_MACRO_NAME_BYTES,
+    MAX_MACRO_NUMBER, MAX_MACRO_SOURCE_BYTES, MacroPresentation,
+};
+pub use command_macro_runtime::{
+    CommandMacroExecutionError, CommandMacroExecutionHost, CommandMacroExecutionService,
+    CommandMacroExecutionSnapshot, CommandMacroExecutionState, CommandMacroOwnedLine,
+    CommandMacroRunRequest, CommandMacroRuntimeSnapshot, CommandMacroSequenceOutcome,
+    CommandMacroTrigger, DEFAULT_MACRO_HISTORY_LIMIT,
 };
 pub use dynamics::{
     DynamicControllerUpdate, DynamicFixAtCommand, DynamicOffCommand, DynamicStartCommand,
@@ -80,8 +93,8 @@ pub use managed_assets::{
     AssetAvailability, AssetChunkSink, AssetChunkSource, AssetCleanupReport, AssetDescriptor,
     AssetError, AssetErrorKind, AssetExportManifest, AssetExportReport, AssetExportSink, AssetId,
     AssetNamespace, AssetReference, AssetRevision, AssetStreamReport, AssetValidation,
-    CleanupAssetsRequest, CopyAssetRequest, ExportAssetsRequest, ImportAssetRequest,
-    ManagedAssetStore,
+    CleanupAssetsRequest, CopyAssetRequest, ExportAssetsRequest, FilesystemManagedAssetStore,
+    ImportAssetRequest, ManagedAssetStore,
 };
 pub use mvr_import::{
     ActiveMvrImportResult, ApplyActiveMvrImportCommand, MvrImportResolution, MvrImportService,
@@ -110,6 +123,7 @@ pub use playback::{
     VirtualPlaybackNumber, automatic_playback_events, committed_playback_effect_event,
     committed_playback_event, publish_automatic_playback_events, telemetry_frame_divider,
 };
+pub use playback_timecode_graph::validate_cue_timecode_graph;
 pub use playback_topology::{
     GroupMasterPlaybackAddress, PlaybackTopologyAction, PlaybackTopologyCommand,
     PlaybackTopologyObjectProjection, PlaybackTopologyOutcome, PlaybackTopologyPorts,
@@ -218,6 +232,8 @@ pub use speed_group::{
     SpeedGroupSnapshot,
 };
 pub use timeline::{
-    TimelineError, TimelineErrorKind, TimelineExecution, TimelineExecutionRequest, TimelineHost,
-    TimelineHostBackend, TimelineId, TimelineOperation, TimelineRuntime, TimelineService,
+    ImportedWavAsset, TimecodeAudioCommand, TimecodeAudioOutput, TimecodeAudioService,
+    TimecodeAudioState, TimecodeWavImporter, TimelineError, TimelineErrorKind, TimelineExecution,
+    TimelineExecutionRequest, TimelineHost, TimelineHostBackend, TimelineId, TimelineOperation,
+    TimelineRuntime, TimelineService, WavEncoding, WavMetadata, parse_wav_metadata,
 };

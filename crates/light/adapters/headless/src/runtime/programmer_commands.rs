@@ -22,6 +22,89 @@ pub(super) enum ProgrammerCommandExecution {
     ChoiceRequired(light_application::DynamicInstanceChoice),
 }
 
+struct CommandPrevalidationFailure {
+    index: usize,
+    message: String,
+}
+
+impl From<String> for CommandPrevalidationFailure {
+    fn from(message: String) -> Self {
+        Self { index: 0, message }
+    }
+}
+
+/// Validates one entered command with the same tokenizer and dispatch table used by execution.
+/// Programmer-only families run against a detached operator state, so fixture/group resolution,
+/// levels, spreads, presets, and current-selection requirements are checked without publishing or
+/// committing a mutation. Families that own external runtime/show mutations expose their parser
+/// through `command_http` and are checked there instead of being executed speculatively.
+pub(super) fn prevalidate_programmer_commands_from(
+    state: &AppState,
+    session: &Session,
+    command_lines: &[&str],
+    context: &light_application::ActionContext,
+) -> Result<(), (usize, String)> {
+    state
+        .programming
+        .with_detached_command(session.id, |detached_programming| {
+            let mut detached_state = state.clone();
+            detached_state.programming = detached_programming.clone();
+            for (index, command_line) in command_lines.iter().enumerate() {
+                prevalidate_programmer_command_in_state(
+                    &detached_state,
+                    session,
+                    command_line,
+                    context,
+                )
+                .map_err(|message| CommandPrevalidationFailure { index, message })?;
+            }
+            Ok(())
+        })
+        .map_err(|error: CommandPrevalidationFailure| (error.index, error.message))
+}
+
+fn prevalidate_programmer_command_in_state(
+    state: &AppState,
+    session: &Session,
+    command_line: &str,
+    context: &light_application::ActionContext,
+) -> Result<(), String> {
+    if command_http::prevalidate_typed_command(state, session, command_line, context)? {
+        return Ok(());
+    }
+    let (tokens, _timing) = tokenize_programmer_command(command_line)?;
+    let first = tokens.first().ok_or("the command line is empty")?;
+    if tokens
+        .iter()
+        .any(|token| matches!(token.as_str(), "FIXAT" | "DYNAMIC"))
+    {
+        // These families own typed Dynamics mutations outside Programmer. Their authoritative
+        // grammar rejects incomplete commands before execution; retain the current-context checks
+        // that can be performed without invoking that mutation authority.
+        if tokens.last().is_some_and(|token| {
+            matches!(
+                token.as_str(),
+                "FIXAT" | "DYNAMIC" | "AT" | "ATTRIBUTE" | "PARAMETER"
+            )
+        }) {
+            return Err(format!(
+                "{} requires a value or target",
+                tokens.last().unwrap()
+            ));
+        }
+        if tokens.iter().any(|token| token == "FIXAT")
+            && state.programming.get(session.id).is_none()
+        {
+            return Err("programmer does not exist".into());
+        }
+        return Ok(());
+    }
+    if matches!(first.as_str(), "CUE" | "SPD") || show_command(first) {
+        return command_http::prevalidate_external_command(state, session, command_line, context);
+    }
+    execute_programmer_command_effect_from(state, session, command_line, context).map(|_| ())
+}
+
 #[cfg(test)]
 pub(super) fn execute_programmer_command_from(
     state: &AppState,

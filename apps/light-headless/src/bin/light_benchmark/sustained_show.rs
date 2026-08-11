@@ -493,6 +493,7 @@ fn demo_playback_for_groups(group_ids: &[String]) -> (CueList, PlaybackDefinitio
         out_delay_millis: None,
         trigger: CueTrigger::Manual,
         cue_only: false,
+        actions: vec![],
         dynamic_changes: vec![],
         group_changes: group_ids
             .iter()

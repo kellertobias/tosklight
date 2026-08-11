@@ -15,13 +15,13 @@ import {
 	recordAt,
 	stringAt,
 } from "./playbackWirePrimitives";
-import { VIRTUAL_PLAYBACKS_PER_PAGE } from "./virtualPlaybackAddress";
 import { decodeCueListBody } from "./showObjectCueWire";
 import {
 	decodePlaybackBody,
 	decodePlaybackPageBody,
 } from "./showObjectPlaybackWire";
 import type { PatchLayer, StoredPreset } from "./types";
+import { VIRTUAL_PLAYBACKS_PER_PAGE } from "./virtualPlaybackAddress";
 import { WireValidationError } from "./wireValidation";
 
 export function decodeShowObjectBody<K extends ShowObjectKind>(
@@ -397,6 +397,10 @@ const BUILT_IN_WINDOWS: readonly BuiltInWindow[] = [
 	"playback_pool",
 	"cue_list",
 	"dynamics",
+	"macros",
+	"media",
+	"running",
+	"timecode",
 	"scheduler",
 	"channels",
 	"dmx",

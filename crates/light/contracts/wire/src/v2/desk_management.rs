@@ -26,10 +26,27 @@ pub struct ConfigurationPatch {
     pub art_timecode_bind: Option<Option<String>>,
     #[serde(default)]
     #[ts(optional = nullable)]
-    pub timecode_sources: Option<Vec<TimecodeSourceConfiguration>>,
+    pub timecode_source: Option<TimecodeSourceSelectionConfiguration>,
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub timecode_frame_rate: Option<Option<TimecodeFrameRateConfiguration>>,
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub timecode_external_loss_policy: Option<ExternalTimecodeLossPolicyConfiguration>,
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    #[ts(type = "number")]
+    pub timecode_external_loss_timeout_millis: Option<u64>,
     #[serde(default)]
     #[ts(optional = nullable)]
     pub osc_timecode: Option<Option<OscTimecodeConfiguration>>,
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub timecode_audio_output_device: Option<Option<String>>,
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub timecode_audio_latency_trim_micros_by_output:
+        Option<std::collections::BTreeMap<String, i64>>,
     #[serde(default)]
     #[ts(optional = nullable)]
     pub backup_retention: Option<usize>,
@@ -174,12 +191,25 @@ pub struct PoolItemPresentation {
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-pub struct TimecodeSourceConfiguration {
-    pub source_prefix: String,
-    pub priority: i16,
-    pub fallback: bool,
-    #[ts(type = "number")]
-    pub loss_timeout_millis: u64,
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum TimecodeSourceSelectionConfiguration {
+    Internal,
+    External { source: String },
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct TimecodeFrameRateConfiguration {
+    pub numerator: u32,
+    pub denominator: u32,
+    pub drop_frame: bool,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ExternalTimecodeLossPolicyConfiguration {
+    ContinueInternal,
+    Pause,
+    Stop,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]

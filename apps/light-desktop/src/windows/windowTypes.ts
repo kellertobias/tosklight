@@ -38,5 +38,19 @@ export interface WindowProps {
 		showList: boolean;
 		showCalendar: boolean;
 	}) => void;
+	mediaPaneState?: {
+		serverId?: string;
+		layerId?: string;
+		browserMode?: "media" | "mask";
+		mainSectionId?: string;
+		rightPaneVisible?: boolean;
+	};
+	onMediaPaneStateChange?: (
+		state: NonNullable<WindowProps["mediaPaneState"]>,
+	) => void;
+	runningFilter?: "all" | "cue_list" | "dynamic" | "timecode" | "macro";
+	onRunningFilterChange?: (
+		filter: NonNullable<WindowProps["runningFilter"]>,
+	) => void;
 	channelDisplayMode?: ChannelDisplayMode;
 }

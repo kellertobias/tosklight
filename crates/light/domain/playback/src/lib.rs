@@ -12,6 +12,7 @@ mod cue_transfer;
 mod engine;
 mod model;
 mod runtime;
+mod timecode;
 mod transition;
 
 pub use arbitration::resolve;
@@ -28,6 +29,7 @@ pub use cue_transfer::{CueTransferMode, transferred_cue};
 pub use engine::PlaybackEngine;
 pub use model::{cue::*, playback::*, runtime::*};
 pub use runtime::PlaybackTelemetrySample;
+pub use timecode::*;
 
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use light_core::{
