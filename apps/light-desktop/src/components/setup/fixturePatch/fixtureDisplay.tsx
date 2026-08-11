@@ -17,6 +17,25 @@ export function FixtureTypeIcon({ type }: { type: string }) {
 	);
 }
 
+export function FixtureIcon({
+	definition,
+}: {
+	definition: Pick<FixtureDefinition, "device_type" | "icon_asset" | "name">;
+}) {
+	if (!definition.icon_asset)
+		return <FixtureTypeIcon type={definition.device_type} />;
+	return (
+		<span
+			className="fixture-type-icon"
+			title={definition.name}
+			role="img"
+			aria-label={`Fixture icon: ${definition.name}`}
+		>
+			<img alt="" src={definition.icon_asset} />
+		</span>
+	);
+}
+
 export function MultiPatchBranch({ last }: { last: boolean }) {
 	return (
 		<span className="multipatch-branch" aria-hidden="true">

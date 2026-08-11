@@ -10,7 +10,7 @@ import {
 	selectSplitAddress,
 } from "./editSession";
 import { selectPatchFixture } from "./fixtureActions";
-import { FixtureTypeIcon, MultiPatchBranch } from "./fixtureDisplay";
+import { FixtureIcon, MultiPatchBranch } from "./fixtureDisplay";
 import { fixtureDisplayId } from "./fixtureIds";
 import { LightSourceCell } from "./LightSourceAppearance";
 import {
@@ -151,7 +151,7 @@ function FixtureIdentityCells({ fixture }: { fixture: PatchedFixture }) {
 	return (
 		<>
 			<td className="patch-type-cell">
-				<FixtureTypeIcon type={fixture.definition.device_type} />
+				<FixtureIcon definition={fixture.definition} />
 			</td>
 			<td>{fixtureDisplayId(fixture)}</td>
 			<td>

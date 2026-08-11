@@ -1266,7 +1266,7 @@ describe("installed light-source appearance", () => {
 		);
 	});
 
-	it("keeps Apply disabled for a no-op, discards Close changes, and marks emitterless fixtures unavailable", () => {
+	it("keeps Apply disabled for a no-op, discards Close changes, and labels emitterless fixtures", () => {
 		const fixture = appearanceFixture();
 		server.patch.fixtures = [fixture];
 		state.patchSetArmed = true;
@@ -1311,8 +1311,45 @@ describe("installed light-source appearance", () => {
 		const row = screen.getByRole("row", {
 			name: /17 Split Wash 17/,
 		}) as HTMLTableRowElement;
-		expect(row.cells[8]).toHaveTextContent("UnavailableNo geometry emitter");
+		expect(row.cells[8]).toHaveTextContent("No emitter");
+		expect(row.cells[8]).not.toHaveTextContent("Unavailable");
+		expect(row.cells[8]).not.toHaveTextContent("No geometry emitter");
+		expect(within(row.cells[8]).getByText("No emitter")).toHaveClass(
+			"patch-secondary",
+		);
 		expect(within(row.cells[8]).queryByRole("button")).not.toBeInTheDocument();
+	});
+
+	it("prefers the explicit fixture icon and falls back to its type icon", () => {
+		const fixture = splitFixture();
+		fixture.definition.icon_asset =
+			"data:image/svg+xml,show-patch-explicit-icon";
+		server.patch.fixtures = [fixture];
+		const { rerender } = render(<FixturePatchSetup />);
+
+		let row = screen.getByRole("row", {
+			name: /17 Split Wash 17/,
+		}) as HTMLTableRowElement;
+		let icon = within(row.cells[0]).getByRole("img", {
+			name: "Fixture icon: Split Wash",
+		});
+		expect(icon.querySelector("img")).toHaveAttribute(
+			"src",
+			"data:image/svg+xml,show-patch-explicit-icon",
+		);
+		expect(
+			within(row.cells[0]).queryByRole("img", { name: "Type: wash" }),
+		).toBeNull();
+
+		fixture.definition.icon_asset = null;
+		rerender(<FixturePatchSetup />);
+		row = screen.getByRole("row", {
+			name: /17 Split Wash 17/,
+		}) as HTMLTableRowElement;
+		icon = within(row.cells[0]).getByRole("img", { name: "Type: wash" });
+		expect(
+			decodeURIComponent(icon.querySelector("img")?.getAttribute("src") ?? ""),
+		).toContain("fixture type led wash moving light lenses");
 	});
 });
 

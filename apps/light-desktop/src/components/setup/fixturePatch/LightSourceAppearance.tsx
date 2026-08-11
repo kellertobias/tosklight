@@ -34,10 +34,7 @@ export function LightSourceCell({
 	if (!available)
 		return (
 			<td className="patch-stacked-cell">
-				<span className="patch-stacked-line">Unavailable</span>
-				<span className="patch-stacked-line patch-secondary">
-					No geometry emitter
-				</span>
+				<span className="patch-stacked-line patch-secondary">No emitter</span>
 			</td>
 		);
 

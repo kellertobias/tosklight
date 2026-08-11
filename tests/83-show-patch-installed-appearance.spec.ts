@@ -54,8 +54,9 @@ test("PATCH-APPEARANCE-003-001 @ui › exact table, combined MIB, and emitterles
 	await expect(
 		page.getByRole("button", { name: "MIB 101: Off" }),
 	).toBeVisible();
-	await expect(mib.locator("xpath=ancestor::tr")).toContainText(
-		"UnavailableNo geometry emitter",
+	await expect(mib.locator("xpath=ancestor::tr")).toContainText("No emitter");
+	await expect(mib.locator("xpath=ancestor::tr")).not.toContainText(
+		/Unavailable|No geometry emitter/,
 	);
 
 	await expect
