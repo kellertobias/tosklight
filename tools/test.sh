@@ -11,7 +11,7 @@ HARDWARE_UI="$ROOT/apps/light-hardware-controls"
 CONTROL_TAURI_CONFIG="$LIGHT_TMP_DIR/tauri-control-artifacts.json"
 
 # Backs the root package.json test scripts; invoke via `npm run test:<name>`.
-usage(){ echo "Usage: npm run test:{unit|verify|rust-workspace|architecture|ui-package|patch-package|viz-editor|media-app|storybook|e2e-build|e2e|e2e-api|e2e-ui|e2e-performance|app-icons|artifact-paths|documentation-screenshots|marketing-screenshots|help-screenshots|help-screenshots-live|record|demo|all}"; }
+usage(){ echo "Usage: npm run test:{unit|typescript-unit|verify|rust-workspace|architecture|ui-package|patch-package|viz-editor|media-app|storybook|e2e-build|e2e|e2e-api|e2e-ui|e2e-performance|app-icons|artifact-paths|documentation-screenshots|marketing-screenshots|help-screenshots|help-screenshots-live|record|demo|all}"; }
 build_e2e(){
   if [[ "${LIGHT_REUSE_E2E_BUILD:-0}" == "1" ]]; then
     local server="${LIGHT_E2E_SERVER:-$LIGHT_CARGO_TARGET_DIR/debug/light-headless}"
@@ -21,7 +21,9 @@ build_e2e(){
     }
     return
   fi
-  (cd "$UI" && npm run build)
+  if [[ "${LIGHT_REUSE_FRONTEND_BUILD:-0}" != "1" ]]; then
+    (cd "$UI" && npm run build)
+  fi
   # Playwright shards reuse this debug executable on separate runners. rust-embed normally reads
   # assets from disk in debug builds, so opt into a self-contained UI for the transferable binary.
   light_with_cargo_command_lock "npm run test:e2e build" \
@@ -83,9 +85,10 @@ rust_unit(){
 }
 rust_workspace(){
   # light-headless embeds the operator UI even when the desktop crates themselves are excluded.
-  # Build it here so this gate also works from a clean checkout instead of inheriting artifacts
-  # from an earlier frontend or E2E job.
-  (cd "$UI" && npm run build)
+  # Build it for a clean local checkout; CI can explicitly reuse its exact-commit frontend artifact.
+  if [[ "${LIGHT_REUSE_FRONTEND_BUILD:-0}" != "1" ]]; then
+    (cd "$UI" && npm run build)
+  fi
   light_with_cargo_command_lock "npm run test:verify Rust workspace" \
     cargo test --manifest-path "$ROOT/Cargo.toml" --workspace \
       --exclude light-desktop --exclude light-hardware-controls --no-default-features
@@ -96,7 +99,7 @@ verify(){
   typescript_unit
   (cd "$UI" && npm run build)
   (cd "$HARDWARE_UI" && npm run build)
-  rust_workspace
+  LIGHT_REUSE_FRONTEND_BUILD=1 rust_workspace
 }
 e2e(){ build_e2e; (cd "$UI" && npm run test:e2e -- "$@"); }
 e2e_api(){ e2e --grep '@api' "$@"; }
@@ -154,6 +157,7 @@ case "$command" in
   architecture) architecture ;;
   artifact-paths) "$ROOT/tools/test-artifact-paths.sh" ;;
   unit) unit ;;
+  typescript-unit) typescript_unit ;;
   verify) verify ;;
   rust-workspace) rust_workspace ;;
   e2e-build) build_e2e ;;

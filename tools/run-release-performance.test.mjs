@@ -322,13 +322,17 @@ test("CLI accepts a parsed measured failure but rejects invalid JSON", () => {
 	);
 });
 
-test("release workflow separates measured degradation from infrastructure failure", () => {
-	const workflow = readFileSync(
+test("scheduled publication separates release delivery from performance and Pages", () => {
+	const releaseWorkflow = readFileSync(
 		resolve(ROOT, ".github/workflows/release.yml"),
 		"utf8",
 	);
+	const workflow = readFileSync(
+		resolve(ROOT, ".github/workflows/performance-pages.yml"),
+		"utf8",
+	);
 	const release =
-		/^ {2}release:\n([\s\S]*?)(?=^ {2}[\w-]+:\n)/mu.exec(workflow)?.[1] ?? "";
+		/^ {2}release:\n([\s\S]*?)(?=^ {2}[\w-]+:\n)/mu.exec(releaseWorkflow)?.[1] ?? "";
 	const performance =
 		/^ {2}release-performance:\n([\s\S]*?)(?=^ {2}[\w-]+:\n)/mu.exec(
 			workflow,
@@ -339,18 +343,23 @@ test("release workflow separates measured degradation from infrastructure failur
 
 	assert.match(release, /needs:[\s\S]*?- build/u);
 	assert.doesNotMatch(release, /- benchmark|- pages-build/u);
-	assert.match(performance, /needs: \[metadata, release\]/u);
+	assert.match(workflow, /schedule:[\s\S]*?cron:/u);
+	assert.match(performance, /needs: release-metadata/u);
 	assert.doesNotMatch(performance, /product-demo|--canonical-demo-performance/u);
 	assert.match(performance, /gh release download/u);
 	assert.match(performance, /tools\/run-release-performance\.mjs/u);
 	assert.doesNotMatch(performance, /continue-on-error: true/u);
 	assert.match(pages, /always\(\)/u);
-	assert.match(pages, /needs\['release-performance'\]\.result/u);
+	assert.match(pages, /needs: \[release-metadata, release-performance\]/u);
 	assert.match(pages, /LIGHT_PERFORMANCE_STATUS_FILE/u);
-	assert.match(pages, /name: storybook-static/u);
+	assert.match(pages, /--name storybook-static/u);
 	assert.match(pages, /\.artifacts\/build\/storybook\/ui/u);
 	assert.match(
-		workflow,
+		releaseWorkflow,
 		/name: storybook-static[\s\S]*?path: \.artifacts\/build\/storybook\/ui/u,
+	);
+	assert.match(
+		releaseWorkflow,
+		/release-performance:[\s\S]*?if: \$\{\{ false \}\}[\s\S]*?pages-deploy:[\s\S]*?if: \$\{\{ false \}\}/u,
 	);
 });

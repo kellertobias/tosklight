@@ -163,9 +163,8 @@ test("macOS release apps are sealed only after their final helpers and resources
 
 test("the Viz release builds only the bundle format its staging step consumes", () => {
 	const workflow = read(".github/workflows/release.yml");
-	const frontendStart = workflow.indexOf(
-		"- name: Build the ToskLight Viz Editor frontend",
-	);
+	const frontends =
+		/^ {2}frontends:\n([\s\S]*?)(?=^ {2}[\w-]+:\n)/mu.exec(workflow)?.[1] ?? "";
 	const buildStart = workflow.indexOf(
 		"- name: Build the ToskLight Viz Editor application",
 	);
@@ -173,14 +172,11 @@ test("the Viz release builds only the bundle format its staging step consumes", 
 		"- name: Stage the Viz release artifacts",
 		buildStart,
 	);
-	assert.notEqual(frontendStart, -1, "the Viz frontend build should exist");
 	assert.notEqual(buildStart, -1, "the Viz release build should exist");
-	assert.ok(
-		frontendStart < buildStart,
-		"the Viz frontend should be built before Tauri packages it",
-	);
-	assert.match(
-		workflow.slice(frontendStart, buildStart),
+	assert.match(frontends, /npm run --prefix apps\/viz-editor build/u);
+	assert.match(frontends, /name: release-frontends-\$\{\{ github\.sha \}\}/u);
+	assert.doesNotMatch(
+		workflow.slice(buildStart, stageStart),
 		/npm run --prefix apps\/viz-editor build/u,
 	);
 	assert.notEqual(
@@ -230,13 +226,17 @@ test("fast unit tests and comprehensive verification remain distinct", () => {
 
 	assert.equal(packageManifest.scripts["test:unit"], "bash tools/test.sh unit");
 	assert.equal(
+		packageManifest.scripts["test:typescript-unit"],
+		"bash tools/test.sh typescript-unit",
+	);
+	assert.equal(
 		packageManifest.scripts["test:verify"],
 		"bash tools/test.sh verify",
 	);
 	assert.match(testScript, /unit\(\)\{ typescript_unit; rust_unit; \}/u);
 	assert.match(
 		testScript,
-		/rust_workspace\(\)\{[\s\S]*\(cd "\$UI" && npm run build\)[\s\S]*cargo test/u,
+		/rust_workspace\(\)\{[\s\S]*LIGHT_REUSE_FRONTEND_BUILD[\s\S]*\(cd "\$UI" && npm run build\)[\s\S]*cargo test/u,
 	);
 	assert.match(workspaceJob, /actions\/setup-node/u);
 	assert.match(workspaceJob, /run: npm ci/u);
@@ -245,12 +245,20 @@ test("fast unit tests and comprehensive verification remain distinct", () => {
 		/verify\(\)\{[\s\S]*architecture[\s\S]*rust_workspace/u,
 	);
 	assert.match(workflow, /bash tools\/test\.sh rust-workspace/u);
+	assert.match(
+		workflow,
+		/workspace:[\s\S]*?needs: frontends[\s\S]*?LIGHT_REUSE_FRONTEND_BUILD: "1"[\s\S]*?name: release-frontends-\$\{\{ github\.sha \}\}/u,
+	);
+	assert.match(
+		workflow,
+		/e2e-build:[\s\S]*?needs: frontends[\s\S]*?LIGHT_REUSE_FRONTEND_BUILD: "1"[\s\S]*?name: release-frontends-\$\{\{ github\.sha \}\}/u,
+	);
 });
 
 test("release packaging and Pages cover the supported product matrix", () => {
 	const workflow = read(".github/workflows/release.yml");
 	const mediaWorkflow = read(".github/workflows/media-release.yml");
-	const mediaQualityWorkflow = read(".github/workflows/media.yml");
+	const publicationWorkflow = read(".github/workflows/performance-pages.yml");
 	const landingPage = read("tools/render-landing-page.mjs");
 
 	for (const asset of [
@@ -261,12 +269,19 @@ test("release packaging and Pages cover the supported product matrix", () => {
 		"assets-demo-show.show",
 		"assets-handbook.pdf",
 		"report-checksums.txt",
-		"report-performance-status.json",
-		"report-performance.zip",
 	]) {
 		assert.ok(
 			workflow.includes(asset),
 			`release workflow should require ${asset}`,
+		);
+	}
+	for (const asset of [
+		"report-performance-status.json",
+		"report-performance.zip",
+	]) {
+		assert.ok(
+			publicationWorkflow.includes(asset),
+			`scheduled publication should generate ${asset}`,
 		);
 	}
 	assert.match(
@@ -283,10 +298,7 @@ test("release packaging and Pages cover the supported product matrix", () => {
 	);
 	assert.match(mediaWorkflow, /workflow_call:/u);
 	assert.doesNotMatch(mediaWorkflow, /workflow_run|gh release upload/u);
-	assert.match(
-		mediaQualityWorkflow,
-		/\.github\/workflows\/media-release\.yml/u,
-	);
+	assert.equal(fs.existsSync(path.join(repositoryRoot, ".github/workflows/media.yml")), false);
 
 	for (const slug of [
 		"macos_arm64",
@@ -356,11 +368,15 @@ test("non-main branch pushes run validation without release work", () => {
 	);
 	assert.match(
 		workflow,
-		/unit:[\s\S]*?run: npm run test:architecture[\s\S]*?run: npm run test:unit/u,
+		/unit:[\s\S]*?run: npm run test:architecture[\s\S]*?github\.ref == 'refs\/heads\/main'[\s\S]*?run: npm run test:typescript-unit[\s\S]*?github\.ref != 'refs\/heads\/main'[\s\S]*?run: npm run test:unit/u,
+	);
+	assert.match(
+		read(".github/workflows/performance-pages.yml"),
+		/schedule:[\s\S]*?cron:[\s\S]*?publish-marketing:/u,
 	);
 	assert.match(
 		workflow,
-		/publish-marketing:[\s\S]*?github\.ref == 'refs\/heads\/main'/u,
+		/validated:[\s\S]*?needs: \[quality, unit, workspace, native-extension-draft, usb-dmx, e2e\][\s\S]*?git ls-remote origin refs\/heads\/main/u,
 	);
 	assert.match(mediaRelease, /workflow_call:/u);
 	assert.doesNotMatch(mediaRelease, /workflow_dispatch|workflow_run/u);

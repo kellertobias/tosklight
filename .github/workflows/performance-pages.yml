@@ -1,0 +1,205 @@
+name: Daily performance and Pages
+
+# Release publication stays on the fast path. This workflow measures and republishes the latest
+# completed release once a day, or on demand, and builds Pages from that exact release commit.
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      promote_marketing:
+        description: Promote the newly generated marketing preview to the live prefix
+        type: boolean
+        default: false
+
+permissions:
+  actions: read
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: daily-performance-pages
+  cancel-in-progress: true
+
+jobs:
+  release-metadata:
+    name: Select latest published release
+    runs-on: ubuntu-22.04
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+      version: ${{ steps.release.outputs.version }}
+      sha: ${{ steps.release.outputs.sha }}
+      source_run: ${{ steps.release.outputs.source_run }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve the release and its successful source run
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="$(gh release view --json tagName --jq .tagName)"
+          git fetch --force origin "refs/tags/$tag:refs/tags/$tag"
+          sha="$(git rev-list -n 1 "$tag")"
+          source_run="$(gh run list --workflow release.yml --branch main --status success \
+            --limit 100 --json databaseId,headSha \
+            --jq "map(select(.headSha == \"$sha\")) | .[0].databaseId // \"\"")"
+          test -n "$source_run"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "source_run=$source_run" >> "$GITHUB_OUTPUT"
+
+  release-performance:
+    name: Measure latest published release
+    needs: release-metadata
+    runs-on: ubuntu-22.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.release-metadata.outputs.version }}
+      RELEASE_SHA: ${{ needs.release-metadata.outputs.sha }}
+      RELEASE_TAG: ${{ needs.release-metadata.outputs.tag }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.release-metadata.outputs.sha }}
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+
+      - name: Measure the published Linux bundle
+        id: measure
+        shell: bash
+        run: |
+          set -euo pipefail
+          out=".artifacts/performance"
+          tmp=".artifacts/tmp/release-performance"
+          mkdir -p "$out" "$tmp/unpacked"
+          archive="tosklight-bundle-linux_amd64.zip"
+          gh release download "$RELEASE_TAG" --pattern "$archive" --dir "$tmp"
+          unzip -q "$tmp/$archive" -d "$tmp/unpacked"
+          benchmark="$(find "$tmp/unpacked" -type f -name light-benchmark -print -quit)"
+          test -n "$benchmark"
+          chmod +x "$benchmark"
+          status=0
+          node tools/run-release-performance.mjs \
+            --binary "$benchmark" \
+            --output-dir "$out" \
+            --version "$VERSION" \
+            --commit "$RELEASE_SHA" \
+            --release-url "https://github.com/${GITHUB_REPOSITORY}/releases/tag/${RELEASE_TAG}" \
+            --hardware-label "GitHub Actions ubuntu-22.04" || status=$?
+          test -f "$out/status.json"
+          cp "$out/status.json" "$out/report-performance-status.json"
+          (cd "$out" && zip -q report-performance.zip ./*.json ./*.log ./*.md 2>/dev/null || \
+            zip -q report-performance.zip ./*.json)
+          gh release upload "$RELEASE_TAG" --clobber \
+            "$out/report-performance-status.json#Performance status" \
+            "$out/report-performance.zip#Detailed performance report"
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: release-performance
+          path: .artifacts/performance
+          if-no-files-found: error
+
+      - name: Report a measured performance failure
+        if: steps.measure.outputs.status != '0'
+        run: exit 1
+
+  pages-build:
+    name: Assemble static website
+    if: always() && needs.release-metadata.result == 'success'
+    needs: [release-metadata, release-performance]
+    runs-on: ubuntu-22.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+      LIGHT_RELEASE_VERSION: ${{ needs.release-metadata.outputs.version }}
+      LIGHT_REUSE_MANUAL: "1"
+      LIGHT_PERFORMANCE_STATUS_FILE: .artifacts/performance/status.json
+      SOURCE_RUN: ${{ needs.release-metadata.outputs.source_run }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.release-metadata.outputs.sha }}
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - run: npm ci
+
+      - name: Download publication inputs from the release run
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh run download "$SOURCE_RUN" --name operator-manual --dir .artifacts/generated/manual
+          gh run download "$SOURCE_RUN" --name help-screenshots --dir docs/help/assets/screenshots
+          gh run download "$SOURCE_RUN" --name marketing-screenshots --dir docs/marketing/assets/screenshots
+          gh run download "$SOURCE_RUN" --name storybook-static --dir .artifacts/build/storybook/ui
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-performance
+          path: .artifacts/performance
+
+      - run: npm run pages:generate
+
+      - name: Resolve the assembled site directory
+        id: site
+        run: echo "path=$(npm run --silent artifact-path -- pages)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
+        with:
+          path: ${{ steps.site.outputs.path }}
+
+      - name: Publish the marketing gallery preview
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          MARKETING_SCREENSHOTS_S3_BUCKET: ${{ secrets.MARKETING_SCREENSHOTS_S3_BUCKET }}
+          MARKETING_SCREENSHOTS_S3_BASE_PATH: ${{ secrets.MARKETING_SCREENSHOTS_S3_BASE_PATH }}
+        run: bash tools/upload-marketing-screenshots.sh preview
+
+  pages-deploy:
+    name: Deploy GitHub Pages
+    if: always() && needs.pages-build.result == 'success'
+    needs: pages-build
+    runs-on: ubuntu-22.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
+
+  publish-marketing:
+    name: Promote the previewed gallery
+    if: github.event_name == 'workflow_dispatch' && inputs.promote_marketing
+    needs: pages-build
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Promote the previewed gallery and demo to the live prefix
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          BUCKET: ${{ secrets.MARKETING_SCREENSHOTS_S3_BUCKET }}
+          BASE_PATH: ${{ secrets.MARKETING_SCREENSHOTS_S3_BASE_PATH }}
+        run: |
+          set -euo pipefail
+          base="s3://$BUCKET/${BASE_PATH#/}"
+          aws s3 cp "$base/preview/" "$base/" --recursive --only-show-errors

@@ -1,4 +1,4 @@
-name: CI, release, and Pages
+name: CI and release
 
 # Forgejo owns every branch. Its push mirror delivers those branch commits here.
 # GitHub validates mirrored pushes and pull requests, then creates only v* release
@@ -9,13 +9,6 @@ on:
     branches: ["**"]
   pull_request:
   workflow_dispatch:
-    inputs:
-      promote_marketing:
-        description: >-
-          Promote the previewed marketing gallery to the live prefix the website serves. Look at
-          the preview first; nothing else publishes it.
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -28,6 +21,37 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  frontends:
+    name: Build / Shared web applications
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - run: npm ci
+
+      - name: Build every release frontend once
+        run: |
+          npm run build --prefix apps/light-desktop & desk=$!
+          npm run --prefix apps/viz-editor build & previz=$!
+          npm run build --prefix apps/media & media=$!
+          wait "$desk"
+          wait "$previz"
+          wait "$media"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-frontends-${{ github.sha }}
+          path: .artifacts/build/frontend
+          if-no-files-found: error
+
   metadata:
     name: Release / Select version
     if: github.ref == 'refs/heads/main'
@@ -72,6 +96,7 @@ jobs:
 
   quality:
     name: Checks / Linting
+    needs: frontends
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -103,8 +128,10 @@ jobs:
       - name: Install workspace dependencies
         run: npm ci
 
-      - name: Build the embedded Control UI
-        run: npm run build --prefix apps/light-desktop
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-frontends-${{ github.sha }}
+          path: .artifacts/build/frontend
 
       - name: Check Rust formatting
         run: cargo fmt --all -- --check
@@ -135,14 +162,17 @@ jobs:
       # Rust setup may materialize Cargo bookkeeping. Keep all of it after the architecture gate,
       # whose first contract deliberately checks that checkout and npm left the root clean.
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
+        if: github.ref != 'refs/heads/main'
         with:
           toolchain: stable
 
       - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
+        if: github.ref != 'refs/heads/main'
         with:
           key: unit
 
       - name: Install Linux workspace development files
+        if: github.ref != 'refs/heads/main'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -150,7 +180,12 @@ jobs:
             libgtk-3-dev libsoup-3.0-dev libudev-dev libasound2-dev libxdo-dev \
             mesa-vulkan-drivers build-essential pkg-config
 
-      - name: Run unit tests
+      - name: Run TypeScript unit tests on release branches
+        if: github.ref == 'refs/heads/main'
+        run: npm run test:typescript-unit
+
+      - name: Run TypeScript and focused Rust unit tests on non-release branches
+        if: github.ref != 'refs/heads/main'
         env:
           TOSKLIGHT_EMBEDDED_PANE_WGPU_BACKEND: noop
         run: npm run test:unit
@@ -158,7 +193,10 @@ jobs:
   workspace:
     name: Tests / Comprehensive Rust workspace
     if: github.ref == 'refs/heads/main'
+    needs: frontends
     runs-on: ubuntu-22.04
+    env:
+      LIGHT_REUSE_FRONTEND_BUILD: "1"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -172,6 +210,11 @@ jobs:
 
       - name: Install workspace dependencies
         run: npm ci
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-frontends-${{ github.sha }}
+          path: .artifacts/build/frontend
 
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
         with:
@@ -279,7 +322,10 @@ jobs:
   e2e-build:
     name: Tests / Build Playwright application
     if: github.ref == 'refs/heads/main'
+    needs: frontends
     runs-on: ubuntu-22.04
+    env:
+      LIGHT_REUSE_FRONTEND_BUILD: "1"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -301,6 +347,11 @@ jobs:
 
       - name: Install workspace dependencies
         run: npm ci
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-frontends-${{ github.sha }}
+          path: .artifacts/build/frontend
 
       - name: Install USB serial and audio development files
         run: sudo apt-get update && sudo apt-get install -y libudev-dev libasound2-dev pkg-config
@@ -689,12 +740,28 @@ jobs:
           path: assets/demo.show
           if-no-files-found: error
 
-  # Media is built as its own four-platform matrix as soon as the release version is known. The
-  # platform bundle gate below is what joins products; Media does not wait for a published release.
+  validated:
+    name: Release / Confirm latest validated main
+    if: github.ref == 'refs/heads/main'
+    needs: [quality, unit, workspace, native-extension-draft, usb-dmx, e2e]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Confirm this is still the latest main commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git ls-remote origin refs/heads/main | awk '{print $1}')" = "$GITHUB_SHA"
+
+  # Media remains a separate four-platform component matrix, but it starts only after the current
+  # main commit has passed every validation gate.
   media-build:
     name: Build / Media release components
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: metadata
+    needs: [metadata, frontends, validated]
     uses: ./.github/workflows/media-release.yml
     with:
       version: ${{ needs.metadata.outputs.version }}
@@ -705,7 +772,7 @@ jobs:
     # The help screenshots are embedded into the binary, so they have to exist before anything is
     # compiled. This is what makes what ships the current interface rather than whatever was last
     # committed by hand.
-    needs: [metadata, help-screenshots, workspace, demo-show]
+    needs: [metadata, frontends, validated, help-screenshots, demo-show]
     runs-on: ${{ matrix.runner }}
     env:
       LIGHT_RELEASE_VERSION: ${{ needs.metadata.outputs.version }}
@@ -760,6 +827,11 @@ jobs:
           name: help-screenshots
           path: docs/help/assets/screenshots
 
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-frontends-${{ github.sha }}
+          path: .artifacts/build/frontend
+
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
         with:
           toolchain: stable
@@ -793,9 +865,6 @@ jobs:
       - name: Install workspace dependencies
         shell: bash
         run: npm ci
-
-      - name: Build the Light desktop UI bundle
-        run: npm run build --prefix apps/light-desktop
 
       - name: Build the standalone Light headless application
         shell: bash
@@ -943,11 +1012,6 @@ jobs:
           light_init_artifact_paths "$PWD"
           mkdir -p "$LIGHT_DEMO_SHOW_DIR"
           cp assets/demo.show "$LIGHT_DEMO_SHOW_DIR/demo-show.show"
-
-      - name: Build the ToskLight Viz Editor frontend
-        if: matrix.viz
-        shell: bash
-        run: npm run --prefix apps/viz-editor build
 
       - name: Build the ToskLight Viz Editor application
         if: matrix.viz
@@ -1102,15 +1166,8 @@ jobs:
 
   pages-build:
     name: Documentation / Assemble static website
-    if: >-
-      always() &&
-      github.event_name == 'push' &&
-      github.ref == 'refs/heads/main' &&
-      needs.metadata.result == 'success' &&
-      needs.manual.result == 'success' &&
-      needs.help-screenshots.result == 'success' &&
-      (needs['release-performance'].result == 'success' ||
-       needs['release-performance'].result == 'failure')
+    # Kept as a tombstone for old run links. The scheduled performance-pages workflow owns this.
+    if: ${{ false }}
     needs:
       - metadata
       - manual
@@ -1299,7 +1356,8 @@ jobs:
 
   release-performance:
     name: Release / Measure published artifact
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Performance is deliberately outside the release critical path; see performance-pages.yml.
+    if: ${{ false }}
     needs: [metadata, release]
     runs-on: ubuntu-22.04
     permissions:
@@ -1447,7 +1505,8 @@ jobs:
 
   pages-deploy:
     name: Documentation / Deploy GitHub Pages
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Pages is deliberately outside the release critical path; see performance-pages.yml.
+    if: ${{ false }}
     needs: [pages-build]
     runs-on: ubuntu-22.04
     permissions:
