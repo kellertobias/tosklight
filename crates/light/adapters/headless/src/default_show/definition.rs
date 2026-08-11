@@ -1,8 +1,11 @@
 use light_core::{AttributeKey, FixtureId};
 use light_fixture::{
-    ByteOrder, ChannelComponent, FixtureDefinition, FixtureLocation, FixturePhysicalProperties,
-    FixtureVector, LogicalHead, MultiPatchInstance, Parameter, ParameterMetadata, PatchedFixture,
-    PatchedHead, SignalLossPolicy,
+    ByteOrder, ChannelComponent, FixtureDefinition, FixturePhysicalProperties, LogicalHead,
+    Parameter, ParameterMetadata, SignalLossPolicy,
+};
+#[cfg(test)]
+use light_fixture::{
+    FixtureLocation, FixtureVector, MultiPatchInstance, PatchedFixture, PatchedHead,
 };
 use std::collections::BTreeMap;
 
@@ -114,6 +117,7 @@ pub(super) fn sunstrip_definition() -> FixtureDefinition {
     fixture
 }
 
+#[cfg(test)]
 pub(super) fn patched(
     name: String,
     fixture_number: u32,
@@ -164,6 +168,7 @@ pub(super) fn patched(
     }
 }
 
+#[cfg(test)]
 pub(super) fn multipatch(
     name: String,
     location: FixtureLocation,

@@ -5,7 +5,7 @@ use super::show_objects_v2::{active_entry, object_record, validate_request_id};
 use super::*;
 use crate::tolerant_json::TolerantJson;
 use light_application::timeline::{
-    SystemTimecodeClock, TimecodeChangePublisher, TimecodeRuntimeChange, TimecodeRuntimeService,
+    TimecodeChangePublisher, TimecodeRuntimeChange, TimecodeRuntimeService,
 };
 use light_playback::{TimecodeFrame, TimecodeFrameRate, TimecodeId};
 use light_wire::v2::show_objects::ShowObjectActionOutcome;
@@ -20,14 +20,6 @@ impl TimecodeChangePublisher for RoutePublisher {
                 change.clone(),
             ));
     }
-}
-
-pub(super) fn new_service() -> TimecodeRuntimeService {
-    new_service_with_clock(
-        Arc::new(SystemTimecodeClock::default()),
-        None,
-        light_application::EventBus::default(),
-    )
 }
 
 pub(super) fn new_service_with_clock(

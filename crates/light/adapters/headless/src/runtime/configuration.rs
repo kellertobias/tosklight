@@ -235,10 +235,6 @@ pub(super) struct DeskConfiguration {
     pub(super) output_bind_ip: IpAddr,
     pub(super) osc_bind: Option<SocketAddr>,
     pub(super) art_timecode_bind: Option<SocketAddr>,
-    /// Legacy priority-list input retained only so older installation files deserialize. It is
-    /// never serialized and never drives routing after the explicit-source migration.
-    #[serde(default, rename = "timecode_sources", skip_serializing)]
-    pub(super) legacy_timecode_sources: Vec<LegacyTimecodeSourceConfig>,
     pub(super) timecode_source: TimecodeSourceSelection,
     /// `None` follows the configured DMX frame rate. `Some` is the operator's explicit override.
     pub(super) timecode_frame_rate: Option<DeskTimecodeFrameRate>,
@@ -325,17 +321,6 @@ impl DeskTimecodeFrameRate {
             .then_some(FrameRate::Fps2997Drop)
     }
 }
-#[derive(Clone, Debug, Deserialize)]
-pub(super) struct LegacyTimecodeSourceConfig {
-    #[allow(dead_code)]
-    pub(super) source_prefix: String,
-    #[allow(dead_code)]
-    pub(super) priority: i16,
-    #[allow(dead_code)]
-    pub(super) fallback: bool,
-    #[allow(dead_code)]
-    pub(super) loss_timeout_millis: u64,
-}
 impl Default for DeskConfiguration {
     fn default() -> Self {
         Self {
@@ -343,7 +328,6 @@ impl Default for DeskConfiguration {
             output_bind_ip: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
             osc_bind: Some(SocketAddr::from(([127, 0, 0, 1], 9000))),
             art_timecode_bind: None,
-            legacy_timecode_sources: Vec::new(),
             timecode_source: TimecodeSourceSelection::Internal,
             timecode_frame_rate: None,
             timecode_external_loss_policy: ExternalTimecodeLossPolicy::ContinueInternal,

@@ -5,6 +5,7 @@ use std::path::Path;
 
 #[path = "default_show/definition.rs"]
 mod definition;
+#[cfg(test)]
 #[path = "default_show/seed.rs"]
 mod seed;
 
