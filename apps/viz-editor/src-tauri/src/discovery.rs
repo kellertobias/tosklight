@@ -11,7 +11,8 @@
 use crate::session::{DocumentSummary, Session};
 use light_discovery::{Advertisement, Advertiser, Browser, Peer, Role};
 use parking_lot::Mutex;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 /// The editor's own announcement, and what it has heard.
@@ -87,16 +88,42 @@ type Answer<T> = Result<T, String>;
 
 /// The desks on the network that are running a show.
 #[tauri::command]
-pub fn discovered_desks(discovery: tauri::State<'_, Discovery>) -> Vec<DeskPeer> {
-    discovery
+pub async fn discovered_desks(discovery: tauri::State<'_, Discovery>) -> Answer<Vec<DeskPeer>> {
+    let client = discovery_client(std::time::Duration::from_secs(2))?;
+    let checks = discovery
         .desks()
         .into_iter()
         .filter(|desk| desk.show.is_some())
-        .map(|desk| DeskPeer {
-            instance: desk.instance.clone(),
-            name: desk.name.clone(),
-            address: desk.address().to_owned(),
-            show: desk.show,
+        .map(|desk| {
+            let client = client.clone();
+            tokio::spawn(async move {
+                let reachable = reachable_base(&client, &desk).await.ok()?;
+                Some(DeskPeer {
+                    instance: desk.instance,
+                    name: desk.name,
+                    address: reachable.trim_start_matches("http://").to_owned(),
+                    show: desk.show,
+                })
+            })
+        })
+        .collect::<Vec<_>>();
+    let mut found = Vec::new();
+    for check in checks {
+        let Ok(Some(peer)) = check.await else {
+            continue;
+        };
+        found.push(peer);
+    }
+    Ok(deduplicate_desk_peers(found))
+}
+
+fn deduplicate_desk_peers(peers: Vec<DeskPeer>) -> Vec<DeskPeer> {
+    let mut instances = HashSet::new();
+    let mut endpoints = HashSet::new();
+    peers
+        .into_iter()
+        .filter(|peer| {
+            instances.insert(peer.instance.clone()) && endpoints.insert(peer.address.clone())
         })
         .collect()
 }
@@ -132,19 +159,85 @@ pub async fn load_from_desk(
 /// A desk answers on every interface its machine has, and only one of them may be the network
 /// this editor is on, so each is tried in turn rather than failing on the first.
 async fn fetch_active_show(desk: &Peer) -> Answer<(String, Vec<u8>)> {
-    let client = reqwest::Client::builder()
-        .connect_timeout(std::time::Duration::from_secs(3))
-        .timeout(std::time::Duration::from_secs(60))
-        .build()
-        .map_err(|error| error.to_string())?;
-    let mut failure = None;
+    let client = discovery_client(std::time::Duration::from_secs(60))?;
+    let mut failures = Vec::new();
     for base in desk.base_urls() {
         match fetch_from(&client, desk, &base).await {
             Ok(show) => return Ok(show),
-            Err(error) => failure = Some(error),
+            Err(error) => failures.push(format!("{base}: {error}")),
         }
     }
-    Err(failure.unwrap_or_else(|| format!("{} has no address this editor can reach", desk.name)))
+    Err(if failures.is_empty() {
+        format!(
+            "{} has no advertised address this editor can reach",
+            desk.name
+        )
+    } else {
+        format!(
+            "Could not connect to {} at any advertised address. Check that the desk is running and reachable. {}",
+            desk.name,
+            failures.join("; ")
+        )
+    })
+}
+
+fn discovery_client(timeout: std::time::Duration) -> Answer<reqwest::Client> {
+    reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(2))
+        .timeout(timeout)
+        .build()
+        .map_err(|error| error.to_string())
+}
+
+#[derive(Deserialize)]
+struct Bootstrap {
+    users: Vec<BootstrapUser>,
+}
+
+#[derive(Deserialize)]
+struct BootstrapUser {
+    name: String,
+    enabled: bool,
+}
+
+async fn reachable_base(client: &reqwest::Client, desk: &Peer) -> Answer<String> {
+    let mut failures = Vec::new();
+    for base in desk.base_urls() {
+        match enabled_session_user(client, &base).await {
+            Ok(_) => return Ok(base),
+            Err(error) => failures.push(format!("{base}: {error}")),
+        }
+    }
+    Err(failures.join("; "))
+}
+
+async fn enabled_session_user(client: &reqwest::Client, base: &str) -> Answer<String> {
+    let bootstrap: Bootstrap = client
+        .get(format!("{base}/api/v2/bootstrap"))
+        .send()
+        .await
+        .map_err(|error| format!("did not answer: {error}"))?
+        .error_for_status()
+        .map_err(|error| format!("did not provide API v2 bootstrap: {error}"))?
+        .json()
+        .await
+        .map_err(|error| format!("returned an invalid API v2 bootstrap: {error}"))?;
+    preferred_enabled_user(bootstrap.users)
+}
+
+fn preferred_enabled_user(users: Vec<BootstrapUser>) -> Answer<String> {
+    let mut enabled = users
+        .into_iter()
+        .filter(|user| user.enabled)
+        .map(|user| user.name)
+        .collect::<Vec<_>>();
+    enabled.sort_by_key(|name| name.to_lowercase());
+    enabled
+        .iter()
+        .find(|name| name.eq_ignore_ascii_case("Operator"))
+        .cloned()
+        .or_else(|| enabled.into_iter().next())
+        .ok_or_else(|| "has no enabled user for a read-only Visualizer session".to_owned())
 }
 
 async fn fetch_from(
@@ -152,15 +245,16 @@ async fn fetch_from(
     desk: &Peer,
     base: &str,
 ) -> Answer<(String, Vec<u8>)> {
+    let username = enabled_session_user(client, base).await?;
     // A read-only session, which is what this is: the editor takes a copy and issues nothing else.
     let session: serde_json::Value = client
         .post(format!("{base}/api/v2/sessions"))
-        .json(&serde_json::json!({"username": "ToskLight Viz Editor", "role": "visualizer"}))
+        .json(&serde_json::json!({"username": username, "role": "visualizer"}))
         .send()
         .await
-        .map_err(|error| format!("{} did not answer: {error}", desk.name))?
+        .map_err(|error| format!("did not answer while creating a read-only session: {error}"))?
         .error_for_status()
-        .map_err(|error| format!("{} refused a session: {error}", desk.name))?
+        .map_err(|error| format!("refused a read-only Visualizer session: {error}"))?
         .json()
         .await
         .map_err(|error| error.to_string())?;
@@ -256,6 +350,56 @@ fn unique_path(directory: &Path, name: &str) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    async fn answer_http(
+        listener: &tokio::net::TcpListener,
+        expected: &str,
+        body: &[u8],
+        extra_headers: &str,
+    ) -> String {
+        let (mut stream, _) = listener.accept().await.expect("request");
+        let mut request = Vec::new();
+        loop {
+            let mut chunk = [0_u8; 2048];
+            let count = stream.read(&mut chunk).await.expect("request bytes");
+            if count == 0 {
+                break;
+            }
+            request.extend_from_slice(&chunk[..count]);
+            let text = String::from_utf8_lossy(&request);
+            let Some(headers_end) = text.find("\r\n\r\n") else {
+                continue;
+            };
+            let content_length = text[..headers_end]
+                .lines()
+                .find_map(|line| {
+                    line.to_ascii_lowercase()
+                        .strip_prefix("content-length:")?
+                        .trim()
+                        .parse::<usize>()
+                        .ok()
+                })
+                .unwrap_or(0);
+            if request.len() >= headers_end + 4 + content_length {
+                break;
+            }
+        }
+        let request = String::from_utf8(request).expect("UTF-8 HTTP request");
+        assert!(request.starts_with(expected), "{request}");
+        stream
+            .write_all(
+                format!(
+                    "HTTP/1.1 200 OK\r\ncontent-length: {}\r\nconnection: close\r\n{extra_headers}\r\n{}",
+                    body.len(),
+                    String::from_utf8_lossy(body)
+                )
+                .as_bytes(),
+            )
+            .await
+            .expect("response");
+        request
+    }
 
     #[test]
     fn a_downloaded_show_never_overwrites_one_already_there() {
@@ -273,5 +417,158 @@ mod tests {
     fn a_desk_name_that_is_not_a_file_name_still_becomes_one() {
         assert_eq!(sanitised("Summer/Tour 2026"), "Summer-Tour 2026");
         assert_eq!(sanitised("   "), "Show from desk");
+    }
+
+    #[test]
+    fn the_clean_install_operator_is_used_for_the_read_only_session() {
+        let selected = preferred_enabled_user(vec![
+            BootstrapUser {
+                name: "Disabled".into(),
+                enabled: false,
+            },
+            BootstrapUser {
+                name: "Operator".into(),
+                enabled: true,
+            },
+        ])
+        .expect("clean installation has an enabled user");
+        assert_eq!(selected, "Operator");
+        assert!(preferred_enabled_user(Vec::new()).is_err());
+    }
+
+    #[test]
+    fn one_advertised_desk_is_deduplicated_across_address_representations() {
+        let peer = |address: &str| DeskPeer {
+            instance: "tosklight-desk-kmp5._tosklight._tcp.local.".into(),
+            name: "kmp5".into(),
+            show: Some("Tour".into()),
+            address: address.into(),
+        };
+        let found = deduplicate_desk_peers(vec![
+            peer("[::1]:5000"),
+            peer("127.0.0.1:5000"),
+            peer("kmp5:5000"),
+        ]);
+
+        assert_eq!(found.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn an_ipv6_then_ipv4_peer_falls_back_to_the_ipv4_only_desk() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("IPv4 listener");
+        let port = listener.local_addr().unwrap().port();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.expect("bootstrap request");
+            let mut request = [0_u8; 2048];
+            let count = stream.read(&mut request).await.expect("request bytes");
+            assert!(
+                String::from_utf8_lossy(&request[..count]).starts_with("GET /api/v2/bootstrap")
+            );
+            let body = r#"{"users":[{"name":"Operator","enabled":true}]}"#;
+            stream
+                .write_all(
+                    format!(
+                        "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                        body.len()
+                    )
+                    .as_bytes(),
+                )
+                .await
+                .expect("bootstrap response");
+        });
+        let peer = Peer {
+            role: Role::Desk,
+            name: "IPv4 desk".into(),
+            show: Some("Show".into()),
+            addresses: vec![format!("[::1]:{port}"), format!("127.0.0.1:{port}")],
+            instance: "desk.local".into(),
+        };
+
+        let base = reachable_base(
+            &discovery_client(std::time::Duration::from_secs(2)).unwrap(),
+            &peer,
+        )
+        .await
+        .expect("IPv4 fallback reaches the desk");
+        assert_eq!(base, format!("http://127.0.0.1:{port}"));
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn an_ipv4_only_clean_desk_creates_a_visualizer_session_and_downloads() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("IPv4 listener");
+        let port = listener.local_addr().unwrap().port();
+        let show_id = uuid::Uuid::new_v4();
+        let server = tokio::spawn(async move {
+            answer_http(
+                &listener,
+                "GET /api/v2/bootstrap",
+                br#"{"users":[{"name":"Operator","enabled":true}]}"#,
+                "content-type: application/json\r\n",
+            )
+            .await;
+            let session = answer_http(
+                &listener,
+                "POST /api/v2/sessions",
+                br#"{"token":"visualizer-token"}"#,
+                "content-type: application/json\r\n",
+            )
+            .await;
+            assert!(session.contains(r#""username":"Operator""#));
+            assert!(session.contains(r#""role":"visualizer""#));
+            answer_http(
+                &listener,
+                "GET /api/v2/readiness",
+                format!(r#"{{"active_show":"{show_id}"}}"#).as_bytes(),
+                "content-type: application/json\r\n",
+            )
+            .await;
+            answer_http(
+                &listener,
+                &format!("GET /api/v2/shows/{show_id}/download"),
+                b"portable-show",
+                "content-type: application/octet-stream\r\ncontent-disposition: attachment; filename=\"IPv4 Tour.show\"\r\n",
+            )
+            .await;
+        });
+        let peer = Peer {
+            role: Role::Desk,
+            name: "Clean desk".into(),
+            show: Some("IPv4 Tour".into()),
+            addresses: vec![format!("[::1]:{port}"), format!("127.0.0.1:{port}")],
+            instance: "clean.local".into(),
+        };
+
+        let (name, bytes) = fetch_active_show(&peer).await.expect("downloaded show");
+        assert_eq!(name, "IPv4 Tour");
+        assert_eq!(bytes, b"portable-show");
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn an_endpoint_without_a_listener_is_not_reachable() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener);
+        let peer = Peer {
+            role: Role::Desk,
+            name: "Stale desk".into(),
+            show: Some("Old show".into()),
+            addresses: vec![format!("127.0.0.1:{port}")],
+            instance: "stale.local".into(),
+        };
+
+        assert!(
+            reachable_base(
+                &discovery_client(std::time::Duration::from_millis(500)).unwrap(),
+                &peer,
+            )
+            .await
+            .is_err()
+        );
     }
 }
