@@ -196,6 +196,7 @@ function measuredStatus(status = "healthy") {
 			{
 				case_name: "37,720 parameters / 2,000 fixtures",
 				execution_mode: "unrestricted",
+				measurement_surface: "released-tauri-desk-fixture-sheet",
 				fixture_count: 2_000,
 				parameter_count: 37_720,
 				universes: 74,
@@ -214,11 +215,23 @@ function measuredStatus(status = "healthy") {
 					application_cpu_average_percent: 83,
 					application_cpu_max_percent: 97,
 					application_peak_resident_bytes: 700 * 1024 ** 2,
+					server: {
+						cpu_average_percent: 61,
+						cpu_max_percent: 72,
+						peak_resident_bytes: 500 * 1024 ** 2,
+					},
+					desktop_webview: {
+						cpu_average_percent: 22,
+						cpu_max_percent: 25,
+						peak_resident_bytes: 200 * 1024 ** 2,
+					},
+					playwright: { launched: false },
 				},
 			},
 			...["unrestricted", "one_core"].map((execution_mode) => ({
 				case_name: "Demo show — 4,096 parameters / 295 fixtures",
 				execution_mode,
+				measurement_surface: "released-tauri-desk-fixture-sheet",
 				fixture_count: 295,
 				parameter_count: 4_096,
 				universes: 8,
@@ -241,6 +254,17 @@ function measuredStatus(status = "healthy") {
 					application_cpu_average_percent: 25,
 					application_cpu_max_percent: 31,
 					application_peak_resident_bytes: 256 * 1024 ** 2,
+					server: {
+						cpu_average_percent: 18,
+						cpu_max_percent: 22,
+						peak_resident_bytes: 192 * 1024 ** 2,
+					},
+					desktop_webview: {
+						cpu_average_percent: 7,
+						cpu_max_percent: 9,
+						peak_resident_bytes: 64 * 1024 ** 2,
+					},
+					playwright: { launched: false },
 				},
 			})),
 		],
@@ -269,15 +293,25 @@ test("healthy and degraded measured statuses retain their public evidence", () =
 	assert.match(page, /Canonical 306-instance demo show/u);
 	assert.match(page, /Physical Stage instances<\/th><td>343/u);
 	assert.match(page, /Stage source-to-canvas p95<\/th><td>61 ms/u);
-	assert.match(page, /Show statistics/u);
-	assert.match(page, /<strong>295<\/strong><small>fixture records/u);
-	assert.match(page, /100-fixture show/u);
-	assert.match(page, /2,000-fixture mixed shipped-mode show/u);
-	assert.match(page, /<strong>37,?720<\/strong>|<strong>37720<\/strong>/u);
-	assert.match(page, /2,048-fixture capacity diagnostic/u);
-	assert.match(page, /<strong>87\.5 Hz<\/strong>/u);
-	assert.match(page, /warning: 40 Hz ≤ x &lt; 60 Hz/u);
-	assert.match(page, /<strong>Not measured<\/strong><small>not collected/u);
+	assert.match(page, /Measured shows/u);
+	assert.equal(page.match(/class="performance-row /gu)?.length, 3);
+	assert.match(page, /37,720 parameters \/ 2,000 fixtures/u);
+	assert.match(page, /Demo show — 4,096 parameters \/ 295 fixtures/u);
+	assert.doesNotMatch(page, /100-fixture show|Not measured/u);
+	assert.match(page, /same measured-scenario table shown on the main/u);
+	assert.match(page, /How the test runs/u);
+	assert.match(page, /Released Linux bundle/u);
+	assert.match(page, /Tauri Desk under Xvfb/u);
+	assert.match(page, /WebKit Fixture Sheet/u);
+	assert.match(page, /Bundled Light server/u);
+	assert.match(page, /60 Hz scheduler/u);
+	assert.match(page, /Node and Xvfb are excluded/u);
+	assert.match(page, /Playwright is not launched/u);
+	assert.match(page, /Application process breakdown/u);
+	assert.match(page, /Complete Desk app tree/u);
+	assert.match(page, /Bundled Light server/u);
+	assert.match(page, /Tauri host \+ WebKit/u);
+	assert.match(page, /61%<\/td><td>72%<\/td><td>0\.49 GiB/u);
 	assert.match(page, /Runner configuration/u);
 	assert.match(page, /Logical cores<\/th><td>4/u);
 	assert.match(page, /RAM<\/th><td>16\.0 GiB/u);

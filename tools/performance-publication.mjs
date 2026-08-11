@@ -93,122 +93,10 @@ function row(label, value_, unit = "") {
 	return `<tr><th>${escapePerformanceText(label)}</th><td>${value(value_, unit)}</td></tr>`;
 }
 
-function summaryMetric(value_, unit = "", context = "measured") {
-	const actual = present(value_)
-		? `${escapePerformanceText(value_)}${unit}`
-		: "Not measured";
-	const detail = present(value_) ? context : "not collected by this benchmark";
-	return `<td><strong>${actual}</strong><small>${escapePerformanceText(detail)}</small></td>`;
-}
-
-function rateContext(workload) {
-	const yellow = workload?.yellow_threshold_hz;
-	const green = workload?.green_threshold_hz;
-	return present(yellow) && present(green)
-		? `critical: x < ${yellow} Hz; warning: ${yellow} Hz ≤ x < ${green} Hz; healthy: x ≥ ${green} Hz`
-		: "informational; no acceptance range configured";
-}
-
 function bytes(value_) {
 	if (!present(value_)) return null;
 	const gibibytes = Number(value_) / 1024 ** 3;
 	return `${gibibytes.toFixed(gibibytes >= 10 ? 1 : 2)} GiB`;
-}
-
-function summaryRow({
-	name,
-	fixtures,
-	parameters,
-	universes,
-	workload,
-	rate,
-	resources,
-}) {
-	const context = rateContext(workload);
-	return (
-		`<tr><th>${escapePerformanceText(name)}</th>` +
-		summaryMetric(fixtures, "", "fixture records") +
-		summaryMetric(parameters, "", "controllable parameter slots") +
-		summaryMetric(universes, "", "logical output universes") +
-		summaryMetric(rate?.minimum, " Hz", context) +
-		summaryMetric(rate?.average, " Hz", context) +
-		summaryMetric(rate?.p95, " Hz", context) +
-		summaryMetric(rate?.outliers, "", "one-second windows below the minimum") +
-		summaryMetric(resources?.application_cpu_max, "%") +
-		summaryMetric(resources?.application_cpu_average, "%") +
-		summaryMetric(resources?.system_cpu_max, "%") +
-		summaryMetric(resources?.system_cpu_average, "%") +
-		summaryMetric(
-			bytes(resources?.peak_resident_bytes),
-			"",
-			"peak application resident memory",
-		) +
-		`</tr>`
-	);
-}
-
-function renderStatisticsSummary(performance) {
-	const canonical = performance.canonical_demo ?? {};
-	const twoThousand = performance.two_thousand_show ?? {};
-	const required = performance.required_floor ?? {};
-	const doubled = performance.doubled_density ?? {};
-	const unavailable = (name, fixtures) => summaryRow({ name, fixtures });
-	return (
-		`<div class="table-scroll"><table class="statistics"><thead><tr>` +
-		`<th>Case / show</th><th>Fixtures</th><th>Parameters</th><th>Universes</th>` +
-		`<th>Minimum rate</th><th>Average rate</th><th>P95 rate</th><th>Outliers</th>` +
-		`<th>Application CPU max</th><th>Application CPU average</th>` +
-		`<th>General CPU max</th><th>General CPU average</th><th>Maximum RAM</th>` +
-		`</tr></thead><tbody>` +
-		summaryRow({
-			name: "Product demo (~300 fixtures)",
-			fixtures: canonical.scene?.fixture_records ?? 295,
-			rate: { average: canonical.stage?.presentation_rate_hz },
-		}) +
-		unavailable("100-fixture show", 100) +
-		summaryRow({
-			name: "2,000-fixture mixed shipped-mode show",
-			fixtures: twoThousand.fixture_count ?? 2_000,
-			parameters: twoThousand.parameter_count,
-			universes: twoThousand.universes,
-			rate: {
-				minimum: twoThousand.minimum_one_second_completed_hz,
-				average: twoThousand.average_completed_hz,
-				p95: twoThousand.p95_one_second_completed_hz,
-				outliers: twoThousand.windows_below_minimum,
-			},
-			resources: twoThousand.resources,
-		}) +
-		summaryRow({
-			name: "1,024-fixture released-engine workload",
-			fixtures: required.fixture_count,
-			parameters: required.parameter_count,
-			universes: required.universes,
-			workload: required,
-			rate: {
-				minimum: required.minimum_one_second_completed_hz,
-				average: required.average_completed_hz,
-				p95: required.p95_one_second_completed_hz,
-				outliers: required.windows_below_minimum,
-			},
-			resources: required.resources,
-		}) +
-		summaryRow({
-			name: "2,048-fixture capacity diagnostic",
-			fixtures: doubled.fixture_count,
-			parameters: doubled.parameter_count,
-			universes: doubled.universes,
-			workload: required,
-			rate: {
-				minimum: doubled.minimum_one_second_completed_hz,
-				average: doubled.average_completed_hz,
-				p95: doubled.p95_one_second_completed_hz,
-				outliers: doubled.windows_below_minimum,
-			},
-			resources: doubled.resources,
-		}) +
-		`</tbody></table></div><p><small>The exact 100-fixture sustained show case is listed explicitly but is not yet collected. The 2,000-fixture mixed shipped-mode workload and 2,048-fixture synthetic capacity probe are different measurements and are reported separately.</small></p>`
-	);
 }
 
 function compactNumber(value_) {
@@ -352,16 +240,85 @@ function compactScenarioRow(scenario) {
 	);
 }
 
-export function renderCompactPerformanceSummary(performance) {
+function scenarioTable(performance) {
 	const scenarios = compactScenarioRows(performance);
 	const rows = scenarios.map(compactScenarioRow).join("");
-	const table = scenarios.length
-		? `<div class="performance-table-scroll"><table class="performance-compact"><thead><tr>` +
-			`<th>Test set</th><th>Load</th><th>Statistics</th><th>Below target</th><th>CPU</th>` +
-			`</tr></thead><tbody>${rows}</tbody></table></div>`
-		: `<p class="performance-empty">No measured output-cadence run is available for this release.</p>`;
+	return {
+		scenarios,
+		html: scenarios.length
+			? `<div class="performance-table-scroll"><table class="performance-compact"><thead><tr>` +
+				`<th>Test set</th><th>Load</th><th>Statistics</th><th>Below target</th><th>CPU</th>` +
+				`</tr></thead><tbody>${rows}</tbody></table></div>`
+			: `<p class="performance-empty">No measured output-cadence run is available for this release.</p>`,
+	};
+}
+
+function componentResourceRows(scenarios) {
+	return scenarios
+		.flatMap((scenario) => {
+			const resources = scenario.resources ?? {};
+			const application = {
+				cpu_average_percent: resources.application_cpu_average_percent,
+				cpu_max_percent: resources.application_cpu_max_percent,
+				peak_resident_bytes: resources.application_peak_resident_bytes,
+			};
+			return [
+				["Complete Desk app tree", application],
+				["Bundled Light server", resources.server],
+				["Tauri host + WebKit", resources.desktop_webview],
+			]
+				.filter(([, component]) =>
+					Number.isFinite(component?.cpu_average_percent),
+				)
+				.map(
+					([componentName, component]) =>
+						`<tr><th>${escapePerformanceText(scenario.case_name)}</th>` +
+						`<td>${scenario.execution_mode === "one_core" ? "locked to 1 core" : "unrestricted"}</td>` +
+						`<td>${escapePerformanceText(componentName)}</td>` +
+						`<td>${compactNumber(component.cpu_average_percent)}%</td>` +
+						`<td>${compactNumber(component.cpu_max_percent)}%</td>` +
+						`<td>${bytes(component.peak_resident_bytes) ?? "—"}</td></tr>`,
+				);
+		})
+		.join("");
+}
+
+function renderTestSetup(scenarios) {
+	const desktopMeasurement = scenarios.some(
+		(scenario) =>
+			scenario.measurement_surface === "released-tauri-desk-fixture-sheet",
+	);
+	if (!desktopMeasurement) {
+		return `<p>These legacy results were produced by the released Linux engine benchmark. The next publication uses the released Desk application setup shown on the main page.</p>`;
+	}
 	return (
-		`<div class="performance-summary">${table}` +
+		`<p>Each row is a 15-second timed run of the released Linux Desk bundle. The workflow repeats every show once with the complete application tree locked to one CPU core and once without that limit. The output scheduler always requests 60 Hz; the counter records one-second windows that fall below 44 Hz.</p>` +
+		`<figure class="test-setup"><div class="test-flow" role="img" aria-label="Released Linux bundle starts the Tauri Desk under Xvfb. Its real WebKit Fixture Sheet connects to the bundled Light server, which runs the 60 hertz output scheduler.">` +
+		`<div><strong>Released Linux bundle</strong><small>exact published AppImage</small></div><span aria-hidden="true">→</span>` +
+		`<div><strong>Tauri Desk under Xvfb</strong><small>one core or unrestricted</small></div><span aria-hidden="true">→</span>` +
+		`<div><strong>WebKit Fixture Sheet</strong><small>real production UI, kept active</small></div><span aria-hidden="true">→</span>` +
+		`<div><strong>Bundled Light server</strong><small>show, Dynamics, and DMX output</small></div><span aria-hidden="true">→</span>` +
+		`<div><strong>60 Hz scheduler</strong><small>cadence diagnostics</small></div></div>` +
+		`<figcaption>The API coordinator loads each real show and confirms the Fixture Sheet remains responsive. Linux process sampling measures the Desk application tree and separates its Light server from the Tauri/WebKit processes. Node and Xvfb are excluded. Playwright is not launched.</figcaption></figure>`
+	);
+}
+
+function renderDetailedScenarioEvidence(performance) {
+	const { scenarios, html } = scenarioTable(performance);
+	const componentRows = componentResourceRows(scenarios);
+	const components = componentRows
+		? `<h3>Application process breakdown</h3><div class="table-scroll"><table><thead><tr><th>Test set</th><th>Mode</th><th>Process scope</th><th>Average CPU</th><th>Maximum CPU</th><th>Maximum RAM</th></tr></thead><tbody>${componentRows}</tbody></table></div>`
+		: "";
+	return (
+		`${html}<p class="performance-legend">This is the same measured-scenario table shown on the main GitHub Pages page. Rows use their scenario-specific p95 thresholds; every run requests 60 Hz and “below target” counts one-second windows below 44 Hz.</p>` +
+		`<h2>How the test runs</h2>${renderTestSetup(scenarios)}${components}`
+	);
+}
+
+export function renderCompactPerformanceSummary(performance) {
+	const { html } = scenarioTable(performance);
+	return (
+		`<div class="performance-summary">${html}` +
 		`<p class="performance-legend">Rows use the scenario-specific p95 thresholds. <span class="legend-healthy">Green</span>: target met · ` +
 		`<span class="legend-warning">Yellow</span>: warning · ` +
 		`<span class="legend-degraded">Red</span>: below the scenario floor · ` +
@@ -536,7 +493,8 @@ export function renderPerformancePage(performance) {
 	return (
 		`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width">` +
 		`<title>ToskLight release performance</title><style>body{font:16px system-ui;max-width:1500px;margin:3rem auto;padding:0 1rem;background:#101318;color:#eef2f6}` +
-		`a{color:#72c7ff}.table-scroll{overflow-x:auto}table{border-collapse:collapse;width:100%;margin:1rem 0 2rem}th,td{border:1px solid #44505c;padding:.7rem;text-align:left;vertical-align:top}.statistics{min-width:1500px}.statistics th{white-space:nowrap}.statistics td strong{display:block}.statistics td small{display:block;margin-top:.25rem;color:#aab4bf;font-size:.7rem;line-height:1.2}` +
+		`a{color:#72c7ff}.table-scroll,.performance-table-scroll{overflow-x:auto}table{border-collapse:collapse;width:100%;margin:1rem 0 2rem}th,td{border:1px solid #44505c;padding:.7rem;text-align:left;vertical-align:top}.performance-compact td strong,.performance-compact th strong{display:block}.performance-compact td small,.performance-compact th small{display:block;margin-top:.25rem;color:#aab4bf;font-size:.72rem;line-height:1.3}.performance-row-healthy{background:#123326}.performance-row-warning{background:#3a3014}.performance-row-degraded{background:#3b1d20}.performance-row-unknown{background:#252b32}.performance-legend{color:#c5ced8}` +
+		`.test-setup{margin:1.25rem 0 2rem}.test-flow{display:grid;grid-template-columns:repeat(9,auto);align-items:stretch;gap:.6rem}.test-flow div{border:1px solid #526170;border-radius:.5rem;padding:.8rem;background:#1a2027;min-width:0}.test-flow strong,.test-flow small{display:block}.test-flow small,.test-setup figcaption{color:#aab4bf}.test-flow span{align-self:center;color:#72c7ff;font-size:1.4rem}.test-setup figcaption{margin-top:.8rem;line-height:1.5}@media(max-width:900px){.test-flow{display:flex;flex-direction:column}.test-flow span{transform:rotate(90deg);align-self:flex-start;margin-left:1rem}}` +
 		`code{background:#20262d;padding:.15rem .35rem}.healthy{color:#39d98a}.warning{color:#ffd166}.degraded{color:#ff6b6b}.unknown{color:#9aa5b8}</style><main><p><a href="../">← ToskLight</a></p>` +
 		`<h1>Release performance</h1><p><strong class="${escapePerformanceText(performance.status)}">${escapePerformanceText(performance.status.toUpperCase())}</strong> — ${escapePerformanceText(performance.summary)}</p>` +
 		`<h2>Evidence</h2><table><tbody>` +
@@ -546,7 +504,7 @@ export function renderPerformancePage(performance) {
 		row("Runner", runner) +
 		row("Workload", workloadLabel(performance.workload)) +
 		`</tbody></table>` +
-		`<h2>Show statistics</h2>${renderStatisticsSummary(performance)}` +
+		`<h2>Measured shows</h2>${renderDetailedScenarioEvidence(performance)}` +
 		`<h2>Runner configuration</h2><table><tbody>` +
 		row("CPU", performance.runner?.cpu_model) +
 		row("Logical cores", performance.runner?.logical_cpus) +
