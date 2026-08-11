@@ -34,9 +34,10 @@ export const DEFAULT_FIXED_SCREEN_PANE: FixedScreenPane = {
 
 export const DEFAULT_FIXED_SIDE_WIDTH_PERCENT = 25;
 
-export function browserScreenUrl(screenId: string, currentHref: string) {
-	const url = new URL(currentHref);
-	url.searchParams.delete("demo");
+export function browserScreenUrl(screenId: string, deskServerUrl: string) {
+	const url = new URL(deskServerUrl);
+	url.pathname = "/";
+	url.search = "";
 	url.searchParams.set("screen", screenId);
 	url.hash = "";
 	return url.toString();

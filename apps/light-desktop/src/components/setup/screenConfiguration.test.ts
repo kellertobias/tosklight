@@ -29,17 +29,22 @@ const configuredScreen: ScreenConfiguration = {
 };
 
 describe("Add Screen action", () => {
-	it("builds a stable browser route without carrying incompatible app modes", () => {
-		const url = new URL(
-			browserScreenUrl(
-				"screen-1",
-				"https://desk.example.test/light?demo=product&frontend-warmup-disabled=1#old",
-			),
-		);
+	it.each([
+		["IPv4", "http://127.0.0.1:5000", "http://127.0.0.1:5000/"],
+		["IPv6", "http://[::1]:5000", "http://[::1]:5000/"],
+		["hostname", "http://desk.local:5000", "http://desk.local:5000/"],
+		[
+			"remote HTTPS",
+			"https://desk.example.test/light?demo=1",
+			"https://desk.example.test/",
+		],
+	])("builds a stable externally usable %s screen route", (_kind, server, expectedBase) => {
+		const url = new URL(browserScreenUrl("screen / 1", server));
 
-		expect(url.searchParams.get("screen")).toBe("screen-1");
-		expect(url.searchParams.get("demo")).toBeNull();
-		expect(url.searchParams.get("frontend-warmup-disabled")).toBe("1");
+		expect(`${url.origin}${url.pathname}`).toBe(expectedBase);
+		expect(url.protocol).not.toBe("tauri:");
+		expect(url.searchParams.get("screen")).toBe("screen / 1");
+		expect([...url.searchParams]).toEqual([["screen", "screen / 1"]]);
 		expect(url.hash).toBe("");
 	});
 

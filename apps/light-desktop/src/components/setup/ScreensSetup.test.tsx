@@ -15,6 +15,10 @@ import {
 	ScreenSettingsCard,
 } from "./ScreensSetup";
 
+vi.mock("../../api/client/serverLocation", () => ({
+	configuredServerUrl: () => "http://[::1]:5000",
+}));
+
 const configuredScreen: ScreenConfiguration = {
 	id: "screen-1",
 	name: "Screen 1",
@@ -351,12 +355,13 @@ describe("additional screen settings", () => {
 			name: "Open in browser",
 		});
 		const browserHref = browserLink.getAttribute("href") ?? "";
-		expect(new URL(browserHref).searchParams.get("screen")).toBe(
-			"screen-1",
-		);
+		expect(browserHref).toBe("http://[::1]:5000/?screen=screen-1");
+		expect(new URL(browserHref).searchParams.get("screen")).toBe("screen-1");
 		fireEvent.click(screen.getByRole("button", { name: "Copy browser link" }));
 		await waitFor(() => expect(writeText).toHaveBeenCalledWith(browserHref));
-		expect(screen.getByRole("status")).toHaveTextContent("Browser link copied.");
+		expect(screen.getByRole("status")).toHaveTextContent(
+			"Browser link copied.",
+		);
 		fireEvent.click(screen.getByRole("option", { name: "Fixed right pane" }));
 		const width = screen.getByRole("textbox", { name: "Pane width (%)" });
 		expect(width).toHaveValue("25");
@@ -364,47 +369,47 @@ describe("additional screen settings", () => {
 		expect(screen.getByRole("switch", { name: "Dock" })).toBeDisabled();
 
 		await waitFor(() => expect(saved.length).toBeGreaterThan(0));
-			expect(saved.at(-1)).toMatchObject({
-				content: {
-					type: "fixed_side_pane",
-					side: "right",
-					width_percent: 40,
-				},
-				show_dock: false,
-			});
+		expect(saved.at(-1)).toMatchObject({
+			content: {
+				type: "fixed_side_pane",
+				side: "right",
+				width_percent: 40,
+			},
+			show_dock: false,
 		});
+	});
 
-		it("assigns Programmer ownership when a fixed side pane is selected", async () => {
-			const updateProgrammerOwner = vi.fn().mockResolvedValue(undefined);
-			const save = vi.fn().mockResolvedValue(undefined);
-			render(
-				<ScreenSettingsCard
-					screen={configuredScreen}
-					displays={[]}
-					save={save}
-					remove={vi.fn()}
-					updateProgrammerOwner={updateProgrammerOwner}
-				/>,
-			);
+	it("assigns Programmer ownership when a fixed side pane is selected", async () => {
+		const updateProgrammerOwner = vi.fn().mockResolvedValue(undefined);
+		const save = vi.fn().mockResolvedValue(undefined);
+		render(
+			<ScreenSettingsCard
+				screen={configuredScreen}
+				displays={[]}
+				save={save}
+				remove={vi.fn()}
+				updateProgrammerOwner={updateProgrammerOwner}
+			/>,
+		);
 
-			fireEvent.click(screen.getByRole("button", { name: "Desktop" }));
-			fireEvent.click(screen.getByRole("option", { name: "Fixed left pane" }));
+		fireEvent.click(screen.getByRole("button", { name: "Desktop" }));
+		fireEvent.click(screen.getByRole("option", { name: "Fixed left pane" }));
 
-			await waitFor(() => expect(save).toHaveBeenCalledOnce());
-			await waitFor(() =>
-				expect(updateProgrammerOwner).toHaveBeenCalledWith({
-					owner_screen_id: "screen-1",
-				}),
-			);
-			expect(save.mock.calls[0][0]).toMatchObject({
-				content: {
-					type: "fixed_side_pane",
-					side: "left",
-					width_percent: 25,
-				},
-				show_dock: false,
-			});
+		await waitFor(() => expect(save).toHaveBeenCalledOnce());
+		await waitFor(() =>
+			expect(updateProgrammerOwner).toHaveBeenCalledWith({
+				owner_screen_id: "screen-1",
+			}),
+		);
+		expect(save.mock.calls[0][0]).toMatchObject({
+			content: {
+				type: "fixed_side_pane",
+				side: "left",
+				width_percent: 25,
+			},
+			show_dock: false,
 		});
+	});
 
 	it("assigns the single Programmer owner when Controls only is selected", async () => {
 		const updateProgrammerOwner = vi.fn().mockResolvedValue(undefined);

@@ -121,6 +121,18 @@
 	background: #7d2328;
 	color: #fff;
 }
+.native-drag-strip.native-drag-strip-fullscreen {
+	width: auto;
+	min-width: 132px;
+	grid-template-columns: 1fr;
+}
+.native-drag-strip .native-window-exit-fullscreen {
+	padding: 0 12px;
+	background: #16353c;
+	color: #d6edf0;
+	font-size: 11px;
+	font-weight: 800;
+}
 .native-drag-strip svg {
 	width: 15px;
 	height: 15px;
