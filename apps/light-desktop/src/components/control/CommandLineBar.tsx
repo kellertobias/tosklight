@@ -110,6 +110,14 @@ function useCommandErrors(setCompleted: Dispatch<SetStateAction<boolean>>) {
 	};
 }
 
+function openSystemControlsModal(
+	dispatch: ReturnType<typeof useApp>["dispatch"],
+	hasDeskDiagnostics: boolean,
+) {
+	requestSystemControlsTab(hasDeskDiagnostics ? "desk-state" : "running");
+	dispatch({ type: "SET_MODAL", modal: "systemControlsOpen", value: true });
+}
+
 function useCommandLineBarModel() {
 	const { state, dispatch } = useApp();
 	const hardwareAttached = useHardwareConnected();
@@ -208,14 +216,8 @@ function useCommandLineBarModel() {
 		if (!preload.ready || !preload.actions) return;
 		await preload.actions.release();
 	};
-	const openSystemControls = () => {
-		requestSystemControlsTab(deskDiagnostics.length ? "desk-state" : "running");
-		dispatch({
-			type: "SET_MODAL",
-			modal: "systemControlsOpen",
-			value: true,
-		});
-	};
+	const openSystemControls = () =>
+		openSystemControlsModal(dispatch, deskDiagnostics.length > 0);
 	const toggleControlMode = () => dispatch({ type: "TOGGLE_CONTROL_MODE" });
 	useCommandLineShortcuts(hardware, {
 		completed,

@@ -6,14 +6,17 @@ import {
 	useMemo,
 	useState,
 } from "react";
-import type { RuntimeDiagnosticsSnapshot } from "../../api/generated/light-wire";
-import type { OutputRoute, VersionedObject } from "../../api/types";
+import type {
+	OutputRoute,
+	RuntimeDiagnostics,
+	VersionedObject,
+} from "../../api/types";
 import {
 	deskStateDiagnostic,
 	type DeskStateDiagnostic,
 } from "./deskStateDiagnostics";
 
-type ReadDiagnostics = () => Promise<RuntimeDiagnosticsSnapshot>;
+type ReadDiagnostics = () => Promise<RuntimeDiagnostics>;
 
 const OutputDiagnosticsContext = createContext<readonly DeskStateDiagnostic[]>([]);
 
@@ -29,7 +32,7 @@ export function DeskStateDiagnosticsProvider({
 	outputRoutes: readonly VersionedObject<OutputRoute>[];
 	pollMilliseconds?: number;
 }>) {
-	const [snapshot, setSnapshot] = useState<RuntimeDiagnosticsSnapshot | null>(null);
+	const [snapshot, setSnapshot] = useState<RuntimeDiagnostics | null>(null);
 	const diagnostics = useMemo(
 		() => (snapshot ? currentOutputDiagnostics(snapshot, outputRoutes) : []),
 		[outputRoutes, snapshot],
@@ -81,10 +84,10 @@ interface OutputRouteDiagnostic {
 }
 
 export function currentOutputDiagnostics(
-	snapshot: Pick<RuntimeDiagnosticsSnapshot, "output_routes">,
+	snapshot: RuntimeDiagnostics,
 	outputRoutes: readonly VersionedObject<OutputRoute>[] = [],
 ): readonly DeskStateDiagnostic[] {
-	const routes = decodeOutputRoutes(snapshot.output_routes).filter(
+	const routes = decodeOutputRoutes(snapshot.outputRoutes).filter(
 		(route) => route.enabled,
 	);
 	const grouped = new Map<string, OutputRouteDiagnostic[]>();

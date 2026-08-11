@@ -286,7 +286,7 @@ describe("scoped command-line integration", () => {
 				pollMilliseconds={60_000}
 				readDiagnostics={async () =>
 					({
-						output_routes: [
+						outputRoutes: [
 							{
 								protocol: "art_net",
 								universe: 7,

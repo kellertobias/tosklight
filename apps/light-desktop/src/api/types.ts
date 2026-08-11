@@ -40,6 +40,11 @@ export type CueUpdateMode =
 	| "add_to_current_cue"
 	| "add_new";
 export type ExistingContentMode = "update_existing" | "add_new";
+
+/** Operator-facing subset mapped from the runtime diagnostics wire response. */
+export interface RuntimeDiagnostics {
+	outputRoutes: unknown;
+}
 export type UpdateTargetFilter =
 	| "eligible_for_update_existing"
 	| "show_all_active";

@@ -223,6 +223,44 @@ function useSystemControlsModel() {
 	};
 }
 
+function SystemControlsTitleActions({
+	model,
+	onOpenProgrammers,
+}: {
+	model: ReturnType<typeof useSystemControlsModel>;
+	onOpenProgrammers: () => void;
+}) {
+	const nothingRunning =
+		!model.playbackAuthority.sources.length &&
+		!model.dynamicsAuthority.rows.length &&
+		!model.preload.active;
+	const cannotStop =
+		model.stoppingAll ||
+		!model.playbackAuthority.ready ||
+		!model.dynamicsAuthority.ready ||
+		!model.preload.ready ||
+		(model.playbackAuthority.sources.length > 0 &&
+			!model.playbackAuthority.canRelease) ||
+		(model.dynamicsAuthority.rows.length > 0 &&
+			!model.dynamicsAuthority.canStop) ||
+		nothingRunning;
+	return (
+		<>
+			<Button onClick={onOpenProgrammers}>
+				Active Programmers ({model.programmers.length})
+			</Button>
+			<Button
+				variant="danger"
+				className="system-controls-all-off"
+				disabled={cannotStop}
+				onClick={() => void model.stopAllRunning()}
+			>
+				{model.stoppingAll ? "Turning off…" : "All Off"}
+			</Button>
+		</>
+	);
+}
+
 export function SystemControlsModal() {
 	const model = useSystemControlsModel();
 	const visualizer = useVisualizerViewControls(model.open);
@@ -262,31 +300,10 @@ export function SystemControlsModal() {
 							</span>
 						}
 						actions={
-							<>
-								<Button onClick={() => setProgrammersOpen(true)}>
-									Active Programmers ({model.programmers.length})
-								</Button>
-								<Button
-									variant="danger"
-									className="system-controls-all-off"
-									disabled={
-										model.stoppingAll ||
-										!model.playbackAuthority.ready ||
-										!model.dynamicsAuthority.ready ||
-										!model.preload.ready ||
-										(model.playbackAuthority.sources.length > 0 &&
-											!model.playbackAuthority.canRelease) ||
-										(model.dynamicsAuthority.rows.length > 0 &&
-											!model.dynamicsAuthority.canStop) ||
-										(!model.playbackAuthority.sources.length &&
-											!model.dynamicsAuthority.rows.length &&
-											!model.preload.active)
-									}
-									onClick={() => void model.stopAllRunning()}
-								>
-									{model.stoppingAll ? "Turning off…" : "All Off"}
-								</Button>
-							</>
+							<SystemControlsTitleActions
+								model={model}
+								onOpenProgrammers={() => setProgrammersOpen(true)}
+							/>
 						}
 						closeLabel="Close Running & Output"
 						onClose={model.close}

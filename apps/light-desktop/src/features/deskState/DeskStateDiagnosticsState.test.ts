@@ -11,7 +11,7 @@ describe("current desk output diagnostics", () => {
 			enabled: true,
 		};
 		const diagnostics = currentOutputDiagnostics({
-			output_routes: [route, { ...route }],
+			outputRoutes: [route, { ...route }],
 		});
 
 		expect(diagnostics).toEqual([
@@ -34,7 +34,7 @@ describe("current desk output diagnostics", () => {
 		};
 		expect(
 			currentOutputDiagnostics({
-				output_routes: [route, { ...route, enabled: false }],
+				outputRoutes: [route, { ...route, enabled: false }],
 			}),
 		).toEqual([]);
 	});
@@ -57,7 +57,7 @@ describe("current desk output diagnostics", () => {
 			},
 		});
 		const duplicate = currentOutputDiagnostics(
-			{ output_routes: [] },
+			{ outputRoutes: [] },
 			[usbRoute("route-a", 1), usbRoute("route-b", 4)],
 		);
 		expect(duplicate).toEqual([
@@ -78,7 +78,7 @@ describe("current desk output diagnostics", () => {
 		expect(operatorCopy).not.toMatch(/endpoint|claim/iu);
 		expect(
 			currentOutputDiagnostics(
-				{ output_routes: [] },
+				{ outputRoutes: [] },
 				[usbRoute("route-a", 1), usbRoute("route-b", 4, false)],
 			),
 		).toEqual([]);
