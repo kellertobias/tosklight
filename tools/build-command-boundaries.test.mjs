@@ -110,6 +110,27 @@ test("release Desk bundles both supervised helpers before packaging", () => {
 	assert.match(smoke, /Bundled Light server log/u);
 });
 
+test("native Timecode audio stays out of the cross-compiled ARM headless build", () => {
+	const workflow = read(".github/workflows/release.yml");
+	const appManifest = read("apps/light-headless/Cargo.toml");
+	const runtimeManifest = read("crates/light/adapters/headless/Cargo.toml");
+	const armStart = workflow.indexOf("label: Linux (ARM64 / Raspberry Pi)");
+	const windowsStart = workflow.indexOf("label: Windows (x86_64)", armStart);
+
+	assert.ok(armStart >= 0 && windowsStart > armStart);
+	assert.match(
+		workflow.slice(armStart, windowsStart),
+		/--no-default-features/u,
+	);
+	assert.match(appManifest, /default = \["native-audio-output"\]/u);
+	assert.match(
+		appManifest,
+		/native-audio-output = \["light-headless-runtime\/native-audio-output"\]/u,
+	);
+	assert.match(runtimeManifest, /native-audio-output = \["dep:cpal"\]/u);
+	assert.match(runtimeManifest, /cpal = \{[^\n]*optional = true[^\n]*\}/u);
+});
+
 test("macOS release apps are sealed only after their final helpers and resources", () => {
 	const workflow = read(".github/workflows/release.yml");
 	const mediaWorkflow = read(".github/workflows/media-release.yml");

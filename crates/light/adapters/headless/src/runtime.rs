@@ -210,6 +210,10 @@ mod state;
 mod store_api;
 mod store_preload_targets;
 mod test_bench;
+#[cfg(feature = "native-audio-output")]
+mod timecode_audio_output;
+#[cfg(not(feature = "native-audio-output"))]
+#[path = "runtime/timecode_audio_output_disabled.rs"]
 mod timecode_audio_output;
 mod timecode_v2;
 mod update_api;

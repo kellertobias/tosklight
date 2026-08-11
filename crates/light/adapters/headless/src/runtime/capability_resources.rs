@@ -322,16 +322,19 @@ impl HighlightResource {
 /// The CPAL stream must remain on its creating thread on CoreAudio. Keeping the join handle in a
 /// capability resource makes shutdown an explicit part of server-owned audio rather than adapter
 /// task ownership.
+#[cfg(feature = "native-audio-output")]
 pub(in crate::runtime) struct TimecodeAudioWorkerResource {
     sender: std::sync::mpsc::Sender<TimecodeAudioWorkerRequest>,
     worker: Mutex<Option<std::thread::JoinHandle<()>>>,
 }
 
+#[cfg(feature = "native-audio-output")]
 pub(in crate::runtime) struct TimecodeAudioWorkerRequest {
     pub(in crate::runtime) command: super::timecode_audio_output::NativeCommand,
     pub(in crate::runtime) reply: std::sync::mpsc::Sender<Result<(), String>>,
 }
 
+#[cfg(feature = "native-audio-output")]
 impl TimecodeAudioWorkerResource {
     pub(in crate::runtime) fn new(
         sender: std::sync::mpsc::Sender<TimecodeAudioWorkerRequest>,
@@ -357,6 +360,7 @@ impl TimecodeAudioWorkerResource {
     }
 }
 
+#[cfg(feature = "native-audio-output")]
 impl Drop for TimecodeAudioWorkerResource {
     fn drop(&mut self) {
         let (reply, _response) = std::sync::mpsc::channel();

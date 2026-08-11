@@ -1,0 +1,58 @@
+//! Timecode audio boundary for builds without a native device adapter.
+//!
+//! Cross-compiled headless artifacts remain useful for lighting output without requiring a target
+//! ALSA sysroot. Native Desk builds enable `native-audio-output` and use the CPAL implementation.
+
+use std::sync::Arc;
+
+use light_application::timeline::TimecodeClock;
+use light_application::{ManagedAssetStore, TimecodeAudioCommand, TimecodeAudioOutput};
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) enum OutputDeviceSelector {
+    SystemDefault,
+    Name(String),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct NativeTimecodeAudioConfig {
+    pub device: OutputDeviceSelector,
+    pub latency_trim_micros: i64,
+}
+
+pub(super) fn output_devices() -> Vec<String> {
+    Vec::new()
+}
+
+pub(super) struct NativeTimecodeAudioOutput;
+
+impl NativeTimecodeAudioOutput {
+    pub(super) fn open(
+        _store: Arc<dyn ManagedAssetStore>,
+        _clock: Arc<dyn TimecodeClock>,
+        configuration: &NativeTimecodeAudioConfig,
+    ) -> Result<Self, String> {
+        let _ = (&configuration.device, configuration.latency_trim_micros);
+        Err("this build does not include native Timecode audio output".into())
+    }
+}
+
+impl TimecodeAudioOutput for NativeTimecodeAudioOutput {
+    fn output_latency_micros(&self) -> u64 {
+        0
+    }
+
+    fn apply(&self, _command: TimecodeAudioCommand) -> Result<(), String> {
+        Err("this build does not include native Timecode audio output".into())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn disabled_build_reports_no_native_devices() {
+        assert!(output_devices().is_empty());
+    }
+}
