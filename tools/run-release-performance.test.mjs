@@ -155,6 +155,37 @@ function canonicalDemo() {
 	};
 }
 
+function desktopScenario(caseId = "demo") {
+	return {
+		case_id: caseId,
+		case_name: "Real Fixture Sheet show",
+		execution_mode: "one_core",
+		measurement_surface: "released-tauri-desk-fixture-sheet",
+		fixture_count: 264,
+		physical_instance_count: 306,
+		parameter_count: 4_032,
+		universes: 8,
+		animated_attribute_count: 500,
+		master_lane_count: 20,
+		requested_rate_hz: 60,
+		below_target_hz: 44,
+		measurement_seconds: 15,
+		minimum_one_second_completed_hz: 58,
+		average_completed_hz: 59,
+		p95_one_second_completed_hz: 60,
+		maximum_one_second_completed_hz: 60,
+		windows_below_target: 0,
+		resources: {
+			application_cpu_average_percent: 42,
+			application_cpu_max_percent: 55,
+			application_peak_resident_bytes: 400_000_000,
+			server: { cpu_average_percent: 30 },
+			desktop_webview: { cpu_average_percent: 12 },
+			playwright: { launched: false },
+		},
+	};
+}
+
 test("invalid or inconsistent benchmark evidence is unknown", () => {
 	assert.equal(PERFORMANCE_MEASUREMENT_SECONDS, 15);
 	assert.equal(
@@ -169,6 +200,30 @@ test("invalid or inconsistent benchmark evidence is unknown", () => {
 	assert.equal(status.status, "unknown");
 	assert.equal(status.evidence.kind, "unknown");
 	assert.match(status.evidence.baseline.error, /missing required measured/u);
+});
+
+test("compact scenarios prefer validated released Desk Fixture Sheet evidence", () => {
+	const baseline = report();
+	const scenarios = [desktopScenario()];
+	const status = statusDocument(
+		options,
+		stage(baseline),
+		null,
+		null,
+		null,
+		[],
+		scenarios,
+	);
+	assert.equal(status.benchmark_scenarios.length, 1);
+	assert.equal(
+		status.benchmark_scenarios[0].measurement_surface,
+		"released-tauri-desk-fixture-sheet",
+	);
+	assert.equal(status.benchmark_scenarios[0].thresholds.red_below_hz, 44);
+	assert.equal(
+		status.benchmark_scenarios[0].resources.playwright.launched,
+		false,
+	);
 });
 
 test("the 1,024-fixture indicator uses 60 Hz green and 40 Hz yellow thresholds", () => {
@@ -362,7 +417,9 @@ test("CLI accepts a parsed measured failure but rejects invalid JSON", () => {
 	);
 	assert.equal(measuredStatus.benchmark_scenarios.length, 8);
 	assert.deepEqual(
-		new Set(measuredStatus.benchmark_scenarios.map((scenario) => scenario.case_id)),
+		new Set(
+			measuredStatus.benchmark_scenarios.map((scenario) => scenario.case_id),
+		),
 		new Set(["demo", "sixteen_universe", "required_1024", "doubled_2048"]),
 	);
 	assert.ok(
@@ -421,6 +478,10 @@ test("scheduled publication separates release delivery from performance and Page
 		resolve(ROOT, ".github/workflows/documentation.yml"),
 		"utf8",
 	);
+	const desktopHarness = readFileSync(
+		resolve(ROOT, "tools/run-desktop-performance.mjs"),
+		"utf8",
+	);
 	const release =
 		/^ {2}release:\n([\s\S]*?)(?=^ {2}[\w-]+:\n|(?![\s\S]))/mu.exec(
 			releaseWorkflow,
@@ -459,7 +520,20 @@ test("scheduled publication separates release delivery from performance and Page
 		/product-demo|--canonical-demo-performance/u,
 	);
 	assert.match(performance, /gh release download/u);
+	assert.match(performance, /tosklight-desk-linux_amd64\.AppImage/u);
+	assert.match(
+		performance,
+		/xvfb-run -a node tools\/run-desktop-performance\.mjs/u,
+	);
+	assert.match(
+		performance,
+		/--desktop-scenarios "\$out\/desktop-scenarios\.json"/u,
+	);
 	assert.match(performance, /tools\/run-release-performance\.mjs/u);
+	assert.match(desktopHarness, /const DURATION_SECONDS = 15/u);
+	assert.match(desktopHarness, /fixture-sheet-heartbeat/u);
+	assert.match(desktopHarness, /released-tauri-desk-fixture-sheet/u);
+	assert.match(desktopHarness, /taskset/u);
 	assert.doesNotMatch(performance, /continue-on-error: true/u);
 	assert.match(workflow, /Check for an undocumented release/u);
 	assert.match(workflow, /report-documentation\.json/u);

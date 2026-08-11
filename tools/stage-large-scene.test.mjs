@@ -3,6 +3,7 @@ import test from "node:test";
 import {
 	countFixtureInstances,
 	createDeterministicLargeStageInputs,
+	createPerformanceFixtureInputs,
 	LARGE_STAGE_FIXTURE_INSTANCES,
 	LARGE_STAGE_FIXTURE_RECORDS,
 	LARGE_STAGE_MANIFEST,
@@ -97,5 +98,28 @@ test("fails closed when a required shipped profile or exact mode is absent", () 
 				),
 			),
 		/Robin DLS Profile \/ Mode 1/,
+	);
+});
+
+test("builds proportional real-profile Fixture Sheet workloads at requested sizes", () => {
+	for (const fixtureRecords of [576, 1_024, 2_000, 2_048]) {
+		const built = createPerformanceFixtureInputs(profiles, fixtureRecords);
+		assert.equal(built.fixtures.length, fixtureRecords);
+		assert.equal(countFixtureInstances(built.fixtures), fixtureRecords);
+		assert.ok(built.dynamicFixtureIds.length > 20);
+		assert.ok(built.staticControlFixtureIds.length > 0);
+		assert.ok(built.patch.universeCount > 0);
+		assert.ok(built.patch.occupiedSlots > fixtureRecords);
+	}
+	const sixteenUniverse = createPerformanceFixtureInputs(profiles, 576);
+	assert.equal(sixteenUniverse.patch.occupiedSlots, 8_064);
+	assert.equal(sixteenUniverse.patch.universeCount, 16);
+	assert.equal(
+		createPerformanceFixtureInputs(profiles, 1_024).patch.occupiedSlots,
+		16_384,
+	);
+	assert.equal(
+		createPerformanceFixtureInputs(profiles, 2_048).patch.occupiedSlots,
+		16_384,
 	);
 });

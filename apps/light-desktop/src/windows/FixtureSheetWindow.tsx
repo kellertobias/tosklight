@@ -4,7 +4,9 @@ import {
 	type ReactNode,
 	useCallback,
 	useDeferredValue,
+	useEffect,
 	useMemo,
+	useRef,
 	useState,
 } from "react";
 import { GroupStrip } from "../components/shared/GroupStrip";
@@ -17,6 +19,7 @@ import {
 	useProgrammingSelectionActions,
 	useProgrammingSelectionView,
 } from "../features/programmingInteraction/ProgrammingInteractionView";
+import { useDesktopBridge } from "../platform/desktop";
 import { useApp } from "../state/AppContext";
 import type { FixtureSheetColumn } from "../types";
 import {
@@ -110,6 +113,12 @@ export function FixtureSheetWindow({
 			highlight,
 			active,
 		});
+	useFixtureSheetBenchmarkReady({
+		active,
+		rows,
+		activeValuesLoading,
+		groupRuntimeLoading,
+	});
 	const presentStep = useMemo(
 		() => createFixtureStepPresenter(highlight),
 		[highlight],
@@ -180,6 +189,114 @@ export function FixtureSheetWindow({
 			}
 		/>
 	);
+}
+
+function useFixtureSheetBenchmarkReady({
+	active,
+	rows,
+	activeValuesLoading,
+	groupRuntimeLoading,
+}: {
+	active: boolean;
+	rows: Array<{ parentFixtureId: string }>;
+	activeValuesLoading: boolean;
+	groupRuntimeLoading: boolean;
+}) {
+	const desktop = useDesktopBridge();
+	const reported = useRef(false);
+	const [ready, setReady] = useState(false);
+	const [config, setConfig] = useState<
+		Awaited<ReturnType<typeof desktop.packagedStageBenchmarkConfig>> | undefined
+	>();
+	useEffect(() => {
+		if (typeof desktop.packagedStageBenchmarkConfig !== "function") {
+			setConfig(null);
+			return;
+		}
+		let cancelled = false;
+		void desktop
+			.packagedStageBenchmarkConfig()
+			.then((value) => {
+				if (!cancelled) setConfig(value);
+			})
+			.catch(() => {
+				if (!cancelled) setConfig(null);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [desktop]);
+	useEffect(() => {
+		if (
+			reported.current ||
+			!config?.fixtureSheet ||
+			!active ||
+			activeValuesLoading ||
+			groupRuntimeLoading ||
+			rows.length === 0
+		)
+			return;
+		const fixtureRecords = new Set(rows.map((row) => row.parentFixtureId)).size;
+		if (
+			config.expectedFixtureRecords != null &&
+			fixtureRecords !== config.expectedFixtureRecords
+		)
+			return;
+		reported.current = true;
+		void desktop
+			.appendPackagedStageBenchmarkSample({
+				schemaVersion: 1,
+				kind: "fixture-sheet-ready",
+				measurementSurface: "packaged-tauri-webview-fixture-sheet",
+				profile: config.profile,
+				fixtureRecords,
+				rowCount: rows.length,
+				recordedAt: new Date().toISOString(),
+			})
+			.catch(() => {
+				reported.current = false;
+				setReady(false);
+			});
+		setReady(true);
+	}, [active, activeValuesLoading, config, desktop, groupRuntimeLoading, rows]);
+	useEffect(() => {
+		if (
+			!ready ||
+			!config?.fixtureSheet ||
+			!active ||
+			activeValuesLoading ||
+			groupRuntimeLoading
+		)
+			return;
+		const fixtureRecords = new Set(rows.map((row) => row.parentFixtureId)).size;
+		if (
+			config.expectedFixtureRecords != null &&
+			fixtureRecords !== config.expectedFixtureRecords
+		)
+			return;
+		const heartbeat = window.setInterval(() => {
+			void desktop
+				.appendPackagedStageBenchmarkSample({
+					schemaVersion: 1,
+					kind: "fixture-sheet-heartbeat",
+					measurementSurface: "packaged-tauri-webview-fixture-sheet",
+					profile: config.profile,
+					fixtureRecords,
+					rowCount: rows.length,
+					recordedAt: new Date().toISOString(),
+				})
+				.catch(() => undefined);
+		}, 1_000);
+		return () => window.clearInterval(heartbeat);
+	}, [
+		active,
+		activeValuesLoading,
+		config,
+		desktop,
+		groupRuntimeLoading,
+		ready,
+		rows,
+	]);
 }
 
 function useVisibleFixtureIds() {

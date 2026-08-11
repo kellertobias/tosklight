@@ -101,9 +101,76 @@ export function createDeterministicLargeStageInputs(
 	profiles,
 	layerId = "default",
 ) {
+	return createStageInputs(profiles, layerId, LARGE_STAGE_MANIFEST, {
+		expectedRecords: LARGE_STAGE_FIXTURE_RECORDS,
+		expectedInstances: LARGE_STAGE_FIXTURE_INSTANCES,
+		name: "Large Stage",
+	});
+}
+
+/** Builds an API-loadable, proportionally mixed operator show from shipped fixture modes. */
+export function createPerformanceFixtureInputs(
+	profiles,
+	fixtureRecords,
+	layerId = "default",
+) {
+	if (!Number.isSafeInteger(fixtureRecords) || fixtureRecords < 100)
+		throw new Error(
+			"Performance fixture records must be an integer of at least 100",
+		);
+	const scaled = performanceManifest(fixtureRecords);
+	return createStageInputs(profiles, layerId, scaled, {
+		expectedRecords: fixtureRecords,
+		expectedInstances: null,
+		name: "Fixture Sheet performance",
+	});
+}
+
+const EXACT_PERFORMANCE_COUNTS = new Map([
+	[576, { beam: 224, sunstrip: 96, dimmer: 256 }],
+	[1_024, { beam: 574, sunstrip: 114, dimmer: 336 }],
+	[2_048, { beam: 412, sunstrip: 196, dimmer: 1_440 }],
+]);
+
+function performanceManifest(fixtureRecords) {
+	const exact = EXACT_PERFORMANCE_COUNTS.get(fixtureRecords);
+	if (!exact) return scaledManifest(fixtureRecords);
+	return LARGE_STAGE_MANIFEST.map((entry) => ({
+		...entry,
+		records: exact[entry.key] ?? 0,
+		multipatches: 0,
+	}));
+}
+
+function scaledManifest(fixtureRecords) {
+	const weighted = LARGE_STAGE_MANIFEST.map((entry) => {
+		const exact =
+			(entry.records * fixtureRecords) / LARGE_STAGE_FIXTURE_RECORDS;
+		return {
+			...entry,
+			records: Math.floor(exact),
+			multipatches: 0,
+			fraction: exact - Math.floor(exact),
+		};
+	});
+	let remaining =
+		fixtureRecords -
+		weighted.reduce((total, entry) => total + entry.records, 0);
+	for (const entry of [...weighted].sort(
+		(left, right) =>
+			right.fraction - left.fraction || left.key.localeCompare(right.key),
+	)) {
+		if (remaining <= 0) break;
+		entry.records += 1;
+		remaining -= 1;
+	}
+	return weighted.map(({ fraction: _fraction, ...entry }) => entry);
+}
+
+function createStageInputs(profiles, layerId, manifest, expectation) {
 	if (!Array.isArray(profiles) || profiles.length === 0)
-		throw new Error("Large Stage requires the fixture profile catalog");
-	const resolved = LARGE_STAGE_MANIFEST.map((entry) => ({
+		throw new Error(`${expectation.name} requires the fixture profile catalog`);
+	const resolved = manifest.map((entry) => ({
 		...entry,
 		profile: resolveProfile(profiles, entry),
 	}));
@@ -157,11 +224,12 @@ export function createDeterministicLargeStageInputs(
 	const patch = packPatchInstances(fixtures, resolved);
 	const fixtureInstances = countFixtureInstances(fixtures);
 	if (
-		fixtures.length !== LARGE_STAGE_FIXTURE_RECORDS ||
-		fixtureInstances !== LARGE_STAGE_FIXTURE_INSTANCES
+		fixtures.length !== expectation.expectedRecords ||
+		(expectation.expectedInstances != null &&
+			fixtureInstances !== expectation.expectedInstances)
 	)
 		throw new Error(
-			`Large Stage manifest resolved to ${fixtures.length} records and ${fixtureInstances} instances`,
+			`${expectation.name} manifest resolved to ${fixtures.length} records and ${fixtureInstances} instances`,
 		);
 	return {
 		fixtures,

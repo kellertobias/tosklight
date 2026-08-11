@@ -27,6 +27,7 @@ export interface PackagedStageBenchmarkConfig {
 	profile: string;
 	additionalStageWindow: boolean;
 	fixtureSheet: boolean;
+	expectedFixtureRecords: number | null;
 }
 
 /** Where the Stage pane is, in the points the web layout works in. */
@@ -100,7 +101,11 @@ export interface DesktopBridge {
 	openStagePane(geometry: StagePaneGeometry, user: string): Promise<void>;
 	setStagePane(geometry: StagePaneGeometry): Promise<void>;
 	closeStagePane(): Promise<void>;
-	sendStagePaneInput(gesture: StagePaneGesture, x: number, y: number): Promise<void>;
+	sendStagePaneInput(
+		gesture: StagePaneGesture,
+		x: number,
+		y: number,
+	): Promise<void>;
 	/** The picture settings, which belong to the renderer drawing the pane rather than the desk. */
 	setStagePanePicture(picture: StagePanePicture): Promise<void>;
 	/** What the operator has selected, which the renderer draws and never decides. */
@@ -113,7 +118,9 @@ export interface DesktopBridge {
 	 */
 	takeStagePanePicks(): Promise<Array<[string | null, boolean]>>;
 	/** Where the renderer's camera is, as `[x, y, z, pan, tilt, distance]`. */
-	stagePaneCamera(): Promise<[number, number, number, number, number, number] | null>;
+	stagePaneCamera(): Promise<
+		[number, number, number, number, number, number] | null
+	>;
 	/** Put the camera at numbers. Anything omitted is left where it is. */
 	placeStagePaneCamera(place: Partial<StagePaneCameraPlacement>): Promise<void>;
 	packagedStageBenchmarkConfig(): Promise<PackagedStageBenchmarkConfig | null>;

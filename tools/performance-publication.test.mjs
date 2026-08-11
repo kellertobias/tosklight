@@ -216,7 +216,7 @@ function measuredStatus(status = "healthy") {
 					application_peak_resident_bytes: 700 * 1024 ** 2,
 				},
 			},
-			...(["unrestricted", "one_core"].map((execution_mode) => ({
+			...["unrestricted", "one_core"].map((execution_mode) => ({
 				case_name: "Demo show — 4,096 parameters / 295 fixtures",
 				execution_mode,
 				fixture_count: 295,
@@ -242,7 +242,7 @@ function measuredStatus(status = "healthy") {
 					application_cpu_max_percent: 31,
 					application_peak_resident_bytes: 256 * 1024 ** 2,
 				},
-			}))),
+			})),
 		],
 	};
 }
@@ -301,14 +301,17 @@ test("compact landing summary includes only measured runs and explains row color
 	);
 	assert.match(
 		summary,
-		/97% max<\/strong><small>83% avg Light CPU<br>0\.68 GiB max RAM/u,
+		/97% max<\/strong><small>83% avg Desk app CPU<br>0\.68 GiB max RAM/u,
 	);
+	assert.match(summary, /real WebKit Fixture Sheet/u);
+	assert.match(summary, /Playwright is not launched/u);
 	assert.match(summary, /58 \/ 59\.5 \/ 60 Hz<br>min \/ avg \/ max/u);
-	assert.match(summary, /This workflow does not launch Playwright/u);
 	assert.match(summary, /100% means one fully used core/u);
 	assert.match(summary, /performance-row-warning/u);
 	assert.match(summary, /Yellow<\/span>: warning/u);
-	assert.ok(summary.indexOf("Demo show") < summary.indexOf("37,720 parameters"));
+	assert.ok(
+		summary.indexOf("Demo show") < summary.indexOf("37,720 parameters"),
+	);
 	assert.match(summary, /locked to 1 core/u);
 	assert.match(summary, /unrestricted/u);
 	assert.match(summary, /Detailed tests, run information, and raw report/u);

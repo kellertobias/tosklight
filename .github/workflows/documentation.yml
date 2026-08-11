@@ -87,6 +87,13 @@ jobs:
         with:
           node-version: 22
 
+      - name: Install released Desk runtime dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            xvfb libwebkit2gtk-4.1-0 libgtk-3-0 libayatana-appindicator3-1 \
+            librsvg2-2 libasound2 libxdo3
+
       - name: Measure the published Linux bundle
         id: measure
         shell: bash
@@ -99,11 +106,17 @@ jobs:
           gh release download "$RELEASE_TAG" --pattern "$archive" --dir "$tmp"
           unzip -q "$tmp/$archive" -d "$tmp/unpacked"
           benchmark="$(find "$tmp/unpacked" -type f -name light-benchmark -print -quit)"
+          desk="$(find "$tmp/unpacked" -type f -name 'tosklight-desk-linux_amd64.AppImage' -print -quit)"
           fixture_library="$(find "$tmp/unpacked" -type d -name fixture-library -print -quit)"
           test -n "$benchmark"
+          test -n "$desk"
           test -n "$fixture_library"
-          chmod +x "$benchmark"
+          chmod +x "$benchmark" "$desk"
           status=0
+          xvfb-run -a node tools/run-desktop-performance.mjs \
+            --application "$desk" \
+            --output-dir "$out" \
+            --demo-show assets/demo.show
           node tools/run-release-performance.mjs \
             --binary "$benchmark" \
             --output-dir "$out" \
@@ -111,6 +124,7 @@ jobs:
             --commit "$RELEASE_SHA" \
             --release-url "https://github.com/${GITHUB_REPOSITORY}/releases/tag/${RELEASE_TAG}" \
             --fixture-package-dir "$fixture_library" \
+            --desktop-scenarios "$out/desktop-scenarios.json" \
             --hardware-label "GitHub Actions ubuntu-22.04" || status=$?
           test -f "$out/status.json"
           cp "$out/status.json" "$out/report-performance-status.json"

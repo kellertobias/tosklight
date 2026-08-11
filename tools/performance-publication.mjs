@@ -222,7 +222,9 @@ function compactNumber(value_) {
 
 function compactDuration(value_) {
 	if (!Number.isFinite(value_)) return "—";
-	return new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(value_);
+	return new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(
+		value_,
+	);
 }
 
 function compactScenarioStatus(scenario, thresholds) {
@@ -252,7 +254,9 @@ function compactScenarioRows(performance) {
 				(left, right) =>
 					(left.animated_attribute_count ?? Number.MAX_SAFE_INTEGER) -
 						(right.animated_attribute_count ?? Number.MAX_SAFE_INTEGER) ||
-					String(left.execution_mode).localeCompare(String(right.execution_mode)),
+					String(left.execution_mode).localeCompare(
+						String(right.execution_mode),
+					),
 			);
 	}
 	const required = performance.required_floor ?? {};
@@ -296,10 +300,11 @@ function compactCpu(resources) {
 		return `<strong>Not measured</strong><small>application CPU unavailable</small>`;
 	}
 	const ram =
-		resources?.application_peak_resident_bytes ?? resources?.peak_resident_bytes;
+		resources?.application_peak_resident_bytes ??
+		resources?.peak_resident_bytes;
 	return (
 		`<strong>${compactNumber(maximum)}% max</strong>` +
-		`<small>${compactNumber(average)}% avg Light CPU<br>${bytes(ram)} max RAM</small>`
+		`<small>${compactNumber(average)}% avg Desk app CPU<br>${bytes(ram)} max RAM</small>`
 	);
 }
 
@@ -315,11 +320,12 @@ function compactScenarioRow(scenario) {
 	const legacyAttributes = Array.isArray(scenario.dynamic_lane_attributes)
 		? scenario.dynamic_lane_attributes.length
 		: null;
-	const dynamicsDetail = Number.isFinite(scenario.animated_attribute_count) && Number.isFinite(lanes)
-		? `${compactNumber(lanes)} master lane${lanes === 1 ? "" : "s"}`
-		: Number.isFinite(legacyAttributes)
-			? `${compactNumber(legacyAttributes)} Dynamic lane attribute${legacyAttributes === 1 ? "" : "s"}`
-			: "Dynamic workload unavailable";
+	const dynamicsDetail =
+		Number.isFinite(scenario.animated_attribute_count) && Number.isFinite(lanes)
+			? `${compactNumber(lanes)} master lane${lanes === 1 ? "" : "s"}`
+			: Number.isFinite(legacyAttributes)
+				? `${compactNumber(legacyAttributes)} Dynamic lane attribute${legacyAttributes === 1 ? "" : "s"}`
+				: "Dynamic workload unavailable";
 	const maximum = compactNumber(scenario.maximum_one_second_completed_hz);
 	const target = compactNumber(scenario.below_target_hz ?? 44);
 	const below = scenario.windows_below_target ?? scenario.windows_below_minimum;
@@ -329,7 +335,10 @@ function compactScenarioRow(scenario) {
 		scenario.p95_one_second_completed_hz < scenario.thresholds.critical_below_hz
 			? `<small>Critical: below ${compactNumber(scenario.thresholds.critical_below_hz)} Hz</small>`
 			: "";
-	const mode = scenario.execution_mode === "one_core" ? "locked to 1 core" : "unrestricted";
+	const mode =
+		scenario.execution_mode === "one_core"
+			? "locked to 1 core"
+			: "unrestricted";
 	return (
 		`<tr class="performance-row performance-row-${escapePerformanceText(scenario.compact_status)}">` +
 		`<th scope="row"><strong>${escapePerformanceText(scenario.case_name ?? `${compactNumber(scenario.fixture_count)} fixtures`)}</strong>` +
@@ -357,7 +366,7 @@ export function renderCompactPerformanceSummary(performance) {
 		`<span class="legend-warning">Yellow</span>: warning · ` +
 		`<span class="legend-degraded">Red</span>: below the scenario floor · ` +
 		`<span class="legend-unknown">Gray</span>: incomplete evidence. Every run requests 60 Hz; “below target” always counts one-second windows below 44 Hz.</p>` +
-		`<p class="performance-legend">CPU and RAM cover only the Light benchmark process (engine, rendering, and protocol pipeline) during the timed window—not the Node coordinator, browser, Desk UI, or Playwright. This workflow does not launch Playwright. CPU is expressed per logical core and bounded by the process CPU affinity; 100% means one fully used core.</p>` +
+		`<p class="performance-legend">CPU and RAM cover the released Desk application tree during the timed window: the Tauri host, its real WebKit Fixture Sheet, and the bundled Light server. The detailed report separates the server and desktop/WebView processes. Node, Xvfb, and Playwright are excluded; Playwright is not launched. CPU is expressed per logical core and bounded by the application affinity; 100% means one fully used core.</p>` +
 		`<p class="performance-details"><a href="performance/">Detailed tests, run information, and raw report →</a></p></div>`
 	);
 }

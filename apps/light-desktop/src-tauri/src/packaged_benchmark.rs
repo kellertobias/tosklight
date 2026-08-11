@@ -14,6 +14,8 @@ const PROFILE_ENV: &str = "LIGHT_STAGE_PACKAGED_BENCH_PROFILE";
 const PREPARED_ENV: &str = "LIGHT_STAGE_PACKAGED_BENCH_PREPARED";
 const ADDITIONAL_STAGE_WINDOW_ENV: &str = "LIGHT_STAGE_PACKAGED_BENCH_ADDITIONAL_STAGE_WINDOW";
 const FIXTURE_SHEET_ENV: &str = "LIGHT_STAGE_PACKAGED_BENCH_FIXTURE_SHEET";
+const EXPECTED_FIXTURE_RECORDS_ENV: &str =
+    "LIGHT_STAGE_PACKAGED_BENCH_EXPECTED_FIXTURE_RECORDS";
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -23,6 +25,7 @@ pub(crate) struct PackagedStageBenchmarkConfig {
     profile: String,
     additional_stage_window: bool,
     fixture_sheet: bool,
+    expected_fixture_records: Option<usize>,
 }
 
 #[tauri::command]
@@ -49,6 +52,10 @@ pub(crate) fn packaged_stage_benchmark_config(
         profile: std::env::var(PROFILE_ENV).unwrap_or_else(|_| "default-stage".to_string()),
         additional_stage_window: env_enabled_by_default(ADDITIONAL_STAGE_WINDOW_ENV),
         fixture_sheet: env_enabled_by_default(FIXTURE_SHEET_ENV),
+        expected_fixture_records: std::env::var(EXPECTED_FIXTURE_RECORDS_ENV)
+            .ok()
+            .and_then(|value| value.parse::<usize>().ok())
+            .filter(|value| *value > 0),
     })
 }
 
