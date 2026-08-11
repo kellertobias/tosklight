@@ -14,11 +14,15 @@ permissions:
   contents: read
 
 concurrency:
-  group: github-ci-${{ github.workflow }}-${{ github.ref }}
+  group: github-ci-release-${{ github.ref }}
   cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
+  # CI needs diagnostics, but not multi-gigabyte native debug symbols. Keeping those symbols out
+  # of dev/test artifacts materially shortens the comprehensive workspace and E2E link phases.
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
 
 jobs:
   frontends:
@@ -48,7 +52,7 @@ jobs:
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: release-frontends-${{ github.sha }}
+          name: shared-frontends-${{ github.sha }}
           path: .artifacts/build/frontend
           if-no-files-found: error
 
@@ -130,7 +134,7 @@ jobs:
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: release-frontends-${{ github.sha }}
+          name: shared-frontends-${{ github.sha }}
           path: .artifacts/build/frontend
 
       - name: Check Rust formatting
@@ -213,7 +217,7 @@ jobs:
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: release-frontends-${{ github.sha }}
+          name: shared-frontends-${{ github.sha }}
           path: .artifacts/build/frontend
 
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
@@ -350,7 +354,7 @@ jobs:
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: release-frontends-${{ github.sha }}
+          name: shared-frontends-${{ github.sha }}
           path: .artifacts/build/frontend
 
       - name: Install USB serial and audio development files
@@ -829,7 +833,7 @@ jobs:
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: release-frontends-${{ github.sha }}
+          name: shared-frontends-${{ github.sha }}
           path: .artifacts/build/frontend
 
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
@@ -866,13 +870,23 @@ jobs:
         shell: bash
         run: npm ci
 
-      - name: Build the standalone Light headless application
+      # Cargo can schedule both independent application graphs across the runner when they are
+      # selected in one invocation. Separate calls made the visualizer wait for all Headless work.
+      - name: Build the Desk server and Stage renderer sidecars
+        if: matrix.desktop
         shell: bash
-        run: |
-          ${{ matrix.cross && 'cargo zigbuild' || 'cargo build' }} \
-            --release --locked --target ${{ matrix.target }} \
-            ${{ matrix.cargo_flags }} \
-            -p light-headless --bin light-headless
+        run: >-
+          cargo build --release --locked --target ${{ matrix.target }}
+          -p light-headless --bin light-headless
+          -p viz-renderer --bin viz-renderer
+
+      - name: Build the standalone Light headless application
+        if: matrix.cross
+        shell: bash
+        run: >-
+          cargo zigbuild --release --locked --target ${{ matrix.target }}
+          ${{ matrix.cargo_flags }}
+          -p light-headless --bin light-headless
 
       - name: Build the release performance probe
         if: matrix.slug == 'linux-amd64'
@@ -880,13 +894,6 @@ jobs:
         run: >-
           cargo build --release --locked --target ${{ matrix.target }}
           --no-default-features -p light-headless --bin light-benchmark
-
-      - name: Build the standalone visualizer
-        if: matrix.viz
-        shell: bash
-        run: >-
-          cargo build --release --locked --target ${{ matrix.target }}
-          -p viz-renderer --bin viz-renderer
 
       - name: Smoke-test the standalone visualizer
         if: matrix.viz
@@ -1331,7 +1338,12 @@ jobs:
             grep -F "tosklight-media-macos_arm64.app/Contents/MacOS/ToskLight Media" >/dev/null
           unzip -Z1 .artifacts/release/tosklight-bundle-linux_amd64.zip |
             grep -E '/light-benchmark$' >/dev/null
-          (cd .artifacts/release && sha256sum * > report-checksums.txt)
+          (
+            cd .artifacts/release
+            find . -maxdepth 1 -type f ! -name report-checksums.txt -print0 |
+              sort -z |
+              xargs -0 sha256sum > report-checksums.txt
+          )
 
       - name: Create the tag-only semantic release
         env:

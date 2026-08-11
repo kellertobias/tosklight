@@ -88,8 +88,8 @@ test("the control Tauri overlay resolves both target-specific sidecars", () => {
 
 test("release Desk bundles both supervised helpers before packaging", () => {
 	const workflow = read(".github/workflows/release.yml");
-	const visualizer = workflow.indexOf(
-		"- name: Build the standalone visualizer",
+	const sidecarBuild = workflow.indexOf(
+		"- name: Build the Desk server and Stage renderer sidecars",
 	);
 	const sidecars = workflow.indexOf(
 		"- name: Stage the Desk server and Stage renderer sidecars",
@@ -97,7 +97,11 @@ test("release Desk bundles both supervised helpers before packaging", () => {
 	const desktop = workflow.indexOf(
 		"- name: Build the ToskLight desktop application",
 	);
-	assert.ok(visualizer >= 0 && visualizer < sidecars);
+	assert.ok(sidecarBuild >= 0 && sidecarBuild < sidecars);
+	assert.match(
+		workflow.slice(sidecarBuild, sidecars),
+		/-p light-headless --bin light-headless[\s\S]*-p viz-renderer --bin viz-renderer/u,
+	);
 	assert.ok(sidecars < desktop);
 	assert.match(workflow.slice(sidecars, desktop), /light-headless/u);
 	assert.match(workflow.slice(sidecars, desktop), /viz-renderer/u);
@@ -174,7 +178,7 @@ test("the Viz release builds only the bundle format its staging step consumes", 
 	);
 	assert.notEqual(buildStart, -1, "the Viz release build should exist");
 	assert.match(frontends, /npm run --prefix apps\/viz-editor build/u);
-	assert.match(frontends, /name: release-frontends-\$\{\{ github\.sha \}\}/u);
+	assert.match(frontends, /name: shared-frontends-\$\{\{ github\.sha \}\}/u);
 	assert.doesNotMatch(
 		workflow.slice(buildStart, stageStart),
 		/npm run --prefix apps\/viz-editor build/u,
@@ -247,12 +251,30 @@ test("fast unit tests and comprehensive verification remain distinct", () => {
 	assert.match(workflow, /bash tools\/test\.sh rust-workspace/u);
 	assert.match(
 		workflow,
-		/workspace:[\s\S]*?needs: frontends[\s\S]*?LIGHT_REUSE_FRONTEND_BUILD: "1"[\s\S]*?name: release-frontends-\$\{\{ github\.sha \}\}/u,
+		/workspace:[\s\S]*?needs: frontends[\s\S]*?LIGHT_REUSE_FRONTEND_BUILD: "1"[\s\S]*?name: shared-frontends-\$\{\{ github\.sha \}\}/u,
 	);
 	assert.match(
 		workflow,
-		/e2e-build:[\s\S]*?needs: frontends[\s\S]*?LIGHT_REUSE_FRONTEND_BUILD: "1"[\s\S]*?name: release-frontends-\$\{\{ github\.sha \}\}/u,
+		/e2e-build:[\s\S]*?needs: frontends[\s\S]*?LIGHT_REUSE_FRONTEND_BUILD: "1"[\s\S]*?name: shared-frontends-\$\{\{ github\.sha \}\}/u,
 	);
+});
+
+test("CI keeps shared inputs out of release downloads and strips debug symbols", () => {
+	const workflow = read(".github/workflows/release.yml");
+	const mediaWorkflow = read(".github/workflows/media-release.yml");
+
+	for (const source of [workflow, mediaWorkflow]) {
+		assert.match(source, /CARGO_PROFILE_DEV_DEBUG: "0"/u);
+		assert.match(source, /CARGO_PROFILE_TEST_DEBUG: "0"/u);
+		assert.doesNotMatch(source, /name: release-frontends-/u);
+	}
+	assert.match(workflow, /name: shared-frontends-\$\{\{ github\.sha \}\}/u);
+	assert.match(
+		workflow,
+		/find \. -maxdepth 1 -type f ! -name report-checksums\.txt -print0[\s\S]*xargs -0 sha256sum/u,
+	);
+	assert.doesNotMatch(workflow, /sha256sum \* > report-checksums\.txt/u);
+	assert.match(workflow, /group: github-ci-release-\$\{\{ github\.ref \}\}/u);
 });
 
 test("release packaging and Pages cover the supported product matrix", () => {
