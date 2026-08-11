@@ -1,3 +1,4 @@
+import { Button } from "@tosklight/ui";
 import { WindowScrollArea } from "@tosklight/ui/window-kit";
 import type { CSSProperties } from "react";
 import type { Cue, PlaybackSnapshot } from "../../api/types";
@@ -61,7 +62,7 @@ function TimingCell({
 				} as CSSProperties);
 	return (
 		<td className="cue-timing-cell">
-			<button
+			<Button
 				type="button"
 				className="cue-timing-cell-value"
 				style={style}
@@ -86,7 +87,7 @@ function TimingCell({
 						{value}
 					</span>
 				)}
-			</button>
+			</Button>
 		</td>
 	);
 }
@@ -253,7 +254,7 @@ export function CueTable({
 										)}
 									</td>
 									<td className="cue-trigger-column">
-										<button
+										<Button
 											type="button"
 											aria-label="Trigger"
 											disabled={
@@ -265,7 +266,7 @@ export function CueTable({
 											}}
 										>
 											{cueTriggerLabel(cues, cue)}
-										</button>
+										</Button>
 									</td>
 									<TimingCell
 										label="Trigger Time progress"
