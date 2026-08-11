@@ -88,7 +88,7 @@ test("CUELIST-LAYOUT-001 @ui › Cue timing and trigger cells use exact-property
 		"Out Delay",
 		"Out Fade",
 	]) {
-		await firstRow.getByRole("button", { name: property, exact: true }).tap();
+		await firstRow.getByRole("button", { name: property, exact: true }).click();
 		const modal = page.getByRole("dialog", { name: property, exact: true });
 		await expect(modal).toBeVisible();
 		await expect(
@@ -100,9 +100,10 @@ test("CUELIST-LAYOUT-001 @ui › Cue timing and trigger cells use exact-property
 		await modal.getByRole("button", { name: "Cancel", exact: true }).click();
 	}
 
-	await firstRow.getByRole("button", { name: "In Fade", exact: true }).tap();
+	await firstRow.getByRole("button", { name: "In Fade", exact: true }).click();
 	const fadeModal = page.getByRole("dialog", { name: "In Fade", exact: true });
-	await fadeModal.getByLabel("In Fade").fill("5");
+	await expect(fadeModal.locator("..")).toHaveAttribute("data-modal-top", "true");
+	await fadeModal.getByRole("textbox", { name: "In Fade", exact: true }).fill("5");
 	await fadeModal.getByRole("button", { name: "Save", exact: true }).click();
 	await expect
 		.poll(
@@ -112,12 +113,15 @@ test("CUELIST-LAYOUT-001 @ui › Cue timing and trigger cells use exact-property
 		)
 		.toBe(5_000);
 
-	await firstRow.getByRole("button", { name: "Out Delay", exact: true }).tap();
+	await firstRow.getByRole("button", { name: "Out Delay", exact: true }).click();
 	const cancelModal = page.getByRole("dialog", {
 		name: "Out Delay",
 		exact: true,
 	});
-	await cancelModal.getByLabel("Out Delay").fill("9");
+	await expect(cancelModal.locator("..")).toHaveAttribute("data-modal-top", "true");
+	await cancelModal
+		.getByRole("textbox", { name: "Out Delay", exact: true })
+		.fill("9");
 	await cancelModal
 		.getByRole("button", { name: "Cancel", exact: true })
 		.click();
