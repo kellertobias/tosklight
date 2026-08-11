@@ -1,9 +1,6 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 import type { ApiDriver } from "../core/api";
-import {
-	type ClockDuration,
-	parseClockDuration,
-} from "../core/clockScenario";
+import { type ClockDuration, parseClockDuration } from "../core/clockScenario";
 import type { DeskDriver } from "../core/desk";
 import type { SimulatedHardware } from "../hardware/hardwareScenario";
 import { BrowserCueFade } from "../playbacks/cueFadeScenario";
@@ -98,6 +95,12 @@ export class BrowserProgrammerFade implements ProgrammerFadeSetPort {
 		);
 	}
 
+	async setCommandLineAtEnabled(enabled: boolean): Promise<void> {
+		await this.api.request("PUT", "/api/v2/configuration", {
+			command_line_at_uses_programmer_fade: enabled,
+		});
+	}
+
 	async executeSet(
 		duration: ClockDuration,
 		route: ProgrammerFadeRoute,
@@ -162,7 +165,8 @@ export class BrowserProgrammerFade implements ProgrammerFadeSetPort {
 			exact: true,
 		});
 		const box = await input.boundingBox();
-		if (!box) throw new Error("Visible Programmer Fade fader has no pointer box");
+		if (!box)
+			throw new Error("Visible Programmer Fade fader has no pointer box");
 		const current = await this.currentMillis();
 		const endpointZone = Math.min(
 			box.height / 3,
@@ -188,7 +192,8 @@ export class BrowserProgrammerFade implements ProgrammerFadeSetPort {
 
 	private async oscSet(millis: number): Promise<void> {
 		const session = this.api.session;
-		if (!session) throw new Error("Programmer Fade OSC route requires a session");
+		if (!session)
+			throw new Error("Programmer Fade OSC route requires a session");
 		await this.hardware.send(
 			`/light/${session.desk.osc_alias}/programmer/prog-fade`,
 			[millis / 20_000],

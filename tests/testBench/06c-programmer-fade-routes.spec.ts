@@ -1,7 +1,7 @@
-import { fixture as dmxFixture } from "../bench/output/fixtureDmx";
+import { fixture } from "../bench/command-selection/selectionContract";
 import { expect } from "../bench/core/fixtures";
 import { scenario } from "../bench/core/scenario";
-import { fixture } from "../bench/command-selection/selectionContract";
+import { fixture as dmxFixture } from "../bench/output/fixtureDmx";
 import { Show } from "../bench/show/showScenario";
 
 scenario(
@@ -11,6 +11,7 @@ scenario(
 		await t.show.use(Show.DefaultStage);
 		await t.app.open();
 		await t.app.expect.ready();
+		await t.timing.programmerFade.setCommandLineAtEnabled(true);
 		await t.timing.programmerFade.via.api.set("4s");
 		expect(await t.timing.programmerFade.currentMillis()).toBe(4_000);
 
