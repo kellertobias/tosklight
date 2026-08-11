@@ -419,6 +419,7 @@ const supportedCallPaths = new Set([
 	"special.position.prepareReturnHomeContract",
 	"special.position.returnHome",
 	"timing.cueFade.set",
+	"timing.programmerFade.setCommandLineAtEnabled",
 	"timing.programmerFade.via.api.set",
 	"systemIntegration.expectFixtureProfileCreation",
 	"systemIntegration.expectHighlightErrorOverlay",
@@ -489,6 +490,10 @@ const exactNarrations = new Map([
 	],
 	["keypad.press", ([keys]) => `Press keypad keys ${keys}.`],
 	["clock.advanceBy", ([duration]) => `Advance the test clock by ${duration}.`],
+	[
+		"timing.programmerFade.setCommandLineAtEnabled",
+		([enabled]) => `Programmer Fade → command-line AT fade is ${enabled}.`,
+	],
 	[
 		"clock.advanceStep",
 		() => "Advance the test clock by one deterministic step.",
