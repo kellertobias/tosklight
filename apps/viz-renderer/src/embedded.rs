@@ -234,7 +234,7 @@ fn drain(events: Vec<ProviderEvent>, state: &mut PaneState) -> bool {
                 state.scene = *scene;
                 state.frame_rig_if_unaimed();
             }
-            ProviderEvent::Values(values) => state.values = *values,
+            ProviderEvent::Values(values) => adopt_provider_values(&mut state.values, *values),
             ProviderEvent::View(view) => state.adopt_desk_view(view),
             ProviderEvent::Connection(connection) => {
                 finished |= matches!(connection, viz_scene::ConnectionState::Failed { .. });
@@ -243,6 +243,16 @@ fn drain(events: Vec<ProviderEvent>, state: &mut PaneState) -> bool {
         }
     }
     finished
+}
+
+/// Adopt the desk's latest output frame without discarding pane-owned selection.
+///
+/// Selection arrives over the embedding channel rather than the scene provider. A provider value
+/// frame therefore cannot authoritatively replace it, even though both happen to share the same
+/// render-state structure.
+fn adopt_provider_values(current: &mut SceneValues, mut next: SceneValues) {
+    next.selected_fixtures = std::mem::take(&mut current.selected_fixtures);
+    *current = next;
 }
 
 /// Everything the pane draws with, and the texture it draws into.
@@ -703,6 +713,25 @@ mod tests {
             desk: None,
             surface_service: None,
         }
+    }
+
+    #[test]
+    fn live_value_frames_preserve_the_authoritative_pane_selection() {
+        let selected = uuid::Uuid::new_v4();
+        let mut current = SceneValues {
+            selected_fixtures: [selected].into_iter().collect(),
+            frame: 7,
+            ..SceneValues::default()
+        };
+        let next = SceneValues {
+            frame: 8,
+            ..SceneValues::default()
+        };
+
+        adopt_provider_values(&mut current, next);
+
+        assert_eq!(current.frame, 8, "the new output frame is still adopted");
+        assert_eq!(current.selected_fixtures, [selected].into_iter().collect());
     }
 
     /// The desk works in points and the texture in pixels. Getting this wrong is a pane that is

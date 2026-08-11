@@ -195,7 +195,8 @@ export function playbackFaderDisplay(
 		const master = projection.runtime;
 		return `${value}%${master.blackout ? " · BLACKOUT" : ""}${master.dynamics_paused ? " · DYNAMICS PAUSED" : ""}`;
 	}
-	if (playback.target.type === "group") return `${value}% master`;
+	if (playback.target.type === "group")
+		return value === 0 ? "0% master · ▲" : `${value}% master`;
 	if (playback.fader === "x_fade") {
 		const current =
 			active?.current_cue_number ??

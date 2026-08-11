@@ -1041,6 +1041,45 @@ describe("PlaybackFaderBank Record targets", () => {
 
 describe("PlaybackFaderBank action dispatch and persistence", () => {
 	beforeEach(resetPlaybackFaderMocks);
+	it("commits rapid and slow touch fader changes as absolute virtual-surface values", async () => {
+		assignPlayback({ target: { type: "group", group_id: "group-front" } });
+		render(<PlaybackFaderBank count={1} />);
+		const fader = screen.getByRole("slider", { name: "Group master" });
+
+		fireEvent.input(fader, { target: { value: "87" } });
+		fireEvent.input(fader, { target: { value: "13" } });
+		await waitFor(() =>
+			expect(mocks.poolPlaybackAction).toHaveBeenLastCalledWith(7, "master", {
+				value: 0.13,
+				surface: "virtual",
+			}),
+		);
+
+		fireEvent.input(fader, { target: { value: "42" } });
+		await waitFor(() =>
+			expect(mocks.poolPlaybackAction).toHaveBeenLastCalledWith(7, "master", {
+				value: 0.42,
+				surface: "virtual",
+			}),
+		);
+		expect(mocks.poolPlaybackAction).not.toHaveBeenCalledWith(7, "master", {
+			value: expect.any(Number),
+			surface: "physical",
+		});
+	});
+	it("keeps the zero Group Master warning with the intensity instead of the summary", () => {
+		assignPlayback({ target: { type: "group", group_id: "group-front" } });
+		mocks.playbacks.active = [{ playback_number: 7, master: 0 }];
+		const { container } = render(<PlaybackFaderBank count={1} />);
+
+		expect(screen.getByText("0% master · ▲")).toBeInTheDocument();
+		expect(container.querySelector(".playback-summary")).not.toHaveTextContent(
+			"0%",
+		);
+		expect(
+			container.querySelector(".vertical-touch-fader > strong"),
+		).toHaveTextContent("0% master · ▲");
+	});
 	it("dispatches the configured index and the concrete held Flash lifetime", async () => {
 		assignPlayback();
 		const { container } = render(<PlaybackFaderBank count={1} />);

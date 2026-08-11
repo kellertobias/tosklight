@@ -250,7 +250,7 @@ function playbackSummary({
 	if (target === "group")
 		return {
 			label: `${groupFixtureCount ?? 0} Fixture${groupFixtureCount === 1 ? "" : "s"}`,
-			detail: `${Math.round(value)}%`,
+			detail: value === 0 ? undefined : `${Math.round(value)}%`,
 		};
 	if (target === "dynamic" && projection?.target === "dynamic") {
 		const runtime = projection.runtime;
