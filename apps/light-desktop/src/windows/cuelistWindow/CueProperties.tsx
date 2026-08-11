@@ -233,16 +233,18 @@ export function CuePropertyModal({
 								onEnter={() => void save()}
 							/>
 						)}
-						{!valid && (
-							<p className="ui-field-error" role="alert">
-								Enter a time of zero or greater.
-							</p>
-						)}
-						{editError && (
-							<p className="ui-field-error" role="alert">
-								{editError}
-							</p>
-						)}
+						<div className="cue-property-modal-feedback">
+							{!valid && (
+								<p className="ui-field-error" role="alert">
+									Enter a time of zero or greater.
+								</p>
+							)}
+							{editError && (
+								<p className="ui-field-error" role="alert">
+									{editError}
+								</p>
+							)}
+						</div>
 					</div>
 					<footer className="cue-property-modal-actions">
 						<Button disabled={busy} onClick={onCancel}>

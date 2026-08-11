@@ -212,6 +212,20 @@
 	padding: 18px;
 }
 
+.cue-property-modal-feedback {
+	display: grid;
+	min-height: 1.25rem;
+	gap: 6px;
+}
+
+.cue-property-modal-feedback .ui-field-error {
+	margin: 0;
+}
+
+.cue-property-modal-feedback:empty {
+	visibility: hidden;
+}
+
 .cue-property-modal-actions {
 	display: flex;
 	justify-content: flex-end;

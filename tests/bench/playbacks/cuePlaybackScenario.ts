@@ -127,7 +127,26 @@ class CueListSettings {
 				exact: true,
 			}),
 		);
+		const confirm = this.page.getByRole("dialog", {
+			name: "Unsaved Cuelist Settings",
+			exact: true,
+		});
+		if (await confirm.isVisible()) {
+			await this.desk.click(
+				confirm.getByRole("button", {
+					name: "Discard changes",
+					exact: true,
+				}),
+			);
+			await expect(confirm).toBeHidden();
+		}
 		await expect(this.dialog()).toBeHidden();
+		await expect(
+			this.page.getByRole("button", {
+				name: "Cuelist Settings",
+				exact: true,
+			}),
+		).toBeFocused();
 	}
 
 	private dialog() {
@@ -335,6 +354,18 @@ export class CueEditor {
 		);
 		const dialog = this.page.getByRole("dialog", { name: label, exact: true });
 		await expect(dialog).toBeVisible();
+		await expect(dialog).toHaveAttribute("aria-modal", "true");
+		await expect(
+			dialog.getByRole("button", {
+				name: `Cancel ${label}`,
+				exact: true,
+			}),
+		).toBeFocused();
+		const input = dialog.getByRole("textbox", { name: label, exact: true });
+		if (await input.count()) {
+			await input.focus();
+			await expect(input).toBeFocused();
+		}
 		return dialog;
 	}
 
