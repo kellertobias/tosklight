@@ -86,7 +86,7 @@ test("Playwright shards reuse one exact-commit application build", () => {
 
 test("documentation screenshots share one Storybook build", () => {
 	const workflow = fs.readFileSync(
-		path.join(repositoryRoot, ".github/workflows/release.yml"),
+		path.join(repositoryRoot, ".github/workflows/documentation.yml"),
 		"utf8",
 	);
 	const testScript = fs.readFileSync(
@@ -101,7 +101,7 @@ test("documentation screenshots share one Storybook build", () => {
 		"utf8",
 	);
 	const screenshotJob =
-		/^ {2}documentation-screenshots:\n([\s\S]*?)(?=^ {2}[\w-]+:\n)/mu.exec(
+		/^ {2}storybook-screenshots:\n([\s\S]*?)(?=^ {2}[\w-]+:\n)/mu.exec(
 			workflow,
 		)?.[1] ?? "";
 
@@ -120,7 +120,7 @@ test("documentation screenshots share one Storybook build", () => {
 	// only the assembly job may claim the whole set.
 	assert.match(screenshotJob, /name: help-screenshots-storybook/u);
 	assert.doesNotMatch(workflow, /^ {2}marketing-screenshots:/mu);
-	assert.match(workflow, /^ {2}help-screenshots-live:\n/mu);
+	assert.match(workflow, /^ {2}help-live-screenshots:\n/mu);
 	assert.match(workflow, /^ {2}help-screenshots:\n/mu);
 	assert.match(
 		testScript,

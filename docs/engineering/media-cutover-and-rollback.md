@@ -11,8 +11,9 @@ Do not freeze the reference repository until all of these are true:
 
 1. The maintainer has watched the diagnostic pattern on every intended output and accepted its
    monitor, resolution, orientation, presentation rate, and colour.
-2. The Media branch is integrated into `main`, and `.github/workflows/media.yml` is green for
-   macOS Apple Silicon, Windows x86_64, Linux x86_64, and Linux aarch64.
+2. The Media branch is integrated into `main`, and the Media build and smoke-test steps in the
+   `.github/workflows/release.yml` platform matrix are green for macOS Apple Silicon, Windows
+   x86_64, Linux x86_64, and Linux aarch64.
 3. Every row in `media-migration-ledger.md` records the maintainer acceptance rather than
    `pending review`.
 4. The original library and configuration have a recoverable backup. The source checkout at

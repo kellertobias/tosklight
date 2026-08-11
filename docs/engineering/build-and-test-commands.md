@@ -101,7 +101,7 @@ code.**
 | `npm run test:e2e-api` | Playwright `--grep '@api'`. API-only contracts and constructed failure, persistence, concurrency, and wire conditions that cannot be driven truthfully through UI. |
 | `npm run test:e2e-ui` | Playwright `--grep '@ui' --grep-invert '@(demo\|docs)\b'`. Real Chrome operator workflows, including OSC and attached-hardware surfaces. Generated visual documentation runs separately. |
 | `npm run test:help-screenshots` | Builds static Storybook and serially checks every entry in `docs/help/screenshot-manifest.json`. Story-owned captures require stable IDs/dimensions, no blank output, no browser errors or live REST/WebSocket requests, and no unreviewed pixel diff. It does not launch Light. |
-| `npm run screenshots:help` | Regenerates the whole help gallery: the Storybook capture and the live-desk capture. A fresh clone has no help images until this runs. |
+| `npm run screenshots:help` | Regenerates the tracked Help gallery from Storybook and the live desk. Review and commit accepted PNG changes; release CI embeds the checked-in set without recapturing it. |
 | `npm run test:help-screenshots-live` | Smaller, separately named production browser/server path for manifest entries still marked `live-app`; Storybook-owned captures cannot be overwritten by this command. |
 | `npm run test:record` | Serial narrated video of the whole catalog, assembled with ffmpeg into `.artifacts/test/visual-inspection/`. |
 | `npm run test:demo-show` | Fast API-only generation and validation of `assets/demo.show`; release CI uses this path. |
@@ -233,7 +233,7 @@ Start with the smallest relevant check, then widen by risk.
 | API-only failure construction, restart, migration, or wire behaviour | `npm run test:e2e-api` |
 | Desktop lifecycle, native windows, server supervision | Focused Rust/Tauri tests locally; the GitHub Actions release build probes the newly built desktop process on macOS, Linux, and Windows |
 | `docs/help/` content | `npm run dev` to check live help, then `npm run manual` |
-| Storybook-owned panes or help images | `npm run screenshots:help` (CI regenerates them on every run regardless) |
+| Storybook-owned panes or help images | `npm run screenshots:help`, then review and commit the accepted PNG changes |
 | Manifest entries still marked live-app | `npm run test:help-screenshots-live`, then review only those image diffs |
 | Real operator behaviour, before handoff | `npm run open` |
 
@@ -286,17 +286,18 @@ The launch probe is intentionally CI-only. Local `npm run open` and
 `npm run bundle` behavior is unchanged and does not automatically launch an
 application merely to validate a build.
 
-`.github/workflows/media.yml` is the Media Server's quality gate: `cargo fmt --check`,
-`cargo clippy -- -D warnings`, the tests, and a packaged `--check-configuration` smoke test, over
-every Media package on macOS, Windows, and Linux x86_64 and aarch64.
+`.github/workflows/release.yml` builds Media in the same early four-platform matrix as the other
+products. Each OS job smoke-tests its Media executable and directly assembles the final platform
+ZIP; publication still waits for linting, unit/architecture, comprehensive Rust, USB/native
+extension, Playwright, demo-show, and every platform result.
 
-`.github/workflows/media-release.yml` is a reusable four-platform component build called by
-`release.yml` immediately after version selection. Media remains a separate product, but its build
-now runs alongside the regular release work instead of following an already-published release.
-Publication still waits for the complete quality gate and for platform-bundle assembly.
+`.github/workflows/documentation.yml` checks nightly for a release without the durable
+`report-documentation.json` marker. It builds the handbook and Storybook, refreshes Help and
+marketing screenshot candidates, measures the published Linux bundle, deploys Pages, attaches the
+documentation/performance assets, and only then marks that release documented.
 
 Each supported platform publishes one `tosklight-bundle-<os>_<arch>.zip`. macOS, Windows, and
 Linux x86_64 bundles contain Desk, Headless, PreViz, and Media; Linux ARM64 contains its supported
-Headless and Media products. The portable show and handbook ship separately as
-`assets-demo-show.show` and `assets-handbook.pdf`; checksums and performance evidence use the
-`report-` prefix.
+Headless and Media products. Release CI publishes `assets-demo-show.show` immediately. The nightly
+documentation workflow attaches `assets-handbook.pdf`; checksums and documentation/performance
+evidence use the `report-` prefix.

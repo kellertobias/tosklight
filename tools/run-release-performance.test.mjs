@@ -328,11 +328,13 @@ test("scheduled publication separates release delivery from performance and Page
 		"utf8",
 	);
 	const workflow = readFileSync(
-		resolve(ROOT, ".github/workflows/performance-pages.yml"),
+		resolve(ROOT, ".github/workflows/documentation.yml"),
 		"utf8",
 	);
 	const release =
-		/^ {2}release:\n([\s\S]*?)(?=^ {2}[\w-]+:\n)/mu.exec(releaseWorkflow)?.[1] ?? "";
+		/^ {2}release:\n([\s\S]*?)(?=^ {2}[\w-]+:\n|(?![\s\S]))/mu.exec(
+			releaseWorkflow,
+		)?.[1] ?? "";
 	const performance =
 		/^ {2}release-performance:\n([\s\S]*?)(?=^ {2}[\w-]+:\n)/mu.exec(
 			workflow,
@@ -349,17 +351,14 @@ test("scheduled publication separates release delivery from performance and Page
 	assert.match(performance, /gh release download/u);
 	assert.match(performance, /tools\/run-release-performance\.mjs/u);
 	assert.doesNotMatch(performance, /continue-on-error: true/u);
-	assert.match(pages, /always\(\)/u);
-	assert.match(pages, /needs: \[release-metadata, release-performance\]/u);
+	assert.match(workflow, /Check for an undocumented release/u);
+	assert.match(workflow, /report-documentation\.json/u);
+	assert.match(pages, /release-performance/u);
+	assert.match(pages, /manual/u);
+	assert.match(pages, /storybook-screenshots/u);
+	assert.match(pages, /help-screenshots/u);
 	assert.match(pages, /LIGHT_PERFORMANCE_STATUS_FILE/u);
-	assert.match(pages, /--name storybook-static/u);
+	assert.match(pages, /name: storybook-static/u);
 	assert.match(pages, /\.artifacts\/build\/storybook\/ui/u);
-	assert.match(
-		releaseWorkflow,
-		/name: storybook-static[\s\S]*?path: \.artifacts\/build\/storybook\/ui/u,
-	);
-	assert.match(
-		releaseWorkflow,
-		/release-performance:[\s\S]*?if: \$\{\{ false \}\}[\s\S]*?pages-deploy:[\s\S]*?if: \$\{\{ false \}\}/u,
-	);
+	assert.doesNotMatch(release, /storybook|manual|pages|performance/u);
 });

@@ -11,6 +11,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
 
 concurrency:
@@ -258,7 +259,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ${{ matrix.runner }}
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         include:
           - label: macOS
@@ -290,7 +291,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ${{ matrix.runner }}
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         include:
           - label: Linux
@@ -371,12 +372,13 @@ jobs:
 
   e2e:
     name: Tests / Playwright / ${{ matrix.label }}
+    if: github.ref == 'refs/heads/main'
     needs: e2e-build
     runs-on: ubuntu-22.04
     env:
       LIGHT_REUSE_E2E_BUILD: "1"
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         include:
           - { label: API, suite: api, shard: 1/1, artifact: api }
@@ -436,280 +438,10 @@ jobs:
             .artifacts/test/results
           if-no-files-found: ignore
 
-  models:
-    name: Documentation / Fixture model renders
-    needs: [metadata]
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          ref: ${{ github.sha }}
-
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: package-lock.json
-
-      - name: Install workspace dependencies
-        run: npm ci
-
-      # The shipped .glb files are checked without Blender, which is the cheap gate: it
-      # reads them the way the visualizer does and fails on anything it could not draw.
-      - name: Verify the shipped models against the import contract
-        run: npm run models:verify
-
-      - name: Install Blender
-        env:
-          BLENDER_VERSION: 4.5.12
-          BLENDER_LINUX_SHA256: 95e3a2dfedba3bd32ca54fc355eac6b15a11986954ccb02815a07535d0120a25
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y xvfb libxkbcommon0
-          tmp="$(npm run --silent artifact-path -- tmp)"
-          archive="$tmp/blender-$BLENDER_VERSION-linux-x64.tar.xz"
-          install_root="$tmp/blender-$BLENDER_VERSION-linux-x64"
-          curl --fail --location --retry 3 \
-            --output "$archive" \
-            "https://download.blender.org/release/Blender4.5/blender-$BLENDER_VERSION-linux-x64.tar.xz"
-          echo "$BLENDER_LINUX_SHA256  $archive" | sha256sum --check
-          tar --extract --file "$archive" --directory "$tmp"
-          echo "$install_root" >> "$GITHUB_PATH"
-          "$install_root/blender" --version
-
-      # Rebuilding proves the builders still produce what is committed, and rendering
-      # proves every committed .glb still imports. Both write into the working tree, so
-      # a drift check afterwards is what turns them into a gate.
-      - name: Rebuild the models and render one PNG each
-        env:
-          LIBGL_ALWAYS_SOFTWARE: "1"
-        run: |
-          xvfb-run --auto-servernum npm run models
-          xvfb-run --auto-servernum npm run models:render
-
-      # Compared on the manifest and the generated page rather than on the .glb and .png
-      # bytes: the glTF exporter stamps its own version into every file it writes, so a
-      # byte comparison would fail the day the runner's Blender is upgraded. The manifest
-      # holds the geometry the builders computed — sizes, triangle counts, node lists,
-      # swivels — which is what actually changes when a model changes.
-      - name: Fail if the committed models are out of date
-        run: |
-          if ! git diff --quiet -- assets/models/manifest.json docs/help/45-Visualizer/02-model-catalogue.md; then
-            echo "error: assets/models differs from what tools/stage_models produces; run 'npm run models && npm run models:render'" >&2
-            git --no-pager diff -- assets/models/manifest.json docs/help/45-Visualizer/02-model-catalogue.md >&2
-            exit 1
-          fi
-
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        if: always()
-        with:
-          name: fixture-model-renders
-          path: docs/help/assets/models
-          if-no-files-found: error
-
-  documentation-screenshots:
-    name: Documentation / Generate reviewed screenshots
-    needs: [metadata, unit]
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          ref: ${{ github.sha }}
-
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: package-lock.json
-
-      - name: Install workspace dependencies
-        run: npm ci
-
-      - name: Install Chrome for Playwright
-        run: npx playwright install --with-deps chrome
-
-      - name: Build Storybook once and generate the screenshots a story can show
-        run: |
-          if output="$(bash tools/test.sh documentation-screenshots 2>&1)"; then
-            printf '%s\n' "$output"
-          else
-            status=$?
-            printf '%s\n' "$output" >&2
-            output="$(printf '%s' "$output" | tail -c 8000)"
-            output="${output//'%'/'%25'}"
-            output="${output//$'\r'/'%0D'}"
-            output="${output//$'\n'/'%0A'}"
-            printf '::error title=Documentation screenshot failure::%s\n' "$output" >&2
-            exit "$status"
-          fi
-
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: storybook-static
-          path: .artifacts/build/storybook/ui
-          if-no-files-found: error
-
-      # Only the entries a story can render. The rest come from the live desk, and the two halves
-      # are assembled in the help-screenshots job.
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        if: always()
-        with:
-          name: help-screenshots-storybook
-          path: docs/help/assets/screenshots
-          if-no-files-found: error
-
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        if: always()
-        with:
-          name: marketing-screenshots
-          path: docs/marketing/assets/screenshots
-          if-no-files-found: error
-
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        if: failure()
-        with:
-          name: documentation-screenshot-diagnostics
-          path: |
-            .artifacts/test/playwright-report/storybook
-            .artifacts/test/results/storybook
-          if-no-files-found: ignore
-
-  # Twenty-seven of the help screenshots show things no story can: a running desk with output,
-  # live pane settings, the real patch. They are captured by an ordinary Playwright spec against
-  # the same prebuilt server the e2e shards use, so this costs one runner rather than a build.
-  help-screenshots-live:
-    name: Documentation / Live-desk help screenshots
-    needs: e2e-build
-    runs-on: ubuntu-22.04
-    env:
-      LIGHT_REUSE_E2E_BUILD: "1"
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          ref: ${{ github.sha }}
-
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: package-lock.json
-
-      - name: Install workspace dependencies
-        run: npm ci
-
-      - name: Install Chrome for Playwright
-        run: npx playwright install --with-deps chrome
-
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: playwright-application-${{ github.sha }}
-          path: .artifacts/build/cargo/debug
-
-      - name: Make the Playwright server executable
-        run: chmod +x .artifacts/build/cargo/debug/light-headless
-
-      - name: Capture the screenshots only a running desk can show
-        run: |
-          if output="$(bash tools/test.sh help-screenshots-live 2>&1)"; then
-            printf '%s\n' "$output"
-          else
-            status=$?
-            printf '%s\n' "$output" >&2
-            output="$(printf '%s' "$output" | tail -c 8000)"
-            output="${output//'%'/'%25'}"
-            output="${output//$'\r'/'%0D'}"
-            output="${output//$'\n'/'%0A'}"
-            printf '::error title=Live help screenshot failure::%s\n' "$output" >&2
-            exit "$status"
-          fi
-
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: help-screenshots-live
-          path: docs/help/assets/screenshots
-          if-no-files-found: error
-
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        if: failure()
-        with:
-          name: help-screenshots-live-diagnostics
-          path: .artifacts/test
-          if-no-files-found: ignore
-
-  # The set is only complete once both captures are in one directory, and neither capture can
-  # tell. Everything that ships help images depends on this job rather than on either half.
-  help-screenshots:
-    name: Documentation / Help screenshot set
-    needs: [documentation-screenshots, help-screenshots-live]
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          ref: ${{ github.sha }}
-
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: help-screenshots-storybook
-          path: docs/help/assets/screenshots
-
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: help-screenshots-live
-          path: docs/help/assets/screenshots
-
-      - name: Fail if the assembled set is not what the manifest declares
-        run: node tools/check-help-screenshot-set.mjs
-
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: help-screenshots
-          path: docs/help/assets/screenshots
-          if-no-files-found: error
-
-  manual:
-    name: Documentation / Operator manual
-    needs: [metadata, help-screenshots]
-    runs-on: ubuntu-22.04
-    env:
-      LIGHT_MANUAL_VERSION: ${{ needs.metadata.outputs.version }}
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          ref: ${{ github.sha }}
-
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 22
-
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: docs/help/.tooling/requirements.txt
-
-      - name: Install manual rendering dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libpango-1.0-0 libpangoft2-1.0-0 libcairo2 libgdk-pixbuf-2.0-0
-
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: help-screenshots
-          path: docs/help/assets/screenshots
-
-      - run: npm run manual
-
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: operator-manual
-          path: .artifacts/generated/manual
-          if-no-files-found: error
-
   demo-show:
     name: Release / Generate default demo show
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [metadata, unit, e2e-build, e2e]
+    needs: [metadata, e2e-build]
     runs-on: ubuntu-22.04
     env:
       LIGHT_REUSE_E2E_BUILD: "1"
@@ -744,44 +476,17 @@ jobs:
           path: assets/demo.show
           if-no-files-found: error
 
-  validated:
-    name: Release / Confirm latest validated main
-    if: github.ref == 'refs/heads/main'
-    needs: [quality, unit, workspace, native-extension-draft, usb-dmx, e2e]
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          ref: ${{ github.sha }}
-
-      - name: Confirm this is still the latest main commit
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$(git ls-remote origin refs/heads/main | awk '{print $1}')" = "$GITHUB_SHA"
-
-  # Media remains a separate four-platform component matrix, but it starts only after the current
-  # main commit has passed every validation gate.
-  media-build:
-    name: Build / Media release components
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [metadata, frontends, validated]
-    uses: ./.github/workflows/media-release.yml
-    with:
-      version: ${{ needs.metadata.outputs.version }}
-
   build:
-    name: Build / Release archive / ${{ matrix.label }}
-    if: github.event_name != 'pull_request'
-    # The help screenshots are embedded into the binary, so they have to exist before anything is
-    # compiled. This is what makes what ships the current interface rather than whatever was last
-    # committed by hand.
-    needs: [metadata, frontends, validated, help-screenshots, demo-show]
+    name: Build / Platform bundle / ${{ matrix.label }}
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Start expensive platform work as soon as the shared web inputs exist. Validation runs in
+    # parallel and the release job remains the authority that requires every result.
+    needs: [metadata, frontends]
     runs-on: ${{ matrix.runner }}
     env:
       LIGHT_RELEASE_VERSION: ${{ needs.metadata.outputs.version }}
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         include:
           - label: macOS (Apple Silicon)
@@ -799,12 +504,11 @@ jobs:
             desktop: true
             viz: true
           - label: Linux (ARM64 / Raspberry Pi)
-            runner: ubuntu-22.04
-            target: aarch64-unknown-linux-musl
+            runner: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
             slug: linux-arm64
             headless_binary: light-headless
             desktop: false
-            cross: true
             cargo_flags: --no-default-features
           - label: Windows (x86_64)
             runner: windows-2022
@@ -818,18 +522,6 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ github.sha }}
-
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: default-demo-show
-          path: assets
-
-      # Populates docs/help/assets/screenshots, which rust-embed compiles into the binary. The
-      # directory is not in git: it is generated every run, so the shipped help cannot go stale.
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: help-screenshots
-          path: docs/help/assets/screenshots
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
@@ -860,11 +552,11 @@ jobs:
             libgtk-3-dev libsoup-3.0-dev libudev-dev libasound2-dev libxdo-dev \
             libxkbcommon-x11-0 mesa-vulkan-drivers vulkan-tools build-essential xvfb
 
-      - name: Install the cross-compilation toolchain
-        if: matrix.cross
+      - name: Install Linux ARM64 server dependencies
+        if: runner.os == 'Linux' && !matrix.desktop
         run: |
-          pip install ziglang
-          cargo install cargo-zigbuild --locked
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev pkg-config zip
 
       - name: Install workspace dependencies
         shell: bash
@@ -872,21 +564,32 @@ jobs:
 
       # Cargo can schedule both independent application graphs across the runner when they are
       # selected in one invocation. Separate calls made the visualizer wait for all Headless work.
-      - name: Build the Desk server and Stage renderer sidecars
+      - name: Build the Desk server, Stage renderer, and Media Server
         if: matrix.desktop
         shell: bash
         run: >-
           cargo build --release --locked --target ${{ matrix.target }}
           -p light-headless --bin light-headless
           -p viz-renderer --bin viz-renderer
+          -p media-server --bin media-server
 
-      - name: Build the standalone Light headless application
-        if: matrix.cross
+      - name: Build the ARM64 Headless and Media servers
+        if: '!matrix.desktop'
         shell: bash
         run: >-
-          cargo zigbuild --release --locked --target ${{ matrix.target }}
+          cargo build --release --locked --target ${{ matrix.target }}
           ${{ matrix.cargo_flags }}
           -p light-headless --bin light-headless
+          -p media-server --bin media-server
+
+      - name: Smoke-test the built Media Server
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          suffix=""
+          if [[ "$RUNNER_OS" == "Windows" ]]; then suffix=".exe"; fi
+          ".artifacts/build/cargo/$TARGET/release/media-server$suffix" --check-configuration
 
       - name: Build the release performance probe
         if: matrix.slug == 'linux-amd64'
@@ -1013,12 +716,25 @@ jobs:
       - name: Stage the generated demo show for application bundles
         if: matrix.viz
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          for attempt in {1..60}; do
+            if gh run download "$GITHUB_RUN_ID" --name default-demo-show --dir assets; then
+              break
+            fi
+            if [[ "$attempt" == 60 ]]; then
+              echo "error: default-demo-show was not available after 10 minutes" >&2
+              exit 1
+            fi
+            sleep 10
+          done
           source tools/artifact-paths.sh
           light_init_artifact_paths "$PWD"
           mkdir -p "$LIGHT_DEMO_SHOW_DIR"
           cp assets/demo.show "$LIGHT_DEMO_SHOW_DIR/demo-show.show"
+          cp assets/demo.show .artifacts/release/demo.show
 
       - name: Build the ToskLight Viz Editor application
         if: matrix.viz
@@ -1108,61 +824,48 @@ jobs:
           esac
           ls -la "$out"
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: component-core-${{ matrix.slug }}
-          path: .artifacts/release/*
-          if-no-files-found: error
+      - name: Stage the Media Server component
+        shell: bash
+        env:
+          SLUG: ${{ matrix.slug }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          version="$LIGHT_RELEASE_VERSION"
+          out=".artifacts/release"
+          tmp=".artifacts/tmp"
+          suffix=""
+          if [[ "$RUNNER_OS" == "Windows" ]]; then suffix=".exe"; fi
+          mkdir -p "$out" "$tmp"
+          stage_root="$(mktemp -d "$tmp/media-component.XXXXXX")"
+          trap 'rm -rf -- "$stage_root"' EXIT
+          stage="$stage_root/tosklight-media-$version-$SLUG"
+          mkdir -p "$stage"
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            bash tools/bundle-media-macos.sh \
+              ".artifacts/build/cargo/$TARGET/release/media-server" "$stage" "$version"
+            bash tools/seal-macos-app.sh "$stage/ToskLight Media.app"
+          else
+            cp ".artifacts/build/cargo/$TARGET/release/media-server$suffix" "$stage/"
+          fi
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            (cd "$stage_root" && 7z a -tzip \
+              "$OLDPWD/$out/tosklight-media-$version-$SLUG.zip" "$(basename "$stage")" >/dev/null)
+          elif [[ "$RUNNER_OS" == "macOS" ]]; then
+            ditto -c -k --sequesterRsrc --keepParent \
+              "$stage" "$out/tosklight-media-$version-$SLUG.zip"
+          else
+            (cd "$stage_root" && zip -q -r \
+              "$OLDPWD/$out/tosklight-media-$version-$SLUG.zip" "$(basename "$stage")")
+          fi
 
-  bundle:
-    name: Build / Product bundle / ${{ matrix.label }}
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [metadata, build, media-build]
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - label: macOS (Apple Silicon)
-            runner: macos-14
-            slug: macos-arm64
-          - label: Linux (x86_64)
-            runner: ubuntu-22.04
-            slug: linux-amd64
-          - label: Linux (ARM64 / Raspberry Pi)
-            runner: ubuntu-22.04
-            slug: linux-arm64
-          - label: Windows (x86_64)
-            runner: windows-2022
-            slug: windows-amd64
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          ref: ${{ github.sha }}
-
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: component-core-${{ matrix.slug }}
-          path: .artifacts/components
-
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: component-media-${{ matrix.slug }}
-          path: .artifacts/components
-
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        if: matrix.slug == 'linux-amd64' || matrix.slug == 'windows-amd64'
-        with:
-          name: default-demo-show
-          path: .artifacts/components
-
-      - name: Assemble one operator-facing platform bundle
+      - name: Assemble the operator-facing platform bundle
         shell: bash
         run: >-
           bash tools/assemble-release-bundle.sh
           ${{ matrix.slug }}
           ${{ needs.metadata.outputs.version }}
-          .artifacts/components
+          .artifacts/release
           .artifacts/release
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -1171,83 +874,6 @@ jobs:
           path: .artifacts/release/tosklight-bundle-*.zip
           if-no-files-found: error
 
-  pages-build:
-    name: Documentation / Assemble static website
-    # Kept as a tombstone for old run links. The scheduled performance-pages workflow owns this.
-    if: ${{ false }}
-    needs:
-      - metadata
-      - manual
-      - help-screenshots
-      - release-performance
-    runs-on: ubuntu-22.04
-    env:
-      LIGHT_RELEASE_VERSION: ${{ needs.metadata.outputs.version }}
-      LIGHT_REUSE_MANUAL: "1"
-      LIGHT_PERFORMANCE_STATUS_FILE: .artifacts/performance/status.json
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          fetch-depth: 0
-          ref: ${{ github.sha }}
-
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: package-lock.json
-
-      - name: Install workspace dependencies
-        run: npm ci
-
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: operator-manual
-          path: .artifacts/generated/manual
-
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: help-screenshots
-          path: docs/help/assets/screenshots
-
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: marketing-screenshots
-          path: docs/marketing/assets/screenshots
-
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: storybook-static
-          path: .artifacts/build/storybook/ui
-
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: release-performance
-          path: .artifacts/performance
-
-      - name: Assemble the public site
-        run: npm run pages:generate
-
-      - name: Resolve the assembled site directory
-        id: site
-        run: echo "path=$(npm run --silent artifact-path -- pages)" >> "$GITHUB_OUTPUT"
-
-      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
-        with:
-          path: ${{ steps.site.outputs.path }}
-
-      # Published on every run, to the preview prefix rather than the one the website serves.
-      # Looking at the current gallery should not require deciding to ship it.
-      - name: Publish the marketing gallery preview
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
-          AWS_REGION: ${{ secrets.AWS_REGION }}
-          MARKETING_SCREENSHOTS_S3_BUCKET: ${{ secrets.MARKETING_SCREENSHOTS_S3_BUCKET }}
-          MARKETING_SCREENSHOTS_S3_BASE_PATH: ${{ secrets.MARKETING_SCREENSHOTS_S3_BASE_PATH }}
-        run: bash tools/upload-marketing-screenshots.sh preview
-
   release:
     name: Release / Tag and publish
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -1255,11 +881,12 @@ jobs:
       - metadata
       - quality
       - unit
+      - workspace
+      - native-extension-draft
+      - usb-dmx
       - e2e
-      - manual
-      - help-screenshots
+      - demo-show
       - build
-      - bundle
     runs-on: ubuntu-22.04
     permissions:
       contents: write
@@ -1288,11 +915,6 @@ jobs:
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: operator-manual
-          path: .artifacts/generated/manual
-
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
           name: default-demo-show
           path: .artifacts/generated/demo-show
 
@@ -1304,15 +926,20 @@ jobs:
           set -euo pipefail
           cp .artifacts/generated/demo-show/demo.show \
             .artifacts/release/assets-demo-show.show
-          cp .artifacts/generated/manual/pdf/tosklight-manual.pdf \
-            .artifacts/release/assets-handbook.pdf
+          jq -n \
+            --arg version "$VERSION" \
+            --arg tag "v$VERSION" \
+            --arg commit "$GITHUB_SHA" \
+            --arg release_url "https://github.com/$GITHUB_REPOSITORY/releases/tag/v$VERSION" \
+            '{version: $version, tag: $tag, commit: $commit, releaseUrl: $release_url}' \
+            > .artifacts/release/report-release-metadata.json
           for required in \
             "tosklight-bundle-macos_arm64.zip" \
             "tosklight-bundle-linux_amd64.zip" \
             "tosklight-bundle-linux_arm64.zip" \
             "tosklight-bundle-windows_amd64.zip" \
             "assets-demo-show.show" \
-            "assets-handbook.pdf"
+            "report-release-metadata.json"
           do
             test -f ".artifacts/release/$required"
           done
@@ -1365,197 +992,3 @@ jobs:
         run: |
           git fetch --force --tags origin
           test "$(git rev-list -n 1 "v$VERSION")" = "$GITHUB_SHA"
-
-  release-performance:
-    name: Release / Measure published artifact
-    # Performance is deliberately outside the release critical path; see performance-pages.yml.
-    if: ${{ false }}
-    needs: [metadata, release]
-    runs-on: ubuntu-22.04
-    permissions:
-      contents: write
-    env:
-      GH_TOKEN: ${{ github.token }}
-      VERSION: ${{ needs.metadata.outputs.version }}
-      RELEASE_CREATED: ${{ needs.metadata.outputs.release }}
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          ref: ${{ github.sha }}
-
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 22
-
-      - name: Measure the published release or reuse its latest status
-        shell: bash
-        run: |
-          set -euo pipefail
-          out=".artifacts/performance"
-          mkdir -p "$out"
-          release_url="https://github.com/${GITHUB_REPOSITORY}/releases/tag/v${VERSION}"
-          if [[ "$RELEASE_CREATED" == "true" ]]; then
-            archive="tosklight-bundle-linux_amd64.zip"
-            tmp=".artifacts/tmp/release-performance"
-            rm -rf -- "$tmp"
-            mkdir -p "$tmp/unpacked"
-            gh release download "v${VERSION}" --pattern "$archive" --dir "$tmp"
-            unzip -q "$tmp/$archive" -d "$tmp/unpacked"
-            benchmark="$(find "$tmp/unpacked" -type f -name light-benchmark -print -quit)"
-            if [[ -z "$benchmark" ]]; then
-              node -e '
-                const fs = require("node:fs");
-                fs.writeFileSync(process.argv[1], JSON.stringify({
-                  schema_version: 3,
-                  status: "unknown",
-                  summary: "The published release did not contain the benchmark executable.",
-                  generated_at: new Date().toISOString(),
-                  release: { version: process.env.VERSION, commit: process.env.GITHUB_SHA, url: process.argv[2] },
-                  evidence: { kind: "unknown", baseline: { exit_code: null, signal: null, error: "missing benchmark executable" }, failed_gates: [] }
-                }, null, 2) + "\n");
-              ' "$out/status.json" "$release_url"
-              exit 1
-            fi
-            chmod +x "$benchmark"
-            node tools/run-release-performance.mjs \
-              --binary "$benchmark" \
-              --output-dir "$out" \
-              --version "$VERSION" \
-              --commit "$GITHUB_SHA" \
-              --release-url "$release_url" \
-              --hardware-label "GitHub Actions ubuntu-22.04"
-
-            if [[ ! -f "$out/status.json" ]]; then
-              node -e '
-                const fs = require("node:fs");
-                fs.writeFileSync(process.argv[1], JSON.stringify({
-                  schema_version: 1,
-                  status: "unknown",
-                  summary: "The published benchmark artifact could not be executed.",
-                  generated_at: new Date().toISOString(),
-                  release: { version: process.env.VERSION, commit: process.env.GITHUB_SHA, url: process.argv[2] }
-                }, null, 2) + "\n");
-              ' "$out/status.json" "$release_url"
-            fi
-
-            cp "$out/status.json" "$out/report-performance-status.json"
-            (cd "$out" && zip -q "report-performance.zip" ./*.json ./*.log ./*.md 2>/dev/null || \
-              zip -q "report-performance.zip" ./*.json)
-            gh release upload "v${VERSION}" --clobber \
-              "$out/report-performance-status.json#Performance status" \
-              "$out/report-performance.zip#Detailed performance report"
-          else
-            gh release download "v${VERSION}" \
-              --pattern "report-performance-status.json" \
-              --dir "$out" || true
-            if [[ -f "$out/report-performance-status.json" ]]; then
-              cp "$out/report-performance-status.json" "$out/status.json"
-            else
-              node -e '
-                const fs = require("node:fs");
-                fs.writeFileSync(process.argv[1], JSON.stringify({
-                  schema_version: 1,
-                  status: "unknown",
-                  summary: "No performance report is attached to the current release.",
-                  generated_at: new Date().toISOString(),
-                  release: { version: process.env.VERSION, commit: process.env.GITHUB_SHA, url: process.argv[2] }
-                }, null, 2) + "\n");
-              ' "$out/status.json" "$release_url"
-              exit 1
-            fi
-          fi
-
-          node --input-type=module -e '
-            import fs from "node:fs";
-            import { normalizePublicPerformanceStatus } from "./tools/performance-publication.mjs";
-            const candidate = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
-            const normalized = normalizePublicPerformanceStatus(candidate, {
-              version: process.env.VERSION,
-              releaseUrl: process.argv[2]
-            });
-            fs.writeFileSync(process.argv[1], JSON.stringify(normalized, null, 2) + "\n");
-            if (normalized.status === "unknown") process.exit(1);
-          ' "$out/status.json" "$release_url"
-
-          if [[ -f "$out/summary.md" ]]; then
-            cat "$out/summary.md" >> "$GITHUB_STEP_SUMMARY"
-          else
-            node -e '
-              const status = require("./" + process.argv[1]);
-              console.log(`## Release performance\n\n**${status.status.toUpperCase()}** — ${status.summary}`);
-            ' "$out/status.json" >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-      - name: Ensure a publishable performance status
-        if: always()
-        shell: bash
-        run: |
-          if [[ ! -f .artifacts/performance/status.json ]]; then
-            mkdir -p .artifacts/performance
-            node -e '
-              const fs = require("node:fs");
-              fs.writeFileSync(process.argv[1], JSON.stringify({
-                schema_version: 1,
-                status: "unknown",
-                summary: "The performance assessment encountered an infrastructure error.",
-                generated_at: new Date().toISOString(),
-                release: {
-                  version: process.env.VERSION,
-                  commit: process.env.GITHUB_SHA,
-                  url: `https://github.com/${process.env.GITHUB_REPOSITORY}/releases/tag/v${process.env.VERSION}`
-                }
-              }, null, 2) + "\n");
-            ' .artifacts/performance/status.json
-          fi
-
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        if: always()
-        with:
-          name: release-performance
-          path: .artifacts/performance
-          if-no-files-found: error
-
-  pages-deploy:
-    name: Documentation / Deploy GitHub Pages
-    # Pages is deliberately outside the release critical path; see performance-pages.yml.
-    if: ${{ false }}
-    needs: [pages-build]
-    runs-on: ubuntu-22.04
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
-
-  # The gallery the website serves only changes when you say so. Every run publishes a preview;
-  # this promotes that preview to the live prefix, and nothing else does. Run it from the Actions
-  # tab once you have looked at the preview and are happy with it.
-  publish-marketing:
-    name: Marketing / Promote the previewed gallery
-    if: >-
-      github.event_name == 'workflow_dispatch' &&
-      github.ref == 'refs/heads/main' &&
-      inputs.promote_marketing
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Promote the previewed gallery and demo to the live prefix
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
-          AWS_REGION: ${{ secrets.AWS_REGION }}
-          BUCKET: ${{ secrets.MARKETING_SCREENSHOTS_S3_BUCKET }}
-          BASE_PATH: ${{ secrets.MARKETING_SCREENSHOTS_S3_BASE_PATH }}
-        run: |
-          set -euo pipefail
-          base="s3://$BUCKET/${BASE_PATH#/}"
-          # Copied rather than synced: the live prefix may hold reviewed offline media or anything
-          # else published beside the gallery, and a sync would delete what this preview does not
-          # happen to contain.
-          aws s3 cp "$base/preview/" "$base/" --recursive --only-show-errors
-          echo "Promoted $base/preview/ to $base/"

@@ -89,7 +89,7 @@ test("the control Tauri overlay resolves both target-specific sidecars", () => {
 test("release Desk bundles both supervised helpers before packaging", () => {
 	const workflow = read(".github/workflows/release.yml");
 	const sidecarBuild = workflow.indexOf(
-		"- name: Build the Desk server and Stage renderer sidecars",
+		"- name: Build the Desk server, Stage renderer, and Media Server",
 	);
 	const sidecars = workflow.indexOf(
 		"- name: Stage the Desk server and Stage renderer sidecars",
@@ -114,7 +114,7 @@ test("release Desk bundles both supervised helpers before packaging", () => {
 	assert.match(smoke, /Bundled Light server log/u);
 });
 
-test("native Timecode audio stays out of the cross-compiled ARM headless build", () => {
+test("native Timecode audio stays out of the ARM headless build", () => {
 	const workflow = read(".github/workflows/release.yml");
 	const appManifest = read("apps/light-headless/Cargo.toml");
 	const runtimeManifest = read("crates/light/adapters/headless/Cargo.toml");
@@ -137,7 +137,6 @@ test("native Timecode audio stays out of the cross-compiled ARM headless build",
 
 test("macOS release apps are sealed only after their final helpers and resources", () => {
 	const workflow = read(".github/workflows/release.yml");
-	const mediaWorkflow = read(".github/workflows/media-release.yml");
 	const assembler = read("tools/assemble-release-bundle.sh");
 	const sealer = read("tools/seal-macos-app.sh");
 	const desktopBuild = workflow.indexOf(
@@ -157,7 +156,7 @@ test("macOS release apps are sealed only after their final helpers and resources
 	assert.match(workflow, /ToskLight Visualizer\.app[\s\S]*seal-macos-app\.sh/u);
 	assert.match(workflow, /ToskLight Viz Editor\.app[\s\S]*seal-macos-app\.sh/u);
 	assert.match(
-		mediaWorkflow,
+		workflow,
 		/bundle-media-macos\.sh[\s\S]*seal-macos-app\.sh/u,
 	);
 	assert.match(assembler, /codesign --verify --deep --strict/u);
@@ -261,9 +260,9 @@ test("fast unit tests and comprehensive verification remain distinct", () => {
 
 test("CI keeps shared inputs out of release downloads and strips debug symbols", () => {
 	const workflow = read(".github/workflows/release.yml");
-	const mediaWorkflow = read(".github/workflows/media-release.yml");
+	const documentation = read(".github/workflows/documentation.yml");
 
-	for (const source of [workflow, mediaWorkflow]) {
+	for (const source of [workflow, documentation]) {
 		assert.match(source, /CARGO_PROFILE_DEV_DEBUG: "0"/u);
 		assert.match(source, /CARGO_PROFILE_TEST_DEBUG: "0"/u);
 		assert.doesNotMatch(source, /name: release-frontends-/u);
@@ -279,8 +278,7 @@ test("CI keeps shared inputs out of release downloads and strips debug symbols",
 
 test("release packaging and Pages cover the supported product matrix", () => {
 	const workflow = read(".github/workflows/release.yml");
-	const mediaWorkflow = read(".github/workflows/media-release.yml");
-	const publicationWorkflow = read(".github/workflows/performance-pages.yml");
+	const publicationWorkflow = read(".github/workflows/documentation.yml");
 	const landingPage = read("tools/render-landing-page.mjs");
 
 	for (const asset of [
@@ -289,7 +287,7 @@ test("release packaging and Pages cover the supported product matrix", () => {
 		"tosklight-bundle-linux_amd64.zip",
 		"tosklight-bundle-linux_arm64.zip",
 		"assets-demo-show.show",
-		"assets-handbook.pdf",
+		"report-release-metadata.json",
 		"report-checksums.txt",
 	]) {
 		assert.ok(
@@ -298,8 +296,10 @@ test("release packaging and Pages cover the supported product matrix", () => {
 		);
 	}
 	for (const asset of [
+		"assets-handbook.pdf",
 		"report-performance-status.json",
 		"report-performance.zip",
+		"report-documentation.json",
 	]) {
 		assert.ok(
 			publicationWorkflow.includes(asset),
@@ -314,12 +314,15 @@ test("release packaging and Pages cover the supported product matrix", () => {
 		workflow,
 		/binary="[^"]*viz-renderer\$suffix"[\s\S]*--demo --verify/u,
 	);
+	assert.match(workflow, /-p media-server --bin media-server/u);
 	assert.match(
 		workflow,
-		/media-build:[\s\S]*?uses: \.\/\.github\/workflows\/media-release\.yml/u,
+		/Assemble the operator-facing platform bundle[\s\S]*assemble-release-bundle\.sh/u,
 	);
-	assert.match(mediaWorkflow, /workflow_call:/u);
-	assert.doesNotMatch(mediaWorkflow, /workflow_run|gh release upload/u);
+	assert.equal(
+		fs.existsSync(path.join(repositoryRoot, ".github/workflows/media-release.yml")),
+		false,
+	);
 	assert.equal(fs.existsSync(path.join(repositoryRoot, ".github/workflows/media.yml")), false);
 
 	for (const slug of [
@@ -340,7 +343,7 @@ test("release packaging and Pages cover the supported product matrix", () => {
 		"linux-arm64",
 	]) {
 		assert.ok(
-			mediaWorkflow.includes(`slug: ${slug}`),
+			workflow.includes(`slug: ${slug}`),
 			`Media should build ${slug}`,
 		);
 	}
@@ -365,7 +368,6 @@ test("release packaging and Pages cover the supported product matrix", () => {
 
 test("non-main branch pushes run validation without release work", () => {
 	const workflow = read(".github/workflows/release.yml");
-	const mediaRelease = read(".github/workflows/media-release.yml");
 
 	assert.match(workflow, /push:[\s\S]*?branches: \["\*\*"\]/u);
 	for (const job of [
@@ -385,21 +387,23 @@ test("non-main branch pushes run validation without release work", () => {
 	}
 	assert.match(
 		workflow,
-		/\n {2}media-build:\n[\s\S]*?\n {4}if: [^\n]*github\.ref == 'refs\/heads\/main'/u,
-		"media-build should be main-only",
+		/\n {2}build:\n[\s\S]*?\n {4}if: github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'/u,
+		"platform bundles should be main-push-only",
 	);
 	assert.match(
 		workflow,
 		/unit:[\s\S]*?run: npm run test:architecture[\s\S]*?github\.ref == 'refs\/heads\/main'[\s\S]*?run: npm run test:typescript-unit[\s\S]*?github\.ref != 'refs\/heads\/main'[\s\S]*?run: npm run test:unit/u,
 	);
 	assert.match(
-		read(".github/workflows/performance-pages.yml"),
+		read(".github/workflows/documentation.yml"),
 		/schedule:[\s\S]*?cron:[\s\S]*?publish-marketing:/u,
 	);
 	assert.match(
 		workflow,
-		/validated:[\s\S]*?needs: \[quality, unit, workspace, native-extension-draft, usb-dmx, e2e\][\s\S]*?git ls-remote origin refs\/heads\/main/u,
+		/build:[\s\S]*?needs: \[metadata, frontends\][\s\S]*?fail-fast: true/u,
 	);
-	assert.match(mediaRelease, /workflow_call:/u);
-	assert.doesNotMatch(mediaRelease, /workflow_dispatch|workflow_run/u);
+	assert.match(
+		workflow,
+		/release:[\s\S]*?needs:[\s\S]*?- workspace[\s\S]*?- native-extension-draft[\s\S]*?- usb-dmx[\s\S]*?- e2e[\s\S]*?- build/u,
+	);
 });
