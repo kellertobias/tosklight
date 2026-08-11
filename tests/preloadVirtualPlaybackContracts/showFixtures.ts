@@ -1,8 +1,5 @@
 import type { ApiDriver } from "../bench/core/api";
-import {
-	type BenchContractContext,
-	expect,
-} from "../bench/core/fixtures";
+import { type BenchContractContext, expect } from "../bench/core/fixtures";
 import {
 	fixtureIdsByNumber,
 	loadCanonicalCopy,
@@ -129,11 +126,7 @@ export async function writeVirtualPage(
 	const virtualPlaybacks = Object.fromEntries(
 		await Promise.all(
 			Object.entries(assignments).map(async ([number, sourceNumber]) => {
-				const source = await object<any>(
-					api,
-					"playback",
-					String(sourceNumber),
-				);
+				const source = await object<any>(api, "playback", String(sourceNumber));
 				return [
 					number,
 					{
@@ -182,6 +175,7 @@ export async function setCaptureMask(
 	await api.request("PUT", "/api/v2/configuration", {
 		...current,
 		programmer_fade_millis: programmerFade,
+		command_line_at_uses_programmer_fade: programmerCapture,
 		sequence_master_fade_millis: cueFade,
 		preload_programmer_changes: programmerCapture,
 		preload_physical_playback_actions: physicalCapture,
@@ -291,7 +285,10 @@ export async function visualizationLevel(
 	fixtureId: string,
 	attribute = "intensity",
 ): Promise<number> {
-	const snapshot = await api.request<any>("GET", "/api/v2/output/visualization");
+	const snapshot = await api.request<any>(
+		"GET",
+		"/api/v2/output/visualization",
+	);
 	const value = snapshot.values.find(
 		(entry: any) =>
 			entry.fixture_id === fixtureId && entry.attribute === attribute,
