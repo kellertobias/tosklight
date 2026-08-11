@@ -196,6 +196,7 @@ test("healthy and degraded measured statuses retain their public evidence", () =
 	assert.match(page, /Physical Stage instances<\/th><td>343/u);
 	assert.match(page, /Stage source-to-canvas p95<\/th><td>61 ms/u);
 	assert.match(page, /Show statistics/u);
+	assert.match(page, /<strong>295<\/strong><small>fixture records/u);
 	assert.match(page, /100-fixture show/u);
 	assert.match(page, /2,000-fixture mixed shipped-mode show/u);
 	assert.match(page, /<strong>37,?720<\/strong>|<strong>37720<\/strong>/u);

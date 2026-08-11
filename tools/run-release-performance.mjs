@@ -570,6 +570,7 @@ export function statusDocument(
 					average_completed_hz: doubledObserved?.average_completed_hz ?? null,
 					p95_one_second_completed_hz:
 						doubledObserved?.p95_one_second_completed_hz ?? null,
+					windows_below_minimum: doubledObserved?.windows_below_minimum ?? null,
 					deadline_misses: doubledObserved?.deadline_misses ?? null,
 					dropped_ticks: doubledObserved?.dropped_ticks ?? null,
 					deferred_ticks: doubledObserved?.deferred_ticks ?? null,
@@ -591,6 +592,7 @@ export function statusDocument(
 					minimum_one_second_completed_hz: null,
 					average_completed_hz: null,
 					p95_one_second_completed_hz: null,
+					windows_below_minimum: null,
 					deadline_misses: null,
 					dropped_ticks: null,
 					deferred_ticks: null,

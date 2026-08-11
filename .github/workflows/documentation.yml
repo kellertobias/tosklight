@@ -426,7 +426,7 @@ jobs:
             --arg completed_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             '{tag: $tag, commit: $commit, completedAt: $completed_at}' \
             > .artifacts/documentation/report-documentation.json
-          gh release upload "$RELEASE_TAG" --clobber \
+          gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --clobber \
             .artifacts/documentation/report-documentation.json
 
   publish-marketing:

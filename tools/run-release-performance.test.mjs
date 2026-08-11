@@ -257,6 +257,7 @@ test("passing baseline remains healthy when the optional density probe degrades"
 	assert.equal(status.doubled_density.configured_target_met, false);
 	assert.equal(status.doubled_density.achieved_ticks_per_second, 82);
 	assert.equal(status.doubled_density.deadline_misses, 2);
+	assert.equal(status.doubled_density.windows_below_minimum, 2);
 });
 
 test("the exact 2,000-fixture shipped-mode workload is retained separately", () => {
@@ -419,6 +420,10 @@ test("scheduled publication separates release delivery from performance and Page
 	assert.doesNotMatch(performance, /continue-on-error: true/u);
 	assert.match(workflow, /Check for an undocumented release/u);
 	assert.match(workflow, /report-documentation\.json/u);
+	assert.match(
+		workflow,
+		/gh release upload "\$RELEASE_TAG" --repo "\$GITHUB_REPOSITORY"/u,
+	);
 	assert.match(pages, /release-performance/u);
 	assert.match(pages, /manual/u);
 	assert.match(pages, /storybook-screenshots/u);

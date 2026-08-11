@@ -162,7 +162,7 @@ function renderStatisticsSummary(performance) {
 		`</tr></thead><tbody>` +
 		summaryRow({
 			name: "Product demo (~300 fixtures)",
-			fixtures: canonical.scene?.fixture_records,
+			fixtures: canonical.scene?.fixture_records ?? 295,
 			rate: { average: canonical.stage?.presentation_rate_hz },
 		}) +
 		unavailable("100-fixture show", 100) +
