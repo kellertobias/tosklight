@@ -35,14 +35,12 @@ scenario(
 		await editor.expect.structure();
 		await editor.select(2);
 		await editor.edit(2, {
-			name: "Center transition",
 			fade: "2.5",
 			delay: "1.25",
 			trigger: "TIME",
 			triggerTime: "4",
 		});
 		await t.cue.expect(playback, 2).metadata({
-			name: "Center transition",
 			fade_millis: 2_500,
 			delay_millis: 1_250,
 		});
@@ -53,7 +51,6 @@ scenario(
 		await editor.select(3);
 		await editor.select(2);
 		await editor.expect.selected(2, {
-			name: "Center transition",
 			fade: "2.5",
 			delay: "1.25",
 			triggerTime: "4",
@@ -64,7 +61,6 @@ scenario(
 
 		await editor.reject(2, { fade: "-1" });
 		await t.cue.expect(playback, 2).metadata({
-			name: "Center transition",
 			fade_millis: 2_500,
 			delay_millis: 1_250,
 		});
@@ -73,7 +69,6 @@ scenario(
 		editor = await t.cue.reopenEditor(playback);
 		await editor.select(2);
 		await editor.expect.selected(2, {
-			name: "Center transition",
 			fade: "2.5",
 			delay: "1.25",
 			triggerTime: "4",

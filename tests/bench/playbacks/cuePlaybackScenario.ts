@@ -32,7 +32,6 @@ type CommandRoute = "ui" | "api";
 type CueTriggerLabel = "GO" | "FOLLOW" | "TIME";
 
 export interface CueEditorValues {
-	name?: string;
 	fade?: string;
 	delay?: string;
 	trigger?: CueTriggerLabel;
@@ -184,21 +183,18 @@ class CueEditorExpectation {
 	async selected(cue: number, values: CueEditorValues = {}) {
 		const row = this.owner.row(cue);
 		await expect(row).toHaveClass(/selected/);
-		await expect(
-			this.owner.page.getByText(`Selected Cue · ${formatCueNumber(cue)}`, {
-				exact: true,
-			}),
-		).toBeVisible();
-		if (values.name != null)
-			await expect(this.owner.field("Title")).toHaveValue(values.name);
 		if (values.fade != null)
-			await expect(this.owner.field("In Fade")).toHaveValue(values.fade);
+			await expect(
+				row.getByRole("button", { name: "In Fade", exact: true }),
+			).toHaveText(`${values.fade} s`);
 		if (values.delay != null)
-			await expect(this.owner.field("In Delay")).toHaveValue(values.delay);
+			await expect(
+				row.getByRole("button", { name: "In Delay", exact: true }),
+			).toHaveText(`${values.delay} s`);
 		if (values.triggerTime != null)
-			await expect(this.owner.field("Trigger time")).toHaveValue(
-				values.triggerTime,
-			);
+			await expect(
+				row.getByRole("button", { name: "Trigger Time", exact: true }),
+			).toHaveText(`${values.triggerTime} s`);
 	}
 }
 
@@ -229,25 +225,29 @@ export class CueEditor {
 			`EDIT CUE ${formatCueNumber(cue)}`,
 			"Edit the selected Cue through the visible Cuelist View fields.",
 		);
-		if (values.name != null) await this.commit("Title", values.name);
-		if (values.fade != null) await this.commit("In Fade", values.fade);
-		if (values.delay != null) await this.commit("In Delay", values.delay);
-		if (values.trigger != null) await this.chooseTrigger(values.trigger);
+		if (values.fade != null) await this.commit(cue, "In Fade", values.fade);
+		if (values.delay != null) await this.commit(cue, "In Delay", values.delay);
+		if (values.trigger != null) await this.chooseTrigger(cue, values.trigger);
 		if (values.triggerTime != null)
-			await this.commit("Trigger time", values.triggerTime);
+			await this.commit(cue, "Trigger Time", values.triggerTime);
 	}
 
 	async reject(cue: number, values: CueEditorValues) {
 		await this.select(cue);
 		if (values.fade != null) {
-			await this.field("In Fade").fill(values.fade);
-			await this.field("In Fade").press("Enter");
+			const dialog = await this.openProperty(cue, "In Fade");
+			await dialog.getByRole("textbox", { name: "In Fade" }).fill(values.fade);
+			await expect(dialog.getByRole("alert")).toHaveText(
+				"Enter a time of zero or greater.",
+			);
+			await expect(
+				dialog.getByRole("button", { name: "Save", exact: true }),
+			).toBeDisabled();
+			await this.desk.click(
+				dialog.getByRole("button", { name: "Cancel", exact: true }),
+			);
+			await expect(dialog).toBeHidden();
 		}
-		await expect(
-			this.page
-				.getByRole("alert")
-				.filter({ hasText: "Cue edit was not saved" }),
-		).toBeVisible();
 	}
 
 	async inspectSettings() {
@@ -282,26 +282,60 @@ export class CueEditor {
 		});
 	}
 
-	field(label: string) {
-		return this.page.getByLabel(label, { exact: true });
-	}
-
-	private async commit(label: string, value: string) {
+	private async commit(cue: number, label: string, value: string) {
 		const before = await this.revision();
-		const field = this.field(label);
-		await field.fill(value);
-		await field.press("Enter");
+		const dialog = await this.openProperty(cue, label);
+		await this.desk.click(
+			dialog.getByRole("button", { name: "Open number pad", exact: true }),
+		);
+		const numberPad = this.page.locator(".direct-value-modal");
+		await expect(numberPad).toBeVisible();
+		for (const character of value) {
+			await this.desk.click(
+				numberPad.getByRole("button", {
+					name: character === "-" ? "−" : character,
+					exact: true,
+				}),
+			);
+		}
+		await this.desk.click(
+			numberPad.getByRole("button", { name: "ENTER", exact: true }),
+		);
+		await expect(numberPad).toBeHidden();
+		await this.desk.click(
+			dialog.getByRole("button", { name: "Save", exact: true }),
+		);
+		await expect(dialog).toBeHidden();
 		await expect.poll(() => this.revision()).toBeGreaterThan(before);
+		await expect(
+			this.row(cue).getByRole("button", { name: label, exact: true }),
+		).toHaveText(`${value} s`);
 	}
 
-	private async chooseTrigger(next: CueTriggerLabel) {
+	private async chooseTrigger(cue: number, next: CueTriggerLabel) {
 		const before = await this.revision();
-		const scope = this.page.locator(".cue-properties");
-		await scope
+		const dialog = await this.openProperty(cue, "Trigger");
+		await dialog
 			.getByRole("button", { name: /^(GO|FOLLOW|TIME)$/, exact: true })
 			.click();
 		await this.page.getByRole("option", { name: next, exact: true }).click();
+		await this.desk.click(
+			dialog.getByRole("button", { name: "Save", exact: true }),
+		);
+		await expect(dialog).toBeHidden();
 		await expect.poll(() => this.revision()).toBeGreaterThan(before);
+		await expect(
+			this.row(cue).getByRole("button", { name: "Trigger", exact: true }),
+		).toHaveText(next);
+	}
+
+	private async openProperty(cue: number, label: string) {
+		await this.desk.click(
+			this.row(cue).getByRole("button", { name: label, exact: true }),
+		);
+		const dialog = this.page.getByRole("dialog", { name: label, exact: true });
+		await expect(dialog).toBeVisible();
+		return dialog;
 	}
 
 	private async revision() {

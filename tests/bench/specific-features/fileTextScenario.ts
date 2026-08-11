@@ -354,7 +354,10 @@ export class BrowserFiles {
 			}),
 		);
 		await this.desk.click(
-			this.page.getByRole("button", { name: "Desk Lock", exact: true }),
+			this.page.getByRole("button", {
+				name: "Configure desk lock",
+				exact: true,
+			}),
 		);
 		await this.desk.click(
 			this.page.getByRole("button", { name: "Choose lock wallpaper" }),
