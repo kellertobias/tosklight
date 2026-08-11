@@ -1,0 +1,15 @@
+ToskLight for macOS - first start
+=================================
+
+These testing builds are ad-hoc signed so macOS can verify that the application bundle is intact.
+They are not yet signed with an Apple Developer ID or notarized by Apple.
+
+1. Move tosklight-desk-macos_arm64.app to Applications.
+2. In Finder, Control-click the application and choose Open.
+3. Confirm Open in the dialog. If macOS instead directs you to System Settings, open Privacy &
+   Security and use Open Anyway for ToskLight after checking that this archive came from the
+   expected GitHub release.
+
+Do not remove quarantine attributes or re-sign the downloaded application yourself. If macOS says
+the application is damaged, verify the archive against report-checksums.txt and download the newest
+release. A damaged warning means the release bundle itself did not pass its integrity contract.

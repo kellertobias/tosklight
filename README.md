@@ -82,9 +82,11 @@ for the documentation workflow.
 | Linux | x86_64 AppImage and Debian package | Linux AMD64 archive |
 | Raspberry Pi | Use the browser desk from another computer | Pi 4 or Pi 5, 64-bit Raspberry Pi OS, ARM64 archive |
 
-The release builds are currently unsigned. Cross-compiling the non-macOS server archives requires
-the Rust targets used by the build script, `zig`, and `cargo-zigbuild`. Native device and protocol
-integrations run as separately approved extension packages; OSC and network output remain built in.
+The macOS testing applications are ad-hoc signed so Gatekeeper can verify that each completed app
+bundle is intact, but they are not yet Apple Developer-ID signed or notarized. The other release
+builds are unsigned. Cross-compiling the non-macOS server archives requires the Rust targets used
+by the build script, `zig`, and `cargo-zigbuild`. Native device and protocol integrations run as
+separately approved extension packages; OSC and network output remain built in.
 
 ## How ToskLight is structured
 

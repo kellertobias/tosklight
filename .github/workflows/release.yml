@@ -865,6 +865,13 @@ jobs:
           node tools/write-tauri-artifact-config.mjs control "$config"
           npm run --prefix apps/light-desktop tauri:build -- --target ${{ matrix.target }} --config "$config"
 
+      - name: Seal the completed macOS Desk bundle
+        if: matrix.desktop && matrix.slug == 'macos-arm64'
+        shell: bash
+        run: >-
+          bash tools/seal-macos-app.sh
+          ".artifacts/build/cargo/${{ matrix.target }}/release/bundle/macos/ToskLight.app"
+
       - name: Smoke-test the built desktop application
         if: matrix.desktop
         shell: bash
@@ -986,6 +993,8 @@ jobs:
               bash tools/bundle-visualizer-macos.sh "$release/viz-renderer" "$bundle/macos"
               cp "$release/light-headless" \
                 "$bundle/macos/ToskLight Visualizer.app/Contents/MacOS/light-headless"
+              bash tools/seal-macos-app.sh \
+                "$bundle/macos/ToskLight Visualizer.app"
               ditto -c -k --sequesterRsrc --keepParent \
                 "$bundle/macos/ToskLight Visualizer.app" \
                 "$out/tosklight-visualizer-$version-macos-arm64.zip"
@@ -994,6 +1003,8 @@ jobs:
               resources="$bundle/macos/ToskLight Viz Editor.app/Contents/Resources"
               rm -rf -- "$resources/ToskLight Visualizer.app"
               cp -R "$bundle/macos/ToskLight Visualizer.app" "$resources/"
+              bash tools/seal-macos-app.sh \
+                "$bundle/macos/ToskLight Viz Editor.app"
               ditto -c -k --sequesterRsrc --keepParent \
                 "$bundle/macos/ToskLight Viz Editor.app" "$out/tosklight-viz-$version-macos-arm64.zip"
               ;;
@@ -1255,6 +1266,8 @@ jobs:
             unzip -Z1 .artifacts/release/tosklight-bundle-macos_arm64.zip |
               grep -F "tosklight-desk-macos_arm64.app/Contents/MacOS/$helper" >/dev/null
           done
+          unzip -Z1 .artifacts/release/tosklight-bundle-macos_arm64.zip |
+            grep -F "macos-first-start.txt" >/dev/null
           unzip -Z1 .artifacts/release/tosklight-bundle-linux_amd64.zip |
             grep -E '/light-benchmark$' >/dev/null
           (cd .artifacts/release && sha256sum * > report-checksums.txt)

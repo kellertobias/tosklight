@@ -621,6 +621,7 @@ function pulse() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Duration;
 
     #[test]
     fn the_demo_scene_contains_beam_pixel_and_atmosphere_emitters() {
@@ -645,7 +646,12 @@ mod tests {
     /// checked to arrive in turn.
     #[test]
     fn the_built_in_laser_cycles_through_its_three_figures() {
-        let mut engine = viz_laser::ScanEngine::new().expect("a scan runtime");
+        // This checks the built-in figure sequence, not the production execution deadline. The
+        // laser crate tests that deadline independently; a busy shared CI runner must not turn a
+        // correct figure into a wall-clock scheduling failure here.
+        let mut engine = viz_laser::ScanEngine::new()
+            .expect("a scan runtime")
+            .with_budget(Duration::from_millis(100));
         // A frame every sixtieth of a second, as the renderer runs it, for long enough to see
         // every figure hold and the first come back around.
         let frames = (0..(60 * 7 * 4)).map(|frame| {

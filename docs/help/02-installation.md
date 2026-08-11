@@ -4,11 +4,16 @@ ToskLight ships as a desktop application with its own Light server, and as stand
 
 ## Desktop application
 
-1. Download the macOS ToskLight application archive from the matching GitHub release.
-2. Expand the ZIP and move **ToskLight.app** to Applications.
+1. Download `tosklight-bundle-macos_arm64.zip` from the matching GitHub release.
+2. Expand the ZIP and move **tosklight-desk-macos_arm64.app** to Applications.
 3. Open the application. The bundled server uses `127.0.0.1:5000` and stores desk data in the application data location.
-4. If macOS blocks an unsigned development build, verify that the archive came from the expected GitHub release before using the Finder **Open** confirmation.
+4. The testing build is ad-hoc signed for bundle integrity, but is not yet Developer-ID signed or notarized. Verify that the archive came from the expected GitHub release, then Control-click the application in Finder, choose **Open**, and confirm **Open**. If directed to System Settings, use **Privacy & Security > Open Anyway** for ToskLight.
 5. Open **Desk Setup > Network & Inputs** and confirm the active server URL.
+
+Do not remove quarantine attributes or re-sign the downloaded application. If macOS reports that
+it is damaged instead of offering the approval path above, verify the ZIP against
+`report-checksums.txt` and use the newest release; that message indicates a release-integrity bug.
+The archive also includes `macos-first-start.txt` beside the applications for offline reference.
 
 The separate **ToskLight Hardware Controls** application is used for the attached hardware-control surface when that artifact is included in the release.
 

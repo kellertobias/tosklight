@@ -107,6 +107,30 @@ test("release Desk bundles both supervised helpers before packaging", () => {
 	assert.match(smoke, /api\/v2\/readiness/u);
 });
 
+test("macOS release apps are sealed only after their final helpers and resources", () => {
+	const workflow = read(".github/workflows/release.yml");
+	const assembler = read("tools/assemble-release-bundle.sh");
+	const sealer = read("tools/seal-macos-app.sh");
+	const desktopBuild = workflow.indexOf(
+		"- name: Build the ToskLight desktop application",
+	);
+	const desktopSeal = workflow.indexOf(
+		"- name: Seal the completed macOS Desk bundle",
+	);
+	const desktopSmoke = workflow.indexOf(
+		"- name: Smoke-test the built desktop application",
+	);
+
+	assert.ok(desktopBuild >= 0 && desktopBuild < desktopSeal);
+	assert.ok(desktopSeal < desktopSmoke);
+	assert.match(sealer, /codesign --force --deep --sign - --timestamp=none/u);
+	assert.match(sealer, /codesign --verify --deep --strict/u);
+	assert.match(workflow, /ToskLight Visualizer\.app[\s\S]*seal-macos-app\.sh/u);
+	assert.match(workflow, /ToskLight Viz Editor\.app[\s\S]*seal-macos-app\.sh/u);
+	assert.match(assembler, /codesign --verify --deep --strict/u);
+	assert.match(assembler, /macos-first-start\.txt/u);
+});
+
 test("the Viz release builds only the bundle format its staging step consumes", () => {
 	const workflow = read(".github/workflows/release.yml");
 	const frontendStart = workflow.indexOf(
