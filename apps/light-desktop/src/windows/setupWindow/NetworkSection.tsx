@@ -104,8 +104,12 @@ function NetworkInputs({ controller }: { controller: SetupWindowController }) {
 								</div>
 							))}
 							{extensions.instance_diagnostics.map((diagnostic) => (
-								<p key={`${diagnostic.instance_id}:${diagnostic.code}`} role="alert">
-									{diagnostic.instance_id} · {diagnostic.code}: {diagnostic.detail}
+								<p
+									key={`${diagnostic.instance_id}:${diagnostic.code}`}
+									role="alert"
+								>
+									{diagnostic.instance_id} · {diagnostic.code}:{" "}
+									{diagnostic.detail}
 								</p>
 							))}
 						</details>
@@ -144,53 +148,62 @@ export function NetworkSection({
 	return (
 		<>
 			<h2>Network &amp; Inputs</h2>
-			<section
-				className="network-settings-group"
-				aria-labelledby="network-connection"
-			>
-				<h3 id="network-connection">ToskLight server connection</h3>
-				<FormLayout className="configuration-form" labelPlacement="side">
-					<TextField
-						label="Light server URL"
-						value={controller.serverUrl}
-						onChange={(event) => controller.setServerUrl(event.target.value)}
-						description="Tauri can use this desk or a remote Light server."
-					/>
-					<FormField label="">
-						<Button
-							onClick={() => controller.applyServerUrl(controller.serverUrl)}
-						>
-							Connect to server
-						</Button>
-					</FormField>
-				</FormLayout>
-				<div className="setup-cards">
-					<section>
-						<b>{configuredServerUrl()}</b>
-						<small>Active REST and WebSocket server</small>
-					</section>
-					<section>
-						<b>REST /api/v2</b>
-						<small>Initial and coarse-grained state</small>
-					</section>
-					<section>
-						<b>WebSocket connected</b>
-						<small>Live events and control</small>
-					</section>
-				</div>
-			</section>
-			<NetworkInputs controller={controller} />
-			<section className="network-settings-group" aria-labelledby="sound-input">
-				<h3 id="sound-input">Sound input</h3>
-				<SoundInputSettings />
-			</section>
-			<section
-				className="network-settings-group"
-				aria-labelledby="matter-bridge"
-			>
-				<h3 id="matter-bridge">Matter bridge</h3>
-				<MatterBridgeSettings />
-			</section>
+			<div hidden={controller.networkTab !== "control-server"}>
+				<section
+					className="network-settings-group"
+					aria-labelledby="network-connection"
+				>
+					<h3 id="network-connection">ToskLight server connection</h3>
+					<FormLayout className="configuration-form" labelPlacement="side">
+						<TextField
+							label="Light server URL"
+							value={controller.serverUrl}
+							onChange={(event) => controller.setServerUrl(event.target.value)}
+							description="Tauri can use this desk or a remote Light server."
+						/>
+						<FormField label="">
+							<Button
+								onClick={() => controller.applyServerUrl(controller.serverUrl)}
+							>
+								Connect to server
+							</Button>
+						</FormField>
+					</FormLayout>
+					<div className="setup-cards">
+						<section>
+							<b>{configuredServerUrl()}</b>
+							<small>Active REST and WebSocket server</small>
+						</section>
+						<section>
+							<b>REST /api/v2</b>
+							<small>Initial and coarse-grained state</small>
+						</section>
+						<section>
+							<b>WebSocket connected</b>
+							<small>Live events and control</small>
+						</section>
+					</div>
+				</section>
+				<NetworkInputs controller={controller} />
+			</div>
+			<div hidden={controller.networkTab !== "sound"}>
+				<section
+					className="network-settings-group"
+					aria-labelledby="sound-input"
+				>
+					<h3 id="sound-input">Sound input</h3>
+					<SoundInputSettings />
+				</section>
+			</div>
+			<div hidden={controller.networkTab !== "bridges"}>
+				<section
+					className="network-settings-group"
+					aria-labelledby="matter-bridge"
+				>
+					<h3 id="matter-bridge">Matter bridge</h3>
+					<MatterBridgeSettings />
+				</section>
+			</div>
 		</>
 	);
 }

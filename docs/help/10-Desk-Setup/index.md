@@ -14,13 +14,12 @@ Work through these pages in order:
 4. [Operators, Sessions, and Recovery](04-users-sessions-and-recovery.md)
 5. [Media Server](05-media-server.md)
 
-**Preferences** contains the focused **Defaults**, **Attributes & encoders**, **Highlight**, and **Others** pages. Operator switching is available from **Show > Change User**, not from Desk Setup.
+**Preferences** contains the focused **Defaults**, **Attributes & encoders**, **Highlight**, and **Others** pages. **Defaults** selects **Record & Update**, **Playback**, or **Pools** from the window title. Switching these tabs keeps unfinished field edits in place; **Save changes** retains the existing ownership of each setting. Operator switching is available from **Show > Change User**, not from Desk Setup.
 
 **Attributes & encoders** selects its section from the window title: **Encoder groups**, **Attribute
 activation groups**, and **Attributes**.
 
-**Encoder groups** edits the live encoder layout at the width configured in Screens & playback →
-Encoder placement. There is no separate read-only preview: this page is the layout. Every encoder
+**Encoder groups** edits the live encoder layout at the width configured with **Screens & playback → Configure encoder placement**. There is no separate read-only preview: this page is the layout. Every encoder
 group has its own section, headed with how many encoders and pages it holds, and each page inside it
 shows one slot per encoder. An empty slot is drawn dimmed and dashed; choose **Assign attribute** on
 it to place an attribute that currently has no encoder.

@@ -2,6 +2,7 @@ import { ModalRegistration, ModalTitleBar } from "@tosklight/ui";
 import { useMemo, useState } from "react";
 import { DeskLockSettingsModal } from "../../components/setup/DeskLockSettingsModal";
 import { FixtureLibrarySetup } from "../../components/setup/FixtureLibrarySetup";
+import { ProgrammerControlSurfaceSettings } from "../../components/setup/ScreensSetup";
 import {
 	fixtureDefinitionsFromProfiles,
 	mergeFixtureDefinitions,
@@ -90,6 +91,33 @@ function FixtureLibraryDialog({ onClose }: { onClose: () => void }) {
 	);
 }
 
+function EncoderPlacementDialog({ onClose }: { onClose: () => void }) {
+	return (
+		<ModalRegistration onClose={onClose}>
+			<div
+				className="stacked-modal-layer"
+				onPointerDown={(event) =>
+					event.target === event.currentTarget && onClose()
+				}
+			>
+				<section
+					className="nested-modal"
+					role="dialog"
+					aria-modal="true"
+					aria-label="Encoder placement"
+				>
+					<ModalTitleBar
+						title="Encoder placement"
+						closeLabel="Close encoder placement"
+						onClose={onClose}
+					/>
+					<ProgrammerControlSurfaceSettings />
+				</section>
+			</div>
+		</ModalRegistration>
+	);
+}
+
 export function SetupDialogs({
 	controller,
 }: {
@@ -105,6 +133,11 @@ export function SetupDialogs({
 			{controller.deskLockSettingsOpen && (
 				<DeskLockSettingsModal
 					onClose={() => controller.setDeskLockSettingsOpen(false)}
+				/>
+			)}
+			{controller.encoderPlacementOpen && (
+				<EncoderPlacementDialog
+					onClose={() => controller.setEncoderPlacementOpen(false)}
 				/>
 			)}
 		</>

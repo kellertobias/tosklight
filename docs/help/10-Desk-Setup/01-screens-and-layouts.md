@@ -10,7 +10,7 @@ Choose **Choose default screen** to see every known client. Connected clients ap
 
 A disconnected historical client can be removed with **Remove client** and a named confirmation. The current client and any client or screen configuration with an active session cannot be removed. Removal clears that client's registration, default-screen configuration, per-show page and playback selection, desk lock, and Update defaults. It does not change portable shows, users, optional screens, other clients, installation-wide configuration, Virtual Playback assignments, or show-owned exclusion zones. If the same removed client identity reconnects later, ToskLight registers it with a new default screen configuration instead of restoring the deleted settings.
 
-Choose **Desk Lock** in the Screens & playback title bar to open its configuration modal. Set the lock message, unlock control, and optional wallpaper, then choose **Save Lock Configuration** in the modal title bar. The Show menu's **Lock Desk** action applies that saved configuration.
+Choose **Configure desk lock** in the Screens & playback title bar to open its configuration modal. Set the lock message, unlock control, and optional wallpaper, then choose **Save Lock Configuration** in the modal title bar. The Show menu's **Lock Desk** action applies that saved configuration.
 
 The Tauri desktop application can add optional screens. Each optional screen can use its normal
 configurable **Desktop** or a **Fixed full-screen pane**. A fixed pane fills the screen's pane
@@ -67,7 +67,7 @@ The rest of the desk keeps running. Pressing **X** on the main window quits Tosk
 
 ## Encoder placement
 
-**Encoder placement** decides which screen carries the encoder section, independently of the
+Choose **Configure encoder placement** in the Screens & playback title bar. Its **Encoder placement** modal decides which screen carries the encoder section, independently of the
 Playback controls. Choose **Encoders on** to select the main screen or any optional screen, and
 **Visible encoders** to show four or six software encoders; attached hardware always keeps its six.
 
@@ -75,7 +75,7 @@ The main screen keeps its whole programmer whatever the placement is. While the 
 another screen, the main screen still carries its command line, its keypad and its Delete and Move
 tools, and its Programmer/Playback toggle stays available; only the encoder pane itself moves, and
 it names the screen the encoders went to. It does not announce the placement anywhere else; the
-setting you made stays out of the way. If the chosen screen is closed, **Setup → Screens** shows
+setting you made stays out of the main screen list. If the chosen screen is closed, the same modal shows
 the placement warning and offers **Use encoders on this screen** to take the encoders back in one
 explicit action.
 

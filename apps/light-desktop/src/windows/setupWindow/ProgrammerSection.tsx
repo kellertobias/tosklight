@@ -332,30 +332,36 @@ export function DefaultsSection({
 }) {
 	return (
 		<PreferencesPage title="Defaults" controller={controller}>
-			<article>
-				<header>
-					<b>Record defaults</b>
-					<small>Also available by holding Record.</small>
-				</header>
-				<RecordDefaultsFields
-					settings={controller.recordSettings}
-					onChange={controller.setRecordSettings}
-				/>
-			</article>
-			<article>
-				<header>
-					<b>Update defaults</b>
-					<small>Also available by holding Update.</small>
-				</header>
-				<UpdateDefaultsFields
-					settings={controller.updateSettings}
-					onChange={controller.setUpdateSettings}
-				/>
-			</article>
-			<PlaybackDefaultsSettings controller={controller} />
-			<article>
-				<PoolPaletteSettings />
-			</article>
+			<div hidden={controller.defaultsTab !== "record-update"}>
+				<article>
+					<header>
+						<b>Record defaults</b>
+						<small>Also available by holding Record.</small>
+					</header>
+					<RecordDefaultsFields
+						settings={controller.recordSettings}
+						onChange={controller.setRecordSettings}
+					/>
+				</article>
+				<article>
+					<header>
+						<b>Update defaults</b>
+						<small>Also available by holding Update.</small>
+					</header>
+					<UpdateDefaultsFields
+						settings={controller.updateSettings}
+						onChange={controller.setUpdateSettings}
+					/>
+				</article>
+			</div>
+			<div hidden={controller.defaultsTab !== "playback"}>
+				<PlaybackDefaultsSettings controller={controller} />
+			</div>
+			<div hidden={controller.defaultsTab !== "pools"}>
+				<article>
+					<PoolPaletteSettings />
+				</article>
+			</div>
 		</PreferencesPage>
 	);
 }

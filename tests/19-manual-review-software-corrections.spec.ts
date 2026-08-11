@@ -204,7 +204,9 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
 
     await desk.recordStep("WALLPAPER FILE PICKER", "Desk Lock wallpaper selection stays inside configured roots and accepts browser image formats only.");
 	await setupNav.getByRole("button", { name: "Screens & playback", exact: true }).click();
-	await page.getByRole("button", { name: "Desk Lock", exact: true }).click();
+	await page
+		.getByRole("button", { name: "Configure desk lock", exact: true })
+		.click();
     await page.getByRole("button", { name: "Choose lock wallpaper", exact: true }).click();
     await expectPickerConstraint(page, files.invalid, files.wallpaper);
 
