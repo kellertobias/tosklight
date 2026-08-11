@@ -56,6 +56,39 @@ function useDeskConfigurationDraft(configuration: DeskConfiguration | null) {
 	return { draft, setDraft, pendingSave, dirtyFields };
 }
 
+function useAttributeConfigurationSetup(
+	actions: ReturnType<typeof useAttributeConfigurationActions>,
+	section: SetupSection,
+) {
+	const [configuration, setConfiguration] =
+		useState<AttributeConfigurationSnapshot | null>(null);
+	const [error, setError] = useState<string | null>(null);
+	const saved = useRef<AttributeConfigurationSnapshot | null>(null);
+	useEffect(() => {
+		if (section !== "preferences-attributes") return;
+		let active = true;
+		setError(null);
+		void actions
+			?.load()
+			.then((snapshot) => {
+				if (!active) return;
+				saved.current = snapshot;
+				setConfiguration(snapshot);
+				setError(snapshot.validation_error);
+			})
+			.catch((reason) => {
+				if (!active) return;
+				setConfiguration(null);
+				setError(errorMessage(reason));
+			});
+		if (!actions) setError("Show attribute configuration is unavailable.");
+		return () => {
+			active = false;
+		};
+	}, [actions, section]);
+	return { configuration, setConfiguration, error, setError, saved };
+}
+
 export function useSetupWindowController() {
 	const connection = useDeskConnection();
 	const configurationActions = useConfigurationActions();
@@ -74,10 +107,13 @@ export function useSetupWindowController() {
 		programmerSettingsError,
 		setProgrammerSettingsError,
 	} = useProgrammerSetupSettings(programmingUpdate, section);
-	const [attributeConfiguration, setAttributeConfiguration] =
-		useState<AttributeConfigurationSnapshot | null>(null);
-	const [attributeConfigurationError, setAttributeConfigurationError] =
-		useState<string | null>(null);
+	const {
+		configuration: attributeConfiguration,
+		setConfiguration: setAttributeConfiguration,
+		error: attributeConfigurationError,
+		setError: setAttributeConfigurationError,
+		saved: savedAttributeConfiguration,
+	} = useAttributeConfigurationSetup(attributeActions, section);
 	const [restartRequired, setRestartRequired] = useState(false);
 	const [serverUrl, setServerUrl] = useState(configuredServerUrl());
 	const [fixtureLibraryOpen, setFixtureLibraryOpen] = useState(false);
@@ -91,34 +127,6 @@ export function useSetupWindowController() {
 	const [defaultsTab, setDefaultsTab] =
 		useState<DefaultsSettingsTab>("record-update");
 	const screenUndo = useRef<(() => void) | null>(null);
-	const savedAttributeConfiguration =
-		useRef<AttributeConfigurationSnapshot | null>(null);
-
-	useEffect(() => {
-		if (section !== "preferences-attributes") return;
-		let active = true;
-		setAttributeConfigurationError(null);
-		void attributeActions
-			?.load()
-			.then((snapshot) => {
-				if (!active) return;
-				savedAttributeConfiguration.current = snapshot;
-				setAttributeConfiguration(snapshot);
-				setAttributeConfigurationError(snapshot.validation_error);
-			})
-			.catch((reason) => {
-				if (!active) return;
-				setAttributeConfiguration(null);
-				setAttributeConfigurationError(errorMessage(reason));
-			});
-		if (!attributeActions)
-			setAttributeConfigurationError(
-				"Show attribute configuration is unavailable.",
-			);
-		return () => {
-			active = false;
-		};
-	}, [attributeActions, section]);
 
 	const editDraft = (next: DeskConfiguration) => {
 		if (draft)
