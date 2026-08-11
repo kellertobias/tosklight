@@ -308,6 +308,61 @@ fn plot_prefers_packaged_artwork_before_renderer_fallbacks() {
     assert_ne!(unknown.lines.len(), generic_lines);
 }
 
+#[test]
+fn shipped_profile_svg_reaches_the_literal_plan_artwork_mesh() {
+    let package = std::fs::read(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../../assets/fixture-library/generic--dimmer-profile.toskfixture"
+    ))
+    .expect("shipped fixture package");
+    let profile = light_fixture::read_fixture_package(&package).expect("valid shipped package");
+    let mode_id = profile.modes[0].id;
+    let fixture_id = uuid::Uuid::new_v4();
+    let plan = viz_project::compile(&[viz_project::PatchedFixture {
+        fixture_id,
+        name: "Shipped Dimmer Profile".into(),
+        number: Some(101),
+        profile: std::sync::Arc::new(profile),
+        mode_id,
+        instances: vec![viz_project::PhysicalInstance {
+            instance_id: uuid::Uuid::new_v4(),
+            name: "Shipped Dimmer Profile".into(),
+            split_patches: vec![(1, Some((1, 1)))],
+            position: Vec3::new(0.0, 6.0, 0.0),
+            rotation_degrees: Vec3::ZERO,
+            invert_pan: false,
+            invert_tilt: false,
+            bracket_angle: 0.0,
+            shaper_angle: None,
+            installed_appearance: light_fixture::InstalledFixtureAppearance::default(),
+        }],
+    }]);
+    let binding = plan
+        .scene
+        .fixture_plan
+        .iter()
+        .find(|binding| binding.fixture_id == fixture_id)
+        .expect("shipped fixture has a plan binding");
+    assert!(binding.artwork.iter().all(Option::is_some));
+    assert_eq!(plan.scene.plan_artwork.len(), 5);
+
+    let instances = build(
+        &plan.scene,
+        &SceneValues::default(),
+        &FrameStyle {
+            plot: true,
+            projection_view: viz_scene::ProjectionView::Top,
+            ..FrameStyle::default()
+        },
+    );
+    assert!(
+        instances
+            .meshes
+            .iter()
+            .any(|(kind, drawn)| { matches!(kind, MeshKind::PlanArtwork(_)) && drawn.len() == 1 })
+    );
+}
+
 fn emitter() -> EmitterInstance {
     EmitterInstance {
         fixture_index: 0,

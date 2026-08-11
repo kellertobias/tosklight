@@ -1,411 +1,263 @@
-import { Button, ModalPortal, ModalTitleBar } from "@tosklight/ui";
 import {
-	type MouseEvent as ReactMouseEvent,
-	useEffect,
-	useLayoutEffect,
-	useRef,
-	useState,
-} from "react";
+	Button,
+	ModalPortal,
+	ModalTitleBar,
+	NumberField,
+	SelectField,
+} from "@tosklight/ui";
+import { type Dispatch, type SetStateAction, useState } from "react";
 import type { Cue } from "../../api/types";
-import { useControlSurfaceTarget } from "../../features/controlSurfaceInteraction/useControlSurfaceTarget";
-import {
-	type CueDraftActions,
-	type CueKeyboardField,
-	CuePropertyFields,
-} from "./CuePropertyFields";
-import { cueTrigger, cueTriggerKind, formatCueSeconds } from "./cueFormatting";
+import type { CueEditableProperty } from "./CueTable";
+import { cueTrigger, cueTriggerKind } from "./cueFormatting";
 
-function useCuePropertiesLayout(active: boolean, dependencies: unknown[]) {
-	const propertiesRef = useRef<HTMLElement>(null);
-	const previewRef = useRef<HTMLElement>(null);
-	const gridRef = useRef<HTMLDivElement>(null);
-	const [fieldsFit, setFieldsFit] = useState(true);
-	const [setArmed, setSetArmed] = useState(false);
-	useLayoutEffect(() => {
-		const aside = propertiesRef.current;
-		const preview = previewRef.current;
-		const fields = gridRef.current;
-		if (!aside || !preview || !fields) return;
-		const measure = () => {
-			if (aside.clientHeight <= 0 || fields.scrollHeight <= 0) return;
-			const style = getComputedStyle(aside);
-			const available =
-				aside.clientHeight -
-				Number.parseFloat(style.paddingTop || "0") -
-				Number.parseFloat(style.paddingBottom || "0");
-			const gap = Number.parseFloat(style.rowGap || style.gap || "0");
-			setFieldsFit(
-				preview.offsetHeight + gap + fields.scrollHeight <= available + 1,
-			);
-		};
-		if (typeof ResizeObserver === "undefined") {
-			measure();
-			return;
-		}
-		const observer = new ResizeObserver(measure);
-		observer.observe(aside);
-		observer.observe(preview);
-		observer.observe(fields);
-		measure();
-		return () => observer.disconnect();
-	}, dependencies);
-	useEffect(() => {
-		if (fieldsFit) setSetArmed(false);
-	}, [fieldsFit]);
-	useControlSurfaceTarget(
-		!fieldsFit && active
-			? {
-					id: "compact-cue-properties",
-					priority: 300,
-					accepts: ({ type }) => type === "set",
-					handle: () => setSetArmed((armed) => !armed),
-				}
-			: null,
-	);
-	return {
-		propertiesRef,
-		previewRef,
-		gridRef,
-		fieldsFit,
-		setArmed,
-		setSetArmed,
-	};
+const propertyLabels: Record<CueEditableProperty, string> = {
+	trigger: "Trigger",
+	triggerTime: "Trigger Time",
+	inDelay: "In Delay",
+	inFade: "In Fade",
+	outDelay: "Out Delay",
+	outFade: "Out Fade",
+};
+
+const timingKeys = {
+	inDelay: "delay_millis",
+	inFade: "fade_millis",
+	outDelay: "out_delay_millis",
+	outFade: "out_fade_millis",
+} as const;
+
+type TimingProperty = Exclude<CueEditableProperty, "trigger" | "triggerTime">;
+
+function timingValue(cue: Cue, property: TimingProperty) {
+	const fallback = property === "outFade" ? cue.fade_millis : cue.delay_millis;
+	return Number(cue[timingKeys[property]] ?? fallback) / 1000;
 }
 
-function CompactCueProperties({
-	actions,
-	cues,
-	setArmed,
-	onDisarm,
-	onOpenInput,
-	onOpenTrigger,
-}: {
-	actions: CueDraftActions;
-	cues: Cue[];
-	setArmed: boolean;
-	onDisarm: () => void;
-	onOpenInput: (field: CueKeyboardField, direct?: boolean) => void;
-	onOpenTrigger: () => void;
-}) {
-	const kind = cueTriggerKind(actions.draft);
-	const triggerMillis = Number(actions.draft.trigger.delay_millis ?? 0);
-	const openDirect = (field: CueKeyboardField) => (event: ReactMouseEvent) => {
-		event.preventDefault();
-		onOpenInput(field, true);
-	};
-	return (
-		<section
-			className="cue-settings-compact-fallback"
-			data-set-armed={setArmed || undefined}
-		>
-			<p>
-				{setArmed
-					? "SET is active. Press an attribute value to edit it."
-					: "Press SET, then press an attribute value to edit it."}
-			</p>
-			<div>
-				<Button
-					aria-label="Set Cue Title"
-					active={setArmed}
-					onClick={() => onOpenInput("title")}
-					onContextMenu={openDirect("title")}
-				>
-					<small>Title</small>
-					<b>{actions.draft.name || "Untitled"}</b>
-				</Button>
-				<Button
-					aria-label="Set Cue Intensity In Fade"
-					active={setArmed}
-					onClick={() => onOpenInput("fade")}
-					onContextMenu={openDirect("fade")}
-				>
-					<small>In Fade</small>
-					<b>{formatCueSeconds(actions.draft.fade_millis)}</b>
-				</Button>
-				<Button
-					aria-label="Set Cue Intensity In Delay"
-					active={setArmed}
-					onClick={() => onOpenInput("delay")}
-					onContextMenu={openDirect("delay")}
-				>
-					<small>In Delay</small>
-					<b>{formatCueSeconds(actions.draft.delay_millis)}</b>
-				</Button>
-				<Button
-					aria-label="Set Cue Intensity Out Fade"
-					active={setArmed}
-					onClick={() => onOpenInput("outFade")}
-					onContextMenu={openDirect("outFade")}
-				>
-					<small>Out Fade</small>
-					<b>
-						{formatCueSeconds(
-							actions.draft.out_fade_millis ?? actions.draft.fade_millis,
-						)}
-					</b>
-				</Button>
-				<Button
-					aria-label="Set Cue Intensity Out Delay"
-					active={setArmed}
-					onClick={() => onOpenInput("outDelay")}
-					onContextMenu={openDirect("outDelay")}
-				>
-					<small>Out Delay</small>
-					<b>
-						{formatCueSeconds(
-							actions.draft.out_delay_millis ?? actions.draft.delay_millis,
-						)}
-					</b>
-				</Button>
-				<Button
-					aria-label="Set Cue Trigger"
-					active={setArmed}
-					onClick={() => {
-						if (!setArmed) return;
-						onDisarm();
-						onOpenTrigger();
-					}}
-					onContextMenu={(event) => {
-						event.preventDefault();
-						onDisarm();
-						onOpenTrigger();
-					}}
-				>
-					<small>Trigger</small>
-					<b>{kind.toUpperCase()}</b>
-				</Button>
-				{kind === "link" && (
-					<Button
-						aria-label="Set Cue Link destination"
-						active={setArmed}
-						onClick={() => {
-							if (!setArmed) return;
-							onDisarm();
-							onOpenTrigger();
-						}}
-						onContextMenu={(event) => {
-							event.preventDefault();
-							onDisarm();
-							onOpenTrigger();
-						}}
-					>
-						<small>Link Cue</small>
-						<b>
-							{cues.find((cue) => cue.id === actions.draft.trigger.cue_id)
-								?.number ?? "Missing"}
-						</b>
-					</Button>
-				)}
-				{(kind === "time" || kind === "link") && (
-					<Button
-						aria-label={
-							kind === "link" ? "Set Cue Link delay" : "Set Cue Trigger time"
-						}
-						active={setArmed}
-						onClick={() => onOpenInput("triggerTime")}
-						onContextMenu={openDirect("triggerTime")}
-					>
-						<small>{kind === "link" ? "Link delay" : "Trigger time"}</small>
-						<b>{formatCueSeconds(triggerMillis)}</b>
-					</Button>
-				)}
-			</div>
-		</section>
-	);
+function validCueDraft(cue: Cue, property: CueEditableProperty) {
+	const triggerMillis = Number(cue.trigger.delay_millis ?? 0);
+	return [
+		cue.fade_millis,
+		cue.delay_millis,
+		cue.out_fade_millis ?? 0,
+		cue.out_delay_millis ?? 0,
+		property === "triggerTime" ? triggerMillis : 0,
+	].every((value) => Number.isSafeInteger(value) && value >= 0);
 }
 
-function CueTriggerModal({
-	actions,
+function CueTriggerPropertyField({
+	draft,
+	setDraft,
 	cues,
-	close,
 }: {
-	actions: CueDraftActions;
+	draft: Cue;
+	setDraft: Dispatch<SetStateAction<Cue>>;
 	cues: Cue[];
-	close: () => void;
 }) {
-	const triggerDescriptions = {
-		go: "Wait for a manual GO.",
-		follow: "Start after the preceding Cue has finished.",
-		time: "Start after this time from the preceding Cue's GO.",
-		timecode: "Start when external timecode reaches this Cue's frame.",
-		link: "After this Cue finishes, jump to the selected Cue after its delay.",
-	} as const;
-	const kind = cueTriggerKind(actions.draft);
-	const triggerMillis = Number(actions.draft.trigger.delay_millis ?? 0);
+	const kind = cueTriggerKind(draft);
 	const linkCandidates = cues.filter(
-		(cue) => cue.id && cue.id !== actions.draft.id,
+		(candidate) => candidate.id && candidate.id !== draft.id,
 	);
-	const choose = (value: "go" | "follow" | "time" | "timecode" | "link") => {
-		const next = {
-			...actions.draft,
-			trigger: cueTrigger(
-				value,
-				triggerMillis,
-				String(actions.draft.trigger.cue_id ?? linkCandidates[0]?.id ?? ""),
-				Number(actions.draft.trigger.frame ?? 0),
-			),
-		};
-		actions.setDraft(next);
-		close();
-		void actions.save(next);
-	};
-	const chooseDestination = (cueId: string) => {
-		const next = {
-			...actions.draft,
-			trigger: cueTrigger("link", triggerMillis, cueId),
-		};
-		actions.setDraft(next);
-		close();
-		void actions.save(next);
-	};
-	return (
-		<ModalPortal onClose={close}>
-			<div
-				className="stacked-modal-layer"
-				onPointerDown={(event) =>
-					event.target === event.currentTarget && close()
-				}
-			>
-				<section
-					className="nested-modal cue-trigger-modal"
-					role="dialog"
-					aria-modal="true"
-					aria-label="Cue Trigger"
-				>
-					<ModalTitleBar
-						title="Cue Trigger"
-						closeLabel="Close Cue Trigger"
-						onClose={close}
-					/>
-					<div className="cue-trigger-options">
-						{(
-							[
-								"go",
-								"follow",
-								"time",
-								"timecode",
-								...(linkCandidates.length > 0 ? (["link"] as const) : []),
-							] as const
-						).map((value) => (
-							<Button
-								key={value}
-								active={kind === value}
-								onClick={() => choose(value)}
-							>
-								<span>{value.toUpperCase()}</span>
-								<small>{triggerDescriptions[value]}</small>
-							</Button>
-						))}
-					</div>
-					{kind === "link" && (
-						<div
-							className="cue-trigger-options"
-							role="group"
-							aria-label="Link destination"
-						>
-							{linkCandidates.map((cue) => (
-								<Button
-									key={cue.id}
-									active={cue.id === actions.draft.trigger.cue_id}
-									onClick={() => chooseDestination(cue.id as string)}
-								>
-									{`Cue ${cue.number}${cue.name ? ` · ${cue.name}` : ""}`}
-								</Button>
-							))}
-						</div>
-					)}
-				</section>
-			</div>
-		</ModalPortal>
+	const linkedCueId = String(
+		draft.trigger.cue_id ?? linkCandidates[0]?.id ?? "",
 	);
-}
-
-export function CueProperties({
-	actions,
-	cues,
-	thumbnail,
-	editError,
-	active,
-	layoutDependencies,
-}: {
-	actions: CueDraftActions;
-	cues: Cue[];
-	thumbnail: string | undefined;
-	editError: string;
-	active: boolean;
-	layoutDependencies: unknown[];
-}) {
-	const refs = {
-		title: useRef<HTMLInputElement>(null),
-		fade: useRef<HTMLInputElement>(null),
-		delay: useRef<HTMLInputElement>(null),
-		outFade: useRef<HTMLInputElement>(null),
-		outDelay: useRef<HTMLInputElement>(null),
-		triggerTime: useRef<HTMLInputElement>(null),
-		triggerPicker: useRef<HTMLDivElement>(null),
-		grid: useRef<HTMLDivElement>(null),
-	};
-	const layout = useCuePropertiesLayout(active, layoutDependencies);
-	refs.grid = layout.gridRef;
-	const [triggerModalOpen, setTriggerModalOpen] = useState(false);
-	const [keyboardRequests, setKeyboardRequests] = useState<
-		Partial<Record<CueKeyboardField, number>>
-	>({});
-	const openInput = (field: CueKeyboardField, direct = false) => {
-		if (!layout.setArmed && !direct) return;
-		layout.setSetArmed(false);
-		setKeyboardRequests((requests) => ({
-			...requests,
-			[field]: (requests[field] ?? 0) + 1,
-		}));
-	};
+	const triggerMillis = Number(draft.trigger.delay_millis ?? 0);
 	return (
 		<>
-			<aside
-				ref={layout.propertiesRef}
-				className={`sequence-actions cue-properties ${layout.fieldsFit ? "" : "compact-cue-settings"}`.trim()}
-			>
-				<section ref={layout.previewRef} className="cue-selected-preview">
-					{thumbnail && (
-						<img
-							className="cue-selected-thumbnail"
-							src={thumbnail}
-							alt={`3D preview for Cue ${actions.draft.number}`}
-						/>
-					)}
-					<b className="cue-selected-label">
-						Selected Cue · {actions.draft.number}
-					</b>
-				</section>
-				<CuePropertyFields
-					actions={actions}
-					cues={cues}
-					refs={refs}
-					keyboardRequests={keyboardRequests}
+			<SelectField
+				label="Trigger"
+				value={kind}
+				onChange={(value) =>
+					setDraft({
+						...draft,
+						trigger: cueTrigger(
+							value,
+							triggerMillis,
+							linkedCueId,
+							Number(draft.trigger.frame ?? 0),
+						),
+					})
+				}
+				options={[
+					{ value: "go", label: "GO" },
+					{ value: "follow", label: "FOLLOW" },
+					{ value: "time", label: "TIME" },
+					{ value: "timecode", label: "TIMECODE" },
+					...(linkCandidates.length
+						? [{ value: "link" as const, label: "LINK" }]
+						: []),
+				]}
+			/>
+			{kind === "link" && (
+				<SelectField
+					label="Link Cue"
+					value={linkedCueId}
+					onChange={(cueId) =>
+						setDraft({
+							...draft,
+							trigger: cueTrigger("link", triggerMillis, cueId),
+						})
+					}
+					options={linkCandidates.map((candidate) => ({
+						value: candidate.id as string,
+						label: `Cue ${candidate.number}${candidate.name ? ` · ${candidate.name}` : ""}`,
+					}))}
 				/>
-				{!layout.fieldsFit && (
-					<CompactCueProperties
-						actions={actions}
-						cues={cues}
-						setArmed={layout.setArmed}
-						onDisarm={() => layout.setSetArmed(false)}
-						onOpenInput={openInput}
-						onOpenTrigger={() => setTriggerModalOpen(true)}
-					/>
-				)}
-				{editError && (
-					<p className="ui-field-error" role="alert">
-						{editError}
-					</p>
-				)}
-			</aside>
-			{triggerModalOpen && (
-				<CueTriggerModal
-					actions={actions}
-					cues={cues}
-					close={() => setTriggerModalOpen(false)}
+			)}
+			{kind === "timecode" && (
+				<NumberField
+					label="Timecode frame"
+					min="0"
+					value={Number(draft.trigger.frame ?? 0)}
+					onChange={(event) =>
+						setDraft({
+							...draft,
+							trigger: cueTrigger(
+								"timecode",
+								0,
+								undefined,
+								Math.max(0, Math.round(Number(event.target.value))),
+							),
+						})
+					}
 				/>
 			)}
 		</>
+	);
+}
+
+function CueTimingPropertyField({
+	draft,
+	setDraft,
+	property,
+	label,
+	onEnter,
+}: {
+	draft: Cue;
+	setDraft: Dispatch<SetStateAction<Cue>>;
+	property: Exclude<CueEditableProperty, "trigger">;
+	label: string;
+	onEnter: () => void;
+}) {
+	const kind = cueTriggerKind(draft);
+	const linkedCueId = String(draft.trigger.cue_id ?? "");
+	const triggerMillis = Number(draft.trigger.delay_millis ?? 0);
+	return (
+		<NumberField
+			autoFocus
+			label={label}
+			unit="s"
+			allowDecimal
+			min="0"
+			value={
+				property === "triggerTime"
+					? triggerMillis / 1000
+					: timingValue(draft, property)
+			}
+			onChange={(event) => {
+				const millis = Math.round(Number(event.target.value) * 1000);
+				if (property === "triggerTime") {
+					setDraft({
+						...draft,
+						trigger:
+							kind === "link"
+								? cueTrigger("link", millis, linkedCueId)
+								: cueTrigger("time", millis),
+					});
+				} else setDraft({ ...draft, [timingKeys[property]]: millis });
+			}}
+			onKeyDown={(event) => event.key === "Enter" && onEnter()}
+		/>
+	);
+}
+
+export function CuePropertyModal({
+	cue,
+	cues,
+	property,
+	editError,
+	onCancel,
+	onSave,
+}: {
+	cue: Cue;
+	cues: Cue[];
+	property: CueEditableProperty;
+	editError: string;
+	onCancel: () => void;
+	onSave: (cue: Cue) => Promise<boolean>;
+}) {
+	const [draft, setDraft] = useState(cue);
+	const [busy, setBusy] = useState(false);
+	const label = propertyLabels[property];
+	const valid = validCueDraft(draft, property);
+	const save = async () => {
+		if (!valid || busy) return;
+		setBusy(true);
+		try {
+			if (await onSave(draft)) onCancel();
+		} finally {
+			setBusy(false);
+		}
+	};
+	return (
+		<ModalPortal onClose={onCancel}>
+			<div
+				className="stacked-modal-layer"
+				onPointerDown={(event) =>
+					event.target === event.currentTarget && onCancel()
+				}
+			>
+				<section
+					className="nested-modal cue-property-modal"
+					role="dialog"
+					aria-modal="true"
+					aria-label={label}
+				>
+					<ModalTitleBar
+						title={`${label} · Cue ${cue.number}`}
+						closeLabel={`Cancel ${label}`}
+						onClose={onCancel}
+					/>
+					<div className="cue-property-modal-body">
+						{property === "trigger" ? (
+							<CueTriggerPropertyField
+								draft={draft}
+								setDraft={setDraft}
+								cues={cues}
+							/>
+						) : (
+							<CueTimingPropertyField
+								draft={draft}
+								setDraft={setDraft}
+								property={property}
+								label={label}
+								onEnter={() => void save()}
+							/>
+						)}
+						{!valid && (
+							<p className="ui-field-error" role="alert">
+								Enter a time of zero or greater.
+							</p>
+						)}
+						{editError && (
+							<p className="ui-field-error" role="alert">
+								{editError}
+							</p>
+						)}
+					</div>
+					<footer className="cue-property-modal-actions">
+						<Button disabled={busy} onClick={onCancel}>
+							Cancel
+						</Button>
+						<Button
+							className="primary"
+							disabled={!valid || busy}
+							onClick={() => void save()}
+						>
+							Save
+						</Button>
+					</footer>
+				</section>
+			</div>
+		</ModalPortal>
 	);
 }

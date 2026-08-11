@@ -17,7 +17,12 @@ import { useConfigurationActions } from "../../features/configuration/Configurat
 import { useDeskConfiguration } from "../../features/configuration/ConfigurationState";
 import { useDeskConnection } from "../../features/deskConnection/DeskConnectionContext";
 import { useProgrammingUpdate } from "../../features/programmingUpdate/ProgrammingUpdateProvider";
-import type { AttributeSettingsTab, SetupSection } from "./SetupChrome";
+import type {
+	AttributeSettingsTab,
+	DefaultsSettingsTab,
+	NetworkSettingsTab,
+	SetupSection,
+} from "./SetupChrome";
 
 function useDeskConfigurationDraft(configuration: DeskConfiguration | null) {
 	const [draft, setDraft] = useState<DeskConfiguration | null>(configuration);
@@ -51,6 +56,39 @@ function useDeskConfigurationDraft(configuration: DeskConfiguration | null) {
 	return { draft, setDraft, pendingSave, dirtyFields };
 }
 
+function useAttributeConfigurationSetup(
+	actions: ReturnType<typeof useAttributeConfigurationActions>,
+	section: SetupSection,
+) {
+	const [configuration, setConfiguration] =
+		useState<AttributeConfigurationSnapshot | null>(null);
+	const [error, setError] = useState<string | null>(null);
+	const saved = useRef<AttributeConfigurationSnapshot | null>(null);
+	useEffect(() => {
+		if (section !== "preferences-attributes") return;
+		let active = true;
+		setError(null);
+		void actions
+			?.load()
+			.then((snapshot) => {
+				if (!active) return;
+				saved.current = snapshot;
+				setConfiguration(snapshot);
+				setError(snapshot.validation_error);
+			})
+			.catch((reason) => {
+				if (!active) return;
+				setConfiguration(null);
+				setError(errorMessage(reason));
+			});
+		if (!actions) setError("Show attribute configuration is unavailable.");
+		return () => {
+			active = false;
+		};
+	}, [actions, section]);
+	return { configuration, setConfiguration, error, setError, saved };
+}
+
 export function useSetupWindowController() {
 	const connection = useDeskConnection();
 	const configurationActions = useConfigurationActions();
@@ -69,46 +107,26 @@ export function useSetupWindowController() {
 		programmerSettingsError,
 		setProgrammerSettingsError,
 	} = useProgrammerSetupSettings(programmingUpdate, section);
-	const [attributeConfiguration, setAttributeConfiguration] =
-		useState<AttributeConfigurationSnapshot | null>(null);
-	const [attributeConfigurationError, setAttributeConfigurationError] =
-		useState<string | null>(null);
+	const {
+		configuration: attributeConfiguration,
+		setConfiguration: setAttributeConfiguration,
+		error: attributeConfigurationError,
+		setError: setAttributeConfigurationError,
+		saved: savedAttributeConfiguration,
+	} = useAttributeConfigurationSetup(attributeActions, section);
 	const [restartRequired, setRestartRequired] = useState(false);
 	const [serverUrl, setServerUrl] = useState(configuredServerUrl());
 	const [fixtureLibraryOpen, setFixtureLibraryOpen] = useState(false);
 	const [deskLockSettingsOpen, setDeskLockSettingsOpen] = useState(false);
+	const [encoderPlacementOpen, setEncoderPlacementOpen] = useState(false);
 	const [screenCanUndo, setScreenCanUndo] = useState(false);
 	const [attributeTab, setAttributeTab] =
 		useState<AttributeSettingsTab>("encoder-groups");
+	const [networkTab, setNetworkTab] =
+		useState<NetworkSettingsTab>("control-server");
+	const [defaultsTab, setDefaultsTab] =
+		useState<DefaultsSettingsTab>("record-update");
 	const screenUndo = useRef<(() => void) | null>(null);
-	const savedAttributeConfiguration =
-		useRef<AttributeConfigurationSnapshot | null>(null);
-
-	useEffect(() => {
-		if (section !== "preferences-attributes") return;
-		let active = true;
-		setAttributeConfigurationError(null);
-		void attributeActions
-			?.load()
-			.then((snapshot) => {
-				if (!active) return;
-				savedAttributeConfiguration.current = snapshot;
-				setAttributeConfiguration(snapshot);
-				setAttributeConfigurationError(snapshot.validation_error);
-			})
-			.catch((reason) => {
-				if (!active) return;
-				setAttributeConfiguration(null);
-				setAttributeConfigurationError(errorMessage(reason));
-			});
-		if (!attributeActions)
-			setAttributeConfigurationError(
-				"Show attribute configuration is unavailable.",
-			);
-		return () => {
-			active = false;
-		};
-	}, [attributeActions, section]);
 
 	const editDraft = (next: DeskConfiguration) => {
 		if (draft)
@@ -169,7 +187,10 @@ export function useSetupWindowController() {
 	return {
 		attributeTab,
 		setAttributeTab,
+		defaultsTab,
+		setDefaultsTab,
 		deskLockSettingsOpen,
+		encoderPlacementOpen,
 		draft,
 		editDraft,
 		attributeConfiguration,
@@ -183,6 +204,7 @@ export function useSetupWindowController() {
 		programmerSettingsLoaded,
 		recordSettings,
 		restartRequired,
+		networkTab,
 		save,
 		screenCanUndo,
 		screenUndo,
@@ -190,8 +212,10 @@ export function useSetupWindowController() {
 		applyServerUrl: (url: string) => connection?.setServerUrl(url),
 		serverUrl,
 		setDeskLockSettingsOpen,
+		setEncoderPlacementOpen,
 		setFixtureLibraryOpen,
 		setRecordSettings,
+		setNetworkTab,
 		setSection,
 		setServerUrl,
 		setUpdateSettings,
@@ -206,6 +230,7 @@ function useProgrammerSetupSettings(
 	programmingUpdate: ReturnType<typeof useProgrammingUpdate>,
 	section: SetupSection,
 ) {
+	const loadedOnce = useRef(false);
 	const [recordSettings, setRecordSettings] =
 		useState<RecordSettings>(loadRecordSettings);
 	const [updateSettings, setUpdateSettings] = useState<UpdateSettings>(
@@ -217,15 +242,14 @@ function useProgrammerSetupSettings(
 		string | null
 	>(null);
 	useEffect(() => {
-		if (section !== "preferences-defaults") return;
-		let active = true;
+		if (section !== "preferences-defaults" || loadedOnce.current) return;
+		loadedOnce.current = true;
 		setProgrammerSettingsLoaded(false);
 		setRecordSettings(loadRecordSettings());
 		setProgrammerSettingsError(null);
 		void programmingUpdate
 			?.loadSettings()
 			.then((settings) => {
-				if (!active) return;
 				setUpdateSettings(settings ?? defaultUpdateSettings);
 				setProgrammerSettingsLoaded(true);
 				if (!settings)
@@ -234,7 +258,6 @@ function useProgrammerSetupSettings(
 					);
 			})
 			.catch((reason) => {
-				if (!active) return;
 				setUpdateSettings(defaultUpdateSettings);
 				setProgrammerSettingsLoaded(true);
 				setProgrammerSettingsError(errorMessage(reason));
@@ -244,9 +267,6 @@ function useProgrammerSetupSettings(
 			setProgrammerSettingsLoaded(true);
 			setProgrammerSettingsError("Update defaults are unavailable.");
 		}
-		return () => {
-			active = false;
-		};
 	}, [programmingUpdate, section]);
 	return {
 		recordSettings,

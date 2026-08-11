@@ -179,6 +179,15 @@ mod tests {
         let shows = directory.join("shows");
         std::fs::create_dir_all(&shows).expect("shows folder");
         let session = Session::default();
+        let database = crate::prepare_fixture_library(
+            Some(crate::FixtureLibrarySource::Packages(
+                PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../assets/fixture-library"),
+            )),
+            &directory.join("clean-app-data"),
+        )
+        .expect("clean packaged fixture setup")
+        .expect("writable fixture database");
+        session.set_library_path(Some(database));
 
         let first = open_copy(&session, &template, &shows).expect("the demo opens");
         assert_eq!(first.name, "Demo Show");
@@ -188,6 +197,21 @@ mod tests {
             "the packaged template itself was opened"
         );
         assert!(first.fixture_count > 0, "the copy carries the demo rig");
+        let embedded_revisions = session
+            .scene_source()
+            .with(|document| {
+                document
+                    .patch_snapshot()
+                    .expect("demo patch")
+                    .profile_revisions
+                    .into_iter()
+                    .all(|revision| revision.profile_snapshot.is_object())
+            })
+            .expect("open demo document");
+        assert!(
+            embedded_revisions,
+            "every demo fixture retains the required immutable profile revision"
+        );
 
         // Opening it again is another document, not the same one reopened.
         let second = open_copy(&session, &template, &shows).expect("the demo opens again");

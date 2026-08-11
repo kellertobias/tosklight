@@ -357,14 +357,14 @@ impl Default for DeskConfiguration {
             speed_group_sound_to_light: default_sound_to_light(),
             speed_group_sources: default_speed_group_sources(),
             programmer_fade_millis: 3_000,
-            command_line_at_uses_programmer_fade: true,
+            command_line_at_uses_programmer_fade: false,
             sequence_master_fade_millis: 3_000,
             cuelist_auto_off_at_zero_default: false,
             cuelist_auto_off_flash_release_default: false,
             start_after_first_recording: false,
             preload_programmer_changes: true,
-            preload_physical_playback_actions: true,
-            preload_virtual_playback_actions: false,
+            preload_physical_playback_actions: false,
+            preload_virtual_playback_actions: true,
             patch_preview_highlight_dmx: false,
             highlight_look: light_fixture::HighlightLook::default(),
             highlight_legacy_overrides_acknowledged: false,
@@ -562,6 +562,31 @@ fn wire_highlight_look(
 #[cfg(test)]
 mod highlight_look_tests {
     use super::*;
+
+    #[test]
+    fn fresh_timing_and_preload_defaults_are_operator_safe() {
+        let fresh = DeskConfiguration::default();
+        assert!(!fresh.command_line_at_uses_programmer_fade);
+        assert!(fresh.preload_programmer_changes);
+        assert!(!fresh.preload_physical_playback_actions);
+        assert!(fresh.preload_virtual_playback_actions);
+    }
+
+    #[test]
+    fn explicit_persisted_timing_and_preload_choices_survive_default_changes() {
+        let mut stored = serde_json::to_value(DeskConfiguration::default()).unwrap();
+        let object = stored.as_object_mut().unwrap();
+        object.insert("command_line_at_uses_programmer_fade".into(), true.into());
+        object.insert("preload_programmer_changes".into(), false.into());
+        object.insert("preload_physical_playback_actions".into(), true.into());
+        object.insert("preload_virtual_playback_actions".into(), false.into());
+
+        let decoded: DeskConfiguration = serde_json::from_value(stored).unwrap();
+        assert!(decoded.command_line_at_uses_programmer_fade);
+        assert!(!decoded.preload_programmer_changes);
+        assert!(decoded.preload_physical_playback_actions);
+        assert!(!decoded.preload_virtual_playback_actions);
+    }
 
     #[test]
     fn playback_recording_defaults_are_disabled_for_fresh_and_legacy_installations() {

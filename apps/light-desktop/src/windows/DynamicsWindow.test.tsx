@@ -1,4 +1,5 @@
 import {
+	act,
 	cleanup,
 	fireEvent,
 	render,
@@ -227,7 +228,7 @@ describe("DynamicsWindow", () => {
 		fireEvent.click(screen.getByRole("button", { name: /Pulse/i }), { shiftKey: true });
 
 		expect(
-			screen.getByRole("button", { name: /Back to Pool/ }),
+			screen.getByRole("button", { name: "← Dynamics" }),
 		).toBeInTheDocument();
 		expect(
 			screen.getAllByText("Intensity", { selector: "strong" }),
@@ -282,7 +283,7 @@ describe("DynamicsWindow", () => {
 		});
 
 		expect(
-			screen.getByRole("button", { name: /Back to Pool/ }),
+			screen.getByRole("button", { name: "← Dynamics" }),
 		).toBeInTheDocument();
 		expect(
 			screen.getByRole("list", { name: "Dynamic lanes" }),
@@ -440,22 +441,35 @@ describe("DynamicsWindow", () => {
 		expect(replaceCommand).toHaveBeenCalledWith("SET DYNAMIC 1");
 	});
 
-	it("uses the SET Dynamic action for right-click and suppresses the native menu", () => {
+	it.each([
+		["right-click", false],
+		["macOS Control-click", true],
+	] as const)("opens the full Dynamic tile editor from %s", (_label, ctrlKey) => {
 		dynamics = [dynamicObject()];
 		renderWindow();
 
 		const tile = screen.getByRole("button", { name: /Pulse/i });
-		const contextMenu = new MouseEvent("contextmenu", {
-			bubbles: true,
-			cancelable: true,
-		});
-		tile.dispatchEvent(contextMenu);
-
-		expect(contextMenu.defaultPrevented).toBe(true);
-		expect(replaceCommand).toHaveBeenCalledWith("SET DYNAMIC 1");
+		fireEvent.contextMenu(tile, { ctrlKey });
 		expect(
-			screen.queryByRole("button", { name: /Back to Pool/ }),
-		).toBeNull();
+			screen.getByRole("button", { name: "← Dynamics" }),
+		).toBeInTheDocument();
+	});
+
+	it("opens the full Dynamic tile editor on long press without toggling it", () => {
+		vi.useFakeTimers();
+		dynamics = [dynamicObject()];
+		renderWindow();
+
+		const tile = screen.getByRole("button", { name: /Pulse/i });
+		fireEvent.pointerDown(tile);
+		act(() => vi.advanceTimersByTime(650));
+		fireEvent.pointerUp(tile);
+		fireEvent.click(tile);
+
+		expect(
+			screen.getByRole("button", { name: "← Dynamics" }),
+		).toBeInTheDocument();
+		vi.useRealTimers();
 	});
 
 	it("selects one lane normally and adds a lane with Shift-click", () => {

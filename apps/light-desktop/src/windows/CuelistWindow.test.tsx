@@ -15,7 +15,6 @@ import type {
 	PlaybackSnapshot,
 } from "../api/types";
 import { PaneSettingsModal } from "../components/modals/PaneSettingsModal";
-import { routeControlSurfaceIntent } from "../features/controlSurfaceInteraction/registry";
 import { createCommandLineTestAuthority } from "../features/programmingInteraction/testing/commandLineTestAuthority";
 import { CuelistWindow } from "./CuelistWindow";
 
@@ -235,19 +234,7 @@ function savedCueListOutcome(
 describe("CuelistWindow Cue settings", () => {
 	beforeEach(resetCuelistWindowMocks);
 
-	it("keeps Cue rows selection-only and exposes the compact Cue settings grid", () => {
-		let measure: ResizeObserverCallback = () => undefined;
-		vi.stubGlobal(
-			"ResizeObserver",
-			class {
-				constructor(callback: ResizeObserverCallback) {
-					measure = callback;
-				}
-				observe() {}
-				disconnect() {}
-				unobserve() {}
-			},
-		);
+	it("opens exact Cue property modals from table cells without a sidebar", () => {
 		mocks.state.storeArmed = false;
 		mocks.playbacks.pool = [
 			{
@@ -298,143 +285,22 @@ describe("CuelistWindow Cue settings", () => {
 			"Out Delay",
 			"Out Fade",
 		]);
-		fireEvent.click(screen.getByText("Opening"));
-		expect(
-			screen.queryByRole("button", { name: "GO −" }),
-		).not.toBeInTheDocument();
-		expect(
-			screen.queryByRole("button", { name: "TOGGLE" }),
-		).not.toBeInTheDocument();
-		expect(
-			screen.queryByRole("button", { name: "OFF" }),
-		).not.toBeInTheDocument();
-		expect(screen.getByLabelText("Title")).toHaveValue("Opening");
-		expect(
-			screen.queryByRole("heading", { name: "Cue Settings" }),
-		).not.toBeInTheDocument();
-		expect(screen.getByText("Selected Cue · 1")).toHaveClass(
-			"cue-selected-label",
-		);
-		expect(
-			[
-				...document.querySelectorAll(
-					".cue-settings-grid-measure > .ui-form-field > label",
-				),
-			].map((label) => label.textContent),
-		).toEqual([
-			"Title",
+		expect(document.querySelector(".cue-properties")).not.toBeInTheDocument();
+		for (const name of [
+			"Trigger",
+			"Trigger Time",
 			"In Delay",
 			"In Fade",
 			"Out Delay",
 			"Out Fade",
-			"Trigger",
-		]);
-		expect(
-			screen.getByLabelText("Title").closest(".ui-form-field"),
-		).toContainElement(screen.getByRole("button", { name: "Open keyboard" }));
-		expect(
-			within(
-				screen.getByLabelText("In Fade").closest(".ui-form-field")!,
-			).getByRole("button", { name: "Open number pad" }),
-		).toBeInTheDocument();
-		expect(
-			screen.getByRole("button", { name: "Open Trigger picker" }),
-		).toBeInTheDocument();
-
-		const sidebar = document.querySelector(".cue-properties") as HTMLElement;
-		const preview = document.querySelector(
-			".cue-selected-preview",
-		) as HTMLElement;
-		const fields = document.querySelector(
-			".cue-settings-grid-measure",
-		) as HTMLElement;
-		Object.defineProperty(sidebar, "clientHeight", {
-			configurable: true,
-			value: 150,
-		});
-		Object.defineProperty(preview, "offsetHeight", {
-			configurable: true,
-			value: 74,
-		});
-		Object.defineProperty(fields, "scrollHeight", {
-			configurable: true,
-			value: 180,
-		});
-		act(() => measure([], {} as ResizeObserver));
-		expect(
-			screen.getByText("Press SET, then press an attribute value to edit it."),
-		).toBeInTheDocument();
-		for (const [buttonName, dialogName, closeName] of [
-			["Set Cue Title", "Title", "Close input"],
-			["Set Cue Intensity In Fade", "In Fade", "Close In Fade"],
-			["Set Cue Intensity In Delay", "In Delay", "Close In Delay"],
-			["Set Cue Intensity Out Fade", "Out Fade", "Close Out Fade"],
-			["Set Cue Intensity Out Delay", "Out Delay", "Close Out Delay"],
-		] as const) {
-			expect(
-				fireEvent.contextMenu(screen.getByRole("button", { name: buttonName })),
-			).toBe(false);
-			expect(
-				screen.getByRole("dialog", { name: dialogName }),
-			).toBeInTheDocument();
-			fireEvent.click(screen.getByRole("button", { name: closeName }));
+		]) {
+			fireEvent.click(screen.getByRole("button", { name }));
+			expect(screen.getByRole("dialog", { name })).toBeInTheDocument();
+			fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 		}
-		expect(
-			fireEvent.contextMenu(
-				screen.getByRole("button", { name: "Set Cue Trigger" }),
-			),
-		).toBe(false);
-		expect(
-			screen.getByRole("dialog", { name: "Cue Trigger" }),
-		).toBeInTheDocument();
-		fireEvent.click(screen.getByRole("button", { name: "Close Cue Trigger" }));
-		act(() => {
-			routeControlSurfaceIntent({ type: "set", source: "hardware" });
-		});
-		expect(
-			screen.getByText("SET is active. Press an attribute value to edit it."),
-		).toBeInTheDocument();
-		expect(
-			screen
-				.getByRole("button", { name: "Set Cue Intensity In Fade" })
-				.closest("button"),
-		).toHaveClass("is-active");
-		fireEvent.click(
-			screen.getByRole("button", { name: "Set Cue Intensity In Fade" }),
-		);
-		expect(screen.getByRole("dialog", { name: "In Fade" })).toBeInTheDocument();
-		fireEvent.click(screen.getByRole("button", { name: "Close In Fade" }));
-		act(() => {
-			routeControlSurfaceIntent({ type: "set", source: "hardware" });
-		});
-		fireEvent.click(screen.getByRole("button", { name: "Set Cue Trigger" }));
-		const triggerModal = screen.getByRole("dialog", { name: "Cue Trigger" });
-		expect(triggerModal).toHaveTextContent("Wait for a manual GO.");
-		expect(triggerModal).toHaveTextContent(
-			"Start after the preceding Cue has finished.",
-		);
-		expect(triggerModal).toHaveTextContent(
-			"Start after this time from the preceding Cue's GO.",
-		);
-		expect(triggerModal).toHaveTextContent(
-			"Start when external timecode reaches this Cue's frame.",
-		);
-		vi.unstubAllGlobals();
 	});
 
-	it("shows a Link destination by stable Cue identity in the table and editor", () => {
-		let measure: ResizeObserverCallback = () => undefined;
-		vi.stubGlobal(
-			"ResizeObserver",
-			class {
-				constructor(callback: ResizeObserverCallback) {
-					measure = callback;
-				}
-				observe() {}
-				disconnect() {}
-				unobserve() {}
-			},
-		);
+	it("shows a Link destination by stable Cue identity in its Trigger modal", () => {
 		const destination = {
 			id: "cue-blackout",
 			number: 12,
@@ -457,48 +323,14 @@ describe("CuelistWindow Cue settings", () => {
 		fireEvent.click(ui.getByText("Main").closest("button")!);
 
 		expect(ui.getByText("LINK → Cue 12 · Blackout")).toBeInTheDocument();
-		expect(ui.getByText("Link Cue")).toBeInTheDocument();
-		expect(ui.getByText("Link delay")).toBeInTheDocument();
-		expect(ui.getAllByText("Cue 12 · Blackout").length).toBeGreaterThan(0);
-		const sidebar = document.querySelector(".cue-properties") as HTMLElement;
-		const preview = document.querySelector(
-			".cue-selected-preview",
-		) as HTMLElement;
-		const fields = document.querySelector(
-			".cue-settings-grid-measure",
-		) as HTMLElement;
-		Object.defineProperty(sidebar, "clientHeight", {
-			configurable: true,
-			value: 150,
-		});
-		Object.defineProperty(preview, "offsetHeight", {
-			configurable: true,
-			value: 74,
-		});
-		Object.defineProperty(fields, "scrollHeight", {
-			configurable: true,
-			value: 220,
-		});
-		act(() => measure([], {} as ResizeObserver));
-
+		fireEvent.click(
+			ui.getByText("LINK → Cue 12 · Blackout").closest("button")!,
+		);
+		const modal = screen.getByRole("dialog", { name: "Trigger" });
+		expect(within(modal).getByText("Link Cue")).toBeInTheDocument();
 		expect(
-			fireEvent.contextMenu(
-				ui.getByRole("button", { name: "Set Cue Link destination" }),
-			),
-		).toBe(false);
-		expect(
-			screen.getByRole("dialog", { name: "Cue Trigger" }),
+			within(modal).getByRole("button", { name: "Cue 12 · Blackout" }),
 		).toBeInTheDocument();
-		fireEvent.click(screen.getByRole("button", { name: "Close Cue Trigger" }));
-		expect(
-			fireEvent.contextMenu(
-				ui.getByRole("button", { name: "Set Cue Link delay" }),
-			),
-		).toBe(false);
-		expect(
-			screen.getByRole("dialog", { name: "Link delay" }),
-		).toBeInTheDocument();
-		vi.unstubAllGlobals();
 	});
 });
 
@@ -538,7 +370,7 @@ describe("CuelistWindow pane selection", () => {
 		expect(within(container).getByRole("table")).toBeInTheDocument();
 	});
 
-	it("uses compact rows without the Preview column while retaining the sidebar preview", () => {
+	it("uses compact rows without the Preview column or a sidebar", () => {
 		mocks.state.storeArmed = false;
 		mocks.playbacks.cue_lists = [editableCueList()];
 		const { container } = render(
@@ -568,10 +400,7 @@ describe("CuelistWindow pane selection", () => {
 			"compact-cue-rows",
 		);
 		expect(container.querySelector(".cue-table img")).not.toBeInTheDocument();
-		expect(container.querySelector(".cue-selected-thumbnail")).toHaveAttribute(
-			"src",
-			"data:image/png;base64,preview",
-		);
+		expect(container.querySelector(".cue-properties")).not.toBeInTheDocument();
 	});
 });
 
@@ -748,7 +577,7 @@ describe("CuelistWindow fixed and selected playback sources", () => {
 describe("CuelistWindow pane and Cuelist settings", () => {
 	beforeEach(resetCuelistWindowMocks);
 
-	it("offers the persisted sidebar switch in Cues pane settings", () => {
+	it("offers Cuelist selection and compact rows without a sidebar switch", () => {
 		mocks.state.paneSettingsId = "cues-1";
 		mocks.playbacks.pool = [
 			{
@@ -774,13 +603,9 @@ describe("CuelistWindow pane and Cuelist settings", () => {
 		expect(
 			screen.getByRole("button", { name: "7 · Main" }),
 		).toBeInTheDocument();
-		fireEvent.click(screen.getByRole("switch", { name: "Cue sidebar" }));
-
-		expect(mocks.dispatch).toHaveBeenCalledWith({
-			type: "SET_PANE_CUE_SIDEBAR",
-			id: "cues-1",
-			value: false,
-		});
+		expect(
+			screen.queryByRole("switch", { name: "Cue sidebar" }),
+		).not.toBeInTheDocument();
 
 		fireEvent.click(screen.getByRole("switch", { name: "Compact Cue rows" }));
 		expect(mocks.dispatch).toHaveBeenCalledWith({
@@ -829,8 +654,7 @@ describe("CuelistWindow pane and Cuelist settings", () => {
 		fireEvent.click(ui.getByRole("button", { name: "Cuelist Settings" }));
 
 		const settings = screen.getByRole("dialog", { name: "Cuelist Settings" });
-		const sidebar = container.querySelector(".cue-properties")!;
-		expect(sidebar).not.toContainElement(settings);
+		expect(container.querySelector(".cue-properties")).not.toBeInTheDocument();
 		expect(ui.getByRole("table")).toBeInTheDocument();
 		expect(
 			ui.queryByRole("heading", { name: "Cue Settings" }),
@@ -891,332 +715,66 @@ describe("CuelistWindow pane and Cuelist settings", () => {
 		expect(
 			ui.queryByRole("heading", { name: "Cue Settings" }),
 		).not.toBeInTheDocument();
-		expect(ui.getByText("Selected Cue · 1")).toBeInTheDocument();
+		expect(ui.getByRole("table")).toBeInTheDocument();
+		expect(container.querySelector(".cue-properties")).not.toBeInTheDocument();
 		expect(mocks.saveTopologyCueList).not.toHaveBeenCalled();
 	});
 });
 
-describe("CuelistWindow Cue draft validation", () => {
+describe("CuelistWindow Cue property transactions", () => {
 	beforeEach(resetCuelistWindowMocks);
 
-	it("does not let a late server refresh clobber an invalid Cue draft before validation", async () => {
-		mocks.state.storeArmed = false;
-		const cueList: CueList = {
-			id: "main",
-			name: "Main",
-			priority: 10,
-			mode: "sequence",
-			looped: false,
-			cues: [
-				{
-					id: "cue-1",
-					number: 1,
-					name: "Opening",
-					fade_millis: 2_500,
-					delay_millis: 0,
-					trigger: { type: "manual" },
-					changes: [],
-				},
-			],
-		};
-		mocks.playbacks.pool = [
-			{
-				number: 1,
-				name: "Main",
-				target: { type: "cue_list", cue_list_id: "main" },
-				buttons: ["go", "go_minus", "flash"],
-				fader: "master",
-				go_activates: true,
-				auto_off: true,
-				xfade_millis: 0,
-			},
-		];
-		mocks.cueObjects = [{ id: "main", revision: 1, body: cueList }];
-		const view = render(<CuelistWindow />);
-		const ui = within(view.container);
-		fireEvent.click(ui.getByText("Main").closest("button")!);
-		const fade = ui.getByLabelText("In Fade");
-		fireEvent.change(fade, { target: { value: "-1" } });
-
-		mocks.cueObjects = [
-			{
-				id: "main",
-				revision: 1,
-				body: { ...cueList, cues: cueList.cues.map((cue) => ({ ...cue })) },
-			},
-		];
-		view.rerender(<CuelistWindow />);
-		expect(ui.getByLabelText("In Fade")).toHaveValue("-1");
-
-		fireEvent.keyDown(ui.getByLabelText("In Fade"), { key: "Enter" });
-		expect(await ui.findByRole("alert")).toHaveTextContent(
-			"Cue edit was not saved",
-		);
-		expect(mocks.saveTopologyCueList).not.toHaveBeenCalled();
-	});
-
-	it("saves an inline Cue through its captured topology identity without a broad refresh", async () => {
+	it("discards Cancel and saves one modal draft through captured topology authority", async () => {
 		const cueList = showEditableCueList();
-		const view = render(<CuelistWindow />);
-		const ui = within(view.container);
+		const { container } = render(<CuelistWindow />);
+		const ui = within(container);
 		fireEvent.click(ui.getByText("Main").closest("button")!);
-		fireEvent.change(ui.getByLabelText("In Fade"), { target: { value: "3" } });
-		fireEvent.change(ui.getByLabelText("Out Delay"), {
-			target: { value: "0.5" },
-		});
-		fireEvent.change(ui.getByLabelText("Out Fade"), {
-			target: { value: "4" },
-		});
 
-		mocks.cueObjects = [
-			{
-				id: "replacement-main",
-				revision: 9,
-				body: { ...cueList, name: "Concurrent" },
-			},
-		];
-		view.rerender(<CuelistWindow />);
-		fireEvent.keyDown(ui.getByLabelText("Out Fade"), { key: "Enter" });
+		fireEvent.click(ui.getByRole("button", { name: "In Fade" }));
+		let modal = screen.getByRole("dialog", { name: "In Fade" });
+		fireEvent.change(within(modal).getByRole("textbox", { name: "In Fade" }), {
+			target: { value: "9" },
+		});
+		fireEvent.click(within(modal).getByRole("button", { name: "Cancel" }));
+		expect(mocks.saveTopologyCueList).not.toHaveBeenCalled();
+
+		fireEvent.click(ui.getByRole("button", { name: "In Fade" }));
+		modal = screen.getByRole("dialog", { name: "In Fade" });
+		fireEvent.change(within(modal).getByRole("textbox", { name: "In Fade" }), {
+			target: { value: "3" },
+		});
+		fireEvent.click(within(modal).getByRole("button", { name: "Save" }));
 
 		await waitFor(() =>
 			expect(mocks.saveTopologyCueList).toHaveBeenCalledOnce(),
 		);
 		expect(mocks.saveTopologyCueList).toHaveBeenCalledWith(
-			"main",
+			cueList.id,
 			3,
 			"legacy-main",
 			expect.objectContaining({
-				id: "main",
-				name: "Main",
-				cues: [
-					expect.objectContaining({
-						id: "cue-1",
-						fade_millis: 3_000,
-						out_delay_millis: 500,
-						out_fade_millis: 4_000,
-					}),
-				],
+				cues: [expect.objectContaining({ id: "cue-1", fade_millis: 3_000 })],
 			}),
 		);
-		expect(mocks.refresh).not.toHaveBeenCalled();
 	});
 
-	it("rebases queued inline edits onto the preceding authoritative outcome", async () => {
+	it("keeps the property modal open when the authoritative write fails", async () => {
 		showEditableCueList();
-		let resolveFirst!: (
-			outcome: ReturnType<typeof savedCueListOutcome>,
-		) => void;
-		const first = new Promise<ReturnType<typeof savedCueListOutcome>>(
-			(resolve) => {
-				resolveFirst = resolve;
-			},
-		);
-		mocks.saveTopologyCueList
-			.mockReset()
-			.mockImplementationOnce(() => first)
-			.mockImplementationOnce(
-				(
-					_cueListId: string,
-					expectedRevision: number,
-					expectedObjectId: string,
-					body: CueList,
-				) =>
-					Promise.resolve(
-						savedCueListOutcome(expectedObjectId, expectedRevision + 1, body),
-					),
-			);
-		const view = render(<CuelistWindow />);
-		const ui = within(view.container);
+		mocks.saveTopologyCueList.mockReset().mockResolvedValue(null);
+		const { container } = render(<CuelistWindow />);
+		const ui = within(container);
 		fireEvent.click(ui.getByText("Main").closest("button")!);
-		fireEvent.change(ui.getByLabelText("In Fade"), { target: { value: "3" } });
-		fireEvent.keyDown(ui.getByLabelText("In Fade"), { key: "Enter" });
-		await waitFor(() =>
-			expect(mocks.saveTopologyCueList).toHaveBeenCalledOnce(),
-		);
-
-		fireEvent.change(ui.getByLabelText("In Delay"), { target: { value: "2" } });
-		fireEvent.keyDown(ui.getByLabelText("In Delay"), { key: "Enter" });
-		expect(mocks.saveTopologyCueList).toHaveBeenCalledOnce();
-		const firstBody = mocks.saveTopologyCueList.mock.calls[0][3] as CueList;
-		act(() => resolveFirst(savedCueListOutcome("legacy-main", 4, firstBody)));
-
-		await waitFor(() =>
-			expect(mocks.saveTopologyCueList).toHaveBeenCalledTimes(2),
-		);
-		expect(mocks.saveTopologyCueList.mock.calls[1]).toEqual([
-			"main",
-			4,
-			"legacy-main",
-			expect.objectContaining({
-				cues: [
-					expect.objectContaining({
-						fade_millis: 3_000,
-						delay_millis: 2_000,
-					}),
-				],
-			}),
-		]);
-	});
-
-	it("cancels later queued edits after failure and lets the operator retry on repaired authority", async () => {
-		const cueList = showEditableCueList();
-		let resolveFirst!: (outcome: null) => void;
-		const first = new Promise<null>((resolve) => {
-			resolveFirst = resolve;
+		fireEvent.click(ui.getByRole("button", { name: "In Fade" }));
+		const modal = screen.getByRole("dialog", { name: "In Fade" });
+		fireEvent.change(within(modal).getByRole("textbox", { name: "In Fade" }), {
+			target: { value: "3" },
 		});
-		mocks.saveTopologyCueList
-			.mockReset()
-			.mockImplementationOnce(() => first)
-			.mockImplementationOnce(
-				(
-					_cueListId: string,
-					expectedRevision: number,
-					expectedObjectId: string,
-					body: CueList,
-				) =>
-					Promise.resolve(
-						savedCueListOutcome(expectedObjectId, expectedRevision + 1, body),
-					),
-			);
-		const view = render(<CuelistWindow />);
-		const ui = within(view.container);
-		fireEvent.click(ui.getByText("Main").closest("button")!);
-		fireEvent.change(ui.getByLabelText("In Fade"), { target: { value: "3" } });
-		fireEvent.keyDown(ui.getByLabelText("In Fade"), { key: "Enter" });
-		await waitFor(() =>
-			expect(mocks.saveTopologyCueList).toHaveBeenCalledOnce(),
+		fireEvent.click(within(modal).getByRole("button", { name: "Save" }));
+
+		expect(await within(modal).findByRole("alert")).toHaveTextContent(
+			"Cue edit was not saved",
 		);
-		fireEvent.change(ui.getByLabelText("In Delay"), { target: { value: "2" } });
-		fireEvent.keyDown(ui.getByLabelText("In Delay"), { key: "Enter" });
-
-		mocks.cueObjects = [
-			{
-				id: "legacy-main",
-				revision: 4,
-				body: { ...cueList, name: "Concurrent repair" },
-			},
-		];
-		view.rerender(<CuelistWindow />);
-		act(() => resolveFirst(null));
-		await waitFor(() =>
-			expect(ui.getByRole("alert")).toHaveTextContent("revision conflict"),
-		);
-		expect(mocks.saveTopologyCueList).toHaveBeenCalledOnce();
-
-		fireEvent.keyDown(ui.getByLabelText("In Delay"), { key: "Enter" });
-		await waitFor(() =>
-			expect(mocks.saveTopologyCueList).toHaveBeenCalledTimes(2),
-		);
-		expect(mocks.saveTopologyCueList.mock.calls[1]).toEqual([
-			"main",
-			4,
-			"legacy-main",
-			expect.objectContaining({
-				name: "Concurrent repair",
-				cues: [
-					expect.objectContaining({
-						fade_millis: 3_000,
-						delay_millis: 2_000,
-					}),
-				],
-			}),
-		]);
-	});
-
-	it("isolates a replacement writer from a late same-object response", async () => {
-		showEditableCueList();
-		let resolveOld!: (outcome: null) => void;
-		const oldResponse = new Promise<null>((resolve) => {
-			resolveOld = resolve;
-		});
-		mocks.saveTopologyCueList
-			.mockReset()
-			.mockImplementationOnce(() => oldResponse);
-		const view = render(<CuelistWindow />);
-		const ui = within(view.container);
-		fireEvent.click(ui.getByText("Main").closest("button")!);
-		fireEvent.change(ui.getByLabelText("In Fade"), { target: { value: "3" } });
-		fireEvent.keyDown(ui.getByLabelText("In Fade"), { key: "Enter" });
-		await waitFor(() =>
-			expect(mocks.saveTopologyCueList).toHaveBeenCalledOnce(),
-		);
-
-		const replacementWriter = vi.fn(
-			(
-				_cueListId: string,
-				expectedRevision: number,
-				expectedObjectId: string,
-				body: CueList,
-			) =>
-				Promise.resolve(
-					savedCueListOutcome(expectedObjectId, expectedRevision + 1, body),
-				),
-		);
-		mocks.activeSaveTopologyCueList = replacementWriter;
-		view.rerender(<CuelistWindow />);
-		fireEvent.change(ui.getByLabelText("In Delay"), { target: { value: "2" } });
-		fireEvent.keyDown(ui.getByLabelText("In Delay"), { key: "Enter" });
-		await waitFor(() => expect(replacementWriter).toHaveBeenCalledOnce());
-
-		act(() => resolveOld(null));
-		await act(async () => Promise.resolve());
-		expect(ui.queryByRole("alert")).not.toBeInTheDocument();
-		expect(replacementWriter).toHaveBeenCalledOnce();
-	});
-
-	it("clears a stale repair marker after retry instead of rebasing a later dirty draft", async () => {
-		showEditableCueList();
-		mocks.saveTopologyCueList
-			.mockReset()
-			.mockResolvedValueOnce(null)
-			.mockImplementation(
-				(
-					_cueListId: string,
-					expectedRevision: number,
-					expectedObjectId: string,
-					body: CueList,
-				) =>
-					Promise.resolve(
-						savedCueListOutcome(expectedObjectId, expectedRevision + 1, body),
-					),
-			);
-		const view = render(<CuelistWindow />);
-		const ui = within(view.container);
-		fireEvent.click(ui.getByText("Main").closest("button")!);
-		fireEvent.change(ui.getByLabelText("In Fade"), { target: { value: "3" } });
-		fireEvent.keyDown(ui.getByLabelText("In Fade"), { key: "Enter" });
-		await ui.findByRole("alert");
-		fireEvent.keyDown(ui.getByLabelText("In Fade"), { key: "Enter" });
-		await waitFor(() =>
-			expect(mocks.saveTopologyCueList).toHaveBeenCalledTimes(2),
-		);
-
-		const retriedBody = mocks.saveTopologyCueList.mock.calls[1][3] as CueList;
-		mocks.cueObjects = [{ id: "legacy-main", revision: 4, body: retriedBody }];
-		view.rerender(<CuelistWindow />);
-		fireEvent.change(ui.getByLabelText("In Delay"), { target: { value: "2" } });
-		mocks.cueObjects = [
-			{
-				id: "legacy-main",
-				revision: 5,
-				body: { ...retriedBody, name: "Later concurrent change" },
-			},
-		];
-		view.rerender(<CuelistWindow />);
-		fireEvent.keyDown(ui.getByLabelText("In Delay"), { key: "Enter" });
-
-		await waitFor(() =>
-			expect(mocks.saveTopologyCueList).toHaveBeenCalledTimes(3),
-		);
-		expect(mocks.saveTopologyCueList.mock.calls[2]).toEqual([
-			"main",
-			4,
-			"legacy-main",
-			expect.objectContaining({
-				name: "Main",
-				cues: [expect.objectContaining({ delay_millis: 2_000 })],
-			}),
-		]);
+		expect(modal).toBeInTheDocument();
 	});
 });
 
@@ -1427,9 +985,7 @@ describe("CuelistWindow pool recording", () => {
 	it("right-click on an empty Cuelist reports the exact SET-click guidance", () => {
 		mocks.state.storeArmed = false;
 		mocks.state.cueListSetArmed = true;
-		const { container } = render(
-			<CuelistWindow compact cueListTab="pool" />,
-		);
+		const { container } = render(<CuelistWindow compact cueListTab="pool" />);
 		const empty = container.querySelector<HTMLButtonElement>(".cuelist-card")!;
 		fireEvent.contextMenu(empty);
 

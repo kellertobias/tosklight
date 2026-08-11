@@ -735,6 +735,25 @@
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
+.cue-table td > button {
+	width: 100%;
+	min-height: 40px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+.cue-table td > button:disabled {
+	cursor: default;
+	opacity: 1;
+}
+.cue-table td > button:focus-visible {
+	outline: 2px solid var(--cyan);
+	outline-offset: 1px;
+}
 .cue-table tbody tr {
 	cursor: pointer;
 	background: transparent;

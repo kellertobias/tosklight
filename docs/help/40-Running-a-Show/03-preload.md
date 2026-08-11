@@ -4,7 +4,7 @@ Preload prepares a separate scene or queued playback actions without immediately
 
 ## Capture domains
 
-Desk Setup provides independent switches for programmer changes, physical playback actions, and virtual playback actions. All eight on/off combinations are meaningful. Disabled domains act live; enabled domains are captured in order for the pending Preload operation.
+Desk Setup provides independent switches for programmer changes, physical playback actions, and virtual playback actions. A fresh desk captures Programmer changes and Virtual Playback actions while leaving physical Playback actions live. All eight on/off combinations remain meaningful. Disabled domains act live; enabled domains are captured in order for the pending Preload operation.
 
 Physical capture retains only **Toggle**, **GO**, **GO minus**, **Off**, **On**, **Temp on**, and **Temp off**. Flash presses and releases, normal fader moves, and an On caused only by crossing zero remain live and are not captured. A configured **TEMP** button keeps its normal press-to-toggle gesture: one press queues Temp on and the next queues Temp off; it does not become a held button.
 

@@ -138,6 +138,15 @@ fn attribute_of(name: &str) -> String {
 mod tests {
     use super::*;
     use media_domain::personality::SlotFootprint;
+    use std::path::Path;
+
+    fn shipped_tosklight_profile(filename: &str) -> light_fixture::FixtureProfile {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../..")
+            .join("assets/fixture-library")
+            .join(filename);
+        light_fixture::read_fixture_package(&std::fs::read(path).unwrap()).unwrap()
+    }
 
     #[test]
     fn each_fixture_patches_exactly_the_slots_the_personality_says() {
@@ -266,5 +275,49 @@ mod tests {
             assert!(bytes.len() > 100, "{name} is suspiciously small");
         }
         assert!(layer_description().contains("ToskLight Media Layer"));
+    }
+
+    #[test]
+    fn normal_fixture_library_packages_match_the_canonical_media_wire() {
+        for (filename, id, specs) in [
+            (
+                "tosklight--media-server-layer.toskfixture",
+                LAYER_ID,
+                LAYER_CHANNELS,
+            ),
+            (
+                "tosklight--media-server-master.toskfixture",
+                MASTER_ID,
+                MASTER_CHANNELS,
+            ),
+        ] {
+            let profile = shipped_tosklight_profile(filename);
+            assert_eq!(profile.id.0, id);
+            assert_eq!(profile.manufacturer, "ToskLight");
+            let mode = &profile.modes[0];
+            assert_eq!(usize::from(mode.splits[0].footprint), specs.len());
+
+            for spec in specs {
+                if spec.resolution == Resolution::Fine {
+                    continue;
+                }
+                let channel = mode
+                    .channels
+                    .iter()
+                    .find(|channel| channel.functions[0].name == spec.name)
+                    .unwrap_or_else(|| panic!("{filename} is missing {}", spec.name));
+                assert_eq!(channel.default_raw, u32::from(spec.default_value));
+                assert_eq!(
+                    channel.secondary_slots,
+                    if spec.resolution == Resolution::Coarse {
+                        vec![spec.offset + 2]
+                    } else {
+                        Vec::new()
+                    },
+                    "{} slot ownership",
+                    spec.name
+                );
+            }
+        }
     }
 }

@@ -28,6 +28,8 @@ export interface CommandStatus {
 	timecode: string | null;
 	blackout: boolean;
 	highlight: boolean;
+	/** A desk-level fault replaces the normal DMX and timecode readouts. */
+	deskError?: string | null;
 }
 
 export interface CommandLineProps {
@@ -178,6 +180,18 @@ function CommandStatusButton({
 	status: CommandStatus;
 	onOpen: () => void;
 }) {
+	if (status.deskError) {
+		return (
+			<Button
+				aria-label="Desk error. Open Running & Output Desk state"
+				className="command-status command-status-desk-error"
+				title="Open Desk state"
+				onClick={onOpen}
+			>
+				<span aria-hidden="true" className="command-status-warning-triangle" />
+			</Button>
+		);
+	}
 	return (
 		<Button
 			aria-label={`${status.highlight ? "Highlight active" : `DMX ${status.frequency}Hz`}; ${status.timecode ?? "No Timecode"}. Open running and output controls`}

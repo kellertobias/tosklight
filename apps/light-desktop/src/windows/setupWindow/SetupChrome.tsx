@@ -47,6 +47,27 @@ export const ATTRIBUTE_SETTINGS_TABS: ReadonlyArray<{
 	{ id: "attributes", label: "Attributes" },
 ];
 
+export type NetworkSettingsTab = "control-server" | "sound" | "bridges";
+export type DefaultsSettingsTab = "record-update" | "playback" | "pools";
+
+const NETWORK_SETTINGS_TABS: ReadonlyArray<{
+	id: NetworkSettingsTab;
+	label: string;
+}> = [
+	{ id: "control-server", label: "Control & server" },
+	{ id: "sound", label: "Sound" },
+	{ id: "bridges", label: "Bridges" },
+];
+
+const DEFAULTS_SETTINGS_TABS: ReadonlyArray<{
+	id: DefaultsSettingsTab;
+	label: string;
+}> = [
+	{ id: "record-update", label: "Record & Update" },
+	{ id: "playback", label: "Playback" },
+	{ id: "pools", label: "Pools" },
+];
+
 export function setupSectionLabel(section: SetupSection) {
 	return (
 		SETUP_SECTIONS.find((candidate) => candidate.id === section)?.label ??
@@ -74,13 +95,38 @@ export function SetupHeader({
 							onClick: () => controller.screenUndo.current?.(),
 						},
 						{
+							id: "encoder-placement",
+							label: "Configure encoder placement",
+							onClick: () => controller.setEncoderPlacementOpen(true),
+						},
+						{
 							id: "desk-lock",
-							label: "Desk Lock",
+							label: "Configure desk lock",
 							onClick: () => controller.setDeskLockSettingsOpen(true),
 						},
 					],
 				]
 			: [
+					...(controller.section === "network"
+						? [
+								NETWORK_SETTINGS_TABS.map(({ id, label }) => ({
+									id: `network-tab-${id}`,
+									label,
+									active: controller.networkTab === id,
+									onClick: () => controller.setNetworkTab(id),
+								})),
+							]
+						: []),
+					...(controller.section === "preferences-defaults"
+						? [
+								DEFAULTS_SETTINGS_TABS.map(({ id, label }) => ({
+									id: `defaults-tab-${id}`,
+									label,
+									active: controller.defaultsTab === id,
+									onClick: () => controller.setDefaultsTab(id),
+								})),
+							]
+						: []),
 					...(controller.section === "preferences-attributes"
 						? [
 								ATTRIBUTE_SETTINGS_TABS.map(({ id, label }) => ({

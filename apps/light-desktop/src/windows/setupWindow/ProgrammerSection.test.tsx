@@ -10,6 +10,7 @@ import type { DeskConfiguration } from "../../api/types";
 import type { SetupWindowController } from "./controller";
 import {
 	HighlightLookSettings,
+	OthersSection,
 	PatchHighlightSettings,
 	PlaybackDefaultsSettings,
 } from "./ProgrammerSection";
@@ -125,7 +126,7 @@ describe("Desk Setup Highlight Look", () => {
 		});
 	});
 
-	it("shows fixture-specific feedback for unsupported semantic parts", () => {
+	it("does not present unsupported optional semantic parts as an error", () => {
 		renderSettings(
 			{
 				intensity: 1,
@@ -139,9 +140,10 @@ describe("Desk Setup Highlight Look", () => {
 			["Fixture 7 Dimmer: Color is unavailable"],
 		);
 
-		expect(screen.getByRole("status")).toHaveTextContent(
-			"Fixture 7 Dimmer: Color is unavailable",
-		);
+		expect(screen.queryByRole("status")).not.toBeInTheDocument();
+		expect(
+			screen.queryByText("Fixture 7 Dimmer: Color is unavailable"),
+		).not.toBeInTheDocument();
 	});
 });
 
@@ -194,5 +196,33 @@ describe("Desk Setup Cuelist playback defaults", () => {
 			...draft,
 			cuelist_auto_off_at_zero_default: true,
 		});
+	});
+});
+
+describe("Desk Setup direct timing and Preload defaults", () => {
+	it("shows the fresh Immediate and Programmer plus Virtual capture contract", () => {
+		const draft = {
+			frame_rate_hz: 44,
+			command_line_at_uses_programmer_fade: false,
+			preload_programmer_changes: true,
+			preload_physical_playback_actions: false,
+			preload_virtual_playback_actions: true,
+		} as DeskConfiguration;
+		render(
+			<OthersSection
+				controller={{
+					draft,
+					editDraft: vi.fn(),
+					programmerSettingsError: null,
+				} as unknown as SetupWindowController}
+			/>,
+		);
+
+		expect(screen.getByLabelText("Direct entry uses Programmer Fade")).not.toBeChecked();
+		expect(screen.getByText("Immediate")).toBeInTheDocument();
+		expect(screen.getByLabelText("Preload programmer changes")).toBeChecked();
+		expect(screen.getByLabelText("Preload physical playback actions")).not.toBeChecked();
+		expect(screen.getByLabelText("Preload virtual playback actions")).toBeChecked();
+		expect(screen.getByText(/Physical Flash and hardware\/physical fader movements/)).toBeInTheDocument();
 	});
 });

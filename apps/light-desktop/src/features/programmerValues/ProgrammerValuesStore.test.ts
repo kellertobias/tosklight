@@ -191,7 +191,11 @@ describe("ProgrammerValuesStore authority", () => {
 					fixtureValues: [fixtureValue(), fixtureValue(0.8)],
 				}),
 			),
-		).toThrow(ProgrammerValuesProtocolError);
+		).toThrow(
+			new RegExp(
+				`Fixture ${FIXTURE_1} has more than one Programmer value for intensity.*not a DMX patch overlap.*Reload the desk state`,
+			),
+		);
 		expect(store.getSnapshot()).toMatchObject({
 			status: "error",
 			repairRequired: true,

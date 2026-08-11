@@ -153,6 +153,41 @@
 	text-align: left;
 	cursor: pointer;
 }
+.command-status.command-status-desk-error {
+	display: grid;
+	place-items: center;
+	grid-template-rows: 1fr;
+	border-color: #ff3947;
+	background: #321014;
+	color: #ff3947;
+}
+.command-status .command-status-warning-triangle {
+	position: relative;
+	width: 30px;
+	height: 27px;
+	display: grid;
+	place-items: end center;
+	overflow: visible;
+}
+.command-status .command-status-warning-triangle::before {
+	content: "";
+	position: absolute;
+	top: 0;
+	left: 50%;
+	width: 0;
+	height: 0;
+	transform: translateX(-50%);
+	border-right: 15px solid transparent;
+	border-bottom: 27px solid #ff3947;
+	border-left: 15px solid transparent;
+}
+.command-status .command-status-warning-triangle::after {
+	content: "!";
+	position: relative;
+	padding-bottom: 2px;
+	color: #160306;
+	font: 900 19px/1 ui-sans-serif, system-ui, sans-serif;
+}
 .system-controls-card {
 	width: min(680px, calc(100vw - 30px));
 }

@@ -20,11 +20,23 @@ export function canonicalProjection(
 	const dynamicValues = (projection.dynamicValues ?? []).map((entry) =>
 		Object.freeze({ ...entry }),
 	);
-	assertUnique(fixtureValues, (entry) => `${entry.fixtureId}\u0000${entry.attribute}`);
-	assertUnique(groupValues, (entry) => `${entry.groupId}\u0000${entry.attribute}`);
+	assertUnique(
+		fixtureValues,
+		(entry) => `${entry.fixtureId}\u0000${entry.attribute}`,
+		(entry) =>
+			`Fixture ${entry.fixtureId} has more than one Programmer value for ${entry.attribute}. This is an internal Programmer authority duplication, not a DMX patch overlap. Reload the desk state; if it returns, inspect that fixture's profile, heads, and multipatch data.`,
+	);
+	assertUnique(
+		groupValues,
+		(entry) => `${entry.groupId}\u0000${entry.attribute}`,
+		(entry) =>
+			`Group ${entry.groupId} has more than one Programmer value for ${entry.attribute}. Reload the desk state and remove the duplicate stored Group value if it returns.`,
+	);
 	assertUnique(
 		dynamicValues,
 		(entry) => `${entry.fixtureId}\u0000${entry.attribute}`,
+		(entry) =>
+			`Dynamic control projected ${entry.attribute} more than once for fixture ${entry.fixtureId}. Stop and restart the affected Dynamic; inspect its fixture targets if the duplicate returns.`,
 	);
 	fixtureValues.sort(compareFixtureValues);
 	groupValues.sort(compareGroupValues);
@@ -69,7 +81,9 @@ function canonicalFixtureValue(
 	});
 }
 
-function canonicalGroupValue(entry: ProgrammerGroupValue): ProgrammerGroupValue {
+function canonicalGroupValue(
+	entry: ProgrammerGroupValue,
+): ProgrammerGroupValue {
 	assertAddress(entry.groupId, entry.attribute, "Group");
 	assertTiming(entry);
 	return Object.freeze({
@@ -129,14 +143,16 @@ function assertNonNegativeInteger(value: number, label: string) {
 		);
 }
 
-function assertUnique<T>(values: readonly T[], key: (value: T) => string) {
+function assertUnique<T>(
+	values: readonly T[],
+	key: (value: T) => string,
+	diagnostic: (value: T) => string,
+) {
 	const addresses = new Set<string>();
 	for (const value of values) {
 		const address = key(value);
 		if (addresses.has(address))
-			throw new ProgrammerValuesProtocolError(
-				"Programmer values projection contains a duplicate address",
-			);
+			throw new ProgrammerValuesProtocolError(diagnostic(value));
 		addresses.add(address);
 	}
 }
@@ -152,7 +168,10 @@ function compareFixtureValues(
 	);
 }
 
-function compareGroupValues(left: ProgrammerGroupValue, right: ProgrammerGroupValue) {
+function compareGroupValues(
+	left: ProgrammerGroupValue,
+	right: ProgrammerGroupValue,
+) {
 	return (
 		left.programmerOrder - right.programmerOrder ||
 		left.groupId.localeCompare(right.groupId) ||

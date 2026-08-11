@@ -232,7 +232,7 @@ async function captureWorkflowReference(page: Page) {
     await page.locator(".setup-window nav").getByRole("button", { name: section, exact: true }).click();
     await page.locator(".setup-window").screenshot({ path: workflowShot(file) });
   }
-  await page.getByRole("button", { name: "Desk Lock", exact: true }).click();
+  await page.getByRole("button", { name: "Configure desk lock", exact: true }).click();
   await page.getByRole("dialog", { name: "Desk Lock" }).screenshot({ path: workflowShot("desk-setup-lock.png") });
   await page.getByRole("button", { name: "Close Desk Lock settings", exact: true }).click();
   await page.locator(".setup-window nav").getByRole("button", { name: "Shows & recovery", exact: true }).click();

@@ -11,5 +11,10 @@ pollster.workspace = true
 viz-scene.workspace = true
 wgpu.workspace = true
 
+[dev-dependencies]
+light-fixture = { path = "../../shared/fixture" }
+uuid.workspace = true
+viz-project = { path = "../project" }
+
 [lints]
 workspace = true

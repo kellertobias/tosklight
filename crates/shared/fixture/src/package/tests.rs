@@ -545,7 +545,10 @@ fn shipped_native_hsi_modes_bind_their_physical_coordinates_and_highlight_white(
 
 #[test]
 fn shipped_strobe_channels_keep_fixture_identity_and_program_canonical_shutter() {
-    for filename in ["generic--strobe.toskfixture", "generic--laser.toskfixture"] {
+    for filename in [
+        "generic--strobe.toskfixture",
+        "tosklight--visualizer-laser.toskfixture",
+    ] {
         let profile = shipped_profile(filename);
         let channels = profile
             .modes
@@ -763,12 +766,12 @@ fn rare_capability_profiles_remain_independent_and_round_trip() {
 
 #[test]
 fn visualizer_camera_package_keeps_its_exact_seventeen_slot_wire_contract() {
-    let profile = shipped_profile("generic--visualizer-camera.toskfixture");
+    let profile = shipped_profile("tosklight--visualizer-camera.toskfixture");
     assert_eq!(
         profile.id.0.to_string(),
         "ddf9c823-4062-490c-bd10-a15ca1c7cf4e"
     );
-    assert_eq!(profile.manufacturer, "Generic");
+    assert_eq!(profile.manufacturer, "ToskLight");
     assert_eq!(profile.name, "Visualizer Camera");
     assert_eq!(profile.fixture_type, "visualizer_camera");
     assert_eq!(profile.reserved_source, None);

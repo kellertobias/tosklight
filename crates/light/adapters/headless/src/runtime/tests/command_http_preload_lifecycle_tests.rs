@@ -85,6 +85,9 @@ fn application_event_count(state: &AppState, object: light_application::EventObj
 #[tokio::test]
 async fn preload_lifecycle_http_is_sparse_replay_safe_and_shared_across_user_desks() {
     let scenario = CommandHttpScenario::new().await;
+    scenario.state.installation.update_configuration(|configuration| {
+        configuration.preload_physical_playback_actions = true;
+    });
     let (show_id, show_revision, fixture) =
         install_lifecycle_show(&scenario, "Typed Preload lifecycle").await;
     let user_id = scenario.session.user.id.0;
@@ -381,6 +384,9 @@ async fn preload_lifecycle_http_is_sparse_replay_safe_and_shared_across_user_des
 #[tokio::test]
 async fn preload_go_rejects_show_target_and_gap_conflicts_with_explicit_authorities() {
     let scenario = CommandHttpScenario::new().await;
+    scenario.state.installation.update_configuration(|configuration| {
+        configuration.preload_physical_playback_actions = true;
+    });
     let (show_id, show_revision, _) =
         install_lifecycle_show(&scenario, "Preload cursor authority").await;
     assert_eq!(

@@ -105,7 +105,11 @@ describe("ProgrammerPreloadValuesStore authority", () => {
 					fixtureValues: [preloadFixtureValue(), preloadFixtureValue(0.8)],
 				}),
 			),
-		).toThrow(ProgrammerPreloadValuesProtocolError);
+		).toThrow(
+			new RegExp(
+				`Fixture ${FIXTURE_1} has more than one Preload Programmer value for intensity.*not a DMX patch overlap.*Clear and recapture Preload`,
+			),
+		);
 		expect(store.getSnapshot()).toMatchObject({
 			status: "error",
 			repairRequired: true,

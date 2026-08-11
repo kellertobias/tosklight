@@ -1,6 +1,6 @@
 # OSC, Extensions, and Network Control
 
-Preload capture configuration lives in **Desk Setup > Preferences > Others**. Native extensions, OSC, Sound-to-Light input, Matter, and remote-server status are peer groups under **Desk Setup > Network & Inputs**.
+Preload capture configuration lives in **Desk Setup > Preferences > Others**. **Desk Setup > Network & Inputs** selects **Control & server**, **Sound**, or **Bridges** from the window title. Control & server contains the remote-server, native-extension, and OSC status; Sound contains Sound-to-Light input; Bridges contains Matter. Switching tabs keeps unfinished fields mounted and does not change which service owns them.
 
 ![Desk input status and Preload capture settings](../assets/screenshots/workflows/desk-setup-inputs.png)
 
@@ -12,13 +12,13 @@ This is installation data, not portable show content. The peer **Highlight patch
 
 ## OSC
 
-Network & Inputs reports the active OSC bind address; it does not edit that binding. Configure the server-side OSC bind through the installation configuration, then return here to verify what the running desk loaded. Bind only to the trusted lighting-network interface. One ToskLight application and the OSC hardware subscribed to its alias form one desk: a physical button continues that desk's visible command and behaves like the corresponding UI button. A different desk alias retains its own command line, page, and button state. Programmer values are owned by the logged-in user instead, so a value that has been confirmed into that user's programmer is visible from the same user's sessions on every desk without copying the originating desk's unfinished interaction state.
+**Network & Inputs > Control & server** reports the active OSC bind address; it does not edit that binding. Configure the server-side OSC bind through the installation configuration, then return here to verify what the running desk loaded. Bind only to the trusted lighting-network interface. One ToskLight application and the OSC hardware subscribed to its alias form one desk: a physical button continues that desk's visible command and behaves like the corresponding UI button. A different desk alias retains its own command line, page, and button state. Programmer values are owned by the logged-in user instead, so a value that has been confirmed into that user's programmer is visible from the same user's sessions on every desk without copying the originating desk's unfinished interaction state.
 
 After binding, test a harmless selection and confirm the command text and result in the application. Avoid exposing OSC to untrusted networks; OSC itself does not provide the desk-token boundary used by remote application connections.
 
 ## Native extensions
 
-Built-in MIDI and RTP-MIDI transports have been removed from the server. Native device and protocol integrations are installed as separately approved extension packages. **Network & Inputs > Native extensions** shows the effective package folder and configuration file, manifest and digest validation, local approval state, configured instances, process health, restarts, protocol errors, and bounded queue drops. A missing, invalid, unapproved, or crashing extension does not prevent the desk from becoming ready.
+Built-in MIDI and RTP-MIDI transports have been removed from the server. Native device and protocol integrations are installed as separately approved extension packages. **Network & Inputs > Control & server > Native extensions** shows the effective package folder and configuration file, manifest and digest validation, local approval state, configured instances, process health, restarts, protocol errors, and bounded queue drops. A missing, invalid, unapproved, or crashing extension does not prevent the desk from becoming ready.
 
 To install one, copy its complete package folder into the exact **Extensions folder** shown by diagnostics, then use the authenticated **Rescan extensions** action. Portable/headless archives normally use `extensions` beside the server executable; the desktop uses `extensions` in its application-data folder; repository development uses `.artifacts/runtime/extensions`. Do not copy individual files into a live package folder. Stage the complete folder elsewhere and replace it atomically so a rescan cannot observe half an update.
 
@@ -38,7 +38,7 @@ timecode, lifecycle, and conformance contract is in
 
 ## Sound-to-Light audio input
 
-Under **Network & Inputs > Sound input**, request microphone access and choose the audio input used by Sound to Light. This is one browser-local selection for the current desk and is shared by Speed Groups A–E. It is not portable show data and is not sent to the server as a device identifier. Use **Refresh inputs** after connecting or renaming an audio interface.
+Under **Network & Inputs > Sound > Sound input**, request microphone access and choose the audio input used by Sound to Light. This is one browser-local selection for the current desk and is shared by Speed Groups A–E. It is not portable show data and is not sent to the server as a device identifier. Use **Refresh inputs** after connecting or renaming an audio interface.
 
 Speed Group source, frequency region, gain, confidence, smoothing, tempo range, hold, and ratio remain in each Speed Group's settings. Open those settings with Shift-tap/Shift-click or a hold on the Speed Group control.
 
@@ -48,7 +48,7 @@ On **Screens & playback**, the default-screen card can enable or disable all sof
 
 ## Matter bridge
 
-Open **Show > Enter Setup > Network & Inputs > Matter bridge**, then use the **Matter server disabled** toggle. When enabled, its label changes to **Matter server enabled**. This is physical desk installation data, not Desktop layout or show data: changing a Desktop, changing or loading a show, or switching the current playback page does not change the setting, pairing identity, or commissioned fabrics. Disabling the setting stops Matter networking and advertising without deleting that persisted identity.
+Open **Show > Enter Setup > Network & Inputs > Bridges > Matter bridge**, then use the **Matter server disabled** toggle. When enabled, its label changes to **Matter server enabled**. This is physical desk installation data, not Desktop layout or show data: changing a Desktop, changing or loading a show, or switching the current playback page does not change the setting, pairing identity, or commissioned fabrics. Disabling the setting stops Matter networking and advertising without deleting that persisted identity.
 
 When the status says **Ready to commission**, enter the displayed **Manual pairing code** in the Matter controller. **QR payload** exposes the standard `MT:` payload for controller or integration tooling. A basic commissioning window is time-limited by Matter; if the desk has not yet been commissioned and the window expires, disable and re-enable the bridge to open a new window. **Starting Matter networking…** means the UDP and mDNS sockets are not ready yet. A displayed error, such as a port conflict or missing suitable network interface, means the desk is not advertising and is not commissionable.
 

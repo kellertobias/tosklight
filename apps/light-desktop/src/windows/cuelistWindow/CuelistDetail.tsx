@@ -1,8 +1,13 @@
 import { WindowHeader } from "@tosklight/ui/window-kit";
+import { useState } from "react";
 import { useCommandLineSurface } from "../../components/control/commandLine/useCommandLineSurface";
 import type { WindowProps } from "../windowTypes";
-import { CueProperties } from "./CueProperties";
-import { CueTable, type CueTableEmptyState } from "./CueTable";
+import { CuePropertyModal } from "./CueProperties";
+import {
+	type CueEditableProperty,
+	CueTable,
+	type CueTableEmptyState,
+} from "./CueTable";
 import { useCueTimingProgress } from "./cueTimingProgress";
 import { useCueEditor } from "./useCueEditor";
 import { useSelectedCuelist } from "./useCuelistSelection";
@@ -69,6 +74,10 @@ interface CuelistDetailProps {
 }
 
 export function CuelistDetail(props: CuelistDetailProps) {
+	const [propertyEditor, setPropertyEditor] = useState<{
+		index: number;
+		property: CueEditableProperty;
+	} | null>(null);
 	const selection = useSelectedCuelist(
 		props.selectedCuelist,
 		props.active,
@@ -89,10 +98,6 @@ export function CuelistDetail(props: CuelistDetailProps) {
 		enabled: props.active && !props.viewOnly,
 		observeCommand: true,
 	});
-	const showProperties =
-		!props.viewOnly &&
-		props.showCueSidebar &&
-		(!props.compact || props.cueListTab === "cues");
 	return (
 		<div className="cuelist-window">
 			{!props.compact && (
@@ -118,9 +123,7 @@ export function CuelistDetail(props: CuelistDetailProps) {
 					]}
 				/>
 			)}
-			<div
-				className={`sequence-layout ${showProperties ? "with-cue-properties" : ""}`}
-			>
+			<div className="sequence-layout">
 				<CueTable
 					cues={cues}
 					active={selection.active}
@@ -136,30 +139,27 @@ export function CuelistDetail(props: CuelistDetailProps) {
 						Boolean(props.viewOnly),
 					)}
 					onSelectCue={editor.setSelectedCue}
+					onEditCueProperty={(index, property) => {
+						editor.setSelectedCue(index);
+						setPropertyEditor({ index, property });
+					}}
 					interactive={!props.viewOnly}
 					compactRows={props.compactRows}
 					timingProgressByRow={timingProgressByRow}
 					playbackNumber={props.selectedCuelist}
 					command={command}
 				/>
-				{showProperties && editor.cueDraft && (
-					<CueProperties
-						actions={{
-							draft: editor.cueDraft,
-							setDraft: editor.setCueDraft,
-							save: editor.saveCue,
-						}}
+				{propertyEditor && cues[propertyEditor.index] && (
+					<CuePropertyModal
+						cue={cues[propertyEditor.index]}
 						cues={cues}
-						thumbnail={thumbnails[editor.selectedCue]}
+						property={propertyEditor.property}
 						editError={editor.cueEditError}
-						active={props.active}
-						layoutDependencies={[
-							props.compact,
-							editor.cueDraft.id,
-							editor.cueDraft.number,
-							editor.cueDraft.trigger.type,
-							props.cueListTab,
-						]}
+						onCancel={() => setPropertyEditor(null)}
+						onSave={async (cue) => {
+							editor.setCueDraft(cue);
+							return editor.saveCue(cue);
+						}}
 					/>
 				)}
 			</div>

@@ -209,7 +209,7 @@ fn a_shipped_hazer_becomes_an_atmosphere_emitter_rather_than_a_beam() {
 #[test]
 fn a_shipped_laser_projects_from_the_window_in_its_front_face() {
     let plan = scene_build::build(&models(
-        shipped_profile("generic--laser"),
+        shipped_profile("tosklight--visualizer-laser"),
         StageLayoutBody::default(),
     ));
     let fixture = &plan.scene.fixtures[0];
@@ -399,7 +399,7 @@ fn shipped_package(name: &str) -> serde_json::Value {
 #[test]
 fn the_shipped_laser_becomes_a_scanning_emitter_carrying_its_own_engine() {
     let plan = scene_build::build(&models(
-        shipped_package("generic--laser"),
+        shipped_package("tosklight--visualizer-laser"),
         StageLayoutBody::default(),
     ));
     let emitter = plan

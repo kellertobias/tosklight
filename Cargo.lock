@@ -8213,7 +8213,10 @@ version = "0.1.0"
 dependencies = [
  "bytemuck",
  "glam",
+ "light-fixture",
  "pollster",
+ "uuid",
+ "viz-project",
  "viz-scene",
  "wgpu",
 ]

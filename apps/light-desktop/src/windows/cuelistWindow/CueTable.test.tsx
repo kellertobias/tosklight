@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Cue } from "../../api/types";
 import { CueTable } from "./CueTable";
 
@@ -14,6 +14,8 @@ const cue: Cue = {
 	trigger: { type: "wait", delay_millis: 4_000 },
 	changes: [],
 };
+
+afterEach(cleanup);
 
 describe("CueTable timing progress", () => {
 	it("renders optional normalized timing progress without deriving runtime state", () => {
@@ -32,18 +34,55 @@ describe("CueTable timing progress", () => {
 			/>,
 		);
 
-		expect(
-			screen.getByRole("progressbar", { name: "Trigger Time progress" }),
-		).toHaveAttribute("aria-valuenow", "25");
+		expect(screen.getByRole("button", { name: "Trigger Time" })).toHaveStyle({
+			"--cue-timing-progress": "25%",
+		});
 		expect(
 			screen.getByRole("progressbar", { name: "In Fade progress" }),
 		).toHaveAttribute("aria-valuetext", "2 s, 50% complete");
+		expect(screen.getByRole("button", { name: "Out Fade" })).toHaveStyle({
+			"--cue-timing-progress": "100%",
+		});
+		expect(
+			screen.getByRole("progressbar", { name: "Trigger Time progress" }),
+		).toHaveAttribute("aria-valuenow", "25");
 		expect(
 			screen.getByRole("progressbar", { name: "Out Fade progress" }),
 		).toHaveAttribute("aria-valuenow", "100");
 		expect(
 			screen.queryByRole("progressbar", { name: "In Delay progress" }),
 		).not.toBeInTheDocument();
+	});
+
+	it("opens the exact property from pointer/touch-capable cell controls", () => {
+		const onEditCueProperty = vi.fn();
+		render(
+			<CueTable
+				cues={[cue]}
+				active={undefined}
+				selectedCue={0}
+				settingsOpen={false}
+				thumbnails={{}}
+				emptyState={{ title: "Empty", description: "Empty", icon: "◎" }}
+				onSelectCue={vi.fn()}
+				onEditCueProperty={onEditCueProperty}
+			/>,
+		);
+
+		for (const [name, property] of [
+			["Trigger", "trigger"],
+			["Trigger Time", "triggerTime"],
+			["In Delay", "inDelay"],
+			["In Fade", "inFade"],
+			["Out Delay", "outDelay"],
+			["Out Fade", "outFade"],
+		] as const) {
+			const cell = screen.getByRole("button", { name });
+			fireEvent.pointerDown(cell, { pointerType: "touch" });
+			fireEvent.pointerUp(cell, { pointerType: "touch" });
+			fireEvent.click(cell);
+			expect(onEditCueProperty).toHaveBeenLastCalledWith(0, property);
+		}
 	});
 });
 

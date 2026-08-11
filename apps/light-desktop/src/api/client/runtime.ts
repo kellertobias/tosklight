@@ -4,8 +4,13 @@ import type {
 	EventServerMessage,
 	LiveAction,
 	LiveActionFrame,
+	RuntimeDiagnosticsSnapshot,
 } from "../generated/light-wire";
-import type { BootstrapSnapshot, SessionResponse } from "../types";
+import type {
+	BootstrapSnapshot,
+	RuntimeDiagnostics,
+	SessionResponse,
+} from "../types";
 import { browserStorage, defaultServerUrl } from "./serverLocation";
 import type { LiveClientTransport } from "./transport";
 
@@ -67,6 +72,14 @@ export class LightClientRuntime {
 
 	bootstrap(): Promise<BootstrapSnapshot> {
 		return this.request("/api/v2/bootstrap", {}, false);
+	}
+
+	/** Authenticated, current runtime diagnostics for operator-facing desk health. */
+	async diagnostics(): Promise<RuntimeDiagnostics> {
+		const snapshot = await this.request<RuntimeDiagnosticsSnapshot>(
+			"/api/v2/diagnostics",
+		);
+		return { outputRoutes: snapshot.output_routes };
 	}
 
 	async login(username: string): Promise<SessionResponse> {

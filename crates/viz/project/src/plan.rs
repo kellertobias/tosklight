@@ -336,6 +336,12 @@ pub fn compile(fixtures: &[PatchedFixture]) -> ScenePlan {
     let mut plan_artwork: HashMap<light_core::FixtureId, [Option<u32>; 5]> = HashMap::new();
 
     for fixture in fixtures {
+        // Visual-only Venue objects are compiled by the desk's scenery path. Keeping them out of
+        // the fixture plan prevents a curtain, pipe, or truss from acquiring a lamp icon merely
+        // because it arrived through the portable fixture-package schema.
+        if fixture.profile.patch_policy == PatchPolicy::VisualOnly {
+            continue;
+        }
         let Some((mode, primary_slots)) = selected_mode(fixture, &mut warnings) else {
             continue;
         };
@@ -403,38 +409,7 @@ pub fn compile(fixtures: &[PatchedFixture]) -> ScenePlan {
             .and_then(|index| scene.models.get(index as usize))
             .map(|body| EmitterMount::from_model(body, body_size))
             .unwrap_or_default();
-        /*
-         * The lit face is the size of the lens it is drawn on.
-         *
-         * A profile that states its own light source is the authority and keeps it. Everything else
-         * — which is most of the library — was getting a size from its class: one number per kind of
-         * lantern, with no relation to the model it lands on. A 150 mm guess in the middle of a
-         * 260 mm lens is why the thing projecting the light looked several times bigger than the
-         * light leaving it.
-         *
-         * The model knows, because the lens is geometry in it. It already told us where that
-         * geometry is and which way it looks; this is the third thing it can answer.
-         */
-        if fixture.profile.optics.light_source.is_none()
-            && let Some(face) = mount.face
-        {
-            // Never wider than the lantern it is set into, which is the rule the help states and
-            // the last guard against a model whose emitting geometry is modelled generously.
-            let face = face.min(glam::Vec2::new(body_size.x, body_size.y.max(body_size.z)));
-            match optics.source.form {
-                // A round lens is one number, so a face measured a little off-square is taken at
-                // its mean rather than being drawn as an oval nobody built.
-                SourceForm::Round => {
-                    let diameter = (face.x + face.y) * 0.5;
-                    optics.source.width = diameter;
-                    optics.source.height = diameter;
-                }
-                SourceForm::Oval | SourceForm::Rectangular => {
-                    optics.source.width = face.x;
-                    optics.source.height = face.y;
-                }
-            }
-        }
+        apply_model_source_face(&mut optics, fixture, mount, body_size);
         compile_instances(
             &mut scene,
             &mut bindings,
@@ -461,6 +436,46 @@ pub fn compile(fixtures: &[PatchedFixture]) -> ScenePlan {
         external_camera,
         external_camera_issue,
         warnings,
+    }
+}
+
+fn apply_model_source_face(
+    optics: &mut EmitterOptics,
+    fixture: &PatchedFixture,
+    mount: EmitterMount,
+    body_size: Vec3,
+) {
+    /*
+     * The lit face is the size of the lens it is drawn on.
+     *
+     * A profile that states its own light source is the authority and keeps it. Everything else
+     * — which is most of the library — was getting a size from its class: one number per kind of
+     * lantern, with no relation to the model it lands on. A 150 mm guess in the middle of a
+     * 260 mm lens is why the thing projecting the light looked several times bigger than the
+     * light leaving it.
+     *
+     * The model knows, because the lens is geometry in it. It already told us where that
+     * geometry is and which way it looks; this is the third thing it can answer.
+     */
+    if fixture.profile.optics.light_source.is_none()
+        && let Some(face) = mount.face
+    {
+        // Never wider than the lantern it is set into, which is the rule the help states and
+        // the last guard against a model whose emitting geometry is modelled generously.
+        let face = face.min(glam::Vec2::new(body_size.x, body_size.y.max(body_size.z)));
+        match optics.source.form {
+            // A round lens is one number, so a face measured a little off-square is taken at
+            // its mean rather than being drawn as an oval nobody built.
+            SourceForm::Round => {
+                let diameter = (face.x + face.y) * 0.5;
+                optics.source.width = diameter;
+                optics.source.height = diameter;
+            }
+            SourceForm::Oval | SourceForm::Rectangular => {
+                optics.source.width = face.x;
+                optics.source.height = face.y;
+            }
+        }
     }
 }
 

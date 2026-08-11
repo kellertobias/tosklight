@@ -65,9 +65,6 @@ pub(super) fn compile_instances(
                 )
             }),
         });
-        if fixture.profile.patch_policy == PatchPolicy::VisualOnly {
-            continue;
-        }
         // Its own address where it has one, the fixture's where it has not.
         let own = address_map(instance);
         let addresses = if own.is_empty() {

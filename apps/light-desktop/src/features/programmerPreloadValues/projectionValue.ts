@@ -19,10 +19,14 @@ export function canonicalPreloadProjection(
 	assertUnique(
 		fixtureValues,
 		(entry) => `${entry.fixtureId}\u0000${entry.attribute}`,
+		(entry) =>
+			`Fixture ${entry.fixtureId} has more than one Preload Programmer value for ${entry.attribute}. This is an internal Preload authority duplication, not a DMX patch overlap. Clear and recapture Preload; inspect that fixture's profile, heads, and multipatch data if it returns.`,
 	);
 	assertUnique(
 		groupValues,
 		(entry) => `${entry.groupId}\u0000${entry.attribute}`,
+		(entry) =>
+			`Group ${entry.groupId} has more than one Preload Programmer value for ${entry.attribute}. Clear and recapture Preload to remove the duplicate.`,
 	);
 	fixtureValues.sort(compareFixtureValues);
 	groupValues.sort(compareGroupValues);
@@ -110,14 +114,16 @@ function assertNonNegativeInteger(value: number, label: string) {
 		);
 }
 
-function assertUnique<T>(values: readonly T[], key: (value: T) => string) {
+function assertUnique<T>(
+	values: readonly T[],
+	key: (value: T) => string,
+	diagnostic: (value: T) => string,
+) {
 	const addresses = new Set<string>();
 	for (const value of values) {
 		const address = key(value);
 		if (addresses.has(address))
-			throw new ProgrammerPreloadValuesProtocolError(
-				"Preload Programmer values projection contains a duplicate address",
-			);
+			throw new ProgrammerPreloadValuesProtocolError(diagnostic(value));
 		addresses.add(address);
 	}
 }

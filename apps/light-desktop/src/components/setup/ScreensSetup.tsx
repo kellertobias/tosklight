@@ -233,7 +233,6 @@ export function ScreensSetup({
 				onCreate={create}
 			/>
 			<div className="screens-setup-list">
-				<ProgrammerControlSurfaceSettings />
 				<DefaultScreenSettings
 					deskName={defaultScreen.draft?.name ?? ""}
 					deskAlias={defaultScreen.draft?.osc_alias ?? ""}

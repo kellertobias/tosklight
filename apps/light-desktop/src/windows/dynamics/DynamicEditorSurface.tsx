@@ -162,7 +162,7 @@ function DynamicEditorHeader({
 							}),
 					},
 				],
-				[{ id: "back", label: "← Back to Pool", onClick: onBack }],
+				[{ id: "back", label: "← Dynamics", onClick: onBack }],
 			]}
 			settings
 			onSettings={(anchor) => onSettingsAnchor(anchor.getBoundingClientRect())}

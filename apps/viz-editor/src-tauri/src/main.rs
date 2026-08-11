@@ -18,6 +18,11 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::Manager;
 
+enum FixtureLibrarySource {
+    Packages(PathBuf),
+    Database(PathBuf),
+}
+
 /// Where to serve the open document for a visualizer that launched this window.
 ///
 /// The visualizer picks the port and passes it, because it is the one that has to connect. With
@@ -60,9 +65,19 @@ fn opened_by_the_visualizer() -> bool {
 }
 
 /// Where the shipped fixture packages live, so the fixture browser has something to offer.
-fn fixture_library_path(app: &tauri::App) -> Option<PathBuf> {
+fn fixture_library_source(app: &tauri::App) -> Result<Option<FixtureLibrarySource>, String> {
     if let Some(configured) = std::env::var_os("LIGHT_FIXTURE_LIBRARY") {
-        return Some(PathBuf::from(configured));
+        let path = PathBuf::from(configured);
+        return if path.is_dir() {
+            Ok(Some(FixtureLibrarySource::Packages(path)))
+        } else if path.is_file() {
+            Ok(Some(FixtureLibrarySource::Database(path)))
+        } else {
+            Err(format!(
+                "LIGHT_FIXTURE_LIBRARY names {}, which is neither a fixture-package directory nor a fixture database",
+                path.display()
+            ))
+        };
     }
     let bundled = app
         .path()
@@ -70,13 +85,51 @@ fn fixture_library_path(app: &tauri::App) -> Option<PathBuf> {
         .ok()
         .map(|dir| dir.join("fixture-library"));
     if let Some(path) = bundled.filter(|path| path.exists()) {
-        return Some(path);
+        return Ok(Some(FixtureLibrarySource::Packages(path)));
     }
     // Development: the desk's own runtime library, if this checkout has one.
-    option_env!("LIGHT_RUNTIME_DATA_DIR")
+    Ok(option_env!("LIGHT_RUNTIME_DATA_DIR")
         .map(PathBuf::from)
         .map(|dir| dir.join("fixtures.sqlite"))
         .filter(|path| path.exists())
+        .map(FixtureLibrarySource::Database))
+}
+
+fn prepare_fixture_library(
+    source: Option<FixtureLibrarySource>,
+    app_data: &std::path::Path,
+) -> Result<Option<PathBuf>, String> {
+    let Some(source) = source else {
+        return Ok(None);
+    };
+    match source {
+        FixtureLibrarySource::Database(path) => Ok(Some(path)),
+        FixtureLibrarySource::Packages(packages) => {
+            std::fs::create_dir_all(app_data).map_err(|error| {
+                format!(
+                    "could not create writable pre-visualizer data directory {}: {error}",
+                    app_data.display()
+                )
+            })?;
+            let database = app_data.join("fixtures.sqlite");
+            let library = light_fixture::FixtureLibrary::open(&database).map_err(|error| {
+                format!(
+                    "could not open writable fixture database {}: {error}",
+                    database.display()
+                )
+            })?;
+            library
+                .load_fixture_package_directory(&packages)
+                .map_err(|error| {
+                    format!(
+                        "could not load bundled fixture packages from {} into {}: {error}",
+                        packages.display(),
+                        database.display()
+                    )
+                })?;
+            Ok(Some(database))
+        }
+    }
 }
 
 /// Serve this editor's document to the network, and say where.
@@ -143,7 +196,10 @@ fn main() {
             if opened_by_the_visualizer() {
                 let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
             }
-            let library = fixture_library_path(app);
+            let source = fixture_library_source(app).map_err(std::io::Error::other)?;
+            let app_data = app.path().app_data_dir().map_err(std::io::Error::other)?;
+            let library =
+                prepare_fixture_library(source, &app_data).map_err(std::io::Error::other)?;
             let session = app.state::<session::Session>();
             session.set_library_path(library);
             if let Ok(config) = app.path().app_config_dir() {
@@ -175,7 +231,94 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::served_address;
+    use super::{FixtureLibrarySource, prepare_fixture_library, served_address};
+    use std::path::PathBuf;
+
+    fn workspace(name: &str) -> PathBuf {
+        let root = std::env::var_os("LIGHT_TMP_DIR").map_or_else(
+            || PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../.artifacts/tmp"),
+            PathBuf::from,
+        );
+        let directory = root
+            .join("viz-editor-library-tests")
+            .join(format!("{name}-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&directory).unwrap();
+        directory
+    }
+
+    fn shipped_packages() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../assets/fixture-library")
+    }
+
+    #[test]
+    fn bundled_packages_populate_only_a_clean_writable_app_data_database() {
+        let root = workspace("packaged-clean");
+        let app_data = root.join("Application Support");
+        let packages = shipped_packages();
+
+        let database = prepare_fixture_library(
+            Some(FixtureLibrarySource::Packages(packages.clone())),
+            &app_data,
+        )
+        .expect("packaged fixture library")
+        .expect("fixture database path");
+
+        assert_eq!(database, app_data.join("fixtures.sqlite"));
+        assert!(!database.starts_with(&packages));
+        let library = light_fixture::FixtureLibrary::open(&database).expect("writable database");
+        let profiles = library.profiles().expect("installed profiles");
+        assert!(
+            profiles.len() > 40,
+            "the normal shipped library is available"
+        );
+        assert!(profiles.iter().any(|profile| {
+            profile.manufacturer == "Generic" && profile.name == "Dimmer Profile"
+        }));
+        let tosklight_names = profiles
+            .iter()
+            .filter(|profile| profile.manufacturer == "ToskLight")
+            .map(|profile| profile.name.as_str())
+            .collect::<Vec<_>>();
+        for expected in [
+            "Media Server Layer",
+            "Media Server Master",
+            "Visualizer Camera",
+            "Visualizer Laser",
+        ] {
+            assert!(tosklight_names.contains(&expected), "missing {expected}");
+        }
+        assert!(!tosklight_names.iter().any(|name| {
+            name.to_lowercase().contains("music") || name.to_lowercase().contains("sparkler")
+        }));
+
+        prepare_fixture_library(Some(FixtureLibrarySource::Packages(packages)), &app_data)
+            .expect("repeat startup is idempotent");
+        assert_eq!(
+            light_fixture::FixtureLibrary::open(&database)
+                .unwrap()
+                .profiles()
+                .unwrap()
+                .len(),
+            profiles.len()
+        );
+    }
+
+    #[test]
+    fn corrupt_packaged_resources_name_both_source_and_database() {
+        let root = workspace("packaged-corrupt");
+        let packages = root.join("Resources/fixture-library");
+        std::fs::create_dir_all(&packages).unwrap();
+        std::fs::write(packages.join("broken.toskfixture"), b"not a package").unwrap();
+        let app_data = root.join("Application Support");
+
+        let error = prepare_fixture_library(
+            Some(FixtureLibrarySource::Packages(packages.clone())),
+            &app_data,
+        )
+        .expect_err("corrupt package is actionable");
+        assert!(error.contains(&packages.display().to_string()));
+        assert!(error.contains(&app_data.join("fixtures.sqlite").display().to_string()));
+    }
 
     /// One product, one Dock tile. The editor keeps its own only when an operator opened it: what
     /// distinguishes the two is the address the visualizer passes so it can connect to the

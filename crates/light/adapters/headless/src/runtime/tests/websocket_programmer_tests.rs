@@ -827,6 +827,9 @@ async fn combined_indexed_control_targets_share_one_transient_lifetime() {
 #[tokio::test]
 async fn direct_programmer_writes_preserve_resolved_fade_for_recording() {
     let (state, data_dir) = test_state();
+    state.installation.update_configuration(|configuration| {
+        configuration.command_line_at_uses_programmer_fade = true;
+    });
     let fixture_definition = schema_v2_direct_fixture().0;
     let fixture = fixture_definition.fixture_id;
     state

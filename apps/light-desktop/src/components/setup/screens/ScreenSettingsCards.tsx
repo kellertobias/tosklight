@@ -7,6 +7,7 @@ import {
 	TextField,
 } from "@tosklight/ui";
 import { useEffect, useRef, useState } from "react";
+import { configuredServerUrl } from "../../../api/client/serverLocation";
 import type {
 	FixedScreenPane,
 	PlaybackSurfaceLayout,
@@ -910,7 +911,7 @@ export function ScreenSettingsCard({
 				pending.current -= 1;
 			});
 	};
-	const browserLink = browserScreenUrl(draft.id, window.location.href);
+	const browserLink = browserScreenUrl(draft.id, configuredServerUrl());
 	const copyBrowserLink = () =>
 		copyScreenBrowserLink(browserLink, setBrowserLinkStatus);
 	const confirmOwnerRemoval = async () => {

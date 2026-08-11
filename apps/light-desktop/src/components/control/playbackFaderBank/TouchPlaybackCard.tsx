@@ -123,7 +123,7 @@ export function TouchPlaybackCard({
 					void controller.runtimeActions?.poolPlaybackAction(
 						playback.number,
 						"master",
-						{ value: next / 100, surface: "physical" },
+						{ value: next / 100, surface: "virtual" },
 					),
 			}}
 		/>

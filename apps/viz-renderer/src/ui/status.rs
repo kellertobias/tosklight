@@ -532,10 +532,9 @@ fn build_second_row(
 
 /// Draw screen-space fixture labels in every Stage view.
 ///
-/// Labels are operator annotations, so they deliberately remain visible when rendered geometry
-/// crosses their world anchor. Collision dropping and a small coverage budget keep that useful
-/// visibility from turning a dense rig into a wall of text. Plan views additionally keep their
-/// existing live-colour dots.
+/// Labels are operator annotations for light-producing fixtures. Collision dropping, scene
+/// visibility, and a small coverage budget keep them from turning a dense rig into a wall of text.
+/// Plan views additionally keep their existing live-colour dots.
 pub fn build_fixture_labels(
     overlay: &mut Overlay,
     scene: &Scene,
@@ -578,6 +577,24 @@ pub fn build_fixture_labels(
         return;
     }
 
+    build_perspective_fixture_labels(
+        overlay, scene, camera, width, height, scale, line, label_ink, theme, &lit,
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn build_perspective_fixture_labels(
+    overlay: &mut Overlay,
+    scene: &Scene,
+    camera: &ResolvedCamera,
+    width: f32,
+    height: f32,
+    scale: f32,
+    line: f32,
+    label_ink: [f32; 4],
+    theme: Theme,
+    lit: &[Option<(f32, [f32; 3])>],
+) {
     // A 3D picture with overlapping labels is unreadable, so a label is dropped when it would collide
     // with one already placed. Near fixtures win deterministically, which prevents a label behind
     // the rig from hiding the fixture in front without pretending the overlay is depth-tested.
@@ -611,10 +628,19 @@ pub fn build_fixture_labels(
             })
     });
     for index in order {
+        if lit[index].is_none() {
+            continue;
+        }
         let fixture = &scene.fixtures[index];
         let Some((x, y)) = camera.project(fixture.position, width, height) else {
             continue;
         };
+        let ray = camera.ray_through(x, y, width, height);
+        if viz_render::pick(scene, &ray, camera.position.distance(fixture.position)).element
+            != viz_render::PickedElement::Fixture(index)
+        {
+            continue;
+        }
         // Keep labels off the bottom status bar and the top-left mark.
         if y > height - 40.0 * ui_scale(width) {
             continue;
@@ -716,6 +742,9 @@ fn build_plot_fixture_labels(
     // hidden, text follows scene order, and only direct label collisions drop text.
     let mut placed: Vec<[f32; 4]> = Vec::with_capacity(scene.fixtures.len());
     for (index, fixture) in scene.fixtures.iter().enumerate() {
+        if lit[index].is_none() {
+            continue;
+        }
         let Some((x, y)) = camera.project(fixture.position, width, height) else {
             continue;
         };
@@ -768,7 +797,8 @@ mod fixture_label_tests {
     use glam::Vec3;
     use viz_scene::{
         Camera, EmitterInstance, EmitterKind, EmitterLayoutCells, EmitterOptics, FixtureBody,
-        FixtureInstance, Scene, SceneValues, ViewConfiguration, ViewMode,
+        FixtureInstance, Scene, SceneValues, SceneryKind, SceneryObject, ViewConfiguration,
+        ViewMode,
     };
 
     fn fixture(number: u32, position: Vec3) -> FixtureInstance {
@@ -809,10 +839,34 @@ mod fixture_label_tests {
         overlay
     }
 
+    fn push_lamp(scene: &mut Scene, fixture: FixtureInstance) {
+        let fixture_index = scene.fixtures.len() as u32;
+        scene.fixtures.push(fixture);
+        scene.emitters.push(EmitterInstance {
+            fixture_index,
+            head_index: 0,
+            label: "Main".into(),
+            local_origin: Vec3::ZERO,
+            tilt_pivot: Vec3::ZERO,
+            local_orientation_degrees: Vec3::ZERO,
+            pan: None,
+            tilt: None,
+            beam_angle_degrees: 10.0,
+            field_angle_degrees: 20.0,
+            optics: EmitterOptics::default(),
+            kind: EmitterKind::Beam,
+            cells: EmitterLayoutCells::single(),
+            laser: None,
+            live_shaper_angle_roles: [false; 4],
+            shaper_roles: [false; 4],
+            live_shaper_rotation_role: false,
+        });
+    }
+
     #[test]
     fn full_3d_labels_are_screen_space_and_obey_the_authoritative_switch() {
         let mut near = Scene::default();
-        near.fixtures.push(fixture(7, Vec3::new(0.0, 3.0, 0.0)));
+        push_lamp(&mut near, fixture(7, Vec3::new(0.0, 3.0, 0.0)));
         near.recompute_bounds();
         let visible = labels(&near, true);
         assert!(!visible.quads.is_empty(), "Full 3D receives a fixture tag");
@@ -822,7 +876,7 @@ mod fixture_label_tests {
         );
 
         let mut far = Scene::default();
-        far.fixtures.push(fixture(7, Vec3::new(0.0, 3.0, -6.0)));
+        push_lamp(&mut far, fixture(7, Vec3::new(0.0, 3.0, -6.0)));
         far.recompute_bounds();
         let far = labels(&far, true);
         assert_eq!(
@@ -838,16 +892,16 @@ mod fixture_label_tests {
         let far_position = camera.position + (camera.target - camera.position) * 1.5;
         let near = fixture(1, near_position);
         let mut single = Scene::default();
-        single.fixtures.push(near.clone());
+        push_lamp(&mut single, near.clone());
         single.recompute_bounds();
         let expected = labels(&single, true);
 
         let mut dense = Scene::default();
         for number in 100..180 {
-            dense.fixtures.push(fixture(number, far_position));
+            push_lamp(&mut dense, fixture(number, far_position));
         }
         // Deliberately append the near fixture after every far one: depth, not source order, wins.
-        dense.fixtures.push(near);
+        push_lamp(&mut dense, near);
         dense.recompute_bounds();
         let actual = labels(&dense, true);
 
@@ -857,6 +911,42 @@ mod fixture_label_tests {
             "colliding far labels are dropped instead of blanketing the rig"
         );
         assert_eq!(actual.quads[0].rect, expected.quads[0].rect);
+    }
+
+    #[test]
+    fn labels_skip_non_lamps_and_lamps_hidden_by_scenery() {
+        let position = Camera::default().target;
+        let mut machine_only = Scene::default();
+        machine_only.fixtures.push(fixture(1, position));
+        machine_only.recompute_bounds();
+        assert!(
+            labels(&machine_only, true).quads.is_empty(),
+            "a Venue object or non-light-producing machine never receives a label"
+        );
+
+        let mut visible = Scene::default();
+        push_lamp(&mut visible, fixture(2, position));
+        visible.recompute_bounds();
+        assert!(!labels(&visible, true).quads.is_empty());
+
+        let camera = Camera::default();
+        let mut hidden = visible;
+        hidden.scenery.push(SceneryObject {
+            id: viz_scene::uuid::Uuid::new_v4(),
+            name: "Front curtain".into(),
+            position: camera.position.lerp(position, 0.5),
+            rotation_degrees: Vec3::ZERO,
+            size: Vec3::splat(3.0),
+            colour: [0.1; 3],
+            roughness: 1.0,
+            kind: SceneryKind::Curtain,
+            chords: 0,
+        });
+        hidden.recompute_bounds();
+        assert!(
+            labels(&hidden, true).quads.is_empty(),
+            "the curtain suppresses the fixture's floating label"
+        );
     }
 
     #[test]

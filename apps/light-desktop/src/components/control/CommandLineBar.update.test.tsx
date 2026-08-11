@@ -21,6 +21,11 @@ import {
 } from "../../features/programmingInteraction/testFixtures";
 import { createCommandLineTestAuthority } from "../../features/programmingInteraction/testing/commandLineTestAuthority";
 import { CommandLineBar } from "./CommandLineBar";
+import {
+	requestSystemControlsTab,
+	useRequestedSystemControlsTab,
+} from "../../features/deskState/deskStateDiagnostics";
+import { DeskStateDiagnosticsProvider } from "../../features/deskState/DeskStateDiagnosticsState";
 
 const activity = vi.hoisted(() => ({
 	current: {
@@ -52,7 +57,7 @@ const preloadLifecycle = vi.hoisted(() => ({
 	active: false,
 	pending: false,
 	phase: "idle" as const,
-	error: null,
+	error: null as string | null,
 	actions: {
 		enter: vi.fn().mockResolvedValue(null),
 		go: vi.fn().mockResolvedValue(null),
@@ -129,7 +134,7 @@ const server = {
 			at: "2026-07-17T20:00:01Z",
 		},
 	] as const,
-	error: null,
+	error: null as string | null,
 	status: "connected",
 	poolPlaybackAction: vi.fn(),
 	setPlaybackPage: vi.fn(),
@@ -174,6 +179,13 @@ vi.mock("../../features/outputRuntime/OutputRuntimeView", () => ({
 vi.mock("../../features/highlight/HighlightState", () => ({
 	useHighlightSnapshot: () => ({ active: highlight.active }),
 }));
+vi.mock("../../features/shellStatus/ShellStatusState", () => ({
+	useConnectionStatus: () => server.status,
+	useServerError: () => server.error,
+}));
+vi.mock("../../features/shellStatus/ShellStatusActionsProvider", () => ({
+	useShellStatusActions: () => ({ dismissError: server.dismissError }),
+}));
 vi.mock("../../features/programmerValues/useProgrammerValuesActivity", () => ({
 	useProgrammerValuesActivity: () => activity.current,
 }));
@@ -204,6 +216,8 @@ beforeEach(() => {
 	server.commandLine = "FIXTURE";
 	server.bootstrap.active_programmers = [];
 	server.bootstrap.active_timecode = null;
+	server.error = null;
+	requestSystemControlsTab("running");
 	activity.current = {
 		authority: "loading",
 		ready: false,
@@ -228,7 +242,87 @@ function deferred<T>() {
 	return { promise, resolve };
 }
 
+function RequestedSystemControlsTab() {
+	return (
+		<output aria-label="Requested system controls tab">
+			{useRequestedSystemControlsTab()}
+		</output>
+	);
+}
+
 describe("scoped command-line integration", () => {
+	it("opens a global warning on the exact Desk state tab", () => {
+		server.error =
+			"Fixture fixture-17 has more than one Programmer value for intensity.";
+		render(
+			<>
+				<CommandLineBar />
+				<RequestedSystemControlsTab />
+			</>,
+		);
+
+		expect(screen.queryByText(/DMX 60Hz/u)).not.toBeInTheDocument();
+		fireEvent.click(
+			screen.getByRole("button", {
+				name: "Desk error. Open Running & Output Desk state",
+			}),
+		);
+
+		expect(
+			screen.getByLabelText("Requested system controls tab"),
+		).toHaveTextContent("desk-state");
+		expect(dispatch).toHaveBeenCalledWith({
+			type: "SET_MODAL",
+			modal: "systemControlsOpen",
+			value: true,
+		});
+	});
+
+	it("opens current duplicate output diagnostics on the exact Desk state tab", async () => {
+		render(
+			<DeskStateDiagnosticsProvider
+				enabled
+				outputRoutes={[]}
+				pollMilliseconds={60_000}
+				readDiagnostics={async () =>
+					({
+						outputRoutes: [
+							{
+								protocol: "art_net",
+								universe: 7,
+								destination: "10.0.0.17:6454",
+								enabled: true,
+							},
+							{
+								protocol: "art_net",
+								universe: 7,
+								destination: "10.0.0.17:6454",
+								enabled: true,
+							},
+						],
+					}) as never
+				}
+			>
+				<CommandLineBar />
+				<RequestedSystemControlsTab />
+			</DeskStateDiagnosticsProvider>,
+		);
+		await act(async () => await Promise.resolve());
+
+		fireEvent.click(
+			screen.getByRole("button", {
+				name: "Desk error. Open Running & Output Desk state",
+			}),
+		);
+		expect(
+			screen.getByLabelText("Requested system controls tab"),
+		).toHaveTextContent("desk-state");
+		expect(dispatch).toHaveBeenCalledWith({
+			type: "SET_MODAL",
+			modal: "systemControlsOpen",
+			value: true,
+		});
+	});
 	it("renders optimistic edits and waits for the revisioned write before Enter", async () => {
 		const store = new ProgrammingInteractionStore();
 		const transport = new FakeProgrammingTransport();
