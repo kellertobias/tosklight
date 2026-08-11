@@ -109,14 +109,15 @@ impl RuntimeResources {
                 .copied()
                 .unwrap_or(0),
         };
-        let audio_output = super::timecode_audio_output::NativeTimecodeAudioOutput::open(
-            Arc::clone(&managed_assets),
-            Arc::clone(&timecode_clock),
-            &audio_configuration,
-        )
-        .map(|output| Arc::new(output) as Arc<dyn light_application::TimecodeAudioOutput>)
-        .map_err(|error| tracing::warn!(%error, "native Timecode audio is unavailable"))
-        .ok();
+        let audio_output =
+            super::timecode_audio_output::NativeTimecodeAudioOutput::open_with_timeout(
+                Arc::clone(&managed_assets),
+                Arc::clone(&timecode_clock),
+                &audio_configuration,
+            )
+            .map(|output| Arc::new(output) as Arc<dyn light_application::TimecodeAudioOutput>)
+            .map_err(|error| tracing::warn!(%error, "native Timecode audio is unavailable"))
+            .ok();
         let timecodes = super::timecode_v2::new_service_with_clock(
             timecode_clock,
             audio_output,

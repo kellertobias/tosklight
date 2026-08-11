@@ -27,7 +27,7 @@ pub(super) fn output_devices() -> Vec<String> {
 pub(super) struct NativeTimecodeAudioOutput;
 
 impl NativeTimecodeAudioOutput {
-    pub(super) fn open(
+    pub(super) fn open_with_timeout(
         _store: Arc<dyn ManagedAssetStore>,
         _clock: Arc<dyn TimecodeClock>,
         configuration: &NativeTimecodeAudioConfig,

@@ -6,6 +6,7 @@
 use std::{
     collections::BTreeMap,
     sync::{Arc, Mutex},
+    time::Duration,
 };
 
 use cpal::traits::{DeviceTrait as _, HostTrait as _, StreamTrait as _};
@@ -66,6 +67,27 @@ pub(in crate::runtime) enum NativeCommand {
 }
 
 impl NativeTimecodeAudioOutput {
+    pub(super) fn open_with_timeout(
+        store: Arc<dyn ManagedAssetStore>,
+        clock: Arc<dyn TimecodeClock>,
+        configuration: &NativeTimecodeAudioConfig,
+    ) -> Result<Self, String> {
+        let configuration = configuration.clone();
+        let (started, startup) = std::sync::mpsc::channel();
+        std::thread::Builder::new()
+            .name("timecode-audio-startup".into())
+            .spawn(move || {
+                let _ = started.send(Self::open(store, clock, &configuration));
+            })
+            .map_err(|error| format!("Timecode audio startup worker could not start: {error}"))?;
+        receive_startup(
+            &startup,
+            Duration::from_secs(3),
+            "Timecode audio initialization did not finish within 3 seconds",
+            "Timecode audio startup worker stopped unexpectedly",
+        )?
+    }
+
     pub(super) fn open(
         store: Arc<dyn ManagedAssetStore>,
         clock: Arc<dyn TimecodeClock>,
@@ -89,15 +111,30 @@ impl NativeTimecodeAudioOutput {
                 run_device(device, config, format, receiver, clock, started);
             })
             .map_err(|error| format!("Timecode audio output worker could not start: {error}"))?;
-        startup
-            .recv()
-            .map_err(|_| "Timecode audio output worker stopped during startup".to_owned())??;
+        receive_startup(
+            &startup,
+            Duration::from_secs(3),
+            "Timecode audio output worker did not start within 3 seconds",
+            "Timecode audio output worker stopped during startup",
+        )??;
         Ok(Self {
             store,
             latency_micros,
             worker: super::TimecodeAudioWorkerResource::new(commands, worker),
         })
     }
+}
+
+fn receive_startup<T>(
+    receiver: &std::sync::mpsc::Receiver<T>,
+    timeout: Duration,
+    timeout_error: &str,
+    disconnected_error: &str,
+) -> Result<T, String> {
+    receiver.recv_timeout(timeout).map_err(|error| match error {
+        std::sync::mpsc::RecvTimeoutError::Timeout => timeout_error.to_owned(),
+        std::sync::mpsc::RecvTimeoutError::Disconnected => disconnected_error.to_owned(),
+    })
 }
 
 impl TimecodeAudioOutput for NativeTimecodeAudioOutput {
@@ -505,5 +542,36 @@ mod tests {
         assert_eq!(add_signed(10_000, 2_500), 12_500);
         assert_eq!(add_signed(10_000, -2_500), 7_500);
         assert_eq!(add_signed(1_000, -2_500), 0);
+    }
+
+    #[test]
+    fn startup_wait_reports_timeout_without_blocking_server_startup() {
+        let (_sender, receiver) = std::sync::mpsc::channel::<()>();
+
+        assert_eq!(
+            receive_startup(
+                &receiver,
+                Duration::ZERO,
+                "startup timed out",
+                "startup disconnected",
+            ),
+            Err("startup timed out".to_owned())
+        );
+    }
+
+    #[test]
+    fn startup_wait_distinguishes_a_stopped_worker() {
+        let (sender, receiver) = std::sync::mpsc::channel::<()>();
+        drop(sender);
+
+        assert_eq!(
+            receive_startup(
+                &receiver,
+                Duration::from_secs(1),
+                "startup timed out",
+                "startup disconnected",
+            ),
+            Err("startup disconnected".to_owned())
+        );
     }
 }
