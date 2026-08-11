@@ -319,6 +319,11 @@ test("release packaging and Pages cover the supported product matrix", () => {
 		/binary="[^"]*viz-renderer\$suffix"[\s\S]*--demo --verify/u,
 	);
 	assert.match(workflow, /-p media-server --bin media-server/u);
+	assert.doesNotMatch(workflow, /default-demo-show --dir assets/u);
+	assert.match(
+		workflow,
+		/default-demo-show-\$attempt[\s\S]*?demo_show="\$attempt_dir\/demo\.show"/u,
+	);
 	assert.match(
 		workflow,
 		/Assemble the operator-facing platform bundle[\s\S]*assemble-release-bundle\.sh/u,

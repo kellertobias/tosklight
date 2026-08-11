@@ -720,8 +720,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          source tools/artifact-paths.sh
+          light_init_artifact_paths "$PWD"
+          demo_show=""
           for attempt in {1..60}; do
-            if gh run download "$GITHUB_RUN_ID" --name default-demo-show --dir assets; then
+            attempt_dir="$LIGHT_TMP_DIR/default-demo-show-$attempt"
+            mkdir -p "$attempt_dir"
+            if gh run download "$GITHUB_RUN_ID" --name default-demo-show --dir "$attempt_dir"; then
+              demo_show="$attempt_dir/demo.show"
               break
             fi
             if [[ "$attempt" == 60 ]]; then
@@ -730,11 +736,13 @@ jobs:
             fi
             sleep 10
           done
-          source tools/artifact-paths.sh
-          light_init_artifact_paths "$PWD"
+          [[ -f "$demo_show" ]] || {
+            echo "error: downloaded default-demo-show did not contain demo.show" >&2
+            exit 1
+          }
           mkdir -p "$LIGHT_DEMO_SHOW_DIR"
-          cp assets/demo.show "$LIGHT_DEMO_SHOW_DIR/demo-show.show"
-          cp assets/demo.show .artifacts/release/demo.show
+          cp "$demo_show" "$LIGHT_DEMO_SHOW_DIR/demo-show.show"
+          cp "$demo_show" .artifacts/release/demo.show
 
       - name: Build the ToskLight Viz Editor application
         if: matrix.viz
