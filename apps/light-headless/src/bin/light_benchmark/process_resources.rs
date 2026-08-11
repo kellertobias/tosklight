@@ -46,6 +46,7 @@ impl MeasurementSampler {
 #[cfg(target_os = "linux")]
 struct LinuxMeasurementState {
     ticks_per_second: u64,
+    cpu_capacity_percent: f64,
     previous: LinuxSample,
     next_sample_at: Instant,
     cpu_total: f64,
@@ -63,6 +64,7 @@ impl LinuxMeasurementState {
         let previous = linux_sample()?;
         Ok(Self {
             ticks_per_second,
+            cpu_capacity_percent: previous.allowed_logical_cpus as f64 * 100.0,
             next_sample_at: previous.at + SAMPLE_INTERVAL,
             peak_resident: previous.resident_bytes,
             previous,
@@ -90,6 +92,7 @@ impl LinuxMeasurementState {
                 / self.ticks_per_second as f64
                 / elapsed
                 * 100.0;
+            let cpu = cpu.min(self.cpu_capacity_percent);
             self.cpu_total += cpu;
             self.cpu_max = self.cpu_max.max(cpu);
             self.cpu_samples += 1;
@@ -111,7 +114,7 @@ impl LinuxMeasurementState {
             application_peak_resident_bytes: Some(self.peak_resident),
             samples: self.cpu_samples,
             sample_interval_milliseconds: SAMPLE_INTERVAL.as_millis() as u64,
-            measurement: "Light benchmark process only, sampled from /proc during the timed window",
+            measurement: "Light benchmark process only, sampled from /proc during the timed window; CPU is percent of one logical core and is bounded by the process CPU affinity",
             unavailable_reason: None,
         }
     }
@@ -122,6 +125,7 @@ struct LinuxSample {
     at: Instant,
     cpu_ticks: u64,
     resident_bytes: u64,
+    allowed_logical_cpus: u64,
 }
 
 #[cfg(target_os = "linux")]
@@ -148,7 +152,50 @@ fn linux_sample() -> Result<LinuxSample, String> {
         at: Instant::now(),
         cpu_ticks: user_ticks + system_ticks,
         resident_bytes: status_kib(&status, "VmRSS:").unwrap_or(0),
+        allowed_logical_cpus: allowed_cpu_count(&status).unwrap_or(1),
     })
+}
+
+fn allowed_cpu_count(status: &str) -> Option<u64> {
+    status
+        .lines()
+        .find_map(|line| line.strip_prefix("Cpus_allowed_list:"))?
+        .trim()
+        .split(',')
+        .try_fold(0_u64, |count, part| {
+            let mut bounds = part.split('-');
+            let first = bounds.next()?.trim().parse::<u64>().ok()?;
+            let last = bounds
+                .next()
+                .map(str::trim)
+                .map(str::parse::<u64>)
+                .transpose()
+                .ok()?
+                .unwrap_or(first);
+            last.checked_sub(first)?.checked_add(1)?.checked_add(count)
+        })
+        .filter(|count| *count > 0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::allowed_cpu_count;
+
+    #[test]
+    fn counts_single_and_ranged_cpu_affinity_entries() {
+        assert_eq!(allowed_cpu_count("Cpus_allowed_list:\t3\n"), Some(1));
+        assert_eq!(
+            allowed_cpu_count("Name:\tlight-benchmark\nCpus_allowed_list:\t0-3,8,10-11\n"),
+            Some(7)
+        );
+    }
+
+    #[test]
+    fn rejects_missing_empty_and_reversed_cpu_affinity() {
+        assert_eq!(allowed_cpu_count("Name:\tlight-benchmark\n"), None);
+        assert_eq!(allowed_cpu_count("Cpus_allowed_list:\t\n"), None);
+        assert_eq!(allowed_cpu_count("Cpus_allowed_list:\t4-2\n"), None);
+    }
 }
 
 #[cfg(target_os = "linux")]

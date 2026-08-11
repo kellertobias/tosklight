@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 import { artifactPaths } from "./artifact-paths.mjs";
 import {
 	classifyPerformance,
+	PERFORMANCE_MEASUREMENT_SECONDS,
 	statusDocument,
 } from "./run-release-performance.mjs";
 
@@ -61,7 +62,7 @@ function report({
 				fixture_footprint: 16,
 				configured_rate_hz: 60,
 				achieved_ticks_per_second: achieved,
-				elapsed_seconds: 3.04,
+				elapsed_seconds: 15.04,
 				frame_rate: {
 					average_completed_hz: achieved,
 					minimum_one_second_completed_hz: minimum,
@@ -155,6 +156,7 @@ function canonicalDemo() {
 }
 
 test("invalid or inconsistent benchmark evidence is unknown", () => {
+	assert.equal(PERFORMANCE_MEASUREMENT_SECONDS, 15);
 	assert.equal(
 		classifyPerformance({ valid: false, reason: "invalid" }, null).status,
 		"unknown",

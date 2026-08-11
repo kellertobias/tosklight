@@ -194,7 +194,7 @@ function measuredStatus(status = "healthy") {
 		},
 		benchmark_scenarios: [
 			{
-				case_name: "Maximum mixed shipped-mode show",
+				case_name: "37,720 parameters / 2,000 fixtures",
 				execution_mode: "unrestricted",
 				fixture_count: 2_000,
 				parameter_count: 37_720,
@@ -206,7 +206,7 @@ function measuredStatus(status = "healthy") {
 				maximum_one_second_completed_hz: 58,
 				below_target_hz: 44,
 				windows_below_target: 1,
-				measurement_seconds: 3.04,
+				measurement_seconds: 15.04,
 				animated_attribute_count: 6_480,
 				master_lane_count: 20,
 				thresholds: { red_below_hz: 30, yellow_below_hz: 45 },
@@ -217,7 +217,7 @@ function measuredStatus(status = "healthy") {
 				},
 			},
 			...(["unrestricted", "one_core"].map((execution_mode) => ({
-				case_name: "Demo show (~300 fixtures)",
+				case_name: "Demo show — 4,096 parameters / 295 fixtures",
 				execution_mode,
 				fixture_count: 295,
 				parameter_count: 4_096,
@@ -229,7 +229,7 @@ function measuredStatus(status = "healthy") {
 				maximum_one_second_completed_hz: 60,
 				below_target_hz: 44,
 				windows_below_target: 0,
-				measurement_seconds: 3.01,
+				measurement_seconds: 15.01,
 				animated_attribute_count: 295,
 				master_lane_count: 5,
 				thresholds: {
@@ -290,22 +290,25 @@ test("compact landing summary includes only measured runs and explains row color
 		summary,
 		/<th>Test set<\/th><th>Load<\/th><th>Statistics<\/th>/u,
 	);
-	assert.match(summary, /Maximum mixed shipped-mode show/u);
-	assert.match(summary, /37,720 parameters · 74 DMX universes/u);
+	assert.match(summary, /37,720 parameters \/ 2,000 fixtures/u);
+	assert.match(summary, /unrestricted<br>74 DMX universes/u);
 	assert.match(summary, /<strong>6,480 dyn\. attr\.<\/strong>/u);
 	assert.match(summary, /20 master lanes/u);
 	assert.match(summary, /<strong>44 Hz p95<\/strong>/u);
 	assert.match(
 		summary,
-		/<strong>1 \/ 3\.04 s<\/strong><small>one-second windows below 44 Hz \/ total test time/u,
+		/<strong>1 \/ 15\.04 s<\/strong><small>one-second windows<br>below 44 Hz<br>total test time/u,
 	);
 	assert.match(
 		summary,
-		/97% max<\/strong><small>83% avg Light CPU · 0\.68 GiB max RAM/u,
+		/97% max<\/strong><small>83% avg Light CPU<br>0\.68 GiB max RAM/u,
 	);
+	assert.match(summary, /58 \/ 59\.5 \/ 60 Hz<br>min \/ avg \/ max/u);
+	assert.match(summary, /This workflow does not launch Playwright/u);
+	assert.match(summary, /100% means one fully used core/u);
 	assert.match(summary, /performance-row-warning/u);
 	assert.match(summary, /Yellow<\/span>: warning/u);
-	assert.ok(summary.indexOf("Demo show") < summary.indexOf("Maximum mixed"));
+	assert.ok(summary.indexOf("Demo show") < summary.indexOf("37,720 parameters"));
 	assert.match(summary, /locked to 1 core/u);
 	assert.match(summary, /unrestricted/u);
 	assert.match(summary, /Detailed tests, run information, and raw report/u);
@@ -450,9 +453,11 @@ test("landing-page assembly writes the same normalized object used by the HTML",
 		assert.match(detailPage, /report-performance\.zip/u);
 		const landingPage = readFileSync(target, "utf8");
 		assert.match(landingPage, /class="performance-compact"/u);
-		assert.match(landingPage, /Maximum mixed shipped-mode show/u);
+		assert.match(landingPage, /37,720 parameters \/ 2,000 fixtures/u);
 		assert.match(landingPage, /6,480 dyn\. attr\./u);
 		assert.match(landingPage, /Yellow<\/span>: warning/u);
+		assert.match(landingPage, /table-layout: fixed/u);
+		assert.doesNotMatch(landingPage, /min-width: 58rem/u);
 	} finally {
 		rmSync(directory, { recursive: true, force: true });
 	}

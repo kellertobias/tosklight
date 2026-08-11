@@ -299,7 +299,7 @@ function compactCpu(resources) {
 		resources?.application_peak_resident_bytes ?? resources?.peak_resident_bytes;
 	return (
 		`<strong>${compactNumber(maximum)}% max</strong>` +
-		`<small>${compactNumber(average)}% avg Light CPU · ${bytes(ram)} max RAM</small>`
+		`<small>${compactNumber(average)}% avg Light CPU<br>${bytes(ram)} max RAM</small>`
 	);
 }
 
@@ -333,12 +333,12 @@ function compactScenarioRow(scenario) {
 	return (
 		`<tr class="performance-row performance-row-${escapePerformanceText(scenario.compact_status)}">` +
 		`<th scope="row"><strong>${escapePerformanceText(scenario.case_name ?? `${compactNumber(scenario.fixture_count)} fixtures`)}</strong>` +
-		`<small>${compactNumber(scenario.fixture_count)} fixtures · ${compactNumber(scenario.parameter_count)} parameters · ${compactNumber(scenario.universes)} DMX universes · ${mode}</small></th>` +
+		`<small>${mode}<br>${compactNumber(scenario.universes)} DMX universes</small></th>` +
 		`<td><strong>${dynamics}</strong><small>${escapePerformanceText(dynamicsDetail)}</small></td>` +
 		`<td><strong>${compactNumber(scenario.p95_one_second_completed_hz)} Hz p95</strong>` +
-		`<small>${compactNumber(scenario.minimum_one_second_completed_hz)} / ${compactNumber(scenario.average_completed_hz)} / ${maximum} Hz · min / avg / max</small>${critical}</td>` +
+		`<small>${compactNumber(scenario.minimum_one_second_completed_hz)} / ${compactNumber(scenario.average_completed_hz)} / ${maximum} Hz<br>min / avg / max</small>${critical}</td>` +
 		`<td><strong>${compactNumber(below)} / ${compactDuration(elapsed)} s</strong>` +
-		`<small>one-second windows below ${target} Hz / total test time</small></td>` +
+		`<small>one-second windows<br>below ${target} Hz<br>total test time</small></td>` +
 		`<td>${compactCpu(scenario.resources)}</td></tr>`
 	);
 }
@@ -357,6 +357,7 @@ export function renderCompactPerformanceSummary(performance) {
 		`<span class="legend-warning">Yellow</span>: warning · ` +
 		`<span class="legend-degraded">Red</span>: below the scenario floor · ` +
 		`<span class="legend-unknown">Gray</span>: incomplete evidence. Every run requests 60 Hz; “below target” always counts one-second windows below 44 Hz.</p>` +
+		`<p class="performance-legend">CPU and RAM cover only the Light benchmark process (engine, rendering, and protocol pipeline) during the timed window—not the Node coordinator, browser, Desk UI, or Playwright. This workflow does not launch Playwright. CPU is expressed per logical core and bounded by the process CPU affinity; 100% means one fully used core.</p>` +
 		`<p class="performance-details"><a href="performance/">Detailed tests, run information, and raw report →</a></p></div>`
 	);
 }

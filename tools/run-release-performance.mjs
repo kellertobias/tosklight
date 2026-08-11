@@ -12,6 +12,7 @@ const DOUBLED_FIXTURES_PER_UNIVERSE = BASELINE_FIXTURES_PER_UNIVERSE * 2;
 const INTERACTIVE_GREEN_HZ = 60;
 const INTERACTIVE_YELLOW_HZ = 40;
 const BENCHMARK_IDENTITY = "tosklight_render_to_protocol_encoding_pipeline";
+export const PERFORMANCE_MEASUREMENT_SECONDS = 15;
 
 const finite = (value) => typeof value === "number" && Number.isFinite(value);
 
@@ -233,7 +234,7 @@ function runStage(
 		"--transport",
 		"encode-only",
 		"--seconds",
-		"3",
+		String(PERFORMANCE_MEASUREMENT_SECONDS),
 		"--warmup-seconds",
 		"1",
 		"--fixtures-per-universe",
@@ -296,7 +297,7 @@ function runHeadlessStress(
 			"--transport",
 			"encode-only",
 			"--seconds",
-			"3",
+			String(PERFORMANCE_MEASUREMENT_SECONDS),
 			"--warmup-seconds",
 			"1",
 			"--rate-hz",
@@ -478,26 +479,26 @@ function canonicalDemoEvidence(candidate) {
 
 const PERFORMANCE_CASES = {
 	demo: {
-		name: "Demo show (~300 fixtures)",
 		thresholds: { red_below_hz: 44, critical_below_hz: 40, yellow_below_hz: 59 },
 	},
 	sixteen_universe: {
-		name: "16-universe show (~600 fixtures)",
 		thresholds: { red_below_hz: 40, yellow_below_hz: 59 },
 	},
 	required_1024: {
-		name: "16k parameter / 1,024 fixture show",
 		thresholds: { red_below_hz: 40, yellow_below_hz: 44 },
 	},
 	doubled_2048: {
-		name: "16k parameter / 2,048 fixture show",
 		thresholds: { red_below_hz: 30, yellow_below_hz: 44 },
 	},
 	maximum: {
-		name: "Maximum mixed shipped-mode show",
 		thresholds: { red_below_hz: 30, yellow_below_hz: 45 },
 	},
 };
+
+function performanceCaseName(caseId, parameterCount, fixtureCount) {
+	const measuredSize = `${parameterCount.toLocaleString("en-US")} parameters / ${fixtureCount.toLocaleString("en-US")} fixtures`;
+	return caseId === "demo" ? `Demo show — ${measuredSize}` : measuredSize;
+}
 
 function benchmarkScenarioEvidence(caseId, stage) {
 	const scenario = stage?.report?.scenarios?.[0];
@@ -520,7 +521,11 @@ function benchmarkScenarioEvidence(caseId, stage) {
 	const evidence = scenarioEvidence({ valid: true, scenario });
 	return {
 		case_id: caseId,
-		case_name: PERFORMANCE_CASES[caseId].name,
+		case_name: performanceCaseName(
+			caseId,
+			evidence.parameter_count,
+			scenario.fixture_count,
+		),
 		execution_mode: stage.execution_mode,
 		cpu_limit: stage.execution_mode === "one_core" ? 1 : null,
 		fixture_count: scenario.fixture_count,

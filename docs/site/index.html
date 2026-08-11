@@ -186,10 +186,10 @@
       .signing-note { margin: 1.5rem 0 0; color: var(--muted); font-size: 0.85rem; }
       a.version { text-decoration: none; }
       a.version:hover { border-color: var(--accent); color: var(--text); }
-      .performance-table-scroll { overflow-x: auto; }
+      .performance-table-scroll { overflow-x: visible; }
       .performance-compact {
         width: 100%;
-        min-width: 58rem;
+        table-layout: fixed;
         border-collapse: separate;
         border-spacing: 0 0.45rem;
       }
@@ -215,7 +215,8 @@
         color: var(--muted);
         font-size: 0.72rem;
         line-height: 1.35;
-        white-space: nowrap;
+        white-space: normal;
+        overflow-wrap: anywhere;
       }
       .performance-row-healthy > * { background: rgb(57 217 138 / 0.12); }
       .performance-row-warning > * { background: rgb(255 209 102 / 0.16); }
