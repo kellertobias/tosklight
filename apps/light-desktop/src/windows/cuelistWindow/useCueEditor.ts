@@ -10,8 +10,8 @@ import {
 } from "react";
 import type { Cue, CueList, VersionedObject } from "../../api/types";
 import {
-	cueListWriteBasis,
 	type CueListWriteBasis,
+	cueListWriteBasis,
 	useCueListTopologyWriter,
 } from "../../features/playbackTopology/useCueListTopologyWriter";
 import { cueDraftIdentity } from "./cueFormatting";
@@ -137,7 +137,7 @@ export function useCueEditor({
 	}, [selectedCueObject?.body.id, cues.length]);
 
 	const saveCue = async (nextCue = cueDraft) => {
-		await queueCueWrite(nextCue, {
+		return queueCueWrite(nextCue, {
 			queue: cueWriteQueue,
 			activeQueue: activeCueWriteQueue,
 			latestCueObject,
@@ -193,23 +193,23 @@ type CueWriteControls = Omit<
 async function queueCueWrite(
 	nextCue: Cue | null,
 	controls: CueWriteControls,
-) {
+): Promise<boolean> {
 	const writeBase = controls.cueWriteBase.current;
-	if (!nextCue || !writeBase) return;
+	if (!nextCue || !writeBase) return false;
 	if (!hasValidTimings(nextCue)) {
 		controls.setCueEditError(
 			"Cue edit was not saved. In/Out Fade, In/Out Delay, and Trigger time must be zero or greater.",
 		);
-		return;
+		return false;
 	}
 	const cueIdentity = cueDraftIdentity(nextCue);
-	if (!cueIdentity) return;
+	if (!cueIdentity) return false;
 	const saveKey = cueWriteKey(writeBase, cueIdentity, nextCue);
-	if (
-		controls.queue.pending.has(saveKey) ||
-		controls.queue.completedKey === saveKey
-	)
-		return;
+	if (controls.queue.completedKey === saveKey) return true;
+	if (controls.queue.pending.has(saveKey)) {
+		await controls.queue.tail;
+		return controls.queue.completedKey === saveKey;
+	}
 	controls.queue.pending.add(saveKey);
 	controls.setCueEditError("");
 	const generation = controls.queue.generation;
@@ -223,26 +223,33 @@ async function queueCueWrite(
 			saveKey,
 		});
 	const result = controls.queue.tail.then(operation, operation);
-	controls.queue.tail = result;
-	await result;
+	controls.queue.tail = result.then(
+		() => undefined,
+		() => undefined,
+	);
+	return result;
 }
 
-async function commitQueuedCue(write: QueuedCueWrite) {
+async function commitQueuedCue(write: QueuedCueWrite): Promise<boolean> {
 	try {
-		if (!isCurrentWrite(write)) return;
+		if (!isCurrentWrite(write)) return false;
 		const current = write.cueWriteBase.current;
-		if (!current || current.basis.cueListId !== write.cueListId) return;
+		if (!current || current.basis.cueListId !== write.cueListId) return false;
 		const cueIndex = findCue(current.body, write.cueIdentity);
-		if (cueIndex < 0) return;
+		if (cueIndex < 0) return false;
 		const saved = await write.queue.save(current.basis, {
 			...current.body,
 			cues: current.body.cues.map((cue, index) =>
 				index === cueIndex ? write.nextCue : cue,
 			),
 		});
-		if (!isCurrentWrite(write)) return;
-		if (saved) installQueuedWrite(write, saved);
-		else failQueuedWrite(write);
+		if (!isCurrentWrite(write)) return false;
+		if (saved) return installQueuedWrite(write, saved);
+		failQueuedWrite(write);
+		return false;
+	} catch {
+		if (isCurrentWrite(write)) failQueuedWrite(write);
+		return false;
 	} finally {
 		write.queue.pending.delete(write.saveKey);
 	}
@@ -251,9 +258,9 @@ async function commitQueuedCue(write: QueuedCueWrite) {
 function installQueuedWrite(
 	write: QueuedCueWrite,
 	saved: VersionedObject<CueList>,
-) {
+): boolean {
 	const current = write.cueWriteBase.current;
-	if (!current) return;
+	if (!current) return false;
 	const latest = write.latestCueObject.current;
 	if (
 		latest?.body.id === saved.body.id &&
@@ -264,7 +271,7 @@ function installQueuedWrite(
 		write.setCueEditError(
 			"Cue edit was saved, but newer Cuelist changes also arrived. Review the current values before saving again.",
 		);
-		return;
+		return false;
 	}
 	const selectedIdentity = cueDraftIdentity(
 		current.body.cues[current.cueIndex],
@@ -283,6 +290,7 @@ function installQueuedWrite(
 		write.cueIdentity,
 		write.nextCue,
 	);
+	return true;
 }
 
 function failQueuedWrite(write: QueuedCueWrite) {
@@ -359,9 +367,7 @@ function hasValidTimings(cue: Cue) {
 		cue.out_fade_millis ?? 0,
 		cue.out_delay_millis ?? 0,
 		triggerDelay,
-	].every(
-		(value) => Number.isSafeInteger(value) && value >= 0,
-	);
+	].every((value) => Number.isSafeInteger(value) && value >= 0);
 }
 
 function cueWriteKey(

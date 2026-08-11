@@ -190,19 +190,6 @@ function CuePaneSettings({
 				}))}
 			/>
 			<SwitchField
-				label="Cue sidebar"
-				offLabel="Hidden"
-				onLabel="Visible"
-				checked={pane.showCueSidebar ?? true}
-				onChange={(event) =>
-					dispatch({
-						type: "SET_PANE_CUE_SIDEBAR",
-						id: pane.id,
-						value: event.target.checked,
-					})
-				}
-			/>
-			<SwitchField
 				label="Compact Cue rows"
 				offLabel="Standard"
 				onLabel="Compact"

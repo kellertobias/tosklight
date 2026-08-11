@@ -202,6 +202,23 @@
 	width: min(480px, 100%) !important;
 }
 
+.cue-property-modal {
+	width: min(460px, 100%) !important;
+}
+
+.cue-property-modal-body {
+	display: grid;
+	gap: 12px;
+	padding: 18px;
+}
+
+.cue-property-modal-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+	padding: 0 18px 18px;
+}
+
 .cue-trigger-options {
 	display: grid;
 	grid-template-columns: repeat(3, minmax(0, 1fr));

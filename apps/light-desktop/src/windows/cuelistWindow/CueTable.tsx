@@ -28,6 +28,14 @@ export type CueTimingProgressByRow = Record<
 	Partial<Record<CueTimingProgressField, number>>
 >;
 
+export type CueEditableProperty =
+	| "trigger"
+	| "triggerTime"
+	| "inDelay"
+	| "inFade"
+	| "outDelay"
+	| "outFade";
+
 function normalizedProgress(value: number | undefined): number | undefined {
 	if (value === undefined || !Number.isFinite(value)) return undefined;
 	return Math.min(1, Math.max(0, value));
@@ -37,10 +45,12 @@ function TimingCell({
 	label,
 	value,
 	progress,
+	onActivate,
 }: {
 	label: string;
 	value: string;
 	progress?: number;
+	onActivate?: () => void;
 }) {
 	const normalized = normalizedProgress(progress);
 	const style =
@@ -49,27 +59,34 @@ function TimingCell({
 			: ({
 					"--cue-timing-progress": `${normalized * 100}%`,
 				} as CSSProperties);
-	if (normalized === undefined) {
-		return (
-			<td className="cue-timing-cell">
-				<span className="cue-timing-cell-value">{value}</span>
-			</td>
-		);
-	}
 	return (
 		<td className="cue-timing-cell">
-			<span
+			<button
+				type="button"
 				className="cue-timing-cell-value"
 				style={style}
-				role="progressbar"
-				aria-label={label}
-				aria-valuemin={0}
-				aria-valuemax={100}
-				aria-valuenow={Math.round(normalized * 100)}
-				aria-valuetext={`${value}, ${Math.round(normalized * 100)}% complete`}
+				aria-label={label.replace(" progress", "")}
+				onClick={(event) => {
+					event.stopPropagation();
+					onActivate?.();
+				}}
+				disabled={!onActivate}
 			>
-				{value}
-			</span>
+				{normalized === undefined ? (
+					value
+				) : (
+					<span
+						role="progressbar"
+						aria-label={label}
+						aria-valuemin={0}
+						aria-valuemax={100}
+						aria-valuenow={Math.round(normalized * 100)}
+						aria-valuetext={`${value}, ${Math.round(normalized * 100)}% complete`}
+					>
+						{value}
+					</span>
+				)}
+			</button>
 		</td>
 	);
 }
@@ -138,6 +155,7 @@ export function CueTable({
 	thumbnails,
 	emptyState,
 	onSelectCue,
+	onEditCueProperty,
 	interactive = true,
 	compactRows = false,
 	timingProgressByRow = {},
@@ -151,6 +169,7 @@ export function CueTable({
 	thumbnails: Record<number, string>;
 	emptyState: CueTableEmptyState;
 	onSelectCue: (index: number) => void;
+	onEditCueProperty?: (index: number, property: CueEditableProperty) => void;
 	interactive?: boolean;
 	compactRows?: boolean;
 	timingProgressByRow?: CueTimingProgressByRow;
@@ -170,6 +189,10 @@ export function CueTable({
 			command,
 			onSelectCue,
 		});
+	const activateProperty = (index: number, property: CueEditableProperty) => {
+		if (mutationTarget) activateCue(index);
+		else onEditCueProperty?.(index, property);
+	};
 	return (
 		<div className="cue-editor">
 			<WindowScrollArea
@@ -229,7 +252,21 @@ export function CueTable({
 											</small>
 										)}
 									</td>
-									<td>{cueTriggerLabel(cues, cue)}</td>
+									<td className="cue-trigger-column">
+										<button
+											type="button"
+											aria-label="Trigger"
+											disabled={
+												!interactive || settingsOpen || !onEditCueProperty
+											}
+											onClick={(event) => {
+												event.stopPropagation();
+												activateProperty(index, "trigger");
+											}}
+										>
+											{cueTriggerLabel(cues, cue)}
+										</button>
+									</td>
 									<TimingCell
 										label="Trigger Time progress"
 										value={
@@ -238,16 +275,31 @@ export function CueTable({
 												: "—"
 										}
 										progress={timingProgressByRow[index]?.triggerTime}
+										onActivate={
+											interactive && !settingsOpen && onEditCueProperty
+												? () => activateProperty(index, "triggerTime")
+												: undefined
+										}
 									/>
 									<TimingCell
 										label="In Delay progress"
 										value={formatCueSeconds(cue.delay_millis)}
 										progress={timingProgressByRow[index]?.inDelay}
+										onActivate={
+											interactive && !settingsOpen && onEditCueProperty
+												? () => activateProperty(index, "inDelay")
+												: undefined
+										}
 									/>
 									<TimingCell
 										label="In Fade progress"
 										value={formatCueSeconds(cue.fade_millis)}
 										progress={timingProgressByRow[index]?.inFade}
+										onActivate={
+											interactive && !settingsOpen && onEditCueProperty
+												? () => activateProperty(index, "inFade")
+												: undefined
+										}
 									/>
 									<TimingCell
 										label="Out Delay progress"
@@ -255,6 +307,11 @@ export function CueTable({
 											cue.out_delay_millis ?? cue.delay_millis,
 										)}
 										progress={timingProgressByRow[index]?.outDelay}
+										onActivate={
+											interactive && !settingsOpen && onEditCueProperty
+												? () => activateProperty(index, "outDelay")
+												: undefined
+										}
 									/>
 									<TimingCell
 										label="Out Fade progress"
@@ -262,6 +319,11 @@ export function CueTable({
 											cue.out_fade_millis ?? cue.fade_millis,
 										)}
 										progress={timingProgressByRow[index]?.outFade}
+										onActivate={
+											interactive && !settingsOpen && onEditCueProperty
+												? () => activateProperty(index, "outFade")
+												: undefined
+										}
 									/>
 								</tr>
 							))}
