@@ -126,6 +126,10 @@ test("native Timecode audio stays out of the ARM headless build", () => {
 		workflow.slice(armStart, windowsStart),
 		/--no-default-features/u,
 	);
+	assert.match(
+		workflow,
+		/Install Linux ARM64 server dependencies[\s\S]*?libudev-dev/u,
+	);
 	assert.match(appManifest, /default = \["native-audio-output"\]/u);
 	assert.match(
 		appManifest,

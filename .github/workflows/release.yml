@@ -556,7 +556,7 @@ jobs:
         if: runner.os == 'Linux' && !matrix.desktop
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev pkg-config zip
+          sudo apt-get install -y libasound2-dev libudev-dev pkg-config zip
 
       - name: Install workspace dependencies
         shell: bash
