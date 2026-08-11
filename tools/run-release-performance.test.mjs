@@ -432,4 +432,13 @@ test("scheduled publication separates release delivery from performance and Page
 	assert.match(pages, /name: storybook-static/u);
 	assert.match(pages, /\.artifacts\/build\/storybook\/ui/u);
 	assert.doesNotMatch(release, /storybook|manual|pages|performance/u);
+	assert.match(releaseWorkflow, /SCCACHE_GHA_ENABLED: "true"/u);
+	assert.match(releaseWorkflow, /RUSTC_WRAPPER: sccache/u);
+	assert.equal(
+		releaseWorkflow.match(
+			/mozilla-actions\/sccache-action@7d986dd989559c6ecdb630a3fd2557667be217ad/g,
+		)?.length,
+		7,
+	);
+	assert.equal(releaseWorkflow.match(/version: v0\.17\.0/g)?.length, 7);
 });
