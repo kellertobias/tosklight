@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
 use cpal::traits::{DeviceTrait as _, HostTrait as _, StreamTrait as _};
 use crossbeam_queue::ArrayQueue;
@@ -10,6 +11,10 @@ use media_domain::audio::Tuning;
 
 use crate::QUEUE_CAPACITY;
 use crate::snapshot::{AnalysisSnapshot, SharedAnalysis, Worker};
+
+/// CoreAudio device discovery can block indefinitely when the host audio service is unhealthy.
+/// Media is still useful without an audio input, so startup must not wait forever for it.
+const STARTUP_TIMEOUT: Duration = Duration::from_secs(3);
 
 /// Why audio could not be captured.
 ///
@@ -34,12 +39,28 @@ pub enum AudioError {
 /// make them unusable.
 pub type SharedTuning = Arc<arc_swap::ArcSwap<Tuning>>;
 
-/// A running capture: the device, the queue it fills, and the worker that drains it.
+/// The thread-safe control surface for a running capture.
+///
+/// CPAL's CoreAudio stream is not `Send`, so the platform stream remains on the device thread
+/// that opened it. The rest of Media holds only the published analysis, live tuning, and shutdown
+/// control.
 pub struct AudioService {
     published: SharedAnalysis,
     tuning: SharedTuning,
     /// The device that is open, as the machine names it.
     device: String,
+    stop: Option<std::sync::mpsc::Sender<()>>,
+    device_thread: Option<std::thread::JoinHandle<()>>,
+}
+
+struct Opened {
+    published: SharedAnalysis,
+    tuning: SharedTuning,
+    device: String,
+}
+
+/// The non-Send CoreAudio stream and its analysis worker, both owned by the device thread.
+struct DeviceCapture {
     running: Arc<AtomicBool>,
     /// Held for as long as capture should continue. Dropping it closes the device.
     _stream: cpal::Stream,
@@ -47,8 +68,72 @@ pub struct AudioService {
 }
 
 impl AudioService {
-    /// Opens the configured device and starts analysing.
-    pub fn start(configuration: &AudioConfiguration) -> Result<Self, AudioError> {
+    /// Opens the configured device without allowing a platform audio service to hold up Media.
+    pub fn start_bounded(configuration: &AudioConfiguration) -> Result<Self, AudioError> {
+        let configuration = configuration.clone();
+        let (started, startup) = std::sync::mpsc::channel();
+        let (stop, stopping) = std::sync::mpsc::channel();
+        let device_thread = std::thread::Builder::new()
+            .name("media-audio-device".into())
+            .spawn(move || {
+                let (capture, opened) = match DeviceCapture::open(&configuration) {
+                    Ok(opened) => opened,
+                    Err(error) => {
+                        let _ = started.send(Err(error));
+                        return;
+                    }
+                };
+                if started.send(Ok(opened)).is_err() {
+                    return;
+                }
+                let _ = stopping.recv();
+                drop(capture);
+            })
+            .map_err(|error| AudioError::NotOpened {
+                detail: format!("audio startup worker could not start: {error}"),
+            })?;
+
+        let opened = receive_startup(&startup, STARTUP_TIMEOUT)??;
+        Ok(Self {
+            published: opened.published,
+            tuning: opened.tuning,
+            device: opened.device,
+            stop: Some(stop),
+            device_thread: Some(device_thread),
+        })
+    }
+
+    /// The newest analysis, for whoever is drawing this frame.
+    pub fn analysis(&self) -> SharedAnalysis {
+        Arc::clone(&self.published)
+    }
+
+    /// The device this capture is reading, as the machine names it.
+    pub fn device(&self) -> &str {
+        &self.device
+    }
+
+    /// The tuning the worker reads, for whoever accepts an operator's edit.
+    ///
+    /// Handed out rather than reached through this service, because the service owns a platform
+    /// stream that belongs to one thread while an edit arrives on another.
+    pub fn tuning(&self) -> SharedTuning {
+        Arc::clone(&self.tuning)
+    }
+
+    /// Applies an operator's tuning to the running analysis.
+    ///
+    /// The device is not reopened: choosing a different input is a different stream, and the
+    /// platform event loop owns the one that is open. What changes here is what the worker does
+    /// with the samples it is already receiving.
+    pub fn retune(&self, configuration: &AudioConfiguration) {
+        self.tuning.store(Arc::new(tuning_of(configuration)));
+    }
+}
+
+impl DeviceCapture {
+    /// Opens the configured device and starts analysing on the thread that retains the stream.
+    fn open(configuration: &AudioConfiguration) -> Result<(Self, Opened), AudioError> {
         let host = cpal::default_host();
         let device = select(&host, &configuration.device)?;
         let name = device.name().unwrap_or_else(|_| "an input".to_owned());
@@ -124,42 +209,40 @@ impl AudioService {
             })?;
 
         tracing::info!(device = %name, sample_rate, channels, "capturing audio");
-        Ok(Self {
-            published,
-            tuning,
+        let opened = Opened {
+            published: Arc::clone(&published),
+            tuning: Arc::clone(&tuning),
             device: name,
-            running,
-            _stream: stream,
-            worker: Some(worker),
-        })
+        };
+        Ok((
+            Self {
+                running,
+                _stream: stream,
+                worker: Some(worker),
+            },
+            opened,
+        ))
     }
+}
 
-    /// The newest analysis, for whoever is drawing this frame.
-    pub fn analysis(&self) -> SharedAnalysis {
-        Arc::clone(&self.published)
-    }
-
-    /// The device this capture is reading, as the machine names it.
-    pub fn device(&self) -> &str {
-        &self.device
-    }
-
-    /// The tuning the worker reads, for whoever accepts an operator's edit.
-    ///
-    /// Handed out rather than reached through this service, because the service owns a platform
-    /// stream that belongs to one thread while an edit arrives on another.
-    pub fn tuning(&self) -> SharedTuning {
-        Arc::clone(&self.tuning)
-    }
-
-    /// Applies an operator's tuning to the running analysis.
-    ///
-    /// The device is not reopened: choosing a different input is a different stream, and the
-    /// platform event loop owns the one that is open. What changes here is what the worker does
-    /// with the samples it is already receiving.
-    pub fn retune(&self, configuration: &AudioConfiguration) {
-        self.tuning.store(Arc::new(tuning_of(configuration)));
-    }
+fn receive_startup<T>(
+    receiver: &std::sync::mpsc::Receiver<T>,
+    timeout: Duration,
+) -> Result<T, AudioError> {
+    receiver.recv_timeout(timeout).map_err(|error| {
+        let detail = match error {
+            std::sync::mpsc::RecvTimeoutError::Timeout => {
+                format!(
+                    "audio input initialization did not finish within {} seconds",
+                    timeout.as_secs()
+                )
+            }
+            std::sync::mpsc::RecvTimeoutError::Disconnected => {
+                "audio startup worker stopped unexpectedly".to_owned()
+            }
+        };
+        AudioError::NotOpened { detail }
+    })
 }
 
 /// This machine's audio inputs, by name.
@@ -178,6 +261,17 @@ pub fn input_devices() -> Vec<String> {
 }
 
 impl Drop for AudioService {
+    fn drop(&mut self) {
+        if let Some(stop) = self.stop.take() {
+            let _ = stop.send(());
+        }
+        if let Some(device_thread) = self.device_thread.take() {
+            let _ = device_thread.join();
+        }
+    }
+}
+
+impl Drop for DeviceCapture {
     fn drop(&mut self) {
         self.running.store(false, Ordering::Relaxed);
         if let Some(worker) = self.worker.take() {
@@ -242,6 +336,31 @@ fn choose(selector: &AudioDeviceSelector, names: &[String]) -> Result<usize, Aud
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bounded_startup_reports_a_timeout_instead_of_waiting_forever() {
+        let (_sender, receiver) = std::sync::mpsc::channel::<()>();
+        let error = receive_startup(&receiver, Duration::ZERO).unwrap_err();
+        assert_eq!(
+            error,
+            AudioError::NotOpened {
+                detail: "audio input initialization did not finish within 0 seconds".into()
+            }
+        );
+    }
+
+    #[test]
+    fn bounded_startup_reports_a_worker_that_stopped() {
+        let (sender, receiver) = std::sync::mpsc::channel::<()>();
+        drop(sender);
+        let error = receive_startup(&receiver, Duration::from_secs(1)).unwrap_err();
+        assert_eq!(
+            error,
+            AudioError::NotOpened {
+                detail: "audio startup worker stopped unexpectedly".into()
+            }
+        );
+    }
 
     #[test]
     fn the_operators_tuning_reaches_the_analysis() {

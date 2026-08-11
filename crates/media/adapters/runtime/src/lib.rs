@@ -302,7 +302,7 @@ fn start_audio(
     Option<media_audio::AudioService>,
     media_audio::SharedAnalysis,
 ) {
-    let audio = match media_audio::AudioService::start(&configuration.audio) {
+    let audio = match media_audio::AudioService::start_bounded(&configuration.audio) {
         Ok(service) => Some(service),
         Err(error) => {
             tracing::warn!(%error, "no audio input; generated sources will run on silence");
