@@ -201,7 +201,16 @@ fn placement_conflict_and_universe_overflow_stop_before_commit() {
         )
         .unwrap_err();
     assert_eq!(error.kind, ActionErrorKind::Invalid);
-    assert!(error.message.contains("patch overlap"));
+    assert!(error.message.contains("overlap in the patch"));
+    assert!(
+        conflict_ids
+            .iter()
+            .all(|fixture_id| error.message.contains(&fixture_id.0.to_string())),
+        "both conflicting fixture identities are named: {}",
+        error.message
+    );
+    assert!(error.message.contains("universe 1, addresses 1-1"));
+    assert!(error.message.contains("Move or unpatch one fixture"));
     conflict_rig.assert_empty_show();
 
     let overflow_rig = TestRig::new(profile, FailurePoint::None);
@@ -697,7 +706,7 @@ fn invalid_complete_patch_stops_before_backup_and_commit() {
         .unwrap_err();
 
     assert_eq!(error.kind, ActionErrorKind::Invalid);
-    assert!(error.message.contains("patch overlap"));
+    assert!(error.message.contains("overlap in the patch"));
     assert_eq!(
         rig.counters(),
         CounterSnapshot {

@@ -13,11 +13,18 @@ pub fn validate_patch(fixtures: &[PatchedFixture]) -> Result<(), FixtureError> {
 }
 
 struct PatchValidator {
-    used_slots: HashMap<Universe, [bool; 512]>,
+    used_slots: HashMap<Universe, [Option<PatchOwner>; 512]>,
     fixture_numbers: HashSet<u32>,
     virtual_fixture_numbers: HashSet<u32>,
     selection_ids: HashSet<uuid::Uuid>,
     multipatch_ids: HashSet<uuid::Uuid>,
+}
+
+#[derive(Clone)]
+struct PatchOwner {
+    fixture: String,
+    start: u16,
+    end: u16,
 }
 
 impl PatchValidator {
@@ -127,16 +134,27 @@ impl PatchValidator {
 
     fn validate_instances(&mut self, fixture: &PatchedFixture) -> Result<(), FixtureError> {
         let footprints = fixture.definition.split_footprints();
+        let fixture_identity = fixture_identity(fixture);
         self.validate_instance(
-            &fixture.fixture_id.0.to_string(),
+            &fixture_identity,
             &fixture.split_patches,
             fixture.universe,
             fixture.address,
             &footprints,
         )?;
         for instance in &fixture.multipatch {
+            let instance_identity = format!(
+                "{} / {} (multipatch {})",
+                fixture_identity,
+                if instance.name.trim().is_empty() {
+                    "unnamed instance"
+                } else {
+                    instance.name.as_str()
+                },
+                instance.id
+            );
             self.validate_instance(
-                &instance.id.to_string(),
+                &instance_identity,
                 &instance.split_patches,
                 instance.universe,
                 instance.address,
@@ -188,22 +206,41 @@ impl PatchValidator {
                 "fixture instance {instance} exceeds universe {universe}"
             )));
         }
-        let slots = self.used_slots.entry(universe).or_insert([false; 512]);
+        let slots = self
+            .used_slots
+            .entry(universe)
+            .or_insert_with(|| std::array::from_fn(|_| None));
         let start = usize::from(address - 1);
-        for (offset, slot) in slots[start..start + usize::from(footprint)]
-            .iter_mut()
-            .enumerate()
-        {
-            if *slot {
+        let end_address = address + footprint - 1;
+        let owner = PatchOwner {
+            fixture: instance.to_owned(),
+            start: address,
+            end: end_address,
+        };
+        for slot in &mut slots[start..start + usize::from(footprint)] {
+            if let Some(existing) = slot {
+                let overlap_start = address.max(existing.start);
+                let overlap_end = end_address.min(existing.end);
                 return Err(invalid(format!(
-                    "patch overlap at universe {} address {}",
-                    universe,
-                    start + offset + 1
+                    "Fixtures {} and {} overlap in the patch on universe {}, addresses {}-{}. Move or unpatch one fixture so their DMX ranges no longer overlap.",
+                    existing.fixture, instance, universe, overlap_start, overlap_end
                 )));
             }
-            *slot = true;
+            *slot = Some(owner.clone());
         }
         Ok(())
+    }
+}
+
+fn fixture_identity(fixture: &PatchedFixture) -> String {
+    let name = if fixture.name.trim().is_empty() {
+        fixture.definition.name.as_str()
+    } else {
+        fixture.name.as_str()
+    };
+    match fixture.fixture_number {
+        Some(number) => format!("{name} (Fixture {number}, {})", fixture.fixture_id.0),
+        None => format!("{name} ({})", fixture.fixture_id.0),
     }
 }
 
