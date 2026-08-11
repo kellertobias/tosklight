@@ -148,6 +148,152 @@ function CueTableHeader({ compactRows }: { compactRows: boolean }) {
 	);
 }
 
+function CueTimingCells({
+	cue,
+	progress,
+	editable,
+	onActivate,
+}: {
+	cue: Cue;
+	progress: Partial<Record<CueTimingProgressField, number>> | undefined;
+	editable: boolean;
+	onActivate: (property: CueEditableProperty) => void;
+}) {
+	const activate = (property: CueEditableProperty) =>
+		editable ? () => onActivate(property) : undefined;
+	return (
+		<>
+			<TimingCell
+				label="Trigger Time progress"
+				value={
+					typeof cue.trigger.delay_millis === "number"
+						? formatCueSeconds(cue.trigger.delay_millis)
+						: "—"
+				}
+				progress={progress?.triggerTime}
+				onActivate={activate("triggerTime")}
+			/>
+			<TimingCell
+				label="In Delay progress"
+				value={formatCueSeconds(cue.delay_millis)}
+				progress={progress?.inDelay}
+				onActivate={activate("inDelay")}
+			/>
+			<TimingCell
+				label="In Fade progress"
+				value={formatCueSeconds(cue.fade_millis)}
+				progress={progress?.inFade}
+				onActivate={activate("inFade")}
+			/>
+			<TimingCell
+				label="Out Delay progress"
+				value={formatCueSeconds(cue.out_delay_millis ?? cue.delay_millis)}
+				progress={progress?.outDelay}
+				onActivate={activate("outDelay")}
+			/>
+			<TimingCell
+				label="Out Fade progress"
+				value={formatCueSeconds(cue.out_fade_millis ?? cue.fade_millis)}
+				progress={progress?.outFade}
+				onActivate={activate("outFade")}
+			/>
+		</>
+	);
+}
+
+function CueTableRow({
+	cue,
+	index,
+	cues,
+	active,
+	selected,
+	disabled,
+	propertyEditable,
+	compactRows,
+	thumbnail,
+	mutationTarget,
+	timingProgress,
+	onActivateCue,
+	onActivateProperty,
+}: {
+	cue: Cue;
+	index: number;
+	cues: Cue[];
+	active: PlaybackSnapshot["active"][number] | undefined;
+	selected: boolean;
+	disabled: boolean;
+	propertyEditable: boolean;
+	compactRows: boolean;
+	thumbnail: string | undefined;
+	mutationTarget: ReturnType<typeof cueMutationTarget>;
+	timingProgress: Partial<Record<CueTimingProgressField, number>> | undefined;
+	onActivateCue: () => void;
+	onActivateProperty: (property: CueEditableProperty) => void;
+}) {
+	return (
+		<tr
+			tabIndex={disabled ? undefined : 0}
+			aria-disabled={disabled}
+			onClick={() => !disabled && onActivateCue()}
+			onKeyDown={(event) => {
+				if (!disabled && (event.key === "Enter" || event.key === " ")) {
+					event.preventDefault();
+					onActivateCue();
+				}
+			}}
+			className={`${active?.cue_index === index ? "current" : active?.effective_next_cue_number === cue.number ? "next" : ""} ${selected ? "selected" : ""} ${mutationTarget ? `${mutationTarget.operation}-target cue-command-target` : ""}`}
+		>
+			{!compactRows && (
+				<td className="cue-preview-column">
+					{thumbnail && <img src={thumbnail} alt="" />}
+				</td>
+			)}
+			<td>
+				<b>{cue.number}</b>
+				{mutationTarget && (
+					<span
+						className={`cue-command-target-badge ${mutationTarget.operation}`}
+					>
+						{cueMutationLabel(mutationTarget)}
+					</span>
+				)}
+			</td>
+			<td>
+				{cue.name || `Cue ${cue.number}`}
+				{Boolean(cue.dynamic_changes?.length) && (
+					<small
+						className="cue-dynamics-marker"
+						title="Cue contains tracked Dynamic or FAT content"
+						role="img"
+						aria-label="Contains Dynamics"
+					>
+						∿
+					</small>
+				)}
+			</td>
+			<td className="cue-trigger-column">
+				<Button
+					type="button"
+					aria-label="Trigger"
+					disabled={!propertyEditable}
+					onClick={(event) => {
+						event.stopPropagation();
+						onActivateProperty("trigger");
+					}}
+				>
+					{cueTriggerLabel(cues, cue)}
+				</Button>
+			</td>
+			<CueTimingCells
+				cue={cue}
+				progress={timingProgress}
+				editable={propertyEditable}
+				onActivate={onActivateProperty}
+			/>
+		</tr>
+	);
+}
+
 export function CueTable({
 	cues,
 	active,
@@ -207,126 +353,26 @@ export function CueTable({
 						<CueTableHeader compactRows={compactRows} />
 						<tbody>
 							{cues.map((cue, index) => (
-								<tr
-									tabIndex={interactive ? 0 : undefined}
-									aria-disabled={!interactive || settingsOpen}
-									onClick={() => {
-										if (interactive && !settingsOpen) activateCue(index);
-									}}
-									onKeyDown={(event) => {
-										if (!interactive || settingsOpen) return;
-										if (event.key === "Enter" || event.key === " ") {
-											event.preventDefault();
-											activateCue(index);
-										}
-									}}
+								<CueTableRow
 									key={cue.number}
-									className={`${active?.cue_index === index ? "current" : active?.effective_next_cue_number === cue.number ? "next" : ""} ${interactive && selectedCue === index ? "selected" : ""} ${mutationTarget ? `${mutationTarget.operation}-target cue-command-target` : ""}`}
-								>
-									{!compactRows && (
-										<td className="cue-preview-column">
-											{thumbnails[index] && (
-												<img src={thumbnails[index]} alt="" />
-											)}
-										</td>
-									)}
-									<td>
-										<b>{cue.number}</b>
-										{mutationTarget && (
-											<span
-												className={`cue-command-target-badge ${mutationTarget.operation}`}
-											>
-												{cueMutationLabel(mutationTarget)}
-											</span>
-										)}
-									</td>
-									<td>
-										{cue.name || `Cue ${cue.number}`}
-										{Boolean(cue.dynamic_changes?.length) && (
-											<small
-												className="cue-dynamics-marker"
-												title="Cue contains tracked Dynamic or FAT content"
-												role="img"
-												aria-label="Contains Dynamics"
-											>
-												∿
-											</small>
-										)}
-									</td>
-									<td className="cue-trigger-column">
-										<Button
-											type="button"
-											aria-label="Trigger"
-											disabled={
-												!interactive || settingsOpen || !onEditCueProperty
-											}
-											onClick={(event) => {
-												event.stopPropagation();
-												activateProperty(index, "trigger");
-											}}
-										>
-											{cueTriggerLabel(cues, cue)}
-										</Button>
-									</td>
-									<TimingCell
-										label="Trigger Time progress"
-										value={
-											typeof cue.trigger.delay_millis === "number"
-												? formatCueSeconds(cue.trigger.delay_millis)
-												: "—"
-										}
-										progress={timingProgressByRow[index]?.triggerTime}
-										onActivate={
-											interactive && !settingsOpen && onEditCueProperty
-												? () => activateProperty(index, "triggerTime")
-												: undefined
-										}
-									/>
-									<TimingCell
-										label="In Delay progress"
-										value={formatCueSeconds(cue.delay_millis)}
-										progress={timingProgressByRow[index]?.inDelay}
-										onActivate={
-											interactive && !settingsOpen && onEditCueProperty
-												? () => activateProperty(index, "inDelay")
-												: undefined
-										}
-									/>
-									<TimingCell
-										label="In Fade progress"
-										value={formatCueSeconds(cue.fade_millis)}
-										progress={timingProgressByRow[index]?.inFade}
-										onActivate={
-											interactive && !settingsOpen && onEditCueProperty
-												? () => activateProperty(index, "inFade")
-												: undefined
-										}
-									/>
-									<TimingCell
-										label="Out Delay progress"
-										value={formatCueSeconds(
-											cue.out_delay_millis ?? cue.delay_millis,
-										)}
-										progress={timingProgressByRow[index]?.outDelay}
-										onActivate={
-											interactive && !settingsOpen && onEditCueProperty
-												? () => activateProperty(index, "outDelay")
-												: undefined
-										}
-									/>
-									<TimingCell
-										label="Out Fade progress"
-										value={formatCueSeconds(
-											cue.out_fade_millis ?? cue.fade_millis,
-										)}
-										progress={timingProgressByRow[index]?.outFade}
-										onActivate={
-											interactive && !settingsOpen && onEditCueProperty
-												? () => activateProperty(index, "outFade")
-												: undefined
-										}
-									/>
-								</tr>
+									cue={cue}
+									index={index}
+									cues={cues}
+									active={active}
+									selected={interactive && selectedCue === index}
+									disabled={!interactive || settingsOpen}
+									propertyEditable={
+										interactive && !settingsOpen && Boolean(onEditCueProperty)
+									}
+									compactRows={compactRows}
+									thumbnail={thumbnails[index]}
+									mutationTarget={mutationTarget}
+									timingProgress={timingProgressByRow[index]}
+									onActivateCue={() => activateCue(index)}
+									onActivateProperty={(property) =>
+										activateProperty(index, property)
+									}
+								/>
 							))}
 						</tbody>
 					</table>
