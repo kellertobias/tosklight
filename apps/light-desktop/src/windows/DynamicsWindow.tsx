@@ -633,7 +633,7 @@ function DynamicPoolTile({
 			}}
 			onContextMenu={(event) => {
 				event.preventDefault();
-				if (dynamic) actions.onSet(poolNumber);
+				open();
 			}}
 			onPressHold={open}
 		/>

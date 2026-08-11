@@ -14,7 +14,7 @@ fn legacy_four_speed_group_configuration_gains_group_e() {
     assert!(!configuration.patch_preview_highlight_dmx);
     assert!(!configuration.file_manager_system_picker_fallback);
     assert!(configuration.file_manager_roots.is_empty());
-    assert!(configuration.command_line_at_uses_programmer_fade);
+    assert!(!configuration.command_line_at_uses_programmer_fade);
     let five: DeskConfiguration =
         serde_json::from_value(serde_json::json!({"speed_groups_bpm":[1,2,3,4,5]})).unwrap();
     assert_eq!(five.speed_groups_bpm, [1.0, 2.0, 3.0, 4.0, 5.0]);

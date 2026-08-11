@@ -247,16 +247,15 @@ fn command_line_contract_supports_subsets_preset_lifecycle_and_cue_list_creation
 }
 
 #[test]
-fn command_line_at_timing_setting_preserves_default_and_explicit_time_semantics() {
+fn command_line_at_timing_defaults_to_immediate_and_preserves_explicit_time_semantics() {
     let scenario = CommandContractScenario::new();
-    assert!(scenario
+    assert!(!scenario
         .state
         .installation.configuration()
         .command_line_at_uses_programmer_fade);
 
     scenario.state.installation.update_configuration(|configuration| {
         configuration.programmer_fade_millis = 5_000;
-        configuration.command_line_at_uses_programmer_fade = false;
     });
     execute_programmer_command(&scenario.state, &scenario.session, "GROUP 1 AT 50 DELAY 1")
         .unwrap();

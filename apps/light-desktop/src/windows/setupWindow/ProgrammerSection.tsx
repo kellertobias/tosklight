@@ -178,20 +178,6 @@ export function HighlightLookSettings({
 					</Button>
 				</div>
 			)}
-			{look.compatibility === "semantic" &&
-				draft.highlight_look_feedback != null &&
-				draft.highlight_look_feedback.length > 0 && (
-					<div className="modal-error" role="status">
-						<p>
-							Unsupported Highlight parts stay unchanged for these fixtures:
-						</p>
-						<ul>
-							{draft.highlight_look_feedback.map((warning) => (
-								<li key={warning}>{warning}</li>
-							))}
-						</ul>
-					</div>
-				)}
 		</article>
 	);
 }
@@ -258,6 +244,7 @@ function PreloadSettings({
 					label="Preload physical playback actions"
 					offLabel="Ignore"
 					onLabel="Capture"
+					description="Physical Flash and hardware/physical fader movements remain live and are not captured by Preload."
 					checked={draft.preload_physical_playback_actions}
 					onChange={(event) =>
 						controller.editDraft({
@@ -301,7 +288,7 @@ function CommandLineTimingSettings({
 					label="Direct entry uses Programmer Fade"
 					offLabel="Immediate"
 					onLabel="Programmer Fade"
-					checked={draft.command_line_at_uses_programmer_fade ?? true}
+					checked={draft.command_line_at_uses_programmer_fade ?? false}
 					onChange={(event) =>
 						controller.editDraft({
 							...draft,
