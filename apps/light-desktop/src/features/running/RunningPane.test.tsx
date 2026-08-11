@@ -74,6 +74,18 @@ describe("RunningPane", () => {
 		expect(screen.getByText("Dynamic · Cue — · Running")).toBeInTheDocument();
 		expect(screen.getByText("Timecode · Cue — · Running")).toBeInTheDocument();
 		expect(screen.getByText("Macro · Cue — · Running")).toBeInTheDocument();
+		expect(screen.getAllByRole("article")[0]).toHaveStyle({
+			"--running-kind-color": "#93cc55",
+		});
+		expect(screen.getAllByRole("article")[1]).toHaveStyle({
+			"--running-kind-color": "#3bbdce",
+		});
+		expect(screen.getAllByRole("article")[2]).toHaveStyle({
+			"--running-kind-color": "#48c0ff",
+		});
+		expect(screen.getAllByRole("article")[3]).toHaveStyle({
+			"--running-kind-color": "#8f3541",
+		});
 	});
 
 	it("filters to one kind and explains the empty filtered view", () => {
@@ -100,5 +112,20 @@ describe("RunningPane", () => {
 		expect(off).toHaveBeenCalledTimes(1);
 		expect(button).toBeDisabled();
 		finish?.();
+	});
+
+	it("reports an actionable row-specific error when authoritative Off is rejected", async () => {
+		const off = vi.fn().mockResolvedValue(null);
+		render(<RunningPane rows={[row("cue_list", 4, "Act One", off)]} />);
+
+		fireEvent.click(
+			screen.getByRole("button", { name: "Turn off Cuelist 4 Act One" }),
+		);
+
+		expect(
+			await screen.findByText(
+				/Could not turn off Cuelist 4 · Act One:.*check the desk connection and try again/,
+			),
+		).toBeInTheDocument();
 	});
 });

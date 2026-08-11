@@ -364,6 +364,32 @@ function ChannelPaneSettings({ pane }: { pane: PaneModel }) {
 	);
 }
 
+export function RunningPaneSettings({ pane }: { pane: PaneModel }) {
+	const { dispatch } = useApp();
+	return (
+		<FormLayout labelPlacement="side">
+			<MultiValueToggleField
+				label="Running kind"
+				value={pane.runningFilter ?? "all"}
+				onChange={(filter) =>
+					dispatch({
+						type: "SET_PANE_RUNNING_FILTER",
+						id: pane.id,
+						filter,
+					})
+				}
+				options={[
+					{ value: "all", label: "All" },
+					{ value: "cue_list", label: "Cuelists" },
+					{ value: "dynamic", label: "Dynamics" },
+					{ value: "timecode", label: "Timecodes" },
+					{ value: "macro", label: "Macros" },
+				]}
+			/>
+		</FormLayout>
+	);
+}
+
 function VirtualPlaybackGridSettings({ pane }: { pane: PaneModel }) {
 	const { dispatch } = useApp();
 	const rows = pane.virtualPlaybackRows ?? 2;
@@ -692,6 +718,12 @@ function paneSpecificTabs(
 			id: "channels",
 			label: "Channels",
 			content: <ChannelPaneSettings pane={pane} />,
+		});
+	if (pane.kind === "running")
+		tabs.push({
+			id: "running",
+			label: "Running",
+			content: <RunningPaneSettings pane={pane} />,
 		});
 	if (pane.kind === "fixtures")
 		tabs.push({

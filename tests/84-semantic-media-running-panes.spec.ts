@@ -41,11 +41,7 @@ test.describe("docs/testing/14-media-and-running-panes.md", () => {
 
 		await desk.open(api.baseUrl);
 		await expect(page.locator(".connection-cover")).toBeHidden();
-		await openBuiltIns(page);
-		await page
-			.locator("[aria-label='Built-ins']")
-			.getByRole("button", { name: "Running", exact: true })
-			.click();
+		await openRunningPane(page);
 
 		const running = page.locator(".running-window");
 		await expect(running).toBeVisible();
@@ -53,10 +49,6 @@ test.describe("docs/testing/14-media-and-running-panes.md", () => {
 		await expect(
 			running.getByText("Macro · Cue — · Running", { exact: true }),
 		).toBeVisible();
-
-		await running.getByRole("button", { name: "Cuelists", exact: true }).click();
-		await expect(running.getByText("No Cuelists are running.")).toBeVisible();
-		await running.getByRole("button", { name: "Macros", exact: true }).click();
 
 		await running
 			.getByRole("button", {
@@ -67,7 +59,7 @@ test.describe("docs/testing/14-media-and-running-panes.md", () => {
 		await expect.poll(() => cancelRequest).toEqual({
 			execution_id: "execution-reset",
 		});
-		await expect(running.getByText("No Macros are running.")).toBeVisible();
+		await expect(running.getByText("Nothing is running.")).toBeVisible();
 		await expect(running.locator("[data-running-kind='macro']")).toHaveCount(0);
 	});
 });
@@ -79,6 +71,28 @@ async function openBuiltIns(page: Page): Promise<void> {
 	});
 	if ((await toggle.getAttribute("data-dock-mode")) !== "builtins")
 		await toggle.click();
+}
+
+async function openRunningPane(page: Page): Promise<void> {
+	const toggle = page.getByRole("button", {
+		name: "Desktops / Built-ins",
+		exact: true,
+	});
+	if ((await toggle.getAttribute("data-dock-mode")) !== "desks")
+		await toggle.click();
+	await page.getByRole("button", { name: "New desktop", exact: true }).click();
+	const grid = page.locator(".desk-grid");
+	const box = await grid.boundingBox();
+	expect(box).not.toBeNull();
+	await page.mouse.click(box!.x + box!.width * 0.2, box!.y + box!.height * 0.2);
+	const picker = page.getByRole("dialog", { name: "Open Window", exact: true });
+	await expect(picker).toBeVisible();
+	const playbackTab = picker.getByRole("tab", {
+		name: "Playback & Automation",
+		exact: true,
+	});
+	if (await playbackTab.count()) await playbackTab.click();
+	await picker.getByRole("button", { name: /^Running/ }).click();
 }
 
 async function fulfillJson(route: Route, body: unknown): Promise<void> {

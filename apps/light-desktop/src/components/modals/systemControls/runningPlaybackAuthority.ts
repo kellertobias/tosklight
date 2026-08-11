@@ -33,6 +33,8 @@ type CueListPlayback = PlaybackDefinition & {
 
 export interface RunningCueListSource extends CueListRuntimeSource {
 	key: string;
+	/** Stable Cuelist Pool number, independent of the surface runtime identity. */
+	cueListNumber?: number | null;
 	playbackNumber: number | null;
 	label: string;
 	runtime: CueListRuntime;
@@ -48,6 +50,7 @@ export interface RunningDynamic {
 export interface RunningPlaybackAuthority {
 	ready: boolean;
 	loading: boolean;
+	error: string | null;
 	canRelease: boolean;
 	sources: readonly RunningCueListSource[];
 	mappedSources: readonly RunningCueListSource[];
@@ -100,6 +103,7 @@ export function useRunningPlaybackAuthority(
 	return {
 		ready,
 		loading: enabled && !ready,
+		error: status.error?.message ?? null,
 		canRelease,
 		sources: ready ? derived.sources : NO_SOURCES,
 		mappedSources: ready ? derived.mappedSources : NO_SOURCES,
@@ -118,9 +122,15 @@ function portableModel(
 		.map((object) => object.body)
 		.filter(targetsCueList)
 		.sort((left, right) => left.number - right.number);
+	const cueListNumbers = new Map<string, number>();
+	for (const playback of playbacks) {
+		if (!cueListNumbers.has(playback.target.cue_list_id))
+			cueListNumbers.set(playback.target.cue_list_id, playback.number);
+	}
 	return {
 		cueLists,
 		playbacks,
+		cueListNumbers,
 		cueListIds: cueLists.map((cueList) => cueList.id),
 		playbackNumbers: playbacks.map((playback) => playback.number),
 	};
@@ -148,6 +158,7 @@ function deriveSources(
 						projection,
 						runtime,
 						cueLists.get(playback.target.cue_list_id),
+						model.cueListNumbers.get(playback.target.cue_list_id) ?? null,
 						playback,
 					),
 				]
@@ -157,7 +168,16 @@ function deriveSources(
 		const projection = direct.get(cueList.id);
 		if (!isDirectRuntime(projection, cueList.id)) return [];
 		const runtime = projection.runtime;
-		return runtime ? [source(projection, runtime, cueList)] : [];
+		return runtime
+			? [
+					source(
+						projection,
+						runtime,
+						cueList,
+						model.cueListNumbers.get(cueList.id) ?? null,
+					),
+				]
+			: [];
 	});
 	const sources = [...mappedSources, ...virtualSources];
 	return {
@@ -173,6 +193,7 @@ function source(
 	projection: CueListProjection,
 	runtime: CueListRuntime,
 	cueList: CueList | undefined,
+	cueListNumber: number | null,
 	playback?: CueListPlayback,
 ): RunningCueListSource {
 	const playbackNumber = projection.playback_number;
@@ -184,6 +205,7 @@ function source(
 		key: identityKey(identity),
 		identity,
 		cueListId: projection.cue_list_id,
+		cueListNumber,
 		playbackNumber,
 		label:
 			playback?.name ||

@@ -95,25 +95,27 @@ export function useRunningSupplementalAuthority(
 
 	const stopTimecode = useCallback(
 		async (timecodeId: string) => {
-			if (!showId || !actions) return;
+			if (!showId || !actions) return false;
 			const snapshot = await actions.timecodes.stop(showId, timecodeId);
 			setState((current) => ({
 				...current,
 				timecodes: mergeTimecodes(current.timecodes, [snapshot]),
 			}));
 			if (!actions.events) await refreshRef.current();
+			return true;
 		},
 		[actions, showId],
 	);
 	const cancelMacro = useCallback(
 		async (executionId: string) => {
-			if (!showId || !actions) return;
+			if (!showId || !actions) return false;
 			const execution = await actions.macros.cancel(showId, executionId);
 			setState((current) => ({
 				...current,
 				macros: mergeMacroExecutions(current.macros, [execution]),
 			}));
 			if (!actions.events) await refreshRef.current();
+			return true;
 		},
 		[actions, showId],
 	);

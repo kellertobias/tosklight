@@ -1,6 +1,7 @@
 import { Button } from "@tosklight/ui";
+import { DEFAULT_POOL_COLOR_PALETTE } from "@tosklight/ui/pools";
 import { WindowHeader, WindowScrollArea } from "@tosklight/ui/window-kit";
-import { useMemo, useRef, useState } from "react";
+import { type CSSProperties, useMemo, useRef, useState } from "react";
 import {
 	filterRunningRows,
 	type RunningFilter,
@@ -17,6 +18,13 @@ const FILTERS: readonly { id: RunningFilter; label: string }[] = [
 	{ id: "timecode", label: "Timecodes" },
 	{ id: "macro", label: "Macros" },
 ];
+
+export const RUNNING_KIND_COLORS: Readonly<Record<RunningKind, string>> = {
+	cue_list: DEFAULT_POOL_COLOR_PALETTE.cuelist,
+	dynamic: DEFAULT_POOL_COLOR_PALETTE.dynamic,
+	timecode: "#48c0ff",
+	macro: DEFAULT_POOL_COLOR_PALETTE.macro,
+};
 
 export interface RunningPaneProps {
 	rows: readonly RunningRow[];
@@ -58,9 +66,17 @@ export function RunningPane({
 		setActionError(null);
 		setStopping((current) => new Set(current).add(row.key));
 		try {
-			await row.off();
+			const outcome = await row.off();
+			if (outcome === null || outcome === false) {
+				throw new Error(
+					"the authoritative runtime did not confirm the action; check the desk connection and try again",
+				);
+			}
 		} catch (cause) {
-			setActionError(cause instanceof Error ? cause.message : String(cause));
+			const reason = cause instanceof Error ? cause.message : String(cause);
+			setActionError(
+				`Could not turn off ${kindSingular(row.kind)} ${identityLabel(row)}: ${reason}`,
+			);
 		} finally {
 			stoppingRef.current.delete(row.key);
 			setStopping((current) => {
@@ -101,9 +117,14 @@ export function RunningPane({
 							{loading ? "Running objects loading…" : emptyMessage(filter)}
 						</p>
 					)}
-					{(error || actionError) && (
+					{error && (
 						<p className="running-error" role="alert">
-							Running state unavailable: {error ?? actionError}
+							Running state unavailable: {error}
+						</p>
+					)}
+					{actionError && (
+						<p className="running-error" role="alert">
+							{actionError}
 						</p>
 					)}
 				</div>
@@ -122,7 +143,15 @@ function RunningRowView({
 	onOff(): void;
 }) {
 	return (
-		<article className="running-row" data-running-kind={row.kind}>
+		<article
+			className="running-row"
+			data-running-kind={row.kind}
+			style={
+				{
+					"--running-kind-color": RUNNING_KIND_COLORS[row.kind],
+				} as CSSProperties
+			}
+		>
 			<span>
 				<b>{identityLabel(row)}</b>
 				<small>

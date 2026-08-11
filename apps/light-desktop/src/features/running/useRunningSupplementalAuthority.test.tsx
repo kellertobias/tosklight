@@ -55,6 +55,39 @@ describe("useRunningSupplementalAuthority", () => {
 		expect(runtime).toHaveBeenCalledOnce();
 		expect(timecodes).toHaveBeenCalledOnce();
 	});
+
+	it("confirms authoritative stop and cancel outcomes", async () => {
+		const stop = vi
+			.fn()
+			.mockResolvedValue({ ...timecode(4, 40), state: "stopped" });
+		const cancel = vi.fn().mockResolvedValue(macro("succeeded"));
+		const actions = {
+			macros: {
+				runtime: vi
+					.fn()
+					.mockResolvedValue({ desk_id: "desk-a", active: [], recent: [] }),
+				cancel,
+			},
+			timecodes: {
+				runtime: vi.fn().mockResolvedValue([]),
+				stop,
+			},
+			showObjects: { objects: vi.fn().mockResolvedValue([]) },
+		};
+		const rendered = renderHook(() =>
+			useRunningSupplementalAuthority(true, "show-a", actions),
+		);
+		await waitFor(() => expect(rendered.result.current.loading).toBe(false));
+
+		await expect(
+			rendered.result.current.stopTimecode("timecode-a"),
+		).resolves.toBe(true);
+		await expect(
+			rendered.result.current.cancelMacro("execution-a"),
+		).resolves.toBe(true);
+		expect(stop).toHaveBeenCalledWith("show-a", "timecode-a");
+		expect(cancel).toHaveBeenCalledWith("show-a", "execution-a");
+	});
 });
 
 function timecode(revision: number, frame: number) {

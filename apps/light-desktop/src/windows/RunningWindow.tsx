@@ -84,7 +84,7 @@ function RunningWindowAuthority({
 		<RunningPane
 			rows={rows}
 			loading={playbacks.loading || dynamics.loading || supplemental.loading}
-			error={dynamics.error ?? supplemental.error}
+			error={playbacks.error ?? dynamics.error ?? supplemental.error}
 			compact={compact}
 			initialFilter={runningFilter}
 			filter={onRunningFilterChange ? runningFilter : undefined}

@@ -71,10 +71,13 @@ export interface RunningModelInput {
  */
 export function buildRunningRows(input: RunningModelInput): RunningRow[] {
 	const rows: RunningRow[] = [];
-	const seenCueLists = new Set<string>();
+	const cueListSources = new Map<string, RunningCueListSource>();
 	for (const source of input.playbacks) {
-		if (seenCueLists.has(source.cueListId)) continue;
-		seenCueLists.add(source.cueListId);
+		const existing = cueListSources.get(source.cueListId);
+		if (!existing || source.identity.kind === "cue_list")
+			cueListSources.set(source.cueListId, source);
+	}
+	for (const source of cueListSources.values()) {
 		const cueNumber =
 			source.cue?.number ??
 			source.runtime.current?.number ??
@@ -82,9 +85,10 @@ export function buildRunningRows(input: RunningModelInput): RunningRow[] {
 		rows.push({
 			key: `cue-list:${source.cueListId}`,
 			kind: "cue_list",
-			// The playback definition number is the Cuelist pool address. Page/fader
-			// assignments are intentionally absent from this source projection.
-			number: source.playbackNumber,
+			// Pool identity and runtime-control identity are deliberately separate. A
+			// direct Cuelist release stops the shared logical runtime regardless of the
+			// software, hardware, OSC, or Playback surface that started it.
+			number: source.cueListNumber ?? source.playbackNumber,
 			name: source.cueList?.name ?? source.label,
 			status: source.runtime.paused ? "Paused" : "Running",
 			cueNumber,

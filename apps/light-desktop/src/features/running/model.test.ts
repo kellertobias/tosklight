@@ -7,7 +7,8 @@ import { buildRunningRows, filterRunningRows } from "./model";
 function playback(
 	key: string,
 	cueListId = "cue-list-a",
-	playbackNumber: number | null = 4,
+	playbackNumber: number | null = 12,
+	cueListNumber = 4,
 ): RunningCueListSource {
 	return {
 		key,
@@ -16,6 +17,7 @@ function playback(
 				? { kind: "cue_list", cue_list_id: cueListId }
 				: { kind: "playback", playback_number: playbackNumber },
 		cueListId,
+		cueListNumber,
 		playbackNumber,
 		label: "Wrong assignment label",
 		cueList: {
@@ -83,7 +85,7 @@ describe("buildRunningRows", () => {
 	it("deduplicates shared Cuelists and shows the Cuelist identity and current Cue", () => {
 		const release = vi.fn();
 		const rows = buildRunningRows({
-			playbacks: [playback("mapped"), playback("virtual", "cue-list-a", null)],
+			playbacks: [playback("mapped"), playback("direct", "cue-list-a", null)],
 			dynamics: [],
 			timecodes: [],
 			macros: [],
@@ -102,7 +104,10 @@ describe("buildRunningRows", () => {
 		rows[0]?.off();
 		expect(release).toHaveBeenCalledTimes(1);
 		expect(release).toHaveBeenCalledWith(
-			expect.objectContaining({ key: "mapped" }),
+			expect.objectContaining({
+				key: "direct",
+				identity: { kind: "cue_list", cue_list_id: "cue-list-a" },
+			}),
 		);
 	});
 

@@ -24,8 +24,8 @@ Start one Cuelist through several assignments or control surfaces, with a Dynami
 
 ## RUNNING-002 — filters and live reconciliation
 
-All is the default. A pane's **Running kind** setting persists All, Cuelists, Dynamics, Timecodes, or Macros independently from other Running panes; the built-in exposes the same choices in its header. Start, Cue change, pause, resume, completion, release, cancellation, and stop update or remove rows without reopening. Every empty filtered view names the selected kind.
+All is the default. A pane's **Running kind** setting persists All, Cuelists, Dynamics, Timecodes, or Macros independently from other Running panes. Running is available through **Open Window** and is absent from Built-ins. Start, Cue change, pause, resume, completion, release, cancellation, and stop update or remove rows without reopening. Every empty filtered view names the selected kind.
 
 ## RUNNING-003 — exact Off convergence
 
-For each row kind, press **Off** and verify only the named runtime is released, stopped, or cancelled. Repeated presses while the request is pending submit one action. The same final runtime state and row removal result when the transition originates from software, a Virtual Playback, attached hardware, keyboard, OSC, WebSocket, or HTTP.
+For each row kind, press **Off** and verify only the named runtime is released, stopped, or cancelled. A Cuelist row addresses the shared Cuelist identity rather than whichever surface first exposed it. A rejected action leaves an actionable error on the Running surface. Repeated presses while the request is pending submit one action. The same final runtime state and row removal result when the transition originates from software, a Virtual Playback, attached hardware, keyboard, OSC, WebSocket, or HTTP.
