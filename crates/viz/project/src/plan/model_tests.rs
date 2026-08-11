@@ -434,3 +434,18 @@ fn fallback_strip_cells_fit_inside_their_body() {
     assert!(last + half_face <= 0.5 + 1e-6);
     assert!(fitted.source.width <= 0.09 + 1e-6);
 }
+
+#[test]
+fn visual_only_packages_never_enter_the_lamp_or_plan_fixture_paths() {
+    let mut venue = patched("curtain", ProfileOptics::default());
+    Arc::get_mut(&mut venue.profile)
+        .expect("sole profile owner")
+        .patch_policy = PatchPolicy::VisualOnly;
+
+    let compiled = compile(&[venue]);
+
+    assert!(compiled.scene.fixtures.is_empty());
+    assert!(compiled.scene.emitters.is_empty());
+    assert!(compiled.scene.fixture_plan.is_empty());
+    assert!(compiled.scene.plan_artwork.is_empty());
+}

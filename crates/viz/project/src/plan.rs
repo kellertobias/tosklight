@@ -336,6 +336,12 @@ pub fn compile(fixtures: &[PatchedFixture]) -> ScenePlan {
     let mut plan_artwork: HashMap<light_core::FixtureId, [Option<u32>; 5]> = HashMap::new();
 
     for fixture in fixtures {
+        // Visual-only Venue objects are compiled by the desk's scenery path. Keeping them out of
+        // the fixture plan prevents a curtain, pipe, or truss from acquiring a lamp icon merely
+        // because it arrived through the portable fixture-package schema.
+        if fixture.profile.patch_policy == PatchPolicy::VisualOnly {
+            continue;
+        }
         let Some((mode, primary_slots)) = selected_mode(fixture, &mut warnings) else {
             continue;
         };
