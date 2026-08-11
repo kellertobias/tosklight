@@ -577,6 +577,24 @@ pub fn build_fixture_labels(
         return;
     }
 
+    build_perspective_fixture_labels(
+        overlay, scene, camera, width, height, scale, line, label_ink, theme, &lit,
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn build_perspective_fixture_labels(
+    overlay: &mut Overlay,
+    scene: &Scene,
+    camera: &ResolvedCamera,
+    width: f32,
+    height: f32,
+    scale: f32,
+    line: f32,
+    label_ink: [f32; 4],
+    theme: Theme,
+    lit: &[Option<(f32, [f32; 3])>],
+) {
     // A 3D picture with overlapping labels is unreadable, so a label is dropped when it would collide
     // with one already placed. Near fixtures win deterministically, which prevents a label behind
     // the rig from hiding the fixture in front without pretending the overlay is depth-tested.
