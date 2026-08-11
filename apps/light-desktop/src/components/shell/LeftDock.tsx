@@ -15,9 +15,7 @@ export const builtIns: Array<[BuiltInWindow, string, string]> = [
 	["presets", "▣", "Presets"],
 	["cuelists", "▶", "Cuelists"],
 	["dynamics", "∿", "Dynamics"],
-	["macros", "M", "Macros"],
 	["media", "▤", "Media"],
-	["running", "●", "Running"],
 	["timecode", "◷", "Timecode"],
 	["channels", "▥", "Channels"],
 ];

@@ -50,7 +50,9 @@ Every **Off** button targets exactly the object named by its row: release Cuelis
 
 Use **All**, **Cuelists**, **Dynamics**, **Timecodes**, or **Macros** to restrict the list. An empty filtered list says which kind is not running instead of appearing broken.
 
-**Pane configuration:** **Running kind** stores All, Cuelists, Dynamics, Timecodes, or Macros for this pane. Common size and removal controls also apply. The full built-in exposes the same filter in its window header.
+Add Running to a Desktop with **Open Window**. It is a pane-only window and does not appear in the BUILT-INS dock.
+
+**Pane configuration:** **Running kind** stores All, Cuelists, Dynamics, Timecodes, or Macros for this pane. Common size and removal controls also apply.
 
 ## Macros
 
