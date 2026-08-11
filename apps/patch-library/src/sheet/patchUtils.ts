@@ -17,7 +17,7 @@ export function fixtureRanges(fixture: PatchedFixture) { return [...rangesFor(fi
 export function conflicts(fixtures: PatchedFixture[], universe: number, address: number, footprint: number, except?: string) { const end = address + footprint - 1; return fixtures.filter((fixture) => fixture.fixture_id !== except && fixtureRanges(fixture).some((range) => range.universe === universe && range.start <= end && range.end >= address)); }
 export function firstFreeAddress(fixtures: PatchedFixture[], universe: number, footprint: number, from = 1) { for (let address = Math.max(1, from); address + footprint - 1 <= 512; address++) if (!conflicts(fixtures, universe, address, footprint).length) return address; return null; }
 export function compareFixtureManufacturers(a: string, b: string) {
-  const rank = (value: string) => value.toLowerCase() === "generic" ? 0 : value.toLowerCase() === "venue" ? 1 : 2;
+  const rank = (value: string) => value.toLowerCase() === "generic" ? 0 : value.toLowerCase() === "venue" ? 1 : value.toLowerCase() === "tosklight" ? 2 : 3;
   return rank(a) - rank(b) || a.localeCompare(b);
 }
 export function isDmxPatchable(definition: FixtureDefinition) { return definition.profile_snapshot?.patch_policy !== "visual_only"; }

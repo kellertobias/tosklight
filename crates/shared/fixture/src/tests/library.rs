@@ -224,6 +224,92 @@ fn transferable_package_startup_is_idempotent_updates_clean_installs_and_preserv
 }
 
 #[test]
+fn shipped_visualizer_taxonomy_moves_to_tosklight_without_replacing_identity_or_operator_edits() {
+    for (new_filename, old_filename, old_name) in [
+        (
+            "tosklight--visualizer-camera.toskfixture",
+            "generic--visualizer-camera.toskfixture",
+            "Visualizer Camera",
+        ),
+        (
+            "tosklight--visualizer-laser.toskfixture",
+            "generic--laser.toskfixture",
+            "Laser",
+        ),
+    ] {
+        let root = std::env::temp_dir().join(format!(
+            "fixture-taxonomy-migration-{}-{}",
+            old_name.replace(' ', "-"),
+            Uuid::new_v4()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let shipped_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../..")
+            .join("assets/fixture-library")
+            .join(new_filename);
+        let incoming = read_fixture_package(&fs::read(shipped_path).unwrap()).unwrap();
+        let mut old = incoming.clone();
+        old.manufacturer = "Generic".into();
+        old.name = old_name.into();
+        fs::write(
+            root.join(old_filename),
+            write_fixture_package(&old).unwrap(),
+        )
+        .unwrap();
+
+        let library = FixtureLibrary::open(root.join("fixtures.sqlite")).unwrap();
+        assert_eq!(
+            library
+                .load_fixture_package_directory(&root)
+                .unwrap()
+                .installed,
+            1
+        );
+        fs::remove_file(root.join(old_filename)).unwrap();
+        fs::write(
+            root.join(new_filename),
+            write_fixture_package(&incoming).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            library
+                .load_fixture_package_directory(&root)
+                .unwrap()
+                .updated,
+            1
+        );
+
+        let migrated = library.profiles().unwrap().remove(0);
+        assert_eq!(migrated.id, old.id);
+        assert_eq!(migrated.manufacturer, "ToskLight");
+        assert_eq!(migrated.name, incoming.name);
+        assert_eq!(
+            library.profile(old.id, 1).unwrap().unwrap().manufacturer,
+            "Generic"
+        );
+
+        let mut operator = migrated.clone();
+        operator.notes.push_str(" operator revision");
+        let operator = library.save_profile(operator, migrated.revision).unwrap();
+        let mut later_package = incoming.clone();
+        later_package.notes.push_str(" later shipped revision");
+        fs::write(
+            root.join(new_filename),
+            write_fixture_package(&later_package).unwrap(),
+        )
+        .unwrap();
+        let report = library.load_fixture_package_directory(&root).unwrap();
+        assert_eq!(
+            report.preserved_operator_revisions, 1,
+            "a later package must not overwrite an operator revision"
+        );
+        assert_eq!(library.profiles().unwrap().remove(0).notes, operator.notes);
+        drop(library);
+        let _ = fs::remove_dir_all(root);
+    }
+}
+
+#[test]
 fn transferable_package_retires_matching_unmarked_legacy_generic_rows() {
     let root =
         std::env::temp_dir().join(format!("fixture-package-legacy-catalog-{}", Uuid::new_v4()));

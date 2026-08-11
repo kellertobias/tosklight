@@ -43,7 +43,7 @@ setting it back to **Follow source** hands the choice back.
 
 ## A camera patched as a fixture
 
-The Generic **Visualizer Camera** is a transferable 17-slot personality for a camera that must
+The ToskLight **Visualizer Camera** is a transferable 17-slot personality for a camera that must
 be recorded and played back with DMX. It controls the dedicated external 3D Visualizer only:
 embedded Stage panes and every 2D view keep their own camera.
 

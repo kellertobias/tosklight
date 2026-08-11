@@ -274,6 +274,22 @@ mod tests {
         assert!(profiles.iter().any(|profile| {
             profile.manufacturer == "Generic" && profile.name == "Dimmer Profile"
         }));
+        let tosklight_names = profiles
+            .iter()
+            .filter(|profile| profile.manufacturer == "ToskLight")
+            .map(|profile| profile.name.as_str())
+            .collect::<Vec<_>>();
+        for expected in [
+            "Media Server Layer",
+            "Media Server Master",
+            "Visualizer Camera",
+            "Visualizer Laser",
+        ] {
+            assert!(tosklight_names.contains(&expected), "missing {expected}");
+        }
+        assert!(!tosklight_names.iter().any(|name| {
+            name.to_lowercase().contains("music") || name.to_lowercase().contains("sparkler")
+        }));
 
         prepare_fixture_library(Some(FixtureLibrarySource::Packages(packages)), &app_data)
             .expect("repeat startup is idempotent");

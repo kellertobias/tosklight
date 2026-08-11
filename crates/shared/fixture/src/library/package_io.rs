@@ -106,11 +106,19 @@ impl FixtureLibrary {
                     self.save_profile(incoming, 0)?
                 }
                 Some(existing) => {
-                    ensure_same_fixture_family(&existing, &incoming)?;
+                    let taxonomy_migration = self.is_shipped_tosklight_taxonomy_migration(
+                        &existing,
+                        &incoming,
+                        &package_key,
+                    )?;
+                    if !taxonomy_migration {
+                        ensure_same_fixture_family(&existing, &incoming)?;
+                    }
                     if normalized_profile_json(&existing)? == normalized_profile_json(&incoming)? {
                         report.unchanged += 1;
                         existing
-                    } else if legacy_packaged_profile
+                    } else if taxonomy_migration
+                        || legacy_packaged_profile
                         || installation
                             .as_ref()
                             .is_some_and(|(_, installed_id, revision)| {
@@ -142,6 +150,47 @@ impl FixtureLibrary {
             )?;
         }
         Ok(report)
+    }
+
+    fn is_shipped_tosklight_taxonomy_migration(
+        &self,
+        existing: &FixtureProfile,
+        incoming: &FixtureProfile,
+        package_key: &str,
+    ) -> Result<bool, FixtureError> {
+        let old_package = match (
+            existing.manufacturer.as_str(),
+            existing.name.as_str(),
+            incoming.manufacturer.as_str(),
+            incoming.name.as_str(),
+            package_key,
+        ) {
+            (
+                "Generic",
+                "Visualizer Camera",
+                "ToskLight",
+                "Visualizer Camera",
+                "tosklight--visualizer-camera.toskfixture",
+            ) => Some("generic--visualizer-camera.toskfixture"),
+            (
+                "Generic",
+                "Laser",
+                "ToskLight",
+                "Visualizer Laser",
+                "tosklight--visualizer-laser.toskfixture",
+            ) => Some("generic--laser.toskfixture"),
+            _ => None,
+        };
+        let Some(old_package) = old_package else {
+            return Ok(false);
+        };
+        self.conn
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM fixture_package_installations WHERE package_path=?1 AND profile_id=?2 AND installed_revision=?3)",
+                params![old_package, existing.id.0.to_string(), existing.revision],
+                |row| row.get(0),
+            )
+            .map_err(FixtureError::from)
     }
 
     fn retire_packaged_legacy_sources(&self, profile_id: FixtureId) -> Result<(), FixtureError> {
