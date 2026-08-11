@@ -109,7 +109,13 @@ jobs:
           trap 'rm -rf -- "$stage_root"' EXIT
           stage="$stage_root/tosklight-media-$VERSION-$SLUG"
           mkdir -p "$stage"
-          cp ".artifacts/build/cargo/$TARGET/release/$BINARY" "$stage/"
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            bash tools/bundle-media-macos.sh \
+              ".artifacts/build/cargo/$TARGET/release/$BINARY" "$stage" "$VERSION"
+            bash tools/seal-macos-app.sh "$stage/ToskLight Media.app"
+          else
+            cp ".artifacts/build/cargo/$TARGET/release/$BINARY" "$stage/"
+          fi
           archive="tosklight-media-$VERSION-$SLUG.zip"
           if [[ "$RUNNER_OS" == "Windows" ]]; then
             (cd "$stage_root" && 7z a -tzip "$OLDPWD/$out/$archive" "$(basename "$stage")")

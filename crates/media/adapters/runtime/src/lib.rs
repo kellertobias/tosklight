@@ -17,6 +17,7 @@ pub mod off_screen;
 pub mod presentation;
 pub mod preview;
 mod shutdown;
+mod standby;
 mod startup;
 mod text_sources;
 
@@ -26,7 +27,9 @@ pub use log_buffer::LogBuffer;
 pub use logging::{InstalledLogging, install_logging};
 pub use presentation::{Diagnostics, SharedConfiguration};
 pub use shutdown::{Shutdown, ShutdownReason};
-pub use startup::{ConfigurationSource, StartupError, load_configuration};
+pub use startup::{
+    ConfigurationSource, StartupError, load_configuration, running_from_macos_app_bundle,
+};
 
 use media_application::MediaConfiguration;
 use media_domain::{MediaState, OutputState, Timestamp};
@@ -52,22 +55,17 @@ pub const PLAY_ARGUMENT: &str = "--play";
 /// to the outputs. A process whose outputs are all off-screen never builds an event loop and
 /// simply blocks on the services.
 pub fn run() -> anyhow::Result<()> {
+    let result = run_inner();
+    if let Err(error) = &result {
+        show_startup_error(error);
+    }
+    result
+}
+
+fn run_inner() -> anyhow::Result<()> {
     let logging = install_logging();
     let arguments: Vec<String> = std::env::args().collect();
-    let source = ConfigurationSource::from_environment();
-    let mut configuration = load_configuration(&source)?;
-
-    // A first run in an existing installation inherits what the previous Media Server had: its
-    // text sources are operator data, and cutover must not lose them. Once this server has a
-    // document of its own, the operator's catalog is theirs.
-    if startup::is_first_run(&source) {
-        startup::adopt_legacy_text(&mut configuration, true, unix_millis());
-        if !configuration.text.slots.is_empty()
-            && let Err(error) = startup::write_configuration(&source.path(), &configuration)
-        {
-            tracing::error!(%error, "the adopted text sources could not be stored");
-        }
-    }
+    let configuration = prepare_configuration()?;
 
     if arguments
         .iter()
@@ -185,6 +183,7 @@ pub fn run() -> anyhow::Result<()> {
         shutdown.clone(),
         diagnostics_arguments,
         started,
+        administration_endpoint(&configuration),
     );
     shutdown.request(ShutdownReason::Requested);
     let _ = runtime.block_on(serving);
@@ -196,6 +195,72 @@ pub fn run() -> anyhow::Result<()> {
     // stream that vanished.
     drop(audio);
     presented
+}
+
+fn prepare_configuration() -> Result<MediaConfiguration, StartupError> {
+    let app_mode = running_from_macos_app_bundle();
+    let source = ConfigurationSource::from_environment();
+    let mut configuration = load_configuration(&source)?;
+    let first_run = startup::is_first_run(&source);
+
+    if app_mode && first_run {
+        startup::apply_macos_app_defaults(&mut configuration, &source.path());
+    }
+    // A first run inherits legacy text once, then the resulting document belongs to this server.
+    if first_run {
+        startup::adopt_legacy_text(&mut configuration, true, unix_millis());
+        if (app_mode || !configuration.text.slots.is_empty())
+            && let Err(error) = startup::write_configuration(&source.path(), &configuration)
+        {
+            tracing::error!(%error, "the adopted text sources could not be stored");
+        }
+    }
+    Ok(configuration)
+}
+
+/// Makes a Finder-launch failure actionable even though no Terminal window exists.
+fn show_startup_error(error: &anyhow::Error) {
+    tracing::error!(%error, "ToskLight Media could not start");
+    #[cfg(target_os = "macos")]
+    if running_from_macos_app_bundle() {
+        let message = format!("ToskLight Media could not start.\n\n{error}");
+        let _ = std::process::Command::new("/usr/bin/osascript")
+            .args([
+                "-e",
+                "on run argv",
+                "-e",
+                "display alert \"ToskLight Media\" message (item 1 of argv) as critical buttons {\"OK\"}",
+                "-e",
+                "end run",
+                "--",
+                &message,
+            ])
+            .status();
+    }
+}
+
+fn administration_endpoint(configuration: &MediaConfiguration) -> String {
+    let listen = configuration.network.resolved().http_listen;
+    let ip = if listen.ip().is_unspecified() {
+        primary_ipv4().unwrap_or(media_application::configuration::LOOPBACK)
+    } else {
+        match listen.ip() {
+            std::net::IpAddr::V4(ip) => ip,
+            std::net::IpAddr::V6(_) => media_application::configuration::LOOPBACK,
+        }
+    };
+    format!("{ip}:{}", listen.port())
+}
+
+fn primary_ipv4() -> Option<std::net::Ipv4Addr> {
+    let socket = std::net::UdpSocket::bind((std::net::Ipv4Addr::UNSPECIFIED, 0)).ok()?;
+    socket
+        .connect((std::net::Ipv4Addr::new(192, 0, 2, 1), 9))
+        .ok()?;
+    match socket.local_addr().ok()?.ip() {
+        std::net::IpAddr::V4(ip) if !ip.is_loopback() => Some(ip),
+        _ => None,
+    }
 }
 
 /// Milliseconds since the Unix epoch, for a migration that has to resolve a time of day.
@@ -699,5 +764,13 @@ mod tests {
             initial_state(&configuration).outputs.is_empty(),
             "a disabled output holds no state"
         );
+    }
+
+    #[test]
+    fn the_standby_address_is_a_literal_usable_ip_and_port() {
+        let mut configuration = MediaConfiguration::default();
+        configuration.network.http_listen = "10.42.0.8:9090".parse().unwrap();
+
+        assert_eq!(administration_endpoint(&configuration), "10.42.0.8:9090");
     }
 }

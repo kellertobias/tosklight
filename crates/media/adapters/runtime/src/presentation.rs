@@ -44,6 +44,7 @@ pub fn run_event_loop(
     // The same reference point the network listeners stamp against, so a packet's arrival and a
     // frame's presentation sit on one timeline.
     started: std::time::Instant,
+    administration_endpoint: String,
 ) -> anyhow::Result<()> {
     let Shared {
         state,
@@ -78,6 +79,7 @@ pub fn run_event_loop(
         loader: ClipLoader::new(configuration.playback.cache_budget_bytes),
         direct: None,
         clip_size: Size::new(2, 2),
+        administration_endpoint,
     };
     event_loop.run_app(&mut host)?;
     Ok(())
@@ -127,6 +129,7 @@ struct HostedOutput {
     sources: crate::layer_sources::LayerSources,
     /// This output's path from addresses to textures.
     pipeline: LayerPipeline,
+    standby: Option<SourceTexture>,
 }
 
 /// A clip loaded for the development `--play` affordance.
@@ -154,6 +157,7 @@ struct PresentationHost {
     loader: ClipLoader,
     direct: Option<DirectClip>,
     clip_size: Size,
+    administration_endpoint: String,
 }
 
 /// The diagnostic pattern's colour: unmistakably not black and unmistakably not media.
@@ -285,12 +289,22 @@ impl PresentationHost {
                     output.size(),
                 );
                 pipeline.validate_visualizers();
+                let standby = crate::standby::render(output.size(), &self.administration_endpoint)
+                    .and_then(|frame| {
+                        SourceTexture::from_rgba8(output.gpu(), frame.size, &frame.pixels)
+                            .map_err(anyhow::Error::from)
+                    })
+                    .map_err(
+                        |error| tracing::error!(%error, "cannot build the Media standby surface"),
+                    )
+                    .ok();
                 self.outputs.push(HostedOutput {
                     output,
                     window,
                     test_pattern,
                     sources,
                     pipeline,
+                    standby,
                 });
             }
             Err(error) => {
@@ -320,6 +334,28 @@ impl PresentationHost {
                 continue;
             };
             let master = output_state.master;
+
+            let status_overlay = configuration
+                .output(output_state.id)
+                .is_some_and(|output| output.status_overlay);
+            if crate::standby::visible(status_overlay, output_state.ownership.dmx.is_some())
+                && let Some(standby) = hosted.standby.as_ref()
+            {
+                let draws = [LayerDraw {
+                    state: &self.test_pattern_layer,
+                    source: standby,
+                    mask: None,
+                }];
+                present(
+                    &mut hosted.output,
+                    &draws,
+                    &MasterState::default(),
+                    None,
+                    now,
+                );
+                hosted.window.request_redraw();
+                continue;
+            }
 
             // A clip named at launch plays on layer one. It is a development affordance and it
             // takes precedence over the real path so a machine with no library still proves it.
@@ -533,6 +569,12 @@ impl ApplicationHandler for PresentationHost {
                 hosted.output.resize(size);
                 // Generated sources are output-sized by definition, so they follow the surface.
                 hosted.pipeline.resize(size);
+                hosted.standby = crate::standby::render(size, &self.administration_endpoint)
+                    .and_then(|frame| {
+                        SourceTexture::from_rgba8(hosted.output.gpu(), frame.size, &frame.pixels)
+                            .map_err(anyhow::Error::from)
+                    })
+                    .ok();
             }
             WindowEvent::RedrawRequested => {}
             _ => {}

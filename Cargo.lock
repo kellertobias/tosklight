@@ -4002,6 +4002,7 @@ dependencies = [
  "media-playback",
  "media-render",
  "media-text",
+ "png 0.18.1",
  "thiserror 2.0.20",
  "tokio",
  "tracing",

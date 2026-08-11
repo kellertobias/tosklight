@@ -315,6 +315,11 @@ mod tests {
         let layer = &loaded.output(id).unwrap().layers[0];
         assert_eq!(layer.address, MediaAddress::new(1, 4));
         assert_eq!(layer.dimmer, 1.0);
+        assert_eq!(
+            loaded.output(id).unwrap().ownership.dmx.unwrap().source,
+            media_domain::CommandSource::ArtNet,
+            "the first valid frame records the permanent standby transition"
+        );
     }
 
     #[test]

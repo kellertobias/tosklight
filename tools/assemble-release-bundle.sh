@@ -55,15 +55,11 @@ fi
 media_unpack="$stage_root/media"
 extract_archive "$COMPONENTS/tosklight-media-$VERSION-$SLUG.zip" "$media_unpack"
 media="$bundle/tosklight-media-$asset_slug"
-mv "$(single_directory "$media_unpack")" "$media"
-if [[ -f "$media/media-server.exe" ]]; then
-  mv "$media/media-server.exe" "$media/tosklight-media-$asset_slug.exe"
-else
-  mv "$media/media-server" "$media/tosklight-media-$asset_slug"
-fi
+media_component="$(single_directory "$media_unpack")"
 
 case "$SLUG" in
   macos-arm64)
+    mv "$media_component/ToskLight Media.app" "$bundle/tosklight-media-$asset_slug.app"
     desk_unpack="$stage_root/desk"
     extract_archive "$COMPONENTS/tosklight-$VERSION-macos-arm64.zip" "$desk_unpack"
     mv "$desk_unpack/ToskLight.app" "$bundle/tosklight-desk-$asset_slug.app"
@@ -72,10 +68,15 @@ case "$SLUG" in
     extract_archive "$COMPONENTS/tosklight-viz-$VERSION-macos-arm64.zip" "$previz_unpack"
     mv "$previz_unpack/ToskLight Viz Editor.app" "$bundle/tosklight-previz-$asset_slug.app"
     cp "$ROOT/docs/release/macos-first-start.txt" "$bundle/"
+    cp "$ROOT/tools/sign-macos-apps-locally.sh" "$bundle/"
+    chmod +x "$bundle/sign-macos-apps-locally.sh"
     codesign --verify --deep --strict --verbose=2 "$bundle/tosklight-desk-$asset_slug.app"
     codesign --verify --deep --strict --verbose=2 "$bundle/tosklight-previz-$asset_slug.app"
+    codesign --verify --deep --strict --verbose=2 "$bundle/tosklight-media-$asset_slug.app"
     ;;
   windows-amd64)
+    mv "$media_component" "$media"
+    mv "$media/media-server.exe" "$media/tosklight-media-$asset_slug.exe"
     cp "$COMPONENTS/tosklight-$VERSION-windows-amd64-setup.exe" \
       "$bundle/tosklight-desk-$asset_slug-setup.exe"
     previz_unpack="$stage_root/previz"
@@ -89,6 +90,8 @@ case "$SLUG" in
     cp "$COMPONENTS/demo.show" "$previz/demo-show/demo.show"
     ;;
   linux-amd64)
+    mv "$media_component" "$media"
+    mv "$media/media-server" "$media/tosklight-media-$asset_slug"
     cp "$COMPONENTS/tosklight-$VERSION-linux-amd64.AppImage" \
       "$bundle/tosklight-desk-$asset_slug.AppImage"
     cp "$COMPONENTS/tosklight-$VERSION-linux-amd64.deb" \
@@ -103,7 +106,10 @@ case "$SLUG" in
     mkdir -p "$previz/demo-show"
     cp "$COMPONENTS/demo.show" "$previz/demo-show/demo.show"
     ;;
-  linux-arm64) ;;
+  linux-arm64)
+    mv "$media_component" "$media"
+    mv "$media/media-server" "$media/tosklight-media-$asset_slug"
+    ;;
   *)
     echo "error: unsupported release bundle slug: $SLUG" >&2
     exit 2
