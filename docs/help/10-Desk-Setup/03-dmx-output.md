@@ -10,7 +10,7 @@ In **Desk Setup > Outputs**, choose a 40-60 Hz frame rate, the output bind addre
 
 ## Create routes
 
-Open **Desk Setup > Outputs > Routes**. A route maps one logical show universe to an Art-Net or sACN destination universe, or to one claimed local USB DMX endpoint. Create, edit, enable, disable, and verify routes beside the output-engine configuration rather than inside the DMX monitor.
+Open **Desk Setup > Outputs > Routes**. A route maps one logical show universe to an Art-Net or sACN destination universe, or to one local USB DMX device. Create, edit, enable, disable, and verify routes beside the output-engine configuration rather than inside the DMX monitor.
 
 Choose **Add route** to create one, or **Edit route** beside a versioned route to change its protocol, logical universe, destination universe, delivery mode, address, minimum universe size, or enabled state. **Art-Net Broadcast** uses the global `255.255.255.255:6454` destination. **Art-Net Unicast** requires an IPv4 address and port. **sACN Multicast** derives `239.255.x.y:5568` from the destination universe, while **sACN Unicast** requires an IPv4 address and port. Art-Net does not offer Multicast, and sACN does not offer Broadcast.
 
@@ -20,11 +20,11 @@ New routes start with a minimum of 128 slots. Every enabled route emits a frame 
 
 ## Configure USB DMX
 
-Connect the interface, then use **Desk Setup > Outputs > USB DMX endpoints > Scan USB devices**. Choose the exact discovered USB serial device, give it a stable Endpoint ID, choose **ENTTEC USB Pro v1.44** or **Open DMX (FTDI)**, and select **Claim endpoint**. ToskLight stores the strong USB serial identity when available; otherwise it binds the current physical port identity and will not silently fall back to the first similar device.
+Connect the interface, then open **Desk Setup > Outputs > Routes** and choose **Scan USB devices** beside **Add route**. Every discovered interface appears with its USB serial identity and an **Add route for device** action. That action opens the normal route editor with the device already selected. ToskLight chooses ENTTEC USB Pro or Open DMX automatically when the device metadata is conclusive; otherwise the editor asks which kind of interface is connected.
 
-After the endpoint reports Ready, add a route, choose **USB DMX endpoint**, select its Endpoint ID, and assign one logical universe. Endpoint identity and health belong to this desk installation; the show route stores only the portable Endpoint ID. A show can therefore move to another desk whose operator has deliberately claimed a matching local Endpoint ID.
+On macOS, one physical interface can appear as paired `/dev/cu.*` callout and `/dev/tty.*` dial-in entries. ToskLight recommends and selects the usable callout device automatically instead of presenting both as separate interfaces. Assign one logical universe and save the route. The desk remembers the exact USB serial identity when available; without one, it remembers the selected physical connection and never silently substitutes the first similar device.
 
-Built-in support is intentionally limited to host-timed FTDI Open DMX interfaces and the documented ENTTEC DMX USB Pro v1.44 framing family. Open DMX continuously generates BREAK, mark-after-break, and the complete frame at 40 Hz. USB Pro interfaces retain their last buffered frame when output stops; Open DMX shutdown cannot promise a final electrical state. Disconnecting or failing one USB endpoint does not block Art-Net, sACN, or another endpoint. Diagnostics show Online/Reconnecting state, accepted frames, reconnect attempts, the last error, dropped frames, and the final shutdown outcome.
+Built-in support is intentionally limited to host-timed FTDI Open DMX interfaces and the documented ENTTEC DMX USB Pro v1.44 framing family. Open DMX continuously generates BREAK, mark-after-break, and the complete frame at 40 Hz. USB Pro interfaces retain their last buffered frame when output stops; Open DMX shutdown cannot promise a final electrical state. Disconnecting or failing one USB device does not block Art-Net, sACN, or another device. Diagnostics show Online/Reconnecting state, accepted frames, reconnect attempts, the last error, dropped frames, and the final shutdown outcome.
 
 Do not select a driver based only on a similar product name. Unsupported, ambiguous, or duplicate device identities remain Offline with an actionable diagnostic. Electrical BREAK/MAB timing, isolation, and behavior after unplug still require validation with the actual interface before a production show.
 

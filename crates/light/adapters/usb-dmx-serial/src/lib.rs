@@ -47,6 +47,7 @@ pub fn discover_usb_serial_devices() -> Result<Vec<DiscoveredUsbSerialDevice>, S
             _ => None,
         })
         .collect::<Vec<_>>();
+    deduplicate_macos_pairs(&mut devices);
     devices.sort_by(|left, right| left.port_name.cmp(&right.port_name));
     Ok(devices)
 }

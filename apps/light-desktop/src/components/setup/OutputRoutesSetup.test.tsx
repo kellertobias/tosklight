@@ -139,7 +139,7 @@ describe("OutputRoutesSetup", () => {
 		await waitFor(() => expect(remove).toHaveBeenCalledWith("front-artnet", 4));
 	});
 
-	it("assigns one logical universe to a claimed USB DMX endpoint", async () => {
+	it("assigns one logical universe to a configured USB DMX device", async () => {
 		const save = vi.fn().mockResolvedValue(true);
 		render(
 			<OutputRoutesSetup
@@ -166,7 +166,7 @@ describe("OutputRoutesSetup", () => {
 		fireEvent.click(
 			screen.getByRole("button", { name: "Network (Art-Net / sACN)" }),
 		);
-		fireEvent.click(screen.getByRole("option", { name: "USB DMX endpoint" }));
+		fireEvent.click(screen.getByRole("option", { name: "USB DMX device" }));
 		expect(screen.getByLabelText("Logical universe")).toBeVisible();
 		expect(
 			screen.queryByLabelText("Destination universe"),
@@ -183,6 +183,84 @@ describe("OutputRoutesSetup", () => {
 					target: { kind: "usb_endpoint", endpoint_id: "front-usb" },
 					logical_universe: 7,
 					destination: null,
+				}),
+				0,
+			),
+		);
+	});
+
+	it("shows discovered devices beside normal routes and provisions from the preselected route modal", async () => {
+		const save = vi.fn().mockResolvedValue(true);
+		const scan = vi.fn().mockResolvedValue(undefined);
+		const discovered = {
+			port_name: "/dev/cu.usbserial-TL1",
+			identity: {
+				vendor_id: 0x403,
+				product_id: 0x6001,
+				manufacturer: "ENTTEC",
+				product: "DMX USB Pro",
+				usb_serial: "TL1",
+				port_topology_hint: "/dev/cu.usbserial-TL1",
+			},
+		};
+		const provision = vi.fn().mockResolvedValue({
+			endpoint_id: "internal-usb-device",
+			driver: "enttec_usb_pro_v144",
+			identity: { ...discovered.identity, port_topology_hint: null },
+			enabled: true,
+		});
+		const { container } = render(
+			<OutputRoutesSetup
+				routes={[]}
+				usbDevices={[discovered]}
+				onScanUsbDevices={scan}
+				onProvisionUsbDevice={provision}
+				onSave={save}
+				onCreateRange={vi.fn().mockResolvedValue(true)}
+				onDelete={vi.fn().mockResolvedValue(true)}
+			/>,
+		);
+
+		const actions = container.querySelector("header .setup-section-actions");
+		expect(actions).not.toBeNull();
+		expect(
+			within(actions as HTMLElement)
+				.getAllByRole("button")
+				.map((button) => button.textContent),
+		).toEqual(["Scan USB devices", "Add route"]);
+		expect(screen.getByText(/USB serial TL1/)).toBeVisible();
+		expect(
+			screen.getByText(/Recommended macOS connection \/dev\/cu\.usbserial-TL1/),
+		).toBeVisible();
+		fireEvent.click(screen.getByRole("button", { name: "Scan USB devices" }));
+		expect(scan).toHaveBeenCalledOnce();
+
+		fireEvent.click(screen.getByRole("button", { name: "Add route for device" }));
+		const dialog = screen.getByRole("dialog", { name: "Output route editor" });
+		expect(within(dialog).getByRole("button", { name: "USB DMX device" })).toBeVisible();
+		expect(
+			within(dialog).getByRole("button", {
+				name: "DMX USB Pro · USB serial TL1",
+			}),
+		).toBeVisible();
+		expect(within(dialog).getByText(/selected from the device metadata/)).toBeVisible();
+		expect(dialog).not.toHaveTextContent(/endpoint|claim/i);
+
+		fireEvent.click(within(dialog).getByRole("button", { name: "Save route" }));
+		await waitFor(() =>
+			expect(provision).toHaveBeenCalledWith(
+				discovered,
+				"enttec_usb_pro_v144",
+			),
+		);
+		await waitFor(() =>
+			expect(save).toHaveBeenCalledWith(
+				expect.stringMatching(/^route-/),
+				expect.objectContaining({
+					target: {
+						kind: "usb_endpoint",
+						endpoint_id: "internal-usb-device",
+					},
 				}),
 				0,
 			),
