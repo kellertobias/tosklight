@@ -64,6 +64,20 @@ export function reducePaneOptions(
 				schedulerShowList: action.showList,
 				schedulerShowCalendar: action.showCalendar,
 			}));
+		case "SET_PANE_MEDIA_STATE":
+			return updateActivePane(state, action.id, (pane) => ({
+				...pane,
+				mediaServerId: action.state.serverId,
+				mediaLayerId: action.state.layerId,
+				mediaBrowserMode: action.state.browserMode,
+				mediaMainSectionId: action.state.mainSectionId,
+				mediaRightPaneVisible: action.state.rightPaneVisible,
+			}));
+		case "SET_PANE_RUNNING_FILTER":
+			return updateActivePane(state, action.id, (pane) => ({
+				...pane,
+				runningFilter: action.filter,
+			}));
 		case "SET_VIRTUAL_PLAYBACK_GRID": {
 			const grid = normalizeVirtualPlaybackGrid(
 				action.rows,

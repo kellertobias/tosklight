@@ -20,11 +20,15 @@ parking_lot.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+# Pure-Rust MP3 import decoder. MPL-2.0; audit and file-level obligations are recorded in
+# docs/engineering/timecode-audio-codec-decision.md. Runtime playback receives normalized WAV only.
+symphonia = { version = "0.5.5", default-features = false, features = ["mp3"] }
 tokio = { workspace = true, features = ["sync", "time"] }
 tracing.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
+base64.workspace = true
 tokio = { workspace = true, features = ["test-util"] }
 
 [lints]

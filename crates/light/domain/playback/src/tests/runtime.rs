@@ -1,6 +1,31 @@
 use super::*;
 
 #[test]
+fn started_timecode_extends_cue_completion_without_changing_legacy_trigger() {
+    let mut cue = Cue::new(1.0);
+    cue.fade_millis = 1_000;
+    cue.actions.push(CueAction::TimecodeStart {
+        timecode_id: TimecodeId(uuid::Uuid::from_u128(70)),
+        start: CueTimecodeStart::Frame {
+            frame: TimecodeFrame(250),
+        },
+    });
+    cue.trigger = CueTrigger::Timecode { frame: 42 };
+    let cue_list = list(vec![cue]);
+    let id = cue_list.id;
+    let mut engine = PlaybackEngine::default();
+    engine.register(cue_list).unwrap();
+    engine.go(id).unwrap();
+    engine.set_external_completion_millis(id, 5_000);
+    let timing = engine.runtime_status().remove(0).cue_timing.unwrap();
+    assert_eq!(timing.completion_millis, 5_000);
+    assert!(matches!(
+        engine.cue_lists[&id].cues[0].trigger,
+        CueTrigger::Timecode { frame: 42 }
+    ));
+}
+
+#[test]
 fn runtime_timing_projects_effective_phases_and_retains_completed_trigger_until_retrigger() {
     let outgoing = FixtureId::new();
     let incoming = FixtureId::new();

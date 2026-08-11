@@ -68,6 +68,31 @@ pub struct MediaPreviewRefreshRequest {
     pub height: u16,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum MediaLibraryKind {
+    Content,
+    Mask,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct MediaLibrarySelectionRequest {
+    pub request_id: String,
+    pub expected_library_revision: String,
+    pub layer_fixture_id: Uuid,
+    pub kind: MediaLibraryKind,
+    pub folder: u8,
+    pub file: u8,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct MediaLibrarySelectionOutcome {
+    pub request_id: String,
+    pub library_revision: String,
+    #[ts(type = "number")]
+    pub programmer_revision: u64,
+}
+
 fn default_library_type() -> u8 {
     1
 }

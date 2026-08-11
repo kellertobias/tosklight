@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title description">
+  <title id="title">ToskLight Media LED wall badge</title>
+  <desc id="description">A glowing perspective LED wall for the bottom-right of the ToskLight application icon.</desc>
+  <defs>
+    <filter id="media-badge-glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="18" result="blur"/>
+      <feFlood flood-color="#3f9dff"/>
+      <feComposite in2="blur" operator="in"/>
+    </filter>
+    <path id="media-wall-outline" d="M 0 38 L 248 0 L 248 176 L 0 214 Z"/>
+  </defs>
+  <g id="media-badge" transform="translate(672 718)" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <use href="#media-wall-outline" stroke="#01050f" stroke-width="70" stroke-opacity="0.92"/>
+    <use href="#media-wall-outline" stroke="#3f9dff" stroke-width="34" filter="url(#media-badge-glow)"/>
+    <use href="#media-wall-outline" stroke="#ffffff" stroke-width="18"/>
+    <g stroke="#ffffff" stroke-width="9" opacity="0.92">
+      <path d="M 62 29 L 62 204 M 124 19 L 124 195 M 186 10 L 186 185"/>
+      <path d="M 0 91 L 248 53 M 0 144 L 248 106 M 0 197 L 248 159"/>
+    </g>
+    <g fill="#66b5ff" stroke="none">
+      <circle cx="31" cy="64" r="6"/><circle cx="93" cy="55" r="6"/><circle cx="155" cy="45" r="6"/><circle cx="217" cy="36" r="6"/>
+      <circle cx="31" cy="117" r="6"/><circle cx="93" cy="108" r="6"/><circle cx="155" cy="98" r="6"/><circle cx="217" cy="89" r="6"/>
+      <circle cx="31" cy="170" r="6"/><circle cx="93" cy="161" r="6"/><circle cx="155" cy="151" r="6"/><circle cx="217" cy="142" r="6"/>
+    </g>
+  </g>
+</svg>

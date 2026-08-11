@@ -132,7 +132,8 @@ mod wire;
 
 pub(super) use adapter::{
     ExistingCommandOutcome, ExistingCommandPolicy, execute_existing_command,
-    route_osc_command_key_outcome, run_service_with_source,
+    prevalidate_external_command, prevalidate_typed_command, route_osc_command_key_outcome,
+    run_service_with_source,
 };
 pub(super) use color_attributes::color_attribute_index;
 pub(crate) use cue_deletion_ports::ServerProgrammingCueDeletionPorts;
@@ -155,8 +156,8 @@ pub(crate) use preset_recording_wire::address as preset_address;
 pub(super) use programmer_priority_wire::change as priority_change;
 pub(crate) use programmer_priority_wire::outcome as programmer_priority_outcome;
 pub(crate) use programming_ports::ServerProgrammingPorts;
-pub(super) use routes::router;
 pub(crate) use routes::validate_command;
+pub(super) use routes::{authenticate_desk_mutation, router};
 pub(crate) use selection_routes::validate_request as validate_selection_request;
 pub(crate) use selection_wire::{selection_command, selection_response};
 pub(super) use speed_group_action::execute_compatibility as execute_compatibility_speed_group;

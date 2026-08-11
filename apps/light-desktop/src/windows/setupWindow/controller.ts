@@ -286,8 +286,13 @@ const CONFIGURATION_FIELDS = Object.keys({
 	output_bind_ip: true,
 	osc_bind: true,
 	art_timecode_bind: true,
+	timecode_source: true,
+	timecode_frame_rate: true,
+	timecode_external_loss_policy: true,
+	timecode_external_loss_timeout_millis: true,
 	osc_timecode: true,
-	timecode_sources: true,
+	timecode_audio_output_device: true,
+	timecode_audio_latency_trim_micros_by_output: true,
 	backup_retention: true,
 	autosave_interval_seconds: true,
 	speed_groups_bpm: true,
@@ -318,6 +323,17 @@ export function configurationFieldsForSection(
 			return ["autosave_interval_seconds"];
 		case "outputs":
 			return ["frame_rate_hz", "output_bind_ip", "backup_retention"];
+		case "timecode":
+			return [
+				"timecode_source",
+				"timecode_frame_rate",
+				"timecode_external_loss_policy",
+				"timecode_external_loss_timeout_millis",
+				"art_timecode_bind",
+				"osc_timecode",
+				"timecode_audio_output_device",
+				"timecode_audio_latency_trim_micros_by_output",
+			];
 		case "preferences-highlight":
 			return ["highlight_look", "patch_preview_highlight_dmx"];
 		case "preferences-others":

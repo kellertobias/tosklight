@@ -447,6 +447,10 @@ To configure an assigned page playback, press `[SET]` and then tap the playback,
 | Configure a Cuelist | `[SET] <Cuelist-number> [ENTER]` | Open the Cuelist configuration. |
 | Configure a page playback | `[SET] <page> [ . ] <playback-number> [ENTER]` | Open the configuration for the playback at that page position. |
 
+### Starting a Macro
+
+`MACRO <pool-number>` starts that show-owned Macro through the same authenticated, desk-scoped execution queue as a pool tap or assigned Playback. The command returns after the one-shot execution is queued; the Macro and Running windows show its live result. A Macro body cannot use `MACRO` to call another Macro, because Macro lines deliberately contain only non-interactive ordinary programming commands and have no call or recursion feature.
+
 ## OSC playback addressing
 
 Every keypad key is also accepted at `/light/{desk}/programmer/{key}` with a pressed value. The new inputs are `minus` (alias `subtract`), `time`, `delay`, and `shift`; digits use `digit-0` through `digit-9`. OSC `[SHIFT]` is latched exactly like the software key, so `shift` followed by `digit-1` opens Stage. Existing inputs such as `plus`, `at`, `thru`, `set`, `record`, `enter`, and `backspace` continue to use the same address family.

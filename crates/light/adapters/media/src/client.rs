@@ -1,8 +1,12 @@
 use crate::protocol::{
-    Fragment, HEADER_BYTES, MAX_PACKET_BYTES, Packet, encode_packet, parse_stream_frame,
-    parse_thumbnail,
+    Fragment, HEADER_BYTES, MAX_PACKET_BYTES, Packet, encode_packet, parse_layer_status,
+    parse_library_elements, parse_library_folders, parse_preview_sources, parse_server_information,
+    parse_stream_frame, parse_thumbnail,
 };
-use crate::{ImageFormat, LibraryId, MediaError, MediaImage};
+use crate::{
+    ImageFormat, LibraryId, MediaError, MediaImage, MediaLayerStatus, MediaProviderCapabilities,
+    MediaServerInformation, MediaServerSnapshot,
+};
 use std::{net::SocketAddr, time::Duration};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -15,6 +19,8 @@ pub struct CitpClient {
     request_index: u16,
     negotiated_version: (u8, u8),
     operation_timeout: Duration,
+    server: MediaServerInformation,
+    latest_layers: Vec<MediaLayerStatus>,
 }
 
 impl CitpClient {
@@ -31,11 +37,49 @@ impl CitpClient {
             request_index: 0,
             negotiated_version: (1, 2),
             operation_timeout,
+            server: MediaServerInformation {
+                name: String::new(),
+                layer_count: 0,
+            },
+            latest_layers: Vec::new(),
         };
         let request = client.send(*b"CInf", vec![3, 1, 2, 1, 1, 1, 0]).await?;
         let server_info = client.receive_relevant(*b"SInf", request).await?;
         client.negotiated_version = server_info.version;
+        client.server = parse_server_information(&server_info.payload)?;
         Ok(client)
+    }
+
+    /// Reads the server-advertised operating model. Folder/file IDs, preview-source IDs and
+    /// layer IDs remain separate all the way to callers; no positional identity is invented.
+    pub async fn inspect(&mut self) -> Result<MediaServerSnapshot, MediaError> {
+        let request = self.send(*b"GELI", self.library_request()).await?;
+        let folders_packet = self.receive_relevant(*b"ELIn", request).await?;
+        let folders = parse_library_folders(&folders_packet.payload, folders_packet.version)?;
+        let mut files = Vec::new();
+        for folder in &folders {
+            let request = self.send(*b"GEIn", self.element_request(folder.id)).await?;
+            let packet = self.receive_relevant(*b"MEIn", request).await?;
+            files.extend(parse_library_elements(&packet.payload, packet.version)?);
+        }
+        let request = self.send(*b"GVSr", Vec::new()).await?;
+        let sources_packet = self.receive_relevant(*b"VSrc", request).await?;
+        let preview_sources = parse_preview_sources(&sources_packet.payload)?;
+        self.receive_optional_layer_status().await?;
+        let library_revision = library_revision(&folders, &files);
+        Ok(MediaServerSnapshot {
+            library_revision,
+            server: self.server.clone(),
+            folders,
+            files,
+            preview_sources,
+            layers: self.latest_layers.clone(),
+            capabilities: MediaProviderCapabilities {
+                provider: "citp_msex".into(),
+                native_action: None,
+                layers: Vec::new(),
+            },
+        })
     }
 
     pub async fn request_thumbnail(
@@ -117,6 +161,22 @@ impl CitpClient {
         payload
     }
 
+    fn library_request(&self) -> Vec<u8> {
+        if self.negotiated_version >= (1, 1) {
+            vec![1, 0, 0, 0, 0, 0]
+        } else {
+            vec![1, 0]
+        }
+    }
+
+    fn element_request(&self, folder: u8) -> Vec<u8> {
+        if self.negotiated_version >= (1, 1) {
+            vec![1, 1, folder, 0, 0, 0]
+        } else {
+            vec![1, folder, 0]
+        }
+    }
+
     fn encode_thumbnail_address(
         &self,
         payload: &mut Vec<u8>,
@@ -143,6 +203,10 @@ impl CitpClient {
     ) -> Result<Packet, MediaError> {
         for _ in 0..64 {
             let packet = self.read_packet().await?;
+            if packet.content == *b"LSta" {
+                self.latest_layers = parse_layer_status(&packet.payload)?;
+                continue;
+            }
             if packet.content == *b"Nack" {
                 return Err(MediaError::Rejected(
                     String::from_utf8_lossy(packet.payload.get(..4).unwrap_or_default())
@@ -158,6 +222,17 @@ impl CitpClient {
         Err(MediaError::Invalid(
             "too many unrelated CITP messages".into(),
         ))
+    }
+
+    async fn receive_optional_layer_status(&mut self) -> Result<(), MediaError> {
+        match timeout(Duration::from_millis(120), self.read_packet()).await {
+            Ok(Ok(packet)) if packet.content == *b"LSta" => {
+                self.latest_layers = parse_layer_status(&packet.payload)?;
+            }
+            Ok(Ok(_)) | Err(_) => {}
+            Ok(Err(error)) => return Err(error),
+        }
+        Ok(())
     }
 
     async fn send(&mut self, content: [u8; 4], payload: Vec<u8>) -> Result<u16, MediaError> {
@@ -216,6 +291,35 @@ impl CitpClient {
             payload: rest[6..].to_vec(),
         })
     }
+}
+
+fn library_revision(
+    folders: &[crate::MediaLibraryFolder],
+    files: &[crate::MediaLibraryElement],
+) -> String {
+    // FNV-1a keeps the wire revision deterministic without turning the provider crate into a
+    // cryptographic identity service. The revision is an opaque stale-write precondition only.
+    let mut hash = 0xcbf29ce484222325_u64;
+    let mut update = |bytes: &[u8]| {
+        for byte in bytes {
+            hash ^= u64::from(*byte);
+            hash = hash.wrapping_mul(0x100000001b3);
+        }
+    };
+    for folder in folders {
+        update(&[folder.id, folder.element_count]);
+        update(folder.name.as_bytes());
+        update(&[0]);
+    }
+    for file in files {
+        update(&[file.folder_id, file.id]);
+        update(file.name.as_bytes());
+        update(&file.width.to_le_bytes());
+        update(&file.height.to_le_bytes());
+        update(&file.length_frames.to_le_bytes());
+        update(&[file.fps, 0]);
+    }
+    format!("citp-{hash:016x}")
 }
 
 fn preview_payload(source: u16, width: u16, height: u16) -> Vec<u8> {

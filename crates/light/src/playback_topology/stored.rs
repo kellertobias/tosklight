@@ -51,6 +51,28 @@ pub(super) fn find_group(
     Ok(Some(stored))
 }
 
+pub(super) fn find_macro(
+    document: &PortableShowDocument,
+    id: uuid::Uuid,
+) -> Result<Option<Stored<crate::CommandMacroDefinition>>, ActionError> {
+    find_unique(
+        document,
+        "macro",
+        |value: &crate::CommandMacroDefinition| value.id == id,
+    )
+}
+
+pub(super) fn find_timecode(
+    document: &PortableShowDocument,
+    id: light_playback::TimecodeId,
+) -> Result<Option<Stored<light_playback::TimecodeDefinition>>, ActionError> {
+    find_unique(
+        document,
+        "timecode",
+        |value: &light_playback::TimecodeDefinition| value.id == id,
+    )
+}
+
 pub(super) fn pages(
     document: &PortableShowDocument,
 ) -> Result<Vec<Stored<PlaybackPage>>, ActionError> {

@@ -348,7 +348,11 @@ function configurationPatch(
 		output_bind_ip: configuration.output_bind_ip,
 		osc_bind: configuration.osc_bind,
 		art_timecode_bind: configuration.art_timecode_bind,
-		timecode_sources: configuration.timecode_sources,
+		timecode_source: configuration.timecode_source,
+		timecode_frame_rate: configuration.timecode_frame_rate,
+		timecode_external_loss_policy: configuration.timecode_external_loss_policy,
+		timecode_external_loss_timeout_millis:
+			configuration.timecode_external_loss_timeout_millis,
 		osc_timecode: configuration.osc_timecode,
 		backup_retention: configuration.backup_retention,
 		autosave_interval_seconds: configuration.autosave_interval_seconds,

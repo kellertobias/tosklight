@@ -7,6 +7,8 @@ pub(in crate::runtime) enum ReplayAction {
     DynamicCopy(Uuid, wire::DynamicPoolActionRequest),
     DynamicDelete(Uuid, wire::DynamicDeleteActionRequest),
     DynamicUpdate(Uuid, wire::DynamicUpdateActionRequest),
+    Macro(light_wire::v2::macros::MacroObjectAction),
+    Timecode(light_wire::v2::timecode::TimecodeObjectAction),
     UserLayout(wire::UserLayoutAction),
     PatchLayer(wire::PatchLayerAction),
     Preload(wire::PreloadRecordAction),

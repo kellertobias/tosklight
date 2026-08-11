@@ -1,9 +1,4 @@
-/**
- * FUTURE FEATURE — STORYBOOK PRODUCT-DESIGN PROTOTYPE.
- *
- * This story intentionally uses deterministic local state. It demonstrates the
- * proposed Timecode interaction without implementing runtime or persistence.
- */
+/** Production Timecode editor story plus a deterministic full-desk visual composition. */
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import {
 	Button,
@@ -14,9 +9,12 @@ import { GridDesktop, PaneView } from "@tosklight/ui/desktop";
 import { useMemo, useState } from "react";
 import { CommandSectionFixture } from "../../../ui-library/storybook/fixtures/controlSection";
 import { ApplicationStateHarness } from "../../../ui-library/storybook/providers/ApplicationStateHarness";
+import type { TimecodeDefinition } from "../api/types/timecode";
 import { AppShellView } from "../components/shell/AppShell";
 import { Clock } from "../components/shell/Clock";
 import { LeftDock } from "../components/shell/LeftDock";
+import { TimecodeTimelineEditor } from "../features/timecode/TimecodeTimelineEditor";
+import { useTimecodeEditorHistory } from "../features/timecode/useTimecodeEditorHistory";
 import {
 	formatTimecode,
 	secondsToFrames,
@@ -35,7 +33,7 @@ const meta = {
 		docs: {
 			description: {
 				component:
-					"Storybook-only product-design prototype for a frame-addressed Timecode editor. Audio, transport, lanes, and control points are deterministic local demo state.",
+					"The production frame-addressed Timecode editor plus the original deterministic application composition used to settle its control language.",
 			},
 		},
 	},
@@ -43,6 +41,140 @@ const meta = {
 
 export default meta;
 type Story = StoryObj<typeof meta>;
+
+const productionDefinition: TimecodeDefinition = {
+	id: "00000000-0000-0000-0000-000000000070",
+	number: 7,
+	name: "Opening track",
+	duration_frame: 44 * 75,
+	transport_offset_frame: 0,
+	auto_start: false,
+	audio: {
+		asset_id: "00000000-0000-0000-0000-000000000071",
+		asset_revision: 1,
+	},
+	markers: [
+		{
+			id: "00000000-0000-0000-0000-000000000072",
+			frame: 44 * 10,
+			name: "Verse",
+			color: "#a67cff",
+		},
+		{
+			id: "00000000-0000-0000-0000-000000000073",
+			frame: 44 * 31,
+			name: "Hit",
+			color: "#ff6a62",
+		},
+	],
+	lanes: [
+		{
+			id: "00000000-0000-0000-0000-000000000074",
+			name: "Main audio",
+			content: {
+				kind: "audio_volume",
+				keyframes: [
+					{
+						id: "00000000-0000-0000-0000-000000000075",
+						frame: 0,
+						value: 0,
+						fade_frames: 88,
+						curve: "ease_in",
+					},
+					{
+						id: "00000000-0000-0000-0000-000000000076",
+						frame: 88,
+						value: 1,
+						fade_frames: 0,
+						curve: "linear",
+					},
+				],
+			},
+		},
+		{
+			id: "00000000-0000-0000-0000-000000000077",
+			name: "Movement speed",
+			content: {
+				kind: "speed_group",
+				group: "A",
+				keyframes: [
+					{
+						id: "00000000-0000-0000-0000-000000000078",
+						frame: 44 * 8,
+						bpm: 120,
+						phase: 0,
+					},
+					{
+						id: "00000000-0000-0000-0000-000000000079",
+						frame: 44 * 31,
+						bpm: 96,
+						phase: 0.5,
+					},
+				],
+			},
+		},
+	],
+};
+
+function ProductionEditorStory() {
+	const history = useTimecodeEditorHistory(productionDefinition);
+	const [frame, setFrame] = useState(44 * 18);
+	const peaks = useMemo(
+		() =>
+			Array.from({ length: 220 }, (_, index) =>
+				Math.max(
+					0.08,
+					Math.sin((index / 219) * Math.PI) *
+						(0.35 + Math.abs(Math.sin(index * 0.47)) * 0.65),
+				),
+			),
+		[],
+	);
+	return (
+		<div
+			style={{
+				height: "100vh",
+				padding: "1rem",
+				background: "#090a10",
+				color: "white",
+			}}
+		>
+			<TimecodeTimelineEditor
+				definition={history.draft}
+				frame={frame}
+				fps={44}
+				cueLists={[
+					{
+						id: "00000000-0000-0000-0000-000000000080",
+						name: "Opening",
+						cues: [
+							{
+								id: "00000000-0000-0000-0000-000000000081",
+								number: 1,
+								name: "Preset",
+							},
+							{
+								id: "00000000-0000-0000-0000-000000000082",
+								number: 2,
+								name: "Hit",
+							},
+						],
+					},
+				]}
+				waveformPeaks={peaks}
+				onScrub={setFrame}
+				onCommit={history.commit}
+				onPreview={history.preview}
+				onBeginGesture={history.beginGesture}
+				onEndGesture={history.endGesture}
+			/>
+		</div>
+	);
+}
+
+export const ProductionTimelineEditor: Story = {
+	render: () => <ProductionEditorStory />,
+};
 
 const initialLanes: TimecodeLane[] = [
 	{

@@ -1,4 +1,5 @@
 import { createContext, type PropsWithChildren, useContext } from "react";
+import type { MediaServerInspection } from "../../api/client/mediaOutput";
 import type { MatterBridgeStatus, MediaServerFixture } from "../../api/types";
 
 /**
@@ -11,8 +12,25 @@ export interface MediaServersState {
 	refreshMediaPreview: (fixtureId: string, source?: number) => Promise<boolean>;
 	refreshMediaThumbnails: (
 		fixtureId: string,
+		folder: number,
 		elements: number[],
 	) => Promise<void>;
+	inspectMediaServer: (fixtureId: string) => Promise<MediaServerInspection>;
+	applyMediaLibrarySelection: (
+		fixtureId: string,
+		input: {
+			expected_library_revision: string;
+			layer_fixture_id: string;
+			kind: "content" | "mask";
+			folder: number;
+			file: number;
+		},
+	) => Promise<unknown>;
+	mediaThumbnail: (
+		fixtureId: string,
+		folder: number,
+		element: number,
+	) => Promise<Blob>;
 	matter: MatterBridgeStatus | null;
 }
 

@@ -235,8 +235,20 @@ pub(super) struct DeskConfiguration {
     pub(super) output_bind_ip: IpAddr,
     pub(super) osc_bind: Option<SocketAddr>,
     pub(super) art_timecode_bind: Option<SocketAddr>,
-    pub(super) timecode_sources: Vec<TimecodeSourceConfig>,
+    /// Legacy priority-list input retained only so older installation files deserialize. It is
+    /// never serialized and never drives routing after the explicit-source migration.
+    #[serde(default, rename = "timecode_sources", skip_serializing)]
+    pub(super) legacy_timecode_sources: Vec<LegacyTimecodeSourceConfig>,
+    pub(super) timecode_source: TimecodeSourceSelection,
+    /// `None` follows the configured DMX frame rate. `Some` is the operator's explicit override.
+    pub(super) timecode_frame_rate: Option<DeskTimecodeFrameRate>,
+    pub(super) timecode_external_loss_policy: ExternalTimecodeLossPolicy,
+    pub(super) timecode_external_loss_timeout_millis: u64,
     pub(super) osc_timecode: Option<OscTimecodeConfig>,
+    /// `None` follows the operating system default. A name is exact and never silently falls back.
+    pub(super) timecode_audio_output_device: Option<String>,
+    /// Per-destination operator calibration. The `$system_default` key owns default-device trim.
+    pub(super) timecode_audio_latency_trim_micros_by_output: BTreeMap<String, i64>,
     pub(super) backup_retention: usize,
     /// Seconds between automatic recovery checkpoints of the active show (api-rules §8).
     #[serde(default = "default_autosave_interval_seconds")]
@@ -295,6 +307,35 @@ pub(super) struct OscTimecodeConfig {
     pub(super) address: String,
     pub(super) rate: FrameRate,
 }
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+pub(super) struct DeskTimecodeFrameRate {
+    pub(super) numerator: u32,
+    pub(super) denominator: u32,
+    pub(super) drop_frame: bool,
+}
+
+impl DeskTimecodeFrameRate {
+    fn control_rate(self) -> Option<FrameRate> {
+        if self.denominator == 1 {
+            return u8::try_from(self.numerator)
+                .ok()
+                .and_then(FrameRate::whole_frames);
+        }
+        (self.numerator == 30_000 && self.denominator == 1_001 && self.drop_frame)
+            .then_some(FrameRate::Fps2997Drop)
+    }
+}
+#[derive(Clone, Debug, Deserialize)]
+pub(super) struct LegacyTimecodeSourceConfig {
+    #[allow(dead_code)]
+    pub(super) source_prefix: String,
+    #[allow(dead_code)]
+    pub(super) priority: i16,
+    #[allow(dead_code)]
+    pub(super) fallback: bool,
+    #[allow(dead_code)]
+    pub(super) loss_timeout_millis: u64,
+}
 impl Default for DeskConfiguration {
     fn default() -> Self {
         Self {
@@ -302,27 +343,14 @@ impl Default for DeskConfiguration {
             output_bind_ip: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
             osc_bind: Some(SocketAddr::from(([127, 0, 0, 1], 9000))),
             art_timecode_bind: None,
-            timecode_sources: vec![
-                TimecodeSourceConfig {
-                    source_prefix: "artnet:".into(),
-                    priority: 30,
-                    fallback: false,
-                    loss_timeout_millis: 500,
-                },
-                TimecodeSourceConfig {
-                    source_prefix: "osc:".into(),
-                    priority: 10,
-                    fallback: true,
-                    loss_timeout_millis: 500,
-                },
-                TimecodeSourceConfig {
-                    source_prefix: "extension:".into(),
-                    priority: 20,
-                    fallback: true,
-                    loss_timeout_millis: 500,
-                },
-            ],
+            legacy_timecode_sources: Vec::new(),
+            timecode_source: TimecodeSourceSelection::Internal,
+            timecode_frame_rate: None,
+            timecode_external_loss_policy: ExternalTimecodeLossPolicy::ContinueInternal,
+            timecode_external_loss_timeout_millis: 500,
             osc_timecode: None,
+            timecode_audio_output_device: None,
+            timecode_audio_latency_trim_micros_by_output: BTreeMap::new(),
             backup_retention: 20,
             autosave_interval_seconds: default_autosave_interval_seconds(),
             speed_groups_bpm: default_speed_groups(),
@@ -350,6 +378,21 @@ impl Default for DeskConfiguration {
     }
 }
 impl DeskConfiguration {
+    pub(super) fn timecode_router_config(&self) -> TimecodeRouterConfig {
+        TimecodeRouterConfig {
+            selected_source: self.timecode_source.clone(),
+            desk_rate: self
+                .timecode_frame_rate
+                .and_then(DeskTimecodeFrameRate::control_rate)
+                .unwrap_or_else(|| {
+                    FrameRate::whole_frames(u8::try_from(self.frame_rate_hz).unwrap_or(u8::MAX))
+                        .expect("validated DMX frame rate is positive")
+                }),
+            external_loss_policy: self.timecode_external_loss_policy,
+            loss_timeout_millis: self.timecode_external_loss_timeout_millis,
+        }
+    }
+
     pub(super) fn migrate_speed_group_sources(&mut self) {
         for index in 0..self.speed_group_sources.len() {
             if self.speed_group_sources[index] == SpeedGroupSource::Manual
@@ -376,6 +419,48 @@ impl DeskConfiguration {
     pub(super) fn validate(&self) -> Result<(), ApiError> {
         if !(40..=60).contains(&self.frame_rate_hz) {
             return Err(ApiError::bad_request("frame_rate_hz must be 40-60"));
+        }
+        if self.timecode_external_loss_timeout_millis == 0
+            || self.timecode_external_loss_timeout_millis > 60_000
+        {
+            return Err(ApiError::bad_request(
+                "timecode_external_loss_timeout_millis must be 1-60000",
+            ));
+        }
+        if let TimecodeSourceSelection::External { source } = &self.timecode_source
+            && source.trim().is_empty()
+        {
+            return Err(ApiError::bad_request(
+                "timecode_source.external source must not be empty",
+            ));
+        }
+        if self
+            .timecode_frame_rate
+            .is_some_and(|rate| rate.control_rate().is_none())
+        {
+            return Err(ApiError::bad_request(
+                "timecode_frame_rate must be a positive whole-frame rate or 30000/1001 drop-frame",
+            ));
+        }
+        if self
+            .timecode_audio_output_device
+            .as_ref()
+            .is_some_and(|device| device.trim().is_empty())
+        {
+            return Err(ApiError::bad_request(
+                "timecode_audio_output_device must be null or a non-empty exact device name",
+            ));
+        }
+        if self
+            .timecode_audio_latency_trim_micros_by_output
+            .iter()
+            .any(|(output, trim)| {
+                output.trim().is_empty() || !(-5_000_000..=5_000_000).contains(trim)
+            })
+        {
+            return Err(ApiError::bad_request(
+                "Timecode audio output trim keys must be non-empty and values within +/-5000000 microseconds",
+            ));
         }
         if self.backup_retention == 0 || self.backup_retention > 1_000 {
             return Err(ApiError::bad_request("backup_retention must be 1-1000"));

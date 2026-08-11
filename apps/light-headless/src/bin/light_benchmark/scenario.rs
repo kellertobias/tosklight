@@ -362,6 +362,7 @@ fn playback(fixture_footprint: u16) -> (CueList, PlaybackDefinition) {
         out_delay_millis: None,
         trigger: CueTrigger::Manual,
         cue_only: false,
+        actions: vec![],
         dynamic_changes: vec![],
         group_changes: static_slots(fixture_footprint)
             .map(|slot| GroupCueChange {

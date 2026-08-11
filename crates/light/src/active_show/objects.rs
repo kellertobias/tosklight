@@ -11,7 +11,7 @@ use light_dynamics::{DynamicDefinition, validate_definition};
 use light_playback::{CueList, PlaybackDefinition, PlaybackPage};
 use light_programmer::{GroupDefinition, Preset};
 use light_show::{LosslessBody, PortableShowDocument, PortableShowObject, PortableShowTransaction};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 pub(super) struct PreparedObjectChanges {
     pub(super) transaction: PortableShowTransaction,
@@ -25,6 +25,8 @@ pub(super) fn prepare_object_mutation(
     previous: Option<&light_engine::EngineSnapshot>,
 ) -> Result<PreparedObjectChanges, ActionError> {
     validate_command(document, command)?;
+    validate_macro_pool_identity(document, command)?;
+    validate_timecode_pool_identity(document, command)?;
     let mut transaction = document.transaction();
     let mut changes = Vec::with_capacity(command.mutations.len());
     for mutation in &command.mutations {
@@ -45,6 +47,139 @@ pub(super) fn prepare_object_mutation(
         snapshot,
         changes,
     })
+}
+
+fn validate_timecode_pool_identity(
+    document: &PortableShowDocument,
+    command: &MutateActiveShowObjectsCommand,
+) -> Result<(), ActionError> {
+    let changed_ids = command
+        .mutations
+        .iter()
+        .filter(|mutation| mutation.kind == super::ActiveShowObjectKind::Timecode)
+        .map(|mutation| mutation.object_id.as_str())
+        .collect::<HashSet<_>>();
+    if changed_ids.is_empty() {
+        return Ok(());
+    }
+    let mut numbers = HashMap::<u32, String>::new();
+    let mut names = HashMap::<String, String>::new();
+    let mut insert = |object_id: &str,
+                      definition: &light_playback::TimecodeDefinition|
+     -> Result<(), ActionError> {
+        if let Some(existing_id) = numbers.insert(definition.number, object_id.to_owned()) {
+            return Err(invalid(format!(
+                "Timecode number {} is already used by Timecode {existing_id}",
+                definition.number
+            )));
+        }
+        if let Some(existing_id) =
+            names.insert(definition.name.trim().to_lowercase(), object_id.to_owned())
+        {
+            return Err(invalid(format!(
+                "Timecode name {:?} is already used by Timecode {existing_id}",
+                definition.name.trim()
+            )));
+        }
+        Ok(())
+    };
+    for object in document
+        .objects_of_kind(super::ActiveShowObjectKind::Timecode.as_str())
+        .filter(|object| !changed_ids.contains(object.key().id()))
+    {
+        let Ok(ActiveShowObjectBody::Timecode(body)) = ActiveShowObjectBody::decode(
+            super::ActiveShowObjectKind::Timecode,
+            object.body().clone(),
+        ) else {
+            continue;
+        };
+        insert(object.key().id(), body.typed())?;
+    }
+    for mutation in command
+        .mutations
+        .iter()
+        .filter(|mutation| mutation.kind == super::ActiveShowObjectKind::Timecode)
+    {
+        let ActiveShowObjectMutationKind::Put { body } = &mutation.mutation else {
+            continue;
+        };
+        if let Some(definition) = body.timecode() {
+            insert(&mutation.object_id, definition.typed())?;
+        }
+    }
+    Ok(())
+}
+
+fn validate_macro_pool_identity(
+    document: &PortableShowDocument,
+    command: &MutateActiveShowObjectsCommand,
+) -> Result<(), ActionError> {
+    let changed_ids = command
+        .mutations
+        .iter()
+        .filter(|mutation| mutation.kind == super::ActiveShowObjectKind::Macro)
+        .map(|mutation| mutation.object_id.as_str())
+        .collect::<HashSet<_>>();
+    if changed_ids.is_empty() {
+        return Ok(());
+    }
+
+    let mut numbers = HashMap::<u16, String>::new();
+    let mut names = HashMap::<String, String>::new();
+    for object in document
+        .objects_of_kind(super::ActiveShowObjectKind::Macro.as_str())
+        .filter(|object| !changed_ids.contains(object.key().id()))
+    {
+        // A malformed optional object must not prevent recovery or repair of the rest of a show.
+        let Ok(ActiveShowObjectBody::Macro(body)) =
+            ActiveShowObjectBody::decode(super::ActiveShowObjectKind::Macro, object.body().clone())
+        else {
+            continue;
+        };
+        insert_macro_identity(&mut numbers, &mut names, object.key().id(), body.typed())?;
+    }
+
+    for mutation in command
+        .mutations
+        .iter()
+        .filter(|mutation| mutation.kind == super::ActiveShowObjectKind::Macro)
+    {
+        let ActiveShowObjectMutationKind::Put { body } = &mutation.mutation else {
+            continue;
+        };
+        let Some(definition) = body.macro_definition() else {
+            continue;
+        };
+        insert_macro_identity(
+            &mut numbers,
+            &mut names,
+            &mutation.object_id,
+            definition.typed(),
+        )?;
+    }
+    Ok(())
+}
+
+fn insert_macro_identity(
+    numbers: &mut HashMap<u16, String>,
+    names: &mut HashMap<String, String>,
+    object_id: &str,
+    definition: &crate::CommandMacroDefinition,
+) -> Result<(), ActionError> {
+    if let Some(existing_id) = numbers.insert(definition.number, object_id.to_owned()) {
+        return Err(invalid(format!(
+            "Macro number {} is already used by Macro {existing_id}",
+            definition.number
+        )));
+    }
+    let normalized_name = definition.name.trim().to_lowercase();
+    if let Some(existing_id) = names.insert(normalized_name, object_id.to_owned()) {
+        return Err(invalid(format!(
+            "Macro name {:?} is already used by Macro {existing_id}",
+            definition.name.trim()
+        )));
+    }
+    Ok(())
 }
 
 fn validate_command(
@@ -188,6 +323,12 @@ fn normalize_body(
             request,
         )
         .map(ActiveShowObjectBody::Group),
+        ActiveShowObjectBody::Macro(request) => normalize_macro(
+            existing.and_then(ActiveShowObjectBody::macro_definition),
+            mutation,
+            request,
+        )
+        .map(ActiveShowObjectBody::Macro),
         ActiveShowObjectBody::PatchLayer(request) => normalize_passthrough(
             existing.and_then(ActiveShowObjectBody::patch_layer),
             request,
@@ -222,12 +363,38 @@ fn normalize_body(
             request,
         )
         .map(ActiveShowObjectBody::StageLayout),
+        ActiveShowObjectBody::Timecode(request) => normalize_timecode(
+            existing.and_then(ActiveShowObjectBody::timecode),
+            mutation,
+            request,
+        )
+        .map(ActiveShowObjectBody::Timecode),
         ActiveShowObjectBody::UserLayout(request) => normalize_passthrough(
             existing.and_then(ActiveShowObjectBody::user_layout),
             request,
         )
         .map(ActiveShowObjectBody::UserLayout),
     }
+}
+
+fn normalize_timecode(
+    existing: Option<&LosslessBody<light_playback::TimecodeDefinition>>,
+    mutation: &ActiveShowObjectMutation,
+    request: &LosslessBody<light_playback::TimecodeDefinition>,
+) -> Result<LosslessBody<light_playback::TimecodeDefinition>, ActionError> {
+    let mut normalized = request.typed().clone();
+    normalized.id = light_playback::TimecodeId(
+        uuid::Uuid::parse_str(&mutation.object_id)
+            .map_err(|error| invalid(format!("invalid Timecode storage id: {error}")))?,
+    );
+    normalized.name = normalized.name.trim().to_owned();
+    if normalized.name.is_empty() {
+        return Err(invalid("Timecode name must not be empty"));
+    }
+    normalized
+        .validate()
+        .map_err(|error| invalid(error.message))?;
+    LosslessBody::merge_normalized_body(existing, request, normalized).map_err(invalid)
 }
 
 fn normalize_attribute_configuration(
@@ -289,6 +456,19 @@ fn normalize_group(
     merged.strip_object_key("master");
     merged.strip_object_key("playback_fader");
     Ok(merged)
+}
+
+fn normalize_macro(
+    existing: Option<&LosslessBody<crate::CommandMacroDefinition>>,
+    mutation: &ActiveShowObjectMutation,
+    request: &LosslessBody<crate::CommandMacroDefinition>,
+) -> Result<LosslessBody<crate::CommandMacroDefinition>, ActionError> {
+    let mut normalized = request.typed().clone();
+    normalized.id = uuid::Uuid::parse_str(&mutation.object_id)
+        .map_err(|error| invalid(format!("invalid Macro storage id: {error}")))?;
+    normalized.name = normalized.name.trim().to_owned();
+    normalized.validate().map_err(invalid)?;
+    LosslessBody::merge_normalized_body(existing, request, normalized).map_err(invalid)
 }
 
 fn normalize_preset(

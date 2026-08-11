@@ -14,11 +14,11 @@ LINK belongs to the source Cue. After that Cue's latest real incoming or outgoin
 
 ## Timecode
 
-Configure timecode sources, priority, and fallback under Desk Setup. Built-in ArtTimeCode and approved native extensions feed the same authoritative timecode router. Verify source identity and fallback by disconnecting the preferred source during rehearsal; never assume visible time alone proves the intended source is driving.
+Choose exactly one Timecode source under **Desk Setup > General**: the desk's internal generator or one exact external source identity. There is no automatic priority list. Select whether loss of the chosen external source continues on the internal clock, pauses running Timecodes, or stops them; the selected source takes authority again as soon as it returns. The desk Timecode rate can follow the DMX rate or use an explicit whole-frame rate. A known incoming rate is converted and reported; an unusable sample is rejected rather than guessed.
 
-The current Timecode page reports source prefixes, priority, and fallback state; it does not edit those sources.
+The same Setup section selects the server audio-output device and its signed latency trim. Rehearse loss and return with the exact adapter and device used for the show; visible frames alone do not prove that the intended source or audible output is synchronized.
 
-![Configured timecode source priority and fallback](../assets/screenshots/workflows/desk-setup-timecode.png)
+![Configured timecode source and loss policy](../assets/screenshots/workflows/desk-setup-timecode.png)
 
 ## Chasers and speed groups
 

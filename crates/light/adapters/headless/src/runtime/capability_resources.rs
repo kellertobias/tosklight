@@ -309,6 +309,69 @@ impl HighlightResource {
             patch_preview: Arc::default(),
         }
     }
+
+    /// Creates isolated Highlight ownership for a detached Programmer transaction.
+    /// Raw registry construction stays inside the capability resource boundary.
+    pub(in crate::runtime) fn detached_registry() -> Arc<HighlightRegistry> {
+        Arc::new(HighlightRegistry::default())
+    }
+}
+
+/// Owns the native Timecode audio worker lifecycle and its request channel.
+///
+/// The CPAL stream must remain on its creating thread on CoreAudio. Keeping the join handle in a
+/// capability resource makes shutdown an explicit part of server-owned audio rather than adapter
+/// task ownership.
+#[cfg(feature = "native-audio-output")]
+pub(in crate::runtime) struct TimecodeAudioWorkerResource {
+    sender: std::sync::mpsc::Sender<TimecodeAudioWorkerRequest>,
+    worker: Mutex<Option<std::thread::JoinHandle<()>>>,
+}
+
+#[cfg(feature = "native-audio-output")]
+pub(in crate::runtime) struct TimecodeAudioWorkerRequest {
+    pub(in crate::runtime) command: super::timecode_audio_output::NativeCommand,
+    pub(in crate::runtime) reply: std::sync::mpsc::Sender<Result<(), String>>,
+}
+
+#[cfg(feature = "native-audio-output")]
+impl TimecodeAudioWorkerResource {
+    pub(in crate::runtime) fn new(
+        sender: std::sync::mpsc::Sender<TimecodeAudioWorkerRequest>,
+        worker: std::thread::JoinHandle<()>,
+    ) -> Self {
+        Self {
+            sender,
+            worker: Mutex::new(Some(worker)),
+        }
+    }
+
+    pub(in crate::runtime) fn request(
+        &self,
+        command: super::timecode_audio_output::NativeCommand,
+    ) -> Result<(), String> {
+        let (reply, response) = std::sync::mpsc::channel();
+        self.sender
+            .send(TimecodeAudioWorkerRequest { command, reply })
+            .map_err(|_| "Timecode audio output worker is unavailable".to_owned())?;
+        response.recv().map_err(|_| {
+            "Timecode audio output worker stopped before applying a command".to_owned()
+        })?
+    }
+}
+
+#[cfg(feature = "native-audio-output")]
+impl Drop for TimecodeAudioWorkerResource {
+    fn drop(&mut self) {
+        let (reply, _response) = std::sync::mpsc::channel();
+        let _ = self.sender.send(TimecodeAudioWorkerRequest {
+            command: super::timecode_audio_output::NativeCommand::Shutdown,
+            reply,
+        });
+        if let Some(worker) = self.worker.get_mut().take() {
+            let _ = worker.join();
+        }
+    }
 }
 
 #[derive(Clone)]

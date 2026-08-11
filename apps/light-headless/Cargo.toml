@@ -7,8 +7,9 @@ license-file.workspace = true
 authors.workspace = true
 
 [features]
-default = []
+default = ["native-audio-output"]
 e2e-embedded-ui = ["light-headless-runtime/e2e-embedded-ui"]
+native-audio-output = ["light-headless-runtime/native-audio-output"]
 
 [dependencies]
 anyhow.workspace = true

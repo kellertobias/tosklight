@@ -15,6 +15,8 @@ pub(super) fn build(state: AppState) -> Router {
         .merge(speed_group_v2::router())
         .merge(playback_v2::router())
         .merge(dynamics_http::router())
+        .merge(macros_v2::router())
+        .merge(timecode_v2::router())
         .merge(playback_topology_http::router())
         .merge(attribute_configuration::router())
         .merge(control_desk_configuration_v2::router())
@@ -58,6 +60,14 @@ fn media_and_output_routes() -> Router<AppState> {
         .route("/api/v2/output/visualization", get(visualization_snapshot))
         .route("/api/v2/media-servers", get(media_servers))
         .route(
+            "/api/v2/media-servers/{fixture_id}/inspect",
+            get(inspect_media_server),
+        )
+        .route(
+            "/api/v2/media-servers/{fixture_id}/library-selection",
+            post(apply_media_library_selection),
+        )
+        .route(
             "/api/v2/media-servers/{fixture_id}/thumbnails/refresh",
             post(refresh_media_thumbnails),
         )
@@ -68,6 +78,10 @@ fn media_and_output_routes() -> Router<AppState> {
         .route(
             "/api/v2/media-servers/{fixture_id}/preview/{source}",
             get(media_preview),
+        )
+        .route(
+            "/api/v2/media-servers/{fixture_id}/thumbnails/{folder}/{element}",
+            get(media_thumbnail),
         )
         .route("/api/v2/output/dmx", get(dmx_snapshot))
         .route("/api/v2/output/dmx-overrides", post(update_dmx_override))

@@ -24,8 +24,9 @@ This matrix is the completeness contract for operator Help and the generated man
 | Cuelists, Playbacks, buttons/faders, page behavior | [Cues and Playbacks](../40-Running-a-Show/01-cues-and-playbacks.md) | `cuelist-playback.png` |
 | HTP, LTP, priorities, tracking, source ownership | [HTP, LTP, and Ownership](../40-Running-a-Show/02-htp-ltp-and-ownership.md) | Fixture sheet source cells |
 | Preload, capture domains, Preload GO/release | [Preload and Preload GO](../40-Running-a-Show/03-preload.md) | Capture switches plus existing Stage/Fixture comparison images |
-| Follow/timecode, Chasers, Speed Groups | [Triggers, Chasers, and Speed Groups](../40-Running-a-Show/04-triggers-chasers-and-speed.md) | `desk-setup-timecode.png` |
+| Follow/timecode, Timecode Pool/editor/audio, Macros, Chasers, Speed Groups | [Triggers, Chasers, and Speed Groups](../40-Running-a-Show/04-triggers-chasers-and-speed.md), [Cue and Playback Panes](../05-Pane-Reference/02-cues-and-playbacks.md#timecode), and [Macros](../05-Pane-Reference/02-cues-and-playbacks.md#macros) | `desk-setup-timecode.png`; focused Timecode/Macro operator acceptance required |
 | Virtual Playbacks | [Virtual Playbacks](../40-Running-a-Show/05-virtual-playbacks.md) | Pane and pane-settings images |
+| Live Media operating surface and authoritative Running objects | [Programming and Visualization Panes](../05-Pane-Reference/01-programming-and-visualization.md#media), [Cue and Playback Panes](../05-Pane-Reference/02-cues-and-playbacks.md#running) | Focused UI acceptance; no external-server screenshot required |
 | File Manager and Text Editor | [File Manager and Text Editor](03-file-manager-and-text-editor.md) | Covered by dedicated UI E2E |
 | Help and generated PDF | [Manual and Help Screenshots](04-manual-and-help-screenshots.md) | `help-command-line.png` plus rendered-PDF QA |
 | Development diagnostics and plans | [Development and Future Features](index.md) | Not required |

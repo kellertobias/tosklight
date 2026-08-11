@@ -3438,6 +3438,7 @@ dependencies = [
 name = "light-application"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "chrono",
  "jiff",
  "light-core",
@@ -3453,6 +3454,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "symphonia",
  "tokio",
  "tracing",
  "uuid",
@@ -3619,6 +3621,7 @@ dependencies = [
  "base64 0.22.1",
  "bytes",
  "chrono",
+ "cpal",
  "embassy-futures",
  "embassy-time-queue-utils",
  "futures-lite",
@@ -4002,6 +4005,7 @@ dependencies = [
  "media-playback",
  "media-render",
  "media-text",
+ "png 0.18.1",
  "thiserror 2.0.20",
  "tokio",
  "tracing",
@@ -6810,6 +6814,55 @@ dependencies = [
  "base64 0.21.7",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "symphonia"
+version = "0.5.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5773a4c030a19d9bfaa090f49746ff35c75dfddfa700df7a5939d5e076a57039"
+dependencies = [
+ "lazy_static",
+ "symphonia-bundle-mp3",
+ "symphonia-core",
+ "symphonia-metadata",
+]
+
+[[package]]
+name = "symphonia-bundle-mp3"
+version = "0.5.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4872dd6bb56bf5eac799e3e957aa1981086c3e613b27e0ac23b176054f7c57ed"
+dependencies = [
+ "lazy_static",
+ "log",
+ "symphonia-core",
+ "symphonia-metadata",
+]
+
+[[package]]
+name = "symphonia-core"
+version = "0.5.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ea00cc4f79b7f6bb7ff87eddc065a1066f3a43fe1875979056672c9ef948c2af"
+dependencies = [
+ "arrayvec",
+ "bitflags 1.3.2",
+ "bytemuck",
+ "lazy_static",
+ "log",
+]
+
+[[package]]
+name = "symphonia-metadata"
+version = "0.5.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "36306ff42b9ffe6e5afc99d49e121e0bd62fe79b9db7b9681d48e29fa19e6b16"
+dependencies = [
+ "encoding_rs",
+ "lazy_static",
+ "log",
+ "symphonia-core",
 ]
 
 [[package]]

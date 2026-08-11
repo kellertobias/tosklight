@@ -63,8 +63,9 @@ use light_control::speed::{
     SoundObservation, SoundToLightConfig, SpeedGroupController, SpeedSnapshot,
 };
 use light_control::{
-    ControlAction, ControlEvent, ControlInput, FrameRate, OscArgument, SmpteTimecode,
-    TimecodeRouter, TimecodeSourceConfig, UdpControlInput, UdpInputProtocol, encode_osc_message,
+    ControlAction, ControlEvent, ControlInput, ExternalTimecodeLossPolicy, FrameRate, OscArgument,
+    SmpteTimecode, TimecodeRouter, TimecodeRouterConfig, TimecodeSourceSelection, UdpControlInput,
+    UdpInputProtocol, encode_osc_message,
 };
 use light_core::{ApplicationClock, ManualClock, SessionId};
 use light_engine::{
@@ -136,6 +137,7 @@ mod highlight_service_adapter;
 mod indexed_presets;
 mod lifecycle;
 mod live_action_http;
+pub(crate) mod macros_v2;
 mod media_api;
 mod mvr_apply;
 mod mvr_apply_store;
@@ -208,6 +210,12 @@ mod state;
 mod store_api;
 mod store_preload_targets;
 mod test_bench;
+#[cfg(feature = "native-audio-output")]
+mod timecode_audio_output;
+#[cfg(not(feature = "native-audio-output"))]
+#[path = "runtime/timecode_audio_output_disabled.rs"]
+mod timecode_audio_output;
+mod timecode_v2;
 mod update_api;
 
 pub(crate) use capabilities::active_show::repository::ActiveShowRepository;

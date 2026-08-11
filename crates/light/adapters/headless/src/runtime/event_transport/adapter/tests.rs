@@ -587,6 +587,88 @@ fn sequence_gaps_always_forward() {
 }
 
 #[test]
+fn macro_execution_change_is_a_typed_lossless_desk_delivery() {
+    let bus = EventBus::new(4);
+    let desk_id = Uuid::from_u128(71);
+    let execution_id = Uuid::from_u128(72);
+    let event = bus.publish(EventDraft::macro_execution_changed(
+        application::CommandMacroExecutionSnapshot {
+            execution_id,
+            macro_id: Uuid::from_u128(73),
+            macro_number: 7,
+            macro_name: "Blackout".into(),
+            source_revision: 2,
+            desk_id,
+            user_id: Uuid::from_u128(74),
+            session_id: Uuid::from_u128(75),
+            state: application::CommandMacroExecutionState::Succeeded,
+            line: Some(2),
+            command: Some("GROUP 1 AT 0".into()),
+            message: None,
+            trigger: application::CommandMacroTrigger::Pool,
+            started_at: "2026-08-10T18:00:00Z".into(),
+            finished_at: Some("2026-08-10T18:00:01Z".into()),
+        },
+    ));
+
+    let Some(wire::EventServerMessage::Event { event }) =
+        wire_delivery(application::SubscriptionDelivery::Event(event))
+    else {
+        panic!("expected a Macro execution delivery")
+    };
+    assert_eq!(event.desk_id, Some(desk_id));
+    assert_eq!(event.class, wire::EventClass::CommandOutcome);
+    assert_eq!(event.delivery, wire::EventDeliveryPolicy::Lossless);
+    let wire::EventPayload::MacroExecutionChanged { execution } = event.payload else {
+        panic!("expected a typed Macro execution payload")
+    };
+    assert_eq!(execution.execution_id, execution_id);
+    assert_eq!(
+        execution.state,
+        light_wire::v2::macros::MacroExecutionState::Succeeded
+    );
+}
+
+#[test]
+fn timecode_tick_is_a_typed_replaceable_ordered_projection() {
+    let bus = EventBus::new(4);
+    let id = light_playback::TimecodeId(Uuid::from_u128(70));
+    let event = bus.publish(EventDraft::timecode_runtime_changed(
+        application::timeline::TimecodeRuntimeChange {
+            cause: application::timeline::TimecodeRuntimeChangeCause::Tick { completed_loops: 0 },
+            snapshot: application::timeline::TimecodeRuntimeSnapshot {
+                timecode_id: id,
+                revision: 12,
+                transport: light_playback::TimecodeTransportState::Playing,
+                frame: light_playback::TimecodeFrame(88),
+                duration: light_playback::TimecodeFrame(440),
+                reconstructed: light_playback::TimecodeReconstructedState {
+                    frame: light_playback::TimecodeFrame(88),
+                    cue_lists: Vec::new(),
+                    speed_groups: Default::default(),
+                    audio_volume: 1.0,
+                },
+                audio_linked: true,
+            },
+        },
+    ));
+
+    let Some(wire::EventServerMessage::Event { event }) =
+        wire_delivery(application::SubscriptionDelivery::Event(event))
+    else {
+        panic!("expected a Timecode runtime delivery")
+    };
+    assert_eq!(event.class, wire::EventClass::Projection);
+    assert_eq!(event.delivery, wire::EventDeliveryPolicy::Replaceable);
+    let wire::EventPayload::TimecodeRuntimeChanged { snapshot } = event.payload else {
+        panic!("expected a typed Timecode runtime payload")
+    };
+    assert_eq!(snapshot.timecode_id, id.0);
+    assert_eq!(snapshot.revision, 12);
+    assert_eq!(snapshot.frame, 88);
+}
+
+#[test]
 fn dynamic_runtime_event_keeps_exact_instance_controller_and_failure_identity() {
     let dynamic_id = Uuid::from_u128(21);
     let instance_id = Uuid::from_u128(22);

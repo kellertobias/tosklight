@@ -83,8 +83,10 @@ for the documentation workflow.
 | Raspberry Pi | Use the browser desk from another computer | Pi 4 or Pi 5, 64-bit Raspberry Pi OS, ARM64 archive |
 
 The macOS testing applications are ad-hoc signed so Gatekeeper can verify that each completed app
-bundle is intact, but they are not yet Apple Developer-ID signed or notarized. The other release
-builds are unsigned. Cross-compiling the non-macOS server archives requires the Rust targets used
+bundle is intact, but they are not yet Apple Developer-ID signed or notarized. The macOS bundle
+includes `sign-macos-apps-locally.sh` to apply and verify a fresh ad-hoc signature on the Mac that
+will run Desk, PreVIZ, or Media; no Apple identity is needed. The other release builds are unsigned.
+Cross-compiling the non-macOS server archives requires the Rust targets used
 by the build script, `zig`, and `cargo-zigbuild`. Native device and protocol integrations run as
 separately approved extension packages; OSC and network output remain built in.
 

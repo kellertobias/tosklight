@@ -179,6 +179,7 @@ impl PlaybackPorts for ServerPlaybackPorts<'_> {
         enum SharedTarget {
             CueList(light_core::CueListId),
             Dynamic(uuid::Uuid),
+            Timecode(light_playback::TimecodeId),
         }
         let shared_target = match (&address, definition.as_ref()) {
             (ResolvedPlaybackAddress::CueList(cue_list_id), _) => {
@@ -190,6 +191,9 @@ impl PlaybackPorts for ServerPlaybackPorts<'_> {
                 }
                 light_playback::PlaybackTarget::Dynamic { assignment } => {
                     SharedTarget::Dynamic(assignment.target_id())
+                }
+                light_playback::PlaybackTarget::Timecode { timecode_id } => {
+                    SharedTarget::Timecode(*timecode_id)
                 }
                 _ => return Ok(Vec::new()),
             },
@@ -210,6 +214,10 @@ impl PlaybackPorts for ServerPlaybackPorts<'_> {
                         SharedTarget::Dynamic(target),
                         light_playback::PlaybackTarget::Dynamic { assignment },
                     ) => *target == assignment.target_id(),
+                    (
+                        SharedTarget::Timecode(target),
+                        light_playback::PlaybackTarget::Timecode { timecode_id },
+                    ) => target == timecode_id,
                     _ => false,
                 })
                 .map(|candidate| PlaybackRuntimeIdentity::Playback(candidate.number)),
@@ -228,6 +236,10 @@ impl PlaybackPorts for ServerPlaybackPorts<'_> {
                                 SharedTarget::Dynamic(target),
                                 light_playback::PlaybackTarget::Dynamic { assignment },
                             ) => *target == assignment.target_id(),
+                            (
+                                SharedTarget::Timecode(target),
+                                light_playback::PlaybackTarget::Timecode { timecode_id },
+                            ) => target == timecode_id,
                             _ => false,
                         };
                         if !matches_target {

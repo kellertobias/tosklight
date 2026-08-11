@@ -4,6 +4,7 @@ use super::*;
 pub(in crate::runtime) struct MediaResource {
     cache: Arc<Mutex<MediaCache>>,
     status: Arc<RwLock<HashMap<light_core::FixtureId, MediaServerStatus>>>,
+    inspections: Arc<RwLock<HashMap<light_core::FixtureId, light_media::MediaServerSnapshot>>>,
 }
 
 impl MediaResource {
@@ -11,7 +12,27 @@ impl MediaResource {
         Self {
             cache: Arc::new(Mutex::new(cache)),
             status: Arc::default(),
+            inspections: Arc::default(),
         }
+    }
+
+    pub(in crate::runtime) fn record_inspection(
+        &self,
+        fixture_id: light_core::FixtureId,
+        snapshot: light_media::MediaServerSnapshot,
+    ) {
+        self.inspections.write().insert(fixture_id, snapshot);
+    }
+
+    pub(in crate::runtime) fn inspection(
+        &self,
+        fixture_id: light_core::FixtureId,
+    ) -> Option<light_media::MediaServerSnapshot> {
+        self.inspections.read().get(&fixture_id).cloned()
+    }
+
+    pub(in crate::runtime) fn clear_inspection(&self, fixture_id: light_core::FixtureId) {
+        self.inspections.write().remove(&fixture_id);
     }
 
     pub(in crate::runtime) fn statuses(&self) -> HashMap<light_core::FixtureId, MediaServerStatus> {
@@ -56,7 +77,6 @@ impl MediaResource {
         Ok(())
     }
 
-    #[cfg(test)]
     pub(in crate::runtime) fn thumbnail(
         &self,
         key: &ThumbnailKey,
@@ -79,6 +99,7 @@ impl MediaResource {
     pub(in crate::runtime) fn invalidate_fixture(&self, fixture_id: light_core::FixtureId) {
         self.cache.lock().clear_fixture(&fixture_id.0.to_string());
         self.status.write().remove(&fixture_id);
+        self.inspections.write().remove(&fixture_id);
     }
 
     pub(in crate::runtime) fn invalidate_fixtures(
@@ -93,13 +114,18 @@ impl MediaResource {
             }
         }
         let mut statuses = self.status.write();
+        let mut inspections = self.inspections.write();
         for fixture_id in fixture_ids {
             statuses.remove(&fixture_id);
+            inspections.remove(&fixture_id);
         }
     }
 
     pub(in crate::runtime) fn retain_fixtures(&self, fixture_ids: &HashSet<light_core::FixtureId>) {
         self.status
+            .write()
+            .retain(|fixture_id, _| fixture_ids.contains(fixture_id));
+        self.inspections
             .write()
             .retain(|fixture_id, _| fixture_ids.contains(fixture_id));
         self.cache.lock().retain_fixtures(

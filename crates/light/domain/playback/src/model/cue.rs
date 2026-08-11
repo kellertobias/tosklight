@@ -60,6 +60,28 @@ pub struct Cue {
     /// values so a later AT updates Current without stopping or restarting a Dynamic.
     #[serde(default)]
     pub dynamic_changes: Vec<CueDynamicChange>,
+    /// Ordered non-value actions dispatched once when this Cue becomes current.
+    #[serde(default)]
+    pub actions: Vec<CueAction>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum CueAction {
+    TimecodeStart {
+        timecode_id: TimecodeId,
+        start: CueTimecodeStart,
+    },
+    TimecodeStop {
+        timecode_id: TimecodeId,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum CueTimecodeStart {
+    Frame { frame: TimecodeFrame },
+    Marker { marker_id: TimecodeMarkerId },
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -99,6 +121,7 @@ impl Cue {
             cue_only: false,
             group_changes: Vec::new(),
             dynamic_changes: Vec::new(),
+            actions: Vec::new(),
         }
     }
 }
@@ -289,6 +312,7 @@ pub(crate) fn cue_completion_millis(
     fixture_values
         .chain(group_values)
         .chain(dynamic_values)
+        .chain(std::iter::once(playback.external_completion_millis))
         .max()
         .unwrap_or(0)
 }
@@ -465,6 +489,23 @@ impl CueList {
                         "cue {} contains duplicate fixture attributes",
                         cue.number
                     ));
+                }
+            }
+            for action in &cue.actions {
+                let timecode_id = match action {
+                    CueAction::TimecodeStart {
+                        timecode_id, start, ..
+                    } => {
+                        if matches!(start, CueTimecodeStart::Marker { marker_id } if marker_id.0.is_nil())
+                        {
+                            return Err(format!("cue {} has a nil Timecode marker id", cue.number));
+                        }
+                        timecode_id
+                    }
+                    CueAction::TimecodeStop { timecode_id } => timecode_id,
+                };
+                if timecode_id.0.is_nil() {
+                    return Err(format!("cue {} has a nil Timecode id", cue.number));
                 }
             }
             if let CueTrigger::Link { cue_id, .. } = cue.trigger {

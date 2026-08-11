@@ -1100,6 +1100,40 @@
         {
           "type": "object",
           "properties": {
+            "macro_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "target": {
+              "type": "string",
+              "const": "macro"
+            }
+          },
+          "required": [
+            "target",
+            "macro_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "target": {
+              "type": "string",
+              "const": "timecode"
+            },
+            "timecode_id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "target",
+            "timecode_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
             "fader_pickup_required": {
               "type": "boolean"
             },

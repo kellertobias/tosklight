@@ -43,10 +43,50 @@ impl ConfigurationSource {
                 required: true,
             },
             _ => Self::File {
-                path: PathBuf::from(DEFAULT_CONFIGURATION_PATH),
+                path: macos_application_support_path()
+                    .unwrap_or_else(|| PathBuf::from(DEFAULT_CONFIGURATION_PATH)),
                 required: false,
             },
         }
+    }
+}
+
+/// True only for the Finder-launchable Media product, never for the standalone server binary.
+pub fn running_from_macos_app_bundle() -> bool {
+    cfg!(target_os = "macos")
+        && std::env::current_exe().ok().is_some_and(|executable| {
+            executable.ancestors().any(|ancestor| {
+                ancestor
+                    .extension()
+                    .is_some_and(|extension| extension == "app")
+            })
+        })
+}
+
+fn macos_application_support_path() -> Option<PathBuf> {
+    if !running_from_macos_app_bundle() {
+        return None;
+    }
+    let home = std::env::var_os("HOME")?;
+    Some(
+        PathBuf::from(home)
+            .join("Library/Application Support/de.tokenet.tosklight.media/media-server.json"),
+    )
+}
+
+/// Makes a first Finder launch visible and remotely configurable without changing server defaults.
+pub fn apply_macos_app_defaults(configuration: &mut MediaConfiguration, path: &Path) {
+    use media_application::configuration::{HTTP_PORT, MonitorSelector, OutputTarget};
+    configuration.network.http_listen =
+        std::net::SocketAddr::from((std::net::Ipv4Addr::UNSPECIFIED, HTTP_PORT));
+    if let Some(output) = configuration.outputs.first_mut() {
+        output.target = OutputTarget::Monitor {
+            monitor: MonitorSelector::Index(0),
+            fullscreen: true,
+        };
+    }
+    if let Some(parent) = path.parent() {
+        configuration.library.root = parent.join("Media");
     }
 }
 
@@ -287,6 +327,29 @@ mod tests {
 
         adopt_legacy_text(&mut configuration, true, 0);
         assert_eq!(configuration.text, shipped);
+    }
+
+    #[test]
+    fn finder_first_run_opens_a_fullscreen_output_and_a_lan_admin_service() {
+        let path = PathBuf::from("/tmp/ToskLight Media/media-server.json");
+        let mut configuration = MediaConfiguration::default();
+        apply_macos_app_defaults(&mut configuration, &path);
+
+        assert_eq!(
+            configuration.network.http_listen,
+            "0.0.0.0:8080".parse().unwrap()
+        );
+        assert!(matches!(
+            configuration.outputs[0].target,
+            media_application::configuration::OutputTarget::Monitor {
+                monitor: media_application::configuration::MonitorSelector::Index(0),
+                fullscreen: true
+            }
+        ));
+        assert_eq!(
+            configuration.library.root,
+            PathBuf::from("/tmp/ToskLight Media/Media")
+        );
     }
 
     #[test]

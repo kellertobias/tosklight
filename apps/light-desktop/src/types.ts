@@ -21,6 +21,10 @@ export type BuiltInWindow =
 	| "playback_pool"
 	| "cue_list"
 	| "dynamics"
+	| "macros"
+	| "media"
+	| "running"
+	| "timecode"
 	| "scheduler"
 	| "channels"
 	| "dmx"
@@ -112,6 +116,12 @@ export interface PaneModel extends GridRect {
 	poolColumns?: number;
 	schedulerShowList?: boolean;
 	schedulerShowCalendar?: boolean;
+	mediaServerId?: string;
+	mediaLayerId?: string;
+	mediaBrowserMode?: "media" | "mask";
+	mediaMainSectionId?: string;
+	mediaRightPaneVisible?: boolean;
+	runningFilter?: "all" | "cue_list" | "dynamic" | "timecode" | "macro";
 	virtualPlaybackRows?: number;
 	virtualPlaybackColumns?: number;
 	virtualPlaybackPageMode?: VirtualPlaybackPageMode;

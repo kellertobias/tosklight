@@ -27,13 +27,18 @@ export interface DeskConfiguration {
 	output_bind_ip: string;
 	osc_bind: string | null;
 	art_timecode_bind: string | null;
-	timecode_sources: Array<{
-		source_prefix: string;
-		priority: number;
-		fallback: boolean;
-		loss_timeout_millis: number;
-	}>;
+	timecode_source: { type: "internal" } | { type: "external"; source: string };
+	/** Null follows the configured DMX frame rate; a value is an explicit desk override. */
+	timecode_frame_rate: {
+		numerator: number;
+		denominator: number;
+		drop_frame: boolean;
+	} | null;
+	timecode_external_loss_policy: "continue_internal" | "pause" | "stop";
+	timecode_external_loss_timeout_millis: number;
 	osc_timecode: { address: string; rate: string } | null;
+	timecode_audio_output_device?: string | null;
+	timecode_audio_latency_trim_micros_by_output?: Record<string, number>;
 	backup_retention: number;
 	autosave_interval_seconds: number;
 	speed_groups_bpm: [number, number, number, number, number];

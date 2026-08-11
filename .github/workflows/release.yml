@@ -1268,6 +1268,10 @@ jobs:
           done
           unzip -Z1 .artifacts/release/tosklight-bundle-macos_arm64.zip |
             grep -F "macos-first-start.txt" >/dev/null
+          unzip -Z1 .artifacts/release/tosklight-bundle-macos_arm64.zip |
+            grep -F "sign-macos-apps-locally.sh" >/dev/null
+          unzip -Z1 .artifacts/release/tosklight-bundle-macos_arm64.zip |
+            grep -F "tosklight-media-macos_arm64.app/Contents/MacOS/ToskLight Media" >/dev/null
           unzip -Z1 .artifacts/release/tosklight-bundle-linux_amd64.zip |
             grep -E '/light-benchmark$' >/dev/null
           (cd .artifacts/release && sha256sum * > report-checksums.txt)
