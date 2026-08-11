@@ -8,6 +8,7 @@ pub struct ReferenceMetadata {
     pub hardware_label: String,
     pub cpu_model: Option<String>,
     pub logical_cpus: usize,
+    pub total_memory_bytes: Option<u64>,
     pub operating_system: &'static str,
     pub architecture: &'static str,
     pub rustc_version: Option<String>,
@@ -29,6 +30,7 @@ pub fn capture(hardware_label: Option<&str>) -> ReferenceMetadata {
         logical_cpus: std::thread::available_parallelism()
             .map(usize::from)
             .unwrap_or(1),
+        total_memory_bytes: total_memory_bytes(),
         operating_system: std::env::consts::OS,
         architecture: std::env::consts::ARCH,
         rustc_version: command_output("rustc", &["--version"]),
@@ -41,6 +43,20 @@ pub fn capture(hardware_label: Option<&str>) -> ReferenceMetadata {
         git_revision: command_output("git", &["rev-parse", "--short", "HEAD"]),
         git_dirty: command_output("git", &["status", "--porcelain"]).map(|value| !value.is_empty()),
     }
+}
+
+fn total_memory_bytes() -> Option<u64> {
+    command_output("sysctl", &["-n", "hw.memsize"])
+        .and_then(|value| value.parse().ok())
+        .or_else(linux_total_memory_bytes)
+}
+
+fn linux_total_memory_bytes() -> Option<u64> {
+    let meminfo = fs::read_to_string("/proc/meminfo").ok()?;
+    meminfo.lines().find_map(|line| {
+        let value = line.strip_prefix("MemTotal:")?.split_whitespace().next()?;
+        value.parse::<u64>().ok()?.checked_mul(1_024)
+    })
 }
 
 fn cpu_model() -> Option<String> {

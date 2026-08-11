@@ -94,6 +94,29 @@ function validateStage(stage, { mutations }) {
 	return { valid: true, report, scenario };
 }
 
+function validateHeadlessStress(stage) {
+	const report = stage?.report;
+	const scenario = report?.scenarios?.[0];
+	if (
+		stage?.exit_code !== 0 ||
+		report?.schema_version !== 6 ||
+		report?.benchmark !== BENCHMARK_IDENTITY ||
+		scenario?.profile !== "headless_stress" ||
+		scenario?.expectation !== "informational_capacity" ||
+		scenario?.fixture_count !== 2_000 ||
+		!finite(scenario?.frame_rate?.minimum_one_second_completed_hz) ||
+		!finite(scenario?.frame_rate?.average_completed_hz)
+	) {
+		return {
+			valid: false,
+			reason:
+				stage?.error ??
+				"The 2,000-fixture benchmark did not produce valid evidence.",
+		};
+	}
+	return { valid: true, report, scenario };
+}
+
 export function classifyPerformance(baselineValidation, doubledValidation) {
 	if (!baselineValidation?.valid) {
 		return {
@@ -217,6 +240,53 @@ function runStage(
 	};
 }
 
+function runHeadlessStress(
+	binary,
+	outputDirectory,
+	fixturePackageDir,
+	hardwareLabel,
+) {
+	const result = spawnSync(
+		binary,
+		[
+			"--headless-stress-fixtures",
+			"2000",
+			"--fixture-package-dir",
+			fixturePackageDir,
+			"--protocol",
+			"artnet",
+			"--transport",
+			"encode-only",
+			"--seconds",
+			"3",
+			"--warmup-seconds",
+			"1",
+			"--hardware-label",
+			hardwareLabel,
+		],
+		{ encoding: "utf8", maxBuffer: 32 * 1024 * 1024 },
+	);
+	writeFileSync(
+		resolve(outputDirectory, "two-thousand.stderr.log"),
+		result.stderr ?? "",
+	);
+	if (result.stdout)
+		writeFileSync(resolve(outputDirectory, "two-thousand.json"), result.stdout);
+	let report;
+	try {
+		report = JSON.parse(result.stdout);
+	} catch {
+		report = null;
+	}
+	return {
+		attempted: true,
+		exit_code: result.status,
+		signal: result.signal,
+		error: result.error?.message ?? null,
+		report,
+	};
+}
+
 function reportDownloadUrl(options) {
 	const base = options["release-url"].replace("/tag/", "/download/");
 	return `${base}/report-performance.zip`;
@@ -226,11 +296,19 @@ function scenarioEvidence(validation) {
 	if (!validation?.valid) return null;
 	const scenario = validation.scenario;
 	return {
+		universes: scenario.universes,
+		parameter_count:
+			Number.isInteger(scenario.fixture_footprint) &&
+			Number.isInteger(scenario.fixture_count)
+				? scenario.fixture_footprint * scenario.fixture_count
+				: (scenario.fixture_inventory?.total_slots ?? null),
 		requested_rate_hz: scenario.configured_rate_hz,
 		achieved_ticks_per_second: scenario.achieved_ticks_per_second,
 		average_completed_hz: scenario.frame_rate.average_completed_hz,
 		minimum_one_second_completed_hz:
 			scenario.frame_rate.minimum_one_second_completed_hz,
+		p95_one_second_completed_hz:
+			scenario.frame_rate.p95_one_second_completed_hz ?? null,
 		windows_below_minimum: scenario.frame_rate.windows_below_minimum,
 		deadline_misses: scenario.deadline.deadline_misses,
 		dropped_ticks: scenario.deadline.dropped_ticks,
@@ -341,6 +419,7 @@ export function statusDocument(
 	baseline,
 	doubled,
 	canonicalDemo = null,
+	twoThousand = null,
 ) {
 	const baselineValidation = validateStage(baseline, { mutations: true });
 	const doubledValidation = doubled
@@ -366,6 +445,10 @@ export function statusDocument(
 			].filter(Boolean)
 		: [];
 	const doubledObserved = scenarioEvidence(doubledValidation);
+	const twoThousandValidation = twoThousand
+		? validateHeadlessStress(twoThousand)
+		: null;
+	const twoThousandObserved = scenarioEvidence(twoThousandValidation);
 	return {
 		schema_version: 4,
 		status: classification.status,
@@ -397,8 +480,12 @@ export function statusDocument(
 					hardware_label: report.reference.hardware_label,
 					cpu_model: report.reference.cpu_model ?? null,
 					logical_cpus: report.reference.logical_cpus,
+					total_memory_bytes: report.reference.total_memory_bytes ?? null,
 					operating_system: report.reference.operating_system,
 					architecture: report.reference.architecture,
+					rustc_version: report.reference.rustc_version ?? null,
+					package_version: report.reference.package_version ?? null,
+					build_profile: report.reference.build_profile ?? null,
 				}
 			: null,
 		workload: report
@@ -415,6 +502,7 @@ export function statusDocument(
 			rate_hz: REQUIRED_RATE_HZ,
 			fixtures_per_universe: BASELINE_FIXTURES_PER_UNIVERSE,
 			fixture_count: REQUIRED_UNIVERSES * BASELINE_FIXTURES_PER_UNIVERSE,
+			parameter_count: observed?.parameter_count ?? null,
 			met:
 				baselineCadence == null
 					? null
@@ -426,22 +514,49 @@ export function statusDocument(
 			average_completed_hz: observed?.average_completed_hz ?? null,
 			minimum_one_second_completed_hz:
 				observed?.minimum_one_second_completed_hz ?? null,
+			p95_one_second_completed_hz:
+				observed?.p95_one_second_completed_hz ?? null,
 			windows_below_minimum: observed?.windows_below_minimum ?? null,
 			deadline_misses: observed?.deadline_misses ?? null,
 			dropped_ticks: observed?.dropped_ticks ?? null,
 			deferred_ticks: observed?.deferred_ticks ?? null,
 			phases: observed?.phases ?? null,
 			limiting_phase: limitingPhase(baselineValidation),
+			resources: report?.process_resources ?? null,
 		},
 		show_mutation: mutationEvidence(report),
 		patch: patchEvidence(report),
 		canonical_demo: canonicalDemoEvidence(canonicalDemo),
+		two_thousand_show: twoThousandValidation?.valid
+			? {
+					attempted: true,
+					reason: null,
+					fixture_count: twoThousandValidation.scenario.fixture_count,
+					universes: twoThousandObserved.universes,
+					parameter_count: twoThousandObserved.parameter_count,
+					average_completed_hz: twoThousandObserved.average_completed_hz,
+					minimum_one_second_completed_hz:
+						twoThousandObserved.minimum_one_second_completed_hz,
+					p95_one_second_completed_hz:
+						twoThousandObserved.p95_one_second_completed_hz,
+					windows_below_minimum: twoThousandObserved.windows_below_minimum,
+					resources: twoThousandValidation.report.process_resources ?? null,
+				}
+			: {
+					attempted: twoThousand != null,
+					reason:
+						twoThousandValidation?.reason ??
+						"The exact 2,000-fixture workload was not executed.",
+					fixture_count: 2_000,
+				},
 		doubled_density: doubled
 			? {
 					attempted: true,
 					reason: doubledValidation?.valid ? null : doubledValidation?.reason,
 					fixtures_per_universe: DOUBLED_FIXTURES_PER_UNIVERSE,
 					fixture_count: REQUIRED_UNIVERSES * DOUBLED_FIXTURES_PER_UNIVERSE,
+					universes: doubledObserved?.universes ?? REQUIRED_UNIVERSES,
+					parameter_count: doubledObserved?.parameter_count ?? null,
 					met: null,
 					requested_rate_hz:
 						doubledObserved?.requested_rate_hz ?? REQUIRED_RATE_HZ,
@@ -452,27 +567,36 @@ export function statusDocument(
 						doubledObserved?.achieved_ticks_per_second ?? null,
 					minimum_one_second_completed_hz:
 						doubledObserved?.minimum_one_second_completed_hz ?? null,
+					average_completed_hz: doubledObserved?.average_completed_hz ?? null,
+					p95_one_second_completed_hz:
+						doubledObserved?.p95_one_second_completed_hz ?? null,
 					deadline_misses: doubledObserved?.deadline_misses ?? null,
 					dropped_ticks: doubledObserved?.dropped_ticks ?? null,
 					deferred_ticks: doubledObserved?.deferred_ticks ?? null,
 					phases: doubledObserved?.phases ?? null,
 					limiting_phase: limitingPhase(doubledValidation),
+					resources: doubledValidation?.report?.process_resources ?? null,
 				}
 			: {
 					attempted: false,
 					reason: "The diagnostic could not be executed.",
 					fixtures_per_universe: DOUBLED_FIXTURES_PER_UNIVERSE,
 					fixture_count: REQUIRED_UNIVERSES * DOUBLED_FIXTURES_PER_UNIVERSE,
+					universes: REQUIRED_UNIVERSES,
+					parameter_count: null,
 					met: null,
 					requested_rate_hz: REQUIRED_RATE_HZ,
 					configured_target_met: null,
 					achieved_ticks_per_second: null,
 					minimum_one_second_completed_hz: null,
+					average_completed_hz: null,
+					p95_one_second_completed_hz: null,
 					deadline_misses: null,
 					dropped_ticks: null,
 					deferred_ticks: null,
 					phases: null,
 					limiting_phase: null,
+					resources: null,
 				},
 	};
 }
@@ -501,6 +625,14 @@ function main() {
 		false,
 		false,
 	);
+	const twoThousand = options["fixture-package-dir"]
+		? runHeadlessStress(
+				resolve(options.binary),
+				outputDirectory,
+				resolve(options["fixture-package-dir"]),
+				hardwareLabel,
+			)
+		: null;
 	let canonicalDemo = null;
 	if (options["canonical-demo-performance"]) {
 		try {
@@ -511,7 +643,13 @@ function main() {
 			canonicalDemo = null;
 		}
 	}
-	const status = statusDocument(options, baseline, doubled, canonicalDemo);
+	const status = statusDocument(
+		options,
+		baseline,
+		doubled,
+		canonicalDemo,
+		twoThousand,
+	);
 	writeFileSync(
 		resolve(outputDirectory, "status.json"),
 		`${JSON.stringify(status, null, 2)}\n`,
@@ -533,6 +671,7 @@ function main() {
 				`${status.show_mutation?.large.p95_microseconds ?? "missing"} µs`,
 			`- 2,048-fixture diagnostic cadence: ${status.doubled_density.achieved_ticks_per_second ?? "missing"} Hz`,
 			`- 2,048-fixture limiting phase: ${status.doubled_density.limiting_phase?.name ?? "missing"}`,
+			`- Exact 2,000-fixture shipped-mode cadence: ${status.two_thousand_show.average_completed_hz ?? "missing"} Hz average`,
 			`- Patch server p95 (1 fixture): ${status.patch?.server.single_fixture.p95_microseconds ?? "missing"} µs`,
 			`- Patch server p95 (100 fixtures): ${status.patch?.server.hundred_fixtures.p95_microseconds ?? "missing"} µs`,
 			"- Patch UI action-to-visible: informational browser evidence (not a release gate)",

@@ -49,14 +49,19 @@ function measuredStatus(status = "healthy") {
 			hardware_label: "GitHub Actions ubuntu-22.04",
 			cpu_model: "Test CPU",
 			logical_cpus: 4,
+			total_memory_bytes: 16 * 1024 ** 3,
 			operating_system: "linux",
 			architecture: "x86_64",
+			package_version: "2.4.6",
+			rustc_version: "rustc 1.88.0",
+			build_profile: "release",
 		},
 		workload: {
 			benchmark: "tosklight_render_to_protocol_encoding_pipeline",
 			profile: "hard_floor",
 			universes: 32,
 			fixture_count: 1024,
+			parameter_count: 16_384,
 			requested_rate_hz: 100,
 		},
 		required_floor: {
@@ -70,9 +75,13 @@ function measuredStatus(status = "healthy") {
 			yellow_threshold_hz: 40,
 			achieved_ticks_per_second: status === "healthy" ? 100.2 : 87.5,
 			minimum_one_second_completed_hz: status === "healthy" ? 100 : 82,
+			average_completed_hz: status === "healthy" ? 100.1 : 87.5,
+			p95_one_second_completed_hz: status === "healthy" ? 101 : 91,
+			windows_below_minimum: status === "healthy" ? 0 : 3,
 			deadline_misses: status === "healthy" ? 0 : 3,
 			dropped_ticks: 0,
 			deferred_ticks: 0,
+			resources: { peak_resident_bytes: 512 * 1024 ** 2 },
 			limiting_phase: {
 				name: "Engine render and fixture projection",
 				p50_microseconds: 400,
@@ -96,6 +105,17 @@ function measuredStatus(status = "healthy") {
 				max_draw_calls: 402,
 				max_triangles: 120_000,
 			},
+		},
+		two_thousand_show: {
+			attempted: true,
+			fixture_count: 2_000,
+			parameter_count: 37_720,
+			universes: 74,
+			minimum_one_second_completed_hz: 57,
+			average_completed_hz: 60,
+			p95_one_second_completed_hz: 62,
+			windows_below_minimum: 1,
+			resources: { peak_resident_bytes: 700 * 1024 ** 2 },
 		},
 		show_mutation: {
 			gate_met: true,
@@ -132,10 +152,15 @@ function measuredStatus(status = "healthy") {
 			reason: null,
 			fixtures_per_universe: 64,
 			fixture_count: 2048,
+			parameter_count: 16_384,
+			universes: 32,
 			met: false,
 			configured_target_met: false,
 			achieved_ticks_per_second: 72.25,
 			minimum_one_second_completed_hz: 69,
+			average_completed_hz: 72,
+			p95_one_second_completed_hz: 74,
+			windows_below_minimum: 2,
 			deadline_misses: 8,
 			dropped_ticks: 0,
 			deferred_ticks: 1,
@@ -170,6 +195,17 @@ test("healthy and degraded measured statuses retain their public evidence", () =
 	assert.match(page, /Canonical 306-instance demo show/u);
 	assert.match(page, /Physical Stage instances<\/th><td>343/u);
 	assert.match(page, /Stage source-to-canvas p95<\/th><td>61 ms/u);
+	assert.match(page, /Show statistics/u);
+	assert.match(page, /100-fixture show/u);
+	assert.match(page, /2,000-fixture mixed shipped-mode show/u);
+	assert.match(page, /<strong>37,?720<\/strong>|<strong>37720<\/strong>/u);
+	assert.match(page, /2,048-fixture capacity diagnostic/u);
+	assert.match(page, /<strong>87\.5 Hz<\/strong>/u);
+	assert.match(page, /warning: 40 Hz ≤ x &lt; 60 Hz/u);
+	assert.match(page, /<strong>Not measured<\/strong><small>not collected/u);
+	assert.match(page, /Runner configuration/u);
+	assert.match(page, /Logical cores<\/th><td>4/u);
+	assert.match(page, /RAM<\/th><td>16\.0 GiB/u);
 });
 
 test("warning is a valid measured public state", () => {
@@ -272,7 +308,10 @@ test("landing-page assembly writes the same normalized object used by the HTML",
 		writeFileSync(statusFile, `${JSON.stringify(status, null, 2)}\n`);
 		mkdirSync(screenshots, { recursive: true });
 		const manifest = JSON.parse(
-			readFileSync(resolve(ROOT, "docs/marketing/screenshot-manifest.json"), "utf8"),
+			readFileSync(
+				resolve(ROOT, "docs/marketing/screenshot-manifest.json"),
+				"utf8",
+			),
 		);
 		for (const entry of manifest.entries) {
 			writeFileSync(resolve(screenshots, entry.file), "fixture image");

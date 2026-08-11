@@ -43,8 +43,12 @@ function report({
 			hardware_label: "<CI runner>",
 			cpu_model: "Test CPU",
 			logical_cpus: 4,
+			total_memory_bytes: 16 * 1024 ** 3,
 			operating_system: "linux",
 			architecture: "x86_64",
+			rustc_version: "rustc test",
+			package_version: "1.2.3",
+			build_profile: "release",
 		},
 		scenarios: [
 			{
@@ -54,9 +58,15 @@ function report({
 				universes: 32,
 				fixture_count: 1024,
 				fixtures_per_universe: 32,
+				fixture_footprint: 16,
 				configured_rate_hz: 100,
 				achieved_ticks_per_second: achieved,
-				frame_rate: { minimum_one_second_completed_hz: minimum },
+				frame_rate: {
+					average_completed_hz: achieved,
+					minimum_one_second_completed_hz: minimum,
+					p95_one_second_completed_hz: achieved + 1,
+					windows_below_minimum: deadlineMisses,
+				},
 				deadline: {
 					deadline_misses: deadlineMisses,
 					dropped_ticks: 0,
@@ -71,6 +81,9 @@ function report({
 				},
 			},
 		],
+		process_resources: {
+			peak_resident_bytes: 512 * 1024 ** 2,
+		},
 		required_floor_met: floor,
 		show_mutation: {
 			gate_met: showMutation,
@@ -155,6 +168,15 @@ test("the 1,024-fixture indicator uses 60 Hz green and 40 Hz yellow thresholds",
 	assert.deepEqual(status.evidence.failed_gates, []);
 	assert.deepEqual(status.evidence.warnings, []);
 	assert.equal(status.required_floor.achieved_ticks_per_second, 63.25);
+	assert.equal(status.required_floor.parameter_count, 16_384);
+	assert.equal(status.required_floor.average_completed_hz, 63.25);
+	assert.equal(status.required_floor.p95_one_second_completed_hz, 64.25);
+	assert.equal(
+		status.required_floor.resources.peak_resident_bytes,
+		512 * 1024 ** 2,
+	);
+	assert.equal(status.runner.total_memory_bytes, 16 * 1024 ** 3);
+	assert.equal(status.runner.package_version, "1.2.3");
 	assert.equal(status.required_floor.met, true);
 	assert.equal(status.required_floor.configured_target_met, false);
 	assert.equal(status.required_floor.deadline_misses, 3);
@@ -164,10 +186,7 @@ test("the 1,024-fixture indicator uses 60 Hz green and 40 Hz yellow thresholds",
 	);
 	assert.equal(status.show_mutation.large.p95_microseconds, 40);
 	assert.equal(status.patch.server.single_fixture.p95_microseconds, 0);
-	assert.match(
-		status.report_url,
-		/report-performance\.zip$/u,
-	);
+	assert.match(status.report_url, /report-performance\.zip$/u);
 
 	const yellow = statusDocument(
 		options,
@@ -238,6 +257,33 @@ test("passing baseline remains healthy when the optional density probe degrades"
 	assert.equal(status.doubled_density.configured_target_met, false);
 	assert.equal(status.doubled_density.achieved_ticks_per_second, 82);
 	assert.equal(status.doubled_density.deadline_misses, 2);
+});
+
+test("the exact 2,000-fixture shipped-mode workload is retained separately", () => {
+	const stressReport = report();
+	const scenario = stressReport.scenarios[0];
+	scenario.profile = "headless_stress";
+	scenario.expectation = "informational_capacity";
+	scenario.release_blocking = false;
+	scenario.fixture_count = 2_000;
+	scenario.fixture_footprint = null;
+	scenario.universes = 74;
+	scenario.fixture_inventory = { total_slots: 37_720 };
+	stressReport.required_floor_met = null;
+	delete stressReport.show_mutation;
+	delete stressReport.patch_mutation;
+	const status = statusDocument(
+		options,
+		stage(report(), 0),
+		null,
+		null,
+		stage(stressReport, 0),
+	);
+	assert.equal(status.two_thousand_show.attempted, true);
+	assert.equal(status.two_thousand_show.fixture_count, 2_000);
+	assert.equal(status.two_thousand_show.parameter_count, 37_720);
+	assert.equal(status.two_thousand_show.universes, 74);
+	assert.equal(status.two_thousand_show.average_completed_hz, 100);
 });
 
 test("CLI accepts a parsed measured failure but rejects invalid JSON", () => {
@@ -339,6 +385,16 @@ test("scheduled publication separates release delivery from performance and Page
 		/^ {2}release-performance:\n([\s\S]*?)(?=^ {2}[\w-]+:\n)/mu.exec(
 			workflow,
 		)?.[1] ?? "";
+	const manual =
+		/^ {2}manual:\n([\s\S]*?)(?=^ {2}[\w-]+:\n)/mu.exec(workflow)?.[1] ?? "";
+	const storybook =
+		/^ {2}storybook-screenshots:\n([\s\S]*?)(?=^ {2}[\w-]+:\n)/mu.exec(
+			workflow,
+		)?.[1] ?? "";
+	const liveBuild =
+		/^ {2}help-live-build:\n([\s\S]*?)(?=^ {2}[\w-]+:\n)/mu.exec(
+			workflow,
+		)?.[1] ?? "";
 	const pages =
 		/^ {2}pages-build:\n([\s\S]*?)(?=^ {2}[\w-]+:\n)/mu.exec(workflow)?.[1] ??
 		"";
@@ -346,8 +402,18 @@ test("scheduled publication separates release delivery from performance and Page
 	assert.match(release, /needs:[\s\S]*?- build/u);
 	assert.doesNotMatch(release, /- benchmark|- pages-build/u);
 	assert.match(workflow, /schedule:[\s\S]*?cron:/u);
+	assert.match(workflow, /workflow_dispatch:/u);
 	assert.match(performance, /needs: release-metadata/u);
-	assert.doesNotMatch(performance, /product-demo|--canonical-demo-performance/u);
+	for (const expensiveJob of [manual, storybook, liveBuild]) {
+		assert.match(
+			expensiveJob,
+			/needs: \[release-metadata, release-performance\]/u,
+		);
+	}
+	assert.doesNotMatch(
+		performance,
+		/product-demo|--canonical-demo-performance/u,
+	);
 	assert.match(performance, /gh release download/u);
 	assert.match(performance, /tools\/run-release-performance\.mjs/u);
 	assert.doesNotMatch(performance, /continue-on-error: true/u);

@@ -99,7 +99,9 @@ jobs:
           gh release download "$RELEASE_TAG" --pattern "$archive" --dir "$tmp"
           unzip -q "$tmp/$archive" -d "$tmp/unpacked"
           benchmark="$(find "$tmp/unpacked" -type f -name light-benchmark -print -quit)"
+          fixture_library="$(find "$tmp/unpacked" -type d -name fixture-library -print -quit)"
           test -n "$benchmark"
+          test -n "$fixture_library"
           chmod +x "$benchmark"
           status=0
           node tools/run-release-performance.mjs \
@@ -108,6 +110,7 @@ jobs:
             --version "$VERSION" \
             --commit "$RELEASE_SHA" \
             --release-url "https://github.com/${GITHUB_REPOSITORY}/releases/tag/${RELEASE_TAG}" \
+            --fixture-package-dir "$fixture_library" \
             --hardware-label "GitHub Actions ubuntu-22.04" || status=$?
           test -f "$out/status.json"
           cp "$out/status.json" "$out/report-performance-status.json"
@@ -132,7 +135,7 @@ jobs:
   manual:
     name: Documentation / Build handbook PDF and HTML
     if: needs.release-metadata.outputs.run == 'true'
-    needs: release-metadata
+    needs: [release-metadata, release-performance]
     runs-on: ubuntu-22.04
     env:
       GH_TOKEN: ${{ github.token }}
@@ -177,7 +180,7 @@ jobs:
   storybook-screenshots:
     name: Documentation / Storybook and static screenshots
     if: needs.release-metadata.outputs.run == 'true'
-    needs: release-metadata
+    needs: [release-metadata, release-performance]
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -217,7 +220,7 @@ jobs:
   help-live-build:
     name: Documentation / Build live screenshot application
     if: needs.release-metadata.outputs.run == 'true'
-    needs: release-metadata
+    needs: [release-metadata, release-performance]
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4

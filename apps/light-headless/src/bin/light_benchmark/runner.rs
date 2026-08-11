@@ -500,6 +500,14 @@ fn frame_rate_report(
 ) -> FrameRateReport {
     let required = u64::from(required_minimum_hz);
     let minimum = completed_ticks_by_second.iter().copied().min().unwrap_or(0);
+    let mut sorted_windows = completed_ticks_by_second.to_vec();
+    sorted_windows.sort_unstable();
+    let p95_index = sorted_windows
+        .len()
+        .saturating_mul(95)
+        .div_ceil(100)
+        .saturating_sub(1);
+    let p95 = sorted_windows.get(p95_index).copied().unwrap_or(0);
     let windows_below_minimum = completed_ticks_by_second
         .iter()
         .filter(|completed| **completed < required)
@@ -510,6 +518,7 @@ fn frame_rate_report(
         average_completed_hz: average,
         wall_clock_average_completed_hz: completed_ticks as f64 / elapsed.as_secs_f64(),
         minimum_one_second_completed_hz: minimum as f64,
+        p95_one_second_completed_hz: p95 as f64,
         one_second_windows: completed_ticks_by_second.len() as u64,
         windows_below_minimum,
         gate_met: average >= f64::from(required_minimum_hz) && windows_below_minimum == 0,

@@ -93,6 +93,124 @@ function row(label, value_, unit = "") {
 	return `<tr><th>${escapePerformanceText(label)}</th><td>${value(value_, unit)}</td></tr>`;
 }
 
+function summaryMetric(value_, unit = "", context = "measured") {
+	const actual = present(value_)
+		? `${escapePerformanceText(value_)}${unit}`
+		: "Not measured";
+	const detail = present(value_) ? context : "not collected by this benchmark";
+	return `<td><strong>${actual}</strong><small>${escapePerformanceText(detail)}</small></td>`;
+}
+
+function rateContext(workload) {
+	const yellow = workload?.yellow_threshold_hz;
+	const green = workload?.green_threshold_hz;
+	return present(yellow) && present(green)
+		? `critical: x < ${yellow} Hz; warning: ${yellow} Hz ≤ x < ${green} Hz; healthy: x ≥ ${green} Hz`
+		: "informational; no acceptance range configured";
+}
+
+function bytes(value_) {
+	if (!present(value_)) return null;
+	const gibibytes = Number(value_) / 1024 ** 3;
+	return `${gibibytes.toFixed(gibibytes >= 10 ? 1 : 2)} GiB`;
+}
+
+function summaryRow({
+	name,
+	fixtures,
+	parameters,
+	universes,
+	workload,
+	rate,
+	resources,
+}) {
+	const context = rateContext(workload);
+	return (
+		`<tr><th>${escapePerformanceText(name)}</th>` +
+		summaryMetric(fixtures, "", "fixture records") +
+		summaryMetric(parameters, "", "controllable parameter slots") +
+		summaryMetric(universes, "", "logical output universes") +
+		summaryMetric(rate?.minimum, " Hz", context) +
+		summaryMetric(rate?.average, " Hz", context) +
+		summaryMetric(rate?.p95, " Hz", context) +
+		summaryMetric(rate?.outliers, "", "one-second windows below the minimum") +
+		summaryMetric(resources?.application_cpu_max, "%") +
+		summaryMetric(resources?.application_cpu_average, "%") +
+		summaryMetric(resources?.system_cpu_max, "%") +
+		summaryMetric(resources?.system_cpu_average, "%") +
+		summaryMetric(
+			bytes(resources?.peak_resident_bytes),
+			"",
+			"peak application resident memory",
+		) +
+		`</tr>`
+	);
+}
+
+function renderStatisticsSummary(performance) {
+	const canonical = performance.canonical_demo ?? {};
+	const twoThousand = performance.two_thousand_show ?? {};
+	const required = performance.required_floor ?? {};
+	const doubled = performance.doubled_density ?? {};
+	const unavailable = (name, fixtures) => summaryRow({ name, fixtures });
+	return (
+		`<div class="table-scroll"><table class="statistics"><thead><tr>` +
+		`<th>Case / show</th><th>Fixtures</th><th>Parameters</th><th>Universes</th>` +
+		`<th>Minimum rate</th><th>Average rate</th><th>P95 rate</th><th>Outliers</th>` +
+		`<th>Application CPU max</th><th>Application CPU average</th>` +
+		`<th>General CPU max</th><th>General CPU average</th><th>Maximum RAM</th>` +
+		`</tr></thead><tbody>` +
+		summaryRow({
+			name: "Product demo (~300 fixtures)",
+			fixtures: canonical.scene?.fixture_records,
+			rate: { average: canonical.stage?.presentation_rate_hz },
+		}) +
+		unavailable("100-fixture show", 100) +
+		summaryRow({
+			name: "2,000-fixture mixed shipped-mode show",
+			fixtures: twoThousand.fixture_count ?? 2_000,
+			parameters: twoThousand.parameter_count,
+			universes: twoThousand.universes,
+			rate: {
+				minimum: twoThousand.minimum_one_second_completed_hz,
+				average: twoThousand.average_completed_hz,
+				p95: twoThousand.p95_one_second_completed_hz,
+				outliers: twoThousand.windows_below_minimum,
+			},
+			resources: twoThousand.resources,
+		}) +
+		summaryRow({
+			name: "1,024-fixture released-engine workload",
+			fixtures: required.fixture_count,
+			parameters: required.parameter_count,
+			universes: required.universes,
+			workload: required,
+			rate: {
+				minimum: required.minimum_one_second_completed_hz,
+				average: required.average_completed_hz,
+				p95: required.p95_one_second_completed_hz,
+				outliers: required.windows_below_minimum,
+			},
+			resources: required.resources,
+		}) +
+		summaryRow({
+			name: "2,048-fixture capacity diagnostic",
+			fixtures: doubled.fixture_count,
+			parameters: doubled.parameter_count,
+			universes: doubled.universes,
+			workload: required,
+			rate: {
+				minimum: doubled.minimum_one_second_completed_hz,
+				average: doubled.average_completed_hz,
+				p95: doubled.p95_one_second_completed_hz,
+				outliers: doubled.windows_below_minimum,
+			},
+			resources: doubled.resources,
+		}) +
+		`</tbody></table></div><p><small>The exact 100-fixture sustained show case is listed explicitly but is not yet collected. The 2,000-fixture mixed shipped-mode workload and 2,048-fixture synthetic capacity probe are different measurements and are reported separately.</small></p>`
+	);
+}
+
 function safePublicUrl(value_) {
 	if (typeof value_ !== "string") return null;
 	try {
@@ -257,8 +375,8 @@ export function renderPerformancePage(performance) {
 
 	return (
 		`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width">` +
-		`<title>ToskLight release performance</title><style>body{font:16px system-ui;max-width:960px;margin:3rem auto;padding:0 1rem;background:#101318;color:#eef2f6}` +
-		`a{color:#72c7ff}table{border-collapse:collapse;width:100%;margin:1rem 0 2rem}th,td{border:1px solid #44505c;padding:.7rem;text-align:left}` +
+		`<title>ToskLight release performance</title><style>body{font:16px system-ui;max-width:1500px;margin:3rem auto;padding:0 1rem;background:#101318;color:#eef2f6}` +
+		`a{color:#72c7ff}.table-scroll{overflow-x:auto}table{border-collapse:collapse;width:100%;margin:1rem 0 2rem}th,td{border:1px solid #44505c;padding:.7rem;text-align:left;vertical-align:top}.statistics{min-width:1500px}.statistics th{white-space:nowrap}.statistics td strong{display:block}.statistics td small{display:block;margin-top:.25rem;color:#aab4bf;font-size:.7rem;line-height:1.2}` +
 		`code{background:#20262d;padding:.15rem .35rem}.healthy{color:#39d98a}.warning{color:#ffd166}.degraded{color:#ff6b6b}.unknown{color:#9aa5b8}</style><main><p><a href="../">← ToskLight</a></p>` +
 		`<h1>Release performance</h1><p><strong class="${escapePerformanceText(performance.status)}">${escapePerformanceText(performance.status.toUpperCase())}</strong> — ${escapePerformanceText(performance.summary)}</p>` +
 		`<h2>Evidence</h2><table><tbody>` +
@@ -267,6 +385,18 @@ export function renderPerformancePage(performance) {
 		row("Generated", performance.generated_at) +
 		row("Runner", runner) +
 		row("Workload", workloadLabel(performance.workload)) +
+		`</tbody></table>` +
+		`<h2>Show statistics</h2>${renderStatisticsSummary(performance)}` +
+		`<h2>Runner configuration</h2><table><tbody>` +
+		row("CPU", performance.runner?.cpu_model) +
+		row("Logical cores", performance.runner?.logical_cpus) +
+		row("RAM", bytes(performance.runner?.total_memory_bytes)) +
+		row("Operating system", performance.runner?.operating_system) +
+		row("Architecture", performance.runner?.architecture) +
+		row("ToskLight release", performance.release?.version) +
+		row("Benchmark package version", performance.runner?.package_version) +
+		row("Rust toolchain", performance.runner?.rustc_version) +
+		row("Build profile", performance.runner?.build_profile) +
 		`</tbody></table>` +
 		`<h2>Canonical 306-instance demo show</h2>${renderCanonicalDemo(canonical)}` +
 		`<h2>1,024-fixture released-engine workload</h2><p>Green means at least ${value(required.green_threshold_hz, " Hz")}; yellow means at least ${value(required.yellow_threshold_hz, " Hz")}; below that is red. This released Linux probe measures engine rendering and output encoding without opening a UI. Separate packaged acceptance keeps the 306-instance demo at 100 Hz and proves the exact 1,000-instance show with Stage and Fixture Sheet open while the rest of the desk remains responsive.</p><table><tbody>` +
