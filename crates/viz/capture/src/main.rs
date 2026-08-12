@@ -268,7 +268,20 @@ fn scripted_look(
             // tungsten rather than as a colour effect.
             colour: [1.0, 0.86, 0.62],
         });
+        if matches!(fixture.patch.name.as_str(), "Gobo Demo" | "Prism Demo") {
+            state.apply(viz_planning::PreviewSet::Semantic {
+                fixture_id,
+                parameter: viz_planning::PreviewParameter::Gobo,
+                value: if fixture.patch.name == "Gobo Demo" {
+                    0.42
+                } else {
+                    0.68
+                },
+                colour: [0.0; 3],
+            });
+        }
     }
+    apply_prism_demo(&mut state, &snapshot)?;
     let projected = viz_planning::preview::project(&state, &snapshot, 1);
     Ok(projected
         .universes
@@ -285,6 +298,52 @@ fn scripted_look(
             }
         })
         .collect())
+}
+
+/// Fixture 512 is the canonical demo's prism evidence. Simple Viz preview deliberately exposes
+/// only Gobo, so the product capture sets the prism through the same fixture-relative raw slot as
+/// Full DMX mode. The profile remains authoritative for that slot and its resolution.
+fn apply_prism_demo(
+    state: &mut viz_planning::preview::PreviewState,
+    snapshot: &light_application::PatchSnapshot,
+) -> Result<(), String> {
+    let Some(fixture) = snapshot.fixtures.iter().find(|fixture| {
+        fixture.patch.fixture_number == Some(512) && fixture.patch.name == "Prism Demo"
+    }) else {
+        return Ok(());
+    };
+    let revision = snapshot
+        .profile_revisions
+        .iter()
+        .find(|profile| {
+            profile.profile_id == fixture.profile.profile_id
+                && profile.profile_revision == fixture.profile.profile_revision
+        })
+        .ok_or_else(|| "Prism Demo has no embedded profile revision".to_owned())?;
+    let profile: light_fixture::FixtureProfile =
+        serde_json::from_value(revision.profile_snapshot.clone())
+            .map_err(|error| format!("Prism Demo profile: {error}"))?;
+    let mode = profile
+        .mode(fixture.profile.mode_id)
+        .ok_or_else(|| "Prism Demo profile has no selected mode".to_owned())?;
+    let primary = mode.primary_slots().map_err(|error| error.to_string())?;
+    for (attribute, value) in [("prism.1", 255), ("prism.1.rotation", 166)] {
+        let channel = mode
+            .channels
+            .iter()
+            .find(|channel| channel.attribute.0 == attribute)
+            .ok_or_else(|| format!("Prism Demo mode has no {attribute}"))?;
+        let offset = *primary
+            .get(&channel.id)
+            .ok_or_else(|| format!("Prism Demo {attribute} has no primary slot"))?;
+        state.apply(viz_planning::PreviewSet::Slot {
+            fixture_id: fixture.patch.fixture_id.0,
+            split: channel.split,
+            offset,
+            value,
+        });
+    }
+    Ok(())
 }
 
 fn write_png(path: &Path, width: u32, height: u32, rgba: &[u8]) -> Result<(), String> {
@@ -368,7 +427,7 @@ mod tests {
     use viz_scene::BodyKind;
 
     /// The generated demo show, built exactly as a capture builds it.
-    fn demo_scene(name: &str) -> Scene {
+    fn demo_scene_and_values(name: &str) -> (Scene, SceneValues) {
         let directory = std::env::var_os("LIGHT_TMP_DIR").map_or_else(
             || PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../.artifacts/tmp"),
             PathBuf::from,
@@ -386,8 +445,16 @@ mod tests {
             .expect("the shipped packages load");
         let show = workspace.join("demo-show.show");
         viz_demo::generate(library, &show).expect("the demo generates");
-        let (scene, _bindings, _preview) = scene_from(&show).expect("the scene builds");
-        scene
+        let (scene, bindings, preview) = scene_from(&show).expect("the scene builds");
+        let mut values = SceneValues::default();
+        values.resize(scene.emitters.len());
+        let mut decoder = viz_project::Decoder::new(bindings);
+        decoder.apply(&scene, &preview, &mut values, 0.0);
+        (scene, values)
+    }
+
+    fn demo_scene(name: &str) -> Scene {
+        demo_scene_and_values(name).0
     }
 
     fn body_of(scene: &Scene, name: &str) -> BodyKind {
@@ -412,6 +479,34 @@ mod tests {
             fixture_bounds(&scene, "Not in this show").is_err(),
             "a typo must fail rather than silently capture the whole rig"
         );
+    }
+
+    #[test]
+    fn the_capture_look_decodes_visible_gobo_and_prism_beams() {
+        let (scene, values) = demo_scene_and_values("gobo-prism-look");
+        let emitter_values = |name: &str| {
+            let fixture_index = scene
+                .fixtures
+                .iter()
+                .position(|fixture| fixture.name == name)
+                .unwrap_or_else(|| panic!("the demo has no {name}"));
+            scene
+                .emitters
+                .iter()
+                .enumerate()
+                .filter(|(_, emitter)| emitter.fixture_index == fixture_index as u32)
+                .map(|(index, _)| &values.emitters[index])
+                .collect::<Vec<_>>()
+        };
+        let gobo = emitter_values("Gobo Demo");
+        assert!(
+            gobo.iter()
+                .any(|value| { value.visible_intensity() > 0.99 && value.gobo_slot(8) > 0 })
+        );
+        let prism = emitter_values("Prism Demo");
+        assert!(prism.iter().any(|value| {
+            value.visible_intensity() > 0.99 && value.gobo_slot(8) > 0 && value.prism_facets() >= 3
+        }));
     }
 
     #[test]

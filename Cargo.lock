@@ -8081,8 +8081,11 @@ dependencies = [
  "light-application",
  "light-core",
  "light-fixture",
+ "light-programmer",
+ "serde_json",
  "uuid",
  "viz-document",
+ "viz-scene",
 ]
 
 [[package]]

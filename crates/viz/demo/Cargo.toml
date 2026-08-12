@@ -12,8 +12,13 @@ path = "src/bin/viz-demo-show.rs"
 light-application = { path = "../../light" }
 light-core = { path = "../../shared/core" }
 light-fixture = { path = "../../shared/fixture" }
+serde_json.workspace = true
 uuid.workspace = true
 viz-document = { path = "../document" }
+
+[dev-dependencies]
+light-programmer = { path = "../../light/domain/programmer" }
+viz-scene = { path = "../scene" }
 
 [lints]
 workspace = true

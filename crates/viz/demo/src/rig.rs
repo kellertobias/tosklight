@@ -92,6 +92,33 @@ pub const DEMO_RIG: &[RigBlock] = &[
         step: (0, 0, 0),
         rotation: (-35.0, 0.0, 0.0),
     },
+    // A deliberate pair for the shipped gobo/prism demonstration look. They use the full ROBE
+    // profile personality so the desk, Stage, and renderer all exercise the same canonical beam
+    // attributes as a real show.
+    RigBlock {
+        manufacturer: "ROBE",
+        profile: "Robin DLS Profile",
+        mode: "Mode 3",
+        label: "Gobo Demo",
+        count: 1,
+        universe: 5,
+        first_number: 511,
+        origin: (-2_500, 3_500, 7_200),
+        step: (0, 0, 0),
+        rotation: (0.0, 0.0, 0.0),
+    },
+    RigBlock {
+        manufacturer: "ROBE",
+        profile: "Robin DLS Profile",
+        mode: "Mode 3",
+        label: "Prism Demo",
+        count: 1,
+        universe: 5,
+        first_number: 512,
+        origin: (2_500, 3_500, 7_200),
+        step: (0, 0, 0),
+        rotation: (0.0, 0.0, 0.0),
+    },
     // Mid truss: the washes and the profile movers.
     RigBlock {
         manufacturer: "ROBE",
@@ -263,6 +290,7 @@ mod tests {
             "Dimmer PAR Can",
             "ACL",
             "Dimmer Fresnel",
+            "Robin DLS Profile",
             "Robin 600X LEDWash",
             "Trackspot",
             "Visualizer Laser",

@@ -63,6 +63,13 @@ pub(super) fn legacy_canonical_mapping(
         | "fixture.pan_tilt_speed"
         | "fixture.pan_tilt_speed_time"
         | "fixture.mspeed" => ("position.movement", CanonicalTransform::Identity),
+        "gobo.gobo_wheel" | "gobo.rotating_gobo_selection" | "gobo.rotating_gobo_wheel" => {
+            ("gobo.1", CanonicalTransform::Identity)
+        }
+        "gobo.gobo_index_rotation" | "gobo.rotating_gobo_index_rotation" => {
+            ("gobo.1.rotation", CanonicalTransform::Identity)
+        }
+        "gobo.fixed_gobo_wheel" => ("gobo.2", CanonicalTransform::Identity),
         "prism.prism" | "prism.prism_insertion" => ("prism.1", CanonicalTransform::Identity),
         "prism.prism_rotation" => ("prism.1.rotation", CanonicalTransform::Identity),
         "fixture.blade_1" => ("shaper.blade.1.position", CanonicalTransform::Identity),

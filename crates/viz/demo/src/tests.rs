@@ -5,7 +5,10 @@
 //! has to fail here rather than in a release nobody opened.
 
 use super::*;
+use light_core::{AttributeKey, AttributeValue};
+use light_programmer::Preset;
 use std::collections::HashSet;
+use viz_scene::EmitterValues;
 
 /// The shipped packages, which are what a release generates the demo from.
 fn shipped_packages() -> PathBuf {
@@ -89,15 +92,36 @@ fn no_two_fixtures_in_the_demo_rig_share_a_dmx_slot() {
     let snapshot = document.patch_snapshot().expect("patch");
     let mut occupied: HashSet<(u16, u16)> = HashSet::new();
     for fixture in &snapshot.fixtures {
+        let profile = snapshot
+            .profile_revisions
+            .iter()
+            .find(|profile| {
+                profile.profile_id == fixture.profile.profile_id
+                    && profile.profile_revision == fixture.profile.profile_revision
+            })
+            .expect("fixture profile revision");
+        let mode = profile
+            .referenced_modes
+            .iter()
+            .find(|mode| mode.mode_id == fixture.profile.mode_id)
+            .expect("fixture mode");
         for split in &fixture.patch.split_patches {
             let (Some(universe), Some(address)) = (split.universe, split.address) else {
                 panic!("{} is not patched", fixture.patch.name);
             };
-            assert!(
-                occupied.insert((universe, address)),
-                "{} starts on {universe}.{address}, which is already taken",
-                fixture.patch.name
-            );
+            let footprint = mode
+                .splits
+                .iter()
+                .find(|mode_split| mode_split.number == split.split)
+                .expect("patch split exists in selected mode")
+                .footprint;
+            for slot in address..address + footprint {
+                assert!(
+                    occupied.insert((universe, slot)),
+                    "{} uses {universe}.{slot}, which is already taken",
+                    fixture.patch.name
+                );
+            }
         }
     }
 }
@@ -112,7 +136,7 @@ fn generating_twice_produces_the_same_rig() {
     assert_eq!(first.profile_revisions, second.profile_revisions);
 
     /// One fixture as the operator sees it addressed: number, name, universe and address.
-    type PatchRow = (Option<u32>, String, Option<u16>, Option<u16>);
+    type PatchRow = (String, Option<u32>, String, Option<u16>, Option<u16>);
 
     let names = |generated: &GeneratedShow| {
         let document = PlanningDocument::open(&generated.path).expect("reopen");
@@ -122,6 +146,7 @@ fn generating_twice_produces_the_same_rig() {
             .iter()
             .map(|fixture| {
                 (
+                    fixture.patch.fixture_id.0.to_string(),
                     fixture.patch.fixture_number,
                     fixture.patch.name.clone(),
                     fixture.patch.universe,
@@ -133,6 +158,88 @@ fn generating_twice_produces_the_same_rig() {
         rows
     };
     assert_eq!(names(&first), names(&second));
+}
+
+#[test]
+fn the_demo_profiles_project_canonical_gobo_and_prism_controls() {
+    let directory = workspace("gobo-prism-capabilities");
+    let library = library_in(&directory);
+    let profiles = library.profiles().expect("profiles");
+    let profile = profiles
+        .iter()
+        .find(|profile| profile.manufacturer == "ROBE" && profile.name == "Robin DLS Profile")
+        .expect("shipped ROBE profile");
+    let mode = profile
+        .modes
+        .iter()
+        .find(|mode| mode.name == "Mode 3")
+        .expect("documented Mode 3");
+    let attributes = mode
+        .channels
+        .iter()
+        .map(|channel| channel.attribute.0.as_str())
+        .collect::<HashSet<_>>();
+    for required in ["gobo.1", "gobo.1.rotation", "prism.1", "prism.1.rotation"] {
+        assert!(
+            attributes.contains(required),
+            "Mode 3 does not project canonical {required}"
+        );
+    }
+    let serialized = serde_json::to_value(profile).expect("serialized profile");
+    assert!(
+        serialized["gobos"]
+            .as_array()
+            .is_some_and(|gobos| gobos.iter().any(|gobo| !gobo["artwork_asset"].is_null())),
+        "the demo gobo fixture carries no artwork"
+    );
+}
+
+#[test]
+fn the_mixed_demo_preset_produces_observable_gobo_and_prism_state() {
+    let (_directory, generated) = generated_in("gobo-prism-look");
+    let document = PlanningDocument::open(&generated.path).expect("the show reopens");
+    let stored = document
+        .objects("preset")
+        .expect("presets")
+        .into_iter()
+        .find(|preset| preset.id == GOBO_PRISM_DEMO_PRESET)
+        .expect("gobo/prism demo preset");
+    let preset: Preset = serde_json::from_value(stored.body).expect("typed mixed preset");
+    assert_eq!(preset.name, "Gobo + Prism Demo");
+
+    let gobo = preset
+        .values
+        .get(&demo_fixture_id(GOBO_DEMO_FIXTURE_NUMBER))
+        .expect("gobo fixture values");
+    let prism = preset
+        .values
+        .get(&demo_fixture_id(PRISM_DEMO_FIXTURE_NUMBER))
+        .expect("prism fixture values");
+    let normalized = |values: &std::collections::HashMap<AttributeKey, AttributeValue>,
+                      key: &str| match values.get(&AttributeKey(key.into())) {
+        Some(AttributeValue::Normalized(value)) => *value,
+        other => panic!("{key} is not a normalized demo value: {other:?}"),
+    };
+
+    let gobo_state = EmitterValues {
+        intensity: normalized(gobo, "intensity"),
+        shutter: normalized(gobo, "shutter"),
+        gobo: normalized(gobo, "gobo.1"),
+        ..EmitterValues::default()
+    };
+    assert!(gobo_state.visible_intensity() > 0.99);
+    assert!(gobo_state.gobo_slot(8) > 0);
+
+    let prism_state = EmitterValues {
+        intensity: normalized(prism, "intensity"),
+        shutter: normalized(prism, "shutter"),
+        gobo: normalized(prism, "gobo.1"),
+        prism: normalized(prism, "prism.1"),
+        ..EmitterValues::default()
+    };
+    assert!(prism_state.visible_intensity() > 0.99);
+    assert!(prism_state.gobo_slot(8) > 0);
+    assert!(prism_state.prism_facets() >= 3);
 }
 
 /// Regenerating over an existing file replaces it rather than merging into it.

@@ -25,6 +25,12 @@ The demo is built from the fixture packages this version of ToskLight ships, so 
 the same profile revisions, models and modes the fixture library does. It is the quickest way to
 see what the Visualizer draws, and the rig the product demonstration video is shot from.
 
+When the demo is opened on a desk, Mixed Preset **0.1 Gobo + Prism Demo** is a repeatable beam
+look for fixtures **511 Gobo Demo** and **512 Prism Demo**. Recall it to light the pair, place two
+different gobos in their beams, and insert and rotate the prism on fixture 512. The preset uses the
+same shipped ROBE Robin DLS Profile Mode 3 parameters and stable fixture identities each time the
+demo show is generated.
+
 ## Lighting the rig without a desk
 
 Select fixtures in the patch sheet and the editor's preview controls light them. No desk, no

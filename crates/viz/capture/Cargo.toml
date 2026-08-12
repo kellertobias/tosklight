@@ -10,6 +10,7 @@ path = "src/main.rs"
 
 [dependencies]
 light-application = { path = "../../light" }
+light-fixture = { path = "../../shared/fixture" }
 png.workspace = true
 serde_json.workspace = true
 viz-desk = { path = "../desk" }
@@ -21,7 +22,6 @@ viz-render = { path = "../render" }
 viz-scene = { path = "../scene" }
 
 [dev-dependencies]
-light-fixture = { path = "../../shared/fixture" }
 viz-demo = { path = "../demo" }
 
 [lints]

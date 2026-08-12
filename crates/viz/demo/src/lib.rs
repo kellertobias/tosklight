@@ -21,6 +21,7 @@ use light_fixture::{
     PatchedFixturePatch, PatchedFixtureProfileReference, SplitPatch,
 };
 use rig::{DEMO_RIG, RigBlock};
+use serde_json::json;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use viz_document::PlanningDocument;
@@ -34,6 +35,15 @@ pub const DEMO_SHOW_FILE_NAME: &str = "demo-show.show";
 /// The last slot of a DMX universe. A rig that will not fit is a mistake in the rig, not something
 /// to silently wrap into the next universe.
 const LAST_SLOT: u32 = 512;
+
+/// Stable namespace for fixture identities in this generated product artefact. Fixture numbers
+/// are already an explicit compatibility surface in [`DEMO_RIG`], so deriving the UUID from that
+/// number makes regeneration stable without coupling identity to patch order or display wording.
+const DEMO_FIXTURE_NAMESPACE: u128 = 0x58a4_5aea_0b69_4ed6_9e08_a435_c65f_bec3;
+
+pub const GOBO_DEMO_FIXTURE_NUMBER: u32 = 511;
+pub const PRISM_DEMO_FIXTURE_NUMBER: u32 = 512;
+pub const GOBO_PRISM_DEMO_PRESET: &str = "0.1";
 
 #[derive(Debug)]
 pub enum DemoError {
@@ -173,6 +183,8 @@ pub fn generate(library: FixtureLibrary, destination: &Path) -> Result<Generated
         })
         .map_err(|error| DemoError::Document(error.to_string()))?;
 
+    install_gobo_prism_demo_look(&document)?;
+
     Ok(GeneratedShow {
         path: destination.to_path_buf(),
         name: DEMO_SHOW_NAME.to_owned(),
@@ -215,7 +227,7 @@ fn candidate(
             mode_id,
         },
         patch: PatchedFixturePatch {
-            fixture_id: FixtureId::new(),
+            fixture_id: demo_fixture_id(block.first_number + index),
             fixture_number: Some(block.first_number + index),
             virtual_fixture_number: None,
             name,
@@ -244,4 +256,51 @@ fn candidate(
             highlight_overrides: Default::default(),
         },
     }
+}
+
+/// Stable identity of one canonical demo fixture.
+pub fn demo_fixture_id(number: u32) -> FixtureId {
+    let namespace = uuid::Uuid::from_u128(DEMO_FIXTURE_NAMESPACE);
+    FixtureId(uuid::Uuid::new_v5(
+        &namespace,
+        format!("fixture:{number}").as_bytes(),
+    ))
+}
+
+fn install_gobo_prism_demo_look(document: &PlanningDocument) -> Result<(), DemoError> {
+    let gobo = demo_fixture_id(GOBO_DEMO_FIXTURE_NUMBER).0.to_string();
+    let prism = demo_fixture_id(PRISM_DEMO_FIXTURE_NUMBER).0.to_string();
+    document
+        .put_object(
+            "preset",
+            GOBO_PRISM_DEMO_PRESET,
+            &json!({
+                "name": "Gobo + Prism Demo",
+                "family": "Mixed",
+                "number": 1,
+                "values": {
+                    gobo: {
+                        "intensity": { "kind": "normalized", "value": 1.0 },
+                        "shutter": { "kind": "normalized", "value": 1.0 },
+                        "pan": { "kind": "normalized", "value": 0.42 },
+                        "tilt": { "kind": "normalized", "value": 0.58 },
+                        "gobo.1": { "kind": "normalized", "value": 0.42 },
+                        "gobo.1.rotation": { "kind": "normalized", "value": 0.28 },
+                        "focus": { "kind": "normalized", "value": 0.72 }
+                    },
+                    prism: {
+                        "intensity": { "kind": "normalized", "value": 1.0 },
+                        "shutter": { "kind": "normalized", "value": 1.0 },
+                        "pan": { "kind": "normalized", "value": 0.58 },
+                        "tilt": { "kind": "normalized", "value": 0.58 },
+                        "gobo.1": { "kind": "normalized", "value": 0.68 },
+                        "prism.1": { "kind": "normalized", "value": 1.0 },
+                        "prism.1.rotation": { "kind": "normalized", "value": 0.65 },
+                        "focus": { "kind": "normalized", "value": 0.72 }
+                    }
+                },
+                "group_values": {}
+            }),
+        )
+        .map_err(|error| DemoError::Document(error.to_string()))
 }
