@@ -38,6 +38,8 @@ export type {
 export function MediaPaneSurface({
 	model,
 	compact = false,
+	title = "Media",
+	headerAction,
 	onSelectServer,
 	onSelectLayer,
 	onSelectBrowserMode,
@@ -56,7 +58,7 @@ export function MediaPaneSurface({
 	return (
 		<WindowFrame
 			className={`media-pane-surface ${compact ? "compact" : ""}`}
-			title="Media"
+			title={title}
 			toolbar={
 				<div className="media-pane-header-tools">
 					{model.rightPaneVisible ? (
@@ -102,6 +104,7 @@ export function MediaPaneSurface({
 						}))}
 						onChange={onSelectServer}
 					/>
+					{headerAction}
 				</div>
 			}
 			settingsTitle="Media pane settings"

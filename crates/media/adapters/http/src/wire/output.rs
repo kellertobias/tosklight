@@ -130,6 +130,8 @@ pub struct OutputView {
     pub master: MasterView,
     /// Whether an external desk currently owns this output's continuously controlled values.
     pub dmx_active: bool,
+    /// Whether this server explicitly ignores network playback control in favour of the web UI.
+    pub playback_takeover: bool,
 }
 
 impl OutputView {
@@ -146,6 +148,7 @@ impl OutputView {
                 .collect(),
             master: MasterView::of(output.master),
             dmx_active,
+            playback_takeover: output.ownership.web_takeover,
         }
     }
 }

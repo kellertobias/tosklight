@@ -106,6 +106,8 @@ pub enum CatalogError {
     AddressTaken { folder: u8, file: u8 },
     #[error("an item name cannot be empty")]
     EmptyName,
+    #[error("intrinsic BPM must be a finite positive number")]
+    InvalidIntrinsicBpm,
 }
 
 impl CatalogSnapshot {
@@ -200,6 +202,21 @@ impl CatalogSnapshot {
             .find_map(|folder| folder.items.iter_mut().find(|item| item.id == id))
             .ok_or(CatalogError::NoSuchItem)?;
         item.name = name.trim().to_owned();
+        self.bump();
+        Ok(())
+    }
+
+    /// Corrects or clears the authored tempo without changing the item's identity or address.
+    pub fn set_intrinsic_bpm(&mut self, id: AssetId, bpm: Option<f64>) -> Result<(), CatalogError> {
+        if bpm.is_some_and(|value| !value.is_finite() || value <= 0.0) {
+            return Err(CatalogError::InvalidIntrinsicBpm);
+        }
+        let item = self
+            .folders
+            .iter_mut()
+            .find_map(|folder| folder.items.iter_mut().find(|item| item.id == id))
+            .ok_or(CatalogError::NoSuchItem)?;
+        item.intrinsic_bpm = bpm;
         self.bump();
         Ok(())
     }

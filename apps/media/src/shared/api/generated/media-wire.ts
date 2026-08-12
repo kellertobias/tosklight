@@ -38,7 +38,11 @@ export type OutputView = { id: string, name: string, layerCount: number, layers:
 /**
  * Whether an external desk currently owns this output's continuously controlled values.
  */
-dmxActive: boolean, };
+dmxActive: boolean,
+/**
+ * Whether this server explicitly ignores network playback control in favour of the web UI.
+ */
+playbackTakeover: boolean, };
 export type OutputConfigurationView = { id: string, name: string,
 /**
  * `monitor` or `off-screen`.
@@ -309,6 +313,10 @@ export type UpdateAudio = { requestId: string,
 deviceBy?: string | null, deviceValue?: string | null, inputGain?: number | null, beatSensitivity?: number | null, eqBass?: number | null, eqMid?: number | null, eqTreble?: number | null, };
 export type StartImport = { requestId: string, folder?: number | null, file?: number | null, };
 export type UpdateLibraryItem = { requestId: string, name?: string | null, folder?: number | null, file?: number | null,
+/**
+ * Correct or clear the authored tempo. An absent field leaves it unchanged.
+ */
+intrinsicBpm?: number | null | null,
 /**
  * Exchange addresses when the destination is occupied. False refuses the edit.
  */

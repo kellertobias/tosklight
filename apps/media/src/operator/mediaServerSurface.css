@@ -123,7 +123,59 @@
 
 .media-operator-workspace {
 	min-width: 0;
-	padding: 8px;
+	height: 100vh;
+	padding: 0;
+	overflow: hidden;
+}
+
+.media-route-surface,
+.media-route-surface > .ui-window,
+.media-route-surface > .media-library-window,
+.media-route-surface > .media-pane-surface {
+	height: 100%;
+	min-height: 0;
+}
+
+/* The embedded production Media Pane is already scoped to this server. */
+.media-operator-shell .media-pane-server-select {
+	display: none;
+}
+
+.media-playback-takeover {
+	flex: none;
+}
+
+.media-playback-takeover > label {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+}
+
+.media-playback-takeover > .ui-form-control > .ui-switch-control {
+	min-height: 30px;
+	padding: 2px 6px;
+	gap: 5px;
+}
+
+.media-playback-takeover .ui-switch-track {
+	width: 42px;
+	height: 24px;
+}
+
+.media-playback-takeover .ui-switch-track i {
+	width: 16px;
+	height: 16px;
+}
+
+.media-playback-takeover input:checked + .ui-switch-track i {
+	transform: translateX(18px);
+}
+
+.media-playback-takeover .ui-switch-state {
+	padding: 3px 5px;
+	font-size: 12px;
 }
 
 .media-screen-header {
@@ -142,9 +194,26 @@
 	box-shadow: none;
 }
 
-.media-operator-panel > .ui-window-layout > .ui-window-center {
+.media-operator-panel-heading {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 10px 12px;
+	border-bottom: 1px solid var(--line);
+}
+
+.media-operator-panel-heading h2 {
+	margin: 0;
+	font-size: 0.92rem;
+}
+
+.media-operator-panel-heading small {
+	color: var(--muted);
+}
+
+.media-operator-panel > :not(.media-operator-panel-heading) {
 	padding: 12px;
-	overflow: visible;
 }
 
 .media-metric-grid {
@@ -225,7 +294,158 @@
 
 .media-list-detail-content {
 	min-width: 0;
-	padding: 22px;
+	align-self: start;
+	padding: 12px;
+}
+
+.media-list-detail-content .ui-form-field,
+.media-list-detail-content .ui-form-layout {
+	align-self: start;
+}
+
+.media-library-window {
+	height: 100%;
+	min-height: 0;
+}
+
+.media-library-window > .ui-window-layout,
+.media-library-window > .ui-window-layout > .ui-window-center {
+	min-height: 0;
+}
+
+.media-library-window > .ui-window-layout > .ui-window-center {
+	overflow: hidden;
+}
+
+.media-library-browser {
+	height: 100%;
+	min-height: 0;
+	display: grid;
+	grid-template-columns: minmax(220px, 25%) minmax(430px, 1fr) minmax(
+			260px,
+			30%
+		);
+}
+
+.media-library-folders,
+.media-library-pool,
+.media-library-inspector {
+	min-height: 0;
+	border-right: 1px solid var(--line);
+	background: var(--panel);
+}
+
+.media-library-folder {
+	width: 100%;
+	min-height: 42px;
+	display: grid;
+	grid-template-columns: 38px minmax(0, 1fr) auto;
+	align-items: center;
+	gap: 8px;
+	padding: 4px 9px;
+	border: 0;
+	border-bottom: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
+	background: transparent;
+	color: var(--text);
+	text-align: left;
+	font: inherit;
+}
+
+.media-library-folder:hover,
+.media-library-folder.is-selected {
+	background: var(--panel2);
+}
+
+.media-library-folder.is-selected {
+	box-shadow: inset 3px 0 0 var(--cyan);
+}
+
+.media-library-folder.is-reserved {
+	color: var(--muted);
+}
+
+.media-library-folder b,
+.media-library-folder small,
+.media-library-address {
+	font-variant-numeric: tabular-nums;
+}
+
+.media-library-folder small {
+	color: var(--muted);
+}
+
+.media-library-pool {
+	padding: 0 8px 8px;
+}
+
+.media-library-pool-heading {
+	position: sticky;
+	top: 0;
+	z-index: 2;
+	display: flex;
+	justify-content: space-between;
+	padding: 10px 4px;
+	background: var(--panel);
+}
+
+.media-library-pool-heading small {
+	color: var(--muted);
+}
+
+.media-library-pool .pool-window-grid {
+	grid-auto-rows: 104px;
+}
+
+.media-library-pool .pool-card.selected {
+	outline: 2px solid var(--cyan);
+	outline-offset: -2px;
+}
+
+.media-library-inspector {
+	border-right: 0;
+	overflow: auto;
+}
+
+.media-library-editor,
+.media-library-reserved-copy {
+	display: grid;
+	align-content: start;
+	gap: 14px;
+	padding: 16px;
+}
+
+.media-library-editor > img {
+	width: 100%;
+	aspect-ratio: 16 / 9;
+	object-fit: contain;
+	background: #050608;
+	border: 1px solid var(--line);
+}
+
+.media-library-editor h2,
+.media-library-editor p,
+.media-library-reserved-copy h2,
+.media-library-reserved-copy p {
+	margin: 0;
+}
+
+.media-library-eyebrow,
+.media-library-address {
+	color: var(--muted);
+	font-size: 0.78rem;
+	text-transform: uppercase;
+	letter-spacing: 0.07em;
+}
+
+.media-library-error {
+	position: absolute;
+	z-index: 10;
+	right: 8px;
+	top: 48px;
+	padding: 8px 12px;
+	border: 1px solid var(--red);
+	background: var(--panel);
+	color: var(--red);
 }
 
 .media-detail-heading {

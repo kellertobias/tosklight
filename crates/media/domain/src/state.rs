@@ -141,6 +141,9 @@ pub fn apply(state: &mut MediaState, command: &Command) -> Applied {
             target.reset_trigger_id = target.reset_trigger_id.wrapping_add(1);
             Applied::Changed
         }
+        CommandKind::TakeOverPlayback { take_over, .. } => {
+            changed_or_not(replace(&mut output.ownership.web_takeover, *take_over))
+        }
         CommandKind::ReportSourceStatus { layer, status, .. } => {
             let Some(target) = output.layers.get_mut(*layer) else {
                 return Applied::RejectedUnknownLayer;

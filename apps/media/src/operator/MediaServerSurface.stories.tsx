@@ -1,11 +1,12 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { SwitchField } from "@tosklight/ui/controls";
 import { type ReactNode, useState } from "react";
+import { StatefulMediaStory } from "../../../light-desktop/src/windows/MediaPaneWindow.stories";
+import { LibraryBrowserView } from "../features/media-library/LibraryPage";
 import {
 	DashboardScreen,
 	LibrariesSettings,
-	LibraryScreen,
 	LogsSettings,
-	MediaScreen,
 	NetworkInputsSettings,
 	type OperatorTextSource,
 	OutputsSettings,
@@ -179,17 +180,65 @@ function Frame({
 }
 
 function StatefulLibrary() {
-	const [selected, setSelected] = useState("storm");
 	return (
 		<Frame active="library">
-			<LibraryScreen
-				items={library}
-				selectedId={selected}
-				onSelect={setSelected}
+			<LibraryBrowserView
+				catalog={storyCatalog}
+				thumbnailUrl={(_, file) => storyThumbnail(file)}
 			/>
 		</Frame>
 	);
 }
+
+function storyThumbnail(file: number) {
+	const hue = (file * 37) % 360;
+	return `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 90"><defs><linearGradient id="g"><stop stop-color="hsl(${hue} 75% 38%)"/><stop offset="1" stop-color="#070b12"/></linearGradient></defs><rect width="160" height="90" fill="url(#g)"/><circle cx="${35 + (file % 70)}" cy="45" r="23" fill="hsl(${(hue + 80) % 360} 80% 62%)" opacity=".7"/></svg>`)}`;
+}
+
+function StatefulPlayback() {
+	const [takeover, setTakeover] = useState(false);
+	return (
+		<Frame active="media">
+			<StatefulMediaStory
+				embedded
+				showNotice={false}
+				title="Playback"
+				headerAction={
+					<SwitchField
+						className="media-playback-takeover"
+						label="Take over playback"
+						aria-label="Take over playback"
+						offLabel="Take over playback"
+						onLabel="Release"
+						checked={takeover}
+						onChange={(event) => setTakeover(event.target.checked)}
+					/>
+				}
+			/>
+		</Frame>
+	);
+}
+
+const storyCatalog = {
+	revision: 12,
+	itemCount: 4,
+	folders: [
+		{
+			folder: 1,
+			name: "Show content",
+			items: library.map((item, index) => ({
+				id: item.id,
+				file: [12, 18, 24, 31][index] ?? index + 1,
+				name: item.name,
+				kind: index === 2 ? "image" : "video",
+				width: 1920,
+				height: 1080,
+				frames: index === 2 ? null : 3_600,
+				intrinsicBpm: index === 0 ? 120 : null,
+			})),
+		},
+	],
+} satisfies import("../shared/api/generated/media-wire").CatalogView;
 
 function StatefulVisualizers() {
 	const [selected, setSelected] = useState("aurora");
@@ -300,11 +349,8 @@ export const Dashboard: Story = {
 };
 
 export const Media: Story = {
-	render: () => (
-		<Frame active="media">
-			<MediaScreen outputs={outputs} />
-		</Frame>
-	),
+	name: "Playback",
+	render: () => <StatefulPlayback />,
 };
 export const Library: Story = { render: () => <StatefulLibrary /> };
 export const Visualizers: Story = { render: () => <StatefulVisualizers /> };

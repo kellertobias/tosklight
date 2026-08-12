@@ -24,7 +24,7 @@ describe("routing", () => {
 	it("exposes exactly the six operator dock sections in order", () => {
 		expect(ROUTES.map((route) => route.label)).toEqual([
 			"Dashboard",
-			"Media",
+			"Playback",
 			"Library",
 			"Visualizers",
 			"Text",

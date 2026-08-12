@@ -115,7 +115,7 @@ describe("importing into the library", () => {
 		render(<LibraryPage />);
 
 		// The library itself still renders; only the panel is absent.
-		await screen.findByLabelText("Search the library");
+		await screen.findByLabelText("Search Library");
 		expect(screen.queryByRole("article", { name: "Import" })).not.toBeInTheDocument();
 	});
 });

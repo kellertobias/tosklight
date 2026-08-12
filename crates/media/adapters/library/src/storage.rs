@@ -59,6 +59,42 @@ impl LibraryStorage {
             .join(naming::thumbnail_filename(address.file))
     }
 
+    fn metadata_path(&self, address: MediaAddress) -> PathBuf {
+        self.root
+            .join(naming::folder_directory(address.folder))
+            .join(naming::METADATA_DIRECTORY)
+            .join(naming::metadata_filename(address.file))
+    }
+
+    /// Persists an operator tempo correction separately from the immutable imported clip.
+    pub fn set_intrinsic_bpm(
+        &self,
+        catalog: &mut CatalogSnapshot,
+        id: AssetId,
+        bpm: Option<f64>,
+    ) -> Result<(), StorageError> {
+        let (address, _) = self.locate(catalog, id)?;
+        let mut proposed = catalog.clone();
+        proposed.set_intrinsic_bpm(id, bpm)?;
+        let path = self.metadata_path(address);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|source| StorageError::Filesystem {
+                operation: "create",
+                path: parent.to_path_buf(),
+                source,
+            })?;
+        }
+        let bytes = serde_json::to_vec(&serde_json::json!({ "intrinsicBpm": bpm }))
+            .expect("metadata is serializable");
+        std::fs::write(&path, bytes).map_err(|source| StorageError::Filesystem {
+            operation: "write",
+            path,
+            source,
+        })?;
+        *catalog = proposed;
+        Ok(())
+    }
+
     /// Renames an item, keeping its address and identity.
     pub fn rename_item(
         &self,
@@ -104,6 +140,7 @@ impl LibraryStorage {
             )?;
             self.rename_source_if_present(from_address, &name, to, &name)?;
             self.rename_thumbnail_if_present(from_address, to)?;
+            self.rename_metadata_if_present(from_address, to)?;
         }
         *catalog = proposed;
         Ok(())
@@ -137,6 +174,7 @@ impl LibraryStorage {
         self.rename(&staging, &self.item_path(second_address, &first_name))?;
         self.swap_sources(first_address, &first_name, second_address, &second_name)?;
         self.swap_thumbnails(first_address, second_address)?;
+        self.swap_metadata(first_address, second_address)?;
 
         *catalog = proposed;
         Ok(())
@@ -196,6 +234,7 @@ impl LibraryStorage {
         }
         let thumbnail = self.thumbnail_path(address);
         let _ = std::fs::remove_file(thumbnail);
+        let _ = std::fs::remove_file(self.metadata_path(address));
         catalog.remove_item(id);
         Ok(())
     }
@@ -248,6 +287,18 @@ impl LibraryStorage {
             return Ok(());
         }
         self.rename(&source, &self.thumbnail_path(to))
+    }
+
+    fn rename_metadata_if_present(
+        &self,
+        from: MediaAddress,
+        to: MediaAddress,
+    ) -> Result<(), StorageError> {
+        let source = self.metadata_path(from);
+        if !source.exists() || from == to {
+            return Ok(());
+        }
+        self.rename(&source, &self.metadata_path(to))
     }
 
     fn rename_source_if_present(
@@ -351,6 +402,21 @@ impl LibraryStorage {
         second: MediaAddress,
     ) -> Result<(), StorageError> {
         let (a, b) = (self.thumbnail_path(first), self.thumbnail_path(second));
+        match (a.exists(), b.exists()) {
+            (true, true) => {
+                let staging = staging(&a);
+                self.rename(&a, &staging)?;
+                self.rename(&b, &a)?;
+                self.rename(&staging, &b)
+            }
+            (true, false) => self.rename(&a, &b),
+            (false, true) => self.rename(&b, &a),
+            (false, false) => Ok(()),
+        }
+    }
+
+    fn swap_metadata(&self, first: MediaAddress, second: MediaAddress) -> Result<(), StorageError> {
+        let (a, b) = (self.metadata_path(first), self.metadata_path(second));
         match (a.exists(), b.exists()) {
             (true, true) => {
                 let staging = staging(&a);
@@ -676,5 +742,37 @@ mod tests {
             error,
             StorageError::Catalog(CatalogError::NoSuchItem)
         ));
+    }
+
+    #[test]
+    fn an_operator_bpm_correction_is_persisted_and_follows_a_move() {
+        let mut library = Library::new("bpm-correction");
+        let id = library.add(1, 3, "Clip");
+        library
+            .storage
+            .set_intrinsic_bpm(&mut library.catalog, id, Some(127.5))
+            .unwrap();
+        assert_eq!(
+            library.catalog.item(id).unwrap().1.intrinsic_bpm,
+            Some(127.5)
+        );
+        let original = library.storage.metadata_path(MediaAddress::new(1, 3));
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&std::fs::read(&original).unwrap())
+                .unwrap(),
+            serde_json::json!({ "intrinsicBpm": 127.5 })
+        );
+
+        library
+            .storage
+            .move_item(&mut library.catalog, id, MediaAddress::new(2, 8))
+            .unwrap();
+        assert!(!original.exists());
+        assert!(
+            library
+                .storage
+                .metadata_path(MediaAddress::new(2, 8))
+                .exists()
+        );
     }
 }

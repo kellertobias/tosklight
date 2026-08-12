@@ -194,6 +194,8 @@ function writeLibrary(
 				404,
 			);
 		if (body.name !== undefined) located.item.name = body.name;
+		if (body.intrinsicBpm !== undefined)
+			located.item.intrinsicBpm = body.intrinsicBpm;
 		if (body.folder !== undefined && body.file !== undefined) {
 			located.folder.items = located.folder.items.filter(
 				(candidate) => candidate.id !== located.item.id,
@@ -344,6 +346,7 @@ export function anOutput(overrides: Partial<OutputView> = {}): OutputView {
 		name: "Main",
 		layerCount: 2,
 		dmxActive: false,
+		playbackTakeover: false,
 		master: {
 			dimmer: 1,
 			volume: 1,

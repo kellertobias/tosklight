@@ -177,6 +177,26 @@
 			"interactions": []
 		},
 		{
+			"file": "media-server-playback.png",
+			"title": "Media Server playback",
+			"caption": "The production CITP Media Pane monitors live server playback and offers an explicit local takeover when the operator needs to drive it from the server.",
+			"storyId": "tosklight-media-server--media",
+			"viewport": { "width": 1440, "height": 900 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": []
+		},
+		{
+			"file": "media-server-library.png",
+			"title": "Media Server library",
+			"caption": "A three-column CITP library browser combines all 255 folders, multi-select media pools, previews, metadata editing, and direct upload workflows.",
+			"storyId": "tosklight-media-server--library",
+			"viewport": { "width": 1440, "height": 900 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": []
+		},
+		{
 			"file": "media-server-visualizers.png",
 			"title": "Media Server visualizers",
 			"caption": "Generated visualizers use a focused list-and-detail surface with a representative picture preview and direct parameter editing.",

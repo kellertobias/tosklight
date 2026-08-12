@@ -103,7 +103,7 @@ pub struct Imports {
 }
 
 /// One durable edit to the operator's media library.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum LibraryEdit {
     RenameItem {
         id: AssetId,
@@ -114,6 +114,10 @@ pub enum LibraryEdit {
         destination: MediaAddress,
         /// When occupied, exchange the two addresses instead of overwriting either file.
         swap: bool,
+    },
+    SetItemBpm {
+        id: AssetId,
+        bpm: Option<f64>,
     },
     RenameFolder {
         folder: u8,

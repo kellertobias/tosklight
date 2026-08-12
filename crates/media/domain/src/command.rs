@@ -107,6 +107,8 @@ pub enum CommandKind {
     },
     /// Restart the media on one layer without changing its address.
     ResetLayer { output: OutputId, layer: usize },
+    /// Gives or releases the Media Server web operator priority over external DMX.
+    TakeOverPlayback { output: OutputId, take_over: bool },
     /// A playback session reporting what happened to a source it was asked to load.
     ReportSourceStatus {
         output: OutputId,
@@ -123,6 +125,7 @@ impl CommandKind {
             | Self::SelectMedia { output, .. }
             | Self::SetLayerDimmer { output, .. }
             | Self::ResetLayer { output, .. }
+            | Self::TakeOverPlayback { output, .. }
             | Self::ReportSourceStatus { output, .. } => *output,
         }
     }
@@ -159,6 +162,9 @@ impl Command {
 pub struct ControlOwnership {
     /// The last external DMX source seen, and when.
     pub dmx: Option<DmxActivity>,
+    /// Explicit local priority. While set, incoming network DMX is ignored.
+    #[serde(default)]
+    pub web_takeover: bool,
 }
 
 /// The most recent external DMX activity on an output.
@@ -197,11 +203,14 @@ impl ControlOwnership {
             // Recovery restores state the process itself lost; ownership never blocks it.
             CommandSource::Recovery => true,
             // External DMX and the application always write.
-            CommandSource::ArtNet | CommandSource::Sacn | CommandSource::Internal => true,
+            CommandSource::ArtNet | CommandSource::Sacn => !self.web_takeover,
+            CommandSource::Internal => true,
             // The web UI may always inspect and may always perform administrative actions; it
             // yields only the values a live desk is driving.
             CommandSource::Web => {
-                !command.kind.is_continuously_controlled() || !self.dmx_is_active(command.at)
+                !command.kind.is_continuously_controlled()
+                    || self.web_takeover
+                    || !self.dmx_is_active(command.at)
             }
         }
     }
@@ -327,5 +336,24 @@ mod tests {
     fn a_clock_that_goes_backwards_cannot_manufacture_an_age() {
         let earlier = Timestamp::from_millis(5_000);
         assert_eq!(Timestamp::from_millis(1_000).since(earlier), Duration::ZERO);
+    }
+
+    #[test]
+    fn explicit_web_takeover_reverses_normal_network_priority() {
+        let mut ownership = ControlOwnership::default();
+        ownership.observe_dmx(CommandSource::ArtNet, Timestamp::from_millis(1_000));
+        assert!(!ownership.accepts(&select(1_000)));
+        ownership.web_takeover = true;
+        assert!(ownership.accepts(&select(1_000)));
+        let network = Command::new(
+            CommandKind::SelectMedia {
+                output: output(),
+                layer: 0,
+                address: MediaAddress::new(1, 1),
+            },
+            CommandSource::ArtNet,
+            Timestamp::from_millis(1_001),
+        );
+        assert!(!ownership.accepts(&network));
     }
 }

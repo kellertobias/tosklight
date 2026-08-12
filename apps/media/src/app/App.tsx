@@ -3,14 +3,14 @@
 // Pages compose features. Nothing here converts a protocol or holds a state machine.
 
 import { useEffect, useState } from "react";
+import { WindowFrame } from "@tosklight/ui/window-kit";
 import { DashboardPage } from "../features/dashboard/DashboardPage";
-import { LayersPage } from "../features/layers/LayersPage";
+import { MediaPanePage } from "../features/layers/MediaPanePage";
 import { LibraryPage } from "../features/media-library/LibraryPage";
 import { SettingsPage } from "../features/settings/SettingsPage";
 import { TextSourcesPage } from "../features/text-sources/TextSourcesPage";
 import { VisualizersPage } from "../features/visualizers/VisualizersPage";
 import {
-	MediaScreenHeader,
 	type MediaServerSection,
 	MediaServerShell,
 } from "../operator/MediaServerSurface";
@@ -24,7 +24,7 @@ const HEALTH_POLL_MS = 5_000;
 
 const PAGES: Record<RoutePath, () => React.ReactElement> = {
 	"/": DashboardPage,
-	"/media": LayersPage,
+	"/media": MediaPanePage,
 	"/library": LibraryPage,
 	"/visualizers": VisualizersPage,
 	"/text": TextSourcesPage,
@@ -40,24 +40,12 @@ const SECTION_BY_PATH: Record<RoutePath, MediaServerSection> = {
 	"/settings": "settings",
 };
 
-const DETAIL_BY_PATH: Record<RoutePath, string> = {
-	"/": "See the server, desk, output, and library state that matters during a show.",
-	"/media":
-		"See the source and level currently resolved on every output layer.",
-	"/library":
-		"Prepare stable numbered media without changing the address a show uses.",
-	"/visualizers":
-		"Select a generated source to inspect its look and tune its controls.",
-	"/text": "Write and style addressable text, clocks, and countdowns.",
-	"/settings": "Configure this Media Server through focused operator settings.",
-};
-
 export function App() {
 	const { path, navigate, headingRef } = useRouter();
 	const health = useHealth(HEALTH_POLL_MS);
 	const Page = PAGES[path];
-	const label =
-		ROUTES.find((route) => route.path === path)?.label ?? "Dashboard";
+	const route = ROUTES.find((candidate) => candidate.path === path) ?? ROUTES[0];
+	const pageOwnsWindow = path === "/media" || path === "/library";
 	const [now, setNow] = useState(() => new Date());
 	useEffect(() => {
 		const timer = window.setInterval(() => setNow(new Date()), 30_000);
@@ -77,10 +65,19 @@ export function App() {
 				if (route) navigate(route.path);
 			}}
 		>
-			<div ref={headingRef} tabIndex={-1}>
-				<MediaScreenHeader title={label} detail={DETAIL_BY_PATH[path]} />
+			<div ref={headingRef} tabIndex={-1} className="media-route-surface">
 				<ErrorBoundary key={path}>
-					<Page />
+					{pageOwnsWindow ? (
+						<Page />
+					) : (
+						<WindowFrame
+							title={route.label}
+							info={{ primary: "Media Server", secondary: "Operator controls" }}
+							className="media-route-window"
+						>
+							<Page />
+						</WindowFrame>
+					)}
 				</ErrorBoundary>
 			</div>
 		</MediaServerShell>

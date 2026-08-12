@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { GridDesktop, PaneView } from "@tosklight/ui/desktop";
-import { useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { CommandSectionFixture } from "../../../ui-library/storybook/fixtures/controlSection";
 import {
 	type DummyMediaFolder,
@@ -143,13 +143,15 @@ interface MediaEncoderSelection {
 	maskFileId: string;
 }
 
-function StatefulMediaStory({
+export function StatefulMediaStory({
 	servers = dummyMediaServers,
 	compact = false,
 	embedded = false,
 	showNotice = true,
 	previewOverride,
 	encoderSelection,
+	title,
+	headerAction,
 }: {
 	servers?: DummyMediaServer[];
 	compact?: boolean;
@@ -157,6 +159,8 @@ function StatefulMediaStory({
 	showNotice?: boolean;
 	previewOverride?: MediaPreviewState;
 	encoderSelection?: MediaEncoderSelection;
+	title?: ReactNode;
+	headerAction?: ReactNode;
 }) {
 	const [selectedServerId, setSelectedServerId] = useState(
 		servers[0]?.id ?? "",
@@ -535,6 +539,8 @@ function StatefulMediaStory({
 			<MediaPaneSurface
 				model={model}
 				compact={compact}
+				title={title}
+				headerAction={headerAction}
 				onSelectServer={selectServer}
 				onSelectLayer={selectLayer}
 				onSelectBrowserMode={selectBrowserMode}

@@ -108,6 +108,11 @@ export const api = {
 	outputs: () => request<OutputView[]>("/outputs"),
 	outputState: (output: string) =>
 		request<OutputView>(`/outputs/${output}/state`),
+	setPlaybackTakeover: (output: string, takeOver: boolean) =>
+		request<OutputView>(
+			`/outputs/${output}/playback/${takeOver ? "take-over" : "release"}`,
+			{ method: "POST" },
+		),
 	outputConfiguration: (output: string) =>
 		request<OutputConfigurationView>(`/outputs/${output}/configuration`),
 	updateOutputConfiguration: (

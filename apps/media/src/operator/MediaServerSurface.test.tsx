@@ -48,7 +48,7 @@ describe("the Media Server operator surface", () => {
 		).not.toBeInTheDocument();
 
 		await userEvent.click(
-			within(destinations).getByRole("button", { name: /Media/ }),
+		within(destinations).getByRole("button", { name: /Playback/ }),
 		);
 		expect(navigate).toHaveBeenCalledWith("media");
 	});

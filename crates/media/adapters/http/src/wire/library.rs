@@ -97,7 +97,7 @@ pub struct StartImport {
 }
 
 /// Renaming or moving one stable catalog item.
-#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, Eq, TS)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateLibraryItem {
     pub request_id: String,
@@ -107,6 +107,9 @@ pub struct UpdateLibraryItem {
     pub folder: Option<u8>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub file: Option<u8>,
+    /// Correct or clear the authored tempo. An absent field leaves it unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub intrinsic_bpm: Option<Option<f64>>,
     /// Exchange addresses when the destination is occupied. False refuses the edit.
     #[serde(default)]
     pub swap: bool,

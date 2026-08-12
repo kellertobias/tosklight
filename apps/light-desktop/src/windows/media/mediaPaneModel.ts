@@ -161,4 +161,6 @@ export interface MediaPaneUiCallbacks {
 export interface MediaPaneSurfaceProps extends MediaPaneUiCallbacks {
 	model: MediaPaneModel;
 	compact?: boolean;
+	title?: ReactNode;
+	headerAction?: ReactNode;
 }

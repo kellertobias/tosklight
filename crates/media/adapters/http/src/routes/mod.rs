@@ -148,6 +148,10 @@ pub fn router(state: ApiState) -> Router {
             post(outputs::update_output_configuration),
         )
         .route("/api/v2/outputs/{output}/state", get(outputs::output_state))
+        .route(
+            "/api/v2/outputs/{output}/playback/{mode}",
+            post(outputs::set_playback_takeover),
+        )
         .route("/api/v2/outputs/{output}/dmx-map", get(outputs::dmx_map))
         .route(
             "/api/v2/outputs/{output}/layers/{layer}/update",

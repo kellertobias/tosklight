@@ -107,8 +107,8 @@ pub(super) async fn update_item(
     let id = Uuid::parse_str(&id)
         .map(AssetId::from_uuid)
         .map_err(|_| ApiError::bad_request("invalid-asset-id", "the catalog item id is invalid"))?;
-    let operation = match (body.name, body.folder, body.file) {
-        (Some(name), None, None) => {
+    let operation = match (body.name, body.folder, body.file, body.intrinsic_bpm) {
+        (Some(name), None, None, None) => {
             let name = name.trim().to_owned();
             if name.is_empty() {
                 return Err(ApiError::bad_request(
@@ -118,15 +118,16 @@ pub(super) async fn update_item(
             }
             LibraryEdit::RenameItem { id, name }
         }
-        (None, Some(folder), Some(file)) => LibraryEdit::MoveItem {
+        (None, Some(folder), Some(file), None) => LibraryEdit::MoveItem {
             id,
             destination: MediaAddress::new(folder, file),
             swap: body.swap,
         },
+        (None, None, None, Some(bpm)) => LibraryEdit::SetItemBpm { id, bpm },
         _ => {
             return Err(ApiError::bad_request(
                 "ambiguous-library-edit",
-                "rename with a name, or move with both folder and file",
+                "rename with a name, move with both folder and file, or set intrinsic BPM",
             ));
         }
     };
@@ -509,6 +510,15 @@ mod tests {
         let (status, _) = send(
             &bench.router,
             post(
+                format!("/api/v2/library/items/{id}/update"),
+                r#"{"requestId":"bpm","intrinsicBpm":128.5}"#,
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let (status, _) = send(
+            &bench.router,
+            post(
                 "/api/v2/library/folders/7/update".into(),
                 r#"{"requestId":"folder","name":"Looks"}"#,
             ),
@@ -531,6 +541,10 @@ mod tests {
                 LibraryEdit::RenameItem {
                     id: media_domain::AssetId::from_uuid(id),
                     name: "Opening".to_owned(),
+                },
+                LibraryEdit::SetItemBpm {
+                    id: media_domain::AssetId::from_uuid(id),
+                    bpm: Some(128.5),
                 },
                 LibraryEdit::RenameFolder {
                     folder: 7,

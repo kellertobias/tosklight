@@ -1,19 +1,19 @@
-// The library, as the desk addresses it.
-//
-// The address is the point of this page: an operator reading a cue sheet needs to see which
-// folder and file number reaches which clip, so the DMX address is the first column and the file
-// name is a detail beside it.
-
+import { FileDropField, NumberField, TextField } from "@tosklight/ui/controls";
 import {
-	Button,
-	CheckboxField,
-	NumberField,
-	SearchBar,
-	TextField,
-} from "@tosklight/ui/controls";
-import { Fragment, useMemo, useState } from "react";
-import { ResourceState } from "../../app/ResourceState";
-import { addressLabel, folderLabel, itemDetail } from "../../entities/catalog";
+	PoolCard,
+	PoolGrid,
+	type PoolSlotViewModel,
+} from "@tosklight/ui/pools";
+import { WindowFrame, WindowScrollArea } from "@tosklight/ui/window-kit";
+import {
+	type DragEvent,
+	type MouseEvent,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+	type ReactNode,
+} from "react";
 import { api } from "../../shared/api/client";
 import { requestId, useEditing } from "../../shared/api/editing";
 import type { CatalogView } from "../../shared/api/generated/media-wire";
@@ -21,507 +21,510 @@ import { useCatalog } from "../../shared/api/queries";
 import { ImportPanel } from "./ImportPanel";
 
 const CATALOG_POLL_MS = 15_000;
+const MEDIA_FOLDER_COUNT = 199;
+const CITP_FOLDER_COUNT = 255;
+const FILES_PER_FOLDER = 254;
+const DRAG_MEDIA_TYPE = "application/x-tosklight-media-items";
+
+type CatalogItem = CatalogView["folders"][number]["items"][number];
 
 export function LibraryPage() {
 	const catalog = useCatalog(CATALOG_POLL_MS);
-	const [search, setSearch] = useState("");
 	const editing = useEditing(catalog.reload);
 
-	return (
-		<section className="media-page">
-			<ImportPanel onImported={catalog.reload} />
-			<UploadForm
-				busy={editing.busy}
-				onUpload={(folder, file, name, media) =>
-					void editing.save(() =>
-						api.uploadLibraryItem(folder, file, requestId(), name, media),
-					)
-				}
-			/>
-			{editing.failure && (
-				<p className="media-state is-error" role="alert">
-					{editing.failure.message}{" "}
-					<Button size="compact" onClick={editing.dismiss}>
-						Dismiss
-					</Button>
-				</p>
-			)}
-
-			<SearchBar
-				value={search}
-				onChange={setSearch}
-				ariaLabel="Search the library"
-				placeholder="Search the library"
-			/>
-			<ResourceState
-				resource={catalog}
-				subject="the library"
-				isEmpty={(data) => data.itemCount === 0}
-				empty="Nothing in the library can be played yet."
-			>
-				{(data) => (
-					<Folders
-						catalog={data}
-						search={search}
-						editing={editing.editing}
-						busy={editing.busy}
-						onBegin={editing.begin}
-						onCancel={editing.cancel}
-						onSave={editing.save}
-					/>
-				)}
-			</ResourceState>
-		</section>
-	);
-}
-
-function Folders({
-	catalog,
-	search,
-	editing,
-	busy,
-	onBegin,
-	onCancel,
-	onSave,
-}: {
-	catalog: CatalogView;
-	search: string;
-	editing: string | undefined;
-	busy: boolean;
-	onBegin: (key: string) => void;
-	onCancel: () => void;
-	onSave: (save: () => Promise<unknown>) => Promise<void>;
-}) {
-	const folders = useMemo(() => matching(catalog, search), [catalog, search]);
-
-	if (folders.length === 0) {
+	if (!catalog.data) {
 		return (
-			<p className="media-state is-empty">
-				Nothing in the library matches “{search}”.
-			</p>
+			<WindowFrame title="Library" className="media-library-window">
+				<p className={`media-state ${catalog.failure ? "is-error" : ""}`}>
+					{catalog.failure?.message ?? "Loading the CITP media library…"}
+				</p>
+			</WindowFrame>
 		);
 	}
 
 	return (
-		<>
-			{folders.map((folder) => (
-				<FolderSection
-					key={folder.folder}
-					folder={folder}
-					editing={editing}
-					busy={busy}
-					onBegin={onBegin}
-					onCancel={onCancel}
-					onSave={onSave}
-				/>
-			))}
-		</>
-	);
-}
-
-function FolderSection({
-	folder,
-	editing,
-	busy,
-	onBegin,
-	onCancel,
-	onSave,
-}: {
-	folder: CatalogView["folders"][number];
-	editing: string | undefined;
-	busy: boolean;
-	onBegin: (key: string) => void;
-	onCancel: () => void;
-	onSave: (save: () => Promise<unknown>) => Promise<void>;
-}) {
-	return (
-		<section className="media-folder" aria-label={folderLabel(folder)}>
-			<div className="media-folder-heading">
-				<h2>{folderLabel(folder)}</h2>
-				<Button
-					size="compact"
-					onClick={() => onBegin(`folder-${folder.folder}`)}
-				>
-					Change folder name
-				</Button>
-			</div>
-			{editing === `folder-${folder.folder}` && (
-				<FolderNameForm
-					folder={folder.folder}
-					name={folder.name ?? ""}
-					busy={busy}
-					onCancel={onCancel}
-					onSave={(name) =>
-						void onSave(() =>
-							api.updateLibraryFolder(folder.folder, {
-								requestId: requestId(),
-								name,
-							}),
-						)
+		<LibraryBrowserView
+			catalog={catalog.data}
+			busy={editing.busy}
+			failure={editing.failure?.message}
+			importPanel={<ImportPanel onImported={catalog.reload} />}
+			onDismissFailure={editing.dismiss}
+			onRenameFolder={(folder, name) =>
+				editing.save(() =>
+					api.updateLibraryFolder(folder, { requestId: requestId(), name }),
+				)
+			}
+			onRenameItem={(item, name) =>
+				editing.save(() =>
+					api.updateLibraryItem(item.id, {
+						requestId: requestId(),
+						name,
+						swap: false,
+					}),
+				)
+			}
+			onSetBpm={(item, intrinsicBpm) =>
+				editing.save(() =>
+					api.updateLibraryItem(item.id, {
+						requestId: requestId(),
+						intrinsicBpm,
+						swap: false,
+					}),
+				)
+			}
+			onMoveItems={async (items, folder) => {
+				await editing.save(async () => {
+					const addresses = allocateFreeAddresses(catalog.data!, folder, items);
+					for (const [index, item] of items.entries()) {
+						const destination = addresses[index];
+						if (!destination) throw new Error("No free media address remains.");
+						await api.updateLibraryItem(item.id, {
+							requestId: requestId(),
+							...destination,
+							swap: false,
+						});
 					}
-				/>
-			)}
-			<FolderItemsTable
-				{...{ folder, editing, busy, onBegin, onCancel, onSave }}
-			/>
-		</section>
-	);
-}
-
-interface FolderEditingProps {
-	editing: string | undefined;
-	busy: boolean;
-	onBegin: (key: string) => void;
-	onCancel: () => void;
-	onSave: (save: () => Promise<unknown>) => Promise<void>;
-}
-
-function FolderItemsTable({
-	folder,
-	...editingProps
-}: { folder: CatalogView["folders"][number] } & FolderEditingProps) {
-	return (
-		<table className="media-table">
-			<caption className="media-visually-hidden">
-				Items in {folderLabel(folder)}
-			</caption>
-			<thead>
-				<tr>
-					<th scope="col">Thumbnail</th>
-					<th scope="col">Address</th>
-					<th scope="col">Name</th>
-					<th scope="col">Detail</th>
-					<th scope="col">Tempo</th>
-					<th scope="col">Actions</th>
-				</tr>
-			</thead>
-			<tbody>
-				{folder.items.map((item) => (
-					<LibraryItemRows
-						key={item.id}
-						folder={folder.folder}
-						item={item}
-						{...editingProps}
-					/>
-				))}
-			</tbody>
-		</table>
-	);
-}
-
-function LibraryItemRows({
-	folder,
-	item,
-	editing,
-	busy,
-	onBegin,
-	onCancel,
-	onSave,
-}: {
-	folder: number;
-	item: CatalogView["folders"][number]["items"][number];
-} & FolderEditingProps) {
-	return (
-		<Fragment>
-			<tr>
-				<td>
-					<Thumbnail folder={folder} file={item.file} name={item.name} />
-				</td>
-				<td>{addressLabel(folder, item.file)}</td>
-				<td>{item.name}</td>
-				<td>{itemDetail(item)}</td>
-				<td>{item.intrinsicBpm === null ? "—" : `${item.intrinsicBpm} BPM`}</td>
-				<td className="media-library-actions">
-					<Button size="compact" onClick={() => onBegin(`rename-${item.id}`)}>
-						Rename
-					</Button>
-					<Button size="compact" onClick={() => onBegin(`move-${item.id}`)}>
-						Move
-					</Button>
-				</td>
-			</tr>
-			{editing === `rename-${item.id}` && (
-				<tr>
-					<td colSpan={6}>
-						<RenameItemForm
-							name={item.name}
-							busy={busy}
-							onCancel={onCancel}
-							onSave={(name) =>
-								void onSave(() =>
-									api.updateLibraryItem(item.id, {
-										requestId: requestId(),
-										name,
-										swap: false,
-									}),
-								)
-							}
-						/>
-					</td>
-				</tr>
-			)}
-			{editing === `move-${item.id}` && (
-				<tr>
-					<td colSpan={6}>
-						<MoveItemForm
-							folder={folder}
-							file={item.file}
-							busy={busy}
-							onCancel={onCancel}
-							onSave={(destinationFolder, destinationFile, swap) =>
-								void onSave(() =>
-									api.updateLibraryItem(item.id, {
-										requestId: requestId(),
-										folder: destinationFolder,
-										file: destinationFile,
-										swap,
-									}),
-								)
-							}
-						/>
-					</td>
-				</tr>
-			)}
-		</Fragment>
-	);
-}
-
-function Thumbnail({
-	folder,
-	file,
-	name,
-}: {
-	folder: number;
-	file: number;
-	name: string;
-}) {
-	const [missing, setMissing] = useState(false);
-	if (missing)
-		return <span className="media-thumbnail-missing">No thumbnail</span>;
-	return (
-		<img
-			className="media-thumbnail"
-			src={api.thumbnailUrl(folder, file)}
-			alt={`${name} thumbnail`}
-			onError={() => setMissing(true)}
+				});
+			}}
+			onUpload={async (files, folder) => {
+				await editing.save(async () => {
+					const addresses = allocateFreeAddresses(
+						catalog.data!,
+						folder,
+						[],
+						files.length,
+					);
+					for (const [index, media] of files.entries()) {
+						const destination = addresses[index];
+						if (!destination) throw new Error("No free media address remains.");
+						await api.uploadLibraryItem(
+							destination.folder,
+							destination.file,
+							requestId(),
+							media.name.replace(/\.[^.]+$/u, ""),
+							media,
+						);
+					}
+				});
+			}}
 		/>
 	);
 }
 
-function FolderNameForm({
-	folder,
-	name,
-	busy,
-	onSave,
-	onCancel,
-}: {
-	folder: number;
-	name: string;
-	busy: boolean;
-	onSave: (name: string) => void;
-	onCancel: () => void;
-}) {
-	const [next, setNext] = useState(name);
+export interface LibraryBrowserViewProps {
+	catalog: CatalogView;
+	busy?: boolean;
+	failure?: string;
+	onDismissFailure?: () => void;
+	onRenameFolder?: (folder: number, name: string) => Promise<unknown> | void;
+	onRenameItem?: (item: CatalogItem, name: string) => Promise<unknown> | void;
+	onSetBpm?: (item: CatalogItem, bpm: number | null) => Promise<unknown> | void;
+	onMoveItems?: (
+		items: CatalogItem[],
+		folder: number,
+	) => Promise<unknown> | void;
+	onUpload?: (
+		files: readonly File[],
+		folder: number,
+	) => Promise<unknown> | void;
+	thumbnailUrl?: (folder: number, file: number) => string;
+	importPanel?: ReactNode;
+}
+
+/** The Media Server's address-first, three-pane CITP library editor. */
+export function LibraryBrowserView({
+	catalog,
+	busy = false,
+	failure,
+	onDismissFailure,
+	onRenameFolder,
+	onRenameItem,
+	onSetBpm,
+	onMoveItems,
+	onUpload,
+	thumbnailUrl = api.thumbnailUrl,
+	importPanel,
+}: LibraryBrowserViewProps) {
+	const [folder, setFolder] = useState(1);
+	const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+	const [focusedId, setFocusedId] = useState<string | null>(null);
+	const [folderEditor, setFolderEditor] = useState<number | null>(null);
+	const [search, setSearch] = useState("");
+	const picker = useRef<HTMLInputElement>(null);
+	const selectedFolder = catalog.folders.find(
+		(entry) => entry.folder === folder,
+	);
+	const visibleItems = useMemo(() => {
+		const needle = search.trim().toLowerCase();
+		return (selectedFolder?.items ?? []).filter(
+			(item) => !needle || item.name.toLowerCase().includes(needle),
+		);
+	}, [search, selectedFolder]);
+	const focused = selectedFolder?.items.find((item) => item.id === focusedId);
+
+	useEffect(() => {
+		setSelectedIds(new Set());
+		setFocusedId(null);
+		setFolderEditor(null);
+	}, [folder]);
+
+	const choose = (item: CatalogItem, event: MouseEvent<HTMLButtonElement>) => {
+		setFocusedId(item.id);
+		setFolderEditor(null);
+		setSelectedIds((current) => {
+			if (event.metaKey || event.ctrlKey) {
+				const next = new Set(current);
+				if (next.has(item.id)) next.delete(item.id);
+				else next.add(item.id);
+				return next;
+			}
+			return new Set([item.id]);
+		});
+	};
+
+	const selectedItems = (selectedFolder?.items ?? []).filter((item) =>
+		selectedIds.has(item.id),
+	);
+
 	return (
-		<form
-			className="media-inline-editor"
-			onSubmit={(event) => {
-				event.preventDefault();
-				onSave(next);
+		<WindowFrame
+			title="Library"
+			info={{
+				primary: "CITP media library",
+				secondary:
+					"Folders and files keep their desk addresses while you prepare media.",
 			}}
+			className="media-library-window"
+			onSearch={setSearch}
+			search={{ value: search, placeholder: "Find media in this folder" }}
 		>
-			<TextField
-				label={`Folder ${folder} name`}
-				value={next}
-				onChange={(event) => setNext(event.target.value)}
-			/>
-			<span className="media-inline-note">
-				Leave empty to remove the folder name.
-			</span>
-			<Button type="submit" disabled={busy}>
-				Save
-			</Button>
-			<Button type="button" onClick={onCancel}>
-				Cancel
-			</Button>
-		</form>
+			{failure && (
+				<button
+					type="button"
+					className="media-library-error"
+					onClick={onDismissFailure}
+				>
+					{failure} · Dismiss
+				</button>
+			)}
+			<div className="media-library-browser">
+				<WindowScrollArea className="media-library-folders">
+					{Array.from(
+						{ length: CITP_FOLDER_COUNT },
+						(_, index) => index + 1,
+					).map((number) => {
+						const entry = catalog.folders.find(
+							(candidate) => candidate.folder === number,
+						);
+						const writable = number <= MEDIA_FOLDER_COUNT;
+						return (
+							<button
+								type="button"
+								key={number}
+								className={`media-library-folder ${folder === number ? "is-selected" : ""} ${writable ? "" : "is-reserved"}`}
+								onClick={() => setFolder(number)}
+								onContextMenu={(event) => {
+									event.preventDefault();
+									if (writable) {
+										setFolder(number);
+										setFolderEditor(number);
+									}
+								}}
+								onDragOver={(event) => {
+									if (writable) event.preventDefault();
+								}}
+								onDrop={(event) => {
+									if (!writable) return;
+									event.preventDefault();
+									const files = [...event.dataTransfer.files];
+									if (files.length) void onUpload?.(files, number);
+									else if (event.dataTransfer.types.includes(DRAG_MEDIA_TYPE))
+										void onMoveItems?.(selectedItems, number);
+								}}
+							>
+								<b>{String(number).padStart(3, "0")}</b>
+								<span>
+									{entry?.name || reservedFolderName(number) || "Empty folder"}
+								</span>
+								<small>
+									{writable ? `${entry?.items.length ?? 0}/254` : "Reserved"}
+								</small>
+							</button>
+						);
+					})}
+				</WindowScrollArea>
+
+				<WindowScrollArea className="media-library-pool">
+					<div className="media-library-pool-heading">
+						<span>Folder {String(folder).padStart(3, "0")}</span>
+						<small>
+							{selectedIds.size
+								? `${selectedIds.size} selected`
+								: `${visibleItems.length} media`}
+						</small>
+					</div>
+					<PoolGrid
+						slots={visibleItems.map((item) =>
+							itemSlot(item, folder, thumbnailUrl),
+						)}
+						slotCount={FILES_PER_FOLDER}
+						columns={5}
+						minimumCardWidth={92}
+						emptySlot={(index) => ({
+							id: `empty-${index + 1}`,
+							position: index,
+							card: { number: index + 1, primary: "", states: ["empty"] },
+						})}
+						renderSlot={(slot) => {
+							const item = visibleItems.find(
+								(candidate) => candidate.file - 1 === slot.position,
+							);
+							if (!item) return <PoolCard model={slot.card} disabled />;
+							return (
+								<PoolCard
+									model={{
+										...slot.card,
+										states: selectedIds.has(item.id) ? ["selected"] : [],
+									}}
+									draggable
+									onDragStart={(event) => {
+										if (!selectedIds.has(item.id))
+											setSelectedIds(new Set([item.id]));
+										event.dataTransfer.setData(DRAG_MEDIA_TYPE, item.id);
+										event.dataTransfer.effectAllowed = "move";
+									}}
+									onClick={(event) => choose(item, event)}
+								/>
+							);
+						}}
+					/>
+				</WindowScrollArea>
+
+				<aside className="media-library-inspector">
+					{folderEditor !== null ? (
+						<FolderEditor
+							folder={folderEditor}
+							name={
+								catalog.folders.find((entry) => entry.folder === folderEditor)
+									?.name ?? ""
+							}
+							busy={busy}
+							onSave={onRenameFolder}
+						/>
+					) : focused ? (
+						<ItemEditor
+							folder={folder}
+							item={focused}
+							busy={busy}
+							onRename={onRenameItem}
+							onSetBpm={onSetBpm}
+							thumbnailUrl={thumbnailUrl}
+						/>
+					) : folder <= MEDIA_FOLDER_COUNT ? (
+						<UploadEditor
+							folder={folder}
+							busy={busy}
+							picker={picker}
+							onUpload={onUpload}
+							importPanel={importPanel}
+						/>
+					) : (
+						<div className="media-library-reserved-copy">
+							<h2>{reservedFolderName(folder)}</h2>
+							<p>
+								This address range is generated by the Text or Visualizer
+								screen.
+							</p>
+						</div>
+					)}
+				</aside>
+			</div>
+		</WindowFrame>
 	);
 }
 
-function RenameItemForm({
-	name,
+function itemSlot(
+	item: CatalogItem,
+	folder: number,
+	thumbnailUrl: (folder: number, file: number) => string,
+): PoolSlotViewModel<string> {
+	return {
+		id: item.id,
+		position: item.file - 1,
+		card: {
+			number: item.file,
+			primary: item.name,
+			secondary: item.intrinsicBpm ? `${item.intrinsicBpm} BPM` : undefined,
+			image: { src: thumbnailUrl(folder, item.file), alt: "" },
+		},
+	};
+}
+
+function ItemEditor({
+	folder,
+	item,
 	busy,
-	onSave,
-	onCancel,
+	onRename,
+	onSetBpm,
+	thumbnailUrl,
 }: {
-	name: string;
+	folder: number;
+	item: CatalogItem;
 	busy: boolean;
-	onSave: (name: string) => void;
-	onCancel: () => void;
+	onRename?: LibraryBrowserViewProps["onRenameItem"];
+	onSetBpm?: LibraryBrowserViewProps["onSetBpm"];
+	thumbnailUrl: (folder: number, file: number) => string;
 }) {
-	const [next, setNext] = useState(name);
+	const [name, setName] = useState(item.name);
+	const [bpm, setBpm] = useState(item.intrinsicBpm?.toString() ?? "");
+	useEffect(() => {
+		setName(item.name);
+		setBpm(item.intrinsicBpm?.toString() ?? "");
+	}, [item]);
 	return (
 		<form
-			className="media-inline-editor"
+			className="media-library-editor"
 			onSubmit={(event) => {
 				event.preventDefault();
-				onSave(next);
+				if (name !== item.name) void onRename?.(item, name);
+				const value = bpm.trim() ? Number(bpm) : null;
+				if (value !== item.intrinsicBpm) void onSetBpm?.(item, value);
 			}}
 		>
+			<img src={thumbnailUrl(folder, item.file)} alt={`${item.name} preview`} />
+			<p className="media-library-address">
+				{String(folder).padStart(3, "0")} / {String(item.file).padStart(3, "0")}
+			</p>
 			<TextField
 				label="Media name"
-				value={next}
-				onChange={(event) => setNext(event.target.value)}
+				value={name}
+				onChange={(event) => setName(event.target.value)}
 				required
 			/>
-			<Button type="submit" disabled={busy}>
-				Save name
-			</Button>
-			<Button type="button" onClick={onCancel}>
-				Cancel
-			</Button>
+			<NumberField
+				label="BPM"
+				value={bpm}
+				min={1}
+				step={0.01}
+				placeholder="Not set"
+				onChange={(event) => setBpm(event.target.value)}
+			/>
+			<button type="submit" className="ui-button primary" disabled={busy}>
+				Save media
+			</button>
 		</form>
 	);
 }
 
-function MoveItemForm({
+function FolderEditor({
 	folder,
-	file,
+	name,
 	busy,
 	onSave,
-	onCancel,
 }: {
 	folder: number;
-	file: number;
+	name: string;
 	busy: boolean;
-	onSave: (folder: number, file: number, swap: boolean) => void;
-	onCancel: () => void;
+	onSave?: LibraryBrowserViewProps["onRenameFolder"];
 }) {
-	const [nextFolder, setNextFolder] = useState(folder);
-	const [nextFile, setNextFile] = useState(file);
-	const [swap, setSwap] = useState(false);
+	const [next, setNext] = useState(name);
 	return (
 		<form
-			className="media-inline-editor"
+			className="media-library-editor"
 			onSubmit={(event) => {
 				event.preventDefault();
-				onSave(nextFolder, nextFile, swap);
+				void onSave?.(folder, next);
 			}}
 		>
-			<NumberField
-				label="Folder"
-				value={nextFolder}
-				min={1}
-				max={199}
-				onChange={(event) => setNextFolder(Number(event.target.value))}
+			<p className="media-library-eyebrow">
+				Folder {String(folder).padStart(3, "0")}
+			</p>
+			<h2>Configure folder</h2>
+			<TextField
+				label="Folder name"
+				value={next}
+				onChange={(event) => setNext(event.target.value)}
+				placeholder="Empty folder"
 			/>
-			<NumberField
-				label="File"
-				value={nextFile}
-				min={1}
-				max={254}
-				onChange={(event) => setNextFile(Number(event.target.value))}
-			/>
-			<CheckboxField
-				label="Exchange with the item already there"
-				stateLabel="Move by safely swapping the two media items"
-				checked={swap}
-				onChange={(event) => setSwap(event.target.checked)}
-			/>
-			<Button type="submit" disabled={busy}>
-				Move media
-			</Button>
-			<Button type="button" onClick={onCancel}>
-				Cancel
-			</Button>
+			<button type="submit" className="ui-button primary" disabled={busy}>
+				Save folder
+			</button>
 		</form>
 	);
 }
 
-function UploadForm({
+function UploadEditor({
+	folder,
 	busy,
+	picker,
 	onUpload,
+	importPanel,
 }: {
+	folder: number;
 	busy: boolean;
-	onUpload: (folder: number, file: number, name: string, media: File) => void;
+	picker: React.RefObject<HTMLInputElement | null>;
+	onUpload?: LibraryBrowserViewProps["onUpload"];
+	importPanel?: ReactNode;
 }) {
-	const [folder, setFolder] = useState(1);
-	const [file, setFile] = useState(1);
-	const [name, setName] = useState("");
-	const [media, setMedia] = useState<File>();
 	return (
-		<section className="media-import-panel" aria-label="Upload media">
-			<h2>Upload media</h2>
-			<p>
-				Choose an unused desk address. The original is kept and converted to HAP
-				Alpha as a visible import job.
+		<div className="media-library-editor">
+			<p className="media-library-eyebrow">
+				Folder {String(folder).padStart(3, "0")}
 			</p>
-			<form
-				className="media-inline-editor"
-				onSubmit={(event) => {
-					event.preventDefault();
-					if (media)
-						onUpload(
-							folder,
-							file,
-							name || media.name.replace(/\.[^.]+$/u, ""),
-							media,
-						);
+			<h2>Add media</h2>
+			<p>
+				Files take the first free slots. If this folder fills up, allocation
+				continues in the next media folder.
+			</p>
+			<input
+				ref={picker}
+				hidden
+				type="file"
+				multiple
+				accept="video/*,image/*"
+				onChange={(event) => {
+					const files = [...(event.target.files ?? [])];
+					if (files.length) void onUpload?.(files, folder);
 				}}
-			>
-				<NumberField
-					label="Folder"
-					value={folder}
-					min={1}
-					max={199}
-					onChange={(event) => setFolder(Number(event.target.value))}
-				/>
-				<NumberField
-					label="File"
-					value={file}
-					min={1}
-					max={254}
-					onChange={(event) => setFile(Number(event.target.value))}
-				/>
-				<TextField
-					label="Media name"
-					value={name}
-					onChange={(event) => setName(event.target.value)}
-				/>
-				<label>
-					Source file
-					<input
-						type="file"
-						accept="video/*,image/*"
-						required
-						onChange={(event) => setMedia(event.target.files?.[0])}
-					/>
-				</label>
-				<Button type="submit" disabled={busy || !media}>
-					Upload and import
-				</Button>
-			</form>
-		</section>
+			/>
+			<FileDropField
+				label="Media files"
+				constraints={{ mimeTypes: ["video/*", "image/*"], multiple: true }}
+				disabled={busy}
+				onFiles={(files) => void onUpload?.(files, folder)}
+				onOpenPicker={() => picker.current?.click()}
+			/>
+			{importPanel}
+		</div>
 	);
 }
 
-/** Folders whose name, or one of whose items, matches. An empty search matches everything. */
-function matching(
+function reservedFolderName(folder: number) {
+	if (folder >= 200 && folder <= 219) return "Text sources";
+	if (folder >= 220) return "Visualizers";
+	return "";
+}
+
+export function allocateFreeAddresses(
 	catalog: CatalogView,
-	search: string,
-): CatalogView["folders"] {
-	const needle = search.trim().toLowerCase();
-	if (!needle) return catalog.folders;
-	return catalog.folders
-		.map((folder) => ({
-			...folder,
-			items: folder.items.filter((item) =>
-				item.name.toLowerCase().includes(needle),
-			),
-		}))
-		.filter(
-			(folder) =>
-				folder.items.length > 0 ||
-				(folder.name ?? "").toLowerCase().includes(needle),
-		);
+	startFolder: number,
+	moving: readonly CatalogItem[] = [],
+	count = moving.length,
+) {
+	const movingIds = new Set(moving.map((item) => item.id));
+	const occupied = new Set(
+		catalog.folders.flatMap((folder) =>
+			folder.items
+				.filter((item) => !movingIds.has(item.id))
+				.map((item) => `${folder.folder}/${item.file}`),
+		),
+	);
+	const addresses: Array<{ folder: number; file: number }> = [];
+	for (let folder = startFolder; folder <= MEDIA_FOLDER_COUNT; folder += 1) {
+		for (let file = 1; file <= FILES_PER_FOLDER; file += 1) {
+			if (!occupied.has(`${folder}/${file}`)) addresses.push({ folder, file });
+			if (addresses.length === count) return addresses;
+		}
+	}
+	return addresses;
 }

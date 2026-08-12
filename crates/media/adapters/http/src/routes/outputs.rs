@@ -175,6 +175,37 @@ pub(super) async fn reset_layer(
         .into_response())
 }
 
+/// Explicitly changes playback ownership. Taking over makes subsequent network DMX read-only;
+/// releasing immediately lets the next Art-Net or sACN frame drive the output again.
+pub(super) async fn set_playback_takeover(
+    State(state): State<ApiState>,
+    Path((output, mode)): Path<(String, String)>,
+) -> Result<Response, ApiError> {
+    let id = parse_output(&output)?;
+    let take_over = match mode.as_str() {
+        "take-over" => true,
+        "release" => false,
+        _ => {
+            return Err(ApiError::not_found(
+                "unknown-playback-control",
+                "use take-over or release",
+            ));
+        }
+    };
+    let now = (state.now)();
+    submit(
+        &state,
+        vec![CommandKind::TakeOverPlayback {
+            output: id,
+            take_over,
+        }],
+        now,
+    )?;
+    let media = state.state.load();
+    let found = media.output(id).ok_or_else(|| unknown_output(id))?;
+    Ok(axum::Json(view_of(&state, found, now)).into_response())
+}
+
 /// Applies commands through the reducer and publishes one new snapshot.
 fn submit(state: &ApiState, commands: Vec<CommandKind>, now: Timestamp) -> Result<(), ApiError> {
     if commands.is_empty() {

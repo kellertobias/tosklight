@@ -126,10 +126,25 @@ fn read_item(path: &Path, file: u8, name: &str) -> Option<CatalogItem> {
         frames: (header.frame_count > 1).then_some(header.frame_count),
         // The clip carries the tempo import parsed. The filename is consulted only as a fallback
         // for a clip written before the field existed; runtime never re-infers it.
-        intrinsic_bpm: header
-            .intrinsic_bpm
-            .or_else(|| authored_tempo::from_filename(name)),
+        intrinsic_bpm: corrected_bpm(path, file).unwrap_or_else(|| {
+            header
+                .intrinsic_bpm
+                .or_else(|| authored_tempo::from_filename(name))
+        }),
     })
+}
+
+fn corrected_bpm(item_path: &Path, file: u8) -> Option<Option<f64>> {
+    let path = item_path
+        .parent()?
+        .join(naming::METADATA_DIRECTORY)
+        .join(naming::metadata_filename(file));
+    let value: serde_json::Value = serde_json::from_slice(&std::fs::read(path).ok()?).ok()?;
+    match value.get("intrinsicBpm") {
+        Some(serde_json::Value::Null) => Some(None),
+        Some(value) => value.as_f64().map(Some),
+        None => None,
+    }
 }
 
 /// A file sitting in the library that could be played once it is imported.

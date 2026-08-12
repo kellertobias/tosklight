@@ -1,152 +1,81 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { aCatalog, stubServer } from "../../testing/server";
-import { LibraryPage } from "./LibraryPage";
+import { allocateFreeAddresses, LibraryPage } from "./LibraryPage";
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe("the media library page", () => {
-	it("lists every item under the address a desk would send", async () => {
+describe("the CITP media library", () => {
+	it("shows the whole 255-folder address space and the selected folder pool", async () => {
 		stubServer();
 		render(<LibraryPage />);
-
 		expect(
-			await screen.findByRole("cell", { name: "001/001" }),
+			(await screen.findByText("Looks")).closest("button"),
 		).toBeInTheDocument();
-		expect(screen.getByRole("cell", { name: "Blue haze" })).toBeInTheDocument();
-		expect(screen.getByRole("cell", { name: "001/002" })).toBeInTheDocument();
+		expect(
+			screen.getByRole("button", { name: /199Empty folder/u }),
+		).toBeInTheDocument();
+		expect(
+			screen.getByRole("button", { name: /200Text sourcesReserved/u }),
+		).toBeInTheDocument();
+		expect(
+			screen.getByRole("button", { name: /255VisualizersReserved/u }),
+		).toBeInTheDocument();
+		expect(screen.getByText("Blue haze").closest("button")).toBeInTheDocument();
 	});
 
-	it("narrows to what a search matches, and says so when nothing does", async () => {
-		stubServer();
-		render(<LibraryPage />);
-		await screen.findByRole("cell", { name: "Blue haze" });
-
-		await userEvent.type(screen.getByLabelText("Search the library"), "grid");
-		expect(
-			screen.queryByRole("cell", { name: "Blue haze" }),
-		).not.toBeInTheDocument();
-		expect(
-			screen.getByRole("cell", { name: "Static grid" }),
-		).toBeInTheDocument();
-
-		await userEvent.clear(screen.getByLabelText("Search the library"));
-		await userEvent.type(
-			screen.getByLabelText("Search the library"),
-			"nothing here",
-		);
-		expect(
-			await screen.findByText(/nothing in the library matches/iu),
-		).toBeInTheDocument();
-	});
-
-	it("says the library is empty rather than showing an empty table", async () => {
-		stubServer({ catalog: { ...aCatalog(), itemCount: 0, folders: [] } });
-		render(<LibraryPage />);
-
-		expect(
-			await screen.findByText(/nothing in the library can be played yet/iu),
-		).toBeInTheDocument();
-	});
-
-	it("renames a clip through its stable catalog identity", async () => {
+	it("opens one media item in the preview editor and persists name and BPM", async () => {
 		const server = stubServer();
 		render(<LibraryPage />);
-		const row = (
-			await screen.findByRole("cell", { name: "Blue haze" })
-		).closest("tr");
-		expect(row).not.toBeNull();
-		await userEvent.click(screen.getAllByRole("button", { name: "Rename" })[0]);
+		const media = (await screen.findByText("Blue haze")).closest("button");
+		if (!media) throw new Error("media card missing");
+		await userEvent.click(media);
+		expect(
+			screen.getByRole("img", { name: "Blue haze preview" }),
+		).toHaveAttribute("src", "/api/v2/library/1/1/thumbnail");
 		const editor = screen
-			.getByRole("button", { name: "Save name" })
+			.getByRole("button", { name: "Save media" })
 			.closest("form");
-		const name = editor?.querySelector("input");
-		expect(name).toBeInstanceOf(HTMLInputElement);
-		if (!name) throw new Error("rename input missing");
-		await userEvent.clear(name);
-		await userEvent.type(name, "Opening haze");
-		await userEvent.click(screen.getByRole("button", { name: "Save name" }));
-
-		expect(server.writes[0]).toBe("/library/items/asset-a/update");
-		expect(
-			await screen.findByRole("cell", { name: "Opening haze" }),
-		).toBeInTheDocument();
-	});
-
-	it("moves a clip to an explicit address through its stable identity", async () => {
-		const server = stubServer();
-		render(<LibraryPage />);
-		await screen.findByRole("cell", { name: "Blue haze" });
-		await userEvent.click(screen.getAllByRole("button", { name: "Move" })[0]);
-		const form = screen
-			.getByRole("button", { name: "Move media" })
-			.closest("form");
-		expect(form).not.toBeNull();
-		if (!form) throw new Error("move form missing");
-		await userEvent.clear(within(form).getByLabelText("Folder"));
-		await userEvent.type(within(form).getByLabelText("Folder"), "2");
-		await userEvent.clear(within(form).getByLabelText("File"));
-		await userEvent.type(within(form).getByLabelText("File"), "8");
-		await userEvent.click(
-			within(form).getByLabelText("Exchange with the item already there"),
-		);
-		await userEvent.click(
-			within(form).getByRole("button", { name: "Move media" }),
-		);
-
-		expect(server.writes[0]).toBe("/library/items/asset-a/update");
-		expect(
-			await screen.findByRole("cell", { name: "002/008" }),
-		).toBeInTheDocument();
-	});
-
-	it("shows address-owned thumbnails and an explicit missing state", async () => {
-		stubServer();
-		render(<LibraryPage />);
-		const thumbnail = await screen.findByRole("img", {
-			name: "Blue haze thumbnail",
+		const inputs = editor?.querySelectorAll("input");
+		if (!inputs || inputs.length < 2)
+			throw new Error("media editor fields missing");
+		await userEvent.clear(inputs[0]);
+		await userEvent.type(inputs[0], "Opening haze");
+		await userEvent.clear(inputs[1]);
+		await userEvent.type(inputs[1], "128");
+		await userEvent.click(screen.getByRole("button", { name: "Save media" }));
+		await vi.waitFor(() => expect(server.writes).toHaveLength(2));
+		expect(server.catalog.folders[0].items[0]).toMatchObject({
+			name: "Opening haze",
+			intrinsicBpm: 128,
 		});
-		expect(thumbnail).toHaveAttribute("src", "/api/v2/library/1/1/thumbnail");
-		fireEvent.error(thumbnail);
-		expect(screen.getByText("No thumbnail")).toBeInTheDocument();
 	});
 
-	it("changes and clears the visible folder name", async () => {
+	it("right-clicking a media folder opens its configuration", async () => {
 		const server = stubServer();
 		render(<LibraryPage />);
-		await screen.findByRole("heading", { name: "001 · Looks" });
-		await userEvent.click(
-			screen.getByRole("button", { name: "Change folder name" }),
-		);
-		await userEvent.clear(screen.getByLabelText("Folder 1 name"));
-		await userEvent.click(screen.getByRole("button", { name: "Save" }));
-
-		expect(server.catalog.folders[0].name).toBeNull();
-		expect(
-			await screen.findByRole("heading", { name: "001" }),
-		).toBeInTheDocument();
-	});
-
-	it("uploads one chosen source to an explicit unused address", async () => {
-		const server = stubServer();
-		render(<LibraryPage />);
-		await screen.findByRole("heading", { name: "Upload media" });
-		await userEvent.clear(screen.getByLabelText("File"));
-		await userEvent.type(screen.getByLabelText("File"), "7");
-		await userEvent.type(screen.getByLabelText("Media name"), "Opening");
-		await userEvent.upload(
-			screen.getByLabelText("Source file"),
-			new File(["pixels"], "opening.png", { type: "image/png" }),
-		);
-		const upload = screen.getByRole("button", { name: "Upload and import" });
-		expect(upload).toBeEnabled();
-		const form = upload.closest("form");
-		expect(form).not.toBeNull();
-		if (form) fireEvent.submit(form);
-
+		const folder = (await screen.findByText("Looks")).closest("button");
+		if (!folder) throw new Error("folder button missing");
+		fireEvent.contextMenu(folder);
+		await userEvent.clear(screen.getByLabelText("Folder name"));
+		await userEvent.type(screen.getByLabelText("Folder name"), "Act one");
+		await userEvent.click(screen.getByRole("button", { name: "Save folder" }));
 		await vi.waitFor(() =>
-			expect(server.writes[0]).toMatch(/^\/library\/1\/7\/upload\?/u),
+			expect(server.catalog.folders[0].name).toBe("Act one"),
 		);
+	});
+
+	it("allocates at the first free slot and rolls into the next folder", () => {
+		const catalog = aCatalog();
+		catalog.folders[0].items = Array.from({ length: 254 }, (_, index) => ({
+			...catalog.folders[0].items[0],
+			id: `item-${index + 1}`,
+			file: index + 1,
+		}));
+		expect(allocateFreeAddresses(catalog, 1, [], 2)).toEqual([
+			{ folder: 2, file: 1 },
+			{ folder: 2, file: 2 },
+		]);
 	});
 });

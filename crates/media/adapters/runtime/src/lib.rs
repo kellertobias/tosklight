@@ -457,6 +457,9 @@ fn library_access(
                         _ => editing.move_item(&mut next, id, destination),
                     }
                 }
+                media_http::LibraryEdit::SetItemBpm { id, bpm } => {
+                    editing.set_intrinsic_bpm(&mut next, id, bpm)
+                }
                 media_http::LibraryEdit::RenameFolder { folder, name } => {
                     editing.rename_folder(&mut next, folder, name.as_deref())
                 }

@@ -9,7 +9,7 @@ import type { ReactNode } from "react";
 
 export const MEDIA_SERVER_SECTIONS = [
 	{ id: "dashboard", label: "Dashboard", icon: "⌂" },
-	{ id: "media", label: "Media", icon: "▣" },
+	{ id: "media", label: "Playback", icon: "▣" },
 	{ id: "library", label: "Library", icon: "▦" },
 	{ id: "visualizers", label: "Visualizers", icon: "✦" },
 	{ id: "text", label: "Text", icon: "T" },
@@ -108,16 +108,14 @@ export function MediaPanel({
 	children: ReactNode;
 	className?: string;
 }) {
-	return title ? (
-		<WindowFrame
-			className={`media-operator-panel ${className}`.trim()}
-			title={title}
-			info={detail ? { primary: detail } : undefined}
-		>
-			{children}
-		</WindowFrame>
-	) : (
+	return (
 		<section className={`media-operator-panel ${className}`.trim()}>
+			{title && (
+				<header className="media-operator-panel-heading">
+					<h2>{title}</h2>
+					{detail && <small>{detail}</small>}
+				</header>
+			)}
 			{children}
 		</section>
 	);

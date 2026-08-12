@@ -14,6 +14,9 @@ pub const CLIP_EXTENSION: &str = "toskclip";
 /// The directory a folder's thumbnails live in.
 pub const THUMBNAIL_DIRECTORY: &str = ".thumbs";
 
+/// Operator corrections that override metadata embedded during import.
+pub const METADATA_DIRECTORY: &str = ".metadata";
+
 /// The file a folder's operator-given name lives in.
 pub const FOLDER_NAME_FILE: &str = ".info";
 
@@ -44,6 +47,10 @@ pub fn item_filename(file: u8, name: &str) -> String {
 /// A thumbnail's filename, matching the legacy layout.
 pub fn thumbnail_filename(file: u8) -> String {
     format!("{file:03}-thumb.jpg")
+}
+
+pub fn metadata_filename(file: u8) -> String {
+    format!("{file:03}.json")
 }
 
 /// Reads an item's index and name out of a filename.
