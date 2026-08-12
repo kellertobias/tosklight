@@ -212,9 +212,7 @@
 	background: #596069;
 }
 
-.macro-diagnostics,
-.macro-validation-ok,
-.macro-editor > [role="status"] {
+.macro-diagnostics {
 	margin: 0;
 	padding: 0.65rem 0.85rem;
 	border-top: 1px solid var(--border-subtle, #393c3f);
@@ -227,6 +225,6 @@
 	color: #ffbec6;
 }
 
-.macro-validation-ok {
-	color: #9bd5aa;
+.macro-editor-status[role="alert"] {
+	color: #ffbec6;
 }
