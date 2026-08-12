@@ -267,6 +267,8 @@ pub struct PatchFixtureInput {
     pub split_patches: Vec<PatchSplitAssignment>,
     pub layer_id: String,
     pub direct_control: Option<PatchDirectControlEndpoint>,
+    #[serde(default)]
+    pub internal_bindings: PatchInternalFixtureBindings,
     pub location: PatchFixtureLocation,
     pub rotation: PatchFixtureRotation,
     pub multipatch: Vec<PatchMultiPatchInput>,
@@ -306,6 +308,13 @@ pub struct PatchDirectControlEndpoint {
     /// Transport adapters validate this as an IP address before invoking the application service.
     pub ip_address: String,
     pub port: u16,
+}
+
+/// Portable names resolved to machine-local audio resources by each desk.
+#[derive(Clone, Debug, Default, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PatchInternalFixtureBindings {
+    pub library: Option<String>,
+    pub output: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -424,6 +433,8 @@ pub struct PatchFixtureProjection {
     pub split_patches: Vec<PatchSplitAssignment>,
     pub layer_id: String,
     pub direct_control: Option<PatchDirectControlEndpoint>,
+    #[serde(default)]
+    pub internal_bindings: PatchInternalFixtureBindings,
     pub location: PatchFixtureLocation,
     pub rotation: PatchFixtureRotation,
     pub logical_heads: Vec<PatchLogicalHeadProjection>,
@@ -497,6 +508,7 @@ pub struct PatchProfileRevisionProjection {
 pub enum PatchProfilePolicy {
     Dmx,
     VisualOnly,
+    Internal,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

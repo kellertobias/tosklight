@@ -50,6 +50,13 @@
     "installed_appearance": {
       "$ref": "#/$defs/PatchInstalledFixtureAppearance"
     },
+    "internal_bindings": {
+      "$ref": "#/$defs/PatchInternalFixtureBindings",
+      "default": {
+        "library": null,
+        "output": null
+      }
+    },
     "invert_pan": {
       "type": "boolean"
     },
@@ -135,6 +142,7 @@
     "split_patches",
     "layer_id",
     "direct_control",
+    "internal_bindings",
     "location",
     "rotation",
     "logical_heads",
@@ -484,6 +492,28 @@
             "label"
           ]
         }
+      ]
+    },
+    "PatchInternalFixtureBindings": {
+      "description": "Portable names resolved to machine-local audio resources by each desk.",
+      "type": "object",
+      "properties": {
+        "library": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "output": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "library",
+        "output"
       ]
     },
     "PatchLogicalHeadProjection": {

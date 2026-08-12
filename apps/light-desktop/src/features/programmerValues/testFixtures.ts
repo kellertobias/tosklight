@@ -1,9 +1,10 @@
 import { vi } from "vitest";
 import type {
+	ProgrammerDynamicValue,
 	ProgrammerFixtureValue,
 	ProgrammerGroupValue,
-	ProgrammerValuesEventMessage,
 	ProgrammerValuesChange,
+	ProgrammerValuesEventMessage,
 	ProgrammerValuesProjection,
 	ProgrammerValuesScope,
 	ProgrammerValuesSnapshot,
@@ -19,6 +20,26 @@ export const USER_ID = "operator-a";
 export const OTHER_USER_ID = "operator-b";
 export const FIXTURE_1 = "11111111-1111-4111-8111-111111111111";
 export const FIXTURE_2 = "22222222-2222-4222-8222-222222222222";
+export const DYNAMIC_INSTANCE_1 = "33333333-3333-4333-8333-333333333333";
+export const DYNAMIC_INSTANCE_2 = "44444444-4444-4444-8444-444444444444";
+
+export function dynamicValue(
+	instanceLink = DYNAMIC_INSTANCE_1,
+	overrides: Partial<ProgrammerDynamicValue> = {},
+): ProgrammerDynamicValue {
+	return {
+		fixtureId: FIXTURE_1,
+		attribute: "intensity",
+		value: {
+			type: "dynamic_off",
+			instance_link: instanceLink,
+			timing: { fade_millis: null, delay_millis: null },
+		},
+		programmerOrder: 3,
+		changedAtMillis: 100,
+		...overrides,
+	};
+}
 
 export function fixtureValue(
 	level = 0.25,
@@ -58,6 +79,7 @@ export function valuesProjection(
 		revision?: number;
 		fixtureValues?: readonly ProgrammerFixtureValue[];
 		groupValues?: readonly ProgrammerGroupValue[];
+		dynamicValues?: readonly ProgrammerDynamicValue[];
 	} = {},
 ): ProgrammerValuesProjection {
 	return {
@@ -65,6 +87,9 @@ export function valuesProjection(
 		revision: options.revision ?? 1,
 		fixtureValues: options.fixtureValues ?? [fixtureValue()],
 		groupValues: options.groupValues ?? [],
+		...(options.dynamicValues?.length
+			? { dynamicValues: options.dynamicValues }
+			: {}),
 	};
 }
 

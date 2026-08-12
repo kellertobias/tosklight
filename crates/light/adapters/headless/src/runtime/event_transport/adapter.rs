@@ -215,6 +215,13 @@ fn wire_payload(
                     },
                 }
             }
+            application::DeskEvent::VisualizerConnectionChanged(change) => {
+                wire::EventPayload::VisualizerConnectionChanged {
+                    change: wire::VisualizerConnectionNotification {
+                        connected: change.connected,
+                    },
+                }
+            }
             application::DeskEvent::MacroExecutionChanged(change) => {
                 wire::EventPayload::MacroExecutionChanged {
                     execution: super::super::macros_v2::execution_wire(change.clone()),

@@ -147,13 +147,22 @@ pub struct ProgrammingValuesChange {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub dynamic_definitions: Vec<DynamicDefinitionProjection>,
     pub dynamic_values: Vec<ProgrammingDynamicValue>,
-    pub removed_dynamic_values: Vec<ProgrammingFixtureValueAddress>,
+    pub removed_dynamic_values: Vec<ProgrammingDynamicValueAddress>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 pub struct ProgrammingFixtureValueAddress {
     pub fixture_id: Uuid,
     pub attribute: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct ProgrammingDynamicValueAddress {
+    pub fixture_id: Uuid,
+    pub attribute: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub instance_link: Option<Uuid>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

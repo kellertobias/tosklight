@@ -85,6 +85,27 @@
         grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
         padding: 2rem 0 1rem;
       }
+      .product-suite {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 1rem;
+        padding: 0 0 3rem;
+      }
+      .product-card {
+        padding: 1.25rem;
+        background: var(--panel);
+        border: 1px solid var(--edge);
+        border-radius: 0.9rem;
+      }
+      .product-card img {
+        display: block;
+        width: 4.25rem;
+        height: 4.25rem;
+        margin-bottom: 0.9rem;
+        border-radius: 1rem;
+      }
+      .product-card h2 { margin: 0 0 0.35rem; font-size: 1.15rem; }
+      .product-card p { margin: 0; color: var(--muted); font-size: 0.95rem; }
       .card {
         display: block;
         padding: 1.5rem;
@@ -115,16 +136,28 @@
       }
       .shot {
         margin: 0;
+        padding: 0;
         display: flex;
         flex-direction: column;
+        width: 100%;
         background: var(--panel);
         border: 1px solid var(--edge);
         border-radius: 0.7rem;
         overflow: hidden;
       }
+      .shot:hover, .shot:focus-within { border-color: var(--accent); }
+      .shot-wide { grid-column: 1 / -1; }
+      .shot-image {
+        display: block;
+        width: 100%;
+        padding: 0;
+        border: 0;
+        background: none;
+        cursor: zoom-in;
+      }
       /* Source screenshots vary from 3:2 to 4:1. Fit whole frames into one tile ratio —
          cropping to fill would zoom the wide keypad capture into an unreadable fragment. */
-      .shot img {
+      .shot-image img {
         display: block;
         width: 100%;
         aspect-ratio: 16 / 10;
@@ -134,6 +167,32 @@
       }
       .shot figcaption { margin-top: auto; padding: 0.8rem 1rem; color: var(--muted); font-size: 0.88rem; }
       .shot figcaption strong { display: block; color: var(--text); font-weight: 600; }
+      .lightbox {
+        width: min(96vw, 100rem);
+        max-width: none;
+        padding: 0;
+        border: 1px solid var(--edge);
+        border-radius: 0.8rem;
+        background: var(--panel);
+        color: var(--text);
+      }
+      .lightbox::backdrop { background: rgb(0 0 0 / 0.8); }
+      .lightbox-close {
+        position: absolute;
+        top: 0.75rem;
+        right: 0.75rem;
+        z-index: 1;
+        padding: 0.45rem 0.7rem;
+        border: 1px solid var(--edge);
+        border-radius: 0.4rem;
+        background: var(--panel);
+        color: var(--text);
+        font: inherit;
+        cursor: pointer;
+      }
+      .lightbox figure { margin: 0; }
+      .lightbox img { display: block; width: 100%; max-height: 82vh; object-fit: contain; background: #0f1219; }
+      .lightbox figcaption { padding: 0.9rem 1rem; color: var(--muted); }
       .product-demo {
         display: block;
         width: 100%;
@@ -250,6 +309,8 @@
         .topbar { align-items: flex-start; }
         .topbar-links { align-items: flex-end; flex-direction: column; gap: 0.5rem; }
         header { padding-top: 3rem; }
+        .product-suite { grid-template-columns: 1fr; }
+        .shot-wide { grid-column: auto; }
       }
       footer {
         padding: 2.5rem 0 4rem;
@@ -293,6 +354,24 @@
         >
       </header>
 
+      <section class="product-suite" aria-label="ToskLight applications">
+        <article class="product-card">
+          <img src="product-icons/tosklight-desk.png" alt="TOSK Light Desk application icon" />
+          <h2>TOSK Light Desk</h2>
+          <p>Program fixtures, build presets and cue lists, run playbacks, and send your show to the stage.</p>
+        </article>
+        <article class="product-card">
+          <img src="product-icons/tosklight-previs.png" alt="TOSK Light Previs application icon" />
+          <h2>TOSK Light Previs</h2>
+          <p>Visualize fixture positions, beams, colors, and looks before the rig is in front of you.</p>
+        </article>
+        <article class="product-card">
+          <img src="product-icons/tosklight-media.png" alt="TOSK Light Media application icon" />
+          <h2>TOSK Light Media</h2>
+          <p>Prepare and play media alongside the lighting show from the same portable production package.</p>
+        </article>
+      </section>
+
       <section>
         <h2>See the desk in action</h2>
         <p class="section-lede">
@@ -323,11 +402,11 @@
       <section>
         <h2>Everything a live desk needs</h2>
         <ul class="features">
-          <li><strong>Programmer and command line.</strong> Select fixtures, work with real keypad grammar, spread values, and build reusable looks.</li>
-          <li><strong>Referencing and tracking.</strong> Ordered Groups, Presets, sparse tracked Cues, Preload, GO, and page-aware Playbacks.</li>
-          <li><strong>Visualization.</strong> Fixture Sheet, Channels, DMX, and built-in 2D and 3D Stage views stay connected to the live desk.</li>
-          <li><strong>Fixture and show exchange.</strong> Transfer fixture packages and portable SQLite show files; use MVR for venue data.</li>
-          <li><strong>Output and integration.</strong> Art-Net, sACN, OSC, native extensions, timecode, attached hardware, and browser-connected operator surfaces.</li>
+          <li><strong>Programmer and command line.</strong> Select fixtures, use desk-style keypad grammar, spread values, and turn ideas into reusable looks.</li>
+          <li><strong>Groups, Presets, Cues, and Playbacks.</strong> Build a show from reusable preset building blocks, then store sparse tracked cues and run them from page-aware playbacks.</li>
+          <li><strong>Visualization.</strong> Keep Fixture Sheet, Channels, DMX, and built-in 2D and 3D Stage views connected to the live desk as you program.</li>
+          <li><strong>Fixture and show exchange.</strong> Transfer fixture packages and portable SQLite show files; use MVR to bring venue data into a show.</li>
+          <li><strong>Output and integration.</strong> Send DMX over Art-Net, sACN, or supported USB DMX interfaces; integrate OSC, native extensions, timecode, attached hardware, and browser-connected operator surfaces.</li>
         </ul>
       </section>
 
@@ -351,7 +430,7 @@
           </div>
           <div class="spec">
             <strong>Output</strong>
-            <span>Networked DMX via Art-Net and sACN at up to 60 Hz across as many as 128 sparsely populated universes. A realistic modern-hardware workload is 4,096 or more occupied addresses.</span>
+            <span>Send networked DMX via Art-Net and sACN, or route a universe directly to supported USB DMX interfaces. The desk runs at up to 60 Hz across as many as 128 sparsely populated universes; a realistic modern-hardware workload is 4,096 or more occupied addresses.</span>
           </div>
           <div class="spec">
             <strong>Desktop and headless</strong>
@@ -371,11 +450,11 @@
           </div>
           <div class="spec">
             <strong>Macro engine</strong>
-            <span>Work in progress toward full desk automation and custom user interfaces built from reusable operator actions.</span>
+            <span>Automate repeated desk actions and build custom operator interfaces from reusable actions.</span>
           </div>
           <div class="spec">
             <strong>Timecode / timeline playback</strong>
-            <span>Work in progress toward repeatable automation arranged on a timeline and driven by show timecode.</span>
+            <span>Arrange cue-list clips, markers, audio, speed, and volume changes on a frame-addressed timeline, then run the show from its shared timecode clock.</span>
           </div>
         </div>
       </section>
@@ -417,7 +496,7 @@
         <h2>For developers</h2>
         <p class="section-lede">
           ToskLight is a Rust workspace with TypeScript/React operator interfaces hosted by Tauri.
-          Start the full desktop development path with <code>npm run open</code>.
+          Build and start the full desktop development path with <code>npm run build:open</code>.
         </p>
         <div class="cards">
           <a class="card" href="storybook/">
@@ -456,6 +535,13 @@
         </p>
       </footer>
     </div>
+    <dialog class="lightbox" id="image-lightbox" aria-labelledby="lightbox-caption">
+      <form method="dialog"><button class="lightbox-close" aria-label="Close enlarged image">Close</button></form>
+      <figure>
+        <img id="lightbox-image" alt="" />
+        <figcaption id="lightbox-caption"></figcaption>
+      </figure>
+    </dialog>
     <script>
       // The stamped version is whatever main was built from. Prefer the newest published
       // release when GitHub is reachable; keep the build-time value on any failure.
@@ -477,6 +563,23 @@
         } catch {
           /* Offline or rate-limited: the stamped version already renders. */
         }
+      })();
+      (() => {
+        const dialog = document.getElementById("image-lightbox");
+        const image = document.getElementById("lightbox-image");
+        const caption = document.getElementById("lightbox-caption");
+        document.querySelectorAll(".shot-image").forEach((control) => {
+          control.addEventListener("click", () => {
+            const shot = control.closest(".shot");
+            if (!shot) return;
+            const thumbnail = shot.querySelector("img");
+            if (!thumbnail) return;
+            image.src = thumbnail.currentSrc || thumbnail.src;
+            image.alt = thumbnail.alt;
+            caption.textContent = shot.querySelector("figcaption")?.textContent || "";
+            dialog.showModal();
+          });
+        });
       })();
     </script>
   </body>

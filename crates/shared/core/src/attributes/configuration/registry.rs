@@ -267,6 +267,16 @@ pub const ATTRIBUTE_REGISTRY: &[AttributeDescriptor] = &[
     indexed("media.file", "Media File", AttributeClass::Media),
     indexed("media.mask.folder", "Mask Folder", AttributeClass::Media),
     indexed("media.mask.file", "Mask File", AttributeClass::Media),
+    indexed("audio.folder", "Audio Folder", AttributeClass::Media),
+    indexed("audio.file", "Audio File", AttributeClass::Media),
+    indexed("audio.transport", "Audio Transport", AttributeClass::Media),
+    indexed("audio.repeat", "Audio Repeat", AttributeClass::Media),
+    continuous(
+        "audio.volume",
+        "Audio Volume",
+        AttributeClass::Media,
+        "percent",
+    ),
     continuous(
         "media.opacity",
         "Layer Opacity",

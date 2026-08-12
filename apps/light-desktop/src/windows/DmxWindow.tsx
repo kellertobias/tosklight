@@ -227,7 +227,7 @@ export function DmxWindowView({
   };
 
   return <div className="dmx-window">
-    {!compact && <WindowHeader title="DMX Output" info={{ primary: "Live", secondary: "Diagnostic override" }} actions={[[{ id: "values", label: "Values as dots", active: view === "values", onClick: () => setView("values") },{ id: "sources", label: "Sources", active: view === "sources", onClick: () => setView("sources") }]]} settings onSettings={(anchor) => setSettingsAnchor(anchor.getBoundingClientRect())} />}
+    {!compact && <WindowHeader title="DMX Output" info={{ primary: "Live", secondary: "Diagnostic override" }} actions={[[{ id: "values", label: "Values", active: view === "values", onClick: () => setView("values") },{ id: "sources", label: "Sources", active: view === "sources", onClick: () => setView("sources") }]]} settings onSettings={(anchor) => setSettingsAnchor(anchor.getBoundingClientRect())} />}
     {settingsAnchor && <WindowSettings modal={false} anchor={settingsAnchor} title="DMX Settings" onClose={() => setSettingsAnchor(null)} tabs={[{ id: "display", label: "Display", content: <><h3>DMX dot size</h3><div className="button-group"><Button className={dotSize === "small" ? "active" : ""} onClick={() => onDotSizeChange("small")}>Small</Button><Button className={dotSize === "large" ? "active" : ""} onClick={() => onDotSizeChange("large")}>Large</Button></div><small>{channelsPerRow} values per row at this window size</small></> }]} />}
     <div className="dmx-content"><WindowScrollArea><main ref={valuesHost} style={{ "--dmx-columns": channelsPerRow, "--dmx-dot-size": `${targetDot}px` } as CSSProperties}>{view === "values" && universeNumbers.map((universe) => {
       const frame = snapshot?.universes.find((item) => item.universe === universe);

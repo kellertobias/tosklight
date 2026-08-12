@@ -15,6 +15,7 @@ import type {
 import type { OutputRoute, VersionedObject } from "../../api/types";
 import {
 	type DiscoveredUsbDmxDevice,
+	endpointForDevice,
 	recommendedUsbDmxDriver,
 	usbDmxDeviceLabel,
 } from "./UsbDmxEndpointsSetup";
@@ -43,7 +44,7 @@ export interface OutputRoutesSetupProps {
 	usbDevices?: DiscoveredUsbDmxDevice[];
 	usbBusy?: boolean;
 	usbError?: string;
-	onScanUsbDevices?: () => Promise<void>;
+	onScanUsbDevices?: () => Promise<boolean>;
 	onProvisionUsbDevice?: (
 		device: DiscoveredUsbDmxDevice,
 		driver: UsbDmxDriverKind,
@@ -112,8 +113,7 @@ function validate(route: OutputRoute, outputBindIp?: string): string {
 	)
 		return "Logical universe must be a whole number from 1 to 65535.";
 	if (route.target?.kind === "usb_endpoint") {
-		if (!route.target.endpoint_id.trim())
-			return "Choose a USB DMX device.";
+		if (!route.target.endpoint_id.trim()) return "Choose a USB DMX device.";
 		return "";
 	}
 	const maximumUniverse = route.protocol === "art_net" ? 32_767 : 63_999;
@@ -195,6 +195,7 @@ export function OutputRoutesSetup({
 	const [error, setError] = useState("");
 	const [busy, setBusy] = useState(false);
 	const [confirmDelete, setConfirmDelete] = useState(false);
+	const [usbScanComplete, setUsbScanComplete] = useState(false);
 	const ordered = useMemo(
 		() =>
 			[...routes].sort(
@@ -275,7 +276,9 @@ export function OutputRoutesSetup({
 				(candidate) => candidate.port_name === draft.usbDevicePort,
 			);
 			if (!device || !onProvisionUsbDevice) {
-				setError("The selected USB DMX device is no longer available. Scan again.");
+				setError(
+					"The selected USB DMX device is no longer available. Scan again.",
+				);
 				return;
 			}
 			setBusy(true);
@@ -346,6 +349,40 @@ export function OutputRoutesSetup({
 	const selectedRecommendedDriver = selectedUsbDevice
 		? recommendedUsbDmxDriver(selectedUsbDevice)
 		: null;
+	const routedUsbEndpointIds = useMemo(
+		() =>
+			new Set(
+				routes.flatMap((route) =>
+					route.body.target?.kind === "usb_endpoint"
+						? [route.body.target.endpoint_id]
+						: [],
+				),
+			),
+		[routes],
+	);
+	const unroutedUsbDevices = useMemo(
+		() =>
+			usbDevices.filter((device) => {
+				const endpoint = endpointForDevice(usbEndpoints, device);
+				return !endpoint || !routedUsbEndpointIds.has(endpoint.endpoint_id);
+			}),
+		[routedUsbEndpointIds, usbDevices, usbEndpoints],
+	);
+	const availableUsbEndpoints = useMemo(
+		() =>
+			usbEndpoints.filter(
+				(endpoint) =>
+					!routedUsbEndpointIds.has(endpoint.endpoint_id) ||
+					(draft?.body.target?.kind === "usb_endpoint" &&
+						draft.body.target.endpoint_id === endpoint.endpoint_id),
+			),
+		[draft?.body.target, routedUsbEndpointIds, usbEndpoints],
+	);
+	const scanUsbDevices = async () => {
+		if (!onScanUsbDevices || usbBusy) return;
+		setUsbScanComplete(false);
+		if (await onScanUsbDevices()) setUsbScanComplete(true);
+	};
 
 	return (
 		<section className="output-routes-setup" aria-label="Output routes">
@@ -358,12 +395,16 @@ export function OutputRoutesSetup({
 				</div>
 				<div className="setup-section-actions">
 					<Button
+						variant={usbScanComplete ? "success" : "secondary"}
+						loading={usbBusy}
+						icon={usbScanComplete ? "✓" : undefined}
 						disabled={usbBusy || !onScanUsbDevices}
-						onClick={() => void onScanUsbDevices?.()}
+						onClick={() => void scanUsbDevices()}
 					>
-						{usbBusy ? "Scanning…" : "Scan USB devices"}
+						{usbScanComplete ? "USB devices scanned" : "Scan USB devices"}
 					</Button>
 					<Button
+						variant="primary"
 						onClick={() => {
 							setDraft(newRoute());
 							setError("");
@@ -380,36 +421,47 @@ export function OutputRoutesSetup({
 				</p>
 			)}
 			{usbDevices.length > 0 && (
-				<div
+				<section
 					className="setup-list usb-dmx-device-list"
 					aria-label="Discovered USB DMX devices"
 				>
-					{usbDevices.map((device) => (
-						<article key={device.port_name}>
-							<span>
-								<b>{device.identity.product ?? "USB DMX device"}</b>
-								<small>
-									{device.identity.usb_serial
-										? `USB serial ${device.identity.usb_serial}`
-										: "USB serial unavailable"}
-									{device.port_name.startsWith("/dev/cu.")
-										? ` · Recommended macOS connection ${device.port_name}`
-										: ` · ${device.port_name}`}
-								</small>
-							</span>
-							<Button
-								disabled={usbBusy}
-								onClick={() => {
-									setDraft(newRoute(device));
-									setError("");
-									setConfirmDelete(false);
-								}}
-							>
-								Add route for device
-							</Button>
-						</article>
-					))}
-				</div>
+					{usbDevices.map((device) => {
+						const endpoint = endpointForDevice(usbEndpoints, device);
+						const configured = Boolean(
+							endpoint && routedUsbEndpointIds.has(endpoint.endpoint_id),
+						);
+						return (
+							<article key={device.port_name}>
+								<span>
+									<b>{device.identity.product ?? "USB DMX device"}</b>
+									<small>
+										{device.identity.usb_serial
+											? `USB serial ${device.identity.usb_serial}`
+											: "USB serial unavailable"}
+										{device.port_name.startsWith("/dev/cu.")
+											? ` · Recommended macOS connection ${device.port_name}`
+											: ` · ${device.port_name}`}
+									</small>
+								</span>
+								{configured ? (
+									<span className="route-enabled">Configured</span>
+								) : (
+									<Button
+										variant="primary"
+										disabled={usbBusy}
+										onClick={() => {
+											setDraft(newRoute(device));
+											setError("");
+											setConfirmDelete(false);
+										}}
+									>
+										Add route for device
+									</Button>
+								)}
+							</article>
+						);
+					})}
+				</section>
 			)}
 			<div className="setup-list output-route-list">
 				{ordered.map((route) => (
@@ -473,11 +525,13 @@ export function OutputRoutesSetup({
 									label="Output transport"
 									value={draft.body.target?.kind ?? "network"}
 									onChange={(kind) => {
-										const device = usbDevices[0];
+										const device = unroutedUsbDevices[0];
 										setDraft({
 											...draft,
 											usbDevicePort:
-												kind === "usb_endpoint" ? (device?.port_name ?? null) : null,
+												kind === "usb_endpoint"
+													? (device?.port_name ?? null)
+													: null,
 											usbDriver:
 												(device && recommendedUsbDmxDriver(device)) ??
 												draft.usbDriver,
@@ -489,7 +543,8 @@ export function OutputRoutesSetup({
 																kind,
 																endpoint_id:
 																	device == null
-																		? (usbEndpoints[0]?.endpoint_id ?? "")
+																		? (availableUsbEndpoints[0]?.endpoint_id ??
+																			"")
 																		: "",
 															}
 														: undefined,
@@ -501,7 +556,9 @@ export function OutputRoutesSetup({
 										{
 											value: "usb_endpoint",
 											label: "USB DMX device",
-											disabled: !usbEndpoints.length && !usbDevices.length,
+											disabled:
+												!availableUsbEndpoints.length &&
+												!unroutedUsbDevices.length,
 										},
 									]}
 								/>
@@ -538,11 +595,11 @@ export function OutputRoutesSetup({
 												});
 											}}
 											options={[
-												...usbDevices.map((device) => ({
+												...unroutedUsbDevices.map((device) => ({
 													value: `device:${device.port_name}`,
 													label: usbDmxDeviceLabel(device),
 												})),
-												...usbEndpoints.map((endpoint) => ({
+												...availableUsbEndpoints.map((endpoint) => ({
 													value: `configured:${endpoint.endpoint_id}`,
 													label: endpointLabel(endpoint),
 													disabled: !endpoint.enabled,
@@ -556,15 +613,15 @@ export function OutputRoutesSetup({
 													: "Open DMX selected from the device metadata."}
 											</p>
 										) : selectedUsbDevice ? (
-							<SelectField
-								label="USB DMX device type"
-								value={draft.usbDriver}
-								onChange={(usbDriver) =>
-									setDraft({
-										...draft,
-										usbDriver: usbDriver as UsbDmxDriverKind,
-									})
-								}
+											<SelectField
+												label="USB DMX device type"
+												value={draft.usbDriver}
+												onChange={(usbDriver) =>
+													setDraft({
+														...draft,
+														usbDriver: usbDriver as UsbDmxDriverKind,
+													})
+												}
 												options={[
 													{
 														value: "enttec_usb_pro_v144",

@@ -19,6 +19,7 @@ import { StageWindow } from "./StageWindow";
 import { TextEditorWindow } from "./TextEditorWindow";
 import { TimecodeRuntimeWindow } from "./TimecodeRuntimeWindow";
 import { VirtualPlaybacksWindow } from "./VirtualPlaybacksWindow";
+import { VisualizationWindow } from "./VisualizationWindow";
 import type { WindowProps } from "./windowTypes";
 
 export type RegisteredWindow = Exclude<BuiltInWindow, "layout">;
@@ -57,6 +58,7 @@ export const windowRegistry: Record<
 	scheduler: SchedulerWindow,
 	channels: ChannelsWindow,
 	dmx: DmxWindow,
+	visualization: VisualizationWindow,
 	patch: PatchWindow,
 	setup: SetupWindow,
 	help: HelpWindow,

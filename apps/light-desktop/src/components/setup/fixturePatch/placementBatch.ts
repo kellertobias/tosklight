@@ -6,7 +6,7 @@ import {
 	type PatchedFixtureResult,
 } from "../../../features/patch/PatchContext";
 import { parsePatchAddress } from "../../input/ConsoleFields";
-import { conflicts, incrementFixtureName, isDmxPatchable } from "../patchUtils";
+import { conflicts, incrementFixtureName, isDmxPatchable, isVisualOnly } from "../patchUtils";
 import type { PatchController } from "./controller";
 import {
 	batchPatchError,
@@ -21,7 +21,8 @@ export async function addPlacementBatch(controller: PatchController) {
 	const definition = controller.data.definition;
 	if (!definition) return;
 	if (!isDmxPatchable(definition)) {
-		await addVirtualBatch(controller);
+		if (isVisualOnly(definition)) await addVirtualBatch(controller);
+		else await addUnpatchedBatch(controller);
 		return;
 	}
 	if (controller.ui.placementEmpty) {

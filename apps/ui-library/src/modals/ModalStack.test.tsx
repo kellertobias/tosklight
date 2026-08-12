@@ -118,6 +118,77 @@ describe("ModalProvider", () => {
     expect(close).toHaveBeenCalledOnce();
   });
 
+  it("routes an application-owned backdrop through the same registered close action", () => {
+    const close = vi.fn();
+    render(
+      <ModalProvider>
+        <ModalRegistration id="application-backdrop" onClose={close}>
+          <div className="stacked-modal-layer">
+            <section role="dialog" aria-label="Application backdrop dialog">
+              Existing dialog
+            </section>
+          </div>
+        </ModalRegistration>
+      </ModalProvider>,
+    );
+    const layer = document.body.querySelector<HTMLElement>(
+      '[data-modal-id="application-backdrop"]',
+    )!;
+    fireEvent.pointerDown(screen.getByRole("dialog", { name: "Application backdrop dialog" }));
+    expect(close).not.toHaveBeenCalled();
+    fireEvent.pointerDown(layer);
+    expect(close).toHaveBeenCalledOnce();
+  });
+
+  it("does not duplicate an application-owned backdrop handler", () => {
+    const close = vi.fn();
+    render(
+      <ModalProvider>
+        <ModalRegistration id="owned-backdrop" onClose={close}>
+          <div
+            className="stacked-modal-layer"
+            onPointerDown={(event) =>
+              event.target === event.currentTarget && close()
+            }
+          >
+            <section role="dialog" aria-label="Owned backdrop dialog">
+              Existing dialog
+            </section>
+          </div>
+        </ModalRegistration>
+      </ModalProvider>,
+    );
+    fireEvent.pointerDown(
+      document.body.querySelector<HTMLElement>('[data-modal-id="owned-backdrop"]')!,
+    );
+    expect(close).toHaveBeenCalledOnce();
+  });
+
+  it("keeps an explicitly locked application backdrop inert", () => {
+    const close = vi.fn();
+    render(
+      <ModalProvider>
+        <ModalRegistration
+          id="locked-application-backdrop"
+          policy={{ backdrop: false }}
+          onClose={close}
+        >
+          <div className="stacked-modal-layer">
+            <section role="alertdialog" aria-label="Locked application dialog">
+              Locked dialog
+            </section>
+          </div>
+        </ModalRegistration>
+      </ModalProvider>,
+    );
+    fireEvent.pointerDown(
+      document.body.querySelector<HTMLElement>(
+        '[data-modal-id="locked-application-backdrop"]',
+      )!,
+    );
+    expect(close).not.toHaveBeenCalled();
+  });
+
   it("restores focus to the control that opened a nested modal", async () => {
     function FocusHarness() {
       const [open, setOpen] = useState(false);

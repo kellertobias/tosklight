@@ -20,9 +20,14 @@ pub enum Row {
     Port,
     User,
     Quality,
+    Focus,
     Appearance,
+    Background,
     Ambient,
+    Exposure,
     Labels,
+    ShowSelection,
+    FloorGrid,
     FogAmount,
     LaserBrightness,
     Persistence,
@@ -36,6 +41,33 @@ pub enum Row {
     Cancel,
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum QuickSettingsTab {
+    Source,
+    #[default]
+    Rendering,
+    Features,
+    Snapshots,
+}
+
+impl QuickSettingsTab {
+    const ALL: [Self; 4] = [
+        Self::Source,
+        Self::Rendering,
+        Self::Features,
+        Self::Snapshots,
+    ];
+
+    pub(super) fn label(self) -> &'static str {
+        match self {
+            Self::Source => "Source",
+            Self::Rendering => "Rendering",
+            Self::Features => "Features",
+            Self::Snapshots => "Snapshots",
+        }
+    }
+}
+
 /// The longest afterglow the setting offers.
 ///
 /// A third of a second is already well past what an eye does and into obvious smearing; the
@@ -44,35 +76,21 @@ pub enum Row {
 pub(super) const MAX_PERSISTENCE: f32 = 0.3;
 
 impl Row {
-    /// The rows above the snapshot list.
-    const FIXED: [Self; 15] = [
-        Self::Source,
-        Self::Server,
-        Self::Port,
-        Self::User,
-        Self::Quality,
-        Self::Appearance,
-        Self::Ambient,
-        Self::Labels,
-        Self::FogAmount,
-        Self::LaserBrightness,
-        Self::Persistence,
-        Self::PersistenceFalloff,
-        Self::InputUniverse,
-        Self::InputProtocol,
-        Self::BlenderPath,
-    ];
-
     pub fn label(self) -> &'static str {
         match self {
             Self::Source => "Source",
             Self::Server => "Server",
             Self::Port => "Port",
             Self::User => "Desk user",
-            Self::Quality => "Rendering quality",
+            Self::Quality => "Render quality",
+            Self::Focus => "Focus",
             Self::Appearance => "Appearance",
-            Self::Ambient => "Ambient light",
-            Self::Labels => "Plan labels",
+            Self::Background => "Background color",
+            Self::Ambient => "Environment brightness",
+            Self::Exposure => "Exposure",
+            Self::Labels => "Fixture / plan labels",
+            Self::ShowSelection => "Show selection",
+            Self::FloorGrid => "Floor grid",
             Self::FogAmount => "Fog amount",
             Self::LaserBrightness => "Laser brightness",
             Self::Persistence => "Persistence of vision",
@@ -125,6 +143,8 @@ pub enum QuickSettingsOutcome {
     ExportSnapshot(usize),
     /// The source changed; the application must switch providers atomically.
     SourceChanged(ProviderKind),
+    /// Reframe the camera around the current rig.
+    FocusView,
     /// Quality or fog changed and applies immediately without reconnecting.
     AppliedLocally,
     /// The staged edit is invalid; the message is shown in place.
@@ -134,6 +154,7 @@ pub enum QuickSettingsOutcome {
 pub struct QuickSettings {
     pub open: bool,
     pub selected: usize,
+    pub tab: QuickSettingsTab,
     pub editing: bool,
     pub staged: StagedConnection,
     pub staged_user: String,
@@ -161,6 +182,7 @@ impl QuickSettings {
         Self {
             open: false,
             selected: 0,
+            tab: QuickSettingsTab::Rendering,
             editing: false,
             staged: StagedConnection::from_preferences(preferences),
             staged_user: preferences.user.clone(),
@@ -193,11 +215,53 @@ impl QuickSettings {
 
     /// Every row in the panel, in the order they are drawn.
     pub fn rows(&self) -> Vec<Row> {
-        let mut rows = Row::FIXED.to_vec();
-        rows.extend((0..self.snapshots.len()).map(Row::Snapshot));
-        rows.push(Row::Connect);
+        let mut rows = match self.tab {
+            QuickSettingsTab::Source => vec![
+                Row::Source,
+                Row::Server,
+                Row::Port,
+                Row::User,
+                Row::InputUniverse,
+                Row::InputProtocol,
+                Row::Connect,
+            ],
+            QuickSettingsTab::Rendering => vec![
+                Row::Quality,
+                Row::Focus,
+                Row::Ambient,
+                Row::Exposure,
+                Row::FogAmount,
+                Row::LaserBrightness,
+                Row::Persistence,
+                Row::Background,
+                Row::Appearance,
+                Row::PersistenceFalloff,
+            ],
+            QuickSettingsTab::Features => {
+                vec![Row::Labels, Row::ShowSelection, Row::FloorGrid]
+            }
+            QuickSettingsTab::Snapshots => {
+                let mut rows = vec![Row::BlenderPath];
+                rows.extend((0..self.snapshots.len()).map(Row::Snapshot));
+                rows
+            }
+        };
         rows.push(Row::Cancel);
         rows
+    }
+
+    pub fn move_tab(&mut self, delta: isize) {
+        if self.editing {
+            return;
+        }
+        let current = QuickSettingsTab::ALL
+            .iter()
+            .position(|tab| *tab == self.tab)
+            .unwrap_or_default() as isize;
+        self.tab = QuickSettingsTab::ALL
+            [(current + delta).rem_euclid(QuickSettingsTab::ALL.len() as isize) as usize];
+        self.selected = 0;
+        self.message.clear();
     }
 
     pub fn row(&self) -> Row {
@@ -237,9 +301,32 @@ impl QuickSettings {
                 self.message = format!("Rendering quality: {}", preferences.quality_label());
                 QuickSettingsOutcome::AppliedLocally
             }
+            Row::Exposure => {
+                preferences.exposure =
+                    (preferences.exposure + 0.05 * delta as f32).clamp(0.05, 4.0);
+                self.message = format!("Exposure {:.2}×", preferences.exposure);
+                QuickSettingsOutcome::AppliedLocally
+            }
             Row::Appearance => {
                 preferences.theme = preferences.theme.toggled();
                 self.message = format!("Appearance: {}", preferences.theme.label());
+                QuickSettingsOutcome::AppliedLocally
+            }
+            Row::Background => {
+                const COLORS: [Option<[f32; 3]>; 5] = [
+                    None,
+                    Some([0.0, 0.0, 0.0]),
+                    Some([0.015, 0.025, 0.05]),
+                    Some([0.04, 0.055, 0.09]),
+                    Some([0.08, 0.08, 0.08]),
+                ];
+                let current = COLORS
+                    .iter()
+                    .position(|color| *color == preferences.background)
+                    .unwrap_or_default() as i32;
+                preferences.background =
+                    COLORS[(current + delta).rem_euclid(COLORS.len() as i32) as usize];
+                self.message = format!("Background {}", background_label(preferences.background));
                 QuickSettingsOutcome::AppliedLocally
             }
             Row::Ambient => {
@@ -278,6 +365,25 @@ impl QuickSettings {
                 } else {
                     "Plan labels hidden".into()
                 };
+                QuickSettingsOutcome::AppliedLocally
+            }
+            Row::ShowSelection => {
+                preferences.show_selection = !preferences.show_selection;
+                self.message = if preferences.show_selection {
+                    "Selected fixtures are highlighted".into()
+                } else {
+                    "Selection highlight hidden".into()
+                };
+                QuickSettingsOutcome::AppliedLocally
+            }
+            Row::FloorGrid => {
+                preferences.floor_grid = match (preferences.floor_grid, delta.signum()) {
+                    (None, 1) | (Some(false), -1) => Some(true),
+                    (Some(true), 1) | (None, -1) => Some(false),
+                    _ => None,
+                };
+                self.message =
+                    format!("Floor grid {}", optional_bool_label(preferences.floor_grid));
                 QuickSettingsOutcome::AppliedLocally
             }
             Row::FogAmount => {
@@ -352,6 +458,7 @@ impl QuickSettings {
             return QuickSettingsOutcome::None;
         }
         match row {
+            Row::Focus => QuickSettingsOutcome::FocusView,
             Row::Snapshot(index) => {
                 let Some(snapshot) = self.snapshots.get(index) else {
                     return QuickSettingsOutcome::None;
@@ -394,6 +501,8 @@ impl QuickSettings {
                 QuickSettingsOutcome::Close
             }
             Row::Quality
+            | Row::Exposure
+            | Row::Background
             | Row::LaserBrightness
             | Row::Persistence
             | Row::PersistenceFalloff
@@ -402,6 +511,7 @@ impl QuickSettings {
             | Row::Appearance
             | Row::Ambient
             | Row::Labels => self.adjust(1, preferences),
+            Row::ShowSelection | Row::FloorGrid => self.adjust(1, preferences),
             _ => QuickSettingsOutcome::None,
         }
     }
@@ -471,9 +581,14 @@ impl QuickSettings {
             Row::Port => self.staged.port_text.clone(),
             Row::User => self.staged_user.clone(),
             Row::Quality => preferences.quality_label(),
+            Row::Focus => "Frame rig".into(),
             Row::Appearance => preferences.theme.label().to_owned(),
+            Row::Background => background_label(preferences.background),
             Row::Ambient => format!("{:.0}%", preferences.ambient * 100.0),
+            Row::Exposure => format!("{:.2}×", preferences.exposure),
             Row::Labels => bool_label(preferences.show_labels),
+            Row::ShowSelection => bool_label(preferences.show_selection),
+            Row::FloorGrid => optional_bool_label(preferences.floor_grid),
             Row::FogAmount => format!("{:.0}%", preferences.atmosphere.amount * 100.0),
             Row::LaserBrightness => format!("{:.0}%", preferences.laser_brightness * 100.0),
             Row::Persistence => {
@@ -528,6 +643,25 @@ impl QuickSettings {
             Some(found) => format!("Found: {}", found.display()),
             None => "Not found \u{2014} type a path to blender".to_owned(),
         }
+    }
+}
+
+fn background_label(color: Option<[f32; 3]>) -> String {
+    let Some(color) = color else {
+        return "Follow source".into();
+    };
+    format!(
+        "#{:02X}{:02X}{:02X}",
+        (color[0].clamp(0.0, 1.0) * 255.0).round() as u8,
+        (color[1].clamp(0.0, 1.0) * 255.0).round() as u8,
+        (color[2].clamp(0.0, 1.0) * 255.0).round() as u8,
+    )
+}
+
+fn optional_bool_label(value: Option<bool>) -> String {
+    match value {
+        None => "Follow source".into(),
+        Some(value) => bool_label(value),
     }
 }
 
@@ -600,9 +734,9 @@ pub fn build_quick_settings(
     // keyboard-driven list that runs off the bottom of the screen cannot be reached at all. The
     // rows that fit are shown, moving with the selection, and the rest are counted underneath.
     let chrome_lines = if settings.snapshot_folder.is_empty() {
-        7.0
+        9.0
     } else {
-        8.0
+        10.0
     };
     // A line is held back for the list's own heading, and the margin keeps the panel and its
     // border clear of the window edge at every scale.
@@ -638,6 +772,25 @@ pub fn build_quick_settings(
         "Quick Settings",
     );
     cursor += line * 1.3;
+
+    let mut tab_x = x + padding;
+    for tab in QuickSettingsTab::ALL {
+        let label = tab.label();
+        let colour = if tab == settings.tab {
+            palette.accent
+        } else {
+            palette.dim
+        };
+        tab_x += overlay.text(tab_x, cursor, scale, colour, label) + 18.0 * scale;
+    }
+    overlay.text(
+        x + panel_width - padding - Overlay::measure("Tab changes page", scale),
+        cursor,
+        scale,
+        palette.dim,
+        "Tab changes page",
+    );
+    cursor += line;
 
     draw_rows(
         overlay,
@@ -691,23 +844,18 @@ pub fn build_quick_settings(
         );
         cursor += line;
     }
-    overlay.text(
-        x + padding,
-        cursor,
-        scale,
-        palette.dim,
-        &format!(
-            "{}  |  show {}  |  revision {}",
-            model.connection.summary(),
-            if model.diagnostics.show_identity.is_empty() {
-                "-"
-            } else {
-                &model.diagnostics.show_identity
-            },
-            model.diagnostics.scene_revision,
-        ),
-    );
-    cursor += line;
+    let diagnostic_rows = diagnostic_rows(model);
+    for row in &diagnostic_rows[..2] {
+        overlay.clipped_text(
+            x + padding,
+            cursor,
+            scale,
+            palette.dim,
+            row,
+            x + panel_width - padding,
+        );
+        cursor += line;
+    }
     // Which GPU is drawing this, and how fast values are arriving to draw with. The connection
     // surface has to name the renderer backend, and an operator diagnosing a slow picture needs it
     // where the rest of the connection is rather than in a benchmark report.
@@ -716,7 +864,7 @@ pub fn build_quick_settings(
         cursor,
         scale,
         palette.dim,
-        &model.renderer_summary(),
+        &diagnostic_rows[2],
         x + panel_width - padding,
     );
     cursor += line;
@@ -727,6 +875,23 @@ pub fn build_quick_settings(
         palette.dim,
         "Arrows move and adjust, Enter activates, Esc cancels",
     );
+}
+
+pub(super) fn diagnostic_rows(model: &StatusModel<'_>) -> [String; 3] {
+    let show = if model.diagnostics.show_identity.is_empty() {
+        "-"
+    } else {
+        &model.diagnostics.show_identity
+    };
+    [
+        format!(
+            "{}  |  revision {}",
+            model.connection.summary(),
+            model.diagnostics.scene_revision
+        ),
+        format!("show {show}"),
+        model.renderer_summary(),
+    ]
 }
 
 /// Which stretch of rows to draw when they do not all fit.

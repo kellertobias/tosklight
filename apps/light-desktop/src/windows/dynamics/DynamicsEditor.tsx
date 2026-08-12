@@ -602,6 +602,7 @@ export function LaneAttributeModal({
 	onClose(): void;
 	onChoose(attribute: string): void;
 }) {
+	const [selectedFamily, setSelectedFamily] = useState<string | null>(null);
 	const groups = attributes.reduce<
 		Array<{
 			family: string;
@@ -614,6 +615,9 @@ export function LaneAttributeModal({
 		else grouped.push({ family, attributes: [attribute] });
 		return grouped;
 	}, []);
+	const selectedGroup = groups.find(
+		(group) => group.family === selectedFamily,
+	);
 	return (
 		<ModalFrame
 			id={id}
@@ -624,27 +628,62 @@ export function LaneAttributeModal({
 			onClose={onClose}
 		>
 			<div className="dynamic-attribute-choice-scroll">
-				<div className="ui-grouped-selection-groups dynamic-attribute-choice-groups">
-					{groups.map((group) => (
-						<section key={group.family}>
-							<h3>{group.family}</h3>
+				{selectedGroup ? (
+					<div className="dynamic-attribute-choice-stage">
+						<div className="dynamic-attribute-choice-toolbar">
+							<Button
+								disabled={busy}
+								onClick={() => setSelectedFamily(null)}
+							>
+								Back to attribute groups
+							</Button>
+							<h3>{selectedGroup.family}</h3>
+						</div>
+						<div className="ui-grouped-selection-options">
+							{selectedGroup.attributes.map((attribute) => {
+								const selected = attribute.id === currentAttribute;
+								return (
+									<Button
+										key={attribute.id}
+										active={selected}
+										aria-pressed={selected}
+										disabled={busy}
+										contentAlign="left"
+										onClick={() =>
+											selected ? onClose() : onChoose(attribute.id)
+										}
+									>
+										<span className="ui-grouped-selection-option has-no-icon">
+											<span className="ui-grouped-selection-copy">
+												<b>{attribute.label}</b>
+											</span>
+										</span>
+									</Button>
+								);
+							})}
+						</div>
+					</div>
+				) : (
+					<div className="ui-grouped-selection-groups dynamic-attribute-choice-groups">
+						<section>
+							<h3>Attribute groups</h3>
 							<div className="ui-grouped-selection-options">
-								{group.attributes.map((attribute) => {
-									const selected = attribute.id === currentAttribute;
+								{groups.map((group) => {
+									const containsCurrent = group.attributes.some(
+										(attribute) => attribute.id === currentAttribute,
+									);
 									return (
 										<Button
-											key={attribute.id}
-											active={selected}
-											aria-pressed={selected}
+											key={group.family}
+											active={containsCurrent}
+											aria-pressed={containsCurrent}
 											disabled={busy}
 											contentAlign="left"
-											onClick={() =>
-												selected ? onClose() : onChoose(attribute.id)
-											}
+											onClick={() => setSelectedFamily(group.family)}
 										>
 											<span className="ui-grouped-selection-option has-no-icon">
 												<span className="ui-grouped-selection-copy">
-													<b>{attribute.label}</b>
+													<b>{group.family}</b>
 												</span>
 											</span>
 										</Button>
@@ -652,8 +691,8 @@ export function LaneAttributeModal({
 								})}
 							</div>
 						</section>
-					))}
-				</div>
+					</div>
+				)}
 				{groups.length === 0 && (
 					<p className="dynamic-attribute-choice-empty" role="alert">
 						No continuous scalar attributes are available.

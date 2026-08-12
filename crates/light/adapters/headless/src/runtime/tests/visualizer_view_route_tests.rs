@@ -9,6 +9,7 @@ async fn the_default_target_answers_before_anything_has_been_configured() {
     let (token, _) = login(&app, "Operator").await;
 
     let snapshot = json(get_views(&app, &token).await).await;
+    assert_eq!(snapshot["connected"], false);
     assert_eq!(snapshot["views"].as_array().unwrap().len(), 1);
     let view = &snapshot["views"][0];
     assert_eq!(view["target"], "main");
@@ -16,6 +17,63 @@ async fn the_default_target_answers_before_anything_has_been_configured() {
     assert_eq!(view["quality"], "high");
     assert_eq!(view["revision"], 0);
     assert!(view.get("camera").is_none() || view["camera"].is_null());
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
+async fn connection_state_follows_an_active_visualizer_event_connection() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (operator_token, _) = login(&app, "Operator").await;
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post("/api/v2/sessions")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({"username": "Operator", "role": "visualizer"}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let visualizer = json(response).await;
+    let visualizer_token = visualizer["token"].as_str().unwrap();
+    let visualizer_session = visualizer["session_id"].as_str().unwrap();
+    let visualizer_session_id = SessionId(visualizer_session.parse().unwrap());
+    assert_eq!(
+        json(get_views(&app, &operator_token).await).await["connected"],
+        false,
+        "a temporary read-only session is not a connected renderer"
+    );
+    state
+        .sessions
+        .set_visualizer_connected(visualizer_session_id, true);
+    assert_eq!(
+        json(get_views(&app, &operator_token).await).await["connected"],
+        true
+    );
+
+    let closed = app
+        .clone()
+        .oneshot(
+            Request::delete(format!("/api/v2/sessions/{visualizer_session}"))
+                .header(header::AUTHORIZATION, format!("Bearer {visualizer_token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(closed.status(), StatusCode::NO_CONTENT);
+    state
+        .sessions
+        .set_visualizer_connected(visualizer_session_id, false);
+    assert_eq!(
+        json(get_views(&app, &operator_token).await).await["connected"],
+        false
+    );
     let _ = std::fs::remove_dir_all(data_dir);
 }
 

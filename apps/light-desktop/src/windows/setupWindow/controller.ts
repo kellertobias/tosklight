@@ -309,6 +309,8 @@ const CONFIGURATION_FIELDS = Object.keys({
 	osc_timecode: true,
 	timecode_audio_output_device: true,
 	timecode_audio_latency_trim_micros_by_output: true,
+	internal_audio_library_roots: true,
+	internal_audio_output_devices: true,
 	backup_retention: true,
 	autosave_interval_seconds: true,
 	speed_groups_bpm: true,
@@ -349,6 +351,8 @@ export function configurationFieldsForSection(
 				"osc_timecode",
 				"timecode_audio_output_device",
 				"timecode_audio_latency_trim_micros_by_output",
+				"internal_audio_library_roots",
+				"internal_audio_output_devices",
 			];
 		case "preferences-highlight":
 			return ["highlight_look", "patch_preview_highlight_dmx"];

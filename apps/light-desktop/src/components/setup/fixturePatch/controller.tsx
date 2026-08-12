@@ -38,6 +38,7 @@ export type EditKind =
 	| "pan_tilt"
 	| "bracket_angle"
 	| "shaper_angle"
+	| "internal_bindings"
 	| null;
 
 export type VectorAxis = "x" | "y" | "z";

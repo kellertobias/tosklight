@@ -205,6 +205,52 @@ fn stage_lamp_packages_bind_models_motion_and_emitters() {
     }
 }
 
+#[test]
+fn shipped_audio_player_is_one_programmable_zero_dmx_internal_voice() {
+    let profile = shipped_profile("tosklight--audio-player.toskfixture");
+    assert_eq!(profile.manufacturer, "ToskLight");
+    assert_eq!(profile.name, "Audio Player");
+    assert_eq!(profile.patch_policy, PatchPolicy::Internal);
+    assert_eq!(profile.modes.len(), 1);
+    let mode = &profile.modes[0];
+    assert_eq!(mode.name, "Internal Audio");
+    assert_eq!(
+        mode.splits,
+        [FixtureSplit {
+            number: 1,
+            footprint: 0
+        }]
+    );
+    assert_eq!(mode.heads.len(), 1);
+    assert!(!mode.heads[0].master_shared);
+    assert_eq!(
+        mode.channels
+            .iter()
+            .map(|channel| channel.attribute.0.as_str())
+            .collect::<Vec<_>>(),
+        [
+            "audio.folder",
+            "audio.file",
+            "audio.transport",
+            "audio.repeat",
+            "audio.volume",
+        ]
+    );
+    assert!(
+        mode.channels
+            .iter()
+            .all(|channel| channel.secondary_slots.is_empty())
+    );
+    let definition = profile.resolved_definition(mode.id).unwrap();
+    assert_eq!(definition.footprint, 0);
+    assert!(
+        definition.heads[0]
+            .parameters
+            .iter()
+            .all(|parameter| parameter.components.is_empty())
+    );
+}
+
 fn assert_moving_lamp_geometry(filename: &str) {
     let mover = shipped_profile(filename);
     assert_eq!(mover.model_units, ModelUnits::Metres);
@@ -938,6 +984,61 @@ fn visualizer_camera_package_keeps_its_exact_seventeen_slot_wire_contract() {
         serde_json::to_value(restored).unwrap(),
         serde_json::to_value(profile).unwrap()
     );
+}
+
+#[test]
+fn tosklight_media_server_package_exposes_complete_multi_head_personalities() {
+    let profile = shipped_profile("tosklight--media-server.toskfixture");
+    assert_eq!(profile.manufacturer, "ToskLight");
+    assert_eq!(profile.name, "Media Server");
+    assert_eq!(profile.modes.len(), 2);
+
+    for (mode, layer_count, footprint) in [
+        (&profile.modes[0], 2_usize, 75_u16),
+        (&profile.modes[1], 8_usize, 279_u16),
+    ] {
+        assert_eq!(
+            mode.splits,
+            vec![FixtureSplit {
+                number: 1,
+                footprint
+            }]
+        );
+        assert_eq!(mode.heads.len(), layer_count + 1);
+        assert_eq!(
+            mode.heads.iter().filter(|head| head.master_shared).count(),
+            1
+        );
+        assert_eq!(mode.heads[0].name, "Master");
+        assert!(mode.heads[1..].iter().all(|head| !head.master_shared));
+        assert_eq!(
+            mode.heads[1..]
+                .iter()
+                .map(|head| head.name.as_str())
+                .collect::<Vec<_>>(),
+            (1..=layer_count)
+                .map(|layer| format!("Layer {layer}"))
+                .collect::<Vec<_>>()
+        );
+        assert!(mode.channels.iter().all(|channel| channel.split == 1));
+        assert!(
+            mode.channels
+                .iter()
+                .all(|channel| { mode.heads.iter().any(|head| head.id == channel.head_id) })
+        );
+        let primary_slots = mode.primary_slots().unwrap();
+        let mut owned_slots = std::collections::BTreeSet::new();
+        for channel in &mode.channels {
+            assert!(owned_slots.insert(primary_slots[&channel.id]));
+            for slot in &channel.secondary_slots {
+                assert!(owned_slots.insert(*slot));
+            }
+        }
+        assert_eq!(owned_slots, (1..=footprint).collect());
+    }
+
+    assert!(profile.notes.contains("Legacy Media Server Layer"));
+    assert!(profile.notes.contains("existing show snapshots"));
 }
 
 #[test]

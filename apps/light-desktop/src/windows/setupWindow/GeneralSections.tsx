@@ -1,5 +1,12 @@
-import { Button, NumberField, SelectField, TextField } from "@tosklight/ui";
+import {
+	Button,
+	NumberField,
+	SelectField,
+	TextAreaField,
+	TextField,
+} from "@tosklight/ui";
 import { useEffect, useState } from "react";
+import type { InternalAudioStatus } from "../../api/generated/light-wire";
 import { ShowRecoveryFileManager } from "../../components/setup/ShowRecoveryFileManager";
 import { useBootstrapSnapshot } from "../../features/deskSnapshot/DeskSnapshotState";
 import { useConnectionStatus } from "../../features/shellStatus/ShellStatusState";
@@ -84,6 +91,8 @@ export function TimecodeSection({
 	const timecodes = useTimecodeActions();
 	const [audioOutputs, setAudioOutputs] = useState<readonly string[]>([]);
 	const [audioOutputError, setAudioOutputError] = useState<string | null>(null);
+	const [internalAudioStatus, setInternalAudioStatus] =
+		useState<InternalAudioStatus | null>(null);
 	useEffect(() => {
 		let active = true;
 		if (!timecodes) return;
@@ -97,6 +106,14 @@ export function TimecodeSection({
 					setAudioOutputError(
 						reason instanceof Error ? reason.message : String(reason),
 					);
+			});
+		void timecodes.api
+			.internalAudioStatus()
+			.then((status) => {
+				if (active) setInternalAudioStatus(status);
+			})
+			.catch(() => {
+				if (active) setInternalAudioStatus(null);
 			});
 		return () => {
 			active = false;
@@ -112,6 +129,7 @@ export function TimecodeSection({
 					controller={controller}
 					audioOutputs={audioOutputs}
 					audioOutputError={audioOutputError}
+					internalAudioStatus={internalAudioStatus}
 				/>
 			</div>
 		</>
@@ -204,10 +222,12 @@ function TimecodeAudioFields({
 	controller,
 	audioOutputs,
 	audioOutputError,
+	internalAudioStatus,
 }: {
 	controller: SetupWindowController;
 	audioOutputs: readonly string[];
 	audioOutputError: string | null;
+	internalAudioStatus: InternalAudioStatus | null;
 }) {
 	const draft = controller.draft;
 	if (!draft) return null;
@@ -285,6 +305,89 @@ function TimecodeAudioFields({
 					})
 				}
 			/>
+			<AudioBindingMapField
+				label="Audio library bindings"
+				description="One portable name = absolute local root per line. Example: show-audio = /Volumes/Show/Audio"
+				value={draft.internal_audio_library_roots ?? {}}
+				onChange={(value) =>
+					controller.editDraft({
+						...draft,
+						internal_audio_library_roots: value,
+					})
+				}
+			/>
+			{internalAudioStatus && (
+				<div className="setup-field-description" aria-live="polite">
+					{internalAudioStatus.players.map((player) => (
+						<p key={player.fixture_id} role={player.available ? undefined : "alert"}>
+							Audio Player {player.fixture_id}: {player.available ? "Ready" : player.diagnostic}
+						</p>
+					))}
+					{internalAudioStatus.libraries.flatMap((library) =>
+						library.diagnostics.map((diagnostic) => (
+							<p key={`${library.binding}:${diagnostic}`} role="alert">
+								{library.binding}: {diagnostic}
+							</p>
+						)),
+					)}
+				</div>
+			)}
+			<AudioBindingMapField
+				label="Audio output bindings"
+				description="One portable name = exact local device per line. Use $system_default for the operating-system default."
+				value={draft.internal_audio_output_devices ?? {}}
+				onChange={(value) =>
+					controller.editDraft({
+						...draft,
+						internal_audio_output_devices: value,
+					})
+				}
+			/>
 		</>
 	);
+}
+
+function AudioBindingMapField({
+	label,
+	description,
+	value,
+	onChange,
+}: {
+	label: string;
+	description: string;
+	value: Record<string, string>;
+	onChange: (value: Record<string, string>) => void;
+}) {
+	const formatted = Object.entries(value)
+		.sort(([left], [right]) => left.localeCompare(right))
+		.map(([name, target]) => `${name} = ${target}`)
+		.join("\n");
+	const [draft, setDraft] = useState(formatted);
+	useEffect(() => setDraft(formatted), [formatted]);
+	return (
+		<TextAreaField
+			label={label}
+			description={description}
+			value={draft}
+			onChange={(event) => setDraft(event.target.value)}
+			onBlur={() => {
+				const parsed = parseAudioBindingMap(draft);
+				if (parsed) onChange(parsed);
+			}}
+		/>
+	);
+}
+
+export function parseAudioBindingMap(value: string) {
+	const result: Record<string, string> = {};
+	for (const line of value.split("\n")) {
+		if (!line.trim()) continue;
+		const separator = line.indexOf("=");
+		if (separator < 1) return null;
+		const name = line.slice(0, separator).trim();
+		const target = line.slice(separator + 1).trim();
+		if (!name || !target || name.length > 128 || name in result) return null;
+		result[name] = target;
+	}
+	return result;
 }

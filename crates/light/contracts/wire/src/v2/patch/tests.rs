@@ -300,6 +300,7 @@ fn fixture_input() -> PatchFixtureInput {
         }],
         layer_id: "default".into(),
         direct_control: None,
+        internal_bindings: Default::default(),
         location: PatchFixtureLocation { x: 0, y: 0, z: 0 },
         rotation: PatchFixtureRotation {
             x: 0.0,
@@ -334,6 +335,7 @@ fn fixture_projection() -> PatchFixtureProjection {
         split_patches: input.split_patches,
         layer_id: input.layer_id,
         direct_control: input.direct_control,
+        internal_bindings: input.internal_bindings,
         location: input.location,
         rotation: input.rotation,
         logical_heads: Vec::new(),

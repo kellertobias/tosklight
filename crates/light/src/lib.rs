@@ -70,7 +70,7 @@ pub use event::{
     ScreenNotification, ScreenNotificationKind, SequenceGap, ShowEvent, ShowLibraryNotification,
     ShowLibraryNotificationKind, SubscriptionDelivery, SubscriptionOptions, SystemEvent,
     UpdateTargetFamilyNotification, UpdateTargetNotification, UpdateWorkflowNotification,
-    VirtualPlaybackExclusionZonesChange,
+    VirtualPlaybackExclusionZonesChange, VisualizerConnectionNotification,
 };
 pub use fixture_position::{
     FixturePositionCommand, FixturePositionExecution, FixturePositionOutcome, FixturePositionPorts,

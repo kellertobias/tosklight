@@ -335,6 +335,10 @@ fn application_fixture(
                 .direct_control
                 .map(application_direct_control)
                 .transpose()?,
+            internal_bindings: fixture::InternalFixtureBindings {
+                library: input.internal_bindings.library,
+                output: input.internal_bindings.output,
+            },
             location: application_location(input.location),
             rotation: application_rotation(input.rotation),
             logical_heads: Vec::new(),
@@ -497,6 +501,10 @@ fn wire_fixture(input: &application::PatchFixtureProjection) -> wire::PatchFixtu
         split_patches: patch.split_patches.iter().map(wire_split).collect(),
         layer_id: patch.layer_id.clone(),
         direct_control: patch.direct_control.as_ref().map(wire_direct_control),
+        internal_bindings: wire::PatchInternalFixtureBindings {
+            library: patch.internal_bindings.library.clone(),
+            output: patch.internal_bindings.output.clone(),
+        },
         location: wire_location(patch.location),
         rotation: wire_rotation(patch.rotation),
         logical_heads: patch
@@ -648,6 +656,7 @@ fn wire_profile(
         patch_policy: match profile.patch_policy {
             fixture::PatchPolicy::Dmx => wire::PatchProfilePolicy::Dmx,
             fixture::PatchPolicy::VisualOnly => wire::PatchProfilePolicy::VisualOnly,
+            fixture::PatchPolicy::Internal => wire::PatchProfilePolicy::Internal,
         },
         referenced_modes: profile
             .referenced_modes

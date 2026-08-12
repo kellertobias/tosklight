@@ -191,7 +191,7 @@ describe("OutputRoutesSetup", () => {
 
 	it("shows discovered devices beside normal routes and provisions from the preselected route modal", async () => {
 		const save = vi.fn().mockResolvedValue(true);
-		const scan = vi.fn().mockResolvedValue(undefined);
+		const scan = vi.fn().mockResolvedValue(true);
 		const discovered = {
 			port_name: "/dev/cu.usbserial-TL1",
 			identity: {
@@ -211,7 +211,7 @@ describe("OutputRoutesSetup", () => {
 		});
 		const { container } = render(
 			<OutputRoutesSetup
-				routes={[]}
+				routes={[route]}
 				usbDevices={[discovered]}
 				onScanUsbDevices={scan}
 				onProvisionUsbDevice={provision}
@@ -223,6 +223,12 @@ describe("OutputRoutesSetup", () => {
 
 		const actions = container.querySelector("header .setup-section-actions");
 		expect(actions).not.toBeNull();
+		const discoveredDevices = screen.getByRole("region", {
+			name: "Discovered USB DMX devices",
+		});
+		expect(discoveredDevices.nextElementSibling).toHaveClass(
+			"output-route-list",
+		);
 		expect(
 			within(actions as HTMLElement)
 				.getAllByRole("button")
@@ -233,25 +239,31 @@ describe("OutputRoutesSetup", () => {
 			screen.getByText(/Recommended macOS connection \/dev\/cu\.usbserial-TL1/),
 		).toBeVisible();
 		fireEvent.click(screen.getByRole("button", { name: "Scan USB devices" }));
-		expect(scan).toHaveBeenCalledOnce();
+		await waitFor(() => expect(scan).toHaveBeenCalledOnce());
+		expect(
+			screen.getByRole("button", { name: "USB devices scanned" }),
+		).toHaveClass("ui-success");
 
-		fireEvent.click(screen.getByRole("button", { name: "Add route for device" }));
+		fireEvent.click(
+			screen.getByRole("button", { name: "Add route for device" }),
+		);
 		const dialog = screen.getByRole("dialog", { name: "Output route editor" });
-		expect(within(dialog).getByRole("button", { name: "USB DMX device" })).toBeVisible();
+		expect(
+			within(dialog).getByRole("button", { name: "USB DMX device" }),
+		).toBeVisible();
 		expect(
 			within(dialog).getByRole("button", {
 				name: "DMX USB Pro · USB serial TL1",
 			}),
 		).toBeVisible();
-		expect(within(dialog).getByText(/selected from the device metadata/)).toBeVisible();
+		expect(
+			within(dialog).getByText(/selected from the device metadata/),
+		).toBeVisible();
 		expect(dialog).not.toHaveTextContent(/endpoint|claim/i);
 
 		fireEvent.click(within(dialog).getByRole("button", { name: "Save route" }));
 		await waitFor(() =>
-			expect(provision).toHaveBeenCalledWith(
-				discovered,
-				"enttec_usb_pro_v144",
-			),
+			expect(provision).toHaveBeenCalledWith(discovered, "enttec_usb_pro_v144"),
 		);
 		await waitFor(() =>
 			expect(save).toHaveBeenCalledWith(
@@ -265,6 +277,56 @@ describe("OutputRoutesSetup", () => {
 				0,
 			),
 		);
+	});
+
+	it("shows the standard scan spinner and does not offer a second route for a configured device", () => {
+		const discovered = {
+			port_name: "/dev/cu.usbserial-TL1",
+			identity: {
+				vendor_id: 0x403,
+				product_id: 0x6001,
+				manufacturer: "ENTTEC",
+				product: "DMX USB Pro",
+				usb_serial: "TL1",
+				port_topology_hint: "/dev/cu.usbserial-TL1",
+			},
+		};
+		const usbRoute: VersionedObject<OutputRoute> = {
+			...route,
+			id: "usb-route",
+			body: {
+				...route.body,
+				target: { kind: "usb_endpoint", endpoint_id: "usb-tl1" },
+			},
+		};
+		const props = {
+			usbDevices: [discovered],
+			usbEndpoints: [
+				{
+					endpoint_id: "usb-tl1",
+					driver: "enttec_usb_pro_v144" as const,
+					identity: { ...discovered.identity, port_topology_hint: null },
+					enabled: true,
+				},
+			],
+			onScanUsbDevices: vi.fn().mockResolvedValue(true),
+			onSave: vi.fn().mockResolvedValue(true),
+			onCreateRange: vi.fn().mockResolvedValue(true),
+			onDelete: vi.fn().mockResolvedValue(true),
+		};
+		const { rerender } = render(
+			<OutputRoutesSetup {...props} routes={[usbRoute]} usbBusy />,
+		);
+		expect(screen.getByRole("button", { name: "Loading" })).toBeDisabled();
+		expect(screen.getByText("Configured")).toBeVisible();
+		expect(
+			screen.queryByRole("button", { name: "Add route for device" }),
+		).not.toBeInTheDocument();
+
+		rerender(<OutputRoutesSetup {...props} routes={[]} />);
+		expect(
+			screen.getByRole("button", { name: "Add route for device" }),
+		).toBeEnabled();
 	});
 
 	it("creates paired universe ranges with one atomic action", async () => {

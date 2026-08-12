@@ -159,6 +159,7 @@ pub enum DeskEvent {
     ConfigurationChanged(NotificationRevision),
     ScreensChanged(ScreenNotification),
     HardwareConnectionChanged(HardwareConnectionNotification),
+    VisualizerConnectionChanged(VisualizerConnectionNotification),
     MacroExecutionChanged(crate::CommandMacroExecutionSnapshot),
     TimecodeRuntimeChanged(crate::timeline::TimecodeRuntimeChange),
 }
@@ -233,6 +234,11 @@ pub struct NotificationRevision {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct HardwareConnectionNotification {
     pub revision: u64,
+    pub connected: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct VisualizerConnectionNotification {
     pub connected: bool,
 }
 
@@ -515,6 +521,14 @@ impl EventDraft {
             EventCapability::Desk,
             "hardware-connections",
             ApplicationEvent::Desk(DeskEvent::HardwareConnectionChanged(change)),
+        )
+    }
+
+    pub fn visualizer_connection_changed(change: VisualizerConnectionNotification) -> Self {
+        Self::runtime_projection(
+            EventCapability::Desk,
+            "visualizer-connections",
+            ApplicationEvent::Desk(DeskEvent::VisualizerConnectionChanged(change)),
         )
     }
 

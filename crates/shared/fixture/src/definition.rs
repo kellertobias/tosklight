@@ -11,6 +11,12 @@ impl FixtureDefinition {
             .is_none_or(|profile| profile.patch_policy == PatchPolicy::Dmx)
     }
 
+    pub fn patch_policy(&self) -> PatchPolicy {
+        self.profile_snapshot
+            .as_deref()
+            .map_or(PatchPolicy::Dmx, |profile| profile.patch_policy)
+    }
+
     pub fn split_footprints(&self) -> BTreeMap<u16, u16> {
         if self.schema_version == FIXTURE_PROFILE_SCHEMA_VERSION
             && let (Some(profile), Some(mode_id)) = (&self.profile_snapshot, self.mode_id)

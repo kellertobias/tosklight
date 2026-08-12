@@ -632,3 +632,33 @@
 		display: none;
 	}
 }
+.native-media-controls {
+	display: grid;
+	gap: 0.75rem;
+	min-width: min(34rem, 100%);
+}
+
+.native-media-summary,
+.native-media-effects,
+.native-media-text-slot {
+	display: grid;
+	gap: 0.35rem;
+}
+
+.native-media-text {
+	display: grid;
+	gap: 0.75rem;
+}
+
+.native-media-text h3 {
+	margin: 0;
+}
+
+.native-media-text-slot {
+	padding-block: 0.5rem;
+	border-top: 1px solid var(--border-subtle);
+}
+
+.native-media-controls .unavailable {
+	color: var(--text-muted);
+}

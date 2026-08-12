@@ -176,6 +176,11 @@ function PaneContent({
 				showGroupShortcuts={Boolean(pane.showGroupShortcuts)}
 				fixtureSheetActiveOnly={Boolean(pane.fixtureSheetActiveOnly)}
 				fixtureSheetCompactMode={pane.fixtureSheetCompactMode ?? "off"}
+				fixtureSheetIncludedHeads={pane.fixtureSheetIncludedHeads ?? "all"}
+				fixtureSheetOrder={pane.fixtureSheetOrder ?? "fixture-id"}
+				fixtureSheetCueListId={pane.fixtureSheetCueListId || undefined}
+				fixtureSheetColumns={pane.fixtureSheetColumns}
+				fixtureSheetShowType={pane.fixtureSheetShowType ?? true}
 				showCueSidebar={pane.showCueSidebar ?? true}
 				cueListCompactRows={pane.cueListCompactRows ?? false}
 				cueListSource={pane.cueListSource ?? "fixed"}
@@ -184,6 +189,7 @@ function PaneContent({
 				stage2dSide={pane.stage2dSide ?? state.stage2dSide}
 				followPreload={Boolean(pane.followPreload)}
 				channelDisplayMode={pane.channelDisplayMode ?? "intensity"}
+				visualizationRows={pane.visualizationRows ?? []}
 				presetFamily={pane.presetFamily ?? state.presetFamily}
 				presetPoolColors={pane.presetPoolColors ?? true}
 				poolColumns={pane.poolColumns}

@@ -699,7 +699,10 @@ describe("CuelistWindow pane and Cuelist settings", () => {
 		const confirmation = screen.getByRole("dialog", {
 			name: "Unsaved Cuelist Settings",
 		});
-		fireEvent.click(within(confirmation).getByRole("button", { name: "Stay" }));
+		fireEvent.pointerDown(confirmation.closest("[data-modal-id]")!);
+		expect(
+			screen.queryByRole("dialog", { name: "Unsaved Cuelist Settings" }),
+		).not.toBeInTheDocument();
 		expect(settings).toBeInTheDocument();
 		fireEvent.click(
 			within(settings).getByRole("button", { name: "Close Cuelist Settings" }),
@@ -815,7 +818,15 @@ describe("CuelistWindow topology-backed Cuelist settings", () => {
 	});
 
 	it("renumbers the complete Cuelist in one topology action", async () => {
-		showEditableCueList();
+		const cueList = editableCueList();
+		cueList.cues.push({
+			...cueList.cues[0],
+			id: "cue-2",
+			number: 2.5,
+			name: "Look",
+			fade_millis: 4_000,
+		});
+		showEditableCueList(cueList);
 		render(<CuelistWindow />);
 		fireEvent.click(screen.getByText("Main").closest("button")!);
 		fireEvent.click(screen.getByRole("button", { name: "Cuelist Settings" }));
@@ -823,8 +834,29 @@ describe("CuelistWindow topology-backed Cuelist settings", () => {
 		fireEvent.click(
 			within(settings).getByRole("button", { name: "Renumber Cues" }),
 		);
-		const renumber = screen.getByRole("dialog", { name: "Renumber Cues" });
-		fireEvent.change(within(renumber).getByLabelText("Start Cue"), {
+		let renumber = screen.getByRole("dialog", { name: "Renumber Cues" });
+		expect(
+			within(renumber).getByText(/the first Cue receives this number/i),
+		).toBeVisible();
+		const primaryAction = within(renumber).getByRole("button", {
+			name: "Renumber",
+		});
+		expect(primaryAction.closest(".ui-modal-title-actions")).not.toBeNull();
+		expect(renumber.querySelector(".modal-actions")).toBeNull();
+
+		fireEvent.click(
+			within(renumber).getByRole("button", { name: "Cancel renumbering" }),
+		);
+		expect(
+			screen.queryByRole("dialog", { name: "Renumber Cues" }),
+		).not.toBeInTheDocument();
+		expect(mocks.saveTopologyCueList).not.toHaveBeenCalled();
+
+		fireEvent.click(
+			within(settings).getByRole("button", { name: "Renumber Cues" }),
+		);
+		renumber = screen.getByRole("dialog", { name: "Renumber Cues" });
+		fireEvent.change(within(renumber).getByLabelText("First new Cue number"), {
 			target: { value: "10" },
 		});
 		fireEvent.click(within(renumber).getByRole("button", { name: "Renumber" }));
@@ -832,14 +864,16 @@ describe("CuelistWindow topology-backed Cuelist settings", () => {
 		await waitFor(() =>
 			expect(mocks.saveTopologyCueList).toHaveBeenCalledOnce(),
 		);
-		expect(mocks.saveTopologyCueList).toHaveBeenCalledWith(
+		expect(mocks.saveTopologyCueList.mock.calls[0].slice(0, 3)).toEqual([
 			"main",
 			3,
 			"legacy-main",
-			expect.objectContaining({
-				cues: [expect.objectContaining({ id: "cue-1", number: 10 })],
-			}),
-		);
+		]);
+		const saved = mocks.saveTopologyCueList.mock.calls[0][3] as CueList;
+		expect(saved.cues).toEqual([
+			{ ...cueList.cues[0], number: 10 },
+			{ ...cueList.cues[1], number: 11 },
+		]);
 		expect(mocks.refresh).not.toHaveBeenCalled();
 	});
 });
@@ -1046,6 +1080,16 @@ describe("CuelistWindow pool recording", () => {
 			).toHaveFocus(),
 		);
 		fireEvent.keyDown(document, { key: "Escape" });
+		await waitFor(() =>
+			expect(
+				screen.queryByRole("dialog", { name: "Main preview image" }),
+			).not.toBeInTheDocument(),
+		);
+		await waitFor(() => expect(preview).toHaveFocus());
+
+		fireEvent.click(preview);
+		dialog = screen.getByRole("dialog", { name: "Main preview image" });
+		fireEvent.pointerDown(dialog.closest("[data-modal-id]")!);
 		await waitFor(() =>
 			expect(
 				screen.queryByRole("dialog", { name: "Main preview image" }),

@@ -34,9 +34,9 @@ export function canonicalProjection(
 	);
 	assertUnique(
 		dynamicValues,
-		(entry) => `${entry.fixtureId}\u0000${entry.attribute}`,
+		(entry) => dynamicAddress(entry),
 		(entry) =>
-			`Dynamic control projected ${entry.attribute} more than once for fixture ${entry.fixtureId}. Stop and restart the affected Dynamic; inspect its fixture targets if the duplicate returns.`,
+			`Dynamic control track ${dynamicInstanceLabel(entry)} projected ${entry.attribute} more than once for fixture ${entry.fixtureId}. Stop and restart the affected Dynamic; inspect that instance track if the duplicate returns.`,
 	);
 	fixtureValues.sort(compareFixtureValues);
 	groupValues.sort(compareGroupValues);
@@ -59,8 +59,25 @@ function compareDynamicValues(
 	return (
 		left.programmerOrder - right.programmerOrder ||
 		left.fixtureId.localeCompare(right.fixtureId) ||
-		left.attribute.localeCompare(right.attribute)
+		left.attribute.localeCompare(right.attribute) ||
+		dynamicInstanceLabel(left).localeCompare(dynamicInstanceLabel(right))
 	);
+}
+
+export function dynamicInstanceLink(
+	entry: ProgrammerDynamicValue,
+): string | null {
+	return entry.value.type === "dynamic_on" || entry.value.type === "dynamic_off"
+		? entry.value.instance_link
+		: null;
+}
+
+function dynamicAddress(entry: ProgrammerDynamicValue) {
+	return `${entry.fixtureId}\u0000${entry.attribute}\u0000${dynamicInstanceLabel(entry)}`;
+}
+
+function dynamicInstanceLabel(entry: ProgrammerDynamicValue) {
+	return dynamicInstanceLink(entry) ?? "static";
 }
 
 export function sameProjection(

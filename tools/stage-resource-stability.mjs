@@ -2,6 +2,7 @@ export function summarizeStageLongRunResources(
 	timeline,
 	processMemory,
 	durationSeconds,
+	{ renderer = "webgl" } = {},
 ) {
 	const enforced = durationSeconds >= 1_800;
 	const stageMemory = processMemory.filter(
@@ -57,10 +58,14 @@ export function summarizeStageLongRunResources(
 	if (
 		enforced &&
 		(lateResources.maxGeometries > earlyResources.maxGeometries ||
-			lateResources.maxTextures > earlyResources.maxTextures)
+			(renderer === "native"
+				? lateResources.maxDrawCalls > earlyResources.maxDrawCalls
+				: lateResources.maxTextures > earlyResources.maxTextures))
 	)
 		failures.push(
-			"30-minute packaged WebGL geometry or texture counts grew after warmup",
+			renderer === "native"
+				? "30-minute packaged native instance or draw-call ownership grew after warmup"
+				: "30-minute packaged WebGL geometry or texture counts grew after warmup",
 		);
 	if (enforced && lateResources.cpuFrameP95Ms > 16.7)
 		failures.push(
@@ -77,7 +82,9 @@ export function summarizeStageLongRunResources(
 		failures,
 		passed: enforced ? failures.length === 0 : null,
 		gpuFrameMeasurement:
-			"Unavailable in the current Three.js/WebKit diagnostics path",
+			renderer === "native"
+				? "Native helper frame telemetry; aggregate p95 is reported in resources.gpuFrameP95Ms"
+				: "Unavailable in the current Three.js/WebKit diagnostics path",
 	};
 }
 

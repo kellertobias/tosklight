@@ -95,12 +95,37 @@ function decodeValuesEvent(
 				change.removed_group_values,
 				"$.event.payload.change.removed_group_values",
 			),
-			removedDynamicValues: decodeFixtureAddresses(
+			removedDynamicValues: decodeDynamicAddresses(
 				change.removed_dynamic_values,
 				"$.event.payload.change.removed_dynamic_values",
 			),
 		},
 	};
+}
+
+function decodeDynamicAddresses(value: unknown, path: string) {
+	return arrayAt(value, path).map((entry, index) => {
+		const addressPath = `${path}[${index}]`;
+		const address = exactRecordAt(entry, addressPath, [
+			"fixture_id",
+			"attribute",
+			"instance_link",
+		]);
+		return {
+			fixtureId: programmerValuesUuidAt(
+				address.fixture_id,
+				`${addressPath}.fixture_id`,
+			),
+			attribute: stringAt(address.attribute, `${addressPath}.attribute`),
+			instanceLink:
+				address.instance_link == null
+					? null
+					: programmerValuesUuidAt(
+							address.instance_link,
+							`${addressPath}.instance_link`,
+						),
+		};
+	});
 }
 
 function decodeChange(value: unknown) {

@@ -149,6 +149,33 @@
   min-width: 88px;
 }
 
+.ui-window-dropdown-trigger {
+  height: 38px;
+  min-height: 38px;
+  border-radius: 0;
+}
+
+.ui-window-dropdown-layer {
+  position: fixed;
+  z-index: 10000;
+  inset: 0;
+}
+
+.ui-window-dropdown-menu {
+  position: fixed;
+  display: grid;
+  min-width: 12rem;
+  padding: 0.35rem;
+  border: 1px solid var(--line2);
+  border-radius: 0.35rem;
+  background: #171d23;
+  box-shadow: 0 0.8rem 2rem rgb(0 0 0 / 45%);
+}
+
+.ui-window-dropdown-menu > .ui-button {
+  justify-content: flex-start;
+}
+
 .ui-window-layout {
   position: relative;
   display: grid;

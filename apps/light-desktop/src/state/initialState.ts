@@ -58,7 +58,8 @@ export const initialState: AppState = {
 	stageShowFloorGrid: true,
 	// Over the rig, which is the plan a paper stage plot is drawn as.
 	stage2dSide: "top",
-	stageEnvironmentBrightness: 1,
+	// Just enough ambient light to read an unlit rig without flattening fixture output.
+	stageEnvironmentBrightness: 0.05,
 	// Very dark, and blue rather than neutral: a stage seen from the house is never black and
 	// never grey.
 	stageVizBackground: "#020304",

@@ -4,6 +4,7 @@ import type {
 	FixtureSheetColumn,
 	FixtureSheetCompactMode,
 	StageView,
+	VisualizationRow,
 } from "../types";
 
 export interface WindowProps {
@@ -53,4 +54,5 @@ export interface WindowProps {
 		filter: NonNullable<WindowProps["runningFilter"]>,
 	) => void;
 	channelDisplayMode?: ChannelDisplayMode;
+	visualizationRows?: VisualizationRow[];
 }

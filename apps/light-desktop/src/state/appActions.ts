@@ -6,6 +6,7 @@ import type {
 	TextEditorMode,
 	VirtualPlaybackExclusionZone,
 	VirtualPlaybackPageMode,
+	VisualizationRow,
 	WindowSettings,
 } from "../types";
 
@@ -28,6 +29,17 @@ export type Action =
 			type: "SET_PANE_FIXTURE_COMPACT_MODE";
 			id: string;
 			mode: AppState["fixtureSheetCompactMode"];
+	  }
+	| {
+			type: "SET_PANE_FIXTURE_OPTIONS";
+			id: string;
+			options: {
+				includedHeads?: AppState["fixtureSheetIncludedHeads"];
+				order?: AppState["fixtureSheetOrder"];
+				cueListId?: string;
+				columns?: FixtureSheetColumn[];
+				showType?: boolean;
+			};
 	  }
 	| { type: "SET_PANE_POOL_COLUMNS"; id: string; value: number }
 	| { type: "DISMISS_LAYOUT_MIGRATION_NOTICE" }
@@ -57,6 +69,11 @@ export type Action =
 			mode: NonNullable<
 				AppState["desks"][number]["panes"][number]["channelDisplayMode"]
 			>;
+	  }
+	| {
+			type: "SET_PANE_VISUALIZATION_ROWS";
+			id: string;
+			rows: VisualizationRow[];
 	  }
 	| {
 			type: "SET_PANE_SCHEDULER_LAYOUT";

@@ -126,18 +126,21 @@ export const tauriDesktopBridge: DesktopBridge = {
 	hideConsoleScreen: (screenId) => invoke("hide_console_screen", { screenId }),
 	closeConsoleScreen: (screenId) =>
 		invoke("close_console_screen", { screenId }),
-	setStagePaneSelection: (fixtures) =>
-		invoke("set_stage_pane_selection", { fixtures }),
+	setStagePaneSelection: (paneId, fixtures) =>
+		invoke("set_stage_pane_selection", { paneId, fixtures }),
 	stagePaneAvailable: async () => {
 		const api = await coreApi();
 		return api.invoke<boolean>("stage_pane_available");
 	},
-	openStagePane: (geometry, user) => invoke("open_stage_pane", { geometry, user }),
-	setStagePane: (geometry) => invoke("set_stage_pane", { geometry }),
-	closeStagePane: () => invoke("close_stage_pane"),
-	sendStagePaneInput: (gesture, x, y) =>
-		invoke("stage_pane_input", { gesture, x, y }),
-	setStagePanePicture: (picture) => invoke("set_stage_pane_picture", { picture }),
+	openStagePane: (paneId, live3d, geometry, user) =>
+		invoke("open_stage_pane", { paneId, live3d, geometry, user }),
+	setStagePane: (paneId, geometry) =>
+		invoke("set_stage_pane", { paneId, geometry }),
+	closeStagePane: (paneId) => invoke("close_stage_pane", { paneId }),
+	sendStagePaneInput: (gesture, x, y, paneId) =>
+		invoke("stage_pane_input", { paneId, gesture, x, y }),
+	setStagePanePicture: (paneId, picture) =>
+		invoke("set_stage_pane_picture", { paneId, picture }),
 	stagePaneCamera: async () => {
 		const api = await coreApi();
 		return api.invoke<[number, number, number, number, number, number] | null>(
@@ -145,13 +148,21 @@ export const tauriDesktopBridge: DesktopBridge = {
 		);
 	},
 	placeStagePaneCamera: (place) => invoke("place_stage_pane_camera", place),
-	takeStagePanePicks: async () => {
+	takeStagePanePicks: async (paneId) => {
 		const api = await coreApi();
-		return api.invoke<Array<[string | null, boolean]>>("take_stage_pane_picks");
+		return api.invoke<Array<[string | null, boolean]>>("take_stage_pane_picks", {
+			paneId,
+		});
 	},
-	stagePaneStatus: async () => {
+	stagePaneStatus: async (paneId) => {
 		const api = await coreApi();
-		return api.invoke<[string | null, string | null]>("stage_pane_status");
+		return api.invoke<[string | null, string | null]>("stage_pane_status", {
+			paneId,
+		});
+	},
+	takeStagePaneBenchmarkSamples: async () => {
+		const api = await coreApi();
+		return api.invoke("take_stage_pane_benchmark_samples");
 	},
 	packagedStageBenchmarkConfig: async () => {
 		const api = await coreApi();

@@ -5,6 +5,16 @@ export const PACKAGED_STAGE_PROFILES = Object.freeze({
 		targetHz: null,
 		blocking: true,
 	}),
+	"stage-500": Object.freeze({
+		label: "500-instance mixed Stage",
+		tier: "stage-500",
+		targetHz: 10,
+		blocking: true,
+		expectedScene: Object.freeze({
+			fixtureRecords: 500,
+			fixtureInstances: 500,
+		}),
+	}),
 	"canonical-demo": Object.freeze({
 		label:
 			"Canonical demo (231 controls / 264 records / 306 physical instances)",

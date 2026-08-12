@@ -16,6 +16,7 @@ pub mod files;
 pub mod fixture_library;
 pub mod group_management;
 pub mod group_recording;
+pub mod internal_audio;
 pub mod live_action;
 pub mod macros;
 pub mod output_control;

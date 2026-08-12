@@ -11,6 +11,10 @@ export interface PatchedFixture {
 		ip_address: string;
 		port: number;
 	} | null;
+	internal_bindings?: {
+		library?: string | null;
+		output?: string | null;
+	};
 	definition: FixtureDefinition;
 	logical_heads: Array<{
 		/** Stable profile identity; absent only on legacy v1 projections. */
@@ -106,7 +110,7 @@ export interface FixtureProfile {
 	name: string;
 	short_name: string;
 	fixture_type: string;
-	patch_policy?: "dmx" | "visual_only";
+	patch_policy?: "dmx" | "visual_only" | "internal";
 	notes: string;
 	photograph_asset: string | null;
 	stage_icon_asset: string | null;
@@ -472,7 +476,8 @@ export interface FixtureDefinition {
 export interface MediaServerFixture {
 	fixture_id: string;
 	name: string;
-	endpoint: { protocol: "citp"; ip_address: string; port: number };
+	endpoint: { protocol: "citp"; ip_address: string; port: number } | null;
+	native_action?: string | null;
 	layers: Array<{ fixture_id: string; head_index: number }>;
 	status: {
 		online: boolean;

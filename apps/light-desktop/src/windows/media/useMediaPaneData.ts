@@ -51,7 +51,7 @@ function useInspectionPolling({
 	initializedDraftScope,
 }: InspectionPollingInput) {
 	useEffect(() => {
-		if (!active || !inspect || !server) {
+		if (!active || !inspect || !server?.endpoint) {
 			reset();
 			return;
 		}
@@ -79,9 +79,6 @@ function useInspectionPolling({
 						cause instanceof Error ? cause.message : String(cause),
 					);
 					setInspection(EMPTY_MEDIA_INSPECTION);
-					setDraftFolderId("");
-					setDraftFileId(null);
-					initializedDraftScope.current = null;
 				}
 			} finally {
 				running = false;
@@ -165,7 +162,7 @@ export function useMediaPaneData({
 	});
 
 	useEffect(() => {
-		if (!active || !refreshPreview || !server) return;
+		if (!active || !refreshPreview || !server?.endpoint) return;
 		const sources = inspection.preview_sources;
 		if (sources.length === 0) return;
 		const refresh = () => {
@@ -187,7 +184,7 @@ export function useMediaPaneData({
 			!active ||
 			!refreshThumbnails ||
 			!loadThumbnail ||
-			!server ||
+			!server?.endpoint ||
 			visibleFiles.length === 0
 		)
 			return;

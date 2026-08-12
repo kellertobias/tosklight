@@ -1354,7 +1354,7 @@ describe("installed light-source appearance", () => {
 });
 
 describe("selected split selection and SET editing", () => {
-	it("orders title actions edit-first through Preview Stage and supports additive and range selection", () => {
+	it("keeps the four Patch title-action groups ordered and supports additive and range selection", () => {
 		const second = splitFixture();
 		second.fixture_id = "fixture-18";
 		second.fixture_number = 18;
@@ -1382,19 +1382,45 @@ describe("selected split selection and SET editing", () => {
 				.slice(0, 7)
 				.map((button) => button.textContent),
 		).toEqual([
+			"Preview Stage",
+			"Fixtures",
+			"Media Servers",
 			"+ Add layer",
 			"+ Add fixture",
 			"+ Add multi-patch",
 			"Delete",
-			"Fixtures",
-			"Media Servers",
-			"Preview Stage",
+		]);
+		expect(
+			[...actions.querySelectorAll(".ui-window-action-group")].map((group) =>
+				[...group.querySelectorAll("button")].map(
+					(button) => button.textContent,
+				),
+			),
+		).toEqual([
+			["Preview Stage"],
+			["Fixtures", "Media Servers"],
+			["+ Add layer", "+ Add fixture", "+ Add multi-patch"],
+			["Delete"],
 		]);
 		expect(screen.getByRole("button", { name: "Preview Stage" })).toHaveClass(
 			"active",
 		);
 		fireEvent.click(screen.getByRole("button", { name: "Preview Stage" }));
 		expect(onStagePreview).toHaveBeenCalledOnce();
+		expect(
+			within(actions)
+				.getAllByRole("button")
+				.slice(0, 7)
+				.map((button) => button.textContent),
+		).toEqual([
+			"Preview Stage",
+			"Fixtures",
+			"Media Servers",
+			"+ Add layer",
+			"+ Add fixture",
+			"+ Add multi-patch",
+			"Delete",
+		]);
 
 		fireEvent.click(screen.getByRole("row", { name: /17 Split Wash 17/ }));
 		expect(programming.actions.replace).toHaveBeenLastCalledWith({

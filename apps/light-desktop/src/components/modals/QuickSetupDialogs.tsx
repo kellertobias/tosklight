@@ -528,7 +528,28 @@ function MvrShowPicker({ model }: ModelProps) {
 }
 
 function MvrFilePicker({ model }: ModelProps) {
-	const { inspectMvr, mvrBusy, mvrMode, mvrTarget } = model.mvr;
+	const {
+		inspectMvr,
+		mvrBusy,
+		mvrFilePickerRequested,
+		mvrFilePickerTrigger,
+		mvrMode,
+		mvrTarget,
+		setMvrFilePickerRequested,
+	} = model.mvr;
+	useEffect(() => {
+		if (!mvrFilePickerRequested) return;
+		const timer = globalThis.setTimeout(() => {
+			if (!mvrFilePickerTrigger.current) return;
+			setMvrFilePickerRequested(false);
+			mvrFilePickerTrigger.current();
+		}, 0);
+		return () => globalThis.clearTimeout(timer);
+	}, [
+		mvrFilePickerRequested,
+		mvrFilePickerTrigger,
+		setMvrFilePickerRequested,
+	]);
 	if (mvrMode === "export" || model.mvr.mvrPreview) return null;
 	return (
 		<>
@@ -546,6 +567,7 @@ function MvrFilePicker({ model }: ModelProps) {
 				)}
 			</p>
 			<RootConfinedFilePickerButton
+				triggerRef={mvrFilePickerTrigger}
 				variant="primary"
 				disabled={mvrBusy}
 				label={mvrBusy ? "Inspecting…" : "Choose MVR file"}

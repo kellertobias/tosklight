@@ -81,6 +81,7 @@ fn matter_bridge_writes_and_tracking_feedback_use_explicit_global_addresses() {
         matter::MatterPlaybackWrite {
             on: None,
             level: Some(127),
+        color: None,
         },
     )
     .unwrap();
@@ -135,6 +136,61 @@ fn matter_bridge_writes_and_tracking_feedback_use_explicit_global_addresses() {
         state.events.audit_events().last().unwrap().payload["source"],
         "matter"
     );
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
+fn matter_fader_explicitly_starts_and_stops_when_authored_policies_are_disabled() {
+    let (state, data_dir) = test_state();
+    state
+        .installation
+        .update_configuration(|configuration| configuration.matter_enabled = true);
+    let mut snapshot = matter_test_snapshot();
+    for playback in std::sync::Arc::make_mut(&mut snapshot.playbacks) {
+        playback.go_activates = false;
+        playback.auto_off = false;
+    }
+    std::sync::Arc::make_mut(&mut snapshot.cue_lists)[0].auto_off_at_zero = false;
+    state.output.replace_snapshot(snapshot).unwrap();
+    let endpoint = matter::endpoint_id(4, 7).unwrap();
+
+    apply_matter_playback_write(
+        &state,
+        endpoint,
+        matter::MatterPlaybackWrite {
+            on: None,
+            level: Some(127),
+        color: None,
+        },
+    )
+    .unwrap();
+    let active = state
+        .output
+        .playback_runtime()
+        .into_iter()
+        .find(|playback| playback.playback_number == Some(25))
+        .unwrap();
+    assert!(active.enabled);
+    assert!((active.master - 0.5).abs() < 0.001);
+
+    apply_matter_playback_write(
+        &state,
+        endpoint,
+        matter::MatterPlaybackWrite {
+            on: None,
+            level: Some(0),
+        color: None,
+        },
+    )
+    .unwrap();
+    let stopped = state
+        .output
+        .playback_runtime()
+        .into_iter()
+        .find(|playback| playback.playback_number == Some(25))
+        .unwrap();
+    assert!(!stopped.enabled);
+    assert_eq!(stopped.master, 0.0);
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
@@ -198,6 +254,7 @@ fn matter_activation_checkpoint_keeps_desk_independent_restart_scope() {
         matter::MatterPlaybackWrite {
             on: Some(true),
             level: None,
+        color: None,
         },
     )
     .unwrap();
@@ -286,6 +343,7 @@ fn matter_virtual_master_controls_and_tracks_a_faderless_assignment() {
         matter::MatterPlaybackWrite {
             on: None,
             level: Some(127),
+        color: None,
         },
     )
     .unwrap();
@@ -321,6 +379,7 @@ fn matter_virtual_master_controls_and_tracks_a_faderless_assignment() {
         matter::MatterPlaybackWrite {
             on: Some(false),
             level: None,
+        color: None,
         },
     )
     .unwrap();
@@ -338,6 +397,7 @@ fn matter_virtual_master_controls_and_tracks_a_faderless_assignment() {
         matter::MatterPlaybackWrite {
             on: Some(true),
             level: None,
+        color: None,
         },
     )
     .unwrap();
@@ -452,6 +512,7 @@ fn matter_writes_reach_eligible_faderless_groups_and_reject_ineligible_targets()
         matter::MatterPlaybackWrite {
             on: None,
             level: Some(127),
+        color: None,
         },
     )
     .unwrap_err();
@@ -465,6 +526,7 @@ fn matter_writes_reach_eligible_faderless_groups_and_reject_ineligible_targets()
         matter::MatterPlaybackWrite {
             on: None,
             level: Some(127),
+        color: None,
         },
     )
     .unwrap();
@@ -475,6 +537,7 @@ fn matter_writes_reach_eligible_faderless_groups_and_reject_ineligible_targets()
             matter::MatterPlaybackWrite {
                 on: None,
                 level: Some(127),
+            color: None,
             },
         )
         .unwrap_err();
@@ -494,6 +557,57 @@ fn matter_writes_reach_eligible_faderless_groups_and_reject_ineligible_targets()
         (matter_values[&1].level - 0.5).abs() < 0.001,
         "Matter feedback uses the shared Group Master runtime level"
     );
+    let endpoint = matter::endpoint_id(1, 1).unwrap();
+    let before_color = refresh_matter_bridge(&state);
+    let color_write = matter::MatterColorWrite::ColorTemperature { mireds: 250 };
+    let after_color = apply_matter_playback_write(
+        &state,
+        endpoint,
+        matter::MatterPlaybackWrite {
+            on: None,
+            level: None,
+            color: Some(color_write),
+        },
+    )
+    .unwrap();
+    assert_eq!(after_color.revision, before_color.revision + 1);
+    assert_eq!(
+        after_color
+            .lights
+            .iter()
+            .find(|light| light.endpoint_id == endpoint)
+            .unwrap()
+            .color
+            .unwrap()
+            .mode,
+        matter::MatterColorMode::ColorTemperature
+    );
+    let controller_color = state.output.group_color("front").unwrap();
+    assert!((controller_color.x - color_write.xyz().x).abs() < 0.001);
+    assert_eq!(refresh_matter_bridge(&state).revision, after_color.revision);
+
+    let desk_color = light_core::Xyz {
+        x: 0.25,
+        y: 0.65,
+        z: 0.1,
+    };
+    assert!(
+        state
+            .output
+            .set_group_color("front", Some(desk_color))
+            .unwrap()
+    );
+    let after_desk_color = refresh_matter_bridge(&state);
+    assert_eq!(after_desk_color.revision, after_color.revision + 1);
+    let mirrored = after_desk_color
+        .lights
+        .iter()
+        .find(|light| light.endpoint_id == endpoint)
+        .unwrap()
+        .color
+        .unwrap();
+    assert_eq!(mirrored.mode, matter::MatterColorMode::ColorTemperature);
+    assert_ne!(mirrored.color_temperature_mireds, 250);
     let configuration = state.installation.configuration();
     assert_eq!(
         configuration.programmer_fade_millis,

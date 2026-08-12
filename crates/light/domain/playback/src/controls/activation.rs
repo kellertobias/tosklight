@@ -364,6 +364,50 @@ impl PlaybackEngine {
         ))
     }
 
+    /// Apply an externally authoritative fader value with explicit start/stop semantics.
+    ///
+    /// Unlike a physical desk fader, an automation light does not inherit the authored
+    /// `auto_off_at_zero` policy: positive values mean On and zero means Off. Keeping the level
+    /// and activation change inside one Playback mutation boundary prevents transports from
+    /// synthesizing a racy Master + On/Off command sequence.
+    pub fn set_master_with_explicit_activation_mutation(
+        &mut self,
+        number: u16,
+        value: f32,
+    ) -> Result<PlaybackMutation<()>, String> {
+        let target = self
+            .definitions
+            .get(&number)
+            .map(|definition| definition.target.clone())
+            .ok_or("playback does not exist")?;
+        if !matches!(
+            target,
+            PlaybackTarget::CueList { .. } | PlaybackTarget::Dynamic { .. }
+        ) {
+            return Err("explicit fader activation requires a Cuelist or Dynamic Playback".into());
+        }
+
+        let fader = self.set_virtual_master_mutation(number, value)?;
+        let activation = if value > 0.0 {
+            // The virtual-master path starts both Cuelists and Dynamics above zero without
+            // engaging physical-fader pickup.
+            PlaybackMutation::new((), PlaybackRuntimeEffect::None)
+        } else {
+            let activation = if matches!(target, PlaybackTarget::Dynamic { .. }) {
+                self.off_dynamic_mutation(number)?.map(|_| ())
+            } else {
+                self.off_mutation(number)?.map(|_| ())
+            };
+            activation
+        };
+
+        Ok(PlaybackMutation {
+            value: (),
+            addressed_effect: fader.addressed_effect.combine(activation.addressed_effect),
+            effect: fader.effect.combine(activation.effect),
+        })
+    }
+
     fn set_master_inner_mutation(
         &mut self,
         number: u16,
@@ -544,15 +588,18 @@ impl PlaybackEngine {
         let Some(released) = self.temporary.remove(&key) else {
             return Ok(PlaybackMutation::new((), PlaybackRuntimeEffect::None));
         };
-        let held_peer =
-            self.cuelist_flash_states.keys().copied().any(|peer| {
-                self.runtime_key_at(peer).ok() == Some(PlaybackKey::CueList(cue_list_id))
-            });
+        let held_peer = self
+            .cuelist_flash_states
+            .keys()
+            .chain(self.cuelist_swap_states.keys())
+            .copied()
+            .any(|peer| self.runtime_key_at(peer).ok() == Some(PlaybackKey::CueList(cue_list_id)));
         let auto_off = self.cue_lists[&cue_list_id].auto_off_flash_release
             && flash_state.is_some_and(|state| state.restore_off)
             && !held_peer;
         let promoted = !auto_off
-            && definition.flash_release == FlashReleaseMode::ReleaseIntensityOnly
+            && flash_state.is_some_and(|state| state.restore_off)
+            && !held_peer
             && self.promote_intensity_release_at(identity, released, true);
         let turned_off = if auto_off {
             self.reset_jump_counts(cue_list_id);
@@ -578,6 +625,19 @@ impl PlaybackEngine {
             .collect::<Vec<_>>();
         for identity in identities {
             if let Some(state) = self.cuelist_flash_states.get_mut(&identity) {
+                state.restore_off = false;
+            }
+        }
+        let swap_identities = self
+            .cuelist_swap_states
+            .keys()
+            .copied()
+            .filter(|identity| {
+                self.runtime_key_at(*identity).ok() == Some(PlaybackKey::CueList(cue_list_id))
+            })
+            .collect::<Vec<_>>();
+        for identity in swap_identities {
+            if let Some(state) = self.cuelist_swap_states.get_mut(&identity) {
                 state.restore_off = false;
             }
         }
@@ -632,7 +692,7 @@ fn activate_normal(playback: &mut ActivePlayback, number: u16) -> bool {
     changed
 }
 
-fn deactivate(playback: &mut ActivePlayback) -> bool {
+pub(crate) fn deactivate(playback: &mut ActivePlayback) -> bool {
     let changed = playback.enabled
         || playback.flash
         || playback.master_transition.is_some()

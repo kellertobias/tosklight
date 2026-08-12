@@ -313,6 +313,7 @@ pub fn stored_fixture(
         split_patches: Vec::new(),
         layer_id: "default".into(),
         direct_control: None,
+        internal_bindings: Default::default(),
         location: Default::default(),
         rotation: Default::default(),
         logical_heads: Vec::new(),

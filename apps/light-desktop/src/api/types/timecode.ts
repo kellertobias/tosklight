@@ -32,7 +32,22 @@ export interface TimecodeLane {
 export type TimecodeLaneContent =
 	| { kind: "cue_list"; cue_list_id: string; clips: TimecodeCueListClip[] }
 	| { kind: "speed_group"; group: string; keyframes: TimecodeSpeedKeyframe[] }
-	| { kind: "audio_volume"; keyframes: TimecodeVolumeKeyframe[] };
+	| { kind: "audio_volume"; keyframes: TimecodeVolumeKeyframe[] }
+	| {
+			kind: "audio_player";
+			fixture_id: string;
+			clips: TimecodeAudioPlayerClip[];
+	  };
+
+export interface TimecodeAudioPlayerClip {
+	id: string;
+	start_frame: number;
+	end_frame: number;
+	folder: number;
+	file: number;
+	repeat: boolean;
+	volume_keyframes: TimecodeVolumeKeyframe[];
+}
 
 export interface TimecodeCueListClip {
 	id: string;

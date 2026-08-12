@@ -1,6 +1,7 @@
 import type { Preview } from "@storybook/react-vite";
 import { type ReactNode, useEffect, useState } from "react";
 import { ModalProvider } from "../../src/modals";
+import { actualSourceForStory } from "./actualSource";
 import "../../src/styles.css";
 import "./preview.css";
 
@@ -52,6 +53,13 @@ const preview: Preview = {
 	],
 	parameters: {
 		controls: { expanded: true },
+		docs: {
+			codePanel: true,
+			source: {
+				language: "tsx",
+				transform: actualSourceForStory,
+			},
+		},
 		options: {
 			storySort: {
 				order: [

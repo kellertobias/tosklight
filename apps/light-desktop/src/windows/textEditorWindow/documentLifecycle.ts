@@ -140,7 +140,7 @@ export function useSelectedTextDocument(
 			return;
 		}
 		if (!selectedRoot || !selectedPath) {
-			clearDocument();
+			if (selectedPath || !dirtyRef.current) clearDocument();
 			availabilityRef.current = "none";
 			setAvailability("none");
 			setNotice(null);

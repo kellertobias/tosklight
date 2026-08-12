@@ -149,11 +149,16 @@ describe("SoundToLightModal", () => {
     />);
     fireEvent.click(screen.getByRole("button", { name: "Manual" }));
     fireEvent.click(screen.getByRole("option", { name: "Sound to Light" }));
-    fireEvent.click(screen.getByRole("button", { name: "Close Speed Group settings" }));
+    fireEvent.pointerDown(
+      screen
+        .getByRole("dialog", { name: "Speed Group A Sound to Light" })
+        .closest("[data-modal-id]")!,
+    );
     const confirmation = screen.getByRole("alertdialog", { name: "Unsaved Speed Group settings" });
     expect(within(confirmation).getByRole("button", { name: "Close and discard" })).toBeInTheDocument();
     expect(within(confirmation).getByRole("button", { name: "Close and save" })).toBeInTheDocument();
-    fireEvent.click(within(confirmation).getByRole("button", { name: "Stay" }));
+    fireEvent.pointerDown(confirmation.closest("[data-modal-id]")!);
+    expect(screen.queryByRole("alertdialog", { name: "Unsaved Speed Group settings" })).not.toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Close Speed Group settings" }));
     fireEvent.click(within(screen.getByRole("alertdialog", { name: "Unsaved Speed Group settings" })).getByRole("button", { name: "Close and save" }));

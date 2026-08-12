@@ -380,26 +380,13 @@ fn venue_objects_are_accepted_as_scenery() {
     );
 }
 
-/// Read a shipped package the way the running desk does, so relative asset paths become the
-/// self-contained data URLs a profile snapshot actually carries. The lighter helper above reads
-/// `fixture.json` straight out of the archive and would leave every asset an unresolved path.
-fn shipped_package(name: &str) -> serde_json::Value {
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../assets/fixture-library")
-        .join(format!("{name}.toskfixture"));
-    let bytes =
-        std::fs::read(&path).unwrap_or_else(|error| panic!("read {}: {error}", path.display()));
-    let profile = light_fixture::read_fixture_package(&bytes).expect("read fixture package");
-    serde_json::to_value(&profile).expect("serialize profile")
-}
-
 /// The end of the chain the whole feature hangs on: a shipped laser package, read the way the desk
 /// reads it, becomes an emitter that draws a scan path and carries the script that decides what
 /// that path is.
 #[test]
 fn the_shipped_laser_becomes_a_scanning_emitter_carrying_its_own_engine() {
     let plan = scene_build::build(&models(
-        shipped_package("tosklight--visualizer-laser"),
+        shipped_profile_with_assets("tosklight--visualizer-laser"),
         StageLayoutBody::default(),
     ));
     let emitter = plan
@@ -427,22 +414,35 @@ fn the_shipped_laser_becomes_a_scanning_emitter_carrying_its_own_engine() {
     assert!((optics.optical_power_watts - 0.5).abs() < 1e-4);
 }
 
-/// Model ownership, from the side that can be tested without authoring geometry.
-///
-/// TL-68 settles that an exact model belongs in the fixture's own transferable package, with one
-/// audited generic set for everything else. `model_asset` names an asset carried *inside* the
-/// package, so a real preference test needs a package that ships one — and none do yet.
-///
-/// What can be pinned now is the other half of the rule, and it is the half that goes wrong
-/// quietly: a package that names a model nobody can read.
+/// A real shipped package model must survive the exact read-model path the running desk uses.
+#[test]
+fn a_shipped_fixture_model_reaches_the_scene_as_renderable_parts() {
+    let plan = scene_build::build(&models(
+        shipped_profile_with_assets("generic--acl"),
+        StageLayoutBody::default(),
+    ));
+    let fixture = &plan.scene.fixtures[0];
+    let model_index = fixture.model.expect("the ACL keeps its packaged model");
+    let model = &plan.scene.models[model_index as usize];
+    assert!(!model.parts.is_empty());
+    assert!(model.triangle_count() > 0);
+    assert!(
+        plan.warnings
+            .iter()
+            .all(|warning| !warning.contains("built-in body")),
+        "a valid shipped model must not fall back: {:?}",
+        plan.warnings
+    );
+}
+
 /// A package that names a model nobody can read still draws, and says why.
 ///
 /// Silently falling back would leave an operator wondering why their fixture looks wrong; refusing
 /// to draw would lose the rig over a missing file. It does both: the built-in body, and a warning.
 #[test]
 fn a_model_that_cannot_be_read_falls_back_and_says_so() {
-    let mut profile = shipped_profile("claypaky--sharpy");
-    profile["model_asset"] = json!("lamps/there-is-no-such-model.glb");
+    let mut profile = shipped_profile_with_assets("generic--acl");
+    profile["model_asset"] = json!("data:model/gltf-binary;base64,bm90IGEgbW9kZWw=");
     let plan = scene_build::build(&models(profile, StageLayoutBody::default()));
 
     assert!(
@@ -453,7 +453,7 @@ fn a_model_that_cannot_be_read_falls_back_and_says_so() {
         plan.warnings
     );
     assert!(
-        !plan.scene.fixtures.is_empty(),
-        "the rig is still drawn rather than lost over a missing file"
+        plan.scene.fixtures[0].model.is_none(),
+        "the unreadable model is not handed to the renderer"
     );
 }

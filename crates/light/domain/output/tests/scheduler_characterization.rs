@@ -55,7 +55,9 @@ async fn scheduler_records_a_slow_tick_as_a_missed_deadline() {
     run_scheduler(44, cancel, health, move || {
         let stop = stop.clone();
         async move {
-            tokio::time::sleep(Duration::from_millis(35)).await;
+            // More than two 44 Hz intervals means one complete output opportunity was lost;
+            // ordinary sub-frame timer jitter is characterized separately in scheduler.rs.
+            tokio::time::sleep(Duration::from_millis(50)).await;
             stop.cancel();
             Ok(1)
         }
@@ -72,7 +74,7 @@ async fn scheduler_records_a_slow_tick_as_a_missed_deadline() {
         .iter()
         .position(|count| *count == 1)
         .expect("the slow tick is represented in the histogram");
-    assert!(OUTPUT_TICK_DURATION_BUCKET_BOUNDS_MICROS[slow_tick_bucket] >= 35_000);
+    assert!(OUTPUT_TICK_DURATION_BUCKET_BOUNDS_MICROS[slow_tick_bucket] >= 50_000);
 }
 
 #[tokio::test]

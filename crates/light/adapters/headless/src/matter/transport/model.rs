@@ -1,4 +1,6 @@
-use super::super::{MAX_MATTER_LEVEL, MatterPlaybackLight, MatterPlaybackWrite};
+use super::super::{
+    MAX_MATTER_LEVEL, MatterColorState, MatterLightKind, MatterPlaybackLight, MatterPlaybackWrite,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::sync::mpsc::Sender;
@@ -73,6 +75,7 @@ pub(super) struct MatterIdentity {
 pub(super) struct EndpointShape {
     pub(super) endpoint_id: u16,
     pub(super) name: String,
+    pub(super) kind: MatterLightKind,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -81,6 +84,8 @@ pub(super) struct TransportLight {
     pub(super) name: String,
     pub(super) on: bool,
     pub(super) level: u8,
+    pub(super) kind: MatterLightKind,
+    pub(super) color: Option<MatterColorState>,
 }
 
 impl From<&MatterPlaybackLight> for TransportLight {
@@ -90,6 +95,8 @@ impl From<&MatterPlaybackLight> for TransportLight {
             name: matter_string(&light.name, 32),
             on: light.on,
             level: light.level.min(MAX_MATTER_LEVEL),
+            kind: light.kind,
+            color: light.color,
         }
     }
 }
@@ -141,6 +148,7 @@ pub(super) fn endpoint_shape(lights: &[TransportLight]) -> Vec<EndpointShape> {
         .map(|light| EndpointShape {
             endpoint_id: light.endpoint_id,
             name: light.name.clone(),
+            kind: light.kind,
         })
         .collect()
 }

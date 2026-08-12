@@ -523,6 +523,12 @@ fn patched_configuration(
     if let Some(value) = patch.timecode_audio_latency_trim_micros_by_output {
         configuration.timecode_audio_latency_trim_micros_by_output = value;
     }
+    if let Some(value) = patch.internal_audio_library_roots {
+        configuration.internal_audio_library_roots = value;
+    }
+    if let Some(value) = patch.internal_audio_output_devices {
+        configuration.internal_audio_output_devices = value;
+    }
     if let Some(value) = patch.backup_retention {
         configuration.backup_retention = value;
     }

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Stamp the workspace version into the assembled landing page and build its screenshot
-// gallery from the reviewed Storybook marketing screenshots.
+// gallery from reviewed marketing captures and explicitly documented static stills.
 
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -18,11 +18,16 @@ const SCREENSHOTS = resolve(
     resolve(ROOT, "docs/marketing/assets/screenshots"),
 );
 const MARKETING_MANIFEST = resolve(ROOT, "docs/marketing/screenshot-manifest.json");
+const PRODUCT_ICONS = [
+  ["assets/branding/tosklight-app-icon.png", "tosklight-desk.png"],
+  ["assets/branding/tosklight-viz-icon.png", "tosklight-previs.png"],
+  ["assets/branding/tosklight-media-icon.png", "tosklight-media.png"],
+];
 const DEMO_DIRECTORY = resolve(artifactPaths.visual, "product-demo");
 const PERFORMANCE_STATUS_FILE = process.env.LIGHT_PERFORMANCE_STATUS_FILE;
 
-// The manifest order is the reviewed marketing-gallery order. Its files are
-// deterministic Storybook captures, separate from the Help/manual screenshot set.
+// The manifest order is the reviewed marketing-gallery order. Most files are deterministic
+// Storybook captures; native-only surfaces may name a reviewed static source explicitly.
 const marketingManifest = JSON.parse(readFileSync(MARKETING_MANIFEST, "utf8"));
 if (marketingManifest.version !== 1 || !Array.isArray(marketingManifest.entries)) {
   throw new Error(`Invalid marketing screenshot manifest: ${MARKETING_MANIFEST}`);
@@ -113,17 +118,23 @@ const escapeHtml = (value) =>
   value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 mkdirSync(resolve(siteRoot, "screenshots"), { recursive: true });
-const figures = GALLERY.map(({ file, title, caption }) => {
-  const source = resolve(SCREENSHOTS, file);
+const figures = GALLERY.map(({ file, sourceFile, title, caption, wide }) => {
+  const source = sourceFile ? resolve(ROOT, sourceFile) : resolve(SCREENSHOTS, file);
   const name = file.replace(/\//g, "-");
   copyFileSync(source, resolve(siteRoot, "screenshots", name));
   return (
-    `<figure class="shot">` +
-    `<img src="screenshots/${escapeHtml(name)}" alt="${escapeHtml(title)} — ${escapeHtml(caption)}" loading="lazy" decoding="async">` +
+    `<figure class="shot${wide ? " shot-wide" : ""}">` +
+    `<button class="shot-image" type="button" aria-label="Enlarge ${escapeHtml(title)}">` +
+    `<img src="screenshots/${escapeHtml(name)}" alt="${escapeHtml(title)} — ${escapeHtml(caption)}" loading="lazy" decoding="async"></button>` +
     `<figcaption><strong>${escapeHtml(title)}</strong> ${escapeHtml(caption)}</figcaption>` +
     `</figure>`
   );
 }).join("\n        ");
+
+mkdirSync(resolve(siteRoot, "product-icons"), { recursive: true });
+for (const [source, file] of PRODUCT_ICONS) {
+  copyFileSync(resolve(ROOT, source), resolve(siteRoot, "product-icons", file));
+}
 
 const tag = `v${version}`;
 const releaseUrl = `https://github.com/${REPOSITORY}/releases/tag/${tag}`;

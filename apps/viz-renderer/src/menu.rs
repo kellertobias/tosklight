@@ -12,6 +12,7 @@ use muda::{Menu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem, Submenu};
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MenuCommand {
     OpenShowFile,
+    OpenRigEditor,
     CloseShowFile,
     ConnectToDesk,
     TakeSnapshot,
@@ -23,6 +24,7 @@ pub struct ApplicationMenu {
     #[allow(dead_code)]
     menu: Menu,
     open: MenuId,
+    editor: MenuId,
     close: MenuId,
     desk: MenuId,
     snapshot: MenuId,
@@ -41,6 +43,7 @@ impl ApplicationMenu {
             Some(Accelerator::new(Some(Modifiers::META), Code::KeyO)),
         );
         let close = MenuItem::new("Close Show File", true, None);
+        let editor = MenuItem::new("Open Rig Editor…", true, None);
         let desk = MenuItem::new("Connect to Lighting Desk", true, None);
         let snapshot = MenuItem::new(
             "Take Snapshot",
@@ -68,6 +71,7 @@ impl ApplicationMenu {
         let file = Submenu::new("File", true);
         file.append_items(&[
             &open,
+            &editor,
             &close,
             &PredefinedMenuItem::separator(),
             &snapshot,
@@ -92,6 +96,7 @@ impl ApplicationMenu {
         Some(Self {
             menu,
             open: open.id().clone(),
+            editor: editor.id().clone(),
             close: close.id().clone(),
             desk: desk.id().clone(),
             snapshot: snapshot.id().clone(),
@@ -111,6 +116,8 @@ impl ApplicationMenu {
     fn command_for(&self, event: &MenuEvent) -> Option<MenuCommand> {
         if event.id == self.open {
             Some(MenuCommand::OpenShowFile)
+        } else if event.id == self.editor {
+            Some(MenuCommand::OpenRigEditor)
         } else if event.id == self.close {
             Some(MenuCommand::CloseShowFile)
         } else if event.id == self.desk {

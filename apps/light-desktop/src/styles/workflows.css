@@ -172,6 +172,17 @@
 	letter-spacing: 0.06em;
 	text-transform: uppercase;
 }
+.playback-numbered-object-label {
+	display: grid;
+	grid-template-columns: 4ch minmax(0, 1fr);
+	gap: 8px;
+	width: 100%;
+	align-items: baseline;
+}
+.playback-numbered-object-number {
+	font-variant-numeric: tabular-nums;
+	text-align: right;
+}
 .playback-function-screen {
 	height: 100%;
 	min-height: 0;
@@ -1595,6 +1606,24 @@
 .matter-desk-settings > small {
 	display: block;
 	color: var(--text-dim);
+}
+.matter-playback-list {
+	display: grid;
+	gap: 4px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.matter-playback-list li {
+	display: flex;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 6px 8px;
+	border: 1px solid var(--border);
+	border-radius: 4px;
+}
+.matter-playback-list b {
+	color: var(--accent);
 }
 .matter-pairing {
 	display: grid;

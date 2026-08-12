@@ -16,6 +16,7 @@ use axum::{
 use light_application as application;
 use light_wire::v2::events as wire;
 use light_wire::v2::live_action::LiveActionFrame;
+use light_wire::v2::runtime::RuntimeSessionRole;
 use serde::Serialize;
 use uuid::Uuid;
 
@@ -77,7 +78,26 @@ async fn handle_socket(mut socket: WebSocket, state: AppState, session: Session)
     if !send_wire(&mut socket, stream.ready()).await {
         return;
     }
+    let visualizer = state.sessions.role(session.id) == RuntimeSessionRole::Visualizer;
+    if visualizer {
+        state.sessions.set_visualizer_connected(session.id, true);
+        publish_visualizer_connection(&state);
+    }
     event_loop(&mut socket, &mut stream, &state, &session).await;
+    if visualizer {
+        state.sessions.set_visualizer_connected(session.id, false);
+        publish_visualizer_connection(&state);
+    }
+}
+
+fn publish_visualizer_connection(state: &AppState) {
+    state.events.publish(
+        light_application::EventDraft::visualizer_connection_changed(
+            light_application::VisualizerConnectionNotification {
+                connected: state.sessions.has_visualizer_connection(),
+            },
+        ),
+    );
 }
 
 async fn event_loop(

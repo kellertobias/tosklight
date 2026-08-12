@@ -127,7 +127,9 @@ fn normalized_wav_name(name: &str) -> String {
     }
 }
 
-fn normalize_mp3_to_wav(bytes: &[u8]) -> Result<Vec<u8>, AssetError> {
+/// Decodes MP3 bytes into the same portable PCM16 WAV representation used by managed Timecode
+/// assets. Internal audio libraries use this at their local-file boundary before native playback.
+pub fn normalize_mp3_to_wav(bytes: &[u8]) -> Result<Vec<u8>, AssetError> {
     use std::io::Cursor;
     use symphonia::core::{
         audio::SampleBuffer,

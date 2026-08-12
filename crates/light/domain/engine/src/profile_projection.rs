@@ -84,7 +84,7 @@ impl AxisInversion {
 #[derive(Default)]
 pub(crate) struct ResolvedProfileFixtureOutput {
     pub(crate) heads: Vec<ResolvedProfileHeadOutput>,
-    channels: Vec<(uuid::Uuid, u32)>,
+    pub(crate) channels: Vec<(uuid::Uuid, u32)>,
 }
 
 pub(crate) struct ResolvedProfileHeadOutput {

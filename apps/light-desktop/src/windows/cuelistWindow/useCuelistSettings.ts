@@ -136,7 +136,7 @@ export function useCuelistSettings({
 			start + object.body.cues.length - 1 > Number.MAX_SAFE_INTEGER
 		) {
 			setRenumberError(
-				"Start Cue must be a positive whole number whose resulting Cue numbers are safe integers.",
+				"First new Cue number must be a positive whole number whose resulting Cue numbers are safe integers.",
 			);
 			return;
 		}

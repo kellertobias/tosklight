@@ -79,6 +79,18 @@ mod network_rule_tests {
             "one in the desk's window is handed its values instead"
         );
     }
+
+    #[test]
+    fn an_empty_desk_output_snapshot_still_advances_the_stage_source() {
+        let mut values = SceneValues::default();
+        let mut frame = 0;
+
+        stamp_desk_output_frame(&mut values, &mut frame, 42);
+
+        assert_eq!(frame, 1);
+        assert_eq!(values.frame, 1);
+        assert_eq!(values.newest_input_micros, 42);
+    }
 }
 
 #[cfg(test)]

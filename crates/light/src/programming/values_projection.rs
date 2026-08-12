@@ -2,7 +2,7 @@ use super::{ProgrammingPorts, ProgrammingService};
 use crate::{ActionContext, ActionError, ActionErrorKind};
 use light_core::{AttributeKey, FixtureId};
 use light_core::{SessionId, UserId};
-use light_dynamics::DynamicAddressValue;
+use light_dynamics::{DynamicAddressValue, DynamicSemanticValue};
 use light_programmer::{ProgrammerFixtureUpdate, ProgrammerGroupUpdate, ProgrammerRegistry};
 use std::sync::Arc;
 
@@ -39,6 +39,13 @@ pub struct ProgrammingGroupValueAddress {
     pub attribute: AttributeKey,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProgrammingDynamicValueAddress {
+    pub fixture_id: FixtureId,
+    pub attribute: AttributeKey,
+    pub instance_link: Option<uuid::Uuid>,
+}
+
 /// One ordered normal-value transition. The retained projection remains available to command
 /// outcomes, while event transport publishes only these address-level changes.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -48,7 +55,7 @@ pub struct ProgrammingValuesDelta {
     pub group_values: Vec<ProgrammerGroupUpdate>,
     pub removed_group_values: Vec<ProgrammingGroupValueAddress>,
     pub dynamic_values: Vec<DynamicAddressValue>,
-    pub removed_dynamic_values: Vec<ProgrammingFixtureValueAddress>,
+    pub removed_dynamic_values: Vec<ProgrammingDynamicValueAddress>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -149,7 +156,7 @@ impl ProgrammingValuesContent {
             before
                 .dynamic_values
                 .iter()
-                .map(|value| ((value.fixture_id, value.attribute.clone()), value))
+                .map(|value| (dynamic_address(value), value))
                 .collect::<HashMap<_, _>>()
         } else {
             HashMap::default()
@@ -157,7 +164,7 @@ impl ProgrammingValuesContent {
         let after_dynamic = if dynamic_changed {
             self.dynamic_values
                 .iter()
-                .map(|value| ((value.fixture_id, value.attribute.clone()), value))
+                .map(|value| (dynamic_address(value), value))
                 .collect::<HashMap<_, _>>()
         } else {
             HashMap::default()
@@ -206,10 +213,7 @@ impl ProgrammingValuesContent {
                 self.dynamic_values
                     .iter()
                     .filter(|value| {
-                        before_dynamic
-                            .get(&(value.fixture_id, value.attribute.clone()))
-                            .copied()
-                            != Some(*value)
+                        before_dynamic.get(&dynamic_address(value)).copied() != Some(*value)
                     })
                     .cloned()
                     .collect()
@@ -220,10 +224,13 @@ impl ProgrammingValuesContent {
                 before_dynamic
                     .keys()
                     .filter(|key| !after_dynamic.contains_key(*key))
-                    .map(|(fixture_id, attribute)| ProgrammingFixtureValueAddress {
-                        fixture_id: *fixture_id,
-                        attribute: attribute.clone(),
-                    })
+                    .map(
+                        |(fixture_id, attribute, instance_link)| ProgrammingDynamicValueAddress {
+                            fixture_id: *fixture_id,
+                            attribute: attribute.clone(),
+                            instance_link: *instance_link,
+                        },
+                    )
                     .collect()
             } else {
                 Vec::new()
@@ -234,6 +241,15 @@ impl ProgrammingValuesContent {
     }
 }
 
+fn dynamic_address(value: &DynamicAddressValue) -> (FixtureId, AttributeKey, Option<uuid::Uuid>) {
+    let instance_link = match &value.value {
+        DynamicSemanticValue::DynamicOn { instance_link, .. }
+        | DynamicSemanticValue::DynamicOff { instance_link, .. } => Some(*instance_link),
+        _ => None,
+    };
+    (value.fixture_id, value.attribute.clone(), instance_link)
+}
+
 #[cfg(test)]
 pub(super) fn reset_projection_read_count() {
     PROJECTION_READS.set(0);
@@ -242,6 +258,53 @@ pub(super) fn reset_projection_read_count() {
 #[cfg(test)]
 pub(super) fn projection_read_count() -> usize {
     PROJECTION_READS.get()
+}
+
+#[cfg(test)]
+mod dynamic_delta_tests {
+    use super::*;
+    use light_core::{AttributeKey, FixtureId};
+    use light_dynamics::{DynamicSemanticValue, DynamicValueTiming};
+    use uuid::Uuid;
+
+    fn dynamic_value(instance_link: Uuid, programmer_order: u64) -> DynamicAddressValue {
+        DynamicAddressValue {
+            fixture_id: FixtureId(Uuid::from_u128(1)),
+            attribute: AttributeKey("intensity".into()),
+            value: DynamicSemanticValue::DynamicOff {
+                instance_link,
+                timing: DynamicValueTiming::default(),
+            },
+            programmer_order,
+            changed_at_millis: programmer_order,
+        }
+    }
+
+    #[test]
+    fn dynamic_delta_keeps_concurrent_instance_tracks_distinct() {
+        let first = Uuid::from_u128(11);
+        let second = Uuid::from_u128(12);
+        let before = ProgrammingValuesContent {
+            dynamic_values: Arc::new(vec![dynamic_value(first, 1), dynamic_value(second, 2)]),
+            ..Default::default()
+        };
+        let after = ProgrammingValuesContent {
+            dynamic_values: Arc::new(vec![dynamic_value(second, 3)]),
+            ..Default::default()
+        };
+
+        let change = after.change(&before, UserId(Uuid::from_u128(2)), 2);
+
+        assert_eq!(change.delta.dynamic_values, vec![dynamic_value(second, 3)]);
+        assert_eq!(
+            change.delta.removed_dynamic_values,
+            vec![ProgrammingDynamicValueAddress {
+                fixture_id: FixtureId(Uuid::from_u128(1)),
+                attribute: AttributeKey("intensity".into()),
+                instance_link: Some(first),
+            }]
+        );
+    }
 }
 
 impl ProgrammingService {

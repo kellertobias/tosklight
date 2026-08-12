@@ -43,6 +43,12 @@ export interface WindowSettingsTab {
 	label: string;
 	content: ReactNode;
 }
+export interface WindowDropdownItem {
+	id: string;
+	label: ReactNode;
+	onSelect: () => void;
+	disabled?: boolean;
+}
 export interface WindowEmptyState {
 	title: ReactNode;
 	description?: ReactNode;
@@ -52,6 +58,83 @@ export interface WindowEmptyState {
 
 const WindowSettingsContext = createContext<(() => void) | null>(null);
 export const useWindowSettings = () => useContext(WindowSettingsContext);
+
+export function WindowDropdown({
+	label,
+	ariaLabel,
+	items,
+	className,
+}: {
+	label: ReactNode;
+	ariaLabel: string;
+	items: readonly WindowDropdownItem[];
+	className?: string;
+}) {
+	const [anchor, setAnchor] = useState<DOMRect | null>(null);
+	useEffect(() => {
+		if (!anchor) return;
+		const close = (event: globalThis.KeyboardEvent) => {
+			if (event.key === "Escape") setAnchor(null);
+		};
+		window.addEventListener("keydown", close);
+		return () => window.removeEventListener("keydown", close);
+	}, [anchor]);
+	return (
+		<>
+			<Button
+				className={`ui-window-dropdown-trigger ${className ?? ""}`.trim()}
+				aria-label={ariaLabel}
+				aria-haspopup="menu"
+				aria-expanded={Boolean(anchor)}
+				onClick={(event) =>
+					setAnchor((current) =>
+						current ? null : event.currentTarget.getBoundingClientRect(),
+					)
+				}
+			>
+				{label}
+				<span aria-hidden="true">⌄</span>
+			</Button>
+			{anchor &&
+				createPortal(
+					<div
+						className="ui-window-dropdown-layer"
+						onPointerDown={(event) =>
+							event.target === event.currentTarget && setAnchor(null)
+						}
+					>
+						<div
+							className="ui-window-dropdown-menu"
+							role="menu"
+							aria-label={ariaLabel}
+							style={{
+								top: anchor.bottom + 3,
+								left: Math.max(
+									3,
+									Math.min(anchor.left, window.innerWidth - 230),
+								),
+							}}
+						>
+							{items.map((item) => (
+								<Button
+									key={item.id}
+									role="menuitem"
+									disabled={item.disabled}
+									onClick={() => {
+										setAnchor(null);
+										item.onSelect();
+									}}
+								>
+									{item.label}
+								</Button>
+							))}
+						</div>
+					</div>,
+					document.body,
+				)}
+		</>
+	);
+}
 
 function WindowActionButton({ action }: { action: WindowAction }) {
 	const holdTimer = useRef<number | null>(null);

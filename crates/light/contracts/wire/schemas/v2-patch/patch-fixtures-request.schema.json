@@ -142,6 +142,13 @@
             ]
           }
         },
+        "internal_bindings": {
+          "$ref": "#/$defs/PatchInternalFixtureBindings",
+          "default": {
+            "library": null,
+            "output": null
+          }
+        },
         "invert_pan": {
           "type": "boolean",
           "default": false
@@ -529,6 +536,24 @@
           ]
         }
       ]
+    },
+    "PatchInternalFixtureBindings": {
+      "description": "Portable names resolved to machine-local audio resources by each desk.",
+      "type": "object",
+      "properties": {
+        "library": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "output": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
     },
     "PatchMultiPatchInput": {
       "type": "object",

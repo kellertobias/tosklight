@@ -186,6 +186,8 @@ function useMvrController(
 		useState<MvrExportPreview | null>(null);
 	const [mvrName, setMvrName] = useState("");
 	const [mvrBusy, setMvrBusy] = useState(false);
+	const mvrFilePickerTrigger = useRef<(() => void) | null>(null);
+	const [mvrFilePickerRequested, setMvrFilePickerRequested] = useState(false);
 	const [mvrResolutions, setMvrResolutions] = useState<
 		Record<string, { action: string; universe?: number; address?: number }>
 	>({});
@@ -254,6 +256,7 @@ function useMvrController(
 		setMvrMode("new");
 		setMvrTarget(null);
 		setMvrPreview(null);
+		setMvrFilePickerRequested(true);
 	}
 	function openMvrExport() {
 		closeSaveAs();
@@ -274,6 +277,9 @@ function useMvrController(
 		mvrName,
 		setMvrName,
 		mvrBusy,
+		mvrFilePickerTrigger,
+		mvrFilePickerRequested,
+		setMvrFilePickerRequested,
 		mvrResolutions,
 		setMvrResolutions,
 		inspectMvr,

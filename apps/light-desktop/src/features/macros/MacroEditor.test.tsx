@@ -65,7 +65,7 @@ describe("MacroEditor", () => {
 		const client = api(valid());
 		const onClose = vi.fn();
 		vi.spyOn(window, "confirm").mockReturnValue(true);
-		render(
+		const { container } = render(
 			<MacroEditor
 				showId="show-a"
 				macro={macro}
@@ -75,6 +75,7 @@ describe("MacroEditor", () => {
 			/>,
 		);
 
+		expect(container.querySelectorAll(".ui-window-header")).toHaveLength(1);
 		expect(screen.getByText("Macro")).toBeInTheDocument();
 		expect(screen.queryByText("Macro 160")).not.toBeInTheDocument();
 		expect(screen.getByRole("button", { name: "Run Macro" })).toHaveTextContent(
@@ -87,13 +88,17 @@ describe("MacroEditor", () => {
 				trigger: { type: "editor" },
 			}),
 		);
-		expect(screen.queryByRole("button", { name: /copy/i })).not.toBeInTheDocument();
+		expect(
+			screen.queryByRole("button", { name: /copy/i }),
+		).not.toBeInTheDocument();
 		expect(
 			screen.queryByRole("button", { name: /undo.*save/i }),
 		).not.toBeInTheDocument();
 
 		fireEvent.click(screen.getByRole("button", { name: "Settings" }));
-		expect(screen.getByRole("dialog", { name: "Macro Settings" })).toBeInTheDocument();
+		expect(
+			screen.getByRole("dialog", { name: "Macro Settings" }),
+		).toBeInTheDocument();
 		expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue(
 			"Front wash",
 		);
@@ -108,11 +113,83 @@ describe("MacroEditor", () => {
 		await waitFor(() =>
 			expect(client.delete).toHaveBeenCalledWith("show-a", macro.id, 4),
 		);
-		fireEvent.click(
-			screen.getByRole("button", { name: "Close Macro Settings" }),
-		);
-		fireEvent.click(screen.getByRole("button", { name: "← Macros" }));
 		expect(onClose).toHaveBeenCalledOnce();
+	});
+
+	it("hides stale errors while editing, then autosaves a settled valid command", async () => {
+		vi.useFakeTimers();
+		const incomplete = valid({
+			valid: false,
+			diagnostics: [
+				{
+					line: 1,
+					status: "invalid",
+					message: "Fixture selection needs a number",
+					tokens: [],
+				},
+			],
+		});
+		const client = api(valid());
+		vi.mocked(client.validate)
+			.mockResolvedValueOnce(valid())
+			.mockResolvedValueOnce(incomplete)
+			.mockResolvedValueOnce(valid());
+		vi.mocked(client.update).mockResolvedValue({
+			request_id: "request-1",
+			replayed: false,
+			show_id: "show-a",
+			show_revision: 8,
+			object: {
+				kind: "macro",
+				id: macro.id,
+				revision: 5,
+				updated_at: "2026-08-12T02:00:00Z",
+				body: { ...macro.body, source: "FIXTURE 1" },
+			},
+		});
+		render(
+			<MacroEditor
+				showId="show-a"
+				macro={macro}
+				api={client}
+				onClose={vi.fn()}
+				onSaved={vi.fn().mockResolvedValue(undefined)}
+			/>,
+		);
+
+		await act(async () => vi.advanceTimersByTime(180));
+		const source = screen.getByRole("textbox", { name: "Macro command lines" });
+		fireEvent.change(source, { target: { value: "FIXTURE" } });
+		expect(screen.getByRole("status")).toHaveTextContent(
+			"Checking command line",
+		);
+		expect(screen.queryByText(/needs a number/)).not.toBeInTheDocument();
+
+		await act(async () => vi.advanceTimersByTime(180));
+		expect(screen.getByRole("alert")).toHaveTextContent(
+			"Command line needs attention",
+		);
+		expect(screen.getByText(/needs a number/)).toBeInTheDocument();
+		expect(client.update).not.toHaveBeenCalled();
+
+		fireEvent.change(source, { target: { value: "FIXTURE 1" } });
+		expect(screen.queryByText(/needs a number/)).not.toBeInTheDocument();
+		await act(async () => vi.advanceTimersByTime(180));
+		expect(screen.getByRole("status")).toHaveTextContent("Autosave pending");
+		await act(async () => vi.advanceTimersByTime(499));
+		expect(client.update).not.toHaveBeenCalled();
+		await act(async () => {
+			vi.advanceTimersByTime(1);
+			await Promise.resolve();
+		});
+		expect(client.update).toHaveBeenCalledWith("show-a", macro.id, 4, {
+			number: 160,
+			name: "Front wash",
+			source: "FIXTURE 1",
+			presentation: macro.body.presentation,
+		});
+		expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+		expect(screen.getByRole("status")).toHaveTextContent("Saved");
 	});
 
 	it("inserts the authoritative completion and exposes DEFINE expansion on hover", async () => {
@@ -187,9 +264,7 @@ describe("MacroEditor", () => {
 		const source = screen.getByRole("textbox", { name: "Macro command lines" });
 		expect(source).toHaveAttribute("aria-activedescendant");
 		fireEvent.keyDown(source, { key: "Enter" });
-		expect(source).toHaveValue(
-			"FIXTURE \nDEFINE _front FIXTURE 1\n_front",
-		);
+		expect(source).toHaveValue("FIXTURE \nDEFINE _front FIXTURE 1\n_front");
 	});
 
 	it("discards a late IntelliCode response for an older source revision", async () => {
@@ -246,6 +321,8 @@ describe("MacroEditor", () => {
 				}),
 			),
 		);
-		expect(screen.queryByRole("option", { name: /FULL/ })).not.toBeInTheDocument();
+		expect(
+			screen.queryByRole("option", { name: /FULL/ }),
+		).not.toBeInTheDocument();
 	});
 });

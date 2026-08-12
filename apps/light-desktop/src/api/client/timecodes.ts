@@ -1,4 +1,5 @@
 import type {
+	InternalAudioStatus,
 	ShowObjectActionOutcome,
 	TimecodeCollectionSnapshot as WireTimecodeCollectionSnapshot,
 	TimecodeDefinition as WireTimecodeDefinition,
@@ -125,6 +126,10 @@ export class TimecodesApiClient {
 		return this.transport.request("/api/v2/timecodes/audio/outputs");
 	}
 
+	internalAudioStatus(): Promise<InternalAudioStatus> {
+		return this.transport.request("/api/v2/internal-audio/status");
+	}
+
 	importAudio(showId: string, file: File): Promise<TimecodeAudioImportResult> {
 		return this.transport.request(
 			`/api/v2/timecodes/audio/import?name=${encodeURIComponent(file.name)}`,
@@ -189,6 +194,17 @@ function cloneLaneContent(
 		return {
 			...content,
 			keyframes: content.keyframes.map((keyframe) => ({ ...keyframe })),
+		};
+	}
+	if (content.kind === "audio_player") {
+		return {
+			...content,
+			clips: content.clips.map((clip) => ({
+				...clip,
+				volume_keyframes: clip.volume_keyframes.map((keyframe) => ({
+					...keyframe,
+				})),
+			})),
 		};
 	}
 	return {

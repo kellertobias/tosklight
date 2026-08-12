@@ -1,7 +1,7 @@
 import type { SplitPatch } from "../../../api/types";
 import type { PatchFixtureUpdateAction } from "../../../features/patch/contracts";
 import { parsePatchAddress } from "../../input/ConsoleFields";
-import { compatibleHighlightOverrides, isDmxPatchable } from "../patchUtils";
+import { compatibleHighlightOverrides, isVisualOnly } from "../patchUtils";
 import {
 	type CombinedPolicyChoice,
 	combinedPolicyValues,
@@ -85,6 +85,14 @@ export function saveEdit(
 				degrees,
 			});
 	}
+	if (edit === "internal_bindings") {
+		const bindings = parseInternalBindingDraft(value);
+		if (!bindings) {
+			controller.ui.setEditError("Enter valid logical library and output names.");
+		} else {
+			void applyEdit(controller, { internal_bindings: bindings });
+		}
+	}
 	if ((edit === "location" || edit === "rotation") && editAxis)
 		void applyFixtureIntent(
 			controller,
@@ -111,6 +119,24 @@ export function saveEdit(
 		});
 	}
 	void all;
+}
+
+export function parseInternalBindingDraft(value: string) {
+	try {
+		const draft = JSON.parse(value) as { library?: unknown; output?: unknown };
+		const normalize = (candidate: unknown) => {
+			if (typeof candidate !== "string") return undefined;
+			const trimmed = candidate.trim();
+			return trimmed || undefined;
+		};
+		const library = normalize(draft.library);
+		const output = normalize(draft.output);
+		if ((library?.length ?? 0) > 128 || (output?.length ?? 0) > 128)
+			return null;
+		return { library, output };
+	} catch {
+		return null;
+	}
 }
 
 async function applyFixtureIntent(
@@ -248,7 +274,7 @@ export function parseMibInput(value: string):
 function saveFixtureNumber(controller: PatchController, value: string) {
 	const { selected, all } = controller.data;
 	if (!selected) return;
-	if (isDmxPatchable(selected.definition)) {
+	if (!isVisualOnly(selected.definition)) {
 		const number = parseFixtureNumber(value);
 		if (
 			number != null &&

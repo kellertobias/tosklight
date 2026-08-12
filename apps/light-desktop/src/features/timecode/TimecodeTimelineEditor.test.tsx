@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen } from "@testing-library/react";
-import { createRef } from "react";
+import { createRef, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { TimecodeDefinition } from "../../api/types/timecode";
 import {
@@ -20,13 +20,20 @@ const definition: TimecodeDefinition = {
 		asset_id: "00000000-0000-0000-0000-000000000002",
 		asset_revision: 1,
 	},
-	markers: [],
+	markers: [
+		{
+			id: "00000000-0000-0000-0000-000000000003",
+			frame: 88,
+			name: "Verse",
+		},
+	],
 	lanes: [],
 };
 
 describe("TimecodeTimelineEditor", () => {
 	it("fits the whole timeline at 1x and reaches 17.5 CSS pixels per frame", () => {
 		const onCommit = vi.fn();
+		const onScrub = vi.fn();
 		const ref = createRef<TimecodeTimelineEditorHandle>();
 		render(
 			<TimecodeTimelineEditor
@@ -47,8 +54,9 @@ describe("TimecodeTimelineEditor", () => {
 						],
 					},
 				]}
+				audioPlayers={[]}
 				waveformPeaks={[0.2, 1, 0.4]}
-				onScrub={vi.fn()}
+				onScrub={onScrub}
 				onCommit={onCommit}
 				onPreview={vi.fn()}
 				onBeginGesture={vi.fn()}
@@ -70,9 +78,24 @@ describe("TimecodeTimelineEditor", () => {
 		expect(
 			screen.getByLabelText("Linked audio waveform").querySelectorAll("line"),
 		).toHaveLength(3);
+		expect(screen.queryByRole("button", { name: "Copy" })).toBeNull();
+		expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
+		expect(screen.queryByLabelText("Speed Group")).toBeNull();
+		expect(screen.queryByLabelText("Cuelist")).toBeNull();
+		expect(screen.getByTitle("Verse · 00:00:02.00")).toHaveClass(
+			"timecode-timeline-marker",
+		);
 		expect(
-			screen.getByRole("button", { name: "Copy" }).hasAttribute("disabled"),
-		).toBe(true);
+			screen.getByRole("button", { name: "Drag playhead to seek" }),
+		).toHaveTextContent("00:00:01.00");
+		const playhead = screen.getByRole("button", {
+			name: "Drag playhead to seek",
+		});
+		playhead.setPointerCapture = vi.fn();
+		playhead.hasPointerCapture = vi.fn(() => true);
+		fireEvent.pointerDown(playhead, { pointerId: 1, clientX: 88 });
+		fireEvent.pointerMove(playhead, { pointerId: 1, clientX: 176 });
+		expect(onScrub).toHaveBeenCalled();
 		ref.current?.addAudioLane();
 		expect(onCommit).toHaveBeenCalledWith(
 			expect.objectContaining({
@@ -98,5 +121,77 @@ describe("TimecodeTimelineEditor", () => {
 		);
 		expect(screen.queryByLabelText("Marker CSV")).toBeNull();
 		expect(screen.queryByRole("button", { name: "Add Marker" })).toBeNull();
+	});
+
+	it("creates and edits a clip on a patched Audio Player lane", () => {
+		const commits: TimecodeDefinition[] = [];
+		function Harness() {
+			const [draft, setDraft] = useState<TimecodeDefinition>({
+				...definition,
+				audio: null,
+				lanes: [
+					{
+						id: "00000000-0000-0000-0000-000000000040",
+						name: "Audio Player 201",
+						content: {
+							kind: "audio_player",
+							fixture_id: "00000000-0000-0000-0000-000000000041",
+							clips: [],
+						},
+					},
+				],
+			});
+			return (
+				<TimecodeTimelineEditor
+					definition={draft}
+					frame={44}
+					fps={44}
+					cueLists={[]}
+					audioPlayers={[
+						{
+							fixtureId: "00000000-0000-0000-0000-000000000041",
+							name: "Audio Player 201",
+						},
+					]}
+					onScrub={vi.fn()}
+					onCommit={(next) => {
+						commits.push(next);
+						setDraft(next);
+					}}
+					onPreview={setDraft}
+					onBeginGesture={vi.fn()}
+					onEndGesture={vi.fn()}
+				/>
+			);
+		}
+		render(<Harness />);
+		fireEvent.click(screen.getByRole("button", { name: "+ clip" }));
+		expect(screen.getByTitle(/Audio Player 201 · 000\.000/)).toBeTruthy();
+		fireEvent.input(screen.getByLabelText("Audio Folder"), {
+			target: { value: "12" },
+		});
+		fireEvent.input(screen.getByLabelText("Audio File"), {
+			target: { value: "34" },
+		});
+		fireEvent.click(screen.getByLabelText("Repeat"));
+		fireEvent.input(screen.getByLabelText("Volume %"), {
+			target: { value: "65" },
+		});
+		fireEvent.click(screen.getByRole("button", { name: "Add volume point" }));
+		const content = commits.at(-1)?.lanes[0].content;
+		expect(content).toMatchObject({
+			kind: "audio_player",
+			clips: [
+				expect.objectContaining({
+					folder: 12,
+					file: 34,
+					repeat: true,
+					volume_keyframes: [
+						expect.objectContaining({ value: 0.65 }),
+						expect.objectContaining({ value: 0.65 }),
+					],
+				}),
+			],
+		});
 	});
 });

@@ -195,7 +195,10 @@ pub(super) fn matter_playback_values(
                 PlaybackTarget::Group { group_id, .. } => state
                     .output
                     .group_master(group_id)
-                    .map(|master| matter::PlaybackValue::new(master, master > 0.0))
+                    .map(|master| {
+                        matter::PlaybackValue::new(master, master > 0.0)
+                            .with_color(state.output.group_color(group_id))
+                    })
                     .unwrap_or_default(),
                 PlaybackTarget::SpeedGroup { .. }
                 | PlaybackTarget::Macro { .. }
@@ -271,6 +274,40 @@ pub(super) fn apply_matter_playback_write(
                 "source":"matter"
             }),
         );
+    }
+    if let Some(color) = resolved.color {
+        let group_id = state
+            .output
+            .snapshot()
+            .playbacks
+            .iter()
+            .find(|definition| definition.number == resolved.playback_number)
+            .and_then(|definition| match &definition.target {
+                light_playback::PlaybackTarget::Group { group_id, .. } => Some(group_id.clone()),
+                _ => None,
+            })
+            .ok_or_else(|| ApiError::bad_request("Matter color requires a Group Master"))?;
+        let color_changed = state
+            .output
+            .set_group_color(&group_id, Some(color.xyz()))
+            .map_err(|error| ApiError::bad_request(error.to_string()))?;
+        if color_changed {
+            emit(
+                state,
+                "playback_changed",
+                serde_json::json!({
+                    "page":resolved.page,
+                    "playback":resolved.playback,
+                    "playback_number":resolved.playback_number,
+                    "action":"color",
+                    "source":"matter"
+                }),
+            );
+        }
+        state
+            .integrations
+            .matter_bridge()
+            .apply_color_write(resolved.endpoint_id, color);
     }
     Ok(refresh_matter_bridge(state))
 }

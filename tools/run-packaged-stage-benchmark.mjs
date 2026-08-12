@@ -33,6 +33,7 @@ import {
 import {
 	countFixtureInstances,
 	createDeterministicLargeStageInputs,
+	createPerformanceFixtureInputs,
 	LARGE_STAGE_DYNAMIC_INSTANCES,
 	LARGE_STAGE_FIXTURE_INSTANCES,
 	LARGE_STAGE_FIXTURE_RECORDS,
@@ -62,6 +63,11 @@ const samplesPath = path.join(
 	`packaged-tauri-${profile}-${stamp}.jsonl`,
 );
 const reportPath = samplesPath.replace(/\.jsonl$/, ".json");
+const canonicalReportPath = path.join(
+	artifactPaths.performance,
+	"stage",
+	"stage-visualization-timing.json",
+);
 const dataPath = path.join(
 	artifactPaths.performance,
 	"stage",
@@ -188,7 +194,7 @@ try {
 					)
 				: null;
 		memoryPhase = "stage";
-		if (isLargeOperatorProfile(profile))
+		if (usesStalledVisualizationClient(profile))
 			slowClient = await startSlowVisualizationClient(
 				"http://127.0.0.1:5000",
 				prepared.session.token,
@@ -283,7 +289,9 @@ if (benchmarkFailure) {
 				);
 }
 await writeFile(reportPath, `${JSON.stringify(result, null, 2)}\n`);
+await writeFile(canonicalReportPath, `${JSON.stringify(result, null, 2)}\n`);
 console.log(`Created ${reportPath}`);
+console.log(`Updated ${canonicalReportPath}`);
 if (!result.acceptanceGateEnforced) {
 	for (const failure of result.failures)
 		console.error(`Stage gate: ${failure}`);
@@ -805,6 +813,10 @@ function isLargeOperatorProfile(candidate) {
 	return candidate === "large-stage" || candidate === "supported-scale";
 }
 
+function usesStalledVisualizationClient(candidate) {
+	return candidate === "stage-500" || isLargeOperatorProfile(candidate);
+}
+
 async function prepareScene(profile) {
 	const session = await requestJson("POST", "/api/v2/sessions", {
 		username: "Operator",
@@ -888,6 +900,49 @@ async function prepareScene(profile) {
 		undefined,
 		{ session },
 	);
+	if (profile === "stage-500") {
+		const workload = createPerformanceFixtureInputs(
+			fixtureLibrary.profiles,
+			500,
+			before.fixtures[0]?.layer_id ?? "default",
+		);
+		await requestJson(
+			"POST",
+			"/api/v2/patch/fixtures",
+			{
+				request_id: crypto.randomUUID(),
+				fixtures: workload.fixtures,
+				remove_fixture_ids: before.fixtures.map(
+					(fixture) => fixture.fixture_id,
+				),
+				placements: [],
+			},
+			{ session, showId, revision: before.patch_revision },
+		);
+		const after = await requestJson("GET", "/api/v2/patch", undefined, {
+			session,
+			showId,
+		});
+		await setStaticControlIntensity(
+			session,
+			showId,
+			workload.staticControlFixtureIds,
+		);
+		const scene = {
+			...summarizeScene(profile, after.fixtures),
+			inventory: workload.inventory,
+			categoryCounts: workload.categoryCounts,
+			patch: workload.patch,
+		};
+		const failures = packagedStageSceneFailures(profile, scene);
+		if (failures.length > 0) throw new Error(failures.join("; "));
+		return {
+			scene,
+			session,
+			showId,
+			showSwitch: await createShowSwitchTarget(session, showId, profile),
+		};
+	}
 	const largeScene = createDeterministicLargeStageInputs(
 		before.fixtures,
 		fixtureLibrary.profiles,
@@ -1735,6 +1790,15 @@ function packagedApplication() {
 	};
 }
 
+function packagedApplicationIdentity(application) {
+	return {
+		productName: "ToskLight",
+		applicationKind: "packaged-desktop",
+		executable: path.basename(application.executable),
+		bundle: application.bundle ? path.basename(application.bundle) : null,
+	};
+}
+
 function launchPackagedApplication(application, environment) {
 	if (!application.direct)
 		return spawn(
@@ -1830,6 +1894,16 @@ function evaluate(
 	runtime,
 	processMemory,
 ) {
+	if (complete.measurementSurface === "packaged-tauri-native-stage")
+		return evaluateNativeStage(
+			complete,
+			duration,
+			samplesFile,
+			profile,
+			scene,
+			runtime,
+			processMemory,
+		);
 	const stage = complete.frontend?.stage;
 	const timeline = Array.isArray(complete.timeline) ? complete.timeline : [];
 	const frames = Array.isArray(stage?.frames)
@@ -2048,7 +2122,7 @@ function evaluate(
 	if (visualization.finalStreamQueueDepth !== 0)
 		failures.push("packaged visualization stream retained a queued frame");
 	if (
-		isLargeOperatorProfile(profile) &&
+		usesStalledVisualizationClient(profile) &&
 		visualization.streamQueueDrops + visualization.streamSendFailures === 0
 	)
 		failures.push(
@@ -2114,6 +2188,7 @@ function evaluate(
 		schemaVersion: 2,
 		tier: profileDefinition.tier,
 		measurementSurface: "packaged-tauri-webview",
+		applicationIdentity: packagedApplicationIdentity(application),
 		profile,
 		profileLabel: profileDefinition.label,
 		scene,
@@ -2160,10 +2235,10 @@ function evaluate(
 					)
 				: null,
 			maxPresentationGapMs: presentationGaps.length
-				? Math.max(...presentationGaps)
+				? maximum(presentationGaps)
 				: null,
 			maxSourceCadenceGapMs: sourceCadenceGaps.length
-				? Math.max(...sourceCadenceGaps)
+				? maximum(sourceCadenceGaps)
 				: null,
 			playbackIndication,
 			fixtureSheetConvergence,
@@ -2203,6 +2278,194 @@ function evaluate(
 		},
 		capabilities: complete.capabilities ?? null,
 	};
+}
+
+function evaluateNativeStage(
+	complete,
+	duration,
+	samplesFile,
+	profile,
+	scene,
+	runtime,
+	processMemory,
+) {
+	const frames = Array.isArray(complete.nativeStage?.frames)
+		? complete.nativeStage.frames
+		: [];
+	const timeline = Array.isArray(complete.timeline) ? complete.timeline : [];
+	const lifecycleFrames = frames.filter(
+		(frame) =>
+			Number.isFinite(frame.sourceToSettledCanvasMs) &&
+			!frameOverlapsApplicationSuspend(frame, runtime.applicationSuspend) &&
+			!frameOverlapsShowSwitch(frame, runtime.showSwitch),
+	);
+	const latencies = lifecycleFrames
+		.map((frame) => frame.sourceToSettledCanvasMs)
+		.sort((left, right) => left - right);
+	const lanes = [...new Set(lifecycleFrames.map((frame) => frame.lane))].sort();
+	const qualities = [...new Set(frames.map((frame) => frame.quality))].sort();
+	const presentationGaps = changingPresentationGaps(
+		frames,
+		runtime.applicationSuspend,
+		runtime.showSwitch,
+		null,
+	);
+	const sourceCadenceGaps = laneSourceCadenceGaps(
+		frames,
+		runtime.applicationSuspend,
+		runtime.showSwitch,
+		null,
+	);
+	const failures = [];
+	if (frames.length === 0)
+		failures.push("the packaged native renderer presented no measured frame");
+	const renderer = frames.find((frame) => frame.renderer)?.renderer ?? null;
+	if (!renderer)
+		failures.push("the packaged native renderer reported no GPU/backend identity");
+	for (const lane of ["normal", "preload"])
+		if (!lanes.includes(lane))
+			failures.push(`native ${lane} lane presented no frame`);
+	if (percentile(latencies, 95) > 120)
+		failures.push("packaged native source-to-presentation p95 exceeded 120 ms");
+	if (maximum(latencies) > 200)
+		failures.push("a native Stage frame exceeded the 200 ms latency ceiling");
+	if (maximum(presentationGaps) > 200)
+		failures.push(
+			"a native Stage lane had a presentation gap longer than 200 ms",
+		);
+	if (maximum(sourceCadenceGaps) > 200)
+		failures.push(
+			"a native Stage lane had a source cadence gap longer than 200 ms",
+		);
+	if (qualities.length !== 4)
+		failures.push("the native renderer did not present all four quality tiers");
+	const rendererRestarts = countNativeRendererRestarts(frames);
+	if (rendererRestarts < 1)
+		failures.push(
+			"the native renderer teardown/recreation exercise did not recover",
+		);
+	const liveSizes = new Set(
+		frames
+			.filter((frame) => frame.lane === "normal")
+			.map((frame) => `${frame.width}x${frame.height}`),
+	);
+	if (liveSizes.size < 2)
+		failures.push(
+			"the native shared-surface resize/recovery exercise did not recover",
+		);
+	if ((runtime.showSwitch?.completed ?? 0) !== 4)
+		failures.push(
+			"the packaged native Stage did not complete two show round trips",
+		);
+	if (
+		process.platform !== "win32" &&
+		runtime.applicationSuspend?.completed !== true
+	)
+		failures.push("the packaged native Stage did not complete suspend/resume");
+	const output = summarizeOutputComparison(runtime);
+	if (!output.boundedWindowGatePassed)
+		failures.push(
+			"packaged native Stage output p99 regressed beyond the bounded gate",
+		);
+	if (output.stageWindowDeadlineMisses > 0)
+		failures.push("packaged native Stage output missed a scheduler deadline");
+	if (output.stageWindowSendErrors > 0)
+		failures.push("packaged native Stage output recorded a send error");
+	const visualization = summarizeVisualizationWindow(runtime);
+	if (visualization.finalStreamQueueDepth !== 0)
+		failures.push("packaged visualization stream retained a queued frame");
+	if (
+		usesStalledVisualizationClient(profile) &&
+		visualization.streamQueueDrops + visualization.streamSendFailures === 0
+	)
+		failures.push(
+			"paused visualization client caused no bounded queue replacement",
+		);
+	for (const failure of packagedStageSceneFailures(profile, scene))
+		failures.push(failure);
+	const longRun = summarizeStageLongRunResources(
+		timeline,
+		processMemory,
+		duration,
+		{ renderer: "native" },
+	);
+	for (const failure of longRun.failures) failures.push(failure);
+	const gpuSamples = frames
+		.map((frame) => frame.gpuMicros)
+		.filter(Number.isFinite)
+		.sort((left, right) => left - right);
+	const cpuSamples = frames
+		.map((frame) => frame.cpuMicros / 1_000)
+		.filter(Number.isFinite)
+		.sort((left, right) => left - right);
+	return {
+		schemaVersion: 3,
+		tier: profileDefinition.tier,
+		measurementSurface: "packaged-tauri-native-stage",
+		applicationIdentity: packagedApplicationIdentity(application),
+		profile,
+		profileLabel: profileDefinition.label,
+		scene,
+		host: hostHardware(),
+		durationSeconds: duration,
+		activeUiSurfaces: complete.activeUiSurfaces ?? [],
+		visualizationEnabled: true,
+		samplesFile,
+		acceptanceGateEnforced: failures.length === 0,
+		failures,
+		qualities,
+		lanes,
+		latency: {
+			samples: latencies.length,
+			p50Ms: percentile(latencies, 50),
+			p95Ms: percentile(latencies, 95),
+			maxMs: latencies.at(-1) ?? null,
+			maxPresentationGapMs: presentationGaps.length
+				? maximum(presentationGaps)
+				: null,
+			maxSourceCadenceGapMs: sourceCadenceGaps.length
+				? maximum(sourceCadenceGaps)
+				: null,
+		},
+		resources: {
+			frames: frames.length,
+			rendererRestarts,
+			nativeSurfaceSizes: [...liveSizes],
+			cpuFrameP95Ms: percentile(cpuSamples, 95),
+			gpuFrameP95Ms:
+				percentile(gpuSamples, 95) === null
+					? null
+					: percentile(gpuSamples, 95) / 1_000,
+			degradedFrames: frames.filter((frame) => frame.degraded).length,
+			maximumInstances: maximum(frames.map((frame) => frame.instances ?? 0)),
+			maximumDrawCalls: maximum(frames.map((frame) => frame.drawCalls ?? 0)),
+			processMemory: {
+				measurement: `${process.platform} light-desktop main-process resident set`,
+				samples: processMemory,
+			},
+			longRun,
+		},
+		server: {
+			...runtime,
+			outputComparison: output,
+			visualizationWindow: visualization,
+		},
+		capabilities: {
+			...(complete.capabilities ?? {}),
+			renderer,
+		},
+	};
+}
+
+function countNativeRendererRestarts(frames) {
+	let restarts = 0;
+	const previous = new Map();
+	for (const frame of frames) {
+		const prior = previous.get(frame.lane);
+		if (prior && frame.sequence <= prior.sequence) restarts++;
+		previous.set(frame.lane, frame);
+	}
+	return restarts;
 }
 
 function summarizePackagedPlaybackIndication(samples) {
@@ -2649,6 +2912,12 @@ function uniqueTimelineFrames(timeline) {
 function percentile(sorted, value) {
 	if (!sorted.length) return null;
 	return sorted[Math.max(0, Math.ceil((value / 100) * sorted.length) - 1)];
+}
+
+function maximum(values) {
+	let result = 0;
+	for (const value of values) if (value > result) result = value;
+	return result;
 }
 
 function positiveInteger(value, label) {

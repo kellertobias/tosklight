@@ -11,6 +11,10 @@ export function MatterBridgeSettings() {
 	const configuration = useDeskConfiguration();
 	const configurationActions = useConfigurationActions();
 	const enabled = useMatterEnabled();
+	const dimmableCount =
+		matter?.lights.filter((light) => light.kind === "dimmable").length ?? 0;
+	const colorCount =
+		matter?.lights.filter((light) => light.kind === "color").length ?? 0;
 	const toggleMatter = (enabled: boolean) => {
 		if (!configuration) return;
 		void configurationActions?.saveConfiguration({
@@ -33,9 +37,23 @@ export function MatterBridgeSettings() {
 				{!enabled
 					? "Disabled. No Matter lights are advertised."
 					: matter?.transport === "running"
-						? `${matter.lights.length} assigned playback${matter.lights.length === 1 ? "" : "s"} exposed as dimmable lights.`
+						? `${matter.lights.length} assigned playback${matter.lights.length === 1 ? "" : "s"} exposed: ${dimmableCount} dimmable, ${colorCount} color.`
 						: (matter?.limitation ?? "Starting Matter networking…")}
 			</p>
+			{enabled && matter && matter.lights.length > 0 && (
+				<ul className="matter-playback-list" aria-label="Exposed Matter playbacks">
+					{matter.lights.map((light) => (
+						<li key={light.endpoint_id}>
+							<span>{light.name}</span>
+							<b>
+								{light.kind === "color"
+									? `Color${light.color_active ? " · Group color active" : ""}`
+									: "Dimmable"}
+							</b>
+						</li>
+					))}
+				</ul>
+			)}
 			{matter?.commissionable && matter.pairing && (
 				<div className="matter-pairing">
 					<b>Ready to commission</b>
@@ -64,8 +82,10 @@ export function MatterBridgeSettings() {
 			)}
 			{enabled && (
 				<small>
-					Every assigned global page/playback is exposed, including button-only
-					controls; empty slots are not advertised.
+					Only assigned Cuelist, Dynamic, and Group Master playbacks are
+					advertised. Group Masters include color control; Cuelists and Dynamics
+					are dimmable. Empty slots, unassigned pool entries, and other playback
+					targets are omitted.
 				</small>
 			)}
 		</div>

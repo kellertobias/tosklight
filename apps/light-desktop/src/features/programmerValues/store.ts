@@ -3,11 +3,17 @@ import {
 	chooseProgrammerValuesRevision,
 } from "./authority";
 import type {
+	ProgrammerDynamicValue,
+	ProgrammerDynamicValueAddress,
 	ProgrammerValuesChange,
 	ProgrammerValuesProjection,
 	ProgrammerValuesSnapshot,
 } from "./contracts";
-import { assertCursor, canonicalProjection } from "./projectionValue";
+import {
+	assertCursor,
+	canonicalProjection,
+	dynamicInstanceLink,
+} from "./projectionValue";
 import {
 	emptyProgrammerValuesState,
 	type ProgrammerValuesOptimisticReducer,
@@ -151,7 +157,7 @@ export class ProgrammerValuesStore {
 				this.authoritative.dynamicValues ?? [],
 				change.dynamicValues,
 				change.removedDynamicValues,
-				(entry) => `${entry.fixtureId}\u0000${entry.attribute}`,
+				dynamicStoreAddress,
 			);
 			return this.install(
 				{
@@ -461,10 +467,15 @@ export class ProgrammerValuesStore {
 	}
 }
 
-function mergeAddressValues<
-	T,
-	A,
->(
+function dynamicStoreAddress(
+	entry: ProgrammerDynamicValue | ProgrammerDynamicValueAddress,
+) {
+	const instanceLink =
+		"value" in entry ? dynamicInstanceLink(entry) : entry.instanceLink;
+	return `${entry.fixtureId}\u0000${entry.attribute}\u0000${instanceLink ?? "static"}`;
+}
+
+function mergeAddressValues<T, A>(
 	current: readonly T[],
 	upserts: readonly T[],
 	removals: readonly A[],

@@ -23,7 +23,7 @@ pub(super) fn push_scenery(frame: &mut FrameInstances, scene: &Scene, style: &Fr
         // reason a fixture is one: nothing here is lit, so a solid is a black shape in a black
         // room. The stage floor is the exception — the ground already has the grid on it, and a
         // box around the ground is a box around everything.
-        if !style.fixture_models {
+        if !style.scenery_surfaces {
             if object.kind != SceneryKind::Floor {
                 super::push_box_outline(
                     frame,

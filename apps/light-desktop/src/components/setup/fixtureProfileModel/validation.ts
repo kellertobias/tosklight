@@ -41,14 +41,14 @@ function validateSplits(
 			);
 		}
 		const validFootprint =
-			profile.patch_policy === "visual_only"
+			profile.patch_policy === "visual_only" || profile.patch_policy === "internal"
 				? split.footprint === 0
 				: Number.isInteger(split.footprint) &&
 					split.footprint >= 1 &&
 					split.footprint <= 512;
 		if (!validFootprint) {
 			errors.push(
-				`${mode.name}: split ${split.number} footprint must be ${profile.patch_policy === "visual_only" ? "zero" : "1–512"}`,
+				`${mode.name}: split ${split.number} footprint must be ${profile.patch_policy === "dmx" ? "1–512" : "zero"}`,
 			);
 		}
 		splitNumbers.add(split.number);
@@ -156,9 +156,10 @@ function validateMode(
 	) {
 		errors.push(`${mode.name}: visual-only modes cannot contain DMX behavior`);
 	}
-	errors.push(
-		...derivePrimarySlots(mode).errors.map((error) => `${mode.name}: ${error}`),
-	);
+	if (profile.patch_policy === "dmx")
+		errors.push(
+			...derivePrimarySlots(mode).errors.map((error) => `${mode.name}: ${error}`),
+		);
 }
 
 function validateHueSaturationSystems(mode: FixtureMode, errors: string[]) {

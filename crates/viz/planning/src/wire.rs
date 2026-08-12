@@ -206,6 +206,7 @@ fn profile_revision(profile: PatchProfileRevisionProjection) -> ProfileRevisionD
         patch_policy: match profile.patch_policy {
             light_fixture::PatchPolicy::Dmx => "dmx".to_owned(),
             light_fixture::PatchPolicy::VisualOnly => "visual_only".to_owned(),
+            light_fixture::PatchPolicy::Internal => "internal".to_owned(),
         },
         profile_snapshot: profile.profile_snapshot,
     }

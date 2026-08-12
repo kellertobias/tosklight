@@ -238,6 +238,7 @@ function FixtureEditFields() {
 				onChange={(event) => controller.ui.setEditText(event.target.value)}
 			/>
 		);
+	if (edit === "internal_bindings") return <InternalBindingsFields />;
 	if (edit === "masters" || edit === "pan_tilt")
 		return <CombinedPolicySelect kind={edit} />;
 	if (edit === "location" || edit === "rotation")
@@ -246,6 +247,43 @@ function FixtureEditFields() {
 		);
 	if (edit === "mode") return <ModeField />;
 	return null;
+}
+
+function InternalBindingsFields() {
+	const controller = usePatchController();
+	let draft = { library: "", output: "" };
+	try {
+		draft = JSON.parse(controller.ui.editText) as typeof draft;
+	} catch {
+		// The editor owns this private draft format and recovers to empty fields.
+	}
+	const update = (key: keyof typeof draft, value: string) =>
+		controller.ui.setEditText(JSON.stringify({ ...draft, [key]: value }));
+	return (
+		<div className="vector-inputs">
+			<label>
+				Audio library binding
+				<TextInput
+					autoFocus
+					aria-label="Logical audio library binding"
+					value={draft.library}
+					onChange={(event) => update("library", event.target.value)}
+				/>
+			</label>
+			<label>
+				Audio output binding
+				<TextInput
+					aria-label="Logical audio output binding"
+					value={draft.output}
+					onChange={(event) => update("output", event.target.value)}
+				/>
+			</label>
+			<small>
+				Portable logical names only. This desk resolves local folders and devices in
+				 Setup.
+			</small>
+		</div>
+	);
 }
 
 function CombinedPolicySelect({ kind }: { kind: "masters" | "pan_tilt" }) {
@@ -436,5 +474,6 @@ function editTitle(
 	if (edit === "pan_tilt") return "Pan / Tilt";
 	if (edit === "bracket_angle") return "Bracket angle";
 	if (edit === "shaper_angle") return "Shaper angle";
+	if (edit === "internal_bindings") return "Audio bindings";
 	return edit;
 }

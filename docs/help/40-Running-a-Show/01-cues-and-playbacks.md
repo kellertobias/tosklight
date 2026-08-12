@@ -30,6 +30,12 @@ Each Cue row can define a **Jump** destination and positive **Jump Count**. The 
 
 The active playback is an explicit operator selection. Running another playback must not silently steal that selection. Cuelist View shows current/next state, Cue detail, and playback configuration.
 
+In the Cuelist Pool, touch a Cuelist's preview image to open that actual image at a larger size;
+Close, Escape, or the backdrop returns to the pool. **Cuelist Settings → Renumber Cues** assigns
+the entered **First new Cue number** to the first Cue, then numbers every later Cue consecutively
+without changing their order, names, values, timing, or stable identities. Choose title-bar
+**Renumber** to apply the change or Close to cancel it.
+
 In the hardware-connected layout, touch any descriptive area of an assigned playback card to select that concrete playback. Cuelist cards also open that playback in Cuelist View; when **REC** is armed, the complete card is outlined as the Record target. Its full label, every assigned playback button, and its fader all record to the same page and slot, and the touched control's normal press, hold, release, or fader action is suppressed. Touch and simulated Playback cards use the same complete-card rule. Group playback cards select the playback and its Group without opening Cuelist View. Outside Record, the labeled playback buttons and fader remain independent controls: operating them does not also select the card. Selection retains the playback's explicit identity when pages change, even when another page uses the same slot.
 
 ## Restart behavior

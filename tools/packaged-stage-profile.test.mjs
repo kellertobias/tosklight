@@ -35,6 +35,23 @@ test("canonical-demo identifies the shipped realistic release workload", () => {
 	);
 });
 
+test("STAGE-PERF-002 fixes the mixed load at 500 physical instances", () => {
+	assert.deepEqual(PACKAGED_STAGE_PROFILES["stage-500"], {
+		label: "500-instance mixed Stage",
+		tier: "stage-500",
+		targetHz: 10,
+		blocking: true,
+		expectedScene: { fixtureRecords: 500, fixtureInstances: 500 },
+	});
+	assert.deepEqual(
+		packagedStageSceneFailures("stage-500", {
+			fixtureRecords: 500,
+			fixtureInstances: 500,
+		}),
+		[],
+	);
+});
+
 test("canonical-demo rejects either wrong control or physical-instance count", () => {
 	assert.deepEqual(
 		packagedStageSceneFailures("canonical-demo", {
@@ -89,6 +106,6 @@ test("canonical-demo benchmark look has one physical and eleven virtual assignme
 test("packaged profile errors enumerate canonical-demo with the other supported profiles", () => {
 	assert.throws(
 		() => packagedStageProfile("unknown"),
-		/error.*`default-stage`, `canonical-demo`, `large-stage`, `supported-scale`, `improved-beam-spike`/i,
+		/error.*`default-stage`, `stage-500`, `canonical-demo`, `large-stage`, `supported-scale`, `improved-beam-spike`/i,
 	);
 });

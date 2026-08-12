@@ -65,6 +65,11 @@ impl Engine {
                 });
             self.programmer_contributions(programmers, generation, now, underlay.as_ref(), sampled)
         };
+        let programmer_colors = programmer
+            .iter()
+            .filter(|contribution| contribution.attribute().0 == "color")
+            .map(EngineContribution::fixture_id)
+            .collect::<std::collections::HashSet<_>>();
         playback.contributions.extend(programmer);
         let mut resolver = EngineContributionResolver::new(playback.contributions);
         if has_samples {
@@ -87,6 +92,7 @@ impl Engine {
             resolver.add_playback_unscaled(contribution, transition_ordinal);
         }
         let mut resolved = resolver.finish();
+        self.apply_group_color_contributions(generation, &mut resolved, &programmer_colors);
         resolved.automatic_playback_transitions = playback.automatic_transitions;
         resolved
     }

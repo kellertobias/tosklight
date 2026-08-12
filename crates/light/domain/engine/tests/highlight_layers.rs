@@ -127,6 +127,7 @@ fn intensity_fixture(default_raw: u32) -> (PatchedFixture, FixtureId) {
             split_patches: vec![],
             layer_id: "default".into(),
             direct_control: None,
+            internal_bindings: Default::default(),
             location: Default::default(),
             rotation: Default::default(),
             logical_heads: vec![],

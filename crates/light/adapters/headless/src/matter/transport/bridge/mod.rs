@@ -1,8 +1,11 @@
 mod bridged_info;
+mod color_control;
 mod level_control;
 mod on_off;
 
-use super::super::{MAX_MATTER_LEVEL, MatterPlaybackWrite};
+use super::super::{
+    MAX_MATTER_LEVEL, MatterColorState, MatterColorWrite, MatterLightKind, MatterPlaybackWrite,
+};
 use super::model::{MatterRemoteWrite, TransportLight};
 use parking_lot::RwLock;
 use rs_matter::dm::Dataver;
@@ -16,6 +19,8 @@ pub(super) struct EndpointState {
     pub(super) name: String,
     pub(super) on: bool,
     pub(super) level: u8,
+    pub(super) kind: MatterLightKind,
+    pub(super) color: Option<MatterColorState>,
     options: u8,
     on_level: Option<u8>,
 }
@@ -25,6 +30,7 @@ pub(super) struct AttributeChanges {
     pub(super) endpoint_id: u16,
     pub(super) on: bool,
     pub(super) level: bool,
+    pub(super) color: bool,
 }
 
 pub(super) struct BridgeLights {
@@ -32,6 +38,7 @@ pub(super) struct BridgeLights {
     remote_writes: Sender<MatterRemoteWrite>,
     on_off_dataver: Dataver,
     level_dataver: Dataver,
+    color_dataver: Dataver,
     bridged_info_dataver: Dataver,
 }
 
@@ -50,6 +57,7 @@ impl BridgeLights {
         remote_writes: Sender<MatterRemoteWrite>,
         on_off_dataver: Dataver,
         level_dataver: Dataver,
+        color_dataver: Dataver,
         bridged_info_dataver: Dataver,
     ) -> Self {
         let endpoints = lights
@@ -61,6 +69,8 @@ impl BridgeLights {
                         name: light.name,
                         on: light.on,
                         level: if light.level == 0 { 1 } else { light.level },
+                        kind: light.kind,
+                        color: light.color,
                         options: level_cluster::OptionsBitmap::EXECUTE_IF_OFF.bits(),
                         on_level: None,
                     },
@@ -72,6 +82,7 @@ impl BridgeLights {
             remote_writes,
             on_off_dataver,
             level_dataver,
+            color_dataver,
             bridged_info_dataver,
         }
     }
@@ -83,15 +94,21 @@ impl BridgeLights {
             if let Some(endpoint) = endpoints.get_mut(&light.endpoint_id) {
                 let old_on = endpoint.on;
                 let old_level = endpoint.level;
+                let old_color = endpoint.color;
                 endpoint.on = light.on;
                 if light.level > 0 {
                     endpoint.level = light.level;
                 }
-                if old_on != endpoint.on || old_level != endpoint.level {
+                endpoint.color = light.color;
+                if old_on != endpoint.on
+                    || old_level != endpoint.level
+                    || old_color != endpoint.color
+                {
                     changes.push(AttributeChanges {
                         endpoint_id: light.endpoint_id,
                         on: old_on != endpoint.on,
                         level: old_level != endpoint.level,
+                        color: old_color != endpoint.color,
                     });
                 }
             }
@@ -127,6 +144,7 @@ impl BridgeLights {
             MatterPlaybackWrite {
                 on: Some(on),
                 level: on.then_some(level),
+                color: None,
             },
         )?;
         Ok(level)
@@ -152,9 +170,32 @@ impl BridgeLights {
             MatterPlaybackWrite {
                 on: Some(on),
                 level: on.then_some(level.min(MAX_MATTER_LEVEL)),
+                color: None,
             },
         )?;
         Ok(on)
+    }
+
+    pub(super) fn set_color(&self, endpoint_id: u16, color: MatterColorWrite) -> Result<(), Error> {
+        let state = MatterColorState::from_xyz(color.xyz(), color.mode());
+        {
+            let mut endpoints = self.endpoints.write();
+            let endpoint = endpoints
+                .get_mut(&endpoint_id)
+                .ok_or(ErrorCode::EndpointNotFound)?;
+            if endpoint.kind != MatterLightKind::Color {
+                return Err(ErrorCode::Failure.into());
+            }
+            endpoint.color = Some(state);
+        }
+        self.send_write(
+            endpoint_id,
+            MatterPlaybackWrite {
+                on: None,
+                level: None,
+                color: Some(color),
+            },
+        )
     }
 
     fn step_level(&self, endpoint_id: u16, up: bool, step: u8) -> Result<u8, Error> {

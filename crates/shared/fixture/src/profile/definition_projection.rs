@@ -34,7 +34,11 @@ impl FixtureProfile {
         snapshot_scope: SnapshotScope,
     ) -> Result<FixtureDefinition, ProfileError> {
         let mode = self.required_mode(mode_id)?;
-        let primary_slots = mode.primary_slots()?;
+        let primary_slots = if self.patch_policy == crate::PatchPolicy::Internal {
+            HashMap::new()
+        } else {
+            mode.primary_slots()?
+        };
         let snapshot = self.snapshot_for(mode, snapshot_scope);
         Ok(build_definition(self, mode, &primary_slots, snapshot))
     }
@@ -103,7 +107,7 @@ fn build_definition(
         model: profile.short_name.clone(),
         mode: mode.name.clone(),
         footprint: mode_footprint(mode),
-        heads: logical_heads(mode, primary_slots),
+        heads: logical_heads(mode, primary_slots, profile.patch_policy),
         color_calibration: color_calibration(mode),
         physical: physical_properties(profile),
         model_asset: profile.model_asset.clone(),
@@ -118,7 +122,11 @@ fn build_definition(
     }
 }
 
-fn logical_heads(mode: &FixtureMode, primary_slots: &HashMap<Uuid, u16>) -> Vec<LogicalHead> {
+fn logical_heads(
+    mode: &FixtureMode,
+    primary_slots: &HashMap<Uuid, u16>,
+    patch_policy: crate::PatchPolicy,
+) -> Vec<LogicalHead> {
     mode.heads
         .iter()
         .enumerate()
@@ -127,7 +135,7 @@ fn logical_heads(mode: &FixtureMode, primary_slots: &HashMap<Uuid, u16>) -> Vec<
                 .channels
                 .iter()
                 .filter(|channel| channel.head_id == head.id)
-                .map(|channel| parameter(channel, primary_slots))
+                .map(|channel| parameter(channel, primary_slots, patch_policy))
                 .collect::<Vec<_>>();
             // A head whose channels react to virtual intensity but that has no physical intensity
             // channel (e.g. an RGB head whose intensity is derived) needs the abstract
@@ -169,9 +177,17 @@ fn abstract_virtual_dimmer_intensity() -> Parameter {
     }
 }
 
-fn parameter(channel: &FixtureChannel, primary_slots: &HashMap<Uuid, u16>) -> Parameter {
-    let slots =
-        std::iter::once(primary_slots[&channel.id]).chain(channel.secondary_slots.iter().copied());
+fn parameter(
+    channel: &FixtureChannel,
+    primary_slots: &HashMap<Uuid, u16>,
+    patch_policy: crate::PatchPolicy,
+) -> Parameter {
+    let slots = primary_slots
+        .get(&channel.id)
+        .copied()
+        .into_iter()
+        .chain(channel.secondary_slots.iter().copied())
+        .filter(|_| patch_policy == crate::PatchPolicy::Dmx);
     Parameter {
         attribute: channel.attribute.clone(),
         components: slots

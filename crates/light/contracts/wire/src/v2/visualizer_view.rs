@@ -78,6 +78,8 @@ pub struct VisualizerViewProjection {
 /// Every configured target, newest state.
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct VisualizerViewSnapshot {
+    /// Whether at least one external visualizer currently has an active desk session.
+    pub connected: bool,
     pub views: Vec<VisualizerViewProjection>,
 }
 

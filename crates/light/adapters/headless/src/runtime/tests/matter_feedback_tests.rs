@@ -73,6 +73,7 @@ fn matter_feedback_tracks_faderless_temp_and_manual_xfade_positions() {
             matter::MatterPlaybackWrite {
                 on: None,
                 level: Some(127),
+            color: None,
             },
         )
         .unwrap();
@@ -93,6 +94,7 @@ fn matter_feedback_tracks_faderless_temp_and_manual_xfade_positions() {
         matter::MatterPlaybackWrite {
             on: Some(false),
             level: None,
+        color: None,
         },
     )
     .unwrap();
@@ -107,6 +109,7 @@ fn matter_feedback_tracks_faderless_temp_and_manual_xfade_positions() {
         matter::MatterPlaybackWrite {
             on: Some(false),
             level: None,
+        color: None,
         },
     )
     .unwrap();
@@ -118,6 +121,7 @@ fn matter_feedback_tracks_faderless_temp_and_manual_xfade_positions() {
         matter::MatterPlaybackWrite {
             on: Some(true),
             level: None,
+        color: None,
         },
     )
     .unwrap();

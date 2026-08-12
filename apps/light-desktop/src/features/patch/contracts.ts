@@ -13,6 +13,11 @@ export interface PatchDirectControlEndpoint {
 	port: number;
 }
 
+export interface PatchInternalFixtureBindings {
+	library: string | null;
+	output: string | null;
+}
+
 export interface PatchFixtureLocation {
 	x: number;
 	y: number;
@@ -93,6 +98,7 @@ export interface PatchFixtureWrite {
 	splitPatches: readonly PatchSplitAssignment[];
 	layerId: string;
 	directControl: PatchDirectControlEndpoint | null;
+	internalBindings?: PatchInternalFixtureBindings;
 	location: PatchFixtureLocation;
 	rotation: PatchFixtureRotation;
 	multipatch: readonly PatchMultiPatch[];
@@ -166,7 +172,7 @@ export interface PatchProfileRevision {
 	manufacturer: string;
 	name: string;
 	fixtureType: string;
-	patchPolicy: "dmx" | "visual_only";
+	patchPolicy: "dmx" | "visual_only" | "internal";
 	referencedModes: readonly PatchModeProjection[];
 	/**
 	 * Server-resolved parameterized profile snapshot for this exact revision. Programmer-surface

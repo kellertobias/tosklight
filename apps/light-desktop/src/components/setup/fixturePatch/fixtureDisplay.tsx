@@ -2,7 +2,7 @@ import { SelectField } from "@tosklight/ui";
 import type { FixtureDefinition } from "../../../api/types";
 import { fixtureDefinitionKey } from "../fixtureProfileModel";
 import { fixtureTypeIconAsset } from "../fixtureTypeIconAssets";
-import { isDmxPatchable } from "../patchUtils";
+import { isDmxPatchable, isInternal } from "../patchUtils";
 
 export function FixtureTypeIcon({ type }: { type: string }) {
 	return (
@@ -88,7 +88,9 @@ export function FixtureDetails({
 			<strong>
 				{isDmxPatchable(definition)
 					? `${definition.footprint} DMX channels`
-					: "Visual only · no DMX patch"}
+					: isInternal(definition)
+						? "Internal · no DMX patch"
+						: "Visual only · no DMX patch"}
 			</strong>
 			<span>{definition.device_type}</span>
 			<span>

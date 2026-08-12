@@ -21,35 +21,14 @@ export function PatchHeader() {
 			}}
 			actions={[
 				[
-					{
-						id: "layer",
-						label: "+ Add layer",
-						onClick: () => ui.setLayerModal("add"),
-					},
-					{
-						id: "fixture",
-						label: "+ Add fixture",
-						onClick: () => ui.setBrowserOpen(true),
-					},
-					{
-						id: "multipatch",
-						label: "+ Add multi-patch",
-						disabled: !data.selected,
-						onClick: () => void addMultipatch(controller),
-					},
-					{
-						id: "delete",
-						label: "Delete",
-						active: ui.deleteArmed,
-						disabled: data.visible.length === 0,
-						onClick: () => ui.setDeleteArmed((armed) => !armed),
-					},
-					...(selected && appState.patchSetArmed
+					...(props.onStagePreview
 						? [
 								{
-									id: "fixture-number",
-									label: "Set fixture ID",
-									onClick: () => void setFixtureNumber(controller, selected),
+									id: "preview-stage",
+									label: "Preview Stage",
+									active: props.stagePreviewOpen,
+									onClick: props.onStagePreview,
+									onLongPress: props.onOpenStageWindow,
 								},
 							]
 						: []),
@@ -72,14 +51,37 @@ export function PatchHeader() {
 						: []),
 				],
 				[
-					...(props.onStagePreview
+					{
+						id: "layer",
+						label: "+ Add layer",
+						onClick: () => ui.setLayerModal("add"),
+					},
+					{
+						id: "fixture",
+						label: "+ Add fixture",
+						onClick: () => ui.setBrowserOpen(true),
+					},
+					{
+						id: "multipatch",
+						label: "+ Add multi-patch",
+						disabled: !data.selected,
+						onClick: () => void addMultipatch(controller),
+					},
+				],
+				[
+					{
+						id: "delete",
+						label: "Delete",
+						active: ui.deleteArmed,
+						disabled: data.visible.length === 0,
+						onClick: () => ui.setDeleteArmed((armed) => !armed),
+					},
+					...(selected && appState.patchSetArmed
 						? [
 								{
-									id: "preview-stage",
-									label: "Preview Stage",
-									active: props.stagePreviewOpen,
-									onClick: props.onStagePreview,
-									onLongPress: props.onOpenStageWindow,
+									id: "fixture-number",
+									label: "Set fixture ID",
+									onClick: () => void setFixtureNumber(controller, selected),
 								},
 							]
 						: []),

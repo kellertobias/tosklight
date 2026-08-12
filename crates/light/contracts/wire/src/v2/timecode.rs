@@ -111,6 +111,25 @@ pub enum TimecodeLaneContent {
     AudioVolume {
         keyframes: Vec<TimecodeVolumeKeyframe>,
     },
+    AudioPlayer {
+        fixture_id: Uuid,
+        clips: Vec<TimecodeAudioPlayerClip>,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct TimecodeAudioPlayerClip {
+    pub id: Uuid,
+    #[ts(type = "number")]
+    pub start_frame: u64,
+    #[ts(type = "number")]
+    pub end_frame: u64,
+    pub folder: u8,
+    pub file: u8,
+    #[serde(default)]
+    pub repeat: bool,
+    #[serde(default)]
+    pub volume_keyframes: Vec<TimecodeVolumeKeyframe>,
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

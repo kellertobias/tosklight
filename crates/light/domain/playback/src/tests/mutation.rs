@@ -278,7 +278,12 @@ fn flash_and_swap_release_promotion_is_durable() {
 
 #[test]
 fn release_all_flash_remains_transient() {
-    let (mut engine, _) = single_cue_engine();
+    let (mut engine, cue_list_id) = single_cue_engine();
+    engine
+        .cue_lists
+        .get_mut(&cue_list_id)
+        .unwrap()
+        .auto_off_flash_release = true;
     assert_eq!(
         engine.set_flash_mutation(1, true).unwrap().effect,
         PlaybackRuntimeEffect::Transient

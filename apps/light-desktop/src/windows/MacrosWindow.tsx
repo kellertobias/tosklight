@@ -164,7 +164,6 @@ export function MacrosWindow({ active = true, compact = false }: WindowProps) {
 			onClose={() => setEditing(null)}
 			onSaved={async () => {
 				await refresh();
-				setEditing(null);
 			}}
 		/>
 	) : (

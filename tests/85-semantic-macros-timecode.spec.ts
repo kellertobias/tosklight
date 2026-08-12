@@ -272,17 +272,16 @@ test.describe("docs/testing/15-macros-and-timecode.md", () => {
 			.click();
 		await page
 			.getByRole("button", { name: "Timecode 7 Opening track" })
-			.click();
+			.click({ button: "right" });
 
 		const editor = page.getByLabel("Timecode timeline editor");
 		await expect(editor).toBeVisible();
 		await expect(
 			page.getByRole("button", { name: "Save", exact: true }),
 		).toHaveCount(0);
-		const transport = page.getByLabel("Timecode transport");
-		for (const label of ["Go", "Pause", "Stop", "Rewind"])
+		for (const label of ["Play", "Pause", "Stop", "Rewind"])
 			await expect(
-				transport.getByRole("button", { name: label }),
+				page.getByRole("button", { name: label, exact: true }),
 			).toBeVisible();
 
 		await page.getByRole("button", { name: "Add", exact: true }).click();
@@ -316,12 +315,26 @@ test.describe("docs/testing/15-macros-and-timecode.md", () => {
 		await page.getByRole("button", { name: "Settings" }).click();
 		const settings = page.getByRole("dialog", { name: "Timecode Settings" });
 		await settings.getByLabel("Name").fill("Opening sequence");
-		await settings
-			.getByLabel("Marker CSV")
-			.fill("position,name,color\n00:00:05:00,Verse,#a67cff");
 		await settings.getByRole("button", { name: "Append" }).click();
 		await page.getByRole("option", { name: "Replace" }).click();
-		await settings.getByRole("button", { name: "Apply marker CSV" }).click();
+		const configuration = await api.request<any>("GET", "/api/v2/configuration");
+		await api.request("PUT", "/api/v2/configuration", {
+			...configuration.configuration,
+			file_manager_system_picker_fallback: true,
+		});
+		await settings
+			.getByRole("button", { name: "Choose marker CSV" })
+			.click();
+		await page
+			.getByRole("dialog", { name: "Choose files or folders" })
+			.locator('input[type="file"]')
+			.setInputFiles({
+				name: "markers.csv",
+				mimeType: "text/csv",
+				buffer: Buffer.from(
+					"position,name,color\n00:00:05:00,Verse,#a67cff",
+				),
+			});
 
 		await expect
 			.poll(() =>

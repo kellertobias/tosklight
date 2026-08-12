@@ -79,13 +79,13 @@ A column only reports attributes the lantern actually carries. A fixture without
 
 ## Media
 
-The Media window is the operating surface for patched media-server fixtures. It is offered only when the show contains an eligible physical media-server master with a configured CITP/MSEX connection and at least one logical layer head. Endpoint setup remains under **Show Patch > Media Servers**.
+The Media window is always available from Built-ins and **Open Window**. Without a configured CITP/MSEX connection it says that no CITP Media Server is available and still shows the complete 0–255 Content and Mask folder/file configuration ranges. Endpoint setup remains under **Show Patch > Media Servers**. When a server connects, its advertised names, thumbnails, status, and controls reconcile into the same stable configuration surface without hiding unadvertised values.
 
 Choose the physical master in **Server**, then choose one of its advertised logical layers. A layer touch replaces the desk's shared fixture selection with that exact logical head, so the Programmer, OSC, attached controls, and other panes continue to describe one authoritative selection. The Program output and layer thumbnails use the preview-source and layer identities advertised by the server; source number, layer number, and fixture sub-ID are not assumed to be interchangeable. Loading, stale, failed, unsupported, and offline states are shown beside the preview rather than drawn into the program image.
 
 The folder and file pools separate browsing from live output. Touching a folder changes only the local draft and loads its files; it does not change Programmer values or DMX. Touching a file commits that folder and file together as one Programmer operation and one Undo step. It never exposes the newly browsed folder with the old live file. Media encoders remain immediate and do not use this staged touch workflow.
 
-When the server advertises masks, **Media / Mask** selects the corresponding folder/file browser. Unsupported masks or secondary controls are absent or explicitly unavailable; the window does not invent controls the fixture and connection do not advertise. Library administration and connection setup stay outside this window.
+**Media / Mask** always selects the corresponding complete numeric folder/file range. Advertised mask names and thumbnails reconcile into those slots; without that advertisement the values remain configurable through the patched layer's Programmer attributes and are identified as not advertised. Server-specific secondary controls still appear only when the fixture and connection advertise them. Library administration and connection setup stay outside this window.
 
 A saved Media pane keeps its selected server, layer, Media/Mask choice, content section, and secondary-region visibility as desk-local state. A disconnect, missing patch, or temporarily unsupported capability does not delete that pane or silently select another server. The pane explains the unavailable state and resumes the same stable identities when they return.
 
@@ -132,17 +132,24 @@ running function rather than a value, and the Stage does not reproduce one to gu
   vector convention for the declared fixture type; an unknown type remains a simple box. Opaque
   filled regions participate in plan depth, so a foreground fixture hides the truss or scenery it
   actually covers while deliberate empty regions remain open.
-- **3D** is an outline diagram. Every fixture is a box the size of the fixture, every stage,
-  platform and wall is the outline of its own box, and every directional emitter carries a dotted
-  aim guideline whether or not it is lit — a lit one adds its own line in its live colour over the
-  guideline. Truss and soft goods are not drawn: a truss as a box is a wall hiding the lamps
-  hanging off it. Nothing here is lit, which is what makes it the cheap view and why it offers no
-  render style and no environment brightness.
+- **3D** is a model-and-lines diagram. Each fixture uses the 3D model carried by its fixture
+  package; a package without one uses the audited built-in model for that fixture class, while an
+  invalid model is reported and falls back to a deliberate procedural body. Stages, platforms and
+  walls remain box outlines, and every directional emitter carries a dotted aim guideline whether
+  or not it is lit — a lit one adds its own line in its live colour over the guideline. Truss and
+  soft goods are not drawn. Nothing here is lit, which keeps it inexpensive and is why it offers
+  no render style or environment brightness.
 - **3D Viz** is the full picture, with the fixture models and light cones.
 
 ### Stage is a selection and viewing surface
 
 Only the full Stage window exposes **Select fixtures** and **Navigate**. A Stage pane reflects the global mode, but it does not contain the controls that switch it.
+
+With **Navigate** active, the desk's ordinary encoder bank replaces the Programmer attributes. On
+the renderer camera, **Position** provides X, Y, Z, and Zoom; **Direction** provides Pan and Tilt.
+The software encoders use the same tap, drag, wheel, arrow-key, and direct-value interactions as
+the Programmer encoders. Attached encoders turn in fine steps, press-turn in coarse steps, and
+open the same direct-value editor when pressed.
 
 Positions are edited in **Show Patch**: physical patch and multi-patch placement provides every fixture's location and rotation, with **Preview Stage** for visual feedback while patching. Add a truss, platform, curtain, or other scenery object from the **Venue** manufacturer in **Show Patch**; these visual-only fixtures receive `0.x` fixture IDs and no DMX address.
 
@@ -158,6 +165,10 @@ adding to the one below it:
   shadows where a beam meets something opaque.
 - **Ultra** — and the haze itself, drifting and uneven, so a beam through it varies along its
   length instead of running through a uniform slab.
+
+On a fresh desk, **Environment brightness** starts at 5%, leaving an unlit rig just visible without
+flattening the fixtures' output. Changing it is persisted with the desk layout; an existing saved
+value, including zero, remains authoritative when that layout is reopened.
 
 **Floor grid** lays a dark reference grid of lines on the ground plane, a metre apart, with the
 centre lines drawn stronger. It is lines rather than a surface: it takes no light and hides nothing
@@ -178,6 +189,16 @@ Stage receives authoritative Live and Preload output from the engine. A disconne
 ![Stage pane settings](../assets/screenshots/panes/stage-settings.png)
 
 ![Full Stage window](../assets/screenshots/workflows/stage-window-2d.png)
+
+## Visualization
+
+The Visualization pane monitors live desk values without changing Programmer or playback state. Add rows in **Pane Settings → Visualization**, then place one or more widgets in each row. Rows stack vertically; widgets in the same row share the available width side by side. The complete layout and its widget settings are stored with the show layout.
+
+Each widget reads either one raw DMX universe/address or one resolved fixture attribute. A multiply or divide factor can be applied before the result is constrained to the configured minimum and maximum. Display the result on a 0–100% or 0–255 scale.
+
+Widgets can show concise text, a large numeric readout, a horizontal or vertical bar, or a sampled graph. Numeric widgets configure decimal places, a unit suffix, and low-to-high value colours. Graphs configure their time window, linear or logarithmic Y scale, Y-axis name, optional area fill, and independent low-to-high colour ranges for the line and fill. Sampling occurs only while the pane is visible; unavailable sources are identified instead of retaining an apparently live value.
+
+The source picker is designed to gain further desk and plugin sources without changing saved widget layouts. Raw DMX and resolved fixture attributes are the built-in sources.
 
 ## Channels
 

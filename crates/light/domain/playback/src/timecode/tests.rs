@@ -1,5 +1,5 @@
 use super::*;
-use light_core::CueListId;
+use light_core::{CueListId, FixtureId};
 use uuid::Uuid;
 
 fn id(value: u128) -> Uuid {
@@ -123,6 +123,50 @@ fn state_at_is_deterministic_for_seek_and_same_frame_values() {
     assert_eq!(first.speed_groups["A"].bpm, 90.0);
     assert_eq!(first.speed_groups["A"].phase, 0.25);
     assert_eq!(first.audio_volume, 0.5);
+}
+
+#[test]
+fn audio_player_clip_reconstructs_source_cursor_repeat_and_volume() {
+    let mut timecode = definition();
+    let fixture_id = FixtureId(id(20));
+    timecode.lanes.push(TimecodeLane {
+        id: TimecodeLaneId(id(21)),
+        name: "Atmosphere player".into(),
+        content: TimecodeLaneContent::AudioPlayer {
+            fixture_id,
+            clips: vec![TimecodeAudioPlayerClip {
+                id: TimecodeClipId(id(22)),
+                start_frame: TimecodeFrame(100),
+                end_frame: TimecodeFrame(300),
+                folder: 1,
+                file: 2,
+                repeat: true,
+                volume_keyframes: vec![TimecodeVolumeKeyframe {
+                    id: TimecodeKeyframeId(id(23)),
+                    frame: TimecodeFrame(100),
+                    value: 0.0,
+                    fade_frames: 100,
+                    curve: TimecodeCurve::Linear,
+                }],
+            }],
+        },
+    });
+
+    let state = timecode.state_at(TimecodeFrame(150));
+    assert_eq!(state.audio_players.len(), 1);
+    assert_eq!(state.audio_players[0].fixture_id, fixture_id);
+    assert_eq!(state.audio_players[0].folder, 1);
+    assert_eq!(state.audio_players[0].file, 2);
+    assert!(state.audio_players[0].repeat);
+    assert_eq!(state.audio_players[0].cursor_frame, TimecodeFrame(50));
+    assert_eq!(state.audio_players[0].volume, 0.5);
+
+    assert!(
+        timecode
+            .state_at(TimecodeFrame(300))
+            .audio_players
+            .is_empty()
+    );
 }
 
 #[test]

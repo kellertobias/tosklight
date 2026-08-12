@@ -57,6 +57,13 @@ function beginFixtureEdit(
 				? ""
 				: String(fixture.shaper_angle),
 		);
+	else if (kind === "internal_bindings")
+		ui.setEditText(
+			JSON.stringify({
+				library: fixture.internal_bindings?.library ?? "",
+				output: fixture.internal_bindings?.output ?? "",
+			}),
+		);
 	else if (kind === "location" || kind === "rotation")
 		ui.setVector(fixture[kind] ?? { x: 0, y: 0, z: 0 });
 	else if (kind === "mode") selectFixtureFamily(controller, fixture);

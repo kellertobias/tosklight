@@ -34,7 +34,7 @@ The compact pane starts fixed to Cuelist 1 or the first available list. In Pane 
 
 This pane currently opens the Cuelist Pool and then replaces it with the selected list's Cue table. Despite its legacy label, the current implementation does not display multiple tabs. In compact mode the full-window Back control is hidden, so returning to the Pool requires reopening or replacing the pane. Treat this as a current interface limitation rather than as a multi-tab workspace.
 
-Use **Cuelist Pool** for a permanent pool surface and **Cues - Cuelist** for a permanent Cue overview. Use the full Cuelists built-in when the operator must move freely between pool, Cue editing, and Cuelist configuration.
+Open **Cuelists** for the integrated Pool, Cue editing, and Cuelist configuration workflow. Open Window still offers **Cues** for a permanent Cue overview. Older saved Desktops can contain pool-only panes, but the catalog does not duplicate the integrated Cuelists workflow with a separate Cuelist Pool choice.
 
 **Pane configuration:** only common size and removal controls.
 
@@ -73,6 +73,10 @@ The editor timeline scrolls and zooms without changing live output. At **1×** t
 **Add Marker** creates a non-executing marker at the editor playhead. **Timecode Settings** owns the name, duration and frame count, transport offset, auto-start, audio file, and marker CSV. Changes save immediately; there is no Save button. Marker CSV accepts `position,name,color`, where position is a frame number or `HH:MM:SS:FF`; name and color are optional. Choose **Append** or **Replace** explicitly before applying it. Importing WAV or MP3 stores managed portable audio, normalizes MP3 to WAV, updates the duration, and displays decoded waveform peaks. The original file path is not needed after import.
 
 The editor shows duration, transport offset, auto-start, markers, and ordered lanes. Markers label and snap positions but do not execute output. Cuelist clips, Speed Group keyframes, and audio-volume lanes reconstruct deterministically at any frame, so continuous play, seek, and loop reach the same state. Missing referenced show objects remain visible errors and are skipped rather than silently retargeted.
+
+For separately controlled Cue and Timecode audio, patch one **ToskLight Audio Player** for each concurrent voice. It is an Internal fixture: it has a normal fixture number, head, attributes, Cue tracking, and LTP ownership, but no universe or DMX address. Program **Audio Folder**, **Audio File**, **Transport**, **Repeat**, and **Volume** exactly like other fixture attributes. A Timecode Audio Player lane binds its clips to one patched player, so Cue playback, Timecode, Programmer, macros, OSC, WebSocket, and HTTP all converge on that same fixture state. Stop and a non-repeating end reset to the start; Pause retains the cursor; Play resumes; entering Restart Play again restarts from the beginning.
+
+The show stores only the player's logical library and output binding names. In Desk Setup, map each library name to a local confined root and each output name to a local output device (`$system_default` selects the current system default). Under a library root, immediate folders and files use leading `000`–`255` addresses. Duplicate claims use the first supported relative name in deterministic order and appear in Internal Audio diagnostics. WAV is supported directly; accepted MP3 files are normalized for playback. Missing local mappings or files keep the fixture programmable and show an actionable unavailable status.
 
 Choose the single desk Timecode source, frame rate, external-loss behavior, audio device, and latency trim in Desk Setup. Several software, physical, Virtual Playback, OSC, WebSocket, or HTTP controls addressing the same Timecode operate one shared runtime, not independent copies.
 

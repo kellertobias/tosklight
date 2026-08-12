@@ -172,7 +172,7 @@ impl FixtureMode {
             split.number == 0
                 || match patch_policy {
                     PatchPolicy::Dmx => !(1..=512).contains(&split.footprint),
-                    PatchPolicy::VisualOnly => split.footprint != 0,
+                    PatchPolicy::VisualOnly | PatchPolicy::Internal => split.footprint != 0,
                 }
         });
         if split_map.len() != self.splits.len() || invalid_split {
@@ -181,6 +181,9 @@ impl FixtureMode {
                     PatchPolicy::Dmx => "split numbers must be unique and footprints must be 1-512",
                     PatchPolicy::VisualOnly => {
                         "visual-only split numbers must be unique and footprints must be zero"
+                    }
+                    PatchPolicy::Internal => {
+                        "internal split numbers must be unique and footprints must be zero"
                     }
                 }
                 .into(),
@@ -248,7 +251,18 @@ impl FixtureMode {
                 )));
             }
         }
-        self.primary_slots()?;
+        if patch_policy == PatchPolicy::Dmx {
+            self.primary_slots()?;
+        } else if patch_policy == PatchPolicy::Internal
+            && self
+                .channels
+                .iter()
+                .any(|channel| !channel.secondary_slots.is_empty())
+        {
+            return Err(ProfileError::Invalid(
+                "internal channels cannot define DMX component slots".into(),
+            ));
+        }
         for head in &self.heads {
             if !head_ids.contains(&head.id) {
                 return Err(ProfileError::Invalid("invalid head".into()));

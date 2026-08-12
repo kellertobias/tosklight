@@ -784,7 +784,6 @@ jobs:
           bundle_args=(--no-bundle)
           case "$RUNNER_OS" in
             macOS) bundle_args=(--bundles app) ;;
-            Windows) bundle_args=(--bundles nsis) ;;
           esac
           if output="$(npm run --prefix apps/viz-editor tauri:build -- \
             --target ${{ matrix.target }} --config "$config" "${bundle_args[@]}" 2>&1)"; then
@@ -816,27 +815,27 @@ jobs:
 
           case "$SLUG" in
             macos-arm64)
+              editor_app="$bundle/macos/ToskLight Visualizer.app"
+              accessory="$(mktemp -d ".artifacts/tmp/viz-accessory.XXXXXX")"
+              cp "$editor_app/Contents/MacOS/viz-editor" "$accessory/viz-editor"
+              mkdir -p "$accessory/resources"
+              cp -R "$editor_app/Contents/Resources/." "$accessory/resources/"
               bash tools/bundle-visualizer-macos.sh "$release/viz-renderer" "$bundle/macos"
               cp "$release/light-headless" \
                 "$bundle/macos/ToskLight Visualizer.app/Contents/MacOS/light-headless"
+              cp "$accessory/viz-editor" \
+                "$bundle/macos/ToskLight Visualizer.app/Contents/MacOS/viz-editor"
+              cp -R "$accessory/resources/." \
+                "$bundle/macos/ToskLight Visualizer.app/Contents/Resources/"
               bash tools/seal-macos-app.sh \
                 "$bundle/macos/ToskLight Visualizer.app"
               ditto -c -k --sequesterRsrc --keepParent \
                 "$bundle/macos/ToskLight Visualizer.app" \
                 "$out/tosklight-visualizer-$version-macos-arm64.zip"
-              # The editor owns the session and the visualizer is the picture it drives, so the
-              # visualizer travels inside the editor rather than as a second thing to install.
-              resources="$bundle/macos/ToskLight Viz Editor.app/Contents/Resources"
-              rm -rf -- "$resources/ToskLight Visualizer.app"
-              cp -R "$bundle/macos/ToskLight Visualizer.app" "$resources/"
-              bash tools/seal-macos-app.sh \
-                "$bundle/macos/ToskLight Viz Editor.app"
               ditto -c -k --sequesterRsrc --keepParent \
-                "$bundle/macos/ToskLight Viz Editor.app" "$out/tosklight-viz-$version-macos-arm64.zip"
+                "$bundle/macos/ToskLight Visualizer.app" "$out/tosklight-viz-$version-macos-arm64.zip"
               ;;
             windows-amd64)
-              cp "$bundle"/nsis/"ToskLight Viz Editor"_*-setup.exe \
-                "$out/tosklight-viz-$version-windows-amd64-setup.exe"
               stage_root="$(mktemp -d ".artifacts/tmp/viz-stage.XXXXXX")"
               trap 'rm -rf -- "$stage_root"' EXIT
               stage="$stage_root/tosklight-visualizer-$version-windows-amd64"

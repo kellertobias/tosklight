@@ -534,33 +534,33 @@ impl SceneProvider for DeskProvider {
                     &mut self.values,
                     self.epoch.elapsed().as_secs_f32(),
                 );
-                // The preload sits on top of the live picture rather than replacing it: a fixture
-                // nobody preloaded goes on showing what it is doing.
-                if self.following_preload {
-                    let overlay: Vec<crate::preload_overlay::PreloadValue> = self
-                        .preload_projection
-                        .fixture_values
-                        .iter()
-                        .filter_map(|entry| match entry.value {
-                            crate::wire::PreloadAttributeValue::Normalized(value) => {
-                                Some(crate::preload_overlay::PreloadValue {
-                                    fixture_id: entry.fixture_id,
-                                    attribute: entry.attribute.clone(),
-                                    value,
-                                })
-                            }
-                            crate::wire::PreloadAttributeValue::Other => None,
-                        })
-                        .collect();
-                    crate::preload_overlay::apply(scene, &overlay, &mut self.values);
-                }
-                // The desk changing its output is not a packet arriving, so it gets its own frame
-                // stamp; without one the host would never present it.
-                self.value_frame += 1;
-                self.values.newest_input_micros = now;
-                self.values.frame = self.value_frame;
-                events.push(ProviderEvent::Values(Box::new(self.values.clone())));
             }
+            // The preload sits on top of the live picture rather than replacing it: a fixture
+            // nobody preloaded goes on showing what it is doing. This also applies when the desk
+            // has no patched universes; unpatched fixtures are still part of the show.
+            if self.following_preload {
+                let overlay: Vec<crate::preload_overlay::PreloadValue> = self
+                    .preload_projection
+                    .fixture_values
+                    .iter()
+                    .filter_map(|entry| match entry.value {
+                        crate::wire::PreloadAttributeValue::Normalized(value) => {
+                            Some(crate::preload_overlay::PreloadValue {
+                                fixture_id: entry.fixture_id,
+                                attribute: entry.attribute.clone(),
+                                value,
+                            })
+                        }
+                        crate::wire::PreloadAttributeValue::Other => None,
+                    })
+                    .collect();
+                crate::preload_overlay::apply(scene, &overlay, &mut self.values);
+            }
+            // An empty output snapshot is still an authoritative source frame. A show may retain
+            // a complete unpatched rig, and the Stage must keep presenting it instead of treating
+            // the absence of network universes as the absence of the desk.
+            stamp_desk_output_frame(&mut self.values, &mut self.value_frame, now);
+            events.push(ProviderEvent::Values(Box::new(self.values.clone())));
         }
 
         if let (Some(receivers), Some(decoder), Some(scene)) =
@@ -913,7 +913,9 @@ async fn watch(
             }
         }
         let poll = if connection.values_from_desk_output {
-            25
+            // Stage's source contract is 10 Hz. Rendering remains independent and can interpolate
+            // physical motion between these authoritative desk-output snapshots.
+            100
         } else {
             500
         };
@@ -979,6 +981,12 @@ async fn watch(
             }
         }
     }
+}
+
+fn stamp_desk_output_frame(values: &mut SceneValues, value_frame: &mut u64, now: u64) {
+    *value_frame = value_frame.saturating_add(1);
+    values.newest_input_micros = now;
+    values.frame = *value_frame;
 }
 /// Which universes the planning window drives, given what the network has ever delivered.
 ///

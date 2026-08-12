@@ -56,10 +56,6 @@ fn served_address(arguments: impl IntoIterator<Item = String>) -> Option<SocketA
 ///
 /// Implied by `--serve`, which only the visualizer passes: it is how the visualizer says where to
 /// serve the document it is about to connect to, so nothing else has a reason to send it.
-#[cfg_attr(
-    not(target_os = "macos"),
-    allow(dead_code, reason = "one Dock tile is a macOS idea")
-)]
 fn opened_by_the_visualizer() -> bool {
     scene_address().is_some()
 }
@@ -196,6 +192,11 @@ fn main() {
             if opened_by_the_visualizer() {
                 let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
             }
+            if opened_by_the_visualizer()
+                && let Some(window) = app.get_webview_window("main")
+            {
+                let _ = window.set_skip_taskbar(true);
+            }
             let source = fixture_library_source(app).map_err(std::io::Error::other)?;
             let app_data = app.path().app_data_dir().map_err(std::io::Error::other)?;
             let library =
@@ -203,7 +204,15 @@ fn main() {
             let session = app.state::<session::Session>();
             session.set_library_path(library);
             if let Ok(config) = app.path().app_config_dir() {
-                session.set_recent_store(recent::RecentShow::at(config.join("recent-show")));
+                let legacy = config
+                    .parent()
+                    .map(|parent| parent.join("de.tokenet.tosklight.viz-editor/recent-show"));
+                session.set_recent_store(match legacy {
+                    Some(legacy) => {
+                        recent::RecentShow::migrating_from(config.join("recent-show"), legacy)
+                    }
+                    None => recent::RecentShow::at(config.join("recent-show")),
+                });
                 session.reopen_recent();
             }
             announce_on_the_network(app);

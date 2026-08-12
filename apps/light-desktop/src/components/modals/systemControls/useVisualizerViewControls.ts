@@ -18,6 +18,7 @@ const DEFAULT_TARGET = "main";
 export function useVisualizerViewControls(open: boolean) {
 	const actions = useVisualizerViewActions();
 	const [views, setViews] = useState<VisualizerView[]>([]);
+	const [connected, setConnected] = useState(false);
 	const [target, setTarget] = useState(DEFAULT_TARGET);
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -25,11 +26,18 @@ export function useVisualizerViewControls(open: boolean) {
 	useEffect(() => {
 		if (!open || !actions) return;
 		let cancelled = false;
+		let connectionEventObserved = false;
+		const unsubscribe = actions.onConnectionChanged((next) => {
+			if (cancelled) return;
+			connectionEventObserved = true;
+			setConnected(next);
+		});
 		actions
-			.views()
+			.snapshot()
 			.then((loaded) => {
 				if (cancelled) return;
-				setViews(loaded);
+				if (!connectionEventObserved) setConnected(loaded.connected);
+				setViews(loaded.views);
 				setError(null);
 			})
 			.catch((reason: unknown) => {
@@ -38,6 +46,7 @@ export function useVisualizerViewControls(open: boolean) {
 			});
 		return () => {
 			cancelled = true;
+			unsubscribe();
 		};
 	}, [actions, open]);
 
@@ -51,9 +60,7 @@ export function useVisualizerViewControls(open: boolean) {
 			try {
 				const updated = await actions.update(target, patch);
 				setViews((current) => {
-					const rest = current.filter(
-						(view) => view.target !== updated.target,
-					);
+					const rest = current.filter((view) => view.target !== updated.target);
 					return [...rest, updated].sort((left, right) =>
 						left.target.localeCompare(right.target),
 					);
@@ -69,7 +76,7 @@ export function useVisualizerViewControls(open: boolean) {
 	);
 
 	return {
-		available: actions !== null,
+		connected,
 		view: views.find((view) => view.target === target) ?? null,
 		targets: views.map((view) => view.target),
 		target,

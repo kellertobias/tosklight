@@ -1,9 +1,11 @@
 # Driving the Visualizer from the Desk
 
 The Visualizer is usually somewhere else: on the far side of the desk, on a second screen,
-or on another machine at the back of the room. **Running & Output** carries a
-**Visualizer** section so the view can be changed from where the operator is sitting
-rather than from the keyboard the picture happens to be next to.
+or on another machine at the back of the room. While an external Visualizer is connected,
+**Running & Output** carries a **Visualizer** tab so the view can be changed from where the
+operator is sitting rather than from the keyboard the picture happens to be next to. The tab
+disappears when the last external Visualizer disconnects. Settings for the desk's internal Stage
+view remain in **Settings**.
 
 ## Choosing the view
 
@@ -62,7 +64,7 @@ a single desk does without anyone configuring anything.
 
 Start a second Visualizer with `--target front-of-house` and it follows a view of its own:
 the desk can then have the plan on one screen and the beams on the other. The
-**Renderer** chooser appears in the section as soon as there is more than one to choose
+**Renderer** chooser appears in the tab as soon as there is more than one to choose
 between.
 
 ## What is not sent

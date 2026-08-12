@@ -26,7 +26,7 @@ function FileManagerToolbar({
 }: {
 	controller: FileManagerController;
 }) {
-	const { state, navigation, operations, picker } = controller;
+	const { state, navigation, operations } = controller;
 	return (
 		<>
 			<div className="file-toolbar">
@@ -120,24 +120,6 @@ function FileManagerToolbar({
 						>
 							Cancel
 						</Button>
-					</div>
-				)}
-				{picker && !state.operation && (
-					<div className="file-picker-actions">
-						<Button
-							variant="primary"
-							disabled={!controller.pickerValid}
-							onClick={() =>
-								controller.pickerValid && picker.onSelect(state.selected)
-							}
-						>
-							{picker.selectLabel ?? "Select"}
-						</Button>
-						{!picker.hideCancel && (
-							<Button onClick={picker.onCancel}>
-								{picker.cancelLabel ?? "Cancel"}
-							</Button>
-						)}
 					</div>
 				)}
 			</div>

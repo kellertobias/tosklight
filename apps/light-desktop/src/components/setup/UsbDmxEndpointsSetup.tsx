@@ -58,7 +58,7 @@ export function usbDmxDeviceLabel(
 		: `${product} · ${device.port_name}`;
 }
 
-function endpointForDevice(
+export function endpointForDevice(
 	endpoints: readonly UsbDmxEndpoint[],
 	device: DiscoveredUsbDmxDevice,
 ) {
@@ -90,16 +90,18 @@ export function useUsbDmxDiscovery() {
 	const [snapshot, setSnapshot] = useState<UsbDmxEndpointSnapshot | null>(null);
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState("");
-	const scan = useCallback(async () => {
-		if (!actions) return;
+	const scan = useCallback(async (): Promise<boolean> => {
+		if (!actions) return false;
 		setBusy(true);
 		setError("");
 		try {
 			setSnapshot(await actions.load());
+			return true;
 		} catch {
 			setError(
 				"USB DMX devices are unavailable. Check the connection and scan again.",
 			);
+			return false;
 		} finally {
 			setBusy(false);
 		}

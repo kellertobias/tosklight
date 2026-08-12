@@ -387,6 +387,7 @@ impl From<PatchProfileRevisionProjection> for ProfileRevisionDto {
             patch_policy: match profile.patch_policy {
                 light_fixture::PatchPolicy::Dmx => "dmx".to_owned(),
                 light_fixture::PatchPolicy::VisualOnly => "visual_only".to_owned(),
+                light_fixture::PatchPolicy::Internal => "internal".to_owned(),
             },
             referenced_modes: profile
                 .referenced_modes
@@ -520,6 +521,7 @@ impl From<FixtureDto> for PatchFixtureCandidate {
                             port: value.port,
                         })
                 }),
+                internal_bindings: Default::default(),
                 location: FixtureLocation {
                     x: dto.location.x,
                     y: dto.location.y,

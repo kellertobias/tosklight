@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use light_core::CueListId;
+use light_core::{CueListId, FixtureId};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -159,6 +159,23 @@ pub enum TimecodeLaneContent {
     AudioVolume {
         keyframes: Vec<TimecodeVolumeKeyframe>,
     },
+    AudioPlayer {
+        fixture_id: FixtureId,
+        clips: Vec<TimecodeAudioPlayerClip>,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct TimecodeAudioPlayerClip {
+    pub id: TimecodeClipId,
+    pub start_frame: TimecodeFrame,
+    pub end_frame: TimecodeFrame,
+    pub folder: u8,
+    pub file: u8,
+    #[serde(default)]
+    pub repeat: bool,
+    #[serde(default)]
+    pub volume_keyframes: Vec<TimecodeVolumeKeyframe>,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
@@ -226,6 +243,19 @@ pub struct TimecodeReconstructedState {
     pub cue_lists: Vec<TimecodeCueListState>,
     pub speed_groups: BTreeMap<String, TimecodeSpeedState>,
     pub audio_volume: f32,
+    pub audio_players: Vec<TimecodeAudioPlayerState>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct TimecodeAudioPlayerState {
+    pub lane_id: TimecodeLaneId,
+    pub fixture_id: FixtureId,
+    pub clip_id: TimecodeClipId,
+    pub folder: u8,
+    pub file: u8,
+    pub repeat: bool,
+    pub volume: f32,
+    pub cursor_frame: TimecodeFrame,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

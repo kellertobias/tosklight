@@ -278,6 +278,10 @@ pub struct FrameStyle {
     pub selected_ink: Vec3,
     /// Draw each fixture's own model, rather than a box standing where it is.
     pub fixture_models: bool,
+    /// Draw the emitting faces that belong to a simulated-light picture.
+    pub emitter_apertures: bool,
+    /// Draw retained scenery as shaded surfaces instead of quiet outlines.
+    pub scenery_surfaces: bool,
     /// Draw an aim guideline for every directional emitter, lit or not.
     pub aim_guides: bool,
     /// Lay the reference grid on the ground plane.
@@ -302,6 +306,8 @@ impl Default for FrameStyle {
             symbol_ink: Vec3::splat(0.42),
             selected_ink: Vec3::new(0.25, 0.6, 1.0),
             fixture_models: true,
+            emitter_apertures: true,
+            scenery_surfaces: true,
             aim_guides: false,
             floor_grid: true,
             scenery: |_| true,
@@ -778,7 +784,7 @@ fn push_emitters(
              * was an ambient-lit solid at every lamp, which is the brightest thing in a picture
              * whose whole point is that the lines are the picture.
              */
-            if style.fixture_models {
+            if style.emitter_apertures {
                 push_aperture(
                     frame,
                     origin,

@@ -2623,6 +2623,22 @@
         {
           "type": "object",
           "properties": {
+            "change": {
+              "$ref": "#/$defs/VisualizerConnectionNotification"
+            },
+            "type": {
+              "type": "string",
+              "const": "visualizer_connection_changed"
+            }
+          },
+          "required": [
+            "type",
+            "change"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
             "notification": {
               "$ref": "#/$defs/OperatorNotification"
             },
@@ -3778,6 +3794,13 @@
         "installed_appearance": {
           "$ref": "#/$defs/PatchInstalledFixtureAppearance"
         },
+        "internal_bindings": {
+          "$ref": "#/$defs/PatchInternalFixtureBindings",
+          "default": {
+            "library": null,
+            "output": null
+          }
+        },
         "invert_pan": {
           "type": "boolean"
         },
@@ -3863,6 +3886,7 @@
         "split_patches",
         "layer_id",
         "direct_control",
+        "internal_bindings",
         "location",
         "rotation",
         "logical_heads",
@@ -4162,6 +4186,28 @@
         }
       ]
     },
+    "PatchInternalFixtureBindings": {
+      "description": "Portable names resolved to machine-local audio resources by each desk.",
+      "type": "object",
+      "properties": {
+        "library": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "output": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "library",
+        "output"
+      ]
+    },
     "PatchLogicalHeadProjection": {
       "type": "object",
       "properties": {
@@ -4294,7 +4340,8 @@
       "type": "string",
       "enum": [
         "dmx",
-        "visual_only"
+        "visual_only",
+        "internal"
       ]
     },
     "PatchProfileRevisionProjection": {
@@ -5643,6 +5690,29 @@
         "changed_at_millis"
       ]
     },
+    "ProgrammingDynamicValueAddress": {
+      "type": "object",
+      "properties": {
+        "attribute": {
+          "type": "string"
+        },
+        "fixture_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "instance_link": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "fixture_id",
+        "attribute"
+      ]
+    },
     "ProgrammingFixtureValue": {
       "type": "object",
       "properties": {
@@ -6366,7 +6436,7 @@
         "removed_dynamic_values": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ProgrammingFixtureValueAddress"
+            "$ref": "#/$defs/ProgrammingDynamicValueAddress"
           }
         },
         "removed_fixture_values": {
@@ -7633,6 +7703,17 @@
       "required": [
         "show_id",
         "revision"
+      ]
+    },
+    "VisualizerConnectionNotification": {
+      "type": "object",
+      "properties": {
+        "connected": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "connected"
       ]
     }
   }

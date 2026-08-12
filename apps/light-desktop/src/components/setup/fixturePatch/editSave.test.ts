@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseMibInput } from "./editSave";
+import { parseInternalBindingDraft, parseMibInput } from "./editSave";
 
 describe("combined MIB value parsing", () => {
 	it("preserves Off as a distinct disabled state", () => {
@@ -44,5 +44,33 @@ describe("combined MIB value parsing", () => {
 		expect(parseMibInput(String(Number.MAX_SAFE_INTEGER))).toEqual({
 			error: "The MIB delay is too large to store safely.",
 		});
+	});
+});
+
+describe("Internal Audio Player binding parsing", () => {
+	it("keeps portable logical names and trims operator input", () => {
+		expect(
+			parseInternalBindingDraft(
+				JSON.stringify({ library: "  house-sfx ", output: " main-pair " }),
+			),
+		).toEqual({ library: "house-sfx", output: "main-pair" });
+	});
+
+	it("allows either logical binding to remain explicitly unavailable", () => {
+		expect(parseInternalBindingDraft('{"library":"","output":"booth"}')).toEqual(
+			{
+				library: undefined,
+				output: "booth",
+			},
+		);
+	});
+
+	it("rejects malformed or overlong binding drafts", () => {
+		expect(parseInternalBindingDraft("not json")).toBeNull();
+		expect(
+			parseInternalBindingDraft(
+				JSON.stringify({ library: "x".repeat(129), output: "main" }),
+			),
+		).toBeNull();
 	});
 });

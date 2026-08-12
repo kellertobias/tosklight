@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 
 /// The protocol this build speaks.
 pub const PROTOCOL_MAJOR: u16 = 1;
-pub const PROTOCOL_MINOR: u16 = 1;
+pub const PROTOCOL_MINOR: u16 = 2;
 
 /// How a rendered pane gets from the helper to the desk.
 ///
@@ -301,6 +301,28 @@ pub enum FromHelper {
         height: u32,
         rgba: Vec<u8>,
     },
+    /// Timing and bounded render-work evidence for one frame presented by an embedded pane.
+    ///
+    /// Pixels still travel through the negotiated transport. This small message exists so the
+    /// packaged native benchmark can prove source-to-presentation latency without pretending the
+    /// WebView drew a canvas it no longer owns.
+    FramePresented {
+        sequence: u64,
+        source_frame: u64,
+        source_input_epoch_micros: u64,
+        presented_epoch_micros: u64,
+        cpu_micros: u64,
+        acquire_micros: u64,
+        gpu_micros: Option<u64>,
+        instances: u32,
+        draw_calls: u32,
+        degraded: bool,
+        renderer: String,
+        quality: RenderQuality,
+        follow_preload: bool,
+        width: u32,
+        height: u32,
+    },
     /// Where the camera now is, whenever it moves.
     ///
     /// The renderer owns the camera — it is the side that drags, orbits and clamps it — so the desk
@@ -528,6 +550,23 @@ mod tests {
                 handle: SharedSurfaceHandle::DxgiSharedHandle(0xdead_beef),
                 width: 640,
                 height: 360,
+            },
+            FromHelper::FramePresented {
+                sequence: 42,
+                source_frame: 9,
+                source_input_epoch_micros: 1_000_000,
+                presented_epoch_micros: 1_002_500,
+                cpu_micros: 1_200,
+                acquire_micros: 300,
+                gpu_micros: Some(900),
+                instances: 500,
+                draw_calls: 12,
+                degraded: false,
+                renderer: "Apple M3 Pro (Metal, 4x MSAA)".to_owned(),
+                quality: RenderQuality::High,
+                follow_preload: true,
+                width: 1_280,
+                height: 720,
             },
         ];
         for answer in answers {

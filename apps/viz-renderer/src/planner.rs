@@ -5,9 +5,9 @@
 //! and connects to the document that window holds: the operator picks or builds a rig there, and
 //! it appears here.
 //!
-//! The editor is a separate application and stays one. If it is not installed the visualizer says
-//! so and keeps running — an empty picture with a readable reason is better than a window that
-//! refuses to open.
+//! The editor is an accessory executable inside the Visualizer product. If a development build is
+//! incomplete the visualizer says so and keeps running — an empty picture with a readable reason
+//! is better than a window that refuses to open.
 
 use std::net::{Ipv4Addr, SocketAddr, TcpListener};
 use std::path::PathBuf;
@@ -107,11 +107,16 @@ fn editor_binary() -> Result<PathBuf, String> {
 
 #[cfg(target_os = "macos")]
 fn installed_editor() -> Option<PathBuf> {
-    let bundle = "Applications/ToskLight Viz Editor.app/Contents/MacOS/viz-editor";
-    std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .map(|home| home.join(bundle))
-        .filter(|path| path.is_file())
+    let bundles = [
+        "Applications/ToskLight Visualizer.app/Contents/MacOS/viz-editor",
+        // Legacy standalone editor installations remain discoverable during migration.
+        "Applications/ToskLight Viz Editor.app/Contents/MacOS/viz-editor",
+    ];
+    let home = std::env::var_os("HOME").map(PathBuf::from)?;
+    bundles
+        .into_iter()
+        .map(|bundle| home.join(bundle))
+        .find(|path| path.is_file())
 }
 
 #[cfg(not(target_os = "macos"))]

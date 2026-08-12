@@ -872,17 +872,10 @@ mod tests {
         );
     }
 
-    /// Where the fixture models actually stand today.
-    ///
-    /// TL-68 consolidates fixture-model ownership on the premise that an exact model belongs in
-    /// the fixture's own transferable package, with one documented generic set as the fallback.
-    /// No shipped package declares `model_asset` yet, so every fixture resolves through the
-    /// generic set — the consolidation is not a matter of making four consumers agree on
-    /// package-owned models, because there are none to agree on.
-    ///
-    /// What is worth guarding now is the other half: every fixture resolves to *some* geometry.
-    /// A fixture with no model draws as nothing, which in a still capture is indistinguishable
-    /// from a fixture that is simply unlit.
+    /// Exact fixture models live in transferable packages and the audited built-in set covers a
+    /// profile that carries none. Whichever route supplied it, every fixture must resolve to some
+    /// geometry: a fixture with no model draws as nothing, which in a still capture is
+    /// indistinguishable from a fixture that is simply unlit.
     #[test]
     fn every_demo_fixture_resolves_to_geometry() {
         let scene = demo_scene("models");

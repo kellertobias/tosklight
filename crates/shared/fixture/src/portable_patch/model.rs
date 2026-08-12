@@ -1,6 +1,7 @@
 use crate::{
     DirectControlEndpoint, FixtureLocation, FixtureVector, InstalledFixtureAppearance,
-    MultiPatchInstance, PatchedFixture, PatchedHead, SplitPatch, default_patch_layer,
+    InternalFixtureBindings, MultiPatchInstance, PatchedFixture, PatchedHead, SplitPatch,
+    default_patch_layer,
 };
 use light_core::{DmxAddress, FixtureId, Revision, Universe};
 use serde::{Deserialize, Serialize};
@@ -46,6 +47,8 @@ pub struct PatchedFixturePatch {
     pub layer_id: String,
     #[serde(default)]
     pub direct_control: Option<DirectControlEndpoint>,
+    #[serde(default, skip_serializing_if = "InternalFixtureBindings::is_empty")]
+    pub internal_bindings: InternalFixtureBindings,
     #[serde(default)]
     pub location: FixtureLocation,
     #[serde(default)]
@@ -96,6 +99,7 @@ impl PatchedFixturePatch {
             split_patches: fixture.split_patches.clone(),
             layer_id: fixture.layer_id.clone(),
             direct_control: fixture.direct_control.clone(),
+            internal_bindings: fixture.internal_bindings.clone(),
             location: fixture.location,
             rotation: fixture.rotation,
             logical_heads: fixture.logical_heads.clone(),

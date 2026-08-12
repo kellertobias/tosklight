@@ -1,6 +1,55 @@
 use super::*;
 
 #[test]
+fn visual_only_profile_renders_without_a_dmx_encoding_plan() {
+    let mut profile = FixtureProfile::blank();
+    profile.manufacturer = "Venue".into();
+    profile.name = "Stage element".into();
+    profile.patch_policy = light_fixture::PatchPolicy::VisualOnly;
+    profile.modes[0].splits[0].footprint = 0;
+    let mode_id = profile.modes[0].id;
+    let definition = profile.resolved_definition(mode_id).unwrap();
+    let fixture = PatchedFixture {
+        fixture_id: FixtureId::new(),
+        fixture_number: None,
+        virtual_fixture_number: Some(1),
+        name: "Stage element".into(),
+        definition,
+        universe: None,
+        address: None,
+        split_patches: vec![],
+        layer_id: "default".into(),
+        direct_control: None,
+        internal_bindings: Default::default(),
+        location: Default::default(),
+        rotation: Default::default(),
+        logical_heads: vec![],
+        multipatch: vec![],
+        group_masters_enabled: true,
+        grand_master_enabled: true,
+        invert_pan: false,
+        invert_tilt: false,
+        bracket_angle: 0.0,
+        shaper_angle: None,
+        installed_appearance: Default::default(),
+        move_in_black_enabled: true,
+        move_in_black_delay_millis: 0,
+        highlight_overrides: BTreeMap::new(),
+    };
+    let engine = Engine::new(ProgrammerRegistry::default());
+    engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![fixture].into(),
+            ..Default::default()
+        })
+        .unwrap();
+
+    let rendered = engine.render(RenderOptions::default()).unwrap();
+
+    assert!(rendered.universes.is_empty());
+}
+
+#[test]
 fn patched_multipatch_instances_duplicate_output_while_visual_only_instances_do_not() {
     let programmers = ProgrammerRegistry::default();
     let session = light_core::SessionId::new();

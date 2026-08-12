@@ -11,18 +11,38 @@ use std::path::{Path, PathBuf};
 /// repository owns.
 pub struct RecentShow {
     file: PathBuf,
+    legacy_file: Option<PathBuf>,
 }
 
 impl RecentShow {
     pub fn at(file: impl Into<PathBuf>) -> Self {
-        Self { file: file.into() }
+        Self {
+            file: file.into(),
+            legacy_file: None,
+        }
+    }
+
+    pub fn migrating_from(file: impl Into<PathBuf>, legacy_file: impl Into<PathBuf>) -> Self {
+        Self {
+            file: file.into(),
+            legacy_file: Some(legacy_file.into()),
+        }
     }
 
     /// The last show, if it is still there.
     pub fn read(&self) -> Option<PathBuf> {
-        let recorded = std::fs::read_to_string(&self.file).ok()?;
+        let recorded = std::fs::read_to_string(&self.file).ok().or_else(|| {
+            self.legacy_file
+                .as_ref()
+                .and_then(|legacy| std::fs::read_to_string(legacy).ok())
+        })?;
         let path = PathBuf::from(recorded.trim());
-        path.is_file().then_some(path)
+        if path.is_file() {
+            self.remember(&path);
+            Some(path)
+        } else {
+            None
+        }
     }
 
     pub fn remember(&self, path: &Path) {
@@ -62,6 +82,25 @@ mod tests {
             recent.read(),
             None,
             "a show that has been moved away is forgotten, not reported as broken"
+        );
+        let _ = std::fs::remove_dir_all(&directory);
+    }
+
+    #[test]
+    fn a_legacy_editor_recent_show_moves_to_the_visualizer_identity() {
+        let directory = scratch();
+        let show = directory.join("tour.show");
+        let legacy = directory.join("legacy/recent-show");
+        let current = directory.join("visualizer/recent-show");
+        std::fs::create_dir_all(legacy.parent().unwrap()).unwrap();
+        std::fs::write(&show, "show").unwrap();
+        std::fs::write(&legacy, show.display().to_string()).unwrap();
+
+        let recent = RecentShow::migrating_from(&current, legacy);
+        assert_eq!(recent.read(), Some(show));
+        assert!(
+            current.is_file(),
+            "the new identity owns the migrated record"
         );
         let _ = std::fs::remove_dir_all(&directory);
     }

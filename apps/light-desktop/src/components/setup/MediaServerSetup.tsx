@@ -1,3 +1,4 @@
+import { Button, FormLayout, NumberField, TextField } from "@tosklight/ui";
 import {
 	type Dispatch,
 	type SetStateAction,
@@ -5,13 +6,12 @@ import {
 	useMemo,
 	useState,
 } from "react";
+import type { MediaServerFixture, PatchedFixture } from "../../api/types";
 import {
 	type MediaServersState,
 	useMediaServers,
 } from "../../features/mediaServers/MediaServersContext";
-import type { MediaServerFixture, PatchedFixture } from "../../api/types";
 import { usePatch, usePatchView } from "../../features/patch/PatchContext";
-import { Button, FormLayout, NumberField, TextField } from "@tosklight/ui";
 
 type Draft = { ip: string; port: number };
 
@@ -237,7 +237,7 @@ function matchingStatus(
 	return statuses.find(
 		(status) =>
 			status.fixture_id === fixture.fixture_id &&
-			status.endpoint.protocol === endpoint.protocol &&
+			status.endpoint?.protocol === endpoint.protocol &&
 			status.endpoint.ip_address === endpoint.ip_address &&
 			status.endpoint.port === endpoint.port,
 	);

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useSessionSnapshot } from "../../features/deskSnapshot/DeskSnapshotState";
 import { useDesktopBridge } from "../../platform/desktop";
 import type { StagePaneGesture } from "../../platform/desktop/types";
@@ -18,6 +18,8 @@ import type { StagePaneGesture } from "../../platform/desktop/types";
  * why `active` is the answer rather than an error.
  */
 export interface NativeStagePane {
+	/** Stable identity for routing this pane within its native window. */
+	id: string;
 	/** Attach to the element the pane should fill. */
 	ref: (element: HTMLElement | null) => void;
 	/** True while the native renderer is drawing this pane. */
@@ -33,8 +35,9 @@ export interface NativeStagePane {
 /** How often the desk is asked what the pane is doing. Diagnostics, not the picture. */
 const STATUS_INTERVAL = 2_000;
 
-export function useNativeStagePane(enabled = true): NativeStagePane {
+export function useNativeStagePane(enabled = true, live3d = true): NativeStagePane {
 	const desktopBridge = useDesktopBridge();
+	const paneId = useId();
 	// The renderer joins the desk as this operator, so the desk keeps its view separate from
 	// anything else drawing the same show.
 	const user = useSessionSnapshot()?.user.name ?? "";
@@ -42,6 +45,7 @@ export function useNativeStagePane(enabled = true): NativeStagePane {
 	const [active, setActive] = useState(false);
 	const [trouble, setTrouble] = useState<string | null>(null);
 	const [renderer, setRenderer] = useState<string | null>(null);
+	const [restart, setRestart] = useState(0);
 	const opened = useRef(false);
 	/** True once the desk has named a renderer, so a first poll cannot be read as a stop. */
 	const drew = useRef(false);
@@ -83,6 +87,8 @@ export function useNativeStagePane(enabled = true): NativeStagePane {
 		if (!enabled || !element || !available) return;
 		let observer: ResizeObserver | null = null;
 		let report: (() => void) | null = null;
+		let unsubscribeMove: (() => void) | null = null;
+		let disposed = false;
 
 		const geometry = () => {
 			const rect = element.getBoundingClientRect();
@@ -102,16 +108,20 @@ export function useNativeStagePane(enabled = true): NativeStagePane {
 		// between a question and its answer.
 		opened.current = true;
 		void desktopBridge
-			.openStagePane(geometry(), user)
+			.openStagePane(paneId, live3d, geometry(), user)
 			.then(() => {
 				setActive(true);
 				report = () => {
-					void desktopBridge.setStagePane(geometry());
+					void desktopBridge.setStagePane(paneId, geometry());
 				};
 				observer = new ResizeObserver(report);
 				observer.observe(element);
 				window.addEventListener("resize", report);
 				window.addEventListener("scroll", report, true);
+				void desktopBridge.onCurrentWindowMoved(report).then((unsubscribe) => {
+					if (disposed) unsubscribe();
+					else unsubscribeMove = unsubscribe;
+				});
 				report();
 			})
 			.catch((error) => {
@@ -122,7 +132,9 @@ export function useNativeStagePane(enabled = true): NativeStagePane {
 			});
 
 		return () => {
+			disposed = true;
 			observer?.disconnect();
+			unsubscribeMove?.();
 			if (report) {
 				window.removeEventListener("resize", report);
 				window.removeEventListener("scroll", report, true);
@@ -131,16 +143,16 @@ export function useNativeStagePane(enabled = true): NativeStagePane {
 				opened.current = false;
 				drew.current = false;
 				setActive(false);
-				void desktopBridge.closeStagePane();
+				void desktopBridge.closeStagePane(paneId);
 			}
 		};
-	}, [element, enabled, available, desktopBridge, user]);
+	}, [element, enabled, available, desktopBridge, user, paneId, live3d, restart]);
 
 	useEffect(() => {
 		if (!active) return;
 		let cancelled = false;
 		const poll = async () => {
-			const [description, detail] = await desktopBridge.stagePaneStatus();
+			const [description, detail] = await desktopBridge.stagePaneStatus(paneId);
 			if (cancelled) return;
 			setRenderer(description);
 			setTrouble(detail);
@@ -152,7 +164,10 @@ export function useNativeStagePane(enabled = true): NativeStagePane {
 			// before the desk has finished opening, and reading that as a stop would have the
 			// interface tear down a pane the desk is still holding.
 			if (description !== null) drew.current = true;
-			else if (drew.current) setActive(false);
+			else if (drew.current) {
+				setActive(false);
+				setRestart((value) => value + 1);
+			}
 		};
 		void poll();
 		const timer = window.setInterval(() => void poll(), STATUS_INTERVAL);
@@ -160,16 +175,17 @@ export function useNativeStagePane(enabled = true): NativeStagePane {
 			cancelled = true;
 			window.clearInterval(timer);
 		};
-	}, [active, desktopBridge]);
+	}, [active, desktopBridge, paneId]);
 
 	return {
+		id: paneId,
 		ref: setElement,
 		active,
 		trouble,
 		renderer,
 		send: (gesture, x, y) => {
 			if (!active) return;
-			void desktopBridge.sendStagePaneInput(gesture, x, y);
+			void desktopBridge.sendStagePaneInput(gesture, x, y, paneId);
 		},
 	};
 }

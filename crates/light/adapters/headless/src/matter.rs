@@ -8,7 +8,7 @@
 
 use light_playback::{MAX_PAGE_SLOTS, MAX_PLAYBACK_PAGES, PlaybackDefinition, PlaybackPage};
 use parking_lot::RwLock;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 
 #[path = "matter/transport.rs"]
@@ -28,11 +28,71 @@ const TRANSPORT_LIMITATION: &str =
 pub struct PlaybackValue {
     pub level: f32,
     pub active: bool,
+    pub color: Option<light_core::Xyz>,
 }
 
 impl PlaybackValue {
     pub fn new(level: f32, active: bool) -> Self {
-        Self { level, active }
+        Self {
+            level,
+            active,
+            color: None,
+        }
+    }
+
+    pub fn with_color(mut self, color: Option<light_core::Xyz>) -> Self {
+        self.color = color;
+        self
+    }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MatterLightKind {
+    Dimmable,
+    Color,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MatterColorMode {
+    HueSaturation,
+    ColorTemperature,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+pub struct MatterColorState {
+    pub hue: u8,
+    pub saturation: u8,
+    pub color_temperature_mireds: u16,
+    pub mode: MatterColorMode,
+}
+
+impl MatterColorState {
+    pub fn from_xyz(color: light_core::Xyz, mode: MatterColorMode) -> Self {
+        let (x, y) = xyz_to_matter_xy(color);
+        let (enhanced_hue, saturation) =
+            rs_matter::dm::clusters::app::color_control::SetDeviceColor::Xy { x, y }
+                .to_hue_saturation();
+        Self {
+            hue: (enhanced_hue >> 8).min(254) as u8,
+            saturation,
+            color_temperature_mireds: xyz_to_mireds(color),
+            mode,
+        }
+    }
+}
+
+impl Default for MatterColorState {
+    fn default() -> Self {
+        Self::from_xyz(
+            light_core::Xyz {
+                x: 0.950_47,
+                y: 1.0,
+                z: 1.088_83,
+            },
+            MatterColorMode::ColorTemperature,
+        )
     }
 }
 
@@ -58,6 +118,11 @@ pub struct MatterPlaybackLight {
     pub on: bool,
     /// Matter Level Control value in the inclusive range `0..=254`.
     pub level: u8,
+    pub kind: MatterLightKind,
+    /// True only while the engine owns an explicit Group color contribution for this endpoint.
+    pub color_active: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color: Option<MatterColorState>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -100,6 +165,40 @@ impl Default for MatterBridgeStatus {
 pub struct MatterPlaybackWrite {
     pub on: Option<bool>,
     pub level: Option<u8>,
+    pub color: Option<MatterColorWrite>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MatterColorWrite {
+    HueSaturation { hue: u8, saturation: u8 },
+    ColorTemperature { mireds: u16 },
+}
+
+impl MatterColorWrite {
+    pub fn xyz(self) -> light_core::Xyz {
+        let target = match self {
+            Self::HueSaturation { hue, saturation } => {
+                rs_matter::dm::clusters::app::color_control::SetDeviceColor::HueSaturation {
+                    enhanced_hue: u16::from(hue) * 257,
+                    saturation,
+                }
+            }
+            Self::ColorTemperature { mireds } => {
+                rs_matter::dm::clusters::app::color_control::SetDeviceColor::ColorTemperature {
+                    mireds,
+                }
+            }
+        };
+        let (x, y) = target.to_xy();
+        matter_xy_to_xyz(x, y)
+    }
+
+    pub const fn mode(self) -> MatterColorMode {
+        match self {
+            Self::HueSaturation { .. } => MatterColorMode::HueSaturation,
+            Self::ColorTemperature { .. } => MatterColorMode::ColorTemperature,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -109,6 +208,7 @@ pub struct ResolvedMatterPlaybackWrite {
     pub playback: u8,
     pub playback_number: u16,
     pub level: f32,
+    pub color: Option<MatterColorWrite>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -150,12 +250,24 @@ impl MatterBridgeAdapter {
         definitions: &[PlaybackDefinition],
         values: &HashMap<u16, PlaybackValue>,
     ) -> MatterBridgeStatus {
-        let lights = if enabled {
+        let mut lights = if enabled {
             build_lights(pages, definitions, values)
         } else {
             Vec::new()
         };
         let mut current = self.status.write();
+        for light in &mut lights {
+            if let (Some(color), Some(current_color)) = (
+                light.color.as_mut(),
+                current
+                    .lights
+                    .iter()
+                    .find(|current| current.endpoint_id == light.endpoint_id)
+                    .and_then(|current| current.color),
+            ) {
+                color.mode = current_color.mode;
+            }
+        }
         let transport = if !enabled {
             MatterTransportState::Disabled
         } else if current.enabled
@@ -280,6 +392,29 @@ impl MatterBridgeAdapter {
         self.status.read().clone()
     }
 
+    /// Record the controller's chosen ColorControl mode and value exactly once before ordinary
+    /// authoritative reconciliation. Desk-side changes retain that mode while updating values.
+    pub fn apply_color_write(&self, endpoint_id: u16, write: MatterColorWrite) {
+        let mut current = self.status.write();
+        let next = MatterColorState::from_xyz(write.xyz(), write.mode());
+        let changed = current
+            .lights
+            .iter_mut()
+            .find(|light| light.endpoint_id == endpoint_id)
+            .is_some_and(|light| {
+                if light.color == Some(next) && light.color_active {
+                    false
+                } else {
+                    light.color = Some(next);
+                    light.color_active = true;
+                    true
+                }
+            });
+        if changed {
+            current.revision = current.revision.saturating_add(1);
+        }
+    }
+
     /// Resolve a Matter On/Off or Level Control mutation to the assigned global playback.
     ///
     /// `Off` wins when a combined write contains contradictory fields. `On` without a level
@@ -298,11 +433,14 @@ impl MatterBridgeAdapter {
             .iter()
             .find(|light| light.endpoint_id == endpoint_id)
             .ok_or(MatterBridgeError::EndpointNotExposed(endpoint_id))?;
-        if write.on.is_none() && write.level.is_none() {
+        if write.on.is_none() && write.level.is_none() && write.color.is_none() {
             return Err(MatterBridgeError::MissingValue);
         }
         if write.level == Some(u8::MAX) {
             return Err(MatterBridgeError::ReservedLevel);
+        }
+        if write.color.is_some() && light.kind != MatterLightKind::Color {
+            return Err(MatterBridgeError::EndpointNotExposed(endpoint_id));
         }
         let matter_level = if write.on == Some(false) {
             0
@@ -314,6 +452,8 @@ impl MatterBridgeAdapter {
             } else {
                 MAX_MATTER_LEVEL
             }
+        } else if write.color.is_some() {
+            light.level
         } else {
             return Err(MatterBridgeError::MissingValue);
         };
@@ -323,6 +463,7 @@ impl MatterBridgeAdapter {
             playback: light.playback,
             playback_number: light.playback_number,
             level: f32::from(matter_level) / f32::from(MAX_MATTER_LEVEL),
+            color: write.color,
         })
     }
 }
@@ -362,6 +503,14 @@ fn build_lights(
                 0.0
             };
             let level = (normalized * f32::from(MAX_MATTER_LEVEL)).round() as u8;
+            let kind = if matches!(
+                definition.target,
+                light_playback::PlaybackTarget::Group { .. }
+            ) {
+                MatterLightKind::Color
+            } else {
+                MatterLightKind::Dimmable
+            };
             lights.insert(
                 endpoint_id,
                 MatterPlaybackLight {
@@ -375,11 +524,62 @@ fn build_lights(
                     ),
                     on: value.active && level > 0,
                     level,
+                    kind,
+                    color_active: kind == MatterLightKind::Color && value.color.is_some(),
+                    color: (kind == MatterLightKind::Color).then(|| match value.color {
+                        Some(color) => {
+                            MatterColorState::from_xyz(color, MatterColorMode::HueSaturation)
+                        }
+                        None => MatterColorState::default(),
+                    }),
                 },
             );
         }
     }
     lights.into_values().collect()
+}
+
+fn xyz_to_matter_xy(color: light_core::Xyz) -> (u16, u16) {
+    let total = color.x + color.y + color.z;
+    if !total.is_finite() || total <= f32::EPSILON {
+        return (0, 0);
+    }
+    let scale = 0xFEFF as f32;
+    (
+        (color.x / total * scale).round().clamp(0.0, scale) as u16,
+        (color.y / total * scale).round().clamp(0.0, scale) as u16,
+    )
+}
+
+fn matter_xy_to_xyz(x: u16, y: u16) -> light_core::Xyz {
+    let scale = 0xFEFF as f32;
+    let x = f32::from(x) / scale;
+    let y = (f32::from(y) / scale).max(0.000_1);
+    let z = (1.0 - x - y).max(0.0);
+    light_core::Xyz {
+        x: x / y,
+        y: 1.0,
+        z: z / y,
+    }
+}
+
+fn xyz_to_mireds(color: light_core::Xyz) -> u16 {
+    let total = color.x + color.y + color.z;
+    if total <= f32::EPSILON {
+        return 370;
+    }
+    let x = color.x / total;
+    let y = color.y / total;
+    let denominator = 0.1858 - y;
+    if denominator.abs() < 0.000_1 {
+        return 370;
+    }
+    let n = (x - 0.3320) / denominator;
+    let kelvin = 449.0 * n.powi(3) + 3525.0 * n.powi(2) + 6823.3 * n + 5520.33;
+    if !kelvin.is_finite() || kelvin <= 0.0 {
+        return 370;
+    }
+    (1_000_000.0 / kelvin).round().clamp(153.0, 500.0) as u16
 }
 
 #[cfg(test)]

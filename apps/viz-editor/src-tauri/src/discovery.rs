@@ -30,7 +30,7 @@ pub struct Discovery {
 /// The host is part of the name because two editors on two machines are two entries, and an
 /// operator picks between them by knowing which machine is which.
 fn editor_name() -> String {
-    format!("ToskLight Viz Editor on {}", light_discovery::hostname())
+    format!("ToskLight Rig Editor on {}", light_discovery::hostname())
 }
 
 impl Discovery {

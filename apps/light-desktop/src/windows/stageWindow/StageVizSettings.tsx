@@ -20,7 +20,7 @@ import { useApp } from "../../state/AppContext";
  * The pane's geometry is deliberately absent. Where the Stage is and how big it is comes from the
  * layout, and an operator moving a pane is already saying it.
  */
-export function StageVizSettings() {
+export function StageVizSettings({ paneId }: { paneId?: string } = {}) {
 	const { state, dispatch } = useApp();
 	const bridge = useDesktopBridge();
 	const [trouble, setTrouble] = useState<string | null>(null);
@@ -35,7 +35,7 @@ export function StageVizSettings() {
 	useEffect(() => {
 		let cancelled = false;
 		const poll = async () => {
-			const [, detail] = await bridge.stagePaneStatus();
+			const [, detail] = await bridge.stagePaneStatus(paneId);
 			if (cancelled) return;
 			setTrouble(detail);
 		};
@@ -45,7 +45,7 @@ export function StageVizSettings() {
 			cancelled = true;
 			window.clearInterval(timer);
 		};
-	}, [bridge]);
+	}, [bridge, paneId]);
 
 	/*
 	 * Nothing is sent from here. The picture crosses whenever it changes and whenever a renderer
@@ -54,7 +54,9 @@ export function StageVizSettings() {
 	 */
 	return (
 		<>
-			<Button onClick={() => void bridge.sendStagePaneInput("frame", 0, 0)}>
+			<Button
+				onClick={() => void bridge.sendStagePaneInput("frame", 0, 0, paneId)}
+			>
 				Reset view
 			</Button>
 			{/*

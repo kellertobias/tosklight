@@ -199,7 +199,7 @@ function DirtyCloseConfirmation({
   onStay: () => void;
 }) {
   if (!visible) return null;
-  return <ModalRegistration onClose={onStay}><div className="stacked-modal-layer" onPointerDown={(event) => event.stopPropagation()}>
+  return <ModalRegistration onClose={onStay}><div className="stacked-modal-layer" onPointerDown={(event) => event.target === event.currentTarget && onStay()}>
     <section className="nested-modal" role="alertdialog" aria-modal="true" aria-label="Unsaved Speed Group settings">
       <h3>Save Speed Group changes?</h3>
       <p>This Speed Group has unapplied settings.</p>

@@ -219,10 +219,16 @@ impl Session {
             view.quality = quality;
         }
         view.theme = preferences.theme;
+        if let Some(background) = preferences.background {
+            view.background = Some(background);
+        }
         view.ambient = preferences.ambient;
         view.exposure = preferences.exposure;
         view.laser_brightness = preferences.laser_brightness;
         view.show_labels = preferences.show_labels;
+        if let Some(floor_grid) = preferences.floor_grid {
+            view.floor_grid = floor_grid;
+        }
         view
     }
 
@@ -337,6 +343,24 @@ mod tests {
             session.effective_view(&preferences).quality,
             viz_scene::RenderQuality::Draft
         );
+    }
+
+    #[test]
+    fn local_rendering_and_feature_settings_reach_the_effective_view() {
+        let mut session = session();
+        session.pump(Instant::now());
+        let mut preferences =
+            crate::settings::Preferences::from_options(&crate::settings::Options::default());
+        preferences.background = Some([0.02, 0.04, 0.08]);
+        preferences.show_labels = false;
+        preferences.floor_grid = Some(false);
+        preferences.exposure = 1.75;
+
+        let view = session.effective_view(&preferences);
+        assert_eq!(view.background, Some([0.02, 0.04, 0.08]));
+        assert!(!view.show_labels);
+        assert!(!view.floor_grid);
+        assert_eq!(view.exposure, 1.75);
     }
 
     /// A provider that hands out exactly what a test queued for it.

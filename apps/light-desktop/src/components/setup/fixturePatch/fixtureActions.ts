@@ -1,6 +1,6 @@
 import type { PatchedFixture } from "../../../api/types";
 import { changedPatchFixtureCandidate } from "../../../features/patch/PatchContext";
-import { isDmxPatchable } from "../patchUtils";
+import { isVisualOnly } from "../patchUtils";
 import type { PatchController, PatchRowMouseEvent } from "./controller";
 import { cancelEdit, completeEdit } from "./editSession";
 import {
@@ -132,7 +132,7 @@ export async function setFixtureNumber(
 	controller: PatchController,
 	fixture: PatchedFixture,
 ) {
-	const visualOnly = !isDmxPatchable(fixture.definition);
+	const visualOnly = isVisualOnly(fixture.definition);
 	const value = window.prompt("Fixture ID", String(fixtureDisplayId(fixture)));
 	if (value == null) return;
 	if (visualOnly) {

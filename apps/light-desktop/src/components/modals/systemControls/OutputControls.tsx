@@ -1,6 +1,6 @@
-import { type KeyboardEvent, useState } from "react";
 import { Button, SelectField } from "@tosklight/ui";
 import { VerticalTouchFaderSurface } from "@tosklight/ui/faders";
+import { type KeyboardEvent, useState } from "react";
 import type { ControlActionSemantic } from "../../../api/types";
 
 const PRIMARY_FIXTURE_ACTIONS = [
@@ -87,32 +87,10 @@ export function OutputControls(props: OutputControlsProps) {
 				{view === "masters" ? (
 					<MasterControls {...props} onActions={() => setView("actions")} />
 				) : (
-					<div
+					<section
 						className="fixture-control-actions"
 						aria-label="Fixture controls"
 					>
-						<Button
-							className="fixture-actions-back"
-							onClick={() => setView("masters")}
-						>
-							Masters
-						</Button>
-						{PRIMARY_FIXTURE_ACTIONS.map((action) => (
-							<FixtureActionButton
-								key={action.semantic}
-								label={
-									props.fixturesSelected ? action.selected : action.all
-								}
-								danger={action.danger}
-								disabled={
-									!props.availableFixtureActions.has(action.semantic)
-								}
-								onAction={(phase) =>
-									props.onFixtureAction(action.semantic, phase)
-								}
-							/>
-						))}
-						<span className="fixture-actions-spacer" />
 						<SelectField
 							label="Fan Mode"
 							ariaLabel="Fan Mode"
@@ -124,9 +102,7 @@ export function OutputControls(props: OutputControlsProps) {
 									label: `Fan Mode ${action.semantic
 										.slice("fan_".length)
 										.replace(/^./, (letter) => letter.toUpperCase())}`,
-									disabled: !props.availableFixtureActions.has(
-										action.semantic,
-									),
+									disabled: !props.availableFixtureActions.has(action.semantic),
 								})),
 							]}
 							onChange={(semantic) => {
@@ -135,7 +111,25 @@ export function OutputControls(props: OutputControlsProps) {
 								props.onFixtureAction(semantic, "click");
 							}}
 						/>
-					</div>
+						{PRIMARY_FIXTURE_ACTIONS.map((action) => (
+							<FixtureActionButton
+								key={action.semantic}
+								label={props.fixturesSelected ? action.selected : action.all}
+								danger={action.danger}
+								disabled={!props.availableFixtureActions.has(action.semantic)}
+								onAction={(phase) =>
+									props.onFixtureAction(action.semantic, phase)
+								}
+							/>
+						))}
+						<span className="fixture-actions-spacer" />
+						<Button
+							className="fixture-actions-back"
+							onClick={() => setView("masters")}
+						>
+							Masters
+						</Button>
+					</section>
 				)}
 				{props.fixtureActionResult && (
 					<p className="fixture-command-result" role="status">
@@ -147,11 +141,9 @@ export function OutputControls(props: OutputControlsProps) {
 	);
 }
 
-function MasterControls(
-	props: OutputControlsProps & { onActions(): void },
-) {
+function MasterControls(props: OutputControlsProps & { onActions(): void }) {
 	return (
-		<div className="master-controls" aria-label="Master controls">
+		<section className="master-controls" aria-label="Master controls">
 			<VerticalTouchFaderSurface
 				label="Grand Master"
 				value={props.master ?? 0}
@@ -170,7 +162,7 @@ function MasterControls(
 			<Button className="fixture-actions-open" onClick={props.onActions}>
 				Actions
 			</Button>
-		</div>
+		</section>
 	);
 }
 

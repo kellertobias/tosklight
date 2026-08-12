@@ -460,6 +460,37 @@ fn visual_only_profiles_require_zero_footprint_and_no_dmx_behavior() {
 }
 
 #[test]
+fn internal_profiles_keep_semantic_channels_without_dmx_components() {
+    let mut profile = FixtureProfile::blank();
+    profile.manufacturer = "ToskLight".into();
+    profile.name = "Audio Player".into();
+    profile.patch_policy = PatchPolicy::Internal;
+    profile.modes[0].splits[0].footprint = 0;
+    let head = profile.modes[0].heads[0].id;
+    let mut volume = channel(head, ChannelResolution::U8, vec![]);
+    volume.fixture_attribute = AttributeKey("audio.volume".into());
+    volume.attribute = volume.fixture_attribute.clone();
+    volume.functions.clear();
+    profile.modes[0].channels.push(volume);
+
+    profile.validate().unwrap();
+    let definition = profile.resolved_definition(profile.modes[0].id).unwrap();
+    assert_eq!(definition.footprint, 0);
+    assert_eq!(definition.patch_policy(), PatchPolicy::Internal);
+    assert_eq!(
+        definition.heads[0].parameters[0].attribute.0,
+        "audio.volume"
+    );
+    assert!(definition.heads[0].parameters[0].components.is_empty());
+
+    profile.modes[0].splits[0].footprint = 1;
+    assert!(profile.validate().is_err());
+    profile.modes[0].splits[0].footprint = 0;
+    profile.modes[0].channels[0].secondary_slots.push(2);
+    assert!(profile.validate().is_err());
+}
+
+#[test]
 fn missing_patch_and_model_policy_fields_decode_to_legacy_defaults() {
     let mut profile = FixtureProfile::blank();
     profile.manufacturer = "Generic".into();

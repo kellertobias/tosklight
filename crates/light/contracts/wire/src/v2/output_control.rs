@@ -93,6 +93,37 @@ pub struct MediaLibrarySelectionOutcome {
     pub programmer_revision: u64,
 }
 
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct NativeMediaTextSlot {
+    pub folder: u8,
+    pub file: u8,
+    pub name: String,
+    pub enabled: bool,
+    pub kind: String,
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub text: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct NativeMediaSnapshot {
+    pub endpoint: String,
+    pub status: String,
+    pub instance: String,
+    pub outputs: usize,
+    #[ts(type = "number")]
+    pub catalog_revision: u64,
+    pub catalog_items: usize,
+    pub text_slots: Vec<NativeMediaTextSlot>,
+    pub effect_controls_available: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct NativeMediaTextUpdateRequest {
+    pub request_id: String,
+    pub text: String,
+}
+
 fn default_library_type() -> u8 {
     1
 }

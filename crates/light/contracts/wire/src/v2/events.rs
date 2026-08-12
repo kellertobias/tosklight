@@ -248,6 +248,9 @@ pub enum EventPayload {
     HardwareConnectionChanged {
         change: HardwareConnectionNotification,
     },
+    VisualizerConnectionChanged {
+        change: VisualizerConnectionNotification,
+    },
     OperatorNotification {
         notification: OperatorNotification,
     },
@@ -292,6 +295,11 @@ pub struct NotificationRevision {
 pub struct HardwareConnectionNotification {
     #[ts(type = "number")]
     pub revision: u64,
+    pub connected: bool,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct VisualizerConnectionNotification {
     pub connected: bool,
 }
 

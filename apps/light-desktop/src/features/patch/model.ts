@@ -71,6 +71,7 @@ export function newPatchFixtureCandidate(
 		split_patches: splitPatches,
 		layer_id: fixture.layer_id ?? "default",
 		direct_control: null,
+		internal_bindings: {},
 		location: { x: 0, y: 0, z: 0 },
 		rotation: { x: 0, y: 0, z: 0 },
 		logical_heads: [],
@@ -135,6 +136,10 @@ export function patchedFixtureCandidate(
 						port: fixture.direct_control.port,
 					}
 				: null,
+			internalBindings: {
+				library: fixture.internal_bindings?.library ?? null,
+				output: fixture.internal_bindings?.output ?? null,
+			},
 			location: fixture.location ?? { x: 0, y: 0, z: 0 },
 			rotation: fixture.rotation ?? { x: 0, y: 0, z: 0 },
 			multipatch: (fixture.multipatch ?? []).map((instance) => ({
@@ -233,6 +238,10 @@ export function projectionToPatchedFixture(
 					port: projection.directControl.port,
 				}
 			: null,
+		internal_bindings: {
+			library: projection.internalBindings?.library ?? null,
+			output: projection.internalBindings?.output ?? null,
+		},
 		location: projection.location,
 		rotation: projection.rotation,
 		logical_heads: projection.logicalHeads.map((head) => ({

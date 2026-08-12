@@ -93,6 +93,10 @@ pub struct TimecodeRuntimeService {
 }
 
 impl TimecodeRuntimeService {
+    pub fn frame_rate(&self) -> TimecodeFrameRate {
+        self.rate
+    }
+
     pub fn new(
         clock: Arc<dyn TimecodeClock>,
         publisher: Arc<dyn TimecodeChangePublisher>,

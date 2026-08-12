@@ -11,7 +11,7 @@ use futures_lite::future::block_on;
 use parking_lot::RwLock;
 use rs_matter::crypto::{Crypto, default_crypto};
 use rs_matter::dm::clusters::decl::{
-    bridged_device_basic_information as bridged_info, level_control, on_off,
+    bridged_device_basic_information as bridged_info, color_control, level_control, on_off,
 };
 use rs_matter::dm::clusters::desc::{self, ClusterHandler as _};
 use rs_matter::dm::clusters::groups::{self, ClusterHandler as _};
@@ -71,6 +71,7 @@ pub(super) fn run_transport(
         Dataver::new_rand(&mut random),
         Dataver::new_rand(&mut random),
         Dataver::new_rand(&mut random),
+        Dataver::new_rand(&mut random),
     );
     let endpoints_meta = build_endpoints(shape);
     let node = Node::new(&endpoints_meta);
@@ -113,6 +114,13 @@ pub(super) fn run_transport(
                 Some(<BridgeLights as level_control::ClusterHandler>::CLUSTER.id),
             ),
             Async(level_control::HandlerAdaptor(&bridge_lights)),
+        )
+        .chain(
+            EpClMatcher::new(
+                None,
+                Some(<BridgeLights as color_control::ClusterHandler>::CLUSTER.id),
+            ),
+            Async(color_control::HandlerAdaptor(&bridge_lights)),
         );
     let data_model = (node, handler);
     let im = InteractionModel::new(&matter, &crypto, &buffers, data_model, &kv, &im_state);
@@ -212,6 +220,21 @@ fn notify_changes(
                 <BridgeLights as level_control::ClusterHandler>::CLUSTER.id,
                 level_control::AttributeId::CurrentLevel as _,
             );
+        }
+        if change.color {
+            for attribute in [
+                color_control::AttributeId::CurrentHue,
+                color_control::AttributeId::CurrentSaturation,
+                color_control::AttributeId::ColorTemperatureMireds,
+                color_control::AttributeId::ColorMode,
+                color_control::AttributeId::EnhancedColorMode,
+            ] {
+                notifier.notify_attr_changed(
+                    change.endpoint_id,
+                    <BridgeLights as color_control::ClusterHandler>::CLUSTER.id,
+                    attribute as _,
+                );
+            }
         }
     }
 }

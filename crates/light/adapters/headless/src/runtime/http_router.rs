@@ -17,6 +17,7 @@ pub(super) fn build(state: AppState) -> Router {
         .merge(dynamics_http::router())
         .merge(macros_v2::router())
         .merge(timecode_v2::router())
+        .merge(internal_audio_http::router())
         .merge(playback_topology_http::router())
         .merge(attribute_configuration::router())
         .merge(control_desk_configuration_v2::router())
@@ -62,6 +63,14 @@ fn media_and_output_routes() -> Router<AppState> {
         .route(
             "/api/v2/media-servers/{fixture_id}/inspect",
             get(inspect_media_server),
+        )
+        .route(
+            "/api/v2/media-servers/{fixture_id}/native",
+            get(native_media_snapshot),
+        )
+        .route(
+            "/api/v2/media-servers/{fixture_id}/native/text/{folder}/{file}/update",
+            post(update_native_media_text),
         )
         .route(
             "/api/v2/media-servers/{fixture_id}/library-selection",

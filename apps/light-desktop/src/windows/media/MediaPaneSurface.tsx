@@ -323,6 +323,7 @@ function MediaLayerStrip({
 									</small>
 									<span
 										className="media-layer-opacity"
+										role="img"
 										aria-label={`Opacity ${opacity}%`}
 										title={`Opacity ${opacity}%`}
 									>
@@ -466,7 +467,9 @@ function mediaPoolSlots(
 		id: item.id,
 		position: index,
 		card: {
-			number: String(index + 1).padStart(3, "0"),
+			number: Number.isInteger(Number(item.id))
+				? String(Number(item.id)).padStart(3, "0")
+				: String(index + 1).padStart(3, "0"),
 			primary: item.name,
 			secondary: item.detail,
 			kind: "generic",

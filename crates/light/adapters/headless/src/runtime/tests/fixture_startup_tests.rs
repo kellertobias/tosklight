@@ -52,6 +52,25 @@ fn startup_fixture_library_migrates_schema_v1_and_loads_transferable_packages_on
         .iter()
         .filter(|profile| profile.manufacturer == "ROBE")
         .collect::<Vec<_>>();
+    let media_server = profiles
+        .iter()
+        .find(|profile| profile.manufacturer == "ToskLight" && profile.name == "Media Server")
+        .expect("the combined ToskLight Media Server fixture is in the profile inventory");
+    assert_eq!(
+        media_server
+            .modes
+            .iter()
+            .map(|mode| (mode.name.as_str(), mode.splits[0].footprint, mode.heads.len()))
+            .collect::<Vec<_>>(),
+        vec![("2 layers", 75, 3), ("8 layers", 279, 9)]
+    );
+    assert!(!profiles.iter().any(|profile| {
+        profile.manufacturer == "ToskLight"
+            && matches!(
+                profile.name.as_str(),
+                "Media Server Layer" | "Media Server Master"
+            )
+    }));
     assert_eq!(profiles.len(), package_count + 1);
     assert_eq!(vendor_profiles.len(), 5);
     assert!(vendor_profiles.iter().any(|profile| {

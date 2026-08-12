@@ -1,4 +1,4 @@
-use crate::*;
+use crate::{controls::activation::deactivate, engine::CuelistFlashState, *};
 
 impl PlaybackEngine {
     pub(crate) fn temporary_playback_at(
@@ -168,12 +168,24 @@ impl PlaybackEngine {
         identity: PlaybackIdentity,
         pressed: bool,
     ) -> Result<PlaybackMutation<()>, String> {
-        self.definition_at(identity)
-            .ok_or("playback does not exist")?;
+        let cue_list_id = match self
+            .definition_at(identity)
+            .ok_or("playback does not exist")?
+            .target
+        {
+            PlaybackTarget::CueList { cue_list_id } => cue_list_id,
+            _ => return Err("Swap is available only for Cuelist playbacks".into()),
+        };
         let key = (identity, TemporaryPlaybackKind::Swap);
         if pressed {
             let mut changed = self.swap_held.insert(identity);
             if !self.temporary.contains_key(&key) {
+                let restore_off = !self
+                    .active
+                    .get(&PlaybackKey::CueList(cue_list_id))
+                    .is_some_and(|playback| playback.enabled);
+                self.cuelist_swap_states
+                    .insert(identity, CuelistFlashState { restore_off });
                 let playback = self.temporary_playback_at(identity, 1.0, true)?;
                 self.temporary.insert(key, playback);
                 changed = true;
@@ -185,17 +197,35 @@ impl PlaybackEngine {
             };
             return Ok(PlaybackMutation::new((), effect));
         }
+        let swap_state = self.cuelist_swap_states.remove(&identity);
         let released = self.temporary.remove(&key);
         let changed = self.swap_held.remove(&identity) || released.is_some();
         if !changed {
             return Ok(PlaybackMutation::new((), PlaybackRuntimeEffect::None));
         }
-        let promoted = self.definition_at(identity).unwrap().flash_release
-            == FlashReleaseMode::ReleaseIntensityOnly
+        let held_peer = self
+            .cuelist_swap_states
+            .keys()
+            .chain(self.cuelist_flash_states.keys())
+            .copied()
+            .any(|peer| self.runtime_key_at(peer).ok() == Some(PlaybackKey::CueList(cue_list_id)));
+        let auto_off = self.cue_lists[&cue_list_id].auto_off_flash_release
+            && swap_state.is_some_and(|state| state.restore_off)
+            && !held_peer;
+        let promoted = !auto_off
+            && swap_state.is_some_and(|state| state.restore_off)
+            && !held_peer
             && released.is_some_and(|released| {
                 self.promote_intensity_release_at(identity, released, false)
             });
-        let effect = PlaybackRuntimeEffect::Transient.combine(if promoted {
+        let turned_off = if auto_off {
+            self.active
+                .get_mut(&PlaybackKey::CueList(cue_list_id))
+                .is_some_and(deactivate)
+        } else {
+            false
+        };
+        let effect = PlaybackRuntimeEffect::Transient.combine(if promoted || turned_off {
             PlaybackRuntimeEffect::Durable
         } else {
             PlaybackRuntimeEffect::None

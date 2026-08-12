@@ -425,6 +425,25 @@ impl Application {
         }
     }
 
+    /// Open the product's rig-planning window and make its document the rendered source.
+    fn open_rig_editor(&mut self) {
+        self.lasting_failure = None;
+        if self.planning_window.is_none() {
+            match crate::planner::PlanningWindow::open() {
+                Ok(window) => self.planning_window = Some(window),
+                Err(error) => {
+                    self.lasting_failure = Some(format!("rig editor: {error}"));
+                    return;
+                }
+            }
+        }
+        self.hosted_show = None;
+        self.preferences.source = ProviderKind::PlanningSoftware;
+        self.framed_revision = None;
+        self.camera_is_local = false;
+        self.reconnect();
+    }
+
     /// Open or close Quick Settings, with the source control saying what this build can connect.
     ///
     /// The active provider is asked rather than assumed: a source that reports itself unavailable
@@ -702,6 +721,11 @@ impl Application {
                 self.quick_settings.move_selection(1);
                 QuickSettingsOutcome::None
             }
+            Key::Named(NamedKey::Tab) => {
+                self.quick_settings
+                    .move_tab(if self.modifiers.shift_key() { -1 } else { 1 });
+                QuickSettingsOutcome::None
+            }
             Key::Named(NamedKey::ArrowLeft) => self.quick_settings.adjust(-1, &mut preferences),
             Key::Named(NamedKey::ArrowRight) => self.quick_settings.adjust(1, &mut preferences),
             Key::Named(NamedKey::Enter) => self.quick_settings.activate(&mut preferences),
@@ -745,11 +769,24 @@ impl Application {
                 let blender = self.preferences.blender_path();
                 self.snapshots.export(index, blender);
             }
+            QuickSettingsOutcome::FocusView => self.focus_view(),
             QuickSettingsOutcome::Close
             | QuickSettingsOutcome::AppliedLocally
             | QuickSettingsOutcome::Invalid(_)
             | QuickSettingsOutcome::None => {}
         }
+    }
+
+    fn focus_view(&mut self) {
+        let Some(session) = self.session.as_mut() else {
+            return;
+        };
+        session.source_view.camera =
+            Camera::framed(session.source_view.mode, session.scene.framing_bounds());
+        self.camera.adopt(&session.source_view.camera);
+        self.framed_revision = Some(session.scene.revision);
+        self.latch_local_camera_control();
+        self.quick_settings.message = "Focused the current rig".into();
     }
 
     /// Freeze the picture exactly as it is and write it as a snapshot.
@@ -1136,6 +1173,7 @@ impl ApplicationHandler for Application {
         for command in commands {
             match command {
                 crate::menu::MenuCommand::OpenShowFile => self.prompt_for_show_file(),
+                crate::menu::MenuCommand::OpenRigEditor => self.open_rig_editor(),
                 crate::menu::MenuCommand::CloseShowFile => self.close_show_file(),
                 crate::menu::MenuCommand::ConnectToDesk => self.close_show_file(),
                 crate::menu::MenuCommand::TakeSnapshot => self.take_snapshot(),

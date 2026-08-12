@@ -31,9 +31,19 @@ export function mediaFileMutations(
 	folder: number,
 	file: number,
 ) {
+	return mediaLibraryMutations(fixtureId, "media", folder, file);
+}
+
+export function mediaLibraryMutations(
+	fixtureId: string,
+	mode: "media" | "mask",
+	folder: number,
+	file: number,
+) {
+	const prefix = mode === "mask" ? "media.mask" : "media";
 	return [
-		mediaMutation(fixtureId, "media.folder", folder),
-		mediaMutation(fixtureId, "media.file", file),
+		mediaMutation(fixtureId, `${prefix}.folder`, folder),
+		mediaMutation(fixtureId, `${prefix}.file`, file),
 	];
 }
 

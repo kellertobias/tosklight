@@ -1,7 +1,7 @@
 import { Button } from "@tosklight/ui";
 import { Fragment } from "react";
 import type { MultiPatchInstance, PatchedFixture } from "../../../api/types";
-import { isDmxPatchable } from "../patchUtils";
+import { isDmxPatchable, isInternal } from "../patchUtils";
 import { usePatchController } from "./controller";
 import {
 	armEdit,
@@ -174,6 +174,29 @@ function FixtureIdentityCells({ fixture }: { fixture: PatchedFixture }) {
 
 function FixturePatchCell({ fixture }: { fixture: PatchedFixture }) {
 	const controller = usePatchController();
+	if (isInternal(fixture.definition)) {
+		const library = fixture.internal_bindings?.library ?? "No library";
+		const output = fixture.internal_bindings?.output ?? "No output";
+		return (
+			<td>
+				<Button
+					className="patch-address split-patch-summary"
+					onClick={() => armEdit(controller, fixture, "internal_bindings")}
+					onContextMenu={(event) => {
+						event.preventDefault();
+						event.stopPropagation();
+						beginFixtureEditFromContextMenu(
+							controller,
+							fixture,
+							"internal_bindings",
+						);
+					}}
+				>
+					{library} → {output}
+				</Button>
+			</td>
+		);
+	}
 	if (!isDmxPatchable(fixture.definition))
 		return (
 			<td>

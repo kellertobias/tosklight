@@ -39,6 +39,8 @@ export interface DeskConfiguration {
 	osc_timecode: { address: string; rate: string } | null;
 	timecode_audio_output_device?: string | null;
 	timecode_audio_latency_trim_micros_by_output?: Record<string, number>;
+	internal_audio_library_roots?: Record<string, string>;
+	internal_audio_output_devices?: Record<string, string>;
 	backup_retention: number;
 	autosave_interval_seconds: number;
 	speed_groups_bpm: [number, number, number, number, number];
@@ -102,6 +104,14 @@ export interface MatterPlaybackLight {
 	name: string;
 	on: boolean;
 	level: number;
+	kind: "dimmable" | "color";
+	color_active: boolean;
+	color?: {
+		hue: number;
+		saturation: number;
+		color_temperature_mireds: number;
+		mode: "hue_saturation" | "color_temperature";
+	} | null;
 }
 
 export interface MatterBridgeStatus {

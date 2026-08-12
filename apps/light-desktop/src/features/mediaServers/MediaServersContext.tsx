@@ -1,5 +1,9 @@
 import { createContext, type PropsWithChildren, useContext } from "react";
-import type { MediaServerInspection } from "../../api/client/mediaOutput";
+import type {
+	MediaServerInspection,
+	NativeMediaSnapshot,
+	NativeMediaTextSlot,
+} from "../../api/client/mediaOutput";
 import type { MatterBridgeStatus, MediaServerFixture } from "../../api/types";
 
 /**
@@ -16,6 +20,13 @@ export interface MediaServersState {
 		elements: number[],
 	) => Promise<void>;
 	inspectMediaServer: (fixtureId: string) => Promise<MediaServerInspection>;
+	nativeMedia: (fixtureId: string) => Promise<NativeMediaSnapshot>;
+	updateNativeMediaText: (
+		fixtureId: string,
+		folder: number,
+		file: number,
+		text: string,
+	) => Promise<NativeMediaTextSlot>;
 	applyMediaLibrarySelection: (
 		fixtureId: string,
 		input: {

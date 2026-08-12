@@ -13,6 +13,9 @@ impl ProfileEncodingIndex {
     pub(crate) fn compile(snapshot: &EngineSnapshot) -> Result<Self, EngineError> {
         let mut fixtures = HashMap::new();
         for fixture in snapshot.fixtures.iter() {
+            if !fixture.definition.is_dmx_patchable() {
+                continue;
+            }
             let Some(mode) = profile_mode(fixture) else {
                 continue;
             };

@@ -16,6 +16,7 @@ use crate::v2::files::*;
 use crate::v2::fixture_library::*;
 use crate::v2::group_management::*;
 use crate::v2::group_recording::*;
+use crate::v2::internal_audio::*;
 use crate::v2::live_action::*;
 use crate::v2::macros::*;
 use crate::v2::output_control::*;
@@ -76,10 +77,19 @@ pub(super) fn all(config: &Config) -> Vec<String> {
     declarations.extend(selective_import(config));
     declarations.extend(show_library(config));
     declarations.extend(interaction(config));
+    declarations.extend(internal_audio(config));
     declarations.extend(live_actions(config));
     declarations.extend(macros(config));
     declarations.extend(timecode(config));
     declarations
+}
+
+fn internal_audio(config: &Config) -> Vec<String> {
+    vec![
+        InternalAudioPlayerStatus::decl(config),
+        InternalAudioLibraryStatus::decl(config),
+        InternalAudioStatus::decl(config),
+    ]
 }
 
 fn timecode(config: &Config) -> Vec<String> {
@@ -95,6 +105,7 @@ fn timecode(config: &Config) -> Vec<String> {
         TimecodeMarker::decl(config),
         TimecodeLane::decl(config),
         TimecodeLaneContent::decl(config),
+        TimecodeAudioPlayerClip::decl(config),
         TimecodeClipStart::decl(config),
         TimecodeClipEnd::decl(config),
         TimecodeCueListClip::decl(config),
@@ -360,6 +371,9 @@ fn output_control(config: &Config) -> Vec<String> {
         MediaLibraryKind::decl(config),
         MediaLibrarySelectionRequest::decl(config),
         MediaLibrarySelectionOutcome::decl(config),
+        NativeMediaTextSlot::decl(config),
+        NativeMediaSnapshot::decl(config),
+        NativeMediaTextUpdateRequest::decl(config),
     ]
 }
 
@@ -637,6 +651,7 @@ fn programming(config: &Config) -> Vec<String> {
         ProgrammingCaptureModeSnapshot::decl(config),
         ProgrammingValuesProjection::decl(config),
         ProgrammingFixtureValueAddress::decl(config),
+        ProgrammingDynamicValueAddress::decl(config),
         ProgrammingGroupValueAddress::decl(config),
         ProgrammingValuesChange::decl(config),
         ProgrammingValuesSnapshot::decl(config),
@@ -837,6 +852,7 @@ fn event_payload(config: &Config) -> Vec<String> {
         SelectiveImportChange::decl(config),
         NotificationRevision::decl(config),
         HardwareConnectionNotification::decl(config),
+        VisualizerConnectionNotification::decl(config),
         HighlightChange::decl(config),
         ScreenNotificationKind::decl(config),
         ScreenNotification::decl(config),
@@ -905,6 +921,7 @@ fn patch(config: &Config) -> Vec<String> {
         PatchProfilePolicy::decl(config),
         PatchSplitAssignment::decl(config),
         PatchDirectControlEndpoint::decl(config),
+        PatchInternalFixtureBindings::decl(config),
         PatchFixtureLocation::decl(config),
         PatchFixtureRotation::decl(config),
         PatchInstalledLightSource::decl(config),

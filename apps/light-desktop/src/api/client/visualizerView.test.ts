@@ -5,6 +5,7 @@ import { VisualizerViewApiClient } from "./visualizerView";
 describe("VisualizerViewApiClient", () => {
 	it("reads every renderer target the desk is driving", async () => {
 		const request = vi.fn(async (_path: string, _init?: RequestInit) => ({
+			connected: true,
 			views: [
 				{
 					target: "main",
@@ -20,16 +21,19 @@ describe("VisualizerViewApiClient", () => {
 			request,
 		} as unknown as ClientTransport);
 
-		await expect(client.views()).resolves.toEqual([
-			{
-				target: "main",
-				mode: "top_down",
-				quality: "high",
-				exposure: 1,
-				ambient: 0.06,
-				revision: 3,
-			},
-		]);
+		await expect(client.snapshot()).resolves.toEqual({
+			connected: true,
+			views: [
+				{
+					target: "main",
+					mode: "top_down",
+					quality: "high",
+					exposure: 1,
+					ambient: 0.06,
+					revision: 3,
+				},
+			],
+		});
 		expect(request.mock.calls[0]?.[0]).toBe("/api/v2/visualizer-views");
 	});
 

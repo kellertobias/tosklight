@@ -65,6 +65,11 @@ export interface ProgrammerFixtureValueAddress {
 	attribute: string;
 }
 
+export interface ProgrammerDynamicValueAddress
+	extends ProgrammerFixtureValueAddress {
+	instanceLink: string | null;
+}
+
 export interface ProgrammerGroupValueAddress {
 	groupId: string;
 	attribute: string;
@@ -78,7 +83,7 @@ export interface ProgrammerValuesChange {
 	groupValues: readonly ProgrammerGroupValue[];
 	removedGroupValues: readonly ProgrammerGroupValueAddress[];
 	dynamicValues: readonly ProgrammerDynamicValue[];
-	removedDynamicValues: readonly ProgrammerFixtureValueAddress[];
+	removedDynamicValues: readonly ProgrammerDynamicValueAddress[];
 }
 
 export type ProgrammerValuesEventMessage =

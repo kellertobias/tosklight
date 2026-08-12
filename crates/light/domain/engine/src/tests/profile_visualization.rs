@@ -97,6 +97,7 @@ fn calibrated_visual_fixture(fixture_id: FixtureId) -> PatchedFixture {
         split_patches: vec![],
         layer_id: "default".into(),
         direct_control: None,
+        internal_bindings: Default::default(),
         location: Default::default(),
         rotation: Default::default(),
         logical_heads: vec![],

@@ -249,9 +249,10 @@ pub(in crate::runtime) fn values_change(
             .delta
             .removed_dynamic_values
             .iter()
-            .map(|address| wire::ProgrammingFixtureValueAddress {
+            .map(|address| wire::ProgrammingDynamicValueAddress {
                 fixture_id: address.fixture_id.0,
                 attribute: address.attribute.0.clone(),
+                instance_link: address.instance_link,
             })
             .collect(),
     }

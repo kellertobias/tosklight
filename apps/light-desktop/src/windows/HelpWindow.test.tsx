@@ -25,6 +25,19 @@ afterEach(() => {
 });
 
 describe("help key rendering", () => {
+  it("resolves screenshots relative to the selected help topic", () => {
+    render(
+      <HelpMarkdown
+        markdown="![Stage](../../assets/screenshots/stage.png)"
+        topicId="30-Programmer/02-stage/details.md"
+      />,
+    );
+    expect(screen.getByRole("img", { name: "Stage" })).toHaveAttribute(
+      "src",
+      "/api/v2/help/assets/assets/screenshots/stage.png",
+    );
+  });
+
   it("renders normal and numeric-range keys as keycaps", () => {
     const { container } = render(<HelpMarkdown markdown={"[AT] [+] [0-9] [.] [CLR] [REC]"}/>);
     expect(screen.getByText("AT", { selector: "kbd" })).toBeInTheDocument();

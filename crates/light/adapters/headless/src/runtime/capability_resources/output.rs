@@ -122,6 +122,18 @@ impl OutputResource {
     pub(in crate::runtime) fn engine(&self) -> &Engine {
         &self.engine
     }
+
+    pub(in crate::runtime) fn group_color(&self, group_id: &str) -> Option<light_core::Xyz> {
+        self.engine.group_color(group_id)
+    }
+
+    pub(in crate::runtime) fn set_group_color(
+        &self,
+        group_id: &str,
+        color: Option<light_core::Xyz>,
+    ) -> Result<bool, light_engine::EngineError> {
+        self.engine.set_group_color(group_id, color)
+    }
     #[allow(clippy::too_many_arguments)]
     pub(in crate::runtime) fn new(
         runtime_service: OutputRuntimeService,

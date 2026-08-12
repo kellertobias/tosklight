@@ -221,6 +221,30 @@ fn off_requires_zero_pickup_without_moving_the_recorded_fader() {
 }
 
 #[test]
+fn explicit_fader_activation_ignores_cuelist_zero_policy() {
+    let cue_list = list(vec![Cue::new(1.0)]);
+    let cue_list_id = cue_list.id;
+    let mut playback = definition(1, cue_list_id);
+    playback.go_activates = false;
+    playback.auto_off = false;
+    let mut engine = PlaybackEngine::default();
+    engine.register(cue_list).unwrap();
+    engine.register_definition(playback).unwrap();
+
+    engine
+        .set_master_with_explicit_activation_mutation(1, 0.4)
+        .unwrap();
+    assert!(engine.runtime()[0].enabled);
+    assert_eq!(engine.runtime()[0].master, 0.4);
+
+    engine
+        .set_master_with_explicit_activation_mutation(1, 0.0)
+        .unwrap();
+    assert!(!engine.runtime()[0].enabled);
+    assert_eq!(engine.runtime()[0].master, 0.0);
+}
+
+#[test]
 fn cuelist_zero_auto_off_resumes_only_its_own_current_cue() {
     let fixture = FixtureId::new();
     let mut one = Cue::new(1.0);
@@ -273,6 +297,48 @@ fn cuelist_flash_auto_off_is_armed_only_by_the_flash_that_started_it() {
     engine.set_flash(1, true).unwrap();
     engine.set_flash(1, false).unwrap();
     assert!(engine.runtime()[0].enabled);
+}
+
+#[test]
+fn cuelist_flash_and_swap_share_keep_running_or_release_all_policy() {
+    let build = |release_all| {
+        let mut cue = Cue::new(1.0);
+        cue.changes.push(value(FixtureId::new(), "intensity", 1.0));
+        let mut cue_list = list(vec![cue]);
+        cue_list.auto_off_flash_release = release_all;
+        let cue_list_id = cue_list.id;
+        let mut engine = PlaybackEngine::default();
+        engine.register(cue_list).unwrap();
+        engine
+            .register_definition(definition(1, cue_list_id))
+            .unwrap();
+        engine
+    };
+
+    for release in [
+        PlaybackEngine::set_flash as fn(&mut PlaybackEngine, u16, bool) -> Result<(), String>,
+        PlaybackEngine::set_swap,
+    ] {
+        let mut keep_running = build(false);
+        release(&mut keep_running, 1, true).unwrap();
+        release(&mut keep_running, 1, false).unwrap();
+        let runtime = &keep_running.runtime()[0];
+        assert!(runtime.enabled);
+        assert_eq!(runtime.master, 0.0);
+
+        let mut release_all = build(true);
+        release(&mut release_all, 1, true).unwrap();
+        release(&mut release_all, 1, false).unwrap();
+        assert!(release_all.runtime().iter().all(|runtime| !runtime.enabled));
+    }
+
+    let mut combined_hold = build(false);
+    combined_hold.set_flash(1, true).unwrap();
+    combined_hold.set_swap(1, true).unwrap();
+    combined_hold.set_flash(1, false).unwrap();
+    assert!(combined_hold.active.is_empty());
+    combined_hold.set_swap(1, false).unwrap();
+    assert!(combined_hold.active.values().any(|runtime| runtime.enabled));
 }
 
 #[test]
@@ -431,7 +497,7 @@ fn temp_is_a_separate_entry_and_never_auto_offs_the_underlying_playback() {
 }
 
 #[test]
-fn flash_release_modes_and_swap_protection_preserve_normal_runtime() {
+fn keep_running_release_and_swap_protection_preserve_normal_runtime() {
     let fixture_a = FixtureId::new();
     let fixture_b = FixtureId::new();
     let fixture_c = FixtureId::new();
@@ -452,9 +518,7 @@ fn flash_release_modes_and_swap_protection_preserve_normal_runtime() {
     engine.register(b).unwrap();
     engine.register(c).unwrap();
     engine.register_definition(definition(1, a_id)).unwrap();
-    let mut b_definition = definition(2, b_id);
-    b_definition.flash_release = FlashReleaseMode::ReleaseIntensityOnly;
-    engine.register_definition(b_definition).unwrap();
+    engine.register_definition(definition(2, b_id)).unwrap();
     let mut c_definition = definition(3, c_id);
     c_definition.protect_from_swap = true;
     engine.register_definition(c_definition).unwrap();
@@ -707,6 +771,32 @@ fn dynamic_playback_definition(
         presentation_image: None,
         target,
     }
+}
+
+#[test]
+fn explicit_fader_activation_ignores_dynamic_zero_policy() {
+    let mut definition =
+        dynamic_playback_definition(17, DynamicPlaybackFaderMode::SizeAndMaster, false);
+    let PlaybackTarget::Dynamic { assignment } = &mut definition.target else {
+        unreachable!()
+    };
+    assignment.auto_off_at_zero = false;
+    definition.go_activates = false;
+    definition.auto_off = false;
+    let mut engine = PlaybackEngine::default();
+    engine.register_definition(definition).unwrap();
+
+    engine
+        .set_master_with_explicit_activation_mutation(17, 0.6)
+        .unwrap();
+    assert!(engine.active_dynamic_playbacks()[0].enabled);
+    assert_eq!(engine.active_dynamic_playbacks()[0].fader_value, 0.6);
+
+    engine
+        .set_master_with_explicit_activation_mutation(17, 0.0)
+        .unwrap();
+    assert!(!engine.active_dynamic_playbacks()[0].enabled);
+    assert_eq!(engine.active_dynamic_playbacks()[0].fader_value, 0.0);
 }
 
 #[test]

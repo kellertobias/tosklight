@@ -29,6 +29,11 @@ export interface VisualizerView {
 	revision: number;
 }
 
+export interface VisualizerViewSnapshot {
+	connected: boolean;
+	views: VisualizerView[];
+}
+
 /** Only the fields being changed: selecting a view never resubmits a camera. */
 export interface VisualizerViewPatch {
 	mode?: VisualizerViewMode;
@@ -41,10 +46,13 @@ export interface VisualizerViewPatch {
 export class VisualizerViewApiClient {
 	constructor(private readonly transport: ClientTransport) {}
 
-	views(): Promise<VisualizerView[]> {
+	snapshot(): Promise<VisualizerViewSnapshot> {
 		return this.transport
 			.request<WireVisualizerViewSnapshot>("/api/v2/visualizer-views")
-			.then((snapshot) => snapshot.views.map(mapView));
+			.then((snapshot) => ({
+				connected: snapshot.connected,
+				views: snapshot.views.map(mapView),
+			}));
 	}
 
 	update(target: string, patch: VisualizerViewPatch): Promise<VisualizerView> {

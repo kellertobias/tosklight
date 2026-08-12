@@ -78,7 +78,7 @@ export function useStagePanePicture(
 
 	useEffect(() => {
 		if (!active) return;
-		void bridge.setStagePanePicture({
+		void bridge.setStagePanePicture(pane.id, {
 			atmosphere: stageVizAtmosphere,
 			ambient: stageEnvironmentBrightness,
 			quality: stageVizQuality,
@@ -103,5 +103,6 @@ export function useStagePanePicture(
 		stageVizShowLabels,
 		stageShowFloorGrid,
 		stageVizBackground,
+		pane.id,
 	]);
 }

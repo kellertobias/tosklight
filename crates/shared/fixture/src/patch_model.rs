@@ -204,6 +204,10 @@ pub struct PatchedFixture {
     /// Logical heads inherit this endpoint and cannot override it.
     #[serde(default)]
     pub direct_control: Option<DirectControlEndpoint>,
+    /// Portable logical bindings for an application-owned Internal fixture. Concrete local paths
+    /// and device identities remain desk-local and are never stored here.
+    #[serde(default, skip_serializing_if = "InternalFixtureBindings::is_empty")]
+    pub internal_bindings: InternalFixtureBindings,
     #[serde(default)]
     pub location: FixtureLocation,
     #[serde(default)]
@@ -249,6 +253,20 @@ pub struct PatchedFixture {
     /// Optional per-instance raw Highlight overrides keyed by stable channel ID.
     #[serde(default)]
     pub highlight_overrides: BTreeMap<Uuid, u32>,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub struct InternalFixtureBindings {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub library: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output: Option<String>,
+}
+
+impl InternalFixtureBindings {
+    pub fn is_empty(&self) -> bool {
+        self.library.is_none() && self.output.is_none()
+    }
 }
 
 fn default_true() -> bool {

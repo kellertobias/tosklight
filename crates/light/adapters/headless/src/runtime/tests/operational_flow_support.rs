@@ -47,6 +47,7 @@ fn operational_fixture(fixture_id: light_core::FixtureId) -> light_fixture::Patc
         address: Some(1),
         split_patches: Vec::new(),
         direct_control: None,
+        internal_bindings: Default::default(),
         location: Default::default(),
         rotation: Default::default(),
         logical_heads: vec![],

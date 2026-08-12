@@ -142,6 +142,38 @@ impl HelperSource {
         self.send(&message);
     }
 
+    pub fn send_frame_presented(
+        &mut self,
+        sequence: u64,
+        source_frame: u64,
+        source_input_epoch_micros: u64,
+        presented_epoch_micros: u64,
+        stats: viz_render::FrameStats,
+        renderer: String,
+        quality: viz_helper::protocol::RenderQuality,
+        follow_preload: bool,
+        width: u32,
+        height: u32,
+    ) {
+        self.send(&viz_helper::protocol::FromHelper::FramePresented {
+            sequence,
+            source_frame,
+            source_input_epoch_micros,
+            presented_epoch_micros,
+            cpu_micros: stats.cpu_micros,
+            acquire_micros: stats.acquire_micros,
+            gpu_micros: stats.gpu_micros,
+            instances: stats.instances,
+            draw_calls: stats.draw_calls,
+            degraded: stats.degraded,
+            renderer,
+            quality,
+            follow_preload,
+            width,
+            height,
+        });
+    }
+
     /// Failure is not reported upwards: the desk has gone, and a helper without a desk is already
     /// finishing for that reason.
     fn send(&mut self, message: &viz_helper::protocol::FromHelper) {

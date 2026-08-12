@@ -9,7 +9,7 @@ import type {
 } from "../types";
 import type { FixtureSheetCuelistOption } from "./fixtureSheetCuelistAuthority";
 
-const columnOrder: FixtureSheetColumn[] = [
+export const FIXTURE_SHEET_COLUMN_ORDER: FixtureSheetColumn[] = [
 	"id",
 	"icon",
 	"name",
@@ -24,11 +24,11 @@ const columnOrder: FixtureSheetColumn[] = [
 	"media",
 ];
 
-export const DEFAULT_FIXTURE_SHEET_COLUMNS = columnOrder.filter(
+export const DEFAULT_FIXTURE_SHEET_COLUMNS = FIXTURE_SHEET_COLUMN_ORDER.filter(
 	(column) => column !== "patch",
 );
 
-const columnLabels: Record<FixtureSheetColumn, string> = {
+export const FIXTURE_SHEET_COLUMN_LABELS: Record<FixtureSheetColumn, string> = {
 	id: "Fixture ID",
 	icon: "Icon",
 	name: "Name",
@@ -167,10 +167,10 @@ function FixtureSheetColumnSettings() {
 			<section>
 				<h3>Visible columns</h3>
 				<div className="fixture-sheet-column-options">
-					{columnOrder.map((column) => (
+					{FIXTURE_SHEET_COLUMN_ORDER.map((column) => (
 						<SwitchField
 							key={column}
-							label={columnLabels[column]}
+							label={FIXTURE_SHEET_COLUMN_LABELS[column]}
 							offLabel="Hidden"
 							onLabel="Visible"
 							checked={state.fixtureSheetColumns.includes(column)}

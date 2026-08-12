@@ -14,6 +14,7 @@ pub use model::{
     ScreenNotification, ScreenNotificationKind, ShowEvent, ShowLibraryNotification,
     ShowLibraryNotificationKind, SystemEvent, UpdateTargetFamilyNotification,
     UpdateTargetNotification, UpdateWorkflowNotification, VirtualPlaybackExclusionZonesChange,
+    VisualizerConnectionNotification,
 };
 pub use subscription::{
     EventFilter, EventReplay, ReplaceableEventRateLimit, SequenceGap, SubscriptionDelivery,

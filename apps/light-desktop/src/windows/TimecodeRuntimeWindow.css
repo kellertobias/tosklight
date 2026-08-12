@@ -32,16 +32,17 @@
 	padding: 0.7rem;
 }
 .timecode-settings-fields label,
-.timecode-duration-readout {
+.timecode-audio-import {
 	display: grid;
 	gap: 0.2rem;
 	color: #a8abb8;
 	font-size: 0.72rem;
 }
-.timecode-duration-readout strong {
-	padding: 0.45rem 0;
-	color: #eef0f5;
-	font-variant-numeric: tabular-nums;
+.timecode-duration-fields {
+	display: grid;
+	grid-column: 1 / -1;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 0.6rem;
 }
 .timecode-settings-fields input {
 	min-width: 0;
@@ -82,23 +83,22 @@
 .timecode-header-group > .ui-button + .ui-button {
 	border-left: 1px solid #424553;
 }
-.timecode-add-menu-layer {
-	position: fixed;
-	z-index: 10000;
-	inset: 0;
+.timecode-editor .timecode-transport-action {
+	min-width: 58px;
 }
-.timecode-add-menu {
-	position: fixed;
-	display: grid;
-	min-width: 12rem;
-	padding: 0.35rem;
-	border: 1px solid #4b4e5d;
-	border-radius: 0.35rem;
-	background: #171823;
-	box-shadow: 0 0.8rem 2rem rgb(0 0 0 / 45%);
+.timecode-rewind-glyph {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.08rem;
 }
-.timecode-add-menu > .ui-button {
-	justify-content: flex-start;
+.timecode-reversed-play {
+	display: inline-block;
+	transform: rotate(180deg);
+}
+.timecode-editor .timecode-position-action {
+	min-width: 10ch;
+	font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+	font-variant-numeric: tabular-nums;
 }
 .timecode-timeline-editor {
 	display: flex;
@@ -106,7 +106,7 @@
 	flex-direction: column;
 	min-height: 0;
 	overflow: hidden;
-	margin: 0.7rem;
+	margin: 0;
 	border: 1px solid #343644;
 	background: #0e0f16;
 }
@@ -190,15 +190,29 @@
 }
 .timecode-timeline-scroll {
 	flex: 1 1 12rem;
-	min-height: 12rem;
+	min-height: 0;
 	overflow: auto;
+	scrollbar-width: auto;
+	scrollbar-color: #6d7183 #11121a;
 	scrollbar-gutter: stable;
 	overscroll-behavior: contain;
+}
+.timecode-timeline-scroll::-webkit-scrollbar {
+	width: 12px;
+	height: 12px;
+}
+.timecode-timeline-scroll::-webkit-scrollbar-track {
+	background: #11121a;
+}
+.timecode-timeline-scroll::-webkit-scrollbar-thumb {
+	border: 2px solid #11121a;
+	border-radius: 999px;
+	background: #6d7183;
 }
 .timecode-timeline-canvas {
 	position: relative;
 	box-sizing: border-box;
-	min-height: 20rem;
+	min-height: max(20rem, 100%);
 	padding-top: 2rem;
 	background:
 		repeating-linear-gradient(
@@ -261,17 +275,27 @@
 }
 .timecode-timeline-marker {
 	position: absolute;
-	top: 0.25rem;
-	min-width: 2.75rem;
-	min-height: 2rem;
-	transform: translateX(-0.25rem);
+	top: 0;
+	bottom: 0;
+	width: 2px;
+	min-width: 2px;
+	margin: 0;
+	padding: 0;
+	transform: none;
 	border: 0;
-	border-left: 3px solid #d2b6ff;
-	border-radius: 0.2rem;
-	background: #30264a;
+	border-radius: 0;
+	background: #ff6a62;
 	color: #fff;
 	cursor: ew-resize;
 	touch-action: none;
+}
+.timecode-timeline-marker > span {
+	display: block;
+	width: max-content;
+	padding: 0.12rem 0.25rem;
+	transform: translateX(2px);
+	background: #9c343e;
+	font-size: 0.65rem;
 }
 .timecode-timeline-marker.selected {
 	outline: 2px solid #fff;
@@ -351,8 +375,12 @@
 	top: 0;
 	bottom: 0;
 	width: 2px;
+	margin: 0;
+	padding: 0;
+	border: 0;
 	background: #ff6a62;
-	pointer-events: none;
+	cursor: ew-resize;
+	touch-action: none;
 }
 .timecode-editor-playhead span {
 	position: sticky;
@@ -394,6 +422,13 @@
 	border-radius: 0.25rem;
 	background: #090a10;
 	color: #fff;
+}
+.timecode-audio-player-volume-point {
+	display: contents;
+}
+.timecode-audio-player-volume-point > strong {
+	padding-left: 0.35rem;
+	border-left: 2px solid #4c839a;
 }
 @media (max-width: 800px) {
 	.timecode-fields {

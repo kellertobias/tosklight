@@ -1,18 +1,12 @@
-import {
-	Button,
-	CheckboxField,
-	Input,
-	NumberField,
-	SelectField,
-	TextAreaField,
-	TextField,
-} from "@tosklight/ui";
+import { CheckboxField, SelectField, TextField } from "@tosklight/ui";
 import {
 	PoolCard,
 	PoolGrid,
 	type PoolSlotViewModel,
 } from "@tosklight/ui/pools";
 import {
+	type WindowAction,
+	WindowDropdown,
 	WindowHeader,
 	WindowScrollArea,
 	WindowSettings,
@@ -25,7 +19,6 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { createPortal } from "react-dom";
 import { createLightApi } from "../api/client/api";
 import {
 	type TimecodeDefinition,
@@ -34,13 +27,16 @@ import {
 	type TimecodeTransportAction,
 	type TimecodeTransportSnapshot,
 } from "../api/client/timecodes";
+import { RootConfinedFilePickerButton } from "../components/files/RootConfinedFilePickerButton";
 import { useActiveShowId } from "../features/deskSnapshot/DeskSnapshotState";
+import { usePatchedFixturesView } from "../features/patch/PatchState";
 import { useCueLists } from "../features/showObjects/ShowObjectsState";
 import { useShowObjectView } from "../features/showObjects/ShowObjectsView";
 import { parseMarkerCsv } from "../features/timecode/editorModel";
 import { useTimecodeActions } from "../features/timecode/TimecodeActionsContext";
 import { TimecodeAutosaveWriter } from "../features/timecode/TimecodeAutosaveWriter";
 import {
+	type TimecodeAudioPlayerOption,
 	TimecodeTimelineEditor,
 	type TimecodeTimelineEditorHandle,
 } from "../features/timecode/TimecodeTimelineEditor";
@@ -50,6 +46,7 @@ import "./TimecodeRuntimeWindow.css";
 
 const FPS = 44;
 const TIMECODE_POOL_SIZE = 100;
+const AUDIO_PLAYER_PROFILE_ID = "358171f4-c3a7-4d75-b256-b9cf30afd4ab";
 
 export function TimecodeRuntimeWindow({
 	active = true,
@@ -57,6 +54,22 @@ export function TimecodeRuntimeWindow({
 }: WindowProps) {
 	const showId = useActiveShowId();
 	const cueLists = useCueLists(active);
+	const patchedFixtures = usePatchedFixturesView(active);
+	const audioPlayers = useMemo<TimecodeAudioPlayerOption[]>(
+		() =>
+			patchedFixtures
+				.filter(
+					(fixture) =>
+						fixture.definition.profile_id === AUDIO_PLAYER_PROFILE_ID,
+				)
+				.map((fixture) => ({
+					fixtureId: fixture.fixture_id,
+					name: fixture.fixture_number
+						? `Audio Player ${fixture.fixture_number}`
+						: fixture.name?.trim() || `Audio Player ${fixture.fixture_id}`,
+				})),
+		[patchedFixtures],
+	);
 	useShowObjectView("cue_list", active);
 	const timelineCueLists = useMemo(
 		() =>
@@ -84,6 +97,18 @@ export function TimecodeRuntimeWindow({
 		TimecodeObjectRecord | NewTimecode | null
 	>(null);
 	const [error, setError] = useState<string | null>(null);
+	const start = useCallback(
+		async (item: TimecodeObjectRecord) => {
+			if (!showId) return;
+			try {
+				await api.transportAction(showId, item.definition.id, { type: "go" });
+				setError(null);
+			} catch (reason) {
+				setError(String(reason));
+			}
+		},
+		[api, showId],
+	);
 
 	const refresh = useCallback(async () => {
 		if (!showId) return;
@@ -118,6 +143,7 @@ export function TimecodeRuntimeWindow({
 				api={api}
 				snapshot={runtime.get(editing.definition.id)}
 				cueLists={timelineCueLists}
+				audioPlayers={audioPlayers}
 				onClose={async () => {
 					await refresh();
 					setEditing(null);
@@ -188,7 +214,14 @@ export function TimecodeRuntimeWindow({
 											: []),
 									],
 								}}
-								onClick={() => setEditing(item ?? newTimecode(number))}
+								onClick={() => {
+									if (item) void start(item);
+									else setEditing(newTimecode(number));
+								}}
+								onContextMenu={(event) => {
+									event.preventDefault();
+									if (item) setEditing(item);
+								}}
 							/>
 						);
 					}}
@@ -263,6 +296,7 @@ export function TimecodeEditor({
 	api,
 	snapshot,
 	cueLists,
+	audioPlayers,
 	onClose,
 }: {
 	showId: string | null;
@@ -274,6 +308,7 @@ export function TimecodeEditor({
 		name: string;
 		cues: Array<{ id: string; number: number; name: string }>;
 	}>;
+	audioPlayers: TimecodeAudioPlayerOption[];
 	onClose(): Promise<void>;
 }) {
 	const {
@@ -288,14 +323,14 @@ export function TimecodeEditor({
 		canRedo,
 	} = useTimecodeEditorHistory(item.definition);
 	const [editorFrame, setEditorFrame] = useState(snapshot?.frame ?? 0);
+	useEffect(() => {
+		if (snapshot) setEditorFrame(snapshot.frame);
+	}, [snapshot]);
 	const [error, setError] = useState<string | null>(null);
 	const [actionBusy, setActionBusy] = useState(false);
 	const [audioImporting, setAudioImporting] = useState(false);
 	const [settingsAnchor, setSettingsAnchor] = useState<DOMRect | null>(null);
 	const [settingsOpen, setSettingsOpen] = useState(false);
-	const [csvSource, setCsvSource] = useState(
-		"position,name,color\n00:00:05:00,Intro,#a67cff",
-	);
 	const [csvMode, setCsvMode] = useState<"append" | "replace">("append");
 	const [csvError, setCsvError] = useState<string | null>(null);
 	const timelineRef = useRef<TimecodeTimelineEditorHandle>(null);
@@ -386,22 +421,9 @@ export function TimecodeEditor({
 			setError(`Could not close before autosave completed: ${String(reason)}`);
 		}
 	};
-	const remove = async () => {
-		if (!showId || !writer) return;
-		setActionBusy(true);
+	const importCsv = async (file: File) => {
 		try {
-			const saved = await writer.flush();
-			if (!saved) return;
-			await api.delete(showId, saved.definition.id, saved.revision);
-			await onClose();
-		} catch (reason) {
-			setError(String(reason));
-		} finally {
-			setActionBusy(false);
-		}
-	};
-	const importCsv = () => {
-		try {
+			const csvSource = await file.text();
 			const imported = parseMarkerCsv(csvSource, FPS, Math.max(1, duration));
 			setDraft({
 				...draft,
@@ -413,6 +435,45 @@ export function TimecodeEditor({
 			setCsvError(reason instanceof Error ? reason.message : String(reason));
 		}
 	};
+	const transportActions: WindowAction[] = [
+		{
+			id: "rewind",
+			label: (
+				<span className="timecode-rewind-glyph" aria-hidden="true">
+					<span>▏</span>
+					<span className="timecode-reversed-play">▶</span>
+				</span>
+			),
+			ariaLabel: "Rewind",
+			onClick: () => void act({ type: "rewind" }),
+			disabled: isNew || busy,
+			className: "timecode-transport-action",
+		},
+		{
+			id: "stop",
+			label: <span aria-hidden="true">■</span>,
+			ariaLabel: "Stop",
+			onClick: () => void act({ type: "stop" }),
+			disabled: isNew || busy,
+			className: "timecode-transport-action",
+		},
+		{
+			id: "play",
+			label: <span aria-hidden="true">▶</span>,
+			ariaLabel: "Play",
+			onClick: () => void act({ type: "go" }),
+			disabled: isNew || busy,
+			className: "timecode-transport-action",
+		},
+		{
+			id: "pause",
+			label: <span aria-hidden="true">Ⅱ</span>,
+			ariaLabel: "Pause",
+			onClick: () => void act({ type: "pause" }),
+			disabled: isNew || busy,
+			className: "timecode-transport-action",
+		},
+	];
 	return (
 		<section className="timecode-window timecode-editor" aria-busy={busy}>
 			<WindowHeader
@@ -428,10 +489,43 @@ export function TimecodeEditor({
 							: "Creating…",
 				}}
 				toolbar={
-					<TimecodeHeaderToolbar
-						{...{ act, busy, isNew, timelineRef, draft, cueLists }}
+					<TimecodeAddMenu
+						{...{ timelineRef, draft, cueLists, audioPlayers }}
 					/>
 				}
+				actions={[
+					[
+						{
+							id: "back",
+							label: "Back",
+							onClick: () => void close(),
+							disabled: busy,
+						},
+						{
+							id: "undo",
+							label: "Undo",
+							onClick: undo,
+							disabled: !canUndo || busy,
+						},
+						{
+							id: "redo",
+							label: "Redo",
+							onClick: redo,
+							disabled: !canRedo || busy,
+						},
+					],
+					[
+						{
+							id: "position",
+							label: formatFrame(snapshot?.frame ?? frame),
+							ariaLabel: "Timecode position",
+							className: "timecode-position-action",
+							onClick: () => void act({ type: "seek", frame }),
+							disabled: isNew || busy,
+						},
+					],
+					transportActions,
+				]}
 				settings
 				onSettings={(anchor) => {
 					setSettingsAnchor(anchor.getBoundingClientRect());
@@ -457,8 +551,6 @@ export function TimecodeEditor({
 										busy,
 										audioImporting,
 										importAudio,
-										csvSource,
-										setCsvSource,
 										csvMode,
 										setCsvMode,
 										csvError,
@@ -475,25 +567,13 @@ export function TimecodeEditor({
 					{error}
 				</p>
 			)}
-			<EditorToolbar
-				{...{
-					onClose: close,
-					undo,
-					redo,
-					remove,
-					canUndo,
-					canRedo,
-					busy,
-					isNew,
-				}}
-			/>
-			<RuntimeSeekControls {...{ act, frame, snapshot, busy, isNew }} />
 			<TimecodeTimelineEditor
 				ref={timelineRef}
 				definition={draft}
 				frame={frame}
 				fps={FPS}
 				cueLists={cueLists}
+				audioPlayers={audioPlayers}
 				waveformPeaks={waveformPeaks}
 				onScrub={setEditorFrame}
 				onCommit={setDraft}
@@ -505,81 +585,13 @@ export function TimecodeEditor({
 	);
 }
 
-function EditorToolbar({
-	onClose,
-	undo,
-	redo,
-	remove,
-	canUndo,
-	canRedo,
-	busy,
-	isNew,
-}: {
-	onClose(): Promise<void>;
-	undo(): void;
-	redo(): void;
-	remove(): Promise<void>;
-	canUndo: boolean;
-	canRedo: boolean;
-	busy: boolean;
-	isNew: boolean;
-}) {
-	return (
-		<div className="timecode-editor-toolbar">
-			<Button onClick={() => void onClose()} disabled={busy}>
-				Back
-			</Button>
-			<Button onClick={undo} disabled={!canUndo || busy}>
-				Undo
-			</Button>
-			<Button onClick={redo} disabled={!canRedo || busy}>
-				Redo
-			</Button>
-			{!isNew && (
-				<Button onClick={() => void remove()} disabled={busy}>
-					Delete
-				</Button>
-			)}
-		</div>
-	);
-}
-
-function RuntimeSeekControls({
-	act,
-	frame,
-	snapshot,
-	busy,
-	isNew,
-}: {
-	act(action: TimecodeTransportAction): Promise<void>;
-	frame: number;
-	snapshot?: TimecodeTransportSnapshot;
-	busy: boolean;
-	isNew: boolean;
-}) {
-	const disabled = isNew || busy;
-	return (
-		<fieldset className="timecode-runtime-seek" aria-label="Runtime seek">
-			<Button
-				onClick={() => void act({ type: "seek", frame })}
-				disabled={disabled}
-			>
-				Seek runtime to playhead
-			</Button>
-			<strong>{formatFrame(snapshot?.frame ?? 0)}</strong>
-		</fieldset>
-	);
-}
-
-function TimecodeSettings({
+export function TimecodeSettings({
 	draft,
 	setDraft,
 	duration,
 	busy,
 	audioImporting,
 	importAudio,
-	csvSource,
-	setCsvSource,
 	csvMode,
 	setCsvMode,
 	csvError,
@@ -591,23 +603,21 @@ function TimecodeSettings({
 	busy: boolean;
 	audioImporting: boolean;
 	importAudio(file: File): Promise<void>;
-	csvSource: string;
-	setCsvSource(value: string): void;
 	csvMode: "append" | "replace";
 	setCsvMode(value: "append" | "replace"): void;
 	csvError: string | null;
-	importCsv(): void;
+	importCsv(file: File): Promise<void>;
 }) {
+	const changeFrameField = (
+		field: "duration_frame" | "transport_offset_frame",
+		value: string,
+	) => {
+		const frame = parseFrame(value);
+		if (frame === null || (field === "duration_frame" && frame < 1)) return;
+		setDraft({ ...draft, [field]: frame });
+	};
 	return (
 		<div className="timecode-settings-fields">
-			<NumberField
-				label="Number"
-				min={1}
-				value={draft.number}
-				onChange={(event) =>
-					setDraft({ ...draft, number: Number(event.currentTarget.value) })
-				}
-			/>
 			<TextField
 				label="Name"
 				value={draft.name}
@@ -615,32 +625,27 @@ function TimecodeSettings({
 					setDraft({ ...draft, name: event.currentTarget.value })
 				}
 			/>
-			<div className="timecode-duration-readout">
-				<span>Duration</span>
-				<strong>{formatFrame(duration)}</strong>
+			<div className="timecode-duration-fields">
+				<TextField
+					label="Duration"
+					value={formatFrame(duration)}
+					pattern="[0-9]+:[0-5][0-9]:[0-5][0-9][.:][0-9]+"
+					onChange={(event) =>
+						changeFrameField("duration_frame", event.currentTarget.value)
+					}
+				/>
+				<TextField
+					label="Transport offset"
+					value={formatFrame(draft.transport_offset_frame)}
+					pattern="[0-9]+:[0-5][0-9]:[0-5][0-9][.:][0-9]+"
+					onChange={(event) =>
+						changeFrameField(
+							"transport_offset_frame",
+							event.currentTarget.value,
+						)
+					}
+				/>
 			</div>
-			<NumberField
-				label="Frames"
-				min={1}
-				value={duration}
-				onChange={(event) =>
-					setDraft({
-						...draft,
-						duration_frame: Number(event.currentTarget.value),
-					})
-				}
-			/>
-			<NumberField
-				label="Transport offset"
-				min={0}
-				value={draft.transport_offset_frame}
-				onChange={(event) =>
-					setDraft({
-						...draft,
-						transport_offset_frame: Number(event.currentTarget.value),
-					})
-				}
-			/>
 			<CheckboxField
 				className="timecode-checkbox"
 				label="Auto-start"
@@ -650,18 +655,13 @@ function TimecodeSettings({
 					setDraft({ ...draft, auto_start: event.currentTarget.checked })
 				}
 			/>
-			<label className="timecode-audio-import" htmlFor="timecode-audio-file">
+			<div className="timecode-audio-import">
 				<span>Audio file</span>
-				<Input
-					id="timecode-audio-file"
-					aria-label="Audio file"
-					type="file"
-					accept="audio/wav,audio/x-wav,audio/mpeg,.wav,.mp3"
+				<RootConfinedFilePickerButton
+					label="Choose audio file"
+					allowedExtensions={["wav", "mp3"]}
 					disabled={busy || audioImporting}
-					onChange={(event) => {
-						const file = event.currentTarget.files?.[0];
-						if (file) void importAudio(file);
-					}}
+					onFiles={async ([file]) => file && importAudio(file)}
 				/>
 				<small>
 					{audioImporting
@@ -670,13 +670,8 @@ function TimecodeSettings({
 							? `Managed audio ${draft.audio.asset_id}`
 							: "WAV or MP3; MP3 is normalized to managed WAV."}
 				</small>
-			</label>
+			</div>
 			<div className="timecode-csv-panel">
-				<TextAreaField
-					label="Marker CSV"
-					value={csvSource}
-					onChange={(event) => setCsvSource(event.currentTarget.value)}
-				/>
 				<SelectField
 					label="Import mode"
 					value={csvMode}
@@ -686,130 +681,76 @@ function TimecodeSettings({
 						{ value: "replace", label: "Replace" },
 					]}
 				/>
-				<Button onClick={importCsv}>Apply marker CSV</Button>
+				<RootConfinedFilePickerButton
+					label="Choose marker CSV"
+					allowedExtensions={["csv"]}
+					disabled={busy}
+					onFiles={async ([file]) => file && importCsv(file)}
+				/>
 				{csvError && <p role="alert">{csvError}</p>}
 			</div>
 		</div>
 	);
 }
 
-function TimecodeHeaderToolbar({
-	act,
-	busy,
-	isNew,
+function TimecodeAddMenu({
 	timelineRef,
 	draft,
 	cueLists,
+	audioPlayers,
 }: {
-	act(action: TimecodeTransportAction): Promise<void>;
-	busy: boolean;
-	isNew: boolean;
 	timelineRef: RefObject<TimecodeTimelineEditorHandle | null>;
 	draft: TimecodeDefinition;
 	cueLists: readonly unknown[];
+	audioPlayers: readonly TimecodeAudioPlayerOption[];
 }) {
-	const [addAnchor, setAddAnchor] = useState<DOMRect | null>(null);
-	const disabled = busy || isNew;
-	const runAdd = (action: () => void) => {
-		setAddAnchor(null);
-		action();
-	};
 	return (
-		<>
-			<div className="timecode-header-toolbar">
-				<fieldset
-					className="timecode-header-group"
-					aria-label="Timecode transport"
-				>
-					<Button onClick={() => void act({ type: "go" })} disabled={disabled}>
-						Go
-					</Button>
-					<Button
-						onClick={() => void act({ type: "pause" })}
-						disabled={disabled}
-					>
-						Pause
-					</Button>
-					<Button
-						onClick={() => void act({ type: "stop" })}
-						disabled={disabled}
-					>
-						Stop
-					</Button>
-					<Button
-						onClick={() => void act({ type: "rewind" })}
-						disabled={disabled}
-					>
-						Rewind
-					</Button>
-				</fieldset>
-				<div className="timecode-header-group">
-					<Button
-						aria-haspopup="menu"
-						aria-expanded={Boolean(addAnchor)}
-						onClick={(event) =>
-							setAddAnchor((current) =>
-								current ? null : event.currentTarget.getBoundingClientRect(),
-							)
-						}
-					>
-						Add
-					</Button>
-				</div>
-			</div>
-			{addAnchor &&
-				createPortal(
-					<div
-						className="timecode-add-menu-layer"
-						onPointerDown={(event) =>
-							event.target === event.currentTarget && setAddAnchor(null)
-						}
-					>
-						<div
-							className="timecode-add-menu"
-							role="menu"
-							aria-label="Add"
-							style={{ top: addAnchor.bottom + 3, left: addAnchor.left }}
-						>
-							<Button
-								role="menuitem"
-								onClick={() => runAdd(() => timelineRef.current?.addMarker())}
-							>
-								Add Marker
-							</Button>
-							<Button
-								role="menuitem"
-								disabled={draft.lanes.some(
-									(lane) => lane.content.kind === "audio_volume",
-								)}
-								onClick={() =>
-									runAdd(() => timelineRef.current?.addAudioLane())
-								}
-							>
-								Add Audio Lane
-							</Button>
-							<Button
-								role="menuitem"
-								onClick={() =>
-									runAdd(() => timelineRef.current?.addSpeedLane())
-								}
-							>
-								Add Speed Lane
-							</Button>
-							<Button
-								role="menuitem"
-								disabled={!cueLists.length}
-								onClick={() =>
-									runAdd(() => timelineRef.current?.addCueListLane())
-								}
-							>
-								Add Cuelist Lane
-							</Button>
-						</div>
-					</div>,
-					document.body,
-				)}
-		</>
+		<WindowDropdown
+			className="timecode-add-title-action"
+			ariaLabel="Add"
+			label={
+				<>
+					<span aria-hidden="true">＋</span> Add
+				</>
+			}
+			items={[
+				{
+					id: "marker",
+					label: "Add Marker",
+					onSelect: () => timelineRef.current?.addMarker(),
+				},
+				{
+					id: "audio",
+					label: "Add Audio Lane",
+					disabled: draft.lanes.some(
+						(lane) => lane.content.kind === "audio_volume",
+					),
+					onSelect: () => timelineRef.current?.addAudioLane(),
+				},
+				...audioPlayers.map((player) => ({
+					id: `audio-player-${player.fixtureId}`,
+					label: `Add ${player.name} Lane`,
+					disabled: draft.lanes.some(
+						(lane) =>
+							lane.content.kind === "audio_player" &&
+							lane.content.fixture_id === player.fixtureId,
+					),
+					onSelect: () =>
+						timelineRef.current?.addAudioPlayerLane(player.fixtureId),
+				})),
+				{
+					id: "speed",
+					label: "Add Speed Lane",
+					onSelect: () => timelineRef.current?.addSpeedLane(),
+				},
+				{
+					id: "cuelist",
+					label: "Add Cuelist Lane",
+					disabled: !cueLists.length,
+					onSelect: () => timelineRef.current?.addCueListLane(),
+				},
+			]}
+		/>
 	);
 }
 
@@ -845,5 +786,17 @@ async function decodeAudioPeaks(file: File, count = 220): Promise<number[]> {
 
 export function formatFrame(frame: number): string {
 	const seconds = Math.floor(frame / FPS);
-	return `${String(Math.floor(seconds / 3600)).padStart(2, "0")}:${String(Math.floor(seconds / 60) % 60).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}:${String(frame % FPS).padStart(2, "0")}`;
+	return `${String(Math.floor(seconds / 3600)).padStart(2, "0")}:${String(Math.floor(seconds / 60) % 60).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}.${String(frame % FPS).padStart(2, "0")}`;
+}
+
+export function parseFrame(value: string): number | null {
+	const match = /^(\d+):([0-5]\d):([0-5]\d)[.:](\d+)$/.exec(value.trim());
+	if (!match) return null;
+	const [, hours, minutes, seconds, frames] = match;
+	const framePart = Number(frames);
+	if (framePart >= FPS) return null;
+	return (
+		(Number(hours) * 60 * 60 + Number(minutes) * 60 + Number(seconds)) * FPS +
+		framePart
+	);
 }

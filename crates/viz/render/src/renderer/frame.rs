@@ -217,6 +217,8 @@ impl Renderer {
             symbol_ink: Vec3::from(view.theme.symbol_ink()),
             selected_ink: Vec3::from(view.theme.selected_ink()),
             fixture_models: view.mode.draws_fixture_models(),
+            emitter_apertures: view.mode.simulates_light(),
+            scenery_surfaces: view.mode.simulates_light(),
             aim_guides: view.mode.always_draws_aim_guides(),
             // The grid is a ground reference for a picture with a ground in it. A plan already
             // has one — it is a drawing on a page with its own scale — so it is not drawn there.

@@ -14,6 +14,7 @@ fn rejects_patch_overlap_and_boundary_overflow() {
         split_patches: vec![],
         layer_id: default_patch_layer(),
         direct_control: None,
+        internal_bindings: Default::default(),
         location: Default::default(),
         rotation: Default::default(),
         logical_heads: vec![],
@@ -40,6 +41,7 @@ fn rejects_patch_overlap_and_boundary_overflow() {
         split_patches: vec![],
         layer_id: default_patch_layer(),
         direct_control: None,
+        internal_bindings: Default::default(),
         location: Default::default(),
         rotation: Default::default(),
         logical_heads: vec![],
@@ -67,6 +69,7 @@ fn rejects_patch_overlap_and_boundary_overflow() {
         split_patches: vec![],
         layer_id: default_patch_layer(),
         direct_control: None,
+        internal_bindings: Default::default(),
         location: Default::default(),
         rotation: Default::default(),
         logical_heads: vec![],
@@ -98,6 +101,7 @@ fn multipatch_reserves_real_addresses_and_allows_visualizer_only_instances() {
         split_patches: vec![],
         layer_id: default_patch_layer(),
         direct_control: None,
+        internal_bindings: Default::default(),
         location: Default::default(),
         rotation: Default::default(),
         logical_heads: vec![],
@@ -356,6 +360,7 @@ fn media_server_layers_inherit_parent_direct_control_endpoint() {
         split_patches: vec![],
         layer_id: default_patch_layer(),
         direct_control: Some(endpoint.clone()),
+        internal_bindings: Default::default(),
         location: Default::default(),
         rotation: Default::default(),
         logical_heads: vec![PatchedHead {
@@ -403,6 +408,7 @@ fn logical_head_reconciliation_preserves_matching_ids_and_repairs_shape() {
         split_patches: vec![],
         layer_id: default_patch_layer(),
         direct_control: None,
+        internal_bindings: Default::default(),
         location: Default::default(),
         rotation: Default::default(),
         logical_heads: vec![
@@ -531,4 +537,32 @@ fn visual_only_fixtures_allow_addressless_multipatches_and_reject_dmx_addresses(
     fixture.universe = Some(1);
     fixture.address = Some(1);
     assert!(validate_patch(&[fixture]).is_err());
+}
+
+#[test]
+fn internal_fixtures_use_regular_ids_and_reject_every_physical_patch() {
+    let mut profile = FixtureProfile::blank();
+    profile.manufacturer = "ToskLight".into();
+    profile.name = "Audio Player".into();
+    profile.patch_policy = PatchPolicy::Internal;
+    profile.modes[0].splits[0].footprint = 0;
+    let definition = profile.resolved_definition(profile.modes[0].id).unwrap();
+    let mut fixture: PatchedFixture = serde_json::from_value(serde_json::json!({
+        "fixture_id": FixtureId::new(),
+        "fixture_number": 901,
+        "definition": definition,
+        "split_patches": [{"split": 1, "universe": null, "address": null}]
+    }))
+    .unwrap();
+    validate_patch(std::slice::from_ref(&fixture)).unwrap();
+
+    fixture.fixture_number = None;
+    assert!(validate_patch(std::slice::from_ref(&fixture)).is_err());
+    fixture.fixture_number = Some(901);
+    fixture.virtual_fixture_number = Some(1);
+    assert!(validate_patch(std::slice::from_ref(&fixture)).is_err());
+    fixture.virtual_fixture_number = None;
+    fixture.universe = Some(1);
+    fixture.address = Some(1);
+    assert!(validate_patch(std::slice::from_ref(&fixture)).is_err());
 }

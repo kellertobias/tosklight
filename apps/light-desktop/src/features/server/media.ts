@@ -8,6 +8,8 @@ export function createMediaActions(
 	| "refreshMediaPreview"
 	| "refreshMediaThumbnails"
 	| "inspectMediaServer"
+	| "nativeMedia"
+	| "updateNativeMediaText"
 	| "applyMediaLibrarySelection"
 	| "mediaThumbnail"
 > {
@@ -22,6 +24,9 @@ export function createMediaActions(
 	return {
 		inspectMediaServer: (fixtureId) =>
 			api.mediaOutput.inspectMediaServer(fixtureId),
+		nativeMedia: (fixtureId) => api.mediaOutput.nativeMedia(fixtureId),
+		updateNativeMediaText: (fixtureId, folder, file, text) =>
+			api.mediaOutput.updateNativeMediaText(fixtureId, folder, file, text),
 		applyMediaLibrarySelection: (fixtureId, input) =>
 			api.mediaOutput.applyMediaLibrarySelection(fixtureId, input),
 		mediaThumbnail: (fixtureId, folder, element) =>

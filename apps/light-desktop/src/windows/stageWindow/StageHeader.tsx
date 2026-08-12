@@ -126,12 +126,12 @@ function Stage2dSettings({ options }: { options: StageOptionsModel }) {
 }
 
 /**
- * The 3D Stage, which is an outline diagram rather than a picture of light.
+ * The 3D Stage, which is a model-and-lines diagram rather than a picture of light.
  *
- * Deliberately almost empty. This view draws boxes and aim lines and simulates no light at all, so
- * a render style and an environment brightness would both be controls over something that is not
- * happening — and the beam guidelines are not offered either, because here they are the picture
- * rather than an addition to it.
+ * Deliberately almost empty. This view draws fixture models and aim lines and simulates no light at
+ * all, so a render style and an environment brightness would both be controls over something that
+ * is not happening — and the beam guidelines are not offered either, because here they are the
+ * picture rather than an addition to it.
  */
 function Stage3dSettings() {
 	const { state, dispatch } = useApp();

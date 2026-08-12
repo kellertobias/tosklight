@@ -72,6 +72,7 @@ fn document(name: &str) -> (PlanningDocument, PathBuf) {
                     }],
                     layer_id: "default".into(),
                     direct_control: None,
+                    internal_bindings: Default::default(),
                     location: FixtureLocation {
                         x: 1_000,
                         y: 2_000,
@@ -570,6 +571,7 @@ fn preview_document_with(
                     }],
                     layer_id: "default".into(),
                     direct_control: None,
+                    internal_bindings: Default::default(),
                     location: FixtureLocation { x: 0, y: 0, z: 0 },
                     rotation: FixtureVector {
                         x: 0.0,

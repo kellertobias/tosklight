@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createVisualizationWidget } from "../windows/visualizationPaneModel";
 import { appReducer, initialState } from "./appReducer";
 
 describe("appReducer control mode and pane geometry", () => {
@@ -146,6 +147,58 @@ describe("appReducer desk creation and layout hydration", () => {
 			schedulerShowList: true,
 			schedulerShowCalendar: false,
 		});
+	});
+
+	it("creates, edits, and safely hydrates show-persisted Visualization rows", () => {
+		const emptyDesk = {
+			...initialState,
+			activeDeskId: "visualization-test",
+			desks: [{ id: "visualization-test", name: "Visualization", panes: [] }],
+			windowPicker: { x: 1, y: 1, width: 12, height: 10 },
+		};
+		const added = appReducer(emptyDesk, {
+			type: "ADD_WINDOW",
+			kind: "visualization",
+		});
+		const pane = added.desks[0].panes[0];
+		expect(pane).toMatchObject({
+			kind: "visualization",
+			title: "Visualization",
+			visualizationRows: [],
+		});
+		const rows = [
+			{
+				id: "row-1",
+				widgets: [
+					{
+						...createVisualizationWidget("widget-1"),
+						id: "widget-1",
+						title: "Dimmer",
+						type: "bar" as const,
+						source: { kind: "raw_dmx" as const, universe: 1, address: 12 },
+						operation: "multiply" as const,
+						factor: 1,
+						displayScale: "percent" as const,
+						minimum: 0,
+						maximum: 100,
+						bar: { orientation: "vertical" as const },
+					},
+				],
+			},
+		];
+		const edited = appReducer(added, {
+			type: "SET_PANE_VISUALIZATION_ROWS",
+			id: pane.id,
+			rows,
+		});
+		expect(edited.desks[0].panes[0].visualizationRows).toEqual(rows);
+
+		const hydrated = appReducer(edited, {
+			type: "HYDRATE_LAYOUT",
+			desks: edited.desks,
+			activeDeskId: "visualization-test",
+		});
+		expect(hydrated.desks[0].panes[0].visualizationRows).toMatchObject(rows);
 	});
 });
 
@@ -348,6 +401,29 @@ describe("appReducer Stage and Development pane settings", () => {
 		).toBe(0);
 	});
 
+	it("defaults new visualizers to 5% ambient light without replacing persisted values", () => {
+		expect(initialState.stageEnvironmentBrightness).toBe(0.05);
+
+		for (const stageEnvironmentBrightness of [0, 0.35, 1]) {
+			const hydrated = appReducer(initialState, {
+				type: "HYDRATE_LAYOUT",
+				desks: initialState.desks,
+				activeDeskId: initialState.activeDeskId,
+				windowSettings: { stageEnvironmentBrightness },
+			});
+			expect(hydrated.stageEnvironmentBrightness).toBe(
+				stageEnvironmentBrightness,
+			);
+		}
+
+		const legacy = appReducer(initialState, {
+			type: "HYDRATE_LAYOUT",
+			desks: initialState.desks,
+			activeDeskId: initialState.activeDeskId,
+		});
+		expect(legacy.stageEnvironmentBrightness).toBe(0.05);
+	});
+
 	it("stores the 2D side independently on a Stage pane", () => {
 		const updated = appReducer(initialState, {
 			type: "SET_PANE_STAGE_OPTION",
@@ -376,6 +452,31 @@ describe("appReducer Stage and Development pane settings", () => {
 				?.panes.find((pane) => pane.id === "stage")?.stageView,
 		).toBe("3d");
 		expect(updated.stageView).toBe("2d");
+	});
+
+	it("stores the complete Fixture Sheet configuration independently on each pane", () => {
+		const options = appReducer(initialState, {
+			type: "SET_PANE_FIXTURE_OPTIONS",
+			id: "fixtures",
+			options: {
+				includedHeads: "no-sub-heads",
+				order: "active",
+				cueListId: "front",
+				columns: ["id", "name", "patch"],
+				showType: false,
+			},
+		});
+		const pane = options.desks
+			.find((desk) => desk.id === options.activeDeskId)
+			?.panes.find((candidate) => candidate.id === "fixtures");
+		expect(pane).toMatchObject({
+			fixtureSheetIncludedHeads: "no-sub-heads",
+			fixtureSheetOrder: "active",
+			fixtureSheetCueListId: "front",
+			fixtureSheetColumns: ["id", "name", "patch"],
+			fixtureSheetShowType: false,
+		});
+		expect(options.fixtureSheetOrder).toBe(initialState.fixtureSheetOrder);
 	});
 
 	it("retires persisted Layout panes and built-ins with one actionable notice", () => {
