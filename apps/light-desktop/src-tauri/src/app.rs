@@ -22,6 +22,7 @@ pub(crate) fn run() {
             crate::stage_pane::set_stage_pane_picture,
             crate::stage_pane::set_stage_pane_selection,
             crate::stage_pane::stage_pane_status,
+            crate::stage_pane::take_stage_pane_benchmark_samples,
             crate::stage_pane::take_stage_pane_picks,
             crate::stage_pane::stage_pane_camera,
             crate::stage_pane::place_stage_pane_camera,

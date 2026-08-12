@@ -62,7 +62,7 @@ impl Engine {
                     .ok_or_else(|| {
                         EngineError::Invalid("schema-v2 fixture projection plan is missing".into())
                     })?;
-                if profile.patch_policy == light_fixture::PatchPolicy::Internal {
+                if profile.patch_policy != light_fixture::PatchPolicy::Dmx {
                     let output = resolve_profile_fixture(
                         fixture,
                         mode,

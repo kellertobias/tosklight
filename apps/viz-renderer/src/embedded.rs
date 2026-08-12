@@ -278,6 +278,7 @@ struct PaneState {
     camera_is_local: bool,
     redraw_gate: crate::redraw::RedrawGate,
     last_tick: Instant,
+    presented_frames: u64,
 }
 
 impl PaneState {
@@ -298,6 +299,7 @@ impl PaneState {
             following_preload: false,
             redraw_gate: crate::redraw::RedrawGate::default(),
             last_tick: Instant::now(),
+            presented_frames: 0,
         })
     }
 
@@ -603,14 +605,48 @@ impl PaneState {
         ) {
             return Ok(());
         }
-        match self.transport {
+        let stats = match self.transport {
             FrameTransport::Shared => self.draw_shared(time, source),
             FrameTransport::Copy => self.draw_copy(time, source),
-        }
+        }?;
+        self.presented_frames = self.presented_frames.saturating_add(1);
+        let presented_epoch_micros = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|duration| duration.as_micros() as u64)
+            .unwrap_or_default();
+        let quality = match self.view.quality {
+            viz_scene::RenderQuality::Draft => viz_helper::protocol::RenderQuality::Draft,
+            viz_scene::RenderQuality::Standard => viz_helper::protocol::RenderQuality::Standard,
+            viz_scene::RenderQuality::High => viz_helper::protocol::RenderQuality::High,
+            viz_scene::RenderQuality::Ultra => viz_helper::protocol::RenderQuality::Ultra,
+        };
+        let renderer = format!(
+            "{} ({}, {}x MSAA)",
+            self.renderer.adapter_name(),
+            self.renderer.backend(),
+            self.renderer.samples()
+        );
+        source.send_frame_presented(
+            self.presented_frames,
+            self.values.frame,
+            self.values.newest_input_micros,
+            presented_epoch_micros,
+            stats,
+            renderer,
+            quality,
+            self.following_preload,
+            self.size.0,
+            self.size.1,
+        );
+        Ok(())
     }
 
     /// Draw straight into the surface the desk samples.
-    fn draw_shared(&mut self, time: f32, source: &mut HelperSource) -> Result<(), String> {
+    fn draw_shared(
+        &mut self,
+        time: f32,
+        source: &mut HelperSource,
+    ) -> Result<viz_render::FrameStats, String> {
         if self.shared.is_none() {
             let surface = viz_surface::create(self.renderer.device(), self.size.0, self.size.1)
                 .map_err(|error| error.to_string())?;
@@ -629,7 +665,7 @@ impl PaneState {
             self.shared = Some(surface);
         }
         let Some(surface) = self.shared.as_ref() else {
-            return Ok(());
+            return Ok(self.renderer.stats());
         };
         self.renderer
             .render_into(
@@ -640,18 +676,21 @@ impl PaneState {
                 &self.overlay,
                 time,
             )
-            .map_err(|error| error.to_string())?;
-        Ok(())
+            .map_err(|error| error.to_string())
     }
 
     /// Draw into a private texture, read it back, and send the pixels.
-    fn draw_copy(&mut self, time: f32, source: &mut HelperSource) -> Result<(), String> {
+    fn draw_copy(
+        &mut self,
+        time: f32,
+        source: &mut HelperSource,
+    ) -> Result<viz_render::FrameStats, String> {
         let image = self
             .renderer
             .capture(&self.scene, &self.values, &self.view, &self.overlay, time)
             .map_err(|error| error.to_string())?;
         source.send_frame(image.width, image.height, image.rgba);
-        Ok(())
+        Ok(self.renderer.stats())
     }
 }
 

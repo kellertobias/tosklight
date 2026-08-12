@@ -56,9 +56,42 @@ mod tests {
         let mut deadline = Instant::now() + Duration::from_secs(1);
 
         assert!(
-            !wait_for_deadline_or_wake(&health, &mut deadline, &cancel, Some(&wake)).await,
+            !wait_for_deadline_or_wake(
+                &health,
+                &mut deadline,
+                Duration::from_secs(1),
+                &cancel,
+                Some(&wake),
+            )
+            .await,
             "a programmer wake requests an immediate extra output tick"
         );
+    }
+
+    #[tokio::test]
+    async fn timer_jitter_inside_one_frame_is_not_a_missed_output_deadline() {
+        let health = Mutex::new(OutputHealth::default());
+        let cancel = CancellationToken::new();
+        let interval = Duration::from_millis(20);
+        let original_deadline = Instant::now() - Duration::from_millis(5);
+        let mut deadline = original_deadline;
+
+        assert!(wait_for_deadline_or_wake(&health, &mut deadline, interval, &cancel, None).await);
+        assert_eq!(health.lock().unwrap().deadline_misses, 0);
+        assert_eq!(deadline, original_deadline);
+    }
+
+    #[tokio::test]
+    async fn lateness_of_a_complete_frame_is_a_missed_output_deadline() {
+        let health = Mutex::new(OutputHealth::default());
+        let cancel = CancellationToken::new();
+        let interval = Duration::from_millis(20);
+        let mut deadline = Instant::now() - interval;
+
+        assert!(wait_for_deadline_or_wake(&health, &mut deadline, interval, &cancel, None).await);
+        let health = health.lock().unwrap();
+        assert_eq!(health.deadline_misses, 1);
+        assert!(health.maximum_lateness_micros >= 20_000);
     }
 
     #[tokio::test]
@@ -117,7 +150,8 @@ async fn run_scheduler_dynamic_inner<F, Fut>(
             deadline += interval;
         }
         scheduled_tick =
-            wait_for_deadline_or_wake(&health, &mut deadline, &cancel, wake.as_deref()).await;
+            wait_for_deadline_or_wake(&health, &mut deadline, interval, &cancel, wake.as_deref())
+                .await;
     }
 }
 
@@ -149,16 +183,23 @@ fn record_tick_duration(health: &Mutex<OutputHealth>, tick_started: Instant, int
 async fn wait_for_deadline_or_wake(
     health: &Mutex<OutputHealth>,
     deadline: &mut Instant,
+    interval: Duration,
     cancel: &CancellationToken,
     wake: Option<&Notify>,
 ) -> bool {
     let now = Instant::now();
     if now > *deadline {
         let lateness = now.duration_since(*deadline).as_micros() as u64;
-        let mut current = health.lock().expect("output health mutex poisoned");
-        current.deadline_misses += 1;
-        current.maximum_lateness_micros = current.maximum_lateness_micros.max(lateness);
-        *deadline = now;
+        // Waking a few microseconds after the requested instant is ordinary timer jitter, not a
+        // lost output frame. A deadline is missed only once the next complete frame interval can
+        // no longer be delivered on cadence. Preserve the original cadence for sub-frame jitter;
+        // rebase after a real miss so one host stall does not cascade into false later misses.
+        if now.duration_since(*deadline) >= interval {
+            let mut current = health.lock().expect("output health mutex poisoned");
+            current.deadline_misses += 1;
+            current.maximum_lateness_micros = current.maximum_lateness_micros.max(lateness);
+            *deadline = now;
+        }
         return true;
     }
     let wake = async {

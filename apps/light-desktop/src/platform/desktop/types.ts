@@ -79,6 +79,25 @@ export interface StagePanePicture {
 	followPreload: boolean;
 }
 
+export interface StagePaneBenchmarkSample {
+	paneId: string;
+	sequence: number;
+	sourceFrame: number;
+	sourceInputEpochMicros: number;
+	presentedEpochMicros: number;
+	cpuMicros: number;
+	acquireMicros: number;
+	gpuMicros: number | null;
+	instances: number;
+	drawCalls: number;
+	degraded: boolean;
+	renderer: string;
+	quality: "draft" | "standard" | "high" | "ultra";
+	followPreload: boolean;
+	width: number;
+	height: number;
+}
+
 export interface DesktopBridge {
 	readonly available: boolean;
 	frontendReady(): Promise<void>;
@@ -118,6 +137,7 @@ export interface DesktopBridge {
 	setStagePaneSelection(paneId: string, fixtures: string[]): Promise<void>;
 	/** What is drawing the pane, and whatever last went wrong with it. */
 	stagePaneStatus(paneId?: string): Promise<[string | null, string | null]>;
+	takeStagePaneBenchmarkSamples(): Promise<StagePaneBenchmarkSample[]>;
 	/**
 	 * What the operator pointed at in the pane since this was last asked, as `[fixtureId, additive]`.
 	 * A null fixture is a click on nothing, which clears the selection.

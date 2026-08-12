@@ -70,7 +70,7 @@ schema limit or a promise for 1,000 worst-case emitters. Any higher
 fixture-count result belongs to a separately identified headless/output-only
 profile with Stage disabled and is not Stage capacity evidence.
 
-## Packaged Tauri WebView collector
+## Packaged native Stage collector
 
 After `npm run build:open` has built the debug bundle and left its headless service
 ready, run the packaged collector with a duration in seconds and an explicit
@@ -97,9 +97,9 @@ after the profile is ready, then records a consolidated report under
 `.artifacts/performance/stage/`.
 
 The benchmark surface keeps independent Live and Follow Preload views open,
-cycles every render quality, exercises 2D/3D and surface release/recreation,
-triggers real WebGL context loss and recovery when the WebView exposes the
-extension, and drives alternating Live and Preload values through the
+cycles every render quality, exercises 2D/3D native surfaces, resizes their
+shared drawable, tears down and recreates the live renderer helper, and drives
+alternating Live and Preload values through the
 production command and Preload lifecycle capabilities. Before either Stage
 surface mounts, it drives the same changes for an equal-duration no-Stage
 output baseline. The runner takes authenticated production diagnostics
@@ -118,19 +118,17 @@ WebSocket used by the focused browser collector, pauses its underlying TCP
 reader, alternates lane resynchronization requests, and requires a bounded
 queue replacement or send failure followed by zero final queue depth.
 
-The in-process 100 ms timeline avoids repeatedly serializing the complete
-frontend diagnostics history while measurement is active. The report is marked
-`measurementSurface: packaged-tauri-webview` and enforces the 120 ms p95 and
+The Tauri bridge drains a bounded native-helper telemetry queue. The benchmark
+retains at most one presentation sample for each source frame, quality, surface
+size, and lifecycle transition per lane, so a long run cannot grow an
+unbounded frontend history. The report is marked
+`measurementSurface: packaged-tauri-native-stage` and enforces the 120 ms p95 and
 200 ms hard changing-frame ceilings, the 200 ms presentation-gap ceiling, both
-lane samples, all four qualities, and bounded renderer-context ownership. It
+lane samples, all four qualities, and native renderer restart/resize ownership. It
 also records the requested profile and verified fixture/instance counts,
-renderer-owned WebGL capabilities, draw calls, transparent draw calls,
-triangles, resources, and CPU submission time. Browser memory and GPU time
-remain `null` with an explicit reason when the WebView does not expose those
-measurements. Quality evidence is object-level rather than
-inferred from aggregate draw counts: the report distinguishes conventional and
-feathered volumes, center lines, exact ground footprints, inactive direction
-guides, and selected-fixture outlines.
+native drawable dimensions, instance and draw-call counts, degraded frames,
+and measured CPU acquisition and GPU submission time from the production
+renderer helper. Process resident memory is sampled separately by the runner.
 
 The `improved-beam-spike` profile is a synchronous packaged WebGL capability
 experiment rather than a latency-duration run. It prepares the same 500-instance
@@ -166,17 +164,16 @@ The 1800-second run additionally enforces the retained-resource gate. The
 runner samples the `light-desktop` main-process resident set once per
 second, excludes the first Stage minute as warmup, and rejects a fitted growth
 slope above 1 MiB per minute. It compares the first and last five-minute
-post-warmup render windows, rejects growth in Three.js/WebGL geometry or texture
-counts, and requires the late-window CPU submission p95 to stay at or below
-16.7 ms. Main-process resident memory does not claim WebKit JavaScript heap or
-GPU-process ownership; GPU frame time remains explicitly unavailable when the
-WebView/Three.js diagnostics path cannot expose it.
+post-warmup render windows, rejects growth in native instance or draw-call
+ownership, rejects degraded frames, and requires the late-window CPU frame p95
+to stay at or below 16.7 ms. Main-process resident memory does not claim
+complete Metal driver allocation ownership; native frame telemetry is the
+authoritative renderer evidence.
 
-The macOS user session must remain unlocked with ToskLight visible. The desktop
-WebViews disable inactive scheduling so a visible Stage continues while another
-application has focus, but WebKit still submits no animation frame behind
-`loginwindow`. The runner reports that state as a failed RAF/canvas gate rather
-than treating live timers or data delivery as packaged performance evidence.
+The macOS user session must remain unlocked with ToskLight visible. The runner
+reports a stalled native presentation stream as a failed cadence/presentation
+gate rather than treating control timers or data delivery as packaged
+performance evidence.
 
 ## Evidence boundary
 

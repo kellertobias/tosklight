@@ -160,6 +160,10 @@ export const tauriDesktopBridge: DesktopBridge = {
 			paneId,
 		});
 	},
+	takeStagePaneBenchmarkSamples: async () => {
+		const api = await coreApi();
+		return api.invoke("take_stage_pane_benchmark_samples");
+	},
 	packagedStageBenchmarkConfig: async () => {
 		const api = await coreApi();
 		return api.invoke("packaged_stage_benchmark_config");

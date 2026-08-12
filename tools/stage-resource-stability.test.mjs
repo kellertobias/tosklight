@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { summarizeStageLongRunResources } from "./stage-resource-stability.mjs";
 
-function evidence({ memoryGrowthPerMinute = 0, lateGeometries = 5 } = {}) {
+function evidence({
+	memoryGrowthPerMinute = 0,
+	lateGeometries = 5,
+	lateDrawCalls = 10,
+} = {}) {
 	const startedAt = 1_000_000;
 	const processMemory = Array.from({ length: 1_801 }, (_, index) => ({
 		recordedAt: startedAt + index * 1_000,
@@ -14,7 +18,7 @@ function evidence({ memoryGrowthPerMinute = 0, lateGeometries = 5 } = {}) {
 		latestRender: {
 			submittedAt: index * 1_000,
 			durationMs: 2,
-			calls: 10,
+			calls: index >= 1_500 ? lateDrawCalls : 10,
 			transparentDrawCalls: 4,
 			geometries: index >= 1_500 ? lateGeometries : 5,
 			textures: 2,
@@ -58,6 +62,27 @@ test("keeps short development runs informational", () => {
 	assert.equal(result.enforced, false);
 	assert.equal(result.passed, null);
 	assert.deepEqual(result.failures, []);
+});
+
+test("names native renderer evidence without WebGL terminology", () => {
+	const result = summarizeStageLongRunResources([], [], 30, {
+		renderer: "native",
+	});
+
+	assert.match(result.gpuFrameMeasurement, /Native helper frame telemetry/u);
+});
+
+test("rejects retained native draw-call ownership growth", () => {
+	const sample = evidence({ lateDrawCalls: 11 });
+	const result = summarizeStageLongRunResources(
+		sample.timeline,
+		sample.processMemory,
+		1_800,
+		{ renderer: "native" },
+	);
+
+	assert.equal(result.passed, false);
+	assert.match(result.failures.join("\n"), /native instance or draw-call/u);
 });
 
 test("uses each newly recorded render instead of repeated latest snapshots", () => {

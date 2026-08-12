@@ -42,6 +42,7 @@ enum FromRenderer {
         height: u32,
         rgba: Vec<u8>,
     },
+    Presented(FrameTelemetry),
     /// Where the camera now is.
     Camera([f32; 6]),
     /// What the operator pointed at in the pane.
@@ -71,6 +72,7 @@ pub(crate) struct StagePane {
     /// Read rather than tracked: the renderer owns the camera, so a desk keeping its own copy would
     /// drift the moment a mouse touched the pane.
     camera: Mutex<Option<[f32; 6]>>,
+    telemetry: Mutex<Vec<FrameTelemetry>>,
     /// Whether anything is embedded, readable without taking the lock.
     ///
     /// The frame pump asks this before posting anything to the main thread. A desk with no pane —
@@ -78,6 +80,27 @@ pub(crate) struct StagePane {
     /// paints on, and posting a task every few milliseconds from startup competes with the
     /// webview's own first paint.
     drawing: std::sync::atomic::AtomicBool,
+}
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct FrameTelemetry {
+    pane_id: String,
+    sequence: u64,
+    source_frame: u64,
+    source_input_epoch_micros: u64,
+    presented_epoch_micros: u64,
+    cpu_micros: u64,
+    acquire_micros: u64,
+    gpu_micros: Option<u64>,
+    instances: u32,
+    draw_calls: u32,
+    degraded: bool,
+    renderer: String,
+    quality: &'static str,
+    follow_preload: bool,
+    width: u32,
+    height: u32,
 }
 
 #[derive(Default)]
@@ -91,6 +114,22 @@ struct RegisteredPane {
 }
 
 impl StagePanes {
+    fn take_benchmark_samples(&self) -> Result<Vec<FrameTelemetry>, String> {
+        let panes = self.panes.lock().map_err(|_| "the Stage pane registry")?;
+        let mut result = Vec::new();
+        for (pane_id, registered) in panes.iter() {
+            let mut samples = registered
+                .pane
+                .telemetry
+                .lock()
+                .map_err(|_| "the Stage pane benchmark telemetry")?;
+            for mut sample in samples.drain(..) {
+                sample.pane_id.clone_from(pane_id);
+                result.push(sample);
+            }
+        }
+        Ok(result)
+    }
     fn ensure_owner_available(&self, key: &str, live_3d: bool) -> Result<(), String> {
         let panes = self.panes.lock().map_err(|_| "the Stage pane registry")?;
         Self::ensure_owner_available_in(&panes, key, live_3d)
@@ -251,6 +290,10 @@ impl StagePane {
             + 'static,
     {
         self.close()?;
+        self.telemetry
+            .lock()
+            .map_err(|_| "the Stage pane benchmark telemetry")?
+            .clear();
         let program = match crate::visualizer::helper_binary() {
             Ok(program) => program,
             Err(error) => {
@@ -486,6 +529,17 @@ impl StagePane {
                     if let Err(detail) = running.compositor.accept_copy(width, height, &rgba) {
                         trouble = Some(detail);
                     }
+                }
+                Ok(FromRenderer::Presented(sample)) => {
+                    let mut samples = self
+                        .telemetry
+                        .lock()
+                        .map_err(|_| "the Stage pane benchmark telemetry")?;
+                    if samples.len() >= 2_048 {
+                        let overflow = samples.len() + 1 - 2_048;
+                        samples.drain(..overflow);
+                    }
+                    samples.push(sample);
                 }
                 Ok(FromRenderer::Camera(camera)) => latest_camera = Some(camera),
                 Ok(FromRenderer::Picked { fixture, additive }) => {
@@ -723,6 +777,45 @@ fn read_renderer(mut from_helper: impl std::io::Read, outbox: &Sender<FromRender
                 height,
                 rgba,
             }),
+            Ok(FromHelper::FramePresented {
+                sequence,
+                source_frame,
+                source_input_epoch_micros,
+                presented_epoch_micros,
+                cpu_micros,
+                acquire_micros,
+                gpu_micros,
+                instances,
+                draw_calls,
+                degraded,
+                renderer,
+                quality,
+                follow_preload,
+                width,
+                height,
+            }) => outbox.send(FromRenderer::Presented(FrameTelemetry {
+                pane_id: String::new(),
+                sequence,
+                source_frame,
+                source_input_epoch_micros,
+                presented_epoch_micros,
+                cpu_micros,
+                acquire_micros,
+                gpu_micros,
+                instances,
+                draw_calls,
+                degraded,
+                renderer,
+                quality: match quality {
+                    viz_helper::protocol::RenderQuality::Draft => "draft",
+                    viz_helper::protocol::RenderQuality::Standard => "standard",
+                    viz_helper::protocol::RenderQuality::High => "high",
+                    viz_helper::protocol::RenderQuality::Ultra => "ultra",
+                },
+                follow_preload,
+                width,
+                height,
+            })),
             Ok(FromHelper::Camera {
                 x,
                 y,
@@ -1072,6 +1165,16 @@ pub(crate) fn stage_pane_status(
         return Ok((None, None));
     };
     Ok((pane.description()?, pane.trouble()?))
+}
+
+#[tauri::command]
+pub(crate) fn take_stage_pane_benchmark_samples(
+    panes: tauri::State<'_, StagePanes>,
+) -> Result<Vec<FrameTelemetry>, String> {
+    if std::env::var_os("LIGHT_STAGE_PACKAGED_BENCH_REPORT").is_none() {
+        return Ok(Vec::new());
+    }
+    panes.take_benchmark_samples()
 }
 
 #[cfg(test)]

@@ -302,7 +302,7 @@ npm run test:e2e -- tests/66-semantic-stage-visualizer.spec.ts
 
 [`STAGE-PERF-001`](../../../docs/testing/16-stage-performance.md) and
 [`STAGE-PERF-002`](../../../docs/testing/16-stage-performance.md) are implemented by the packaged
-Tauri/WebView collector. They cover the default and deterministic 500-instance profiles and write
+Tauri/native-helper collector. They cover the default and deterministic 500-instance profiles and write
 the stable `.artifacts/performance/stage/stage-visualization-timing.json` artifact in addition to
 the timestamped report. Five-minute output and 30-minute resource gates require retained reports
 from real supported-platform GPU runs; a short local run or browser/software renderer is explicitly
