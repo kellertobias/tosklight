@@ -3,7 +3,6 @@ import { OperatorDestinationList } from "@tosklight/ui/application";
 import { type ReactNode, useRef } from "react";
 import appMark from "../../../src-tauri/icons/mark-shadow.svg";
 import { useActiveShow } from "../../features/deskSnapshot/DeskSnapshotState";
-import { useMediaServers } from "../../features/mediaServers/MediaServersContext";
 import { useApp } from "../../state/AppContext";
 import type { BuiltInWindow } from "../../types";
 import { DeskSettingsModal } from "../modals/DeskSettingsModal";
@@ -43,7 +42,6 @@ export function LeftDock({
 } = {}) {
 	const { state, dispatch } = useApp();
 	const activeShow = useActiveShow();
-	const mediaAvailable = (useMediaServers()?.mediaServers.length ?? 0) > 0;
 	const longPress = useRef<number | null>(null);
 	const held = useRef(false);
 	const suppressUntil = useRef(0);
@@ -159,9 +157,7 @@ export function LeftDock({
 					ariaLabel="Built-ins"
 					className="builtins-list dock-list-swap dock-list-swap-builtins"
 					activeId={state.builtIn ?? undefined}
-					entries={builtIns
-						.filter(([kind]) => kind !== "media" || mediaAvailable)
-						.map(([id, icon, label]) => ({ id, icon, label }))}
+					entries={builtIns.map(([id, icon, label]) => ({ id, icon, label }))}
 					onSelect={(id) =>
 						dispatch({ type: "OPEN_BUILTIN", kind: id as BuiltInWindow })
 					}

@@ -278,6 +278,8 @@ describe("CuelistWindow Cue settings", () => {
 			"Preview",
 			"No.",
 			"Name",
+			"Jump",
+			"Jump Count",
 			"Trigger",
 			"Trigger Time",
 			"In Delay",
@@ -287,6 +289,7 @@ describe("CuelistWindow Cue settings", () => {
 		]);
 		expect(document.querySelector(".cue-properties")).not.toBeInTheDocument();
 		for (const name of [
+			"Jump",
 			"Trigger",
 			"Trigger Time",
 			"In Delay",
@@ -389,6 +392,8 @@ describe("CuelistWindow pane selection", () => {
 		).toEqual([
 			"No.",
 			"Name",
+			"Jump",
+			"Jump Count",
 			"Trigger",
 			"Trigger Time",
 			"In Delay",
