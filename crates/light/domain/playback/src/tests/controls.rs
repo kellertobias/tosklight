@@ -100,6 +100,30 @@ fn off_requires_zero_pickup_without_moving_the_recorded_fader() {
 }
 
 #[test]
+fn explicit_fader_activation_ignores_cuelist_zero_policy() {
+    let cue_list = list(vec![Cue::new(1.0)]);
+    let cue_list_id = cue_list.id;
+    let mut playback = definition(1, cue_list_id);
+    playback.go_activates = false;
+    playback.auto_off = false;
+    let mut engine = PlaybackEngine::default();
+    engine.register(cue_list).unwrap();
+    engine.register_definition(playback).unwrap();
+
+    engine
+        .set_master_with_explicit_activation_mutation(1, 0.4)
+        .unwrap();
+    assert!(engine.runtime()[0].enabled);
+    assert_eq!(engine.runtime()[0].master, 0.4);
+
+    engine
+        .set_master_with_explicit_activation_mutation(1, 0.0)
+        .unwrap();
+    assert!(!engine.runtime()[0].enabled);
+    assert_eq!(engine.runtime()[0].master, 0.0);
+}
+
+#[test]
 fn cuelist_zero_auto_off_resumes_only_its_own_current_cue() {
     let fixture = FixtureId::new();
     let mut one = Cue::new(1.0);
@@ -626,6 +650,32 @@ fn dynamic_playback_definition(
         presentation_image: None,
         target,
     }
+}
+
+#[test]
+fn explicit_fader_activation_ignores_dynamic_zero_policy() {
+    let mut definition =
+        dynamic_playback_definition(17, DynamicPlaybackFaderMode::SizeAndMaster, false);
+    let PlaybackTarget::Dynamic { assignment } = &mut definition.target else {
+        unreachable!()
+    };
+    assignment.auto_off_at_zero = false;
+    definition.go_activates = false;
+    definition.auto_off = false;
+    let mut engine = PlaybackEngine::default();
+    engine.register_definition(definition).unwrap();
+
+    engine
+        .set_master_with_explicit_activation_mutation(17, 0.6)
+        .unwrap();
+    assert!(engine.active_dynamic_playbacks()[0].enabled);
+    assert_eq!(engine.active_dynamic_playbacks()[0].fader_value, 0.6);
+
+    engine
+        .set_master_with_explicit_activation_mutation(17, 0.0)
+        .unwrap();
+    assert!(!engine.active_dynamic_playbacks()[0].enabled);
+    assert_eq!(engine.active_dynamic_playbacks()[0].fader_value, 0.0);
 }
 
 #[test]

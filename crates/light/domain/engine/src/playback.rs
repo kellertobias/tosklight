@@ -62,6 +62,8 @@ pub enum PoolPlaybackAction {
     GoTo(f64),
     Load(f64),
     SetMaster(f32),
+    /// An automation fader whose zero/non-zero value is also authoritative Off/On state.
+    SetMasterWithExplicitActivation(f32),
     SetConfiguredFader {
         mode: light_playback::PlaybackFaderMode,
         value: f32,
@@ -687,6 +689,9 @@ fn execute_pool(
         PoolPlaybackAction::GoTo(cue) => playback.goto_playback_mutation(number, cue)?.into(),
         PoolPlaybackAction::Load(cue) => playback.load_playback_mutation(number, cue)?.into(),
         PoolPlaybackAction::SetMaster(value) => playback.set_master_mutation(number, value)?.into(),
+        PoolPlaybackAction::SetMasterWithExplicitActivation(value) => playback
+            .set_master_with_explicit_activation_mutation(number, value)?
+            .into(),
         PoolPlaybackAction::SetConfiguredFader { mode, value } => playback
             .set_configured_fader_mutation(number, mode, value)?
             .into(),

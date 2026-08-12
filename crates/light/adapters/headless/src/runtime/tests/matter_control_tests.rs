@@ -139,6 +139,59 @@ fn matter_bridge_writes_and_tracking_feedback_use_explicit_global_addresses() {
 }
 
 #[test]
+fn matter_fader_explicitly_starts_and_stops_when_authored_policies_are_disabled() {
+    let (state, data_dir) = test_state();
+    state
+        .installation
+        .update_configuration(|configuration| configuration.matter_enabled = true);
+    let mut snapshot = matter_test_snapshot();
+    for playback in std::sync::Arc::make_mut(&mut snapshot.playbacks) {
+        playback.go_activates = false;
+        playback.auto_off = false;
+    }
+    std::sync::Arc::make_mut(&mut snapshot.cue_lists)[0].auto_off_at_zero = false;
+    state.output.replace_snapshot(snapshot).unwrap();
+    let endpoint = matter::endpoint_id(4, 7).unwrap();
+
+    apply_matter_playback_write(
+        &state,
+        endpoint,
+        matter::MatterPlaybackWrite {
+            on: None,
+            level: Some(127),
+        },
+    )
+    .unwrap();
+    let active = state
+        .output
+        .playback_runtime()
+        .into_iter()
+        .find(|playback| playback.playback_number == Some(25))
+        .unwrap();
+    assert!(active.enabled);
+    assert!((active.master - 0.5).abs() < 0.001);
+
+    apply_matter_playback_write(
+        &state,
+        endpoint,
+        matter::MatterPlaybackWrite {
+            on: None,
+            level: Some(0),
+        },
+    )
+    .unwrap();
+    let stopped = state
+        .output
+        .playback_runtime()
+        .into_iter()
+        .find(|playback| playback.playback_number == Some(25))
+        .unwrap();
+    assert!(!stopped.enabled);
+    assert_eq!(stopped.master, 0.0);
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
 fn matter_activation_checkpoint_keeps_desk_independent_restart_scope() {
     let (state, data_dir) = test_state();
     let show = ShowEntry {

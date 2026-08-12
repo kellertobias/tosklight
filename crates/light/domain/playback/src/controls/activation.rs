@@ -350,6 +350,50 @@ impl PlaybackEngine {
         ))
     }
 
+    /// Apply an externally authoritative fader value with explicit start/stop semantics.
+    ///
+    /// Unlike a physical desk fader, an automation light does not inherit the authored
+    /// `auto_off_at_zero` policy: positive values mean On and zero means Off. Keeping the level
+    /// and activation change inside one Playback mutation boundary prevents transports from
+    /// synthesizing a racy Master + On/Off command sequence.
+    pub fn set_master_with_explicit_activation_mutation(
+        &mut self,
+        number: u16,
+        value: f32,
+    ) -> Result<PlaybackMutation<()>, String> {
+        let target = self
+            .definitions
+            .get(&number)
+            .map(|definition| definition.target.clone())
+            .ok_or("playback does not exist")?;
+        if !matches!(
+            target,
+            PlaybackTarget::CueList { .. } | PlaybackTarget::Dynamic { .. }
+        ) {
+            return Err("explicit fader activation requires a Cuelist or Dynamic Playback".into());
+        }
+
+        let fader = self.set_virtual_master_mutation(number, value)?;
+        let activation = if value > 0.0 {
+            // The virtual-master path starts both Cuelists and Dynamics above zero without
+            // engaging physical-fader pickup.
+            PlaybackMutation::new((), PlaybackRuntimeEffect::None)
+        } else {
+            let activation = if matches!(target, PlaybackTarget::Dynamic { .. }) {
+                self.off_dynamic_mutation(number)?.map(|_| ())
+            } else {
+                self.off_mutation(number)?.map(|_| ())
+            };
+            activation
+        };
+
+        Ok(PlaybackMutation {
+            value: (),
+            addressed_effect: fader.addressed_effect.combine(activation.addressed_effect),
+            effect: fader.effect.combine(activation.effect),
+        })
+    }
+
     fn set_master_inner_mutation(
         &mut self,
         number: u16,

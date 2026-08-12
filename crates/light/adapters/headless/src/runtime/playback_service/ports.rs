@@ -550,6 +550,44 @@ impl ServerPlaybackPorts<'_> {
                 pending: None,
             });
         }
+        if surface == PlaybackSurface::Matter
+            && let PlaybackAction::Master(level) = action
+            && matches!(
+                definition.target,
+                light_playback::PlaybackTarget::CueList { .. }
+                    | light_playback::PlaybackTarget::Dynamic { .. }
+            )
+        {
+            let transition = self
+                .state
+                .output
+                .execute_pool_playback_with_activation(
+                    number,
+                    light_engine::PoolPlaybackAction::SetMasterWithExplicitActivation(
+                        level.value(),
+                    ),
+                    &[],
+                    Some(light_playback::PlaybackActivationOrigin {
+                        at: self.state.output.application_time(),
+                        desk_id: None,
+                        surface: light_playback::PlaybackActivationSurface::Matter,
+                        exclusion_scope: light_playback::PlaybackExclusionScope::None,
+                    }),
+                )
+                .map_err(invalid)?;
+            let EnginePlaybackOutcome::Changed(effect) = transition.outcome else {
+                return Err(invalid("unexpected explicit Matter fader outcome"));
+            };
+            if effect.durable()
+                && let Err(error) = persist_active_playbacks(self.state)
+            {
+                self.mark_persistence_pending(context, "active_playbacks", error);
+            }
+            return Ok(PlaybackExecution::Pool {
+                changed: effect.changed(),
+                pending: None,
+            });
+        }
         let (action_name, input) = legacy_action(action);
         if captures_preload(context.source)
             && let Some(pending) =
