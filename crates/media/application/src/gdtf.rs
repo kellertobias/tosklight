@@ -278,46 +278,84 @@ mod tests {
     }
 
     #[test]
-    fn normal_fixture_library_packages_match_the_canonical_media_wire() {
-        for (filename, id, specs) in [
-            (
-                "tosklight--media-server-layer.toskfixture",
-                LAYER_ID,
-                LAYER_CHANNELS,
-            ),
-            (
-                "tosklight--media-server-master.toskfixture",
-                MASTER_ID,
-                MASTER_CHANNELS,
-            ),
-        ] {
-            let profile = shipped_tosklight_profile(filename);
-            assert_eq!(profile.id.0, id);
-            assert_eq!(profile.manufacturer, "ToskLight");
-            let mode = &profile.modes[0];
-            assert_eq!(usize::from(mode.splits[0].footprint), specs.len());
+    fn normal_fixture_library_package_matches_both_canonical_media_personalities() {
+        let profile = shipped_tosklight_profile("tosklight--media-server.toskfixture");
+        assert_eq!(profile.manufacturer, "ToskLight");
+        assert_eq!(profile.name, "Media Server");
+        assert_eq!(profile.modes.len(), 2);
 
-            for spec in specs {
-                if spec.resolution == Resolution::Fine {
-                    continue;
-                }
-                let channel = mode
-                    .channels
-                    .iter()
-                    .find(|channel| channel.functions[0].name == spec.name)
-                    .unwrap_or_else(|| panic!("{filename} is missing {}", spec.name));
-                assert_eq!(channel.default_raw, u32::from(spec.default_value));
-                assert_eq!(
-                    channel.secondary_slots,
-                    if spec.resolution == Resolution::Coarse {
-                        vec![spec.offset + 2]
-                    } else {
-                        Vec::new()
-                    },
-                    "{} slot ownership",
-                    spec.name
+        for (mode, layer_count) in profile.modes.iter().zip([2_u16, 8]) {
+            let expected_footprint = layer_count * SlotFootprint::SINGLE_LAYER.total()
+                + SlotFootprint::MASTER_ONLY.total();
+            assert_eq!(
+                mode.splits,
+                vec![light_fixture::FixtureSplit {
+                    number: 1,
+                    footprint: expected_footprint,
+                }]
+            );
+            assert_eq!(mode.heads.len(), usize::from(layer_count + 1));
+            assert_eq!(
+                mode.heads.iter().filter(|head| head.master_shared).count(),
+                1
+            );
+            assert_eq!(mode.heads[0].name, "Master");
+
+            let primary_slots = mode.primary_slots().unwrap();
+            for layer in 0..layer_count {
+                let head = &mode.heads[usize::from(layer + 1)];
+                assert_eq!(head.name, format!("Layer {}", layer + 1));
+                assert!(!head.master_shared);
+                assert_wire_block(
+                    mode,
+                    head.id,
+                    LAYER_CHANNELS,
+                    layer * SlotFootprint::SINGLE_LAYER.total(),
+                    &primary_slots,
                 );
             }
+            assert_wire_block(
+                mode,
+                mode.heads[0].id,
+                MASTER_CHANNELS,
+                layer_count * SlotFootprint::SINGLE_LAYER.total(),
+                &primary_slots,
+            );
+        }
+    }
+
+    fn assert_wire_block(
+        mode: &light_fixture::FixtureMode,
+        head_id: uuid::Uuid,
+        specs: &[media_domain::personality::channels::ChannelSpec],
+        block_offset: u16,
+        primary_slots: &std::collections::HashMap<uuid::Uuid, u16>,
+    ) {
+        for spec in specs {
+            if spec.resolution == Resolution::Fine {
+                continue;
+            }
+            let channel = mode
+                .channels
+                .iter()
+                .find(|channel| {
+                    channel.head_id == head_id && channel.functions[0].name == spec.name
+                })
+                .unwrap_or_else(|| panic!("{} is missing {}", mode.name, spec.name));
+            assert_eq!(channel.split, 1);
+            assert_eq!(channel.default_raw, u32::from(spec.default_value));
+            assert_eq!(primary_slots[&channel.id], block_offset + spec.offset + 1);
+            assert_eq!(
+                channel.secondary_slots,
+                if spec.resolution == Resolution::Coarse {
+                    vec![block_offset + spec.offset + 2]
+                } else {
+                    Vec::new()
+                },
+                "{} / {} slot ownership",
+                mode.name,
+                spec.name
+            );
         }
     }
 }

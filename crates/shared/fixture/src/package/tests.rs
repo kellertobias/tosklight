@@ -941,6 +941,61 @@ fn visualizer_camera_package_keeps_its_exact_seventeen_slot_wire_contract() {
 }
 
 #[test]
+fn tosklight_media_server_package_exposes_complete_multi_head_personalities() {
+    let profile = shipped_profile("tosklight--media-server.toskfixture");
+    assert_eq!(profile.manufacturer, "ToskLight");
+    assert_eq!(profile.name, "Media Server");
+    assert_eq!(profile.modes.len(), 2);
+
+    for (mode, layer_count, footprint) in [
+        (&profile.modes[0], 2_usize, 75_u16),
+        (&profile.modes[1], 8_usize, 279_u16),
+    ] {
+        assert_eq!(
+            mode.splits,
+            vec![FixtureSplit {
+                number: 1,
+                footprint
+            }]
+        );
+        assert_eq!(mode.heads.len(), layer_count + 1);
+        assert_eq!(
+            mode.heads.iter().filter(|head| head.master_shared).count(),
+            1
+        );
+        assert_eq!(mode.heads[0].name, "Master");
+        assert!(mode.heads[1..].iter().all(|head| !head.master_shared));
+        assert_eq!(
+            mode.heads[1..]
+                .iter()
+                .map(|head| head.name.as_str())
+                .collect::<Vec<_>>(),
+            (1..=layer_count)
+                .map(|layer| format!("Layer {layer}"))
+                .collect::<Vec<_>>()
+        );
+        assert!(mode.channels.iter().all(|channel| channel.split == 1));
+        assert!(
+            mode.channels
+                .iter()
+                .all(|channel| { mode.heads.iter().any(|head| head.id == channel.head_id) })
+        );
+        let primary_slots = mode.primary_slots().unwrap();
+        let mut owned_slots = std::collections::BTreeSet::new();
+        for channel in &mode.channels {
+            assert!(owned_slots.insert(primary_slots[&channel.id]));
+            for slot in &channel.secondary_slots {
+                assert!(owned_slots.insert(*slot));
+            }
+        }
+        assert_eq!(owned_slots, (1..=footprint).collect());
+    }
+
+    assert!(profile.notes.contains("Legacy Media Server Layer"));
+    assert!(profile.notes.contains("existing show snapshots"));
+}
+
+#[test]
 fn shipped_library_keeps_compound_prism_and_motion_migration_evidence_explicit() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
