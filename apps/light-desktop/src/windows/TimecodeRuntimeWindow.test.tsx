@@ -1,5 +1,11 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+	within,
+} from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { ShowObjectActionOutcome } from "../api/generated/light-wire";
 import type { TimecodeDefinition, TimecodePatch } from "../api/types/timecode";
@@ -74,17 +80,25 @@ describe("TimecodeEditor title and settings", () => {
 		await screen.findByText("Saved");
 
 		expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
-		const transport = screen.getByLabelText("Timecode transport");
-		for (const label of ["Go", "Pause", "Stop", "Rewind"])
-			expect(
-				within(transport).getByRole("button", { name: label }),
-			).toBeTruthy();
-		fireEvent.click(within(transport).getByRole("button", { name: "Go" }));
+		for (const label of ["Rewind", "Stop", "Play", "Pause"])
+			expect(screen.getByRole("button", { name: label })).toHaveClass(
+				"timecode-transport-action",
+			);
+		expect(screen.getByRole("button", { name: "Rewind" })).toHaveTextContent(
+			"▏▶",
+		);
+		expect(
+			screen.getByRole("button", { name: "Timecode position" }),
+		).toHaveTextContent("00:00:00:00");
+		fireEvent.click(screen.getByRole("button", { name: "Play" }));
 		await waitFor(() =>
 			expect(api.transportAction).toHaveBeenCalledWith(SHOW_ID, TIMECODE_ID, {
 				type: "go",
 			}),
 		);
+		expect(screen.queryByLabelText("Speed Group")).toBeNull();
+		expect(screen.queryByLabelText("Cuelist")).toBeNull();
+		expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
 
 		fireEvent.click(screen.getByRole("button", { name: "Settings" }));
 		const settings = screen.getByRole("dialog", {
@@ -94,9 +108,15 @@ describe("TimecodeEditor title and settings", () => {
 			expect(within(settings).getByLabelText(label)).toBeTruthy();
 		expect(within(settings).queryByLabelText("Number")).toBeNull();
 		expect(within(settings).queryByLabelText("Frames")).toBeNull();
-		expect(within(settings).queryByRole("textbox", { name: "Marker CSV" })).toBeNull();
-		expect(within(settings).getByRole("button", { name: "Choose audio file" })).toBeTruthy();
-		expect(within(settings).getByRole("button", { name: "Choose marker CSV" })).toBeTruthy();
+		expect(
+			within(settings).queryByRole("textbox", { name: "Marker CSV" }),
+		).toBeNull();
+		expect(
+			within(settings).getByRole("button", { name: "Choose audio file" }),
+		).toBeTruthy();
+		expect(
+			within(settings).getByRole("button", { name: "Choose marker CSV" }),
+		).toBeTruthy();
 		fireEvent.change(within(settings).getByLabelText("Name"), {
 			target: { value: "Opening sequence" },
 		});
@@ -111,8 +131,10 @@ describe("TimecodeEditor title and settings", () => {
 				auto_start: true,
 			}),
 		);
-
 		fireEvent.click(screen.getByRole("button", { name: "Add" }));
+		expect(screen.getByRole("button", { name: "Add" })).toHaveClass(
+			"ui-window-dropdown-trigger",
+		);
 		const add = screen.getByRole("menu", { name: "Add" });
 		expect(
 			within(add)

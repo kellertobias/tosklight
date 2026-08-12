@@ -11,6 +11,7 @@ import {
 	ButtonGrid,
 	DataTable,
 	GridButton,
+	WindowDropdown,
 	WindowHeader,
 	WindowScrollArea,
 	WindowSettings,
@@ -79,6 +80,23 @@ describe("window kit", () => {
 		const input = screen.getByRole("textbox", { name: "Search Groups" });
 		fireEvent.change(input, { target: { value: "front" } });
 		expect(onSearch).toHaveBeenCalledWith("front");
+	});
+	it("opens and closes the standard title dropdown around one selected action", () => {
+		const selected = vi.fn();
+		render(
+			<WindowDropdown
+				ariaLabel="Add"
+				label="Add"
+				items={[{ id: "marker", label: "Add Marker", onSelect: selected }]}
+			/>,
+		);
+		const trigger = screen.getByRole("button", { name: "Add" });
+		expect(trigger).toHaveAttribute("aria-expanded", "false");
+		fireEvent.click(trigger);
+		expect(trigger).toHaveAttribute("aria-expanded", "true");
+		fireEvent.click(screen.getByRole("menuitem", { name: "Add Marker" }));
+		expect(selected).toHaveBeenCalledTimes(1);
+		expect(screen.queryByRole("menu")).toBeNull();
 	});
 	it("makes an armed window-title action pointer and keyboard operable", () => {
 		const remove = vi.fn();

@@ -83,23 +83,17 @@
 .timecode-header-group > .ui-button + .ui-button {
 	border-left: 1px solid #424553;
 }
-.timecode-add-menu-layer {
-	position: fixed;
-	z-index: 10000;
-	inset: 0;
+.timecode-editor .timecode-transport-action {
+	min-width: 58px;
 }
-.timecode-add-menu {
-	position: fixed;
-	display: grid;
-	min-width: 12rem;
-	padding: 0.35rem;
-	border: 1px solid #4b4e5d;
-	border-radius: 0.35rem;
-	background: #171823;
-	box-shadow: 0 0.8rem 2rem rgb(0 0 0 / 45%);
+.timecode-rewind-glyph {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.08rem;
 }
-.timecode-add-menu > .ui-button {
-	justify-content: flex-start;
+.timecode-reversed-play {
+	display: inline-block;
+	transform: rotate(180deg);
 }
 .timecode-timeline-editor {
 	display: flex;

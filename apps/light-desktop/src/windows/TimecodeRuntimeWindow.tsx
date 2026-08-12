@@ -1,10 +1,12 @@
-import { Button, CheckboxField, SelectField, TextField } from "@tosklight/ui";
+import { CheckboxField, SelectField, TextField } from "@tosklight/ui";
 import {
 	PoolCard,
 	PoolGrid,
 	type PoolSlotViewModel,
 } from "@tosklight/ui/pools";
 import {
+	type WindowAction,
+	WindowDropdown,
 	WindowHeader,
 	WindowScrollArea,
 	WindowSettings,
@@ -17,7 +19,6 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { createPortal } from "react-dom";
 import { createLightApi } from "../api/client/api";
 import {
 	type TimecodeDefinition,
@@ -376,20 +377,6 @@ export function TimecodeEditor({
 			setError(`Could not close before autosave completed: ${String(reason)}`);
 		}
 	};
-	const remove = async () => {
-		if (!showId || !writer) return;
-		setActionBusy(true);
-		try {
-			const saved = await writer.flush();
-			if (!saved) return;
-			await api.delete(showId, saved.definition.id, saved.revision);
-			await onClose();
-		} catch (reason) {
-			setError(String(reason));
-		} finally {
-			setActionBusy(false);
-		}
-	};
 	const importCsv = async (file: File) => {
 		try {
 			const csvSource = await file.text();
@@ -404,6 +391,45 @@ export function TimecodeEditor({
 			setCsvError(reason instanceof Error ? reason.message : String(reason));
 		}
 	};
+	const transportActions: WindowAction[] = [
+		{
+			id: "rewind",
+			label: (
+				<span className="timecode-rewind-glyph" aria-hidden="true">
+					<span>▏</span>
+					<span className="timecode-reversed-play">▶</span>
+				</span>
+			),
+			ariaLabel: "Rewind",
+			onClick: () => void act({ type: "rewind" }),
+			disabled: isNew || busy,
+			className: "timecode-transport-action",
+		},
+		{
+			id: "stop",
+			label: <span aria-hidden="true">■</span>,
+			ariaLabel: "Stop",
+			onClick: () => void act({ type: "stop" }),
+			disabled: isNew || busy,
+			className: "timecode-transport-action",
+		},
+		{
+			id: "play",
+			label: <span aria-hidden="true">▶</span>,
+			ariaLabel: "Play",
+			onClick: () => void act({ type: "go" }),
+			disabled: isNew || busy,
+			className: "timecode-transport-action",
+		},
+		{
+			id: "pause",
+			label: <span aria-hidden="true">Ⅱ</span>,
+			ariaLabel: "Pause",
+			onClick: () => void act({ type: "pause" }),
+			disabled: isNew || busy,
+			className: "timecode-transport-action",
+		},
+	];
 	return (
 		<section className="timecode-window timecode-editor" aria-busy={busy}>
 			<WindowHeader
@@ -418,11 +444,39 @@ export function TimecodeEditor({
 							? "Saved"
 							: "Creating…",
 				}}
-				toolbar={
-					<TimecodeHeaderToolbar
-						{...{ act, busy, isNew, timelineRef, draft, cueLists }}
-					/>
-				}
+				toolbar={<TimecodeAddMenu {...{ timelineRef, draft, cueLists }} />}
+				actions={[
+					[
+						{
+							id: "back",
+							label: "Back",
+							onClick: () => void close(),
+							disabled: busy,
+						},
+						{
+							id: "undo",
+							label: "Undo",
+							onClick: undo,
+							disabled: !canUndo || busy,
+						},
+						{
+							id: "redo",
+							label: "Redo",
+							onClick: redo,
+							disabled: !canRedo || busy,
+						},
+					],
+					[
+						{
+							id: "position",
+							label: formatFrame(snapshot?.frame ?? frame),
+							ariaLabel: "Timecode position",
+							onClick: () => void act({ type: "seek", frame }),
+							disabled: isNew || busy,
+						},
+					],
+					transportActions,
+				]}
 				settings
 				onSettings={(anchor) => {
 					setSettingsAnchor(anchor.getBoundingClientRect());
@@ -464,19 +518,6 @@ export function TimecodeEditor({
 					{error}
 				</p>
 			)}
-			<EditorToolbar
-				{...{
-					onClose: close,
-					undo,
-					redo,
-					remove,
-					canUndo,
-					canRedo,
-					busy,
-					isNew,
-				}}
-			/>
-			<RuntimeSeekControls {...{ act, frame, snapshot, busy, isNew }} />
 			<TimecodeTimelineEditor
 				ref={timelineRef}
 				definition={draft}
@@ -491,72 +532,6 @@ export function TimecodeEditor({
 				onEndGesture={endGesture}
 			/>
 		</section>
-	);
-}
-
-function EditorToolbar({
-	onClose,
-	undo,
-	redo,
-	remove,
-	canUndo,
-	canRedo,
-	busy,
-	isNew,
-}: {
-	onClose(): Promise<void>;
-	undo(): void;
-	redo(): void;
-	remove(): Promise<void>;
-	canUndo: boolean;
-	canRedo: boolean;
-	busy: boolean;
-	isNew: boolean;
-}) {
-	return (
-		<div className="timecode-editor-toolbar">
-			<Button onClick={() => void onClose()} disabled={busy}>
-				Back
-			</Button>
-			<Button onClick={undo} disabled={!canUndo || busy}>
-				Undo
-			</Button>
-			<Button onClick={redo} disabled={!canRedo || busy}>
-				Redo
-			</Button>
-			{!isNew && (
-				<Button onClick={() => void remove()} disabled={busy}>
-					Delete
-				</Button>
-			)}
-		</div>
-	);
-}
-
-function RuntimeSeekControls({
-	act,
-	frame,
-	snapshot,
-	busy,
-	isNew,
-}: {
-	act(action: TimecodeTransportAction): Promise<void>;
-	frame: number;
-	snapshot?: TimecodeTransportSnapshot;
-	busy: boolean;
-	isNew: boolean;
-}) {
-	const disabled = isNew || busy;
-	return (
-		<fieldset className="timecode-runtime-seek" aria-label="Runtime seek">
-			<Button
-				onClick={() => void act({ type: "seek", frame })}
-				disabled={disabled}
-			>
-				Seek runtime to playhead
-			</Button>
-			<strong>{formatFrame(snapshot?.frame ?? 0)}</strong>
-		</fieldset>
 	);
 }
 
@@ -668,123 +643,51 @@ export function TimecodeSettings({
 	);
 }
 
-function TimecodeHeaderToolbar({
-	act,
-	busy,
-	isNew,
+function TimecodeAddMenu({
 	timelineRef,
 	draft,
 	cueLists,
 }: {
-	act(action: TimecodeTransportAction): Promise<void>;
-	busy: boolean;
-	isNew: boolean;
 	timelineRef: RefObject<TimecodeTimelineEditorHandle | null>;
 	draft: TimecodeDefinition;
 	cueLists: readonly unknown[];
 }) {
-	const [addAnchor, setAddAnchor] = useState<DOMRect | null>(null);
-	const disabled = busy || isNew;
-	const runAdd = (action: () => void) => {
-		setAddAnchor(null);
-		action();
-	};
 	return (
-		<>
-			<div className="timecode-header-toolbar">
-				<fieldset
-					className="timecode-header-group"
-					aria-label="Timecode transport"
-				>
-					<Button onClick={() => void act({ type: "go" })} disabled={disabled}>
-						Go
-					</Button>
-					<Button
-						onClick={() => void act({ type: "pause" })}
-						disabled={disabled}
-					>
-						Pause
-					</Button>
-					<Button
-						onClick={() => void act({ type: "stop" })}
-						disabled={disabled}
-					>
-						Stop
-					</Button>
-					<Button
-						onClick={() => void act({ type: "rewind" })}
-						disabled={disabled}
-					>
-						Rewind
-					</Button>
-				</fieldset>
-				<div className="timecode-header-group">
-					<Button
-						aria-haspopup="menu"
-						aria-expanded={Boolean(addAnchor)}
-						onClick={(event) =>
-							setAddAnchor((current) =>
-								current ? null : event.currentTarget.getBoundingClientRect(),
-							)
-						}
-					>
-						Add
-					</Button>
-				</div>
-			</div>
-			{addAnchor &&
-				createPortal(
-					<div
-						className="timecode-add-menu-layer"
-						onPointerDown={(event) =>
-							event.target === event.currentTarget && setAddAnchor(null)
-						}
-					>
-						<div
-							className="timecode-add-menu"
-							role="menu"
-							aria-label="Add"
-							style={{ top: addAnchor.bottom + 3, left: addAnchor.left }}
-						>
-							<Button
-								role="menuitem"
-								onClick={() => runAdd(() => timelineRef.current?.addMarker())}
-							>
-								Add Marker
-							</Button>
-							<Button
-								role="menuitem"
-								disabled={draft.lanes.some(
-									(lane) => lane.content.kind === "audio_volume",
-								)}
-								onClick={() =>
-									runAdd(() => timelineRef.current?.addAudioLane())
-								}
-							>
-								Add Audio Lane
-							</Button>
-							<Button
-								role="menuitem"
-								onClick={() =>
-									runAdd(() => timelineRef.current?.addSpeedLane())
-								}
-							>
-								Add Speed Lane
-							</Button>
-							<Button
-								role="menuitem"
-								disabled={!cueLists.length}
-								onClick={() =>
-									runAdd(() => timelineRef.current?.addCueListLane())
-								}
-							>
-								Add Cuelist Lane
-							</Button>
-						</div>
-					</div>,
-					document.body,
-				)}
-		</>
+		<WindowDropdown
+			className="timecode-add-title-action"
+			ariaLabel="Add"
+			label={
+				<>
+					<span aria-hidden="true">＋</span> Add
+				</>
+			}
+			items={[
+				{
+					id: "marker",
+					label: "Add Marker",
+					onSelect: () => timelineRef.current?.addMarker(),
+				},
+				{
+					id: "audio",
+					label: "Add Audio Lane",
+					disabled: draft.lanes.some(
+						(lane) => lane.content.kind === "audio_volume",
+					),
+					onSelect: () => timelineRef.current?.addAudioLane(),
+				},
+				{
+					id: "speed",
+					label: "Add Speed Lane",
+					onSelect: () => timelineRef.current?.addSpeedLane(),
+				},
+				{
+					id: "cuelist",
+					label: "Add Cuelist Lane",
+					disabled: !cueLists.length,
+					onSelect: () => timelineRef.current?.addCueListLane(),
+				},
+			]}
+		/>
 	);
 }
 
