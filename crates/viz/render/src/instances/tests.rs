@@ -807,26 +807,70 @@ fn the_cells_of_a_bar_keep_their_own_lenses() {
     );
 }
 
-/// The lines view is a diagram, not a dim picture.
+/// The lines view is a model-and-lines diagram, not a dim picture.
 ///
 /// An operator on it is asking two questions — where are the lamps, and where are they pointed —
-/// and every other thing in the frame is between them and the answer. So the bodies become boxes
-/// the size of the fixtures, the rigging and the soft goods go, and the aim of every directional
-/// head is drawn whether or not anything is lit.
+/// and every other thing in the frame is between them and the answer. Fixture models stay, the
+/// rigging and the soft goods go, and the aim of every directional head is drawn whether or not
+/// anything is lit.
 mod lines_view {
     use super::*;
-    use viz_scene::{SceneryKind, SceneryObject, ViewMode};
+    use viz_scene::{FixtureModel, ModelPart, ModelPartKind, SceneryKind, SceneryObject, ViewMode};
 
     fn lines_style() -> FrameStyle {
         FrameStyle {
             draw_beams: false,
             draw_aim_lines: true,
             aim_guides: true,
-            fixture_models: false,
+            fixture_models: true,
+            emitter_apertures: false,
+            scenery_surfaces: false,
             floor_grid: false,
             scenery: |kind| ViewMode::Lines3d.draws_scenery(kind),
             ..FrameStyle::default()
         }
+    }
+
+    pub(super) fn package_model() -> FixtureModel {
+        FixtureModel {
+            parts: vec![ModelPart {
+                name: "authored-body".into(),
+                kind: ModelPartKind::Base,
+                positions: vec![[-0.2, -0.3, 0.0], [0.2, -0.3, 0.0], [0.0, 0.3, 0.0]],
+                normals: vec![[0.0, 0.0, 1.0]; 3],
+                indices: vec![0, 1, 2],
+                colour: [0.08, 0.09, 0.1],
+                roughness: 0.5,
+                metallic: 0.3,
+            }],
+            extent: Vec3::new(0.2, 0.3, 0.01),
+            head_pivot: Vec3::ZERO,
+            emitter_anchor: None,
+            emitter_size: None,
+            emitter_axis: None,
+            has_head: false,
+            warnings: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_package_model_replaces_the_old_body_box() {
+        let mut scene = Scene::default();
+        let mut instance = fixture();
+        instance.model = Some(0);
+        scene.fixtures.push(instance);
+        scene.models.push(package_model());
+
+        let frame = build(&scene, &SceneValues::default(), &lines_style());
+        assert!(
+            frame.meshes.iter().any(|(kind, entries)| {
+                *kind == MeshKind::ModelPart(0, 0) && entries.len() == 1
+            })
+        );
+        assert!(
+            frame.lines.is_empty(),
+            "the authored fixture is no longer replaced by a box outline"
+        );
     }
 
     fn scenery(kind: SceneryKind) -> SceneryObject {
@@ -917,8 +961,8 @@ mod lines_view {
             values.emitters[0].intensity = level;
             values.emitters[0].held_intensity = level;
             let frame = build(&scene, &values, &lines_style());
-            // The lit line is drawn in the lamp's own colour, which is white here; the fixture's
-            // outline is drawn in the ink, which is nearly black. This measures the line.
+            // The lit line is drawn in the lamp's own colour, which is white here. This measures
+            // that line and ignores the shaded fixture body.
             frame
                 .lines
                 .iter()
@@ -967,34 +1011,26 @@ mod lines_view {
         assert_eq!(frame.lines.len(), 24, "twelve edges, two vertices each");
     }
 
-    /// The fixture's box is the size of the fixture, so an operator can judge whether two heads
-    /// will foul each other from the diagram.
+    /// An invalid package model arrives with no resolved model index. It still gets a deliberate
+    /// body rather than the broken-looking outline that prompted TL-171.
     #[test]
-    fn a_fixture_outline_is_the_size_of_the_fixture() {
+    fn an_unresolved_model_uses_a_readable_procedural_body() {
         let mut scene = Scene::default();
         let mut instance = fixture();
         instance.body.size = Vec3::new(0.4, 0.9, 0.3);
         instance.position = Vec3::ZERO;
         scene.fixtures.push(instance);
-        let values = SceneValues::default();
 
-        let frame = build(&scene, &values, &lines_style());
-        assert_eq!(
-            frame.lines.len(),
-            24,
-            "one box outline, not a modelled body"
-        );
-        let extent = |axis: usize| {
-            let values = frame.lines.iter().map(|vertex| vertex.position[axis]);
-            let max = values.clone().fold(f32::MIN, f32::max);
-            let min = values.fold(f32::MAX, f32::min);
-            max - min
-        };
-        let measured = Vec3::new(extent(0), extent(1), extent(2));
+        let frame = build(&scene, &SceneValues::default(), &lines_style());
         assert!(
-            (measured - Vec3::new(0.4, 0.9, 0.3)).length() < 1e-5,
-            "the box is the fixture's own size, got {measured:?}"
+            frame
+                .meshes
+                .iter()
+                .any(|(kind, entries)| !matches!(kind, MeshKind::ModelPart(_, _))
+                    && !entries.is_empty()),
+            "the renderer supplies a procedural fixture body"
         );
+        assert!(frame.lines.is_empty(), "the fallback is not the old Z-box");
     }
 }
 
@@ -1267,15 +1303,17 @@ mod selection {
     }
 }
 
-/// An outline view is lines. Nothing in it may reach the surface pipeline.
+/// A model-and-lines view keeps its fixture body but no simulated-light surfaces.
 ///
-/// The lit faces used to be pushed here too — an ambient-lit solid at every lamp, which is the
-/// brightest thing in a picture whose whole point is that the lines *are* the picture. Guarding the
-/// ink is not enough on its own: a solid drawn by the shaded pass ignores it entirely.
+/// The lit faces used to be pushed into every view that drew a fixture model. Splitting those two
+/// decisions keeps the real model without making an unlit lines diagram look switched on.
 #[test]
-fn an_outline_view_pushes_no_shaded_geometry_at_all() {
+fn a_lines_view_draws_the_model_without_an_emitter_aperture() {
     let mut scene = Scene::default();
-    scene.fixtures.push(fixture());
+    let mut instance = fixture();
+    instance.model = Some(0);
+    scene.fixtures.push(instance);
+    scene.models.push(lines_view::package_model());
     scene.emitters.push(emitter());
     let mut values = SceneValues::default();
     values.resize(1);
@@ -1289,12 +1327,25 @@ fn an_outline_view_pushes_no_shaded_geometry_at_all() {
             draw_beams: false,
             draw_aim_lines: true,
             aim_guides: true,
-            fixture_models: false,
+            fixture_models: true,
+            emitter_apertures: false,
+            scenery_surfaces: false,
             floor_grid: false,
             ..FrameStyle::default()
         },
     );
-    let meshes: usize = frame.meshes.iter().map(|(_, entries)| entries.len()).sum();
-    assert_eq!(meshes, 0, "no shaded geometry in an outline view");
-    assert!(!frame.lines.is_empty(), "and the lines are still drawn");
+    assert!(
+        frame
+            .meshes
+            .iter()
+            .any(|(kind, entries)| { *kind == MeshKind::ModelPart(0, 0) && entries.len() == 1 })
+    );
+    assert!(
+        frame
+            .meshes
+            .iter()
+            .all(|(kind, entries)| *kind != MeshKind::Lens || entries.is_empty()),
+        "the emitting face belongs only to a simulated-light view"
+    );
+    assert!(!frame.lines.is_empty(), "and the aim line is still drawn");
 }

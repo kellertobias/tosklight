@@ -128,13 +128,13 @@ impl ViewMode {
         self.renders_beams()
     }
 
-    /// Whether this mode draws each fixture's own model, or a box standing in for it.
+    /// Whether this mode draws each fixture's own model.
     ///
-    /// A box is the point of [`Self::Lines3d`], not a shortfall in it: an operator checking
-    /// coverage wants the position and the aim, and a hundred detailed bodies are in the way of
-    /// seeing them.
+    /// Orthographic plans use the package's authored projection artwork instead. Every 3D view
+    /// uses the model: the lines view remains inexpensive by omitting simulated light and shaded
+    /// scenery, not by replacing a fixture with a box that can be mistaken for broken geometry.
     pub fn draws_fixture_models(self) -> bool {
-        !matches!(self, Self::Lines3d)
+        !self.is_orthographic()
     }
 
     /// Whether this mode draws aim guidelines for every directional emitter, lit or not.

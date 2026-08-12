@@ -132,12 +132,13 @@ running function rather than a value, and the Stage does not reproduce one to gu
   vector convention for the declared fixture type; an unknown type remains a simple box. Opaque
   filled regions participate in plan depth, so a foreground fixture hides the truss or scenery it
   actually covers while deliberate empty regions remain open.
-- **3D** is an outline diagram. Every fixture is a box the size of the fixture, every stage,
-  platform and wall is the outline of its own box, and every directional emitter carries a dotted
-  aim guideline whether or not it is lit — a lit one adds its own line in its live colour over the
-  guideline. Truss and soft goods are not drawn: a truss as a box is a wall hiding the lamps
-  hanging off it. Nothing here is lit, which is what makes it the cheap view and why it offers no
-  render style and no environment brightness.
+- **3D** is a model-and-lines diagram. Each fixture uses the 3D model carried by its fixture
+  package; a package without one uses the audited built-in model for that fixture class, while an
+  invalid model is reported and falls back to a deliberate procedural body. Stages, platforms and
+  walls remain box outlines, and every directional emitter carries a dotted aim guideline whether
+  or not it is lit — a lit one adds its own line in its live colour over the guideline. Truss and
+  soft goods are not drawn. Nothing here is lit, which keeps it inexpensive and is why it offers
+  no render style or environment brightness.
 - **3D Viz** is the full picture, with the fixture models and light cones.
 
 ### Stage is a selection and viewing surface
