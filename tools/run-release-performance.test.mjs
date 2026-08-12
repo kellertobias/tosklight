@@ -510,6 +510,10 @@ test("scheduled publication separates release delivery from performance and Page
 	assert.match(workflow, /workflow_dispatch:/u);
 	assert.match(
 		workflow,
+		/storybook_ref:[\s\S]*?type: string[\s\S]*?default: ""/u,
+	);
+	assert.match(
+		workflow,
 		/workflow_run:[\s\S]*?workflows: \["CI and release"\][\s\S]*?types: \[completed\]/u,
 	);
 	assert.match(
@@ -556,6 +560,10 @@ test("scheduled publication separates release delivery from performance and Page
 	assert.match(pages, /LIGHT_PERFORMANCE_STATUS_FILE/u);
 	assert.match(pages, /name: storybook-static/u);
 	assert.match(pages, /\.artifacts\/build\/storybook\/ui/u);
+	assert.match(
+		storybook,
+		/ref: \$\{\{ inputs\.storybook_ref \|\| needs\.release-metadata\.outputs\.sha \}\}/u,
+	);
 	assert.doesNotMatch(release, /storybook|manual|pages|performance/u);
 	assert.match(releaseWorkflow, /SCCACHE_GHA_ENABLED: "true"/u);
 	assert.match(releaseWorkflow, /RUSTC_WRAPPER: sccache/u);
