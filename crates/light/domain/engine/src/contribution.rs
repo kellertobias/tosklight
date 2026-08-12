@@ -122,6 +122,14 @@ impl EngineContribution {
             )),
         }
     }
+
+    pub(crate) fn fixture_id(&self) -> FixtureId {
+        self.value.fixture_id
+    }
+
+    pub(crate) fn attribute(&self) -> &AttributeKey {
+        &self.value.attribute
+    }
 }
 
 #[derive(Default)]

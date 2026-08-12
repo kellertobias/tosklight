@@ -1,6 +1,6 @@
 use crate::engine::GroupMasterTransition;
 use crate::{Engine, EngineError, GroupMasterGenerationUpdate, RuntimeGeneration};
-use light_core::FixtureId;
+use light_core::{AttributeKey, AttributeValue, FixtureId, Xyz};
 use light_fixture::{ChannelFunctionBehavior, HighlightLook};
 use std::{cell::Cell, collections::HashSet};
 
@@ -118,6 +118,128 @@ impl Engine {
             .get(group_id)
             .map(|transition| transition.to)
             .or_else(|| self.group_master(group_id))
+    }
+
+    /// Set or explicitly release the runtime Group color contribution.
+    ///
+    /// The contribution remains armed while the Group Master is at zero so restoring the master
+    /// restores the same look. It is intentionally runtime-only and is discarded on restart.
+    pub fn set_group_color(&self, group_id: &str, color: Option<Xyz>) -> Result<bool, EngineError> {
+        if !self.generation.load().groups().contains_key(group_id) {
+            return Err(EngineError::Invalid(format!(
+                "group {group_id} does not exist"
+            )));
+        }
+        if color.is_some_and(|color| {
+            !color.x.is_finite()
+                || !color.y.is_finite()
+                || !color.z.is_finite()
+                || color.x < 0.0
+                || color.y < 0.0
+                || color.z < 0.0
+        }) {
+            return Err(EngineError::Invalid(
+                "group color XYZ components must be finite and non-negative".into(),
+            ));
+        }
+        let mut colors = self.group_colors.write();
+        match color {
+            Some(color)
+                if colors
+                    .get(group_id)
+                    .is_some_and(|current| current.color == color) =>
+            {
+                Ok(false)
+            }
+            Some(color) => {
+                colors.insert(
+                    group_id.to_owned(),
+                    crate::engine::GroupColorContribution {
+                        color,
+                        changed_at: self.clock.now(),
+                    },
+                );
+                Ok(true)
+            }
+            None => Ok(colors.remove(group_id).is_some()),
+        }
+    }
+
+    pub fn group_color(&self, group_id: &str) -> Option<Xyz> {
+        self.group_colors
+            .read()
+            .get(group_id)
+            .map(|contribution| contribution.color)
+    }
+
+    pub(crate) fn group_color_for_fixture(
+        &self,
+        generation: &RuntimeGeneration,
+        fixture_id: FixtureId,
+    ) -> Option<(AttributeValue, chrono::DateTime<chrono::Utc>)> {
+        let colors = self.group_colors.read();
+        colors
+            .iter()
+            .filter_map(|(group_id, contribution)| {
+                let fixtures =
+                    light_programmer::resolve_group(group_id, generation.groups()).ok()?;
+                fixtures
+                    .contains(&fixture_id)
+                    .then_some((group_id, contribution))
+            })
+            .max_by(|(left_id, left), (right_id, right)| {
+                (left.changed_at, left_id.as_str()).cmp(&(right.changed_at, right_id.as_str()))
+            })
+            .map(|(_, contribution)| {
+                (
+                    AttributeValue::ColorXyz(contribution.color),
+                    contribution.changed_at,
+                )
+            })
+    }
+
+    pub(crate) fn apply_group_color_contributions(
+        &self,
+        generation: &RuntimeGeneration,
+        resolved: &mut crate::ResolvedAttributes,
+        programmer_colors: &HashSet<FixtureId>,
+    ) {
+        let color_attribute = AttributeKey("color".into());
+        let colors = self.group_colors.read();
+        let mut overlays = std::collections::HashMap::<
+            FixtureId,
+            (String, crate::engine::GroupColorContribution),
+        >::new();
+        for (group_id, contribution) in colors.iter() {
+            let Ok(fixtures) = light_programmer::resolve_group(group_id, generation.groups())
+            else {
+                continue;
+            };
+            for fixture_id in fixtures {
+                let replace = overlays
+                    .get(&fixture_id)
+                    .is_none_or(|(current_id, current)| {
+                        (contribution.changed_at, group_id.as_str())
+                            > (current.changed_at, current_id.as_str())
+                    });
+                if replace {
+                    overlays.insert(fixture_id, (group_id.clone(), *contribution));
+                }
+            }
+        }
+        drop(colors);
+        for (fixture_id, (_, contribution)) in overlays {
+            if programmer_colors.contains(&fixture_id) {
+                continue;
+            }
+            let key = (fixture_id, color_attribute.clone());
+            resolved
+                .values
+                .insert(key.clone(), AttributeValue::ColorXyz(contribution.color));
+            let changed_at = contribution.changed_at;
+            resolved.changed_at.insert(key.clone(), changed_at);
+            resolved.sequence_masters.remove(&key);
+        }
     }
 
     /// Replace the transient Highlight output set. This deliberately does not touch programmer

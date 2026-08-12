@@ -158,6 +158,13 @@ impl Engine {
                 .lock()
                 .retain(|group_id, _| !detached_group_masters.contains(group_id));
         }
+        if preserve_playback {
+            self.group_colors
+                .write()
+                .retain(|group_id, _| runtime.groups.contains_key(group_id));
+        } else {
+            self.group_colors.write().clear();
+        }
         self.generation.store(Arc::new(RuntimeGeneration::replacing(
             &current,
             snapshot,

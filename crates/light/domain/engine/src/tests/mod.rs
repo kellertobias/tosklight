@@ -424,6 +424,8 @@ mod patch_and_heads;
 
 mod masters;
 
+mod group_colors;
+
 mod programmer_groups;
 
 mod snapshot_groups;

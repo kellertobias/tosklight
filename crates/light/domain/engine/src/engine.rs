@@ -4,7 +4,7 @@ use crate::{
 };
 use arc_swap::ArcSwap;
 use chrono::{DateTime, Utc};
-use light_core::{FixtureId, SharedClock};
+use light_core::{FixtureId, SharedClock, Xyz};
 use light_fixture::{HighlightLook, HighlightLookCompatibility};
 use light_playback::PlaybackEngine;
 use light_programmer::{ActiveDynamicSessionSource, HighlightOutputLayer, ProgrammerRegistry};
@@ -33,6 +33,9 @@ pub struct Engine {
     pub(crate) move_in_black: Mutex<HashMap<MoveInBlackKey, MoveInBlackRuntime>>,
     pub(crate) group_master_flashes: RwLock<HashMap<String, f32>>,
     pub(crate) group_master_transitions: Mutex<HashMap<String, GroupMasterTransition>>,
+    /// Runtime-only Group color intent. It deliberately stays out of the portable show and desk
+    /// persistence; external controllers must restore it after a process restart.
+    pub(crate) group_colors: RwLock<HashMap<String, GroupColorContribution>>,
     /// Live Highlight is an output overlay, not programmer/show data. Ownership and remembered
     /// selection live in the server; the engine only needs the currently lit fixture identities.
     pub(crate) highlight_layers: RwLock<HashMap<FixtureId, HighlightOutputLayer>>,
@@ -78,6 +81,7 @@ impl Engine {
             move_in_black: Mutex::new(HashMap::new()),
             group_master_flashes: RwLock::new(HashMap::new()),
             group_master_transitions: Mutex::new(HashMap::new()),
+            group_colors: RwLock::new(HashMap::new()),
             highlight_layers: RwLock::new(HashMap::new()),
             highlight_look: RwLock::new(HighlightLook {
                 compatibility: HighlightLookCompatibility::NeedsReview,
@@ -178,4 +182,10 @@ pub(crate) struct GroupMasterTransition {
     pub(crate) to: f32,
     pub(crate) started_at: DateTime<Utc>,
     pub(crate) duration_millis: u64,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct GroupColorContribution {
+    pub(crate) color: Xyz,
+    pub(crate) changed_at: DateTime<Utc>,
 }

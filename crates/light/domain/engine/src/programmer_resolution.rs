@@ -149,9 +149,15 @@ impl Engine {
         programmer_id: ProgrammerId,
         source: ProgrammerTransitionSource,
     ) -> TimedValue {
-        let underlying = underlay
-            .and_then(|values| values.value(value.fixture_id, &value.attribute))
-            .or_else(|| generation.default_value(value.fixture_id, &value.attribute));
+        let group_color_underlay = (value.attribute.0 == "color")
+            .then(|| self.group_color_for_fixture(generation, value.fixture_id))
+            .flatten()
+            .map(|(value, _)| value);
+        let underlying = group_color_underlay.as_ref().or_else(|| {
+            underlay
+                .and_then(|values| values.value(value.fixture_id, &value.attribute))
+                .or_else(|| generation.default_value(value.fixture_id, &value.attribute))
+        });
         let snap = generation.attribute_is_snap(value.fixture_id, &value.attribute);
         self.faded_programmer_value(value, now, underlying, programmer_id, source, snap)
     }
