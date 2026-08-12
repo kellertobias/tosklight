@@ -7,6 +7,9 @@ import type {
 	HighlightActionRequest,
 	MediaLibrarySelectionOutcome,
 	MediaLibrarySelectionRequest,
+	NativeMediaSnapshot as NativeMediaSnapshotWire,
+	NativeMediaTextSlot as NativeMediaTextSlotWire,
+	NativeMediaTextUpdateRequest,
 	MediaPreviewRefreshRequest,
 	MediaThumbnailRefreshRequest,
 	PatchPreviewHighlightRequest,
@@ -31,6 +34,26 @@ export interface MediaPreviewRefresh {
 	format: string;
 	width: number;
 	height: number;
+}
+
+export interface NativeMediaTextSlot {
+	folder: number;
+	file: number;
+	name: string;
+	enabled: boolean;
+	kind: string;
+	text: string | null;
+}
+
+export interface NativeMediaSnapshot {
+	endpoint: string;
+	status: string;
+	instance: string;
+	outputs: number;
+	catalogRevision: number;
+	catalogItems: number;
+	textSlots: NativeMediaTextSlot[];
+	effectControlsAvailable: boolean;
 }
 
 export interface MediaServerInspection {
@@ -95,6 +118,30 @@ export class MediaOutputApiClient {
 
 	inspectMediaServer(fixtureId: string): Promise<MediaServerInspection> {
 		return this.transport.request(`/api/v2/media-servers/${fixtureId}/inspect`);
+	}
+
+	nativeMedia(fixtureId: string): Promise<NativeMediaSnapshot> {
+		return this.transport
+			.request<NativeMediaSnapshotWire>(
+				`/api/v2/media-servers/${fixtureId}/native`,
+			)
+			.then(mapNativeMediaSnapshot);
+	}
+
+	updateNativeMediaText(
+		fixtureId: string,
+		folder: number,
+		file: number,
+		text: string,
+	): Promise<NativeMediaTextSlot> {
+		const request: NativeMediaTextUpdateRequest = {
+			request_id: crypto.randomUUID(),
+			text,
+		};
+		return this.transport.request<NativeMediaTextSlotWire>(
+			`/api/v2/media-servers/${fixtureId}/native/text/${folder}/${file}/update`,
+			jsonRequest("POST", request),
+		).then(mapNativeMediaTextSlot);
 	}
 
 	applyMediaLibrarySelection(
@@ -221,4 +268,21 @@ export class MediaOutputApiClient {
 			requestId,
 		) as Promise<{ active: boolean; allowed: boolean }>;
 	}
+}
+
+function mapNativeMediaTextSlot(slot: NativeMediaTextSlotWire): NativeMediaTextSlot {
+	return { ...slot, text: slot.text ?? null };
+}
+
+function mapNativeMediaSnapshot(snapshot: NativeMediaSnapshotWire): NativeMediaSnapshot {
+	return {
+		endpoint: snapshot.endpoint,
+		status: snapshot.status,
+		instance: snapshot.instance,
+		outputs: snapshot.outputs,
+		catalogRevision: snapshot.catalog_revision,
+		catalogItems: snapshot.catalog_items,
+		textSlots: snapshot.text_slots.map(mapNativeMediaTextSlot),
+		effectControlsAvailable: snapshot.effect_controls_available,
+	};
 }

@@ -12,6 +12,7 @@ import {
 } from "./media/MediaPaneSurface";
 import { useMediaPaneActions } from "./media/useMediaPaneActions";
 import { useMediaPaneData } from "./media/useMediaPaneData";
+import { NativeMediaControls } from "./media/NativeMediaControls";
 
 export {
 	mediaCapabilitiesForLayer,
@@ -43,6 +44,8 @@ export function MediaPaneWindow({
 }: MediaPaneWindowProps) {
 	const media = useMediaServers();
 	const inspectMediaServer = media?.inspectMediaServer;
+	const nativeMedia = media?.nativeMedia;
+	const updateNativeMediaText = media?.updateNativeMediaText;
 	const applyMediaLibrarySelection = media?.applyMediaLibrarySelection;
 	const refreshMediaPreview = media?.refreshMediaPreview;
 	const refreshMediaThumbnails = media?.refreshMediaThumbnails;
@@ -148,6 +151,14 @@ export function MediaPaneWindow({
 				thumbnailUrls,
 				previewUrls: media?.mediaPreviewUrls ?? {},
 				liveProgrammer,
+				nativeControls:
+					selectedServer?.native_action && nativeMedia && updateNativeMediaText ? (
+						<NativeMediaControls
+							fixtureId={selectedServer.fixture_id}
+							load={nativeMedia}
+							updateText={updateNativeMediaText}
+						/>
+					) : undefined,
 			}),
 		[
 			browserMode,
@@ -157,6 +168,7 @@ export function MediaPaneWindow({
 			inspection,
 			inspectionError,
 			liveProgrammer,
+			nativeMedia,
 			mainSectionId,
 			media?.mediaPreviewUrls,
 			rightPaneVisible,
@@ -164,6 +176,7 @@ export function MediaPaneWindow({
 			selectedServer,
 			selectedServerId,
 			thumbnailUrls,
+			updateNativeMediaText,
 		],
 	);
 
