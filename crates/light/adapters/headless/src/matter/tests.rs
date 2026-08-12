@@ -24,6 +24,16 @@ fn definition(number: u16, name: &str, has_fader: bool) -> PlaybackDefinition {
     }
 }
 
+fn group_definition(number: u16, name: &str, group_id: &str) -> PlaybackDefinition {
+    PlaybackDefinition {
+        target: PlaybackTarget::Group {
+            group_id: group_id.into(),
+            initial_master: None,
+        },
+        ..definition(number, name, true)
+    }
+}
+
 #[test]
 fn endpoint_ids_are_stable_global_page_playback_addresses() {
     assert_eq!(endpoint_id(1, 1), Some(1));
@@ -62,7 +72,8 @@ fn disabled_bridge_exposes_nothing_and_does_not_churn_revision() {
             1,
             MatterPlaybackWrite {
                 on: Some(true),
-                level: None
+                level: None,
+                color: None,
             }
         ),
         Err(MatterBridgeError::Disabled)
@@ -279,6 +290,7 @@ fn matter_writes_resolve_the_explicit_address_without_a_desk_page() {
             MatterPlaybackWrite {
                 on: None,
                 level: Some(127),
+                color: None,
             },
         )
         .unwrap();
@@ -291,6 +303,7 @@ fn matter_writes_resolve_the_explicit_address_without_a_desk_page() {
             MatterPlaybackWrite {
                 on: Some(false),
                 level: Some(254),
+                color: None,
             },
         )
         .unwrap();
@@ -300,9 +313,115 @@ fn matter_writes_resolve_the_explicit_address_without_a_desk_page() {
             endpoint,
             MatterPlaybackWrite {
                 on: None,
-                level: Some(255)
+                level: Some(255),
+                color: None,
             }
         ),
         Err(MatterBridgeError::ReservedLevel)
+    );
+}
+
+#[test]
+fn group_playbacks_are_extended_color_lights_and_accept_color_writes() {
+    let adapter = MatterBridgeAdapter::default();
+    let page = PlaybackPage {
+        number: 1,
+        name: "Groups".into(),
+        slots: HashMap::from([(1, 10), (2, 20)]),
+        virtual_playbacks: HashMap::new(),
+    };
+    let group_color = light_core::Xyz {
+        x: 0.4,
+        y: 0.5,
+        z: 0.1,
+    };
+    let status = adapter.reconcile(
+        true,
+        &[page],
+        &[
+            group_definition(10, "Front", "front"),
+            definition(20, "Cues", true),
+        ],
+        &HashMap::from([
+            (
+                10,
+                PlaybackValue::new(0.5, true).with_color(Some(group_color)),
+            ),
+            (20, PlaybackValue::new(0.5, true)),
+        ]),
+    );
+
+    assert_eq!(status.lights[0].kind, MatterLightKind::Color);
+    assert!(status.lights[0].color.is_some());
+    assert_eq!(status.lights[1].kind, MatterLightKind::Dimmable);
+    assert_eq!(status.lights[1].color, None);
+
+    let color_write = MatterColorWrite::ColorTemperature { mireds: 250 };
+    let resolved = adapter
+        .resolve_write(
+            endpoint_id(1, 1).unwrap(),
+            MatterPlaybackWrite {
+                on: None,
+                level: None,
+                color: Some(color_write),
+            },
+        )
+        .unwrap();
+    assert_eq!(resolved.playback_number, 10);
+    assert_eq!(resolved.color, Some(color_write));
+    assert_eq!(resolved.level, 0.5);
+    assert_eq!(
+        adapter.resolve_write(
+            endpoint_id(1, 2).unwrap(),
+            MatterPlaybackWrite {
+                on: None,
+                level: None,
+                color: Some(color_write),
+            }
+        ),
+        Err(MatterBridgeError::EndpointNotExposed(
+            endpoint_id(1, 2).unwrap()
+        ))
+    );
+}
+
+#[test]
+fn controller_color_write_and_authoritative_reconcile_share_one_revision() {
+    let adapter = MatterBridgeAdapter::default();
+    let page = PlaybackPage {
+        number: 1,
+        name: "Groups".into(),
+        slots: HashMap::from([(1, 10)]),
+        virtual_playbacks: HashMap::new(),
+    };
+    let definition = group_definition(10, "Front", "front");
+    let initial = adapter.reconcile(
+        true,
+        std::slice::from_ref(&page),
+        std::slice::from_ref(&definition),
+        &HashMap::from([(10, PlaybackValue::new(0.5, true))]),
+    );
+    let write = MatterColorWrite::ColorTemperature { mireds: 250 };
+    adapter.apply_color_write(endpoint_id(1, 1).unwrap(), write);
+    let after_write = adapter.status();
+    assert_eq!(after_write.revision, initial.revision + 1);
+    assert_eq!(
+        after_write.lights[0].color.unwrap().mode,
+        MatterColorMode::ColorTemperature
+    );
+
+    let reconciled = adapter.reconcile(
+        true,
+        &[page],
+        &[definition],
+        &HashMap::from([(
+            10,
+            PlaybackValue::new(0.5, true).with_color(Some(write.xyz())),
+        )]),
+    );
+    assert_eq!(reconciled.revision, after_write.revision);
+    assert_eq!(
+        reconciled.lights[0].color.unwrap().mode,
+        MatterColorMode::ColorTemperature
     );
 }

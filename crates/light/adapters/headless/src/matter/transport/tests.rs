@@ -1,8 +1,12 @@
-use super::super::{MatterPlaybackLight, MatterPlaybackWrite};
+use super::super::{
+    MatterColorMode, MatterColorState, MatterColorWrite, MatterLightKind, MatterPlaybackLight,
+    MatterPlaybackWrite,
+};
 use super::bridge::{AttributeChanges, BridgeLights};
 use super::commissioning::{IDENTITY_FILE, load_or_create_identity, pairing_data};
 use super::model::{
-    AGGREGATOR_ENDPOINT_ID, EndpointShape, TransportLight, matter_string, validate_lights,
+    AGGREGATOR_ENDPOINT_ID, EndpointShape, TransportLight, endpoint_shape, matter_string,
+    validate_lights,
 };
 use super::node::build_endpoints;
 use super::*;
@@ -19,6 +23,16 @@ fn light(endpoint_id: u16, name: &str, on: bool, level: u8) -> MatterPlaybackLig
         name: name.into(),
         on,
         level,
+        kind: super::super::MatterLightKind::Dimmable,
+        color: None,
+    }
+}
+
+fn color_light(endpoint_id: u16, name: &str, on: bool, level: u8) -> MatterPlaybackLight {
+    MatterPlaybackLight {
+        kind: MatterLightKind::Color,
+        color: Some(MatterColorState::default()),
+        ..light(endpoint_id, name, on, level)
     }
 }
 
@@ -99,10 +113,12 @@ fn endpoint_metadata_removes_empty_playbacks_without_renumbering_survivors() {
         EndpointShape {
             endpoint_id: 1,
             name: "First".into(),
+            kind: super::super::MatterLightKind::Dimmable,
         },
         EndpointShape {
             endpoint_id: 128,
             name: "Second page".into(),
+            kind: super::super::MatterLightKind::Dimmable,
         },
     ]);
     assert_eq!(
@@ -116,6 +132,7 @@ fn endpoint_metadata_removes_empty_playbacks_without_renumbering_survivors() {
     let after_removal = build_endpoints(&[EndpointShape {
         endpoint_id: 128,
         name: "Second page".into(),
+        kind: super::super::MatterLightKind::Dimmable,
     }]);
     assert_eq!(
         after_removal
@@ -123,6 +140,25 @@ fn endpoint_metadata_removes_empty_playbacks_without_renumbering_survivors() {
             .map(|endpoint| endpoint.id)
             .collect::<Vec<_>>(),
         vec![0, 128, AGGREGATOR_ENDPOINT_ID]
+    );
+}
+
+#[test]
+fn endpoint_shape_distinguishes_dimmable_and_extended_color_lights() {
+    let dimmable = TransportLight::from(&light(1, "Cues", true, 127));
+    let color = TransportLight::from(&color_light(2, "Front", true, 127));
+    let shape = endpoint_shape(&[dimmable, color]);
+    assert_eq!(shape[0].kind, MatterLightKind::Dimmable);
+    assert_eq!(shape[1].kind, MatterLightKind::Color);
+    assert_ne!(shape[0], shape[1]);
+
+    let endpoints = build_endpoints(&shape);
+    assert_eq!(
+        endpoints
+            .iter()
+            .map(|endpoint| endpoint.id)
+            .collect::<Vec<_>>(),
+        vec![0, 1, 2, AGGREGATOR_ENDPOINT_ID]
     );
 }
 
@@ -141,10 +177,12 @@ fn endpoint_removal_replaces_runtime_shape_without_touching_persisted_kv_storage
         EndpointShape {
             endpoint_id: 1,
             name: "First".into(),
+            kind: super::super::MatterLightKind::Dimmable,
         },
         EndpointShape {
             endpoint_id: 128,
             name: "Second page".into(),
+            kind: super::super::MatterLightKind::Dimmable,
         },
     ];
     let (control, control_rx) = mpsc::channel();
@@ -198,6 +236,7 @@ fn outbound_tracking_updates_change_only_the_subscription_attributes_that_moved(
         Dataver::new(1),
         Dataver::new(2),
         Dataver::new(3),
+        Dataver::new(4),
     );
     let changes = handler.reconcile(vec![TransportLight::from(&light(1, "Look", false, 0))]);
     assert_eq!(
@@ -206,6 +245,7 @@ fn outbound_tracking_updates_change_only_the_subscription_attributes_that_moved(
             endpoint_id: 1,
             on: true,
             level: false,
+            color: false,
         }]
     );
     assert_eq!(handler.endpoint(1).unwrap().level, 127);
@@ -220,6 +260,7 @@ fn controller_mutations_are_forwarded_as_onoff_and_level_writes() {
         Dataver::new(1),
         Dataver::new(2),
         Dataver::new(3),
+        Dataver::new(4),
     );
     handler.set_level(128, 64).unwrap();
     assert_eq!(
@@ -229,11 +270,58 @@ fn controller_mutations_are_forwarded_as_onoff_and_level_writes() {
             write: MatterPlaybackWrite {
                 on: Some(true),
                 level: Some(64),
+                color: None,
             },
         }
     );
     handler.set_on(128, false).unwrap();
     assert_eq!(receiver.recv().unwrap().write.on, Some(false));
+}
+
+#[test]
+fn color_mutations_are_forwarded_and_tracking_reports_only_color_changes() {
+    let (sender, receiver) = mpsc::channel();
+    let handler = BridgeLights::new(
+        vec![TransportLight::from(&color_light(1, "Front", true, 127))],
+        sender,
+        Dataver::new(1),
+        Dataver::new(2),
+        Dataver::new(3),
+        Dataver::new(4),
+    );
+    let write = MatterColorWrite::ColorTemperature { mireds: 250 };
+    handler.set_color(1, write).unwrap();
+    assert_eq!(
+        receiver.recv().unwrap().write,
+        MatterPlaybackWrite {
+            on: None,
+            level: None,
+            color: Some(write),
+        }
+    );
+    assert_eq!(
+        handler.endpoint(1).unwrap().color.unwrap().mode,
+        MatterColorMode::ColorTemperature
+    );
+
+    let mut tracked = color_light(1, "Front", true, 127);
+    tracked.color = Some(MatterColorState::from_xyz(
+        light_core::Xyz {
+            x: 0.3,
+            y: 0.6,
+            z: 0.1,
+        },
+        MatterColorMode::ColorTemperature,
+    ));
+    assert_eq!(
+        handler.reconcile(vec![TransportLight::from(&tracked)]),
+        vec![AttributeChanges {
+            endpoint_id: 1,
+            on: false,
+            level: false,
+            color: true,
+        }]
+    );
 }
 
 #[test]
