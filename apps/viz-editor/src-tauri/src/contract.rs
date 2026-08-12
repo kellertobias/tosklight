@@ -340,6 +340,7 @@ impl From<PatchFixtureProjection> for FixtureDto {
             split_patches: patch.split_patches.iter().map(SplitDto::from).collect(),
             layer_id: patch.layer_id,
             direct_control: patch.direct_control.as_ref().map(DirectControlDto::from),
+            internal_bindings: Default::default(),
             location: LocationDto::from(&patch.location),
             rotation: VectorDto::from(&patch.rotation),
             multipatch: patch.multipatch.iter().map(MultipatchDto::from).collect(),

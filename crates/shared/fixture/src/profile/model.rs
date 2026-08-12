@@ -12,6 +12,7 @@ pub enum PatchPolicy {
     #[default]
     Dmx,
     VisualOnly,
+    Internal,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]

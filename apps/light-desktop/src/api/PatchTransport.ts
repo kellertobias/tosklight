@@ -367,6 +367,10 @@ export function toWireFixture(fixture: PatchFixtureWrite): PatchFixtureInput {
 		split_patches: fixture.splitPatches.map((split) => ({ ...split })),
 		layer_id: fixture.layerId,
 		direct_control: toWireDirectControl(fixture.directControl),
+		internal_bindings: {
+			library: fixture.internalBindings?.library ?? null,
+			output: fixture.internalBindings?.output ?? null,
+		},
 		location: { ...fixture.location },
 		rotation: { ...fixture.rotation },
 		multipatch: fixture.multipatch.map((instance) => ({

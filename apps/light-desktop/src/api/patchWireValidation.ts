@@ -149,6 +149,14 @@ function directControlAt(value: unknown, path: string): void {
 	positiveIntegerAt(endpoint.port, path + ".port");
 }
 
+function internalBindingsAt(value: unknown, path: string): void {
+	if (value === undefined) return;
+	const bindings = objectAt(value, path);
+	for (const key of ["library", "output"] as const) {
+		if (bindings[key] !== null) stringAt(bindings[key], path + "." + key);
+	}
+}
+
 function multipatchAt(value: unknown, path: string): void {
 	const instance = objectAt(value, path);
 	uuidAt(instance.id, path + ".id");
@@ -289,6 +297,7 @@ function fixtureAt(
 	splitArrayAt(fixture.split_patches, path + ".split_patches");
 	stringAt(fixture.layer_id, path + ".layer_id");
 	directControlAt(fixture.direct_control, path + ".direct_control");
+	internalBindingsAt(fixture.internal_bindings, path + ".internal_bindings");
 	vectorAt(fixture.location, path + ".location", true);
 	vectorAt(fixture.rotation, path + ".rotation", false);
 	arrayAt(fixture.logical_heads, path + ".logical_heads").forEach(
@@ -341,8 +350,8 @@ function profileAt(
 	stringAt(profile.manufacturer, path + ".manufacturer");
 	stringAt(profile.name, path + ".name");
 	stringAt(profile.fixture_type, path + ".fixture_type");
-	if (profile.patch_policy !== "dmx" && profile.patch_policy !== "visual_only")
-		invalid(path + ".patch_policy", "dmx or visual_only", profile.patch_policy);
+	if (profile.patch_policy !== "dmx" && profile.patch_policy !== "visual_only" && profile.patch_policy !== "internal")
+		invalid(path + ".patch_policy", "dmx, visual_only, or internal", profile.patch_policy);
 	arrayAt(profile.referenced_modes, path + ".referenced_modes").forEach(
 		(modeValue, modeIndex) => {
 			const modePath = path + ".referenced_modes[" + modeIndex + "]";

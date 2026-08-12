@@ -308,6 +308,7 @@ fn patched_fixture(
         split_patches: Vec::new(),
         layer_id: source.layer.clone().unwrap_or_else(|| "default".into()),
         direct_control: None,
+        internal_bindings: Default::default(),
         location,
         rotation,
         logical_heads: definition

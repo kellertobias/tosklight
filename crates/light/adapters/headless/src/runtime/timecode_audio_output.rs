@@ -4,7 +4,7 @@
 //! Asset reads and WAV decoding happen on the API/scheduler side before playback begins.
 
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, HashMap},
     process::{Command, Stdio},
     sync::{Arc, Mutex},
     time::{Duration, Instant},
@@ -15,6 +15,7 @@ use light_application::timeline::TimecodeClock;
 use light_application::{
     AssetChunkSink, AssetReference, ManagedAssetStore, TimecodeAudioCommand, TimecodeAudioOutput,
 };
+use light_core::FixtureId;
 use light_playback::{TimecodeFrame, TimecodeFrameRate, TimecodeId};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -123,7 +124,7 @@ fn output_devices_from_command(command: &mut Command) -> Result<Vec<String>, Str
 pub(super) struct NativeTimecodeAudioOutput {
     store: Arc<dyn ManagedAssetStore>,
     latency_micros: u64,
-    worker: super::TimecodeAudioWorkerResource,
+    worker: Arc<super::TimecodeAudioWorkerResource>,
 }
 
 pub(in crate::runtime) enum NativeCommand {
@@ -133,10 +134,51 @@ pub(in crate::runtime) enum NativeCommand {
         timeline_rate: TimecodeFrameRate,
     },
     Transport(TimecodeAudioCommand),
+    PrepareInternal {
+        fixture_id: FixtureId,
+        decoded: DecodedWav,
+    },
+    InternalTransport {
+        fixture_id: FixtureId,
+        action: NativeInternalTransport,
+    },
+    InternalRepeat {
+        fixture_id: FixtureId,
+        enabled: bool,
+    },
+    InternalVolume {
+        fixture_id: FixtureId,
+        linear: f32,
+    },
+    InternalSeek {
+        fixture_id: FixtureId,
+        cursor_millis: u32,
+    },
+    RemoveInternal {
+        fixture_id: FixtureId,
+    },
     Shutdown,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::runtime) enum NativeInternalTransport {
+    Stop,
+    Pause,
+    Play,
+    RestartPlay,
+}
+
+#[derive(Clone)]
+pub(in crate::runtime) struct NativeInternalAudioOutput {
+    worker: Arc<super::TimecodeAudioWorkerResource>,
+}
+
 impl NativeTimecodeAudioOutput {
+    pub(in crate::runtime) fn internal_output(&self) -> NativeInternalAudioOutput {
+        NativeInternalAudioOutput {
+            worker: Arc::clone(&self.worker),
+        }
+    }
     pub(super) fn open_with_timeout(
         store: Arc<dyn ManagedAssetStore>,
         clock: Arc<dyn TimecodeClock>,
@@ -190,8 +232,67 @@ impl NativeTimecodeAudioOutput {
         Ok(Self {
             store,
             latency_micros,
-            worker: super::TimecodeAudioWorkerResource::new(commands, worker),
+            worker: Arc::new(super::TimecodeAudioWorkerResource::new(commands, worker)),
         })
+    }
+}
+
+impl NativeInternalAudioOutput {
+    pub(in crate::runtime) fn prepare(
+        &self,
+        fixture_id: FixtureId,
+        wav: &[u8],
+    ) -> Result<(), String> {
+        self.request(NativeCommand::PrepareInternal {
+            fixture_id,
+            decoded: decode_wav(wav)?,
+        })
+    }
+
+    pub(in crate::runtime) fn transport(
+        &self,
+        fixture_id: FixtureId,
+        action: NativeInternalTransport,
+    ) -> Result<(), String> {
+        self.request(NativeCommand::InternalTransport { fixture_id, action })
+    }
+
+    pub(in crate::runtime) fn repeat(
+        &self,
+        fixture_id: FixtureId,
+        enabled: bool,
+    ) -> Result<(), String> {
+        self.request(NativeCommand::InternalRepeat {
+            fixture_id,
+            enabled,
+        })
+    }
+
+    pub(in crate::runtime) fn volume(
+        &self,
+        fixture_id: FixtureId,
+        linear: f32,
+    ) -> Result<(), String> {
+        self.request(NativeCommand::InternalVolume { fixture_id, linear })
+    }
+
+    pub(in crate::runtime) fn seek(
+        &self,
+        fixture_id: FixtureId,
+        cursor_millis: u32,
+    ) -> Result<(), String> {
+        self.request(NativeCommand::InternalSeek {
+            fixture_id,
+            cursor_millis,
+        })
+    }
+
+    pub(in crate::runtime) fn remove(&self, fixture_id: FixtureId) -> Result<(), String> {
+        self.request(NativeCommand::RemoveInternal { fixture_id })
+    }
+
+    fn request(&self, command: NativeCommand) -> Result<(), String> {
+        self.worker.request(command)
     }
 }
 
@@ -246,7 +347,7 @@ fn run_device(
     clock: Arc<dyn TimecodeClock>,
     started: std::sync::mpsc::Sender<Result<(), String>>,
 ) {
-    let voices = Arc::new(Mutex::new(BTreeMap::new()));
+    let voices = Arc::new(Mutex::new(DeviceVoices::default()));
     let stream = match format {
         cpal::SampleFormat::F32 => {
             build_stream::<f32>(&device, &config, Arc::clone(&voices), Arc::clone(&clock))
@@ -298,7 +399,7 @@ fn run_device(
 }
 
 fn apply_native(
-    voices: &mut BTreeMap<TimecodeId, Voice>,
+    voices: &mut DeviceVoices,
     command: NativeCommand,
     output_sample_rate: u32,
     output_channels: usize,
@@ -309,7 +410,7 @@ fn apply_native(
             decoded,
             timeline_rate,
         } => {
-            voices.insert(
+            voices.timecodes.insert(
                 timecode_id,
                 Voice::new(decoded, timeline_rate, output_sample_rate, output_channels),
             );
@@ -319,18 +420,18 @@ fn apply_native(
             source_frame,
             audible_at_micros,
         }) => {
-            let voice = voice(voices, timecode_id)?;
+            let voice = timecode_voice(voices, timecode_id)?;
             voice.seek(source_frame);
             voice.play_at_micros = Some(audible_at_micros);
             voice.playing = true;
         }
         NativeCommand::Transport(TimecodeAudioCommand::Pause { timecode_id }) => {
-            let voice = voice(voices, timecode_id)?;
+            let voice = timecode_voice(voices, timecode_id)?;
             voice.playing = false;
             voice.play_at_micros = None;
         }
         NativeCommand::Transport(TimecodeAudioCommand::Stop { timecode_id }) => {
-            let voice = voice(voices, timecode_id)?;
+            let voice = timecode_voice(voices, timecode_id)?;
             voice.playing = false;
             voice.play_at_micros = None;
             voice.position = 0.0;
@@ -340,7 +441,7 @@ fn apply_native(
             source_frame,
             audible_at_micros,
         }) => {
-            let voice = voice(voices, timecode_id)?;
+            let voice = timecode_voice(voices, timecode_id)?;
             voice.seek(source_frame);
             if voice.playing {
                 voice.play_at_micros = Some(audible_at_micros);
@@ -351,7 +452,7 @@ fn apply_native(
             enabled,
             end_exclusive,
         }) => {
-            let voice = voice(voices, timecode_id)?;
+            let voice = timecode_voice(voices, timecode_id)?;
             voice.looping = enabled;
             voice.loop_end = voice
                 .sample_at_frame(end_exclusive)
@@ -361,18 +462,81 @@ fn apply_native(
             timecode_id,
             linear,
         }) => {
-            voice(voices, timecode_id)?.volume = linear as f32;
+            timecode_voice(voices, timecode_id)?.volume = linear as f32;
         }
         NativeCommand::Transport(TimecodeAudioCommand::Prepare { .. }) => unreachable!(),
+        NativeCommand::PrepareInternal {
+            fixture_id,
+            decoded,
+        } => {
+            voices.internal.insert(
+                fixture_id,
+                Voice::new(
+                    decoded,
+                    TimecodeFrameRate::whole_frames(1).expect("one fps is valid"),
+                    output_sample_rate,
+                    output_channels,
+                ),
+            );
+        }
+        NativeCommand::InternalTransport { fixture_id, action } => {
+            let voice = internal_voice(voices, fixture_id)?;
+            match action {
+                NativeInternalTransport::Stop => {
+                    voice.playing = false;
+                    voice.play_at_micros = None;
+                    voice.position = 0.0;
+                }
+                NativeInternalTransport::Pause => {
+                    voice.playing = false;
+                    voice.play_at_micros = None;
+                }
+                NativeInternalTransport::Play => {
+                    voice.playing = true;
+                    voice.play_at_micros = None;
+                }
+                NativeInternalTransport::RestartPlay => {
+                    voice.position = 0.0;
+                    voice.playing = true;
+                    voice.play_at_micros = None;
+                }
+            }
+        }
+        NativeCommand::InternalRepeat {
+            fixture_id,
+            enabled,
+        } => {
+            internal_voice(voices, fixture_id)?.looping = enabled;
+        }
+        NativeCommand::InternalVolume { fixture_id, linear } => {
+            internal_voice(voices, fixture_id)?.volume = linear.clamp(0.0, 1.0);
+        }
+        NativeCommand::InternalSeek {
+            fixture_id,
+            cursor_millis,
+        } => {
+            internal_voice(voices, fixture_id)?.seek_millis(cursor_millis);
+        }
+        NativeCommand::RemoveInternal { fixture_id } => {
+            voices.internal.remove(&fixture_id);
+        }
         NativeCommand::Shutdown => unreachable!(),
     }
     Ok(())
 }
 
-fn voice(voices: &mut BTreeMap<TimecodeId, Voice>, id: TimecodeId) -> Result<&mut Voice, String> {
+fn timecode_voice(voices: &mut DeviceVoices, id: TimecodeId) -> Result<&mut Voice, String> {
     voices
+        .timecodes
         .get_mut(&id)
         .ok_or_else(|| "Timecode audio is not prepared on the output device".into())
+}
+
+fn internal_voice(voices: &mut DeviceVoices, id: FixtureId) -> Result<&mut Voice, String> {
+    voices
+        .internal
+        .get_mut(&id)
+        .ok_or_else(|| format!("Audio Player {} is not prepared on the output device", id.0))
 }
 
 fn select_device(
@@ -431,7 +595,7 @@ impl OutputSample for u16 {
 fn build_stream<T: OutputSample>(
     device: &cpal::Device,
     config: &cpal::StreamConfig,
-    voices: Arc<Mutex<BTreeMap<TimecodeId, Voice>>>,
+    voices: Arc<Mutex<DeviceVoices>>,
     clock: Arc<dyn TimecodeClock>,
 ) -> Result<cpal::Stream, String> {
     let channels = usize::from(config.channels);
@@ -445,8 +609,15 @@ fn build_stream<T: OutputSample>(
                 };
                 let now = clock.now_micros();
                 for frame in output.chunks_mut(channels) {
-                    for voice in voices.values_mut() {
-                        voice.mix_frame(frame, now);
+                    let mut mix = vec![0.0_f32; channels];
+                    for voice in voices.timecodes.values_mut() {
+                        voice.mix_frame(&mut mix, now);
+                    }
+                    for voice in voices.internal.values_mut() {
+                        voice.mix_frame(&mut mix, now);
+                    }
+                    for (target, sample) in frame.iter_mut().zip(mix) {
+                        *target = T::from_mix(sample.clamp(-1.0, 1.0));
                     }
                 }
             },
@@ -460,6 +631,12 @@ pub(in crate::runtime) struct DecodedWav {
     samples: Vec<f32>,
     sample_rate: u32,
     channels: u16,
+}
+
+#[derive(Default)]
+struct DeviceVoices {
+    timecodes: BTreeMap<TimecodeId, Voice>,
+    internal: HashMap<FixtureId, Voice>,
 }
 
 struct Voice {
@@ -517,7 +694,14 @@ impl Voice {
         self.position = self.sample_at_frame(frame).min(self.sample_frames()) as f64;
     }
 
-    fn mix_frame<T: OutputSample>(&mut self, output: &mut [T], now: u64) {
+    fn seek_millis(&mut self, millis: u32) {
+        let sample = u128::from(millis) * u128::from(self.source_rate) / 1_000;
+        self.position = usize::try_from(sample)
+            .unwrap_or(usize::MAX)
+            .min(self.sample_frames()) as f64;
+    }
+
+    fn mix_frame(&mut self, output: &mut [f32], now: u64) {
         if !self.playing || self.play_at_micros.is_some_and(|deadline| now < deadline) {
             return;
         }
@@ -530,6 +714,7 @@ impl Voice {
                 source_frame = self.position.floor() as usize;
             } else {
                 self.playing = false;
+                self.position = 0.0;
                 return;
             }
         }
@@ -538,7 +723,7 @@ impl Voice {
             let sample = self.samples[source_frame * self.source_channels + source_channel];
             // CPAL owns the sole mutable output frame, so mixing converts through f32 here.
             // Current callers use one Timecode audio lane; clamping is still safe if that expands.
-            output[channel] = T::from_mix(sample * self.volume);
+            output[channel] += sample * self.volume;
         }
         self.position += f64::from(self.source_rate) / f64::from(self.output_rate.max(1));
     }
@@ -607,6 +792,18 @@ fn decode_wav(bytes: &[u8]) -> Result<DecodedWav, String> {
 mod tests {
     use super::*;
 
+    fn decoded(samples: &[f32]) -> DecodedWav {
+        DecodedWav {
+            samples: samples.to_vec(),
+            sample_rate: 1,
+            channels: 1,
+        }
+    }
+
+    fn fixture(value: u128) -> FixtureId {
+        FixtureId(uuid::Uuid::from_u128(value))
+    }
+
     #[test]
     fn latency_trim_is_signed_and_saturating() {
         assert_eq!(add_signed(10_000, 2_500), 12_500);
@@ -643,6 +840,145 @@ mod tests {
             ),
             Err("startup disconnected".to_owned())
         );
+    }
+
+    #[test]
+    fn internal_players_mix_without_voice_stealing() {
+        let mut voices = DeviceVoices::default();
+        for (fixture_id, samples) in [(fixture(1), &[0.25][..]), (fixture(2), &[0.5][..])] {
+            apply_native(
+                &mut voices,
+                NativeCommand::PrepareInternal {
+                    fixture_id,
+                    decoded: decoded(samples),
+                },
+                1,
+                1,
+            )
+            .unwrap();
+            apply_native(
+                &mut voices,
+                NativeCommand::InternalTransport {
+                    fixture_id,
+                    action: NativeInternalTransport::Play,
+                },
+                1,
+                1,
+            )
+            .unwrap();
+        }
+
+        let mut output = [0.0];
+        for voice in voices.internal.values_mut() {
+            voice.mix_frame(&mut output, 0);
+        }
+
+        assert_eq!(voices.internal.len(), 2);
+        assert_eq!(output, [0.75]);
+    }
+
+    #[test]
+    fn internal_transport_resets_on_stop_and_non_repeating_end() {
+        let fixture_id = fixture(3);
+        let mut voices = DeviceVoices::default();
+        apply_native(
+            &mut voices,
+            NativeCommand::PrepareInternal {
+                fixture_id,
+                decoded: decoded(&[0.5]),
+            },
+            1,
+            1,
+        )
+        .unwrap();
+        apply_native(
+            &mut voices,
+            NativeCommand::InternalTransport {
+                fixture_id,
+                action: NativeInternalTransport::Play,
+            },
+            1,
+            1,
+        )
+        .unwrap();
+
+        let voice = voices.internal.get_mut(&fixture_id).unwrap();
+        voice.mix_frame(&mut [0.0], 0);
+        voice.mix_frame(&mut [0.0], 1);
+        assert!(!voice.playing);
+        assert_eq!(voice.position, 0.0);
+
+        voice.position = 1.0;
+        voice.playing = true;
+        apply_native(
+            &mut voices,
+            NativeCommand::InternalTransport {
+                fixture_id,
+                action: NativeInternalTransport::Stop,
+            },
+            1,
+            1,
+        )
+        .unwrap();
+        let voice = &voices.internal[&fixture_id];
+        assert!(!voice.playing);
+        assert_eq!(voice.position, 0.0);
+    }
+
+    #[test]
+    fn restart_play_is_an_edge_action_and_repeat_wraps() {
+        let fixture_id = fixture(4);
+        let mut voices = DeviceVoices::default();
+        apply_native(
+            &mut voices,
+            NativeCommand::PrepareInternal {
+                fixture_id,
+                decoded: decoded(&[0.25, 0.75]),
+            },
+            1,
+            1,
+        )
+        .unwrap();
+        apply_native(
+            &mut voices,
+            NativeCommand::InternalRepeat {
+                fixture_id,
+                enabled: true,
+            },
+            1,
+            1,
+        )
+        .unwrap();
+        apply_native(
+            &mut voices,
+            NativeCommand::InternalTransport {
+                fixture_id,
+                action: NativeInternalTransport::RestartPlay,
+            },
+            1,
+            1,
+        )
+        .unwrap();
+        let voice = voices.internal.get_mut(&fixture_id).unwrap();
+        let mut first = [0.0];
+        voice.mix_frame(&mut first, 0);
+        voice.mix_frame(&mut [0.0], 1);
+        let mut wrapped = [0.0];
+        voice.mix_frame(&mut wrapped, 2);
+        assert_eq!(first, [0.25]);
+        assert_eq!(wrapped, [0.25]);
+
+        apply_native(
+            &mut voices,
+            NativeCommand::InternalTransport {
+                fixture_id,
+                action: NativeInternalTransport::RestartPlay,
+            },
+            1,
+            1,
+        )
+        .unwrap();
+        assert_eq!(voices.internal[&fixture_id].position, 0.0);
     }
 
     #[cfg(unix)]

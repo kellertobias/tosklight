@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use light_core::{AttributeKey, AttributeValue, FixtureId, Universe};
 use light_dynamics::{DynamicDefinition, validate_definition};
 use light_fixture::{PatchedFixture, validate_patch};
@@ -205,6 +206,8 @@ pub struct RenderResult {
     /// snapshot with the render result lets observational consumers follow output without
     /// resolving the engine a second time.
     pub resolved_values: Arc<HashMap<(FixtureId, AttributeKey), AttributeValue>>,
+    /// Winning LTP timestamps for edge-sensitive internal services.
+    pub resolved_changed_at: Arc<HashMap<(FixtureId, AttributeKey), DateTime<Utc>>>,
     /// Profile-head values resolved while producing the same output frame.
     pub profile_visualization_values: Arc<HashMap<(FixtureId, AttributeKey), AttributeValue>>,
     /// Highest patched slot for each logical universe. This is kept separately from values so a

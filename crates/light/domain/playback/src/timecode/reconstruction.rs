@@ -1,9 +1,10 @@
 use std::collections::BTreeMap;
 
 use super::{
-    TimecodeClipEnd, TimecodeCueListState, TimecodeCueListStateKind, TimecodeCurve,
-    TimecodeDefinition, TimecodeFrame, TimecodeLaneContent, TimecodeReconstructedState,
-    TimecodeScheduledAction, TimecodeSpeedState, TimecodeVolumeKeyframe,
+    TimecodeAudioPlayerState, TimecodeClipEnd, TimecodeCueListState, TimecodeCueListStateKind,
+    TimecodeCurve, TimecodeDefinition, TimecodeFrame, TimecodeLaneContent,
+    TimecodeReconstructedState, TimecodeScheduledAction, TimecodeSpeedState,
+    TimecodeVolumeKeyframe,
 };
 
 impl TimecodeDefinition {
@@ -19,6 +20,7 @@ impl TimecodeDefinition {
         let mut cue_lists = Vec::new();
         let mut speed_groups = BTreeMap::new();
         let mut audio_volume = 1.0;
+        let mut audio_players = Vec::new();
 
         for lane in &self.lanes {
             match &lane.content {
@@ -64,6 +66,23 @@ impl TimecodeDefinition {
                 TimecodeLaneContent::AudioVolume { keyframes } => {
                     audio_volume = volume_at(keyframes, frame);
                 }
+                TimecodeLaneContent::AudioPlayer { fixture_id, clips } => {
+                    if let Some(clip) = clips
+                        .iter()
+                        .find(|clip| clip.start_frame.0 <= frame.0 && frame.0 < clip.end_frame.0)
+                    {
+                        audio_players.push(TimecodeAudioPlayerState {
+                            lane_id: lane.id,
+                            fixture_id: *fixture_id,
+                            clip_id: clip.id,
+                            folder: clip.folder,
+                            file: clip.file,
+                            repeat: clip.repeat,
+                            volume: volume_at(&clip.volume_keyframes, frame),
+                            cursor_frame: TimecodeFrame(frame.0 - clip.start_frame.0),
+                        });
+                    }
+                }
             }
         }
 
@@ -72,6 +91,7 @@ impl TimecodeDefinition {
             cue_lists,
             speed_groups,
             audio_volume,
+            audio_players,
         }
     }
 
@@ -130,6 +150,7 @@ impl TimecodeDefinition {
                             }),
                     );
                 }
+                TimecodeLaneContent::AudioPlayer { .. } => {}
             }
         }
         actions

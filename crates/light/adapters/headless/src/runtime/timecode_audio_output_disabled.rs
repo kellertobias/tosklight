@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use light_application::timeline::TimecodeClock;
 use light_application::{ManagedAssetStore, TimecodeAudioCommand, TimecodeAudioOutput};
+use light_core::FixtureId;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) enum OutputDeviceSelector {
@@ -36,7 +37,21 @@ pub(super) fn output_devices() -> Result<Vec<String>, String> {
 
 pub(super) struct NativeTimecodeAudioOutput;
 
+#[derive(Clone)]
+pub(in crate::runtime) struct NativeInternalAudioOutput;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::runtime) enum NativeInternalTransport {
+    Stop,
+    Pause,
+    Play,
+    RestartPlay,
+}
+
 impl NativeTimecodeAudioOutput {
+    pub(in crate::runtime) fn internal_output(&self) -> NativeInternalAudioOutput {
+        NativeInternalAudioOutput
+    }
     pub(super) fn open_with_timeout(
         _store: Arc<dyn ManagedAssetStore>,
         _clock: Arc<dyn TimecodeClock>,
@@ -45,6 +60,51 @@ impl NativeTimecodeAudioOutput {
         let _ = (&configuration.device, configuration.latency_trim_micros);
         Err("this build does not include native Timecode audio output".into())
     }
+}
+
+impl NativeInternalAudioOutput {
+    pub(in crate::runtime) fn prepare(
+        &self,
+        _fixture_id: FixtureId,
+        _wav: &[u8],
+    ) -> Result<(), String> {
+        unavailable()
+    }
+    pub(in crate::runtime) fn transport(
+        &self,
+        _fixture_id: FixtureId,
+        _action: NativeInternalTransport,
+    ) -> Result<(), String> {
+        unavailable()
+    }
+    pub(in crate::runtime) fn repeat(
+        &self,
+        _fixture_id: FixtureId,
+        _enabled: bool,
+    ) -> Result<(), String> {
+        unavailable()
+    }
+    pub(in crate::runtime) fn volume(
+        &self,
+        _fixture_id: FixtureId,
+        _linear: f32,
+    ) -> Result<(), String> {
+        unavailable()
+    }
+    pub(in crate::runtime) fn seek(
+        &self,
+        _fixture_id: FixtureId,
+        _cursor_millis: u32,
+    ) -> Result<(), String> {
+        unavailable()
+    }
+    pub(in crate::runtime) fn remove(&self, _fixture_id: FixtureId) -> Result<(), String> {
+        unavailable()
+    }
+}
+
+fn unavailable<T>() -> Result<T, String> {
+    Err("this build does not include native audio output".into())
 }
 
 impl TimecodeAudioOutput for NativeTimecodeAudioOutput {

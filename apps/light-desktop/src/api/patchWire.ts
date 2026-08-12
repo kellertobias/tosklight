@@ -117,6 +117,10 @@ function mapFixtureProjection(
 		splitPatches: fixture.split_patches.map((split) => ({ ...split })),
 		layerId: fixture.layer_id,
 		directControl: mapDirectControl(fixture.direct_control),
+		internalBindings: {
+			library: fixture.internal_bindings?.library ?? null,
+			output: fixture.internal_bindings?.output ?? null,
+		},
 		location: { ...fixture.location },
 		rotation: { ...fixture.rotation },
 		logicalHeads: fixture.logical_heads.map((head) => ({

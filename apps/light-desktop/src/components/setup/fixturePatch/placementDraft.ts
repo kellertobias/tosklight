@@ -1,6 +1,6 @@
 import { parsePatchAddress } from "../../input/ConsoleFields";
 import { fixtureDefinitionKey } from "../fixtureProfileModel";
-import { firstFreeAddress, isDmxPatchable } from "../patchUtils";
+import { firstFreeAddress, isDmxPatchable, isVisualOnly } from "../patchUtils";
 import type { PatchController } from "./controller";
 import {
 	contiguousBatchPatches,
@@ -22,7 +22,8 @@ export function beginPlacement(controller: PatchController) {
 	const { ui } = controller;
 	if (!definition) return;
 	if (!isDmxPatchable(definition)) {
-		beginVirtualPlacement(controller);
+		if (isVisualOnly(definition)) beginVirtualPlacement(controller);
+		else beginInternalPlacement(controller);
 		return;
 	}
 	const splits = definitionSplits(definition);
@@ -63,6 +64,26 @@ export function beginPlacement(controller: PatchController) {
 	ui.setPlacementOverrides({});
 	ui.setPlacementEmpty(false);
 	openPlacement(controller, nextDraft, nextSplitDrafts);
+}
+
+function beginInternalPlacement(controller: PatchController) {
+	const { definition, all } = controller.data;
+	const { ui } = controller;
+	if (!definition) return;
+	const used = new Set(all.flatMap((fixture) => fixture.fixture_number == null ? [] : [fixture.fixture_number]));
+	const first = nextAvailableFixtureNumber(1, used) ?? 1;
+	const nextDraft = {
+		...ui.draft,
+		fixtureNumber: String(first),
+		patch: "",
+		name: ui.draft.name || definition.name,
+	};
+	ui.setDraft(nextDraft);
+	ui.setSplitDrafts({});
+	ui.setBatchPatches([]);
+	ui.setPlacementOverrides({});
+	ui.setPlacementEmpty(true);
+	openPlacement(controller, nextDraft, {});
 }
 
 function beginVirtualPlacement(controller: PatchController) {

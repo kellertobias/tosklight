@@ -78,6 +78,7 @@ pub(super) fn fixture(profile: &FixtureProfile) -> PatchedFixture {
             ip_address: "192.0.2.25".parse().unwrap(),
             port: 4812,
         }),
+        internal_bindings: Default::default(),
         location: FixtureLocation {
             x: 1_200,
             y: -350,

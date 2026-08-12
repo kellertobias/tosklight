@@ -120,6 +120,60 @@ impl TimecodeDefinition {
                         previous = keyframe.frame;
                     }
                 }
+                TimecodeLaneContent::AudioPlayer { fixture_id, clips } => {
+                    if fixture_id.0.is_nil() {
+                        return Err(TimecodeValidationError::new(
+                            "Audio Player lane fixture id must not be nil",
+                        ));
+                    }
+                    let mut previous_start = TimecodeFrame::ZERO;
+                    let mut previous_end = None;
+                    for clip in clips {
+                        unique(&mut identities, clip.id.0, "Audio Player clip")?;
+                        ordered(previous_start, clip.start_frame, "Audio Player clips")?;
+                        if previous_end.is_some_and(|end: TimecodeFrame| clip.start_frame.0 < end.0)
+                        {
+                            return Err(TimecodeValidationError::new(
+                                "Audio Player clips on one lane must not overlap",
+                            ));
+                        }
+                        if clip.end_frame.0 <= clip.start_frame.0 {
+                            return Err(TimecodeValidationError::new(
+                                "Audio Player clip end must follow its start",
+                            ));
+                        }
+                        within_duration(clip.end_frame, self.duration, "Audio Player clip")?;
+                        let mut previous_keyframe = clip.start_frame;
+                        for keyframe in &clip.volume_keyframes {
+                            unique(
+                                &mut identities,
+                                keyframe.id.0,
+                                "Audio Player volume keyframe",
+                            )?;
+                            ordered(
+                                previous_keyframe,
+                                keyframe.frame,
+                                "Audio Player volume keyframes",
+                            )?;
+                            if keyframe.frame.0 < clip.start_frame.0
+                                || keyframe.frame.0 > clip.end_frame.0
+                            {
+                                return Err(TimecodeValidationError::new(
+                                    "Audio Player volume keyframes must remain inside their clip",
+                                ));
+                            }
+                            if !keyframe.value.is_finite() || !(0.0..=1.0).contains(&keyframe.value)
+                            {
+                                return Err(TimecodeValidationError::new(
+                                    "Audio Player volume must be within 0 and 1",
+                                ));
+                            }
+                            previous_keyframe = keyframe.frame;
+                        }
+                        previous_start = clip.start_frame;
+                        previous_end = Some(clip.end_frame);
+                    }
+                }
             }
         }
         Ok(())

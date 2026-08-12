@@ -475,6 +475,7 @@ fn logical_head_master_does_not_limit_sibling_heads() {
         address: Some(1),
         split_patches: Vec::new(),
         direct_control: None,
+        internal_bindings: Default::default(),
         location: Default::default(),
         rotation: Default::default(),
         logical_heads: vec![

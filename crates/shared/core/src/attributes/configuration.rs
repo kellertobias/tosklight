@@ -62,6 +62,11 @@ impl AttributeConfiguration {
                 &["media.mask.folder", "media.mask.file"],
             ),
             recommended_activation_group(
+                "audio_source",
+                "Audio Source",
+                &["audio.folder", "audio.file"],
+            ),
+            recommended_activation_group(
                 "shapers",
                 "Shapers",
                 &[

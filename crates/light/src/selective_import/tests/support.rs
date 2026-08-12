@@ -746,6 +746,7 @@ pub(super) fn portable_fixture_record(
         split_patches: Vec::new(),
         layer_id: "default".into(),
         direct_control: None,
+        internal_bindings: Default::default(),
         location: Default::default(),
         rotation: Default::default(),
         logical_heads: vec![PatchedHead {
@@ -812,6 +813,7 @@ pub(super) fn legacy_fixture_record(
         split_patches: Vec::new(),
         layer_id: "default".into(),
         direct_control: None,
+        internal_bindings: Default::default(),
         location: Default::default(),
         rotation: Default::default(),
         logical_heads: vec![PatchedHead {

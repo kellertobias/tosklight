@@ -135,6 +135,8 @@ mod highlight_api;
 mod highlight_compatibility;
 mod highlight_service_adapter;
 mod indexed_presets;
+mod internal_audio;
+mod internal_audio_http;
 mod lifecycle;
 mod live_action_http;
 pub(crate) mod macros_v2;

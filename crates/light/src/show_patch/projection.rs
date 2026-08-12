@@ -107,6 +107,7 @@ fn patch_policy(profile: &serde_json::Value) -> Result<PatchPolicy, ActionError>
     {
         None | Some("dmx") => Ok(PatchPolicy::Dmx),
         Some("visual_only") => Ok(PatchPolicy::VisualOnly),
+        Some("internal") => Ok(PatchPolicy::Internal),
         Some(_) => Err(invalid("fixture profile has an invalid patch policy")),
     }
 }

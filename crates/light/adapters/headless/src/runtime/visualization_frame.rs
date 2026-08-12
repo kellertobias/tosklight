@@ -595,6 +595,7 @@ mod tests {
         RenderResult {
             universes: HashMap::new(),
             resolved_values: Arc::new(HashMap::new()),
+            resolved_changed_at: Arc::new(HashMap::new()),
             profile_visualization_values: Arc::new(HashMap::new()),
             patched_slots: HashMap::new(),
             revision,

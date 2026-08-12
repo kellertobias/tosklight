@@ -220,6 +220,7 @@ fn fixture_highlight_override_renders_an_individual_blue_identification_look() {
         split_patches: Vec::new(),
         layer_id: "default".into(),
         direct_control: None,
+        internal_bindings: Default::default(),
         location: Default::default(),
         rotation: Default::default(),
         logical_heads: Vec::new(),
@@ -352,6 +353,7 @@ fn selected_logical_head_highlights_independently_while_parent_identifies_all_he
         split_patches: vec![],
         layer_id: "default".into(),
         direct_control: None,
+        internal_bindings: Default::default(),
         location: Default::default(),
         rotation: Default::default(),
         logical_heads: vec![

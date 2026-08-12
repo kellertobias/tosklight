@@ -378,6 +378,7 @@ fn schema_v2_renders_one_head_channels_to_independent_splits() {
         ],
         layer_id: "default".into(),
         direct_control: None,
+        internal_bindings: Default::default(),
         location: Default::default(),
         rotation: Default::default(),
         logical_heads: vec![],

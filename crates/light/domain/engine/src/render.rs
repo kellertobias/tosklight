@@ -57,6 +57,52 @@ impl Engine {
                 let mode = profile.mode(mode_id).ok_or_else(|| {
                     EngineError::Invalid("schema-v2 fixture mode is missing".into())
                 })?;
+                let projection = generation
+                    .profile_projection(fixture.fixture_id)
+                    .ok_or_else(|| {
+                        EngineError::Invalid("schema-v2 fixture projection plan is missing".into())
+                    })?;
+                if profile.patch_policy == light_fixture::PatchPolicy::Internal {
+                    let output = resolve_profile_fixture(
+                        fixture,
+                        mode,
+                        projection,
+                        None,
+                        &profile_values,
+                        options,
+                        group_masters,
+                        &group_master_flashes,
+                        &highlight_layers,
+                        &highlight_look,
+                        AxisInversion::default(),
+                    )?;
+                    insert_profile_visualization_values(&mut profile_visualization_values, &output);
+                    for (channel_id, raw) in &output.channels {
+                        let Some(channel) = mode
+                            .channels
+                            .iter()
+                            .find(|channel| channel.id == *channel_id)
+                        else {
+                            continue;
+                        };
+                        let Some((head_index, head)) = mode
+                            .heads
+                            .iter()
+                            .enumerate()
+                            .find(|(_, head)| head.id == channel.head_id)
+                        else {
+                            continue;
+                        };
+                        profile_visualization_values.insert(
+                            (
+                                crate::fixture::profile_head_owner(fixture, head_index, head),
+                                channel.attribute.clone(),
+                            ),
+                            light_core::AttributeValue::RawDmxExact(*raw),
+                        );
+                    }
+                    continue;
+                }
                 let encoding =
                     generation
                         .profile_encoding(fixture.fixture_id)
@@ -65,11 +111,6 @@ impl Engine {
                                 "schema-v2 fixture encoding plan is missing".into(),
                             )
                         })?;
-                let projection = generation
-                    .profile_projection(fixture.fixture_id)
-                    .ok_or_else(|| {
-                        EngineError::Invalid("schema-v2 fixture projection plan is missing".into())
-                    })?;
                 let root_output = resolve_profile_fixture(
                     fixture,
                     mode,
@@ -141,6 +182,7 @@ impl Engine {
         Ok(RenderResult {
             universes,
             resolved_values: Arc::new(resolved.values),
+            resolved_changed_at: Arc::new(resolved.changed_at),
             profile_visualization_values: Arc::new(profile_visualization_values),
             patched_slots,
             revision: snapshot.revision,

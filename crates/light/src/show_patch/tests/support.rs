@@ -499,6 +499,7 @@ fn fixture_candidate(
             }],
             layer_id: "default".into(),
             direct_control: None,
+            internal_bindings: Default::default(),
             location: FixtureLocation::default(),
             rotation: FixtureVector::default(),
             logical_heads: Vec::new(),

@@ -224,6 +224,7 @@ fn candidate(
             split_patches,
             layer_id: "default".to_owned(),
             direct_control: None,
+            internal_bindings: Default::default(),
             location: FixtureLocation { x, y, z },
             rotation: FixtureVector {
                 x: block.rotation.0,

@@ -49,6 +49,12 @@ pub struct ConfigurationPatch {
         Option<std::collections::BTreeMap<String, i64>>,
     #[serde(default)]
     #[ts(optional = nullable)]
+    pub internal_audio_library_roots: Option<std::collections::BTreeMap<String, String>>,
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub internal_audio_output_devices: Option<std::collections::BTreeMap<String, String>>,
+    #[serde(default)]
+    #[ts(optional = nullable)]
     pub backup_retention: Option<usize>,
     #[serde(default)]
     #[ts(optional = nullable)]

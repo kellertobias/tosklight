@@ -205,6 +205,52 @@ fn stage_lamp_packages_bind_models_motion_and_emitters() {
     }
 }
 
+#[test]
+fn shipped_audio_player_is_one_programmable_zero_dmx_internal_voice() {
+    let profile = shipped_profile("tosklight--audio-player.toskfixture");
+    assert_eq!(profile.manufacturer, "ToskLight");
+    assert_eq!(profile.name, "Audio Player");
+    assert_eq!(profile.patch_policy, PatchPolicy::Internal);
+    assert_eq!(profile.modes.len(), 1);
+    let mode = &profile.modes[0];
+    assert_eq!(mode.name, "Internal Audio");
+    assert_eq!(
+        mode.splits,
+        [FixtureSplit {
+            number: 1,
+            footprint: 0
+        }]
+    );
+    assert_eq!(mode.heads.len(), 1);
+    assert!(!mode.heads[0].master_shared);
+    assert_eq!(
+        mode.channels
+            .iter()
+            .map(|channel| channel.attribute.0.as_str())
+            .collect::<Vec<_>>(),
+        [
+            "audio.folder",
+            "audio.file",
+            "audio.transport",
+            "audio.repeat",
+            "audio.volume",
+        ]
+    );
+    assert!(
+        mode.channels
+            .iter()
+            .all(|channel| channel.secondary_slots.is_empty())
+    );
+    let definition = profile.resolved_definition(mode.id).unwrap();
+    assert_eq!(definition.footprint, 0);
+    assert!(
+        definition.heads[0]
+            .parameters
+            .iter()
+            .all(|parameter| parameter.components.is_empty())
+    );
+}
+
 fn assert_moving_lamp_geometry(filename: &str) {
     let mover = shipped_profile(filename);
     assert_eq!(mover.model_units, ModelUnits::Metres);

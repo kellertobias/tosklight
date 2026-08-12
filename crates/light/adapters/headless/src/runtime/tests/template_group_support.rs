@@ -64,6 +64,7 @@ fn template_fixture(
         address: Some(address),
         split_patches: Vec::new(),
         direct_control: None,
+        internal_bindings: Default::default(),
         location: Default::default(),
         rotation: Default::default(),
         logical_heads: vec![],

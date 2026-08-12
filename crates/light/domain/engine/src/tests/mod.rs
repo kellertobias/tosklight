@@ -88,6 +88,7 @@ fn fixture() -> (PatchedFixture, FixtureId) {
             address: Some(1),
             split_patches: Vec::new(),
             direct_control: None,
+            internal_bindings: Default::default(),
             location: Default::default(),
             rotation: Default::default(),
             logical_heads: vec![PatchedHead {
@@ -198,6 +199,7 @@ fn schema_v2_fixture(
             split_patches: vec![],
             layer_id: "default".into(),
             direct_control: None,
+            internal_bindings: Default::default(),
             location: Default::default(),
             rotation: Default::default(),
             logical_heads: vec![],

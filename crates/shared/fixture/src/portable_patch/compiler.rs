@@ -320,6 +320,7 @@ fn into_runtime_fixture(
         split_patches: patch.split_patches,
         layer_id: patch.layer_id,
         direct_control: patch.direct_control,
+        internal_bindings: patch.internal_bindings,
         location: patch.location,
         rotation: patch.rotation,
         logical_heads: patch.logical_heads,

@@ -245,6 +245,11 @@ pub(super) struct DeskConfiguration {
     pub(super) timecode_audio_output_device: Option<String>,
     /// Per-destination operator calibration. The `$system_default` key owns default-device trim.
     pub(super) timecode_audio_latency_trim_micros_by_output: BTreeMap<String, i64>,
+    /// Logical portable audio-library name to a confined machine-local root folder.
+    pub(super) internal_audio_library_roots: BTreeMap<String, String>,
+    /// Logical portable audio-output name to an exact machine-local device name. The reserved
+    /// `$system_default` value selects the operating-system default.
+    pub(super) internal_audio_output_devices: BTreeMap<String, String>,
     pub(super) backup_retention: usize,
     /// Seconds between automatic recovery checkpoints of the active show (api-rules §8).
     #[serde(default = "default_autosave_interval_seconds")]
@@ -335,6 +340,8 @@ impl Default for DeskConfiguration {
             osc_timecode: None,
             timecode_audio_output_device: None,
             timecode_audio_latency_trim_micros_by_output: BTreeMap::new(),
+            internal_audio_library_roots: BTreeMap::new(),
+            internal_audio_output_devices: BTreeMap::new(),
             backup_retention: 20,
             autosave_interval_seconds: default_autosave_interval_seconds(),
             speed_groups_bpm: default_speed_groups(),
@@ -446,6 +453,17 @@ impl DeskConfiguration {
                 "Timecode audio output trim keys must be non-empty and values within +/-5000000 microseconds",
             ));
         }
+        for (binding, root) in &self.internal_audio_library_roots {
+            validate_internal_audio_mapping(binding, root, "library root")?;
+            if !std::path::Path::new(root).is_absolute() {
+                return Err(ApiError::bad_request(
+                    "Internal audio library roots must be absolute desk-local paths",
+                ));
+            }
+        }
+        for (binding, device) in &self.internal_audio_output_devices {
+            validate_internal_audio_mapping(binding, device, "output device")?;
+        }
         if self.backup_retention == 0 || self.backup_retention > 1_000 {
             return Err(ApiError::bad_request("backup_retention must be 1-1000"));
         }
@@ -497,6 +515,24 @@ impl DeskConfiguration {
         }
         Ok(())
     }
+}
+
+fn validate_internal_audio_mapping(
+    binding: &str,
+    value: &str,
+    label: &str,
+) -> Result<(), ApiError> {
+    if binding.trim() != binding
+        || binding.is_empty()
+        || binding.len() > 128
+        || value.trim() != value
+        || value.is_empty()
+    {
+        return Err(ApiError::bad_request(format!(
+            "Internal audio {label} mappings require trimmed non-empty logical names and values"
+        )));
+    }
+    Ok(())
 }
 
 pub(super) fn wire_configuration_value(

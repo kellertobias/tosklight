@@ -621,11 +621,49 @@ fn domain_lane(lane: wire::TimecodeLane) -> light_playback::TimecodeLane {
                     .collect(),
             }
         }
+        wire::TimecodeLaneContent::AudioPlayer { fixture_id, clips } => {
+            domain::TimecodeLaneContent::AudioPlayer {
+                fixture_id: light_core::FixtureId(fixture_id),
+                clips: clips
+                    .into_iter()
+                    .map(|clip| domain::TimecodeAudioPlayerClip {
+                        id: domain::TimecodeClipId(clip.id),
+                        start_frame: TimecodeFrame(clip.start_frame),
+                        end_frame: TimecodeFrame(clip.end_frame),
+                        folder: clip.folder,
+                        file: clip.file,
+                        repeat: clip.repeat,
+                        volume_keyframes: clip
+                            .volume_keyframes
+                            .into_iter()
+                            .map(domain_volume_keyframe)
+                            .collect(),
+                    })
+                    .collect(),
+            }
+        }
     };
     domain::TimecodeLane {
         id: domain::TimecodeLaneId(lane.id),
         name: lane.name,
         content,
+    }
+}
+
+fn domain_volume_keyframe(
+    keyframe: wire::TimecodeVolumeKeyframe,
+) -> light_playback::TimecodeVolumeKeyframe {
+    light_playback::TimecodeVolumeKeyframe {
+        id: light_playback::TimecodeKeyframeId(keyframe.id),
+        frame: TimecodeFrame(keyframe.frame),
+        value: keyframe.value,
+        fade_frames: keyframe.fade_frames,
+        curve: match keyframe.curve {
+            wire::TimecodeCurve::Linear => light_playback::TimecodeCurve::Linear,
+            wire::TimecodeCurve::EaseIn => light_playback::TimecodeCurve::EaseIn,
+            wire::TimecodeCurve::EaseOut => light_playback::TimecodeCurve::EaseOut,
+            wire::TimecodeCurve::EaseInOut => light_playback::TimecodeCurve::EaseInOut,
+        },
     }
 }
 
@@ -715,11 +753,49 @@ fn wire_lane(lane: light_playback::TimecodeLane) -> wire::TimecodeLane {
                     .collect(),
             }
         }
+        domain::TimecodeLaneContent::AudioPlayer { fixture_id, clips } => {
+            wire::TimecodeLaneContent::AudioPlayer {
+                fixture_id: fixture_id.0,
+                clips: clips
+                    .into_iter()
+                    .map(|clip| wire::TimecodeAudioPlayerClip {
+                        id: clip.id.0,
+                        start_frame: clip.start_frame.0,
+                        end_frame: clip.end_frame.0,
+                        folder: clip.folder,
+                        file: clip.file,
+                        repeat: clip.repeat,
+                        volume_keyframes: clip
+                            .volume_keyframes
+                            .into_iter()
+                            .map(wire_volume_keyframe)
+                            .collect(),
+                    })
+                    .collect(),
+            }
+        }
     };
     wire::TimecodeLane {
         id: lane.id.0,
         name: lane.name,
         content,
+    }
+}
+
+fn wire_volume_keyframe(
+    keyframe: light_playback::TimecodeVolumeKeyframe,
+) -> wire::TimecodeVolumeKeyframe {
+    wire::TimecodeVolumeKeyframe {
+        id: keyframe.id.0,
+        frame: keyframe.frame.0,
+        value: keyframe.value,
+        fade_frames: keyframe.fade_frames,
+        curve: match keyframe.curve {
+            light_playback::TimecodeCurve::Linear => wire::TimecodeCurve::Linear,
+            light_playback::TimecodeCurve::EaseIn => wire::TimecodeCurve::EaseIn,
+            light_playback::TimecodeCurve::EaseOut => wire::TimecodeCurve::EaseOut,
+            light_playback::TimecodeCurve::EaseInOut => wire::TimecodeCurve::EaseInOut,
+        },
     }
 }
 

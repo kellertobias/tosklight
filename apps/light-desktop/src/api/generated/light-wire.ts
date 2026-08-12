@@ -41,7 +41,7 @@ export type ControlDeskConfigurationAction = { "type": "update", patch: ControlD
 export type ControlDeskConfigurationPatch = { name: string | null, osc_alias: string | null, columns: number | null, rows: number | null, buttons: number | null, playback_layout: RuntimePlaybackSurfaceLayout | null, };
 export type ControlDeskConfigurationActionOutcome = { request_id: string, replayed: boolean, desk: RuntimeControlDesk, removed: boolean, page: number | null, event_sequence: number | null, page_creation_event_sequence: number | null, };
 export type ConfigurationUpdateRequest = { request_id: string, patch: ConfigurationPatch, };
-export type ConfigurationPatch = { frame_rate_hz?: number | null, output_bind_ip?: string | null, osc_bind?: string | null | null, art_timecode_bind?: string | null | null, timecode_source?: TimecodeSourceSelectionConfiguration | null, timecode_frame_rate?: TimecodeFrameRateConfiguration | null | null, timecode_external_loss_policy?: ExternalTimecodeLossPolicyConfiguration | null, timecode_external_loss_timeout_millis?: number, osc_timecode?: OscTimecodeConfiguration | null | null, timecode_audio_output_device?: string | null | null, timecode_audio_latency_trim_micros_by_output?: { [key in string]: bigint } | null, backup_retention?: number | null, autosave_interval_seconds?: number, programmer_fade_millis?: number, command_line_at_uses_programmer_fade?: boolean | null, sequence_master_fade_millis?: number, cuelist_auto_off_at_zero_default?: boolean | null, cuelist_auto_off_flash_release_default?: boolean | null, start_after_first_recording?: boolean | null, preload_programmer_changes?: boolean | null, preload_physical_playback_actions?: boolean | null, preload_virtual_playback_actions?: boolean | null, patch_preview_highlight_dmx?: boolean | null, highlight_look?: HighlightLookConfiguration | null, matter_enabled?: boolean | null, pool_presentation?: PoolPresentationConfiguration | null, file_manager_system_picker_fallback?: boolean | null, file_manager_roots?: Array<FileManagerRoot> | null, };
+export type ConfigurationPatch = { frame_rate_hz?: number | null, output_bind_ip?: string | null, osc_bind?: string | null | null, art_timecode_bind?: string | null | null, timecode_source?: TimecodeSourceSelectionConfiguration | null, timecode_frame_rate?: TimecodeFrameRateConfiguration | null | null, timecode_external_loss_policy?: ExternalTimecodeLossPolicyConfiguration | null, timecode_external_loss_timeout_millis?: number, osc_timecode?: OscTimecodeConfiguration | null | null, timecode_audio_output_device?: string | null | null, timecode_audio_latency_trim_micros_by_output?: { [key in string]: bigint } | null, internal_audio_library_roots?: { [key in string]: string } | null, internal_audio_output_devices?: { [key in string]: string } | null, backup_retention?: number | null, autosave_interval_seconds?: number, programmer_fade_millis?: number, command_line_at_uses_programmer_fade?: boolean | null, sequence_master_fade_millis?: number, cuelist_auto_off_at_zero_default?: boolean | null, cuelist_auto_off_flash_release_default?: boolean | null, start_after_first_recording?: boolean | null, preload_programmer_changes?: boolean | null, preload_physical_playback_actions?: boolean | null, preload_virtual_playback_actions?: boolean | null, patch_preview_highlight_dmx?: boolean | null, highlight_look?: HighlightLookConfiguration | null, matter_enabled?: boolean | null, pool_presentation?: PoolPresentationConfiguration | null, file_manager_system_picker_fallback?: boolean | null, file_manager_roots?: Array<FileManagerRoot> | null, };
 export type HighlightLookConfiguration = { intensity: number, color?: HighlightLookColor | null, iris?: number | null, zoom?: number | null, focus?: number | null, frost?: number | null, compatibility: HighlightLookCompatibility, };
 export type HighlightLookColor = "white" | "red" | "green" | "blue" | "cyan" | "magenta" | "amber";
 export type HighlightLookCompatibility = "semantic" | "legacy_raw" | "needs_review";
@@ -605,13 +605,14 @@ export type PlaybackTopologyActionOutcome = { request_id: string, correlation_id
 export type PlaybackTopologyErrorKind = "invalid" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unavailable" | "internal";
 export type PlaybackTopologyErrorResponse = { kind: PlaybackTopologyErrorKind, error: string, current_revision?: number | null, current_related_revision?: number | null, retryable: boolean, };
 export type PatchDirectControlProtocol = "citp";
-export type PatchProfilePolicy = "dmx" | "visual_only";
+export type PatchProfilePolicy = "dmx" | "visual_only" | "internal";
 export type PatchSplitAssignment = { split: number, universe: number | null, address: number | null, };
 export type PatchDirectControlEndpoint = { protocol: PatchDirectControlProtocol,
 /**
  * Transport adapters validate this as an IP address before invoking the application service.
  */
 ip_address: string, port: number, };
+export type PatchInternalFixtureBindings = { library: string | null, output: string | null, };
 export type PatchFixtureLocation = { x: number, y: number, z: number, };
 export type PatchFixtureRotation = { x: number, y: number, z: number, };
 export type PatchInstalledLightSource = { "type": "profile_default" } | { "type": "tungsten" } | { "type": "halogen" } | { "type": "discharge" } | { "type": "led" } | { "type": "fluorescent" } | { "type": "arc" } | { "type": "other", label: string, };
@@ -628,7 +629,7 @@ fixture_id: string, fixture_number: number | null, virtual_fixture_number: numbe
 /**
  * Canonical split assignments. An unpatched split has two `null` address fields.
  */
-split_patches: Array<PatchSplitAssignment>, layer_id: string, direct_control: PatchDirectControlEndpoint | null, location: PatchFixtureLocation, rotation: PatchFixtureRotation, multipatch: Array<PatchMultiPatchInput>, group_masters_enabled: boolean, grand_master_enabled: boolean, invert_pan: boolean, invert_tilt: boolean,
+split_patches: Array<PatchSplitAssignment>, layer_id: string, direct_control: PatchDirectControlEndpoint | null, internal_bindings: PatchInternalFixtureBindings, location: PatchFixtureLocation, rotation: PatchFixtureRotation, multipatch: Array<PatchMultiPatchInput>, group_masters_enabled: boolean, grand_master_enabled: boolean, invert_pan: boolean, invert_tilt: boolean,
 /**
  * Degrees the mounting bracket is set to, positive nose-down. A mechanical setting the desk
  * cannot drive, recorded so the visualizer draws the rig as it actually hangs.
@@ -693,7 +694,7 @@ export type PatchLogicalHeadProjection = {
 profile_head_id: string | null, head_index: number, fixture_id: string, };
 export type PatchMultiPatchProjection = { id: string, name: string, split_patches: Array<PatchSplitAssignment>, location: PatchFixtureLocation, rotation: PatchFixtureRotation, invert_pan: boolean, invert_tilt: boolean, bracket_angle: number, shaper_angle: number | null, installed_appearance: PatchInstalledFixtureAppearance, };
 export type PatchHighlightOverrideProjection = { channel_id: string, raw_value: number, };
-export type PatchFixtureProjection = { fixture_id: string, fixture_revision: number, fixture_number: number | null, virtual_fixture_number: number | null, name: string, profile_id: string, profile_revision: number, mode_id: string, split_patches: Array<PatchSplitAssignment>, layer_id: string, direct_control: PatchDirectControlEndpoint | null, location: PatchFixtureLocation, rotation: PatchFixtureRotation, logical_heads: Array<PatchLogicalHeadProjection>, multipatch: Array<PatchMultiPatchProjection>, group_masters_enabled: boolean, grand_master_enabled: boolean, invert_pan: boolean, invert_tilt: boolean, bracket_angle: number, shaper_angle: number | null, installed_appearance: PatchInstalledFixtureAppearance, move_in_black_enabled: boolean, move_in_black_delay_millis: number, highlight_overrides: Array<PatchHighlightOverrideProjection>, };
+export type PatchFixtureProjection = { fixture_id: string, fixture_revision: number, fixture_number: number | null, virtual_fixture_number: number | null, name: string, profile_id: string, profile_revision: number, mode_id: string, split_patches: Array<PatchSplitAssignment>, layer_id: string, direct_control: PatchDirectControlEndpoint | null, internal_bindings: PatchInternalFixtureBindings, location: PatchFixtureLocation, rotation: PatchFixtureRotation, logical_heads: Array<PatchLogicalHeadProjection>, multipatch: Array<PatchMultiPatchProjection>, group_masters_enabled: boolean, grand_master_enabled: boolean, invert_pan: boolean, invert_tilt: boolean, bracket_angle: number, shaper_angle: number | null, installed_appearance: PatchInstalledFixtureAppearance, move_in_black_enabled: boolean, move_in_black_delay_millis: number, highlight_overrides: Array<PatchHighlightOverrideProjection>, };
 export type PatchModeSplitProjection = { split: number, footprint: number, };
 export type PatchModeProjection = { mode_id: string, name: string, splits: Array<PatchModeSplitProjection>, };
 export type PatchProfileRevisionProjection = { profile_id: string, profile_revision: number, content_digest: string, manufacturer: string, name: string, fixture_type: string, patch_policy: PatchProfilePolicy,
@@ -1057,6 +1058,9 @@ export type ProgrammingSelectionAction = { "action": "replace", fixtures: Array<
 export type ProgrammingSelectionActionRequest = { request_id: string, } & ({ "action": "replace", fixtures: Array<string>, expected_revision: number, } | { "action": "gesture", source: ProgrammingSelectionGestureSource, remove: boolean, } | { "action": "select_group", group_id: string, frozen: boolean, rule: ProgrammerSelectionRule, expected_revision: number, } | { "action": "apply_rule", rule: ProgrammerSelectionRule, });
 export type ProgrammingSelectionAcceptedAction = "replaced" | "gesture_applied" | "group_selected" | "rule_applied";
 export type ProgrammingSelectionActionOutcome = { request_id: string, correlation_id: string, action: ProgrammingSelectionAcceptedAction, applied: number, selection: ProgrammerSelectionProjection, event_sequence: number, replayed: boolean, warning?: string | null, };
+export type InternalAudioPlayerStatus = { fixture_id: string, available: boolean, diagnostic: string | null, };
+export type InternalAudioLibraryStatus = { binding: string, entries: number, diagnostics: Array<string>, };
+export type InternalAudioStatus = { players: Array<InternalAudioPlayerStatus>, libraries: Array<InternalAudioLibraryStatus>, };
 export type LiveActionMessageType = "action";
 export type PresetRecallLiveActionRequest = { request_id: string, show_id: string, request: PresetRecallRequest, };
 export type CommandLineReplaceLiveActionRequest = { expected_revision: number, text: string, };
@@ -1116,7 +1120,8 @@ export type TimecodeAudioImportResult = { asset_id: string, asset_revision: numb
 export type TimecodeAudioWaveform = { peaks: Array<number>, };
 export type TimecodeMarker = { id: string, frame: number, name: string, color?: string | null, };
 export type TimecodeLane = { id: string, name: string, content: TimecodeLaneContent, };
-export type TimecodeLaneContent = { "kind": "cue_list", cue_list_id: string, clips: Array<TimecodeCueListClip>, } | { "kind": "speed_group", group: string, keyframes: Array<TimecodeSpeedKeyframe>, } | { "kind": "audio_volume", keyframes: Array<TimecodeVolumeKeyframe>, };
+export type TimecodeLaneContent = { "kind": "cue_list", cue_list_id: string, clips: Array<TimecodeCueListClip>, } | { "kind": "speed_group", group: string, keyframes: Array<TimecodeSpeedKeyframe>, } | { "kind": "audio_volume", keyframes: Array<TimecodeVolumeKeyframe>, } | { "kind": "audio_player", fixture_id: string, clips: Array<TimecodeAudioPlayerClip>, };
+export type TimecodeAudioPlayerClip = { id: string, start_frame: number, end_frame: number, folder: number, file: number, repeat: boolean, volume_keyframes: Array<TimecodeVolumeKeyframe>, };
 export type TimecodeClipStart = "state" | "cue";
 export type TimecodeClipEnd = "release" | "hold";
 export type TimecodeCueListClip = { id: string, start_frame: number, end_frame: number, start_cue_id: string, end_cue_id: string, start_behavior: TimecodeClipStart, end_behavior: TimecodeClipEnd, };

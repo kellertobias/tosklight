@@ -127,6 +127,7 @@ impl EngineContribution {
 #[derive(Default)]
 pub(crate) struct ResolvedAttributes {
     pub(crate) values: HashMap<(FixtureId, AttributeKey), AttributeValue>,
+    pub(crate) changed_at: HashMap<(FixtureId, AttributeKey), DateTime<Utc>>,
     pub(crate) sequence_masters: HashMap<(FixtureId, AttributeKey), ApplicableSequenceMaster>,
     pub(crate) automatic_playback_transitions: Vec<AutomaticPlaybackTransition>,
 }
@@ -244,6 +245,7 @@ impl EngineContributionResolver {
         for (fixture_id, attributes) in self.winners {
             for (attribute, winner) in attributes {
                 let key = (fixture_id, attribute);
+                resolved.changed_at.insert(key.clone(), winner.changed_at);
                 resolved.values.insert(key.clone(), winner.value);
                 if let Some(sequence_master) = winner.sequence_master {
                     resolved.sequence_masters.insert(key, sequence_master);

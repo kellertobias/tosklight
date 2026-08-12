@@ -6,7 +6,7 @@ import {
 	parsePatchAddress,
 } from "../../input/ConsoleFields";
 import { fixtureDefinitionKey } from "../fixtureProfileModel";
-import { incrementFixtureName, isDmxPatchable } from "../patchUtils";
+import { incrementFixtureName, isDmxPatchable, isInternal, isVisualOnly } from "../patchUtils";
 import { type PatchController, usePatchController } from "./controller";
 import { FixtureModeSelect } from "./fixtureDisplay";
 import {
@@ -105,7 +105,7 @@ function PlacementFields({ controller }: { controller: PatchController }) {
 				Start fixture ID
 				<ConsoleNumberField
 					label="Start fixture ID"
-					allowDecimal={!isDmxPatchable(definition)}
+					allowDecimal={isVisualOnly(definition)}
 					value={ui.draft.fixtureNumber}
 					onChange={(fixtureNumber) =>
 						ui.setDraft({ ...ui.draft, fixtureNumber })
@@ -132,8 +132,10 @@ function PlacementPatchFields({ controller }: { controller: PatchController }) {
 	const definition = controller.data.definition;
 	const { ui } = controller;
 	if (!definition) return null;
-	if (!isDmxPatchable(definition))
+	if (isVisualOnly(definition))
 		return <p>This Venue element is visual only and has no DMX patch.</p>;
+	if (isInternal(definition))
+		return <p>This Internal fixture uses a local application service and has no DMX patch.</p>;
 	const addressChoice = (
 		<fieldset
 			className="placement-address-choice"
@@ -276,5 +278,7 @@ function placementIsDisabled(controller: PatchController) {
 				!parsePatchAddress(ui.splitDrafts[split.number]),
 		);
 	}
-	return parseVirtualFixtureNumber(ui.draft.fixtureNumber) == null;
+	return isVisualOnly(definition)
+		? parseVirtualFixtureNumber(ui.draft.fixtureNumber) == null
+		: parseFixtureNumber(ui.draft.fixtureNumber) == null;
 }

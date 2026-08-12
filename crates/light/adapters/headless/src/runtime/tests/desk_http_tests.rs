@@ -224,6 +224,7 @@ async fn citp_thumbnail_api_uses_patched_parent_endpoint_and_cache() {
                 move_in_black_delay_millis: 0,
                 multipatch: vec![],
                 highlight_overrides: Default::default(),
+                internal_bindings: Default::default(),
             }].into(),
             revision: 1,
             ..EngineSnapshot::default()

@@ -62,6 +62,7 @@ pub(super) fn portable_fixture_with_policy(
         split_patches: Vec::new(),
         layer_id: "default".into(),
         direct_control: None,
+        internal_bindings: Default::default(),
         location: Default::default(),
         rotation: Default::default(),
         logical_heads: vec![

@@ -78,6 +78,7 @@ struct RuntimeResources {
     pub(super) dynamics: Arc<Mutex<light_dynamics::DynamicRuntime>>,
     pub(super) dynamic_auto_offs: Arc<Mutex<Vec<light_playback::PlaybackIdentity>>>,
     pub(super) visualization_frames: Arc<super::visualization_frame::VisualizationFrameHub>,
+    pub(super) internal_audio: Arc<Mutex<super::internal_audio::InternalAudioRuntime>>,
 }
 
 impl RuntimeResources {
@@ -112,15 +113,64 @@ impl RuntimeResources {
                 .copied()
                 .unwrap_or(0),
         };
-        let audio_output =
+        let native_audio_output =
             super::timecode_audio_output::NativeTimecodeAudioOutput::open_with_timeout(
                 Arc::clone(&managed_assets),
                 Arc::clone(&timecode_clock),
                 &audio_configuration,
             )
-            .map(|output| Arc::new(output) as Arc<dyn light_application::TimecodeAudioOutput>)
             .map_err(|error| tracing::warn!(%error, "native Timecode audio is unavailable"))
             .ok();
+        let mut audio_outputs_by_device = HashMap::new();
+        if let Some(output) = &native_audio_output {
+            audio_outputs_by_device.insert(trim_key.to_owned(), output.internal_output());
+        }
+        let mut internal_outputs = std::collections::BTreeMap::new();
+        for (binding, device_name) in &configuration.internal_audio_output_devices {
+            let output = if let Some(output) = audio_outputs_by_device.get(device_name) {
+                Some(output.clone())
+            } else {
+                let device = if device_name == "$system_default" {
+                    super::timecode_audio_output::OutputDeviceSelector::SystemDefault
+                } else {
+                    super::timecode_audio_output::OutputDeviceSelector::Name(device_name.clone())
+                };
+                let config = super::timecode_audio_output::NativeTimecodeAudioConfig {
+                    device,
+                    latency_trim_micros: configuration
+                        .timecode_audio_latency_trim_micros_by_output
+                        .get(device_name)
+                        .copied()
+                        .unwrap_or(0),
+                };
+                match super::timecode_audio_output::NativeTimecodeAudioOutput::open_with_timeout(
+                    Arc::clone(&managed_assets),
+                    Arc::clone(&timecode_clock),
+                    &config,
+                ) {
+                    Ok(output) => {
+                        let internal = output.internal_output();
+                        audio_outputs_by_device.insert(device_name.clone(), internal.clone());
+                        Some(internal)
+                    }
+                    Err(error) => {
+                        tracing::warn!(binding, device = device_name, %error, "Internal audio output is unavailable");
+                        None
+                    }
+                }
+            };
+            if let Some(output) = output {
+                internal_outputs.insert(binding.clone(), output);
+            }
+        }
+        let internal_audio = Arc::new(Mutex::new(
+            super::internal_audio::InternalAudioRuntime::new(
+                &configuration.internal_audio_library_roots,
+                internal_outputs,
+            ),
+        ));
+        let audio_output = native_audio_output
+            .map(|output| Arc::new(output) as Arc<dyn light_application::TimecodeAudioOutput>);
         let timecodes = super::timecode_v2::new_service_with_clock(
             timecode_clock,
             audio_output,
@@ -189,6 +239,7 @@ impl RuntimeResources {
             action_timing: action_timing.clone(),
             test_bench: startup.persistent.test_bench,
             data_dir: startup.persistent.data_dir.clone(),
+            internal_audio: Arc::clone(&internal_audio),
         })
         .await?;
         Ok(Self {
@@ -210,6 +261,7 @@ impl RuntimeResources {
             dynamics,
             dynamic_auto_offs,
             visualization_frames,
+            internal_audio,
         })
     }
 }
@@ -475,6 +527,7 @@ fn build_app_state(
             Some(osc_feedback),
         ),
         media: MediaResource::new(MediaCache::default()),
+        internal_audio: Arc::clone(&resources.internal_audio),
         replay: ReplayResource::default(),
         lifecycle: LifecycleResource::new(resources.cancellation.clone()),
         discovery,

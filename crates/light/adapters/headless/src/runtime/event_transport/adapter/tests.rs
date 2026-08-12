@@ -674,6 +674,7 @@ fn timecode_tick_is_a_typed_replaceable_ordered_projection() {
                     cue_lists: Vec::new(),
                     speed_groups: Default::default(),
                     audio_volume: 1.0,
+                    audio_players: Vec::new(),
                 },
                 audio_linked: true,
             },

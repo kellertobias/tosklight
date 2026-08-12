@@ -138,6 +138,7 @@ pub(super) fn patched(
         split_patches: Vec::new(),
         layer_id: "default".into(),
         direct_control: None,
+        internal_bindings: Default::default(),
         location,
         rotation: FixtureVector {
             x: 0.0,

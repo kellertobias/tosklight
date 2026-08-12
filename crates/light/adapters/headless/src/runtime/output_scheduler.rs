@@ -84,6 +84,7 @@ pub(super) struct Config {
     pub visualization_frames: Arc<VisualizationFrameHub>,
     pub action_timing: ActionTimingResource,
     pub data_dir: std::path::PathBuf,
+    pub internal_audio: Arc<Mutex<super::internal_audio::InternalAudioRuntime>>,
 }
 
 pub(super) struct OutputScheduler {
@@ -125,6 +126,7 @@ struct Runtime {
     pub(super) action_timing: ActionTimingResource,
     pub(super) programmer_reconciliation_cache: Arc<ProgrammerReconciliationCache>,
     pub(super) persistence: OutputPersistenceResource,
+    pub(super) internal_audio: Arc<Mutex<super::internal_audio::InternalAudioRuntime>>,
 }
 
 pub(super) async fn start(config: Config) -> anyhow::Result<OutputScheduler> {
@@ -230,7 +232,7 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
             show_id: runtime.active_show.current().map(|show| show.id.0),
         };
         let dynamic_started = Instant::now();
-        let (sampled, auto_offs, dynamic_events, _, _) = dynamic_contributions_with_auto_off(
+        let (mut sampled, auto_offs, dynamic_events, _, _) = dynamic_contributions_with_auto_off(
             &runtime.engine,
             &runtime.dynamics,
             &runtime.speed_groups,
@@ -244,6 +246,13 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
         }
         for event in dynamic_events {
             runtime.playback.publish(event);
+        }
+        let timecode_audio = timecode_audio_contributions(
+            &runtime.timecodes,
+            runtime.engine.snapshot().fixtures.as_ref(),
+        );
+        if !timecode_audio.is_empty() {
+            sampled.push(timecode_audio);
         }
         let dynamic = dynamic_started.elapsed();
         let engine_started = Instant::now();
@@ -268,6 +277,11 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
         &runtime.timecodes,
         &runtime.active_show,
         &before_cues,
+    );
+    runtime.internal_audio.lock().reconcile(
+        runtime.engine.snapshot().fixtures.as_ref(),
+        rendered.profile_visualization_values.as_ref(),
+        rendered.resolved_changed_at.as_ref(),
     );
     let publish_started = Instant::now();
     let (routes, frames, patched_slots) = {
@@ -303,6 +317,78 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
         runtime.action_timing.complete_output_render(action_timing);
     }
     result
+}
+
+fn timecode_audio_contributions(
+    timecodes: &light_application::timeline::TimecodeRuntimeService,
+    fixtures: &[light_fixture::PatchedFixture],
+) -> ContributionBatch {
+    let rate = timecodes.frame_rate();
+    let changed_at = chrono::Utc::now();
+    let mut order = 0_u64;
+    ContributionBatch::new(timecodes.snapshots().into_iter().flat_map(|snapshot| {
+        let transport = match snapshot.transport {
+            TimecodeTransportState::Stopped => return Vec::new(),
+            TimecodeTransportState::Paused => 64_u32,
+            TimecodeTransportState::Playing => 128_u32,
+        };
+        snapshot
+            .reconstructed
+            .audio_players
+            .into_iter()
+            .flat_map(|player| {
+                let fixture_id = fixtures
+                    .iter()
+                    .find(|fixture| fixture.fixture_id == player.fixture_id)
+                    .and_then(|fixture| fixture.logical_heads.first())
+                    .map_or(player.fixture_id, |head| head.fixture_id);
+                let cursor_millis = u32::try_from(
+                    u128::from(player.cursor_frame.0)
+                        .saturating_mul(u128::from(rate.denominator()))
+                        .saturating_mul(1_000)
+                        / u128::from(rate.numerator()),
+                )
+                .unwrap_or(u32::MAX);
+                [
+                    (
+                        "audio.folder",
+                        AttributeValue::RawDmxExact(u32::from(player.folder)),
+                    ),
+                    (
+                        "audio.file",
+                        AttributeValue::RawDmxExact(u32::from(player.file)),
+                    ),
+                    ("audio.transport", AttributeValue::RawDmxExact(transport)),
+                    (
+                        "audio.repeat",
+                        AttributeValue::RawDmxExact(if player.repeat { 255 } else { 0 }),
+                    ),
+                    ("audio.volume", AttributeValue::Normalized(player.volume)),
+                    (
+                        "audio.cursor_millis",
+                        AttributeValue::RawDmxExact(cursor_millis),
+                    ),
+                ]
+                .into_iter()
+                .map(|(attribute, value)| {
+                    order = order.saturating_add(1);
+                    ContributionSample::independent(TimedValue {
+                        fixture_id,
+                        attribute: AttributeKey(attribute.into()),
+                        value,
+                        priority: 75,
+                        changed_at,
+                        programmer_order: order,
+                        merge_mode: MergeMode::Ltp,
+                        fade: false,
+                        fade_millis: None,
+                        delay_millis: None,
+                    })
+                })
+                .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>()
+    }))
 }
 
 fn dispatch_automatic_cue_actions(
@@ -767,6 +853,7 @@ impl SharedResources {
             action_timing: config.action_timing.clone(),
             programmer_reconciliation_cache: Arc::clone(&self.programmer_reconciliation_cache),
             persistence: self.persistence.clone(),
+            internal_audio: Arc::clone(&config.internal_audio),
         }
     }
 

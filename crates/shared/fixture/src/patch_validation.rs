@@ -55,8 +55,10 @@ impl PatchValidator {
             )?;
         }
         validate_logical_head_topology(fixture)?;
-        if !fixture.definition.is_dmx_patchable() {
-            return validate_visual_only_fixture(fixture);
+        match fixture.definition.patch_policy() {
+            crate::PatchPolicy::VisualOnly => return validate_visual_only_fixture(fixture),
+            crate::PatchPolicy::Internal => return validate_internal_fixture(fixture),
+            crate::PatchPolicy::Dmx => {}
         }
         validate_direct_control(fixture)?;
         self.validate_instances(fixture)
@@ -118,7 +120,7 @@ impl PatchValidator {
             if number == 0 {
                 return Err(invalid("virtual fixture IDs start at 0.1"));
             }
-            if fixture.definition.is_dmx_patchable() {
+            if fixture.definition.patch_policy() != crate::PatchPolicy::VisualOnly {
                 return Err(invalid(format!(
                     "virtual fixture ID 0.{number} requires a visual-only fixture"
                 )));
@@ -317,6 +319,40 @@ fn validate_visual_only_fixture(fixture: &PatchedFixture) -> Result<(), FixtureE
             "visual-only fixture {} cannot have a DMX or direct-control patch",
             fixture.fixture_id.0
         )));
+    }
+    Ok(())
+}
+
+fn validate_internal_fixture(fixture: &PatchedFixture) -> Result<(), FixtureError> {
+    if fixture.fixture_number.is_none() || fixture.virtual_fixture_number.is_some() {
+        return Err(invalid(format!(
+            "internal fixture {} requires a regular positive fixture ID",
+            fixture.fixture_id.0
+        )));
+    }
+    let has_patch = fixture.direct_control.is_some()
+        || fixture.universe.is_some()
+        || fixture.address.is_some()
+        || has_split_patch(&fixture.split_patches)
+        || !fixture.multipatch.is_empty();
+    if has_patch {
+        return Err(invalid(format!(
+            "internal fixture {} cannot have a DMX, direct-control, or multipatch assignment",
+            fixture.fixture_id.0
+        )));
+    }
+    for (label, binding) in [
+        ("library", fixture.internal_bindings.library.as_deref()),
+        ("output", fixture.internal_bindings.output.as_deref()),
+    ] {
+        if binding.is_some_and(|binding| {
+            binding.trim() != binding || binding.is_empty() || binding.len() > 128
+        }) {
+            return Err(invalid(format!(
+                "internal fixture {} {label} binding must be a trimmed 1-128 byte logical identity",
+                fixture.fixture_id.0
+            )));
+        }
     }
     Ok(())
 }

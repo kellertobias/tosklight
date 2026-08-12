@@ -17,6 +17,7 @@ pub(super) fn build(state: AppState) -> Router {
         .merge(dynamics_http::router())
         .merge(macros_v2::router())
         .merge(timecode_v2::router())
+        .merge(internal_audio_http::router())
         .merge(playback_topology_http::router())
         .merge(attribute_configuration::router())
         .merge(control_desk_configuration_v2::router())
