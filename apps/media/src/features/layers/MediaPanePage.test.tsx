@@ -20,6 +20,19 @@ beforeEach(() => {
 });
 
 describe("the production Media pane", () => {
+	it("puts Release on the off side and Take over playback on the on side", async () => {
+		stubServer();
+		render(<MediaPanePage />);
+
+		await screen.findByRole("switch", { name: "Take over playback" });
+		expect(document.querySelector(".ui-switch-state-off")).toHaveTextContent(
+			"Release",
+		);
+		expect(document.querySelector(".ui-switch-state-on")).toHaveTextContent(
+			"Take over playback",
+		);
+	});
+
 	it("takes over only the selected output and exposes the master's controls", async () => {
 		const second = anOutput({
 			id: "22222222-2222-4222-8222-222222222222",

@@ -463,8 +463,8 @@ export function MediaPanePage() {
 						className="media-playback-takeover"
 						label="Take over playback"
 						aria-label="Take over playback"
-						offLabel="Take over playback"
-						onLabel="Release"
+						offLabel="Release"
+						onLabel="Take over playback"
 						checked={takeover}
 						disabled={!selectedOutput || takeoverBusy}
 						onChange={async (event) => {

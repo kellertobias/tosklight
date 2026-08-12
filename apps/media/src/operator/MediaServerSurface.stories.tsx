@@ -487,8 +487,8 @@ function StatefulPlayback() {
 						className="media-playback-takeover"
 						label="Take over playback"
 						aria-label="Take over playback"
-						offLabel="Take over playback"
-						onLabel="Release"
+						offLabel="Release"
+						onLabel="Take over playback"
 						checked={takeover}
 						onChange={(event) => setTakeover(event.target.checked)}
 					/>
