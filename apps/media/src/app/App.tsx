@@ -4,6 +4,7 @@
 
 import { WindowFrame } from "@tosklight/ui/window-kit";
 import { useEffect, useState } from "react";
+import { AudioPage } from "../features/audio/AudioPage";
 import { DashboardPage } from "../features/dashboard/DashboardPage";
 import { MediaPanePage } from "../features/layers/MediaPanePage";
 import { LibraryPage } from "../features/media-library/LibraryPage";
@@ -28,6 +29,7 @@ const PAGES: Record<RoutePath, () => React.ReactElement> = {
 	"/library": () => <LibraryPage />,
 	"/visualizers": () => <LibraryPage mode="visualizers" />,
 	"/text": () => <LibraryPage mode="text" />,
+	"/audio": AudioPage,
 	"/settings": SettingsPage,
 };
 
@@ -37,6 +39,7 @@ const SECTION_BY_PATH: Record<RoutePath, MediaServerSection> = {
 	"/library": "library",
 	"/visualizers": "library",
 	"/text": "library",
+	"/audio": "audio",
 	"/settings": "settings",
 };
 

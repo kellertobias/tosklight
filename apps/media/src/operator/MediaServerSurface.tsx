@@ -11,6 +11,7 @@ export const MEDIA_SERVER_SECTIONS = [
 	{ id: "dashboard", label: "Dashboard", icon: "⌂" },
 	{ id: "media", label: "Playback", icon: "▣" },
 	{ id: "library", label: "Library", icon: "▦" },
+	{ id: "audio", label: "Audio", icon: "≋" },
 	{ id: "settings", label: "Settings", icon: "⚙" },
 ] as const;
 

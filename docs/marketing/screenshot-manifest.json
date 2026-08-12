@@ -227,6 +227,16 @@
 			"interactions": []
 		},
 		{
+			"file": "media-server-audio.png",
+			"title": "Media Server audio",
+			"caption": "The production audio monitor exposes live bass, mid, treble, level, peak, waveform, spectrum, beat, and tempo analysis from the Media Server input.",
+			"storyId": "tosklight-media-server--audio",
+			"viewport": { "width": 1440, "height": 900 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": []
+		},
+		{
 			"file": "media-server-network-inputs.png",
 			"title": "Media Server network and inputs",
 			"caption": "Network listeners, DMX personality and address, and audio input live together in the Media Server settings language.",

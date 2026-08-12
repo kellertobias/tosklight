@@ -9,6 +9,7 @@ export const ROUTES = [
 	{ path: "/library", label: "Library" },
 	{ path: "/visualizers", label: "Visualizers" },
 	{ path: "/text", label: "Text" },
+	{ path: "/audio", label: "Audio" },
 	{ path: "/settings", label: "Settings" },
 ] as const;
 
@@ -18,7 +19,6 @@ export function normalizePath(pathname: string): RoutePath {
 	const trimmed = pathname.replace(/\/+$/u, "") || "/";
 	const legacy = {
 		"/layers": "/media",
-		"/audio": "/settings",
 		"/dmx": "/settings",
 		"/logs": "/settings",
 	} as const;

@@ -23,6 +23,16 @@ test("Media Server dock and settings navigate between Storybook screens", async 
 	await expect(page).toHaveURL(
 		/\?path=\/story\/tosklight-media-server--settings-network-and-inputs$/u,
 	);
+
+	await story.getByRole("button", { name: "Audio", exact: true }).click();
+	await expect(page).toHaveURL(
+		/\?path=\/story\/tosklight-media-server--audio$/u,
+	);
+	await expect(story.getByRole("meter", { name: "Bass" })).toHaveAttribute(
+		"aria-valuenow",
+		"82",
+	);
+	await expect(story.getByText("124.8 BPM")).toBeVisible();
 });
 
 test("Media Server Library title filters expose their own folder ranges", async ({

@@ -9,7 +9,7 @@ import {
 } from "./MediaServerSurface";
 
 describe("the Media Server operator surface", () => {
-	it("shows only the four Media Server built-ins in their operator order", async () => {
+	it("shows the five Media Server destinations in their operator order", async () => {
 		const navigate = vi.fn();
 		render(
 			<MediaServerShell
@@ -44,13 +44,18 @@ describe("the Media Server operator surface", () => {
 			MEDIA_SERVER_SECTIONS.map((section) => `${section.icon}${section.label}`),
 		);
 		expect(
-			within(dock).queryByText(/desktop|audio|dmx|logs|visualizers|text/iu),
+			within(dock).queryByText(/desktop|dmx|logs|visualizers|text/iu),
 		).not.toBeInTheDocument();
 
 		await userEvent.click(
 			within(destinations).getByRole("button", { name: /Playback/ }),
 		);
 		expect(navigate).toHaveBeenCalledWith("media");
+
+		await userEvent.click(
+			within(destinations).getByRole("button", { name: /Audio/ }),
+		);
+		expect(navigate).toHaveBeenCalledWith("audio");
 	});
 
 	it("keeps the four settings areas in the Light Desk order", () => {

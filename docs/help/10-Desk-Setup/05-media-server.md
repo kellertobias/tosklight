@@ -7,7 +7,9 @@ surface, resolution, presentation rate, DMX personality, protocol, universe, and
 
 The administration interface is served by the Media Server itself. Open the address configured as
 **This interface**. Its left dock follows the Light Desk operator language: the Media Server mark
-and current time are followed by **Dashboard**, **Playback**, **Library**, and **Settings**. Those
+and current time are followed by **Dashboard**, **Playback**, **Library**, **Audio**, and
+**Settings**. The Audio destination shows the live bass, mid, treble, level, peak, waveform,
+spectrum, beat, and tempo analysis alongside the stored input tuning. Those
 are the only built-ins in this interface. The connection indicator changes
 if live telemetry is lost. While a Light Desk is connected, its active show name appears in that
 indicator and on the Dashboard. If the desk stops announcing itself, the name disappears instead

@@ -5,8 +5,10 @@ import {
 	SwitchField,
 	TextAreaField,
 } from "@tosklight/ui/controls";
+import { WindowFrame } from "@tosklight/ui/window-kit";
 import { type ReactNode, useState } from "react";
 import { StatefulMediaStory } from "../../../light-desktop/src/windows/MediaPaneWindow.stories";
+import { AudioMeters } from "../features/audio/AudioMeters";
 import {
 	GeneratedLibraryBrowserView,
 	type LibrarySourceType,
@@ -15,7 +17,10 @@ import {
 	allocateFreeAddresses,
 	LibraryBrowserView,
 } from "../features/media-library/LibraryPage";
-import type { CatalogView } from "../shared/api/generated/media-wire";
+import type {
+	AudioView,
+	CatalogView,
+} from "../shared/api/generated/media-wire";
 import {
 	DashboardScreen,
 	LibrariesSettings,
@@ -41,6 +46,7 @@ const MEDIA_STORY_BY_SECTION: Record<MediaServerSection, string> = {
 	dashboard: "dashboard",
 	media: "media",
 	library: "library",
+	audio: "audio",
 	settings: "settings-libraries",
 };
 
@@ -90,6 +96,28 @@ const outputs = [
 		],
 	},
 ];
+
+const audioAnalysis = {
+	capturing: true,
+	device: "USB Audio CODEC",
+	detail: null,
+	waveform: {
+		points: [
+			0, 0.28, -0.12, 0.64, -0.48, 0.2, 0.78, -0.32, 0.1, 0.52, -0.68, 0.34,
+			0.08, -0.22, 0.58, -0.14, 0,
+		],
+	},
+	spectrum: [
+		0.78, 0.86, 0.72, 0.63, 0.58, 0.66, 0.54, 0.47, 0.41, 0.35, 0.3, 0.24, 0.2,
+		0.17, 0.13, 0.09,
+	],
+	bands: { bass: 0.82, mid: 0.61, treble: 0.38 },
+	energy: 0.69,
+	peak: 0.91,
+	beat: 0.84,
+	bpm: 124.8,
+	beatPhase: 0.32,
+} satisfies AudioView;
 
 const library = [
 	{
@@ -682,6 +710,24 @@ export const Media: Story = {
 export const Library: Story = { render: () => <StatefulLibrary /> };
 export const Visualizers: Story = { render: () => <StatefulVisualizers /> };
 export const Text: Story = { render: () => <StatefulText /> };
+export const Audio: Story = {
+	render: () => (
+		<Frame active="audio">
+			<WindowFrame
+				title="Audio"
+				info={{
+					primary: "USB Audio CODEC",
+					secondary: "Live audio analysis",
+				}}
+				className="media-route-window"
+			>
+				<section className="media-page">
+					<AudioMeters audio={audioAnalysis} live />
+				</section>
+			</WindowFrame>
+		</Frame>
+	),
+};
 
 export const SettingsLibraries: Story = {
 	render: () => (

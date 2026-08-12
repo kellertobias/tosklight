@@ -16,18 +16,19 @@ describe("routing", () => {
 
 	it("keeps the retired page URLs reachable through the new information architecture", () => {
 		expect(normalizePath("/layers")).toBe("/media");
-		for (const path of ["/audio", "/dmx", "/logs"]) {
+		for (const path of ["/dmx", "/logs"]) {
 			expect(normalizePath(path)).toBe("/settings");
 		}
 	});
 
-	it("exposes exactly the six operator dock sections in order", () => {
+	it("exposes the production routes in operator order", () => {
 		expect(ROUTES.map((route) => route.label)).toEqual([
 			"Dashboard",
 			"Playback",
 			"Library",
 			"Visualizers",
 			"Text",
+			"Audio",
 			"Settings",
 		]);
 	});
