@@ -1,9 +1,9 @@
 import { NativeStageSurface } from "./NativeStageSurface";
+import type { StageOptionsModel } from "./types";
 import { useNativeStagePane } from "./useNativeStagePane";
 import { useStagePanePicks } from "./useStagePanePicks";
-import { useStagePaneSelection } from "./useStagePaneSelection";
 import { stageViewMode, useStagePanePicture } from "./useStagePanePicture";
-import type { StageOptionsModel } from "./types";
+import { useStagePaneSelection } from "./useStagePaneSelection";
 import type { StageSelectionModel } from "./useStageSelection";
 
 /**
@@ -46,7 +46,7 @@ export function StageRendererView({
 	 */
 	useStagePanePicks(pane, selection, interactive);
 	// And the answer goes back, so the renderer can draw what the desk decided was selected.
-	useStagePaneSelection(pane, selection);
+	useStagePaneSelection(pane, selection, options.showSelection);
 	// The picture settings cross when the renderer starts, not only when one is moved.
 	useStagePanePicture(
 		pane,
