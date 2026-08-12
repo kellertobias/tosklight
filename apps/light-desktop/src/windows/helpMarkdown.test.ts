@@ -22,6 +22,16 @@ describe("help Markdown extensions", () => {
   it("allows safe links and relative images only", () => {
     expect(safeHelpUrl("images/desk.png", "image")).toBe("/api/v2/help/assets/images/desk.png");
     expect(safeHelpUrl("../secret.png", "image")).toBeUndefined();
+    expect(
+      safeHelpUrl(
+        "../../assets/screenshots/stage.png",
+        "image",
+        "30-Programmer/02-stage/details.md",
+      ),
+    ).toBe("/api/v2/help/assets/assets/screenshots/stage.png");
+    expect(
+      safeHelpUrl("../../../secret.png", "image", "30-Programmer/topic.md"),
+    ).toBeUndefined();
     expect(safeHelpUrl("javascript:alert(1)", "link")).toBeUndefined();
     expect(safeHelpUrl("https://example.com/help", "link")).toBe("https://example.com/help");
   });

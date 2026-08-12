@@ -140,6 +140,11 @@ export interface PaneModel extends GridRect {
 	showGroupShortcuts?: boolean;
 	fixtureSheetActiveOnly?: boolean;
 	fixtureSheetCompactMode?: FixtureSheetCompactMode;
+	fixtureSheetIncludedHeads?: FixtureSheetIncludedHeads;
+	fixtureSheetOrder?: FixtureSheetOrder;
+	fixtureSheetCueListId?: string;
+	fixtureSheetColumns?: FixtureSheetColumn[];
+	fixtureSheetShowType?: boolean;
 	showCueSidebar?: boolean;
 	cueListCompactRows?: boolean;
 	cueListSource?: "fixed" | "follow-selection";

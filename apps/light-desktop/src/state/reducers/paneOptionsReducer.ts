@@ -34,6 +34,25 @@ export function reducePaneOptions(
 	action: Action,
 ): AppState | undefined {
 	switch (action.type) {
+		case "SET_PANE_FIXTURE_OPTIONS":
+			return updateActivePane(state, action.id, (pane) => ({
+				...pane,
+				...(action.options.includedHeads === undefined
+					? {}
+					: { fixtureSheetIncludedHeads: action.options.includedHeads }),
+				...(action.options.order === undefined
+					? {}
+					: { fixtureSheetOrder: action.options.order }),
+				...(action.options.cueListId === undefined
+					? {}
+					: { fixtureSheetCueListId: action.options.cueListId }),
+				...(action.options.columns === undefined
+					? {}
+					: { fixtureSheetColumns: action.options.columns }),
+				...(action.options.showType === undefined
+					? {}
+					: { fixtureSheetShowType: action.options.showType }),
+			}));
 		case "SET_PANE_POOL_COLUMNS":
 			return updateActivePane(state, action.id, (pane) => ({
 				...pane,

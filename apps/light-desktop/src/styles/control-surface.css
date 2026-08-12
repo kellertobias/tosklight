@@ -2578,6 +2578,33 @@ textarea,
 }
 
 /*
+ * A Windowed Stage also has the desktop grid beneath its pane.
+ *
+ * That grid belongs around the windows, but its ancestor background used to continue through the
+ * transparent Stage hole and was therefore composited over the native picture. DeskGrid supplies
+ * backdrop rectangles for only the cells outside Stage panes; switch to those rectangles once a
+ * native Stage is drawing so the surrounding desktop keeps its grid without covering the Stage.
+ */
+.stage-grid-backdrop {
+	display: none;
+	min-width: 0;
+	min-height: 0;
+	pointer-events: none;
+}
+.desk-grid:has(.stage-canvas-3d[data-stage-renderer="native"]) {
+	background-image: none;
+}
+.desk-grid:has(.stage-canvas-3d[data-stage-renderer="native"])
+	> .stage-grid-backdrop {
+	display: block;
+	background-image:
+		linear-gradient(#162028 1px, transparent 1px),
+		linear-gradient(90deg, #162028 1px, transparent 1px);
+	background-size: calc(100% / var(--stage-grid-backdrop-columns))
+		calc(100% / var(--stage-grid-backdrop-rows));
+}
+
+/*
  * What a screen that cannot draw a Stage says.
  *
  * Stated rather than left blank, and stated in terms of what is unaffected: an operator who opens

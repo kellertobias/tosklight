@@ -35,14 +35,20 @@ function HelpWarningIcon() {
 
 export function HelpMarkdown({
   markdown,
+  topicId,
   urlTransform = safeHelpUrl,
 }: {
   markdown: string;
+  topicId?: string;
   urlTransform?: HelpUrlTransform;
 }) {
   return <ReactMarkdown
     remarkPlugins={[remarkGfm]}
-    urlTransform={(url, key) => urlTransform(url, key === "src" ? "image" : "link") ?? ""}
+    urlTransform={(url, key) =>
+      (urlTransform === safeHelpUrl
+        ? safeHelpUrl(url, key === "src" ? "image" : "link", topicId)
+        : urlTransform(url, key === "src" ? "image" : "link")) ?? ""
+    }
     components={{
       code({ className, children, ...props }) {
         const value = String(children).replace(/\n$/, "");
@@ -231,7 +237,7 @@ export function HelpWindowView({
           <HelpWarningIcon/>
           <span><strong>Help catalog warning</strong><small>{message}</small></span>
         </div>)}
-        {topic && <HelpMarkdown markdown={topic.markdown} urlTransform={urlTransform}/>}
+        {topic && <HelpMarkdown markdown={topic.markdown} topicId={topic.id} urlTransform={urlTransform}/>}
       </main></WindowScrollArea>
     </div>
   </div>;

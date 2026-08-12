@@ -30,6 +30,17 @@ export type Action =
 			id: string;
 			mode: AppState["fixtureSheetCompactMode"];
 	  }
+	| {
+			type: "SET_PANE_FIXTURE_OPTIONS";
+			id: string;
+			options: {
+				includedHeads?: AppState["fixtureSheetIncludedHeads"];
+				order?: AppState["fixtureSheetOrder"];
+				cueListId?: string;
+				columns?: FixtureSheetColumn[];
+				showType?: boolean;
+			};
+	  }
 	| { type: "SET_PANE_POOL_COLUMNS"; id: string; value: number }
 	| { type: "DISMISS_LAYOUT_MIGRATION_NOTICE" }
 	| { type: "SET_PANE_CUE_SIDEBAR"; id: string; value: boolean }

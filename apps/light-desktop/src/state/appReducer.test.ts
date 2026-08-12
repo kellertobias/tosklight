@@ -454,6 +454,31 @@ describe("appReducer Stage and Development pane settings", () => {
 		expect(updated.stageView).toBe("2d");
 	});
 
+	it("stores the complete Fixture Sheet configuration independently on each pane", () => {
+		const options = appReducer(initialState, {
+			type: "SET_PANE_FIXTURE_OPTIONS",
+			id: "fixtures",
+			options: {
+				includedHeads: "no-sub-heads",
+				order: "active",
+				cueListId: "front",
+				columns: ["id", "name", "patch"],
+				showType: false,
+			},
+		});
+		const pane = options.desks
+			.find((desk) => desk.id === options.activeDeskId)
+			?.panes.find((candidate) => candidate.id === "fixtures");
+		expect(pane).toMatchObject({
+			fixtureSheetIncludedHeads: "no-sub-heads",
+			fixtureSheetOrder: "active",
+			fixtureSheetCueListId: "front",
+			fixtureSheetColumns: ["id", "name", "patch"],
+			fixtureSheetShowType: false,
+		});
+		expect(options.fixtureSheetOrder).toBe(initialState.fixtureSheetOrder);
+	});
+
 	it("retires persisted Layout panes and built-ins with one actionable notice", () => {
 		const desks = [
 			{

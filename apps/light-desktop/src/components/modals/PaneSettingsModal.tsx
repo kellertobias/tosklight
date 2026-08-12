@@ -18,13 +18,29 @@ import {
 	usePlaybackRuntimeStatus,
 } from "../../features/playbackRuntime/PlaybackRuntimeView";
 import type { VirtualPlaybackZone } from "../../features/virtualPlaybackZones/contracts";
+import { useDesktopBridge } from "../../platform/desktop";
 import { PRESET_FAMILIES } from "../../presetFamilies";
 import { useApp } from "../../state/AppContext";
 import {
 	MAX_PLAYBACK_PAGE,
 	MAX_VIRTUAL_PLAYBACK_CELLS,
 } from "../../state/reducers/paneOptionsReducer";
-import { GRID_COLUMNS, GRID_ROWS, type PaneModel } from "../../types";
+import {
+	type FixtureSheetColumn,
+	GRID_COLUMNS,
+	GRID_ROWS,
+	type PaneModel,
+} from "../../types";
+import {
+	DEFAULT_FIXTURE_SHEET_COLUMNS,
+	FIXTURE_SHEET_COLUMN_LABELS,
+	FIXTURE_SHEET_COLUMN_ORDER,
+} from "../../windows/FixtureSheetSettings";
+import {
+	type FixtureSheetCuelistOption,
+	useFixtureSheetCuelistAuthority,
+} from "../../windows/fixtureSheetCuelistAuthority";
+import { StageVizSettings } from "../../windows/stageWindow/StageVizSettings";
 import { useVirtualPlaybackSurfaceZones } from "../control/virtualPlayback/useVirtualPlaybackSurfaceZones";
 import { PoolColorSettings } from "../shared/PoolColorSettings";
 import { requestPaneRemoval } from "../shell/paneRemovalGuard";
@@ -288,13 +304,11 @@ function PaneLayoutSettings({
 	);
 }
 
-function StagePaneSettings({ pane }: { pane: PaneModel }) {
-	const { dispatch } = useApp();
+export function StagePaneSettings({ pane }: { pane: PaneModel }) {
+	const { state, dispatch } = useApp();
+	const bridge = useDesktopBridge();
 	const setOption = (
-		option:
-			| "stageView"
-			| "followPreload"
-			| "stage2dSide",
+		option: "stageView" | "followPreload" | "stage2dSide",
 		value:
 			| boolean
 			| NonNullable<PaneModel["stageView"]>
@@ -338,6 +352,44 @@ function StagePaneSettings({ pane }: { pane: PaneModel }) {
 					]}
 				/>
 			)}
+			{(pane.stageView ?? "2d") === "3d" && (
+				<>
+					<Button
+						onClick={() =>
+							void bridge.sendStagePaneInput("frame", 0, 0, pane.id)
+						}
+					>
+						Reset view
+					</Button>
+					<SwitchField
+						label="Floor grid"
+						offLabel="Hidden"
+						onLabel="Visible"
+						checked={state.stageShowFloorGrid}
+						onChange={(event) =>
+							dispatch({
+								type: "SET_STAGE_OPTIONS",
+								showFloorGrid: event.target.checked,
+							})
+						}
+					/>
+				</>
+			)}
+			{(pane.stageView ?? "2d") === "3d-viz" && (
+				<StageVizSettings paneId={pane.id} />
+			)}
+			<SwitchField
+				label="Show selection"
+				offLabel="Hidden"
+				onLabel="Visible"
+				checked={state.stageShowSelection}
+				onChange={(event) =>
+					dispatch({
+						type: "SET_STAGE_OPTIONS",
+						showSelection: event.target.checked,
+					})
+				}
+			/>
 		</FormLayout>
 	);
 }
@@ -608,10 +660,26 @@ function PaneGroupShortcutsSettings({ pane }: { pane: PaneModel }) {
 	);
 }
 
-function FixtureSheetPaneSettings({ pane }: { pane: PaneModel }) {
+export function FixtureSheetPaneSettings({
+	pane,
+	cueLists,
+	selectedCueListId,
+}: {
+	pane: PaneModel;
+	cueLists: readonly FixtureSheetCuelistOption[];
+	selectedCueListId: string;
+}) {
 	const { dispatch } = useApp();
+	const columns = pane.fixtureSheetColumns ?? DEFAULT_FIXTURE_SHEET_COLUMNS;
+	const setOptions = (options: {
+		includedHeads?: NonNullable<PaneModel["fixtureSheetIncludedHeads"]>;
+		order?: NonNullable<PaneModel["fixtureSheetOrder"]>;
+		cueListId?: string;
+		columns?: FixtureSheetColumn[];
+		showType?: boolean;
+	}) => dispatch({ type: "SET_PANE_FIXTURE_OPTIONS", id: pane.id, options });
 	return (
-		<FormLayout>
+		<FormLayout labelPlacement="side">
 			<SelectField
 				label="Compact mode"
 				value={pane.fixtureSheetCompactMode ?? "off"}
@@ -640,6 +708,64 @@ function FixtureSheetPaneSettings({ pane }: { pane: PaneModel }) {
 						value: event.target.checked,
 					})
 				}
+			/>
+			<SelectField
+				label="Fixture heads"
+				value={pane.fixtureSheetIncludedHeads ?? "all"}
+				onChange={(includedHeads) => setOptions({ includedHeads })}
+				options={[
+					{ value: "all", label: "All" },
+					{ value: "no-sub-heads", label: "No sub heads" },
+					{ value: "no-master-heads", label: "No master heads" },
+				]}
+			/>
+			<SelectField
+				label="Ordering"
+				value={pane.fixtureSheetOrder ?? "fixture-id"}
+				onChange={(order) => setOptions({ order })}
+				options={[
+					{ value: "fixture-id", label: "Fixture ID" },
+					{ value: "active", label: "Active fixtures first" },
+				]}
+			/>
+			<SelectField
+				label="Cuelist"
+				value={selectedCueListId}
+				onChange={(cueListId) => setOptions({ cueListId })}
+				options={[
+					{ value: "", label: "All fixtures" },
+					...cueLists.map((cueList) => ({
+						value: cueList.id,
+						label: cueList.name,
+					})),
+				]}
+			/>
+			<div className="fixture-sheet-column-options">
+				{FIXTURE_SHEET_COLUMN_ORDER.map((column) => (
+					<SwitchField
+						key={column}
+						label={FIXTURE_SHEET_COLUMN_LABELS[column]}
+						offLabel="Hidden"
+						onLabel="Visible"
+						checked={columns.includes(column)}
+						disabled={columns.length === 1 && columns.includes(column)}
+						onChange={(event) =>
+							setOptions({
+								columns: event.target.checked
+									? [...columns, column]
+									: columns.filter((candidate) => candidate !== column),
+							})
+						}
+					/>
+				))}
+			</div>
+			<SwitchField
+				label="Show fixture type"
+				offLabel="Name only"
+				onLabel="Show type"
+				checked={pane.fixtureSheetShowType ?? true}
+				disabled={!columns.includes("name")}
+				onChange={(event) => setOptions({ showType: event.target.checked })}
 			/>
 		</FormLayout>
 	);
@@ -674,6 +800,8 @@ function VirtualPlaybackExclusionSettings({
 function paneSpecificTabs(
 	pane: PaneModel,
 	cuePaneCueLists: readonly CuePaneCuelistPlayback[],
+	fixturePaneCueLists: readonly FixtureSheetCuelistOption[],
+	fixturePaneSelectedCueListId: string,
 	close: () => void,
 ) {
 	const tabs: WindowSettingsTab[] = [];
@@ -736,7 +864,13 @@ function paneSpecificTabs(
 		tabs.push({
 			id: "fixture-sheet",
 			label: "Fixture Sheet",
-			content: <FixtureSheetPaneSettings pane={pane} />,
+			content: (
+				<FixtureSheetPaneSettings
+					pane={pane}
+					cueLists={fixturePaneCueLists}
+					selectedCueListId={fixturePaneSelectedCueListId}
+				/>
+			),
 		});
 	if (pane.kind === "virtual_playbacks")
 		tabs.push(
@@ -784,11 +918,21 @@ export function PaneSettingsModal() {
 function PaneSettingsDialog({ pane }: { pane: PaneModel }) {
 	const { state, dispatch } = useApp();
 	const cuePaneCueLists = useCuePaneCuelistPlaybacks(pane.kind === "cues");
+	const fixturePaneCuelists = useFixtureSheetCuelistAuthority({
+		enabled: pane.kind === "fixtures",
+		savedCueListId: pane.fixtureSheetCueListId ?? "",
+	});
 	const close = () => dispatch({ type: "SET_PANE_SETTINGS", id: null });
 	const maximized = state.maximizedPaneId === pane.id;
 	const tabs = [
 		paneLayoutTab(pane, maximized),
-		...paneSpecificTabs(pane, cuePaneCueLists, close),
+		...paneSpecificTabs(
+			pane,
+			cuePaneCueLists,
+			fixturePaneCuelists.cueLists,
+			fixturePaneCuelists.selectedCueListId,
+			close,
+		),
 	];
 	return <WindowSettings title="Pane Settings" tabs={tabs} onClose={close} />;
 }
