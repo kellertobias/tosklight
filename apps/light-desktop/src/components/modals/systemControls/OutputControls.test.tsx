@@ -33,9 +33,7 @@ describe("OutputControls fixture action scope", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Actions" }));
 
 		for (const action of FIXED_FIXTURE_ACTIONS.slice(0, 3)) {
-			expect(
-				screen.getByRole("button", { name: action.all }),
-			).toBeEnabled();
+			expect(screen.getByRole("button", { name: action.all })).toBeEnabled();
 		}
 		expect(screen.getByRole("button", { name: "Fan Mode" })).toBeEnabled();
 	});
@@ -45,9 +43,7 @@ describe("OutputControls fixture action scope", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Actions" }));
 
 		for (const action of FIXED_FIXTURE_ACTIONS.slice(0, 3)) {
-			fireEvent.click(
-				screen.getByRole("button", { name: action.selected }),
-			);
+			fireEvent.click(screen.getByRole("button", { name: action.selected }));
 			expect(onFixtureAction).toHaveBeenCalledWith(action.semantic, "click");
 		}
 		fireEvent.click(screen.getByRole("button", { name: "Fan Mode" }));
@@ -73,6 +69,13 @@ describe("OutputControls fixture action scope", () => {
 		renderControls(false);
 		const rail = document.querySelector(".system-controls-left-rail");
 		fireEvent.click(screen.getByRole("button", { name: "Actions" }));
+		const navigation = screen.getByLabelText("Fixture controls");
+		expect(navigation.firstElementChild).toContainElement(
+			screen.getByRole("button", { name: "Fan Mode" }),
+		);
+		expect(navigation.lastElementChild).toBe(
+			screen.getByRole("button", { name: "Masters" }),
+		);
 		expect(screen.getByRole("button", { name: "Masters" })).toBeInTheDocument();
 		expect(document.querySelector(".system-controls-left-rail")).toBe(rail);
 		fireEvent.click(screen.getByRole("button", { name: "Masters" }));
