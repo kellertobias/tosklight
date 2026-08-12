@@ -1,45 +1,170 @@
-import { useEffect } from "react";
-import { useApp } from "../../state/AppContext";
-import { useHardwareConnected } from "../../features/deskSnapshot/DeskSnapshotState";
-import { VerticalTouchFader } from "./VerticalTouchFader";
-import { DualVerticalTouchFader } from "./DualVerticalTouchFader";
 import { Button } from "@tosklight/ui";
+import { TouchEncoder } from "@tosklight/ui/encoders";
+import { useEffect } from "react";
+import { useHardwareConnected } from "../../features/deskSnapshot/DeskSnapshotState";
+import { useApp } from "../../state/AppContext";
 import { HardwareEncoderDisplay } from "./HardwareEncoderDisplay";
 
+type NavigationKey =
+	| "stageZoom"
+	| "stagePanX"
+	| "stagePanY"
+	| "stageOrbitX"
+	| "stageOrbitY";
+
+interface NavigationEncoder {
+	key: NavigationKey;
+	label: string;
+	minimum: number;
+	maximum: number;
+	fineStep: number;
+	coarseStep: number;
+	format(value: number): string;
+}
+
+const NAVIGATION_ENCODERS: readonly NavigationEncoder[] = [
+	{
+		key: "stageZoom",
+		label: "Zoom",
+		minimum: 0.2,
+		maximum: 2,
+		fineStep: 0.02,
+		coarseStep: 0.2,
+		format: (value) => `${Math.round(value * 100)}%`,
+	},
+	{
+		key: "stagePanX",
+		label: "X Pan",
+		minimum: -100,
+		maximum: 100,
+		fineStep: 1,
+		coarseStep: 5,
+		format: (value) => String(Math.round(value)),
+	},
+	{
+		key: "stagePanY",
+		label: "Y Pan",
+		minimum: -100,
+		maximum: 100,
+		fineStep: 1,
+		coarseStep: 5,
+		format: (value) => String(Math.round(value)),
+	},
+	{
+		key: "stageOrbitX",
+		label: "Orbit",
+		minimum: -180,
+		maximum: 180,
+		fineStep: 1,
+		coarseStep: 5,
+		format: (value) => `${Math.round(value)}°`,
+	},
+	{
+		key: "stageOrbitY",
+		label: "Orbit tilt",
+		minimum: -90,
+		maximum: 90,
+		fineStep: 1,
+		coarseStep: 5,
+		format: (value) => `${Math.round(value)}°`,
+	},
+];
+
+const PLAN_NAVIGATION_ENCODERS = NAVIGATION_ENCODERS.slice(0, 3);
+
+function clamp(value: number, encoder: NavigationEncoder) {
+	return Math.max(encoder.minimum, Math.min(encoder.maximum, value));
+}
+
+function navigationAction(key: NavigationKey, value: number) {
+	const property = {
+		stageZoom: "zoom",
+		stagePanX: "panX",
+		stagePanY: "panY",
+		stageOrbitX: "orbitX",
+		stageOrbitY: "orbitY",
+	} as const;
+	return { type: "SET_STAGE_NAVIGATION" as const, [property[key]]: value };
+}
+
 export function StageCommandControls() {
-  const { state, dispatch } = useApp();
-  const hardwareAttached = useHardwareConnected();
-  const hardwareConnected = Boolean(hardwareAttached || state.midiProfile);
-  useEffect(() => {
-    if (!hardwareConnected) return;
-    const handleEncoder = (event: Event) => {
-      const { control, value } = (event as CustomEvent<{ control: string; value?: string }>).detail;
-      const slot = Number(control.split("/")[1]);
-      if (!["up", "down", "left", "right"].includes(value ?? "")) return;
-      const direction = value === "up" || value === "right" ? 1 : -1;
-      const coarse = value === "left" || value === "right";
-      if (state.stageMode !== "navigate") return;
-      if (slot === 1) dispatch({ type: "SET_STAGE_NAVIGATION", zoom: Math.max(.2, state.stageZoom + direction * (coarse ? .2 : .02)) });
-      if (slot === 2) dispatch({ type: "SET_STAGE_NAVIGATION", ...(coarse ? { panY: state.stagePanY + direction * 5 } : { panX: state.stagePanX + direction * 5 }) });
-      if (slot === 3 && state.stageView === "3d") dispatch({ type: "SET_STAGE_NAVIGATION", ...(coarse ? { orbitY: state.stageOrbitY + direction * 5 } : { orbitX: state.stageOrbitX + direction * 5 }) });
-    };
-    window.addEventListener("light:encoder-action", handleEncoder);
-    return () => window.removeEventListener("light:encoder-action", handleEncoder);
-  }, [hardwareConnected, state.stageMode, state.stageView, state.stageZoom, state.stagePanX, state.stagePanY, state.stageOrbitX, state.stageOrbitY]);
-  if (state.stageMode !== "navigate") return null;
-  return <div className="parameter-controls stage-command-controls"><div className="family-tabs"><Button className="active">Navigate Stage</Button></div><div className="parameter-surfaces">
-    {hardwareConnected ? <>
-      <HardwareEncoderDisplay slot={1} target={{ label: "Zoom", value: `${Math.round(state.stageZoom * 100)}%`, role: "Turn · Press-turn coarse" }} />
-      <HardwareEncoderDisplay slot={2} target={{ label: "X Pan", value: String(Math.round(state.stagePanX)), role: "Turn" }} secondary={{ label: "Y Pan", value: String(Math.round(state.stagePanY)), role: "Press-turn" }} />
-      {state.stageView === "3d" ? <HardwareEncoderDisplay slot={3} target={{ label: "Orbit", value: `${Math.round(state.stageOrbitX)}°`, role: "Turn" }} secondary={{ label: "Orbit tilt", value: `${Math.round(state.stageOrbitY)}°`, role: "Press-turn" }} /> : <HardwareEncoderDisplay slot={3} />}
-      {[4, 5, 6].map((slot) => <HardwareEncoderDisplay key={slot} slot={slot} />)}
-    </> : <>
-    <VerticalTouchFader label="Zoom" value={state.stageZoom * 100} maximum={200} onChange={(value) => dispatch({ type: "SET_STAGE_NAVIGATION", zoom: Math.max(.2, value / 100) })}/>
-    <DualVerticalTouchFader encoder="X/Y Pan" primary={{ label: "X Pan", value: state.stagePanX + 100, maximum: 200, display: String(Math.round(state.stagePanX)), inputOffset: 100, onChange: (value) => dispatch({ type: "SET_STAGE_NAVIGATION", panX: value - 100 }) }} secondary={{ label: "Y Pan", value: state.stagePanY + 100, maximum: 200, display: String(Math.round(state.stagePanY)), inputOffset: 100, onChange: (value) => dispatch({ type: "SET_STAGE_NAVIGATION", panY: value - 100 }) }}/>
-    {state.stageView === "3d" && <DualVerticalTouchFader
-      encoder="Orbit"
-      primary={{ label: "Orbit", value: state.stageOrbitX + 180, maximum: 360, display: `${Math.round(state.stageOrbitX)}°`, inputOffset: 180, onChange: (value) => dispatch({ type: "SET_STAGE_NAVIGATION", orbitX: value - 180 }) }}
-      secondary={{ label: "Orbit tilt", value: state.stageOrbitY + 90, maximum: 180, display: `${Math.round(state.stageOrbitY)}°`, inputOffset: 90, onChange: (value) => dispatch({ type: "SET_STAGE_NAVIGATION", orbitY: value - 90 }) }}
-    />}</>}
-  </div></div>;
+	const { state, dispatch } = useApp();
+	const hardwareAttached = useHardwareConnected();
+	const hardwareConnected = Boolean(hardwareAttached || state.midiProfile);
+	const encoders =
+		state.stageView === "3d" ? NAVIGATION_ENCODERS : PLAN_NAVIGATION_ENCODERS;
+	const setValue = (encoder: NavigationEncoder, value: number) =>
+		dispatch(navigationAction(encoder.key, clamp(value, encoder)));
+
+	useEffect(() => {
+		if (!hardwareConnected || state.stageMode !== "navigate") return;
+		const handleEncoder = (event: Event) => {
+			const { control, value } = (
+				event as CustomEvent<{ control: string; value?: string }>
+			).detail;
+			const encoder = encoders[Number(control.split("/")[1]) - 1];
+			if (!encoder) return;
+			const direction = value === "up" || value === "right" ? 1 : -1;
+			if (!["up", "down", "left", "right"].includes(value ?? "")) return;
+			const step =
+				value === "left" || value === "right"
+					? encoder.coarseStep
+					: encoder.fineStep;
+			setValue(encoder, state[encoder.key] + direction * step);
+		};
+		window.addEventListener("light:encoder-action", handleEncoder);
+		return () =>
+			window.removeEventListener("light:encoder-action", handleEncoder);
+	}, [encoders, hardwareConnected, setValue, state]);
+
+	if (state.stageMode !== "navigate") return null;
+	return (
+		<div className="parameter-controls stage-command-controls">
+			<div className="family-tabs">
+				<Button className="active">Navigate Stage</Button>
+			</div>
+			<div className="parameter-surfaces">
+				{encoders.map((encoder, index) => {
+					const slot = index + 1;
+					const value = state[encoder.key];
+					return hardwareConnected ? (
+						<HardwareEncoderDisplay
+							key={encoder.key}
+							slot={slot}
+							activateOnHardwarePress
+							target={{
+								label: encoder.label,
+								value: encoder.format(value),
+								role: "Turn · Press-turn coarse",
+							}}
+							editValue={value}
+							onEdit={(next) => setValue(encoder, next)}
+						/>
+					) : (
+						<TouchEncoder
+							key={encoder.key}
+							label={`Enc ${slot} · ${encoder.label}`}
+							slot={slot}
+							attributeLabel={encoder.label}
+							value={value}
+							display={encoder.format(value)}
+							minimum={encoder.minimum}
+							maximum={encoder.maximum}
+							slowStep={encoder.fineStep}
+							fastStep={encoder.coarseStep}
+							onStep={(delta) => setValue(encoder, value + delta)}
+							onSet={(next) => setValue(encoder, next)}
+						/>
+					);
+				})}
+				{hardwareConnected &&
+					Array.from({ length: 6 - encoders.length }, (_, index) => (
+						<HardwareEncoderDisplay
+							key={`empty-${index}`}
+							slot={encoders.length + index + 1}
+						/>
+					))}
+			</div>
+		</div>
+	);
 }

@@ -348,6 +348,29 @@ describe("appReducer Stage and Development pane settings", () => {
 		).toBe(0);
 	});
 
+	it("defaults new visualizers to 5% ambient light without replacing persisted values", () => {
+		expect(initialState.stageEnvironmentBrightness).toBe(0.05);
+
+		for (const stageEnvironmentBrightness of [0, 0.35, 1]) {
+			const hydrated = appReducer(initialState, {
+				type: "HYDRATE_LAYOUT",
+				desks: initialState.desks,
+				activeDeskId: initialState.activeDeskId,
+				windowSettings: { stageEnvironmentBrightness },
+			});
+			expect(hydrated.stageEnvironmentBrightness).toBe(
+				stageEnvironmentBrightness,
+			);
+		}
+
+		const legacy = appReducer(initialState, {
+			type: "HYDRATE_LAYOUT",
+			desks: initialState.desks,
+			activeDeskId: initialState.activeDeskId,
+		});
+		expect(legacy.stageEnvironmentBrightness).toBe(0.05);
+	});
+
 	it("stores the 2D side independently on a Stage pane", () => {
 		const updated = appReducer(initialState, {
 			type: "SET_PANE_STAGE_OPTION",

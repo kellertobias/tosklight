@@ -145,6 +145,12 @@ running function rather than a value, and the Stage does not reproduce one to gu
 
 Only the full Stage window exposes **Select fixtures** and **Navigate**. A Stage pane reflects the global mode, but it does not contain the controls that switch it.
 
+With **Navigate** active, the desk's ordinary encoder bank replaces the Programmer attributes. On
+the renderer camera, **Position** provides X, Y, Z, and Zoom; **Direction** provides Pan and Tilt.
+The software encoders use the same tap, drag, wheel, arrow-key, and direct-value interactions as
+the Programmer encoders. Attached encoders turn in fine steps, press-turn in coarse steps, and
+open the same direct-value editor when pressed.
+
 Positions are edited in **Show Patch**: physical patch and multi-patch placement provides every fixture's location and rotation, with **Preview Stage** for visual feedback while patching. Add a truss, platform, curtain, or other scenery object from the **Venue** manufacturer in **Show Patch**; these visual-only fixtures receive `0.x` fixture IDs and no DMX address.
 
 A Stage pane stores its own view and side independently, so a Live pane and a **Follow Preload**
@@ -159,6 +165,10 @@ adding to the one below it:
   shadows where a beam meets something opaque.
 - **Ultra** — and the haze itself, drifting and uneven, so a beam through it varies along its
   length instead of running through a uniform slab.
+
+On a fresh desk, **Environment brightness** starts at 5%, leaving an unlit rig just visible without
+flattening the fixtures' output. Changing it is persisted with the desk layout; an existing saved
+value, including zero, remains authoritative when that layout is reopened.
 
 **Floor grid** lays a dark reference grid of lines on the ground plane, a metre apart, with the
 centre lines drawn stronger. It is lines rather than a surface: it takes no light and hides nothing

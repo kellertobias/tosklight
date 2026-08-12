@@ -34,6 +34,7 @@ const render = (ui: Parameters<typeof rtlRender>[0]) =>
 
 const state = {
 	stageMode: "select",
+	stageView: "2d",
 	builtIn: null as string | null,
 	desks: [],
 	activeDeskId: "programming",
@@ -241,6 +242,7 @@ vi.mock("./parameterControls/useParameterProgrammerValues", () => ({
 afterEach(() => {
 	cleanup();
 	state.stageMode = "select";
+	state.stageView = "2d";
 	state.builtIn = null;
 	state.desks = [];
 	state.shiftArmed = false;
@@ -311,6 +313,21 @@ describe("ParameterControls projection lifecycle", () => {
 		render(<ParameterControls />);
 
 		expect(server.readVisualization).not.toHaveBeenCalled();
+	});
+
+	it("routes built-in 3D Viz navigation to the renderer camera encoders", () => {
+		state.stageMode = "navigate";
+		state.stageView = "3d-viz";
+		state.builtIn = "stage";
+
+		render(<ParameterControls />);
+
+		expect(screen.getByRole("button", { name: "Position" })).toHaveClass(
+			"active",
+		);
+		expect(
+			screen.getByRole("button", { name: "Direction" }),
+		).toBeInTheDocument();
 	});
 
 	it("never reads legacy bootstrap Programmer values while scoped authority loads or is ready", () => {

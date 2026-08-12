@@ -1,44 +1,80 @@
 import { Button } from "@tosklight/ui";
-import { useEffect, useState } from "react";
+import { TouchEncoder } from "@tosklight/ui/encoders";
+import { useCallback, useEffect, useState } from "react";
 import { useDesktopBridge } from "../../platform/desktop";
 import { HardwareEncoderDisplay } from "./HardwareEncoderDisplay";
-import { VerticalTouchFader } from "./VerticalTouchFader";
 
-/**
- * Aiming the renderer's camera from the encoders.
- *
- * The camera belongs to the renderer — it is the side that drags, orbits and clamps it — so this
- * reads where it is rather than keeping a copy. A desk tracking its own would drift the moment an
- * operator touched the pane with a mouse, and the encoders would then be showing numbers that are
- * not what anybody is looking at.
- *
- * Two pages, because six numbers do not belong together: where the camera is, and where it looks.
- */
 const PAGES = [
 	{
 		label: "Position",
-		// A fader runs from zero, so a value that can be negative is carried with an offset and
-		// taken back off on the way out — the same way the desk's other stage controls do it.
 		encoders: [
-			{ key: "x", label: "X Pos", unit: "m", offset: 50, range: 100 },
-			{ key: "y", label: "Y Pos", unit: "m", offset: 20, range: 60 },
-			{ key: "z", label: "Z Pos", unit: "m", offset: 50, range: 100 },
-			{ key: "distance", label: "Zoom", unit: "m", offset: 0, range: 80 },
+			{
+				key: "x",
+				label: "X Pos",
+				unit: "m",
+				minimum: -50,
+				maximum: 50,
+				fineStep: 0.1,
+				coarseStep: 1,
+			},
+			{
+				key: "y",
+				label: "Y Pos",
+				unit: "m",
+				minimum: -20,
+				maximum: 40,
+				fineStep: 0.1,
+				coarseStep: 1,
+			},
+			{
+				key: "z",
+				label: "Z Pos",
+				unit: "m",
+				minimum: -50,
+				maximum: 50,
+				fineStep: 0.1,
+				coarseStep: 1,
+			},
+			{
+				key: "distance",
+				label: "Zoom",
+				unit: "m",
+				minimum: 0,
+				maximum: 80,
+				fineStep: 0.1,
+				coarseStep: 1,
+			},
 		],
 	},
 	{
 		label: "Direction",
 		encoders: [
-			{ key: "pan", label: "Pan", unit: "°", offset: 180, range: 360 },
-			{ key: "tilt", label: "Tilt", unit: "°", offset: 89, range: 178 },
+			{
+				key: "pan",
+				label: "Pan",
+				unit: "°",
+				minimum: -180,
+				maximum: 180,
+				fineStep: 1,
+				coarseStep: 10,
+			},
+			{
+				key: "tilt",
+				label: "Tilt",
+				unit: "°",
+				minimum: -89,
+				maximum: 89,
+				fineStep: 1,
+				coarseStep: 10,
+			},
 		],
 	},
 ] as const;
 
-/** How often the camera is read back. Fast enough to follow a drag without flooding the channel. */
 const READ_INTERVAL = 120;
 
-type Camera = Record<string, number>;
+type CameraKey = (typeof PAGES)[number]["encoders"][number]["key"];
+type Camera = Record<CameraKey, number>;
 
 export function StageVizCameraControls({
 	hardwareConnected,
@@ -65,14 +101,45 @@ export function StageVizCameraControls({
 		};
 	}, [bridge]);
 
-	// Only the number that moved is sent. The others are left alone rather than re-asserted, so a
-	// mouse drag happening at the same time is not fought by an encoder that was not touched.
-	const place = (key: string, value: number) => {
-		setCamera((current) => (current ? { ...current, [key]: value } : current));
-		void bridge.placeStagePaneCamera({ [key]: value });
-	};
+	// Send only the number that moved, leaving simultaneous pointer camera changes alone.
+	const place = useCallback(
+		(key: CameraKey, value: number) => {
+			setCamera((current) =>
+				current ? { ...current, [key]: value } : current,
+			);
+			void bridge.placeStagePaneCamera({ [key]: value });
+		},
+		[bridge],
+	);
 
 	const current = PAGES[page];
+	useEffect(() => {
+		if (!hardwareConnected || !camera) return;
+		const handleEncoder = (event: Event) => {
+			const { control, value } = (
+				event as CustomEvent<{ control: string; value?: string }>
+			).detail;
+			const encoder = current.encoders[Number(control.split("/")[1]) - 1];
+			if (!encoder || !["up", "down", "left", "right"].includes(value ?? ""))
+				return;
+			const direction = value === "up" || value === "right" ? 1 : -1;
+			const step =
+				value === "left" || value === "right"
+					? encoder.coarseStep
+					: encoder.fineStep;
+			place(
+				encoder.key,
+				Math.max(
+					encoder.minimum,
+					Math.min(encoder.maximum, camera[encoder.key] + direction * step),
+				),
+			);
+		};
+		window.addEventListener("light:encoder-action", handleEncoder);
+		return () =>
+			window.removeEventListener("light:encoder-action", handleEncoder);
+	}, [camera, current, hardwareConnected, place]);
+
 	return (
 		<div className="parameter-controls stage-command-controls">
 			<div className="family-tabs">
@@ -87,46 +154,54 @@ export function StageVizCameraControls({
 				))}
 			</div>
 			<div className="parameter-surfaces">
-				{current.encoders.map((encoder, slot) =>
-					hardwareConnected ? (
+				{current.encoders.map((encoder, index) => {
+					const slot = index + 1;
+					const value = camera?.[encoder.key] ?? 0;
+					const display =
+						camera == null ? "—" : `${value.toFixed(1)}${encoder.unit}`;
+					const setValue = (next: number) =>
+						place(
+							encoder.key,
+							Math.max(encoder.minimum, Math.min(encoder.maximum, next)),
+						);
+					return hardwareConnected ? (
 						<HardwareEncoderDisplay
 							key={encoder.key}
-							slot={slot + 1}
+							slot={slot}
+							activateOnHardwarePress
 							target={{
 								label: encoder.label,
-								value:
-									camera == null
-										? "—"
-										: `${camera[encoder.key].toFixed(1)}${encoder.unit}`,
-								role: "Turn",
+								value: display,
+								role: "Turn · Press-turn coarse",
 							}}
+							editValue={camera == null ? undefined : value}
+							onEdit={camera == null ? undefined : (next) => setValue(next)}
 						/>
 					) : (
-						<VerticalTouchFader
+						<TouchEncoder
 							key={encoder.key}
-							label={encoder.label}
-							value={(camera?.[encoder.key] ?? 0) + encoder.offset}
-							maximum={encoder.range}
-							display={
-								camera == null
-									? "—"
-									: `${camera[encoder.key].toFixed(1)}${encoder.unit}`
-							}
-							onChange={(value) => place(encoder.key, value - encoder.offset)}
+							label={`Enc ${slot} · ${encoder.label}`}
+							slot={slot}
+							attributeLabel={encoder.label}
+							value={value}
+							display={display}
+							minimum={encoder.minimum}
+							maximum={encoder.maximum}
+							slowStep={encoder.fineStep}
+							fastStep={encoder.coarseStep}
+							disabled={camera == null}
+							onStep={(delta) => setValue(value + delta)}
+							onSet={setValue}
 						/>
-					),
-				)}
-				{/* The rest of the bank is empty rather than repeating: a camera has six numbers. */}
-				{Array.from(
-					{ length: 6 - current.encoders.length },
-					(_, index) =>
-						hardwareConnected && (
-							<HardwareEncoderDisplay
-								key={`empty-${index}`}
-								slot={current.encoders.length + index + 1}
-							/>
-						),
-				)}
+					);
+				})}
+				{hardwareConnected &&
+					Array.from({ length: 6 - current.encoders.length }, (_, index) => (
+						<HardwareEncoderDisplay
+							key={`empty-${index}`}
+							slot={current.encoders.length + index + 1}
+						/>
+					))}
 			</div>
 		</div>
 	);
