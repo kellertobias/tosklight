@@ -104,6 +104,14 @@ export interface MatterPlaybackLight {
 	name: string;
 	on: boolean;
 	level: number;
+	kind: "dimmable" | "color";
+	color_active: boolean;
+	color?: {
+		hue: number;
+		saturation: number;
+		color_temperature_mireds: number;
+		mode: "hue_saturation" | "color_temperature";
+	} | null;
 }
 
 export interface MatterBridgeStatus {

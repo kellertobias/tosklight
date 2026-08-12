@@ -352,6 +352,7 @@ fn group_playbacks_are_extended_color_lights_and_accept_color_writes() {
     );
 
     assert_eq!(status.lights[0].kind, MatterLightKind::Color);
+    assert!(status.lights[0].color_active);
     assert!(status.lights[0].color.is_some());
     assert_eq!(status.lights[1].kind, MatterLightKind::Dimmable);
     assert_eq!(status.lights[1].color, None);
@@ -401,6 +402,7 @@ fn controller_color_write_and_authoritative_reconcile_share_one_revision() {
         std::slice::from_ref(&definition),
         &HashMap::from([(10, PlaybackValue::new(0.5, true))]),
     );
+    assert!(!initial.lights[0].color_active);
     let write = MatterColorWrite::ColorTemperature { mireds: 250 };
     adapter.apply_color_write(endpoint_id(1, 1).unwrap(), write);
     let after_write = adapter.status();

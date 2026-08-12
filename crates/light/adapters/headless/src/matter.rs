@@ -119,6 +119,8 @@ pub struct MatterPlaybackLight {
     /// Matter Level Control value in the inclusive range `0..=254`.
     pub level: u8,
     pub kind: MatterLightKind,
+    /// True only while the engine owns an explicit Group color contribution for this endpoint.
+    pub color_active: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub color: Option<MatterColorState>,
 }
@@ -400,10 +402,11 @@ impl MatterBridgeAdapter {
             .iter_mut()
             .find(|light| light.endpoint_id == endpoint_id)
             .is_some_and(|light| {
-                if light.color == Some(next) {
+                if light.color == Some(next) && light.color_active {
                     false
                 } else {
                     light.color = Some(next);
+                    light.color_active = true;
                     true
                 }
             });
@@ -522,6 +525,7 @@ fn build_lights(
                     on: value.active && level > 0,
                     level,
                     kind,
+                    color_active: kind == MatterLightKind::Color && value.color.is_some(),
                     color: (kind == MatterLightKind::Color).then(|| match value.color {
                         Some(color) => {
                             MatterColorState::from_xyz(color, MatterColorMode::HueSaturation)

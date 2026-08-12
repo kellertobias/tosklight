@@ -1607,6 +1607,24 @@
 	display: block;
 	color: var(--text-dim);
 }
+.matter-playback-list {
+	display: grid;
+	gap: 4px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.matter-playback-list li {
+	display: flex;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 6px 8px;
+	border: 1px solid var(--border);
+	border-radius: 4px;
+}
+.matter-playback-list b {
+	color: var(--accent);
+}
 .matter-pairing {
 	display: grid;
 	grid-template-columns: max-content 1fr;

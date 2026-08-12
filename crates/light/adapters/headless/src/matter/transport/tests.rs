@@ -24,6 +24,7 @@ fn light(endpoint_id: u16, name: &str, on: bool, level: u8) -> MatterPlaybackLig
         on,
         level,
         kind: super::super::MatterLightKind::Dimmable,
+        color_active: false,
         color: None,
     }
 }
