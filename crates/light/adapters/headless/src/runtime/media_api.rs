@@ -16,26 +16,29 @@ pub(super) async fn media_servers(
     let _session = authenticate(&state, &headers)?;
     show.verify(&state)?;
     let fixtures = state
-        .output.snapshot()
+        .output
+        .snapshot()
         .fixtures
         .iter()
-        .filter_map(|fixture| {
-            fixture
+        .filter(|fixture| {
+            !fixture.logical_heads.is_empty()
+                && fixture
+                    .definition
+                    .direct_control_protocols
+                    .contains(&light_fixture::DirectControlProtocol::Citp)
+        })
+        .map(|fixture| {
+            let endpoint = fixture
                 .direct_control
                 .as_ref()
-                .filter(|endpoint| {
-                    endpoint.protocol == light_fixture::DirectControlProtocol::Citp
-                        && !fixture.logical_heads.is_empty()
-                })
-                .map(|endpoint| {
-                let status = state.media.status(fixture.fixture_id);
-                serde_json::json!({
-                    "fixture_id": fixture.fixture_id,
-                    "name": format!("{} {}", fixture.definition.manufacturer, fixture.definition.model),
-                    "endpoint": endpoint,
-                    "layers": fixture.logical_heads,
-                    "status": status,
-                })
+                .filter(|endpoint| endpoint.protocol == light_fixture::DirectControlProtocol::Citp);
+            let status = state.media.status(fixture.fixture_id);
+            serde_json::json!({
+                "fixture_id": fixture.fixture_id,
+                "name": format!("{} {}", fixture.definition.manufacturer, fixture.definition.model),
+                "endpoint": endpoint,
+                "layers": fixture.logical_heads,
+                "status": status,
             })
         })
         .collect::<Vec<_>>();

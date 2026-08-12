@@ -17,6 +17,7 @@ export {
 	mediaCapabilitiesForLayer,
 	mediaDraftForLayer,
 	mediaFileMutations,
+	mediaLibraryMutations,
 } from "./MediaPaneWindow.helpers";
 
 import type { WindowProps } from "./windowTypes";

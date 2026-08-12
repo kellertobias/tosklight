@@ -2,7 +2,6 @@ import { Button } from "@tosklight/ui";
 import { type ReactNode, useRef } from "react";
 import appMark from "../../../src-tauri/icons/mark-shadow.svg";
 import { useActiveShow } from "../../features/deskSnapshot/DeskSnapshotState";
-import { useMediaServers } from "../../features/mediaServers/MediaServersContext";
 import { useApp } from "../../state/AppContext";
 import type { BuiltInWindow } from "../../types";
 import { DeskSettingsModal } from "../modals/DeskSettingsModal";
@@ -42,7 +41,6 @@ export function LeftDock({
 } = {}) {
 	const { state, dispatch } = useApp();
 	const activeShow = useActiveShow();
-	const mediaAvailable = (useMediaServers()?.mediaServers.length ?? 0) > 0;
 	const longPress = useRef<number | null>(null);
 	const held = useRef(false);
 	const suppressUntil = useRef(0);
@@ -158,19 +156,17 @@ export function LeftDock({
 					className="dock-list builtins-list dock-list-swap dock-list-swap-builtins"
 					aria-label="Built-ins"
 				>
-					{builtIns
-						.filter(([kind]) => kind !== "media" || mediaAvailable)
-						.map(([kind, icon, label]) => (
-							<Button
-								key={kind}
-								aria-label={label}
-								aria-current={state.builtIn === kind ? "page" : undefined}
-								className={`dock-entry ${state.builtIn === kind ? "active" : ""}`}
-								onClick={() => dispatch({ type: "OPEN_BUILTIN", kind })}
-							>
-								<DockEntryContent icon={icon} label={label} />
-							</Button>
-						))}
+					{builtIns.map(([kind, icon, label]) => (
+						<Button
+							key={kind}
+							aria-label={label}
+							aria-current={state.builtIn === kind ? "page" : undefined}
+							className={`dock-entry ${state.builtIn === kind ? "active" : ""}`}
+							onClick={() => dispatch({ type: "OPEN_BUILTIN", kind })}
+						>
+							<DockEntryContent icon={icon} label={label} />
+						</Button>
+					))}
 				</nav>
 			)}
 			<DeskSettingsModal />

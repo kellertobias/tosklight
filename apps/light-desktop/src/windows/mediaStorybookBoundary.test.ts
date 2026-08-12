@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { decodeShowObjectBody } from "../api/showObjectBodyWire";
-import { availableWindowChoices, windowChoices } from "../components/modals/WindowPicker";
+import {
+	availableWindowChoices,
+	windowChoices,
+} from "../components/modals/WindowPicker";
 import { builtIns } from "../components/shell/LeftDock";
+import leftDockSource from "../components/shell/LeftDock.tsx?raw";
 import builtInWindowTypes from "../types.ts?raw";
 import stories from "./MediaPaneWindow.stories.tsx?raw";
 import surface from "./media/MediaPaneSurface.tsx?raw";
@@ -12,9 +16,9 @@ describe("Media pane production boundary", () => {
 		expect(builtInWindowTypes).toMatch(/^\s*\|\s*"media"\s*$/m);
 		expect("media" in (windowRegistry as Record<string, unknown>)).toBe(true);
 		expect(builtIns.map(([kind]) => String(kind))).toContain("media");
+		expect(leftDockSource).not.toMatch(/kind\s*!==\s*["']media["']/);
 		expect(windowChoices.map(([kind]) => String(kind))).toContain("media");
-		expect(availableWindowChoices(false).map(([kind]) => kind)).not.toContain("media");
-		expect(availableWindowChoices(true).map(([kind]) => kind)).toContain("media");
+		expect(availableWindowChoices().map(([kind]) => kind)).toContain("media");
 		expect(() =>
 			decodeShowObjectBody(
 				"user_layout",

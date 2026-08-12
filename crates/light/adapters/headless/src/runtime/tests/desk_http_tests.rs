@@ -297,6 +297,7 @@ async fn citp_thumbnail_api_uses_patched_parent_endpoint_and_cache() {
     );
     assert!(thumbnail.headers().contains_key("x-light-received-at-millis"));
     let status = app
+        .clone()
         .oneshot(
             Request::get("/api/v2/media-servers")
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
@@ -308,6 +309,21 @@ async fn citp_thumbnail_api_uses_patched_parent_endpoint_and_cache() {
     let status = json(status).await;
     assert_eq!(status["fixtures"][0]["status"]["online"], true);
     assert_eq!(status["fixtures"][0]["layers"].as_array().unwrap().len(), 1);
+    let mut snapshot = (*state.output.snapshot()).clone();
+    std::sync::Arc::make_mut(&mut snapshot.fixtures)[0].direct_control = None;
+    state.output.replace_snapshot(snapshot).unwrap();
+    let unconfigured = app
+        .oneshot(
+            Request::get("/api/v2/media-servers")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let unconfigured = json(unconfigured).await;
+    assert_eq!(unconfigured["fixtures"].as_array().unwrap().len(), 1);
+    assert!(unconfigured["fixtures"][0]["endpoint"].is_null());
     mock.await.unwrap();
     let _ = std::fs::remove_dir_all(data_dir);
 }

@@ -6,6 +6,7 @@ import type { MediaServersState } from "../../features/mediaServers/MediaServers
 import type { useProgrammerValuesActions } from "../../features/programmerValues/ProgrammerValuesView";
 import type { useProgrammingSelectionActions } from "../../features/programmingInteraction/ProgrammingInteractionView";
 import type { PersistedMediaPaneState } from "../MediaPaneWindow";
+import { mediaLibraryMutations } from "../MediaPaneWindow.helpers";
 import type { MediaBrowserMode, MediaLibraryItem } from "./mediaPaneModel";
 
 interface MediaPaneActionsInput {
@@ -66,27 +67,47 @@ export function useMediaPaneActions(input: MediaPaneActionsInput) {
 				return;
 			}
 			input.setDraftFileId(item.id);
-			if (
-				!input.applySelection ||
-				!input.selectedServer ||
-				!input.selectedLayer ||
-				!input.inspection.library_revision ||
-				!Number.isFinite(input.draftFolder)
-			)
-				return;
-			void input
-				.applySelection(input.selectedServer.fixture_id, {
-					expected_library_revision: input.inspection.library_revision,
-					layer_fixture_id: input.selectedLayer.fixture_id,
-					kind: mode === "mask" ? "mask" : "content",
-					folder: input.draftFolder,
-					file: Number(item.id),
-				})
-				.catch((cause) =>
-					input.setInspectionError(
-						cause instanceof Error ? cause.message : String(cause),
-					),
-				);
+			if (!input.selectedLayer || !Number.isFinite(input.draftFolder)) return;
+			const file = Number(item.id);
+			const advertised = input.inspection.files.some(
+				(candidate) =>
+					candidate.folder_id === input.draftFolder && candidate.id === file,
+			);
+			const capabilities = input.inspection.capabilities.layers.find(
+				(candidate) => candidate.layer === input.selectedLayer?.head_index,
+			);
+			const libraryAdvertised =
+				mode === "mask"
+					? capabilities?.mask_library
+					: capabilities?.content_library;
+			const operation =
+				input.applySelection &&
+				input.selectedServer &&
+				input.inspection.library_revision &&
+				advertised &&
+				libraryAdvertised
+					? input.applySelection(input.selectedServer.fixture_id, {
+							expected_library_revision: input.inspection.library_revision,
+							layer_fixture_id: input.selectedLayer.fixture_id,
+							kind: mode === "mask" ? "mask" : "content",
+							folder: input.draftFolder,
+							file,
+						})
+					: input.valuesActions?.batch({
+							requestId: crypto.randomUUID(),
+							mutations: mediaLibraryMutations(
+								input.selectedLayer.fixture_id,
+								mode,
+								input.draftFolder,
+								file,
+							),
+						});
+			if (!operation) return;
+			void operation.catch((cause) =>
+				input.setInspectionError(
+					cause instanceof Error ? cause.message : String(cause),
+				),
+			);
 		},
 		[input],
 	);

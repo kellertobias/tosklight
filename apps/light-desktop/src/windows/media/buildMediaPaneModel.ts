@@ -54,7 +54,7 @@ export function buildMediaPaneModel(
 		preview: previewState(input),
 		layers: layerModels(input),
 		browserMode: input.browserMode,
-		maskBrowser: capabilities?.mask_library ? "supported" : "hidden",
+		maskBrowser: "supported",
 		...libraryModel(input),
 		...selectionModel(input, liveFolder, liveFile),
 		controlSections: controlSections(
@@ -70,6 +70,15 @@ export function buildMediaPaneModel(
 }
 
 function serverChoices(input: BuildMediaPaneModelInput) {
+	if (input.servers.length === 0 && !input.selectedServerId)
+		return [
+			{
+				id: "",
+				name: "No CITP Media Server available",
+				statusLabel: "Not configured",
+				disabled: true,
+			},
+		];
 	return [
 		...(input.selectedServerId && !input.selectedServer
 			? [
@@ -84,7 +93,11 @@ function serverChoices(input: BuildMediaPaneModelInput) {
 		...input.servers.map((server) => ({
 			id: server.fixture_id,
 			name: server.name,
-			statusLabel: server.status.online ? "Online" : "Offline",
+			statusLabel: !server.endpoint
+				? "Not configured"
+				: server.status.online
+					? "Online"
+					: "Offline",
 		})),
 	];
 }
@@ -93,7 +106,14 @@ function previewState(input: BuildMediaPaneModelInput): MediaPreviewState {
 	if (!input.selectedServer)
 		return {
 			kind: "missing_patch",
-			detail: "Patch a CITP media master with logical layers.",
+			detail:
+				"No CITP Media Server is available. Configure one in Show Patch > Media Servers.",
+		};
+	if (!input.selectedServer.endpoint)
+		return {
+			kind: "offline",
+			detail:
+				"No CITP Media Server is available. Configure one in Show Patch > Media Servers.",
 		};
 	if (input.inspectionError || !input.selectedServer.status.online)
 		return {
@@ -156,22 +176,38 @@ function layerModels(input: BuildMediaPaneModelInput): MediaPaneLayer[] {
 
 function libraryModel(input: BuildMediaPaneModelInput) {
 	const draftFolder = Number(input.draftFolderId);
-	return {
-		libraryFolders: input.inspection.folders.map((folder) => ({
-			id: String(folder.id),
-			kind: "folder" as const,
-			name: folder.name,
-			detail: `${folder.element_count} files`,
-		})),
-		libraryFiles: input.inspection.files
+	const advertisedFolders = new Map(
+		input.inspection.folders.map((folder) => [folder.id, folder]),
+	);
+	const advertisedFiles = new Map(
+		input.inspection.files
 			.filter((file) => file.folder_id === draftFolder)
-			.map((file) => ({
-				id: String(file.id),
+			.map((file) => [file.id, file]),
+	);
+	return {
+		libraryFolders: Array.from({ length: 256 }, (_, id) => {
+			const folder = advertisedFolders.get(id);
+			return {
+				id: String(id),
+				kind: "folder" as const,
+				name: folder?.name || `Folder ${id}`,
+				detail: folder
+					? `${folder.element_count} files`
+					: "Configurable slot · not advertised",
+			};
+		}),
+		libraryFiles: Array.from({ length: 256 }, (_, id) => {
+			const file = advertisedFiles.get(id);
+			return {
+				id: String(id),
 				kind: "file" as const,
-				name: file.name,
-				detail: `${file.width}×${file.height}`,
-				thumbnailSrc: input.thumbnailUrls[String(file.id)],
-			})),
+				name: file?.name || `File ${id}`,
+				detail: file
+					? `${file.width}×${file.height}`
+					: "Configurable slot · not advertised",
+				thumbnailSrc: input.thumbnailUrls[String(id)],
+			};
+		}),
 	};
 }
 

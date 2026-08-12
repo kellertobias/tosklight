@@ -1,10 +1,5 @@
-import {
-	Button,
-	ModalFrame,
-	SelectionCardContent,
-} from "@tosklight/ui";
+import { Button, ModalFrame, SelectionCardContent } from "@tosklight/ui";
 import { useState } from "react";
-import { useMediaServers } from "../../features/mediaServers/MediaServersContext";
 import { useApp } from "../../state/AppContext";
 import type { BuiltInWindow } from "../../types";
 
@@ -117,7 +112,7 @@ export const windowCategories: readonly WindowChoiceCategory[] = [
 			{
 				kind: "media",
 				title: "Media",
-				description: "Browse and control an available media server.",
+				description: "Configure media layers and reconcile live CITP data.",
 			},
 			{
 				kind: "file_manager",
@@ -138,29 +133,24 @@ export const windowCategories: readonly WindowChoiceCategory[] = [
 	},
 ];
 
-export const windowChoices: Array<[BuiltInWindow, string]> = windowCategories.flatMap(
-	(category) => category.choices.map(({ kind, title }) => [kind, title]),
-);
+export const windowChoices: Array<[BuiltInWindow, string]> =
+	windowCategories.flatMap((category) =>
+		category.choices.map(({ kind, title }) => [kind, title]),
+	);
 
-export const availableWindowChoices = (mediaAvailable: boolean) =>
-	windowChoices.filter(([kind]) => kind !== "media" || mediaAvailable);
+export const availableWindowChoices = () => windowChoices;
 
-export const availableWindowCategoryChoices = (
-	category: WindowCategoryId,
-	mediaAvailable: boolean,
-) =>
-	windowCategories
-		.find(({ id }) => id === category)!
-		.choices.filter(({ kind }) => kind !== "media" || mediaAvailable);
+export const availableWindowCategoryChoices = (category: WindowCategoryId) =>
+	windowCategories.find(({ id }) => id === category)?.choices ?? [];
 
 export function WindowPicker() {
 	const { state, dispatch } = useApp();
-	const mediaAvailable = (useMediaServers()?.mediaServers.length ?? 0) > 0;
 	const [category, setCategory] = useState<WindowCategoryId>("programming");
 	if (!state.windowPicker) return null;
 	const close = () => dispatch({ type: "OPEN_WINDOW_PICKER", rect: null });
-	const activeCategory = windowCategories.find(({ id }) => id === category)!;
-	const choices = availableWindowCategoryChoices(category, mediaAvailable);
+	const activeCategory = windowCategories.find(({ id }) => id === category);
+	if (!activeCategory) return null;
+	const choices = availableWindowCategoryChoices(category);
 	return (
 		<ModalFrame
 			id="window-picker"
@@ -183,9 +173,7 @@ export function WindowPicker() {
 					<Button
 						key={choice.kind}
 						contentAlign="left"
-						onClick={() =>
-							dispatch({ type: "ADD_WINDOW", kind: choice.kind })
-						}
+						onClick={() => dispatch({ type: "ADD_WINDOW", kind: choice.kind })}
 					>
 						<SelectionCardContent
 							label={choice.title}

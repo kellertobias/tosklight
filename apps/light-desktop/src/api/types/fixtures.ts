@@ -472,7 +472,7 @@ export interface FixtureDefinition {
 export interface MediaServerFixture {
 	fixture_id: string;
 	name: string;
-	endpoint: { protocol: "citp"; ip_address: string; port: number };
+	endpoint: { protocol: "citp"; ip_address: string; port: number } | null;
 	layers: Array<{ fixture_id: string; head_index: number }>;
 	status: {
 		online: boolean;

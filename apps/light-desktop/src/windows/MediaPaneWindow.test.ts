@@ -3,6 +3,7 @@ import {
 	mediaCapabilitiesForLayer,
 	mediaDraftForLayer,
 	mediaFileMutations,
+	mediaLibraryMutations,
 } from "./MediaPaneWindow";
 
 describe("Media pane programmer transaction", () => {
@@ -22,6 +23,13 @@ describe("Media pane programmer transaction", () => {
 				value: { kind: "normalized", value: 19 / 255 },
 				timing: { fade: false, fadeMillis: null, delayMillis: null },
 			},
+		]);
+	});
+
+	it("commits offline mask slots through the same ordered pair", () => {
+		expect(mediaLibraryMutations("layer-7", "mask", 3, 21)).toEqual([
+			expect.objectContaining({ attribute: "media.mask.folder" }),
+			expect.objectContaining({ attribute: "media.mask.file" }),
 		]);
 	});
 

@@ -4,7 +4,7 @@ These scenarios are the operator acceptance contract for the capability-gated Me
 
 ## MEDIA-001 — eligibility and unavailable state
 
-Given a show without a patched physical media-server master, configured CITP/MSEX connection, and logical layer heads, **Media** is absent from Built-ins and **Open Window**. When an eligible fixture exists, both choices appear. A previously saved Media pane remains in the Desktop when its server disconnects, its patch disappears, or a required capability becomes unavailable; it explains that state and does not silently select another server or layer.
+Given a show without a patched physical media-server master or configured CITP/MSEX connection, **Media** remains present in Built-ins and **Open Window**. Opening it states that no CITP Media Server is available while retaining all 0–255 folder/file choices and the Content/Mask configuration surface. When an eligible fixture exists, advertised names and live data reconcile into those same stable choices; unadvertised values remain configurable. A saved Media pane remains in the Desktop when its server disconnects, its patch disappears, or a required capability becomes unavailable; it explains that state and does not silently select another server or layer.
 
 ## MEDIA-002 — advertised preview and selection identities
 

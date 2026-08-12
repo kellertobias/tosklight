@@ -38,7 +38,9 @@ describe("Open Window categories", () => {
 		const choices = windowCategories.flatMap(({ choices }) => choices);
 		expect(choices).toHaveLength(19);
 		expect(new Set(choices.map(({ kind }) => kind)).size).toBe(19);
-		expect(choices.every(({ description }) => description.length > 0)).toBe(true);
+		expect(choices.every(({ description }) => description.length > 0)).toBe(
+			true,
+		);
 		expect(windowChoices).toEqual(
 			choices.map(({ kind, title }) => [kind, title]),
 		);
@@ -49,12 +51,9 @@ describe("Open Window categories", () => {
 		]);
 	});
 
-	it("keeps Media subject to media-server availability", () => {
+	it("keeps Media discoverable without a media server", () => {
 		expect(
-			availableWindowCategoryChoices("show", false).map(({ kind }) => kind),
-		).not.toContain("media");
-		expect(
-			availableWindowCategoryChoices("show", true).map(({ kind }) => kind),
+			availableWindowCategoryChoices("show").map(({ kind }) => kind),
 		).toContain("media");
 	});
 });
@@ -74,9 +73,7 @@ describe("Open Window modal", () => {
 		expect(screen.queryByText("Running")).not.toBeInTheDocument();
 
 		await waitFor(() => expect(document.activeElement).toBe(programming));
-		fireEvent.click(
-			screen.getByRole("tab", { name: "Playback & Automation" }),
-		);
+		fireEvent.click(screen.getByRole("tab", { name: "Playback & Automation" }));
 		expect(
 			screen.getByRole("tabpanel", { name: "Playback & Automation" }),
 		).toBeVisible();
@@ -84,14 +81,12 @@ describe("Open Window modal", () => {
 		expect(screen.getByText("Macro Pool")).toBeVisible();
 	});
 
-	it("hides unavailable Media and adds a selected pane at the requested placement", () => {
+	it("shows unavailable Media and adds a selected pane at the requested placement", () => {
 		render(<WindowPicker />);
 		fireEvent.click(screen.getByRole("tab", { name: "Show & Visual" }));
-		expect(screen.queryByText("Media")).not.toBeInTheDocument();
+		expect(screen.getByText("Media")).toBeVisible();
 
-		fireEvent.click(
-			screen.getByRole("tab", { name: "Playback & Automation" }),
-		);
+		fireEvent.click(screen.getByRole("tab", { name: "Playback & Automation" }));
 		fireEvent.click(screen.getByText("Running"));
 		expect(app.dispatch).toHaveBeenCalledWith({
 			type: "ADD_WINDOW",
