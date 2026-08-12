@@ -10,8 +10,9 @@
 
 use media_domain::geometry::Size;
 use media_domain::{
-    AnalogTvParameters, EffectSlot, FlipMirror, LayerState, MaskSource, MaskState, MasterState,
-    MediaAddress, OutputId, PresentationMode, ScalingMode, SourceStatus, Timestamp, Tint,
+    AnalogTvParameters, DigitalTvParameters, EffectSlot, FlipMirror, LayerState, MaskSource,
+    MaskState, MasterState, MediaAddress, OutputId, PresentationMode, ScalingMode, SourceStatus,
+    Timestamp, Tint,
 };
 use media_render::{Gpu, LayerDraw, OutputRenderer, SourceTexture};
 use std::path::Path;
@@ -113,6 +114,18 @@ fn patterned_source(gpu: &Gpu) -> SourceTexture {
 fn analog_state(parameters: AnalogTvParameters) -> LayerState {
     let mut effect = EffectSlot::analog_tv();
     effect.seed = 0x116;
+    effect.parameters = parameters.as_array().to_vec();
+    let mut effects: [EffectSlot; 4] = Default::default();
+    effects[0] = effect;
+    ready(LayerState {
+        effects,
+        ..Default::default()
+    })
+}
+
+fn digital_state(parameters: DigitalTvParameters) -> LayerState {
+    let mut effect = EffectSlot::digital_tv();
+    effect.seed = 0x115;
     effect.parameters = parameters.as_array().to_vec();
     let mut effects: [EffectSlot; 4] = Default::default();
     effects[0] = effect;
@@ -276,6 +289,174 @@ fn analog_tv_parameters_have_independent_visual_endpoints() {
     assert_ne!(
         glitch.pixels, curvature.pixels,
         "analog tearing is not curvature"
+    );
+}
+
+#[test]
+fn digital_tv_defaults_are_deterministic_distinct_and_zero_is_a_true_bypass() {
+    let mut bench = Bench::new();
+    let source = patterned_source(&bench.gpu);
+    let plain = ready(LayerState::default());
+    let zero = digital_state(DigitalTvParameters {
+        compression_damage: 0.0,
+        block_size: 0.0,
+        tile_displacement: 0.0,
+        chroma_damage: 0.0,
+        glitching: 0.0,
+    });
+    let digital = digital_state(DigitalTvParameters::default());
+    let analog = analog_state(AnalogTvParameters::default());
+    let at = Timestamp::from_micros(12_345_678);
+    let draw = |state| LayerDraw {
+        state,
+        source: &source,
+        mask: None,
+    };
+
+    let untouched = bench.render_at(&[draw(&plain)], &MasterState::default(), at);
+    let bypassed = bench.render_at(&[draw(&zero)], &MasterState::default(), at);
+    assert_eq!(
+        bypassed.pixels, untouched.pixels,
+        "five zeroes are a bypass"
+    );
+    let first = bench.render_at(&[draw(&digital)], &MasterState::default(), at);
+    let repeated = bench.render_at(&[draw(&digital)], &MasterState::default(), at);
+    let analog = bench.render_at(&[draw(&analog)], &MasterState::default(), at);
+    assert_eq!(
+        first.pixels, repeated.pixels,
+        "same seed and time, same frame"
+    );
+    assert!(changed_pixels(&first, &untouched) > 500);
+    assert_ne!(
+        first.pixels, analog.pixels,
+        "DVB-T blocks are not analog snow"
+    );
+    assert_ne!(first.at(0, 0), BLACK, "Digital TV does not curve the image");
+    write_evidence("tl-115-digital-tv-defaults.png", &first);
+    write_evidence("tl-115-analog-tv-defaults.png", &analog);
+}
+
+#[test]
+fn digital_tv_parameters_have_independent_visual_endpoints() {
+    let mut bench = Bench::new();
+    let source = patterned_source(&bench.gpu);
+    let baseline_state = ready(LayerState::default());
+    let at = Timestamp::from_micros(8_250_000);
+    let render = |parameters: DigitalTvParameters, bench: &mut Bench, at| {
+        let state = digital_state(parameters);
+        bench.render_at(
+            &[LayerDraw {
+                state: &state,
+                source: &source,
+                mask: None,
+            }],
+            &MasterState::default(),
+            at,
+        )
+    };
+    let baseline = bench.render_at(
+        &[LayerDraw {
+            state: &baseline_state,
+            source: &source,
+            mask: None,
+        }],
+        &MasterState::default(),
+        at,
+    );
+    let endpoint = |index: usize, bench: &mut Bench| {
+        let mut values = [0.0; 5];
+        values[index] = 1.0;
+        render(
+            DigitalTvParameters {
+                compression_damage: values[0],
+                block_size: values[1],
+                tile_displacement: values[2],
+                chroma_damage: values[3],
+                glitching: values[4],
+            },
+            bench,
+            at,
+        )
+    };
+    let compression = endpoint(0, &mut bench);
+    let block_size = render(
+        DigitalTvParameters {
+            compression_damage: 1.0,
+            block_size: 1.0,
+            tile_displacement: 0.0,
+            chroma_damage: 0.0,
+            glitching: 0.0,
+        },
+        &mut bench,
+        at,
+    );
+    let displaced = endpoint(2, &mut bench);
+    let chroma = endpoint(3, &mut bench);
+    assert!(changed_pixels(&compression, &baseline) > 500);
+    assert_ne!(compression.pixels, block_size.pixels);
+    assert!(changed_pixels(&displaced, &baseline) > 100);
+    assert!(changed_pixels(&chroma, &baseline) > 500);
+
+    // Glitching is held in rectangular event buckets. A bounded search proves one event, and two
+    // frames in the same bucket reproduce the same damaged tile selection.
+    let glitch_parameters = DigitalTvParameters {
+        compression_damage: 0.0,
+        block_size: 0.4,
+        tile_displacement: 0.0,
+        chroma_damage: 0.0,
+        glitching: 1.0,
+    };
+    let (bucket_time, glitch) = (0..80)
+        .map(|bucket| Timestamp::from_micros(bucket * 250_000 + 20_000))
+        .map(|time| (time, render(glitch_parameters, &mut bench, time)))
+        .find(|(_, image)| changed_pixels(image, &baseline) > 100)
+        .expect("a full glitch endpoint triggers in the bounded schedule");
+    let held = render(
+        glitch_parameters,
+        &mut bench,
+        Timestamp::from_micros(bucket_time.as_micros() + 80_000),
+    );
+    assert_eq!(
+        glitch.pixels, held.pixels,
+        "corrupt tiles persist within a bucket"
+    );
+}
+
+#[test]
+fn digital_tv_respects_the_ordered_effect_stack() {
+    let mut bench = Bench::new();
+    let source = patterned_source(&bench.gpu);
+    let at = Timestamp::from_micros(12_345_678);
+
+    let mut analog = EffectSlot::analog_tv();
+    analog.seed = 0x116;
+    let mut digital = EffectSlot::digital_tv();
+    digital.seed = 0x115;
+
+    let render = |first: EffectSlot, second: EffectSlot, bench: &mut Bench| {
+        let mut effects: [EffectSlot; 4] = Default::default();
+        effects[0] = first;
+        effects[1] = second;
+        let state = ready(LayerState {
+            effects,
+            ..Default::default()
+        });
+        bench.render_at(
+            &[LayerDraw {
+                state: &state,
+                source: &source,
+                mask: None,
+            }],
+            &MasterState::default(),
+            at,
+        )
+    };
+
+    let analog_then_digital = render(analog.clone(), digital.clone(), &mut bench);
+    let digital_then_analog = render(digital, analog, &mut bench);
+    assert_ne!(
+        analog_then_digital.pixels, digital_then_analog.pixels,
+        "Digital TV processes the preceding slot instead of replacing the stack"
     );
 }
 

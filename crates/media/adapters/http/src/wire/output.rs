@@ -4,8 +4,8 @@ use media_application::configuration::{
     DmxProtocol, MonitorSelector, OutputConfiguration, OutputTarget, Resolution, SoundOutput,
 };
 use media_domain::{
-    ANALOG_TV_EFFECT, AnalogTvParameters, EffectSlot, LayerState, MaskSource, MaskState,
-    MasterState, MediaAddress, OutputState,
+    ANALOG_TV_EFFECT, AnalogTvParameters, DIGITAL_TV_EFFECT, DigitalTvParameters, EffectSlot,
+    LayerState, MaskSource, MaskState, MasterState, MediaAddress, OutputState,
 };
 use media_domain::{LayerPersonality, PresentationMode};
 use serde::{Deserialize, Serialize};
@@ -74,40 +74,64 @@ pub struct EffectSlotView {
 impl EffectSlotView {
     fn of(index: usize, effect: &EffectSlot) -> Self {
         let analog = effect.effect_type.as_deref() == Some(ANALOG_TV_EFFECT);
-        let defaults = AnalogTvParameters::default().as_array();
-        let values = AnalogTvParameters::from_normalized(&effect.parameters).as_array();
+        let digital = effect.effect_type.as_deref() == Some(DIGITAL_TV_EFFECT);
+        let parameters = if analog {
+            let defaults = AnalogTvParameters::default().as_array();
+            let values = AnalogTvParameters::from_normalized(&effect.parameters).as_array();
+            parameter_views(
+                &AnalogTvParameters::IDS,
+                &AnalogTvParameters::LABELS,
+                &values,
+                &defaults,
+            )
+        } else if digital {
+            let defaults = DigitalTvParameters::default().as_array();
+            let values = DigitalTvParameters::from_normalized(&effect.parameters).as_array();
+            parameter_views(
+                &DigitalTvParameters::IDS,
+                &DigitalTvParameters::LABELS,
+                &values,
+                &defaults,
+            )
+        } else {
+            Vec::new()
+        };
         Self {
             index,
             effect_type: effect.effect_type.clone(),
-            label: if analog {
-                "Analog TV".to_owned()
+            label: if analog || digital {
+                if analog { "Analog TV" } else { "Digital TV" }.to_owned()
             } else {
                 effect.effect_type.as_deref().unwrap_or("None").to_owned()
             },
             enabled: effect.enabled,
             mix: effect.mix,
-            supported: effect.effect_type.is_none() || analog,
-            capability_detail: (!analog && effect.effect_type.is_some())
+            supported: effect.effect_type.is_none() || analog || digital,
+            capability_detail: (!analog && !digital && effect.effect_type.is_some())
                 .then(|| "This Media Server build cannot render the selected effect.".to_owned()),
-            parameters: if analog {
-                AnalogTvParameters::IDS
-                    .into_iter()
-                    .zip(AnalogTvParameters::LABELS)
-                    .zip(values.into_iter().zip(defaults))
-                    .map(
-                        |((id, label), (value, default_value))| EffectParameterView {
-                            id: id.to_owned(),
-                            label: label.to_owned(),
-                            value,
-                            default_value,
-                        },
-                    )
-                    .collect()
-            } else {
-                Vec::new()
-            },
+            parameters,
         }
     }
+}
+
+fn parameter_views(
+    ids: &[&str],
+    labels: &[&str],
+    values: &[f32],
+    defaults: &[f32],
+) -> Vec<EffectParameterView> {
+    ids.iter()
+        .zip(labels)
+        .zip(values.iter().zip(defaults))
+        .map(
+            |((id, label), (value, default_value))| EffectParameterView {
+                id: (*id).to_owned(),
+                label: (*label).to_owned(),
+                value: *value,
+                default_value: *default_value,
+            },
+        )
+        .collect()
 }
 
 /// One layer, as the API reports it.
@@ -670,7 +694,7 @@ pub struct UpdateLayer {
     /// The ordered slot changed by the following typed effect fields, `0..=3`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effect_slot: Option<u8>,
-    /// `analog-tv` selects the effect; `none` clears the slot.
+    /// `analog-tv` or `digital-tv` selects the effect; `none` clears the slot.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effect_type: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -683,6 +707,14 @@ pub struct UpdateLayer {
     pub effect_distortion: Option<f32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub image_grain: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compression_damage: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub block_size: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tile_displacement: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chroma_damage: Option<f32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effect_glitching: Option<f32>,
 }
@@ -716,6 +748,10 @@ impl UpdateLayer {
             || self.tv_curvature.is_some()
             || self.effect_distortion.is_some()
             || self.image_grain.is_some()
+            || self.compression_damage.is_some()
+            || self.block_size.is_some()
+            || self.tile_displacement.is_some()
+            || self.chroma_damage.is_some()
             || self.effect_glitching.is_some()
     }
 }

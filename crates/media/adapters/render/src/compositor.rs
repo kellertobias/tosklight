@@ -41,6 +41,8 @@ struct LayerUniform {
     effect_types: [u32; 4],
     effect_mixes: [f32; 4],
     effect_parameters: [[f32; 4]; 4],
+    /// Fifth typed parameter for effects that need it, one value per slot.
+    effect_parameter_tail: [f32; 4],
     effect_seeds: [f32; 4],
     /// Authoritative playback seconds, output width/height, spare.
     effect_clock: [f32; 4],
@@ -60,12 +62,20 @@ impl LayerUniform {
         let mut effect_types = [0; 4];
         let mut effect_mixes = [0.0; 4];
         let mut effect_parameters = [[0.0; 4]; 4];
+        let mut effect_parameter_tail = [0.0; 4];
         let mut effect_seeds = [0.0; 4];
         for (index, effect) in layer.effects.iter().enumerate() {
             if let Some(parameters) = effect.analog_tv_parameters() {
                 effect_types[index] = 1;
                 effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
                 effect_parameters[index] = parameters.as_array();
+                effect_seeds[index] = effect_seed(output_id, effect.seed, index);
+            } else if let Some(parameters) = effect.digital_tv_parameters() {
+                let values = parameters.as_array();
+                effect_types[index] = 2;
+                effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
+                effect_parameters[index].copy_from_slice(&values[..4]);
+                effect_parameter_tail[index] = values[4];
                 effect_seeds[index] = effect_seed(output_id, effect.seed, index);
             }
         }
@@ -103,6 +113,7 @@ impl LayerUniform {
             effect_types,
             effect_mixes,
             effect_parameters,
+            effect_parameter_tail,
             effect_seeds,
             effect_clock: [
                 (now.as_micros() as f64 / 1_000_000.0) as f32,
@@ -601,7 +612,7 @@ mod tests {
 
     #[test]
     fn the_uniforms_are_the_size_the_shaders_declare() {
-        assert_eq!(std::mem::size_of::<LayerUniform>(), 224);
+        assert_eq!(std::mem::size_of::<LayerUniform>(), 240);
         assert_eq!(std::mem::size_of::<MasterUniform>(), 32);
     }
 

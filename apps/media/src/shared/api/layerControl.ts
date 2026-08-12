@@ -308,11 +308,37 @@ function applyEffectLocally(
 					defaultValue: Number(value),
 				})),
 			};
+		} else if (change.effectType === "digital-tv") {
+			next = {
+				...effect,
+				effectType: "digital-tv",
+				label: "Digital TV",
+				enabled: true,
+				mix: 1,
+				supported: true,
+				capabilityDetail: null,
+				parameters: [
+					["compression-damage", "Compression damage", 0.35],
+					["block-size", "Block size", 0.35],
+					["tile-displacement", "Tile displacement", 0.25],
+					["chroma-damage", "Chroma damage", 0.2],
+					["glitching", "Glitching", 0.15],
+				].map(([id, label, value]) => ({
+					id: String(id),
+					label: String(label),
+					value: Number(value),
+					defaultValue: Number(value),
+				})),
+			};
 		}
 		const values: Record<string, number | null | undefined> = {
 			"tv-curvature": change.tvCurvature,
 			distortion: change.effectDistortion,
 			"image-grain": change.imageGrain,
+			"compression-damage": change.compressionDamage,
+			"block-size": change.blockSize,
+			"tile-displacement": change.tileDisplacement,
+			"chroma-damage": change.chromaDamage,
 			glitching: change.effectGlitching,
 		};
 		return {

@@ -23,12 +23,14 @@ struct Layer {
     mask: vec4<f32>,
     // x: 1 when the mask reads its strength from alpha rather than luminance.
     mask_source: vec4<f32>,
-    // 0: none/unsupported, 1: Analog TV. One stable type per ordered effect slot.
+    // 0: none/unsupported, 1: Analog TV, 2: Digital TV. One type per ordered slot.
     effect_types: vec4<u32>,
     effect_mixes: vec4<f32>,
     // Typed normalized parameters for slots 1..4. Analog TV is curvature, distortion, grain,
     // glitching. Future effect types interpret their own row through the advertised contract.
     effect_parameters: array<vec4<f32>, 4>,
+    // Fifth typed parameter, indexed by slot.
+    effect_parameter_tail: vec4<f32>,
     effect_seeds: vec4<f32>,
     // x: authoritative playback seconds. y/z: output dimensions.
     effect_clock: vec4<f32>,
@@ -178,6 +180,87 @@ fn analog_colour(
     return vec4<f32>(clamp(rgb, vec3<f32>(0.0), vec3<f32>(1.0)), colour.a);
 }
 
+fn digital_grid(parameters: vec4<f32>) -> f32 {
+    // Normalized grid density keeps the artifact scale independent of output resolution.
+    return mix(64.0, 7.0, parameters.y);
+}
+
+/// Grid-aligned tile displacement for damaged compressed streams. Event buckets hold the same
+/// wrong tile for a quarter second instead of generating unrelated full-screen noise each frame.
+fn digital_coordinates(
+    input: EffectCoordinates,
+    parameters: vec4<f32>,
+    glitching_parameter: f32,
+    mix_amount: f32,
+    seed: f32,
+) -> EffectCoordinates {
+    let displacement = parameters.z * mix_amount;
+    let glitching = glitching_parameter * mix_amount;
+    if displacement <= 0.0 && glitching <= 0.0 {
+        return input;
+    }
+    let cells = digital_grid(parameters);
+    let tile = floor(input.uv * cells);
+    let held_event = floor(layer.effect_clock.x * 4.0);
+    let choice = hash21(tile + vec2<f32>(held_event * 13.0, seed * 8191.0));
+    let displaced = select(0.0, 1.0, choice > 1.0 - displacement * 0.58);
+    let stream_failure = select(0.0, 1.0, choice > 1.0 - glitching * 0.36);
+    let offset_cell = vec2<f32>(
+        floor((hash21(tile.yx + vec2<f32>(held_event, seed * 97.0)) - 0.5) * 7.0),
+        floor((hash21(tile + vec2<f32>(seed * 193.0, held_event)) - 0.5) * 5.0),
+    );
+    let amount = max(displaced * displacement, stream_failure * glitching);
+    var result = input;
+    // Clamp is the documented source-boundary contract: corruption never samples outside source.
+    result.uv = clamp(input.uv + offset_cell / cells * amount, vec2<f32>(0.0), vec2<f32>(1.0));
+    return result;
+}
+
+/// Compression/chroma corruption operates on the previous slot's color and stays rectangular.
+/// There is deliberately no scanline or per-pixel snow term: those belong to Analog TV.
+fn digital_colour(
+    colour: vec4<f32>,
+    uv: vec2<f32>,
+    parameters: vec4<f32>,
+    glitching_parameter: f32,
+    mix_amount: f32,
+    seed: f32,
+) -> vec4<f32> {
+    let compression = parameters.x * mix_amount;
+    let chroma_damage = parameters.w * mix_amount;
+    let glitching = glitching_parameter * mix_amount;
+    if compression <= 0.0 && chroma_damage <= 0.0 && glitching <= 0.0 {
+        return colour;
+    }
+
+    let cells = digital_grid(parameters);
+    let tile = floor(uv * cells);
+    let held_event = floor(layer.effect_clock.x * 4.0);
+    let tile_hash = hash21(tile + vec2<f32>(held_event * 17.0, seed * 4093.0));
+    var rgb = colour.rgb;
+
+    // Posterization and tile-edge ringing approximate damaged transform coefficients.
+    let levels = mix(255.0, 6.0, compression);
+    let quantized = round(rgb * levels) / levels;
+    let within_tile = fract(uv * cells);
+    let edge = 1.0 - smoothstep(0.0, 0.16, min(min(within_tile.x, within_tile.y), min(1.0 - within_tile.x, 1.0 - within_tile.y)));
+    rgb = mix(rgb, quantized + (tile_hash - 0.5) * edge * 0.14, compression);
+
+    // Damage chroma by rectangular block while leaving luma comparatively stable.
+    let luma = dot(rgb, LUMINANCE);
+    let chroma = rgb - vec3<f32>(luma);
+    let chroma_hold = select(0.35, 1.0, tile_hash > 0.72);
+    let damaged_chroma = chroma * (1.0 - chroma_damage * chroma_hold);
+    let channel_bias = vec3<f32>(tile_hash - 0.5, 0.25 - tile_hash * 0.5, 0.5 - tile_hash) * 0.22;
+    rgb = vec3<f32>(luma) + damaged_chroma + channel_bias * chroma_damage;
+
+    // A held subset of macroblocks loses a channel or brightness during a stream failure.
+    let corrupted = select(0.0, 1.0, tile_hash > 1.0 - glitching * 0.48);
+    let failure = vec3<f32>(rgb.g * 0.25, rgb.b, rgb.r * 0.1);
+    rgb = mix(rgb, failure * (0.45 + tile_hash * 0.75), corrupted * glitching);
+    return vec4<f32>(clamp(rgb, vec3<f32>(0.0), vec3<f32>(1.0)), colour.a);
+}
+
 /// How much of the layer this pixel's mask lets through.
 ///
 /// The mask carries its own scale about the layer centre rather than inheriting the layer's, so an
@@ -217,6 +300,14 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
                 layer.effect_mixes[slot],
                 layer.effect_seeds[slot],
             );
+        } else if layer.effect_types[slot] == 2u {
+            coordinates = digital_coordinates(
+                coordinates,
+                layer.effect_parameters[slot],
+                layer.effect_parameter_tail[slot],
+                layer.effect_mixes[slot],
+                layer.effect_seeds[slot],
+            );
         }
     }
 
@@ -227,6 +318,15 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
                 sampled,
                 coordinates.uv,
                 layer.effect_parameters[slot],
+                layer.effect_mixes[slot],
+                layer.effect_seeds[slot],
+            );
+        } else if layer.effect_types[slot] == 2u {
+            sampled = digital_colour(
+                sampled,
+                coordinates.uv,
+                layer.effect_parameters[slot],
+                layer.effect_parameter_tail[slot],
                 layer.effect_mixes[slot],
                 layer.effect_seeds[slot],
             );

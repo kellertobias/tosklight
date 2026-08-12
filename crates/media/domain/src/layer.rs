@@ -93,6 +93,7 @@ impl MaskState {
 
 /// The first typed effect shipped by the Media Server.
 pub const ANALOG_TV_EFFECT: &str = "analog-tv";
+pub const DIGITAL_TV_EFFECT: &str = "digital-tv";
 
 /// Typed Analog TV parameters, normalized to `0.0..=1.0`.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -147,6 +148,74 @@ impl AnalogTvParameters {
     }
 }
 
+/// Typed Digital TV/DVB-T damage parameters, normalized to `0.0..=1.0`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DigitalTvParameters {
+    pub compression_damage: f32,
+    pub block_size: f32,
+    pub tile_displacement: f32,
+    pub chroma_damage: f32,
+    pub glitching: f32,
+}
+
+impl Default for DigitalTvParameters {
+    fn default() -> Self {
+        Self {
+            compression_damage: 0.35,
+            block_size: 0.35,
+            tile_displacement: 0.25,
+            chroma_damage: 0.20,
+            glitching: 0.15,
+        }
+    }
+}
+
+impl DigitalTvParameters {
+    pub const IDS: [&'static str; 5] = [
+        "compression-damage",
+        "block-size",
+        "tile-displacement",
+        "chroma-damage",
+        "glitching",
+    ];
+    pub const LABELS: [&'static str; 5] = [
+        "Compression damage",
+        "Block size",
+        "Tile displacement",
+        "Chroma damage",
+        "Glitching",
+    ];
+
+    pub fn from_normalized(values: &[f32]) -> Self {
+        let defaults = Self::default().as_array();
+        let mut resolved = defaults;
+        for (index, value) in values.iter().copied().take(5).enumerate() {
+            resolved[index] = if value.is_finite() {
+                value.clamp(0.0, 1.0)
+            } else {
+                defaults[index]
+            };
+        }
+        Self {
+            compression_damage: resolved[0],
+            block_size: resolved[1],
+            tile_displacement: resolved[2],
+            chroma_damage: resolved[3],
+            glitching: resolved[4],
+        }
+    }
+
+    pub const fn as_array(self) -> [f32; 5] {
+        [
+            self.compression_damage,
+            self.block_size,
+            self.tile_displacement,
+            self.chroma_damage,
+            self.glitching,
+        ]
+    }
+}
+
 /// One slot in a layer's ordered effect chain.
 ///
 /// The four DMX bytes populate the primary amount of four configured slots. Effect identity and
@@ -183,6 +252,21 @@ impl EffectSlot {
             .then(|| AnalogTvParameters::from_normalized(&self.parameters))
     }
 
+    pub fn digital_tv() -> Self {
+        Self {
+            effect_type: Some(DIGITAL_TV_EFFECT.to_owned()),
+            enabled: true,
+            seed: 0,
+            mix: 1.0,
+            parameters: DigitalTvParameters::default().as_array().to_vec(),
+        }
+    }
+
+    pub fn digital_tv_parameters(&self) -> Option<DigitalTvParameters> {
+        (self.enabled && self.mix > 0.0 && self.effect_type.as_deref() == Some(DIGITAL_TV_EFFECT))
+            .then(|| DigitalTvParameters::from_normalized(&self.parameters))
+    }
+
     pub fn normalize(&mut self) {
         self.mix = if self.mix.is_finite() {
             self.mix.clamp(0.0, 1.0)
@@ -191,6 +275,10 @@ impl EffectSlot {
         };
         if self.effect_type.as_deref() == Some(ANALOG_TV_EFFECT) {
             self.parameters = AnalogTvParameters::from_normalized(&self.parameters)
+                .as_array()
+                .to_vec();
+        } else if self.effect_type.as_deref() == Some(DIGITAL_TV_EFFECT) {
+            self.parameters = DigitalTvParameters::from_normalized(&self.parameters)
                 .as_array()
                 .to_vec();
         }
@@ -466,5 +554,20 @@ mod tests {
         effect.mix = 1.0;
         effect.enabled = false;
         assert_eq!(effect.analog_tv_parameters(), None, "disabled bypasses");
+    }
+
+    #[test]
+    fn digital_tv_has_five_typed_restrained_defaults_and_normalized_endpoints() {
+        let mut effect = EffectSlot::digital_tv();
+        assert_eq!(effect.effect_type.as_deref(), Some(DIGITAL_TV_EFFECT));
+        assert_eq!(
+            effect.digital_tv_parameters(),
+            Some(DigitalTvParameters::default())
+        );
+        assert_eq!(DigitalTvParameters::IDS.len(), effect.parameters.len());
+
+        effect.parameters = vec![-1.0, 0.25, 0.5, 1.5, f32::NAN];
+        effect.normalize();
+        assert_eq!(effect.parameters, vec![0.0, 0.25, 0.5, 1.0, 0.15]);
     }
 }

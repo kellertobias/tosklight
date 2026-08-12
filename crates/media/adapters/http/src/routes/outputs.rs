@@ -12,9 +12,9 @@ use axum::response::{IntoResponse, Response};
 use media_application::MediaConfiguration;
 use media_application::configuration::{load, save};
 use media_domain::{
-    ANALOG_TV_EFFECT, Applied, Command, CommandKind, CommandSource, EffectSlot, FlipMirror,
-    LayerControls, MasterControls, MediaAddress, MediaState, OutputId, ScalingMode, Timestamp,
-    Tint, apply,
+    ANALOG_TV_EFFECT, Applied, Command, CommandKind, CommandSource, DIGITAL_TV_EFFECT, EffectSlot,
+    FlipMirror, LayerControls, MasterControls, MediaAddress, MediaState, OutputId, ScalingMode,
+    Timestamp, Tint, apply,
 };
 
 use crate::error::ApiError;
@@ -137,6 +137,10 @@ pub(super) async fn update_layer(
         ("tvCurvature", body.tv_curvature),
         ("effectDistortion", body.effect_distortion),
         ("imageGrain", body.image_grain),
+        ("compressionDamage", body.compression_damage),
+        ("blockSize", body.block_size),
+        ("tileDisplacement", body.tile_displacement),
+        ("chromaDamage", body.chroma_damage),
         ("effectGlitching", body.effect_glitching),
     ] {
         validate_unit(name, value)?;
@@ -185,6 +189,7 @@ pub(super) async fn update_layer(
         if let Some(effect_type) = body.effect_type.as_deref() {
             effects[slot] = match effect_type {
                 ANALOG_TV_EFFECT => EffectSlot::analog_tv(),
+                DIGITAL_TV_EFFECT => EffectSlot::digital_tv(),
                 "none" => EffectSlot::default(),
                 _ => {
                     return Err(ApiError::bad_request(
@@ -205,21 +210,53 @@ pub(super) async fn update_layer(
         let changes_parameters = body.tv_curvature.is_some()
             || body.effect_distortion.is_some()
             || body.image_grain.is_some()
+            || body.compression_damage.is_some()
+            || body.block_size.is_some()
+            || body.tile_displacement.is_some()
+            || body.chroma_damage.is_some()
             || body.effect_glitching.is_some();
         if changes_parameters {
-            if effect.effect_type.as_deref() != Some(ANALOG_TV_EFFECT) {
-                return Err(ApiError::bad_request(
-                    "effect-parameters-invalid",
-                    "Analog TV parameters require an Analog TV effect in this slot",
-                ));
+            match effect.effect_type.as_deref() {
+                Some(ANALOG_TV_EFFECT)
+                    if body.compression_damage.is_none()
+                        && body.block_size.is_none()
+                        && body.tile_displacement.is_none()
+                        && body.chroma_damage.is_none() =>
+                {
+                    let mut parameters =
+                        media_domain::AnalogTvParameters::from_normalized(&effect.parameters);
+                    parameters.curvature = body.tv_curvature.unwrap_or(parameters.curvature);
+                    parameters.distortion = body.effect_distortion.unwrap_or(parameters.distortion);
+                    parameters.image_grain = body.image_grain.unwrap_or(parameters.image_grain);
+                    parameters.glitching = body.effect_glitching.unwrap_or(parameters.glitching);
+                    effect.parameters = parameters.as_array().to_vec();
+                }
+                Some(DIGITAL_TV_EFFECT)
+                    if body.tv_curvature.is_none()
+                        && body.effect_distortion.is_none()
+                        && body.image_grain.is_none() =>
+                {
+                    let mut parameters =
+                        media_domain::DigitalTvParameters::from_normalized(&effect.parameters);
+                    parameters.compression_damage = body
+                        .compression_damage
+                        .unwrap_or(parameters.compression_damage);
+                    parameters.block_size = body.block_size.unwrap_or(parameters.block_size);
+                    parameters.tile_displacement = body
+                        .tile_displacement
+                        .unwrap_or(parameters.tile_displacement);
+                    parameters.chroma_damage =
+                        body.chroma_damage.unwrap_or(parameters.chroma_damage);
+                    parameters.glitching = body.effect_glitching.unwrap_or(parameters.glitching);
+                    effect.parameters = parameters.as_array().to_vec();
+                }
+                _ => {
+                    return Err(ApiError::bad_request(
+                        "effect-parameters-invalid",
+                        "the typed parameters must match the selected effect in this slot",
+                    ));
+                }
             }
-            let mut parameters =
-                media_domain::AnalogTvParameters::from_normalized(&effect.parameters);
-            parameters.curvature = body.tv_curvature.unwrap_or(parameters.curvature);
-            parameters.distortion = body.effect_distortion.unwrap_or(parameters.distortion);
-            parameters.image_grain = body.image_grain.unwrap_or(parameters.image_grain);
-            parameters.glitching = body.effect_glitching.unwrap_or(parameters.glitching);
-            effect.parameters = parameters.as_array().to_vec();
         }
         effect.normalize();
         Some(effects)
@@ -824,7 +861,7 @@ mod tests {
                 "effect-slot-out-of-range",
             ),
             (
-                r#"{"effectSlot":0,"effectType":"digital-tv"}"#,
+                r#"{"effectSlot":0,"effectType":"future-effect"}"#,
                 "effect-unsupported",
             ),
             (
@@ -842,6 +879,43 @@ mod tests {
                 "the rejected edit published nothing"
             );
         }
+    }
+
+    #[tokio::test]
+    async fn digital_tv_is_a_five_parameter_typed_intent_shaped_effect_edit() {
+        let bench = bench();
+        let uri = format!("/api/v2/outputs/{}/layers/0/update", bench.output);
+        let (status, selected) = send(
+            &bench.router,
+            post(uri.clone(), r#"{"effectSlot":2,"effectType":"digital-tv"}"#),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let effect = &selected["layers"][0]["effects"][2];
+        assert_eq!(effect["effectType"], "digital-tv");
+        assert_eq!(effect["label"], "Digital TV");
+        assert_eq!(effect["parameters"][0]["value"], 0.35);
+        assert_eq!(effect["parameters"][1]["value"], 0.35);
+        assert_eq!(effect["parameters"][2]["value"], 0.25);
+        assert_eq!(effect["parameters"][3]["value"], 0.20);
+        assert_eq!(effect["parameters"][4]["value"], 0.15);
+
+        let (status, tuned) = send(
+            &bench.router,
+            post(
+                uri,
+                r#"{"effectSlot":2,"compressionDamage":0,"blockSize":1,"tileDisplacement":0.6,"chromaDamage":0.4,"effectGlitching":1}"#,
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let values = tuned["layers"][0]["effects"][2]["parameters"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|parameter| parameter["value"].as_f64().unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(values, vec![0.0, 1.0, 0.6, 0.4, 1.0]);
     }
 
     #[tokio::test]

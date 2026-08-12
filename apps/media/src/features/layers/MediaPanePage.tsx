@@ -595,7 +595,7 @@ function tintChange(value: string) {
 
 function layerChange(id: string, value: string | number): UpdateLayer {
 	const number = Number(value);
-	const effect = /^effect-(\d+)-(type|enabled|mix|tv-curvature|distortion|image-grain|glitching)$/.exec(
+	const effect = /^effect-(\d+)-(type|enabled|mix|tv-curvature|distortion|image-grain|compression-damage|block-size|tile-displacement|chroma-damage|glitching)$/.exec(
 		id,
 	);
 	if (effect) {
@@ -613,6 +613,14 @@ function layerChange(id: string, value: string | number): UpdateLayer {
 				return { effectSlot, effectDistortion: number / 100 };
 			case "image-grain":
 				return { effectSlot, imageGrain: number / 100 };
+			case "compression-damage":
+				return { effectSlot, compressionDamage: number / 100 };
+			case "block-size":
+				return { effectSlot, blockSize: number / 100 };
+			case "tile-displacement":
+				return { effectSlot, tileDisplacement: number / 100 };
+			case "chroma-damage":
+				return { effectSlot, chromaDamage: number / 100 };
 			case "glitching":
 				return { effectSlot, effectGlitching: number / 100 };
 		}
@@ -673,11 +681,13 @@ function effectControls(
 				options: [
 					{ value: "none", label: "None" },
 					{ value: "analog-tv", label: "Analog TV" },
+					{ value: "digital-tv", label: "Digital TV" },
 				],
 				disabled,
 			},
 		];
-		if (effect.effectType !== "analog-tv") return controls;
+		if (effect.effectType !== "analog-tv" && effect.effectType !== "digital-tv")
+			return controls;
 		return [
 			...controls,
 			{

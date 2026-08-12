@@ -102,6 +102,25 @@ describe("the transport", () => {
 		expect(init.body).toBe('{"effectSlot":1,"imageGrain":0.65}');
 	});
 
+	it("sends one typed Digital TV parameter without replacing the effect chain", async () => {
+		const fetchStub = vi.fn(
+			async () =>
+				new Response(JSON.stringify({}), {
+					status: 200,
+					headers: { "content-type": "application/json" },
+				}),
+		);
+		vi.stubGlobal("fetch", fetchStub);
+
+		await api.updateLayer("an-output", 2, {
+			effectSlot: 3,
+			tileDisplacement: 0.7,
+		});
+
+		const [, init] = fetchStub.mock.calls[0] as unknown as [string, RequestInit];
+		expect(init.body).toBe('{"effectSlot":3,"tileDisplacement":0.7}');
+	});
+
 	it("sends a folder reorder as an explicit swap intent", async () => {
 		const fetchStub = vi.fn(async () => new Response(null, { status: 204 }));
 		vi.stubGlobal("fetch", fetchStub);

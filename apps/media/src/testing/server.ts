@@ -230,6 +230,8 @@ export function stubServer(
 						};
 					} else if (body.effectType === "analog-tv") {
 						layer.effects[body.effectSlot] = analogTvEffect(body.effectSlot);
+					} else if (body.effectType === "digital-tv") {
+						layer.effects[body.effectSlot] = digitalTvEffect(body.effectSlot);
 					}
 					const selectedEffect = layer.effects[body.effectSlot];
 					if (body.effectEnabled !== undefined)
@@ -239,6 +241,10 @@ export function stubServer(
 						["tv-curvature", "tvCurvature"],
 						["distortion", "effectDistortion"],
 						["image-grain", "imageGrain"],
+						["compression-damage", "compressionDamage"],
+						["block-size", "blockSize"],
+						["tile-displacement", "tileDisplacement"],
+						["chroma-damage", "chromaDamage"],
 						["glitching", "effectGlitching"],
 					] as const) {
 						const parameter = selectedEffect.parameters.find(
@@ -555,6 +561,30 @@ function analogTvEffect(
 			["distortion", "Distortion", 0.18],
 			["image-grain", "Image grain", 0.2],
 			["glitching", "Glitching", 0.08],
+		].map(([id, label, value]) => ({
+			id: String(id),
+			label: String(label),
+			value: Number(value),
+			defaultValue: Number(value),
+		})),
+	};
+}
+
+function digitalTvEffect(
+	index: number,
+): OutputView["layers"][number]["effects"][number] {
+	return {
+		...emptyEffect(index),
+		effectType: "digital-tv",
+		label: "Digital TV",
+		enabled: true,
+		mix: 1,
+		parameters: [
+			["compression-damage", "Compression damage", 0.35],
+			["block-size", "Block size", 0.35],
+			["tile-displacement", "Tile displacement", 0.25],
+			["chroma-damage", "Chroma damage", 0.2],
+			["glitching", "Glitching", 0.15],
 		].map(([id, label, value]) => ({
 			id: String(id),
 			label: String(label),

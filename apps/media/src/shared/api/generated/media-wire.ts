@@ -305,9 +305,9 @@ playbackBpm?: number | null,
  */
 effectSlot?: number | null,
 /**
- * `analog-tv` selects the effect; `none` clears the slot.
+ * `analog-tv` or `digital-tv` selects the effect; `none` clears the slot.
  */
-effectType?: string | null, effectEnabled?: boolean | null, effectMix?: number | null, tvCurvature?: number | null, effectDistortion?: number | null, imageGrain?: number | null, effectGlitching?: number | null, };
+effectType?: string | null, effectEnabled?: boolean | null, effectMix?: number | null, tvCurvature?: number | null, effectDistortion?: number | null, imageGrain?: number | null, compressionDamage?: number | null, blockSize?: number | null, tileDisplacement?: number | null, chromaDamage?: number | null, effectGlitching?: number | null, };
 export type UpdateMaster = { dimmer?: number | null, volume?: number | null, tintRed?: number | null, tintGreen?: number | null, tintBlue?: number | null, flipMirror?: string | null, maskFolder?: number | null, maskFile?: number | null, };
 export type UpdateOutputConfiguration = { requestId: string, targetKind?: string | null, monitorBy?: string | null, monitorValue?: string | null, fullscreen?: boolean | null, width?: number | null, height?: number | null, presentation?: string | null, framesPerSecond?: number | null, soundOutputKind?: string | null, soundOutputName?: string | null, personality?: string | null, protocol?: string | null, universe?: number | null, startAddress?: number | null, };
 export type UpdateVisualizer = {

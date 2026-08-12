@@ -148,6 +148,12 @@ rounded screen, Distortion controls continuous horizontal-sync and chroma instab
 adds continuous noise and scanlines, and Glitching controls intermittent tearing and vertical roll.
 Set an individual control to 0% to remove only that contribution, choose **Bypassed** to preserve the
 slot without rendering it, or choose **None** to clear the slot.
+**Digital TV** is the distinct compressed-stream failure: its defaults are **Compression damage**
+35%, **Block size** 35%, **Tile displacement** 25%, **Chroma damage** 20%, and **Glitching** 15%.
+Compression damage adds quantization and damaged transform blocks, Block size changes the
+rectangular grid, Tile displacement moves selected blocks to the wrong source region, Chroma
+damage breaks color more strongly than luma, and Glitching controls held intermittent stream
+failures. It deliberately does not add Analog TV's snow, scanlines, curvature, or sync roll.
 After configuring a slot, release takeover to return control to the desk. The matching **Effect 1**
 through **Effect 4** DMX channel then controls that slot's mix without erasing its selected effect or
 typed parameters.

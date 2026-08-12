@@ -172,6 +172,43 @@ describe("the production Media pane", () => {
 		);
 	});
 
+	it("edits a typed Digital TV slot with five distinct DVB-T controls", async () => {
+		const server = stubServer();
+		render(<MediaPanePage />);
+		await userEvent.click(
+			await screen.findByRole("switch", { name: "Take over playback" }),
+		);
+		await userEvent.click(screen.getByRole("radio", { name: "Effects" }));
+		await userEvent.click(
+			within(screen.getByRole("radiogroup", { name: "Slot 2 effect" })).getByRole(
+				"radio",
+				{ name: "Digital TV" },
+			),
+		);
+
+		await waitFor(() =>
+			expect(server.outputs[0].layers[0].effects[1].effectType).toBe(
+				"digital-tv",
+			),
+		);
+		expect(screen.getByLabelText("Slot 2 · Compression damage")).toHaveValue("35");
+		expect(screen.getByLabelText("Slot 2 · Block size")).toHaveValue("35");
+		expect(screen.getByLabelText("Slot 2 · Tile displacement")).toHaveValue("25");
+		expect(screen.getByLabelText("Slot 2 · Chroma damage")).toHaveValue("20");
+		expect(screen.getByLabelText("Slot 2 · Glitching")).toHaveValue("15");
+
+		fireEvent.input(screen.getByLabelText("Slot 2 · Tile displacement"), {
+			target: { value: "70" },
+		});
+		await waitFor(() =>
+			expect(
+				server.outputs[0].layers[0].effects[1].parameters.find(
+					(parameter) => parameter.id === "tile-displacement",
+				)?.value,
+			).toBeCloseTo(0.7),
+		);
+	});
+
 	it("shows an actionable capability error for an effect this build cannot render", async () => {
 		const output = anOutput();
 		output.layers[0].effects[0] = {
