@@ -53,14 +53,21 @@ on every local interface; it is not a valid destination.
 
 ## Prepare the media library
 
-The **Media library** page shows numbered folders and files with their stable names, addresses, and
-thumbnails. Files `0` and `255` are blank sentinels and cannot hold media. Normal media addresses
-are `1` through `254`.
+The **Library** page uses three columns: folder preset pool, file preset pool, and the selected
+media preview and editor. Files `0` and `255` are blank sentinels and cannot hold media. Normal
+media addresses are `1` through `254`.
 
 - **Rename** changes a clip's operator-facing name without changing its stable identity.
 - **Move** chooses a new numbered address. An occupied address is refused unless **Swap** is chosen;
   the server never silently overwrites another clip.
 - A folder name can be changed or cleared. Its numbered folder remains the same.
+- Drag one occupied file onto another to swap their slots, or onto an empty slot to move it there.
+  Multi-select files and drag the selection onto another folder to fill that folder's first free
+  slots. Allocation continues into the next folder only when the target is full.
+- Drag one folder card onto another to exchange the complete folders. Folders `900` through `999`
+  are parking storage: clips there stay in the library but have no CITP or DMX playback address.
+  Move individual clips there, or exchange a full playable folder with a parking folder, when the
+  on-air address space is full. Restore them by dragging them back.
 - **Upload** selects an explicit folder and file address, preserves the uploaded source, and starts
   a visible HAP Alpha import job. Wait for the job to finish before expecting playback or its
   thumbnail. A job can be cancelled, and a failure states what is missing or unreadable.
@@ -68,7 +75,8 @@ are `1` through `254`.
   the replacement for the old H.264/ProRes re-encode action: the only playback format is HAP Alpha
   in a `.toskclip` container.
 
-Thumbnail, source, and playable clip files follow a rename, move, or explicit swap together. A
+Thumbnail, source, metadata, and playable clip files follow a rename, move, folder reorder, or
+explicit swap together. A
 missing thumbnail is shown as missing; it is not substituted from another address.
 
 ### Convert a folder before copying it to the server
@@ -127,7 +135,7 @@ temporary: restarting reads `MEDIA_LOG` again. Raising it to Debug does not chan
 filter, and lowering the browser filter does not change the process.
 
 Bookmarks for the retired `/layers`, `/audio`, `/dmx`, and `/logs` pages remain compatible: they
-open **Media** or the corresponding area of **Settings**, so no existing operator function is lost.
+open **Playback** or the corresponding area of **Settings**, so no existing operator function is lost.
 
 ## Check a show and retain rollback
 

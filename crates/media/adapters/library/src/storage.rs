@@ -11,7 +11,7 @@
 use std::path::{Path, PathBuf};
 
 use media_domain::catalog::{CatalogError, CatalogSnapshot};
-use media_domain::{AssetId, MediaAddress};
+use media_domain::{AssetId, CatalogLocation};
 
 use crate::naming;
 
@@ -45,21 +45,24 @@ impl LibraryStorage {
     }
 
     /// Where an item at this address with this name lives.
-    pub fn item_path(&self, address: MediaAddress, name: &str) -> PathBuf {
+    pub fn item_path(&self, address: impl Into<CatalogLocation>, name: &str) -> PathBuf {
+        let address = address.into();
         self.root
             .join(naming::folder_directory(address.folder))
             .join(naming::item_filename(address.file, name))
     }
 
     /// Where an item's thumbnail lives.
-    pub fn thumbnail_path(&self, address: MediaAddress) -> PathBuf {
+    pub fn thumbnail_path(&self, address: impl Into<CatalogLocation>) -> PathBuf {
+        let address = address.into();
         self.root
             .join(naming::folder_directory(address.folder))
             .join(naming::THUMBNAIL_DIRECTORY)
             .join(naming::thumbnail_filename(address.file))
     }
 
-    fn metadata_path(&self, address: MediaAddress) -> PathBuf {
+    fn metadata_path(&self, address: impl Into<CatalogLocation>) -> PathBuf {
+        let address = address.into();
         self.root
             .join(naming::folder_directory(address.folder))
             .join(naming::METADATA_DIRECTORY)
@@ -126,8 +129,9 @@ impl LibraryStorage {
         &self,
         catalog: &mut CatalogSnapshot,
         id: AssetId,
-        to: MediaAddress,
+        to: impl Into<CatalogLocation>,
     ) -> Result<(), StorageError> {
+        let to = to.into();
         let (from_address, name) = self.locate(catalog, id)?;
         let mut proposed = catalog.clone();
         proposed.move_item(id, to)?;
@@ -184,7 +188,7 @@ impl LibraryStorage {
     pub fn rename_folder(
         &self,
         catalog: &mut CatalogSnapshot,
-        folder: u8,
+        folder: u16,
         name: Option<&str>,
     ) -> Result<(), StorageError> {
         let mut proposed = catalog.clone();
@@ -217,6 +221,47 @@ impl LibraryStorage {
         Ok(())
     }
 
+    /// Exchanges two complete physical folders, including names, originals, metadata and
+    /// thumbnails. This is also how a playable folder is parked or restored as one operation.
+    pub fn swap_folders(
+        &self,
+        catalog: &mut CatalogSnapshot,
+        first: u16,
+        second: u16,
+    ) -> Result<(), StorageError> {
+        let mut proposed = catalog.clone();
+        proposed.swap_folders(first, second)?;
+        if first == second {
+            return Ok(());
+        }
+
+        let first_path = self.root.join(naming::folder_directory(first));
+        let second_path = self.root.join(naming::folder_directory(second));
+        match (first_path.exists(), second_path.exists()) {
+            (true, true) => {
+                let staging = first_path.with_extension("swapping");
+                if staging.exists() {
+                    return Err(StorageError::Filesystem {
+                        operation: "stage folder swap because a recovery folder already exists at",
+                        path: staging,
+                        source: std::io::Error::new(
+                            std::io::ErrorKind::AlreadyExists,
+                            "recover the earlier folder swap before retrying",
+                        ),
+                    });
+                }
+                self.rename(&first_path, &staging)?;
+                self.rename(&second_path, &first_path)?;
+                self.rename(&staging, &second_path)?;
+            }
+            (true, false) => self.rename(&first_path, &second_path)?,
+            (false, true) => self.rename(&second_path, &first_path)?,
+            (false, false) => {}
+        }
+        *catalog = proposed;
+        Ok(())
+    }
+
     /// Deletes an item and its thumbnail.
     pub fn remove_item(
         &self,
@@ -240,7 +285,8 @@ impl LibraryStorage {
     }
 
     /// Creates a folder's directory if it is not there yet.
-    pub fn ensure_folder(&self, folder: u8) -> Result<(), StorageError> {
+    pub fn ensure_folder(&self, folder: impl Into<u16>) -> Result<(), StorageError> {
+        let folder = folder.into();
         let path = self.root.join(naming::folder_directory(folder));
         std::fs::create_dir_all(&path).map_err(|source| StorageError::Filesystem {
             operation: "create",
@@ -253,10 +299,10 @@ impl LibraryStorage {
         &self,
         catalog: &CatalogSnapshot,
         id: AssetId,
-    ) -> Result<(MediaAddress, String), StorageError> {
+    ) -> Result<(CatalogLocation, String), StorageError> {
         let (folder, item) = catalog.item(id).ok_or(CatalogError::NoSuchItem)?;
         Ok((
-            MediaAddress::new(folder.folder, item.file),
+            CatalogLocation::new(folder.folder, item.file),
             item.name.clone(),
         ))
     }
@@ -279,8 +325,8 @@ impl LibraryStorage {
     /// Thumbnails follow their item. A missing one is not an error — it is regenerated on demand.
     fn rename_thumbnail_if_present(
         &self,
-        from: MediaAddress,
-        to: MediaAddress,
+        from: CatalogLocation,
+        to: CatalogLocation,
     ) -> Result<(), StorageError> {
         let source = self.thumbnail_path(from);
         if !source.exists() || from == to {
@@ -291,8 +337,8 @@ impl LibraryStorage {
 
     fn rename_metadata_if_present(
         &self,
-        from: MediaAddress,
-        to: MediaAddress,
+        from: CatalogLocation,
+        to: CatalogLocation,
     ) -> Result<(), StorageError> {
         let source = self.metadata_path(from);
         if !source.exists() || from == to {
@@ -303,9 +349,9 @@ impl LibraryStorage {
 
     fn rename_source_if_present(
         &self,
-        from: MediaAddress,
+        from: CatalogLocation,
         from_name: &str,
-        to: MediaAddress,
+        to: CatalogLocation,
         to_name: &str,
     ) -> Result<(), StorageError> {
         let Some(source) = self.source_path(from, from_name) else {
@@ -324,9 +370,9 @@ impl LibraryStorage {
 
     fn swap_sources(
         &self,
-        first: MediaAddress,
+        first: CatalogLocation,
         first_name: &str,
-        second: MediaAddress,
+        second: CatalogLocation,
         second_name: &str,
     ) -> Result<(), StorageError> {
         let first_source = self.source_path(first, first_name);
@@ -370,7 +416,7 @@ impl LibraryStorage {
         }
     }
 
-    fn source_path(&self, address: MediaAddress, name: &str) -> Option<PathBuf> {
+    fn source_path(&self, address: CatalogLocation, name: &str) -> Option<PathBuf> {
         let folder = self.root.join(naming::folder_directory(address.folder));
         std::fs::read_dir(folder)
             .ok()?
@@ -384,7 +430,7 @@ impl LibraryStorage {
             })
     }
 
-    fn source_destination(&self, address: MediaAddress, name: &str, extension: &str) -> PathBuf {
+    fn source_destination(&self, address: CatalogLocation, name: &str, extension: &str) -> PathBuf {
         let safe = naming::safe_name(name);
         let stem = if safe.is_empty() {
             format!("{:03}", address.file)
@@ -398,8 +444,8 @@ impl LibraryStorage {
 
     fn swap_thumbnails(
         &self,
-        first: MediaAddress,
-        second: MediaAddress,
+        first: CatalogLocation,
+        second: CatalogLocation,
     ) -> Result<(), StorageError> {
         let (a, b) = (self.thumbnail_path(first), self.thumbnail_path(second));
         match (a.exists(), b.exists()) {
@@ -415,7 +461,11 @@ impl LibraryStorage {
         }
     }
 
-    fn swap_metadata(&self, first: MediaAddress, second: MediaAddress) -> Result<(), StorageError> {
+    fn swap_metadata(
+        &self,
+        first: CatalogLocation,
+        second: CatalogLocation,
+    ) -> Result<(), StorageError> {
         let (a, b) = (self.metadata_path(first), self.metadata_path(second));
         match (a.exists(), b.exists()) {
             (true, true) => {
@@ -439,6 +489,7 @@ fn staging(path: &Path) -> PathBuf {
 
 #[cfg(test)]
 mod tests {
+    use media_domain::MediaAddress;
     use media_domain::catalog::{CatalogItem, ItemKind};
 
     use super::*;
@@ -465,7 +516,7 @@ mod tests {
             let id = AssetId::new();
             self.catalog
                 .insert(
-                    folder,
+                    u16::from(folder),
                     CatalogItem {
                         id,
                         file,
@@ -646,6 +697,40 @@ mod tests {
             .unwrap();
         assert!(!info.exists(), "clearing the name removes the file");
         assert_eq!(library.catalog.folder(2).unwrap().name, None);
+    }
+
+    #[test]
+    fn a_complete_folder_can_be_parked_and_restored_on_disk() {
+        let mut library = Library::new("park-folder");
+        let id = library.add(1, 7, "Opening");
+
+        library
+            .storage
+            .swap_folders(&mut library.catalog, 1, 900)
+            .unwrap();
+        assert_eq!(
+            library.catalog.location_of(id),
+            Some(CatalogLocation::new(900, 7))
+        );
+        assert!(
+            library
+                .storage
+                .item_path(CatalogLocation::new(900, 7), "Opening")
+                .exists()
+        );
+
+        library
+            .storage
+            .swap_folders(&mut library.catalog, 900, 1)
+            .unwrap();
+        assert_eq!(
+            library.catalog.address_of(id),
+            Some(MediaAddress::new(1, 7))
+        );
+        assert_eq!(
+            library.contents(1, 7, "Opening").as_deref(),
+            Some("Opening")
+        );
     }
 
     #[test]

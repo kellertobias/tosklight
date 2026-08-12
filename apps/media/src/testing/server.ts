@@ -266,6 +266,11 @@ function writeLibrary(
 		if (body.intrinsicBpm !== undefined)
 			located.item.intrinsicBpm = body.intrinsicBpm;
 		if (body.folder !== undefined && body.file !== undefined) {
+			const occupant = server.catalog.folders
+				.find((candidate) => candidate.folder === body.folder)
+				?.items.find((candidate) => candidate.file === body.file);
+			const previousFolder = located.folder.folder;
+			const previousFile = located.item.file;
 			located.folder.items = located.folder.items.filter(
 				(candidate) => candidate.id !== located.item.id,
 			);
@@ -278,6 +283,20 @@ function writeLibrary(
 			}
 			located.item.file = body.file;
 			destination.items.push(located.item);
+			if (occupant && body.swap) {
+				destination.items = destination.items.filter(
+					(candidate) => candidate.id !== occupant.id,
+				);
+				let source = server.catalog.folders.find(
+					(candidate) => candidate.folder === previousFolder,
+				);
+				if (!source) {
+					source = { folder: previousFolder, name: null, items: [] };
+					server.catalog.folders.push(source);
+				}
+				occupant.file = previousFile;
+				source.items.push(occupant);
+			}
 		}
 		return jsonResponse(server.catalog);
 	}
@@ -292,7 +311,16 @@ function writeLibrary(
 				{ code: "library-folder-not-updated", message: "no folder" },
 				404,
 			);
-		folder.name = body.name.trim() || null;
+		if (body.swapWith !== undefined) {
+			const second = server.catalog.folders.find(
+				(candidate) => candidate.folder === body.swapWith,
+			);
+			folder.folder = body.swapWith;
+			if (second) second.folder = Number(folderUpdate[1]);
+			server.catalog.folders.sort((left, right) => left.folder - right.folder);
+		} else {
+			folder.name = body.name.trim() || null;
+		}
 		return jsonResponse(server.catalog);
 	}
 	const upload = path.match(/^\/library\/(\d+)\/(\d+)\/upload\?/u);

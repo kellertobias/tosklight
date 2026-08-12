@@ -81,3 +81,60 @@ test("Media Server Library story exercises metadata, multi-move, folder configur
 	});
 	await expect(page.getByRole("button", { name: /new-look/u })).toBeVisible();
 });
+
+test("Media Server Library reorders pooled folders and occupied file slots", async ({
+	page,
+}) => {
+	await page.goto(
+		"/iframe.html?id=tosklight-media-server--library&viewMode=story",
+	);
+	await page.locator('.media-library-folder[data-folder="900"]').waitFor({
+		state: "attached",
+	});
+
+	await page.evaluate(() => {
+		const first = document.querySelector<HTMLButtonElement>(
+			'.media-library-folder[data-folder="1"]',
+		);
+		const parking = document.querySelector<HTMLButtonElement>(
+			'.media-library-folder[data-folder="900"]',
+		);
+		if (!first || !parking) throw new Error("folder cards are missing");
+		const transfer = new DataTransfer();
+		first.dispatchEvent(
+			new DragEvent("dragstart", { bubbles: true, dataTransfer: transfer }),
+		);
+		parking.dispatchEvent(
+			new DragEvent("drop", { bubbles: true, dataTransfer: transfer }),
+		);
+	});
+	await expect(
+		page.getByRole("button", { name: /001\s+Parking\s+1\/254/u }),
+	).toBeVisible();
+	await expect(
+		page.getByRole("button", { name: /900\s+Show content\s+4\/254/u }),
+	).toBeVisible();
+
+	await page.getByRole("button", { name: /900\s+Show content/u }).click();
+	const storm = page.getByRole("button", { name: /Storm Clouds/u });
+	const sunrise = page.getByRole("button", { name: /Island sunrise/u });
+	await storm.dragTo(sunrise);
+	await expect(storm).toHaveAttribute("data-pool-position", "17");
+	await expect(sunrise).toHaveAttribute("data-pool-position", "11");
+});
+
+test("Media Server Playback keeps the shared Media Pane folder pool above its file pool", async ({
+	page,
+}) => {
+	await page.goto(
+		"/iframe.html?id=tosklight-media-server--media&viewMode=story",
+	);
+	const folders = await page.locator(".media-folder-pool").boundingBox();
+	const files = await page.locator(".media-file-pool").boundingBox();
+	expect(folders).not.toBeNull();
+	expect(files).not.toBeNull();
+	expect(folders?.y ?? Number.POSITIVE_INFINITY).toBeLessThan(
+		files?.y ?? Number.NEGATIVE_INFINITY,
+	);
+	expect(folders?.x).toBe(files?.x);
+});

@@ -469,6 +469,9 @@ fn library_access(
                 media_http::LibraryEdit::RenameFolder { folder, name } => {
                     editing.rename_folder(&mut next, folder, name.as_deref())
                 }
+                media_http::LibraryEdit::SwapFolders { first, second } => {
+                    editing.swap_folders(&mut next, first, second)
+                }
             }
             .map_err(|error| error.to_string())?;
             published.store(std::sync::Arc::new(next));

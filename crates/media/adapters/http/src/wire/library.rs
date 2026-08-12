@@ -104,7 +104,7 @@ pub struct UpdateLibraryItem {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub folder: Option<u8>,
+    pub folder: Option<u16>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub file: Option<u8>,
     /// Correct or clear the authored tempo. An absent field leaves it unchanged.
@@ -120,7 +120,10 @@ pub struct UpdateLibraryItem {
 #[serde(rename_all = "camelCase")]
 pub struct UpdateLibraryFolder {
     pub request_id: String,
-    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub swap_with: Option<u16>,
 }
 
 /// The immediate answer after a browser upload has been accepted and queued.

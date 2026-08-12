@@ -193,11 +193,24 @@ function StatefulLibrary() {
 				onRenameFolder={(folder, name) =>
 					setCatalog((current) => withStoryFolderName(current, folder, name))
 				}
+				onSwapFolders={(first, second) =>
+					setCatalog((current) => swapStoryFolders(current, first, second))
+				}
 				onUpdateItem={(item, update) =>
 					setCatalog((current) => withStoryItem(current, item.id, update))
 				}
 				onMoveItems={(items, folder) =>
 					setCatalog((current) => moveStoryItems(current, items, folder))
+				}
+				onReorderItem={(item, destination) =>
+					setCatalog((current) =>
+						reorderStoryItem(
+							current,
+							item.id,
+							destination.folder,
+							destination.file,
+						),
+					)
 				}
 				onUpload={(files, folder) =>
 					setCatalog((current) => uploadStoryFiles(current, files, folder))
@@ -205,6 +218,61 @@ function StatefulLibrary() {
 			/>
 		</Frame>
 	);
+}
+
+function swapStoryFolders(
+	catalog: CatalogView,
+	first: number,
+	second: number,
+): CatalogView {
+	return {
+		...catalog,
+		revision: catalog.revision + 1,
+		folders: catalog.folders
+			.map((entry) => ({
+				...entry,
+				folder:
+					entry.folder === first
+						? second
+						: entry.folder === second
+							? first
+							: entry.folder,
+			}))
+			.sort((left, right) => left.folder - right.folder),
+	};
+}
+
+function reorderStoryItem(
+	catalog: CatalogView,
+	id: string,
+	folder: number,
+	file: number,
+): CatalogView {
+	const source = catalog.folders
+		.flatMap((entry) =>
+			entry.items.map((item) => ({ folder: entry.folder, item })),
+		)
+		.find((entry) => entry.item.id === id);
+	const target = catalog.folders
+		.find((entry) => entry.folder === folder)
+		?.items.find((item) => item.file === file);
+	if (!source || !target) return catalog;
+	return {
+		...catalog,
+		revision: catalog.revision + 1,
+		folders: catalog.folders.map((entry) => ({
+			...entry,
+			items: entry.items
+				.map((item) =>
+					item.id === id
+						? { ...item, file }
+						: item.id === target.id
+							? { ...item, file: source.item.file }
+							: item,
+				)
+				.sort((left, right) => left.file - right.file),
+		})),
+	};
 }
 
 function withStoryFolderName(
@@ -383,7 +451,7 @@ function StatefulPlayback() {
 
 const storyCatalog = {
 	revision: 12,
-	itemCount: 4,
+	itemCount: 5,
 	folders: [
 		{
 			folder: 1,
@@ -398,6 +466,22 @@ const storyCatalog = {
 				frames: index === 2 ? null : 3_600,
 				intrinsicBpm: index === 0 ? 120 : null,
 			})),
+		},
+		{
+			folder: 900,
+			name: "Parking",
+			items: [
+				{
+					id: "parked-archive",
+					file: 1,
+					name: "Unused finale alternate",
+					kind: "video",
+					width: 1920,
+					height: 1080,
+					frames: 2_400,
+					intrinsicBpm: 128,
+				},
+			],
 		},
 	],
 } satisfies CatalogView;

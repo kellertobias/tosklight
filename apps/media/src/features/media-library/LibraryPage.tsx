@@ -6,6 +6,7 @@ import {
 } from "@tosklight/ui/pools";
 import { WindowFrame, WindowScrollArea } from "@tosklight/ui/window-kit";
 import {
+	type DragEvent,
 	type MouseEvent,
 	type ReactNode,
 	useEffect,
@@ -24,6 +25,9 @@ const MEDIA_FOLDER_COUNT = 199;
 const CITP_FOLDER_COUNT = 255;
 const FILES_PER_FOLDER = 254;
 const DRAG_MEDIA_TYPE = "application/x-tosklight-media-items";
+const DRAG_FOLDER_TYPE = "application/x-tosklight-media-folder";
+const FIRST_PARKING_FOLDER = 900;
+const LAST_PARKING_FOLDER = 999;
 
 type CatalogItem = CatalogView["folders"][number]["items"][number];
 
@@ -51,6 +55,23 @@ export function LibraryPage() {
 			onRenameFolder={(folder, name) =>
 				editing.save(() =>
 					api.updateLibraryFolder(folder, { requestId: requestId(), name }),
+				)
+			}
+			onSwapFolders={(first, second) =>
+				editing.save(() =>
+					api.updateLibraryFolder(first, {
+						requestId: requestId(),
+						swapWith: second,
+					}),
+				)
+			}
+			onReorderItem={(item, destination) =>
+				editing.save(() =>
+					api.updateLibraryItem(item.id, {
+						requestId: requestId(),
+						...destination,
+						swap: true,
+					}),
 				)
 			}
 			onUpdateItem={(item, update) =>
@@ -153,11 +174,16 @@ export interface LibraryBrowserViewProps {
 	failure?: string;
 	onDismissFailure?: () => void;
 	onRenameFolder?: (folder: number, name: string) => void;
+	onSwapFolders?: (first: number, second: number) => void;
 	onUpdateItem?: (
 		item: CatalogItem,
 		update: { name?: string; intrinsicBpm?: number | null },
 	) => void;
 	onMoveItems?: (items: CatalogItem[], folder: number) => void;
+	onReorderItem?: (
+		item: CatalogItem,
+		destination: { folder: number; file: number },
+	) => void;
 	onUpload?: (files: readonly File[], folder: number) => void;
 	thumbnailUrl?: (folder: number, file: number) => string;
 	importPanel?: ReactNode;
@@ -170,8 +196,10 @@ export function LibraryBrowserView({
 	failure,
 	onDismissFailure,
 	onRenameFolder,
+	onSwapFolders,
 	onUpdateItem,
 	onMoveItems,
+	onReorderItem,
 	onUpload,
 	thumbnailUrl = api.thumbnailUrl,
 	importPanel,
@@ -216,6 +244,72 @@ export function LibraryBrowserView({
 	const selectedItems = (selectedFolder?.items ?? []).filter((item) =>
 		selectedIds.has(item.id),
 	);
+	const folders = [
+		...Array.from({ length: CITP_FOLDER_COUNT }, (_, index) => index + 1),
+		...Array.from(
+			{ length: LAST_PARKING_FOLDER - FIRST_PARKING_FOLDER + 1 },
+			(_, index) => FIRST_PARKING_FOLDER + index,
+		),
+	];
+
+	const dropOnFolder = (
+		event: DragEvent<HTMLButtonElement>,
+		number: number,
+	) => {
+		if (!isStorageFolder(number) || busy) return;
+		event.preventDefault();
+		const draggedFolder = Number(
+			typeof event.dataTransfer.getData === "function"
+				? event.dataTransfer.getData(DRAG_FOLDER_TYPE)
+				: "",
+		);
+		if (isStorageFolder(draggedFolder)) {
+			if (draggedFolder !== number) void onSwapFolders?.(draggedFolder, number);
+			return;
+		}
+		const files = [...event.dataTransfer.files];
+		if (files.length) {
+			if (!isPlayableFolder(number)) {
+				setDropFailure(
+					"Upload into a playable folder, then park the imported media.",
+				);
+				return;
+			}
+			if (!files.every(isAcceptedMediaFile)) {
+				setDropFailure("Only video and image files can be uploaded.");
+				return;
+			}
+			setDropFailure(null);
+			void onUpload?.(files, number);
+			return;
+		}
+		if (event.dataTransfer.types.includes(DRAG_MEDIA_TYPE)) {
+			const ids = draggedItemIds(event.dataTransfer.getData(DRAG_MEDIA_TYPE));
+			const byId = new Map(
+				catalog.folders.flatMap((entry) =>
+					entry.items.map((item) => [item.id, item] as const),
+				),
+			);
+			const items = ids.flatMap((id) => {
+				const item = byId.get(id);
+				return item ? [item] : [];
+			});
+			if (items.length) void onMoveItems?.(items, number);
+		}
+	};
+	const dropOnFile = (event: DragEvent<HTMLButtonElement>, file: number) => {
+		event.preventDefault();
+		const ids = draggedItemIds(event.dataTransfer.getData(DRAG_MEDIA_TYPE));
+		if (ids.length !== 1) return;
+		const dragged = catalog.folders
+			.flatMap((entry) => entry.items)
+			.find((candidate) => candidate.id === ids[0]);
+		const sourceFolder = catalog.folders.find((entry) =>
+			entry.items.some((candidate) => candidate.id === dragged?.id),
+		)?.folder;
+		if (!dragged || (sourceFolder === folder && dragged.file === file)) return;
+		void onReorderItem?.(dragged, { folder, file });
+	};
 
 	return (
 		<WindowFrame
@@ -241,77 +335,67 @@ export function LibraryBrowserView({
 					{dropFailure ?? failure} · Dismiss
 				</button>
 			)}
-			<div className="media-library-browser">
+			<div className="media-catalog-browser">
 				<WindowScrollArea className="media-library-folders">
-					{Array.from(
-						{ length: CITP_FOLDER_COUNT },
-						(_, index) => index + 1,
-					).map((number) => {
-						const entry = catalog.folders.find(
-							(candidate) => candidate.folder === number,
-						);
-						const writable = number <= MEDIA_FOLDER_COUNT;
-						return (
-							<button
-								type="button"
-								key={number}
-								className={`media-library-folder ${folder === number ? "is-selected" : ""} ${writable ? "" : "is-reserved"}`}
-								onClick={() => {
-									setFolderEditor(null);
-									setFolder(number);
-								}}
-								onContextMenu={(event) => {
-									event.preventDefault();
-									if (writable) {
+					<div className="media-library-pool-heading">
+						<span>Folders</span>
+						<small>001–255 · Parking 900–999</small>
+					</div>
+					<div className="media-library-folder-pool">
+						{folders.map((number) => {
+							const entry = catalog.folders.find(
+								(candidate) => candidate.folder === number,
+							);
+							const writable = isStorageFolder(number);
+							return (
+								<PoolCard
+									key={number}
+									model={{
+										number: String(number).padStart(3, "0"),
+										primary:
+											entry?.name ||
+											(number >= FIRST_PARKING_FOLDER
+												? "Parking"
+												: reservedFolderName(number) || "Empty folder"),
+										secondary: writable
+											? `${entry?.items.length ?? 0}/254`
+											: "Reserved",
+										states:
+											folder === number
+												? ["selected"]
+												: writable
+													? []
+													: ["disabled"],
+									}}
+									className={`media-library-folder ${number >= FIRST_PARKING_FOLDER ? "is-parking" : ""}`}
+									data-folder={number}
+									onClick={() => {
+										setFolderEditor(null);
 										setFolder(number);
-										setFolderEditor(number);
-									}
-								}}
-								onDragOver={(event) => {
-									if (writable && !busy) event.preventDefault();
-								}}
-								onDrop={(event) => {
-									if (!writable || busy) return;
-									event.preventDefault();
-									const files = [...event.dataTransfer.files];
-									if (files.length) {
-										if (!files.every(isAcceptedMediaFile)) {
-											setDropFailure(
-												"Only video and image files can be uploaded.",
-											);
-											return;
+									}}
+									onContextMenu={(event) => {
+										event.preventDefault();
+										if (writable) {
+											setFolder(number);
+											setFolderEditor(number);
 										}
-										setDropFailure(null);
-										void onUpload?.(files, number);
-									} else if (
-										event.dataTransfer.types.includes(DRAG_MEDIA_TYPE)
-									) {
-										const ids = draggedItemIds(
-											event.dataTransfer.getData(DRAG_MEDIA_TYPE),
+									}}
+									draggable={writable && !busy}
+									onDragStart={(event) => {
+										event.dataTransfer.setData(
+											DRAG_FOLDER_TYPE,
+											String(number),
 										);
-										const byId = new Map(
-											catalog.folders.flatMap((entry) =>
-												entry.items.map((item) => [item.id, item] as const),
-											),
-										);
-										const items = ids.flatMap((id) => {
-											const item = byId.get(id);
-											return item ? [item] : [];
-										});
-										if (items.length) void onMoveItems?.(items, number);
-									}
-								}}
-							>
-								<b>{String(number).padStart(3, "0")}</b>
-								<span>
-									{entry?.name || reservedFolderName(number) || "Empty folder"}
-								</span>
-								<small>
-									{writable ? `${entry?.items.length ?? 0}/254` : "Reserved"}
-								</small>
-							</button>
-						);
-					})}
+										event.dataTransfer.effectAllowed = "move";
+									}}
+									onDragOver={(event) => {
+										if (writable && !busy) event.preventDefault();
+									}}
+									onDrop={(event) => dropOnFolder(event, number)}
+								/>
+							);
+						})}
+					</div>
 				</WindowScrollArea>
 
 				<WindowScrollArea className="media-library-pool">
@@ -339,7 +423,14 @@ export function LibraryBrowserView({
 							const item = visibleItems.find(
 								(candidate) => candidate.file - 1 === slot.position,
 							);
-							if (!item) return <PoolCard model={slot.card} disabled />;
+							if (!item)
+								return (
+									<PoolCard
+										model={slot.card}
+										onDragOver={(event) => event.preventDefault()}
+										onDrop={(event) => dropOnFile(event, slot.position + 1)}
+									/>
+								);
 							return (
 								<PoolCard
 									model={{
@@ -360,6 +451,12 @@ export function LibraryBrowserView({
 										event.dataTransfer.effectAllowed = "move";
 									}}
 									onClick={(event) => choose(item, event)}
+									onDragOver={(event) => {
+										event.preventDefault();
+									}}
+									onDrop={(event) => {
+										dropOnFile(event, item.file);
+									}}
 								/>
 							);
 						}}
@@ -386,7 +483,7 @@ export function LibraryBrowserView({
 							onUpdate={onUpdateItem}
 							thumbnailUrl={thumbnailUrl}
 						/>
-					) : folder <= MEDIA_FOLDER_COUNT ? (
+					) : isPlayableFolder(folder) ? (
 						<UploadEditor
 							folder={folder}
 							busy={busy}
@@ -394,6 +491,14 @@ export function LibraryBrowserView({
 							onUpload={onUpload}
 							importPanel={importPanel}
 						/>
+					) : folder >= FIRST_PARKING_FOLDER ? (
+						<div className="media-library-reserved-copy">
+							<h2>Parking folder {folder}</h2>
+							<p>
+								Drop existing media here to take it out of playback without
+								deleting it.
+							</p>
+						</div>
 					) : (
 						<div className="media-library-reserved-copy">
 							<h2>{reservedFolderName(folder)}</h2>
@@ -457,6 +562,7 @@ function ItemEditor({
 				if (Object.keys(update).length) void onUpdate?.(item, update);
 			}}
 		>
+			<p className="media-library-eyebrow">Media</p>
 			<img src={thumbnailUrl(folder, item.file)} alt={`${item.name} preview`} />
 			<p className="media-library-address">
 				{String(folder).padStart(3, "0")} / {String(item.file).padStart(3, "0")}
@@ -572,6 +678,17 @@ function reservedFolderName(folder: number) {
 	return "";
 }
 
+function isPlayableFolder(folder: number) {
+	return folder >= 1 && folder <= MEDIA_FOLDER_COUNT;
+}
+
+function isStorageFolder(folder: number) {
+	return (
+		isPlayableFolder(folder) ||
+		(folder >= FIRST_PARKING_FOLDER && folder <= LAST_PARKING_FOLDER)
+	);
+}
+
 export function isAcceptedMediaFile(file: Pick<File, "type">) {
 	return file.type.startsWith("video/") || file.type.startsWith("image/");
 }
@@ -604,7 +721,11 @@ export function allocateFreeAddresses(
 		),
 	);
 	const addresses: Array<{ folder: number; file: number }> = [];
-	for (let folder = startFolder; folder <= MEDIA_FOLDER_COUNT; folder += 1) {
+	const lastFolder =
+		startFolder >= FIRST_PARKING_FOLDER
+			? LAST_PARKING_FOLDER
+			: MEDIA_FOLDER_COUNT;
+	for (let folder = startFolder; folder <= lastFolder; folder += 1) {
 		for (let file = 1; file <= FILES_PER_FOLDER; file += 1) {
 			if (!occupied.has(`${folder}/${file}`)) addresses.push({ folder, file });
 			if (addresses.length === count) return addresses;

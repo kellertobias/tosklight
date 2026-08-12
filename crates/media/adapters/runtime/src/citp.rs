@@ -77,8 +77,9 @@ impl Library for PublishedLibrary {
         self.catalog
             .folders
             .iter()
+            .filter(|folder| folder.folder <= 199)
             .map(|folder| LibraryFolder {
-                number: folder.folder,
+                number: folder.folder as u8,
                 name: folder
                     .name
                     .clone()
@@ -89,20 +90,22 @@ impl Library for PublishedLibrary {
     }
 
     fn elements(&self, folder: u8) -> Vec<LibraryElement> {
-        self.catalog.folder(folder).map_or_else(Vec::new, |found| {
-            found
-                .items
-                .iter()
-                .map(|item| LibraryElement {
-                    number: item.file,
-                    name: item.name.clone(),
-                    width: item.width.min(u32::from(u16::MAX)) as u16,
-                    height: item.height.min(u32::from(u16::MAX)) as u16,
-                    length_frames: item.frames.unwrap_or(0),
-                    fps: 25,
-                })
-                .collect()
-        })
+        self.catalog
+            .folder(u16::from(folder))
+            .map_or_else(Vec::new, |found| {
+                found
+                    .items
+                    .iter()
+                    .map(|item| LibraryElement {
+                        number: item.file,
+                        name: item.name.clone(),
+                        width: item.width.min(u32::from(u16::MAX)) as u16,
+                        height: item.height.min(u32::from(u16::MAX)) as u16,
+                        length_frames: item.frames.unwrap_or(0),
+                        fps: 25,
+                    })
+                    .collect()
+            })
     }
 
     fn thumbnail(
@@ -116,7 +119,7 @@ impl Library for PublishedLibrary {
         // path; CITP carries the real dimensions, so the stored thumbnail is sent as it is.
         let file = element.or_else(|| {
             self.catalog
-                .folder(folder)
+                .folder(u16::from(folder))
                 .and_then(|found| found.items.first())
                 .map(|item| item.file)
         })?;

@@ -189,7 +189,7 @@
 		{
 			"file": "media-server-library.png",
 			"title": "Media Server library",
-			"caption": "A three-column CITP library browser combines all 255 folders, multi-select media pools, previews, metadata editing, and direct upload workflows.",
+			"caption": "A three-column CITP library browser combines preset-pool folders, multi-select files, media previews, drag reordering, and 900-series parking storage.",
 			"storyId": "tosklight-media-server--library",
 			"viewport": { "width": 1440, "height": 900 },
 			"theme": "dark",

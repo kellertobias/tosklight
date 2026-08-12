@@ -11,7 +11,7 @@
 use std::path::{Path, PathBuf};
 
 use media_codec::container::ClipReader;
-use media_domain::catalog::{CatalogItem, CatalogSnapshot, ItemKind};
+use media_domain::catalog::{CatalogItem, CatalogSnapshot, ItemKind, is_storage_folder};
 use media_domain::{AssetId, MediaAddress, authored_tempo};
 
 use crate::naming;
@@ -41,12 +41,12 @@ pub fn discover(root: &Path) -> Result<CatalogSnapshot, DiscoveryError> {
         source,
     })?;
 
-    let mut folders: Vec<(u8, PathBuf)> = entries
+    let mut folders: Vec<(u16, PathBuf)> = entries
         .flatten()
         .filter_map(|entry| {
             let name = entry.file_name().to_str()?.to_owned();
             let folder = naming::parse_folder_directory(&name)?;
-            entry.path().is_dir().then(|| (folder, entry.path()))
+            (entry.path().is_dir() && is_storage_folder(folder)).then(|| (folder, entry.path()))
         })
         .collect();
     folders.sort_by_key(|(folder, _)| *folder);
@@ -66,7 +66,10 @@ pub fn discover(root: &Path) -> Result<CatalogSnapshot, DiscoveryError> {
         // A library from the legacy application is full of `.mp4` and `.png` files, which are
         // import formats rather than playback ones. Finding none of them playable and saying
         // nothing would leave an operator looking at an empty library with no idea why.
-        let waiting = awaiting_import(&path, folder).len();
+        let waiting = u8::try_from(folder)
+            .ok()
+            .filter(|folder| (1..=199).contains(folder))
+            .map_or(0, |folder| awaiting_import(&path, folder).len());
         if waiting > 0 {
             tracing::warn!(
                 %folder,
@@ -172,8 +175,8 @@ pub fn pending_imports(root: &Path) -> Vec<Pending> {
         .flatten()
         .filter_map(|entry| {
             let name = entry.file_name().to_str()?.to_owned();
-            let folder = naming::parse_folder_directory(&name)?;
-            entry.path().is_dir().then(|| (folder, entry.path()))
+            let folder = u8::try_from(naming::parse_folder_directory(&name)?).ok()?;
+            (entry.path().is_dir() && (1..=199).contains(&folder)).then(|| (folder, entry.path()))
         })
         .collect();
     folders.sort_by_key(|(folder, _)| *folder);
@@ -360,6 +363,21 @@ mod tests {
             catalog.resolve(MediaAddress::new(3, 2)).unwrap().name,
             "Elsewhere"
         );
+    }
+
+    #[test]
+    fn parking_folders_survive_a_restart_without_becoming_playable_addresses() {
+        let library = Library::new("parking");
+        library.put("900/001-Alternate.toskclip", &clip(10, None));
+
+        let catalog = discover(&library.0).unwrap();
+        let parked = catalog.folder(900).unwrap().item(1).unwrap();
+        assert_eq!(parked.name, "Alternate");
+        assert_eq!(
+            catalog.location_of(parked.id),
+            Some(media_domain::CatalogLocation::new(900, 1))
+        );
+        assert_eq!(catalog.address_of(parked.id), None);
     }
 
     #[test]

@@ -16,6 +16,37 @@ use crate::address::{AddressClass, AssetId, MediaAddress};
 /// The lowest and highest file index an item may occupy. `0` and `255` are blank sentinels.
 pub const FIRST_FILE: u8 = 1;
 pub const LAST_FILE: u8 = 254;
+/// Parking folders are deliberately outside the one-byte CITP/DMX address space.
+pub const FIRST_PARKING_FOLDER: u16 = 900;
+pub const LAST_PARKING_FOLDER: u16 = 999;
+
+/// A physical catalog slot. Unlike [`MediaAddress`], this can name non-playable parking storage.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogLocation {
+    pub folder: u16,
+    pub file: u8,
+}
+
+impl CatalogLocation {
+    pub const fn new(folder: u16, file: u8) -> Self {
+        Self { folder, file }
+    }
+
+    pub const fn address(self) -> Option<MediaAddress> {
+        if self.folder >= 1 && self.folder <= 199 {
+            Some(MediaAddress::new(self.folder as u8, self.file))
+        } else {
+            None
+        }
+    }
+}
+
+impl From<MediaAddress> for CatalogLocation {
+    fn from(address: MediaAddress) -> Self {
+        Self::new(u16::from(address.folder), address.file)
+    }
+}
 
 /// Increments whenever the catalog changes, so a consumer can tell whether the snapshot it holds
 /// is still current without comparing contents.
@@ -64,8 +95,8 @@ pub struct CatalogItem {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CatalogFolder {
-    /// The folder's DMX index.
-    pub folder: u8,
+    /// The physical folder number. Parking folders deliberately have no DMX index.
+    pub folder: u16,
     /// The operator's name for it, when they have given one.
     pub name: Option<String>,
     /// Items in file order. Order is maintained so a reindex is a deliberate rewrite rather than
@@ -94,16 +125,14 @@ pub struct CatalogSnapshot {
 /// Why a catalog edit cannot be applied.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum CatalogError {
-    #[error("folder {folder} is not a library folder; only 1-199 hold filesystem media")]
-    NotALibraryFolder { folder: u8 },
+    #[error("folder {folder} is not storage; use library folders 1-199 or parking folders 900-999")]
+    NotALibraryFolder { folder: u16 },
     #[error("file {file} is a blank sentinel, not a usable index")]
     NotAUsableFile { file: u8 },
-    #[error("no folder {folder}")]
-    NoSuchFolder { folder: u8 },
     #[error("no item with that identity in the catalog")]
     NoSuchItem,
     #[error("folder {folder} already has an item at file {file}")]
-    AddressTaken { folder: u8, file: u8 },
+    AddressTaken { folder: u16, file: u8 },
     #[error("an item name cannot be empty")]
     EmptyName,
     #[error("intrinsic BPM must be a finite positive number")]
@@ -119,10 +148,10 @@ impl CatalogSnapshot {
         if address.classify() != AddressClass::Library {
             return None;
         }
-        self.folder(address.folder)?.item(address.file)
+        self.folder(u16::from(address.folder))?.item(address.file)
     }
 
-    pub fn folder(&self, folder: u8) -> Option<&CatalogFolder> {
+    pub fn folder(&self, folder: u16) -> Option<&CatalogFolder> {
         self.folders
             .iter()
             .find(|candidate| candidate.folder == folder)
@@ -140,9 +169,14 @@ impl CatalogSnapshot {
     }
 
     /// The address an item currently occupies.
-    pub fn address_of(&self, id: AssetId) -> Option<MediaAddress> {
+    pub fn location_of(&self, id: AssetId) -> Option<CatalogLocation> {
         let (folder, item) = self.item(id)?;
-        Some(MediaAddress::new(folder.folder, item.file))
+        Some(CatalogLocation::new(folder.folder, item.file))
+    }
+
+    /// The playable address an item currently occupies, if it is not parked.
+    pub fn address_of(&self, id: AssetId) -> Option<MediaAddress> {
+        self.location_of(id)?.address()
     }
 
     pub fn item_count(&self) -> usize {
@@ -150,8 +184,8 @@ impl CatalogSnapshot {
     }
 
     /// Adds an item at an address, if that address is usable and free.
-    pub fn insert(&mut self, folder: u8, item: CatalogItem) -> Result<(), CatalogError> {
-        validate_address(MediaAddress::new(folder, item.file))?;
+    pub fn insert(&mut self, folder: u16, item: CatalogItem) -> Result<(), CatalogError> {
+        validate_location(CatalogLocation::new(folder, item.file))?;
         if item.name.trim().is_empty() {
             return Err(CatalogError::EmptyName);
         }
@@ -225,13 +259,22 @@ impl CatalogSnapshot {
     ///
     /// The destination must be free. Swapping two items is two moves through a free slot, or
     /// [`Self::swap_items`], rather than a move that silently overwrites.
-    pub fn move_item(&mut self, id: AssetId, to: MediaAddress) -> Result<(), CatalogError> {
-        validate_address(to)?;
-        let from = self.address_of(id).ok_or(CatalogError::NoSuchItem)?;
+    pub fn move_item(
+        &mut self,
+        id: AssetId,
+        to: impl Into<CatalogLocation>,
+    ) -> Result<(), CatalogError> {
+        let to = to.into();
+        validate_location(to)?;
+        let from = self.location_of(id).ok_or(CatalogError::NoSuchItem)?;
         if from == to {
             return Ok(());
         }
-        if self.resolve(to).is_some() {
+        if self
+            .folder(to.folder)
+            .and_then(|folder| folder.item(to.file))
+            .is_some()
+        {
             return Err(CatalogError::AddressTaken {
                 folder: to.folder,
                 file: to.file,
@@ -249,8 +292,8 @@ impl CatalogSnapshot {
     /// One operation rather than two moves, so an operator dragging one item onto another never
     /// leaves the catalog with one of them temporarily homeless.
     pub fn swap_items(&mut self, first: AssetId, second: AssetId) -> Result<(), CatalogError> {
-        let first_address = self.address_of(first).ok_or(CatalogError::NoSuchItem)?;
-        let second_address = self.address_of(second).ok_or(CatalogError::NoSuchItem)?;
+        let first_address = self.location_of(first).ok_or(CatalogError::NoSuchItem)?;
+        let second_address = self.location_of(second).ok_or(CatalogError::NoSuchItem)?;
         if first == second {
             return Ok(());
         }
@@ -265,12 +308,23 @@ impl CatalogSnapshot {
     }
 
     /// Names a folder, or clears its name.
-    pub fn rename_folder(&mut self, folder: u8, name: Option<&str>) -> Result<(), CatalogError> {
+    pub fn rename_folder(&mut self, folder: u16, name: Option<&str>) -> Result<(), CatalogError> {
+        if !is_storage_folder(folder) {
+            return Err(CatalogError::NotALibraryFolder { folder });
+        }
+        if self.folder(folder).is_none() {
+            self.folders.push(CatalogFolder {
+                folder,
+                name: None,
+                items: Vec::new(),
+            });
+            self.folders.sort_by_key(|entry| entry.folder);
+        }
         let entry = self
             .folders
             .iter_mut()
             .find(|entry| entry.folder == folder)
-            .ok_or(CatalogError::NoSuchFolder { folder })?;
+            .expect("the folder was just ensured");
         entry.name = name
             .map(str::trim)
             .filter(|name| !name.is_empty())
@@ -280,12 +334,9 @@ impl CatalogSnapshot {
     }
 
     /// Exchanges two whole folders, contents and names together.
-    pub fn swap_folders(&mut self, first: u8, second: u8) -> Result<(), CatalogError> {
+    pub fn swap_folders(&mut self, first: u16, second: u16) -> Result<(), CatalogError> {
         for folder in [first, second] {
-            if !matches!(
-                MediaAddress::new(folder, FIRST_FILE).classify(),
-                AddressClass::Library
-            ) {
+            if !is_storage_folder(folder) {
                 return Err(CatalogError::NotALibraryFolder { folder });
             }
         }
@@ -335,10 +386,29 @@ pub const fn validate_address(address: MediaAddress) -> Result<(), CatalogError>
         // Text banks and generated visualizers are addressed, but nothing on disk lives there.
         AddressClass::TextBank | AddressClass::GeneratedVisualizer => {
             Err(CatalogError::NotALibraryFolder {
-                folder: address.folder,
+                folder: address.folder as u16,
             })
         }
     }
+}
+
+pub const fn is_storage_folder(folder: u16) -> bool {
+    (folder >= 1 && folder <= 199)
+        || (folder >= FIRST_PARKING_FOLDER && folder <= LAST_PARKING_FOLDER)
+}
+
+pub const fn validate_location(location: CatalogLocation) -> Result<(), CatalogError> {
+    if location.file < FIRST_FILE || location.file > LAST_FILE {
+        return Err(CatalogError::NotAUsableFile {
+            file: location.file,
+        });
+    }
+    if !is_storage_folder(location.folder) {
+        return Err(CatalogError::NotALibraryFolder {
+            folder: location.folder,
+        });
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -470,8 +540,44 @@ mod tests {
         catalog.insert(9, item(1, "Nine")).unwrap();
         catalog.insert(2, item(1, "Two")).unwrap();
         catalog.insert(5, item(1, "Five")).unwrap();
-        let order: Vec<u8> = catalog.folders.iter().map(|folder| folder.folder).collect();
+        let order: Vec<u16> = catalog.folders.iter().map(|folder| folder.folder).collect();
         assert_eq!(order, [2, 5, 9]);
+    }
+
+    #[test]
+    fn parking_storage_preserves_identity_without_exposing_a_playable_address() {
+        let mut catalog = catalog();
+        let id = catalog.resolve(MediaAddress::new(1, 1)).unwrap().id;
+
+        catalog
+            .move_item(id, CatalogLocation::new(FIRST_PARKING_FOLDER, 1))
+            .unwrap();
+
+        assert_eq!(
+            catalog.location_of(id),
+            Some(CatalogLocation::new(FIRST_PARKING_FOLDER, 1))
+        );
+        assert_eq!(catalog.address_of(id), None);
+        assert!(catalog.resolve(MediaAddress::new(1, 1)).is_none());
+    }
+
+    #[test]
+    fn an_addressable_folder_can_swap_with_a_parking_folder() {
+        let mut catalog = catalog();
+        catalog
+            .insert(FIRST_PARKING_FOLDER, item(1, "Parked"))
+            .unwrap();
+
+        catalog.swap_folders(1, FIRST_PARKING_FOLDER).unwrap();
+
+        assert_eq!(
+            catalog.resolve(MediaAddress::new(1, 1)).unwrap().name,
+            "Parked"
+        );
+        assert_eq!(
+            catalog.folder(FIRST_PARKING_FOLDER).unwrap().items[0].name,
+            "First"
+        );
     }
 
     #[test]
@@ -507,7 +613,7 @@ mod tests {
         );
         assert_eq!(
             catalog.insert(0, item(1, "Nowhere")).unwrap_err(),
-            CatalogError::NotAUsableFile { file: 1 },
+            CatalogError::NotALibraryFolder { folder: 0 },
             "folder zero is blank on the wire"
         );
     }
@@ -558,8 +664,8 @@ mod tests {
             CatalogError::NoSuchItem
         );
         assert_eq!(
-            catalog.rename_folder(42, Some("Nope")).unwrap_err(),
-            CatalogError::NoSuchFolder { folder: 42 }
+            catalog.rename_folder(200, Some("Nope")).unwrap_err(),
+            CatalogError::NotALibraryFolder { folder: 200 }
         );
         assert!(!catalog.remove_item(absent));
     }

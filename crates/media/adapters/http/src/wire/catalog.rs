@@ -42,7 +42,7 @@ impl CatalogItemView {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct CatalogFolderView {
-    pub folder: u8,
+    pub folder: u16,
     pub name: Option<String>,
     pub items: Vec<CatalogItemView>,
 }

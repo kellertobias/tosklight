@@ -21,13 +21,14 @@ pub const METADATA_DIRECTORY: &str = ".metadata";
 pub const FOLDER_NAME_FILE: &str = ".info";
 
 /// A folder's directory name: three digits, zero padded.
-pub fn folder_directory(folder: u8) -> String {
+pub fn folder_directory(folder: impl Into<u16>) -> String {
+    let folder = folder.into();
     format!("{folder:03}")
 }
 
 /// Reads a folder index out of a directory name. Anything that is not exactly three digits is not
 /// a library folder, which is what keeps `.thumbs` and `.system` out of the catalog.
-pub fn parse_folder_directory(name: &str) -> Option<u8> {
+pub fn parse_folder_directory(name: &str) -> Option<u16> {
     if name.len() != 3 || !name.bytes().all(|byte| byte.is_ascii_digit()) {
         return None;
     }
@@ -130,10 +131,12 @@ mod tests {
 
     #[test]
     fn folder_directories_are_three_digits() {
-        assert_eq!(folder_directory(1), "001");
-        assert_eq!(folder_directory(199), "199");
+        assert_eq!(folder_directory(1u16), "001");
+        assert_eq!(folder_directory(199u16), "199");
+        assert_eq!(folder_directory(900u16), "900");
         assert_eq!(parse_folder_directory("001"), Some(1));
         assert_eq!(parse_folder_directory("199"), Some(199));
+        assert_eq!(parse_folder_directory("900"), Some(900));
     }
 
     #[test]

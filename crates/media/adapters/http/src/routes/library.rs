@@ -11,7 +11,7 @@
 use axum::extract::{Multipart, Path, Query, State};
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
-use media_domain::{AssetId, MediaAddress};
+use media_domain::{AssetId, CatalogLocation, MediaAddress};
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -120,7 +120,7 @@ pub(super) async fn update_item(
         }
         (None, Some(folder), Some(file), None) => LibraryEdit::MoveItem {
             id,
-            destination: MediaAddress::new(folder, file),
+            destination: CatalogLocation::new(folder, file),
             swap: body.swap,
         },
         (None, None, None, Some(bpm)) => LibraryEdit::SetItemBpm { id, bpm },
@@ -139,18 +139,33 @@ pub(super) async fn update_item(
 /// Changes a folder's optional visible label. Clearing the field removes `.info` deliberately.
 pub(super) async fn update_folder(
     State(state): State<ApiState>,
-    Path(folder): Path<u8>,
+    Path(folder): Path<u16>,
     TolerantJson(body): TolerantJson<UpdateLibraryFolder>,
 ) -> Result<Response, ApiError> {
     if let Proceed::Replay(response) = edit::begin(&state, &body.request_id)? {
         return Ok(response);
     }
-    let name = body.name.trim();
-    (state.diagnostics.library.edit)(LibraryEdit::RenameFolder {
-        folder,
-        name: (!name.is_empty()).then(|| name.to_owned()),
-    })
-    .map_err(|detail| library_edit_error("library-folder-not-updated", detail))?;
+    let operation = match (body.name, body.swap_with) {
+        (Some(name), None) => {
+            let name = name.trim();
+            LibraryEdit::RenameFolder {
+                folder,
+                name: (!name.is_empty()).then(|| name.to_owned()),
+            }
+        }
+        (None, Some(second)) => LibraryEdit::SwapFolders {
+            first: folder,
+            second,
+        },
+        _ => {
+            return Err(ApiError::bad_request(
+                "ambiguous-library-folder-edit",
+                "rename with a name or reorder with swapWith",
+            ));
+        }
+    };
+    (state.diagnostics.library.edit)(operation)
+        .map_err(|detail| library_edit_error("library-folder-not-updated", detail))?;
     remember_catalog(&state, &body.request_id)
 }
 
@@ -158,15 +173,16 @@ pub(super) async fn update_folder(
 /// the filesystem.
 pub(super) async fn thumbnail(
     State(state): State<ApiState>,
-    Path((folder, file)): Path<(u8, u8)>,
+    Path((folder, file)): Path<(u16, u8)>,
 ) -> Result<Response, ApiError> {
-    let bytes =
-        (state.diagnostics.library.thumbnail)(MediaAddress::new(folder, file)).map_err(|_| {
+    let bytes = (state.diagnostics.library.thumbnail)(CatalogLocation::new(folder, file)).map_err(
+        |_| {
             ApiError::not_found(
                 "thumbnail-not-found",
                 "this media item has no thumbnail yet",
             )
-        })?;
+        },
+    )?;
     Ok(([(header::CONTENT_TYPE, "image/jpeg")], bytes).into_response())
 }
 
@@ -510,6 +526,24 @@ mod tests {
         let (status, _) = send(
             &bench.router,
             post(
+                "/api/v2/library/folders/7/update".into(),
+                r#"{"requestId":"park-folder","swapWith":900}"#,
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let (status, _) = send(
+            &bench.router,
+            post(
+                format!("/api/v2/library/items/{id}/update"),
+                r#"{"requestId":"park-item","folder":900,"file":1}"#,
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let (status, _) = send(
+            &bench.router,
+            post(
                 format!("/api/v2/library/items/{id}/update"),
                 r#"{"requestId":"bpm","intrinsicBpm":128.5}"#,
             ),
@@ -542,6 +576,15 @@ mod tests {
                     id: media_domain::AssetId::from_uuid(id),
                     name: "Opening".to_owned(),
                 },
+                LibraryEdit::SwapFolders {
+                    first: 7,
+                    second: 900,
+                },
+                LibraryEdit::MoveItem {
+                    id: media_domain::AssetId::from_uuid(id),
+                    destination: media_domain::CatalogLocation::new(900, 1),
+                    swap: false,
+                },
                 LibraryEdit::SetItemBpm {
                     id: media_domain::AssetId::from_uuid(id),
                     bpm: Some(128.5),
@@ -552,7 +595,7 @@ mod tests {
                 },
                 LibraryEdit::MoveItem {
                     id: media_domain::AssetId::from_uuid(id),
-                    destination: media_domain::MediaAddress::new(2, 8),
+                    destination: media_domain::MediaAddress::new(2, 8).into(),
                     swap: true,
                 },
             ]
@@ -564,7 +607,7 @@ mod tests {
         let diagnostics = Diagnostics {
             library: LibraryAccess {
                 thumbnail: Arc::new(|address| {
-                    if address == media_domain::MediaAddress::new(3, 7) {
+                    if address == media_domain::MediaAddress::new(3, 7).into() {
                         Ok(vec![0xff, 0xd8, 0xff, 0xd9])
                     } else {
                         Err("missing".to_owned())

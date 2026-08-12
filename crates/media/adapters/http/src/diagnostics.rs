@@ -10,7 +10,7 @@
 
 use std::sync::Arc;
 
-use media_domain::{AssetId, MediaAddress, OutputId};
+use media_domain::{AssetId, CatalogLocation, MediaAddress, OutputId};
 
 /// One instant of audio analysis, as the process publishes it.
 #[derive(Debug, Clone, PartialEq)]
@@ -111,7 +111,7 @@ pub enum LibraryEdit {
     },
     MoveItem {
         id: AssetId,
-        destination: MediaAddress,
+        destination: CatalogLocation,
         /// When occupied, exchange the two addresses instead of overwriting either file.
         swap: bool,
     },
@@ -120,8 +120,12 @@ pub enum LibraryEdit {
         bpm: Option<f64>,
     },
     RenameFolder {
-        folder: u8,
+        folder: u16,
         name: Option<String>,
+    },
+    SwapFolders {
+        first: u16,
+        second: u16,
     },
 }
 
@@ -141,7 +145,7 @@ pub type BeginUpload =
 #[derive(Clone)]
 pub struct LibraryAccess {
     pub edit: Arc<dyn Fn(LibraryEdit) -> Result<(), String> + Send + Sync>,
-    pub thumbnail: Arc<dyn Fn(MediaAddress) -> Result<Vec<u8>, String> + Send + Sync>,
+    pub thumbnail: Arc<dyn Fn(CatalogLocation) -> Result<Vec<u8>, String> + Send + Sync>,
     pub begin_upload: BeginUpload,
 }
 

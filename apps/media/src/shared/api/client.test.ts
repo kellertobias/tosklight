@@ -18,7 +18,10 @@ function answering(body: unknown, status: number): void {
 
 describe("the transport", () => {
 	it("carries the server's stable code, not its wording", async () => {
-		answering({ code: "dmx-owns-this", message: "a desk is driving this output" }, 409);
+		answering(
+			{ code: "dmx-owns-this", message: "a desk is driving this output" },
+			409,
+		);
 
 		const failure = await api.outputs().catch((error: unknown) => error);
 		expect(failure).toBeInstanceOf(ApiFailure);
@@ -35,15 +38,24 @@ describe("the transport", () => {
 			}),
 		);
 
-		const failure = (await api.health().catch((error: unknown) => error)) as ApiFailure;
+		const failure = (await api
+			.health()
+			.catch((error: unknown) => error)) as ApiFailure;
 		expect(failure.disconnected).toBe(true);
 		expect(failure.code).toBe("unreachable");
 	});
 
 	it("still produces a readable failure when something answers that is not the API", async () => {
-		vi.stubGlobal("fetch", vi.fn(async () => new Response("<html>proxy error</html>", { status: 502 })));
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(
+				async () => new Response("<html>proxy error</html>", { status: 502 }),
+			),
+		);
 
-		const failure = (await api.catalog().catch((error: unknown) => error)) as ApiFailure;
+		const failure = (await api
+			.catalog()
+			.catch((error: unknown) => error)) as ApiFailure;
 		expect(failure.code).toBe("unexpected-response");
 		expect(failure.status).toBe(502);
 	});
@@ -60,9 +72,30 @@ describe("the transport", () => {
 
 		await api.updateLayer("an-output", 2, { dimmer: 0.5 });
 
-		const [url, init] = fetchStub.mock.calls[0] as unknown as [string, RequestInit];
+		const [url, init] = fetchStub.mock.calls[0] as unknown as [
+			string,
+			RequestInit,
+		];
 		expect(url).toBe("/api/v2/outputs/an-output/layers/2/update");
 		expect(init.body).toBe('{"dimmer":0.5}');
+	});
+
+	it("sends a folder reorder as an explicit swap intent", async () => {
+		const fetchStub = vi.fn(async () => new Response(null, { status: 204 }));
+		vi.stubGlobal("fetch", fetchStub);
+
+		await api.updateLibraryFolder(1, {
+			requestId: "swap-folder",
+			swapWith: 900,
+		});
+
+		const [url, init] = fetchStub.mock.calls[0] as unknown as [
+			string,
+			RequestInit,
+		];
+		expect(url).toBe("/api/v2/library/folders/1/update");
+		expect(init.method).toBe("POST");
+		expect(init.body).toBe('{"requestId":"swap-folder","swapWith":900}');
 	});
 
 	it("triggers a payload-free live action with a plain GET", async () => {
@@ -71,7 +104,10 @@ describe("the transport", () => {
 
 		await api.resetLayer("an-output", 0);
 
-		const [url, init] = fetchStub.mock.calls[0] as unknown as [string, RequestInit | undefined];
+		const [url, init] = fetchStub.mock.calls[0] as unknown as [
+			string,
+			RequestInit | undefined,
+		];
 		expect(url).toBe("/api/v2/outputs/an-output/layers/0/reset");
 		expect(init?.method).toBeUndefined();
 	});

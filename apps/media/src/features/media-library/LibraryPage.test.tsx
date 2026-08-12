@@ -28,6 +28,9 @@ describe("the CITP media library", () => {
 		expect(
 			screen.getByRole("button", { name: /255VisualizersReserved/u }),
 		).toBeInTheDocument();
+		expect(
+			screen.getByRole("button", { name: /900Parking0\/254/u }),
+		).toBeInTheDocument();
 		expect(screen.getByText("Blue haze").closest("button")).toBeInTheDocument();
 	});
 
@@ -143,6 +146,54 @@ describe("the CITP media library", () => {
 		const moved = onMoveItems.mock.calls[0]?.[0] as Array<{ id: string }>;
 		expect(moved.map((item) => item.id)).toEqual(["asset-a", "asset-b"]);
 		expect(onMoveItems.mock.calls[0]?.[1]).toBe(2);
+	});
+
+	it("reorders complete folders and swaps occupied file slots", () => {
+		const onSwapFolders = vi.fn();
+		const onReorderItem = vi.fn();
+		const { container } = render(
+			<LibraryBrowserView
+				catalog={aCatalog()}
+				onSwapFolders={onSwapFolders}
+				onReorderItem={onReorderItem}
+				thumbnailUrl={() => "preview.png"}
+			/>,
+		);
+		const values = new Map<string, string>();
+		const transfer = {
+			files: [],
+			types: [],
+			effectAllowed: "none",
+			setData: (type: string, value: string) => values.set(type, value),
+			getData: (type: string) => values.get(type) ?? "",
+		};
+		const firstFolder = screen.getByRole("button", { name: /001Looks/u });
+		fireEvent.dragStart(firstFolder, { dataTransfer: transfer });
+		fireEvent.drop(screen.getByRole("button", { name: /900Parking/u }), {
+			dataTransfer: transfer,
+		});
+		expect(onSwapFolders).toHaveBeenCalledWith(1, 900);
+
+		const first = screen.getByText("Blue haze").closest("button");
+		const second = screen.getByText("Static grid").closest("button");
+		if (!first || !second) throw new Error("media cards missing");
+		fireEvent.dragStart(first, { dataTransfer: transfer });
+		fireEvent.drop(second, { dataTransfer: transfer });
+		expect(onReorderItem).toHaveBeenCalledWith(
+			expect.objectContaining({ id: "asset-a" }),
+			{ folder: 1, file: 2 },
+		);
+		onReorderItem.mockClear();
+		fireEvent.dragStart(first, { dataTransfer: transfer });
+		const empty = container.querySelector<HTMLButtonElement>(
+			'.media-library-pool [data-pool-position="2"]',
+		);
+		if (!empty) throw new Error("empty file slot missing");
+		fireEvent.drop(empty, { dataTransfer: transfer });
+		expect(onReorderItem).toHaveBeenCalledWith(
+			expect.objectContaining({ id: "asset-a" }),
+			{ folder: 1, file: 3 },
+		);
 	});
 
 	it("keeps search-hidden selected items in the exact multi-drag payload", async () => {
@@ -332,6 +383,13 @@ describe("the CITP media library", () => {
 			{ folder: 1, file: 2 },
 			{ folder: 1, file: 3 },
 			{ folder: 1, file: 5 },
+		]);
+	});
+
+	it("allocates parking space only inside the 900-series", () => {
+		expect(allocateFreeAddresses(aCatalog(), 900, [], 2)).toEqual([
+			{ folder: 900, file: 1 },
+			{ folder: 900, file: 2 },
 		]);
 	});
 

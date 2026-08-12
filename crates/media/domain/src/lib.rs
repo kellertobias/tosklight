@@ -35,7 +35,9 @@ pub mod visualizer;
 
 pub use address::{AddressClass, AssetId, MediaAddress};
 pub use audio::{Analysis, BeatDetector, Tuning};
-pub use catalog::{CatalogError, CatalogFolder, CatalogItem, CatalogSnapshot, ItemKind};
+pub use catalog::{
+    CatalogError, CatalogFolder, CatalogItem, CatalogLocation, CatalogSnapshot, ItemKind,
+};
 pub use clock::{MeasuredCadence, RenderClock};
 pub use color::{FlipMirror, Tint};
 pub use command::{
