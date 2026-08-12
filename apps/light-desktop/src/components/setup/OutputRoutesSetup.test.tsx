@@ -211,7 +211,7 @@ describe("OutputRoutesSetup", () => {
 		});
 		const { container } = render(
 			<OutputRoutesSetup
-				routes={[]}
+				routes={[route]}
 				usbDevices={[discovered]}
 				onScanUsbDevices={scan}
 				onProvisionUsbDevice={provision}
@@ -223,6 +223,12 @@ describe("OutputRoutesSetup", () => {
 
 		const actions = container.querySelector("header .setup-section-actions");
 		expect(actions).not.toBeNull();
+		const discoveredDevices = screen.getByRole("region", {
+			name: "Discovered USB DMX devices",
+		});
+		expect(discoveredDevices.nextElementSibling).toHaveClass(
+			"output-route-list",
+		);
 		expect(
 			within(actions as HTMLElement)
 				.getAllByRole("button")

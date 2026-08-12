@@ -1536,6 +1536,9 @@
 	grid-template-columns: minmax(220px, 1fr) auto auto;
 	align-items: center;
 }
+.usb-dmx-device-list + .output-route-list {
+	margin-top: 6px;
+}
 .output-route-list article > span:first-child small,
 .usb-dmx-endpoint-list article > span:first-child small {
 	display: block;
