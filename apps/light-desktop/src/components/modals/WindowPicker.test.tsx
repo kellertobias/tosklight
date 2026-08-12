@@ -36,8 +36,8 @@ afterEach(() => {
 describe("Open Window categories", () => {
 	it("represents every pane exactly once with a description", () => {
 		const choices = windowCategories.flatMap(({ choices }) => choices);
-		expect(choices).toHaveLength(19);
-		expect(new Set(choices.map(({ kind }) => kind)).size).toBe(19);
+		expect(choices).toHaveLength(18);
+		expect(new Set(choices.map(({ kind }) => kind)).size).toBe(18);
 		expect(choices.every(({ description }) => description.length > 0)).toBe(
 			true,
 		);
@@ -48,7 +48,24 @@ describe("Open Window categories", () => {
 			"Programming",
 			"Playback & Automation",
 			"Show & Visual",
+			"Miscellaneous",
 		]);
+		expect(
+			availableWindowCategoryChoices("programming").map(({ kind }) => kind),
+		).toContain("macros");
+		expect(
+			availableWindowCategoryChoices("miscellaneous").map(
+				({ kind }) => kind,
+			),
+		).toEqual([
+			"running",
+			"scheduler",
+			"file_manager",
+			"help",
+			"text_editor",
+		]);
+		expect(windowChoices).toContainEqual(["cuelists", "Cuelists"]);
+		expect(windowChoices.some(([kind]) => kind === "cuelist_pool")).toBe(false);
 	});
 
 	it("keeps Media discoverable without a media server", () => {
@@ -62,7 +79,10 @@ describe("Open Window modal", () => {
 	it("uses title tabs and shared descriptive selection cards", async () => {
 		render(<WindowPicker />);
 
-		expect(screen.getByRole("dialog", { name: "Open Window" })).toBeVisible();
+		const dialog = screen.getByRole("dialog", { name: "Open Window" });
+		expect(dialog).toBeVisible();
+		expect(dialog.parentElement).toHaveClass("window-picker-layer");
+		expect(dialog.parentElement).not.toHaveClass("ui-modal-wide");
 		const programming = screen.getByRole("tab", { name: "Programming" });
 		expect(programming).toHaveAttribute("aria-selected", "true");
 		expect(screen.getByRole("tabpanel", { name: "Programming" })).toBeVisible();
@@ -73,11 +93,14 @@ describe("Open Window modal", () => {
 		expect(screen.queryByText("Running")).not.toBeInTheDocument();
 
 		await waitFor(() => expect(document.activeElement).toBe(programming));
-		fireEvent.click(screen.getByRole("tab", { name: "Playback & Automation" }));
+		fireEvent.click(screen.getByRole("tab", { name: "Miscellaneous" }));
 		expect(
-			screen.getByRole("tabpanel", { name: "Playback & Automation" }),
+			screen.getByRole("tabpanel", { name: "Miscellaneous" }),
 		).toBeVisible();
 		expect(screen.getByText("Running")).toBeVisible();
+		expect(screen.getByText("Text Editor")).toBeVisible();
+
+		fireEvent.click(screen.getByRole("tab", { name: "Programming" }));
 		expect(screen.getByText("Macro Pool")).toBeVisible();
 	});
 
@@ -86,7 +109,7 @@ describe("Open Window modal", () => {
 		fireEvent.click(screen.getByRole("tab", { name: "Show & Visual" }));
 		expect(screen.getByText("Media")).toBeVisible();
 
-		fireEvent.click(screen.getByRole("tab", { name: "Playback & Automation" }));
+		fireEvent.click(screen.getByRole("tab", { name: "Miscellaneous" }));
 		fireEvent.click(screen.getByText("Running"));
 		expect(app.dispatch).toHaveBeenCalledWith({
 			type: "ADD_WINDOW",

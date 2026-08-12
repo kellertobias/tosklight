@@ -3,7 +3,11 @@ import { useState } from "react";
 import { useApp } from "../../state/AppContext";
 import type { BuiltInWindow } from "../../types";
 
-export type WindowCategoryId = "programming" | "playback" | "show";
+export type WindowCategoryId =
+	| "programming"
+	| "playback"
+	| "show"
+	| "miscellaneous";
 
 export interface WindowChoice {
 	kind: BuiltInWindow;
@@ -48,9 +52,9 @@ export const windowCategories: readonly WindowChoiceCategory[] = [
 				description: "Create and control animated attribute values.",
 			},
 			{
-				kind: "text_editor",
-				title: "Text Editor",
-				description: "Open and edit show text files.",
+				kind: "macros",
+				title: "Macro Pool",
+				description: "Run and edit reusable command sequences.",
 			},
 		],
 	},
@@ -59,9 +63,9 @@ export const windowCategories: readonly WindowChoiceCategory[] = [
 		label: "Playback & Automation",
 		choices: [
 			{
-				kind: "cuelist_pool",
-				title: "Cuelist Pool",
-				description: "Choose and manage Cuelists.",
+				kind: "cuelists",
+				title: "Cuelists",
+				description: "Work across the pool, Cues, and Cuelist settings.",
 			},
 			{
 				kind: "cues",
@@ -69,34 +73,14 @@ export const windowCategories: readonly WindowChoiceCategory[] = [
 				description: "View Cues for a selected Cuelist.",
 			},
 			{
-				kind: "cuelists",
-				title: "Cuelists",
-				description: "Work across the pool, Cues, and Cuelist settings.",
-			},
-			{
 				kind: "virtual_playbacks",
 				title: "Virtual Playbacks",
 				description: "Place playback actions on a configurable grid.",
 			},
 			{
-				kind: "running",
-				title: "Running",
-				description: "Monitor and stop active runtime objects.",
-			},
-			{
-				kind: "macros",
-				title: "Macro Pool",
-				description: "Run and edit reusable command sequences.",
-			},
-			{
 				kind: "timecode",
 				title: "Timecode",
 				description: "Program and control timed show automation.",
-			},
-			{
-				kind: "scheduler",
-				title: "Scheduler",
-				description: "Schedule show actions by date and time.",
 			},
 		],
 	},
@@ -115,19 +99,40 @@ export const windowCategories: readonly WindowChoiceCategory[] = [
 				description: "Configure media layers and reconcile live CITP data.",
 			},
 			{
+				kind: "dmx",
+				title: "DMX output",
+				description: "Inspect live universe values and diagnostics.",
+			},
+		],
+	},
+	{
+		id: "miscellaneous",
+		label: "Miscellaneous",
+		choices: [
+			{
+				kind: "running",
+				title: "Running",
+				description: "Monitor and stop active runtime objects.",
+			},
+			{
+				kind: "scheduler",
+				title: "Scheduler",
+				description: "Schedule show actions by date and time.",
+			},
+			{
 				kind: "file_manager",
 				title: "File Manager",
 				description: "Manage files exposed by the desk server.",
 			},
 			{
-				kind: "dmx",
-				title: "DMX output",
-				description: "Inspect live universe values and diagnostics.",
-			},
-			{
 				kind: "help",
 				title: "Help",
 				description: "Read the operator manual inside ToskLight.",
+			},
+			{
+				kind: "text_editor",
+				title: "Text Editor",
+				description: "Open and edit show text files.",
 			},
 		],
 	},
@@ -156,7 +161,7 @@ export function WindowPicker() {
 			id="window-picker"
 			ariaLabel="Open Window"
 			title="Open Window"
-			className="ui-modal-wide window-picker-layer"
+			className="window-picker-layer"
 			dialogClassName="window-picker-modal"
 			tabs={windowCategories.map(({ id, label }) => ({ id, label }))}
 			activeTab={category}
