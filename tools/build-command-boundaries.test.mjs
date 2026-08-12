@@ -224,7 +224,7 @@ test("macOS release apps are sealed only after their final helpers and resources
 	assert.match(workflow, /ToskLight Visualizer\.app[\s\S]*seal-macos-app\.sh/u);
 	assert.match(
 		workflow,
-		/ToskLight Viz Editor\.app\/Contents\/MacOS\/viz-editor[\s\S]*ToskLight Visualizer\.app\/Contents\/MacOS\/viz-editor[\s\S]*seal-macos-app\.sh/u,
+		/editor_app="\$bundle\/macos\/ToskLight Visualizer\.app"[\s\S]*accessory\/viz-editor[\s\S]*ToskLight Visualizer\.app\/Contents\/MacOS\/viz-editor[\s\S]*seal-macos-app\.sh/u,
 	);
 	assert.match(
 		workflow,
