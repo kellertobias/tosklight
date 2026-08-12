@@ -1,4 +1,9 @@
-import { Button, ModalRegistration, NumberField } from "@tosklight/ui";
+import {
+	Button,
+	ModalRegistration,
+	ModalTitleBar,
+	NumberField,
+} from "@tosklight/ui";
 import type { CuelistSettingsController } from "./useCuelistSettings";
 
 export function RenumberCuesDialog({
@@ -28,43 +33,39 @@ export function RenumberCuesDialog({
 					if (event.target === event.currentTarget) close();
 				}}
 			>
-			<form
-				className="modal-card"
-				role="dialog"
-				aria-modal="true"
-				aria-label="Renumber Cues"
-				onSubmit={(event) => {
-					event.preventDefault();
-					void renumber();
-				}}
-			>
-				<Button
-					className="modal-close"
-					aria-label="Close Renumber Cues"
-					onClick={close}
+				<form
+					className="modal-card"
+					role="dialog"
+					aria-modal="true"
+					aria-label="Renumber Cues"
+					onSubmit={(event) => {
+						event.preventDefault();
+						void renumber();
+					}}
 				>
-					×
-				</Button>
-				<h2>Renumber Cues</h2>
-				<NumberField
-					label="Start Cue"
-					allowDecimal
-					step="1"
-					value={startCue}
-					onChange={(event) => setStartCue(event.target.value)}
-				/>
-				{renumberError && (
-					<p className="ui-field-error" role="alert">
-						{renumberError}
-					</p>
-				)}
-				<div className="modal-actions">
-					<Button type="button" onClick={close}>
-						Cancel
-					</Button>
-					<Button type="submit">Renumber</Button>
-				</div>
-			</form>
+					<ModalTitleBar
+						title="Renumber Cues"
+						actions={
+							<Button type="submit" variant="primary">
+								Renumber
+							</Button>
+						}
+						onClose={close}
+						closeLabel="Cancel renumbering"
+					/>
+					<NumberField
+						label="First new Cue number"
+						description="The first Cue receives this number; every later Cue follows in its existing order."
+						step="1"
+						value={startCue}
+						onChange={(event) => setStartCue(event.target.value)}
+					/>
+					{renumberError && (
+						<p className="ui-field-error" role="alert">
+							{renumberError}
+						</p>
+					)}
+				</form>
 			</div>
 		</ModalRegistration>
 	);
@@ -82,25 +83,25 @@ export function UnsavedSettingsDialog({
 	return (
 		<ModalRegistration onClose={stay}>
 			<div className="modal-backdrop">
-			<section
-				className="modal-card cuelist-settings-close-confirm"
-				role="dialog"
-				aria-label="Unsaved Cuelist Settings"
-			>
-				<h2>Unsaved Cuelist Settings</h2>
-				<p>
-					Save the Cuelist changes, discard them, or stay in Cuelist Settings.
-				</p>
-				<div className="modal-actions three">
-					<Button onClick={() => void controller.submit()}>Save changes</Button>
-					<Button className="danger" onClick={discard}>
-						Discard changes
-					</Button>
-					<Button onClick={stay}>
-						Stay
-					</Button>
-				</div>
-			</section>
+				<section
+					className="modal-card cuelist-settings-close-confirm"
+					role="dialog"
+					aria-label="Unsaved Cuelist Settings"
+				>
+					<h2>Unsaved Cuelist Settings</h2>
+					<p>
+						Save the Cuelist changes, discard them, or stay in Cuelist Settings.
+					</p>
+					<div className="modal-actions three">
+						<Button onClick={() => void controller.submit()}>
+							Save changes
+						</Button>
+						<Button className="danger" onClick={discard}>
+							Discard changes
+						</Button>
+						<Button onClick={stay}>Stay</Button>
+					</div>
+				</section>
 			</div>
 		</ModalRegistration>
 	);
