@@ -32,16 +32,17 @@
 	padding: 0.7rem;
 }
 .timecode-settings-fields label,
-.timecode-duration-readout {
+.timecode-audio-import {
 	display: grid;
 	gap: 0.2rem;
 	color: #a8abb8;
 	font-size: 0.72rem;
 }
-.timecode-duration-readout strong {
-	padding: 0.45rem 0;
-	color: #eef0f5;
-	font-variant-numeric: tabular-nums;
+.timecode-duration-fields {
+	display: grid;
+	grid-column: 1 / -1;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 0.6rem;
 }
 .timecode-settings-fields input {
 	min-width: 0;

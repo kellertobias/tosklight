@@ -1,15 +1,15 @@
 // @vitest-environment jsdom
-import {
-	fireEvent,
-	render,
-	screen,
-	waitFor,
-	within,
-} from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { ShowObjectActionOutcome } from "../api/generated/light-wire";
 import type { TimecodeDefinition, TimecodePatch } from "../api/types/timecode";
 import { TimecodeEditor } from "./TimecodeRuntimeWindow";
+
+vi.mock("../components/files/RootConfinedFilePickerButton", () => ({
+	RootConfinedFilePickerButton: ({ label }: { label: string }) => (
+		<button type="button">{label}</button>
+	),
+}));
 
 const SHOW_ID = "00000000-0000-4000-8000-000000000161";
 const TIMECODE_ID = "00000000-0000-4000-8000-000000000162";
@@ -90,19 +90,13 @@ describe("TimecodeEditor title and settings", () => {
 		const settings = screen.getByRole("dialog", {
 			name: "Timecode Settings",
 		});
-		for (const label of [
-			"Number",
-			"Name",
-			"Frames",
-			"Transport offset",
-			"Auto-start",
-			"Audio file",
-			"Marker CSV",
-		])
+		for (const label of ["Name", "Duration", "Transport offset", "Auto-start"])
 			expect(within(settings).getByLabelText(label)).toBeTruthy();
-		expect(within(settings).getByText("Duration")).toBeTruthy();
-		expect(screen.getAllByLabelText("Marker CSV")).toHaveLength(1);
-
+		expect(within(settings).queryByLabelText("Number")).toBeNull();
+		expect(within(settings).queryByLabelText("Frames")).toBeNull();
+		expect(within(settings).queryByRole("textbox", { name: "Marker CSV" })).toBeNull();
+		expect(within(settings).getByRole("button", { name: "Choose audio file" })).toBeTruthy();
+		expect(within(settings).getByRole("button", { name: "Choose marker CSV" })).toBeTruthy();
 		fireEvent.change(within(settings).getByLabelText("Name"), {
 			target: { value: "Opening sequence" },
 		});

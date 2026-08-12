@@ -1,12 +1,4 @@
-import {
-	Button,
-	CheckboxField,
-	Input,
-	NumberField,
-	SelectField,
-	TextAreaField,
-	TextField,
-} from "@tosklight/ui";
+import { Button, CheckboxField, SelectField, TextField } from "@tosklight/ui";
 import {
 	PoolCard,
 	PoolGrid,
@@ -34,6 +26,7 @@ import {
 	type TimecodeTransportAction,
 	type TimecodeTransportSnapshot,
 } from "../api/client/timecodes";
+import { RootConfinedFilePickerButton } from "../components/files/RootConfinedFilePickerButton";
 import { useActiveShowId } from "../features/deskSnapshot/DeskSnapshotState";
 import { useCueLists } from "../features/showObjects/ShowObjectsState";
 import { useShowObjectView } from "../features/showObjects/ShowObjectsView";
@@ -293,9 +286,6 @@ export function TimecodeEditor({
 	const [audioImporting, setAudioImporting] = useState(false);
 	const [settingsAnchor, setSettingsAnchor] = useState<DOMRect | null>(null);
 	const [settingsOpen, setSettingsOpen] = useState(false);
-	const [csvSource, setCsvSource] = useState(
-		"position,name,color\n00:00:05:00,Intro,#a67cff",
-	);
 	const [csvMode, setCsvMode] = useState<"append" | "replace">("append");
 	const [csvError, setCsvError] = useState<string | null>(null);
 	const timelineRef = useRef<TimecodeTimelineEditorHandle>(null);
@@ -400,8 +390,9 @@ export function TimecodeEditor({
 			setActionBusy(false);
 		}
 	};
-	const importCsv = () => {
+	const importCsv = async (file: File) => {
 		try {
+			const csvSource = await file.text();
 			const imported = parseMarkerCsv(csvSource, FPS, Math.max(1, duration));
 			setDraft({
 				...draft,
@@ -457,8 +448,6 @@ export function TimecodeEditor({
 										busy,
 										audioImporting,
 										importAudio,
-										csvSource,
-										setCsvSource,
 										csvMode,
 										setCsvMode,
 										csvError,
@@ -571,15 +560,13 @@ function RuntimeSeekControls({
 	);
 }
 
-function TimecodeSettings({
+export function TimecodeSettings({
 	draft,
 	setDraft,
 	duration,
 	busy,
 	audioImporting,
 	importAudio,
-	csvSource,
-	setCsvSource,
 	csvMode,
 	setCsvMode,
 	csvError,
@@ -591,23 +578,21 @@ function TimecodeSettings({
 	busy: boolean;
 	audioImporting: boolean;
 	importAudio(file: File): Promise<void>;
-	csvSource: string;
-	setCsvSource(value: string): void;
 	csvMode: "append" | "replace";
 	setCsvMode(value: "append" | "replace"): void;
 	csvError: string | null;
-	importCsv(): void;
+	importCsv(file: File): Promise<void>;
 }) {
+	const changeFrameField = (
+		field: "duration_frame" | "transport_offset_frame",
+		value: string,
+	) => {
+		const frame = parseFrame(value);
+		if (frame === null || (field === "duration_frame" && frame < 1)) return;
+		setDraft({ ...draft, [field]: frame });
+	};
 	return (
 		<div className="timecode-settings-fields">
-			<NumberField
-				label="Number"
-				min={1}
-				value={draft.number}
-				onChange={(event) =>
-					setDraft({ ...draft, number: Number(event.currentTarget.value) })
-				}
-			/>
 			<TextField
 				label="Name"
 				value={draft.name}
@@ -615,32 +600,27 @@ function TimecodeSettings({
 					setDraft({ ...draft, name: event.currentTarget.value })
 				}
 			/>
-			<div className="timecode-duration-readout">
-				<span>Duration</span>
-				<strong>{formatFrame(duration)}</strong>
+			<div className="timecode-duration-fields">
+				<TextField
+					label="Duration"
+					value={formatFrame(duration)}
+					pattern="[0-9]+:[0-5][0-9]:[0-5][0-9]:[0-9]+"
+					onChange={(event) =>
+						changeFrameField("duration_frame", event.currentTarget.value)
+					}
+				/>
+				<TextField
+					label="Transport offset"
+					value={formatFrame(draft.transport_offset_frame)}
+					pattern="[0-9]+:[0-5][0-9]:[0-5][0-9]:[0-9]+"
+					onChange={(event) =>
+						changeFrameField(
+							"transport_offset_frame",
+							event.currentTarget.value,
+						)
+					}
+				/>
 			</div>
-			<NumberField
-				label="Frames"
-				min={1}
-				value={duration}
-				onChange={(event) =>
-					setDraft({
-						...draft,
-						duration_frame: Number(event.currentTarget.value),
-					})
-				}
-			/>
-			<NumberField
-				label="Transport offset"
-				min={0}
-				value={draft.transport_offset_frame}
-				onChange={(event) =>
-					setDraft({
-						...draft,
-						transport_offset_frame: Number(event.currentTarget.value),
-					})
-				}
-			/>
 			<CheckboxField
 				className="timecode-checkbox"
 				label="Auto-start"
@@ -650,18 +630,13 @@ function TimecodeSettings({
 					setDraft({ ...draft, auto_start: event.currentTarget.checked })
 				}
 			/>
-			<label className="timecode-audio-import" htmlFor="timecode-audio-file">
+			<div className="timecode-audio-import">
 				<span>Audio file</span>
-				<Input
-					id="timecode-audio-file"
-					aria-label="Audio file"
-					type="file"
-					accept="audio/wav,audio/x-wav,audio/mpeg,.wav,.mp3"
+				<RootConfinedFilePickerButton
+					label="Choose audio file"
+					allowedExtensions={["wav", "mp3"]}
 					disabled={busy || audioImporting}
-					onChange={(event) => {
-						const file = event.currentTarget.files?.[0];
-						if (file) void importAudio(file);
-					}}
+					onFiles={async ([file]) => file && importAudio(file)}
 				/>
 				<small>
 					{audioImporting
@@ -670,13 +645,8 @@ function TimecodeSettings({
 							? `Managed audio ${draft.audio.asset_id}`
 							: "WAV or MP3; MP3 is normalized to managed WAV."}
 				</small>
-			</label>
+			</div>
 			<div className="timecode-csv-panel">
-				<TextAreaField
-					label="Marker CSV"
-					value={csvSource}
-					onChange={(event) => setCsvSource(event.currentTarget.value)}
-				/>
 				<SelectField
 					label="Import mode"
 					value={csvMode}
@@ -686,7 +656,12 @@ function TimecodeSettings({
 						{ value: "replace", label: "Replace" },
 					]}
 				/>
-				<Button onClick={importCsv}>Apply marker CSV</Button>
+				<RootConfinedFilePickerButton
+					label="Choose marker CSV"
+					allowedExtensions={["csv"]}
+					disabled={busy}
+					onFiles={async ([file]) => file && importCsv(file)}
+				/>
 				{csvError && <p role="alert">{csvError}</p>}
 			</div>
 		</div>
@@ -846,4 +821,16 @@ async function decodeAudioPeaks(file: File, count = 220): Promise<number[]> {
 export function formatFrame(frame: number): string {
 	const seconds = Math.floor(frame / FPS);
 	return `${String(Math.floor(seconds / 3600)).padStart(2, "0")}:${String(Math.floor(seconds / 60) % 60).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}:${String(frame % FPS).padStart(2, "0")}`;
+}
+
+export function parseFrame(value: string): number | null {
+	const match = /^(\d+):([0-5]\d):([0-5]\d):(\d+)$/.exec(value.trim());
+	if (!match) return null;
+	const [, hours, minutes, seconds, frames] = match;
+	const framePart = Number(frames);
+	if (framePart >= FPS) return null;
+	return (
+		(Number(hours) * 60 * 60 + Number(minutes) * 60 + Number(seconds)) * FPS +
+		framePart
+	);
 }
