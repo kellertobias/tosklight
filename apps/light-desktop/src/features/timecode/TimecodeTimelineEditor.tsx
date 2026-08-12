@@ -1,5 +1,6 @@
 import {
 	Button,
+	CheckboxField,
 	ColorPickerField,
 	HorizontalFader,
 	NumberField,
@@ -33,6 +34,7 @@ interface Props {
 	frame: number;
 	fps: number;
 	cueLists: readonly TimecodeCueListOption[];
+	audioPlayers: readonly TimecodeAudioPlayerOption[];
 	waveformPeaks?: readonly number[];
 	onScrub(frame: number): void;
 	onCommit(definition: TimecodeDefinition): void;
@@ -46,6 +48,7 @@ export interface TimecodeTimelineEditorHandle {
 	addAudioLane(): void;
 	addSpeedLane(): void;
 	addCueListLane(): void;
+	addAudioPlayerLane(fixtureId: string): void;
 }
 
 function TimelineTools(props: {
@@ -208,19 +211,23 @@ function EditorLane(
 	},
 ) {
 	const { lane } = props;
+	const clipLane =
+		lane.content.kind === "cue_list" || lane.content.kind === "audio_player";
 	const cueList = lane.content.kind === "cue_list" ? lane.content : null;
 	return (
 		<div className={`timecode-editor-lane lane-${lane.content.kind}`}>
 			<div className="timecode-editor-lane-label">
 				<strong>{lane.name}</strong>
 				<span>{lane.content.kind.replaceAll("_", " ")}</span>
-				{cueList ? (
+				{clipLane ? (
 					<Button
 						size="compact"
 						disabled={
-							!props.cueLists.find(
-								(candidate) => candidate.id === cueList.cue_list_id,
-							)?.cues.length
+							cueList
+								? !props.cueLists.find(
+										(candidate) => candidate.id === cueList.cue_list_id,
+									)?.cues.length
+								: false
 						}
 						onClick={() => props.addClip(lane.id)}
 					>
@@ -289,6 +296,11 @@ export interface TimecodeCueListOption {
 	cues: readonly { id: string; number: number; name: string }[];
 }
 
+export interface TimecodeAudioPlayerOption {
+	fixtureId: string;
+	name: string;
+}
+
 const TARGET_MAX_PIXELS_PER_FRAME = 17.5;
 const FALLBACK_VIEWPORT_WIDTH = 720;
 
@@ -320,6 +332,7 @@ export const TimecodeTimelineEditor = forwardRef<
 		frame,
 		fps,
 		cueLists,
+		audioPlayers,
 		waveformPeaks,
 		onScrub,
 		onCommit,
@@ -365,6 +378,7 @@ export const TimecodeTimelineEditor = forwardRef<
 		addAudioLane,
 		addSpeedLane,
 		addCueListLane,
+		addAudioPlayerLane,
 		addClip,
 	} = useTimelineActions({
 		definition,
@@ -374,13 +388,20 @@ export const TimecodeTimelineEditor = forwardRef<
 		cueLists,
 		speedGroup,
 		cueListId,
+		audioPlayers,
 		onCommit,
 		setSelection,
 	});
 	useImperativeHandle(
 		ref,
-		() => ({ addMarker, addAudioLane, addSpeedLane, addCueListLane }),
-		[addAudioLane, addCueListLane, addMarker, addSpeedLane],
+		() => ({
+			addMarker,
+			addAudioLane,
+			addSpeedLane,
+			addCueListLane,
+			addAudioPlayerLane,
+		}),
+		[addAudioLane, addAudioPlayerLane, addCueListLane, addMarker, addSpeedLane],
 	);
 	useEffect(() => {
 		if (zoom > maximumZoom) setZoom(maximumZoom);
@@ -579,7 +600,186 @@ function SelectionInspector({
 			/>
 		);
 	}
+	if (selection.kind === "clip" && lane.content.kind === "audio_player") {
+		const content = lane.content;
+		const clip = content.clips.find(
+			(candidate) => candidate.id === selection.itemId,
+		);
+		if (!clip) return null;
+		const update = (patch: Partial<typeof clip>) =>
+			onCommit(
+				updateLane(definition, lane.id, {
+					...content,
+					clips: content.clips.map((candidate) =>
+						candidate.id === clip.id ? { ...candidate, ...patch } : candidate,
+					),
+				}),
+			);
+		return (
+			<AudioPlayerClipInspector
+				label={selectedLabel}
+				clip={clip}
+				duration={definition.duration_frame}
+				update={update}
+			/>
+		);
+	}
 	return null;
+}
+
+type AudioPlayerClip = Extract<
+	TimecodeDefinition["lanes"][number]["content"],
+	{ kind: "audio_player" }
+>["clips"][number];
+
+function AudioPlayerClipInspector({
+	label,
+	clip,
+	duration,
+	update,
+}: {
+	label?: string;
+	clip: AudioPlayerClip;
+	duration?: number | null;
+	update(patch: Partial<AudioPlayerClip>): void;
+}) {
+	const updateVolume = (
+		id: string,
+		patch: Partial<AudioPlayerClip["volume_keyframes"][number]>,
+	) =>
+		update({
+			volume_keyframes: clip.volume_keyframes.map((keyframe) =>
+				keyframe.id === id ? { ...keyframe, ...patch } : keyframe,
+			),
+		});
+	const addVolumePoint = () => {
+		const previous = clip.volume_keyframes.at(-1);
+		const frame = Math.min(
+			clip.end_frame - 1,
+			Math.max(
+				clip.start_frame,
+				previous
+					? previous.frame + 1
+					: Math.round((clip.start_frame + clip.end_frame) / 2),
+			),
+		);
+		update({
+			volume_keyframes: [
+				...clip.volume_keyframes,
+				{
+					id: crypto.randomUUID(),
+					frame,
+					value: previous?.value ?? 1,
+					fade_frames: 0,
+					curve: "linear" as const,
+				},
+			].sort((left, right) => left.frame - right.frame),
+		});
+	};
+	return (
+		<div className="timecode-selection-inspector">
+			<strong>{label}</strong>
+			<InspectorNumber
+				label="Start frame"
+				value={clip.start_frame}
+				min={0}
+				max={clip.end_frame - 1}
+				onValue={(start_frame) => {
+					const offset = start_frame - clip.start_frame;
+					update({
+						start_frame,
+						volume_keyframes: clip.volume_keyframes.map((keyframe) => ({
+							...keyframe,
+							frame: keyframe.frame + offset,
+						})),
+					});
+				}}
+			/>
+			<InspectorNumber
+				label="End frame"
+				value={clip.end_frame}
+				min={clip.start_frame + 1}
+				max={duration ?? undefined}
+				onValue={(end_frame) => update({ end_frame })}
+			/>
+			<InspectorNumber
+				label="Audio Folder"
+				value={clip.folder}
+				min={0}
+				max={255}
+				onValue={(folder) => update({ folder })}
+			/>
+			<InspectorNumber
+				label="Audio File"
+				value={clip.file}
+				min={0}
+				max={255}
+				onValue={(file) => update({ file })}
+			/>
+			<CheckboxField
+				label="Repeat"
+				stateLabel="Repeat clip"
+				checked={clip.repeat}
+				onChange={(event) => update({ repeat: event.currentTarget.checked })}
+			/>
+			{clip.volume_keyframes.map((keyframe, index) => (
+				<div className="timecode-audio-player-volume-point" key={keyframe.id}>
+					<strong>Volume point {index + 1}</strong>
+					<InspectorNumber
+						label="Volume frame"
+						value={keyframe.frame}
+						min={clip.start_frame}
+						max={clip.end_frame - 1}
+						onValue={(frame) => updateVolume(keyframe.id, { frame })}
+					/>
+					<InspectorNumber
+						label="Volume %"
+						value={Math.round(keyframe.value * 100)}
+						min={0}
+						max={100}
+						onValue={(value) =>
+							updateVolume(keyframe.id, { value: value / 100 })
+						}
+					/>
+					<InspectorNumber
+						label="Fade frames"
+						value={keyframe.fade_frames}
+						min={0}
+						onValue={(fade_frames) =>
+							updateVolume(keyframe.id, { fade_frames })
+						}
+					/>
+					<SelectField
+						label="Volume curve"
+						value={keyframe.curve}
+						onChange={(curve) => updateVolume(keyframe.id, { curve })}
+						options={[
+							{ value: "linear", label: "Linear" },
+							{ value: "ease_in", label: "Ease in" },
+							{ value: "ease_out", label: "Ease out" },
+							{ value: "ease_in_out", label: "Ease in/out" },
+						]}
+					/>
+					<Button
+						size="compact"
+						disabled={clip.volume_keyframes.length === 1}
+						onClick={() =>
+							update({
+								volume_keyframes: clip.volume_keyframes.filter(
+									(candidate) => candidate.id !== keyframe.id,
+								),
+							})
+						}
+					>
+						Remove volume point
+					</Button>
+				</div>
+			))}
+			<Button size="compact" onClick={addVolumePoint}>
+				Add volume point
+			</Button>
+		</div>
+	);
 }
 
 function MarkerInspector({

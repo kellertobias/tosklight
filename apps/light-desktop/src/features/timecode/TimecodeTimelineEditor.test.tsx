@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen } from "@testing-library/react";
-import { createRef } from "react";
+import { createRef, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { TimecodeDefinition } from "../../api/types/timecode";
 import {
@@ -54,6 +54,7 @@ describe("TimecodeTimelineEditor", () => {
 						],
 					},
 				]}
+				audioPlayers={[]}
 				waveformPeaks={[0.2, 1, 0.4]}
 				onScrub={onScrub}
 				onCommit={onCommit}
@@ -87,7 +88,9 @@ describe("TimecodeTimelineEditor", () => {
 		expect(
 			screen.getByRole("button", { name: "Drag playhead to seek" }),
 		).toHaveTextContent("00:00:01.00");
-		const playhead = screen.getByRole("button", { name: "Drag playhead to seek" });
+		const playhead = screen.getByRole("button", {
+			name: "Drag playhead to seek",
+		});
 		playhead.setPointerCapture = vi.fn();
 		playhead.hasPointerCapture = vi.fn(() => true);
 		fireEvent.pointerDown(playhead, { pointerId: 1, clientX: 88 });
@@ -118,5 +121,77 @@ describe("TimecodeTimelineEditor", () => {
 		);
 		expect(screen.queryByLabelText("Marker CSV")).toBeNull();
 		expect(screen.queryByRole("button", { name: "Add Marker" })).toBeNull();
+	});
+
+	it("creates and edits a clip on a patched Audio Player lane", () => {
+		const commits: TimecodeDefinition[] = [];
+		function Harness() {
+			const [draft, setDraft] = useState<TimecodeDefinition>({
+				...definition,
+				audio: null,
+				lanes: [
+					{
+						id: "00000000-0000-0000-0000-000000000040",
+						name: "Audio Player 201",
+						content: {
+							kind: "audio_player",
+							fixture_id: "00000000-0000-0000-0000-000000000041",
+							clips: [],
+						},
+					},
+				],
+			});
+			return (
+				<TimecodeTimelineEditor
+					definition={draft}
+					frame={44}
+					fps={44}
+					cueLists={[]}
+					audioPlayers={[
+						{
+							fixtureId: "00000000-0000-0000-0000-000000000041",
+							name: "Audio Player 201",
+						},
+					]}
+					onScrub={vi.fn()}
+					onCommit={(next) => {
+						commits.push(next);
+						setDraft(next);
+					}}
+					onPreview={setDraft}
+					onBeginGesture={vi.fn()}
+					onEndGesture={vi.fn()}
+				/>
+			);
+		}
+		render(<Harness />);
+		fireEvent.click(screen.getByRole("button", { name: "+ clip" }));
+		expect(screen.getByTitle(/Audio Player 201 · 000\.000/)).toBeTruthy();
+		fireEvent.input(screen.getByLabelText("Audio Folder"), {
+			target: { value: "12" },
+		});
+		fireEvent.input(screen.getByLabelText("Audio File"), {
+			target: { value: "34" },
+		});
+		fireEvent.click(screen.getByLabelText("Repeat"));
+		fireEvent.input(screen.getByLabelText("Volume %"), {
+			target: { value: "65" },
+		});
+		fireEvent.click(screen.getByRole("button", { name: "Add volume point" }));
+		const content = commits.at(-1)?.lanes[0].content;
+		expect(content).toMatchObject({
+			kind: "audio_player",
+			clips: [
+				expect.objectContaining({
+					folder: 12,
+					file: 34,
+					repeat: true,
+					volume_keyframes: [
+						expect.objectContaining({ value: 0.65 }),
+						expect.objectContaining({ value: 0.65 }),
+					],
+				}),
+			],
+		});
 	});
 });

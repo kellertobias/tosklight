@@ -63,6 +63,19 @@ export function timelineItems(definition: TimecodeDefinition): TimelineItem[] {
 					});
 				}
 				break;
+			case "audio_player":
+				for (const clip of lane.content.clips) {
+					items.push({
+						selection: { kind: "clip", laneId: lane.id, itemId: clip.id },
+						frame: clip.start_frame,
+						endFrame: clip.end_frame,
+						label: `${lane.name} · ${padAddress(clip.folder)}.${padAddress(clip.file)}${clip.repeat ? " · repeat" : ""}`,
+						laneId: lane.id,
+						laneName: lane.name,
+						kind: "clip",
+					});
+				}
+				break;
 		}
 	}
 	return items.sort((left, right) => left.frame - right.frame);
@@ -154,6 +167,32 @@ export function moveTimelineItem(
 							),
 						},
 					};
+				case "audio_player":
+					if (selection.kind !== "clip") return lane;
+					return {
+						...lane,
+						content: {
+							...lane.content,
+							clips: lane.content.clips.map((clip) => {
+								if (clip.id !== selection.itemId) return clip;
+								const length = clip.end_frame - clip.start_frame;
+								const start = Math.min(
+									nextFrame,
+									Math.max(0, duration - length),
+								);
+								const offset = start - clip.start_frame;
+								return {
+									...clip,
+									start_frame: start,
+									end_frame: start + length,
+									volume_keyframes: clip.volume_keyframes.map((keyframe) => ({
+										...keyframe,
+										frame: keyframe.frame + offset,
+									})),
+								};
+							}),
+						},
+					};
 			}
 			return lane;
 		}),
@@ -202,6 +241,16 @@ export function deleteTimelineItem(
 						...lane.content,
 						keyframes: lane.content.keyframes.filter(
 							(keyframe) => keyframe.id !== selection.itemId,
+						),
+					},
+				};
+			if (lane.content.kind === "audio_player" && selection.kind === "clip")
+				return {
+					...lane,
+					content: {
+						...lane.content,
+						clips: lane.content.clips.filter(
+							(clip) => clip.id !== selection.itemId,
 						),
 					},
 				};
@@ -288,6 +337,32 @@ export function copyTimelineItem(
 									keyframes: [
 										...lane.content.keyframes,
 										{ ...source, id: newId },
+									],
+								},
+							}
+						: lane;
+				}
+				if (lane.content.kind === "audio_player" && selection.kind === "clip") {
+					const source = lane.content.clips.find(
+						(clip) => clip.id === selection.itemId,
+					);
+					return source
+						? {
+								...lane,
+								content: {
+									...lane.content,
+									clips: [
+										...lane.content.clips,
+										{
+											...source,
+											id: newId,
+											volume_keyframes: source.volume_keyframes.map(
+												(keyframe) => ({
+													...keyframe,
+													id: crypto.randomUUID(),
+												}),
+											),
+										},
 									],
 								},
 							}
@@ -389,4 +464,8 @@ function csvCells(line: string): string[] {
 
 function clampFrame(frame: number, duration: number): number {
 	return Math.max(0, Math.min(duration, Math.round(frame)));
+}
+
+function padAddress(value: number): string {
+	return String(value).padStart(3, "0");
 }

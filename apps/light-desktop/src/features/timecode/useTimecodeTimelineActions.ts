@@ -89,6 +89,7 @@ export function useTimelineActions({
 	cueLists,
 	speedGroup,
 	cueListId,
+	audioPlayers,
 	onCommit,
 	setSelection,
 }: {
@@ -99,6 +100,7 @@ export function useTimelineActions({
 	cueLists: readonly CueListOption[];
 	speedGroup: string;
 	cueListId: string;
+	audioPlayers: readonly { fixtureId: string; name: string }[];
 	onCommit(value: TimecodeDefinition): void;
 	setSelection(value: TimecodeEditorSelection | null): void;
 }) {
@@ -144,9 +146,45 @@ export function useTimelineActions({
 				}),
 			);
 	};
+	const addAudioPlayerLane = (fixtureId: string) => {
+		const player = audioPlayers.find(
+			(candidate) => candidate.fixtureId === fixtureId,
+		);
+		if (
+			!player ||
+			definition.lanes.some(
+				(lane) =>
+					lane.content.kind === "audio_player" &&
+					lane.content.fixture_id === fixtureId,
+			)
+		)
+			return;
+		onCommit(
+			addLane(definition, player.name, {
+				kind: "audio_player",
+				fixture_id: fixtureId,
+				clips: [],
+			}),
+		);
+	};
 	const addClip = (laneId: string) => {
 		const lane = definition.lanes.find((candidate) => candidate.id === laneId);
-		if (!lane || lane.content.kind !== "cue_list") return;
+		if (!lane) return;
+		const id = crypto.randomUUID();
+		const start = Math.min(frame, Math.max(0, duration - fps));
+		const end = Math.min(duration, start + fps * 4);
+		if (lane.content.kind === "audio_player") {
+			onCommit(
+				addAudioPlayerClipToDefinition(definition, laneId, {
+					id,
+					start,
+					end,
+				}),
+			);
+			setSelection({ kind: "clip", laneId, itemId: id });
+			return;
+		}
+		if (lane.content.kind !== "cue_list") return;
 		const content = lane.content;
 		const cueList = cueLists.find(
 			(candidate) => candidate.id === content.cue_list_id,
@@ -154,13 +192,11 @@ export function useTimelineActions({
 		const first = cueList?.cues[0];
 		const last = cueList?.cues.at(-1);
 		if (!first || !last) return;
-		const id = crypto.randomUUID();
-		const start = Math.min(frame, Math.max(0, duration - fps));
 		onCommit(
 			addClipToDefinition(definition, laneId, {
 				id,
 				start,
-				end: Math.min(duration, start + fps * 4),
+				end,
 				firstId: first.id,
 				lastId: last.id,
 			}),
@@ -173,7 +209,48 @@ export function useTimelineActions({
 		addAudioLane,
 		addSpeedLane,
 		addCueListLane,
+		addAudioPlayerLane,
 		addClip,
+	};
+}
+
+function addAudioPlayerClipToDefinition(
+	definition: TimecodeDefinition,
+	laneId: string,
+	clip: { id: string; start: number; end: number },
+): TimecodeDefinition {
+	return {
+		...definition,
+		lanes: definition.lanes.map((lane) =>
+			lane.id !== laneId || lane.content.kind !== "audio_player"
+				? lane
+				: {
+						...lane,
+						content: {
+							...lane.content,
+							clips: [
+								...lane.content.clips,
+								{
+									id: clip.id,
+									start_frame: clip.start,
+									end_frame: clip.end,
+									folder: 0,
+									file: 0,
+									repeat: false,
+									volume_keyframes: [
+										{
+											id: crypto.randomUUID(),
+											frame: clip.start,
+											value: 1,
+											fade_frames: 0,
+											curve: "linear" as const,
+										},
+									],
+								},
+							],
+						},
+					},
+		),
 	};
 }
 

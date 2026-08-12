@@ -111,4 +111,71 @@ describe("Timecode editor model", () => {
 			"position",
 		);
 	});
+
+	it("moves, copies, and deletes Audio Player clips with their volume envelope", () => {
+		const audioDefinition: TimecodeDefinition = {
+			...definition,
+			lanes: [
+				{
+					id: "00000000-0000-0000-0000-000000000040",
+					name: "Audio Player 201",
+					content: {
+						kind: "audio_player",
+						fixture_id: "00000000-0000-0000-0000-000000000041",
+						clips: [
+							{
+								id: "00000000-0000-0000-0000-000000000042",
+								start_frame: 44,
+								end_frame: 132,
+								folder: 1,
+								file: 2,
+								repeat: true,
+								volume_keyframes: [
+									{
+										id: "00000000-0000-0000-0000-000000000043",
+										frame: 88,
+										value: 0.5,
+										fade_frames: 22,
+										curve: "linear",
+									},
+								],
+							},
+						],
+					},
+				},
+			],
+		};
+		const selection = {
+			kind: "clip" as const,
+			laneId: audioDefinition.lanes[0].id,
+			itemId: "00000000-0000-0000-0000-000000000042",
+		};
+		expect(timelineItems(audioDefinition)[0].label).toContain(
+			"001.002 · repeat",
+		);
+		const moved = moveTimelineItem(audioDefinition, selection, 88);
+		expect(moved.lanes[0].content).toMatchObject({
+			kind: "audio_player",
+			clips: [
+				{ start_frame: 88, end_frame: 176, volume_keyframes: [{ frame: 132 }] },
+			],
+		});
+		const copied = copyTimelineItem(
+			moved,
+			selection,
+			"00000000-0000-0000-0000-000000000044",
+			88,
+		);
+		expect(
+			(copied.definition.lanes[0].content as { clips: unknown[] }).clips,
+		).toHaveLength(2);
+		expect(
+			(
+				deleteTimelineItem(copied.definition, copied.selection).lanes[0]
+					.content as {
+					clips: unknown[];
+				}
+			).clips,
+		).toHaveLength(1);
+	});
 });
