@@ -9,7 +9,7 @@ import {
 	cueMutationLabel,
 	cueMutationTarget,
 } from "./cueCommandTarget";
-import { cueTriggerKind, formatCueSeconds } from "./cueFormatting";
+import { cueJump, cueTriggerKind, formatCueSeconds } from "./cueFormatting";
 
 export interface CueTableEmptyState {
 	title: string;
@@ -30,6 +30,8 @@ export type CueTimingProgressByRow = Record<
 >;
 
 export type CueEditableProperty =
+	| "jump"
+	| "jumpCount"
 	| "trigger"
 	| "triggerTime"
 	| "inDelay"
@@ -102,6 +104,15 @@ function cueTriggerLabel(cues: Cue[], cue: Cue) {
 		: "LINK → Missing Cue";
 }
 
+function cueJumpLabel(cues: Cue[], cue: Cue) {
+	const jump = cueJump(cue);
+	if (!jump) return "—";
+	const destination = cues.find((candidate) => candidate.id === jump.cue_id);
+	return destination
+		? `Cue ${destination.number}${destination.name ? ` · ${destination.name}` : ""}`
+		: "Missing Cue";
+}
+
 function activateCueAt({
 	index,
 	cues,
@@ -137,6 +148,8 @@ function CueTableHeader({ compactRows }: { compactRows: boolean }) {
 				{!compactRows && <th className="cue-preview-column">Preview</th>}
 				<th className="cue-number-column">No.</th>
 				<th>Name</th>
+				<th className="cue-jump-column">Jump</th>
+				<th className="cue-jump-count-column">Jump Count</th>
 				<th className="cue-trigger-column">Trigger</th>
 				<th className="cue-timing-column">Trigger Time</th>
 				<th className="cue-timing-column">In Delay</th>
@@ -270,6 +283,32 @@ function CueTableRow({
 						∿
 					</small>
 				)}
+			</td>
+			<td className="cue-jump-column">
+				<Button
+					type="button"
+					aria-label="Jump"
+					disabled={!propertyEditable}
+					onClick={(event) => {
+						event.stopPropagation();
+						onActivateProperty("jump");
+					}}
+				>
+					{cueJumpLabel(cues, cue)}
+				</Button>
+			</td>
+			<td className="cue-jump-count-column">
+				<Button
+					type="button"
+					aria-label="Jump Count"
+					disabled={!propertyEditable || !cueJump(cue)}
+					onClick={(event) => {
+						event.stopPropagation();
+						onActivateProperty("jumpCount");
+					}}
+				>
+					{cueJump(cue)?.count ?? "—"}
+				</Button>
 			</td>
 			<td className="cue-trigger-column">
 				<Button

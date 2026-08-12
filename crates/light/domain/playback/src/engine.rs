@@ -5,6 +5,11 @@ pub struct PlaybackEngine {
     pub(crate) cue_lists: HashMap<CueListId, CueList>,
     pub(crate) compiled_cue_lists: HashMap<CueListId, Arc<CompiledCueList>>,
     pub(crate) active: HashMap<PlaybackKey, ActivePlayback>,
+    /// Runtime-only arrival counts for configured Cue jump points. A Cuelist has one shared
+    /// authority regardless of how many physical, virtual, keyboard, OSC, or hardware controls
+    /// address it.
+    pub(crate) jump_counts: HashMap<(CueListId, Uuid), u32>,
+    pub(crate) jump_bypass_once: HashSet<CueListId>,
     pub(crate) control_states: HashMap<PlaybackIdentity, PlaybackControlState>,
     pub(crate) active_dynamics: HashMap<uuid::Uuid, ActiveDynamicPlayback>,
     pub(crate) cuelist_flash_states: HashMap<PlaybackIdentity, CuelistFlashState>,
@@ -34,6 +39,8 @@ impl PlaybackEngine {
             cue_lists: HashMap::new(),
             compiled_cue_lists: HashMap::new(),
             active: HashMap::new(),
+            jump_counts: HashMap::new(),
+            jump_bypass_once: HashSet::new(),
             control_states: HashMap::new(),
             active_dynamics: HashMap::new(),
             cuelist_flash_states: HashMap::new(),

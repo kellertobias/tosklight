@@ -14,7 +14,7 @@ import {
 	cueListWriteBasis,
 	useCueListTopologyWriter,
 } from "../../features/playbackTopology/useCueListTopologyWriter";
-import { cueDraftIdentity } from "./cueFormatting";
+import { cueDraftIdentity, cueJump } from "./cueFormatting";
 
 interface CueEditorOptions {
 	cues: Cue[];
@@ -198,7 +198,7 @@ async function queueCueWrite(
 	if (!nextCue || !writeBase) return false;
 	if (!hasValidTimings(nextCue)) {
 		controls.setCueEditError(
-			"Cue edit was not saved. In/Out Fade, In/Out Delay, and Trigger time must be zero or greater.",
+			"Cue edit was not saved. Timings must be zero or greater and Jump Count must be a whole number of one or greater.",
 		);
 		return false;
 	}
@@ -355,6 +355,8 @@ function findCue(cueList: CueList, identity: string) {
 }
 
 function hasValidTimings(cue: Cue) {
+	const jump = cueJump(cue);
+	if (jump && (!Number.isSafeInteger(jump.count) || jump.count < 1)) return false;
 	const triggerDelay =
 		cue.trigger.type === "manual"
 			? 0

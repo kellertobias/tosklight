@@ -41,6 +41,17 @@ impl PlaybackEngine {
     ) -> Result<&ActivePlayback, String> {
         let interrupted_source = self.transition_source_at(key, now);
         let transition_ordinal = self.take_transition_ordinal();
+        let jump_index = self
+            .active
+            .get(&key)
+            .filter(|playback| {
+                !playback.paused
+                    && playback.loaded_cue_id.is_none()
+                    && playback.deleted_cue_hold.is_none()
+                    && !self.jump_bypass_once.contains(&id)
+            })
+            .map(|playback| playback.cue_index)
+            .and_then(|index| self.jump_destination(id, index));
         let cue_list = self.cue_lists.get(&id).ok_or("cue list does not exist")?;
         let playback = match self.active.entry(key) {
             std::collections::hash_map::Entry::Vacant(entry) => entry.insert(ActivePlayback {
@@ -133,6 +144,10 @@ impl PlaybackEngine {
                         playback.activated_at += now - paused_at;
                     }
                     playback.paused = false;
+                } else if let Some(index) = jump_index {
+                    playback.previous_index = Some(playback.cue_index);
+                    playback.cue_index = index;
+                    playback.tracking_wrap = false;
                 } else if playback.cue_index + 1 < cue_list.cues.len() {
                     playback.previous_index = Some(playback.cue_index);
                     playback.cue_index += 1;
@@ -156,6 +171,24 @@ impl PlaybackEngine {
         };
         reset_manual_transition(playback);
         Ok(playback)
+    }
+
+    fn jump_destination(&mut self, id: CueListId, cue_index: usize) -> Option<usize> {
+        let cue_list = self.cue_lists.get(&id)?;
+        let cue = cue_list.cues.get(cue_index)?;
+        let (destination_id, limit) = cue.actions.iter().find_map(|action| match action {
+            CueAction::Jump { cue_id, count } => Some((*cue_id, *count)),
+            _ => None,
+        })?;
+        let arrivals = self.jump_counts.entry((id, cue.id)).or_default();
+        *arrivals = arrivals.saturating_add(1);
+        (*arrivals <= limit).then(|| {
+            cue_list
+                .cues
+                .iter()
+                .position(|candidate| candidate.id == destination_id)
+                .expect("validated jump destination remains in the Cuelist")
+        })
     }
 
     pub fn jump(&mut self, id: CueListId, cue_number: f64) -> Result<&ActivePlayback, String> {
@@ -356,6 +389,8 @@ impl PlaybackEngine {
         Ok(PlaybackMutation::new((), PlaybackRuntimeEffect::Durable))
     }
     pub fn release(&mut self, id: CueListId) -> bool {
+        self.jump_counts
+            .retain(|(cue_list_id, _), _| *cue_list_id != id);
         self.key_for_cue_list(id)
             .ok()
             .is_some_and(|key| self.active.remove(&key).is_some())

@@ -24,6 +24,9 @@ impl PlaybackEngine {
                 if !had_runtime {
                     self.go_at_key(key, cue_list_id, self.clock.now())?;
                 }
+                if had_runtime {
+                    self.restart_first_cue_if_needed(key, cue_list_id);
+                }
                 let transition_ordinal =
                     (had_runtime && !was_enabled).then(|| self.take_transition_ordinal());
                 let active = self
@@ -46,12 +49,13 @@ impl PlaybackEngine {
             PlaybackIdentity::Physical(number) => self.off(number.get()),
             PlaybackIdentity::Virtual(_address) => {
                 let key = self.runtime_key_at(identity)?;
+                let PlaybackKey::CueList(cue_list_id) = key;
+                self.reset_jump_counts(cue_list_id);
                 let Some(playback) = self.active.get_mut(&key) else {
                     return Ok(false);
                 };
                 let was_enabled = playback.enabled;
                 deactivate(playback);
-                let PlaybackKey::CueList(cue_list_id) = key;
                 self.retarget_physical_controls(cue_list_id, 0.0, None);
                 Ok(was_enabled)
             }
@@ -118,6 +122,7 @@ impl PlaybackEngine {
         active.deleted_cue_transition_source = None;
         active.activated_at = now;
         active.completed_trigger_cue_id = None;
+        self.reset_jump_counts(id);
         true
     }
 
@@ -153,6 +158,7 @@ impl PlaybackEngine {
         }
         let id = self.cue_list_for(number)?;
         let key = PlaybackKey::CueList(id);
+        self.reset_jump_counts(id);
         let Some(playback) = self.active.get_mut(&key) else {
             return Ok(PlaybackMutation::new(false, PlaybackRuntimeEffect::None));
         };
@@ -167,6 +173,11 @@ impl PlaybackEngine {
                 PlaybackRuntimeEffect::None
             }),
         ))
+    }
+
+    fn reset_jump_counts(&mut self, id: CueListId) {
+        self.jump_counts
+            .retain(|(cue_list_id, _), _| *cue_list_id != id);
     }
 
     pub fn toggle(&mut self, number: u16) -> Result<bool, String> {
@@ -335,6 +346,9 @@ impl PlaybackEngine {
             changed |=
                 apply_cuelist_master(active, address.number().get(), value, auto_off_at_zero);
         }
+        if value == 0.0 && auto_off_at_zero {
+            self.reset_jump_counts(cue_list_id);
+        }
         let control_changed = self.retarget_physical_controls(cue_list_id, value, None);
         let addressed_effect = durable_effect(changed);
         let addressed_effect = addressed_effect.combine(if control_changed {
@@ -470,6 +484,9 @@ impl PlaybackEngine {
         if let Some(active) = self.active.get_mut(&key) {
             changed |= apply_cuelist_master(active, number, value, auto_off_at_zero);
         }
+        if value == 0.0 && auto_off_at_zero {
+            self.reset_jump_counts(id);
+        }
         control_changed |= self.retarget_physical_controls(id, value, physical.then_some(identity));
         let addressed_effect = durable_effect(changed).combine(if control_changed {
             PlaybackRuntimeEffect::Transient
@@ -538,6 +555,7 @@ impl PlaybackEngine {
             && definition.flash_release == FlashReleaseMode::ReleaseIntensityOnly
             && self.promote_intensity_release_at(identity, released, true);
         let turned_off = if auto_off {
+            self.reset_jump_counts(cue_list_id);
             self.active
                 .get_mut(&PlaybackKey::CueList(cue_list_id))
                 .is_some_and(deactivate)

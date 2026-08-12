@@ -68,6 +68,12 @@ pub struct Cue {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum CueAction {
+    /// Take this stable Cue destination for the configured number of arrivals before ordinary
+    /// forward progression resumes. The count is runtime-only and Cuelist-owned.
+    Jump {
+        cue_id: Uuid,
+        count: u32,
+    },
     TimecodeStart {
         timecode_id: TimecodeId,
         start: CueTimecodeStart,
@@ -491,8 +497,31 @@ impl CueList {
                     ));
                 }
             }
+            let mut jump_seen = false;
             for action in &cue.actions {
                 let timecode_id = match action {
+                    CueAction::Jump { cue_id, count } => {
+                        if jump_seen {
+                            return Err(format!(
+                                "cue {} contains more than one jump point",
+                                cue.number
+                            ));
+                        }
+                        jump_seen = true;
+                        if *count == 0 {
+                            return Err(format!(
+                                "cue {} jump count must be greater than zero",
+                                cue.number
+                            ));
+                        }
+                        if !cue_ids.contains(cue_id) {
+                            return Err(format!(
+                                "cue {} jumps to a missing cue identity",
+                                cue.number
+                            ));
+                        }
+                        continue;
+                    }
                     CueAction::TimecodeStart {
                         timecode_id, start, ..
                     } => {

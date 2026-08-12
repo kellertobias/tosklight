@@ -81,6 +81,7 @@ const cueList: CueList = {
 			fade_millis: 1_500,
 			delay_millis: 0,
 			trigger: { type: "follow", millis: 5_000 },
+			actions: [{ type: "jump", cue_id: "solo", count: 2 }],
 			changes: [],
 		},
 		{

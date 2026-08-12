@@ -8,9 +8,16 @@ import {
 import { type Dispatch, type SetStateAction, useState } from "react";
 import type { Cue } from "../../api/types";
 import type { CueEditableProperty } from "./CueTable";
-import { cueTrigger, cueTriggerKind } from "./cueFormatting";
+import {
+	cueJump,
+	cueTrigger,
+	cueTriggerKind,
+	withCueJump,
+} from "./cueFormatting";
 
 const propertyLabels: Record<CueEditableProperty, string> = {
+	jump: "Jump",
+	jumpCount: "Jump Count",
 	trigger: "Trigger",
 	triggerTime: "Trigger Time",
 	inDelay: "In Delay",
@@ -26,7 +33,10 @@ const timingKeys = {
 	outFade: "out_fade_millis",
 } as const;
 
-type TimingProperty = Exclude<CueEditableProperty, "trigger" | "triggerTime">;
+type TimingProperty = Exclude<
+	CueEditableProperty,
+	"jump" | "jumpCount" | "trigger" | "triggerTime"
+>;
 
 function timingValue(cue: Cue, property: TimingProperty) {
 	const fallback = property === "outFade" ? cue.fade_millis : cue.delay_millis;
@@ -35,6 +45,8 @@ function timingValue(cue: Cue, property: TimingProperty) {
 
 function validCueDraft(cue: Cue, property: CueEditableProperty) {
 	const triggerMillis = Number(cue.trigger.delay_millis ?? 0);
+	const jump = cueJump(cue);
+	if (jump && (!Number.isSafeInteger(jump.count) || jump.count < 1)) return false;
 	return [
 		cue.fade_millis,
 		cue.delay_millis,
@@ -42,6 +54,66 @@ function validCueDraft(cue: Cue, property: CueEditableProperty) {
 		cue.out_delay_millis ?? 0,
 		property === "triggerTime" ? triggerMillis : 0,
 	].every((value) => Number.isSafeInteger(value) && value >= 0);
+}
+
+function CueJumpPropertyField({
+	draft,
+	setDraft,
+	cues,
+	property,
+}: {
+	draft: Cue;
+	setDraft: Dispatch<SetStateAction<Cue>>;
+	cues: Cue[];
+	property: "jump" | "jumpCount";
+}) {
+	const jump = cueJump(draft);
+	if (property === "jumpCount") {
+		return (
+			<NumberField
+				autoFocus
+				label="Jump Count"
+				min="1"
+				step="1"
+				disabled={!jump}
+				value={jump?.count ?? 1}
+				onChange={(event) => {
+					if (!jump) return;
+					setDraft(
+						withCueJump(draft, {
+							...jump,
+							count: Math.round(Number(event.target.value)),
+						}),
+					);
+				}}
+			/>
+		);
+	}
+	return (
+		<SelectField
+			label="Jump"
+			value={jump?.cue_id ?? ""}
+			onChange={(cueId) =>
+				setDraft(
+					withCueJump(
+						draft,
+						cueId
+							? { type: "jump", cue_id: cueId, count: jump?.count ?? 1 }
+							: null,
+					),
+				)
+			}
+			options={[
+				{ value: "", label: "No Jump" },
+				...cues
+					.filter((candidate) => candidate.id)
+					.map((candidate) => ({
+						value: candidate.id as string,
+						label: `Cue ${candidate.number}${candidate.name ? ` · ${candidate.name}` : ""}`,
+					})),
+			]}
+		/>
+	);
 }
 
 function CueTriggerPropertyField({
@@ -134,7 +206,7 @@ function CueTimingPropertyField({
 }: {
 	draft: Cue;
 	setDraft: Dispatch<SetStateAction<Cue>>;
-	property: Exclude<CueEditableProperty, "trigger">;
+	property: "triggerTime" | TimingProperty;
 	label: string;
 	onEnter: () => void;
 }) {
@@ -218,7 +290,14 @@ export function CuePropertyModal({
 						onClose={onCancel}
 					/>
 					<div className="cue-property-modal-body">
-						{property === "trigger" ? (
+						{property === "jump" || property === "jumpCount" ? (
+							<CueJumpPropertyField
+								draft={draft}
+								setDraft={setDraft}
+								cues={cues}
+								property={property}
+							/>
+						) : property === "trigger" ? (
 							<CueTriggerPropertyField
 								draft={draft}
 								setDraft={setDraft}
@@ -236,7 +315,9 @@ export function CuePropertyModal({
 						<div className="cue-property-modal-feedback">
 							{!valid && (
 								<p className="ui-field-error" role="alert">
-									Enter a time of zero or greater.
+									{property === "jumpCount"
+										? "Enter a whole Jump Count of one or greater."
+										: "Enter a time of zero or greater."}
 								</p>
 							)}
 							{editError && (

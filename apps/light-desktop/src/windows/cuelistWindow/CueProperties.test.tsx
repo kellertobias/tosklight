@@ -110,6 +110,63 @@ describe("CuePropertyModal", () => {
 		});
 	});
 
+	it("stores a Jump by stable Cue identity without replacing other Cue actions", async () => {
+		const onSave = vi.fn(async (_cue: Cue) => true);
+		const source: Cue = {
+			...cue,
+			actions: [{ type: "timecode_stop", timecode_id: "timecode-1" }],
+		};
+		const destination: Cue = {
+			...cue,
+			id: "cue-2",
+			number: 2,
+			name: "Second",
+		};
+		render(
+			<CuePropertyModal
+				cue={source}
+				cues={[source, destination]}
+				property="jump"
+				editError=""
+				onCancel={vi.fn()}
+				onSave={onSave}
+			/>,
+		);
+
+		fireEvent.click(screen.getByRole("button", { name: "No Jump" }));
+		fireEvent.click(screen.getByRole("option", { name: "Cue 2 · Second" }));
+		fireEvent.click(screen.getByRole("button", { name: "Save" }));
+		await waitFor(() => expect(onSave).toHaveBeenCalledOnce());
+		expect(onSave.mock.calls[0]?.[0].actions).toEqual([
+			{ type: "timecode_stop", timecode_id: "timecode-1" },
+			{ type: "jump", cue_id: "cue-2", count: 1 },
+		]);
+	});
+
+	it("requires Jump Count to be a positive whole number", () => {
+		const onSave = vi.fn(async (_cue: Cue) => true);
+		render(
+			<CuePropertyModal
+				cue={{
+					...cue,
+					actions: [{ type: "jump", cue_id: "cue-1", count: 2 }],
+				}}
+				cues={[cue]}
+				property="jumpCount"
+				editError=""
+				onCancel={vi.fn()}
+				onSave={onSave}
+			/>,
+		);
+		fireEvent.change(screen.getByRole("textbox", { name: "Jump Count" }), {
+			target: { value: "0" },
+		});
+		expect(screen.getByRole("alert")).toHaveTextContent(
+			"whole Jump Count of one or greater",
+		);
+		expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+	});
+
 	it("keeps the modal open with the actionable error when authority rejects Save", async () => {
 		const onSave = vi.fn(async (_cue: Cue) => false);
 		const onCancel = vi.fn();

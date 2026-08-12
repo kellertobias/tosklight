@@ -134,7 +134,12 @@ impl PlaybackEngine {
     }
 
     pub fn fast_forward_playback(&mut self, number: u16) -> Result<&ActivePlayback, String> {
-        self.go_playback(number)?;
+        let id = self.cue_list_for(number)?;
+        self.reset_current_jump_count(id);
+        self.jump_bypass_once.insert(id);
+        let advanced = self.go_playback(number).map(|_| ());
+        self.jump_bypass_once.remove(&id);
+        advanced?;
         let key = self.runtime_key(number)?;
         let playback = self.active.get_mut(&key).ok_or("playback is not active")?;
         playback.transition_timing_bypassed = true;
@@ -142,6 +147,8 @@ impl PlaybackEngine {
     }
 
     pub fn fast_rewind_playback(&mut self, number: u16) -> Result<&ActivePlayback, String> {
+        let id = self.cue_list_for(number)?;
+        self.reset_current_jump_count(id);
         self.back_playback(number)?;
         let key = self.runtime_key(number)?;
         let playback = self.active.get_mut(&key).ok_or("playback is not active")?;
@@ -156,7 +163,17 @@ impl PlaybackEngine {
         if let PlaybackIdentity::Physical(number) = identity {
             return self.fast_forward_playback(number.get());
         }
-        self.go_playback_at(identity)?;
+        let definition = self
+            .definition_at(identity)
+            .ok_or("virtual playback does not exist")?;
+        let PlaybackTarget::CueList { cue_list_id: id } = definition.target else {
+            return Err("virtual playback does not have cues".into());
+        };
+        self.reset_current_jump_count(id);
+        self.jump_bypass_once.insert(id);
+        let advanced = self.go_playback_at(identity).map(|_| ());
+        self.jump_bypass_once.remove(&id);
+        advanced?;
         let key = self.runtime_key_at(identity)?;
         let playback = self
             .active
@@ -173,6 +190,13 @@ impl PlaybackEngine {
         if let PlaybackIdentity::Physical(number) = identity {
             return self.fast_rewind_playback(number.get());
         }
+        let definition = self
+            .definition_at(identity)
+            .ok_or("virtual playback does not exist")?;
+        let PlaybackTarget::CueList { cue_list_id: id } = definition.target else {
+            return Err("virtual playback does not have cues".into());
+        };
+        self.reset_current_jump_count(id);
         self.back_playback_at(identity)?;
         let key = self.runtime_key_at(identity)?;
         let playback = self
@@ -181,6 +205,41 @@ impl PlaybackEngine {
             .ok_or("virtual playback is not active")?;
         playback.transition_timing_bypassed = true;
         Ok(playback)
+    }
+
+    fn reset_current_jump_count(&mut self, id: CueListId) {
+        let Some(cue_id) = self
+            .active
+            .get(&PlaybackKey::CueList(id))
+            .and_then(|playback| playback.current_cue_id)
+        else {
+            return;
+        };
+        self.jump_counts.remove(&(id, cue_id));
+    }
+
+    fn reset_crossed_jump_counts(&mut self, key: PlaybackKey, id: CueListId, destination_id: Uuid) {
+        let Some(from) = self.active.get(&key).map(|playback| playback.cue_index) else {
+            return;
+        };
+        let Some(to) = self.cue_lists[&id]
+            .cues
+            .iter()
+            .position(|cue| cue.id == destination_id)
+        else {
+            return;
+        };
+        let crossed = if from < to {
+            from..to
+        } else {
+            to.saturating_add(1)..from.saturating_add(1)
+        };
+        let cue_ids = crossed
+            .filter_map(|index| self.cue_lists[&id].cues.get(index).map(|cue| cue.id))
+            .collect::<Vec<_>>();
+        for cue_id in cue_ids {
+            self.jump_counts.remove(&(id, cue_id));
+        }
     }
 
     pub fn goto_playback(
@@ -208,6 +267,7 @@ impl PlaybackEngine {
             .ok_or("cue does not exist")?;
         let (cue_id, cue_number) = (cue.id, cue.number);
         let key = PlaybackKey::CueList(id);
+        self.reset_crossed_jump_counts(key, id, cue_id);
         self.disarm_cuelist_flash(id);
         let now = self.clock.now();
         let changed = self
@@ -259,6 +319,7 @@ impl PlaybackEngine {
             .ok_or("cue does not exist")?;
         let (cue_id, cue_number) = (cue.id, cue.number);
         let key = PlaybackKey::CueList(cue_list_id);
+        self.reset_crossed_jump_counts(key, cue_list_id, cue_id);
         self.disarm_cuelist_flash(cue_list_id);
         let now = self.clock.now();
         let changed = self.active.get(&key).is_none_or(|playback| {

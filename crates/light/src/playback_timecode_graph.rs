@@ -39,6 +39,7 @@ pub fn validate_cue_timecode_graph(
         for cue in &cue_list.cues {
             for action in &cue.actions {
                 let (timecode_id, start) = match action {
+                    CueAction::Jump { .. } => continue,
                     CueAction::TimecodeStart {
                         timecode_id, start, ..
                     } => (*timecode_id, Some(*start)),

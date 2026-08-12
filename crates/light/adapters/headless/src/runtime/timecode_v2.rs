@@ -826,6 +826,7 @@ pub(super) fn apply_cue_action(
         .ok_or_else(|| ApiError::bad_request("no show is open"))?
         .id;
     let id = match action {
+        light_playback::CueAction::Jump { .. } => return Ok(None),
         light_playback::CueAction::TimecodeStart { timecode_id, .. }
         | light_playback::CueAction::TimecodeStop { timecode_id } => *timecode_id,
     };
@@ -840,6 +841,7 @@ pub(super) fn apply_installed_cue_action(
     action: &light_playback::CueAction,
 ) -> Result<Option<u64>, ApiError> {
     let (id, transport, completion) = match action {
+        light_playback::CueAction::Jump { .. } => return Ok(None),
         light_playback::CueAction::TimecodeStop { timecode_id } => (
             *timecode_id,
             light_playback::TimecodeTransportAction::Stop,

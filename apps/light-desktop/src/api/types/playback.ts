@@ -39,6 +39,10 @@ export interface Cue {
 		value: { type?: string; [key: string]: unknown };
 		automatic_restore?: boolean;
 	}>;
+	actions?: Array<
+		| { type: "jump"; cue_id: string; count: number }
+		| { type: string; [key: string]: unknown }
+	>;
 }
 
 export type AttributeValue =

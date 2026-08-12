@@ -156,6 +156,57 @@ async fn save_cue_list_preserves_extensions_and_returns_the_committed_projection
 }
 
 #[tokio::test]
+async fn cue_jump_round_trips_by_stable_identity_when_its_destination_is_renumbered() {
+    let scenario = TopologyScenario::new("Playback topology Cue jump").await;
+    let revision = scenario.show_revision();
+    let mut request = save_request("save-jump", 0);
+    let cue_list_id = request["action"]["cue_list_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let destination_id = Uuid::new_v4();
+    request["action"]["body"]["cues"][0]["actions"] = serde_json::json!([{
+        "type": "jump",
+        "cue_id": destination_id,
+        "count": 3
+    }]);
+    request["action"]["body"]["cues"]
+        .as_array_mut()
+        .unwrap()
+        .push(
+            serde_json::to_value(light_playback::Cue {
+                id: destination_id,
+                number: 2.0,
+                name: "Destination".into(),
+                ..light_playback::Cue::new(2.0)
+            })
+            .unwrap(),
+        );
+
+    let response = scenario.action(revision, request.clone()).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let saved = json(response).await;
+    assert_eq!(
+        saved["objects"][0]["body"]["cues"][0]["actions"][0]["count"],
+        3
+    );
+
+    request["request_id"] = serde_json::json!("renumber-jump-destination");
+    request["action"]["expected_revision"] = serde_json::json!(1);
+    request["action"]["expected_object_id"] = serde_json::json!(cue_list_id);
+    request["action"]["body"]["cues"][1]["number"] = serde_json::json!(42.0);
+    let response = scenario.action(revision + 1, request).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let saved = json(response).await;
+    assert_eq!(saved["objects"][0]["body"]["cues"][1]["number"], 42.0);
+    assert_eq!(
+        saved["objects"][0]["body"]["cues"][0]["actions"][0]["cue_id"],
+        destination_id.to_string()
+    );
+    scenario.cleanup();
+}
+
+#[tokio::test]
 async fn topology_route_rejects_missing_authority_and_forged_scope() {
     let scenario = TopologyScenario::new("Playback topology authorization").await;
     let revision = scenario.show_revision();

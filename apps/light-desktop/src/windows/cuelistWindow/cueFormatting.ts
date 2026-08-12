@@ -1,6 +1,26 @@
 import type { Cue } from "../../api/types";
 
 export type CueTriggerKind = "go" | "follow" | "time" | "timecode" | "link";
+export interface CueJumpAction {
+	type: "jump";
+	cue_id: string;
+	count: number;
+}
+
+export function cueJump(cue: Cue | null | undefined): CueJumpAction | null {
+	const action = cue?.actions?.find((candidate) => candidate.type === "jump");
+	if (!action || typeof action.cue_id !== "string") return null;
+	return {
+		type: "jump",
+		cue_id: action.cue_id,
+		count: Number(action.count),
+	};
+}
+
+export function withCueJump(cue: Cue, jump: CueJumpAction | null): Cue {
+	const actions = (cue.actions ?? []).filter((action) => action.type !== "jump");
+	return { ...cue, actions: jump ? [...actions, jump] : actions };
+}
 
 export function cueTriggerKind(cue: Cue | null | undefined): CueTriggerKind {
 	if (cue?.trigger.type === "manual") return "go";

@@ -54,6 +54,10 @@ impl PlaybackEngine {
             }
         }
         let changed = !release.is_empty();
+        let released_cue_lists = release
+            .iter()
+            .filter_map(|key| self.active.get(key).map(|playback| playback.cue_list_id))
+            .collect::<HashSet<_>>();
         for key in release {
             if let Some(playback) = self.active.get_mut(&key) {
                 playback.enabled = false;
@@ -61,6 +65,8 @@ impl PlaybackEngine {
                 playback.activation = None;
             }
         }
+        self.jump_counts
+            .retain(|(cue_list_id, _), _| !released_cue_lists.contains(cue_list_id));
         changed
     }
     pub fn restore_active(&mut self, playbacks: impl IntoIterator<Item = ActivePlayback>) {
@@ -338,6 +344,8 @@ impl PlaybackEngine {
                     cue_lists: self.cue_lists.clone(),
                     compiled_cue_lists: self.compiled_cue_lists.clone(),
                     active: HashMap::from([(*key, playback.clone())]),
+                    jump_counts: self.jump_counts.clone(),
+                    jump_bypass_once: HashSet::new(),
                     control_states: HashMap::new(),
                     active_dynamics: HashMap::new(),
                     dynamic_flash_states: HashMap::new(),

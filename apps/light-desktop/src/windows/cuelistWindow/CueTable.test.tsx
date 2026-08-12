@@ -12,6 +12,7 @@ const cue: Cue = {
 	out_fade_millis: 3_000,
 	out_delay_millis: 750,
 	trigger: { type: "wait", delay_millis: 4_000 },
+	actions: [{ type: "jump", cue_id: "cue-1", count: 3 }],
 	changes: [],
 };
 
@@ -70,6 +71,8 @@ describe("CueTable timing progress", () => {
 		);
 
 		for (const [name, property] of [
+			["Jump", "jump"],
+			["Jump Count", "jumpCount"],
 			["Trigger", "trigger"],
 			["Trigger Time", "triggerTime"],
 			["In Delay", "inDelay"],
@@ -83,6 +86,29 @@ describe("CueTable timing progress", () => {
 			fireEvent.click(cell);
 			expect(onEditCueProperty).toHaveBeenLastCalledWith(0, property);
 		}
+	});
+
+	it("resolves a Jump destination through stable identity after renumbering", () => {
+		const destination = { ...cue, id: "destination", number: 42, name: "Encore" };
+		const source: Cue = {
+			...cue,
+			actions: [{ type: "jump", cue_id: "destination", count: 2 }],
+		};
+		render(
+			<CueTable
+				cues={[source, destination]}
+				active={undefined}
+				selectedCue={0}
+				settingsOpen={false}
+				thumbnails={{}}
+				emptyState={{ title: "Empty", description: "Empty", icon: "◎" }}
+				onSelectCue={vi.fn()}
+				onEditCueProperty={vi.fn()}
+			/>,
+		);
+		expect(screen.getAllByRole("button", { name: "Jump" })[0]).toHaveTextContent(
+			"Cue 42 · Encore",
+		);
 	});
 });
 

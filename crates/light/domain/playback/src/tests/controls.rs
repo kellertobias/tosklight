@@ -1,5 +1,126 @@
 use super::*;
 
+fn jump_to(cue: &mut Cue, destination: Uuid, count: u32) {
+    cue.actions.push(CueAction::Jump {
+        cue_id: destination,
+        count,
+    });
+}
+
+#[test]
+fn cue_jump_count_exhausts_then_continues_normally() {
+    let one = Cue::new(1.0);
+    let mut two = Cue::new(2.0);
+    let three = Cue::new(3.0);
+    jump_to(&mut two, one.id, 2);
+    let cue_list = list(vec![one, two, three]);
+    let id = cue_list.id;
+    let mut engine = PlaybackEngine::default();
+    engine.register(cue_list).unwrap();
+    engine.register_definition(definition(1, id)).unwrap();
+
+    engine.on(1).unwrap();
+    assert_eq!(engine.runtime()[0].current_cue_number, Some(1.0));
+    for expected in [2.0, 1.0, 2.0, 1.0, 2.0, 3.0] {
+        engine.go_playback(1).unwrap();
+        assert_eq!(engine.runtime()[0].current_cue_number, Some(expected));
+    }
+    assert_eq!(
+        engine.jump_counts.values().copied().collect::<Vec<_>>(),
+        [3]
+    );
+}
+
+#[test]
+fn each_jump_point_keeps_an_independent_runtime_count() {
+    let mut one = Cue::new(1.0);
+    let mut two = Cue::new(2.0);
+    let three = Cue::new(3.0);
+    let one_destination = one.id;
+    jump_to(&mut one, one_destination, 1);
+    jump_to(&mut two, three.id, 1);
+    let one_id = one.id;
+    let two_id = two.id;
+    let cue_list = list(vec![one, two, three]);
+    let id = cue_list.id;
+    let mut engine = PlaybackEngine::default();
+    engine.register(cue_list).unwrap();
+    engine.register_definition(definition(1, id)).unwrap();
+
+    engine.on(1).unwrap();
+    for expected in [1.0, 2.0, 3.0] {
+        engine.go_playback(1).unwrap();
+        assert_eq!(engine.runtime()[0].current_cue_number, Some(expected));
+    }
+    assert_eq!(engine.jump_counts[&(id, one_id)], 2);
+    assert_eq!(engine.jump_counts[&(id, two_id)], 1);
+}
+
+#[test]
+fn off_and_restart_reset_every_jump_count() {
+    let one = Cue::new(1.0);
+    let mut two = Cue::new(2.0);
+    let three = Cue::new(3.0);
+    jump_to(&mut two, one.id, 2);
+    let cue_list = list(vec![one, two, three]);
+    let id = cue_list.id;
+    let mut engine = PlaybackEngine::default();
+    engine.register(cue_list).unwrap();
+    engine.register_definition(definition(1, id)).unwrap();
+
+    engine.on(1).unwrap();
+    engine.go_playback(1).unwrap();
+    engine.go_playback(1).unwrap();
+    assert_eq!(engine.jump_counts.values().next(), Some(&1));
+    engine.off(1).unwrap();
+    assert!(engine.jump_counts.is_empty());
+    engine.on(1).unwrap();
+    for expected in [2.0, 1.0, 2.0, 1.0] {
+        engine.go_playback(1).unwrap();
+        assert_eq!(engine.runtime()[0].current_cue_number, Some(expected));
+    }
+}
+
+#[test]
+fn fast_forward_skips_and_resets_a_jump_point() {
+    let one = Cue::new(1.0);
+    let mut two = Cue::new(2.0);
+    let three = Cue::new(3.0);
+    jump_to(&mut two, one.id, 3);
+    let cue_list = list(vec![one, two, three]);
+    let id = cue_list.id;
+    let mut engine = PlaybackEngine::default();
+    engine.register(cue_list).unwrap();
+    engine.register_definition(definition(1, id)).unwrap();
+
+    engine.on(1).unwrap();
+    engine.go_playback(1).unwrap();
+    engine.fast_forward_playback(1).unwrap();
+    assert_eq!(engine.runtime()[0].current_cue_number, Some(3.0));
+    assert!(engine.jump_counts.is_empty());
+}
+
+#[test]
+fn goto_resets_jump_points_that_it_bypasses() {
+    let one = Cue::new(1.0);
+    let mut two = Cue::new(2.0);
+    let three = Cue::new(3.0);
+    jump_to(&mut two, one.id, 3);
+    let cue_list = list(vec![one, two, three]);
+    let id = cue_list.id;
+    let mut engine = PlaybackEngine::default();
+    engine.register(cue_list).unwrap();
+    engine.register_definition(definition(1, id)).unwrap();
+
+    engine.on(1).unwrap();
+    engine.go_playback(1).unwrap();
+    engine.go_playback(1).unwrap();
+    assert_eq!(engine.jump_counts.values().next(), Some(&1));
+    engine.go_playback(1).unwrap();
+    engine.goto_playback(1, 3.0).unwrap();
+    assert!(engine.jump_counts.is_empty());
+}
+
 #[test]
 fn fast_navigation_bypasses_only_the_current_transition_timing() {
     let started = Utc::now();
