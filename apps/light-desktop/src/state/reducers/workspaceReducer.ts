@@ -45,6 +45,7 @@ function addWindow(
 		...(kind === "scheduler"
 			? { schedulerShowList: true, schedulerShowCalendar: true }
 			: {}),
+		...(kind === "visualization" ? { visualizationRows: [] } : {}),
 		...state.windowPicker,
 	};
 	const activeDesk = state.desks.find((desk) => desk.id === state.activeDeskId);

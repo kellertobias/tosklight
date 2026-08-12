@@ -58,6 +58,11 @@ export function reducePaneOptions(
 			return updateActivePane(state, action.id, (pane) =>
 				Object.assign({}, pane, { channelDisplayMode: action.mode }),
 			);
+		case "SET_PANE_VISUALIZATION_ROWS":
+			return updateActivePane(state, action.id, (pane) => ({
+				...pane,
+				visualizationRows: action.rows,
+			}));
 		case "SET_PANE_SCHEDULER_LAYOUT":
 			return updateActivePane(state, action.id, (pane) => ({
 				...pane,

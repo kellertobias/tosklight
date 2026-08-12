@@ -190,6 +190,16 @@ Stage receives authoritative Live and Preload output from the engine. A disconne
 
 ![Full Stage window](../assets/screenshots/workflows/stage-window-2d.png)
 
+## Visualization
+
+The Visualization pane monitors live desk values without changing Programmer or playback state. Add rows in **Pane Settings → Visualization**, then place one or more widgets in each row. Rows stack vertically; widgets in the same row share the available width side by side. The complete layout and its widget settings are stored with the show layout.
+
+Each widget reads either one raw DMX universe/address or one resolved fixture attribute. A multiply or divide factor can be applied before the result is constrained to the configured minimum and maximum. Display the result on a 0–100% or 0–255 scale.
+
+Widgets can show concise text, a large numeric readout, a horizontal or vertical bar, or a sampled graph. Numeric widgets configure decimal places, a unit suffix, and low-to-high value colours. Graphs configure their time window, linear or logarithmic Y scale, Y-axis name, optional area fill, and independent low-to-high colour ranges for the line and fill. Sampling occurs only while the pane is visible; unavailable sources are identified instead of retaining an apparently live value.
+
+The source picker is designed to gain further desk and plugin sources without changing saved widget layouts. Raw DMX and resolved fixture attributes are the built-in sources.
+
 ## Channels
 
 The Channels pane is a direct programming bank ordered by Fixture ID. In the default **Intensity only** mode, it assigns one fader to each fixture. Faders fill each page from left to right across the first row and then continue on the second row. Each fader is labelled **Fixture _ID_**, followed by **Intensity**, and shows the resolved percentage. Moving it writes an intensity value into the programmer; tapping its card selects the fixture. A disabled fader replaces the attribute label with its current reason, such as **Empty position**, **Programmer values are loading**, or **Preload control is unavailable**. The reason disappears as soon as that fader becomes available.

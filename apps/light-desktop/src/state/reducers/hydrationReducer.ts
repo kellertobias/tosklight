@@ -1,5 +1,6 @@
 import { normalizePresetFamily } from "../../presetFamilies";
 import type { AppState } from "../../types";
+import { normalizeVisualizationRows } from "../../windows/visualizationPaneModel";
 import type { Action } from "../appActions";
 import {
 	cueListWindowKind,
@@ -96,6 +97,13 @@ function hydrateDesks(
 						? {
 								channelDisplayMode: normalizeChannelDisplayMode(
 									pane.channelDisplayMode,
+								),
+							}
+						: {}),
+					...(kind === "visualization"
+						? {
+								visualizationRows: normalizeVisualizationRows(
+									pane.visualizationRows,
 								),
 							}
 						: {}),

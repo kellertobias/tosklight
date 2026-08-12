@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createVisualizationWidget } from "../windows/visualizationPaneModel";
 import { appReducer, initialState } from "./appReducer";
 
 describe("appReducer control mode and pane geometry", () => {
@@ -146,6 +147,58 @@ describe("appReducer desk creation and layout hydration", () => {
 			schedulerShowList: true,
 			schedulerShowCalendar: false,
 		});
+	});
+
+	it("creates, edits, and safely hydrates show-persisted Visualization rows", () => {
+		const emptyDesk = {
+			...initialState,
+			activeDeskId: "visualization-test",
+			desks: [{ id: "visualization-test", name: "Visualization", panes: [] }],
+			windowPicker: { x: 1, y: 1, width: 12, height: 10 },
+		};
+		const added = appReducer(emptyDesk, {
+			type: "ADD_WINDOW",
+			kind: "visualization",
+		});
+		const pane = added.desks[0].panes[0];
+		expect(pane).toMatchObject({
+			kind: "visualization",
+			title: "Visualization",
+			visualizationRows: [],
+		});
+		const rows = [
+			{
+				id: "row-1",
+				widgets: [
+					{
+						...createVisualizationWidget("widget-1"),
+						id: "widget-1",
+						title: "Dimmer",
+						type: "bar" as const,
+						source: { kind: "raw_dmx" as const, universe: 1, address: 12 },
+						operation: "multiply" as const,
+						factor: 1,
+						displayScale: "percent" as const,
+						minimum: 0,
+						maximum: 100,
+						bar: { orientation: "vertical" as const },
+					},
+				],
+			},
+		];
+		const edited = appReducer(added, {
+			type: "SET_PANE_VISUALIZATION_ROWS",
+			id: pane.id,
+			rows,
+		});
+		expect(edited.desks[0].panes[0].visualizationRows).toEqual(rows);
+
+		const hydrated = appReducer(edited, {
+			type: "HYDRATE_LAYOUT",
+			desks: edited.desks,
+			activeDeskId: "visualization-test",
+		});
+		expect(hydrated.desks[0].panes[0].visualizationRows).toMatchObject(rows);
 	});
 });
 

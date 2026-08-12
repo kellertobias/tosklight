@@ -28,6 +28,7 @@ export type BuiltInWindow =
 	| "scheduler"
 	| "channels"
 	| "dmx"
+	| "visualization"
 	| "patch"
 	| "setup"
 	| "help"
@@ -71,6 +72,46 @@ export type DmxDotSize = "small" | "large";
 export type ChannelDisplayMode = "intensity" | "all";
 export type TextEditorMode = "plain" | "markdown" | "split";
 export type VirtualPlaybackPageMode = "follow_main" | "pinned";
+
+export type VisualizationWidgetSource =
+	| { kind: "raw_dmx"; universe: number; address: number }
+	| { kind: "fixture_attribute"; fixtureId: string; attribute: string };
+
+export type VisualizationWidgetType = "text" | "graph" | "bar" | "number";
+
+export interface VisualizationWidget {
+	id: string;
+	title: string;
+	type: VisualizationWidgetType;
+	source: VisualizationWidgetSource;
+	operation: "multiply" | "divide";
+	factor: number;
+	displayScale: "percent" | "dmx";
+	minimum: number;
+	maximum: number;
+	graph: {
+		timeWindowSeconds: number;
+		yScale: "linear" | "logarithmic";
+		filled: boolean;
+		lineLowColor: string;
+		lineHighColor: string;
+		fillLowColor: string;
+		fillHighColor: string;
+		yAxisName: string;
+	};
+	bar: { orientation: "horizontal" | "vertical" };
+	number: {
+		decimalPlaces: number;
+		unit: string;
+		lowColor: string;
+		highColor: string;
+	};
+}
+
+export interface VisualizationRow {
+	id: string;
+	widgets: VisualizationWidget[];
+}
 
 export interface GridRect {
 	x: number;
@@ -137,6 +178,7 @@ export interface PaneModel extends GridRect {
 	textEditorReadOnly?: boolean;
 	textEditorMode?: TextEditorMode;
 	channelDisplayMode?: ChannelDisplayMode;
+	visualizationRows?: VisualizationRow[];
 	textEditorView?: {
 		root: string;
 		path: string;

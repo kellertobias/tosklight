@@ -36,8 +36,8 @@ afterEach(() => {
 describe("Open Window categories", () => {
 	it("represents every pane exactly once with a description", () => {
 		const choices = windowCategories.flatMap(({ choices }) => choices);
-		expect(choices).toHaveLength(18);
-		expect(new Set(choices.map(({ kind }) => kind)).size).toBe(18);
+		expect(choices).toHaveLength(19);
+		expect(new Set(choices.map(({ kind }) => kind)).size).toBe(19);
 		expect(choices.every(({ description }) => description.length > 0)).toBe(
 			true,
 		);
@@ -72,6 +72,9 @@ describe("Open Window categories", () => {
 		expect(
 			availableWindowCategoryChoices("show").map(({ kind }) => kind),
 		).toContain("media");
+		expect(
+			availableWindowCategoryChoices("show").map(({ kind }) => kind),
+		).toContain("visualization");
 	});
 });
 

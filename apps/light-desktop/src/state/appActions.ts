@@ -6,6 +6,7 @@ import type {
 	TextEditorMode,
 	VirtualPlaybackExclusionZone,
 	VirtualPlaybackPageMode,
+	VisualizationRow,
 	WindowSettings,
 } from "../types";
 
@@ -57,6 +58,11 @@ export type Action =
 			mode: NonNullable<
 				AppState["desks"][number]["panes"][number]["channelDisplayMode"]
 			>;
+	  }
+	| {
+			type: "SET_PANE_VISUALIZATION_ROWS";
+			id: string;
+			rows: VisualizationRow[];
 	  }
 	| {
 			type: "SET_PANE_SCHEDULER_LAYOUT";

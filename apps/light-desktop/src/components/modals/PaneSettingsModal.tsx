@@ -32,6 +32,7 @@ import {
 	type CuePaneCuelistPlayback,
 	useCuePaneCuelistPlaybacks,
 } from "./cuePaneCuelistAuthority";
+import { VisualizationPaneSettings } from "./VisualizationPaneSettings";
 
 function VirtualPlaybackZoneEditor({
 	zone,
@@ -724,6 +725,12 @@ function paneSpecificTabs(
 			id: "running",
 			label: "Running",
 			content: <RunningPaneSettings pane={pane} />,
+		});
+	if (pane.kind === "visualization")
+		tabs.push({
+			id: "visualization",
+			label: "Visualization",
+			content: <VisualizationPaneSettings pane={pane} />,
 		});
 	if (pane.kind === "fixtures")
 		tabs.push({

@@ -103,6 +103,11 @@ export const windowCategories: readonly WindowChoiceCategory[] = [
 				title: "DMX output",
 				description: "Inspect live universe values and diagnostics.",
 			},
+			{
+				kind: "visualization",
+				title: "Visualization",
+				description: "Monitor DMX and fixture values as text, graphs, or bars.",
+			},
 		],
 	},
 	{
