@@ -53,13 +53,22 @@ pub struct LayerView {
     pub index: usize,
     pub address: AddressView,
     pub play_mode: String,
+    pub play_mode_dmx: u8,
     pub dimmer: f32,
     pub scale_x: f32,
     pub scale_y: f32,
+    pub scaling_mode: String,
     pub position_x: f32,
     pub position_y: f32,
     pub rotation: f32,
     pub grayscale: f32,
+    pub volume: f32,
+    pub tint_red: f32,
+    pub tint_green: f32,
+    pub tint_blue: f32,
+    pub speed_multiplier: String,
+    pub speed_multiplier_dmx: u8,
+    pub playback_bpm: Option<u8>,
     pub source_status: SourceStatusView,
     pub mask: MaskView,
     /// Whether this layer contributes pixels right now.
@@ -72,13 +81,32 @@ impl LayerView {
             index,
             address: AddressView::of(layer.address),
             play_mode: layer.play_mode.label().to_owned(),
+            play_mode_dmx: layer.play_mode.dmx_range().0,
             dimmer: layer.dimmer,
             scale_x: layer.scale_x,
             scale_y: layer.scale_y,
+            scaling_mode: match layer.scaling_mode {
+                media_domain::ScalingMode::Fit => "fit",
+                media_domain::ScalingMode::Fill => "fill",
+                media_domain::ScalingMode::Original => "original",
+                media_domain::ScalingMode::Stretch => "stretch",
+            }
+            .to_owned(),
             position_x: layer.position_x,
             position_y: layer.position_y,
             rotation: layer.rotation,
             grayscale: layer.grayscale,
+            volume: layer.volume,
+            tint_red: layer.tint.red,
+            tint_green: layer.tint.green,
+            tint_blue: layer.tint.blue,
+            speed_multiplier: layer.speed_multiplier.label(),
+            speed_multiplier_dmx: (0..=u8::MAX)
+                .find(|value| {
+                    media_domain::SpeedMultiplier::from_dmx(*value) == layer.speed_multiplier
+                })
+                .unwrap_or(127),
+            playback_bpm: layer.playback_bpm,
             source_status: SourceStatusView::of(layer.source_status),
             mask: MaskView::of(&layer.mask),
             drawing: layer.draws(),
@@ -464,6 +492,47 @@ pub struct UpdateLayer {
     pub file: Option<u8>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dimmer: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub play_mode_dmx: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scale_x: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scale_y: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scaling_mode: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub position_x: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub position_y: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rotation: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub volume: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tint_red: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tint_green: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tint_blue: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grayscale: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mask_folder: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mask_file: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mask_scale_x: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mask_scale_y: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mask_invert: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mask_opacity: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub speed_multiplier_dmx: Option<u8>,
+    /// Zero disables the per-layer BPM target; 1..=255 selects a target.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub playback_bpm: Option<u8>,
 }
 
 impl UpdateLayer {
@@ -487,6 +556,27 @@ impl UpdateLayer {
     pub const fn changes_address(&self) -> bool {
         self.folder.is_some() || self.file.is_some()
     }
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateMaster {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dimmer: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub volume: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tint_red: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tint_green: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tint_blue: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub flip_mirror: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mask_folder: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mask_file: Option<u8>,
 }
 
 #[cfg(test)]

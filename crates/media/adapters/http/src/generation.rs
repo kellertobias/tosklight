@@ -12,14 +12,14 @@ use ts_rs::{Config, TS};
 use crate::error::ApiErrorBody;
 use crate::wire::{
     AddressView, AudioBandsView, AudioPanelView, AudioSettingsView, AudioView, CatalogFolderView,
-    CatalogItemView, CatalogView, CreateText, DeleteText, DmxChannelGroupView, DmxChannelView,
-    DmxIngressView, DmxMapView, DmxPersonalityView, DmxResolutionView, DmxValueSetView, Health,
-    ImportJobView, ImportsView, LayerView, LogRecordView, LogsView, MaskView, MasterView,
-    NetworkAddressesView, NetworkView, OutputConfigurationView, OutputView, PendingImportView,
-    ServerLogLevelView, SourceStatusView, StartImport, TelemetryFrame, TextSlotView, TextStyleView,
-    UpdateAudio, UpdateLayer, UpdateLibraryFolder, UpdateLibraryItem, UpdateNetwork,
-    UpdateOutputConfiguration, UpdateServerLogLevel, UpdateText, UpdateVisualizer,
-    UploadAcceptedView, VisualizerParametersView, VisualizerView, WaveformView,
+    CatalogItemView, CatalogView, CreateText, DeleteText, DeskIdentityView, DmxChannelGroupView,
+    DmxChannelView, DmxIngressView, DmxMapView, DmxPersonalityView, DmxResolutionView,
+    DmxValueSetView, Health, ImportJobView, ImportsView, LayerView, LogRecordView, LogsView,
+    MaskView, MasterView, NetworkAddressesView, NetworkView, OutputConfigurationView, OutputView,
+    PendingImportView, ServerLogLevelView, SourceStatusView, StartImport, TelemetryFrame,
+    TextSlotView, TextStyleView, UpdateAudio, UpdateLayer, UpdateLibraryFolder, UpdateLibraryItem,
+    UpdateMaster, UpdateNetwork, UpdateOutputConfiguration, UpdateServerLogLevel, UpdateText,
+    UpdateVisualizer, UploadAcceptedView, VisualizerParametersView, VisualizerView, WaveformView,
 };
 
 const TYPESCRIPT_PATH: &str = "apps/media/src/shared/api/generated/media-wire.ts";
@@ -98,11 +98,13 @@ fn declarations(config: &Config) -> Vec<String> {
         PendingImportView::decl(config),
         ImportJobView::decl(config),
         ImportsView::decl(config),
+        DeskIdentityView::decl(config),
         TelemetryFrame::decl(config),
         LogRecordView::decl(config),
         LogsView::decl(config),
         ServerLogLevelView::decl(config),
         UpdateLayer::decl(config),
+        UpdateMaster::decl(config),
         UpdateOutputConfiguration::decl(config),
         UpdateVisualizer::decl(config),
         UpdateNetwork::decl(config),

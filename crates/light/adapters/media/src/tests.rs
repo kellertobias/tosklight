@@ -1,4 +1,17 @@
 use super::*;
+
+#[test]
+fn console_announcement_carries_the_active_show_as_a_peer_location() {
+    let message = console_announcement("The Tempest");
+    assert_eq!(&message[..4], b"CITP");
+    assert_eq!(&message[16..24], b"PINFPLoc");
+    assert!(message.windows(11).any(|window| window == b"The Tempest"));
+    assert!(
+        message
+            .windows(15)
+            .any(|window| window == b"LightingConsole")
+    );
+}
 use crate::protocol::{encode_packet, parse_thumbnail};
 use std::time::Duration;
 use tokio::{

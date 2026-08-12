@@ -12,7 +12,8 @@ use axum::response::{IntoResponse, Response};
 use media_application::MediaConfiguration;
 use media_application::configuration::{load, save};
 use media_domain::{
-    Applied, Command, CommandKind, CommandSource, MediaState, OutputId, Timestamp, apply,
+    Applied, Command, CommandKind, CommandSource, FlipMirror, LayerControls, MasterControls,
+    MediaAddress, MediaState, OutputId, ScalingMode, Timestamp, Tint, apply,
 };
 
 use crate::error::ApiError;
@@ -20,7 +21,8 @@ use crate::routes::ApiState;
 use crate::routes::edit::{self, Proceed};
 use crate::tolerant::TolerantJson;
 use crate::wire::{
-    DmxMapView, OutputConfigurationView, OutputView, UpdateLayer, UpdateOutputConfiguration,
+    DmxMapView, OutputConfigurationView, OutputView, UpdateLayer, UpdateMaster,
+    UpdateOutputConfiguration,
 };
 
 pub(super) async fn outputs(State(state): State<ApiState>) -> impl IntoResponse {
@@ -112,9 +114,6 @@ pub(super) async fn update_layer(
     let id = parse_output(&output)?;
     let now = (state.now)();
 
-    // Both halves of the update are separate commands, so a dimmer change never rewrites a
-    // selection and a selection change never rewrites a dimmer.
-    let mut commands = Vec::new();
     let current = {
         let media = state.state.load();
         let found = media.output(id).ok_or_else(|| unknown_output(id))?;
@@ -123,34 +122,200 @@ pub(super) async fn update_layer(
             .ok_or_else(|| {
                 ApiError::not_found("unknown-layer", format!("this output has no layer {layer}"))
             })?
-            .address
+            .clone()
     };
-
-    if body.changes_address() {
-        commands.push(CommandKind::SelectMedia {
+    for (name, value) in [
+        ("dimmer", body.dimmer),
+        ("volume", body.volume),
+        ("tintRed", body.tint_red),
+        ("tintGreen", body.tint_green),
+        ("tintBlue", body.tint_blue),
+        ("grayscale", body.grayscale),
+        ("maskOpacity", body.mask_opacity),
+    ] {
+        validate_unit(name, value)?;
+    }
+    for (name, value, minimum, maximum) in [
+        ("scaleX", body.scale_x, 0.0, 10.0),
+        ("scaleY", body.scale_y, 0.0, 10.0),
+        ("positionX", body.position_x, -2.0, 2.0),
+        ("positionY", body.position_y, -2.0, 2.0),
+        ("rotation", body.rotation, -360.0, 360.0),
+        ("maskScaleX", body.mask_scale_x, 0.0, 2.0),
+        ("maskScaleY", body.mask_scale_y, 0.0, 2.0),
+    ] {
+        validate_range(name, value, minimum, maximum)?;
+    }
+    let scaling_mode = body
+        .scaling_mode
+        .as_deref()
+        .map(parse_scaling_mode)
+        .transpose()?;
+    let tint = (body.tint_red.is_some() || body.tint_green.is_some() || body.tint_blue.is_some())
+        .then(|| {
+            Tint::new(
+                body.tint_red.unwrap_or(current.tint.red),
+                body.tint_green.unwrap_or(current.tint.green),
+                body.tint_blue.unwrap_or(current.tint.blue),
+            )
+        });
+    let mask_address = (body.mask_folder.is_some() || body.mask_file.is_some()).then(|| {
+        MediaAddress::new(
+            body.mask_folder.unwrap_or(current.mask.address.folder),
+            body.mask_file.unwrap_or(current.mask.address.file),
+        )
+    });
+    submit(
+        &state,
+        vec![CommandKind::SetLayerControls {
             output: id,
             layer,
-            address: body.address(current),
-        });
-    }
-    if let Some(dimmer) = body.dimmer {
-        if !dimmer.is_finite() || !(0.0..=1.0).contains(&dimmer) {
-            return Err(ApiError::bad_request(
-                "dimmer-out-of-range",
-                "dimmer must be between 0 and 1",
-            ));
-        }
-        commands.push(CommandKind::SetLayerDimmer {
-            output: id,
-            layer,
-            dimmer,
-        });
-    }
-
-    submit(&state, commands, now)?;
+            controls: Box::new(LayerControls {
+                address: body
+                    .changes_address()
+                    .then(|| body.address(current.address)),
+                play_mode: body.play_mode_dmx.map(media_domain::PlayMode::from_dmx),
+                scale_x: body.scale_x,
+                scale_y: body.scale_y,
+                scaling_mode,
+                position_x: body.position_x,
+                position_y: body.position_y,
+                rotation: body.rotation,
+                dimmer: body.dimmer,
+                volume: body.volume,
+                tint,
+                grayscale: body.grayscale,
+                mask_address,
+                mask_scale_x: body.mask_scale_x,
+                mask_scale_y: body.mask_scale_y,
+                mask_invert: body.mask_invert,
+                mask_opacity: body.mask_opacity,
+                speed_multiplier: body
+                    .speed_multiplier_dmx
+                    .map(media_domain::SpeedMultiplier::from_dmx),
+                playback_bpm: body.playback_bpm.map(|value| (value != 0).then_some(value)),
+            }),
+        }],
+        now,
+    )?;
     let media = state.state.load();
     let found = media.output(id).ok_or_else(|| unknown_output(id))?;
     Ok(axum::Json(view_of(&state, found, now)).into_response())
+}
+
+pub(super) async fn update_master(
+    State(state): State<ApiState>,
+    Path(output): Path<String>,
+    TolerantJson(body): TolerantJson<UpdateMaster>,
+) -> Result<Response, ApiError> {
+    let id = parse_output(&output)?;
+    let now = (state.now)();
+    let current = state
+        .state
+        .load()
+        .output(id)
+        .ok_or_else(|| unknown_output(id))?
+        .master;
+    for (name, value) in [
+        ("dimmer", body.dimmer),
+        ("volume", body.volume),
+        ("tintRed", body.tint_red),
+        ("tintGreen", body.tint_green),
+        ("tintBlue", body.tint_blue),
+    ] {
+        validate_unit(name, value)?;
+    }
+    let tint = (body.tint_red.is_some() || body.tint_green.is_some() || body.tint_blue.is_some())
+        .then(|| {
+            Tint::new(
+                body.tint_red.unwrap_or(current.tint.red),
+                body.tint_green.unwrap_or(current.tint.green),
+                body.tint_blue.unwrap_or(current.tint.blue),
+            )
+        });
+    let flip_mirror = body
+        .flip_mirror
+        .as_deref()
+        .map(parse_flip_mirror)
+        .transpose()?;
+    let mask = (body.mask_folder.is_some() || body.mask_file.is_some()).then(|| {
+        MediaAddress::new(
+            body.mask_folder.unwrap_or(current.mask.folder),
+            body.mask_file.unwrap_or(current.mask.file),
+        )
+    });
+    submit(
+        &state,
+        vec![CommandKind::SetMasterControls {
+            output: id,
+            controls: Box::new(MasterControls {
+                dimmer: body.dimmer,
+                volume: body.volume,
+                tint,
+                flip_mirror,
+                mask,
+            }),
+        }],
+        now,
+    )?;
+    let media = state.state.load();
+    let found = media.output(id).ok_or_else(|| unknown_output(id))?;
+    Ok(axum::Json(view_of(&state, found, now)).into_response())
+}
+
+fn validate_unit(name: &str, value: Option<f32>) -> Result<(), ApiError> {
+    if value.is_some_and(|value| !value.is_finite() || !(0.0..=1.0).contains(&value)) {
+        return Err(ApiError::bad_request(
+            if name == "dimmer" {
+                "dimmer-out-of-range"
+            } else {
+                "control-out-of-range"
+            },
+            format!("{name} must be between 0 and 1"),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_range(
+    name: &str,
+    value: Option<f32>,
+    minimum: f32,
+    maximum: f32,
+) -> Result<(), ApiError> {
+    if value.is_some_and(|value| !value.is_finite() || !(minimum..=maximum).contains(&value)) {
+        return Err(ApiError::bad_request(
+            "control-out-of-range",
+            format!("{name} must be between {minimum} and {maximum}"),
+        ));
+    }
+    Ok(())
+}
+
+fn parse_scaling_mode(value: &str) -> Result<ScalingMode, ApiError> {
+    match value {
+        "fit" => Ok(ScalingMode::Fit),
+        "fill" => Ok(ScalingMode::Fill),
+        "original" => Ok(ScalingMode::Original),
+        "stretch" => Ok(ScalingMode::Stretch),
+        _ => Err(ApiError::bad_request(
+            "unknown-scaling-mode",
+            "use fit, fill, original, or stretch",
+        )),
+    }
+}
+
+fn parse_flip_mirror(value: &str) -> Result<FlipMirror, ApiError> {
+    match value {
+        "none" => Ok(FlipMirror::None),
+        "horizontal" => Ok(FlipMirror::Horizontal),
+        "vertical" => Ok(FlipMirror::Vertical),
+        "both" => Ok(FlipMirror::Both),
+        _ => Err(ApiError::bad_request(
+            "unknown-flip-mirror",
+            "use none, horizontal, vertical, or both",
+        )),
+    }
 }
 
 /// Restarts a layer's media. A live-control action with no payload, so it is a `GET` an
@@ -203,7 +368,11 @@ pub(super) async fn set_playback_takeover(
     )?;
     let media = state.state.load();
     let found = media.output(id).ok_or_else(|| unknown_output(id))?;
-    Ok(axum::Json(view_of(&state, found, now)).into_response())
+    Ok((
+        [(header::CACHE_CONTROL, "no-store")],
+        axum::Json(view_of(&state, found, now)),
+    )
+        .into_response())
 }
 
 /// Applies commands through the reducer and publishes one new snapshot.
@@ -517,6 +686,47 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_layer_and_master_accept_the_network_equivalent_controls() {
+        let bench = bench();
+        let (_, layer) = send(
+            &bench.router,
+            post(format!("/api/v2/outputs/{}/layers/0/update", bench.output),
+                r#"{"playModeDmx":236,"scaleX":10,"scaleY":2,"scalingMode":"stretch","positionX":-2,"positionY":2,"rotation":360,"volume":0.4,"tintRed":0.2,"tintGreen":0.3,"tintBlue":0.4,"grayscale":0.5,"maskFolder":2,"maskFile":3,"maskScaleX":2,"maskScaleY":1.5,"maskInvert":true,"maskOpacity":0.8,"speedMultiplierDmx":255,"playbackBpm":120}"#),
+        ).await;
+        assert_eq!(layer["layers"][0]["playMode"], "Pause");
+        assert_eq!(layer["layers"][0]["scalingMode"], "stretch");
+        assert_eq!(layer["layers"][0]["speedMultiplier"], "16×");
+        assert_eq!(layer["layers"][0]["mask"]["address"]["file"], 3);
+
+        let (_, master) = send(
+            &bench.router,
+            post(format!("/api/v2/outputs/{}/master/update", bench.output),
+                r#"{"dimmer":0.4,"volume":0.5,"tintRed":0.6,"tintGreen":0.7,"tintBlue":0.8,"flipMirror":"both","maskFolder":4,"maskFile":5}"#),
+        ).await;
+        assert_eq!(master["master"]["flipMirror"], "both");
+        assert_eq!(master["master"]["mask"]["file"], 5);
+    }
+
+    #[tokio::test]
+    async fn an_invalid_control_range_publishes_none_of_the_update() {
+        let bench = bench();
+        let (status, body) = send(
+            &bench.router,
+            post(
+                format!("/api/v2/outputs/{}/layers/0/update", bench.output),
+                r#"{"dimmer":0.25,"scaleX":10.01}"#,
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(body["code"], "control-out-of-range");
+        assert_eq!(
+            bench.state.load().output(bench.output).unwrap().layers[0].dimmer,
+            1.0
+        );
+    }
+
+    #[tokio::test]
     async fn unknown_fields_are_accepted_rather_than_rejected() {
         let bench = bench();
         let (status, body) = send(
@@ -581,6 +791,34 @@ mod tests {
             bench.state.load().output(bench.output).unwrap().layers[0].reset_trigger_id,
             1
         );
+    }
+
+    #[tokio::test]
+    async fn takeover_and_release_are_get_actions_that_must_not_be_cached() {
+        let bench = bench();
+        for (mode, expected) in [("take-over", true), ("release", false)] {
+            let response = bench
+                .router
+                .clone()
+                .oneshot(get(format!(
+                    "/api/v2/outputs/{}/playback/{mode}",
+                    bench.output
+                )))
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
+            assert_eq!(
+                bench
+                    .state
+                    .load()
+                    .output(bench.output)
+                    .unwrap()
+                    .ownership
+                    .web_takeover,
+                expected
+            );
+        }
     }
 
     #[tokio::test]

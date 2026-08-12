@@ -2,7 +2,11 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { SwitchField } from "@tosklight/ui/controls";
 import { type ReactNode, useState } from "react";
 import { StatefulMediaStory } from "../../../light-desktop/src/windows/MediaPaneWindow.stories";
-import { LibraryBrowserView } from "../features/media-library/LibraryPage";
+import {
+	allocateFreeAddresses,
+	LibraryBrowserView,
+} from "../features/media-library/LibraryPage";
+import type { CatalogView } from "../shared/api/generated/media-wire";
 import {
 	DashboardScreen,
 	LibrariesSettings,
@@ -180,14 +184,172 @@ function Frame({
 }
 
 function StatefulLibrary() {
+	const [catalog, setCatalog] = useState<CatalogView>(storyCatalog);
 	return (
 		<Frame active="library">
 			<LibraryBrowserView
-				catalog={storyCatalog}
+				catalog={catalog}
 				thumbnailUrl={(_, file) => storyThumbnail(file)}
+				onRenameFolder={(folder, name) =>
+					setCatalog((current) => withStoryFolderName(current, folder, name))
+				}
+				onUpdateItem={(item, update) =>
+					setCatalog((current) => withStoryItem(current, item.id, update))
+				}
+				onMoveItems={(items, folder) =>
+					setCatalog((current) => moveStoryItems(current, items, folder))
+				}
+				onUpload={(files, folder) =>
+					setCatalog((current) => uploadStoryFiles(current, files, folder))
+				}
 			/>
 		</Frame>
 	);
+}
+
+function withStoryFolderName(
+	catalog: CatalogView,
+	folder: number,
+	name: string,
+): CatalogView {
+	const existing = catalog.folders.find((entry) => entry.folder === folder);
+	return {
+		...catalog,
+		folders: existing
+			? catalog.folders.map((entry) =>
+					entry.folder === folder ? { ...entry, name } : entry,
+				)
+			: [...catalog.folders, { folder, name, items: [] }],
+	};
+}
+
+function withStoryItem(
+	catalog: CatalogView,
+	id: string,
+	update: { name?: string; intrinsicBpm?: number | null },
+): CatalogView {
+	return {
+		...catalog,
+		folders: catalog.folders.map((folder) => ({
+			...folder,
+			items: folder.items.map((item) =>
+				item.id === id ? { ...item, ...update } : item,
+			),
+		})),
+	};
+}
+
+function moveStoryItems(
+	catalog: CatalogView,
+	items: CatalogView["folders"][number]["items"],
+	folder: number,
+): CatalogView {
+	if (
+		items.every((item) =>
+			catalog.folders
+				.find((entry) => entry.folder === folder)
+				?.items.some((candidate) => candidate.id === item.id),
+		)
+	)
+		return catalog;
+	const addresses = allocateFreeAddresses(catalog, folder, items);
+	const moving = new Set(items.map((item) => item.id));
+	const placements = new Map(
+		items.flatMap((item, index) => {
+			const address = addresses[index];
+			return address ? [[item.id, address] as const] : [];
+		}),
+	);
+	const folderNumbers = new Set([
+		...catalog.folders.map((entry) => entry.folder),
+		...addresses.map((address) => address.folder),
+	]);
+	return {
+		...catalog,
+		revision: catalog.revision + 1,
+		folders: [...folderNumbers]
+			.sort((left, right) => left - right)
+			.map((number) => {
+				const existing = catalog.folders.find(
+					(entry) => entry.folder === number,
+				);
+				const arrivals = items.flatMap((item) => {
+					const address = placements.get(item.id);
+					return address?.folder === number
+						? [{ ...item, file: address.file }]
+						: [];
+				});
+				return {
+					folder: number,
+					name: existing?.name ?? "",
+					items: [
+						...(existing?.items ?? []).filter((item) => !moving.has(item.id)),
+						...arrivals,
+					].sort((left, right) => left.file - right.file),
+				};
+			}),
+	};
+}
+
+function uploadStoryFiles(
+	catalog: CatalogView,
+	files: readonly File[],
+	folder: number,
+): CatalogView {
+	const addresses = allocateFreeAddresses(catalog, folder, [], files.length);
+	const additions = files.flatMap((file, index) => {
+		const address = addresses[index];
+		return address
+			? [
+					{
+						address,
+						item: {
+							id: `story-upload-${catalog.revision}-${index}`,
+							file: address.file,
+							name: file.name.replace(/\.[^.]+$/u, ""),
+							kind: file.type.startsWith("image/") ? "image" : "video",
+							width: 1920,
+							height: 1080,
+							frames: file.type.startsWith("image/") ? null : 1_800,
+							intrinsicBpm: null,
+						},
+					},
+				]
+			: [];
+	});
+	let next = catalog;
+	for (const addition of additions) {
+		const existing = next.folders.find(
+			(entry) => entry.folder === addition.address.folder,
+		);
+		next = {
+			...next,
+			folders: existing
+				? next.folders.map((entry) =>
+						entry.folder === addition.address.folder
+							? {
+									...entry,
+									items: [...entry.items, addition.item].sort(
+										(left, right) => left.file - right.file,
+									),
+								}
+							: entry,
+					)
+				: [
+						...next.folders,
+						{
+							folder: addition.address.folder,
+							name: "",
+							items: [addition.item],
+						},
+					],
+		};
+	}
+	return {
+		...next,
+		revision: catalog.revision + 1,
+		itemCount: catalog.itemCount + additions.length,
+	};
 }
 
 function storyThumbnail(file: number) {
@@ -238,7 +400,7 @@ const storyCatalog = {
 			})),
 		},
 	],
-} satisfies import("../shared/api/generated/media-wire").CatalogView;
+} satisfies CatalogView;
 
 function StatefulVisualizers() {
 	const [selected, setSelected] = useState("aurora");

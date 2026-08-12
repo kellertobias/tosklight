@@ -24,8 +24,8 @@ mod text;
 mod visualizer;
 
 pub use audio::{
-    AudioBandsView, AudioEditError, AudioPanelView, AudioSettingsView, AudioView, TelemetryFrame,
-    UpdateAudio, WaveformView,
+    AudioBandsView, AudioEditError, AudioPanelView, AudioSettingsView, AudioView, DeskIdentityView,
+    TelemetryFrame, UpdateAudio, WaveformView,
 };
 pub use catalog::{CatalogFolderView, CatalogItemView, CatalogView};
 pub use dmx::{
@@ -41,7 +41,7 @@ pub use logs::{LogRecordView, LogsView, ServerLogLevelView, UpdateServerLogLevel
 pub use network::{NetworkAddressesView, NetworkEditError, NetworkView, UpdateNetwork};
 pub use output::{
     LayerView, MaskView, MasterView, OutputConfigurationEditError, OutputConfigurationView,
-    OutputView, UpdateLayer, UpdateOutputConfiguration,
+    OutputView, UpdateLayer, UpdateMaster, UpdateOutputConfiguration,
 };
 pub use text::{CreateText, DeleteText, TextEditError, TextSlotView, TextStyleView, UpdateText};
 pub use visualizer::{UpdateVisualizer, VisualizerParametersView, VisualizerView};

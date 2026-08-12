@@ -38,7 +38,9 @@ pub use audio::{Analysis, BeatDetector, Tuning};
 pub use catalog::{CatalogError, CatalogFolder, CatalogItem, CatalogSnapshot, ItemKind};
 pub use clock::{MeasuredCadence, RenderClock};
 pub use color::{FlipMirror, Tint};
-pub use command::{Command, CommandKind, CommandSource, ControlOwnership, Timestamp};
+pub use command::{
+    Command, CommandKind, CommandSource, ControlOwnership, LayerControls, MasterControls, Timestamp,
+};
 pub use geometry::{LayerTransform, Point, Size};
 pub use layer::{LayerState, MaskSource, MaskState, ScalingMode, SourceFailure, SourceStatus};
 pub use master::MasterState;

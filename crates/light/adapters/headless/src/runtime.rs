@@ -19,6 +19,7 @@ mod help;
 mod http_router;
 #[path = "matter.rs"]
 mod matter;
+mod media_identity;
 mod output_scheduler;
 mod playback_service;
 mod playback_telemetry;

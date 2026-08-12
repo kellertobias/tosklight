@@ -15,7 +15,7 @@ use axum::extract::{State, WebSocketUpgrade};
 use axum::response::Response;
 
 use crate::routes::ApiState;
-use crate::wire::{AudioView, DmxIngressView, ImportJobView, TelemetryFrame};
+use crate::wire::{AudioView, DeskIdentityView, DmxIngressView, ImportJobView, TelemetryFrame};
 
 /// Twenty frames a second: fast enough that a beat reads as a flash, slow enough that a browser
 /// keeps up on a machine that is also compositing.
@@ -45,6 +45,9 @@ async fn push(mut socket: WebSocket, state: ApiState) {
                     audio: AudioView::of(&(state.diagnostics.audio)()),
                     imports: jobs.iter().map(ImportJobView::of).collect(),
                     dmx: (state.diagnostics.dmx)().iter().map(DmxIngressView::of).collect(),
+                    desk_identity: (state.diagnostics.desk_identity)()
+                        .as_ref()
+                        .map(DeskIdentityView::of),
                 };
                 let Ok(serialized) = serde_json::to_string(&frame) else {
                     continue;

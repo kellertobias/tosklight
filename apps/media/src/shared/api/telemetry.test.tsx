@@ -29,7 +29,9 @@ function Meter() {
 	return (
 		<p>
 			{connected ? "connected" : "not connected"} ·{" "}
-			{frame ? `${frame.audio.bpm} BPM` : "no frame"}
+			{frame
+				? `${frame.audio.bpm} BPM${frame.deskIdentity ? ` · ${frame.deskIdentity.showName}` : ""}`
+				: "no frame"}
 		</p>
 	);
 }
@@ -50,11 +52,18 @@ describe("pushed telemetry", () => {
 		act(() => socket.onopen?.());
 		act(() =>
 			socket.onmessage?.({
-				data: JSON.stringify({ audio: { bpm: 128, capturing: true } }),
+				data: JSON.stringify({
+					audio: { bpm: 128, capturing: true },
+					deskIdentity: { showName: "The Tempest" },
+				}),
 			}),
 		);
 
-		await waitFor(() => expect(screen.getByText(/connected · 128 BPM/u)).toBeInTheDocument());
+		await waitFor(() =>
+			expect(
+				screen.getByText(/connected · 128 BPM · The Tempest/u),
+			).toBeInTheDocument(),
+		);
 	});
 
 	it("reports a dropped socket rather than leaving a meter looking live", async () => {
@@ -62,10 +71,14 @@ describe("pushed telemetry", () => {
 		render(<Meter />);
 		const socket = FakeSocket.opened[0];
 		act(() => socket.onopen?.());
-		await waitFor(() => expect(screen.getByText(/^connected/u)).toBeInTheDocument());
+		await waitFor(() =>
+			expect(screen.getByText(/^connected/u)).toBeInTheDocument(),
+		);
 
 		act(() => socket.close());
-		await waitFor(() => expect(screen.getByText(/^not connected/u)).toBeInTheDocument());
+		await waitFor(() =>
+			expect(screen.getByText(/^not connected/u)).toBeInTheDocument(),
+		);
 	});
 
 	it("survives a frame it cannot read", async () => {

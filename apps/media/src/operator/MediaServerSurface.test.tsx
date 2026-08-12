@@ -48,7 +48,7 @@ describe("the Media Server operator surface", () => {
 		).not.toBeInTheDocument();
 
 		await userEvent.click(
-		within(destinations).getByRole("button", { name: /Playback/ }),
+			within(destinations).getByRole("button", { name: /Playback/ }),
 		);
 		expect(navigate).toHaveBeenCalledWith("media");
 	});
@@ -68,5 +68,22 @@ describe("the Media Server operator surface", () => {
 				.getAllByRole("radio")
 				.map((button) => button.textContent),
 		).toEqual(MEDIA_SETTINGS_SECTIONS.map((section) => section.label));
+	});
+
+	it("identifies the connected Light Desk by its active show", () => {
+		render(
+			<MediaServerShell
+				active="dashboard"
+				connected
+				instance="Media Server 1"
+				showName="The Tempest"
+				now={new Date("2026-08-12T20:42:00Z")}
+				onNavigate={vi.fn()}
+			>
+				<p>Current screen</p>
+			</MediaServerShell>,
+		);
+
+		expect(screen.getByText("Light Desk · The Tempest")).toBeInTheDocument();
 	});
 });

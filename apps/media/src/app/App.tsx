@@ -2,19 +2,21 @@
 //
 // Pages compose features. Nothing here converts a protocol or holds a state machine.
 
-import { useEffect, useState } from "react";
 import { WindowFrame } from "@tosklight/ui/window-kit";
+import { useEffect, useState } from "react";
 import { DashboardPage } from "../features/dashboard/DashboardPage";
 import { MediaPanePage } from "../features/layers/MediaPanePage";
 import { LibraryPage } from "../features/media-library/LibraryPage";
 import { SettingsPage } from "../features/settings/SettingsPage";
 import { TextSourcesPage } from "../features/text-sources/TextSourcesPage";
 import { VisualizersPage } from "../features/visualizers/VisualizersPage";
+import { DeskIdentityProvider } from "../operator/DeskIdentityContext";
 import {
 	type MediaServerSection,
 	MediaServerShell,
 } from "../operator/MediaServerSurface";
 import { useHealth } from "../shared/api/queries";
+import { useTelemetry } from "../shared/api/telemetry";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { ROUTES, type RoutePath } from "./routes";
 import { useRouter } from "./useRouter";
@@ -43,8 +45,11 @@ const SECTION_BY_PATH: Record<RoutePath, MediaServerSection> = {
 export function App() {
 	const { path, navigate, headingRef } = useRouter();
 	const health = useHealth(HEALTH_POLL_MS);
+	const telemetry = useTelemetry();
+	const showName = telemetry.frame?.deskIdentity?.showName;
 	const Page = PAGES[path];
-	const route = ROUTES.find((candidate) => candidate.path === path) ?? ROUTES[0];
+	const route =
+		ROUTES.find((candidate) => candidate.path === path) ?? ROUTES[0];
 	const pageOwnsWindow = path === "/media" || path === "/library";
 	const [now, setNow] = useState(() => new Date());
 	useEffect(() => {
@@ -57,6 +62,7 @@ export function App() {
 			active={SECTION_BY_PATH[path]}
 			connected={health.data !== undefined && health.failure === undefined}
 			instance={health.data?.instance}
+			showName={showName}
 			now={now}
 			onNavigate={(section) => {
 				const route = ROUTES.find(
@@ -65,21 +71,26 @@ export function App() {
 				if (route) navigate(route.path);
 			}}
 		>
-			<div ref={headingRef} tabIndex={-1} className="media-route-surface">
-				<ErrorBoundary key={path}>
-					{pageOwnsWindow ? (
-						<Page />
-					) : (
-						<WindowFrame
-							title={route.label}
-							info={{ primary: "Media Server", secondary: "Operator controls" }}
-							className="media-route-window"
-						>
+			<DeskIdentityProvider showName={showName}>
+				<div ref={headingRef} tabIndex={-1} className="media-route-surface">
+					<ErrorBoundary key={path}>
+						{pageOwnsWindow ? (
 							<Page />
-						</WindowFrame>
-					)}
-				</ErrorBoundary>
-			</div>
+						) : (
+							<WindowFrame
+								title={route.label}
+								info={{
+									primary: "Media Server",
+									secondary: "Operator controls",
+								}}
+								className="media-route-window"
+							>
+								<Page />
+							</WindowFrame>
+						)}
+					</ErrorBoundary>
+				</div>
+			</DeskIdentityProvider>
 		</MediaServerShell>
 	);
 }

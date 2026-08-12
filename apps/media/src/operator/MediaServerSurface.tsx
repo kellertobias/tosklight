@@ -1,10 +1,6 @@
 import { OperatorDestinationList } from "@tosklight/ui/application";
 import { Button } from "@tosklight/ui/controls";
-import {
-	SelectionList,
-	WindowFrame,
-	WindowHeader,
-} from "@tosklight/ui/window-kit";
+import { SelectionList, WindowHeader } from "@tosklight/ui/window-kit";
 import type { ReactNode } from "react";
 
 export const MEDIA_SERVER_SECTIONS = [
@@ -22,6 +18,7 @@ export function MediaServerShell({
 	active,
 	connected,
 	instance,
+	showName,
 	now,
 	children,
 	onNavigate,
@@ -29,6 +26,7 @@ export function MediaServerShell({
 	active: MediaServerSection;
 	connected: boolean;
 	instance?: string;
+	showName?: string;
 	now: Date;
 	children: ReactNode;
 	onNavigate?: (section: MediaServerSection) => void;
@@ -66,7 +64,11 @@ export function MediaServerShell({
 				>
 					<span aria-hidden="true" />
 					<strong>{connected ? "Connected" : "Offline"}</strong>
-					<small>{instance ?? "Media Server"}</small>
+					<small>
+						{showName
+							? `Light Desk · ${showName}`
+							: (instance ?? "Media Server")}
+					</small>
 				</div>
 			</aside>
 			<main className="media-operator-workspace">{children}</main>

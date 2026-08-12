@@ -7,10 +7,12 @@ surface, resolution, presentation rate, DMX personality, protocol, universe, and
 
 The administration interface is served by the Media Server itself. Open the address configured as
 **This interface**. Its left dock follows the Light Desk operator language: the Media Server mark
-and current time are followed by **Dashboard**, **Media**, **Library**, **Visualizers**, **Text**,
-and **Settings**. Those are the only built-ins in this interface. The connection indicator names
-the server instance and changes if live telemetry is lost. On the Light Desk, the show identity at
-the top of its own dock continues to name the active show when a Media Server is connected.
+and current time are followed by **Dashboard**, **Playback**, **Library**, **Visualizers**, **Text**,
+and **Settings**. Those are the only built-ins in this interface. The connection indicator changes
+if live telemetry is lost. While a Light Desk is connected, its active show name appears in that
+indicator and on the Dashboard. If the desk stops announcing itself, the name disappears instead
+of leaving a stale show identity behind. The Light Desk's own dock continues to name the active
+show as usual.
 
 ## Start and configure the server
 

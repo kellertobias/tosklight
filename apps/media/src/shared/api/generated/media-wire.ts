@@ -28,7 +28,7 @@ source: string,
  * Whether it is currently shaping the layer at all.
  */
 active: boolean, };
-export type LayerView = { index: number, address: AddressView, playMode: string, dimmer: number, scaleX: number, scaleY: number, positionX: number, positionY: number, rotation: number, grayscale: number, sourceStatus: SourceStatusView, mask: MaskView,
+export type LayerView = { index: number, address: AddressView, playMode: string, playModeDmx: number, dimmer: number, scaleX: number, scaleY: number, scalingMode: string, positionX: number, positionY: number, rotation: number, grayscale: number, volume: number, tintRed: number, tintGreen: number, tintBlue: number, speedMultiplier: string, speedMultiplierDmx: number, playbackBpm: number | null, sourceStatus: SourceStatusView, mask: MaskView,
 /**
  * Whether this layer contributes pixels right now.
  */
@@ -247,6 +247,7 @@ export type ImportsView = { pending: Array<PendingImportView>, jobs: Array<Impor
  * without it should say so before an operator queues forty clips that will all fail.
  */
 canImport: boolean, };
+export type DeskIdentityView = { showName: string, };
 export type TelemetryFrame = { audio: AudioView,
 /**
  * Every import this run has seen. Pushed rather than polled for the same reason as the
@@ -256,7 +257,11 @@ imports: Array<ImportJobView>,
 /**
  * Winning, protocol-aware DMX ingress. Volatile state is pushed, never polled.
  */
-dmx: Array<DmxIngressView>, };
+dmx: Array<DmxIngressView>,
+/**
+ * The current show name published by the connected Light Desk over CITP discovery.
+ */
+deskIdentity: DeskIdentityView | null, };
 export type LogRecordView = {
 /**
  * Monotonically increasing, so a viewer asks for everything after what it already holds.
@@ -280,7 +285,12 @@ export type ServerLogLevelView = { level: string,
  * This is always true: the maintainer chose parity with the reference's runtime-only control.
  */
 resetsOnRestart: boolean, };
-export type UpdateLayer = { folder?: number | null, file?: number | null, dimmer?: number | null, };
+export type UpdateLayer = { folder?: number | null, file?: number | null, dimmer?: number | null, playModeDmx?: number | null, scaleX?: number | null, scaleY?: number | null, scalingMode?: string | null, positionX?: number | null, positionY?: number | null, rotation?: number | null, volume?: number | null, tintRed?: number | null, tintGreen?: number | null, tintBlue?: number | null, grayscale?: number | null, maskFolder?: number | null, maskFile?: number | null, maskScaleX?: number | null, maskScaleY?: number | null, maskInvert?: boolean | null, maskOpacity?: number | null, speedMultiplierDmx?: number | null,
+/**
+ * Zero disables the per-layer BPM target; 1..=255 selects a target.
+ */
+playbackBpm?: number | null, };
+export type UpdateMaster = { dimmer?: number | null, volume?: number | null, tintRed?: number | null, tintGreen?: number | null, tintBlue?: number | null, flipMirror?: string | null, maskFolder?: number | null, maskFile?: number | null, };
 export type UpdateOutputConfiguration = { requestId: string, targetKind?: string | null, monitorBy?: string | null, monitorValue?: string | null, fullscreen?: boolean | null, width?: number | null, height?: number | null, presentation?: string | null, framesPerSecond?: number | null, personality?: string | null, protocol?: string | null, universe?: number | null, startAddress?: number | null, };
 export type UpdateVisualizer = {
 /**

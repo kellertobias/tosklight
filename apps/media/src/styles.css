@@ -117,6 +117,31 @@ body {
 	gap: 1.25rem;
 }
 
+.media-desk-identity {
+	display: grid;
+	grid-template-columns: auto 1fr;
+	gap: 0.15rem 0.75rem;
+	align-items: baseline;
+	padding: 0.75rem 1rem;
+	border: 1px solid var(--line);
+	border-left: 3px solid var(--amber);
+	border-radius: 8px;
+	background: var(--panel);
+}
+
+.media-desk-identity.is-connected {
+	border-left-color: var(--green);
+}
+
+.media-desk-identity span {
+	font-weight: 600;
+}
+
+.media-desk-identity small {
+	grid-column: 2;
+	color: var(--muted);
+}
+
 .media-state {
 	margin: 0;
 	padding: 0.75rem 1rem;

@@ -5,7 +5,7 @@
 //! is left here is carrying bytes and answering from the live catalog and state.
 
 use std::net::{Ipv4Addr, SocketAddr};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use media_application::MediaConfiguration;
 use media_citp::message::{LibraryElement, LibraryFolder, Thumbnail, ThumbnailRequest};
@@ -26,6 +26,45 @@ const ANNOUNCE_INTERVAL: std::time::Duration = std::time::Duration::from_secs(5)
 const STATUS_INTERVAL: std::time::Duration = std::time::Duration::from_millis(250);
 /// A console that sends more than this without a complete message is not talking CITP.
 const READ_BUFFER: usize = 8192;
+const CONSOLE_IDENTITY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
+
+/// The most recent running Light Desk identity received over CITP discovery.
+#[derive(Clone, Default)]
+pub struct ConsoleIdentity {
+    latest: Arc<Mutex<Option<(String, std::time::Instant)>>>,
+}
+
+impl ConsoleIdentity {
+    fn observe(&self, message: &media_citp::Message) {
+        let Some(peer) = media_citp::read_peer_location(message) else {
+            return;
+        };
+        if peer.kind != "LightingConsole" || peer.state != "Running" || peer.name.trim().is_empty()
+        {
+            return;
+        }
+        if let Ok(mut latest) = self.latest.lock() {
+            *latest = Some((peer.name, std::time::Instant::now()));
+        }
+    }
+
+    fn observe_datagram(&self, datagram: &[u8]) {
+        let mut bytes = datagram.to_vec();
+        if let Ok(messages) = packet::take_messages(&mut bytes) {
+            for message in messages {
+                self.observe(&message);
+            }
+        }
+    }
+
+    pub fn snapshot(&self) -> Option<media_http::DeskIdentityTelemetry> {
+        let latest = self.latest.lock().ok()?;
+        let (show_name, seen) = latest.as_ref()?;
+        (seen.elapsed() < CONSOLE_IDENTITY_TIMEOUT).then(|| media_http::DeskIdentityTelemetry {
+            show_name: show_name.clone(),
+        })
+    }
+}
 
 /// The library, answered from the published catalog and the thumbnails on disk.
 struct PublishedLibrary {
@@ -199,6 +238,7 @@ pub fn spawn(
     catalog: SharedCatalog,
     preview: crate::preview::SharedPreview,
     shutdown: Shutdown,
+    console_identity: ConsoleIdentity,
 ) {
     let listen = configuration.network.resolved().citp_listen;
     let service = Service {
@@ -213,13 +253,23 @@ pub fn spawn(
             .first()
             .map_or(8, |output| output.personality.layer_count().min(255) as u8),
     };
-    tokio::spawn(announce(service.clone(), shutdown.clone()));
+    tokio::spawn(announce(
+        service.clone(),
+        shutdown.clone(),
+        console_identity,
+        listen,
+    ));
     tokio::spawn(listen_for_consoles(service, listen, shutdown));
 }
 
 /// Announces this server, and answers a console that announced itself.
-async fn announce(service: Service, shutdown: Shutdown) {
-    let socket = match UdpSocket::bind(SocketAddr::from((Ipv4Addr::UNSPECIFIED, 0))).await {
+async fn announce(
+    service: Service,
+    shutdown: Shutdown,
+    console_identity: ConsoleIdentity,
+    listen: SocketAddr,
+) {
+    let socket = match UdpSocket::bind(listen).await {
         Ok(socket) => socket,
         Err(error) => {
             tracing::error!(%error, "CITP discovery could not open a socket; consoles will not find this server");
@@ -233,6 +283,7 @@ async fn announce(service: Service, shutdown: Shutdown) {
     let group = SocketAddr::from((Ipv4Addr::from(MULTICAST_GROUP), media_citp::CITP_PORT));
     let announcement = media_citp::announcement(&service.name, service.listening_port);
     let mut ticker = tokio::time::interval(ANNOUNCE_INTERVAL);
+    let mut buffer = vec![0_u8; READ_BUFFER];
     let mut watcher = shutdown.watcher();
     let mut stopping = Box::pin(watcher.wait());
 
@@ -241,6 +292,14 @@ async fn announce(service: Service, shutdown: Shutdown) {
             _ = ticker.tick() => {
                 if let Err(error) = socket.send_to(&announcement, group).await {
                     tracing::debug!(%error, "CITP announcement could not be sent");
+                }
+            }
+            received = socket.recv_from(&mut buffer) => {
+                match received {
+                    Ok((count, _)) => {
+                        console_identity.observe_datagram(&buffer[..count]);
+                    }
+                    Err(error) => tracing::debug!(%error, "CITP discovery datagram could not be read"),
                 }
             }
             _ = &mut stopping => return,
@@ -411,5 +470,44 @@ mod tests {
         let mut jpeg = vec![0xFF, 0xD8, 0xFF, 0xC4, 0x00, 0x06, 1, 2, 3, 4];
         jpeg.extend_from_slice(&tiny_jpeg()[2..]);
         assert_eq!(jpeg_size(&jpeg), Some((16, 8)));
+    }
+
+    #[tokio::test]
+    async fn a_light_console_udp_announcement_identifies_its_active_show() {
+        let receiver = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let sender = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let announcement = media_citp::peer_location(&media_citp::Presence {
+            listening_port: 0,
+            kind: "LightingConsole",
+            name: "The Tempest",
+            state: "Running",
+        });
+
+        sender
+            .send_to(&announcement, receiver.local_addr().unwrap())
+            .await
+            .unwrap();
+        let mut buffer = [0_u8; 512];
+        let (count, _) = receiver.recv_from(&mut buffer).await.unwrap();
+        let identity = ConsoleIdentity::default();
+        identity.observe_datagram(&buffer[..count]);
+
+        assert_eq!(
+            identity.snapshot(),
+            Some(media_http::DeskIdentityTelemetry {
+                show_name: "The Tempest".to_owned(),
+            })
+        );
+    }
+
+    #[test]
+    fn a_stale_console_announcement_is_not_reported_as_connected() {
+        let identity = ConsoleIdentity::default();
+        *identity.latest.lock().unwrap() = Some((
+            "Closed show".to_owned(),
+            std::time::Instant::now() - CONSOLE_IDENTITY_TIMEOUT,
+        ));
+
+        assert_eq!(identity.snapshot(), None);
     }
 }

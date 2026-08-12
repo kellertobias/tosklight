@@ -13,9 +13,46 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 
 use crate::address::MediaAddress;
-use crate::layer::SourceStatus;
+use crate::color::{FlipMirror, Tint};
+use crate::layer::{ScalingMode, SourceStatus};
 use crate::output::OutputId;
 use crate::personality::decode::DecodedFrame;
+use crate::playback::PlayMode;
+use crate::speed::SpeedMultiplier;
+
+/// An intent-shaped web edit of the values the network personality controls on one layer.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct LayerControls {
+    pub address: Option<MediaAddress>,
+    pub play_mode: Option<PlayMode>,
+    pub scale_x: Option<f32>,
+    pub scale_y: Option<f32>,
+    pub scaling_mode: Option<ScalingMode>,
+    pub position_x: Option<f32>,
+    pub position_y: Option<f32>,
+    pub rotation: Option<f32>,
+    pub dimmer: Option<f32>,
+    pub volume: Option<f32>,
+    pub tint: Option<Tint>,
+    pub grayscale: Option<f32>,
+    pub mask_address: Option<MediaAddress>,
+    pub mask_scale_x: Option<f32>,
+    pub mask_scale_y: Option<f32>,
+    pub mask_invert: Option<bool>,
+    pub mask_opacity: Option<f32>,
+    pub speed_multiplier: Option<SpeedMultiplier>,
+    pub playback_bpm: Option<Option<u8>>,
+}
+
+/// An intent-shaped edit of the master values at the end of the network personality.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct MasterControls {
+    pub dimmer: Option<f32>,
+    pub volume: Option<f32>,
+    pub tint: Option<Tint>,
+    pub flip_mirror: Option<FlipMirror>,
+    pub mask: Option<MediaAddress>,
+}
 
 /// How long external DMX keeps ownership after its last packet.
 ///
@@ -105,6 +142,15 @@ pub enum CommandKind {
         layer: usize,
         dimmer: f32,
     },
+    SetLayerControls {
+        output: OutputId,
+        layer: usize,
+        controls: Box<LayerControls>,
+    },
+    SetMasterControls {
+        output: OutputId,
+        controls: Box<MasterControls>,
+    },
     /// Restart the media on one layer without changing its address.
     ResetLayer { output: OutputId, layer: usize },
     /// Gives or releases the Media Server web operator priority over external DMX.
@@ -124,6 +170,8 @@ impl CommandKind {
             Self::SetDmxFrame { output, .. }
             | Self::SelectMedia { output, .. }
             | Self::SetLayerDimmer { output, .. }
+            | Self::SetLayerControls { output, .. }
+            | Self::SetMasterControls { output, .. }
             | Self::ResetLayer { output, .. }
             | Self::TakeOverPlayback { output, .. }
             | Self::ReportSourceStatus { output, .. } => *output,
@@ -137,7 +185,11 @@ impl CommandKind {
     pub const fn is_continuously_controlled(&self) -> bool {
         matches!(
             self,
-            Self::SetDmxFrame { .. } | Self::SelectMedia { .. } | Self::SetLayerDimmer { .. }
+            Self::SetDmxFrame { .. }
+                | Self::SelectMedia { .. }
+                | Self::SetLayerDimmer { .. }
+                | Self::SetLayerControls { .. }
+                | Self::SetMasterControls { .. }
         )
     }
 }

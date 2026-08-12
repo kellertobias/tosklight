@@ -150,12 +150,16 @@ pub fn router(state: ApiState) -> Router {
         .route("/api/v2/outputs/{output}/state", get(outputs::output_state))
         .route(
             "/api/v2/outputs/{output}/playback/{mode}",
-            post(outputs::set_playback_takeover),
+            get(outputs::set_playback_takeover),
         )
         .route("/api/v2/outputs/{output}/dmx-map", get(outputs::dmx_map))
         .route(
             "/api/v2/outputs/{output}/layers/{layer}/update",
             post(outputs::update_layer),
+        )
+        .route(
+            "/api/v2/outputs/{output}/master/update",
+            post(outputs::update_master),
         )
         .route(
             "/api/v2/outputs/{output}/layers/{layer}/reset",

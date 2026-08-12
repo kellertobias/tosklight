@@ -134,6 +134,70 @@ pub fn apply(state: &mut MediaState, command: &Command) -> Applied {
             };
             changed_or_not(replace(&mut target.dimmer, dimmer.clamp(0.0, 1.0)))
         }
+        CommandKind::SetLayerControls {
+            layer, controls, ..
+        } => {
+            let Some(target) = output.layers.get_mut(*layer) else {
+                return Applied::RejectedUnknownLayer;
+            };
+            let mut changed = false;
+            macro_rules! assign {
+                ($field:ident) => {
+                    if let Some(value) = controls.$field {
+                        changed |= replace(&mut target.$field, value);
+                    }
+                };
+            }
+            assign!(address);
+            assign!(play_mode);
+            assign!(scale_x);
+            assign!(scale_y);
+            assign!(scaling_mode);
+            assign!(position_x);
+            assign!(position_y);
+            assign!(rotation);
+            assign!(dimmer);
+            assign!(volume);
+            assign!(tint);
+            assign!(grayscale);
+            assign!(speed_multiplier);
+            assign!(playback_bpm);
+            if let Some(value) = controls.mask_address {
+                changed |= replace(&mut target.mask.address, value);
+            }
+            if let Some(value) = controls.mask_scale_x {
+                changed |= replace(&mut target.mask.scale_x, value);
+            }
+            if let Some(value) = controls.mask_scale_y {
+                changed |= replace(&mut target.mask.scale_y, value);
+            }
+            if let Some(value) = controls.mask_invert {
+                changed |= replace(&mut target.mask.invert, value);
+            }
+            if let Some(value) = controls.mask_opacity {
+                changed |= replace(&mut target.mask.opacity, value);
+            }
+            changed_or_not(changed)
+        }
+        CommandKind::SetMasterControls { controls, .. } => {
+            let mut next: MasterState = output.master;
+            if let Some(value) = controls.dimmer {
+                next.dimmer = value;
+            }
+            if let Some(value) = controls.volume {
+                next.volume = value;
+            }
+            if let Some(value) = controls.tint {
+                next.tint = value;
+            }
+            if let Some(value) = controls.flip_mirror {
+                next.flip_mirror = value;
+            }
+            if let Some(value) = controls.mask {
+                next.mask = value;
+            }
+            changed_or_not(replace(&mut output.master, next))
+        }
         CommandKind::ResetLayer { layer, .. } => {
             let Some(target) = output.layers.get_mut(*layer) else {
                 return Applied::RejectedUnknownLayer;

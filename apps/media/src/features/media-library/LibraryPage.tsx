@@ -6,13 +6,12 @@ import {
 } from "@tosklight/ui/pools";
 import { WindowFrame, WindowScrollArea } from "@tosklight/ui/window-kit";
 import {
-	type DragEvent,
 	type MouseEvent,
+	type ReactNode,
 	useEffect,
 	useMemo,
 	useRef,
 	useState,
-	type ReactNode,
 } from "react";
 import { api } from "../../shared/api/client";
 import { requestId, useEditing } from "../../shared/api/editing";
@@ -54,56 +53,93 @@ export function LibraryPage() {
 					api.updateLibraryFolder(folder, { requestId: requestId(), name }),
 				)
 			}
-			onRenameItem={(item, name) =>
-				editing.save(() =>
-					api.updateLibraryItem(item.id, {
-						requestId: requestId(),
-						name,
-						swap: false,
-					}),
-				)
-			}
-			onSetBpm={(item, intrinsicBpm) =>
-				editing.save(() =>
-					api.updateLibraryItem(item.id, {
-						requestId: requestId(),
-						intrinsicBpm,
-						swap: false,
-					}),
-				)
+			onUpdateItem={(item, update) =>
+				editing.save(async () => {
+					try {
+						if (update.name !== undefined) {
+							await api.updateLibraryItem(item.id, {
+								requestId: requestId(),
+								name: update.name,
+								swap: false,
+							});
+						}
+						if (update.intrinsicBpm !== undefined) {
+							await api.updateLibraryItem(item.id, {
+								requestId: requestId(),
+								intrinsicBpm: update.intrinsicBpm,
+								swap: false,
+							});
+						}
+					} catch (error) {
+						// Both wire intents belong to one Save action. If the first was
+						// accepted, refresh before showing a refusal from the second.
+						catalog.reload();
+						throw error;
+					}
+				})
 			}
 			onMoveItems={async (items, folder) => {
+				const currentCatalog = catalog.data;
+				if (!currentCatalog) return;
+				if (
+					items.every((item) =>
+						currentCatalog.folders
+							.find((entry) => entry.folder === folder)
+							?.items.some((candidate) => candidate.id === item.id),
+					)
+				)
+					return;
 				await editing.save(async () => {
-					const addresses = allocateFreeAddresses(catalog.data!, folder, items);
-					for (const [index, item] of items.entries()) {
-						const destination = addresses[index];
-						if (!destination) throw new Error("No free media address remains.");
-						await api.updateLibraryItem(item.id, {
-							requestId: requestId(),
-							...destination,
-							swap: false,
-						});
+					const addresses = allocateFreeAddresses(
+						currentCatalog,
+						folder,
+						items,
+					);
+					try {
+						for (const [index, item] of items.entries()) {
+							const destination = addresses[index];
+							if (!destination)
+								throw new Error("No free media address remains.");
+							await api.updateLibraryItem(item.id, {
+								requestId: requestId(),
+								...destination,
+								swap: false,
+							});
+						}
+					} catch (error) {
+						// A server can accept an earlier move before refusing a later one.
+						// Re-read before the operator retries so allocation never uses stale slots.
+						catalog.reload();
+						throw error;
 					}
 				});
 			}}
 			onUpload={async (files, folder) => {
+				const currentCatalog = catalog.data;
+				if (!currentCatalog) return;
 				await editing.save(async () => {
 					const addresses = allocateFreeAddresses(
-						catalog.data!,
+						currentCatalog,
 						folder,
 						[],
 						files.length,
 					);
-					for (const [index, media] of files.entries()) {
-						const destination = addresses[index];
-						if (!destination) throw new Error("No free media address remains.");
-						await api.uploadLibraryItem(
-							destination.folder,
-							destination.file,
-							requestId(),
-							media.name.replace(/\.[^.]+$/u, ""),
-							media,
-						);
+					try {
+						for (const [index, media] of files.entries()) {
+							const destination = addresses[index];
+							if (!destination)
+								throw new Error("No free media address remains.");
+							await api.uploadLibraryItem(
+								destination.folder,
+								destination.file,
+								requestId(),
+								media.name.replace(/\.[^.]+$/u, ""),
+								media,
+							);
+						}
+					} catch (error) {
+						catalog.reload();
+						throw error;
 					}
 				});
 			}}
@@ -116,17 +152,13 @@ export interface LibraryBrowserViewProps {
 	busy?: boolean;
 	failure?: string;
 	onDismissFailure?: () => void;
-	onRenameFolder?: (folder: number, name: string) => Promise<unknown> | void;
-	onRenameItem?: (item: CatalogItem, name: string) => Promise<unknown> | void;
-	onSetBpm?: (item: CatalogItem, bpm: number | null) => Promise<unknown> | void;
-	onMoveItems?: (
-		items: CatalogItem[],
-		folder: number,
-	) => Promise<unknown> | void;
-	onUpload?: (
-		files: readonly File[],
-		folder: number,
-	) => Promise<unknown> | void;
+	onRenameFolder?: (folder: number, name: string) => void;
+	onUpdateItem?: (
+		item: CatalogItem,
+		update: { name?: string; intrinsicBpm?: number | null },
+	) => void;
+	onMoveItems?: (items: CatalogItem[], folder: number) => void;
+	onUpload?: (files: readonly File[], folder: number) => void;
 	thumbnailUrl?: (folder: number, file: number) => string;
 	importPanel?: ReactNode;
 }
@@ -138,8 +170,7 @@ export function LibraryBrowserView({
 	failure,
 	onDismissFailure,
 	onRenameFolder,
-	onRenameItem,
-	onSetBpm,
+	onUpdateItem,
 	onMoveItems,
 	onUpload,
 	thumbnailUrl = api.thumbnailUrl,
@@ -150,6 +181,7 @@ export function LibraryBrowserView({
 	const [focusedId, setFocusedId] = useState<string | null>(null);
 	const [folderEditor, setFolderEditor] = useState<number | null>(null);
 	const [search, setSearch] = useState("");
+	const [dropFailure, setDropFailure] = useState<string | null>(null);
 	const picker = useRef<HTMLInputElement>(null);
 	const selectedFolder = catalog.folders.find(
 		(entry) => entry.folder === folder,
@@ -165,7 +197,6 @@ export function LibraryBrowserView({
 	useEffect(() => {
 		setSelectedIds(new Set());
 		setFocusedId(null);
-		setFolderEditor(null);
 	}, [folder]);
 
 	const choose = (item: CatalogItem, event: MouseEvent<HTMLButtonElement>) => {
@@ -198,13 +229,16 @@ export function LibraryBrowserView({
 			onSearch={setSearch}
 			search={{ value: search, placeholder: "Find media in this folder" }}
 		>
-			{failure && (
+			{(dropFailure ?? failure) && (
 				<button
 					type="button"
 					className="media-library-error"
-					onClick={onDismissFailure}
+					onClick={() => {
+						setDropFailure(null);
+						onDismissFailure?.();
+					}}
 				>
-					{failure} · Dismiss
+					{dropFailure ?? failure} · Dismiss
 				</button>
 			)}
 			<div className="media-library-browser">
@@ -222,7 +256,10 @@ export function LibraryBrowserView({
 								type="button"
 								key={number}
 								className={`media-library-folder ${folder === number ? "is-selected" : ""} ${writable ? "" : "is-reserved"}`}
-								onClick={() => setFolder(number)}
+								onClick={() => {
+									setFolderEditor(null);
+									setFolder(number);
+								}}
 								onContextMenu={(event) => {
 									event.preventDefault();
 									if (writable) {
@@ -231,15 +268,38 @@ export function LibraryBrowserView({
 									}
 								}}
 								onDragOver={(event) => {
-									if (writable) event.preventDefault();
+									if (writable && !busy) event.preventDefault();
 								}}
 								onDrop={(event) => {
-									if (!writable) return;
+									if (!writable || busy) return;
 									event.preventDefault();
 									const files = [...event.dataTransfer.files];
-									if (files.length) void onUpload?.(files, number);
-									else if (event.dataTransfer.types.includes(DRAG_MEDIA_TYPE))
-										void onMoveItems?.(selectedItems, number);
+									if (files.length) {
+										if (!files.every(isAcceptedMediaFile)) {
+											setDropFailure(
+												"Only video and image files can be uploaded.",
+											);
+											return;
+										}
+										setDropFailure(null);
+										void onUpload?.(files, number);
+									} else if (
+										event.dataTransfer.types.includes(DRAG_MEDIA_TYPE)
+									) {
+										const ids = draggedItemIds(
+											event.dataTransfer.getData(DRAG_MEDIA_TYPE),
+										);
+										const byId = new Map(
+											catalog.folders.flatMap((entry) =>
+												entry.items.map((item) => [item.id, item] as const),
+											),
+										);
+										const items = ids.flatMap((id) => {
+											const item = byId.get(id);
+											return item ? [item] : [];
+										});
+										if (items.length) void onMoveItems?.(items, number);
+									}
 								}}
 							>
 								<b>{String(number).padStart(3, "0")}</b>
@@ -286,11 +346,17 @@ export function LibraryBrowserView({
 										...slot.card,
 										states: selectedIds.has(item.id) ? ["selected"] : [],
 									}}
-									draggable
+									draggable={!busy}
 									onDragStart={(event) => {
+										const ids = selectedIds.has(item.id)
+											? selectedItems.map((selected) => selected.id)
+											: [item.id];
 										if (!selectedIds.has(item.id))
 											setSelectedIds(new Set([item.id]));
-										event.dataTransfer.setData(DRAG_MEDIA_TYPE, item.id);
+										event.dataTransfer.setData(
+											DRAG_MEDIA_TYPE,
+											JSON.stringify(ids),
+										);
 										event.dataTransfer.effectAllowed = "move";
 									}}
 									onClick={(event) => choose(item, event)}
@@ -303,6 +369,7 @@ export function LibraryBrowserView({
 				<aside className="media-library-inspector">
 					{folderEditor !== null ? (
 						<FolderEditor
+							key={folderEditor}
 							folder={folderEditor}
 							name={
 								catalog.folders.find((entry) => entry.folder === folderEditor)
@@ -316,8 +383,7 @@ export function LibraryBrowserView({
 							folder={folder}
 							item={focused}
 							busy={busy}
-							onRename={onRenameItem}
-							onSetBpm={onSetBpm}
+							onUpdate={onUpdateItem}
 							thumbnailUrl={thumbnailUrl}
 						/>
 					) : folder <= MEDIA_FOLDER_COUNT ? (
@@ -364,15 +430,13 @@ function ItemEditor({
 	folder,
 	item,
 	busy,
-	onRename,
-	onSetBpm,
+	onUpdate,
 	thumbnailUrl,
 }: {
 	folder: number;
 	item: CatalogItem;
 	busy: boolean;
-	onRename?: LibraryBrowserViewProps["onRenameItem"];
-	onSetBpm?: LibraryBrowserViewProps["onSetBpm"];
+	onUpdate?: LibraryBrowserViewProps["onUpdateItem"];
 	thumbnailUrl: (folder: number, file: number) => string;
 }) {
 	const [name, setName] = useState(item.name);
@@ -386,9 +450,11 @@ function ItemEditor({
 			className="media-library-editor"
 			onSubmit={(event) => {
 				event.preventDefault();
-				if (name !== item.name) void onRename?.(item, name);
 				const value = bpm.trim() ? Number(bpm) : null;
-				if (value !== item.intrinsicBpm) void onSetBpm?.(item, value);
+				const update: { name?: string; intrinsicBpm?: number | null } = {};
+				if (name !== item.name) update.name = name;
+				if (value !== item.intrinsicBpm) update.intrinsicBpm = value;
+				if (Object.keys(update).length) void onUpdate?.(item, update);
 			}}
 		>
 			<img src={thumbnailUrl(folder, item.file)} alt={`${item.name} preview`} />
@@ -484,6 +550,7 @@ function UploadEditor({
 				accept="video/*,image/*"
 				onChange={(event) => {
 					const files = [...(event.target.files ?? [])];
+					event.currentTarget.value = "";
 					if (files.length) void onUpload?.(files, folder);
 				}}
 			/>
@@ -503,6 +570,23 @@ function reservedFolderName(folder: number) {
 	if (folder >= 200 && folder <= 219) return "Text sources";
 	if (folder >= 220) return "Visualizers";
 	return "";
+}
+
+export function isAcceptedMediaFile(file: Pick<File, "type">) {
+	return file.type.startsWith("video/") || file.type.startsWith("image/");
+}
+
+export function draggedItemIds(payload: string): string[] {
+	try {
+		const parsed: unknown = JSON.parse(payload);
+		if (!Array.isArray(parsed)) return [];
+		return parsed.filter(
+			(id, index): id is string =>
+				typeof id === "string" && parsed.indexOf(id) === index,
+		);
+	} catch {
+		return [];
+	}
 }
 
 export function allocateFreeAddresses(

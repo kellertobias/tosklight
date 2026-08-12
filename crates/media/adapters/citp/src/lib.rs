@@ -15,12 +15,12 @@ pub mod packet;
 pub mod server;
 
 pub use message::{
-    ElementRequest, LayerStatus, LibraryElement, LibraryFolder, LibraryRequest, Presence,
-    StreamRequest, Thumbnail, ThumbnailRequest, element_library_information,
+    ElementRequest, LayerStatus, LibraryElement, LibraryFolder, LibraryRequest, PeerLocation,
+    Presence, StreamRequest, Thumbnail, ThumbnailRequest, element_library_information,
     element_library_thumbnail, element_thumbnail, failure_text, layer_status,
     media_element_information, peer_location, read_element_request, read_element_thumbnail_request,
-    read_library_request, read_library_thumbnail_request, read_stream_request, server_information,
-    status_flags, stream_frame, video_sources,
+    read_library_request, read_library_thumbnail_request, read_peer_location, read_stream_request,
+    server_information, status_flags, stream_frame, video_sources,
 };
 pub use packet::{FramingError, Message, content, parse, take_messages};
 pub use server::{Identity, Library, Sessions, announcement, greeting, negotiate, respond, status};

@@ -20,6 +20,41 @@ pub struct Presence<'a> {
     pub state: &'a str,
 }
 
+/// An owned peer announcement received from another CITP product.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PeerLocation {
+    pub listening_port: u16,
+    pub kind: String,
+    pub name: String,
+    pub state: String,
+}
+
+/// Reads a PINF `PLoc` announcement without borrowing the receive buffer.
+pub fn read_peer_location(message: &crate::packet::Message) -> Option<PeerLocation> {
+    if message.layer != crate::packet::PINF || message.content_type != content::PLOC {
+        return None;
+    }
+    let reader = Reader::new(&message.body);
+    let mut at = 2;
+    let kind = read_ucs1(&message.body, &mut at)?;
+    let name = read_ucs1(&message.body, &mut at)?;
+    let state = read_ucs1(&message.body, &mut at)?;
+    Some(PeerLocation {
+        listening_port: reader.u16(0),
+        kind,
+        name,
+        state,
+    })
+}
+
+fn read_ucs1(bytes: &[u8], at: &mut usize) -> Option<String> {
+    let tail = bytes.get(*at..)?;
+    let length = tail.iter().position(|byte| *byte == 0)?;
+    let value = String::from_utf8_lossy(&tail[..length]).into_owned();
+    *at += length + 1;
+    Some(value)
+}
+
 /// The discovery announcement, sent to the CITP multicast group and in reply to a peer's own.
 pub fn peer_location(presence: &Presence<'_>) -> Vec<u8> {
     let mut body = Body::new();
@@ -483,6 +518,26 @@ mod tests {
                 .windows(11)
                 .any(|window| window == b"MediaServer"),
             "a console filters on the peer type"
+        );
+    }
+
+    #[test]
+    fn a_console_announcement_round_trips_as_owned_identity() {
+        let framed = body_of(&peer_location(&Presence {
+            listening_port: 0,
+            kind: "LightingConsole",
+            name: "The Tempest",
+            state: "Running",
+        }));
+
+        assert_eq!(
+            read_peer_location(&framed),
+            Some(PeerLocation {
+                listening_port: 0,
+                kind: "LightingConsole".into(),
+                name: "The Tempest".into(),
+                state: "Running".into(),
+            })
         );
     }
 

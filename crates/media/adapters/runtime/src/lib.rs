@@ -98,6 +98,7 @@ fn run_inner() -> anyhow::Result<()> {
     let importer = start_importer(&configuration, &catalog);
     let (audio, analysis) = start_audio(&configuration);
     let dmx_diagnostics = dmx::diagnostics();
+    let console_identity = citp::ConsoleIdentity::default();
 
     // One configuration document, read by the outputs and written by the API. A second copy is a
     // second truth: an operator would edit one and watch the other.
@@ -110,6 +111,7 @@ fn run_inner() -> anyhow::Result<()> {
         &configuration.library.root,
         &catalog,
         &dmx_diagnostics,
+        &console_identity,
         started,
     );
     let apply = applies_to(audio.as_ref());
@@ -133,6 +135,7 @@ fn run_inner() -> anyhow::Result<()> {
             catalog.clone(),
             preview.clone(),
             shutdown.clone(),
+            console_identity,
         );
         anyhow::Ok(())
     })?;
@@ -372,10 +375,12 @@ fn diagnostics_of(
     library_root: &std::path::Path,
     catalog: &presentation::SharedCatalog,
     dmx_diagnostics: &dmx::SharedDiagnostics,
+    console_identity: &citp::ConsoleIdentity,
     started: std::time::Instant,
 ) -> media_http::Diagnostics {
     let log = logging.window.clone();
     let dmx_diagnostics = dmx_diagnostics.clone();
+    let console_identity = console_identity.clone();
     media_http::Diagnostics {
         audio: match audio {
             Some(service) => {
@@ -415,6 +420,7 @@ fn diagnostics_of(
                 Timestamp::from_micros(started.elapsed().as_micros() as u64),
             )
         }),
+        desk_identity: std::sync::Arc::new(move || console_identity.snapshot()),
     }
 }
 
@@ -741,7 +747,8 @@ mod tests {
 
     #[tokio::test]
     async fn the_empty_media_application_starts_and_shuts_down() {
-        let configuration = load_configuration(&ConfigurationSource::Defaults).unwrap();
+        let mut configuration = load_configuration(&ConfigurationSource::Defaults).unwrap();
+        configuration.network.http_listen = "127.0.0.1:0".parse().unwrap();
         let shutdown = Shutdown::new();
 
         let requester = shutdown.clone();

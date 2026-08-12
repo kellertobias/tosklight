@@ -23,6 +23,7 @@ import type {
 	UpdateLayer,
 	UpdateLibraryFolder,
 	UpdateLibraryItem,
+	UpdateMaster,
 	UpdateNetwork,
 	UpdateOutputConfiguration,
 	UpdateServerLogLevel,
@@ -111,7 +112,6 @@ export const api = {
 	setPlaybackTakeover: (output: string, takeOver: boolean) =>
 		request<OutputView>(
 			`/outputs/${output}/playback/${takeOver ? "take-over" : "release"}`,
-			{ method: "POST" },
 		),
 	outputConfiguration: (output: string) =>
 		request<OutputConfigurationView>(`/outputs/${output}/configuration`),
@@ -131,6 +131,11 @@ export const api = {
 	/** An intent-shaped write: only the fields being changed travel. */
 	updateLayer: (output: string, layer: number, update: UpdateLayer) =>
 		request<OutputView>(`/outputs/${output}/layers/${layer}/update`, {
+			method: "POST",
+			body: JSON.stringify(update),
+		}),
+	updateMaster: (output: string, update: UpdateMaster) =>
+		request<OutputView>(`/outputs/${output}/master/update`, {
 			method: "POST",
 			body: JSON.stringify(update),
 		}),

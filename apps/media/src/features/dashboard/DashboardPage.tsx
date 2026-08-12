@@ -1,8 +1,9 @@
 // What is running, right now, in as few words as possible.
 
 import { ResourceState } from "../../app/ResourceState";
-import { layersDrawing, percent, sourceBadge } from "../../entities/output";
 import { addressLabel } from "../../entities/catalog";
+import { layersDrawing, percent, sourceBadge } from "../../entities/output";
+import { useDeskShowName } from "../../operator/DeskIdentityContext";
 import type { Health, OutputView } from "../../shared/api/generated/media-wire";
 import { useHealth, useOutputs } from "../../shared/api/queries";
 
@@ -12,9 +13,18 @@ const HEALTH_POLL_MS = 5_000;
 export function DashboardPage() {
 	const health = useHealth(HEALTH_POLL_MS);
 	const outputs = useOutputs(OUTPUT_POLL_MS);
+	const showName = useDeskShowName();
 
 	return (
 		<section className="media-page">
+			<div
+				className={`media-desk-identity ${showName ? "is-connected" : "is-waiting"}`}
+				role="status"
+			>
+				<strong>Light Desk</strong>
+				<span>{showName ?? "Not identified"}</span>
+				<small>{showName ? "Active show" : "Waiting for CITP identity"}</small>
+			</div>
 			<ResourceState resource={health} subject="server status">
 				{(data) => <ServerFacts health={data} />}
 			</ResourceState>
@@ -57,7 +67,9 @@ function OutputSummary({ output }: { output: OutputView }) {
 		<article className="media-output-card" aria-label={output.name}>
 			<header>
 				<h2>{output.name}</h2>
-				<span className={`media-badge is-${output.dmxActive ? "good" : "neutral"}`}>
+				<span
+					className={`media-badge is-${output.dmxActive ? "good" : "neutral"}`}
+				>
 					{output.dmxActive ? "Desk connected" : "No desk"}
 				</span>
 			</header>
@@ -71,8 +83,12 @@ function OutputSummary({ output }: { output: OutputView }) {
 					return (
 						<li key={layer.index}>
 							<span>Layer {layer.index + 1}</span>
-							<span>{addressLabel(layer.address.folder, layer.address.file)}</span>
-							<span className={`media-badge is-${badge.tone}`}>{badge.label}</span>
+							<span>
+								{addressLabel(layer.address.folder, layer.address.file)}
+							</span>
+							<span className={`media-badge is-${badge.tone}`}>
+								{badge.label}
+							</span>
 						</li>
 					);
 				})}

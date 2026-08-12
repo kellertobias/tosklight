@@ -66,7 +66,11 @@ export function stubServer(
 		"fetch",
 		vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
 			const path = String(input).replace("/api/v2", "");
-			if (init?.method === "POST" || path.endsWith("/reset")) {
+			if (
+				init?.method === "POST" ||
+				path.endsWith("/reset") ||
+				path.includes("/playback/")
+			) {
 				server.writes.push(path);
 				if (server.refuseWrites) {
 					const { code, message, status } = server.refuseWrites;
@@ -137,6 +141,18 @@ export function stubServer(
 			if (text) return text;
 
 			if (path.endsWith("/reset")) return new Response(null, { status: 204 });
+			const takeover = path.match(
+				/^\/outputs\/([^/]+)\/playback\/(take-over|release)$/u,
+			);
+			if (takeover) {
+				const output = server.outputs.find(
+					(candidate) => candidate.id === takeover[1],
+				);
+				if (!output)
+					return jsonResponse({ code: "unknown-output", message: "no" }, 404);
+				output.playbackTakeover = takeover[2] === "take-over";
+				return jsonResponse(output);
+			}
 
 			const tuned = path.match(/^\/visualizers\/(\d+)\/(\d+)\/update$/u);
 			if (tuned) {
@@ -169,6 +185,59 @@ export function stubServer(
 				if (body.dimmer !== undefined) layer.dimmer = body.dimmer;
 				if (body.folder !== undefined) layer.address.folder = body.folder;
 				if (body.file !== undefined) layer.address.file = body.file;
+				for (const key of [
+					"playModeDmx",
+					"scaleX",
+					"scaleY",
+					"scalingMode",
+					"positionX",
+					"positionY",
+					"rotation",
+					"volume",
+					"tintRed",
+					"tintGreen",
+					"tintBlue",
+					"grayscale",
+					"speedMultiplierDmx",
+					"playbackBpm",
+				])
+					if (body[key] !== undefined)
+						(layer as unknown as Record<string, unknown>)[key] =
+							body[key] === 0 && key === "playbackBpm" ? null : body[key];
+				if (body.maskFolder !== undefined)
+					layer.mask.address.folder = body.maskFolder;
+				if (body.maskFile !== undefined)
+					layer.mask.address.file = body.maskFile;
+				if (body.maskScaleX !== undefined) layer.mask.scaleX = body.maskScaleX;
+				if (body.maskScaleY !== undefined) layer.mask.scaleY = body.maskScaleY;
+				if (body.maskInvert !== undefined) layer.mask.invert = body.maskInvert;
+				if (body.maskOpacity !== undefined)
+					layer.mask.opacity = body.maskOpacity;
+				return jsonResponse(output);
+			}
+			const master = path.match(/^\/outputs\/([^/]+)\/master\/update$/u);
+			if (master) {
+				const body = JSON.parse(String(init?.body ?? "{}"));
+				const output = server.outputs.find(
+					(candidate) => candidate.id === master[1],
+				);
+				if (!output)
+					return jsonResponse({ code: "unknown-output", message: "no" }, 404);
+				for (const key of [
+					"dimmer",
+					"volume",
+					"tintRed",
+					"tintGreen",
+					"tintBlue",
+					"flipMirror",
+				])
+					if (body[key] !== undefined)
+						(output.master as unknown as Record<string, unknown>)[key] =
+							body[key];
+				if (body.maskFolder !== undefined)
+					output.master.mask.folder = body.maskFolder;
+				if (body.maskFile !== undefined)
+					output.master.mask.file = body.maskFile;
 				return jsonResponse(output);
 			}
 			return jsonResponse({ code: "unknown-route", message: path }, 404);
@@ -366,13 +435,22 @@ export function aLayer(index: number): OutputView["layers"][number] {
 		index,
 		address: { folder: 1, file: index + 1, class: "library" },
 		playMode: "Loop",
+		playModeDmx: 0,
 		dimmer: 1,
 		scaleX: 1,
 		scaleY: 1,
+		scalingMode: "fit",
 		positionX: 0,
 		positionY: 0,
 		rotation: 0,
 		grayscale: 0,
+		volume: 1,
+		tintRed: 1,
+		tintGreen: 1,
+		tintBlue: 1,
+		speedMultiplier: "1×",
+		speedMultiplierDmx: 127,
+		playbackBpm: null,
 		sourceStatus: { state: "ready", failure: null },
 		mask: {
 			address: { folder: 0, file: 0, class: "blank" },

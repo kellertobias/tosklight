@@ -90,6 +90,22 @@ pub struct TelemetryFrame {
     pub imports: Vec<crate::wire::ImportJobView>,
     /// Winning, protocol-aware DMX ingress. Volatile state is pushed, never polled.
     pub dmx: Vec<crate::wire::DmxIngressView>,
+    /// The current show name published by the connected Light Desk over CITP discovery.
+    pub desk_identity: Option<DeskIdentityView>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct DeskIdentityView {
+    pub show_name: String,
+}
+
+impl DeskIdentityView {
+    pub fn of(identity: &crate::diagnostics::DeskIdentityTelemetry) -> Self {
+        Self {
+            show_name: identity.show_name.clone(),
+        }
+    }
 }
 
 /// The audio settings, as the API reports them.
@@ -262,6 +278,15 @@ mod tests {
         assert_eq!(view.energy, 0.0);
         assert!(view.detail.is_some());
         assert!(view.waveform.points.is_empty());
+    }
+
+    #[test]
+    fn a_connected_desk_identity_carries_the_active_show_name() {
+        let view = DeskIdentityView::of(&crate::diagnostics::DeskIdentityTelemetry {
+            show_name: "The Tempest".to_owned(),
+        });
+
+        assert_eq!(view.show_name, "The Tempest");
     }
 
     #[test]

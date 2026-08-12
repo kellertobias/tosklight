@@ -182,6 +182,14 @@ pub struct DmxTelemetry {
 
 pub type DmxSource = Arc<dyn Fn() -> Vec<DmxTelemetry> + Send + Sync>;
 
+/// The Light Desk most recently identified over CITP discovery.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeskIdentityTelemetry {
+    pub show_name: String,
+}
+
+pub type DeskIdentitySource = Arc<dyn Fn() -> Option<DeskIdentityTelemetry> + Send + Sync>;
+
 impl Default for Imports {
     /// A process that imports nothing: it reports nothing waiting, and says it cannot import.
     fn default() -> Self {
@@ -285,6 +293,7 @@ pub struct Diagnostics {
     pub imports: Imports,
     pub library: LibraryAccess,
     pub dmx: DmxSource,
+    pub desk_identity: DeskIdentitySource,
 }
 
 impl Default for Diagnostics {
@@ -301,6 +310,7 @@ impl Default for Diagnostics {
             imports: Imports::default(),
             library: LibraryAccess::default(),
             dmx: Arc::new(Vec::new),
+            desk_identity: Arc::new(|| None),
         }
     }
 }

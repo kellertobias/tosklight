@@ -597,7 +597,10 @@ function MediaControl({
 				<MultiValueToggle
 					ariaLabel={control.label}
 					value={control.value}
-					options={control.options}
+					options={control.options.map((option) => ({
+						...option,
+						disabled: disabled || option.disabled,
+					}))}
 					onChange={(value) => onChange(control.id, value)}
 				/>
 				{control.description && <small>{control.description}</small>}

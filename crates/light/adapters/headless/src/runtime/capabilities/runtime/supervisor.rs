@@ -1,8 +1,8 @@
 //! Capability-owned cancellation and join lifecycle for runtime background work.
 
 use crate::runtime::{
-    AppState, OwnedRuntimeTask, control_input_tasks, matter_bridge_sync, output_scheduler,
-    persist_output_runtime, playback_service, schedules_v2,
+    AppState, OwnedRuntimeTask, control_input_tasks, matter_bridge_sync, media_identity,
+    output_scheduler, persist_output_runtime, playback_service, schedules_v2,
 };
 use anyhow::Context;
 use tokio::task::JoinHandle;
@@ -111,6 +111,10 @@ impl CapabilitySupervisors {
                 .run_sampler(runtime_tasks.cancellation()),
         );
         runtime_tasks.spawn(schedules_v2::run_scheduler(
+            state.clone(),
+            runtime_tasks.cancellation(),
+        ));
+        runtime_tasks.spawn(media_identity::run(
             state.clone(),
             runtime_tasks.cancellation(),
         ));
