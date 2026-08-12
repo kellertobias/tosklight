@@ -699,7 +699,10 @@ describe("CuelistWindow pane and Cuelist settings", () => {
 		const confirmation = screen.getByRole("dialog", {
 			name: "Unsaved Cuelist Settings",
 		});
-		fireEvent.click(within(confirmation).getByRole("button", { name: "Stay" }));
+		fireEvent.pointerDown(confirmation.closest("[data-modal-id]")!);
+		expect(
+			screen.queryByRole("dialog", { name: "Unsaved Cuelist Settings" }),
+		).not.toBeInTheDocument();
 		expect(settings).toBeInTheDocument();
 		fireEvent.click(
 			within(settings).getByRole("button", { name: "Close Cuelist Settings" }),

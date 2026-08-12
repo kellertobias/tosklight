@@ -277,11 +277,14 @@ export interface ModalRegistrationProps {
 
 /**
  * Registers an application-owned workflow modal with the package modal stack
- * without changing its existing layer markup or layout.
+ * without changing its existing layer markup or layout. A bare layer uses the
+ * registered close action for backdrop dismissal. A layer with its own pointer
+ * handler retains ownership of that behavior so existing guarded close flows
+ * are not invoked twice.
  */
 export function ModalRegistration({
   id,
-  policy = { backdrop: false },
+  policy = {},
   children,
   onClose,
 }: ModalRegistrationProps) {
@@ -314,6 +317,7 @@ export function ModalRegistration({
       childPointerDown?.(event);
       if (
         !event.defaultPrevented
+        && !childPointerDown
         && event.target === event.currentTarget
         && registered.policy.backdrop
         && registered.top

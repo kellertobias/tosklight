@@ -7,10 +7,12 @@ import "./applicationStyles";
 import { SessionHandoffProvider } from "./features/session/SessionHandoffContext";
 import { createSessionHandoff } from "./features/session/sessionHandoff";
 import { ProductDemoApp } from "./ProductDemoApp";
+import { installDeskContextMenuPolicy } from "./platform/deskContextMenuPolicy";
 import { createDesktopBridge, DesktopProvider } from "./platform/desktop";
 
 const desktop = createDesktopBridge();
 const sessionHandoff = createSessionHandoff();
+installDeskContextMenuPolicy(document);
 const screenId = new URLSearchParams(window.location.search).get("screen");
 const productDemo =
 	new URLSearchParams(window.location.search).get("demo") === "product";
