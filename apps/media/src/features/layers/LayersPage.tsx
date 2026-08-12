@@ -6,7 +6,10 @@ import { readOnlyReason } from "../../entities/output";
 import { useCatalog } from "../../shared/api/queries";
 import type { OutputView } from "../../shared/api/generated/media-wire";
 import { LayerCard } from "./LayerCard";
-import { useLayerControl, useOutputsForControl } from "../../shared/api/layerControl";
+import {
+	useLayerControl,
+	useOutputsForControl,
+} from "../../shared/api/layerControl";
 
 /** The library changes when someone imports, which is rare compared with layer state. */
 const CATALOG_POLL_MS = 15_000;
@@ -14,7 +17,7 @@ const CATALOG_POLL_MS = 15_000;
 export function LayersPage() {
 	const outputs = useOutputsForControl();
 	const catalog = useCatalog(CATALOG_POLL_MS);
-	const control = useLayerControl(outputs.data);
+	const control = useLayerControl();
 
 	return (
 		<section className="media-page">
@@ -76,7 +79,9 @@ function OutputLayers({
 						layer={layer}
 						catalog={catalog}
 						readOnly={reason !== undefined}
-						onChange={(change) => void control.update(output, layer.index, change)}
+						onChange={(change) =>
+							void control.update(output, layer.index, change)
+						}
 						onReset={() => void control.reset(output, layer.index)}
 					/>
 				))}

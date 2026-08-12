@@ -5,7 +5,13 @@
 // interval; features own the interval and the invalidation, and nothing keeps a private copy of
 // server state in a component.
 
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import {
+	useCallback,
+	useEffect,
+	useRef,
+	useState,
+	useSyncExternalStore,
+} from "react";
 import { ApiFailure } from "./client";
 
 /** What a consumer sees. `data` survives a later failure so a panel does not blank out. */
@@ -19,11 +25,14 @@ export interface Resource<T> {
 }
 
 interface Entry<T> {
+	/** Last value accepted from the server. Optimistic transforms are layered over this. */
+	baseData: T | undefined;
 	data: T | undefined;
 	failure: ApiFailure | undefined;
 	loading: boolean;
 	listeners: Set<() => void>;
 	inFlight: Promise<void> | undefined;
+	optimistic: Map<string, (data: T) => T>;
 	snapshot: Omit<Resource<T>, "reload">;
 }
 
@@ -33,16 +42,30 @@ function entryFor<T>(key: string): Entry<T> {
 	let entry = entries.get(key) as Entry<T> | undefined;
 	if (!entry) {
 		entry = {
+			baseData: undefined,
 			data: undefined,
 			failure: undefined,
 			loading: false,
 			listeners: new Set(),
 			inFlight: undefined,
-			snapshot: { data: undefined, failure: undefined, loading: false, stale: false },
+			optimistic: new Map(),
+			snapshot: {
+				data: undefined,
+				failure: undefined,
+				loading: false,
+				stale: false,
+			},
 		};
 		entries.set(key, entry as Entry<unknown>);
 	}
 	return entry;
+}
+
+function project<T>(entry: Entry<T>): void {
+	let data = entry.baseData;
+	if (data !== undefined)
+		for (const update of entry.optimistic.values()) data = update(data);
+	entry.data = data;
 }
 
 function publish<T>(entry: Entry<T>): void {
@@ -65,7 +88,8 @@ async function load<T>(key: string, loader: () => Promise<T>): Promise<void> {
 	publish(entry);
 	entry.inFlight = (async () => {
 		try {
-			entry.data = await loader();
+			entry.baseData = await loader();
+			project(entry);
 			entry.failure = undefined;
 		} catch (error) {
 			entry.failure =
@@ -84,8 +108,40 @@ async function load<T>(key: string, loader: () => Promise<T>): Promise<void> {
 /** Replaces a resource's value without a round trip — used by an optimistic write. */
 export function writeResource<T>(key: string, data: T): void {
 	const entry = entryFor<T>(key);
-	entry.data = data;
+	entry.baseData = data;
+	project(entry);
 	entry.failure = undefined;
+	publish(entry);
+}
+
+/**
+ * Adds immediate local feedback while a write is in flight.
+ *
+ * Polls and earlier authoritative responses update the base underneath these transforms, so a
+ * one-second output poll can never erase an operator's still-pending fader movement.
+ */
+export function stageOptimisticResource<T>(
+	key: string,
+	token: string,
+	update: (data: T) => T,
+): void {
+	const entry = entryFor<T>(key);
+	entry.optimistic.set(token, update);
+	project(entry);
+	publish(entry);
+}
+
+/** Removes one pending transform and optionally reconciles to the server response. */
+export function settleOptimisticResource<T>(
+	key: string,
+	token: string,
+	reconcile?: (data: T) => T,
+): void {
+	const entry = entryFor<T>(key);
+	if (reconcile && entry.baseData !== undefined)
+		entry.baseData = reconcile(entry.baseData);
+	entry.optimistic.delete(token);
+	project(entry);
 	publish(entry);
 }
 
@@ -93,6 +149,7 @@ export function writeResource<T>(key: string, data: T): void {
 export function invalidateResource(key: string): void {
 	const entry = entries.get(key);
 	if (!entry) return;
+	entry.baseData = undefined;
 	entry.data = undefined;
 	publish(entry);
 }

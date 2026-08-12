@@ -18,13 +18,7 @@ import {
 	useLayerControl,
 	useOutputsForControl,
 } from "../../shared/api/layerControl";
-import {
-	KEYS,
-	useCatalog,
-	useText,
-	useVisualizers,
-} from "../../shared/api/queries";
-import { writeResource } from "../../shared/api/resource";
+import { useCatalog, useText, useVisualizers } from "../../shared/api/queries";
 
 const CATALOG_POLL_MS = 15_000;
 
@@ -38,7 +32,7 @@ export function MediaPanePage() {
 	const catalog = useCatalog(CATALOG_POLL_MS);
 	const text = useText();
 	const visualizers = useVisualizers();
-	const control = useLayerControl(outputs.data);
+	const control = useLayerControl();
 	const layers = useMemo(
 		() =>
 			(outputs.data ?? []).flatMap((output) =>
@@ -472,16 +466,7 @@ export function MediaPanePage() {
 							setTakeoverBusy(true);
 							setTakeoverError("");
 							try {
-								const updated = await api.setPlaybackTakeover(
-									selectedOutput.id,
-									event.target.checked,
-								);
-								writeResource(
-									KEYS.outputs,
-									(outputs.data ?? []).map((output) =>
-										output.id === updated.id ? updated : output,
-									),
-								);
+								await control.setTakeover(selectedOutput, event.target.checked);
 							} catch (error) {
 								setTakeoverError(
 									error instanceof Error ? error.message : String(error),

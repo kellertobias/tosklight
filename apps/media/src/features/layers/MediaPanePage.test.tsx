@@ -20,6 +20,58 @@ beforeEach(() => {
 });
 
 describe("the production Media pane", () => {
+	it("paints takeover feedback inside the 50 ms operator budget while the request is still pending", async () => {
+		const server = stubServer();
+		const request = deferred();
+		server.holdWrites = request.promise;
+		render(<MediaPanePage />);
+
+		const takeover = await screen.findByRole("switch", {
+			name: "Take over playback",
+		});
+		const inputAt = performance.now();
+		fireEvent.click(takeover);
+		const paintedAt = performance.now();
+
+		expect(takeover).toBeChecked();
+		expect(paintedAt - inputAt).toBeLessThan(50);
+		expect(server.outputs[0].playbackTakeover).toBe(false);
+
+		request.resolve();
+		await waitFor(() => expect(server.outputs[0].playbackTakeover).toBe(true));
+	});
+
+	it("keeps rapid fader feedback immediate and serializes authoritative writes", async () => {
+		const server = stubServer();
+		render(<MediaPanePage />);
+		await userEvent.click(
+			await screen.findByRole("switch", { name: "Take over playback" }),
+		);
+		await userEvent.click(screen.getByRole("radio", { name: "Frame" }));
+
+		const request = deferred();
+		server.holdWrites = request.promise;
+		const scale = screen.getByLabelText("Scale X");
+		const inputAt = performance.now();
+		fireEvent.input(scale, { target: { value: "2" } });
+		fireEvent.input(scale, { target: { value: "3" } });
+		const paintedAt = performance.now();
+
+		expect(scale).toHaveValue("3");
+		expect(paintedAt - inputAt).toBeLessThan(50);
+		await waitFor(() => expect(server.writes).toHaveLength(2));
+		// Takeover is the first write; only one layer write reaches the held server at a time.
+		expect(
+			server.writes.filter((path) => path.endsWith("/layers/0/update")),
+		).toHaveLength(1);
+
+		request.resolve();
+		await waitFor(() => expect(server.outputs[0].layers[0].scaleX).toBe(3));
+		expect(
+			server.writes.filter((path) => path.endsWith("/layers/0/update")),
+		).toHaveLength(2);
+	});
+
 	it("puts Release on the off side and Take over playback on the on side", async () => {
 		stubServer();
 		render(<MediaPanePage />);
@@ -168,3 +220,11 @@ describe("the production Media pane", () => {
 		).toBe(false);
 	});
 });
+
+function deferred() {
+	let resolve!: () => void;
+	const promise = new Promise<void>((complete) => {
+		resolve = complete;
+	});
+	return { promise, resolve };
+}

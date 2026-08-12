@@ -1,14 +1,26 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiFailure } from "./client";
-import { resetResources, useResource, writeResource } from "./resource";
+import {
+	resetResources,
+	settleOptimisticResource,
+	stageOptimisticResource,
+	useResource,
+	writeResource,
+} from "./resource";
 
 afterEach(() => {
 	resetResources();
 	vi.useRealTimers();
 });
 
-function Panel({ loader, pollMs }: { loader: () => Promise<string>; pollMs?: number }) {
+function Panel({
+	loader,
+	pollMs,
+}: {
+	loader: () => Promise<string>;
+	pollMs?: number;
+}) {
 	const resource = useResource("subject", loader, { pollMs });
 	return (
 		<div>
@@ -22,19 +34,25 @@ function Panel({ loader, pollMs }: { loader: () => Promise<string>; pollMs?: num
 describe("the resource cache", () => {
 	it("loads once and publishes the value", async () => {
 		render(<Panel loader={async () => "loaded"} />);
-		await waitFor(() => expect(screen.getByTestId("data")).toHaveTextContent("loaded"));
+		await waitFor(() =>
+			expect(screen.getByTestId("data")).toHaveTextContent("loaded"),
+		);
 	});
 
 	it("keeps the last good value on screen when a later read fails", async () => {
 		let answer: () => Promise<string> = async () => "first";
 		render(<Panel loader={() => answer()} pollMs={20} />);
-		await waitFor(() => expect(screen.getByTestId("data")).toHaveTextContent("first"));
+		await waitFor(() =>
+			expect(screen.getByTestId("data")).toHaveTextContent("first"),
+		);
 
 		answer = async () => {
 			throw new ApiFailure("unreachable", "gone", 0);
 		};
 
-		await waitFor(() => expect(screen.getByTestId("failure")).toHaveTextContent("unreachable"));
+		await waitFor(() =>
+			expect(screen.getByTestId("failure")).toHaveTextContent("unreachable"),
+		);
 		// A panel that blanks out during a hiccup is worse than one that says it is stale.
 		expect(screen.getByTestId("data")).toHaveTextContent("first");
 		expect(screen.getByTestId("stale")).toHaveTextContent("true");
@@ -42,10 +60,42 @@ describe("the resource cache", () => {
 
 	it("takes an optimistic write without a round trip", async () => {
 		render(<Panel loader={async () => "server"} />);
-		await waitFor(() => expect(screen.getByTestId("data")).toHaveTextContent("server"));
+		await waitFor(() =>
+			expect(screen.getByTestId("data")).toHaveTextContent("server"),
+		);
 
 		writeResource("subject", "optimistic");
-		await waitFor(() => expect(screen.getByTestId("data")).toHaveTextContent("optimistic"));
+		await waitFor(() =>
+			expect(screen.getByTestId("data")).toHaveTextContent("optimistic"),
+		);
+	});
+
+	it("keeps a pending operator transform over newer authoritative snapshots", async () => {
+		render(<Panel loader={async () => "server"} />);
+		await waitFor(() =>
+			expect(screen.getByTestId("data")).toHaveTextContent("server"),
+		);
+
+		stageOptimisticResource<string>(
+			"subject",
+			"operator-1",
+			(value) => `${value} + local`,
+		);
+		await waitFor(() =>
+			expect(screen.getByTestId("data")).toHaveTextContent("server + local"),
+		);
+
+		writeResource("subject", "new server");
+		await waitFor(() =>
+			expect(screen.getByTestId("data")).toHaveTextContent(
+				"new server + local",
+			),
+		);
+
+		settleOptimisticResource<string>("subject", "operator-1");
+		await waitFor(() =>
+			expect(screen.getByTestId("data")).toHaveTextContent("new server"),
+		);
 	});
 
 	it("turns an unexpected throw into a typed failure rather than losing it", async () => {
@@ -57,7 +107,9 @@ describe("the resource cache", () => {
 			/>,
 		);
 		await waitFor(() =>
-			expect(screen.getByTestId("failure")).toHaveTextContent("unexpected-error"),
+			expect(screen.getByTestId("failure")).toHaveTextContent(
+				"unexpected-error",
+			),
 		);
 	});
 });

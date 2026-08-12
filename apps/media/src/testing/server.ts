@@ -34,6 +34,8 @@ export interface StubbedServer {
 	refuseWrites: { code: string; message: string; status: number } | undefined;
 	/** Every path written to, in order. */
 	writes: string[];
+	/** Test-only gate for reproducing a slow request without delaying initial reads. */
+	holdWrites: Promise<void> | undefined;
 }
 
 export function stubServer(
@@ -58,6 +60,7 @@ export function stubServer(
 		},
 		refuseWrites: undefined,
 		writes: [],
+		holdWrites: undefined,
 		...overrides,
 	};
 
@@ -72,6 +75,7 @@ export function stubServer(
 				path.includes("/playback/")
 			) {
 				server.writes.push(path);
+				if (server.holdWrites) await server.holdWrites;
 				if (server.refuseWrites) {
 					const { code, message, status } = server.refuseWrites;
 					return jsonResponse({ code, message }, status);
