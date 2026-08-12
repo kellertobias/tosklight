@@ -352,6 +352,7 @@ describe("DynamicsWindow", () => {
 		const dialog = screen.getByRole("dialog", {
 			name: "Select lane attribute",
 		});
+		fireEvent.click(within(dialog).getByRole("button", { name: "Position" }));
 		fireEvent.click(within(dialog).getByRole("button", { name: "Pan" }));
 
 		await vi.waitFor(() =>
@@ -382,7 +383,28 @@ describe("DynamicsWindow", () => {
 			within(dialog).getByRole("button", { name: "Intensity" }),
 		).toBeInTheDocument();
 		expect(
+			within(dialog).getByRole("button", { name: "Position" }),
+		).toBeInTheDocument();
+		expect(within(dialog).queryByRole("button", { name: "Pan" })).toBeNull();
+
+		fireEvent.click(within(dialog).getByRole("button", { name: "Position" }));
+		expect(
 			within(dialog).getByRole("button", { name: "Pan" }),
+		).toBeInTheDocument();
+		expect(
+			within(dialog).queryByRole("button", { name: "Intensity" }),
+		).toBeNull();
+
+		fireEvent.click(
+			within(dialog).getByRole("button", {
+				name: "Back to attribute groups",
+			}),
+		);
+		expect(
+			within(dialog).getByRole("button", { name: "Intensity" }),
+		).toBeInTheDocument();
+		expect(
+			within(dialog).getByRole("button", { name: "Position" }),
 		).toBeInTheDocument();
 		expect(within(dialog).queryByLabelText("First lane")).toBeNull();
 		expect(
@@ -399,6 +421,7 @@ describe("DynamicsWindow", () => {
 		const dialog = screen.getByRole("dialog", {
 			name: "Select lane attribute",
 		});
+		fireEvent.click(within(dialog).getByRole("button", { name: "Position" }));
 		fireEvent.click(within(dialog).getByRole("button", { name: "Pan" }));
 
 		await vi.waitFor(() =>
@@ -847,6 +870,7 @@ describe("DynamicsWindow", () => {
 			name: "Change lane attribute",
 		});
 		expect(dialog).toBeInTheDocument();
+		fireEvent.click(within(dialog).getByRole("button", { name: "Position" }));
 		fireEvent.click(within(dialog).getByRole("button", { name: "Pan" }));
 
 		await vi.waitFor(() =>
