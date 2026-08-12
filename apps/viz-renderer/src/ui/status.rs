@@ -93,7 +93,7 @@ impl StatusModel<'_> {
             )
         };
         match self.gpu_millis {
-            Some(millis) => format!("{}  |  GPU {millis:.2} ms  |  {inputs}", self.renderer),
+            Some(millis) => format!("{}  |  GPU {millis:5.2} ms  |  {inputs}", self.renderer),
             None => format!("{}  |  {inputs}", self.renderer),
         }
     }

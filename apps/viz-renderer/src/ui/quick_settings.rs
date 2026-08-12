@@ -600,9 +600,9 @@ pub fn build_quick_settings(
     // keyboard-driven list that runs off the bottom of the screen cannot be reached at all. The
     // rows that fit are shown, moving with the selection, and the rest are counted underneath.
     let chrome_lines = if settings.snapshot_folder.is_empty() {
-        7.0
-    } else {
         8.0
+    } else {
+        9.0
     };
     // A line is held back for the list's own heading, and the margin keeps the panel and its
     // border clear of the window edge at every scale.
@@ -691,23 +691,18 @@ pub fn build_quick_settings(
         );
         cursor += line;
     }
-    overlay.text(
-        x + padding,
-        cursor,
-        scale,
-        palette.dim,
-        &format!(
-            "{}  |  show {}  |  revision {}",
-            model.connection.summary(),
-            if model.diagnostics.show_identity.is_empty() {
-                "-"
-            } else {
-                &model.diagnostics.show_identity
-            },
-            model.diagnostics.scene_revision,
-        ),
-    );
-    cursor += line;
+    let diagnostic_rows = diagnostic_rows(model);
+    for row in &diagnostic_rows[..2] {
+        overlay.clipped_text(
+            x + padding,
+            cursor,
+            scale,
+            palette.dim,
+            row,
+            x + panel_width - padding,
+        );
+        cursor += line;
+    }
     // Which GPU is drawing this, and how fast values are arriving to draw with. The connection
     // surface has to name the renderer backend, and an operator diagnosing a slow picture needs it
     // where the rest of the connection is rather than in a benchmark report.
@@ -716,7 +711,7 @@ pub fn build_quick_settings(
         cursor,
         scale,
         palette.dim,
-        &model.renderer_summary(),
+        &diagnostic_rows[2],
         x + panel_width - padding,
     );
     cursor += line;
@@ -727,6 +722,23 @@ pub fn build_quick_settings(
         palette.dim,
         "Arrows move and adjust, Enter activates, Esc cancels",
     );
+}
+
+pub(super) fn diagnostic_rows(model: &StatusModel<'_>) -> [String; 3] {
+    let show = if model.diagnostics.show_identity.is_empty() {
+        "-"
+    } else {
+        &model.diagnostics.show_identity
+    };
+    [
+        format!(
+            "{}  |  revision {}",
+            model.connection.summary(),
+            model.diagnostics.scene_revision
+        ),
+        format!("show {show}"),
+        model.renderer_summary(),
+    ]
 }
 
 /// Which stretch of rows to draw when they do not all fit.

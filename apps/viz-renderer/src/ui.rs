@@ -441,6 +441,38 @@ mod tests {
     }
 
     #[test]
+    fn diagnostics_reserve_gpu_time_width_and_put_the_show_on_its_own_row() {
+        let connected = ConnectionState::Connected {
+            endpoint: "http://127.0.0.1:5310".into(),
+            revision: 1,
+        };
+        let mut diagnostics = ProviderDiagnostics {
+            show_identity: "A deliberately long active show name".into(),
+            scene_revision: 42,
+            ..ProviderDiagnostics::default()
+        };
+        let mut model = status_model(&connected, &diagnostics, 12, false, None);
+        model.renderer = "Apple M4 Max (Metal, 4× MSAA)".into();
+        model.gpu_millis = Some(9.25);
+
+        let one_digit = model.renderer_summary();
+        assert!(one_digit.contains("GPU  9.25 ms"));
+        let rows = diagnostic_rows(&model);
+        assert_eq!(rows[1], "show A deliberately long active show name");
+        assert!(!rows[0].contains("active show"));
+        assert!(rows[2].contains("Apple M4 Max (Metal, 4× MSAA)"));
+
+        model.gpu_millis = Some(10.25);
+        let two_digits = model.renderer_summary();
+        assert!(two_digits.contains("GPU 10.25 ms"));
+        assert_eq!(one_digit.len(), two_digits.len());
+
+        diagnostics.show_identity.clear();
+        let empty_show = status_model(&connected, &diagnostics, 12, false, None);
+        assert_eq!(diagnostic_rows(&empty_show)[1], "show -");
+    }
+
+    #[test]
     fn a_crowded_status_bar_never_overlaps_its_own_halves() {
         for width in [900.0_f32, 1280.0, 1600.0, 2560.0] {
             for notice in [
