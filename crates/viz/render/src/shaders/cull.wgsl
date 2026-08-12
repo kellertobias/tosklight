@@ -18,6 +18,15 @@ struct Light {
     direction_cos_outer: vec4<f32>,
     colour_intensity: vec4<f32>,
     params: vec4<f32>,
+    // Keep this storage layout byte-for-byte identical to `Light` in common.wgsl and
+    // `GpuLight` in instances.rs. Storage-buffer arrays use the struct stride to locate every
+    // light; a shortened culling-only declaration makes light 1 read the middle of light 0.
+    tangent_frost: vec4<f32>,
+    optics: vec4<f32>,
+    shapers: vec4<f32>,
+    shaper_angles: vec4<f32>,
+    gate: vec4<f32>,
+    shadow: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> globals: Globals;

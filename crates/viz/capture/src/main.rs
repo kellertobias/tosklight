@@ -424,7 +424,101 @@ fn number(arguments: &mut impl Iterator<Item = String>, flag: &str) -> Result<u3
 #[cfg(test)]
 mod tests {
     use super::*;
-    use viz_scene::BodyKind;
+    use viz_scene::{
+        BodyKind, EmitterInstance, EmitterKind, EmitterLayoutCells, EmitterOptics, FixtureBody,
+        FixtureInstance, RenderQuality, SceneryKind, SceneryObject,
+    };
+
+    fn two_light_surface_scene() -> (Scene, SceneValues, ViewConfiguration) {
+        use viz_scene::{glam::Vec3, uuid::Uuid};
+
+        let fixture = |name: &str, position: Vec3| FixtureInstance {
+            instance_id: Uuid::new_v4(),
+            fixture_id: Uuid::new_v4(),
+            name: name.to_owned(),
+            number: None,
+            position,
+            rotation_degrees: Vec3::ZERO,
+            bracket_degrees: 0.0,
+            shaper_degrees: None,
+            installed_colour: [1.0; 3],
+            installed_shaper_angles_degrees: [0.0; 4],
+            body: FixtureBody::default(),
+            patched: true,
+            address: None,
+            model: None,
+            fallback: None,
+        };
+        let emitter = |fixture_index| EmitterInstance {
+            fixture_index,
+            head_index: 0,
+            label: "Main".to_owned(),
+            local_origin: Vec3::ZERO,
+            tilt_pivot: Vec3::ZERO,
+            local_orientation_degrees: Vec3::ZERO,
+            pan: None,
+            tilt: None,
+            beam_angle_degrees: 12.0,
+            field_angle_degrees: 28.0,
+            optics: EmitterOptics::default(),
+            kind: EmitterKind::Beam,
+            cells: EmitterLayoutCells::single(),
+            laser: None,
+            live_shaper_angle_roles: [false; 4],
+            shaper_roles: [false; 4],
+            live_shaper_rotation_role: false,
+        };
+
+        // Light zero is deliberately far outside the shot. Light one illuminates the receiving
+        // deck in front of the camera. A storage-array stride error makes culling light one from
+        // fields in the middle of light zero, which removes this pool while leaving a plausible
+        // fixture aperture and beam volume behind.
+        let mut scene = Scene {
+            fixtures: vec![
+                fixture("Offscreen", Vec3::new(-20.0, 4.0, 0.0)),
+                fixture("Surface", Vec3::new(6.0, 4.0, 0.0)),
+            ],
+            emitters: vec![emitter(0), emitter(1)],
+            scenery: vec![SceneryObject {
+                id: Uuid::new_v4(),
+                name: "Receiving deck".to_owned(),
+                position: Vec3::new(6.0, -0.05, 0.0),
+                rotation_degrees: Vec3::ZERO,
+                size: Vec3::new(4.0, 0.1, 4.0),
+                colour: [0.35, 0.35, 0.35],
+                roughness: 0.8,
+                kind: SceneryKind::Riser,
+                chords: 0,
+            }],
+            ..Scene::default()
+        };
+        scene.recompute_bounds();
+
+        let mut values = SceneValues::default();
+        values.resize(2);
+        values.atmosphere.density = 0.0;
+        for value in &mut values.emitters {
+            value.intensity = 1.0;
+            value.held_intensity = 1.0;
+        }
+
+        let mut view = ViewConfiguration::default();
+        view.camera.position = Vec3::new(6.0, 4.5, 7.0);
+        view.camera.target = Vec3::new(6.0, 0.0, 0.0);
+        view.ambient = 0.0;
+        view.show_labels = false;
+        view.floor_grid = false;
+        (scene, values, view)
+    }
+
+    fn picture_brightness(image: &viz_render::CapturedImage) -> f64 {
+        let total: u64 = image
+            .rgba
+            .chunks_exact(4)
+            .map(|pixel| u64::from(pixel[0]) + u64::from(pixel[1]) + u64::from(pixel[2]))
+            .sum();
+        total as f64 / (image.rgba.len() / 4) as f64
+    }
 
     /// The generated demo show, built exactly as a capture builds it.
     fn demo_scene_and_values(name: &str) -> (Scene, SceneValues) {
@@ -465,6 +559,75 @@ mod tests {
             .unwrap_or_else(|| panic!("the demo rig has no fixture named {name}"))
             .body
             .kind
+    }
+
+    /// The surface pool from a light after index zero must survive quality changes, small camera
+    /// moves and repeated redraws. This is the actual operator path: the culling compute shader
+    /// chooses the lights evaluated by the surface shader, while the beam pass is independent and
+    /// can otherwise make the broken frame look superficially alive.
+    #[test]
+    fn a_second_light_keeps_its_surface_pool_across_views_and_quality_tiers() {
+        let (scene, values, mut view) = two_light_surface_scene();
+        let overlay = viz_render::Overlay::default();
+        let mut renderer = viz_render::Renderer::headless(320, 180)
+            .expect("a headless renderer; this machine has no GPU or software adapter");
+
+        let mut reference = values.clone();
+        reference.emitters[1].intensity = 0.0;
+        reference.emitters[1].held_intensity = 0.0;
+        let dark_image = renderer
+            .capture(&scene, &reference, &view, &overlay, 0.0)
+            .expect("the receiving surface without its light");
+        let dark = picture_brightness(&dark_image);
+        let evidence = std::env::var_os("LIGHT_TMP_DIR").map(PathBuf::from);
+        if let Some(directory) = evidence.as_deref() {
+            std::fs::create_dir_all(directory).expect("capture evidence directory");
+            write_png(
+                &directory.join("tl-202-surface-dark.png"),
+                dark_image.width,
+                dark_image.height,
+                &dark_image.rgba,
+            )
+            .expect("dark surface evidence");
+        }
+
+        let base_position = view.camera.position;
+        for quality in RenderQuality::ALL {
+            view.quality = quality;
+            for camera_offset in [-0.3_f32, 0.3] {
+                view.camera.position.x = base_position.x + camera_offset;
+                let first = renderer
+                    .capture(&scene, &values, &view, &overlay, 1.0)
+                    .expect("the active pool renders");
+                let repeated = renderer
+                    .capture(&scene, &values, &view, &overlay, 1.0)
+                    .expect("the same active pool renders again");
+                let first_brightness = picture_brightness(&first);
+                let repeated_brightness = picture_brightness(&repeated);
+                if quality == RenderQuality::Ultra
+                    && camera_offset > 0.0
+                    && let Some(directory) = evidence.as_deref()
+                {
+                    write_png(
+                        &directory.join("tl-202-surface-lit.png"),
+                        repeated.width,
+                        repeated.height,
+                        &repeated.rgba,
+                    )
+                    .expect("lit surface evidence");
+                }
+                assert!(
+                    first_brightness > dark + 4.0,
+                    "{} at camera offset {camera_offset} lost the surface pool: dark {dark:.2}, lit {first_brightness:.2}",
+                    quality.label()
+                );
+                assert!(
+                    (first_brightness - repeated_brightness).abs() < 0.25,
+                    "{} changed on an identical redraw: {first_brightness:.2} to {repeated_brightness:.2}",
+                    quality.label()
+                );
+            }
+        }
     }
 
     #[test]

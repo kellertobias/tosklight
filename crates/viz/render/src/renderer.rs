@@ -933,6 +933,44 @@ const _: () = assert!(TILE_SIZE == 16);
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::instances::GpuLight;
+
+    fn light_fields(shader: &str) -> Vec<&str> {
+        let declaration = shader
+            .split_once("struct Light {")
+            .expect("shader declares Light")
+            .1
+            .split_once("};")
+            .expect("Light declaration is closed")
+            .0;
+        declaration
+            .lines()
+            .filter_map(|line| {
+                let field = line.trim().split_once(':')?.0.trim();
+                (!field.is_empty()).then_some(field)
+            })
+            .collect()
+    }
+
+    /// Every shader indexes the same storage-buffer array uploaded as `GpuLight`. WGSL derives
+    /// an array's stride from its local struct declaration, so even an unused trailing field must
+    /// remain present in the culling shader or every light after index zero is read at the wrong
+    /// byte offset and can disappear from its surface tiles.
+    #[test]
+    fn culling_and_surface_shaders_share_the_uploaded_light_layout() {
+        let surface_fields = light_fields(COMMON_WGSL);
+        let culling_fields = light_fields(CULL_WGSL);
+
+        assert_eq!(culling_fields, surface_fields);
+        assert_eq!(
+            std::mem::size_of::<GpuLight>(),
+            surface_fields.len() * std::mem::size_of::<[f32; 4]>()
+        );
+        assert_eq!(
+            std::mem::align_of::<GpuLight>(),
+            std::mem::align_of::<f32>()
+        );
+    }
 
     /// The multisampled beam pass reads a different WGSL texture type, and it is reached by
     /// substituting one declaration. A rename in the shader would leave the substitution a silent
