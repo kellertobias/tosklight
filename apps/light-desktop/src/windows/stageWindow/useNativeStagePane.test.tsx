@@ -35,6 +35,7 @@ function stubBridge(overrides: Partial<DesktopBridge>): DesktopBridge {
 		closeStagePane: vi.fn(async () => undefined),
 		sendStagePaneInput: vi.fn(async () => undefined),
 		stagePaneStatus: async () => [null, null],
+		onCurrentWindowMoved: async () => () => undefined,
 		...overrides,
 	} as unknown as DesktopBridge;
 }
@@ -80,7 +81,13 @@ describe("useNativeStagePane", () => {
 	});
 
 	it("reports where the pane is and takes it back down again", async () => {
-		const openStagePane = vi.fn(async (_geometry: StagePaneGeometry) => undefined);
+		const openStagePane = vi.fn(
+			async (
+				_paneId: string,
+				_live3d: boolean,
+				_geometry: StagePaneGeometry,
+			) => undefined,
+		);
 		const closeStagePane = vi.fn(async () => undefined);
 		bridge.current = stubBridge({ openStagePane, closeStagePane });
 		const { getByTestId, unmount } = render(<Probe />);
@@ -88,7 +95,7 @@ describe("useNativeStagePane", () => {
 			expect(getByTestId("pane")).toHaveAttribute("data-active", "yes"),
 		);
 		expect(openStagePane).toHaveBeenCalledOnce();
-		const geometry = openStagePane.mock.calls[0][0];
+		const geometry = openStagePane.mock.calls[0][2];
 		expect(geometry).toMatchObject({
 			x: expect.any(Number),
 			y: expect.any(Number),

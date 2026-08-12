@@ -28,7 +28,7 @@ export function useStagePanePicks(
 		if (!active || !interactive) return;
 		let cancelled = false;
 		const drain = async () => {
-			const picks = await bridge.takeStagePanePicks();
+			const picks = await bridge.takeStagePanePicks(pane.id);
 			if (cancelled || picks.length === 0) return;
 			for (const [fixtureId, additive] of picks) {
 				// A click on nothing clears the selection, which is what the desk's own Stage does
@@ -51,5 +51,5 @@ export function useStagePanePicks(
 			cancelled = true;
 			window.clearInterval(timer);
 		};
-	}, [active, interactive, bridge, selection]);
+	}, [active, interactive, bridge, selection, pane.id]);
 }

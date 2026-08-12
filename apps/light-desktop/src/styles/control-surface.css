@@ -2568,6 +2568,9 @@ textarea,
 .desk-pane:has(.stage-canvas-3d[data-stage-renderer="native"]),
 .desk-pane:has(.stage-canvas-3d[data-stage-renderer="native"]) .pane-content,
 .desk-pane:has(.stage-canvas-3d[data-stage-renderer="native"]) .stage-window,
+.screen-shell:has(.stage-canvas-3d[data-stage-renderer="native"]),
+.screen-shell:has(.stage-canvas-3d[data-stage-renderer="native"])
+	.fixed-screen-pane,
 .screen-shell:has(.stage-canvas-3d[data-stage-renderer="native"]) .stage-window,
 .stage-window:has(.stage-canvas-3d[data-stage-renderer="native"]) {
 	background: transparent;

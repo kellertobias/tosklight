@@ -116,6 +116,14 @@ impl Visualizer {
             .as_ref()
             .map_or(HelperState::Down, |helper| helper.state().clone()))
     }
+
+    pub(crate) fn is_open(&self) -> Result<bool, String> {
+        Ok(self
+            .helper
+            .lock()
+            .map_err(|_| "visualizer state")?
+            .is_some())
+    }
 }
 
 /// The renderer shipped inside this bundle.
@@ -160,7 +168,16 @@ const fn renderer_binary_name() -> &'static str {
 
 /// Open the visualizer, or report why it could not be opened.
 #[tauri::command]
-pub(crate) fn open_visualizer(visualizer: tauri::State<'_, Visualizer>) -> Result<(), String> {
+pub(crate) fn open_visualizer(
+    visualizer: tauri::State<'_, Visualizer>,
+    panes: tauri::State<'_, crate::stage_pane::StagePanes>,
+) -> Result<(), String> {
+    if panes.has_live_3d()? {
+        return Err(
+            "Only one live 3D Stage is supported. Close the embedded or external 3D Stage before opening the Visualizer."
+                .to_owned(),
+        );
+    }
     visualizer.open()
 }
 

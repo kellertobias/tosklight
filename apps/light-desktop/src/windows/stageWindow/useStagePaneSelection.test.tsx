@@ -27,7 +27,7 @@ function Probe({
 	active?: boolean;
 }) {
 	useStagePaneSelection(
-		{ active } as NativeStagePane,
+		{ id: "pane", active } as NativeStagePane,
 		selectionModel(selected),
 		visible,
 	);
@@ -45,12 +45,12 @@ describe("useStagePaneSelection", () => {
 		bridge.current = { setStagePaneSelection } as unknown as DesktopBridge;
 		const view = render(<Probe selected={["fixture-1"]} visible />);
 		await waitFor(() =>
-			expect(setStagePaneSelection).toHaveBeenLastCalledWith(["fixture-1"]),
+			expect(setStagePaneSelection).toHaveBeenLastCalledWith("pane", ["fixture-1"]),
 		);
 
 		view.rerender(<Probe selected={["fixture-1"]} visible={false} />);
 		await waitFor(() =>
-			expect(setStagePaneSelection).toHaveBeenLastCalledWith([]),
+			expect(setStagePaneSelection).toHaveBeenLastCalledWith("pane", []),
 		);
 	});
 
@@ -59,17 +59,17 @@ describe("useStagePaneSelection", () => {
 		bridge.current = { setStagePaneSelection } as unknown as DesktopBridge;
 		const view = render(<Probe selected={["fixture-1"]} visible={false} />);
 		await waitFor(() =>
-			expect(setStagePaneSelection).toHaveBeenLastCalledWith([]),
+			expect(setStagePaneSelection).toHaveBeenLastCalledWith("pane", []),
 		);
 
 		view.rerender(<Probe selected={["fixture-2"]} visible={false} />);
 		await new Promise((resolve) => setTimeout(resolve, 0));
 		expect(setStagePaneSelection).toHaveBeenCalledTimes(1);
-		expect(setStagePaneSelection).toHaveBeenLastCalledWith([]);
+		expect(setStagePaneSelection).toHaveBeenLastCalledWith("pane", []);
 
 		view.rerender(<Probe selected={["fixture-2"]} visible />);
 		await waitFor(() =>
-			expect(setStagePaneSelection).toHaveBeenLastCalledWith(["fixture-2"]),
+			expect(setStagePaneSelection).toHaveBeenLastCalledWith("pane", ["fixture-2"]),
 		);
 	});
 

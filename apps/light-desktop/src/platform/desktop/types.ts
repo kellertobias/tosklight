@@ -98,25 +98,31 @@ export interface DesktopBridge {
 	 * cannot be drawn here rather than quietly showing a different picture of the same rig.
 	 */
 	stagePaneAvailable(): Promise<boolean>;
-	openStagePane(geometry: StagePaneGeometry, user: string): Promise<void>;
-	setStagePane(geometry: StagePaneGeometry): Promise<void>;
-	closeStagePane(): Promise<void>;
+	openStagePane(
+		paneId: string,
+		live3d: boolean,
+		geometry: StagePaneGeometry,
+		user: string,
+	): Promise<void>;
+	setStagePane(paneId: string, geometry: StagePaneGeometry): Promise<void>;
+	closeStagePane(paneId: string): Promise<void>;
 	sendStagePaneInput(
 		gesture: StagePaneGesture,
 		x: number,
 		y: number,
+		paneId?: string,
 	): Promise<void>;
 	/** The picture settings, which belong to the renderer drawing the pane rather than the desk. */
-	setStagePanePicture(picture: StagePanePicture): Promise<void>;
+	setStagePanePicture(paneId: string, picture: StagePanePicture): Promise<void>;
 	/** What the operator has selected, which the renderer draws and never decides. */
-	setStagePaneSelection(fixtures: string[]): Promise<void>;
+	setStagePaneSelection(paneId: string, fixtures: string[]): Promise<void>;
 	/** What is drawing the pane, and whatever last went wrong with it. */
-	stagePaneStatus(): Promise<[string | null, string | null]>;
+	stagePaneStatus(paneId?: string): Promise<[string | null, string | null]>;
 	/**
 	 * What the operator pointed at in the pane since this was last asked, as `[fixtureId, additive]`.
 	 * A null fixture is a click on nothing, which clears the selection.
 	 */
-	takeStagePanePicks(): Promise<Array<[string | null, boolean]>>;
+	takeStagePanePicks(paneId: string): Promise<Array<[string | null, boolean]>>;
 	/** Where the renderer's camera is, as `[x, y, z, pan, tilt, distance]`. */
 	stagePaneCamera(): Promise<
 		[number, number, number, number, number, number] | null

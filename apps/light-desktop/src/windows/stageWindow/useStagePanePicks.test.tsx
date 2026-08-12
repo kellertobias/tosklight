@@ -28,7 +28,7 @@ function selectionModel(selected: string[] = []) {
 
 function drive(selection: StageSelectionModel, active = true) {
 	function Probe() {
-		useStagePanePicks({ active } as NativeStagePane, selection, true);
+		useStagePanePicks({ id: "pane", active } as NativeStagePane, selection, true);
 		return null;
 	}
 	return render(<Probe />);

@@ -1,6 +1,6 @@
 use serde::Serialize;
-use tauri::Manager;
 use tauri::utils::config::BackgroundThrottlingPolicy;
+use tauri::{LogicalPosition, LogicalSize, Manager};
 
 #[derive(Serialize)]
 pub(crate) struct ConsoleDisplay {
@@ -55,7 +55,7 @@ pub(crate) fn list_console_displays(app: tauri::AppHandle) -> Result<Vec<Console
 
 #[tauri::command]
 pub(crate) fn close_console_screen(app: tauri::AppHandle, screen_id: String) -> Result<(), String> {
-    if let Some(window) = app.get_webview_window(&format!("screen-{screen_id}")) {
+    if let Some(window) = app.get_window(&format!("screen-{screen_id}")) {
         window.close().map_err(|error| error.to_string())?;
     }
     Ok(())
@@ -63,7 +63,7 @@ pub(crate) fn close_console_screen(app: tauri::AppHandle, screen_id: String) -> 
 
 #[tauri::command]
 pub(crate) fn hide_console_screen(app: tauri::AppHandle, screen_id: String) -> Result<(), String> {
-    if let Some(window) = app.get_webview_window(&format!("screen-{screen_id}")) {
+    if let Some(window) = app.get_window(&format!("screen-{screen_id}")) {
         window.hide().map_err(|error| error.to_string())?;
     }
     Ok(())
@@ -79,7 +79,7 @@ pub(crate) fn open_console_screen(
     fullscreen: bool,
 ) -> Result<(), String> {
     let label = format!("screen-{screen_id}");
-    if let Some(window) = app.get_webview_window(&label) {
+    if let Some(window) = app.get_window(&label) {
         if !window.is_visible().map_err(|error| error.to_string())? {
             window.show().map_err(|error| error.to_string())?;
         }
@@ -94,16 +94,12 @@ pub(crate) fn open_console_screen(
     if display_id.is_some() && monitor.is_none() {
         return Ok(());
     }
-    let mut builder = tauri::WebviewWindowBuilder::new(
-        &app,
-        label,
-        tauri::WebviewUrl::App(format!("index.html?screen={screen_id}").into()),
-    )
-    .title(title)
-    .inner_size(1200.0, 800.0)
-    .resizable(true)
-    .background_throttling(BackgroundThrottlingPolicy::Disabled)
-    .decorations(false);
+    let mut builder = tauri::window::WindowBuilder::new(&app, &label)
+        .title(title)
+        .inner_size(1200.0, 800.0)
+        .resizable(true)
+        .background_color(tauri::window::Color(0x07, 0x09, 0x0c, 0xff))
+        .decorations(false);
     if let Some(value) = bounds {
         if let Some(bounds) = window_bounds(&value) {
             builder = builder
@@ -114,10 +110,32 @@ pub(crate) fn open_console_screen(
         let position = monitor.position();
         builder = builder.position(f64::from(position.x) + 20.0, f64::from(position.y) + 20.0);
     }
-    builder
+    let window = builder
         .fullscreen(fullscreen)
         .build()
         .map_err(|error| error.to_string())?;
+    let size = window.inner_size().map_err(|error| error.to_string())?;
+    let scale = window.scale_factor().map_err(|error| error.to_string())?;
+    let logical = size.to_logical::<f64>(scale);
+    let webview = window
+        .add_child(
+            tauri::webview::WebviewBuilder::new(
+                &label,
+                tauri::WebviewUrl::App(format!("index.html?screen={screen_id}").into()),
+            )
+            .transparent(true)
+            .background_throttling(BackgroundThrottlingPolicy::Disabled)
+            .auto_resize(),
+            LogicalPosition::new(0.0, 0.0),
+            LogicalSize::new(logical.width, logical.height),
+        )
+        .map_err(|error| error.to_string())?;
+    #[cfg(target_os = "macos")]
+    let _ = webview.with_webview(|webview| {
+        viz_surface::raise_view_above_siblings(webview.inner());
+    });
+    #[cfg(not(target_os = "macos"))]
+    let _ = webview;
     Ok(())
 }
 

@@ -1,7 +1,7 @@
 pub(crate) fn run() {
     tauri::Builder::default()
         .manage(crate::visualizer::Visualizer::default())
-        .manage(crate::stage_pane::StagePane::default())
+        .manage(crate::stage_pane::StagePanes::default())
         .on_menu_event(crate::menu::handle_event)
         .invoke_handler(tauri::generate_handler![
             crate::windows::list_console_displays,

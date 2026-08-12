@@ -33,7 +33,8 @@ export function useStagePaneSelection(
 	useEffect(() => {
 		if (!active) return;
 		void bridge.setStagePaneSelection(
+			pane.id,
 			visibleFixtures ? visibleFixtures.split(",") : [],
 		);
-	}, [active, bridge, visibleFixtures]);
+	}, [active, bridge, visibleFixtures, pane.id]);
 }

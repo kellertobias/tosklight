@@ -12,7 +12,16 @@ pub(crate) fn handle_event(app: &tauri::AppHandle, event: tauri::menu::MenuEvent
         // desk's own supervised window rather than a second application — the embedded pane is a
         // later step, and this is the arrangement the plan makes first.
         "open-visualizer" => {
-            if let Err(error) = app.state::<Visualizer>().open() {
+            let panes = app.state::<crate::stage_pane::StagePanes>();
+            let result = if panes.has_live_3d().unwrap_or(false) {
+                Err(
+                    "Only one live 3D Stage is supported. Close the embedded or external 3D Stage before opening the Visualizer."
+                        .to_owned(),
+                )
+            } else {
+                app.state::<Visualizer>().open()
+            };
+            if let Err(error) = result {
                 eprintln!("failed to open the visualizer: {error}");
             }
         }

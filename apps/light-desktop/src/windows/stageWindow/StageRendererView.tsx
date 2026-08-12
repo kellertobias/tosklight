@@ -37,7 +37,7 @@ export function StageRendererView({
 	active?: boolean;
 	interactive?: boolean;
 }) {
-	const pane = useNativeStagePane(true);
+	const pane = useNativeStagePane(true, options.view !== "2d");
 	/*
 	 * The renderer resolves what is under the pointer; this decides what that means. Selection is
 	 * the desk's, and a renderer holding its own idea of it would be a second answer to the one

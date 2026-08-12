@@ -17,6 +17,7 @@
 //! precisely what running the renderer in another process was meant to prevent.
 
 use crate::stage_compositor::StageCompositor;
+use std::collections::HashMap;
 use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
 use std::sync::{Arc, Mutex};
 use viz_helper::handshake::{HelperIdentity, greet_helper};
@@ -79,6 +80,141 @@ pub(crate) struct StagePane {
     drawing: std::sync::atomic::AtomicBool,
 }
 
+#[derive(Default)]
+pub(crate) struct StagePanes {
+    panes: Mutex<HashMap<String, RegisteredPane>>,
+}
+
+struct RegisteredPane {
+    pane: Arc<StagePane>,
+    live_3d: bool,
+}
+
+impl StagePanes {
+    fn ensure_owner_available(&self, key: &str, live_3d: bool) -> Result<(), String> {
+        let panes = self.panes.lock().map_err(|_| "the Stage pane registry")?;
+        Self::ensure_owner_available_in(&panes, key, live_3d)
+    }
+
+    fn ensure_owner_available_in(
+        panes: &HashMap<String, RegisteredPane>,
+        key: &str,
+        live_3d: bool,
+    ) -> Result<(), String> {
+        if !live_3d {
+            return Ok(());
+        }
+        if panes
+            .iter()
+            .any(|(candidate, registered)| candidate != key && registered.live_3d)
+        {
+            return Err(
+                "Only one live 3D Stage is supported. Close the other 3D Stage or configure this screen as Stage - 2D."
+                    .to_owned(),
+            );
+        }
+        Ok(())
+    }
+
+    fn pane(&self, key: &str) -> Result<Option<Arc<StagePane>>, String> {
+        Ok(self
+            .panes
+            .lock()
+            .map_err(|_| "the Stage pane registry")?
+            .get(key)
+            .map(|registered| Arc::clone(&registered.pane)))
+    }
+
+    fn open<T>(
+        &self,
+        key: String,
+        live_3d: bool,
+        window: Arc<T>,
+        surface_size: (u32, u32),
+        pane_rect: PaneRect,
+        scale: f32,
+        user: String,
+    ) -> Result<(), String>
+    where
+        T: raw_window_handle::HasWindowHandle
+            + raw_window_handle::HasDisplayHandle
+            + Send
+            + Sync
+            + 'static,
+    {
+        let pane = {
+            let mut panes = self.panes.lock().map_err(|_| "the Stage pane registry")?;
+            Self::ensure_owner_available_in(&panes, &key, live_3d)?;
+            let registered = panes.entry(key.clone()).or_insert_with(|| RegisteredPane {
+                pane: Arc::new(StagePane::default()),
+                live_3d: false,
+            });
+            registered.live_3d = live_3d;
+            Arc::clone(&registered.pane)
+        };
+        if let Err(error) = pane.open(
+            window,
+            surface_size,
+            pane_rect,
+            scale,
+            user,
+            format!("stage-pane:{key}"),
+        ) {
+            if let Ok(mut panes) = self.panes.lock()
+                && let Some(registered) = panes.get_mut(&key)
+            {
+                registered.live_3d = false;
+            }
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    fn close(&self, key: &str) -> Result<(), String> {
+        let pane = {
+            let mut panes = self.panes.lock().map_err(|_| "the Stage pane registry")?;
+            let Some(registered) = panes.get_mut(key) else {
+                return Ok(());
+            };
+            registered.live_3d = false;
+            Arc::clone(&registered.pane)
+        };
+        pane.close()
+    }
+
+    fn drawing_panes(&self) -> Vec<Arc<StagePane>> {
+        self.panes.lock().map_or_else(
+            |_| Vec::new(),
+            |panes| {
+                panes
+                    .values()
+                    .filter(|registered| registered.pane.is_drawing())
+                    .map(|registered| Arc::clone(&registered.pane))
+                    .collect()
+            },
+        )
+    }
+
+    fn live_3d_pane(&self) -> Result<Option<Arc<StagePane>>, String> {
+        Ok(self
+            .panes
+            .lock()
+            .map_err(|_| "the Stage pane registry")?
+            .values()
+            .find(|registered| registered.live_3d)
+            .map(|registered| Arc::clone(&registered.pane)))
+    }
+
+    pub(crate) fn has_live_3d(&self) -> Result<bool, String> {
+        Ok(self
+            .panes
+            .lock()
+            .map_err(|_| "the Stage pane registry")?
+            .values()
+            .any(|registered| registered.live_3d))
+    }
+}
+
 struct Running {
     helper: SupervisedHelper,
     /// Where the renderer hands over each surface, while the transport shares one.
@@ -105,6 +241,7 @@ impl StagePane {
         pane: PaneRect,
         scale: f32,
         user: String,
+        target: String,
     ) -> Result<(), String>
     where
         T: raw_window_handle::HasWindowHandle
@@ -213,7 +350,7 @@ impl StagePane {
                 user,
                 // Named so a desk driving more than one renderer keeps a view per renderer, and so
                 // this pane's camera is not the standalone visualizer's.
-                target: "stage-pane".to_owned(),
+                target,
             }),
             surface_service,
         });
@@ -648,7 +785,8 @@ pub(crate) fn drive(app: &tauri::AppHandle) {
             loop {
                 // Asked off the main thread, and without the lock a frame takes, so a desk with no
                 // pane never reaches the interface's thread at all.
-                if !handle.state::<StagePane>().is_drawing() {
+                let panes = handle.state::<StagePanes>().drawing_panes();
+                if panes.is_empty() {
                     std::thread::sleep(IDLE);
                     continue;
                 }
@@ -656,8 +794,9 @@ pub(crate) fn drive(app: &tauri::AppHandle) {
                 let (done, wait) = std::sync::mpsc::channel();
                 let handle = handle.clone();
                 let posted = handle.clone().run_on_main_thread(move || {
-                    let pane = handle.state::<StagePane>();
-                    let _ = pane.tick();
+                    for pane in panes {
+                        let _ = pane.tick();
+                    }
                     // Tells this thread the main thread is free again, so the next frame is not
                     // stacked on top of one still waiting for the display.
                     let _ = done.send(());
@@ -728,16 +867,24 @@ impl PaneGeometry {
 
 #[tauri::command]
 pub(crate) fn open_stage_pane(
-    app: tauri::AppHandle,
-    pane: tauri::State<'_, StagePane>,
+    window: tauri::WebviewWindow,
+    panes: tauri::State<'_, StagePanes>,
+    visualizer: tauri::State<'_, crate::visualizer::Visualizer>,
+    pane_id: String,
+    live_3d: bool,
     geometry: PaneGeometry,
     user: String,
 ) -> Result<(), String> {
-    use tauri::Manager;
-    let window = app
-        .get_window("main")
-        .ok_or("the desk's window is not open")?;
-    pane.open(
+    if live_3d && visualizer.is_open()? {
+        return Err(
+            "Only one live 3D Stage is supported. Close the Visualizer or configure this screen as Stage - 2D."
+                .to_owned(),
+        );
+    }
+    let key = format!("{}:{pane_id}", window.label());
+    panes.open(
+        key,
+        live_3d,
         Arc::new(window),
         (geometry.surface_width, geometry.surface_height),
         geometry.rect(),
@@ -748,9 +895,15 @@ pub(crate) fn open_stage_pane(
 
 #[tauri::command]
 pub(crate) fn set_stage_pane(
-    pane: tauri::State<'_, StagePane>,
+    window: tauri::WebviewWindow,
+    panes: tauri::State<'_, StagePanes>,
+    pane_id: String,
     geometry: PaneGeometry,
 ) -> Result<(), String> {
+    let key = format!("{}:{pane_id}", window.label());
+    let Some(pane) = panes.pane(&key)? else {
+        return Ok(());
+    };
     pane.set_pane(
         (geometry.surface_width, geometry.surface_height),
         geometry.rect(),
@@ -759,18 +912,32 @@ pub(crate) fn set_stage_pane(
 }
 
 #[tauri::command]
-pub(crate) fn close_stage_pane(pane: tauri::State<'_, StagePane>) -> Result<(), String> {
-    pane.close()
+pub(crate) fn close_stage_pane(
+    window: tauri::WebviewWindow,
+    panes: tauri::State<'_, StagePanes>,
+    pane_id: String,
+) -> Result<(), String> {
+    panes.close(&format!("{}:{pane_id}", window.label()))
 }
 
 /// What the operator did over the pane, already coalesced by the web layer into one step.
 #[tauri::command]
 pub(crate) fn stage_pane_input(
-    pane: tauri::State<'_, StagePane>,
+    window: tauri::WebviewWindow,
+    panes: tauri::State<'_, StagePanes>,
+    pane_id: Option<String>,
     gesture: String,
     x: f32,
     y: f32,
 ) -> Result<(), String> {
+    let pane = if let Some(pane_id) = pane_id {
+        panes.pane(&format!("{}:{pane_id}", window.label()))?
+    } else {
+        panes.live_3d_pane()?
+    };
+    let Some(pane) = pane else {
+        return Ok(());
+    };
     let input = match gesture.as_str() {
         // A pick carries where in the pane it happened, as a fraction of the pane's own size.
         "pick" => PaneInput::Pick {
@@ -820,17 +987,27 @@ pub(crate) struct Picture {
 /// What the operator has selected, for the renderer to draw.
 #[tauri::command]
 pub(crate) fn set_stage_pane_selection(
-    pane: tauri::State<'_, StagePane>,
+    window: tauri::WebviewWindow,
+    panes: tauri::State<'_, StagePanes>,
+    pane_id: String,
     fixtures: Vec<String>,
 ) -> Result<(), String> {
+    let Some(pane) = panes.pane(&format!("{}:{pane_id}", window.label()))? else {
+        return Ok(());
+    };
     pane.send_selection(fixtures)
 }
 
 #[tauri::command]
 pub(crate) fn set_stage_pane_picture(
-    pane: tauri::State<'_, StagePane>,
+    window: tauri::WebviewWindow,
+    panes: tauri::State<'_, StagePanes>,
+    pane_id: String,
     picture: Picture,
 ) -> Result<(), String> {
+    let Some(pane) = panes.pane(&format!("{}:{pane_id}", window.label()))? else {
+        return Ok(());
+    };
     pane.send_picture(picture)
 }
 
@@ -844,23 +1021,29 @@ pub(crate) fn set_stage_pane_picture(
 /// the desk decides what pointing at a fixture means.
 #[tauri::command]
 pub(crate) fn take_stage_pane_picks(
-    pane: tauri::State<'_, StagePane>,
+    window: tauri::WebviewWindow,
+    panes: tauri::State<'_, StagePanes>,
+    pane_id: String,
 ) -> Result<Vec<(Option<String>, bool)>, String> {
-    pane.take_picked()
+    panes
+        .pane(&format!("{}:{pane_id}", window.label()))?
+        .map_or_else(|| Ok(Vec::new()), |pane| pane.take_picked())
 }
 
 /// Where the renderer's camera is, as `[x, y, z, pan, tilt, distance]`.
 #[tauri::command]
 pub(crate) fn stage_pane_camera(
-    pane: tauri::State<'_, StagePane>,
+    panes: tauri::State<'_, StagePanes>,
 ) -> Result<Option<[f32; 6]>, String> {
-    pane.camera()
+    panes
+        .live_3d_pane()?
+        .map_or_else(|| Ok(None), |pane| pane.camera())
 }
 
 /// Put the camera at numbers, for a control surface that addresses it that way.
 #[tauri::command]
 pub(crate) fn place_stage_pane_camera(
-    pane: tauri::State<'_, StagePane>,
+    panes: tauri::State<'_, StagePanes>,
     x: Option<f32>,
     y: Option<f32>,
     z: Option<f32>,
@@ -868,13 +1051,26 @@ pub(crate) fn place_stage_pane_camera(
     tilt: Option<f32>,
     distance: Option<f32>,
 ) -> Result<(), String> {
+    let Some(pane) = panes.live_3d_pane()? else {
+        return Ok(());
+    };
     pane.place_camera(x, y, z, pan, tilt, distance)
 }
 
 #[tauri::command]
 pub(crate) fn stage_pane_status(
-    pane: tauri::State<'_, StagePane>,
+    window: tauri::WebviewWindow,
+    panes: tauri::State<'_, StagePanes>,
+    pane_id: Option<String>,
 ) -> Result<(Option<String>, Option<String>), String> {
+    let pane = if let Some(pane_id) = pane_id {
+        panes.pane(&format!("{}:{pane_id}", window.label()))?
+    } else {
+        panes.live_3d_pane()?
+    };
+    let Some(pane) = pane else {
+        return Ok((None, None));
+    };
     Ok((pane.description()?, pane.trouble()?))
 }
 
@@ -914,5 +1110,30 @@ mod tests {
         pane.tick().expect("drawing nothing");
         assert_eq!(pane.description().expect("description"), None);
         assert_eq!(pane.trouble().expect("trouble"), None);
+    }
+
+    #[test]
+    fn one_live_3d_owner_does_not_block_independent_2d_panes() {
+        let panes = StagePanes::default();
+        panes.panes.lock().expect("registry").insert(
+            "main:stage".into(),
+            RegisteredPane {
+                pane: Arc::new(StagePane::default()),
+                live_3d: true,
+            },
+        );
+
+        assert!(panes.ensure_owner_available("main:stage", true).is_ok());
+        assert!(
+            panes
+                .ensure_owner_available("screen-plan:stage", false)
+                .is_ok()
+        );
+        assert!(
+            panes
+                .ensure_owner_available("screen-viz:stage", true)
+                .unwrap_err()
+                .contains("Only one live 3D Stage")
+        );
     }
 }
