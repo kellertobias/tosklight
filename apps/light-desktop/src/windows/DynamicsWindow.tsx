@@ -585,20 +585,10 @@ function DynamicPoolTile({
 				number: poolNumber,
 				primary: dynamic?.body.name ?? "Empty",
 				secondary: dynamic
-					? targetSummary(dynamic.body)
+					? dynamic.body.target_binding.type === "live_group"
+						? `G${dynamic.body.target_binding.group_id}`
+						: "Live"
 					: "Tap to choose first lane",
-				details: dynamic
-					? [
-							`${dynamic.body.lanes.length} ${dynamic.body.lanes.length === 1 ? "lane" : "lanes"}`,
-							...(validationError ? [validationError] : []),
-							...(status ? [coverageSummary(status)] : []),
-							validationError
-								? "Blocked until repaired or deleted"
-								: running
-									? `${count} running ${count === 1 ? "instance" : "instances"}`
-									: "Ready",
-						]
-					: [],
 				status: validationError || status?.warning ? "⚠" : undefined,
 				icon: dynamic?.body.icon,
 				iconColor: dynamic?.body.color ?? "#4edcff",
@@ -650,12 +640,10 @@ export {
 } from "./dynamics/DynamicsEditor";
 
 import {
-	coverageSummary,
 	createDefaultDynamicDefinition,
 	DynamicEditor,
 	type DynamicEditorProps,
 	definitionStatus,
 	LaneAttributeModal,
 	runningCount,
-	targetSummary,
 } from "./dynamics/DynamicsEditor";

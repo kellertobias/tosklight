@@ -212,6 +212,41 @@ describe("DynamicsWindow", () => {
 		).not.toBeInTheDocument();
 	});
 
+	it("shows only the concise target scope as populated card metadata", () => {
+		const groupDynamic = dynamicObject({ multipleLanes: true });
+		groupDynamic.id = "dynamic-group";
+		groupDynamic.body.id = "dynamic-group";
+		groupDynamic.body.pool_number = 18;
+		groupDynamic.body.name = "Group Pulse";
+		groupDynamic.body.target_binding = {
+			type: "live_group",
+			group_id: "18",
+		};
+		const selectionDynamic = dynamicObject({ multipleLanes: true });
+		selectionDynamic.id = "dynamic-selection";
+		selectionDynamic.body.id = "dynamic-selection";
+		selectionDynamic.body.pool_number = 19;
+		selectionDynamic.body.name = "Selection Pulse";
+		selectionDynamic.body.target_binding = {
+			type: "frozen_targets",
+			targets: ["fixture-1", "fixture-2"],
+		};
+		dynamics = [groupDynamic, selectionDynamic];
+
+		renderWindow();
+
+		const groupCard = screen.getByRole("button", { name: /Group Pulse/i });
+		expect(within(groupCard).getByText("G18")).toBeInTheDocument();
+		expect(within(groupCard).queryByText(/Live Group/i)).toBeNull();
+		expect(within(groupCard).queryByText(/lanes?/i)).toBeNull();
+		const selectionCard = screen.getByRole("button", {
+			name: /Selection Pulse/i,
+		});
+		expect(within(selectionCard).getByText("Live")).toBeInTheDocument();
+		expect(within(selectionCard).queryByText(/targets?/i)).toBeNull();
+		expect(within(selectionCard).queryByText(/lanes?/i)).toBeNull();
+	});
+
 	it("uses the shared pool without pagination or implementation legend", () => {
 		renderWindow();
 
