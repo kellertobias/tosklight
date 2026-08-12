@@ -16,8 +16,7 @@
 	display: none;
 }
 
-.file-manager .file-operation-actions,
-.file-manager .file-picker-actions {
+.file-manager .file-operation-actions {
 	display: flex;
 	flex: none;
 	gap: 0.35rem;

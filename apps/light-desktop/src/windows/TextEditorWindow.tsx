@@ -1,10 +1,7 @@
 import { useTextEditorController } from "./textEditorWindow/controller";
 import { TextEditorContent } from "./textEditorWindow/EditorContent";
 import { TextEditorMessages } from "./textEditorWindow/Messages";
-import {
-	TextEditorPaneChrome,
-	TextEditorToolbar,
-} from "./textEditorWindow/Toolbar";
+import { TextEditorPaneChrome } from "./textEditorWindow/Toolbar";
 import type { TextEditorController } from "./textEditorWindow/controller";
 import type { WindowProps } from "./windowTypes";
 
@@ -27,7 +24,6 @@ export function TextEditorWindowView({
 			data-dirty={controller.dirty || undefined}
 		>
 			<TextEditorPaneChrome controller={controller} />
-			<TextEditorToolbar controller={controller} />
 			<TextEditorMessages controller={controller} />
 			<TextEditorContent controller={controller} />
 		</section>

@@ -19,9 +19,8 @@ export function TextEditorContent({
 					}
 					value={controller.text}
 					readOnly={
-						!controller.document ||
 						controller.paneReadOnly ||
-						controller.document.read_only ||
+						Boolean(controller.document?.read_only) ||
 						controller.availability === "missing"
 					}
 					onBlur={controller.persistViewState}
@@ -39,7 +38,7 @@ export function TextEditorContent({
 					placeholder={
 						controller.availability === "missing"
 							? "The associated file is missing."
-							: "Choose a UTF-8 text file to begin."
+							: "Enter text, or open a UTF-8 text file."
 					}
 				/>
 			)}

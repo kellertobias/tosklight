@@ -222,6 +222,44 @@ describe("TextEditorWindow file loading and presentation", () => {
 			root: "shows",
 			path: "run/cues.md",
 		});
+		expect(screen.queryByLabelText("File root")).not.toBeInTheDocument();
+		expect(screen.queryByLabelText("Choose File")).not.toBeInTheDocument();
+		expect(
+			screen.queryByRole("button", { name: "Close File" }),
+		).not.toBeInTheDocument();
+	});
+
+	it("allows direct editing before a file is associated", async () => {
+		type Roots = Awaited<ReturnType<typeof mocks.server.fileRoots>>;
+		let resolveRoots: ((roots: Roots) => void) | undefined;
+		mocks.server.fileRoots.mockReturnValue(
+			new Promise((resolve) => {
+				resolveRoots = resolve;
+			}),
+		);
+		mocks.state.desks[0].panes[0].textFileRoot = "";
+		mocks.state.desks[0].panes[0].textFilePath = "";
+		render(<TextEditorWindow paneId="editor" />);
+
+		const editor = screen.getByLabelText("File text");
+		expect(editor).not.toHaveAttribute("readonly");
+		fireEvent.change(editor, { target: { value: "New operator note" } });
+		expect(editor).toHaveValue("New operator note");
+		expect(
+			screen.getByText("Unsaved", { selector: ".text-save-state" }),
+		).toBeVisible();
+		await act(async () =>
+			resolveRoots?.([
+				{
+					id: "shows",
+					label: "Shows",
+					icon: "shows",
+					removable: false,
+					writable: true,
+				},
+			]),
+		);
+		expect(editor).toHaveValue("New operator note");
 	});
 
 	it("enforces pane-level read-only operation even for a writable file", async () => {
@@ -364,21 +402,45 @@ describe("TextEditorWindow revision conflicts and Save As", () => {
 	});
 
 	it("saves a copy without overwriting an existing revision and persists the new association", async () => {
-		vi.mocked(window.prompt).mockReturnValue("run/new-notes.md");
+		mocks.openPicker.mockResolvedValue([
+			{ rootId: "shows", entry: entry("run/new-notes.md") },
+		]);
+		mocks.server.readTextFile
+			.mockResolvedValueOnce(document())
+			.mockResolvedValueOnce(
+				document("", "destination-revision", false, "run/new-notes.md"),
+			);
 		render(<TextEditorWindow paneId="editor" />);
 		const editor = screen.getByLabelText("File text");
 		await waitFor(() => expect(editor).toHaveValue("House open"));
 		fireEvent.change(editor, { target: { value: "House open\nBeginners" } });
 
 		fireEvent.click(screen.getByRole("button", { name: "Save As" }));
+		expect(
+			screen.getByRole("button", { name: "Save As" }).closest("header"),
+		).not.toBeNull();
+		await waitFor(() =>
+			expect(mocks.openPicker).toHaveBeenCalledWith({
+				purpose: "Save text as",
+				target: "files",
+				multiple: false,
+				allowedExtensions: ["txt", "md", "csv", "log"],
+				initialRootId: "shows",
+				initialDirectory: "",
+				selectLabel: "Save As",
+			}),
+		);
 
 		await waitFor(() =>
 			expect(mocks.server.saveTextFile).toHaveBeenCalledWith(
 				"shows",
 				"run/new-notes.md",
 				"House open\nBeginners",
-				null,
+				"destination-revision",
 			),
+		);
+		expect(window.confirm).toHaveBeenCalledWith(
+			"Replace run/new-notes.md with this text?",
 		);
 		expect(mocks.dispatch).toHaveBeenCalledWith({
 			type: "SET_TEXT_EDITOR_FILE",
@@ -548,24 +610,15 @@ describe("TextEditorWindow external deletion and recovery", () => {
 });
 
 describe("TextEditorWindow dirty lifecycle and view persistence", () => {
-	it("asks before closing an associated file with unsaved changes", async () => {
+	it("keeps file switching in Open and removal outside redundant pane controls", async () => {
 		render(<TextEditorWindow paneId="editor" />);
 		const editor = screen.getByLabelText("File text");
 		await waitFor(() => expect(editor).toHaveValue("House open"));
 		fireEvent.change(editor, { target: { value: "Unstored" } });
-		vi.mocked(window.confirm).mockReturnValueOnce(false);
-
-		fireEvent.click(screen.getByRole("button", { name: "Close File" }));
-		expect(mocks.dispatch).not.toHaveBeenCalled();
-
-		vi.mocked(window.confirm).mockReturnValueOnce(true);
-		fireEvent.click(screen.getByRole("button", { name: "Close File" }));
-		expect(mocks.dispatch).toHaveBeenCalledWith({
-			type: "SET_TEXT_EDITOR_FILE",
-			id: "editor",
-			root: "shows",
-			path: "",
-		});
+		expect(
+			screen.queryByRole("button", { name: "Close File" }),
+		).not.toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "Open File" })).toBeVisible();
 	});
 
 	it("protects dirty text when the configurable pane is removed", async () => {

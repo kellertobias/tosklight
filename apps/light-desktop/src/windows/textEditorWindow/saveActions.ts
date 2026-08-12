@@ -1,4 +1,5 @@
 import type { TextDocument } from "../../api/types";
+import { openFileManagerPicker } from "../FileManagerPickerHost";
 import { publishTextFileSaved } from "../textFileSync";
 import type { ReloadTextFiles } from "./catalog";
 import {
@@ -6,6 +7,8 @@ import {
 	isMissingError,
 	isSameDocumentVersion,
 	isSupportedTextFile,
+	parentDirectory,
+	TEXT_FILE_EXTENSIONS,
 } from "./files";
 import type { TextEditorState } from "./state";
 
@@ -16,17 +19,17 @@ export function useTextFileSaveActions(
 	surfaceExternalDocument: (next: TextDocument, source: string) => void,
 ) {
 	const saveTo = async (
+		root: string,
 		path: string,
 		revision: string | null,
 		associationChanges: boolean,
 		successMessage: string,
 	) => {
-		const targetRoot = model.documentRef.current?.root_id ?? model.selectedRoot;
-		if (!targetRoot || model.saving) return;
+		if (!root || model.saving) return;
 		model.setSaving(true);
 		try {
 			const next = await model.serverRef.current.saveTextFile(
-				targetRoot,
+				root,
 				path,
 				model.textRef.current,
 				revision,
@@ -36,12 +39,12 @@ export function useTextFileSaveActions(
 				model.dispatch({
 					type: "SET_TEXT_EDITOR_FILE",
 					id: model.paneId,
-					root: targetRoot,
+					root,
 					path: next.path,
 				});
 			}
 			publishTextFileSaved(next, model.paneId);
-			void reloadFiles(targetRoot);
+			void reloadFiles(root);
 		} catch (error) {
 			if (
 				revision &&
@@ -68,15 +71,36 @@ export function useTextFileSaveActions(
 		) {
 			return;
 		}
-		void saveTo(current.path, current.revision, false, "Saved");
+		void saveTo(
+			current.root_id,
+			current.path,
+			current.revision,
+			false,
+			"Saved",
+		);
 	};
-	const saveAs = () => {
+	const saveAs = async () => {
 		if (!model.selectedRoot || model.paneReadOnly) return;
-		const suggested = model.selectedPath || "operator-notes.txt";
-		const path = window
-			.prompt("Save as path (relative to this file location)", suggested)
-			?.trim();
-		if (!path) return;
+		const result = await openFileManagerPicker({
+			purpose: "Save text as",
+			target: "files",
+			multiple: false,
+			allowedExtensions: [...TEXT_FILE_EXTENSIONS],
+			initialRootId: model.selectedRoot,
+			initialDirectory: parentDirectory(model.selectedPath),
+			selectLabel: "Save As",
+		});
+		if (!result) return;
+		if (!Array.isArray(result)) {
+			model.setNotice({
+				kind: "error",
+				text: "Save As requires a file in the ToskLight File Manager.",
+			});
+			return;
+		}
+		const selected = result[0];
+		const path = selected?.entry.path;
+		if (!selected || !path) return;
 		if (!isSupportedTextFile(path)) {
 			model.setNotice({
 				kind: "error",
@@ -84,9 +108,25 @@ export function useTextFileSaveActions(
 			});
 			return;
 		}
+		let revision: string;
+		try {
+			const destination = await model.serverRef.current.readTextFile(
+				selected.rootId,
+				path,
+			);
+			if (!window.confirm(`Replace ${path} with this text?`)) return;
+			revision = destination.revision;
+		} catch (error) {
+			model.setNotice({
+				kind: "error",
+				text: `Could not prepare ${path} for Save As: ${friendlyError(error)}`,
+			});
+			return;
+		}
 		void saveTo(
+			selected.rootId,
 			path,
-			null,
+			revision,
 			path !== model.selectedPath,
 			path === model.selectedPath ? "File recreated" : `Saved as ${path}`,
 		);
@@ -101,7 +141,13 @@ export function useTextFileSaveActions(
 		) {
 			return;
 		}
-		void saveTo(model.selectedPath, null, false, "File recreated");
+		void saveTo(
+			model.selectedRoot,
+			model.selectedPath,
+			null,
+			false,
+			"File recreated",
+		);
 	};
 	const reloadExternal = () => {
 		const latest = model.externalDocumentRef.current;

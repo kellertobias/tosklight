@@ -275,17 +275,18 @@ export function FileManagerHeader({
 	);
 	const actions = (
 		<div className="file-manager-header-actions">
-			<Button
-				aria-label="Partial Show Load"
-				disabled={
-					!controller.partialImport.source || controller.partialImport.loading
-				}
-				onClick={() => void controller.partialImport.open()}
-			>
-				{controller.partialImport.loading
-					? "Preparing Partial Load…"
-					: "Partial Show Load"}
-			</Button>
+			{controller.picker && (
+				<Button
+					variant="primary"
+					disabled={!controller.pickerValid}
+					onClick={() =>
+						controller.pickerValid &&
+						controller.picker?.onSelect(state.selected)
+					}
+				>
+					{controller.picker.selectLabel ?? "Select"}
+				</Button>
+			)}
 			<Button
 				aria-label="Edit"
 				aria-haspopup="menu"
@@ -345,7 +346,7 @@ export function FileManagerHeader({
 	};
 	return (
 		<>
-			{!paneChrome && !controller.picker && (
+			{!paneChrome && (
 				<WindowHeader
 					title="File Manager"
 					info={{ primary: controller.purpose, secondary: pathControl }}
@@ -353,7 +354,18 @@ export function FileManagerHeader({
 					onSearch={state.setQuery}
 					toolbar={actions}
 					actions={
-						controller.closeable && controller.app
+						controller.picker
+							? [
+									[
+										{
+											id: "cancel",
+											label: "×",
+											ariaLabel: "Close File Manager",
+											onClick: controller.picker.onCancel,
+										},
+									],
+								]
+							: controller.closeable && controller.app
 							? [
 									[
 										{
