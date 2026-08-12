@@ -80,6 +80,44 @@ pub(crate) fn open_console_screen(
 ) -> Result<(), String> {
     let label = format!("screen-{screen_id}");
     if let Some(window) = app.get_window(&label) {
+        window
+            .set_title(&title)
+            .map_err(|error| error.to_string())?;
+        if window.is_fullscreen().map_err(|error| error.to_string())? {
+            window
+                .set_fullscreen(false)
+                .map_err(|error| error.to_string())?;
+        }
+        if let Some(value) = bounds {
+            if let Some(bounds) = window_bounds(&value) {
+                window
+                    .set_position(LogicalPosition::new(bounds.x, bounds.y))
+                    .map_err(|error| error.to_string())?;
+                window
+                    .set_size(LogicalSize::new(bounds.width, bounds.height))
+                    .map_err(|error| error.to_string())?;
+            }
+        } else if let Some(monitor) = app
+            .available_monitors()
+            .map_err(|error| error.to_string())?
+            .iter()
+            .find(|monitor| {
+                display_id
+                    .as_ref()
+                    .is_some_and(|id| monitor_id(monitor) == *id)
+            })
+        {
+            let position = monitor.position();
+            window
+                .set_position(LogicalPosition::new(
+                    f64::from(position.x) + 20.0,
+                    f64::from(position.y) + 20.0,
+                ))
+                .map_err(|error| error.to_string())?;
+        }
+        window
+            .set_fullscreen(fullscreen)
+            .map_err(|error| error.to_string())?;
         if !window.is_visible().map_err(|error| error.to_string())? {
             window.show().map_err(|error| error.to_string())?;
         }
