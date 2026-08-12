@@ -28,11 +28,36 @@ pub(crate) struct Visualizer {
     to_helper: Mutex<Option<std::process::ChildStdin>>,
     /// What answered the greeting, for the desk's diagnostics.
     identity: Mutex<Option<HelperIdentity>>,
+    /// The authoritative state a replacement helper needs before its first frame.
+    snapshot: Mutex<VisualizerSnapshot>,
+}
+
+#[derive(Default)]
+struct VisualizerSnapshot {
+    scene: Option<Vec<u8>>,
+    values: Option<Vec<u8>>,
+}
+
+impl VisualizerSnapshot {
+    fn messages(&self) -> impl Iterator<Item = ToHelper> + '_ {
+        self.scene
+            .iter()
+            .cloned()
+            .map(|payload| ToHelper::Scene { payload })
+            .chain(
+                self.values
+                    .iter()
+                    .cloned()
+                    .map(|payload| ToHelper::Values { payload }),
+            )
+    }
 }
 
 impl Visualizer {
     /// Start it, replacing one already running.
     pub(crate) fn open(&self) -> Result<(), String> {
+        self.close()?;
+        *self.snapshot.lock().map_err(|_| "visualizer state")? = VisualizerSnapshot::default();
         let program = helper_binary()?;
         // `--helper` is what makes it this desk's window rather than the standalone product: it
         // takes its scene, values and view over the channel and opens nothing of its own.
@@ -78,6 +103,16 @@ impl Visualizer {
         Ok(())
     }
 
+    pub(crate) fn send_scene(&self, payload: Vec<u8>) -> Result<(), String> {
+        self.snapshot.lock().map_err(|_| "visualizer state")?.scene = Some(payload.clone());
+        self.send(&ToHelper::Scene { payload })
+    }
+
+    pub(crate) fn send_values(&self, payload: Vec<u8>) -> Result<(), String> {
+        self.snapshot.lock().map_err(|_| "visualizer state")?.values = Some(payload.clone());
+        self.send(&ToHelper::Values { payload })
+    }
+
     /// What is drawing, once the helper has said. `None` before the greeting completes.
     pub(crate) fn renderer(&self) -> Result<Option<String>, String> {
         Ok(self
@@ -96,15 +131,48 @@ impl Visualizer {
         }
         *self.to_helper.lock().map_err(|_| "visualizer state")? = None;
         *self.identity.lock().map_err(|_| "visualizer state")? = None;
+        *self.snapshot.lock().map_err(|_| "visualizer state")? = VisualizerSnapshot::default();
         Ok(())
     }
 
     /// Notice a helper that has died, and restart or give up. Driven from the desk's own loop so
     /// supervision cannot race with the desk deciding to close it.
     pub(crate) fn poll(&self) -> Result<(), String> {
-        if let Some(helper) = self.helper.lock().map_err(|_| "visualizer state")?.as_mut() {
-            helper.poll(std::time::Instant::now());
+        let mut helpers = self.helper.lock().map_err(|_| "visualizer state")?;
+        let Some(helper) = helpers.as_mut() else {
+            return Ok(());
+        };
+        helper.poll(std::time::Instant::now());
+        if helper.state() != &HelperState::Running {
+            *self.to_helper.lock().map_err(|_| "visualizer state")? = None;
+            *self.identity.lock().map_err(|_| "visualizer state")? = None;
+            return Ok(());
         }
+        if self
+            .to_helper
+            .lock()
+            .map_err(|_| "visualizer state")?
+            .is_some()
+        {
+            return Ok(());
+        }
+
+        let (mut to_helper, mut from_helper) = helper
+            .take_channel()
+            .ok_or("the restarted visualizer has no channel")?;
+        let identity = greet_helper(&mut to_helper, &mut from_helper, "ToskLight Visualizer")
+            .map_err(|error| error.to_string())?;
+        for message in self
+            .snapshot
+            .lock()
+            .map_err(|_| "visualizer state")?
+            .messages()
+        {
+            write_frame(&mut to_helper, &encode(&message)?)
+                .map_err(|error| format!("restore the visualizer: {error}"))?;
+        }
+        *self.to_helper.lock().map_err(|_| "visualizer state")? = Some(to_helper);
+        *self.identity.lock().map_err(|_| "visualizer state")? = Some(identity);
         Ok(())
     }
 
@@ -200,7 +268,7 @@ pub(crate) fn send_visualizer_scene(
     visualizer: tauri::State<'_, Visualizer>,
     payload: Vec<u8>,
 ) -> Result<(), String> {
-    visualizer.send(&ToHelper::Scene { payload })
+    visualizer.send_scene(payload)
 }
 
 /// Send the visualizer what the rig is currently doing.
@@ -209,7 +277,7 @@ pub(crate) fn send_visualizer_values(
     visualizer: tauri::State<'_, Visualizer>,
     payload: Vec<u8>,
 ) -> Result<(), String> {
-    visualizer.send(&ToHelper::Values { payload })
+    visualizer.send_values(payload)
 }
 
 /// What the visualizer is drawing with, once it has said. Empty before the greeting completes.
@@ -273,6 +341,22 @@ mod tests {
             .send(&ToHelper::Shutdown)
             .expect("sending into the void is not a failure");
         assert_eq!(visualizer.renderer().expect("renderer"), None);
+    }
+
+    #[test]
+    fn a_replacement_visualizer_replays_latest_scene_before_values() {
+        let mut snapshot = VisualizerSnapshot::default();
+        snapshot.scene = Some(vec![1]);
+        snapshot.values = Some(vec![2]);
+        snapshot.scene = Some(vec![3]);
+
+        assert_eq!(
+            snapshot.messages().collect::<Vec<_>>(),
+            vec![
+                ToHelper::Scene { payload: vec![3] },
+                ToHelper::Values { payload: vec![2] },
+            ]
+        );
     }
 
     /// The desk supervises a helper it ships. Anything else would be another build speaking an
