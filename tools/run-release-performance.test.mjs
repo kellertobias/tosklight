@@ -478,6 +478,10 @@ test("scheduled publication separates release delivery from performance and Page
 		resolve(ROOT, ".github/workflows/documentation.yml"),
 		"utf8",
 	);
+	const storybookPagesWorkflow = readFileSync(
+		resolve(ROOT, ".github/workflows/storybook-pages.yml"),
+		"utf8",
+	);
 	const desktopHarness = readFileSync(
 		resolve(ROOT, "tools/run-desktop-performance.mjs"),
 		"utf8",
@@ -508,6 +512,14 @@ test("scheduled publication separates release delivery from performance and Page
 	assert.doesNotMatch(release, /- benchmark|- pages-build/u);
 	assert.match(workflow, /schedule:[\s\S]*?cron:/u);
 	assert.match(workflow, /workflow_dispatch:/u);
+	assert.match(
+		workflow,
+		/workflow_run:[\s\S]*?workflows: \["CI and release"\][\s\S]*?types: \[completed\]/u,
+	);
+	assert.match(
+		workflow,
+		/github\.event\.workflow_run\.conclusion == 'success'[\s\S]*?github\.event\.workflow_run\.event == 'push'[\s\S]*?github\.event\.workflow_run\.head_branch == 'main'/u,
+	);
 	assert.match(performance, /needs: release-metadata/u);
 	for (const expensiveJob of [manual, storybook, liveBuild]) {
 		assert.match(
@@ -548,6 +560,19 @@ test("scheduled publication separates release delivery from performance and Page
 	assert.match(pages, /LIGHT_PERFORMANCE_STATUS_FILE/u);
 	assert.match(pages, /name: storybook-static/u);
 	assert.match(pages, /\.artifacts\/build\/storybook\/ui/u);
+	assert.match(storybookPagesWorkflow, /workflow_dispatch:/u);
+	assert.match(storybookPagesWorkflow, /npm run storybook:build/u);
+	assert.match(
+		storybookPagesWorkflow,
+		/actions\/artifacts\?name=github-pages[\s\S]*?select\(\.expired == false\)[\s\S]*?workflow_run\.id/u,
+	);
+	assert.match(storybookPagesWorkflow, /--name github-pages/u);
+	assert.match(
+		storybookPagesWorkflow,
+		/rm -rf \.artifacts\/generated\/pages\/storybook/u,
+	);
+	assert.match(storybookPagesWorkflow, /actions\/upload-pages-artifact@/u);
+	assert.match(storybookPagesWorkflow, /actions\/deploy-pages@/u);
 	assert.doesNotMatch(release, /storybook|manual|pages|performance/u);
 	assert.match(releaseWorkflow, /SCCACHE_GHA_ENABLED: "true"/u);
 	assert.match(releaseWorkflow, /RUSTC_WRAPPER: sccache/u);
