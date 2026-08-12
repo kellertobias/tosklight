@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "ToskLight Viz Editor",
+  "productName": "ToskLight Visualizer",
   "version": "0.1.0",
-  "identifier": "de.tokenet.tosklight.viz-editor",
+  "identifier": "de.tokenet.tosklight.visualizer",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://127.0.0.1:4177",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "ToskLight Viz Editor",
+        "title": "Rig Editor",
         "width": 1440,
         "height": 900,
         "minWidth": 1024,

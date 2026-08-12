@@ -425,6 +425,25 @@ impl Application {
         }
     }
 
+    /// Open the product's rig-planning window and make its document the rendered source.
+    fn open_rig_editor(&mut self) {
+        self.lasting_failure = None;
+        if self.planning_window.is_none() {
+            match crate::planner::PlanningWindow::open() {
+                Ok(window) => self.planning_window = Some(window),
+                Err(error) => {
+                    self.lasting_failure = Some(format!("rig editor: {error}"));
+                    return;
+                }
+            }
+        }
+        self.hosted_show = None;
+        self.preferences.source = ProviderKind::PlanningSoftware;
+        self.framed_revision = None;
+        self.camera_is_local = false;
+        self.reconnect();
+    }
+
     /// Open or close Quick Settings, with the source control saying what this build can connect.
     ///
     /// The active provider is asked rather than assumed: a source that reports itself unavailable
@@ -1154,6 +1173,7 @@ impl ApplicationHandler for Application {
         for command in commands {
             match command {
                 crate::menu::MenuCommand::OpenShowFile => self.prompt_for_show_file(),
+                crate::menu::MenuCommand::OpenRigEditor => self.open_rig_editor(),
                 crate::menu::MenuCommand::CloseShowFile => self.close_show_file(),
                 crate::menu::MenuCommand::ConnectToDesk => self.close_show_file(),
                 crate::menu::MenuCommand::TakeSnapshot => self.take_snapshot(),

@@ -222,7 +222,10 @@ test("macOS release apps are sealed only after their final helpers and resources
 	assert.match(sealer, /codesign --force --deep --sign - --timestamp=none/u);
 	assert.match(sealer, /codesign --verify --deep --strict/u);
 	assert.match(workflow, /ToskLight Visualizer\.app[\s\S]*seal-macos-app\.sh/u);
-	assert.match(workflow, /ToskLight Viz Editor\.app[\s\S]*seal-macos-app\.sh/u);
+	assert.match(
+		workflow,
+		/ToskLight Viz Editor\.app\/Contents\/MacOS\/viz-editor[\s\S]*ToskLight Visualizer\.app\/Contents\/MacOS\/viz-editor[\s\S]*seal-macos-app\.sh/u,
+	);
 	assert.match(
 		workflow,
 		/bundle-media-macos\.sh[\s\S]*seal-macos-app\.sh/u,
@@ -259,8 +262,20 @@ test("the Viz release builds only the bundle format its staging step consumes", 
 
 	assert.match(buildStep, /bundle_args=\(--no-bundle\)/u);
 	assert.match(buildStep, /macOS\) bundle_args=\(--bundles app\)/u);
-	assert.match(buildStep, /Windows\) bundle_args=\(--bundles nsis\)/u);
+	assert.doesNotMatch(buildStep, /Windows\) bundle_args=\(--bundles nsis\)/u);
 	assert.doesNotMatch(buildStep, /--bundles all/u);
+});
+
+test("the Viz release keeps one product identity and literal accessory names", () => {
+	const workflow = read(".github/workflows/release.yml");
+	const assembler = read("tools/assemble-release-bundle.sh");
+	const config = read("apps/viz-editor/src-tauri/tauri.conf.json");
+
+	assert.match(config, /"productName": "ToskLight Visualizer"/u);
+	assert.match(config, /"title": "Rig Editor"/u);
+	assert.doesNotMatch(workflow, /tosklight-viz-\$version-windows-amd64-setup/u);
+	assert.match(assembler, /ToskLight Visualizer\.exe/u);
+	assert.doesNotMatch(assembler, /mv "\$previz\/viz-editor(?:\.exe)?"/u);
 });
 
 test("open:viz requires every helper path it exports without rebuilding", () => {
