@@ -9,6 +9,7 @@ pub(in crate::runtime) struct SessionResource {
     /// Sessions that hold a non-default role. Kept beside the session record so the historical
     /// operator session stays exactly as it was.
     roles: Arc<RwLock<HashMap<SessionId, RuntimeSessionRole>>>,
+    visualizer_connections: Arc<RwLock<HashMap<SessionId, usize>>>,
 }
 
 pub(crate) enum SessionFileInputRoute {
@@ -24,6 +25,7 @@ impl SessionResource {
             session_clients: Arc::default(),
             file_input_contexts: Arc::default(),
             roles: Arc::default(),
+            visualizer_connections: Arc::default(),
         }
     }
 
@@ -62,6 +64,28 @@ impl SessionResource {
 
     pub(in crate::runtime) fn sessions(&self) -> Vec<Session> {
         self.sessions.read().values().cloned().collect()
+    }
+
+    pub(in crate::runtime) fn set_visualizer_connected(&self, id: SessionId, connected: bool) {
+        if connected {
+            *self.visualizer_connections.write().entry(id).or_default() += 1;
+        } else {
+            let mut connections = self.visualizer_connections.write();
+            let Some(count) = connections.get_mut(&id) else {
+                return;
+            };
+            *count -= 1;
+            if *count == 0 {
+                connections.remove(&id);
+            }
+        }
+    }
+
+    pub(in crate::runtime) fn has_visualizer_connection(&self) -> bool {
+        // Visualizer views are installation-level presentation state, so a live renderer is
+        // available to every desk surface attached to this server rather than one command-line
+        // context.
+        !self.visualizer_connections.read().is_empty()
     }
 
     pub(in crate::runtime) fn insert_session(&self, session: Session) -> Option<Session> {

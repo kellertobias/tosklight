@@ -298,7 +298,7 @@ pub(super) async fn unlock_desk(
     })
 }
 
-/// A read-only visualizer session may only read.
+/// A read-only visualizer session may only read or close itself.
 ///
 /// Enforcing this once at the transport is what makes the role a guarantee rather than a
 /// convention: no handler has to remember to check it, and a future mutating route is covered the
@@ -318,6 +318,10 @@ pub(super) async fn read_only_session_boundary(
         return next.run(request).await;
     };
     if state.sessions.role(session.id).is_read_only() {
+        let own_session_path = format!("/api/v2/sessions/{}", session.id.0);
+        if request.method() == Method::DELETE && request.uri().path() == own_session_path {
+            return next.run(request).await;
+        }
         return ApiError::forbidden(
             "a read-only visualizer session cannot change desk or show state",
         )

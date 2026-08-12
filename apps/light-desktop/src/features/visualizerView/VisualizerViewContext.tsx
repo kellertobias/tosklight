@@ -2,6 +2,7 @@ import { createContext, type PropsWithChildren, useContext } from "react";
 import type {
 	VisualizerView,
 	VisualizerViewPatch,
+	VisualizerViewSnapshot,
 } from "../../api/client/visualizerView";
 
 /**
@@ -13,8 +14,9 @@ import type {
  * can move one of them.
  */
 export interface VisualizerViewActions {
-	views(): Promise<VisualizerView[]>;
+	snapshot(): Promise<VisualizerViewSnapshot>;
 	update(target: string, patch: VisualizerViewPatch): Promise<VisualizerView>;
+	onConnectionChanged(listener: (connected: boolean) => void): () => unknown;
 }
 
 const VisualizerViewContext = createContext<VisualizerViewActions | null>(null);

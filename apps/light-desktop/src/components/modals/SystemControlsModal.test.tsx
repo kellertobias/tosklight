@@ -4,11 +4,12 @@ import {
 	render,
 	screen,
 	waitFor,
+	within,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { requestSystemControlsTab } from "../../features/deskState/deskStateDiagnostics";
 import { SystemControlsModal } from "./SystemControlsModal";
 import type { RunningCueListSource } from "./systemControls/runningPlaybackAuthority";
-import { requestSystemControlsTab } from "../../features/deskState/deskStateDiagnostics";
 
 const dispatch = vi.fn();
 const clearProgrammer = vi.fn().mockResolvedValue(undefined);
@@ -16,6 +17,24 @@ const release = vi.fn().mockResolvedValue(null);
 const authorityCalls: boolean[] = [];
 const appState = { systemControlsOpen: true };
 const deskState = vi.hoisted(() => ({ error: null as string | null }));
+const visualizerModel = vi.hoisted(() => ({
+	connected: false,
+	view: {
+		target: "main",
+		mode: "full_3d" as const,
+		quality: "high" as const,
+		exposure: 1,
+		ambient: 0.05,
+		revision: 1,
+	},
+	targets: ["main"],
+	target: "main",
+	busy: false,
+	error: null as string | null,
+	selectTarget: vi.fn(),
+	selectMode: vi.fn(),
+	selectQuality: vi.fn(),
+}));
 const lifecycle = vi.hoisted(() => ({
 	projection: {
 		revision: 1,
@@ -248,6 +267,9 @@ vi.mock("./systemControls/runningPlaybackAuthority", () => ({
 vi.mock("./systemControls/runningDynamicsAuthority", () => ({
 	useRunningDynamicsAuthority: () => dynamicsRuntime.authority,
 }));
+vi.mock("./systemControls/useVisualizerViewControls", () => ({
+	useVisualizerViewControls: () => visualizerModel,
+}));
 
 afterEach(() => {
 	cleanup();
@@ -278,6 +300,7 @@ afterEach(() => {
 		canStop: true,
 	});
 	appState.systemControlsOpen = true;
+	visualizerModel.connected = false;
 	deskState.error = null;
 	requestSystemControlsTab("running");
 	Object.assign(playbackAuthority, {
@@ -305,7 +328,7 @@ afterEach(() => {
 });
 
 describe("SystemControlsModal", () => {
-	it("switches all three states through title-bar tabs in one modal", () => {
+	it("switches the core states through title-bar tabs with a stable All Off action", () => {
 		render(<SystemControlsModal />);
 
 		expect(screen.getByRole("tab", { name: "Running" })).toHaveAttribute(
@@ -314,14 +337,40 @@ describe("SystemControlsModal", () => {
 		);
 		expect(screen.getAllByRole("dialog")).toHaveLength(1);
 		fireEvent.click(screen.getByRole("tab", { name: "Desk State" }));
+		expect(screen.getByRole("button", { name: "All Off" })).toBeInTheDocument();
 		expect(screen.getByText("No desk errors")).toBeInTheDocument();
 		expect(
-			screen.getByText("Output and desk authorities have no current global fault."),
+			screen.getByText(
+				"Output and desk authorities have no current global fault.",
+			),
 		).toBeInTheDocument();
 
 		fireEvent.click(screen.getByRole("tab", { name: "Active Programmers" }));
+		expect(screen.getByRole("button", { name: "All Off" })).toBeInTheDocument();
 		expect(screen.getByText("Operator · Current user")).toBeInTheDocument();
 		expect(screen.getAllByRole("dialog")).toHaveLength(1);
+	});
+
+	it("shows external Visualizer controls only while its session is connected", () => {
+		visualizerModel.connected = true;
+		const rendered = render(<SystemControlsModal />);
+
+		expect(screen.getByRole("tab", { name: "Visualizer" })).toBeInTheDocument();
+		expect(screen.queryByLabelText("Visualizer view")).not.toBeInTheDocument();
+		fireEvent.click(screen.getByRole("tab", { name: "Visualizer" }));
+		expect(screen.getByLabelText("Visualizer view")).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "All Off" })).toBeInTheDocument();
+
+		visualizerModel.connected = false;
+		rendered.rerender(<SystemControlsModal />);
+		expect(
+			screen.queryByRole("tab", { name: "Visualizer" }),
+		).not.toBeInTheDocument();
+		expect(screen.getByRole("tab", { name: "Running" })).toHaveAttribute(
+			"aria-selected",
+			"true",
+		);
+		expect(screen.queryByLabelText("Visualizer view")).not.toBeInTheDocument();
 	});
 	it("shows each scoped running source without reading broad Playback state", () => {
 		render(<SystemControlsModal />);
@@ -348,7 +397,9 @@ describe("SystemControlsModal", () => {
 		expect(screen.getByText("Main playback")).toBeInTheDocument();
 		expect(screen.getByText("Virtual Cuelist")).toBeInTheDocument();
 		expect(screen.getByText("Circle · Dynamic 7")).toBeInTheDocument();
-		expect(screen.queryByText("Operator · Current user")).not.toBeInTheDocument();
+		expect(
+			screen.queryByText("Operator · Current user"),
+		).not.toBeInTheDocument();
 		fireEvent.click(screen.getByRole("tab", { name: "Active Programmers" }));
 		expect(screen.getByText("Operator · Current user")).toBeInTheDocument();
 		expect(
@@ -433,6 +484,15 @@ describe("SystemControlsModal", () => {
 		preloadLifecycle.active = true;
 		render(<SystemControlsModal />);
 		fireEvent.click(screen.getByRole("button", { name: "All Off" }));
+		const confirmation = screen.getByRole("alertdialog", {
+			name: "Confirm All Off",
+		});
+		expect(release).not.toHaveBeenCalled();
+		expect(dynamicsRuntime.off).not.toHaveBeenCalled();
+		expect(preloadLifecycle.actions.release).not.toHaveBeenCalled();
+		fireEvent.click(
+			within(confirmation).getByRole("button", { name: "Confirm All Off" }),
+		);
 
 		await waitFor(() => expect(release).toHaveBeenCalledTimes(2));
 		expect(release).toHaveBeenCalledWith(mapped);
@@ -441,6 +501,60 @@ describe("SystemControlsModal", () => {
 		expect(clearProgrammer).not.toHaveBeenCalled();
 		expect(preloadLifecycle.actions.release).toHaveBeenCalledOnce();
 		expect(dispatch).not.toHaveBeenCalledWith({ type: "RELEASE_PRELOAD" });
+	});
+
+	it("cancels All Off without changing desk output", () => {
+		preloadLifecycle.active = true;
+		render(<SystemControlsModal />);
+		fireEvent.click(screen.getByRole("button", { name: "All Off" }));
+		const confirmation = screen.getByRole("alertdialog", {
+			name: "Confirm All Off",
+		});
+		fireEvent.click(
+			within(confirmation).getByRole("button", { name: "Cancel" }),
+		);
+
+		expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+		expect(release).not.toHaveBeenCalled();
+		expect(dynamicsRuntime.off).not.toHaveBeenCalled();
+		expect(preloadLifecycle.actions.release).not.toHaveBeenCalled();
+	});
+
+	it("keeps the confirmation actionable when one running item fails", async () => {
+		release.mockRejectedValueOnce(new Error("release refused"));
+		render(<SystemControlsModal />);
+		fireEvent.click(screen.getByRole("button", { name: "All Off" }));
+		const confirmation = screen.getByRole("alertdialog", {
+			name: "Confirm All Off",
+		});
+		fireEvent.click(
+			within(confirmation).getByRole("button", { name: "Confirm All Off" }),
+		);
+
+		await waitFor(() =>
+			expect(within(confirmation).getByRole("alert")).toHaveTextContent(
+				"1 running item could not be turned off",
+			),
+		);
+		expect(confirmation).toBeInTheDocument();
+		expect(
+			within(confirmation).getByRole("button", { name: "Confirm All Off" }),
+		).toBeEnabled();
+	});
+
+	it("treats confirmation backdrop dismissal as Cancel", () => {
+		render(<SystemControlsModal />);
+		fireEvent.click(screen.getByRole("button", { name: "All Off" }));
+		const confirmation = screen.getByRole("alertdialog", {
+			name: "Confirm All Off",
+		});
+		const confirmationLayer = confirmation.closest("[data-modal-id]");
+		expect(confirmationLayer).not.toBeNull();
+		fireEvent.pointerDown(confirmationLayer as HTMLElement);
+
+		expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+		expect(release).not.toHaveBeenCalled();
+		expect(dynamicsRuntime.off).not.toHaveBeenCalled();
 	});
 
 	it("refuses All Off while Playback authority is loading", () => {
@@ -456,9 +570,7 @@ describe("SystemControlsModal", () => {
 		render(<SystemControlsModal />);
 
 		expect(screen.getByText("Running Playbacks loading…")).toBeInTheDocument();
-		expect(
-			screen.getByRole("button", { name: "All Off" }),
-		).toBeDisabled();
+		expect(screen.getByRole("button", { name: "All Off" })).toBeDisabled();
 		expect(release).not.toHaveBeenCalled();
 		expect(clearProgrammer).not.toHaveBeenCalled();
 		expect(preloadLifecycle.actions.release).not.toHaveBeenCalled();

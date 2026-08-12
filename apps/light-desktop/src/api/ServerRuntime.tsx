@@ -3,8 +3,8 @@ import { AttributeConfigurationActionsProvider } from "../features/attributeConf
 import { CueRecordingProvider } from "../features/cueRecording/CueRecordingProvider";
 import { DeskConnectionProvider } from "../features/deskConnection/DeskConnectionContext";
 import { DeskLoadingStateProvider } from "../features/deskLoading/DeskLoadingState";
-import { DmxDiagnosticsProvider } from "../features/dmxDiagnostics/DmxDiagnosticsContext";
 import { DeskStateDiagnosticsProvider } from "../features/deskState/DeskStateDiagnosticsState";
+import { DmxDiagnosticsProvider } from "../features/dmxDiagnostics/DmxDiagnosticsContext";
 import { DynamicsActionsProvider } from "../features/dynamics/DynamicsActionsContext";
 import { FilesProvider } from "../features/files/FilesContext";
 import { FixtureLibraryProvider } from "../features/fixtureLibrary/FixtureLibraryContext";
@@ -360,11 +360,16 @@ function useVisualizerViewActionSource(
 ) {
 	return useMemo(
 		() => ({
-			views: () => state.api.visualizerView.views(),
+			snapshot: () => state.api.visualizerView.snapshot(),
 			update: (target: string, patch: VisualizerViewPatch) =>
 				state.api.visualizerView.update(target, patch),
+			onConnectionChanged: (listener: (connected: boolean) => void) =>
+				state.api.runtime.onEvent((event) => {
+					if (event.type === "visualizer_connection_changed")
+						listener(event.change.connected);
+				}),
 		}),
-		[state.api],
+		[state.api, state.status],
 	);
 }
 

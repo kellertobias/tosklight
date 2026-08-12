@@ -8,7 +8,7 @@ The left dock switches between **DESKTOPS** and **BUILT-INS**. Desktops are save
 
 The Show menu contains show creation/loading, MVR exchange, Desk Setup, Help, development tools, system controls, and desk shutdown. Help itself is a split workspace: topics on the left and the selected Markdown page on the right.
 
-The **DMX** control beside the command line opens **Running & Output**. Its title-bar tabs keep **Running**, **Desk State**, and **Active Programmers** in one modal; it opens on Running unless a warning routes directly to Desk State. A red triangle with a white exclamation mark beside DMX means Desk State needs attention. Rejected commands stay marked on the current command line, while connection and critical desk failures use the top status message.
+The **DMX** control beside the command line opens **Running & Output**. Its title-bar tabs keep **Running**, **Desk State**, and **Active Programmers** in one modal; a **Visualizer** tab joins them only while an external Visualizer is connected. It opens on Running unless a warning routes directly to Desk State. **All Off** stays in the title bar on every tab and asks for confirmation before it releases every running playback, dynamic, and Programmer Preload. A red triangle with a white exclamation mark beside DMX means Desk State needs attention. Rejected commands stay marked on the current command line, while connection and critical desk failures use the top status message.
 
 Every desk window carries the same window strip with **X**, fullscreen, and move controls. On the
 main window the **X** quits ToskLight, because that window is the desk itself. On an optional screen

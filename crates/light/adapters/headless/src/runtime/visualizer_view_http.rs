@@ -47,7 +47,10 @@ async fn snapshot(
     if !configuration.visualizer_views.contains_key(DEFAULT_TARGET) {
         views.insert(0, projection(DEFAULT_TARGET, &VisualizerView::default()));
     }
-    Ok(Json(wire::VisualizerViewSnapshot { views }))
+    Ok(Json(wire::VisualizerViewSnapshot {
+        connected: state.sessions.has_visualizer_connection(),
+        views,
+    }))
 }
 
 async fn update(

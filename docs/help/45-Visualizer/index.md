@@ -26,9 +26,10 @@ that engine as a small script and the Visualizer runs it to find the path the be
 A look on stage can also be kept and taken away: a snapshot freezes the rig as it stands and
 can be turned into a Blender file for a finished render.
 
-The desk decides which way the picture is looking. **Running & Output** carries the eight
-named views and the rendering quality, so the view can be changed from the desk rather
-than from the machine the Visualizer happens to be running on.
+The desk decides which way the picture is looking. While an external Visualizer is connected,
+**Running & Output** shows a **Visualizer** tab with the eight named views and rendering quality,
+so the view can be changed from the desk rather than from the machine the Visualizer happens to
+be running on. Internal Stage settings remain in **Settings**.
 
 The rig itself can come from either side. The **Viz Editor** plans a rig against the same patch
 sheet the desk uses, and each application offers the other's show directly when both are on one

@@ -6,7 +6,7 @@ use light_application::{
     PatchChange, ProgrammingCaptureModeChange, ProgrammingCaptureModeProjection,
     ProgrammingInteractionChange, ProgrammingValuesChange, ProgrammingValuesProjection,
     SelectiveShowImportChange, SelectiveShowObjectChange, SpeedGroupChange, SpeedGroupId,
-    SpeedGroupProjection,
+    SpeedGroupProjection, VisualizerConnectionNotification,
 };
 use light_core::{AttributeKey, AttributeValue, ShowId, UserId};
 use light_show::PortableShowObjectKey;
@@ -100,6 +100,32 @@ fn hardware_connection_event_carries_authoritative_state_and_desk_route() {
         panic!("expected a hardware-connection payload");
     };
     assert_eq!(change.revision, 18);
+    assert!(change.connected);
+}
+
+#[test]
+fn visualizer_connection_event_carries_authoritative_state() {
+    let bus = EventBus::new(4);
+    let event = bus.publish(EventDraft::visualizer_connection_changed(
+        VisualizerConnectionNotification { connected: true },
+    ));
+
+    let Some(wire::EventServerMessage::Event { event }) =
+        wire_delivery(application::SubscriptionDelivery::Event(event))
+    else {
+        panic!("expected a visualizer-connection delivery");
+    };
+    assert_eq!(
+        event.object,
+        Some(wire::EventObject {
+            capability: wire::EventCapability::Desk,
+            id: "visualizer-connections".into(),
+        })
+    );
+    assert_eq!(event.desk_id, None);
+    let wire::EventPayload::VisualizerConnectionChanged { change } = event.payload else {
+        panic!("expected a visualizer-connection payload");
+    };
     assert!(change.connected);
 }
 

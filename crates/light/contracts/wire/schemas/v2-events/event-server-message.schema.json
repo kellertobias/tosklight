@@ -2623,6 +2623,22 @@
         {
           "type": "object",
           "properties": {
+            "change": {
+              "$ref": "#/$defs/VisualizerConnectionNotification"
+            },
+            "type": {
+              "type": "string",
+              "const": "visualizer_connection_changed"
+            }
+          },
+          "required": [
+            "type",
+            "change"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
             "notification": {
               "$ref": "#/$defs/OperatorNotification"
             },
@@ -7633,6 +7649,17 @@
       "required": [
         "show_id",
         "revision"
+      ]
+    },
+    "VisualizerConnectionNotification": {
+      "type": "object",
+      "properties": {
+        "connected": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "connected"
       ]
     }
   }

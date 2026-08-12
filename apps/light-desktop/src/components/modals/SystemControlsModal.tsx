@@ -1,7 +1,17 @@
-import { Button, ModalPortal, ModalTitleBar } from "@tosklight/ui";
+import {
+	Button,
+	ModalPortal,
+	ModalRegistration,
+	ModalTitleBar,
+} from "@tosklight/ui";
 import { useEffect, useMemo, useState } from "react";
 import type { ControlActionSemantic } from "../../api/types";
 import { useSessionSnapshot } from "../../features/deskSnapshot/DeskSnapshotState";
+import { useDeskStateDiagnostics } from "../../features/deskState/DeskStateDiagnosticsState";
+import {
+	type SystemControlsTab,
+	useRequestedSystemControlsTab,
+} from "../../features/deskState/deskStateDiagnostics";
 import { useDynamicsActions } from "../../features/dynamics/DynamicsActionsContext";
 import {
 	useOutputRuntimeActions,
@@ -16,12 +26,8 @@ import { useProgrammerLifecycleView } from "../../features/programmerLifecycle/P
 import { useProgrammerPreloadLifecycleView } from "../../features/programmerPreloadLifecycle/ProgrammerPreloadLifecycleView";
 import { useProgrammingSelectionView } from "../../features/programmingInteraction/ProgrammingInteractionView";
 import { useApp } from "../../state/AppContext";
-import {
-	type SystemControlsTab,
-	useRequestedSystemControlsTab,
-} from "../../features/deskState/deskStateDiagnostics";
-import { useDeskStateDiagnostics } from "../../features/deskState/DeskStateDiagnosticsState";
 import { compatibleSpecialDialogActions } from "./SpecialDialogsModal";
+import { DeskStatePanel } from "./systemControls/DeskStatePanel";
 import { OutputControls } from "./systemControls/OutputControls";
 import { ProgrammerList } from "./systemControls/ProgrammerList";
 import { RunningSections } from "./systemControls/RunningSections";
@@ -29,7 +35,6 @@ import { useRunningDynamicsAuthority } from "./systemControls/runningDynamicsAut
 import { useRunningPlaybackAuthority } from "./systemControls/runningPlaybackAuthority";
 import { useVisualizerViewControls } from "./systemControls/useVisualizerViewControls";
 import { VisualizerControls } from "./systemControls/VisualizerControls";
-import { DeskStatePanel } from "./systemControls/DeskStatePanel";
 
 const EMPTY_FIXTURE_IDS: readonly string[] = [];
 const EMPTY_PROGRAMMERS = [] as const;
@@ -92,6 +97,7 @@ function useSystemControlsModel() {
 	const dynamicsActions = useDynamicsActions();
 	const session = useSessionSnapshot();
 	const [stoppingAll, setStoppingAll] = useState(false);
+	const [stopAllError, setStopAllError] = useState<string | null>(null);
 	const output = useOutputRuntimeView(state.systemControlsOpen);
 	const outputActions = useOutputRuntimeActions(state.systemControlsOpen);
 	const selection = useProgrammingSelectionView(state.systemControlsOpen);
@@ -165,17 +171,32 @@ function useSystemControlsModel() {
 			!preload.actions ||
 			(playbackAuthority.sources.length > 0 && !playbackAuthority.canRelease) ||
 			(dynamicsAuthority.rows.length > 0 && !dynamicsAuthority.canStop)
-		)
-			return;
+		) {
+			setStopAllError(
+				"Running state changed before confirmation. Review the remaining items and try again.",
+			);
+			return false;
+		}
 		setStoppingAll(true);
+		setStopAllError(null);
 		try {
-			await Promise.all([
+			const outcomes = await Promise.allSettled([
 				...runningSources.map((source) => playbackAuthority.release(source)),
 				...dynamicsAuthority.rows.map((dynamic) =>
 					dynamicsAuthority.off(dynamic),
 				),
 				...(preload.active ? [preload.actions.release()] : []),
 			]);
+			const failed = outcomes.filter(
+				(outcome) => outcome.status === "rejected" || outcome.value === false,
+			);
+			if (failed.length) {
+				setStopAllError(
+					`${failed.length} running item${failed.length === 1 ? "" : "s"} could not be turned off. Review the remaining items and try again.`,
+				);
+				return false;
+			}
+			return true;
 		} finally {
 			setStoppingAll(false);
 		}
@@ -189,6 +210,7 @@ function useSystemControlsModel() {
 		outputReady,
 		fixtureActionResult,
 		stoppingAll,
+		stopAllError,
 		selectedFixtureIds,
 		fixturesSelected,
 		availableFixtureActions: new Set(
@@ -209,6 +231,7 @@ function useSystemControlsModel() {
 				value: false,
 			}),
 		stopAllRunning,
+		clearStopAllError: () => setStopAllError(null),
 		triggerFixtureAction,
 		setMaster: (value: number) => {
 			if (!outputReady || !outputActions) return;
@@ -224,8 +247,10 @@ function useSystemControlsModel() {
 
 function SystemControlsTitleActions({
 	model,
+	onRequestAllOff,
 }: {
 	model: ReturnType<typeof useSystemControlsModel>;
+	onRequestAllOff: () => void;
 }) {
 	const nothingRunning =
 		!model.playbackAuthority.sources.length &&
@@ -246,139 +271,209 @@ function SystemControlsTitleActions({
 			variant="danger"
 			className="system-controls-all-off"
 			disabled={cannotStop}
-			onClick={() => void model.stopAllRunning()}
+			onClick={onRequestAllOff}
 		>
 			{model.stoppingAll ? "Turning off…" : "All Off"}
 		</Button>
 	);
 }
 
+function AllOffConfirmation({
+	stopping,
+	error,
+	onCancel,
+	onConfirm,
+}: {
+	stopping: boolean;
+	error: string | null;
+	onCancel: () => void;
+	onConfirm: () => void;
+}) {
+	return (
+		<ModalRegistration onClose={onCancel}>
+			<div className="stacked-modal-layer fixture-confirm-layer">
+				<section
+					className="nested-modal fixture-confirm-dialog"
+					role="alertdialog"
+					aria-modal="true"
+					aria-label="Confirm All Off"
+				>
+					<ModalTitleBar
+						title="Turn all running output off?"
+						closeLabel="Cancel All Off"
+						onClose={onCancel}
+					/>
+					<p>
+						This releases every running playback, dynamic, and Programmer
+						Preload. Active Programmers are not cleared.
+					</p>
+					{error && <p role="alert">{error}</p>}
+					<div className="modal-actions">
+						<Button autoFocus disabled={stopping} onClick={onCancel}>
+							Cancel
+						</Button>
+						<Button variant="danger" disabled={stopping} onClick={onConfirm}>
+							{stopping ? "Turning off…" : "Confirm All Off"}
+						</Button>
+					</div>
+				</section>
+			</div>
+		</ModalRegistration>
+	);
+}
+
+type RunningOutputTab = SystemControlsTab | "visualizer";
+
 export function SystemControlsModal() {
 	const model = useSystemControlsModel();
 	const visualizer = useVisualizerViewControls(model.open);
 	const requestedTab = useRequestedSystemControlsTab();
 	const deskDiagnostics = useDeskStateDiagnostics();
-	const [tab, setTab] = useState<SystemControlsTab>(requestedTab);
+	const [tab, setTab] = useState<RunningOutputTab>(requestedTab);
+	const [allOffConfirmationOpen, setAllOffConfirmationOpen] = useState(false);
 	useEffect(() => {
 		if (model.open) setTab(requestedTab);
 	}, [model.open, requestedTab]);
+	useEffect(() => {
+		if (!visualizer.connected && tab === "visualizer") setTab("running");
+	}, [tab, visualizer.connected]);
+	useEffect(() => {
+		if (!model.open) setAllOffConfirmationOpen(false);
+	}, [model.open]);
 	if (!model.open) return null;
 	const activeItems =
 		model.runningSources.length +
 		model.dynamicsAuthority.rows.length +
 		(model.preload.active ? 1 : 0);
+	const confirmAllOff = async () => {
+		if (await model.stopAllRunning()) setAllOffConfirmationOpen(false);
+	};
 	return (
-		<ModalPortal onClose={model.close}>
-			<div
-				className="modal-backdrop"
-				onPointerDown={(event) => {
-					if (event.target === event.currentTarget) model.close();
-				}}
-			>
-				<section
-					className="modal-card system-controls-card"
-					role="dialog"
-					aria-modal="true"
-					aria-label="Running and output"
+		<>
+			<ModalPortal onClose={model.close}>
+				<div
+					className="modal-backdrop"
+					onPointerDown={(event) => {
+						if (event.target === event.currentTarget) model.close();
+					}}
 				>
-					<ModalTitleBar
-						className="system-controls-titlebar"
-						title="Running & Output"
-						tabs={[
-							{ id: "running", label: "Running" },
-							{
-								id: "desk-state",
-								label: deskDiagnostics.length
-									? `Desk State · ${deskDiagnostics.length}`
-									: "Desk State",
-							},
-							{ id: "active-programmers", label: "Active Programmers" },
-						]}
-						activeTab={tab}
-						onTabChange={(next) => setTab(next as SystemControlsTab)}
-						details={
-							<span className="system-controls-active-items">
-								<b>{activeItems}</b> active items
-							</span>
-						}
-						actions={
-							tab === "running" ? (
-								<SystemControlsTitleActions model={model} />
-							) : null
-						}
-						closeLabel="Close Running & Output"
-						onClose={model.close}
-					/>
-					{tab === "desk-state" ? (
-						<DeskStatePanel diagnostics={deskDiagnostics} />
-					) : tab === "active-programmers" ? (
-						<section
-							className="system-controls-programmers"
-							aria-label="Active Programmers"
-						>
-							<ProgrammerList
-								programmers={model.programmers}
-								loading={model.lifecycle === null}
-								currentUserId={model.session?.user.id ?? null}
-								currentUserName={model.session?.user.name ?? null}
-								onClear={(sessionId) =>
-									void model.programmerActions?.clearProgrammer(sessionId)
-								}
-							/>
-						</section>
-					) : (
-						<div className="system-controls-body">
-							<OutputControls
-								master={model.master}
-								blackout={model.blackout}
-								ready={model.outputReady}
-								fixtureActionResult={model.fixtureActionResult}
-								fixturesSelected={model.fixturesSelected}
-								availableFixtureActions={model.availableFixtureActions}
-								onMaster={model.setMaster}
-								onBlackout={model.toggleBlackout}
-								onFixtureAction={(semantic, phase) =>
-									void model.triggerFixtureAction(semantic, phase)
-								}
-							/>
-							{visualizer.available && (
-								<VisualizerControls
-									view={visualizer.view}
-									targets={visualizer.targets}
-									target={visualizer.target}
-									busy={visualizer.busy}
-									error={visualizer.error}
-									onSelectTarget={visualizer.selectTarget}
-									onSelectMode={visualizer.selectMode}
-									onSelectQuality={visualizer.selectQuality}
+					<section
+						className="modal-card system-controls-card"
+						role="dialog"
+						aria-modal="true"
+						aria-label="Running and output"
+					>
+						<ModalTitleBar
+							className="system-controls-titlebar"
+							title="Running & Output"
+							tabs={[
+								{ id: "running", label: "Running" },
+								{
+									id: "desk-state",
+									label: deskDiagnostics.length
+										? `Desk State · ${deskDiagnostics.length}`
+										: "Desk State",
+								},
+								{ id: "active-programmers", label: "Active Programmers" },
+								...(visualizer.connected
+									? [{ id: "visualizer", label: "Visualizer" }]
+									: []),
+							]}
+							activeTab={tab}
+							onTabChange={(next) => setTab(next as RunningOutputTab)}
+							details={
+								<span className="system-controls-active-items">
+									<b>{activeItems}</b> active items
+								</span>
+							}
+							actions={
+								<SystemControlsTitleActions
+									model={model}
+									onRequestAllOff={() => {
+										model.clearStopAllError();
+										setAllOffConfirmationOpen(true);
+									}}
 								/>
-							)}
-							<RunningSections
-								playbacks={model.runningSources}
-								dynamics={model.dynamicsAuthority.rows}
-								dynamicsLoading={model.dynamicsAuthority.loading}
-								dynamicsError={model.dynamicsAuthority.error}
-								dynamicsCanStop={model.dynamicsAuthority.canStop}
-								stoppingDynamicControllerIds={
-									model.dynamicsAuthority.stoppingControllerIds
-								}
-								preloadActive={model.preload.active}
-								playbacksLoading={model.playbackAuthority.loading}
-								releaseAvailable={model.playbackAuthority.canRelease}
-								onReleasePlayback={(source) =>
-									void model.playbackAuthority.release(source)
-								}
-								onReleasePreload={() =>
-									void model.preload.actions?.release()
-								}
-								onTurnOffDynamic={(dynamic) =>
-									void model.dynamicsAuthority.off(dynamic)
-								}
+							}
+							closeLabel="Close Running & Output"
+							onClose={model.close}
+						/>
+						{tab === "visualizer" ? (
+							<VisualizerControls
+								view={visualizer.view}
+								targets={visualizer.targets}
+								target={visualizer.target}
+								busy={visualizer.busy}
+								error={visualizer.error}
+								onSelectTarget={visualizer.selectTarget}
+								onSelectMode={visualizer.selectMode}
+								onSelectQuality={visualizer.selectQuality}
 							/>
-						</div>
-					)}
-				</section>
-			</div>
-		</ModalPortal>
+						) : tab === "desk-state" ? (
+							<DeskStatePanel diagnostics={deskDiagnostics} />
+						) : tab === "active-programmers" ? (
+							<section
+								className="system-controls-programmers"
+								aria-label="Active Programmers"
+							>
+								<ProgrammerList
+									programmers={model.programmers}
+									loading={model.lifecycle === null}
+									currentUserId={model.session?.user.id ?? null}
+									currentUserName={model.session?.user.name ?? null}
+									onClear={(sessionId) =>
+										void model.programmerActions?.clearProgrammer(sessionId)
+									}
+								/>
+							</section>
+						) : (
+							<div className="system-controls-body">
+								<OutputControls
+									master={model.master}
+									blackout={model.blackout}
+									ready={model.outputReady}
+									fixtureActionResult={model.fixtureActionResult}
+									fixturesSelected={model.fixturesSelected}
+									availableFixtureActions={model.availableFixtureActions}
+									onMaster={model.setMaster}
+									onBlackout={model.toggleBlackout}
+									onFixtureAction={(semantic, phase) =>
+										void model.triggerFixtureAction(semantic, phase)
+									}
+								/>
+								<RunningSections
+									playbacks={model.runningSources}
+									dynamics={model.dynamicsAuthority.rows}
+									dynamicsLoading={model.dynamicsAuthority.loading}
+									dynamicsError={model.dynamicsAuthority.error}
+									dynamicsCanStop={model.dynamicsAuthority.canStop}
+									stoppingDynamicControllerIds={
+										model.dynamicsAuthority.stoppingControllerIds
+									}
+									preloadActive={model.preload.active}
+									playbacksLoading={model.playbackAuthority.loading}
+									releaseAvailable={model.playbackAuthority.canRelease}
+									onReleasePlayback={(source) =>
+										void model.playbackAuthority.release(source)
+									}
+									onReleasePreload={() => void model.preload.actions?.release()}
+									onTurnOffDynamic={(dynamic) =>
+										void model.dynamicsAuthority.off(dynamic)
+									}
+								/>
+							</div>
+						)}
+					</section>
+				</div>
+			</ModalPortal>
+			{allOffConfirmationOpen && (
+				<AllOffConfirmation
+					stopping={model.stoppingAll}
+					error={model.stopAllError}
+					onCancel={() => setAllOffConfirmationOpen(false)}
+					onConfirm={() => void confirmAllOff()}
+				/>
+			)}
+		</>
 	);
 }

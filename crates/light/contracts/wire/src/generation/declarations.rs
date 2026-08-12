@@ -837,6 +837,7 @@ fn event_payload(config: &Config) -> Vec<String> {
         SelectiveImportChange::decl(config),
         NotificationRevision::decl(config),
         HardwareConnectionNotification::decl(config),
+        VisualizerConnectionNotification::decl(config),
         HighlightChange::decl(config),
         ScreenNotificationKind::decl(config),
         ScreenNotification::decl(config),
