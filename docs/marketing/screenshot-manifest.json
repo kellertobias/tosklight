@@ -4,7 +4,7 @@
 		{
 			"file": "application-overview.png",
 			"title": "Application overview",
-			"caption": "Fixture Sheet, 3D Stage, Groups, Color Presets, and populated touch playbacks in one operator desktop.",
+			"caption": "Run the complete desk: select and program fixtures, build looks, store cues, and operate playbacks from one workspace.",
 			"storyId": "tosklight-marketing--full-application",
 			"viewport": { "width": 1600, "height": 920 },
 			"theme": "dark",
@@ -14,7 +14,7 @@
 		{
 			"file": "command-section-touch.png",
 			"title": "Touch programmer",
-			"caption": "The complete programmer command section configured for a software-only touch desk.",
+			"caption": "Program fixtures from a software-only touch desk with the same command language used on an attached surface.",
 			"storyId": "tosklight-command-section--programmer-software",
 			"viewport": { "width": 1920, "height": 761 },
 			"captureSelector": ".control-section",
@@ -25,7 +25,7 @@
 		{
 			"file": "groups.png",
 			"title": "Groups",
-			"caption": "Populated and intentionally empty ordered fixture groups in the production pool window.",
+			"caption": "Capture ordered fixture selections once, then recall them throughout programming, cues, and playbacks.",
 			"storyId": "tosklight-marketing--groups-window",
 			"viewport": { "width": 960, "height": 560 },
 			"theme": "dark",
@@ -35,7 +35,7 @@
 		{
 			"file": "color-presets.png",
 			"title": "Color presets",
-			"caption": "A complete working palette from warm whites through saturated show colors.",
+			"caption": "Build your show from reusable color looks, from practical whites to saturated accents, instead of recreating values cue by cue.",
 			"storyId": "tosklight-marketing--color-presets-window",
 			"viewport": { "width": 840, "height": 440 },
 			"theme": "dark",
@@ -45,7 +45,7 @@
 		{
 			"file": "position-presets.png",
 			"title": "Position presets",
-			"caption": "Reusable down, cross, audience, blind, and center positions in the preset window.",
+			"caption": "Build your show from reusable focus positions so every cue can call a consistent stage picture.",
 			"storyId": "tosklight-marketing--position-presets-window",
 			"viewport": { "width": 480, "height": 336 },
 			"theme": "dark",
@@ -55,7 +55,7 @@
 		{
 			"file": "cues.png",
 			"title": "Cues",
-			"caption": "A populated cue list with timing and playback information ready for a show.",
+			"caption": "Store sparse tracked cues with timing, then run a repeatable show from the playback surface.",
 			"storyId": "tosklight-marketing--cues-window",
 			"viewport": { "width": 960, "height": 560 },
 			"theme": "dark",
@@ -65,28 +65,26 @@
 		{
 			"file": "command-section-hardware.png",
 			"title": "Hardware-connected programmer",
-			"caption": "The complete command section adapted to an attached hardware control surface.",
+			"caption": "Use the same programmer and command line with an attached hardware control surface, without giving up desk workflows.",
 			"storyId": "tosklight-command-section--programmer-hardware-connected",
-			"viewport": { "width": 1920, "height": 761 },
+			"viewport": { "width": 1080, "height": 720 },
 			"captureSelector": ".control-section",
+			"wide": true,
 			"theme": "dark",
 			"mode": "hardware",
 			"interactions": []
 		},
 		{
 			"file": "stage-3d.png",
-			"title": "3D Stage",
-			"caption": "Patched fixtures visualized in the production 3D Stage window.",
-			"storyId": "tosklight-marketing--stage-3-d-window",
-			"viewport": { "width": 1200, "height": 700 },
-			"theme": "dark",
-			"mode": "software",
-			"interactions": []
+			"sourceFile": "docs/marketing/assets/stills/stage-3d-production.png",
+			"title": "3D Previsualizer",
+			"caption": "See fixture positions, beams, color, and focus on a three-dimensional stage while the desk continues to run the show.",
+			"theme": "dark"
 		},
 		{
 			"file": "fixture-library.png",
 			"title": "Fixture library",
-			"caption": "Searchable manufacturer, fixture, and detailed fixture-profile columns.",
+			"caption": "Find, inspect, and import fixture profiles so real hardware is ready to patch into a show.",
 			"storyId": "tosklight-marketing--fixture-library-window",
 			"viewport": { "width": 1200, "height": 640 },
 			"theme": "dark",
@@ -119,7 +117,7 @@
 		{
 			"file": "desk-setup-outputs.png",
 			"title": "Output routes",
-			"caption": "Desk output configuration with working Art-Net and sACN universe routes.",
+			"caption": "Route each show universe over Art-Net, sACN, or supported USB DMX interfaces from one output setup.",
 			"storyId": "tosklight-marketing--desk-setup-outputs-window",
 			"viewport": { "width": 960, "height": 560 },
 			"theme": "dark",
@@ -129,7 +127,7 @@
 		{
 			"file": "channels.png",
 			"title": "Channels",
-			"caption": "Live channel values arranged in the production Channels window.",
+			"caption": "Inspect the live values driving each fixture while programming and running the show.",
 			"storyId": "tosklight-marketing--channels-window",
 			"viewport": { "width": 960, "height": 560 },
 			"theme": "dark",
@@ -139,7 +137,7 @@
 		{
 			"file": "dmx.png",
 			"title": "DMX",
-			"caption": "Universe output with the selected fixture, channel, and address detail visible.",
+			"caption": "Trace the final DMX values for every universe, fixture, channel, and address before they leave the desk.",
 			"storyId": "tosklight-marketing--dmx-window",
 			"viewport": { "width": 960, "height": 560 },
 			"theme": "dark",
@@ -149,7 +147,7 @@
 		{
 			"file": "dynamics.png",
 			"title": "Dynamics",
-			"caption": "A multi-lane Dynamic with keyframes, normalized cycle previews, and the production touch encoder deck.",
+			"caption": "Create fixture effects with editable waveform lanes, timing, phase, wings, and touch-friendly encoder control.",
 			"storyId": "tosklight-marketing--dynamics-view",
 			"viewport": { "width": 1600, "height": 920 },
 			"theme": "dark",
@@ -157,10 +155,10 @@
 			"interactions": []
 		},
 		{
-			"file": "grid-dynamics.png",
-			"title": "Grid Dynamics",
-			"caption": "A drum-machine-style Dynamic combines group-owned intensity, position, and color preset lanes with live tile timing and encoder editing.",
-			"storyId": "tosklight-marketing--grid-dynamics-view",
+			"file": "timecode-timeline.png",
+			"title": "Timecode timeline",
+			"caption": "Arrange markers, audio, speed changes, and cue-list clips on a frame-addressed timeline for repeatable playback.",
+			"storyId": "tosklight-marketing--timecode-view",
 			"viewport": { "width": 1600, "height": 920 },
 			"theme": "dark",
 			"mode": "software",

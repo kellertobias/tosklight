@@ -3,7 +3,9 @@
 The reviewed PNG files below `assets/screenshots` are generated from deterministic
 Storybook application stories. `screenshot-manifest.json` is the source contract
 for their filenames, gallery order, titles, captions, story IDs, viewport sizes,
-operator mode, and any deterministic interactions.
+operator mode, and any deterministic interactions. The 3D Previsualizer is the
+one documented exception: Storybook cannot render the native 3D surface, so its
+manifest entry copies the reviewed desktop capture from `assets/stills`.
 
 Run:
 

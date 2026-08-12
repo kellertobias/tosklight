@@ -28,10 +28,11 @@ interface ScreenshotInteraction {
 
 interface MarketingScreenshotEntry {
 	file: string;
+	sourceFile?: string;
 	title: string;
 	caption: string;
-	storyId: string;
-	viewport: { width: number; height: number };
+	storyId?: string;
+	viewport?: { width: number; height: number };
 	captureSelector?: string;
 	theme: "dark";
 	mode: "software" | "hardware";
@@ -43,7 +44,7 @@ interface MarketingScreenshotManifest {
 	entries: MarketingScreenshotEntry[];
 }
 
-test("captures the complete reviewed marketing gallery from Storybook", async ({
+test("captures the reviewed Storybook marketing gallery and preserves static stills", async ({
 	page,
 	request,
 }) => {
@@ -65,6 +66,12 @@ test("captures the complete reviewed marketing gallery from Storybook", async ({
 	// only completeness check worth making is the one at the end, against the manifest.
 	await fs.rm(REVIEWED_ROOT, { recursive: true, force: true });
 	await fs.mkdir(REVIEWED_ROOT, { recursive: true });
+	for (const entry of manifest.entries.filter((candidate) => candidate.sourceFile)) {
+		await fs.copyFile(
+			path.join(ROOT, entry.sourceFile as string),
+			path.join(REVIEWED_ROOT, entry.file),
+		);
+	}
 
 	const indexResponse = await request.get("/index.json");
 	expect(indexResponse.ok()).toBe(true);
@@ -93,6 +100,7 @@ test("captures the complete reviewed marketing gallery from Storybook", async ({
 	});
 
 	for (const entry of manifest.entries) {
+		if (entry.sourceFile) continue;
 		const consoleErrors: string[] = [];
 		const pageErrors: string[] = [];
 		const forbiddenRequests: string[] = [];
@@ -109,7 +117,7 @@ test("captures the complete reviewed marketing gallery from Storybook", async ({
 		page.on("pageerror", onPageError);
 		page.on("request", onRequest);
 
-		await page.setViewportSize(entry.viewport);
+		await page.setViewportSize(entry.viewport!);
 		await page.goto(
 			`/iframe.html?id=${encodeURIComponent(entry.storyId)}&viewMode=story&globals=mode:${entry.mode}`,
 		);
@@ -138,11 +146,11 @@ test("captures the complete reviewed marketing gallery from Storybook", async ({
 		expect(
 			actualDimensions.width,
 			`${entry.file} capture width`,
-		).toBeLessThanOrEqual(entry.viewport.width);
+		).toBeLessThanOrEqual(entry.viewport!.width);
 		expect(
 			actualDimensions.height,
 			`${entry.file} capture height`,
-		).toBeLessThanOrEqual(entry.viewport.height);
+		).toBeLessThanOrEqual(entry.viewport!.height);
 		await assertNotBlank(page, actual, entry.file);
 		expect(forbiddenRequests, `${entry.file} requested a live desk`).toEqual(
 			[],
@@ -172,15 +180,20 @@ function validateEntry(entry: MarketingScreenshotEntry, storyIds: Set<string>) {
 	expect(entry.file).toMatch(/^[a-z0-9][a-z0-9-]*\.png$/u);
 	expect(entry.title.trim().length).toBeGreaterThan(0);
 	expect(entry.caption.trim().length).toBeGreaterThan(10);
-	expect(entry.viewport.width).toBeGreaterThanOrEqual(320);
-	expect(entry.viewport.height).toBeGreaterThanOrEqual(160);
 	expect(entry.theme).toBe("dark");
+	if (entry.sourceFile) {
+		expect(entry.sourceFile).toMatch(/^docs\/marketing\/assets\/stills\/.+\.png$/u);
+		return;
+	}
+	expect(entry.viewport?.width).toBeGreaterThanOrEqual(320);
+	expect(entry.viewport?.height).toBeGreaterThanOrEqual(160);
 	expect(["software", "hardware"]).toContain(entry.mode);
 	expect(Array.isArray(entry.interactions)).toBe(true);
 	if (entry.captureSelector)
 		expect(entry.captureSelector.trim().length).toBeGreaterThan(0);
+	expect(entry.storyId).toBeTruthy();
 	expect(
-		storyIds.has(entry.storyId),
+		storyIds.has(entry.storyId as string),
 		`${entry.file} references missing Storybook story ${entry.storyId}`,
 	).toBe(true);
 }
