@@ -163,7 +163,11 @@ export function MediaPanePage() {
 						? "None"
 						: `${layer.mask.address.folder}/${layer.mask.address.file}`,
 				grayscalePercent: Math.round((1 - layer.grayscale) * 100),
-				effectLabel: "Unsupported",
+				effectLabel:
+					layer.effects
+						.filter((effect) => effect.enabled && effect.effectType)
+						.map((effect) => effect.label)
+						.join(" · ") || "None",
 			};
 		}),
 		browserMode,
@@ -408,12 +412,7 @@ export function MediaPanePage() {
 								],
 							},
 							{
-								id: "effects",
-								label: "Effects",
-								capability: "unsupported",
-								unsupportedDetail:
-									"Effect slots 1–4 are reserved by the canonical personality but are not implemented.",
-								controls: [],
+								...effectSection(selected.layer.effects, !takeover),
 							},
 						]
 					: [],
@@ -596,6 +595,28 @@ function tintChange(value: string) {
 
 function layerChange(id: string, value: string | number): UpdateLayer {
 	const number = Number(value);
+	const effect = /^effect-(\d+)-(type|enabled|mix|tv-curvature|distortion|image-grain|glitching)$/.exec(
+		id,
+	);
+	if (effect) {
+		const effectSlot = Number(effect[1]);
+		switch (effect[2]) {
+			case "type":
+				return { effectSlot, effectType: String(value) };
+			case "enabled":
+				return { effectSlot, effectEnabled: value === "true" };
+			case "mix":
+				return { effectSlot, effectMix: number / 100 };
+			case "tv-curvature":
+				return { effectSlot, tvCurvature: number / 100 };
+			case "distortion":
+				return { effectSlot, effectDistortion: number / 100 };
+			case "image-grain":
+				return { effectSlot, imageGrain: number / 100 };
+			case "glitching":
+				return { effectSlot, effectGlitching: number / 100 };
+		}
+	}
 	switch (id) {
 		case "play-mode":
 			return { playModeDmx: number };
@@ -634,6 +655,78 @@ function layerChange(id: string, value: string | number): UpdateLayer {
 		default:
 			return {};
 	}
+}
+
+function effectControls(
+	effects: OutputView["layers"][number]["effects"],
+	disabled: boolean,
+) {
+	return effects.flatMap((effect) => {
+		const prefix = `effect-${effect.index}`;
+		const slot = `Slot ${effect.index + 1}`;
+		const controls = [
+			{
+				id: `${prefix}-type`,
+				kind: "choice" as const,
+				label: `${slot} effect`,
+				value: effect.effectType ?? "none",
+				options: [
+					{ value: "none", label: "None" },
+					{ value: "analog-tv", label: "Analog TV" },
+				],
+				disabled,
+			},
+		];
+		if (effect.effectType !== "analog-tv") return controls;
+		return [
+			...controls,
+			{
+				id: `${prefix}-enabled`,
+				kind: "choice" as const,
+				label: `${slot} state`,
+				value: String(effect.enabled),
+				options: [
+					{ value: "true", label: "Enabled" },
+					{ value: "false", label: "Bypassed" },
+				],
+				disabled,
+			},
+			valueControl(
+				`${prefix}-mix`,
+				`${slot} mix`,
+				effect.mix * 100,
+				0,
+				100,
+				disabled,
+				"%",
+			),
+			...effect.parameters.map((parameter) =>
+				valueControl(
+					`${prefix}-${parameter.id}`,
+					`${slot} · ${parameter.label}`,
+					parameter.value * 100,
+					0,
+					100,
+					disabled,
+					"%",
+				),
+			),
+		];
+	});
+}
+
+function effectSection(
+	effects: OutputView["layers"][number]["effects"],
+	disabled: boolean,
+): MediaPaneModel["controlSections"][number] {
+	const unsupported = effects.find((effect) => !effect.supported);
+	return {
+		id: "effects",
+		label: "Effects",
+		capability: unsupported ? "unsupported" : undefined,
+		unsupportedDetail: unsupported?.capabilityDetail ?? undefined,
+		controls: unsupported ? [] : effectControls(effects, disabled),
+	};
 }
 
 function masterChange(id: string, value: string | number): UpdateMaster {

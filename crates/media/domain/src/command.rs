@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::address::MediaAddress;
 use crate::color::{FlipMirror, Tint};
-use crate::layer::{ScalingMode, SourceStatus};
+use crate::layer::{EffectSlot, ScalingMode, SourceStatus};
 use crate::output::OutputId;
 use crate::personality::decode::DecodedFrame;
 use crate::playback::PlayMode;
@@ -42,6 +42,9 @@ pub struct LayerControls {
     pub mask_opacity: Option<f32>,
     pub speed_multiplier: Option<SpeedMultiplier>,
     pub playback_bpm: Option<Option<u8>>,
+    /// Replaces the complete ordered effect chain after the HTTP adapter has applied one
+    /// intent-shaped slot edit to the current state.
+    pub effects: Option<[EffectSlot; 4]>,
 }
 
 /// An intent-shaped edit of the master values at the end of the network personality.

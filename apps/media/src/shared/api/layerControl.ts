@@ -249,6 +249,7 @@ function withChange(
 			change.playbackBpm === 0
 				? null
 				: (change.playbackBpm ?? layer.playbackBpm),
+		effects: applyEffectLocally(layer.effects, change),
 		address: {
 			...layer.address,
 			folder: change.folder ?? layer.address.folder,
@@ -267,6 +268,63 @@ function withChange(
 			opacity: change.maskOpacity ?? layer.mask.opacity,
 		},
 	};
+}
+
+function applyEffectLocally(
+	effects: OutputView["layers"][number]["effects"],
+	change: UpdateLayer,
+) {
+	if (change.effectSlot == null) return effects;
+	return effects.map((effect) => {
+		if (effect.index !== change.effectSlot) return effect;
+		let next = effect;
+		if (change.effectType === "none") {
+			next = {
+				...effect,
+				effectType: null,
+				label: "None",
+				enabled: false,
+				mix: 0,
+				parameters: [],
+			};
+		} else if (change.effectType === "analog-tv") {
+			next = {
+				...effect,
+				effectType: "analog-tv",
+				label: "Analog TV",
+				enabled: true,
+				mix: 1,
+				supported: true,
+				capabilityDetail: null,
+				parameters: [
+					["tv-curvature", "TV curvature", 0.3],
+					["distortion", "Distortion", 0.18],
+					["image-grain", "Image grain", 0.2],
+					["glitching", "Glitching", 0.08],
+				].map(([id, label, value]) => ({
+					id: String(id),
+					label: String(label),
+					value: Number(value),
+					defaultValue: Number(value),
+				})),
+			};
+		}
+		const values: Record<string, number | null | undefined> = {
+			"tv-curvature": change.tvCurvature,
+			distortion: change.effectDistortion,
+			"image-grain": change.imageGrain,
+			glitching: change.effectGlitching,
+		};
+		return {
+			...next,
+			enabled: change.effectEnabled ?? next.enabled,
+			mix: change.effectMix ?? next.mix,
+			parameters: next.parameters.map((parameter) => ({
+				...parameter,
+				value: values[parameter.id] ?? parameter.value,
+			})),
+		};
+	});
 }
 
 function replaceOutput(

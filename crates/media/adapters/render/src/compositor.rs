@@ -5,7 +5,7 @@
 
 use bytemuck::{Pod, Zeroable};
 use media_domain::geometry::{Size, layer_transform};
-use media_domain::{LayerState, MaskSource, MasterState, geometry};
+use media_domain::{LayerState, MaskSource, MasterState, OutputId, Timestamp, geometry};
 
 use crate::gpu::Gpu;
 use crate::texture::SourceTexture;
@@ -38,12 +38,37 @@ struct LayerUniform {
     controls: [f32; 4],
     mask: [f32; 4],
     mask_source: [f32; 4],
+    effect_types: [u32; 4],
+    effect_mixes: [f32; 4],
+    effect_parameters: [[f32; 4]; 4],
+    effect_seeds: [f32; 4],
+    /// Authoritative playback seconds, output width/height, spare.
+    effect_clock: [f32; 4],
 }
 
 impl LayerUniform {
-    fn new(layer: &LayerState, source: Size, output: Size, has_mask: bool) -> Self {
+    fn new(
+        layer: &LayerState,
+        source: Size,
+        output: Size,
+        has_mask: bool,
+        output_id: OutputId,
+        now: Timestamp,
+    ) -> Self {
         let transform = layer_transform(layer, source, output);
         let (sin, cos) = transform.rotation_degrees.to_radians().sin_cos();
+        let mut effect_types = [0; 4];
+        let mut effect_mixes = [0.0; 4];
+        let mut effect_parameters = [[0.0; 4]; 4];
+        let mut effect_seeds = [0.0; 4];
+        for (index, effect) in layer.effects.iter().enumerate() {
+            if let Some(parameters) = effect.analog_tv_parameters() {
+                effect_types[index] = 1;
+                effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
+                effect_parameters[index] = parameters.as_array();
+                effect_seeds[index] = effect_seed(output_id, effect.seed, index);
+            }
+        }
         Self {
             center: [transform.center.x, transform.center.y],
             size: [transform.size.0, transform.size.1],
@@ -75,8 +100,33 @@ impl LayerUniform {
                 0.0,
                 0.0,
             ],
+            effect_types,
+            effect_mixes,
+            effect_parameters,
+            effect_seeds,
+            effect_clock: [
+                (now.as_micros() as f64 / 1_000_000.0) as f32,
+                output.width as f32,
+                output.height as f32,
+                0.0,
+            ],
         }
     }
+}
+
+fn effect_seed(output: OutputId, seed: u32, slot: usize) -> f32 {
+    let mut hash = 2_166_136_261_u32;
+    for byte in output
+        .as_uuid()
+        .as_bytes()
+        .iter()
+        .copied()
+        .chain(seed.to_le_bytes())
+        .chain((slot as u32).to_le_bytes())
+    {
+        hash = (hash ^ u32::from(byte)).wrapping_mul(16_777_619);
+    }
+    (hash & 0x00ff_ffff) as f32 / 0x00ff_ffff as f32
 }
 
 #[repr(C)]
@@ -229,6 +279,8 @@ impl Compositor {
         master: &MasterState,
         master_mask: Option<&SourceTexture>,
         target: &wgpu::TextureView,
+        output_id: OutputId,
+        now: Timestamp,
     ) {
         let device = &self.gpu.device;
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -265,6 +317,8 @@ impl Compositor {
                     layer.source.size(),
                     self.size,
                     layer.mask.is_some(),
+                    output_id,
+                    now,
                 );
                 self.gpu.queue.write_buffer(
                     &self.layer_uniforms[index],
@@ -516,7 +570,14 @@ mod tests {
         };
         let source = Size::new(100, 50);
         let output = Size::new(1920, 1080);
-        let uniform = LayerUniform::new(&layer, source, output, false);
+        let uniform = LayerUniform::new(
+            &layer,
+            source,
+            output,
+            false,
+            OutputId::default(),
+            Timestamp::ZERO,
+        );
         let transform = layer_transform(&layer, source, output);
 
         assert_eq!(uniform.center, [transform.center.x, transform.center.y]);
@@ -540,7 +601,7 @@ mod tests {
 
     #[test]
     fn the_uniforms_are_the_size_the_shaders_declare() {
-        assert_eq!(std::mem::size_of::<LayerUniform>(), 96);
+        assert_eq!(std::mem::size_of::<LayerUniform>(), 224);
         assert_eq!(std::mem::size_of::<MasterUniform>(), 32);
     }
 

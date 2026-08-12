@@ -10,10 +10,11 @@
 
 use media_domain::geometry::Size;
 use media_domain::{
-    FlipMirror, LayerState, MaskSource, MaskState, MasterState, MediaAddress, OutputId,
-    PresentationMode, ScalingMode, SourceStatus, Timestamp, Tint,
+    AnalogTvParameters, EffectSlot, FlipMirror, LayerState, MaskSource, MaskState, MasterState,
+    MediaAddress, OutputId, PresentationMode, ScalingMode, SourceStatus, Timestamp, Tint,
 };
 use media_render::{Gpu, LayerDraw, OutputRenderer, SourceTexture};
+use std::path::Path;
 
 const OUTPUT: Size = Size::new(64, 64);
 
@@ -58,7 +59,16 @@ impl Bench {
     }
 
     fn render(&mut self, layers: &[LayerDraw<'_>], master: &MasterState) -> Image {
-        self.render_masked(layers, master, None)
+        self.render_at(layers, master, Timestamp::ZERO)
+    }
+
+    fn render_at(
+        &mut self,
+        layers: &[LayerDraw<'_>],
+        master: &MasterState,
+        now: Timestamp,
+    ) -> Image {
+        self.render_masked_at(layers, master, None, now)
     }
 
     fn render_masked(
@@ -67,12 +77,206 @@ impl Bench {
         master: &MasterState,
         master_mask: Option<&SourceTexture>,
     ) -> Image {
-        self.renderer
-            .present(layers, master, master_mask, Timestamp::from_micros(0));
+        self.render_masked_at(layers, master, master_mask, Timestamp::ZERO)
+    }
+
+    fn render_masked_at(
+        &mut self,
+        layers: &[LayerDraw<'_>],
+        master: &MasterState,
+        master_mask: Option<&SourceTexture>,
+        now: Timestamp,
+    ) -> Image {
+        self.renderer.present(layers, master, master_mask, now);
         Image {
             pixels: self.renderer.read_image(),
         }
     }
+}
+
+fn patterned_source(gpu: &Gpu) -> SourceTexture {
+    let mut pixels = Vec::with_capacity((OUTPUT.width * OUTPUT.height * 4) as usize);
+    for y in 0..OUTPUT.height {
+        for x in 0..OUTPUT.width {
+            let checker = if (x / 8 + y / 8) % 2 == 0 { 48 } else { 208 };
+            pixels.extend_from_slice(&[
+                ((x * 255) / (OUTPUT.width - 1)) as u8,
+                checker,
+                ((y * 255) / (OUTPUT.height - 1)) as u8,
+                255,
+            ]);
+        }
+    }
+    SourceTexture::from_rgba8(gpu, OUTPUT, &pixels).expect("the reference pattern uploads")
+}
+
+fn analog_state(parameters: AnalogTvParameters) -> LayerState {
+    let mut effect = EffectSlot::analog_tv();
+    effect.seed = 0x116;
+    effect.parameters = parameters.as_array().to_vec();
+    let mut effects: [EffectSlot; 4] = Default::default();
+    effects[0] = effect;
+    ready(LayerState {
+        effects,
+        ..Default::default()
+    })
+}
+
+fn changed_pixels(left: &Image, right: &Image) -> usize {
+    left.pixels
+        .chunks_exact(4)
+        .zip(right.pixels.chunks_exact(4))
+        .filter(|(left, right)| left != right)
+        .count()
+}
+
+fn write_evidence(name: &str, image: &Image) {
+    let Ok(directory) = std::env::var("LIGHT_TMP_DIR") else {
+        return;
+    };
+    let path = Path::new(&directory).join(name);
+    std::fs::create_dir_all(&directory).expect("the configured artifact directory is writable");
+    let file = std::fs::File::create(path).expect("the evidence image can be created");
+    let mut encoder = png::Encoder::new(file, OUTPUT.width, OUTPUT.height);
+    encoder.set_color(png::ColorType::Rgba);
+    encoder.set_depth(png::BitDepth::Eight);
+    encoder
+        .write_header()
+        .expect("the PNG header is valid")
+        .write_image_data(&image.pixels)
+        .expect("the rendered pixels can be encoded");
+}
+
+#[test]
+fn analog_tv_defaults_are_deterministic_and_zero_is_a_true_bypass() {
+    let mut bench = Bench::new();
+    let source = patterned_source(&bench.gpu);
+    let plain = ready(LayerState::default());
+    let zero = analog_state(AnalogTvParameters {
+        curvature: 0.0,
+        distortion: 0.0,
+        image_grain: 0.0,
+        glitching: 0.0,
+    });
+    let defaults = analog_state(AnalogTvParameters::default());
+    let at = Timestamp::from_micros(12_345_678);
+    let draw = |state| LayerDraw {
+        state,
+        source: &source,
+        mask: None,
+    };
+
+    let untouched = bench.render_at(&[draw(&plain)], &MasterState::default(), at);
+    let bypassed = bench.render_at(&[draw(&zero)], &MasterState::default(), at);
+    assert_eq!(
+        bypassed.pixels, untouched.pixels,
+        "four zeroes are a bypass"
+    );
+
+    let first = bench.render_at(&[draw(&defaults)], &MasterState::default(), at);
+    let repeated = bench.render_at(&[draw(&defaults)], &MasterState::default(), at);
+    assert_eq!(
+        first.pixels, repeated.pixels,
+        "same seed and time, same frame"
+    );
+    assert!(
+        changed_pixels(&first, &untouched) > 1_000,
+        "the restrained defaults still read as a television"
+    );
+    assert_eq!(
+        first.at(0, 0),
+        BLACK,
+        "curved invalid samples fade to black"
+    );
+    assert_eq!(
+        first.at(63, 63),
+        BLACK,
+        "the sampler does not repeat an edge"
+    );
+    write_evidence("tl-116-source.png", &untouched);
+    write_evidence("tl-116-analog-tv-defaults.png", &first);
+}
+
+#[test]
+fn analog_tv_parameters_have_independent_visual_endpoints() {
+    let mut bench = Bench::new();
+    let source = patterned_source(&bench.gpu);
+    let plain = ready(LayerState::default());
+    let at = Timestamp::from_micros(8_250_000);
+    let baseline = bench.render_at(
+        &[LayerDraw {
+            state: &plain,
+            source: &source,
+            mask: None,
+        }],
+        &MasterState::default(),
+        at,
+    );
+    let endpoint = |parameters: AnalogTvParameters, bench: &mut Bench, at| {
+        let state = analog_state(parameters);
+        bench.render_at(
+            &[LayerDraw {
+                state: &state,
+                source: &source,
+                mask: None,
+            }],
+            &MasterState::default(),
+            at,
+        )
+    };
+    let curvature = endpoint(
+        AnalogTvParameters {
+            curvature: 1.0,
+            distortion: 0.0,
+            image_grain: 0.0,
+            glitching: 0.0,
+        },
+        &mut bench,
+        at,
+    );
+    let distortion = endpoint(
+        AnalogTvParameters {
+            curvature: 0.0,
+            distortion: 1.0,
+            image_grain: 0.0,
+            glitching: 0.0,
+        },
+        &mut bench,
+        at,
+    );
+    let grain = endpoint(
+        AnalogTvParameters {
+            curvature: 0.0,
+            distortion: 0.0,
+            image_grain: 1.0,
+            glitching: 0.0,
+        },
+        &mut bench,
+        at,
+    );
+    assert!(changed_pixels(&curvature, &baseline) > 500);
+    assert!(changed_pixels(&distortion, &baseline) > 500);
+    assert!(changed_pixels(&grain, &baseline) > 500);
+    assert_ne!(curvature.pixels, distortion.pixels);
+    assert_ne!(distortion.pixels, grain.pixels);
+
+    // Glitching is intermittent by definition. Search a bounded authoritative-time window and
+    // prove that it produces a held analog event rather than pretending every frame must glitch.
+    let glitch_parameters = AnalogTvParameters {
+        curvature: 0.0,
+        distortion: 0.0,
+        image_grain: 0.0,
+        glitching: 1.0,
+    };
+    let glitch = (0..120)
+        .map(|frame| Timestamp::from_micros(frame * 166_667))
+        .map(|time| endpoint(glitch_parameters, &mut bench, time))
+        .find(|image| changed_pixels(image, &baseline) > 200)
+        .expect("a full endpoint triggers within the bounded event schedule");
+    assert_ne!(
+        glitch.pixels, curvature.pixels,
+        "analog tearing is not curvature"
+    );
 }
 
 struct Image {

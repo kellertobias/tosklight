@@ -12,8 +12,9 @@ use axum::response::{IntoResponse, Response};
 use media_application::MediaConfiguration;
 use media_application::configuration::{load, save};
 use media_domain::{
-    Applied, Command, CommandKind, CommandSource, FlipMirror, LayerControls, MasterControls,
-    MediaAddress, MediaState, OutputId, ScalingMode, Timestamp, Tint, apply,
+    ANALOG_TV_EFFECT, Applied, Command, CommandKind, CommandSource, EffectSlot, FlipMirror,
+    LayerControls, MasterControls, MediaAddress, MediaState, OutputId, ScalingMode, Timestamp,
+    Tint, apply,
 };
 
 use crate::error::ApiError;
@@ -132,6 +133,11 @@ pub(super) async fn update_layer(
         ("tintBlue", body.tint_blue),
         ("grayscale", body.grayscale),
         ("maskOpacity", body.mask_opacity),
+        ("effectMix", body.effect_mix),
+        ("tvCurvature", body.tv_curvature),
+        ("effectDistortion", body.effect_distortion),
+        ("imageGrain", body.image_grain),
+        ("effectGlitching", body.effect_glitching),
     ] {
         validate_unit(name, value)?;
     }
@@ -165,6 +171,61 @@ pub(super) async fn update_layer(
             body.mask_file.unwrap_or(current.mask.address.file),
         )
     });
+    let effects = if body.changes_effect() {
+        let slot = usize::from(body.effect_slot.ok_or_else(|| {
+            ApiError::bad_request("effect-slot-required", "choose effectSlot 0, 1, 2, or 3")
+        })?);
+        if slot >= current.effects.len() {
+            return Err(ApiError::bad_request(
+                "effect-slot-out-of-range",
+                "effectSlot must be 0, 1, 2, or 3",
+            ));
+        }
+        let mut effects = current.effects.clone();
+        if let Some(effect_type) = body.effect_type.as_deref() {
+            effects[slot] = match effect_type {
+                ANALOG_TV_EFFECT => EffectSlot::analog_tv(),
+                "none" => EffectSlot::default(),
+                _ => {
+                    return Err(ApiError::bad_request(
+                        "effect-unsupported",
+                        format!("this Media Server cannot render effect {effect_type:?}"),
+                    ));
+                }
+            };
+            effects[slot].seed = ((layer as u32) << 8) | slot as u32;
+        }
+        let effect = &mut effects[slot];
+        if let Some(enabled) = body.effect_enabled {
+            effect.enabled = enabled;
+        }
+        if let Some(mix) = body.effect_mix {
+            effect.mix = mix;
+        }
+        let changes_parameters = body.tv_curvature.is_some()
+            || body.effect_distortion.is_some()
+            || body.image_grain.is_some()
+            || body.effect_glitching.is_some();
+        if changes_parameters {
+            if effect.effect_type.as_deref() != Some(ANALOG_TV_EFFECT) {
+                return Err(ApiError::bad_request(
+                    "effect-parameters-invalid",
+                    "Analog TV parameters require an Analog TV effect in this slot",
+                ));
+            }
+            let mut parameters =
+                media_domain::AnalogTvParameters::from_normalized(&effect.parameters);
+            parameters.curvature = body.tv_curvature.unwrap_or(parameters.curvature);
+            parameters.distortion = body.effect_distortion.unwrap_or(parameters.distortion);
+            parameters.image_grain = body.image_grain.unwrap_or(parameters.image_grain);
+            parameters.glitching = body.effect_glitching.unwrap_or(parameters.glitching);
+            effect.parameters = parameters.as_array().to_vec();
+        }
+        effect.normalize();
+        Some(effects)
+    } else {
+        None
+    };
     submit(
         &state,
         vec![CommandKind::SetLayerControls {
@@ -194,6 +255,7 @@ pub(super) async fn update_layer(
                     .speed_multiplier_dmx
                     .map(media_domain::SpeedMultiplier::from_dmx),
                 playback_bpm: body.playback_bpm.map(|value| (value != 0).then_some(value)),
+                effects,
             }),
         }],
         now,
@@ -457,6 +519,7 @@ mod tests {
         assert_eq!(body["name"], "Main");
         assert_eq!(body["layers"].as_array().unwrap().len(), 2);
         assert_eq!(body["layers"][0]["playMode"], "Loop");
+        assert_eq!(body["layers"][0]["effects"].as_array().unwrap().len(), 4);
         assert_eq!(body["dmxActive"], false);
     }
 
@@ -705,6 +768,80 @@ mod tests {
         ).await;
         assert_eq!(master["master"]["flipMirror"], "both");
         assert_eq!(master["master"]["mask"]["file"], 5);
+    }
+
+    #[tokio::test]
+    async fn analog_tv_is_a_typed_intent_shaped_effect_edit() {
+        let bench = bench();
+        let uri = format!("/api/v2/outputs/{}/layers/0/update", bench.output);
+        let (status, selected) = send(
+            &bench.router,
+            post(uri.clone(), r#"{"effectSlot":1,"effectType":"analog-tv"}"#),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let effect = &selected["layers"][0]["effects"][1];
+        assert_eq!(effect["effectType"], "analog-tv");
+        assert_eq!(effect["label"], "Analog TV");
+        assert_eq!(effect["supported"], true);
+        assert_eq!(effect["parameters"][0]["id"], "tv-curvature");
+        assert_eq!(effect["parameters"][0]["value"], 0.30);
+        assert_eq!(effect["parameters"][1]["value"], 0.18);
+        assert_eq!(effect["parameters"][2]["value"], 0.20);
+        assert_eq!(effect["parameters"][3]["value"], 0.08);
+
+        let (status, tuned) = send(
+            &bench.router,
+            post(
+                uri.clone(),
+                r#"{"effectSlot":1,"tvCurvature":0,"effectDistortion":0.6,"imageGrain":0,"effectGlitching":1}"#,
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let effect = &tuned["layers"][0]["effects"][1];
+        assert_eq!(effect["parameters"][0]["value"], 0.0);
+        assert_eq!(effect["parameters"][1]["value"], 0.6);
+        assert_eq!(effect["parameters"][2]["value"], 0.0);
+        assert_eq!(effect["parameters"][3]["value"], 1.0);
+
+        let (_, cleared) = send(
+            &bench.router,
+            post(uri, r#"{"effectSlot":1,"effectType":"none"}"#),
+        )
+        .await;
+        assert!(cleared["layers"][0]["effects"][1]["effectType"].is_null());
+    }
+
+    #[tokio::test]
+    async fn invalid_or_unsupported_effect_edits_leave_the_chain_untouched() {
+        let bench = bench();
+        let uri = format!("/api/v2/outputs/{}/layers/0/update", bench.output);
+        for (body, code) in [
+            (r#"{"effectType":"analog-tv"}"#, "effect-slot-required"),
+            (
+                r#"{"effectSlot":4,"effectType":"analog-tv"}"#,
+                "effect-slot-out-of-range",
+            ),
+            (
+                r#"{"effectSlot":0,"effectType":"digital-tv"}"#,
+                "effect-unsupported",
+            ),
+            (
+                r#"{"effectSlot":0,"effectType":"analog-tv","imageGrain":1.1}"#,
+                "control-out-of-range",
+            ),
+        ] {
+            let (status, response) = send(&bench.router, post(uri.clone(), body)).await;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+            assert_eq!(response["code"], code, "{body}");
+            assert!(
+                bench.state.load().output(bench.output).unwrap().layers[0].effects[0]
+                    .effect_type
+                    .is_none(),
+                "the rejected edit published nothing"
+            );
+        }
     }
 
     #[tokio::test]

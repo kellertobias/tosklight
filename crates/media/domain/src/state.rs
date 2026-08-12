@@ -111,10 +111,17 @@ pub fn apply(state: &mut MediaState, command: &Command) -> Applied {
             let mut changed = false;
             for (existing, incoming) in output.layers.iter_mut().zip(&frame.layers) {
                 // Runtime status belongs to playback, not to the wire. A desk repeating the same
-                // address must not reset a layer that has already failed or completed.
+                // address must not reset a layer that has already failed or completed. Effect
+                // identity and typed parameters are configured on the Media Server; DMX carries
+                // only each configured slot's mix byte, so a frame must not clear that contract.
+                let mut effects = existing.effects.clone();
+                for (configured, wire) in effects.iter_mut().zip(&incoming.effects) {
+                    configured.mix = wire.mix;
+                }
                 let incoming = LayerState {
                     source_status: existing.source_status,
                     reset_trigger_id: existing.reset_trigger_id,
+                    effects,
                     ..incoming.clone()
                 };
                 changed |= replace(existing, incoming);
@@ -162,6 +169,9 @@ pub fn apply(state: &mut MediaState, command: &Command) -> Applied {
             assign!(grayscale);
             assign!(speed_multiplier);
             assign!(playback_bpm);
+            if let Some(value) = controls.effects.clone() {
+                changed |= replace(&mut target.effects, value);
+            }
             if let Some(value) = controls.mask_address {
                 changed |= replace(&mut target.mask.address, value);
             }
@@ -251,7 +261,7 @@ mod tests {
     use super::*;
     use crate::address::MediaAddress;
     use crate::command::Timestamp;
-    use crate::layer::{SourceFailure, SourceStatus};
+    use crate::layer::{EffectSlot, SourceFailure, SourceStatus};
     use crate::personality::decode::DecodedFrame;
 
     fn state(personality: LayerPersonality) -> (MediaState, OutputId) {
@@ -459,6 +469,38 @@ mod tests {
             "the wire must not clear a failure"
         );
         assert_eq!(layer.reset_trigger_id, trigger);
+    }
+
+    #[test]
+    fn a_dmx_frame_controls_effect_mix_without_erasing_the_configured_effect() {
+        let (mut media, id) = state(LayerPersonality::TwoLayers);
+        let configured = EffectSlot::analog_tv();
+        media.output_mut(id).unwrap().layers[0].effects[1] = configured.clone();
+        let mut incoming = LayerState::default();
+        incoming.effects[1].mix = 0.4;
+
+        assert_eq!(
+            apply(
+                &mut media,
+                &command(
+                    CommandKind::SetDmxFrame {
+                        output: id,
+                        frame: Box::new(DecodedFrame {
+                            layers: vec![incoming, LayerState::default()],
+                            master: MasterState::default(),
+                        }),
+                    },
+                    CommandSource::ArtNet,
+                    1_000,
+                ),
+            ),
+            Applied::Changed
+        );
+
+        let effect = &media.output(id).unwrap().layers[0].effects[1];
+        assert_eq!(effect.effect_type, configured.effect_type);
+        assert_eq!(effect.parameters, configured.parameters);
+        assert_eq!(effect.mix, 0.4);
     }
 
     #[test]

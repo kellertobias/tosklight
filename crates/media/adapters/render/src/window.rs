@@ -193,7 +193,8 @@ impl WindowedOutput {
         let view = frame
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
-        self.compositor.render(layers, master, master_mask, &view);
+        self.compositor
+            .render(layers, master, master_mask, &view, self.id, now);
         self.window.pre_present_notify();
         self.gpu.queue.present(frame);
         self.clock.record_present(now);

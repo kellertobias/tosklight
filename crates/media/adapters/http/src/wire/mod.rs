@@ -40,8 +40,9 @@ pub use library::{
 pub use logs::{LogRecordView, LogsView, ServerLogLevelView, UpdateServerLogLevel};
 pub use network::{NetworkAddressesView, NetworkEditError, NetworkView, UpdateNetwork};
 pub use output::{
-    LayerView, MaskView, MasterView, OutputConfigurationEditError, OutputConfigurationView,
-    OutputView, UpdateLayer, UpdateMaster, UpdateOutputConfiguration,
+    EffectParameterView, EffectSlotView, LayerView, MaskView, MasterView,
+    OutputConfigurationEditError, OutputConfigurationView, OutputView, UpdateLayer, UpdateMaster,
+    UpdateOutputConfiguration,
 };
 pub use text::{CreateText, DeleteText, TextEditError, TextSlotView, TextStyleView, UpdateText};
 pub use visualizer::{UpdateVisualizer, VisualizerParametersView, VisualizerView};

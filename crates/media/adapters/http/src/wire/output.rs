@@ -3,8 +3,11 @@
 use media_application::configuration::{
     DmxProtocol, MonitorSelector, OutputConfiguration, OutputTarget, Resolution, SoundOutput,
 };
+use media_domain::{
+    ANALOG_TV_EFFECT, AnalogTvParameters, EffectSlot, LayerState, MaskSource, MaskState,
+    MasterState, MediaAddress, OutputState,
+};
 use media_domain::{LayerPersonality, PresentationMode};
-use media_domain::{LayerState, MaskSource, MaskState, MasterState, MediaAddress, OutputState};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -46,6 +49,67 @@ impl MaskView {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct EffectParameterView {
+    pub id: String,
+    pub label: String,
+    pub value: f32,
+    pub default_value: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct EffectSlotView {
+    pub index: usize,
+    pub effect_type: Option<String>,
+    pub label: String,
+    pub enabled: bool,
+    pub mix: f32,
+    pub supported: bool,
+    pub capability_detail: Option<String>,
+    pub parameters: Vec<EffectParameterView>,
+}
+
+impl EffectSlotView {
+    fn of(index: usize, effect: &EffectSlot) -> Self {
+        let analog = effect.effect_type.as_deref() == Some(ANALOG_TV_EFFECT);
+        let defaults = AnalogTvParameters::default().as_array();
+        let values = AnalogTvParameters::from_normalized(&effect.parameters).as_array();
+        Self {
+            index,
+            effect_type: effect.effect_type.clone(),
+            label: if analog {
+                "Analog TV".to_owned()
+            } else {
+                effect.effect_type.as_deref().unwrap_or("None").to_owned()
+            },
+            enabled: effect.enabled,
+            mix: effect.mix,
+            supported: effect.effect_type.is_none() || analog,
+            capability_detail: (!analog && effect.effect_type.is_some())
+                .then(|| "This Media Server build cannot render the selected effect.".to_owned()),
+            parameters: if analog {
+                AnalogTvParameters::IDS
+                    .into_iter()
+                    .zip(AnalogTvParameters::LABELS)
+                    .zip(values.into_iter().zip(defaults))
+                    .map(
+                        |((id, label), (value, default_value))| EffectParameterView {
+                            id: id.to_owned(),
+                            label: label.to_owned(),
+                            value,
+                            default_value,
+                        },
+                    )
+                    .collect()
+            } else {
+                Vec::new()
+            },
+        }
+    }
+}
+
 /// One layer, as the API reports it.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
 #[serde(rename_all = "camelCase")]
@@ -71,6 +135,7 @@ pub struct LayerView {
     pub playback_bpm: Option<u8>,
     pub source_status: SourceStatusView,
     pub mask: MaskView,
+    pub effects: Vec<EffectSlotView>,
     /// Whether this layer contributes pixels right now.
     pub drawing: bool,
 }
@@ -109,6 +174,12 @@ impl LayerView {
             playback_bpm: layer.playback_bpm,
             source_status: SourceStatusView::of(layer.source_status),
             mask: MaskView::of(&layer.mask),
+            effects: layer
+                .effects
+                .iter()
+                .enumerate()
+                .map(|(index, effect)| EffectSlotView::of(index, effect))
+                .collect(),
             drawing: layer.draws(),
         }
     }
@@ -596,6 +667,24 @@ pub struct UpdateLayer {
     /// Zero disables the per-layer BPM target; 1..=255 selects a target.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub playback_bpm: Option<u8>,
+    /// The ordered slot changed by the following typed effect fields, `0..=3`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effect_slot: Option<u8>,
+    /// `analog-tv` selects the effect; `none` clears the slot.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effect_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effect_enabled: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effect_mix: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tv_curvature: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effect_distortion: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image_grain: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effect_glitching: Option<f32>,
 }
 
 impl UpdateLayer {
@@ -618,6 +707,16 @@ impl UpdateLayer {
 
     pub const fn changes_address(&self) -> bool {
         self.folder.is_some() || self.file.is_some()
+    }
+
+    pub const fn changes_effect(&self) -> bool {
+        self.effect_type.is_some()
+            || self.effect_enabled.is_some()
+            || self.effect_mix.is_some()
+            || self.tv_curvature.is_some()
+            || self.effect_distortion.is_some()
+            || self.image_grain.is_some()
+            || self.effect_glitching.is_some()
     }
 }
 
@@ -677,6 +776,25 @@ mod tests {
         assert_eq!(
             body.address(MediaAddress::new(4, 4)),
             MediaAddress::new(4, 4)
+        );
+    }
+
+    #[test]
+    fn an_unknown_persisted_effect_reports_an_actionable_capability_error() {
+        let effect = EffectSlot {
+            effect_type: Some("future-effect".to_owned()),
+            enabled: true,
+            mix: 1.0,
+            parameters: vec![0.4],
+            seed: 7,
+        };
+        let view = EffectSlotView::of(2, &effect);
+
+        assert_eq!(view.label, "future-effect");
+        assert!(!view.supported);
+        assert_eq!(
+            view.capability_detail.as_deref(),
+            Some("This Media Server build cannot render the selected effect.")
         );
     }
 

@@ -23,6 +23,15 @@ struct Layer {
     mask: vec4<f32>,
     // x: 1 when the mask reads its strength from alpha rather than luminance.
     mask_source: vec4<f32>,
+    // 0: none/unsupported, 1: Analog TV. One stable type per ordered effect slot.
+    effect_types: vec4<u32>,
+    effect_mixes: vec4<f32>,
+    // Typed normalized parameters for slots 1..4. Analog TV is curvature, distortion, grain,
+    // glitching. Future effect types interpret their own row through the advertised contract.
+    effect_parameters: array<vec4<f32>, 4>,
+    effect_seeds: vec4<f32>,
+    // x: authoritative playback seconds. y/z: output dimensions.
+    effect_clock: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> layer: Layer;
@@ -74,6 +83,101 @@ fn vertex(@builtin(vertex_index) index: u32) -> VertexOutput {
 // The weights the legacy renderer used, kept so a migrated show's grayscale looks the same.
 const LUMINANCE = vec3<f32>(0.299, 0.587, 0.114);
 
+fn hash21(value: vec2<f32>) -> f32 {
+    return fract(sin(dot(value, vec2<f32>(127.1, 311.7))) * 43758.5453123);
+}
+
+struct EffectCoordinates {
+    uv: vec2<f32>,
+    validity: f32,
+};
+
+/// Source-coordinate part of Analog TV. It is applied before the source sample so effect slots
+/// compose in order, and returns an explicit validity instead of relying on the clamp-to-edge
+/// sampler (which would repeat the outside edge around a curved CRT).
+fn analog_coordinates(
+    input: EffectCoordinates,
+    parameters: vec4<f32>,
+    mix_amount: f32,
+    seed: f32,
+) -> EffectCoordinates {
+    let curvature = parameters.x * mix_amount;
+    let distortion = parameters.y * mix_amount;
+    let glitching = parameters.w * mix_amount;
+    if curvature <= 0.0 && distortion <= 0.0 && glitching <= 0.0 {
+        return input;
+    }
+    let seconds = layer.effect_clock.x;
+
+    var centred = input.uv * 2.0 - vec2<f32>(1.0);
+    let radius_squared = dot(centred, centred);
+    // Pull the corners inward before bending them back out. This controlled overscan keeps normal
+    // content filling the rounded face while still allowing the extreme curved corners to fade.
+    centred *= (1.0 - curvature * 0.075) * (1.0 + curvature * 0.18 * radius_squared);
+    var uv = centred * 0.5 + vec2<f32>(0.5);
+
+    // Continuous horizontal hold and line displacement. Every term is smooth in time and y, so
+    // this can never turn into the grid-aligned macroblocks owned by Digital TV.
+    let line = floor(uv.y * max(layer.effect_clock.z, 1.0));
+    let slow_sync = sin(uv.y * 31.0 + seconds * 3.7 + seed * 19.0);
+    let line_jitter = hash21(vec2<f32>(line, floor(seconds * 24.0) + seed * 991.0)) - 0.5;
+    uv.x += distortion * (slow_sync * 0.012 + line_jitter * 0.010);
+
+    // Intermittent failures are held for a few frames by the event bucket. A triggered horizontal
+    // band tears, and the rare stronger event rolls vertically; neither creates rectangular tiles.
+    let event_bucket = floor(seconds * 6.0);
+    let event = hash21(vec2<f32>(event_bucket, seed * 4093.0));
+    let triggered = select(0.0, 1.0, event > 1.0 - glitching * 0.42);
+    let band_center = hash21(vec2<f32>(event_bucket + 17.0, seed * 1877.0));
+    let band = 1.0 - smoothstep(0.035, 0.085, abs(uv.y - band_center));
+    uv.x += triggered * band * (hash21(vec2<f32>(event_bucket, seed)) - 0.5) * 0.20;
+    let roll = triggered * select(0.0, 1.0, event > 0.985) * glitching;
+    uv.y = mix(uv.y, fract(uv.y + seconds * 0.18 + seed), roll);
+
+    let edge = min(min(uv.x, uv.y), min(1.0 - uv.x, 1.0 - uv.y));
+    var result: EffectCoordinates;
+    result.uv = uv;
+    result.validity = input.validity * smoothstep(-0.012, 0.012, edge);
+    return result;
+}
+
+/// Color part of Analog TV, after the ordered UV transforms and source sample.
+fn analog_colour(
+    colour: vec4<f32>,
+    uv: vec2<f32>,
+    parameters: vec4<f32>,
+    mix_amount: f32,
+    seed: f32,
+) -> vec4<f32> {
+    let distortion = parameters.y * mix_amount;
+    let grain = parameters.z * mix_amount;
+    let glitching = parameters.w * mix_amount;
+    if distortion <= 0.0 && grain <= 0.0 && glitching <= 0.0 {
+        return colour;
+    }
+    let seconds = layer.effect_clock.x;
+
+    // Bounded analog chroma misregistration: luma stays anchored while red and blue drift by less
+    // than two percent of the image even at the endpoint.
+    let chroma_shift = distortion * 0.012 * sin(uv.y * 19.0 + seconds * 2.3 + seed * 7.0);
+    let red = textureSample(source, source_sampler, uv + vec2<f32>(chroma_shift, 0.0)).r;
+    let blue = textureSample(source, source_sampler, uv - vec2<f32>(chroma_shift, 0.0)).b;
+    var rgb = vec3<f32>(mix(colour.r, red, distortion), colour.g, mix(colour.b, blue, distortion));
+
+    let pixel = floor(uv * layer.effect_clock.yz);
+    let noise = hash21(pixel + vec2<f32>(floor(seconds * 30.0), seed * 8191.0)) - 0.5;
+    let scanline = sin(uv.y * layer.effect_clock.z * 3.14159265);
+    rgb += noise * grain * 0.22;
+    rgb *= 1.0 - grain * (0.055 + 0.035 * scanline);
+
+    let event_bucket = floor(seconds * 6.0);
+    let event = hash21(vec2<f32>(event_bucket, seed * 4093.0));
+    let triggered = select(0.0, 1.0, event > 1.0 - glitching * 0.42);
+    let disturbance = (hash21(vec2<f32>(event_bucket + 41.0, seed)) - 0.5) * 0.35;
+    rgb *= 1.0 + triggered * disturbance;
+    return vec4<f32>(clamp(rgb, vec3<f32>(0.0), vec3<f32>(1.0)), colour.a);
+}
+
 /// How much of the layer this pixel's mask lets through.
 ///
 /// The mask carries its own scale about the layer centre rather than inheriting the layer's, so an
@@ -102,7 +206,33 @@ fn mask_strength(uv: vec2<f32>) -> f32 {
 
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
-    let sampled = textureSample(source, source_sampler, in.uv);
+    var coordinates: EffectCoordinates;
+    coordinates.uv = in.uv;
+    coordinates.validity = 1.0;
+    for (var slot = 0u; slot < 4u; slot += 1u) {
+        if layer.effect_types[slot] == 1u {
+            coordinates = analog_coordinates(
+                coordinates,
+                layer.effect_parameters[slot],
+                layer.effect_mixes[slot],
+                layer.effect_seeds[slot],
+            );
+        }
+    }
+
+    var sampled = textureSample(source, source_sampler, coordinates.uv);
+    for (var slot = 0u; slot < 4u; slot += 1u) {
+        if layer.effect_types[slot] == 1u {
+            sampled = analog_colour(
+                sampled,
+                coordinates.uv,
+                layer.effect_parameters[slot],
+                layer.effect_mixes[slot],
+                layer.effect_seeds[slot],
+            );
+        }
+    }
+    sampled = vec4<f32>(sampled.rgb * coordinates.validity, sampled.a);
 
     let gray = dot(sampled.rgb, LUMINANCE);
     let desaturated = mix(sampled.rgb, vec3<f32>(gray, gray, gray), layer.controls.x);

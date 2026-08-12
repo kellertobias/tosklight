@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { anOutput, stubServer } from "../../testing/server";
@@ -117,7 +117,7 @@ describe("the production Media pane", () => {
 		await waitFor(() => expect(second.master.flipMirror).toBe("both"));
 	});
 
-	it("keeps takeover failure on the selected output and makes effects explicit", async () => {
+	it("keeps takeover failure on the selected output", async () => {
 		const server = stubServer();
 		server.refuseWrites = {
 			code: "refused",
@@ -126,9 +126,7 @@ describe("the production Media pane", () => {
 		};
 		render(<MediaPanePage />);
 
-		expect((await screen.findAllByText("Unsupported")).length).toBeGreaterThan(
-			0,
-		);
+		await screen.findByRole("switch", { name: "Take over playback" });
 		await userEvent.click(
 			screen.getByRole("switch", { name: "Take over playback" }),
 		);
@@ -136,6 +134,64 @@ describe("the production Media pane", () => {
 			"takeover refused",
 		);
 		expect(server.outputs[0].playbackTakeover).toBe(false);
+	});
+
+	it("edits a typed Analog TV slot with the documented defaults", async () => {
+		const server = stubServer();
+		render(<MediaPanePage />);
+		await userEvent.click(
+			await screen.findByRole("switch", { name: "Take over playback" }),
+		);
+		await userEvent.click(screen.getByRole("radio", { name: "Effects" }));
+		await userEvent.click(
+			within(screen.getByRole("radiogroup", { name: "Slot 1 effect" })).getByRole(
+				"radio",
+				{ name: "Analog TV" },
+			),
+		);
+
+		await waitFor(() =>
+			expect(server.outputs[0].layers[0].effects[0].effectType).toBe(
+				"analog-tv",
+			),
+		);
+		expect(screen.getByLabelText("Slot 1 · TV curvature")).toHaveValue("30");
+		expect(screen.getByLabelText("Slot 1 · Distortion")).toHaveValue("18");
+		expect(screen.getByLabelText("Slot 1 · Image grain")).toHaveValue("20");
+		expect(screen.getByLabelText("Slot 1 · Glitching")).toHaveValue("8");
+
+		fireEvent.input(screen.getByLabelText("Slot 1 · Image grain"), {
+			target: { value: "65" },
+		});
+		await waitFor(() =>
+			expect(
+				server.outputs[0].layers[0].effects[0].parameters.find(
+					(parameter) => parameter.id === "image-grain",
+				)?.value,
+			).toBeCloseTo(0.65),
+		);
+	});
+
+	it("shows an actionable capability error for an effect this build cannot render", async () => {
+		const output = anOutput();
+		output.layers[0].effects[0] = {
+			index: 0,
+			effectType: "future-effect",
+			label: "future-effect",
+			enabled: true,
+			mix: 1,
+			supported: false,
+			capabilityDetail:
+				"This Media Server build cannot render the selected effect.",
+			parameters: [],
+		};
+		stubServer({ outputs: [output] });
+		render(<MediaPanePage />);
+
+		await userEvent.click(await screen.findByRole("radio", { name: "Effects" }));
+		expect(screen.getByRole("status")).toHaveTextContent(
+			"Not supported by this layer · This Media Server build cannot render the selected effect.",
+		);
 	});
 
 	it("lists generated Text and Visualizer address folders beside the media library", async () => {

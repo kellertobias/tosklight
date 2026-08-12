@@ -81,8 +81,14 @@ impl OutputRenderer {
         master_mask: Option<&SourceTexture>,
         now: media_domain::Timestamp,
     ) {
-        self.compositor
-            .render(layers, master, master_mask, self.target.view());
+        self.compositor.render(
+            layers,
+            master,
+            master_mask,
+            self.target.view(),
+            self.id,
+            now,
+        );
         self.clock.record_present(now);
     }
 

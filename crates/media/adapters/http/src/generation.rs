@@ -14,12 +14,13 @@ use crate::wire::{
     AddressView, AudioBandsView, AudioPanelView, AudioSettingsView, AudioView, CatalogFolderView,
     CatalogItemView, CatalogView, CreateText, DeleteText, DeskIdentityView, DmxChannelGroupView,
     DmxChannelView, DmxIngressView, DmxMapView, DmxPersonalityView, DmxResolutionView,
-    DmxValueSetView, Health, ImportJobView, ImportsView, LayerView, LogRecordView, LogsView,
-    MaskView, MasterView, NetworkAddressesView, NetworkView, OutputConfigurationView, OutputView,
-    PendingImportView, ServerLogLevelView, SourceStatusView, StartImport, TelemetryFrame,
-    TextSlotView, TextStyleView, UpdateAudio, UpdateLayer, UpdateLibraryFolder, UpdateLibraryItem,
-    UpdateMaster, UpdateNetwork, UpdateOutputConfiguration, UpdateServerLogLevel, UpdateText,
-    UpdateVisualizer, UploadAcceptedView, VisualizerParametersView, VisualizerView, WaveformView,
+    DmxValueSetView, EffectParameterView, EffectSlotView, Health, ImportJobView, ImportsView,
+    LayerView, LogRecordView, LogsView, MaskView, MasterView, NetworkAddressesView, NetworkView,
+    OutputConfigurationView, OutputView, PendingImportView, ServerLogLevelView, SourceStatusView,
+    StartImport, TelemetryFrame, TextSlotView, TextStyleView, UpdateAudio, UpdateLayer,
+    UpdateLibraryFolder, UpdateLibraryItem, UpdateMaster, UpdateNetwork, UpdateOutputConfiguration,
+    UpdateServerLogLevel, UpdateText, UpdateVisualizer, UploadAcceptedView,
+    VisualizerParametersView, VisualizerView, WaveformView,
 };
 
 const TYPESCRIPT_PATH: &str = "apps/media/src/shared/api/generated/media-wire.ts";
@@ -70,6 +71,8 @@ fn declarations(config: &Config) -> Vec<String> {
         AddressView::decl(config),
         SourceStatusView::decl(config),
         MaskView::decl(config),
+        EffectParameterView::decl(config),
+        EffectSlotView::decl(config),
         LayerView::decl(config),
         MasterView::decl(config),
         OutputView::decl(config),

@@ -44,7 +44,10 @@ pub use command::{
     Command, CommandKind, CommandSource, ControlOwnership, LayerControls, MasterControls, Timestamp,
 };
 pub use geometry::{LayerTransform, Point, Size};
-pub use layer::{LayerState, MaskSource, MaskState, ScalingMode, SourceFailure, SourceStatus};
+pub use layer::{
+    ANALOG_TV_EFFECT, AnalogTvParameters, EffectSlot, LayerState, MaskSource, MaskState,
+    ScalingMode, SourceFailure, SourceStatus,
+};
 pub use master::MasterState;
 pub use output::{OutputId, OutputName, PresentationMode};
 pub use personality::{LayerPersonality, SlotFootprint, StartAddressError};

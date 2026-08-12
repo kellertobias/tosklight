@@ -288,7 +288,7 @@ mod tests {
     }
 
     #[test]
-    fn every_repeated_effect_slot_says_it_is_not_implemented() {
+    fn every_repeated_effect_slot_is_an_implemented_mix_control() {
         let view = DmxMapView::of(&configured_output());
         let effects: Vec<&DmxChannelView> = view
             .channels
@@ -297,10 +297,9 @@ mod tests {
             .collect();
         assert_eq!(effects.len(), 8, "four slots on each of two layers");
         for effect in effects {
-            assert!(!effect.implemented);
-            assert!(effect.implementation_note.is_some());
-            assert_eq!(effect.value_sets.len(), 1);
-            assert!(!effect.value_sets[0].implemented);
+            assert!(effect.implemented);
+            assert!(effect.implementation_note.is_none());
+            assert!(effect.value_sets.is_empty());
         }
     }
 

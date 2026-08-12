@@ -91,6 +91,62 @@ impl MaskState {
     }
 }
 
+/// The first typed effect shipped by the Media Server.
+pub const ANALOG_TV_EFFECT: &str = "analog-tv";
+
+/// Typed Analog TV parameters, normalized to `0.0..=1.0`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct AnalogTvParameters {
+    pub curvature: f32,
+    pub distortion: f32,
+    pub image_grain: f32,
+    pub glitching: f32,
+}
+
+impl Default for AnalogTvParameters {
+    fn default() -> Self {
+        Self {
+            curvature: 0.30,
+            distortion: 0.18,
+            image_grain: 0.20,
+            glitching: 0.08,
+        }
+    }
+}
+
+impl AnalogTvParameters {
+    pub const IDS: [&'static str; 4] = ["tv-curvature", "distortion", "image-grain", "glitching"];
+    pub const LABELS: [&'static str; 4] =
+        ["TV curvature", "Distortion", "Image grain", "Glitching"];
+
+    pub fn from_normalized(values: &[f32]) -> Self {
+        let defaults = Self::default().as_array();
+        let mut resolved = defaults;
+        for (index, value) in values.iter().copied().take(4).enumerate() {
+            resolved[index] = if value.is_finite() {
+                value.clamp(0.0, 1.0)
+            } else {
+                defaults[index]
+            };
+        }
+        Self {
+            curvature: resolved[0],
+            distortion: resolved[1],
+            image_grain: resolved[2],
+            glitching: resolved[3],
+        }
+    }
+
+    pub const fn as_array(self) -> [f32; 4] {
+        [
+            self.curvature,
+            self.distortion,
+            self.image_grain,
+            self.glitching,
+        ]
+    }
+}
+
 /// One slot in a layer's ordered effect chain.
 ///
 /// The four DMX bytes populate the primary amount of four configured slots. Effect identity and
@@ -99,13 +155,46 @@ impl MaskState {
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EffectSlot {
-    /// `None` until the effect spike defines the initial set. The slot is declared and
-    /// explicitly unimplemented rather than silently repurposed.
+    /// A stable typed-effect identifier. Unknown future values remain preserved in stored shows
+    /// and are reported as unsupported instead of being silently discarded.
     pub effect_type: Option<String>,
     pub enabled: bool,
+    /// Stable layer/slot identity used to seed deterministic temporal effects.
+    #[serde(default)]
+    pub seed: u32,
     /// The normalized primary amount the DMX byte carries.
     pub mix: f32,
     pub parameters: Vec<f32>,
+}
+
+impl EffectSlot {
+    pub fn analog_tv() -> Self {
+        Self {
+            effect_type: Some(ANALOG_TV_EFFECT.to_owned()),
+            enabled: true,
+            seed: 0,
+            mix: 1.0,
+            parameters: AnalogTvParameters::default().as_array().to_vec(),
+        }
+    }
+
+    pub fn analog_tv_parameters(&self) -> Option<AnalogTvParameters> {
+        (self.enabled && self.mix > 0.0 && self.effect_type.as_deref() == Some(ANALOG_TV_EFFECT))
+            .then(|| AnalogTvParameters::from_normalized(&self.parameters))
+    }
+
+    pub fn normalize(&mut self) {
+        self.mix = if self.mix.is_finite() {
+            self.mix.clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        if self.effect_type.as_deref() == Some(ANALOG_TV_EFFECT) {
+            self.parameters = AnalogTvParameters::from_normalized(&self.parameters)
+                .as_array()
+                .to_vec();
+        }
+    }
 }
 
 /// Why a layer's selected source is not drawing.
@@ -345,7 +434,7 @@ mod tests {
     }
 
     #[test]
-    fn effect_slots_start_declared_and_unimplemented() {
+    fn effect_slots_start_empty() {
         let layer = LayerState::default();
         assert_eq!(layer.effects.len(), 4);
         for slot in &layer.effects {
@@ -353,5 +442,29 @@ mod tests {
             assert!(!slot.enabled);
             assert_eq!(slot.mix, 0.0);
         }
+    }
+
+    #[test]
+    fn analog_tv_has_typed_restrained_defaults_and_normalized_endpoints() {
+        let mut effect = EffectSlot::analog_tv();
+        assert_eq!(effect.effect_type.as_deref(), Some(ANALOG_TV_EFFECT));
+        assert!(effect.enabled);
+        assert_eq!(
+            effect.analog_tv_parameters(),
+            Some(AnalogTvParameters::default())
+        );
+        assert_eq!(AnalogTvParameters::IDS.len(), effect.parameters.len());
+
+        effect.mix = 2.0;
+        effect.parameters = vec![-1.0, 0.4, 1.5, f32::NAN];
+        effect.normalize();
+        assert_eq!(effect.mix, 1.0);
+        assert_eq!(effect.parameters, vec![0.0, 0.4, 1.0, 0.08]);
+
+        effect.mix = 0.0;
+        assert_eq!(effect.analog_tv_parameters(), None, "zero mix bypasses");
+        effect.mix = 1.0;
+        effect.enabled = false;
+        assert_eq!(effect.analog_tv_parameters(), None, "disabled bypasses");
     }
 }

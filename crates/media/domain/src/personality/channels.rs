@@ -201,9 +201,6 @@ macro_rules! layer_channels {
 }
 
 const IMPLEMENTED: ChannelImplementation = ChannelImplementation::Implemented;
-const EFFECT_NOT_IMPLEMENTED: ChannelImplementation = ChannelImplementation::Unimplemented {
-    reason: "the effect slot is reserved; no effect engine is implemented",
-};
 
 layer_channels! {
      0 "Folder"                Byte       0, ValueKind::Continuous, IMPLEMENTED;
@@ -234,10 +231,10 @@ layer_channels! {
     25 "Mask scale Y fine"     Fine       0, ValueKind::Continuous, IMPLEMENTED;
     26 "Mask invert"           Byte       0, ValueKind::Binary { off: "Normal", on: "Inverted" }, IMPLEMENTED;
     27 "Mask opacity"          Byte       0, ValueKind::Continuous, IMPLEMENTED;
-    28 "Effect 1"              Byte       0, ValueKind::Unimplemented, EFFECT_NOT_IMPLEMENTED;
-    29 "Effect 2"              Byte       0, ValueKind::Unimplemented, EFFECT_NOT_IMPLEMENTED;
-    30 "Effect 3"              Byte       0, ValueKind::Unimplemented, EFFECT_NOT_IMPLEMENTED;
-    31 "Effect 4"              Byte       0, ValueKind::Unimplemented, EFFECT_NOT_IMPLEMENTED;
+    28 "Effect 1"              Byte       0, ValueKind::Continuous, IMPLEMENTED;
+    29 "Effect 2"              Byte       0, ValueKind::Continuous, IMPLEMENTED;
+    30 "Effect 3"              Byte       0, ValueKind::Continuous, IMPLEMENTED;
+    31 "Effect 4"              Byte       0, ValueKind::Continuous, IMPLEMENTED;
     32 "Speed multiplier"      Byte     127, ValueKind::SpeedMultiplier, IMPLEMENTED;
     33 "Playback BPM"          Byte       0, ValueKind::PlaybackBpm, IMPLEMENTED;
 }
@@ -498,14 +495,11 @@ mod tests {
     }
 
     #[test]
-    fn the_effect_slots_are_explicitly_unimplemented() {
+    fn the_effect_slots_are_normalized_mix_controls() {
         for effect in &LAYER_CHANNELS[layer::EFFECT_1..layer::EFFECT_1 + 4] {
-            assert!(!effect.implementation.is_implemented(), "{}", effect.name);
-            assert!(effect.implementation.reason().is_some(), "{}", effect.name);
-            let sets = effect.values.sets();
-            assert_eq!(sets.len(), 1, "{}", effect.name);
-            assert!(!sets[0].implemented, "{}", effect.name);
-            assert_eq!((sets[0].from, sets[0].to), (0, 255));
+            assert!(effect.implementation.is_implemented(), "{}", effect.name);
+            assert!(effect.implementation.reason().is_none(), "{}", effect.name);
+            assert_eq!(effect.values, ValueKind::Continuous, "{}", effect.name);
         }
     }
 

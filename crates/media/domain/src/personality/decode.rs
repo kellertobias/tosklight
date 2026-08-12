@@ -52,6 +52,7 @@ pub fn layer_state(slots: &LayerSlots) -> LayerState {
             ..MaskState::default()
         },
         effects: std::array::from_fn(|index| crate::layer::EffectSlot {
+            seed: index as u32,
             mix: dmx::unit(slots[layer::EFFECT_1 + index]),
             ..Default::default()
         }),

@@ -28,7 +28,9 @@ source: string,
  * Whether it is currently shaping the layer at all.
  */
 active: boolean, };
-export type LayerView = { index: number, address: AddressView, playMode: string, playModeDmx: number, dimmer: number, scaleX: number, scaleY: number, scalingMode: string, positionX: number, positionY: number, rotation: number, grayscale: number, volume: number, tintRed: number, tintGreen: number, tintBlue: number, speedMultiplier: string, speedMultiplierDmx: number, playbackBpm: number | null, sourceStatus: SourceStatusView, mask: MaskView,
+export type EffectParameterView = { id: string, label: string, value: number, defaultValue: number, };
+export type EffectSlotView = { index: number, effectType: string | null, label: string, enabled: boolean, mix: number, supported: boolean, capabilityDetail: string | null, parameters: Array<EffectParameterView>, };
+export type LayerView = { index: number, address: AddressView, playMode: string, playModeDmx: number, dimmer: number, scaleX: number, scaleY: number, scalingMode: string, positionX: number, positionY: number, rotation: number, grayscale: number, volume: number, tintRed: number, tintGreen: number, tintBlue: number, speedMultiplier: string, speedMultiplierDmx: number, playbackBpm: number | null, sourceStatus: SourceStatusView, mask: MaskView, effects: Array<EffectSlotView>,
 /**
  * Whether this layer contributes pixels right now.
  */
@@ -297,7 +299,15 @@ export type UpdateLayer = { folder?: number | null, file?: number | null, dimmer
 /**
  * Zero disables the per-layer BPM target; 1..=255 selects a target.
  */
-playbackBpm?: number | null, };
+playbackBpm?: number | null,
+/**
+ * The ordered slot changed by the following typed effect fields, `0..=3`.
+ */
+effectSlot?: number | null,
+/**
+ * `analog-tv` selects the effect; `none` clears the slot.
+ */
+effectType?: string | null, effectEnabled?: boolean | null, effectMix?: number | null, tvCurvature?: number | null, effectDistortion?: number | null, imageGrain?: number | null, effectGlitching?: number | null, };
 export type UpdateMaster = { dimmer?: number | null, volume?: number | null, tintRed?: number | null, tintGreen?: number | null, tintBlue?: number | null, flipMirror?: string | null, maskFolder?: number | null, maskFile?: number | null, };
 export type UpdateOutputConfiguration = { requestId: string, targetKind?: string | null, monitorBy?: string | null, monitorValue?: string | null, fullscreen?: boolean | null, width?: number | null, height?: number | null, presentation?: string | null, framesPerSecond?: number | null, soundOutputKind?: string | null, soundOutputName?: string | null, personality?: string | null, protocol?: string | null, universe?: number | null, startAddress?: number | null, };
 export type UpdateVisualizer = {

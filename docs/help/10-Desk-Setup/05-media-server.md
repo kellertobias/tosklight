@@ -141,6 +141,17 @@ separate and changes which records the running process captures. That level is i
 temporary: restarting reads `MEDIA_LOG` again. Raising it to Debug does not change the **Show**
 filter, and lowering the browser filter does not change the process.
 
+On **Playback**, take over the selected output before changing a layer. The **Effects** section has
+four ordered slots. **Analog TV** starts with restrained CRT defaults: **TV curvature** 30%,
+**Distortion** 18%, **Image grain** 20%, and **Glitching** 8%. Curvature bends the picture into a
+rounded screen, Distortion controls continuous horizontal-sync and chroma instability, Image grain
+adds continuous noise and scanlines, and Glitching controls intermittent tearing and vertical roll.
+Set an individual control to 0% to remove only that contribution, choose **Bypassed** to preserve the
+slot without rendering it, or choose **None** to clear the slot.
+After configuring a slot, release takeover to return control to the desk. The matching **Effect 1**
+through **Effect 4** DMX channel then controls that slot's mix without erasing its selected effect or
+typed parameters.
+
 Bookmarks for the retired `/layers`, `/audio`, `/dmx`, and `/logs` pages remain compatible: they
 open **Playback** or the corresponding area of **Settings**. The retired `/text` and
 `/visualizers` destinations open the matching **Library** filter.

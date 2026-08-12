@@ -217,6 +217,36 @@ export function stubServer(
 				if (body.maskInvert !== undefined) layer.mask.invert = body.maskInvert;
 				if (body.maskOpacity !== undefined)
 					layer.mask.opacity = body.maskOpacity;
+				if (body.effectSlot !== undefined) {
+					const effect = layer.effects[body.effectSlot];
+					if (body.effectType === "none") {
+						layer.effects[body.effectSlot] = {
+							...effect,
+							effectType: null,
+							label: "None",
+							enabled: false,
+							mix: 0,
+							parameters: [],
+						};
+					} else if (body.effectType === "analog-tv") {
+						layer.effects[body.effectSlot] = analogTvEffect(body.effectSlot);
+					}
+					const selectedEffect = layer.effects[body.effectSlot];
+					if (body.effectEnabled !== undefined)
+						selectedEffect.enabled = body.effectEnabled;
+					if (body.effectMix !== undefined) selectedEffect.mix = body.effectMix;
+					for (const [id, key] of [
+						["tv-curvature", "tvCurvature"],
+						["distortion", "effectDistortion"],
+						["image-grain", "imageGrain"],
+						["glitching", "effectGlitching"],
+					] as const) {
+						const parameter = selectedEffect.parameters.find(
+							(candidate) => candidate.id === id,
+						);
+						if (parameter && body[key] !== undefined) parameter.value = body[key];
+					}
+				}
 				return jsonResponse(output);
 			}
 			const master = path.match(/^\/outputs\/([^/]+)\/master\/update$/u);
@@ -493,7 +523,44 @@ export function aLayer(index: number): OutputView["layers"][number] {
 			source: "luminance",
 			active: false,
 		},
+		effects: Array.from({ length: 4 }, (_, slot) => emptyEffect(slot)),
 		drawing: true,
+	};
+}
+
+function emptyEffect(index: number): OutputView["layers"][number]["effects"][number] {
+	return {
+		index,
+		effectType: null,
+		label: "None",
+		enabled: false,
+		mix: 0,
+		supported: true,
+		capabilityDetail: null,
+		parameters: [],
+	};
+}
+
+function analogTvEffect(
+	index: number,
+): OutputView["layers"][number]["effects"][number] {
+	return {
+		...emptyEffect(index),
+		effectType: "analog-tv",
+		label: "Analog TV",
+		enabled: true,
+		mix: 1,
+		parameters: [
+			["tv-curvature", "TV curvature", 0.3],
+			["distortion", "Distortion", 0.18],
+			["image-grain", "Image grain", 0.2],
+			["glitching", "Glitching", 0.08],
+		].map(([id, label, value]) => ({
+			id: String(id),
+			label: String(label),
+			value: Number(value),
+			defaultValue: Number(value),
+		})),
 	};
 }
 
