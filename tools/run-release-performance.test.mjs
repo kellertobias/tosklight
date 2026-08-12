@@ -564,7 +564,7 @@ test("scheduled publication separates release delivery from performance and Page
 	assert.match(storybookPagesWorkflow, /npm run storybook:build/u);
 	assert.match(
 		storybookPagesWorkflow,
-		/gh run list[\s\S]*?--workflow documentation\.yml[\s\S]*?--status success/u,
+		/actions\/artifacts\?name=github-pages[\s\S]*?select\(\.expired == false\)[\s\S]*?workflow_run\.id/u,
 	);
 	assert.match(storybookPagesWorkflow, /--name github-pages/u);
 	assert.match(

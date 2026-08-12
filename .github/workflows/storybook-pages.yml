@@ -37,13 +37,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          base_run="$(gh run list \
-            --repo "$GITHUB_REPOSITORY" \
-            --workflow documentation.yml \
-            --status success \
-            --limit 1 \
-            --json databaseId \
-            --jq '.[0].databaseId')"
+          base_run="$(gh api \
+            "repos/$GITHUB_REPOSITORY/actions/artifacts?name=github-pages&per_page=100" \
+            --jq '[.artifacts[] | select(.expired == false)] | sort_by(.created_at) | reverse | .[0].workflow_run.id')"
           test -n "$base_run"
           mkdir -p .artifacts/pages-base .artifacts/generated/pages
           gh run download "$base_run" \
