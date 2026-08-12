@@ -493,6 +493,7 @@ fn wire_fixture(
         }],
         layer_id: "default".into(),
         direct_control: None,
+        internal_bindings: Default::default(),
         location: wire::PatchFixtureLocation { x: 0, y: 0, z: 0 },
         rotation: wire::PatchFixtureRotation {
             x: 0.0,
