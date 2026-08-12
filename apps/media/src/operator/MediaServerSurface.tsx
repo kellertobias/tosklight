@@ -221,10 +221,12 @@ export type MediaSettingsSection =
 export function MediaSettingsLayout({
 	active,
 	onSelect,
+	toolbar,
 	children,
 }: {
 	active: MediaSettingsSection;
 	onSelect?: (section: MediaSettingsSection) => void;
+	toolbar?: ReactNode;
 	children: ReactNode;
 }) {
 	return (
@@ -235,6 +237,7 @@ export function MediaSettingsLayout({
 				secondary: "Output, network, and service configuration",
 			}}
 			className="media-settings-window"
+			toolbar={toolbar}
 			navigation={
 				<SelectionList
 					className="media-settings-navigation"

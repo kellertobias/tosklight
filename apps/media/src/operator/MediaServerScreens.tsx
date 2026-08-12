@@ -2,6 +2,7 @@ import {
 	Button,
 	ColorPickerField,
 	FormLayout,
+	MultiValueToggle,
 	NumberField,
 	SelectField,
 	TextAreaField,
@@ -411,14 +412,16 @@ export function TextScreen({
 export function SettingsScreen({
 	active,
 	onSelect,
+	toolbar,
 	children,
 }: {
 	active: MediaSettingsSection;
 	onSelect?: (section: MediaSettingsSection) => void;
+	toolbar?: ReactNode;
 	children: ReactNode;
 }) {
 	return (
-		<MediaSettingsLayout active={active} onSelect={onSelect}>
+		<MediaSettingsLayout active={active} onSelect={onSelect} toolbar={toolbar}>
 			{children}
 		</MediaSettingsLayout>
 	);
@@ -536,12 +539,41 @@ export function OutputsSettings() {
 	);
 }
 
-export function NetworkInputsSettings() {
+export type NetworkInputsSettingsTab = "network" | "dmx" | "audio";
+
+export function NetworkInputsTabs({
+	value,
+	onChange,
+}: {
+	value: NetworkInputsSettingsTab;
+	onChange: (value: NetworkInputsSettingsTab) => void;
+}) {
+	return (
+		<MultiValueToggle
+			ariaLabel="Network and input settings"
+			value={value}
+			onChange={onChange}
+			options={[
+				{ value: "network", label: "Network" },
+				{ value: "dmx", label: "DMX" },
+				{ value: "audio", label: "Audio" },
+			]}
+		/>
+	);
+}
+
+export function NetworkInputsSettings({
+	active = "network",
+	audioMonitor,
+}: {
+	active?: NetworkInputsSettingsTab;
+	audioMonitor?: ReactNode;
+}) {
 	return (
 		<>
 			<h2>Network &amp; Inputs</h2>
-			<p>Keep network listeners, DMX identity, and audio input together.</p>
-			<div className="media-operator-card-grid">
+			<p>Configure one input family at a time from the window title.</p>
+			{active === "network" && (
 				<SettingsSection title="Network" detail="Addresses used after restart">
 					<FormLayout columns={2} className="media-operator-control-row">
 						<TextField label="Art-Net listen" defaultValue="0.0.0.0:6454" />
@@ -550,6 +582,8 @@ export function NetworkInputsSettings() {
 						<TextField label="This interface" defaultValue="0.0.0.0:4711" />
 					</FormLayout>
 				</SettingsSection>
+			)}
+			{active === "dmx" && (
 				<SettingsSection
 					title="DMX"
 					detail="The block patched on the Light Desk"
@@ -575,32 +609,124 @@ export function NetworkInputsSettings() {
 						<NumberField label="Start address" defaultValue={1} />
 					</FormLayout>
 				</SettingsSection>
-			</div>
-			<SettingsSection
-				title="Audio input"
-				detail="Feeds audio-reactive visualizers"
-				className="media-audio-input-panel"
-			>
-				<FormLayout columns={2} className="media-operator-control-row">
-					<StorySelect
-						label="Input device"
-						initialValue="usb"
-						options={[
-							{ value: "usb", label: "USB Audio CODEC" },
-							{ value: "system", label: "System default" },
-						]}
-					/>
-					<NumberField label="Gain" min={0} max={100} defaultValue={72} />
-				</FormLayout>
-			</SettingsSection>
+			)}
+			{active === "audio" && (
+				<>
+					{audioMonitor}
+					<SettingsSection
+						title="Audio input"
+						detail="Feeds audio-reactive visualizers"
+						className="media-audio-input-panel"
+					>
+						<FormLayout columns={2} className="media-operator-control-row">
+							<StorySelect
+								label="Input device"
+								initialValue="usb"
+								options={[
+									{ value: "usb", label: "USB Audio CODEC" },
+									{ value: "system", label: "System default" },
+								]}
+							/>
+							<NumberField label="Gain" min={0} max={100} defaultValue={72} />
+						</FormLayout>
+					</SettingsSection>
+				</>
+			)}
 			<div className="media-operator-toolbar">
-				<Button variant="primary">Save network &amp; inputs</Button>
+				<Button variant="primary">
+					Save {active === "audio" ? "audio input" : active} settings
+				</Button>
 			</div>
 		</>
 	);
 }
 
-export function LogsSettings() {
+export type LogsSettingsTab = "logs" | "dmx-diagnostics";
+
+export function LogsTabs({
+	value,
+	onChange,
+}: {
+	value: LogsSettingsTab;
+	onChange: (value: LogsSettingsTab) => void;
+}) {
+	return (
+		<MultiValueToggle
+			ariaLabel="Logs and diagnostics"
+			value={value}
+			onChange={onChange}
+			options={[
+				{ value: "logs", label: "Logs" },
+				{ value: "dmx-diagnostics", label: "DMX Diagnostics" },
+			]}
+		/>
+	);
+}
+
+export function LogsSettings({
+	active = "logs",
+}: {
+	active?: LogsSettingsTab;
+}) {
+	if (active === "dmx-diagnostics") {
+		const channels = [
+			{ address: 1, name: "Master dimmer", raw: 255, value: "100%" },
+			{ address: 2, name: "Master volume", raw: 204, value: "80%" },
+			{ address: 8, name: "Layer 1 dimmer", raw: 255, value: "100%" },
+		];
+		return (
+			<>
+				<h2>DMX Diagnostics</h2>
+				<p>
+					Inspect live receiver state and download the generated personality.
+				</p>
+				<div className="media-metric-grid">
+					<MediaMetric label="Protocol" value="Art-Net" detail="Universe 1" />
+					<MediaMetric
+						label="Input"
+						value="44 Hz"
+						detail="Light · active"
+						tone="good"
+					/>
+					<MediaMetric
+						label="Patch"
+						value="Address 1"
+						detail="8 layers · 279 slots"
+					/>
+				</div>
+				<MediaPanel
+					title="Main output channels"
+					detail="Current decoded values"
+				>
+					<DataTable
+						rows={channels}
+						rowKey={(channel) => String(channel.address)}
+						columns={[
+							{
+								id: "address",
+								header: "Address",
+								render: (channel) => channel.address,
+							},
+							{
+								id: "name",
+								header: "Channel",
+								render: (channel) => channel.name,
+							},
+							{ id: "raw", header: "Raw", render: (channel) => channel.raw },
+							{
+								id: "value",
+								header: "Decoded",
+								render: (channel) => channel.value,
+							},
+						]}
+					/>
+				</MediaPanel>
+				<div className="media-operator-toolbar">
+					<Button>Download Main output GDTF</Button>
+				</div>
+			</>
+		);
+	}
 	return (
 		<>
 			<h2>Logs</h2>

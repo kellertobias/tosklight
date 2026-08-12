@@ -41,6 +41,7 @@ describe("the settings page", () => {
 		expect(screen.queryByText(outputIdPattern)).not.toBeInTheDocument();
 
 		await openSettings("Network & Inputs");
+		await openSettingsTab("DMX");
 		const dmx = await screen.findByRole("article", {
 			name: "Main DMX input settings",
 		});
@@ -136,6 +137,7 @@ describe("the settings page", () => {
 		});
 		render(<SettingsPage />);
 		await openSettings("Network & Inputs");
+		await openSettingsTab("DMX");
 
 		await userEvent.click(
 			await screen.findByRole("button", { name: "Change DMX input" }),
@@ -159,6 +161,53 @@ describe("the settings page", () => {
 			monitorValue: "Stage projector",
 			fullscreen: true,
 		});
+	});
+
+	it("separates Network, DMX, and Audio into window title tabs", async () => {
+		stubSettingsServer();
+		render(<SettingsPage />);
+		await openSettings("Network & Inputs");
+
+		const tabs = screen.getByRole("radiogroup", {
+			name: "Network and input settings",
+		});
+		expect(tabs).toHaveTextContent("NetworkDMXAudio");
+		expect(
+			await screen.findByRole("article", { name: "Network" }),
+		).toBeVisible();
+
+		await openSettingsTab("DMX");
+		expect(
+			await screen.findByRole("article", { name: "Main DMX input settings" }),
+		).toBeVisible();
+		expect(
+			screen.queryByRole("article", { name: "Network" }),
+		).not.toBeInTheDocument();
+
+		await openSettingsTab("Audio");
+		expect(
+			await screen.findByRole("article", { name: "Audio monitor" }),
+		).toBeVisible();
+		expect(
+			screen.queryByRole("article", { name: "Main DMX input settings" }),
+		).not.toBeInTheDocument();
+	});
+
+	it("puts DMX Diagnostics in its own Logs title tab", async () => {
+		stubSettingsServer();
+		render(<SettingsPage />);
+		await openSettings("Logs");
+
+		const tabs = screen.getByRole("radiogroup", {
+			name: "Logs and diagnostics",
+		});
+		expect(tabs).toHaveTextContent("LogsDMX Diagnostics");
+		await openSettingsTab("DMX Diagnostics");
+		expect(
+			await screen.findByRole("heading", { name: "GDTF fixtures" }),
+		).toBeVisible();
+		expect(screen.getByLabelText("Main DMX")).toBeVisible();
+		expect(screen.queryByText("Server log level")).not.toBeInTheDocument();
 	});
 
 	it("shows what was configured beside what this run actually bound", async () => {
@@ -409,6 +458,12 @@ async function replaceNumber(label: string, value: string) {
 
 async function openSettings(
 	name: "Libraries" | "Outputs" | "Network & Inputs" | "Logs",
+) {
+	await userEvent.click(screen.getByRole("radio", { name }));
+}
+
+async function openSettingsTab(
+	name: "Network" | "DMX" | "Audio" | "Logs" | "DMX Diagnostics",
 ) {
 	await userEvent.click(screen.getByRole("radio", { name }));
 }

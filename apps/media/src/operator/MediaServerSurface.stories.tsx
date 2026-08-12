@@ -25,7 +25,11 @@ import {
 	DashboardScreen,
 	LibrariesSettings,
 	LogsSettings,
+	LogsTabs,
+	type LogsSettingsTab,
 	NetworkInputsSettings,
+	NetworkInputsTabs,
+	type NetworkInputsSettingsTab,
 	OutputsSettings,
 	SettingsScreen,
 } from "./MediaServerScreens";
@@ -56,6 +60,17 @@ const SETTINGS_STORY_BY_SECTION = {
 	"network-inputs": "settings-network-and-inputs",
 	logs: "settings-logs",
 } as const;
+
+const NETWORK_INPUT_STORY_BY_TAB: Record<NetworkInputsSettingsTab, string> = {
+	network: "settings-network-and-inputs",
+	dmx: "settings-dmx-input",
+	audio: "settings-audio-input",
+};
+
+const LOG_STORY_BY_TAB: Record<LogsSettingsTab, string> = {
+	logs: "settings-logs",
+	"dmx-diagnostics": "settings-dmx-diagnostics",
+};
 
 function mediaServerStoryPath(section: MediaServerSection) {
 	return `/?path=/story/tosklight-media-server--${MEDIA_STORY_BY_SECTION[section]}`;
@@ -759,8 +774,53 @@ export const SettingsNetworkAndInputs: Story = {
 			<SettingsScreen
 				active="network-inputs"
 				onSelect={(section) => openStory(SETTINGS_STORY_BY_SECTION[section])}
+				toolbar={
+					<NetworkInputsTabs
+						value="network"
+						onChange={(tab) => openStory(NETWORK_INPUT_STORY_BY_TAB[tab])}
+					/>
+				}
 			>
-				<NetworkInputsSettings />
+				<NetworkInputsSettings active="network" />
+			</SettingsScreen>
+		</Frame>
+	),
+};
+export const SettingsDmxInput: Story = {
+	render: () => (
+		<Frame active="settings">
+			<SettingsScreen
+				active="network-inputs"
+				onSelect={(section) => openStory(SETTINGS_STORY_BY_SECTION[section])}
+				toolbar={
+					<NetworkInputsTabs
+						value="dmx"
+						onChange={(tab) => openStory(NETWORK_INPUT_STORY_BY_TAB[tab])}
+					/>
+				}
+			>
+				<NetworkInputsSettings active="dmx" />
+			</SettingsScreen>
+		</Frame>
+	),
+};
+export const SettingsAudioInput: Story = {
+	render: () => (
+		<Frame active="settings">
+			<SettingsScreen
+				active="network-inputs"
+				onSelect={(section) => openStory(SETTINGS_STORY_BY_SECTION[section])}
+				toolbar={
+					<NetworkInputsTabs
+						value="audio"
+						onChange={(tab) => openStory(NETWORK_INPUT_STORY_BY_TAB[tab])}
+					/>
+				}
+			>
+				<NetworkInputsSettings
+					active="audio"
+					audioMonitor={<AudioMeters audio={audioAnalysis} live />}
+				/>
 			</SettingsScreen>
 		</Frame>
 	),
@@ -771,8 +831,32 @@ export const SettingsLogs: Story = {
 			<SettingsScreen
 				active="logs"
 				onSelect={(section) => openStory(SETTINGS_STORY_BY_SECTION[section])}
+				toolbar={
+					<LogsTabs
+						value="logs"
+						onChange={(tab) => openStory(LOG_STORY_BY_TAB[tab])}
+					/>
+				}
 			>
-				<LogsSettings />
+				<LogsSettings active="logs" />
+			</SettingsScreen>
+		</Frame>
+	),
+};
+export const SettingsDmxDiagnostics: Story = {
+	render: () => (
+		<Frame active="settings">
+			<SettingsScreen
+				active="logs"
+				onSelect={(section) => openStory(SETTINGS_STORY_BY_SECTION[section])}
+				toolbar={
+					<LogsTabs
+						value="dmx-diagnostics"
+						onChange={(tab) => openStory(LOG_STORY_BY_TAB[tab])}
+					/>
+				}
+			>
+				<LogsSettings active="dmx-diagnostics" />
 			</SettingsScreen>
 		</Frame>
 	),

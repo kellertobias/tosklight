@@ -3,7 +3,7 @@
 // Output identity is editable as stored configuration. The running surface is deliberately left
 // alone, and the page says so rather than pretending a monitor or resolution changed live.
 
-import { Button } from "@tosklight/ui/controls";
+import { Button, MultiValueToggle } from "@tosklight/ui/controls";
 import { useState } from "react";
 import { ResourceState } from "../../app/ResourceState";
 import {
@@ -25,22 +25,57 @@ import { OutputSettings } from "./OutputSettings";
 
 const HEALTH_POLL_MS = 15_000;
 
+type NetworkInputsTab = "network" | "dmx" | "audio";
+type LogsTab = "logs" | "dmx-diagnostics";
+
 export function SettingsPage() {
 	const health = useHealth(HEALTH_POLL_MS);
 	const outputs = useOutputs(HEALTH_POLL_MS);
 	const network = useNetwork();
 	const editing = useEditing(network.reload);
 	const initialSection =
-		window.location.pathname === "/logs"
+		window.location.pathname === "/logs" || window.location.pathname === "/dmx"
 			? "logs"
-			: window.location.pathname === "/audio" ||
-					window.location.pathname === "/dmx"
+			: window.location.pathname === "/audio"
 				? "network-inputs"
 				: "libraries";
 	const [section, setSection] = useState<MediaSettingsSection>(initialSection);
+	const [networkInputsTab, setNetworkInputsTab] = useState<NetworkInputsTab>(
+		window.location.pathname === "/audio" ? "audio" : "network",
+	);
+	const [logsTab, setLogsTab] = useState<LogsTab>(
+		window.location.pathname === "/dmx" ? "dmx-diagnostics" : "logs",
+	);
+	const toolbar =
+		section === "network-inputs" ? (
+			<MultiValueToggle
+				ariaLabel="Network and input settings"
+				value={networkInputsTab}
+				options={[
+					{ value: "network", label: "Network" },
+					{ value: "dmx", label: "DMX" },
+					{ value: "audio", label: "Audio" },
+				]}
+				onChange={setNetworkInputsTab}
+			/>
+		) : section === "logs" ? (
+			<MultiValueToggle
+				ariaLabel="Logs and diagnostics"
+				value={logsTab}
+				options={[
+					{ value: "logs", label: "Logs" },
+					{ value: "dmx-diagnostics", label: "DMX Diagnostics" },
+				]}
+				onChange={setLogsTab}
+			/>
+		) : undefined;
 
 	return (
-		<MediaSettingsLayout active={section} onSelect={setSection}>
+		<MediaSettingsLayout
+			active={section}
+			onSelect={setSection}
+			toolbar={toolbar}
+		>
 			{section === "libraries" && (
 				<section className="media-page">
 					<ResourceState resource={health} subject="server settings">
@@ -62,7 +97,7 @@ export function SettingsPage() {
 				</section>
 			)}
 
-			{section === "network-inputs" && (
+			{section === "network-inputs" && networkInputsTab === "network" && (
 				<section className="media-page">
 					{editing.failure && (
 						<p className="media-state is-error" role="alert">
@@ -87,6 +122,11 @@ export function SettingsPage() {
 							/>
 						)}
 					</ResourceState>
+				</section>
+			)}
+
+			{section === "network-inputs" && networkInputsTab === "dmx" && (
+				<section className="media-page">
 					<ResourceState
 						resource={outputs}
 						subject="DMX input settings"
@@ -110,18 +150,11 @@ export function SettingsPage() {
 							</section>
 						)}
 					</ResourceState>
-					<section
-						className="media-settings-group media-audio-input-group"
-						aria-labelledby="audio-input-heading"
-					>
-						<h2 id="audio-input-heading">Audio input</h2>
-						<AudioPage />
-					</section>
-					<details className="media-settings-section">
-						<summary>DMX diagnostics and fixture downloads</summary>
-						<DmxPage />
-					</details>
 				</section>
+			)}
+
+			{section === "network-inputs" && networkInputsTab === "audio" && (
+				<AudioPage />
 			)}
 
 			{section === "outputs" && (
@@ -149,7 +182,8 @@ export function SettingsPage() {
 					)}
 				</ResourceState>
 			)}
-			{section === "logs" && <LogsPage />}
+			{section === "logs" && logsTab === "logs" && <LogsPage />}
+			{section === "logs" && logsTab === "dmx-diagnostics" && <DmxPage />}
 		</MediaSettingsLayout>
 	);
 }

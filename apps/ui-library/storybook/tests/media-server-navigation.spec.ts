@@ -23,6 +23,25 @@ test("Media Server dock and settings navigate between Storybook screens", async 
 	await expect(page).toHaveURL(
 		/\?path=\/story\/tosklight-media-server--settings-network-and-inputs$/u,
 	);
+	await story.getByRole("radio", { name: "DMX", exact: true }).click();
+	await expect(page).toHaveURL(
+		/\?path=\/story\/tosklight-media-server--settings-dmx-input$/u,
+	);
+	await story.getByRole("radio", { name: "Audio", exact: true }).click();
+	await expect(page).toHaveURL(
+		/\?path=\/story\/tosklight-media-server--settings-audio-input$/u,
+	);
+
+	await story.getByRole("radio", { name: "Logs", exact: true }).click();
+	await expect(page).toHaveURL(
+		/\?path=\/story\/tosklight-media-server--settings-logs$/u,
+	);
+	await story
+		.getByRole("radio", { name: "DMX Diagnostics", exact: true })
+		.click();
+	await expect(page).toHaveURL(
+		/\?path=\/story\/tosklight-media-server--settings-dmx-diagnostics$/u,
+	);
 
 	await story.getByRole("button", { name: "Audio", exact: true }).click();
 	await expect(page).toHaveURL(

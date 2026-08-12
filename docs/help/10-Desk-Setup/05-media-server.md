@@ -32,17 +32,19 @@ The **Settings** page separates the values deliberately. Its tabs are **Librarie
 - **Libraries** identifies the process, reports the current library revision, and explains where
   the `library.root` setting lives. This path is changed in the configuration file rather than in
   the browser.
-- **Network & Inputs** shows each configured listener beside the address actually in use. **Where this
+- **Network & Inputs** uses the window title buttons **Network**, **DMX**, and **Audio**. **Network**
+  shows each configured listener beside the address actually in use. **Where this
   server listens** contains Art-Net, sACN, CITP, and the administration interface. **Where this
   server sends** contains the optional Light Speed Group stream destination. **Light and Media are
   on this computer** temporarily resolves listeners to `127.0.0.1` without destroying the stored
-  installation addresses. The same tab contains audio input and each output's DMX personality,
-  Art-Net or sACN protocol, universe, and start address. The page limits the start address so the
-  complete personality remains in one 512-slot universe. Its diagnostics section keeps the
-  detailed DMX receiver state and generated GDTF downloads reachable.
+  installation addresses. **DMX** contains each output's personality, Art-Net or sACN protocol,
+  universe, and start address. The page limits the start address so the complete personality
+  remains in one 512-slot universe. **Audio** configures the input used by audio-reactive sources.
 - **Outputs** has one card per output. Choose a monitor or an off-screen surface, render size, and
   display-synchronized, fixed-rate, or diagnostic presentation.
-- **Logs** keeps the visible-log filter and running server log level together.
+- **Logs** uses the window title buttons **Logs** and **DMX Diagnostics**. **Logs** keeps the
+  visible-log filter and running server log level together. **DMX Diagnostics** contains detailed
+  receiver state, decoded channel values, and generated GDTF downloads.
 
 Saved network and output changes are stored immediately but do not replace sockets or output
 surfaces underneath a running show. Restart the Media Server, return to **Settings**, and confirm
@@ -103,9 +105,10 @@ the authored input.
 ## Patch and diagnose DMX
 
 Patch each Media output on the lighting desk with the same personality, protocol, universe, and
-start address shown under **Settings** > **Network & Inputs**. The 2-layer personality occupies 75 slots; the 8-layer
-personality occupies 279 slots. Open **DMX diagnostics and fixture downloads** in that tab to
-download an output's generated GDTF rather than recreating the channel map by hand.
+start address shown under **Settings** > **Network & Inputs** > **DMX**. The 2-layer personality
+occupies 75 slots; the 8-layer personality occupies 279 slots. Open **Settings** > **Logs** >
+**DMX Diagnostics** to download an output's generated GDTF rather than recreating the channel map
+by hand.
 
 The **DMX** page groups canonical channels under each layer and the master. It reports each
 channel's absolute address, name, raw value, decoded value, resolution, defaults, and implemented
