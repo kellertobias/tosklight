@@ -1,4 +1,14 @@
-import type { ReactNode } from "react";
+import {
+	Button,
+	ColorPickerField,
+	FormLayout,
+	NumberField,
+	SelectField,
+	TextAreaField,
+	TextField,
+} from "@tosklight/ui/controls";
+import { DataTable } from "@tosklight/ui/window-kit";
+import { type ReactNode, useState } from "react";
 import {
 	MediaListDetail,
 	MediaMetric,
@@ -42,6 +52,26 @@ export interface OperatorTextSource {
 	kind: string;
 	text: string;
 	enabled: boolean;
+}
+
+function StorySelect<T extends string>({
+	label,
+	initialValue,
+	options,
+}: {
+	label: string;
+	initialValue: T;
+	options: Array<{ value: T; label: string }>;
+}) {
+	const [value, setValue] = useState(initialValue);
+	return (
+		<SelectField
+			label={label}
+			value={value}
+			options={options}
+			onChange={setValue}
+		/>
+	);
 }
 
 export function DashboardScreen({
@@ -100,26 +130,28 @@ export function DashboardScreen({
 					title="Outputs"
 					detail="Current picture surfaces and render health."
 				>
-					<table className="media-operator-table">
-						<thead>
-							<tr>
-								<th>Output</th>
-								<th>Target</th>
-								<th>Picture</th>
-								<th>Status</th>
-							</tr>
-						</thead>
-						<tbody>
-							{outputs.map((output) => (
-								<tr key={output.id}>
-									<td>{output.name}</td>
-									<td>{output.target}</td>
-									<td>{output.resolution}</td>
-									<td>{output.status}</td>
-								</tr>
-							))}
-						</tbody>
-					</table>
+					<DataTable
+						rows={outputs}
+						rowKey={(output) => output.id}
+						columns={[
+							{ id: "name", header: "Output", render: (output) => output.name },
+							{
+								id: "target",
+								header: "Target",
+								render: (output) => output.target,
+							},
+							{
+								id: "picture",
+								header: "Picture",
+								render: (output) => output.resolution,
+							},
+							{
+								id: "status",
+								header: "Status",
+								render: (output) => output.status,
+							},
+						]}
+					/>
 				</MediaPanel>
 				<MediaPanel
 					title="Recent activity"
@@ -147,24 +179,23 @@ export function MediaScreen({ outputs }: { outputs: OperatorOutput[] }) {
 						detail={`${output.target} · ${output.resolution}`}
 					>
 						<MediaPreview title={`${output.name} program`} variant="media" />
-						<table className="media-operator-table">
-							<thead>
-								<tr>
-									<th>Layer</th>
-									<th>Source</th>
-									<th>Level</th>
-								</tr>
-							</thead>
-							<tbody>
-								{output.layers.map((layer) => (
-									<tr key={layer.id}>
-										<td>{layer.name}</td>
-										<td>{layer.source}</td>
-										<td>{layer.level}</td>
-									</tr>
-								))}
-							</tbody>
-						</table>
+						<DataTable
+							rows={output.layers}
+							rowKey={(layer) => layer.id}
+							columns={[
+								{ id: "name", header: "Layer", render: (layer) => layer.name },
+								{
+									id: "source",
+									header: "Source",
+									render: (layer) => layer.source,
+								},
+								{
+									id: "level",
+									header: "Level",
+									render: (layer) => layer.level,
+								},
+							]}
+						/>
 					</MediaPanel>
 				))}
 			</div>
@@ -189,9 +220,7 @@ export function LibraryScreen({
 				detail="Prepare stable, numbered media without changing the address a show uses."
 				actions={
 					<div className="media-operator-toolbar">
-						<button type="button" className="is-primary">
-							Import media
-						</button>
+						<Button variant="primary">Import media</Button>
 					</div>
 				}
 			/>
@@ -214,9 +243,9 @@ export function LibraryScreen({
 								{selected.address} · {selected.type}
 							</p>
 							<div className="media-operator-toolbar">
-								<button type="button">Rename</button>
-								<button type="button">Move</button>
-								<button type="button">Replace source</button>
+								<Button>Rename</Button>
+								<Button>Move</Button>
+								<Button>Replace source</Button>
 							</div>
 						</>
 					) : (
@@ -262,23 +291,19 @@ export function VisualizersScreen({
 							<p>
 								{selected.kind} · {selected.address}
 							</p>
-							<div className="media-operator-control-row">
+							<FormLayout columns={2} className="media-operator-control-row">
 								{selected.controls.slice(0, 4).map((control, index) => (
-									<label key={control}>
-										{control}
-										<input
-											type="range"
-											min="0"
-											max="100"
-											defaultValue={String(72 - index * 9)}
-										/>
-									</label>
+									<NumberField
+										key={control}
+										label={control}
+										min={0}
+										max={100}
+										defaultValue={72 - index * 9}
+									/>
 								))}
-							</div>
+							</FormLayout>
 							<div className="media-operator-toolbar">
-								<button type="button" className="is-primary">
-									Save visualizer
-								</button>
+								<Button variant="primary">Save visualizer</Button>
 							</div>
 						</>
 					) : (
@@ -309,9 +334,7 @@ export function TextScreen({
 				detail="Write and style addressable text, clocks, and countdowns."
 				actions={
 					<div className="media-operator-toolbar">
-						<button type="button" className="is-primary">
-							New text source
-						</button>
+						<Button variant="primary">New text source</Button>
 					</div>
 				}
 			/>
@@ -333,46 +356,41 @@ export function TextScreen({
 									{selected.text}
 								</span>
 							</MediaPreview>
-							<div className="media-operator-form-grid">
-								<label className="media-operator-textarea-label">
-									Text
-									<textarea
-										aria-label="Text"
-										value={selected.text}
-										onChange={(event) => onTextChange?.(event.target.value)}
-									/>
-								</label>
+							<FormLayout columns={2} className="media-operator-form-grid">
+								<TextAreaField
+									label="Text"
+									value={selected.text}
+									onChange={(event) => onTextChange?.(event.target.value)}
+								/>
 								<div className="media-operator-control-row">
-									<label>
-										Font
-										<select defaultValue="sans">
-											<option value="sans">Sans serif</option>
-											<option value="serif">Serif</option>
-										</select>
-									</label>
-									<label>
-										Alignment
-										<select defaultValue="center">
-											<option value="left">Left</option>
-											<option value="center">Centre</option>
-											<option value="right">Right</option>
-										</select>
-									</label>
-									<label>
-										Height
-										<input type="number" defaultValue="20" />
-									</label>
-									<label>
-										Colour
-										<input type="color" defaultValue="#ffffff" />
-									</label>
+									<StorySelect
+										label="Font"
+										initialValue="sans"
+										options={[
+											{ value: "sans", label: "Sans serif" },
+											{ value: "serif", label: "Serif" },
+										]}
+									/>
+									<StorySelect
+										label="Alignment"
+										initialValue="center"
+										options={[
+											{ value: "left", label: "Left" },
+											{ value: "center", label: "Centre" },
+											{ value: "right", label: "Right" },
+										]}
+									/>
+									<NumberField label="Height" defaultValue={20} />
+									<ColorPickerField
+										label="Colour"
+										value="#ffffff"
+										onChange={() => {}}
+									/>
 								</div>
-							</div>
+							</FormLayout>
 							<div className="media-operator-toolbar">
-								<button type="button" className="is-primary">
-									Save text
-								</button>
-								<button type="button">Remove</button>
+								<Button variant="primary">Save text</Button>
+								<Button variant="danger">Remove</Button>
 							</div>
 						</>
 					) : (
@@ -418,23 +436,17 @@ export function LibrariesSettings({
 				Choose where authored sources, playable media, thumbnails, and generated
 				sources are kept.
 			</p>
-			<div className="media-operator-control-row">
-				<label>
-					Library folder
-					<input value={root} readOnly />
-				</label>
-				<label>
-					Playback format
-					<select defaultValue="hap-alpha">
-						<option value="hap-alpha">HAP Alpha</option>
-					</select>
-				</label>
-			</div>
+			<FormLayout columns={2} className="media-operator-control-row">
+				<TextField label="Library folder" value={root} readOnly />
+				<StorySelect
+					label="Playback format"
+					initialValue="hap-alpha"
+					options={[{ value: "hap-alpha", label: "HAP Alpha" }]}
+				/>
+			</FormLayout>
 			<div className="media-operator-toolbar">
-				<button type="button">Choose folder</button>
-				<button type="button" className="is-primary">
-					Save library settings
-				</button>
+				<Button>Choose folder</Button>
+				<Button variant="primary">Save library settings</Button>
 			</div>
 		</>
 	);
@@ -446,41 +458,43 @@ export function OutputsSettings() {
 			<h2>Outputs</h2>
 			<p>Choose the picture surface and presentation for each output.</p>
 			<MediaPanel title="Main output" detail="Picture surface 1">
-				<div className="media-operator-control-row">
-					<label>
-						Output target
-						<select defaultValue="display-2">
-							<option value="display-2">Display 2 · 1920 × 1080</option>
-							<option value="offscreen">Off-screen surface</option>
-						</select>
-					</label>
-					<label>
-						Picture size
-						<select defaultValue="1920">
-							<option value="1920">1920 × 1080</option>
-							<option value="1280">1280 × 720</option>
-						</select>
-					</label>
-					<label>
-						Presentation
-						<select defaultValue="display">
-							<option value="display">Display synchronized</option>
-							<option value="fixed">Fixed rate</option>
-							<option value="diagnostic">Diagnostic pattern</option>
-						</select>
-					</label>
-					<label>
-						Orientation
-						<select defaultValue="normal">
-							<option value="normal">Landscape</option>
-							<option value="left">Portrait left</option>
-						</select>
-					</label>
-				</div>
+				<FormLayout columns={2} className="media-operator-control-row">
+					<StorySelect
+						label="Output target"
+						initialValue="display-2"
+						options={[
+							{ value: "display-2", label: "Display 2 · 1920 × 1080" },
+							{ value: "offscreen", label: "Off-screen surface" },
+						]}
+					/>
+					<StorySelect
+						label="Picture size"
+						initialValue="1920"
+						options={[
+							{ value: "1920", label: "1920 × 1080" },
+							{ value: "1280", label: "1280 × 720" },
+						]}
+					/>
+					<StorySelect
+						label="Presentation"
+						initialValue="display"
+						options={[
+							{ value: "display", label: "Display synchronized" },
+							{ value: "fixed", label: "Fixed rate" },
+							{ value: "diagnostic", label: "Diagnostic pattern" },
+						]}
+					/>
+					<StorySelect
+						label="Orientation"
+						initialValue="normal"
+						options={[
+							{ value: "normal", label: "Landscape" },
+							{ value: "left", label: "Portrait left" },
+						]}
+					/>
+				</FormLayout>
 				<div className="media-operator-toolbar">
-					<button type="button" className="is-primary">
-						Save output
-					</button>
+					<Button variant="primary">Save output</Button>
 				</div>
 			</MediaPanel>
 		</>
@@ -494,71 +508,51 @@ export function NetworkInputsSettings() {
 			<p>Keep network listeners, DMX identity, and audio input together.</p>
 			<div className="media-operator-card-grid">
 				<MediaPanel title="Network" detail="Addresses used after restart">
-					<div className="media-operator-control-row">
-						<label>
-							Art-Net listen
-							<input defaultValue="0.0.0.0:6454" />
-						</label>
-						<label>
-							sACN listen
-							<input defaultValue="0.0.0.0:5568" />
-						</label>
-						<label>
-							CITP listen
-							<input defaultValue="0.0.0.0:4809" />
-						</label>
-						<label>
-							This interface
-							<input defaultValue="0.0.0.0:4711" />
-						</label>
-					</div>
+					<FormLayout columns={2} className="media-operator-control-row">
+						<TextField label="Art-Net listen" defaultValue="0.0.0.0:6454" />
+						<TextField label="sACN listen" defaultValue="0.0.0.0:5568" />
+						<TextField label="CITP listen" defaultValue="0.0.0.0:4809" />
+						<TextField label="This interface" defaultValue="0.0.0.0:4711" />
+					</FormLayout>
 				</MediaPanel>
 				<MediaPanel title="DMX" detail="The block patched on the Light Desk">
-					<div className="media-operator-control-row">
-						<label>
-							Personality
-							<select defaultValue="8">
-								<option value="2">2 layers</option>
-								<option value="8">8 layers</option>
-							</select>
-						</label>
-						<label>
-							Protocol
-							<select defaultValue="artnet">
-								<option value="artnet">Art-Net</option>
-								<option value="sacn">sACN</option>
-							</select>
-						</label>
-						<label>
-							Universe
-							<input type="number" defaultValue="1" />
-						</label>
-						<label>
-							Start address
-							<input type="number" defaultValue="1" />
-						</label>
-					</div>
+					<FormLayout columns={2} className="media-operator-control-row">
+						<StorySelect
+							label="Personality"
+							initialValue="8"
+							options={[
+								{ value: "2", label: "2 layers" },
+								{ value: "8", label: "8 layers" },
+							]}
+						/>
+						<StorySelect
+							label="Protocol"
+							initialValue="artnet"
+							options={[
+								{ value: "artnet", label: "Art-Net" },
+								{ value: "sacn", label: "sACN" },
+							]}
+						/>
+						<NumberField label="Universe" defaultValue={1} />
+						<NumberField label="Start address" defaultValue={1} />
+					</FormLayout>
 				</MediaPanel>
 			</div>
 			<MediaPanel title="Audio input" detail="Feeds audio-reactive visualizers">
-				<div className="media-operator-control-row">
-					<label>
-						Input device
-						<select defaultValue="usb">
-							<option value="usb">USB Audio CODEC</option>
-							<option value="system">System default</option>
-						</select>
-					</label>
-					<label>
-						Gain
-						<input type="range" defaultValue="72" />
-					</label>
-				</div>
+				<FormLayout columns={2} className="media-operator-control-row">
+					<StorySelect
+						label="Input device"
+						initialValue="usb"
+						options={[
+							{ value: "usb", label: "USB Audio CODEC" },
+							{ value: "system", label: "System default" },
+						]}
+					/>
+					<NumberField label="Gain" min={0} max={100} defaultValue={72} />
+				</FormLayout>
 			</MediaPanel>
 			<div className="media-operator-toolbar">
-				<button type="button" className="is-primary">
-					Save network &amp; inputs
-				</button>
+				<Button variant="primary">Save network &amp; inputs</Button>
 			</div>
 		</>
 	);
@@ -572,24 +566,26 @@ export function LogsSettings() {
 				Filter the visible log separately from the level captured by the running
 				server.
 			</p>
-			<div className="media-operator-control-row">
-				<label>
-					Show
-					<select defaultValue="info">
-						<option value="debug">Debug and above</option>
-						<option value="info">Info and above</option>
-						<option value="warn">Warnings and errors</option>
-					</select>
-				</label>
-				<label>
-					Server log level
-					<select defaultValue="info">
-						<option value="debug">Debug</option>
-						<option value="info">Info</option>
-						<option value="warn">Warn</option>
-					</select>
-				</label>
-			</div>
+			<FormLayout columns={2} className="media-operator-control-row">
+				<StorySelect
+					label="Show"
+					initialValue="info"
+					options={[
+						{ value: "debug", label: "Debug and above" },
+						{ value: "info", label: "Info and above" },
+						{ value: "warn", label: "Warnings and errors" },
+					]}
+				/>
+				<StorySelect
+					label="Server log level"
+					initialValue="info"
+					options={[
+						{ value: "debug", label: "Debug" },
+						{ value: "info", label: "Info" },
+						{ value: "warn", label: "Warn" },
+					]}
+				/>
+			</FormLayout>
 			<MediaPanel className="media-operator-log" title="Server log">
 				<pre>
 					23:31:09 INFO Output Main presented frame 18420{"\n"}23:31:08 INFO

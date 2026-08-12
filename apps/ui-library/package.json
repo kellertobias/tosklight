@@ -9,6 +9,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./controls": "./src/controls.ts",
+    "./application": "./src/application.ts",
     "./command": "./src/command.ts",
     "./forms": "./src/forms.ts",
     "./input": "./src/input.ts",

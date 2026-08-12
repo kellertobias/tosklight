@@ -33,8 +33,11 @@ describe("the Media Server operator surface", () => {
 			"datetime",
 			"2026-08-12T20:42:00.000Z",
 		);
+		const destinations = within(dock).getByRole("navigation", {
+			name: "Media Server destinations",
+		});
 		expect(
-			within(dock)
+			within(destinations)
 				.getAllByRole("button")
 				.map((button) => button.textContent),
 		).toEqual(
@@ -44,7 +47,9 @@ describe("the Media Server operator surface", () => {
 			within(dock).queryByText(/desktop|audio|dmx|logs/iu),
 		).not.toBeInTheDocument();
 
-		await userEvent.click(within(dock).getByRole("button", { name: /Media/ }));
+		await userEvent.click(
+			within(destinations).getByRole("button", { name: /Media/ }),
+		);
 		expect(navigate).toHaveBeenCalledWith("media");
 	});
 
@@ -55,12 +60,12 @@ describe("the Media Server operator surface", () => {
 			</MediaSettingsLayout>,
 		);
 
-		const settings = screen.getByRole("navigation", {
+		const settings = screen.getByRole("radiogroup", {
 			name: "Media Server settings",
 		});
 		expect(
 			within(settings)
-				.getAllByRole("button")
+				.getAllByRole("radio")
 				.map((button) => button.textContent),
 		).toEqual(MEDIA_SETTINGS_SECTIONS.map((section) => section.label));
 	});

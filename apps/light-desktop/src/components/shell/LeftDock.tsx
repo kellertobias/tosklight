@@ -1,4 +1,5 @@
 import { Button } from "@tosklight/ui";
+import { OperatorDestinationList } from "@tosklight/ui/application";
 import { type ReactNode, useRef } from "react";
 import appMark from "../../../src-tauri/icons/mark-shadow.svg";
 import { useActiveShow } from "../../features/deskSnapshot/DeskSnapshotState";
@@ -153,25 +154,18 @@ export function LeftDock({
 					</Button>
 				</nav>
 			) : (
-				<nav
+				<OperatorDestinationList
 					key="builtins"
-					className="dock-list builtins-list dock-list-swap dock-list-swap-builtins"
-					aria-label="Built-ins"
-				>
-					{builtIns
+					ariaLabel="Built-ins"
+					className="builtins-list dock-list-swap dock-list-swap-builtins"
+					activeId={state.builtIn ?? undefined}
+					entries={builtIns
 						.filter(([kind]) => kind !== "media" || mediaAvailable)
-						.map(([kind, icon, label]) => (
-							<Button
-								key={kind}
-								aria-label={label}
-								aria-current={state.builtIn === kind ? "page" : undefined}
-								className={`dock-entry ${state.builtIn === kind ? "active" : ""}`}
-								onClick={() => dispatch({ type: "OPEN_BUILTIN", kind })}
-							>
-								<DockEntryContent icon={icon} label={label} />
-							</Button>
-						))}
-				</nav>
+						.map(([id, icon, label]) => ({ id, icon, label }))}
+					onSelect={(id) =>
+						dispatch({ type: "OPEN_BUILTIN", kind: id as BuiltInWindow })
+					}
+				/>
 			)}
 			<DeskSettingsModal />
 		</aside>

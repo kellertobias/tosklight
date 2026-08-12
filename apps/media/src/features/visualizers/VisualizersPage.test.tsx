@@ -15,8 +15,8 @@ describe("the visualizers page", () => {
 		render(<VisualizersPage />);
 
 		expect(
-			await screen.findByRole("button", { name: /Equalizer Bars/ }),
-		).toHaveAttribute("aria-current", "true");
+			await screen.findByRole("radio", { name: /Equalizer Bars/ }),
+		).toHaveAttribute("aria-checked", "true");
 		expect(
 			screen.getByRole("figure", { name: "Equalizer Bars preview" }),
 		).toBeInTheDocument();
@@ -30,7 +30,7 @@ describe("the visualizers page", () => {
 		const server = stubServer();
 		render(<VisualizersPage />);
 
-		await screen.findByRole("button", { name: /Equalizer Bars/ });
+		await screen.findByRole("radio", { name: /Equalizer Bars/ });
 		expect(
 			screen.queryByRole("button", { name: /select|put/iu }),
 		).not.toBeInTheDocument();
@@ -95,7 +95,7 @@ describe("the visualizers page", () => {
 		});
 		render(<VisualizersPage />);
 
-		await screen.findByRole("button", { name: /Equalizer Bars/ });
+		await screen.findByRole("radio", { name: /Equalizer Bars/ });
 		expect(
 			screen.queryByRole("button", { name: /select|put/iu }),
 		).not.toBeInTheDocument();

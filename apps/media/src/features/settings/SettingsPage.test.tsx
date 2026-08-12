@@ -399,5 +399,5 @@ async function replaceNumber(label: string, value: string) {
 async function openSettings(
 	name: "Libraries" | "Outputs" | "Network & Inputs" | "Logs",
 ) {
-	await userEvent.click(screen.getByRole("button", { name }));
+	await userEvent.click(screen.getByRole("radio", { name }));
 }

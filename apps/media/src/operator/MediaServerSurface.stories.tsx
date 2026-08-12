@@ -26,6 +26,32 @@ import "./mediaServerSurface.css";
 
 const NOW = new Date("2026-08-12T21:31:00+02:00");
 
+const MEDIA_STORY_BY_SECTION: Record<MediaServerSection, string> = {
+	dashboard: "dashboard",
+	media: "media",
+	library: "library",
+	visualizers: "visualizers",
+	text: "text",
+	settings: "settings-libraries",
+};
+
+const SETTINGS_STORY_BY_SECTION = {
+	libraries: "settings-libraries",
+	outputs: "settings-outputs",
+	"network-inputs": "settings-network-and-inputs",
+	logs: "settings-logs",
+} as const;
+
+function mediaServerStoryPath(section: MediaServerSection) {
+	return `/?path=/story/tosklight-media-server--${MEDIA_STORY_BY_SECTION[section]}`;
+}
+
+function openStory(story: string) {
+	(window.top ?? window).location.assign(
+		`/?path=/story/tosklight-media-server--${story}`,
+	);
+}
+
 const outputs = [
 	{
 		id: "main",
@@ -135,15 +161,16 @@ function Frame({
 	active: MediaServerSection;
 	children: ReactNode;
 }) {
-	const [section, setSection] = useState(active);
 	return (
 		<div className="marketing-screenshot-viewport">
 			<MediaServerShell
-				active={section}
+				active={active}
 				connected
 				instance="Media Server · Stage Rack"
 				now={NOW}
-				onNavigate={setSection}
+				onNavigate={(section) =>
+					(window.top ?? window).location.assign(mediaServerStoryPath(section))
+				}
 			>
 				{children}
 			</MediaServerShell>
@@ -286,7 +313,10 @@ export const Text: Story = { render: () => <StatefulText /> };
 export const SettingsLibraries: Story = {
 	render: () => (
 		<Frame active="settings">
-			<SettingsScreen active="libraries">
+			<SettingsScreen
+				active="libraries"
+				onSelect={(section) => openStory(SETTINGS_STORY_BY_SECTION[section])}
+			>
 				<LibrariesSettings />
 			</SettingsScreen>
 		</Frame>
@@ -295,7 +325,10 @@ export const SettingsLibraries: Story = {
 export const SettingsOutputs: Story = {
 	render: () => (
 		<Frame active="settings">
-			<SettingsScreen active="outputs">
+			<SettingsScreen
+				active="outputs"
+				onSelect={(section) => openStory(SETTINGS_STORY_BY_SECTION[section])}
+			>
 				<OutputsSettings />
 			</SettingsScreen>
 		</Frame>
@@ -304,7 +337,10 @@ export const SettingsOutputs: Story = {
 export const SettingsNetworkAndInputs: Story = {
 	render: () => (
 		<Frame active="settings">
-			<SettingsScreen active="network-inputs">
+			<SettingsScreen
+				active="network-inputs"
+				onSelect={(section) => openStory(SETTINGS_STORY_BY_SECTION[section])}
+			>
 				<NetworkInputsSettings />
 			</SettingsScreen>
 		</Frame>
@@ -313,7 +349,10 @@ export const SettingsNetworkAndInputs: Story = {
 export const SettingsLogs: Story = {
 	render: () => (
 		<Frame active="settings">
-			<SettingsScreen active="logs">
+			<SettingsScreen
+				active="logs"
+				onSelect={(section) => openStory(SETTINGS_STORY_BY_SECTION[section])}
+			>
 				<LogsSettings />
 			</SettingsScreen>
 		</Frame>

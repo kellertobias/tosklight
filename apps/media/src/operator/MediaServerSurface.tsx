@@ -1,3 +1,10 @@
+import { OperatorDestinationList } from "@tosklight/ui/application";
+import { Button } from "@tosklight/ui/controls";
+import {
+	SelectionList,
+	WindowFrame,
+	WindowHeader,
+} from "@tosklight/ui/window-kit";
 import type { ReactNode } from "react";
 
 export const MEDIA_SERVER_SECTIONS = [
@@ -28,34 +35,32 @@ export function MediaServerShell({
 }) {
 	return (
 		<div className="media-operator-shell">
-			<aside className="media-operator-dock" aria-label="Media Server sections">
-				<div className="media-operator-identity">
+			<aside
+				className="left-dock media-operator-dock"
+				aria-label="Media Server sections"
+			>
+				<Button
+					className="dock-identity media-operator-identity"
+					aria-label="ToskLight Media Server"
+				>
 					<div
-						className="media-operator-mark"
+						className="app-mark media-operator-mark"
 						role="img"
-						aria-label="ToskLight Media Server"
+						aria-hidden="true"
 					>
 						<span aria-hidden="true">M</span>
 					</div>
 					<time dateTime={now.toISOString()}>
 						{now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
 					</time>
-				</div>
-				<nav>
-					{MEDIA_SERVER_SECTIONS.map((section) => (
-						<button
-							key={section.id}
-							type="button"
-							aria-current={active === section.id ? "page" : undefined}
-							onClick={() => onNavigate?.(section.id)}
-						>
-							<span className="media-operator-dock-icon" aria-hidden="true">
-								{section.icon}
-							</span>
-							<span>{section.label}</span>
-						</button>
-					))}
-				</nav>
+					<b>Media Server</b>
+				</Button>
+				<OperatorDestinationList
+					ariaLabel="Media Server destinations"
+					entries={MEDIA_SERVER_SECTIONS}
+					activeId={active}
+					onSelect={(id) => onNavigate?.(id as MediaServerSection)}
+				/>
 				<div
 					className={`media-operator-connection ${connected ? "is-connected" : "is-disconnected"}`}
 				>
@@ -81,14 +86,14 @@ export function MediaScreenHeader({
 	actions?: ReactNode;
 }) {
 	return (
-		<header className="media-screen-header">
-			<div>
-				{eyebrow && <p className="media-screen-eyebrow">{eyebrow}</p>}
-				<h1>{title}</h1>
-				<p>{detail}</p>
-			</div>
-			{actions && <div className="media-screen-actions">{actions}</div>}
-		</header>
+		<div className="media-screen-header">
+			<h1 className="media-visually-hidden">{title}</h1>
+			<WindowHeader
+				title={title}
+				info={{ primary: eyebrow ?? "Media Server", secondary: detail }}
+				toolbar={actions}
+			/>
+		</div>
 	);
 }
 
@@ -103,14 +108,16 @@ export function MediaPanel({
 	children: ReactNode;
 	className?: string;
 }) {
-	return (
+	return title ? (
+		<WindowFrame
+			className={`media-operator-panel ${className}`.trim()}
+			title={title}
+			info={detail ? { primary: detail } : undefined}
+		>
+			{children}
+		</WindowFrame>
+	) : (
 		<section className={`media-operator-panel ${className}`.trim()}>
-			{(title || detail) && (
-				<header>
-					{title && <h2>{title}</h2>}
-					{detail && <p>{detail}</p>}
-				</header>
-			)}
 			{children}
 		</section>
 	);
@@ -151,22 +158,22 @@ export function MediaListDetail({
 }) {
 	return (
 		<div className="media-list-detail">
-			<section className="media-list-detail-list" aria-label={label}>
-				{items.map((item) => (
-					<button
-						key={item.id}
-						type="button"
-						aria-current={item.id === selectedId ? "true" : undefined}
-						onClick={() => onSelect?.(item.id)}
-					>
-						<span>
+			<SelectionList
+				className="media-list-detail-list"
+				ariaLabel={label}
+				value={selectedId}
+				options={items.map((item) => ({
+					value: item.id,
+					label: (
+						<>
 							<strong>{item.title}</strong>
-							<small>{item.detail}</small>
-						</span>
-						{item.meta && <em>{item.meta}</em>}
-					</button>
-				))}
-			</section>
+							{item.meta && <em>{item.meta}</em>}
+						</>
+					),
+					description: item.detail,
+				}))}
+				onChange={(id) => onSelect?.(id)}
+			/>
 			<section className="media-list-detail-content">{detail}</section>
 		</div>
 	);
@@ -219,18 +226,16 @@ export function MediaSettingsLayout({
 }) {
 	return (
 		<div className="media-settings-layout">
-			<nav aria-label="Media Server settings">
-				{MEDIA_SETTINGS_SECTIONS.map((section) => (
-					<button
-						key={section.id}
-						type="button"
-						aria-current={active === section.id ? "page" : undefined}
-						onClick={() => onSelect?.(section.id)}
-					>
-						{section.label}
-					</button>
-				))}
-			</nav>
+			<SelectionList
+				className="media-settings-navigation"
+				ariaLabel="Media Server settings"
+				value={active}
+				options={MEDIA_SETTINGS_SECTIONS.map((section) => ({
+					value: section.id,
+					label: section.label,
+				}))}
+				onChange={(id) => onSelect?.(id as MediaSettingsSection)}
+			/>
 			<div className="media-settings-content">{children}</div>
 		</div>
 	);

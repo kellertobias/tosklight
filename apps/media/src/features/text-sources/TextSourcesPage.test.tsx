@@ -14,12 +14,13 @@ describe("the text sources page", () => {
 		stubServer();
 		render(<TextSourcesPage />);
 
-		expect(
-			await screen.findByRole("button", { name: /Clock/ }),
-		).toHaveAttribute("aria-current", "true");
+		expect(await screen.findByRole("radio", { name: /Clock/ })).toHaveAttribute(
+			"aria-checked",
+			"true",
+		);
 		expect(screen.getAllByText("200/001")).not.toHaveLength(0);
 		expect(
-			screen.getByRole("button", { name: /Ten minutes/ }),
+			screen.getByRole("radio", { name: /Ten minutes/ }),
 		).toHaveTextContent("600 s");
 	});
 
