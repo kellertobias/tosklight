@@ -416,6 +416,8 @@ impl PlaybackEngine {
             .retain(|(candidate, _), _| *candidate != identity);
         let transient = before != self.temporary.len()
             || self.swap_held.remove(&identity)
+            || self.cuelist_flash_states.remove(&identity).is_some()
+            || self.cuelist_swap_states.remove(&identity).is_some()
             || dynamic_flash_effect.changed();
         Ok(PlaybackMutation::new(
             (),

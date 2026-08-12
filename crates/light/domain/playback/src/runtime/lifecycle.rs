@@ -342,6 +342,7 @@ impl PlaybackEngine {
                     active_dynamics: HashMap::new(),
                     dynamic_flash_states: HashMap::new(),
                     cuelist_flash_states: HashMap::new(),
+                    cuelist_swap_states: HashMap::new(),
                     temporary: HashMap::new(),
                     swap_held: HashSet::new(),
                     dynamics_paused_at: None,

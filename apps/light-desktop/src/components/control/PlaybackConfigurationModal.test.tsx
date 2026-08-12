@@ -34,7 +34,13 @@ const mocks = vi.hoisted(() => ({
 	scopedCueLists: [
 		{ id: "cue-1", name: "Main sequence" },
 		{ id: "cue-2", name: "Encore" },
-	] as Array<{ id: string; name: string; storageId?: string; auto_off_at_zero?: boolean; auto_off_flash_release?: boolean }>,
+	] as Array<{
+		id: string;
+		name: string;
+		storageId?: string;
+		auto_off_at_zero?: boolean;
+		auto_off_flash_release?: boolean;
+	}>,
 	groups: [{ id: "group-1", body: { name: "Front Wash" } }],
 	dynamics: [
 		{
@@ -74,6 +80,17 @@ vi.mock("../files/RootConfinedFilePickerButton", () => ({
 vi.mock("../../features/showObjects/ShowObjectsState", () => ({
 	usePortableGroups: () => mocks.groups,
 	useDynamics: () => mocks.dynamics,
+	usePlaybackDefinitions: () =>
+		mocks.scopedCueLists.map((body, index) => ({
+			kind: "playback",
+			id: `playback-${index + 1}`,
+			revision: 1,
+			updated_at: "",
+			body: {
+				number: [12, 1000][index],
+				target: { type: "cue_list", cue_list_id: body.id },
+			},
+		})),
 	useCueLists: () =>
 		mocks.scopedCueLists.map((body) => ({
 			kind: "cue_list",
@@ -84,7 +101,15 @@ vi.mock("../../features/showObjects/ShowObjectsState", () => ({
 		})),
 }));
 vi.mock("../../features/playbackTopology/useCueListTopologyWriter", () => ({
-	cueListWriteBasis: (object: { body: { id: string }; id: string; revision: number }) => ({ cueListId: object.body.id, expectedObjectId: object.id, expectedRevision: object.revision }),
+	cueListWriteBasis: (object: {
+		body: { id: string };
+		id: string;
+		revision: number;
+	}) => ({
+		cueListId: object.body.id,
+		expectedObjectId: object.id,
+		expectedRevision: object.revision,
+	}),
 	useCueListTopologyWriter: () => mocks.saveCueList,
 }));
 
@@ -108,7 +133,13 @@ afterEach(cleanup);
 beforeEach(() => {
 	mocks.savePlaybackSlot.mockReset().mockResolvedValue(true);
 	mocks.clearPlaybackSlot.mockReset().mockResolvedValue(true);
-	mocks.saveCueList.mockReset().mockImplementation(async (_basis, body) => ({ id: body.id, revision: 2, body }));
+	mocks.saveCueList
+		.mockReset()
+		.mockImplementation(async (_basis, body) => ({
+			id: body.id,
+			revision: 2,
+			body,
+		}));
 	mocks.error = null;
 	mocks.playbacks.cue_lists = [
 		{ id: "cue-1", name: "Main sequence" },
@@ -159,11 +190,21 @@ function choose(label: string, option: string) {
 
 describe("PlaybackConfigurationModal function and behavior", () => {
 	it("persists shared Cuelist Auto-off options independently", async () => {
-		mocks.scopedCueLists[0] = { ...mocks.scopedCueLists[0], auto_off_at_zero: false, auto_off_flash_release: false };
+		mocks.scopedCueLists[0] = {
+			...mocks.scopedCueLists[0],
+			auto_off_at_zero: false,
+			auto_off_flash_release: false,
+		};
 		show();
 		fireEvent.click(screen.getByRole("button", { name: "Behavior" }));
 		const group = screen.getByRole("group", { name: "Auto-off" });
-		fireEvent.click(within(group).getByText("When fader reaches zero"));
+		fireEvent.click(
+			within(
+				within(group).getByRole("radiogroup", {
+					name: "When fader reaches zero",
+				}),
+			).getByRole("radio", { name: "Release All" }),
+		);
 		fireEvent.click(screen.getByRole("button", { name: "Apply" }));
 		await waitFor(() => expect(mocks.saveCueList).toHaveBeenCalledTimes(1));
 		expect(mocks.saveCueList.mock.calls[0][1]).toMatchObject({
@@ -213,7 +254,7 @@ describe("PlaybackConfigurationModal function and behavior", () => {
 		];
 		show({ ...base, target: { type: "cue_list", cue_list_id: cueListId } });
 
-		const option = screen.getByRole("radio", { name: "Legacy Main" });
+		const option = screen.getByRole("radio", { name: "12 Legacy Main" });
 		expect(option).toHaveAttribute("aria-checked", "true");
 		fireEvent.click(option);
 		fireEvent.change(screen.getByLabelText("Playback name"), {
@@ -260,6 +301,12 @@ describe("PlaybackConfigurationModal function and behavior", () => {
 		expect(
 			screen.getByRole("radiogroup", { name: "Cue List options" }),
 		).toBeInTheDocument();
+		expect(
+			screen.getByRole("radio", { name: "12 Main sequence" }),
+		).toBeInTheDocument();
+		expect(screen.getByText("12")).toHaveClass(
+			"playback-numbered-object-number",
+		);
 		expect(
 			screen.queryByText("Cue List", { selector: "label" }),
 		).not.toBeInTheDocument();
@@ -319,22 +366,19 @@ describe("PlaybackConfigurationModal function and behavior", () => {
 });
 
 describe("PlaybackConfigurationModal behavior compatibility", () => {
-	it("uses the stage-style toggle for cue-list flash release and persists Behavior", async () => {
+	it("shows one exact shared policy for Flash and Swap release", async () => {
 		show();
 		fireEvent.click(screen.getByRole("button", { name: "Behavior" }));
+		const releasePolicy = screen.getByRole("radiogroup", {
+			name: "When Flash or Swap is released",
+		});
 		expect(
-			screen.getByRole("radiogroup", {
-				name: "When Flash or Swap is released",
-			}),
-		).toBeInTheDocument();
-		expect(
-			screen.getByText(/leaves this Cue List active at zero intensity/),
-		).toBeInTheDocument();
-		expect(screen.getByRole("radio", { name: "Release all" })).toHaveAttribute(
-			"aria-checked",
-			"true",
+			within(releasePolicy).getByRole("radio", { name: "Keep Running" }),
+		).toHaveAttribute("aria-checked", "true");
+		expect(screen.queryByText("Intensity only")).not.toBeInTheDocument();
+		fireEvent.click(
+			within(releasePolicy).getByRole("radio", { name: "Release All" }),
 		);
-		fireEvent.click(screen.getByRole("radio", { name: "Intensity only" }));
 		fireEvent.click(
 			screen.getByRole("switch", {
 				name: "Turn off when other playbacks take full control",
@@ -347,12 +391,15 @@ describe("PlaybackConfigurationModal behavior compatibility", () => {
 				2,
 				4,
 				expect.objectContaining({
-					flash_release: "release_intensity_only",
+					flash_release: "release_all",
 					auto_off: false,
 					protect_from_swap: true,
 				}),
 			),
 		);
+		expect(mocks.saveCueList.mock.calls[0][1]).toMatchObject({
+			auto_off_flash_release: true,
+		});
 	});
 
 	it("resets incompatible mappings and explains choices in an additional modal", async () => {
@@ -362,7 +409,7 @@ describe("PlaybackConfigurationModal behavior compatibility", () => {
 			fader: "x_fade",
 		});
 		fireEvent.click(screen.getByRole("radio", { name: "Group Master" }));
-		fireEvent.click(screen.getByRole("radio", { name: "Front Wash" }));
+		fireEvent.click(screen.getByRole("radio", { name: "1 Front Wash" }));
 		fireEvent.click(screen.getByRole("button", { name: "Layout" }));
 		expect(selectTrigger("Top button")).toHaveTextContent("Select");
 		expect(selectTrigger("Middle button")).toHaveTextContent(
@@ -512,7 +559,7 @@ describe("PlaybackConfigurationModal layout and persistence", () => {
 		show();
 
 		expect(
-			screen.getByRole("radio", { name: "Scoped authority" }),
+			screen.getByRole("radio", { name: "12 Scoped authority" }),
 		).toBeInTheDocument();
 		expect(screen.queryByRole("radio", { name: "Legacy" })).toBeNull();
 	});
@@ -587,18 +634,26 @@ describe("PlaybackConfigurationModal topology defaults", () => {
 		choose("Live Group", "group-1 · Front Wash");
 
 		const group = screen.getByRole("group", { name: "Auto-off" });
-		const atZero = within(group).getByRole("switch", {
+		const atZero = within(group).getByRole("radiogroup", {
 			name: "When fader reaches zero",
 		});
-		const afterFlash = within(group).getByRole("switch", {
-			name: "When Flash is released",
+		const afterFlash = within(group).getByRole("radiogroup", {
+			name: "When Flash or Swap is released",
 		});
-		expect(atZero).not.toBeChecked();
-		expect(afterFlash).not.toBeChecked();
+		expect(
+			within(atZero).getByRole("radio", { name: "Keep Running" }),
+		).toHaveAttribute("aria-checked", "true");
+		expect(
+			within(afterFlash).getByRole("radio", { name: "Keep Running" }),
+		).toHaveAttribute("aria-checked", "true");
 
-		fireEvent.click(atZero);
-		expect(atZero).toBeChecked();
-		expect(afterFlash).not.toBeChecked();
+		fireEvent.click(within(atZero).getByRole("radio", { name: "Release All" }));
+		expect(
+			within(atZero).getByRole("radio", { name: "Release All" }),
+		).toHaveAttribute("aria-checked", "true");
+		expect(
+			within(afterFlash).getByRole("radio", { name: "Keep Running" }),
+		).toHaveAttribute("aria-checked", "true");
 		fireEvent.click(screen.getByRole("button", { name: "Apply" }));
 
 		await waitFor(() => expect(mocks.savePlaybackSlot).toHaveBeenCalledOnce());

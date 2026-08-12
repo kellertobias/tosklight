@@ -308,7 +308,7 @@ fn page_and_pool_validation_enforce_public_ranges() {
 }
 
 #[test]
-fn toggle_retains_cue_and_flash_restores_off_state() {
+fn toggle_retains_cue_and_flash_keep_running_retains_current_cue() {
     let fixture = FixtureId::new();
     let mut one = Cue::new(1.0);
     one.changes.push(value(fixture, "pan", 0.1));
@@ -328,6 +328,9 @@ fn toggle_retains_cue_and_flash_restores_off_state() {
     engine.set_flash(1, true).unwrap();
     assert_eq!(engine.active()[0].cue_index, 1);
     engine.set_flash(1, false).unwrap();
+    assert_eq!(engine.active()[0].cue_index, 1);
+    assert_eq!(engine.active()[0].master, 0.0);
+    assert!(!engine.toggle(1).unwrap());
     assert!(engine.active().is_empty());
     assert!(engine.toggle(1).unwrap());
     assert_eq!(engine.active()[0].cue_index, 1);

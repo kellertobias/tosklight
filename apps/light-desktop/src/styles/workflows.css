@@ -172,6 +172,17 @@
 	letter-spacing: 0.06em;
 	text-transform: uppercase;
 }
+.playback-numbered-object-label {
+	display: grid;
+	grid-template-columns: 4ch minmax(0, 1fr);
+	gap: 8px;
+	width: 100%;
+	align-items: baseline;
+}
+.playback-numbered-object-number {
+	font-variant-numeric: tabular-nums;
+	text-align: right;
+}
 .playback-function-screen {
 	height: 100%;
 	min-height: 0;

@@ -527,15 +527,18 @@ impl PlaybackEngine {
         let Some(released) = self.temporary.remove(&key) else {
             return Ok(PlaybackMutation::new((), PlaybackRuntimeEffect::None));
         };
-        let held_peer =
-            self.cuelist_flash_states.keys().copied().any(|peer| {
-                self.runtime_key_at(peer).ok() == Some(PlaybackKey::CueList(cue_list_id))
-            });
+        let held_peer = self
+            .cuelist_flash_states
+            .keys()
+            .chain(self.cuelist_swap_states.keys())
+            .copied()
+            .any(|peer| self.runtime_key_at(peer).ok() == Some(PlaybackKey::CueList(cue_list_id)));
         let auto_off = self.cue_lists[&cue_list_id].auto_off_flash_release
             && flash_state.is_some_and(|state| state.restore_off)
             && !held_peer;
         let promoted = !auto_off
-            && definition.flash_release == FlashReleaseMode::ReleaseIntensityOnly
+            && flash_state.is_some_and(|state| state.restore_off)
+            && !held_peer
             && self.promote_intensity_release_at(identity, released, true);
         let turned_off = if auto_off {
             self.active
@@ -560,6 +563,19 @@ impl PlaybackEngine {
             .collect::<Vec<_>>();
         for identity in identities {
             if let Some(state) = self.cuelist_flash_states.get_mut(&identity) {
+                state.restore_off = false;
+            }
+        }
+        let swap_identities = self
+            .cuelist_swap_states
+            .keys()
+            .copied()
+            .filter(|identity| {
+                self.runtime_key_at(*identity).ok() == Some(PlaybackKey::CueList(cue_list_id))
+            })
+            .collect::<Vec<_>>();
+        for identity in swap_identities {
+            if let Some(state) = self.cuelist_swap_states.get_mut(&identity) {
                 state.restore_off = false;
             }
         }
@@ -614,7 +630,7 @@ fn activate_normal(playback: &mut ActivePlayback, number: u16) -> bool {
     changed
 }
 
-fn deactivate(playback: &mut ActivePlayback) -> bool {
+pub(crate) fn deactivate(playback: &mut ActivePlayback) -> bool {
     let changed = playback.enabled
         || playback.flash
         || playback.master_transition.is_some()

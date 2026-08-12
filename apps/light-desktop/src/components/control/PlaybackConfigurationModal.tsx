@@ -5,7 +5,7 @@ import { Button, ColorPickerField, DEFAULT_COLORS, FormLayout, GroupedSelectionF
 import { ModalTitleBar } from "@tosklight/ui";
 import { SelectionTree, WindowScrollArea, type SelectionListOption } from "@tosklight/ui/window-kit";
 import { useShowObjectView } from "../../features/showObjects/ShowObjectsView";
-import { useCueLists, useDynamics, usePortableGroups } from "../../features/showObjects/ShowObjectsState";
+import { useCueLists, useDynamics, usePlaybackDefinitions, usePortableGroups } from "../../features/showObjects/ShowObjectsState";
 import { cueListWriteBasis, useCueListTopologyWriter } from "../../features/playbackTopology/useCueListTopologyWriter";
 import { RootConfinedFilePickerButton } from "../files/RootConfinedFilePickerButton";
 
@@ -85,8 +85,16 @@ export function PlaybackConfigurationDialog({ playback, page, slot, empty = fals
   const groups = usePortableGroups();
   const dynamics = useDynamics();
   const cueListObjects = useCueLists();
+  const playbackDefinitions = usePlaybackDefinitions();
   const saveCueList = useCueListTopologyWriter();
-  const cueLists = useMemo(() => cueListObjects.map(({ body }) => ({ id: body.id, name: body.name || body.id })), [cueListObjects]);
+  const cueListNumbers = useMemo(() => {
+    const numbers = new Map<string, number>();
+    for (const { body } of [...playbackDefinitions].sort((left, right) => left.body.number - right.body.number)) {
+      if (body.target.type === "cue_list" && !numbers.has(body.target.cue_list_id)) numbers.set(body.target.cue_list_id, body.number);
+    }
+    return numbers;
+  }, [playbackDefinitions]);
+  const cueLists = useMemo(() => cueListObjects.map(({ body }, index) => ({ id: body.id, name: body.name || body.id, number: cueListNumbers.get(body.id) ?? index + 1 })), [cueListNumbers, cueListObjects]);
   const [initialDraft] = useState(() => normalizePlaybackTopology(playback, fallbackButtons, !virtual));
   const [draft, setDraft] = useState(initialDraft);
   const initialFamily = familyFromTarget(initialDraft.target.type);
@@ -177,7 +185,7 @@ function PlaybackFunctionTab({ family, draft, virtual, presentation, cueLists, d
   draft: PlaybackDefinition;
   virtual: boolean;
   presentation: "label" | "icon" | "image";
-  cueLists: Array<{ id: string; name: string }>;
+  cueLists: Array<{ id: string; name: string; number: number }>;
   dynamics: ReturnType<typeof useDynamics>;
   groups: ReadonlyArray<{ id: string; body: { name?: string } }>;
   onFamilyChange: (family: PlaybackFamily) => void;
@@ -190,9 +198,9 @@ function PlaybackFunctionTab({ family, draft, virtual, presentation, cueLists, d
   let optionLabel = `${family === "cue_list" ? "Cue List" : family === "group" ? "Group" : family === "speed_group" ? "Speed Group" : "Special"} options`;
   let targetOptions: SelectionListOption[] = [];
   let chooseTarget = (_value: string) => {};
-  if (family === "cue_list" && draft.target.type === "cue_list") { optionValue = draft.target.cue_list_id; targetOptions = cueLists.map((cue) => ({ value: cue.id, label: cue.name })); chooseTarget = (cue_list_id) => onDraftChange({ ...draft, target: { type: "cue_list", cue_list_id } }); }
-  else if (family === "dynamic" && draft.target.type === "dynamic") { const assignment = draft.target.assignment; optionLabel = "Dynamic options"; optionValue = assignment.dynamic_id ?? undefined; targetOptions = dynamics.map((dynamic) => ({ value: dynamic.id, label: `Dynamic ${dynamic.body.pool_number} · ${dynamic.body.name}${dynamic.body.target_binding.type === "targetless" ? " · targetless" : ""}` })); chooseTarget = (dynamicId) => { const dynamic = dynamics.find((candidate) => candidate.id === dynamicId); if (!dynamic) return; onDraftChange({ ...draft, target: { type: "dynamic", assignment: { ...assignment, dynamic_id: dynamic.id, last_known_pool_number: dynamic.body.pool_number, embedded_fallback: dynamic.body, target_scope: dynamic.body.target_binding.type === "targetless" ? assignment.target_scope : null, revision: assignment.revision + 1 } } }); }; }
-  else if (family === "group" && draft.target.type === "group") { const groupTarget = draft.target; optionValue = groupTarget.group_id; targetOptions = groups.map((group) => ({ value: group.id, label: group.body.name ?? group.id })); chooseTarget = (group_id) => onDraftChange({ ...draft, target: { type: "group", group_id, ...(group_id === groupTarget.group_id && groupTarget.initial_master != null ? { initial_master: groupTarget.initial_master } : {}) } }); }
+  if (family === "cue_list" && draft.target.type === "cue_list") { optionValue = draft.target.cue_list_id; targetOptions = cueLists.map((cue) => ({ value: cue.id, label: <NumberedObjectLabel number={cue.number} name={cue.name}/> })); chooseTarget = (cue_list_id) => onDraftChange({ ...draft, target: { type: "cue_list", cue_list_id } }); }
+  else if (family === "dynamic" && draft.target.type === "dynamic") { const assignment = draft.target.assignment; optionLabel = "Dynamic options"; optionValue = assignment.dynamic_id ?? undefined; targetOptions = dynamics.map((dynamic) => ({ value: dynamic.id, label: <NumberedObjectLabel number={dynamic.body.pool_number} name={`${dynamic.body.name}${dynamic.body.target_binding.type === "targetless" ? " · targetless" : ""}`}/> })); chooseTarget = (dynamicId) => { const dynamic = dynamics.find((candidate) => candidate.id === dynamicId); if (!dynamic) return; onDraftChange({ ...draft, target: { type: "dynamic", assignment: { ...assignment, dynamic_id: dynamic.id, last_known_pool_number: dynamic.body.pool_number, embedded_fallback: dynamic.body, target_scope: dynamic.body.target_binding.type === "targetless" ? assignment.target_scope : null, revision: assignment.revision + 1 } } }); }; }
+  else if (family === "group" && draft.target.type === "group") { const groupTarget = draft.target; optionValue = groupTarget.group_id; targetOptions = groups.map((group, index) => ({ value: group.id, label: <NumberedObjectLabel number={index + 1} name={group.body.name ?? group.id}/> })); chooseTarget = (group_id) => onDraftChange({ ...draft, target: { type: "group", group_id, ...(group_id === groupTarget.group_id && groupTarget.initial_master != null ? { initial_master: groupTarget.initial_master } : {}) } }); }
   else if (family === "speed_group" && draft.target.type === "speed_group") { optionValue = draft.target.group; targetOptions = ["A", "B", "C", "D", "E"].map((value) => ({ value, label: `Speed Group ${value}` })); chooseTarget = (group) => onDraftChange({ ...draft, target: { type: "speed_group", group } }); }
   else if (family === "special") { optionValue = isSpecial(draft.target.type) ? draft.target.type : "programmer_fade"; targetOptions = [{ value: "programmer_fade", label: "Programmer Fade" }, { value: "cue_fade", label: "Cue Fade" }, { value: "grand_master", label: "Grand Master" }]; chooseTarget = (value) => onSpecialChange(value as "programmer_fade" | "cue_fade" | "grand_master"); }
   const presentationOptions = virtual && family !== "none" ? <FormLayout className="playback-presentation-options"><SelectField label="Presentation" value={presentation} onChange={(value) => {
@@ -216,6 +224,10 @@ function PlaybackFunctionTab({ family, draft, virtual, presentation, cueLists, d
       </FormLayout>
     </section>
   </div>;
+}
+
+function NumberedObjectLabel({ number, name }: { number: number; name: string }) {
+  return <span className="playback-numbered-object-label" aria-label={`${number} ${name}`}><span className="playback-numbered-object-number">{number}</span><span>{name}</span></span>;
 }
 
 const MAX_PLAYBACK_IMAGE_BYTES = 400 * 1024;
@@ -284,7 +296,6 @@ function PlaybackBehaviorTab({ draft, dynamics, groups, cueListBehavior, onCueLi
         />
         <p className="playback-topology-note">These Auto-off settings are shared by every playback using this Cuelist.</p>
       </>}
-      <MultiValueToggleField label="When Flash or Swap is released" description="Release all removes the temporary values and restores the prior state. Intensity only leaves this Cue List active at zero intensity, retaining values such as color and position." value={draft.flash_release ?? "release_all"} onChange={(flash_release) => onDraftChange({ ...draft, flash_release })} options={[{ value: "release_all", label: "Release all" }, { value: "release_intensity_only", label: "Intensity only" }]}/>
       <SwitchField label="Turn off when other playbacks take full control" offLabel="Keep active" onLabel="Auto off" description="Automatically turns this Cue List off once other normal playbacks at full level control every value it was outputting. Partial takeovers, Flash, and Temp do not count." checked={draft.auto_off} onChange={(event) => onDraftChange({ ...draft, auto_off: event.target.checked })}/>
     </> : <p className="playback-topology-note">Flash/Swap release and automatic turn-off are available for Cue Lists only.</p>}
     <SwitchField label="Protect from Swap" offLabel="Affected by Swap" onLabel="Protected" description="Keeps this playback at its current level while another playback’s Swap button is held." checked={Boolean(draft.protect_from_swap)} onChange={(event) => onDraftChange({ ...draft, protect_from_swap: event.target.checked })}/>
@@ -299,8 +310,8 @@ function PlaybackAutoOffSettings({ autoOffAtZero, autoOffFlashRelease, onAutoOff
 }) {
   return <fieldset className="playback-auto-off-settings">
     <legend>Auto-off</legend>
-    <SwitchField label="When fader reaches zero" offLabel="Keep running" onLabel="Turn Off" checked={autoOffAtZero} onChange={(event) => onAutoOffAtZeroChange(event.target.checked)}/>
-    <SwitchField label="When Flash is released" offLabel="Keep running" onLabel="Turn Off" checked={autoOffFlashRelease} onChange={(event) => onAutoOffFlashReleaseChange(event.target.checked)}/>
+    <MultiValueToggleField label="When fader reaches zero" description="Keep Running leaves the playback active at zero. Release All turns the playback off." value={autoOffAtZero ? "release_all" : "keep_running"} onChange={(value) => onAutoOffAtZeroChange(value === "release_all")} options={[{ value: "keep_running", label: "Keep Running" }, { value: "release_all", label: "Release All" }]}/>
+    <MultiValueToggleField label="When Flash or Swap is released" description="Keep Running leaves a playback started by Flash or Swap active at zero. Release All turns that playback off." value={autoOffFlashRelease ? "release_all" : "keep_running"} onChange={(value) => onAutoOffFlashReleaseChange(value === "release_all")} options={[{ value: "keep_running", label: "Keep Running" }, { value: "release_all", label: "Release All" }]}/>
   </fieldset>;
 }
 
