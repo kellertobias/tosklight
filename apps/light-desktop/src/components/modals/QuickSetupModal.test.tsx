@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   lockDesk: vi.fn(),
   dispatch: vi.fn(),
   fileContent: vi.fn(),
+  openFileManagerPicker: vi.fn(),
   server: {
     status: "connected" as const,
     bootstrap: {
@@ -88,7 +89,10 @@ vi.mock("../../features/screens/ScreensContext", () => ({
 	}),
 }));
 vi.mock("../../features/files/FilesContext", () => ({
-	useFiles: () => ({ fileContent: mocks.fileContent }),
+  useFiles: () => ({ fileContent: mocks.fileContent }),
+}));
+vi.mock("../../windows/FileManagerPickerHost", () => ({
+	openFileManagerPicker: mocks.openFileManagerPicker,
 }));
 vi.mock("../../state/AppContext", () => ({
   useApp: () => ({
@@ -118,6 +122,7 @@ beforeEach(() => {
     mocks.server.saveShowAs.mockReset().mockResolvedValue(true);
     mocks.server.discoveredVisualizers.mockReset().mockResolvedValue([]);
     mocks.server.loadFromVisualizer.mockReset().mockResolvedValue(true);
+	mocks.openFileManagerPicker.mockReset().mockResolvedValue(null);
 });
 
 afterEach(() => {
@@ -262,6 +267,23 @@ describe("QuickSetupModal show workflows", () => {
 
 		expect(await screen.findByRole("dialog", { name: "Partial Show Load" }))
 			.toHaveTextContent("lists every dependency, conflict, fixture profile, and managed asset");
+	});
+
+	it("opens the MVR file chooser directly from Load Show", async () => {
+		render(<QuickSetupModal />);
+		fireEvent.click(screen.getByRole("button", { name: "Load" }));
+		const load = await screen.findByRole("dialog", { name: "Load show" });
+
+		fireEvent.click(within(load).getByRole("button", { name: "Load from MVR" }));
+
+		await waitFor(() =>
+			expect(mocks.openFileManagerPicker).toHaveBeenCalledWith({
+				purpose: "Choose MVR file",
+				target: "files",
+				multiple: false,
+				allowedExtensions: ["mvr"],
+			}),
+		);
 	});
 
   it("keeps an orphaned revision copy usable without an overwrite-original action", () => {

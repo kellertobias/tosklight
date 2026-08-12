@@ -33,6 +33,14 @@ function renderView(overrides: Partial<Parameters<typeof DmxWindowView>[0]> = {}
 }
 
 describe("DMX application view", () => {
+  it("labels the two output modes Values and Sources", () => {
+    renderView();
+
+    expect(screen.getByRole("button", { name: "Values" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sources" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Values as dots" })).toBeNull();
+  });
+
   it("renders all 512 selectable addresses for every visible universe and the output summary", () => {
     const { container } = renderView();
     expect(container.querySelectorAll(".dmx-universe")).toHaveLength(4);
