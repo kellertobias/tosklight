@@ -20,13 +20,20 @@ const definition: TimecodeDefinition = {
 		asset_id: "00000000-0000-0000-0000-000000000002",
 		asset_revision: 1,
 	},
-	markers: [],
+	markers: [
+		{
+			id: "00000000-0000-0000-0000-000000000003",
+			frame: 88,
+			name: "Verse",
+		},
+	],
 	lanes: [],
 };
 
 describe("TimecodeTimelineEditor", () => {
 	it("fits the whole timeline at 1x and reaches 17.5 CSS pixels per frame", () => {
 		const onCommit = vi.fn();
+		const onScrub = vi.fn();
 		const ref = createRef<TimecodeTimelineEditorHandle>();
 		render(
 			<TimecodeTimelineEditor
@@ -48,7 +55,7 @@ describe("TimecodeTimelineEditor", () => {
 					},
 				]}
 				waveformPeaks={[0.2, 1, 0.4]}
-				onScrub={vi.fn()}
+				onScrub={onScrub}
 				onCommit={onCommit}
 				onPreview={vi.fn()}
 				onBeginGesture={vi.fn()}
@@ -70,9 +77,22 @@ describe("TimecodeTimelineEditor", () => {
 		expect(
 			screen.getByLabelText("Linked audio waveform").querySelectorAll("line"),
 		).toHaveLength(3);
+		expect(screen.queryByRole("button", { name: "Copy" })).toBeNull();
+		expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
+		expect(screen.queryByLabelText("Speed Group")).toBeNull();
+		expect(screen.queryByLabelText("Cuelist")).toBeNull();
+		expect(screen.getByTitle("Verse · 00:00:02.00")).toHaveClass(
+			"timecode-timeline-marker",
+		);
 		expect(
-			screen.getByRole("button", { name: "Copy" }).hasAttribute("disabled"),
-		).toBe(true);
+			screen.getByRole("button", { name: "Drag playhead to seek" }),
+		).toHaveTextContent("00:00:01.00");
+		const playhead = screen.getByRole("button", { name: "Drag playhead to seek" });
+		playhead.setPointerCapture = vi.fn();
+		playhead.hasPointerCapture = vi.fn(() => true);
+		fireEvent.pointerDown(playhead, { pointerId: 1, clientX: 88 });
+		fireEvent.pointerMove(playhead, { pointerId: 1, clientX: 176 });
+		expect(onScrub).toHaveBeenCalled();
 		ref.current?.addAudioLane();
 		expect(onCommit).toHaveBeenCalledWith(
 			expect.objectContaining({

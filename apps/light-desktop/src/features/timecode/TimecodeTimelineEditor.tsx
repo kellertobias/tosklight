@@ -19,8 +19,6 @@ import {
 } from "react";
 import type { TimecodeDefinition } from "../../api/types/timecode";
 import {
-	copyTimelineItem,
-	deleteTimelineItem,
 	sameSelection,
 	type TimecodeEditorSelection,
 	timelineItems,
@@ -51,74 +49,13 @@ export interface TimecodeTimelineEditorHandle {
 }
 
 function TimelineTools(props: {
-	definition: TimecodeDefinition;
-	selection: TimecodeEditorSelection | null;
-	speedGroup: string;
-	setSpeedGroup(value: string): void;
-	cueListId: string;
-	setCueListId(value: string): void;
-	cueLists: readonly TimecodeCueListOption[];
 	zoom: number;
 	setZoom(value: number): void;
 	maximumZoom: number;
-	setSelection(value: TimecodeEditorSelection | null): void;
-	onCommit(value: TimecodeDefinition): void;
-	fps: number;
 }) {
-	const {
-		definition,
-		selection,
-		speedGroup,
-		setSpeedGroup,
-		cueListId,
-		setCueListId,
-		cueLists,
-		zoom,
-		setZoom,
-	} = props;
-	const copy = () => {
-		if (!selection) return;
-		const copied = copyTimelineItem(
-			definition,
-			selection,
-			crypto.randomUUID(),
-			props.fps,
-		);
-		props.onCommit(copied.definition);
-		props.setSelection(copied.selection);
-	};
-	const remove = () => {
-		if (!selection) return;
-		props.onCommit(deleteTimelineItem(definition, selection));
-		props.setSelection(null);
-	};
+	const { zoom, setZoom } = props;
 	return (
 		<div className="timecode-timeline-tools">
-			<SelectField
-				label="Speed Group"
-				value={speedGroup}
-				onChange={setSpeedGroup}
-				options={["A", "B", "C", "D", "E"].map((group) => ({
-					value: group,
-					label: group,
-				}))}
-			/>
-			<SelectField
-				label="Cuelist"
-				value={cueListId}
-				disabled={!cueLists.length}
-				onChange={setCueListId}
-				options={cueLists.map((cueList) => ({
-					value: cueList.id,
-					label: cueList.name,
-				}))}
-			/>
-			<Button disabled={!selection} onClick={copy}>
-				Copy
-			</Button>
-			<Button disabled={!selection} onClick={remove}>
-				Delete
-			</Button>
 			<HorizontalFader
 				className="timecode-timeline-zoom"
 				label="Timeline zoom"
@@ -158,16 +95,23 @@ function TimelineCanvas(props: {
 }) {
 	const scrub = (event: ReactPointerEvent<HTMLDivElement>) => {
 		if (event.target !== event.currentTarget) return;
-		const bounds = event.currentTarget.getBoundingClientRect();
+		scrubAt(event.clientX, event.currentTarget);
+	};
+	const scrubAt = (clientX: number, canvas: HTMLElement) => {
+		const bounds = canvas.getBoundingClientRect();
 		props.onScrub(
 			Math.max(
 				0,
 				Math.min(
 					props.duration,
-					Math.round((event.clientX - bounds.left) / props.pixelsPerFrame),
+					Math.round((clientX - bounds.left) / props.pixelsPerFrame),
 				),
 			),
 		);
+	};
+	const scrubPlayhead = (event: ReactPointerEvent<HTMLButtonElement>) => {
+		const canvas = event.currentTarget.parentElement;
+		if (canvas) scrubAt(event.clientX, canvas);
 	};
 	return (
 		<section
@@ -208,12 +152,23 @@ function TimelineCanvas(props: {
 				{props.definition.lanes.map((lane) => (
 					<EditorLane key={lane.id} {...props} lane={lane} />
 				))}
-				<div
+				<button
+					type="button"
 					className="timecode-editor-playhead"
+					aria-label="Drag playhead to seek"
 					style={{ left: props.frame * props.pixelsPerFrame }}
+					onPointerDown={(event) => {
+						event.preventDefault();
+						event.currentTarget.setPointerCapture(event.pointerId);
+						scrubPlayhead(event);
+					}}
+					onPointerMove={(event) => {
+						if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
+						scrubPlayhead(event);
+					}}
 				>
 					<span>{formatFrame(props.frame, props.fps)}</span>
-				</div>
+				</button>
 			</div>
 		</section>
 	);
@@ -322,7 +277,7 @@ function TimelineItemButton({
 			onPointerDown={(event) => startDrag(event, item.selection, item.frame)}
 			title={`${item.label} · ${formatFrame(item.frame, fps)}`}
 		>
-			{item.label}
+			{marker ? <span>{item.label}</span> : item.label}
 			{!marker && <small>{formatFrame(item.frame, fps)}</small>}
 		</Button>
 	);
@@ -378,7 +333,7 @@ export const TimecodeTimelineEditor = forwardRef<
 	const [selection, setSelection] = useState<TimecodeEditorSelection | null>(
 		null,
 	);
-	const [speedGroup, setSpeedGroup] = useState("A");
+	const [speedGroup] = useState("A");
 	const [cueListId, setCueListId] = useState(cueLists[0]?.id ?? "");
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const [viewportWidth, setViewportWidth] = useState(FALLBACK_VIEWPORT_WIDTH);
@@ -455,19 +410,9 @@ export const TimecodeTimelineEditor = forwardRef<
 		>
 			<TimelineTools
 				{...{
-					definition,
-					selection,
-					speedGroup,
-					setSpeedGroup,
-					cueListId,
-					setCueListId,
-					cueLists,
 					zoom,
 					setZoom,
 					maximumZoom,
-					setSelection,
-					onCommit,
-					fps,
 				}}
 			/>
 			<TimelineCanvas

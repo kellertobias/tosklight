@@ -78,6 +78,18 @@ export function TimecodeRuntimeWindow({
 		TimecodeObjectRecord | NewTimecode | null
 	>(null);
 	const [error, setError] = useState<string | null>(null);
+	const start = useCallback(
+		async (item: TimecodeObjectRecord) => {
+			if (!showId) return;
+			try {
+				await api.transportAction(showId, item.definition.id, { type: "go" });
+				setError(null);
+			} catch (reason) {
+				setError(String(reason));
+			}
+		},
+		[api, showId],
+	);
 
 	const refresh = useCallback(async () => {
 		if (!showId) return;
@@ -182,7 +194,14 @@ export function TimecodeRuntimeWindow({
 											: []),
 									],
 								}}
-								onClick={() => setEditing(item ?? newTimecode(number))}
+								onClick={() => {
+									if (item) void start(item);
+									else setEditing(newTimecode(number));
+								}}
+								onContextMenu={(event) => {
+									event.preventDefault();
+									if (item) setEditing(item);
+								}}
 							/>
 						);
 					}}

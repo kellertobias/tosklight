@@ -275,17 +275,27 @@
 }
 .timecode-timeline-marker {
 	position: absolute;
-	top: 0.25rem;
-	min-width: 2.75rem;
-	min-height: 2rem;
-	transform: translateX(-0.25rem);
+	top: 0;
+	bottom: 0;
+	width: 2px;
+	min-width: 2px;
+	margin: 0;
+	padding: 0;
+	transform: none;
 	border: 0;
-	border-left: 3px solid #d2b6ff;
-	border-radius: 0.2rem;
-	background: #30264a;
+	border-radius: 0;
+	background: #ff6a62;
 	color: #fff;
 	cursor: ew-resize;
 	touch-action: none;
+}
+.timecode-timeline-marker > span {
+	display: block;
+	width: max-content;
+	padding: 0.12rem 0.25rem;
+	transform: translateX(2px);
+	background: #9c343e;
+	font-size: 0.65rem;
 }
 .timecode-timeline-marker.selected {
 	outline: 2px solid #fff;
@@ -365,8 +375,12 @@
 	top: 0;
 	bottom: 0;
 	width: 2px;
+	margin: 0;
+	padding: 0;
+	border: 0;
 	background: #ff6a62;
-	pointer-events: none;
+	cursor: ew-resize;
+	touch-action: none;
 }
 .timecode-editor-playhead span {
 	position: sticky;
