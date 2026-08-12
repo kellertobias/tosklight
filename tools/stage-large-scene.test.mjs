@@ -101,8 +101,8 @@ test("fails closed when a required shipped profile or exact mode is absent", () 
 	);
 });
 
-test("builds proportional real-profile Fixture Sheet workloads at requested sizes", () => {
-	for (const fixtureRecords of [576, 1_024, 2_000, 2_048]) {
+test("builds proportional real-profile Fixture Sheet and Stage workloads at requested sizes", () => {
+	for (const fixtureRecords of [500, 576, 1_024, 2_000, 2_048]) {
 		const built = createPerformanceFixtureInputs(profiles, fixtureRecords);
 		assert.equal(built.fixtures.length, fixtureRecords);
 		assert.equal(countFixtureInstances(built.fixtures), fixtureRecords);

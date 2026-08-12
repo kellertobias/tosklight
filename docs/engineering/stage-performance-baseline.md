@@ -78,6 +78,7 @@ scene profile:
 
 ```sh
 npm run benchmark:packaged-stage -- 300 default-stage
+npm run benchmark:packaged-stage -- 300 stage-500
 npm run benchmark:packaged-stage -- 300 large-stage
 npm run benchmark:packaged-stage -- 1 improved-beam-spike
 ```

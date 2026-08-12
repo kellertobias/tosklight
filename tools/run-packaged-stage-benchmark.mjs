@@ -33,6 +33,7 @@ import {
 import {
 	countFixtureInstances,
 	createDeterministicLargeStageInputs,
+	createPerformanceFixtureInputs,
 	LARGE_STAGE_DYNAMIC_INSTANCES,
 	LARGE_STAGE_FIXTURE_INSTANCES,
 	LARGE_STAGE_FIXTURE_RECORDS,
@@ -62,6 +63,11 @@ const samplesPath = path.join(
 	`packaged-tauri-${profile}-${stamp}.jsonl`,
 );
 const reportPath = samplesPath.replace(/\.jsonl$/, ".json");
+const canonicalReportPath = path.join(
+	artifactPaths.performance,
+	"stage",
+	"stage-visualization-timing.json",
+);
 const dataPath = path.join(
 	artifactPaths.performance,
 	"stage",
@@ -188,7 +194,7 @@ try {
 					)
 				: null;
 		memoryPhase = "stage";
-		if (isLargeOperatorProfile(profile))
+		if (usesStalledVisualizationClient(profile))
 			slowClient = await startSlowVisualizationClient(
 				"http://127.0.0.1:5000",
 				prepared.session.token,
@@ -283,7 +289,9 @@ if (benchmarkFailure) {
 				);
 }
 await writeFile(reportPath, `${JSON.stringify(result, null, 2)}\n`);
+await writeFile(canonicalReportPath, `${JSON.stringify(result, null, 2)}\n`);
 console.log(`Created ${reportPath}`);
+console.log(`Updated ${canonicalReportPath}`);
 if (!result.acceptanceGateEnforced) {
 	for (const failure of result.failures)
 		console.error(`Stage gate: ${failure}`);
@@ -805,6 +813,10 @@ function isLargeOperatorProfile(candidate) {
 	return candidate === "large-stage" || candidate === "supported-scale";
 }
 
+function usesStalledVisualizationClient(candidate) {
+	return candidate === "stage-500" || isLargeOperatorProfile(candidate);
+}
+
 async function prepareScene(profile) {
 	const session = await requestJson("POST", "/api/v2/sessions", {
 		username: "Operator",
@@ -888,6 +900,49 @@ async function prepareScene(profile) {
 		undefined,
 		{ session },
 	);
+	if (profile === "stage-500") {
+		const workload = createPerformanceFixtureInputs(
+			fixtureLibrary.profiles,
+			500,
+			before.fixtures[0]?.layer_id ?? "default",
+		);
+		await requestJson(
+			"POST",
+			"/api/v2/patch/fixtures",
+			{
+				request_id: crypto.randomUUID(),
+				fixtures: workload.fixtures,
+				remove_fixture_ids: before.fixtures.map(
+					(fixture) => fixture.fixture_id,
+				),
+				placements: [],
+			},
+			{ session, showId, revision: before.patch_revision },
+		);
+		const after = await requestJson("GET", "/api/v2/patch", undefined, {
+			session,
+			showId,
+		});
+		await setStaticControlIntensity(
+			session,
+			showId,
+			workload.staticControlFixtureIds,
+		);
+		const scene = {
+			...summarizeScene(profile, after.fixtures),
+			inventory: workload.inventory,
+			categoryCounts: workload.categoryCounts,
+			patch: workload.patch,
+		};
+		const failures = packagedStageSceneFailures(profile, scene);
+		if (failures.length > 0) throw new Error(failures.join("; "));
+		return {
+			scene,
+			session,
+			showId,
+			showSwitch: await createShowSwitchTarget(session, showId, profile),
+		};
+	}
 	const largeScene = createDeterministicLargeStageInputs(
 		before.fixtures,
 		fixtureLibrary.profiles,
@@ -1735,6 +1790,15 @@ function packagedApplication() {
 	};
 }
 
+function packagedApplicationIdentity(application) {
+	return {
+		productName: "ToskLight",
+		applicationKind: "packaged-desktop",
+		executable: path.basename(application.executable),
+		bundle: application.bundle ? path.basename(application.bundle) : null,
+	};
+}
+
 function launchPackagedApplication(application, environment) {
 	if (!application.direct)
 		return spawn(
@@ -2048,7 +2112,7 @@ function evaluate(
 	if (visualization.finalStreamQueueDepth !== 0)
 		failures.push("packaged visualization stream retained a queued frame");
 	if (
-		isLargeOperatorProfile(profile) &&
+		usesStalledVisualizationClient(profile) &&
 		visualization.streamQueueDrops + visualization.streamSendFailures === 0
 	)
 		failures.push(
@@ -2114,6 +2178,7 @@ function evaluate(
 		schemaVersion: 2,
 		tier: profileDefinition.tier,
 		measurementSurface: "packaged-tauri-webview",
+		applicationIdentity: packagedApplicationIdentity(application),
 		profile,
 		profileLabel: profileDefinition.label,
 		scene,

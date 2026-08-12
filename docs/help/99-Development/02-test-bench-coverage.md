@@ -300,11 +300,13 @@ cd ../..
 npm run test:e2e -- tests/66-semantic-stage-visualizer.spec.ts
 ```
 
-There is currently no automated `STAGE-PERF-001` or `STAGE-PERF-002`, packaged-WebView collector,
-cross-platform GPU run, five-minute output comparison, 30-minute resource-release gate, or attached
-`stage-visualization-timing.json`. Source-to-canvas latency, compositor screenshots, WebGL recovery
-in the packaged application, and DMX continuity while a native renderer is stalled remain missing
-native/performance evidence.
+[`STAGE-PERF-001`](../../../docs/testing/16-stage-performance.md) and
+[`STAGE-PERF-002`](../../../docs/testing/16-stage-performance.md) are implemented by the packaged
+Tauri/WebView collector. They cover the default and deterministic 500-instance profiles and write
+the stable `.artifacts/performance/stage/stage-visualization-timing.json` artifact in addition to
+the timestamped report. Five-minute output and 30-minute resource gates require retained reports
+from real supported-platform GPU runs; a short local run or browser/software renderer is explicitly
+non-acceptance evidence.
 
 ### Matter playback bridge
 
