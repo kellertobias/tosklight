@@ -86,6 +86,9 @@ impl Application {
         let live_beams = live_beam_count(session);
         let selection = Self::selection_summary(session, self.selected);
         let mut values = std::mem::take(&mut session.values);
+        if !self.preferences.show_selection {
+            values.selected_fixtures.clear();
+        }
         values.atmosphere = atmosphere;
         let since_last_frame = now
             .saturating_duration_since(self.last_persistence)

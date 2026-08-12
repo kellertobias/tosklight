@@ -340,11 +340,11 @@ mod tests {
     #[test]
     fn pinning_one_universe_leaves_every_other_one_following_the_show() {
         let (mut settings, mut preferences) = fixture();
-        settings.selected = select(&settings, Row::InputUniverse);
+        settings.selected = select(&mut settings, Row::InputUniverse);
         settings.adjust(2, &mut preferences); // universe 1 -> 3
         assert_eq!(settings.input_universe, 3);
 
-        settings.selected = select(&settings, Row::InputProtocol);
+        settings.selected = select(&mut settings, Row::InputProtocol);
         settings.adjust(1, &mut preferences);
         assert_eq!(
             preferences.input_for(3),
@@ -585,7 +585,29 @@ mod tests {
     }
 
     /// Where a named row currently sits, which moves as snapshots are taken.
-    fn select(settings: &QuickSettings, wanted: Row) -> usize {
+    fn select(settings: &mut QuickSettings, wanted: Row) -> usize {
+        settings.tab = match wanted {
+            Row::Source
+            | Row::Server
+            | Row::Port
+            | Row::User
+            | Row::InputUniverse
+            | Row::InputProtocol
+            | Row::Connect => QuickSettingsTab::Source,
+            Row::Quality
+            | Row::Focus
+            | Row::Appearance
+            | Row::Background
+            | Row::Ambient
+            | Row::Exposure
+            | Row::FogAmount
+            | Row::LaserBrightness
+            | Row::Persistence
+            | Row::PersistenceFalloff => QuickSettingsTab::Rendering,
+            Row::Labels | Row::ShowSelection | Row::FloorGrid => QuickSettingsTab::Features,
+            Row::BlenderPath | Row::Snapshot(_) => QuickSettingsTab::Snapshots,
+            Row::Cancel => settings.tab,
+        };
         settings
             .rows()
             .iter()
@@ -603,12 +625,12 @@ mod tests {
     fn cancelling_restores_the_live_endpoint_and_closes() {
         let (mut settings, mut preferences) = fixture();
         settings.toggle(&preferences);
-        settings.selected = 1;
+        settings.selected = select(&mut settings, Row::Server);
         settings.editing = true;
         settings.type_character('9');
         assert_eq!(settings.staged.host, "127.0.0.19");
         settings.editing = false;
-        settings.selected = select(&settings, Row::Cancel);
+        settings.selected = select(&mut settings, Row::Cancel);
         assert_eq!(
             settings.activate(&mut preferences),
             QuickSettingsOutcome::Close
@@ -623,7 +645,7 @@ mod tests {
         settings.toggle(&preferences);
         settings.staged.host = "10.0.0.4".into();
         settings.staged.port_text = "5100".into();
-        settings.selected = select(&settings, Row::Connect);
+        settings.selected = select(&mut settings, Row::Connect);
         assert_eq!(
             settings.activate(&mut preferences),
             QuickSettingsOutcome::Connect {
@@ -639,7 +661,7 @@ mod tests {
         let (mut settings, mut preferences) = fixture();
         settings.toggle(&preferences);
         settings.staged.port_text = "0".into();
-        settings.selected = select(&settings, Row::Connect);
+        settings.selected = select(&mut settings, Row::Connect);
         let outcome = settings.activate(&mut preferences);
         assert!(matches!(outcome, QuickSettingsOutcome::Invalid(_)));
         assert_eq!(preferences.port, 5000);
@@ -649,7 +671,7 @@ mod tests {
     fn an_unavailable_planning_provider_is_named_rather_than_selectable() {
         let (mut settings, mut preferences) = fixture();
         settings.toggle(&preferences);
-        settings.selected = 0;
+        settings.selected = select(&mut settings, Row::Source);
         let outcome = settings.adjust(1, &mut preferences);
         assert!(matches!(outcome, QuickSettingsOutcome::Invalid(_)));
         assert_eq!(settings.staged.source, ProviderKind::LightingDesk);
@@ -660,16 +682,90 @@ mod tests {
     fn quality_and_fog_apply_immediately_without_reconnecting() {
         let (mut settings, mut preferences) = fixture();
         settings.toggle(&preferences);
-        settings.selected = select(&settings, Row::Quality);
+        settings.selected = select(&mut settings, Row::Quality);
         assert_eq!(
             settings.adjust(1, &mut preferences),
             QuickSettingsOutcome::AppliedLocally
         );
         assert_eq!(preferences.quality_override, Some(RenderQuality::Draft));
-        settings.selected = select(&settings, Row::FogAmount);
+        settings.selected = select(&mut settings, Row::FogAmount);
         let before = preferences.atmosphere.amount;
         settings.adjust(1, &mut preferences);
         assert!(preferences.atmosphere.amount > before);
+    }
+
+    #[test]
+    fn operator_tabs_expose_each_visualizer_setting_once() {
+        let (mut settings, mut preferences) = fixture();
+        let expected = [
+            (
+                QuickSettingsTab::Source,
+                vec![
+                    Row::Source,
+                    Row::Server,
+                    Row::Port,
+                    Row::User,
+                    Row::InputUniverse,
+                    Row::InputProtocol,
+                    Row::Connect,
+                ],
+            ),
+            (
+                QuickSettingsTab::Rendering,
+                vec![
+                    Row::Quality,
+                    Row::Focus,
+                    Row::Ambient,
+                    Row::Exposure,
+                    Row::FogAmount,
+                    Row::LaserBrightness,
+                    Row::Persistence,
+                    Row::Background,
+                    Row::Appearance,
+                    Row::PersistenceFalloff,
+                ],
+            ),
+            (
+                QuickSettingsTab::Features,
+                vec![Row::Labels, Row::ShowSelection, Row::FloorGrid],
+            ),
+            (QuickSettingsTab::Snapshots, vec![Row::BlenderPath]),
+        ];
+        let mut seen = Vec::new();
+        for (tab, rows) in expected {
+            settings.tab = tab;
+            let actual: Vec<Row> = settings
+                .rows()
+                .into_iter()
+                .filter(|row| *row != Row::Cancel)
+                .collect();
+            assert_eq!(actual, rows, "wrong rows in {}", tab.label());
+            seen.extend(actual);
+        }
+        seen.sort_by_key(|row| format!("{row:?}"));
+        seen.dedup();
+        assert_eq!(seen.len(), 21, "a setting was duplicated between tabs");
+
+        settings.selected = select(&mut settings, Row::Exposure);
+        let exposure = preferences.exposure;
+        assert_eq!(
+            settings.adjust(1, &mut preferences),
+            QuickSettingsOutcome::AppliedLocally
+        );
+        assert!(preferences.exposure > exposure);
+        settings.selected = select(&mut settings, Row::ShowSelection);
+        settings.activate(&mut preferences);
+        assert!(!preferences.show_selection);
+        settings.selected = select(&mut settings, Row::FloorGrid);
+        settings.activate(&mut preferences);
+        assert_eq!(preferences.floor_grid, Some(true));
+        settings.activate(&mut preferences);
+        assert_eq!(preferences.floor_grid, Some(false));
+        settings.selected = select(&mut settings, Row::Focus);
+        assert_eq!(
+            settings.activate(&mut preferences),
+            QuickSettingsOutcome::FocusView
+        );
     }
 
     /// Laser brightness is the operator's own, applies without reconnecting, and goes all the way
@@ -678,7 +774,7 @@ mod tests {
     fn laser_brightness_is_adjustable_from_off_to_stronger_than_default() {
         let (mut settings, mut preferences) = fixture();
         settings.toggle(&preferences);
-        settings.selected = select(&settings, Row::LaserBrightness);
+        settings.selected = select(&mut settings, Row::LaserBrightness);
         assert!((preferences.laser_brightness - 1.0).abs() < 1e-6);
 
         assert_eq!(
@@ -783,6 +879,7 @@ mod tests {
         for (width, height) in [(1280.0_f32, 720.0_f32), (2560.0, 1440.0), (1000.0, 640.0)] {
             let (mut settings, preferences) = fixture();
             settings.open = true;
+            settings.tab = QuickSettingsTab::Snapshots;
             settings.snapshots = kept(viz_snapshot::DEFAULT_KEPT);
             settings.snapshot_folder = "/Users/operator/Library/Application Support/ToskLight/\
                                         Visualizer/Snapshots"
@@ -810,6 +907,7 @@ mod tests {
     fn every_kept_snapshot_gets_a_row_that_says_when_it_was_taken() {
         let (mut settings, preferences) = fixture();
         settings.toggle(&preferences);
+        settings.tab = QuickSettingsTab::Snapshots;
         let without = settings.rows().len();
         settings.snapshots = kept(3);
         assert_eq!(settings.rows().len(), without + 3);
@@ -822,9 +920,10 @@ mod tests {
 
     #[test]
     fn a_grown_list_still_reaches_the_rows_underneath_it() {
-        // Connect and Cancel stay at the bottom however many captures are above them, and moving
+        // Cancel stays at the bottom however many captures are above it, and moving
         // up from the top row still wraps onto the last one rather than off the end.
         let (mut settings, _) = fixture();
+        settings.tab = QuickSettingsTab::Snapshots;
         settings.snapshots = kept(4);
         let rows = settings.rows();
         assert_eq!(rows.last(), Some(&Row::Cancel));
@@ -832,14 +931,14 @@ mod tests {
         settings.move_selection(-1);
         assert_eq!(settings.row(), Row::Cancel);
         settings.move_selection(1);
-        assert_eq!(settings.row(), Row::Source);
+        assert_eq!(settings.row(), Row::BlenderPath);
     }
 
     #[test]
     fn activating_a_snapshot_asks_for_that_one_to_be_exported() {
         let (mut settings, mut preferences) = fixture();
         settings.snapshots = kept(3);
-        settings.selected = select(&settings, Row::Snapshot(2));
+        settings.selected = select(&mut settings, Row::Snapshot(2));
         assert_eq!(
             settings.activate(&mut preferences),
             QuickSettingsOutcome::ExportSnapshot(2)
@@ -856,7 +955,7 @@ mod tests {
         let (mut settings, mut preferences) = fixture();
         settings.snapshots = kept(1);
         settings.snapshots[0].export = crate::snapshots::ExportState::Running;
-        settings.selected = select(&settings, Row::Snapshot(0));
+        settings.selected = select(&mut settings, Row::Snapshot(0));
         assert_eq!(
             settings.activate(&mut preferences),
             QuickSettingsOutcome::None
@@ -870,7 +969,7 @@ mod tests {
         // which would reconnect the session as a side effect of setting an export tool.
         let (mut settings, mut preferences) = fixture();
         settings.toggle(&preferences);
-        settings.selected = select(&settings, Row::BlenderPath);
+        settings.selected = select(&mut settings, Row::BlenderPath);
         settings.activate(&mut preferences);
         assert!(settings.editing);
         for character in "/opt/blender".chars() {

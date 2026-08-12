@@ -702,6 +702,11 @@ impl Application {
                 self.quick_settings.move_selection(1);
                 QuickSettingsOutcome::None
             }
+            Key::Named(NamedKey::Tab) => {
+                self.quick_settings
+                    .move_tab(if self.modifiers.shift_key() { -1 } else { 1 });
+                QuickSettingsOutcome::None
+            }
             Key::Named(NamedKey::ArrowLeft) => self.quick_settings.adjust(-1, &mut preferences),
             Key::Named(NamedKey::ArrowRight) => self.quick_settings.adjust(1, &mut preferences),
             Key::Named(NamedKey::Enter) => self.quick_settings.activate(&mut preferences),
@@ -745,11 +750,24 @@ impl Application {
                 let blender = self.preferences.blender_path();
                 self.snapshots.export(index, blender);
             }
+            QuickSettingsOutcome::FocusView => self.focus_view(),
             QuickSettingsOutcome::Close
             | QuickSettingsOutcome::AppliedLocally
             | QuickSettingsOutcome::Invalid(_)
             | QuickSettingsOutcome::None => {}
         }
+    }
+
+    fn focus_view(&mut self) {
+        let Some(session) = self.session.as_mut() else {
+            return;
+        };
+        session.source_view.camera =
+            Camera::framed(session.source_view.mode, session.scene.framing_bounds());
+        self.camera.adopt(&session.source_view.camera);
+        self.framed_revision = Some(session.scene.revision);
+        self.latch_local_camera_control();
+        self.quick_settings.message = "Focused the current rig".into();
     }
 
     /// Freeze the picture exactly as it is and write it as a snapshot.

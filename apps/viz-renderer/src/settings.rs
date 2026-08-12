@@ -489,8 +489,14 @@ pub struct Preferences {
     /// eye, not of the show.
     pub laser_brightness: f32,
     pub theme: Theme,
+    /// The room colour behind the rig.
+    pub background: Option<[f32; 3]>,
     /// Show screen-space fixture numbers and patch addresses in every Stage view.
     pub show_labels: bool,
+    /// Draw selection emphasis received from the source.
+    pub show_selection: bool,
+    /// Draw the renderer's floor grid in spatial views.
+    pub floor_grid: Option<bool>,
     /// Hide every overlay so the picture can be looked at on its own.
     ///
     /// Not kept between launches, and deliberately: a window that opens with no status surface,
@@ -522,7 +528,10 @@ impl Preferences {
             exposure: options.exposure.unwrap_or(1.0),
             laser_brightness: options.laser_brightness.unwrap_or(1.0),
             theme: options.theme.unwrap_or(Theme::LightOnDark),
+            background: None,
             show_labels: true,
+            show_selection: true,
+            floor_grid: None,
             overlays_hidden: false,
             input_overrides: Vec::new(),
             blender: options
@@ -586,7 +595,21 @@ impl Preferences {
         text.push_str(&format!("exposure {}\n", self.exposure));
         text.push_str(&format!("laser_brightness {}\n", self.laser_brightness));
         text.push_str(&format!("theme {}\n", self.theme.wire()));
+        match self.background {
+            Some(background) => text.push_str(&format!(
+                "background {},{},{}\n",
+                background[0], background[1], background[2]
+            )),
+            None => text.push_str("background follow\n"),
+        }
         text.push_str(&format!("labels {}\n", self.show_labels));
+        text.push_str(&format!("show_selection {}\n", self.show_selection));
+        text.push_str(&format!(
+            "floor_grid {}\n",
+            self.floor_grid
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| "follow".into())
+        ));
         if !self.blender.trim().is_empty() {
             text.push_str(&format!("blender {}\n", self.blender.trim()));
         }
@@ -674,7 +697,32 @@ impl Preferences {
                         self.theme = theme;
                     }
                 }
+                "background" => {
+                    if value == "follow" {
+                        self.background = None;
+                        continue;
+                    }
+                    let channels: Vec<f32> = value
+                        .split(',')
+                        .filter_map(|channel| channel.trim().parse::<f32>().ok())
+                        .collect();
+                    if let [red, green, blue] = channels.as_slice() {
+                        self.background = Some([
+                            red.clamp(0.0, 1.0),
+                            green.clamp(0.0, 1.0),
+                            blue.clamp(0.0, 1.0),
+                        ]);
+                    }
+                }
                 "labels" => self.show_labels = value != "false",
+                "show_selection" => self.show_selection = value != "false",
+                "floor_grid" => {
+                    self.floor_grid = match value {
+                        "true" => Some(true),
+                        "false" => Some(false),
+                        _ => None,
+                    }
+                }
                 // Written by an earlier version, and deliberately not read: see the field.
                 "overlays_hidden" => {}
                 "blender" if options.blender.is_none() => self.blender = value.to_owned(),
@@ -860,7 +908,10 @@ mod preference_tests {
         written.exposure = 1.75;
         written.laser_brightness = 2.4;
         written.theme = Theme::DarkOnLight;
+        written.background = Some([0.02, 0.04, 0.08]);
         written.show_labels = false;
+        written.show_selection = false;
+        written.floor_grid = Some(false);
         written.blender = "/opt/blender".into();
         written.set_input(3, Some(viz_dmx::Protocol::Sacn));
 
@@ -878,7 +929,10 @@ mod preference_tests {
         assert!((read.exposure - 1.75).abs() < 1e-6);
         assert!((read.laser_brightness - 2.4).abs() < 1e-6);
         assert_eq!(read.theme, Theme::DarkOnLight);
+        assert_eq!(read.background, Some([0.02, 0.04, 0.08]));
         assert!(!read.show_labels);
+        assert!(!read.show_selection);
+        assert_eq!(read.floor_grid, Some(false));
         assert_eq!(read.blender, "/opt/blender");
         assert_eq!(read.input_for(3), Some(viz_dmx::Protocol::Sacn));
     }
