@@ -9,7 +9,7 @@ use serde_json::{Map, Value, json};
 use media_domain::{LayerPersonality, OutputId, OutputName};
 
 /// The version this build writes.
-pub const CURRENT_VERSION: u32 = 2;
+pub const CURRENT_VERSION: u32 = 3;
 
 /// Why a stored document cannot be brought forward.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -23,6 +23,10 @@ pub enum MigrationError {
     FromTheFuture { found: u32 },
     #[error("the configuration document has a non-numeric version field")]
     UnreadableVersion,
+    #[error(
+        "the configuration contains {found} visualizers, but folders 250 through 255 hold at most {maximum}"
+    )]
+    TooManyVisualizers { found: usize, maximum: usize },
 }
 
 /// Brings any supported document to [`CURRENT_VERSION`].
@@ -48,10 +52,13 @@ pub fn migrate_to_current(document: Value) -> Result<Value, MigrationError> {
     let mut current = document;
     while version < CURRENT_VERSION {
         current = match version {
-            0 => from_legacy_info(current.as_object().expect("checked above")),
-            1 => without_personality_version(current),
+            0 => Ok(from_legacy_info(
+                current.as_object().expect("checked above"),
+            )),
+            1 => Ok(without_personality_version(current)),
+            2 => visualizers_into_final_banks(current),
             other => unreachable!("no migration is registered for version {other}"),
-        };
+        }?;
         version += 1;
     }
     Ok(current)
@@ -156,6 +163,42 @@ fn without_personality_version(document: Value) -> Value {
     }
     document["version"] = json!(2);
     document
+}
+
+/// Version 2 → 3: text grows through folder 249 and generated visualizers are compacted into
+/// folders 250–255. The address change is the explicitly declared pre-v1 compatibility break;
+/// configurations and names survive in their previous address order.
+fn visualizers_into_final_banks(mut document: Value) -> Result<Value, MigrationError> {
+    const FIRST_FOLDER: usize = 250;
+    const FOLDERS: usize = 6;
+    const FILES_PER_FOLDER: usize = 254;
+    const CAPACITY: usize = FOLDERS * FILES_PER_FOLDER;
+
+    if let Some(entries) = document
+        .get_mut("configuration")
+        .and_then(|configuration| configuration.get_mut("visualizers"))
+        .and_then(|visualizers| visualizers.get_mut("entries"))
+        .and_then(Value::as_array_mut)
+    {
+        if entries.len() > CAPACITY {
+            return Err(MigrationError::TooManyVisualizers {
+                found: entries.len(),
+                maximum: CAPACITY,
+            });
+        }
+        for (index, entry) in entries.iter_mut().enumerate() {
+            let Some(address) = entry.get_mut("address").and_then(Value::as_object_mut) else {
+                continue;
+            };
+            address.insert(
+                "folder".to_owned(),
+                json!(FIRST_FOLDER + index / FILES_PER_FOLDER),
+            );
+            address.insert("file".to_owned(), json!(1 + index % FILES_PER_FOLDER));
+        }
+    }
+    document["version"] = json!(3);
+    Ok(document)
 }
 
 fn legacy_target(legacy: &Map<String, Value>) -> Value {
@@ -280,7 +323,32 @@ mod tests {
             !written.contains("personalityVersion"),
             "there is one personality, so nothing records which one"
         );
-        assert!(written.contains("\"version\": 2"));
+        assert!(written.contains("\"version\": 3"));
+    }
+
+    #[test]
+    fn version_two_visualizers_are_compacted_into_folders_250_through_255() {
+        let document = json!({
+            "version": 2,
+            "configuration": {
+                "visualizers": {
+                    "version": 1,
+                    "entries": [
+                        { "address": { "folder": 220, "file": 9 }, "configuration": { "name": "First" } },
+                        { "address": { "folder": 249, "file": 4 }, "configuration": { "name": "Second" } }
+                    ]
+                }
+            }
+        });
+
+        let migrated = migrate_to_current(document).expect("version two migrates");
+        let entries = migrated["configuration"]["visualizers"]["entries"]
+            .as_array()
+            .expect("entries");
+        assert_eq!(migrated["version"], json!(3));
+        assert_eq!(entries[0]["address"], json!({ "folder": 250, "file": 1 }));
+        assert_eq!(entries[1]["address"], json!({ "folder": 250, "file": 2 }));
+        assert_eq!(entries[0]["configuration"]["name"], json!("First"));
     }
 
     #[test]

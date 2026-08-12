@@ -13,9 +13,9 @@ import {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("the CITP media library", () => {
-	it("shows the whole 255-folder address space and the selected folder pool", async () => {
+	it("filters the media folder pool to playable and parking storage", async () => {
 		stubServer();
-		render(<LibraryPage />);
+		const { container } = render(<LibraryPage />);
 		expect(
 			(await screen.findByText("Looks")).closest("button"),
 		).toBeInTheDocument();
@@ -23,15 +23,18 @@ describe("the CITP media library", () => {
 			screen.getByRole("button", { name: /199Empty folder/u }),
 		).toBeInTheDocument();
 		expect(
-			screen.getByRole("button", { name: /200Text sourcesReserved/u }),
-		).toBeInTheDocument();
+			container.querySelector('.media-library-folders [data-folder="200"]'),
+		).not.toBeInTheDocument();
 		expect(
-			screen.getByRole("button", { name: /255VisualizersReserved/u }),
-		).toBeInTheDocument();
+			container.querySelector('.media-library-folders [data-folder="255"]'),
+		).not.toBeInTheDocument();
 		expect(
 			screen.getByRole("button", { name: /900Parking0\/254/u }),
 		).toBeInTheDocument();
 		expect(screen.getByText("Blue haze").closest("button")).toBeInTheDocument();
+		expect(
+			screen.getByRole("radiogroup", { name: "Library source type" }),
+		).toBeInTheDocument();
 	});
 
 	it("opens one media item in the preview editor and persists name and BPM", async () => {

@@ -6,7 +6,10 @@ test("Media Server dock and settings navigate between Storybook screens", async 
 	await page.goto("/?path=/story/tosklight-media-server--library");
 
 	const story = page.frameLocator("#storybook-preview-iframe");
-	await story.getByRole("button", { name: "Visualizers", exact: true }).click();
+	await expect(
+		story.getByRole("button", { name: "Visualizers", exact: true }),
+	).toHaveCount(0);
+	await story.getByRole("radio", { name: "Visualizers", exact: true }).click();
 	await expect(page).toHaveURL(
 		/\?path=\/story\/tosklight-media-server--visualizers$/u,
 	);
@@ -20,6 +23,25 @@ test("Media Server dock and settings navigate between Storybook screens", async 
 	await expect(page).toHaveURL(
 		/\?path=\/story\/tosklight-media-server--settings-network-and-inputs$/u,
 	);
+});
+
+test("Media Server Library title filters expose their own folder ranges", async ({
+	page,
+}) => {
+	await page.goto("/?path=/story/tosklight-media-server--library");
+	const story = page.frameLocator("#storybook-preview-iframe");
+
+	await story.getByRole("radio", { name: "Text", exact: true }).click();
+	await expect(page).toHaveURL(/tosklight-media-server--text$/u);
+	await expect(story.locator('[data-folder="200"]')).toBeVisible();
+	await expect(story.locator('[data-folder="249"]')).toBeAttached();
+	await expect(story.locator('[data-folder="250"]')).toHaveCount(0);
+
+	await story.getByRole("radio", { name: "Visualizers", exact: true }).click();
+	await expect(page).toHaveURL(/tosklight-media-server--visualizers$/u);
+	await expect(story.locator('[data-folder="250"]')).toBeVisible();
+	await expect(story.locator('[data-folder="255"]')).toBeAttached();
+	await expect(story.locator('[data-folder="249"]')).toHaveCount(0);
 });
 
 test("Media Server Library story exercises metadata, multi-move, folder configuration, and upload", async ({

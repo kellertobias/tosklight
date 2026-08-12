@@ -7,8 +7,8 @@ surface, resolution, presentation rate, DMX personality, protocol, universe, and
 
 The administration interface is served by the Media Server itself. Open the address configured as
 **This interface**. Its left dock follows the Light Desk operator language: the Media Server mark
-and current time are followed by **Dashboard**, **Playback**, **Library**, **Visualizers**, **Text**,
-and **Settings**. Those are the only built-ins in this interface. The connection indicator changes
+and current time are followed by **Dashboard**, **Playback**, **Library**, and **Settings**. Those
+are the only built-ins in this interface. The connection indicator changes
 if live telemetry is lost. While a Light Desk is connected, its active show name appears in that
 indicator and on the Dashboard. If the desk stops announcing itself, the name disappears instead
 of leaving a stale show identity behind. The Light Desk's own dock continues to name the active
@@ -53,9 +53,11 @@ on every local interface; it is not a valid destination.
 
 ## Prepare the media library
 
-The **Library** page uses three columns: folder preset pool, file preset pool, and the selected
-media preview and editor. Files `0` and `255` are blank sentinels and cannot hold media. Normal
-media addresses are `1` through `254`.
+The **Library** page uses the title buttons **Media**, **Visualizers**, and **Text** to filter one
+shared three-column surface: folder preset pool, file or source preset pool, and the selected
+preview and editor. Files `0` and `255` are blank sentinels and cannot hold content. Normal file
+addresses are `1` through `254`. Media uses folders `1` through `199`, text uses `200` through
+`249`, and generated visualizers use `250` through `255`.
 
 - **Rename** changes a clip's operator-facing name without changing its stable identity.
 - **Move** chooses a new numbered address. An occupied address is refused unless **Swap** is chosen;
@@ -121,11 +123,11 @@ If the output is not responding, check in this order:
 
 ## Operate generated sources and diagnostics
 
-Use **Text** to create and edit static text, clocks, and countdowns. The source list stays on the
-left and the selected source's preview and configuration appear on the right. Static text accepts
-multiple lines and preserves their line breaks. **Visualizers** uses the same list-and-detail
-layout with a screenshot-like preview. Selecting a visualizer is only for inspection and tuning;
-it does not put that source on an output. Use **Settings** > **Network & Inputs** to select and tune
+Use **Library** > **Text** to create and edit static text, clocks, and countdowns. Its folder pool
+covers `200` through `249`, allowing 12,700 addressable sources. Static text accepts multiple lines
+and preserves their line breaks. **Library** > **Visualizers** uses folders `250` through `255` and
+the same pool-and-inspector layout with a screenshot-like preview. Selecting a visualizer is only
+for inspection and tuning; it does not put that source on an output. Use **Settings** > **Network & Inputs** to select and tune
 the audio input that feeds audio-reactive sources; the meters prove the running input rather than
 only the stored device choice. Long-running and unavailable states remain visible in that tab.
 
@@ -135,7 +137,13 @@ temporary: restarting reads `MEDIA_LOG` again. Raising it to Debug does not chan
 filter, and lowering the browser filter does not change the process.
 
 Bookmarks for the retired `/layers`, `/audio`, `/dmx`, and `/logs` pages remain compatible: they
-open **Playback** or the corresponding area of **Settings**, so no existing operator function is lost.
+open **Playback** or the corresponding area of **Settings**. The retired `/text` and
+`/visualizers` destinations open the matching **Library** filter.
+
+This pre-1.0 address allocation replaces the earlier text `200`–`219` and visualizer `220`–`255`
+split. Stored visualizer configuration is migrated into `250`–`255` in its existing entry order.
+Because the address itself changes, update any cues or external control that named the old
+visualizer address before using that show live.
 
 ## Check a show and retain rollback
 

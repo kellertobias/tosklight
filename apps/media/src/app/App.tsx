@@ -8,8 +8,6 @@ import { DashboardPage } from "../features/dashboard/DashboardPage";
 import { MediaPanePage } from "../features/layers/MediaPanePage";
 import { LibraryPage } from "../features/media-library/LibraryPage";
 import { SettingsPage } from "../features/settings/SettingsPage";
-import { TextSourcesPage } from "../features/text-sources/TextSourcesPage";
-import { VisualizersPage } from "../features/visualizers/VisualizersPage";
 import { DeskIdentityProvider } from "../operator/DeskIdentityContext";
 import {
 	type MediaServerSection,
@@ -27,9 +25,9 @@ const HEALTH_POLL_MS = 5_000;
 const PAGES: Record<RoutePath, () => React.ReactElement> = {
 	"/": DashboardPage,
 	"/media": MediaPanePage,
-	"/library": LibraryPage,
-	"/visualizers": VisualizersPage,
-	"/text": TextSourcesPage,
+	"/library": () => <LibraryPage />,
+	"/visualizers": () => <LibraryPage mode="visualizers" />,
+	"/text": () => <LibraryPage mode="text" />,
 	"/settings": SettingsPage,
 };
 
@@ -37,8 +35,8 @@ const SECTION_BY_PATH: Record<RoutePath, MediaServerSection> = {
 	"/": "dashboard",
 	"/media": "media",
 	"/library": "library",
-	"/visualizers": "visualizers",
-	"/text": "text",
+	"/visualizers": "library",
+	"/text": "library",
 	"/settings": "settings",
 };
 
@@ -50,7 +48,17 @@ export function App() {
 	const Page = PAGES[path];
 	const route =
 		ROUTES.find((candidate) => candidate.path === path) ?? ROUTES[0];
-	const pageOwnsWindow = path === "/media" || path === "/library";
+	const pageOwnsWindow =
+		path === "/media" ||
+		path === "/library" ||
+		path === "/visualizers" ||
+		path === "/text";
+	const libraryMode =
+		path === "/visualizers"
+			? "visualizers"
+			: path === "/text"
+				? "text"
+				: "media";
 	const [now, setNow] = useState(() => new Date());
 	useEffect(() => {
 		const timer = window.setInterval(() => setNow(new Date()), 30_000);
@@ -75,7 +83,24 @@ export function App() {
 				<div ref={headingRef} tabIndex={-1} className="media-route-surface">
 					<ErrorBoundary key={path}>
 						{pageOwnsWindow ? (
-							<Page />
+							path === "/library" ||
+							path === "/visualizers" ||
+							path === "/text" ? (
+								<LibraryPage
+									mode={libraryMode}
+									onModeChange={(mode) =>
+										navigate(
+											mode === "media"
+												? "/library"
+												: mode === "visualizers"
+													? "/visualizers"
+													: "/text",
+										)
+									}
+								/>
+							) : (
+								<Page />
+							)
 						) : (
 							<WindowFrame
 								title={route.label}

@@ -12,7 +12,7 @@ use crate::text::TextEntry;
 
 /// The bank text entries are assigned into by default.
 ///
-/// The whole `200..=219` range is text; shipping one populated bank is a starting point.
+/// The whole `200..=249` range is text; shipping one populated bank is a starting point.
 pub const DEFAULT_BANK: u8 = 200;
 
 /// How a text entry is drawn.
@@ -187,7 +187,7 @@ mod tests {
             "a library address is not text space"
         );
         assert_eq!(
-            catalog.assign(slot(220, 5)),
+            catalog.assign(slot(250, 5)),
             Err(TextCatalogError::NotTextSpace),
             "the generated range is not text space"
         );

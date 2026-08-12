@@ -1,7 +1,16 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { SwitchField } from "@tosklight/ui/controls";
+import {
+	Button,
+	NumberField,
+	SwitchField,
+	TextAreaField,
+} from "@tosklight/ui/controls";
 import { type ReactNode, useState } from "react";
 import { StatefulMediaStory } from "../../../light-desktop/src/windows/MediaPaneWindow.stories";
+import {
+	GeneratedLibraryBrowserView,
+	type LibrarySourceType,
+} from "../features/media-library/GeneratedLibraryBrowserView";
 import {
 	allocateFreeAddresses,
 	LibraryBrowserView,
@@ -12,11 +21,8 @@ import {
 	LibrariesSettings,
 	LogsSettings,
 	NetworkInputsSettings,
-	type OperatorTextSource,
 	OutputsSettings,
 	SettingsScreen,
-	TextScreen,
-	VisualizersScreen,
 } from "./MediaServerScreens";
 import {
 	MediaListDetail,
@@ -35,8 +41,6 @@ const MEDIA_STORY_BY_SECTION: Record<MediaServerSection, string> = {
 	dashboard: "dashboard",
 	media: "media",
 	library: "library",
-	visualizers: "visualizers",
-	text: "text",
 	settings: "settings-libraries",
 };
 
@@ -55,6 +59,10 @@ function openStory(story: string) {
 	(window.top ?? window).location.assign(
 		`/?path=/story/tosklight-media-server--${story}`,
 	);
+}
+
+function openLibraryType(type: LibrarySourceType) {
+	openStory(type === "media" ? "library" : type);
 }
 
 const outputs = [
@@ -109,7 +117,9 @@ const visualizers = [
 	{
 		id: "aurora",
 		name: "Aurora Field",
-		address: "220 / 3",
+		address: "250 / 3",
+		folder: 250,
+		file: 3,
 		kind: "Reactive field",
 		controls: ["Speed", "Amount", "Reactivity", "Smoothing"],
 		variant: "aurora" as const,
@@ -117,7 +127,9 @@ const visualizers = [
 	{
 		id: "particles",
 		name: "Ember Particles",
-		address: "220 / 4",
+		address: "250 / 4",
+		folder: 250,
+		file: 4,
 		kind: "Particle system",
 		controls: ["Count", "Size", "Gravity", "Lifetime"],
 		variant: "particles" as const,
@@ -125,18 +137,22 @@ const visualizers = [
 	{
 		id: "equalizer",
 		name: "Band Equalizer",
-		address: "220 / 5",
+		address: "250 / 5",
+		folder: 250,
+		file: 5,
 		kind: "Audio bars",
 		controls: ["Amount", "Decay", "Smoothing", "Mirror"],
 		variant: "particles" as const,
 	},
 ];
 
-const initialText: OperatorTextSource[] = [
+const initialText = [
 	{
 		id: "prospero",
 		name: "Prospero title",
 		address: "200 / 3",
+		folder: 200,
+		file: 3,
 		kind: "Fixed words",
 		text: "We are such stuff\nas dreams are made on",
 		enabled: true,
@@ -145,6 +161,8 @@ const initialText: OperatorTextSource[] = [
 		id: "interval",
 		name: "Interval countdown",
 		address: "200 / 4",
+		folder: 200,
+		file: 4,
 		kind: "Countdown",
 		text: "Interval · 12:34",
 		enabled: true,
@@ -153,6 +171,8 @@ const initialText: OperatorTextSource[] = [
 		id: "doors",
 		name: "Doors open",
 		address: "200 / 5",
+		folder: 200,
+		file: 5,
 		kind: "Clock",
 		text: "Doors 19:00",
 		enabled: false,
@@ -188,6 +208,7 @@ function StatefulLibrary() {
 	return (
 		<Frame active="library">
 			<LibraryBrowserView
+				onModeChange={openLibraryType}
 				catalog={catalog}
 				thumbnailUrl={(_, file) => storyThumbnail(file)}
 				onRenameFolder={(folder, name) =>
@@ -488,12 +509,41 @@ const storyCatalog = {
 
 function StatefulVisualizers() {
 	const [selected, setSelected] = useState("aurora");
+	const item = visualizers.find((candidate) => candidate.id === selected);
 	return (
-		<Frame active="visualizers">
-			<VisualizersScreen
-				items={visualizers}
+		<Frame active="library">
+			<GeneratedLibraryBrowserView
+				type="visualizers"
+				items={visualizers.map((visualizer) => ({
+					id: visualizer.id,
+					folder: visualizer.folder,
+					file: visualizer.file,
+					name: visualizer.name,
+					detail: visualizer.kind,
+				}))}
 				selectedId={selected}
 				onSelect={setSelected}
+				onTypeChange={openLibraryType}
+				detail={
+					item ? (
+						<div className="media-library-editor media-generated-library-detail">
+							<MediaPreview title={item.name} variant={item.variant} />
+							<h2>{item.name}</h2>
+							<p>
+								{item.address} · {item.kind}
+							</p>
+							{item.controls.map((control, index) => (
+								<NumberField
+									key={control}
+									label={control}
+									value={String(72 - index * 9)}
+								/>
+							))}
+							<Button variant="primary">Save visualizer</Button>
+						</div>
+					) : null
+				}
+				emptyDetail={<p>No visualizer is assigned in this folder.</p>}
 			/>
 		</Frame>
 	);
@@ -502,19 +552,50 @@ function StatefulVisualizers() {
 function StatefulText() {
 	const [items, setItems] = useState(initialText);
 	const [selected, setSelected] = useState("prospero");
+	const item = items.find((candidate) => candidate.id === selected);
 	return (
-		<Frame active="text">
-			<TextScreen
-				items={items}
+		<Frame active="library">
+			<GeneratedLibraryBrowserView
+				type="text"
+				items={items.map((text) => ({
+					id: text.id,
+					folder: text.folder,
+					file: text.file,
+					name: text.name,
+					detail: text.kind,
+				}))}
 				selectedId={selected}
 				onSelect={setSelected}
-				onTextChange={(text) =>
-					setItems((current) =>
-						current.map((item) =>
-							item.id === selected ? { ...item, text } : item,
-						),
-					)
+				onTypeChange={openLibraryType}
+				headerAction={<Button size="compact">New text source</Button>}
+				detail={
+					item ? (
+						<div className="media-library-editor media-generated-library-detail">
+							<MediaPreview title={item.name} variant="text">
+								<span className="media-text-preview-words">{item.text}</span>
+							</MediaPreview>
+							<h2>{item.name}</h2>
+							<p>
+								{item.address} · {item.kind}
+							</p>
+							<TextAreaField
+								label="Words"
+								value={item.text}
+								onChange={(event) =>
+									setItems((current) =>
+										current.map((candidate) =>
+											candidate.id === selected
+												? { ...candidate, text: event.target.value }
+												: candidate,
+										),
+									)
+								}
+							/>
+							<Button variant="primary">Save text</Button>
+						</div>
+					) : null
 				}
+				emptyDetail={<p>No text source is assigned in this folder.</p>}
 			/>
 		</Frame>
 	);

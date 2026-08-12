@@ -189,7 +189,7 @@
 		{
 			"file": "media-server-library.png",
 			"title": "Media Server library",
-			"caption": "A three-column CITP library browser combines preset-pool folders, multi-select files, media previews, drag reordering, and 900-series parking storage.",
+			"caption": "One Library uses title buttons for Media, Visualizers, and Text; its Media filter combines preset-pool folders, multi-select files, previews, drag reordering, and 900-series parking storage.",
 			"storyId": "tosklight-media-server--library",
 			"viewport": { "width": 1440, "height": 900 },
 			"theme": "dark",
@@ -198,8 +198,8 @@
 		},
 		{
 			"file": "media-server-visualizers.png",
-			"title": "Media Server visualizers",
-			"caption": "Generated visualizers use a focused list-and-detail surface with a representative picture preview and direct parameter editing.",
+			"title": "Media Server library visualizers",
+			"caption": "The Library's Visualizers filter uses folders 250–255, pooled sources, a representative picture preview, and direct parameter editing.",
 			"storyId": "tosklight-media-server--visualizers",
 			"viewport": { "width": 1440, "height": 900 },
 			"theme": "dark",
@@ -208,8 +208,8 @@
 		},
 		{
 			"file": "media-server-text.png",
-			"title": "Media Server text",
-			"caption": "Addressable text sources combine a picture preview with multiline authoring and the controls needed to shape their on-screen appearance.",
+			"title": "Media Server library text",
+			"caption": "The Library's Text filter expands through folders 200–249 and combines pooled sources, a picture preview, multiline authoring, and appearance controls.",
 			"storyId": "tosklight-media-server--text",
 			"viewport": { "width": 1440, "height": 900 },
 			"theme": "dark",

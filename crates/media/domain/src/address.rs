@@ -33,8 +33,8 @@ impl MediaAddress {
             // it is only DMX that reads zero as "nothing selected".
             0 => AddressClass::Blank,
             1..=199 => AddressClass::Library,
-            200..=219 => AddressClass::TextBank,
-            220..=255 => AddressClass::GeneratedVisualizer,
+            200..=249 => AddressClass::TextBank,
+            250..=255 => AddressClass::GeneratedVisualizer,
         }
     }
 
@@ -53,7 +53,7 @@ impl std::fmt::Display for MediaAddress {
 
 /// The address space an address falls in.
 ///
-/// No part of `220..=255` is reserved media space: the generated-source catalog may initially
+/// No part of `250..=255` is reserved media space: the generated-source catalog may initially
 /// populate only some of it, but the range belongs to generated sources.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -62,9 +62,9 @@ pub enum AddressClass {
     Blank,
     /// An image or video from the filesystem library, folders `001–199`.
     Library,
-    /// One of twenty text-source banks, folders `200–219`.
+    /// One of fifty text-source banks, folders `200–249`.
     TextBank,
-    /// A generated-visualizer bank, folders `220–255`.
+    /// A generated-visualizer bank, folders `250–255`.
     GeneratedVisualizer,
 }
 
@@ -81,7 +81,7 @@ mod tests {
 
     #[test]
     fn file_zero_and_file_255_are_blank_in_every_bank() {
-        for folder in [1, 199, 200, 219, 220, 255] {
+        for folder in [1, 199, 200, 249, 250, 255] {
             assert_eq!(
                 MediaAddress::new(folder, 0).classify(),
                 AddressClass::Blank,
@@ -106,21 +106,21 @@ mod tests {
     }
 
     #[test]
-    fn twenty_text_banks_sit_between_the_library_and_the_visualizers() {
+    fn fifty_text_banks_sit_between_the_library_and_the_visualizers() {
         assert_eq!(MediaAddress::new(200, 1).classify(), AddressClass::TextBank);
         assert_eq!(
-            MediaAddress::new(219, 254).classify(),
+            MediaAddress::new(249, 254).classify(),
             AddressClass::TextBank
         );
         assert_eq!(
-            MediaAddress::new(220, 1).classify(),
+            MediaAddress::new(250, 1).classify(),
             AddressClass::GeneratedVisualizer
         );
     }
 
     #[test]
     fn the_whole_generated_range_belongs_to_generated_sources() {
-        for folder in 220..=255u8 {
+        for folder in 250..=255u8 {
             assert_eq!(
                 MediaAddress::new(folder, 1).classify(),
                 AddressClass::GeneratedVisualizer,

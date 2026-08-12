@@ -1,6 +1,6 @@
 //! Text sources.
 //!
-//! Folders `200–219` address twenty banks of text entries. An entry is static text, a clock, or a
+//! Folders `200–249` address fifty banks of text entries. An entry is static text, a clock, or a
 //! countdown; the countdown is the one with a lifecycle, because it has to start, freeze, resume,
 //! and reset in step with a layer's transport.
 //!

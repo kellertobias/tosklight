@@ -308,6 +308,22 @@
 	min-height: 0;
 }
 
+.media-library-page,
+.media-library-page > .media-library-window {
+	height: 100%;
+	min-height: 0;
+}
+
+.media-library-page {
+	gap: 0;
+}
+
+.media-library-title-tools {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
 .media-library-window > .ui-window-layout > .ui-window-center {
 	overflow: hidden;
 }
@@ -530,6 +546,15 @@
 	letter-spacing: 0.08em;
 }
 
+.media-generated-library-detail .media-preview {
+	width: 100%;
+	margin: 0;
+}
+
+.media-generated-library-detail .media-preview-picture {
+	min-height: 180px;
+}
+
 .media-settings-layout {
 	min-height: 590px;
 	display: grid;
@@ -656,6 +681,10 @@
 	text-align: center;
 	text-shadow: 0 4px 18px black;
 	white-space: pre-line;
+}
+
+.media-generated-library-detail .media-text-preview-words {
+	font-size: clamp(1.25rem, 2.5vw, 2.25rem);
 }
 
 @media (max-width: 900px) {

@@ -14,30 +14,27 @@ describe("the text sources page", () => {
 		stubServer();
 		render(<TextSourcesPage />);
 
-		expect(await screen.findByRole("radio", { name: /Clock/ })).toHaveAttribute(
-			"aria-checked",
-			"true",
-		);
+		expect(
+			await screen.findByRole("button", { name: /Clock/ }),
+		).toBeInTheDocument();
 		expect(screen.getAllByText("200/001")).not.toHaveLength(0);
 		expect(
-			screen.getByRole("radio", { name: /Ten minutes/ }),
+			screen.getByRole("button", { name: /Ten minutes/ }),
 		).toHaveTextContent("600 s");
 	});
 
-	it("selects a text source onto a layer by its address", async () => {
+	it("keeps playback selection on the Playback screen", async () => {
 		const server = stubServer({ text: [aClock()] });
 		render(<TextSourcesPage />);
 
-		await userEvent.click(
-			await screen.findByRole("button", { name: "Select on output" }),
-		);
-
-		await waitFor(() =>
-			expect(server.outputs[0].layers[0].address).toMatchObject({
-				folder: 200,
-				file: 1,
-			}),
-		);
+		await screen.findByRole("button", { name: /Clock/ });
+		expect(
+			screen.queryByRole("button", { name: /select on/iu }),
+		).not.toBeInTheDocument();
+		expect(server.outputs[0].layers[0].address).not.toMatchObject({
+			folder: 200,
+			file: 1,
+		});
 	});
 
 	it("only asks for the payload the chosen kind has", async () => {
@@ -64,7 +61,7 @@ describe("the text sources page", () => {
 		render(<TextSourcesPage />);
 
 		await userEvent.click(
-			await screen.findByRole("button", { name: "Write a new text source" }),
+			await screen.findByRole("button", { name: "New text source" }),
 		);
 		await userEvent.type(screen.getByLabelText("Name"), "House open");
 		await userEvent.type(screen.getByLabelText("Words"), "Doors in five");

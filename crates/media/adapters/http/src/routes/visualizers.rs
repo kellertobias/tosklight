@@ -81,7 +81,7 @@ mod tests {
         assert_eq!(entries.len(), 20);
 
         let first = &entries[0];
-        assert_eq!(first["address"]["folder"], 220);
+        assert_eq!(first["address"]["folder"], 250);
         assert_eq!(first["address"]["file"], 1);
         assert_eq!(first["address"]["class"], "generated-visualizer");
         assert_eq!(first["typeId"], 0);
@@ -99,7 +99,7 @@ mod tests {
     #[tokio::test]
     async fn an_edited_visualizer_is_stored_before_it_is_answered() {
         let bench = bench();
-        let uri = "/api/v2/visualizers/220/1/update".to_owned();
+        let uri = "/api/v2/visualizers/250/1/update".to_owned();
         let (status, body) = send(
             &bench.router,
             post(
@@ -118,7 +118,7 @@ mod tests {
         assert_eq!(stored.len(), 1, "the edit was written, not just answered");
         let saved = stored[0]
             .visualizers
-            .resolve(media_domain::MediaAddress::new(220, 1))
+            .resolve(media_domain::MediaAddress::new(250, 1))
             .expect("still there");
         assert_eq!(saved.name, "House bars");
         assert_eq!(saved.parameters.count, 64);
@@ -127,7 +127,7 @@ mod tests {
     #[tokio::test]
     async fn resending_an_edit_answers_it_rather_than_doing_it_twice() {
         let bench = bench();
-        let uri = "/api/v2/visualizers/220/1/update".to_owned();
+        let uri = "/api/v2/visualizers/250/1/update".to_owned();
         let edit = r#"{"requestId":"same","name":"First"}"#;
 
         let (_, first) = send(&bench.router, post(uri.clone(), edit)).await;
@@ -151,7 +151,7 @@ mod tests {
         bench
             .refuse
             .store(true, std::sync::atomic::Ordering::SeqCst);
-        let uri = "/api/v2/visualizers/220/1/update".to_owned();
+        let uri = "/api/v2/visualizers/250/1/update".to_owned();
 
         let (status, body) = send(
             &bench.router,
@@ -180,7 +180,7 @@ mod tests {
         let (status, body) = send(
             &bench.router,
             post(
-                "/api/v2/visualizers/220/1/update".into(),
+                "/api/v2/visualizers/250/1/update".into(),
                 r#"{"requestId":"  ","name":"No"}"#,
             ),
         )
@@ -207,7 +207,7 @@ mod tests {
         let (status, body) = send(
             &bench.router,
             post(
-                "/api/v2/visualizers/220/1/update".into(),
+                "/api/v2/visualizers/250/1/update".into(),
                 r#"{"requestId":"d","name":"   "}"#,
             ),
         )

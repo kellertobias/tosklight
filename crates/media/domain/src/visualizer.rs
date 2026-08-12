@@ -17,9 +17,9 @@ use crate::color::Tint;
 
 /// The bank generated visualizers are assigned into by default.
 ///
-/// The whole `220..=255` range belongs to generated sources; shipping one populated bank is a
+/// The whole `250..=255` range belongs to generated sources; shipping one populated bank is a
 /// starting point, not a reservation of the rest.
-pub const DEFAULT_BANK: u8 = 220;
+pub const DEFAULT_BANK: u8 = 250;
 
 /// Every visualizer this product ships.
 ///
@@ -501,7 +501,7 @@ mod tests {
             Err(GeneratedCatalogError::AddressTaken)
         );
 
-        let free = MediaAddress::new(221, 7);
+        let free = MediaAddress::new(251, 7);
         assert_eq!(catalog.assign(free, configuration), Ok(()));
         assert_eq!(
             catalog.resolve(free).map(|found| found.kind),

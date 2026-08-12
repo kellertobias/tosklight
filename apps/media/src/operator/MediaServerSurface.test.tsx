@@ -9,7 +9,7 @@ import {
 } from "./MediaServerSurface";
 
 describe("the Media Server operator surface", () => {
-	it("shows only the six Media Server built-ins in their operator order", async () => {
+	it("shows only the four Media Server built-ins in their operator order", async () => {
 		const navigate = vi.fn();
 		render(
 			<MediaServerShell
@@ -44,7 +44,7 @@ describe("the Media Server operator surface", () => {
 			MEDIA_SERVER_SECTIONS.map((section) => `${section.icon}${section.label}`),
 		);
 		expect(
-			within(dock).queryByText(/desktop|audio|dmx|logs/iu),
+			within(dock).queryByText(/desktop|audio|dmx|logs|visualizers|text/iu),
 		).not.toBeInTheDocument();
 
 		await userEvent.click(

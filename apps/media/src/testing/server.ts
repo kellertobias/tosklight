@@ -497,7 +497,7 @@ export function aVisualizer(
 	overrides: Partial<VisualizerView> = {},
 ): VisualizerView {
 	return {
-		address: { folder: 220, file: 1, class: "generated-visualizer" },
+		address: { folder: 250, file: 1, class: "generated-visualizer" },
 		typeId: 0,
 		kind: "Equalizer Bars",
 		name: "Equalizer Bars",

@@ -2,30 +2,35 @@ import { Button } from "@tosklight/ui/controls";
 import { useEffect, useState } from "react";
 import { ResourceState } from "../../app/ResourceState";
 import { addressLabel } from "../../entities/catalog";
-import {
-	MediaListDetail,
-	MediaPreview,
-} from "../../operator/MediaServerSurface";
+import { MediaPreview } from "../../operator/MediaServerSurface";
 import type {
 	UpdateVisualizer,
 	VisualizerView,
 } from "../../shared/api/generated/media-wire";
 import { useVisualizers } from "../../shared/api/queries";
+import {
+	GeneratedLibraryBrowserView,
+	type LibrarySourceType,
+} from "../media-library/GeneratedLibraryBrowserView";
 import { useVisualizerEditing } from "./editing";
 import { VisualizerEditor } from "./VisualizerEditor";
 
-export function VisualizersPage() {
+export function VisualizersPage({
+	onModeChange,
+}: {
+	onModeChange?: (mode: LibrarySourceType) => void;
+}) {
 	const visualizers = useVisualizers();
 	const editing = useVisualizerEditing(visualizers.reload);
-	const [selectedKey, setSelectedKey] = useState("");
+	const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
 	useEffect(() => {
-		if (!selectedKey && visualizers.data?.[0])
+		if (selectedKey === null && visualizers.data?.[0])
 			setSelectedKey(key(visualizers.data[0]));
 	}, [selectedKey, visualizers.data]);
 
 	return (
-		<section className="media-page">
+		<section className="media-page media-library-page">
 			{editing.failure && (
 				<p className="media-state is-error" role="alert">
 					{editing.failure.message}{" "}
@@ -34,42 +39,46 @@ export function VisualizersPage() {
 					</Button>
 				</p>
 			)}
-			<ResourceState
-				resource={visualizers}
-				subject="the visualizers"
-				isEmpty={(data) => data.length === 0}
-				empty="No generated visualizers are assigned to an address."
-			>
+			<ResourceState resource={visualizers} subject="the visualizers">
 				{(data) => {
-					const selected =
-						data.find((visualizer) => key(visualizer) === selectedKey) ??
-						data[0];
+					const selected = data.find(
+						(visualizer) => key(visualizer) === selectedKey,
+					);
 					return (
-						<MediaListDetail
-							label="Visualizers"
+						<GeneratedLibraryBrowserView
+							type="visualizers"
 							items={data.map((visualizer) => ({
 								id: key(visualizer),
-								title: visualizer.name,
+								folder: visualizer.address.folder,
+								file: visualizer.address.file,
+								name: visualizer.name,
 								detail: visualizer.kind,
-								meta: addressLabel(
-									visualizer.address.folder,
-									visualizer.address.file,
-								),
 							}))}
-							selectedId={key(selected)}
+							selectedId={selectedKey ?? ""}
 							onSelect={(next) => {
 								editing.cancel();
 								setSelectedKey(next);
 							}}
+							onTypeChange={onModeChange}
 							detail={
-								<VisualizerDetail
-									visualizer={selected}
-									editing={editing.editing === key(selected)}
-									busy={editing.busy}
-									onEdit={() => editing.begin(key(selected))}
-									onCancel={editing.cancel}
-									onSave={(edit) => void editing.save(selected, edit)}
-								/>
+								selected ? (
+									<VisualizerDetail
+										visualizer={selected}
+										editing={editing.editing === key(selected)}
+										busy={editing.busy}
+										onEdit={() => editing.begin(key(selected))}
+										onCancel={editing.cancel}
+										onSave={(edit) => void editing.save(selected, edit)}
+									/>
+								) : (
+									<p>No visualizer is selected.</p>
+								)
+							}
+							emptyDetail={
+								<div className="media-library-reserved-copy">
+									<h2>Empty visualizer folder</h2>
+									<p>No generated source is assigned in this folder.</p>
+								</div>
 							}
 						/>
 					);
@@ -83,7 +92,7 @@ export function key(visualizer: VisualizerView): string {
 	return `${visualizer.address.folder}/${visualizer.address.file}`;
 }
 
-function VisualizerDetail({
+export function VisualizerDetail({
 	visualizer,
 	editing,
 	busy,
@@ -99,7 +108,7 @@ function VisualizerDetail({
 	onSave: (edit: UpdateVisualizer) => void;
 }) {
 	return (
-		<>
+		<div className="media-library-editor media-generated-library-detail">
 			<MediaPreview
 				title={visualizer.name}
 				variant={
@@ -130,6 +139,6 @@ function VisualizerDetail({
 					Controls: {visualizer.uses.join(", ")}
 				</p>
 			)}
-		</>
+		</div>
 	);
 }

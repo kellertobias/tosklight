@@ -133,9 +133,9 @@ export function TextSourceEditor({
 				<div className="media-text-address">
 					<NumberField
 						label="Bank"
-						description="200 to 219."
+						description="200 to 249."
 						min={200}
-						max={219}
+						max={249}
 						value={String(address.folder)}
 						onChange={(event) =>
 							onAddress({ ...address, folder: Number(event.target.value) })

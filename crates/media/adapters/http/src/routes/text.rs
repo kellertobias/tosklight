@@ -107,7 +107,7 @@ fn refused_assignment(error: TextCatalogError) -> ApiError {
     match error {
         TextCatalogError::NotTextSpace => ApiError::bad_request(
             "not-text-space",
-            "text lives in folders 200 to 219, and file 0 and file 255 are blank in every bank",
+            "text lives in folders 200 to 249, and file 0 and file 255 are blank in every bank",
         ),
         TextCatalogError::AddressTaken => ApiError::bad_request(
             "address-taken",

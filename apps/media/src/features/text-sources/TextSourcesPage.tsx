@@ -1,22 +1,16 @@
-import { Button, SelectField } from "@tosklight/ui/controls";
+import { Button } from "@tosklight/ui/controls";
 import { useEffect, useState } from "react";
 import { ResourceState } from "../../app/ResourceState";
 import { addressLabel } from "../../entities/catalog";
-import {
-	MediaListDetail,
-	MediaPreview,
-} from "../../operator/MediaServerSurface";
+import { MediaPreview } from "../../operator/MediaServerSurface";
 import { api } from "../../shared/api/client";
 import { requestId, useEditing } from "../../shared/api/editing";
-import type {
-	OutputView,
-	TextSlotView,
-} from "../../shared/api/generated/media-wire";
-import {
-	useLayerControl,
-	useOutputsForControl,
-} from "../../shared/api/layerControl";
+import type { TextSlotView } from "../../shared/api/generated/media-wire";
 import { useText } from "../../shared/api/queries";
+import {
+	GeneratedLibraryBrowserView,
+	type LibrarySourceType,
+} from "../media-library/GeneratedLibraryBrowserView";
 import {
 	draftOf,
 	emptyDraft,
@@ -31,18 +25,20 @@ export function key(slot: TextSlotView): string {
 }
 const NEW = "new";
 
-export function TextSourcesPage() {
+export function TextSourcesPage({
+	onModeChange,
+}: {
+	onModeChange?: (mode: LibrarySourceType) => void;
+}) {
 	const text = useText();
-	const outputs = useOutputsForControl();
-	const control = useLayerControl(outputs.data);
-	const [layer, setLayer] = useState(0);
 	const editing = useEditing(text.reload);
 	const [draft, setDraft] = useState<TextDraft>(emptyDraft());
 	const [address, setAddress] = useState({ folder: 200, file: 3 });
-	const [selectedKey, setSelectedKey] = useState("");
+	const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
 	useEffect(() => {
-		if (!selectedKey && text.data?.[0]) setSelectedKey(key(text.data[0]));
+		if (selectedKey === null && text.data?.[0])
+			setSelectedKey(key(text.data[0]));
 	}, [selectedKey, text.data]);
 
 	const beginNew = () => {
@@ -52,22 +48,7 @@ export function TextSourcesPage() {
 	};
 
 	return (
-		<section className="media-page">
-			{control.refusal && (
-				<p className="media-state is-error" role="alert">
-					{control.refusal.deskOwnsIt
-						? "That selection was not applied: a lighting desk is driving this output."
-						: control.refusal.message}{" "}
-					<Button size="compact" onClick={control.dismissRefusal}>
-						Dismiss
-					</Button>
-				</p>
-			)}
-			<LayerChoice
-				outputs={outputs.data ?? []}
-				layer={layer}
-				onChange={setLayer}
-			/>
+		<section className="media-page media-library-page">
 			{editing.failure && (
 				<p className="media-state is-error" role="alert">
 					{editing.failure.message}{" "}
@@ -76,32 +57,31 @@ export function TextSourcesPage() {
 					</Button>
 				</p>
 			)}
-			<div className="media-settings-actions">
-				<Button onClick={beginNew}>Write a new text source</Button>
-			</div>
-			<ResourceState
-				resource={text}
-				subject="the text sources"
-				isEmpty={(data) => data.length === 0}
-				empty="No text is assigned to an address yet."
-			>
+			<ResourceState resource={text} subject="the text sources">
 				{(data) => {
-					const selected =
-						data.find((slot) => key(slot) === selectedKey) ?? data[0];
+					const selected = data.find((slot) => key(slot) === selectedKey);
 					return (
-						<MediaListDetail
-							label="Text sources"
+						<GeneratedLibraryBrowserView
+							type="text"
 							items={data.map((slot) => ({
 								id: key(slot),
-								title: slot.name,
+								folder: slot.address.folder,
+								file: slot.address.file,
+								name: slot.name,
 								detail: describe(slot),
-								meta: addressLabel(slot.address.folder, slot.address.file),
 							}))}
-							selectedId={editing.editing === NEW ? "" : key(selected)}
+							selectedId={editing.editing === NEW ? "" : (selectedKey ?? "")}
 							onSelect={(next) => {
 								editing.cancel();
 								setSelectedKey(next);
 							}}
+							onTypeChange={onModeChange}
+							headerAction={
+								<Button size="compact" onClick={beginNew}>
+									New text source
+								</Button>
+							}
+							showDetail={editing.editing === NEW}
 							detail={
 								editing.editing === NEW ? (
 									<NewTextDetail
@@ -125,10 +105,9 @@ export function TextSourcesPage() {
 											)
 										}
 									/>
-								) : (
+								) : selected ? (
 									<TextDetail
 										slot={selected}
-										outputs={outputs.data ?? []}
 										editing={editing.editing === key(selected)}
 										busy={editing.busy}
 										draft={draft}
@@ -163,14 +142,17 @@ export function TextSourcesPage() {
 												),
 											)
 										}
-										onSelect={(output) =>
-											void control.update(output, layer, {
-												folder: selected.address.folder,
-												file: selected.address.file,
-											})
-										}
 									/>
+								) : (
+									<p>No text source is selected.</p>
 								)
+							}
+							emptyDetail={
+								<div className="media-library-reserved-copy">
+									<h2>Empty text folder</h2>
+									<p>Create a text source in this address range.</p>
+									<Button onClick={beginNew}>New text source</Button>
+								</div>
 							}
 						/>
 					);
@@ -198,7 +180,7 @@ function NewTextDetail({
 	onSave: () => void;
 }) {
 	return (
-		<>
+		<div className="media-library-editor">
 			<h2>New text source</h2>
 			<TextSourceEditor
 				draft={draft}
@@ -210,13 +192,12 @@ function NewTextDetail({
 				onCancel={onCancel}
 				onSave={onSave}
 			/>
-		</>
+		</div>
 	);
 }
 
 function TextDetail({
 	slot,
-	outputs,
 	editing,
 	busy,
 	draft,
@@ -225,10 +206,8 @@ function TextDetail({
 	onCancel,
 	onSave,
 	onDelete,
-	onSelect,
 }: {
 	slot: TextSlotView;
-	outputs: OutputView[];
 	editing: boolean;
 	busy: boolean;
 	draft: TextDraft;
@@ -237,10 +216,9 @@ function TextDetail({
 	onCancel: () => void;
 	onSave: () => void;
 	onDelete: () => void;
-	onSelect: (output: OutputView) => void;
 }) {
 	return (
-		<>
+		<div className="media-library-editor media-generated-library-detail">
 			<MediaPreview title={slot.name} variant="text">
 				<span className="media-text-preview-words">
 					{slot.text ?? describe(slot)}
@@ -270,43 +248,9 @@ function TextDetail({
 				<div className="media-settings-actions">
 					<Button onClick={onEdit}>Change</Button>
 					<Button onClick={onDelete}>Remove</Button>
-					{outputs.map((output) => (
-						<Button
-							key={output.id}
-							disabled={output.dmxActive}
-							onClick={() => onSelect(output)}
-						>
-							{outputs.length === 1
-								? "Select on output"
-								: `Select on ${output.name}`}
-						</Button>
-					))}
 				</div>
 			)}
-		</>
-	);
-}
-
-function LayerChoice({
-	outputs,
-	layer,
-	onChange,
-}: {
-	outputs: OutputView[];
-	layer: number;
-	onChange: (layer: number) => void;
-}) {
-	const layers = Math.max(1, ...outputs.map((output) => output.layerCount));
-	return (
-		<SelectField
-			label="Target layer for manual selection"
-			value={String(layer)}
-			options={Array.from({ length: layers }, (_, index) => ({
-				value: String(index),
-				label: `Layer ${index + 1}`,
-			}))}
-			onChange={(next) => onChange(Number(next))}
-		/>
+		</div>
 	);
 }
 
@@ -327,7 +271,7 @@ export function nextFreeAddress(slots: TextSlotView[]): {
 	file: number;
 } {
 	const taken = new Set(slots.map(key));
-	for (let folder = 200; folder <= 219; folder += 1)
+	for (let folder = 200; folder <= 249; folder += 1)
 		for (let file = 1; file <= 254; file += 1)
 			if (!taken.has(`${folder}/${file}`)) return { folder, file };
 	return { folder: 200, file: 1 };

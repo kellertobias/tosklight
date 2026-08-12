@@ -102,7 +102,7 @@ mod tests {
             "text-bank"
         );
         assert_eq!(
-            AddressView::of(MediaAddress::new(220, 1)).class,
+            AddressView::of(MediaAddress::new(250, 1)).class,
             "generated-visualizer"
         );
     }

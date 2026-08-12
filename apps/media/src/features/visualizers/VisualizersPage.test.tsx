@@ -15,12 +15,12 @@ describe("the visualizers page", () => {
 		render(<VisualizersPage />);
 
 		expect(
-			await screen.findByRole("radio", { name: /Equalizer Bars/ }),
-		).toHaveAttribute("aria-checked", "true");
+			await screen.findByRole("button", { name: /Equalizer Bars/ }),
+		).toBeInTheDocument();
 		expect(
 			screen.getByRole("figure", { name: "Equalizer Bars preview" }),
 		).toBeInTheDocument();
-		expect(screen.getAllByText("220/001")).not.toHaveLength(0);
+		expect(screen.getAllByText(/250\/0*1/)).not.toHaveLength(0);
 		expect(
 			screen.getByRole("heading", { name: "Equalizer Bars" }),
 		).toBeInTheDocument();
@@ -30,12 +30,12 @@ describe("the visualizers page", () => {
 		const server = stubServer();
 		render(<VisualizersPage />);
 
-		await screen.findByRole("radio", { name: /Equalizer Bars/ });
+		await screen.findByRole("button", { name: /Equalizer Bars/ });
 		expect(
 			screen.queryByRole("button", { name: /select|put/iu }),
 		).not.toBeInTheDocument();
 		expect(server.outputs[0].layers[0].address).not.toMatchObject({
-			folder: 220,
+			folder: 250,
 			file: 1,
 		});
 	});
@@ -54,7 +54,7 @@ describe("the visualizers page", () => {
 
 		await waitFor(() => expect(server.visualizers[0].name).toBe("House bars"));
 		const edit = server.writes.find((path) => path.includes("/visualizers/"));
-		expect(edit).toBe("/visualizers/220/1/update");
+		expect(edit).toBe("/visualizers/250/1/update");
 	});
 
 	it("only offers the controls the kind actually reads", async () => {
@@ -95,7 +95,7 @@ describe("the visualizers page", () => {
 		});
 		render(<VisualizersPage />);
 
-		await screen.findByRole("radio", { name: /Equalizer Bars/ });
+		await screen.findByRole("button", { name: /Equalizer Bars/ });
 		expect(
 			screen.queryByRole("button", { name: /select|put/iu }),
 		).not.toBeInTheDocument();
