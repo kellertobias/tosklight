@@ -21,7 +21,9 @@ export function useProgrammerLifecycleBoundaries(state: ServerState) {
 				: null,
 		[state.session],
 	);
-	const authorityKey = state.session ? configuredServerUrl() : null;
+	const authorityKey = state.session
+		? `${configuredServerUrl()}|${state.connectionGeneration}`
+		: null;
 	const loadSnapshot = useCallback(() => {
 		if (!transport)
 			throw new Error("Programmer lifecycle session is unavailable");

@@ -20,8 +20,18 @@ pub(super) struct NativeTimecodeAudioConfig {
     pub latency_trim_micros: i64,
 }
 
-pub(super) fn output_devices() -> Vec<String> {
-    Vec::new()
+const OUTPUT_DEVICE_PROBE_ARGUMENT: &str = "--probe-timecode-audio-outputs";
+
+pub(super) fn run_output_device_probe_from_process() -> anyhow::Result<bool> {
+    if std::env::args().nth(1).as_deref() != Some(OUTPUT_DEVICE_PROBE_ARGUMENT) {
+        return Ok(false);
+    }
+    serde_json::to_writer(std::io::stdout().lock(), &Vec::<String>::new())?;
+    Ok(true)
+}
+
+pub(super) fn output_devices() -> Result<Vec<String>, String> {
+    Ok(Vec::new())
 }
 
 pub(super) struct NativeTimecodeAudioOutput;
@@ -53,6 +63,6 @@ mod tests {
 
     #[test]
     fn disabled_build_reports_no_native_devices() {
-        assert!(output_devices().is_empty());
+        assert!(output_devices().unwrap().is_empty());
     }
 }

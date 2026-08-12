@@ -30,6 +30,9 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 pub(super) async fn run() -> anyhow::Result<()> {
+    if super::timecode_audio_output::run_output_device_probe_from_process()? {
+        return Ok(());
+    }
     initialize_tracing();
     let Some(options) = process_options()? else {
         return Ok(());

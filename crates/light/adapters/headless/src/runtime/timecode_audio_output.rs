@@ -5,8 +5,9 @@
 
 use std::{
     collections::BTreeMap,
+    process::{Command, Stdio},
     sync::{Arc, Mutex},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use cpal::traits::{DeviceTrait as _, HostTrait as _, StreamTrait as _};
@@ -38,7 +39,27 @@ impl Default for NativeTimecodeAudioConfig {
     }
 }
 
-pub(super) fn output_devices() -> Vec<String> {
+const OUTPUT_DEVICE_PROBE_ARGUMENT: &str = "--probe-timecode-audio-outputs";
+const OUTPUT_DEVICE_PROBE_TIMEOUT: Duration = Duration::from_secs(3);
+
+pub(super) fn run_output_device_probe_from_process() -> anyhow::Result<bool> {
+    if std::env::args().nth(1).as_deref() != Some(OUTPUT_DEVICE_PROBE_ARGUMENT) {
+        return Ok(false);
+    }
+    let devices = enumerate_output_devices().map_err(anyhow::Error::msg)?;
+    serde_json::to_writer(std::io::stdout().lock(), &devices)?;
+    Ok(true)
+}
+
+pub(super) fn output_devices() -> Result<Vec<String>, String> {
+    let executable = std::env::current_exe()
+        .map_err(|error| format!("Timecode audio output probe could not be located: {error}"))?;
+    let mut command = Command::new(executable);
+    command.arg(OUTPUT_DEVICE_PROBE_ARGUMENT);
+    output_devices_from_command(&mut command)
+}
+
+fn enumerate_output_devices() -> Result<Vec<String>, String> {
     cpal::default_host()
         .output_devices()
         .map(|devices| {
@@ -47,7 +68,56 @@ pub(super) fn output_devices() -> Vec<String> {
                 .filter(|name| !name.trim().is_empty())
                 .collect()
         })
-        .unwrap_or_default()
+        .map_err(|error| format!("audio output devices could not be enumerated: {error}"))
+}
+
+fn output_devices_from_command(command: &mut Command) -> Result<Vec<String>, String> {
+    let mut child = command
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|error| format!("Timecode audio output probe could not start: {error}"))?;
+    let deadline = Instant::now() + OUTPUT_DEVICE_PROBE_TIMEOUT;
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => {
+                let output = child.wait_with_output().map_err(|error| {
+                    format!("Timecode audio output probe result could not be read: {error}")
+                })?;
+                if !output.status.success() {
+                    let detail = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+                    return Err(if detail.is_empty() {
+                        format!(
+                            "Timecode audio output discovery stopped unexpectedly ({})",
+                            output.status
+                        )
+                    } else {
+                        format!("Timecode audio output discovery failed: {detail}")
+                    });
+                }
+                return serde_json::from_slice(&output.stdout).map_err(|error| {
+                    format!("Timecode audio output discovery returned invalid data: {error}")
+                });
+            }
+            Ok(None) if Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            Ok(None) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(
+                    "Timecode audio output discovery did not finish within 3 seconds".into(),
+                );
+            }
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(format!(
+                    "Timecode audio output probe could not be monitored: {error}"
+                ));
+            }
+        }
+    }
 }
 
 pub(super) struct NativeTimecodeAudioOutput {
@@ -573,5 +643,27 @@ mod tests {
             ),
             Err("startup disconnected".to_owned())
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn failed_device_probe_is_reported_without_terminating_the_server_process() {
+        let mut command = Command::new("/bin/sh");
+        command.args(["-c", "kill -SEGV $$"]);
+
+        let error = output_devices_from_command(&mut command).unwrap_err();
+
+        assert!(error.contains("stopped unexpectedly"), "{error}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn malformed_device_probe_output_is_actionable() {
+        let mut command = Command::new("/bin/sh");
+        command.args(["-c", "printf not-json"]);
+
+        let error = output_devices_from_command(&mut command).unwrap_err();
+
+        assert!(error.contains("returned invalid data"), "{error}");
     }
 }

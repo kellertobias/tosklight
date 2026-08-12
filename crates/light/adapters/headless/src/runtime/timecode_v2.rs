@@ -241,9 +241,13 @@ async fn audio_outputs(
     headers: HeaderMap,
 ) -> Result<Json<wire::TimecodeAudioOutputDevices>, ApiError> {
     authenticate(&state, &headers)?;
-    Ok(Json(wire::TimecodeAudioOutputDevices {
-        devices: super::timecode_audio_output::output_devices(),
-    }))
+    let devices = tokio::task::spawn_blocking(super::timecode_audio_output::output_devices)
+        .await
+        .map_err(|error| {
+            ApiError::unavailable(format!("Timecode audio output discovery stopped: {error}"))
+        })?
+        .map_err(ApiError::unavailable)?;
+    Ok(Json(wire::TimecodeAudioOutputDevices { devices }))
 }
 
 async fn timecode_objects(
