@@ -62,6 +62,13 @@ def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def display_path(path: Path) -> str:
+    try:
+        return path.relative_to(ROOT).as_posix()
+    except ValueError:
+        return str(path)
+
+
 def icon_groups() -> dict[str, list[Path]]:
     groups = {
         directory.name: sorted(
@@ -320,7 +327,7 @@ def generate() -> None:
             compress_level=9,
         )
         output_hashes[destination.name] = sha256(destination.read_bytes())
-        print(f"Rendered {destination.relative_to(ROOT)} from {len(paths)} icons")
+        print(f"Rendered {display_path(destination)} from {len(paths)} icons")
     complete = OUTPUT_ROOT / "complete-library.png"
     render_complete(groups, rendered_groups).convert("RGB").save(
         complete,
@@ -330,7 +337,7 @@ def generate() -> None:
     )
     output_hashes[complete.name] = sha256(complete.read_bytes())
     print(
-        f"Rendered {complete.relative_to(ROOT)} from "
+        f"Rendered {display_path(complete)} from "
         f"{sum(len(paths) for paths in groups.values())} icons"
     )
     for name in sorted(expected):

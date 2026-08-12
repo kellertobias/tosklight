@@ -212,6 +212,7 @@ serve_pages() {
 
 ensure_manual_dependencies() {
   require python3
+  configure_manual_native_dependencies
   [[ -f "$MANUAL_REQUIREMENTS" ]] || {
     echo "error: manual requirements not found: $MANUAL_REQUIREMENTS" >&2
     exit 1
@@ -227,6 +228,16 @@ ensure_manual_dependencies() {
     echo "Installing pinned manual build dependencies..."
     "$MANUAL_PYTHON" -m pip install --disable-pip-version-check --requirement "$MANUAL_REQUIREMENTS"
   fi
+}
+
+configure_manual_native_dependencies() {
+  local cairo_prefix
+
+  [[ "$(uname -s)" == "Darwin" ]] || return 0
+  command -v brew >/dev/null 2>&1 || return 0
+  cairo_prefix="$(brew --prefix cairo 2>/dev/null)" || return 0
+  [[ -d "$cairo_prefix/lib" ]] || return 0
+  export DYLD_LIBRARY_PATH="$cairo_prefix/lib${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
 }
 
 manual_requirements_satisfied() {
