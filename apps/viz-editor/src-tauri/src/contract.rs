@@ -340,7 +340,6 @@ impl From<PatchFixtureProjection> for FixtureDto {
             split_patches: patch.split_patches.iter().map(SplitDto::from).collect(),
             layer_id: patch.layer_id,
             direct_control: patch.direct_control.as_ref().map(DirectControlDto::from),
-            internal_bindings: Default::default(),
             location: LocationDto::from(&patch.location),
             rotation: VectorDto::from(&patch.rotation),
             multipatch: patch.multipatch.iter().map(MultipatchDto::from).collect(),
@@ -388,6 +387,7 @@ impl From<PatchProfileRevisionProjection> for ProfileRevisionDto {
             patch_policy: match profile.patch_policy {
                 light_fixture::PatchPolicy::Dmx => "dmx".to_owned(),
                 light_fixture::PatchPolicy::VisualOnly => "visual_only".to_owned(),
+                light_fixture::PatchPolicy::Internal => "internal".to_owned(),
             },
             referenced_modes: profile
                 .referenced_modes
@@ -521,6 +521,7 @@ impl From<FixtureDto> for PatchFixtureCandidate {
                             port: value.port,
                         })
                 }),
+                internal_bindings: Default::default(),
                 location: FixtureLocation {
                     x: dto.location.x,
                     y: dto.location.y,
