@@ -56,7 +56,7 @@ describe("TimecodeEditor title and settings", () => {
 			importAudio: vi.fn(),
 			waveform: vi.fn(),
 		};
-		render(
+		const view = render(
 			<TimecodeEditor
 				showId={SHOW_ID}
 				item={{ revision, definition: serverDefinition }}
@@ -89,13 +89,39 @@ describe("TimecodeEditor title and settings", () => {
 		);
 		expect(
 			screen.getByRole("button", { name: "Timecode position" }),
-		).toHaveTextContent("00:00:00:00");
+		).toHaveTextContent("00:00:00.00");
+		expect(
+			screen.getByRole("button", { name: "Timecode position" }),
+		).toHaveClass("timecode-position-action");
 		fireEvent.click(screen.getByRole("button", { name: "Play" }));
 		await waitFor(() =>
 			expect(api.transportAction).toHaveBeenCalledWith(SHOW_ID, TIMECODE_ID, {
 				type: "go",
 			}),
 		);
+		view.rerender(
+			<TimecodeEditor
+				showId={SHOW_ID}
+				item={{ revision, definition: serverDefinition }}
+				api={api as never}
+				cueLists={[]}
+				snapshot={{
+					timecode_id: TIMECODE_ID,
+					revision: 2,
+					state: "playing",
+					frame: 44,
+					duration_frame: 440,
+					audio_linked: false,
+				}}
+				onClose={vi.fn()}
+			/>,
+		);
+		expect(
+			screen.getByRole("button", { name: "Timecode position" }),
+		).toHaveTextContent("00:00:01.00");
+		expect(
+			view.container.querySelector(".timecode-editor-playhead"),
+		).toHaveTextContent("00:00:01.00");
 		expect(screen.queryByLabelText("Speed Group")).toBeNull();
 		expect(screen.queryByLabelText("Cuelist")).toBeNull();
 		expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
@@ -150,7 +176,7 @@ describe("TimecodeEditor title and settings", () => {
 		fireEvent.click(within(add).getByRole("menuitem", { name: "Add Marker" }));
 		await waitFor(() =>
 			expect(update.mock.calls.at(-1)?.[3]).toEqual({
-				markers: [expect.objectContaining({ frame: 0, name: "Marker 1" })],
+				markers: [expect.objectContaining({ frame: 44, name: "Marker 1" })],
 			}),
 		);
 	});

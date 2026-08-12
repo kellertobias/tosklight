@@ -37,14 +37,14 @@ describe("Timecode Settings", () => {
 
 		expect(screen.queryByLabelText("Number")).toBeNull();
 		expect(screen.queryByLabelText("Frames")).toBeNull();
-		expect(screen.getByLabelText("Duration")).toHaveValue("00:00:10:00");
+		expect(screen.getByLabelText("Duration")).toHaveValue("00:00:10.00");
 		expect(screen.getByLabelText("Transport offset")).toHaveValue(
-			"00:00:00:00",
+			"00:00:00.00",
 		);
 		expect(screen.queryByRole("textbox", { name: "Marker CSV" })).toBeNull();
 
 		fireEvent.change(screen.getByLabelText("Duration"), {
-			target: { value: "00:00:20:00" },
+			target: { value: "00:00:20.00" },
 		});
 		expect(setDraft).toHaveBeenCalledWith({ ...draft, duration_frame: 880 });
 
@@ -75,6 +75,7 @@ describe("Timecode Settings", () => {
 
 	it("parses desk duration values and rejects malformed frames", () => {
 		expect(parseFrame("01:02:03:04")).toBe(163_816);
+		expect(parseFrame("01:02:03.04")).toBe(163_816);
 		expect(parseFrame("00:00:00:44")).toBeNull();
 		expect(parseFrame("62 frames")).toBeNull();
 	});

@@ -95,6 +95,11 @@
 	display: inline-block;
 	transform: rotate(180deg);
 }
+.timecode-editor .timecode-position-action {
+	min-width: 10ch;
+	font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+	font-variant-numeric: tabular-nums;
+}
 .timecode-timeline-editor {
 	display: flex;
 	flex: 1 1 auto;

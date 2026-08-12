@@ -949,5 +949,5 @@ function Waveform({ peaks }: { peaks: readonly number[] }) {
 function formatFrame(frame: number, fps: number): string {
 	const whole = Math.max(0, Math.round(frame));
 	const seconds = Math.floor(whole / fps);
-	return `${String(Math.floor(seconds / 3600)).padStart(2, "0")}:${String(Math.floor(seconds / 60) % 60).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}:${String(whole % fps).padStart(2, "0")}`;
+	return `${String(Math.floor(seconds / 3600)).padStart(2, "0")}:${String(Math.floor(seconds / 60) % 60).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}.${String(whole % fps).padStart(2, "0")}`;
 }

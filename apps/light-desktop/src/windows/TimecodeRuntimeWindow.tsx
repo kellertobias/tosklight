@@ -282,6 +282,9 @@ export function TimecodeEditor({
 		canRedo,
 	} = useTimecodeEditorHistory(item.definition);
 	const [editorFrame, setEditorFrame] = useState(snapshot?.frame ?? 0);
+	useEffect(() => {
+		if (snapshot) setEditorFrame(snapshot.frame);
+	}, [snapshot]);
 	const [error, setError] = useState<string | null>(null);
 	const [actionBusy, setActionBusy] = useState(false);
 	const [audioImporting, setAudioImporting] = useState(false);
@@ -471,6 +474,7 @@ export function TimecodeEditor({
 							id: "position",
 							label: formatFrame(snapshot?.frame ?? frame),
 							ariaLabel: "Timecode position",
+							className: "timecode-position-action",
 							onClick: () => void act({ type: "seek", frame }),
 							disabled: isNew || busy,
 						},
@@ -579,7 +583,7 @@ export function TimecodeSettings({
 				<TextField
 					label="Duration"
 					value={formatFrame(duration)}
-					pattern="[0-9]+:[0-5][0-9]:[0-5][0-9]:[0-9]+"
+					pattern="[0-9]+:[0-5][0-9]:[0-5][0-9][.:][0-9]+"
 					onChange={(event) =>
 						changeFrameField("duration_frame", event.currentTarget.value)
 					}
@@ -587,7 +591,7 @@ export function TimecodeSettings({
 				<TextField
 					label="Transport offset"
 					value={formatFrame(draft.transport_offset_frame)}
-					pattern="[0-9]+:[0-5][0-9]:[0-5][0-9]:[0-9]+"
+					pattern="[0-9]+:[0-5][0-9]:[0-5][0-9][.:][0-9]+"
 					onChange={(event) =>
 						changeFrameField(
 							"transport_offset_frame",
@@ -723,11 +727,11 @@ async function decodeAudioPeaks(file: File, count = 220): Promise<number[]> {
 
 export function formatFrame(frame: number): string {
 	const seconds = Math.floor(frame / FPS);
-	return `${String(Math.floor(seconds / 3600)).padStart(2, "0")}:${String(Math.floor(seconds / 60) % 60).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}:${String(frame % FPS).padStart(2, "0")}`;
+	return `${String(Math.floor(seconds / 3600)).padStart(2, "0")}:${String(Math.floor(seconds / 60) % 60).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}.${String(frame % FPS).padStart(2, "0")}`;
 }
 
 export function parseFrame(value: string): number | null {
-	const match = /^(\d+):([0-5]\d):([0-5]\d):(\d+)$/.exec(value.trim());
+	const match = /^(\d+):([0-5]\d):([0-5]\d)[.:](\d+)$/.exec(value.trim());
 	if (!match) return null;
 	const [, hours, minutes, seconds, frames] = match;
 	const framePart = Number(frames);
