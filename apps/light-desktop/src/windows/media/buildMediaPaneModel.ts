@@ -1,4 +1,5 @@
 import type { MediaServerInspection } from "../../api/client/mediaOutput";
+import type { ReactNode } from "react";
 import type { MediaServerFixture } from "../../api/types";
 import type { ProgrammerFixtureValue } from "../../features/programmerValues/contracts";
 import type {
@@ -23,6 +24,7 @@ export interface BuildMediaPaneModelInput {
 	thumbnailUrls: Record<string, string>;
 	previewUrls: Record<string, string>;
 	liveProgrammer: readonly ProgrammerFixtureValue[] | undefined;
+	nativeControls?: ReactNode;
 }
 
 export function buildMediaPaneModel(
@@ -245,9 +247,25 @@ function controlSections(
 	input: BuildMediaPaneModelInput,
 	controls: Array<{ attribute: string }>,
 ): MediaControlSection[] {
-	if (controls.length === 0 || !input.selectedServer) return [];
-	return [
-		{
+	if (!input.selectedServer) return [];
+	const sections: MediaControlSection[] = [];
+	if (input.inspection.capabilities.native_action && input.nativeControls) {
+		sections.push({
+			id: "native",
+			label: "ToskLight",
+			capability: "supported",
+			controls: [
+				{
+					id: "native-controls",
+					label: "Native Media controls",
+					kind: "readout",
+					value: input.nativeControls,
+				},
+			],
+		});
+	}
+	if (controls.length) {
+		sections.push({
 			id: "advertised",
 			label: "Layer controls",
 			capability: "supported",
@@ -261,8 +279,9 @@ function controlSections(
 				maximum: 255,
 				step: 1,
 			})),
-		},
-	];
+		});
+	}
+	return sections;
 }
 
 function normalizedAttribute(

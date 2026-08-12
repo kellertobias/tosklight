@@ -74,6 +74,12 @@ describe("TimecodeEditor title and settings", () => {
 						],
 					},
 				]}
+				audioPlayers={[
+					{
+						fixtureId: "00000000-0000-4000-8000-000000000180",
+						name: "Audio Player 201",
+					},
+				]}
 				onClose={vi.fn()}
 			/>,
 		);
@@ -105,6 +111,12 @@ describe("TimecodeEditor title and settings", () => {
 				item={{ revision, definition: serverDefinition }}
 				api={api as never}
 				cueLists={[]}
+				audioPlayers={[
+					{
+						fixtureId: "00000000-0000-4000-8000-000000000180",
+						name: "Audio Player 201",
+					},
+				]}
 				snapshot={{
 					timecode_id: TIMECODE_ID,
 					revision: 2,
@@ -169,6 +181,7 @@ describe("TimecodeEditor title and settings", () => {
 		).toEqual([
 			"Add Marker",
 			"Add Audio Lane",
+			"Add Audio Player 201 Lane",
 			"Add Speed Lane",
 			"Add Cuelist Lane",
 		]);

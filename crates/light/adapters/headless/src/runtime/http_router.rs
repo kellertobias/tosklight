@@ -65,6 +65,14 @@ fn media_and_output_routes() -> Router<AppState> {
             get(inspect_media_server),
         )
         .route(
+            "/api/v2/media-servers/{fixture_id}/native",
+            get(native_media_snapshot),
+        )
+        .route(
+            "/api/v2/media-servers/{fixture_id}/native/text/{folder}/{file}/update",
+            post(update_native_media_text),
+        )
+        .route(
             "/api/v2/media-servers/{fixture_id}/library-selection",
             post(apply_media_library_selection),
         )

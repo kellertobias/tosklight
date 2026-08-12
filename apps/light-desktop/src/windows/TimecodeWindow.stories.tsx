@@ -161,6 +161,7 @@ function ProductionEditorStory() {
 						],
 					},
 				]}
+				audioPlayers={[]}
 				waveformPeaks={peaks}
 				onScrub={setFrame}
 				onCommit={history.commit}

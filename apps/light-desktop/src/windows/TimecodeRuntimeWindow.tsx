@@ -29,12 +29,14 @@ import {
 } from "../api/client/timecodes";
 import { RootConfinedFilePickerButton } from "../components/files/RootConfinedFilePickerButton";
 import { useActiveShowId } from "../features/deskSnapshot/DeskSnapshotState";
+import { usePatchedFixturesView } from "../features/patch/PatchState";
 import { useCueLists } from "../features/showObjects/ShowObjectsState";
 import { useShowObjectView } from "../features/showObjects/ShowObjectsView";
 import { parseMarkerCsv } from "../features/timecode/editorModel";
 import { useTimecodeActions } from "../features/timecode/TimecodeActionsContext";
 import { TimecodeAutosaveWriter } from "../features/timecode/TimecodeAutosaveWriter";
 import {
+	type TimecodeAudioPlayerOption,
 	TimecodeTimelineEditor,
 	type TimecodeTimelineEditorHandle,
 } from "../features/timecode/TimecodeTimelineEditor";
@@ -44,6 +46,7 @@ import "./TimecodeRuntimeWindow.css";
 
 const FPS = 44;
 const TIMECODE_POOL_SIZE = 100;
+const AUDIO_PLAYER_PROFILE_ID = "358171f4-c3a7-4d75-b256-b9cf30afd4ab";
 
 export function TimecodeRuntimeWindow({
 	active = true,
@@ -51,6 +54,22 @@ export function TimecodeRuntimeWindow({
 }: WindowProps) {
 	const showId = useActiveShowId();
 	const cueLists = useCueLists(active);
+	const patchedFixtures = usePatchedFixturesView(active);
+	const audioPlayers = useMemo<TimecodeAudioPlayerOption[]>(
+		() =>
+			patchedFixtures
+				.filter(
+					(fixture) =>
+						fixture.definition.profile_id === AUDIO_PLAYER_PROFILE_ID,
+				)
+				.map((fixture) => ({
+					fixtureId: fixture.fixture_id,
+					name: fixture.fixture_number
+						? `Audio Player ${fixture.fixture_number}`
+						: fixture.name?.trim() || `Audio Player ${fixture.fixture_id}`,
+				})),
+		[patchedFixtures],
+	);
 	useShowObjectView("cue_list", active);
 	const timelineCueLists = useMemo(
 		() =>
@@ -124,6 +143,7 @@ export function TimecodeRuntimeWindow({
 				api={api}
 				snapshot={runtime.get(editing.definition.id)}
 				cueLists={timelineCueLists}
+				audioPlayers={audioPlayers}
 				onClose={async () => {
 					await refresh();
 					setEditing(null);
@@ -276,6 +296,7 @@ export function TimecodeEditor({
 	api,
 	snapshot,
 	cueLists,
+	audioPlayers,
 	onClose,
 }: {
 	showId: string | null;
@@ -287,6 +308,7 @@ export function TimecodeEditor({
 		name: string;
 		cues: Array<{ id: string; number: number; name: string }>;
 	}>;
+	audioPlayers: TimecodeAudioPlayerOption[];
 	onClose(): Promise<void>;
 }) {
 	const {
@@ -466,7 +488,11 @@ export function TimecodeEditor({
 							? "Saved"
 							: "Creating…",
 				}}
-				toolbar={<TimecodeAddMenu {...{ timelineRef, draft, cueLists }} />}
+				toolbar={
+					<TimecodeAddMenu
+						{...{ timelineRef, draft, cueLists, audioPlayers }}
+					/>
+				}
 				actions={[
 					[
 						{
@@ -547,6 +573,7 @@ export function TimecodeEditor({
 				frame={frame}
 				fps={FPS}
 				cueLists={cueLists}
+				audioPlayers={audioPlayers}
 				waveformPeaks={waveformPeaks}
 				onScrub={setEditorFrame}
 				onCommit={setDraft}
@@ -670,10 +697,12 @@ function TimecodeAddMenu({
 	timelineRef,
 	draft,
 	cueLists,
+	audioPlayers,
 }: {
 	timelineRef: RefObject<TimecodeTimelineEditorHandle | null>;
 	draft: TimecodeDefinition;
 	cueLists: readonly unknown[];
+	audioPlayers: readonly TimecodeAudioPlayerOption[];
 }) {
 	return (
 		<WindowDropdown
@@ -698,6 +727,17 @@ function TimecodeAddMenu({
 					),
 					onSelect: () => timelineRef.current?.addAudioLane(),
 				},
+				...audioPlayers.map((player) => ({
+					id: `audio-player-${player.fixtureId}`,
+					label: `Add ${player.name} Lane`,
+					disabled: draft.lanes.some(
+						(lane) =>
+							lane.content.kind === "audio_player" &&
+							lane.content.fixture_id === player.fixtureId,
+					),
+					onSelect: () =>
+						timelineRef.current?.addAudioPlayerLane(player.fixtureId),
+				})),
 				{
 					id: "speed",
 					label: "Add Speed Lane",

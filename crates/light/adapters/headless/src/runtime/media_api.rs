@@ -1,5 +1,34 @@
 use super::*;
 
+const TOSKLIGHT_MEDIA_SERVER_PROFILE_ID: &str = "0a14fb60-280d-5ef1-aa4a-2ff11bd06943";
+const TOSKLIGHT_MEDIA_HTTP_PORT: u16 = 8080;
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct NativeMediaHealth {
+    status: String,
+    instance: String,
+    outputs: usize,
+    catalog_revision: u64,
+    catalog_items: usize,
+}
+
+#[derive(Deserialize)]
+struct NativeMediaAddress {
+    folder: u8,
+    file: u8,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct NativeMediaTextResponse {
+    address: NativeMediaAddress,
+    name: String,
+    enabled: bool,
+    kind: String,
+    text: Option<String>,
+}
+
 #[derive(Default, Deserialize)]
 pub(super) struct VisualizationQuery {
     #[serde(default)]
@@ -37,6 +66,7 @@ pub(super) async fn media_servers(
                 "fixture_id": fixture.fixture_id,
                 "name": format!("{} {}", fixture.definition.manufacturer, fixture.definition.model),
                 "endpoint": endpoint,
+                "native_action": native_media_action(fixture),
                 "layers": fixture.logical_heads,
                 "status": status,
             })
@@ -62,6 +92,7 @@ pub(super) async fn inspect_media_server(
     {
         Ok(mut snapshot) => {
             snapshot.capabilities.layers = media_layer_capabilities(&state, fixture_id)?;
+            snapshot.capabilities.native_action = native_media_action_for(&state, fixture_id)?;
             state.media.record_inspection(fixture_id, snapshot.clone());
             state.media.record_status(fixture_id, None);
             emit(
@@ -79,6 +110,164 @@ pub(super) async fn inspect_media_server(
             Err(ApiError::unavailable(error.to_string()))
         }
     }
+}
+
+pub(super) async fn native_media_snapshot(
+    State(state): State<AppState>,
+    Path(fixture_id): Path<light_core::FixtureId>,
+    show: ShowContext,
+    headers: HeaderMap,
+) -> Result<Json<light_wire::v2::output_control::NativeMediaSnapshot>, ApiError> {
+    let _session = authenticate(&state, &headers)?;
+    show.verify(&state)?;
+    let endpoint = native_media_endpoint(&state, fixture_id)?;
+    let base = format!("http://{endpoint}/api/v2");
+    let health_url = format!("{base}/health");
+    let text_url = format!("{base}/text");
+    let client = native_media_client()?;
+    let (health, text_slots) = tokio::try_join!(
+        native_media_get::<NativeMediaHealth>(&client, &health_url),
+        native_media_get::<Vec<NativeMediaTextResponse>>(&client, &text_url),
+    )?;
+    Ok(Json(light_wire::v2::output_control::NativeMediaSnapshot {
+        endpoint: format!("http://{endpoint}"),
+        status: health.status,
+        instance: health.instance,
+        outputs: health.outputs,
+        catalog_revision: health.catalog_revision,
+        catalog_items: health.catalog_items,
+        text_slots: text_slots.into_iter().map(native_text_slot).collect(),
+        // The Media Server currently declares effect DMX channels but does not expose an
+        // implemented effect-parameter edit API. Report that honestly instead of inventing one.
+        effect_controls_available: false,
+    }))
+}
+
+pub(super) async fn update_native_media_text(
+    State(state): State<AppState>,
+    Path((fixture_id, folder, file)): Path<(light_core::FixtureId, u8, u8)>,
+    show: ShowContext,
+    headers: HeaderMap,
+    TolerantJson(input): TolerantJson<light_wire::v2::output_control::NativeMediaTextUpdateRequest>,
+) -> Result<Json<light_wire::v2::output_control::NativeMediaTextSlot>, ApiError> {
+    let _session = authenticate(&state, &headers)?;
+    show.verify(&state)?;
+    if input.request_id.trim().is_empty() {
+        return Err(ApiError::bad_request(
+            "native Media text request_id is required",
+        ));
+    }
+    let endpoint = native_media_endpoint(&state, fixture_id)?;
+    let url = format!("http://{endpoint}/api/v2/text/{folder}/{file}/update");
+    let response = native_media_client()?
+        .post(url)
+        .json(&serde_json::json!({
+            "requestId": input.request_id,
+            "text": input.text,
+        }))
+        .send()
+        .await
+        .map_err(native_media_unavailable)?;
+    let response = native_media_response(response).await?;
+    let slot = response
+        .json::<NativeMediaTextResponse>()
+        .await
+        .map_err(|_| ApiError::unavailable("Media Server returned an invalid text response"))?;
+    Ok(Json(native_text_slot(slot)))
+}
+
+fn native_text_slot(
+    slot: NativeMediaTextResponse,
+) -> light_wire::v2::output_control::NativeMediaTextSlot {
+    light_wire::v2::output_control::NativeMediaTextSlot {
+        folder: slot.address.folder,
+        file: slot.address.file,
+        name: slot.name,
+        enabled: slot.enabled,
+        kind: slot.kind,
+        text: slot.text,
+    }
+}
+
+fn native_media_client() -> Result<reqwest::Client, ApiError> {
+    reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(2))
+        .timeout(Duration::from_secs(4))
+        .build()
+        .map_err(|_| ApiError::unavailable("Native Media client is unavailable"))
+}
+
+async fn native_media_get<T: serde::de::DeserializeOwned>(
+    client: &reqwest::Client,
+    url: &str,
+) -> Result<T, ApiError> {
+    let response = client
+        .get(url)
+        .send()
+        .await
+        .map_err(native_media_unavailable)?;
+    native_media_response(response)
+        .await?
+        .json::<T>()
+        .await
+        .map_err(|_| ApiError::unavailable("Media Server returned an invalid response"))
+}
+
+async fn native_media_response(response: reqwest::Response) -> Result<reqwest::Response, ApiError> {
+    if response.status().is_success() {
+        Ok(response)
+    } else {
+        Err(ApiError::unavailable(format!(
+            "Media Server native API answered {}",
+            response.status()
+        )))
+    }
+}
+
+fn native_media_unavailable(_: reqwest::Error) -> ApiError {
+    ApiError::unavailable("Media Server native API is unavailable")
+}
+
+fn native_media_action_for(
+    state: &AppState,
+    fixture_id: light_core::FixtureId,
+) -> Result<Option<String>, ApiError> {
+    let snapshot = state.output.snapshot();
+    let fixture = snapshot
+        .fixtures
+        .iter()
+        .find(|fixture| fixture.fixture_id == fixture_id)
+        .ok_or_else(|| ApiError::not_found("fixture"))?;
+    Ok(native_media_action(fixture))
+}
+
+fn native_media_action(fixture: &light_fixture::PatchedFixture) -> Option<String> {
+    let profile_id = fixture.definition.profile_id?;
+    (profile_id.0.to_string() == TOSKLIGHT_MEDIA_SERVER_PROFILE_ID)
+        .then(|| "tosklight_media_v2".to_owned())
+}
+
+fn native_media_endpoint(
+    state: &AppState,
+    fixture_id: light_core::FixtureId,
+) -> Result<SocketAddr, ApiError> {
+    let snapshot = state.output.snapshot();
+    let fixture = snapshot
+        .fixtures
+        .iter()
+        .find(|fixture| fixture.fixture_id == fixture_id)
+        .ok_or_else(|| ApiError::not_found("fixture"))?;
+    if native_media_action(fixture).is_none() {
+        return Err(ApiError::bad_request(
+            "fixture profile does not support ToskLight native Media controls",
+        ));
+    }
+    let citp = fixture
+        .direct_control
+        .as_ref()
+        .filter(|endpoint| endpoint.protocol == light_fixture::DirectControlProtocol::Citp)
+        .ok_or_else(|| ApiError::bad_request("fixture has no CITP endpoint"))?;
+    Ok(SocketAddr::new(citp.ip_address, TOSKLIGHT_MEDIA_HTTP_PORT))
 }
 
 pub(super) async fn apply_media_library_selection(

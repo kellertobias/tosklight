@@ -371,6 +371,9 @@ fn output_control(config: &Config) -> Vec<String> {
         MediaLibraryKind::decl(config),
         MediaLibrarySelectionRequest::decl(config),
         MediaLibrarySelectionOutcome::decl(config),
+        NativeMediaTextSlot::decl(config),
+        NativeMediaSnapshot::decl(config),
+        NativeMediaTextUpdateRequest::decl(config),
     ]
 }
 
