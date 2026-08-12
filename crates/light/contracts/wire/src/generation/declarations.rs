@@ -637,6 +637,7 @@ fn programming(config: &Config) -> Vec<String> {
         ProgrammingCaptureModeSnapshot::decl(config),
         ProgrammingValuesProjection::decl(config),
         ProgrammingFixtureValueAddress::decl(config),
+        ProgrammingDynamicValueAddress::decl(config),
         ProgrammingGroupValueAddress::decl(config),
         ProgrammingValuesChange::decl(config),
         ProgrammingValuesSnapshot::decl(config),

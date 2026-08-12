@@ -140,8 +140,9 @@ pub use values_action::{
     ProgrammingValuesRequest, ProgrammingValuesResult,
 };
 pub use values_projection::{
-    ProgrammingFixtureValueAddress, ProgrammingGroupValueAddress, ProgrammingValuesChange,
-    ProgrammingValuesDelta, ProgrammingValuesProjection, ProgrammingValuesSnapshot,
+    ProgrammingDynamicValueAddress, ProgrammingFixtureValueAddress, ProgrammingGroupValueAddress,
+    ProgrammingValuesChange, ProgrammingValuesDelta, ProgrammingValuesProjection,
+    ProgrammingValuesSnapshot,
 };
 
 #[cfg(test)]

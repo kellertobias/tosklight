@@ -5659,6 +5659,29 @@
         "changed_at_millis"
       ]
     },
+    "ProgrammingDynamicValueAddress": {
+      "type": "object",
+      "properties": {
+        "attribute": {
+          "type": "string"
+        },
+        "fixture_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "instance_link": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "fixture_id",
+        "attribute"
+      ]
+    },
     "ProgrammingFixtureValue": {
       "type": "object",
       "properties": {
@@ -6382,7 +6405,7 @@
         "removed_dynamic_values": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ProgrammingFixtureValueAddress"
+            "$ref": "#/$defs/ProgrammingDynamicValueAddress"
           }
         },
         "removed_fixture_values": {

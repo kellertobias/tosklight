@@ -429,6 +429,27 @@ describe("Programmer values event wire boundary", () => {
 		});
 	});
 
+	it("decodes Dynamic removals with their instance track", () => {
+		const event = valuesEvent();
+		(event.event.payload.change.removed_dynamic_values as unknown[]).push({
+			fixture_id: FIXTURE_ID,
+			attribute: "intensity",
+			instance_link: CORRELATION_ID,
+		});
+		const decoded = decodeProgrammerValuesEventMessage(event, USER_ID);
+		expect(
+			decoded.type === "event" && "change" in decoded
+				? decoded.change.removedDynamicValues
+				: null,
+		).toEqual([
+			{
+				fixtureId: FIXTURE_ID,
+				attribute: "intensity",
+				instanceLink: CORRELATION_ID,
+			},
+		]);
+	});
+
 	it.each([
 		[
 			"foreign route",

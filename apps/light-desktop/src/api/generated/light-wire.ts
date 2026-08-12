@@ -218,8 +218,9 @@ export type ProgrammingValuesProjection = { user_id: string, revision: number, f
  */
 dynamic_definitions?: Array<DynamicDefinitionProjection>, dynamic_values: Array<ProgrammingDynamicValue>, };
 export type ProgrammingFixtureValueAddress = { fixture_id: string, attribute: string, };
+export type ProgrammingDynamicValueAddress = { fixture_id: string, attribute: string, instance_link?: string | null, };
 export type ProgrammingGroupValueAddress = { group_id: string, attribute: string, };
-export type ProgrammingValuesChange = { user_id: string, revision: number, fixture_values: Array<ProgrammingFixtureValue>, removed_fixture_values: Array<ProgrammingFixtureValueAddress>, group_values: Array<ProgrammingGroupValue>, removed_group_values: Array<ProgrammingGroupValueAddress>, dynamic_definitions?: Array<DynamicDefinitionProjection>, dynamic_values: Array<ProgrammingDynamicValue>, removed_dynamic_values: Array<ProgrammingFixtureValueAddress>, };
+export type ProgrammingValuesChange = { user_id: string, revision: number, fixture_values: Array<ProgrammingFixtureValue>, removed_fixture_values: Array<ProgrammingFixtureValueAddress>, group_values: Array<ProgrammingGroupValue>, removed_group_values: Array<ProgrammingGroupValueAddress>, dynamic_definitions?: Array<DynamicDefinitionProjection>, dynamic_values: Array<ProgrammingDynamicValue>, removed_dynamic_values: Array<ProgrammingDynamicValueAddress>, };
 export type ProgrammingValuesSnapshot = { cursor: EventSnapshotCursor, projection: ProgrammingValuesProjection, };
 export type ProgrammingPickerColor = { hue: number, saturation: number, };
 export type ProgrammingValueTiming = { fade: boolean, fade_millis?: number | null, delay_millis?: number | null, };

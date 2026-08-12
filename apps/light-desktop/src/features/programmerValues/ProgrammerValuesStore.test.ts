@@ -5,6 +5,9 @@ import type {
 } from "./contracts";
 import { ProgrammerValuesStore } from "./store";
 import {
+	DYNAMIC_INSTANCE_1,
+	DYNAMIC_INSTANCE_2,
+	dynamicValue,
 	FIXTURE_1,
 	FIXTURE_2,
 	fixtureValue,
@@ -201,6 +204,75 @@ describe("ProgrammerValuesStore authority", () => {
 			repairRequired: true,
 			projection: null,
 		});
+	});
+
+	it("keeps concurrent Dynamic tracks distinct and rejects duplicates within one instance", () => {
+		const concurrent = [
+			dynamicValue(DYNAMIC_INSTANCE_1),
+			dynamicValue(DYNAMIC_INSTANCE_2, { programmerOrder: 4 }),
+		];
+		const store = readyStore(
+			valuesProjection({ fixtureValues: [], dynamicValues: concurrent }),
+		);
+		expect(store.getSnapshot().projection?.dynamicValues).toHaveLength(2);
+
+		const duplicateStore = new ProgrammerValuesStore();
+		duplicateStore.reset(SHOW_ID, USER_ID);
+		expect(() =>
+			duplicateStore.installSnapshot(
+				valuesSnapshot({
+					fixtureValues: [],
+					dynamicValues: [
+						dynamicValue(DYNAMIC_INSTANCE_1),
+						dynamicValue(DYNAMIC_INSTANCE_1, { programmerOrder: 4 }),
+					],
+				}),
+			),
+		).toThrow(new RegExp(`track ${DYNAMIC_INSTANCE_1} projected intensity`));
+	});
+
+	it("merges and removes Dynamic deltas by instance link", () => {
+		const store = readyStore(
+			valuesProjection({
+				fixtureValues: [],
+				dynamicValues: [
+					dynamicValue(DYNAMIC_INSTANCE_1),
+					dynamicValue(DYNAMIC_INSTANCE_2, { programmerOrder: 4 }),
+				],
+			}),
+		);
+		expect(
+			store.applyChange(
+				{
+					userId: USER_ID,
+					revision: 2,
+					fixtureValues: [],
+					removedFixtureValues: [],
+					groupValues: [],
+					removedGroupValues: [],
+					dynamicValues: [
+						dynamicValue(DYNAMIC_INSTANCE_2, {
+							programmerOrder: 5,
+							changedAtMillis: 200,
+						}),
+					],
+					removedDynamicValues: [
+						{
+							fixtureId: FIXTURE_1,
+							attribute: "intensity",
+							instanceLink: DYNAMIC_INSTANCE_1,
+						},
+					],
+				},
+				11,
+			),
+		).toBe(true);
+		expect(store.getSnapshot().projection?.dynamicValues).toEqual([
+			expect.objectContaining({
+				value: expect.objectContaining({ instance_link: DYNAMIC_INSTANCE_2 }),
+				programmerOrder: 5,
+			}),
+		]);
 	});
 });
 
