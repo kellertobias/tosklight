@@ -508,6 +508,14 @@ test("scheduled publication separates release delivery from performance and Page
 	assert.doesNotMatch(release, /- benchmark|- pages-build/u);
 	assert.match(workflow, /schedule:[\s\S]*?cron:/u);
 	assert.match(workflow, /workflow_dispatch:/u);
+	assert.match(
+		workflow,
+		/workflow_run:[\s\S]*?workflows: \["CI and release"\][\s\S]*?types: \[completed\]/u,
+	);
+	assert.match(
+		workflow,
+		/github\.event\.workflow_run\.conclusion == 'success'[\s\S]*?github\.event\.workflow_run\.event == 'push'[\s\S]*?github\.event\.workflow_run\.head_branch == 'main'/u,
+	);
 	assert.match(performance, /needs: release-metadata/u);
 	for (const expensiveJob of [manual, storybook, liveBuild]) {
 		assert.match(
