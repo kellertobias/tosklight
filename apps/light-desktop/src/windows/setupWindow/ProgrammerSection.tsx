@@ -332,39 +332,38 @@ export function DefaultsSection({
 }) {
 	return (
 		<PreferencesPage title="Defaults" controller={controller}>
-			<div
-				className="defaults-record-update"
-				hidden={controller.defaultsTab !== "record-update"}
-			>
-				<article>
-					<header>
-						<b>Record defaults</b>
-						<small>Also available by holding Record.</small>
-					</header>
-					<RecordDefaultsFields
-						settings={controller.recordSettings}
-						onChange={controller.setRecordSettings}
-					/>
-				</article>
-				<article>
-					<header>
-						<b>Update defaults</b>
-						<small>Also available by holding Update.</small>
-					</header>
-					<UpdateDefaultsFields
-						settings={controller.updateSettings}
-						onChange={controller.setUpdateSettings}
-					/>
-				</article>
-			</div>
-			<div hidden={controller.defaultsTab !== "playback"}>
+			{controller.defaultsTab === "record-update" && (
+				<div className="defaults-record-update">
+					<article>
+						<header>
+							<b>Record defaults</b>
+							<small>Also available by holding Record.</small>
+						</header>
+						<RecordDefaultsFields
+							settings={controller.recordSettings}
+							onChange={controller.setRecordSettings}
+						/>
+					</article>
+					<article>
+						<header>
+							<b>Update defaults</b>
+							<small>Also available by holding Update.</small>
+						</header>
+						<UpdateDefaultsFields
+							settings={controller.updateSettings}
+							onChange={controller.setUpdateSettings}
+						/>
+					</article>
+				</div>
+			)}
+			{controller.defaultsTab === "playback" && (
 				<PlaybackDefaultsSettings controller={controller} />
-			</div>
-			<div hidden={controller.defaultsTab !== "pools"}>
+			)}
+			{controller.defaultsTab === "pools" && (
 				<article>
 					<PoolPaletteSettings />
 				</article>
-			</div>
+			)}
 		</PreferencesPage>
 	);
 }
