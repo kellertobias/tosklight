@@ -1,6 +1,10 @@
 import { OperatorDestinationList } from "@tosklight/ui/application";
 import { Button } from "@tosklight/ui/controls";
-import { SelectionList, WindowHeader } from "@tosklight/ui/window-kit";
+import {
+	SelectionList,
+	WindowFrame,
+	WindowHeader,
+} from "@tosklight/ui/window-kit";
 import type { ReactNode } from "react";
 
 export const MEDIA_SERVER_SECTIONS = [
@@ -223,18 +227,27 @@ export function MediaSettingsLayout({
 	children: ReactNode;
 }) {
 	return (
-		<div className="media-settings-layout">
-			<SelectionList
-				className="media-settings-navigation"
-				ariaLabel="Media Server settings"
-				value={active}
-				options={MEDIA_SETTINGS_SECTIONS.map((section) => ({
-					value: section.id,
-					label: section.label,
-				}))}
-				onChange={(id) => onSelect?.(id as MediaSettingsSection)}
-			/>
+		<WindowFrame
+			title="Settings"
+			info={{
+				primary: "Media Server",
+				secondary: "Output, network, and service configuration",
+			}}
+			className="media-settings-window"
+			navigation={
+				<SelectionList
+					className="media-settings-navigation"
+					ariaLabel="Media Server settings"
+					value={active}
+					options={MEDIA_SETTINGS_SECTIONS.map((section) => ({
+						value: section.id,
+						label: section.label,
+					}))}
+					onChange={(id) => onSelect?.(id as MediaSettingsSection)}
+				/>
+			}
+		>
 			<div className="media-settings-content">{children}</div>
-		</div>
+		</WindowFrame>
 	);
 }

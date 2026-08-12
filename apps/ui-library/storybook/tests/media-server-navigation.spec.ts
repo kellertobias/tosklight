@@ -160,3 +160,36 @@ test("Media Server Playback keeps the shared Media Pane folder pool above its fi
 	);
 	expect(folders?.x).toBe(files?.x);
 });
+
+test("Media Server windows fill the viewport without nested frames and use pool presentation", async ({
+	page,
+}) => {
+	await page.goto(
+		"/iframe.html?id=tosklight-media-server--dashboard&viewMode=story",
+	);
+	const dashboard = await page.locator(".media-dashboard-window").boundingBox();
+	expect(dashboard?.height).toBe(await page.evaluate(() => window.innerHeight));
+	expect(
+		await page
+			.locator(".media-recent-activity ul")
+			.evaluate((element) => getComputedStyle(element).listStyleType),
+	).toBe("none");
+
+	await page.goto(
+		"/iframe.html?id=tosklight-media-server--settings-outputs&viewMode=story",
+	);
+	const settings = await page.locator(".media-settings-window").boundingBox();
+	expect(settings?.height).toBe(await page.evaluate(() => window.innerHeight));
+	await expect(page.locator(".ui-window .ui-window")).toHaveCount(0);
+	await expect(page.getByText("Sound output", { exact: true })).toBeVisible();
+
+	await page.goto(
+		"/iframe.html?id=tosklight-media-server--library&viewMode=story",
+	);
+	const poolColor = await page
+		.locator('.media-library-folder[data-folder="1"]')
+		.evaluate((element) =>
+			getComputedStyle(element).getPropertyValue("--pool-card-color").trim(),
+		);
+	expect(poolColor).not.toBe("");
+});

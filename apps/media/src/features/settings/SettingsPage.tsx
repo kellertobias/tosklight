@@ -111,7 +111,7 @@ export function SettingsPage() {
 						)}
 					</ResourceState>
 					<section
-						className="media-settings-group"
+						className="media-settings-group media-audio-input-group"
 						aria-labelledby="audio-input-heading"
 					>
 						<h2 id="audio-input-heading">Audio input</h2>

@@ -2,623 +2,343 @@
 // Do not edit it by hand.
 
 export type ApiErrorBody = {
-	/**
-	 * Stable across releases. Clients branch on this, never on the message.
-	 */
-	code: string;
-	message: string;
-};
-export type Health = {
-	status: string;
-	instance: string;
-	outputs: number;
-	/**
-	 * A revision counter, not an identifier. It stays inside the range a browser can hold in a
-	 * number, so the client is not forced into `bigint` arithmetic to compare two snapshots.
-	 */
-	catalogRevision: number;
-	catalogItems: number;
-};
-export type AddressView = {
-	folder: number;
-	file: number;
-	/**
-	 * Which address space the pair falls in, so the UI can label a selection without
-	 * re-implementing the ranges.
-	 */
-	class: string;
-};
-export type SourceStatusView = { state: string; failure: string | null };
-export type MaskView = {
-	address: AddressView;
-	scaleX: number;
-	scaleY: number;
-	invert: boolean;
-	opacity: number;
-	/**
-	 * `alpha` or `luminance`.
-	 */
-	source: string;
-	/**
-	 * Whether it is currently shaping the layer at all.
-	 */
-	active: boolean;
-};
-export type LayerView = {
-	index: number;
-	address: AddressView;
-	playMode: string;
-	playModeDmx: number;
-	dimmer: number;
-	scaleX: number;
-	scaleY: number;
-	scalingMode: string;
-	positionX: number;
-	positionY: number;
-	rotation: number;
-	grayscale: number;
-	volume: number;
-	tintRed: number;
-	tintGreen: number;
-	tintBlue: number;
-	speedMultiplier: string;
-	speedMultiplierDmx: number;
-	playbackBpm: number | null;
-	sourceStatus: SourceStatusView;
-	mask: MaskView;
-	/**
-	 * Whether this layer contributes pixels right now.
-	 */
-	drawing: boolean;
-};
-export type MasterView = {
-	dimmer: number;
-	volume: number;
-	tintRed: number;
-	tintGreen: number;
-	tintBlue: number;
-	flipMirror: string;
-	mask: AddressView;
-};
-export type OutputView = {
-	id: string;
-	name: string;
-	layerCount: number;
-	layers: Array<LayerView>;
-	master: MasterView;
-	/**
-	 * Whether an external desk currently owns this output's continuously controlled values.
-	 */
-	dmxActive: boolean;
-	/**
-	 * Whether this server explicitly ignores network playback control in favour of the web UI.
-	 */
-	playbackTakeover: boolean;
-};
-export type OutputConfigurationView = {
-	id: string;
-	name: string;
-	/**
-	 * `monitor` or `off-screen`.
-	 */
-	targetKind: string;
-	/**
-	 * `index` or `name` when the target is a monitor.
-	 */
-	monitorBy: string | null;
-	/**
-	 * A decimal index or the literal monitor name, depending on `monitorBy`.
-	 */
-	monitorValue: string | null;
-	fullscreen: boolean;
-	width: number;
-	height: number;
-	/**
-	 * `display-synchronized`, `fixed-fps`, or `unlocked`.
-	 */
-	presentation: string;
-	framesPerSecond: number | null;
-	/**
-	 * `two-layers` or `eight-layers`.
-	 */
-	personality: string;
-	/**
-	 * `art-net` or `sacn`.
-	 */
-	protocol: string;
-	universe: number;
-	startAddress: number;
-	/**
-	 * Output surfaces, clocks, personalities, and DMX ingress are created once at startup.
-	 */
-	takesEffectOnRestart: boolean;
-};
-export type DmxMapView = {
-	outputId: string;
-	outputName: string;
-	universe: number;
-	/**
-	 * The configured one-based DMX address of the first layer slot.
-	 */
-	startAddress: number;
-	personality: DmxPersonalityView;
-	layerCount: number;
-	channels: Array<DmxChannelView>;
-};
-export type DmxIngressView = {
-	outputId: string;
-	protocol: string;
-	universe: number;
-	startAddress: number;
-	source: string;
-	framesPerSecond: number;
-	ageMillis: number;
-	active: boolean;
-	slots: Array<number>;
-};
+/**
+ * Stable across releases. Clients branch on this, never on the message.
+ */
+code: string, message: string, };
+export type Health = { status: string, instance: string, outputs: number,
+/**
+ * A revision counter, not an identifier. It stays inside the range a browser can hold in a
+ * number, so the client is not forced into `bigint` arithmetic to compare two snapshots.
+ */
+catalogRevision: number, catalogItems: number, };
+export type AddressView = { folder: number, file: number,
+/**
+ * Which address space the pair falls in, so the UI can label a selection without
+ * re-implementing the ranges.
+ */
+class: string, };
+export type SourceStatusView = { state: string, failure: string | null, };
+export type MaskView = { address: AddressView, scaleX: number, scaleY: number, invert: boolean, opacity: number,
+/**
+ * `alpha` or `luminance`.
+ */
+source: string,
+/**
+ * Whether it is currently shaping the layer at all.
+ */
+active: boolean, };
+export type LayerView = { index: number, address: AddressView, playMode: string, playModeDmx: number, dimmer: number, scaleX: number, scaleY: number, scalingMode: string, positionX: number, positionY: number, rotation: number, grayscale: number, volume: number, tintRed: number, tintGreen: number, tintBlue: number, speedMultiplier: string, speedMultiplierDmx: number, playbackBpm: number | null, sourceStatus: SourceStatusView, mask: MaskView,
+/**
+ * Whether this layer contributes pixels right now.
+ */
+drawing: boolean, };
+export type MasterView = { dimmer: number, volume: number, tintRed: number, tintGreen: number, tintBlue: number, flipMirror: string, mask: AddressView, };
+export type OutputView = { id: string, name: string, layerCount: number, layers: Array<LayerView>, master: MasterView,
+/**
+ * Whether an external desk currently owns this output's continuously controlled values.
+ */
+dmxActive: boolean,
+/**
+ * Whether this server explicitly ignores network playback control in favour of the web UI.
+ */
+playbackTakeover: boolean, };
+export type OutputConfigurationView = { id: string, name: string,
+/**
+ * `monitor` or `off-screen`.
+ */
+targetKind: string,
+/**
+ * `index` or `name` when the target is a monitor.
+ */
+monitorBy: string | null,
+/**
+ * A decimal index or the literal monitor name, depending on `monitorBy`.
+ */
+monitorValue: string | null, fullscreen: boolean, width: number, height: number,
+/**
+ * `display-synchronized`, `fixed-fps`, or `unlocked`.
+ */
+presentation: string, framesPerSecond: number | null,
+/**
+ * `disabled`, `system-default`, or `device`.
+ */
+soundOutputKind: string,
+/**
+ * The exact operating-system device name when `soundOutputKind` is `device`.
+ */
+soundOutputName: string | null,
+/**
+ * `two-layers` or `eight-layers`.
+ */
+personality: string,
+/**
+ * `art-net` or `sacn`.
+ */
+protocol: string, universe: number, startAddress: number,
+/**
+ * Output surfaces, clocks, personalities, and DMX ingress are created once at startup.
+ */
+takesEffectOnRestart: boolean, };
+export type DmxMapView = { outputId: string, outputName: string, universe: number,
+/**
+ * The configured one-based DMX address of the first layer slot.
+ */
+startAddress: number, personality: DmxPersonalityView, layerCount: number, channels: Array<DmxChannelView>, };
+export type DmxIngressView = { outputId: string, protocol: string, universe: number, startAddress: number, source: string, framesPerSecond: number, ageMillis: number, active: boolean, slots: Array<number>, };
 export type DmxPersonalityView = "twoLayers" | "eightLayers";
 export type DmxChannelView = {
-	/**
-	 * The one-based universe address an operator patches.
-	 */
-	absoluteChannel: number;
-	/**
-	 * The canonical zero-based offset within a layer or master block.
-	 */
-	localOffset: number;
-	group: DmxChannelGroupView;
-	name: string;
-	resolution: DmxResolutionView;
-	/**
-	 * The complete logical default: 0..=255 for byte controls and 0..=65535 for coarse ones.
-	 */
-	defaultValue: number;
-	valueSets: Array<DmxValueSetView>;
-	implemented: boolean;
-	implementationNote: string | null;
-};
-export type DmxChannelGroupView =
-	| { kind: "layer"; number: number }
-	| { kind: "master" };
+/**
+ * The one-based universe address an operator patches.
+ */
+absoluteChannel: number,
+/**
+ * The canonical zero-based offset within a layer or master block.
+ */
+localOffset: number, group: DmxChannelGroupView, name: string, resolution: DmxResolutionView,
+/**
+ * The complete logical default: 0..=255 for byte controls and 0..=65535 for coarse ones.
+ */
+defaultValue: number, valueSets: Array<DmxValueSetView>, implemented: boolean, implementationNote: string | null, };
+export type DmxChannelGroupView = { "kind": "layer", number: number, } | { "kind": "master" };
 export type DmxResolutionView = "byte" | "coarse" | "fine";
-export type DmxValueSetView = {
-	name: string;
-	from: number;
-	to: number;
-	step: number;
-	implemented: boolean;
-};
+export type DmxValueSetView = { name: string, from: number, to: number, step: number, implemented: boolean, };
 export type CatalogItemView = {
-	/**
-	 * Stable across renames, moves, and reindexing — the identity a UI keys a row on.
-	 */
-	id: string;
-	file: number;
-	name: string;
-	kind: string;
-	width: number;
-	height: number;
-	frames: number | null;
-	intrinsicBpm: number | null;
-};
-export type CatalogFolderView = {
-	folder: number;
-	name: string | null;
-	items: Array<CatalogItemView>;
-};
-export type CatalogView = {
-	revision: number;
-	itemCount: number;
-	folders: Array<CatalogFolderView>;
-};
-export type VisualizerParametersView = {
-	count: number;
-	size: number;
-	speed: number;
-	amount: number;
-	radius: number;
-	thickness: number;
-	reactivity: number;
-	decay: number;
-	zoom: number;
-	iterations: number;
-	threshold: number;
-	smoothing: number;
-	gravity: number;
-	lifetime: number;
-	curvature: number;
-	primaryRed: number;
-	primaryGreen: number;
-	primaryBlue: number;
-	secondaryRed: number;
-	secondaryGreen: number;
-	secondaryBlue: number;
-	mirror: boolean;
-	filled: boolean;
-	wireframe: boolean;
-	mode: number;
-};
-export type VisualizerView = {
-	address: AddressView;
-	/**
-	 * Stable across releases and across a reassignment of the address.
-	 */
-	typeId: number;
-	/**
-	 * The kind's own name, which is what documentation and a cue sheet call it.
-	 */
-	kind: string;
-	/**
-	 * What this configuration is called, which an operator may change.
-	 */
-	name: string;
-	/**
-	 * Which of the shared parameters this kind reads. The rest are present and ignored, so an
-	 * editor can show only the controls that do something.
-	 */
-	uses: Array<string>;
-	parameters: VisualizerParametersView;
-};
-export type NetworkAddressesView = {
-	artNetListen: string;
-	sacnListen: string;
-	citpListen: string;
-	httpListen: string;
-	/**
-	 * Where the Light desk publishes its Speed Group stream. A destination, not a listen
-	 * address; absent means Media is not consuming one.
-	 */
-	speedGroupEndpoint: string | null;
-};
+/**
+ * Stable across renames, moves, and reindexing — the identity a UI keys a row on.
+ */
+id: string, file: number, name: string, kind: string, width: number, height: number, frames: number | null, intrinsicBpm: number | null, };
+export type CatalogFolderView = { folder: number, name: string | null, items: Array<CatalogItemView>, };
+export type CatalogView = { revision: number, itemCount: number, folders: Array<CatalogFolderView>, };
+export type VisualizerParametersView = { count: number, size: number, speed: number, amount: number, radius: number, thickness: number, reactivity: number, decay: number, zoom: number, iterations: number, threshold: number, smoothing: number, gravity: number, lifetime: number, curvature: number, primaryRed: number, primaryGreen: number, primaryBlue: number, secondaryRed: number, secondaryGreen: number, secondaryBlue: number, mirror: boolean, filled: boolean, wireframe: boolean, mode: number, };
+export type VisualizerView = { address: AddressView,
+/**
+ * Stable across releases and across a reassignment of the address.
+ */
+typeId: number,
+/**
+ * The kind's own name, which is what documentation and a cue sheet call it.
+ */
+kind: string,
+/**
+ * What this configuration is called, which an operator may change.
+ */
+name: string,
+/**
+ * Which of the shared parameters this kind reads. The rest are present and ignored, so an
+ * editor can show only the controls that do something.
+ */
+uses: Array<string>, parameters: VisualizerParametersView, };
+export type NetworkAddressesView = { artNetListen: string, sacnListen: string, citpListen: string, httpListen: string,
+/**
+ * Where the Light desk publishes its Speed Group stream. A destination, not a listen
+ * address; absent means Media is not consuming one.
+ */
+speedGroupEndpoint: string | null, };
 export type NetworkView = {
-	/**
-	 * When set, every protocol listens on IPv4 loopback without touching the stored addresses.
-	 */
-	sameComputerPreset: boolean;
-	/**
-	 * What the operator configured.
-	 */
-	stored: NetworkAddressesView;
-	/**
-	 * What this run bound, after the preset was applied.
-	 */
-	resolved: NetworkAddressesView;
-	/**
-	 * The port CITP discovery announces. Always the port CITP actually listens on.
-	 */
-	citpAdvertisedPort: number;
-	/**
-	 * Sockets are bound once, at startup. An accepted change is stored and used by the next
-	 * start; the API says so rather than letting a panel imply the change is already live.
-	 */
-	takesEffectOnRestart: boolean;
-};
+/**
+ * When set, every protocol listens on IPv4 loopback without touching the stored addresses.
+ */
+sameComputerPreset: boolean,
+/**
+ * What the operator configured.
+ */
+stored: NetworkAddressesView,
+/**
+ * What this run bound, after the preset was applied.
+ */
+resolved: NetworkAddressesView,
+/**
+ * The port CITP discovery announces. Always the port CITP actually listens on.
+ */
+citpAdvertisedPort: number,
+/**
+ * Sockets are bound once, at startup. An accepted change is stored and used by the next
+ * start; the API says so rather than letting a panel imply the change is already live.
+ */
+takesEffectOnRestart: boolean, };
 export type TextStyleView = {
-	/**
-	 * A family name this machine is asked for. An absent family falls back rather than failing.
-	 */
-	family: string;
-	/**
-	 * Height as a fraction of the output's height, so a look survives a change of resolution.
-	 */
-	size: number;
-	bold: boolean;
-	italic: boolean;
-	/**
-	 * `left`, `center`, or `right`.
-	 */
-	alignment: string;
-	red: number;
-	green: number;
-	blue: number;
-};
-export type TextSlotView = {
-	address: AddressView;
-	name: string;
-	/**
-	 * A disabled slot produces nothing, which is how an operator parks one without deleting it.
-	 */
-	enabled: boolean;
-	/**
-	 * `static`, `clock`, `countdown-duration`, or `countdown-target`.
-	 */
-	kind: string;
-	text: string | null;
-	durationSeconds: number | null;
-	/**
-	 * Rendered as a number rather than a `bigint`: a Unix millisecond stamp is well inside what a
-	 * browser holds exactly, and a client should not need big-integer arithmetic to set a deadline.
-	 */
-	targetUnixMillis: number | null;
-	style: TextStyleView;
-};
-export type AudioBandsView = { bass: number; mid: number; treble: number };
-export type WaveformView = { points: Array<number> };
+/**
+ * A family name this machine is asked for. An absent family falls back rather than failing.
+ */
+family: string,
+/**
+ * Height as a fraction of the output's height, so a look survives a change of resolution.
+ */
+size: number, bold: boolean, italic: boolean,
+/**
+ * `left`, `center`, or `right`.
+ */
+alignment: string, red: number, green: number, blue: number, };
+export type TextSlotView = { address: AddressView, name: string,
+/**
+ * A disabled slot produces nothing, which is how an operator parks one without deleting it.
+ */
+enabled: boolean,
+/**
+ * `static`, `clock`, `countdown-duration`, or `countdown-target`.
+ */
+kind: string, text: string | null, durationSeconds: number | null,
+/**
+ * Rendered as a number rather than a `bigint`: a Unix millisecond stamp is well inside what a
+ * browser holds exactly, and a client should not need big-integer arithmetic to set a deadline.
+ */
+targetUnixMillis: number | null, style: TextStyleView, };
+export type AudioBandsView = { bass: number, mid: number, treble: number, };
+export type WaveformView = { points: Array<number>, };
 export type AudioView = {
-	/**
-	 * Whether an input device is open at all. A flat meter on a capturing device means a quiet
-	 * room; a flat meter on a closed one means something to fix.
-	 */
-	capturing: boolean;
-	device: string;
-	detail: string | null;
-	waveform: WaveformView;
-	spectrum: Array<number>;
-	bands: AudioBandsView;
-	/**
-	 * Root-mean-square of the window.
-	 */
-	energy: number;
-	/**
-	 * The largest absolute sample in the window, which is what tells an operator they are clipping.
-	 */
-	peak: number;
-	/**
-	 * `1.0` on the pass a beat landed, falling afterwards.
-	 */
-	beat: number;
-	/**
-	 * Zero until enough beats have been seen to mean anything.
-	 */
-	bpm: number;
-	beatPhase: number;
-};
+/**
+ * Whether an input device is open at all. A flat meter on a capturing device means a quiet
+ * room; a flat meter on a closed one means something to fix.
+ */
+capturing: boolean, device: string, detail: string | null, waveform: WaveformView, spectrum: Array<number>, bands: AudioBandsView,
+/**
+ * Root-mean-square of the window.
+ */
+energy: number,
+/**
+ * The largest absolute sample in the window, which is what tells an operator they are clipping.
+ */
+peak: number,
+/**
+ * `1.0` on the pass a beat landed, falling afterwards.
+ */
+beat: number,
+/**
+ * Zero until enough beats have been seen to mean anything.
+ */
+bpm: number, beatPhase: number, };
 export type AudioSettingsView = {
-	/**
-	 * `system-default`, `name`, or `index`.
-	 */
-	deviceBy: string;
-	/**
-	 * The name or index the operator chose, when they chose one.
-	 */
-	deviceValue: string | null;
-	inputGain: number;
-	beatSensitivity: number;
-	eqBass: number;
-	eqMid: number;
-	eqTreble: number;
-	/**
-	 * This machine's inputs, so an operator picks from what exists rather than typing a name.
-	 */
-	availableDevices: Array<string>;
-	/**
-	 * Gain, sensitivity, and the bands reach the running analysis immediately. Choosing a
-	 * different device reopens a stream, which happens on the next start.
-	 */
-	deviceTakesEffectOnRestart: boolean;
-};
-export type AudioPanelView = {
-	settings: AudioSettingsView;
-	analysis: AudioView;
-};
-export type PendingImportView = {
-	address: AddressView;
-	/**
-	 * The name the imported clip will keep.
-	 */
-	name: string;
-	/**
-	 * The filename as it sits on disk, so an operator recognises what they are about to convert.
-	 */
-	filename: string;
-};
-export type ImportJobView = {
-	id: string;
-	address: AddressView;
-	filename: string;
-	/**
-	 * `queued`, `running`, `succeeded`, `failed`, or `cancelled`.
-	 */
-	state: string;
-	/**
-	 * Absent while the total is unknown, rather than a made-up number.
-	 */
-	fraction: number | null;
-	framesDone: number | null;
-	framesTotal: number | null;
-	/**
-	 * Why it failed, when it did. Operator-facing text.
-	 */
-	reason: string | null;
-};
-export type ImportsView = {
-	pending: Array<PendingImportView>;
-	jobs: Array<ImportJobView>;
-	/**
-	 * Whether this machine can transcode at all. Import shells out to FFmpeg, and a machine
-	 * without it should say so before an operator queues forty clips that will all fail.
-	 */
-	canImport: boolean;
-};
-export type DeskIdentityView = { showName: string };
-export type TelemetryFrame = {
-	audio: AudioView;
-	/**
-	 * Every import this run has seen. Pushed rather than polled for the same reason as the
-	 * meters: a progress bar that has to ask is a progress bar that stutters.
-	 */
-	imports: Array<ImportJobView>;
-	/**
-	 * Winning, protocol-aware DMX ingress. Volatile state is pushed, never polled.
-	 */
-	dmx: Array<DmxIngressView>;
-	/**
-	 * The current show name published by the connected Light Desk over CITP discovery.
-	 */
-	deskIdentity: DeskIdentityView | null;
-};
+/**
+ * `system-default`, `name`, or `index`.
+ */
+deviceBy: string,
+/**
+ * The name or index the operator chose, when they chose one.
+ */
+deviceValue: string | null, inputGain: number, beatSensitivity: number, eqBass: number, eqMid: number, eqTreble: number,
+/**
+ * This machine's inputs, so an operator picks from what exists rather than typing a name.
+ */
+availableDevices: Array<string>,
+/**
+ * Gain, sensitivity, and the bands reach the running analysis immediately. Choosing a
+ * different device reopens a stream, which happens on the next start.
+ */
+deviceTakesEffectOnRestart: boolean, };
+export type AudioPanelView = { settings: AudioSettingsView, analysis: AudioView, };
+export type PendingImportView = { address: AddressView,
+/**
+ * The name the imported clip will keep.
+ */
+name: string,
+/**
+ * The filename as it sits on disk, so an operator recognises what they are about to convert.
+ */
+filename: string, };
+export type ImportJobView = { id: string, address: AddressView, filename: string,
+/**
+ * `queued`, `running`, `succeeded`, `failed`, or `cancelled`.
+ */
+state: string,
+/**
+ * Absent while the total is unknown, rather than a made-up number.
+ */
+fraction: number | null, framesDone: number | null, framesTotal: number | null,
+/**
+ * Why it failed, when it did. Operator-facing text.
+ */
+reason: string | null, };
+export type ImportsView = { pending: Array<PendingImportView>, jobs: Array<ImportJobView>,
+/**
+ * Whether this machine can transcode at all. Import shells out to FFmpeg, and a machine
+ * without it should say so before an operator queues forty clips that will all fail.
+ */
+canImport: boolean, };
+export type DeskIdentityView = { showName: string, };
+export type TelemetryFrame = { audio: AudioView,
+/**
+ * Every import this run has seen. Pushed rather than polled for the same reason as the
+ * meters: a progress bar that has to ask is a progress bar that stutters.
+ */
+imports: Array<ImportJobView>,
+/**
+ * Winning, protocol-aware DMX ingress. Volatile state is pushed, never polled.
+ */
+dmx: Array<DmxIngressView>,
+/**
+ * The current show name published by the connected Light Desk over CITP discovery.
+ */
+deskIdentity: DeskIdentityView | null, };
 export type LogRecordView = {
-	/**
-	 * Monotonically increasing, so a viewer asks for everything after what it already holds.
-	 */
-	sequence: number;
-	millisSinceStart: number;
-	/**
-	 * `error`, `warn`, `info`, `debug`, or `trace`.
-	 */
-	level: string;
-	target: string;
-	message: string;
-};
-export type LogsView = {
-	records: Array<LogRecordView>;
-	/**
-	 * The newest sequence the process holds, whether or not this window reached it.
-	 */
-	newest: number;
-	/**
-	 * How many records have been discarded since the process started.
-	 */
-	dropped: number;
-	capacity: number;
-};
-export type ServerLogLevelView = {
-	level: string;
-	/**
-	 * This is always true: the maintainer chose parity with the reference's runtime-only control.
-	 */
-	resetsOnRestart: boolean;
-};
-export type UpdateLayer = {
-	folder?: number | null;
-	file?: number | null;
-	dimmer?: number | null;
-	playModeDmx?: number | null;
-	scaleX?: number | null;
-	scaleY?: number | null;
-	scalingMode?: string | null;
-	positionX?: number | null;
-	positionY?: number | null;
-	rotation?: number | null;
-	volume?: number | null;
-	tintRed?: number | null;
-	tintGreen?: number | null;
-	tintBlue?: number | null;
-	grayscale?: number | null;
-	maskFolder?: number | null;
-	maskFile?: number | null;
-	maskScaleX?: number | null;
-	maskScaleY?: number | null;
-	maskInvert?: boolean | null;
-	maskOpacity?: number | null;
-	speedMultiplierDmx?: number | null;
-	/**
-	 * Zero disables the per-layer BPM target; 1..=255 selects a target.
-	 */
-	playbackBpm?: number | null;
-};
-export type UpdateMaster = {
-	dimmer?: number | null;
-	volume?: number | null;
-	tintRed?: number | null;
-	tintGreen?: number | null;
-	tintBlue?: number | null;
-	flipMirror?: string | null;
-	maskFolder?: number | null;
-	maskFile?: number | null;
-};
-export type UpdateOutputConfiguration = {
-	requestId: string;
-	targetKind?: string | null;
-	monitorBy?: string | null;
-	monitorValue?: string | null;
-	fullscreen?: boolean | null;
-	width?: number | null;
-	height?: number | null;
-	presentation?: string | null;
-	framesPerSecond?: number | null;
-	personality?: string | null;
-	protocol?: string | null;
-	universe?: number | null;
-	startAddress?: number | null;
-};
+/**
+ * Monotonically increasing, so a viewer asks for everything after what it already holds.
+ */
+sequence: number, millisSinceStart: number,
+/**
+ * `error`, `warn`, `info`, `debug`, or `trace`.
+ */
+level: string, target: string, message: string, };
+export type LogsView = { records: Array<LogRecordView>,
+/**
+ * The newest sequence the process holds, whether or not this window reached it.
+ */
+newest: number,
+/**
+ * How many records have been discarded since the process started.
+ */
+dropped: number, capacity: number, };
+export type ServerLogLevelView = { level: string,
+/**
+ * This is always true: the maintainer chose parity with the reference's runtime-only control.
+ */
+resetsOnRestart: boolean, };
+export type UpdateLayer = { folder?: number | null, file?: number | null, dimmer?: number | null, playModeDmx?: number | null, scaleX?: number | null, scaleY?: number | null, scalingMode?: string | null, positionX?: number | null, positionY?: number | null, rotation?: number | null, volume?: number | null, tintRed?: number | null, tintGreen?: number | null, tintBlue?: number | null, grayscale?: number | null, maskFolder?: number | null, maskFile?: number | null, maskScaleX?: number | null, maskScaleY?: number | null, maskInvert?: boolean | null, maskOpacity?: number | null, speedMultiplierDmx?: number | null,
+/**
+ * Zero disables the per-layer BPM target; 1..=255 selects a target.
+ */
+playbackBpm?: number | null, };
+export type UpdateMaster = { dimmer?: number | null, volume?: number | null, tintRed?: number | null, tintGreen?: number | null, tintBlue?: number | null, flipMirror?: string | null, maskFolder?: number | null, maskFile?: number | null, };
+export type UpdateOutputConfiguration = { requestId: string, targetKind?: string | null, monitorBy?: string | null, monitorValue?: string | null, fullscreen?: boolean | null, width?: number | null, height?: number | null, presentation?: string | null, framesPerSecond?: number | null, soundOutputKind?: string | null, soundOutputName?: string | null, personality?: string | null, protocol?: string | null, universe?: number | null, startAddress?: number | null, };
 export type UpdateVisualizer = {
-	/**
-	 * Client-generated. A resend with the same id returns the first outcome.
-	 */
-	requestId: string;
-	name?: string | null;
-	parameters?: VisualizerParametersView | null;
-};
-export type UpdateNetwork = {
-	requestId: string;
-	sameComputerPreset?: boolean | null;
-	artNetListen?: string | null;
-	sacnListen?: string | null;
-	citpListen?: string | null;
-	httpListen?: string | null;
-	/**
-	 * A destination rather than a listener. `null` clears it; leaving the field out keeps it,
-	 * which is why an absent field and an explicit null have to be different things here.
-	 */
-	speedGroupEndpoint?: string | null;
-};
-export type CreateText = {
-	requestId: string;
-	folder: number;
-	file: number;
-	name: string;
-	kind: string;
-	text?: string | null;
-	durationSeconds?: number | null;
-	targetUnixMillis?: number | null;
-	/**
-	 * Absent means the shipped default appearance, which is what a new slot should look like.
-	 */
-	style?: TextStyleView | null;
-};
-export type UpdateText = {
-	requestId: string;
-	name?: string | null;
-	enabled?: boolean | null;
-	/**
-	 * Changing the kind carries that kind's payload with it.
-	 */
-	kind?: string | null;
-	text?: string | null;
-	durationSeconds?: number | null;
-	targetUnixMillis?: number | null;
-	style?: TextStyleView | null;
-};
-export type DeleteText = { requestId: string };
-export type UpdateAudio = {
-	requestId: string;
-	/**
-	 * `system-default`, `name`, or `index`. Naming a device without a value is refused, because
-	 * falling back to the default input would give an operator the laptop microphone instead of
-	 * the desk feed they asked for.
-	 */
-	deviceBy?: string | null;
-	deviceValue?: string | null;
-	inputGain?: number | null;
-	beatSensitivity?: number | null;
-	eqBass?: number | null;
-	eqMid?: number | null;
-	eqTreble?: number | null;
-};
-export type StartImport = {
-	requestId: string;
-	folder?: number | null;
-	file?: number | null;
-};
-export type UpdateLibraryItem = {
-	requestId: string;
-	name?: string | null;
-	folder?: number | null;
-	file?: number | null;
-	/**
-	 * Correct or clear the authored tempo. An absent field leaves it unchanged.
-	 */
-	intrinsicBpm?: number | null | null;
-	/**
-	 * Exchange addresses when the destination is occupied. False refuses the edit.
-	 */
-	swap: boolean;
-};
-export type UpdateLibraryFolder = {
-	requestId: string;
-	name?: string | null;
-	swapWith?: number | null;
-};
-export type UpdateServerLogLevel = { requestId: string; level: string };
-export type UploadAcceptedView = { jobId: string; address: AddressView };
+/**
+ * Client-generated. A resend with the same id returns the first outcome.
+ */
+requestId: string, name?: string | null, parameters?: VisualizerParametersView | null, };
+export type UpdateNetwork = { requestId: string, sameComputerPreset?: boolean | null, artNetListen?: string | null, sacnListen?: string | null, citpListen?: string | null, httpListen?: string | null,
+/**
+ * A destination rather than a listener. `null` clears it; leaving the field out keeps it,
+ * which is why an absent field and an explicit null have to be different things here.
+ */
+speedGroupEndpoint?: string | null, };
+export type CreateText = { requestId: string, folder: number, file: number, name: string, kind: string, text?: string | null, durationSeconds?: number | null, targetUnixMillis?: number | null,
+/**
+ * Absent means the shipped default appearance, which is what a new slot should look like.
+ */
+style?: TextStyleView | null, };
+export type UpdateText = { requestId: string, name?: string | null, enabled?: boolean | null,
+/**
+ * Changing the kind carries that kind's payload with it.
+ */
+kind?: string | null, text?: string | null, durationSeconds?: number | null, targetUnixMillis?: number | null, style?: TextStyleView | null, };
+export type DeleteText = { requestId: string, };
+export type UpdateAudio = { requestId: string,
+/**
+ * `system-default`, `name`, or `index`. Naming a device without a value is refused, because
+ * falling back to the default input would give an operator the laptop microphone instead of
+ * the desk feed they asked for.
+ */
+deviceBy?: string | null, deviceValue?: string | null, inputGain?: number | null, beatSensitivity?: number | null, eqBass?: number | null, eqMid?: number | null, eqTreble?: number | null, };
+export type StartImport = { requestId: string, folder?: number | null, file?: number | null, };
+export type UpdateLibraryItem = { requestId: string, name?: string | null, folder?: number | null, file?: number | null,
+/**
+ * Correct or clear the authored tempo. An absent field leaves it unchanged.
+ */
+intrinsicBpm?: number | null | null,
+/**
+ * Exchange addresses when the destination is occupied. False refuses the edit.
+ */
+swap: boolean, };
+export type UpdateLibraryFolder = { requestId: string, name?: string | null, swapWith?: number | null, };
+export type UpdateServerLogLevel = { requestId: string, level: string, };
+export type UploadAcceptedView = { jobId: string, address: AddressView, };

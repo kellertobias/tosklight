@@ -52,7 +52,8 @@ export function App() {
 		path === "/media" ||
 		path === "/library" ||
 		path === "/visualizers" ||
-		path === "/text";
+		path === "/text" ||
+		path === "/settings";
 	const libraryMode =
 		path === "/visualizers"
 			? "visualizers"

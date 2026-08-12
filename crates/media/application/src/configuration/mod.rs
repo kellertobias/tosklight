@@ -20,7 +20,9 @@ pub use migration::{CURRENT_VERSION, MigrationError, migrate_to_current};
 pub use network::{
     ART_NET_PORT, CITP_PORT, HTTP_PORT, LOOPBACK, NetworkConfiguration, ResolvedNetwork, SACN_PORT,
 };
-pub use output::{CitpIdentity, DmxProtocol, OutputConfiguration, OutputTarget, Resolution};
+pub use output::{
+    CitpIdentity, DmxProtocol, OutputConfiguration, OutputTarget, Resolution, SoundOutput,
+};
 pub use service::{
     AudioConfiguration, AudioDeviceSelector, LibraryConfiguration, PlaybackConfiguration,
     TargetCodec,

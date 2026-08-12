@@ -1,5 +1,6 @@
 import { FileDropField, NumberField, TextField } from "@tosklight/ui/controls";
 import {
+	DEFAULT_POOL_COLOR_PALETTE,
 	PoolCard,
 	PoolGrid,
 	type PoolSlotViewModel,
@@ -386,6 +387,10 @@ export function LibraryBrowserView({
 										secondary: writable
 											? `${entry?.items.length ?? 0}/254`
 											: "Reserved",
+										color:
+											number >= FIRST_PARKING_FOLDER
+												? DEFAULT_POOL_COLOR_PALETTE.macro
+												: DEFAULT_POOL_COLOR_PALETTE.group,
 										states:
 											folder === number
 												? ["selected"]
@@ -549,6 +554,7 @@ function itemSlot(
 			primary: item.name,
 			secondary: item.intrinsicBpm ? `${item.intrinsicBpm} BPM` : undefined,
 			image: { src: thumbnailUrl(folder, item.file), alt: "" },
+			color: DEFAULT_POOL_COLOR_PALETTE.preset.mixed,
 		},
 	};
 }

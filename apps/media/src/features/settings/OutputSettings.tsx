@@ -161,6 +161,8 @@ function OutputFacts({
 					</dd>
 					<dt>Presentation</dt>
 					<dd>{describePresentation(output)}</dd>
+					<dt>Sound output</dt>
+					<dd>{describeSoundOutput(output)}</dd>
 				</>
 			)}
 			{mode !== "picture" && (
@@ -196,6 +198,12 @@ function describePresentation(output: OutputConfigurationView): string {
 		return `Fixed at ${output.framesPerSecond ?? "?"} frames per second`;
 	}
 	return "Unlocked (diagnostic)";
+}
+
+function describeSoundOutput(output: OutputConfigurationView): string {
+	if (output.soundOutputKind === "disabled") return "Muted";
+	if (output.soundOutputKind === "system-default") return "System default";
+	return output.soundOutputName ?? "Device not set";
 }
 
 function RestartNotice() {
@@ -336,6 +344,42 @@ function DmxInputFields({
 	);
 }
 
+function SoundOutputFields({
+	kind,
+	name,
+	setKind,
+	setName,
+}: {
+	kind: OutputConfigurationView["soundOutputKind"];
+	name: string;
+	setKind: Dispatch<SetStateAction<OutputConfigurationView["soundOutputKind"]>>;
+	setName: Dispatch<SetStateAction<string>>;
+}) {
+	return (
+		<fieldset>
+			<legend>Sound output</legend>
+			<SelectField
+				label="Sound output"
+				value={kind}
+				options={[
+					{ value: "disabled", label: "Muted" },
+					{ value: "system-default", label: "System default" },
+					{ value: "device", label: "Named device" },
+				]}
+				onChange={setKind}
+			/>
+			{kind === "device" && (
+				<TextField
+					label="Device name"
+					description="Use the exact output-device name reported by this machine."
+					value={name}
+					onChange={(event) => setName(event.target.value)}
+				/>
+			)}
+		</fieldset>
+	);
+}
+
 export function OutputEditor({
 	output,
 	busy,
@@ -359,6 +403,12 @@ export function OutputEditor({
 	const [framesPerSecond, setFramesPerSecond] = useState(
 		output.framesPerSecond ?? 60,
 	);
+	const [soundOutputKind, setSoundOutputKind] = useState(
+		output.soundOutputKind,
+	);
+	const [soundOutputName, setSoundOutputName] = useState(
+		output.soundOutputName ?? "",
+	);
 	const [personality, setPersonality] = useState(output.personality);
 	const [protocol, setProtocol] = useState(output.protocol);
 	const [universe, setUniverse] = useState(output.universe);
@@ -379,6 +429,10 @@ export function OutputEditor({
 					height,
 					presentation,
 					...(presentation === "fixed-fps" ? { framesPerSecond } : {}),
+					soundOutputKind,
+					...(soundOutputKind === "device"
+						? { soundOutputName: soundOutputName.trim() }
+						: {}),
 					personality,
 					protocol,
 					universe,
@@ -438,18 +492,26 @@ export function OutputEditor({
 			)}
 
 			{mode !== "dmx" && (
-				<PictureFields
-					{...{
-						width,
-						height,
-						presentation,
-						framesPerSecond,
-						setWidth,
-						setHeight,
-						setPresentation,
-						setFramesPerSecond,
-					}}
-				/>
+				<>
+					<PictureFields
+						{...{
+							width,
+							height,
+							presentation,
+							framesPerSecond,
+							setWidth,
+							setHeight,
+							setPresentation,
+							setFramesPerSecond,
+						}}
+					/>
+					<SoundOutputFields
+						kind={soundOutputKind}
+						name={soundOutputName}
+						setKind={setSoundOutputKind}
+						setName={setSoundOutputName}
+					/>
+				</>
 			)}
 
 			{mode !== "picture" && (

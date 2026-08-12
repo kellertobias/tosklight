@@ -1,5 +1,9 @@
 import { MultiValueToggle } from "@tosklight/ui/controls";
-import { PoolCard, PoolGrid } from "@tosklight/ui/pools";
+import {
+	DEFAULT_POOL_COLOR_PALETTE,
+	PoolCard,
+	PoolGrid,
+} from "@tosklight/ui/pools";
 import { WindowFrame, WindowScrollArea } from "@tosklight/ui/window-kit";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 
@@ -69,6 +73,10 @@ export function GeneratedLibraryBrowserView({
 		[folder, items],
 	);
 	const visibleSelected = visible.some((item) => item.id === selectedId);
+	const sourceColor =
+		type === "text"
+			? DEFAULT_POOL_COLOR_PALETTE.macro
+			: DEFAULT_POOL_COLOR_PALETTE.dynamic;
 
 	return (
 		<WindowFrame
@@ -106,6 +114,7 @@ export function GeneratedLibraryBrowserView({
 										number: String(number).padStart(3, "0"),
 										primary: type === "text" ? "Text" : "Visualizers",
 										secondary: `${count}/254`,
+										color: DEFAULT_POOL_COLOR_PALETTE.group,
 										states: folder === number ? ["selected"] : [],
 									}}
 									data-folder={number}
@@ -137,6 +146,7 @@ export function GeneratedLibraryBrowserView({
 								number: item.file,
 								primary: item.name,
 								secondary: item.detail,
+								color: sourceColor,
 								states: item.id === selectedId ? ["selected"] : [],
 							},
 						}))}

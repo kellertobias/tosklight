@@ -17,6 +17,19 @@ pub enum DmxProtocol {
     Sacn,
 }
 
+/// Where decoded media audio is sent for this picture output.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", tag = "kind")]
+pub enum SoundOutput {
+    /// Do not present audio for this output.
+    #[default]
+    Disabled,
+    /// Follow the operating system's current default output device.
+    SystemDefault,
+    /// Use the output device with this exact operating-system name.
+    Device { name: String },
+}
+
 /// Where an output presents.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", tag = "kind")]
@@ -78,6 +91,8 @@ pub struct OutputConfiguration {
     #[serde(default)]
     pub presentation: PresentationMode,
     #[serde(default)]
+    pub sound_output: SoundOutput,
+    #[serde(default)]
     pub personality: LayerPersonality,
     #[serde(default)]
     pub protocol: DmxProtocol,
@@ -113,6 +128,7 @@ impl OutputConfiguration {
             target: OutputTarget::default(),
             resolution: Resolution::default(),
             presentation: PresentationMode::default(),
+            sound_output: SoundOutput::default(),
             personality: LayerPersonality::default(),
             protocol: DmxProtocol::default(),
             universe: 0,
@@ -141,6 +157,7 @@ mod tests {
             }
         );
         assert_eq!(output.presentation, PresentationMode::DisplaySynchronized);
+        assert_eq!(output.sound_output, SoundOutput::Disabled);
         assert_eq!(output.personality, LayerPersonality::EightLayers);
         assert_eq!(output.start_address, 1);
     }

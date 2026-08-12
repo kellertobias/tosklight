@@ -7,7 +7,7 @@ import {
 	TextAreaField,
 	TextField,
 } from "@tosklight/ui/controls";
-import { DataTable } from "@tosklight/ui/window-kit";
+import { DataTable, WindowFrame } from "@tosklight/ui/window-kit";
 import { type ReactNode, useState } from "react";
 import {
 	MediaListDetail,
@@ -90,77 +90,83 @@ export function DashboardScreen({
 	recent: ReactNode;
 }) {
 	return (
-		<>
-			<MediaScreenHeader
-				eyebrow={instance}
-				title="Dashboard"
-				detail={
-					showName
-						? `Connected to ${showName}. The server is ready for this show.`
-						: "This Media Server is ready. No Light Desk is currently identified."
-				}
-			/>
-			<div className="media-metric-grid">
-				<MediaMetric
-					label="Light Desk"
-					value={showName ?? "Not connected"}
-					detail={showName ? "Active show" : "Waiting for identity"}
-					tone={showName ? "good" : "warn"}
-				/>
-				<MediaMetric
-					label="Outputs"
-					value={String(outputs.length)}
-					detail={`${outputs.filter((output) => output.status === "Live").length} live`}
-					tone="good"
-				/>
-				<MediaMetric
-					label="Library"
-					value={String(libraryItems)}
-					detail="Addressable items"
-				/>
-				<MediaMetric
-					label="DMX input"
-					value={dmxRate}
-					detail="Accepted update rate"
-					tone="good"
-				/>
-			</div>
-			<div className="media-operator-card-grid">
-				<MediaPanel
-					title="Outputs"
-					detail="Current picture surfaces and render health."
-				>
-					<DataTable
-						rows={outputs}
-						rowKey={(output) => output.id}
-						columns={[
-							{ id: "name", header: "Output", render: (output) => output.name },
-							{
-								id: "target",
-								header: "Target",
-								render: (output) => output.target,
-							},
-							{
-								id: "picture",
-								header: "Picture",
-								render: (output) => output.resolution,
-							},
-							{
-								id: "status",
-								header: "Status",
-								render: (output) => output.status,
-							},
-						]}
+		<WindowFrame
+			title="Dashboard"
+			info={{
+				primary: instance,
+				secondary: showName
+					? `Connected to ${showName}. The server is ready for this show.`
+					: "This Media Server is ready. No Light Desk is currently identified.",
+			}}
+			className="media-dashboard-window"
+		>
+			<div className="media-dashboard-content">
+				<div className="media-metric-grid">
+					<MediaMetric
+						label="Light Desk"
+						value={showName ?? "Not connected"}
+						detail={showName ? "Active show" : "Waiting for identity"}
+						tone={showName ? "good" : "warn"}
 					/>
-				</MediaPanel>
-				<MediaPanel
-					title="Recent activity"
-					detail="The events an operator is most likely to act on."
-				>
-					{recent}
-				</MediaPanel>
+					<MediaMetric
+						label="Outputs"
+						value={String(outputs.length)}
+						detail={`${outputs.filter((output) => output.status === "Live").length} live`}
+						tone="good"
+					/>
+					<MediaMetric
+						label="Library"
+						value={String(libraryItems)}
+						detail="Addressable items"
+					/>
+					<MediaMetric
+						label="DMX input"
+						value={dmxRate}
+						detail="Accepted update rate"
+						tone="good"
+					/>
+				</div>
+				<div className="media-operator-card-grid">
+					<MediaPanel
+						title="Outputs"
+						detail="Current picture surfaces and render health."
+					>
+						<DataTable
+							rows={outputs}
+							rowKey={(output) => output.id}
+							columns={[
+								{
+									id: "name",
+									header: "Output",
+									render: (output) => output.name,
+								},
+								{
+									id: "target",
+									header: "Target",
+									render: (output) => output.target,
+								},
+								{
+									id: "picture",
+									header: "Picture",
+									render: (output) => output.resolution,
+								},
+								{
+									id: "status",
+									header: "Status",
+									render: (output) => output.status,
+								},
+							]}
+						/>
+					</MediaPanel>
+					<MediaPanel
+						title="Recent activity"
+						detail="The events an operator is most likely to act on."
+					>
+						<div className="media-recent-activity">{recent}</div>
+					</MediaPanel>
+				</div>
 			</div>
-		</>
+		</WindowFrame>
 	);
 }
 
@@ -412,15 +418,35 @@ export function SettingsScreen({
 	children: ReactNode;
 }) {
 	return (
-		<>
-			<MediaScreenHeader
-				title="Settings"
-				detail="Configure this Media Server with the same focused settings language as the Light Desk."
-			/>
-			<MediaSettingsLayout active={active} onSelect={onSelect}>
-				{children}
-			</MediaSettingsLayout>
-		</>
+		<MediaSettingsLayout active={active} onSelect={onSelect}>
+			{children}
+		</MediaSettingsLayout>
+	);
+}
+
+function SettingsSection({
+	title,
+	detail,
+	className,
+	children,
+}: {
+	title: string;
+	detail: string;
+	className?: string;
+	children: ReactNode;
+}) {
+	return (
+		<section
+			className={["media-settings-section", className]
+				.filter(Boolean)
+				.join(" ")}
+		>
+			<div className="media-settings-section-heading">
+				<h3>{title}</h3>
+				<p>{detail}</p>
+			</div>
+			{children}
+		</section>
 	);
 }
 
@@ -457,7 +483,7 @@ export function OutputsSettings() {
 		<>
 			<h2>Outputs</h2>
 			<p>Choose the picture surface and presentation for each output.</p>
-			<MediaPanel title="Main output" detail="Picture surface 1">
+			<SettingsSection title="Main output" detail="Picture surface 1">
 				<FormLayout columns={2} className="media-operator-control-row">
 					<StorySelect
 						label="Output target"
@@ -492,11 +518,20 @@ export function OutputsSettings() {
 							{ value: "left", label: "Portrait left" },
 						]}
 					/>
+					<StorySelect
+						label="Sound output"
+						initialValue="display-2"
+						options={[
+							{ value: "disabled", label: "Muted" },
+							{ value: "system", label: "System default" },
+							{ value: "display-2", label: "Display 2 audio" },
+						]}
+					/>
 				</FormLayout>
 				<div className="media-operator-toolbar">
 					<Button variant="primary">Save output</Button>
 				</div>
-			</MediaPanel>
+			</SettingsSection>
 		</>
 	);
 }
@@ -507,15 +542,18 @@ export function NetworkInputsSettings() {
 			<h2>Network &amp; Inputs</h2>
 			<p>Keep network listeners, DMX identity, and audio input together.</p>
 			<div className="media-operator-card-grid">
-				<MediaPanel title="Network" detail="Addresses used after restart">
+				<SettingsSection title="Network" detail="Addresses used after restart">
 					<FormLayout columns={2} className="media-operator-control-row">
 						<TextField label="Art-Net listen" defaultValue="0.0.0.0:6454" />
 						<TextField label="sACN listen" defaultValue="0.0.0.0:5568" />
 						<TextField label="CITP listen" defaultValue="0.0.0.0:4809" />
 						<TextField label="This interface" defaultValue="0.0.0.0:4711" />
 					</FormLayout>
-				</MediaPanel>
-				<MediaPanel title="DMX" detail="The block patched on the Light Desk">
+				</SettingsSection>
+				<SettingsSection
+					title="DMX"
+					detail="The block patched on the Light Desk"
+				>
 					<FormLayout columns={2} className="media-operator-control-row">
 						<StorySelect
 							label="Personality"
@@ -536,9 +574,13 @@ export function NetworkInputsSettings() {
 						<NumberField label="Universe" defaultValue={1} />
 						<NumberField label="Start address" defaultValue={1} />
 					</FormLayout>
-				</MediaPanel>
+				</SettingsSection>
 			</div>
-			<MediaPanel title="Audio input" detail="Feeds audio-reactive visualizers">
+			<SettingsSection
+				title="Audio input"
+				detail="Feeds audio-reactive visualizers"
+				className="media-audio-input-panel"
+			>
 				<FormLayout columns={2} className="media-operator-control-row">
 					<StorySelect
 						label="Input device"
@@ -550,7 +592,7 @@ export function NetworkInputsSettings() {
 					/>
 					<NumberField label="Gain" min={0} max={100} defaultValue={72} />
 				</FormLayout>
-			</MediaPanel>
+			</SettingsSection>
 			<div className="media-operator-toolbar">
 				<Button variant="primary">Save network &amp; inputs</Button>
 			</div>

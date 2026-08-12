@@ -1,7 +1,7 @@
 //! One output, its stored configuration, its layers, and their intent-shaped updates.
 
 use media_application::configuration::{
-    DmxProtocol, MonitorSelector, OutputConfiguration, OutputTarget, Resolution,
+    DmxProtocol, MonitorSelector, OutputConfiguration, OutputTarget, Resolution, SoundOutput,
 };
 use media_domain::{LayerPersonality, PresentationMode};
 use media_domain::{LayerState, MaskSource, MaskState, MasterState, MediaAddress, OutputState};
@@ -204,6 +204,10 @@ pub struct OutputConfigurationView {
     /// `display-synchronized`, `fixed-fps`, or `unlocked`.
     pub presentation: String,
     pub frames_per_second: Option<u16>,
+    /// `disabled`, `system-default`, or `device`.
+    pub sound_output_kind: String,
+    /// The exact operating-system device name when `soundOutputKind` is `device`.
+    pub sound_output_name: Option<String>,
     /// `two-layers` or `eight-layers`.
     pub personality: String,
     /// `art-net` or `sacn`.
@@ -248,6 +252,16 @@ impl OutputConfigurationView {
             height: output.resolution.height,
             presentation: presentation.to_owned(),
             frames_per_second,
+            sound_output_kind: match &output.sound_output {
+                SoundOutput::Disabled => "disabled",
+                SoundOutput::SystemDefault => "system-default",
+                SoundOutput::Device { .. } => "device",
+            }
+            .to_owned(),
+            sound_output_name: match &output.sound_output {
+                SoundOutput::Device { name } => Some(name.clone()),
+                SoundOutput::Disabled | SoundOutput::SystemDefault => None,
+            },
             personality: match output.personality {
                 LayerPersonality::TwoLayers => "two-layers",
                 LayerPersonality::EightLayers => "eight-layers",
@@ -290,6 +304,10 @@ pub struct UpdateOutputConfiguration {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub frames_per_second: Option<u16>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sound_output_kind: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sound_output_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub personality: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub protocol: Option<String>,
@@ -320,6 +338,12 @@ pub enum OutputConfigurationEditError {
     FixedFpsMissing,
     #[error("framesPerSecond only applies to fixed-fps presentation")]
     FixedFpsForOtherPresentation,
+    #[error("soundOutputKind must be 'disabled', 'system-default', or 'device'")]
+    SoundOutputKind,
+    #[error("a device sound output needs soundOutputName")]
+    SoundOutputMissing,
+    #[error("soundOutputName only applies to a device sound output")]
+    SoundOutputNameForOtherKind,
     #[error("personality must be 'two-layers' or 'eight-layers'")]
     Personality,
     #[error("protocol must be 'art-net' or 'sacn'")]
@@ -340,6 +364,7 @@ impl UpdateOutputConfiguration {
             height: self.height.unwrap_or(current.resolution.height),
         };
         next.presentation = self.presentation(current.presentation)?;
+        next.sound_output = self.sound_output(&current.sound_output)?;
         if let Some(personality) = self.personality.as_deref() {
             next.personality = match personality.trim() {
                 "two-layers" => LayerPersonality::TwoLayers,
@@ -361,6 +386,44 @@ impl UpdateOutputConfiguration {
             next.start_address = start_address;
         }
         Ok(next)
+    }
+
+    fn sound_output(
+        &self,
+        current: &SoundOutput,
+    ) -> Result<SoundOutput, OutputConfigurationEditError> {
+        match self.sound_output_kind.as_deref().map(str::trim) {
+            None => {
+                if self.sound_output_name.is_some() {
+                    return Err(OutputConfigurationEditError::SoundOutputNameForOtherKind);
+                }
+                Ok(current.clone())
+            }
+            Some("disabled") => {
+                if self.sound_output_name.is_some() {
+                    return Err(OutputConfigurationEditError::SoundOutputNameForOtherKind);
+                }
+                Ok(SoundOutput::Disabled)
+            }
+            Some("system-default") => {
+                if self.sound_output_name.is_some() {
+                    return Err(OutputConfigurationEditError::SoundOutputNameForOtherKind);
+                }
+                Ok(SoundOutput::SystemDefault)
+            }
+            Some("device") => {
+                let name = self
+                    .sound_output_name
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|name| !name.is_empty())
+                    .ok_or(OutputConfigurationEditError::SoundOutputMissing)?;
+                Ok(SoundOutput::Device {
+                    name: name.to_owned(),
+                })
+            }
+            Some(_) => Err(OutputConfigurationEditError::SoundOutputKind),
+        }
     }
 
     fn target(&self, current: &OutputTarget) -> Result<OutputTarget, OutputConfigurationEditError> {
@@ -631,6 +694,9 @@ mod tests {
         output.presentation = PresentationMode::FixedFps {
             frames_per_second: 50,
         };
+        output.sound_output = SoundOutput::Device {
+            name: "Display 2".to_owned(),
+        };
         let view = OutputConfigurationView::of(&output);
 
         assert_eq!(view.target_kind, "monitor");
@@ -639,6 +705,8 @@ mod tests {
         assert!(view.fullscreen);
         assert_eq!(view.presentation, "fixed-fps");
         assert_eq!(view.frames_per_second, Some(50));
+        assert_eq!(view.sound_output_kind, "device");
+        assert_eq!(view.sound_output_name.as_deref(), Some("Display 2"));
         assert!(view.takes_effect_on_restart);
     }
 
@@ -706,5 +774,26 @@ mod tests {
             error,
             OutputConfigurationEditError::FixedFpsForOtherPresentation
         );
+    }
+
+    #[test]
+    fn sound_output_edits_require_a_truthful_device_name() {
+        let current = OutputConfiguration::new("Main");
+        let device = configuration_edit(
+            r#"{"requestId":"a","soundOutputKind":"device","soundOutputName":"Display 2"}"#,
+        )
+        .applied(&current)
+        .expect("accepted");
+        assert_eq!(
+            device.sound_output,
+            SoundOutput::Device {
+                name: "Display 2".to_owned()
+            }
+        );
+
+        let error = configuration_edit(r#"{"requestId":"b","soundOutputKind":"device"}"#)
+            .applied(&current)
+            .unwrap_err();
+        assert_eq!(error, OutputConfigurationEditError::SoundOutputMissing);
     }
 }

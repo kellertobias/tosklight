@@ -36,6 +36,7 @@ describe("the settings page", () => {
 		);
 		expect(settings).toHaveTextContent("3840 × 2160");
 		expect(settings).toHaveTextContent("Fixed at 50 frames per second");
+		expect(settings).toHaveTextContent("Muted");
 		expect(settings).toHaveTextContent(/next time this server starts/u);
 		expect(screen.queryByText(outputIdPattern)).not.toBeInTheDocument();
 
@@ -72,6 +73,8 @@ describe("the settings page", () => {
 		await replaceNumber("Height", "2160");
 		await choose("Display synchronized", "Fixed frame rate");
 		await replaceNumber("Frames per second", "50");
+		await choose("Muted", "Named device");
+		await userEvent.type(screen.getByLabelText("Device name"), "Display 2");
 		await userEvent.click(
 			screen.getByRole("button", { name: "Save output settings" }),
 		);
@@ -86,6 +89,8 @@ describe("the settings page", () => {
 			height: 2160,
 			presentation: "fixed-fps",
 			framesPerSecond: 50,
+			soundOutputKind: "device",
+			soundOutputName: "Display 2",
 			personality: "eight-layers",
 			protocol: "art-net",
 			universe: 0,
@@ -303,6 +308,8 @@ type OutputConfiguration = {
 	height: number;
 	presentation: "display-synchronized" | "fixed-fps" | "unlocked";
 	framesPerSecond: number | null;
+	soundOutputKind: "disabled" | "system-default" | "device";
+	soundOutputName: string | null;
 	personality: "two-layers" | "eight-layers";
 	protocol: "art-net" | "sacn";
 	universe: number;
@@ -323,6 +330,8 @@ function stubOutputConfiguration(overrides: Partial<OutputConfiguration> = {}) {
 		height: 1080,
 		presentation: "display-synchronized",
 		framesPerSecond: null,
+		soundOutputKind: "disabled",
+		soundOutputName: null,
 		personality: "eight-layers",
 		protocol: "art-net",
 		universe: 0,
@@ -346,6 +355,8 @@ function stubSettingsServer(overrides: Parameters<typeof stubServer>[0] = {}) {
 		height: 1080,
 		presentation: "display-synchronized",
 		framesPerSecond: null,
+		soundOutputKind: "disabled",
+		soundOutputName: null,
 		personality: "eight-layers",
 		protocol: "art-net",
 		universe: 0,
