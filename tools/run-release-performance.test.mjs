@@ -478,6 +478,10 @@ test("scheduled publication separates release delivery from performance and Page
 		resolve(ROOT, ".github/workflows/documentation.yml"),
 		"utf8",
 	);
+	const storybookPagesWorkflow = readFileSync(
+		resolve(ROOT, ".github/workflows/storybook-pages.yml"),
+		"utf8",
+	);
 	const desktopHarness = readFileSync(
 		resolve(ROOT, "tools/run-desktop-performance.mjs"),
 		"utf8",
@@ -508,10 +512,6 @@ test("scheduled publication separates release delivery from performance and Page
 	assert.doesNotMatch(release, /- benchmark|- pages-build/u);
 	assert.match(workflow, /schedule:[\s\S]*?cron:/u);
 	assert.match(workflow, /workflow_dispatch:/u);
-	assert.match(
-		workflow,
-		/storybook_ref:[\s\S]*?type: string[\s\S]*?default: ""/u,
-	);
 	assert.match(
 		workflow,
 		/workflow_run:[\s\S]*?workflows: \["CI and release"\][\s\S]*?types: \[completed\]/u,
@@ -560,10 +560,19 @@ test("scheduled publication separates release delivery from performance and Page
 	assert.match(pages, /LIGHT_PERFORMANCE_STATUS_FILE/u);
 	assert.match(pages, /name: storybook-static/u);
 	assert.match(pages, /\.artifacts\/build\/storybook\/ui/u);
+	assert.match(storybookPagesWorkflow, /workflow_dispatch:/u);
+	assert.match(storybookPagesWorkflow, /npm run storybook:build/u);
 	assert.match(
-		storybook,
-		/ref: \$\{\{ inputs\.storybook_ref \|\| needs\.release-metadata\.outputs\.sha \}\}/u,
+		storybookPagesWorkflow,
+		/gh run list[\s\S]*?--workflow documentation\.yml[\s\S]*?--status success/u,
 	);
+	assert.match(storybookPagesWorkflow, /--name github-pages/u);
+	assert.match(
+		storybookPagesWorkflow,
+		/rm -rf \.artifacts\/generated\/pages\/storybook/u,
+	);
+	assert.match(storybookPagesWorkflow, /actions\/upload-pages-artifact@/u);
+	assert.match(storybookPagesWorkflow, /actions\/deploy-pages@/u);
 	assert.doesNotMatch(release, /storybook|manual|pages|performance/u);
 	assert.match(releaseWorkflow, /SCCACHE_GHA_ENABLED: "true"/u);
 	assert.match(releaseWorkflow, /RUSTC_WRAPPER: sccache/u);
