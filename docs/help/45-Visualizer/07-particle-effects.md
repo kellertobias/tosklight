@@ -53,6 +53,9 @@ population is higher, **FrameStats** exposes requested and drawn counts and mark
 degraded; density is reduced without dropping an entire nozzle or allowing a package to grow GPU
 buffers without limit.
 
-The standard built-in benchmark includes a package-equivalent cold-spark fountain. The TL-105
-Working Log records the measured High and Ultra renderer results and hardware label used for
-acceptance; the numbers are evidence for that machine, not a product-wide maximum.
+The standard built-in benchmark includes a package-equivalent cold-spark fountain. On the Apple
+M5 Max Metal reference machine, the 33-fixture Full 3D scene rendered its 220 requested particles
+without particle reduction at 59.9 fps in High and 59.3 fps in Ultra. The same run demonstrated
+the shared adaptive ladder independently reducing the heavier crowd workload while particle
+requested/drawn remained 220/220. These figures are evidence for that machine, not a product-wide
+maximum.
