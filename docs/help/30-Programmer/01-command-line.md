@@ -124,7 +124,7 @@ removing the full Freeze therefore removes every family Freeze on that target.
 `5` remains Dynamics. Freeze does not change dotted `AT` Preset addresses, decimal/comma literal
 entry, or direct attribute entry.
 
-The touch `[SHIFT]` button remains active until it is tapped again. A physical computer keyboard Shift key is momentary: the Shift layer is active only while the key is held, matching the attached hardware button. While Shift is active, every affected software button keeps its ordinary label and adds the shifted action beneath it at half size: Align adds Off, Cue adds Timecode, PBK adds Macro, Escape adds Undo, Enter adds Lock or Unlock, Clear adds Freeze or Unfreeze, Preload Go adds Preload Go Clear, Record adds Update, and touch Move adds Copy. Actions without a shifted assignment keep their ordinary label and behavior.
+The touch `[SHIFT]` button remains active until it is tapped again. A physical computer keyboard Shift key is momentary: the Shift layer is active only while the key is held, matching the attached hardware button. While Shift is active, every affected software button keeps its ordinary label and adds the shifted action beneath it at half size: Align adds Off, Cue adds Timecode, PBK adds Macro, Escape adds Undo, Enter adds Lock or Unlock, Clear adds Freeze or Unfreeze, Preload Go adds Preload Go Clear, Record adds Update, and touch Move adds Copy. Shifted Clear is a stable Freeze or Unfreeze action and does not use Clear's blinking programmer-value warning. Actions without a shifted assignment keep their ordinary label and behavior.
 
 ## Moving and copying Cues
 

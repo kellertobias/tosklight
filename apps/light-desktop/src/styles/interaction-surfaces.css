@@ -260,6 +260,12 @@
 	color: #30383d;
 	animation: clear-blink 0.7s steps(1, end) infinite;
 }
+.numeric-pad button.clear.freeze-action {
+	border-color: var(--amber);
+	background: #171c22;
+	color: var(--amber);
+	animation: none;
+}
 @keyframes clear-blink {
 	50% {
 		background: #261d08;

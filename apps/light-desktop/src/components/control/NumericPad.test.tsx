@@ -258,6 +258,24 @@ describe("NumericPad Clear and SET routing", () => {
 		expect(programmerValuesActions.clear).not.toHaveBeenCalled();
 	});
 
+	it("shows shifted Freeze as a stable action instead of blinking Clear", () => {
+		valuesActivity.current = {
+			authority: "normal",
+			ready: true,
+			valueCount: 1,
+			pendingValueCount: 0,
+		};
+		state.shiftArmed = true;
+		render(<NumericPad inputMode="touch" />);
+
+		const freeze = screen.getByRole("button", {
+			name: "CLR, Shift: FREEZE",
+		});
+		expect(freeze).toHaveClass("freeze-action", "clear-idle");
+		expect(freeze).not.toHaveClass("clear-warning");
+		expect(getComputedStyle(freeze).animationName).toBe("none");
+	});
+
 	it("arms playback configuration when a Virtual Playback grid is the available target surface", () => {
 		const release = registerControlSurfaceTarget({
 			id: "virtual-playbacks",

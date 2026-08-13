@@ -126,7 +126,7 @@ export function NumericPad({
 					);
 					return secondary ? `${primary}, Shift: ${secondary}` : primary;
 				}}
-				clearState={pad.clearState}
+				clearState={pad.state.shiftArmed ? "idle" : pad.clearState}
 				activeKeys={[
 					...(pad.state.shiftArmed ? (["SHIFT"] as const) : []),
 					...(pad.state.patchSetArmed ||
@@ -219,6 +219,8 @@ function NumericKeys({
 
 function keyClass(key: SoftwareKey, pad: NumericPadController) {
 	const shifted = key === "SHIFT" && pad.state.shiftArmed ? "shift-armed" : "";
+	const freezeAction =
+		key === "CLR" && pad.state.shiftArmed ? "freeze-action" : "";
 	const setArmed =
 		key === "SET" &&
 		((pad.state.builtIn === "patch" && pad.state.patchSetArmed) ||
@@ -227,5 +229,5 @@ function keyClass(key: SoftwareKey, pad: NumericPadController) {
 			pad.state.playbackSetArmed)
 			? "patch-set-armed"
 			: "";
-	return `${shifted} ${setArmed}`;
+	return `${shifted} ${freezeAction} ${setArmed}`;
 }
