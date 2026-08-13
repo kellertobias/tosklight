@@ -200,6 +200,37 @@ pub struct FrameInstances {
     pub crowd_drawn: u32,
     pub particles_requested: u32,
     pub particles_drawn: u32,
+    /// Textured fronts are a dedicated pass so one source texture can feed any number of panels.
+    pub media_panels: Vec<MediaPanel>,
+}
+
+#[derive(Clone, Debug)]
+pub struct MediaPanel {
+    pub source_id: Option<viz_scene::uuid::Uuid>,
+    pub fallback_source_id: Option<viz_scene::uuid::Uuid>,
+    pub model: Mat4,
+    pub crop: [f32; 4],
+    /// x kind: 0 reflective screen, 1 TV, 2 LED; y gain/spill, z roughness, w feather.
+    pub material: [f32; 4],
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Pod, Zeroable)]
+pub struct GpuMediaPanel {
+    pub model: [[f32; 4]; 4],
+    pub crop: [f32; 4],
+    pub material: [f32; 4],
+}
+
+impl GpuMediaPanel {
+    pub const LAYOUT: wgpu::VertexBufferLayout<'static> = wgpu::VertexBufferLayout {
+        array_stride: size_of::<Self>() as wgpu::BufferAddress,
+        step_mode: wgpu::VertexStepMode::Instance,
+        attributes: &wgpu::vertex_attr_array![
+            3 => Float32x4, 4 => Float32x4, 5 => Float32x4, 6 => Float32x4,
+            7 => Float32x4, 8 => Float32x4
+        ],
+    };
 }
 
 impl FrameInstances {
@@ -259,7 +290,7 @@ const REFERENCE_HALF_ANGLE: f32 = 0.349;
 const SPREAD_COMPRESSION: f32 = 0.55;
 
 /// How one frame should be drawn.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct FrameStyle {
     pub quality: viz_scene::RenderQuality,
     pub draw_beams: bool,
@@ -307,6 +338,15 @@ pub struct FrameStyle {
     /// Live/fallback media is a standalone capability. Helpers and embedded Stage panes draw the
     /// same authored geometry with neutral faces and open no media transport.
     pub media_content: bool,
+    /// Current decoded appearance by Media Surface identity. This is volatile renderer state,
+    /// never authored show intent.
+    pub media_appearance: std::collections::BTreeMap<viz_scene::uuid::Uuid, MediaAppearance>,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct MediaAppearance {
+    pub average: Vec3,
+    pub flicker: f32,
 }
 
 impl Default for FrameStyle {
@@ -335,6 +375,7 @@ impl Default for FrameStyle {
             crowd_person_budget: 384,
             effect_particle_budget: 2_048,
             media_content: true,
+            media_appearance: std::collections::BTreeMap::new(),
         }
     }
 }

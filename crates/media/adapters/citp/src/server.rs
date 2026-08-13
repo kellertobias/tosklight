@@ -17,7 +17,7 @@ use crate::packet::{Message, content};
 ///
 /// A console states what it supports; the reply is the newest both sides know. A console that
 /// asked for nothing gets 1.0, which every console can read.
-pub const SUPPORTED: [(u8, u8); 2] = [(1, 1), (1, 0)];
+pub const SUPPORTED: [(u8, u8); 3] = [(1, 2), (1, 1), (1, 0)];
 
 /// Chooses the version to answer a request at.
 pub fn negotiate(requested: (u8, u8)) -> (u8, u8) {
@@ -85,6 +85,26 @@ impl Sessions {
             .reduce(|first, second| (first.0.max(second.0), first.1.max(second.1)))
     }
 
+    /// Numeric source identities with a live subscription. Transport uses this to charge GPU
+    /// readback only to the exact logical outputs a console requested.
+    pub fn active_sources(&self, now_millis: u64) -> Vec<u16> {
+        self.subscriptions
+            .iter()
+            .filter(|subscription| subscription.expires_at_millis > now_millis)
+            .map(|subscription| subscription.source)
+            .collect()
+    }
+
+    pub fn requested_size_for(&self, source: u16, now_millis: u64) -> Option<(u16, u16)> {
+        self.subscriptions
+            .iter()
+            .filter(|subscription| {
+                subscription.source == source && subscription.expires_at_millis > now_millis
+            })
+            .map(|subscription| (subscription.width.max(1), subscription.height.max(1)))
+            .reduce(|first, second| (first.0.max(second.0), first.1.max(second.1)))
+    }
+
     fn expire(&mut self, now_millis: u64) {
         self.subscriptions
             .retain(|subscription| subscription.expires_at_millis > now_millis);
@@ -122,8 +142,9 @@ impl Sessions {
     ///
     /// A subscription that has already seen this sequence is skipped, and a single-frame request
     /// ends as soon as it has been served.
-    pub fn frames_for(
+    pub fn frames_for_source(
         &mut self,
+        source: u16,
         preview: &Thumbnail,
         sequence: u64,
         now_millis: u64,
@@ -131,6 +152,9 @@ impl Sessions {
         self.expire(now_millis);
         let mut messages = Vec::new();
         for subscription in &mut self.subscriptions {
+            if subscription.source != source {
+                continue;
+            }
             if subscription.last_sequence == sequence {
                 continue;
             }
@@ -145,21 +169,34 @@ impl Sessions {
         self.expire(now_millis);
         messages
     }
+
+    /// Compatibility path for the historical single Program source.
+    pub fn frames_for(
+        &mut self,
+        preview: &Thumbnail,
+        sequence: u64,
+        now_millis: u64,
+    ) -> Vec<Vec<u8>> {
+        let source = self
+            .subscriptions
+            .first()
+            .map_or(1, |subscription| subscription.source);
+        self.frames_for_source(source, preview, sequence, now_millis)
+    }
 }
 
 /// What the server is, for the messages that describe it.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Identity<'a> {
-    pub name: &'a str,
+pub struct Identity {
+    pub name: String,
     pub listening_port: u16,
     pub layers: u8,
-    pub preview_width: u16,
-    pub preview_height: u16,
+    pub preview_sources: Vec<crate::message::VideoSource>,
 }
 
 /// The greeting sent the moment a console connects, before it has asked anything.
-pub fn greeting(identity: &Identity<'_>) -> Vec<u8> {
-    server_information(identity.name, (1, 1), identity.layers)
+pub fn greeting(identity: &Identity) -> Vec<u8> {
+    server_information(&identity.name, (1, 2), identity.layers)
 }
 
 /// The discovery announcement.
@@ -178,30 +215,30 @@ pub fn announcement(name: &str, listening_port: u16) -> Vec<u8> {
 /// gets six messages, because CITP has no batched thumbnail response.
 pub fn respond(
     message: &Message,
-    identity: &Identity<'_>,
+    identity: &Identity,
     library: &dyn Library,
     sessions: &mut Sessions,
     now_millis: u64,
 ) -> Vec<Vec<u8>> {
     if message.content_type == content::PLOC {
-        return vec![announcement(identity.name, identity.listening_port)];
+        return vec![announcement(&identity.name, identity.listening_port)];
     }
 
     let version = negotiate(message.version);
     match message.content_type {
-        content::CINF => vec![server_information(identity.name, version, identity.layers)],
+        content::CINF => vec![server_information(&identity.name, version, identity.layers)],
         content::GELI => library_information(message, version, library),
         content::GEIN => element_information(message, version, library),
         content::GELT => library_thumbnails(message, version, library),
         content::GETH => element_thumbnails(message, version, library),
-        content::GVSR => vec![video_sources(
-            version,
-            "Program",
-            identity.preview_width,
-            identity.preview_height,
-        )],
+        content::GVSR => vec![video_sources(version, &identity.preview_sources)],
         content::RQST => {
-            if let Some(request) = read_stream_request(&message.body) {
+            if let Some(request) = read_stream_request(&message.body)
+                && identity
+                    .preview_sources
+                    .iter()
+                    .any(|source| source.id == request.source)
+            {
                 sessions.subscribe(&request, now_millis);
             }
             // A subscription is answered by frames, when there are frames — not by an
@@ -357,13 +394,18 @@ mod tests {
         }
     }
 
-    fn identity() -> Identity<'static> {
+    fn identity() -> Identity {
         Identity {
-            name: "ToskLight Media",
+            name: "ToskLight Media".into(),
             listening_port: 14_809,
             layers: 8,
-            preview_width: 320,
-            preview_height: 180,
+            preview_sources: vec![crate::message::VideoSource {
+                id: 1,
+                name: "Program".into(),
+                physical_output: 0,
+                width: 320,
+                height: 180,
+            }],
         }
     }
 
@@ -381,7 +423,7 @@ mod tests {
 
     #[test]
     fn a_console_gets_the_newest_version_both_sides_speak() {
-        assert_eq!(negotiate((1, 2)), (1, 1), "never above what we implement");
+        assert_eq!(negotiate((1, 2)), (1, 2), "never above what we implement");
         assert_eq!(negotiate((1, 1)), (1, 1));
         assert_eq!(negotiate((1, 0)), (1, 0), "and never above what it asked");
         assert_eq!(
@@ -400,6 +442,64 @@ mod tests {
 
         let replies = reply(&request(content::CINF, (1, 1), &[]));
         assert_eq!(replies[0].version, (1, 1));
+    }
+
+    #[test]
+    fn every_logical_output_is_advertised_and_unknown_sources_are_rejected() {
+        let identity = Identity {
+            preview_sources: vec![
+                crate::message::VideoSource {
+                    id: 41,
+                    name: "Main Program".into(),
+                    physical_output: 0,
+                    width: 1920,
+                    height: 1080,
+                },
+                crate::message::VideoSource {
+                    id: 99,
+                    name: "Lobby Program".into(),
+                    physical_output: 1,
+                    width: 1280,
+                    height: 720,
+                },
+            ],
+            ..identity()
+        };
+        let mut sessions = Sessions::new();
+        let replies = respond(
+            &request(content::GVSR, (1, 2), &[]),
+            &identity,
+            &Shelf,
+            &mut sessions,
+            0,
+        );
+        let sources = parse(&replies[0]).unwrap();
+        assert_eq!(u16::from_le_bytes(sources.body[..2].try_into().unwrap()), 2);
+        assert_eq!(sources.version, (1, 2));
+
+        let unknown = StreamRequest {
+            source: 7,
+            format: FORMAT_JPEG,
+            width: 160,
+            height: 90,
+            fps: 10,
+            timeout_seconds: 5,
+        };
+        let mut body = Body::new();
+        body.u16(unknown.source)
+            .four_cc(unknown.format)
+            .u16(unknown.width)
+            .u16(unknown.height)
+            .u8(unknown.fps)
+            .u8(unknown.timeout_seconds);
+        respond(
+            &request(content::RQST, (1, 2), body.as_slice()),
+            &identity,
+            &Shelf,
+            &mut sessions,
+            0,
+        );
+        assert!(!sessions.anyone_subscribed(0));
     }
 
     #[test]

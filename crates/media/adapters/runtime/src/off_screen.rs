@@ -34,6 +34,7 @@ struct Hosted {
     renderer: OutputRenderer,
     pipeline: LayerPipeline,
     configuration: OutputConfiguration,
+    last_preview_millis: Option<u64>,
 }
 
 /// Runs every off-screen output until shutdown.
@@ -111,6 +112,21 @@ pub fn run(configuration: &MediaConfiguration, shared: Shared, shutdown: Shutdow
                 .master_mask
                 .and_then(|slot| output.pipeline.texture(slot));
             output.renderer.present(&draws, &state.master, mask, now);
+            if let Some(preview) = shared.previews.for_output(state.id)
+                && preview.wanted()
+                && crate::preview::due(output.last_preview_millis, now.as_millis())
+            {
+                output.last_preview_millis = Some(now.as_millis());
+                let from = output.renderer.size();
+                let to = preview.requested_size();
+                let pixels = output.renderer.read_image();
+                match crate::preview::encode(&pixels, from, to) {
+                    Ok(frame) => preview.publish(frame),
+                    Err(error) => {
+                        tracing::warn!(%error, output = %state.id, "the off-screen preview could not be encoded")
+                    }
+                }
+            }
         }
 
         publish(&shared, reports, now);
@@ -158,6 +174,7 @@ fn open(
         renderer,
         pipeline,
         configuration: configuration.clone(),
+        last_preview_millis: None,
     })
 }
 

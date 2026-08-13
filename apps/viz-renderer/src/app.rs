@@ -88,6 +88,12 @@ pub struct Application {
     /// Every laser's scan engine, and the override directory it watches.
     lasers: crate::lasers::Lasers,
     effects: crate::effects::Effects,
+    /// Absent for helper/embed launches, which must open no media sockets or decoders.
+    media_workers: Option<crate::media_worker::MediaWorkers>,
+    /// Advances only when a new decoded source frame reaches the GPU. This participates in the
+    /// demand-redraw identity so live video cannot be suppressed as an otherwise unchanged scene.
+    media_revision: u64,
+    media_notice: Option<String>,
     last_frame: Instant,
     /// When the next frame is due. Frames are paced instead of drawn back to back so the event
     /// loop spends its time in the window system, where input is delivered, rather than parked
@@ -238,6 +244,7 @@ impl Application {
         let laser_scripts = crate::lasers::Lasers::directory(options.laser_scripts.clone());
         let preferences = Preferences::restored(&options);
         let options_for_paths = options.clone();
+        let media_enabled = !options.helper && !options.embed;
         // The planning source is the Viz editor, so it is selectable exactly when that editor can
         // be started. When it cannot, the control says why in the words the failed launch would
         // have used rather than pretending the source does not exist.
@@ -266,6 +273,9 @@ impl Application {
             last_persistence: Instant::now(),
             lasers: crate::lasers::Lasers::new(laser_scripts),
             effects: crate::effects::Effects::new(),
+            media_workers: media_enabled.then(crate::media_worker::MediaWorkers::default),
+            media_revision: 0,
+            media_notice: None,
             last_frame: Instant::now(),
             next_frame: Instant::now(),
             frame_interval: DEFAULT_FRAME_INTERVAL,

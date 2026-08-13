@@ -20,6 +20,7 @@ pub(super) struct Layouts {
     pub shadow: wgpu::BindGroupLayout,
     pub shadow_draw: wgpu::BindGroupLayout,
     pub overlay: wgpu::BindGroupLayout,
+    pub media: wgpu::BindGroupLayout,
 }
 
 impl Layouts {
@@ -33,6 +34,7 @@ impl Layouts {
             shadow: shadow_layout(device),
             shadow_draw: shadow_draw_layout(device),
             overlay: overlay_layout(device),
+            media: media_layout(device),
         }
     }
 }
@@ -61,7 +63,11 @@ impl PipelineLayouts {
         let surface_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("viz surface layout"),
-                bind_group_layouts: &[Some(scene_layout), None, Some(shadow_layout)],
+                bind_group_layouts: &[
+                    Some(scene_layout),
+                    Some(&layouts.media),
+                    Some(shadow_layout),
+                ],
                 immediate_size: 0,
             });
         let beam_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -116,6 +122,47 @@ impl PipelineLayouts {
             overlay: overlay_pipeline_layout,
         }
     }
+}
+
+fn media_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
+    device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("viz media"),
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    view_dimension: wgpu::TextureViewDimension::D2Array,
+                    multisampled: false,
+                },
+                count: None,
+            },
+            sampler_entry(1),
+        ],
+    })
+}
+
+pub(super) fn build_media_group(
+    device: &wgpu::Device,
+    layout: &wgpu::BindGroupLayout,
+    view: &wgpu::TextureView,
+    sampler: &wgpu::Sampler,
+) -> wgpu::BindGroup {
+    device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("viz media"),
+        layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::Sampler(sampler),
+            },
+        ],
+    })
 }
 
 /// The shadow atlas, its comparison sampler, and the buffers one shadow draw reads.

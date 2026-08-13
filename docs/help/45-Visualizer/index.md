@@ -53,4 +53,5 @@ scripts and the persistence-of-vision settings that make lasers and strobes read
 between it and the desk, and [Particle Effects](07-particle-effects.md) for transferable flame and
 cold-spark engines, trigger semantics, restart behavior and quality budgets. Continue with
 [Crowd Areas](08-crowds.md) for modes, footprint editing, deterministic placement, local amount
-control, and measured quality budgets.
+control, and measured quality budgets, and [Media Surfaces](09-media-surfaces.md) for screens, TVs,
+LED walls, projectors, CITP output selection, and portable fallback pictures.

@@ -223,6 +223,12 @@ fn scene_from(path: &Path) -> Result<Capture, String> {
         patch,
         stage_layout: viz_desk::wire::StageLayoutBody::default(),
         venue_objects: Vec::new(),
+        media_servers: Vec::new(),
+        media_fallback_assets: Vec::new(),
+        media_sources: Vec::new(),
+        led_module_types: Vec::new(),
+        media_surfaces: Vec::new(),
+        media_projectors: Vec::new(),
         show_name: document.name().unwrap_or_else(|_| "Show".to_owned()),
         server_identity: path.display().to_string(),
     };

@@ -12,26 +12,34 @@ pub(super) fn push_media(frame: &mut FrameInstances, scene: &Scene, style: &Fram
         if !style.fixture_models {
             super::push_box_outline(
                 frame,
-                Mat4::from_scale_rotation_translation(
-                    section.size,
-                    orientation,
-                    section.position,
-                ),
+                Mat4::from_scale_rotation_translation(section.size, orientation, section.position),
                 style.faint_ink,
                 0.8,
             );
             continue;
         }
-        let source_colour = section
-            .source_id
-            .map(stable_source_colour)
+        let source_colour = style
+            .media_appearance
+            .get(&section.surface_id)
+            .map(|appearance| appearance.average)
             .unwrap_or(Vec3::ZERO);
+        let panel_model = Mat4::from_scale_rotation_translation(
+            Vec3::new(section.size.x, 1.0, section.size.y),
+            orientation * Quat::from_rotation_x(std::f32::consts::FRAC_PI_2),
+            section.position + orientation * Vec3::Z * (section.size.z * 0.501 + 0.0005),
+        );
+        let crop = [
+            section.crop.left,
+            section.crop.top,
+            section.crop.width,
+            section.crop.height,
+        ];
         match &section.kind {
             MediaSectionKind::ProjectionScreen {
                 colour,
                 gain,
                 roughness,
-                ..
+                edge_feather,
             } => {
                 frame.mesh(MeshKind::Cube).push(MeshInstance::new(
                     Mat4::from_scale_rotation_translation(
@@ -47,6 +55,15 @@ pub(super) fn push_media(frame: &mut FrameInstances, scene: &Scene, style: &Fram
                         .unwrap_or(Vec3::ZERO),
                     0.0,
                 ));
+                if style.media_content {
+                    frame.media_panels.push(MediaPanel {
+                        source_id: section.source_id,
+                        fallback_source_id: section.fallback_source_id,
+                        model: panel_model,
+                        crop,
+                        material: [0.0, gain.clamp(0.0, 4.0), *roughness, *edge_feather],
+                    });
+                }
             }
             MediaSectionKind::Tv {
                 bezel_metres,
@@ -64,6 +81,15 @@ pub(super) fn push_media(frame: &mut FrameInstances, scene: &Scene, style: &Fram
                     Vec3::ZERO,
                     0.15,
                 ));
+                if style.media_content {
+                    frame.media_panels.push(MediaPanel {
+                        source_id: section.source_id,
+                        fallback_source_id: section.fallback_source_id,
+                        model: panel_model,
+                        crop,
+                        material: [1.0, 1.2 + spill.clamp(0.0, 1.0), 0.12, 0.0],
+                    });
+                }
                 frame.mesh(MeshKind::Cube).push(MeshInstance::new(
                     Mat4::from_scale_rotation_translation(
                         section.size,
@@ -104,6 +130,15 @@ pub(super) fn push_media(frame: &mut FrameInstances, scene: &Scene, style: &Fram
                         },
                         0.0,
                     ));
+                    if style.media_content {
+                        frame.media_panels.push(MediaPanel {
+                            source_id: section.source_id,
+                            fallback_source_id: section.fallback_source_id,
+                            model: panel_model,
+                            crop,
+                            material: [2.0, 1.35, 0.5, *pixel_pitch_millimetres],
+                        });
+                    }
                     continue;
                 }
                 let occupied: std::collections::HashSet<u32> =
@@ -148,6 +183,28 @@ pub(super) fn push_media(frame: &mut FrameInstances, scene: &Scene, style: &Fram
                             },
                             0.0,
                         ));
+                        if style.media_content {
+                            let module_model = Mat4::from_scale_rotation_translation(
+                                Vec3::new(module.x, 1.0, module.y),
+                                orientation * Quat::from_rotation_x(std::f32::consts::FRAC_PI_2),
+                                section.position
+                                    + orientation
+                                        * (local + Vec3::Z * (section.size.z * 0.501 + 0.0005)),
+                            );
+                            let module_crop = [
+                                crop[0] + crop[2] * f32::from(column) / f32::from(*columns),
+                                crop[1] + crop[3] * f32::from(row) / f32::from(*rows),
+                                crop[2] / f32::from(*columns),
+                                crop[3] / f32::from(*rows),
+                            ];
+                            frame.media_panels.push(MediaPanel {
+                                source_id: section.source_id,
+                                fallback_source_id: section.fallback_source_id,
+                                model: module_model,
+                                crop: module_crop,
+                                material: [2.0, 1.5 * diode_gain, 0.5, *pixel_pitch_millimetres],
+                            });
+                        }
                     }
                 }
             }
@@ -157,15 +214,6 @@ pub(super) fn push_media(frame: &mut FrameInstances, scene: &Scene, style: &Fram
     for projector in &scene.media_projectors {
         push_projector(frame, projector, style);
     }
-}
-
-fn stable_source_colour(id: viz_scene::uuid::Uuid) -> Vec3 {
-    let bytes = id.as_bytes();
-    Vec3::new(
-        0.15 + f32::from(bytes[0]) / 340.0,
-        0.12 + f32::from(bytes[5]) / 370.0,
-        0.18 + f32::from(bytes[10]) / 330.0,
-    )
 }
 
 fn push_projector(
@@ -187,7 +235,13 @@ fn push_projector(
     ));
     let direction = (orientation * Vec3::NEG_Z).normalize_or(Vec3::NEG_Z);
     let origin = projector.position + direction * 0.3;
-    let colour = stable_source_colour(projector.surface_id);
+    let appearance = style
+        .media_appearance
+        .get(&projector.surface_id)
+        .copied()
+        .unwrap_or_default();
+    let colour = appearance.average;
+    let flicker_gain = (1.0 + appearance.flicker * 2.0).clamp(1.0, 1.8);
     frame.mesh(MeshKind::Lens).push(MeshInstance::new(
         Mat4::from_scale_rotation_translation(
             Vec3::new(0.1, 0.1, 0.025),
@@ -197,7 +251,7 @@ fn push_projector(
         Vec3::splat(0.04),
         0.18,
         if style.media_content {
-            colour * 1.8
+            colour * 1.8 * flicker_gain
         } else {
             Vec3::ZERO
         },
@@ -211,10 +265,12 @@ fn push_projector(
     frame.lights.push(GpuLight {
         position_range: origin.extend(projector.cone_length_metres).to_array(),
         direction_cos_outer: direction.extend(half_angle.cos()).to_array(),
-        colour_intensity: (colour * projector.spill.clamp(0.0, 1.0))
-            .extend(projector.spill.clamp(0.0, 1.0))
+        colour_intensity: (colour * projector.spill.clamp(0.0, 1.0) * flicker_gain)
+            .extend(projector.spill.clamp(0.0, 1.0) * flicker_gain)
             .to_array(),
-        params: [(half_angle * 0.75).cos(), 0.25, 0.9, 0.0],
+        // params.w marks the separately budgeted projector-light class; shaders intentionally do
+        // not consume it.
+        params: [(half_angle * 0.75).cos(), 0.25, 0.9, 1.0],
         tangent_frost: (orientation * Vec3::X).extend(0.15).to_array(),
         optics: [0.0; 4],
         shapers: [0.0; 4],
@@ -230,7 +286,7 @@ fn push_projector(
     );
     frame.beams.push(BeamInstance {
         model: model.to_cols_array_2d(),
-        colour: colour.extend(0.32).to_array(),
+        colour: (colour * flicker_gain).extend(0.32).to_array(),
         params: [light_index as f32, total, 0.0, 0.0],
     });
 }
@@ -248,6 +304,7 @@ mod tests {
             surface_id: viz_scene::uuid::Uuid::new_v4(),
             name: "Sparse wall".into(),
             source_id: Some(source),
+            fallback_source_id: None,
             position: Vec3::ZERO,
             rotation_degrees: Vec3::ZERO,
             size: Vec3::new(2.0, 1.0, 0.04),
@@ -308,5 +365,44 @@ mod tests {
         assert!(!frame.meshes.is_empty());
         assert!(frame.lights.is_empty());
         assert!(frame.beams.is_empty());
+    }
+
+    #[test]
+    fn a_large_sparse_wall_costs_modules_not_pixels_or_empty_cells() {
+        let mut scene = Scene::default();
+        let occupied_cells = (0..2_500).step_by(25).collect::<Vec<_>>();
+        scene.media_sections.push(viz_scene::MediaSection {
+            id: viz_scene::uuid::Uuid::new_v4(),
+            surface_id: viz_scene::uuid::Uuid::new_v4(),
+            name: "50 by 50 sparse wall".into(),
+            source_id: Some(viz_scene::uuid::Uuid::new_v4()),
+            fallback_source_id: None,
+            position: Vec3::ZERO,
+            rotation_degrees: Vec3::ZERO,
+            size: Vec3::new(25.0, 25.0, 0.04),
+            crop: viz_scene::MediaCrop {
+                left: 0.0,
+                top: 0.0,
+                width: 1.0,
+                height: 1.0,
+            },
+            kind: MediaSectionKind::Led {
+                rows: 50,
+                columns: 50,
+                occupied_cells: occupied_cells.clone(),
+                module_size: [0.5, 0.5],
+                module_gap: [0.005, 0.005],
+                pixel_pitch_millimetres: 2.6,
+            },
+        });
+        let mut frame = FrameInstances::default();
+        push_media(&mut frame, &scene, &FrameStyle::default());
+        assert_eq!(frame.media_panels.len(), occupied_cells.len());
+        let cubes = frame
+            .meshes
+            .iter()
+            .find(|(kind, _)| *kind == MeshKind::Cube)
+            .map_or(0, |(_, instances)| instances.len());
+        assert_eq!(cubes, occupied_cells.len());
     }
 }

@@ -4,14 +4,17 @@
 //! the same portable history as every other authored object. Runtime source status and preview
 //! frames deliberately do not appear here.
 
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use light_show::{AtomicObjectDelete, AtomicObjectWrite, ShowStore};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use uuid::Uuid;
 
 const REQUEST_KIND: &str = "media_layout_request";
-const MEDIA_KINDS: [&str; 5] = [
+const MEDIA_KINDS: [&str; 6] = [
+    "media_fallback_asset",
     "media_server",
     "media_source",
     "led_module_type",
@@ -192,6 +195,24 @@ pub struct ManagedFallbackReference {
     pub height: u32,
 }
 
+/// Immutable fallback bytes owned by the portable show itself.
+///
+/// The encoded bytes are intentionally an ordinary typed show object: SQLite backup/restore and
+/// selective import already preserve object history atomically, without a lossy sidecar path.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MediaFallbackAsset {
+    pub id: Uuid,
+    pub name: String,
+    pub media_type: String,
+    pub digest: String,
+    pub width: u32,
+    pub height: u32,
+    pub bytes_base64: String,
+    #[serde(flatten)]
+    pub extra: BTreeMap<String, Value>,
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MediaSurface {
@@ -228,6 +249,7 @@ pub struct MediaProjector {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(tag = "kind", content = "body", rename_all = "snake_case")]
 pub enum MediaObject {
+    MediaFallbackAsset(MediaFallbackAsset),
     MediaServer(MediaServer),
     MediaSource(MediaSource),
     LedModuleType(LedModuleType),
@@ -238,6 +260,7 @@ pub enum MediaObject {
 impl MediaObject {
     fn kind(&self) -> &'static str {
         match self {
+            Self::MediaFallbackAsset(_) => "media_fallback_asset",
             Self::MediaServer(_) => "media_server",
             Self::MediaSource(_) => "media_source",
             Self::LedModuleType(_) => "led_module_type",
@@ -248,6 +271,7 @@ impl MediaObject {
 
     fn id(&self) -> Uuid {
         match self {
+            Self::MediaFallbackAsset(value) => value.id,
             Self::MediaServer(value) => value.id,
             Self::MediaSource(value) => value.id,
             Self::LedModuleType(value) => value.id,
@@ -258,6 +282,7 @@ impl MediaObject {
 
     fn body(&self) -> Result<Value, String> {
         match self {
+            Self::MediaFallbackAsset(value) => serde_json::to_value(value),
             Self::MediaServer(value) => serde_json::to_value(value),
             Self::MediaSource(value) => serde_json::to_value(value),
             Self::LedModuleType(value) => serde_json::to_value(value),
@@ -278,6 +303,8 @@ pub struct VersionedMediaObject {
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MediaLayoutSnapshot {
+    #[serde(default)]
+    pub fallback_assets: Vec<VersionedMediaObject>,
     pub servers: Vec<VersionedMediaObject>,
     pub sources: Vec<VersionedMediaObject>,
     pub led_module_types: Vec<VersionedMediaObject>,
@@ -334,6 +361,11 @@ where
 
 pub(crate) fn snapshot(store: &ShowStore) -> Result<MediaLayoutSnapshot, String> {
     Ok(MediaLayoutSnapshot {
+        fallback_assets: read_kind(
+            store,
+            "media_fallback_asset",
+            MediaObject::MediaFallbackAsset,
+        )?,
         servers: read_kind(store, "media_server", MediaObject::MediaServer)?,
         sources: read_kind(store, "media_source", MediaObject::MediaSource)?,
         led_module_types: read_kind(store, "led_module_type", MediaObject::LedModuleType)?,
@@ -347,22 +379,52 @@ fn ids(entries: &[VersionedMediaObject]) -> BTreeSet<Uuid> {
 }
 
 fn validate(layout: &MediaLayoutSnapshot) -> Result<(), String> {
+    let fallback_assets = ids(&layout.fallback_assets);
     let servers = ids(&layout.servers);
     let sources = ids(&layout.sources);
     let modules = ids(&layout.led_module_types);
     let surfaces = ids(&layout.surfaces);
+    for entry in &layout.fallback_assets {
+        let MediaObject::MediaFallbackAsset(asset) = &entry.object else {
+            unreachable!()
+        };
+        let bytes = BASE64.decode(&asset.bytes_base64).map_err(|error| {
+            format!("fallback asset {} is not valid base64: {error}", asset.name)
+        })?;
+        let digest = hex_digest(Sha256::digest(&bytes));
+        if bytes.is_empty() || digest != asset.digest {
+            return Err(format!(
+                "fallback asset {} bytes do not match its digest",
+                asset.name
+            ));
+        }
+        let decoded = image::load_from_memory(&bytes)
+            .map_err(|error| format!("fallback asset {} cannot be decoded: {error}", asset.name))?;
+        if decoded.width() != asset.width || decoded.height() != asset.height {
+            return Err(format!(
+                "fallback asset {} dimensions do not match its bytes",
+                asset.name
+            ));
+        }
+    }
     for entry in &layout.sources {
         let MediaObject::MediaSource(source) = &entry.object else {
             unreachable!()
         };
         if !servers.contains(&source.server_id) {
-            return Err(format!("media source {} references a missing server", source.name));
+            return Err(format!(
+                "media source {} references a missing server",
+                source.name
+            ));
         }
         if source
             .aspect_ratio
             .is_some_and(|ratio| !ratio.is_finite() || ratio <= 0.0)
         {
-            return Err(format!("media source {} has an invalid aspect ratio", source.name));
+            return Err(format!(
+                "media source {} has an invalid aspect ratio",
+                source.name
+            ));
         }
     }
     for entry in &layout.led_module_types {
@@ -385,6 +447,33 @@ fn validate(layout: &MediaLayoutSnapshot) -> Result<(), String> {
         let MediaObject::MediaSurface(surface) = &entry.object else {
             unreachable!()
         };
+        if let Some(fallback) = &surface.fallback {
+            if !fallback_assets.contains(&fallback.asset_id) {
+                return Err(format!(
+                    "media surface {} references a missing fallback asset",
+                    surface.name
+                ));
+            }
+            let asset = layout
+                .fallback_assets
+                .iter()
+                .find(|entry| entry.object.id() == fallback.asset_id)
+                .expect("set and collection agree");
+            let MediaObject::MediaFallbackAsset(asset_body) = &asset.object else {
+                unreachable!()
+            };
+            if asset.revision != fallback.revision
+                || asset_body.digest != fallback.digest
+                || asset_body.media_type != fallback.media_type
+                || asset_body.width != fallback.width
+                || asset_body.height != fallback.height
+            {
+                return Err(format!(
+                    "media surface {} fallback metadata is stale or inconsistent",
+                    surface.name
+                ));
+            }
+        }
         if surface.source_id.is_some_and(|id| !sources.contains(&id)) {
             return Err(format!(
                 "media surface {} references a missing source",
@@ -400,7 +489,10 @@ fn validate(layout: &MediaLayoutSnapshot) -> Result<(), String> {
                 ));
             }
             if section.width_metres <= 0.0 || section.height_metres <= 0.0 {
-                return Err(format!("media section {} needs positive dimensions", section.name));
+                return Err(format!(
+                    "media section {} needs positive dimensions",
+                    section.name
+                ));
             }
             let crop = section.crop;
             if ![crop.left, crop.top, crop.width, crop.height]
@@ -461,6 +553,76 @@ fn validate(layout: &MediaLayoutSnapshot) -> Result<(), String> {
     Ok(())
 }
 
+pub(crate) fn import_fallback(
+    store: &ShowStore,
+    request_id: String,
+    expected_revision: u64,
+    name: String,
+    bytes: &[u8],
+) -> Result<(ManagedFallbackReference, MediaLayoutOutcome), String> {
+    if bytes.is_empty() || bytes.len() > 32 * 1024 * 1024 {
+        return Err("fallback image must contain at most 32 MiB".into());
+    }
+    let format = image::guess_format(bytes)
+        .map_err(|error| format!("fallback image format is not recognized: {error}"))?;
+    let media_type = match format {
+        image::ImageFormat::Png => "image/png",
+        image::ImageFormat::Jpeg => "image/jpeg",
+        image::ImageFormat::WebP => "image/webp",
+        _ => return Err("fallback image must be PNG, JPEG or WebP".into()),
+    };
+    let decoded = image::load_from_memory_with_format(bytes, format)
+        .map_err(|error| format!("fallback image cannot be decoded: {error}"))?;
+    let id = Uuid::new_v4();
+    let digest = hex_digest(Sha256::digest(bytes));
+    let asset = MediaFallbackAsset {
+        id,
+        name,
+        media_type: media_type.into(),
+        digest: digest.clone(),
+        width: decoded.width(),
+        height: decoded.height(),
+        bytes_base64: BASE64.encode(bytes),
+        extra: BTreeMap::new(),
+    };
+    let outcome = apply(
+        store,
+        MediaObjectIntent {
+            request_id,
+            expected_revision,
+            action: MediaIntentAction::Put {
+                object: MediaObject::MediaFallbackAsset(asset),
+            },
+        },
+    )?;
+    let revision = outcome
+        .snapshot
+        .fallback_assets
+        .iter()
+        .find(|entry| entry.object.id() == id)
+        .map(|entry| entry.revision)
+        .ok_or_else(|| "imported fallback did not appear in the committed layout".to_owned())?;
+    Ok((
+        ManagedFallbackReference {
+            asset_id: id,
+            revision,
+            digest,
+            media_type: media_type.into(),
+            width: decoded.width(),
+            height: decoded.height(),
+        },
+        outcome,
+    ))
+}
+
+fn hex_digest(bytes: impl AsRef<[u8]>) -> String {
+    bytes
+        .as_ref()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
 pub(crate) fn apply(
     store: &ShowStore,
     intent: MediaObjectIntent,
@@ -514,6 +676,7 @@ pub(crate) fn apply(
     }
 
     let collection = match kind.as_str() {
+        "media_fallback_asset" => &mut candidate.fallback_assets,
         "media_server" => &mut candidate.servers,
         "media_source" => &mut candidate.sources,
         "led_module_type" => &mut candidate.led_module_types,
@@ -524,6 +687,9 @@ pub(crate) fn apply(
     collection.retain(|entry| entry.object.id() != id);
     if let Some(body) = &body {
         let object = match kind.as_str() {
+            "media_fallback_asset" => MediaObject::MediaFallbackAsset(
+                serde_json::from_value(body.clone()).map_err(|error| error.to_string())?,
+            ),
             "media_server" => MediaObject::MediaServer(
                 serde_json::from_value(body.clone()).map_err(|error| error.to_string())?,
             ),
@@ -637,13 +803,16 @@ mod tests {
         let replay = apply(&store, intent).unwrap();
         assert!(replay.replayed);
         assert_eq!(replay.snapshot.servers.len(), 1);
-        assert!(apply(&store, put("stale", server(id), 0))
-            .unwrap_err()
-            .contains("revision conflict"));
+        assert!(
+            apply(&store, put("stale", server(id), 0))
+                .unwrap_err()
+                .contains("revision conflict")
+        );
 
         drop(store);
         let reopened = ShowStore::open(path).unwrap();
-        let MediaObject::MediaServer(saved) = &snapshot(&reopened).unwrap().servers[0].object else {
+        let MediaObject::MediaServer(saved) = &snapshot(&reopened).unwrap().servers[0].object
+        else {
             panic!("server")
         };
         assert_eq!(saved.extra["futureField"], Value::Bool(true));
@@ -693,6 +862,85 @@ mod tests {
         .unwrap_err();
         assert!(error.contains("missing source"));
         assert_eq!(snapshot(&store).unwrap().sources.len(), 1);
+    }
+
+    #[test]
+    fn fallback_bytes_survive_backup_and_are_dependency_guarded() {
+        let (path, store) = show("fallback");
+        let png = BASE64
+            .decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")
+            .unwrap();
+        let (fallback, imported) = import_fallback(
+            &store,
+            "fallback-import".into(),
+            0,
+            "Standby.png".into(),
+            &png,
+        )
+        .unwrap();
+        assert_eq!(fallback.media_type, "image/png");
+        assert_eq!((fallback.width, fallback.height), (1, 1));
+        assert_eq!(imported.snapshot.fallback_assets.len(), 1);
+
+        let surface_id = Uuid::new_v4();
+        apply(
+            &store,
+            put(
+                "fallback-surface",
+                MediaObject::MediaSurface(MediaSurface {
+                    id: surface_id,
+                    name: "Fallback only".into(),
+                    source_id: None,
+                    fallback: Some(fallback.clone()),
+                    sections: vec![],
+                    extra: BTreeMap::new(),
+                }),
+                0,
+            ),
+        )
+        .unwrap();
+
+        let backup = path.with_file_name("backup.show");
+        store.backup_to(&backup).unwrap();
+        let restored = ShowStore::open(backup).unwrap();
+        let restored_layout = snapshot(&restored).unwrap();
+        assert_eq!(
+            restored_layout.fallback_assets,
+            snapshot(&store).unwrap().fallback_assets
+        );
+        assert_eq!(restored_layout.surfaces.len(), 1);
+
+        let error = apply(
+            &store,
+            MediaObjectIntent {
+                request_id: "delete-used-fallback".into(),
+                expected_revision: fallback.revision,
+                action: MediaIntentAction::Delete {
+                    kind: "media_fallback_asset".into(),
+                    id: fallback.asset_id,
+                },
+            },
+        )
+        .unwrap_err();
+        assert!(error.contains("missing fallback asset"));
+        assert_eq!(snapshot(&store).unwrap().fallback_assets.len(), 1);
+    }
+
+    #[test]
+    fn malformed_fallbacks_do_not_create_history() {
+        let (_path, store) = show("bad-fallback");
+        assert!(
+            import_fallback(
+                &store,
+                "bad-fallback".into(),
+                0,
+                "broken.png".into(),
+                b"not an image",
+            )
+            .is_err()
+        );
+        assert!(snapshot(&store).unwrap().fallback_assets.is_empty());
+        assert!(store.objects(REQUEST_KIND).unwrap().is_empty());
     }
 
     #[test]

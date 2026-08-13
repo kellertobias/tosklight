@@ -13,6 +13,7 @@ use crate::camera::ResolvedCamera;
 use crate::instances::{FrameStyle, GpuLight, MeshKind};
 use bytemuck::Zeroable;
 use glam::{Mat4, Vec3};
+use std::hash::{Hash, Hasher};
 use viz_scene::{Aabb, Scene, SceneValues, ViewConfiguration};
 
 /// What one frame decided before any of it was drawn.
@@ -79,7 +80,7 @@ impl Renderer {
         let device = self.gpu.device.clone();
         let queue = self.gpu.queue.clone();
 
-        self.assign_shadows(view, plan.shadow_budget);
+        let shadows_changed = self.assign_shadows(scene.revision, view, plan.shadow_budget);
         self.upload_frame(scene, &device, &queue);
         self.write_globals(&plan, values, view, time_seconds, &queue);
 
@@ -105,7 +106,7 @@ impl Renderer {
         if plan.passes.cull {
             self.cull_pass(&mut encoder);
         }
-        if plan.passes.shadows {
+        if plan.passes.shadows && shadows_changed {
             self.shadow_pass(&mut encoder);
         }
 
@@ -206,6 +207,20 @@ impl Renderer {
         });
         let control = crate::camera::CameraControl::from_camera(&view.camera);
         let (plot_right, plot_up) = control.page_axes(view.mode);
+        let media_appearance = scene
+            .media_surfaces_with_sources()
+            .into_iter()
+            .map(|(surface, source, fallback)| {
+                let (average, flicker) = self.media_atlas.appearance(source, fallback);
+                (
+                    surface,
+                    crate::instances::MediaAppearance {
+                        average: Vec3::from(average),
+                        flicker,
+                    },
+                )
+            })
+            .collect();
         let style = FrameStyle {
             quality: view.quality,
             draw_beams: view.mode.renders_beams(),
@@ -253,6 +268,7 @@ impl Renderer {
                 }
             },
             media_content: self.media_content_enabled,
+            media_appearance,
         };
         let draw_beams = style.draw_beams && !plot;
         self.frame = crate::instances::build(scene, values, &style);
@@ -287,13 +303,30 @@ impl Renderer {
 
     /// Pick the shadow casters and stamp each chosen light with its tile before the light buffer
     /// is uploaded, so the shaders read the same frame the maps were drawn for.
-    fn assign_shadows(&mut self, view: &ViewConfiguration, quality_budget: u32) {
+    fn assign_shadows(
+        &mut self,
+        scene_revision: u64,
+        view: &ViewConfiguration,
+        quality_budget: u32,
+    ) -> bool {
         let budget = if view.mode.renders_beams() {
             quality_budget as usize
         } else {
             0
         };
-        let chosen = shadow_candidates(&self.frame.lights, budget);
+        let projector_budget = if !view.mode.renders_beams() {
+            0
+        } else {
+            match view.quality {
+                viz_scene::RenderQuality::Draft | viz_scene::RenderQuality::Standard => 0,
+                viz_scene::RenderQuality::High => 2,
+                viz_scene::RenderQuality::Ultra => 4,
+            }
+        };
+        let chosen = shadow_candidates(&self.frame.lights, budget, projector_budget);
+        let signature = shadow_geometry_signature(scene_revision, &self.frame.lights, &chosen);
+        let changed = self.shadow_signature != Some(signature);
+        self.shadow_signature = Some(signature);
         let tile = SHADOW_TILE_EDGE as f32 / super::SHADOW_ATLAS_EDGE as f32;
         let mut matrices: Vec<[[f32; 4]; 4]> = Vec::with_capacity(chosen.len());
         for (slot, light_index) in chosen.iter().enumerate() {
@@ -321,6 +354,7 @@ impl Renderer {
             self.rebuild_shadow_groups();
         }
         self.gpu.queue.write_buffer(&self.shadow_draws, 0, &draws);
+        changed
     }
 
     /// Everything this frame draws, uploaded to the buffers the passes read.
@@ -360,6 +394,30 @@ impl Renderer {
         self.laser_instances
             .upload(device, queue, &self.frame.lasers);
         self.line_vertices.upload(device, queue, &self.frame.lines);
+        let media_panels = self
+            .frame
+            .media_panels
+            .iter()
+            .map(|panel| {
+                let mut material = panel.material;
+                material[3] = material[3].max(0.0);
+                // The shader's x is the atlas layer; authored kind/gain/feather shift right.
+                crate::instances::GpuMediaPanel {
+                    model: panel.model.to_cols_array_2d(),
+                    crop: panel.crop,
+                    material: [
+                        self.media_atlas
+                            .layer_with_fallback(panel.source_id, panel.fallback_source_id)
+                            as f32,
+                        material[0],
+                        material[1],
+                        material[3],
+                    ],
+                }
+            })
+            .collect::<Vec<_>>();
+        self.media_panel_instances
+            .upload(device, queue, &media_panels);
     }
 
     /// The one uniform block every shader reads: where the camera is, and what the look is.
@@ -545,6 +603,20 @@ impl Renderer {
             pass.draw_indexed(0..mesh.index_count, 0, 0..instances.length);
             *draw_calls += 1;
             *instance_total += instances.length;
+        }
+        if self.media_panel_instances.length > 0
+            && let Some(mesh) = self.meshes.get(&MeshKind::Plane)
+        {
+            pass.set_pipeline(&self.media_pipeline);
+            pass.set_bind_group(0, &self.scene_bind_group, &[]);
+            pass.set_bind_group(1, &self.media_bind_group, &[]);
+            pass.set_bind_group(2, &self.shadow_bind_group, &[]);
+            pass.set_vertex_buffer(0, mesh.vertices.slice(..));
+            pass.set_vertex_buffer(1, self.media_panel_instances.buffer.slice(..));
+            pass.set_index_buffer(mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
+            pass.draw_indexed(0..mesh.index_count, 0, 0..self.media_panel_instances.length);
+            *draw_calls += 1;
+            *instance_total += self.media_panel_instances.length;
         }
         if self.line_vertices.length > 0 {
             pass.set_pipeline(&self.line_pipeline);
@@ -775,21 +847,57 @@ fn symbol_metres(view: &ViewConfiguration) -> f32 {
 ///
 /// A frame has more lights than maps, and the operator notices the shadow of the brightest beam
 /// long before the twentieth. Choosing by radiance keeps the budget spent where it shows.
-fn shadow_candidates(lights: &[GpuLight], budget: usize) -> Vec<usize> {
-    let mut ranked: Vec<(usize, f32)> = lights
-        .iter()
-        .enumerate()
-        .filter(|(_, light)| light.colour_intensity[3] > 0.02)
-        .map(|(index, light)| {
-            let radiance = light.colour_intensity[0]
-                .max(light.colour_intensity[1])
-                .max(light.colour_intensity[2]);
-            (index, radiance)
-        })
-        .collect();
-    ranked.sort_by(|left, right| right.1.total_cmp(&left.1));
-    ranked.truncate(budget.min(MAX_SHADOWS));
-    ranked.into_iter().map(|(index, _)| index).collect()
+fn shadow_candidates(
+    lights: &[GpuLight],
+    fixture_budget: usize,
+    projector_budget: usize,
+) -> Vec<usize> {
+    let ranked = |projectors: bool| {
+        let mut ranked: Vec<(usize, f32)> = lights
+            .iter()
+            .enumerate()
+            .filter(|(_, light)| {
+                light.colour_intensity[3] > 0.02 && (light.params[3] > 0.5) == projectors
+            })
+            .map(|(index, light)| {
+                let radiance = light.colour_intensity[0]
+                    .max(light.colour_intensity[1])
+                    .max(light.colour_intensity[2]);
+                (index, radiance)
+            })
+            .collect();
+        ranked.sort_by(|left, right| right.1.total_cmp(&left.1));
+        ranked
+    };
+    let mut chosen = ranked(true)
+        .into_iter()
+        .take(projector_budget.min(MAX_SHADOWS))
+        .map(|(index, _)| index)
+        .collect::<Vec<_>>();
+    let remaining = MAX_SHADOWS.saturating_sub(chosen.len());
+    chosen.extend(
+        ranked(false)
+            .into_iter()
+            .take(fixture_budget.min(remaining))
+            .map(|(index, _)| index),
+    );
+    chosen
+}
+
+fn shadow_geometry_signature(scene_revision: u64, lights: &[GpuLight], chosen: &[usize]) -> u64 {
+    let mut signature = std::collections::hash_map::DefaultHasher::new();
+    scene_revision.hash(&mut signature);
+    for index in chosen {
+        index.hash(&mut signature);
+        for value in lights[*index]
+            .position_range
+            .iter()
+            .chain(lights[*index].direction_cos_outer.iter())
+        {
+            value.to_bits().hash(&mut signature);
+        }
+    }
+    signature.finish()
 }
 
 /// The view-projection one light renders its depth map with.
@@ -910,20 +1018,46 @@ mod tests {
     #[test]
     fn the_shadow_budget_goes_to_the_brightest_beams() {
         let lights = vec![light(0.1), light(0.9), light(0.5), light(0.0)];
-        let chosen = shadow_candidates(&lights, 2);
+        let chosen = shadow_candidates(&lights, 2, 0);
         assert_eq!(chosen, vec![1, 2]);
     }
 
     #[test]
     fn a_dark_light_never_costs_a_shadow_map() {
         let lights = vec![light(0.0), light(0.0)];
-        assert!(shadow_candidates(&lights, 4).is_empty());
+        assert!(shadow_candidates(&lights, 4, 0).is_empty());
     }
 
     #[test]
     fn the_budget_can_never_exceed_the_atlas() {
         let lights: Vec<GpuLight> = (0..64).map(|index| light(index as f32 + 1.0)).collect();
-        assert_eq!(shadow_candidates(&lights, 1000).len(), MAX_SHADOWS);
+        assert_eq!(shadow_candidates(&lights, 1000, 0).len(), MAX_SHADOWS);
+    }
+
+    #[test]
+    fn projector_shadows_have_a_reservation_outside_fixture_budget() {
+        let mut fixture = light(0.9);
+        fixture.params[3] = 0.0;
+        let mut projector = light(0.2);
+        projector.params[3] = 1.0;
+        assert_eq!(shadow_candidates(&[fixture, projector], 1, 1), vec![1, 0]);
+    }
+
+    #[test]
+    fn media_colour_and_flicker_do_not_invalidate_projector_shadow_geometry() {
+        let mut first = light(0.2);
+        first.params[3] = 1.0;
+        let mut next_frame = first;
+        next_frame.colour_intensity = [0.9, 0.1, 0.7, 0.8];
+        assert_eq!(
+            shadow_geometry_signature(12, &[first], &[0]),
+            shadow_geometry_signature(12, &[next_frame], &[0])
+        );
+        next_frame.position_range[0] += 0.1;
+        assert_ne!(
+            shadow_geometry_signature(12, &[first], &[0]),
+            shadow_geometry_signature(12, &[next_frame], &[0])
+        );
     }
 
     /// A point in front of the lamp has to land inside the map, or the light is shadowing itself

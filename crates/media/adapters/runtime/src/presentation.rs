@@ -51,7 +51,7 @@ pub fn run_event_loop(
         catalog,
         configuration: live,
         analysis,
-        preview,
+        previews,
     } = shared;
     let event_loop = EventLoop::new()?;
     // Outputs present continuously, so the loop should come back round rather than sleep until
@@ -62,8 +62,8 @@ pub fn run_event_loop(
         configuration: live,
         catalog,
         analysis,
-        preview,
-        last_preview_millis: None,
+        previews,
+        last_preview_millis: std::collections::BTreeMap::new(),
         outputs: Vec::new(),
         pending: configuration
             .outputs
@@ -109,7 +109,7 @@ pub struct Shared {
     /// a countdown will show has to see them.
     pub configuration: SharedConfiguration,
     pub analysis: media_audio::SharedAnalysis,
-    pub preview: crate::preview::SharedPreview,
+    pub previews: crate::preview::SharedPreviews,
 }
 
 /// The published library snapshot, shared with the services so both read one catalog.
@@ -145,8 +145,8 @@ struct PresentationHost {
     /// The newest audio analysis, which generated sources react to.
     analysis: media_audio::SharedAnalysis,
     /// The output preview a subscribed console receives.
-    preview: crate::preview::SharedPreview,
-    last_preview_millis: Option<u64>,
+    previews: crate::preview::SharedPreviews,
+    last_preview_millis: std::collections::BTreeMap<media_domain::OutputId, u64>,
     outputs: Vec<HostedOutput>,
     pending: Vec<OutputConfiguration>,
     state: SharedState,
@@ -433,36 +433,38 @@ impl PresentationHost {
     /// Only while something is subscribed, and at a fraction of the output's rate: a preview must
     /// never cost the program the frame it is previewing.
     fn capture_preview(&mut self, now: Timestamp) {
-        if !self.preview.wanted() {
-            if self.last_preview_millis.take().is_some() {
-                // Nothing is watching any more; give the target back.
-                for hosted in &mut self.outputs {
+        let state = self.state.load();
+        for hosted in &mut self.outputs {
+            let output_id = hosted.output.id();
+            let Some(preview) = self.previews.for_output(output_id) else {
+                continue;
+            };
+            if !preview.wanted() {
+                if self.last_preview_millis.remove(&output_id).is_some() {
                     hosted.output.release_preview();
                 }
+                continue;
             }
-            return;
-        }
-        if !crate::preview::due(self.last_preview_millis, now.as_millis()) {
-            return;
-        }
-        let state = self.state.load();
-        let Some(hosted) = self.outputs.first_mut() else {
-            return;
-        };
-        let Some(output_state) = state.output(hosted.output.id()) else {
-            return;
-        };
-
-        self.last_preview_millis = Some(now.as_millis());
-        // The mask a preview needs is the one the last frame used; a preview that showed the
-        // program unmasked would be a lie about what is on the wall.
-        let size = self.preview.requested_size();
-        let captured = hosted
-            .output
-            .capture_preview(size, &output_state.master, None);
-        match crate::preview::encode(&captured, size, size) {
-            Ok(frame) => self.preview.publish(frame),
-            Err(error) => tracing::warn!(%error, "the output preview could not be encoded"),
+            if !crate::preview::due(
+                self.last_preview_millis.get(&output_id).copied(),
+                now.as_millis(),
+            ) {
+                continue;
+            }
+            let Some(output_state) = state.output(output_id) else {
+                continue;
+            };
+            self.last_preview_millis.insert(output_id, now.as_millis());
+            let size = preview.requested_size();
+            let captured = hosted
+                .output
+                .capture_preview(size, &output_state.master, None);
+            match crate::preview::encode(&captured, size, size) {
+                Ok(frame) => preview.publish(frame),
+                Err(error) => {
+                    tracing::warn!(%error, output = %output_id, "the output preview could not be encoded")
+                }
+            }
         }
     }
 

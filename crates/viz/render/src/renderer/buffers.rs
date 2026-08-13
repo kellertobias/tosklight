@@ -5,7 +5,9 @@
 
 use super::{Globals, MAX_LIGHTS_PER_TILE};
 use crate::buffers::DynamicBuffer;
-use crate::instances::{BeamInstance, GpuLight, LaserInstance, LineVertex, MeshInstance, MeshKind};
+use crate::instances::{
+    BeamInstance, GpuLight, GpuMediaPanel, LaserInstance, LineVertex, MeshInstance, MeshKind,
+};
 use crate::targets::Targets;
 use bytemuck::Zeroable;
 use std::collections::HashMap;
@@ -25,6 +27,7 @@ pub(super) struct SceneBuffers {
     pub laser_instances: DynamicBuffer,
     pub line_vertices: DynamicBuffer,
     pub overlay_quads: DynamicBuffer,
+    pub media_panels: DynamicBuffer,
 }
 
 impl SceneBuffers {
@@ -110,6 +113,12 @@ impl SceneBuffers {
                 "viz overlay quads",
                 BufferUsages::VERTEX,
                 (size_of::<crate::overlay::OverlayQuad>() * 4096) as u64,
+            ),
+            media_panels: DynamicBuffer::new(
+                device,
+                "viz media panels",
+                BufferUsages::VERTEX,
+                (size_of::<GpuMediaPanel>() * 1024) as u64,
             ),
         }
     }

@@ -12,6 +12,7 @@ mod embedded;
 mod helper_source;
 mod lasers;
 
+mod media_worker;
 /// How many slots the renderer divides a gobo wheel into.
 mod menu;
 mod pacing;

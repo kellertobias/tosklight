@@ -591,6 +591,7 @@ impl PaneState {
         self.rebuild_fixture_overlay();
         let redraw_state = crate::redraw::RedrawState::new(
             self.scene.revision,
+            0,
             &self.values,
             &self.view,
             self.size,

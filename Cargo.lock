@@ -8092,8 +8092,10 @@ dependencies = [
 name = "viz-desk"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "futures-util",
  "glam",
+ "image",
  "light-fixture",
  "reqwest 0.12.28",
  "serde",
@@ -8120,6 +8122,8 @@ dependencies = [
 name = "viz-document"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
+ "image",
  "light-application",
  "light-core",
  "light-engine",
@@ -8129,6 +8133,7 @@ dependencies = [
  "parking_lot",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "thiserror 2.0.20",
  "uuid",
 ]
@@ -8141,6 +8146,7 @@ dependencies = [
  "light-core",
  "light-discovery",
  "light-fixture",
+ "light-media",
  "light-mvr",
  "parking_lot",
  "reqwest 0.12.28",
@@ -8227,6 +8233,7 @@ dependencies = [
  "bytemuck",
  "glam",
  "light-fixture",
+ "naga",
  "pollster",
  "uuid",
  "viz-project",
@@ -8239,10 +8246,13 @@ name = "viz-renderer"
 version = "0.1.0"
 dependencies = [
  "glam",
+ "image",
+ "light-media",
  "muda",
  "png 0.18.1",
  "pollster",
  "rfd 0.15.4",
+ "tokio",
  "uuid",
  "viz-desk",
  "viz-dmx",

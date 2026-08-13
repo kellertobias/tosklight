@@ -35,26 +35,29 @@ pub struct ConsoleIdentity {
 }
 
 impl ConsoleIdentity {
-    fn observe(&self, message: &media_citp::Message) {
+    fn observe(&self, message: &media_citp::Message) -> bool {
         let Some(peer) = media_citp::read_peer_location(message) else {
-            return;
+            return false;
         };
         if peer.kind != "LightingConsole" || peer.state != "Running" || peer.name.trim().is_empty()
         {
-            return;
+            return false;
         }
         if let Ok(mut latest) = self.latest.lock() {
             *latest = Some((peer.name, std::time::Instant::now()));
         }
+        true
     }
 
-    fn observe_datagram(&self, datagram: &[u8]) {
+    fn observe_datagram(&self, datagram: &[u8]) -> bool {
         let mut bytes = datagram.to_vec();
+        let mut console = false;
         if let Ok(messages) = packet::take_messages(&mut bytes) {
             for message in messages {
-                self.observe(&message);
+                console |= self.observe(&message);
             }
         }
+        console
     }
 
     pub fn snapshot(&self) -> Option<media_http::DeskIdentityTelemetry> {
@@ -170,23 +173,21 @@ fn jpeg_size(jpeg: &[u8]) -> Option<(u16, u16)> {
 struct Service {
     name: String,
     listening_port: u16,
-    preview: crate::preview::SharedPreview,
+    previews: crate::preview::SharedPreviews,
     state: SharedState,
     catalog: SharedCatalog,
     storage: media_library::LibraryStorage,
     layers: u8,
+    preview_sources: Vec<media_citp::VideoSource>,
 }
 
 impl Service {
-    fn identity(&self) -> Identity<'_> {
+    fn identity(&self) -> Identity {
         Identity {
-            name: &self.name,
+            name: self.name.clone(),
             listening_port: self.listening_port,
             layers: self.layers,
-            // The preview size a console is offered. The program output is read back at whatever
-            // a subscriber asks for; this is only what the source advertises.
-            preview_width: 320,
-            preview_height: 180,
+            preview_sources: self.preview_sources.clone(),
         }
     }
 
@@ -239,22 +240,27 @@ pub fn spawn(
     configuration: &MediaConfiguration,
     state: SharedState,
     catalog: SharedCatalog,
-    preview: crate::preview::SharedPreview,
+    previews: crate::preview::SharedPreviews,
     shutdown: Shutdown,
     console_identity: ConsoleIdentity,
 ) {
     let listen = configuration.network.resolved().citp_listen;
+    let preview_sources = configured_preview_sources(configuration, &previews);
     let service = Service {
         name: format!("ToskLight Media — {}", configuration.instance_id.as_str()),
         listening_port: listen.port(),
-        preview,
+        previews,
         state,
         catalog,
         storage: media_library::LibraryStorage::new(configuration.library.root.clone()),
         layers: configuration
             .outputs
-            .first()
-            .map_or(8, |output| output.personality.layer_count().min(255) as u8),
+            .iter()
+            .map(|output| output.personality.layer_count())
+            .max()
+            .unwrap_or(8)
+            .min(255) as u8,
+        preview_sources,
     };
     tokio::spawn(announce(
         service.clone(),
@@ -263,6 +269,32 @@ pub fn spawn(
         listen,
     ));
     tokio::spawn(listen_for_consoles(service, listen, shutdown));
+}
+
+fn configured_preview_sources(
+    configuration: &MediaConfiguration,
+    previews: &crate::preview::SharedPreviews,
+) -> Vec<media_citp::VideoSource> {
+    configuration
+        .outputs
+        .iter()
+        .filter(|output| output.enabled)
+        .enumerate()
+        .filter_map(|(physical_output, output)| {
+            let id = previews.source_for_output(output.id)?;
+            Some(media_citp::VideoSource {
+                id,
+                name: output
+                    .citp
+                    .source_name
+                    .clone()
+                    .unwrap_or_else(|| format!("{} Program", output.name)),
+                physical_output: physical_output.min(u8::MAX as usize) as u8,
+                width: output.resolution.width.min(u32::from(u16::MAX)) as u16,
+                height: output.resolution.height.min(u32::from(u16::MAX)) as u16,
+            })
+        })
+        .collect()
 }
 
 /// Announces this server, and answers a console that announced itself.
@@ -299,8 +331,12 @@ async fn announce(
             }
             received = socket.recv_from(&mut buffer) => {
                 match received {
-                    Ok((count, _)) => {
-                        console_identity.observe_datagram(&buffer[..count]);
+                    Ok((count, peer)) => {
+                        if console_identity.observe_datagram(&buffer[..count])
+                            && let Err(error) = socket.send_to(&announcement, peer).await
+                        {
+                            tracing::debug!(%error, %peer, "CITP discovery reply could not be sent");
+                        }
                     }
                     Err(error) => tracing::debug!(%error, "CITP discovery datagram could not be read"),
                 }
@@ -348,6 +384,14 @@ async fn serve_console(
     peer: SocketAddr,
     shutdown: Shutdown,
 ) {
+    // Some CITP consumers receive StFr on the standard multicast group even though the RqSt
+    // lifecycle travels over TCP. Multicast is additive: the requesting TCP peer always receives
+    // the same bounded frame directly as well.
+    let multicast = UdpSocket::bind(SocketAddr::from((Ipv4Addr::UNSPECIFIED, 0)))
+        .await
+        .ok();
+    let multicast_group =
+        SocketAddr::from((Ipv4Addr::from(MULTICAST_GROUP), media_citp::CITP_PORT));
     let mut sessions = Sessions::new();
     let mut pending: Vec<u8> = Vec::new();
     let mut buffer = vec![0u8; READ_BUFFER];
@@ -365,12 +409,12 @@ async fn serve_console(
     let mut status = tokio::time::interval(STATUS_INTERVAL);
     // What this connection last told the outputs it wanted, so a change is reported once rather
     // than every tick.
-    let mut subscribed = false;
-    let mut sent_sequence = 0u64;
+    let mut subscribed_sources = std::collections::BTreeSet::new();
+    let mut sent_sequences = std::collections::BTreeMap::new();
     let mut watcher = shutdown.watcher();
     let mut stopping = Box::pin(watcher.wait());
 
-    loop {
+    'connected: loop {
         tokio::select! {
             read = stream.read(&mut buffer) => {
                 let Ok(count) = read else { break };
@@ -397,7 +441,7 @@ async fn serve_console(
                     );
                     for reply in replies {
                         if stream.write_all(&reply).await.is_err() {
-                            return;
+                            break 'connected;
                         }
                     }
                 }
@@ -408,35 +452,47 @@ async fn serve_console(
                     .await
                     .is_err()
                 {
-                    return;
+                    break 'connected;
                 }
 
                 let now = started.elapsed().as_millis() as u64;
-                let wanted = sessions.anyone_subscribed(now);
-                if wanted != subscribed {
-                    subscribed = wanted;
-                    service.preview.subscribed(wanted, sessions.requested_size(now));
+                let active = sessions.active_sources(now).into_iter().collect::<std::collections::BTreeSet<_>>();
+                for source in subscribed_sources.difference(&active) {
+                    if let Some(preview) = service.previews.for_source(*source) {
+                        preview.subscribed(false, None);
+                    }
                 }
-
-                // A frame is sent only when there is a new one: a console asked for ten a second,
-                // not for the same picture sixty times.
-                if let Some((sequence, frame)) = service.preview.latest()
-                    && sequence != sent_sequence
-                {
-                    sent_sequence = sequence;
-                    for message in sessions.frames_for(&frame, sequence, now) {
+                for source in active.difference(&subscribed_sources) {
+                    if let Some(preview) = service.previews.for_source(*source) {
+                        preview.subscribed(true, sessions.requested_size_for(*source, now));
+                    }
+                }
+                for source in &active {
+                    let Some(preview) = service.previews.for_source(*source) else { continue };
+                    preview.requested_size_is(sessions.requested_size_for(*source, now));
+                    let Some((sequence, frame)) = preview.latest() else { continue };
+                    if sent_sequences.get(source) == Some(&sequence) { continue; }
+                    sent_sequences.insert(*source, sequence);
+                    for message in sessions.frames_for_source(*source, &frame, sequence, now) {
                         if stream.write_all(&message).await.is_err() {
-                            return;
+                            break 'connected;
+                        }
+                        if let Some(socket) = multicast.as_ref()
+                            && let Err(error) = socket.send_to(&message, multicast_group).await
+                        {
+                            tracing::debug!(%error, "CITP multicast preview frame was not delivered");
                         }
                     }
                 }
+                subscribed_sources = active;
             }
-            _ = &mut stopping => return,
+            _ = &mut stopping => break 'connected,
         }
     }
-    if subscribed {
-        // A console that closed without unsubscribing must not leave the outputs capturing.
-        service.preview.subscribed(false, None);
+    for source in subscribed_sources {
+        if let Some(preview) = service.previews.for_source(source) {
+            preview.subscribed(false, None);
+        }
     }
     tracing::info!(%peer, "a console disconnected");
 }
@@ -512,5 +568,25 @@ mod tests {
         ));
 
         assert_eq!(identity.snapshot(), None);
+    }
+
+    #[test]
+    fn every_enabled_logical_output_is_a_stable_named_preview_source() {
+        let mut main = media_application::configuration::OutputConfiguration::new("Main");
+        main.resolution.width = 1920;
+        main.resolution.height = 1080;
+        main.citp.source_name = Some("Program A".to_owned());
+        let auxiliary = media_application::configuration::OutputConfiguration::new("Aux");
+        let configuration = MediaConfiguration {
+            outputs: vec![main.clone(), auxiliary.clone()],
+            ..Default::default()
+        };
+        let previews = crate::preview::SharedPreviews::configured(&configuration);
+        let sources = configured_preview_sources(&configuration, &previews);
+        assert_eq!(sources.len(), 2);
+        assert_eq!(sources[0].name, "Program A");
+        assert_eq!((sources[0].width, sources[0].height), (1920, 1080));
+        assert_eq!(sources[0].id, previews.source_for_output(main.id).unwrap());
+        assert_ne!(sources[0].id, sources[1].id);
     }
 }

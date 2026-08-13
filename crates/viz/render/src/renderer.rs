@@ -12,6 +12,7 @@ use wgpu::BufferUsages;
 
 const COMMON_WGSL: &str = include_str!("shaders/common.wgsl");
 const SURFACE_WGSL: &str = include_str!("shaders/surface.wgsl");
+const MEDIA_WGSL: &str = include_str!("shaders/media.wgsl");
 const BEAM_WGSL: &str = include_str!("shaders/beam.wgsl");
 const LASER_WGSL: &str = include_str!("shaders/laser.wgsl");
 const LINES_WGSL: &str = include_str!("shaders/lines.wgsl");
@@ -223,6 +224,9 @@ pub struct Renderer {
     shadow_draws: wgpu::Buffer,
     /// How many lights actually have a map this frame.
     shadow_count: u32,
+    /// Geometry/light identity represented by the current shadow atlas. Media pixels are excluded,
+    /// so a new video frame never redraws unchanged projector or fixture shadow maps.
+    shadow_signature: Option<u64>,
     haze_view: wgpu::TextureView,
     haze_sampler: wgpu::Sampler,
     bloom_extract_group: wgpu::BindGroup,
@@ -243,6 +247,10 @@ pub struct Renderer {
     overlay_bind_group: wgpu::BindGroup,
     overlay_globals: wgpu::Buffer,
     overlay_quads: DynamicBuffer,
+    media_panel_instances: DynamicBuffer,
+    media_pipeline: wgpu::RenderPipeline,
+    media_bind_group: wgpu::BindGroup,
+    media_atlas: crate::media::MediaAtlas,
     frame: FrameInstances,
     media_content_enabled: bool,
     stats: FrameStats,
@@ -343,6 +351,17 @@ impl Renderer {
             &device, &gpu.queue, &layouts, &buffers, &shadow, &targets, &sampler,
         );
         let overlay = OverlayAtlas::new(&device, &gpu.queue, &layouts, icon);
+        let media_atlas = crate::media::MediaAtlas::new(&device, &gpu.queue);
+        let media_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("viz media sampler"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        });
+        let media_bind_group =
+            build_media_group(&device, &layouts.media, &media_atlas.view, &media_sampler);
 
         Ok(Self {
             gpu,
@@ -379,6 +398,7 @@ impl Renderer {
             shadow_matrices: shadow.matrices,
             shadow_draws: shadow.draws,
             shadow_count: 0,
+            shadow_signature: None,
             haze_view: groups.haze_view,
             haze_sampler: groups.haze_sampler,
             bloom_extract_group: groups.bloom_extract,
@@ -399,6 +419,10 @@ impl Renderer {
             overlay_bind_group: overlay.bind_group,
             overlay_globals: overlay.globals,
             overlay_quads: buffers.overlay_quads,
+            media_panel_instances: buffers.media_panels,
+            media_pipeline: pipelines.media,
+            media_bind_group,
+            media_atlas,
             frame: FrameInstances::default(),
             media_content_enabled: true,
             stats: FrameStats::default(),
@@ -437,6 +461,18 @@ impl Renderer {
     /// embedded panes keep authored screen/projector geometry but never open media capabilities.
     pub fn set_media_content_enabled(&mut self, enabled: bool) {
         self.media_content_enabled = enabled;
+    }
+
+    pub fn update_media_frame(&mut self, frame: &crate::media::MediaFrame) -> Result<bool, String> {
+        self.media_atlas.update(&self.gpu.queue, frame)
+    }
+
+    pub fn media_upload_count(&self) -> u64 {
+        self.media_atlas.upload_count()
+    }
+
+    pub fn media_presentation_identity(&self) -> u64 {
+        self.media_atlas.presentation_identity()
     }
 
     /// Re-attach the swapchain without changing size, for a window the system stopped
@@ -876,7 +912,8 @@ mod pipelines;
 use buffers::SceneBuffers;
 use groups::Groups;
 use layouts::{
-    Layouts, PipelineLayouts, ShadowResources, build_scene_group, build_shadow_group, post_group,
+    Layouts, PipelineLayouts, ShadowResources, build_media_group, build_scene_group,
+    build_shadow_group, post_group,
 };
 use overlay_atlas::OverlayAtlas;
 use pipelines::{Modules, Pipelines};
@@ -1028,5 +1065,68 @@ mod tests {
         assert_eq!(budget.settings(), *ULTRA_LADDER.last().unwrap());
         budget.observe(11_000);
         assert_eq!(budget.settings(), ULTRA_LADDER[ULTRA_LADDER.len() - 2]);
+    }
+
+    #[test]
+    fn media_shader_validates_and_captures_when_a_gpu_is_available() {
+        let shader = naga::front::wgsl::parse_str(&format!("{COMMON_WGSL}\n{MEDIA_WGSL}"))
+            .expect("media WGSL parses");
+        naga::valid::Validator::new(
+            naga::valid::ValidationFlags::all(),
+            naga::valid::Capabilities::all(),
+        )
+        .validate(&shader)
+        .expect("media WGSL validates");
+
+        let Ok(mut renderer) = Renderer::headless(96, 64) else {
+            // Shader validation above is platform-independent. Runtime capture is additionally
+            // exercised wherever CI or the workstation exposes a Metal/software adapter.
+            return;
+        };
+        let source = viz_scene::uuid::Uuid::new_v4();
+        let frame = crate::media::MediaFrame {
+            source_id: source,
+            sequence: 7,
+            width: crate::media::EDGE,
+            height: crate::media::EDGE,
+            rgba: [220, 30, 20, 255].repeat((crate::media::EDGE * crate::media::EDGE) as usize),
+            persistent: true,
+        };
+        assert!(renderer.update_media_frame(&frame).unwrap());
+        assert!(!renderer.update_media_frame(&frame).unwrap());
+        assert_eq!(renderer.media_upload_count(), 1);
+
+        let mut scene = viz_scene::Scene::default();
+        scene.media_sections.push(viz_scene::MediaSection {
+            id: viz_scene::uuid::Uuid::new_v4(),
+            surface_id: viz_scene::uuid::Uuid::new_v4(),
+            name: "Program screen".to_owned(),
+            source_id: Some(source),
+            fallback_source_id: None,
+            position: glam::Vec3::ZERO,
+            rotation_degrees: glam::Vec3::ZERO,
+            size: glam::Vec3::new(4.0, 2.25, 0.04),
+            crop: viz_scene::MediaCrop {
+                left: 0.1,
+                top: 0.1,
+                width: 0.8,
+                height: 0.8,
+            },
+            kind: viz_scene::MediaSectionKind::Tv {
+                bezel_metres: 0.03,
+                spill: 0.2,
+            },
+        });
+        scene.recompute_bounds();
+        let image = renderer
+            .capture(
+                &scene,
+                &viz_scene::SceneValues::default(),
+                &viz_scene::ViewConfiguration::default(),
+                &crate::Overlay::default(),
+                0.0,
+            )
+            .expect("media pipeline capture");
+        assert_eq!((image.width, image.height), (96, 64));
     }
 }

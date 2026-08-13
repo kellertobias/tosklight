@@ -5,6 +5,8 @@ edition.workspace = true
 license-file.workspace = true
 
 [dependencies]
+base64.workspace = true
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 futures-util.workspace = true
 glam.workspace = true
 light-fixture = { path = "../../shared/fixture" }

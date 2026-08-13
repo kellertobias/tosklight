@@ -14,7 +14,9 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 use viz_document::PlanningDocument;
-use viz_document::{MediaLayoutOutcome, MediaLayoutSnapshot, MediaObjectIntent};
+use viz_document::{
+    ManagedFallbackReference, MediaLayoutOutcome, MediaLayoutSnapshot, MediaObjectIntent,
+};
 use viz_planning::SceneSource;
 
 /// The open document, shared with the visualizer.
@@ -232,6 +234,33 @@ pub fn media_layout(session: tauri::State<'_, Session>) -> Answer<MediaLayoutSna
     session.with(|document| document.media_layout().map_err(|error| error.to_string()))
 }
 
+/// Connects to a configured CITP peer and returns its numeric advertised outputs.
+#[tauri::command]
+pub async fn inspect_citp_server(
+    host: String,
+    port: u16,
+) -> Result<Vec<light_media::MediaPreviewSource>, String> {
+    let address = tokio::net::lookup_host((host.as_str(), port))
+        .await
+        .map_err(|error| error.to_string())?
+        .next()
+        .ok_or_else(|| "CITP host resolved to no address".to_owned())?;
+    let mut client = light_media::CitpClient::connect(address, std::time::Duration::from_secs(3))
+        .await
+        .map_err(|error| error.to_string())?;
+    client
+        .preview_sources()
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn discover_citp_servers() -> Result<Vec<light_media::DiscoveredCitpServer>, String> {
+    light_media::discover_servers(std::time::Duration::from_millis(1_500))
+        .await
+        .map_err(|error| error.to_string())
+}
+
 /// One revision-safe and replay-safe media object mutation.
 #[tauri::command]
 pub fn apply_media_intent(
@@ -242,6 +271,33 @@ pub fn apply_media_intent(
         document
             .apply_media_intent(intent)
             .map_err(|error| error.to_string())
+    })
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportedMediaFallback {
+    reference: ManagedFallbackReference,
+    outcome: MediaLayoutOutcome,
+}
+
+/// Copies a fallback image into the portable show; the source path is never persisted.
+#[tauri::command]
+pub fn import_media_fallback(
+    session: tauri::State<'_, Session>,
+    path: PathBuf,
+) -> Answer<ImportedMediaFallback> {
+    let bytes = std::fs::read(&path).map_err(|error| error.to_string())?;
+    let name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("Fallback image")
+        .to_owned();
+    session.change(|document| {
+        let (reference, outcome) = document
+            .import_media_fallback(Uuid::new_v4().to_string(), 0, name, &bytes)
+            .map_err(|error| error.to_string())?;
+        Ok(ImportedMediaFallback { reference, outcome })
     })
 }
 

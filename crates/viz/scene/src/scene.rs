@@ -52,6 +52,20 @@ pub struct Scene {
 }
 
 impl Scene {
+    /// One effective live/fallback binding per surface, for linked projector appearance. Sections
+    /// of one surface intentionally share that logical source even when their crops differ.
+    pub fn media_surfaces_with_sources(&self) -> Vec<(Uuid, Option<Uuid>, Option<Uuid>)> {
+        let mut surfaces = std::collections::BTreeMap::new();
+        for section in &self.media_sections {
+            surfaces
+                .entry(section.surface_id)
+                .or_insert((section.source_id, section.fallback_source_id));
+        }
+        surfaces
+            .into_iter()
+            .map(|(surface, (source, fallback))| (surface, source, fallback))
+            .collect()
+    }
     /// Recompute the scene bounds from fixture and scenery placement.
     /// The rig's own extent: the fixtures, without the room invented around them.
     ///
@@ -143,6 +157,10 @@ pub struct MediaSourceBinding {
     pub advertised_source_id: u16,
     pub name: String,
     pub aspect_ratio: Option<f32>,
+    /// Embedded fallback RGBA8. Present only for show-owned fallback bindings; live sources keep
+    /// this empty and are fed by the standalone CITP worker.
+    #[serde(default)]
+    pub fallback_rgba: Option<Vec<u8>>,
 }
 
 #[derive(Clone, Copy, Debug, serde::Serialize, serde::Deserialize)]
@@ -181,6 +199,11 @@ pub struct MediaSection {
     pub surface_id: Uuid,
     pub name: String,
     pub source_id: Option<Uuid>,
+    /// Show-owned image used when the live source has produced no frame, or its last good frame
+    /// has been held for two seconds. It remains distinct so a live reconnect never rewrites the
+    /// authored surface binding.
+    #[serde(default)]
+    pub fallback_source_id: Option<Uuid>,
     pub position: Vec3,
     pub rotation_degrees: Vec3,
     pub size: Vec3,

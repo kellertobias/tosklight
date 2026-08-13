@@ -14,21 +14,21 @@
 //! The file it writes is an ordinary portable show. The desk opens it directly; no conversion,
 //! no export step, no second format.
 
-mod mvr;
 mod media;
+mod mvr;
 mod ports;
 pub mod standalone;
 
 #[cfg(test)]
 mod tests;
 
-pub use mvr::{MvrExport, MvrImportOutcome, MvrPreview, MvrPreviewFixture};
 pub use media::{
-    CitpConfiguration, CropRectangle, LedModuleType, ManagedFallbackReference, MediaIntentAction,
-    MediaLayoutOutcome, MediaLayoutSnapshot, MediaObject, MediaObjectIntent, MediaProjector,
-    MediaServer, MediaSource, MediaSurface, MediaSurfaceSection, MediaSurfaceSectionKind,
-    MediaTransform, ProjectionScreenMaterial, VersionedMediaObject,
+    CitpConfiguration, CropRectangle, LedModuleType, ManagedFallbackReference, MediaFallbackAsset,
+    MediaIntentAction, MediaLayoutOutcome, MediaLayoutSnapshot, MediaObject, MediaObjectIntent,
+    MediaProjector, MediaServer, MediaSource, MediaSurface, MediaSurfaceSection,
+    MediaSurfaceSectionKind, MediaTransform, ProjectionScreenMaterial, VersionedMediaObject,
 };
+pub use mvr::{MvrExport, MvrImportOutcome, MvrPreview, MvrPreviewFixture};
 pub use ports::{PlanningPorts, PlanningUnitOfWork};
 
 use light_application::{
@@ -207,6 +207,27 @@ impl PlanningDocument {
         intent: MediaObjectIntent,
     ) -> Result<MediaLayoutOutcome, DocumentError> {
         media::apply(&self.store()?, intent).map_err(DocumentError::Action)
+    }
+
+    /// Imports a PNG, JPEG or WebP fallback as immutable bytes inside the portable show.
+    ///
+    /// Keeping the bytes in the show database makes ordinary save-as/backup/restore exact and
+    /// avoids absolute paths or a sidecar directory that could be separated from the show.
+    pub fn import_media_fallback(
+        &self,
+        request_id: impl Into<String>,
+        expected_revision: u64,
+        name: impl Into<String>,
+        bytes: &[u8],
+    ) -> Result<(ManagedFallbackReference, MediaLayoutOutcome), DocumentError> {
+        media::import_fallback(
+            &self.store()?,
+            request_id.into(),
+            expected_revision,
+            name.into(),
+            bytes,
+        )
+        .map_err(DocumentError::Action)
     }
 
     /// The portable patch revision, which is what patch mutations are versioned against.

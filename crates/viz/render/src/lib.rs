@@ -12,6 +12,7 @@ pub mod font;
 mod gobos;
 mod gpu;
 mod instances;
+pub mod media;
 mod mesh;
 pub mod overlay;
 mod pick;

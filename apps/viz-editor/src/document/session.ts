@@ -185,6 +185,7 @@ export interface MediaProjector {
 }
 
 export type MediaObject =
+	| { kind: "media_fallback_asset"; body: { id: string; name: string; mediaType: string; digest: string; width: number; height: number; bytesBase64: string } }
 	| { kind: "media_server"; body: MediaServer }
 	| { kind: "media_source"; body: MediaSource }
 	| { kind: "led_module_type"; body: LedModuleType }
@@ -197,6 +198,7 @@ export interface VersionedMediaObject {
 }
 
 export interface MediaLayoutSnapshot {
+	fallbackAssets: VersionedMediaObject[];
 	servers: VersionedMediaObject[];
 	sources: VersionedMediaObject[];
 	ledModuleTypes: VersionedMediaObject[];
@@ -271,8 +273,13 @@ export const documentSession = {
 	/** The rig as it currently stands, for surfaces outside the sheet that need the fixtures. */
 	patchSnapshot: () => invoke<PatchSnapshot>("patch_snapshot"),
 	mediaLayout: () => invoke<MediaLayoutSnapshot>("media_layout"),
+	inspectCitpServer: (host: string, port: number) =>
+		invoke<Array<{ id: number; name: string; physical_output: number; layer: number | null; width: number; height: number }>>("inspect_citp_server", { host, port }),
+	discoverCitpServers: () => invoke<Array<{ name: string; host: string; port: number }>>("discover_citp_servers"),
 	applyMediaIntent: (intent: MediaObjectIntent) =>
 		invoke<MediaLayoutOutcome>("apply_media_intent", { intent }),
+	importMediaFallback: (path: string) =>
+		invoke<{ reference: NonNullable<MediaSurface["fallback"]>; outcome: MediaLayoutOutcome }>("import_media_fallback", { path }),
 	patchLayers: () => invoke<PatchLayer[]>("patch_layers"),
 	savePatchLayer: (layer: PatchLayer) =>
 		invoke<PatchLayer>("save_patch_layer", { layer }),

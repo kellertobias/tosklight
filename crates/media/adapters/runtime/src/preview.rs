@@ -10,6 +10,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
 use media_citp::Thumbnail;
+use media_domain::OutputId;
 use media_domain::geometry::Size;
 
 /// The most preview frames captured per second, however fast the output runs.
@@ -32,6 +33,49 @@ pub struct Preview {
 /// Shared between the outputs, which capture, and the connections, which send.
 pub type SharedPreview = Arc<Preview>;
 
+/// Stable one-to-one mapping between configured logical outputs, advertised CITP sources and
+/// their independently demand-driven latest-frame slots.
+#[derive(Clone, Default)]
+pub struct SharedPreviews {
+    by_output: Arc<std::collections::BTreeMap<OutputId, (u16, SharedPreview)>>,
+}
+
+impl SharedPreviews {
+    pub fn configured(configuration: &media_application::MediaConfiguration) -> Self {
+        let mut used = std::collections::BTreeSet::new();
+        let by_output = configuration
+            .outputs
+            .iter()
+            .filter(|output| output.enabled)
+            .map(|output| {
+                let bytes = output.id.as_uuid().into_bytes();
+                let mut source = u16::from_le_bytes([bytes[0], bytes[1]]).max(1);
+                while !used.insert(source) {
+                    source = source.wrapping_add(1).max(1);
+                }
+                (output.id, (source, Arc::new(Preview::new())))
+            })
+            .collect();
+        Self {
+            by_output: Arc::new(by_output),
+        }
+    }
+
+    pub fn for_output(&self, output: OutputId) -> Option<&SharedPreview> {
+        self.by_output.get(&output).map(|(_, preview)| preview)
+    }
+
+    pub fn for_source(&self, source: u16) -> Option<&SharedPreview> {
+        self.by_output
+            .values()
+            .find_map(|(id, preview)| (*id == source).then_some(preview))
+    }
+
+    pub fn source_for_output(&self, output: OutputId) -> Option<u16> {
+        self.by_output.get(&output).map(|(source, _)| *source)
+    }
+}
+
 impl Preview {
     pub fn new() -> Self {
         Self::default()
@@ -41,10 +85,7 @@ impl Preview {
     pub fn subscribed(&self, wanted: bool, size: Option<(u16, u16)>) {
         if wanted {
             self.subscribers.fetch_add(1, Ordering::SeqCst);
-            if let Some((width, height)) = size {
-                self.requested
-                    .store(u64::from(width) << 16 | u64::from(height), Ordering::SeqCst);
-            }
+            self.requested_size_is(size);
         } else {
             // Never below zero: a connection that closes while unsubscribed must not make the
             // count wrap and leave the GPU reading back forever.
@@ -53,6 +94,13 @@ impl Preview {
                 .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
                     count.checked_sub(1)
                 });
+        }
+    }
+
+    pub fn requested_size_is(&self, size: Option<(u16, u16)>) {
+        if let Some((width, height)) = size {
+            self.requested
+                .store(u64::from(width) << 16 | u64::from(height), Ordering::SeqCst);
         }
     }
 
@@ -137,6 +185,31 @@ mod tests {
 
     fn image(size: Size, colour: [u8; 4]) -> Vec<u8> {
         colour.repeat(size.width as usize * size.height as usize)
+    }
+
+    #[test]
+    fn configured_outputs_have_stable_isolated_preview_slots() {
+        let first = media_application::configuration::OutputConfiguration::new("Main");
+        let second = media_application::configuration::OutputConfiguration::new("Aux");
+        let configuration = media_application::MediaConfiguration {
+            outputs: vec![first.clone(), second.clone()],
+            ..Default::default()
+        };
+        let previews = SharedPreviews::configured(&configuration);
+        let first_source = previews.source_for_output(first.id).unwrap();
+        let second_source = previews.source_for_output(second.id).unwrap();
+        assert_ne!(first_source, second_source);
+        assert!(Arc::ptr_eq(
+            previews.for_output(first.id).unwrap(),
+            previews.for_source(first_source).unwrap()
+        ));
+        assert!(!previews.for_output(second.id).unwrap().wanted());
+        previews
+            .for_source(first_source)
+            .unwrap()
+            .subscribed(true, Some((160, 90)));
+        assert!(previews.for_output(first.id).unwrap().wanted());
+        assert!(!previews.for_output(second.id).unwrap().wanted());
     }
 
     #[test]

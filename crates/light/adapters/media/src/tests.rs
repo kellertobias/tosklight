@@ -12,6 +12,28 @@ fn console_announcement_carries_the_active_show_as_a_peer_location() {
             .any(|window| window == b"LightingConsole")
     );
 }
+
+#[test]
+fn discovery_reads_the_advertised_media_server_port_and_identity() {
+    let mut body = 4809_u16.to_le_bytes().to_vec();
+    body.extend_from_slice(b"MediaServer\0ToskLight Media\0Running\0");
+    let size = 24 + body.len();
+    let mut packet = b"CITP\x01\x00\x00\x00".to_vec();
+    packet.extend_from_slice(&(size as u32).to_le_bytes());
+    packet.extend_from_slice(&1_u16.to_le_bytes());
+    packet.extend_from_slice(&0_u16.to_le_bytes());
+    packet.extend_from_slice(b"PINFPLoc");
+    packet.extend_from_slice(&body);
+    assert_eq!(
+        parse_peer_location(&packet),
+        Some((
+            4809,
+            "MediaServer".to_owned(),
+            "ToskLight Media".to_owned(),
+            "Running".to_owned()
+        ))
+    );
+}
 use crate::protocol::{encode_packet, parse_thumbnail};
 use std::time::Duration;
 use tokio::{

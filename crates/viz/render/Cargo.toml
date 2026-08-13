@@ -13,6 +13,7 @@ wgpu.workspace = true
 
 [dev-dependencies]
 light-fixture = { path = "../../shared/fixture" }
+naga = { version = "30", features = ["wgsl-in"] }
 uuid.workspace = true
 viz-project = { path = "../project" }
 

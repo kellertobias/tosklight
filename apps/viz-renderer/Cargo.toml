@@ -10,9 +10,12 @@ path = "src/main.rs"
 
 [dependencies]
 glam.workspace = true
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+light-media = { path = "../../crates/light/adapters/media" }
 muda.workspace = true
 png.workspace = true
 rfd.workspace = true
+tokio.workspace = true
 uuid.workspace = true
 viz-desk.workspace = true
 viz-dmx.workspace = true

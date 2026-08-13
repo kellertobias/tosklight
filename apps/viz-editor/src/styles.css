@@ -195,6 +195,29 @@ body {
 	background: linear-gradient(135deg, #13202c, #1f101f);
 }
 
+.viz-media-crop-preview {
+	position: relative;
+	grid-column: 1 / -1;
+	min-height: 130px;
+	border: 1px solid #52606e;
+	background: repeating-conic-gradient(#172533 0 25%, #101923 0 50%) 0 / 24px 24px;
+	overflow: hidden;
+}
+
+.viz-media-crop-preview > div {
+	position: absolute;
+	border: 2px solid #55e5ff;
+	background: rgb(85 229 255 / 18%);
+	box-shadow: 0 0 0 100vmax rgb(0 0 0 / 55%);
+}
+
+.viz-media-transform {
+	grid-column: 1 / -1;
+	display: grid;
+	grid-template-columns: repeat(3, minmax(120px, 1fr));
+	gap: 8px;
+}
+
 .viz-led-grid {
 	grid-column: 1 / -1;
 	display: grid;

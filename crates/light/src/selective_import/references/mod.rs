@@ -26,6 +26,12 @@ enum RegisteredObjectKind {
     DependencyList,
     Effect,
     ManagedAsset,
+    MediaFallbackAsset,
+    MediaServer,
+    MediaSource,
+    LedModuleType,
+    MediaSurface,
+    MediaProjector,
 }
 
 impl RegisteredObjectKind {
@@ -48,6 +54,12 @@ impl RegisteredObjectKind {
             "macro" | "timecode" => Some(Self::DependencyList),
             "effect" => Some(Self::Effect),
             "managed_asset" => Some(Self::ManagedAsset),
+            "media_fallback_asset" => Some(Self::MediaFallbackAsset),
+            "media_server" => Some(Self::MediaServer),
+            "media_source" => Some(Self::MediaSource),
+            "led_module_type" => Some(Self::LedModuleType),
+            "media_surface" => Some(Self::MediaSurface),
+            "media_projector" => Some(Self::MediaProjector),
             _ => None,
         }
     }
@@ -95,6 +107,12 @@ pub(super) fn registered_descriptor(
         RegisteredObjectKind::DependencyList => descriptors::dependency_list_descriptor(object)?,
         RegisteredObjectKind::Effect => descriptors::effect_descriptor(object)?,
         RegisteredObjectKind::ManagedAsset => locations::id_descriptor(object)?,
+        RegisteredObjectKind::MediaFallbackAsset
+        | RegisteredObjectKind::MediaServer
+        | RegisteredObjectKind::LedModuleType => locations::id_descriptor(object)?,
+        RegisteredObjectKind::MediaSource => descriptors::media_source_descriptor(object)?,
+        RegisteredObjectKind::MediaSurface => descriptors::media_surface_descriptor(object)?,
+        RegisteredObjectKind::MediaProjector => descriptors::media_projector_descriptor(object)?,
     };
     Ok(Some(descriptor))
 }

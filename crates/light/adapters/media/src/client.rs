@@ -7,7 +7,10 @@ use crate::{
     ImageFormat, LibraryId, MediaError, MediaImage, MediaLayerStatus, MediaProviderCapabilities,
     MediaServerInformation, MediaServerSnapshot,
 };
-use std::{net::SocketAddr, time::Duration};
+use std::{
+    net::SocketAddr,
+    time::{Duration, Instant},
+};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
@@ -80,6 +83,67 @@ impl CitpClient {
                 layers: Vec::new(),
             },
         })
+    }
+
+    /// Enumerates the peer's advertised output/master sources without assuming source 0 or 1.
+    pub async fn preview_sources(&mut self) -> Result<Vec<crate::MediaPreviewSource>, MediaError> {
+        let request = self.send(*b"GVSr", Vec::new()).await?;
+        let packet = self.receive_relevant(*b"VSrc", request).await?;
+        parse_preview_sources(&packet.payload)
+    }
+
+    /// Starts or renews one bounded continuous preview subscription.
+    pub async fn subscribe_preview(
+        &mut self,
+        source: u16,
+        width: u16,
+        height: u16,
+        fps: u8,
+        lease: Duration,
+    ) -> Result<(), MediaError> {
+        validate_preview_bounds(width, height)?;
+        if fps == 0 || fps > 10 {
+            return Err(MediaError::Invalid(
+                "preview subscription rate must be between 1 and 10 fps".into(),
+            ));
+        }
+        let seconds = lease.as_secs().clamp(1, u64::from(u8::MAX)) as u8;
+        self.send(
+            *b"RqSt",
+            preview_payload_with_lifecycle(source, width, height, fps, seconds),
+        )
+        .await?;
+        Ok(())
+    }
+
+    /// Receives the next continuous frame, ignoring status traffic and validating source identity.
+    pub async fn next_preview_frame(&mut self, source: u16) -> Result<MediaImage, MediaError> {
+        for _ in 0..64 {
+            let packet = self.read_packet().await?;
+            if packet.content == *b"LSta" {
+                self.latest_layers = parse_layer_status(&packet.payload)?;
+                continue;
+            }
+            if packet.content == *b"Nack" {
+                return Err(MediaError::Rejected(
+                    String::from_utf8_lossy(packet.payload.get(..4).unwrap_or_default())
+                        .into_owned(),
+                ));
+            }
+            if packet.content != *b"StFr" {
+                continue;
+            }
+            let (received_source, image) = parse_stream_frame(&packet.payload, packet.version)?;
+            if received_source != source {
+                return Err(MediaError::Invalid(format!(
+                    "media server sent source {received_source} to subscription {source}"
+                )));
+            }
+            return Ok(image);
+        }
+        Err(MediaError::Invalid(
+            "too many unrelated CITP messages while awaiting preview".into(),
+        ))
     }
 
     pub async fn request_thumbnail(
@@ -323,14 +387,114 @@ fn library_revision(
 }
 
 fn preview_payload(source: u16, width: u16, height: u16) -> Vec<u8> {
+    preview_payload_with_lifecycle(source, width, height, 1, 0)
+}
+
+fn preview_payload_with_lifecycle(
+    source: u16,
+    width: u16,
+    height: u16,
+    fps: u8,
+    timeout_seconds: u8,
+) -> Vec<u8> {
     let mut payload = Vec::with_capacity(13);
     payload.extend_from_slice(&source.to_le_bytes());
     payload.extend_from_slice(&ImageFormat::Jpeg.cookie());
     payload.extend_from_slice(&width.to_le_bytes());
     payload.extend_from_slice(&height.to_le_bytes());
-    payload.push(1);
-    payload.push(0);
+    payload.push(fps);
+    payload.push(timeout_seconds);
     payload
+}
+
+/// Reconnecting continuous subscription that never rebinds a disappeared numeric source.
+pub struct CitpPreviewSubscription {
+    address: SocketAddr,
+    operation_timeout: Duration,
+    source: u16,
+    width: u16,
+    height: u16,
+    fps: u8,
+    lease: Duration,
+    renew_at: Instant,
+    client: CitpClient,
+}
+
+impl CitpPreviewSubscription {
+    pub async fn connect(
+        address: SocketAddr,
+        operation_timeout: Duration,
+        source: u16,
+        width: u16,
+        height: u16,
+        fps: u8,
+        lease: Duration,
+    ) -> Result<Self, MediaError> {
+        let mut client = CitpClient::connect(address, operation_timeout).await?;
+        ensure_advertised(&mut client, source).await?;
+        client
+            .subscribe_preview(source, width, height, fps, lease)
+            .await?;
+        Ok(Self {
+            address,
+            operation_timeout,
+            source,
+            width,
+            height,
+            fps,
+            lease,
+            renew_at: renewal_deadline(lease),
+            client,
+        })
+    }
+
+    pub async fn next_frame(&mut self) -> Result<MediaImage, MediaError> {
+        if Instant::now() >= self.renew_at {
+            self.renew().await?;
+        }
+        match self.client.next_preview_frame(self.source).await {
+            Ok(frame) => Ok(frame),
+            Err(MediaError::Io(_) | MediaError::Timeout) => {
+                self.reconnect().await?;
+                self.client.next_preview_frame(self.source).await
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    pub async fn renew(&mut self) -> Result<(), MediaError> {
+        self.client
+            .subscribe_preview(self.source, self.width, self.height, self.fps, self.lease)
+            .await?;
+        self.renew_at = renewal_deadline(self.lease);
+        Ok(())
+    }
+
+    async fn reconnect(&mut self) -> Result<(), MediaError> {
+        let mut client = CitpClient::connect(self.address, self.operation_timeout).await?;
+        ensure_advertised(&mut client, self.source).await?;
+        client
+            .subscribe_preview(self.source, self.width, self.height, self.fps, self.lease)
+            .await?;
+        self.client = client;
+        self.renew_at = renewal_deadline(self.lease);
+        Ok(())
+    }
+}
+
+async fn ensure_advertised(client: &mut CitpClient, source: u16) -> Result<(), MediaError> {
+    let sources = client.preview_sources().await?;
+    if sources.iter().any(|advertised| advertised.id == source) {
+        Ok(())
+    } else {
+        Err(MediaError::Rejected(format!(
+            "preview source {source} is no longer advertised"
+        )))
+    }
+}
+
+fn renewal_deadline(lease: Duration) -> Instant {
+    Instant::now() + lease.mul_f32(0.6).max(Duration::from_millis(250))
 }
 
 fn validate_preview_bounds(width: u16, height: u16) -> Result<(), MediaError> {

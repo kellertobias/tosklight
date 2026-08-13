@@ -118,7 +118,7 @@ fn run_inner() -> anyhow::Result<()> {
 
     // What a subscribed console sees. Shared between the outputs, which capture, and the CITP
     // connections, which send.
-    let preview: preview::SharedPreview = std::sync::Arc::new(preview::Preview::new());
+    let previews = preview::SharedPreviews::configured(&configuration);
 
     // The desk drives the outputs, so the listeners come up before anything presents.
     runtime.block_on(async {
@@ -133,7 +133,7 @@ fn run_inner() -> anyhow::Result<()> {
             &configuration,
             state.clone(),
             catalog.clone(),
-            preview.clone(),
+            previews.clone(),
             shutdown.clone(),
             console_identity,
         );
@@ -149,7 +149,7 @@ fn run_inner() -> anyhow::Result<()> {
             catalog: catalog.clone(),
             configuration: live.clone(),
             analysis: analysis.clone(),
-            preview: preview.clone(),
+            previews: previews.clone(),
         };
         let shutdown = shutdown.clone();
         std::thread::Builder::new()
@@ -181,7 +181,7 @@ fn run_inner() -> anyhow::Result<()> {
             catalog,
             configuration: live,
             analysis,
-            preview,
+            previews,
         },
         shutdown.clone(),
         diagnostics_arguments,

@@ -304,22 +304,30 @@ pub fn element_thumbnail(
     ))
 }
 
+/// One stable logical output advertised as a CITP preview source.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct VideoSource {
+    pub id: u16,
+    pub name: String,
+    pub physical_output: u8,
+    pub width: u16,
+    pub height: u16,
+}
+
 /// The video sources a console may subscribe to.
-pub fn video_sources(version: (u8, u8), name: &str, width: u16, height: u16) -> Vec<u8> {
+pub fn video_sources(version: (u8, u8), sources: &[VideoSource]) -> Vec<u8> {
     let mut body = Body::new();
-    body.u16(1) // one source
-        .u16(1) // its identifier
-        .ucs2(name)
-        .u8(0) // physical output
-        .u8(0xFF) // not tied to one layer
-        .u16(0) // no flags
-        .u16(width)
-        .u16(height);
-    msex_message(
-        content::VSRC,
-        (1, if version >= (1, 1) { 1 } else { 0 }),
-        body.as_slice(),
-    )
+    body.u16(sources.len().min(u16::MAX as usize) as u16);
+    for source in sources.iter().take(u16::MAX as usize) {
+        body.u16(source.id)
+            .ucs2(&source.name)
+            .u8(source.physical_output)
+            .u8(0xFF) // not tied to one layer
+            .u16(0) // no flags
+            .u16(source.width)
+            .u16(source.height);
+    }
+    msex_message(content::VSRC, (1, version.1.min(2)), body.as_slice())
 }
 
 /// One preview frame.

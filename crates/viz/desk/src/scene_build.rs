@@ -9,9 +9,8 @@ use std::sync::Arc;
 use uuid::Uuid;
 use viz_project::{PatchedFixture, PhysicalInstance, ScenePlan};
 use viz_scene::{
-    CrowdArea, CrowdDensity, CrowdPosture, MediaCrop,
-    MediaProjector as SceneMediaProjector, MediaSection, MediaSectionKind, MediaSourceBinding,
-    SceneryKind, SceneryObject,
+    CrowdArea, CrowdDensity, CrowdPosture, MediaCrop, MediaProjector as SceneMediaProjector,
+    MediaSection, MediaSectionKind, MediaSourceBinding, SceneryKind, SceneryObject,
 };
 
 /// Everything the scene builder reads, gathered by the connection before anything is displayed.
@@ -20,6 +19,7 @@ pub struct DeskReadModels {
     pub stage_layout: StageLayoutBody,
     pub venue_objects: Vec<ObjectRecord>,
     pub media_servers: Vec<ObjectRecord>,
+    pub media_fallback_assets: Vec<ObjectRecord>,
     pub media_sources: Vec<ObjectRecord>,
     pub led_module_types: Vec<ObjectRecord>,
     pub media_surfaces: Vec<ObjectRecord>,
@@ -209,7 +209,7 @@ fn valid_crowd_dimension(value: Option<f32>, fallback: f32) -> f32 {
 
 fn build_media(scene: &mut viz_scene::Scene, models: &DeskReadModels, warnings: &mut Vec<String>) {
     use viz_document::{
-        LedModuleType, MediaProjector, MediaServer, MediaSource, MediaSurface,
+        LedModuleType, MediaFallbackAsset, MediaProjector, MediaServer, MediaSource, MediaSurface,
         MediaSurfaceSectionKind, ProjectionScreenMaterial,
     };
     let servers: HashMap<Uuid, MediaServer> = models
@@ -217,6 +217,12 @@ fn build_media(scene: &mut viz_scene::Scene, models: &DeskReadModels, warnings: 
         .iter()
         .filter_map(|record| serde_json::from_value::<MediaServer>(record.body.clone()).ok())
         .map(|server| (server.id, server))
+        .collect();
+    let fallback_assets: HashMap<Uuid, MediaFallbackAsset> = models
+        .media_fallback_assets
+        .iter()
+        .filter_map(|record| serde_json::from_value::<MediaFallbackAsset>(record.body.clone()).ok())
+        .map(|asset| (asset.id, asset))
         .collect();
     let sources: Vec<MediaSource> = models
         .media_sources
@@ -252,9 +258,39 @@ fn build_media(scene: &mut viz_scene::Scene, models: &DeskReadModels, warnings: 
                 advertised_source_id: source.advertised_source_id,
                 name: source.name.clone(),
                 aspect_ratio: source.aspect_ratio,
+                fallback_rgba: None,
             })
         })
         .collect();
+    for asset in fallback_assets.values() {
+        let Ok(bytes) = base64::Engine::decode(
+            &base64::engine::general_purpose::STANDARD,
+            &asset.bytes_base64,
+        ) else {
+            continue;
+        };
+        let Ok(decoded) = image::load_from_memory(&bytes) else {
+            continue;
+        };
+        let rgba = decoded
+            .resize_exact(
+                viz_render_edge(),
+                viz_render_edge(),
+                image::imageops::FilterType::Triangle,
+            )
+            .to_rgba8()
+            .into_raw();
+        scene.media_sources.push(MediaSourceBinding {
+            id: asset.id,
+            server_id: Uuid::nil(),
+            host: String::new(),
+            port: 0,
+            advertised_source_id: 0,
+            name: asset.name.clone(),
+            aspect_ratio: Some(asset.width as f32 / asset.height.max(1) as f32),
+            fallback_rgba: Some(rgba),
+        });
+    }
     for surface in &surfaces {
         for section in &surface.sections {
             let kind = match &section.kind {
@@ -264,9 +300,7 @@ fn build_media(scene: &mut viz_scene::Scene, models: &DeskReadModels, warnings: 
                 } => {
                     let (colour, gain, roughness) = match material {
                         ProjectionScreenMaterial::White => ([0.92, 0.92, 0.9], 1.0, 0.72),
-                        ProjectionScreenMaterial::GreyHomeCinema => {
-                            ([0.28, 0.29, 0.3], 0.82, 0.78)
-                        }
+                        ProjectionScreenMaterial::GreyHomeCinema => ([0.28, 0.29, 0.3], 0.82, 0.78),
                         ProjectionScreenMaterial::Custom {
                             gain,
                             tint_srgb,
@@ -315,6 +349,7 @@ fn build_media(scene: &mut viz_scene::Scene, models: &DeskReadModels, warnings: 
                 surface_id: surface.id,
                 name: section.name.clone(),
                 source_id: surface.source_id,
+                fallback_source_id: surface.fallback.as_ref().map(|fallback| fallback.asset_id),
                 position: Vec3::from_array(section.transform.position_metres),
                 rotation_degrees: Vec3::from_array(section.transform.rotation_degrees),
                 size: Vec3::new(section.width_metres, section.height_metres, 0.04),
@@ -340,6 +375,10 @@ fn build_media(scene: &mut viz_scene::Scene, models: &DeskReadModels, warnings: 
             spill: projector.spill,
         })
         .collect();
+}
+
+const fn viz_render_edge() -> u32 {
+    512
 }
 
 fn srgb(value: &str) -> Option<[f32; 3]> {

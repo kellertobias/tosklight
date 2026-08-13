@@ -1,6 +1,24 @@
 use super::draw::splash_state;
 use super::*;
 
+#[test]
+fn media_workers_exist_only_for_the_normal_standalone_product() {
+    let standalone = Application::new(Options::default());
+    assert!(standalone.media_workers.is_some());
+
+    let helper = Application::new(Options {
+        helper: true,
+        ..Options::default()
+    });
+    assert!(helper.media_workers.is_none());
+
+    let embedded = Application::new(Options {
+        embed: true,
+        ..Options::default()
+    });
+    assert!(embedded.media_workers.is_none());
+}
+
 /// An empty window has to say which kind of empty it is, and a window with a rig in it must
 /// never be covered by a splash — the picture is the point.
 #[test]

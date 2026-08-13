@@ -71,6 +71,12 @@ fn models(profile: serde_json::Value, layout: StageLayoutBody) -> DeskReadModels
         patch,
         stage_layout: layout,
         venue_objects: Vec::new(),
+        media_servers: Vec::new(),
+        media_fallback_assets: Vec::new(),
+        media_sources: Vec::new(),
+        led_module_types: Vec::new(),
+        media_surfaces: Vec::new(),
+        media_projectors: Vec::new(),
         show_name: "Test show".into(),
         server_identity: "http://127.0.0.1:5000".into(),
     }

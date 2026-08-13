@@ -38,6 +38,23 @@ impl Application {
         height: f32,
     ) {
         session.pump(now);
+        if let Some(workers) = self.media_workers.as_mut() {
+            workers.reconcile(&session.scene);
+            if let Some(renderer) = self.renderer.as_mut() {
+                for frame in workers.drain() {
+                    match renderer.update_media_frame(&frame) {
+                        Ok(true) => self.media_revision = self.media_revision.wrapping_add(1),
+                        Ok(false) => {}
+                        Err(error) => {
+                            self.lasting_failure = Some(format!("media texture: {error}"));
+                        }
+                    }
+                }
+            }
+            self.media_notice = workers.offline_notice();
+        } else {
+            self.media_notice = None;
+        }
         let preserve_external_override =
             is_external_camera_target(self.options.embed, session.source_view.mode)
                 && self.external_camera.local_override();
@@ -117,6 +134,11 @@ impl Application {
                 self.lasting_failure
                     .as_ref()
                     .map(|failure| (failure.clone(), true))
+            })
+            .or_else(|| {
+                self.media_notice
+                    .as_ref()
+                    .map(|notice| (notice.clone(), false))
             })
             .or_else(|| laser_fault.map(|fault| (fault, true)))
             .or_else(|| effect_fault.map(|fault| (fault, true)));
@@ -219,8 +241,10 @@ impl Application {
             width,
             height,
         );
+        let media_identity = self.media_revision ^ renderer.media_presentation_identity();
         let redraw_state = crate::redraw::RedrawState::new(
             session.scene.revision,
+            media_identity,
             values,
             view,
             (width as u32, height as u32),

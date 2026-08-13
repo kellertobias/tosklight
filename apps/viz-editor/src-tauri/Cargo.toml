@@ -16,6 +16,7 @@ light-discovery.workspace = true
 light-core = { path = "../../../crates/shared/core" }
 light-fixture = { path = "../../../crates/shared/fixture" }
 light-mvr = { path = "../../../crates/shared/mvr" }
+light-media = { path = "../../../crates/light/adapters/media" }
 parking_lot.workspace = true
 reqwest.workspace = true
 serde.workspace = true

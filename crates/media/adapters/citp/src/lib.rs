@@ -16,7 +16,7 @@ pub mod server;
 
 pub use message::{
     ElementRequest, LayerStatus, LibraryElement, LibraryFolder, LibraryRequest, PeerLocation,
-    Presence, StreamRequest, Thumbnail, ThumbnailRequest, element_library_information,
+    Presence, StreamRequest, Thumbnail, ThumbnailRequest, VideoSource, element_library_information,
     element_library_thumbnail, element_thumbnail, failure_text, layer_status,
     media_element_information, peer_location, read_element_request, read_element_thumbnail_request,
     read_library_request, read_library_thumbnail_request, read_peer_location, read_stream_request,

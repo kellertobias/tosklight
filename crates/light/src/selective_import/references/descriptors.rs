@@ -43,6 +43,55 @@ pub(super) fn group_descriptor(
     Ok(descriptor)
 }
 
+pub(super) fn media_source_descriptor(
+    object: &PortableShowObject,
+) -> Result<ImportObjectDescriptor, String> {
+    let mut descriptor = id_descriptor(object)?;
+    add_optional_direct_reference(object.body(), "/serverId", "media_server", &mut descriptor)?;
+    Ok(descriptor)
+}
+
+pub(super) fn media_surface_descriptor(
+    object: &PortableShowObject,
+) -> Result<ImportObjectDescriptor, String> {
+    let mut descriptor = id_descriptor(object)?;
+    let body = object.body();
+    add_optional_direct_reference(body, "/sourceId", "media_source", &mut descriptor)?;
+    add_optional_direct_reference(
+        body,
+        "/fallback/assetId",
+        "media_fallback_asset",
+        &mut descriptor,
+    )?;
+    if let Some(sections) = body.pointer("/sections").and_then(Value::as_array) {
+        for (index, section) in sections.iter().enumerate() {
+            if section.get("type").and_then(Value::as_str) == Some("led") {
+                add_direct_value(
+                    section,
+                    "/module_type_id",
+                    format!("/sections/{index}/module_type_id"),
+                    "led_module_type",
+                    &mut descriptor,
+                )?;
+            }
+        }
+    }
+    Ok(descriptor)
+}
+
+pub(super) fn media_projector_descriptor(
+    object: &PortableShowObject,
+) -> Result<ImportObjectDescriptor, String> {
+    let mut descriptor = id_descriptor(object)?;
+    add_optional_direct_reference(
+        object.body(),
+        "/surfaceId",
+        "media_surface",
+        &mut descriptor,
+    )?;
+    Ok(descriptor)
+}
+
 fn add_canonical_group_source_references(
     canonical_source: &Value,
     source: &FixtureIdentityCatalog,

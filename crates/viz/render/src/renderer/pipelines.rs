@@ -6,16 +6,17 @@
 
 use super::layouts::{Layouts, PipelineLayouts};
 use super::{
-    BEAM_WGSL, COMMON_WGSL, CULL_WGSL, LASER_WGSL, LINES_WGSL, OVERLAY_WGSL, POST_WGSL,
+    BEAM_WGSL, COMMON_WGSL, CULL_WGSL, LASER_WGSL, LINES_WGSL, MEDIA_WGSL, OVERLAY_WGSL, POST_WGSL,
     SCENE_DEPTH_BINDING, SHADOW_PRELUDE_WGSL, SHADOW_WGSL, SURFACE_WGSL, scene_depth_binding,
 };
-use crate::instances::{BeamInstance, LaserInstance, LineVertex, MeshInstance};
+use crate::instances::{BeamInstance, GpuMediaPanel, LaserInstance, LineVertex, MeshInstance};
 use crate::mesh::Vertex;
 use crate::targets::{DEPTH_FORMAT, HDR_FORMAT};
 
 /// Every compiled shader module, built once at startup.
 pub(super) struct Modules {
     pub surface: wgpu::ShaderModule,
+    pub media: wgpu::ShaderModule,
     pub beam: wgpu::ShaderModule,
     pub laser: wgpu::ShaderModule,
     pub line: wgpu::ShaderModule,
@@ -30,6 +31,10 @@ impl Modules {
         let surface_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("viz surface"),
             source: wgpu::ShaderSource::Wgsl(format!("{COMMON_WGSL}\n{SURFACE_WGSL}").into()),
+        });
+        let media_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("viz media"),
+            source: wgpu::ShaderSource::Wgsl(format!("{COMMON_WGSL}\n{MEDIA_WGSL}").into()),
         });
         // The beam pass reads the depth the geometry left behind. Multisampled depth is a
         // different WGSL type, so the declaration follows the sample count the adapter gave us;
@@ -76,6 +81,7 @@ impl Modules {
         });
         Self {
             surface: surface_module,
+            media: media_module,
             beam: beam_module,
             laser: laser_module,
             line: line_module,
@@ -90,6 +96,7 @@ impl Modules {
 /// Every pipeline a frame can use.
 pub(super) struct Pipelines {
     pub surface: wgpu::RenderPipeline,
+    pub media: wgpu::RenderPipeline,
     pub line: wgpu::RenderPipeline,
     pub beam: wgpu::RenderPipeline,
     pub laser: wgpu::RenderPipeline,
@@ -112,6 +119,7 @@ impl Pipelines {
     ) -> Self {
         Self {
             surface: surface_pipeline(device, pipeline_layouts, modules, multisample),
+            media: media_pipeline(device, pipeline_layouts, modules, multisample),
             line: line_pipeline(device, pipeline_layouts, modules, multisample),
             beam: beam_pipeline(device, pipeline_layouts, modules, multisample),
             laser: laser_pipeline(device, pipeline_layouts, modules, multisample),
@@ -144,6 +152,48 @@ impl Pipelines {
             overlay: overlay_pipeline(device, pipeline_layouts, modules, surface_format),
         }
     }
+}
+
+fn media_pipeline(
+    device: &wgpu::Device,
+    layouts: &PipelineLayouts,
+    modules: &Modules,
+    multisample: wgpu::MultisampleState,
+) -> wgpu::RenderPipeline {
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("viz media"),
+        layout: Some(&layouts.surface),
+        vertex: wgpu::VertexState {
+            module: &modules.media,
+            entry_point: Some("media_vertex"),
+            buffers: &[Some(Vertex::LAYOUT), Some(GpuMediaPanel::LAYOUT)],
+            compilation_options: Default::default(),
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &modules.media,
+            entry_point: Some("media_fragment"),
+            targets: &[Some(wgpu::ColorTargetState {
+                format: HDR_FORMAT,
+                blend: None,
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+            compilation_options: Default::default(),
+        }),
+        primitive: wgpu::PrimitiveState {
+            cull_mode: Some(wgpu::Face::Back),
+            ..Default::default()
+        },
+        depth_stencil: Some(wgpu::DepthStencilState {
+            format: DEPTH_FORMAT,
+            depth_write_enabled: Some(true),
+            depth_compare: Some(wgpu::CompareFunction::LessEqual),
+            stencil: Default::default(),
+            bias: Default::default(),
+        }),
+        multisample,
+        multiview_mask: None,
+        cache: None,
+    })
 }
 
 fn surface_pipeline(

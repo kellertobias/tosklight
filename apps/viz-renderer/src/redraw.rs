@@ -11,6 +11,7 @@ use viz_scene::{Atmosphere, PersistencePreference, SceneValues, ViewConfiguratio
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct RedrawState {
     pub scene_revision: u64,
+    pub media_revision: u64,
     pub values_frame: u64,
     pub view: ViewConfiguration,
     pub size: (u32, u32),
@@ -22,6 +23,7 @@ pub(crate) struct RedrawState {
 impl RedrawState {
     pub fn new(
         scene_revision: u64,
+        media_revision: u64,
         values: &SceneValues,
         view: &ViewConfiguration,
         size: (u32, u32),
@@ -29,6 +31,7 @@ impl RedrawState {
     ) -> Self {
         Self {
             scene_revision,
+            media_revision,
             values_frame: values.frame,
             view: view.clone(),
             size,
@@ -77,7 +80,14 @@ mod tests {
     fn state(frame: u64) -> RedrawState {
         let mut values = SceneValues::default();
         values.frame = frame;
-        RedrawState::new(1, &values, &ViewConfiguration::default(), (800, 600), &[])
+        RedrawState::new(
+            1,
+            0,
+            &values,
+            &ViewConfiguration::default(),
+            (800, 600),
+            &[],
+        )
     }
 
     #[test]
@@ -115,6 +125,10 @@ mod tests {
             uv_rect: [0.0; 4],
             colour: [1.0; 4],
         });
+        assert!(gate.should_draw(changed, false));
+
+        let mut changed = state(7);
+        changed.media_revision += 1;
         assert!(gate.should_draw(changed, false));
     }
 }
