@@ -39,17 +39,19 @@ The **Desk key** is the button shown on the touchscreen keypad or console. The *
 | `[TRU]` | Thru | `[KBD:ß]` | Define a range. |
 | `[+]` | Plus | `[KBD:NUMPAD +]` or `[KBD:+]` | Add to a range or offset a subset. |
 | `[-]` | Minus | `[KBD:NUMPAD -]` | Remove fixtures from a selection; after `[AT]`, subtract a value. |
-| `[AT]` | At | `[KBD:#]` | Separate the selection from the value. Press `[AT][AT]` for `[AT][FULL][ENT]`. |
+| `[AT]` | At | `[KBD:#]` | Separate the selection from the value. Press twice quickly for `[AT] 100 [ENT]`. |
 | `[TIME]` | Time | - | Give a value or recorded Cue an explicit fade time; press twice for `DELAY`. |
-| `[SHIFT]` | Shift | - | Latch the shifted keypad layer for the next desk key. With Record it enters Update. |
-| `[.]` | Dot | `[KBD:.]` | Separate address/value parts or enter a decimal point. Press `[.][.]` for `[AT] 0 [ENT]`. |
+| `[SHIFT]` | Shift | - | Toggle the persistent shifted keypad layer. Press Shift again to return to normal labels. |
+| `[.]` | Dot | `[KBD:.]` | Separate address/value parts or enter a decimal point. With a selection, press twice quickly for `[AT] 0 [ENT]`. |
 | `[HIGH]` | Highlight | `[KBD:ALT]` + `[KBD:H]` | Toggle Highlight and capture the current ordered selection as its frozen original set. |
 | `[PREV]` | Previous Highlight item | `[KBD:ALT]` + `[KBD:LEFT]` | While HIGH is active, single the previous original member and wrap at the start. |
 | `[NEXT]` | Next Highlight item | `[KBD:ALT]` + `[KBD:RIGHT]` | While HIGH is active, single the next original member and wrap at the end. |
 | `[ALL]` | Highlight all | `[KBD:ALT]` + `[KBD:A]` | Restore the frozen original set as the actual selection and put every member in Highlight. |
-| `[DIV]` | Division | `[KBD:´]` | Edit a selection or separate multiple values. Hold for selection options. |
+| `[DIV]` | Division | `[KBD:´]` | Edit a selection or separate multiple values; press twice quickly for `OFFSET`. |
 | `[GRP]` | Group | `[KBD:SHIFT]` + `[KBD:^]` | Select a group; press twice to reference its fixtures instead. |
-| `[CUE]` | Cue | `[KBD:SHIFT]` + `[KBD:?]` | Separate a playback address from its cue number. |
+| `[CUE]` | Cue | `[KBD:SHIFT]` + `[KBD:?]` | Separate a playback address from its cue number; press twice quickly for Cuelists. |
+| `[PLAYBACK]` | Playback | - | Enter a Playback command; press twice quickly for the Playback Page menu. |
+| `[OFF]` | Off | - | Enter Off; press twice quickly for Running & Output. |
 | `[SET]` | Set | `[KBD:HOME]` | Set a value, assign a control, or open configuration. |
 | `[REC]` | Record | `[KBD:END]` | Store cues, presets, and groups. Hold for record options. |
 | `[DEL]` | Delete | `[KBD:SHIFT]` + `[KBD:´]` | Delete a cue, preset, or other supported element. With attached hardware, press `[DEL]` and then an assigned encoder to release that encoder's scoped programmer value. |
@@ -63,15 +65,21 @@ The **Desk key** is the button shown on the touchscreen keypad or console. The *
 | `[SELECT]` | Select | `[KBD:SHIFT]` + `[KBD:Z]` | Enter the operator selection command. |
 | `[UND]` | Undo | - | Undo the latest programming change; playback execution and fader changes are unaffected. |
 
-Playback shortcuts are `[KBD:PAGEUP]` and `[KBD:PAGEDOWN]` for playback pages, `[KBD:F1]` through `[KBD:F8]` for the first button of paged Playbacks 1 through 8, and `[KBD:F9]` through `[KBD:F13]` for Speed Groups A through E.
+Playback shortcuts are `[KBD:PAGEUP]` and `[KBD:PAGEDOWN]` for playback pages. Hold both together to open the Playback Page menu without stepping. `[KBD:F1]` through `[KBD:F8]` operate paged Playbacks 1 through 8, and `[KBD:F9]` through `[KBD:F13]` operate Speed Groups A through E.
 
 ## Typical layout on the software desk
 
 ![The real software keypad, command controls, and key arrangement](../assets/screenshots/software-keypad.png)
 
+The attached surface provides `[PROGRAMMER / PLAYBACK]`, `[ALIGN]`, `[HIGH]`, `[PREV]`, `[NEXT]`, `[ALL]`, `[PAGE UP]`, `[PAGE DOWN]`, `[GRP]`, `[CUE]`, `[PLAYBACK]`, `[OFF]`, `[TIME]`, `[DIFF]`, `[DIV]`, `[-]`, `[+]`, `[BACKSPACE]`, `[.]`, `[ENT]`, `[TRU]`, `[AT]`, `[0]`–`[9]`, `[DEL]`, `[CPY]`, `[MOV]`, `[SET]`, `[REC]`, `[PRE]`, `[CLR]`, `[ESC]`, and `[SHIFT]`. `[DIFF]` and `[DIV]` are separate physical controls.
+
+Only `[REC]` has a long-press action: hold `[REC]` for about 2.5 seconds for Record Settings, or hold `[SHIFT] [REC]` for Update Settings. No long-press action is assigned to `[PROGRAMMER / PLAYBACK]`, `[ALIGN]`, `[HIGH]`, `[PREV]`, `[NEXT]`, `[ALL]`, `[PAGE UP]`, `[PAGE DOWN]`, `[GRP]`, `[CUE]`, `[PLAYBACK]`, `[OFF]`, `[TIME]`, `[DIFF]`, `[DIV]`, `[-]`, `[+]`, `[BACKSPACE]`, `[.]`, `[ENT]`, `[TRU]`, `[AT]`, `[0]`–`[9]`, `[DEL]`, `[CPY]`, `[MOV]`, `[SET]`, `[PRE]`, `[CLR]`, `[ESC]`, or `[SHIFT]`.
+
+No shifted action is assigned to `[PROGRAMMER / PLAYBACK]`, `[HIGH]`, `[PREV]`, `[NEXT]`, `[ALL]`, `[PAGE UP]`, `[PAGE DOWN]`, `[GRP]`, `[OFF]`, `[TIME]`, `[DIFF]`, `[DIV]`, `[-]`, `[+]`, `[BACKSPACE]`, `[.]`, `[TRU]`, `[AT]`, `[DEL]`, `[CPY]`, `[MOV]`, or `[SET]`; those controls keep their primary action while Shift is active. Touch-only `[SHIFT] [MOV]` is the documented software-layout exception and performs Copy.
+
 The remaining `[PRE]` and `[ESC]` buttons are in or next to the command-line display. Shortcuts are disabled while console hardware is connected. They also pause while an ordinary text input is focused; command inputs still receive command shortcuts, `[ENT]` confirms them, and `[ESC]` closes the active input or dialog.
 
-The num block places `[HIGH]`, `[PREV]`, `[NEXT]`, and `[ALL]` in one horizontal row directly above `[GRP]`, `[CUE]`, `[TIME]`, and `[DIV]` respectively. HIGH contains only the centered text `HIGH`: it uses the ordinary neutral key treatment while inactive and the same visibly lit armed/active treatment as SHIFT or SET while Highlight is active, including with an empty selection or safety-suppressed output. There is no Capture key and `Alt+C` has no Highlight action.
+The num block places `[HIGH]`, `[PREV]`, `[NEXT]`, and `[ALL]` across the top. Below it the central rows are `TIME DIV − +`, `7 8 9 AT`, `4 5 6 THRU`, `1 2 3 CLEAR`, and `0 BACKSPACE . ENTER`. The left column is `GROUP CUE PLAYBACK OFF`. A software desk with a keyboard uses `DELETE MOVE COPY SET` on the right and shows no virtual Shift; a touch-only desk uses `DELETE MOVE SET SHIFT`, where shifted Move is Copy. HIGH contains only the centered text `HIGH`: it uses the ordinary neutral key treatment while inactive and the same visibly lit armed/active treatment as SHIFT or SET while Highlight is active, including with an empty selection or safety-suppressed output. There is no Capture key and `Alt+C` has no Highlight action.
 
 The command-bar space between the command line and the REC/Preload controls contains no separate Highlight menu, selection summary, or suppression panel. While Highlight is active, its existing output-rate field replaces `DMX 44Hz` with a blue, blinking `Highlight` label; HIGH remains lit and the Fixture Sheet retains its complete-versus-stepped selection treatment. An actionable Highlight error opens a dedicated dismissible alert above panes and modal surfaces without changing the num-block grid or the HIGH key's size.
 
@@ -96,8 +104,11 @@ rewrite that state.
 
 For a partial Freeze, enter **FREEZE**, the selection, and one or more family keys before `[ENT]`:
 `[SHIFT] [1]` Intensity, `[SHIFT] [2]` Color, `[SHIFT] [3]` Position, and `[SHIFT] [4]` Beam.
-These mappings apply while FREEZE or UNFREEZE is pending; outside that mode the existing shifted
-keys retain their normal assignments.
+These mappings apply while FREEZE or UNFREEZE is pending. Otherwise, with a current selection,
+Shift+1 through Shift+4 begin the Intensity, Color, Position, or Beam Preset category. Without a
+selection, Shift+1 through Shift+9 select the Intensity, Color, Position, Beam, Dynamics, Shapers,
+Focus, Control, or Media encoder page. Shift+5 through Shift+9 deliberately do not create a Preset
+command when a selection exists.
 
 To remove Freeze, keep `[SHIFT]` held and press `[CLR]` twice, then release `[SHIFT]`. The command
 line shows **UNFREEZE**. Enter a selection and `[ENT]` to remove the complete Freeze state, or add
@@ -113,25 +124,7 @@ removing the full Freeze therefore removes every family Freeze on that target.
 `5` remains Dynamics. Freeze does not change dotted `AT` Preset addresses, decimal/comma literal
 entry, or direct attribute entry.
 
-`[ ^ ]` is latched for one following key on software/touch desks. Its software assignments are `[ ^ ][.]` Help, `[ ^ ] 0` Fixtures, `[ ^ ] 1` Groups, `[ ^ ] 2` Presets, `[ ^ ] 3` Cuelists, `[ ^ ] 4` the selected playback's Cue details, `[ ^ ] 5` Dynamics, `[ ^ ] 6` Channels, and `[ ^ ] 7` through `[ ^ ] 9` the first three saved Desktops.
-
-On attached hardware, keep `[ ^ ]` pressed while pressing the modified button. Hardware shortcuts `[ ^ ] 1` through `[ ^ ] 9` open Stage, Fixtures, Groups, Presets, Cuelists, Channels, DMX, Dynamics, and Help respectively. Hardware `[ ^ ] 0` has no operator-window assignment; Development diagnostics are available only through the **Desk Status** developer menu.
-
-`[ ^ ] 4` opens the Cue details for the active playback. The active playback is an operator selection, not merely the most recently running playback.
-
-### Speed-group shortcut
-
-Press `[SHIFT] [TIME]` to enter `SPD GRP`. The speed-group numbers `1` through `5` correspond to Speed Groups A through E.
-
-| Action | Command | Result |
-| --- | --- | --- |
-| Set a whole-number BPM | `[SHIFT] [TIME] 1 [AT] 120 [ENT]` | Set Speed Group A to 120 BPM. |
-| Set a fractional BPM | `[SHIFT] [TIME] 2 [AT] 127,5 [ENT]` | Set Speed Group B to 127.5 BPM. A comma may be used as the decimal separator. |
-| Increase relatively | `[SHIFT] [TIME] 1 [AT] [+] 5 [ENT]` | Add 5 BPM to Speed Group A. |
-| Decrease relatively | `[SHIFT] [TIME] 1 [AT] [-] 5 [ENT]` | Subtract 5 BPM from Speed Group A. |
-| Synchronize two groups | `[SHIFT] [TIME] 1 [AT] [SHIFT] [TIME] 2 [ENT]` | Copy Speed Group A's BPM and phase to Speed Group B and keep A and B synchronized. |
-
-The two speed groups remain synchronized until you set a BPM directly for either group or tap either group to set its tempo.
+Shift remains active until it is toggled off on software and touch desks; attached hardware may also hold Shift physically. Shifted labels show the active action: Align Off, Cue to Timecode, Playback to Macro, Escape to Undo, Enter to Lock or Unlock, Clear to Freeze or Unfreeze, Preload Go Clear, Record to Update, and on touch desks Move to Copy. Actions without a shifted assignment keep their ordinary label and behavior.
 
 ## Moving and copying Cues
 
@@ -352,7 +345,7 @@ The Record gesture has three mutually exclusive Update forms:
 | --- | --- |
 | Short `[SHIFT] [REC]` | Arm Update and wait for a target. |
 | While Shift remains held, press `[REC]` a second time | Open **Update Update**, the eligible-target menu. |
-| Hold `[SHIFT] [REC]` for 650 ms | Open **Update Settings** without arming or applying an Update. |
+| Hold `[SHIFT] [REC]` for about 2.5 seconds | Open **Update Settings** without arming or applying an Update. |
 
 After arming Update, touch an existing Cuelist, assigned playback, Preset, or Group. Touch normally opens a preview that identifies the concrete target, current Cue when applicable, eligible changes, ignored changes, and the storage location. **Cancel** disarms Update and writes nothing. **Show Update modal on touch** can be disabled in Update Settings; touch then applies the configured default directly. Completing an address with `[ENT]` always applies that default directly.
 
@@ -481,7 +474,7 @@ Inside a Macro source document, either a newline or `;` ends a command; the fina
 
 ## OSC playback addressing
 
-Every keypad key is also accepted at `/light/{desk}/programmer/{key}` with a pressed value. The new inputs are `minus` (alias `subtract`), `time`, `delay`, and `shift`; digits use `digit-0` through `digit-9`. OSC `[SHIFT]` is latched exactly like the software key, so `shift` followed by `digit-1` opens Stage. Existing inputs such as `plus`, `at`, `thru`, `set`, `record`, `enter`, and `backspace` continue to use the same address family.
+Every keypad key is also accepted at `/light/{desk}/programmer/{key}` with a pressed value. Inputs include `playback`, `off`, `diff`, `page-up`, `page-down`, `minus`, `time`, `shift`, and `digit-0` through `digit-9`. OSC Shift follows the same shifted action labels; a held Shift remains active until release. Existing inputs such as `plus`, `at`, `thru`, `set`, `record`, `enter`, and `backspace` continue to use the same address family.
 
 The desk alias scopes interaction, not ownership of programmer values. A Tauri or browser desk and the OSC controllers subscribed to its alias share one in-progress command line, page, and button state, so a physical key continues the command visible in that desk UI exactly as an on-screen key would. Different desk aliases keep those partial interactions separate. After a command is completed, its values land in the logged-in user's programmer and are therefore visible in every session for that same user, including sessions attached to other desks.
 

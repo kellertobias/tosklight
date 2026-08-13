@@ -143,6 +143,13 @@ async function tick() {
 	});
 }
 
+async function settlePageChord() {
+	await act(async () => {
+		await new Promise((resolve) => window.setTimeout(resolve, 160));
+	});
+	await tick();
+}
+
 /** Settles every in-flight runtime action so a queued release can be sent. */
 async function flush() {
 	for (const resolve of inFlight.splice(0)) resolve();
@@ -373,15 +380,31 @@ describe("useCommandLineShortcuts playback keys", () => {
 });
 
 describe("useCommandLineShortcuts page keys", () => {
+	it("opens the Page menu chord without stepping either direction", async () => {
+		const open = vi.fn();
+		window.addEventListener("light:playback-page-menu", open, { once: true });
+		mount();
+
+		press("PageUp");
+		press("PageDown");
+		await settlePageChord();
+
+		expect(open).toHaveBeenCalledOnce();
+		expect(setActivePage).not.toHaveBeenCalled();
+		expect(createPage).not.toHaveBeenCalled();
+	});
+
 	it("steps to an existing Page through the scoped desk action", async () => {
 		mount();
 
 		press("PageUp");
-		await tick();
+		await settlePageChord();
+		release("PageUp");
 		expect(setActivePage).toHaveBeenCalledWith(3);
 
 		press("PageDown");
-		await tick();
+		await settlePageChord();
+		release("PageDown");
 		expect(setActivePage).toHaveBeenCalledWith(1);
 	});
 
@@ -391,7 +414,7 @@ describe("useCommandLineShortcuts page keys", () => {
 		mount();
 
 		press("PageUp");
-		await tick();
+		await settlePageChord();
 
 		expect(createPage).toHaveBeenCalledWith(3);
 		expect(setActivePage).toHaveBeenCalledWith(3);
@@ -412,7 +435,7 @@ describe("useCommandLineShortcuts page keys", () => {
 		press("PageUp");
 		press("PageUp");
 		press("PageUp", { repeat: true });
-		await tick();
+		await settlePageChord();
 
 		expect(topologyActions.createPage).toHaveBeenCalledOnce();
 		resolveCreate({});

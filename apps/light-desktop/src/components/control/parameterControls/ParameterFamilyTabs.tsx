@@ -36,7 +36,7 @@ function alignLabel(mode: ParameterController["alignMode"]) {
 }
 
 function AlignmentControl({ controller }: { controller: ParameterController }) {
-	const label = alignLabel(controller.alignMode);
+	const label = controller.state.shiftArmed ? "Off" : alignLabel(controller.alignMode);
 	const setMode = async (mode: ParameterController["alignMode"]) => {
 		if (!controller.programmerActions) return;
 		try {
@@ -53,8 +53,6 @@ function AlignmentControl({ controller }: { controller: ParameterController }) {
 			onClick={(event) => {
 				if (event.shiftKey || controller.state.shiftArmed) {
 					void setMode(null);
-					if (controller.state.shiftArmed)
-						controller.dispatch({ type: "SET_SHIFT_ARMED", value: false });
 					return;
 				}
 				const nextIndex =

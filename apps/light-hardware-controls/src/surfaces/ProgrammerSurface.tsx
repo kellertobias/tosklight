@@ -73,12 +73,20 @@ export function ProgrammerSurface({
 			<div className="hardware-number-block">
 				<div className="hardware-keypad-section hardware-keypad-command-section">
 					<ControlButton
+						keypadKey="PROGRAMMER / PLAYBACK"
+						className="key-prog-playback"
+						label="PROGRAMMER / PLAYBACK"
+						style={{ gridColumn: "1 / span 4", gridRow: 2 }}
+						onDown={() => action("prog-playback", true)}
+						onUp={() => action("prog-playback", false)}
+					/>
+					<ControlButton
 						keypadKey="RECORD"
 						className="key-record"
 						label={updateArmed ? "UPDATE" : "RECORD"}
 						lamp={updateArmed ? { color: "#f4b942", state: "on" } : darkLamp}
 						style={{
-							gridColumn: attachedProgrammerActionLayout.record.column,
+							gridColumn: `${attachedProgrammerActionLayout.record.column} / span ${attachedProgrammerActionLayout.record.columnSpan}`,
 							gridRow: `${attachedProgrammerActionLayout.record.row} / span ${attachedProgrammerActionLayout.record.rowSpan}`,
 						}}
 						onDown={() => action("record", true)}
@@ -89,7 +97,7 @@ export function ProgrammerSurface({
 						className="key-preload-go"
 						label="PRELOAD GO"
 						style={{
-							gridColumn: attachedProgrammerActionLayout.preload.column,
+							gridColumn: `${attachedProgrammerActionLayout.preload.column} / span ${attachedProgrammerActionLayout.preload.columnSpan}`,
 							gridRow: `${attachedProgrammerActionLayout.preload.row} / span ${attachedProgrammerActionLayout.preload.rowSpan}`,
 						}}
 						onDown={() => action("preload", true)}

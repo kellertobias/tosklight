@@ -40,6 +40,11 @@ export function usePlaybackPageControl() {
 		setPagePickerOpen(false);
 		setRenamePage(null);
 	}, [operation.generation]);
+	useEffect(() => {
+		const open = () => openPageMenu();
+		window.addEventListener("light:playback-page-menu", open);
+		return () => window.removeEventListener("light:playback-page-menu", open);
+	});
 	const pages = topology.pages.map((page) => page.body);
 	const previousPageNumber =
 		ready && activePageNumber != null

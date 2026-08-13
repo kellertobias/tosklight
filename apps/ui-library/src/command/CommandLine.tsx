@@ -68,6 +68,7 @@ export interface CommandLineProps {
 	onRecordComplete: (shifted: boolean) => void;
 	onAdvancePreload: () => void | Promise<void>;
 	onReleasePreload: () => void | Promise<void>;
+	onEscape?: () => void;
 }
 
 export function CommandLine(props: CommandLineProps) {
@@ -141,9 +142,13 @@ function CommandInputSurface(
 				{!props.hardware && (
 					<Button
 						className="command-escape"
-						onClick={() => props.onReplace("", true)}
+						onClick={() =>
+							props.recordShiftArmed
+								? props.onEscape?.()
+								: props.onReplace("", true)
+						}
 					>
-						ESC
+						{props.recordShiftArmed ? "UNDO" : "ESC"}
 					</Button>
 				)}
 				<CommandStatusButton
@@ -280,7 +285,9 @@ function CommandRecordPreload(props: CommandLineProps) {
 				: props.recordState === "ready"
 					? "record-ready"
 					: "record-empty";
-	const recordLabel =
+	const recordLabel = props.recordShiftArmed
+		? "UPDATE"
+		:
 		props.recordState === "update-armed"
 			? "UPDATE ARMED"
 			: props.recordState === "record-armed"

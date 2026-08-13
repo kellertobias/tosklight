@@ -238,7 +238,7 @@ fn edit_text(state: &CommandLineState, key: CommandKey) -> CommandLineEdit {
         return edited(replace_last_word(command, "DEGRP"), state.target);
     }
     if key == CommandKey::At && last_word_is_any(command, &["AT"]) {
-        let mut edit = edited(replace_last_word(command, "AT FULL"), state.target);
+        let mut edit = edited(replace_last_word(command, "AT 100"), state.target);
         edit.execute = true;
         return edit;
     }
@@ -251,12 +251,18 @@ fn edit_text(state: &CommandLineState, key: CommandKey) -> CommandLineEdit {
             .strip_suffix('.')
             .expect("the command was checked to end with a dot")
             .trim_end();
-        let mut edit = edited(format!("{without_dot} AT 0"), state.target);
+        let mut edit = edited(
+            format!("{without_dot} AT 0").trim().to_owned(),
+            state.target,
+        );
         edit.execute = true;
         return edit;
     }
     if key == CommandKey::Time && last_word_is_any(command, &["TIME"]) {
         return edited(replace_last_word(command, "DELAY"), state.target);
+    }
+    if key == CommandKey::Divide && last_word_is_any(command, &["DIV"]) {
+        return edited(replace_last_word(command, "OFFSET"), state.target);
     }
 
     let token = command_token(key);

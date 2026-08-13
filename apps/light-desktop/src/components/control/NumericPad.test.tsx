@@ -2,7 +2,8 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { registerControlSurfaceTarget } from "../../features/controlSurfaceInteraction/registry";
 import "../../styles.css";
-import { NumericPad, numericPadLayout } from "./NumericPad";
+import { NumericPad, shiftedSoftwareKeyLabel } from "./NumericPad";
+import { softwareDeskKeypadLayout } from "@tosklight/ui/programmer-keypad";
 
 const dispatch = vi.fn((action: { type: string; value?: boolean }) => {
 	if (action.type === "SET_SHIFT_ARMED")
@@ -350,6 +351,13 @@ describe("NumericPad Clear and SET routing", () => {
 });
 
 describe("NumericPad layout and Shift routing", () => {
+	it("substitutes every documented shifted software label", () => {
+		expect(
+			(["CUE", "PLAYBACK", "ESC", "ENT", "CLR", "PRE", "REC", "MOV"] as const).map(
+				(key) => shiftedSoftwareKeyLabel(key, true),
+			),
+		).toEqual(["TIMECODE", "MACRO", "UNDO", "LOCK", "FREEZE", "PRELOAD GO CLEAR", "UPDATE", "COPY"]);
+	});
 	it("uses six-row grids with aligned Highlight actions, a 2x2 Fade control, and a single-row Enter key", () => {
 		const { container } = render(<NumericPad />);
 		expect(
@@ -370,7 +378,7 @@ describe("NumericPad layout and Shift routing", () => {
 			"data-grid-row-span",
 			"2",
 		);
-		for (const { key, section, column, row, rowSpan = 1 } of numericPadLayout) {
+		for (const { key, section, column, row, rowSpan = 1 } of softwareDeskKeypadLayout("keyboard")) {
 			const expectedColumn = section === "commands" ? column : column - 3;
 			const expectedRow = row + 1;
 			expect(container.querySelector(`[data-keypad-key="${key}"]`)).toHaveStyle(
@@ -409,10 +417,10 @@ describe("NumericPad layout and Shift routing", () => {
 			"data-keypad-key",
 			"CUE",
 		);
-		expect(screen.getByRole("button", { name: "UND" })).toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: "SHIFT" })).not.toBeInTheDocument();
 		expect(screen.getByRole("button", { name: "TRU" })).toHaveStyle({
 			gridColumn: "4",
-			gridRow: "5 / span 1",
+			gridRow: "4 / span 1",
 		});
 		expect(screen.getByRole("button", { name: "ENT" })).toHaveStyle({
 			gridColumn: "4",
@@ -439,112 +447,68 @@ describe("NumericPad layout and Shift routing", () => {
 });
 
 describe("NumericPad Shift routing", () => {
-	it("routes Shift shortcuts to built-ins, the scoped selected playback, and stored desks", () => {
-		server.playbacks.selected_playback = 99;
-		render(<NumericPad />);
-		const shifted = (key: string) => {
-			fireEvent.click(screen.getByRole("button", { name: "SHIFT" }));
-			fireEvent.click(screen.getByRole("button", { name: key }));
-		};
-
-		shifted(".");
-		expect(dispatch).toHaveBeenCalledWith({
-			type: "OPEN_BUILTIN",
-			kind: "help",
-		});
-		shifted("0");
-		expect(dispatch).toHaveBeenCalledWith({
-			type: "OPEN_BUILTIN",
-			kind: "fixtures",
-		});
-		shifted("1");
-		expect(dispatch).toHaveBeenCalledWith({
-			type: "OPEN_BUILTIN",
-			kind: "groups",
-		});
-		shifted("2");
-		expect(dispatch).toHaveBeenCalledWith({
-			type: "SET_PRESET_FAMILY",
-			family: "Mixed",
-		});
-		expect(dispatch).toHaveBeenCalledWith({
-			type: "OPEN_BUILTIN",
-			kind: "presets",
-		});
-		shifted("3");
-		expect(dispatch).toHaveBeenCalledWith({
-			type: "OPEN_BUILTIN",
-			kind: "cuelists",
-		});
-		shifted("4");
-		expect(dispatch).toHaveBeenCalledWith({
-			type: "OPEN_BUILTIN_CUELIST",
-			number: 42,
-		});
-		expect(dispatch).not.toHaveBeenCalledWith({
-			type: "OPEN_BUILTIN_CUELIST",
-			number: 99,
-		});
-		shifted("5");
-		expect(dispatch).toHaveBeenCalledWith({
-			type: "OPEN_BUILTIN",
-			kind: "dynamics",
-		});
-		shifted("6");
-		expect(dispatch).toHaveBeenCalledWith({
-			type: "OPEN_BUILTIN",
-			kind: "channels",
-		});
-		shifted("TIME");
-		expect(commandActions.replace).toHaveBeenCalledWith("SPD GRP");
-		commandProjection.text = "SPD GRP 1 AT";
-		commandProjection.pristine = false;
-		shifted("TIME");
-		expect(commandActions.replace).toHaveBeenCalledWith("SPD GRP 1 AT SPD GRP");
-		shifted("7");
-		shifted("8");
-		shifted("9");
-		expect(dispatch).toHaveBeenCalledWith({
-			type: "OPEN_DESK",
-			id: "desk-one",
-		});
-		expect(dispatch).toHaveBeenCalledWith({
-			type: "OPEN_DESK",
-			id: "desk-two",
-		});
-		expect(dispatch).toHaveBeenCalledWith({
-			type: "OPEN_DESK",
-			id: "desk-three",
-		});
-		shifted("CLR");
+	it("keeps touch Shift latched and routes current shifted actions", () => {
+		render(<NumericPad inputMode="touch" />);
+		fireEvent.click(screen.getByRole("button", { name: "SHIFT" }));
+		fireEvent.click(screen.getByRole("button", { name: "CLR" }));
 		expect(commandActions.replace).toHaveBeenCalledWith("FREEZE");
 		commandProjection.text = "FREEZE F1";
 		commandProjection.pristine = false;
-		shifted("1");
+		fireEvent.click(screen.getByRole("button", { name: "1" }));
 		expect(commandActions.replace).toHaveBeenCalledWith("FREEZE F1 INTENSITY");
-		shifted("DEL");
+		fireEvent.click(screen.getByRole("button", { name: "CUE" }));
+		expect(dispatch).toHaveBeenCalledWith({ type: "OPEN_BUILTIN", kind: "timecode" });
+		fireEvent.click(screen.getByRole("button", { name: "PLAYBACK" }));
+		expect(dispatch).toHaveBeenCalledWith({ type: "OPEN_BUILTIN", kind: "macros" });
+		expect(state.shiftArmed).toBe(true);
+	});
+
+	it("toggles touch Shift off only when Shift is pressed again", () => {
+		render(<NumericPad inputMode="touch" />);
+		fireEvent.click(screen.getByRole("button", { name: "SHIFT" }));
+		expect(state.shiftArmed).toBe(true);
+		fireEvent.click(screen.getByRole("button", { name: "SHIFT" }));
+		expect(state.shiftArmed).toBe(false);
+	});
+});
+
+describe("NumericPad double presses", () => {
+	it("routes Off, Cue, and Playback double presses to their operator surfaces", () => {
+		const pageMenu = vi.fn();
+		window.addEventListener("light:playback-page-menu", pageMenu, { once: true });
+		const { container } = render(<NumericPad />);
+		const pressTwice = (key: string) => {
+			const button = container.querySelector(`[data-keypad-key="${key}"]`);
+			expect(button).not.toBeNull();
+			fireEvent.click(button as Element);
+			fireEvent.click(button as Element);
+		};
+
+		pressTwice("OFF");
 		expect(dispatch).toHaveBeenCalledWith({
 			type: "SET_MODAL",
 			modal: "systemControlsOpen",
 			value: true,
 		});
+		pressTwice("CUE");
+		expect(dispatch).toHaveBeenCalledWith({ type: "OPEN_BUILTIN", kind: "cuelists" });
+		pressTwice("PLAYBACK");
+		expect(pageMenu).toHaveBeenCalledOnce();
 	});
 
-	it("opens Cuelists without selecting stale bootstrap Playback state while desk authority loads", () => {
-		server.playbacks.selected_playback = 99;
-		playbackDesk = { active_page: 1, selected_playback: 42 };
-		runtimeStatus = "loading";
-		render(<NumericPad />);
+	it("executes the selected Dot and At value shortcuts", () => {
+		server.selectedFixtures = ["fixture-1"];
+		const { container } = render(<NumericPad />);
+		const dot = container.querySelector('[data-keypad-key="."]') as Element;
+		fireEvent.click(dot);
+		fireEvent.click(dot);
+		expect(commandActions.execute).toHaveBeenCalledWith("AT 0");
 
-		fireEvent.click(screen.getByRole("button", { name: "SHIFT" }));
-		fireEvent.click(screen.getByRole("button", { name: "4" }));
-
-		expect(dispatch).toHaveBeenCalledWith({
-			type: "OPEN_BUILTIN",
-			kind: "cuelists",
-		});
-		expect(dispatch).not.toHaveBeenCalledWith(
-			expect.objectContaining({ type: "OPEN_BUILTIN_CUELIST" }),
-		);
+		commandProjection.text = "FIXTURE";
+		commandProjection.pristine = true;
+		const at = container.querySelector('[data-keypad-key="AT"]') as Element;
+		fireEvent.click(at);
+		fireEvent.click(at);
+		expect(commandActions.execute).toHaveBeenCalledWith("AT 100");
 	});
 });

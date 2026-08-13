@@ -8,6 +8,39 @@ import type {
 import { routeControlSurfaceIntentWithFeedback } from "../controlSurfaceInteraction/registry";
 import type { ServerState } from "./useServerState";
 
+const hardwarePageKeys = new Set<string>();
+const hardwarePageTimers = new Map<string, number>();
+
+function routeHardwarePageKey(action: "page-up" | "page-down", value: string | undefined) {
+	if (value === "up") {
+		hardwarePageKeys.delete(action);
+		return;
+	}
+	hardwarePageKeys.add(action);
+	if (hardwarePageKeys.size === 2) {
+		for (const timer of hardwarePageTimers.values()) window.clearTimeout(timer);
+		hardwarePageTimers.clear();
+		window.dispatchEvent(new Event("light:playback-page-menu"));
+		return;
+	}
+	const previous = hardwarePageTimers.get(action);
+	if (previous != null) window.clearTimeout(previous);
+	hardwarePageTimers.set(
+		action,
+		window.setTimeout(() => {
+			hardwarePageTimers.delete(action);
+			if (hardwarePageKeys.size < 2) {
+				hardwarePageKeys.delete(action);
+				window.dispatchEvent(
+					new CustomEvent("light:playback-page-step", {
+						detail: action === "page-up" ? 1 : -1,
+					}),
+				);
+			}
+		}, 140),
+	);
+}
+
 function routeDeskAction(
 	event: Extract<OperatorNotification, { type: "desk_action" }>,
 	session: SessionResponse,
@@ -30,6 +63,38 @@ function routeDeskAction(
 	) {
 		if (payload.action === "align") {
 			window.dispatchEvent(new CustomEvent("light:align-action", { detail }));
+			return;
+		} else if (payload.action === "shift-align") {
+			window.dispatchEvent(new Event("light:align-off"));
+			return;
+		} else if (payload.action === "prog-playback") {
+			window.dispatchEvent(new Event("light:control-mode-toggle"));
+			return;
+		} else if (payload.action === "record-settings") {
+			window.dispatchEvent(new Event("light:record-settings"));
+			return;
+		} else if (
+			payload.action === "playback" ||
+			payload.action === "off" ||
+			payload.action === "diff"
+		) {
+			window.dispatchEvent(
+				new CustomEvent("light:programmer-key", { detail: payload.action }),
+			);
+			return;
+		} else if (payload.action === "page-up" || payload.action === "page-down") {
+			routeHardwarePageKey(payload.action, payload.value ?? undefined);
+			return;
+		} else if (
+			["shift-cue", "shift-playback", "shift-escape", "shift-enter", "shift-preload", "shift-mov"].includes(
+				payload.action,
+			)
+		) {
+			window.dispatchEvent(
+				new CustomEvent("light:programmer-key", {
+					detail: payload.action,
+				}),
+			);
 			return;
 		} else if (payload.action === "set")
 			routeControlSurfaceIntentWithFeedback({ type: "set", source: "osc" });

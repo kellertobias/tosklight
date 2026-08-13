@@ -58,6 +58,18 @@ impl IntegrationResource {
         }
     }
 
+    #[cfg(test)]
+    pub(in crate::runtime) fn set_osc_unshifted_record_started(
+        &self,
+        client_id: &str,
+        started: Instant,
+    ) {
+        if let Some(subscriber) = self.osc_subscribers.lock().get_mut(client_id) {
+            subscriber.update_record_started = Some(started);
+            subscriber.update_first_release = Some(started);
+        }
+    }
+
     pub(in crate::runtime) fn osc_subscriber_for_source(
         &self,
         source: SocketAddr,

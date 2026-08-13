@@ -2,6 +2,8 @@ import { useEffect, useRef } from "react";
 import { useApp } from "../../../state/AppContext";
 import { openUpdateSettings } from "../updateWorkflow";
 
+export const RECORD_HOLD_MS = 2500;
+
 export function useRecordGesture({
 	armUpdateOrMenu,
 	toggleRecord,
@@ -31,7 +33,7 @@ export function useRecordGesture({
 					modal: "storeSettingsOpen",
 					value: true,
 				});
-		}, 650);
+		}, RECORD_HOLD_MS);
 	};
 	const cancel = () => {
 		end();

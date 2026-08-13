@@ -1,6 +1,9 @@
+import { useRef } from "react";
 import type { ControlSurfaceSource } from "../../../features/controlSurfaceInteraction/registry";
 import { routeControlSurfaceIntent } from "../../../features/controlSurfaceInteraction/registry";
 import { useSetInteraction } from "../../../features/controlSurfaceInteraction/SetInteractionProvider";
+import { useDeskLockActions } from "../../../features/deskLock/DeskLockActionsProvider";
+import { useDeskLock } from "../../../features/deskLock/DeskLockState";
 import {
 	usePlaybackDeskView,
 	usePlaybackRuntimeStatus,
@@ -11,21 +14,11 @@ import { useProgrammerValuesActions } from "../../../features/programmerValues/P
 import { useProgrammerValuesActivity } from "../../../features/programmerValues/useProgrammerValuesActivity";
 import { useProgrammingSelectionActions } from "../../../features/programmingInteraction/ProgrammingInteractionView";
 import { useApp } from "../../../state/AppContext";
-import type { BuiltInWindow } from "../../../types";
 import { useCommandLineSurface } from "../commandLine/useCommandLineSurface";
 import {
 	editTargetedCommandWithSoftwareKey,
 	type SoftwareKey,
 } from "../softwareKeypad";
-
-const shiftedWindows: Partial<Record<SoftwareKey, BuiltInWindow>> = {
-	".": "help",
-	"0": "fixtures",
-	"1": "groups",
-	"3": "cuelists",
-	"5": "dynamics",
-	"6": "channels",
-};
 
 export function useNumericPadController() {
 	const programmerActions = useProgrammerActions();
@@ -42,11 +35,16 @@ export function useNumericPadController() {
 	const preload = useProgrammerPreloadLifecycleView();
 	const setInteraction = useSetInteraction();
 	const hasSelection = command.selected.length > 0;
+	const deskLock = useDeskLock();
+	const deskLockActions = useDeskLockActions();
+	const gesture = useRef<{ key: SoftwareKey | null; at: number }>({ key: null, at: 0 });
 	const hasProgrammerValues = values.ready && values.valueCount > 0;
 	const context = {
 		programmerActions,
 		command,
 		state,
+		deskLocked: deskLock?.locked === true,
+		unfreezeNext: /^\s*FREEZE\b/i.test(command.text),
 		dispatch,
 		values,
 		valuesActions,
@@ -55,9 +53,14 @@ export function useNumericPadController() {
 		playbackReady: playbackStatus.status === "ready" && playbackDesk !== null,
 		preload,
 		setInteraction,
+		deskLock,
+		deskLockActions,
+		gesture,
 	};
 	return {
 		state,
+		deskLocked: deskLock?.locked === true,
+		unfreezeNext: /^\s*FREEZE\b/i.test(command.text),
 		preload,
 		clearState: hasSelection
 			? ("selection" as const)
@@ -78,6 +81,8 @@ export function useNumericPadController() {
 		},
 		press: (key: SoftwareKey, source: ControlSurfaceSource = "touch") =>
 			pressKey(context, key, source),
+		pressShifted: (key: SoftwareKey) =>
+			handleShiftedKey(context, key, command.read().text),
 	};
 }
 
@@ -93,6 +98,9 @@ interface NumericPadContext {
 	playbackReady: boolean;
 	preload: ReturnType<typeof useProgrammerPreloadLifecycleView>;
 	setInteraction: ReturnType<typeof useSetInteraction>;
+	deskLock: ReturnType<typeof useDeskLock>;
+	deskLockActions: ReturnType<typeof useDeskLockActions>;
+	gesture: { current: { key: SoftwareKey | null; at: number } };
 }
 
 function toggleRecord({ state, dispatch, command }: NumericPadContext) {
@@ -119,12 +127,16 @@ function pressKey(
 ) {
 	const { state, dispatch, command, programmerActions } = context;
 	const currentCommand = command.read();
+	const now = performance.now();
+	const repeated = context.gesture.current.key === key && now - context.gesture.current.at <= 450;
+	context.gesture.current = { key, at: now };
 	if (key === "SHIFT") {
 		dispatch({ type: "SET_SHIFT_ARMED", value: !state.shiftArmed });
 		return;
 	}
 	if (state.shiftArmed && handleShiftedKey(context, key, currentCommand.text))
 		return;
+	if (repeated && handleRepeatedKey(context, key)) return;
 	if (key === "CLR") return clearStep(context);
 	if (key === "SET" && currentCommand.pristine && handleSet(source)) return;
 	if (key === "UND") return void programmerActions?.undoProgrammer();
@@ -134,6 +146,7 @@ function pressKey(
 		key,
 		currentCommand.target,
 		currentCommand.pristine,
+		key === "." ? repeated && command.selected.length > 0 : repeated,
 	);
 	void command.replace(edited.command, edited.pristine);
 	if (edited.execute) void command.execute(edited.command);
@@ -145,66 +158,78 @@ function handleShiftedKey(
 		state,
 		dispatch,
 		command,
-		playbackDesk,
-		playbackReady,
+		deskLock,
+		deskLockActions,
+		preload,
 	}: NumericPadContext,
 	key: SoftwareKey,
 	text: string,
 ) {
-	dispatch({ type: "SET_SHIFT_ARMED", value: false });
 	if (/^\s*(?:FREEZE|UNFREEZE)\b/i.test(text) && /^[1-4]$/.test(key)) {
 		selectFixtureFreezeFamily(command, key as "1" | "2" | "3" | "4");
-		return true;
-	}
-	if (key === "TIME") {
-		const current = text.trim();
-		const next =
-			command.read().pristine || current === "FIXTURE" || current === "GROUP"
-				? "SPD GRP"
-				: `${current} SPD GRP`;
-		void command.replace(next, false);
-		return true;
-	}
-	if (key === "AT") {
-		const current = text.trim();
-		const next =
-			command.read().pristine || current === "FIXTURE" || current === "GROUP"
-				? "FixAT"
-				: `${current} FixAT`;
-		void command.replace(next, false);
 		return true;
 	}
 	if (key === "CLR") {
 		advanceFixtureFreezeCommand(command);
 		return true;
 	}
-	if (key === "DEL") {
-		dispatch({ type: "SET_MODAL", modal: "systemControlsOpen", value: true });
+	if (key === "ESC") {
+		void programmerActions?.undoProgrammer();
 		return true;
 	}
-	if (key === "2") {
-		dispatch({ type: "SET_PRESET_FAMILY", family: "Mixed" });
-		dispatch({ type: "OPEN_BUILTIN", kind: "presets" });
+	if (key === "CUE") {
+		dispatch({ type: "OPEN_BUILTIN", kind: "timecode" });
 		return true;
 	}
-	if (key === "4") {
-		dispatch({ type: "OPEN_BUILTIN", kind: "cuelists" });
-		if (playbackReady && playbackDesk?.selected_playback != null)
-			dispatch({
-				type: "OPEN_BUILTIN_CUELIST",
-				number: playbackDesk.selected_playback,
-			});
+	if (key === "PLAYBACK") {
+		dispatch({ type: "OPEN_BUILTIN", kind: "macros" });
 		return true;
 	}
-	if (key === "7" || key === "8" || key === "9") {
-		const desk = state.desks[Number(key) - 7];
-		if (desk) dispatch({ type: "OPEN_DESK", id: desk.id });
-		return Boolean(desk);
+	if (key === "ENT") {
+		if (deskLockActions) {
+			if (deskLock?.locked) void deskLockActions.unlockDesk();
+			else void deskLockActions.lockDesk();
+		}
+		return true;
 	}
-	const kind = shiftedWindows[key];
-	if (!kind) return false;
-	dispatch({ type: "OPEN_BUILTIN", kind });
-	return true;
+	if (key === "PRE") {
+		void preload.actions?.clearPending();
+		return true;
+	}
+	if (key === "MOV") {
+		const current = text.trim();
+		void command.replace(current ? `${current} COPY` : "COPY", false);
+		return true;
+	}
+	if (/^[0-9]$/.test(key)) {
+		const digit = key as `${number}`;
+		if (command.selected.length > 0 && /^[0-4]$/.test(digit)) {
+			void command.replace(`${text.trim()} AT ${digit}.`.trim(), false);
+			return true;
+		}
+		if (command.selected.length === 0) {
+			window.dispatchEvent(new CustomEvent("light:parameter-family-key", { detail: digit }));
+			return true;
+		}
+		return true;
+	}
+	return false;
+}
+
+function handleRepeatedKey(context: NumericPadContext, key: SoftwareKey) {
+	if (key === "OFF") {
+		context.dispatch({ type: "SET_MODAL", modal: "systemControlsOpen", value: true });
+		return true;
+	}
+	if (key === "CUE") {
+		context.dispatch({ type: "OPEN_BUILTIN", kind: "cuelists" });
+		return true;
+	}
+	if (key === "PLAYBACK") {
+		window.dispatchEvent(new Event("light:playback-page-menu"));
+		return true;
+	}
+	return false;
 }
 
 function advanceFixtureFreezeCommand(

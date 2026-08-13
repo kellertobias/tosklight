@@ -26,10 +26,10 @@ describe("attached hardware Programmer layout contract", () => {
     }
   });
 
-  it("puts RECORD and PRELOAD GO in the two-column by two-row command area", () => {
+  it("puts RECORD, PRELOAD GO, and the mode key above the four-column command area", () => {
     expect(attachedProgrammerActionLayout).toEqual({
-      record: { column: 1, row: 1, rowSpan: 2 },
-      preload: { column: 2, row: 1, rowSpan: 2 },
+      record: { column: 1, columnSpan: 2, row: 1, rowSpan: 1 },
+      preload: { column: 3, columnSpan: 2, row: 1, rowSpan: 1 },
     });
 
     const commandRows = numericPadLayout
@@ -37,5 +37,8 @@ describe("attached hardware Programmer layout contract", () => {
       .map((item) => item.row + attachedKeypadContentRowOffset);
     expect(Math.min(...commandRows)).toBe(3);
     expect(Math.max(...commandRows)).toBe(6);
+    expect(
+      numericPadLayout.filter((item) => item.section === "commands").map((item) => item.key),
+    ).toEqual(expect.arrayContaining(["PLAYBACK", "OFF", "DIFF", "PAGE_UP", "PAGE_DOWN"]));
   });
 });

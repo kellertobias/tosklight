@@ -5,7 +5,9 @@ import {
 } from "@tosklight/ui/command";
 import {
 	numericPadLayout,
+	softwareDeskKeypadLayout,
 	softwareKeyLabel,
+	type SoftwareDeskInputMode,
 } from "@tosklight/ui/programmer-keypad";
 import { HighlightControls } from "./HighlightControls";
 import { useNumericPadController } from "./numericPad/useNumericPadController";
@@ -14,14 +16,63 @@ import type { SoftwareKey } from "./softwareKeypad";
 
 export { numericPadLayout } from "@tosklight/ui/programmer-keypad";
 
-export function NumericPad({ demo = false }: { demo?: boolean } = {}) {
+export function softwareDeskInputMode(): SoftwareDeskInputMode {
+	if (typeof window === "undefined") return "keyboard";
+	return window.matchMedia?.("(pointer: coarse)").matches &&
+		(navigator.maxTouchPoints ?? 0) > 0
+		? "touch"
+		: "keyboard";
+}
+
+export function shiftedSoftwareKeyLabel(key: SoftwareKey, shifted: boolean) {
+	if (!shifted) return softwareKeyLabel(key);
+	return (
+		{
+			"0": "ALL",
+			"1": "INTENSITY",
+			"2": "COLOR",
+			"3": "POSITION",
+			"4": "BEAM",
+			"5": "DYNAMICS",
+			"6": "SHAPERS",
+			"7": "FOCUS",
+			"8": "CONTROL",
+			"9": "MEDIA",
+			CUE: "TIMECODE",
+			PLAYBACK: "MACRO",
+			ESC: "UNDO",
+			ENT: "LOCK",
+			CLR: "FREEZE",
+			PRE: "PRELOAD GO CLEAR",
+			REC: "UPDATE",
+			MOV: "COPY",
+		} as Partial<Record<SoftwareKey, string>>
+	)[key] ?? softwareKeyLabel(key);
+}
+
+export function NumericPad({
+	demo = false,
+	inputMode,
+}: {
+	demo?: boolean;
+	inputMode?: SoftwareDeskInputMode;
+} = {}) {
 	const pad = useNumericPadController();
 	if (!demo) {
+		const mode = inputMode ?? softwareDeskInputMode();
 		return (
 			<ProgrammerKeypadView
 				programmerFade={<ProgrammerFadeFader compact />}
 				highlightControls={<HighlightControls />}
 				onPress={pad.press}
+				layout={softwareDeskKeypadLayout(mode)}
+				labelForKey={(key) =>
+					key === "ENT" && pad.state.shiftArmed && pad.deskLocked
+						? "UNLOCK"
+						: key === "CLR" && pad.state.shiftArmed && pad.unfreezeNext
+							? "UNFREEZE"
+						: shiftedSoftwareKeyLabel(key, pad.state.shiftArmed)
+				}
 				clearState={pad.clearState}
 				activeKeys={[
 					...(pad.state.shiftArmed ? (["SHIFT"] as const) : []),

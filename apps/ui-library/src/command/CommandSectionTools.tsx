@@ -2,6 +2,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { Button } from "../common";
 import {
 	numericPadLayout,
+	type NumericPadLayoutItem,
 	type SoftwareKey,
 	softwareKeyLabel,
 } from "../programmerKeypad";
@@ -16,6 +17,8 @@ export interface ProgrammerKeypadViewProps {
 	clearState?: ProgrammerClearState;
 	disabledKeys?: readonly SoftwareKey[];
 	classNameForKey?: (key: SoftwareKey) => string;
+	layout?: readonly NumericPadLayoutItem[];
+	labelForKey?: (key: SoftwareKey) => string;
 }
 
 const ACTION_KEYS = new Set<SoftwareKey>([
@@ -63,9 +66,11 @@ export function ProgrammerKeypadView({
 	clearState = "idle",
 	disabledKeys = [],
 	classNameForKey,
+	layout = numericPadLayout,
+	labelForKey = softwareKeyLabel,
 }: ProgrammerKeypadViewProps) {
 	const renderKeys = (section: "commands" | "numbers") =>
-		numericPadLayout
+		layout
 			.filter((item) => item.section === section)
 			.map(({ key, column, row, rowSpan = 1 }) => {
 				const sectionColumn = section === "commands" ? column : column - 3;
@@ -85,7 +90,7 @@ export function ProgrammerKeypadView({
 							gridRow: `${displayRow} / span ${rowSpan}`,
 						}}
 					>
-						{softwareKeyLabel(key)}
+						{labelForKey(key)}
 					</Button>
 				);
 			});

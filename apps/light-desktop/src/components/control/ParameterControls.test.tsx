@@ -1563,7 +1563,7 @@ describe("ParameterControls Group targets and alignment", () => {
 		fireEvent.click(align);
 		await waitFor(() => expect(align).toHaveAccessibleName("Align Off"));
 		expect(align).toHaveClass("align-off");
-		expect(dispatch).toHaveBeenCalledWith({
+		expect(dispatch).not.toHaveBeenCalledWith({
 			type: "SET_SHIFT_ARMED",
 			value: false,
 		});
