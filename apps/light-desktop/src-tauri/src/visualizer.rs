@@ -206,7 +206,7 @@ pub(crate) fn helper_binary() -> Result<PathBuf, String> {
         return Ok(beside);
     }
     // A development tree has the two beside each other in the target directory rather than inside
-    // one bundle, which is the case `npm run open` produces.
+    // one bundle, which is the case `npm run build:open` produces.
     if let Some(target) = executable
         .ancestors()
         .find(|path| path.file_name().is_some_and(|name| name == "cargo"))

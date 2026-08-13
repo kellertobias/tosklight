@@ -18,7 +18,8 @@ show as usual.
 
 ## Start and configure the server
 
-During development, run `npm run open:media`. A deployed server reads `media/media-server.json`
+During development, run `npm run build:media:open` after changes, or `npm run open:media` to launch
+the latest existing build. A deployed server reads `media/media-server.json`
 from its working directory unless `MEDIA_CONFIG` names another file. Validate an edited file before
 starting outputs:
 

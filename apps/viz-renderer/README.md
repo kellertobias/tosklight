@@ -13,11 +13,12 @@ desk user interface are unaffected.
 npm run open:viz
 ```
 
-That builds the visualizer **and the Viz editor beside it**, then launches the visualizer. With no
-source named it opens that editor as its planning window and draws the rig you patch there. Name a
-desk, a show file or the built-in scene and it does that instead — and for a desk it starts the
-development server first if nothing is answering on `http://127.0.0.1:5000`, using a desk that is
-already running as-is and never stopping it. Arguments pass straight through:
+That launches the latest visualizer build **with the latest Viz editor beside it**. Use `npm run
+build:viz:open` to rebuild every helper first. With no source named it opens that editor as its
+planning window and draws the rig you patch there. Name a desk, a show file or the built-in scene
+and it does that instead — and for a desk it starts the latest built development server if nothing
+is answering on `http://127.0.0.1:5000`, using a desk that is already running as-is and never
+stopping it. Arguments pass straight through:
 
 ```sh
 npm run open:viz -- --server 10.0.0.9 --port 5000

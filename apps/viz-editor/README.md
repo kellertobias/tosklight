@@ -7,6 +7,8 @@ file, with no desk running.
 npm run open:viz-editor
 ```
 
+This opens the latest existing build. Use `npm run build:viz-editor:open` to rebuild it first.
+
 ## What it is for
 
 The visualizer takes its live values from Art-Net or sACN sent by whatever console is driving the

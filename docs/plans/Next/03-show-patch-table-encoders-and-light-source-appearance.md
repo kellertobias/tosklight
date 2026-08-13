@@ -208,7 +208,7 @@ before moving it to `Done` in a semantic commit.
   app-owned server reports `ready` without recovery, loads the active show, installs the revised
   ROBE package, and serves readiness/bootstrap in about 4 ms. The real Tauri window visibly opens
   both the exact Show Patch table and the built-in 3D Stage with the live rig.
-- The authoritative standalone `npm run open:viz -- --server 127.0.0.1 --port 5000 --quality high
+- The authoritative standalone `npm run build:viz:open -- --server 127.0.0.1 --port 5000 --quality high
   --view full_3d` path now builds and bundles the renderer, builds the sibling Viz editor, connects
   a separate `ToskLight Visualizer` process to the ready desk, and visibly renders the full-3D rig.
   This runtime gate exposed and then verified two stale constructor repairs: neutral installed
@@ -714,7 +714,7 @@ npm run test:e2e-api
 npm run test:e2e -- tests/<focused-show-patch-layout-spec>.spec.ts
 npm run test:e2e-ui
 npm run manual
-npm run open
+npm run build:open
 curl -fsS http://127.0.0.1:5000/api/v2/readiness
 ```
 

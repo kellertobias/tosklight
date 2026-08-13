@@ -53,7 +53,7 @@ const controlDurationSeconds =
 const application = packagedApplication();
 const executable = application.executable;
 await stat(executable).catch(() => {
-	throw new Error("Build and open the debug app first with `npm run open`");
+	throw new Error("Build and open the debug app first with `npm run build:open`");
 });
 
 const stamp = new Date().toISOString().replaceAll(/[:.]/g, "-");
