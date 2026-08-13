@@ -128,6 +128,19 @@ impl FixtureProfile {
             validate_positive("light source width", Some(source.width_millimetres))?;
             validate_positive("light source height", Some(source.height_millimetres))?;
         }
+        if let Some(effect) = &self.effect {
+            if !self.fixture_type.eq_ignore_ascii_case("effect") {
+                return Err(ProfileError::Invalid(
+                    "only an Effect fixture may declare an effect script".into(),
+                ));
+            }
+            if effect.result_version != 1 {
+                return Err(ProfileError::Invalid(format!(
+                    "unsupported effect result version {}",
+                    effect.result_version
+                )));
+            }
+        }
         // A wheel is read by slot, so two slots with the same number is an authoring mistake that
         // would otherwise silently drop one of them.
         let mut gobo_slots = HashSet::new();

@@ -78,6 +78,18 @@ pub(super) fn extract_asset_field(
             validate_scan_script(&bytes)?;
             "js"
         }
+        AssetKind::EffectScript => {
+            if !matches!(
+                declared_mime,
+                "text/javascript" | "application/javascript" | "application/ecmascript"
+            ) {
+                return Err(invalid(format!(
+                    "effect script has unsupported media type {declared_mime}"
+                )));
+            }
+            validate_effect_script(&bytes)?;
+            "js"
+        }
         AssetKind::Gobo => {
             let format = sniff_image(&bytes)?;
             validate_image_dimensions(kind, &bytes, format)?;
@@ -217,6 +229,13 @@ fn validate_asset(
             validate_scan_script(bytes)?;
             Ok("text/javascript")
         }
+        AssetKind::EffectScript => {
+            if !path.to_ascii_lowercase().ends_with(".js") {
+                return Err(invalid("effect script must use the .js extension"));
+            }
+            validate_effect_script(bytes)?;
+            Ok("text/javascript")
+        }
         AssetKind::Gobo => {
             let format = sniff_image(bytes)?;
             validate_image_dimensions(kind, bytes, format)?;
@@ -238,6 +257,12 @@ fn validate_asset(
 fn validate_scan_script(bytes: &[u8]) -> Result<(), FixturePackageError> {
     std::str::from_utf8(bytes)
         .map_err(|error| invalid(format!("scan script is not valid UTF-8: {error}")))?;
+    Ok(())
+}
+
+fn validate_effect_script(bytes: &[u8]) -> Result<(), FixturePackageError> {
+    std::str::from_utf8(bytes)
+        .map_err(|error| invalid(format!("effect script is not valid UTF-8: {error}")))?;
     Ok(())
 }
 
@@ -569,7 +594,10 @@ fn validate_image_dimensions(
         AssetKind::Photograph => MAX_PHOTOGRAPH_DIMENSION,
         AssetKind::Icon => MAX_ICON_DIMENSION,
         AssetKind::Gobo => MAX_GOBO_DIMENSION,
-        AssetKind::Model | AssetKind::ScanScript | AssetKind::Projection => unreachable!(),
+        AssetKind::Model
+        | AssetKind::ScanScript
+        | AssetKind::EffectScript
+        | AssetKind::Projection => unreachable!(),
     };
     if width == 0 || height == 0 || width > limit || height > limit {
         return Err(invalid(format!(

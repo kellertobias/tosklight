@@ -20,6 +20,7 @@ pub(super) fn compile_instances(
     optics: EmitterOptics,
     mount: EmitterMount,
     laser: Option<LaserOptics>,
+    effect: Option<EffectProgram>,
 ) {
     let shared_addresses = fixture
         .instances
@@ -110,6 +111,7 @@ pub(super) fn compile_instances(
             optics.clone(),
             mount,
             laser.clone(),
+            effect.clone(),
         );
     }
 }

@@ -46,6 +46,8 @@ pub(super) struct BenchmarkSample {
     degraded_frames: u64,
     crowd_authored: u32,
     crowd_drawn: u32,
+    particles_requested: u32,
+    particles_drawn: u32,
 }
 
 impl BenchmarkSample {
@@ -67,6 +69,8 @@ impl BenchmarkSample {
             degraded_frames: 0,
             crowd_authored: 0,
             crowd_drawn: 0,
+            particles_requested: 0,
+            particles_drawn: 0,
         }
     }
 
@@ -151,6 +155,10 @@ impl Application {
             }
             sample.crowd_authored = sample.crowd_authored.max(self.stats.crowd_authored);
             sample.crowd_drawn = sample.crowd_drawn.max(self.stats.crowd_drawn);
+            sample.particles_requested = sample
+                .particles_requested
+                .max(self.stats.particles_requested);
+            sample.particles_drawn = sample.particles_drawn.max(self.stats.particles_drawn);
         }
         if self.benchmark_view_started.elapsed().as_secs_f32() < slice {
             return false;
@@ -226,6 +234,10 @@ impl Application {
             println!(
                 "  crowd authored/drawn: {}/{}",
                 sample.crowd_authored, sample.crowd_drawn
+            );
+            println!(
+                "  particles requested/drawn: {}/{}",
+                sample.particles_requested, sample.particles_drawn
             );
         }
         for input in &measured.inputs {

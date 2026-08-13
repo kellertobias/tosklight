@@ -164,6 +164,8 @@ pub struct FrameStats {
     pub lights: u32,
     pub beams: u32,
     pub instances: u32,
+    pub particles_requested: u32,
+    pub particles_drawn: u32,
     pub draw_calls: u32,
     /// Set when the renderer had to reduce quality to stay inside the budget.
     pub degraded: bool,

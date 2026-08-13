@@ -8,15 +8,15 @@ use crate::fallback::{self, OpticalClass};
 use glam::{Quat, Vec3};
 use light_fixture::{
     ChannelBehavior, FixtureMode, FixtureProfile, GeometryMotionKind, InstalledFixtureAppearance,
-    LightSourceForm, PatchPolicy, ProfileLaser, ProfileOptics, Vector3,
+    LightSourceForm, PatchPolicy, ProfileEffect, ProfileLaser, ProfileOptics, Vector3,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
 use viz_scene::{
-    EmitterInstance, EmitterKind, EmitterLayoutCells, EmitterOptics, FallbackReason, FixtureBody,
-    FixtureInstance, FixturePlanBinding, LaserOptics, LightSource, MotionAxis, PlanFallback, Scene,
-    SourceForm,
+    EffectProgram, EmitterInstance, EmitterKind, EmitterLayoutCells, EmitterOptics, FallbackReason,
+    FixtureBody, FixtureInstance, FixturePlanBinding, LaserOptics, LightSource, MotionAxis,
+    PlanFallback, Scene, SourceForm,
 };
 
 /// One physical placement of a logical fixture: the root fixture or one multi-patch instance.
@@ -90,6 +90,8 @@ pub struct EmitterBinding {
     /// because the mapping from DMX to picture lives inside the script and no canonical attribute
     /// set describes it. Every other emitter reads named channels; this one reads the footprint.
     pub laser_window: Option<LaserWindow>,
+    /// The whole raw fixture window supplied to an Effect program.
+    pub effect_window: Option<EffectWindow>,
 }
 
 /// The one fully patched virtual-camera fixture a dedicated external Visualizer may follow.
@@ -113,6 +115,12 @@ pub struct ExternalCameraBinding {
 pub struct LaserWindow {
     pub logical_universe: u16,
     /// Absolute 1-based DMX addresses in patch order. Index `n` here is `input.dmx[n]` in a script.
+    pub slots: Vec<u16>,
+}
+
+#[derive(Clone, Debug)]
+pub struct EffectWindow {
+    pub logical_universe: u16,
     pub slots: Vec<u16>,
 }
 
@@ -399,6 +407,16 @@ pub fn compile(fixtures: &[PatchedFixture]) -> ScenePlan {
             }
             resolved
         });
+        let effect = class.is_effect().then(|| {
+            let resolved = effect_program(fixture.profile.effect.as_ref());
+            if resolved.script.is_none() {
+                warnings.push(format!(
+                    "{} {} is an Effect fixture but ships no effect script; it will remain off",
+                    fixture.profile.manufacturer, fixture.profile.name
+                ));
+            }
+            resolved
+        });
         // The wheel this fixture turns, if its package carries one. Artwork is shared by handle:
         // one piece of glass declared by twenty fixtures is decoded once and lives in the scene
         // once.
@@ -427,6 +445,7 @@ pub fn compile(fixtures: &[PatchedFixture]) -> ScenePlan {
             optics,
             mount,
             laser,
+            effect,
         );
     }
     scene.recompute_bounds();
@@ -691,10 +710,12 @@ fn build_emitters(
     optics: EmitterOptics,
     mount: EmitterMount,
     laser: Option<LaserOptics>,
+    effect: Option<EffectProgram>,
 ) {
     // Resolved once for the fixture: every head of a laser reads the same footprint, because the
     // script is given the whole fixture rather than one head's channels.
     let laser_window = laser.as_ref().and_then(|_| laser_window(channels));
+    let effect_window = effect.as_ref().and_then(|_| effect_window(channels));
     // A laser's scan engine is handed the fixture's whole window and answers with the deflection
     // of every point it draws, so its position channels are already in the figure. Letting the
     // desk swing the head on the same channels would apply them a second time, and through a pan
@@ -714,7 +735,9 @@ fn build_emitters(
             optics,
             mount,
             laser,
+            effect,
             &laser_window,
+            &effect_window,
             steered,
         );
         return;
@@ -741,6 +764,8 @@ fn build_emitters(
         // decides the kind here exactly as it does for a head with no geometry at all.
         let kind = if class.is_laser() {
             EmitterKind::Laser
+        } else if class.is_effect() {
+            EmitterKind::Effect
         } else if class == OpticalClass::Atmosphere || binding.fog.is_some() {
             EmitterKind::Atmosphere
         } else if directional {
@@ -778,6 +803,9 @@ fn build_emitters(
             laser: (kind == EmitterKind::Laser)
                 .then(|| laser.clone())
                 .flatten(),
+            effect: (kind == EmitterKind::Effect)
+                .then(|| effect.clone())
+                .flatten(),
             live_shaper_angle_roles: std::array::from_fn(|index| {
                 binding.shaper_blade_angles[index].is_some()
             }),
@@ -788,6 +816,7 @@ fn build_emitters(
             live_shaper_rotation_role: binding.shaper_rotation.is_some(),
         });
         binding.laser_window = laser_window.clone();
+        binding.effect_window = effect_window.clone();
         bindings.push(binding);
     }
 }
@@ -825,7 +854,9 @@ fn build_fallback_emitters(
     optics: EmitterOptics,
     mount: EmitterMount,
     laser: Option<LaserOptics>,
+    effect: Option<EffectProgram>,
     laser_window: &Option<LaserWindow>,
+    effect_window: &Option<EffectWindow>,
     steered: bool,
 ) {
     let head_channels = group_by_head(mode, channels);
@@ -876,6 +907,9 @@ fn build_fallback_emitters(
             laser: (kind == EmitterKind::Laser)
                 .then(|| laser.clone())
                 .flatten(),
+            effect: (kind == EmitterKind::Effect)
+                .then(|| effect.clone())
+                .flatten(),
             live_shaper_angle_roles: std::array::from_fn(|index| {
                 binding.shaper_blade_angles[index].is_some()
             }),
@@ -886,6 +920,7 @@ fn build_fallback_emitters(
             live_shaper_rotation_role: binding.shaper_rotation.is_some(),
         });
         binding.laser_window = laser_window.clone();
+        binding.effect_window = effect_window.clone();
         bindings.push(binding);
     }
     if mode.heads.is_empty() {
@@ -900,7 +935,9 @@ fn build_fallback_emitters(
             optics,
             mount,
             laser,
+            effect,
             laser_window,
+            effect_window,
         );
     }
 }
@@ -918,7 +955,9 @@ fn headless_emitter(
     optics: EmitterOptics,
     mount: EmitterMount,
     laser: Option<LaserOptics>,
+    effect: Option<EffectProgram>,
     laser_window: &Option<LaserWindow>,
+    effect_window: &Option<EffectWindow>,
 ) {
     let mut binding = EmitterBinding {
         invert_pan: instance.invert_pan,
@@ -941,11 +980,13 @@ fn headless_emitter(
         kind: emitter_kind(class, &binding),
         cells: EmitterLayoutCells::single(),
         laser: laser.clone(),
+        effect: effect.clone(),
         live_shaper_angle_roles: [false; 4],
         shaper_roles: [false; 4],
         live_shaper_rotation_role: false,
     });
     binding.laser_window = laser_window.clone();
+    binding.effect_window = effect_window.clone();
     bindings.push(binding);
 }
 
@@ -994,6 +1035,25 @@ fn laser_optics(declared: Option<&ProfileLaser>) -> LaserOptics {
     optics
 }
 
+fn effect_program(declared: Option<&ProfileEffect>) -> EffectProgram {
+    let mut program = EffectProgram {
+        script: None,
+        script_key: 0,
+        result_version: 1,
+    };
+    let Some(declared) = declared else {
+        return program;
+    };
+    program.result_version = declared.result_version;
+    if let Some(script) = declared.effect_script_asset.as_deref()
+        && let Some(source) = decode_script(script)
+    {
+        program.script_key = script_key(&source);
+        program.script = Some(source.into());
+    }
+    program
+}
+
 /// The fixture's whole DMX footprint, in patch order.
 ///
 /// Built from every channel of the mode rather than from one head's, because a script is handed
@@ -1020,6 +1080,13 @@ fn laser_window(channels: &HashMap<Uuid, ChannelRef>) -> Option<LaserWindow> {
     (!slots.is_empty()).then_some(LaserWindow {
         logical_universe,
         slots,
+    })
+}
+
+fn effect_window(channels: &HashMap<Uuid, ChannelRef>) -> Option<EffectWindow> {
+    laser_window(channels).map(|window| EffectWindow {
+        logical_universe: window.logical_universe,
+        slots: window.slots,
     })
 }
 
@@ -1057,6 +1124,9 @@ fn emitter_kind(class: OpticalClass, binding: &EmitterBinding) -> EmitterKind {
     // slots that pick a pattern look exactly like the slots that pick a gobo.
     if class.is_laser() {
         return EmitterKind::Laser;
+    }
+    if class.is_effect() {
+        return EmitterKind::Effect;
     }
     // An atmosphere machine contributes haze whether or not its output channel happens to be
     // named `fog`; the profile's own classification is the authority.

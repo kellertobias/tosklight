@@ -8155,6 +8155,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "viz-effect"
+version = "0.1.0"
+dependencies = [
+ "rquickjs",
+ "viz-scene",
+]
+
+[[package]]
 name = "viz-helper"
 version = "0.1.0"
 dependencies = [
@@ -8237,6 +8245,7 @@ dependencies = [
  "viz-desk",
  "viz-dmx",
  "viz-document",
+ "viz-effect",
  "viz-helper",
  "viz-laser",
  "viz-project",

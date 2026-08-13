@@ -164,6 +164,7 @@ mod tests {
                 kind: EmitterKind::Beam,
                 cells: EmitterLayoutCells::single(),
                 laser: None,
+                effect: None,
                 shaper_roles: [false; 4],
                 live_shaper_angle_roles: [false; 4],
                 live_shaper_rotation_role: false,

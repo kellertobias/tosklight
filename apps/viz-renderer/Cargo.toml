@@ -20,6 +20,7 @@ viz-helper = { path = "../../crates/viz/helper" }
 viz-surface = { path = "../../crates/viz/surface" }
 viz-document = { path = "../../crates/viz/document" }
 viz-laser.workspace = true
+viz-effect.workspace = true
 viz-project.workspace = true
 viz-render.workspace = true
 viz-scene.workspace = true

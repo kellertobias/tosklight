@@ -59,6 +59,12 @@ and taskbar icon are set from the same artwork at runtime.
 
 The first launch needs no network configuration when ToskLight runs on the same computer.
 
+Effect fixtures run their package-owned `effect.js` in isolated bounded QuickJS contexts. Particle
+budgets are Draft 128, Standard 512, High 2,048 and Ultra 8,192; overload retains one particle per
+active nozzle before distributing the remaining capacity and reports requested/drawn counts in
+renderer frame statistics. See the operator manual's **Particle Effects** page for the script and
+restart contract.
+
 ## The three ways it starts
 
 | Started | What happens |

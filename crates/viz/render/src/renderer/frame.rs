@@ -157,12 +157,15 @@ impl Renderer {
             lights: self.lights.length,
             beams: self.beam_instances.length,
             instances: instance_total,
+            particles_requested: self.frame.particles_requested,
+            particles_drawn: self.frame.particles_drawn,
             draw_calls,
             // Only report degradation the renderer actually applied this frame.
             degraded: self.frame.lights.len() as u32 > self.lights.length
                 || self.beam_overflow
                 || plan.adaptive_degraded
-                || self.frame.crowd_drawn < self.frame.crowd_requested,
+                || self.frame.crowd_drawn < self.frame.crowd_requested
+                || self.frame.particles_drawn < self.frame.particles_requested,
             gpu_micros: gpu_passes.total_micros(),
             gpu_passes,
             volumetric_steps: plan.volumetric_steps,
@@ -204,6 +207,7 @@ impl Renderer {
         let control = crate::camera::CameraControl::from_camera(&view.camera);
         let (plot_right, plot_up) = control.page_axes(view.mode);
         let style = FrameStyle {
+            quality: view.quality,
             draw_beams: view.mode.renders_beams(),
             draw_aim_lines: view.mode.renders_aim_lines(),
             plot,

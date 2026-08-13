@@ -11,6 +11,8 @@ use viz_scene::{
     SourceForm, euler_degrees,
 };
 
+mod effects;
+
 /// Which procedural mesh an instance draws.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum MeshKind {
@@ -196,6 +198,8 @@ pub struct FrameInstances {
     pub crowd_authored: u32,
     pub crowd_requested: u32,
     pub crowd_drawn: u32,
+    pub particles_requested: u32,
+    pub particles_drawn: u32,
 }
 
 impl FrameInstances {
@@ -257,6 +261,7 @@ const SPREAD_COMPRESSION: f32 = 0.55;
 /// How one frame should be drawn.
 #[derive(Clone, Copy, Debug)]
 pub struct FrameStyle {
+    pub quality: viz_scene::RenderQuality,
     pub draw_beams: bool,
     pub draw_aim_lines: bool,
     /// Draw the scene as an outline plan instead of a shaded picture.
@@ -303,6 +308,7 @@ pub struct FrameStyle {
 impl Default for FrameStyle {
     fn default() -> Self {
         Self {
+            quality: viz_scene::RenderQuality::High,
             draw_beams: true,
             draw_aim_lines: false,
             plot: false,
@@ -349,6 +355,7 @@ pub fn build(scene: &Scene, values: &SceneValues, style: &FrameStyle) -> FrameIn
         &values.selected_fixtures,
     );
     push_emitters(&mut frame, scene, values, &head_angles, style);
+    effects::push_effects(&mut frame, scene, values, style);
     frame
 }
 

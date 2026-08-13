@@ -27,6 +27,10 @@ An audience is a scalable **Venue — Crowd Area** fixture. Its mode chooses pos
 its independently authored width and depth remain visible as a plan footprint, and the Visualizer
 fills it with deterministic silhouettes within the active quality budget.
 
+Particle-producing equipment uses the same portable idea without pretending to be a laser. An
+**Effect** fixture carries its own bounded DMX-to-emitter script for flames or sparks; the particles
+are depth-tested, emissive and budgeted by quality.
+
 A look on stage can also be kept and taken away: a snapshot freezes the rig as it stands and
 can be turned into a Blender file for a finished render.
 
@@ -46,5 +50,7 @@ rendering it, [Driving the Visualizer from the Desk](04-desk-view-control.md) fo
 selecting the view and the quality from the desk, and [Lasers](05-lasers.md) for scan
 scripts and the persistence-of-vision settings that make lasers and strobes read correctly, and
 [Planning a Rig, and Moving It](06-planning-and-transfer.md) for the Viz Editor and moving a show
-between it and the desk. Continue with [Crowd Areas](08-crowds.md) for modes, footprint editing, deterministic placement,
-local amount control, and measured quality budgets.
+between it and the desk, and [Particle Effects](07-particle-effects.md) for transferable flame and
+cold-spark engines, trigger semantics, restart behavior and quality budgets. Continue with
+[Crowd Areas](08-crowds.md) for modes, footprint editing, deterministic placement, local amount
+control, and measured quality budgets.

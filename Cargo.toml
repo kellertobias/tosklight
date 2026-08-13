@@ -39,6 +39,7 @@ members = [
   "crates/shared/show",
   "crates/viz/scene",
   "crates/viz/laser",
+  "crates/viz/effect",
   "crates/viz/dmx",
   "crates/viz/project",
   "crates/viz/capture",
@@ -114,6 +115,7 @@ rquickjs = { version = "0.12", default-features = false, features = ["classes", 
 light-discovery = { path = "crates/shared/discovery" }
 viz-scene = { path = "crates/viz/scene" }
 viz-laser = { path = "crates/viz/laser" }
+viz-effect = { path = "crates/viz/effect" }
 viz-dmx = { path = "crates/viz/dmx" }
 viz-project = { path = "crates/viz/project" }
 viz-desk = { path = "crates/viz/desk" }

@@ -171,6 +171,19 @@ impl Decoder {
                         .unwrap_or(0)
                 }));
             }
+            if emitter.kind == EmitterKind::Effect
+                && let Some(window) = &binding.effect_window
+            {
+                let frame = self.slots(window.logical_universe);
+                let effect = &mut values.effect_frames[*index];
+                effect.slots.clear();
+                effect.slots.extend(window.slots.iter().map(|slot| {
+                    frame
+                        .get(usize::from(*slot).saturating_sub(1))
+                        .copied()
+                        .unwrap_or(0)
+                }));
+            }
         }
         if camera_affected {
             self.decode_external_camera(values);
@@ -748,6 +761,7 @@ mod tests {
             kind,
             cells: EmitterLayoutCells::single(),
             laser: None,
+            effect: None,
             live_shaper_angle_roles: [false; 4],
             shaper_roles: [false; 4],
             live_shaper_rotation_role: false,
@@ -1073,7 +1087,7 @@ mod tests {
 mod strobe_and_laser_tests {
     use super::tests_support::*;
     use super::*;
-    use crate::plan::LaserWindow;
+    use crate::plan::{EffectWindow, LaserWindow};
 
     /// The reason the gate is integrated at all: no rate may vanish because the frames happened to
     /// fall in its dark half, and none may read as continuously lit either. Averaged over a
@@ -1141,6 +1155,28 @@ mod strobe_and_laser_tests {
             0.0,
         );
         assert_eq!(values.laser_scans[0].slots, vec![10, 20, 30, 40]);
+    }
+
+    #[test]
+    fn an_effect_program_receives_the_exact_fixture_slots_in_patch_order() {
+        let binding = EmitterBinding {
+            universes: vec![1],
+            effect_window: Some(EffectWindow {
+                logical_universe: 1,
+                slots: vec![1, 2, 3],
+            }),
+            ..EmitterBinding::default()
+        };
+        let mut decoder = Decoder::new(vec![binding]);
+        let scene = scene(&[EmitterKind::Effect]);
+        let mut values = SceneValues::default();
+        decoder.apply(
+            &scene,
+            &[frame(&[(0, 17), (1, 91), (2, 203)])],
+            &mut values,
+            0.0,
+        );
+        assert_eq!(values.effect_frames[0].slots, vec![17, 91, 203]);
     }
 
     /// A head that is not a laser must never grow a footprint, or every fixture in the show would

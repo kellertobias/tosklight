@@ -35,6 +35,8 @@ pub enum OpticalClass {
     /// none of the field numbers below mean anything for it. It is a class so the classifier has
     /// somewhere to put it and the scanner defaults have somewhere to live.
     Laser,
+    /// Scripted flame/spark particle producer rather than a projected light field.
+    Effect,
     /// Face-visible source with no meaningful projected beam.
     Emissive,
     /// A bank of individual lamps behind round glass: a blinder, an audience bar, a sunstrip.
@@ -67,7 +69,7 @@ impl OpticalClass {
             // instead. Near enough to zero that nothing treats it as a cone by accident.
             Self::Laser => (0.06, 0.06),
             Self::Emissive | Self::Blinder => (60.0, 110.0),
-            Self::Atmosphere | Self::Machine | Self::Venue => (40.0, 80.0),
+            Self::Effect | Self::Atmosphere | Self::Machine | Self::Venue => (40.0, 80.0),
         }
     }
 
@@ -87,7 +89,12 @@ impl OpticalClass {
             Self::Par => 0.28,
             Self::Wash => 0.18,
             Self::Flood => 0.08,
-            Self::Emissive | Self::Blinder | Self::Atmosphere | Self::Machine | Self::Venue => 0.05,
+            Self::Emissive
+            | Self::Blinder
+            | Self::Effect
+            | Self::Atmosphere
+            | Self::Machine
+            | Self::Venue => 0.05,
         }
     }
 
@@ -105,7 +112,12 @@ impl OpticalClass {
             Self::Fresnel => 0.55,
             Self::Flood => 0.5,
             Self::Par => 0.3,
-            Self::Emissive | Self::Blinder | Self::Atmosphere | Self::Machine | Self::Venue => 0.75,
+            Self::Emissive
+            | Self::Blinder
+            | Self::Effect
+            | Self::Atmosphere
+            | Self::Machine
+            | Self::Venue => 0.75,
         }
     }
 
@@ -138,7 +150,9 @@ impl OpticalClass {
             // One lamp of the bank, behind its own round glass. Sized for a sealed-beam blinder
             // lamp; a bank whose lamps sit closer together than this is trimmed to its own pitch.
             Self::Blinder => LightSource::round(0.185),
-            Self::Atmosphere | Self::Machine | Self::Venue => LightSource::round(0.06),
+            Self::Effect | Self::Atmosphere | Self::Machine | Self::Venue => {
+                LightSource::round(0.06)
+            }
         }
     }
 
@@ -172,11 +186,15 @@ impl OpticalClass {
         matches!(self, Self::Laser)
     }
 
+    pub fn is_effect(self) -> bool {
+        matches!(self, Self::Effect)
+    }
+
     pub fn body_kind(self, moving: bool) -> BodyKind {
         match self {
             // A show laser is a box on a bracket. Its chart declares pan and tilt for the position
             // of the figure inside the scan field, which is not a yoke and must not draw one.
-            Self::Laser => BodyKind::Machine,
+            Self::Laser | Self::Effect => BodyKind::Machine,
             _ if moving => BodyKind::MovingHead,
             Self::Emissive | Self::Blinder => BodyKind::Bar,
             Self::Atmosphere | Self::Machine => BodyKind::Machine,
@@ -200,6 +218,9 @@ pub fn classify(fixture_type: &str) -> OpticalClass {
 
     if has("venue") {
         return OpticalClass::Venue;
+    }
+    if has("effect") || has("pyro") || has("sparkler") || has("flame") {
+        return OpticalClass::Effect;
     }
     if has("fogger") || has("hazer") || has("haze") || has("fog") {
         return OpticalClass::Atmosphere;
@@ -359,7 +380,7 @@ fn reference_lumens(class: OpticalClass) -> f32 {
         OpticalClass::Scanner => 4_000.0,
         // A laser's brightness comes from its optical power, not from a lumen figure that would
         // be meaningless for a source this concentrated.
-        OpticalClass::Laser => 2_000.0,
+        OpticalClass::Laser | OpticalClass::Effect => 2_000.0,
         OpticalClass::Fresnel | OpticalClass::Par => 5_000.0,
         OpticalClass::Wash => 8_000.0,
         OpticalClass::Flood => 9_000.0,

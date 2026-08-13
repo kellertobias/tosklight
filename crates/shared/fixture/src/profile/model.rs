@@ -137,6 +137,9 @@ pub struct FixtureProfile {
     /// names and leaves room for a later animated presentation without changing patch identity.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub crowd: Option<ProfileCrowd>,
+    /// A package-owned particle-effect mapping for flame, spark, and future emitter families.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effect: Option<ProfileEffect>,
     /// The fixture's gobo wheel, slot by slot, when the package carries one.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub gobos: Vec<ProfileGobo>,
@@ -182,6 +185,7 @@ struct FixtureProfileCanonical {
     laser: Option<ProfileLaser>,
     #[serde(default)]
     crowd: Option<ProfileCrowd>,
+    effect: Option<ProfileEffect>,
     #[serde(default)]
     gobos: Vec<ProfileGobo>,
     modes: Vec<FixtureMode>,
@@ -248,6 +252,7 @@ impl<'de> Deserialize<'de> for FixtureProfile {
             optics: canonical.optics,
             laser: canonical.laser,
             crowd: canonical.crowd,
+            effect: canonical.effect,
             gobos: canonical.gobos,
             modes: canonical.modes,
             hazardous: canonical.hazardous,
@@ -362,6 +367,27 @@ pub struct ProfileLaser {
     /// is why a 500 mW projector and a 5 W one do not look alike at the same DMX value.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub optical_power_milliwatts: Option<f32>,
+}
+
+/// The transferable engine that maps one Effect fixture's real DMX programs to emitters.
+///
+/// The JavaScript itself remains manufacturer-owned and travels in the fixture package. The
+/// renderer only understands the bounded, versioned declarative result, so adding a device never
+/// adds a fixture-specific program to ToskLight.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct ProfileEffect {
+    /// An ES module exporting `effect(input)`, stored as `assets/effect.js` in a package and as a
+    /// self-contained data URL in a live profile snapshot.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effect_script_asset: Option<String>,
+    /// Declarative result contract accepted from this script. Version 1 supports flame and spark
+    /// emitters; later versions may add physics-backed debris without changing fixture kind.
+    #[serde(default = "default_effect_result_version")]
+    pub result_version: u16,
+}
+
+fn default_effect_result_version() -> u16 {
+    1
 }
 
 /// One slot on the fixture's gobo wheel.

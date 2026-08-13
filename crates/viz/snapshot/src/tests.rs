@@ -53,6 +53,7 @@ fn rig() -> (Scene, SceneValues) {
         kind: EmitterKind::Beam,
         cells: EmitterLayoutCells::single(),
         laser: None,
+        effect: None,
         live_shaper_angle_roles: [false; 4],
         shaper_roles: [false; 4],
         live_shaper_rotation_role: false,

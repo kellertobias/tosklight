@@ -310,6 +310,7 @@ mod tests {
                 script_key: script.map(script_key).unwrap_or(0),
                 ..LaserOptics::default()
             }),
+            effect: None,
             live_shaper_angle_roles: [false; 4],
             shaper_roles: [false; 4],
             live_shaper_rotation_role: false,

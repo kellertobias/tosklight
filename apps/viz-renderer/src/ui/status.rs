@@ -31,6 +31,7 @@ pub struct StatusModel<'a> {
     pub fog_percent: f32,
     pub ambient_percent: f32,
     pub degraded: bool,
+    pub particle_reduction: Option<(u32, u32)>,
     pub exposure: f32,
     pub renderer: String,
     /// What the GPU spent on a recent frame, where the adapter can time one.
@@ -288,6 +289,12 @@ pub fn build_status(
     if model.degraded {
         bottom_row.push("quality reduced");
     }
+    let particles = model
+        .particle_reduction
+        .map(|(drawn, requested)| format!("particles {drawn}/{requested}"));
+    if let Some(particles) = particles.as_deref() {
+        bottom_row.push(particles);
+    }
     let bottom_limit = width - padding - width_of(&bottom_row);
 
     build_universe_badges(
@@ -339,6 +346,9 @@ pub fn build_status(
             palette.warn,
             line,
         );
+    }
+    if let Some(particles) = particles.as_deref() {
+        place(overlay, &mut bottom_right, particles, palette.warn, line);
     }
 
     hotspots
@@ -857,6 +867,7 @@ mod fixture_label_tests {
             kind: EmitterKind::Beam,
             cells: EmitterLayoutCells::single(),
             laser: None,
+            effect: None,
             live_shaper_angle_roles: [false; 4],
             shaper_roles: [false; 4],
             live_shaper_rotation_role: false,
@@ -968,6 +979,7 @@ mod fixture_label_tests {
             kind: EmitterKind::Beam,
             cells: EmitterLayoutCells::single(),
             laser: None,
+            effect: None,
             live_shaper_angle_roles: [false; 4],
             shaper_roles: [false; 4],
             live_shaper_rotation_role: false,

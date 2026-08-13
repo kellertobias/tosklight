@@ -1535,6 +1535,89 @@ fn rejects_a_scan_script_that_is_not_text() {
 }
 
 #[test]
+fn round_trips_a_versioned_effect_script() {
+    const SCRIPT: &str = "export function effect() { return { version: 1, emitters: [] }; }\n";
+    let mut profile = profile();
+    profile.fixture_type = "effect".into();
+    profile.effect = Some(crate::ProfileEffect {
+        effect_script_asset: Some(format!(
+            "data:text/javascript;base64,{}",
+            STANDARD.encode(SCRIPT)
+        )),
+        result_version: 1,
+    });
+    let bytes = write_fixture_package(&profile).unwrap();
+    let mut zip = ZipArchive::new(Cursor::new(bytes.clone())).unwrap();
+    let names = (0..zip.len())
+        .map(|index| zip.by_index(index).unwrap().name().to_owned())
+        .collect::<Vec<_>>();
+    assert_eq!(names, ["fixture.json", "assets/effect.js"]);
+    let restored = read_fixture_package(&bytes).unwrap();
+    let effect = restored.effect.expect("effect contract survives");
+    assert_eq!(effect.result_version, 1);
+    let payload = effect
+        .effect_script_asset
+        .unwrap()
+        .strip_prefix("data:text/javascript;base64,")
+        .unwrap()
+        .to_owned();
+    assert_eq!(
+        String::from_utf8(STANDARD.decode(payload).unwrap()).unwrap(),
+        SCRIPT
+    );
+}
+
+#[test]
+fn shipped_effect_fixtures_keep_their_programs_and_exact_dmx_footprints() {
+    for (filename, name, footprint) in [
+        ("generic--cold-spark.toskfixture", "Cold Spark Fountain", 3),
+        (
+            "generic--five-nozzle-flame.toskfixture",
+            "Five-nozzle Flame Unit",
+            3,
+        ),
+    ] {
+        let profile = shipped_profile(filename);
+        assert_eq!(profile.fixture_type, "effect");
+        assert_eq!(profile.name, name);
+        assert_eq!(profile.modes[0].splits[0].footprint, footprint);
+        assert_eq!(profile.modes[0].channels.len(), usize::from(footprint));
+        assert!(
+            profile
+                .effect
+                .as_ref()
+                .and_then(|effect| effect.effect_script_asset.as_ref())
+                .is_some()
+        );
+        let restored = read_fixture_package(&write_fixture_package(&profile).unwrap()).unwrap();
+        assert_eq!(
+            serde_json::to_value(restored).unwrap(),
+            serde_json::to_value(profile).unwrap()
+        );
+    }
+}
+
+#[test]
+fn effect_scripts_are_utf8_and_only_belong_to_effect_fixtures() {
+    let mut profile = profile();
+    profile.effect = Some(crate::ProfileEffect {
+        effect_script_asset: Some(format!(
+            "data:text/javascript;base64,{}",
+            STANDARD.encode([0xff, 0xfe])
+        )),
+        result_version: 1,
+    });
+    let error = write_fixture_package(&profile).unwrap_err().to_string();
+    assert!(error.contains("only an Effect fixture"), "{error}");
+    profile.fixture_type = "effect".into();
+    let error = write_fixture_package(&profile).unwrap_err().to_string();
+    assert!(
+        error.contains("effect script is not valid UTF-8"),
+        "{error}"
+    );
+}
+
+#[test]
 fn shipped_fresnel_round_trips_without_identity_or_asset_loss() {
     let original = shipped_profile("generic--dimmer-fresnel.toskfixture");
     let exported = write_fixture_package(&original).unwrap();

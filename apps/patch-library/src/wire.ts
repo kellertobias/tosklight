@@ -99,7 +99,7 @@ export interface SplitPatch {
 }
 
 export interface FixtureProfile {
-	schema_version: 2;
+	schema_version: 2 | 3;
 	id: string;
 	revision: number;
 	manufacturer: string;
@@ -112,6 +112,7 @@ export interface FixtureProfile {
 	stage_icon_asset: string | null;
 	model_asset: string | null;
 	model_units?: "auto" | "metres";
+	effect?: { effect_script_asset?: string | null; result_version: number } | null;
 	physical: FixtureProfilePhysical;
 	modes: FixtureMode[];
 	hazardous: boolean;

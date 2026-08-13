@@ -67,6 +67,7 @@ impl FixtureProfile {
             optics: ProfileOptics::default(),
             laser: None,
             crowd: None,
+            effect: None,
             gobos: Vec::new(),
             modes,
             hazardous: first.hazardous,

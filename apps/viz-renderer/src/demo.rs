@@ -55,6 +55,9 @@ impl DemoProvider {
                     value.intensity = 1.0;
                     value.colour = [1.0, 1.0, 1.0];
                 }
+                EmitterKind::Effect => {
+                    value.intensity = 1.0;
+                }
                 EmitterKind::Beam => {
                     value.intensity = 0.35 + 0.65 * (time * 0.7 + phase).sin().abs();
                     value.pan = 0.5 + 0.28 * (time * 0.45 + phase).sin();
@@ -263,6 +266,56 @@ fn push_demo_laser(scene: &mut Scene) {
             scan_half_angle_y: 25.0_f32.to_radians(),
             ..viz_scene::LaserOptics::default()
         }),
+        effect: None,
+        live_shaper_angle_roles: [false; 4],
+        shaper_roles: [false; 4],
+        live_shaper_rotation_role: false,
+    });
+}
+
+fn push_demo_effect(scene: &mut Scene) {
+    let fixture_index = scene.fixtures.len();
+    let identity = Uuid::from_u128(0xefec_7000_0000_0000_0000_0000_0000_0001);
+    scene.fixtures.push(FixtureInstance {
+        instance_id: identity,
+        fixture_id: identity,
+        name: "Cold Spark".into(),
+        number: Some((fixture_index + 1) as u32),
+        position: Vec3::new(2.8, 0.18, -2.2),
+        rotation_degrees: Vec3::ZERO,
+        bracket_degrees: 0.0,
+        shaper_degrees: None,
+        installed_colour: [1.0; 3],
+        installed_shaper_angles_degrees: [0.0; 4],
+        body: FixtureBody {
+            size: Vec3::new(0.32, 0.36, 0.32),
+            kind: BodyKind::Machine,
+        },
+        patched: true,
+        address: None,
+        model: None,
+        fallback: None,
+    });
+    scene.emitters.push(EmitterInstance {
+        fixture_index: fixture_index as u32,
+        head_index: 0,
+        label: "Fountain".into(),
+        local_origin: Vec3::ZERO,
+        tilt_pivot: Vec3::ZERO,
+        local_orientation_degrees: Vec3::ZERO,
+        pan: None,
+        tilt: None,
+        beam_angle_degrees: 1.0,
+        field_angle_degrees: 1.0,
+        optics: EmitterOptics::default(),
+        kind: EmitterKind::Effect,
+        cells: EmitterLayoutCells::single(),
+        laser: None,
+        effect: Some(viz_scene::EffectProgram {
+            script: Some(DEMO_EFFECT_SCRIPT.into()),
+            script_key: 1,
+            result_version: 1,
+        }),
         live_shaper_angle_roles: [false; 4],
         shaper_roles: [false; 4],
         live_shaper_rotation_role: false,
@@ -313,6 +366,7 @@ fn push_demo_hazer(scene: &mut Scene) {
         kind: EmitterKind::Atmosphere,
         cells: EmitterLayoutCells::single(),
         laser: None,
+        effect: None,
         live_shaper_angle_roles: [false; 4],
         shaper_roles: [false; 4],
         live_shaper_rotation_role: false,
@@ -447,6 +501,7 @@ pub(crate) fn build_scene() -> Scene {
                 kind: EmitterKind::Beam,
                 cells: EmitterLayoutCells::single(),
                 laser: None,
+                effect: None,
                 live_shaper_angle_roles: [false; 4],
                 shaper_roles: [false; 4],
                 live_shaper_rotation_role: false,
@@ -502,6 +557,7 @@ pub(crate) fn build_scene() -> Scene {
             },
             kind: EmitterKind::Emissive,
             laser: None,
+            effect: None,
             cells: EmitterLayoutCells {
                 offsets: (0..10)
                     .map(|cell| Vec3::new(-0.45 + cell as f32 * 0.1, 0.0, 0.0))
@@ -514,6 +570,7 @@ pub(crate) fn build_scene() -> Scene {
     }
 
     push_demo_laser(&mut scene);
+    push_demo_effect(&mut scene);
     push_demo_hazer(&mut scene);
 
     scene
@@ -628,6 +685,13 @@ function pulse() {
     });
   }
   return { points, pointsPerSecond: 30000 };
+}
+"#;
+
+const DEMO_EFFECT_SCRIPT: &str = r#"
+export function effect(input) {
+  return {version:1, emitters:[{family:'spark',origin:[0,0.18,0],direction:[0,1,0],width:0.28,height:3.4,
+    intensity:input.intensity,density:1,lifetime:2.2,color:[1,0.58,0.08],state:'hold'}]};
 }
 "#;
 

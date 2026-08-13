@@ -64,6 +64,29 @@ async fn fixture_profile_api_rejects_invalid_discrete_wheel_before_storing_revis
 }
 
 #[tokio::test]
+async fn live_fixture_profile_projection_keeps_the_effect_engine_contract() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../..")
+        .join("assets/fixture-library/generic--cold-spark.toskfixture");
+    let profile = light_fixture::read_fixture_package(&std::fs::read(path).unwrap()).unwrap();
+    state.installation.save_fixture_profile(profile, 0).unwrap();
+    let response = app.oneshot(
+        Request::get("/api/v2/fixture-library/profiles")
+            .header(header::AUTHORIZATION, format!("Bearer {token}"))
+            .body(Body::empty()).unwrap(),
+    ).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = json(response).await;
+    let projected = body["profiles"].as_array().unwrap().iter().find(|profile| profile["name"] == "Cold Spark Fountain").unwrap();
+    assert_eq!(projected["effect"]["result_version"], 1);
+    assert!(projected["effect"]["effect_script_asset"].as_str().unwrap().starts_with("data:text/javascript;base64,"));
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
 async fn gel_catalog_csv_preview_confirm_replay_and_search_are_typed() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());

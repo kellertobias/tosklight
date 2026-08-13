@@ -100,9 +100,15 @@ impl Application {
 
         self.overlay.clear();
         self.hotspots.clear();
-        let time = now.duration_since(self.epoch).as_secs_f32();
+        let time = if self.options.capture.is_some() {
+            self.presented_frames as f32 / 60.0
+        } else {
+            now.duration_since(self.epoch).as_secs_f32()
+        };
         self.lasers.run(&session.scene, &mut values, time);
         let laser_fault = self.lasers.fault(&values);
+        self.effects.run(&session.scene, &mut values, time);
+        let effect_fault = self.effects.fault(&values);
         let notice = self
             .snapshots
             .notice()
@@ -112,7 +118,8 @@ impl Application {
                     .as_ref()
                     .map(|failure| (failure.clone(), true))
             })
-            .or_else(|| laser_fault.map(|fault| (fault, true)));
+            .or_else(|| laser_fault.map(|fault| (fault, true)))
+            .or_else(|| effect_fault.map(|fault| (fault, true)));
 
         let result = self.render_frame(
             session,
@@ -278,6 +285,8 @@ fn status_model<'a>(
         fog_percent: atmosphere.density * 100.0,
         ambient_percent: view.ambient * 100.0,
         degraded: stats.degraded,
+        particle_reduction: (stats.particles_drawn < stats.particles_requested)
+            .then_some((stats.particles_drawn, stats.particles_requested)),
         exposure: preferences.exposure,
         renderer: gpu_label(renderer),
         gpu_millis: stats.gpu_micros.map(|micros| micros as f32 / 1000.0),

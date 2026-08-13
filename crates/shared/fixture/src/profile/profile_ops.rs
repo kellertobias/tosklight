@@ -31,6 +31,7 @@ impl FixtureProfile {
             optics: ProfileOptics::default(),
             laser: None,
             crowd: None,
+            effect: None,
             gobos: Vec::new(),
             modes: vec![FixtureMode {
                 id: mode_id,

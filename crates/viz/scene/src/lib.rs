@@ -36,17 +36,18 @@ pub use provider::{
     ProviderCapabilities, ProviderError, ProviderEvent, ProviderKind, SceneProvider,
 };
 pub use scene::{
-    Aabb, BodyKind, CrowdArea, CrowdDensity, CrowdPosture, EmitterInstance, EmitterKind,
-    EmitterLayoutCells, EmitterOptics, FixtureBody, FixtureInstance, FixturePlanBinding,
-    GoboArtwork, GoboSlot, LaserOptics, LightSource, MotionAxis, PlanArtwork, PlanFallback, Scene,
-    SceneryKind, SceneryObject, SourceForm, euler_degrees,
+    Aabb, BodyKind, CrowdArea, CrowdDensity, CrowdPosture, EffectProgram, EmitterInstance,
+    EmitterKind, EmitterLayoutCells, EmitterOptics, FixtureBody, FixtureInstance,
+    FixturePlanBinding, GoboArtwork, GoboSlot, LaserOptics, LightSource, MotionAxis, PlanArtwork,
+    PlanFallback, Scene, SceneryKind, SceneryObject, SourceForm, euler_degrees,
 };
 pub use uuid;
 pub use values::{
-    CellValue, EmitterValues, ExternalCameraState, LaserScan, PhysicalMotionState,
-    PhysicalMotionTarget, ScanPoint, SceneValues, WheelMotionState,
+    CellValue, EffectFrame, EmitterValues, ExternalCameraState, LaserScan, ParticleEmitter,
+    ParticleFamily, ParticleTrigger, PhysicalMotionState, PhysicalMotionTarget, ScanPoint,
+    SceneValues, WheelMotionState,
 };
 pub use view::{Camera, ProjectionView, RenderQuality, Theme, ViewConfiguration, ViewMode};
 
 /// Wire/protocol version of the semantic scene contract understood by this render core.
-pub const SCENE_PROTOCOL_VERSION: u32 = 1;
+pub const SCENE_PROTOCOL_VERSION: u32 = 2;

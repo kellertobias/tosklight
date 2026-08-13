@@ -273,6 +273,8 @@ pub struct EmitterInstance {
     pub cells: EmitterLayoutCells,
     /// Scanner geometry, present exactly when `kind` is [`EmitterKind::Laser`].
     pub laser: Option<LaserOptics>,
+    /// Package-owned DMX-to-particle program, present exactly for [`EmitterKind::Effect`].
+    pub effect: Option<EffectProgram>,
     /// Whether the profile carries a live canonical angle attribute for each blade. Live values
     /// override the corresponding installed angle rather than being added to it.
     pub live_shaper_angle_roles: [bool; 4],
@@ -312,6 +314,14 @@ pub struct LaserOptics {
     /// Total optical output in watts with every colour at full, which is what separates a 500 mW
     /// projector from a 5 W one at the same DMX value.
     pub optical_power_watts: f32,
+}
+
+/// One Effect fixture's portable projection program.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct EffectProgram {
+    pub script: Option<Arc<str>>,
+    pub script_key: u64,
+    pub result_version: u16,
 }
 
 impl Default for LaserOptics {
@@ -466,6 +476,8 @@ pub enum EmitterKind {
     /// what it looks like is decided by the fixture's own scan engine rather than by any DMX
     /// parameter the desk can name.
     Laser,
+    /// Produces bounded declarative flame or spark emitters through a package-owned script.
+    Effect,
 }
 
 /// Resolved pixel-cell offsets, metres, fixture-local.
@@ -772,6 +784,7 @@ mod tests {
             kind: EmitterKind::Beam,
             cells: EmitterLayoutCells::single(),
             laser: None,
+            effect: None,
             live_shaper_angle_roles: [false; 4],
             shaper_roles: [false; 4],
             live_shaper_rotation_role: false,

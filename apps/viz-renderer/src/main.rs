@@ -7,6 +7,7 @@
 
 mod app;
 mod demo;
+mod effects;
 mod embedded;
 mod helper_source;
 mod lasers;

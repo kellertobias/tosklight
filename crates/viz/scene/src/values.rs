@@ -15,6 +15,9 @@ pub struct SceneValues {
     /// Scan paths, parallel to [`Self::emitters`]. Every entry exists; only laser emitters ever
     /// have points in theirs.
     pub laser_scans: Vec<LaserScan>,
+    /// Declarative particle emitters, parallel to [`Self::emitters`].
+    #[serde(default)]
+    pub effect_frames: Vec<EffectFrame>,
     /// Atmosphere to render with. Renderer-owned rather than decoded: the application fills it in
     /// from its own haze setting before each frame.
     pub atmosphere: Atmosphere,
@@ -62,6 +65,8 @@ impl SceneValues {
     pub fn resize(&mut self, emitters: usize) {
         self.emitters.resize_with(emitters, EmitterValues::default);
         self.laser_scans.resize_with(emitters, LaserScan::default);
+        self.effect_frames
+            .resize_with(emitters, EffectFrame::default);
     }
 
     /// Advance persistence of vision by `elapsed` seconds.
@@ -124,6 +129,10 @@ impl SceneValues {
                 || emitter.gobo_wheel_motion.motion.is_moving()
                 || emitter.colour_wheel_motion.motion.is_moving()
         }) || self.laser_scans.iter().any(|scan| !scan.points.is_empty())
+            || self
+                .effect_frames
+                .iter()
+                .any(|frame| !frame.emitters.is_empty())
     }
 
     /// Carry the values across a structural change to the scene.
@@ -134,7 +143,7 @@ impl SceneValues {
     /// its look instead of going black for however long the desk holds the same frame. A head
     /// that is genuinely new starts at its defaults.
     pub fn carry_over(&mut self, previous: &Scene, next: &Scene) {
-        let mut held: HashMap<(Uuid, u16), (EmitterValues, LaserScan)> =
+        let mut held: HashMap<(Uuid, u16), (EmitterValues, LaserScan, EffectFrame)> =
             HashMap::with_capacity(previous.emitters.len());
         for (index, emitter) in previous.emitters.iter().enumerate() {
             let Some(fixture) = previous.fixtures.get(emitter.fixture_index as usize) else {
@@ -144,12 +153,13 @@ impl SceneValues {
                 continue;
             };
             let scan = self.laser_scans.get(index).cloned().unwrap_or_default();
+            let effect = self.effect_frames.get(index).cloned().unwrap_or_default();
             held.insert(
                 (fixture.instance_id, emitter.head_index),
-                (values.clone(), scan),
+                (values.clone(), scan, effect),
             );
         }
-        let (emitters, scans): (Vec<_>, Vec<_>) = next
+        let carried: Vec<_> = next
             .emitters
             .iter()
             .map(|emitter| {
@@ -158,10 +168,58 @@ impl SceneValues {
                     .and_then(|fixture| held.remove(&(fixture.instance_id, emitter.head_index)))
                     .unwrap_or_default()
             })
-            .unzip();
-        self.emitters = emitters;
-        self.laser_scans = scans;
+            .collect();
+        self.emitters = carried.iter().map(|value| value.0.clone()).collect();
+        self.laser_scans = carried.iter().map(|value| value.1.clone()).collect();
+        self.effect_frames = carried.into_iter().map(|value| value.2).collect();
     }
+}
+
+/// Validated output of one Effect fixture's script for one frame.
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
+pub struct EffectFrame {
+    pub version: u16,
+    /// Authoritative effect timeline used for deterministic particle placement.
+    pub timeline_seconds: f32,
+    pub emitters: Vec<ParticleEmitter>,
+    /// Exact raw fixture footprint supplied to the script.
+    pub slots: Vec<u8>,
+    pub fault: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ParticleFamily {
+    Flame,
+    Spark,
+    /// Reserved integration seam for TL-107; version 1 validation rejects this family.
+    Debris,
+}
+
+/// One bounded local-space source returned by an Effect script.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct ParticleEmitter {
+    pub family: ParticleFamily,
+    pub origin: [f32; 3],
+    pub direction: [f32; 3],
+    pub width_metres: f32,
+    pub reach_metres: f32,
+    pub intensity: f32,
+    pub density: f32,
+    pub lifetime_seconds: f32,
+    pub colour: [f32; 3],
+    pub trigger: ParticleTrigger,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ParticleTrigger {
+    #[default]
+    Off,
+    Trigger,
+    Hold,
+    Release,
+    Retrigger,
 }
 
 /// One emitter's decoded semantic parameters.
@@ -535,6 +593,7 @@ mod tests {
             kind: EmitterKind::Beam,
             cells: EmitterLayoutCells::single(),
             laser: None,
+            effect: None,
             live_shaper_angle_roles: [false; 4],
             shaper_roles: [false; 4],
             live_shaper_rotation_role: false,

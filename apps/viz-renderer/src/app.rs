@@ -87,6 +87,7 @@ pub struct Application {
     last_persistence: Instant,
     /// Every laser's scan engine, and the override directory it watches.
     lasers: crate::lasers::Lasers,
+    effects: crate::effects::Effects,
     last_frame: Instant,
     /// When the next frame is due. Frames are paced instead of drawn back to back so the event
     /// loop spends its time in the window system, where input is delivered, rather than parked
@@ -264,6 +265,7 @@ impl Application {
             epoch: Instant::now(),
             last_persistence: Instant::now(),
             lasers: crate::lasers::Lasers::new(laser_scripts),
+            effects: crate::effects::Effects::new(),
             last_frame: Instant::now(),
             next_frame: Instant::now(),
             frame_interval: DEFAULT_FRAME_INTERVAL,

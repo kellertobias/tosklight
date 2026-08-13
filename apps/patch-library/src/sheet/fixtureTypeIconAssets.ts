@@ -29,6 +29,7 @@ export function fixtureTypeIconAsset(type: string) {
 	if (/strip|batten/.test(value)) return icon("strip-light");
 	if (/strobe/.test(value)) return icon("strobe");
 	if (/laser/.test(value)) return icon("laser");
+	if (/effect|flame|spark|pyro/.test(value)) return icon("effect");
 	if (/fresnel/.test(value)) return icon("fresnel-barn-doors");
 	if (/\bacl\b/.test(value)) return icon("acl-set");
 	if (/blinder/.test(value)) return icon("blinder");

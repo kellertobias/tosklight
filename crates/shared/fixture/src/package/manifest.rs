@@ -18,6 +18,7 @@ pub const MAX_FIXTURE_MODEL_BYTES: usize = 64 * 1024 * 1024;
 /// quarter of a megabyte is already far more than a scan engine needs. The limit is here to keep
 /// an accidental bundle out of a fixture package rather than to constrain honest authoring.
 pub const MAX_FIXTURE_SCAN_SCRIPT_BYTES: usize = 256 * 1024;
+pub const MAX_FIXTURE_EFFECT_SCRIPT_BYTES: usize = 256 * 1024;
 /// A gobo is a mask, and a wheel of them travels inside every patched show that uses the fixture.
 /// One megabyte is a generous greyscale image and mean enough to keep a photograph out.
 pub const MAX_FIXTURE_GOBO_BYTES: usize = 1024 * 1024;
@@ -69,6 +70,8 @@ pub(super) enum AssetKind {
     Model,
     /// The JavaScript scan engine a laser fixture projects with.
     ScanScript,
+    /// The JavaScript engine an Effect fixture uses to project its DMX programs.
+    EffectScript,
     /// One slot's artwork on a gobo wheel.
     Gobo,
     /// Safe, package-owned vector artwork for one named orthographic view.
@@ -82,6 +85,7 @@ impl AssetKind {
             Self::Icon => "stage icon",
             Self::Model => "3D model",
             Self::ScanScript => "scan script",
+            Self::EffectScript => "effect script",
             Self::Gobo => "gobo artwork",
             Self::Projection => "SVG projection",
         }
@@ -93,6 +97,7 @@ impl AssetKind {
             Self::Icon => MAX_FIXTURE_ICON_BYTES,
             Self::Model => MAX_FIXTURE_MODEL_BYTES,
             Self::ScanScript => MAX_FIXTURE_SCAN_SCRIPT_BYTES,
+            Self::EffectScript => MAX_FIXTURE_EFFECT_SCRIPT_BYTES,
             Self::Gobo => MAX_FIXTURE_GOBO_BYTES,
             Self::Projection => MAX_FIXTURE_PROJECTION_BYTES,
         }

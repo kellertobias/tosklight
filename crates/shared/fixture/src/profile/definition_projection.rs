@@ -85,6 +85,7 @@ impl FixtureProfile {
                     .filter(|binding| modes.iter().any(|mode| mode.id == binding.mode_id))
                     .collect(),
             }),
+            effect: self.effect.clone(),
             gobos: self.gobos.clone(),
             modes,
             hazardous: self.hazardous,
