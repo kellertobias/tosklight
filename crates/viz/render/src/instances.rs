@@ -297,8 +297,6 @@ pub struct FrameStyle {
     pub floor_grid: bool,
     /// Which scenery this view draws at all.
     pub scenery: fn(viz_scene::SceneryKind) -> bool,
-    /// Active quality tier. Draft and Standard deliberately omit crowds.
-    pub quality: viz_scene::RenderQuality,
     /// Renderer-local fraction of every authored crowd to draw.
     pub crowd_amount: f32,
     /// Per-frame crowd budget selected from quality and the renderer's adaptive hardware ladder.
@@ -330,7 +328,6 @@ impl Default for FrameStyle {
             aim_guides: false,
             floor_grid: true,
             scenery: |_| true,
-            quality: viz_scene::RenderQuality::High,
             crowd_amount: 1.0,
             crowd_person_budget: 384,
             effect_particle_budget: 2_048,

@@ -236,7 +236,6 @@ impl Renderer {
                 }
                 _ => |_| true,
             },
-            quality: view.quality,
             crowd_amount: self.crowd_amount,
             crowd_person_budget: match view.quality {
                 viz_scene::RenderQuality::Draft | viz_scene::RenderQuality::Standard => 0,
