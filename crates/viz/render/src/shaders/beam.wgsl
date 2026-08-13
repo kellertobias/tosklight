@@ -166,11 +166,12 @@ fn intersect_cone(
 /// Two samples of one tiling volume, drifting at different speeds and scales, read as air that is
 /// moving without ever looking like a scrolling texture. The result is normalised around one, so
 /// the fog level the operator set still means what it says.
-fn haze_variation(position: vec3<f32>, detail: f32, time: f32) -> f32 {
-    if (detail <= 0.001) {
+fn haze_variation(position: vec3<f32>, cloudiness: f32, turbulence: f32, time: f32) -> f32 {
+    if (cloudiness <= 0.001) {
         return 1.0;
     }
-    let drift = vec3<f32>(time * 0.03, time * 0.017, time * -0.023);
+    let moving_time = time * turbulence;
+    let drift = vec3<f32>(moving_time * 0.03, moving_time * 0.017, moving_time * -0.023);
     // Patches first: a very low frequency that leaves whole pockets of the room thin.
     let pocket = textureSampleLevel(haze_volume, haze_sampler, position * 0.035 + drift * 0.4, 0.0).r;
     let coarse = textureSampleLevel(haze_volume, haze_sampler, position * 0.11 + drift, 0.0).r;
@@ -179,7 +180,7 @@ fn haze_variation(position: vec3<f32>, detail: f32, time: f32) -> f32 {
     // The curve is what makes it read as patchy rather than merely uneven: thin air stays thin
     // and a thick pocket carries most of the light.
     let shaped = pow(clamp(combined * 1.75, 0.0, 1.6), 1.7);
-    return mix(1.0, shaped, detail);
+    return mix(1.0, shaped, cloudiness);
 }
 
 @fragment
@@ -266,7 +267,12 @@ fn fragment_main(input: BeamVertexOutput) -> @location(0) vec4<f32> {
         // A shaft is only lit where the light actually reaches, so a truss standing in a beam
         // casts its shadow through the haze and not only onto the floor.
         cone *= shadow_lookup(light, sample_position, false);
-        let local = haze_variation(sample_position, globals.params3.y, globals.params3.z);
+        let local = haze_variation(
+            sample_position,
+            globals.params5.x,
+            globals.params5.y,
+            globals.params3.z,
+        );
         accumulated += cone * shaft_falloff(distance) * segment * local;
     }
     // A shaped density curve keeps a heavy hazer atmospheric instead of milky, while staying

@@ -13,11 +13,26 @@ const mocks = vi.hoisted(() => ({
 		stageShowSelection: true,
 		stageVizAtmosphere: 0.2,
 		stageEnvironmentBrightness: 0.05,
-		stageVizQuality: "standard" as const,
+		stageVizQuality: "ultra" as const,
 		stageVizExposure: 1,
 		stageVizLaserBrightness: 1,
 		stageVizBackground: "#04060a",
 		stageVizShowLabels: true,
+		activeDeskId: "desk",
+		desks: [
+			{
+				id: "desk",
+				panes: [
+					{
+						id: "stage-pane",
+						lampFogCloudiness: 0.35,
+						lampFogTurbulence: 0.45,
+						laserFogCloudiness: 0.55,
+						laserFogTurbulence: 0.65,
+					},
+				],
+			},
+		],
 	},
 	sendStagePaneInput: vi.fn(),
 	stagePaneStatus: vi.fn().mockResolvedValue(["ready", null]),
@@ -75,6 +90,13 @@ describe("Stage pane settings parity", () => {
 		expect(screen.getByText("Render quality")).toBeVisible();
 		expect(screen.getByText("Exposure")).toBeVisible();
 		expect(screen.getByText("Fixture labels")).toBeVisible();
+		for (const label of [
+			"Lamp fog cloudiness",
+			"Lamp fog turbulence",
+			"Laser fog cloudiness",
+			"Laser fog turbulence",
+		])
+			expect(screen.getByText(label)).toBeVisible();
 	});
 });
 

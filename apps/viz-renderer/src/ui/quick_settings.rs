@@ -29,6 +29,10 @@ pub enum Row {
     ShowSelection,
     FloorGrid,
     FogAmount,
+    LampFogCloudiness,
+    LampFogTurbulence,
+    LaserFogCloudiness,
+    LaserFogTurbulence,
     LaserBrightness,
     CrowdAmount,
     Persistence,
@@ -76,6 +80,17 @@ impl QuickSettingsTab {
 /// anything above about a tenth is realistic.
 pub(super) const MAX_PERSISTENCE: f32 = 0.3;
 
+fn adjust_fog_character(
+    value: &mut f32,
+    delta: i32,
+    label: &str,
+    message: &mut String,
+) -> QuickSettingsOutcome {
+    *value = (*value + 0.05 * delta as f32).clamp(0.0, 1.0);
+    *message = format!("{label} {:.0}%", *value * 100.0);
+    QuickSettingsOutcome::AppliedLocally
+}
+
 impl Row {
     pub fn label(self) -> &'static str {
         match self {
@@ -93,6 +108,10 @@ impl Row {
             Self::ShowSelection => "Show selection",
             Self::FloorGrid => "Floor grid",
             Self::FogAmount => "Fog amount",
+            Self::LampFogCloudiness => "Lamp fog cloudiness",
+            Self::LampFogTurbulence => "Lamp fog turbulence",
+            Self::LaserFogCloudiness => "Laser fog cloudiness",
+            Self::LaserFogTurbulence => "Laser fog turbulence",
             Self::LaserBrightness => "Laser brightness",
             Self::CrowdAmount => "Crowd amount",
             Self::Persistence => "Persistence of vision",
@@ -117,6 +136,10 @@ impl Row {
     fn meter_fraction(self, preferences: &Preferences) -> Option<f32> {
         match self {
             Self::FogAmount => Some(preferences.atmosphere.amount),
+            Self::LampFogCloudiness => Some(preferences.fog_variation.lamp_cloudiness),
+            Self::LampFogTurbulence => Some(preferences.fog_variation.lamp_turbulence),
+            Self::LaserFogCloudiness => Some(preferences.fog_variation.laser_cloudiness),
+            Self::LaserFogTurbulence => Some(preferences.fog_variation.laser_turbulence),
             // Against the strongest the setting offers rather than against `1.0`, so the bar
             // still means something above the built-in strength.
             Self::LaserBrightness => {
@@ -234,6 +257,10 @@ impl QuickSettings {
                 Row::Ambient,
                 Row::Exposure,
                 Row::FogAmount,
+                Row::LampFogCloudiness,
+                Row::LampFogTurbulence,
+                Row::LaserFogCloudiness,
+                Row::LaserFogTurbulence,
                 Row::LaserBrightness,
                 Row::Persistence,
                 Row::Background,
@@ -401,6 +428,30 @@ impl QuickSettings {
                 self.message = format!("Fog amount {:.0}%", preferences.atmosphere.amount * 100.0);
                 QuickSettingsOutcome::AppliedLocally
             }
+            Row::LampFogCloudiness => adjust_fog_character(
+                &mut preferences.fog_variation.lamp_cloudiness,
+                delta,
+                "Lamp fog cloudiness",
+                &mut self.message,
+            ),
+            Row::LampFogTurbulence => adjust_fog_character(
+                &mut preferences.fog_variation.lamp_turbulence,
+                delta,
+                "Lamp fog turbulence",
+                &mut self.message,
+            ),
+            Row::LaserFogCloudiness => adjust_fog_character(
+                &mut preferences.fog_variation.laser_cloudiness,
+                delta,
+                "Laser fog cloudiness",
+                &mut self.message,
+            ),
+            Row::LaserFogTurbulence => adjust_fog_character(
+                &mut preferences.fog_variation.laser_turbulence,
+                delta,
+                "Laser fog turbulence",
+                &mut self.message,
+            ),
             Row::LaserBrightness => {
                 let step = 0.1 * delta as f32;
                 preferences.laser_brightness = (preferences.laser_brightness + step)
@@ -524,6 +575,10 @@ impl QuickSettings {
             | Row::Persistence
             | Row::PersistenceFalloff
             | Row::FogAmount
+            | Row::LampFogCloudiness
+            | Row::LampFogTurbulence
+            | Row::LaserFogCloudiness
+            | Row::LaserFogTurbulence
             | Row::Source
             | Row::Appearance
             | Row::Ambient
@@ -607,6 +662,18 @@ impl QuickSettings {
             Row::ShowSelection => bool_label(preferences.show_selection),
             Row::FloorGrid => optional_bool_label(preferences.floor_grid),
             Row::FogAmount => format!("{:.0}%", preferences.atmosphere.amount * 100.0),
+            Row::LampFogCloudiness => {
+                format!("{:.0}%", preferences.fog_variation.lamp_cloudiness * 100.0)
+            }
+            Row::LampFogTurbulence => {
+                format!("{:.0}%", preferences.fog_variation.lamp_turbulence * 100.0)
+            }
+            Row::LaserFogCloudiness => {
+                format!("{:.0}%", preferences.fog_variation.laser_cloudiness * 100.0)
+            }
+            Row::LaserFogTurbulence => {
+                format!("{:.0}%", preferences.fog_variation.laser_turbulence * 100.0)
+            }
             Row::LaserBrightness => format!("{:.0}%", preferences.laser_brightness * 100.0),
             Row::CrowdAmount => format!("{:.0}%", preferences.crowd_amount * 100.0),
             Row::Persistence => {

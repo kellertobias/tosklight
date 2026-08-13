@@ -126,6 +126,7 @@ struct Globals {
     params2: [f32; 4],
     params3: [f32; 4],
     params4: [f32; 4],
+    params5: [f32; 4],
 }
 
 /// Why a frame could not be presented.

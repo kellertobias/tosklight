@@ -216,6 +216,59 @@ pub enum RenderQuality {
     Ultra,
 }
 
+/// Ultra-only controls for the spatial and temporal character of participating fog.
+///
+/// These are part of the view rather than the scene: they describe how this Visualizer observes
+/// the room. Values are retained at every quality tier, while the renderer deliberately applies
+/// them only at Ultra.
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct FogVariation {
+    pub lamp_cloudiness: f32,
+    pub lamp_turbulence: f32,
+    pub laser_cloudiness: f32,
+    pub laser_turbulence: f32,
+}
+
+/// Compatibility defaults matching the pre-control Ultra lamp haze and uniform laser haze.
+pub const DEFAULT_FOG_VARIATION: FogVariation = FogVariation {
+    lamp_cloudiness: 0.7,
+    lamp_turbulence: 1.0,
+    laser_cloudiness: 0.0,
+    laser_turbulence: 0.0,
+};
+
+impl Default for FogVariation {
+    fn default() -> Self {
+        DEFAULT_FOG_VARIATION
+    }
+}
+
+impl FogVariation {
+    pub fn clamped(self) -> Self {
+        Self {
+            lamp_cloudiness: self.lamp_cloudiness.clamp(0.0, 1.0),
+            lamp_turbulence: self.lamp_turbulence.clamp(0.0, 1.0),
+            laser_cloudiness: self.laser_cloudiness.clamp(0.0, 1.0),
+            laser_turbulence: self.laser_turbulence.clamp(0.0, 1.0),
+        }
+    }
+
+    /// Values the shaders receive. Lower tiers retain authored values but keep their old uniform
+    /// fog appearance.
+    pub fn for_quality(self, quality: RenderQuality) -> Self {
+        if quality == RenderQuality::Ultra {
+            self.clamped()
+        } else {
+            Self {
+                lamp_cloudiness: 0.0,
+                lamp_turbulence: 0.0,
+                laser_cloudiness: 0.0,
+                laser_turbulence: 0.0,
+            }
+        }
+    }
+}
+
 impl RenderQuality {
     pub const ALL: [Self; 4] = [Self::Draft, Self::Standard, Self::High, Self::Ultra];
 
@@ -556,6 +609,8 @@ pub struct ViewConfiguration {
     /// eye it is landing in, and no single choice suits a designer checking a figure and one
     /// showing an audience what the night looks like. So it is the operator's, like the fog.
     pub laser_brightness: f32,
+    /// Spatial patchiness and motion of lamp and laser fog, applied only at Ultra.
+    pub fog_variation: FogVariation,
     pub theme: Theme,
     /// Draw screen-space fixture numbers and patch addresses beside fixtures in every Stage view.
     pub show_labels: bool,
@@ -582,6 +637,7 @@ impl Default for ViewConfiguration {
             exposure: 1.0,
             ambient: 0.06,
             laser_brightness: 1.0,
+            fog_variation: FogVariation::default(),
             theme: Theme::LightOnDark,
             show_labels: true,
             background: Some(DEFAULT_BACKGROUND),
@@ -611,6 +667,45 @@ mod tests {
             assert_eq!(ViewMode::from_wire(mode.wire()), Some(mode));
             assert!(!mode.label().is_empty());
         }
+    }
+
+    #[test]
+    fn fog_character_defaults_are_explicit_and_only_apply_to_ultra() {
+        assert_eq!(FogVariation::default(), DEFAULT_FOG_VARIATION);
+        assert_eq!(DEFAULT_FOG_VARIATION.lamp_cloudiness, 0.7);
+        assert_eq!(DEFAULT_FOG_VARIATION.lamp_turbulence, 1.0);
+        assert_eq!(DEFAULT_FOG_VARIATION.laser_cloudiness, 0.0);
+        assert_eq!(DEFAULT_FOG_VARIATION.laser_turbulence, 0.0);
+        for quality in [
+            RenderQuality::Draft,
+            RenderQuality::Standard,
+            RenderQuality::High,
+        ] {
+            let effective = FogVariation::default().for_quality(quality);
+            assert_eq!(effective.lamp_cloudiness, 0.0);
+            assert_eq!(effective.lamp_turbulence, 0.0);
+            assert_eq!(effective.laser_cloudiness, 0.0);
+            assert_eq!(effective.laser_turbulence, 0.0);
+        }
+        assert_eq!(
+            FogVariation::default().for_quality(RenderQuality::Ultra),
+            DEFAULT_FOG_VARIATION
+        );
+    }
+
+    #[test]
+    fn fog_character_is_bounded_without_coupling_lamps_and_lasers() {
+        let effective = FogVariation {
+            lamp_cloudiness: -1.0,
+            lamp_turbulence: 0.25,
+            laser_cloudiness: 0.75,
+            laser_turbulence: 2.0,
+        }
+        .for_quality(RenderQuality::Ultra);
+        assert_eq!(effective.lamp_cloudiness, 0.0);
+        assert_eq!(effective.lamp_turbulence, 0.25);
+        assert_eq!(effective.laser_cloudiness, 0.75);
+        assert_eq!(effective.laser_turbulence, 1.0);
     }
 
     #[test]

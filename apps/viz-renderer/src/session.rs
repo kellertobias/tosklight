@@ -225,6 +225,7 @@ impl Session {
         view.ambient = preferences.ambient;
         view.exposure = preferences.exposure;
         view.laser_brightness = preferences.laser_brightness;
+        view.fog_variation = preferences.fog_variation;
         view.show_labels = preferences.show_labels;
         if let Some(floor_grid) = preferences.floor_grid {
             view.floor_grid = floor_grid;

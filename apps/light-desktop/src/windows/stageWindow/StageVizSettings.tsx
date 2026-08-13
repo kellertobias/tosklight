@@ -24,6 +24,22 @@ export function StageVizSettings({ paneId }: { paneId?: string } = {}) {
 	const { state, dispatch } = useApp();
 	const bridge = useDesktopBridge();
 	const [trouble, setTrouble] = useState<string | null>(null);
+	const pane = paneId
+		? state.desks
+				.find((desk) => desk.id === state.activeDeskId)
+				?.panes.find((candidate) => candidate.id === paneId)
+		: undefined;
+	const fogControl = (
+		option:
+			| "lampFogCloudiness"
+			| "lampFogTurbulence"
+			| "laserFogCloudiness"
+			| "laserFogTurbulence",
+		value: number,
+	) => {
+		if (paneId)
+			dispatch({ type: "SET_PANE_FOG_VARIATION", id: paneId, option, value });
+	};
 
 	/*
 	 * Only what went wrong. Which GPU answered and which transport the picture came over is the
@@ -102,6 +118,50 @@ export function StageVizSettings({ paneId }: { paneId?: string } = {}) {
 					{ value: "ultra", label: "Ultra" },
 				]}
 			/>
+			{paneId && state.stageVizQuality === "ultra" && (
+				<>
+					<HorizontalFaderField
+						label="Lamp fog cloudiness"
+						description="How uneven and patchy lamp haze is in Ultra. Zero is spatially uniform."
+						value={pane?.lampFogCloudiness ?? 0.7}
+						minimum={0}
+						maximum={1}
+						step={0.01}
+						display={`${Math.round((pane?.lampFogCloudiness ?? 0.7) * 100)}%`}
+						onChange={(value) => fogControl("lampFogCloudiness", value)}
+					/>
+					<HorizontalFaderField
+						label="Lamp fog turbulence"
+						description="How quickly lamp-haze patches move and change in Ultra. Zero is stationary."
+						value={pane?.lampFogTurbulence ?? 1}
+						minimum={0}
+						maximum={1}
+						step={0.01}
+						display={`${Math.round((pane?.lampFogTurbulence ?? 1) * 100)}%`}
+						onChange={(value) => fogControl("lampFogTurbulence", value)}
+					/>
+					<HorizontalFaderField
+						label="Laser fog cloudiness"
+						description="How uneven and patchy laser haze is in Ultra. Zero preserves uniform laser haze."
+						value={pane?.laserFogCloudiness ?? 0}
+						minimum={0}
+						maximum={1}
+						step={0.01}
+						display={`${Math.round((pane?.laserFogCloudiness ?? 0) * 100)}%`}
+						onChange={(value) => fogControl("laserFogCloudiness", value)}
+					/>
+					<HorizontalFaderField
+						label="Laser fog turbulence"
+						description="How quickly laser-haze patches move and change in Ultra. Zero is stationary."
+						value={pane?.laserFogTurbulence ?? 0}
+						minimum={0}
+						maximum={1}
+						step={0.01}
+						display={`${Math.round((pane?.laserFogTurbulence ?? 0) * 100)}%`}
+						onChange={(value) => fogControl("laserFogTurbulence", value)}
+					/>
+				</>
+			)}
 			<HorizontalFaderField
 				label="Exposure"
 				description="What the whole picture is scaled by before it is shown, as a camera's exposure would."
@@ -170,8 +230,20 @@ export function StageVizSettings({ paneId }: { paneId?: string } = {}) {
  * a light background does not make a rig easier to read, it makes the beams impossible.
  */
 const STAGE_BACKGROUNDS = [
-	"#000000", "#020304", "#04060a", "#070a12",
-	"#0a0e18", "#0d1220", "#101728", "#141c30",
-	"#050505", "#0a0a0a", "#101010", "#161616",
-	"#040706", "#061012", "#0a1416", "#12100a",
+	"#000000",
+	"#020304",
+	"#04060a",
+	"#070a12",
+	"#0a0e18",
+	"#0d1220",
+	"#101728",
+	"#141c30",
+	"#050505",
+	"#0a0a0a",
+	"#101010",
+	"#161616",
+	"#040706",
+	"#061012",
+	"#0a1416",
+	"#12100a",
 ] as const;

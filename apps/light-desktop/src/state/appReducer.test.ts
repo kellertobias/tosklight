@@ -454,6 +454,31 @@ describe("appReducer Stage and Development pane settings", () => {
 		expect(updated.stageView).toBe("2d");
 	});
 
+	it("stores bounded Ultra fog character independently on each Visualizer pane", () => {
+		let updated = initialState;
+		for (const [option, value] of [
+			["lampFogCloudiness", 0.25],
+			["lampFogTurbulence", 0.5],
+			["laserFogCloudiness", 0.75],
+			["laserFogTurbulence", 2],
+		] as const)
+			updated = appReducer(updated, {
+				type: "SET_PANE_FOG_VARIATION",
+				id: "stage",
+				option,
+				value,
+			});
+		const stage = updated.desks
+			.find((desk) => desk.id === updated.activeDeskId)
+			?.panes.find((pane) => pane.id === "stage");
+		expect(stage).toMatchObject({
+			lampFogCloudiness: 0.25,
+			lampFogTurbulence: 0.5,
+			laserFogCloudiness: 0.75,
+			laserFogTurbulence: 1,
+		});
+	});
+
 	it("stores the complete Fixture Sheet configuration independently on each pane", () => {
 		const options = appReducer(initialState, {
 			type: "SET_PANE_FIXTURE_OPTIONS",

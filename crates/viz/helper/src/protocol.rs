@@ -12,8 +12,10 @@
 use serde::{Deserialize, Serialize};
 
 /// The protocol this build speaks.
-pub const PROTOCOL_MAJOR: u16 = 1;
-pub const PROTOCOL_MINOR: u16 = 2;
+// Picture gained four fog-character fields. That changes the postcard shape, so a stale helper
+// must be refused instead of accepting a message it cannot decode.
+pub const PROTOCOL_MAJOR: u16 = 2;
+pub const PROTOCOL_MINOR: u16 = 1;
 
 /// How a rendered pane gets from the helper to the desk.
 ///
@@ -146,6 +148,12 @@ pub enum ToHelper {
         /// reference — how strong a beam looks depends on the haze, the room and the eye — so it
         /// is the operator's, like the fog.
         laser_brightness: f32,
+        /// Ultra-only lamp fog patchiness and movement, each `0..=1`.
+        lamp_fog_cloudiness: f32,
+        lamp_fog_turbulence: f32,
+        /// Ultra-only laser fog patchiness and movement, each `0..=1`.
+        laser_fog_cloudiness: f32,
+        laser_fog_turbulence: f32,
         /// Screen-space fixture numbers and patch addresses beside fixtures in every Stage view.
         show_labels: bool,
         /// Lay the reference grid on the ground plane.
@@ -520,6 +528,10 @@ mod tests {
                 quality: RenderQuality::High,
                 exposure: 1.0,
                 laser_brightness: 1.0,
+                lamp_fog_cloudiness: 0.7,
+                lamp_fog_turbulence: 1.0,
+                laser_fog_cloudiness: 0.0,
+                laser_fog_turbulence: 0.0,
                 show_labels: false,
                 floor_grid: true,
                 background: [0.008, 0.010, 0.016],

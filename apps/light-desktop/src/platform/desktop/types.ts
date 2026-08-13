@@ -68,6 +68,10 @@ export interface StagePanePicture {
 	quality: "draft" | "standard" | "high" | "ultra";
 	exposure: number;
 	laserBrightness: number;
+	lampFogCloudiness: number;
+	lampFogTurbulence: number;
+	laserFogCloudiness: number;
+	laserFogTurbulence: number;
 	showLabels: boolean;
 	/** Lay the reference grid on the ground plane. */
 	floorGrid: boolean;

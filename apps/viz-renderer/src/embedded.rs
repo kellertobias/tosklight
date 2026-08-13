@@ -102,6 +102,10 @@ pub fn run(mut source: HelperSource) -> Result<(), String> {
             quality,
             exposure,
             laser_brightness,
+            lamp_fog_cloudiness,
+            lamp_fog_turbulence,
+            laser_fog_cloudiness,
+            laser_fog_turbulence,
             show_labels,
             floor_grid,
             background,
@@ -116,6 +120,12 @@ pub fn run(mut source: HelperSource) -> Result<(), String> {
             state.view.ambient = ambient.clamp(0.0, 2.0);
             state.view.exposure = exposure.clamp(0.05, 4.0);
             state.view.laser_brightness = laser_brightness.clamp(0.0, 4.0);
+            state.view.fog_variation = viz_scene::FogVariation {
+                lamp_cloudiness: lamp_fog_cloudiness.clamp(0.0, 1.0),
+                lamp_turbulence: lamp_fog_turbulence.clamp(0.0, 1.0),
+                laser_cloudiness: laser_fog_cloudiness.clamp(0.0, 1.0),
+                laser_turbulence: laser_fog_turbulence.clamp(0.0, 1.0),
+            };
             state.view.show_labels = *show_labels;
             state.view.floor_grid = *floor_grid;
             state.view.background = Some(background.map(|channel| channel.clamp(0.0, 1.0)));

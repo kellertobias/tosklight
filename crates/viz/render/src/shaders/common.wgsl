@@ -10,6 +10,7 @@ struct Globals {
     params2: vec4<f32>,           // light count, volumetric steps, ambient, tiles_x
     params3: vec4<f32>,           // plot flag, fog detail, time, laser brightness
     params4: vec4<f32>,           // gobos flag, beam fall-off flag, flat-ink flag, spare
+    params5: vec4<f32>,           // lamp cloudiness/turbulence, laser cloudiness/turbulence
 };
 
 // What the quality tier has paid for. The tiers are a ladder of what is in the beam: Draft draws

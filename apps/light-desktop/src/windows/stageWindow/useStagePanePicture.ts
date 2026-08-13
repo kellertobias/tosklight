@@ -61,6 +61,7 @@ export function useStagePanePicture(
 	pane: NativeStagePane,
 	mode = "full_3d",
 	followPreload = false,
+	paneId?: string,
 ) {
 	const bridge = useDesktopBridge();
 	const { state } = useApp();
@@ -75,6 +76,15 @@ export function useStagePanePicture(
 		stageShowFloorGrid,
 		stageVizBackground,
 	} = state;
+	const paneSettings = paneId
+		? state.desks
+				.find((desk) => desk.id === state.activeDeskId)
+				?.panes.find((candidate) => candidate.id === paneId)
+		: undefined;
+	const lampFogCloudiness = paneSettings?.lampFogCloudiness ?? 0.7;
+	const lampFogTurbulence = paneSettings?.lampFogTurbulence ?? 1;
+	const laserFogCloudiness = paneSettings?.laserFogCloudiness ?? 0;
+	const laserFogTurbulence = paneSettings?.laserFogTurbulence ?? 0;
 
 	useEffect(() => {
 		if (!active) return;
@@ -84,6 +94,10 @@ export function useStagePanePicture(
 			quality: stageVizQuality,
 			exposure: stageVizExposure,
 			laserBrightness: stageVizLaserBrightness,
+			lampFogCloudiness,
+			lampFogTurbulence,
+			laserFogCloudiness,
+			laserFogTurbulence,
 			showLabels: stageVizShowLabels,
 			floorGrid: stageShowFloorGrid,
 			background: backgroundColour(stageVizBackground),
@@ -100,6 +114,10 @@ export function useStagePanePicture(
 		stageVizQuality,
 		stageVizExposure,
 		stageVizLaserBrightness,
+		lampFogCloudiness,
+		lampFogTurbulence,
+		laserFogCloudiness,
+		laserFogTurbulence,
 		stageVizShowLabels,
 		stageShowFloorGrid,
 		stageVizBackground,

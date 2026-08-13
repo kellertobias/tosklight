@@ -472,13 +472,21 @@ Set the amount in **Quick Settings → Fog amount**, with the wheel over the fog
 `--fog <pct>` at startup. `0%` is clear air even with every hazer running flat out. The amount is
 renderer-local: it never touches the show.
 
+Ultra adds four independent character controls beside that amount: **Lamp fog cloudiness** and
+**Lamp fog turbulence**, plus the corresponding two **Laser fog** controls. Cloudiness changes
+the air from spatially even at `0%` to strongly patchy at `100%`; turbulence leaves the pattern
+stationary at `0%` and makes it move and change rapidly at `100%`. The lamp defaults preserve the
+original Ultra haze (`70%` cloudiness, `100%` turbulence), while both laser defaults are `0%` and
+therefore preserve the original uniform laser haze. Draft, Standard and High retain their uniform
+fog even while the four stored values remain set.
+
 **Ambient** sets how bright everything that is not a light source is, so the trusses and the floor
 stay readable with the whole rig dark. It is held at a constant screen brightness: a rig full of
 beams pulls the automatic exposure down, and the ambient level is not allowed to go down with it.
 
 ## Settings that stay set
 
-Fog, exposure, ambient, quality, appearance, plan labels, the connection fields and any input
+Fog amount and character, exposure, ambient, quality, appearance, plan labels, the connection fields and any input
 overrides are kept between launches, beside the operator's own application data:
 `~/Library/Application Support/ToskLight/Visualizer/preferences.conf` on macOS,
 `%APPDATA%\ToskLight\Visualizer\preferences.conf` on Windows, and

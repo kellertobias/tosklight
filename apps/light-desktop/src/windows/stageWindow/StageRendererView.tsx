@@ -52,6 +52,7 @@ export function StageRendererView({
 		pane,
 		stageViewMode(options.view, options.side2d),
 		options.followPreload,
+		options.paneId,
 	);
 	return (
 		<div

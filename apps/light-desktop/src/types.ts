@@ -152,6 +152,11 @@ export interface PaneModel extends GridRect {
 	stageView?: StageView;
 	stage2dSide?: Stage2dSide;
 	followPreload?: boolean;
+	/** Ultra-only fog character, stored with this portable Visualizer pane. */
+	lampFogCloudiness?: number;
+	lampFogTurbulence?: number;
+	laserFogCloudiness?: number;
+	laserFogTurbulence?: number;
 	/** Legacy Stage-pane fields retained only for tolerant persisted-layout decoding. */
 	showBeamGuides?: boolean;
 	stageRenderQuality?: StageRenderQuality;

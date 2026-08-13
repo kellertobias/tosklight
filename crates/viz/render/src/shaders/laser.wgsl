@@ -103,6 +103,17 @@ fn linear_depth(depth: f32) -> f32 {
     return near * far / max(far - depth * (far - near), 1e-6);
 }
 
+fn laser_haze_variation(position: vec3<f32>, cloudiness: f32, turbulence: f32, time: f32) -> f32 {
+    if (cloudiness <= 0.001) {
+        return 1.0;
+    }
+    let drift = vec3<f32>(0.19, 0.11, -0.17) * time * turbulence;
+    let cell = position * 0.43 + drift;
+    let waves = sin(cell.x * 1.7) * sin(cell.y * 1.3 + 0.7) * sin(cell.z * 1.9 - 0.4);
+    let pocket = pow(clamp(waves * 0.85 + 0.78, 0.0, 1.6), 1.8);
+    return mix(1.0, pocket, cloudiness);
+}
+
 @fragment
 fn fragment_main(input: LaserOutput) -> @location(0) vec4<f32> {
     // Geometry in front of the beam hides it. Without this a laser shows through the deck and
@@ -142,7 +153,13 @@ fn fragment_main(input: LaserOutput) -> @location(0) vec4<f32> {
     // a wall in still air puts the same pattern on it.
     let density = globals.params.y;
     let scattered = 0.08 + density * 1.62;
-    let visibility = mix(scattered, 1.0, input.landing);
+    let local_haze = laser_haze_variation(
+        input.world,
+        globals.params5.z,
+        globals.params5.w,
+        globals.params3.z,
+    );
+    let visibility = mix(scattered * local_haze, 1.0, input.landing);
 
     // The operator's own strength for every laser in the rig, on top of all of it. It scales the
     // figure and the beam together, because it answers "how strong are the lasers in this

@@ -463,6 +463,15 @@ impl Renderer {
                 f32::from(u8::from(plan.plot || !view.mode.simulates_light())),
                 0.0,
             ],
+            params5: {
+                let fog = view.fog_variation.for_quality(view.quality);
+                [
+                    fog.lamp_cloudiness,
+                    fog.lamp_turbulence,
+                    fog.laser_cloudiness,
+                    fog.laser_turbulence,
+                ]
+            },
         };
         queue.write_buffer(&self.globals_buffer, 0, bytemuck::bytes_of(&globals));
     }

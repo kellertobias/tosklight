@@ -58,6 +58,16 @@ export type Action =
 			value: AppState["stageView"] | AppState["stage2dSide"] | boolean;
 	  }
 	| {
+			type: "SET_PANE_FOG_VARIATION";
+			id: string;
+			option:
+				| "lampFogCloudiness"
+				| "lampFogTurbulence"
+				| "laserFogCloudiness"
+				| "laserFogTurbulence";
+			value: number;
+	  }
+	| {
 			type: "SET_PANE_PRESET_FAMILY";
 			id: string;
 			family: AppState["presetFamily"];

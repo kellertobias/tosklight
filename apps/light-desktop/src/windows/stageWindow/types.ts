@@ -19,6 +19,7 @@ export interface StageWindowProps extends WindowProps {
 }
 
 export interface StageOptionsModel {
+	paneId?: string;
 	mode: StageMode;
 	setMode: (mode: StageMode) => void;
 	view: StageView;

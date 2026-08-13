@@ -11,6 +11,7 @@ export function useStageOptions({
 	showSelection: forcedShowSelection,
 	showFloorGrid: forcedShowFloorGrid,
 	environmentBrightness: forcedEnvironmentBrightness,
+	paneId,
 }: StageWindowProps): StageOptionsModel {
 	const { state, dispatch } = useApp();
 	const [dedicatedFollowPreload, setDedicatedFollowPreload] = useState(false);
@@ -22,6 +23,7 @@ export function useStageOptions({
 		setDedicatedFollowPreload((current) => !current);
 	};
 	return {
+		paneId,
 		mode: state.stageMode,
 		setMode: (value) => dispatch({ type: "SET_STAGE_MODE", value }),
 		view: compact ? (stageView ?? state.stageView) : state.stageView,

@@ -29,6 +29,14 @@ Down** is a plan of this rig rather than a plan of wherever the camera happened 
 how much the renderer spends on volumetrics, shadows and bloom, and applies immediately
 without the Visualizer reconnecting or reloading the show.
 
+An embedded **3D Viz** pane at Ultra also offers four fog-character controls: independent
+cloudiness and turbulence for lamps and lasers. Cloudiness runs from spatially even at 0% to
+strongly patchy at 100%; turbulence runs from stationary at 0% to very fast movement and change
+at 100%. These values are stored with that pane in the portable show and remain set when another
+quality is selected, but Draft, Standard and High retain their existing uniform fog. A dedicated
+Visualizer keeps the same four controls locally in **Quick Settings** and does not rewrite a
+show's pane values.
+
 ## Who wins
 
 The view is an instruction, and the Visualizer obeys it: whatever the operator standing at

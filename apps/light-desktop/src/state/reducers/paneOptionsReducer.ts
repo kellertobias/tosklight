@@ -63,6 +63,11 @@ export function reducePaneOptions(
 				...pane,
 				[action.option]: action.value,
 			}));
+		case "SET_PANE_FOG_VARIATION":
+			return updateActivePane(state, action.id, (pane) => ({
+				...pane,
+				[action.option]: clamp(action.value, 0, 1),
+			}));
 		case "SET_PANE_PRESET_FAMILY":
 			return updateActivePane(state, action.id, (pane) => ({
 				...pane,
