@@ -2420,7 +2420,8 @@ textarea,
 	min-width: 0;
 	padding: 0.35rem;
 	background: color-mix(in srgb, var(--playback-color, #20c997) 18%, #111 82%);
-	border: 1px solid color-mix(in srgb, var(--playback-color, #20c997) 55%, white 15%);
+	border: 1px solid
+		color-mix(in srgb, var(--playback-color, #20c997) 55%, white 15%);
 	border-radius: 0.35rem;
 }
 .expanded-playback-controls.taller {
