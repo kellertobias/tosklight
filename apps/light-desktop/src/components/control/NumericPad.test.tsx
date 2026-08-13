@@ -65,6 +65,9 @@ const programmerValuesActions = {
 const selectionActions = {
 	replace: vi.fn().mockResolvedValue(null),
 };
+const programmerActions = {
+	toggleFixtureFreeze: vi.fn().mockResolvedValue(undefined),
+};
 const preloadLifecycle = {
 	ready: true,
 	armed: false,
@@ -125,6 +128,10 @@ vi.mock("../../features/programmerValues/useProgrammerValuesActivity", () => ({
 vi.mock("../../features/programmerValues/ProgrammerValuesView", () => ({
 	useProgrammerValuesActions: () => programmerValuesActions,
 }));
+vi.mock(
+	"../../features/programmerActions/ProgrammerActionsContext",
+	() => ({ useProgrammerActions: () => programmerActions }),
+);
 vi.mock(
 	"../../features/programmerPreloadLifecycle/ProgrammerPreloadLifecycleView",
 	() => ({ useProgrammerPreloadLifecycleView: () => preloadLifecycle }),
@@ -510,11 +517,7 @@ describe("NumericPad Shift routing", () => {
 			id: "desk-three",
 		});
 		shifted("CLR");
-		expect(dispatch).toHaveBeenCalledWith({
-			type: "SET_MODAL",
-			modal: "systemControlsOpen",
-			value: true,
-		});
+		expect(programmerActions.toggleFixtureFreeze).toHaveBeenCalledTimes(1);
 		shifted("DEL");
 		expect(dispatch).toHaveBeenCalledWith({
 			type: "SET_MODAL",

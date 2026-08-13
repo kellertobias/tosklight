@@ -157,10 +157,21 @@ fn command_bytes(command: &PatchFixturesCommand) -> usize {
 }
 
 fn update_bytes(update: &super::PatchFixtureUpdateIntent) -> usize {
-    let PatchFixtureUpdateAction::SetInstalledAppearance { appearance } = &update.action else {
-        return 0;
-    };
-    appearance_bytes(appearance)
+    match &update.action {
+        PatchFixtureUpdateAction::SetInstalledAppearance { appearance } => {
+            appearance_bytes(appearance)
+        }
+        PatchFixtureUpdateAction::SetFreeze { freeze } => freeze
+            .targets
+            .values()
+            .map(|target| {
+                target.families.capacity() * size_of::<light_fixture::FreezeFamily>()
+                    + target.values.capacity()
+                        * size_of::<(light_core::AttributeKey, light_core::AttributeValue)>()
+            })
+            .sum(),
+        _ => 0,
+    }
 }
 
 fn appearance_bytes(appearance: &light_fixture::InstalledFixtureAppearance) -> usize {

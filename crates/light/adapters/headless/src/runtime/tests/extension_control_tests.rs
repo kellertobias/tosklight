@@ -308,8 +308,31 @@ fn canonical_extension_programmer_highlight_and_speed_controls_use_server_author
             modifier: ModifierKey::Shift,
         },
     );
+    let shifted_clear = extensions_runtime::apply_bound_control(
+        &state,
+        &host,
+        &BoundControlInput {
+            input: ControlInputEvent {
+                input_id: 3,
+                occurred_at_micros: 203,
+                control: ControlInput::Button {
+                    control_id: "clear".into(),
+                    pressed: true,
+                },
+            },
+            intent: CanonicalControlIntent::ProgrammerKey {
+                key: ProgrammerKey::Clear,
+            },
+        },
+    )
+    .unwrap_err();
+    assert!(shifted_clear.to_string().contains("Freeze requires"));
+    assert_eq!(
+        state.programming.get(session.id).unwrap().command_line,
+        "F1"
+    );
     apply(
-        3,
+        4,
         ControlInput::Button {
             control_id: "shift".into(),
             pressed: false,
@@ -330,6 +353,17 @@ fn canonical_extension_programmer_highlight_and_speed_controls_use_server_author
         .map(|event| event.payload["phase"].as_str().unwrap().to_owned())
         .collect::<Vec<_>>();
     assert_eq!(key_phases, ["press", "release"]);
+    apply(
+        5,
+        ControlInput::Button {
+            control_id: "clear".into(),
+            pressed: true,
+        },
+        CanonicalControlIntent::ProgrammerKey {
+            key: ProgrammerKey::Clear,
+        },
+    );
+    assert_eq!(state.programming.get(session.id).unwrap().command_line, "");
 
     for (offset, action) in [
         HighlightControlAction::Toggle,

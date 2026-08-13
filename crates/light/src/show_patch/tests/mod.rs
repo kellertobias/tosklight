@@ -448,6 +448,65 @@ fn sparse_updates_apply_paired_fields_to_the_exact_root_or_copy() {
 }
 
 #[test]
+fn freeze_sparse_update_persists_captured_values_across_ordinary_patch_edits() {
+    let (profile, reference) = profile_with_modes(1);
+    let rig = TestRig::new(profile, FailurePoint::None);
+    let add = patch_batch(rig.ports.show_id(), reference, 1);
+    let mut edited_candidate = add.fixtures[0].clone();
+    let fixture_id = edited_candidate.patch.fixture_id;
+    let seeded = rig
+        .service
+        .handle(envelope(add, "freeze-seed", 0), &rig.ports)
+        .unwrap();
+    let target_id = seeded.change.fixtures[0].patch.fixture_id;
+
+    let freeze = light_fixture::FixtureFreezeState {
+        targets: std::collections::HashMap::from([(
+            target_id,
+            light_fixture::FrozenFixtureTarget {
+                full: false,
+                families: vec![light_fixture::FreezeFamily::Intensity],
+                values: std::collections::HashMap::from([(
+                    light_core::AttributeKey::intensity(),
+                    light_core::AttributeValue::Normalized(0.625),
+                )]),
+            },
+        )]),
+    };
+    let command = sparse_update(
+        rig.ports.show_id(),
+        fixture_id,
+        1,
+        1,
+        None,
+        PatchFixtureUpdateAction::SetFreeze {
+            freeze: freeze.clone(),
+        },
+    );
+    let changed = rig
+        .service
+        .handle(envelope(command, "freeze-values", 1), &rig.ports)
+        .unwrap();
+    assert_eq!(changed.change.fixtures[0].patch.freeze, freeze);
+
+    edited_candidate.patch.name = "Edited while frozen".into();
+    let edit = crate::PatchFixturesCommand {
+        show_id: rig.ports.show_id(),
+        fixtures: vec![edited_candidate],
+        remove_fixture_ids: Vec::new(),
+        placements: Vec::new(),
+        vector_spreads: Vec::new(),
+        fixture_updates: Vec::new(),
+    };
+    let edited = rig
+        .service
+        .handle(envelope(edit, "edit-frozen-fixture", 2), &rig.ports)
+        .unwrap();
+    assert_eq!(edited.change.fixtures[0].patch.freeze, freeze);
+    assert_eq!(edited.change.fixtures[0].patch.name, "Edited while frozen");
+}
+
+#[test]
 fn sparse_update_replay_collision_noop_and_revision_guards_are_exact() {
     let (profile, reference) = profile_with_modes(1);
     let rig = TestRig::new(profile, FailurePoint::None);

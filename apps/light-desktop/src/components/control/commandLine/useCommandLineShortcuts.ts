@@ -35,6 +35,7 @@ interface ShortcutCallbacks {
 	toggleRecord: () => void;
 	advancePreload: () => void;
 	clear: () => void;
+	toggleFixtureFreeze: () => void;
 	undo: () => void;
 }
 
@@ -162,6 +163,8 @@ function handleSoftwareKey(context: ShortcutContext, event: KeyboardEvent) {
 		context.toggleRecord();
 	} else if (key === "PRE") {
 		context.advancePreload();
+	} else if (key === "CLR" && event.shiftKey) {
+		context.toggleFixtureFreeze();
 	} else if (key === "CLR") {
 		context.clear();
 	} else if (key === "UND") {
@@ -207,28 +210,6 @@ function releaseHeldControls(context: ShortcutContext) {
 	context.pageActions.invalidate();
 }
 
-function useRunningMenuShortcut(hardware: boolean) {
-	const { state, dispatch } = useApp();
-	useEffect(() => {
-		if (hardware || !state.regularNumberShortcuts) return;
-		const openRunningMenu = (event: KeyboardEvent) => {
-			if (
-				event.code !== "Delete" ||
-				!event.shiftKey ||
-				event.metaKey ||
-				event.ctrlKey ||
-				event.altKey ||
-				isExternalEditor(event.target)
-			)
-				return;
-			event.preventDefault();
-			dispatch({ type: "SET_MODAL", modal: "systemControlsOpen", value: true });
-		};
-		window.addEventListener("keydown", openRunningMenu);
-		return () => window.removeEventListener("keydown", openRunningMenu);
-	}, [dispatch, hardware, state.regularNumberShortcuts]);
-}
-
 export function useCommandLineShortcuts(
 	hardware: boolean,
 	callbacks: ShortcutCallbacks,
@@ -258,7 +239,6 @@ export function useCommandLineShortcuts(
 		setInteraction,
 		...callbacks,
 	};
-	useRunningMenuShortcut(hardware);
 	useLayoutEffect(() => {
 		if (!active) return;
 		heldActions.syncAuthority(runtimeActions);

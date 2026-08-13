@@ -114,6 +114,7 @@ fn live_action_timing(action: &LiveAction) -> Option<(&'static str, bool)> {
         LiveAction::CommandTarget(_) => Some(("command_target", false)),
         LiveAction::CommandLineExecute(_) => Some(("command_execute", true)),
         LiveAction::ProgrammerUndo => Some(("undo", true)),
+        LiveAction::FixtureFreeze(_) => Some(("fixture_freeze", true)),
         LiveAction::ProgrammingAlign(_) => Some(("align", true)),
         LiveAction::FixtureControl(_) => Some(("fixture_control", true)),
         LiveAction::FixtureControls(_) => Some(("fixture_controls", true)),
@@ -359,6 +360,14 @@ fn dispatch_action(
                 .map_err(|error| error.message);
             ActionOutput::plain(response)
         }),
+        LiveAction::FixtureFreeze(request) => ActionOutput::plain(
+            super::fixture_freeze::toggle_selected(state, session, &request, context)
+                .and_then(|outcome| {
+                    serde_json::to_value(outcome)
+                        .map_err(|error| ApiError::internal(error.to_string()))
+                })
+                .map_err(|error| error.message),
+        ),
         LiveAction::ProgrammingAlign(request) => ActionOutput::plain(
             ws_programmer_align(state, request, context, ports)
                 .and_then(|outcome| serde_json::to_value(outcome).map_err(|e| e.to_string())),

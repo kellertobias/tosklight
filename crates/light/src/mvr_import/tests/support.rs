@@ -327,6 +327,7 @@ pub fn stored_fixture(
         move_in_black_enabled: mib.0,
         move_in_black_delay_millis: mib.1,
         highlight_overrides: Default::default(),
+        freeze: Default::default(),
         multipatch: Vec::new(),
     }
 }

@@ -235,6 +235,7 @@ fn fixture_highlight_override_renders_an_individual_blue_identification_look() {
         move_in_black_enabled: true,
         move_in_black_delay_millis: 0,
         highlight_overrides: BTreeMap::from([(red_id, 0), (green_id, 0), (blue_id, 255)]),
+        freeze: Default::default(),
     };
     let engine = Engine::new(ProgrammerRegistry::default());
     engine
@@ -379,6 +380,7 @@ fn selected_logical_head_highlights_independently_while_parent_identifies_all_he
         move_in_black_enabled: true,
         move_in_black_delay_millis: 0,
         highlight_overrides: BTreeMap::new(),
+        freeze: Default::default(),
     };
     let engine = Engine::new(ProgrammerRegistry::default());
     engine

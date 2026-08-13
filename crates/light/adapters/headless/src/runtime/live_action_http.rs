@@ -9,10 +9,11 @@ use axum::{
 use light_wire::v2::live_action::{
     CommandTargetHttpActionOutcome, CommandTargetHttpActionRequest,
     FixtureControlHttpActionRequest, FixtureControlLiveActionRequest, FixtureControlOutcome,
-    GenerateFixturePresetsOutcome, GenerateFixturePresetsRequest,
-    ProgrammerCaptureModeHttpActionRequest, ProgrammerCaptureModeLiveActionRequest,
-    ProgrammerCaptureModeOutcome, ProgrammerUndoHttpActionOutcome,
-    ProgrammingAlignHttpActionRequest, ProgrammingAlignLiveActionRequest, ProgrammingAlignOutcome,
+    FixtureFreezeActionOutcome, FixtureFreezeLiveActionRequest, GenerateFixturePresetsOutcome,
+    GenerateFixturePresetsRequest, ProgrammerCaptureModeHttpActionRequest,
+    ProgrammerCaptureModeLiveActionRequest, ProgrammerCaptureModeOutcome,
+    ProgrammerUndoHttpActionOutcome, ProgrammingAlignHttpActionRequest,
+    ProgrammingAlignLiveActionRequest, ProgrammingAlignOutcome,
 };
 
 pub(super) fn router() -> Router<AppState> {
@@ -24,11 +25,73 @@ pub(super) fn router() -> Router<AppState> {
         )
         .route("/api/v2/command-target/actions", post(command_target))
         .route("/api/v2/programmer-undo/actions", get(programmer_undo))
+        .route(
+            "/api/v2/fixture-freeze/actions",
+            get(fixture_freeze_full).post(fixture_freeze_partial),
+        )
         .route("/api/v2/fixture-controls/actions", post(fixture_control))
         .route(
             "/api/v2/preset-profile-generation/update",
             post(generate_fixture_presets),
         )
+}
+
+async fn fixture_freeze_full(
+    State(state): State<AppState>,
+    show: ShowContext,
+    desk: DeskContext,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse, ApiError> {
+    fixture_freeze_action(
+        state,
+        show,
+        desk,
+        headers,
+        FixtureFreezeLiveActionRequest::default(),
+    )
+    .await
+}
+
+async fn fixture_freeze_partial(
+    State(state): State<AppState>,
+    show: ShowContext,
+    desk: DeskContext,
+    headers: HeaderMap,
+    TolerantJson(request): TolerantJson<FixtureFreezeLiveActionRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    if request.families.is_empty() {
+        return Err(ApiError::bad_request(
+            "partial Freeze requires at least one attribute family",
+        ));
+    }
+    fixture_freeze_action(state, show, desk, headers, request).await
+}
+
+async fn fixture_freeze_action(
+    state: AppState,
+    show: ShowContext,
+    desk: DeskContext,
+    headers: HeaderMap,
+    request: FixtureFreezeLiveActionRequest,
+) -> Result<impl IntoResponse, ApiError> {
+    let session = session_for_desk(&state, &headers, &desk)?;
+    show.verify(&state)?;
+    let request_id = Uuid::new_v4().to_string();
+    let context = programming_context(
+        &session,
+        light_application::ActionSource::Http,
+        Some(&request_id),
+    );
+    let worker_state = state.clone();
+    let outcome = tokio::task::spawn_blocking(move || {
+        super::fixture_freeze::toggle_selected(&worker_state, &session, &request, &context)
+    })
+    .await
+    .map_err(|error| ApiError::internal(format!("Fixture Freeze action failed: {error}")))??;
+    Ok((
+        [(header::CACHE_CONTROL, "no-store")],
+        Json::<FixtureFreezeActionOutcome>(outcome),
+    ))
 }
 
 async fn command_target(

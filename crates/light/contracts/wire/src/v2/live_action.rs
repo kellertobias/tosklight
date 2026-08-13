@@ -62,6 +62,7 @@ pub enum LiveAction {
     CommandTarget(CommandTargetLiveActionRequest),
     CommandLineExecute(CommandLineExecuteLiveActionRequest),
     ProgrammerUndo,
+    FixtureFreeze(FixtureFreezeLiveActionRequest),
     ProgrammingAlign(ProgrammingAlignLiveActionRequest),
     FixtureControl(FixtureControlLiveActionRequest),
     FixtureControls(FixtureControlsLiveActionRequest),
@@ -73,6 +74,29 @@ pub enum LiveAction {
     DynamicPhase(DynamicControllerLiveActionRequest),
     DynamicFixAt(DynamicFixAtActionRequest),
     Timecode(TimecodeTransportActionRequest),
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum FixtureFreezeFamily {
+    Intensity,
+    Color,
+    Position,
+    Beam,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct FixtureFreezeLiveActionRequest {
+    #[serde(default)]
+    pub families: Vec<FixtureFreezeFamily>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct FixtureFreezeActionOutcome {
+    pub changed: bool,
+    #[ts(type = "number")]
+    pub patch_revision: u64,
+    pub affected_fixtures: usize,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -299,7 +323,8 @@ impl LiveAction {
             | Self::CommandLineSet(_)
             | Self::CommandTarget(_)
             | Self::CommandLineExecute(_)
-            | Self::ProgrammerUndo => None,
+            | Self::ProgrammerUndo
+            | Self::FixtureFreeze(_) => None,
             Self::ProgrammingAlign(request) => Some(&request.request_id),
             Self::FixtureControl(request) => Some(&request.request_id),
             Self::FixtureControls(request) => Some(&request.request_id),

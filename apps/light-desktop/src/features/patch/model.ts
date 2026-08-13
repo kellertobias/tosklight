@@ -86,6 +86,7 @@ export function newPatchFixtureCandidate(
 		move_in_black_enabled: true,
 		move_in_black_delay_millis: 0,
 		highlight_overrides: {},
+		freeze_targets: [],
 	};
 	return patchedFixtureCandidate(optimistic);
 }
@@ -283,6 +284,11 @@ export function projectionToPatchedFixture(
 				override.rawValue,
 			]),
 		),
+		freeze_targets: (projection.freezeTargets ?? []).map((target) => ({
+			fixture_id: target.fixtureId,
+			full: target.full,
+			families: [...target.families],
+		})),
 	};
 }
 

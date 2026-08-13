@@ -14,6 +14,7 @@ mod extensions_runtime;
 mod file_manager;
 #[path = "file_manager_support.rs"]
 mod file_manager_support;
+mod fixture_freeze;
 #[path = "help.rs"]
 mod help;
 mod http_router;

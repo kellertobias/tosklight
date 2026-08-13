@@ -196,6 +196,9 @@ fn patched_mvr_fixture(
                 .and_then(|fixture| fixture.shaper_angle),
             installed_appearance: Default::default(),
             highlight_overrides: Default::default(),
+            freeze: existing_patch
+                .as_ref()
+                .map_or_else(Default::default, |fixture| fixture.freeze.clone()),
             multipatch: Vec::new(),
         });
     patched.fixture_id = fixture_id;
@@ -216,6 +219,7 @@ fn patched_mvr_fixture(
         patched.bracket_angle = existing_patch.bracket_angle;
         patched.shaper_angle = existing_patch.shaper_angle;
         patched.installed_appearance = existing_patch.installed_appearance;
+        patched.freeze = existing_patch.freeze;
         patched.multipatch = existing_patch.multipatch;
     }
     patched

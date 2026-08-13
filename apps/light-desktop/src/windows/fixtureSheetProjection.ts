@@ -121,6 +121,21 @@ function fixtureSheetRow({
 	highlightBypassesGroupMaster: boolean;
 }) {
 	const patched = target.fixture;
+	const exactFreeze = (patched.freeze_targets ?? []).find(
+		(candidate) => candidate.fixture_id === target.fixtureId,
+	);
+	const containedFreeze =
+		target.order === 0
+			? (patched.freeze_targets ?? []).filter((candidate) =>
+					patched.logical_heads.some(
+						(head) => head.fixture_id === candidate.fixture_id,
+					),
+				)
+			: [];
+	const freezeTargets = exactFreeze ? [exactFreeze] : containedFreeze;
+	const freezeFamilies = [
+		...new Set(freezeTargets.flatMap((candidate) => candidate.families)),
+	];
 	const targetValues = programmerValues.get(target.fixtureId);
 	const groupValues = fixtureSheetGroupValues({
 		target,
@@ -186,6 +201,13 @@ function fixtureSheetRow({
 		parentFixtureId: patched.fixture_id,
 		childFixtureIds: patched.logical_heads.map((head) => head.fixture_id),
 		indented: target.indented,
+		freeze: freezeTargets.length
+			? {
+					full: freezeTargets.every((candidate) => candidate.full),
+					families: freezeFamilies,
+					contained: exactFreeze == null && containedFreeze.length > 0,
+				}
+			: null,
 		dimmer: Math.round(intensity * 100),
 		color,
 		colorAvailable: groupValues.color.available,
@@ -370,6 +392,7 @@ function demoFixtureSheetRows() {
 		indented: false,
 		limitingGroups: [] as LimitingGroup[],
 		highlightBypassesGroupMaster: false,
+		freeze: null,
 		preloadDimmer: null,
 		preloadColor: null,
 		preloadPan: null,
@@ -489,12 +512,14 @@ type OptionalFixtureSheetRuntime<T> = T extends {
 			| "dynamicStack"
 			| "groupValues"
 			| "highlightBypassesGroupMaster"
+			| "freeze"
 			| "colorAvailable"
 			| "positionAvailable"
 		> & {
 			dynamicStack?: Stack;
 			groupValues?: Groups;
 			highlightBypassesGroupMaster?: HighlightBypass;
+			freeze?: T extends { freeze: infer Freeze } ? Freeze : never;
 			/** Omitted by presentation fixtures, which describe lanterns that carry the group. */
 			colorAvailable?: boolean;
 			positionAvailable?: boolean;

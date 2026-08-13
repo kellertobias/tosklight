@@ -105,6 +105,22 @@ fn apply_update(
                 None => patch.installed_appearance = appearance.clone(),
             }
         }
+        PatchFixtureUpdateAction::SetFreeze { freeze } => {
+            require_root(update)?;
+            let valid_targets = std::iter::once(patch.fixture_id)
+                .chain(patch.logical_heads.iter().map(|head| head.fixture_id))
+                .collect::<std::collections::HashSet<_>>();
+            if freeze
+                .targets
+                .keys()
+                .any(|fixture_id| !valid_targets.contains(fixture_id))
+            {
+                return Err(invalid(
+                    "fixture Freeze state contains an identity outside the patched fixture",
+                ));
+            }
+            patch.freeze = freeze.clone();
+        }
     }
     Ok(())
 }

@@ -450,6 +450,25 @@ pub struct PatchFixtureProjection {
     #[ts(type = "number")]
     pub move_in_black_delay_millis: u64,
     pub highlight_overrides: Vec<PatchHighlightOverrideProjection>,
+    #[serde(default)]
+    pub freeze_targets: Vec<PatchFixtureFreezeTargetProjection>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(rename_all = "snake_case")]
+pub enum PatchFixtureFreezeFamily {
+    Intensity,
+    Color,
+    Position,
+    Beam,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PatchFixtureFreezeTargetProjection {
+    pub fixture_id: Uuid,
+    pub full: bool,
+    pub families: Vec<PatchFixtureFreezeFamily>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

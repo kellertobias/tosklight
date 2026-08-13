@@ -89,4 +89,32 @@ describe("Fixture Sheet colour and position previews", () => {
 		expect(position.querySelector(".position-glyph")).not.toBeNull();
 		expect(position.textContent).toContain("50");
 	});
+
+	it("distinguishes full, partial, and contained Freeze state", () => {
+		const full = renderColumn(
+			"name",
+			row({ freeze: { full: true, families: [], contained: false } }),
+		);
+		expect(full.textContent).toContain("❄ FREEZE");
+		expect(full.querySelector(".fixture-freeze-status")?.getAttribute("title")).toContain(
+			"ignores all controls",
+		);
+
+		const partial = renderColumn(
+			"name",
+			row({
+				freeze: {
+					full: false,
+					families: ["intensity", "color"],
+					contained: true,
+				},
+			}),
+		);
+		expect(partial.textContent).toContain(
+			"❄ FREEZE · Intensity · Color INSIDE",
+		);
+		expect(
+			partial.querySelector(".fixture-freeze-status")?.getAttribute("title"),
+		).toContain("fixture heads");
+	});
 });

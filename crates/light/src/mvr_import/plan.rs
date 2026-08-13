@@ -354,6 +354,9 @@ fn patched_fixture(
                 fixture.installed_appearance.clone()
             }),
         highlight_overrides: Default::default(),
+        freeze: existing_patch
+            .as_ref()
+            .map_or_else(Default::default, |fixture| fixture.freeze.clone()),
         multipatch: existing_patch
             .as_ref()
             .map_or_else(Vec::new, |fixture| fixture.multipatch.clone()),
@@ -376,6 +379,7 @@ fn patched_fixture(
         patched.bracket_angle = existing_patch.bracket_angle;
         patched.shaper_angle = existing_patch.shaper_angle;
         patched.installed_appearance = existing_patch.installed_appearance;
+        patched.freeze = existing_patch.freeze;
         patched.multipatch = existing_patch.multipatch;
     }
     patched

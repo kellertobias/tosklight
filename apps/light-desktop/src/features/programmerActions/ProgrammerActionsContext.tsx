@@ -9,6 +9,7 @@ import type { PresetFamily } from "../../presetFamilies";
  */
 export interface ProgrammerActions {
 	undoProgrammer: () => Promise<void>;
+	toggleFixtureFreeze: () => Promise<void>;
 	clearProgrammer: (sessionId: string) => Promise<void>;
 	controlFixtureAction: (
 		fixtureId: string,

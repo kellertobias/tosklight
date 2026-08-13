@@ -66,6 +66,7 @@ export function useNumericPadController() {
 				: ("idle" as const),
 		toggleRecord: () => toggleRecord(context),
 		advancePreload: () => advancePreload(context),
+		toggleFixtureFreeze: () => programmerActions?.toggleFixtureFreeze(),
 		escape: () => {
 			if (setInteraction)
 				void setInteraction.cancel().then((consumed) => {
@@ -137,7 +138,14 @@ function pressKey(
 }
 
 function handleShiftedKey(
-	{ state, dispatch, command, playbackDesk, playbackReady }: NumericPadContext,
+	{
+		programmerActions,
+		state,
+		dispatch,
+		command,
+		playbackDesk,
+		playbackReady,
+	}: NumericPadContext,
 	key: SoftwareKey,
 	text: string,
 ) {
@@ -160,7 +168,11 @@ function handleShiftedKey(
 		void command.replace(next, false);
 		return true;
 	}
-	if (key === "CLR" || key === "DEL") {
+	if (key === "CLR") {
+		void programmerActions?.toggleFixtureFreeze();
+		return true;
+	}
+	if (key === "DEL") {
 		dispatch({ type: "SET_MODAL", modal: "systemControlsOpen", value: true });
 		return true;
 	}

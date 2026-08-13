@@ -29,6 +29,7 @@ fn rejects_patch_overlap_and_boundary_overflow() {
         move_in_black_enabled: true,
         move_in_black_delay_millis: 0,
         highlight_overrides: BTreeMap::new(),
+        freeze: Default::default(),
     };
     let overlap = PatchedFixture {
         fixture_id: FixtureId::new(),
@@ -56,6 +57,7 @@ fn rejects_patch_overlap_and_boundary_overflow() {
         move_in_black_enabled: true,
         move_in_black_delay_millis: 0,
         highlight_overrides: BTreeMap::new(),
+        freeze: Default::default(),
     };
     assert!(validate_patch(&[first.clone(), overlap]).is_err());
     let overflow = PatchedFixture {
@@ -84,6 +86,7 @@ fn rejects_patch_overlap_and_boundary_overflow() {
         move_in_black_enabled: true,
         move_in_black_delay_millis: 0,
         highlight_overrides: BTreeMap::new(),
+        freeze: Default::default(),
     };
     assert!(validate_patch(&[overflow]).is_err());
     assert!(validate_patch(&[first]).is_ok());
@@ -145,6 +148,7 @@ fn multipatch_reserves_real_addresses_and_allows_visualizer_only_instances() {
         move_in_black_enabled: true,
         move_in_black_delay_millis: 0,
         highlight_overrides: BTreeMap::new(),
+        freeze: Default::default(),
     };
     assert!(validate_patch(std::slice::from_ref(&fixture)).is_ok());
     fixture.multipatch[1].universe = Some(1);
@@ -379,6 +383,7 @@ fn media_server_layers_inherit_parent_direct_control_endpoint() {
         move_in_black_enabled: true,
         move_in_black_delay_millis: 0,
         highlight_overrides: BTreeMap::new(),
+        freeze: Default::default(),
     };
     validate_patch(std::slice::from_ref(&parent)).unwrap();
     assert_eq!(parent.direct_control, Some(endpoint));
@@ -434,6 +439,7 @@ fn logical_head_reconciliation_preserves_matching_ids_and_repairs_shape() {
         move_in_black_enabled: true,
         move_in_black_delay_millis: 0,
         highlight_overrides: BTreeMap::new(),
+        freeze: Default::default(),
     };
     fixture.definition.heads = vec![
         LogicalHead {
@@ -500,6 +506,42 @@ fn legacy_patch_inherits_highlight_look_and_round_trips_instance_overrides() {
     let restored: PatchedFixture =
         serde_json::from_value(serde_json::to_value(fixture).unwrap()).unwrap();
     assert_eq!(restored.highlight_overrides.get(&channel_id), Some(&173));
+}
+
+#[test]
+fn legacy_patch_defaults_freeze_empty_and_round_trips_captured_values() {
+    let fixture_id = FixtureId::new();
+    let legacy = serde_json::json!({
+        "fixture_id": fixture_id,
+        "definition": definition(2)
+    });
+    let mut fixture: PatchedFixture = serde_json::from_value(legacy).unwrap();
+    assert!(fixture.freeze.is_empty());
+
+    fixture.freeze.targets.insert(
+        fixture_id,
+        FrozenFixtureTarget {
+            full: false,
+            families: vec![FreezeFamily::Intensity, FreezeFamily::Color],
+            values: std::collections::HashMap::from([(
+                AttributeKey::intensity(),
+                light_core::AttributeValue::Normalized(0.625),
+            )]),
+        },
+    );
+    let restored: PatchedFixture =
+        serde_json::from_value(serde_json::to_value(fixture).unwrap()).unwrap();
+    assert_eq!(
+        restored.freeze.targets[&fixture_id],
+        FrozenFixtureTarget {
+            full: false,
+            families: vec![FreezeFamily::Intensity, FreezeFamily::Color],
+            values: std::collections::HashMap::from([(
+                AttributeKey::intensity(),
+                light_core::AttributeValue::Normalized(0.625),
+            )]),
+        }
+    );
 }
 
 #[test]

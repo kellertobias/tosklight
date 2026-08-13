@@ -1,7 +1,7 @@
 use crate::{ActionContext, ApplicationCommand, CommandFamily};
 use light_core::{FixtureId, Revision, ShowId};
 use light_fixture::{
-    FixtureSplit, InstalledFixtureAppearance, PatchPolicy, PatchedFixturePatch,
+    FixtureFreezeState, FixtureSplit, InstalledFixtureAppearance, PatchPolicy, PatchedFixturePatch,
     PatchedFixtureProfileReference,
 };
 use light_show::{PortablePatchRevision, PortableShowRevision};
@@ -87,6 +87,11 @@ pub enum PatchFixtureUpdateAction {
     },
     SetInstalledAppearance {
         appearance: InstalledFixtureAppearance,
+    },
+    /// Replaces the complete portable Freeze projection for one patched fixture family. Capture
+    /// and toggle semantics are resolved by the authoritative operator action before this update.
+    SetFreeze {
+        freeze: FixtureFreezeState,
     },
 }
 

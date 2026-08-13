@@ -215,7 +215,7 @@ fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
     );
     let events = state.events.audit_events();
     let shifted_clear = events.last().unwrap();
-    assert_eq!(shifted_clear.kind, "desk_action");
+    assert_eq!(shifted_clear.kind, "desk_action_error");
     assert_eq!(shifted_clear.payload["action"], "shift-clear");
     let _ = std::fs::remove_dir_all(data_dir);
 }

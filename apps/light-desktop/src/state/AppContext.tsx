@@ -100,7 +100,7 @@ export function AppProvider({ children }: PropsWithChildren) {
 				});
 				return;
 			}
-			if (intent.action === "shift_clear" || intent.action === "shift_delete") {
+			if (intent.action === "shift_delete") {
 				dispatch({
 					type: "SET_MODAL",
 					modal: "systemControlsOpen",

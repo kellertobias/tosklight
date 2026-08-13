@@ -12,9 +12,9 @@ use light_application::{
 };
 use light_core::{FixtureId, ShowId};
 use light_fixture::{
-    DirectControlEndpoint, FixtureLocation, FixtureVector, GelAssignment, GelDefinitionSnapshot,
-    InstalledFixtureAppearance, InstalledLightSource, MultiPatchInstance, PatchedFixturePatch,
-    PatchedFixtureProfileReference, PatchedHead, SplitPatch,
+    DirectControlEndpoint, FixtureFreezeState, FixtureLocation, FixtureVector, GelAssignment,
+    GelDefinitionSnapshot, InstalledFixtureAppearance, InstalledLightSource, MultiPatchInstance,
+    PatchedFixturePatch, PatchedFixtureProfileReference, PatchedHead, SplitPatch,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -232,6 +232,8 @@ pub struct FixtureDto {
     pub move_in_black_delay_millis: u64,
     #[serde(default)]
     pub highlight_overrides: Vec<HighlightOverrideDto>,
+    #[serde(default)]
+    pub freeze: FixtureFreezeState,
     /// Read-only projections the sheet displays but never writes.
     #[serde(default, skip_deserializing)]
     pub fixture_revision: u64,
@@ -360,6 +362,7 @@ impl From<PatchFixtureProjection> for FixtureDto {
                     raw_value: *raw_value,
                 })
                 .collect(),
+            freeze: patch.freeze,
             fixture_revision: projection.fixture_revision,
             logical_heads: patch
                 .logical_heads
@@ -552,6 +555,7 @@ impl From<FixtureDto> for PatchFixtureCandidate {
                     .into_iter()
                     .map(|value| (value.channel_id, value.raw_value))
                     .collect::<BTreeMap<_, _>>(),
+                freeze: dto.freeze,
             },
         }
     }

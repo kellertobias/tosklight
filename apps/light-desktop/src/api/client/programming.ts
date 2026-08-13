@@ -299,6 +299,15 @@ export class ProgrammingApiClient {
 		return this.send({ type: "programmer_undo" });
 	}
 
+	toggleFixtureFreeze(
+		families: Array<"intensity" | "color" | "position" | "beam"> = [],
+	) {
+		return this.send({
+			type: "fixture_freeze",
+			request: { families },
+		});
+	}
+
 	private async send(action: LiveAction) {
 		try {
 			return await this.transport.sendAction(action);

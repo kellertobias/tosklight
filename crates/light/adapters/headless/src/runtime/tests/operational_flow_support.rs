@@ -60,6 +60,7 @@ fn operational_fixture(fixture_id: light_core::FixtureId) -> light_fixture::Patc
         installed_appearance: Default::default(),
         move_in_black_enabled: true,
         highlight_overrides: Default::default(),
+        freeze: Default::default(),
         move_in_black_delay_millis: 0,
         multipatch: vec![],
     }

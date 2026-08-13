@@ -87,6 +87,23 @@ Except for `[KBD:SHIFT]` + `[KBD:Z]`, letter keys remain free for typing and fut
 
 The software shortcuts are disabled while hardware is connected.
 
+`[SHIFT] [CLR]` toggles a full **Freeze** on the current selection. The desk captures the selected
+fixtures' current resolved output; repeating `[SHIFT] [CLR]` removes the full Freeze. Selecting a
+Group first freezes the fixtures currently resolved from that Group, not the Group object. A full
+Freeze ignores later Programmer, Cue, Dynamic, direct-control, Group Master, Grand Master, and
+Blackout changes. Removing it immediately reveals the current underlying state; Freeze does not
+rewrite that state.
+
+The Fixture Sheet marks a full Freeze as `❄ FREEZE`. Partial Freeze state uses the same marker plus
+the frozen family names: Intensity, Color, Position, and Beam. Partial families keep ordinary Group
+Master, Grand Master, and Blackout behavior. Setting a full Freeze replaces partial-family metadata;
+removing the full Freeze therefore removes every family Freeze on that target.
+
+The numeric family-key layout for entering partial Freeze from the keypad is not assigned yet.
+Until that combined keypad/preset decision is settled, `5` remains Dynamics, dotted `AT` values
+remain numbered Preset addresses, decimal/comma literal entry is unchanged, and direct attribute
+entry is unchanged. Do not infer a Shift-number family mapping from the Fixture Sheet labels.
+
 `[ ^ ]` is latched for one following key on software/touch desks. Its software assignments are `[ ^ ][.]` Help, `[ ^ ] 0` Fixtures, `[ ^ ] 1` Groups, `[ ^ ] 2` Presets, `[ ^ ] 3` Cuelists, `[ ^ ] 4` the selected playback's Cue details, `[ ^ ] 5` Dynamics, `[ ^ ] 6` Channels, and `[ ^ ] 7` through `[ ^ ] 9` the first three saved Desktops.
 
 On attached hardware, keep `[ ^ ]` pressed while pressing the modified button. Hardware shortcuts `[ ^ ] 1` through `[ ^ ] 9` open Stage, Fixtures, Groups, Presets, Cuelists, Channels, DMX, Dynamics, and Help respectively. Hardware `[ ^ ] 0` has no operator-window assignment; Development diagnostics are available only through the **Desk Status** developer menu.

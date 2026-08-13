@@ -161,7 +161,23 @@ pub(crate) fn resolve_profile_head(
     channels: &mut Vec<(uuid::Uuid, u32)>,
 ) -> Result<ResolvedProfileHeadOutput, EngineError> {
     let owner = head.owner;
-    let layer = resolved_highlight_layer(fixture.fixture_id, owner, highlight_layers);
+    let full_freeze = fixture
+        .freeze
+        .targets
+        .get(&owner)
+        .is_some_and(|target| target.full);
+    let options = if full_freeze {
+        RenderOptions {
+            grand_master: 1.0,
+            blackout: false,
+            control_loss_progress: None,
+        }
+    } else {
+        options
+    };
+    let layer = (!full_freeze)
+        .then(|| resolved_highlight_layer(fixture.fixture_id, owner, highlight_layers))
+        .flatten();
     let output_highlighted = layer.is_some() && !(fixture.definition.hazardous && options.blackout);
     let selected_look = layer
         .as_ref()
@@ -170,7 +186,7 @@ pub(crate) fn resolve_profile_head(
         && selected_look
             .as_ref()
             .is_some_and(|look| look.compatibility != HighlightLookCompatibility::Semantic);
-    let group_scale = if output_highlighted || !fixture.group_masters_enabled {
+    let group_scale = if full_freeze || output_highlighted || !fixture.group_masters_enabled {
         1.0
     } else {
         group_masters.scale(owner, group_master_flashes)
@@ -320,7 +336,23 @@ fn prepare_head_inputs(
     axis_inversion: AxisInversion,
 ) -> Result<ProfileHeadInputs, EngineError> {
     let owner = head.owner;
-    let layer = resolved_highlight_layer(fixture.fixture_id, owner, highlight_layers);
+    let full_freeze = fixture
+        .freeze
+        .targets
+        .get(&owner)
+        .is_some_and(|target| target.full);
+    let options = if full_freeze {
+        RenderOptions {
+            grand_master: 1.0,
+            blackout: false,
+            control_loss_progress: None,
+        }
+    } else {
+        options
+    };
+    let layer = (!full_freeze)
+        .then(|| resolved_highlight_layer(fixture.fixture_id, owner, highlight_layers))
+        .flatten();
     let output_highlighted = layer.is_some() && !(fixture.definition.hazardous && options.blackout);
     let selected_look = layer
         .as_ref()
@@ -329,7 +361,7 @@ fn prepare_head_inputs(
         && selected_look
             .as_ref()
             .is_some_and(|look| look.compatibility != HighlightLookCompatibility::Semantic);
-    let group_scale = if output_highlighted || !fixture.group_masters_enabled {
+    let group_scale = if full_freeze || output_highlighted || !fixture.group_masters_enabled {
         1.0
     } else {
         group_masters.scale(owner, group_master_flashes)

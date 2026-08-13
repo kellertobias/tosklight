@@ -240,6 +240,7 @@ function useCommandLineBarModel() {
 		toggleRecord,
 		advancePreload: () => void advancePreload(),
 		clear: () => numericPad.press("CLR"),
+		toggleFixtureFreeze: () => void numericPad.toggleFixtureFreeze(),
 		undo: () => numericPad.press("UND"),
 	});
 	const status: CommandStatus = {

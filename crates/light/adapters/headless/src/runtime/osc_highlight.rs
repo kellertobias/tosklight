@@ -255,6 +255,32 @@ fn handle_shifted_shortcut(
     if let Some(source) = source {
         state.integrations.clear_shift(source);
     }
+    if matches!(action, "clear") {
+        let context = light_application::ActionContext::operator(
+            session.desk.id,
+            session.user.id.0,
+            session.id.0,
+            light_application::ActionSource::Osc,
+        )
+        .with_request_id(
+            request_id
+                .map(ToOwned::to_owned)
+                .unwrap_or_else(|| format!("osc-freeze:{}", uuid::Uuid::new_v4())),
+        );
+        if let Err(error) = super::fixture_freeze::toggle_selected(
+            state,
+            session,
+            &light_wire::v2::live_action::FixtureFreezeLiveActionRequest::default(),
+            &context,
+        ) {
+            emit(
+                state,
+                "desk_action_error",
+                serde_json::json!({"desk_alias":desk_alias,"desk_id":session.desk.id,"session_id":session.id,"request_id":request_id,"action":"shift-clear","source":"osc","error":error.message}),
+            );
+        }
+        return;
+    }
     emit(
         state,
         "desk_action",
