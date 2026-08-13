@@ -75,6 +75,16 @@ impl FixtureProfile {
             physical: self.physical.clone(),
             optics: self.optics,
             laser: self.laser.clone(),
+            crowd: self.crowd.as_ref().map(|crowd| super::ProfileCrowd {
+                default_width_metres: crowd.default_width_metres,
+                default_depth_metres: crowd.default_depth_metres,
+                modes: crowd
+                    .modes
+                    .iter()
+                    .copied()
+                    .filter(|binding| modes.iter().any(|mode| mode.id == binding.mode_id))
+                    .collect(),
+            }),
             gobos: self.gobos.clone(),
             modes,
             hazardous: self.hazardous,

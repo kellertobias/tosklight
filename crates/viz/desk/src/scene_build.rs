@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
 use viz_project::{PatchedFixture, PhysicalInstance, ScenePlan};
-use viz_scene::{SceneryKind, SceneryObject};
+use viz_scene::{CrowdArea, CrowdDensity, CrowdPosture, SceneryKind, SceneryObject};
 
 /// Everything the scene builder reads, gathered by the connection before anything is displayed.
 pub struct DeskReadModels {
@@ -117,8 +117,80 @@ pub fn build(models: &DeskReadModels) -> ScenePlan {
     plan.scene.source_identity = models.server_identity.clone();
     plan.scene.revision = models.patch.patch_revision;
     plan.scene.scenery = build_scenery(&plan.scene, &models.venue_objects);
+    plan.scene.crowds = build_crowds(models, &profiles);
     plan.scene.recompute_bounds();
     plan
+}
+
+fn build_crowds(
+    models: &DeskReadModels,
+    profiles: &HashMap<(Uuid, u64), Arc<FixtureProfile>>,
+) -> Vec<CrowdArea> {
+    let mut result = Vec::new();
+    for (index, fixture) in models.patch.fixtures.iter().enumerate() {
+        let Some(profile) = profiles.get(&(fixture.profile_id, fixture.profile_revision)) else {
+            continue;
+        };
+        let Some(crowd) = &profile.crowd else {
+            continue;
+        };
+        let Some(mode) = crowd
+            .modes
+            .iter()
+            .find(|binding| binding.mode_id == fixture.mode_id)
+        else {
+            continue;
+        };
+        let placement = transform::resolve(
+            models
+                .stage_layout
+                .positions3d
+                .get(&fixture.fixture_id.to_string()),
+            fixture.location,
+            fixture.rotation,
+            models
+                .stage_layout
+                .positions
+                .get(&fixture.fixture_id.to_string()),
+            index,
+        );
+        let authored_scale = models
+            .stage_layout
+            .positions3d
+            .get(&fixture.fixture_id.to_string());
+        let scale_x = valid_crowd_scale(authored_scale.and_then(|value| value.scale_x));
+        let scale_z = valid_crowd_scale(authored_scale.and_then(|value| value.scale_z));
+        result.push(CrowdArea {
+            id: fixture.fixture_id,
+            name: fixture.name.clone(),
+            position: Vec3::new(
+                placement.position.x,
+                placement.position.y,
+                placement.position.z,
+            ),
+            rotation_degrees: placement.rotation_degrees,
+            width_metres: crowd.default_width_metres * scale_x,
+            depth_metres: crowd.default_depth_metres * scale_z,
+            posture: match mode.posture {
+                light_fixture::CrowdPosture::Sitting => CrowdPosture::Sitting,
+                light_fixture::CrowdPosture::StandingStill => CrowdPosture::StandingStill,
+                light_fixture::CrowdPosture::Dancing => CrowdPosture::Dancing,
+            },
+            density: match mode.density {
+                light_fixture::CrowdDensity::Sparse => CrowdDensity::Sparse,
+                light_fixture::CrowdDensity::Medium => CrowdDensity::Medium,
+                light_fixture::CrowdDensity::Dense => CrowdDensity::Dense,
+            },
+            seed: u64::from_le_bytes(fixture.fixture_id.as_bytes()[..8].try_into().unwrap()),
+        });
+    }
+    result
+}
+
+fn valid_crowd_scale(value: Option<f32>) -> f32 {
+    value
+        .filter(|value| value.is_finite() && (0.05..=100.0).contains(value))
+        .unwrap_or(1.0)
 }
 
 fn split_patches(splits: &[crate::wire::SplitAssignment]) -> Vec<(u16, Option<(u16, u16)>)> {

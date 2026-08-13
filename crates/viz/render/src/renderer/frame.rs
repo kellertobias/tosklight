@@ -161,12 +161,15 @@ impl Renderer {
             // Only report degradation the renderer actually applied this frame.
             degraded: self.frame.lights.len() as u32 > self.lights.length
                 || self.beam_overflow
-                || plan.adaptive_degraded,
+                || plan.adaptive_degraded
+                || self.frame.crowd_drawn < self.frame.crowd_requested,
             gpu_micros: gpu_passes.total_micros(),
             gpu_passes,
             volumetric_steps: plan.volumetric_steps,
             shadow_budget: plan.shadow_budget,
             render_scale: plan.render_scale,
+            crowd_authored: self.frame.crowd_authored,
+            crowd_drawn: self.frame.crowd_drawn,
         };
         Ok(self.stats)
     }
@@ -229,6 +232,8 @@ impl Renderer {
                 }
                 _ => |_| true,
             },
+            quality: view.quality,
+            crowd_amount: self.crowd_amount,
         };
         let draw_beams = style.draw_beams && !plot;
         self.frame = crate::instances::build(scene, values, &style);

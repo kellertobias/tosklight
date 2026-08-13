@@ -183,6 +183,7 @@ impl Application {
         time: f32,
     ) -> Option<Result<viz_render::FrameStats, RenderError>> {
         let renderer = self.renderer.as_mut()?;
+        renderer.set_crowd_amount(self.preferences.crowd_amount);
         let model = status_model(
             session,
             &self.preferences,

@@ -130,6 +130,13 @@ pub struct FixtureProfile {
     pub optics: ProfileOptics,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub laser: Option<ProfileLaser>,
+    /// Portable visualizer contract for a visual-only crowd-area fixture.
+    ///
+    /// The selected fixture mode chooses one entry by stable mode identity. Keeping posture and
+    /// density in the transferable package avoids a renderer-owned catalogue of special fixture
+    /// names and leaves room for a later animated presentation without changing patch identity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crowd: Option<ProfileCrowd>,
     /// The fixture's gobo wheel, slot by slot, when the package carries one.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub gobos: Vec<ProfileGobo>,
@@ -173,6 +180,8 @@ struct FixtureProfileCanonical {
     optics: ProfileOptics,
     #[serde(default)]
     laser: Option<ProfileLaser>,
+    #[serde(default)]
+    crowd: Option<ProfileCrowd>,
     #[serde(default)]
     gobos: Vec<ProfileGobo>,
     modes: Vec<FixtureMode>,
@@ -238,6 +247,7 @@ impl<'de> Deserialize<'de> for FixtureProfile {
             physical: canonical.physical,
             optics: canonical.optics,
             laser: canonical.laser,
+            crowd: canonical.crowd,
             gobos: canonical.gobos,
             modes: canonical.modes,
             hazardous: canonical.hazardous,
@@ -246,6 +256,39 @@ impl<'de> Deserialize<'de> for FixtureProfile {
             reserved_source: canonical.reserved_source,
         })
     }
+}
+
+/// Fixture-package declaration for a scalable audience area.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct ProfileCrowd {
+    /// Suggested authored footprint before the operator scales the placed Venue fixture.
+    pub default_width_metres: f32,
+    pub default_depth_metres: f32,
+    /// Stable selected-mode mappings. Every crowd mode must appear exactly once.
+    pub modes: Vec<ProfileCrowdMode>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ProfileCrowdMode {
+    pub mode_id: Uuid,
+    pub posture: CrowdPosture,
+    pub density: CrowdDensity,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CrowdPosture {
+    Sitting,
+    StandingStill,
+    Dancing,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CrowdDensity {
+    Sparse,
+    Medium,
+    Dense,
 }
 
 /// How this fixture's light behaves, as against how it is built.

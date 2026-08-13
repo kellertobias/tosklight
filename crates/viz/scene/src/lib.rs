@@ -36,10 +36,10 @@ pub use provider::{
     ProviderCapabilities, ProviderError, ProviderEvent, ProviderKind, SceneProvider,
 };
 pub use scene::{
-    Aabb, BodyKind, EmitterInstance, EmitterKind, EmitterLayoutCells, EmitterOptics, FixtureBody,
-    FixtureInstance, FixturePlanBinding, GoboArtwork, GoboSlot, LaserOptics, LightSource,
-    MotionAxis, PlanArtwork, PlanFallback, Scene, SceneryKind, SceneryObject, SourceForm,
-    euler_degrees,
+    Aabb, BodyKind, CrowdArea, CrowdDensity, CrowdPosture, EmitterInstance, EmitterKind,
+    EmitterLayoutCells, EmitterOptics, FixtureBody, FixtureInstance,
+    FixturePlanBinding, GoboArtwork, GoboSlot, LaserOptics, LightSource, MotionAxis, PlanArtwork,
+    PlanFallback, Scene, SceneryKind, SceneryObject, SourceForm, euler_degrees,
 };
 pub use uuid;
 pub use values::{

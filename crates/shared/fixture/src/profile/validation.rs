@@ -152,6 +152,36 @@ impl FixtureProfile {
             }
             mode.validate_for_patch_policy(self.patch_policy)?;
         }
+        if let Some(crowd) = &self.crowd {
+            if self.patch_policy != PatchPolicy::VisualOnly {
+                return Err(ProfileError::Invalid(
+                    "a crowd declaration requires a visual-only fixture".into(),
+                ));
+            }
+            if !crowd.default_width_metres.is_finite()
+                || !crowd.default_depth_metres.is_finite()
+                || !(0.25..=250.0).contains(&crowd.default_width_metres)
+                || !(0.25..=250.0).contains(&crowd.default_depth_metres)
+            {
+                return Err(ProfileError::Invalid(
+                    "crowd footprint dimensions must be finite values within 0.25-250 metres"
+                        .into(),
+                ));
+            }
+            let mut bindings = HashSet::new();
+            for binding in &crowd.modes {
+                if !mode_ids.contains(&binding.mode_id) || !bindings.insert(binding.mode_id) {
+                    return Err(ProfileError::Invalid(
+                        "crowd modes must reference each fixture mode exactly once".into(),
+                    ));
+                }
+            }
+            if bindings != mode_ids {
+                return Err(ProfileError::Invalid(
+                    "every crowd fixture mode needs a posture and density".into(),
+                ));
+            }
+        }
         Ok(())
     }
 }

@@ -61,6 +61,8 @@ pub struct Options {
     pub exposure: Option<f32>,
     /// What lasers are drawn at, `1.0` being the built-in strength.
     pub laser_brightness: Option<f32>,
+    /// Fraction of every authored crowd to draw in this window.
+    pub crowd_amount: Option<f32>,
     /// Zoom applied once after the scene is framed, for close-up evidence captures.
     pub zoom: Option<f32>,
     /// Haze amount to start with. The renderer's own haze setting, never taken from the show.
@@ -168,6 +170,7 @@ fn parse_look_flag(
                 MAX_LASER_BRIGHTNESS,
             )?);
         }
+        "--crowd" => options.crowd_amount = Some(percent(&mut *arguments, "--crowd")?),
         "--exposure" => {
             let value = arguments
                 .next()
@@ -204,6 +207,7 @@ impl Default for Options {
             ambient: None,
             exposure: None,
             laser_brightness: None,
+            crowd_amount: None,
             zoom: None,
             fog: None,
             capture: None,
@@ -247,6 +251,7 @@ impl Options {
             "  --fog <pct>       Haze amount to render with (default 50)\n",
             "  --exposure <x>    Operator exposure trim, 0.05-4.0\n",
             "  --laser <pct>     Brightness of every laser, 0-400 (default 100)\n",
+            "  --crowd <pct>    Fraction of authored audiences to draw (default 100)\n",
             "  --zoom <factor>   Zoom in (<1) or out (>1) once the scene is framed\n",
             "  --benchmark <s>   Measure for this many seconds, print a report, and exit\n",
             "  --benchmark-all-views  Cycle every named view during the measurement\n",
@@ -488,6 +493,8 @@ pub struct Preferences {
     /// for the same reason the haze is: how strong a laser looks is a property of the room and the
     /// eye, not of the show.
     pub laser_brightness: f32,
+    /// Local audience amount; it never rewrites a Venue fixture or its deterministic seed.
+    pub crowd_amount: f32,
     pub theme: Theme,
     /// The room colour behind the rig.
     pub background: Option<[f32; 3]>,
@@ -527,6 +534,7 @@ impl Preferences {
             ambient: options.ambient.unwrap_or(0.06),
             exposure: options.exposure.unwrap_or(1.0),
             laser_brightness: options.laser_brightness.unwrap_or(1.0),
+            crowd_amount: options.crowd_amount.unwrap_or(1.0),
             theme: options.theme.unwrap_or(Theme::LightOnDark),
             background: None,
             show_labels: true,
@@ -594,6 +602,7 @@ impl Preferences {
         text.push_str(&format!("ambient {}\n", self.ambient));
         text.push_str(&format!("exposure {}\n", self.exposure));
         text.push_str(&format!("laser_brightness {}\n", self.laser_brightness));
+        text.push_str(&format!("crowd_amount {}\n", self.crowd_amount));
         text.push_str(&format!("theme {}\n", self.theme.wire()));
         match self.background {
             Some(background) => text.push_str(&format!(
@@ -690,6 +699,11 @@ impl Preferences {
                 "laser_brightness" if options.laser_brightness.is_none() => {
                     if let Ok(brightness) = value.parse::<f32>() {
                         self.laser_brightness = brightness.clamp(0.0, MAX_LASER_BRIGHTNESS);
+                    }
+                }
+                "crowd_amount" if options.crowd_amount.is_none() => {
+                    if let Ok(amount) = value.parse::<f32>() {
+                        self.crowd_amount = amount.clamp(0.0, 1.0);
                     }
                 }
                 "theme" if options.theme.is_none() => {

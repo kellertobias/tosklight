@@ -192,6 +192,10 @@ pub struct FrameInstances {
     pub lasers: Vec<LaserInstance>,
     pub lines: Vec<LineVertex>,
     pub poses: Vec<EmitterPose>,
+    /// Authored versus actually rendered audience, exposed so a budget reduction is visible.
+    pub crowd_authored: u32,
+    pub crowd_requested: u32,
+    pub crowd_drawn: u32,
 }
 
 impl FrameInstances {
@@ -288,6 +292,10 @@ pub struct FrameStyle {
     pub floor_grid: bool,
     /// Which scenery this view draws at all.
     pub scenery: fn(viz_scene::SceneryKind) -> bool,
+    /// Active quality tier. Draft and Standard deliberately omit crowds.
+    pub quality: viz_scene::RenderQuality,
+    /// Renderer-local fraction of every authored crowd to draw.
+    pub crowd_amount: f32,
 }
 
 impl Default for FrameStyle {
@@ -311,6 +319,8 @@ impl Default for FrameStyle {
             aim_guides: false,
             floor_grid: true,
             scenery: |_| true,
+            quality: viz_scene::RenderQuality::High,
+            crowd_amount: 1.0,
         }
     }
 }
@@ -327,6 +337,7 @@ pub fn build(scene: &Scene, values: &SceneValues, style: &FrameStyle) -> FrameIn
         push_floor_grid(&mut frame, scene, style);
     }
     scenery::push_scenery(&mut frame, scene, style);
+    crowd::push_crowds(&mut frame, scene, style);
     push_bodies(
         &mut frame,
         scene,
@@ -1069,6 +1080,7 @@ fn push_aim_guide(frame: &mut FrameInstances, origin: Vec3, pose: EmitterPose, i
     }
 }
 
+mod crowd;
 mod laser;
 mod plot;
 mod scenery;

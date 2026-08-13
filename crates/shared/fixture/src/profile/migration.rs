@@ -66,6 +66,7 @@ impl FixtureProfile {
             // A legacy definition never described its optics; the fixture type supplies them.
             optics: ProfileOptics::default(),
             laser: None,
+            crowd: None,
             gobos: Vec::new(),
             modes,
             hazardous: first.hazardous,

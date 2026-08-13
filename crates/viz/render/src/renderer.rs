@@ -176,6 +176,9 @@ pub struct FrameStats {
     pub volumetric_steps: u32,
     pub shadow_budget: u32,
     pub render_scale: f32,
+    /// Audience capacity and stable subset actually drawn this frame.
+    pub crowd_authored: u32,
+    pub crowd_drawn: u32,
 }
 
 pub struct Renderer {
@@ -248,6 +251,7 @@ pub struct Renderer {
     timer: Option<crate::timing::GpuTimer>,
     ultra_budget: UltraBudget,
     last_timing_sample: u64,
+    crowd_amount: f32,
 }
 
 impl Renderer {
@@ -399,6 +403,7 @@ impl Renderer {
             timer,
             ultra_budget: UltraBudget::default(),
             last_timing_sample: 0,
+            crowd_amount: 1.0,
         })
     }
 
@@ -417,6 +422,11 @@ impl Renderer {
 
     pub fn stats(&self) -> FrameStats {
         self.stats
+    }
+
+    /// Set the local audience fraction without changing portable show intent.
+    pub fn set_crowd_amount(&mut self, amount: f32) {
+        self.crowd_amount = amount.clamp(0.0, 1.0);
     }
 
     /// Re-attach the swapchain without changing size, for a window the system stopped

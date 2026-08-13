@@ -27,6 +27,10 @@ pub struct Scene {
     pub fixtures: Vec<FixtureInstance>,
     pub emitters: Vec<EmitterInstance>,
     pub scenery: Vec<SceneryObject>,
+    /// Authored audience footprints. People are generated deterministically by the renderer so
+    /// the portable scene stays compact and quality tiers can enforce local budgets.
+    #[serde(default)]
+    pub crowds: Vec<CrowdArea>,
     /// Fixture models read from the library, referenced by [`FixtureInstance::model`].
     pub models: Vec<crate::FixtureModel>,
     /// Safe package-owned SVG geometry, parsed once and shared by every matching fixture.
@@ -67,6 +71,13 @@ impl Scene {
         for object in &self.scenery {
             bounds.expand(object.position - object.size * 0.5);
             bounds.expand(object.position + object.size * 0.5);
+        }
+        for crowd in &self.crowds {
+            let half = Vec3::new(crowd.width_metres * 0.5, 0.0, crowd.depth_metres * 0.5);
+            bounds.expand(crowd.position - half);
+            bounds.expand(
+                crowd.position + Vec3::new(half.x, crowd.posture.nominal_height_metres(), half.z),
+            );
         }
         if bounds.is_empty() {
             bounds = Aabb {
@@ -526,6 +537,59 @@ pub enum SceneryKind {
     /// A faceted mirror ball.
     MirrorBall,
     Prop,
+}
+
+/// One scalable rectangular Venue crowd footprint.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct CrowdArea {
+    pub id: Uuid,
+    pub name: String,
+    /// Centre of the footprint at its floor plane, in stage metres.
+    pub position: Vec3,
+    pub rotation_degrees: Vec3,
+    pub width_metres: f32,
+    pub depth_metres: f32,
+    pub posture: CrowdPosture,
+    pub density: CrowdDensity,
+    /// Persisted with the fixture instance; unrelated scene edits never reshuffle this crowd.
+    pub seed: u64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum CrowdPosture {
+    Sitting,
+    StandingStill,
+    Dancing,
+}
+
+impl CrowdPosture {
+    pub const fn nominal_height_metres(self) -> f32 {
+        match self {
+            Self::Sitting => 1.22,
+            Self::StandingStill | Self::Dancing => 1.78,
+        }
+    }
+}
+
+#[derive(
+    Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, serde::Serialize, serde::Deserialize,
+)]
+pub enum CrowdDensity {
+    Sparse,
+    Medium,
+    Dense,
+}
+
+impl CrowdDensity {
+    /// Authored population capacity per square metre, before the local Crowd amount and quality
+    /// budget are applied.
+    pub const fn people_per_square_metre(self) -> f32 {
+        match self {
+            Self::Sparse => 0.35,
+            Self::Medium => 0.75,
+            Self::Dense => 1.35,
+        }
+    }
 }
 
 /// Axis-aligned bounds used for orthographic framing and volumetric bounds.

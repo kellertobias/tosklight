@@ -30,6 +30,7 @@ impl FixtureProfile {
             physical: ProfilePhysicalProperties::default(),
             optics: ProfileOptics::default(),
             laser: None,
+            crowd: None,
             gobos: Vec::new(),
             modes: vec![FixtureMode {
                 id: mode_id,

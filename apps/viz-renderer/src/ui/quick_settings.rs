@@ -30,6 +30,7 @@ pub enum Row {
     FloorGrid,
     FogAmount,
     LaserBrightness,
+    CrowdAmount,
     Persistence,
     PersistenceFalloff,
     InputUniverse,
@@ -93,6 +94,7 @@ impl Row {
             Self::FloorGrid => "Floor grid",
             Self::FogAmount => "Fog amount",
             Self::LaserBrightness => "Laser brightness",
+            Self::CrowdAmount => "Crowd amount",
             Self::Persistence => "Persistence of vision",
             Self::PersistenceFalloff => "Persistence falloff",
             Self::InputUniverse => "Input universe",
@@ -120,6 +122,7 @@ impl Row {
             Self::LaserBrightness => {
                 Some(preferences.laser_brightness / crate::settings::MAX_LASER_BRIGHTNESS)
             }
+            Self::CrowdAmount => Some(preferences.crowd_amount),
             // Against the longest afterglow the setting offers, so the bar reads as a proportion
             // of the range rather than as an unanchored number of seconds.
             Self::Persistence => Some(preferences.persistence.decay_seconds / MAX_PERSISTENCE),
@@ -238,7 +241,12 @@ impl QuickSettings {
                 Row::PersistenceFalloff,
             ],
             QuickSettingsTab::Features => {
-                vec![Row::Labels, Row::ShowSelection, Row::FloorGrid]
+                vec![
+                    Row::Labels,
+                    Row::ShowSelection,
+                    Row::FloorGrid,
+                    Row::CrowdAmount,
+                ]
             }
             QuickSettingsTab::Snapshots => {
                 let mut rows = vec![Row::BlenderPath];
@@ -405,6 +413,15 @@ impl QuickSettings {
                         preferences.laser_brightness * 100.0
                     )
                 };
+                QuickSettingsOutcome::AppliedLocally
+            }
+            Row::CrowdAmount => {
+                let step = 0.05 * delta as f32;
+                preferences.crowd_amount = (preferences.crowd_amount + step).clamp(0.0, 1.0);
+                self.message = format!(
+                    "Crowd amount {:.0}% — portable footprints and seeds unchanged",
+                    preferences.crowd_amount * 100.0
+                );
                 QuickSettingsOutcome::AppliedLocally
             }
             Row::Persistence => {
@@ -591,6 +608,7 @@ impl QuickSettings {
             Row::FloorGrid => optional_bool_label(preferences.floor_grid),
             Row::FogAmount => format!("{:.0}%", preferences.atmosphere.amount * 100.0),
             Row::LaserBrightness => format!("{:.0}%", preferences.laser_brightness * 100.0),
+            Row::CrowdAmount => format!("{:.0}%", preferences.crowd_amount * 100.0),
             Row::Persistence => {
                 if preferences.persistence.decay_seconds <= 0.0 {
                     "off".into()
