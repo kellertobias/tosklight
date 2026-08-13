@@ -447,6 +447,59 @@ mod tests {
     }
 
     #[test]
+    fn the_program_receives_exact_time_identity_seed_slots_and_decoded_intensity() {
+        let source = r#"export function effect(input) {
+          if (input.dmx.join(',') !== '3,17,255' || input.time !== 12.5 || input.elapsed !== 0.25 ||
+              input.intensity !== 0.75 || input.fixtureId !== 'fixture-42' || input.seed !== '99') {
+            throw new Error('input contract mismatch');
+          }
+          return {emitters: []};
+        }"#;
+        let mut engine = EffectEngine::new().unwrap();
+        let frame = engine.run(
+            0,
+            &EffectRequest {
+                source,
+                source_key: 10,
+                result_version: 1,
+                slots: &[3, 17, 255],
+                time_seconds: 12.5,
+                elapsed_seconds: 0.25,
+                intensity: 0.75,
+                fixture_identity: "fixture-42",
+                capture_seed: 99,
+            },
+        );
+        assert_eq!(frame.fault, None, "{:?}", frame.fault);
+        assert_eq!(frame.slots, [3, 17, 255]);
+    }
+
+    #[test]
+    fn package_imports_are_rejected_without_poisoning_an_independent_fixture() {
+        let mut engine = EffectEngine::new().unwrap();
+        let imported = EffectRequest {
+            source: "import value from 'host'; export function effect(){return value}",
+            source_key: 11,
+            result_version: 1,
+            slots: &[],
+            time_seconds: 0.0,
+            elapsed_seconds: 0.0,
+            intensity: 1.0,
+            fixture_identity: "importer",
+            capture_seed: 1,
+        };
+        assert!(engine.run(0, &imported).fault.is_some());
+        let independent = EffectRequest {
+            source: SCRIPT,
+            source_key: 12,
+            fixture_identity: "good",
+            slots: &[1],
+            ..imported
+        };
+        assert_eq!(engine.run(1, &independent).fault, None);
+    }
+
+    #[test]
     fn runaway_and_oversized_programs_fault_without_poisoning_the_next_fixture() {
         let mut engine = EffectEngine::new()
             .unwrap()

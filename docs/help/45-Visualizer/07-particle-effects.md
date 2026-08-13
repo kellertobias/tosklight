@@ -45,8 +45,10 @@ into portable show state.
 ## Quality budgets
 
 Population is best effort and the major shape is preserved: every active declarative nozzle gets
-one particle before the remaining budget is distributed round-robin. The fixed upper bounds are
-128 particles in Draft, 512 in Standard, 2,048 in High and 8,192 in Ultra. When requested
+one particle before the remaining budget is distributed round-robin. The upper bounds are
+128 particles in Draft, 512 in Standard, 2,048 in High and 8,192 in Ultra. Ultra follows the
+renderer hardware ladder, reducing that ceiling together with resolution and volumetric work when
+the measured GPU frame cost cannot sustain 60 Hz. When requested
 population is higher, **FrameStats** exposes requested and drawn counts and marks the frame
 degraded; density is reduced without dropping an entire nozzle or allowing a package to grow GPU
 buffers without limit.

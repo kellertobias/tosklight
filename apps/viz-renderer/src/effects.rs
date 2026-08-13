@@ -1,13 +1,14 @@
 //! Running package-owned Effect fixture programs once per displayed frame.
 
 use std::collections::HashMap;
+use uuid::Uuid;
 use viz_effect::{EffectEngine, EffectRequest};
 use viz_scene::{EmitterKind, Scene, SceneValues};
 
 pub struct Effects {
     engine: Option<EffectEngine>,
     unavailable: Option<String>,
-    last_run: HashMap<usize, f32>,
+    clocks: HashMap<Uuid, (f32, f32)>,
 }
 
 impl Effects {
@@ -19,7 +20,7 @@ impl Effects {
         Self {
             engine,
             unavailable,
-            last_run: HashMap::new(),
+            clocks: HashMap::new(),
         }
     }
 
@@ -61,9 +62,14 @@ impl Effects {
                 frame.fault = Some("this Effect fixture's profile ships no effect script".into());
                 continue;
             };
-            let previous = self.last_run.insert(index, time);
-            let elapsed = previous.map_or(0.0, |last| (time - last).max(0.0));
             let fixture = scene.fixtures.get(emitter.fixture_index as usize);
+            let fixture_id = fixture
+                .map(|fixture| fixture.instance_id)
+                .unwrap_or_default();
+            let (last, started) = self.clocks.entry(fixture_id).or_insert((time, time));
+            let elapsed = (time - *last).max(0.0);
+            let live_timeline = (time - *started).max(0.0);
+            *last = time;
             let identity = fixture
                 .map(|fixture| fixture.instance_id.to_string())
                 .unwrap_or_default();
@@ -92,13 +98,20 @@ impl Effects {
                 },
             );
             frame.version = produced.version;
-            frame.timeline_seconds = time;
+            // Live simulation starts at zero after a renderer restart. Deterministic capture is a
+            // separate path and supplies its explicit timeline directly in SceneValues.
+            frame.timeline_seconds = live_timeline;
             frame.emitters = produced.emitters;
             frame.fault = produced.fault;
         }
         let live = scene.emitters.len();
         engine.retain(|index| index < live);
-        self.last_run.retain(|index, _| *index < live);
+        let live_ids: std::collections::HashSet<_> = scene
+            .fixtures
+            .iter()
+            .map(|fixture| fixture.instance_id)
+            .collect();
+        self.clocks.retain(|id, _| live_ids.contains(id));
     }
 
     pub fn fault(&self, values: &SceneValues) -> Option<String> {

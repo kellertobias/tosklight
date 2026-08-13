@@ -245,6 +245,14 @@ impl Renderer {
                     (1_024.0 * adaptive_scale * adaptive_scale).round() as usize
                 }
             },
+            effect_particle_budget: match view.quality {
+                viz_scene::RenderQuality::Draft => 128,
+                viz_scene::RenderQuality::Standard => 512,
+                viz_scene::RenderQuality::High => 2_048,
+                viz_scene::RenderQuality::Ultra => {
+                    (8_192.0 * adaptive_scale * adaptive_scale).round() as usize
+                }
+            },
         };
         let draw_beams = style.draw_beams && !plot;
         self.frame = crate::instances::build(scene, values, &style);

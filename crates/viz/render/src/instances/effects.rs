@@ -2,11 +2,15 @@
 
 use super::{FrameInstances, FrameStyle, MeshInstance, MeshKind};
 use glam::{Mat4, Vec3};
-use viz_scene::{ParticleFamily, ParticleTrigger, RenderQuality, Scene, SceneValues};
+use viz_scene::{ParticleFamily, ParticleTrigger, Scene, SceneValues};
 
+#[cfg(test)]
 pub const BUDGET_DRAFT: usize = 128;
+#[cfg(test)]
 pub const BUDGET_STANDARD: usize = 512;
+#[cfg(test)]
 pub const BUDGET_HIGH: usize = 2_048;
+#[cfg(test)]
 pub const BUDGET_ULTRA: usize = 8_192;
 
 pub(super) fn push_effects(
@@ -15,12 +19,7 @@ pub(super) fn push_effects(
     values: &SceneValues,
     style: &FrameStyle,
 ) {
-    let budget = match style.quality {
-        RenderQuality::Draft => BUDGET_DRAFT,
-        RenderQuality::Standard => BUDGET_STANDARD,
-        RenderQuality::High => BUDGET_HIGH,
-        RenderQuality::Ultra => BUDGET_ULTRA,
-    };
+    let budget = style.effect_particle_budget;
     let mut sources = Vec::new();
     for (index, effect_frame) in values.effect_frames.iter().enumerate() {
         let Some(emitter_instance) = scene.emitters.get(index) else {

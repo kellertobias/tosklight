@@ -303,6 +303,9 @@ pub struct FrameStyle {
     pub crowd_amount: f32,
     /// Per-frame crowd budget selected from quality and the renderer's adaptive hardware ladder.
     pub crowd_person_budget: usize,
+    /// Per-frame Effect-particle budget selected from quality and the same adaptive hardware
+    /// ladder as the expensive Ultra rendering features.
+    pub effect_particle_budget: usize,
 }
 
 impl Default for FrameStyle {
@@ -330,6 +333,7 @@ impl Default for FrameStyle {
             quality: viz_scene::RenderQuality::High,
             crowd_amount: 1.0,
             crowd_person_budget: 384,
+            effect_particle_budget: 2_048,
         }
     }
 }

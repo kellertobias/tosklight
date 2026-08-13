@@ -60,6 +60,23 @@ fn build(
     mode.insert("name".into(), Value::from(mode_name));
     let mode_channels = mode.get_mut("channels").unwrap().as_array_mut().unwrap();
     mode_channels.truncate(channels);
+    let labels = if id == "f6f72b7f-736c-4dd4-8c88-9c937ad3b91b" {
+        ["Intensity", "Fountain height", "Spark lifetime"]
+    } else {
+        ["Intensity", "Flame height", "Fluid colour"]
+    };
+    for (channel, label) in mode_channels.iter_mut().zip(labels) {
+        if let Some(function) = channel
+            .get_mut("functions")
+            .and_then(Value::as_array_mut)
+            .and_then(|functions| functions.first_mut())
+        {
+            function
+                .as_object_mut()
+                .unwrap()
+                .insert("name".into(), Value::from(label));
+        }
+    }
     mode.get_mut("splits").unwrap().as_array_mut().unwrap()[0]
         .as_object_mut()
         .unwrap()
