@@ -15,6 +15,7 @@
 //! no export step, no second format.
 
 mod mvr;
+mod media;
 mod ports;
 pub mod standalone;
 
@@ -22,6 +23,12 @@ pub mod standalone;
 mod tests;
 
 pub use mvr::{MvrExport, MvrImportOutcome, MvrPreview, MvrPreviewFixture};
+pub use media::{
+    CitpConfiguration, CropRectangle, LedModuleType, ManagedFallbackReference, MediaIntentAction,
+    MediaLayoutOutcome, MediaLayoutSnapshot, MediaObject, MediaObjectIntent, MediaProjector,
+    MediaServer, MediaSource, MediaSurface, MediaSurfaceSection, MediaSurfaceSectionKind,
+    MediaTransform, ProjectionScreenMaterial, VersionedMediaObject,
+};
 pub use ports::{PlanningPorts, PlanningUnitOfWork};
 
 use light_application::{
@@ -187,6 +194,19 @@ impl PlanningDocument {
             .map_or(light_core::Revision::default(), |object| object.revision);
         store.put_object(kind, id, body, expected)?;
         Ok(())
+    }
+
+    /// The portable media layout authored by the standalone Viz product.
+    pub fn media_layout(&self) -> Result<MediaLayoutSnapshot, DocumentError> {
+        media::snapshot(&self.store()?).map_err(DocumentError::Store)
+    }
+
+    /// Applies one replay-safe, revision-checked media object intent atomically.
+    pub fn apply_media_intent(
+        &self,
+        intent: MediaObjectIntent,
+    ) -> Result<MediaLayoutOutcome, DocumentError> {
+        media::apply(&self.store()?, intent).map_err(DocumentError::Action)
     }
 
     /// The portable patch revision, which is what patch mutations are versioned against.

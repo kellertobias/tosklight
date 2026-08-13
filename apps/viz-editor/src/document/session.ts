@@ -86,6 +86,139 @@ export interface DeskPeer {
 	address: string;
 }
 
+export interface MediaTransform {
+	positionMetres: [number, number, number];
+	rotationDegrees: [number, number, number];
+}
+
+export interface CropRectangle {
+	left: number;
+	top: number;
+	width: number;
+	height: number;
+}
+
+export type ProjectionScreenMaterial =
+	| { type: "white" }
+	| { type: "grey_home_cinema" }
+	| { type: "custom"; gain: number; tint_srgb: string; roughness: number };
+
+export type MediaSectionKind =
+	| {
+			type: "projection_screen";
+			material: ProjectionScreenMaterial;
+			edge_feather: number;
+	  }
+	| { type: "tv"; bezel_metres: number; spill: number }
+	| {
+			type: "led";
+			module_type_id: string;
+			rows: number;
+			columns: number;
+			occupied_cells: number[];
+	  };
+
+export type MediaSurfaceSection = MediaSectionKind & {
+	id: string;
+	name: string;
+	transform: MediaTransform;
+	widthMetres: number;
+	heightMetres: number;
+	crop: CropRectangle;
+};
+
+export interface MediaServer {
+	id: string;
+	name: string;
+	citp: { host: string; port: number; discoveryIdentity?: string | null };
+	lastKnownEndpoint?: string | null;
+}
+
+export interface MediaSource {
+	id: string;
+	serverId: string;
+	advertisedSourceId: number;
+	name: string;
+	outputName?: string | null;
+	width?: number | null;
+	height?: number | null;
+	aspectRatio?: number | null;
+}
+
+export interface LedModuleType {
+	id: string;
+	name: string;
+	widthMetres: number;
+	heightMetres: number;
+	pixelPitchMillimetres: number;
+	horizontalGapMetres: number;
+	verticalGapMetres: number;
+	pixelWidth: number;
+	pixelHeight: number;
+}
+
+export interface MediaSurface {
+	id: string;
+	name: string;
+	sourceId?: string | null;
+	fallback?: {
+		assetId: string;
+		revision: number;
+		digest: string;
+		mediaType: string;
+		width: number;
+		height: number;
+	} | null;
+	sections: MediaSurfaceSection[];
+}
+
+export interface MediaProjector {
+	id: string;
+	name: string;
+	surfaceId: string;
+	transform: MediaTransform;
+	bodyModel: string;
+	throwRatio: number;
+	lensShift: [number, number];
+	coneLengthMetres: number;
+	spill: number;
+}
+
+export type MediaObject =
+	| { kind: "media_server"; body: MediaServer }
+	| { kind: "media_source"; body: MediaSource }
+	| { kind: "led_module_type"; body: LedModuleType }
+	| { kind: "media_surface"; body: MediaSurface }
+	| { kind: "media_projector"; body: MediaProjector };
+
+export interface VersionedMediaObject {
+	object: MediaObject;
+	revision: number;
+}
+
+export interface MediaLayoutSnapshot {
+	servers: VersionedMediaObject[];
+	sources: VersionedMediaObject[];
+	ledModuleTypes: VersionedMediaObject[];
+	surfaces: VersionedMediaObject[];
+	projectors: VersionedMediaObject[];
+}
+
+export interface MediaLayoutOutcome {
+	requestId: string;
+	replayed: boolean;
+	changed: boolean;
+	snapshot: MediaLayoutSnapshot;
+}
+
+export type MediaObjectIntent = {
+	requestId: string;
+	expectedRevision: number;
+	action:
+		| { type: "put"; object: MediaObject }
+		| { type: "delete"; kind: MediaObject["kind"]; id: string };
+};
+
 interface LibraryProfile {
 	id: string;
 	revision: number;
@@ -137,6 +270,9 @@ export const documentSession = {
 		invoke<DocumentSummary>("load_from_desk", { instance }),
 	/** The rig as it currently stands, for surfaces outside the sheet that need the fixtures. */
 	patchSnapshot: () => invoke<PatchSnapshot>("patch_snapshot"),
+	mediaLayout: () => invoke<MediaLayoutSnapshot>("media_layout"),
+	applyMediaIntent: (intent: MediaObjectIntent) =>
+		invoke<MediaLayoutOutcome>("apply_media_intent", { intent }),
 	patchLayers: () => invoke<PatchLayer[]>("patch_layers"),
 	savePatchLayer: (layer: PatchLayer) =>
 		invoke<PatchLayer>("save_patch_layer", { layer }),

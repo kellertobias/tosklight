@@ -304,6 +304,9 @@ pub struct FrameStyle {
     /// Per-frame Effect-particle budget selected from quality and the same adaptive hardware
     /// ladder as the expensive Ultra rendering features.
     pub effect_particle_budget: usize,
+    /// Live/fallback media is a standalone capability. Helpers and embedded Stage panes draw the
+    /// same authored geometry with neutral faces and open no media transport.
+    pub media_content: bool,
 }
 
 impl Default for FrameStyle {
@@ -331,6 +334,7 @@ impl Default for FrameStyle {
             crowd_amount: 1.0,
             crowd_person_budget: 384,
             effect_particle_budget: 2_048,
+            media_content: true,
         }
     }
 }
@@ -348,6 +352,7 @@ pub fn build(scene: &Scene, values: &SceneValues, style: &FrameStyle) -> FrameIn
     }
     scenery::push_scenery(&mut frame, scene, style);
     crowd::push_crowds(&mut frame, scene, style);
+    media::push_media(&mut frame, scene, style);
     push_bodies(
         &mut frame,
         scene,
@@ -946,6 +951,7 @@ fn push_gpu_light(
 }
 
 mod emitter_geometry;
+mod media;
 pub use emitter_geometry::{SemanticLight, semantic_lights};
 use emitter_geometry::{aperture_size, cell_states, push_aperture, push_beam, push_laser_emitter};
 /// Stage floor height in metres. Beams and aim lines stop here instead of running through the

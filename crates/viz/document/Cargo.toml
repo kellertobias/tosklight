@@ -12,6 +12,7 @@ light-fixture = { path = "../../shared/fixture" }
 light-mvr = { path = "../../shared/mvr" }
 light-show = { path = "../../shared/show" }
 parking_lot.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 uuid.workspace = true

@@ -818,13 +818,31 @@ async fn read_models(client: &DeskClient, endpoint: &str) -> Result<DeskReadMode
         .await
         .map(|collection| collection.objects)
         .unwrap_or_default();
+    let media_servers = optional_objects(client, "media_server").await;
+    let media_sources = optional_objects(client, "media_source").await;
+    let led_module_types = optional_objects(client, "led_module_type").await;
+    let media_surfaces = optional_objects(client, "media_surface").await;
+    let media_projectors = optional_objects(client, "media_projector").await;
     Ok(DeskReadModels {
         show_name: patch.show_id.to_string(),
         server_identity: endpoint.to_owned(),
         patch,
         stage_layout,
         venue_objects,
+        media_servers,
+        media_sources,
+        led_module_types,
+        media_surfaces,
+        media_projectors,
     })
+}
+
+async fn optional_objects(client: &DeskClient, kind: &str) -> Vec<crate::wire::ObjectRecord> {
+    client
+        .objects(kind)
+        .await
+        .map(|collection| collection.objects)
+        .unwrap_or_default()
 }
 
 /// Subscribe to revisioned configuration changes and apply them to the running scene.

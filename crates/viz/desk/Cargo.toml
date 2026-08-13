@@ -15,6 +15,7 @@ tokio.workspace = true
 tokio-tungstenite.workspace = true
 uuid.workspace = true
 viz-dmx.workspace = true
+viz-document = { path = "../document" }
 viz-project.workspace = true
 viz-scene.workspace = true
 

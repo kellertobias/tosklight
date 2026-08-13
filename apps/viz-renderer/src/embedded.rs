@@ -284,7 +284,8 @@ struct PaneState {
 impl PaneState {
     fn new(embedding: &Embedding) -> Result<Self, String> {
         let size = pane_pixels(embedding);
-        let renderer = Renderer::headless(size.0, size.1)?;
+        let mut renderer = Renderer::headless(size.0, size.1)?;
+        renderer.set_media_content_enabled(false);
         Ok(Self {
             renderer,
             scene: Scene::default(),

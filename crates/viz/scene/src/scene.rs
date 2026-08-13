@@ -31,6 +31,14 @@ pub struct Scene {
     /// the portable scene stays compact and quality tiers can enforce local budgets.
     #[serde(default)]
     pub crowds: Vec<CrowdArea>,
+    /// Standalone media surfaces and their source bindings. Helpers receive the geometry but do
+    /// not start connectors or decode content.
+    #[serde(default)]
+    pub media_sources: Vec<MediaSourceBinding>,
+    #[serde(default)]
+    pub media_sections: Vec<MediaSection>,
+    #[serde(default)]
+    pub media_projectors: Vec<MediaProjector>,
     /// Fixture models read from the library, referenced by [`FixtureInstance::model`].
     pub models: Vec<crate::FixtureModel>,
     /// Safe package-owned SVG geometry, parsed once and shared by every matching fixture.
@@ -79,6 +87,13 @@ impl Scene {
                 crowd.position + Vec3::new(half.x, crowd.posture.nominal_height_metres(), half.z),
             );
         }
+        for section in &self.media_sections {
+            bounds.expand(section.position - section.size * 0.5);
+            bounds.expand(section.position + section.size * 0.5);
+        }
+        for projector in &self.media_projectors {
+            bounds.expand(projector.position);
+        }
         if bounds.is_empty() {
             bounds = Aabb {
                 min: Vec3::new(-6.0, 0.0, -6.0),
@@ -115,6 +130,73 @@ impl Scene {
         let emitter = self.emitters.get(emitter_index)?;
         self.fixtures.get(emitter.fixture_index as usize)
     }
+}
+
+/// One unique CITP preview source. The renderer uploads one decoded frame for this identity and
+/// every section that references it shares that upload.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct MediaSourceBinding {
+    pub id: Uuid,
+    pub server_id: Uuid,
+    pub host: String,
+    pub port: u16,
+    pub advertised_source_id: u16,
+    pub name: String,
+    pub aspect_ratio: Option<f32>,
+}
+
+#[derive(Clone, Copy, Debug, serde::Serialize, serde::Deserialize)]
+pub struct MediaCrop {
+    pub left: f32,
+    pub top: f32,
+    pub width: f32,
+    pub height: f32,
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub enum MediaSectionKind {
+    ProjectionScreen {
+        colour: [f32; 3],
+        gain: f32,
+        roughness: f32,
+        edge_feather: f32,
+    },
+    Tv {
+        bezel_metres: f32,
+        spill: f32,
+    },
+    Led {
+        rows: u16,
+        columns: u16,
+        occupied_cells: Vec<u32>,
+        module_size: [f32; 2],
+        module_gap: [f32; 2],
+        pixel_pitch_millimetres: f32,
+    },
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct MediaSection {
+    pub id: Uuid,
+    pub surface_id: Uuid,
+    pub name: String,
+    pub source_id: Option<Uuid>,
+    pub position: Vec3,
+    pub rotation_degrees: Vec3,
+    pub size: Vec3,
+    pub crop: MediaCrop,
+    pub kind: MediaSectionKind,
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct MediaProjector {
+    pub id: Uuid,
+    pub surface_id: Uuid,
+    pub name: String,
+    pub position: Vec3,
+    pub rotation_degrees: Vec3,
+    pub cone_length_metres: f32,
+    pub spill: f32,
 }
 
 /// One gobo's artwork, as the mask it is: light passes where the image is white.

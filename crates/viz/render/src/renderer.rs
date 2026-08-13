@@ -244,6 +244,7 @@ pub struct Renderer {
     overlay_globals: wgpu::Buffer,
     overlay_quads: DynamicBuffer,
     frame: FrameInstances,
+    media_content_enabled: bool,
     stats: FrameStats,
     /// Set for one frame to redirect the composite into an offscreen target.
     capture_request: Option<wgpu::TextureView>,
@@ -399,6 +400,7 @@ impl Renderer {
             overlay_globals: overlay.globals,
             overlay_quads: buffers.overlay_quads,
             frame: FrameInstances::default(),
+            media_content_enabled: true,
             stats: FrameStats::default(),
             capture_request: None,
             beam_overflow: false,
@@ -429,6 +431,12 @@ impl Renderer {
     /// Set the local audience fraction without changing portable show intent.
     pub fn set_crowd_amount(&mut self, amount: f32) {
         self.crowd_amount = amount.clamp(0.0, 1.0);
+    }
+
+    /// Enable decoded/fallback media only for the normal standalone product. Desk helpers and
+    /// embedded panes keep authored screen/projector geometry but never open media capabilities.
+    pub fn set_media_content_enabled(&mut self, enabled: bool) {
+        self.media_content_enabled = enabled;
     }
 
     /// Re-attach the swapchain without changing size, for a window the system stopped

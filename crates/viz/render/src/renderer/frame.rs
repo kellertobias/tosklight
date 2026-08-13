@@ -252,6 +252,7 @@ impl Renderer {
                     (8_192.0 * adaptive_scale * adaptive_scale).round() as usize
                 }
             },
+            media_content: self.media_content_enabled,
         };
         let draw_beams = style.draw_beams && !plot;
         self.frame = crate::instances::build(scene, values, &style);

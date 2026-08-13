@@ -14,6 +14,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 use viz_document::PlanningDocument;
+use viz_document::{MediaLayoutOutcome, MediaLayoutSnapshot, MediaObjectIntent};
 use viz_planning::SceneSource;
 
 /// The open document, shared with the visualizer.
@@ -222,6 +223,25 @@ pub fn patch_fixtures(
             changed: result.changed,
             change: ChangeDto::new(result.change, result.event_sequence),
         })
+    })
+}
+
+/// Portable media servers, advertised sources, surfaces, LED modules and projectors.
+#[tauri::command]
+pub fn media_layout(session: tauri::State<'_, Session>) -> Answer<MediaLayoutSnapshot> {
+    session.with(|document| document.media_layout().map_err(|error| error.to_string()))
+}
+
+/// One revision-safe and replay-safe media object mutation.
+#[tauri::command]
+pub fn apply_media_intent(
+    session: tauri::State<'_, Session>,
+    intent: MediaObjectIntent,
+) -> Answer<MediaLayoutOutcome> {
+    session.change(|document| {
+        document
+            .apply_media_intent(intent)
+            .map_err(|error| error.to_string())
     })
 }
 

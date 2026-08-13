@@ -912,7 +912,10 @@ impl ApplicationHandler for Application {
             window.set_window_icon(Some(window_icon));
         }
         match Renderer::with_icon(&surface, icon.as_deref()) {
-            Ok(renderer) => self.renderer = Some(renderer),
+            Ok(mut renderer) => {
+                renderer.set_media_content_enabled(!self.options.helper && !self.options.embed);
+                self.renderer = Some(renderer);
+            }
             Err(error) => {
                 self.startup_error = Some(error.clone());
                 eprintln!("renderer: {error}");

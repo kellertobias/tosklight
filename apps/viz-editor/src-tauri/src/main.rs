@@ -174,6 +174,8 @@ fn main() {
             session::rename_document,
             session::patch_snapshot,
             session::patch_fixtures,
+            session::media_layout,
+            session::apply_media_intent,
             session::library_profiles,
             session::set_preview,
             session::clear_preview,

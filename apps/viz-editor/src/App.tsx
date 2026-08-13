@@ -9,8 +9,10 @@ import {
 	type PatchProfileRevision,
 	mergeFixtureDefinitions,
 } from "@tosklight/patch";
+import { Button } from "@tosklight/ui";
 import { useEffect, useMemo, useState } from "react";
 import { FileBar } from "./FileBar";
+import { MediaWorkspace } from "./MediaWorkspace";
 import { PreviewControls } from "./PreviewControls";
 import { documentSession, sessionPatchLayers } from "./document/session";
 import type { DocumentSummary } from "./document/session";
@@ -23,6 +25,7 @@ export function App() {
 	const [profiles, setProfiles] = useState<readonly FixtureProfile[]>([]);
 	const [layers, setLayers] = useState<readonly PatchLayer[]>([DEFAULT_LAYER]);
 	const [error, setError] = useState<string | null>(null);
+	const [workspace, setWorkspace] = useState<"patch" | "media">("patch");
 	// Bumped when something outside the sheet changed the document — an MVR import — so the sheet
 	// reads the new snapshot instead of showing the rig as it was before.
 	const [reload, setReload] = useState(0);
@@ -136,7 +139,13 @@ export function App() {
 				<output className="viz-editor-error">{error}</output>
 			) : null}
 			{document ? (
-				<PatchHostProvider value={host}>
+				<nav className="viz-editor-workspaces" aria-label="Visualizer authoring workspace">
+					<Button active={workspace === "patch"} onClick={() => setWorkspace("patch")}>Patch & Venue</Button>
+					<Button active={workspace === "media"} onClick={() => setWorkspace("media")}>Media</Button>
+				</nav>
+			) : null}
+			{document ? (
+				workspace === "patch" ? <PatchHostProvider value={host}>
 					<PatchViewProvider
 						key={`${document.showId}-${reload}`}
 						showId={document.showId}
@@ -153,7 +162,7 @@ export function App() {
 						selected={selected}
 						onError={report}
 					/>
-				</PatchHostProvider>
+				</PatchHostProvider> : <MediaWorkspace onError={report} />
 			) : (
 				<section className="viz-editor-empty">
 					<h1>No show open</h1>

@@ -38,8 +38,9 @@ pub use provider::{
 pub use scene::{
     Aabb, BodyKind, CrowdArea, CrowdDensity, CrowdPosture, EffectProgram, EmitterInstance,
     EmitterKind, EmitterLayoutCells, EmitterOptics, FixtureBody, FixtureInstance,
-    FixturePlanBinding, GoboArtwork, GoboSlot, LaserOptics, LightSource, MotionAxis, PlanArtwork,
-    PlanFallback, Scene, SceneryKind, SceneryObject, SourceForm, euler_degrees,
+    FixturePlanBinding, GoboArtwork, GoboSlot, LaserOptics, LightSource, MediaCrop, MediaProjector,
+    MediaSection, MediaSectionKind, MediaSourceBinding, MotionAxis, PlanArtwork, PlanFallback, Scene,
+    SceneryKind, SceneryObject, SourceForm, euler_degrees,
 };
 pub use uuid;
 pub use values::{

@@ -8,13 +8,22 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
 use viz_project::{PatchedFixture, PhysicalInstance, ScenePlan};
-use viz_scene::{CrowdArea, CrowdDensity, CrowdPosture, SceneryKind, SceneryObject};
+use viz_scene::{
+    CrowdArea, CrowdDensity, CrowdPosture, MediaCrop,
+    MediaProjector as SceneMediaProjector, MediaSection, MediaSectionKind, MediaSourceBinding,
+    SceneryKind, SceneryObject,
+};
 
 /// Everything the scene builder reads, gathered by the connection before anything is displayed.
 pub struct DeskReadModels {
     pub patch: PatchSnapshot,
     pub stage_layout: StageLayoutBody,
     pub venue_objects: Vec<ObjectRecord>,
+    pub media_servers: Vec<ObjectRecord>,
+    pub media_sources: Vec<ObjectRecord>,
+    pub led_module_types: Vec<ObjectRecord>,
+    pub media_surfaces: Vec<ObjectRecord>,
+    pub media_projectors: Vec<ObjectRecord>,
     pub show_name: String,
     pub server_identity: String,
 }
@@ -118,6 +127,7 @@ pub fn build(models: &DeskReadModels) -> ScenePlan {
     plan.scene.revision = models.patch.patch_revision;
     plan.scene.scenery = build_scenery(&plan.scene, &models.venue_objects);
     plan.scene.crowds = build_crowds(models, &profiles);
+    build_media(&mut plan.scene, models, &mut plan.warnings);
     plan.scene.recompute_bounds();
     plan
 }
@@ -195,6 +205,153 @@ fn valid_crowd_dimension(value: Option<f32>, fallback: f32) -> f32 {
     value
         .filter(|value| value.is_finite() && (1.0..=250.0).contains(value))
         .unwrap_or(fallback)
+}
+
+fn build_media(scene: &mut viz_scene::Scene, models: &DeskReadModels, warnings: &mut Vec<String>) {
+    use viz_document::{
+        LedModuleType, MediaProjector, MediaServer, MediaSource, MediaSurface,
+        MediaSurfaceSectionKind, ProjectionScreenMaterial,
+    };
+    let servers: HashMap<Uuid, MediaServer> = models
+        .media_servers
+        .iter()
+        .filter_map(|record| serde_json::from_value::<MediaServer>(record.body.clone()).ok())
+        .map(|server| (server.id, server))
+        .collect();
+    let sources: Vec<MediaSource> = models
+        .media_sources
+        .iter()
+        .filter_map(|record| serde_json::from_value(record.body.clone()).ok())
+        .collect();
+    let modules: HashMap<Uuid, LedModuleType> = models
+        .led_module_types
+        .iter()
+        .filter_map(|record| serde_json::from_value::<LedModuleType>(record.body.clone()).ok())
+        .map(|module| (module.id, module))
+        .collect();
+    let surfaces: Vec<MediaSurface> = models
+        .media_surfaces
+        .iter()
+        .filter_map(|record| serde_json::from_value(record.body.clone()).ok())
+        .collect();
+    let projectors: Vec<MediaProjector> = models
+        .media_projectors
+        .iter()
+        .filter_map(|record| serde_json::from_value(record.body.clone()).ok())
+        .collect();
+
+    scene.media_sources = sources
+        .iter()
+        .filter_map(|source| {
+            let server = servers.get(&source.server_id)?;
+            Some(MediaSourceBinding {
+                id: source.id,
+                server_id: source.server_id,
+                host: server.citp.host.clone(),
+                port: server.citp.port,
+                advertised_source_id: source.advertised_source_id,
+                name: source.name.clone(),
+                aspect_ratio: source.aspect_ratio,
+            })
+        })
+        .collect();
+    for surface in &surfaces {
+        for section in &surface.sections {
+            let kind = match &section.kind {
+                MediaSurfaceSectionKind::ProjectionScreen {
+                    material,
+                    edge_feather,
+                } => {
+                    let (colour, gain, roughness) = match material {
+                        ProjectionScreenMaterial::White => ([0.92, 0.92, 0.9], 1.0, 0.72),
+                        ProjectionScreenMaterial::GreyHomeCinema => {
+                            ([0.28, 0.29, 0.3], 0.82, 0.78)
+                        }
+                        ProjectionScreenMaterial::Custom {
+                            gain,
+                            tint_srgb,
+                            roughness,
+                        } => (srgb(tint_srgb).unwrap_or([0.8; 3]), *gain, *roughness),
+                    };
+                    MediaSectionKind::ProjectionScreen {
+                        colour,
+                        gain,
+                        roughness,
+                        edge_feather: *edge_feather,
+                    }
+                }
+                MediaSurfaceSectionKind::Tv {
+                    bezel_metres,
+                    spill,
+                } => MediaSectionKind::Tv {
+                    bezel_metres: *bezel_metres,
+                    spill: *spill,
+                },
+                MediaSurfaceSectionKind::Led {
+                    module_type_id,
+                    rows,
+                    columns,
+                    occupied_cells,
+                } => {
+                    let Some(module) = modules.get(module_type_id) else {
+                        warnings.push(format!(
+                            "{}: LED module type {} is unavailable",
+                            section.name, module_type_id
+                        ));
+                        continue;
+                    };
+                    MediaSectionKind::Led {
+                        rows: *rows,
+                        columns: *columns,
+                        occupied_cells: occupied_cells.clone(),
+                        module_size: [module.width_metres, module.height_metres],
+                        module_gap: [module.horizontal_gap_metres, module.vertical_gap_metres],
+                        pixel_pitch_millimetres: module.pixel_pitch_millimetres,
+                    }
+                }
+            };
+            scene.media_sections.push(MediaSection {
+                id: section.id,
+                surface_id: surface.id,
+                name: section.name.clone(),
+                source_id: surface.source_id,
+                position: Vec3::from_array(section.transform.position_metres),
+                rotation_degrees: Vec3::from_array(section.transform.rotation_degrees),
+                size: Vec3::new(section.width_metres, section.height_metres, 0.04),
+                crop: MediaCrop {
+                    left: section.crop.left,
+                    top: section.crop.top,
+                    width: section.crop.width,
+                    height: section.crop.height,
+                },
+                kind,
+            });
+        }
+    }
+    scene.media_projectors = projectors
+        .into_iter()
+        .map(|projector| SceneMediaProjector {
+            id: projector.id,
+            surface_id: projector.surface_id,
+            name: projector.name,
+            position: Vec3::from_array(projector.transform.position_metres),
+            rotation_degrees: Vec3::from_array(projector.transform.rotation_degrees),
+            cone_length_metres: projector.cone_length_metres,
+            spill: projector.spill,
+        })
+        .collect();
+}
+
+fn srgb(value: &str) -> Option<[f32; 3]> {
+    let value = value.strip_prefix('#')?;
+    if value.len() != 6 {
+        return None;
+    }
+    Some([
+        u8::from_str_radix(&value[0..2], 16).ok()? as f32 / 255.0,
+        u8::from_str_radix(&value[2..4], 16).ok()? as f32 / 255.0,
+        u8::from_str_radix(&value[4..6], 16).ok()? as f32 / 255.0,
+    ])
 }
 
 fn split_patches(splits: &[crate::wire::SplitAssignment]) -> Vec<(u16, Option<(u16, u16)>)> {
