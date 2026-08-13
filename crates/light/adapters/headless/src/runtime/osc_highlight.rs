@@ -252,33 +252,33 @@ fn handle_shifted_shortcut(
     source: Option<SocketAddr>,
     request_id: Option<&str>,
 ) {
+    // Consuming a shifted key clears the one-shot latch. A physically held Shift remains
+    // represented separately by `shift_held`, so a second Clear is still shifted until release.
     if let Some(source) = source {
         state.integrations.clear_shift(source);
     }
     if matches!(action, "clear") {
-        let context = light_application::ActionContext::operator(
-            session.desk.id,
-            session.user.id.0,
-            session.id.0,
-            light_application::ActionSource::Osc,
-        )
-        .with_request_id(
-            request_id
-                .map(ToOwned::to_owned)
-                .unwrap_or_else(|| format!("osc-freeze:{}", uuid::Uuid::new_v4())),
-        );
-        if let Err(error) = super::fixture_freeze::toggle_selected(
-            state,
-            session,
-            &light_wire::v2::live_action::FixtureFreezeLiveActionRequest::default(),
-            &context,
-        ) {
+        if super::fixture_freeze::advance_command_mode(state, session) {
+            let _ = persist_programmer(state, session);
             emit(
                 state,
-                "desk_action_error",
-                serde_json::json!({"desk_alias":desk_alias,"desk_id":session.desk.id,"session_id":session.id,"request_id":request_id,"action":"shift-clear","source":"osc","error":error.message}),
+                "programmer_changed",
+                serde_json::json!({"desk_alias":desk_alias,"desk_id":session.desk.id,"session_id":session.id,"request_id":request_id,"source":"osc"}),
             );
         }
+        return;
+    }
+    if let Some(digit) = action
+        .strip_prefix("digit-")
+        .and_then(|digit| digit.parse::<u8>().ok())
+        && super::fixture_freeze::append_command_family(state, session, digit)
+    {
+        let _ = persist_programmer(state, session);
+        emit(
+            state,
+            "programmer_changed",
+            serde_json::json!({"desk_alias":desk_alias,"desk_id":session.desk.id,"session_id":session.id,"request_id":request_id,"source":"osc"}),
+        );
         return;
     }
     emit(
@@ -352,10 +352,17 @@ pub(super) fn handle_programmer_osc(
     if !pressed {
         return false;
     }
-    if subscriber.shifted
+    if (subscriber.shifted || subscriber.shift_held)
         && (action.starts_with("digit-") || matches!(action, "clear" | "delete" | "del"))
     {
-        handle_shifted_shortcut(state, &session, parts[1], action, source, request_id);
+        handle_shifted_shortcut(
+            state,
+            &session,
+            parts[1],
+            action,
+            source,
+            request_id,
+        );
         return true;
     }
     if subscriber.shifted && action == "at" {

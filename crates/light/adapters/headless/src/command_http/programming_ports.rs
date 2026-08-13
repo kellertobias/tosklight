@@ -68,7 +68,8 @@ impl<'a> ServerProgrammingPorts<'a> {
         command: &str,
         policy: ExecutionPolicy,
     ) -> Option<ProgrammingExecution> {
-        self.link_cue_command(programmers, context, command)
+        self.fixture_freeze_command(programmers, context, command)
+            .or_else(|| self.link_cue_command(programmers, context, command))
             .or_else(|| self.record_group_command(programmers, context, command))
             .or_else(|| self.record_preset_command(programmers, context, command))
             .or_else(|| self.record_cue_command(programmers, context, command))
@@ -76,6 +77,47 @@ impl<'a> ServerProgrammingPorts<'a> {
             .or_else(|| self.transfer_cue_command(programmers, context, command))
             .or_else(|| self.navigate_cue_command(programmers, context, command, policy))
             .or_else(|| self.speed_group_command(programmers, context, command, policy))
+    }
+
+    fn fixture_freeze_command(
+        &self,
+        programmers: &dyn CommandLineProgrammer,
+        context: &ActionContext,
+        command: &str,
+    ) -> Option<ProgrammingExecution> {
+        let parsed = match parse_fixture_freeze_command(command) {
+            Ok(Some(parsed)) => parsed,
+            Ok(None) => return None,
+            Err(error) => return Some(self.recording_execution(context, command, Err(error))),
+        };
+        let result = (|| {
+            if let Some(selection) = parsed.selection.as_deref() {
+                super::super::programmer_commands::execute_programmer_command_from(
+                    self.state,
+                    self.session,
+                    selection,
+                    context,
+                )?;
+            }
+            let outcome = super::super::fixture_freeze::apply_selected_with_activation(
+                self.state,
+                self.session,
+                &light_wire::v2::live_action::FixtureFreezeLiveActionRequest {
+                    operation: parsed.operation,
+                    families: parsed.families,
+                },
+                context,
+            )
+            .map_err(|error| error.message)?;
+            clear_command_line(programmers, self.session)?;
+            let warning = self.accepted_recording_command(
+                context,
+                command,
+                outcome.affected_fixtures,
+            );
+            Ok((outcome.affected_fixtures, warning, false))
+        })();
+        Some(self.recording_execution(context, command, result))
     }
 
     fn record_group_command(
@@ -258,6 +300,62 @@ impl<'a> ServerProgrammingPorts<'a> {
             context.request_id.as_deref(),
         );
     }
+}
+
+struct ParsedFixtureFreezeCommand {
+    operation: light_wire::v2::live_action::FixtureFreezeOperation,
+    selection: Option<String>,
+    families: Vec<light_wire::v2::live_action::FixtureFreezeFamily>,
+}
+
+fn parse_fixture_freeze_command(
+    command: &str,
+) -> Result<Option<ParsedFixtureFreezeCommand>, String> {
+    use light_wire::v2::live_action::{FixtureFreezeFamily as Family, FixtureFreezeOperation};
+    let tokens = command
+        .split_whitespace()
+        .map(|token| token.to_ascii_uppercase())
+        .collect::<Vec<_>>();
+    let Some(first) = tokens.first() else {
+        return Ok(None);
+    };
+    let operation = match first.as_str() {
+        "FREEZE" => FixtureFreezeOperation::Freeze,
+        "UNFREEZE" => FixtureFreezeOperation::Unfreeze,
+        _ => return Ok(None),
+    };
+    let mut selection = Vec::new();
+    let mut families = Vec::new();
+    let mut family_started = false;
+    for token in &tokens[1..] {
+        let family = match token.as_str() {
+            "INTENSITY" => Some(Family::Intensity),
+            "COLOR" | "COLOUR" => Some(Family::Color),
+            "POSITION" => Some(Family::Position),
+            "BEAM" => Some(Family::Beam),
+            _ => None,
+        };
+        if let Some(family) = family {
+            family_started = true;
+            if !families.contains(&family) {
+                families.push(family);
+            }
+        } else if family_started {
+            return Err("Freeze attribute families must follow the fixture selection".into());
+        } else {
+            selection.push(token.clone());
+        }
+    }
+    let selection = (!selection.is_empty()).then(|| selection.join(" "));
+    Ok(Some(ParsedFixtureFreezeCommand {
+        operation,
+        selection,
+        families,
+    }))
+}
+
+pub(crate) fn is_fixture_freeze_command(command: &str) -> Result<bool, String> {
+    parse_fixture_freeze_command(command).map(|parsed| parsed.is_some())
 }
 
 pub(super) fn recording_context(context: &ActionContext, prefix: &str) -> ActionContext {

@@ -29,7 +29,8 @@ pub(crate) fn prevalidate_typed_command(
     _context: &ActionContext,
 ) -> Result<bool, String> {
     let show_id = state.active_show.current().map(|entry| entry.id);
-    let parsed = group_record_command(command)?.is_some()
+    let parsed = super::programming_ports::is_fixture_freeze_command(command)?
+        || group_record_command(command)?.is_some()
         || preset_record_address(command)?.is_some()
         || super::cue_recording_command::parse(command)?.is_some()
         || super::cue_link_command::parse(command)?.is_some()

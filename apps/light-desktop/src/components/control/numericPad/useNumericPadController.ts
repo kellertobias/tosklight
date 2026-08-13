@@ -66,7 +66,9 @@ export function useNumericPadController() {
 				: ("idle" as const),
 		toggleRecord: () => toggleRecord(context),
 		advancePreload: () => advancePreload(context),
-		toggleFixtureFreeze: () => programmerActions?.toggleFixtureFreeze(),
+		toggleFixtureFreeze: () => advanceFixtureFreezeCommand(command),
+		selectFixtureFreezeFamily: (key: "1" | "2" | "3" | "4") =>
+			selectFixtureFreezeFamily(command, key),
 		escape: () => {
 			if (setInteraction)
 				void setInteraction.cancel().then((consumed) => {
@@ -150,6 +152,10 @@ function handleShiftedKey(
 	text: string,
 ) {
 	dispatch({ type: "SET_SHIFT_ARMED", value: false });
+	if (/^\s*(?:FREEZE|UNFREEZE)\b/i.test(text) && /^[1-4]$/.test(key)) {
+		selectFixtureFreezeFamily(command, key as "1" | "2" | "3" | "4");
+		return true;
+	}
 	if (key === "TIME") {
 		const current = text.trim();
 		const next =
@@ -169,7 +175,7 @@ function handleShiftedKey(
 		return true;
 	}
 	if (key === "CLR") {
-		void programmerActions?.toggleFixtureFreeze();
+		advanceFixtureFreezeCommand(command);
 		return true;
 	}
 	if (key === "DEL") {
@@ -199,6 +205,32 @@ function handleShiftedKey(
 	if (!kind) return false;
 	dispatch({ type: "OPEN_BUILTIN", kind });
 	return true;
+}
+
+function advanceFixtureFreezeCommand(
+	command: NumericPadContext["command"],
+) {
+	const current = command.read().text.trim();
+	const next = /^FREEZE\b/i.test(current)
+		? current.replace(/^FREEZE\b/i, "UNFREEZE")
+		: "FREEZE";
+	void command.replace(next, false);
+}
+
+function selectFixtureFreezeFamily(
+	command: NumericPadContext["command"],
+	key: "1" | "2" | "3" | "4",
+) {
+	const family = {
+		"1": "INTENSITY",
+		"2": "COLOR",
+		"3": "POSITION",
+		"4": "BEAM",
+	}[key];
+	const current = command.read().text.trim();
+	if (!/^\s*(?:FREEZE|UNFREEZE)\b/i.test(current)) return;
+	if (new RegExp(`(?:^|\\s)${family}(?:\\s|$)`, "i").test(current)) return;
+	void command.replace(`${current} ${family}`, false);
 }
 
 function clearStep(context: NumericPadContext) {

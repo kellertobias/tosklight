@@ -12,16 +12,18 @@ same persisted result.
    select the Group through the ordinary Group-selection path.
 2. Establish visible Programmer, Cue, Dynamic, and direct-control contributions, with Group Master
    and Grand Master below Full and Blackout off.
-3. Press **SHIFT + CLEAR**. Confirm the Fixture Sheet shows `❄ FREEZE` on each resolved fixture or
+3. Press **SHIFT + CLEAR**, enter the Group selection, and press **ENTER**. Confirm the Fixture Sheet shows `❄ FREEZE` on each resolved fixture or
    head, with `INSIDE` on a master-only row where applicable.
 4. Change every contributing source, move Group Master and Grand Master, and enable Blackout.
    Confirm the frozen physical and visualization output remains exactly at the captured frame.
-5. Press **SHIFT + CLEAR** again. Confirm the marker disappears and the current underlying state is
+5. Hold **SHIFT**, press **CLEAR** twice, release **SHIFT**, enter the same selection, and press
+   **ENTER**. Confirm the command line showed `UNFREEZE`, the marker disappears, and the current underlying state is
    visible immediately; no captured value has been written into the Programmer or Cue.
 
 ## Partial Freeze
 
-1. Through the authoritative Freeze action, apply Intensity and Color to a mixed fixture selection.
+1. Enter **SHIFT + CLEAR**, the mixed fixture selection, **SHIFT + 1**, **SHIFT + 2**, and **ENTER**
+   to apply Intensity and Color.
 2. Confirm the Fixture Sheet names both families and does not show the full `FREEZE` state.
 3. Change Intensity, Color, Position, and Beam sources. Confirm only Intensity and Color retain their
    captured semantic values.
@@ -36,11 +38,11 @@ same persisted result.
 1. Save, close, and reopen the show with full and partial fixtures. Confirm retained values, family
    names, Fixture Sheet status, and output are unchanged.
 2. Make an unrelated Show Patch edit and repeat the reload check.
-3. Exercise **SHIFT + CLEAR** from touch/software keyboard, OSC, and attached hardware wherever that
-   surface exposes the chord. Confirm every path reaches the same server-owned live action and its
+3. Exercise the full FREEZE and UNFREEZE grammar from touch/software keyboard, OSC, and attached
+   hardware wherever that surface exposes the chord. Confirm every path reaches the same server-owned live action and its
    ordered portable-show transaction.
-4. Confirm Programmer Undo remains desk-local and does not silently undo Freeze. If a dedicated
-   Freeze history action is introduced, verify its undo/redo behavior separately; there is no
-   generic show-wide Undo surface.
+4. Apply a Freeze, make a newer Programmer value edit, then press **UND** twice. Confirm the first
+   Undo reverses the value edit and the second restores the exact pre-Freeze state. Confirm this
+   history is desk-local and Freeze does not create a Redo action.
 5. Load an older show with no Freeze fields. Confirm it opens with no frozen fixtures and can be saved
    without recovery warnings.

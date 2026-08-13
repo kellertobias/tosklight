@@ -145,7 +145,6 @@ fn prevalidate_programmer_command_in_state(
     execute_programmer_command_effect_from(state, session, command_line, context).map(|_| ())
 }
 
-#[cfg(test)]
 pub(super) fn execute_programmer_command_from(
     state: &AppState,
     session: &Session,

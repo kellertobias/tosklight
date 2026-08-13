@@ -304,7 +304,7 @@ export class ProgrammingApiClient {
 	) {
 		return this.send({
 			type: "fixture_freeze",
-			request: { families },
+			request: { operation: "toggle", families },
 		});
 	}
 

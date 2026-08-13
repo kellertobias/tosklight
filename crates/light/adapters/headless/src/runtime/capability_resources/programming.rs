@@ -372,6 +372,14 @@ impl ProgrammingResource {
         self.programmers.undo(session_id)
     }
 
+    pub(in crate::runtime) fn undo_depth(&self, session_id: SessionId) -> Option<usize> {
+        self.programmers.undo_depth(session_id)
+    }
+
+    pub(in crate::runtime) fn clear_redo(&self, session_id: SessionId) -> bool {
+        self.programmers.clear_redo(session_id)
+    }
+
     #[cfg(test)]
     pub(in crate::runtime) fn redo(&self, session_id: SessionId) -> bool {
         self.programmers.redo(session_id)

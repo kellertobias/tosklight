@@ -517,7 +517,11 @@ describe("NumericPad Shift routing", () => {
 			id: "desk-three",
 		});
 		shifted("CLR");
-		expect(programmerActions.toggleFixtureFreeze).toHaveBeenCalledTimes(1);
+		expect(commandActions.replace).toHaveBeenCalledWith("FREEZE");
+		commandProjection.text = "FREEZE F1";
+		commandProjection.pristine = false;
+		shifted("1");
+		expect(commandActions.replace).toHaveBeenCalledWith("FREEZE F1 INTENSITY");
 		shifted("DEL");
 		expect(dispatch).toHaveBeenCalledWith({
 			type: "SET_MODAL",

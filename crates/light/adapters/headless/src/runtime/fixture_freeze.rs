@@ -7,14 +7,90 @@ use light_core::{AttributeKey, AttributeValue, FixtureId};
 use light_fixture::{FixtureFreezeState, FreezeFamily, FrozenFixtureTarget};
 use light_wire::v2::live_action::{
     FixtureFreezeActionOutcome, FixtureFreezeFamily, FixtureFreezeLiveActionRequest,
+    FixtureFreezeOperation,
 };
-use std::collections::{HashMap, HashSet};
+use parking_lot::Mutex;
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
+
+const FREEZE_HISTORY_LIMIT: usize = 100;
+
+#[derive(Clone, Default)]
+pub(super) struct FixtureFreezeHistory {
+    entries: Arc<Mutex<HashMap<(light_core::UserId, uuid::Uuid), Vec<FreezeHistoryEntry>>>>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct FreezeHistoryEntry {
+    show_id: light_core::ShowId,
+    programmer_undo_depth: usize,
+    previous: HashMap<FixtureId, FixtureFreezeState>,
+}
+
+impl FixtureFreezeHistory {
+    fn record(&self, session: &Session, entry: FreezeHistoryEntry) {
+        let mut all = self.entries.lock();
+        let entries = all.entry((session.user.id, session.desk.id)).or_default();
+        entries.push(entry);
+        if entries.len() > FREEZE_HISTORY_LIMIT {
+            entries.remove(0);
+        }
+    }
+
+    fn next(
+        &self,
+        session: &Session,
+        programmer_undo_depth: usize,
+    ) -> Option<FreezeHistoryEntry> {
+        self.entries
+            .lock()
+            .get(&(session.user.id, session.desk.id))
+            .and_then(|entries| entries.last())
+            .filter(|entry| programmer_undo_depth <= entry.programmer_undo_depth)
+            .cloned()
+    }
+
+    fn finish(&self, session: &Session, entry: &FreezeHistoryEntry) {
+        let key = (session.user.id, session.desk.id);
+        let mut all = self.entries.lock();
+        let remove = all.get_mut(&key).is_some_and(|entries| {
+            if entries.last().is_some_and(|latest| latest == entry) {
+                entries.pop();
+            }
+            entries.is_empty()
+        });
+        if remove {
+            all.remove(&key);
+        }
+    }
+}
 
 pub(super) fn toggle_selected(
     state: &AppState,
     session: &Session,
     request: &FixtureFreezeLiveActionRequest,
     context: &ActionContext,
+) -> Result<FixtureFreezeActionOutcome, ApiError> {
+    apply_selected(state, session, request, context, false)
+}
+
+pub(super) fn apply_selected_with_activation(
+    state: &AppState,
+    session: &Session,
+    request: &FixtureFreezeLiveActionRequest,
+    context: &ActionContext,
+) -> Result<FixtureFreezeActionOutcome, ApiError> {
+    apply_selected(state, session, request, context, true)
+}
+
+fn apply_selected(
+    state: &AppState,
+    session: &Session,
+    request: &FixtureFreezeLiveActionRequest,
+    context: &ActionContext,
+    activation_held: bool,
 ) -> Result<FixtureFreezeActionOutcome, ApiError> {
     let fixture_ids = state
         .programming
@@ -41,7 +117,11 @@ pub(super) fn toggle_selected(
     // Live-control actions are last-write-wins. Re-read and reapply after a narrow revision race
     // instead of surfacing an object-editor conflict to the operator.
     for attempt in 0..3 {
-        let ports = ServerShowPatchPorts::new(state.clone());
+        let ports = if activation_held {
+            ServerShowPatchPorts::with_activation_held(state.clone())
+        } else {
+            ServerShowPatchPorts::new(state.clone())
+        };
         let snapshot = state
             .active_show
             .patch_snapshot(context, show_id, &ports)
@@ -51,8 +131,14 @@ pub(super) fn toggle_selected(
             .engine()
             .render(state.output.render_options())
             .map_err(|error| ApiError::bad_request(error.to_string()))?;
-        let (command, affected_fixtures) =
-            freeze_command(show_id, &snapshot, &rendered, &fixture_ids, &families)?;
+        let (command, affected_fixtures, previous) = freeze_command(
+            show_id,
+            &snapshot,
+            &rendered,
+            &fixture_ids,
+            &families,
+            request.operation,
+        )?;
         let request_id = context
             .request_id
             .as_deref()
@@ -67,6 +153,21 @@ pub(super) fn toggle_selected(
         };
         match state.active_show.patch_fixtures(action, &ports) {
             Ok(result) => {
+                if result.changed {
+                    let programmer_undo_depth = state
+                        .programming
+                        .undo_depth(session.id)
+                        .ok_or_else(|| ApiError::bad_request("Freeze requires a Programmer"))?;
+                    state.programming.clear_redo(session.id);
+                    state.fixture_freeze_history.record(
+                        session,
+                        FreezeHistoryEntry {
+                            show_id,
+                            programmer_undo_depth,
+                            previous,
+                        },
+                    );
+                }
                 return Ok(FixtureFreezeActionOutcome {
                     changed: result.changed,
                     patch_revision: result.change.patch_revision.value(),
@@ -95,7 +196,15 @@ fn freeze_command(
     rendered: &light_engine::RenderResult,
     fixture_ids: &[FixtureId],
     families: &[FreezeFamily],
-) -> Result<(PatchFixturesCommand, usize), ApiError> {
+    operation: FixtureFreezeOperation,
+) -> Result<
+    (
+        PatchFixturesCommand,
+        usize,
+        HashMap<FixtureId, FixtureFreezeState>,
+    ),
+    ApiError,
+> {
     let mut families = families.to_vec();
     families.sort_by_key(|family| match family {
         FreezeFamily::Intensity => 0,
@@ -106,6 +215,7 @@ fn freeze_command(
     families.dedup();
     let mut updates = Vec::new();
     let mut affected = HashSet::new();
+    let mut previous = HashMap::new();
     for root in &snapshot.fixtures {
         let valid = std::iter::once(root.patch.fixture_id)
             .chain(root.patch.logical_heads.iter().map(|head| head.fixture_id))
@@ -130,9 +240,16 @@ fn freeze_command(
             continue;
         }
         let mut freeze = root.patch.freeze.clone();
+        previous.insert(root.patch.fixture_id, freeze.clone());
         for fixture_id in selected {
             affected.insert(fixture_id);
-            toggle_target(&mut freeze, fixture_id, &families, rendered);
+            apply_target(
+                &mut freeze,
+                fixture_id,
+                &families,
+                rendered,
+                operation,
+            );
         }
         updates.push(PatchFixtureUpdateIntent {
             fixture_id: root.patch.fixture_id,
@@ -168,22 +285,29 @@ fn freeze_command(
             fixture_updates: updates,
         },
         affected.len(),
+        previous,
     ))
 }
 
-fn toggle_target(
+fn apply_target(
     freeze: &mut FixtureFreezeState,
     fixture_id: FixtureId,
     families: &[FreezeFamily],
     rendered: &light_engine::RenderResult,
+    operation: FixtureFreezeOperation,
 ) {
     if families.is_empty() {
-        if freeze
+        let frozen = freeze
             .targets
             .get(&fixture_id)
-            .is_some_and(|target| target.full)
-        {
+            .is_some_and(|target| target.full);
+        let remove = matches!(operation, FixtureFreezeOperation::Unfreeze)
+            || matches!(operation, FixtureFreezeOperation::Toggle) && frozen;
+        if remove {
             freeze.targets.remove(&fixture_id);
+            return;
+        }
+        if frozen {
             return;
         }
         freeze.targets.insert(
@@ -198,10 +322,18 @@ fn toggle_target(
     }
 
     let target = freeze.targets.entry(fixture_id).or_default();
+    // A full Freeze already owns every attribute. The current persisted model cannot express
+    // "full except this family", so explicit family Freeze/Unfreeze commands leave it intact.
+    // Operators can first Unfreeze the fixture and then apply the desired partial Freeze.
+    if target.full && !matches!(operation, FixtureFreezeOperation::Toggle) {
+        return;
+    }
     target.full = false;
-    let removing = families
-        .iter()
-        .all(|family| target.families.contains(family));
+    let removing = matches!(operation, FixtureFreezeOperation::Unfreeze)
+        || matches!(operation, FixtureFreezeOperation::Toggle)
+            && families
+                .iter()
+                .all(|family| target.families.contains(family));
     if removing {
         target.families.retain(|family| !families.contains(family));
         target
@@ -220,6 +352,79 @@ fn toggle_target(
     if target.families.is_empty() {
         freeze.targets.remove(&fixture_id);
     }
+}
+
+pub(super) fn undo_latest(
+    state: &AppState,
+    session: &Session,
+    context: &ActionContext,
+) -> Result<Option<bool>, ApiError> {
+    let active_show_id = state.active_show.current().map(|show| show.id);
+    let depth = state
+        .programming
+        .undo_depth(session.id)
+        .ok_or_else(|| ApiError::bad_request("Undo requires a Programmer"))?;
+    let Some(entry) = state.fixture_freeze_history.next(session, depth) else {
+        return Ok(None);
+    };
+    if active_show_id != Some(entry.show_id) {
+        return Ok(None);
+    }
+    for attempt in 0..3 {
+        let ports = ServerShowPatchPorts::with_activation_held(state.clone());
+        let snapshot = state
+            .active_show
+            .patch_snapshot(context, entry.show_id, &ports)
+            .map_err(api_error)?;
+        let mut updates = Vec::with_capacity(entry.previous.len());
+        for (fixture_id, freeze) in &entry.previous {
+            let fixture = snapshot
+                .fixtures
+                .iter()
+                .find(|fixture| fixture.patch.fixture_id == *fixture_id)
+                .ok_or_else(|| {
+                    ApiError::conflict("A fixture changed since Freeze; Undo could not restore it")
+                })?;
+            updates.push(PatchFixtureUpdateIntent {
+                fixture_id: *fixture_id,
+                expected_fixture_revision: fixture.fixture_revision,
+                expected_show_revision: snapshot.show_revision,
+                multipatch_instance_id: None,
+                action: PatchFixtureUpdateAction::SetFreeze {
+                    freeze: freeze.clone(),
+                },
+            });
+        }
+        let request_id = context
+            .request_id
+            .as_deref()
+            .map(|request_id| format!("{request_id}:freeze-undo:{attempt}"))
+            .unwrap_or_else(|| format!("freeze-undo:{}:{attempt}", uuid::Uuid::new_v4()));
+        let action = ActionEnvelope {
+            context: context
+                .clone()
+                .with_request_id(request_id)
+                .with_expected_revision(snapshot.patch_revision.value()),
+            command: PatchFixturesCommand {
+                show_id: entry.show_id,
+                fixtures: Vec::new(),
+                remove_fixture_ids: Vec::new(),
+                placements: Vec::new(),
+                vector_spreads: Vec::new(),
+                fixture_updates: updates,
+            },
+        };
+        match state.active_show.patch_fixtures(action, &ports) {
+            Ok(result) => {
+                state.fixture_freeze_history.finish(session, &entry);
+                state.programming.clear_redo(session.id);
+                return Ok(Some(result.changed));
+            }
+            Err(error) if error.kind == ActionErrorKind::Conflict && attempt < 2 => continue,
+            Err(error) => return Err(api_error(error)),
+        }
+    }
+    unreachable!("the bounded Freeze Undo retry loop always returns")
 }
 
 fn captured_values(
@@ -250,4 +455,61 @@ fn api_error(error: ActionError) -> ApiError {
         ActionErrorKind::Unavailable => ApiError::unavailable(error.message),
         ActionErrorKind::Internal => ApiError::internal(error.message),
     }
+}
+
+pub(super) fn advance_command_mode(state: &AppState, session: &Session) -> bool {
+    let current = state
+        .programming
+        .get(session.id)
+        .map(|programmer| programmer.command_line)
+        .unwrap_or_default();
+    let current = current.trim();
+    let next = if current
+        .split_whitespace()
+        .next()
+        .is_some_and(|token| token.eq_ignore_ascii_case("FREEZE"))
+    {
+        format!("UNFREEZE{}", &current["FREEZE".len()..])
+    } else {
+        "FREEZE".to_owned()
+    };
+    state.programming.set_command_line(session.id, next)
+}
+
+pub(super) fn append_command_family(
+    state: &AppState,
+    session: &Session,
+    digit: u8,
+) -> bool {
+    let family = match digit {
+        1 => "INTENSITY",
+        2 => "COLOR",
+        3 => "POSITION",
+        4 => "BEAM",
+        _ => return false,
+    };
+    let current = state
+        .programming
+        .get(session.id)
+        .map(|programmer| programmer.command_line)
+        .unwrap_or_default();
+    let current = current.trim();
+    if !current
+        .split_whitespace()
+        .next()
+        .is_some_and(|token| {
+            token.eq_ignore_ascii_case("FREEZE") || token.eq_ignore_ascii_case("UNFREEZE")
+        })
+    {
+        return false;
+    }
+    if current
+        .split_whitespace()
+        .any(|token| token.eq_ignore_ascii_case(family))
+    {
+        return true;
+    }
+    state
+        .programming
+        .set_command_line(session.id, format!("{current} {family}"))
 }

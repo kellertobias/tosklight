@@ -87,6 +87,7 @@ fn test_state_with_programmers(
                 .unwrap(),
             ),
             programming: ProgrammingResource::new(programmers, programming),
+            fixture_freeze_history: Default::default(),
             playback: PlaybackResource::new(
                 PlaybackService::new(application_events.clone()),
                 PlaybackTopologyService::new(active_show_service.clone()),

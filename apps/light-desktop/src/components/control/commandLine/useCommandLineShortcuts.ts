@@ -36,6 +36,7 @@ interface ShortcutCallbacks {
 	advancePreload: () => void;
 	clear: () => void;
 	toggleFixtureFreeze: () => void;
+	selectFixtureFreezeFamily: (key: "1" | "2" | "3" | "4") => void;
 	undo: () => void;
 }
 
@@ -144,6 +145,17 @@ function applySoftwareEdit(
 }
 
 function handleSoftwareKey(context: ShortcutContext, event: KeyboardEvent) {
+	if (
+		event.shiftKey &&
+		/^Digit[1-4]$/.test(event.code) &&
+		/^\s*(?:FREEZE|UNFREEZE)\b/i.test(context.commandLine)
+	) {
+		event.preventDefault();
+		context.selectFixtureFreezeFamily(
+			event.code.slice(-1) as "1" | "2" | "3" | "4",
+		);
+		return;
+	}
 	const key = softwareKeyFromKeyboard(event, true);
 	if (!key) return;
 	if (key === "ESC") {

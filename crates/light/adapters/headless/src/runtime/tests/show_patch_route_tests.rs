@@ -79,6 +79,72 @@ async fn v2_freeze_route_toggles_full_and_partial_state_on_the_resolved_fixture(
 }
 
 #[tokio::test]
+async fn freeze_command_supports_explicit_partial_unfreeze_and_programmer_undo() {
+    let (state, data_dir) = test_state();
+    let (profile_id, mode_id) = install_patch_route_profile(&state);
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let session = state
+        .sessions
+        .sessions()
+        .into_iter()
+        .find(|session| session.token == token)
+        .unwrap();
+    let show = create_show(&app, &token, "Fixture Freeze command").await;
+    let show_id = show["id"].as_str().unwrap();
+    open_show_for_patch_test(&app, &token, show_id).await;
+    let created = post_patch(
+        &app,
+        &token,
+        show_id,
+        Some(0),
+        valid_patch_request_for(profile_id, mode_id, "freeze-command-fixture"),
+    )
+    .await;
+    assert_eq!(created.status(), StatusCode::OK);
+
+    let freeze = execute_freeze_command(
+        &app,
+        &token,
+        session.desk.id,
+        "freeze-command",
+        "FREEZE F1 INTENSITY",
+    )
+    .await;
+    assert_eq!(freeze.status(), StatusCode::OK);
+    let frozen = json(get_patch(&app, &token, show_id).await).await;
+    assert_eq!(
+        frozen["fixtures"][0]["freeze_targets"][0]["families"],
+        serde_json::json!(["intensity"])
+    );
+
+    let unfreeze = execute_freeze_command(
+        &app,
+        &token,
+        session.desk.id,
+        "unfreeze-command",
+        "UNFREEZE F1 INTENSITY",
+    )
+    .await;
+    assert_eq!(unfreeze.status(), StatusCode::OK);
+    let unfrozen = json(get_patch(&app, &token, show_id).await).await;
+    assert_eq!(
+        unfrozen["fixtures"][0]["freeze_targets"],
+        serde_json::json!([])
+    );
+
+    let undo = programmer_undo(&app, &token, show_id, session.desk.id).await;
+    assert_eq!(undo.status(), StatusCode::OK);
+    assert_eq!(json(undo).await["changed"], true);
+    let restored = json(get_patch(&app, &token, show_id).await).await;
+    assert_eq!(
+        restored["fixtures"][0]["freeze_targets"][0]["families"],
+        serde_json::json!(["intensity"])
+    );
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
 async fn v2_patch_route_resolves_ordered_placement_and_replays_authoritative_addresses() {
     let (state, data_dir) = test_state();
     let (profile_id, mode_id) = install_patch_route_profile(&state);
@@ -1061,6 +1127,42 @@ async fn partial_freeze(
                 .header("x-tosk-show", show_id)
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap()
+}
+
+async fn execute_freeze_command(
+    app: &Router,
+    token: &str,
+    desk_id: Uuid,
+    request_id: &str,
+    command: &str,
+) -> Response {
+    app.clone()
+        .oneshot(
+            Request::post("/api/v2/command-line/execute")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header("x-tosk-desk", desk_id.to_string())
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({"request_id": request_id, "command": command}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap()
+}
+
+async fn programmer_undo(app: &Router, token: &str, show_id: &str, desk_id: Uuid) -> Response {
+    app.clone()
+        .oneshot(
+            Request::get("/api/v2/programmer-undo/actions")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header("x-tosk-show", show_id)
+                .header("x-tosk-desk", desk_id.to_string())
+                .body(Body::empty())
                 .unwrap(),
         )
         .await

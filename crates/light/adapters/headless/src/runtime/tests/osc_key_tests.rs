@@ -211,12 +211,18 @@ fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
     assert!(!state.integrations.osc_subscriber("test").unwrap().shifted);
     assert_eq!(
         state.programming.get(session.id).unwrap().command_line,
-        "TIME -"
+        "FREEZE"
     );
-    let events = state.events.audit_events();
-    let shifted_clear = events.last().unwrap();
-    assert_eq!(shifted_clear.kind, "desk_action_error");
-    assert_eq!(shifted_clear.payload["action"], "shift-clear");
+    handle_programmer_osc(
+        &state,
+        "/light/main/programmer/clear",
+        &pressed,
+        Some("127.0.0.1:9010"),
+    );
+    assert_eq!(
+        state.programming.get(session.id).unwrap().command_line,
+        "UNFREEZE"
+    );
     let _ = std::fs::remove_dir_all(data_dir);
 }
 

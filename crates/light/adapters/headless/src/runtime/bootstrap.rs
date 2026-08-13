@@ -488,6 +488,7 @@ fn build_app_state(
         timecodes: resources.timecodes.clone(),
         managed_assets: Arc::clone(&resources.managed_assets),
         programming: ProgrammingResource::new(startup.programmers, programming),
+        fixture_freeze_history: Default::default(),
         playback: PlaybackResource::new(
             resources.playback_service.clone(),
             playback_topology,

@@ -124,6 +124,31 @@ export function editTargetedCommandWithSoftwareKey(
 	}
 	if (key === "SHIFT") return { command, execute: false, pristine };
 
+	const freeze = command.match(/^\s*(FREEZE|UNFREEZE)\b\s*(.*)$/i);
+	if (freeze) {
+		const prefix = freeze[1].toUpperCase();
+		const selection = freeze[2].trim();
+		const family = selection.match(
+			/(?:^|\s)(INTENSITY|COL(?:OR|OUR)|POSITION|BEAM)(?:\s|$)/i,
+		);
+		const selectionText = family
+			? selection.slice(0, family.index).trim()
+			: selection;
+		const familyText = family
+			? selection.slice(family.index).trim()
+			: "";
+		const edited = editTargetedCommandWithSoftwareKey(
+			selectionText || target,
+			key,
+			target,
+			selectionText.length === 0,
+		);
+		return {
+			...edited,
+			command: `${prefix} ${edited.command}${familyText ? ` ${familyText}` : ""}`.trim(),
+		};
+	}
+
 	if (pristine) {
 		const edit = editPristineCommand(key, target);
 		if (edit) return edit;

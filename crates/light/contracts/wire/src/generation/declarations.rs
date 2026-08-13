@@ -292,6 +292,7 @@ fn live_actions(config: &Config) -> Vec<String> {
         CommandTargetHttpActionOutcome::decl(config),
         ProgrammerUndoHttpActionOutcome::decl(config),
         FixtureFreezeFamily::decl(config),
+        FixtureFreezeOperation::decl(config),
         FixtureFreezeLiveActionRequest::decl(config),
         FixtureFreezeActionOutcome::decl(config),
         ProgrammerCaptureModeLiveActionRequest::decl(config),

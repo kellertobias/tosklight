@@ -7,6 +7,7 @@ pub(super) struct AppState {
     pub(super) installation: InstallationResource,
     pub(super) sessions: SessionResource,
     pub(super) programming: ProgrammingResource,
+    pub(super) fixture_freeze_history: super::fixture_freeze::FixtureFreezeHistory,
     pub(super) dynamics: light_application::DynamicsService,
     pub(super) macros: light_application::CommandMacroExecutionService,
     pub(super) timecodes: light_application::timeline::TimecodeRuntimeService,

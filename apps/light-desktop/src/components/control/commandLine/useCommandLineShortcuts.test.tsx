@@ -105,6 +105,7 @@ const callbacks = {
 	advancePreload: vi.fn(),
 	clear: vi.fn(),
 	toggleFixtureFreeze: vi.fn(),
+	selectFixtureFreezeFamily: vi.fn(),
 	undo: vi.fn(),
 };
 
@@ -167,13 +168,22 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("useCommandLineShortcuts playback keys", () => {
-	it("routes Shift Delete to the authoritative full Freeze action", () => {
+	it("routes Shift Delete into Freeze command mode", () => {
 		mount();
 
 		press("Delete", { shiftKey: true });
 
 		expect(callbacks.toggleFixtureFreeze).toHaveBeenCalledTimes(1);
 		expect(callbacks.clear).not.toHaveBeenCalled();
+	});
+
+	it("routes shifted family numbers while Freeze is pending", () => {
+		callbacks.commandLine = "FREEZE F1";
+		mount();
+
+		press("1", { code: "Digit1", shiftKey: true });
+
+		expect(callbacks.selectFixtureFreezeFamily).toHaveBeenCalledWith("1");
 	});
 
 	it("hydrates only Page and Playback definitions plus the desk projection", () => {

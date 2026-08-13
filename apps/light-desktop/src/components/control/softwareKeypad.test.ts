@@ -321,4 +321,31 @@ describe("software keypad", () => {
 		expect(fixture).toBe("FIXTURE");
 		expect(defaultCommandLine(fixture!)).toBe("FIXTURE");
 	});
+
+	it("edits the fixture selection before a Freeze family suffix", () => {
+		expect(
+			editTargetedCommandWithSoftwareKey(
+				"FREEZE INTENSITY",
+				"7",
+				"FIXTURE",
+				false,
+			),
+		).toEqual({
+			command: "FREEZE F7 INTENSITY",
+			execute: false,
+			pristine: false,
+		});
+		expect(
+			editTargetedCommandWithSoftwareKey(
+				"UNFREEZE F7 COLOR",
+				"8",
+				"FIXTURE",
+				false,
+			),
+		).toEqual({
+			command: "UNFREEZE F78 COLOR",
+			execute: false,
+			pristine: false,
+		});
+	});
 });

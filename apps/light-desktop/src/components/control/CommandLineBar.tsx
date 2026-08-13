@@ -241,6 +241,8 @@ function useCommandLineBarModel() {
 		advancePreload: () => void advancePreload(),
 		clear: () => numericPad.press("CLR"),
 		toggleFixtureFreeze: () => void numericPad.toggleFixtureFreeze(),
+		selectFixtureFreezeFamily: (key) =>
+			void numericPad.selectFixtureFreezeFamily(key),
 		undo: () => numericPad.press("UND"),
 	});
 	const status: CommandStatus = {

@@ -85,8 +85,19 @@ pub enum FixtureFreezeFamily {
     Beam,
 }
 
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum FixtureFreezeOperation {
+    Freeze,
+    Unfreeze,
+    #[default]
+    Toggle,
+}
+
 #[derive(Clone, Debug, Default, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 pub struct FixtureFreezeLiveActionRequest {
+    #[serde(default)]
+    pub operation: FixtureFreezeOperation,
     #[serde(default)]
     pub families: Vec<FixtureFreezeFamily>,
 }

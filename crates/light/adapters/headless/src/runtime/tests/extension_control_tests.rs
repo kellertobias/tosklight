@@ -308,31 +308,36 @@ fn canonical_extension_programmer_highlight_and_speed_controls_use_server_author
             modifier: ModifierKey::Shift,
         },
     );
-    let shifted_clear = extensions_runtime::apply_bound_control(
-        &state,
-        &host,
-        &BoundControlInput {
-            input: ControlInputEvent {
-                input_id: 3,
-                occurred_at_micros: 203,
-                control: ControlInput::Button {
-                    control_id: "clear".into(),
-                    pressed: true,
-                },
-            },
-            intent: CanonicalControlIntent::ProgrammerKey {
-                key: ProgrammerKey::Clear,
-            },
+    apply(
+        3,
+        ControlInput::Button {
+            control_id: "clear".into(),
+            pressed: true,
         },
-    )
-    .unwrap_err();
-    assert!(shifted_clear.to_string().contains("Freeze requires"));
+        CanonicalControlIntent::ProgrammerKey {
+            key: ProgrammerKey::Clear,
+        },
+    );
     assert_eq!(
         state.programming.get(session.id).unwrap().command_line,
-        "F1"
+        "FREEZE"
     );
     apply(
         4,
+        ControlInput::Button {
+            control_id: "clear".into(),
+            pressed: true,
+        },
+        CanonicalControlIntent::ProgrammerKey {
+            key: ProgrammerKey::Clear,
+        },
+    );
+    assert_eq!(
+        state.programming.get(session.id).unwrap().command_line,
+        "UNFREEZE"
+    );
+    apply(
+        5,
         ControlInput::Button {
             control_id: "shift".into(),
             pressed: false,
@@ -354,7 +359,7 @@ fn canonical_extension_programmer_highlight_and_speed_controls_use_server_author
         .collect::<Vec<_>>();
     assert_eq!(key_phases, ["press", "release"]);
     apply(
-        5,
+        6,
         ControlInput::Button {
             control_id: "clear".into(),
             pressed: true,

@@ -137,7 +137,14 @@ async fn programmer_undo(
     let outcome_request_id = request_id.clone();
     let outcome =
         run_http_programming_action(state, session, request_id, move |state, session, _| {
-            let changed = state.programming.undo(session.id);
+            let context = programming_context(
+                session,
+                light_application::ActionSource::Http,
+                Some(&outcome_request_id),
+            );
+            let changed = super::fixture_freeze::undo_latest(state, session, &context)
+                .map_err(|error| error.message)?
+                .unwrap_or_else(|| state.programming.undo(session.id));
             persist_programmer(state, session).map_err(|error| error.message)?;
             Ok(ProgrammerUndoHttpActionOutcome {
                 request_id: outcome_request_id,

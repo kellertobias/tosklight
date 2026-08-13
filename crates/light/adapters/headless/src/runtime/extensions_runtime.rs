@@ -703,24 +703,34 @@ fn apply_programmer_key(
     pressed: bool,
 ) -> Result<(), PortError> {
     let session = require_session(session, "Programmer control")?;
-    if key == ProgrammerKey::Clear && state.extensions.shift_held(host) {
+    if state.extensions.shift_held(host) {
         if pressed {
-            let context = light_application::ActionContext::operator(
-                session.desk.id,
-                session.user.id.0,
-                session.id.0,
-                light_application::ActionSource::Extension,
-            )
-            .with_request_id(format!("extension-freeze:{}", uuid::Uuid::new_v4()));
-            super::fixture_freeze::toggle_selected(
-                state,
-                session,
-                &light_wire::v2::live_action::FixtureFreezeLiveActionRequest::default(),
-                &context,
-            )
-            .map_err(|error| PortError::new(error.message))?;
+            let handled = if key == ProgrammerKey::Clear {
+                super::fixture_freeze::advance_command_mode(state, session)
+            } else {
+                let digit = match key {
+                    ProgrammerKey::One => 1,
+                    ProgrammerKey::Two => 2,
+                    ProgrammerKey::Three => 3,
+                    ProgrammerKey::Four => 4,
+                    _ => 0,
+                };
+                super::fixture_freeze::append_command_family(state, session, digit)
+            };
+            if handled {
+                super::persist_programmer(state, session)
+                    .map_err(|error| PortError::new(error.message))?;
+                emit(
+                    state,
+                    "programmer_changed",
+                    serde_json::json!({"session_id":session.id,"source":"extension"}),
+                );
+                return Ok(());
+            }
         }
-        return Ok(());
+        if key == ProgrammerKey::Clear {
+            return Ok(());
+        }
     }
     if pressed
         && super::file_manager::route_control_input(
