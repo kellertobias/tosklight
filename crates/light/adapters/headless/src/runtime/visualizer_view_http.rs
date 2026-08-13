@@ -99,6 +99,9 @@ async fn update(
     if let Some(ambient) = request.patch.ambient {
         next.ambient = ambient;
     }
+    if request.patch.reset_physics == Some(true) {
+        next.physics_reset_generation = current.physics_reset_generation.saturating_add(1);
+    }
     next.validate()?;
 
     // The revision records the change rather than being part of it, so it is held equal across
@@ -171,6 +174,7 @@ pub(super) fn projection(target: &str, view: &VisualizerView) -> wire::Visualize
         exposure: view.exposure,
         ambient: view.ambient,
         revision: view.revision,
+        physics_reset_generation: view.physics_reset_generation,
     }
 }
 

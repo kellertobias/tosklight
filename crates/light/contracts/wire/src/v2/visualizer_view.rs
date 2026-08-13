@@ -73,6 +73,8 @@ pub struct VisualizerViewProjection {
     /// re-read of the same state.
     #[ts(type = "number")]
     pub revision: u64,
+    #[ts(type = "number")]
+    pub physics_reset_generation: u64,
 }
 
 /// Every configured target, newest state.
@@ -96,6 +98,9 @@ pub struct VisualizerViewPatch {
     pub exposure: Option<f32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ambient: Option<f32>,
+    /// Momentary authoritative command. The server increments the target's reset generation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reset_physics: Option<bool>,
 }
 
 /// Body of the idempotent visualizer-view update.

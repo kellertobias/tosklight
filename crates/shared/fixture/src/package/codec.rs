@@ -138,6 +138,13 @@ pub fn read_fixture_package(bytes: &[u8]) -> Result<FixtureProfile, FixturePacka
             &mut files,
         )?;
     }
+    if let Some(physics) = manifest.profile.physics.as_mut() {
+        resolve_asset_field(
+            &mut physics.control_script_asset,
+            AssetKind::PhysicsScript,
+            &mut files,
+        )?;
+    }
     for gobo in &mut manifest.profile.gobos {
         resolve_asset_field(&mut gobo.artwork_asset, AssetKind::Gobo, &mut files)?;
     }
@@ -200,6 +207,14 @@ pub fn write_fixture_package(profile: &FixtureProfile) -> Result<Vec<u8>, Fixtur
             &mut effect.effect_script_asset,
             AssetKind::EffectScript,
             "assets/effect",
+            &mut assets,
+        )?;
+    }
+    if let Some(physics) = portable.physics.as_mut() {
+        extract_asset_field(
+            &mut physics.control_script_asset,
+            AssetKind::PhysicsScript,
+            "assets/physics",
             &mut assets,
         )?;
     }

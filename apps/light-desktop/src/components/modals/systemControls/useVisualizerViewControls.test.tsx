@@ -19,6 +19,7 @@ function view(target: string, mode: VisualizerView["mode"]): VisualizerView {
 		exposure: 1,
 		ambient: 0.06,
 		revision: 1,
+		physicsResetGeneration: 0,
 	};
 }
 
@@ -124,6 +125,28 @@ describe("useVisualizerViewControls", () => {
 		);
 		expect(result.current.view?.mode).toBe("top_down");
 		expect(result.current.busy).toBe(false);
+	});
+
+	it("requests an authoritative physics reset without resubmitting the view", async () => {
+		const actions: VisualizerViewActions = {
+			snapshot: vi.fn(async () => ({
+				connected: true,
+				views: [view("main", "top_down")],
+			})),
+			update: vi.fn(async () => ({
+				...view("main", "top_down"),
+				physicsResetGeneration: 1,
+			})),
+			onConnectionChanged: vi.fn(() => vi.fn()),
+		};
+		const { result } = harness(actions);
+		await waitFor(() => expect(result.current.view).not.toBeNull());
+		result.current.resetPhysics();
+		await waitFor(() =>
+			expect(actions.update).toHaveBeenCalledWith("main", {
+				resetPhysics: true,
+			}),
+		);
 	});
 
 	it("reports no connected visualizer outside a mounted desk boundary", () => {

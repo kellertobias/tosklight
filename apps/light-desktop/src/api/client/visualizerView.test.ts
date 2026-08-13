@@ -14,6 +14,7 @@ describe("VisualizerViewApiClient", () => {
 					exposure: 1,
 					ambient: 0.06,
 					revision: 3,
+					physics_reset_generation: 2,
 				},
 			],
 		}));
@@ -31,6 +32,7 @@ describe("VisualizerViewApiClient", () => {
 					exposure: 1,
 					ambient: 0.06,
 					revision: 3,
+					physicsResetGeneration: 2,
 				},
 			],
 		});
@@ -47,6 +49,7 @@ describe("VisualizerViewApiClient", () => {
 				exposure: 1,
 				ambient: 0.06,
 				revision: 4,
+				physics_reset_generation: 0,
 			},
 			replayed: false,
 			changed: true,
@@ -80,6 +83,7 @@ describe("VisualizerViewApiClient", () => {
 				exposure: 1,
 				ambient: 0.06,
 				revision: 1,
+				physics_reset_generation: 0,
 			},
 			replayed: false,
 			changed: true,

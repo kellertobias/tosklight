@@ -967,13 +967,17 @@ ambient: number,
  * Increments on every accepted change, so a renderer can tell a genuine instruction from a
  * re-read of the same state.
  */
-revision: number, };
+revision: number, physics_reset_generation: number, };
 export type VisualizerViewSnapshot = {
 /**
  * Whether at least one external visualizer currently has an active desk session.
  */
 connected: boolean, views: Array<VisualizerViewProjection>, };
-export type VisualizerViewPatch = { mode?: VisualizerViewMode | null, quality?: VisualizerRenderQuality | null, camera?: VisualizerCamera | null, exposure?: number | null, ambient?: number | null, };
+export type VisualizerViewPatch = { mode?: VisualizerViewMode | null, quality?: VisualizerRenderQuality | null, camera?: VisualizerCamera | null, exposure?: number | null, ambient?: number | null,
+/**
+ * Momentary authoritative command. The server increments the target's reset generation.
+ */
+reset_physics?: boolean | null, };
 export type VisualizerViewUpdateRequest = {
 /**
  * Client-generated idempotency identity, scoped to the authenticated desk session.

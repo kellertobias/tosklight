@@ -26,6 +26,7 @@ const visualizerModel = vi.hoisted(() => ({
 		exposure: 1,
 		ambient: 0.05,
 		revision: 1,
+		physicsResetGeneration: 0,
 	},
 	targets: ["main"],
 	target: "main",
@@ -34,6 +35,7 @@ const visualizerModel = vi.hoisted(() => ({
 	selectTarget: vi.fn(),
 	selectMode: vi.fn(),
 	selectQuality: vi.fn(),
+	resetPhysics: vi.fn(),
 }));
 const lifecycle = vi.hoisted(() => ({
 	projection: {

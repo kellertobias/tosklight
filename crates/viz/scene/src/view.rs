@@ -622,6 +622,9 @@ pub struct ViewConfiguration {
     pub background: Option<[f32; 3]>,
     /// Draw the reference grid on the ground plane.
     pub floor_grid: bool,
+    /// Desk-issued monotonic generation; an increase resets every physics body authoritatively.
+    #[serde(default)]
+    pub physics_reset_generation: u64,
 }
 
 /// The room the rig hangs in, before anyone chooses otherwise: very dark, and blue rather than
@@ -642,6 +645,7 @@ impl Default for ViewConfiguration {
             show_labels: true,
             background: Some(DEFAULT_BACKGROUND),
             floor_grid: true,
+            physics_reset_generation: 0,
         }
     }
 }

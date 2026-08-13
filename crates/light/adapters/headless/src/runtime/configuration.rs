@@ -29,6 +29,8 @@ pub(super) struct VisualizerView {
     pub(super) exposure: f32,
     pub(super) ambient: f32,
     pub(super) revision: u64,
+    #[serde(default)]
+    pub(super) physics_reset_generation: u64,
 }
 
 impl Default for VisualizerView {
@@ -40,6 +42,7 @@ impl Default for VisualizerView {
             exposure: 1.0,
             ambient: 0.06,
             revision: 0,
+            physics_reset_generation: 0,
         }
     }
 }

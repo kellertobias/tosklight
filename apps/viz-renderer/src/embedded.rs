@@ -244,7 +244,11 @@ fn drain(events: Vec<ProviderEvent>, state: &mut PaneState) -> bool {
                 state.scene = *scene;
                 state.frame_rig_if_unaimed();
             }
-            ProviderEvent::Values(values) => adopt_provider_values(&mut state.values, *values),
+            ProviderEvent::Values(values) => adopt_provider_values(
+                &mut state.values,
+                *values,
+                state.scene.physics_scenery.len(),
+            ),
             ProviderEvent::View(view) => state.adopt_desk_view(view),
             ProviderEvent::Connection(connection) => {
                 finished |= matches!(connection, viz_scene::ConnectionState::Failed { .. });
@@ -260,8 +264,9 @@ fn drain(events: Vec<ProviderEvent>, state: &mut PaneState) -> bool {
 /// Selection arrives over the embedding channel rather than the scene provider. A provider value
 /// frame therefore cannot authoritatively replace it, even though both happen to share the same
 /// render-state structure.
-fn adopt_provider_values(current: &mut SceneValues, mut next: SceneValues) {
+fn adopt_provider_values(current: &mut SceneValues, mut next: SceneValues, physics_bodies: usize) {
     next.selected_fixtures = std::mem::take(&mut current.selected_fixtures);
+    next.retain_physics_runtime_from(current, physics_bodies);
     *current = next;
 }
 
@@ -289,6 +294,7 @@ struct PaneState {
     redraw_gate: crate::redraw::RedrawGate,
     last_tick: Instant,
     presented_frames: u64,
+    physics: crate::physics::Physics,
 }
 
 impl PaneState {
@@ -296,6 +302,15 @@ impl PaneState {
         let size = pane_pixels(embedding);
         let mut renderer = Renderer::headless(size.0, size.1)?;
         renderer.set_media_content_enabled(false);
+        let target = embedding
+            .desk
+            .as_ref()
+            .map_or("embedded", |desk| desk.target.as_str());
+        let preferences = crate::settings::preferences_path(&crate::settings::Options::default());
+        let physics_state_path = crate::physics::Physics::state_path(
+            preferences.as_deref(),
+            &format!("embedded-{target}"),
+        );
         Ok(Self {
             renderer,
             scene: Scene::default(),
@@ -311,6 +326,7 @@ impl PaneState {
             redraw_gate: crate::redraw::RedrawGate::default(),
             last_tick: Instant::now(),
             presented_frames: 0,
+            physics: crate::physics::Physics::with_state_path(physics_state_path),
         })
     }
 
@@ -598,6 +614,13 @@ impl PaneState {
         self.last_tick = now;
         self.values.apply_physical_motion(elapsed);
         let time = epoch.elapsed().as_secs_f32();
+        self.physics.run(
+            &self.scene,
+            &mut self.values,
+            time,
+            self.view.quality,
+            self.view.physics_reset_generation,
+        );
         self.rebuild_fixture_overlay();
         let redraw_state = crate::redraw::RedrawState::new(
             self.scene.revision,
@@ -779,7 +802,7 @@ mod tests {
             ..SceneValues::default()
         };
 
-        adopt_provider_values(&mut current, next);
+        adopt_provider_values(&mut current, next, 0);
 
         assert_eq!(current.frame, 8, "the new output frame is still adopted");
         assert_eq!(current.selected_fixtures, [selected].into_iter().collect());

@@ -408,6 +408,7 @@ export function SystemControlsModal() {
 								onSelectTarget={visualizer.selectTarget}
 								onSelectMode={visualizer.selectMode}
 								onSelectQuality={visualizer.selectQuality}
+								onResetPhysics={visualizer.resetPhysics}
 							/>
 						) : tab === "desk-state" ? (
 							<DeskStatePanel diagnostics={deskDiagnostics} />

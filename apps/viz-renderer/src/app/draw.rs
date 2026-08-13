@@ -126,6 +126,14 @@ impl Application {
         let laser_fault = self.lasers.fault(&values);
         self.effects.run(&session.scene, &mut values, time);
         let effect_fault = self.effects.fault(&values);
+        self.physics.run(
+            &session.scene,
+            &mut values,
+            time,
+            view.quality,
+            view.physics_reset_generation,
+        );
+        let physics_fault = self.physics.fault(&values);
         let notice = self
             .snapshots
             .notice()
@@ -141,7 +149,8 @@ impl Application {
                     .map(|notice| (notice.clone(), false))
             })
             .or_else(|| laser_fault.map(|fault| (fault, true)))
-            .or_else(|| effect_fault.map(|fault| (fault, true)));
+            .or_else(|| effect_fault.map(|fault| (fault, true)))
+            .or_else(|| physics_fault.map(|fault| (fault, true)));
 
         let result = self.render_frame(
             session,

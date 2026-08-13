@@ -36,6 +36,7 @@ interface VisualizerControlsProps {
 	onSelectTarget(target: string): void;
 	onSelectMode(mode: VisualizerViewMode): void;
 	onSelectQuality(quality: VisualizerRenderQuality): void;
+	onResetPhysics(): void;
 }
 
 /**
@@ -93,6 +94,12 @@ export function VisualizerControls(props: VisualizerControlsProps) {
 					props.onSelectQuality(quality as VisualizerRenderQuality)
 				}
 			/>
+			<Button
+				disabled={props.busy || props.view === null}
+				onClick={props.onResetPhysics}
+			>
+				Reset physics scenery
+			</Button>
 			{props.error ? (
 				<p className="system-controls-visualizer-error" role="status">
 					{props.error}

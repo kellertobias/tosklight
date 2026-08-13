@@ -140,6 +140,9 @@ pub struct FixtureProfile {
     /// A package-owned particle-effect mapping for flame, spark, and future emitter families.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effect: Option<ProfileEffect>,
+    /// Package-owned DMX mapping and physical body contract for scenic elements released on cue.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub physics: Option<ProfilePhysics>,
     /// The fixture's gobo wheel, slot by slot, when the package carries one.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub gobos: Vec<ProfileGobo>,
@@ -186,6 +189,8 @@ struct FixtureProfileCanonical {
     #[serde(default)]
     crowd: Option<ProfileCrowd>,
     effect: Option<ProfileEffect>,
+    #[serde(default)]
+    physics: Option<ProfilePhysics>,
     #[serde(default)]
     gobos: Vec<ProfileGobo>,
     modes: Vec<FixtureMode>,
@@ -253,6 +258,7 @@ impl<'de> Deserialize<'de> for FixtureProfile {
             laser: canonical.laser,
             crowd: canonical.crowd,
             effect: canonical.effect,
+            physics: canonical.physics,
             gobos: canonical.gobos,
             modes: canonical.modes,
             hazardous: canonical.hazardous,
@@ -384,6 +390,54 @@ pub struct ProfileEffect {
     /// emitters; later versions may add physics-backed debris without changing fixture kind.
     #[serde(default = "default_effect_result_version")]
     pub result_version: u16,
+}
+
+/// A portable, renderer-neutral physics body controlled by exact raw fixture slots.
+///
+/// The script maps DMX to a versioned `release`, `reset`, or `hold` instruction. Integration and
+/// latching remain renderer-owned, so a broken or malicious package cannot replace the solver.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ProfilePhysics {
+    /// ES module exporting `physics(input)`, packaged as `assets/physics.js`.
+    pub control_script_asset: Option<String>,
+    #[serde(default = "default_physics_result_version")]
+    pub result_version: u16,
+    /// Body dimensions in metres. The authored fixture position is the body's hanging centre.
+    pub size_metres: [f32; 3],
+    #[serde(default)]
+    pub scenery_kind: ProfilePhysicsSceneryKind,
+    #[serde(default = "default_physics_mass")]
+    pub mass_kilograms: f32,
+    #[serde(default = "default_physics_gravity")]
+    pub gravity_metres_per_second_squared: f32,
+    /// Floor plane in world metres. Falling bodies settle with their lower face on this plane.
+    #[serde(default)]
+    pub floor_y_metres: f32,
+    #[serde(default = "default_true")]
+    pub scenery_collision: bool,
+    #[serde(default)]
+    pub self_collision: bool,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProfilePhysicsSceneryKind {
+    #[default]
+    Curtain,
+    Prop,
+}
+
+fn default_physics_result_version() -> u16 {
+    1
+}
+fn default_physics_mass() -> f32 {
+    1.0
+}
+fn default_physics_gravity() -> f32 {
+    9.806_65
+}
+fn default_true() -> bool {
+    true
 }
 
 fn default_effect_result_version() -> u16 {

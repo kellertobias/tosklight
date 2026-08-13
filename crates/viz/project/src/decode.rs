@@ -70,6 +70,7 @@ impl Decoder {
     /// under the same limits as a later authoritative DMX update.
     pub fn initialize_motion(&self, scene: &Scene, values: &mut SceneValues) {
         values.resize(scene.emitters.len());
+        values.resize_physics(scene.physics_scenery.len());
         for (index, (binding, emitter)) in self.bindings.iter().zip(&scene.emitters).enumerate() {
             let value = &mut values.emitters[index];
             set_axis_default(
@@ -143,6 +144,7 @@ impl Decoder {
         affected.dedup();
 
         values.resize(scene.emitters.len());
+        values.resize_physics(scene.physics_scenery.len());
         let previous_time = self.last_time_seconds.unwrap_or(time_seconds);
         for index in &affected {
             let Some(binding) = self.bindings.get(*index) else {
@@ -183,6 +185,18 @@ impl Decoder {
                         .copied()
                         .unwrap_or(0)
                 }));
+            }
+            if let Some(window) = &binding.physics_window {
+                let frame = self.slots(window.logical_universe);
+                if let Some(physics) = values.physics_frames.get_mut(window.body_index) {
+                    physics.slots.clear();
+                    physics.slots.extend(window.slots.iter().map(|slot| {
+                        frame
+                            .get(usize::from(*slot).saturating_sub(1))
+                            .copied()
+                            .unwrap_or(0)
+                    }));
+                }
             }
         }
         if camera_affected {
@@ -1087,7 +1101,7 @@ mod tests {
 mod strobe_and_laser_tests {
     use super::tests_support::*;
     use super::*;
-    use crate::plan::{EffectWindow, LaserWindow};
+    use crate::plan::{EffectWindow, LaserWindow, PhysicsWindow};
 
     /// The reason the gate is integrated at all: no rate may vanish because the frames happened to
     /// fall in its dark half, and none may read as continuously lit either. Averaged over a
@@ -1177,6 +1191,54 @@ mod strobe_and_laser_tests {
             0.0,
         );
         assert_eq!(values.effect_frames[0].slots, vec![17, 91, 203]);
+    }
+
+    #[test]
+    fn a_physics_body_receives_the_exact_fixture_slots_in_patch_order() {
+        let binding = EmitterBinding {
+            universes: vec![1],
+            physics_window: Some(PhysicsWindow {
+                body_index: 0,
+                logical_universe: 1,
+                slots: vec![3, 1, 2],
+            }),
+            ..EmitterBinding::default()
+        };
+        let mut decoder = Decoder::new(vec![binding]);
+        let mut scene = scene(&[EmitterKind::Emissive]);
+        let id = uuid::Uuid::new_v4();
+        scene.physics_scenery.push(viz_scene::PhysicsSceneryObject {
+            fixture_instance_id: id,
+            scenery: viz_scene::SceneryObject {
+                id,
+                name: "Kabuki".into(),
+                position: glam::Vec3::ZERO,
+                rotation_degrees: glam::Vec3::ZERO,
+                size: glam::Vec3::ONE,
+                colour: [0.2; 3],
+                roughness: 0.8,
+                kind: viz_scene::SceneryKind::Curtain,
+                chords: 1,
+            },
+            program: viz_scene::PhysicsProgram::default(),
+            body: viz_scene::PhysicsBody {
+                mass_kilograms: 1.0,
+                gravity_metres_per_second_squared: 9.806_65,
+            },
+            constraints: viz_scene::PhysicsConstraints {
+                floor_y_metres: 0.0,
+                scenery_collision: true,
+                self_collision: false,
+            },
+        });
+        let mut values = SceneValues::default();
+        decoder.apply(
+            &scene,
+            &[frame(&[(0, 17), (1, 91), (2, 203)])],
+            &mut values,
+            0.0,
+        );
+        assert_eq!(values.physics_frames[0].slots, vec![203, 17, 91]);
     }
 
     /// A head that is not a laser must never grow a footprint, or every fixture in the show would

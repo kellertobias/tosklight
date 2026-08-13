@@ -18,6 +18,9 @@ pub struct SceneValues {
     /// Declarative particle emitters, parallel to [`Self::emitters`].
     #[serde(default)]
     pub effect_frames: Vec<EffectFrame>,
+    /// Live deterministic body state, parallel to [`crate::Scene::physics_scenery`].
+    #[serde(default)]
+    pub physics_frames: Vec<PhysicsFrame>,
     /// Atmosphere to render with. Renderer-owned rather than decoded: the application fills it in
     /// from its own haze setting before each frame.
     pub atmosphere: Atmosphere,
@@ -67,6 +70,25 @@ impl SceneValues {
         self.laser_scans.resize_with(emitters, LaserScan::default);
         self.effect_frames
             .resize_with(emitters, EffectFrame::default);
+    }
+
+    pub fn resize_physics(&mut self, bodies: usize) {
+        self.physics_frames
+            .resize_with(bodies, PhysicsFrame::default);
+    }
+
+    /// Adopt new raw control slots without discarding renderer-owned body history/state.
+    ///
+    /// Scene providers decode DMX; renderers integrate physics. A provider value frame therefore
+    /// owns only `slots` here. Treating its default state fields as authoritative would raise a
+    /// released object on every DMX packet.
+    pub fn retain_physics_runtime_from(&mut self, previous: &SceneValues, bodies: usize) {
+        self.resize_physics(bodies);
+        for (next, held) in self.physics_frames.iter_mut().zip(&previous.physics_frames) {
+            let slots = std::mem::take(&mut next.slots);
+            *next = held.clone();
+            next.slots = slots;
+        }
     }
 
     /// Advance persistence of vision by `elapsed` seconds.
@@ -133,6 +155,10 @@ impl SceneValues {
                 .effect_frames
                 .iter()
                 .any(|frame| !frame.emitters.is_empty())
+            || self
+                .physics_frames
+                .iter()
+                .any(|frame| frame.released && !frame.settled)
     }
 
     /// Carry the values across a structural change to the scene.
@@ -172,7 +198,36 @@ impl SceneValues {
         self.emitters = carried.iter().map(|value| value.0.clone()).collect();
         self.laser_scans = carried.iter().map(|value| value.1.clone()).collect();
         self.effect_frames = carried.into_iter().map(|value| value.2).collect();
+        let previous_physics: HashMap<Uuid, PhysicsFrame> = previous
+            .physics_scenery
+            .iter()
+            .zip(std::mem::take(&mut self.physics_frames))
+            .map(|(object, frame)| (object.fixture_instance_id, frame))
+            .collect();
+        self.physics_frames = next
+            .physics_scenery
+            .iter()
+            .map(|object| {
+                previous_physics
+                    .get(&object.fixture_instance_id)
+                    .cloned()
+                    .unwrap_or_default()
+            })
+            .collect();
     }
+}
+
+/// Reconstructible state of one released scenic body.
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
+pub struct PhysicsFrame {
+    pub version: u16,
+    pub timeline_seconds: f32,
+    pub position_offset: [f32; 3],
+    pub velocity: [f32; 3],
+    pub released: bool,
+    pub settled: bool,
+    pub slots: Vec<u8>,
+    pub fault: Option<String>,
 }
 
 /// Validated output of one Effect fixture's script for one frame.
@@ -792,6 +847,32 @@ mod tests {
         assert!(visited.contains(&1));
         assert!(visited.contains(&2));
         assert_eq!(visited.last(), Some(&3));
+    }
+
+    #[test]
+    fn a_new_provider_frame_changes_slots_without_raising_a_released_body() {
+        let previous = SceneValues {
+            physics_frames: vec![PhysicsFrame {
+                released: true,
+                settled: true,
+                position_offset: [0.0, -5.0, 0.0],
+                slots: vec![255],
+                ..PhysicsFrame::default()
+            }],
+            ..SceneValues::default()
+        };
+        let mut next = SceneValues {
+            physics_frames: vec![PhysicsFrame {
+                slots: vec![64],
+                ..PhysicsFrame::default()
+            }],
+            ..SceneValues::default()
+        };
+        next.retain_physics_runtime_from(&previous, 1);
+        assert!(next.physics_frames[0].released);
+        assert!(next.physics_frames[0].settled);
+        assert_eq!(next.physics_frames[0].position_offset, [0.0, -5.0, 0.0]);
+        assert_eq!(next.physics_frames[0].slots, [64]);
     }
 }
 

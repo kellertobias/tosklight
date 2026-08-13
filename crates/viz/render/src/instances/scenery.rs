@@ -7,56 +7,63 @@
 
 use super::{FrameInstances, FrameStyle, MeshInstance, MeshKind};
 use glam::{Mat4, Quat, Vec3};
-use viz_scene::{Scene, SceneryKind, SceneryObject, euler_degrees};
+use viz_scene::{Scene, SceneValues, SceneryKind, SceneryObject, euler_degrees};
 
-pub(super) fn push_scenery(frame: &mut FrameInstances, scene: &Scene, style: &FrameStyle) {
+pub(super) fn push_scenery(
+    frame: &mut FrameInstances,
+    scene: &Scene,
+    values: &SceneValues,
+    style: &FrameStyle,
+) {
     for object in &scene.scenery {
-        // Not every view draws every kind. A lines view keeps what the rig is arranged around and
-        // drops the rigging and the soft goods, which would only stand between the operator and
-        // the lamps hanging off them.
-        if !(style.scenery)(object.kind) {
-            continue;
+        push_object(frame, object, style);
+    }
+    for (body, state) in scene.physics_scenery.iter().zip(&values.physics_frames) {
+        let mut object = body.scenery.clone();
+        object.position += Vec3::from_array(state.position_offset);
+        push_object(frame, &object, style);
+    }
+}
+
+fn push_object(frame: &mut FrameInstances, object: &SceneryObject, style: &FrameStyle) {
+    // Not every view draws every kind. A lines view keeps what the rig is arranged around and
+    // drops the rigging and the soft goods, which would only stand between the operator and
+    // the lamps hanging off them.
+    if !(style.scenery)(object.kind) {
+        return;
+    }
+    let orientation = euler_degrees(object.rotation_degrees);
+    let colour = Vec3::from(object.colour);
+    // An outline view draws every object it keeps as the outline of its own box, for the same
+    // reason a fixture is one: nothing here is lit, so a solid is a black shape in a black
+    // room. The stage floor is the exception — the ground already has the grid on it, and a
+    // box around the ground is a box around everything.
+    if !style.scenery_surfaces {
+        if object.kind != SceneryKind::Floor {
+            super::push_box_outline(
+                frame,
+                Mat4::from_scale_rotation_translation(object.size, orientation, object.position),
+                style.faint_ink,
+                0.8,
+            );
         }
-        let orientation = euler_degrees(object.rotation_degrees);
-        let colour = Vec3::from(object.colour);
-        // An outline view draws every object it keeps as the outline of its own box, for the same
-        // reason a fixture is one: nothing here is lit, so a solid is a black shape in a black
-        // room. The stage floor is the exception — the ground already has the grid on it, and a
-        // box around the ground is a box around everything.
-        if !style.scenery_surfaces {
-            if object.kind != SceneryKind::Floor {
-                super::push_box_outline(
-                    frame,
-                    Mat4::from_scale_rotation_translation(
-                        object.size,
-                        orientation,
-                        object.position,
-                    ),
-                    style.faint_ink,
-                    0.8,
-                );
-            }
-            continue;
-        }
-        match object.kind {
-            SceneryKind::Truss => push_truss(frame, object, orientation, colour),
-            SceneryKind::Curtain => push_curtain(frame, object, orientation, colour),
-            SceneryKind::Railing => push_railing(frame, object, orientation, colour),
-            SceneryKind::MirrorBall => push_mirror_ball(frame, object, orientation),
-            SceneryKind::Floor | SceneryKind::Wall | SceneryKind::Riser | SceneryKind::Prop => {
-                let model = Mat4::from_scale_rotation_translation(
-                    object.size,
-                    orientation,
-                    object.position,
-                );
-                frame.mesh(MeshKind::Cube).push(MeshInstance::new(
-                    model,
-                    colour,
-                    object.roughness,
-                    Vec3::ZERO,
-                    0.0,
-                ));
-            }
+        return;
+    }
+    match object.kind {
+        SceneryKind::Truss => push_truss(frame, object, orientation, colour),
+        SceneryKind::Curtain => push_curtain(frame, object, orientation, colour),
+        SceneryKind::Railing => push_railing(frame, object, orientation, colour),
+        SceneryKind::MirrorBall => push_mirror_ball(frame, object, orientation),
+        SceneryKind::Floor | SceneryKind::Wall | SceneryKind::Riser | SceneryKind::Prop => {
+            let model =
+                Mat4::from_scale_rotation_translation(object.size, orientation, object.position);
+            frame.mesh(MeshKind::Cube).push(MeshInstance::new(
+                model,
+                colour,
+                object.roughness,
+                Vec3::ZERO,
+                0.0,
+            ));
         }
     }
 }

@@ -379,6 +379,55 @@ async fn saving_the_desk_settings_leaves_the_view_alone() {
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
+#[tokio::test]
+async fn physics_reset_is_an_idempotent_authoritative_generation() {
+    let (state, data_dir) = test_state();
+    let app = router(state);
+    let (token, _) = login(&app, "Operator").await;
+
+    let first = json(
+        update_view(
+            &app,
+            &token,
+            "main",
+            "physics-reset-1",
+            serde_json::json!({"reset_physics": true}),
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(first["changed"], true);
+    assert_eq!(first["view"]["physics_reset_generation"], 1);
+
+    let replay = json(
+        update_view(
+            &app,
+            &token,
+            "main",
+            "physics-reset-1",
+            serde_json::json!({"reset_physics": true}),
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(replay["replayed"], true);
+    assert_eq!(replay["view"]["physics_reset_generation"], 1);
+
+    let second = json(
+        update_view(
+            &app,
+            &token,
+            "main",
+            "physics-reset-2",
+            serde_json::json!({"reset_physics": true}),
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(second["view"]["physics_reset_generation"], 2);
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
 async fn get_views(app: &Router, token: &str) -> Response {
     app.clone()
         .oneshot(

@@ -54,4 +54,6 @@ between it and the desk, and [Particle Effects](07-particle-effects.md) for tran
 cold-spark engines, trigger semantics, restart behavior and quality budgets. Continue with
 [Crowd Areas](08-crowds.md) for modes, footprint editing, deterministic placement, local amount
 control, and measured quality budgets, and [Media Surfaces](09-media-surfaces.md) for screens, TVs,
-LED walls, projectors, CITP output selection, and portable fallback pictures.
+LED walls, projectors, CITP output selection, and portable fallback pictures. [Physics-driven
+Scenery](10-physics-scenery.md) covers latched scenic releases, collision quality, reset, and the
+Generic Kabuki reference package.

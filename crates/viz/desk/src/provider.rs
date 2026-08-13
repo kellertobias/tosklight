@@ -115,6 +115,7 @@ pub struct DeskView {
     pub exposure: f32,
     pub ambient: f32,
     pub revision: u64,
+    pub physics_reset_generation: u64,
 }
 
 /// Commands the render thread sends to the connection thread.
@@ -312,6 +313,7 @@ impl DeskProvider {
             quality: view.quality,
             exposure: view.exposure,
             ambient: view.ambient,
+            physics_reset_generation: view.physics_reset_generation,
             ..viz_scene::ViewConfiguration::default()
         })
     }
@@ -1062,6 +1064,7 @@ async fn read_view(client: &DeskClient, connection: &DeskConnection) -> Option<D
         exposure: view.exposure,
         ambient: view.ambient,
         revision: view.revision,
+        physics_reset_generation: view.physics_reset_generation,
     })
 }
 

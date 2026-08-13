@@ -86,6 +86,7 @@ impl FixtureProfile {
                     .collect(),
             }),
             effect: self.effect.clone(),
+            physics: self.physics.clone(),
             gobos: self.gobos.clone(),
             modes,
             hazardous: self.hazardous,

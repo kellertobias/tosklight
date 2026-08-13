@@ -68,6 +68,7 @@ impl FixtureProfile {
             laser: None,
             crowd: None,
             effect: None,
+            physics: None,
             gobos: Vec::new(),
             modes,
             hazardous: first.hazardous,

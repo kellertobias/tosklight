@@ -21,6 +21,7 @@ pub(super) fn compile_instances(
     mount: EmitterMount,
     laser: Option<LaserOptics>,
     effect: Option<EffectProgram>,
+    physics: Option<PhysicsProgram>,
 ) {
     let shared_addresses = fixture
         .instances
@@ -74,6 +75,38 @@ pub(super) fn compile_instances(
             own
         };
         let channels = compile_channels(mode, primary_slots, &addresses);
+        let physics_body_index = fixture.profile.physics.as_ref().map(|declared| {
+            let index = scene.physics_scenery.len();
+            let kind = match declared.scenery_kind {
+                ProfilePhysicsSceneryKind::Curtain => SceneryKind::Curtain,
+                ProfilePhysicsSceneryKind::Prop => SceneryKind::Prop,
+            };
+            scene.physics_scenery.push(PhysicsSceneryObject {
+                fixture_instance_id: instance.instance_id,
+                scenery: SceneryObject {
+                    id: instance.instance_id,
+                    name: instance.name.clone(),
+                    position: instance.position,
+                    rotation_degrees: instance.rotation_degrees,
+                    size: Vec3::from_array(declared.size_metres),
+                    colour: [0.32, 0.08, 0.06],
+                    roughness: 0.86,
+                    kind,
+                    chords: 1,
+                },
+                program: physics.clone().unwrap_or_default(),
+                body: PhysicsBody {
+                    mass_kilograms: declared.mass_kilograms,
+                    gravity_metres_per_second_squared: declared.gravity_metres_per_second_squared,
+                },
+                constraints: PhysicsConstraints {
+                    floor_y_metres: declared.floor_y_metres,
+                    scenery_collision: declared.scenery_collision,
+                    self_collision: declared.self_collision,
+                },
+            });
+            index
+        });
         match external_camera_binding(fixture, instance, mode, &channels) {
             Ok(Some(candidate)) if external_camera.is_none() && external_camera_issue.is_none() => {
                 *external_camera = Some(candidate);
@@ -113,5 +146,15 @@ pub(super) fn compile_instances(
             laser.clone(),
             effect.clone(),
         );
+        if let Some(body_index) = physics_body_index
+            && let Some(binding) = bindings.last_mut()
+            && let Some(window) = laser_window(&channels)
+        {
+            binding.physics_window = Some(PhysicsWindow {
+                body_index,
+                logical_universe: window.logical_universe,
+                slots: window.slots,
+            });
+        }
     }
 }

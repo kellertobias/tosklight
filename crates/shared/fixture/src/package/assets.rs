@@ -90,6 +90,18 @@ pub(super) fn extract_asset_field(
             validate_effect_script(&bytes)?;
             "js"
         }
+        AssetKind::PhysicsScript => {
+            if !matches!(
+                declared_mime,
+                "text/javascript" | "application/javascript" | "application/ecmascript"
+            ) {
+                return Err(invalid(format!(
+                    "physics control script has unsupported media type {declared_mime}"
+                )));
+            }
+            validate_physics_script(&bytes)?;
+            "js"
+        }
         AssetKind::Gobo => {
             let format = sniff_image(&bytes)?;
             validate_image_dimensions(kind, &bytes, format)?;
@@ -236,6 +248,13 @@ fn validate_asset(
             validate_effect_script(bytes)?;
             Ok("text/javascript")
         }
+        AssetKind::PhysicsScript => {
+            if !path.to_ascii_lowercase().ends_with(".js") {
+                return Err(invalid("physics control script must use the .js extension"));
+            }
+            validate_physics_script(bytes)?;
+            Ok("text/javascript")
+        }
         AssetKind::Gobo => {
             let format = sniff_image(bytes)?;
             validate_image_dimensions(kind, bytes, format)?;
@@ -263,6 +282,15 @@ fn validate_scan_script(bytes: &[u8]) -> Result<(), FixturePackageError> {
 fn validate_effect_script(bytes: &[u8]) -> Result<(), FixturePackageError> {
     std::str::from_utf8(bytes)
         .map_err(|error| invalid(format!("effect script is not valid UTF-8: {error}")))?;
+    Ok(())
+}
+
+fn validate_physics_script(bytes: &[u8]) -> Result<(), FixturePackageError> {
+    std::str::from_utf8(bytes).map_err(|error| {
+        invalid(format!(
+            "physics control script is not valid UTF-8: {error}"
+        ))
+    })?;
     Ok(())
 }
 
@@ -597,6 +625,7 @@ fn validate_image_dimensions(
         AssetKind::Model
         | AssetKind::ScanScript
         | AssetKind::EffectScript
+        | AssetKind::PhysicsScript
         | AssetKind::Projection => unreachable!(),
     };
     if width == 0 || height == 0 || width > limit || height > limit {

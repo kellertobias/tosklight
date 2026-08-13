@@ -27,6 +27,10 @@ pub struct Scene {
     pub fixtures: Vec<FixtureInstance>,
     pub emitters: Vec<EmitterInstance>,
     pub scenery: Vec<SceneryObject>,
+    /// DMX-controlled scenic bodies. Their authored pose is structural; live offsets are in
+    /// [`crate::SceneValues::physics_frames`] so reconnects and scene revisions can carry state.
+    #[serde(default)]
+    pub physics_scenery: Vec<PhysicsSceneryObject>,
     /// Authored audience footprints. People are generated deterministically by the renderer so
     /// the portable scene stays compact and quality tiers can enforce local budgets.
     #[serde(default)]
@@ -93,6 +97,10 @@ impl Scene {
         for object in &self.scenery {
             bounds.expand(object.position - object.size * 0.5);
             bounds.expand(object.position + object.size * 0.5);
+        }
+        for object in &self.physics_scenery {
+            bounds.expand(object.scenery.position - object.scenery.size * 0.5);
+            bounds.expand(object.scenery.position + object.scenery.size * 0.5);
         }
         for crowd in &self.crowds {
             let half = Vec3::new(crowd.width_metres * 0.5, 0.0, crowd.depth_metres * 0.5);
@@ -639,6 +647,36 @@ pub struct SceneryObject {
     /// Chords in a truss cross-section: `1` is a pipe, `2` a ladder, `3` a triangle, `4` a box.
     /// Ignored by every other kind.
     pub chords: u8,
+}
+
+/// One reusable constrained rigid body represented as scenery rather than as a light emitter.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct PhysicsSceneryObject {
+    pub fixture_instance_id: Uuid,
+    pub scenery: SceneryObject,
+    pub program: PhysicsProgram,
+    pub body: PhysicsBody,
+    pub constraints: PhysicsConstraints,
+}
+
+#[derive(Clone, Copy, Debug, serde::Serialize, serde::Deserialize)]
+pub struct PhysicsBody {
+    pub mass_kilograms: f32,
+    pub gravity_metres_per_second_squared: f32,
+}
+
+#[derive(Clone, Copy, Debug, serde::Serialize, serde::Deserialize)]
+pub struct PhysicsConstraints {
+    pub floor_y_metres: f32,
+    pub scenery_collision: bool,
+    pub self_collision: bool,
+}
+
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
+pub struct PhysicsProgram {
+    pub script: Option<std::sync::Arc<str>>,
+    pub script_key: u64,
+    pub result_version: u16,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]

@@ -11,6 +11,7 @@ mod effects;
 mod embedded;
 mod helper_source;
 mod lasers;
+mod physics;
 
 mod media_worker;
 /// How many slots the renderer divides a gobo wheel into.

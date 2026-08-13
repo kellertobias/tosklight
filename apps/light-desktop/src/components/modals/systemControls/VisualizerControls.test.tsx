@@ -18,12 +18,14 @@ const view: VisualizerView = {
 	exposure: 1,
 	ambient: 0.06,
 	revision: 4,
+	physicsResetGeneration: 0,
 };
 
 function renderControls(overrides: Partial<Parameters<typeof VisualizerControls>[0]> = {}) {
 	const onSelectMode = vi.fn();
 	const onSelectQuality = vi.fn();
 	const onSelectTarget = vi.fn();
+	const onResetPhysics = vi.fn();
 	render(
 		<VisualizerControls
 			view={view}
@@ -34,10 +36,11 @@ function renderControls(overrides: Partial<Parameters<typeof VisualizerControls>
 			onSelectTarget={onSelectTarget}
 			onSelectMode={onSelectMode}
 			onSelectQuality={onSelectQuality}
+			onResetPhysics={onResetPhysics}
 			{...overrides}
 		/>,
 	);
-	return { onSelectMode, onSelectQuality, onSelectTarget };
+	return { onSelectMode, onSelectQuality, onSelectTarget, onResetPhysics };
 }
 
 describe("VisualizerControls", () => {
@@ -70,6 +73,12 @@ describe("VisualizerControls", () => {
 		choose("Rendering quality", "Ultra");
 		expect(onSelectQuality).toHaveBeenCalledWith("ultra");
 		expect(onSelectMode).not.toHaveBeenCalled();
+	});
+
+	it("sends the explicit physics reset action", () => {
+		const { onResetPhysics } = renderControls();
+		fireEvent.click(screen.getByRole("button", { name: "Reset physics scenery" }));
+		expect(onResetPhysics).toHaveBeenCalledOnce();
 	});
 
 	/// A desk driving one renderer must not be made to choose between renderers.

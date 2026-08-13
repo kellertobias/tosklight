@@ -39,14 +39,15 @@ pub use scene::{
     Aabb, BodyKind, CrowdArea, CrowdDensity, CrowdPosture, EffectProgram, EmitterInstance,
     EmitterKind, EmitterLayoutCells, EmitterOptics, FixtureBody, FixtureInstance,
     FixturePlanBinding, GoboArtwork, GoboSlot, LaserOptics, LightSource, MediaCrop, MediaProjector,
-    MediaSection, MediaSectionKind, MediaSourceBinding, MotionAxis, PlanArtwork, PlanFallback,
-    Scene, SceneryKind, SceneryObject, SourceForm, euler_degrees,
+    MediaSection, MediaSectionKind, MediaSourceBinding, MotionAxis, PhysicsBody,
+    PhysicsConstraints, PhysicsProgram, PhysicsSceneryObject, PlanArtwork, PlanFallback, Scene,
+    SceneryKind, SceneryObject, SourceForm, euler_degrees,
 };
 pub use uuid;
 pub use values::{
     CellValue, EffectFrame, EmitterValues, ExternalCameraState, LaserScan, ParticleEmitter,
-    ParticleFamily, ParticleTrigger, PhysicalMotionState, PhysicalMotionTarget, ScanPoint,
-    SceneValues, WheelMotionState,
+    ParticleFamily, ParticleTrigger, PhysicalMotionState, PhysicalMotionTarget, PhysicsFrame,
+    ScanPoint, SceneValues, WheelMotionState,
 };
 pub use view::{
     Camera, DEFAULT_FOG_VARIATION, FogVariation, ProjectionView, RenderQuality, Theme,
@@ -54,4 +55,4 @@ pub use view::{
 };
 
 /// Wire/protocol version of the semantic scene contract understood by this render core.
-pub const SCENE_PROTOCOL_VERSION: u32 = 2;
+pub const SCENE_PROTOCOL_VERSION: u32 = 3;

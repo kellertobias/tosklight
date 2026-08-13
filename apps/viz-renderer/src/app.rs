@@ -88,6 +88,7 @@ pub struct Application {
     /// Every laser's scan engine, and the override directory it watches.
     lasers: crate::lasers::Lasers,
     effects: crate::effects::Effects,
+    physics: crate::physics::Physics,
     /// Absent for helper/embed launches, which must open no media sockets or decoders.
     media_workers: Option<crate::media_worker::MediaWorkers>,
     /// Advances only when a new decoded source frame reaches the GPU. This participates in the
@@ -244,6 +245,11 @@ impl Application {
         let laser_scripts = crate::lasers::Lasers::directory(options.laser_scripts.clone());
         let preferences = Preferences::restored(&options);
         let options_for_paths = options.clone();
+        let preferences_path = crate::settings::preferences_path(&options_for_paths);
+        let physics_state_path = crate::physics::Physics::state_path(
+            preferences_path.as_deref(),
+            &options_for_paths.target,
+        );
         let media_enabled = !options.helper && !options.embed;
         // The planning source is the Viz editor, so it is selectable exactly when that editor can
         // be started. When it cannot, the control says why in the words the failed launch would
@@ -273,6 +279,7 @@ impl Application {
             last_persistence: Instant::now(),
             lasers: crate::lasers::Lasers::new(laser_scripts),
             effects: crate::effects::Effects::new(),
+            physics: crate::physics::Physics::with_state_path(physics_state_path),
             media_workers: media_enabled.then(crate::media_worker::MediaWorkers::default),
             media_revision: 0,
             media_notice: None,
@@ -298,7 +305,7 @@ impl Application {
             selected: None,
             startup_error: None,
             lasting_failure: None,
-            preferences_path: crate::settings::preferences_path(&options_for_paths),
+            preferences_path,
             stored_preferences: String::new(),
             next_preferences_save: Instant::now(),
             next_child_check: Instant::now(),

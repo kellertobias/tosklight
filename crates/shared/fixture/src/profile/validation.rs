@@ -141,6 +141,43 @@ impl FixtureProfile {
                 )));
             }
         }
+        if let Some(physics) = &self.physics {
+            if self.patch_policy != PatchPolicy::Dmx {
+                return Err(ProfileError::Invalid(
+                    "physics scenery requires a DMX-patchable fixture".into(),
+                ));
+            }
+            if physics.result_version != 1 {
+                return Err(ProfileError::Invalid(format!(
+                    "unsupported physics result version {}",
+                    physics.result_version
+                )));
+            }
+            if physics
+                .control_script_asset
+                .as_deref()
+                .is_none_or(str::is_empty)
+            {
+                return Err(ProfileError::Invalid(
+                    "physics scenery requires a control script".into(),
+                ));
+            }
+            if physics
+                .size_metres
+                .into_iter()
+                .any(|value| !value.is_finite() || value <= 0.0)
+                || !physics.mass_kilograms.is_finite()
+                || physics.mass_kilograms <= 0.0
+                || !physics.gravity_metres_per_second_squared.is_finite()
+                || !(0.0..=50.0).contains(&physics.gravity_metres_per_second_squared)
+                || !physics.floor_y_metres.is_finite()
+            {
+                return Err(ProfileError::Invalid(
+                    "physics body dimensions, mass, gravity, and floor must be finite and bounded"
+                        .into(),
+                ));
+            }
+        }
         // A wheel is read by slot, so two slots with the same number is an authoring mistake that
         // would otherwise silently drop one of them.
         let mut gobo_slots = HashSet::new();

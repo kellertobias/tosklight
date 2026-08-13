@@ -95,6 +95,8 @@ pub struct VisualizerView {
     pub ambient: f32,
     #[serde(default)]
     pub revision: u64,
+    #[serde(default)]
+    pub physics_reset_generation: u64,
 }
 
 fn one() -> f32 {

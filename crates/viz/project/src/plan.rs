@@ -8,7 +8,8 @@ use crate::fallback::{self, OpticalClass};
 use glam::{Quat, Vec3};
 use light_fixture::{
     ChannelBehavior, FixtureMode, FixtureProfile, GeometryMotionKind, InstalledFixtureAppearance,
-    LightSourceForm, PatchPolicy, ProfileEffect, ProfileLaser, ProfileOptics, Vector3,
+    LightSourceForm, PatchPolicy, ProfileEffect, ProfileLaser, ProfileOptics, ProfilePhysics,
+    ProfilePhysicsSceneryKind, Vector3,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -16,7 +17,8 @@ use uuid::Uuid;
 use viz_scene::{
     EffectProgram, EmitterInstance, EmitterKind, EmitterLayoutCells, EmitterOptics, FallbackReason,
     FixtureBody, FixtureInstance, FixturePlanBinding, LaserOptics, LightSource, MotionAxis,
-    PlanFallback, Scene, SourceForm,
+    PhysicsBody, PhysicsConstraints, PhysicsProgram, PhysicsSceneryObject, PlanFallback, Scene,
+    SceneryKind, SceneryObject, SourceForm,
 };
 
 /// One physical placement of a logical fixture: the root fixture or one multi-patch instance.
@@ -92,6 +94,8 @@ pub struct EmitterBinding {
     pub laser_window: Option<LaserWindow>,
     /// The whole raw fixture window supplied to an Effect program.
     pub effect_window: Option<EffectWindow>,
+    /// Raw fixture footprint for the first physics body owned by this fixture instance.
+    pub physics_window: Option<PhysicsWindow>,
 }
 
 /// The one fully patched virtual-camera fixture a dedicated external Visualizer may follow.
@@ -120,6 +124,13 @@ pub struct LaserWindow {
 
 #[derive(Clone, Debug)]
 pub struct EffectWindow {
+    pub logical_universe: u16,
+    pub slots: Vec<u16>,
+}
+
+#[derive(Clone, Debug)]
+pub struct PhysicsWindow {
+    pub body_index: usize,
     pub logical_universe: u16,
     pub slots: Vec<u16>,
 }
@@ -417,6 +428,7 @@ pub fn compile(fixtures: &[PatchedFixture]) -> ScenePlan {
             }
             resolved
         });
+        let physics = fixture.profile.physics.as_ref().map(physics_program);
         // The wheel this fixture turns, if its package carries one. Artwork is shared by handle:
         // one piece of glass declared by twenty fixtures is decoded once and lives in the scene
         // once.
@@ -446,6 +458,7 @@ pub fn compile(fixtures: &[PatchedFixture]) -> ScenePlan {
             mount,
             laser,
             effect,
+            physics,
         );
     }
     scene.recompute_bounds();
@@ -1046,6 +1059,21 @@ fn effect_program(declared: Option<&ProfileEffect>) -> EffectProgram {
     };
     program.result_version = declared.result_version;
     if let Some(script) = declared.effect_script_asset.as_deref()
+        && let Some(source) = decode_script(script)
+    {
+        program.script_key = script_key(&source);
+        program.script = Some(source.into());
+    }
+    program
+}
+
+fn physics_program(declared: &ProfilePhysics) -> PhysicsProgram {
+    let mut program = PhysicsProgram {
+        script: None,
+        script_key: 0,
+        result_version: declared.result_version,
+    };
+    if let Some(script) = declared.control_script_asset.as_deref()
         && let Some(source) = decode_script(script)
     {
         program.script_key = script_key(&source);

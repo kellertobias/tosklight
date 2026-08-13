@@ -54,6 +54,7 @@ export function useVisualizerViewControls(open: boolean) {
 		async (patch: {
 			mode?: VisualizerViewMode;
 			quality?: VisualizerRenderQuality;
+			resetPhysics?: boolean;
 		}) => {
 			if (!actions) return;
 			setBusy(true);
@@ -86,6 +87,7 @@ export function useVisualizerViewControls(open: boolean) {
 		selectMode: (mode: VisualizerViewMode) => void apply({ mode }),
 		selectQuality: (quality: VisualizerRenderQuality) =>
 			void apply({ quality }),
+		resetPhysics: () => void apply({ resetPhysics: true }),
 	};
 }
 

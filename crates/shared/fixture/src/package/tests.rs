@@ -1598,6 +1598,25 @@ fn shipped_effect_fixtures_keep_their_programs_and_exact_dmx_footprints() {
 }
 
 #[test]
+fn shipped_kabuki_round_trips_its_portable_physics_contract() {
+    let profile = shipped_profile("generic--kabuki-curtain.toskfixture");
+    assert_eq!(profile.name, "Kabuki Curtain");
+    assert_eq!(profile.modes[0].splits[0].footprint, 1);
+    assert_eq!(profile.modes[0].channels.len(), 1);
+    let physics = profile.physics.as_ref().expect("physics contract");
+    assert_eq!(physics.result_version, 1);
+    assert_eq!(physics.size_metres, [6.0, 5.0, 0.08]);
+    assert!(physics.scenery_collision);
+    assert!(!physics.self_collision);
+    assert!(physics.control_script_asset.is_some());
+    let restored = read_fixture_package(&write_fixture_package(&profile).unwrap()).unwrap();
+    assert_eq!(
+        serde_json::to_value(restored).unwrap(),
+        serde_json::to_value(profile).unwrap()
+    );
+}
+
+#[test]
 fn effect_scripts_are_utf8_and_only_belong_to_effect_fixtures() {
     let mut profile = profile();
     profile.effect = Some(crate::ProfileEffect {

@@ -27,6 +27,7 @@ export interface VisualizerView {
 	exposure: number;
 	ambient: number;
 	revision: number;
+	physicsResetGeneration: number;
 }
 
 export interface VisualizerViewSnapshot {
@@ -40,6 +41,7 @@ export interface VisualizerViewPatch {
 	quality?: VisualizerRenderQuality;
 	exposure?: number;
 	ambient?: number;
+	resetPhysics?: boolean;
 }
 
 /** The desk-owned view every connected visualizer follows, by renderer target. */
@@ -68,6 +70,7 @@ export class VisualizerViewApiClient {
 							| undefined,
 						exposure: patch.exposure,
 						ambient: patch.ambient,
+						reset_physics: patch.resetPhysics,
 					},
 				}),
 			)
@@ -83,5 +86,6 @@ function mapView(view: WireVisualizerViewProjection): VisualizerView {
 		exposure: view.exposure,
 		ambient: view.ambient,
 		revision: view.revision,
+		physicsResetGeneration: view.physics_reset_generation,
 	};
 }

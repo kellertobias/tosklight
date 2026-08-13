@@ -12,6 +12,248 @@ pub const DEFAULT_BUDGET: Duration = Duration::from_millis(4);
 pub const DEFAULT_MEMORY_LIMIT: usize = 8 * 1024 * 1024;
 pub const MAX_EMITTERS: usize = 32;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PhysicsAction {
+    Hold,
+    Release,
+    Reset,
+}
+
+#[derive(Clone, Debug)]
+pub struct PhysicsInstruction {
+    pub version: u16,
+    pub action: PhysicsAction,
+    pub fault: Option<String>,
+}
+
+pub struct PhysicsRequest<'a> {
+    pub source: &'a str,
+    pub source_key: u64,
+    pub result_version: u16,
+    pub slots: &'a [u8],
+    pub time_seconds: f64,
+    pub elapsed_seconds: f64,
+    pub fixture_identity: &'a str,
+    pub released: bool,
+    pub settled: bool,
+    pub timeline_seconds: f32,
+}
+
+/// Separate contexts keep one faulty scenic package isolated from particle Effect fixtures.
+pub struct PhysicsControlEngine {
+    runtime: Runtime,
+    programs: HashMap<usize, Program>,
+    deadline: Arc<AtomicU64>,
+    epoch: Instant,
+    budget: Duration,
+}
+
+impl PhysicsControlEngine {
+    pub fn new() -> Result<Self, String> {
+        let runtime = Runtime::new().map_err(|error| format!("physics runtime: {error}"))?;
+        runtime.set_memory_limit(DEFAULT_MEMORY_LIMIT);
+        let deadline = Arc::new(AtomicU64::new(u64::MAX));
+        let epoch = Instant::now();
+        let watched = Arc::clone(&deadline);
+        runtime.set_interrupt_handler(Some(Box::new(move || {
+            epoch.elapsed().as_micros().min(u64::MAX as u128) as u64
+                > watched.load(Ordering::Relaxed)
+        })));
+        Ok(Self {
+            runtime,
+            programs: HashMap::new(),
+            deadline,
+            epoch,
+            budget: DEFAULT_BUDGET,
+        })
+    }
+
+    pub fn run(&mut self, index: usize, request: &PhysicsRequest<'_>) -> PhysicsInstruction {
+        if request.result_version != 1 {
+            return physics_fault(format!(
+                "unsupported physics result version {}",
+                request.result_version
+            ));
+        }
+        if let Err(reason) = self.ensure_program(index, request) {
+            return physics_fault(reason);
+        }
+        let Some(program) = self.programs.get(&index) else {
+            return physics_fault("physics script was not compiled".into());
+        };
+        if let Some(reason) = &program.compile_fault {
+            return physics_fault(reason.clone());
+        }
+        self.arm();
+        let outcome = program.context.with(|ctx| invoke_physics(&ctx, request));
+        self.disarm();
+        outcome.unwrap_or_else(physics_fault)
+    }
+
+    pub fn retain(&mut self, keep: impl Fn(usize) -> bool) {
+        self.programs.retain(|index, _| keep(*index));
+    }
+
+    fn ensure_program(&mut self, index: usize, request: &PhysicsRequest<'_>) -> Result<(), String> {
+        if self.programs.get(&index).is_some_and(|program| {
+            program.source_key == request.source_key
+                && program.fixture_identity == request.fixture_identity
+        }) {
+            return Ok(());
+        }
+        let context = Context::full(&self.runtime)
+            .map_err(|error| format!("physics context could not be created: {error}"))?;
+        self.arm();
+        let compile_fault = context
+            .with(|ctx| declare_physics(&ctx, request.source))
+            .err();
+        self.disarm();
+        self.programs.insert(
+            index,
+            Program {
+                context,
+                source_key: request.source_key,
+                fixture_identity: request.fixture_identity.to_owned(),
+                compile_fault,
+            },
+        );
+        Ok(())
+    }
+    fn arm(&self) {
+        let now = self.epoch.elapsed().as_micros().min(u64::MAX as u128) as u64;
+        self.deadline.store(
+            now.saturating_add(self.budget.as_micros() as u64),
+            Ordering::Relaxed,
+        );
+    }
+    fn disarm(&self) {
+        self.deadline.store(u64::MAX, Ordering::Relaxed);
+    }
+}
+
+fn declare_physics(ctx: &Ctx<'_>, source: &str) -> Result<(), String> {
+    let (module, promise) = rquickjs::Module::declare(ctx.clone(), "physics-control", source)
+        .catch(ctx)
+        .map_err(|error| format!("physics script could not be compiled: {error}"))?
+        .eval()
+        .catch(ctx)
+        .map_err(|error| format!("physics script failed while loading: {error}"))?;
+    promise
+        .finish::<()>()
+        .catch(ctx)
+        .map_err(|error| format!("physics script failed while loading: {error}"))?;
+    let function: Value = module
+        .get("physics")
+        .ok()
+        .unwrap_or_else(|| Value::new_undefined(ctx.clone()));
+    if !function.is_function() {
+        return Err("physics script does not export a `physics` function".into());
+    }
+    ctx.globals()
+        .set("__physics", function)
+        .catch(ctx)
+        .map_err(|error| format!("physics script could not be prepared: {error}"))
+}
+
+fn invoke_physics(
+    ctx: &Ctx<'_>,
+    request: &PhysicsRequest<'_>,
+) -> Result<PhysicsInstruction, String> {
+    let function: Function = ctx
+        .globals()
+        .get("__physics")
+        .catch(ctx)
+        .map_err(|_| "physics script does not export a `physics` function".to_string())?;
+    let input = Object::new(ctx.clone())
+        .catch(ctx)
+        .map_err(|error| error.to_string())?;
+    let dmx = rquickjs::Array::new(ctx.clone())
+        .catch(ctx)
+        .map_err(|error| error.to_string())?;
+    for (index, value) in request.slots.iter().enumerate() {
+        dmx.set(index, *value)
+            .catch(ctx)
+            .map_err(|error| error.to_string())?;
+    }
+    input
+        .set("dmx", dmx)
+        .catch(ctx)
+        .map_err(|error| error.to_string())?;
+    input
+        .set("time", request.time_seconds)
+        .catch(ctx)
+        .map_err(|error| error.to_string())?;
+    input
+        .set("elapsed", request.elapsed_seconds)
+        .catch(ctx)
+        .map_err(|error| error.to_string())?;
+    input
+        .set("fixtureId", request.fixture_identity)
+        .catch(ctx)
+        .map_err(|error| error.to_string())?;
+    let state = Object::new(ctx.clone())
+        .catch(ctx)
+        .map_err(|error| error.to_string())?;
+    state
+        .set("released", request.released)
+        .catch(ctx)
+        .map_err(|error| error.to_string())?;
+    state
+        .set("settled", request.settled)
+        .catch(ctx)
+        .map_err(|error| error.to_string())?;
+    state
+        .set("timeline", request.timeline_seconds)
+        .catch(ctx)
+        .map_err(|error| error.to_string())?;
+    input
+        .set("state", state)
+        .catch(ctx)
+        .map_err(|error| error.to_string())?;
+    let output: Value = function.call((input,)).catch(ctx).map_err(|error| {
+        let message = error.to_string();
+        if message.trim().is_empty() || message.contains("interrupted") {
+            "physics script exceeded its time budget".into()
+        } else {
+            format!("physics script failed: {message}")
+        }
+    })?;
+    let object = output
+        .as_object()
+        .ok_or_else(|| "physics must return an object".to_string())?;
+    let version = object.get::<_, u16>("version").unwrap_or(1);
+    if version != 1 {
+        return Err(format!("unsupported physics result version {version}"));
+    }
+    let action = match object
+        .get::<_, String>("action")
+        .unwrap_or_else(|_| "hold".into())
+        .as_str()
+    {
+        "hold" => PhysicsAction::Hold,
+        "release" => PhysicsAction::Release,
+        "reset" => PhysicsAction::Reset,
+        other => {
+            return Err(format!(
+                "physics action `{other}` is not hold, release, or reset"
+            ));
+        }
+    };
+    Ok(PhysicsInstruction {
+        version,
+        action,
+        fault: None,
+    })
+}
+
+fn physics_fault(reason: String) -> PhysicsInstruction {
+    PhysicsInstruction {
+        version: 1,
+        action: PhysicsAction::Hold,
+        fault: Some(reason),
+    }
+}
+
 pub struct EffectRequest<'a> {
     pub source: &'a str,
     pub source_key: u64,
@@ -567,5 +809,71 @@ mod tests {
             0.1,
             "a live renderer restart begins fresh from current input"
         );
+    }
+
+    #[test]
+    fn physics_program_receives_exact_slots_and_returns_only_versioned_actions() {
+        let source = r#"export function physics(input) {
+          if (input.dmx.join(',') !== '0,192' || input.time !== 7.5 || input.elapsed !== 0.25 ||
+              input.fixtureId !== 'kabuki' || input.state.released || input.state.settled || input.state.timeline !== 0)
+            throw new Error('input mismatch');
+          return {version: 1, action: input.dmx[1] >= 192 ? 'release' : 'hold'};
+        }"#;
+        let mut engine = PhysicsControlEngine::new().unwrap();
+        let result = engine.run(
+            0,
+            &PhysicsRequest {
+                source,
+                source_key: 1,
+                result_version: 1,
+                slots: &[0, 192],
+                time_seconds: 7.5,
+                elapsed_seconds: 0.25,
+                fixture_identity: "kabuki",
+                released: false,
+                settled: false,
+                timeline_seconds: 0.0,
+            },
+        );
+        assert_eq!(result.fault, None);
+        assert_eq!(result.action, PhysicsAction::Release);
+        let invalid = PhysicsRequest {
+            source: "export function physics(){return {action:'explode'}}",
+            source_key: 2,
+            result_version: 1,
+            slots: &[],
+            time_seconds: 0.0,
+            elapsed_seconds: 0.0,
+            fixture_identity: "invalid",
+            released: false,
+            settled: false,
+            timeline_seconds: 0.0,
+        };
+        assert!(engine.run(1, &invalid).fault.is_some());
+    }
+
+    #[test]
+    fn one_faulty_physics_program_does_not_poison_another_body() {
+        let mut engine = PhysicsControlEngine::new().unwrap();
+        let faulty = PhysicsRequest {
+            source: "export function physics(){while(true){}}",
+            source_key: 1,
+            result_version: 1,
+            slots: &[],
+            time_seconds: 0.0,
+            elapsed_seconds: 0.0,
+            fixture_identity: "faulty",
+            released: false,
+            settled: false,
+            timeline_seconds: 0.0,
+        };
+        assert!(engine.run(0, &faulty).fault.is_some());
+        let good = PhysicsRequest {
+            source: "export function physics(){return {version:1,action:'reset'}}",
+            source_key: 2,
+            fixture_identity: "good",
+            ..faulty
+        };
+        assert_eq!(engine.run(1, &good).action, PhysicsAction::Reset);
     }
 }

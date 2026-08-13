@@ -391,7 +391,7 @@ pub fn build(scene: &Scene, values: &SceneValues, style: &FrameStyle) -> FrameIn
     if style.floor_grid {
         push_floor_grid(&mut frame, scene, style);
     }
-    scenery::push_scenery(&mut frame, scene, style);
+    scenery::push_scenery(&mut frame, scene, values, style);
     crowd::push_crowds(&mut frame, scene, style);
     media::push_media(&mut frame, scene, style);
     push_bodies(
