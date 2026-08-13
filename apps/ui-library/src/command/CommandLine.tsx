@@ -142,13 +142,17 @@ function CommandInputSurface(
 				{!props.hardware && (
 					<Button
 						className="command-escape"
+						aria-label={props.recordShiftArmed ? "ESC, Shift: UNDO" : "ESC"}
 						onClick={() =>
 							props.recordShiftArmed
 								? props.onEscape?.()
 								: props.onReplace("", true)
 						}
 					>
-						{props.recordShiftArmed ? "UNDO" : "ESC"}
+						<ShiftedKeyCaption
+							primary="ESC"
+							secondary={props.recordShiftArmed ? "UNDO" : null}
+						/>
 					</Button>
 				)}
 				<CommandStatusButton
@@ -220,7 +224,9 @@ function CommandStatusButton({
 				) : (
 					<>
 						<span className="status-label-full">DMX {status.frequency}Hz</span>
-						<span className="status-label-compact">DMX {status.frequency}Hz</span>
+						<span className="status-label-compact">
+							DMX {status.frequency}Hz
+						</span>
 					</>
 				)}
 				{status.deskError && (
@@ -285,9 +291,7 @@ function CommandRecordPreload(props: CommandLineProps) {
 				: props.recordState === "ready"
 					? "record-ready"
 					: "record-empty";
-	const recordLabel = props.recordShiftArmed
-		? "UPDATE"
-		:
+	const recordLabel =
 		props.recordState === "update-armed"
 			? "UPDATE ARMED"
 			: props.recordState === "record-armed"
@@ -302,6 +306,9 @@ function CommandRecordPreload(props: CommandLineProps) {
 					props.recordState === "record-armed"
 				}
 				title="REC · Shift+REC: Update · hold Shift+REC: Update Settings"
+				aria-label={
+					props.recordShiftArmed ? `${recordLabel}, Shift: UPDATE` : recordLabel
+				}
 				onPointerDown={(event) =>
 					props.onRecordStart(props.recordShiftArmed || event.shiftKey)
 				}
@@ -311,12 +318,20 @@ function CommandRecordPreload(props: CommandLineProps) {
 					props.onRecordComplete(props.recordShiftArmed || event.shiftKey)
 				}
 			>
-				{recordLabel}
+				<ShiftedKeyCaption
+					primary={recordLabel}
+					secondary={props.recordShiftArmed ? "UPDATE" : null}
+				/>
 			</Button>
 			<Button
 				className={`preload-button ${props.preloadArmed ? "preload-go" : "preload-enter"}`}
 				disabled={!props.preloadReady}
 				aria-busy={!props.preloadReady}
+				aria-label={
+					props.recordShiftArmed
+						? `${props.preloadLabel}, Shift: PRELOAD GO CLEAR`
+						: props.preloadLabel
+				}
 				title={
 					props.preloadArmed && props.pendingSummary
 						? `Pending Preload: ${props.pendingSummary}`
@@ -340,12 +355,30 @@ function CommandRecordPreload(props: CommandLineProps) {
 					preloadHeld.current = false;
 				}}
 			>
-				<b>{props.preloadLabel}</b>
+				<ShiftedKeyCaption
+					primary={props.preloadLabel}
+					secondary={props.recordShiftArmed ? "PRELOAD GO CLEAR" : null}
+				/>
 				{!props.preloadArmed && props.preloadActive && (
 					<small>(Hold: release)</small>
 				)}
 			</Button>
 		</div>
+	);
+}
+
+function ShiftedKeyCaption({
+	primary,
+	secondary,
+}: {
+	primary: string;
+	secondary: string | null;
+}) {
+	return (
+		<span className="shifted-key-caption">
+			<b>{primary}</b>
+			{secondary && <small className="shift-action-label">{secondary}</small>}
+		</span>
 	);
 }
 

@@ -3,7 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PlaybackDefinition, PlaybackPage } from "../../../api/types";
 import { useCommandLineShortcuts } from "./useCommandLineShortcuts";
 
-const appState = { regularNumberShortcuts: true, builtIn: "playback" };
+const appState = {
+	regularNumberShortcuts: true,
+	builtIn: "playback",
+	shiftArmed: false,
+};
+const appDispatch = vi.fn();
 
 let deskPage: number | null = 2;
 let runtimeStatus: "ready" | "loading" | "error" = "ready";
@@ -32,7 +37,7 @@ const createPage = vi.fn(async () => ({}));
 const topologyActions = { createPage, error: null };
 
 vi.mock("../../../state/AppContext", () => ({
-	useApp: () => ({ state: appState, dispatch: vi.fn() }),
+	useApp: () => ({ state: appState, dispatch: appDispatch }),
 }));
 
 // The shortcut path must never reach the broad Playback facade again.
@@ -158,6 +163,7 @@ async function flush() {
 
 beforeEach(() => {
 	appState.regularNumberShortcuts = true;
+	appState.shiftArmed = false;
 	deskPage = 2;
 	runtimeStatus = "ready";
 	collectionsReady = true;
@@ -175,6 +181,22 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("useCommandLineShortcuts playback keys", () => {
+	it("holds keyboard Shift only until the physical key is released", () => {
+		mount();
+
+		press("Shift", { code: "ShiftLeft", shiftKey: true });
+		expect(appDispatch).toHaveBeenCalledWith({
+			type: "SET_SHIFT_ARMED",
+			value: true,
+		});
+
+		release("ShiftLeft");
+		expect(appDispatch).toHaveBeenLastCalledWith({
+			type: "SET_SHIFT_ARMED",
+			value: false,
+		});
+	});
+
 	it("routes Shift Delete into Freeze command mode", () => {
 		mount();
 

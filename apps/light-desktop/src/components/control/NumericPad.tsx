@@ -5,9 +5,9 @@ import {
 } from "@tosklight/ui/command";
 import {
 	numericPadLayout,
+	type SoftwareDeskInputMode,
 	softwareDeskKeypadLayout,
 	softwareKeyLabel,
-	type SoftwareDeskInputMode,
 } from "@tosklight/ui/programmer-keypad";
 import { HighlightControls } from "./HighlightControls";
 import { useNumericPadController } from "./numericPad/useNumericPadController";
@@ -25,29 +25,70 @@ export function softwareDeskInputMode(): SoftwareDeskInputMode {
 }
 
 export function shiftedSoftwareKeyLabel(key: SoftwareKey, shifted: boolean) {
-	if (!shifted) return softwareKeyLabel(key);
+	if (!shifted) return softwareDeskKeyLabel(key);
 	return (
-		{
-			"0": "ALL",
-			"1": "INTENSITY",
-			"2": "COLOR",
-			"3": "POSITION",
-			"4": "BEAM",
-			"5": "DYNAMICS",
-			"6": "SHAPERS",
-			"7": "FOCUS",
-			"8": "CONTROL",
-			"9": "MEDIA",
-			CUE: "TIMECODE",
-			PLAYBACK: "MACRO",
-			ESC: "UNDO",
-			ENT: "LOCK",
-			CLR: "FREEZE",
-			PRE: "PRELOAD GO CLEAR",
-			REC: "UPDATE",
-			MOV: "COPY",
-		} as Partial<Record<SoftwareKey, string>>
-	)[key] ?? softwareKeyLabel(key);
+		(
+			{
+				"0": "ALL",
+				"1": "INTENSITY",
+				"2": "COLOR",
+				"3": "POSITION",
+				"4": "BEAM",
+				"5": "DYNAMICS",
+				"6": "SHAPERS",
+				"7": "FOCUS",
+				"8": "CONTROL",
+				"9": "MEDIA",
+				CUE: "TIMECODE",
+				PLAYBACK: "MACRO",
+				ESC: "UNDO",
+				ENT: "LOCK",
+				CLR: "FREEZE",
+				PRE: "PRELOAD GO CLEAR",
+				REC: "UPDATE",
+				MOV: "COPY",
+			} as Partial<Record<SoftwareKey, string>>
+		)[key] ?? softwareDeskKeyLabel(key)
+	);
+}
+
+export function softwareDeskKeyLabel(key: SoftwareKey) {
+	return key === "PLAYBACK" ? "PBK" : softwareKeyLabel(key);
+}
+
+function softwareDeskKeyPresentation(
+	key: SoftwareKey,
+	shifted: boolean,
+	deskLocked: boolean,
+	unfreezeNext: boolean,
+) {
+	const primary = softwareDeskKeyLabel(key);
+	if (!shifted) return { primary, secondary: null };
+	const secondary =
+		key === "ENT" && deskLocked
+			? "UNLOCK"
+			: key === "CLR" && unfreezeNext
+				? "UNFREEZE"
+				: shiftedSoftwareKeyLabel(key, true);
+	return {
+		primary,
+		secondary: secondary === primary ? null : secondary,
+	};
+}
+
+function SoftwareDeskKeyCaption({
+	primary,
+	secondary,
+}: {
+	primary: string;
+	secondary: string | null;
+}) {
+	return (
+		<span className="shifted-key-caption">
+			<span>{primary}</span>
+			{secondary && <small className="shift-action-label">{secondary}</small>}
+		</span>
+	);
 }
 
 export function NumericPad({
@@ -66,13 +107,25 @@ export function NumericPad({
 				highlightControls={<HighlightControls />}
 				onPress={pad.press}
 				layout={softwareDeskKeypadLayout(mode)}
-				labelForKey={(key) =>
-					key === "ENT" && pad.state.shiftArmed && pad.deskLocked
-						? "UNLOCK"
-						: key === "CLR" && pad.state.shiftArmed && pad.unfreezeNext
-							? "UNFREEZE"
-						: shiftedSoftwareKeyLabel(key, pad.state.shiftArmed)
-				}
+				labelForKey={(key) => (
+					<SoftwareDeskKeyCaption
+						{...softwareDeskKeyPresentation(
+							key,
+							pad.state.shiftArmed,
+							pad.deskLocked,
+							pad.unfreezeNext,
+						)}
+					/>
+				)}
+				ariaLabelForKey={(key) => {
+					const { primary, secondary } = softwareDeskKeyPresentation(
+						key,
+						pad.state.shiftArmed,
+						pad.deskLocked,
+						pad.unfreezeNext,
+					);
+					return secondary ? `${primary}, Shift: ${secondary}` : primary;
+				}}
 				clearState={pad.clearState}
 				activeKeys={[
 					...(pad.state.shiftArmed ? (["SHIFT"] as const) : []),

@@ -272,9 +272,9 @@ describe("scoped command-line integration", () => {
 			"error",
 		);
 		expect(screen.queryByLabelText(/Desk State needs attention/u)).toBeNull();
-		expect(screen.getByLabelText("Requested system controls tab")).toHaveTextContent(
-			"running",
-		);
+		expect(
+			screen.getByLabelText("Requested system controls tab"),
+		).toHaveTextContent("running");
 	});
 
 	it("opens current duplicate output diagnostics on the exact Desk state tab", async () => {
@@ -678,7 +678,10 @@ describe("Shift+Record Update gestures", () => {
 		const authority = createCommandLineTestAuthority();
 		render(authority.wrap(<CommandLineBar />));
 		await act(authority.settle);
-		const record = screen.getByRole("button", { name: "UPDATE" });
+		const record = screen.getByRole("button", {
+			name: "REC, Shift: UPDATE",
+		});
+		expect(record).toHaveTextContent("RECUPDATE");
 
 		fireEvent.pointerDown(record);
 		fireEvent.pointerUp(record);

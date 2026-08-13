@@ -36,7 +36,7 @@ function alignLabel(mode: ParameterController["alignMode"]) {
 }
 
 function AlignmentControl({ controller }: { controller: ParameterController }) {
-	const label = controller.state.shiftArmed ? "Off" : alignLabel(controller.alignMode);
+	const label = alignLabel(controller.alignMode);
 	const setMode = async (mode: ParameterController["alignMode"]) => {
 		if (!controller.programmerActions) return;
 		try {
@@ -48,7 +48,11 @@ function AlignmentControl({ controller }: { controller: ParameterController }) {
 	};
 	return (
 		<Button
-			aria-label={`Align ${label}`}
+			aria-label={
+				controller.state.shiftArmed
+					? `Align ${label}, Shift: Off`
+					: `Align ${label}`
+			}
 			className={`align-cycle ${controller.alignMode ? "align-active" : "align-off"}`}
 			onClick={(event) => {
 				if (event.shiftKey || controller.state.shiftArmed) {
@@ -67,10 +71,16 @@ function AlignmentControl({ controller }: { controller: ParameterController }) {
 			<span className="align-label-full">
 				<span>Align</span>
 				<span>{label}</span>
+				{controller.state.shiftArmed && (
+					<small className="shift-action-label">Off</small>
+				)}
 			</span>
 			<span className="align-label-compact">
 				<span>Align</span>
 				<span>{label}</span>
+				{controller.state.shiftArmed && (
+					<small className="shift-action-label">Off</small>
+				)}
 			</span>
 		</Button>
 	);

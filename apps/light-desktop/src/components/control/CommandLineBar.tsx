@@ -335,13 +335,7 @@ export function CommandLineBar() {
 			preloadArmed={model.preload.armed}
 			preloadActive={model.preload.active}
 			preloadReady={model.preload.ready}
-			preloadLabel={
-				model.state.shiftArmed
-					? "PRELOAD GO CLEAR"
-					: model.preload.armed
-						? "PRELOAD GO"
-						: "PRELOAD"
-			}
+			preloadLabel={model.preload.armed ? "PRELOAD GO" : "PRELOAD"}
 			pendingSummary={model.pendingSummary}
 			recordState={
 				model.state.updateArmed

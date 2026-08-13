@@ -401,6 +401,20 @@
 	white-space: nowrap;
 	text-align: center;
 }
+
+.shifted-key-caption {
+	display: grid;
+	place-items: center;
+	line-height: 1;
+}
+
+.shift-action-label {
+	margin-top: 2px;
+	font-size: 0.5em;
+	font-weight: 700;
+	line-height: 1;
+	opacity: 0.82;
+}
 .playback-page-current span {
 	font-size: 10px;
 	text-transform: uppercase;
@@ -680,7 +694,8 @@
 	color: inherit;
 }
 .file-list > button:is(.set-target, .copy-target, .move-target, .delete-target),
-.file-grid > button:is(.set-target, .copy-target, .move-target, .delete-target) {
+.file-grid
+	> button:is(.set-target, .copy-target, .move-target, .delete-target) {
 	border: 3px solid var(--file-command-target-color, #1bd6ec);
 }
 .file-list > button.copy-target,

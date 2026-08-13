@@ -116,13 +116,15 @@ export function softwareDeskKeypadLayout(
 			column: 2,
 			row: index + 2,
 		})),
-		...([
-			["TIME", "DIV", "-", "+"],
-			["7", "8", "9", "AT"],
-			["4", "5", "6", "TRU"],
-			["1", "2", "3", "CLR"],
-			["0", "BACKSPACE", ".", "ENT"],
-		] as const).flatMap((row, rowIndex) =>
+		...(
+			[
+				["TIME", "DIV", "-", "+"],
+				["7", "8", "9", "AT"],
+				["4", "5", "6", "TRU"],
+				["1", "2", "3", "CLR"],
+				["BACKSPACE", "0", ".", "ENT"],
+			] as const
+		).flatMap((row, rowIndex) =>
 			row.map((key, columnIndex) => ({
 				key,
 				section: "numbers" as const,

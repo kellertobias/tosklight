@@ -1,8 +1,8 @@
 import type { CSSProperties, ReactNode } from "react";
 import { Button } from "../common";
 import {
-	numericPadLayout,
 	type NumericPadLayoutItem,
+	numericPadLayout,
 	type SoftwareKey,
 	softwareKeyLabel,
 } from "../programmerKeypad";
@@ -18,7 +18,8 @@ export interface ProgrammerKeypadViewProps {
 	disabledKeys?: readonly SoftwareKey[];
 	classNameForKey?: (key: SoftwareKey) => string;
 	layout?: readonly NumericPadLayoutItem[];
-	labelForKey?: (key: SoftwareKey) => string;
+	labelForKey?: (key: SoftwareKey) => ReactNode;
+	ariaLabelForKey?: (key: SoftwareKey) => string;
 }
 
 const ACTION_KEYS = new Set<SoftwareKey>([
@@ -68,6 +69,7 @@ export function ProgrammerKeypadView({
 	classNameForKey,
 	layout = numericPadLayout,
 	labelForKey = softwareKeyLabel,
+	ariaLabelForKey,
 }: ProgrammerKeypadViewProps) {
 	const renderKeys = (section: "commands" | "numbers") =>
 		layout
@@ -79,6 +81,7 @@ export function ProgrammerKeypadView({
 				const disabled = disabledKeys.includes(key);
 				return (
 					<Button
+						aria-label={ariaLabelForKey?.(key)}
 						aria-pressed={active || undefined}
 						className={`${programmerKeyClassName(key, clearState)} ${classNameForKey?.(key) ?? ""} ${active ? "active" : ""}`.trim()}
 						data-keypad-key={key}
