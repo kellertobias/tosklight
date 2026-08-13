@@ -64,6 +64,17 @@ function beginFixtureEdit(
 				output: fixture.internal_bindings?.output ?? "",
 			}),
 		);
+	else if (kind === "crowd_width" || kind === "crowd_depth") {
+		const crowd = fixture.definition.profile_snapshot?.crowd;
+		const stored = controller.stagePositions3d[fixture.fixture_id];
+		ui.setEditText(
+			String(
+				kind === "crowd_width"
+					? (stored?.crowdWidthMetres ?? crowd?.default_width_metres ?? 5)
+					: (stored?.crowdDepthMetres ?? crowd?.default_depth_metres ?? 3),
+			),
+		);
+	}
 	else if (kind === "location" || kind === "rotation")
 		ui.setVector(fixture[kind] ?? { x: 0, y: 0, z: 0 });
 	else if (kind === "mode") selectFixtureFamily(controller, fixture);

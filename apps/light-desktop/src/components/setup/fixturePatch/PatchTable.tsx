@@ -49,6 +49,8 @@ const columns = [
 	"Rotation X",
 	"Rotation Y",
 	"Rotation Z",
+	"Footprint width",
+	"Footprint depth",
 	"Layer",
 ];
 
@@ -312,6 +314,52 @@ function FixtureTransformCells({ fixture }: { fixture: PatchedFixture }) {
 					</Button>
 				</td>
 			))}
+			<CrowdFootprintCells fixture={fixture} />
+		</>
+	);
+}
+
+function CrowdFootprintCells({ fixture }: { fixture: PatchedFixture }) {
+	const controller = usePatchController();
+	const crowd = fixture.definition.profile_snapshot?.crowd;
+	const stored = controller.stagePositions3d[fixture.fixture_id];
+	if (!crowd)
+		return (
+			<>
+				<td className="patch-secondary">—</td>
+				<td className="patch-secondary">—</td>
+			</>
+		);
+	return (
+		<>
+			<td className="patch-secondary">
+				<Button
+					className="patch-value"
+					aria-label={`Crowd width ${fixtureDisplayId(fixture)}`}
+					onClick={() => armEdit(controller, fixture, "crowd_width")}
+					onContextMenu={(event) => {
+						event.preventDefault();
+						event.stopPropagation();
+						beginFixtureEditFromContextMenu(controller, fixture, "crowd_width");
+					}}
+				>
+					{(stored?.crowdWidthMetres ?? crowd.default_width_metres).toFixed(2)} m
+				</Button>
+			</td>
+			<td className="patch-secondary">
+				<Button
+					className="patch-value"
+					aria-label={`Crowd depth ${fixtureDisplayId(fixture)}`}
+					onClick={() => armEdit(controller, fixture, "crowd_depth")}
+					onContextMenu={(event) => {
+						event.preventDefault();
+						event.stopPropagation();
+						beginFixtureEditFromContextMenu(controller, fixture, "crowd_depth");
+					}}
+				>
+					{(stored?.crowdDepthMetres ?? crowd.default_depth_metres).toFixed(2)} m
+				</Button>
+			</td>
 		</>
 	);
 }
@@ -461,6 +509,8 @@ function MultiPatchRow({
 					</Button>
 				</td>
 			))}
+			<td className="patch-secondary">—</td>
+			<td className="patch-secondary">—</td>
 			<td className="patch-secondary">
 				<span>—</span>
 			</td>

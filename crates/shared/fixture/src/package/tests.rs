@@ -251,6 +251,45 @@ fn shipped_audio_player_is_one_programmable_zero_dmx_internal_voice() {
     );
 }
 
+#[test]
+fn shipped_crowd_area_has_every_visual_only_mode() {
+    let profile = shipped_profile("venue--crowd-area.toskfixture");
+    assert_eq!(profile.manufacturer, "Venue");
+    assert_eq!(profile.name, "Crowd Area");
+    assert_eq!(profile.patch_policy, PatchPolicy::VisualOnly);
+    assert_eq!(profile.modes.len(), 9);
+    assert!(profile.modes.iter().all(|mode| {
+        mode.splits
+            == vec![FixtureSplit {
+                number: 1,
+                footprint: 0,
+            }]
+    }));
+    let crowd = profile.crowd.expect("crowd profile contract");
+    assert_eq!(crowd.default_width_metres, 5.0);
+    assert_eq!(crowd.default_depth_metres, 3.0);
+    assert_eq!(crowd.modes.len(), 9);
+    for posture in [
+        crate::CrowdPosture::Sitting,
+        crate::CrowdPosture::StandingStill,
+        crate::CrowdPosture::Dancing,
+    ] {
+        for density in [
+            crate::CrowdDensity::Sparse,
+            crate::CrowdDensity::Medium,
+            crate::CrowdDensity::Dense,
+        ] {
+            assert!(
+                crowd
+                    .modes
+                    .iter()
+                    .any(|mode| mode.posture == posture && mode.density == density),
+                "missing {posture:?} {density:?}"
+            );
+        }
+    }
+}
+
 fn assert_moving_lamp_geometry(filename: &str) {
     let mover = shipped_profile(filename);
     assert_eq!(mover.model_units, ModelUnits::Metres);

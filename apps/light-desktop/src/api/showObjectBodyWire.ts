@@ -274,6 +274,22 @@ function position3dMap(
 			rotationX: finiteNumberAt(position.rotationX, `${path}.${id}.rotationX`),
 			rotationY: finiteNumberAt(position.rotationY, `${path}.${id}.rotationY`),
 			rotationZ: finiteNumberAt(position.rotationZ, `${path}.${id}.rotationZ`),
+			...(position.crowdWidthMetres == null
+				? {}
+				: {
+						crowdWidthMetres: finiteNumberAt(
+							position.crowdWidthMetres,
+							`${path}.${id}.crowdWidthMetres`,
+						),
+					}),
+			...(position.crowdDepthMetres == null
+				? {}
+				: {
+						crowdDepthMetres: finiteNumberAt(
+							position.crowdDepthMetres,
+							`${path}.${id}.crowdDepthMetres`,
+						),
+					}),
 		};
 	}
 	return decoded;

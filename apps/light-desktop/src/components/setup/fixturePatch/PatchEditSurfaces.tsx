@@ -155,6 +155,23 @@ export function FixtureEditDialog() {
 			/>
 		);
 	}
+	if (edit === "crowd_width" || edit === "crowd_depth") {
+		const label = edit === "crowd_width" ? "Crowd width" : "Crowd depth";
+		return (
+			<ModalNumberEditor
+				ariaLabel={`${label} (metre)`}
+				title={`Set ${label.toLowerCase()}`}
+				value={controller.ui.editText}
+				onChange={controller.ui.setEditText}
+				onSubmit={(value) =>
+					saveEdit(controller, value ?? controller.ui.editText)
+				}
+				onClose={close}
+				allowDecimal
+				unit="meter"
+			/>
+		);
+	}
 	return (
 		<ModalRegistration onClose={close}>
 			<div className="stacked-modal-layer">
@@ -475,5 +492,7 @@ function editTitle(
 	if (edit === "bracket_angle") return "Bracket angle";
 	if (edit === "shaper_angle") return "Shaper angle";
 	if (edit === "internal_bindings") return "Audio bindings";
+	if (edit === "crowd_width") return "Crowd width";
+	if (edit === "crowd_depth") return "Crowd depth";
 	return edit;
 }

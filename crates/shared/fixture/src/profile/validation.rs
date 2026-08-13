@@ -160,25 +160,35 @@ impl FixtureProfile {
             }
             if !crowd.default_width_metres.is_finite()
                 || !crowd.default_depth_metres.is_finite()
-                || !(0.25..=250.0).contains(&crowd.default_width_metres)
-                || !(0.25..=250.0).contains(&crowd.default_depth_metres)
+                || !(1.0..=250.0).contains(&crowd.default_width_metres)
+                || !(1.0..=250.0).contains(&crowd.default_depth_metres)
             {
                 return Err(ProfileError::Invalid(
-                    "crowd footprint dimensions must be finite values within 0.25-250 metres"
-                        .into(),
+                    "crowd footprint dimensions must be finite values within 1-250 metres".into(),
                 ));
             }
             let mut bindings = HashSet::new();
+            let mut combinations = HashSet::new();
             for binding in &crowd.modes {
                 if !mode_ids.contains(&binding.mode_id) || !bindings.insert(binding.mode_id) {
                     return Err(ProfileError::Invalid(
                         "crowd modes must reference each fixture mode exactly once".into(),
                     ));
                 }
+                if !combinations.insert((binding.posture, binding.density)) {
+                    return Err(ProfileError::Invalid(
+                        "crowd posture and density combinations must be unique".into(),
+                    ));
+                }
             }
             if bindings != mode_ids {
                 return Err(ProfileError::Invalid(
                     "every crowd fixture mode needs a posture and density".into(),
+                ));
+            }
+            if combinations.len() != 9 {
+                return Err(ProfileError::Invalid(
+                    "a crowd fixture requires all nine posture and density combinations".into(),
                 ));
             }
         }

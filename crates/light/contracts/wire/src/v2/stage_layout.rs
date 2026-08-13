@@ -39,6 +39,13 @@ pub enum StageLayoutAction {
         fixture_id: Uuid,
         position: StagePosition2d,
     },
+    /// Stores the independent width and depth of one Crowd Area without changing its height.
+    #[serde(rename = "set_crowd_footprint")]
+    SetCrowdFootprint {
+        fixture_id: Uuid,
+        width_metres: f64,
+        depth_metres: f64,
+    },
     /// Intentionally replaces the complete 2D map from the stored 3D positions.
     #[serde(rename = "regenerate_2d")]
     Regenerate2d { projection: StageProjection2d },

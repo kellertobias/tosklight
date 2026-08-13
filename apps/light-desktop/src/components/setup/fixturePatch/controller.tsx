@@ -11,6 +11,8 @@ import {
 import type { PatchedFixture } from "../../../api/types";
 import { useFixtureLibrary } from "../../../features/fixtureLibrary/FixtureLibraryContext";
 import { usePatch, usePatchView } from "../../../features/patch/PatchContext";
+import { useStageLayoutActions } from "../../../features/stageLayout/StageLayoutActions";
+import { useStagePositions3d } from "../../../features/stageLayout/StageLayoutState";
 import { useApp } from "../../../state/AppContext";
 import { parsePatchAddress } from "../../input/ConsoleFields";
 import { normalizeFixtureSearch } from "../fixtureLibrary/model";
@@ -32,6 +34,8 @@ export type EditKind =
 	| "address"
 	| "location"
 	| "rotation"
+	| "crowd_width"
+	| "crowd_depth"
 	| "mode"
 	| "mib"
 	| "masters"
@@ -340,6 +344,8 @@ function useFixturePatchController(props: FixturePatchSetupProps) {
 	const patch = usePatch();
 	usePatchView(props.active ?? true);
 	const selection = usePatchSelection(props.active ?? true);
+	const stagePositions3d = useStagePositions3d();
+	const stageActions = useStageLayoutActions();
 	const app = useApp();
 	const ui = usePatchUiState();
 	const data = usePatchDerivedState(server, patch, ui);
@@ -356,6 +362,8 @@ function useFixturePatchController(props: FixturePatchSetupProps) {
 		server,
 		patch,
 		selection,
+		stagePositions3d,
+		stageActions,
 		appState: app.state,
 		dispatch: app.dispatch,
 		ui,

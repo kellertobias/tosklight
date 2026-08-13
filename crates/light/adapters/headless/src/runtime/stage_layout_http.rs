@@ -84,6 +84,23 @@ async fn stage_layout_action(
             let changed = apply_position_2d_edit(&mut body, *fixture_id, *position)?;
             (Vec::new(), changed)
         }
+        StageLayoutAction::SetCrowdFootprint {
+            fixture_id,
+            width_metres,
+            depth_metres,
+        } => {
+            let changed = apply_crowd_footprint(
+                &mut body,
+                *fixture_id,
+                *width_metres,
+                *depth_metres,
+                &patched_order,
+            )?;
+            (
+                changed.then_some(*fixture_id).into_iter().collect(),
+                changed,
+            )
+        }
         StageLayoutAction::Regenerate2d { projection } => {
             let before = body.clone();
             regenerate_positions_2d(&mut body, domain_projection(*projection))?;
@@ -179,6 +196,21 @@ fn validate_request(request: &StageLayoutActionRequest) -> Result<(), StageLayou
                 ));
             }
         }
+        StageLayoutAction::SetCrowdFootprint {
+            width_metres,
+            depth_metres,
+            ..
+        } => {
+            if !width_metres.is_finite()
+                || !depth_metres.is_finite()
+                || !(1.0..=250.0).contains(width_metres)
+                || !(1.0..=250.0).contains(depth_metres)
+            {
+                return Err(StageLayoutHttpError::bad_request(
+                    "crowd width and depth must be finite values within 1-250 metres",
+                ));
+            }
+        }
         StageLayoutAction::Regenerate2d { .. } => {}
     }
     Ok(())
@@ -215,6 +247,43 @@ fn apply_position_2d_edit(
         positions.insert(fixture_id.to_string(), next);
     }
     mark_positions_2d_manual(body)?;
+    Ok(true)
+}
+
+fn apply_crowd_footprint(
+    body: &mut serde_json::Value,
+    fixture_id: Uuid,
+    width_metres: f64,
+    depth_metres: f64,
+    patched_order: &HashMap<Uuid, usize>,
+) -> Result<bool, StageLayoutHttpError> {
+    let Some(index) = patched_order.get(&fixture_id).copied() else {
+        return Ok(false);
+    };
+    let layout = body
+        .as_object_mut()
+        .ok_or_else(|| StageLayoutHttpError::conflict("stored stage layout is not an object"))?;
+    let positions3d = layout
+        .entry("positions3d")
+        .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+    let positions3d = positions3d.as_object_mut().ok_or_else(|| {
+        StageLayoutHttpError::conflict("stored stage layout positions3d is not an object")
+    })?;
+    let entry = positions3d
+        .entry(fixture_id.to_string())
+        .or_insert_with(|| default_stage_position(index));
+    let entry = entry.as_object_mut().ok_or_else(|| {
+        StageLayoutHttpError::conflict("stored stage layout positions3d entry is not an object")
+    })?;
+    let width = json_number(width_metres)?;
+    let depth = json_number(depth_metres)?;
+    if entry.get("crowdWidthMetres") == Some(&width)
+        && entry.get("crowdDepthMetres") == Some(&depth)
+    {
+        return Ok(false);
+    }
+    entry.insert("crowdWidthMetres".into(), width);
+    entry.insert("crowdDepthMetres".into(), depth);
     Ok(true)
 }
 

@@ -93,6 +93,8 @@ export function saveEdit(
 			void applyEdit(controller, { internal_bindings: bindings });
 		}
 	}
+	if (edit === "crowd_width" || edit === "crowd_depth")
+		void saveCrowdFootprint(controller, edit, value);
 	if ((edit === "location" || edit === "rotation") && editAxis)
 		void applyFixtureIntent(
 			controller,
@@ -119,6 +121,42 @@ export function saveEdit(
 		});
 	}
 	void all;
+}
+
+async function saveCrowdFootprint(
+	controller: PatchController,
+	kind: "crowd_width" | "crowd_depth",
+	value: string,
+) {
+	const selected = controller.data.selected;
+	const crowd = selected?.definition.profile_snapshot?.crowd;
+	const actions = controller.stageActions;
+	if (!selected || !crowd || !actions?.canWrite) {
+		controller.ui.setEditError("The Crowd Area footprint cannot be edited right now.");
+		return;
+	}
+	const parsed = Number(value);
+	if (!Number.isFinite(parsed) || parsed < 1 || parsed > 250) {
+		controller.ui.setEditError("Enter a crowd footprint from 1 to 250 metres.");
+		return;
+	}
+	const stored = controller.stagePositions3d[selected.fixture_id];
+	const width =
+		kind === "crowd_width"
+			? parsed
+			: (stored?.crowdWidthMetres ?? crowd.default_width_metres);
+	const depth =
+		kind === "crowd_depth"
+			? parsed
+			: (stored?.crowdDepthMetres ?? crowd.default_depth_metres);
+	try {
+		await actions.setCrowdFootprint(selected.fixture_id, width, depth);
+		completeEdit(controller);
+	} catch (error) {
+		controller.ui.setEditError(
+			error instanceof Error ? error.message : "The crowd footprint could not be saved.",
+		);
+	}
 }
 
 export function parseInternalBindingDraft(value: string) {

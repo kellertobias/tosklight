@@ -66,6 +66,47 @@ async fn post_stage_layout_action_with_show(
         .unwrap()
 }
 
+async fn upload_seeded_show_with_patched_fixtures(
+    app: &Router,
+    token: &str,
+    data_dir: &std::path::Path,
+) -> (String, Vec<Uuid>) {
+    let seeded_path = data_dir.join("seeded-stage-layout.show");
+    default_show::initialise_legacy_test_show(&seeded_path).unwrap();
+    let upload = app
+        .clone()
+        .oneshot(show_action_request(
+            token,
+            serde_json::json!({
+                "type": "create",
+                "name": "Seeded stage",
+                "data_base64": STANDARD.encode(std::fs::read(&seeded_path).unwrap()),
+                "overwrite": false,
+            }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(upload.status(), StatusCode::OK);
+    let show_id = show_action_result(json(upload).await, "show")["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    open_show(app, token, &show_id).await;
+    let fixtures = app
+        .clone()
+        .oneshot(v2_show_object_get(token, &show_id, "patched_fixture", None))
+        .await
+        .unwrap();
+    let fixtures = json(fixtures).await;
+    let patched = fixtures["objects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|object| Uuid::parse_str(object["id"].as_str().unwrap()).unwrap())
+        .collect();
+    (show_id, patched)
+}
+
 fn move_request(
     request_id: &str,
     fixture_ids: &[Uuid],
@@ -436,6 +477,102 @@ async fn move_selection_defaults_patched_fixtures_without_any_stored_position() 
         2,
         "only the selected fixtures gain persisted entries"
     );
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
+async fn crowd_footprint_persists_absolute_dimensions_idempotently_and_preserves_opaque_fields() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let (show_id, patched) =
+        upload_seeded_show_with_patched_fixtures(&app, &token, &data_dir).await;
+    let fixture = patched[0];
+    let current = read_stage_layout(&app, &token, &show_id).await;
+    let seeded = seed_show_object(
+        &state,
+        &token,
+        &show_id,
+        "stage_layout",
+        "main",
+        current["revision"].as_u64().unwrap(),
+        serde_json::json!({
+            "version": 2,
+            "positions": {},
+            "positions3d": {
+                fixture.to_string(): {
+                    "x": 3.0,
+                    "y": 0.0,
+                    "z": 4.0,
+                    "rotationX": 0.0,
+                    "rotationY": 15.0,
+                    "rotationZ": 0.0,
+                    "futurePositionField": "kept"
+                }
+            },
+            "futureLayoutField": true
+        }),
+    )
+    .await;
+    assert_eq!(seeded.status(), StatusCode::OK);
+
+    let action = serde_json::json!({
+        "request_id": "crowd-footprint-1",
+        "action": {
+            "type": "set_crowd_footprint",
+            "fixture_id": fixture,
+            "width_metres": 12.5,
+            "depth_metres": 7.25
+        }
+    });
+    let first = json(post_stage_layout_action(&app, &token, &action).await).await;
+    assert_eq!(first["changed"], true);
+    assert_eq!(first["moved_fixture_ids"], serde_json::json!([fixture]));
+    let layout = read_stage_layout(&app, &token, &show_id).await;
+    let position = &layout["body"]["positions3d"][fixture.to_string()];
+    assert_eq!(position["crowdWidthMetres"], 12.5);
+    assert_eq!(position["crowdDepthMetres"], 7.25);
+    assert_eq!(position["x"], 3.0);
+    assert_eq!(position["rotationY"], 15.0);
+    assert_eq!(position["futurePositionField"], "kept");
+    assert_eq!(layout["body"]["futureLayoutField"], true);
+
+    let same = serde_json::json!({
+        "request_id": "crowd-footprint-2",
+        "action": action["action"].clone()
+    });
+    let unchanged = json(post_stage_layout_action(&app, &token, &same).await).await;
+    assert_eq!(unchanged["changed"], false);
+    assert_eq!(unchanged["revision"], first["revision"]);
+
+    let invalid = serde_json::json!({
+        "request_id": "crowd-footprint-invalid",
+        "action": {
+            "type": "set_crowd_footprint",
+            "fixture_id": fixture,
+            "width_metres": 0.99,
+            "depth_metres": 2.0
+        }
+    });
+    assert_eq!(
+        post_stage_layout_action(&app, &token, &invalid)
+            .await
+            .status(),
+        StatusCode::BAD_REQUEST
+    );
+
+    let unpatched = serde_json::json!({
+        "request_id": "crowd-footprint-unpatched",
+        "action": {
+            "type": "set_crowd_footprint",
+            "fixture_id": Uuid::new_v4(),
+            "width_metres": 2.0,
+            "depth_metres": 2.0
+        }
+    });
+    let ignored = json(post_stage_layout_action(&app, &token, &unpatched).await).await;
+    assert_eq!(ignored["changed"], false);
+    assert_eq!(ignored["moved_fixture_ids"], serde_json::json!([]));
     let _ = std::fs::remove_dir_all(data_dir);
 }
 

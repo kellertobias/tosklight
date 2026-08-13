@@ -78,6 +78,34 @@
           ]
         },
         {
+          "description": "Stores the independent width and depth of one Crowd Area without changing its height.",
+          "type": "object",
+          "properties": {
+            "depth_metres": {
+              "type": "number",
+              "format": "double"
+            },
+            "fixture_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": {
+              "type": "string",
+              "const": "set_crowd_footprint"
+            },
+            "width_metres": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          "required": [
+            "type",
+            "fixture_id",
+            "width_metres",
+            "depth_metres"
+          ]
+        },
+        {
           "description": "Intentionally replaces the complete 2D map from the stored 3D positions.",
           "type": "object",
           "properties": {

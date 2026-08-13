@@ -265,12 +265,13 @@ pub struct StagePosition3d {
     pub rotation_y: f32,
     #[serde(default, rename = "rotationZ")]
     pub rotation_z: f32,
-    /// Optional authored footprint scale for scalable Venue scenery. Older layouts omit both and
-    /// therefore retain the package's physical size.
-    #[serde(default, rename = "scaleX")]
-    pub scale_x: Option<f32>,
-    #[serde(default, rename = "scaleZ")]
-    pub scale_z: Option<f32>,
+    /// Optional authored Crowd Area footprint. Older layouts omit both and retain the package
+    /// defaults. These are absolute metres so package revision changes cannot silently resize a
+    /// show that the operator already authored.
+    #[serde(default, rename = "crowdWidthMetres")]
+    pub crowd_width_metres: Option<f32>,
+    #[serde(default, rename = "crowdDepthMetres")]
+    pub crowd_depth_metres: Option<f32>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize)]

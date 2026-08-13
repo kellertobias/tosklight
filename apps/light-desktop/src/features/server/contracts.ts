@@ -29,6 +29,8 @@ export interface StagePosition3d {
 	rotationX: number;
 	rotationY: number;
 	rotationZ: number;
+	crowdWidthMetres?: number;
+	crowdDepthMetres?: number;
 }
 
 export interface StoredStageLayout {

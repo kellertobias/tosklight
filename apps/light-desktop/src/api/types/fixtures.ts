@@ -119,6 +119,7 @@ export interface FixtureProfile {
 	projection_assets?: FixtureProjectionSet | null;
 	physical: FixtureProfilePhysical;
 	optics?: FixtureProfileOptics;
+	crowd?: FixtureProfileCrowd | null;
 	modes: FixtureMode[];
 	hazardous: boolean;
 	direct_control_protocols: Array<"citp">;
@@ -126,6 +127,15 @@ export interface FixtureProfile {
 	reserved_source: string | null;
 }
 
+export interface FixtureProfileCrowd {
+	default_width_metres: number;
+	default_depth_metres: number;
+	modes: Array<{
+		mode_id: string;
+		posture: "sitting" | "standing_still" | "dancing";
+		density: "sparse" | "medium" | "dense";
+	}>;
+}
 export type FixtureProjectionView = "top" | "left" | "right" | "front" | "back";
 export type FixtureProjectionOrientation =
 	| "x_right_z_down"

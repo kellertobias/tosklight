@@ -4,15 +4,12 @@ use super::{FrameInstances, FrameStyle, MeshInstance, MeshKind};
 use glam::{Mat4, Quat, Vec3};
 use viz_scene::{CrowdArea, CrowdPosture, RenderQuality, Scene, euler_degrees};
 
-const PERSON_RADIUS: f32 = 0.16;
-const HIGH_PERSON_BUDGET: usize = 384;
-const ULTRA_PERSON_BUDGET: usize = 1_024;
+const PERSON_MARGIN: f32 = 0.5;
 
 pub(super) fn push_crowds(frame: &mut FrameInstances, scene: &Scene, style: &FrameStyle) {
     let quality_budget = match style.quality {
         RenderQuality::Draft | RenderQuality::Standard => return,
-        RenderQuality::High => HIGH_PERSON_BUDGET,
-        RenderQuality::Ultra => ULTRA_PERSON_BUDGET,
+        RenderQuality::High | RenderQuality::Ultra => style.crowd_person_budget,
     };
     let amount = style.crowd_amount.clamp(0.0, 1.0);
     if amount <= 0.0 {
@@ -49,11 +46,11 @@ fn population(crowd: &CrowdArea) -> usize {
 
 fn push_people(frame: &mut FrameInstances, crowd: &CrowdArea, count: usize) {
     let orientation = euler_degrees(crowd.rotation_degrees);
-    let mut random = SplitMix64::new(crowd.seed);
+    let mut random = SplitMix64::new(population_seed(crowd));
     let half_width = crowd.width_metres * 0.5;
     let half_depth = crowd.depth_metres * 0.5;
-    let margin_x = PERSON_RADIUS.min((half_width * 0.95).max(0.0));
-    let margin_z = PERSON_RADIUS.min((half_depth * 0.95).max(0.0));
+    let margin_x = PERSON_MARGIN.min((half_width * 0.95).max(0.0));
+    let margin_z = PERSON_MARGIN.min((half_depth * 0.95).max(0.0));
     for index in 0..count {
         let local = Vec3::new(
             random.range(-half_width + margin_x, half_width - margin_x),
@@ -76,6 +73,24 @@ fn push_people(frame: &mut FrameInstances, crowd: &CrowdArea, count: usize) {
             &mut random,
         );
     }
+}
+
+fn population_seed(crowd: &CrowdArea) -> u64 {
+    let posture = match crowd.posture {
+        CrowdPosture::Sitting => 0x51_74_54,
+        CrowdPosture::StandingStill => 0x57_41_4e_44,
+        CrowdPosture::Dancing => 0x44_41_4e_43_45,
+    };
+    let density: u64 = match crowd.density {
+        viz_scene::CrowdDensity::Sparse => 0x53_50_41_52_53_45,
+        viz_scene::CrowdDensity::Medium => 0x4d_45_44_49_55_4d,
+        viz_scene::CrowdDensity::Dense => 0x44_45_4e_53_45,
+    };
+    crowd.seed
+        ^ posture
+        ^ density.rotate_left(17)
+        ^ u64::from(crowd.width_metres.to_bits()).rotate_left(29)
+        ^ u64::from(crowd.depth_metres.to_bits()).rotate_left(43)
 }
 
 fn push_person(
@@ -236,7 +251,7 @@ mod tests {
                 ..FrameStyle::default()
             },
         );
-        assert_eq!(high.crowd_drawn, HIGH_PERSON_BUDGET as u32);
+        assert_eq!(high.crowd_drawn, 384);
         assert!(high.crowd_authored > high.crowd_drawn);
         let again = super::super::build(
             &scene,
@@ -263,7 +278,7 @@ mod tests {
     }
 
     #[test]
-    fn generated_body_centres_remain_inside_the_footprint() {
+    fn complete_generated_bodies_remain_inside_the_footprint() {
         let crowd = CrowdArea {
             width_metres: 2.0,
             depth_metres: 1.0,
@@ -286,10 +301,64 @@ mod tests {
                 let x = instance.model[3][0];
                 let y = instance.model[3][1];
                 let z = instance.model[3][2];
-                assert!((-1.0..=1.0).contains(&x), "x={x}");
+                let half_x = 0.5
+                    * (instance.model[0][0].abs()
+                        + instance.model[1][0].abs()
+                        + instance.model[2][0].abs());
+                let half_z = 0.5
+                    * (instance.model[0][2].abs()
+                        + instance.model[1][2].abs()
+                        + instance.model[2][2].abs());
+                assert!(
+                    x - half_x >= -1.0 && x + half_x <= 1.0,
+                    "x={x} half={half_x}"
+                );
                 assert!((0.0..=1.8).contains(&y), "y={y}");
-                assert!((-0.5..=0.5).contains(&z), "z={z}");
+                assert!(
+                    z - half_z >= -0.5 && z + half_z <= 0.5,
+                    "z={z} half={half_z}"
+                );
             }
         }
+    }
+
+    #[test]
+    fn mode_and_footprint_are_deterministic_inputs_without_changing_person_height() {
+        let base = area();
+        let render = |crowd: CrowdArea| {
+            let scene = Scene {
+                crowds: vec![crowd],
+                ..Scene::default()
+            };
+            super::super::build(
+                &scene,
+                &viz_scene::SceneValues::default(),
+                &FrameStyle {
+                    quality: RenderQuality::High,
+                    ..FrameStyle::default()
+                },
+            )
+        };
+        let first = render(base.clone());
+        let restarted = render(base.clone());
+        assert_eq!(first.meshes[0].1[0].model, restarted.meshes[0].1[0].model);
+
+        let resized = render(CrowdArea {
+            width_metres: 30.0,
+            depth_metres: 12.0,
+            ..base.clone()
+        });
+        assert_ne!(first.meshes[0].1[0].model, resized.meshes[0].1[0].model);
+        assert_eq!(
+            first.meshes[0].1[0].model[1][1], resized.meshes[0].1[0].model[1][1],
+            "footprint size must not scale a person's height"
+        );
+
+        let sitting = render(CrowdArea {
+            posture: CrowdPosture::Sitting,
+            ..base
+        });
+        assert_ne!(first.meshes[0].1[0].model, sitting.meshes[0].1[0].model);
+        assert!(sitting.meshes[0].1[0].model[1][1] < first.meshes[0].1[0].model[1][1]);
     }
 }

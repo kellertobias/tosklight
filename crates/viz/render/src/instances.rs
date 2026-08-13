@@ -296,6 +296,8 @@ pub struct FrameStyle {
     pub quality: viz_scene::RenderQuality,
     /// Renderer-local fraction of every authored crowd to draw.
     pub crowd_amount: f32,
+    /// Per-frame crowd budget selected from quality and the renderer's adaptive hardware ladder.
+    pub crowd_person_budget: usize,
 }
 
 impl Default for FrameStyle {
@@ -321,6 +323,7 @@ impl Default for FrameStyle {
             scenery: |_| true,
             quality: viz_scene::RenderQuality::High,
             crowd_amount: 1.0,
+            crowd_person_budget: 384,
         }
     }
 }

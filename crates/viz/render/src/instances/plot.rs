@@ -34,6 +34,30 @@ pub(super) fn push_plot(
         );
     }
 
+    // Crowd Areas remain rectangular authored footprints on every plan. Individual people are a
+    // quality-dependent 3D presentation and would make a plot unstable; the footprint is the
+    // portable show intent the operator positions and scales.
+    for crowd in &scene.crowds {
+        let size = Vec3::new(crowd.width_metres, 0.02, crowd.depth_metres);
+        let orientation = euler_degrees(crowd.rotation_degrees);
+        frame.mesh(MeshKind::Cube).push(MeshInstance::new(
+            Mat4::from_rotation_translation(orientation, crowd.position + Vec3::Y * 0.01)
+                * Mat4::from_scale(size),
+            Vec3::ZERO,
+            1.0,
+            style.faint_ink * 0.1,
+            0.0,
+        ));
+        push_box_outline(
+            frame,
+            crowd.position + Vec3::Y * 0.01,
+            size,
+            orientation,
+            style.faint_ink,
+            1.0,
+        );
+    }
+
     // A drawn plan is read, not admired. The symbols are the quietest thing on it: they say where
     // the lanterns are, and an operator looking at a plan is looking at where the light is going.
     // Drawn in the page's full ink they compete with the beams for the eye and win, because there
@@ -251,5 +275,52 @@ fn push_box_outline(
                 colour,
             });
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use viz_scene::{CrowdArea, CrowdDensity, CrowdPosture};
+
+    #[test]
+    fn plots_draw_the_authored_crowd_rectangle_without_people() {
+        let scene = Scene {
+            crowds: vec![CrowdArea {
+                id: viz_scene::uuid::Uuid::nil(),
+                name: "Audience".into(),
+                position: Vec3::new(2.0, 0.0, -3.0),
+                rotation_degrees: Vec3::new(0.0, 25.0, 0.0),
+                width_metres: 12.0,
+                depth_metres: 7.0,
+                posture: CrowdPosture::Dancing,
+                density: CrowdDensity::Dense,
+                seed: 108,
+            }],
+            ..Scene::default()
+        };
+        let frame = super::super::build(
+            &scene,
+            &SceneValues::default(),
+            &FrameStyle {
+                plot: true,
+                quality: viz_scene::RenderQuality::Ultra,
+                ..FrameStyle::default()
+            },
+        );
+
+        assert_eq!(frame.meshes.len(), 1);
+        assert_eq!(frame.meshes[0].0, MeshKind::Cube);
+        assert_eq!(
+            frame.meshes[0].1.len(),
+            1,
+            "only the footprint fill is a mesh"
+        );
+        assert_eq!(
+            frame.lines.len(),
+            24,
+            "the twelve rectangle edges are retained"
+        );
+        assert_eq!(frame.crowd_drawn, 0, "plots never expand people");
     }
 }

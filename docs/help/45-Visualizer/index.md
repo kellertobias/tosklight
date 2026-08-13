@@ -23,6 +23,10 @@ Lasers are the exception to all of that. What a laser draws is decided by a patt
 inside the projector rather than by anything its channels describe, so a laser profile carries
 that engine as a small script and the Visualizer runs it to find the path the beam takes.
 
+An audience is a scalable **Venue — Crowd Area** fixture. Its mode chooses posture and density,
+its independently authored width and depth remain visible as a plan footprint, and the Visualizer
+fills it with deterministic silhouettes within the active quality budget.
+
 A look on stage can also be kept and taken away: a snapshot freezes the rig as it stands and
 can be turned into a Blender file for a finished render.
 
@@ -42,4 +46,5 @@ rendering it, [Driving the Visualizer from the Desk](04-desk-view-control.md) fo
 selecting the view and the quality from the desk, and [Lasers](05-lasers.md) for scan
 scripts and the persistence-of-vision settings that make lasers and strobes read correctly, and
 [Planning a Rig, and Moving It](06-planning-and-transfer.md) for the Viz Editor and moving a show
-between it and the desk.
+between it and the desk. Continue with [Crowd Areas](08-crowds.md) for modes, footprint editing, deterministic placement,
+local amount control, and measured quality budgets.

@@ -475,6 +475,12 @@ pub struct StagePosition3d {
     pub rotation_y: f64,
     #[serde(default)]
     pub rotation_z: f64,
+    /// Authored rectangular footprint for a scalable crowd-area Venue fixture. Other fixtures
+    /// leave these absent, and legacy layouts remain valid.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crowd_width_metres: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crowd_depth_metres: Option<f64>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]

@@ -44,6 +44,8 @@ pub(super) struct BenchmarkSample {
     dmx_hz: f32,
     lights: u32,
     degraded_frames: u64,
+    crowd_authored: u32,
+    crowd_drawn: u32,
 }
 
 impl BenchmarkSample {
@@ -63,6 +65,8 @@ impl BenchmarkSample {
             dmx_hz: 0.0,
             lights: 0,
             degraded_frames: 0,
+            crowd_authored: 0,
+            crowd_drawn: 0,
         }
     }
 
@@ -145,6 +149,8 @@ impl Application {
             if degraded {
                 sample.degraded_frames += 1;
             }
+            sample.crowd_authored = sample.crowd_authored.max(self.stats.crowd_authored);
+            sample.crowd_drawn = sample.crowd_drawn.max(self.stats.crowd_drawn);
         }
         if self.benchmark_view_started.elapsed().as_secs_f32() < slice {
             return false;
@@ -217,6 +223,10 @@ impl Application {
             if !pass_p95.is_empty() {
                 println!("  GPU pass p95 ms: {}", pass_p95.join("  |  "));
             }
+            println!(
+                "  crowd authored/drawn: {}/{}",
+                sample.crowd_authored, sample.crowd_drawn
+            );
         }
         for input in &measured.inputs {
             println!(

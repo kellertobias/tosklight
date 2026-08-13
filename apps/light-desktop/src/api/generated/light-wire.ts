@@ -750,7 +750,7 @@ export type StageLayoutAction = { "type": "move_selection", fixture_ids: Array<s
 /**
  * Meters for translation axes, degrees for rotation axes. Must be finite.
  */
-delta: number, } | { "type": "set_position_2d", fixture_id: string, position: StagePosition2d, } | { "type": "regenerate_2d", projection: StageProjection2d, };
+delta: number, } | { "type": "set_position_2d", fixture_id: string, position: StagePosition2d, } | { "type": "set_crowd_footprint", fixture_id: string, width_metres: number, depth_metres: number, } | { "type": "regenerate_2d", projection: StageProjection2d, };
 export type StageLayoutActionRequest = {
 /**
  * Client-generated idempotency identity, scoped to the authenticated desk session.

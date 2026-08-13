@@ -64,6 +64,19 @@ const patchFeature = {
 	updateFixtureIntent: vi.fn().mockResolvedValue(true),
 	deleteFixture: vi.fn().mockResolvedValue(true),
 };
+const stage = vi.hoisted(() => ({
+	positions3d: {} as Record<string, {
+		x: number;
+		y: number;
+		z: number;
+		rotationX: number;
+		rotationY: number;
+		rotationZ: number;
+		crowdWidthMetres?: number;
+		crowdDepthMetres?: number;
+	}>,
+	setCrowdFootprint: vi.fn(),
+}));
 
 vi.mock("../../api/ServerContext", () => ({ useServer: () => server }));
 vi.mock(
@@ -113,6 +126,16 @@ vi.mock("../../features/patch/PatchContext", async (importOriginal) => {
 });
 vi.mock("../../state/AppContext", () => ({
 	useApp: () => ({ state, dispatch }),
+}));
+vi.mock("../../features/stageLayout/StageLayoutState", () => ({
+	useStagePositions3d: () => stage.positions3d,
+}));
+vi.mock("../../features/stageLayout/StageLayoutActions", () => ({
+	useStageLayoutActions: () => ({
+		canWrite: true,
+		regenerate2d: vi.fn(),
+		setCrowdFootprint: stage.setCrowdFootprint,
+	}),
 }));
 
 function splitFixture(): PatchedFixture {
@@ -342,6 +365,7 @@ beforeEach(() => {
 	server.patch.fixtures = [splitFixture()];
 	server.fixtureProfiles = [];
 	server.selectedFixtures = [];
+	stage.positions3d = {};
 	programming.ready = true;
 	programming.selection.selected = [];
 	vi.clearAllMocks();
@@ -352,6 +376,13 @@ beforeEach(() => {
 	patchFeature.spreadFixtureVector.mockResolvedValue(true);
 	patchFeature.updatePolicy.mockResolvedValue(true);
 	patchFeature.deleteFixture.mockResolvedValue(true);
+	stage.setCrowdFootprint.mockResolvedValue({
+		request_id: "crowd-footprint",
+		revision: 2,
+		moved_fixture_ids: ["fixture-split"],
+		replayed: false,
+		changed: true,
+	});
 	patchFeature.patchFixtures.mockImplementation(
 		async (candidates: Array<{ fixture: PatchedFixture }>) =>
 			candidates.map((candidate) => ({
@@ -448,7 +479,7 @@ describe("Patch right-click SET parity", () => {
 			name: /17 Split Wash 17/,
 		}) as HTMLTableRowElement;
 
-		rightClick(within(row.cells[15]).getByRole("button"));
+		rightClick(within(row.cells[17]).getByRole("button"));
 
 		expect(
 			screen.getByRole("heading", { name: "Select layer" }),
@@ -2060,6 +2091,58 @@ describe("visual-only Venue placement", () => {
 	});
 });
 
+describe("Crowd Area footprint editing", () => {
+	it("shows persisted metre dimensions and saves one axis with the other unchanged", async () => {
+		const fixture = splitFixture();
+		const profile = fixture.definition.profile_snapshot;
+		if (!profile) throw new Error("crowd fixture profile is missing");
+		profile.patch_policy = "visual_only";
+		profile.crowd = {
+			default_width_metres: 5,
+			default_depth_metres: 3,
+			modes: [
+				{
+					mode_id: profile.modes[0].id,
+					posture: "standing_still",
+					density: "medium",
+				},
+			],
+		};
+		stage.positions3d[fixture.fixture_id] = {
+			x: 0,
+			y: 0,
+			z: 0,
+			rotationX: 0,
+			rotationY: 0,
+			rotationZ: 0,
+			crowdWidthMetres: 9,
+			crowdDepthMetres: 4.5,
+		};
+		server.patch.fixtures = [fixture];
+		render(<FixturePatchSetup />);
+
+		expect(screen.getByRole("button", { name: "Crowd width 17" })).toHaveTextContent(
+			"9.00 m",
+		);
+		expect(screen.getByRole("button", { name: "Crowd depth 17" })).toHaveTextContent(
+			"4.50 m",
+		);
+		fireEvent.contextMenu(screen.getByRole("button", { name: "Crowd width 17" }));
+		const modal = screen.getByRole("dialog", { name: "Crowd width (metre)" });
+		for (const key of ["1", "2", ".", "5"])
+			fireEvent.click(within(modal).getByRole("button", { name: key }));
+		fireEvent.click(within(modal).getByRole("button", { name: "ENTER" }));
+
+		await waitFor(() =>
+			expect(stage.setCrowdFootprint).toHaveBeenCalledWith(
+				"fixture-split",
+				12.5,
+				4.5,
+			),
+		);
+	});
+});
+
 describe("DMX address grid dragging", () => {
 	it("fits whole touch cells into the available width", () => {
 		expect(dmxGridColumnCount(360)).toBe(7);
@@ -2325,7 +2408,7 @@ describe("schema-v2 location and multi-patch editing", () => {
 		);
 	});
 
-	it("uses the exact sixteen-column grid for primary and multi-patch rows", () => {
+	it("uses the exact eighteen-column grid for primary and multi-patch rows", () => {
 		server.patch.fixtures = [policyFixture()];
 		render(<FixturePatchSetup />);
 		expect(
@@ -2346,6 +2429,8 @@ describe("schema-v2 location and multi-patch editing", () => {
 			"Rotation X",
 			"Rotation Y",
 			"Rotation Z",
+			"Footprint width",
+			"Footprint depth",
 			"Layer",
 		]);
 		const primary = screen.getByRole("row", {
@@ -2354,8 +2439,8 @@ describe("schema-v2 location and multi-patch editing", () => {
 		const multi = screen.getByRole("row", {
 			name: "Multi-patch Opposite hang",
 		}) as HTMLTableRowElement;
-		expect(primary.cells).toHaveLength(16);
-		expect(multi.cells).toHaveLength(16);
+		expect(primary.cells).toHaveLength(18);
+		expect(multi.cells).toHaveLength(18);
 		expect(multi.cells[1]).toHaveTextContent(/^—$/);
 		expect(multi.cells[2]).toHaveTextContent(/^—$/);
 		expect(multi.cells[4]).toHaveTextContent("S1 3.1 · S3 4.1");

@@ -52,6 +52,20 @@ export class StageLayoutApiClient {
 			projection: projection satisfies WireStageProjection2d,
 		});
 	}
+
+	setCrowdFootprint(
+		showId: string,
+		fixtureId: string,
+		widthMetres: number,
+		depthMetres: number,
+	): Promise<StageLayoutActionOutcome> {
+		return this.action(showId, {
+			type: "set_crowd_footprint",
+			fixture_id: fixtureId,
+			width_metres: widthMetres,
+			depth_metres: depthMetres,
+		});
+	}
 }
 
 function mapOutcome(

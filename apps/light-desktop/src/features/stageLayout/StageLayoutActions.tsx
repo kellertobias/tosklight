@@ -16,6 +16,11 @@ interface StageLayoutActions {
 	regenerate2d(
 		projection: StageProjection2d,
 	): Promise<StageLayoutActionOutcome>;
+	setCrowdFootprint(
+		fixtureId: string,
+		widthMetres: number,
+		depthMetres: number,
+	): Promise<StageLayoutActionOutcome>;
 }
 
 const StageLayoutActionsContext = createContext<StageLayoutActions | null>(
@@ -42,9 +47,28 @@ export function StageLayoutActionsProvider({
 		},
 		[canWrite, client, showId],
 	);
+	const setCrowdFootprint = useCallback(
+		(fixtureId: string, widthMetres: number, depthMetres: number) => {
+			if (!canWrite || !showId)
+				return Promise.reject(
+					new Error("The primary desk is not ready to edit the Stage layout"),
+				);
+			return client.setCrowdFootprint(
+				showId,
+				fixtureId,
+				widthMetres,
+				depthMetres,
+			);
+		},
+		[canWrite, client, showId],
+	);
 	const actions = useMemo(
-		() => ({ canWrite: canWrite && Boolean(showId), regenerate2d }),
-		[canWrite, regenerate2d, showId],
+		() => ({
+			canWrite: canWrite && Boolean(showId),
+			regenerate2d,
+			setCrowdFootprint,
+		}),
+		[canWrite, regenerate2d, setCrowdFootprint, showId],
 	);
 	return (
 		<StageLayoutActionsContext.Provider value={actions}>

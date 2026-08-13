@@ -604,7 +604,9 @@ mod tests {
             | Row::LaserBrightness
             | Row::Persistence
             | Row::PersistenceFalloff => QuickSettingsTab::Rendering,
-            Row::Labels | Row::ShowSelection | Row::FloorGrid => QuickSettingsTab::Features,
+            Row::Labels | Row::ShowSelection | Row::FloorGrid | Row::CrowdAmount => {
+                QuickSettingsTab::Features
+            }
             Row::BlenderPath | Row::Snapshot(_) => QuickSettingsTab::Snapshots,
             Row::Cancel => settings.tab,
         };
@@ -727,7 +729,12 @@ mod tests {
             ),
             (
                 QuickSettingsTab::Features,
-                vec![Row::Labels, Row::ShowSelection, Row::FloorGrid],
+                vec![
+                    Row::Labels,
+                    Row::ShowSelection,
+                    Row::FloorGrid,
+                    Row::CrowdAmount,
+                ],
             ),
             (QuickSettingsTab::Snapshots, vec![Row::BlenderPath]),
         ];
@@ -744,7 +751,7 @@ mod tests {
         }
         seen.sort_by_key(|row| format!("{row:?}"));
         seen.dedup();
-        assert_eq!(seen.len(), 21, "a setting was duplicated between tabs");
+        assert_eq!(seen.len(), 22, "a setting was duplicated between tabs");
 
         settings.selected = select(&mut settings, Row::Exposure);
         let exposure = preferences.exposure;

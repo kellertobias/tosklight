@@ -6,10 +6,10 @@
 
 use glam::Vec3;
 use viz_scene::{
-    Aabb, BodyKind, ConnectionState, EmitterInstance, EmitterKind, EmitterLayoutCells,
-    EmitterOptics, FixtureBody, FixtureInstance, LightSource, MotionAxis, ProviderCapabilities,
-    ProviderEvent, ProviderKind, Scene, SceneProvider, SceneValues, SceneryKind, SceneryObject,
-    SourceForm, uuid::Uuid,
+    Aabb, BodyKind, ConnectionState, CrowdArea, CrowdDensity, CrowdPosture, EmitterInstance,
+    EmitterKind, EmitterLayoutCells, EmitterOptics, FixtureBody, FixtureInstance, LightSource,
+    MotionAxis, ProviderCapabilities, ProviderEvent, ProviderKind, Scene, SceneProvider,
+    SceneValues, SceneryKind, SceneryObject, SourceForm, uuid::Uuid,
 };
 
 pub struct DemoProvider {
@@ -375,6 +375,19 @@ pub(crate) fn build_scene() -> Scene {
     };
     let wheel = demo_gobo_wheel(&mut scene);
     push_demo_scenery(&mut scene);
+    // One stable audience block makes the built-in benchmark exercise the crowd budget on every
+    // machine without requiring a private show file.
+    scene.crowds.push(CrowdArea {
+        id: Uuid::nil(),
+        name: "Audience".into(),
+        position: Vec3::new(0.0, 0.0, 4.0),
+        rotation_degrees: Vec3::ZERO,
+        width_metres: 40.0,
+        depth_metres: 20.0,
+        posture: CrowdPosture::StandingStill,
+        density: CrowdDensity::Dense,
+        seed: 108,
+    });
 
     for (truss, (height, depth)) in [(7.2_f32, -4.5_f32), (7.6, 0.0), (7.0, 4.0)]
         .into_iter()
@@ -635,6 +648,7 @@ mod tests {
         assert!(kinds.contains(&EmitterKind::Beam));
         assert!(kinds.contains(&EmitterKind::Emissive));
         assert!(kinds.contains(&EmitterKind::Atmosphere));
+        assert_eq!(provider.scene.crowds.len(), 1);
         assert!(!provider.scene.bounds.is_empty());
     }
 

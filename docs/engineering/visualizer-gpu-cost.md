@@ -123,6 +123,24 @@ tests cover the query path; the measured Ultra result above therefore used the d
 interval fallback. For static 3D Lines, the benchmark is the conservative forced-redraw case; the
 normal application gate issues no new renderer frame after the redraw identity is unchanged.
 
+### Crowd budget evidence
+
+Measured 2026-08-13 on the same Apple M5 Max / Metal / 4× MSAA renderer. The deterministic demo
+now includes one 40 m × 20 m dense Crowd Area: 1,080 authored people, deliberately above both
+quality budgets. Both commands held the 60 Hz presentation target and retained a deterministic
+prefix of the authored population:
+
+| Quality | Command | Result |
+| --- | --- | --- |
+| High | `--demo --view full_3d --quality high --benchmark 3` | 59.7 fps, 16.62 ms median, 17.91 ms p95, 3.23 ms CPU p95; 1,080 authored / 384 drawn |
+| Ultra | `--demo --view full_3d --quality ultra --benchmark 3` | 60.0 fps, 16.61 ms median, 17.87 ms p95, 2.67 ms CPU p95; 1,080 authored / 369 drawn |
+
+High's fixed cap is 384. Ultra begins at 1,024 and follows the existing six-rung 16 ms controller;
+this adapter again supplied no timestamp sample, so the conservative frame-interval fallback
+settled on its 0.6 scale rung (`1,024 × 0.6²`, rounded to 369). All measured frames reported
+degradation because authored demand exceeded the current person budget; that signal makes the
+fallback visible rather than indicating a missed presentation deadline.
+
 ## Next optimizations
 
 1. Render volumetrics into a dedicated lower-resolution target with depth-aware upsampling.

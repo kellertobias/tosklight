@@ -114,6 +114,8 @@ mod tests {
             rotation_x: 0.0,
             rotation_y: 0.0,
             rotation_z: 0.0,
+            crowd_width_metres: None,
+            crowd_depth_metres: None,
         }
     }
 

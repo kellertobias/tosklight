@@ -154,12 +154,10 @@ fn build_crowds(
                 .get(&fixture.fixture_id.to_string()),
             index,
         );
-        let authored_scale = models
+        let authored_footprint = models
             .stage_layout
             .positions3d
             .get(&fixture.fixture_id.to_string());
-        let scale_x = valid_crowd_scale(authored_scale.and_then(|value| value.scale_x));
-        let scale_z = valid_crowd_scale(authored_scale.and_then(|value| value.scale_z));
         result.push(CrowdArea {
             id: fixture.fixture_id,
             name: fixture.name.clone(),
@@ -169,8 +167,14 @@ fn build_crowds(
                 placement.position.z,
             ),
             rotation_degrees: placement.rotation_degrees,
-            width_metres: crowd.default_width_metres * scale_x,
-            depth_metres: crowd.default_depth_metres * scale_z,
+            width_metres: valid_crowd_dimension(
+                authored_footprint.and_then(|value| value.crowd_width_metres),
+                crowd.default_width_metres,
+            ),
+            depth_metres: valid_crowd_dimension(
+                authored_footprint.and_then(|value| value.crowd_depth_metres),
+                crowd.default_depth_metres,
+            ),
             posture: match mode.posture {
                 light_fixture::CrowdPosture::Sitting => CrowdPosture::Sitting,
                 light_fixture::CrowdPosture::StandingStill => CrowdPosture::StandingStill,
@@ -187,10 +191,10 @@ fn build_crowds(
     result
 }
 
-fn valid_crowd_scale(value: Option<f32>) -> f32 {
+fn valid_crowd_dimension(value: Option<f32>, fallback: f32) -> f32 {
     value
-        .filter(|value| value.is_finite() && (0.05..=100.0).contains(value))
-        .unwrap_or(1.0)
+        .filter(|value| value.is_finite() && (1.0..=250.0).contains(value))
+        .unwrap_or(fallback)
 }
 
 fn split_patches(splits: &[crate::wire::SplitAssignment]) -> Vec<(u16, Option<(u16, u16)>)> {

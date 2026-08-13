@@ -234,6 +234,13 @@ impl Renderer {
             },
             quality: view.quality,
             crowd_amount: self.crowd_amount,
+            crowd_person_budget: match view.quality {
+                viz_scene::RenderQuality::Draft | viz_scene::RenderQuality::Standard => 0,
+                viz_scene::RenderQuality::High => 384,
+                viz_scene::RenderQuality::Ultra => {
+                    (1_024.0 * adaptive_scale * adaptive_scale).round() as usize
+                }
+            },
         };
         let draw_beams = style.draw_beams && !plot;
         self.frame = crate::instances::build(scene, values, &style);
