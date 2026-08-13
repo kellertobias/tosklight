@@ -8,6 +8,7 @@ import {
 	within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import deadLineCueExtract from "../../../../assets/media/dead-line-cue-extract.en.md?raw";
 import type { FileEntry, TextDocument } from "../api/types";
 import { requestPaneRemoval } from "../components/shell/paneRemovalGuard";
 import { listTextEditorFiles, TextEditorWindow } from "./TextEditorWindow";
@@ -279,24 +280,24 @@ describe("TextEditorWindow file loading and presentation", () => {
 
 	it("renders Markdown-only and two-column Edit + Markdown views from the same authoritative text", async () => {
 		mocks.state.desks[0].panes[0].textEditorMode = "markdown";
-		mocks.server.readTextFile.mockResolvedValue(
-			document("# Running Order\n\n- House open"),
-		);
+		mocks.server.readTextFile.mockResolvedValue(document(deadLineCueExtract));
 		const view = render(<TextEditorWindow paneId="editor" />);
 
 		const rendered = await screen.findByRole("article", {
 			name: "Rendered Markdown",
 		});
 		expect(
-			within(rendered).getByRole("heading", { name: "Running Order" }),
+			within(rendered).getByRole("heading", { name: "Dead Line" }),
 		).toBeVisible();
+		expect(
+			within(rendered).getByRole("heading", { name: "End cue" }),
+		).toBeVisible();
+		expect(within(rendered).getByText("BLACKOUT.")).toBeVisible();
 		expect(screen.queryByLabelText("File text")).not.toBeInTheDocument();
 
 		mocks.state.desks[0].panes[0].textEditorMode = "split";
 		view.rerender(<TextEditorWindow paneId="editor" />);
-		expect(screen.getByLabelText("File text")).toHaveValue(
-			"# Running Order\n\n- House open",
-		);
+		expect(screen.getByLabelText("File text")).toHaveValue(deadLineCueExtract);
 		expect(
 			screen.getByRole("article", { name: "Rendered Markdown" }),
 		).toBeVisible();

@@ -97,9 +97,16 @@ pub struct TextCatalog {
 
 pub const CATALOG_VERSION: u32 = 1;
 
+/// A two-page English cue extract from the author-provided *Dead Line* script.
+///
+/// Kept as a separate UTF-8 asset rather than a Rust string so it stays a useful bundled text
+/// fixture for Media and can be reviewed or copied without rebuilding a configuration document.
+const DEAD_LINE_CUE_EXTRACT: &str =
+    include_str!("../../../../assets/media/dead-line-cue-extract.en.txt");
+
 impl Default for TextCatalog {
-    /// One shipped example per kind, so a first run has something to select and an operator can
-    /// see what each kind does before writing their own.
+    /// Shipped examples give a first run something to select and an operator a real text fixture
+    /// to test against before writing their own.
     fn default() -> Self {
         Self {
             version: CATALOG_VERSION,
@@ -118,6 +125,20 @@ impl Default for TextCatalog {
                         duration: std::time::Duration::from_secs(600),
                     }),
                     style: TextStyle::default(),
+                },
+                TextSlot {
+                    // A real, cue-dense script extract keeps static-text testing representative.
+                    address: MediaAddress::new(DEFAULT_BANK, 3),
+                    name: "Dead Line - cue extract (English)".to_owned(),
+                    entry: TextEntry::new(crate::text::TextKind::Static {
+                        text: DEAD_LINE_CUE_EXTRACT.to_owned(),
+                    }),
+                    style: TextStyle {
+                        // The extract is intentionally much longer than an ordinary title card.
+                        size: 0.035,
+                        alignment: Alignment::Left,
+                        ..TextStyle::default()
+                    },
                 },
             ],
         }
@@ -167,6 +188,22 @@ mod tests {
             );
             assert!(!slot.address.is_blank(), "{} is unreachable", slot.name);
         }
+    }
+
+    #[test]
+    fn shipped_catalog_includes_the_english_cue_dense_script_fixture() {
+        let catalog = TextCatalog::default();
+        let slot = catalog
+            .resolve(MediaAddress::new(DEFAULT_BANK, 3))
+            .expect("the bundled script extract is assigned");
+
+        assert_eq!(slot.name, "Dead Line - cue extract (English)");
+        let TextKind::Static { text } = &slot.entry.kind else {
+            panic!("the bundled script extract must be static text");
+        };
+        assert!(text.contains("notification sound"));
+        assert!(text.contains("city noise"));
+        assert!(text.contains("spotlight isolates Mia"));
     }
 
     #[test]
