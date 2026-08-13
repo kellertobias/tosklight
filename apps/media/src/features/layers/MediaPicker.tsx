@@ -5,8 +5,8 @@
 // file 007 while they look through folders.
 
 import { SelectField } from "@tosklight/ui/controls";
-import type { CatalogView } from "../../shared/api/generated/media-wire";
 import { addressLabel, folderLabel, itemLabel } from "../../entities/catalog";
+import type { CatalogView } from "../../shared/api/generated/media-wire";
 
 export interface MediaPickerProps {
 	catalog: CatalogView | undefined;
@@ -18,7 +18,13 @@ export interface MediaPickerProps {
 
 const BLANK = "0";
 
-export function MediaPicker({ catalog, folder, file, disabled, onSelect }: MediaPickerProps) {
+export function MediaPicker({
+	catalog,
+	folder,
+	file,
+	disabled,
+	onSelect,
+}: MediaPickerProps) {
 	const folders = catalog?.folders ?? [];
 	const selected = folders.find((candidate) => candidate.folder === folder);
 

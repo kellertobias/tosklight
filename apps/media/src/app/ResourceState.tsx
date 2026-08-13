@@ -27,10 +27,15 @@ export function ResourceState<T>({
 	const { data, failure, loading, stale, reload } = resource;
 
 	if (data === undefined) {
-		if (failure) return <Failed subject={subject} message={failure.message} onRetry={reload} />;
+		if (failure)
+			return (
+				<Failed subject={subject} message={failure.message} onRetry={reload} />
+			);
 		return (
 			<p className="media-state" role="status" aria-live="polite">
-				{loading ? `Loading ${subject}…` : `${capitalize(subject)} not loaded yet.`}
+				{loading
+					? `Loading ${subject}…`
+					: `${capitalize(subject)} not loaded yet.`}
 			</p>
 		);
 	}

@@ -24,7 +24,10 @@ describe("the audio monitor", () => {
 			"aria-valuenow",
 			"60",
 		);
-		expect(screen.getByRole("meter", { name: "Peak" })).toHaveAttribute("aria-valuenow", "80");
+		expect(screen.getByRole("meter", { name: "Peak" })).toHaveAttribute(
+			"aria-valuenow",
+			"80",
+		);
 		expect(screen.getByRole("img", { name: "Waveform" })).toBeInTheDocument();
 		expect(screen.getByText("128.0 BPM")).toBeInTheDocument();
 	});
@@ -48,7 +51,9 @@ describe("the audio monitor", () => {
 		render(<AudioPage />);
 
 		expect(await screen.findByText("No input device")).toBeInTheDocument();
-		expect(screen.getByText("this server is not capturing audio")).toBeInTheDocument();
+		expect(
+			screen.getByText("this server is not capturing audio"),
+		).toBeInTheDocument();
 		expect(screen.getByText("not enough beats yet")).toBeInTheDocument();
 	});
 
@@ -64,7 +69,9 @@ describe("the audio monitor", () => {
 		const server = stubServer();
 		render(<AudioPage />);
 
-		await userEvent.click(await screen.findByRole("button", { name: "Change audio settings" }));
+		await userEvent.click(
+			await screen.findByRole("button", { name: "Change audio settings" }),
+		);
 		const gain = screen.getByLabelText("Gain");
 		await userEvent.clear(gain);
 		await userEvent.type(gain, "2");
@@ -78,13 +85,19 @@ describe("the audio monitor", () => {
 		stubServer();
 		render(<AudioPage />);
 
-		await userEvent.click(await screen.findByRole("button", { name: "Change audio settings" }));
+		await userEvent.click(
+			await screen.findByRole("button", { name: "Change audio settings" }),
+		);
 		await userEvent.click(
 			screen.getByRole("button", { name: "This machine's default input" }),
 		);
-		expect(screen.getByRole("option", { name: "Desk feed" })).toBeInTheDocument();
 		expect(
-			screen.getByText(/Choosing a different input opens a\s+different stream/u),
+			screen.getByRole("option", { name: "Desk feed" }),
+		).toBeInTheDocument();
+		expect(
+			screen.getByText(
+				/Choosing a different input opens a\s+different stream/u,
+			),
 		).toBeInTheDocument();
 	});
 
@@ -98,9 +111,13 @@ describe("the audio monitor", () => {
 		});
 		render(<AudioPage />);
 
-		await userEvent.click(await screen.findByRole("button", { name: "Change audio settings" }));
+		await userEvent.click(
+			await screen.findByRole("button", { name: "Change audio settings" }),
+		);
 		await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
-		expect(await screen.findByRole("alert")).toHaveTextContent("inputGain must be between");
+		expect(await screen.findByRole("alert")).toHaveTextContent(
+			"inputGain must be between",
+		);
 	});
 });

@@ -4,12 +4,20 @@
 // watching the meter. The meter arrives over the telemetry socket; the tuning is an edit like any
 // other, and the gains reach the running analysis as soon as it is stored.
 
-import { Button, NumberField, SelectField, TextField } from "@tosklight/ui/controls";
+import {
+	Button,
+	NumberField,
+	SelectField,
+	TextField,
+} from "@tosklight/ui/controls";
 import { useState } from "react";
 import { ResourceState } from "../../app/ResourceState";
 import { api } from "../../shared/api/client";
 import { requestId, useEditing } from "../../shared/api/editing";
-import type { AudioSettingsView, UpdateAudio } from "../../shared/api/generated/media-wire";
+import type {
+	AudioSettingsView,
+	UpdateAudio,
+} from "../../shared/api/generated/media-wire";
 import { useAudio } from "../../shared/api/queries";
 import { useTelemetry } from "../../shared/api/telemetry";
 import { AudioMeters } from "./AudioMeters";
@@ -42,11 +50,16 @@ export function AudioPage() {
 							<AudioSettings
 								settings={data.settings}
 								busy={editing.busy}
-								onSave={(edit) => void editing.save(() => api.updateAudio(edit))}
+								onSave={(edit) =>
+									void editing.save(() => api.updateAudio(edit))
+								}
 								onCancel={editing.cancel}
 							/>
 						) : (
-							<article className="media-settings-section" aria-label="Audio settings">
+							<article
+								className="media-settings-section"
+								aria-label="Audio settings"
+							>
 								<StoredSettings settings={data.settings} />
 								<div className="media-settings-actions">
 									<Button onClick={() => editing.begin("audio")}>
@@ -81,8 +94,10 @@ function StoredSettings({ settings }: { settings: AudioSettingsView }) {
 }
 
 function describeDevice(settings: AudioSettingsView): string {
-	if (settings.deviceBy === "system-default") return "this machine's default input";
-	if (settings.deviceBy === "index") return `input number ${settings.deviceValue}`;
+	if (settings.deviceBy === "system-default")
+		return "this machine's default input";
+	if (settings.deviceBy === "index")
+		return `input number ${settings.deviceValue}`;
 	return settings.deviceValue ?? "unnamed";
 }
 
@@ -130,7 +145,10 @@ function AudioSettings({
 	// device that is not plugged in yet, which is a real case on a rig built in advance.
 	const options = [
 		{ value: "system-default", label: "This machine's default input" },
-		...settings.availableDevices.map((name) => ({ value: `name:${name}`, label: name })),
+		...settings.availableDevices.map((name) => ({
+			value: `name:${name}`,
+			label: name,
+		})),
 		{ value: "name", label: "A device by name…" },
 	];
 	const selection =
@@ -202,8 +220,9 @@ function AudioSettings({
 
 			{settings.deviceTakesEffectOnRestart && (
 				<p className="media-state is-notice">
-					The gains take effect as you save them. Choosing a different input opens a
-					different stream, which happens the next time this server starts.
+					The gains take effect as you save them. Choosing a different input
+					opens a different stream, which happens the next time this server
+					starts.
 				</p>
 			)}
 

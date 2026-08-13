@@ -53,7 +53,11 @@ export function AudioMeters({ audio, live }: AudioMetersProps) {
 					</span>
 				</dd>
 				<dt>Tempo</dt>
-				<dd>{audio.bpm > 0 ? `${audio.bpm.toFixed(1)} BPM` : "not enough beats yet"}</dd>
+				<dd>
+					{audio.bpm > 0
+						? `${audio.bpm.toFixed(1)} BPM`
+						: "not enough beats yet"}
+				</dd>
 			</dl>
 		</article>
 	);

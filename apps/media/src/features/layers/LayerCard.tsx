@@ -1,9 +1,14 @@
 // One layer's controls.
 
 import { Button } from "@tosklight/ui/controls";
-import type { CatalogView, LayerView, OutputView, UpdateLayer } from "../../shared/api/generated/media-wire";
-import { layerName, percent, sourceBadge } from "../../entities/output";
 import { addressLabel, resolveAddress } from "../../entities/catalog";
+import { layerName, percent, sourceBadge } from "../../entities/output";
+import type {
+	CatalogView,
+	LayerView,
+	OutputView,
+	UpdateLayer,
+} from "../../shared/api/generated/media-wire";
 import { MediaPicker } from "./MediaPicker";
 
 export interface LayerCardProps {
@@ -29,9 +34,20 @@ function maskSummary(layer: LayerView): string {
 	return `${address} · ${percent(mask.opacity)} · ${how}`;
 }
 
-export function LayerCard({ output, layer, catalog, readOnly, onChange, onReset }: LayerCardProps) {
+export function LayerCard({
+	output,
+	layer,
+	catalog,
+	readOnly,
+	onChange,
+	onReset,
+}: LayerCardProps) {
 	const badge = sourceBadge(layer.sourceStatus);
-	const { item } = resolveAddress(catalog, layer.address.folder, layer.address.file);
+	const { item } = resolveAddress(
+		catalog,
+		layer.address.folder,
+		layer.address.file,
+	);
 	const dimmerId = `${output.id}-layer-${layer.index}-dimmer`;
 
 	return (
@@ -69,7 +85,9 @@ export function LayerCard({ output, layer, catalog, readOnly, onChange, onReset 
 					step={1}
 					value={Math.round(layer.dimmer * 100)}
 					disabled={readOnly}
-					onChange={(event) => onChange({ dimmer: Number(event.target.value) / 100 })}
+					onChange={(event) =>
+						onChange({ dimmer: Number(event.target.value) / 100 })
+					}
 				/>
 				<output htmlFor={dimmerId}>{percent(layer.dimmer)}</output>
 			</div>

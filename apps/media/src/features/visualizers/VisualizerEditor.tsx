@@ -19,7 +19,10 @@ export interface VisualizerEditorProps {
 }
 
 /// Which fields each published control name writes, and how it is labelled.
-const NUMBERS: Record<string, { label: string; field: keyof VisualizerParametersView; step: number }> = {
+const NUMBERS: Record<
+	string,
+	{ label: string; field: keyof VisualizerParametersView; step: number }
+> = {
 	count: { label: "Count", field: "count", step: 1 },
 	size: { label: "Size", field: "size", step: 0.01 },
 	speed: { label: "Speed", field: "speed", step: 0.1 },
@@ -38,18 +41,28 @@ const NUMBERS: Record<string, { label: string; field: keyof VisualizerParameters
 	mode: { label: "Variant", field: "mode", step: 1 },
 };
 
-const FLAGS: Record<string, { label: string; field: keyof VisualizerParametersView }> = {
+const FLAGS: Record<
+	string,
+	{ label: string; field: keyof VisualizerParametersView }
+> = {
 	mirror: { label: "Mirror", field: "mirror" },
 	filled: { label: "Filled", field: "filled" },
 	wireframe: { label: "Wireframe", field: "wireframe" },
 };
 
-export function VisualizerEditor({ visualizer, busy, onSave, onCancel }: VisualizerEditorProps) {
+export function VisualizerEditor({
+	visualizer,
+	busy,
+	onSave,
+	onCancel,
+}: VisualizerEditorProps) {
 	const [name, setName] = useState(visualizer.name);
 	const [parameters, setParameters] = useState(visualizer.parameters);
 
-	const set = (field: keyof VisualizerParametersView, value: number | boolean) =>
-		setParameters((current) => ({ ...current, [field]: value }));
+	const set = (
+		field: keyof VisualizerParametersView,
+		value: number | boolean,
+	) => setParameters((current) => ({ ...current, [field]: value }));
 
 	return (
 		<form
@@ -60,7 +73,11 @@ export function VisualizerEditor({ visualizer, busy, onSave, onCancel }: Visuali
 				onSave({ requestId: crypto.randomUUID(), name, parameters });
 			}}
 		>
-			<TextField label="Name" value={name} onChange={(event) => setName(event.target.value)} />
+			<TextField
+				label="Name"
+				value={name}
+				onChange={(event) => setName(event.target.value)}
+			/>
 
 			{visualizer.uses.map((control) => {
 				const number = NUMBERS[control];
@@ -71,7 +88,9 @@ export function VisualizerEditor({ visualizer, busy, onSave, onCancel }: Visuali
 							label={number.label}
 							step={number.step}
 							value={String(parameters[number.field])}
-							onChange={(event) => set(number.field, Number(event.target.value))}
+							onChange={(event) =>
+								set(number.field, Number(event.target.value))
+							}
 						/>
 					);
 				}

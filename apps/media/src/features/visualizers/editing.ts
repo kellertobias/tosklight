@@ -6,7 +6,10 @@
 
 import { useCallback, useState } from "react";
 import { ApiFailure, api } from "../../shared/api/client";
-import type { UpdateVisualizer, VisualizerView } from "../../shared/api/generated/media-wire";
+import type {
+	UpdateVisualizer,
+	VisualizerView,
+} from "../../shared/api/generated/media-wire";
 
 export interface VisualizerEditing {
 	/** Which visualizer is open for editing, by address. */

@@ -28,8 +28,8 @@ export class ErrorBoundary extends Component<Props, State> {
 		return (
 			<div className="media-state is-error" role="alert">
 				<p>
-					The administration interface stopped responding. Program output is unaffected —
-					the server keeps running whatever the desk asked for.
+					The administration interface stopped responding. Program output is
+					unaffected — the server keeps running whatever the desk asked for.
 				</p>
 				<Button variant="primary" onClick={() => window.location.reload()}>
 					Reload the interface

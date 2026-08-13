@@ -1,6 +1,10 @@
 // Typed models over an output projection.
 
-import type { LayerView, OutputView, SourceStatusView } from "../shared/api/generated/media-wire";
+import type {
+	LayerView,
+	OutputView,
+	SourceStatusView,
+} from "../shared/api/generated/media-wire";
 
 export type SourceTone = "neutral" | "busy" | "good" | "bad";
 
@@ -20,7 +24,10 @@ const BADGES: Record<string, { label: string; tone: SourceTone }> = {
 };
 
 export function sourceBadge(status: SourceStatusView): SourceBadge {
-	const badge = BADGES[status.state] ?? { label: status.state, tone: "neutral" as SourceTone };
+	const badge = BADGES[status.state] ?? {
+		label: status.state,
+		tone: "neutral" as SourceTone,
+	};
 	return { ...badge, detail: status.failure ?? undefined };
 }
 
@@ -39,7 +46,9 @@ export function percent(value: number): string {
  * A desk owning an output is normal operation, not an error, so the wording explains rather than
  * warns — and every control this covers is disabled rather than silently ignored.
  */
-export function readOnlyReason(output: OutputView | undefined): string | undefined {
+export function readOnlyReason(
+	output: OutputView | undefined,
+): string | undefined {
 	if (!output?.dmxActive) return undefined;
 	return "A lighting desk is driving this output. Its values change here when the desk stops sending.";
 }

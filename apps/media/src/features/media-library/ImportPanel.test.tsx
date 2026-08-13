@@ -34,10 +34,14 @@ describe("importing into the library", () => {
 		const server = stubServer();
 		render(<LibraryPage />);
 
-		await userEvent.click(await screen.findByRole("button", { name: "Convert 1 file" }));
+		await userEvent.click(
+			await screen.findByRole("button", { name: "Convert 1 file" }),
+		);
 
 		await waitFor(() =>
-			expect(screen.getByRole("progressbar", { name: /Converting/u })).toBeInTheDocument(),
+			expect(
+				screen.getByRole("progressbar", { name: /Converting/u }),
+			).toBeInTheDocument(),
 		);
 		expect(server.writes).toContain("/library/import");
 		expect(server.imports.pending).toHaveLength(0);
@@ -46,7 +50,9 @@ describe("importing into the library", () => {
 	it("stops an import that is still going", async () => {
 		const server = stubServer();
 		render(<LibraryPage />);
-		await userEvent.click(await screen.findByRole("button", { name: "Convert 1 file" }));
+		await userEvent.click(
+			await screen.findByRole("button", { name: "Convert 1 file" }),
+		);
 		await screen.findByRole("progressbar", { name: /Converting/u });
 
 		await userEvent.click(screen.getByRole("button", { name: "Stop" }));
@@ -58,8 +64,12 @@ describe("importing into the library", () => {
 		stubServer({ imports: anImportState({ canImport: false }) });
 		render(<LibraryPage />);
 
-		expect(await screen.findByRole("alert")).toHaveTextContent("FFmpeg is not installed");
-		expect(screen.getByRole("button", { name: "Convert 1 file" })).toBeDisabled();
+		expect(await screen.findByRole("alert")).toHaveTextContent(
+			"FFmpeg is not installed",
+		);
+		expect(
+			screen.getByRole("button", { name: "Convert 1 file" }),
+		).toBeDisabled();
 	});
 
 	it("draws an indeterminate bar rather than inventing a percentage", async () => {
@@ -106,7 +116,9 @@ describe("importing into the library", () => {
 		});
 		render(<LibraryPage />);
 
-		expect(await screen.findByText("the file has no video stream")).toBeInTheDocument();
+		expect(
+			await screen.findByText("the file has no video stream"),
+		).toBeInTheDocument();
 		expect(screen.getByText("Failed")).toBeInTheDocument();
 	});
 
@@ -116,6 +128,8 @@ describe("importing into the library", () => {
 
 		// The library itself still renders; only the panel is absent.
 		await screen.findByLabelText("Search Library");
-		expect(screen.queryByRole("article", { name: "Import" })).not.toBeInTheDocument();
+		expect(
+			screen.queryByRole("article", { name: "Import" }),
+		).not.toBeInTheDocument();
 	});
 });

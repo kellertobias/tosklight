@@ -14,9 +14,15 @@ describe("the layer page", () => {
 		stubServer();
 		render(<LayersPage />);
 
-		expect(await screen.findByRole("heading", { name: "Main" })).toBeInTheDocument();
-		expect(await screen.findByRole("article", { name: "Layer 1" })).toBeInTheDocument();
-		expect(screen.getByRole("article", { name: "Layer 2" })).toBeInTheDocument();
+		expect(
+			await screen.findByRole("heading", { name: "Main" }),
+		).toBeInTheDocument();
+		expect(
+			await screen.findByRole("article", { name: "Layer 1" }),
+		).toBeInTheDocument();
+		expect(
+			screen.getByRole("article", { name: "Layer 2" }),
+		).toBeInTheDocument();
 	});
 
 	it("sends only the dimmer when the dimmer moves, and leaves the selection alone", async () => {
@@ -26,7 +32,9 @@ describe("the layer page", () => {
 
 		fireEvent.change(sliders[0], { target: { value: "40" } });
 
-		await waitFor(() => expect(server.outputs[0].layers[0].dimmer).toBeCloseTo(0.4));
+		await waitFor(() =>
+			expect(server.outputs[0].layers[0].dimmer).toBeCloseTo(0.4),
+		);
 		expect(server.outputs[0].layers[0].address).toEqual({
 			folder: 1,
 			file: 1,
@@ -41,7 +49,9 @@ describe("the layer page", () => {
 		expect(
 			await screen.findByText(/a lighting desk is driving this output/iu),
 		).toBeInTheDocument();
-		const restart = await screen.findAllByRole("button", { name: "Restart media" });
+		const restart = await screen.findAllByRole("button", {
+			name: "Restart media",
+		});
 		for (const button of restart) expect(button).toBeDisabled();
 	});
 
@@ -54,7 +64,9 @@ describe("the layer page", () => {
 		};
 		render(<LayersPage />);
 
-		const restart = await screen.findAllByRole("button", { name: "Restart media" });
+		const restart = await screen.findAllByRole("button", {
+			name: "Restart media",
+		});
 		await userEvent.click(restart[0]);
 
 		expect(
@@ -66,11 +78,15 @@ describe("the layer page", () => {
 		const server = stubServer();
 		render(<LayersPage />);
 
-		const restart = await screen.findAllByRole("button", { name: "Restart media" });
+		const restart = await screen.findAllByRole("button", {
+			name: "Restart media",
+		});
 		await userEvent.click(restart[0]);
 
 		await waitFor(() =>
-			expect(server.writes.some((path) => path.endsWith("/layers/0/reset"))).toBe(true),
+			expect(
+				server.writes.some((path) => path.endsWith("/layers/0/reset")),
+			).toBe(true),
 		);
 	});
 });

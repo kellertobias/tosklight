@@ -10,10 +10,13 @@
 
 import { Button } from "@tosklight/ui/controls";
 import { useEffect, useState } from "react";
+import { addressLabel } from "../../entities/catalog";
 import { ApiFailure, api } from "../../shared/api/client";
 import { requestId } from "../../shared/api/editing";
-import { addressLabel } from "../../entities/catalog";
-import type { ImportJobView, ImportsView } from "../../shared/api/generated/media-wire";
+import type {
+	ImportJobView,
+	ImportsView,
+} from "../../shared/api/generated/media-wire";
 import { useTelemetry } from "../../shared/api/telemetry";
 
 /// How often to re-read what is waiting. Only the *jobs* are pushed; what is on disk changes when
@@ -68,7 +71,9 @@ export function ImportPanel({ onImported }: ImportPanelProps) {
 	if (!imports) return null;
 
 	const pending = imports.pending;
-	const running = jobs.filter((job) => job.state === "queued" || job.state === "running");
+	const running = jobs.filter(
+		(job) => job.state === "queued" || job.state === "running",
+	);
 
 	if (pending.length === 0 && jobs.length === 0) return null;
 
@@ -106,8 +111,8 @@ export function ImportPanel({ onImported }: ImportPanelProps) {
 
 			{!imports.canImport && (
 				<p className="media-state is-error" role="alert">
-					This machine cannot convert media: FFmpeg is not installed or not on PATH.
-					Install it and restart the server.
+					This machine cannot convert media: FFmpeg is not installed or not on
+					PATH. Install it and restart the server.
 				</p>
 			)}
 
@@ -123,11 +128,13 @@ export function ImportPanel({ onImported }: ImportPanelProps) {
 			{pending.length > 0 && (
 				<>
 					<p className="media-state is-notice">
-						These files are in the library but not in a format this server can play.
-						Converting them leaves the originals where they are.
+						These files are in the library but not in a format this server can
+						play. Converting them leaves the originals where they are.
 					</p>
 					<table className="media-table">
-						<caption className="media-visually-hidden">Waiting to be imported</caption>
+						<caption className="media-visually-hidden">
+							Waiting to be imported
+						</caption>
 						<thead>
 							<tr>
 								<th scope="col">Address</th>
@@ -138,7 +145,9 @@ export function ImportPanel({ onImported }: ImportPanelProps) {
 						<tbody>
 							{pending.map((item) => (
 								<tr key={`${item.address.folder}/${item.address.file}`}>
-									<td>{addressLabel(item.address.folder, item.address.file)}</td>
+									<td>
+										{addressLabel(item.address.folder, item.address.file)}
+									</td>
 									<td>{item.filename}</td>
 									<td>{item.name}</td>
 								</tr>
@@ -160,7 +169,8 @@ export function ImportPanel({ onImported }: ImportPanelProps) {
 }
 
 function ImportRow({ job }: { job: ImportJobView }) {
-	const percent = job.fraction === null ? undefined : Math.round(job.fraction * 100);
+	const percent =
+		job.fraction === null ? undefined : Math.round(job.fraction * 100);
 	const active = job.state === "queued" || job.state === "running";
 
 	return (
@@ -186,7 +196,9 @@ function ImportRow({ job }: { job: ImportJobView }) {
 					/>
 				</div>
 			) : (
-				<span className={`media-badge ${job.state === "succeeded" ? "is-good" : "is-bad"}`}>
+				<span
+					className={`media-badge ${job.state === "succeeded" ? "is-good" : "is-bad"}`}
+				>
 					{describe(job)}
 				</span>
 			)}
