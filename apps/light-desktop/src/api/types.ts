@@ -25,6 +25,7 @@ export type {
 	DynamicUpdateIntent,
 	EventPayload as RuntimeCapabilityEvent,
 	GroupMappingProvenanceProjection,
+	InternalAudioStatus,
 	OperatorNotification,
 	ProgrammingDynamicSemanticValue,
 	ShowObjectActionOutcome,
