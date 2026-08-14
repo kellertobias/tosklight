@@ -13,7 +13,7 @@
 use std::path::PathBuf;
 
 /// The Viz application's bundle identifier, as `apps/viz-editor/src-tauri/tauri.conf.json` states.
-pub const VIZ_IDENTIFIER: &str = "de.tokenet.tosklight.viz-editor";
+pub const VIZ_IDENTIFIER: &str = "de.tokenet.tosklight.visualizer";
 
 /// The file naming the last opened document.
 pub const RECENT_SHOW_FILE: &str = "recent-show";
