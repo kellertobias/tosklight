@@ -357,7 +357,8 @@ fn dispatch_action(
             let response = super::fixture_freeze::undo_latest(state, session, context)
                 .map_err(|error| error.message)
                 .and_then(|freeze_changed| {
-                    let changed = freeze_changed.unwrap_or_else(|| state.programming.undo(session.id));
+                    let changed =
+                        freeze_changed.unwrap_or_else(|| state.programming.undo(session.id));
                     persist_programmer(state, session)
                         .map(|()| serde_json::json!({"changed":changed}))
                         .map_err(|error| error.message)

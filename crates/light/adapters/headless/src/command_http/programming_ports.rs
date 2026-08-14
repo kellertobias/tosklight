@@ -110,11 +110,8 @@ impl<'a> ServerProgrammingPorts<'a> {
             )
             .map_err(|error| error.message)?;
             clear_command_line(programmers, self.session)?;
-            let warning = self.accepted_recording_command(
-                context,
-                command,
-                outcome.affected_fixtures,
-            );
+            let warning =
+                self.accepted_recording_command(context, command, outcome.affected_fixtures);
             Ok((outcome.affected_fixtures, warning, false))
         })();
         Some(self.recording_execution(context, command, result))

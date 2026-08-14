@@ -39,11 +39,7 @@ impl FixtureFreezeHistory {
         }
     }
 
-    fn next(
-        &self,
-        session: &Session,
-        programmer_undo_depth: usize,
-    ) -> Option<FreezeHistoryEntry> {
+    fn next(&self, session: &Session, programmer_undo_depth: usize) -> Option<FreezeHistoryEntry> {
         self.entries
             .lock()
             .get(&(session.user.id, session.desk.id))
@@ -243,13 +239,7 @@ fn freeze_command(
         previous.insert(root.patch.fixture_id, freeze.clone());
         for fixture_id in selected {
             affected.insert(fixture_id);
-            apply_target(
-                &mut freeze,
-                fixture_id,
-                &families,
-                rendered,
-                operation,
-            );
+            apply_target(&mut freeze, fixture_id, &families, rendered, operation);
         }
         updates.push(PatchFixtureUpdateIntent {
             fixture_id: root.patch.fixture_id,
@@ -476,11 +466,7 @@ pub(super) fn advance_command_mode(state: &AppState, session: &Session) -> bool 
     state.programming.set_command_line(session.id, next)
 }
 
-pub(super) fn append_command_family(
-    state: &AppState,
-    session: &Session,
-    digit: u8,
-) -> bool {
+pub(super) fn append_command_family(state: &AppState, session: &Session, digit: u8) -> bool {
     let family = match digit {
         1 => "INTENSITY",
         2 => "COLOR",
@@ -494,13 +480,9 @@ pub(super) fn append_command_family(
         .map(|programmer| programmer.command_line)
         .unwrap_or_default();
     let current = current.trim();
-    if !current
-        .split_whitespace()
-        .next()
-        .is_some_and(|token| {
-            token.eq_ignore_ascii_case("FREEZE") || token.eq_ignore_ascii_case("UNFREEZE")
-        })
-    {
+    if !current.split_whitespace().next().is_some_and(|token| {
+        token.eq_ignore_ascii_case("FREEZE") || token.eq_ignore_ascii_case("UNFREEZE")
+    }) {
         return false;
     }
     if current
