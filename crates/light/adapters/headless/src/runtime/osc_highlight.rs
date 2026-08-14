@@ -246,22 +246,22 @@ fn handle_record_osc(
     source: Option<SocketAddr>,
     pressed: bool,
 ) -> bool {
-    state.programming.run_desk_operation(session.desk.id, || {
+    // The desk gate covers the lock check and the gesture transition only. Routing the Record key
+    // re-enters the Programming service, which takes the user Programmer before the desk gate, so
+    // it has to run once this gate is released.
+    enum RecordOutcome {
+        Handled(bool),
+        RouteRecord,
+    }
+    let outcome = state.programming.run_desk_operation(session.desk.id, || {
         if read_desk_lock(state, session.desk.id).locked {
-            return true;
+            return RecordOutcome::Handled(true);
         }
         let gesture = source
             .map(|source| state.integrations.record_gesture(source, pressed))
             .unwrap_or(OscRecordGesture::None);
         if matches!(gesture, OscRecordGesture::Record) {
-            let _ = command_http::route_osc_command_key_outcome(
-                state,
-                session,
-                &subscriber.desk_alias,
-                "record",
-                None,
-            );
-            return true;
+            return RecordOutcome::RouteRecord;
         }
         if matches!(gesture, OscRecordGesture::RecordSettings) {
             emit(
@@ -269,14 +269,29 @@ fn handle_record_osc(
                 "desk_action",
                 serde_json::json!({"desk_alias":subscriber.desk_alias,"desk_id":session.desk.id,"session_id":session.id,"action":"record-settings","source":"osc"}),
             );
-            return true;
+            return RecordOutcome::Handled(true);
         }
         apply_record_gesture(state, session, gesture);
-        pressed
-            || !matches!(gesture, OscRecordGesture::None)
-            || subscriber.shifted
-            || subscriber.shift_held
-    })
+        RecordOutcome::Handled(
+            pressed
+                || !matches!(gesture, OscRecordGesture::None)
+                || subscriber.shifted
+                || subscriber.shift_held,
+        )
+    });
+    match outcome {
+        RecordOutcome::Handled(handled) => handled,
+        RecordOutcome::RouteRecord => {
+            let _ = command_http::route_osc_command_key_outcome(
+                state,
+                session,
+                &subscriber.desk_alias,
+                "record",
+                None,
+            );
+            true
+        }
+    }
 }
 
 fn handle_shifted_shortcut(
