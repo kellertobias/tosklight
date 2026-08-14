@@ -133,7 +133,7 @@ mod tests {
 
         assert_eq!(status, StatusCode::OK);
         let slots = body.as_array().expect("a list");
-        assert_eq!(slots.len(), 2);
+        assert_eq!(slots.len(), 3);
         assert_eq!(slots[0]["address"]["folder"], 200);
         assert_eq!(slots[0]["address"]["class"], "text-bank");
         assert_eq!(slots[0]["kind"], "clock");
@@ -272,7 +272,7 @@ mod tests {
         assert_eq!(status, StatusCode::OK);
         assert_eq!(
             body.as_array().expect("what is left").len(),
-            1,
+            2,
             "the answer is the catalog that remains"
         );
 
