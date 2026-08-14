@@ -224,13 +224,14 @@ async fn osc_record_key_sequence_commits_through_the_typed_preset_capability() {
         },
     );
     let pressed = [OscArgument::Bool(true)];
+    let released = [OscArgument::Bool(false)];
+    // Record resolves on release: a bare press only starts the gesture.
     for action in ["record", "digit-0", "dot", "digit-9", "enter"] {
-        handle_programmer_osc(
-            &scenario.state,
-            &format!("/light/main/programmer/{action}"),
-            &pressed,
-            Some("127.0.0.1:9017"),
-        );
+        let address = format!("/light/main/programmer/{action}");
+        handle_programmer_osc(&scenario.state, &address, &pressed, Some("127.0.0.1:9017"));
+        if action == "record" {
+            handle_programmer_osc(&scenario.state, &address, &released, Some("127.0.0.1:9017"));
+        }
     }
 
     assert_eq!(

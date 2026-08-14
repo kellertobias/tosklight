@@ -71,12 +71,22 @@ async fn command_keyboard_and_websocket_cue_recording_share_the_typed_action() {
     for action in [
         "record", "set", "digit-3", "digit-4", "cue", "digit-1", "enter",
     ] {
+        let address = format!("/light/{osc_alias}/programmer/{action}");
         handle_programmer_osc(
             &scenario.state,
-            &format!("/light/{osc_alias}/programmer/{action}"),
+            &address,
             &[OscArgument::Bool(true)],
             Some("127.0.0.1:9026"),
         );
+        // Record resolves on release: a bare press only starts the gesture.
+        if action == "record" {
+            handle_programmer_osc(
+                &scenario.state,
+                &address,
+                &[OscArgument::Bool(false)],
+                Some("127.0.0.1:9026"),
+            );
+        }
     }
     assert!(
         stored_cue_list(&scenario, 34)
