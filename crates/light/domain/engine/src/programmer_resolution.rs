@@ -308,14 +308,27 @@ impl ProgrammerValueSource<'_> {
     }
 }
 
+/// True when `value` is the later operator edit.
+///
+/// The registry hands every live edit a monotonic order from one desk-wide counter, so two edits
+/// that carry an order are ranked by it alone. The wall clock is not monotonic: two edits made in
+/// the same instant can be stamped out of sequence, which used to hand LTP to the earlier one.
+/// Order zero means no counter ever stamped the value — a legacy stored value restored with a
+/// fresh timestamp — so those still rank by time, which is what keeps a restored value current.
+fn supersedes(value: &TimedValue, current: &TimedValue) -> bool {
+    if value.programmer_order > 0 && current.programmer_order > 0 {
+        return value.programmer_order > current.programmer_order;
+    }
+    (value.changed_at, value.programmer_order) > (current.changed_at, current.programmer_order)
+}
+
 fn programmer_winners(values: Vec<TimedValue>) -> Vec<TimedValue> {
     let mut winners = HashMap::new();
     for value in values {
         let key = (value.fixture_id, value.attribute.clone());
-        let replace = winners.get(&key).is_none_or(|current: &TimedValue| {
-            (value.changed_at, value.programmer_order)
-                > (current.changed_at, current.programmer_order)
-        });
+        let replace = winners
+            .get(&key)
+            .is_none_or(|current: &TimedValue| supersedes(&value, current));
         if replace {
             winners.insert(key, value);
         }
@@ -331,4 +344,53 @@ fn programmer_winners(values: Vec<TimedValue>) -> Vec<TimedValue> {
             value
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use light_core::{AttributeValue, FixtureId};
+
+    fn value(changed_at_millis: i64, programmer_order: u64) -> TimedValue {
+        TimedValue {
+            fixture_id: FixtureId::new(),
+            attribute: AttributeKey("pan".into()),
+            value: AttributeValue::Normalized(0.5),
+            priority: 0,
+            changed_at: DateTime::from_timestamp_millis(changed_at_millis).expect("a timestamp"),
+            programmer_order,
+            merge_mode: MergeMode::Ltp,
+            fade: false,
+            fade_millis: None,
+            delay_millis: None,
+        }
+    }
+
+    /// The wall clock can hand two edits made in the same instant timestamps that run backwards.
+    /// The desk-wide counter cannot, so the operator's second edit still wins.
+    #[test]
+    fn a_later_edit_wins_even_when_the_clock_stamped_it_earlier() {
+        let first = value(1_000, 1);
+        let second = value(999, 2);
+        assert!(supersedes(&second, &first));
+        assert!(!supersedes(&first, &second));
+    }
+
+    #[test]
+    fn edits_that_share_one_timestamp_rank_by_the_counter() {
+        let first = value(1_000, 1);
+        let second = value(1_000, 2);
+        assert!(supersedes(&second, &first));
+        assert!(!supersedes(&first, &second));
+    }
+
+    /// A legacy stored value is restored without a counter order and with a fresh timestamp, which
+    /// is what keeps it current against values that were stored alongside it.
+    #[test]
+    fn an_uncounted_legacy_value_still_ranks_by_time() {
+        let stored = value(1_000, 42);
+        let restored_legacy = value(2_000, 0);
+        assert!(supersedes(&restored_legacy, &stored));
+        assert!(!supersedes(&stored, &restored_legacy));
+    }
 }
