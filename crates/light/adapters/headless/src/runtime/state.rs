@@ -20,7 +20,7 @@ pub(super) struct AppState {
     pub(super) extensions: extensions_runtime::ExtensionResource,
     pub(super) integrations: IntegrationResource,
     pub(super) media: MediaResource,
-    pub(super) internal_audio: Arc<Mutex<super::internal_audio::InternalAudioRuntime>>,
+    pub(super) internal_audio: InternalAudioResource,
     pub(super) replay: ReplayResource,
     pub(super) lifecycle: LifecycleResource,
     /// The other ToskLights on the network, and this desk's own announcement to them.

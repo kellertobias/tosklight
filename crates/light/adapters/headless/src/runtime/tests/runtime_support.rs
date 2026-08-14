@@ -142,9 +142,9 @@ fn test_state_with_programmers(
                 None,
             ),
             media: MediaResource::default(),
-            internal_audio: Arc::new(Mutex::new(
+            internal_audio: InternalAudioResource::new(Arc::new(Mutex::new(
                 crate::runtime::internal_audio::InternalAudioRuntime::default(),
-            )),
+            ))),
             replay: ReplayResource::default(),
             lifecycle: LifecycleResource::new(CancellationToken::new()),
             // A test desk announces nothing and looks for nothing: the network is not part of

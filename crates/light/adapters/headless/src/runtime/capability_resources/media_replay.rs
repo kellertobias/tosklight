@@ -1,5 +1,26 @@
 use super::*;
 
+/// Internal Audio Player state behind a capability boundary.
+///
+/// The output scheduler drives the runtime; adapters only read its operator-facing status, so the
+/// lock never leaves this resource.
+#[derive(Clone)]
+pub(in crate::runtime) struct InternalAudioResource {
+    runtime: Arc<Mutex<crate::runtime::internal_audio::InternalAudioRuntime>>,
+}
+
+impl InternalAudioResource {
+    pub(in crate::runtime) fn new(
+        runtime: Arc<Mutex<crate::runtime::internal_audio::InternalAudioRuntime>>,
+    ) -> Self {
+        Self { runtime }
+    }
+
+    pub(in crate::runtime) fn status(&self) -> light_wire::v2::internal_audio::InternalAudioStatus {
+        self.runtime.lock().status()
+    }
+}
+
 #[derive(Clone)]
 pub(in crate::runtime) struct MediaResource {
     cache: Arc<Mutex<MediaCache>>,

@@ -528,7 +528,7 @@ fn build_app_state(
             Some(osc_feedback),
         ),
         media: MediaResource::new(MediaCache::default()),
-        internal_audio: Arc::clone(&resources.internal_audio),
+        internal_audio: InternalAudioResource::new(Arc::clone(&resources.internal_audio)),
         replay: ReplayResource::default(),
         lifecycle: LifecycleResource::new(resources.cancellation.clone()),
         discovery,
