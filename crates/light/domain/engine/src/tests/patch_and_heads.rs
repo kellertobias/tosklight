@@ -35,6 +35,7 @@ fn visual_only_profile_renders_without_a_dmx_encoding_plan() {
         move_in_black_enabled: true,
         move_in_black_delay_millis: 0,
         highlight_overrides: BTreeMap::new(),
+        freeze: Default::default(),
     };
     let engine = Engine::new(ProgrammerRegistry::default());
     engine

@@ -71,9 +71,12 @@ describe("useVisualizerViewControls", () => {
 		await waitFor(() => expect(actions.onConnectionChanged).toHaveBeenCalled());
 
 		act(() => reportConnection(true));
-		resolveSnapshot({
-			connected: false,
-			views: [view("main", "top_down")],
+		// The connection event lands synchronously; let the resolved snapshot settle too.
+		await act(async () => {
+			resolveSnapshot({
+				connected: false,
+				views: [view("main", "top_down")],
+			});
 		});
 		await waitFor(() => expect(result.current.connected).toBe(true));
 		expect(result.current.view).not.toBeNull();

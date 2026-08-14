@@ -185,7 +185,7 @@ mod tests {
     use std::io::Cursor;
 
     use media_codec::container::{ClipHeader, ClipWriter};
-    use media_domain::catalog::{CatalogItem, ItemKind};
+    use media_domain::catalog::{CatalogItem, CatalogLocation, ItemKind};
 
     use super::*;
 
@@ -229,7 +229,7 @@ mod tests {
             }
         }
 
-        fn add(&mut self, folder: u8, file: u8, name: &str, frames: usize) -> AssetId {
+        fn add(&mut self, folder: u16, file: u8, name: &str, frames: usize) -> AssetId {
             let id = AssetId::new();
             self.catalog
                 .insert(
@@ -247,7 +247,7 @@ mod tests {
                 )
                 .unwrap();
             let storage = LibraryStorage::new(self.root.clone());
-            let path = storage.item_path(MediaAddress::new(folder, file), name);
+            let path = storage.item_path(CatalogLocation::new(folder, file), name);
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
             std::fs::write(path, clip(frames)).unwrap();
             id

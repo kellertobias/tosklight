@@ -473,6 +473,7 @@ mod tests {
             live_shaper_angle_roles: [false; 4],
             shaper_roles: [false; 4],
             live_shaper_rotation_role: false,
+            effect: None,
         };
 
         // Light zero is deliberately far outside the shot. Light one illuminates the receiving
