@@ -396,7 +396,16 @@ impl PlaybackEngine {
             let activation = if matches!(target, PlaybackTarget::Dynamic { .. }) {
                 self.off_dynamic_mutation(number)?.map(|_| ())
             } else {
-                self.off_mutation(number)?.map(|_| ())
+                let off = self.off_mutation(number)?.map(|_| ());
+                // Zero is authoritative Off for this surface, but the runtime stays present and
+                // disabled. Arm the same restart the auto-off-at-zero fader uses so the next
+                // non-zero value turns the Cuelist back on instead of moving a dark master.
+                if let Ok(id) = self.cue_list_for(number)
+                    && let Some(active) = self.active.get_mut(&PlaybackKey::CueList(id))
+                {
+                    active.fader_zero_auto_off_armed = true;
+                }
+                off
             };
             activation
         };
