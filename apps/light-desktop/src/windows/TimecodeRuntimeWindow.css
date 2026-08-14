@@ -369,15 +369,19 @@
 	outline: 2px solid #fff;
 	outline-offset: 1px;
 }
-.timecode-editor-playhead {
+/* The playhead is the shared Button primitive reshaped into a scrub line. */
+.ui-button.timecode-editor-playhead {
 	position: absolute;
 	z-index: 5;
 	top: 0;
 	bottom: 0;
+	display: block;
 	width: 2px;
+	min-height: 0;
 	margin: 0;
 	padding: 0;
 	border: 0;
+	border-radius: 0;
 	background: #ff6a62;
 	cursor: ew-resize;
 	touch-action: none;

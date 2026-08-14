@@ -155,8 +155,7 @@ function TimelineCanvas(props: {
 				{props.definition.lanes.map((lane) => (
 					<EditorLane key={lane.id} {...props} lane={lane} />
 				))}
-				<button
-					type="button"
+				<Button
 					className="timecode-editor-playhead"
 					aria-label="Drag playhead to seek"
 					style={{ left: props.frame * props.pixelsPerFrame }}
@@ -171,7 +170,7 @@ function TimelineCanvas(props: {
 					}}
 				>
 					<span>{formatFrame(props.frame, props.fps)}</span>
-				</button>
+				</Button>
 			</div>
 		</section>
 	);
