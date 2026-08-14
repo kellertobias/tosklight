@@ -596,6 +596,8 @@ impl Renderer {
         });
         pass.set_pipeline(&self.surface_pipeline);
         pass.set_bind_group(0, &self.scene_bind_group, &[]);
+        // The surface layout carries the media group even when nothing samples it.
+        pass.set_bind_group(1, &self.media_bind_group, &[]);
         pass.set_bind_group(2, &self.shadow_bind_group, &[]);
         for kind in self.drawn_meshes() {
             let (Some(mesh), Some(instances)) =
@@ -630,6 +632,7 @@ impl Renderer {
         if self.line_vertices.length > 0 {
             pass.set_pipeline(&self.line_pipeline);
             pass.set_bind_group(0, &self.scene_bind_group, &[]);
+            pass.set_bind_group(1, &self.media_bind_group, &[]);
             pass.set_bind_group(2, &self.shadow_bind_group, &[]);
             pass.set_vertex_buffer(0, self.line_vertices.buffer.slice(..));
             pass.draw(0..self.line_vertices.length, 0..1);
