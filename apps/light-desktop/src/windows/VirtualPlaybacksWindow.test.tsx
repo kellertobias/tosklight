@@ -296,6 +296,7 @@ vi.mock("../features/showObjects/ShowObjectsState", () => ({
 	useDynamics: () => [],
 	usePlaybackDefinitions: () => mocks.topology.playbacks,
 	usePortableGroups: () => [],
+	useShowObjectCollectionsReady: () => true,
 }));
 
 afterEach(() => {
