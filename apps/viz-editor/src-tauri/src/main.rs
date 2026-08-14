@@ -293,12 +293,8 @@ mod tests {
             .filter(|profile| profile.manufacturer == "ToskLight")
             .map(|profile| profile.name.as_str())
             .collect::<Vec<_>>();
-        for expected in [
-            "Media Server Layer",
-            "Media Server Master",
-            "Visualizer Camera",
-            "Visualizer Laser",
-        ] {
+        // The media server ships as one multi-head profile, not a Layer/Master pair.
+        for expected in ["Media Server", "Visualizer Camera", "Visualizer Laser"] {
             assert!(tosklight_names.contains(&expected), "missing {expected}");
         }
         assert!(!tosklight_names.iter().any(|name| {
