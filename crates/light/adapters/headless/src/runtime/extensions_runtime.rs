@@ -395,6 +395,7 @@ pub(super) struct ExtensionResource {
     manager: Arc<Mutex<ExtensionManager<HeadlessExtensionPorts>>>,
     ports: Arc<HeadlessExtensionPorts>,
     replay: Arc<Mutex<BTreeMap<(uuid::Uuid, String), ExtensionRuntimeSnapshot>>>,
+    shift_held: Arc<Mutex<BTreeMap<(String, String), bool>>>,
 }
 
 impl ExtensionResource {
@@ -407,6 +408,7 @@ impl ExtensionResource {
             manager: Arc::new(Mutex::new(manager)),
             ports,
             replay: Arc::new(Mutex::new(BTreeMap::new())),
+            shift_held: Arc::new(Mutex::new(BTreeMap::new())),
         }
     }
 
@@ -449,7 +451,28 @@ impl ExtensionResource {
             ))),
             ports,
             replay: Arc::new(Mutex::new(BTreeMap::new())),
+            shift_held: Arc::new(Mutex::new(BTreeMap::new())),
         }
+    }
+
+    fn set_shift_held(&self, host: &HostControlContext, held: bool) {
+        let key = (
+            host.extension_id.clone(),
+            host.extension_instance_id.clone(),
+        );
+        let mut controls = self.shift_held.lock();
+        if held {
+            controls.insert(key, true);
+        } else {
+            controls.remove(&key);
+        }
+    }
+
+    fn shift_held(&self, host: &HostControlContext) -> bool {
+        self.shift_held.lock().contains_key(&(
+            host.extension_id.clone(),
+            host.extension_instance_id.clone(),
+        ))
     }
 
     pub(super) fn rescan(&self) -> ExtensionRuntimeSnapshot {
@@ -616,7 +639,7 @@ pub(super) fn apply_bound_control(
                 modifier: ModifierKey::Shift,
             },
             ControlInput::Button { pressed, .. },
-        ) => apply_programmer_modifier(&state, session.as_ref(), *pressed),
+        ) => apply_programmer_modifier(&state, session.as_ref(), host, *pressed),
         (CanonicalControlIntent::Highlight { action }, ControlInput::Button { pressed, .. }) => {
             if !pressed {
                 return Ok(());
@@ -680,6 +703,35 @@ fn apply_programmer_key(
     pressed: bool,
 ) -> Result<(), PortError> {
     let session = require_session(session, "Programmer control")?;
+    if state.extensions.shift_held(host) {
+        if pressed {
+            let handled = if key == ProgrammerKey::Clear {
+                super::fixture_freeze::advance_command_mode(state, session)
+            } else {
+                let digit = match key {
+                    ProgrammerKey::One => 1,
+                    ProgrammerKey::Two => 2,
+                    ProgrammerKey::Three => 3,
+                    ProgrammerKey::Four => 4,
+                    _ => 0,
+                };
+                super::fixture_freeze::append_command_family(state, session, digit)
+            };
+            if handled {
+                super::persist_programmer(state, session)
+                    .map_err(|error| PortError::new(error.message))?;
+                emit(
+                    state,
+                    "programmer_changed",
+                    serde_json::json!({"session_id":session.id,"source":"extension"}),
+                );
+                return Ok(());
+            }
+        }
+        if key == ProgrammerKey::Clear {
+            return Ok(());
+        }
+    }
     if pressed
         && super::file_manager::route_control_input(
             state,
@@ -755,6 +807,7 @@ fn apply_application_programmer_key(
 fn apply_programmer_modifier(
     state: &AppState,
     session: Option<&Session>,
+    host: &HostControlContext,
     pressed: bool,
 ) -> Result<(), PortError> {
     let session = require_session(session, "Programmer modifier")?;
@@ -763,7 +816,9 @@ fn apply_programmer_modifier(
         session,
         light_programmer::command_line::CommandKey::Shift,
         pressed,
-    )
+    )?;
+    state.extensions.set_shift_held(host, pressed);
+    Ok(())
 }
 
 fn apply_speed_group(

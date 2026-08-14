@@ -1,7 +1,7 @@
 use crate::FixtureDefinition;
-use light_core::{DmxAddress, FixtureId, Universe};
+use light_core::{AttributeKey, AttributeValue, DmxAddress, FixtureId, Universe};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::net::IpAddr;
 use uuid::Uuid;
 
@@ -253,6 +253,69 @@ pub struct PatchedFixture {
     /// Optional per-instance raw Highlight overrides keyed by stable channel ID.
     #[serde(default)]
     pub highlight_overrides: BTreeMap<Uuid, u32>,
+    /// Portable per-fixture output holds. Freeze is show intent, not Programmer ownership: the
+    /// retained values continue to win while ordinary control state evolves underneath them.
+    #[serde(default, skip_serializing_if = "FixtureFreezeState::is_empty")]
+    pub freeze: FixtureFreezeState,
+}
+
+/// Operator-facing attribute families supported by partial fixture Freeze.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FreezeFamily {
+    Intensity,
+    Color,
+    Position,
+    Beam,
+}
+
+impl FreezeFamily {
+    pub fn accepts(self, attribute: &AttributeKey) -> bool {
+        use light_core::AttributeClass;
+
+        let class = light_core::attribute_descriptor(attribute).family;
+        match self {
+            Self::Intensity => attribute.is_intensity() || class == AttributeClass::Intensity,
+            Self::Color => {
+                class == AttributeClass::Color
+                    || attribute.0 == "color"
+                    || attribute.0.starts_with("color.")
+                    || attribute.0.contains(".color.")
+            }
+            Self::Position => attribute.is_position() || class == AttributeClass::Position,
+            Self::Beam => {
+                matches!(
+                    class,
+                    AttributeClass::Beam | AttributeClass::Shapers | AttributeClass::Focus
+                )
+            }
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+pub struct FrozenFixtureTarget {
+    /// Full Freeze bypasses Group Master, Grand Master, Blackout, Highlight, and later control
+    /// changes. Setting it deliberately clears partial-family metadata.
+    #[serde(default)]
+    pub full: bool,
+    #[serde(default)]
+    pub families: Vec<FreezeFamily>,
+    #[serde(default)]
+    pub values: HashMap<AttributeKey, AttributeValue>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+pub struct FixtureFreezeState {
+    /// Root fixtures and logical heads retain independent Freeze state by stable fixture identity.
+    #[serde(default)]
+    pub targets: HashMap<FixtureId, FrozenFixtureTarget>,
+}
+
+impl FixtureFreezeState {
+    pub fn is_empty(&self) -> bool {
+        self.targets.is_empty()
+    }
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]

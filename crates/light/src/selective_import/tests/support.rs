@@ -778,6 +778,7 @@ pub(super) fn portable_fixture_record(
         move_in_black_enabled: true,
         move_in_black_delay_millis: 0,
         highlight_overrides: BTreeMap::new(),
+        freeze: Default::default(),
     };
     let mut profile_body = serde_json::to_value(&profile).unwrap();
     profile_body["future_profile"] = json!({"retained": true});
@@ -832,6 +833,7 @@ pub(super) fn legacy_fixture_record(
         move_in_black_enabled: true,
         move_in_black_delay_millis: 0,
         highlight_overrides: BTreeMap::new(),
+        freeze: Default::default(),
     };
     let mut body = serde_json::to_value(fixture).unwrap();
     body["future_fixture"] = json!({"retained": true});

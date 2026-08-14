@@ -2,6 +2,7 @@ import type { PresetFamily } from "../../presetFamilies";
 
 export interface ServerProgrammingContext {
 	undoProgrammer: () => Promise<void>;
+	toggleFixtureFreeze: () => Promise<void>;
 	controlFixtureAction: (
 		fixtureId: string,
 		actionId: string,

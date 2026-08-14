@@ -61,8 +61,8 @@ describe("shared control-surface contracts", () => {
       { label: "ALL", action: "all", column: 4, row: 1 },
     ]);
     expect(attachedProgrammerActionLayout).toEqual({
-      record: { column: 1, row: 1, rowSpan: 2 },
-      preload: { column: 2, row: 1, rowSpan: 2 },
+      record: { column: 1, row: 1, columnSpan: 2, rowSpan: 1 },
+      preload: { column: 3, row: 1, columnSpan: 2, rowSpan: 1 },
     });
     expect(attachedKeypadContentRowOffset).toBe(1);
     expect(attachedPlaybackLayout.mainSlots).toEqual([

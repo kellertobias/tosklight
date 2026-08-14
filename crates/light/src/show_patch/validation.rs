@@ -153,6 +153,22 @@ fn validate_fixture_update(action: &PatchFixtureUpdateAction) -> Result<(), Acti
         PatchFixtureUpdateAction::SetInstalledAppearance { appearance } => {
             appearance.validate().map_err(invalid)?;
         }
+        PatchFixtureUpdateAction::SetFreeze { freeze } => {
+            if freeze.targets.values().any(|target| {
+                target.full && !target.families.is_empty()
+                    || target.values.values().any(|value| match value {
+                        light_core::AttributeValue::Normalized(value) => !value.is_finite(),
+                        light_core::AttributeValue::ColorXyz(color) => {
+                            !color.x.is_finite() || !color.y.is_finite() || !color.z.is_finite()
+                        }
+                        _ => false,
+                    })
+            }) {
+                return Err(invalid(
+                    "fixture Freeze state is inconsistent or non-finite",
+                ));
+            }
+        }
         PatchFixtureUpdateAction::SetMasters { .. }
         | PatchFixtureUpdateAction::SetPanTilt { .. }
         | PatchFixtureUpdateAction::SetMoveInBlack { .. }

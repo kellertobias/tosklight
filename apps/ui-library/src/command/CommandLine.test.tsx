@@ -80,6 +80,28 @@ describe("CommandLine", () => {
 		expect(view.onAdvancePreload).toHaveBeenCalledOnce();
 	});
 
+	it("keeps primary captions visible beside the smaller Shift actions", () => {
+		render(<CommandLine {...props({ recordShiftArmed: true })} />);
+
+		const escapeButton = screen.getByRole("button", {
+			name: "ESC, Shift: UNDO",
+		});
+		const record = screen.getByRole("button", {
+			name: "REC, Shift: UPDATE",
+		});
+		const preload = screen.getByRole("button", {
+			name: "PRELOAD, Shift: PRELOAD GO CLEAR",
+		});
+		expect(escapeButton).toHaveTextContent("ESCUNDO");
+		expect(record).toHaveTextContent("RECUPDATE");
+		expect(preload).toHaveTextContent("PRELOADPRELOAD GO CLEAR");
+		expect(escapeButton.querySelector("small")).toHaveTextContent("UNDO");
+		expect(record.querySelector("small")).toHaveTextContent("UPDATE");
+		expect(preload.querySelector("small")).toHaveTextContent(
+			"PRELOAD GO CLEAR",
+		);
+	});
+
 	it("renders authoritative completion, blackout, errors, and hardware geometry", () => {
 		const view = props({
 			hardware: true,

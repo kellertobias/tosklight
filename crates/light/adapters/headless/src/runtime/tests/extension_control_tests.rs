@@ -311,6 +311,34 @@ fn canonical_extension_programmer_highlight_and_speed_controls_use_server_author
     apply(
         3,
         ControlInput::Button {
+            control_id: "clear".into(),
+            pressed: true,
+        },
+        CanonicalControlIntent::ProgrammerKey {
+            key: ProgrammerKey::Clear,
+        },
+    );
+    assert_eq!(
+        state.programming.get(session.id).unwrap().command_line,
+        "FREEZE"
+    );
+    apply(
+        4,
+        ControlInput::Button {
+            control_id: "clear".into(),
+            pressed: true,
+        },
+        CanonicalControlIntent::ProgrammerKey {
+            key: ProgrammerKey::Clear,
+        },
+    );
+    assert_eq!(
+        state.programming.get(session.id).unwrap().command_line,
+        "UNFREEZE"
+    );
+    apply(
+        5,
+        ControlInput::Button {
             control_id: "shift".into(),
             pressed: false,
         },
@@ -330,6 +358,17 @@ fn canonical_extension_programmer_highlight_and_speed_controls_use_server_author
         .map(|event| event.payload["phase"].as_str().unwrap().to_owned())
         .collect::<Vec<_>>();
     assert_eq!(key_phases, ["press", "release"]);
+    apply(
+        6,
+        ControlInput::Button {
+            control_id: "clear".into(),
+            pressed: true,
+        },
+        CanonicalControlIntent::ProgrammerKey {
+            key: ProgrammerKey::Clear,
+        },
+    );
+    assert_eq!(state.programming.get(session.id).unwrap().command_line, "");
 
     for (offset, action) in [
         HighlightControlAction::Toggle,

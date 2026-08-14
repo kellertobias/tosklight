@@ -26,7 +26,23 @@ pub(crate) fn render_fixture(
                 .map(|patched| patched.fixture_id)
                 .unwrap_or(fixture.fixture_id)
         };
-        let group_scale = if fixture.group_masters_enabled {
+        let full_freeze = fixture
+            .freeze
+            .targets
+            .get(&owner)
+            .is_some_and(|target| target.full);
+        let options = if full_freeze {
+            RenderOptions {
+                grand_master: 1.0,
+                blackout: false,
+                control_loss_progress: None,
+            }
+        } else {
+            options
+        };
+        let group_scale = if full_freeze || !fixture.group_masters_enabled {
+            1.0
+        } else if fixture.group_masters_enabled {
             group_masters.scale(owner, group_master_flashes)
         } else {
             1.0

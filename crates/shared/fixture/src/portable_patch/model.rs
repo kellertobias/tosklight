@@ -85,6 +85,8 @@ pub struct PatchedFixturePatch {
     pub move_in_black_delay_millis: u64,
     #[serde(default)]
     pub highlight_overrides: BTreeMap<Uuid, u32>,
+    #[serde(default, skip_serializing_if = "crate::FixtureFreezeState::is_empty")]
+    pub freeze: crate::FixtureFreezeState,
 }
 
 impl PatchedFixturePatch {
@@ -114,6 +116,7 @@ impl PatchedFixturePatch {
             move_in_black_enabled: fixture.move_in_black_enabled,
             move_in_black_delay_millis: fixture.move_in_black_delay_millis,
             highlight_overrides: fixture.highlight_overrides.clone(),
+            freeze: fixture.freeze.clone(),
         }
     }
 }

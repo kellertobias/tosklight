@@ -112,6 +112,7 @@ fn calibrated_visual_fixture(fixture_id: FixtureId) -> PatchedFixture {
         move_in_black_enabled: true,
         move_in_black_delay_millis: 0,
         highlight_overrides: BTreeMap::new(),
+        freeze: Default::default(),
     }
 }
 

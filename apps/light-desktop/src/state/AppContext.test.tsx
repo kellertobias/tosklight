@@ -104,7 +104,7 @@ describe("desk shortcuts", () => {
 		expect(screen.getByText("control-playbacks")).toBeInTheDocument();
 	});
 
-	it("opens the running menu for hardware Shift Clear", () => {
+	it("keeps hardware Shift Clear available for the Programmer Freeze authority", () => {
 		render(
 			<AppProvider>
 				<ModalState />
@@ -120,7 +120,7 @@ describe("desk shortcuts", () => {
 			}),
 		);
 
-		expect(screen.getByText("running-open")).toBeInTheDocument();
+		expect(screen.getByText("running-closed")).toBeInTheDocument();
 	});
 
 	it("keeps hardware Shift 0 unassigned while retaining the operator Help shortcut", () => {

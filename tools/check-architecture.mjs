@@ -384,8 +384,12 @@ function sharedUiDependencyDirections() {
     "windows/FileManagerPickerHost.tsx",
   ]) {
     const file = path.join(desktopSourceRoot, registeredOverlay);
-    if (!fs.readFileSync(file, "utf8").includes("<ModalRegistration"))
-      fail(`${relative(file)} must participate in the shared modal stack`);
+    const overlaySource = fs.readFileSync(file, "utf8");
+    // ModalFrame and ModalLayer register with the shared stack themselves.
+    const registers = ["<ModalRegistration", "<ModalFrame", "<ModalLayer"].some(
+      (entry) => overlaySource.includes(entry),
+    );
+    if (!registers) fail(`${relative(file)} must participate in the shared modal stack`);
   }
 
   const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));

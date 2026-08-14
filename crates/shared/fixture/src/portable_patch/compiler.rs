@@ -335,5 +335,6 @@ fn into_runtime_fixture(
         move_in_black_enabled: patch.move_in_black_enabled,
         move_in_black_delay_millis: patch.move_in_black_delay_millis,
         highlight_overrides: patch.highlight_overrides,
+        freeze: patch.freeze,
     }
 }

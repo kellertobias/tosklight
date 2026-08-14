@@ -357,6 +357,7 @@ fn application_fixture(
             move_in_black_enabled: input.move_in_black_enabled,
             move_in_black_delay_millis: input.move_in_black_delay_millis,
             highlight_overrides: application_highlights(input.highlight_overrides)?,
+            freeze: Default::default(),
         },
     })
 }
@@ -533,6 +534,31 @@ fn wire_fixture(input: &application::PatchFixtureProjection) -> wire::PatchFixtu
                 |(channel_id, raw_value)| wire::PatchHighlightOverrideProjection {
                     channel_id: *channel_id,
                     raw_value: *raw_value,
+                },
+            )
+            .collect(),
+        freeze_targets: patch
+            .freeze
+            .targets
+            .iter()
+            .map(
+                |(fixture_id, target)| wire::PatchFixtureFreezeTargetProjection {
+                    fixture_id: fixture_id.0,
+                    full: target.full,
+                    families: target
+                        .families
+                        .iter()
+                        .map(|family| match family {
+                            fixture::FreezeFamily::Intensity => {
+                                wire::PatchFixtureFreezeFamily::Intensity
+                            }
+                            fixture::FreezeFamily::Color => wire::PatchFixtureFreezeFamily::Color,
+                            fixture::FreezeFamily::Position => {
+                                wire::PatchFixtureFreezeFamily::Position
+                            }
+                            fixture::FreezeFamily::Beam => wire::PatchFixtureFreezeFamily::Beam,
+                        })
+                        .collect(),
                 },
             )
             .collect(),

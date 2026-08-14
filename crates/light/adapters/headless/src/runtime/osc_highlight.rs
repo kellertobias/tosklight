@@ -109,6 +109,8 @@ fn emit_highlight_osc_rejection(
 #[derive(Clone, Copy)]
 pub(super) enum OscRecordGesture {
     None,
+    Record,
+    RecordSettings,
     Arm,
     Targets,
     Settings,
@@ -147,7 +149,10 @@ fn handle_shift_osc(
 }
 
 pub(super) fn record_gesture(target: &mut OscSubscriber, pressed: bool) -> OscRecordGesture {
-    if !target.shifted && !target.shift_held {
+    if pressed && !target.shifted && !target.shift_held {
+        let now = Instant::now();
+        target.update_record_started = Some(now);
+        target.update_first_release = Some(now);
         return OscRecordGesture::None;
     }
     if pressed && !target.shift_held {
@@ -164,7 +169,15 @@ pub(super) fn record_gesture(target: &mut OscSubscriber, pressed: bool) -> OscRe
         return OscRecordGesture::None;
     };
     let now = Instant::now();
-    if now.saturating_duration_since(started) >= Duration::from_millis(650) {
+    if target.update_first_release == Some(started) {
+        target.update_first_release = None;
+        return if now.saturating_duration_since(started) >= Duration::from_millis(2500) {
+            OscRecordGesture::RecordSettings
+        } else {
+            OscRecordGesture::Record
+        };
+    }
+    if now.saturating_duration_since(started) >= Duration::from_millis(2500) {
         target.update_first_release = None;
         target.shifted = false;
         OscRecordGesture::Settings
@@ -221,6 +234,7 @@ fn apply_record_gesture(state: &AppState, session: &Session, gesture: OscRecordG
                 serde_json::json!({"session_id":session.id}),
             );
         }
+        OscRecordGesture::Record | OscRecordGesture::RecordSettings => {}
         OscRecordGesture::None => {}
     }
 }
@@ -239,8 +253,29 @@ fn handle_record_osc(
         let gesture = source
             .map(|source| state.integrations.record_gesture(source, pressed))
             .unwrap_or(OscRecordGesture::None);
+        if matches!(gesture, OscRecordGesture::Record) {
+            let _ = command_http::route_osc_command_key_outcome(
+                state,
+                session,
+                &subscriber.desk_alias,
+                "record",
+                None,
+            );
+            return true;
+        }
+        if matches!(gesture, OscRecordGesture::RecordSettings) {
+            emit(
+                state,
+                "desk_action",
+                serde_json::json!({"desk_alias":subscriber.desk_alias,"desk_id":session.desk.id,"session_id":session.id,"action":"record-settings","source":"osc"}),
+            );
+            return true;
+        }
         apply_record_gesture(state, session, gesture);
-        !matches!(gesture, OscRecordGesture::None) || subscriber.shifted || subscriber.shift_held
+        pressed
+            || !matches!(gesture, OscRecordGesture::None)
+            || subscriber.shifted
+            || subscriber.shift_held
     })
 }
 
@@ -252,8 +287,34 @@ fn handle_shifted_shortcut(
     source: Option<SocketAddr>,
     request_id: Option<&str>,
 ) {
+    // Consuming a shifted key clears the one-shot latch. A physically held Shift remains
+    // represented separately by `shift_held`, so a second Clear is still shifted until release.
     if let Some(source) = source {
         state.integrations.clear_shift(source);
+    }
+    if matches!(action, "clear") {
+        if super::fixture_freeze::advance_command_mode(state, session) {
+            let _ = persist_programmer(state, session);
+            emit(
+                state,
+                "programmer_changed",
+                serde_json::json!({"desk_alias":desk_alias,"desk_id":session.desk.id,"session_id":session.id,"request_id":request_id,"source":"osc"}),
+            );
+        }
+        return;
+    }
+    if let Some(digit) = action
+        .strip_prefix("digit-")
+        .and_then(|digit| digit.parse::<u8>().ok())
+        && super::fixture_freeze::append_command_family(state, session, digit)
+    {
+        let _ = persist_programmer(state, session);
+        emit(
+            state,
+            "programmer_changed",
+            serde_json::json!({"desk_alias":desk_alias,"desk_id":session.desk.id,"session_id":session.id,"request_id":request_id,"source":"osc"}),
+        );
+        return;
     }
     emit(
         state,
@@ -280,7 +341,18 @@ fn route_programmer_osc_action(
             serde_json::json!({"desk_alias":desk_alias,"desk_id":session.desk.id,"session_id":session.id,"request_id":request_id,"action":"set","source":"osc"}),
         );
         true
-    } else if matches!(action, "align" | "escape" | "menu" | "prog-playback") {
+    } else if matches!(
+        action,
+        "align"
+            | "escape"
+            | "menu"
+            | "prog-playback"
+            | "playback"
+            | "off"
+            | "page-up"
+            | "page-down"
+            | "diff"
+    ) {
         emit(
             state,
             "desk_action",
@@ -323,11 +395,32 @@ pub(super) fn handle_programmer_osc(
     if action == "record" && handle_record_osc(state, &session, &subscriber, source, pressed) {
         return true;
     }
+    if matches!(action, "page-up" | "page-down") {
+        emit(
+            state,
+            "desk_action",
+            serde_json::json!({"desk_alias":parts[1],"desk_id":session.desk.id,"session_id":session.id,"request_id":request_id,"action":action,"value":if pressed { "down" } else { "up" },"source":"osc"}),
+        );
+        return true;
+    }
     if !pressed {
         return false;
     }
-    if subscriber.shifted
-        && (action.starts_with("digit-") || matches!(action, "clear" | "delete" | "del"))
+    if (subscriber.shifted || subscriber.shift_held)
+        && (action.starts_with("digit-")
+            || matches!(
+                action,
+                "clear"
+                    | "delete"
+                    | "del"
+                    | "align"
+                    | "cue"
+                    | "playback"
+                    | "escape"
+                    | "enter"
+                    | "preload"
+                    | "mov"
+            ))
     {
         handle_shifted_shortcut(state, &session, parts[1], action, source, request_id);
         return true;

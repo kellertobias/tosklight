@@ -216,6 +216,10 @@ function useCommandLineBarModel() {
 	const record = useRecordGesture({ armUpdateOrMenu, toggleRecord });
 	const advancePreload = async () => {
 		if (!preload.ready || !preload.actions) return;
+		if (state.shiftArmed) {
+			await preload.actions.clearPending();
+			return;
+		}
 		if (preload.armed) await preload.actions.go();
 		else await preload.actions.enter();
 	};
@@ -226,6 +230,42 @@ function useCommandLineBarModel() {
 	const openSystemControls = () =>
 		openSystemControlsModal(dispatch, deskDiagnostics.length > 0);
 	const toggleControlMode = () => dispatch({ type: "TOGGLE_CONTROL_MODE" });
+	useEffect(() => {
+		const toggle = () => toggleControlMode();
+		const programmerKey = (event: Event) => {
+			const key = (event as CustomEvent<string>).detail;
+			const shiftedKey = {
+				"shift-cue": "CUE",
+				"shift-playback": "PLAYBACK",
+				"shift-escape": "ESC",
+				"shift-enter": "ENT",
+				"shift-preload": "PRE",
+				"shift-mov": "MOV",
+			} as const;
+			if (key in shiftedKey) {
+				numericPad.pressShifted(shiftedKey[key as keyof typeof shiftedKey]);
+				return;
+			}
+			if (key === "playback") numericPad.press("PLAYBACK", "hardware");
+			if (key === "off") numericPad.press("OFF", "hardware");
+			if (key === "diff") numericPad.press("DIFF", "hardware");
+			if (key === "cue") numericPad.press("CUE", "hardware");
+			if (key === "escape") numericPad.press("ESC", "hardware");
+			if (key === "enter") numericPad.press("ENT", "hardware");
+			if (key === "preload") numericPad.press("PRE", "hardware");
+			if (key === "mov") numericPad.press("MOV", "hardware");
+		};
+		const recordSettings = () =>
+			dispatch({ type: "SET_MODAL", modal: "storeSettingsOpen", value: true });
+		window.addEventListener("light:control-mode-toggle", toggle);
+		window.addEventListener("light:programmer-key", programmerKey);
+		window.addEventListener("light:record-settings", recordSettings);
+		return () => {
+			window.removeEventListener("light:control-mode-toggle", toggle);
+			window.removeEventListener("light:programmer-key", programmerKey);
+			window.removeEventListener("light:record-settings", recordSettings);
+		};
+	});
 	useCommandLineShortcuts(hardware, {
 		completed,
 		commandLine: command.text,
@@ -240,7 +280,11 @@ function useCommandLineBarModel() {
 		toggleRecord,
 		advancePreload: () => void advancePreload(),
 		clear: () => numericPad.press("CLR"),
+		toggleFixtureFreeze: () => void numericPad.toggleFixtureFreeze(),
+		selectFixtureFreezeFamily: (key) =>
+			void numericPad.selectFixtureFreezeFamily(key),
 		undo: () => numericPad.press("UND"),
+		pressKey: (key) => numericPad.press(key, "keyboard"),
 	});
 	const status: CommandStatus = {
 		connection,
@@ -270,6 +314,7 @@ function useCommandLineBarModel() {
 		releasePreload,
 		openSystemControls,
 		toggleControlMode,
+		undo: () => numericPad.press("UND", "touch"),
 	};
 }
 
@@ -325,6 +370,7 @@ export function CommandLineBar() {
 			onRecordComplete={model.record.complete}
 			onAdvancePreload={model.advancePreload}
 			onReleasePreload={model.releasePreload}
+			onEscape={model.undo}
 		/>
 	);
 }

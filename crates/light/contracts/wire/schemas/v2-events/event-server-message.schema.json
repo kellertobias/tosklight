@@ -3721,6 +3721,38 @@
         "citp"
       ]
     },
+    "PatchFixtureFreezeFamily": {
+      "type": "string",
+      "enum": [
+        "intensity",
+        "color",
+        "position",
+        "beam"
+      ]
+    },
+    "PatchFixtureFreezeTargetProjection": {
+      "type": "object",
+      "properties": {
+        "families": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PatchFixtureFreezeFamily"
+          }
+        },
+        "fixture_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "full": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "fixture_id",
+        "full",
+        "families"
+      ]
+    },
     "PatchFixtureLocation": {
       "description": "Stage position in integer millimetres.",
       "type": "object",
@@ -3778,6 +3810,13 @@
           "type": "integer",
           "format": "uint64",
           "minimum": 0
+        },
+        "freeze_targets": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/PatchFixtureFreezeTargetProjection"
+          }
         },
         "grand_master_enabled": {
           "type": "boolean"
@@ -3900,7 +3939,8 @@
         "installed_appearance",
         "move_in_black_enabled",
         "move_in_black_delay_millis",
-        "highlight_overrides"
+        "highlight_overrides",
+        "freeze_targets"
       ]
     },
     "PatchFixtureRotation": {

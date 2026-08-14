@@ -20,6 +20,26 @@ import {
 } from "./useParameterProjection";
 import { useParameterValueActions } from "./useParameterValueActions";
 
+export function parameterTargetForShiftDigit(key: string):
+	| { type: "all" }
+	| { type: "dynamics" }
+	| { type: "family"; family: ParameterFamily }
+	| null {
+	if (key === "0") return { type: "all" };
+	if (key === "5") return { type: "dynamics" };
+	const family: Partial<Record<string, ParameterFamily>> = {
+		"1": "Intensity",
+		"2": "Color",
+		"3": "Position",
+		"4": "Beam",
+		"6": "Shapers",
+		"7": "Focus",
+		"8": "Control",
+		"9": "Media",
+	};
+	return family[key] ? { type: "family", family: family[key] } : null;
+}
+
 function createParameterActions(
 	projection: ParameterProjection,
 	valueActions: ReturnType<typeof useParameterValueActions>,
@@ -131,9 +151,39 @@ export function useParameterController(active = true) {
 				.then(() => setAlignMode(next))
 				.catch(() => undefined);
 		};
+		const handleAlignOff = () => {
+			void programmerActions
+				.alignSelection("off")
+				.then(() => setAlignMode(null))
+				.catch(() => undefined);
+		};
 		window.addEventListener("light:align-action", handleAlign);
-		return () => window.removeEventListener("light:align-action", handleAlign);
+		window.addEventListener("light:align-off", handleAlignOff);
+		return () => {
+			window.removeEventListener("light:align-action", handleAlign);
+			window.removeEventListener("light:align-off", handleAlignOff);
+		};
 	}, [alignMode, projection.active, projection.programmerActions]);
+	useEffect(() => {
+		if (!active) return;
+		const selectFromKey = (event: Event) => {
+			const key = (event as CustomEvent<string>).detail;
+			const target = parameterTargetForShiftDigit(key);
+			if (target?.type === "dynamics") {
+				setDynamicsMode(true);
+				return;
+			}
+			setDynamicsMode(false);
+			if (target?.type === "all") {
+				selectEncoderGroup("Intensity", 1);
+				return;
+			}
+			if (target?.type === "family") selectEncoderGroup(target.family, 1);
+		};
+		window.addEventListener("light:parameter-family-key", selectFromKey);
+		return () =>
+			window.removeEventListener("light:parameter-family-key", selectFromKey);
+	}, [active, selectEncoderGroup]);
 	useEffect(() => {
 		const group = projection.encoderGroups.find(
 			(candidate) => candidate.id === family.toLowerCase(),

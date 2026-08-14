@@ -1,5 +1,5 @@
 import { ApiRequestError } from "../../api/ApiRequestError";
-import type { ShowObjectActionOutcome } from "../../api/generated/light-wire";
+import type { ShowObjectActionOutcome } from "../../api/types";
 import type {
 	TimecodeCollectionSnapshot,
 	TimecodeDefinition,

@@ -48,13 +48,15 @@ function AlignmentControl({ controller }: { controller: ParameterController }) {
 	};
 	return (
 		<Button
-			aria-label={`Align ${label}`}
+			aria-label={
+				controller.state.shiftArmed
+					? `Align ${label}, Shift: Off`
+					: `Align ${label}`
+			}
 			className={`align-cycle ${controller.alignMode ? "align-active" : "align-off"}`}
 			onClick={(event) => {
 				if (event.shiftKey || controller.state.shiftArmed) {
 					void setMode(null);
-					if (controller.state.shiftArmed)
-						controller.dispatch({ type: "SET_SHIFT_ARMED", value: false });
 					return;
 				}
 				const nextIndex =
@@ -69,10 +71,16 @@ function AlignmentControl({ controller }: { controller: ParameterController }) {
 			<span className="align-label-full">
 				<span>Align</span>
 				<span>{label}</span>
+				{controller.state.shiftArmed && (
+					<small className="shift-action-label">Off</small>
+				)}
 			</span>
 			<span className="align-label-compact">
 				<span>Align</span>
 				<span>{label}</span>
+				{controller.state.shiftArmed && (
+					<small className="shift-action-label">Off</small>
+				)}
 			</span>
 		</Button>
 	);

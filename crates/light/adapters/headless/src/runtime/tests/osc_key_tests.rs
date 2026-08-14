@@ -156,6 +156,12 @@ fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
         &pressed,
         Some("127.0.0.1:9010"),
     );
+	handle_programmer_osc(
+		&state,
+		"/light/main/programmer/record",
+		&[OscArgument::Bool(false)],
+		Some("127.0.0.1:9010"),
+	);
     assert_eq!(
         state.programming.get(session.id).unwrap().command_line,
         "RECORD "
@@ -165,6 +171,27 @@ fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
             && event.payload["action"] == "record"
             && event.payload["session_id"] == serde_json::json!(session.id)
     }));
+	handle_programmer_osc(
+		&state,
+		"/light/main/programmer/record",
+		&pressed,
+		Some("127.0.0.1:9010"),
+	);
+	state.integrations.set_osc_unshifted_record_started(
+		"test",
+		Instant::now() - Duration::from_millis(3000),
+	);
+	handle_programmer_osc(
+		&state,
+		"/light/main/programmer/record",
+		&[OscArgument::Bool(false)],
+		Some("127.0.0.1:9010"),
+	);
+	assert!(state.events.audit_events().iter().any(|event| {
+		event.kind == "desk_action"
+			&& event.payload["action"] == "record-settings"
+			&& event.payload["session_id"] == serde_json::json!(session.id)
+	}));
     state
         .programming
         .set_command_line(session.id, "TIME".into());
@@ -211,12 +238,18 @@ fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
     assert!(!state.integrations.osc_subscriber("test").unwrap().shifted);
     assert_eq!(
         state.programming.get(session.id).unwrap().command_line,
-        "TIME -"
+        "FREEZE"
     );
-    let events = state.events.audit_events();
-    let shifted_clear = events.last().unwrap();
-    assert_eq!(shifted_clear.kind, "desk_action");
-    assert_eq!(shifted_clear.payload["action"], "shift-clear");
+    handle_programmer_osc(
+        &state,
+        "/light/main/programmer/clear",
+        &pressed,
+        Some("127.0.0.1:9010"),
+    );
+    assert_eq!(
+        state.programming.get(session.id).unwrap().command_line,
+        "UNFREEZE"
+    );
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
@@ -391,7 +424,7 @@ fn held_shift_record_short_double_and_long_gestures_are_mutually_distinct() {
     send("record", &pressed);
     state.integrations.set_osc_record_started(
         "update-test",
-        Instant::now() - Duration::from_millis(700),
+		Instant::now() - Duration::from_millis(3000),
     );
     send("record", &released);
     assert_eq!(state.programming.get(session.id).unwrap().command_line, "");

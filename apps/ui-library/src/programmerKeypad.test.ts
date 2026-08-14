@@ -7,7 +7,7 @@ import {
 
 describe("programmer keypad contract", () => {
 	it("keeps the shared physical layout stable", () => {
-		expect(numericPadLayout).toHaveLength(28);
+		expect(numericPadLayout).toHaveLength(34);
 		expect(numericPadLayout.find(({ key }) => key === "DEL")).toMatchObject({
 			section: "commands",
 			column: 1,
@@ -30,5 +30,8 @@ describe("programmer keypad contract", () => {
 		expect(oscProgrammerActionForKey("PRE")).toBe("preload");
 		expect(softwareKeyLabel("BACKSPACE")).toBe("←");
 		expect(softwareKeyLabel("SELECT")).toBe("SELECT");
+		expect(oscProgrammerActionForKey("PLAYBACK")).toBe("playback");
+		expect(oscProgrammerActionForKey("OFF")).toBe("off");
+		expect(softwareKeyLabel("PAGE_UP")).toBe("PAGE ▲");
 	});
 });

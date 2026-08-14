@@ -130,6 +130,7 @@ pub(super) fn fixture(profile: &FixtureProfile) -> PatchedFixture {
         move_in_black_enabled: false,
         move_in_black_delay_millis: 275,
         highlight_overrides,
+        freeze: Default::default(),
     }
 }
 

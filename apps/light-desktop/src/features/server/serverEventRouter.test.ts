@@ -437,6 +437,70 @@ describe("server event routing", () => {
 		}
 	});
 
+	it("preserves the attached Shift action for the software command owner", () => {
+		const received: string[] = [];
+		const listener = ((event: CustomEvent<string>) => {
+			received.push(event.detail);
+		}) as EventListener;
+		window.addEventListener("light:programmer-key", listener);
+		try {
+			routeOperatorEvent(
+				event("desk_action", {
+					action: "shift-enter",
+					desk_id: session.desk.id,
+				}),
+				session,
+				{} as ServerState,
+			);
+			expect(received).toEqual(["shift-enter"]);
+		} finally {
+			window.removeEventListener("light:programmer-key", listener);
+		}
+	});
+
+	it("opens page selection for the attached page chord without stepping", () => {
+		vi.useFakeTimers();
+		const steps: number[] = [];
+		let menus = 0;
+		const stepListener = ((event: CustomEvent<number>) => {
+			steps.push(event.detail);
+		}) as EventListener;
+		const menuListener = () => {
+			menus += 1;
+		};
+		window.addEventListener("light:playback-page-step", stepListener);
+		window.addEventListener("light:playback-page-menu", menuListener);
+		try {
+			for (const action of ["page-up", "page-down"])
+				routeOperatorEvent(
+					event("desk_action", {
+						action,
+						value: "down",
+						desk_id: session.desk.id,
+					}),
+					session,
+					{} as ServerState,
+				);
+			vi.advanceTimersByTime(200);
+			expect(menus).toBe(1);
+			expect(steps).toEqual([]);
+			for (const action of ["page-up", "page-down"])
+				routeOperatorEvent(
+					event("desk_action", {
+						action,
+						value: "up",
+						desk_id: session.desk.id,
+					}),
+					session,
+					{} as ServerState,
+				);
+		} finally {
+			window.removeEventListener("light:playback-page-step", stepListener);
+			window.removeEventListener("light:playback-page-menu", menuListener);
+			vi.useRealTimers();
+		}
+	});
+
 	it("routes Update requests through the typed interaction owner", () => {
 		const received: unknown[] = [];
 		const release = registerControlSurfaceTarget({

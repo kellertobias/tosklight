@@ -256,6 +256,7 @@ fn with_fixtures(
             move_in_black_enabled: false,
             move_in_black_delay_millis: 0,
             highlight_overrides: Default::default(),
+            freeze: Default::default(),
         })
         .collect::<Vec<_>>();
     Ok(light_engine::EngineSnapshot {

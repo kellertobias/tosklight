@@ -127,6 +127,12 @@ pub(super) fn parse_subset_rule(
     if tokens.is_empty() {
         return Ok(light_programmer::SelectionRule::All);
     }
+    if tokens[0] == "OFFSET" {
+        if tokens.len() != 1 {
+            return Err("OFFSET does not accept another offset".into());
+        }
+        return Ok(light_programmer::SelectionRule::Even);
+    }
     if tokens[0] != "DIV" {
         return Err("unexpected tokens after selection".into());
     }
@@ -195,7 +201,7 @@ pub(super) fn parse_fixture_selection(
     }
     let div = tokens
         .iter()
-        .position(|token| token == "DIV")
+        .position(|token| token == "DIV" || token == "OFFSET")
         .unwrap_or(tokens.len());
     if let Some(minus) = tokens[..div].iter().position(|token| token == "-") {
         if minus == 0 || minus + 1 == div {

@@ -186,6 +186,7 @@ mod tests {
                 move_in_black_enabled: true,
                 move_in_black_delay_millis: 0,
                 highlight_overrides: overrides,
+                freeze: Default::default(),
             },
         )
         .unwrap();

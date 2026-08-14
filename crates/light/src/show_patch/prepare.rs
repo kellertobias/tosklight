@@ -38,6 +38,20 @@ pub(super) fn plan_patch<P: ShowPatchPorts>(
 ) -> Result<PatchPlan, ActionError> {
     let stored = StoredFixtureRecords::load(document)?;
     let mut expanded = command.clone();
+    // Complete Patch upserts predate Freeze and do not carry captured semantic values. Preserve
+    // those values before sparse updates are expanded; a sparse SetFreeze action must still be
+    // able to deliberately replace the state with an empty map when unfreezing.
+    for fixture in &mut expanded.fixtures {
+        if fixture.patch.freeze.is_empty()
+            && let Some(existing) = stored.get(fixture.patch.fixture_id)
+        {
+            fixture.patch.freeze = existing
+                .record
+                .patch()
+                .map_err(|error| ActionError::new(ActionErrorKind::Invalid, error.to_string()))?
+                .freeze;
+        }
+    }
     expanded
         .fixtures
         .extend(resolve_fixture_updates(&stored, &command.fixture_updates)?);

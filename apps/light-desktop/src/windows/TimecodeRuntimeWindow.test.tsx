@@ -7,7 +7,7 @@ import {
 	within,
 } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { ShowObjectActionOutcome } from "../api/generated/light-wire";
+import type { ShowObjectActionOutcome } from "../api/types";
 import type { TimecodeDefinition, TimecodePatch } from "../api/types/timecode";
 import { TimecodeEditor } from "./TimecodeRuntimeWindow";
 

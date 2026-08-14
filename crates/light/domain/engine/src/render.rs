@@ -30,7 +30,9 @@ impl Engine {
         sampled: &[ContributionBatch],
     ) -> Result<RenderResult, EngineError> {
         let snapshot = generation.snapshot();
-        let resolved = self.resolved_attributes_for_render(generation, self.clock.now(), sampled);
+        let mut resolved =
+            self.resolved_attributes_for_render(generation, self.clock.now(), sampled);
+        apply_fixture_freezes(&snapshot.fixtures, &mut resolved);
         let profile_values = crate::ProfileValueIndex::new(&resolved);
         let group_masters = generation.group_masters();
         let group_master_flashes = self.group_master_flashes.read();
@@ -200,6 +202,23 @@ impl Engine {
         let generation = self.generation.load_full();
         hook();
         self.render_generation(&generation, options, &[])
+    }
+}
+
+fn apply_fixture_freezes(
+    fixtures: &[light_fixture::PatchedFixture],
+    resolved: &mut super::ResolvedAttributes,
+) {
+    for fixture in fixtures {
+        for (fixture_id, target) in &fixture.freeze.targets {
+            for (attribute, value) in &target.values {
+                let key = (*fixture_id, attribute.clone());
+                resolved.values.insert(key.clone(), value.clone());
+                // A Freeze is the final LTP hold. Retaining an underlying sequence-master scale
+                // would allow a Cue master to alter the held value after the Freeze was taken.
+                resolved.sequence_masters.remove(&key);
+            }
+        }
     }
 }
 

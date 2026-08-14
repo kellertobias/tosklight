@@ -12,5 +12,5 @@ async fn status(
     headers: HeaderMap,
 ) -> Result<Json<light_wire::v2::internal_audio::InternalAudioStatus>, ApiError> {
     authenticate(&state, &headers)?;
-    Ok(Json(state.internal_audio.lock().status()))
+    Ok(Json(state.internal_audio.status()))
 }

@@ -118,6 +118,7 @@ fn schema_v2_direct_fixture() -> (light_fixture::PatchedFixture, Uuid, [Uuid; 2]
             move_in_black_enabled: true,
             move_in_black_delay_millis: 0,
             highlight_overrides: Default::default(),
+            freeze: Default::default(),
         },
         action_id,
         [indexed_channel, reset_channel],

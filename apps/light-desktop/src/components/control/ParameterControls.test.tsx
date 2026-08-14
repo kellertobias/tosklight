@@ -1561,9 +1561,13 @@ describe("ParameterControls Group targets and alignment", () => {
 		await waitFor(() => expect(align).toHaveAccessibleName("Align Left"));
 		state.shiftArmed = true;
 		fireEvent.click(align);
-		await waitFor(() => expect(align).toHaveAccessibleName("Align Off"));
+		await waitFor(() =>
+			expect(align).toHaveAccessibleName("Align Off, Shift: Off"),
+		);
+		expect(align).toHaveTextContent("AlignOffOff");
+		expect(align.querySelector(".shift-action-label")).toHaveTextContent("Off");
 		expect(align).toHaveClass("align-off");
-		expect(dispatch).toHaveBeenCalledWith({
+		expect(dispatch).not.toHaveBeenCalledWith({
 			type: "SET_SHIFT_ARMED",
 			value: false,
 		});

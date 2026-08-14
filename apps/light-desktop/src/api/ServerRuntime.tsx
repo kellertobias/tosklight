@@ -281,6 +281,7 @@ function useProviderActionSources(
 	const programmerActions = useMemo(
 		() => ({
 			undoProgrammer: value.undoProgrammer,
+			toggleFixtureFreeze: value.toggleFixtureFreeze,
 			clearProgrammer: value.clearProgrammer,
 			controlFixtureAction: value.controlFixtureAction,
 			controlFixtureActions: value.controlFixtureActions,
@@ -290,6 +291,7 @@ function useProviderActionSources(
 		}),
 		[
 			value.undoProgrammer,
+			value.toggleFixtureFreeze,
 			value.clearProgrammer,
 			value.controlFixtureAction,
 			value.controlFixtureActions,

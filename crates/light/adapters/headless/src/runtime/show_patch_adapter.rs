@@ -26,6 +26,7 @@ use std::{collections::HashSet, sync::Arc};
 pub(super) struct ServerShowPatchPorts {
     state: AppState,
     current_patch_revision: Arc<RwLock<Option<u64>>>,
+    activation_held: bool,
 }
 
 impl ServerShowPatchPorts {
@@ -33,6 +34,15 @@ impl ServerShowPatchPorts {
         Self {
             state,
             current_patch_revision: Arc::new(RwLock::new(None)),
+            activation_held: false,
+        }
+    }
+
+    pub(super) fn with_activation_held(state: AppState) -> Self {
+        Self {
+            state,
+            current_patch_revision: Arc::new(RwLock::new(None)),
+            activation_held: true,
         }
     }
 
@@ -141,6 +151,9 @@ impl ActiveShowPorts for ServerShowPatchPorts {
     ) -> Result<T, ActionError> {
         #[cfg(test)]
         self.state.active_show.pause_patch_lifecycle_if_armed();
+        if self.activation_held {
+            return operation();
+        }
         let _activation = self.state.active_show.acquire_blocking();
         operation()
     }

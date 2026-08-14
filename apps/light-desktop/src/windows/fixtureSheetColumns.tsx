@@ -71,6 +71,7 @@ function fixtureNameColumn(
 				{showType && (
 					<small className="fixture-type">{fixture.fixtureType}</small>
 				)}
+				{fixture.freeze && <FreezeStatus freeze={fixture.freeze} />}
 				{fixture.limitingGroups.length > 0 && (
 					<GroupMasterStatus
 						fixture={fixture}
@@ -80,6 +81,23 @@ function fixtureNameColumn(
 			</span>
 		),
 	};
+}
+
+function FreezeStatus({ freeze }: { freeze: NonNullable<FixtureSheetRow["freeze"]> }) {
+	const families = freeze.families
+		.map((family) => family[0]?.toUpperCase() + family.slice(1))
+		.join(" · ");
+	const label = freeze.full ? "FREEZE" : `FREEZE · ${families}`;
+	const title = freeze.contained
+		? `${label} on one or more fixture heads`
+		: freeze.full
+			? "Full Freeze: output ignores all controls, masters, and Blackout"
+			: `${label}: Grand Master and Blackout remain active`;
+	return (
+		<em className="fixture-freeze-status" title={title}>
+			❄ {label}{freeze.contained ? " INSIDE" : ""}
+		</em>
+	);
 }
 
 function GroupMasterStatus({

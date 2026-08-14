@@ -20,6 +20,7 @@ import {
 	releasePlaybackSlot,
 	stepPlaybackPage,
 } from "./playbackShortcutKeys";
+import { RECORD_HOLD_MS } from "./useRecordGesture";
 
 interface ShortcutCallbacks {
 	completed: boolean;
@@ -35,13 +36,19 @@ interface ShortcutCallbacks {
 	toggleRecord: () => void;
 	advancePreload: () => void;
 	clear: () => void;
+	toggleFixtureFreeze: () => void;
+	selectFixtureFreezeFamily: (key: "1" | "2" | "3" | "4") => void;
 	undo: () => void;
+	pressKey?: (
+		key: Parameters<typeof editTargetedCommandWithSoftwareKey>[1],
+	) => void;
 }
 
 interface UpdateGesture {
 	hold: { current: number | null };
 	active: { current: boolean };
 	held: { current: boolean };
+	mode: { current: "record" | "update" | null };
 }
 
 interface ShortcutContext extends ShortcutCallbacks, PlaybackShortcutContext {
@@ -49,6 +56,44 @@ interface ShortcutContext extends ShortcutCallbacks, PlaybackShortcutContext {
 	dispatch: Dispatch<Action>;
 	update: UpdateGesture;
 	setInteraction: ReturnType<typeof useSetInteraction>;
+	pageChord: PageKeyChord;
+	keyboardShiftDown: { current: boolean };
+}
+
+export class PageKeyChord {
+	private held = new Set<"PageUp" | "PageDown">();
+	private timer: number | null = null;
+	private chord = false;
+
+	down(code: "PageUp" | "PageDown", single: () => void) {
+		this.held.add(code);
+		if (this.held.size === 2) {
+			if (this.timer != null) window.clearTimeout(this.timer);
+			this.timer = null;
+			this.chord = true;
+			window.dispatchEvent(new Event("light:playback-page-menu"));
+			return;
+		}
+		this.timer = window.setTimeout(() => {
+			this.timer = null;
+			if (!this.chord) {
+				this.held.delete(code);
+				single();
+			}
+		}, 140);
+	}
+
+	up(code: "PageUp" | "PageDown") {
+		this.held.delete(code);
+		if (this.held.size === 0) this.chord = false;
+	}
+
+	reset() {
+		if (this.timer != null) window.clearTimeout(this.timer);
+		this.timer = null;
+		this.held.clear();
+		this.chord = false;
+	}
 }
 
 function isExternalEditor(target: EventTarget | null) {
@@ -95,8 +140,10 @@ function handlePageKey(context: ShortcutContext, event: KeyboardEvent) {
 	event.preventDefault();
 	if (event.repeat) return true;
 	// A loading Page/desk/topology consumes the key but creates nothing.
-	if (context.authority.ready)
-		stepPlaybackPage(context, event.code === "PageUp" ? 1 : -1);
+	context.pageChord.down(event.code, () => {
+		if (context.authority.ready)
+			stepPlaybackPage(context, event.code === "PageUp" ? 1 : -1);
+	});
 	return true;
 }
 
@@ -118,14 +165,25 @@ function handleEscape(context: ShortcutContext, event: KeyboardEvent) {
 	}
 }
 
-function beginUpdateGesture(context: ShortcutContext, event: KeyboardEvent) {
+function beginRecordGesture(
+	context: ShortcutContext,
+	event: KeyboardEvent,
+	shifted: boolean,
+) {
 	if (event.repeat || context.update.active.current) return;
 	context.update.active.current = true;
 	context.update.held.current = false;
+	context.update.mode.current = shifted ? "update" : "record";
 	context.update.hold.current = window.setTimeout(() => {
 		context.update.held.current = true;
-		openUpdateSettings();
-	}, 650);
+		if (context.update.mode.current === "update") openUpdateSettings();
+		else
+			context.dispatch({
+				type: "SET_MODAL",
+				modal: "storeSettingsOpen",
+				value: true,
+			});
+	}, RECORD_HOLD_MS);
 }
 
 function applySoftwareEdit(
@@ -143,8 +201,48 @@ function applySoftwareEdit(
 }
 
 function handleSoftwareKey(context: ShortcutContext, event: KeyboardEvent) {
+	if (
+		event.key === "Shift" ||
+		event.code === "ShiftLeft" ||
+		event.code === "ShiftRight"
+	) {
+		event.preventDefault();
+		if (!event.repeat && !context.keyboardShiftDown.current) {
+			context.keyboardShiftDown.current = true;
+			context.dispatch({ type: "SET_SHIFT_ARMED", value: true });
+		}
+		return;
+	}
+	if (
+		event.shiftKey &&
+		/^Digit[1-4]$/.test(event.code) &&
+		/^\s*(?:FREEZE|UNFREEZE)\b/i.test(context.commandLine)
+	) {
+		event.preventDefault();
+		context.selectFixtureFreezeFamily(
+			event.code.slice(-1) as "1" | "2" | "3" | "4",
+		);
+		return;
+	}
 	const key = softwareKeyFromKeyboard(event, true);
 	if (!key) return;
+	const shifted = context.state.shiftArmed || event.shiftKey;
+	if (key === "REC" && shifted) {
+		event.preventDefault();
+		beginRecordGesture(context, event, true);
+		return;
+	}
+	if (key === "CLR" && shifted && !context.pressKey) {
+		event.preventDefault();
+		context.toggleFixtureFreeze();
+		return;
+	}
+	if (shifted) {
+		event.preventDefault();
+		if (context.pressKey) context.pressKey(key);
+		else applySoftwareEdit(context, key);
+		return;
+	}
 	if (key === "ESC") {
 		handleEscape(context, event);
 		return;
@@ -156,12 +254,12 @@ function handleSoftwareKey(context: ShortcutContext, event: KeyboardEvent) {
 		context.state.builtIn === "patch"
 	) {
 		context.pressSet();
-	} else if (key === "REC" && event.shiftKey) {
-		beginUpdateGesture(context, event);
 	} else if (key === "REC") {
-		context.toggleRecord();
+		beginRecordGesture(context, event, event.shiftKey);
 	} else if (key === "PRE") {
 		context.advancePreload();
+	} else if (key === "CLR" && event.shiftKey) {
+		context.toggleFixtureFreeze();
 	} else if (key === "CLR") {
 		context.clear();
 	} else if (key === "UND") {
@@ -186,11 +284,30 @@ function finishUpdateGesture(context: ShortcutContext) {
 		window.clearTimeout(context.update.hold.current);
 	context.update.hold.current = null;
 	context.update.active.current = false;
-	if (!context.update.held.current) context.armUpdateOrMenu();
+	if (!context.update.held.current) {
+		if (context.update.mode.current === "update") context.armUpdateOrMenu();
+		else context.toggleRecord();
+	}
 	context.update.held.current = false;
+	context.update.mode.current = null;
 }
 
 function handleKeyUp(context: ShortcutContext, event: KeyboardEvent) {
+	if (
+		(event.key === "Shift" ||
+			event.code === "ShiftLeft" ||
+			event.code === "ShiftRight") &&
+		context.keyboardShiftDown.current
+	) {
+		event.preventDefault();
+		context.keyboardShiftDown.current = false;
+		context.dispatch({ type: "SET_SHIFT_ARMED", value: false });
+		return;
+	}
+	if (event.code === "PageUp" || event.code === "PageDown") {
+		context.pageChord.up(event.code);
+		return;
+	}
 	if (event.code === "End" && context.update.active.current) {
 		finishUpdateGesture(context);
 		return;
@@ -203,30 +320,14 @@ function releaseHeldControls(context: ShortcutContext) {
 		window.clearTimeout(context.update.hold.current);
 	context.update.hold.current = null;
 	context.update.active.current = false;
+	context.update.mode.current = null;
 	context.heldActions.releaseAll();
 	context.pageActions.invalidate();
-}
-
-function useRunningMenuShortcut(hardware: boolean) {
-	const { state, dispatch } = useApp();
-	useEffect(() => {
-		if (hardware || !state.regularNumberShortcuts) return;
-		const openRunningMenu = (event: KeyboardEvent) => {
-			if (
-				event.code !== "Delete" ||
-				!event.shiftKey ||
-				event.metaKey ||
-				event.ctrlKey ||
-				event.altKey ||
-				isExternalEditor(event.target)
-			)
-				return;
-			event.preventDefault();
-			dispatch({ type: "SET_MODAL", modal: "systemControlsOpen", value: true });
-		};
-		window.addEventListener("keydown", openRunningMenu);
-		return () => window.removeEventListener("keydown", openRunningMenu);
-	}, [dispatch, hardware, state.regularNumberShortcuts]);
+	context.pageChord.reset();
+	if (context.keyboardShiftDown.current) {
+		context.keyboardShiftDown.current = false;
+		context.dispatch({ type: "SET_SHIFT_ARMED", value: false });
+	}
 }
 
 export function useCommandLineShortcuts(
@@ -243,9 +344,12 @@ export function useCommandLineShortcuts(
 		hold: useRef<number | null>(null),
 		active: useRef(false),
 		held: useRef(false),
+		mode: useRef(null),
 	};
 	const heldActions = useRef(new KeyboardHeldActions()).current;
 	const pageActions = useRef(new KeyboardPageActions()).current;
+	const pageChord = useRef(new PageKeyChord()).current;
+	const keyboardShiftDown = useRef(false);
 	const context = useRef<ShortcutContext | null>(null);
 	context.current = {
 		state,
@@ -255,10 +359,11 @@ export function useCommandLineShortcuts(
 		update,
 		heldActions,
 		pageActions,
+		pageChord,
+		keyboardShiftDown,
 		setInteraction,
 		...callbacks,
 	};
-	useRunningMenuShortcut(hardware);
 	useLayoutEffect(() => {
 		if (!active) return;
 		heldActions.syncAuthority(runtimeActions);
@@ -288,7 +393,13 @@ export function useCommandLineShortcuts(
 			if (shortcut.authority.ready)
 				stepPlaybackPage(shortcut, event.detail > 0 ? 1 : -1);
 		}) as EventListener;
-		const blur = () => heldActions.releaseAll();
+		const blur = () => {
+			heldActions.releaseAll();
+			if (keyboardShiftDown.current) {
+				keyboardShiftDown.current = false;
+				current().dispatch({ type: "SET_SHIFT_ARMED", value: false });
+			}
+		};
 		window.addEventListener("keydown", keydown);
 		window.addEventListener("keyup", keyup);
 		window.addEventListener("light:playback-page-step", pageStep);

@@ -157,6 +157,19 @@ export interface PatchLogicalHead {
 export interface PatchFixtureProjection extends PatchFixtureWrite {
 	fixtureRevision: number;
 	logicalHeads: readonly PatchLogicalHead[];
+	freezeTargets?: readonly PatchFixtureFreezeTarget[];
+}
+
+export type PatchFixtureFreezeFamily =
+	| "intensity"
+	| "color"
+	| "position"
+	| "beam";
+
+export interface PatchFixtureFreezeTarget {
+	fixtureId: string;
+	full: boolean;
+	families: readonly PatchFixtureFreezeFamily[];
 }
 
 export interface PatchModeProjection {

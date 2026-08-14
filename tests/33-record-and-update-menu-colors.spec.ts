@@ -19,7 +19,7 @@ test("WORKFLOW-COLOR-001 @ui › Record red and Update amber remain distinct wit
 async function assertWorkflowThemes(page: any) {
   const rec = page.locator(".global-store-button");
   await rec.dispatchEvent("pointerdown", { pointerId: 1, pointerType: "mouse", button: 0 });
-  await page.waitForTimeout(700);
+  await page.waitForTimeout(2_600);
   await rec.dispatchEvent("pointerup", { pointerId: 1, pointerType: "mouse", button: 0 });
   const record = page.getByRole("dialog", { name: "Record Settings" });
   await expect(record).toContainText("RECORD");
@@ -32,7 +32,7 @@ async function assertWorkflowThemes(page: any) {
     button: 0,
     shiftKey: true,
   });
-  await page.waitForTimeout(700);
+  await page.waitForTimeout(2_600);
   await rec.dispatchEvent("pointerup", { pointerId: 2, pointerType: "mouse", button: 0 });
   const update = page.getByRole("dialog", { name: "Update Settings" });
   await expect(update).toContainText("UPDATE");
@@ -42,7 +42,7 @@ async function assertWorkflowThemes(page: any) {
   expect((await colors(rec)).border).toBe("rgb(255, 78, 85)");
   await page.waitForTimeout(1_050);
   await rec.click({ modifiers: ["Shift"] });
-  await expect(rec).toContainText("UPDATE ARMED");
+  await expect(rec).toContainText("UPDATE");
   await expect.poll(async () => (await colors(rec)).border).toBe("rgb(244, 185, 66)");
   await rec.click({ modifiers: ["Shift"] });
   const targets = page.getByRole("dialog", { name: "Update Update" });

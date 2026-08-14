@@ -14,19 +14,19 @@ import {
 
 describe("software keypad", () => {
 	it("shares the current physical number-block layout and OSC actions with hardware surfaces", () => {
-		const matrix = Array.from({ length: 5 }, () => Array<string>(6).fill(""));
-		for (const item of numericPadLayout) {
-			const column =
-				item.section === "commands" ? item.column : item.column - 1;
-			matrix[item.row - 1][column - 1] = item.key;
-		}
-		expect(matrix).toEqual([
-			["", "", "GRP", "CUE", "TIME", "DIV"],
-			["DEL", "CLR", "7", "8", "9", "-"],
-			["MOV", "BACKSPACE", "4", "5", "6", "+"],
-			["CPY", "UND", "1", "2", "3", "TRU"],
-			["SET", "SHIFT", ".", "0", "AT", "ENT"],
+		expect(
+			numericPadLayout.filter(({ section }) => section === "commands").map(({ key }) => key),
+		).toEqual([
+			"DEL", "CLR", "PLAYBACK", "OFF",
+			"MOV", "BACKSPACE", "DIFF", "ESC",
+			"CPY", "UND", "PAGE_UP", "PAGE_DOWN",
+			"SET", "SHIFT",
 		]);
+		expect(numericPadLayout.find(({ key }) => key === "ENT")).toMatchObject({
+			section: "numbers",
+			column: 7,
+			row: 5,
+		});
 		expect(oscProgrammerActionForKey("7")).toBe("digit-7");
 		expect(oscProgrammerActionForKey("TRU")).toBe("thru");
 		expect(oscProgrammerActionForKey("ENT")).toBe("enter");
@@ -35,12 +35,11 @@ describe("software keypad", () => {
 
 	it("keeps the documented keypad layout with timing, minus, and shift", () => {
 		expect(softwareKeypadRows).toEqual([
-			["SET", "GRP", "CUE", "UND", "CLR"],
-			["DEL", "7", "8", "9", "+"],
-			["MOV", "4", "5", "6", "TRU"],
-			["CPY", "1", "2", "3", "DIV"],
-			["BACKSPACE", "0", ".", "AT", "ENT"],
-			["SHIFT", "TIME", "-"],
+			["TIME", "DIV", "-", "+"],
+			["7", "8", "9", "AT"],
+			["4", "5", "6", "TRU"],
+			["1", "2", "3", "CLR"],
+			["0", "BACKSPACE", ".", "ENT"],
 		]);
 	});
 
@@ -78,12 +77,19 @@ describe("software keypad", () => {
 
 	it("expands the double AT and double dot shortcuts and requests execution", () => {
 		expect(editCommandWithSoftwareKey("1 AT ", "AT")).toEqual({
-			command: "1 AT FULL",
+			command: "1 AT 100",
 			execute: true,
 		});
 		expect(editCommandWithSoftwareKey("1.", ".")).toEqual({
 			command: "1 AT 0",
 			execute: true,
+		});
+	});
+
+	it("shows a double DIV press as OFFSET", () => {
+		expect(editCommandWithSoftwareKey("1 DIV ", "DIV")).toEqual({
+			command: "1 OFFSET",
+			execute: false,
 		});
 	});
 
@@ -320,5 +326,32 @@ describe("software keypad", () => {
 		const fixture = commandTargetAfterEnter("FIXTURE", "GROUP", false);
 		expect(fixture).toBe("FIXTURE");
 		expect(defaultCommandLine(fixture!)).toBe("FIXTURE");
+	});
+
+	it("edits the fixture selection before a Freeze family suffix", () => {
+		expect(
+			editTargetedCommandWithSoftwareKey(
+				"FREEZE INTENSITY",
+				"7",
+				"FIXTURE",
+				false,
+			),
+		).toEqual({
+			command: "FREEZE F7 INTENSITY",
+			execute: false,
+			pristine: false,
+		});
+		expect(
+			editTargetedCommandWithSoftwareKey(
+				"UNFREEZE F7 COLOR",
+				"8",
+				"FIXTURE",
+				false,
+			),
+		).toEqual({
+			command: "UNFREEZE F78 COLOR",
+			execute: false,
+			pristine: false,
+		});
 	});
 });

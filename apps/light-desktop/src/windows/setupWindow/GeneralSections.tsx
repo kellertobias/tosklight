@@ -6,7 +6,7 @@ import {
 	TextField,
 } from "@tosklight/ui";
 import { useEffect, useState } from "react";
-import type { InternalAudioStatus } from "../../api/generated/light-wire";
+import type { InternalAudioStatus } from "../../api/types";
 import { ShowRecoveryFileManager } from "../../components/setup/ShowRecoveryFileManager";
 import { useBootstrapSnapshot } from "../../features/deskSnapshot/DeskSnapshotState";
 import { useConnectionStatus } from "../../features/shellStatus/ShellStatusState";

@@ -25,14 +25,19 @@ fn press(text: &str, target: CommandTarget, pristine: bool, key: &str) -> Comman
 fn edits_documented_shortcuts_and_timing_tokens() {
     assert_eq!(
         press("1 AT ", CommandTarget::Fixture, false, "AT").text,
-        "1 AT FULL"
+        "1 AT 100"
     );
     assert!(press("1 AT ", CommandTarget::Fixture, false, "AT").execute);
     assert_eq!(
         press("1.", CommandTarget::Fixture, false, ".").text,
         "1 AT 0"
     );
+    assert_eq!(
+        press("1 DIV ", CommandTarget::Fixture, false, "DIV").text,
+        "1 OFFSET"
+    );
     assert!(press("1.", CommandTarget::Fixture, false, ".").execute);
+    assert_eq!(press(".", CommandTarget::Fixture, false, ".").text, "AT 0");
     assert_eq!(
         press("1..", CommandTarget::Fixture, false, ".").text,
         "1. AT 0"

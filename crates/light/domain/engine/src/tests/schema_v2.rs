@@ -417,6 +417,7 @@ fn schema_v2_renders_one_head_channels_to_independent_splits() {
         move_in_black_enabled: true,
         move_in_black_delay_millis: 0,
         highlight_overrides: BTreeMap::new(),
+        freeze: Default::default(),
     };
     let programmers = ProgrammerRegistry::default();
     let session = SessionId::new();

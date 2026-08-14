@@ -3,7 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PlaybackDefinition, PlaybackPage } from "../../../api/types";
 import { useCommandLineShortcuts } from "./useCommandLineShortcuts";
 
-const appState = { regularNumberShortcuts: true, builtIn: "playback" };
+const appState = {
+	regularNumberShortcuts: true,
+	builtIn: "playback",
+	shiftArmed: false,
+};
+const appDispatch = vi.fn();
 
 let deskPage: number | null = 2;
 let runtimeStatus: "ready" | "loading" | "error" = "ready";
@@ -32,7 +37,7 @@ const createPage = vi.fn(async () => ({}));
 const topologyActions = { createPage, error: null };
 
 vi.mock("../../../state/AppContext", () => ({
-	useApp: () => ({ state: appState, dispatch: vi.fn() }),
+	useApp: () => ({ state: appState, dispatch: appDispatch }),
 }));
 
 // The shortcut path must never reach the broad Playback facade again.
@@ -104,6 +109,8 @@ const callbacks = {
 	toggleRecord: vi.fn(),
 	advancePreload: vi.fn(),
 	clear: vi.fn(),
+	toggleFixtureFreeze: vi.fn(),
+	selectFixtureFreezeFamily: vi.fn(),
 	undo: vi.fn(),
 };
 
@@ -141,6 +148,13 @@ async function tick() {
 	});
 }
 
+async function settlePageChord() {
+	await act(async () => {
+		await new Promise((resolve) => window.setTimeout(resolve, 160));
+	});
+	await tick();
+}
+
 /** Settles every in-flight runtime action so a queued release can be sent. */
 async function flush() {
 	for (const resolve of inFlight.splice(0)) resolve();
@@ -149,6 +163,7 @@ async function flush() {
 
 beforeEach(() => {
 	appState.regularNumberShortcuts = true;
+	appState.shiftArmed = false;
 	deskPage = 2;
 	runtimeStatus = "ready";
 	collectionsReady = true;
@@ -166,6 +181,40 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("useCommandLineShortcuts playback keys", () => {
+	it("holds keyboard Shift only until the physical key is released", () => {
+		mount();
+
+		press("Shift", { code: "ShiftLeft", shiftKey: true });
+		expect(appDispatch).toHaveBeenCalledWith({
+			type: "SET_SHIFT_ARMED",
+			value: true,
+		});
+
+		release("ShiftLeft");
+		expect(appDispatch).toHaveBeenLastCalledWith({
+			type: "SET_SHIFT_ARMED",
+			value: false,
+		});
+	});
+
+	it("routes Shift Delete into Freeze command mode", () => {
+		mount();
+
+		press("Delete", { shiftKey: true });
+
+		expect(callbacks.toggleFixtureFreeze).toHaveBeenCalledTimes(1);
+		expect(callbacks.clear).not.toHaveBeenCalled();
+	});
+
+	it("routes shifted family numbers while Freeze is pending", () => {
+		callbacks.commandLine = "FREEZE F1";
+		mount();
+
+		press("1", { code: "Digit1", shiftKey: true });
+
+		expect(callbacks.selectFixtureFreezeFamily).toHaveBeenCalledWith("1");
+	});
+
 	it("hydrates only Page and Playback definitions plus the desk projection", () => {
 		mount();
 
@@ -353,15 +402,31 @@ describe("useCommandLineShortcuts playback keys", () => {
 });
 
 describe("useCommandLineShortcuts page keys", () => {
+	it("opens the Page menu chord without stepping either direction", async () => {
+		const open = vi.fn();
+		window.addEventListener("light:playback-page-menu", open, { once: true });
+		mount();
+
+		press("PageUp");
+		press("PageDown");
+		await settlePageChord();
+
+		expect(open).toHaveBeenCalledOnce();
+		expect(setActivePage).not.toHaveBeenCalled();
+		expect(createPage).not.toHaveBeenCalled();
+	});
+
 	it("steps to an existing Page through the scoped desk action", async () => {
 		mount();
 
 		press("PageUp");
-		await tick();
+		await settlePageChord();
+		release("PageUp");
 		expect(setActivePage).toHaveBeenCalledWith(3);
 
 		press("PageDown");
-		await tick();
+		await settlePageChord();
+		release("PageDown");
 		expect(setActivePage).toHaveBeenCalledWith(1);
 	});
 
@@ -371,7 +436,7 @@ describe("useCommandLineShortcuts page keys", () => {
 		mount();
 
 		press("PageUp");
-		await tick();
+		await settlePageChord();
 
 		expect(createPage).toHaveBeenCalledWith(3);
 		expect(setActivePage).toHaveBeenCalledWith(3);
@@ -392,7 +457,7 @@ describe("useCommandLineShortcuts page keys", () => {
 		press("PageUp");
 		press("PageUp");
 		press("PageUp", { repeat: true });
-		await tick();
+		await settlePageChord();
 
 		expect(topologyActions.createPage).toHaveBeenCalledOnce();
 		resolveCreate({});

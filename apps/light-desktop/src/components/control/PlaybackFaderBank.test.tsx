@@ -745,11 +745,11 @@ describe("PlaybackFaderBank layout and configuration surfaces", () => {
 			}),
 		);
 
-		expect(screen.getByRole("radio", { name: "Scoped" })).toHaveAttribute(
+		expect(screen.getByRole("radio", { name: "1 Scoped" })).toHaveAttribute(
 			"aria-checked",
 			"true",
 		);
-		expect(screen.queryByRole("radio", { name: "Legacy" })).toBeNull();
+		expect(screen.queryByRole("radio", { name: "1 Legacy" })).toBeNull();
 	});
 });
 

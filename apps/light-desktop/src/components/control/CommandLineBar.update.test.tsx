@@ -272,9 +272,9 @@ describe("scoped command-line integration", () => {
 			"error",
 		);
 		expect(screen.queryByLabelText(/Desk State needs attention/u)).toBeNull();
-		expect(screen.getByLabelText("Requested system controls tab")).toHaveTextContent(
-			"running",
-		);
+		expect(
+			screen.getByLabelText("Requested system controls tab"),
+		).toHaveTextContent("running");
 	});
 
 	it("opens current duplicate output diagnostics on the exact Desk state tab", async () => {
@@ -678,7 +678,10 @@ describe("Shift+Record Update gestures", () => {
 		const authority = createCommandLineTestAuthority();
 		render(authority.wrap(<CommandLineBar />));
 		await act(authority.settle);
-		const record = screen.getByRole("button", { name: "REC" });
+		const record = screen.getByRole("button", {
+			name: "REC, Shift: UPDATE",
+		});
+		expect(record).toHaveTextContent("RECUPDATE");
 
 		fireEvent.pointerDown(record);
 		fireEvent.pointerUp(record);
@@ -705,7 +708,7 @@ describe("Shift+Record Update gestures", () => {
 
 		state.updateArmed = false;
 		fireEvent.pointerDown(record);
-		vi.advanceTimersByTime(650);
+		vi.advanceTimersByTime(2500);
 		fireEvent.pointerUp(record);
 		fireEvent.click(record);
 		expect(settings).toHaveBeenCalledTimes(1);
@@ -753,11 +756,38 @@ describe("Shift+Record Update gestures", () => {
 
 		state.updateArmed = false;
 		fireEvent.keyDown(window, { code: "End", key: "End", shiftKey: true });
-		vi.advanceTimersByTime(650);
+		vi.advanceTimersByTime(2500);
 		fireEvent.keyUp(window, { code: "End", key: "End", shiftKey: true });
 		expect(settings).toHaveBeenCalledTimes(1);
 		expect(state.updateArmed).toBe(false);
 
 		release();
+	});
+
+	it("opens Record Settings after the documented unshifted hold", async () => {
+		const authority = createCommandLineTestAuthority();
+		render(authority.wrap(<CommandLineBar />));
+		await act(authority.settle);
+		const record = screen.getByRole("button", { name: "REC" });
+
+		fireEvent.pointerDown(record);
+		vi.advanceTimersByTime(2500);
+		fireEvent.pointerUp(record);
+		fireEvent.click(record);
+		expect(dispatch).toHaveBeenCalledWith({
+			type: "SET_MODAL",
+			modal: "storeSettingsOpen",
+			value: true,
+		});
+
+		dispatch.mockClear();
+		fireEvent.keyDown(window, { code: "End", key: "End" });
+		vi.advanceTimersByTime(2500);
+		fireEvent.keyUp(window, { code: "End", key: "End" });
+		expect(dispatch).toHaveBeenCalledWith({
+			type: "SET_MODAL",
+			modal: "storeSettingsOpen",
+			value: true,
+		});
 	});
 });

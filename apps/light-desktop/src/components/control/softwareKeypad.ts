@@ -10,12 +10,11 @@ export {
 } from "../../controlSurface/commandTarget";
 
 export const softwareKeypadRows: SoftwareKey[][] = [
-	["SET", "GRP", "CUE", "UND", "CLR"],
-	["DEL", "7", "8", "9", "+"],
-	["MOV", "4", "5", "6", "TRU"],
-	["CPY", "1", "2", "3", "DIV"],
-	["BACKSPACE", "0", ".", "AT", "ENT"],
-	["SHIFT", "TIME", "-"],
+	["TIME", "DIV", "-", "+"],
+	["7", "8", "9", "AT"],
+	["4", "5", "6", "TRU"],
+	["1", "2", "3", "CLR"],
+	["0", "BACKSPACE", ".", "ENT"],
 ];
 
 export interface TargetedCommandEdit {
@@ -27,6 +26,8 @@ export interface TargetedCommandEdit {
 const pristineRootTokens: Partial<Record<SoftwareKey, string>> = {
 	GRP: "GROUP",
 	CUE: "CUE",
+	PLAYBACK: "PLAYBACK",
+	OFF: "OFF",
 	DEL: "DELETE",
 	MOV: "MOVE",
 	CPY: "COPY",
@@ -114,6 +115,7 @@ export function editTargetedCommandWithSoftwareKey(
 	key: SoftwareKey,
 	target: CommandTargetMode,
 	pristine: boolean,
+	repeated: boolean | undefined = undefined,
 ): TargetedCommandEdit {
 	if (key === "BACKSPACE") {
 		if (pristine) return { command: target, execute: false, pristine: true };
@@ -123,6 +125,31 @@ export function editTargetedCommandWithSoftwareKey(
 			: { command: target, execute: false, pristine: true };
 	}
 	if (key === "SHIFT") return { command, execute: false, pristine };
+
+	const freeze = command.match(/^\s*(FREEZE|UNFREEZE)\b\s*(.*)$/i);
+	if (freeze) {
+		const prefix = freeze[1].toUpperCase();
+		const selection = freeze[2].trim();
+		const family = selection.match(
+			/(?:^|\s)(INTENSITY|COL(?:OR|OUR)|POSITION|BEAM)(?:\s|$)/i,
+		);
+		const selectionText = family
+			? selection.slice(0, family.index).trim()
+			: selection;
+		const familyText = family
+			? selection.slice(family.index).trim()
+			: "";
+		const edited = editTargetedCommandWithSoftwareKey(
+			selectionText || target,
+			key,
+			target,
+			selectionText.length === 0,
+		);
+		return {
+			...edited,
+			command: `${prefix} ${edited.command}${familyText ? ` ${familyText}` : ""}`.trim(),
+		};
+	}
 
 	if (pristine) {
 		const edit = editPristineCommand(key, target);
@@ -140,16 +167,16 @@ export function editTargetedCommandWithSoftwareKey(
 			pristine: false,
 		};
 	}
-	if (key === "GRP" && /(?:^|\s)(?:GROUP|G|F)\s*$/i.test(command)) {
+	if (repeated !== false && key === "GRP" && /(?:^|\s)(?:GROUP|G|F)\s*$/i.test(command)) {
 		return {
 			command: command.replace(/(?:GROUP|G|F)\s*$/i, "DEGRP"),
 			execute: false,
 			pristine: false,
 		};
 	}
-	if (key === "AT" && /(?:^|\s)AT\s*$/i.test(command)) {
+	if (repeated !== false && key === "AT" && /(?:^|\s)AT\s*$/i.test(command)) {
 		return {
-			command: command.replace(/AT\s*$/i, "AT FULL"),
+			command: command.replace(/AT\s*$/i, "AT 100"),
 			execute: true,
 			pristine: false,
 		};
@@ -157,16 +184,23 @@ export function editTargetedCommandWithSoftwareKey(
 	if (key === "." && /^\s*SPD\s+GRP\b/i.test(command)) {
 		return { command: `${command},`, execute: false, pristine: false };
 	}
-	if (key === "." && /\.\s*$/.test(command)) {
+	if (repeated !== false && key === "." && /\.\s*$/.test(command)) {
 		return {
-			command: `${command.replace(/\.\s*$/, "").trimEnd()} AT 0`,
+			command: `${command.replace(/\.\s*$/, "").trimEnd()} AT 0`.trim(),
 			execute: true,
 			pristine: false,
 		};
 	}
-	if (key === "TIME" && /(?:^|\s)TIME\s*$/i.test(command)) {
+	if (repeated !== false && key === "TIME" && /(?:^|\s)TIME\s*$/i.test(command)) {
 		return {
 			command: command.replace(/TIME\s*$/i, "DELAY"),
+			execute: false,
+			pristine: false,
+		};
+	}
+	if (repeated !== false && key === "DIV" && /(?:^|\s)DIV\s*$/i.test(command)) {
+		return {
+			command: command.replace(/DIV\s*$/i, "OFFSET"),
 			execute: false,
 			pristine: false,
 		};
@@ -176,11 +210,14 @@ export function editTargetedCommandWithSoftwareKey(
 			{
 				GRP: "GROUP",
 				CUE: "CUE",
+				PLAYBACK: "PLAYBACK",
+				OFF: "OFF",
 				DEL: "DELETE",
 				MOV: "MOVE",
 				CPY: "COPY",
 				TRU: "THRU",
 				DIV: "DIV",
+				DIFF: "DIFF",
 				SET: "SET",
 				AT: "AT",
 				TIME: "TIME",

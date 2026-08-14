@@ -9,7 +9,8 @@ type HardwareKey =
 	| "NEXT"
 	| "ALL"
 	| "RECORD"
-	| "PRELOAD GO";
+	| "PRELOAD GO"
+	| "PROGRAMMER / PLAYBACK";
 
 interface ControlButtonProps {
 	label: string;

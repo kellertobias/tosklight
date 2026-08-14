@@ -109,6 +109,7 @@ fn embedded_legacy_patch_migrates_to_portable_profile_and_explicit_split_assignm
         move_in_black_enabled: true,
         move_in_black_delay_millis: 0,
         highlight_overrides: BTreeMap::new(),
+        freeze: Default::default(),
     };
 
     assert!(migrate_patched_fixture_to_v2(&mut fixture).unwrap());

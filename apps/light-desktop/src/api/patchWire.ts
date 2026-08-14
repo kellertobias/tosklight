@@ -155,6 +155,11 @@ function mapFixtureProjection(
 			channelId: override.channel_id,
 			rawValue: override.raw_value,
 		})),
+		freezeTargets: (fixture.freeze_targets ?? []).map((target) => ({
+			fixtureId: target.fixture_id,
+			full: target.full,
+			families: [...target.families],
+		})),
 	};
 }
 

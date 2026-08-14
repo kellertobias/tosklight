@@ -97,6 +97,136 @@ fn grand_master_and_blackout_affect_intensity() {
 }
 
 #[test]
+fn partial_freeze_holds_the_family_before_group_grand_master_and_blackout() {
+    let programmers = ProgrammerRegistry::default();
+    let session = SessionId::new();
+    programmers.start(session, UserId::new());
+    let (mut fixture, logical) = fixture();
+    fixture.freeze = FixtureFreezeState {
+        targets: HashMap::from([(
+            logical,
+            FrozenFixtureTarget {
+                full: false,
+                families: vec![FreezeFamily::Intensity],
+                values: HashMap::from([(
+                    AttributeKey::intensity(),
+                    AttributeValue::Normalized(0.8),
+                )]),
+            },
+        )]),
+    };
+    programmers.set(
+        session,
+        logical,
+        AttributeKey::intensity(),
+        AttributeValue::Normalized(0.1),
+    );
+    let engine = Engine::new(programmers.clone());
+    engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![fixture].into(),
+            playbacks: vec![group_playback(1, "front", 0.5)].into(),
+            groups: vec![GroupDefinition {
+                id: "front".into(),
+                fixtures: vec![logical],
+                ..Default::default()
+            }]
+            .into(),
+            ..Default::default()
+        })
+        .unwrap();
+
+    assert_eq!(
+        engine
+            .render(RenderOptions {
+                grand_master: 0.5,
+                ..Default::default()
+            })
+            .unwrap()
+            .universes[&1][0],
+        51
+    );
+    programmers.set(
+        session,
+        logical,
+        AttributeKey::intensity(),
+        AttributeValue::Normalized(1.0),
+    );
+    assert_eq!(
+        engine
+            .render(RenderOptions {
+                blackout: true,
+                ..Default::default()
+            })
+            .unwrap()
+            .universes[&1][0],
+        0
+    );
+}
+
+#[test]
+fn full_freeze_bypasses_every_master_and_resumes_underlying_state_when_removed() {
+    let programmers = ProgrammerRegistry::default();
+    let session = SessionId::new();
+    programmers.start(session, UserId::new());
+    let (mut fixture, logical) = fixture();
+    fixture.freeze = FixtureFreezeState {
+        targets: HashMap::from([(
+            logical,
+            FrozenFixtureTarget {
+                full: true,
+                families: Vec::new(),
+                values: HashMap::from([(
+                    AttributeKey::intensity(),
+                    AttributeValue::Normalized(0.8),
+                )]),
+            },
+        )]),
+    };
+    programmers.set(
+        session,
+        logical,
+        AttributeKey::intensity(),
+        AttributeValue::Normalized(0.1),
+    );
+    let engine = Engine::new(programmers.clone());
+    let mut snapshot = EngineSnapshot {
+        fixtures: vec![fixture].into(),
+        playbacks: vec![group_playback(1, "front", 0.0)].into(),
+        groups: vec![GroupDefinition {
+            id: "front".into(),
+            fixtures: vec![logical],
+            ..Default::default()
+        }]
+        .into(),
+        ..Default::default()
+    };
+    engine.replace_snapshot(snapshot.clone()).unwrap();
+
+    assert_eq!(
+        engine
+            .render(RenderOptions {
+                grand_master: 0.0,
+                blackout: true,
+                control_loss_progress: Some(1.0),
+            })
+            .unwrap()
+            .universes[&1][0],
+        204
+    );
+
+    Arc::make_mut(&mut snapshot.fixtures)[0].freeze = FixtureFreezeState::default();
+    Arc::make_mut(&mut snapshot.playbacks).clear();
+    Arc::make_mut(&mut snapshot.groups).clear();
+    snapshot.revision += 1;
+    engine.replace_snapshot(snapshot).unwrap();
+    assert_eq!(
+        engine.render(RenderOptions::default()).unwrap().universes[&1][0],
+        26
+    );
+}
+
+#[test]
 fn patch_master_opt_outs_are_independent_and_blackout_remains_authoritative() {
     let programmers = ProgrammerRegistry::default();
     let session = SessionId::new();
@@ -501,6 +631,7 @@ fn logical_head_master_does_not_limit_sibling_heads() {
         move_in_black_enabled: true,
         move_in_black_delay_millis: 0,
         highlight_overrides: BTreeMap::new(),
+        freeze: Default::default(),
     };
     for fixture_id in [first, second] {
         programmers.set(

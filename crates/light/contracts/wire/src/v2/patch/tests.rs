@@ -350,6 +350,7 @@ fn fixture_projection() -> PatchFixtureProjection {
         move_in_black_enabled: input.move_in_black_enabled,
         move_in_black_delay_millis: input.move_in_black_delay_millis,
         highlight_overrides: Vec::new(),
+        freeze_targets: Vec::new(),
     }
 }
 

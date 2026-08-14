@@ -94,7 +94,7 @@ describe("hardware controls Programmer layout", () => {
     ]);
   });
 
-  it("uses the 2x2 command area for RECORD and PRELOAD GO and keeps equal adjacent fade faders", () => {
+  it("uses the revised command area and keeps equal adjacent fade faders", () => {
     const { container } = render(<HardwareControlsApp />);
     const commandGrid = container.querySelector(
       ".hardware-keypad-command-section",
@@ -109,10 +109,21 @@ describe("hardware controls Programmer layout", () => {
     });
     expect(record.getAttribute("data-keypad-key")).toBe("RECORD");
     expect(preload.getAttribute("data-keypad-key")).toBe("PRELOAD GO");
-    expect(record.style.gridColumn).toBe("1");
-    expect(record.style.gridRow).toBe("1 / span 2");
-    expect(preload.style.gridColumn).toBe("2");
-    expect(preload.style.gridRow).toBe("1 / span 2");
+    expect(record.style.gridColumn).toBe("1 / span 2");
+    expect(record.style.gridRow).toBe("1 / span 1");
+    expect(preload.style.gridColumn).toBe("3 / span 2");
+    expect(preload.style.gridRow).toBe("1 / span 1");
+    for (const key of [
+      "PROGRAMMER / PLAYBACK",
+      "PLAYBACK",
+      "OFF",
+      "DIFF",
+      "PAGE_UP",
+      "PAGE_DOWN",
+    ])
+      expect(
+        commandGrid?.querySelector(`[data-keypad-key="${key}"]`),
+      ).not.toBeNull();
     expect(container.querySelector(".hardware-programmer-actions")).toBeNull();
 
     const fadeArea = container.querySelector(".fade-times");

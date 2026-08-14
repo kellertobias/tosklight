@@ -6,9 +6,9 @@ use light_core::{
 };
 use light_fixture::{
     ByteOrder, ChannelBehavior, ChannelComponent, ChannelFunction, ChannelResolution, ColorSystem,
-    FixtureChannel, FixtureDefinition, FixtureHead, FixtureProfile, FixtureSplit, GeometryGraph,
-    GeometryTemplate, LogicalHead, MultiPatchInstance, Parameter, PatchedFixture, PatchedHead,
-    SignalLossPolicy, SplitPatch,
+    FixtureChannel, FixtureDefinition, FixtureFreezeState, FixtureHead, FixtureProfile,
+    FixtureSplit, FreezeFamily, FrozenFixtureTarget, GeometryGraph, GeometryTemplate, LogicalHead,
+    MultiPatchInstance, Parameter, PatchedFixture, PatchedHead, SignalLossPolicy, SplitPatch,
 };
 use light_playback::{
     Cue, CueChange, CueList, CueListMode, IntensityPriorityMode, PlaybackButtonAction,
@@ -107,6 +107,7 @@ fn fixture() -> (PatchedFixture, FixtureId) {
             move_in_black_enabled: true,
             move_in_black_delay_millis: 0,
             highlight_overrides: BTreeMap::new(),
+            freeze: Default::default(),
         },
         logical,
     )
@@ -214,6 +215,7 @@ fn schema_v2_fixture(
             move_in_black_enabled: true,
             move_in_black_delay_millis: 0,
             highlight_overrides: BTreeMap::new(),
+            freeze: Default::default(),
         },
         fixture_id,
     )

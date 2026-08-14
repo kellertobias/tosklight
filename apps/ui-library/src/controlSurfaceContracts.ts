@@ -30,6 +30,7 @@ export type ProgrammerControlAction =
 	| "cpy"
 	| "cue"
 	| "delay"
+	| "diff"
 	| "del"
 	| "div"
 	| "dot"
@@ -40,6 +41,10 @@ export type ProgrammerControlAction =
 	| "menu"
 	| "minus"
 	| "mov"
+	| "off"
+	| "playback"
+	| "page-up"
+	| "page-down"
 	| "plus"
 	| "preload"
 	| "prog-playback"
@@ -98,8 +103,8 @@ export const attachedHighlightKeys: readonly {
 ];
 
 export const attachedProgrammerActionLayout = {
-	record: { column: 1, row: 1, rowSpan: 2 },
-	preload: { column: 2, row: 1, rowSpan: 2 },
+	record: { column: 1, columnSpan: 2, row: 1, rowSpan: 1 },
+	preload: { column: 3, columnSpan: 2, row: 1, rowSpan: 1 },
 } as const;
 
 export const attachedKeypadContentRowOffset = 1;

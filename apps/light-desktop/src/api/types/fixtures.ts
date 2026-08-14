@@ -40,6 +40,15 @@ export interface PatchedFixture {
 	highlight_overrides?: Record<string, number>;
 	move_in_black_enabled?: boolean;
 	move_in_black_delay_millis?: number;
+	freeze_targets?: FixtureFreezeTarget[];
+}
+
+export type FixtureFreezeFamily = "intensity" | "color" | "position" | "beam";
+
+export interface FixtureFreezeTarget {
+	fixture_id: string;
+	full: boolean;
+	families: FixtureFreezeFamily[];
 }
 
 export interface MultiPatchInstance {

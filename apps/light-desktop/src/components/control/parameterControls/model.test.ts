@@ -13,6 +13,11 @@ describe("parameter family fallback vocabulary", () => {
 		expect(parameterFamilies.Media).toEqual([
 			"media.folder",
 			"media.file",
+			"audio.folder",
+			"audio.file",
+			"audio.transport",
+			"audio.repeat",
+			"audio.volume",
 			"media.mask.folder",
 			"media.mask.file",
 			"media.mask.invert",
