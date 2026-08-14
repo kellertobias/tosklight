@@ -1,4 +1,70 @@
 #[test]
+fn focused_macro_editor_routes_attached_keypad_input_without_mutating_command_line() {
+    let (state, data_dir) = test_state();
+    let user = state.installation.users().unwrap().remove(0);
+    let session = Session {
+        id: SessionId::new(),
+        user: user.clone(),
+        token: "macro-editor-osc-test".into(),
+        connected: true,
+        desk: test_control_desk(),
+    };
+    state.programming.start(session.id, user.id);
+    state.sessions.insert_session(session.clone());
+    let source: SocketAddr = "127.0.0.1:9018".parse().unwrap();
+    state.integrations.register_osc_subscriber(
+        "macro-editor-test".into(),
+        OscSubscriber {
+            desk_alias: "main".into(),
+            target: source,
+            command_source: source,
+            session_id: session.id,
+            last_seen: Instant::now(),
+            shifted: false,
+            shift_held: false,
+            update_record_started: None,
+            update_first_release: None,
+            last_highlight_action: None,
+        },
+    );
+    state
+        .programming
+        .set_command_line(session.id, "FIXTURE 99".into());
+    file_manager::try_claim_input_context(
+        &state,
+        file_manager::FileInputContext {
+            instance_id: "macro-editor:acceptance".into(),
+            action: file_manager::FileInputAction::MacroEdit,
+            session_id: session.id,
+            desk_id: session.desk.id,
+            expires_at: Instant::now() + Duration::from_secs(120),
+        },
+        || Ok(()),
+    )
+    .unwrap();
+
+    assert!(handle_programmer_osc(
+        &state,
+        "/light/main/programmer/digit-7",
+        &[OscArgument::Bool(true)],
+        Some("127.0.0.1:9018"),
+    ));
+    assert_eq!(
+        state.programming.get(session.id).unwrap().command_line,
+        "FIXTURE 99"
+    );
+    assert!(state.events.audit_events().iter().any(|event| {
+        event.kind == "file_input_action"
+            && event.payload["operation"] == "macro_edit"
+            && event.payload["action"] == "digit-7"
+            && event.payload["instance_id"] == "macro-editor:acceptance"
+            && event.payload["source"] == "osc"
+    }));
+
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
 fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);

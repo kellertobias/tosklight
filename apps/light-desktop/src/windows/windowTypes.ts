@@ -23,6 +23,7 @@ export interface WindowProps {
 	fixtureSheetShowType?: boolean;
 	showCueSidebar?: boolean;
 	cueListCompactRows?: boolean;
+	cueInformationBlock?: "off" | "current" | "next";
 	cueListSource?: "fixed" | "follow-selection";
 	fixedCueListNumber?: number;
 	fixedCueListId?: string;

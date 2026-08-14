@@ -81,6 +81,27 @@
 	align-items: stretch;
 }
 
+.ui-modal-titlebar > .ui-title-chrome {
+	min-height: 53px;
+}
+
+.ui-modal-title-tabs > .ui-title-chrome-action > .ui-button,
+.ui-modal-title-tabs > .ui-button,
+.ui-modal-title-terminals > .ui-button {
+	min-height: 53px;
+	margin: 0;
+	padding: 0 14px;
+	border: 0;
+	border-left: 1px solid var(--line2);
+	border-radius: 0;
+	background: #151d24;
+}
+
+.ui-modal-title-tabs > .ui-title-chrome-action > .ui-button.is-icon-only,
+.ui-modal-title-terminals > .ui-button.is-icon-only {
+	padding-inline: 17px;
+}
+
 .ui-modal-title-search {
 	min-width: min(260px, 38vw);
 	max-width: min(760px, 55vw);
@@ -109,9 +130,7 @@
 	background: #151d24;
 }
 
-.ui-input-modal-layer
-	.ui-modal-title-actions
-	> button.ui-input-modal-done {
+.ui-input-modal-layer .ui-modal-title-actions > button.ui-input-modal-done {
 	width: 96px;
 	min-width: 96px;
 	border-right: 1px solid var(--line2);

@@ -22,7 +22,7 @@ import {
 import { HorizontalFaderField } from "./FaderControls";
 
 const meta = {
-	title: "Controls/Forms",
+	title: "ToskLight/Integration/Form Controls",
 	component: FormLayout,
 	tags: ["autodocs"],
 	parameters: {

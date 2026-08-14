@@ -181,29 +181,31 @@ export function StageHeader({
 					secondary:
 						"Tap to select · Shift for range · Control/Command tracks macro",
 				}}
-				actions={[
-					[
+				groups={[
+					{ id: "stage-follow", actions: [
 						{
 							id: "follow",
 							label: "Follow Preload",
 							active: options.followPreload,
-							onClick: options.toggleFollowPreload,
+							onPress: options.toggleFollowPreload,
 						},
-					],
-					[
+					] },
+					{
+						id: "stage-mode",
+						kind: "tabs",
+						activeId: options.mode,
+						onActiveChange: (id) => options.setMode(id as typeof options.mode),
+						actions: [
 						{
 							id: "select",
 							label: "Select fixtures",
-							active: options.mode === "select",
-							onClick: () => options.setMode("select"),
 						},
 						{
 							id: "navigate",
 							label: "Navigate",
-							active: options.mode === "navigate",
-							onClick: () => options.setMode("navigate"),
 						},
-					],
+						],
+					},
 				]}
 				settings
 				onSettings={(anchor) => {

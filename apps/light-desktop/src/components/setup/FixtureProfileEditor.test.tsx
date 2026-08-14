@@ -599,7 +599,11 @@ describe("FixtureProfileEditor chrome and close guards", () => {
 			screen.queryByRole("button", { name: "Add mode" }),
 		).not.toBeInTheDocument();
 		fireEvent.click(screen.getByRole("tab", { name: "Modes" }));
-		expect(container.querySelector(".ui-modal-title-actions")).toContainElement(
+		expect(
+			screen.getByRole("button", { name: "Add mode" }).closest(
+				".ui-title-chrome-group",
+			),
+		).toContainElement(
 			screen.getByRole("button", { name: "Add mode" }),
 		);
 		const modeRow = requiredElement(

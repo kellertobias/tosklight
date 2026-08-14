@@ -77,18 +77,18 @@ describe("Desk Setup focused title tabs", () => {
 		const network = controller({ section: "network" });
 		const { rerender } = render(<SetupHeader controller={network} />);
 		for (const label of ["Control & server", "Sound", "Bridges"])
-			expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
-		fireEvent.click(screen.getByRole("button", { name: "Sound" }));
+			expect(screen.getByRole("tab", { name: label })).toBeInTheDocument();
+		fireEvent.click(screen.getByRole("tab", { name: "Sound" }));
 		expect(network.setNetworkTab).toHaveBeenCalledWith("sound");
 
 		const defaults = controller({ section: "preferences-defaults" });
 		rerender(<SetupHeader controller={defaults} />);
 		for (const label of ["Record & Update", "Playback", "Pool colors"])
-			expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
+			expect(screen.getByRole("tab", { name: label })).toBeInTheDocument();
 		expect(
 			screen.queryByRole("button", { name: "Save changes" }),
 		).not.toBeInTheDocument();
-		fireEvent.click(screen.getByRole("button", { name: "Playback" }));
+		fireEvent.click(screen.getByRole("tab", { name: "Playback" }));
 		expect(defaults.setDefaultsTab).toHaveBeenCalledWith("playback");
 	});
 

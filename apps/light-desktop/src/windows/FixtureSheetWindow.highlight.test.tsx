@@ -486,4 +486,47 @@ describe("Fixture Sheet Highlight stepping visualization", () => {
 			.map((header) => header.textContent);
 		expect(headers).toEqual(["ID", "Icon", "Name / type", "Patch"]);
 	});
+
+	it("falls back to SVG fixture-type icons without classifying by the fixture name", async () => {
+		const acl = multiHeadFixture();
+		acl.fixture_id = "acl";
+		acl.fixture_number = 28;
+		acl.name = "one truss lamp";
+		acl.logical_heads = [];
+		acl.definition = {
+			...acl.definition,
+			icon_asset: null,
+			device_type: "par",
+			name: "ACL Long-nose PAR Set",
+			model: "ACL Long-nose PAR Set",
+		};
+		const profile = multiHeadFixture();
+		profile.fixture_id = "profile";
+		profile.fixture_number = 29;
+		profile.name = "Front truss lamp";
+		profile.logical_heads = [];
+		profile.definition = {
+			...profile.definition,
+			icon_asset: "",
+			device_type: "profile",
+			name: "Generic Profile",
+			model: "Generic Profile",
+		};
+		server.patch.fixtures = [acl, profile];
+		state.fixtureSheetColumns = ["id", "icon", "name"];
+
+		render(<FixtureSheetWindow />);
+
+		const aclRow = await screen.findByRole("row", { name: /28.*one truss lamp/i });
+		const aclSource = decodeURIComponent(
+			aclRow.querySelector(".fixture-sheet-icon img")?.getAttribute("src") ?? "",
+		);
+		expect(aclSource).toContain("fixture type acl set");
+
+		const profileRow = screen.getByRole("row", { name: /29.*Front truss lamp/i });
+		const profileSource = decodeURIComponent(
+			profileRow.querySelector(".fixture-sheet-icon img")?.getAttribute("src") ?? "",
+		);
+		expect(profileSource).toContain("fixture type profile dimmer lamp");
+	});
 });

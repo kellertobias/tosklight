@@ -74,7 +74,7 @@ pub(super) fn compile_instances(
         } else {
             own
         };
-        let channels = compile_channels(mode, primary_slots, &addresses);
+        let channels = compile_channels(&fixture.profile, mode, primary_slots, &addresses);
         let physics_body_index = fixture.profile.physics.as_ref().map(|declared| {
             let index = scene.physics_scenery.len();
             let kind = match declared.scenery_kind {

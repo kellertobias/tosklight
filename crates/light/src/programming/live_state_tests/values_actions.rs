@@ -727,6 +727,45 @@ fn relative_fixture_intent_starts_from_the_owned_programmer_value() {
 }
 
 #[test]
+fn relative_fixture_intent_without_a_resolvable_base_is_actionable_and_atomic() {
+    let mut setup = ValuesSetup::new();
+    let fixture = setup.fixtures[0];
+    let focus = AttributeKey("focus".into());
+    setup
+        .ports
+        .environment
+        .supported_attributes
+        .insert(fixture, HashSet::from([focus.clone()]));
+
+    let rejected = setup
+        .service
+        .handle_values(
+            setup.action(
+                "missing-relative-base",
+                0,
+                ProgrammingValuesCommand::ApplyIntent {
+                    intent: ProgrammingValueIntent {
+                        fixture_ids: vec![fixture],
+                        group_id: None,
+                        attribute: focus,
+                        operation: ProgrammingValueOperation::RelativeStep(0.01),
+                        undo_group: Some("encoder-focus".into()),
+                        timing: Default::default(),
+                    },
+                },
+            ),
+            &setup.ports,
+        )
+        .unwrap_err();
+
+    assert_eq!(rejected.kind, ActionErrorKind::Invalid);
+    assert!(rejected.message.contains("Cannot adjust focus"));
+    assert!(rejected.message.contains("Set an absolute value"));
+    assert!(setup.registry.get(setup.session).unwrap().values.is_empty());
+    assert!(setup.ports.persisted.lock().is_empty());
+}
+
+#[test]
 fn relative_group_intent_preserves_live_group_scope_and_mixed_member_values() {
     let mut setup = ValuesSetup::new();
     let attribute = AttributeKey::intensity();

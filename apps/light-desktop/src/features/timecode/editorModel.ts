@@ -199,6 +199,63 @@ export function moveTimelineItem(
 	};
 }
 
+export function resizeTimelineClip(
+	definition: TimecodeDefinition,
+	selection: TimecodeEditorSelection & { kind: "clip" },
+	edge: "start" | "end",
+	frame: number,
+): TimecodeDefinition {
+	const duration = definition.duration_frame ?? Number.MAX_SAFE_INTEGER;
+	const nextFrame = clampFrame(frame, duration);
+	return {
+		...definition,
+		lanes: definition.lanes.map((lane) => {
+			if (lane.id !== selection.laneId) return lane;
+			if (lane.content.kind === "cue_list")
+				return {
+					...lane,
+					content: {
+						...lane.content,
+						clips: lane.content.clips.map((clip) =>
+							clip.id !== selection.itemId
+								? clip
+								: edge === "start"
+									? {
+											...clip,
+											start_frame: Math.min(nextFrame, clip.end_frame - 1),
+										}
+									: {
+											...clip,
+											end_frame: Math.max(nextFrame, clip.start_frame + 1),
+										},
+						),
+					},
+				};
+			if (lane.content.kind === "audio_player")
+				return {
+					...lane,
+					content: {
+						...lane.content,
+						clips: lane.content.clips.map((clip) =>
+							clip.id !== selection.itemId
+								? clip
+								: edge === "start"
+									? {
+											...clip,
+											start_frame: Math.min(nextFrame, clip.end_frame - 1),
+										}
+									: {
+											...clip,
+											end_frame: Math.max(nextFrame, clip.start_frame + 1),
+										},
+						),
+					},
+				};
+			return lane;
+		}),
+	};
+}
+
 export function deleteTimelineItem(
 	definition: TimecodeDefinition,
 	selection: TimecodeEditorSelection,

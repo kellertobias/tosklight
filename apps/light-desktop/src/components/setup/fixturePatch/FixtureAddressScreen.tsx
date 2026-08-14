@@ -68,15 +68,13 @@ export function FixtureAddressScreen(props: FixtureAddressScreenProps) {
 			<ModalTitleBar
 				title={title}
 				details={addressDetails(props.fixture, props.instance)}
-				actions={
-					<Button
-						className="primary"
-						disabled={validation.invalid}
-						onClick={props.onConfirm}
-					>
-						Set Address
-					</Button>
-				}
+				accept={{
+					id: "set-address",
+					label: "Set Address",
+					variant: "primary",
+					disabled: validation.invalid,
+					onPress: props.onConfirm,
+				}}
 				closeLabel={`Cancel ${title}`}
 				onClose={props.onCancel}
 			/>

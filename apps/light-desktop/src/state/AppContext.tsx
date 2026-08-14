@@ -13,6 +13,7 @@ import { DynamicEditorSessionProvider } from "../features/dynamics/DynamicEditor
 import { frontendPerformanceDiagnostics } from "../features/frontendWarmup/diagnostics";
 import type { AppState, BuiltInWindow } from "../types";
 import { type Action, appReducer, initialState } from "./appReducer";
+import { builtInForDeskCommand } from "./builtInMappings";
 
 const shiftedWindows: Partial<Record<string, BuiltInWindow>> = {
 	"1": "stage",
@@ -130,8 +131,8 @@ export function AppProvider({ children }: PropsWithChildren) {
 				dispatch({ type: "SET_MODAL", modal: "setupOpen", value: true });
 				return;
 			}
-			const kind = intent.command === "cues" ? "cuelists" : intent.command;
-			dispatch({ type: "OPEN_BUILTIN", kind });
+			const kind = builtInForDeskCommand(intent.command, state.shiftArmed);
+			if (kind) dispatch({ type: "OPEN_BUILTIN", kind });
 		},
 	});
 	const value = useMemo(() => ({ state, dispatch }), [state]);

@@ -58,19 +58,25 @@ export function BatchFixtureAddressScreen({
 			<ModalTitleBar
 				title="Fixture addresses"
 				details={`${placementBatchCount(ui.draft.count)} fixtures · ${footprint} slots each`}
-				actions={
-					<>
-						<Button
-							disabled={!detachedCount}
-							onClick={() => reattachPlacementBlock(controller)}
-						>
-							Arrange as block
-						</Button>
-						<Button className="primary" onClick={onClose}>
-							Done
-						</Button>
-					</>
-				}
+				groups={[
+					{
+						id: "arrange",
+						actions: [
+							{
+								id: "arrange",
+								label: "Arrange as block",
+								disabled: !detachedCount,
+								onPress: () => reattachPlacementBlock(controller),
+							},
+						],
+					},
+				]}
+				accept={{
+					id: "done",
+					label: "Done",
+					variant: "primary",
+					onPress: onClose,
+				}}
 				closeLabel="Close fixture addresses"
 				onClose={onClose}
 			/>

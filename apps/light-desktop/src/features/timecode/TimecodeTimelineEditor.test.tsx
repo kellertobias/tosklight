@@ -1,11 +1,14 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act } from "react";
 import { createRef, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { TimecodeDefinition } from "../../api/types/timecode";
 import {
+	TIMECODE_LANE_HEADER_WIDTH,
 	TimecodeTimelineEditor,
 	type TimecodeTimelineEditorHandle,
+	timelineFrameX,
 	timelineZoomGeometry,
 } from "./TimecodeTimelineEditor";
 
@@ -68,13 +71,23 @@ describe("TimecodeTimelineEditor", () => {
 			".timecode-timeline-canvas",
 		);
 		expect(canvas?.style.width).toBe("720px");
-		expect(Number(canvas?.dataset.pixelsPerFrame)).toBeCloseTo(720 / 440);
-		const { maximumZoom } = timelineZoomGeometry(440, 720);
+		expect(canvas?.dataset.timeOriginPx).toBe(
+			String(TIMECODE_LANE_HEADER_WIDTH),
+		);
+		expect(Number(canvas?.dataset.pixelsPerFrame)).toBeCloseTo(560 / 440);
+		const editor = screen.getByLabelText("Timecode timeline editor");
+		const zoom = screen.getByLabelText("Timeline zoom");
+		expect(
+			viewport.compareDocumentPosition(zoom) & Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy();
+		expect(canvas?.firstElementChild).toHaveClass("timecode-ruler");
+		const { maximumZoom } = timelineZoomGeometry(440, 560);
 		fireEvent.input(screen.getByLabelText("Timeline zoom"), {
 			target: { value: maximumZoom },
 		});
 		expect(Number(canvas?.dataset.pixelsPerFrame)).toBeCloseTo(17.5);
-		expect(Number.parseFloat(canvas?.style.width ?? "0")).toBeCloseTo(7700);
+		expect(Number.parseFloat(canvas?.style.width ?? "0")).toBeCloseTo(7860);
+		expect(editor.lastElementChild).toContainElement(zoom);
 		expect(
 			screen.getByLabelText("Linked audio waveform").querySelectorAll("line"),
 		).toHaveLength(3);
@@ -82,14 +95,19 @@ describe("TimecodeTimelineEditor", () => {
 		expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
 		expect(screen.queryByLabelText("Speed Group")).toBeNull();
 		expect(screen.queryByLabelText("Cuelist")).toBeNull();
-		expect(screen.getByTitle("Verse · 00:00:02.00")).toHaveClass(
-			"timecode-timeline-marker",
-		);
+		const marker = screen.getByTitle("Verse · 00:00:02.00");
+		expect(marker).toHaveClass("timecode-timeline-marker");
+		expect(marker).toHaveStyle({
+			left: `${timelineFrameX(88, 17.5)}px`,
+		});
 		expect(
 			screen.getByRole("button", { name: "Drag playhead to seek" }),
 		).toHaveTextContent("00:00:01.00");
 		const playhead = screen.getByRole("button", {
 			name: "Drag playhead to seek",
+		});
+		expect(playhead).toHaveStyle({
+			left: `${timelineFrameX(44, 17.5)}px`,
 		});
 		playhead.setPointerCapture = vi.fn();
 		playhead.hasPointerCapture = vi.fn(() => true);
@@ -106,7 +124,11 @@ describe("TimecodeTimelineEditor", () => {
 				],
 			}),
 		);
-		ref.current?.addCueListLane();
+		act(() => ref.current?.chooseCueListLane());
+		expect(
+			screen.getByRole("dialog", { name: "Choose Cue List" }),
+		).toBeTruthy();
+		fireEvent.click(screen.getByRole("button", { name: "Add lane" }));
 		expect(onCommit).toHaveBeenCalledWith(
 			expect.objectContaining({
 				lanes: [
@@ -193,5 +215,116 @@ describe("TimecodeTimelineEditor", () => {
 				}),
 			],
 		});
+	});
+
+	it("moves a Cue List clip and resizes each boundary through its drag handles", () => {
+		function Harness() {
+			const [draft, setDraft] = useState<TimecodeDefinition>({
+				...definition,
+				lanes: [
+					{
+						id: "lane-1",
+						name: "Opening",
+						content: {
+							kind: "cue_list",
+							cue_list_id: "00000000-0000-0000-0000-000000000010",
+							clips: [
+								{
+									id: "clip-1",
+									start_frame: 44,
+									end_frame: 132,
+									start_cue_id: "cue-1",
+									end_cue_id: "cue-1",
+									start_behavior: "state",
+									end_behavior: "release",
+								},
+							],
+						},
+					},
+				],
+			});
+			return (
+				<TimecodeTimelineEditor
+					definition={draft}
+					frame={0}
+					fps={44}
+					cueLists={[
+						{
+							id: "00000000-0000-0000-0000-000000000010",
+							name: "Opening",
+							cues: [{ id: "cue-1", number: 1, name: "First" }],
+						},
+					]}
+					audioPlayers={[]}
+					onScrub={vi.fn()}
+					onCommit={setDraft}
+					onPreview={setDraft}
+					onBeginGesture={vi.fn()}
+					onEndGesture={vi.fn()}
+				/>
+			);
+		}
+		const view = render(<Harness />);
+		const editor = within(view.container);
+		const clip = editor.getByTitle(/Opening · state start/);
+		fireEvent.pointerDown(clip, { pointerId: 1, clientX: 72 });
+		fireEvent.pointerMove(window, { clientX: 128 });
+		fireEvent.pointerUp(window);
+		expect(editor.getByLabelText("Start frame")).toHaveValue("88");
+		const start = clip.querySelector<HTMLElement>(".timecode-clip-edge.start");
+		expect(start).toBeTruthy();
+		fireEvent.pointerDown(start as HTMLElement, { pointerId: 2, clientX: 144 });
+		fireEvent.pointerMove(window, { clientX: 172 });
+		fireEvent.pointerUp(window);
+		expect(editor.getByLabelText("Start frame")).toHaveValue("110");
+		const end = clip.querySelector<HTMLElement>(".timecode-clip-edge.end");
+		expect(end).toBeTruthy();
+		fireEvent.pointerDown(end as HTMLElement, { pointerId: 3, clientX: 324 });
+		fireEvent.pointerMove(window, { clientX: 352 });
+		fireEvent.pointerUp(window);
+		expect(editor.getByLabelText("End frame")).toHaveValue("198");
+	});
+
+	it("adds and drags audio-volume keyframes through the lane", () => {
+		function Harness() {
+			const [draft, setDraft] = useState<TimecodeDefinition>({
+				...definition,
+				lanes: [
+					{
+						id: "audio-volume",
+						name: "Main audio volume",
+						content: { kind: "audio_volume", keyframes: [] },
+					},
+				],
+			});
+			return (
+				<TimecodeTimelineEditor
+					definition={draft}
+					frame={0}
+					fps={44}
+					cueLists={[]}
+					audioPlayers={[]}
+					onScrub={vi.fn()}
+					onCommit={setDraft}
+					onPreview={setDraft}
+					onBeginGesture={vi.fn()}
+					onEndGesture={vi.fn()}
+				/>
+			);
+		}
+		const view = render(<Harness />);
+		const lane =
+			view.container.querySelector<HTMLElement>(".lane-audio_volume");
+		expect(lane).toBeTruthy();
+		fireEvent.pointerDown(lane as HTMLElement, { clientX: 80, clientY: 100 });
+		const keyframe = view.getByTitle(/Main audio volume · 100%/);
+		fireEvent.pointerDown(keyframe, {
+			pointerId: 1,
+			clientX: 80,
+			clientY: 100,
+		});
+		fireEvent.pointerMove(window, { clientX: 112, clientY: 132 });
+		fireEvent.pointerUp(window);
+		expect(within(view.container).getByLabelText("Volume %")).toHaveValue("80");
 	});
 });

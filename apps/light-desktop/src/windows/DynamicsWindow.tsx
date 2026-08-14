@@ -46,6 +46,10 @@ import "./DynamicsWindow.css";
 
 type DynamicObject = ShowObject<"dynamic">;
 
+function dynamicPoolLabel(dynamic: DynamicObject) {
+	return dynamic.body.name.trim() || `Dynamic ${dynamic.body.pool_number}`;
+}
+
 export function DynamicsWindow({
 	active = true,
 	compact = false,
@@ -508,7 +512,10 @@ function DynamicsPool(props: DynamicsPoolProps) {
 	const slots: PoolSlotViewModel<number>[] = dynamics.map((dynamic) => ({
 		id: dynamic.body.pool_number,
 		position: dynamic.body.pool_number - 1,
-		card: { number: dynamic.body.pool_number, primary: dynamic.body.name },
+		card: {
+			number: dynamic.body.pool_number,
+			primary: dynamicPoolLabel(dynamic),
+		},
 	}));
 	return (
 		<section className="dynamics-window" aria-busy={props.busy}>
@@ -516,7 +523,6 @@ function DynamicsPool(props: DynamicsPoolProps) {
 				<WindowHeader
 					title="Dynamics"
 					info={{ primary: `${dynamics.length} Dynamics` }}
-					actions={[]}
 				/>
 			)}
 			{props.error && (
@@ -583,7 +589,7 @@ function DynamicPoolTile({
 			aria-pressed={running}
 			model={{
 				number: poolNumber,
-				primary: dynamic?.body.name ?? "Empty",
+				primary: dynamic ? dynamicPoolLabel(dynamic) : "Empty",
 				secondary: dynamic
 					? dynamic.body.target_binding.type === "live_group"
 						? `G${dynamic.body.target_binding.group_id}`

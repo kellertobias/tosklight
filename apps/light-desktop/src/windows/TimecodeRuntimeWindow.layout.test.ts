@@ -16,4 +16,19 @@ describe("Timecode timeline layout", () => {
 			".timecode-timeline-scroll::-webkit-scrollbar-thumb",
 		);
 	});
+
+	it("keeps lane titles fixed before the timeline origin and puts zoom below the viewport", () => {
+		expect(css).toMatch(
+			/\.timecode-timeline-editor\s*\{[\s\S]*?--timecode-lane-header-width:\s*10rem;/,
+		);
+		expect(css).toMatch(
+			/\.timecode-ruler\s*\{[\s\S]*?top:\s*0;[\s\S]*?left:\s*var\(--timecode-lane-header-width\);/,
+		);
+		expect(css).toMatch(
+			/\.timecode-editor-lane-label\s*\{[\s\S]*?position:\s*sticky;[\s\S]*?left:\s*0;/,
+		);
+		expect(css).toMatch(
+			/\.timecode-timeline-tools\s*\{[\s\S]*?border-top:\s*1px solid #343644;/,
+		);
+	});
 });

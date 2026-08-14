@@ -245,7 +245,7 @@ function useSystemControlsModel() {
 	};
 }
 
-function SystemControlsTitleActions({
+function systemControlsTitleAction({
 	model,
 	onRequestAllOff,
 }: {
@@ -266,16 +266,14 @@ function SystemControlsTitleActions({
 		(model.dynamicsAuthority.rows.length > 0 &&
 			!model.dynamicsAuthority.canStop) ||
 		nothingRunning;
-	return (
-		<Button
-			variant="danger"
-			className="system-controls-all-off"
-			disabled={cannotStop}
-			onClick={onRequestAllOff}
-		>
-			{model.stoppingAll ? "Turning off…" : "All Off"}
-		</Button>
-	);
+	return {
+		id: "all-off",
+		label: model.stoppingAll ? "Turning off…" : "All Off",
+		variant: "danger" as const,
+		className: "system-controls-all-off",
+		disabled: cannotStop,
+		onPress: onRequestAllOff,
+	};
 }
 
 function AllOffConfirmation({
@@ -341,6 +339,8 @@ export function SystemControlsModal() {
 		if (!model.open) setAllOffConfirmationOpen(false);
 	}, [model.open]);
 	if (!model.open) return null;
+	const activeTab =
+		!visualizer.connected && tab === "visualizer" ? "running" : tab;
 	const activeItems =
 		model.runningSources.length +
 		model.dynamicsAuthority.rows.length +
@@ -366,39 +366,48 @@ export function SystemControlsModal() {
 						<ModalTitleBar
 							className="system-controls-titlebar"
 							title="Running & Output"
-							tabs={[
-								{ id: "running", label: "Running" },
-								{
-									id: "desk-state",
-									label: deskDiagnostics.length
-										? `Desk State · ${deskDiagnostics.length}`
-										: "Desk State",
-								},
-								{ id: "active-programmers", label: "Active Programmers" },
-								...(visualizer.connected
-									? [{ id: "visualizer", label: "Visualizer" }]
-									: []),
-							]}
-							activeTab={tab}
-							onTabChange={(next) => setTab(next as RunningOutputTab)}
 							details={
 								<span className="system-controls-active-items">
 									<b>{activeItems}</b> active items
 								</span>
 							}
-							actions={
-								<SystemControlsTitleActions
-									model={model}
-									onRequestAllOff={() => {
-										model.clearStopAllError();
-										setAllOffConfirmationOpen(true);
-									}}
-								/>
-							}
+							groups={[
+								{
+									id: "views",
+									kind: "tabs",
+									activeId: activeTab,
+									onActiveChange: (next) => setTab(next as RunningOutputTab),
+									actions: [
+										{ id: "running", label: "Running" },
+										{
+											id: "desk-state",
+											label: deskDiagnostics.length
+												? `Desk State · ${deskDiagnostics.length}`
+												: "Desk State",
+										},
+										{ id: "active-programmers", label: "Active Programmers" },
+										...(visualizer.connected
+											? [{ id: "visualizer", label: "Visualizer" }]
+											: []),
+									],
+								},
+								{
+									id: "output",
+									actions: [
+										systemControlsTitleAction({
+											model,
+											onRequestAllOff: () => {
+												model.clearStopAllError();
+												setAllOffConfirmationOpen(true);
+											},
+										}),
+									],
+								},
+							]}
 							closeLabel="Close Running & Output"
 							onClose={model.close}
 						/>
-						{tab === "visualizer" ? (
+						{activeTab === "visualizer" ? (
 							<VisualizerControls
 								view={visualizer.view}
 								targets={visualizer.targets}
@@ -410,9 +419,9 @@ export function SystemControlsModal() {
 								onSelectQuality={visualizer.selectQuality}
 								onResetPhysics={visualizer.resetPhysics}
 							/>
-						) : tab === "desk-state" ? (
+						) : activeTab === "desk-state" ? (
 							<DeskStatePanel diagnostics={deskDiagnostics} />
-						) : tab === "active-programmers" ? (
+						) : activeTab === "active-programmers" ? (
 							<section
 								className="system-controls-programmers"
 								aria-label="Active Programmers"

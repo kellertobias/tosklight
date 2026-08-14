@@ -1,5 +1,6 @@
 import { type RefObject, useEffect, useRef } from "react";
 import { Button, Input } from "../controls";
+import { ModalTitleBar } from "../common/ModalTitleBar";
 
 export type CommandLineMode = "programmer" | "playbacks";
 export type CommandConnectionStatus =
@@ -408,15 +409,12 @@ function CommandHistoryPanel({
 			aria-label="Command line history"
 			ref={panel}
 		>
-			<header>
-				<div>
-					<h2>Command Line History</h2>
-					<small>Newest first · this desk · last 50 results</small>
-				</div>
-				<Button aria-label="Close command line history" onClick={onClose}>
-					×
-				</Button>
-			</header>
+			<ModalTitleBar
+				title="Command Line History"
+				details="Newest first · this desk · last 50 results"
+				closeLabel="Close command line history"
+				onClose={onClose}
+			/>
 			{commandError && (
 				<div className="command-history-current-error" role="alert">
 					<div>

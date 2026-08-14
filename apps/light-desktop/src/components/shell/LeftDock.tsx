@@ -4,21 +4,17 @@ import { type ReactNode, useRef } from "react";
 import appMark from "../../../src-tauri/icons/mark-shadow.svg";
 import { useActiveShow } from "../../features/deskSnapshot/DeskSnapshotState";
 import { useApp } from "../../state/AppContext";
+import {
+	builtIns,
+	builtInsForShift,
+	shiftedBuiltIns,
+} from "../../state/builtInMappings";
 import type { BuiltInWindow } from "../../types";
 import { DeskSettingsModal } from "../modals/DeskSettingsModal";
 import { Clock } from "./Clock";
 import { type ShowIndicator, useShowIndicator } from "./showIndicator";
 
-export const builtIns: Array<[BuiltInWindow, string, string]> = [
-	["stage", "⌖", "Stage"],
-	["fixtures", "♙", "Fixtures"],
-	["presets", "▣", "Presets"],
-	["cuelists", "▶", "Cuelists"],
-	["dynamics", "∿", "Dynamics"],
-	["media", "▤", "Media"],
-	["timecode", "◷", "Timecode"],
-	["channels", "▥", "Channels"],
-];
+export { builtIns, shiftedBuiltIns };
 
 function DockEntryContent({ icon, label }: { icon: string; label: string }) {
 	return (
@@ -57,6 +53,7 @@ export function LeftDock({
 		: `${showIndicator.label}. ${showIndicator.detail}`;
 	const showingDesktops = state.dockMode === "desks";
 	const nextMode = showingDesktops ? "builtins" : "desks";
+	const visibleBuiltIns = builtInsForShift(state.shiftArmed);
 
 	return (
 		<aside className="left-dock">
@@ -154,10 +151,14 @@ export function LeftDock({
 			) : (
 				<OperatorDestinationList
 					key="builtins"
-					ariaLabel="Built-ins"
+					ariaLabel={state.shiftArmed ? "Shift Built-ins" : "Built-ins"}
 					className="builtins-list dock-list-swap dock-list-swap-builtins"
 					activeId={state.builtIn ?? undefined}
-					entries={builtIns.map(([id, icon, label]) => ({ id, icon, label }))}
+					entries={visibleBuiltIns.map(([id, icon, label]) => ({
+						id,
+						icon,
+						label,
+					}))}
 					onSelect={(id) =>
 						dispatch({ type: "OPEN_BUILTIN", kind: id as BuiltInWindow })
 					}

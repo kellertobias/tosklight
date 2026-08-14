@@ -17,7 +17,7 @@ interface InputStoryArgs {
 }
 
 const meta = {
-	title: "Controls/Keyboard and numpad",
+	title: "ToskLight/Integration/Input Modal Surfaces",
 	tags: ["autodocs"],
 	parameters: {
 		layout: "fullscreen",

@@ -7,6 +7,7 @@ const cue: Cue = {
 	id: "cue-1",
 	number: 1,
 	name: "Opening",
+	information: "House opens",
 	fade_millis: 2_000,
 	delay_millis: 500,
 	out_fade_millis: 3_000,
@@ -71,6 +72,8 @@ describe("CueTable timing progress", () => {
 		);
 
 		for (const [name, property] of [
+			["Cue Name", "name"],
+			["Cue Information", "information"],
 			["Jump", "jump"],
 			["Jump Count", "jumpCount"],
 			["Trigger", "trigger"],
@@ -86,6 +89,31 @@ describe("CueTable timing progress", () => {
 			fireEvent.click(cell);
 			expect(onEditCueProperty).toHaveBeenLastCalledWith(0, property);
 		}
+	});
+
+	it("routes the actual preview pointer/click path without selecting the row", () => {
+		const onOpenCuePreview = vi.fn();
+		const onSelectCue = vi.fn();
+		render(
+			<CueTable
+				cues={[cue]}
+				active={undefined}
+				selectedCue={0}
+				settingsOpen={false}
+				thumbnails={{ 0: "data:image/png;base64,preview" }}
+				emptyState={{ title: "Empty", description: "Empty", icon: "◎" }}
+				onSelectCue={onSelectCue}
+				onOpenCuePreview={onOpenCuePreview}
+			/>,
+		);
+		const preview = screen.getByRole("button", {
+			name: "Open Cue 1 preview",
+		});
+		fireEvent.pointerDown(preview, { pointerType: "touch" });
+		fireEvent.pointerUp(preview, { pointerType: "touch" });
+		fireEvent.click(preview);
+		expect(onOpenCuePreview).toHaveBeenCalledWith(0);
+		expect(onSelectCue).not.toHaveBeenCalled();
 	});
 
 	it("resolves a Jump destination through stable identity after renumbering", () => {

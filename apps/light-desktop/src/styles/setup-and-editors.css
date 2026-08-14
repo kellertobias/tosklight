@@ -197,6 +197,10 @@
 	min-height: 100%;
 	padding: 12px;
 }
+.outputs-setup-tabs {
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	margin-bottom: 12px;
+}
 .programmer-setup-list {
 	max-width: 980px;
 	gap: 12px;

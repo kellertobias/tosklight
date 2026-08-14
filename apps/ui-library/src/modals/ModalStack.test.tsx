@@ -62,7 +62,7 @@ describe("ModalProvider", () => {
     );
     fireEvent.keyDown(document, { key: "Escape" });
     fireEvent.pointerDown(document.querySelector('[data-modal-id="locked"]')!);
-    expect(screen.queryByRole("button", { name: "Close modal" })).not.toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "Close modal" })).toBeDisabled();
     expect(close).not.toHaveBeenCalled();
   });
 
@@ -256,7 +256,8 @@ describe("ModalProvider", () => {
           title="Add fixture"
           search={{
             value: "",
-            settings: [{
+            onSearch: () => undefined,
+            settingsConfiguration: [{
               kind: "toggle",
               id: "favorites",
               label: "Favorites only",
@@ -265,7 +266,6 @@ describe("ModalProvider", () => {
               onLabel: "Favorites",
             }],
           }}
-          onSearch={() => undefined}
           onClose={close}
         >
           Fixture results
@@ -290,8 +290,9 @@ describe("ModalProvider", () => {
           title="Add fixture"
           search={{
             value: "",
+            onSearch: () => undefined,
             settingsInitiallyOpen: true,
-            settings: [{
+            settingsConfiguration: [{
               kind: "text",
               id: "preset",
               label: "Preset name",
@@ -299,7 +300,6 @@ describe("ModalProvider", () => {
               keyboardInitiallyOpen: true,
             }],
           }}
-          onSearch={() => undefined}
           onClose={() => undefined}
         >
           Fixture results

@@ -39,7 +39,7 @@ function AttributeSettings({
 
 function titleTabLabels() {
 	return screen
-		.getAllByRole("button")
+		.getAllByRole("tab")
 		.map((button) => button.textContent)
 		.filter((label): label is string =>
 			ATTRIBUTE_TAB_LABELS.includes(label ?? ""),
@@ -142,7 +142,7 @@ describe("Desk Setup attribute registry", () => {
 		expect(
 			layout.querySelectorAll(".attribute-layout-slot.is-unassigned").length,
 		).toBeGreaterThan(0);
-		fireEvent.click(screen.getByRole("button", { name: "Attributes" }));
+		fireEvent.click(screen.getByRole("tab", { name: "Attributes" }));
 		fireEvent.change(screen.getByLabelText("New custom attribute"), {
 			target: { value: "House Light" },
 		});
@@ -306,7 +306,7 @@ describe("Desk Setup attribute registry", () => {
 		);
 
 		fireEvent.click(
-			screen.getByRole("button", { name: "Attribute activation groups" }),
+			screen.getByRole("tab", { name: "Attribute activation groups" }),
 		);
 		fireEvent.click(
 			screen.getByRole("button", { name: "Restore recommended defaults" }),
@@ -465,7 +465,7 @@ describe("Desk Setup attribute registry", () => {
 		);
 
 		fireEvent.click(
-			screen.getByRole("button", { name: "Attribute activation groups" }),
+			screen.getByRole("tab", { name: "Attribute activation groups" }),
 		);
 		const panel = screen.getByRole("tabpanel");
 		expect(
@@ -503,7 +503,7 @@ describe("Desk Setup attribute registry", () => {
 			</FixtureLibraryProvider>,
 		);
 
-		fireEvent.click(screen.getByRole("button", { name: "Attributes" }));
+		fireEvent.click(screen.getByRole("tab", { name: "Attributes" }));
 		fireEvent.change(await screen.findByLabelText("GDTF attribute name"), {
 			target: { value: " MediaRank " },
 		});
@@ -557,7 +557,7 @@ describe("Desk Setup attribute registry", () => {
 			</FixtureLibraryProvider>,
 		);
 
-		fireEvent.click(screen.getByRole("button", { name: "Attributes" }));
+		fireEvent.click(screen.getByRole("tab", { name: "Attributes" }));
 		expect(await screen.findByText("GDTF:Dimmer")).toBeVisible();
 		fireEvent.click(screen.getByRole("button", { name: "Forget mapping" }));
 

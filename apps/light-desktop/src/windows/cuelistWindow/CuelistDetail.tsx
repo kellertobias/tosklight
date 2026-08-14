@@ -1,4 +1,5 @@
 import { WindowHeader } from "@tosklight/ui/window-kit";
+import { ModalFrame } from "@tosklight/ui/modals";
 import { useState } from "react";
 import { useCommandLineSurface } from "../../components/control/commandLine/useCommandLineSurface";
 import type { WindowProps } from "../windowTypes";
@@ -63,6 +64,7 @@ interface CuelistDetailProps {
 	cueListSource: WindowProps["cueListSource"];
 	showCueSidebar: boolean;
 	compactRows: boolean;
+	cueInformationBlock: "off" | "current" | "next";
 	selectedCuelist: number | null;
 	settingsOpen: boolean;
 	settings: React.ReactNode;
@@ -78,6 +80,7 @@ export function CuelistDetail(props: CuelistDetailProps) {
 		index: number;
 		property: CueEditableProperty;
 	} | null>(null);
+	const [previewCue, setPreviewCue] = useState<number | null>(null);
 	const selection = useSelectedCuelist(
 		props.selectedCuelist,
 		props.active,
@@ -98,6 +101,17 @@ export function CuelistDetail(props: CuelistDetailProps) {
 		enabled: props.active && !props.viewOnly,
 		observeCommand: true,
 	});
+	const informationCue =
+		props.cueInformationBlock === "current"
+			? cues[selection.active?.cue_index ?? -1]
+			: props.cueInformationBlock === "next"
+				? cues.find(
+						(cue) =>
+							cue.number === selection.active?.effective_next_cue_number,
+					)
+				: undefined;
+	const informationLabel =
+		props.cueInformationBlock === "current" ? "Current Cue" : "Next Cue";
 	return (
 		<div className="cuelist-window">
 			{!props.compact && (
@@ -107,23 +121,25 @@ export function CuelistDetail(props: CuelistDetailProps) {
 						primary: selection.active ? "Running" : "Ready",
 						secondary: `Revision ${selection.selectedCueObject?.revision ?? 0}${selection.cueList ? ` · ${selection.cueList.mode} · priority ${selection.cueList.priority}` : ""}`,
 					}}
-					actions={[
-						[
+					groups={[
+						{ id: "cuelist-navigation", actions: [
 							{
 								id: "pool",
 								label: "← Cuelist Pool",
-								onClick: props.onOpenPool,
+								onPress: props.onOpenPool,
 							},
 							{
 								id: "settings",
 								label: "Cuelist Settings",
-								onClick: props.onOpenSettings,
+								onPress: props.onOpenSettings,
 							},
-						],
+						] },
 					]}
 				/>
 			)}
-			<div className="sequence-layout">
+			<div
+				className={`sequence-layout ${props.cueInformationBlock !== "off" ? "with-cue-information" : ""}`.trim()}
+			>
 				<CueTable
 					cues={cues}
 					active={selection.active}
@@ -143,12 +159,30 @@ export function CuelistDetail(props: CuelistDetailProps) {
 						editor.setSelectedCue(index);
 						setPropertyEditor({ index, property });
 					}}
+					onOpenCuePreview={setPreviewCue}
 					interactive={!props.viewOnly}
 					compactRows={props.compactRows}
 					timingProgressByRow={timingProgressByRow}
 					playbackNumber={props.selectedCuelist}
 					command={command}
 				/>
+				{props.cueInformationBlock !== "off" && (
+					<section
+						className="cue-information-block"
+						aria-label={`${informationLabel} Information`}
+					>
+						<strong>
+							{informationLabel}
+							{informationCue
+								? ` · Cue ${informationCue.number}${informationCue.name ? ` · ${informationCue.name}` : ""}`
+								: " · None"}
+						</strong>
+						<p>
+							{informationCue?.information ||
+								`No ${informationLabel.toLowerCase()} information.`}
+						</p>
+					</section>
+				)}
 				{propertyEditor && cues[propertyEditor.index] && (
 					<CuePropertyModal
 						cue={cues[propertyEditor.index]}
@@ -161,6 +195,23 @@ export function CuelistDetail(props: CuelistDetailProps) {
 							return editor.saveCue(cue);
 						}}
 					/>
+				)}
+				{previewCue !== null && cues[previewCue] && thumbnails[previewCue] && (
+					<ModalFrame
+						id={`cue-preview-${cues[previewCue].id ?? cues[previewCue].number}`}
+						ariaLabel={`Cue ${cues[previewCue].number} preview image`}
+						title={`Cue ${cues[previewCue].number}${cues[previewCue].name ? ` · ${cues[previewCue].name}` : ""}`}
+						closeLabel="Close Cue preview"
+						dialogClassName="cuelist-preview-modal"
+						onClose={() => setPreviewCue(null)}
+					>
+						<div className="cuelist-preview-modal-body">
+							<img
+								src={thumbnails[previewCue]}
+								alt={`Cue ${cues[previewCue].number} preview`}
+							/>
+						</div>
+					</ModalFrame>
 				)}
 			</div>
 			{props.settings}

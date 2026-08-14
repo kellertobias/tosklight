@@ -17,9 +17,10 @@ export function FixtureBrowser() {
 						title="Add fixture"
 						search={{
 							value: controller.ui.query,
+							onSearch: controller.ui.setQuery,
 							ariaLabel: "Search",
 							placeholder: "Search manufacturer, fixture, mode, or type",
-							settings: [
+							settingsConfiguration: [
 								{
 									kind: "select",
 									id: "type",
@@ -38,7 +39,6 @@ export function FixtureBrowser() {
 								controller.ui.setTypeFilter(String(value)),
 							onClearSettings: () => controller.ui.setTypeFilter(""),
 						}}
-						onSearch={controller.ui.setQuery}
 						closeLabel="Close Add fixture"
 						onClose={close}
 					/>

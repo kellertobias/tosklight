@@ -721,6 +721,9 @@
 .cue-table .cue-number-column {
 	width: 62px;
 }
+.cue-table .cue-information-column {
+	width: 68px;
+}
 .cue-table .cue-jump-column {
 	width: 140px;
 }
@@ -760,6 +763,11 @@
 	outline: 2px solid var(--cyan);
 	outline-offset: 1px;
 }
+.cue-table .cue-information-column > button {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
 .cue-table tbody tr {
 	cursor: pointer;
 	background: transparent;
@@ -779,7 +787,17 @@
 .cue-table tbody tr.next {
 	box-shadow: inset 3px 0 var(--blue);
 }
-.cue-table td img {
+.cue-table td .cue-preview-image-button {
+	display: block;
+	width: 82px;
+	min-height: 46px;
+	height: 46px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	cursor: zoom-in;
+}
+.cue-table td .cue-preview-image-button img {
 	display: block;
 	width: 82px;
 	height: 46px;
@@ -788,7 +806,7 @@
 	border-radius: 3px;
 }
 .cue-table.compact-cue-rows {
-	min-width: 926px;
+	min-width: 994px;
 }
 .cue-table.compact-cue-rows td {
 	height: 32px;

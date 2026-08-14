@@ -12,6 +12,7 @@ export interface Cue {
 	cue_only?: boolean;
 	number: number;
 	name: string;
+	information?: string;
 	fade_millis: number;
 	delay_millis: number;
 	out_fade_millis?: number;

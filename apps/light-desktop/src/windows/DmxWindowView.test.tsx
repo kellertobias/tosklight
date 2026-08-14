@@ -36,8 +36,8 @@ describe("DMX application view", () => {
   it("labels the two output modes Values and Sources", () => {
     renderView();
 
-    expect(screen.getByRole("button", { name: "Values" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Sources" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Values" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Sources" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Values as dots" })).toBeNull();
   });
 

@@ -64,6 +64,7 @@ export function TouchPlaybackCard({
 	interceptClick,
 }: TouchPlaybackCardProps) {
 	const { playback, slot, row, rowIndex } = slotData;
+	const rowUnits = row ? playbackRowUnits(row, controller.hardware) : 1;
 	const display = playbackFaderDisplay(
 		playback,
 		active,
@@ -74,13 +75,14 @@ export function TouchPlaybackCard({
 		page: controller.activePageNumber ?? 1,
 		slot,
 		row: rowIndex,
-		rowUnits: row ? playbackRowUnits(row, controller.hardware) : 1,
+		rowUnits,
 		name: playback?.name ?? "Empty",
 		assigned: Boolean(playback),
 		kind,
 		selected,
 		selectionPending: controller.selectionPending,
-		className,
+		className:
+			`${className} ${rowUnits === 1 ? "playback-row-compact" : ""}`.trim(),
 		style: cardStyle,
 		color,
 		hasFader,

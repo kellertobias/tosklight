@@ -131,6 +131,12 @@ describe("TimecodeEditor title and settings", () => {
 		expect(
 			screen.getByRole("button", { name: "Timecode position" }),
 		).toHaveTextContent("00:00:01.00");
+		expect(view.container.querySelector(".ui-window-info > b")).toHaveTextContent(
+			"playing",
+		);
+		expect(view.container.querySelector(".ui-window-info > b")).not.toHaveTextContent(
+			"00:00:01.00",
+		);
 		expect(
 			view.container.querySelector(".timecode-editor-playhead"),
 		).toHaveTextContent("00:00:01.00");
@@ -158,6 +164,7 @@ describe("TimecodeEditor title and settings", () => {
 		fireEvent.change(within(settings).getByLabelText("Name"), {
 			target: { value: "Opening sequence" },
 		});
+		expect(screen.queryByText("Saving changes…")).toBeNull();
 		await waitFor(() =>
 			expect(update).toHaveBeenCalledWith(SHOW_ID, TIMECODE_ID, 4, {
 				name: "Opening sequence",

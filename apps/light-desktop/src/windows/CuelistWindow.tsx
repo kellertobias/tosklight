@@ -22,6 +22,7 @@ export function CuelistWindow({
 	cueListTab,
 	showCueSidebar = true,
 	cueListCompactRows = false,
+	cueInformationBlock = "off",
 	cueListSource = "fixed",
 	fixedCueListNumber,
 	fixedCueListId,
@@ -126,6 +127,7 @@ export function CuelistWindow({
 			cueListSource={cueListSource}
 			showCueSidebar={showCueSidebar}
 			compactRows={cueListCompactRows}
+			cueInformationBlock={cueInformationBlock}
 			selectedCuelist={selectedCuelist}
 			settingsOpen={settingsOpen}
 			settings={settings}

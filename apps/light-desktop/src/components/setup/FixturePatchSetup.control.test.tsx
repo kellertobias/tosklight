@@ -1422,7 +1422,7 @@ describe("selected split selection and SET editing", () => {
 			"Delete",
 		]);
 		expect(
-			[...actions.querySelectorAll(".ui-window-action-group")].map((group) =>
+			[...actions.querySelectorAll(".ui-title-chrome-groups > .ui-window-action-group")].map((group) =>
 				[...group.querySelectorAll("button")].map(
 					(button) => button.textContent,
 				),
@@ -1434,7 +1434,7 @@ describe("selected split selection and SET editing", () => {
 			["Delete"],
 		]);
 		expect(screen.getByRole("button", { name: "Preview Stage" })).toHaveClass(
-			"active",
+			"is-active",
 		);
 		fireEvent.click(screen.getByRole("button", { name: "Preview Stage" }));
 		expect(onStagePreview).toHaveBeenCalledOnce();
@@ -2626,7 +2626,7 @@ describe("schema-v2 delete and unpatch controls", () => {
 			within(dialog)
 				.getAllByRole("button")
 				.map((button) => button.textContent),
-		).toEqual(["Delete fixture", "Unpatch fixture", "Abort"]);
+		).toEqual(["×", "Delete fixture", "Unpatch fixture", "Abort"]);
 
 		fireEvent.click(
 			within(dialog).getByRole("button", { name: "Unpatch fixture" }),

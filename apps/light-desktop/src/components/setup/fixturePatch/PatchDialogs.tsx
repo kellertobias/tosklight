@@ -1,4 +1,4 @@
-import { Button, ModalRegistration, TextInput } from "@tosklight/ui";
+import { Button, ModalRegistration, ModalTitleBar, TextInput } from "@tosklight/ui";
 import { fixtureRange } from "../patchUtils";
 import { usePatchController } from "./controller";
 import { cancelEdit } from "./editSession";
@@ -26,7 +26,11 @@ export function PlacementCloseConfirm() {
 				aria-modal="true"
 				aria-labelledby="close-add-fixture-title"
 			>
-				<h3 id="close-add-fixture-title">Close Add Fixture?</h3>
+				<ModalTitleBar
+					title="Close Add Fixture?"
+					titleId="close-add-fixture-title"
+					onClose={stay}
+				/>
 				<p>
 					Your changes in Add Fixture have not been applied. Do you really want
 					to close?
@@ -59,7 +63,7 @@ export function EditCloseConfirm() {
 				aria-modal="true"
 				aria-label="Discard fixture changes?"
 			>
-				<h3>Discard changes?</h3>
+				<ModalTitleBar title="Discard changes?" onClose={keepEditing} />
 				<p>
 					The changed{" "}
 					{target === "fixture"
@@ -102,7 +106,10 @@ export function DeleteConfirm() {
 				aria-modal="true"
 				aria-label={`Delete or unpatch ${fixture.name || fixture.definition.name}?`}
 			>
-				<h3>Delete or unpatch {fixtureDisplayId(fixture)}?</h3>
+				<ModalTitleBar
+					title={`Delete or unpatch ${fixtureDisplayId(fixture)}?`}
+					onClose={abort}
+				/>
 				<p>
 					Delete removes <b>{fixture.name || fixture.definition.name}</b> from
 					the show. Unpatch keeps the fixture line and clears its DMX addresses,
@@ -139,7 +146,7 @@ export function AddLayerDialog() {
 		<ModalRegistration onClose={close}>
 			<div className="stacked-modal-layer">
 			<section className="nested-modal patch-small-modal">
-				<h3>Add layer</h3>
+				<ModalTitleBar title="Add layer" onClose={close} />
 				<TextInput
 					clearable
 					autoFocus
@@ -179,7 +186,7 @@ export function PatchConflictDialog() {
 				aria-modal="true"
 				aria-label="Patch conflict"
 			>
-				<h3>Patch conflict</h3>
+				<ModalTitleBar title="Patch conflict" onClose={keepPatch} />
 				{editError && (
 					<p className="patch-status" role="alert">
 						{editError}

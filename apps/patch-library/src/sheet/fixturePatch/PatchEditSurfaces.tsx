@@ -1,5 +1,4 @@
 import {
-	Button,
 	ModalRegistration,
 	ModalTitleBar,
 	NumberField,
@@ -39,14 +38,12 @@ export function MultipatchVectorDialog() {
 										edit.axis,
 									)
 						}`}
-						actions={
-							<Button
-								className="primary"
-								onClick={() => void saveMultipatchEdit(controller)}
-							>
-								Set
-							</Button>
-						}
+						accept={{
+							id: "set",
+							label: "Set",
+							variant: "primary",
+							onPress: () => void saveMultipatchEdit(controller),
+						}}
 						closeLabel={`Cancel multi-patch ${edit.kind}`}
 						onClose={close}
 					/>
@@ -116,15 +113,15 @@ export function FixtureEditDialog() {
 								? vectorEditTitle(edit, controller.ui.editAxis ?? undefined)
 								: editTitle(edit)
 						}`}
-						actions={
-							edit === "name" ? undefined : (
-								<Button
-									className="primary"
-									onClick={() => saveEdit(controller)}
-								>
-									Set
-								</Button>
-							)
+						accept={
+							edit === "name"
+								? undefined
+								: {
+										id: "set",
+										label: "Set",
+										variant: "primary",
+										onPress: () => saveEdit(controller),
+									}
 						}
 						closeLabel={`Cancel fixture ${edit}`}
 						onClose={close}

@@ -38,6 +38,9 @@ pub struct Cue {
     pub id: Uuid,
     pub number: f64,
     pub name: String,
+    /// Operator-authored context shown in Cue-list overview and current/next information blocks.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub information: String,
     pub changes: Vec<CueChange>,
     pub fade_millis: u64,
     pub delay_millis: u64,
@@ -118,6 +121,7 @@ impl Cue {
             id: Uuid::new_v4(),
             number,
             name: String::new(),
+            information: String::new(),
             changes: Vec::new(),
             fade_millis: 0,
             delay_millis: 0,

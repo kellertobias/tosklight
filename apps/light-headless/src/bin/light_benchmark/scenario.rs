@@ -359,6 +359,7 @@ fn playback(fixture_footprint: u16) -> (CueList, PlaybackDefinition) {
         id: fixed_uuid(0x51, 1),
         number: 1.0,
         name: "Overlapping static and animated values".into(),
+        information: String::new(),
         changes: vec![],
         fade_millis: 0,
         delay_millis: 0,

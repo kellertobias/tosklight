@@ -54,20 +54,49 @@ function useVisualization(
 
 function useSupportedAttributes(
 	fixtures: ReturnType<typeof useSelectedPatchedFixtures>,
+	selectedFixtureIds: readonly string[],
 	groupId: string | null,
 	active: boolean,
 ) {
 	const group = useSelectedPortableGroup(groupId, active);
 	return useMemo(() => {
-		const result = new Set<string>();
-		for (const fixture of fixtures)
-			for (const head of fixture.definition.heads ?? [])
-				for (const parameter of head.parameters)
-					result.add(parameter.attribute);
+		const byAttribute = fixtureParameterTargets(selectedFixtureIds, fixtures);
+		const result = new Set(byAttribute.keys());
 		for (const attribute of selectedGroupSupportedAttributes(groupId, group))
 			result.add(attribute);
-		return result;
-	}, [fixtures, groupId, group]);
+		return { attributes: result, fixtureIdsByAttribute: byAttribute };
+	}, [fixtures, selectedFixtureIds, groupId, group]);
+}
+
+export function fixtureParameterTargets(
+	selectedFixtureIds: readonly string[],
+	fixtures: ReturnType<typeof useSelectedPatchedFixtures>,
+) {
+	const result = new Map<string, string[]>();
+	for (const selectedFixtureId of selectedFixtureIds) {
+		const fixture = fixtures.find(
+			(candidate) =>
+				candidate.fixture_id === selectedFixtureId ||
+				candidate.logical_heads.some(
+					(head) => head.fixture_id === selectedFixtureId,
+				),
+		);
+		if (!fixture) continue;
+		const logicalHead = fixture.logical_heads.find(
+			(head) => head.fixture_id === selectedFixtureId,
+		);
+		const heads = logicalHead
+			? fixture.definition.heads.filter(
+					(head) => head.index === logicalHead.head_index,
+				)
+			: fixture.definition.heads.filter((head) => head.shared);
+		for (const parameter of heads.flatMap((head) => head.parameters)) {
+			const targets = result.get(parameter.attribute) ?? [];
+			if (!targets.includes(selectedFixtureId)) targets.push(selectedFixtureId);
+			result.set(parameter.attribute, targets);
+		}
+	}
+	return result;
 }
 
 function useResolvedValues(
@@ -219,6 +248,7 @@ export function useParameterProjection(
 	const visualization = useVisualization(active, selectedFixtureIds);
 	const supported = useSupportedAttributes(
 		selectedFixtures,
+		selectedFixtureIds,
 		selectedGroup,
 		active,
 	);
@@ -234,10 +264,10 @@ export function useParameterProjection(
 		() =>
 			attributeEncoderGroups(
 				placedRegistry(registry),
-				supported,
+				supported.attributes,
 				visibleEncoderCount,
 			),
-		[registry, supported, visibleEncoderCount],
+		[registry, supported.attributes, visibleEncoderCount],
 	);
 	const configuredGroup = encoderGroups.find(
 		(group) => group.id === FAMILY_GROUPS[family],
@@ -249,7 +279,7 @@ export function useParameterProjection(
 	);
 	const configuredPage = configuredGroup?.pages[resolvedPage - 1];
 	const fallbackAttributes = parameterFamilies[family].filter((attribute) =>
-		supported.has(attribute),
+		supported.attributes.has(attribute),
 	);
 	const hasConfiguredFamily = Boolean(configuredGroup?.pages.length);
 	const encoderSlots = hasConfiguredFamily
@@ -275,6 +305,7 @@ export function useParameterProjection(
 		directEntryUsesProgrammerFade,
 		selectedFixtureIds,
 		selectedFixtures,
+		supportedFixtureIdsByAttribute: supported.fixtureIdsByAttribute,
 		selectionRevision: selection?.revision ?? 0,
 		selectedGroupId: selectedGroup,
 		programmerValuesRoute: captureMode

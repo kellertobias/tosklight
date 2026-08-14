@@ -4,6 +4,8 @@ import {
 	ModalTitleBar,
 	NumberField,
 	SelectField,
+	TextAreaField,
+	TextField,
 } from "@tosklight/ui";
 import { type Dispatch, type SetStateAction, useState } from "react";
 import type { Cue } from "../../api/types";
@@ -16,6 +18,8 @@ import {
 } from "./cueFormatting";
 
 const propertyLabels: Record<CueEditableProperty, string> = {
+	name: "Cue Name",
+	information: "Cue Information",
 	jump: "Jump",
 	jumpCount: "Jump Count",
 	trigger: "Trigger",
@@ -33,10 +37,7 @@ const timingKeys = {
 	outFade: "out_fade_millis",
 } as const;
 
-type TimingProperty = Exclude<
-	CueEditableProperty,
-	"jump" | "jumpCount" | "trigger" | "triggerTime"
->;
+type TimingProperty = "inDelay" | "inFade" | "outDelay" | "outFade";
 
 function timingValue(cue: Cue, property: TimingProperty) {
 	const fallback = property === "outFade" ? cue.fade_millis : cue.delay_millis;
@@ -46,7 +47,8 @@ function timingValue(cue: Cue, property: TimingProperty) {
 function validCueDraft(cue: Cue, property: CueEditableProperty) {
 	const triggerMillis = Number(cue.trigger.delay_millis ?? 0);
 	const jump = cueJump(cue);
-	if (jump && (!Number.isSafeInteger(jump.count) || jump.count < 1)) return false;
+	if (jump && (!Number.isSafeInteger(jump.count) || jump.count < 1))
+		return false;
 	return [
 		cue.fade_millis,
 		cue.delay_millis,
@@ -242,6 +244,36 @@ function CueTimingPropertyField({
 	);
 }
 
+function CueTextPropertyField({
+	draft,
+	setDraft,
+	property,
+}: {
+	draft: Cue;
+	setDraft: Dispatch<SetStateAction<Cue>>;
+	property: "name" | "information";
+}) {
+	if (property === "information")
+		return (
+			<TextAreaField
+				autoFocus
+				label="Cue Information"
+				value={draft.information ?? ""}
+				onChange={(event) =>
+					setDraft({ ...draft, information: event.target.value })
+				}
+			/>
+		);
+	return (
+		<TextField
+			autoFocus
+			label="Cue Name"
+			value={draft.name}
+			onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+		/>
+	);
+}
+
 export function CuePropertyModal({
 	cue,
 	cues,
@@ -286,11 +318,24 @@ export function CuePropertyModal({
 				>
 					<ModalTitleBar
 						title={`${label} · Cue ${cue.number}`}
+						accept={{
+							id: "save",
+							label: "Save",
+							variant: "primary",
+							disabled: !valid || busy,
+							onPress: () => void save(),
+						}}
 						closeLabel={`Cancel ${label}`}
 						onClose={onCancel}
 					/>
 					<div className="cue-property-modal-body">
-						{property === "jump" || property === "jumpCount" ? (
+						{property === "name" || property === "information" ? (
+							<CueTextPropertyField
+								draft={draft}
+								setDraft={setDraft}
+								property={property}
+							/>
+						) : property === "jump" || property === "jumpCount" ? (
 							<CueJumpPropertyField
 								draft={draft}
 								setDraft={setDraft}
@@ -327,18 +372,6 @@ export function CuePropertyModal({
 							)}
 						</div>
 					</div>
-					<footer className="cue-property-modal-actions">
-						<Button disabled={busy} onClick={onCancel}>
-							Cancel
-						</Button>
-						<Button
-							className="primary"
-							disabled={!valid || busy}
-							onClick={() => void save()}
-						>
-							Save
-						</Button>
-					</footer>
 				</section>
 			</div>
 		</ModalPortal>

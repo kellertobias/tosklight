@@ -7,8 +7,8 @@ import {
 	type ReactNode,
 } from "react";
 import { ButtonGrid } from "../grids";
+import type { TitleActionGroup } from "../common";
 import {
-	type WindowAction,
 	WindowFrame,
 	type WindowInfo,
 	WindowScrollArea,
@@ -58,7 +58,7 @@ export interface PoolWindowProps<SlotId extends string | number>
 	extends PoolGridProps<SlotId> {
 	title: ReactNode;
 	info?: WindowInfo;
-	actions?: WindowAction[][];
+	groups?: TitleActionGroup[];
 	settingsTabs?: WindowSettingsTab[];
 }
 
@@ -154,7 +154,7 @@ function withSlotIdentity<SlotId extends string | number>(
 export function PoolWindow<SlotId extends string | number>({
 	title,
 	info,
-	actions,
+	groups,
 	settingsTabs,
 	...gridProps
 }: PoolWindowProps<SlotId>) {
@@ -162,7 +162,7 @@ export function PoolWindow<SlotId extends string | number>({
 		<WindowFrame
 			title={title}
 			info={info}
-			actions={actions}
+			groups={groups}
 			settingsTabs={settingsTabs}
 			className="pool-window"
 		>

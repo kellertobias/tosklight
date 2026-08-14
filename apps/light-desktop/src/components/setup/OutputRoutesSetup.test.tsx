@@ -29,6 +29,33 @@ const route: VersionedObject<OutputRoute> = {
 };
 
 describe("OutputRoutesSetup", () => {
+	it("keeps both header actions on the same rounded desk-button geometry and click paths", async () => {
+		const scan = vi.fn().mockResolvedValue(true);
+		render(
+			<OutputRoutesSetup
+				routes={[]}
+				onSave={vi.fn().mockResolvedValue(true)}
+				onCreateRange={vi.fn().mockResolvedValue(true)}
+				onDelete={vi.fn().mockResolvedValue(true)}
+				onScanUsbDevices={scan}
+			/>,
+		);
+
+		const usb = screen.getByRole("button", { name: "Scan USB devices" });
+		const add = screen.getByRole("button", { name: "Add route" });
+		expect(usb.parentElement).toBe(add.parentElement);
+		expect(usb.parentElement).toHaveClass("output-route-header-actions");
+		expect(usb).toHaveClass("ui-button", "ui-default");
+		expect(add).toHaveClass("ui-button", "ui-default");
+
+		fireEvent.click(usb);
+		await waitFor(() => expect(scan).toHaveBeenCalledOnce());
+		fireEvent.click(add);
+		expect(
+			screen.getByRole("dialog", { name: "Output route editor" }),
+		).toBeVisible();
+	});
+
 	it("edits an existing versioned route without writing before Save", async () => {
 		const save = vi.fn().mockResolvedValue(true);
 		render(
@@ -40,8 +67,18 @@ describe("OutputRoutesSetup", () => {
 			/>,
 		);
 
-		expect(screen.getByText("Logical 1 → Art-Net 11")).toBeVisible();
+		expect(
+			screen.getByText(
+				"Logical 1 · Art-Net 11 · Art-Net Unicast · 10.0.0.20:6454",
+			),
+		).toBeVisible();
 		fireEvent.click(screen.getByRole("button", { name: "Edit route" }));
+		const dialog = screen.getByRole("dialog", { name: "Output route editor" });
+		const titlebar = dialog.querySelector(".ui-modal-titlebar") as HTMLElement;
+		expect(within(titlebar).getByRole("button", { name: "Delete route" })).toBeVisible();
+		expect(within(titlebar).getByRole("button", { name: "Save route" })).toBeVisible();
+		expect(within(dialog).queryByRole("button", { name: "Cancel" })).toBeNull();
+		expect(dialog.querySelector(".modal-actions")).toBeNull();
 		fireEvent.change(screen.getByLabelText("Logical universe"), {
 			target: { value: "2" },
 		});
@@ -65,6 +102,32 @@ describe("OutputRoutesSetup", () => {
 		expect(
 			screen.queryByRole("dialog", { name: "Output route editor" }),
 		).not.toBeInTheDocument();
+	});
+
+	it("puts enabled state beneath route identity and subdues a disabled route with a red state", () => {
+		render(
+			<OutputRoutesSetup
+				routes={[{ ...route, body: { ...route.body, enabled: false } }]}
+				onSave={vi.fn().mockResolvedValue(true)}
+				onCreateRange={vi.fn().mockResolvedValue(true)}
+				onDelete={vi.fn().mockResolvedValue(true)}
+			/>,
+		);
+
+		const article = screen
+			.getByRole("button", { name: "Edit route" })
+			.closest("article") as HTMLElement;
+		expect(article).toHaveClass("is-disabled");
+		const content = article.querySelector(".output-route-content") as HTMLElement;
+		expect(content.firstElementChild).toHaveTextContent(
+			"Logical 1 · Art-Net 11 · Art-Net Unicast · 10.0.0.20:6454",
+		);
+		const secondary = content.querySelector(
+			".output-route-secondary",
+		) as HTMLElement;
+		expect(secondary.firstElementChild).toHaveTextContent("Disabled");
+		expect(secondary.firstElementChild).toHaveClass("route-disabled");
+		expect(secondary.lastElementChild).toHaveTextContent("Minimum 128 slots");
 	});
 
 	it("offers protocol-correct delivery modes and validates Unicast destinations", async () => {
@@ -133,9 +196,10 @@ describe("OutputRoutesSetup", () => {
 		);
 
 		fireEvent.click(screen.getByRole("button", { name: "Edit route" }));
-		fireEvent.click(screen.getByRole("button", { name: "Remove route" }));
+		fireEvent.click(screen.getByRole("button", { name: "Delete route" }));
 		expect(remove).not.toHaveBeenCalled();
-		fireEvent.click(screen.getByRole("button", { name: "Confirm remove" }));
+		expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+		fireEvent.click(screen.getByRole("button", { name: "Confirm delete" }));
 		await waitFor(() => expect(remove).toHaveBeenCalledWith("front-artnet", 4));
 	});
 

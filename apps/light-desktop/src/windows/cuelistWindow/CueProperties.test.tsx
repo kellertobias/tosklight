@@ -25,6 +25,37 @@ const cue: Cue = {
 afterEach(cleanup);
 
 describe("CuePropertyModal", () => {
+	it.each([
+		["name", "Cue Name", "Reprise", { name: "Reprise" }],
+		[
+			"information",
+			"Cue Information",
+			"Stand by follow spot",
+			{ information: "Stand by follow spot" },
+		],
+	] as const)(
+		"saves persistent Cue %s text",
+		async (property, label, value, expected) => {
+			const onSave = vi.fn(async (_cue: Cue) => true);
+			render(
+				<CuePropertyModal
+					cue={cue}
+					cues={[cue]}
+					property={property}
+					editError=""
+					onCancel={vi.fn()}
+					onSave={onSave}
+				/>,
+			);
+			fireEvent.change(screen.getByRole("textbox", { name: label }), {
+				target: { value },
+			});
+			fireEvent.click(screen.getByRole("button", { name: "Save" }));
+			await waitFor(() => expect(onSave).toHaveBeenCalledOnce());
+			expect(onSave.mock.calls[0]?.[0]).toMatchObject(expected);
+		},
+	);
+
 	it("saves only the exact timing draft through the authoritative callback", async () => {
 		const onSave = vi.fn(async (_cue: Cue) => true);
 		const onCancel = vi.fn();
@@ -76,10 +107,44 @@ describe("CuePropertyModal", () => {
 			),
 			{ target: { value: "9" } },
 		);
-		fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+		expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+		fireEvent.click(screen.getByRole("button", { name: "Cancel Out Delay" }));
 		expect(onCancel).toHaveBeenCalledOnce();
 		expect(onSave).not.toHaveBeenCalled();
 	});
+
+	it.each(["trigger", "triggerTime", "inDelay", "outDelay"] as const)(
+		"places the %s Save action in the modal title",
+		(property) => {
+			render(
+				<CuePropertyModal
+					cue={cue}
+					cues={[cue]}
+					property={property}
+					editError=""
+					onCancel={vi.fn()}
+					onSave={vi.fn(async (_cue: Cue) => true)}
+				/>,
+			);
+
+			const dialog = screen.getByRole("dialog", {
+				name:
+					property === "trigger"
+						? "Trigger"
+						: property === "triggerTime"
+							? "Trigger Time"
+							: property === "inDelay"
+								? "In Delay"
+								: "Out Delay",
+			});
+			expect(
+				within(dialog)
+					.getByRole("button", { name: "Save" })
+					.closest(".ui-title-chrome-terminals"),
+			).toHaveClass("ui-title-chrome-terminals");
+			expect(within(dialog).queryByRole("button", { name: "Cancel" })).toBeNull();
+		},
+	);
 
 	it("keeps trigger-kind changes transactional until Save", async () => {
 		const onSave = vi.fn(async (_cue: Cue) => true);

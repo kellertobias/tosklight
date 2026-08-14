@@ -1,6 +1,96 @@
 use super::*;
 
 #[test]
+fn robin_dls_full_white_keeps_its_shutter_open_in_resolved_dmx() {
+    let package = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../..")
+        .join("assets/fixture-library/robe--robin-dls-profile.toskfixture");
+    let profile = light_fixture::read_fixture_package(&std::fs::read(package).unwrap()).unwrap();
+    let mode = profile
+        .modes
+        .iter()
+        .find(|mode| mode.name == "Mode 3")
+        .unwrap();
+    let mode_id = mode.id;
+    let slots = mode.primary_slots().unwrap();
+    let shutter = mode
+        .channels
+        .iter()
+        .find(|channel| channel.attribute.0 == "shutter")
+        .unwrap();
+    let intensity = mode
+        .channels
+        .iter()
+        .find(|channel| channel.attribute.is_intensity())
+        .unwrap();
+    let fixture_id = FixtureId::new();
+    let fixture = PatchedFixture {
+        fixture_id,
+        fixture_number: Some(1),
+        virtual_fixture_number: None,
+        name: "Robin DLS Profile".into(),
+        definition: profile.resolved_definition(mode_id).unwrap(),
+        universe: Some(1),
+        address: Some(1),
+        split_patches: vec![],
+        layer_id: "default".into(),
+        direct_control: None,
+        internal_bindings: Default::default(),
+        location: Default::default(),
+        rotation: Default::default(),
+        logical_heads: vec![],
+        multipatch: vec![],
+        group_masters_enabled: true,
+        grand_master_enabled: true,
+        invert_pan: false,
+        invert_tilt: false,
+        bracket_angle: 0.0,
+        shaper_angle: None,
+        installed_appearance: Default::default(),
+        move_in_black_enabled: true,
+        move_in_black_delay_millis: 0,
+        highlight_overrides: BTreeMap::new(),
+        freeze: Default::default(),
+    };
+    let programmers = ProgrammerRegistry::default();
+    let session = SessionId::new();
+    programmers.start(session, UserId::new());
+    programmers.set(
+        session,
+        fixture_id,
+        AttributeKey::intensity(),
+        AttributeValue::Normalized(1.0),
+    );
+    programmers.set(
+        session,
+        fixture_id,
+        AttributeKey("color".into()),
+        AttributeValue::ColorXyz(Xyz {
+            x: 0.950_47,
+            y: 1.0,
+            z: 1.088_83,
+        }),
+    );
+    let engine = Engine::new(programmers);
+    engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![fixture].into(),
+            revision: 1,
+            ..Default::default()
+        })
+        .unwrap();
+
+    let rendered = engine.render(RenderOptions::default()).unwrap();
+    let frame = &rendered.universes[&1];
+    assert_eq!(frame[usize::from(slots[&shutter.id] - 1)], 32);
+    assert_eq!(frame[usize::from(slots[&intensity.id] - 1)], 255);
+    assert_eq!(
+        rendered.profile_visualization_values[&(fixture_id, AttributeKey::intensity())],
+        AttributeValue::Normalized(1.0)
+    );
+}
+
+#[test]
 fn single_patch_fast_path_preserves_profile_visualization_for_patched_and_unpatched_fixtures() {
     let (mut fixture, fixture_id) =
         schema_v2_fixture(&[("intensity", false, false, false, false, false)]);

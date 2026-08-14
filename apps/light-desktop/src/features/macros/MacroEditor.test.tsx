@@ -43,6 +43,8 @@ function api(validation: MacroValidation) {
 		runLine: vi.fn(),
 		undoRunLine: vi.fn(),
 		execution: vi.fn(),
+		claimEditorInput: vi.fn().mockResolvedValue(undefined),
+		releaseEditorInput: vi.fn().mockResolvedValue(undefined),
 	} as unknown as MacrosApiClient;
 }
 
@@ -61,6 +63,48 @@ const valid = (overrides: Partial<MacroValidation> = {}): MacroValidation => ({
 });
 
 describe("MacroEditor", () => {
+	it("claims focused desk input, inserts attached keypad text at the selection, and releases on blur", async () => {
+		const client = api(valid());
+		render(
+			<MacroEditor
+				showId="show-a"
+				macro={macro}
+				api={client}
+				onClose={vi.fn()}
+				onSaved={vi.fn()}
+			/>,
+		);
+
+		const source = screen.getByRole("textbox", {
+			name: "Macro command lines",
+		}) as HTMLTextAreaElement;
+		act(() => source.focus());
+		await waitFor(() => expect(client.claimEditorInput).toHaveBeenCalledOnce());
+		const instanceId = vi.mocked(client.claimEditorInput).mock.calls[0]?.[0];
+		source.setSelectionRange(0, 1);
+		act(() =>
+			window.dispatchEvent(
+				new CustomEvent("light:macro-editor-input", {
+					detail: { instance_id: instanceId, action: "group" },
+				}),
+			),
+		);
+		expect(source).toHaveValue("GROUP ");
+
+		source.setSelectionRange(6, 6);
+		act(() =>
+			window.dispatchEvent(
+				new CustomEvent("light:macro-editor-input", {
+					detail: { instance_id: instanceId, action: "digit-7" },
+				}),
+			),
+		);
+		expect(source).toHaveValue("GROUP 7");
+
+		act(() => source.blur());
+		expect(client.releaseEditorInput).toHaveBeenCalledWith(instanceId);
+	});
+
 	it("keeps identity controls in Macro Settings, runs the saved Macro, and removes editor copy/save undo", async () => {
 		const client = api(valid());
 		const onClose = vi.fn();

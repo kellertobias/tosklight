@@ -150,27 +150,6 @@ function useShowRevisionController(options: ShowRevisionControllerOptions) {
 	};
 }
 
-function AddScreenAction({
-	layout,
-	onAdded,
-}: {
-	layout: Parameters<typeof screenForAddAction>[1];
-	onAdded: () => void;
-}) {
-	const screens = useScreens();
-	const add = async () => {
-		await screens.saveScreen(
-			screenForAddAction(screens.screens?.screens ?? [], layout),
-		);
-		onAdded();
-	};
-	return (
-		<Button onClick={() => void add()}>
-			<span aria-hidden="true">▣</span> Add Screen
-		</Button>
-	);
-}
-
 /** State and workflow for the MVR import/export flows, kept outside QuickSetupModal for size. */
 function useMvrController(
 	lifecycle: ReturnType<typeof useShowLifecycle>,
@@ -490,38 +469,55 @@ function QuickSetupTitleBar({ model }: { model: QuickSetupModel }) {
 	const { close } = model.actions;
 	const { dispatch, state } = model.app;
 	const { desktop } = model.authorities;
+	const screens = useScreens();
+	const addScreen = async () => {
+		await screens.saveScreen(
+			screenForAddAction(screens.screens?.screens ?? [], {
+				desks: state.desks,
+				activeDeskId: state.activeDeskId,
+			}),
+		);
+		close();
+	};
 	return (
 		<ModalTitleBar
 			title="Show"
 			closeLabel="Close Show"
 			onClose={close}
-			actions={
-				<>
-					<Button onClick={() => model.dialogs.setChangeUserOpen(true)}>
-						<span aria-hidden="true">♙</span> Change User
-					</Button>
-					{desktop.available && (
-						<AddScreenAction
-							layout={{
-								desks: state.desks,
-								activeDeskId: state.activeDeskId,
-							}}
-							onAdded={close}
-						/>
-					)}
-					<Button
-						onClick={() =>
-							dispatch({
-								type: "SET_MODAL",
-								modal: "debugOpen",
-								value: true,
-							})
-						}
-					>
-						<span aria-hidden="true">⌁</span> Desk Status
-					</Button>
-				</>
-			}
+			groups={[
+				{
+					id: "show",
+					actions: [
+						{
+							id: "change-user",
+							label: "Change User",
+							icon: <span aria-hidden="true">♙</span>,
+							onPress: () => model.dialogs.setChangeUserOpen(true),
+						},
+						...(desktop.available
+							? [
+									{
+										id: "add-screen",
+										label: "Add Screen",
+										icon: <span aria-hidden="true">▣</span>,
+										onPress: () => void addScreen(),
+									},
+								]
+							: []),
+						{
+							id: "desk-status",
+							label: "Desk Status",
+							icon: <span aria-hidden="true">⌁</span>,
+							onPress: () =>
+								dispatch({
+									type: "SET_MODAL",
+									modal: "debugOpen",
+									value: true,
+								}),
+						},
+					],
+				},
+			]}
 		/>
 	);
 }

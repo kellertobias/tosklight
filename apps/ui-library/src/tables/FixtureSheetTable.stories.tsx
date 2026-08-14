@@ -14,7 +14,7 @@ const rows: Row[] = [
 ];
 
 const meta = {
-  title: "Tables and Grids/Fixture grid",
+  title: "ToskLight/Tables/Fixture Sheet Table",
   tags: ["autodocs"],
   parameters: { layout: "fullscreen" },
 } satisfies Meta;

@@ -219,7 +219,7 @@ describe("QuickSetupModal show workflows", () => {
     expect(within(titleBar).getByRole("button", { name: "Show from OS" })).toBeInTheDocument();
     expect(within(load).queryByRole("button", { name: "Load from flash drive" })).not.toBeInTheDocument();
 
-    const input = titleBar.querySelector<HTMLInputElement>('input[type="file"]')!;
+    const input = load.querySelector<HTMLInputElement>('input[type="file"]')!;
     expect(input).toHaveAttribute("accept", ".show");
     const showFile = new File(["portable show"], "tour.show", { type: "application/octet-stream" });
     fireEvent.change(input, { target: { files: [showFile] } });
@@ -238,12 +238,12 @@ describe("QuickSetupModal show workflows", () => {
     const titleBar = load.querySelector(".ui-modal-titlebar") as HTMLElement;
 
     const booth = await within(titleBar).findByRole("button", {
-      name: "Load from Visualizer · Viz Editor on booth: Summer Tour rig",
+      name: "Load from Viz Editor on booth at 10.0.0.4:5310",
     });
     // Two editors are two offers, told apart by name and address rather than collapsed into one.
-    expect(booth).toHaveAttribute("title", "Viz Editor on booth at 10.0.0.4:5310");
+    expect(booth).toHaveTextContent("Load from Visualizer · Viz Editor on booth: Summer Tour rig");
     expect(within(titleBar).getByRole("button", {
-      name: "Load from Visualizer · Viz Editor on studio: Studio rig",
+      name: "Load from Viz Editor on studio at 10.0.0.9:5310",
     })).toBeInTheDocument();
 
     fireEvent.click(booth);

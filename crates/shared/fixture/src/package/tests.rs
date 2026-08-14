@@ -323,7 +323,9 @@ fn assert_moving_lamp_geometry(filename: &str) {
 #[test]
 fn robe_dls_profile_exposes_canonical_framing_controls() {
     let profile = shipped_profile("robe--robin-dls-profile.toskfixture");
-    assert_eq!(profile.revision, 2);
+    assert_eq!(profile.revision, 3);
+    assert!(profile.notes.contains("DMX protocol version 1.0"));
+    assert!(profile.notes.contains("user manual version 1.3"));
     assert_eq!(
         profile
             .modes
@@ -377,15 +379,64 @@ fn robe_dls_profile_exposes_canonical_framing_controls() {
             assert!(!angle.snap);
         }
 
+        let shutter = mode
+            .channels
+            .iter()
+            .find(|channel| channel.attribute.0 == "shutter")
+            .expect("the independent shutter/strobe channel remains canonical Shutter / Strobe");
+        assert_eq!(shutter.default_raw, 32);
+        assert_eq!(shutter.highlight_raw, 32);
         assert_eq!(
-            mode.channels
+            shutter
+                .functions
                 .iter()
-                .filter(|channel| channel.fixture_attribute.0 == "shutter")
-                .count(),
-            1,
-            "the independent shutter/strobe channel must remain a shutter"
+                .map(|function| {
+                    let semantic = match &function.behavior {
+                        crate::ChannelFunctionBehavior::Fixed { semantic_id, .. } => {
+                            Some(semantic_id.as_str())
+                        }
+                        _ => None,
+                    };
+                    (
+                        function.name.as_str(),
+                        function.dmx_from,
+                        function.dmx_to,
+                        semantic,
+                    )
+                })
+                .collect::<Vec<_>>(),
+            [
+                ("Shutter closed", 0, 31, Some("closed")),
+                ("Shutter open", 32, 63, Some("open")),
+                ("Strobe effect from slow to fast", 64, 95, None),
+                ("Shutter open", 96, 127, Some("open")),
+                (
+                    "Opening pulse in sequences from slow to fast",
+                    128,
+                    143,
+                    None,
+                ),
+                (
+                    "Closing pulse in sequences from fast to slow",
+                    144,
+                    159,
+                    None,
+                ),
+                ("Shutter open", 160, 191, Some("open")),
+                ("Random strobe effect from slow to fast", 192, 223, None),
+                ("Shutter open", 224, 255, Some("open")),
+            ],
+            "the package must retain the manufacturer's exact shutter bands"
         );
     }
+
+    let exported = write_fixture_package(&profile).unwrap();
+    let restored = read_fixture_package(&exported).unwrap();
+    assert_eq!(
+        serde_json::to_value(restored).unwrap(),
+        serde_json::to_value(profile).unwrap(),
+        "the corrected revision must export without changing its stable identities or ranges"
+    );
 }
 
 #[test]

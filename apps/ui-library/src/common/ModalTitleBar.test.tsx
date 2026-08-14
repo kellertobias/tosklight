@@ -1,11 +1,23 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ModalTitleBar } from "./ModalTitleBar";
 
 describe("ModalTitleBar", () => {
+	afterEach(cleanup);
 	it("renders a continuous title and close control", () => {
 		const close = vi.fn();
-		render(<ModalTitleBar title="Number input" details={<><b>Choose a number</b><small>Current value: 1</small></>} onClose={close} />);
+		render(
+			<ModalTitleBar
+				title="Number input"
+				details={
+					<>
+						<b>Choose a number</b>
+						<small>Current value: 1</small>
+					</>
+				}
+				onClose={close}
+			/>,
+		);
 		expect(
 			screen.getByRole("heading", { name: "Number input" }),
 		).toBeInTheDocument();
@@ -20,15 +32,20 @@ describe("ModalTitleBar", () => {
 		const { container } = render(
 			<ModalTitleBar
 				title="Settings"
-				tabs={[
-					{ id: "general", label: "General" },
-					{ id: "output", label: "Output" },
+				groups={[
+					{
+						id: "settings",
+						kind: "tabs",
+						activeId: "general",
+						onActiveChange: select,
+						actions: [
+							{ id: "general", label: "General" },
+							{ id: "output", label: "Output" },
+						],
+					},
 				]}
-				activeTab="general"
-				onTabChange={select}
-				search={{ value: "", ariaLabel: "Search settings" }}
-				onSearch={vi.fn()}
-				actions={<span>Reset</span>}
+				search={{ value: "", onSearch: vi.fn(), ariaLabel: "Search settings" }}
+				accept={{ id: "reset", label: "Reset", onPress: vi.fn() }}
 				onClose={vi.fn()}
 			/>,
 		);
@@ -45,24 +62,29 @@ describe("ModalTitleBar", () => {
 		expect([...titlebar.children].map((child) => child.className)).toEqual([
 			"ui-modal-title-copy",
 			"ui-modal-title-spacer",
-			"ui-modal-title-tabs",
-			"ui-titlebar-search-divider",
-			"ui-modal-title-search",
-			"ui-titlebar-search-divider",
-			"ui-modal-title-actions",
-			"ui-button ui-secondary ui-default ui-modal-title-close",
+			"ui-title-chrome",
 		]);
-		expect(titlebar.querySelectorAll(".ui-titlebar-search-divider")).toHaveLength(2);
+		const chrome = titlebar.querySelector(".ui-title-chrome")!;
+		expect([...chrome.children].map((child) => child.className)).toEqual([
+			"ui-title-chrome-groups",
+			"ui-title-chrome-search ui-modal-title-search",
+			"ui-title-chrome-terminals ui-modal-title-terminals",
+		]);
+		expect(screen.getByText("Reset")).toBeInTheDocument();
+		expect(
+			screen.getByRole("button", { name: "Close modal" }),
+		).toBeInTheDocument();
 	});
 
 	it("omits search dividers when only passive title content surrounds search", () => {
 		const { container } = render(
 			<ModalTitleBar
 				title="Search only"
-				search={{ value: "" }}
-				onSearch={vi.fn()}
+				search={{ value: "", onSearch: vi.fn() }}
 			/>,
 		);
-		expect(container.querySelectorAll(".ui-titlebar-search-divider")).toHaveLength(0);
+		expect(
+			container.querySelectorAll(".ui-titlebar-search-divider"),
+		).toHaveLength(0);
 	});
 });

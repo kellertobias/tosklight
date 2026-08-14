@@ -140,7 +140,7 @@ fn prepare_pending_claim(
     action: FileInputAction,
     pending_origin: bool,
 ) -> Result<(), ApiError> {
-    if !pending_origin {
+    if !pending_origin || action == FileInputAction::MacroEdit {
         return Ok(());
     }
     let command_line = state
@@ -271,7 +271,13 @@ fn emit_input_action(
             "desk_id":session.desk.id,
             "instance_id":context.instance_id,
             "operation":context.action,
-            "action":if action == "enter" { "enter" } else { "escape" },
+            "action":if context.action == FileInputAction::MacroEdit {
+                action
+            } else if action == "enter" {
+                "enter"
+            } else {
+                "escape"
+            },
             "source":source,
         }),
     );

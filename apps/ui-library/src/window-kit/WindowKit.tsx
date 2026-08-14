@@ -15,28 +15,16 @@ import {
 import { createPortal } from "react-dom";
 import {
 	Button,
-	type ButtonVariant,
 	ModalTitleBar,
-	SearchBar,
-	type SearchFeatureProps,
-	TitleBarSearchDivider,
+	TitleChrome,
+	type TitleActionGroup,
+	type TitleSearch,
 } from "../common";
 import { ModalLayer } from "../modals/ModalStack";
 
 export interface WindowInfo {
 	primary: ReactNode;
 	secondary?: ReactNode;
-}
-export interface WindowAction {
-	id: string;
-	label: ReactNode;
-	onClick: () => void;
-	active?: boolean;
-	disabled?: boolean;
-	ariaLabel?: string;
-	onLongPress?: () => void;
-	variant?: ButtonVariant;
-	className?: string;
 }
 export interface WindowSettingsTab {
 	id: string;
@@ -136,75 +124,41 @@ export function WindowDropdown({
 	);
 }
 
-function WindowActionButton({ action }: { action: WindowAction }) {
-	const holdTimer = useRef<number | null>(null);
-	const held = useRef(false);
-	const clearHold = () => {
-		if (holdTimer.current !== null) window.clearTimeout(holdTimer.current);
-		holdTimer.current = null;
-	};
-	return (
-		<Button
-			aria-label={action.ariaLabel}
-			disabled={action.disabled}
-			variant={action.variant}
-			className={`${action.active ? "active" : ""} ${action.className ?? ""}`.trim()}
-			onPointerDown={
-				action.onLongPress &&
-				(() => {
-					held.current = false;
-					clearHold();
-					holdTimer.current = window.setTimeout(() => {
-						held.current = true;
-						action.onLongPress?.();
-					}, 650);
-				})
-			}
-			onPointerUp={action.onLongPress && clearHold}
-			onPointerCancel={action.onLongPress && clearHold}
-			onPointerLeave={action.onLongPress && clearHold}
-			onClick={() => {
-				if (held.current) {
-					held.current = false;
-					return;
-				}
-				action.onClick();
-			}}
-		>
-			{action.label}
-		</Button>
-	);
-}
-
 type WindowHeaderProps = {
 	title: ReactNode;
 	info?: WindowInfo;
 	toolbar?: ReactNode;
-	actions?: WindowAction[][];
+	groups?: TitleActionGroup[];
 	settings?: boolean;
 	onSettings?: (anchor: HTMLElement) => void;
 	dragHandleProps?: React.HTMLAttributes<HTMLElement>;
 	onTitleClick?: () => void;
 	titleActionLabel?: string;
-} & SearchFeatureProps;
+	search?: TitleSearch;
+};
 
 export function WindowHeader({
 	title,
 	info,
 	toolbar,
-	actions = [],
+	groups = [],
 	settings,
 	onSettings,
 	dragHandleProps,
 	onTitleClick,
 	titleActionLabel,
-	...searchFeature
+	search,
 }: WindowHeaderProps) {
 	const { className: dragHandleClassName = "", ...resolvedDragHandleProps } =
 		dragHandleProps ?? {};
-	const hasFollowingSearchActions = Boolean(
-		toolbar || actions.some((group) => group.length > 0) || settings,
-	);
+	const resolvedSearch = search
+		? {
+				...search,
+				ariaLabel:
+					search.ariaLabel ??
+					(typeof title === "string" ? `Search ${title}` : "Search"),
+			}
+		: undefined;
 	return (
 		<header
 			{...resolvedDragHandleProps}
@@ -238,50 +192,29 @@ export function WindowHeader({
 				</span>
 			)}
 			<span className="ui-window-header-spacer" />
-			{searchFeature.onSearch && (
-				<div className="ui-window-header-search">
-					<SearchBar
-						{...searchFeature.search}
-						ariaLabel={
-							searchFeature.search.ariaLabel ??
-							(typeof title === "string" ? `Search ${title}` : "Search")
-						}
-						settingsTitle={
-							searchFeature.search.settingsTitle ??
-							(typeof title === "string"
-								? `${title} search settings`
-								: "Search settings")
-						}
-						onChange={searchFeature.onSearch}
-					/>
-				</div>
-			)}
-			{searchFeature.onSearch && hasFollowingSearchActions && (
-				<TitleBarSearchDivider />
-			)}
 			{toolbar}
-			<div className="ui-window-action-groups">
-				{actions
-					.filter((group) => group.length)
-					.map((group, groupIndex) => (
-						<div className="ui-window-action-group" key={groupIndex}>
-							{group.map((action) => (
-								<WindowActionButton key={action.id} action={action} />
-							))}
-						</div>
-					))}
-				{settings && (
-					<div className="ui-window-action-group ui-window-settings-action">
-						<Button
-							aria-label="Settings"
-							onClick={(event) => onSettings?.(event.currentTarget)}
-						>
-							<span aria-hidden="true">⚙</span>
-							<span>Settings</span>
-						</Button>
-					</div>
-				)}
-			</div>
+			<TitleChrome
+				groups={groups}
+				search={resolvedSearch}
+				terminalActions={[
+					{
+						id: "settings",
+						label: "Settings",
+						icon: <span aria-hidden="true">⚙</span>,
+						ariaLabel: "Settings",
+						disabled: !onSettings,
+						className: "ui-window-settings-action",
+						onPress: () => {
+							const anchor = document.activeElement;
+							if (anchor instanceof HTMLElement) onSettings?.(anchor);
+						},
+					},
+				]}
+				className="ui-window-action-groups"
+				groupClassName="ui-window-action-group"
+				searchClassName="ui-window-header-search"
+				terminalClassName="ui-window-action-group ui-window-terminal-actions"
+			/>
 		</header>
 	);
 }
@@ -327,13 +260,19 @@ export function WindowSettings({
 		<>
 			<ModalTitleBar
 				title={title}
-				tabs={
+				groups={
 					tabs.length > 1
-						? tabs.map(({ id, label }) => ({ id, label }))
+						? [
+								{
+									id: "settings-tabs",
+									kind: "tabs",
+									activeId: active ?? tabs[0]?.id ?? "",
+									onActiveChange: setActive,
+									actions: tabs.map(({ id, label }) => ({ id, label })),
+								},
+							]
 						: undefined
 				}
-				activeTab={active}
-				onTabChange={setActive}
 				closeLabel="Close settings"
 				onClose={onClose}
 			/>
@@ -378,7 +317,7 @@ type WindowFrameProps = {
 	title: ReactNode;
 	info?: WindowInfo;
 	toolbar?: ReactNode;
-	actions?: WindowAction[][];
+	groups?: TitleActionGroup[];
 	settingsTabs?: WindowSettingsTab[];
 	settingsTitle?: string;
 	navigation?: ReactNode;
@@ -386,13 +325,14 @@ type WindowFrameProps = {
 	bottom?: ReactNode;
 	className?: string;
 	children: ReactNode;
-} & SearchFeatureProps;
+	search?: TitleSearch;
+};
 
 export function WindowFrame({
 	title,
 	info,
 	toolbar,
-	actions,
+	groups,
 	settingsTabs = [],
 	settingsTitle = "Settings",
 	navigation,
@@ -420,7 +360,7 @@ export function WindowFrame({
 					info={info}
 					toolbar={toolbar}
 					{...searchFeature}
-					actions={actions}
+					groups={groups}
 					settings={settingsTabs.length > 0}
 					onSettings={(anchor) =>
 						setSettingsAnchor(anchor.getBoundingClientRect())

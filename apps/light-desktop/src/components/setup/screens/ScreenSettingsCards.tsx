@@ -1,6 +1,7 @@
 import {
 	Button,
 	FormLayout,
+	ModalTitleBar,
 	NumberField,
 	SelectField,
 	SwitchField,
@@ -806,6 +807,7 @@ function ScreenRemovalConfirmation(props: {
 			role="dialog"
 			aria-label={`Remove ${props.draft.name}`}
 		>
+			<ModalTitleBar title={`Remove ${props.draft.name}`} onClose={props.cancel} />
 			<b>{props.draft.name} carries the encoders.</b>
 			<p>
 				Removing it will move the encoders back to the main screen in the same

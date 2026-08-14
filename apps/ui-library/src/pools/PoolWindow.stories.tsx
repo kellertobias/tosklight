@@ -111,9 +111,7 @@ function PoolExample({
 					primary: `${slots.length} stored`,
 					secondary: `${slotCount} slots`,
 				}}
-				actions={[
-					[{ id: "record", label: "Record", onClick: () => undefined }],
-				]}
+				groups={[{ id: "record", actions: [{ id: "record", label: "Record", onPress: () => undefined }] }]}
 				settingsTabs={[
 					{
 						id: "pool",

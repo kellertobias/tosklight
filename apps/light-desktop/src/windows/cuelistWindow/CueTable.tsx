@@ -30,6 +30,8 @@ export type CueTimingProgressByRow = Record<
 >;
 
 export type CueEditableProperty =
+	| "name"
+	| "information"
 	| "jump"
 	| "jumpCount"
 	| "trigger"
@@ -148,6 +150,7 @@ function CueTableHeader({ compactRows }: { compactRows: boolean }) {
 				{!compactRows && <th className="cue-preview-column">Preview</th>}
 				<th className="cue-number-column">No.</th>
 				<th>Name</th>
+				<th className="cue-information-column">Info</th>
 				<th className="cue-jump-column">Jump</th>
 				<th className="cue-jump-count-column">Jump Count</th>
 				<th className="cue-trigger-column">Trigger</th>
@@ -228,6 +231,7 @@ function CueTableRow({
 	timingProgress,
 	onActivateCue,
 	onActivateProperty,
+	onOpenPreview,
 }: {
 	cue: Cue;
 	index: number;
@@ -242,6 +246,7 @@ function CueTableRow({
 	timingProgress: Partial<Record<CueTimingProgressField, number>> | undefined;
 	onActivateCue: () => void;
 	onActivateProperty: (property: CueEditableProperty) => void;
+	onOpenPreview: () => void;
 }) {
 	return (
 		<tr
@@ -258,7 +263,19 @@ function CueTableRow({
 		>
 			{!compactRows && (
 				<td className="cue-preview-column">
-					{thumbnail && <img src={thumbnail} alt="" />}
+					{thumbnail && (
+						<Button
+							type="button"
+							className="cue-preview-image-button"
+							aria-label={`Open Cue ${cue.number} preview`}
+							onClick={(event) => {
+								event.stopPropagation();
+								onOpenPreview();
+							}}
+						>
+							<img src={thumbnail} alt="" />
+						</Button>
+					)}
 				</td>
 			)}
 			<td>
@@ -271,8 +288,18 @@ function CueTableRow({
 					</span>
 				)}
 			</td>
-			<td>
-				{cue.name || `Cue ${cue.number}`}
+			<td className="cue-name-column">
+				<Button
+					type="button"
+					aria-label="Cue Name"
+					disabled={!propertyEditable}
+					onClick={(event) => {
+						event.stopPropagation();
+						onActivateProperty("name");
+					}}
+				>
+					{cue.name || `Cue ${cue.number}`}
+				</Button>
 				{Boolean(cue.dynamic_changes?.length) && (
 					<small
 						className="cue-dynamics-marker"
@@ -283,6 +310,20 @@ function CueTableRow({
 						∿
 					</small>
 				)}
+			</td>
+			<td className="cue-information-column">
+				<Button
+					type="button"
+					aria-label="Cue Information"
+					disabled={!propertyEditable}
+					title={cue.information || "No Cue information"}
+					onClick={(event) => {
+						event.stopPropagation();
+						onActivateProperty("information");
+					}}
+				>
+					{cue.information || "—"}
+				</Button>
 			</td>
 			<td className="cue-jump-column">
 				<Button
@@ -342,6 +383,7 @@ export function CueTable({
 	emptyState,
 	onSelectCue,
 	onEditCueProperty,
+	onOpenCuePreview,
 	interactive = true,
 	compactRows = false,
 	timingProgressByRow = {},
@@ -356,6 +398,7 @@ export function CueTable({
 	emptyState: CueTableEmptyState;
 	onSelectCue: (index: number) => void;
 	onEditCueProperty?: (index: number, property: CueEditableProperty) => void;
+	onOpenCuePreview?: (index: number) => void;
 	interactive?: boolean;
 	compactRows?: boolean;
 	timingProgressByRow?: CueTimingProgressByRow;
@@ -411,6 +454,7 @@ export function CueTable({
 									onActivateProperty={(property) =>
 										activateProperty(index, property)
 									}
+									onOpenPreview={() => onOpenCuePreview?.(index)}
 								/>
 							))}
 						</tbody>

@@ -8,6 +8,8 @@ import type {
 	MacroRunLineUndoOutcome,
 	MacroRuntimeSnapshot,
 	MacroValidationRequest,
+	FileInputClaimRequest,
+	FileInputReleaseRequest,
 	ShowObjectActionOutcome,
 	MacroDefinition as WireMacroDefinition,
 	MacroValidation as WireMacroValidation,
@@ -89,6 +91,30 @@ export class MacrosApiClient {
 				replaceEnd: suggestion.replace_end,
 			})),
 		}));
+	}
+
+	claimEditorInput(instanceId: string): Promise<void> {
+		const body: FileInputClaimRequest = {
+			request_id: crypto.randomUUID(),
+			instance_id: instanceId,
+			action: "macro_edit",
+			origin: "editor",
+		};
+		return this.transport.request(
+			"/api/v2/files/input-context/claim",
+			jsonRequest("POST", body),
+		);
+	}
+
+	releaseEditorInput(instanceId: string): Promise<void> {
+		const body: FileInputReleaseRequest = {
+			request_id: crypto.randomUUID(),
+			instance_id: instanceId,
+		};
+		return this.transport.request(
+			"/api/v2/files/input-context/release",
+			jsonRequest("POST", body),
+		);
 	}
 
 	mutate(

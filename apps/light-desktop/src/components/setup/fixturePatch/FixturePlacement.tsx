@@ -1,4 +1,4 @@
-import { Button, ModalRegistration } from "@tosklight/ui";
+import { Button, ModalRegistration, ModalTitleBar } from "@tosklight/ui";
 import { Fragment } from "react";
 import {
 	ConsoleNumberField,
@@ -53,28 +53,24 @@ function PlacementHeader({ controller }: { controller: PatchController }) {
 	const { definition, family } = controller.data;
 	if (!definition) return null;
 	return (
-		<header>
-			<h2>
-				{isDmxPatchable(definition) ? "Patch" : "Add"} {family?.name}
-			</h2>
-			<Button onClick={() => requestPlacementClose(controller)}>Cancel</Button>
-			<Button
-				className="primary"
-				disabled={placementIsDisabled(controller)}
-				onClick={() => void addPlacementBatch(controller)}
-			>
-				{controller.ui.busy
-					? "Adding…"
-					: `Add ${controller.ui.draft.count || 1} fixtures`}
-			</Button>
-			<Button
-				className="modal-close"
-				aria-label="Close Add Fixture"
-				onClick={() => requestPlacementClose(controller)}
-			>
-				×
-			</Button>
-		</header>
+		<ModalTitleBar
+			title={`${isDmxPatchable(definition) ? "Patch" : "Add"} ${family?.name ?? "fixture"}`}
+			groups={[{
+				id: "placement-actions",
+				actions: [
+					{ id: "cancel", label: "Cancel", onPress: () => requestPlacementClose(controller) },
+					{
+						id: "add",
+						label: controller.ui.busy ? "Adding…" : `Add ${controller.ui.draft.count || 1} fixtures`,
+						variant: "primary",
+						disabled: placementIsDisabled(controller),
+						onPress: () => void addPlacementBatch(controller),
+					},
+				],
+			}]}
+			closeLabel="Close Add Fixture"
+			onClose={() => requestPlacementClose(controller)}
+		/>
 	);
 }
 

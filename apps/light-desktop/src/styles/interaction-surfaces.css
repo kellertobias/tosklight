@@ -1537,9 +1537,23 @@
 .usb-dmx-endpoints-setup > header small {
 	color: var(--muted);
 }
+.output-routes-setup .output-route-header-actions {
+	min-width: 0;
+	max-width: none;
+	height: auto;
+	flex: 0 0 auto;
+	align-self: center;
+	align-items: center;
+}
+.output-routes-setup .output-route-header-actions > .ui-button {
+	height: 50px;
+	min-height: 50px;
+	padding-inline: 16px;
+	border-radius: 8px;
+}
 .output-route-list article,
 .usb-dmx-endpoint-list article {
-	grid-template-columns: minmax(220px, 1fr) auto auto;
+	grid-template-columns: minmax(220px, 1fr) auto;
 	align-items: center;
 }
 .usb-dmx-device-list + .output-route-list {
@@ -1548,6 +1562,28 @@
 .output-route-list article > span:first-child small,
 .usb-dmx-endpoint-list article > span:first-child small {
 	display: block;
+}
+.output-route-content {
+	min-width: 0;
+}
+.output-route-content > b {
+	display: block;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.output-route-secondary {
+	display: flex;
+	align-items: baseline;
+	gap: 10px;
+	margin-top: 4px;
+}
+.output-route-list article.is-disabled {
+	background: color-mix(in srgb, var(--panel2) 68%, var(--bg));
+}
+.output-route-list article.is-disabled > .output-route-content > b,
+.output-route-list article.is-disabled > .ui-button {
+	opacity: 0.48;
 }
 .usb-dmx-claim-form {
 	display: grid;
@@ -1560,7 +1596,7 @@
 	color: var(--green);
 }
 .route-disabled {
-	color: var(--muted);
+	color: var(--red);
 }
 .output-route-editor {
 	width: min(620px, calc(100vw - 30px));

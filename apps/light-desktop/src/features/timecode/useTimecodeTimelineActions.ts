@@ -6,6 +6,7 @@ import {
 import type { TimecodeDefinition } from "../../api/types/timecode";
 import {
 	moveTimelineItem,
+	resizeTimelineClip,
 	snapTimelineFrame,
 	type TimecodeEditorSelection,
 } from "./editorModel";
@@ -19,7 +20,10 @@ interface CueListOption {
 interface DragState {
 	selection: TimecodeEditorSelection;
 	startX: number;
+	startY: number;
 	startFrame: number;
+	clipEdge?: "start" | "end";
+	startVolume?: number;
 }
 
 export function useTimelineDrag({
@@ -51,7 +55,33 @@ export function useTimelineDrag({
 				latest.current,
 				pixelsPerFrame,
 			);
-			onPreview(moveTimelineItem(latest.current, active.selection, snapped));
+			const next =
+				active.clipEdge && active.selection.kind === "clip"
+					? resizeTimelineClip(
+							latest.current,
+							active.selection as TimecodeEditorSelection & { kind: "clip" },
+							active.clipEdge,
+							snapped,
+						)
+					: moveTimelineItem(latest.current, active.selection, snapped);
+			if (
+				active.selection.kind === "volume" &&
+				active.startVolume !== undefined
+			)
+				onPreview(
+					setVolumeValue(
+						next,
+						active.selection,
+						Math.max(
+							0,
+							Math.min(
+								1,
+								active.startVolume - (event.clientY - active.startY) / 160,
+							),
+						),
+					),
+				);
+			else onPreview(next);
 		};
 		const up = () => {
 			if (drag.current) {
@@ -72,12 +102,47 @@ export function useTimelineDrag({
 		event: ReactPointerEvent,
 		selection: TimecodeEditorSelection,
 		startFrame: number,
+		clipEdge?: "start" | "end",
+		startVolume?: number,
 	) => {
 		event.preventDefault();
 		setSelection(selection);
 		onBeginGesture();
-		drag.current = { selection, startX: event.clientX, startFrame };
+		drag.current = {
+			selection,
+			startX: event.clientX,
+			startY: event.clientY,
+			startFrame,
+			clipEdge,
+			startVolume,
+		};
 		event.currentTarget.setPointerCapture?.(event.pointerId);
+	};
+}
+
+function setVolumeValue(
+	definition: TimecodeDefinition,
+	selection: TimecodeEditorSelection,
+	value: number,
+): TimecodeDefinition {
+	if (selection.kind !== "volume") return definition;
+	return {
+		...definition,
+		lanes: definition.lanes.map((lane) =>
+			lane.id !== selection.laneId || lane.content.kind !== "audio_volume"
+				? lane
+				: {
+						...lane,
+						content: {
+							...lane.content,
+							keyframes: lane.content.keyframes.map((keyframe) =>
+								keyframe.id === selection.itemId
+									? { ...keyframe, value }
+									: keyframe,
+							),
+						},
+					},
+		),
 	};
 }
 
@@ -88,7 +153,6 @@ export function useTimelineActions({
 	duration,
 	cueLists,
 	speedGroup,
-	cueListId,
 	audioPlayers,
 	onCommit,
 	setSelection,
@@ -99,7 +163,6 @@ export function useTimelineActions({
 	duration: number;
 	cueLists: readonly CueListOption[];
 	speedGroup: string;
-	cueListId: string;
 	audioPlayers: readonly { fixtureId: string; name: string }[];
 	onCommit(value: TimecodeDefinition): void;
 	setSelection(value: TimecodeEditorSelection | null): void;
@@ -109,9 +172,9 @@ export function useTimelineActions({
 		onCommit(addMarkerToDefinition(definition, id, frame, duration));
 		setSelection({ kind: "marker", itemId: id });
 	};
-	const addKeyframe = (laneId: string) => {
+	const addKeyframe = (laneId: string, atFrame = frame) => {
 		const id = crypto.randomUUID();
-		onCommit(addKeyframeToDefinition(definition, laneId, id, frame));
+		onCommit(addKeyframeToDefinition(definition, laneId, id, atFrame));
 		const lane = definition.lanes.find((candidate) => candidate.id === laneId);
 		if (lane?.content.kind === "speed_group")
 			setSelection({ kind: "speed", laneId, itemId: id });
@@ -135,7 +198,7 @@ export function useTimelineActions({
 				keyframes: [],
 			}),
 		);
-	const addCueListLane = () => {
+	const addCueListLane = (cueListId: string) => {
 		const cueList = cueLists.find((candidate) => candidate.id === cueListId);
 		if (cueList)
 			onCommit(

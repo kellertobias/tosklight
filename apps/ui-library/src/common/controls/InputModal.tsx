@@ -132,16 +132,16 @@ export function InputModal({
 					title={title}
 					closeLabel="Close input"
 					onClose={requestClose}
-					actions={
-						kind === "multiline" ? (
-							<Button
-								variant="primary"
-								className="ui-input-modal-done"
-								onClick={commit}
-							>
-								Done
-							</Button>
-						) : undefined
+					accept={
+						kind === "multiline"
+							? {
+									id: "done",
+									label: "Done",
+									variant: "primary",
+									className: "ui-input-modal-done",
+									onPress: commit,
+								}
+							: undefined
 					}
 				/>
 				<ValuePreview

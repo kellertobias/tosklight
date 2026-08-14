@@ -223,8 +223,7 @@ export function HelpWindowView({
     {!compact && <WindowHeader
       title="Help"
       info={catalog?.live ? { primary: "Live documentation" } : undefined}
-      search={{ value: query, ariaLabel: "Search Help" }}
-      onSearch={onQueryChange}
+      search={{ value: query, onSearch: onQueryChange, ariaLabel: "Search Help" }}
     />}
     <div className="help-layout">
       <nav aria-label="Help topics">

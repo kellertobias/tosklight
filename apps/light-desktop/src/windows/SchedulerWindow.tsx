@@ -383,51 +383,53 @@ function SchedulerHeader({
 								: undefined,
 						}
 			}
-			actions={[
-				[
+			groups={[
+				{ id: "scheduler-create", actions: [
 					{
 						id: "create",
 						label: "+ Schedule",
 						variant: "primary",
 						disabled:
 							!controller || !snapshot.canWrite || snapshot.status !== "ready",
-						onClick: onCreate,
+						onPress: onCreate,
 					},
-				],
-				[
+				] },
+				{ id: "scheduler-period", actions: [
 					{
 						id: "previous",
 						label: "‹",
 						ariaLabel: "Previous period",
-						onClick: () => onPeriod(-1),
+						onPress: () => onPeriod(-1),
 					},
 					{
 						id: "today",
 						label: "Today",
 						disabled: !snapshot.serverDate,
-						onClick: onToday,
+						onPress: onToday,
 					},
 					{
 						id: "next",
 						label: "›",
 						ariaLabel: "Next period",
-						onClick: () => onPeriod(1),
+						onPress: () => onPeriod(1),
 					},
-				],
-				[
+				] },
+				{
+					id: "scheduler-view",
+					kind: "tabs",
+					activeId: view,
+					onActiveChange: (id) => setView(id as typeof view),
+					actions: [
 					{
 						id: "month",
 						label: "Month",
-						active: view === "month",
-						onClick: () => setView("month"),
 					},
 					{
 						id: "year",
 						label: "Year",
-						active: view === "year",
-						onClick: () => setView("year"),
 					},
-				],
+					],
+				},
 			]}
 			settings
 			onSettings={onSettings}
@@ -684,22 +686,30 @@ function ScheduleEditor({
 			dialogClassName="scheduler-editor-modal"
 			title={schedule ? "Edit Schedule" : "New Schedule"}
 			details={`Times and previews use ${snapshot.timezone || "the server timezone"}`}
-			tabs={[
-				{ id: "name", label: "Name" },
-				{ id: "when", label: "When" },
-				{ id: "action", label: "Action" },
+			groups={[
+				{
+					id: "editor-tabs",
+					kind: "tabs",
+					activeId: tab,
+					onActiveChange: (value) => setTab(value as ScheduleEditorTab),
+					actions: [
+						{ id: "name", label: "Name" },
+						{ id: "when", label: "When" },
+						{ id: "action", label: "Action" },
+					],
+				},
 			]}
-			activeTab={tab}
-			onTabChange={(value) => setTab(value as ScheduleEditorTab)}
-			actions={
-				<Button
-					variant="primary"
-					disabled={previewInvalid || saving || !snapshot.canWrite}
-					onClick={() => void save()}
-				>
-					{saving ? "Saving…" : schedule ? "Save changes" : "Create Schedule"}
-				</Button>
-			}
+			accept={{
+				id: "save",
+				label: saving
+					? "Saving…"
+					: schedule
+						? "Save changes"
+						: "Create Schedule",
+				variant: "primary",
+				disabled: previewInvalid || saving || !snapshot.canWrite,
+				onPress: () => void save(),
+			}}
 			onClose={close}
 		>
 			<div className="scheduler-editor">

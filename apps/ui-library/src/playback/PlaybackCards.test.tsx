@@ -299,7 +299,7 @@ describe("playback card views", () => {
 		).toHaveStyle({ gridTemplateRows: "minmax(0, 1fr) minmax(0, 4fr)" });
 	});
 
-	it("keeps a faderless playback identity separate from its held action", () => {
+	it("makes one faderless held action fill its touch playback card", () => {
 		const press = vi.fn();
 		const release = vi.fn();
 		render(
@@ -323,9 +323,14 @@ describe("playback card views", () => {
 				}}
 			/>,
 		);
-		expect(screen.getByText("Bump")).toBeInTheDocument();
-		expect(screen.getByText("2.3")).toBeInTheDocument();
 		const flash = screen.getByRole("button", { name: "FLASH" });
+		expect(flash).toHaveClass("single-button-playback-action");
+		expect(flash).toHaveTextContent("3 · Bump");
+		expect(
+			screen.queryByRole("button", {
+				name: "Playback representation page 2 playback 3",
+			}),
+		).not.toBeInTheDocument();
 		fireEvent.pointerDown(flash, { pointerId: 1 });
 		fireEvent.pointerUp(flash, { pointerId: 1 });
 		expect(press).toHaveBeenCalledOnce();

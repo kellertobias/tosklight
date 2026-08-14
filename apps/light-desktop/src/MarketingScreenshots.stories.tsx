@@ -162,22 +162,22 @@ function FullApplicationComposition() {
 											primary: "0 selected",
 											secondary: "Tap to select · Shift for range",
 										}}
-										actions={[
-											[
+										groups={[
+											{ id: "stage-view", actions: [
 												{
 													id: "follow",
 													label: "Follow Preload",
 													active: true,
-													onClick: () => undefined,
+													onPress: () => undefined,
 												},
-											],
-											[
+											] },
+											{ id: "stage-navigation", actions: [
 												{
 													id: "groups",
 													label: "Groups",
-													onClick: () => undefined,
+													onPress: () => undefined,
 												},
-											],
+											] },
 										]}
 										settings
 										onSettings={() => undefined}

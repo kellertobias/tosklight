@@ -613,7 +613,7 @@ jobs:
           -p light-headless --bin light-headless
           -p media-server --bin media-server
 
-      - name: Smoke-test the built Media Server
+      - name: Validate the built Media Server configuration
         shell: bash
         env:
           TARGET: ${{ matrix.target }}
@@ -621,6 +621,12 @@ jobs:
           suffix=""
           if [[ "$RUNNER_OS" == "Windows" ]]; then suffix=".exe"; fi
           ".artifacts/build/cargo/$TARGET/release/media-server$suffix" --check-configuration
+
+      - name: Smoke-test the built Media Server startup
+        shell: bash
+        env:
+          LIGHT_MEDIA_SMOKE_TARGET: ${{ matrix.target }}
+        run: node tools/ci-smoke-media-server.mjs
 
       - name: Build the release performance probe
         if: matrix.slug == 'linux-amd64'
@@ -797,6 +803,23 @@ jobs:
             output="${output//$'\n'/'%0A'}"
             printf '::error title=Viz Editor release build failure on %s::%s\n' "$RUNNER_OS" "$output" >&2
             exit "$status"
+          fi
+
+      - name: Smoke-test the ToskLight Viz Editor application
+        if: matrix.viz
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          TOSKLIGHT_VIZ_DEMO_SHOW: ${{ github.workspace }}/.artifacts/generated/demo-show/demo-show.show
+        run: |
+          set -euo pipefail
+          suffix=""
+          if [[ "$RUNNER_OS" == "Windows" ]]; then suffix=".exe"; fi
+          binary=".artifacts/build/cargo/$TARGET/release/viz-editor$suffix"
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            xvfb-run -a "$binary" --verify
+          else
+            "$binary" --verify
           fi
 
       - name: Stage the Viz release artifacts

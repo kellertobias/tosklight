@@ -168,9 +168,15 @@ export function WindowPicker() {
 			title="Open Window"
 			className="window-picker-layer"
 			dialogClassName="window-picker-modal"
-			tabs={windowCategories.map(({ id, label }) => ({ id, label }))}
-			activeTab={category}
-			onTabChange={(id) => setCategory(id as WindowCategoryId)}
+			groups={[
+				{
+					id: "categories",
+					kind: "tabs",
+					activeId: category,
+					onActiveChange: (id) => setCategory(id as WindowCategoryId),
+					actions: windowCategories.map(({ id, label }) => ({ id, label })),
+				},
+			]}
 			onClose={close}
 			closeLabel="Close Open Window"
 		>

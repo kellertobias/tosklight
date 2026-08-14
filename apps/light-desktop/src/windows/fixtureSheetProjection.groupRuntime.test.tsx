@@ -220,6 +220,29 @@ describe("Fixture Sheet scoped Group runtime", () => {
 		);
 	});
 
+	it("does not report or present a full Group Master while Flash is pressed", () => {
+		mocks.runtime.master = 1;
+		const view = renderHook(rows);
+		expect(view.result.current.rows[0].limitingGroups).toEqual([]);
+
+		mocks.runtime.flashLevel = 1;
+		view.rerender();
+		expect(view.result.current.rows[0].limitingGroups).toEqual([]);
+
+		const nameColumn = fixtureSheetColumns(false, () => ({
+			base: false,
+			containedBase: false,
+			containedCurrent: false,
+			current: false,
+		})).find(({ id }) => id === "name");
+		render(nameColumn?.render(view.result.current.rows[0], 0) ?? null);
+		expect(screen.queryByText(/Group master/i)).toBeNull();
+
+		mocks.runtime.master = 0.6;
+		view.rerender();
+		expect(view.result.current.rows[0].limitingGroups).toEqual([mocks.group]);
+	});
+
 	it("exposes no rows while exact Group runtime authority is loading", () => {
 		mocks.ready = false;
 		const view = renderHook(rows);

@@ -10,7 +10,12 @@ import { usePlaybackTopologyActions } from "../../features/playbackTopology/Play
 import { usePlaybackPagesView } from "../../features/playbackTopology/PlaybackTopologyView";
 import { normalizePlaybackPageName } from "../../features/playbackTopology/pageNames";
 import type { ShowObject } from "../../features/showObjects/contracts";
-import { Button, ModalRegistration, ModalTitleBar, TextInput } from "@tosklight/ui";
+import {
+	Button,
+	ModalRegistration,
+	ModalTitleBar,
+	TextInput,
+} from "@tosklight/ui";
 import {
 	useOpenedPageMenuAuthority,
 	usePlaybackPageMenuEscape,
@@ -126,9 +131,7 @@ export function PlaybackPageMenu({
 			return;
 		const outcome = await createPage(nextNumber);
 		if (!operation.isCurrent(token)) return;
-		const selected = outcome
-			? await setActivePage(nextNumber)
-			: false;
+		const selected = outcome ? await setActivePage(nextNumber) : false;
 		const failure = outcome
 			? `Playback Page ${nextNumber} could not be selected.`
 			: `Playback Page ${nextNumber} could not be created.`;
@@ -136,65 +139,61 @@ export function PlaybackPageMenu({
 		if (selected) onClose();
 	};
 	return createPortal(
-		<ModalRegistration onClose={requestClose}><div
+		<ModalRegistration onClose={requestClose}>
+			<div
 				className="stacked-modal-layer"
 				onPointerDown={(event) =>
 					event.target === event.currentTarget && requestClose()
 				}
 			>
-			<section
-				className="nested-modal playback-page-modal"
-				role="dialog"
-				aria-modal="true"
-				aria-label="Playback pages"
-			>
-				<ModalTitleBar
-					title="Playback pages"
-					actions={
-						<Button
-							variant="primary"
-							disabled={
-								operation.busy ||
-								!ready ||
-								nextNumber == null
-							}
-							onClick={() => void add()}
-						>
-							{operation.pending === "add" ? "Adding…" : "Add new page"}
-						</Button>
-					}
-					closeLabel="Close Playback pages"
-					closeDisabled={operation.busy}
-					onClose={requestClose}
+				<section
+					className="nested-modal playback-page-modal"
+					role="dialog"
+					aria-modal="true"
+					aria-label="Playback pages"
+				>
+					<ModalTitleBar
+						title="Playback pages"
+						accept={{
+							id: "add-page",
+							label: operation.pending === "add" ? "Adding…" : "Add new page",
+							variant: "primary",
+							disabled: operation.busy || !ready || nextNumber == null,
+							onPress: () => void add(),
+						}}
+						closeLabel="Close Playback pages"
+						closeDisabled={operation.busy}
+						onClose={requestClose}
+					/>
+					{operation.failure && (
+						<p className="modal-error" role="alert">
+							{operation.failure}
+						</p>
+					)}
+					{!ready && (
+						<p role={authorityError ? "alert" : "status"}>
+							{authorityError ?? "Loading Playback pages…"}
+						</p>
+					)}
+					{operation.pending === "select" && (
+						<p role="status">Selecting Playback page…</p>
+					)}
+					<PlaybackPageRows
+						activePage={playbackDesk?.active_page ?? null}
+						busy={operation.busy}
+						pageObjects={pageObjects}
+						ready={ready}
+						onRename={setRenamePage}
+						onSelect={select}
+					/>
+				</section>
+				<PlaybackPageRenameDialog
+					page={renamePage}
+					openKeyboardInitially
+					onClose={() => setRenamePage(null)}
 				/>
-				{operation.failure && (
-					<p className="modal-error" role="alert">
-						{operation.failure}
-					</p>
-				)}
-				{!ready && (
-					<p role={authorityError ? "alert" : "status"}>
-						{authorityError ?? "Loading Playback pages…"}
-					</p>
-				)}
-				{operation.pending === "select" && (
-					<p role="status">Selecting Playback page…</p>
-				)}
-				<PlaybackPageRows
-					activePage={playbackDesk?.active_page ?? null}
-					busy={operation.busy}
-					pageObjects={pageObjects}
-					ready={ready}
-					onRename={setRenamePage}
-					onSelect={select}
-				/>
-			</section>
-			<PlaybackPageRenameDialog
-				page={renamePage}
-				openKeyboardInitially
-				onClose={() => setRenamePage(null)}
-			/>
-			</div></ModalRegistration>,
+			</div>
+		</ModalRegistration>,
 		document.body,
 	);
 }
@@ -283,9 +282,7 @@ function OpenPlaybackPageRenameDialog({
 	);
 	const pageExists = authoritativePage !== undefined;
 	const authorityCurrent =
-		topology.ready &&
-		pageExists &&
-		actions?.renamePage === openedRenamePage;
+		topology.ready && pageExists && actions?.renamePage === openedRenamePage;
 	const [name, setName] = useState(page.body.name);
 	const operation = useScopedPageOperation([
 		topology.ready,
@@ -302,10 +299,14 @@ function OpenPlaybackPageRenameDialog({
 		if (token == null || !normalized || !openedRenamePage) return;
 		const currentPage = authoritativePage;
 		if (!currentPage) return;
-		const outcome = await openedRenamePage(currentPage.body.number, normalized, {
-			expectedPageRevision: currentPage.revision,
-			expectedPageObjectId: page.id,
-		});
+		const outcome = await openedRenamePage(
+			currentPage.body.number,
+			normalized,
+			{
+				expectedPageRevision: currentPage.revision,
+				expectedPageObjectId: page.id,
+			},
+		);
 		const current = operation.complete(
 			token,
 			outcome
@@ -315,62 +316,56 @@ function OpenPlaybackPageRenameDialog({
 		if (current && outcome) onClose();
 	};
 	return createPortal(
-		<ModalRegistration
-			policy={{ escape: !operation.busy }}
-			onClose={onClose}
-		>
+		<ModalRegistration policy={{ escape: !operation.busy }} onClose={onClose}>
 			<div
 				className="stacked-modal-layer"
 				onPointerDown={(event) =>
 					event.target === event.currentTarget && !operation.busy && onClose()
 				}
 			>
-			<section
-				className="nested-modal playback-page-name-modal"
-				role="dialog"
-				aria-modal="true"
-				aria-label={`Rename playback page ${page.body.number}`}
-			>
-				<Button
-					className="modal-close"
-					disabled={operation.busy}
-					onClick={onClose}
+				<section
+					className="nested-modal playback-page-name-modal"
+					role="dialog"
+					aria-modal="true"
+					aria-label={`Rename playback page ${page.body.number}`}
 				>
-					×
-				</Button>
-				<h3>Rename Playback Page {page.body.number}</h3>
-				<TextInput
-					autoFocus
-					clearable
-					aria-label="Playback page name"
-					value={name}
-					disabled={operation.busy || !authorityCurrent}
-					openKeyboardInitially={openKeyboardInitially}
-					onChange={(event) => setName(event.target.value)}
-					onKeyboardCommit={(value) => void save(value)}
-				/>
-				{operation.failure && (
-					<p className="modal-error" role="alert">
-						{operation.failure}
-					</p>
-				)}
-				<footer>
-					<Button disabled={operation.busy} onClick={onClose}>
-						Cancel
-					</Button>
-					<Button
-						variant="primary"
-						disabled={
-							operation.busy ||
-							!authorityCurrent ||
-							!normalizePlaybackPageName(name)
-						}
-						onClick={() => void save()}
-					>
-						{operation.pending === "rename" ? "Renaming…" : "Rename Page"}
-					</Button>
-				</footer>
-			</section>
+					<ModalTitleBar
+						title={`Rename Playback Page ${page.body.number}`}
+						closeDisabled={operation.busy}
+						onClose={onClose}
+					/>
+					<TextInput
+						autoFocus
+						clearable
+						aria-label="Playback page name"
+						value={name}
+						disabled={operation.busy || !authorityCurrent}
+						openKeyboardInitially={openKeyboardInitially}
+						onChange={(event) => setName(event.target.value)}
+						onKeyboardCommit={(value) => void save(value)}
+					/>
+					{operation.failure && (
+						<p className="modal-error" role="alert">
+							{operation.failure}
+						</p>
+					)}
+					<footer>
+						<Button disabled={operation.busy} onClick={onClose}>
+							Cancel
+						</Button>
+						<Button
+							variant="primary"
+							disabled={
+								operation.busy ||
+								!authorityCurrent ||
+								!normalizePlaybackPageName(name)
+							}
+							onClick={() => void save()}
+						>
+							{operation.pending === "rename" ? "Renaming…" : "Rename Page"}
+						</Button>
+					</footer>
+				</section>
 			</div>
 		</ModalRegistration>,
 		document.body,

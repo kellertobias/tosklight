@@ -694,14 +694,14 @@ describe("ParameterControls projection lifecycle", () => {
 			screen.getByRole("button", { name: "Set Enc 1 · Gobo 1 value" }),
 		);
 
-		expect(screen.getByText("Direct input")).toHaveAttribute(
-			"data-active",
+		expect(screen.getByRole("tab", { name: "Direct input" })).toHaveAttribute(
+			"aria-selected",
 			"true",
 		);
-		expect(screen.getByText("Indexed Presets")).not.toHaveAttribute(
-			"data-active",
-		);
-		fireEvent.click(screen.getByRole("button", { name: "Show presets" }));
+		expect(
+			screen.getByRole("tab", { name: "Indexed Presets" }),
+		).toHaveAttribute("aria-selected", "false");
+		fireEvent.click(screen.getByRole("tab", { name: "Indexed Presets" }));
 		fireEvent.click(screen.getByRole("button", { name: /Dots/ }));
 
 		expect(normalValuesActions.applyIndexedPreset).toHaveBeenCalledWith({
@@ -735,7 +735,7 @@ describe("ParameterControls projection lifecycle", () => {
 		fireEvent.click(
 			screen.getByRole("button", { name: "Set Enc 1 · Gobo 1 value" }),
 		);
-		fireEvent.click(screen.getByRole("button", { name: "Show presets" }));
+		fireEvent.click(screen.getByRole("tab", { name: "Indexed Presets" }));
 		fireEvent.click(screen.getByRole("button", { name: /Lamp reset/ }));
 		await Promise.resolve();
 

@@ -11,6 +11,7 @@ import {
 	Button,
 	FormLayout,
 	ModalPortal,
+	ModalTitleBar,
 	NumberField,
 	SelectField,
 	TextField,
@@ -74,10 +75,7 @@ export function PreloadStoreModal() {
 				}}
 			>
 				<section className="modal-card preload-store-card">
-					<Button className="modal-close" onClick={close}>
-						×
-					</Button>
-					<h2>Record Pending Preload</h2>
+					<ModalTitleBar title="Record Pending Preload" onClose={close} />
 					<p>The active preload scene remains live. Only the pending scene will be stored.</p>
 					<TargetSelector target={target} onChange={setTarget} />
 					<FormLayout className="preload-target-form" labelPlacement="side">

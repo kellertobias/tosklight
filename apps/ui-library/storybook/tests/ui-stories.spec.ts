@@ -27,65 +27,69 @@ const packageBackground = readFileSync(
 	"utf8",
 ).match(/--bg:\s*(#[0-9a-f]{6})/iu)?.[1];
 const publicComponentStoryCoverage: Record<string, string> = {
-	Button: "controls-buttons--button-playground",
+	Button: "tosklight-controls-button--primary",
 	CommandLine: "tosklight-command-line--interactive",
 	CommandSection: "tosklight-command-section--configurable",
 	ProgrammerKeypadView: "tosklight-command-section--programmer-software",
 	PlaybackToolsView: "tosklight-command-section--playbacks-software",
 	HardwareControlSummaryView:
 		"tosklight-command-section--playbacks-hardware-connected",
-	FormLayout: "controls-forms--form-components",
-	FormField: "controls-forms--form-components",
-	Field: "controls-forms--input-fields",
-	TextInput: "controls-forms--input-fields",
-	NumberInput: "controls-forms--input-fields",
-	Input: "controls-forms--input-fields",
-	TextArea: "controls-forms--input-fields",
-	LargeTextInput: "controls-forms--input-fields",
-	TextField: "controls-forms--input-fields",
-	NumberField: "controls-forms--input-fields",
-	TextAreaField: "controls-forms--input-fields",
-	LargeTextField: "controls-forms--input-fields",
-	MultiValueToggle: "controls-forms--form-components",
-	MultiValueToggleField: "controls-forms--form-components",
-	SelectField: "controls-forms--form-components",
-	Select: "controls-forms--form-components",
-	CheckboxField: "controls-forms--form-components",
-	SwitchField: "controls-forms--form-components",
-	IconPickerField: "controls-forms--form-components",
-	ColorPickerField: "controls-forms--form-components",
-	FileDropField: "controls-forms--form-components",
-	GroupedSelectionField: "controls-forms--form-components",
-	SearchBar: "controls-forms--search",
-	TouchSelect: "controls-forms--form-components",
-	HorizontalFader: "controls-faders-horizontal-fader--default",
-	HorizontalFaderField: "controls-faders-horizontal-fader--states",
-	HorizontalTouchFader: "controls-faders-horizontal-fader--default",
-	InputModal: "controls-keyboard-and-numpad--input-modal-configurations",
-	ModalNumberInput: "controls-keyboard-and-numpad--number-pad",
-	ModalNumberValue: "controls-keyboard-and-numpad--number-pad",
-	ModalNumberEditor: "controls-keyboard-and-numpad--number-pad",
-	ModalTextKeyboard: "controls-keyboard-and-numpad--keyboard",
-	ModalCaretValue: "controls-keyboard-and-numpad--keyboard",
-	ModalPortal: "window-system-modals--portal-primitive",
-	ModalTitleBar: "window-system-modals--title-bar-configuration",
-	TitleBarSearchDivider: "window-system-modals--title-bar-configuration",
-	ModalProvider: "window-system-modals--three-deep",
-	ModalLayer: "window-system-modals--close-policies",
-	ModalFrame: "window-system-modals--close-policies",
-	ModalRegistration: "window-system-modals--application-registration",
-	WindowHeader: "window-system-production-window-kit--header-configurations",
-	WindowSettings:
-		"window-system-production-window-kit--settings-configurations",
-	WindowFrame: "window-system-production-window-kit--configuration",
+	FormLayout: "tosklight-controls-form-layout--primary",
+	FormField: "tosklight-controls-form-layout--primary",
+	Field: "tosklight-controls-form-layout--primary",
+	TextInput: "tosklight-controls-text-input--primary",
+	TextField: "tosklight-controls-text-input--primary",
+	NumberInput: "tosklight-controls-number-input--primary",
+	NumberField: "tosklight-controls-number-input--primary",
+	Input: "tosklight-controls-number-input--primary",
+	TextArea: "tosklight-controls-multiline-text-input--primary",
+	LargeTextInput: "tosklight-controls-multiline-text-input--primary",
+	TextAreaField: "tosklight-controls-multiline-text-input--primary",
+	LargeTextField: "tosklight-controls-multiline-text-input--primary",
+	MultiValueToggle: "tosklight-controls-multi-value-toggle--primary",
+	MultiValueToggleField: "tosklight-controls-multi-value-toggle--primary",
+	CyclingValueToggle: "tosklight-controls-cycling-value-toggle--primary",
+	CyclingValueToggleField: "tosklight-controls-cycling-value-toggle--primary",
+	SelectField: "tosklight-controls-select--primary",
+	Select: "tosklight-controls-select--primary",
+	CheckboxField: "tosklight-controls-checkbox--primary",
+	RadioField: "tosklight-controls-radio--primary",
+	SwitchField: "tosklight-controls-switch--primary",
+	IconPickerField: "tosklight-controls-icon-picker-field--primary",
+	ColorPickerField: "tosklight-controls-color-picker-field--primary",
+	FileDropField: "tosklight-controls-file-drop-field--primary",
+	GroupedSelectionField: "tosklight-controls-grouped-selection-field--primary",
+	SearchBar: "tosklight-controls-search-bar--primary",
+	TouchSelect: "tosklight-controls-touch-select--primary",
+	HorizontalFader: "tosklight-controls-horizontal-fader--primary",
+	HorizontalFaderField: "tosklight-controls-horizontal-fader--primary",
+	HorizontalTouchFader: "tosklight-controls-horizontal-fader--primary",
+	InputModal: "tosklight-controls-text-input--primary",
+	ModalNumberInput: "tosklight-controls-number-input--primary",
+	ModalNumberValue: "tosklight-controls-number-input--primary",
+	ModalNumberEditor: "tosklight-controls-number-input--primary",
+	ModalTextKeyboard: "tosklight-controls-text-input--primary",
+	ModalCaretValue: "tosklight-controls-text-input--primary",
+	ModalPortal: "tosklight-window-system-modal-layer--portal-primitive",
+	ModalTitleBar: "tosklight-window-system-modal-layer--title-bar-configuration",
+	TitleChrome: "tosklight-window-system-title-chrome--window-chrome",
+	ModalProvider: "tosklight-window-system-modal-layer--three-deep",
+	ModalLayer: "tosklight-window-system-modal-layer--close-policies",
+	ModalFrame: "tosklight-window-system-modal-layer--close-policies",
+	ModalRegistration:
+		"tosklight-window-system-modal-layer--application-registration",
+	WindowDropdown: "tosklight-window-system-window-dropdown--primary",
+	WindowHeader: "tosklight-window-system-window-header--primary",
+	WindowSettings: "tosklight-window-system-window-settings--modal-and-anchored",
+	WindowFrame: "tosklight-window-system-window-frame--primary",
 	WindowScrollArea:
-		"window-system-production-window-kit--scroll-and-empty-states",
-	DataTable: "tables-and-grids-generic-table--interactive",
-	ButtonGrid: "window-system-production-window-kit--pool-grid",
-	GridButton: "window-system-production-window-kit--pool-grid",
-	SelectionList: "window-system-production-window-kit--selection-list-states",
-	SelectionTree: "window-system-production-window-kit--multi-step-selection",
-	FixtureSheetTableView: "tables-and-grids-fixture-grid--step-selection",
+		"tosklight-window-system-window-scroll-area--populated-and-empty",
+	DataTable: "tosklight-tables-data-table--primary",
+	ButtonGrid: "tosklight-window-system-button-grid--primary",
+	GridButton: "tosklight-window-system-button-grid--primary",
+	SelectionList: "tosklight-window-system-selection-list--primary",
+	SelectionTree: "tosklight-window-system-selection-tree--primary",
+	FixtureSheetTableView: "tosklight-tables-fixture-sheet-table--step-selection",
 	VerticalTouchFaderSurface: "controls-faders-vertical-touch-fader--software",
 	TouchValueButton: "controls-faders-vertical-touch-fader--direct-value-button",
 	FaderView: "controls-faders-vertical-touch-fader--fader-view-composition",
@@ -1041,6 +1045,43 @@ test("every public production component has a tracked representative story", () 
 	}
 });
 
+test("component-owned catalog stories keep their documented interactions operable", async ({
+	page,
+}) => {
+	await page.goto(
+		"/iframe.html?id=tosklight-controls-text-input--primary&viewMode=story",
+	);
+	await page.getByRole("button", { name: "Open keyboard" }).first().click();
+	await expect(
+		page.getByRole("dialog", { name: "Fixture name" }),
+	).toBeVisible();
+	await expect(
+		page.getByRole("button", { name: "Enter · Confirm" }),
+	).toBeVisible();
+
+	await page.goto(
+		"/iframe.html?id=tosklight-controls-number-input--primary&viewMode=story",
+	);
+	await page.getByRole("button", { name: "Open number pad" }).first().click();
+	await expect(page.getByRole("dialog", { name: "Level" })).toBeVisible();
+	await expect(page.getByRole("button", { name: "7" })).toBeVisible();
+
+	await page.goto(
+		"/iframe.html?id=tosklight-controls-checkbox--primary&viewMode=story",
+	);
+	const checkbox = page.getByRole("checkbox", { name: /Desktop lock/u });
+	await expect(checkbox).toBeChecked();
+	await checkbox.click();
+	await expect(checkbox).not.toBeChecked();
+
+	await page.goto(
+		"/iframe.html?id=tosklight-window-system-window-dropdown--primary&viewMode=story",
+	);
+	await page.getByRole("button", { name: "Stage view" }).click();
+	await page.getByRole("menuitem", { name: "3D" }).click();
+	await expect(page.getByLabel("Selected stage view")).toHaveText("3D");
+});
+
 test("Storybook uses the exact application background token", () => {
 	expect(applicationBackground).toBe("#07090c");
 	expect(packageBackground).toBe(applicationBackground);
@@ -1049,7 +1090,9 @@ test("Storybook uses the exact application background token", () => {
 test("configured search keeps the standard magnifier size and adds width only for its caret", async ({
 	page,
 }) => {
-	await page.goto("/iframe.html?id=controls-forms--search&viewMode=story");
+	await page.goto(
+		"/iframe.html?id=tosklight-controls-search-bar--primary&viewMode=story",
+	);
 	const plainIcon = page.locator(
 		".console-search:not(.has-options) .console-search-icon > svg",
 	);
@@ -3095,7 +3138,7 @@ test("nested modal story keeps deterministic stack order and top-only Escape", a
 	page,
 }) => {
 	await page.goto(
-		"/iframe.html?id=window-system-modals--three-deep&viewMode=story",
+		"/iframe.html?id=tosklight-window-system-modal-layer--three-deep&viewMode=story",
 	);
 	await page.getByRole("button", { name: "Open nested modal" }).click();
 	await page.getByRole("button", { name: "Open third modal" }).click();
@@ -3122,7 +3165,7 @@ test("modal close policies, title configuration, and programmatic close are inte
 	page,
 }) => {
 	await page.goto(
-		"/iframe.html?id=window-system-modals--close-policies&viewMode=story",
+		"/iframe.html?id=tosklight-window-system-modal-layer--close-policies&viewMode=story",
 	);
 	const policyDialog = page.getByRole("dialog", { name: "Policy modal" });
 	await expect(policyDialog).toBeVisible();
@@ -3137,7 +3180,7 @@ test("modal close policies, title configuration, and programmatic close are inte
 	await expect(policyDialog).toBeVisible();
 
 	await page.goto(
-		"/iframe.html?id=window-system-modals--title-bar-configuration&viewMode=story",
+		"/iframe.html?id=tosklight-window-system-modal-layer--title-bar-configuration&viewMode=story",
 	);
 	await page.getByRole("tab", { name: "Advanced" }).click();
 	await expect(page.getByLabel("Active modal tab")).toHaveText("advanced");
@@ -3164,7 +3207,7 @@ test("modal close policies, title configuration, and programmatic close are inte
 	await expect(search).toHaveValue("");
 
 	await page.goto(
-		"/iframe.html?id=window-system-modals--programmatic-close&viewMode=story",
+		"/iframe.html?id=tosklight-window-system-modal-layer--programmatic-close&viewMode=story",
 	);
 	await page.getByRole("button", { name: "Close target by ID" }).click();
 	await expect(
@@ -3180,7 +3223,7 @@ test("configured search children share stack order, focus, form geometry, and di
 }) => {
 	await page.setViewportSize({ width: 1280, height: 800 });
 	await page.goto(
-		"/iframe.html?id=window-system-modals--title-bar-configuration&viewMode=story",
+		"/iframe.html?id=tosklight-window-system-modal-layer--title-bar-configuration&viewMode=story",
 	);
 	const owner = page.locator('[data-modal-id="configured-title"]');
 	const keyboardTrigger = page.getByRole("button", { name: "Open keyboard" });
@@ -3272,12 +3315,12 @@ test("configured search children share stack order, focus, form geometry, and di
 	}
 
 	await page.goto(
-		"/iframe.html?id=window-system-modals--search-without-adjacent-buttons&viewMode=story",
+		"/iframe.html?id=tosklight-window-system-modal-layer--search-without-adjacent-buttons&viewMode=story",
 	);
 	await expect(page.locator(".ui-titlebar-search-divider")).toHaveCount(0);
 
 	await page.goto(
-		"/iframe.html?id=window-system-modals--window-title-bar-search&viewMode=story",
+		"/iframe.html?id=tosklight-window-system-modal-layer--window-title-bar-search&viewMode=story",
 	);
 	await expect(page.locator(".ui-titlebar-search-divider")).toHaveCount(1);
 	await page.setViewportSize({ width: 620, height: 760 });
@@ -3303,7 +3346,7 @@ test("title-bar search dividers remain prominently two CSS pixels at DPR 1 and 2
 		});
 		const dprPage = await context.newPage();
 		await dprPage.goto(
-			"/iframe.html?id=window-system-modals--title-bar-configuration&viewMode=story",
+			"/iframe.html?id=tosklight-window-system-modal-layer--title-bar-configuration&viewMode=story",
 		);
 		const divider = dprPage.locator(".ui-titlebar-search-divider").first();
 		await expect(divider).toBeVisible();
@@ -3325,8 +3368,8 @@ test("generic and Fixture Sheet tables retain a single row-separator owner at DP
 		});
 		const dprPage = await context.newPage();
 		for (const story of [
-			"tables-and-grids-generic-table--interactive",
-			"tables-and-grids-fixture-grid--step-selection",
+			"tosklight-tables-data-table--primary",
+			"tosklight-tables-fixture-sheet-table--step-selection",
 		]) {
 			await dprPage.goto(`/iframe.html?id=${story}&viewMode=story`);
 			const table = dprPage.locator(".ui-data-table").first();
@@ -3420,11 +3463,11 @@ test("window and modal chrome embed borderless searches at their title-bar heigh
 			};
 		});
 	await page.goto(
-		"/iframe.html?id=window-system-production-window-kit--configuration&viewMode=story",
+		"/iframe.html?id=tosklight-window-system-window-frame--primary&viewMode=story",
 	);
 	const windowSearch = await measure();
 	await page.goto(
-		"/iframe.html?id=window-system-modals--title-bar-configuration&viewMode=story",
+		"/iframe.html?id=tosklight-window-system-modal-layer--title-bar-configuration&viewMode=story",
 	);
 	const modalSearch = await measure();
 	expect(windowSearch.borderWidths).toEqual(["0px", "0px", "0px", "0px"]);
@@ -3465,7 +3508,7 @@ test("modal title details stay grouped and vertically centered with their headin
 	page,
 }) => {
 	await page.goto(
-		"/iframe.html?id=window-system-modals--close-policies&viewMode=story",
+		"/iframe.html?id=tosklight-window-system-modal-layer--close-policies&viewMode=story",
 	);
 	const titleCopy = page.locator(".ui-modal-title-copy");
 	await expect(titleCopy).toHaveCSS("justify-content", "center");
@@ -3595,7 +3638,9 @@ test("desktop panes drag, resize, maximize, and request an empty-grid placement"
 test("button variants expose animated loading, larger icon-only controls, icons, and left alignment", async ({
 	page,
 }) => {
-	await page.goto("/iframe.html?id=controls-buttons--buttons&viewMode=story");
+	await page.goto(
+		"/iframe.html?id=tosklight-controls-button--primary&viewMode=story",
+	);
 	const loading = page.getByRole("button", { name: "Loading" });
 	await expect(loading).toHaveAttribute("aria-busy", "true");
 	await expect(loading.locator(".ui-spinner")).toHaveCSS(
@@ -3607,15 +3652,15 @@ test("button variants expose animated loading, larger icon-only controls, icons,
 		Number.parseFloat(getComputedStyle(button).fontSize),
 	);
 	const regularSize = await page
-		.getByRole("button", { name: "Secondary" })
+		.getByRole("button", { name: "Secondary", exact: true })
 		.evaluate((button) => Number.parseFloat(getComputedStyle(button).fontSize));
 	expect(iconOnlySize).toBeGreaterThan(regularSize);
 
-	await page.goto(
-		"/iframe.html?id=controls-buttons--buttons-with-icons&viewMode=story",
-	);
-	await expect(page.locator(".ui-button")).toHaveCount(6);
-	await expect(page.locator(".ui-button-icon")).toHaveCount(6);
+	const iconSection = page
+		.getByRole("heading", { name: "Label and icon content" })
+		.locator("..");
+	await expect(iconSection.locator(".ui-button")).toHaveCount(6);
+	await expect(iconSection.locator(".ui-button-icon")).toHaveCount(6);
 	for (const variant of [
 		"primary",
 		"secondary",
@@ -3624,14 +3669,18 @@ test("button variants expose animated loading, larger icon-only controls, icons,
 		"success",
 		"warning",
 	]) {
-		await expect(page.locator(`.ui-button.ui-${variant}`)).toHaveCount(1);
+		await expect(iconSection.locator(`.ui-button.ui-${variant}`)).toHaveCount(
+			1,
+		);
 	}
 
-	await page.goto(
-		"/iframe.html?id=controls-buttons--left-aligned-buttons&viewMode=story",
-	);
-	await expect(page.locator(".ui-button.is-left-aligned")).toHaveCount(6);
-	for (const button of await page.locator(".ui-button").all()) {
+	const alignedSection = page
+		.getByRole("heading", { name: "Left-aligned full-width controls" })
+		.locator("..");
+	await expect(
+		alignedSection.locator(".ui-button.is-left-aligned"),
+	).toHaveCount(6);
+	for (const button of await alignedSection.locator(".ui-button").all()) {
 		await expect(button).toHaveCSS("justify-content", "flex-start");
 	}
 });
@@ -3735,14 +3784,14 @@ test("direct value opens a modal with the touch fader left of the number pad", a
 });
 
 for (const storyId of [
-	"controls-buttons--button-playground",
-	"controls-keyboard-and-numpad--number-pad",
+	"tosklight-controls-button--primary",
+	"tosklight-integration-input-modal-surfaces--number-pad",
 	"controls-faders-vertical-touch-fader--software",
 	"controls-encoders--individual-touch",
 	"tosklight-virtual-playbacks--narrow-touch",
 	"tables-and-grids-pools-generic-pool-window--narrow",
-	"window-system-modals--close-policies",
-	"window-system-modals--title-bar-configuration",
+	"tosklight-window-system-modal-layer--close-policies",
+	"tosklight-window-system-modal-layer--title-bar-configuration",
 ]) {
 	test(`${storyId} renders at a touch-oriented viewport`, async ({ page }) => {
 		await page.setViewportSize({ width: 430, height: 844 });
@@ -4035,7 +4084,7 @@ test("Form stories keep inputs, scrolling, fader, pickers, grouped selections, a
 }) => {
 	await page.setViewportSize({ width: 1100, height: 720 });
 	await page.goto(
-		"/iframe.html?id=controls-forms--input-fields&viewMode=story",
+		"/iframe.html?id=tosklight-integration-form-controls--input-fields&viewMode=story",
 	);
 	const canvas = page.locator(".forms-story-canvas");
 	await expect(canvas).toBeVisible();
@@ -4121,7 +4170,7 @@ test("Form stories keep inputs, scrolling, fader, pickers, grouped selections, a
 	).toEqual([8, 28]);
 
 	await page.goto(
-		"/iframe.html?id=controls-forms--form-components&viewMode=story",
+		"/iframe.html?id=tosklight-integration-form-controls--form-components&viewMode=story",
 	);
 	await expect(canvas).toBeVisible();
 	await page.getByRole("radio", { name: "3D" }).click();
@@ -4269,7 +4318,7 @@ test("input modal stories expose authoritative carets and literal keypad or keyb
 }) => {
 	await page.setViewportSize({ width: 1100, height: 760 });
 	await page.goto(
-		"/iframe.html?id=controls-keyboard-and-numpad--input-modal-configurations&viewMode=story",
+		"/iframe.html?id=tosklight-integration-input-modal-surfaces--input-modal-configurations&viewMode=story",
 	);
 	const numberModal = page.getByRole("dialog", { name: "Fade time" });
 	await expect(numberModal.locator(".modal-caret-value > i")).toHaveCSS(
@@ -4316,7 +4365,7 @@ test("input modal stories expose authoritative carets and literal keypad or keyb
 	await expect(numberPreview).toContainText("62.98");
 
 	await page.goto(
-		"/iframe.html?id=controls-keyboard-and-numpad--empty-text-input-modal&viewMode=story",
+		"/iframe.html?id=tosklight-integration-input-modal-surfaces--empty-text-input-modal&viewMode=story",
 	);
 	const textModal = page.getByRole("dialog", { name: "Fixture name" });
 	const preview = textModal.getByRole("textbox", {
@@ -4382,7 +4431,7 @@ test("input modal stories expose authoritative carets and literal keypad or keyb
 	await expect(shift).toHaveAttribute("data-shift-state", "inactive");
 
 	await page.goto(
-		"/iframe.html?id=controls-keyboard-and-numpad--multiline-input-modal&viewMode=story",
+		"/iframe.html?id=tosklight-integration-input-modal-surfaces--multiline-input-modal&viewMode=story",
 	);
 	const multiline = page.getByRole("dialog", { name: "Fixture name" });
 	const multilineEditor = multiline.getByRole("textbox", {
@@ -4780,4 +4829,86 @@ test("Grid Dynamics paints presets, toggles history, and queues Preload transpor
 		page.getByText("Preloaded · Play queued", { exact: true }),
 	).toBeVisible();
 	await expect(page.getByText("Playing live", { exact: true })).toHaveCount(0);
+});
+
+test("Title chrome preserves tab and terminal ordering for windows and modals", async ({
+	page,
+}) => {
+	await page.goto(
+		"/iframe.html?id=tosklight-window-system-title-chrome--modal-chrome&viewMode=story",
+	);
+	const tabs = page.getByRole("tab");
+	await expect(tabs).toHaveCount(2);
+	await expect(tabs.filter({ hasText: "Select" })).toHaveAttribute(
+		"aria-selected",
+		"true",
+	);
+	await tabs.filter({ hasText: "Navigate" }).click();
+	await expect(tabs.filter({ hasText: "Navigate" })).toHaveAttribute(
+		"aria-selected",
+		"true",
+	);
+	const terminals = page.locator(".ui-title-chrome-terminals button");
+	await expect(terminals).toHaveCount(2);
+	await expect(terminals.nth(0)).toHaveText("Apply");
+	await expect(terminals.nth(1)).toHaveAttribute("aria-label", "Close modal");
+});
+
+test("Title chrome dropdown actions, toggles, custom close, Escape, and keyboard activation work", async ({
+	page,
+}) => {
+	await page.goto(
+		"/iframe.html?id=tosklight-window-system-title-chrome--dropdown-items&viewMode=story",
+	);
+	const menuTrigger = page.getByRole("button", { name: "Add options" });
+	await menuTrigger.focus();
+	await menuTrigger.press("Enter");
+	await page.getByRole("menuitemcheckbox", { name: "Follow Preload" }).click();
+	await expect(page.getByRole("menu")).toBeVisible();
+	await expect(page.getByText("Follow Preload on")).toBeVisible();
+	await page.keyboard.press("Escape");
+	await expect(page.getByRole("menu")).toHaveCount(0);
+	await menuTrigger.click();
+	await page.getByRole("menuitem", { name: "Add Cue" }).click();
+	await expect(page.getByRole("menu")).toHaveCount(0);
+	await expect(page.getByText("Cue added")).toBeVisible();
+
+	await page.goto(
+		"/iframe.html?id=tosklight-window-system-title-chrome--custom-dropdown-content&viewMode=story",
+	);
+	await page.getByRole("button", { name: "Add options" }).click();
+	await page.getByRole("button", { name: "Apply and close" }).click();
+	await expect(page.getByRole("menu")).toHaveCount(0);
+	await expect(page.getByText("Custom close used")).toBeVisible();
+});
+
+test("Title chrome applies icon geometry and optional search settings exactly", async ({
+	page,
+}) => {
+	await page.goto(
+		"/iframe.html?id=tosklight-window-system-title-chrome--content-contracts&viewMode=story",
+	);
+	await expect(page.getByRole("button", { name: "Icon only" })).toHaveClass(
+		/is-icon-only/u,
+	);
+	await expect(page.getByRole("button", { name: "Label and icon" })).not.toHaveClass(
+		/is-icon-only/u,
+	);
+
+	await page.goto(
+		"/iframe.html?id=tosklight-window-system-title-chrome--search-with-and-without-settings&viewMode=story",
+	);
+	await expect(page.getByRole("button", { name: /search settings/iu })).toHaveCount(1);
+});
+
+test("Title chrome parity story uses the shared model on both surfaces", async ({
+	page,
+}) => {
+	await page.goto(
+		"/iframe.html?id=tosklight-window-system-title-chrome--window-modal-parity&viewMode=story",
+	);
+	await expect(page.locator(".ui-window-header .ui-title-chrome")).toHaveCount(1);
+	await expect(page.locator(".ui-modal-titlebar .ui-title-chrome")).toHaveCount(1);
+	await expect(page.getByRole("tablist")).toHaveCount(2);
+	await expect(page.getByRole("textbox", { name: "Shared search" })).toHaveCount(2);
 });

@@ -347,8 +347,11 @@ export function LibraryBrowserView({
 					"Folders and files keep their desk addresses while you prepare media.",
 			}}
 			className="media-library-window"
-			onSearch={setSearch}
-			search={{ value: search, placeholder: "Find media in this folder" }}
+			search={{
+				value: search,
+				onSearch: setSearch,
+				placeholder: "Find media in this folder",
+			}}
 		>
 			{(dropFailure ?? failure) && (
 				<button

@@ -638,7 +638,10 @@ fn plan_fixture_value_intent(
                     .ok_or_else(|| {
                         ActionError::new(
                             ActionErrorKind::Invalid,
-                            "relative Programmer value requires a current normalized value",
+                            format!(
+                                "Cannot adjust {}: a selected fixture has no normalized current or profile-default value. Set an absolute value or remove that fixture from the selection.",
+                                intent.attribute.0
+                            ),
                         )
                     })?;
                 AttributeValue::Normalized(shift_normalized(current, *delta))

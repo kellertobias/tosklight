@@ -12,6 +12,7 @@ use uuid::Uuid;
 #[derive(Default)]
 struct TestPorts {
     executions: AtomicUsize,
+    executed_commands: Mutex<Vec<String>>,
     persisted: Mutex<Vec<&'static str>>,
     persistence_warning: Mutex<Option<String>>,
     selection_environment: Mutex<ProgrammingSelectionEnvironment>,
@@ -26,6 +27,7 @@ impl ProgrammingPorts for TestPorts {
         _policy: ExecutionPolicy,
     ) -> ProgrammingExecution {
         self.executions.fetch_add(1, Ordering::Relaxed);
+        self.executed_commands.lock().push(command.to_owned());
         let Some(session) = context.session_id.map(SessionId) else {
             return ProgrammingExecution::Rejected {
                 error: "missing session".into(),
@@ -156,6 +158,92 @@ fn identical_surface_key_traces_share_one_editor() {
     });
     assert!(lines.iter().all(|line| line == &lines[0]));
     assert_eq!(lines[0], "F1 + G2");
+}
+
+#[test]
+fn value_shortcuts_execute_immediately_across_every_command_surface() {
+    for source in [
+        ActionSource::UserInterface,
+        ActionSource::Keyboard,
+        ActionSource::Osc,
+        ActionSource::Http,
+    ] {
+        let fixture_range = Harness::new(source);
+        for key in [CommandKey::Thru, CommandKey::At, CommandKey::At] {
+            fixture_range.press(key);
+        }
+        assert_eq!(
+            fixture_range.ports.executed_commands.lock().as_slice(),
+            ["FIXTURE THRU AT 100"]
+        );
+        assert!(
+            fixture_range
+                .registry
+                .command_line_state(SessionId(
+                    fixture_range.context.session_id.expect("operator session")
+                ))
+                .expect("command line")
+                .pristine
+        );
+
+        let selected_full = Harness::new(source);
+        let session = SessionId(selected_full.context.session_id.expect("operator session"));
+        selected_full.registry.select(session, [FixtureId::new()]);
+        selected_full.press(CommandKey::At);
+        selected_full.press(CommandKey::At);
+        assert_eq!(
+            selected_full.ports.executed_commands.lock().as_slice(),
+            ["AT 100"]
+        );
+        assert!(
+            selected_full
+                .registry
+                .command_line_state(session)
+                .expect("command line")
+                .pristine
+        );
+
+        let selected_zero = Harness::new(source);
+        let session = SessionId(selected_zero.context.session_id.expect("operator session"));
+        selected_zero.registry.select(session, [FixtureId::new()]);
+        selected_zero.press(CommandKey::Dot);
+        selected_zero.press(CommandKey::Dot);
+        assert_eq!(
+            selected_zero.ports.executed_commands.lock().as_slice(),
+            ["AT 0"]
+        );
+        assert!(
+            selected_zero
+                .registry
+                .command_line_state(session)
+                .expect("command line")
+                .pristine
+        );
+
+        let explicit_full = Harness::new(source);
+        for key in [
+            CommandKey::Thru,
+            CommandKey::At,
+            CommandKey::Digit(1),
+            CommandKey::Digit(0),
+            CommandKey::Digit(0),
+        ] {
+            let edited = explicit_full.press(key);
+            assert!(matches!(
+                edited.outcome,
+                ProgrammingOutcome::Accepted {
+                    action: ProgrammingAction::Edited,
+                    ..
+                }
+            ));
+        }
+        assert!(explicit_full.ports.executed_commands.lock().is_empty());
+        explicit_full.press(CommandKey::Enter);
+        assert_eq!(
+            explicit_full.ports.executed_commands.lock().as_slice(),
+            ["FIXTURE THRU AT 100"]
+        );
+    }
 }
 
 #[test]

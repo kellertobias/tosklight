@@ -38,6 +38,23 @@ function event(
 				},
 			},
 		};
+	if (kind === "file_input")
+		return {
+			type: "operator_notification",
+			notification: {
+				type: "file_input",
+				revision,
+				notification: {
+					action: payload.action as string,
+					instance_id: payload.instance_id as string,
+					session_id: payload.session_id as string,
+					source_session_id: null,
+					desk_id: payload.desk_id as string,
+					operation: payload.operation as string,
+					source: payload.source as string,
+				},
+			},
+		};
 	if (kind === "update_target_requested") {
 		const target = payload.target as {
 			family: { type: "cue" | "preset" | "group" };
@@ -296,6 +313,36 @@ function createHarness(showId = "show-a") {
 afterEach(() => vi.restoreAllMocks());
 
 describe("server event routing", () => {
+	it("routes attached keypad actions to the owning focused Macro Editor", () => {
+		const received: unknown[] = [];
+		const listener = ((incoming: CustomEvent<unknown>) => {
+			received.push(incoming.detail);
+		}) as EventListener;
+		window.addEventListener("light:macro-editor-input", listener);
+		try {
+			routeOperatorEvent(
+				event("file_input", {
+					action: "digit-7",
+					instance_id: "macro-editor:acceptance",
+					session_id: session.session_id,
+					desk_id: session.desk.id,
+					operation: "macro_edit",
+					source: "osc",
+				}),
+				session,
+				{} as ServerState,
+			);
+			expect(received).toEqual([
+				expect.objectContaining({
+					action: "digit-7",
+					instance_id: "macro-editor:acceptance",
+				}),
+			]);
+		} finally {
+			window.removeEventListener("light:macro-editor-input", listener);
+		}
+	});
+
 	it("routes desk actions only to their matching desk", () => {
 		const received: unknown[] = [];
 		const release = registerControlSurfaceTarget({
@@ -393,6 +440,14 @@ describe("server event routing", () => {
 			);
 			routeOperatorEvent(
 				event("desk_action", {
+					action: "desk-dynamics",
+					desk_id: session.desk.id,
+				}),
+				session,
+				{} as ServerState,
+			);
+			routeOperatorEvent(
+				event("desk_action", {
 					control: "nav",
 					value: "page-up",
 					desk_alias: session.desk.osc_alias,
@@ -402,6 +457,7 @@ describe("server event routing", () => {
 			);
 			expect(commands).toEqual([
 				{ type: "desk_command", source: "hardware", command: "stage" },
+				{ type: "desk_command", source: "hardware", command: "dynamics" },
 			]);
 			expect(steps).toEqual([1]);
 		} finally {

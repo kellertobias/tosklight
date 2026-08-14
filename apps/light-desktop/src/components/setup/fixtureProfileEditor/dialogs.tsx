@@ -40,10 +40,10 @@ export function ManufacturerLookup({
 					title="Manufacturer lookup"
 					search={{
 						value: query,
+						onSearch: onQuery,
 						ariaLabel: "Search manufacturers",
 						placeholder: "Search manufacturers",
 					}}
-					onSearch={onQuery}
 					closeLabel="Close manufacturer lookup"
 					onClose={onClose}
 				/>

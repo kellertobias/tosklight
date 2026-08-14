@@ -4,7 +4,7 @@ import type {
 	UpdateMode,
 	UpdatePreview,
 } from "../../api/types";
-import { Button, ModalRegistration } from "@tosklight/ui";
+import { Button, ModalRegistration, ModalTitleBar } from "@tosklight/ui";
 import {
 	cueUpdateModes,
 	existingContentModes,
@@ -52,20 +52,12 @@ export function UpdateOperationDialog({
 				aria-modal="true"
 				aria-label={`Update ${preview.target.name}`}
 			>
-				<Button
-					className="modal-close"
-					aria-label="Cancel Update"
-					onClick={onCancel}
-				>
-					×
-				</Button>
-				<header className="update-modal-header">
-					<span>UPDATE</span>
-					<div>
-						<h2>{preview.target.name}</h2>
-						<p>{updateTargetContext(preview.target)}</p>
-					</div>
-				</header>
+				<ModalTitleBar
+					title={<><span>UPDATE</span> {preview.target.name}</>}
+					details={updateTargetContext(preview.target)}
+					closeLabel="Cancel Update"
+					onClose={onCancel}
+				/>
 				<p>
 					Choose how the current programmer changes apply to this existing
 					target. Nothing changes until Update is confirmed.

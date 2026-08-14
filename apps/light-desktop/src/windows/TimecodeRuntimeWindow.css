@@ -101,6 +101,8 @@
 	font-variant-numeric: tabular-nums;
 }
 .timecode-timeline-editor {
+	--timecode-lane-header-width: 10rem;
+
 	display: flex;
 	flex: 1 1 auto;
 	flex-direction: column;
@@ -118,7 +120,7 @@
 	align-items: center;
 	gap: 0.45rem;
 	padding: 0.45rem;
-	border-bottom: 1px solid #343644;
+	border-top: 1px solid #343644;
 }
 .timecode-timeline-tools label {
 	display: flex;
@@ -221,6 +223,7 @@
 			rgb(255 255 255 / 5%) 84px
 		),
 		#11121a;
+	background-position: var(--timecode-lane-header-width) 0;
 	touch-action: none;
 }
 .timecode-ruler {
@@ -228,7 +231,7 @@
 	z-index: 3;
 	top: 0;
 	right: 0;
-	left: 0;
+	left: var(--timecode-lane-header-width);
 	height: 2rem;
 	border-bottom: 1px solid #393b49;
 	background: #171823;
@@ -257,28 +260,43 @@
 	border-bottom: 1px solid #2d2f3c;
 	color: #777b8d;
 }
-.timecode-audio-lane > span {
+.timecode-audio-lane-label {
+	position: sticky;
+	z-index: 4;
+	left: 0;
+	display: flex;
+	width: var(--timecode-lane-header-width);
+	height: 3rem;
+	align-items: center;
+	padding: 0.5rem;
+	border-right: 1px solid #393b49;
+	background: rgb(18 19 26 / 96%);
+	color: #dadde6;
+	font-size: 0.72rem;
+	font-weight: 700;
+	text-transform: uppercase;
+}
+.timecode-audio-lane-content {
+	position: absolute;
+	inset: 0 0 0 var(--timecode-lane-header-width);
+}
+.timecode-audio-lane-content > span {
 	display: inline-block;
 	padding: 0.8rem;
 }
-.timecode-audio-lane svg {
+.timecode-audio-lane-content svg {
 	width: 100%;
 	height: 100%;
 	stroke: #6c56a1;
 	stroke-width: 0.65;
 	opacity: 0.85;
 }
-.timecode-marker-lane {
-	position: relative;
-	height: 2.5rem;
-	border-bottom: 1px solid #2d2f3c;
-}
 .timecode-timeline-marker {
 	position: absolute;
 	top: 0;
 	bottom: 0;
-	width: 2px;
-	min-width: 2px;
+	width: 1px;
+	min-width: 1px;
 	margin: 0;
 	padding: 0;
 	transform: none;
@@ -290,6 +308,8 @@
 	touch-action: none;
 }
 .timecode-timeline-marker > span {
+	position: absolute;
+	bottom: 0;
 	display: block;
 	width: max-content;
 	padding: 0.12rem 0.25rem;
@@ -311,7 +331,7 @@
 	z-index: 4;
 	left: 0;
 	display: grid;
-	width: 10rem;
+	width: var(--timecode-lane-header-width);
 	height: 4.1rem;
 	align-content: center;
 	gap: 0.1rem;
@@ -361,6 +381,20 @@
 	border-color: #618d51;
 	background: #1f4027;
 }
+.timecode-clip-edge {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	width: 0.7rem;
+	background: rgb(255 255 255 / 16%);
+	cursor: ew-resize;
+}
+.timecode-clip-edge.start {
+	left: 0;
+}
+.timecode-clip-edge.end {
+	right: 0;
+}
 .timecode-timeline-item.item-volume {
 	border-color: #4c839a;
 	background: #173747;
@@ -397,6 +431,9 @@
 	color: #fff;
 	font-size: 0.65rem;
 	font-variant-numeric: tabular-nums;
+}
+.timecode-editor-playhead.near-right span {
+	transform: translateX(calc(-100% - 2px));
 }
 .timecode-selection-inspector {
 	display: flex;

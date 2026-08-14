@@ -153,15 +153,13 @@ function AppearanceEditor({
 				>
 					<ModalTitleBar
 						title={`Set light source ${identity}`}
-						actions={
-							<Button
-								className="primary"
-								disabled={!changed || Boolean(result.error) || busy}
-								onClick={() => void apply()}
-							>
-								Apply
-							</Button>
-						}
+						accept={{
+							id: "apply",
+							label: "Apply",
+							variant: "primary",
+							disabled: !changed || Boolean(result.error) || busy,
+							onPress: () => void apply(),
+						}}
 						closeLabel="Close light source editor"
 						onClose={close}
 					/>

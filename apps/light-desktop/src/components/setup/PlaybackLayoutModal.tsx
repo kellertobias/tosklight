@@ -167,21 +167,27 @@ function PlaybackLayoutControls({
 		<>
 			<ModalTitleBar
 				title="Configure Playbacks"
-				actions={
-					<>
-						<Button disabled={rowCount >= 127} onClick={onAddRow}>
-							Add Row
-						</Button>
-						<Button
-							className="playback-layout-save"
-							variant="primary"
-							disabled={invalid}
-							onClick={onSave}
-						>
-							Save
-						</Button>
-					</>
-				}
+				groups={[
+					{
+						id: "layout",
+						actions: [
+							{
+								id: "add-row",
+								label: "Add Row",
+								disabled: rowCount >= 127,
+								onPress: onAddRow,
+							},
+						],
+					},
+				]}
+				accept={{
+					id: "save",
+					label: "Save",
+					className: "playback-layout-save",
+					variant: "primary",
+					disabled: invalid,
+					onPress: onSave,
+				}}
 				closeLabel="Close playback configuration"
 				onClose={onClose}
 			/>
@@ -292,49 +298,49 @@ export function PlaybackLayoutModal({
 					event.target === event.currentTarget && onClose()
 				}
 			>
-			<section
-				className="nested-modal playback-layout-modal"
-				role="dialog"
-				aria-modal="true"
-				aria-label="Configure Playbacks"
-			>
-				<PlaybackLayoutControls
-					columns={layout.playbacks_per_row}
-					rowCount={layout.rows.length}
-					pageMode={draftPageMode}
-					pageModeLocked={pageModeLocked}
-					invalid={invalid}
-					onColumns={(playbacks_per_row) =>
-						setLayout((current) => ({ ...current, playbacks_per_row }))
-					}
-					onPageMode={setDraftPageMode}
-					onAddRow={addRow}
-					onSave={() => onSave(layout, draftPageMode)}
-					onClose={onClose}
-				/>
-				<WindowScrollArea className="playback-row-list">
-					{layout.rows.map((row, index) => (
-						<PlaybackRowConfiguration
-							key={index}
-							row={row}
-							index={index}
-							rowCount={layout.rows.length}
-							maxFirst={maxFirst}
-							dragRow={dragRow}
-							onMove={moveRow}
-							onUpdate={(changes) => updateRow(index, changes)}
-							onRemove={() =>
-								setLayout((current) => ({
-									...current,
-									rows: current.rows.filter(
-										(_, rowIndex) => rowIndex !== index,
-									),
-								}))
-							}
-						/>
-					))}
-				</WindowScrollArea>
-			</section>
+				<section
+					className="nested-modal playback-layout-modal"
+					role="dialog"
+					aria-modal="true"
+					aria-label="Configure Playbacks"
+				>
+					<PlaybackLayoutControls
+						columns={layout.playbacks_per_row}
+						rowCount={layout.rows.length}
+						pageMode={draftPageMode}
+						pageModeLocked={pageModeLocked}
+						invalid={invalid}
+						onColumns={(playbacks_per_row) =>
+							setLayout((current) => ({ ...current, playbacks_per_row }))
+						}
+						onPageMode={setDraftPageMode}
+						onAddRow={addRow}
+						onSave={() => onSave(layout, draftPageMode)}
+						onClose={onClose}
+					/>
+					<WindowScrollArea className="playback-row-list">
+						{layout.rows.map((row, index) => (
+							<PlaybackRowConfiguration
+								key={index}
+								row={row}
+								index={index}
+								rowCount={layout.rows.length}
+								maxFirst={maxFirst}
+								dragRow={dragRow}
+								onMove={moveRow}
+								onUpdate={(changes) => updateRow(index, changes)}
+								onRemove={() =>
+									setLayout((current) => ({
+										...current,
+										rows: current.rows.filter(
+											(_, rowIndex) => rowIndex !== index,
+										),
+									}))
+								}
+							/>
+						))}
+					</WindowScrollArea>
+				</section>
 			</div>
 		</ModalRegistration>
 	);

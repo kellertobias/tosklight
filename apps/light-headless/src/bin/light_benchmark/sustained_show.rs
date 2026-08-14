@@ -489,6 +489,7 @@ fn demo_playback_for_groups(group_ids: &[String]) -> (CueList, PlaybackDefinitio
         id: fixed_uuid(0x84, 1),
         number: 1.0,
         name: "Overlapping sustained-show intensity and Dynamic".into(),
+        information: String::new(),
         changes: vec![],
         fade_millis: 0,
         delay_millis: 0,

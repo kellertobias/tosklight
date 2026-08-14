@@ -1,9 +1,12 @@
 use super::*;
+use crate::Decoder;
 use light_core::AttributeKey;
 use light_fixture::{
-    CanonicalTransform, ChannelBehavior, ChannelResolution, FixtureChannel, FixtureHead,
-    GelAssignment, ProfileLightSource,
+    CanonicalTransform, ChannelBehavior, ChannelFunction, ChannelResolution, FixtureChannel,
+    FixtureHead, GelAssignment, ProfileLightSource,
 };
+use viz_dmx::UniverseFrame;
+use viz_scene::SceneValues;
 
 /// One patched fixture of a named type, for the optics questions below.
 fn patched(fixture_type: &str, optics: ProfileOptics) -> PatchedFixture {
@@ -82,6 +85,108 @@ fn camera_fixture(name: &str, address: u16) -> PatchedFixture {
         )
         .collect();
     fixture
+}
+
+#[test]
+fn embedded_robin_dls_open_shutter_band_stays_lit_on_stage() {
+    let package = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../..")
+        .join("assets/fixture-library/robe--robin-dls-profile.toskfixture");
+    let mut profile =
+        light_fixture::read_fixture_package(&std::fs::read(package).unwrap()).unwrap();
+    profile.revision = 2;
+    let mode = profile
+        .modes
+        .iter_mut()
+        .find(|mode| mode.name == "Mode 3")
+        .unwrap();
+    let shutter = mode
+        .channels
+        .iter_mut()
+        .find(|channel| channel.attribute.0 == "shutter")
+        .unwrap();
+    shutter.default_raw = 0;
+    shutter.functions = vec![ChannelFunction::continuous(
+        "Shutter / Strobe",
+        AttributeKey("shutter".into()),
+        255,
+    )];
+    let mode_id = mode.id;
+    let primary = mode.primary_slots().unwrap();
+    let channels = mode.channels.clone();
+    let fixture = PatchedFixture {
+        fixture_id: Uuid::new_v4(),
+        name: "Embedded Robin DLS".into(),
+        number: Some(1),
+        profile: Arc::new(profile),
+        mode_id,
+        instances: vec![PhysicalInstance {
+            instance_id: Uuid::new_v4(),
+            name: "Embedded Robin DLS".into(),
+            split_patches: vec![(1, Some((1, 1)))],
+            position: Vec3::ZERO,
+            rotation_degrees: Vec3::ZERO,
+            invert_pan: false,
+            invert_tilt: false,
+            bracket_angle: 0.0,
+            shaper_angle: None,
+            installed_appearance: InstalledFixtureAppearance::default(),
+        }],
+    };
+    let plan = compile(&[fixture]);
+    let shutter_binding = plan.bindings[0].shutter.as_ref().unwrap();
+    assert_eq!(
+        shutter_binding
+            .function(&frame_with_slot(35, 116).slots)
+            .unwrap()
+            .name,
+        "Shutter open"
+    );
+
+    let mut slots = [0_u8; viz_dmx::DMX_SLOTS];
+    for channel in &channels {
+        let value = if channel.attribute.is_intensity() || channel.attribute.0.starts_with("color.")
+        {
+            255
+        } else if channel.attribute.0 == "shutter" {
+            116
+        } else {
+            channel.default_raw as u8
+        };
+        slots[usize::from(primary[&channel.id] - 1)] = value;
+        for secondary in &channel.secondary_slots {
+            slots[usize::from(*secondary - 1)] = value;
+        }
+    }
+    let frame = UniverseFrame {
+        logical_universe: 1,
+        slots,
+        received_micros: 1_000,
+        stale: false,
+    };
+    let mut decoder = Decoder::new(plan.bindings.clone());
+    let mut values = SceneValues::default();
+    decoder.apply(&plan.scene, &[frame], &mut values, 0.0);
+    assert_eq!(values.emitters[0].intensity, 1.0);
+    assert_eq!(values.emitters[0].shutter, 1.0);
+    assert_eq!(values.emitters[0].strobe_hz, 0.0);
+    assert!(
+        values.emitters[0]
+            .colour
+            .iter()
+            .any(|component| *component > 0.0)
+    );
+}
+
+fn frame_with_slot(slot: usize, value: u8) -> UniverseFrame {
+    let mut slots = [0_u8; viz_dmx::DMX_SLOTS];
+    slots[slot - 1] = value;
+    UniverseFrame {
+        logical_universe: 1,
+        slots,
+        received_micros: 1_000,
+        stale: false,
+    }
 }
 
 #[test]

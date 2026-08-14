@@ -41,15 +41,20 @@ export function DeskSettingsModal() {
 				>
 					<ModalTitleBar
 						title="Desktop"
-						actions={
-							<Button
-								className="danger"
-								disabled={state.desks.length <= 1}
-								onClick={() => setConfirmDelete(true)}
-							>
-								Delete desktop
-							</Button>
-						}
+						groups={[
+							{
+								id: "delete",
+								actions: [
+									{
+										id: "delete",
+										label: "Delete desktop",
+										variant: "danger",
+										disabled: state.desks.length <= 1,
+										onPress: () => setConfirmDelete(true),
+									},
+								],
+							},
+						]}
 						closeLabel="Close Desktop settings"
 						onClose={close}
 					/>

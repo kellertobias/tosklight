@@ -46,7 +46,7 @@ The operator windows are:
 - **File Manager** and **Text Editor** - confined files exposed by the server.
 - **Desk Setup** and **Help** - persistent configuration and operator documentation.
 
-**Running** and **Macro Pool** are pane-only windows: add them to a Desktop with **Open Window**. They do not appear in the BUILT-INS dock. **Timecode** remains available both from **Open Window** and as a full Built-in window.
+**Running** is a pane-only window: add it to a Desktop with **Open Window**. It does not appear in the BUILT-INS dock. Hold **Shift** in BUILT-INS to reveal the alternate destinations: **Stage** becomes **Media**, **Fixtures** becomes **Groups**, **Cuelists** becomes **Timecode**, **Dynamics** becomes **Macros**, and **Channels** becomes **DMX**. Releasing **Shift** restores the normal destinations. Timecode and Macro Pool also remain available through **Open Window**.
 
 Development diagnostics are not an operator pane and do not appear in **Open Window**. Developers can open that surface from the **Desk Status** developer menu; persisted layouts that already contain it remain compatible.
 

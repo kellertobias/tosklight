@@ -29,62 +29,73 @@ export function ChannelFunctionsModal({
 					event.target === event.currentTarget && onClose()
 				}
 			>
-			<section
-				className="nested-modal fixture-functions-editor-modal"
-				role="dialog"
-				aria-modal="true"
-				aria-label="Channel functions"
-			>
-				<ModalTitleBar
-					title="Channel functions"
-					actions={
-						<Button
-							onClick={() =>
-								onChange({
-									...channel,
-									functions: [...channel.functions, blankFunction(channel)],
-								})
-							}
-						>
-							Add function
-						</Button>
-					}
-					closeLabel="Close channel functions"
-					onClose={onClose}
-				/>
-				<div className="fixture-functions-editor-body">
-					{!channel.functions.length && (
-						<p className="empty-editor-message">
-							No functions are configured for this channel.
-						</p>
-					)}
-					{channel.functions.map((fn, index) => (
-						<ChannelFunctionCard
-							key={fn.id}
-							fn={fn}
-							index={index}
-							channel={channel}
-							attributeRegistry={attributeRegistry}
-							actionIds={actionIds}
-							onChange={setFunction}
-							onMove={(offset) =>
-								onChange({
-									...channel,
-									functions: reorder(channel.functions, index, index + offset),
-								})
-							}
-							onRemove={() =>
-								onChange({
-									...channel,
-									functions: channel.functions.filter(
-										(candidate) => candidate.id !== fn.id,
-									),
-								})
-							}
-						/>
-					))}
-				</div>
-			</section>
+				<section
+					className="nested-modal fixture-functions-editor-modal"
+					role="dialog"
+					aria-modal="true"
+					aria-label="Channel functions"
+				>
+					<ModalTitleBar
+						title="Channel functions"
+						groups={[
+							{
+								id: "functions",
+								actions: [
+									{
+										id: "add-function",
+										label: "Add function",
+										onPress: () =>
+											onChange({
+												...channel,
+												functions: [
+													...channel.functions,
+													blankFunction(channel),
+												],
+											}),
+									},
+								],
+							},
+						]}
+						closeLabel="Close channel functions"
+						onClose={onClose}
+					/>
+					<div className="fixture-functions-editor-body">
+						{!channel.functions.length && (
+							<p className="empty-editor-message">
+								No functions are configured for this channel.
+							</p>
+						)}
+						{channel.functions.map((fn, index) => (
+							<ChannelFunctionCard
+								key={fn.id}
+								fn={fn}
+								index={index}
+								channel={channel}
+								attributeRegistry={attributeRegistry}
+								actionIds={actionIds}
+								onChange={setFunction}
+								onMove={(offset) =>
+									onChange({
+										...channel,
+										functions: reorder(
+											channel.functions,
+											index,
+											index + offset,
+										),
+									})
+								}
+								onRemove={() =>
+									onChange({
+										...channel,
+										functions: channel.functions.filter(
+											(candidate) => candidate.id !== fn.id,
+										),
+									})
+								}
+							/>
+						))}
+					</div>
+				</section>
 			</div>
 		</ModalRegistration>
 	);

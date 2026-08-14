@@ -81,6 +81,10 @@ export function reducePaneGeometry(
 			return updatePane(state, action.id, {
 				cueListCompactRows: action.value,
 			});
+		case "SET_PANE_CUE_INFORMATION_BLOCK":
+			return updatePane(state, action.id, {
+				cueInformationBlock: action.value,
+			});
 		case "SET_PANE_CUELIST":
 			return {
 				...state,

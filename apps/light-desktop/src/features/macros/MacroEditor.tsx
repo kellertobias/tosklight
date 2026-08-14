@@ -82,6 +82,10 @@ function useMacroEditorController({
 	const editor = useRef<HTMLTextAreaElement | null>(null);
 	const highlightOverlay = useRef<HTMLPreElement | null>(null);
 	const pendingCaret = useRef<number | null>(null);
+	const editorInputInstanceId = useRef(
+		`macro-editor:${crypto.randomUUID()}`,
+	).current;
+	const editorInputFocusGeneration = useRef(0);
 	const validationGeneration = useRef(0);
 	const suggestionListId = useId();
 	const definitionHelpId = useId();
@@ -139,6 +143,41 @@ function useMacroEditorController({
 		editDraft({ ...draft, source: next });
 		setSuggestionsOpen(false);
 	};
+	const claimEditorInput = async () => {
+		const generation = ++editorInputFocusGeneration.current;
+		try {
+			await api.claimEditorInput(editorInputInstanceId);
+			if (editorInputFocusGeneration.current !== generation)
+				await api.releaseEditorInput(editorInputInstanceId);
+		} catch (reason) {
+			if (editorInputFocusGeneration.current === generation)
+				setNotice(`Attached desk input remains unavailable: ${String(reason)}`);
+		}
+	};
+	const releaseEditorInput = () => {
+		editorInputFocusGeneration.current += 1;
+		void api.releaseEditorInput(editorInputInstanceId).catch(() => undefined);
+	};
+	const applyEditorInput = (action: string) => {
+		const target = editor.current;
+		if (!target || document.activeElement !== target) return;
+		const edit = editMacroSourceWithInput(
+			draft.source,
+			target.selectionStart,
+			target.selectionEnd,
+			action,
+		);
+		if (!edit) return;
+		pendingCaret.current = edit.caret;
+		editDraft({ ...draft, source: edit.source });
+	};
+	useEffect(
+		() => () => {
+			editorInputFocusGeneration.current += 1;
+			void api.releaseEditorInput(editorInputInstanceId).catch(() => undefined);
+		},
+		[api, editorInputInstanceId],
+	);
 
 	const persistence = useMacroPersistence({
 		showId,
@@ -194,6 +233,10 @@ function useMacroEditorController({
 		suggestionIndex,
 		setSuggestionIndex,
 		insertSuggestion,
+		editorInputInstanceId,
+		claimEditorInput,
+		releaseEditorInput,
+		applyEditorInput,
 		suggestionListId,
 		definitionHelpId,
 		runLineUndo,
@@ -477,9 +520,9 @@ function MacroEditorHeader({
 					</span>
 				),
 			}}
-			actions={[
-				[{ id: "back", label: "← Macros", onClick: onClose }],
-				[
+			groups={[
+				{ id: "macro-navigation", actions: [{ id: "back", label: "← Macros", onPress: onClose }] },
+				{ id: "macro-run", actions: [
 					{
 						id: "run-macro",
 						label: (
@@ -489,28 +532,22 @@ function MacroEditorHeader({
 						),
 						ariaLabel: "Run Macro",
 						disabled: controller.isNew || controller.busy,
-						onClick: () => void controller.runMacro(),
+						onPress: () => void controller.runMacro(),
 					},
 					{
 						id: "run-line",
 						label: "Run line",
-						onClick: () => void controller.runLine(),
+						onPress: () => void controller.runLine(),
 					},
 					{
 						id: "undo-run-line",
 						label: "Undo last run",
 						disabled: !controller.runLineUndo || controller.busy,
-						onClick: () => void controller.undoLastRun(),
+						onPress: () => void controller.undoLastRun(),
 					},
-				],
-				[
-					{
-						id: "settings",
-						label: "Settings",
-						onClick: () => controller.setSettingsOpen(true),
-					},
-				],
+				] },
 			]}
+			onSettings={() => controller.setSettingsOpen(true)}
 		/>
 	);
 }
@@ -534,16 +571,23 @@ function MacroSettings({ controller }: { controller: MacroEditorController }) {
 				>
 					<ModalTitleBar
 						title="Macro Settings"
-						actions={
-							!controller.isNew ? (
-								<Button
-									className="danger"
-									disabled={controller.busy}
-									onClick={() => void controller.remove()}
-								>
-									Delete Macro
-								</Button>
-							) : undefined
+						groups={
+							!controller.isNew
+								? [
+										{
+											id: "delete",
+											actions: [
+												{
+													id: "delete",
+													label: "Delete Macro",
+													variant: "danger",
+													disabled: controller.busy,
+													onPress: () => void controller.remove(),
+												},
+											],
+										},
+									]
+								: undefined
 						}
 						closeLabel="Close Macro Settings"
 						onClose={close}
@@ -587,6 +631,20 @@ function MacroSource({ controller }: { controller: MacroEditorController }) {
 		.flatMap((diagnostic) => diagnostic.tokens)
 		.flatMap((token) => (token.expansion ? [token.expansion] : []))
 		.filter((expansion, index, all) => all.indexOf(expansion) === index);
+	useEffect(() => {
+		const routeInput = (event: Event) => {
+			const payload = (event as CustomEvent<{ instance_id?: string; action?: string }>)
+				.detail;
+			if (
+				payload?.instance_id === controller.editorInputInstanceId &&
+				payload.action
+			)
+				controller.applyEditorInput(payload.action);
+		};
+		window.addEventListener("light:macro-editor-input", routeInput);
+		return () =>
+			window.removeEventListener("light:macro-editor-input", routeInput);
+	}, [controller]);
 	return (
 		<div className="macro-source-editor">
 			<LineNumbers source={controller.draft.source} diagnostics={diagnostics} />
@@ -604,6 +662,8 @@ function MacroSource({ controller }: { controller: MacroEditorController }) {
 				<TextArea
 					ref={controller.editor}
 					aria-label="Macro command lines"
+					onFocus={() => void controller.claimEditorInput()}
+					onBlur={controller.releaseEditorInput}
 					value={controller.draft.source}
 					spellCheck={false}
 					aria-autocomplete="list"
@@ -700,6 +760,59 @@ function MacroSource({ controller }: { controller: MacroEditorController }) {
 			</div>
 		</div>
 	);
+}
+
+export function editMacroSourceWithInput(
+	source: string,
+	selectionStart: number,
+	selectionEnd: number,
+	action: string,
+): { source: string; caret: number } | null {
+	const start = Math.max(0, Math.min(selectionStart, source.length));
+	const end = Math.max(start, Math.min(selectionEnd, source.length));
+	if (action === "backspace") {
+		const removeStart = start === end ? Math.max(0, start - 1) : start;
+		return {
+			source: source.slice(0, removeStart) + source.slice(end),
+			caret: removeStart,
+		};
+	}
+	const insert = macroInputText(action);
+	if (insert === null) return null;
+	return {
+		source: source.slice(0, start) + insert + source.slice(end),
+		caret: start + insert.length,
+	};
+}
+
+function macroInputText(action: string): string | null {
+	const digit = action.match(/^digit-([0-9])$/)?.[1];
+	if (digit) return digit;
+	const tokens: Record<string, string> = {
+			at: " AT ",
+			clear: "CLEAR ",
+			cpy: "COPY ",
+			cue: "CUE ",
+			del: "DELETE ",
+			delete: "DELETE ",
+			diff: "DIFF ",
+			div: " DIV ",
+			dot: ".",
+			enter: "\n",
+			group: "GROUP ",
+			minus: " - ",
+			mov: "MOVE ",
+			off: "OFF ",
+			playback: "PLAYBACK ",
+			plus: " + ",
+			preload: "PRELOAD ",
+			record: "RECORD ",
+			set: "SET ",
+			thru: " THRU ",
+			time: " TIME ",
+			undo: "UNDO ",
+	};
+	return tokens[action] ?? null;
 }
 
 const HighlightedSource = forwardRef<

@@ -462,11 +462,10 @@ function CuelistPoolHeader({
 			}}
 			search={{
 				value: search,
+				onSearch,
 				ariaLabel: "Search Cuelists",
 				placeholder: "Number or name",
 			}}
-			onSearch={onSearch}
-			actions={[]}
 			settings
 			onSettings={(button) => onSettings(button.getBoundingClientRect())}
 		/>

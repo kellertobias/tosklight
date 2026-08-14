@@ -172,7 +172,6 @@ export function MacrosWindow({ active = true, compact = false }: WindowProps) {
 				<WindowHeader
 					title="Macros"
 					info={{ primary: `${macros.length} Macros` }}
-					actions={[]}
 				/>
 			)}
 			{error && (

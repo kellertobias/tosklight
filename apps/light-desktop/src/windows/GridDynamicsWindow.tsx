@@ -312,33 +312,33 @@ function GridDynamicsHeader({
 							: ""
 				}`,
 			}}
-			actions={[
-				[
+			groups={[
+				{ id: "grid-configuration", actions: [
 					{
 						id: "groups",
 						label: "Select Groups",
-						onClick: () => setModal("groups"),
+						onPress: () => setModal("groups"),
 					},
 					{
 						id: "speed",
 						label: "Configure Speed Group",
-						onClick: () => setModal("speed"),
+						onPress: () => setModal("speed"),
 					},
 					{
 						id: "grid",
 						label: "Configure Grid",
-						onClick: () => setModal("grid"),
+						onPress: () => setModal("grid"),
 					},
-				],
-				[
+				] },
+				{ id: "grid-transport", actions: [
 					{
 						id: "transport",
 						label: props.playing || props.pendingPlaying ? "Stop" : "Play",
 						active: props.playing || props.pendingPlaying,
-						onClick: () =>
+						onPress: () =>
 							props.onPlaying(!(props.playing || props.pendingPlaying)),
 					},
-				],
+				] },
 			]}
 		/>
 	);
@@ -661,11 +661,12 @@ function GroupSelectionModal({
 			ariaLabel="Select Grid Dynamic groups"
 			title="Select Groups"
 			details="Each group starts with one Intensity lane and one Color lane"
-			actions={
-				<Button variant="primary" onClick={() => onSave(ids)}>
-					Apply groups
-				</Button>
-			}
+			accept={{
+				id: "apply",
+				label: "Apply groups",
+				variant: "primary",
+				onPress: () => onSave(ids),
+			}}
 			onClose={onClose}
 		>
 			<div className="grid-dynamic-modal-list">
@@ -706,11 +707,12 @@ function SpeedModal({
 			ariaLabel="Configure Grid Dynamic speed"
 			title="Configure Speed Group"
 			details="Run from the desk clock or keep an independent internal tempo"
-			actions={
-				<Button variant="primary" onClick={() => onSave(draft)}>
-					Apply speed
-				</Button>
-			}
+			accept={{
+				id: "apply",
+				label: "Apply speed",
+				variant: "primary",
+				onPress: () => onSave(draft),
+			}}
 			onClose={onClose}
 		>
 			<div className="grid-dynamic-modal-form">
@@ -771,11 +773,12 @@ function GridModal({
 			ariaLabel="Configure Grid Dynamic grid"
 			title="Configure Grid"
 			details="Choose the number of tiles and how many beats the complete loop spans"
-			actions={
-				<Button variant="primary" onClick={() => onSave(draft)}>
-					Apply grid
-				</Button>
-			}
+			accept={{
+				id: "apply",
+				label: "Apply grid",
+				variant: "primary",
+				onPress: () => onSave(draft),
+			}}
 			onClose={onClose}
 		>
 			<div className="grid-dynamic-modal-form">
@@ -883,24 +886,21 @@ function LaneModal({
 			ariaLabel="Add Grid Dynamic lane"
 			title="Add lane"
 			details={group ? `${group.number} · ${group.name}` : undefined}
-			actions={
-				<Button
-					variant="primary"
-					onClick={() =>
-						onAdd({
-							id: `${group?.id}-${kind}-${Date.now()}`,
-							kind,
-							label:
-								count === 1
-									? kind[0].toUpperCase() + kind.slice(1)
-									: `${kind[0].toUpperCase() + kind.slice(1)} ${count}`,
-							cells: emptyCells(columns),
-						})
-					}
-				>
-					Add lane
-				</Button>
-			}
+			accept={{
+				id: "add",
+				label: "Add lane",
+				variant: "primary",
+				onPress: () =>
+					onAdd({
+						id: `${group?.id}-${kind}-${Date.now()}`,
+						kind,
+						label:
+							count === 1
+								? kind[0].toUpperCase() + kind.slice(1)
+								: `${kind[0].toUpperCase() + kind.slice(1)} ${count}`,
+						cells: emptyCells(columns),
+					}),
+			}}
 			onClose={onClose}
 		>
 			<div className="grid-dynamic-modal-form">

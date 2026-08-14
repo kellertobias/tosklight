@@ -216,7 +216,7 @@ intent shapes are:
 - `{"kind":"speed_group","group":"A","control":"tap"}`;
 - `{"kind":"grand_master"}` or `{"kind":"blackout"}`; and
 - `{"kind":"desk_command","command":"stage"}` with `home`, `stage`, `fixtures`, `channels`,
-  `groups`, `presets`, `cues`, `playbacks`, `setup`, or `help`.
+  `groups`, `presets`, `cues`, `dynamics`, `playbacks`, `setup`, or `help`.
 
 Playback controls are `button_one`, `button_two`, `button_three`, and `master`. Speed Group controls
 are `tap`, `double`, `half`, and `level`. Current-page and explicit-page Playback bindings are

@@ -1,98 +1,77 @@
 import type { ReactNode } from "react";
 import {
-	SearchBar,
-	type SearchFeatureProps,
-} from "./SearchBar";
-
-export interface ModalTitleTab {
-	id: string;
-	label: ReactNode;
-	disabled?: boolean;
-}
-
-export function TitleBarSearchDivider() {
-	return <span className="ui-titlebar-search-divider" aria-hidden="true" />;
-}
+	TitleChrome,
+	type TitleAction,
+	type TitleActionGroup,
+	type TitleSearch,
+} from "./TitleChrome";
 
 export type ModalTitleBarProps = {
 	title: ReactNode;
+	titleId?: string;
 	details?: ReactNode;
-	tabs?: ModalTitleTab[];
-	activeTab?: string;
-	onTabChange?: (id: string) => void;
-	actions?: ReactNode;
+	groups?: TitleActionGroup[];
+	search?: TitleSearch;
+	accept?: TitleAction;
+	/** Non-action content such as a portal target. Use groups/accept for controls. */
+	toolbar?: ReactNode;
 	onClose?: () => void;
 	closeDisabled?: boolean;
 	closeLabel?: string;
 	className?: string;
-} & SearchFeatureProps;
+};
 
 export function ModalTitleBar({
 	title,
+	titleId,
 	details,
-	tabs,
-	activeTab,
-	onTabChange,
-	actions,
+	groups = [],
+	toolbar,
+	accept,
 	onClose,
 	closeDisabled = false,
 	closeLabel = "Close modal",
 	className = "",
-	onSearch,
 	search,
 }: ModalTitleBarProps) {
-	const hasTabs = Boolean(tabs?.length);
+	const resolvedGroups = [...groups];
+	const terminals: TitleAction[] = [];
+	if (accept) terminals.push(accept);
+	terminals.push({
+		id: "close",
+		icon: <span aria-hidden="true">×</span>,
+		ariaLabel: closeLabel,
+		disabled: closeDisabled || !onClose,
+		className: "ui-modal-title-close",
+		onPress: onClose,
+	});
 	return (
 		<header className={`ui-modal-titlebar ${className}`.trim()}>
 			<div className="ui-modal-title-copy">
-				<h2 className="ui-modal-title-heading">{title}</h2>
+				<h2 id={titleId} className="ui-modal-title-heading">
+					{title}
+				</h2>
 				{details && <div className="ui-modal-title-details">{details}</div>}
 			</div>
 			<span className="ui-modal-title-spacer" />
-			{hasTabs && (
-				<div className="ui-modal-title-tabs" role="tablist">
-					{tabs?.map((tab) => (
-						<button
-							type="button"
-							key={tab.id}
-							role="tab"
-							aria-selected={tab.id === activeTab}
-							className={`ui-button ui-secondary ui-default ${tab.id === activeTab ? "active" : ""}`.trim()}
-							disabled={tab.disabled}
-							onClick={() => onTabChange?.(tab.id)}
-						>
-							{tab.label}
-						</button>
-					))}
-				</div>
-			)}
-			{hasTabs && onSearch && search && <TitleBarSearchDivider />}
-			{onSearch && search && (
-				<div className="ui-modal-title-search">
-					<SearchBar
-						{...search}
-						ariaLabel={search.ariaLabel ?? titleSearchLabel(title)}
-						settingsTitle={
-							search.settingsTitle ?? titleSettingsLabel(title)
-						}
-						onChange={onSearch}
-					/>
-				</div>
-			)}
-			{onSearch && search && (actions || onClose) && <TitleBarSearchDivider />}
-			{actions && <div className="ui-modal-title-actions">{actions}</div>}
-			{onClose && (
-				<button
-					type="button"
-					className="ui-button ui-secondary ui-default ui-modal-title-close"
-					aria-label={closeLabel}
-					title={closeLabel}
-					disabled={closeDisabled}
-					onClick={onClose}
-				>
-					×
-				</button>
-			)}
+			<TitleChrome
+				groups={resolvedGroups}
+				search={
+					search
+						? {
+								...search,
+								ariaLabel: search.ariaLabel ?? titleSearchLabel(title),
+								settingsTitle:
+									search.settingsTitle ?? titleSettingsLabel(title),
+							}
+						: undefined
+				}
+				terminalActions={terminals}
+				leadingTerminalContent={toolbar}
+				groupClassName="ui-modal-title-tabs"
+				searchClassName="ui-modal-title-search"
+				terminalClassName="ui-modal-title-terminals"
+			/>
 		</header>
 	);
 }
@@ -102,5 +81,7 @@ function titleSearchLabel(title: ReactNode) {
 }
 
 function titleSettingsLabel(title: ReactNode) {
-	return typeof title === "string" ? `${title} search settings` : "Search settings";
+	return typeof title === "string"
+		? `${title} search settings`
+		: "Search settings";
 }

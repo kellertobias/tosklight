@@ -1,21 +1,24 @@
 import { describe, expect, it } from "vitest";
 import { decodeShowObjectBody } from "../api/showObjectBodyWire";
 import { windowChoices } from "../components/modals/WindowPicker";
-import { builtIns } from "../components/shell/LeftDock";
+import { builtIns, shiftedBuiltIns } from "../components/shell/LeftDock";
 import { appReducer, initialState } from "../state/appReducer";
 import { windowRegistry } from "./WindowRegistry";
 
 describe("Running and Macro pane-only registration", () => {
-	it("keeps Running and Macro Pool in Open Window while Timecode remains a built-in", () => {
+	it("keeps Running in Open Window while Shift reveals Macro Pool and Timecode", () => {
 		expect(windowChoices).toContainEqual(["running", "Running"]);
 		expect(windowChoices).toContainEqual(["macros", "Macro Pool"]);
 		expect(windowRegistry.running).toBeDefined();
 		expect(windowRegistry.macros).toBeDefined();
 
 		const builtInKinds = builtIns.map(([kind]) => kind);
+		const shiftedBuiltInKinds = shiftedBuiltIns.map(([kind]) => kind);
 		expect(builtInKinds).not.toContain("running");
 		expect(builtInKinds).not.toContain("macros");
-		expect(builtInKinds).toContain("timecode");
+		expect(builtInKinds).not.toContain("timecode");
+		expect(shiftedBuiltInKinds).toContain("macros");
+		expect(shiftedBuiltInKinds).toContain("timecode");
 	});
 
 	it("adds both registered pane kinds through the window-picker action", () => {

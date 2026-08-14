@@ -122,15 +122,22 @@ export function GroupedSelectionField<T extends string>({
 				>
 					<ModalTitleBar
 						title={title}
-						actions={
-							clearAction ? (
-								<Button
-									variant="danger"
-									onClick={() => choose(clearAction.value)}
-								>
-									{clearAction.label}
-								</Button>
-							) : undefined
+						groups={
+							clearAction
+								? [
+										{
+											id: "clear",
+											actions: [
+												{
+													id: "clear",
+													label: clearAction.label,
+													variant: "danger",
+													onPress: () => choose(clearAction.value),
+												},
+											],
+										},
+									]
+								: undefined
 						}
 						closeLabel={closeLabel ?? `Close ${title}`}
 						onClose={() => setOpen(false)}

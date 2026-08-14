@@ -11,6 +11,7 @@ pub enum FileInputAction {
     Copy,
     Move,
     Delete,
+    MacroEdit,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
@@ -18,6 +19,7 @@ pub enum FileInputAction {
 pub enum FileInputOrigin {
     Pending,
     Toolbar,
+    Editor,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]

@@ -212,8 +212,8 @@ describe("additional screen settings", () => {
 		).toBeInTheDocument();
 		const addRow = screen.getByRole("button", { name: "Add Row" });
 		const saveAction = screen.getByRole("button", { name: "Save" });
-		expect(addRow.parentElement).toHaveClass("ui-modal-title-actions");
-		expect(saveAction.parentElement).toHaveClass("ui-modal-title-actions");
+		expect(addRow.closest(".ui-title-chrome-group")).not.toBeNull();
+		expect(saveAction.closest(".ui-title-chrome-terminals")).not.toBeNull();
 		expect(
 			screen.queryByRole("button", { name: "Cancel" }),
 		).not.toBeInTheDocument();

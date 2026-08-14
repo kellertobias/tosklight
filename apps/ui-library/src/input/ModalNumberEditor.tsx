@@ -55,57 +55,6 @@ export interface ModalNumberEditorProps {
 	releaseLabel?: string;
 }
 
-function ModalNumberTitleActions({
-	beforeTitle,
-	hasPresets,
-	mode,
-	onModeChange,
-	onRelease,
-	releaseLabel,
-	valueTabLabel,
-	presetsTabLabel,
-}: {
-	beforeTitle?: ReactNode;
-	hasPresets: boolean;
-	mode: "value" | "presets";
-	onModeChange(): void;
-	onRelease?: () => void;
-	releaseLabel: string;
-	valueTabLabel: string;
-	presetsTabLabel: string;
-}) {
-	if (!beforeTitle && !hasPresets && !onRelease) return null;
-	return (
-		<>
-			{beforeTitle}
-			{hasPresets && (
-				<Button
-					className="modal-number-mode-toggle"
-					aria-label={`Show ${mode === "value" ? "presets" : "value input"}`}
-					aria-pressed={mode === "presets"}
-					onClick={onModeChange}
-				>
-					<span data-active={mode === "value" || undefined}>
-						{valueTabLabel}
-					</span>
-					<span data-active={mode === "presets" || undefined}>
-						{presetsTabLabel}
-					</span>
-				</Button>
-			)}
-			{onRelease && (
-				<Button
-					variant="danger"
-					className="modal-number-release"
-					onClick={onRelease}
-				>
-					{releaseLabel}
-				</Button>
-			)}
-		</>
-	);
-}
-
 export function ModalNumberEditor({
 	ariaLabel,
 	title,
@@ -171,22 +120,45 @@ export function ModalNumberEditor({
 			>
 				<ModalTitleBar
 					title={title}
-					actions={
-						<ModalNumberTitleActions
-							beforeTitle={beforeTitle}
-							hasPresets={hasPresets && !presetsOnly}
-							mode={mode}
-							onModeChange={() =>
-								setMode((current) =>
-									current === "value" ? "presets" : "value",
-								)
-							}
-							onRelease={onRelease}
-							releaseLabel={releaseLabel}
-							valueTabLabel={presets?.valueTabLabel ?? "Value"}
-							presetsTabLabel={presets?.presetsTabLabel ?? "Presets"}
-						/>
-					}
+					toolbar={beforeTitle}
+					groups={[
+						...(hasPresets && !presetsOnly
+							? [
+									{
+										id: "mode",
+										kind: "tabs" as const,
+										activeId: mode,
+										onActiveChange: (id: string) =>
+											setMode(id as "value" | "presets"),
+										actions: [
+											{
+												id: "value",
+												label: presets?.valueTabLabel ?? "Value",
+											},
+											{
+												id: "presets",
+												label: presets?.presetsTabLabel ?? "Presets",
+											},
+										],
+									},
+								]
+							: []),
+						...(onRelease
+							? [
+									{
+										id: "release",
+										actions: [
+											{
+												id: "release",
+												label: releaseLabel,
+												variant: "danger" as const,
+												onPress: onRelease,
+											},
+										],
+									},
+								]
+							: []),
+					]}
 					closeLabel={`Close ${ariaLabel}`}
 					onClose={requestClose}
 				/>

@@ -178,6 +178,19 @@ test("release Desk bundles both supervised helpers before packaging", () => {
 	assert.match(smoke, /Bundled Light server log/u);
 });
 
+test("release launch-smokes the Viz Editor and Media Server", () => {
+	const workflow = read(".github/workflows/release.yml");
+	const mediaSmoke = read("tools/ci-smoke-media-server.mjs");
+	assert.match(workflow, /Smoke-test the built Media Server startup/u);
+	assert.match(workflow, /node tools\/ci-smoke-media-server\.mjs/u);
+	assert.match(mediaSmoke, /api\/v2\/health/u);
+	assert.match(mediaSmoke, /health\.outputs > 0/u);
+	assert.match(mediaSmoke, /interfaceResponse\.ok/u);
+	assert.match(workflow, /Smoke-test the ToskLight Viz Editor application/u);
+	assert.match(workflow, /viz-editor\$suffix/u);
+	assert.match(workflow, /xvfb-run -a "\$binary" --verify/u);
+});
+
 test("native Timecode audio stays out of the ARM headless build", () => {
 	const workflow = read(".github/workflows/release.yml");
 	const appManifest = read("apps/light-headless/Cargo.toml");

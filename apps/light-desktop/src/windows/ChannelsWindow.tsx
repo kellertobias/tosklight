@@ -6,7 +6,7 @@ import {
 	usePatchStatus,
 } from "../features/patch/PatchState";
 import type { PatchedFixture, VisualizationSnapshot } from "../api/types";
-import { Button, ModalRegistration } from "@tosklight/ui";
+import { Button, ModalRegistration, ModalTitleBar } from "@tosklight/ui";
 import { VerticalTouchFader } from "../components/control/VerticalTouchFader";
 import {
 	FaderView,
@@ -328,28 +328,28 @@ function ChannelHeader({
 				primary: displayMode === "intensity" ? "Intensity only" : "All channels",
 				secondary: "Fixture ID order · left to right, then down",
 			}}
-			actions={[
-				[
+			groups={[
+				{ id: "channel-page", actions: [
 					{
 						id: "previous",
 						label: "←",
 						disabled: page === 0,
 						ariaLabel: "Previous channel page",
-						onClick: () => onPage(page - 1),
+						onPress: () => onPage(page - 1),
 					},
 					{
 						id: "page",
 						label: pageLabel(page, columns),
-						onClick: onOpenPicker,
+						onPress: onOpenPicker,
 					},
 					{
 						id: "next",
 						label: "→",
 						disabled: page >= pages - 1,
 						ariaLabel: "Next channel page",
-						onClick: () => onPage(page + 1),
+						onPress: () => onPage(page + 1),
 					},
-				],
+				] },
 			]}
 			settings={Boolean(onSettings)}
 			onSettings={(button) => onSettings?.(button.getBoundingClientRect())}
@@ -478,10 +478,7 @@ function ChannelPagePicker({
 					aria-modal="true"
 					aria-label="Channel pages"
 				>
-					<Button className="modal-close" onClick={onClose}>
-						×
-					</Button>
-					<h3>Channel pages</h3>
+					<ModalTitleBar title="Channel pages" onClose={onClose} />
 					<div>
 						{Array.from({ length: pages }, (_, nextPage) => (
 							<Button

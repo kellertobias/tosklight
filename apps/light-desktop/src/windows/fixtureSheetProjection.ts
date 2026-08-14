@@ -6,6 +6,7 @@ import type {
 	VisualizationSnapshot,
 } from "../api/types";
 import type { AttributeValue } from "../api/types/playback";
+import { fixtureTypeIconAsset } from "../components/setup/fixtureTypeIconAssets";
 import { fixtures } from "../data/mockData";
 import {
 	useActiveShowId,
@@ -182,6 +183,15 @@ function fixtureSheetRow({
 		red == null || green == null || blue == null
 			? "transparent"
 			: `rgb(${Math.round(red * 255)}, ${Math.round(green * 255)}, ${Math.round(blue * 255)})`;
+	const icon =
+		patched.definition.icon_asset ||
+		fixtureTypeIconAsset(
+			[
+				patched.definition.device_type,
+				patched.definition.name,
+				patched.definition.model,
+			].join(" "),
+		);
 	return {
 		id: target.displayId,
 		name: target.name,
@@ -191,7 +201,7 @@ function fixtureSheetRow({
 			patched.universe != null && patched.address != null
 				? `U${patched.universe}.${patched.address}`
 				: "Unpatched",
-		icon: patched.definition.icon_asset ?? null,
+		icon,
 		fixtureId: target.fixtureId,
 		targetKind: (patched.logical_heads.length
 			? target.order === 0
@@ -354,7 +364,7 @@ function indexLimitingGroups(
 		if (
 			group.runtime == null ||
 			group.runtime.playbackNumber == null ||
-			(group.runtime.master >= 1 && group.runtime.flashLevel <= 0)
+			group.runtime.master >= 1
 		)
 			continue;
 		const limitingGroup = group as LimitingGroup;

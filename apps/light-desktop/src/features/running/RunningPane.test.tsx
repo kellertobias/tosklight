@@ -11,21 +11,23 @@ vi.mock("@tosklight/ui/window-kit", () => ({
 	WindowScrollArea: ({ children }: { children: ReactNode }) => children,
 	WindowHeader: ({
 		title,
-		actions,
+		groups,
 	}: {
 		title: string;
-		actions: Array<
-			Array<{ id: string; label: string; onClick(): void; active?: boolean }>
-		>;
+		groups: Array<{
+			activeId: string;
+			onActiveChange(id: string): void;
+			actions: Array<{ id: string; label: string }>;
+		}>;
 	}) => (
 		<header>
 			<h1>{title}</h1>
-			{actions.flat().map((action) => (
+			{groups.flatMap((group) => group.actions.map((action) => ({ action, group }))).map(({ action, group }) => (
 				<button
 					key={action.id}
 					type="button"
-					aria-pressed={action.active}
-					onClick={action.onClick}
+					aria-pressed={group.activeId === action.id}
+					onClick={() => group.onActiveChange(action.id)}
 				>
 					{action.label}
 				</button>

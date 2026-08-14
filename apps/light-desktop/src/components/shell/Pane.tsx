@@ -41,15 +41,17 @@ export function Pane({
 	const [chromeToolbar, setChromeToolbar] = useState<HTMLSpanElement | null>(
 		null,
 	);
-	const stageActions =
+	const stageGroups =
 		pane.kind === "stage"
 			? [
-					[
+					{
+						id: "stage-view",
+						actions: [
 						{
 							id: "follow",
 							label: "Follow Preload",
 							active: Boolean(pane.followPreload),
-							onClick: () => {
+							onPress: () => {
 								const now = performance.now();
 								if (now - lastFollowToggle.current < 400) return;
 								lastFollowToggle.current = now;
@@ -61,15 +63,19 @@ export function Pane({
 								});
 							},
 						},
-					],
-					[
+						],
+					},
+					{
+						id: "stage-navigation",
+						actions: [
 						{
 							id: "groups",
 							label: "Groups",
-							onClick: () =>
+							onPress: () =>
 								dispatch({ type: "OPEN_GROUPS_FROM_STAGE", origin: "desk" }),
 						},
-					],
+						],
+					},
 				]
 			: [];
 	const gridDimensions = { columns: 24, rows: 18 };
@@ -132,7 +138,7 @@ export function Pane({
 					<span className="pane-chrome-toolbar-target" ref={setChromeToolbar} />
 				) : undefined
 			}
-			actions={stageActions}
+			groups={stageGroups}
 			settings
 			onSettings={() => dispatch({ type: "SET_PANE_SETTINGS", id: pane.id })}
 			onTitleClick={deleteArmed ? removeFromDelete : undefined}
@@ -183,6 +189,7 @@ function PaneContent({
 				fixtureSheetShowType={pane.fixtureSheetShowType ?? true}
 				showCueSidebar={pane.showCueSidebar ?? true}
 				cueListCompactRows={pane.cueListCompactRows ?? false}
+				cueInformationBlock={pane.cueInformationBlock ?? "off"}
 				cueListSource={pane.cueListSource ?? "fixed"}
 				fixedCueListNumber={pane.fixedCueListNumber}
 				stageView={pane.stageView ?? state.stageView}

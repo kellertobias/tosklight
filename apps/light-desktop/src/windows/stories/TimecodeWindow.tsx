@@ -554,52 +554,52 @@ export function TimecodeWindow({
 					primary: "Timecode 1 · Show Opener",
 					secondary: `${audioFile ?? "No song"} · ${TIMECODE_HZ} Hz · ${lanes.length} lanes · H ${Math.round(zoom * 100)}% · V ${Math.round(verticalZoom * 100)}%`,
 				}}
-				actions={[
-					[
+				groups={[
+					{ id: "timecode-audio", actions: [
 						{
 							id: "change-song",
 							label: audioFile ? "Change Song" : "Assign Song",
-							onClick: () => audioInput.current?.click(),
+							onPress: () => audioInput.current?.click(),
 						},
-					],
-					[
+					] },
+					{ id: "timecode-horizontal-zoom", actions: [
 						{
 							id: "zoom-out",
 							label: "H −",
 							ariaLabel: "Horizontal zoom out",
-							onClick: () => onZoom(Math.max(0.55, zoom / 1.35)),
+							onPress: () => onZoom(Math.max(0.55, zoom / 1.35)),
 						},
 						{
 							id: "zoom-in",
 							label: "H +",
 							ariaLabel: "Horizontal zoom in",
-							onClick: () => onZoom(Math.min(4.5, zoom * 1.35)),
+							onPress: () => onZoom(Math.min(4.5, zoom * 1.35)),
 						},
-					],
-					[
+					] },
+					{ id: "timecode-vertical-zoom", actions: [
 						{
 							id: "vertical-zoom-out",
 							label: "V −",
 							ariaLabel: "Vertical zoom out",
-							onClick: () => onVerticalZoom(Math.max(0.7, verticalZoom / 1.25)),
+							onPress: () => onVerticalZoom(Math.max(0.7, verticalZoom / 1.25)),
 						},
 						{
 							id: "vertical-zoom-in",
 							label: "V +",
 							ariaLabel: "Vertical zoom in",
-							onClick: () =>
+							onPress: () =>
 								onVerticalZoom(Math.min(1.75, verticalZoom * 1.25)),
 						},
-					],
-					[
+					] },
+					{ id: "timecode-lanes", actions: [
 						{
 							id: "add-lane",
 							label: "+ Lane",
 							variant: "primary",
 							active: laneMenu,
-							onClick: () => setLaneMenu((value) => !value),
+							onPress: () => setLaneMenu((value) => !value),
 						},
-					],
+					] },
 				]}
 			/>
 			<Input

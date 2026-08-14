@@ -262,7 +262,7 @@ describe("DynamicDefinitionEncoderSurface", () => {
 		fireEvent.click(
 			screen.getByRole("button", { name: "Set Enc 1 · Top value" }),
 		);
-		fireEvent.click(screen.getByRole("button", { name: "Show presets" }));
+		fireEvent.click(screen.getByRole("tab", { name: "Presets" }));
 		expect(screen.getByRole("button", { name: /Current/u })).toHaveAttribute(
 			"aria-pressed",
 			"false",

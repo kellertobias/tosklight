@@ -173,6 +173,46 @@ describe("desk shortcuts", () => {
 		expect(screen.getByText("shift-released")).toBeInTheDocument();
 	});
 
+	it("routes attached desk buttons through the held-Shift Built-ins mapping", () => {
+		render(
+			<AppProvider>
+				<ModalState />
+			</AppProvider>,
+		);
+		act(() =>
+			routeControlSurfaceIntent({
+				type: "desk_shortcut",
+				source: "hardware",
+				action: "shift_down",
+			}),
+		);
+
+		act(() =>
+			routeControlSurfaceIntent({
+				type: "desk_command",
+				source: "hardware",
+				command: "cues",
+			}),
+		);
+		expect(screen.getByText("built-in-timecode")).toBeInTheDocument();
+
+		act(() =>
+			routeControlSurfaceIntent({
+				type: "desk_shortcut",
+				source: "hardware",
+				action: "shift_up",
+			}),
+		);
+		act(() =>
+			routeControlSurfaceIntent({
+				type: "desk_command",
+				source: "hardware",
+				command: "cues",
+			}),
+		);
+		expect(screen.getByText("built-in-cuelists")).toBeInTheDocument();
+	});
+
 	it("routes attached-hardware SET into the selected Patch surface", () => {
 		render(
 			<AppProvider>

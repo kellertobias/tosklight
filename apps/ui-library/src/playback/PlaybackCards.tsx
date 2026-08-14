@@ -131,6 +131,29 @@ export function PlaybackActionButtons({
 	));
 }
 
+function SingleFaderlessPlaybackAction({
+	model,
+}: {
+	model: PlaybackCardViewModel;
+}) {
+	const action = model.actions[0];
+	if (!action) return null;
+	const { id, label, className, ...props } = action;
+	return (
+		<Button
+			{...props}
+			aria-label={typeof label === "string" ? label : undefined}
+			className={`${className ?? ""} single-button-playback-action`.trim()}
+			key={id}
+		>
+			<b>
+				{model.slot} · {model.name}
+			</b>
+			<span>{label}</span>
+		</Button>
+	);
+}
+
 function PlaybackStatus({ model }: { model: PlaybackCardViewModel }) {
 	if (!model.status) return null;
 	if (model.status.kind === "loaded" && model.summary) return null;
@@ -276,6 +299,7 @@ export function TouchPlaybackCardView({
 	slots?: PlaybackCardSlots;
 }) {
 	const hasFader = model.assigned && model.hasFader;
+	const singleFaderlessAction = !hasFader && model.actions.length === 1;
 	return (
 		// biome-ignore lint/a11y/useKeyWithClickEvents: The article delegates keyboard interaction to its real child controls.
 		<article
@@ -288,9 +312,11 @@ export function TouchPlaybackCardView({
 			onClick={callbacks.onActivate}
 		>
 			{slots.overlays ?? <CardOverlays model={model} />}
-			<PlaybackIdentity model={model} touch />
-			<PlaybackStatus model={model} />
-			<PlaybackTopWidget summary={model.summary} status={model.status} />
+			{!singleFaderlessAction && <PlaybackIdentity model={model} touch />}
+			{!singleFaderlessAction && <PlaybackStatus model={model} />}
+			{!singleFaderlessAction && (
+				<PlaybackTopWidget summary={model.summary} status={model.status} />
+			)}
 			{hasFader && (
 				<VerticalTouchFaderSurface
 					hardware={false}
@@ -304,7 +330,10 @@ export function TouchPlaybackCardView({
 					onChange={callbacks.onFaderChange}
 				/>
 			)}
-			{!hasFader && model.actions.length > 0 && (
+			{singleFaderlessAction && (
+				<SingleFaderlessPlaybackAction model={model} />
+			)}
+			{!hasFader && model.actions.length > 1 && (
 				<footer
 					className={`faderless-playback-actions action-count-${model.actions.length}`}
 					style={

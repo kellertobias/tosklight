@@ -151,68 +151,81 @@ export function FixtureProfileEditor({
 					event.target === event.currentTarget && editor.requestClose()
 				}
 			>
-			<section
-				className="nested-modal fixture-profile-editor-modal"
-				role="dialog"
-				aria-modal="true"
-				aria-label={
-					initialProfile.revision
-						? "Edit fixture profile"
-						: "Create fixture profile"
-				}
-			>
-				<ModalTitleBar
-					title={
+				<section
+					className="nested-modal fixture-profile-editor-modal"
+					role="dialog"
+					aria-modal="true"
+					aria-label={
 						initialProfile.revision
-							? `Edit ${initialProfile.manufacturer} ${initialProfile.name}`
-							: "Create fixture"
+							? "Edit fixture profile"
+							: "Create fixture profile"
 					}
-					tabs={[
-						{ id: "generic", label: "Generic" },
-						{ id: "modes", label: "Modes" },
-					]}
-					activeTab={editor.tab}
-					onTabChange={(id) => editor.setTab(id as ProfileEditorTab)}
-					actions={
-						<Fragment>
-							{editor.tab === "modes" && (
-								<Button onClick={editor.addMode}>Add mode</Button>
-							)}
-							<Button
-								variant="primary"
-								loading={editor.busy}
-								onClick={editor.requestSave}
-							>
-								Save fixture
-							</Button>
-						</Fragment>
-					}
-					closeLabel="Close fixture editor"
-					onClose={editor.requestClose}
-				/>
-				<ProfileEditorBody
+				>
+					<ModalTitleBar
+						title={
+							initialProfile.revision
+								? `Edit ${initialProfile.manufacturer} ${initialProfile.name}`
+								: "Create fixture"
+						}
+						groups={[
+							{
+								id: "editor-tabs",
+								kind: "tabs",
+								activeId: editor.tab,
+								onActiveChange: (id) => editor.setTab(id as ProfileEditorTab),
+								actions: [
+									{ id: "generic", label: "Generic" },
+									{ id: "modes", label: "Modes" },
+								],
+							},
+							...(editor.tab === "modes"
+								? [
+										{
+											id: "mode",
+											actions: [
+												{
+													id: "add-mode",
+													label: "Add mode",
+													onPress: editor.addMode,
+												},
+											],
+										},
+									]
+								: []),
+						]}
+						accept={{
+							id: "save",
+							label: "Save fixture",
+							variant: "primary",
+							loading: editor.busy,
+							onPress: editor.requestSave,
+						}}
+						closeLabel="Close fixture editor"
+						onClose={editor.requestClose}
+					/>
+					<ProfileEditorBody
+						editor={editor}
+						attributeRegistry={attributeRegistry}
+					/>
+				</section>
+				{editor.editedMode && (
+					<ModeEditor
+						mode={editor.editedMode}
+						tab={editor.modeTab}
+						attributeRegistry={attributeRegistry}
+						openSplit={editor.openSplit}
+						onTabChange={editor.setModeTab}
+						onOpenSplit={editor.setOpenSplit}
+						onChange={editor.updateMode}
+						onClose={editor.closeMode}
+					/>
+				)}
+				<EditorDialogs
 					editor={editor}
-					attributeRegistry={attributeRegistry}
+					initialProfile={initialProfile}
+					manufacturers={manufacturers}
+					onClose={onClose}
 				/>
-			</section>
-			{editor.editedMode && (
-				<ModeEditor
-					mode={editor.editedMode}
-					tab={editor.modeTab}
-					attributeRegistry={attributeRegistry}
-					openSplit={editor.openSplit}
-					onTabChange={editor.setModeTab}
-					onOpenSplit={editor.setOpenSplit}
-					onChange={editor.updateMode}
-					onClose={editor.closeMode}
-				/>
-			)}
-			<EditorDialogs
-				editor={editor}
-				initialProfile={initialProfile}
-				manufacturers={manufacturers}
-				onClose={onClose}
-			/>
 			</div>
 		</ModalRegistration>
 	);

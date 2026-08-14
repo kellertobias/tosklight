@@ -2,6 +2,7 @@ import {
 	Button,
 	FormLayout,
 	ModalRegistration,
+	ModalTitleBar,
 	TextField,
 } from "@tosklight/ui";
 import { useState } from "react";
@@ -219,10 +220,11 @@ function CreateZoneModal(props: {
 					aria-modal="true"
 					aria-label="Create Exclusion Zone"
 				>
-					<Button className="modal-close" onClick={props.onClose}>
-						×
-					</Button>
-					<h3>Create Exclusion Zone</h3>
+					<ModalTitleBar
+						title="Create Exclusion Zone"
+						closeLabel="Close Create Exclusion Zone"
+						onClose={props.onClose}
+					/>
 					<p>
 						Virtual Playbacks {props.playbackNumbers.join(", ")} will be
 						mutually exclusive. Creating the zone does not operate any playback.

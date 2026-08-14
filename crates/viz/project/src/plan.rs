@@ -7,9 +7,9 @@ use crate::default_model::{self, FixtureTraits};
 use crate::fallback::{self, OpticalClass};
 use glam::{Quat, Vec3};
 use light_fixture::{
-    ChannelBehavior, FixtureMode, FixtureProfile, GeometryMotionKind, InstalledFixtureAppearance,
-    LightSourceForm, PatchPolicy, ProfileEffect, ProfileLaser, ProfileOptics, ProfilePhysics,
-    ProfilePhysicsSceneryKind, Vector3,
+    ChannelBehavior, ChannelFunction, ChannelFunctionBehavior, FixtureChannel, FixtureMode,
+    FixtureProfile, GeometryMotionKind, InstalledFixtureAppearance, LightSourceForm, PatchPolicy,
+    ProfileEffect, ProfileLaser, ProfileOptics, ProfilePhysics, ProfilePhysicsSceneryKind, Vector3,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -613,6 +613,7 @@ fn address_map(instance: &PhysicalInstance) -> HashMap<u16, (u16, u16)> {
 
 /// Every channel of the mode resolved to absolute addresses, keyed by channel id.
 fn compile_channels(
+    profile: &FixtureProfile,
     mode: &FixtureMode,
     primary_slots: &HashMap<Uuid, u16>,
     addresses: &HashMap<u16, (u16, u16)>,
@@ -648,11 +649,73 @@ fn compile_channels(
                 physical_max: channel.physical_max.unwrap_or(1.0),
                 snap: channel.snap,
                 default_raw: channel.default_raw,
-                functions: channel.functions.clone(),
+                functions: stage_channel_functions(profile, channel),
             },
         );
     }
     compiled
+}
+
+/// Correct the one malformed shipped profile revision at the Stage boundary without rewriting an
+/// embedded show snapshot. ROBE's chart has discrete open/closed bands around two strobe bands;
+/// revisions 1 and 2 flattened the whole byte into one function named `Shutter / Strobe`, causing
+/// an officially open raw value such as 116 to be decoded as strobe. Revision 3 carries the exact
+/// table, while this compatibility projection keeps already-patched default shows visually aligned
+/// with the DMX they continue to emit.
+fn stage_channel_functions(
+    profile: &FixtureProfile,
+    channel: &FixtureChannel,
+) -> Vec<ChannelFunction> {
+    const ROBIN_DLS_PROFILE_ID: &str = "79e6cc1e-3031-68c2-29ec-026e0c28a505";
+    let malformed = channel.attribute.0 == "shutter"
+        && channel.functions.len() == 1
+        && channel.functions[0].name == "Shutter / Strobe"
+        && channel.functions[0].dmx_from == 0
+        && channel.functions[0].dmx_to == 255;
+    if profile.id.0.to_string() != ROBIN_DLS_PROFILE_ID || profile.revision > 2 || !malformed {
+        return channel.functions.clone();
+    }
+
+    let id = |band: u128| Uuid::from_u128(channel.id.as_u128() ^ band);
+    let fixed = |band, name: &str, from, to, semantic: &str, raw| ChannelFunction {
+        id: id(band),
+        name: name.into(),
+        dmx_from: from,
+        dmx_to: to,
+        attribute: channel.attribute.clone(),
+        priority: 0,
+        angular_motion: None,
+        behavior: ChannelFunctionBehavior::Fixed {
+            semantic_id: semantic.into(),
+            label: name.into(),
+            raw_value: raw,
+        },
+    };
+    let continuous = |band, name: &str, from, to| ChannelFunction {
+        id: id(band),
+        name: name.into(),
+        dmx_from: from,
+        dmx_to: to,
+        attribute: channel.attribute.clone(),
+        priority: 0,
+        angular_motion: None,
+        behavior: ChannelFunctionBehavior::Continuous {
+            physical_min: 0.0,
+            physical_max: 1.0,
+            unit: None,
+        },
+    };
+    vec![
+        fixed(1, "Shutter closed", 0, 31, "closed", 0),
+        fixed(2, "Shutter open", 32, 63, "open", 32),
+        continuous(3, "Strobe effect from slow to fast", 64, 95),
+        fixed(4, "Shutter open", 96, 127, "open", 96),
+        continuous(5, "Opening pulse in sequences from slow to fast", 128, 143),
+        continuous(6, "Closing pulse in sequences from fast to slow", 144, 159),
+        fixed(7, "Shutter open", 160, 191, "open", 160),
+        continuous(8, "Random strobe effect from slow to fast", 192, 223),
+        fixed(9, "Shutter open", 224, 255, "open", 224),
+    ]
 }
 
 #[derive(Default)]

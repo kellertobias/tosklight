@@ -33,6 +33,12 @@ type IndexedPresetMutationTargets = ReadonlyArray<{
 	expectedProfileRevision: number;
 }>;
 
+function fixtureTargets(projection: ParameterProjection, attribute: string) {
+	return projection.selectedGroupId
+		? []
+		: (projection.supportedFixtureIdsByAttribute.get(attribute) ?? []);
+}
+
 export function parameterValueTiming(
 	programmerFadeMillis: number | undefined,
 ): ProgrammerValueTiming {
@@ -61,7 +67,7 @@ export function setParameterMutations(
 				timing,
 			},
 		] satisfies ProgrammerValuesMutation[];
-	return projection.selectedFixtureIds.map(
+	return fixtureTargets(projection, attribute).map(
 		(fixtureId): ProgrammerValuesMutation => ({
 			action: "set_fixture",
 			fixtureId,
@@ -83,13 +89,14 @@ export function setParameterRangeMutations(
 			kind: "spread",
 			value: points,
 		});
-	if (projection.selectedFixtureIds.length === 0) return [];
+	const fixtureIds = fixtureTargets(projection, attribute);
+	if (fixtureIds.length === 0) return [];
 	if (projection.programmerValuesRoute === "preload") {
 		const timing = parameterValueTiming(projection.programmerFadeMillis);
-		return resolveSpread(points, projection.selectedFixtureIds.length).map(
+		return resolveSpread(points, fixtureIds.length).map(
 			(value, index): ProgrammerValuesMutation => ({
 				action: "set_fixture",
-				fixtureId: projection.selectedFixtureIds[index] as string,
+				fixtureId: fixtureIds[index] as string,
 				attribute,
 				value: { kind: "normalized", value },
 				timing,
@@ -100,7 +107,7 @@ export function setParameterRangeMutations(
 	return [
 		{
 			action: "set_selection",
-			fixtureIds: projection.selectedFixtureIds,
+			fixtureIds,
 			attribute,
 			value: { kind: "spread", value: points },
 			timing: parameterValueTiming(projection.programmerFadeMillis),
@@ -161,7 +168,7 @@ export function submitParameterStep(
 ) {
 	if (
 		!actions ||
-		(!projection.selectedGroupId && projection.selectedFixtureIds.length === 0)
+		(!projection.selectedGroupId && fixtureTargets(projection, attribute).length === 0)
 	)
 		return Promise.resolve(null);
 	if (!actions.applyIntent) {
@@ -186,7 +193,7 @@ export function submitParameterStep(
 	}
 	return actions.applyIntent({
 		requestId: requestId(),
-		fixtureIds: projection.selectedGroupId ? [] : projection.selectedFixtureIds,
+		fixtureIds: fixtureTargets(projection, attribute),
 		...(projection.selectedGroupId
 			? { groupId: projection.selectedGroupId }
 			: {}),
@@ -210,12 +217,12 @@ export function submitParameterAbsoluteIntent(
 ) {
 	if (
 		!actions?.applyIntent ||
-		(!projection.selectedGroupId && projection.selectedFixtureIds.length === 0)
+		(!projection.selectedGroupId && fixtureTargets(projection, attribute).length === 0)
 	)
 		return null;
 	return actions.applyIntent({
 		requestId: requestId(),
-		fixtureIds: projection.selectedGroupId ? [] : projection.selectedFixtureIds,
+		fixtureIds: fixtureTargets(projection, attribute),
 		...(projection.selectedGroupId
 			? { groupId: projection.selectedGroupId }
 			: {}),

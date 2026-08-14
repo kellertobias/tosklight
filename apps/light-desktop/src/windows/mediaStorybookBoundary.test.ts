@@ -4,7 +4,7 @@ import {
 	availableWindowChoices,
 	windowChoices,
 } from "../components/modals/WindowPicker";
-import { builtIns } from "../components/shell/LeftDock";
+import { builtIns, shiftedBuiltIns } from "../components/shell/LeftDock";
 import leftDockSource from "../components/shell/LeftDock.tsx?raw";
 import builtInWindowTypes from "../types.ts?raw";
 import stories from "./MediaPaneWindow.stories.tsx?raw";
@@ -15,7 +15,8 @@ describe("Media pane production boundary", () => {
 	it("registers Media in production launch and portable layout surfaces", () => {
 		expect(builtInWindowTypes).toMatch(/^\s*\|\s*"media"\s*$/m);
 		expect("media" in (windowRegistry as Record<string, unknown>)).toBe(true);
-		expect(builtIns.map(([kind]) => String(kind))).toContain("media");
+		expect(builtIns.map(([kind]) => String(kind))).not.toContain("media");
+		expect(shiftedBuiltIns.map(([kind]) => String(kind))).toContain("media");
 		expect(leftDockSource).not.toMatch(/kind\s*!==\s*["']media["']/);
 		expect(windowChoices.map(([kind]) => String(kind))).toContain("media");
 		expect(availableWindowChoices().map(([kind]) => kind)).toContain("media");

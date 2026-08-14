@@ -4,6 +4,7 @@ import {
 	FormLayout,
 	IconPickerField,
 	ModalPortal,
+	ModalTitleBar,
 	TextField,
 } from "@tosklight/ui";
 import {
@@ -66,16 +67,20 @@ export function PresetWindowHeader({
 		<WindowHeader
 			title={compact ? `${family} Presets` : "Preset Pools"}
 			info={compact ? undefined : { primary: `${family} presets` }}
-			actions={[
-				showFamilyActions
+			groups={[
+				{
+					id: "preset-family",
+					kind: "tabs",
+					activeId: family,
+					onActiveChange: (id) => onFamily(id as PresetFamily),
+					actions: showFamilyActions
 					? PRESET_FAMILIES.map((name) => ({
 							id: name,
 							label: name,
-							active: family === name,
-							onClick: () => onFamily(name),
 						}))
 					: [],
-				[{ id: "groups", label: "Groups", onClick: onOpenGroups }],
+				},
+				{ id: "preset-related", actions: [{ id: "groups", label: "Groups", onPress: onOpenGroups }] },
 			]}
 			settings
 			onSettings={(anchor) => onSettings(anchor.getBoundingClientRect())}
@@ -322,10 +327,10 @@ export function PresetCustomizationDialog({
 					aria-modal="true"
 					aria-label="Configure preset button"
 				>
-					<Button className="modal-close" onClick={onClose}>
-						×
-					</Button>
-					<h3>Configure preset {index + 1}</h3>
+					<ModalTitleBar
+						title={`Configure preset ${index + 1}`}
+						onClose={onClose}
+					/>
 					<FormLayout labelPlacement="side">
 						<TextField
 							label="Title"

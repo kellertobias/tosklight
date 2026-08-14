@@ -281,17 +281,34 @@
 	visibility: hidden;
 }
 
-.cue-property-modal-actions {
-	display: flex;
-	justify-content: flex-end;
-	gap: 8px;
-	padding: 0 18px 18px;
-}
-
 .cue-trigger-options {
 	display: grid;
 	grid-template-columns: repeat(3, minmax(0, 1fr));
 	gap: 8px;
+}
+
+.sequence-layout.with-cue-information {
+	grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.cue-information-block {
+	display: grid;
+	gap: 4px;
+	min-height: 72px;
+	padding: 10px 14px;
+	border-top: 1px solid var(--line2);
+	background: #0c1115;
+}
+
+.cue-information-block > strong {
+	color: var(--muted);
+	font-size: 11px;
+	text-transform: uppercase;
+}
+
+.cue-information-block > p {
+	margin: 0;
+	white-space: pre-wrap;
 }
 
 .cue-trigger-options .ui-button {

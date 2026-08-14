@@ -33,25 +33,25 @@ export function GroupPoolHeader({
 				primary: `${command.selected.length} fixtures selected`,
 				secondary: "Ordered selection",
 			}}
-			actions={[
-				[
+			groups={[
+				{ id: "group-navigation", actions: [
 					...(state.groupsReturnToStage
 						? [
 								{
 									id: "stage",
 									label: "Back to Stage",
-									onClick: () => dispatch({ type: "RETURN_TO_STAGE" }),
+									onPress: () => dispatch({ type: "RETURN_TO_STAGE" }),
 								},
 							]
 						: []),
-				],
-				[
+				] },
+				{ id: "group-related", actions: [
 					{
 						id: "presets",
 						label: "Presets",
-						onClick: () => dispatch({ type: "OPEN_BUILTIN", kind: "presets" }),
+						onPress: () => dispatch({ type: "OPEN_BUILTIN", kind: "presets" }),
 					},
-				],
+				] },
 			]}
 			settings
 			onSettings={(button) => onSettings(button.getBoundingClientRect())}

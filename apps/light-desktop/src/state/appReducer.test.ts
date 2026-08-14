@@ -621,6 +621,36 @@ describe("appReducer Cues pane settings", () => {
 		expect(compact.desks[0].panes[1].cueListCompactRows).toBeUndefined();
 	});
 
+	it("persists the current or next Cue information block per pane", () => {
+		const state = {
+			...initialState,
+			activeDeskId: "cues",
+			desks: [
+				{
+					id: "cues",
+					name: "Cues",
+					panes: [
+						{
+							id: "cues-1",
+							kind: "cues" as const,
+							title: "One",
+							x: 1,
+							y: 1,
+							width: 12,
+							height: 12,
+						},
+					],
+				},
+			],
+		};
+		const next = appReducer(state, {
+			type: "SET_PANE_CUE_INFORMATION_BLOCK",
+			id: "cues-1",
+			value: "next",
+		});
+		expect(next.desks[0].panes[0].cueInformationBlock).toBe("next");
+	});
+
 	it("persists Cue sidebar visibility while older pane layouts keep it visible", () => {
 		const desks = [
 			{

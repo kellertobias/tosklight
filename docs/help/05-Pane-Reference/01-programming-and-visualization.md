@@ -84,7 +84,7 @@ A column only reports attributes the lantern actually carries. A fixture without
 
 ## Media
 
-The Media window is always available from Built-ins and **Open Window**. Without a configured CITP/MSEX connection it says that no CITP Media Server is available and still shows the complete 0–255 Content and Mask folder/file configuration ranges. Endpoint setup remains under **Show Patch > Media Servers**. When a server connects, its advertised names, thumbnails, status, and controls reconcile into the same stable configuration surface without hiding unadvertised values.
+The Media window is available from **Shift + Stage** in Built-ins and from **Open Window**. Without a configured CITP/MSEX connection it says that no CITP Media Server is available and still shows the complete 0–255 Content and Mask folder/file configuration ranges. Endpoint setup remains under **Show Patch > Media Servers**. When a server connects, its advertised names, thumbnails, status, and controls reconcile into the same stable configuration surface without hiding unadvertised values.
 
 Choose the physical master in **Server**, then choose one of its advertised logical layers. A layer touch replaces the desk's shared fixture selection with that exact logical head, so the Programmer, OSC, attached controls, and other panes continue to describe one authoritative selection. The Program output and layer thumbnails use the preview-source and layer identities advertised by the server; source number, layer number, and fixture sub-ID are not assumed to be interchangeable. Loading, stale, failed, unsupported, and offline states are shown beside the preview rather than drawn into the program image.
 

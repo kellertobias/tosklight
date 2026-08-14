@@ -1090,6 +1090,12 @@
 	min-height: 0;
 }
 
+.playback-fader-bank.touch-layout
+	.touch-playback-card.playback-row-compact
+	.playback-empty-body {
+	min-height: 0;
+}
+
 .faderless-playback-actions.action-count-3 {
 	grid-template-columns: repeat(2, minmax(0, 1fr));
 	grid-template-rows: repeat(2, minmax(50px, 1fr));

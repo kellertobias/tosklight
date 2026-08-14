@@ -341,6 +341,7 @@ export function FileManagerHeader({
 	);
 	const search = {
 		value: state.query,
+		onSearch: state.setQuery,
 		placeholder: "File or folder name",
 		ariaLabel: "Search File Manager",
 	};
@@ -351,33 +352,32 @@ export function FileManagerHeader({
 					title="File Manager"
 					info={{ primary: controller.purpose, secondary: pathControl }}
 					search={search}
-					onSearch={state.setQuery}
 					toolbar={actions}
-					actions={
+					groups={
 						controller.picker
 							? [
-									[
+									{ id: "file-manager-terminal", actions: [
 										{
 											id: "cancel",
 											label: "×",
 											ariaLabel: "Close File Manager",
-											onClick: controller.picker.onCancel,
+											onPress: controller.picker.onCancel,
 										},
-									],
+									] },
 								]
 							: controller.closeable && controller.app
 							? [
-									[
+									{ id: "file-manager-terminal", actions: [
 										{
 											id: "close",
 											label: "×",
 											ariaLabel: "Close File Manager",
-											onClick: () =>
+											onPress: () =>
 												controller.app?.dispatch({
 													type: "CLOSE_FILE_MANAGER",
 												}),
 										},
-									],
+									] },
 								]
 							: []
 					}

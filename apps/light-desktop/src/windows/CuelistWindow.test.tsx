@@ -89,6 +89,26 @@ vi.mock("../features/playbackTopology/PlaybackTopologyProvider", () => ({
 		saveCueList: mocks.activeSaveTopologyCueList ?? mocks.saveTopologyCueList,
 	}),
 }));
+vi.mock(
+	"../features/playbackRuntime/PlaybackRuntimeView",
+	async (importOriginal) => {
+		const actual = await importOriginal<
+			typeof import("../features/playbackRuntime/PlaybackRuntimeView")
+		>();
+		return {
+			...actual,
+			useCueListRuntime: (
+				cueListId: string | null | undefined,
+				playbackNumber?: number | null,
+			) =>
+				mocks.playbacks.active.find(
+					(entry) =>
+						entry.cue_list_id === cueListId &&
+						(playbackNumber == null || entry.playback_number === playbackNumber),
+				),
+		};
+	},
+);
 vi.mock("../features/cueRecording/CueRecordingProvider", () => ({
 	useCueRecording: () => ({ record: mocks.recordCue }),
 }));
@@ -185,6 +205,7 @@ function editableCueList(): CueList {
 				id: "cue-1",
 				number: 1,
 				name: "Opening",
+				information: "House opens",
 				fade_millis: 2_500,
 				delay_millis: 0,
 				trigger: { type: "manual" },
@@ -278,6 +299,7 @@ describe("CuelistWindow Cue settings", () => {
 			"Preview",
 			"No.",
 			"Name",
+			"Info",
 			"Jump",
 			"Jump Count",
 			"Trigger",
@@ -289,6 +311,8 @@ describe("CuelistWindow Cue settings", () => {
 		]);
 		expect(document.querySelector(".cue-properties")).not.toBeInTheDocument();
 		for (const name of [
+			"Cue Name",
+			"Cue Information",
 			"Jump",
 			"Trigger",
 			"Trigger Time",
@@ -299,7 +323,7 @@ describe("CuelistWindow Cue settings", () => {
 		]) {
 			fireEvent.click(screen.getByRole("button", { name }));
 			expect(screen.getByRole("dialog", { name })).toBeInTheDocument();
-			fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+			fireEvent.click(screen.getByRole("button", { name: `Cancel ${name}` }));
 		}
 	});
 
@@ -392,6 +416,7 @@ describe("CuelistWindow pane selection", () => {
 		).toEqual([
 			"No.",
 			"Name",
+			"Info",
 			"Jump",
 			"Jump Count",
 			"Trigger",
@@ -406,6 +431,85 @@ describe("CuelistWindow pane selection", () => {
 		);
 		expect(container.querySelector(".cue-table img")).not.toBeInTheDocument();
 		expect(container.querySelector(".cue-properties")).not.toBeInTheDocument();
+	});
+
+	it("opens and closes a Cue preview modal through the thumbnail click path", () => {
+		showEditableCueList();
+		const { container } = render(
+			<CuelistWindow
+				compact
+				cueListTab="cues"
+				thumbnails={{ 0: "data:image/png;base64,preview" }}
+			/>,
+		);
+		const preview = within(container).getByRole("button", {
+			name: "Open Cue 1 preview",
+		});
+		fireEvent.pointerDown(preview, { pointerType: "touch" });
+		fireEvent.pointerUp(preview, { pointerType: "touch" });
+		fireEvent.click(preview);
+
+		const modal = screen.getByRole("dialog", {
+			name: "Cue 1 preview image",
+		});
+		expect(within(modal).getByRole("img", { name: "Cue 1 preview" })).toHaveAttribute(
+			"src",
+			"data:image/png;base64,preview",
+		);
+		fireEvent.click(
+			within(modal).getByRole("button", { name: "Close Cue preview" }),
+		);
+		expect(
+			screen.queryByRole("dialog", { name: "Cue 1 preview image" }),
+		).toBeNull();
+	});
+
+	it("shows configured current or next Cue information at the bottom", () => {
+		const cueList = editableCueList();
+		cueList.cues.push({
+			...cueList.cues[0],
+			id: "cue-2",
+			number: 2,
+			name: "Blackout",
+			information: "Clear the stage",
+		});
+		showEditableCueList(cueList);
+		mocks.playbacks.active = [
+			{
+				playback_number: 1,
+				cue_list_id: "main",
+				cue_index: 0,
+				paused: false,
+				master: 1,
+				flash: false,
+				effective_next_cue_number: 2,
+			},
+		];
+		const view = render(
+			<CuelistWindow
+				compact
+				cueListTab="cues"
+				cueInformationBlock="current"
+			/>,
+		);
+		expect(
+			within(view.container).getByRole("region", {
+				name: "Current Cue Information",
+			}),
+		).toHaveTextContent("House opens");
+
+		view.rerender(
+			<CuelistWindow
+				compact
+				cueListTab="cues"
+				cueInformationBlock="next"
+			/>,
+		);
+		expect(
+			within(view.container).getByRole("region", {
+				name: "Next Cue Information",
+			}),
+		).toHaveTextContent("Clear the stage");
 	});
 });
 
@@ -618,6 +722,13 @@ describe("CuelistWindow pane and Cuelist settings", () => {
 			id: "cues-1",
 			value: true,
 		});
+		fireEvent.click(screen.getByRole("button", { name: "Off" }));
+		fireEvent.click(screen.getByRole("option", { name: "Next Cue" }));
+		expect(mocks.dispatch).toHaveBeenCalledWith({
+			type: "SET_PANE_CUE_INFORMATION_BLOCK",
+			id: "cues-1",
+			value: "next",
+		});
 	});
 
 	it("opens Cuelist Settings as a title-controlled modal and confirms dirty close", () => {
@@ -743,7 +854,9 @@ describe("CuelistWindow Cue property transactions", () => {
 		fireEvent.change(within(modal).getByRole("textbox", { name: "In Fade" }), {
 			target: { value: "9" },
 		});
-		fireEvent.click(within(modal).getByRole("button", { name: "Cancel" }));
+		fireEvent.click(
+			within(modal).getByRole("button", { name: "Cancel In Fade" }),
+		);
 		expect(mocks.saveTopologyCueList).not.toHaveBeenCalled();
 
 		fireEvent.click(ui.getByRole("button", { name: "In Fade" }));
@@ -783,6 +896,50 @@ describe("CuelistWindow Cue property transactions", () => {
 			"Cue edit was not saved",
 		);
 		expect(modal).toBeInTheDocument();
+	});
+
+	it("saves Cue name and information through the topology authority", async () => {
+		const cueList = showEditableCueList();
+		const { container } = render(<CuelistWindow />);
+		const ui = within(container);
+		fireEvent.click(ui.getByText("Main").closest("button")!);
+
+		fireEvent.click(ui.getByRole("button", { name: "Cue Name" }));
+		let modal = screen.getByRole("dialog", { name: "Cue Name" });
+		fireEvent.change(within(modal).getByRole("textbox", { name: "Cue Name" }), {
+			target: { value: "Reprise" },
+		});
+		fireEvent.click(within(modal).getByRole("button", { name: "Save" }));
+		await waitFor(() => expect(mocks.saveTopologyCueList).toHaveBeenCalledOnce());
+		expect(mocks.saveTopologyCueList).toHaveBeenLastCalledWith(
+			cueList.id,
+			3,
+			"legacy-main",
+			expect.objectContaining({
+				cues: [expect.objectContaining({ name: "Reprise" })],
+			}),
+		);
+
+		fireEvent.click(ui.getByRole("button", { name: "Cue Information" }));
+		modal = screen.getByRole("dialog", { name: "Cue Information" });
+		fireEvent.change(
+			within(modal).getByRole("textbox", { name: "Cue Information" }),
+			{ target: { value: "Stand by follow spot" } },
+		);
+		fireEvent.click(within(modal).getByRole("button", { name: "Save" }));
+		await waitFor(() =>
+			expect(mocks.saveTopologyCueList).toHaveBeenCalledTimes(2),
+		);
+		expect(mocks.saveTopologyCueList).toHaveBeenLastCalledWith(
+			cueList.id,
+			4,
+			"legacy-main",
+			expect.objectContaining({
+				cues: [
+					expect.objectContaining({ information: "Stand by follow spot" }),
+				],
+			}),
+		);
 	});
 });
 
@@ -846,7 +1003,7 @@ describe("CuelistWindow topology-backed Cuelist settings", () => {
 		const primaryAction = within(renumber).getByRole("button", {
 			name: "Renumber",
 		});
-		expect(primaryAction.closest(".ui-modal-title-actions")).not.toBeNull();
+		expect(primaryAction.closest(".ui-title-chrome-terminals")).not.toBeNull();
 		expect(renumber.querySelector(".modal-actions")).toBeNull();
 
 		fireEvent.click(

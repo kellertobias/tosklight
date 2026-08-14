@@ -150,14 +150,15 @@ describe("ModalNumberEditor", () => {
 				],
 			},
 		});
-		const toggle = screen.getByRole("button", { name: "Show presets" });
-		expect(toggle.querySelector('[data-active="true"]')).toHaveTextContent(
-			"Value",
+		expect(screen.getByRole("tab", { name: "Value" })).toHaveAttribute(
+			"aria-selected",
+			"true",
 		);
-		fireEvent.click(toggle);
-		expect(
-			screen.getByRole("button", { name: "Show value input" }),
-		).toHaveAttribute("aria-pressed", "true");
+		fireEvent.click(screen.getByRole("tab", { name: "Presets" }));
+		expect(screen.getByRole("tab", { name: "Presets" })).toHaveAttribute(
+			"aria-selected",
+			"true",
+		);
 		expect(screen.getByText("Intensity")).toBeVisible();
 		fireEvent.click(screen.getByRole("button", { name: /Half/ }));
 		expect(onChange).toHaveBeenLastCalledWith("50");
@@ -170,7 +171,7 @@ describe("ModalNumberEditor", () => {
 		const releaseButton = screen.getByRole("button", {
 			name: "Release Dimmer",
 		});
-		expect(releaseButton.closest(".ui-modal-title-actions")).not.toBeNull();
+		expect(releaseButton.closest(".ui-title-chrome-group")).not.toBeNull();
 		fireEvent.click(releaseButton);
 		expect(release).toHaveBeenCalledOnce();
 	});

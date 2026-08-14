@@ -6,6 +6,8 @@ import {
 	NumberField,
 	SelectField,
 	TextField,
+	ModalRegistration,
+	ModalTitleBar,
 } from "@tosklight/ui";
 import {
 	forwardRef,
@@ -47,7 +49,7 @@ export interface TimecodeTimelineEditorHandle {
 	addMarker(): void;
 	addAudioLane(): void;
 	addSpeedLane(): void;
-	addCueListLane(): void;
+	chooseCueListLane(): void;
 	addAudioPlayerLane(fixtureId: string): void;
 }
 
@@ -75,6 +77,12 @@ function TimelineTools(props: {
 
 type TimelineItem = ReturnType<typeof timelineItems>[number];
 
+export const TIMECODE_LANE_HEADER_WIDTH = 160;
+
+export function timelineFrameX(frame: number, pixelsPerFrame: number): number {
+	return TIMECODE_LANE_HEADER_WIDTH + frame * pixelsPerFrame;
+}
+
 function TimelineCanvas(props: {
 	definition: TimecodeDefinition;
 	frame: number;
@@ -92,8 +100,9 @@ function TimelineCanvas(props: {
 		event: ReactPointerEvent,
 		selection: TimecodeEditorSelection,
 		frame: number,
+		clipEdge?: "start" | "end",
 	): void;
-	addKeyframe(laneId: string): void;
+	addKeyframe(laneId: string, frame?: number): void;
 	addClip(laneId: string): void;
 }) {
 	const scrub = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -107,7 +116,10 @@ function TimelineCanvas(props: {
 				0,
 				Math.min(
 					props.duration,
-					Math.round((clientX - bounds.left) / props.pixelsPerFrame),
+					Math.round(
+						(clientX - bounds.left - TIMECODE_LANE_HEADER_WIDTH) /
+							props.pixelsPerFrame,
+					),
 				),
 			),
 		);
@@ -124,8 +136,9 @@ function TimelineCanvas(props: {
 		>
 			<div
 				className="timecode-timeline-canvas"
-				style={{ width: props.width }}
+				style={{ width: props.width + TIMECODE_LANE_HEADER_WIDTH }}
 				data-pixels-per-frame={props.pixelsPerFrame}
+				data-time-origin-px={TIMECODE_LANE_HEADER_WIDTH}
 				onPointerDown={scrub}
 			>
 				<Ruler
@@ -137,28 +150,26 @@ function TimelineCanvas(props: {
 					definition={props.definition}
 					waveformPeaks={props.waveformPeaks}
 				/>
-				<div className="timecode-marker-lane">
-					{props.items
-						.filter((item) => item.kind === "marker")
-						.map((item) => (
-							<TimelineItemButton
-								key={item.selection.itemId}
-								item={item}
-								marker
-								selection={props.selection}
-								fps={props.fps}
-								pixelsPerFrame={props.pixelsPerFrame}
-								startDrag={props.startDrag}
-							/>
-						))}
-				</div>
 				{props.definition.lanes.map((lane) => (
 					<EditorLane key={lane.id} {...props} lane={lane} />
 				))}
+				{props.items
+					.filter((item) => item.kind === "marker")
+					.map((item) => (
+						<TimelineItemButton
+							key={item.selection.itemId}
+							item={item}
+							marker
+							selection={props.selection}
+							fps={props.fps}
+							pixelsPerFrame={props.pixelsPerFrame}
+							startDrag={props.startDrag}
+						/>
+					))}
 				<Button
-					className="timecode-editor-playhead"
+					className={`timecode-editor-playhead ${timelineFrameX(props.frame, props.pixelsPerFrame) > props.width + TIMECODE_LANE_HEADER_WIDTH - 96 ? "near-right" : ""}`}
 					aria-label="Drag playhead to seek"
-					style={{ left: props.frame * props.pixelsPerFrame }}
+					style={{ left: timelineFrameX(props.frame, props.pixelsPerFrame) }}
 					onPointerDown={(event) => {
 						event.preventDefault();
 						event.currentTarget.setPointerCapture(event.pointerId);
@@ -191,15 +202,18 @@ function AudioLane({
 				definition.audio ? "Linked audio waveform" : "No linked audio"
 			}
 		>
-			{definition.audio ? (
-				waveformPeaks?.length ? (
-					<Waveform peaks={waveformPeaks} />
+			<div className="timecode-audio-lane-label">Audio</div>
+			<div className="timecode-audio-lane-content">
+				{definition.audio ? (
+					waveformPeaks?.length ? (
+						<Waveform peaks={waveformPeaks} />
+					) : (
+						<span>Waveform loads after the managed audio is saved.</span>
+					)
 				) : (
-					<span>Waveform loads after the managed audio is saved.</span>
-				)
-			) : (
-				<span>No audio linked</span>
-			)}
+					<span>No audio linked</span>
+				)}
+			</div>
 		</div>
 	);
 }
@@ -214,7 +228,30 @@ function EditorLane(
 		lane.content.kind === "cue_list" || lane.content.kind === "audio_player";
 	const cueList = lane.content.kind === "cue_list" ? lane.content : null;
 	return (
-		<div className={`timecode-editor-lane lane-${lane.content.kind}`}>
+		<div
+			className={`timecode-editor-lane lane-${lane.content.kind}`}
+			onPointerDown={(event) => {
+				if (
+					event.target !== event.currentTarget ||
+					lane.content.kind !== "audio_volume"
+				)
+					return;
+				const bounds = event.currentTarget.getBoundingClientRect();
+				props.addKeyframe(
+					lane.id,
+					Math.max(
+						0,
+						Math.min(
+							props.duration,
+							Math.round(
+								(event.clientX - bounds.left - TIMECODE_LANE_HEADER_WIDTH) /
+									props.pixelsPerFrame,
+							),
+						),
+					),
+				);
+			}}
+		>
 			<div className="timecode-editor-lane-label">
 				<strong>{lane.name}</strong>
 				<span>{lane.content.kind.replaceAll("_", " ")}</span>
@@ -248,6 +285,13 @@ function EditorLane(
 						fps={props.fps}
 						pixelsPerFrame={props.pixelsPerFrame}
 						startDrag={props.startDrag}
+						startVolume={
+							item.kind === "volume" && lane.content.kind === "audio_volume"
+								? lane.content.keyframes.find(
+										(keyframe) => keyframe.id === item.selection.itemId,
+									)?.value
+								: undefined
+						}
 					/>
 				))}
 		</div>
@@ -261,6 +305,7 @@ function TimelineItemButton({
 	fps,
 	pixelsPerFrame,
 	startDrag,
+	startVolume,
 }: {
 	item: TimelineItem;
 	marker?: boolean;
@@ -271,7 +316,10 @@ function TimelineItemButton({
 		event: ReactPointerEvent,
 		selection: TimecodeEditorSelection,
 		frame: number,
+		clipEdge?: "start" | "end",
+		startVolume?: number,
 	): void;
+	startVolume?: number;
 }) {
 	const width = item.endFrame
 		? Math.max(44, (item.endFrame - item.frame) * pixelsPerFrame)
@@ -279,10 +327,40 @@ function TimelineItemButton({
 	return (
 		<Button
 			className={`${marker ? "timecode-timeline-marker" : `timecode-timeline-item item-${item.kind}`} ${sameSelection(selection, item.selection) ? "selected" : ""}`}
-			style={{ left: item.frame * pixelsPerFrame, ...(width ? { width } : {}) }}
-			onPointerDown={(event) => startDrag(event, item.selection, item.frame)}
+			style={{
+				left: timelineFrameX(item.frame, pixelsPerFrame),
+				...(width ? { width } : {}),
+			}}
+			onPointerDown={(event) =>
+				startDrag(event, item.selection, item.frame, undefined, startVolume)
+			}
 			title={`${item.label} · ${formatFrame(item.frame, fps)}`}
 		>
+			{item.kind === "clip" && item.endFrame !== undefined && (
+				<>
+					<span
+						className="timecode-clip-edge start"
+						aria-hidden="true"
+						onPointerDown={(event) => {
+							event.stopPropagation();
+							startDrag(event, item.selection, item.frame, "start");
+						}}
+					/>
+					<span
+						className="timecode-clip-edge end"
+						aria-hidden="true"
+						onPointerDown={(event) => {
+							event.stopPropagation();
+							startDrag(
+								event,
+								item.selection,
+								item.endFrame ?? item.frame,
+								"end",
+							);
+						}}
+					/>
+				</>
+			)}
 			{marker ? <span>{item.label}</span> : item.label}
 			{!marker && <small>{formatFrame(item.frame, fps)}</small>}
 		</Button>
@@ -346,17 +424,22 @@ export const TimecodeTimelineEditor = forwardRef<
 		null,
 	);
 	const [speedGroup] = useState("A");
+	const [cueListChooserOpen, setCueListChooserOpen] = useState(false);
 	const [cueListId, setCueListId] = useState(cueLists[0]?.id ?? "");
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const [viewportWidth, setViewportWidth] = useState(FALLBACK_VIEWPORT_WIDTH);
 	const duration = Math.max(1, definition.duration_frame ?? fps * 60);
-	const geometry = timelineZoomGeometry(duration, viewportWidth);
+	const timelineViewportWidth = Math.max(
+		1,
+		viewportWidth - TIMECODE_LANE_HEADER_WIDTH,
+	);
+	const geometry = timelineZoomGeometry(duration, timelineViewportWidth);
 	const maximumZoom = geometry.maximumZoom;
 	const pixelsPerFrame = Math.min(
 		TARGET_MAX_PIXELS_PER_FRAME,
 		geometry.fitPixelsPerFrame * zoom,
 	);
-	const width = Math.max(viewportWidth, duration * pixelsPerFrame);
+	const width = Math.max(timelineViewportWidth, duration * pixelsPerFrame);
 	const items = useMemo(() => timelineItems(definition), [definition]);
 	const selected = items.find((item) =>
 		sameSelection(item.selection, selection),
@@ -386,7 +469,6 @@ export const TimecodeTimelineEditor = forwardRef<
 		duration,
 		cueLists,
 		speedGroup,
-		cueListId,
 		audioPlayers,
 		onCommit,
 		setSelection,
@@ -397,10 +479,10 @@ export const TimecodeTimelineEditor = forwardRef<
 			addMarker,
 			addAudioLane,
 			addSpeedLane,
-			addCueListLane,
+			chooseCueListLane: () => setCueListChooserOpen(true),
 			addAudioPlayerLane,
 		}),
-		[addAudioLane, addAudioPlayerLane, addCueListLane, addMarker, addSpeedLane],
+		[addAudioLane, addAudioPlayerLane, addMarker, addSpeedLane],
 	);
 	useEffect(() => {
 		if (zoom > maximumZoom) setZoom(maximumZoom);
@@ -428,13 +510,6 @@ export const TimecodeTimelineEditor = forwardRef<
 			className="timecode-timeline-editor"
 			aria-label="Timecode timeline editor"
 		>
-			<TimelineTools
-				{...{
-					zoom,
-					setZoom,
-					maximumZoom,
-				}}
-			/>
 			<TimelineCanvas
 				{...{
 					definition,
@@ -462,9 +537,82 @@ export const TimecodeTimelineEditor = forwardRef<
 				fps={fps}
 				onCommit={onCommit}
 			/>
+			<TimelineTools
+				{...{
+					zoom,
+					setZoom,
+					maximumZoom,
+				}}
+			/>
+			{cueListChooserOpen && (
+				<CueListChooser
+					cueLists={cueLists}
+					value={cueListId}
+					onChange={setCueListId}
+					onClose={() => setCueListChooserOpen(false)}
+					onAdd={() => {
+						if (cueListId) addCueListLane(cueListId);
+						setCueListChooserOpen(false);
+					}}
+				/>
+			)}
 		</section>
 	);
 });
+
+function CueListChooser({
+	cueLists,
+	value,
+	onChange,
+	onClose,
+	onAdd,
+}: {
+	cueLists: readonly TimecodeCueListOption[];
+	value: string;
+	onChange(value: string): void;
+	onClose(): void;
+	onAdd(): void;
+}) {
+	return (
+		<ModalRegistration onClose={onClose}>
+			<div
+				className="modal-backdrop"
+				onPointerDown={(event) =>
+					event.target === event.currentTarget && onClose()
+				}
+			>
+				<section
+					className="modal-card"
+					role="dialog"
+					aria-modal="true"
+					aria-label="Choose Cue List"
+				>
+					<ModalTitleBar
+						title="Choose Cue List"
+						onClose={onClose}
+						closeLabel="Cancel adding Cue List lane"
+						accept={{
+							id: "add",
+							label: "Add lane",
+							variant: "primary",
+							disabled: !value,
+							onPress: onAdd,
+						}}
+					/>
+					<SelectField
+						label="Cue List"
+						value={value}
+						onChange={onChange}
+						options={cueLists.map((cueList) => ({
+							value: cueList.id,
+							label: cueList.name,
+						}))}
+					/>
+				</section>
+			</div>
+		</ModalRegistration>
+	);
+}
 
 function SelectionInspector({
 	definition,

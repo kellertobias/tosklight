@@ -6,7 +6,7 @@ import type {
 	UpdateSettings,
 	UpdateTargetFilter,
 } from "../../api/types";
-import { Button, ModalRegistration, SelectField } from "@tosklight/ui";
+import { Button, ModalRegistration, ModalTitleBar, SelectField } from "@tosklight/ui";
 import {
 	modeLabel,
 	targetFamilyLabel,
@@ -49,16 +49,7 @@ export function UpdateSettingsDialog({
 				aria-modal="true"
 				aria-label="Update Settings"
 			>
-				<Button
-					className="modal-close"
-					aria-label="Close Update Settings"
-					onClick={onCancel}
-				>
-					×
-				</Button>
-				<h2>
-					<span className="workflow-badge">UPDATE</span> Update Settings
-				</h2>
+				<ModalTitleBar title={<><span className="workflow-badge">UPDATE</span> Update Settings</>} closeLabel="Close Update Settings" onClose={onCancel}/>
 				<p>
 					Desk workflow preferences for Update. These settings do not change
 					show programming.
@@ -198,16 +189,7 @@ export function UpdateTargetMenu<T extends UpdateMenuEntry>({
 				aria-modal="true"
 				aria-label="Update Update"
 			>
-				<Button
-					className="modal-close"
-					aria-label="Close Update Update"
-					onClick={onCancel}
-				>
-					×
-				</Button>
-				<h2>
-					<span className="workflow-badge">UPDATE</span> Update Update
-				</h2>
+				<ModalTitleBar title={<><span className="workflow-badge">UPDATE</span> Update Update</>} closeLabel="Close Update Update" onClose={onCancel}/>
 				<p>
 					Choose an active or referenced target related to the current
 					programmer changes.
@@ -280,9 +262,7 @@ export function UpdateResultDialog({
 				aria-modal="true"
 				aria-label="Update complete"
 			>
-				<h2>
-					<span className="workflow-badge">UPDATE</span> Update complete
-				</h2>
+				<ModalTitleBar title={<><span className="workflow-badge">UPDATE</span> Update complete</>} onClose={onClose}/>
 				<p>
 					<b>
 						{targetFamilyLabel(result.target)} · {result.target.name}

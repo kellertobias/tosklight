@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { StageHeader } from "./StageHeader";
 import type { StageOptionsModel } from "./types";
@@ -130,6 +130,8 @@ describe("Stage settings are split between the views", () => {
 	 */
 	it("keeps every view's tab present whether or not the renderer can draw it", () => {
 		openSettings();
-		expect(screen.getAllByRole("tab")).toHaveLength(3);
+		expect(
+			within(screen.getByRole("dialog", { name: "Stage Settings" })).getAllByRole("tab"),
+		).toHaveLength(3);
 	});
 });

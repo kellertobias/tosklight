@@ -20,6 +20,10 @@ function projection(
 		active: true,
 		selectedFixtureIds: ["fixture-3", "fixture-1", "fixture-2"],
 		selectedFixtures: [],
+		supportedFixtureIdsByAttribute: new Map([
+			["intensity", ["fixture-3", "fixture-1", "fixture-2"]],
+			["pan", ["fixture-3", "fixture-1", "fixture-2"]],
+		]),
 		selectionRevision: 1,
 		selectedGroupId: null,
 		programmerValuesRoute: "normal",
@@ -99,6 +103,12 @@ describe("parameter value mutation builders", () => {
 						"fixture-2",
 						"fixture-1",
 					],
+					supportedFixtureIdsByAttribute: new Map([
+						[
+							"pan",
+							["fixture-4", "fixture-3", "fixture-2", "fixture-1"],
+						],
+					]),
 				}),
 				"pan",
 				[0, 100, 0],
@@ -182,6 +192,31 @@ describe("parameter value mutation builders", () => {
 			operation: { type: "relative_step", delta: -0.1 },
 			timing: { fade: false, fadeMillis: null, delayMillis: null },
 		});
+	});
+
+	it("targets a mixed selection tick only at fixtures exposing the parameter", async () => {
+		const actions = {
+			batch: vi.fn(),
+			applyIntent: vi.fn(async () => ({ status: "changed" })),
+		};
+		await submitParameterStep(
+			actions,
+			projection({
+				supportedFixtureIdsByAttribute: new Map([
+					["pan", ["fixture-3", "fixture-2"]],
+				]),
+			}),
+			"pan",
+			0.01,
+			() => "mixed-step-1",
+		);
+		expect(actions.applyIntent).toHaveBeenCalledWith(
+			expect.objectContaining({
+				requestId: "mixed-step-1",
+				fixtureIds: ["fixture-3", "fixture-2"],
+				attribute: "pan",
+			}),
+		);
 	});
 
 	it("submits an absolute selection with configured Programmer Fade without expanding locally", async () => {

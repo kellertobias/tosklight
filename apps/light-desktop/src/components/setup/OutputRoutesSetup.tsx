@@ -2,6 +2,7 @@ import {
 	Button,
 	FormLayout,
 	ModalPortal,
+	ModalTitleBar,
 	NumberField,
 	SelectField,
 	SwitchField,
@@ -159,6 +160,16 @@ function modeLabel(route: OutputRoute): string {
 			? "Art-Net Unicast"
 			: "Art-Net Broadcast";
 	return route.delivery_mode === "unicast" ? "sACN Unicast" : "sACN Multicast";
+}
+
+function routeDestination(route: OutputRoute): string {
+	if (route.target?.kind === "usb_endpoint") return "Connected USB device";
+	return (
+		route.destination ||
+		(route.protocol === "art_net"
+			? "255.255.255.255:6454"
+			: `239.255.${route.destination_universe >> 8}.${route.destination_universe & 255}:5568`)
+	);
 }
 
 function endpointLabel(endpoint: UsbDmxEndpoint | undefined) {
@@ -393,7 +404,7 @@ export function OutputRoutesSetup({
 						Map logical show universes to Art-Net or sACN destinations.
 					</small>
 				</div>
-				<div className="setup-section-actions">
+				<div className="setup-section-actions output-route-header-actions">
 					<Button
 						variant={usbScanComplete ? "success" : "secondary"}
 						loading={usbBusy}
@@ -465,31 +476,28 @@ export function OutputRoutesSetup({
 			)}
 			<div className="setup-list output-route-list">
 				{ordered.map((route) => (
-					<article key={route.id}>
-						<span>
+					<article
+						key={route.id}
+						className={route.body.enabled ? undefined : "is-disabled"}
+					>
+						<span className="output-route-content">
 							<b>
-								Logical {route.body.logical_universe} →{" "}
+								Logical {route.body.logical_universe} ·{" "}
 								{route.body.target?.kind === "usb_endpoint"
 									? endpointLabel(routeUsbEndpoint(usbEndpoints, route.body))
-									: `${route.body.protocol === "art_net" ? "Art-Net" : "sACN"} ${route.body.destination_universe}`}
+									: `${route.body.protocol === "art_net" ? "Art-Net" : "sACN"} ${route.body.destination_universe}`} ·{" "}
+								{modeLabel(route.body)} · {routeDestination(route.body)}
 							</b>
-							<small>
-								{modeLabel(route.body)} ·{" "}
-								{route.body.target?.kind === "usb_endpoint"
-									? "Final DMX frame over the connected USB device"
-									: route.body.destination ||
-										(route.body.protocol === "art_net"
-											? "255.255.255.255:6454"
-											: `239.255.${route.body.destination_universe >> 8}.${route.body.destination_universe & 255}:5568`)}{" "}
-								· Minimum {route.body.minimum_slots ?? 512} slots
-							</small>
-						</span>
-						<span
-							className={
-								route.body.enabled ? "route-enabled" : "route-disabled"
-							}
-						>
-							{route.body.enabled ? "Enabled" : "Disabled"}
+							<span className="output-route-secondary">
+								<span
+									className={
+										route.body.enabled ? "route-enabled" : "route-disabled"
+									}
+								>
+									{route.body.enabled ? "Enabled" : "Disabled"}
+								</span>
+								<small>Minimum {route.body.minimum_slots ?? 512} slots</small>
+							</span>
 						</span>
 						<Button onClick={() => edit(route)}>Edit route</Button>
 					</article>
@@ -514,13 +522,55 @@ export function OutputRoutesSetup({
 							aria-modal="true"
 							aria-label="Output route editor"
 						>
-							<Button className="modal-close" disabled={busy} onClick={close}>
-								×
-							</Button>
-							<h2>
-								{draft.revision ? "Edit output route" : "Add output route"}
-							</h2>
-							<FormLayout labelPlacement="side">
+							<ModalTitleBar
+								title={
+									confirmDelete
+										? "Delete output route?"
+										: draft.revision
+											? "Edit output route"
+											: "Add output route"
+								}
+								groups={
+									draft.revision > 0 && !confirmDelete
+										? [
+												{
+													id: "route",
+													actions: [
+														{
+															id: "delete",
+															label: "Delete route",
+															variant: "danger" as const,
+															disabled: busy,
+															onPress: () => setConfirmDelete(true),
+														},
+													],
+												},
+											]
+										: []
+								}
+								accept={{
+									id: confirmDelete ? "confirm-delete" : "save",
+									label: confirmDelete
+										? busy
+											? "Deleting…"
+											: "Confirm delete"
+										: busy
+											? "Saving…"
+											: "Save route",
+									variant: confirmDelete ? "danger" : "primary",
+									disabled: busy,
+									onPress: () => void (confirmDelete ? remove() : save()),
+								}}
+								closeDisabled={busy}
+								onClose={close}
+							/>
+							{confirmDelete ? (
+								<div className="delete-confirm">
+									<b>Remove this output route?</b>
+									<p>This stops output through this route after deletion.</p>
+								</div>
+							) : (
+								<FormLayout labelPlacement="side">
 								<SelectField
 									label="Output transport"
 									value={draft.body.target?.kind ?? "network"}
@@ -794,51 +844,12 @@ export function OutputRoutesSetup({
 										})
 									}
 								/>
-							</FormLayout>
-							{error && (
+								</FormLayout>
+							)}
+							{error && !confirmDelete && (
 								<p className="ui-field-error" role="alert">
 									{error}
 								</p>
-							)}
-							{confirmDelete ? (
-								<div className="delete-confirm">
-									<b>Remove this output route?</b>
-									<Button
-										disabled={busy}
-										onClick={() => setConfirmDelete(false)}
-									>
-										Cancel
-									</Button>
-									<Button
-										className="danger"
-										disabled={busy}
-										onClick={() => void remove()}
-									>
-										Confirm remove
-									</Button>
-								</div>
-							) : (
-								<footer className="modal-actions">
-									{draft.revision > 0 && (
-										<Button
-											className="danger"
-											disabled={busy}
-											onClick={() => setConfirmDelete(true)}
-										>
-											Remove route
-										</Button>
-									)}
-									<Button disabled={busy} onClick={close}>
-										Cancel
-									</Button>
-									<Button
-										variant="primary"
-										disabled={busy}
-										onClick={() => void save()}
-									>
-										{busy ? "Saving…" : "Save route"}
-									</Button>
-								</footer>
 							)}
 						</section>
 					</div>

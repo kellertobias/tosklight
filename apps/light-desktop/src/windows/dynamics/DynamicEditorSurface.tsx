@@ -112,57 +112,66 @@ function DynamicEditorHeader({
 				primary: dynamic.body.name,
 				secondary: `${dynamic.body.lanes.length} ${dynamic.body.lanes.length === 1 ? "lane" : "lanes"}`,
 			}}
-			actions={[
-				view === "curves"
+			groups={[
+				...(view === "curves"
 					? [
 							{
-								id: "add-lane",
-								label: "+ Add Lane",
-								onClick: () => onAddingLane(true),
+								id: "add",
+								actions: [
+									{
+										id: "add-lane",
+										label: "+ Add Lane",
+										onPress: () => onAddingLane(true),
+									},
+								],
 							},
 						]
-					: [],
-				[
-					{
-						id: "curves",
-						label: "Lanes",
-						active: view === "curves",
-						onClick: () => onChangeView("curves"),
-					},
-					{
-						id: "projection",
-						label: "Projection",
-						active: view === "projection",
-						onClick: () => onChangeView("projection"),
-					},
-					{
-						id: "phase",
-						label: "Phase",
-						active: view === "phase",
-						onClick: () => onChangeView("phase"),
-					},
-					{
-						id: "speed",
-						label: "Speed",
-						active: view === "speed",
-						onClick: () => onChangeView("speed"),
-					},
-				],
-				[
-					{
-						id: "preview",
-						label: previewing ? "■ Stop" : "▶ Preview",
-						active: previewing,
-						variant: previewing ? "danger" : "success",
-						className: "dynamic-preview-toggle",
-						onClick: () =>
-							onPreviewing((current) => {
-								if (current) onPreviewPhase(0);
-								return !current;
-							}),
-					},
-				],
-				[{ id: "back", label: "← Dynamics", onClick: onBack }],
+					: []),
+				{
+					id: "views",
+					kind: "tabs",
+					activeId: view,
+					onActiveChange: (id) => onChangeView(id as DynamicEditorView),
+					actions: [
+						{
+							id: "curves",
+							label: "Lanes",
+						},
+						{
+							id: "projection",
+							label: "Projection",
+						},
+						{
+							id: "phase",
+							label: "Phase",
+						},
+						{
+							id: "speed",
+							label: "Speed",
+						},
+					],
+				},
+				{
+					id: "preview",
+					actions: [
+						{
+							id: "preview",
+							label: previewing ? "■ Stop" : "▶ Preview",
+							active: previewing,
+							variant: previewing ? "danger" : "success",
+							className: "dynamic-preview-toggle",
+							onPress: () =>
+								onPreviewing((current) => {
+									if (current) onPreviewPhase(0);
+									return !current;
+								}),
+						},
+					],
+				},
+				{
+					id: "back",
+					actions: [{ id: "back", label: "← Dynamics", onPress: onBack }],
+				},
 			]}
 			settings
 			onSettings={(anchor) => onSettingsAnchor(anchor.getBoundingClientRect())}

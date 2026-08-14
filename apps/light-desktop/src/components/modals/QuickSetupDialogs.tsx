@@ -5,6 +5,7 @@ import {
 	NumberField,
 	SelectField,
 	TextInput,
+	type TitleAction,
 } from "@tosklight/ui";
 import { useEffect, useState } from "react";
 import type { DiscoveredPeer } from "../../api/client/discovery";
@@ -30,10 +31,7 @@ function NamedRevisionDialog({ model }: ModelProps) {
 				aria-modal="true"
 				aria-label="Save named revision"
 			>
-				<Button className="modal-close" onClick={() => setRevisionOpen(false)}>
-					×
-				</Button>
-				<h3>Save Named Revision</h3>
+				<ModalTitleBar title="Save Named Revision" onClose={() => setRevisionOpen(false)} />
 				<p>
 					This creates a restore point from the current autosaved show. Autosave
 					continues afterward.
@@ -76,10 +74,7 @@ function CopySaveDialog({ model }: ModelProps) {
 				aria-modal="true"
 				aria-label="Save revision copy"
 			>
-				<Button className="modal-close" onClick={() => setCopySaveOpen(false)}>
-					×
-				</Button>
-				<h3>Save Revision Copy</h3>
+				<ModalTitleBar title="Save Revision Copy" onClose={() => setCopySaveOpen(false)} />
 				<p>
 					Autosave already protects this copy. Choose where this copy should
 					remain.
@@ -153,20 +148,27 @@ function SaveAsDialog({ model }: ModelProps) {
 			>
 				<ModalTitleBar
 					title={activeShowIsProvisional ? "Name Empty Show" : "Save Show As"}
-					actions={
-						<>
-							<Button onClick={openMvrExport}>Export as MVR</Button>
-							<Button
-								variant="primary"
-								disabled={!dialogs.showName.trim()}
-								onClick={() => void saveAs()}
-							>
-								{activeShowIsProvisional
-									? "Name Empty Show"
-									: "Save as New Show"}
-							</Button>
-						</>
-					}
+					groups={[
+						{
+							id: "export",
+							actions: [
+								{
+									id: "export-mvr",
+									label: "Export as MVR",
+									onPress: openMvrExport,
+								},
+							],
+						},
+					]}
+					accept={{
+						id: "save",
+						label: activeShowIsProvisional
+							? "Name Empty Show"
+							: "Save as New Show",
+						variant: "primary",
+						disabled: !dialogs.showName.trim(),
+						onPress: () => void saveAs(),
+					}}
 					closeLabel="Close Save Show"
 					onClose={() => dialogs.setSaveAsOpen(false)}
 				/>
@@ -223,7 +225,7 @@ function OverwriteDialog({ model }: ModelProps) {
 				aria-modal="true"
 				aria-label={`Confirm overwrite ${overwriteTarget.name}`}
 			>
-				<h3>Replace {overwriteTarget.name} Latest Autosave?</h3>
+				<ModalTitleBar title={`Replace ${overwriteTarget.name} Latest Autosave?`} closeDisabled={overwriteBusy} onClose={close} />
 				<p>
 					This replaces only <b>{overwriteTarget.name}</b>&apos;s mutable Latest
 					Autosave with the active show state. Its identity and named revisions
@@ -280,7 +282,7 @@ function NamedRevisionList({ model, showId }: ModelProps & { showId: string }) {
  * should not be shown a button that can only fail. Two editors are two buttons, told apart by
  * name and — in the tooltip — address, because that is what distinguishes them.
  */
-function LoadFromVisualizerActions({ model }: ModelProps) {
+function useLoadFromVisualizerActions(model: QuickSetupModel): TitleAction[] {
 	const { lifecycle } = model.authorities;
 	const open = model.dialogs.loadOpen;
 	const [visualizers, setVisualizers] = useState<DiscoveredPeer[]>([]);
@@ -299,18 +301,15 @@ function LoadFromVisualizerActions({ model }: ModelProps) {
 			current = false;
 		};
 	}, [open, lifecycle]);
-	return visualizers.map((visualizer) => (
-		<Button
-			key={visualizer.instance}
-			title={`${visualizer.name} at ${visualizer.address}`}
-			onClick={async () => {
-				if (await lifecycle?.loadFromVisualizer(visualizer.instance))
-					model.dialogs.setLoadOpen(false);
-			}}
-		>
-			Load from Visualizer · {visualizer.name}: {visualizer.show}
-		</Button>
-	));
+	return visualizers.map((visualizer) => ({
+		id: `visualizer-${visualizer.instance}`,
+		label: `Load from Visualizer · ${visualizer.name}: ${visualizer.show}`,
+		ariaLabel: `Load from ${visualizer.name} at ${visualizer.address}`,
+		onPress: async () => {
+			if (await lifecycle?.loadFromVisualizer(visualizer.instance))
+				model.dialogs.setLoadOpen(false);
+		},
+	}));
 }
 
 function LoadShowLibrary({ model }: ModelProps) {
@@ -364,6 +363,7 @@ function LoadShowLibrary({ model }: ModelProps) {
 function LoadDialog({ model }: ModelProps) {
 	const { lifecycle } = model.authorities;
 	const dialogs = model.dialogs;
+	const visualizerActions = useLoadFromVisualizerActions(model);
 	if (!dialogs.loadOpen) return null;
 	return (
 		<StackedModal onClose={() => dialogs.setLoadOpen(false)}>
@@ -375,47 +375,51 @@ function LoadDialog({ model }: ModelProps) {
 			>
 				<ModalTitleBar
 					title="Load Show"
-					actions={
-						<>
-							<Button
-								onClick={() => {
-									dialogs.setLoadOpen(false);
-									dialogs.setSelectiveImportOpen(true);
-								}}
-							>
-								Partial Show Load
-							</Button>
-							<Button
-								onClick={() =>
-									model.mvr.openMvrImport(() => dialogs.setLoadOpen(false))
-								}
-							>
-								Load from MVR
-							</Button>
-							<LoadFromVisualizerActions model={model} />
-							<Button onClick={() => dialogs.usbShowPickerTrigger.current?.()}>
-								Show from USB
-							</Button>
-							<Button
-								onClick={() => dialogs.osShowPickerInput.current?.click()}
-							>
-								Show from OS
-							</Button>
-							<Input
-								ref={dialogs.osShowPickerInput}
-								hidden
-								type="file"
-								accept=".show"
-								onChange={(event) => {
-									const file = event.target.files?.[0];
-									if (file) void lifecycle?.uploadShow(file);
-									event.target.value = "";
-								}}
-							/>
-						</>
-					}
+					groups={[
+						{
+							id: "load",
+							actions: [
+								{
+									id: "partial",
+									label: "Partial Show Load",
+									onPress: () => {
+										dialogs.setLoadOpen(false);
+										dialogs.setSelectiveImportOpen(true);
+									},
+								},
+								{
+									id: "mvr",
+									label: "Load from MVR",
+									onPress: () =>
+										model.mvr.openMvrImport(() => dialogs.setLoadOpen(false)),
+								},
+								...visualizerActions,
+								{
+									id: "usb",
+									label: "Show from USB",
+									onPress: () => dialogs.usbShowPickerTrigger.current?.(),
+								},
+								{
+									id: "os",
+									label: "Show from OS",
+									onPress: () => dialogs.osShowPickerInput.current?.click(),
+								},
+							],
+						},
+					]}
 					closeLabel="Close Load Show"
 					onClose={() => dialogs.setLoadOpen(false)}
+				/>
+				<Input
+					ref={dialogs.osShowPickerInput}
+					hidden
+					type="file"
+					accept=".show"
+					onChange={(event) => {
+						const file = event.target.files?.[0];
+						if (file) void lifecycle?.uploadShow(file);
+						event.target.value = "";
+					}}
 				/>
 				<p>
 					Load Latest Autosave always resumes that show&apos;s newest work. Load
@@ -471,16 +475,11 @@ function NewShowDialog({ model }: ModelProps) {
 				aria-modal="true"
 				aria-label="New show"
 			>
-				<Button
-					className="modal-mode-switch"
-					onClick={() => model.mvr.openMvrImport(() => setNewShowOpen(false))}
-				>
-					Load from MVR
-				</Button>
-				<Button className="modal-close" onClick={() => setNewShowOpen(false)}>
-					×
-				</Button>
-				<h3>New Show</h3>
+				<ModalTitleBar
+					title="New Show"
+					groups={[{ id: "new-show-source", actions: [{ id: "mvr", label: "Load from MVR", onPress: () => model.mvr.openMvrImport(() => setNewShowOpen(false)) }] }]}
+					onClose={() => setNewShowOpen(false)}
+				/>
 				<p>
 					Create and open a new empty show. The current show remains saved on
 					this desk.
@@ -545,11 +544,7 @@ function MvrFilePicker({ model }: ModelProps) {
 			mvrFilePickerTrigger.current();
 		}, 0);
 		return () => globalThis.clearTimeout(timer);
-	}, [
-		mvrFilePickerRequested,
-		mvrFilePickerTrigger,
-		setMvrFilePickerRequested,
-	]);
+	}, [mvrFilePickerRequested, mvrFilePickerTrigger, setMvrFilePickerRequested]);
 	if (mvrMode === "export" || model.mvr.mvrPreview) return null;
 	return (
 		<>
@@ -762,16 +757,14 @@ function MvrDialog({ model }: ModelProps) {
 				aria-modal="true"
 				aria-label="MVR import and export"
 			>
-				<Button className="modal-close" onClick={() => mvr.setMvrMode(null)}>
-					×
-				</Button>
-				<h3>
-					{mvr.mvrMode === "new"
+				<ModalTitleBar
+					title={mvr.mvrMode === "new"
 						? "New Show from MVR"
 						: mvr.mvrMode === "merge"
 							? "Add MVR to Show"
 							: "Export Show as MVR"}
-				</h3>
+					onClose={() => mvr.setMvrMode(null)}
+				/>
 				{needsShow && <MvrShowPicker model={model} />}
 				{!needsShow && <MvrFilePicker model={model} />}
 				<MvrImportPreview model={model} />
@@ -793,13 +786,7 @@ function ChangeUserDialog({ model }: ModelProps) {
 				aria-modal="true"
 				aria-label="Change user"
 			>
-				<Button
-					className="modal-close"
-					onClick={() => dialogs.setChangeUserOpen(false)}
-				>
-					×
-				</Button>
-				<h3>Change User</h3>
+				<ModalTitleBar title="Change User" onClose={() => dialogs.setChangeUserOpen(false)} />
 				<div className="show-library">
 					{bootstrap?.users
 						.filter((user) => user.enabled)
@@ -858,13 +845,7 @@ function ShutdownDialog({ model }: ModelProps) {
 				role="alertdialog"
 				aria-modal="true"
 			>
-				<Button
-					className="modal-close"
-					onClick={() => setConfirmShutdown(false)}
-				>
-					×
-				</Button>
-				<h3>Shut Down Desk?</h3>
+				<ModalTitleBar title="Shut Down Desk?" onClose={() => setConfirmShutdown(false)} />
 				<p>
 					Hazardous fixtures will be driven to their safe values before the
 					server stops. This desk application will then close.

@@ -219,6 +219,22 @@ function CuePaneSettings({
 					})
 				}
 			/>
+			<SelectField
+				label="Cue information block"
+				value={pane.cueInformationBlock ?? "off"}
+				onChange={(value) =>
+					dispatch({
+						type: "SET_PANE_CUE_INFORMATION_BLOCK",
+						id: pane.id,
+						value,
+					})
+				}
+				options={[
+					{ value: "off", label: "Off" },
+					{ value: "current", label: "Current Cue" },
+					{ value: "next", label: "Next Cue" },
+				]}
+			/>
 		</FormLayout>
 	);
 }

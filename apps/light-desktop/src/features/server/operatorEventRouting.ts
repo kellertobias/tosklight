@@ -11,7 +11,10 @@ import type { ServerState } from "./useServerState";
 const hardwarePageKeys = new Set<string>();
 const hardwarePageTimers = new Map<string, number>();
 
-function routeHardwarePageKey(action: "page-up" | "page-down", value: string | undefined) {
+function routeHardwarePageKey(
+	action: "page-up" | "page-down",
+	value: string | undefined,
+) {
 	if (value === "up") {
 		hardwarePageKeys.delete(action);
 		return;
@@ -86,9 +89,14 @@ function routeDeskAction(
 			routeHardwarePageKey(payload.action, payload.value ?? undefined);
 			return;
 		} else if (
-			["shift-cue", "shift-playback", "shift-escape", "shift-enter", "shift-preload", "shift-mov"].includes(
-				payload.action,
-			)
+			[
+				"shift-cue",
+				"shift-playback",
+				"shift-escape",
+				"shift-enter",
+				"shift-preload",
+				"shift-mov",
+			].includes(payload.action)
 		) {
 			window.dispatchEvent(
 				new CustomEvent("light:programmer-key", {
@@ -163,6 +171,7 @@ function deskCommand(action: string) {
 			"groups",
 			"presets",
 			"cues",
+			"dynamics",
 			"playbacks",
 			"setup",
 			"help",
@@ -228,10 +237,17 @@ function routeFileEvent(
 ) {
 	if (event.type === "file_input") {
 		const payload = event.notification;
-		if (payload.session_id === session.session_id)
+		if (payload.session_id === session.session_id) {
+			if (payload.operation === "macro_edit") {
+				window.dispatchEvent(
+					new CustomEvent("light:macro-editor-input", { detail: payload }),
+				);
+				return;
+			}
 			window.dispatchEvent(
 				new CustomEvent("light:file-manager-input", { detail: payload }),
 			);
+		}
 		return;
 	}
 	window.dispatchEvent(

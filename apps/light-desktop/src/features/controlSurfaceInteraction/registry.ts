@@ -83,6 +83,7 @@ export type DeskCommand =
 	| "groups"
 	| "presets"
 	| "cues"
+	| "dynamics"
 	| "playbacks"
 	| "setup"
 	| "help"

@@ -84,57 +84,69 @@ export function SetupHeader({
 }: {
 	controller: SetupWindowController;
 }) {
-	const actions =
+	const groups =
 		controller.section === "screens"
 			? [
-					[
+					{ id: "screen-configuration", actions: [
 						{
 							id: "undo",
 							label: "Undo",
 							disabled: !controller.screenCanUndo,
-							onClick: () => controller.screenUndo.current?.(),
+							onPress: () => controller.screenUndo.current?.(),
 						},
 						{
 							id: "encoder-placement",
 							label: "Configure encoder placement",
-							onClick: () => controller.setEncoderPlacementOpen(true),
+							onPress: () => controller.setEncoderPlacementOpen(true),
 						},
 						{
 							id: "desk-lock",
 							label: "Configure desk lock",
-							onClick: () => controller.setDeskLockSettingsOpen(true),
+							onPress: () => controller.setDeskLockSettingsOpen(true),
 						},
-					],
+					] },
 				]
 			: [
 					...(controller.section === "network"
 						? [
-								NETWORK_SETTINGS_TABS.map(({ id, label }) => ({
-									id: `network-tab-${id}`,
+								{
+									id: "network-settings",
+									kind: "tabs" as const,
+									activeId: controller.networkTab,
+									onActiveChange: (id: string) => controller.setNetworkTab(id as typeof controller.networkTab),
+									actions: NETWORK_SETTINGS_TABS.map(({ id, label }) => ({
+									id,
 									label,
-									active: controller.networkTab === id,
-									onClick: () => controller.setNetworkTab(id),
 								})),
+								},
 							]
 						: []),
 					...(controller.section === "preferences-defaults"
 						? [
-								DEFAULTS_SETTINGS_TABS.map(({ id, label }) => ({
-									id: `defaults-tab-${id}`,
+								{
+									id: "defaults-settings",
+									kind: "tabs" as const,
+									activeId: controller.defaultsTab,
+									onActiveChange: (id: string) => controller.setDefaultsTab(id as typeof controller.defaultsTab),
+									actions: DEFAULTS_SETTINGS_TABS.map(({ id, label }) => ({
+									id,
 									label,
-									active: controller.defaultsTab === id,
-									onClick: () => controller.setDefaultsTab(id),
 								})),
+								},
 							]
 						: []),
 					...(controller.section === "preferences-attributes"
 						? [
-								ATTRIBUTE_SETTINGS_TABS.map(({ id, label }) => ({
-									id: `attribute-tab-${id}`,
+								{
+									id: "attribute-settings",
+									kind: "tabs" as const,
+									activeId: controller.attributeTab,
+									onActiveChange: (id: string) => controller.setAttributeTab(id as typeof controller.attributeTab),
+									actions: ATTRIBUTE_SETTINGS_TABS.map(({ id, label }) => ({
+									id,
 									label,
-									active: controller.attributeTab === id,
-									onClick: () => controller.setAttributeTab(id),
 								})),
+								},
 							]
 						: []),
 				];
@@ -145,7 +157,7 @@ export function SetupHeader({
 				primary: setupSectionLabel(controller.section),
 				secondary: controller.restartRequired ? "Restart required" : undefined,
 			}}
-			actions={actions}
+			groups={groups}
 		/>
 	);
 }

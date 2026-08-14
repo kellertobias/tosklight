@@ -608,6 +608,26 @@ describe("useCommandLineShortcuts authority gating", () => {
 });
 
 describe("useCommandLineShortcuts dormancy", () => {
+	it("leaves focused text editors alone and resumes command input off-editor", () => {
+		mount();
+		const editor = document.createElement("textarea");
+		document.body.append(editor);
+		const typed = new KeyboardEvent("keydown", {
+			key: "7",
+			code: "Digit7",
+			bubbles: true,
+			cancelable: true,
+		});
+		editor.dispatchEvent(typed);
+		expect(typed.defaultPrevented).toBe(false);
+		expect(callbacks.replaceCommand).not.toHaveBeenCalled();
+
+		const deskKey = press("7", { code: "Digit7" });
+		expect(deskKey.defaultPrevented).toBe(true);
+		expect(callbacks.replaceCommand).toHaveBeenCalled();
+		editor.remove();
+	});
+
 	it("opens no subscription and consumes no keys in hardware mode", () => {
 		mount(true);
 

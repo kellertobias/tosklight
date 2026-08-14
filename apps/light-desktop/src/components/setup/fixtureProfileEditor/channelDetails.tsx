@@ -33,42 +33,49 @@ export function ChannelEditorModal({
 					event.target === event.currentTarget && onClose()
 				}
 			>
-			<section
-				className="nested-modal fixture-channel-editor-modal"
-				role="dialog"
-				aria-modal="true"
-				aria-label={`Edit ${channel.attribute} channel`}
-			>
-				<ModalTitleBar
-					title="Edit channel"
-					actions={
-						<Button onClick={() => setFunctionsOpen(true)}>
-							Channel functions ({channel.functions.length})
-						</Button>
-					}
-					closeLabel="Close channel editor"
-					onClose={onClose}
-				/>
-				<div className="fixture-channel-editor-body">
-					<ChannelCoreFields
-						mode={mode}
-						channel={channel}
-						attributeRegistry={attributeRegistry}
-						onChange={onChange}
-						onResolution={onResolution}
+				<section
+					className="nested-modal fixture-channel-editor-modal"
+					role="dialog"
+					aria-modal="true"
+					aria-label={`Edit ${channel.attribute} channel`}
+				>
+					<ModalTitleBar
+						title="Edit channel"
+						groups={[
+							{
+								id: "functions",
+								actions: [
+									{
+										id: "functions",
+										label: `Channel functions (${channel.functions.length})`,
+										onPress: () => setFunctionsOpen(true),
+									},
+								],
+							},
+						]}
+						closeLabel="Close channel editor"
+						onClose={onClose}
 					/>
-					<ChannelFields channel={channel} onChange={onChange} />
-				</div>
-				{functionsOpen && (
-					<ChannelFunctionsModal
-						channel={channel}
-						attributeRegistry={attributeRegistry}
-						actionIds={mode.control_actions}
-						onChange={onChange}
-						onClose={() => setFunctionsOpen(false)}
-					/>
-				)}
-			</section>
+					<div className="fixture-channel-editor-body">
+						<ChannelCoreFields
+							mode={mode}
+							channel={channel}
+							attributeRegistry={attributeRegistry}
+							onChange={onChange}
+							onResolution={onResolution}
+						/>
+						<ChannelFields channel={channel} onChange={onChange} />
+					</div>
+					{functionsOpen && (
+						<ChannelFunctionsModal
+							channel={channel}
+							attributeRegistry={attributeRegistry}
+							actionIds={mode.control_actions}
+							onChange={onChange}
+							onClose={() => setFunctionsOpen(false)}
+						/>
+					)}
+				</section>
 			</div>
 		</ModalRegistration>
 	);

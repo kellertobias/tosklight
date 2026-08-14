@@ -86,20 +86,26 @@ export function CuelistSettings(props: CuelistSettingsProps) {
 								</small>
 							</>
 						}
-						actions={
-							<>
-								<ModeControl controller={controller} />
-								<Button
-									disabled={!draft.cues.length}
-									onClick={() => setRenumberOpen(true)}
-								>
-									Renumber Cues
-								</Button>
-								<Button variant="primary" onClick={() => void submit()}>
-									Save
-								</Button>
-							</>
-						}
+						toolbar={<ModeControl controller={controller} />}
+						groups={[
+							{
+								id: "renumber",
+								actions: [
+									{
+										id: "renumber",
+										label: "Renumber Cues",
+										disabled: !draft.cues.length,
+										onPress: () => setRenumberOpen(true),
+									},
+								],
+							},
+						]}
+						accept={{
+							id: "save",
+							label: "Save",
+							variant: "primary",
+							onPress: () => void submit(),
+						}}
 						closeLabel="Close Cuelist Settings"
 						onClose={requestClose}
 					/>

@@ -46,6 +46,11 @@ export type Action =
 	| { type: "SET_PANE_CUE_SIDEBAR"; id: string; value: boolean }
 	| { type: "SET_PANE_CUELIST_COMPACT_ROWS"; id: string; value: boolean }
 	| {
+			type: "SET_PANE_CUE_INFORMATION_BLOCK";
+			id: string;
+			value: "off" | "current" | "next";
+	  }
+	| {
 			type: "SET_PANE_CUELIST";
 			id: string;
 			source?: "fixed" | "follow-selection";

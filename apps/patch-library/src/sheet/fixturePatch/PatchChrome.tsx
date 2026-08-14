@@ -19,71 +19,73 @@ export function PatchHeader() {
 						? `${library.unresolvedMvrFixtures.length} unresolved MVR fixtures excluded from output`
 						: undefined),
 			}}
-			actions={[
-				[
+			groups={[
+				{ id: "stage-preview", actions: [
 					...(props.onStagePreview
 						? [
 								{
 									id: "preview-stage",
 									label: "Preview Stage",
 									active: props.stagePreviewOpen,
-									onClick: props.onStagePreview,
+								onPress: props.onStagePreview,
 									onLongPress: props.onOpenStageWindow,
 								},
 							]
 						: []),
-				],
-				[
+				] },
+				{ id: "patch-kind", actions: [
 					...(props.onMedia
 						? [
 								{
 									id: "fixtures",
 									label: "Fixtures",
 									active: true,
-									onClick: () => undefined,
+								onPress: () => undefined,
 								},
 								{
 									id: "media",
 									label: "Media Servers",
-									onClick: props.onMedia,
+								onPress: props.onMedia,
 								},
 							]
 						: []),
-				],
-				[
-					...(selected && editArmed
-						? [
-								{
-									id: "fixture-number",
-									label: "Set fixture ID",
-									onClick: () => void setFixtureNumber(controller, selected),
-								},
-							]
-						: []),
+				] },
+				{ id: "patch-create", actions: [
 					{
 						id: "layer",
 						label: "+ Add layer",
-						onClick: () => ui.setLayerModal("add"),
+						onPress: () => ui.setLayerModal("add"),
 					},
 					{
 						id: "fixture",
 						label: "+ Add fixture",
-						onClick: () => ui.setBrowserOpen(true),
+						onPress: () => ui.setBrowserOpen(true),
 					},
 					{
 						id: "multipatch",
 						label: "+ Add multi-patch",
 						disabled: !data.selected,
-						onClick: () => void addMultipatch(controller),
+						onPress: () => void addMultipatch(controller),
 					},
+				] },
+				{ id: "patch-edit", actions: [
+					...(selected && editArmed
+						? [
+								{
+									id: "fixture-number",
+									label: "Set fixture ID",
+								onPress: () => void setFixtureNumber(controller, selected),
+								},
+							]
+						: []),
 					{
 						id: "delete",
 						label: "Delete",
 						active: ui.deleteArmed,
 						disabled: data.visible.length === 0,
-						onClick: () => ui.setDeleteArmed((armed) => !armed),
+						onPress: () => ui.setDeleteArmed((armed) => !armed),
 					},
-				],
+				] },
 			]}
 		/>
 	);

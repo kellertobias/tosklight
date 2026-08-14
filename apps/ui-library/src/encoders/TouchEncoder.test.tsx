@@ -286,7 +286,7 @@ describe("TouchEncoder", () => {
 		fireEvent.click(
 			screen.getByRole("button", { name: "Set Enc 1 · Pan value" }),
 		);
-		fireEvent.click(screen.getByRole("button", { name: "Show presets" }));
+		fireEvent.click(screen.getByRole("tab", { name: "Presets" }));
 		fireEvent.click(screen.getByRole("button", { name: /Three quarters/u }));
 
 		expect(onSet).toHaveBeenCalledWith(0.75);
@@ -314,7 +314,7 @@ describe("TouchEncoder", () => {
 		fireEvent.click(
 			screen.getByRole("button", { name: "Set Enc 1 · Pan value" }),
 		);
-		fireEvent.click(screen.getByRole("button", { name: "Show presets" }));
+		fireEvent.click(screen.getByRole("tab", { name: "Presets" }));
 		expect(screen.getByRole("button", { name: "Current" })).toHaveAttribute(
 			"aria-pressed",
 			"true",

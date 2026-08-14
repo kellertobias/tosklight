@@ -450,7 +450,7 @@ describe("selected split selection and SET editing", () => {
 				.map((button) => button.textContent),
 		).toEqual(["Preview Stage", "Fixtures", "Media Servers"]);
 		expect(screen.getByRole("button", { name: "Preview Stage" })).toHaveClass(
-			"active",
+			"is-active",
 		);
 		fireEvent.click(screen.getByRole("button", { name: "Preview Stage" }));
 		expect(onStagePreview).toHaveBeenCalledOnce();

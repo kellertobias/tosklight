@@ -45,11 +45,12 @@ export function RenumberCuesDialog({
 				>
 					<ModalTitleBar
 						title="Renumber Cues"
-						actions={
-							<Button type="submit" variant="primary">
-								Renumber
-							</Button>
-						}
+						accept={{
+							id: "renumber",
+							label: "Renumber",
+							variant: "primary",
+							type: "submit",
+						}}
 						onClose={close}
 						closeLabel="Cancel renumbering"
 					/>
@@ -88,7 +89,7 @@ export function UnsavedSettingsDialog({
 					role="dialog"
 					aria-label="Unsaved Cuelist Settings"
 				>
-					<h2>Unsaved Cuelist Settings</h2>
+					<ModalTitleBar title="Unsaved Cuelist Settings" onClose={stay} />
 					<p>
 						Save the Cuelist changes, discard them, or stay in Cuelist Settings.
 					</p>

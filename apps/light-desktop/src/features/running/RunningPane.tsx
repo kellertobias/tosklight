@@ -92,14 +92,16 @@ export function RunningPane({
 				<WindowHeader
 					title="Running"
 					info={{ primary: `${visibleRows.length} running` }}
-					actions={[
-						FILTERS.map((item) => ({
+					groups={[{
+						id: "running-filter",
+						kind: "tabs",
+						activeId: filter,
+						onActiveChange: (id) => setFilter(id as RunningFilter),
+						actions: FILTERS.map((item) => ({
 							id: item.id,
 							label: item.label,
-							active: filter === item.id,
-							onClick: () => setFilter(item.id),
 						})),
-					]}
+					}]}
 				/>
 			)}
 			<WindowScrollArea>

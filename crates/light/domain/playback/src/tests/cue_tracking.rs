@@ -61,9 +61,10 @@ fn cue_only_releases_new_attribute_in_following_cue() {
 }
 
 #[test]
-fn legacy_cues_default_cue_only_and_group_restore_metadata_to_false() {
+fn legacy_cues_default_optional_metadata() {
     let mut body = serde_json::to_value(Cue::new(1.0)).unwrap();
     body.as_object_mut().unwrap().remove("cue_only");
+    body.as_object_mut().unwrap().remove("information");
     body["group_changes"] = serde_json::json!([{
         "group_id": "1",
         "attribute": "intensity",
@@ -71,7 +72,16 @@ fn legacy_cues_default_cue_only_and_group_restore_metadata_to_false() {
     }]);
     let cue: Cue = serde_json::from_value(body).unwrap();
     assert!(!cue.cue_only);
+    assert!(cue.information.is_empty());
     assert!(!cue.group_changes[0].automatic_restore);
+}
+
+#[test]
+fn cue_information_round_trips_with_the_cue() {
+    let mut cue = Cue::new(1.0);
+    cue.information = "Stand by follow spot".into();
+    let restored: Cue = serde_json::from_value(serde_json::to_value(cue).unwrap()).unwrap();
+    assert_eq!(restored.information, "Stand by follow spot");
 }
 
 #[test]

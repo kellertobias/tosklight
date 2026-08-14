@@ -1,6 +1,7 @@
 import {
 	Button,
 	CheckboxField,
+	ModalTitleBar,
 	TextArea,
 	TextInput,
 } from "@tosklight/ui";
@@ -67,10 +68,10 @@ function OperationConfirmations({
 							: "Confirm permanent deletion"
 					}
 				>
-					<h3>
-						Delete {operation.sources.length} item
-						{operation.sources.length === 1 ? "" : "s"}?
-					</h3>
+					<ModalTitleBar
+						title={`Delete ${operation.sources.length} item${operation.sources.length === 1 ? "" : "s"}?`}
+						onClose={() => operations.cancelOperation()}
+					/>
 					<p>
 						{controller.trashForOperation
 							? "The selected item(s) will be moved to the platform Trash."
@@ -102,7 +103,10 @@ function OperationConfirmations({
 					aria-modal="true"
 					aria-label="Resolve name conflict"
 				>
-					<h3>An item with that name already exists</h3>
+					<ModalTitleBar
+						title="An item with that name already exists"
+						onClose={() => operations.cancelOperation()}
+					/>
 					<p>Choose how this conflict should be handled.</p>
 					{conflict.operation.sources.length > 1 && (
 						<CheckboxField

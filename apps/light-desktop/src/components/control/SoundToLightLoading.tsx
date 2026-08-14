@@ -1,4 +1,4 @@
-import { Button, ModalRegistration } from "@tosklight/ui";
+import { ModalRegistration, ModalTitleBar } from "@tosklight/ui";
 import { createPortal } from "react-dom";
 import type { SpeedGroupId } from "../../api/types";
 import type { SoundToLightController } from "./useSoundToLight";
@@ -26,14 +26,11 @@ export function SoundToLightLoading({
 					aria-modal="true"
 					aria-label={`Speed Group ${group} Sound to Light`}
 				>
-					<Button
-						className="modal-close"
-						aria-label="Close Sound-to-Light configuration"
-						onClick={onClose}
-					>
-						×
-					</Button>
-					<h3>Speed Group {group} · Sound to Light</h3>
+					<ModalTitleBar
+						title={`Speed Group ${group} · Sound to Light`}
+						closeLabel="Close Sound-to-Light configuration"
+						onClose={onClose}
+					/>
 					<p>
 						{controller.loading
 							? "Loading Speed Group configuration…"

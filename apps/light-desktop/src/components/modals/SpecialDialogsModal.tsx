@@ -1,4 +1,4 @@
-import { Button, ModalPortal } from "@tosklight/ui";
+import { Button, ModalPortal, ModalTitleBar } from "@tosklight/ui";
 import { useMemo, useState } from "react";
 import { useProgrammerFadeMillis } from "../../features/configuration/ConfigurationState";
 import { useSelectedPatchedFixtures } from "../../features/patch/PatchState";
@@ -115,10 +115,7 @@ export function SpecialDialogsModal() {
 						family === "Position" ? "position-special-dialog" : ""
 					}`}
 				>
-					<Button className="modal-close" onClick={close}>
-						×
-					</Button>
-					<h2>{family} · Special Dialog</h2>
+					<ModalTitleBar title={`${family} · Special Dialog`} onClose={close} />
 					<p>{selectedFixtureIds.length} fixtures selected</p>
 					{!valueWrites.canWrite && (
 						<p className="modal-status">Programmer values loading…</p>

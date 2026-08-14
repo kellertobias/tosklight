@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseAudioBindingMap } from "./GeneralSections";
+import { parseAudioBindingMap } from "./AudioOutputSection";
 
 describe("desk-local audio binding maps", () => {
 	it("maps logical show names to local targets", () => {

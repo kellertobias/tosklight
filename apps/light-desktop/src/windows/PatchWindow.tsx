@@ -175,17 +175,19 @@ function PatchMediaWindow({
 			<WindowHeader
 				title="Show Patch"
 				info={{ primary: "Media Servers" }}
-				actions={[
-					[
-						{ id: "fixtures", label: "Fixtures", onClick: onFixtures },
+				groups={[{
+					id: "patch-kind",
+					kind: "tabs",
+					activeId: "media",
+					onActiveChange: (id) => id === "fixtures" && onFixtures(),
+					actions: [
+						{ id: "fixtures", label: "Fixtures" },
 						{
 							id: "media",
 							label: "Media Servers",
-							active: true,
-							onClick: () => undefined,
 						},
 					],
-				]}
+				}]}
 			/>
 			<WindowScrollArea>
 				<main>

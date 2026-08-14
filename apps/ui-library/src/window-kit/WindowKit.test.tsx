@@ -29,11 +29,16 @@ describe("window kit", () => {
 					primary: "1 selected",
 					secondary: <span className="test-legend">Shift for range</span>,
 				}}
-				search={{ value: "" }}
-				onSearch={vi.fn()}
-				actions={[
-					[{ id: "one", label: "First", onClick: vi.fn() }],
-					[{ id: "two", label: "Second", onClick: vi.fn() }],
+				search={{ value: "", onSearch: vi.fn() }}
+				groups={[
+					{
+						id: "one",
+						actions: [{ id: "one", label: "First", onPress: vi.fn() }],
+					},
+					{
+						id: "two",
+						actions: [{ id: "two", label: "Second", onPress: vi.fn() }],
+					},
 				]}
 				settings
 				onSettings={vi.fn()}
@@ -45,25 +50,26 @@ describe("window kit", () => {
 			"SMALL",
 		);
 		expect(
-			[...container.querySelectorAll(".ui-window-action-groups button")].map(
-				(button) => button.textContent,
-			),
+			[
+				...container.querySelectorAll(
+					".ui-title-chrome-group > .ui-title-chrome-action > button, .ui-title-chrome-terminals > .ui-title-chrome-action > button",
+				),
+			].map((button) => button.textContent),
 		).toEqual(["First", "Second", "⚙Settings"]);
-		expect(
-			container.querySelectorAll(".ui-titlebar-search-divider"),
-		).toHaveLength(1);
 		const header = container.querySelector(".ui-window-header");
 		const search = screen
 			.getByRole("textbox", { name: "Search Stage" })
 			.closest(".ui-window-header-search");
-		const actionGroups = container.querySelector(".ui-window-action-groups");
+		const chrome = container.querySelector(".ui-window-action-groups");
 		expect(header).not.toBeNull();
 		expect(search).not.toBeNull();
-		expect(actionGroups).not.toBeNull();
-		if (!header || !search || !actionGroups)
+		expect(chrome).not.toBeNull();
+		if (!header || !search || !chrome)
 			throw new Error("Missing window header controls");
-		expect([...header.children].indexOf(search)).toBeLessThan(
-			[...header.children].indexOf(actionGroups),
+		expect([...chrome.children].indexOf(search)).toBeGreaterThan(
+			[...chrome.children].indexOf(
+				chrome.querySelector(".ui-title-chrome-groups")!,
+			),
 		);
 	});
 	it("renders standard controlled search only when a callback is supplied", () => {
@@ -73,8 +79,7 @@ describe("window kit", () => {
 		rerender(
 			<WindowHeader
 				title="Groups"
-				search={{ value: "" }}
-				onSearch={onSearch}
+				search={{ value: "", onSearch }}
 			/>,
 		);
 		const input = screen.getByRole("textbox", { name: "Search Groups" });

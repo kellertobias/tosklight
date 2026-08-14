@@ -231,6 +231,9 @@ impl SessionResource {
             return SessionFileInputRoute::Unclaimed;
         }
         context.expires_at = expires_at;
+        if context.action == file_manager::FileInputAction::MacroEdit {
+            return SessionFileInputRoute::Dispatch(context.clone());
+        }
         if !matches!(action, "enter" | "escape" | "esc") {
             return SessionFileInputRoute::Claimed;
         }

@@ -48,9 +48,10 @@ function FixtureLibraryDialog({ onClose }: { onClose: () => void }) {
 						title="Fixture Library"
 						search={{
 							value: query,
+							onSearch: setQuery,
 							ariaLabel: "Search fixture library",
 							placeholder: "Search manufacturer, fixture, mode, or type",
-							settings: [
+							settingsConfiguration: [
 								{
 									kind: "select",
 									id: "type",
@@ -68,8 +69,7 @@ function FixtureLibraryDialog({ onClose }: { onClose: () => void }) {
 							onSettingChange: (_, value) => setTypeFilter(String(value)),
 							onClearSettings: () => setTypeFilter(""),
 						}}
-						onSearch={setQuery}
-						actions={
+						toolbar={
 							<div ref={setActionsTarget} className="setup-section-actions" />
 						}
 						closeLabel="Close Fixture Library"

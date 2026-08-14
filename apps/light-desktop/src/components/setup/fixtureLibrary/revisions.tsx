@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useFixtureLibrary } from "../../../features/fixtureLibrary/FixtureLibraryContext";
 import type { FixtureDefinition, FixtureProfile } from "../../../api/types";
-import { Button, ModalRegistration } from "@tosklight/ui";
+import { Button, ModalRegistration, ModalTitleBar } from "@tosklight/ui";
 
 interface FixtureRevisionHistoryOptions {
 	selectedMode: FixtureDefinition | null;
@@ -94,12 +94,11 @@ export function FixtureRevisionHistory({
 				aria-modal="true"
 				aria-label="Fixture revision history"
 			>
-				<header>
-					<h2>Fixture revision history</h2>
-					<Button aria-label="Close Fixture revision history" onClick={onClose}>
-						×
-					</Button>
-				</header>
+				<ModalTitleBar
+					title="Fixture revision history"
+					closeLabel="Close Fixture revision history"
+					onClose={onClose}
+				/>
 				{error && <p role="alert">{error}</p>}
 				{!history.length && !error && <p>No retained revisions.</p>}
 				<div>

@@ -152,7 +152,7 @@ describe("PoolWindow", () => {
 		const action = vi.fn();
 		renderPool({
 			info: { primary: "4 stored", secondary: "Page 1" },
-			actions: [[{ id: "record", label: "Record", onClick: action }]],
+			groups: [{ id: "record", actions: [{ id: "record", label: "Record", onPress: action }] }],
 			settingsTabs: [
 				{
 					id: "pool",

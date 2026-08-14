@@ -258,7 +258,12 @@ export interface FileOperationResult {
 		error: string | null;
 	}>;
 }
-export type FileInputAction = "rename" | "copy" | "move" | "delete";
+export type FileInputAction =
+	| "rename"
+	| "copy"
+	| "move"
+	| "delete"
+	| "macro_edit";
 export interface FileInputContext {
 	instance_id: string;
 	action: FileInputAction;

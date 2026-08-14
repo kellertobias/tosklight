@@ -1212,7 +1212,7 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 		);
 	});
 
-	it("keeps a faderless playback identity separate from its configured action", () => {
+	it("makes one configured faderless touch action fill its playback section", () => {
 		assignPlayback({
 			buttons: ["flash", "none", "none"],
 			button_count: 1,
@@ -1220,18 +1220,57 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 		});
 		const { container } = render(<PlaybackFaderBank count={1} />);
 		const action = screen.getByRole("button", { name: "FLASH" });
+		expect(action).toHaveClass("single-button-playback-action");
+		expect(action).toHaveTextContent("1 · Front Wash");
 		expect(action).toHaveTextContent("FLASH");
 		expect(
 			container.querySelector(".faderless-playback-actions"),
-		).toBeInTheDocument();
+		).not.toBeInTheDocument();
 		expect(
-			screen.getByRole("button", {
+			screen.queryByRole("button", {
 				name: "Playback representation page 1 playback 1",
 			}),
-		).toHaveTextContent("Front Wash1.1");
+		).not.toBeInTheDocument();
 		expect(
 			screen.queryByRole("button", { name: "DISABLED" }),
 		).not.toBeInTheDocument();
+	});
+
+	it("compacts only the one-unit software row so every card fits its track", () => {
+		assignPlayback({
+			buttons: ["go", "none", "none"],
+			button_count: 1,
+			has_fader: false,
+		});
+		const { container, rerender } = render(
+			<PlaybackFaderBank
+				count={1}
+				playbackLayout={{
+					playbacks_per_row: 1,
+					rows: [
+						{ first_playback_slot: 1, has_fader: false, button_count: 1 },
+					],
+				}}
+			/>,
+		);
+		expect(container.querySelector(".touch-playback-card")).toHaveClass(
+			"playback-row-compact",
+		);
+
+		rerender(
+			<PlaybackFaderBank
+				count={1}
+				playbackLayout={{
+					playbacks_per_row: 1,
+					rows: [
+						{ first_playback_slot: 1, has_fader: false, button_count: 2 },
+					],
+				}}
+			/>,
+		);
+		expect(container.querySelector(".touch-playback-card")).not.toHaveClass(
+			"playback-row-compact",
+		);
 	});
 
 	it.each([

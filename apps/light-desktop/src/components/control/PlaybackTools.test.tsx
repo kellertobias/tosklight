@@ -379,7 +379,7 @@ describe("PlaybackTools", () => {
 		const addPage = within(dialog).getByRole("button", {
 			name: "Add new page",
 		});
-		expect(addPage.parentElement).toHaveClass("ui-modal-title-actions");
+		expect(addPage.closest(".ui-title-chrome-terminals")).not.toBeNull();
 		fireEvent.click(addPage);
 		await waitFor(() =>
 			expect(topologyActions.createPage).toHaveBeenCalledWith(2),

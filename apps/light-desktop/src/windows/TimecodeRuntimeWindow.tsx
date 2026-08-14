@@ -1,11 +1,10 @@
-import { CheckboxField, SelectField, TextField } from "@tosklight/ui";
+import { CheckboxField, SelectField, TextField, type TitleAction } from "@tosklight/ui";
 import {
 	PoolCard,
 	PoolGrid,
 	type PoolSlotViewModel,
 } from "@tosklight/ui/pools";
 import {
-	type WindowAction,
 	WindowDropdown,
 	WindowHeader,
 	WindowScrollArea,
@@ -166,7 +165,6 @@ export function TimecodeRuntimeWindow({
 				<WindowHeader
 					title="Timecode"
 					info={{ primary: `${objects.length} Timecodes` }}
-					actions={[]}
 				/>
 			)}
 			{error && (
@@ -435,7 +433,7 @@ export function TimecodeEditor({
 			setCsvError(reason instanceof Error ? reason.message : String(reason));
 		}
 	};
-	const transportActions: WindowAction[] = [
+	const transportActions: TitleAction[] = [
 		{
 			id: "rewind",
 			label: (
@@ -445,7 +443,7 @@ export function TimecodeEditor({
 				</span>
 			),
 			ariaLabel: "Rewind",
-			onClick: () => void act({ type: "rewind" }),
+			onPress: () => void act({ type: "rewind" }),
 			disabled: isNew || busy,
 			className: "timecode-transport-action",
 		},
@@ -453,7 +451,7 @@ export function TimecodeEditor({
 			id: "stop",
 			label: <span aria-hidden="true">■</span>,
 			ariaLabel: "Stop",
-			onClick: () => void act({ type: "stop" }),
+			onPress: () => void act({ type: "stop" }),
 			disabled: isNew || busy,
 			className: "timecode-transport-action",
 		},
@@ -461,7 +459,7 @@ export function TimecodeEditor({
 			id: "play",
 			label: <span aria-hidden="true">▶</span>,
 			ariaLabel: "Play",
-			onClick: () => void act({ type: "go" }),
+			onPress: () => void act({ type: "go" }),
 			disabled: isNew || busy,
 			className: "timecode-transport-action",
 		},
@@ -469,7 +467,7 @@ export function TimecodeEditor({
 			id: "pause",
 			label: <span aria-hidden="true">Ⅱ</span>,
 			ariaLabel: "Pause",
-			onClick: () => void act({ type: "pause" }),
+			onPress: () => void act({ type: "pause" }),
 			disabled: isNew || busy,
 			className: "timecode-transport-action",
 		},
@@ -479,52 +477,46 @@ export function TimecodeEditor({
 			<WindowHeader
 				title={`Timecode ${draft.number}`}
 				info={{
-					primary: snapshot
-						? `${formatFrame(snapshot.frame)} · ${snapshot.state}`
-						: "Stopped",
-					secondary: saving
-						? "Saving changes…"
-						: record
-							? "Saved"
-							: "Creating…",
+					primary: snapshot?.state ?? "Stopped",
+					secondary: record ? "Saved" : "Creating…",
 				}}
 				toolbar={
 					<TimecodeAddMenu
 						{...{ timelineRef, draft, cueLists, audioPlayers }}
 					/>
 				}
-				actions={[
-					[
+				groups={[
+					{ id: "timecode-history", actions: [
 						{
 							id: "back",
 							label: "Back",
-							onClick: () => void close(),
+							onPress: () => void close(),
 							disabled: busy,
 						},
 						{
 							id: "undo",
 							label: "Undo",
-							onClick: undo,
+							onPress: undo,
 							disabled: !canUndo || busy,
 						},
 						{
 							id: "redo",
 							label: "Redo",
-							onClick: redo,
+							onPress: redo,
 							disabled: !canRedo || busy,
 						},
-					],
-					[
+					] },
+					{ id: "timecode-position", actions: [
 						{
 							id: "position",
 							label: formatFrame(snapshot?.frame ?? frame),
 							ariaLabel: "Timecode position",
 							className: "timecode-position-action",
-							onClick: () => void act({ type: "seek", frame }),
+							onPress: () => void act({ type: "seek", frame }),
 							disabled: isNew || busy,
 						},
-					],
-					transportActions,
+					] },
+					{ id: "timecode-transport", actions: transportActions },
 				]}
 				settings
 				onSettings={(anchor) => {
@@ -747,7 +739,7 @@ function TimecodeAddMenu({
 					id: "cuelist",
 					label: "Add Cuelist Lane",
 					disabled: !cueLists.length,
-					onSelect: () => timelineRef.current?.addCueListLane(),
+					onSelect: () => timelineRef.current?.chooseCueListLane(),
 				},
 			]}
 		/>

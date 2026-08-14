@@ -212,6 +212,22 @@ describe("DynamicsWindow", () => {
 		).not.toBeInTheDocument();
 	});
 
+	it("keeps a visible numbered label for an unnamed populated Dynamic", () => {
+		const unnamed = dynamicObject();
+		unnamed.body.name = "   ";
+		dynamics = [unnamed];
+		const { container } = renderWindow();
+
+		const card = screen.getByRole("button", { name: /Dynamic 1/i });
+		expect(card).not.toHaveClass("empty");
+		expect(within(card).getByText("Dynamic 1")).toBeVisible();
+
+		fireEvent.click(screen.getByRole("button", { name: "Arm software Shift" }));
+		expect(
+			container.querySelector(".dynamic-pool-card .pool-card-name"),
+		).toHaveTextContent("Dynamic 1");
+	});
+
 	it("shows only the concise target scope as populated card metadata", () => {
 		const groupDynamic = dynamicObject({ multipleLanes: true });
 		groupDynamic.id = "dynamic-group";
@@ -260,7 +276,9 @@ describe("DynamicsWindow", () => {
 		dynamics = [dynamicObject()];
 		renderWindow();
 
-		fireEvent.click(screen.getByRole("button", { name: /Pulse/i }), { shiftKey: true });
+		fireEvent.click(screen.getByRole("button", { name: /Pulse/i }), {
+			shiftKey: true,
+		});
 
 		expect(
 			screen.getByRole("button", { name: "← Dynamics" }),
@@ -329,8 +347,10 @@ describe("DynamicsWindow", () => {
 		dynamics = [dynamicObject()];
 		const { container } = renderWindow();
 
-		fireEvent.click(screen.getByRole("button", { name: /Pulse/i }), { shiftKey: true });
-		fireEvent.click(screen.getByRole("button", { name: "Phase" }));
+		fireEvent.click(screen.getByRole("button", { name: /Pulse/i }), {
+			shiftKey: true,
+		});
+		fireEvent.click(screen.getByRole("tab", { name: "Phase" }));
 
 		expect(
 			container.querySelector('aside[aria-label="Selection preview"]'),
@@ -360,8 +380,10 @@ describe("DynamicsWindow", () => {
 		};
 		dynamics = [object];
 		renderWindow();
-		fireEvent.click(screen.getByRole("button", { name: /Pulse/i }), { shiftKey: true });
-		fireEvent.click(screen.getByRole("button", { name: "Speed" }));
+		fireEvent.click(screen.getByRole("button", { name: /Pulse/i }), {
+			shiftKey: true,
+		});
+		fireEvent.click(screen.getByRole("tab", { name: "Speed" }));
 
 		fireEvent.click(
 			screen.getByRole("button", {
@@ -381,7 +403,9 @@ describe("DynamicsWindow", () => {
 		object.body.lanes = [];
 		dynamics = [object];
 		renderWindow();
-		fireEvent.click(screen.getByRole("button", { name: /Pulse/i }), { shiftKey: true });
+		fireEvent.click(screen.getByRole("button", { name: /Pulse/i }), {
+			shiftKey: true,
+		});
 
 		fireEvent.click(screen.getByRole("button", { name: "Add first lane" }));
 		const dialog = screen.getByRole("dialog", {
@@ -450,7 +474,9 @@ describe("DynamicsWindow", () => {
 	it("uses the lane attribute picker before adding a lane", async () => {
 		dynamics = [dynamicObject()];
 		renderWindow();
-		fireEvent.click(screen.getByRole("button", { name: /Pulse/i }), { shiftKey: true });
+		fireEvent.click(screen.getByRole("button", { name: /Pulse/i }), {
+			shiftKey: true,
+		});
 
 		fireEvent.click(screen.getByRole("button", { name: "+ Add Lane" }));
 		const dialog = screen.getByRole("dialog", {
@@ -533,7 +559,9 @@ describe("DynamicsWindow", () => {
 	it("selects one lane normally and adds a lane with Shift-click", () => {
 		dynamics = [dynamicObject({ multipleLanes: true })];
 		renderWindow();
-		fireEvent.click(screen.getByRole("button", { name: /Pulse/i }), { shiftKey: true });
+		fireEvent.click(screen.getByRole("button", { name: /Pulse/i }), {
+			shiftKey: true,
+		});
 
 		const laneList = screen.getByRole("list", { name: "Dynamic lanes" });
 		const laneOneIdentity = within(laneList).getByRole("button", {
@@ -572,7 +600,9 @@ describe("DynamicsWindow", () => {
 		object.body.lanes[1].mode = "keyframes";
 		dynamics = [object];
 		renderWindow();
-		fireEvent.click(screen.getByRole("button", { name: /Pulse/i }), { shiftKey: true });
+		fireEvent.click(screen.getByRole("button", { name: /Pulse/i }), {
+			shiftKey: true,
+		});
 
 		const laneList = screen.getByRole("list", { name: "Dynamic lanes" });
 		const laneOneIdentity = within(laneList).getByRole("button", {
@@ -605,7 +635,9 @@ describe("DynamicsWindow", () => {
 	it("maps a dragged keyframe center to the cursor without horizontal drift", async () => {
 		dynamics = [dynamicObject({ mode: "keyframes" })];
 		renderWindow();
-		fireEvent.click(screen.getByRole("button", { name: /Pulse/i }), { shiftKey: true });
+		fireEvent.click(screen.getByRole("button", { name: /Pulse/i }), {
+			shiftKey: true,
+		});
 
 		const keyframe = screen.getByRole("button", {
 			name: "Intensity keyframe B",
@@ -669,7 +701,9 @@ describe("DynamicsWindow", () => {
 	it("uses and clears the software Shift latch for additive lane selection", () => {
 		dynamics = [dynamicObject({ multipleLanes: true })];
 		renderWindow();
-		fireEvent.click(screen.getByRole("button", { name: /Pulse/i }), { shiftKey: true });
+		fireEvent.click(screen.getByRole("button", { name: /Pulse/i }), {
+			shiftKey: true,
+		});
 
 		const shiftLatch = screen.getByRole("button", {
 			name: "Arm software Shift",
@@ -692,8 +726,10 @@ describe("DynamicsWindow", () => {
 	it("uses an ordering-mode toggle without exposing uniform or per-lane scope", async () => {
 		dynamics = [dynamicObject({ multipleLanes: true })];
 		renderWindow();
-		fireEvent.click(screen.getByRole("button", { name: /Pulse/i }), { shiftKey: true });
-		fireEvent.click(screen.getByRole("button", { name: "Phase" }));
+		fireEvent.click(screen.getByRole("button", { name: /Pulse/i }), {
+			shiftKey: true,
+		});
+		fireEvent.click(screen.getByRole("tab", { name: "Phase" }));
 
 		expect(
 			screen.getByRole("radiogroup", { name: "Ordering mode" }),
@@ -733,8 +769,10 @@ describe("DynamicsWindow", () => {
 		};
 		dynamics = [object];
 		renderWindow();
-		fireEvent.click(screen.getByRole("button", { name: /Pulse/i }), { shiftKey: true });
-		fireEvent.click(screen.getByRole("button", { name: "Phase" }));
+		fireEvent.click(screen.getByRole("button", { name: /Pulse/i }), {
+			shiftKey: true,
+		});
+		fireEvent.click(screen.getByRole("tab", { name: "Phase" }));
 
 		const lanePicker = screen.getByLabelText("Dynamic phase lane");
 		expect(lanePicker).toHaveTextContent("Lane 1 · intensity");
@@ -752,7 +790,9 @@ describe("DynamicsWindow", () => {
 	it("shows every keyframe as a directly selectable card", () => {
 		dynamics = [dynamicObject({ mode: "keyframes" })];
 		renderWindow();
-		fireEvent.click(screen.getByRole("button", { name: /Pulse/i }), { shiftKey: true });
+		fireEvent.click(screen.getByRole("button", { name: /Pulse/i }), {
+			shiftKey: true,
+		});
 
 		const choices = screen.getByRole("group", { name: "Selected keyframe" });
 		const first = within(choices).getByRole("button", { name: /^A,/ });
@@ -778,7 +818,9 @@ describe("DynamicsWindow", () => {
 		});
 		dynamics = [object];
 		renderWindow();
-		fireEvent.click(screen.getByRole("button", { name: /Pulse/i }), { shiftKey: true });
+		fireEvent.click(screen.getByRole("button", { name: /Pulse/i }), {
+			shiftKey: true,
+		});
 
 		expect(
 			screen.getByRole("button", { name: "Delete keyframe A" }),
@@ -819,7 +861,9 @@ describe("DynamicsWindow", () => {
 	it("cycles the vertically stacked Curve Composer method", async () => {
 		dynamics = [dynamicObject()];
 		renderWindow();
-		fireEvent.click(screen.getByRole("button", { name: /Pulse/i }), { shiftKey: true });
+		fireEvent.click(screen.getByRole("button", { name: /Pulse/i }), {
+			shiftKey: true,
+		});
 
 		const composer = screen.getByRole("region", { name: "Curve Composer" });
 		expect(within(composer).queryByText("Curve")).not.toBeInTheDocument();
@@ -850,7 +894,9 @@ describe("DynamicsWindow", () => {
 	it("chooses a curve function from the grouped function modal", async () => {
 		dynamics = [dynamicObject()];
 		renderWindow();
-		fireEvent.click(screen.getByRole("button", { name: /Pulse/i }), { shiftKey: true });
+		fireEvent.click(screen.getByRole("button", { name: /Pulse/i }), {
+			shiftKey: true,
+		});
 
 		fireEvent.click(
 			screen.getByRole("button", { name: "Curve function: Sinus" }),
@@ -888,7 +934,9 @@ describe("DynamicsWindow", () => {
 	it("opens Change Attribute from the lane menu and submits the selected attribute", async () => {
 		dynamics = [dynamicObject()];
 		renderWindow();
-		fireEvent.click(screen.getByRole("button", { name: /Pulse/i }), { shiftKey: true });
+		fireEvent.click(screen.getByRole("button", { name: /Pulse/i }), {
+			shiftKey: true,
+		});
 
 		fireEvent.click(
 			screen.getByRole("button", { name: "Intensity lane settings" }),
