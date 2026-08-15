@@ -491,6 +491,8 @@ function applyEffectLocally(
 				...parameter,
 				value: values[parameter.id] ?? parameter.value,
 			})),
+			visualizerParameters:
+				change.visualizerParameters ?? next.visualizerParameters,
 		};
 	});
 }

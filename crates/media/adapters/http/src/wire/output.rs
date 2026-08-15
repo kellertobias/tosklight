@@ -11,7 +11,7 @@ use media_domain::{LayerPersonality, PresentationMode};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use super::{AddressView, SourceStatusView};
+use super::{AddressView, SourceStatusView, VisualizerParametersView};
 
 /// A layer's mask, as the API reports it.
 ///
@@ -69,6 +69,8 @@ pub struct EffectSlotView {
     pub supported: bool,
     pub capability_detail: Option<String>,
     pub parameters: Vec<EffectParameterView>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub visualizer_parameters: Option<VisualizerParametersView>,
 }
 
 impl EffectSlotView {
@@ -110,6 +112,10 @@ impl EffectSlotView {
             capability_detail: (!analog && !digital && effect.effect_type.is_some())
                 .then(|| "This Media Server build cannot render the selected effect.".to_owned()),
             parameters,
+            visualizer_parameters: effect
+                .visualizer_parameters
+                .as_ref()
+                .map(VisualizerParametersView::of),
         }
     }
 }
@@ -717,6 +723,9 @@ pub struct UpdateLayer {
     pub chroma_damage: Option<f32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effect_glitching: Option<f32>,
+    /// Complete per-layer visualizer settings routed through effect slot one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub visualizer_parameters: Option<VisualizerParametersView>,
 }
 
 impl UpdateLayer {
@@ -753,6 +762,7 @@ impl UpdateLayer {
             || self.tile_displacement.is_some()
             || self.chroma_damage.is_some()
             || self.effect_glitching.is_some()
+            || self.visualizer_parameters.is_some()
     }
 }
 
@@ -823,6 +833,7 @@ mod tests {
             mix: 1.0,
             parameters: vec![0.4],
             seed: 7,
+            visualizer_parameters: None,
         };
         let view = EffectSlotView::of(2, &effect);
 

@@ -234,6 +234,9 @@ pub struct EffectSlot {
     /// The normalized primary amount the DMX byte carries.
     pub mix: f32,
     pub parameters: Vec<f32>,
+    /// Per-layer overrides used when slot one controls a generated visualizer source.
+    #[serde(default)]
+    pub visualizer_parameters: Option<crate::visualizer::VisualizerParameters>,
 }
 
 impl EffectSlot {
@@ -244,6 +247,7 @@ impl EffectSlot {
             seed: 0,
             mix: 1.0,
             parameters: AnalogTvParameters::default().as_array().to_vec(),
+            visualizer_parameters: None,
         }
     }
 
@@ -259,6 +263,7 @@ impl EffectSlot {
             seed: 0,
             mix: 1.0,
             parameters: DigitalTvParameters::default().as_array().to_vec(),
+            visualizer_parameters: None,
         }
     }
 
@@ -282,6 +287,9 @@ impl EffectSlot {
                 .as_array()
                 .to_vec();
         }
+        self.visualizer_parameters = self
+            .visualizer_parameters
+            .map(crate::visualizer::VisualizerParameters::clamped);
     }
 }
 

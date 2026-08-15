@@ -201,6 +201,27 @@ pub(super) async fn update_layer(
             effects[slot].seed = ((layer as u32) << 8) | slot as u32;
         }
         let effect = &mut effects[slot];
+        if let Some(parameters) = body.visualizer_parameters {
+            if slot != 0 {
+                return Err(ApiError::bad_request(
+                    "visualizer-controls-slot",
+                    "a visualizer is controlled through effectSlot 0",
+                ));
+            }
+            if state
+                .configuration
+                .load()
+                .visualizers
+                .resolve(current.address)
+                .is_none()
+            {
+                return Err(ApiError::bad_request(
+                    "visualizer-controls-source",
+                    "select a generated visualizer on this layer first",
+                ));
+            }
+            effect.visualizer_parameters = Some(parameters.into_parameters());
+        }
         if let Some(enabled) = body.effect_enabled {
             effect.enabled = enabled;
         }
@@ -848,6 +869,48 @@ mod tests {
         )
         .await;
         assert!(cleared["layers"][0]["effects"][1]["effectType"].is_null());
+    }
+
+    #[tokio::test]
+    async fn slot_one_persists_visualizer_parameters_only_for_a_visualizer_layer() {
+        let bench = bench();
+        take_over(&bench).await;
+        let uri = format!("/api/v2/outputs/{}/layers/0/update", bench.output);
+        let (status, _) = send(
+            &bench.router,
+            post(uri.clone(), r#"{"folder":250,"file":1}"#),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+
+        let mut parameters = crate::wire::VisualizerParametersView::of(
+            &media_domain::VisualizerParameters::default(),
+        );
+        parameters.size = 0.2;
+        let body = serde_json::json!({
+            "effectSlot": 0,
+            "visualizerParameters": parameters,
+        })
+        .to_string();
+        let (status, tuned) = send(&bench.router, post(uri.clone(), &body)).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            tuned["layers"][0]["effects"][0]["visualizerParameters"]["size"],
+            0.2
+        );
+        assert_eq!(
+            bench.state.load().output(bench.output).unwrap().layers[0].effects[0]
+                .visualizer_parameters
+                .as_ref()
+                .unwrap()
+                .size,
+            0.2
+        );
+
+        let (_, _) = send(&bench.router, post(uri.clone(), r#"{"folder":1,"file":1}"#)).await;
+        let (status, rejected) = send(&bench.router, post(uri, &body)).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(rejected["code"], "visualizer-controls-source");
     }
 
     #[tokio::test]

@@ -231,9 +231,10 @@ impl LayerPipeline {
             bpm: context.bpm,
             beat_phase: context.beat_phase,
         };
+        let parameters = visualizer_parameters(layer, &visualizer.parameters);
         match self
             .visualizers
-            .render(index, visualizer.kind, &visualizer.parameters, &frame)
+            .render(index, visualizer.kind, parameters, &frame)
         {
             Ok(_) => {
                 prepared
@@ -343,6 +344,16 @@ impl LayerPipeline {
     }
 }
 
+fn visualizer_parameters<'a>(
+    layer: &'a LayerState,
+    configured: &'a media_domain::VisualizerParameters,
+) -> &'a media_domain::VisualizerParameters {
+    layer.effects[0]
+        .visualizer_parameters
+        .as_ref()
+        .unwrap_or(configured)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -351,6 +362,19 @@ mod tests {
     // above every layer index a personality can produce. A layer that overwrote the master mask's
     // texture would show the wrong shape on the whole output.
     const _: () = assert!(MASTER_MASK_SLOT >= media_render::MAX_LAYERS);
+
+    #[test]
+    fn a_layer_visualizer_override_is_the_parameter_block_sent_to_the_renderer() {
+        let configured = media_domain::VisualizerParameters::default();
+        let mut overridden = configured;
+        overridden.size = 0.2;
+        let mut layer = LayerState::default();
+        layer.effects[0].visualizer_parameters = Some(overridden);
+
+        assert_eq!(visualizer_parameters(&layer, &configured), &overridden);
+        layer.effects[0].visualizer_parameters = None;
+        assert_eq!(visualizer_parameters(&layer, &configured), &configured);
+    }
 
     #[test]
     fn a_slot_names_exactly_one_texture_store() {

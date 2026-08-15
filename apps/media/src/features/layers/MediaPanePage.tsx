@@ -5,6 +5,7 @@ import {
 	type MediaLibraryItem,
 	type MediaPaneModel,
 	MediaPaneSurface,
+	type MediaSecondaryControl,
 } from "../../../../light-desktop/src/windows/media/MediaPaneSurface";
 import { resolveAddress } from "../../entities/catalog";
 import { sourceBadge } from "../../entities/output";
@@ -13,6 +14,8 @@ import type {
 	OutputView,
 	UpdateLayer,
 	UpdateMaster,
+	VisualizerParametersView,
+	VisualizerView,
 } from "../../shared/api/generated/media-wire";
 import {
 	useLayerControl,
@@ -79,6 +82,21 @@ export function MediaPanePage() {
 		selected?.output ??
 		outputs.data?.[0];
 	const takeover = selectedOutput?.playbackTakeover ?? false;
+	const selectedVisualizer = selected
+		? visualizers.data?.find(
+				(candidate) =>
+					candidate.address.folder === selected.layer.address.folder &&
+					candidate.address.file === selected.layer.address.file,
+			)
+		: undefined;
+	const displayedVisualizer = selectedVisualizer
+		? {
+				...selectedVisualizer,
+				parameters:
+					selected.layer.effects[0]?.visualizerParameters ??
+					selectedVisualizer.parameters,
+			}
+		: undefined;
 	const previewOutputId = selectedOutput?.id;
 	useEffect(() => {
 		if (!previewOutputId) return;
@@ -437,7 +455,11 @@ export function MediaPanePage() {
 								],
 							},
 							{
-								...effectSection(selected.layer.effects, !takeover),
+								...effectSection(
+									selected.layer.effects,
+									!takeover,
+									displayedVisualizer,
+								),
 							},
 						]
 					: [],
@@ -535,6 +557,18 @@ export function MediaPanePage() {
 			}}
 			onChangeControl={(id, value) => {
 				if (!takeover || !selectedOutput) return;
+				if (displayedVisualizer && selected && id.startsWith("visualizer-")) {
+					const parameters = changeVisualizerParameter(
+						displayedVisualizer.parameters,
+						id.slice("visualizer-".length),
+						value,
+					);
+					void control.updateContinuous(selected.output, selected.layer.index, {
+						effectSlot: 0,
+						visualizerParameters: parameters,
+					});
+					return;
+				}
 				if (selectedLayerId === "master") {
 					void control.updateMasterContinuous(
 						selectedOutput,
@@ -589,6 +623,7 @@ function valueControl(
 	maximum: number,
 	disabled: boolean,
 	suffix = "",
+	step = 0.1,
 ) {
 	return {
 		id,
@@ -598,6 +633,7 @@ function valueControl(
 		minimum,
 		maximum,
 		disabled,
+		step,
 		display: `${Number(value.toFixed(2))}${suffix}`,
 	};
 }
@@ -696,8 +732,11 @@ function layerChange(id: string, value: string | number): UpdateLayer {
 function effectControls(
 	effects: OutputView["layers"][number]["effects"],
 	disabled: boolean,
+	visualizer?: VisualizerView,
 ) {
 	return effects.flatMap((effect) => {
+		if (effect.index === 0 && visualizer)
+			return visualizerControls(visualizer, disabled);
 		const prefix = `effect-${effect.index}`;
 		const slot = `Slot ${effect.index + 1}`;
 		const controls = [
@@ -756,15 +795,242 @@ function effectControls(
 function effectSection(
 	effects: OutputView["layers"][number]["effects"],
 	disabled: boolean,
+	visualizer?: VisualizerView,
 ): MediaPaneModel["controlSections"][number] {
-	const unsupported = effects.find((effect) => !effect.supported);
+	const unsupported = effects.find(
+		(effect) => !effect.supported && !(effect.index === 0 && visualizer),
+	);
 	return {
 		id: "effects",
 		label: "Effects",
 		capability: unsupported ? "unsupported" : undefined,
 		unsupportedDetail: unsupported?.capabilityDetail ?? undefined,
-		controls: unsupported ? [] : effectControls(effects, disabled),
+		controls: unsupported ? [] : effectControls(effects, disabled, visualizer),
 	};
+}
+
+const VISUALIZER_NUMBERS: Record<
+	string,
+	{
+		field: keyof VisualizerParametersView;
+		label: string;
+		minimum: number;
+		maximum: number;
+		step: number;
+	}
+> = {
+	count: { field: "count", label: "Count", minimum: 1, maximum: 512, step: 1 },
+	size: {
+		field: "size",
+		label: "Size",
+		minimum: 0.001,
+		maximum: 1,
+		step: 0.001,
+	},
+	speed: { field: "speed", label: "Speed", minimum: 0, maximum: 8, step: 0.1 },
+	amount: {
+		field: "amount",
+		label: "Amount",
+		minimum: 0,
+		maximum: 1,
+		step: 0.01,
+	},
+	radius: {
+		field: "radius",
+		label: "Radius",
+		minimum: 0,
+		maximum: 1,
+		step: 0.01,
+	},
+	thickness: {
+		field: "thickness",
+		label: "Thickness",
+		minimum: 0.0005,
+		maximum: 0.5,
+		step: 0.0005,
+	},
+	reactivity: {
+		field: "reactivity",
+		label: "Reactivity",
+		minimum: 0,
+		maximum: 8,
+		step: 0.1,
+	},
+	decay: { field: "decay", label: "Decay", minimum: 0, maximum: 1, step: 0.01 },
+	zoom: {
+		field: "zoom",
+		label: "Zoom",
+		minimum: 0.05,
+		maximum: 16,
+		step: 0.05,
+	},
+	iterations: {
+		field: "iterations",
+		label: "Iterations",
+		minimum: 1,
+		maximum: 256,
+		step: 1,
+	},
+	threshold: {
+		field: "threshold",
+		label: "Threshold",
+		minimum: 0,
+		maximum: 1,
+		step: 0.01,
+	},
+	smoothing: {
+		field: "smoothing",
+		label: "Smoothing",
+		minimum: 0,
+		maximum: 1,
+		step: 0.01,
+	},
+	gravity: {
+		field: "gravity",
+		label: "Gravity",
+		minimum: -4,
+		maximum: 4,
+		step: 0.1,
+	},
+	lifetime: {
+		field: "lifetime",
+		label: "Lifetime",
+		minimum: 0.05,
+		maximum: 60,
+		step: 0.05,
+	},
+	curvature: {
+		field: "curvature",
+		label: "Curvature",
+		minimum: 0,
+		maximum: 1,
+		step: 0.01,
+	},
+	mode: { field: "mode", label: "Variant", minimum: 0, maximum: 255, step: 1 },
+};
+
+const VISUALIZER_FLAGS: Record<
+	string,
+	{ field: "mirror" | "filled" | "wireframe"; label: string }
+> = {
+	mirror: { field: "mirror", label: "Mirror" },
+	filled: { field: "filled", label: "Filled" },
+	wireframe: { field: "wireframe", label: "Wireframe" },
+};
+
+const DEFAULT_VISUALIZER_PARAMETERS: VisualizerParametersView = {
+	count: 32,
+	size: 0.05,
+	speed: 1,
+	amount: 1,
+	radius: 0.3,
+	thickness: 0.01,
+	reactivity: 1,
+	decay: 0.1,
+	zoom: 1,
+	iterations: 64,
+	threshold: 0.5,
+	smoothing: 0.5,
+	gravity: 0.5,
+	lifetime: 2,
+	curvature: 0.2,
+	primaryRed: 0.1,
+	primaryGreen: 0.84,
+	primaryBlue: 0.93,
+	secondaryRed: 1,
+	secondaryGreen: 0.7,
+	secondaryBlue: 0.06,
+	mirror: false,
+	filled: false,
+	wireframe: false,
+	mode: 0,
+};
+
+function visualizerControls(visualizer: VisualizerView, disabled: boolean) {
+	const controls: MediaSecondaryControl[] = [
+		{
+			id: "visualizer-reset",
+			kind: "choice",
+			label: `Slot 1 · ${visualizer.name}`,
+			value: "current",
+			options: [
+				{ value: "current", label: "Current" },
+				{ value: "reset", label: "Reset parameters" },
+			],
+			disabled,
+		},
+	];
+	for (const parameter of visualizer.uses) {
+		const number = VISUALIZER_NUMBERS[parameter];
+		if (number) {
+			controls.push(
+				valueControl(
+					`visualizer-${parameter}`,
+					`Slot 1 · ${number.label}`,
+					Number(visualizer.parameters[number.field]),
+					number.minimum,
+					number.maximum,
+					disabled,
+					"",
+					number.step,
+				),
+			);
+			continue;
+		}
+		const flag = VISUALIZER_FLAGS[parameter];
+		if (flag) {
+			controls.push({
+				id: `visualizer-${parameter}`,
+				kind: "choice" as const,
+				label: `Slot 1 · ${flag.label}`,
+				value: String(visualizer.parameters[flag.field]),
+				options: [
+					{ value: "true", label: "On" },
+					{ value: "false", label: "Off" },
+				],
+				disabled,
+			});
+			continue;
+		}
+		if (parameter === "primary" || parameter === "secondary") {
+			const prefix = parameter === "primary" ? "primary" : "secondary";
+			controls.push({
+				id: `visualizer-${parameter}`,
+				kind: "color" as const,
+				label: `Slot 1 · ${parameter === "primary" ? "Colour" : "Second colour"}`,
+				value: tintHex(
+					visualizer.parameters[`${prefix}Red`],
+					visualizer.parameters[`${prefix}Green`],
+					visualizer.parameters[`${prefix}Blue`],
+				),
+				disabled,
+			});
+		}
+	}
+	return controls;
+}
+
+function changeVisualizerParameter(
+	parameters: VisualizerParametersView,
+	parameter: string,
+	value: string | number,
+): VisualizerParametersView {
+	if (parameter === "reset" && value === "reset")
+		return { ...DEFAULT_VISUALIZER_PARAMETERS };
+	const number = VISUALIZER_NUMBERS[parameter];
+	if (number) return { ...parameters, [number.field]: Number(value) };
+	const flag = VISUALIZER_FLAGS[parameter];
+	if (flag) return { ...parameters, [flag.field]: value === "true" };
+	if (parameter === "primary" || parameter === "secondary") {
+		const channels = tintChange(String(value));
+		return {
+			...parameters,
+			[`${parameter}Red`]: channels.tintRed,
+			[`${parameter}Green`]: channels.tintGreen,
+			[`${parameter}Blue`]: channels.tintBlue,
+		};
+	}
+	return parameters;
 }
 
 function masterChange(id: string, value: string | number): UpdateMaster {

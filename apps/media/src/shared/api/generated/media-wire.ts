@@ -29,7 +29,7 @@ source: string,
  */
 active: boolean, };
 export type EffectParameterView = { id: string, label: string, value: number, defaultValue: number, };
-export type EffectSlotView = { index: number, effectType: string | null, label: string, enabled: boolean, mix: number, supported: boolean, capabilityDetail: string | null, parameters: Array<EffectParameterView>, };
+export type EffectSlotView = { index: number, effectType: string | null, label: string, enabled: boolean, mix: number, supported: boolean, capabilityDetail: string | null, parameters: Array<EffectParameterView>, visualizerParameters?: VisualizerParametersView | null, };
 export type LayerView = { index: number, address: AddressView, playMode: string, playModeDmx: number, dimmer: number, scaleX: number, scaleY: number, scalingMode: string, positionX: number, positionY: number, rotation: number, grayscale: number, volume: number, tintRed: number, tintGreen: number, tintBlue: number, speedMultiplier: string, speedMultiplierDmx: number, playbackBpm: number | null, sourceStatus: SourceStatusView, mask: MaskView, effects: Array<EffectSlotView>,
 /**
  * Whether this layer contributes pixels right now.
@@ -307,7 +307,11 @@ effectSlot?: number | null,
 /**
  * `analog-tv` or `digital-tv` selects the effect; `none` clears the slot.
  */
-effectType?: string | null, effectEnabled?: boolean | null, effectMix?: number | null, tvCurvature?: number | null, effectDistortion?: number | null, imageGrain?: number | null, compressionDamage?: number | null, blockSize?: number | null, tileDisplacement?: number | null, chromaDamage?: number | null, effectGlitching?: number | null, };
+effectType?: string | null, effectEnabled?: boolean | null, effectMix?: number | null, tvCurvature?: number | null, effectDistortion?: number | null, imageGrain?: number | null, compressionDamage?: number | null, blockSize?: number | null, tileDisplacement?: number | null, chromaDamage?: number | null, effectGlitching?: number | null,
+/**
+ * Complete per-layer visualizer settings routed through effect slot one.
+ */
+visualizerParameters?: VisualizerParametersView | null, };
 export type UpdateMaster = { dimmer?: number | null, volume?: number | null, tintRed?: number | null, tintGreen?: number | null, tintBlue?: number | null, flipMirror?: string | null, maskFolder?: number | null, maskFile?: number | null, };
 export type UpdateOutputConfiguration = { requestId: string, targetKind?: string | null, monitorBy?: string | null, monitorValue?: string | null, fullscreen?: boolean | null, width?: number | null, height?: number | null, presentation?: string | null, framesPerSecond?: number | null, soundOutputKind?: string | null, soundOutputName?: string | null, personality?: string | null, protocol?: string | null, universe?: number | null, startAddress?: number | null, };
 export type UpdateVisualizer = {

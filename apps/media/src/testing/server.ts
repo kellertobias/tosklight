@@ -248,6 +248,8 @@ export function stubServer(
 						layer.effects[body.effectSlot] = digitalTvEffect(body.effectSlot);
 					}
 					const selectedEffect = layer.effects[body.effectSlot];
+					if (body.visualizerParameters !== undefined)
+						selectedEffect.visualizerParameters = body.visualizerParameters;
 					if (body.effectEnabled !== undefined)
 						selectedEffect.enabled = body.effectEnabled;
 					if (body.effectMix !== undefined) selectedEffect.mix = body.effectMix;
