@@ -48,6 +48,9 @@ export function MediaPanePage() {
 	const [selectedControlSectionId, setSelectedControlSectionId] =
 		useState("playback");
 	const [rightPaneVisible, setRightPaneVisible] = useState(false);
+	const [previewSize, setPreviewSize] = useState<
+		{ width: number; height: number } | undefined
+	>();
 	const [selectedOutputId, setSelectedOutputId] = useState("");
 	const [takeoverError, setTakeoverError] = useState("");
 	const [takeoverBusy, setTakeoverBusy] = useState(false);
@@ -76,6 +79,26 @@ export function MediaPanePage() {
 		selected?.output ??
 		outputs.data?.[0];
 	const takeover = selectedOutput?.playbackTakeover ?? false;
+	const previewOutputId = selectedOutput?.id;
+	useEffect(() => {
+		if (!previewOutputId) return;
+		let current = true;
+		void api
+			.outputConfiguration(previewOutputId)
+			.then((configuration) => {
+				if (current)
+					setPreviewSize({
+						width: configuration.width,
+						height: configuration.height,
+					});
+			})
+			.catch(() => {
+				// Output state still remains usable with the shared 16:9 preview fallback.
+			});
+		return () => {
+			current = false;
+		};
+	}, [previewOutputId]);
 	const draftFolder = Number(draftFolderId || 1);
 	const folder = catalog.data?.folders.find(
 		(candidate) => candidate.folder === draftFolder,
@@ -129,11 +152,13 @@ export function MediaPanePage() {
 			? {
 					kind: "ready",
 					imageSrc: api.thumbnailUrl(draftFolder, selectedItem.file),
+					outputSize: previewSize,
 				}
 			: {
 					kind: "unsupported",
 					capability: "preview",
 					detail: "Choose media to preview it.",
+					outputSize: previewSize,
 				},
 		layers: layers.map(({ output, layer }) => {
 			const item = resolveAddress(
@@ -511,11 +536,14 @@ export function MediaPanePage() {
 			onChangeControl={(id, value) => {
 				if (!takeover || !selectedOutput) return;
 				if (selectedLayerId === "master") {
-					void control.updateMaster(selectedOutput, masterChange(id, value));
+					void control.updateMasterContinuous(
+						selectedOutput,
+						masterChange(id, value),
+					);
 					return;
 				}
 				if (selected)
-					void control.update(
+					void control.updateContinuous(
 						selected.output,
 						selected.layer.index,
 						layerChange(id, value),

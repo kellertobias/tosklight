@@ -42,10 +42,32 @@ export interface LayerControl {
 		layer: number,
 		change: UpdateLayer,
 	) => Promise<void>;
+	/** A continuous gesture: keep immediate feedback, but never replay stale drag samples. */
+	updateContinuous: (
+		output: OutputView,
+		layer: number,
+		change: UpdateLayer,
+	) => Promise<void>;
 	updateMaster: (output: OutputView, change: UpdateMaster) => Promise<void>;
+	updateMasterContinuous: (
+		output: OutputView,
+		change: UpdateMaster,
+	) => Promise<void>;
 	setTakeover: (output: OutputView, takeOver: boolean) => Promise<void>;
 	reset: (output: OutputView, layer: number) => Promise<void>;
 	busy: boolean;
+}
+
+interface ContinuousSlot {
+	token: string;
+	started: boolean;
+	change: UpdateLayer | UpdateMaster;
+	waiters: Array<() => void>;
+	project: (
+		outputs: OutputView[],
+		change: UpdateLayer | UpdateMaster,
+	) => OutputView[];
+	request: (change: UpdateLayer | UpdateMaster) => Promise<OutputView>;
 }
 
 export function useLayerControl(): LayerControl {
@@ -54,6 +76,8 @@ export function useLayerControl(): LayerControl {
 	const pending = useRef(0);
 	const sequence = useRef(0);
 	const queues = useRef(new Map<string, Promise<unknown>>());
+	const queueGenerations = useRef(new Map<string, number>());
+	const continuousSlots = useRef(new Map<string, ContinuousSlot[]>());
 
 	const begin = useCallback(() => {
 		pending.current += 1;
@@ -77,6 +101,16 @@ export function useLayerControl(): LayerControl {
 		},
 		[],
 	);
+	const enqueueDiscrete = useCallback(
+		<T>(outputId: string, operation: () => Promise<T>) => {
+			queueGenerations.current.set(
+				outputId,
+				(queueGenerations.current.get(outputId) ?? 0) + 1,
+			);
+			return enqueue(outputId, operation);
+		},
+		[enqueue],
+	);
 
 	const optimisticOutput = useCallback(
 		async (
@@ -88,7 +122,7 @@ export function useLayerControl(): LayerControl {
 			stageOptimisticResource(KEYS.outputs, token, project);
 			begin();
 			try {
-				const updated = await enqueue(outputId, request);
+				const updated = await enqueueDiscrete(outputId, request);
 				settleOptimisticResource<OutputView[]>(KEYS.outputs, token, (current) =>
 					replaceOutput(current, updated),
 				);
@@ -100,6 +134,82 @@ export function useLayerControl(): LayerControl {
 				end();
 			}
 		},
+		[begin, end, enqueueDiscrete],
+	);
+
+	const optimisticContinuousOutput = useCallback(
+		(
+			outputId: string,
+			target: string,
+			change: UpdateLayer | UpdateMaster,
+			project: ContinuousSlot["project"],
+			request: ContinuousSlot["request"],
+		): Promise<void> =>
+			new Promise((resolve) => {
+				const generation = queueGenerations.current.get(outputId) ?? 0;
+				const laneKey = `${outputId}:${generation}:${target}`;
+				const slots = continuousSlots.current.get(laneKey) ?? [];
+				let slot = slots.at(-1);
+
+				// A queued request has not observed its body yet, so replace/merge it in
+				// place. Once it starts, retain one newer slot and keep replacing that.
+				if (slot && !slot.started) {
+					slot.change = { ...slot.change, ...change };
+					slot.waiters.push(resolve);
+					const queuedSlot = slot;
+					stageOptimisticResource<OutputView[]>(
+						KEYS.outputs,
+						queuedSlot.token,
+						(current) => queuedSlot.project(current, queuedSlot.change),
+					);
+					return;
+				}
+
+				slot = {
+					token: `output-${sequence.current++}`,
+					started: false,
+					change,
+					waiters: [resolve],
+					project,
+					request,
+				};
+				slots.push(slot);
+				continuousSlots.current.set(laneKey, slots);
+				stageOptimisticResource<OutputView[]>(
+					KEYS.outputs,
+					slot.token,
+					(current) => slot.project(current, slot.change),
+				);
+				begin();
+				void enqueue(outputId, async () => {
+					slot.started = true;
+					const submitted = slot.change;
+					try {
+						const updated = await slot.request(submitted);
+						settleOptimisticResource<OutputView[]>(
+							KEYS.outputs,
+							slot.token,
+							(current) => replaceOutput(current, updated),
+						);
+						setRefusal(undefined);
+					} catch (error) {
+						settleOptimisticResource<OutputView[]>(KEYS.outputs, slot.token);
+						setRefusal(asFailure(error));
+					} finally {
+						const currentSlots = continuousSlots.current.get(laneKey);
+						if (currentSlots) {
+							const remaining = currentSlots.filter(
+								(candidate) => candidate !== slot,
+							);
+							if (remaining.length > 0)
+								continuousSlots.current.set(laneKey, remaining);
+							else continuousSlots.current.delete(laneKey);
+						}
+						for (const waiter of slot.waiters) waiter();
+						end();
+					}
+				});
+			}),
 		[begin, end, enqueue],
 	);
 
@@ -113,12 +223,28 @@ export function useLayerControl(): LayerControl {
 		},
 		[optimisticOutput],
 	);
+	const updateContinuous = useCallback(
+		async (output: OutputView, layer: number, change: UpdateLayer) => {
+			await optimisticContinuousOutput(
+				output.id,
+				`layer-${layer}`,
+				change,
+				(current, pendingChange) =>
+					applyLocally(current, output.id, layer, pendingChange as UpdateLayer),
+				(pendingChange) =>
+					api.updateLayer(output.id, layer, pendingChange as UpdateLayer),
+			);
+		},
+		[optimisticContinuousOutput],
+	);
 
 	const reset = useCallback(
 		async (output: OutputView, layer: number) => {
 			begin();
 			try {
-				await enqueue(output.id, () => api.resetLayer(output.id, layer));
+				await enqueueDiscrete(output.id, () =>
+					api.resetLayer(output.id, layer),
+				);
 				setRefusal(undefined);
 			} catch (error) {
 				setRefusal(asFailure(error));
@@ -126,7 +252,7 @@ export function useLayerControl(): LayerControl {
 				end();
 			}
 		},
-		[begin, end, enqueue],
+		[begin, end, enqueueDiscrete],
 	);
 	const updateMaster = useCallback(
 		async (output: OutputView, change: UpdateMaster) => {
@@ -137,6 +263,20 @@ export function useLayerControl(): LayerControl {
 			);
 		},
 		[optimisticOutput],
+	);
+	const updateMasterContinuous = useCallback(
+		async (output: OutputView, change: UpdateMaster) => {
+			await optimisticContinuousOutput(
+				output.id,
+				"master",
+				change,
+				(current, pendingChange) =>
+					applyMasterLocally(current, output.id, pendingChange as UpdateMaster),
+				(pendingChange) =>
+					api.updateMaster(output.id, pendingChange as UpdateMaster),
+			);
+		},
+		[optimisticContinuousOutput],
 	);
 	const setTakeover = useCallback(
 		async (output: OutputView, takeOver: boolean) => {
@@ -153,7 +293,9 @@ export function useLayerControl(): LayerControl {
 		refusal,
 		dismissRefusal: useCallback(() => setRefusal(undefined), []),
 		update,
+		updateContinuous,
 		updateMaster,
+		updateMasterContinuous,
 		setTakeover,
 		reset,
 		busy,

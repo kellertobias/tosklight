@@ -41,7 +41,7 @@ describe("the production Media pane", () => {
 		await waitFor(() => expect(server.outputs[0].playbackTakeover).toBe(true));
 	});
 
-	it("keeps rapid fader feedback immediate and serializes authoritative writes", async () => {
+	it("keeps rapid fader feedback immediate and coalesces a stalled drag to its latest value", async () => {
 		const server = stubServer();
 		render(<MediaPanePage />);
 		await userEvent.click(
@@ -52,6 +52,7 @@ describe("the production Media pane", () => {
 		const request = deferred();
 		server.holdWrites = request.promise;
 		const scale = screen.getByLabelText("Scale X");
+		fireEvent.pointerDown(scale);
 		const inputAt = performance.now();
 		fireEvent.input(scale, { target: { value: "2" } });
 		fireEvent.input(scale, { target: { value: "3" } });
@@ -65,11 +66,49 @@ describe("the production Media pane", () => {
 			server.writes.filter((path) => path.endsWith("/layers/0/update")),
 		).toHaveLength(1);
 
+		for (let sample = 0; sample < 100; sample += 1)
+			fireEvent.input(scale, {
+				target: { value: String(4 + (sample % 7)) },
+			});
+		fireEvent.input(scale, { target: { value: "9" } });
+		fireEvent.pointerUp(scale);
+		expect(scale).toHaveValue("9");
+		expect(
+			server.writes.filter((path) => path.endsWith("/layers/0/update")),
+		).toHaveLength(1);
+
 		request.resolve();
-		await waitFor(() => expect(server.outputs[0].layers[0].scaleX).toBe(3));
+		await waitFor(() => expect(server.outputs[0].layers[0].scaleX).toBe(9));
 		expect(
 			server.writes.filter((path) => path.endsWith("/layers/0/update")),
 		).toHaveLength(2);
+		expect(server.writeBodies.at(-1)).toEqual(
+			expect.objectContaining({ scaleX: 9 }),
+		);
+	});
+
+	it("does not reload output configuration while live controls change", async () => {
+		const server = stubServer();
+		render(<MediaPanePage />);
+		await screen.findByTestId("master-output-picture");
+		await waitFor(() =>
+			expect(
+				server.requests.filter((path) => path.endsWith("/configuration")),
+			).toHaveLength(1),
+		);
+		await userEvent.click(
+			screen.getByRole("switch", { name: "Take over playback" }),
+		);
+		await userEvent.click(screen.getByRole("radio", { name: "Frame" }));
+		const scale = screen.getByLabelText("Scale X");
+		fireEvent.pointerDown(scale);
+		fireEvent.input(scale, { target: { value: "2" } });
+		fireEvent.input(scale, { target: { value: "3" } });
+		fireEvent.pointerUp(scale);
+		await waitFor(() => expect(server.outputs[0].layers[0].scaleX).toBe(3));
+		expect(
+			server.requests.filter((path) => path.endsWith("/configuration")),
+		).toHaveLength(1);
 	});
 
 	it("puts Release on the off side and Take over playback on the on side", async () => {

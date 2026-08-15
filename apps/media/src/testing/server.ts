@@ -34,6 +34,10 @@ export interface StubbedServer {
 	refuseWrites: { code: string; message: string; status: number } | undefined;
 	/** Every path written to, in order. */
 	writes: string[];
+	/** Every requested path, including reads, in order. */
+	requests: string[];
+	/** Parsed JSON bodies written to live/configuration endpoints, in order. */
+	writeBodies: unknown[];
 	/** Test-only gate for reproducing a slow request without delaying initial reads. */
 	holdWrites: Promise<void> | undefined;
 }
@@ -60,6 +64,8 @@ export function stubServer(
 		},
 		refuseWrites: undefined,
 		writes: [],
+		requests: [],
+		writeBodies: [],
 		holdWrites: undefined,
 		...overrides,
 	};
@@ -69,12 +75,20 @@ export function stubServer(
 		"fetch",
 		vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
 			const path = String(input).replace("/api/v2", "");
+			server.requests.push(path);
 			if (
 				init?.method === "POST" ||
 				path.endsWith("/reset") ||
 				path.includes("/playback/")
 			) {
 				server.writes.push(path);
+				if (typeof init?.body === "string") {
+					try {
+						server.writeBodies.push(JSON.parse(init.body));
+					} catch {
+						// Malformed-body tests deliberately exercise the server's error response.
+					}
+				}
 				if (server.holdWrites) await server.holdWrites;
 				if (server.refuseWrites) {
 					const { code, message, status } = server.refuseWrites;

@@ -410,6 +410,61 @@ describe("shared controls", () => {
 		fireEvent.input(fader, { target: { value: "1.5" } });
 		expect(change).toHaveBeenCalledWith(1.5);
 	});
+	it("coalesces a dense drag locally and commits its exact final value", () => {
+		vi.useFakeTimers();
+		const change = vi.fn();
+		render(
+			<HorizontalFaderField
+				label="Dimmer"
+				value={0}
+				minimum={0}
+				maximum={100}
+				onChange={change}
+			/>,
+		);
+		const fader = screen.getByRole("slider", { name: "Dimmer" });
+		fireEvent.pointerDown(fader);
+		for (let value = 1; value <= 100; value += 1)
+			fireEvent.input(fader, { target: { value: String(value) } });
+		expect(fader).toHaveValue("100");
+		expect(change).toHaveBeenCalledTimes(1);
+		fireEvent.pointerUp(fader);
+		expect(change).toHaveBeenCalledTimes(2);
+		expect(change).toHaveBeenLastCalledWith(100);
+		vi.useRealTimers();
+	});
+	it("emits continuous fader samples no faster than every 50 milliseconds", () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(1_000);
+		const emittedAt: number[] = [];
+		render(
+			<HorizontalFaderField
+				label="Dimmer"
+				value={0}
+				minimum={0}
+				maximum={100}
+				onChange={() => emittedAt.push(Date.now())}
+			/>,
+		);
+		const fader = screen.getByRole("slider", { name: "Dimmer" });
+		fireEvent.pointerDown(fader);
+		fireEvent.input(fader, { target: { value: "1" } });
+		expect(emittedAt).toEqual([1_000]);
+
+		for (let value = 2; value <= 10; value += 1) {
+			vi.advanceTimersByTime(5);
+			fireEvent.input(fader, { target: { value: String(value) } });
+		}
+		expect(emittedAt).toEqual([1_000]);
+		vi.advanceTimersByTime(5);
+		expect(emittedAt).toEqual([1_000, 1_050]);
+
+		vi.advanceTimersByTime(5);
+		fireEvent.input(fader, { target: { value: "11" } });
+		fireEvent.pointerUp(fader);
+		expect(emittedAt).toEqual([1_000, 1_050, 1_055]);
+		vi.useRealTimers();
+	});
 	it("never lets the mouse wheel control a range fader", () => {
 		const change = vi.fn();
 		render(
