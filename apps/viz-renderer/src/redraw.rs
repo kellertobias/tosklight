@@ -65,7 +65,10 @@ pub(crate) fn is_time_driven(
 ) -> bool {
     values.is_time_driven(persistence)
         || (view.mode.renders_beams()
-            && view.quality == viz_scene::RenderQuality::Ultra
+            && matches!(
+                view.quality,
+                viz_scene::RenderQuality::Ultra | viz_scene::RenderQuality::Extreme
+            )
             && values.atmosphere.density > 0.0005
             && values
                 .emitters

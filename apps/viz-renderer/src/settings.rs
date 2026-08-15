@@ -240,7 +240,7 @@ impl Options {
             "  --capture <path>  Write one rendered PNG and exit\n",
             "  --capture-frames  Frames to settle before capturing (default 60)\n",
             "  --view <name>     Named view, for example top_down or full_3d\n",
-            "  --quality <tier>  draft | standard | high | ultra\n",
+            "  --quality <tier>  draft | standard | high | ultra | extreme\n",
             "  --show <path>     Open this show file instead of connecting to a running desk\n",
             "  --blender <path>  Blender to export snapshots with (found automatically otherwise)\n",
             "  --laser-scripts <dir>  Laser scan scripts overriding the ones fixtures ship\n",
@@ -499,7 +499,7 @@ pub struct Preferences {
     /// for the same reason the haze is: how strong a laser looks is a property of the room and the
     /// eye, not of the show.
     pub laser_brightness: f32,
-    /// Ultra-only fog character. These remain renderer-local and never rewrite a show.
+    /// Ultra/Extreme fog character. These remain renderer-local and never rewrite a show.
     pub fog_variation: viz_scene::FogVariation,
     /// Local audience amount; it never rewrites a Venue fixture or its deterministic seed.
     pub crowd_amount: f32,
@@ -595,6 +595,9 @@ impl Preferences {
         text.push_str(&format!("host {}\n", self.host));
         text.push_str(&format!("port {}\n", self.port));
         text.push_str(&format!("user {}\n", self.user));
+        // Version only the quality spelling. Before this marker, `ultra` named today's Extreme
+        // maximum; keeping that distinction lets old preferences retain their visual meaning.
+        text.push_str("quality_schema 2\n");
         text.push_str(&format!(
             "quality {}\n",
             match self.quality_override {
@@ -663,6 +666,14 @@ impl Preferences {
     /// what they last left the window set to. A line this build does not understand is skipped:
     /// preferences are a convenience, never a reason to refuse to start.
     pub fn adopt_file(&mut self, text: &str, options: &Options) {
+        let quality_schema = text
+            .lines()
+            .filter_map(|line| line.trim().split_once(char::is_whitespace))
+            .find_map(|(key, value)| {
+                (key == "quality_schema").then(|| value.trim().parse::<u32>().ok())
+            })
+            .flatten()
+            .unwrap_or(1);
         for line in text.lines() {
             let line = line.trim();
             if line.is_empty() || line.starts_with('#') {
@@ -694,7 +705,11 @@ impl Preferences {
                 }
                 "user" if !options.user_requested => self.user = value.to_owned(),
                 "quality" if options.quality.is_none() => {
-                    self.quality_override = RenderQuality::from_wire(value);
+                    self.quality_override = if quality_schema < 2 && value == "ultra" {
+                        Some(RenderQuality::Extreme)
+                    } else {
+                        RenderQuality::from_wire(value)
+                    };
                 }
                 "fog" if options.fog.is_none() => {
                     if let Ok(amount) = value.parse::<f32>() {
@@ -929,6 +944,12 @@ mod tests {
         let preferences = Preferences::from_options(&Options::default());
         assert_eq!(preferences.quality_label(), "Follow source");
     }
+
+    #[test]
+    fn extreme_is_a_named_command_line_quality() {
+        let options = Options::from_arguments(arguments(&["--quality", "extreme"])).unwrap();
+        assert_eq!(options.quality, Some(RenderQuality::Extreme));
+    }
 }
 
 #[cfg(test)]
@@ -947,7 +968,7 @@ mod preference_tests {
         written.host = "10.0.0.9".into();
         written.port = 5310;
         written.user = "Board Op".into();
-        written.quality_override = Some(RenderQuality::High);
+        written.quality_override = Some(RenderQuality::Ultra);
         written.atmosphere.amount = 0.24;
         written.persistence.decay_seconds = 0.06;
         written.persistence.falloff = 3.5;
@@ -974,7 +995,7 @@ mod preference_tests {
         assert_eq!(read.host, "10.0.0.9");
         assert_eq!(read.port, 5310);
         assert_eq!(read.user, "Board Op");
-        assert_eq!(read.quality_override, Some(RenderQuality::High));
+        assert_eq!(read.quality_override, Some(RenderQuality::Ultra));
         assert!((read.atmosphere.amount - 0.24).abs() < 1e-6);
         assert!((read.persistence.decay_seconds - 0.06).abs() < 1e-6);
         assert!((read.persistence.falloff - 3.5).abs() < 1e-6);
@@ -989,6 +1010,19 @@ mod preference_tests {
         assert_eq!(read.floor_grid, Some(false));
         assert_eq!(read.blender, "/opt/blender");
         assert_eq!(read.input_for(3), Some(viz_dmx::Protocol::Sacn));
+    }
+
+    #[test]
+    fn legacy_ultra_preferences_migrate_to_extreme_while_new_ultra_stays_ultra() {
+        let options = Options::default();
+        let mut legacy = Preferences::from_options(&options);
+        legacy.adopt_file("quality ultra\n", &options);
+        assert_eq!(legacy.quality_override, Some(RenderQuality::Extreme));
+
+        let mut current = Preferences::from_options(&options);
+        current.adopt_file("quality_schema 2\nquality ultra\n", &options);
+        assert_eq!(current.quality_override, Some(RenderQuality::Ultra));
+        assert!(current.to_file().contains("quality_schema 2\n"));
     }
 
     /// A window that opens with nothing on it looks broken, so the one gesture that empties the

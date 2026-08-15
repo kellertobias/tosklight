@@ -140,7 +140,7 @@ pub enum ToHelper {
         atmosphere: f32,
         /// How brightly everything that is not a light source is lit, `0..=2`.
         ambient: f32,
-        /// Draft, Standard, High or Ultra, as the renderer names them.
+        /// Draft, Standard, High, Ultra or Extreme, as the renderer names them.
         quality: RenderQuality,
         /// Operator-safe exposure multiplier.
         exposure: f32,
@@ -148,10 +148,10 @@ pub enum ToHelper {
         /// reference — how strong a beam looks depends on the haze, the room and the eye — so it
         /// is the operator's, like the fog.
         laser_brightness: f32,
-        /// Ultra-only lamp fog patchiness and movement, each `0..=1`.
+        /// Ultra/Extreme lamp fog patchiness and movement, each `0..=1`.
         lamp_fog_cloudiness: f32,
         lamp_fog_turbulence: f32,
-        /// Ultra-only laser fog patchiness and movement, each `0..=1`.
+        /// Ultra/Extreme laser fog patchiness and movement, each `0..=1`.
         laser_fog_cloudiness: f32,
         laser_fog_turbulence: f32,
         /// Screen-space fixture numbers and patch addresses beside fixtures in every Stage view.
@@ -207,6 +207,7 @@ pub enum RenderQuality {
     Standard,
     High,
     Ultra,
+    Extreme,
 }
 
 /// Where the desk serves the show the pane is to draw.

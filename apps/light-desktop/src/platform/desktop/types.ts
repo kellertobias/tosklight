@@ -65,7 +65,7 @@ export type StagePaneGesture =
 export interface StagePanePicture {
 	atmosphere: number;
 	ambient: number;
-	quality: "draft" | "standard" | "high" | "ultra";
+	quality: "draft" | "standard" | "high" | "ultra" | "extreme";
 	exposure: number;
 	laserBrightness: number;
 	lampFogCloudiness: number;
@@ -96,7 +96,7 @@ export interface StagePaneBenchmarkSample {
 	drawCalls: number;
 	degraded: boolean;
 	renderer: string;
-	quality: "draft" | "standard" | "high" | "ultra";
+	quality: "draft" | "standard" | "high" | "ultra" | "extreme";
 	followPreload: boolean;
 	width: number;
 	height: number;

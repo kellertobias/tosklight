@@ -75,6 +75,18 @@ describe("VisualizerControls", () => {
 		expect(onSelectMode).not.toHaveBeenCalled();
 	});
 
+	it("orders every renderer quality from Draft through Extreme", () => {
+		renderControls();
+		fireEvent.click(screen.getByRole("button", { name: /Rendering quality/ }));
+		expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual([
+			"Draft",
+			"Standard",
+			"High",
+			"Ultra",
+			"Extreme",
+		]);
+	});
+
 	it("sends the explicit physics reset action", () => {
 		const { onResetPhysics } = renderControls();
 		fireEvent.click(screen.getByRole("button", { name: "Reset physics scenery" }));

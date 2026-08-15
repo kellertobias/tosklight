@@ -611,7 +611,7 @@ mod tests {
                     .expect("the same active pool renders again");
                 let first_brightness = picture_brightness(&first);
                 let repeated_brightness = picture_brightness(&repeated);
-                if quality == RenderQuality::Ultra
+                if quality == RenderQuality::Extreme
                     && camera_offset > 0.0
                     && let Some(directory) = evidence.as_deref()
                 {

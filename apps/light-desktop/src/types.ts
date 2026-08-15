@@ -153,7 +153,7 @@ export interface PaneModel extends GridRect {
 	stageView?: StageView;
 	stage2dSide?: Stage2dSide;
 	followPreload?: boolean;
-	/** Ultra-only fog character, stored with this portable Visualizer pane. */
+	/** Ultra/Extreme fog character, stored with this portable Visualizer pane. */
 	lampFogCloudiness?: number;
 	lampFogTurbulence?: number;
 	laserFogCloudiness?: number;
@@ -311,7 +311,7 @@ export interface AppState {
 	/** Haze the 3D Viz renderer draws its beams through, `0..=1`. */
 	stageVizAtmosphere: number;
 	/** How much the 3D Viz renderer is asked to do per frame. */
-	stageVizQuality: "draft" | "standard" | "high" | "ultra";
+	stageVizQuality: "draft" | "standard" | "high" | "ultra" | "extreme";
 	stageVizExposure: number;
 	stageVizLaserBrightness: number;
 	stageVizShowLabels: boolean;
@@ -376,7 +376,7 @@ export interface WindowSettings {
 	/** Haze the 3D Viz renderer draws its beams through, `0..=1`. */
 	stageVizAtmosphere: number;
 	/** How much the 3D Viz renderer is asked to do per frame. */
-	stageVizQuality: "draft" | "standard" | "high" | "ultra";
+	stageVizQuality: "draft" | "standard" | "high" | "ultra" | "extreme";
 	stageVizExposure: number;
 	stageVizLaserBrightness: number;
 	stageVizShowLabels: boolean;

@@ -54,10 +54,11 @@ const SHADOW_DRAW_STRIDE: u64 = 256;
 /// not enough to wash out a hazy stage.
 const BLOOM_MIX: f32 = 0.16;
 
-/// Ultra targets one 60 Hz display interval instead of consuming every available GPU cycle.
-pub const ULTRA_GPU_BUDGET_MICROS: u64 = 16_000;
+/// Extreme retains the former Ultra peak and targets one 60 Hz display interval instead of
+/// consuming every available GPU cycle. New Ultra is a fixed, lighter tier.
+pub const EXTREME_GPU_BUDGET_MICROS: u64 = 16_000;
 
-const ULTRA_LADDER: [(u32, u32, f32); 6] = [
+const EXTREME_LADDER: [(u32, u32, f32); 6] = [
     (64, 10, 1.0),
     (48, 8, 1.0),
     (40, 6, 0.9),
@@ -67,18 +68,18 @@ const ULTRA_LADDER: [(u32, u32, f32); 6] = [
 ];
 
 #[derive(Debug, Default)]
-struct UltraBudget {
+struct ExtremeBudget {
     level: usize,
     over_budget: u8,
     under_budget: u16,
 }
 
-impl UltraBudget {
+impl ExtremeBudget {
     fn observe(&mut self, gpu_micros: u64) {
-        if gpu_micros > ULTRA_GPU_BUDGET_MICROS {
+        if gpu_micros > EXTREME_GPU_BUDGET_MICROS {
             self.under_budget = 0;
             self.over_budget = self.over_budget.saturating_add(1);
-            if self.over_budget >= 2 && self.level + 1 < ULTRA_LADDER.len() {
+            if self.over_budget >= 2 && self.level + 1 < EXTREME_LADDER.len() {
                 self.level += 1;
                 self.over_budget = 0;
             }
@@ -96,7 +97,7 @@ impl UltraBudget {
     }
 
     fn settings(&self) -> (u32, u32, f32) {
-        ULTRA_LADDER[self.level]
+        EXTREME_LADDER[self.level]
     }
 
     fn degraded(&self) -> bool {
@@ -176,10 +177,12 @@ pub struct FrameStats {
     pub gpu_micros: Option<u64>,
     /// Named pass costs from the same asynchronously sampled frame as `gpu_micros`.
     pub gpu_passes: crate::timing::GpuPassTimings,
-    /// Effective Ultra controls after the frame-budget controller is applied.
+    /// Effective controls after the Extreme frame-budget controller is applied.
     pub volumetric_steps: u32,
     pub shadow_budget: u32,
     pub render_scale: f32,
+    /// Named tier whose fixed controls most closely match the frame that was actually drawn.
+    pub effective_quality: Option<viz_scene::RenderQuality>,
     /// Audience capacity and stable subset actually drawn this frame.
     pub crowd_authored: u32,
     pub crowd_drawn: u32,
@@ -261,7 +264,7 @@ pub struct Renderer {
     beam_overflow: bool,
     /// Times one frame at a time on the GPU, where the adapter supports it.
     timer: Option<crate::timing::GpuTimer>,
-    ultra_budget: UltraBudget,
+    extreme_budget: ExtremeBudget,
     last_timing_sample: u64,
     crowd_amount: f32,
 }
@@ -271,7 +274,7 @@ impl Renderer {
         Self::with_icon(target, None)
     }
 
-    /// Feed the presented-frame interval to the Ultra controller on adapters without timestamps.
+    /// Feed the presented-frame interval to the Extreme controller on adapters without timestamps.
     /// Timestamp-capable adapters use actual GPU work instead, since a refresh-paced interval is
     /// not a measure of headroom.
     pub fn observe_frame_interval(
@@ -279,8 +282,8 @@ impl Renderer {
         quality: viz_scene::RenderQuality,
         interval_micros: u64,
     ) {
-        if quality == viz_scene::RenderQuality::Ultra && self.last_timing_sample == 0 {
-            self.ultra_budget.observe(interval_micros);
+        if quality == viz_scene::RenderQuality::Extreme && self.last_timing_sample == 0 {
+            self.extreme_budget.observe(interval_micros);
         }
     }
 
@@ -430,7 +433,7 @@ impl Renderer {
             capture_request: None,
             beam_overflow: false,
             timer,
-            ultra_budget: UltraBudget::default(),
+            extreme_budget: ExtremeBudget::default(),
             last_timing_sample: 0,
             crowd_amount: 1.0,
         })
@@ -1044,28 +1047,28 @@ mod tests {
     }
 
     #[test]
-    fn ultra_degrades_after_sustained_over_budget_samples() {
-        let mut budget = UltraBudget::default();
-        budget.observe(ULTRA_GPU_BUDGET_MICROS + 1);
-        assert_eq!(budget.settings(), ULTRA_LADDER[0]);
-        budget.observe(ULTRA_GPU_BUDGET_MICROS + 1);
-        assert_eq!(budget.settings(), ULTRA_LADDER[1]);
+    fn extreme_degrades_after_sustained_over_budget_samples() {
+        let mut budget = ExtremeBudget::default();
+        budget.observe(EXTREME_GPU_BUDGET_MICROS + 1);
+        assert_eq!(budget.settings(), EXTREME_LADDER[0]);
+        budget.observe(EXTREME_GPU_BUDGET_MICROS + 1);
+        assert_eq!(budget.settings(), EXTREME_LADDER[1]);
         assert!(budget.degraded());
     }
 
     #[test]
-    fn ultra_recovers_slowly_and_never_leaves_its_ladder() {
-        let mut budget = UltraBudget::default();
+    fn extreme_recovers_slowly_and_never_leaves_its_ladder() {
+        let mut budget = ExtremeBudget::default();
         for _ in 0..20 {
-            budget.observe(ULTRA_GPU_BUDGET_MICROS + 1);
+            budget.observe(EXTREME_GPU_BUDGET_MICROS + 1);
         }
-        assert_eq!(budget.settings(), *ULTRA_LADDER.last().unwrap());
+        assert_eq!(budget.settings(), *EXTREME_LADDER.last().unwrap());
         for _ in 0..119 {
             budget.observe(11_000);
         }
-        assert_eq!(budget.settings(), *ULTRA_LADDER.last().unwrap());
+        assert_eq!(budget.settings(), *EXTREME_LADDER.last().unwrap());
         budget.observe(11_000);
-        assert_eq!(budget.settings(), ULTRA_LADDER[ULTRA_LADDER.len() - 2]);
+        assert_eq!(budget.settings(), EXTREME_LADDER[EXTREME_LADDER.len() - 2]);
     }
 
     #[test]

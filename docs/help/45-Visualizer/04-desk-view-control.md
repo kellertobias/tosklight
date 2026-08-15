@@ -25,7 +25,7 @@ same order:
 Pressing one sends it. The Visualizer takes the view and frames the rig in it, so **Top
 Down** is a plan of this rig rather than a plan of wherever the camera happened to be.
 
-**Rendering quality** — Draft, Standard, High or Ultra — is sent the same way. It decides
+**Rendering quality** — Draft, Standard, High, Ultra or Extreme — is sent the same way. It decides
 how much the renderer spends on volumetrics, shadows and bloom, and applies immediately
 without the Visualizer reconnecting or reloading the show.
 
@@ -33,13 +33,18 @@ without the Visualizer reconnecting or reloading the show.
 released physics body on the selected renderer target to its authored pose. Re-selecting a view,
 losing DMX, or reconnecting is not a reset.
 
-An embedded **3D Viz** pane at Ultra also offers four fog-character controls: independent
+An embedded **3D Viz** pane at Ultra or Extreme also offers four fog-character controls: independent
 cloudiness and turbulence for lamps and lasers. Cloudiness runs from spatially even at 0% to
 strongly patchy at 100%; turbulence runs from stationary at 0% to very fast movement and change
 at 100%. These values are stored with that pane in the portable show and remain set when another
 quality is selected, but Draft, Standard and High retain their existing uniform fog. A dedicated
 Visualizer keeps the same four controls locally in **Quick Settings** and does not rewrite a
 show's pane values.
+
+Ultra is the fixed, bounded step above High. Extreme preserves the former Ultra maximum and may
+reduce its effective tier when measured GPU frame time exceeds 16 ms. When that happens, Quick
+Settings names both the requested and effective tiers and explains that the GPU budget caused the
+reduction.
 
 ## Who wins
 

@@ -177,6 +177,7 @@ pub fn run(mut source: HelperSource) -> Result<(), String> {
                 viz_helper::protocol::RenderQuality::Standard => viz_scene::RenderQuality::Standard,
                 viz_helper::protocol::RenderQuality::High => viz_scene::RenderQuality::High,
                 viz_helper::protocol::RenderQuality::Ultra => viz_scene::RenderQuality::Ultra,
+                viz_helper::protocol::RenderQuality::Extreme => viz_scene::RenderQuality::Extreme,
             };
         }
         state.resize_for(&embedding)?;
@@ -654,6 +655,7 @@ impl PaneState {
             viz_scene::RenderQuality::Standard => viz_helper::protocol::RenderQuality::Standard,
             viz_scene::RenderQuality::High => viz_helper::protocol::RenderQuality::High,
             viz_scene::RenderQuality::Ultra => viz_helper::protocol::RenderQuality::Ultra,
+            viz_scene::RenderQuality::Extreme => viz_helper::protocol::RenderQuality::Extreme,
         };
         let renderer = format!(
             "{} ({}, {}x MSAA)",

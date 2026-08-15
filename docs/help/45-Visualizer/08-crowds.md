@@ -14,8 +14,9 @@ footprint, and density produce the same people after saving, reopening, or resta
 Visualizer. Moving another fixture does not reshuffle them. Changing mode or footprint produces a
 new deterministic layout contained within the rectangle and on its floor plane.
 
-Draft and Standard omit crowds. High draws up to 384 people per frame. Ultra starts at 1,024 and
-follows the renderer's measured 16 ms GPU adaptation ladder down with render scale when necessary.
+Draft and Standard omit crowds. High draws up to 384 people per frame, and Ultra draws up to 768
+with a fixed budget. Extreme starts at 1,024 and follows the renderer's measured 16 ms GPU
+adaptation ladder down with render scale when necessary.
 When an authored audience exceeds the current budget, the Visualizer retains a stable subset and
 reports authored and drawn counts in its benchmark output instead of destabilizing frame time.
 
