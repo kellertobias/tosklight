@@ -250,6 +250,8 @@ export function stubServer(
 						layer.effects[body.effectSlot] = opacityCycleEffect(
 							body.effectSlot,
 						);
+					} else if (body.effectType === "blur") {
+						layer.effects[body.effectSlot] = blurEffect(body.effectSlot);
 					}
 					const selectedEffect = layer.effects[body.effectSlot];
 					if (body.visualizerParameters !== undefined)
@@ -266,6 +268,8 @@ export function stubServer(
 						selectedEffect.parameters[0].value =
 							values[body.cycleInterval as keyof typeof values];
 					}
+					if (body.blurAmount !== undefined)
+						selectedEffect.parameters[0].value = body.blurAmount;
 					for (const [id, key] of [
 						["tv-curvature", "tvCurvature"],
 						["distortion", "effectDistortion"],
@@ -610,6 +614,26 @@ function opacityCycleEffect(
 		mix: 1,
 		parameters: [
 			{ id: "cycle-interval", label: "Interval", value: 0, defaultValue: 0 },
+		],
+	};
+}
+
+function blurEffect(
+	index: number,
+): OutputView["layers"][number]["effects"][number] {
+	return {
+		...emptyEffect(index),
+		effectType: "blur",
+		label: "Blur",
+		enabled: true,
+		mix: 1,
+		parameters: [
+			{
+				id: "blur-amount",
+				label: "Blur amount",
+				value: 0.35,
+				defaultValue: 0.35,
+			},
 		],
 	};
 }

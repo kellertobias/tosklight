@@ -95,6 +95,35 @@ impl MaskState {
 pub const ANALOG_TV_EFFECT: &str = "analog-tv";
 pub const DIGITAL_TV_EFFECT: &str = "digital-tv";
 pub const OPACITY_CYCLE_EFFECT: &str = "opacity-cycle";
+pub const BLUR_EFFECT: &str = "blur";
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BlurParameters {
+    pub amount: f32,
+}
+
+impl Default for BlurParameters {
+    fn default() -> Self {
+        Self { amount: 0.35 }
+    }
+}
+
+impl BlurParameters {
+    pub fn from_normalized(values: &[f32]) -> Self {
+        let amount = values.first().copied().unwrap_or(Self::default().amount);
+        Self {
+            amount: if amount.is_finite() {
+                amount.clamp(0.0, 1.0)
+            } else {
+                Self::default().amount
+            },
+        }
+    }
+
+    pub const fn as_array(self) -> [f32; 1] {
+        [self.amount]
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OpacityCycleInterval {
@@ -320,6 +349,22 @@ impl EffectSlot {
         .then(|| OpacityCycleInterval::from_parameter(self.parameters.first().copied()))
     }
 
+    pub fn blur() -> Self {
+        Self {
+            effect_type: Some(BLUR_EFFECT.to_owned()),
+            enabled: true,
+            seed: 0,
+            mix: 1.0,
+            parameters: BlurParameters::default().as_array().to_vec(),
+            visualizer_parameters: None,
+        }
+    }
+
+    pub fn blur_parameters(&self) -> Option<BlurParameters> {
+        (self.enabled && self.mix > 0.0 && self.effect_type.as_deref() == Some(BLUR_EFFECT))
+            .then(|| BlurParameters::from_normalized(&self.parameters))
+    }
+
     pub fn normalize(&mut self) {
         self.mix = if self.mix.is_finite() {
             self.mix.clamp(0.0, 1.0)
@@ -338,6 +383,10 @@ impl EffectSlot {
             self.parameters = vec![
                 OpacityCycleInterval::from_parameter(self.parameters.first().copied()).parameter(),
             ];
+        } else if self.effect_type.as_deref() == Some(BLUR_EFFECT) {
+            self.parameters = BlurParameters::from_normalized(&self.parameters)
+                .as_array()
+                .to_vec();
         }
         self.visualizer_parameters = self
             .visualizer_parameters

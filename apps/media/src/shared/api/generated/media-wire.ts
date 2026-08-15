@@ -311,7 +311,7 @@ effectType?: string | null, effectEnabled?: boolean | null, effectMix?: number |
 /**
  * `every-beat`, `every-half-beat`, or `every-second` for the opacity cycle effect.
  */
-cycleInterval?: string | null,
+cycleInterval?: string | null, blurAmount?: number | null,
 /**
  * Complete per-layer visualizer settings routed through effect slot one.
  */

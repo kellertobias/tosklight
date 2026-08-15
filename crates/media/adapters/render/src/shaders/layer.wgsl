@@ -287,6 +287,25 @@ fn mask_strength(uv: vec2<f32>) -> f32 {
     return mix(1.0, clamp(strength, 0.0, 1.0), opacity);
 }
 
+fn blurred_source(uv: vec2<f32>, amount: f32, effect_mix: f32) -> vec4<f32> {
+    let original = textureSample(source, source_sampler, uv);
+    if amount <= 0.0 || effect_mix <= 0.0 {
+        return original;
+    }
+    let dimensions = vec2<f32>(textureDimensions(source));
+    let radius = amount * 18.0 / max(dimensions, vec2<f32>(1.0));
+    var blurred = original * 0.2;
+    blurred += textureSample(source, source_sampler, uv + vec2<f32>( radius.x, 0.0)) * 0.1;
+    blurred += textureSample(source, source_sampler, uv + vec2<f32>(-radius.x, 0.0)) * 0.1;
+    blurred += textureSample(source, source_sampler, uv + vec2<f32>(0.0,  radius.y)) * 0.1;
+    blurred += textureSample(source, source_sampler, uv + vec2<f32>(0.0, -radius.y)) * 0.1;
+    blurred += textureSample(source, source_sampler, uv + vec2<f32>( radius.x,  radius.y)) * 0.1;
+    blurred += textureSample(source, source_sampler, uv + vec2<f32>(-radius.x,  radius.y)) * 0.1;
+    blurred += textureSample(source, source_sampler, uv + vec2<f32>( radius.x, -radius.y)) * 0.1;
+    blurred += textureSample(source, source_sampler, uv + vec2<f32>(-radius.x, -radius.y)) * 0.1;
+    return mix(original, blurred, effect_mix);
+}
+
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     var coordinates: EffectCoordinates;
@@ -312,6 +331,15 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     }
 
     var sampled = textureSample(source, source_sampler, coordinates.uv);
+    for (var slot = 0u; slot < 4u; slot += 1u) {
+        if layer.effect_types[slot] == 3u {
+            sampled = blurred_source(
+                coordinates.uv,
+                layer.effect_parameters[slot].x,
+                layer.effect_mixes[slot],
+            );
+        }
+    }
     for (var slot = 0u; slot < 4u; slot += 1u) {
         if layer.effect_types[slot] == 1u {
             sampled = analog_colour(

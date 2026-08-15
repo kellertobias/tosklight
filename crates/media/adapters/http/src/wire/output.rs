@@ -4,9 +4,9 @@ use media_application::configuration::{
     DmxProtocol, MonitorSelector, OutputConfiguration, OutputTarget, Resolution, SoundOutput,
 };
 use media_domain::{
-    ANALOG_TV_EFFECT, AnalogTvParameters, DIGITAL_TV_EFFECT, DigitalTvParameters, EffectSlot,
-    LayerState, MaskSource, MaskState, MasterState, MediaAddress, OPACITY_CYCLE_EFFECT,
-    OpacityCycleInterval, OutputState,
+    ANALOG_TV_EFFECT, AnalogTvParameters, BLUR_EFFECT, BlurParameters, DIGITAL_TV_EFFECT,
+    DigitalTvParameters, EffectSlot, LayerState, MaskSource, MaskState, MasterState, MediaAddress,
+    OPACITY_CYCLE_EFFECT, OpacityCycleInterval, OutputState,
 };
 use media_domain::{LayerPersonality, PresentationMode};
 use serde::{Deserialize, Serialize};
@@ -79,6 +79,7 @@ impl EffectSlotView {
         let analog = effect.effect_type.as_deref() == Some(ANALOG_TV_EFFECT);
         let digital = effect.effect_type.as_deref() == Some(DIGITAL_TV_EFFECT);
         let opacity_cycle = effect.effect_type.as_deref() == Some(OPACITY_CYCLE_EFFECT);
+        let blur = effect.effect_type.as_deref() == Some(BLUR_EFFECT);
         let parameters = if analog {
             let defaults = AnalogTvParameters::default().as_array();
             let values = AnalogTvParameters::from_normalized(&effect.parameters).as_array();
@@ -107,19 +108,29 @@ impl EffectSlotView {
                     .parameter(),
                 default_value: OpacityCycleInterval::EveryBeat.parameter(),
             }]
+        } else if blur {
+            let value = effect.blur_parameters().unwrap_or_default().amount;
+            vec![EffectParameterView {
+                id: "blur-amount".to_owned(),
+                label: "Blur amount".to_owned(),
+                value,
+                default_value: BlurParameters::default().amount,
+            }]
         } else {
             Vec::new()
         };
         Self {
             index,
             effect_type: effect.effect_type.clone(),
-            label: if analog || digital || opacity_cycle {
+            label: if analog || digital || opacity_cycle || blur {
                 if analog {
                     "Analog TV"
                 } else if digital {
                     "Digital TV"
-                } else {
+                } else if opacity_cycle {
                     "Layer opacity cycle"
+                } else {
+                    "Blur"
                 }
                 .to_owned()
             } else {
@@ -127,10 +138,11 @@ impl EffectSlotView {
             },
             enabled: effect.enabled,
             mix: effect.mix,
-            supported: effect.effect_type.is_none() || analog || digital || opacity_cycle,
+            supported: effect.effect_type.is_none() || analog || digital || opacity_cycle || blur,
             capability_detail: (!analog
                 && !digital
                 && !opacity_cycle
+                && !blur
                 && effect.effect_type.is_some())
             .then(|| "This Media Server build cannot render the selected effect.".to_owned()),
             parameters,
@@ -748,6 +760,8 @@ pub struct UpdateLayer {
     /// `every-beat`, `every-half-beat`, or `every-second` for the opacity cycle effect.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cycle_interval: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blur_amount: Option<f32>,
     /// Complete per-layer visualizer settings routed through effect slot one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub visualizer_parameters: Option<VisualizerParametersView>,
@@ -788,6 +802,7 @@ impl UpdateLayer {
             || self.chroma_damage.is_some()
             || self.effect_glitching.is_some()
             || self.cycle_interval.is_some()
+            || self.blur_amount.is_some()
             || self.visualizer_parameters.is_some()
     }
 }

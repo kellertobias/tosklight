@@ -77,6 +77,10 @@ impl LayerUniform {
                 effect_parameters[index].copy_from_slice(&values[..4]);
                 effect_parameter_tail[index] = values[4];
                 effect_seeds[index] = effect_seed(output_id, effect.seed, index);
+            } else if let Some(parameters) = effect.blur_parameters() {
+                effect_types[index] = 3;
+                effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
+                effect_parameters[index][0] = parameters.amount;
             }
         }
         Self {

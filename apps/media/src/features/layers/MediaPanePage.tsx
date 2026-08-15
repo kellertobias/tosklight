@@ -660,7 +660,7 @@ function tintChange(value: string) {
 function layerChange(id: string, value: string | number): UpdateLayer {
 	const number = Number(value);
 	const effect =
-		/^effect-(\d+)-(type|enabled|mix|tv-curvature|distortion|image-grain|compression-damage|block-size|tile-displacement|chroma-damage|glitching|cycle-interval)$/.exec(
+		/^effect-(\d+)-(type|enabled|mix|tv-curvature|distortion|image-grain|compression-damage|block-size|tile-displacement|chroma-damage|glitching|cycle-interval|blur-amount)$/.exec(
 			id,
 		);
 	if (effect) {
@@ -690,6 +690,8 @@ function layerChange(id: string, value: string | number): UpdateLayer {
 				return { effectSlot, effectGlitching: number / 100 };
 			case "cycle-interval":
 				return { effectSlot, cycleInterval: String(value) };
+			case "blur-amount":
+				return { effectSlot, blurAmount: number / 100 };
 		}
 	}
 	switch (id) {
@@ -753,6 +755,7 @@ function effectControls(
 					{ value: "analog-tv", label: "Analog TV" },
 					{ value: "digital-tv", label: "Digital TV" },
 					{ value: "opacity-cycle", label: "Layer opacity cycle" },
+					{ value: "blur", label: "Blur" },
 				],
 				disabled,
 			},
@@ -786,7 +789,11 @@ function effectControls(
 					disabled,
 				},
 			];
-		if (effect.effectType !== "analog-tv" && effect.effectType !== "digital-tv")
+		if (
+			effect.effectType !== "analog-tv" &&
+			effect.effectType !== "digital-tv" &&
+			effect.effectType !== "blur"
+		)
 			return controls;
 		return [
 			...controls,

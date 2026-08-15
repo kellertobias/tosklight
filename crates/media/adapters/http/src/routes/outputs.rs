@@ -12,9 +12,10 @@ use axum::response::{IntoResponse, Response};
 use media_application::MediaConfiguration;
 use media_application::configuration::{load, save};
 use media_domain::{
-    ANALOG_TV_EFFECT, Applied, Command, CommandKind, CommandSource, DIGITAL_TV_EFFECT, EffectSlot,
-    FlipMirror, LayerControls, MasterControls, MediaAddress, MediaState, OPACITY_CYCLE_EFFECT,
-    OpacityCycleInterval, OutputId, ScalingMode, Timestamp, Tint, apply,
+    ANALOG_TV_EFFECT, Applied, BLUR_EFFECT, BlurParameters, Command, CommandKind, CommandSource,
+    DIGITAL_TV_EFFECT, EffectSlot, FlipMirror, LayerControls, MasterControls, MediaAddress,
+    MediaState, OPACITY_CYCLE_EFFECT, OpacityCycleInterval, OutputId, ScalingMode, Timestamp, Tint,
+    apply,
 };
 
 use crate::error::ApiError;
@@ -142,6 +143,7 @@ pub(super) async fn update_layer(
         ("tileDisplacement", body.tile_displacement),
         ("chromaDamage", body.chroma_damage),
         ("effectGlitching", body.effect_glitching),
+        ("blurAmount", body.blur_amount),
     ] {
         validate_unit(name, value)?;
     }
@@ -191,6 +193,7 @@ pub(super) async fn update_layer(
                 ANALOG_TV_EFFECT => EffectSlot::analog_tv(),
                 DIGITAL_TV_EFFECT => EffectSlot::digital_tv(),
                 OPACITY_CYCLE_EFFECT => EffectSlot::opacity_cycle(),
+                BLUR_EFFECT => EffectSlot::blur(),
                 "none" => EffectSlot::default(),
                 _ => {
                     return Err(ApiError::bad_request(
@@ -248,6 +251,17 @@ pub(super) async fn update_layer(
                 }
             };
             effect.parameters = vec![interval.parameter()];
+        }
+        if let Some(amount) = body.blur_amount {
+            if effect.effect_type.as_deref() != Some(BLUR_EFFECT) {
+                return Err(ApiError::bad_request(
+                    "blur-amount-effect",
+                    "choose the Blur effect before setting blurAmount",
+                ));
+            }
+            let mut parameters = BlurParameters::from_normalized(&effect.parameters);
+            parameters.amount = amount;
+            effect.parameters = parameters.as_array().to_vec();
         }
         let changes_parameters = body.tv_curvature.is_some()
             || body.effect_distortion.is_some()
@@ -911,6 +925,32 @@ mod tests {
         assert_eq!(effect["label"], "Layer opacity cycle");
         assert_eq!(effect["parameters"][0]["id"], "cycle-interval");
         assert_eq!(effect["parameters"][0]["value"], 1.0);
+    }
+
+    #[tokio::test]
+    async fn blur_persists_its_live_amount_and_bypass() {
+        let bench = bench();
+        let uri = format!("/api/v2/outputs/{}/layers/0/update", bench.output);
+        let (status, selected) = send(
+            &bench.router,
+            post(
+                uri.clone(),
+                r#"{"effectSlot":0,"effectType":"blur","blurAmount":0.8}"#,
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let effect = &selected["layers"][0]["effects"][0];
+        assert_eq!(effect["effectType"], "blur");
+        assert_eq!(effect["parameters"][0]["id"], "blur-amount");
+        assert_eq!(effect["parameters"][0]["value"], 0.8);
+
+        let (_, bypassed) = send(
+            &bench.router,
+            post(uri, r#"{"effectSlot":0,"effectEnabled":false}"#),
+        )
+        .await;
+        assert_eq!(bypassed["layers"][0]["effects"][0]["enabled"], false);
     }
 
     #[tokio::test]

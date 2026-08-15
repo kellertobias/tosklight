@@ -10,9 +10,9 @@
 
 use media_domain::geometry::Size;
 use media_domain::{
-    AnalogTvParameters, DigitalTvParameters, EffectSlot, FlipMirror, LayerState, MaskSource,
-    MaskState, MasterState, MediaAddress, OutputId, PresentationMode, ScalingMode, SourceStatus,
-    Timestamp, Tint,
+    AnalogTvParameters, BlurParameters, DigitalTvParameters, EffectSlot, FlipMirror, LayerState,
+    MaskSource, MaskState, MasterState, MediaAddress, OutputId, PresentationMode,
+    ScalingMode, SourceStatus, Timestamp, Tint,
 };
 use media_render::{Gpu, LayerDraw, OutputRenderer, SourceTexture};
 use std::path::Path;
@@ -135,6 +135,18 @@ fn digital_state(parameters: DigitalTvParameters) -> LayerState {
     })
 }
 
+fn blur_state(amount: f32, enabled: bool) -> LayerState {
+    let mut effect = EffectSlot::blur();
+    effect.enabled = enabled;
+    effect.parameters = BlurParameters { amount }.as_array().to_vec();
+    let mut effects: [EffectSlot; 4] = Default::default();
+    effects[0] = effect;
+    ready(LayerState {
+        effects,
+        ..Default::default()
+    })
+}
+
 fn changed_pixels(left: &Image, right: &Image) -> usize {
     left.pixels
         .chunks_exact(4)
@@ -208,6 +220,29 @@ fn analog_tv_defaults_are_deterministic_and_zero_is_a_true_bypass() {
     );
     write_evidence("tl-116-source.png", &untouched);
     write_evidence("tl-116-analog-tv-defaults.png", &first);
+}
+
+#[test]
+fn blur_changes_live_pixels_and_disabled_is_an_exact_bypass() {
+    let mut bench = Bench::new();
+    let source = patterned_source(&bench.gpu);
+    let plain = ready(LayerState::default());
+    let mild = blur_state(0.2, true);
+    let strong = blur_state(1.0, true);
+    let disabled = blur_state(1.0, false);
+    let draw = |state| LayerDraw {
+        state,
+        source: &source,
+        mask: None,
+    };
+
+    let clear = bench.render(&[draw(&plain)], &MasterState::default());
+    let mild = bench.render(&[draw(&mild)], &MasterState::default());
+    let strong = bench.render(&[draw(&strong)], &MasterState::default());
+    let disabled = bench.render(&[draw(&disabled)], &MasterState::default());
+    assert!(changed_pixels(&mild, &clear) > 500);
+    assert!(changed_pixels(&strong, &mild) > 500);
+    assert_eq!(disabled.pixels, clear.pixels);
 }
 
 #[test]

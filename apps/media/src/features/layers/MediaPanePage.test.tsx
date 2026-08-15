@@ -181,13 +181,8 @@ describe("the production Media pane", () => {
 		await userEvent.click(
 			await screen.findByRole("switch", { name: "Take over playback" }),
 		);
-		await userEvent.click(screen.getByRole("radio", { name: "Effects" }));
-		await userEvent.click(
-			within(screen.getByRole("radiogroup", { name: "Slot 1 effect" })).getByRole(
-				"radio",
-				{ name: "Analog TV" },
-			),
-		);
+		await userEvent.click(screen.getByRole("tab", { name: "Effects" }));
+		await chooseEffect(1, "Analog TV");
 
 		await waitFor(() =>
 			expect(server.outputs[0].layers[0].effects[0].effectType).toBe(
@@ -217,22 +212,21 @@ describe("the production Media pane", () => {
 		await userEvent.click(
 			await screen.findByRole("switch", { name: "Take over playback" }),
 		);
-		await userEvent.click(screen.getByRole("radio", { name: "Effects" }));
-		await userEvent.click(
-			within(screen.getByRole("radiogroup", { name: "Slot 2 effect" })).getByRole(
-				"radio",
-				{ name: "Digital TV" },
-			),
-		);
+		await userEvent.click(screen.getByRole("tab", { name: "Effects" }));
+		await chooseEffect(2, "Digital TV");
 
 		await waitFor(() =>
 			expect(server.outputs[0].layers[0].effects[1].effectType).toBe(
 				"digital-tv",
 			),
 		);
-		expect(screen.getByLabelText("Slot 2 · Compression damage")).toHaveValue("35");
+		expect(screen.getByLabelText("Slot 2 · Compression damage")).toHaveValue(
+			"35",
+		);
 		expect(screen.getByLabelText("Slot 2 · Block size")).toHaveValue("35");
-		expect(screen.getByLabelText("Slot 2 · Tile displacement")).toHaveValue("25");
+		expect(screen.getByLabelText("Slot 2 · Tile displacement")).toHaveValue(
+			"25",
+		);
 		expect(screen.getByLabelText("Slot 2 · Chroma damage")).toHaveValue("20");
 		expect(screen.getByLabelText("Slot 2 · Glitching")).toHaveValue("15");
 
@@ -255,11 +249,7 @@ describe("the production Media pane", () => {
 			await screen.findByRole("switch", { name: "Take over playback" }),
 		);
 		await userEvent.click(screen.getByRole("tab", { name: "Effects" }));
-		await userEvent.click(
-			within(
-				screen.getByRole("radiogroup", { name: "Slot 1 effect" }),
-			).getByRole("radio", { name: "Layer opacity cycle" }),
-		);
+		await chooseEffect(1, "Layer opacity cycle");
 		await waitFor(() =>
 			expect(server.outputs[0].layers[0].effects[0].effectType).toBe(
 				"opacity-cycle",
@@ -274,6 +264,36 @@ describe("the production Media pane", () => {
 			expect(server.outputs[0].layers[0].effects[0].parameters[0].value).toBe(
 				1,
 			),
+		);
+	});
+
+	it("edits a live Blur amount and can bypass the effect", async () => {
+		const server = stubServer();
+		render(<MediaPanePage />);
+		await userEvent.click(
+			await screen.findByRole("switch", { name: "Take over playback" }),
+		);
+		await userEvent.click(screen.getByRole("tab", { name: "Effects" }));
+		await chooseEffect(1, "Blur");
+		await waitFor(() =>
+			expect(server.outputs[0].layers[0].effects[0].effectType).toBe("blur"),
+		);
+		expect(screen.getByLabelText("Slot 1 · Blur amount")).toHaveValue("35");
+		fireEvent.input(screen.getByLabelText("Slot 1 · Blur amount"), {
+			target: { value: "80" },
+		});
+		await waitFor(() =>
+			expect(
+				server.outputs[0].layers[0].effects[0].parameters[0].value,
+			).toBeCloseTo(0.8),
+		);
+		await userEvent.click(
+			within(
+				screen.getByRole("radiogroup", { name: "Slot 1 state" }),
+			).getByRole("radio", { name: "Bypassed" }),
+		);
+		await waitFor(() =>
+			expect(server.outputs[0].layers[0].effects[0].enabled).toBe(false),
 		);
 	});
 
@@ -388,4 +408,14 @@ function deferred() {
 		resolve = complete;
 	});
 	return { promise, resolve };
+}
+
+async function chooseEffect(slot: number, name: string) {
+	const label = screen.getByText(`Slot ${slot} effect`, { selector: "label" });
+	const trigger = label.parentElement?.querySelector<HTMLButtonElement>(
+		'button[aria-haspopup="listbox"]',
+	);
+	expect(trigger).toBeTruthy();
+	await userEvent.click(trigger as HTMLButtonElement);
+	await userEvent.click(screen.getByRole("option", { name }));
 }
