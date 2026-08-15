@@ -329,6 +329,7 @@ function TimelineItemButton({
 			className={`${marker ? "timecode-timeline-marker" : `timecode-timeline-item item-${item.kind}`} ${sameSelection(selection, item.selection) ? "selected" : ""}`}
 			style={{
 				left: timelineFrameX(item.frame, pixelsPerFrame),
+				...(marker ? { width: 44, transform: "translateX(-22px)" } : {}),
 				...(width ? { width } : {}),
 			}}
 			onPointerDown={(event) =>
@@ -361,7 +362,14 @@ function TimelineItemButton({
 					/>
 				</>
 			)}
-			{marker ? <span>{item.label}</span> : item.label}
+			{marker ? (
+				<>
+					<span className="timecode-timeline-marker-line" aria-hidden="true" />
+					<span className="timecode-timeline-marker-label">{item.label}</span>
+				</>
+			) : (
+				item.label
+			)}
 			{!marker && <small>{formatFrame(item.frame, fps)}</small>}
 		</Button>
 	);

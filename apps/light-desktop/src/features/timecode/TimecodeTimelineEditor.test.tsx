@@ -99,7 +99,12 @@ describe("TimecodeTimelineEditor", () => {
 		expect(marker).toHaveClass("timecode-timeline-marker");
 		expect(marker).toHaveStyle({
 			left: `${timelineFrameX(88, 17.5)}px`,
+			width: "44px",
+			transform: "translateX(-22px)",
 		});
+		expect(
+			marker.querySelector(".timecode-timeline-marker-line"),
+		).toBeInTheDocument();
 		expect(
 			screen.getByRole("button", { name: "Drag playhead to seek" }),
 		).toHaveTextContent("00:00:01.00");

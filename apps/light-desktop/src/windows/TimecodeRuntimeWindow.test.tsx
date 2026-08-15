@@ -184,7 +184,10 @@ describe("TimecodeEditor title and settings", () => {
 
 		fireEvent.click(addTrigger);
 		expect(screen.getByRole("button", { name: "Add" })).toHaveClass(
-			"ui-window-dropdown-trigger",
+			"ui-title-chrome-dropdown-trigger",
+		);
+		expect(screen.getByRole("button", { name: "Add" })).toHaveClass(
+			"timecode-add-title-action",
 		);
 		const add = screen.getByRole("menu", { name: "Add" });
 		expect(

@@ -5,7 +5,6 @@ import {
 	type PoolSlotViewModel,
 } from "@tosklight/ui/pools";
 import {
-	WindowDropdown,
 	WindowHeader,
 	WindowScrollArea,
 	WindowSettings,
@@ -472,6 +471,13 @@ export function TimecodeEditor({
 			className: "timecode-transport-action",
 		},
 	];
+	const addAction = useTimecodeAddAction({
+		timelineRef,
+		draft,
+		cueLists,
+		audioPlayers,
+		onError: setError,
+	});
 	return (
 		<section className="timecode-window timecode-editor" aria-busy={busy}>
 			<WindowHeader
@@ -480,13 +486,8 @@ export function TimecodeEditor({
 					primary: snapshot?.state ?? "Stopped",
 					secondary: record ? "Saved" : "Creating…",
 				}}
-				toolbar={
-					<TimecodeAddMenu
-						{...{ timelineRef, draft, cueLists, audioPlayers }}
-						onError={setError}
-					/>
-				}
 				groups={[
+					{ id: "timecode-add", actions: [addAction] },
 					{ id: "timecode-history", actions: [
 						{
 							id: "back",
@@ -686,7 +687,7 @@ export function TimecodeSettings({
 	);
 }
 
-function TimecodeAddMenu({
+function useTimecodeAddAction({
 	timelineRef,
 	draft,
 	cueLists,
@@ -730,32 +731,39 @@ function TimecodeAddMenu({
 		},
 		[onError],
 	);
-	return (
-		<WindowDropdown
-			className="timecode-add-title-action"
-			ariaLabel="Add"
-			label={
-				<>
-					<span aria-hidden="true">＋</span> Add
-				</>
-			}
-			items={[
+	return {
+		id: "add",
+		kind: "dropdown",
+		className: "timecode-add-title-action",
+		ariaLabel: "Add",
+		label: (
+			<>
+				<span aria-hidden="true">＋</span> Add
+			</>
+		),
+		dropdown: {
+			kind: "items",
+			ariaLabel: "Add",
+			items: [
 				{
+					kind: "action",
 					id: "marker",
 					label: "Add Marker",
-					onSelect: () =>
+					onPress: () =>
 						runAdd("add marker", () => timelineRef.current?.addMarker()),
 				},
 				{
+					kind: "action",
 					id: "audio",
 					label: "Add Audio Lane",
 					disabled: draft.lanes.some(
 						(lane) => lane.content.kind === "audio_volume",
 					),
-					onSelect: () =>
+					onPress: () =>
 						runAdd("add audio lane", () => timelineRef.current?.addAudioLane()),
 				},
 				...audioPlayers.map((player) => ({
+					kind: "action" as const,
 					id: `audio-player-${player.fixtureId}`,
 					label: `Add ${player.name} Lane`,
 					disabled: draft.lanes.some(
@@ -763,29 +771,31 @@ function TimecodeAddMenu({
 							lane.content.kind === "audio_player" &&
 							lane.content.fixture_id === player.fixtureId,
 					),
-					onSelect: () =>
+					onPress: () =>
 						runAdd(`add ${player.name} lane`, () =>
 							timelineRef.current?.addAudioPlayerLane(player.fixtureId),
 						),
 				})),
 				{
+					kind: "action",
 					id: "speed",
 					label: "Add Speed Lane",
-					onSelect: () =>
+					onPress: () =>
 						runAdd("add speed lane", () => timelineRef.current?.addSpeedLane()),
 				},
 				{
+					kind: "action",
 					id: "cuelist",
 					label: "Add Cuelist Lane",
 					disabled: !cueLists.length,
-					onSelect: () =>
+					onPress: () =>
 						runAdd("open the cuelist chooser", () =>
 							timelineRef.current?.chooseCueListLane(),
 						),
 				},
-			]}
-		/>
-	);
+			],
+		},
+	} satisfies TitleAction;
 }
 
 async function decodeAudioPeaks(file: File, count = 220): Promise<number[]> {
