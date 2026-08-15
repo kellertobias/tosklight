@@ -117,7 +117,7 @@ impl Session {
         Ok(summary)
     }
 
-    fn with<T>(&self, action: impl FnOnce(&PlanningDocument) -> Answer<T>) -> Answer<T> {
+    pub(crate) fn with<T>(&self, action: impl FnOnce(&PlanningDocument) -> Answer<T>) -> Answer<T> {
         self.source
             .with(action)
             .unwrap_or_else(|| Err("no document is open".to_owned()))
@@ -127,7 +127,10 @@ impl Session {
     ///
     /// A rig the operator just patched has to appear in the picture now, not on whatever the
     /// renderer's next reconnection would have been.
-    fn change<T>(&self, action: impl FnOnce(&PlanningDocument) -> Answer<T>) -> Answer<T> {
+    pub(crate) fn change<T>(
+        &self,
+        action: impl FnOnce(&PlanningDocument) -> Answer<T>,
+    ) -> Answer<T> {
         let outcome = self.with(action);
         if outcome.is_ok() {
             self.source.mark_changed();
@@ -210,14 +213,23 @@ pub fn patch_snapshot(session: tauri::State<'_, Session>) -> Answer<SnapshotDto>
 
 #[tauri::command]
 pub fn patch_fixtures(
+    app: tauri::AppHandle,
     session: tauri::State<'_, Session>,
+    cad: tauri::State<'_, crate::cad::CadState>,
     mutation: MutationDto,
+    expected_patch_revision: Option<u64>,
 ) -> Answer<OutcomeDto> {
-    session.change(|document| {
+    let removed = mutation.remove_fixture_ids.clone();
+    let outcome = session.change(|document| {
         let request_id = mutation.request_id.clone();
         let command = mutation.into_command(document.show_id());
+        let expected = expected_patch_revision.unwrap_or(
+            document
+                .patch_revision()
+                .map_err(|error| error.to_string())?,
+        );
         let result = document
-            .patch_fixtures(command)
+            .patch_fixtures_at(command, expected)
             .map_err(|error| error.to_string())?;
         Ok(OutcomeDto {
             request_id,
@@ -225,7 +237,9 @@ pub fn patch_fixtures(
             changed: result.changed,
             change: ChangeDto::new(result.change, result.event_sequence),
         })
-    })
+    })?;
+    crate::cad::emit_scene_delta(&app, &session, &cad, outcome.change.patch_revision, removed)?;
+    Ok(outcome)
 }
 
 /// Portable media servers, advertised sources, surfaces, LED modules and projectors.

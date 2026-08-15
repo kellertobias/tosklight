@@ -6,12 +6,14 @@
 //! visualizer renders whatever this document describes, lit by whatever console is actually on
 //! the network.
 
+mod cad;
 mod contract;
 mod demo;
 mod discovery;
 mod recent;
 mod session;
 mod verify;
+mod visualizer;
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -158,10 +160,26 @@ fn announce_on_the_network(app: &tauri::App) {
     discovery.start(address.port(), session.document_name());
 }
 
+/// Bind the renderer's private loopback source before the Open Viz action becomes available.
+fn prepare_local_visualizer(app: &tauri::App) -> Result<(), String> {
+    let source = app.state::<session::Session>().scene_source();
+    let (listener, address) =
+        tauri::async_runtime::block_on(viz_planning::bind(SocketAddr::from(([127, 0, 0, 1], 0))))
+            .map_err(|error| format!("could not prepare the local visualizer source: {error}"))?;
+    tauri::async_runtime::spawn(async move {
+        if let Err(error) = viz_planning::serve_on(source, listener).await {
+            eprintln!("local visualizer scene source on {address}: {error}");
+        }
+    });
+    app.manage(visualizer::VisualizerLauncher::new(address));
+    Ok(())
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(session::Session::default())
+        .manage(cad::CadState::default())
         .manage(discovery::Discovery::default())
         .manage(Arc::new(verify::SurfaceReady::default()))
         .invoke_handler(tauri::generate_handler![
@@ -188,6 +206,13 @@ fn main() {
             session::export_mvr,
             session::preview_mvr,
             session::import_mvr,
+            cad::open_cad,
+            visualizer::open_visualizer,
+            cad::cad_scene_snapshot,
+            cad::cad_replace_selection,
+            cad::cad_transform,
+            cad::cad_undo,
+            cad::cad_redo,
             discovery::discovered_desks,
             discovery::load_from_desk,
         ])
@@ -221,6 +246,7 @@ fn main() {
                 session.reopen_recent();
             }
             announce_on_the_network(app);
+            prepare_local_visualizer(app).map_err(std::io::Error::other)?;
             if let Some(address) = scene_address() {
                 let source = session.scene_source();
                 tauri::async_runtime::spawn(async move {

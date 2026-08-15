@@ -8148,6 +8148,7 @@ dependencies = [
  "light-fixture",
  "light-media",
  "light-mvr",
+ "light-show",
  "parking_lot",
  "reqwest 0.12.28",
  "serde",

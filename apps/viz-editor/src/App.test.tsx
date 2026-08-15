@@ -27,7 +27,9 @@ const snapshot = {
 };
 
 const invoke = vi.hoisted(() => vi.fn());
+const listen = vi.hoisted(() => vi.fn(async () => () => undefined));
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
+vi.mock("@tauri-apps/api/event", () => ({ listen }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({
 	open: vi.fn(),
 	save: vi.fn(),
@@ -99,6 +101,26 @@ beforeEach(() => {
 });
 
 describe("the Viz editor window", () => {
+	it("places Open CAD immediately above Open Viz and launches the sibling window", async () => {
+		invoke.mockImplementation((command: string) => {
+			switch (command) {
+				case "document_summary": return Promise.resolve(document);
+				case "library_profiles": return Promise.resolve([libraryProfile()]);
+				case "patch_snapshot": return Promise.resolve(snapshot);
+				case "patch_layers": return Promise.resolve([]);
+				case "discovered_desks": return Promise.resolve([]);
+				case "open_cad": return Promise.resolve();
+				default: return Promise.reject(new Error(`unexpected command ${command}`));
+			}
+		});
+		renderApp();
+		const cad = await screen.findByRole("button", { name: "Open CAD" });
+		const viz = screen.getByRole("button", { name: "Open Viz" });
+		expect(cad.compareDocumentPosition(viz) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		fireEvent.click(cad);
+		await waitFor(() => expect(invoke).toHaveBeenCalledWith("open_cad"));
+	});
+
 	it("shows the desk's patch sheet over the open document", async () => {
 		renderApp();
 		// The sheet's own header, rendered by the shared window kit.

@@ -47,6 +47,27 @@ mod tests {
         assert!(!view_affecting("show_patch_changed"));
         assert!(!view_affecting("output_frame"));
     }
+
+    #[test]
+    fn planning_selection_replaces_renderer_selection_by_stable_identity() {
+        let first = uuid::Uuid::new_v4();
+        let second = uuid::Uuid::new_v4();
+        let mut values = SceneValues::default();
+        values.selected_fixtures.insert(uuid::Uuid::new_v4());
+
+        apply_selection(
+            &mut values,
+            &crate::wire::SelectionSnapshot {
+                revision: 7,
+                selected_fixture_ids: vec![first, second],
+            },
+        );
+
+        assert_eq!(
+            values.selected_fixtures,
+            [first, second].into_iter().collect()
+        );
+    }
 }
 
 #[cfg(test)]

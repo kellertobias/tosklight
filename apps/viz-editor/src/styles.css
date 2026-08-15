@@ -16,6 +16,14 @@ body {
 	font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
+html,
+body,
+#root {
+	width: 100%;
+	height: 100%;
+	overflow: hidden;
+}
+
 /*
  * The sheet is the window. Everything above it — the file bar, a status line, an error — takes
  * the height it needs and no more; the sheet takes the rest.
@@ -30,6 +38,164 @@ body {
 	flex-direction: column;
 	height: 100vh;
 	overflow: hidden;
+}
+
+.viz-editor-launch-actions {
+	display: grid;
+	gap: 6px;
+	flex: none;
+	padding: 8px 16px 12px;
+	border-top: 1px solid var(--border-subtle, #1d2530);
+	background: var(--surface-raised, #10151c);
+}
+
+.viz-editor-launch-actions .ui-button {
+	min-height: 40px;
+}
+
+/* The CAD window is a retained WebGL planning surface, not a lighting preview. */
+.cad-app {
+	display: grid;
+	grid-template-rows: auto auto minmax(0, 1fr) auto;
+	width: 100%;
+	height: 100%;
+	background: #05070a;
+	color: #edf1f5;
+}
+
+.cad-titlebar,
+.cad-status,
+.cad-tile-tools {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	background: #111720;
+	border-color: #293441;
+}
+
+.cad-titlebar {
+	justify-content: space-between;
+	padding: 10px 14px;
+	border-bottom: 1px solid #293441;
+}
+
+.cad-titlebar h1,
+.cad-titlebar p {
+	margin: 0;
+}
+
+.cad-titlebar h1 {
+	font-size: 16px;
+}
+
+.cad-titlebar p,
+.cad-status {
+	color: #96a1ad;
+	font-size: 11px;
+}
+
+.cad-title-actions {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.cad-snap {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-height: 36px;
+	padding-inline: 8px;
+	font-size: 12px;
+}
+
+.cad-error {
+	padding: 8px 14px;
+	background: #54171c;
+	color: #ffdadd;
+	cursor: pointer;
+}
+
+.cad-workspace,
+.cad-split,
+.cad-tile {
+	min-width: 0;
+	min-height: 0;
+}
+
+.cad-workspace {
+	display: flex;
+	overflow: hidden;
+}
+
+.cad-workspace > * {
+	flex: 1;
+}
+
+.cad-split {
+	display: grid;
+	overflow: hidden;
+}
+
+.cad-split.is-horizontal {
+	grid-template-columns: var(--cad-split-ratio) 2px minmax(0, 1fr);
+}
+
+.cad-split.is-vertical {
+	grid-template-rows: var(--cad-split-ratio) 2px minmax(0, 1fr);
+}
+
+.cad-divider {
+	background: #334151;
+}
+
+.cad-tile {
+	position: relative;
+	display: grid;
+	grid-template-rows: auto minmax(0, 1fr);
+	background: #05070a;
+	border: 1px solid #1c2631;
+}
+
+.cad-tile-tools {
+	min-height: 34px;
+	padding: 4px 6px;
+	border-bottom: 1px solid #293441;
+}
+
+.cad-tile-tools select {
+	min-width: 132px;
+	min-height: 30px;
+	border: 1px solid #344251;
+	border-radius: 3px;
+	background: #0a0f15;
+	color: #edf1f5;
+}
+
+.cad-tile-tools .ui-button {
+	min-height: 30px;
+	padding: 4px 8px;
+}
+
+.cad-canvas {
+	display: block;
+	width: 100%;
+	height: 100%;
+	touch-action: none;
+	cursor: crosshair;
+}
+
+.cad-loading {
+	display: grid;
+	place-items: center;
+	color: #9aa5b1;
+}
+
+.cad-status {
+	justify-content: space-between;
+	min-height: 26px;
+	padding: 0 10px;
+	border-top: 1px solid #293441;
 }
 
 .viz-editor > .show-patch-layout,
