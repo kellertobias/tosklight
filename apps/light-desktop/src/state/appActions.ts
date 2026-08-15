@@ -13,7 +13,11 @@ import type {
 export type Action =
 	| { type: "SET_DOCK_MODE"; mode: AppState["dockMode"] }
 	| { type: "OPEN_DESK"; id: string }
-	| { type: "OPEN_BUILTIN"; kind: BuiltInWindow }
+	| {
+			type: "OPEN_BUILTIN";
+			kind: BuiltInWindow;
+			patchView?: AppState["patchBuiltInView"];
+	  }
 	| { type: "CLOSE_FILE_MANAGER" }
 	| { type: "TOGGLE_CONTROL_MODE" }
 	| { type: "SET_CONTROL_MODE"; value: AppState["controlMode"] }

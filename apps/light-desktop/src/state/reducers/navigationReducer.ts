@@ -59,6 +59,9 @@ export function reduceNavigation(
 				lastBuiltIn: kind,
 				dockMode: "builtins",
 				fileManagerReturn: null,
+				...(kind === "patch"
+					? { patchBuiltInView: action.patchView ?? "fixtures" }
+					: {}),
 			};
 		}
 		case "CLOSE_FILE_MANAGER": {

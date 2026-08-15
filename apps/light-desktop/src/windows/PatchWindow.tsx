@@ -18,8 +18,8 @@ import { useDesktopBridge } from "../platform/desktop";
 import { StageWindow } from "./StageWindow";
 import type { WindowProps } from "./windowTypes";
 
-export function PatchWindow({ active = true }: WindowProps) {
-	const [tab, setTab] = useState<"fixtures" | "media">("fixtures");
+export function PatchWindow({ active = true, patchView = "fixtures" }: WindowProps) {
+	const [tab, setTab] = useState<"fixtures" | "media">(patchView);
 	return (
 		<PatchFeatureBoundary>
 			{tab === "media" ? (

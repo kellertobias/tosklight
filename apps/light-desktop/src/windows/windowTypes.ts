@@ -31,6 +31,7 @@ export interface WindowProps {
 	stage2dSide?: import("../types").Stage2dSide;
 	followPreload?: boolean;
 	cueListTab?: "pool" | "cues";
+	patchView?: "fixtures" | "media";
 	presetFamily?: PresetFamily;
 	presetPoolColors?: boolean;
 	poolColumns?: number;

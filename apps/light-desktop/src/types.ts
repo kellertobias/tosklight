@@ -266,6 +266,7 @@ export interface AppState {
 	presetSetArmed: boolean;
 	cuelistBuiltInView: "pool" | "cues";
 	cuelistBuiltInNumber: number | null;
+	patchBuiltInView: "fixtures" | "media";
 	cueListSetArmed: boolean;
 	cueListSetTarget: number | null;
 	playbackSetArmed: boolean;

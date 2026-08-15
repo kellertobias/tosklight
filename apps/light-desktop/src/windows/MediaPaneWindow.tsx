@@ -5,6 +5,7 @@ import {
 	useProgrammerValuesView,
 } from "../features/programmerValues/ProgrammerValuesView";
 import { useProgrammingSelectionActions } from "../features/programmingInteraction/ProgrammingInteractionView";
+import { useApp } from "../state/AppContext";
 import { buildMediaPaneModel } from "./media/buildMediaPaneModel";
 import {
 	type MediaBrowserMode,
@@ -13,6 +14,7 @@ import {
 import { useMediaPaneActions } from "./media/useMediaPaneActions";
 import { useMediaPaneData } from "./media/useMediaPaneData";
 import { NativeMediaControls } from "./media/NativeMediaControls";
+import { OPEN_MEDIA_PATCH_ACTION } from "./media/openMediaPatch";
 
 export {
 	mediaCapabilitiesForLayer,
@@ -42,6 +44,7 @@ export function MediaPaneWindow({
 	mediaPaneState,
 	onMediaPaneStateChange,
 }: MediaPaneWindowProps) {
+	const { dispatch } = useApp();
 	const media = useMediaServers();
 	const inspectMediaServer = media?.inspectMediaServer;
 	const nativeMedia = media?.nativeMedia;
@@ -180,5 +183,12 @@ export function MediaPaneWindow({
 		],
 	);
 
-	return <MediaPaneSurface model={model} compact={compact} {...actions} />;
+	return (
+		<MediaPaneSurface
+			model={model}
+			compact={compact}
+			onOpenPatch={() => dispatch(OPEN_MEDIA_PATCH_ACTION)}
+			{...actions}
+		/>
+	);
 }

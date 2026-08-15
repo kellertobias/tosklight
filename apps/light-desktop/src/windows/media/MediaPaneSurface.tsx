@@ -40,6 +40,7 @@ export function MediaPaneSurface({
 	compact = false,
 	title = "Media",
 	headerAction,
+	onOpenPatch,
 	onSelectServer,
 	onSelectLayer,
 	onSelectBrowserMode,
@@ -51,6 +52,7 @@ export function MediaPaneSurface({
 	const server = model.servers.find(
 		(candidate) => candidate.id === model.selectedServerId,
 	);
+	const hasPatchedServer = model.servers.some((candidate) => candidate.id.trim() !== "");
 	const mainShowsBrowser =
 		model.rightPaneVisible ||
 		model.mainSectionId === "content" ||
@@ -124,7 +126,17 @@ export function MediaPaneSurface({
 				},
 			]}
 		>
-			<div className="media-pane-body">
+			{!hasPatchedServer ? (
+				<div className="media-pane-empty" role="status">
+					<strong>No media server is patched</strong>
+					{onOpenPatch ? (
+						<div className="ui-window-action-group media-pane-empty-action">
+							<Button onClick={onOpenPatch}>Open Patch</Button>
+						</div>
+					) : null}
+				</div>
+			) : (
+				<div className="media-pane-body">
 				<section className="media-pane-overview" aria-label="Media output">
 					<MediaCompositePreview
 						preview={model.preview}
@@ -162,7 +174,8 @@ export function MediaPaneSurface({
 						/>
 					)}
 				</section>
-			</div>
+				</div>
+			)}
 		</WindowFrame>
 	);
 }

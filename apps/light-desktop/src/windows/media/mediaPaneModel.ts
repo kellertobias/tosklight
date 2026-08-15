@@ -149,6 +149,7 @@ export interface MediaPaneModel {
 }
 
 export interface MediaPaneUiCallbacks {
+	onOpenPatch?(): void;
 	onSelectServer(serverId: string): void;
 	onSelectLayer(layerId: string): void;
 	onSelectBrowserMode(mode: MediaBrowserMode): void;

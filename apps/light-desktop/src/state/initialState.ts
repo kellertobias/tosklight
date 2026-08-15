@@ -26,6 +26,7 @@ export const initialState: AppState = {
 	presetSetArmed: false,
 	cuelistBuiltInView: "pool",
 	cuelistBuiltInNumber: null,
+	patchBuiltInView: "fixtures",
 	cueListSetArmed: false,
 	cueListSetTarget: null,
 	playbackSetArmed: false,

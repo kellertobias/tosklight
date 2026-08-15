@@ -30,7 +30,7 @@ export function WorkspaceView() {
 					data-pane-type={state.builtIn}
 					aria-label={`${state.builtIn} built-in`}
 				>
-					<Window builtIn />
+					<Window builtIn patchView={state.patchBuiltInView} />
 				</main>
 			</>
 		);
