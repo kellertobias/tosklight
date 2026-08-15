@@ -659,9 +659,10 @@ function tintChange(value: string) {
 
 function layerChange(id: string, value: string | number): UpdateLayer {
 	const number = Number(value);
-	const effect = /^effect-(\d+)-(type|enabled|mix|tv-curvature|distortion|image-grain|compression-damage|block-size|tile-displacement|chroma-damage|glitching)$/.exec(
-		id,
-	);
+	const effect =
+		/^effect-(\d+)-(type|enabled|mix|tv-curvature|distortion|image-grain|compression-damage|block-size|tile-displacement|chroma-damage|glitching|cycle-interval)$/.exec(
+			id,
+		);
 	if (effect) {
 		const effectSlot = Number(effect[1]);
 		switch (effect[2]) {
@@ -687,6 +688,8 @@ function layerChange(id: string, value: string | number): UpdateLayer {
 				return { effectSlot, chromaDamage: number / 100 };
 			case "glitching":
 				return { effectSlot, effectGlitching: number / 100 };
+			case "cycle-interval":
+				return { effectSlot, cycleInterval: String(value) };
 		}
 	}
 	switch (id) {
@@ -749,10 +752,40 @@ function effectControls(
 					{ value: "none", label: "None" },
 					{ value: "analog-tv", label: "Analog TV" },
 					{ value: "digital-tv", label: "Digital TV" },
+					{ value: "opacity-cycle", label: "Layer opacity cycle" },
 				],
 				disabled,
 			},
 		];
+		if (effect.effectType === "opacity-cycle")
+			return [
+				...controls,
+				{
+					id: `${prefix}-enabled`,
+					kind: "choice" as const,
+					label: `${slot} state`,
+					value: String(effect.enabled),
+					options: [
+						{ value: "true", label: "Enabled" },
+						{ value: "false", label: "Bypassed" },
+					],
+					disabled,
+				},
+				{
+					id: `${prefix}-cycle-interval`,
+					kind: "choice" as const,
+					label: `${slot} · Interval`,
+					value: ["every-beat", "every-half-beat", "every-second"][
+						Math.round(effect.parameters[0]?.value ?? 0)
+					],
+					options: [
+						{ value: "every-beat", label: "Every beat" },
+						{ value: "every-half-beat", label: "Every half beat" },
+						{ value: "every-second", label: "Every second" },
+					],
+					disabled,
+				},
+			];
 		if (effect.effectType !== "analog-tv" && effect.effectType !== "digital-tv")
 			return controls;
 		return [

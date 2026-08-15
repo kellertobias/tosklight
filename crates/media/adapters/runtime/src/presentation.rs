@@ -129,6 +129,7 @@ struct HostedOutput {
     sources: crate::layer_sources::LayerSources,
     /// This output's path from addresses to textures.
     pipeline: LayerPipeline,
+    opacity_cycle: crate::opacity_cycle::OpacityCycle,
     standby: Option<SourceTexture>,
 }
 
@@ -304,6 +305,7 @@ impl PresentationHost {
                     test_pattern,
                     sources,
                     pipeline,
+                    opacity_cycle: crate::opacity_cycle::OpacityCycle::default(),
                     standby,
                 });
             }
@@ -404,7 +406,16 @@ impl PresentationHost {
                     .map(|(layer, status)| (output_state.id, *layer, *status)),
             );
 
-            let mut draws = hosted.pipeline.draws(output_state, &prepared);
+            let effective_layers = hosted.opacity_cycle.apply(
+                output_state,
+                &prepared,
+                seconds,
+                heard.bpm,
+                heard.beat_phase,
+            );
+            let mut draws = hosted
+                .pipeline
+                .draws_from_layers(&effective_layers, &prepared);
             // The diagnostic pattern occupies layer one only while nothing else has been
             // selected, so it can never hide a running show.
             if draws.is_empty()

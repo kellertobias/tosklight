@@ -246,6 +246,10 @@ export function stubServer(
 						layer.effects[body.effectSlot] = analogTvEffect(body.effectSlot);
 					} else if (body.effectType === "digital-tv") {
 						layer.effects[body.effectSlot] = digitalTvEffect(body.effectSlot);
+					} else if (body.effectType === "opacity-cycle") {
+						layer.effects[body.effectSlot] = opacityCycleEffect(
+							body.effectSlot,
+						);
 					}
 					const selectedEffect = layer.effects[body.effectSlot];
 					if (body.visualizerParameters !== undefined)
@@ -253,6 +257,15 @@ export function stubServer(
 					if (body.effectEnabled !== undefined)
 						selectedEffect.enabled = body.effectEnabled;
 					if (body.effectMix !== undefined) selectedEffect.mix = body.effectMix;
+					if (body.cycleInterval !== undefined) {
+						const values = {
+							"every-beat": 0,
+							"every-half-beat": 1,
+							"every-second": 2,
+						} as const;
+						selectedEffect.parameters[0].value =
+							values[body.cycleInterval as keyof typeof values];
+					}
 					for (const [id, key] of [
 						["tv-curvature", "tvCurvature"],
 						["distortion", "effectDistortion"],
@@ -583,6 +596,21 @@ function analogTvEffect(
 			value: Number(value),
 			defaultValue: Number(value),
 		})),
+	};
+}
+
+function opacityCycleEffect(
+	index: number,
+): OutputView["layers"][number]["effects"][number] {
+	return {
+		...emptyEffect(index),
+		effectType: "opacity-cycle",
+		label: "Layer opacity cycle",
+		enabled: true,
+		mix: 1,
+		parameters: [
+			{ id: "cycle-interval", label: "Interval", value: 0, defaultValue: 0 },
+		],
 	};
 }
 

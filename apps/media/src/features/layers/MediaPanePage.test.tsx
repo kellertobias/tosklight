@@ -248,6 +248,35 @@ describe("the production Media pane", () => {
 		);
 	});
 
+	it("configures the coordinated layer opacity cycle interval", async () => {
+		const server = stubServer();
+		render(<MediaPanePage />);
+		await userEvent.click(
+			await screen.findByRole("switch", { name: "Take over playback" }),
+		);
+		await userEvent.click(screen.getByRole("tab", { name: "Effects" }));
+		await userEvent.click(
+			within(
+				screen.getByRole("radiogroup", { name: "Slot 1 effect" }),
+			).getByRole("radio", { name: "Layer opacity cycle" }),
+		);
+		await waitFor(() =>
+			expect(server.outputs[0].layers[0].effects[0].effectType).toBe(
+				"opacity-cycle",
+			),
+		);
+		await userEvent.click(
+			within(
+				screen.getByRole("radiogroup", { name: "Slot 1 · Interval" }),
+			).getByRole("radio", { name: "Every half beat" }),
+		);
+		await waitFor(() =>
+			expect(server.outputs[0].layers[0].effects[0].parameters[0].value).toBe(
+				1,
+			),
+		);
+	});
+
 	it("shows an actionable capability error for an effect this build cannot render", async () => {
 		const output = anOutput();
 		output.layers[0].effects[0] = {

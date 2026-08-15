@@ -5,7 +5,8 @@ use media_application::configuration::{
 };
 use media_domain::{
     ANALOG_TV_EFFECT, AnalogTvParameters, DIGITAL_TV_EFFECT, DigitalTvParameters, EffectSlot,
-    LayerState, MaskSource, MaskState, MasterState, MediaAddress, OutputState,
+    LayerState, MaskSource, MaskState, MasterState, MediaAddress, OPACITY_CYCLE_EFFECT,
+    OpacityCycleInterval, OutputState,
 };
 use media_domain::{LayerPersonality, PresentationMode};
 use serde::{Deserialize, Serialize};
@@ -77,6 +78,7 @@ impl EffectSlotView {
     fn of(index: usize, effect: &EffectSlot) -> Self {
         let analog = effect.effect_type.as_deref() == Some(ANALOG_TV_EFFECT);
         let digital = effect.effect_type.as_deref() == Some(DIGITAL_TV_EFFECT);
+        let opacity_cycle = effect.effect_type.as_deref() == Some(OPACITY_CYCLE_EFFECT);
         let parameters = if analog {
             let defaults = AnalogTvParameters::default().as_array();
             let values = AnalogTvParameters::from_normalized(&effect.parameters).as_array();
@@ -95,22 +97,42 @@ impl EffectSlotView {
                 &values,
                 &defaults,
             )
+        } else if opacity_cycle {
+            vec![EffectParameterView {
+                id: "cycle-interval".to_owned(),
+                label: "Interval".to_owned(),
+                value: effect
+                    .opacity_cycle_interval()
+                    .unwrap_or(OpacityCycleInterval::EveryBeat)
+                    .parameter(),
+                default_value: OpacityCycleInterval::EveryBeat.parameter(),
+            }]
         } else {
             Vec::new()
         };
         Self {
             index,
             effect_type: effect.effect_type.clone(),
-            label: if analog || digital {
-                if analog { "Analog TV" } else { "Digital TV" }.to_owned()
+            label: if analog || digital || opacity_cycle {
+                if analog {
+                    "Analog TV"
+                } else if digital {
+                    "Digital TV"
+                } else {
+                    "Layer opacity cycle"
+                }
+                .to_owned()
             } else {
                 effect.effect_type.as_deref().unwrap_or("None").to_owned()
             },
             enabled: effect.enabled,
             mix: effect.mix,
-            supported: effect.effect_type.is_none() || analog || digital,
-            capability_detail: (!analog && !digital && effect.effect_type.is_some())
-                .then(|| "This Media Server build cannot render the selected effect.".to_owned()),
+            supported: effect.effect_type.is_none() || analog || digital || opacity_cycle,
+            capability_detail: (!analog
+                && !digital
+                && !opacity_cycle
+                && effect.effect_type.is_some())
+            .then(|| "This Media Server build cannot render the selected effect.".to_owned()),
             parameters,
             visualizer_parameters: effect
                 .visualizer_parameters
@@ -723,6 +745,9 @@ pub struct UpdateLayer {
     pub chroma_damage: Option<f32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effect_glitching: Option<f32>,
+    /// `every-beat`, `every-half-beat`, or `every-second` for the opacity cycle effect.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cycle_interval: Option<String>,
     /// Complete per-layer visualizer settings routed through effect slot one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub visualizer_parameters: Option<VisualizerParametersView>,
@@ -762,6 +787,7 @@ impl UpdateLayer {
             || self.tile_displacement.is_some()
             || self.chroma_damage.is_some()
             || self.effect_glitching.is_some()
+            || self.cycle_interval.is_some()
             || self.visualizer_parameters.is_some()
     }
 }

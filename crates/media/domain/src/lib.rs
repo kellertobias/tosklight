@@ -46,7 +46,8 @@ pub use command::{
 pub use geometry::{LayerTransform, Point, Size};
 pub use layer::{
     ANALOG_TV_EFFECT, AnalogTvParameters, DIGITAL_TV_EFFECT, DigitalTvParameters, EffectSlot,
-    LayerState, MaskSource, MaskState, ScalingMode, SourceFailure, SourceStatus,
+    LayerState, MaskSource, MaskState, OPACITY_CYCLE_EFFECT, OpacityCycleInterval, ScalingMode,
+    SourceFailure, SourceStatus,
 };
 pub use master::MasterState;
 pub use output::{OutputId, OutputName, PresentationMode};

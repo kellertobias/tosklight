@@ -167,12 +167,22 @@ impl LayerPipeline {
 
     /// The draw list, in layer order.
     pub fn draws<'a>(&'a self, output: &'a OutputState, prepared: &Prepared) -> Vec<LayerDraw<'a>> {
+        self.draws_from_layers(&output.layers, prepared)
+    }
+
+    /// The draw list using effective per-frame layer state. Coordinated effects use this to alter
+    /// compositor opacity without mutating the authoritative layer configuration.
+    pub fn draws_from_layers<'a>(
+        &'a self,
+        layers: &'a [LayerState],
+        prepared: &Prepared,
+    ) -> Vec<LayerDraw<'a>> {
         prepared
             .layers
             .iter()
             .filter_map(|layer| {
                 Some(LayerDraw {
-                    state: output.layer(layer.index)?,
+                    state: layers.get(layer.index)?,
                     source: self.texture(layer.source)?,
                     mask: layer.mask.and_then(|slot| self.texture(slot)),
                 })

@@ -13,8 +13,8 @@ use media_application::MediaConfiguration;
 use media_application::configuration::{load, save};
 use media_domain::{
     ANALOG_TV_EFFECT, Applied, Command, CommandKind, CommandSource, DIGITAL_TV_EFFECT, EffectSlot,
-    FlipMirror, LayerControls, MasterControls, MediaAddress, MediaState, OutputId, ScalingMode,
-    Timestamp, Tint, apply,
+    FlipMirror, LayerControls, MasterControls, MediaAddress, MediaState, OPACITY_CYCLE_EFFECT,
+    OpacityCycleInterval, OutputId, ScalingMode, Timestamp, Tint, apply,
 };
 
 use crate::error::ApiError;
@@ -190,6 +190,7 @@ pub(super) async fn update_layer(
             effects[slot] = match effect_type {
                 ANALOG_TV_EFFECT => EffectSlot::analog_tv(),
                 DIGITAL_TV_EFFECT => EffectSlot::digital_tv(),
+                OPACITY_CYCLE_EFFECT => EffectSlot::opacity_cycle(),
                 "none" => EffectSlot::default(),
                 _ => {
                     return Err(ApiError::bad_request(
@@ -227,6 +228,26 @@ pub(super) async fn update_layer(
         }
         if let Some(mix) = body.effect_mix {
             effect.mix = mix;
+        }
+        if let Some(interval) = body.cycle_interval.as_deref() {
+            if effect.effect_type.as_deref() != Some(OPACITY_CYCLE_EFFECT) {
+                return Err(ApiError::bad_request(
+                    "cycle-interval-effect",
+                    "choose the layer opacity cycle effect before setting its interval",
+                ));
+            }
+            let interval = match interval {
+                "every-beat" => OpacityCycleInterval::EveryBeat,
+                "every-half-beat" => OpacityCycleInterval::EveryHalfBeat,
+                "every-second" => OpacityCycleInterval::EverySecond,
+                _ => {
+                    return Err(ApiError::bad_request(
+                        "cycle-interval-invalid",
+                        "cycleInterval must be every-beat, every-half-beat, or every-second",
+                    ));
+                }
+            };
+            effect.parameters = vec![interval.parameter()];
         }
         let changes_parameters = body.tv_curvature.is_some()
             || body.effect_distortion.is_some()
@@ -869,6 +890,27 @@ mod tests {
         )
         .await;
         assert!(cleared["layers"][0]["effects"][1]["effectType"].is_null());
+    }
+
+    #[tokio::test]
+    async fn opacity_cycle_persists_its_named_interval() {
+        let bench = bench();
+        take_over(&bench).await;
+        let uri = format!("/api/v2/outputs/{}/layers/0/update", bench.output);
+        let (status, selected) = send(
+            &bench.router,
+            post(
+                uri,
+                r#"{"effectSlot":0,"effectType":"opacity-cycle","cycleInterval":"every-half-beat"}"#,
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let effect = &selected["layers"][0]["effects"][0];
+        assert_eq!(effect["effectType"], "opacity-cycle");
+        assert_eq!(effect["label"], "Layer opacity cycle");
+        assert_eq!(effect["parameters"][0]["id"], "cycle-interval");
+        assert_eq!(effect["parameters"][0]["value"], 1.0);
     }
 
     #[tokio::test]

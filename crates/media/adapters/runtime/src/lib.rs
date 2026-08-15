@@ -14,6 +14,7 @@ mod layer_sources;
 pub mod log_buffer;
 mod logging;
 pub mod off_screen;
+mod opacity_cycle;
 pub mod presentation;
 pub mod preview;
 mod shutdown;

@@ -94,6 +94,36 @@ impl MaskState {
 /// The first typed effect shipped by the Media Server.
 pub const ANALOG_TV_EFFECT: &str = "analog-tv";
 pub const DIGITAL_TV_EFFECT: &str = "digital-tv";
+pub const OPACITY_CYCLE_EFFECT: &str = "opacity-cycle";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OpacityCycleInterval {
+    EveryBeat,
+    EveryHalfBeat,
+    EverySecond,
+}
+
+impl OpacityCycleInterval {
+    pub fn from_parameter(value: Option<f32>) -> Self {
+        match value
+            .filter(|value| value.is_finite())
+            .unwrap_or(0.0)
+            .round() as i32
+        {
+            1 => Self::EveryHalfBeat,
+            2 => Self::EverySecond,
+            _ => Self::EveryBeat,
+        }
+    }
+
+    pub const fn parameter(self) -> f32 {
+        match self {
+            Self::EveryBeat => 0.0,
+            Self::EveryHalfBeat => 1.0,
+            Self::EverySecond => 2.0,
+        }
+    }
+}
 
 /// Typed Analog TV parameters, normalized to `0.0..=1.0`.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -272,6 +302,24 @@ impl EffectSlot {
             .then(|| DigitalTvParameters::from_normalized(&self.parameters))
     }
 
+    pub fn opacity_cycle() -> Self {
+        Self {
+            effect_type: Some(OPACITY_CYCLE_EFFECT.to_owned()),
+            enabled: true,
+            seed: 0,
+            mix: 1.0,
+            parameters: vec![OpacityCycleInterval::EveryBeat.parameter()],
+            visualizer_parameters: None,
+        }
+    }
+
+    pub fn opacity_cycle_interval(&self) -> Option<OpacityCycleInterval> {
+        (self.enabled
+            && self.mix > 0.0
+            && self.effect_type.as_deref() == Some(OPACITY_CYCLE_EFFECT))
+        .then(|| OpacityCycleInterval::from_parameter(self.parameters.first().copied()))
+    }
+
     pub fn normalize(&mut self) {
         self.mix = if self.mix.is_finite() {
             self.mix.clamp(0.0, 1.0)
@@ -286,6 +334,10 @@ impl EffectSlot {
             self.parameters = DigitalTvParameters::from_normalized(&self.parameters)
                 .as_array()
                 .to_vec();
+        } else if self.effect_type.as_deref() == Some(OPACITY_CYCLE_EFFECT) {
+            self.parameters = vec![
+                OpacityCycleInterval::from_parameter(self.parameters.first().copied()).parameter(),
+            ];
         }
         self.visualizer_parameters = self
             .visualizer_parameters

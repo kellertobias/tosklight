@@ -309,6 +309,10 @@ effectSlot?: number | null,
  */
 effectType?: string | null, effectEnabled?: boolean | null, effectMix?: number | null, tvCurvature?: number | null, effectDistortion?: number | null, imageGrain?: number | null, compressionDamage?: number | null, blockSize?: number | null, tileDisplacement?: number | null, chromaDamage?: number | null, effectGlitching?: number | null,
 /**
+ * `every-beat`, `every-half-beat`, or `every-second` for the opacity cycle effect.
+ */
+cycleInterval?: string | null,
+/**
  * Complete per-layer visualizer settings routed through effect slot one.
  */
 visualizerParameters?: VisualizerParametersView | null, };
