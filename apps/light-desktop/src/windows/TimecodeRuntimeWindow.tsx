@@ -483,6 +483,7 @@ export function TimecodeEditor({
 				toolbar={
 					<TimecodeAddMenu
 						{...{ timelineRef, draft, cueLists, audioPlayers }}
+						onError={setError}
 					/>
 				}
 				groups={[
@@ -690,12 +691,45 @@ function TimecodeAddMenu({
 	draft,
 	cueLists,
 	audioPlayers,
+	onError,
 }: {
 	timelineRef: RefObject<TimecodeTimelineEditorHandle | null>;
 	draft: TimecodeDefinition;
 	cueLists: readonly unknown[];
 	audioPlayers: readonly TimecodeAudioPlayerOption[];
+	onError(message: string | null): void;
 }) {
+	const addLockedRef = useRef(false);
+	const releaseTimerRef = useRef<number | null>(null);
+	useEffect(
+		() => () => {
+			if (releaseTimerRef.current !== null)
+				window.clearTimeout(releaseTimerRef.current);
+		},
+		[],
+	);
+	const runAdd = useCallback(
+		(label: string, action: () => void) => {
+			if (addLockedRef.current) return;
+			addLockedRef.current = true;
+			onError(null);
+			try {
+				action();
+			} catch (reason) {
+				onError(
+					`Could not ${label}: ${
+						reason instanceof Error ? reason.message : String(reason)
+					}`,
+				);
+			} finally {
+				releaseTimerRef.current = window.setTimeout(() => {
+					addLockedRef.current = false;
+					releaseTimerRef.current = null;
+				}, 250);
+			}
+		},
+		[onError],
+	);
 	return (
 		<WindowDropdown
 			className="timecode-add-title-action"
@@ -709,7 +743,8 @@ function TimecodeAddMenu({
 				{
 					id: "marker",
 					label: "Add Marker",
-					onSelect: () => timelineRef.current?.addMarker(),
+					onSelect: () =>
+						runAdd("add marker", () => timelineRef.current?.addMarker()),
 				},
 				{
 					id: "audio",
@@ -717,7 +752,8 @@ function TimecodeAddMenu({
 					disabled: draft.lanes.some(
 						(lane) => lane.content.kind === "audio_volume",
 					),
-					onSelect: () => timelineRef.current?.addAudioLane(),
+					onSelect: () =>
+						runAdd("add audio lane", () => timelineRef.current?.addAudioLane()),
 				},
 				...audioPlayers.map((player) => ({
 					id: `audio-player-${player.fixtureId}`,
@@ -728,18 +764,24 @@ function TimecodeAddMenu({
 							lane.content.fixture_id === player.fixtureId,
 					),
 					onSelect: () =>
-						timelineRef.current?.addAudioPlayerLane(player.fixtureId),
+						runAdd(`add ${player.name} lane`, () =>
+							timelineRef.current?.addAudioPlayerLane(player.fixtureId),
+						),
 				})),
 				{
 					id: "speed",
 					label: "Add Speed Lane",
-					onSelect: () => timelineRef.current?.addSpeedLane(),
+					onSelect: () =>
+						runAdd("add speed lane", () => timelineRef.current?.addSpeedLane()),
 				},
 				{
 					id: "cuelist",
 					label: "Add Cuelist Lane",
 					disabled: !cueLists.length,
-					onSelect: () => timelineRef.current?.chooseCueListLane(),
+					onSelect: () =>
+						runAdd("open the cuelist chooser", () =>
+							timelineRef.current?.chooseCueListLane(),
+						),
 				},
 			]}
 		/>

@@ -176,7 +176,13 @@ describe("TimecodeEditor title and settings", () => {
 				auto_start: true,
 			}),
 		);
-		fireEvent.click(screen.getByRole("button", { name: "Add" }));
+		const addTrigger = screen.getByRole("button", { name: "Add" });
+		fireEvent.click(addTrigger);
+		fireEvent.click(addTrigger);
+		expect(view.container.querySelector(".timecode-window")).toBeTruthy();
+		expect(screen.queryAllByRole("menu", { name: "Add" })).toHaveLength(0);
+
+		fireEvent.click(addTrigger);
 		expect(screen.getByRole("button", { name: "Add" })).toHaveClass(
 			"ui-window-dropdown-trigger",
 		);
@@ -193,7 +199,28 @@ describe("TimecodeEditor title and settings", () => {
 			"Add Cuelist Lane",
 		]);
 		expect(within(add).queryByText("Add Playhead")).toBeNull();
-		fireEvent.click(within(add).getByRole("menuitem", { name: "Add Marker" }));
+		const addMarker = within(add).getByRole("menuitem", { name: "Add Marker" });
+		const randomUuid = vi
+			.spyOn(crypto, "randomUUID")
+			.mockImplementationOnce(() => {
+				throw new Error("UUID generation failed");
+			});
+		fireEvent.click(addMarker);
+		fireEvent.click(addMarker);
+		expect(randomUuid).toHaveBeenCalledTimes(1);
+		expect(screen.getByRole("alert")).toHaveTextContent(
+			"Could not add marker: UUID generation failed",
+		);
+		expect(view.container.querySelector(".timecode-window")).toBeTruthy();
+		randomUuid.mockRestore();
+
+		await new Promise((resolve) => window.setTimeout(resolve, 275));
+		fireEvent.click(addTrigger);
+		fireEvent.click(
+			within(screen.getByRole("menu", { name: "Add" })).getByRole("menuitem", {
+				name: "Add Marker",
+			}),
+		);
 		await waitFor(() =>
 			expect(update.mock.calls.at(-1)?.[3]).toEqual({
 				markers: [expect.objectContaining({ frame: 44, name: "Marker 1" })],

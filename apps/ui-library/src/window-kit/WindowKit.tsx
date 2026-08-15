@@ -74,11 +74,10 @@ export function WindowDropdown({
 				aria-label={ariaLabel}
 				aria-haspopup="menu"
 				aria-expanded={Boolean(anchor)}
-				onClick={(event) =>
-					setAnchor((current) =>
-						current ? null : event.currentTarget.getBoundingClientRect(),
-					)
-				}
+				onClick={(event) => {
+					const nextAnchor = event.currentTarget.getBoundingClientRect();
+					setAnchor((current) => (current ? null : nextAnchor));
+				}}
 			>
 				{label}
 				<span aria-hidden="true">⌄</span>
