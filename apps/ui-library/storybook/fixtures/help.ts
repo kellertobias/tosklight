@@ -4,19 +4,19 @@ import type {
   HelpTopic,
 } from "../../../light-desktop/src/api/types";
 
-export const helpQuickStartId = "00-quick-start.md";
-export const helpNestedTopicId = "30-Programmer/01-command-line.md";
+export const helpQuickStartId = "00-Quick-Start/index.md";
+export const helpNestedTopicId = "10-Desk/20-Programmer-and-Cues/01-command-line.md";
 
 const topics: HelpCatalogEntry[] = [
   { id: helpQuickStartId, title: "Quick Start", kind: "topic", children: [] },
   { id: "10-application-layout.md", title: "Application Layout and Window Manager", kind: "topic", children: [] },
   {
-    id: "30-Programmer/index.md",
-    title: "The Programmer",
+    id: "10-Desk/20-Programmer-and-Cues/index.md",
+    title: "Programmer and Cues",
     kind: "folder",
     children: [
       { id: helpNestedTopicId, title: "Command Line", kind: "topic", children: [] },
-      { id: "30-Programmer/02-encoders.md", title: "Encoders", kind: "topic", children: [] },
+      { id: "10-Desk/20-Programmer-and-Cues/02-selecting-and-setting-values.md", title: "Selecting and Setting Values", kind: "topic", children: [] },
     ],
   },
   {

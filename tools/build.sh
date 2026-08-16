@@ -106,7 +106,7 @@ render_stage_models() {
   blender --background --factory-startup --python "$ROOT/tools/render_stage_models.py" -- \
     --models "$ROOT/assets/models" \
     --images "$ROOT/docs/help/assets/models" \
-    --page "$ROOT/docs/help/45-Visualizer/02-model-catalogue.md"
+    --page "$ROOT/docs/help/20-ToskLight-PreViz/02-model-catalogue.md"
   "$MANUAL_PYTHON" "$ROOT/tools/optimise_model_images.py" "$ROOT/docs/help/assets/models"
 }
 

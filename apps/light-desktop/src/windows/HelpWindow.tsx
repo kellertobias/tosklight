@@ -36,10 +36,12 @@ function HelpWarningIcon() {
 export function HelpMarkdown({
   markdown,
   topicId,
+  onSelectTopic,
   urlTransform = safeHelpUrl,
 }: {
   markdown: string;
   topicId?: string;
+  onSelectTopic?: (id: string) => void;
   urlTransform?: HelpUrlTransform;
 }) {
   return <ReactMarkdown
@@ -66,7 +68,21 @@ export function HelpMarkdown({
         if (!className && value.startsWith("help-placeholder:")) return <span className="help-placeholder">&lt;{value.slice(17)}&gt;</span>;
         return <code className={className} {...props}>{children}</code>;
       },
-      a({ href, children, ...props }) { return href ? <a href={href} target={href.startsWith("https://") ? "_blank" : undefined} rel="noreferrer" {...props}>{children}</a> : <span>{children}</span>; },
+      a({ href, children, ...props }) {
+        if (!href) return <span>{children}</span>;
+        const topicPrefix = "#help-topic:";
+        const topicTarget = href.startsWith(topicPrefix) ? decodeURIComponent(href.slice(topicPrefix.length)) : null;
+        return <a
+          href={href}
+          target={href.startsWith("https://") ? "_blank" : undefined}
+          rel="noreferrer"
+          onClick={topicTarget && onSelectTopic ? (event) => {
+            event.preventDefault();
+            onSelectTopic(topicTarget);
+          } : undefined}
+          {...props}
+        >{children}</a>;
+      },
       img({ src, alt, ...props }) { return src ? <img src={src} alt={alt ?? ""} loading="lazy" {...props} /> : <span className="help-image-error">Image unavailable: {alt}</span>; },
     }}
   >{prepareHelpMarkdown(markdown)}</ReactMarkdown>;
@@ -236,7 +252,7 @@ export function HelpWindowView({
           <HelpWarningIcon/>
           <span><strong>Help catalog warning</strong><small>{message}</small></span>
         </div>)}
-        {topic && <HelpMarkdown markdown={topic.markdown} topicId={topic.id} urlTransform={urlTransform}/>}
+        {topic && <HelpMarkdown markdown={topic.markdown} topicId={topic.id} onSelectTopic={onSelect} urlTransform={urlTransform}/>}
       </main></WindowScrollArea>
     </div>
   </div>;

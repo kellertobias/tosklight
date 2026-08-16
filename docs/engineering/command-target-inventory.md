@@ -6,7 +6,7 @@ current surfaces already have uniform gestures or styling.
 
 The implementation is authoritative where operator Help, tests, and code disagree. The operator
 grammar remains documented in
-[Command Line Reference](../help/30-Programmer/01-command-line.md).
+[Command Line Reference](../help/10-Desk/20-Programmer-and-Cues/01-command-line.md).
 
 ## Shared routing that exists today
 

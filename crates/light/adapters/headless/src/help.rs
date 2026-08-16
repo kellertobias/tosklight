@@ -350,15 +350,16 @@ mod tests {
         assert!(safe_relative("images/console.png"));
         assert!(!safe_relative("../secret"));
         assert!(!safe_relative("/absolute"));
-        assert!(is_markdown_path("00-quickstart.markdown"));
+        assert!(is_markdown_path("00-Quick-Start/index.md"));
         assert!(is_markdown_path("folder/index.md"));
     }
     #[test]
     fn builds_nested_catalog_from_folder_indexes() {
         let (topics, errors) = build_catalog(vec![
-            ("00-quickstart.markdown".into(), "# Quickstart".into()),
-            ("20-Show-Setup/index.md".into(), "# Show File Setup".into()),
-            ("20-Show-Setup/01-patch.md".into(), "# Patch".into()),
+            ("00-Quick-Start/index.md".into(), "# Quick Start".into()),
+            ("10-Desk/index.md".into(), "# ToskLight Desk".into()),
+            ("10-Desk/10-Show-Setup/index.md".into(), "# Show Setup and Patching".into()),
+            ("10-Desk/10-Show-Setup/01-patch.md".into(), "# Patch".into()),
             ("99-Development/index.md".into(), "# Development".into()),
             (
                 "99-Development/01-open.md".into(),
@@ -367,15 +368,16 @@ mod tests {
         ]);
         assert!(errors.is_empty());
         assert_eq!(topics.len(), 3);
-        assert_eq!(topics[0].title, "Quickstart");
-        assert_eq!(topics[0].id.as_deref(), Some("00-quickstart.markdown"));
-        assert_eq!(topics[1].title, "Show File Setup");
-        assert_eq!(topics[1].id.as_deref(), Some("20-Show-Setup/index.md"));
-        assert_eq!(topics[1].children[0].title, "Patch");
+        assert_eq!(topics[0].title, "Quick Start");
+        assert_eq!(topics[0].id.as_deref(), Some("00-Quick-Start/index.md"));
+        assert_eq!(topics[1].title, "ToskLight Desk");
+        assert_eq!(topics[1].id.as_deref(), Some("10-Desk/index.md"));
+        assert_eq!(topics[1].children[0].title, "Show Setup and Patching");
+        assert_eq!(topics[1].children[0].children[0].title, "Patch");
         assert_eq!(topics[2].title, "Development");
     }
     #[test]
     fn embedded_help_contains_nested_command_line_topic() {
-        assert!(EmbeddedHelp::iter().any(|path| path == "30-Programmer/01-command-line.md"));
+        assert!(EmbeddedHelp::iter().any(|path| path == "10-Desk/20-Programmer-and-Cues/01-command-line.md"));
     }
 }

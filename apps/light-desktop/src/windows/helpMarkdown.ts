@@ -31,6 +31,15 @@ export function safeHelpUrl(
   if (/^https:\/\//i.test(trimmed)) return trimmed;
   if (kind === "link" && trimmed.startsWith("#")) return trimmed;
   if (
+    kind === "link" &&
+    !/^[a-z][a-z0-9+.-]*:/i.test(trimmed) &&
+    !trimmed.startsWith("/")
+  ) {
+    const [target] = trimmed.split("#", 1);
+    const path = resolveHelpPath(target, topicId);
+    if (path) return `#help-topic:${encodeURIComponent(path)}`;
+  }
+  if (
     kind === "image" &&
     !/^[a-z][a-z0-9+.-]*:/i.test(trimmed) &&
     !trimmed.startsWith("/")

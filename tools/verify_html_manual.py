@@ -83,12 +83,15 @@ def verify(site: Path, archive: Path) -> None:
         "ToskLight Operator Manual",
         "Search the manual",
         "Quick Start",
-        "Pane Reference",
+        "ToskLight Desk",
+        "Show Setup and Patching",
+        "Programmer and Cues",
+        "Windows and Panes",
+        "ToskLight PreViz",
+        "ToskLight Media Server",
+        "Protocols",
         "Dynamics pane is the numbered pool",
-        "Desk Setup",
-        "Show File Setup",
-        "The Programmer",
-        "Running a Show",
+        "Development and Future Features",
     ]
     missing = [text for text in required if text not in source]
     if missing:

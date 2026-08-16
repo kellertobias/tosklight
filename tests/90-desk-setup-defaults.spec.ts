@@ -1,6 +1,6 @@
 import { expect, test } from "./bench/core/fixtures";
 
-test.describe("docs/help/10-Desk-Setup/index.md", () => {
+test.describe("docs/help/10-Desk/10-Show-Setup/index.md", () => {
 	test("TL-165 @ui › Desk Setup defaults save immediately and keep the requested layout", async ({
 		api,
 		desk,

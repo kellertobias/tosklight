@@ -17,6 +17,7 @@ class SourcePage:
     markdown: str
     bookmark: str
     is_chapter: bool
+    toc_level: int
 
 
 def slug(value: str) -> str:
@@ -52,7 +53,9 @@ def source_page(path: Path, seen: set[str]) -> SourcePage:
         raise ValueError(f"duplicate page bookmark for {relative}")
     seen.add(bookmark)
     is_chapter = path.name.lower() in {"index.md", "index.markdown"} or "/" not in relative
-    return SourcePage(path, relative, titles[0], markdown, bookmark, is_chapter)
+    parts = Path(relative).parts
+    toc_level = max(0, len(parts) - (2 if is_chapter else 1))
+    return SourcePage(path, relative, titles[0], markdown, bookmark, is_chapter, toc_level)
 
 
 def source_pages() -> list[SourcePage]:

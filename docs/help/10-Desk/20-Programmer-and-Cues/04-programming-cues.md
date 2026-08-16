@@ -1,0 +1,34 @@
+# Programming Cues
+
+A Cue stores what is currently in the programmer. Values that are merely visible from a playback, defaults, Highlight, or resolved output are not recorded. A Cue is one stored step inside a Cuelist; a playback is a control that may be assigned to that Cuelist, not the Cuelist itself.
+
+## Record the first Cue
+
+1. Select fixtures and build the intended look in the programmer.
+2. Press `[REC]` and choose a Cuelist/playback target, or enter an explicit Cue address.
+3. Name the Cue and set fade, delay, and trigger behavior in Cuelist View.
+4. Clear the programmer and run the Cue to prove that the stored data is sufficient.
+
+Recording onto an empty Cuelist creates its first Cue without assigning it to a playback. Recording onto an empty playback creates a Cuelist, records its first Cue, and assigns it. On touch, the whole visible playback is the Record target. On an attached desk, only its topmost playback button is the target; if no button is assigned, use the visible on-screen section. The fader is never a Record target, so it remains usable while programming.
+
+When a target Cuelist contains exactly one Cue, the desk asks whether to **Add Cue**, **Merge Cue**, or **Overwrite Cue**. Once it contains two or more Cues, recording onto the Cuelist or its playback always appends a new Cue.
+
+From the command line, the default target is a Cuelist. `[REC][CUE][CUE] <Cuelist-number> [ENT]` appends there and selects it; later use `[REC][CUE][ENT]` to append to the selected Cuelist. `[REC][PBK] <playback-number> [ENT]` records through a physical playback, and `[REC][PBK][PBK] <virtual-playback-number> [ENT]` records through a Virtual Playback. A playback number without a dot uses the current page; `<page>.<playback>` selects an explicit page.
+
+To choose the Cue number, use `[REC][CUE][CUE] <Cuelist-number> [CUE] <Cue-number> [ENT]`, or omit the Cuelist address for the selected Cuelist. An existing Cue is overwritten; an unused number is inserted. Cue numbers are paths, not decimals: `2`, `2.0`, `2.1`, `2.1.0`, and `2.2` are all distinct and sort in that order.
+
+## Edit Cue contents
+
+Normal Record overwrites the addressed Cue, `[REC][+]` merges programmer values, and `[REC][-]` removes their fixture/attribute addresses. Copy, Move, and Delete use explicit addresses. Renumbering and edits are protected as one show mutation; check the final Cue order before proceeding.
+
+Use `[^REC]` to update existing programming. **Update** changes values stored directly in the current Cue; **Tracked** changes the earlier Cue supplying each tracked value; **Known** writes values into the current Cue only when their addresses already occur somewhere in the Cuelist; **All** also introduces new addresses. The command forms are plain `[^REC]`, `[^REC][-]`, `[^REC][+][+]`, and `[^REC][+]` respectively. Press `[^REC]` twice while holding Shift, then release Shift, to open the complete Update modal. The preview explains eligible, ignored, source-Cue, and destination results before confirmation. See [Updating Existing Programming](01-command-line.md#updating-existing-programming) for exact targets and Preset updates.
+
+For a temporary change, hold `[REC]` to open **Record Settings** and enable **Cue only** before recording. The following Cue automatically restores each Cue-only address to its previous tracked value, or releases an address that had no earlier value. Turn **Cue only** off again for ordinary tracking records. The setting and generated restoration data survive a show refresh or reopen.
+
+## Timing and triggers
+
+Cue **In Fade** and **In Delay** provide the existing timing fallbacks. For decreasing or released Intensity, optional **Out Fade** and **Out Delay** provide an independent fade and hold; when they have not been separated, they follow the effective In timing. Individual values can retain their own fade and start delay and remain authoritative unless **Force Cue Timing** is enabled. **Disable Cue Timing** snaps both directions. Chasers retain their single X-fade percentage timing. Manual GO, Follow, timed delay, timecode, and Link triggers determine where and when playback moves. Follow timing begins after the latest incoming or outgoing work settles. Link is stored on its source Cue and jumps to a destination Cue by stable identity after that same actual completion point plus the optional Link delay. Renumbering therefore changes the displayed destination number without changing the Link. Missing destinations, self-links, and Link cycles are rejected before the show changes. Pause freezes a running transition; release removes playback ownership immediately according to its configured behavior rather than applying Cue out timing to the whole playback.
+
+For exact commands and edge cases, see [Command Line Reference](01-command-line.md). For execution semantics, see [Cues and Playbacks](10-cues-and-playbacks.md).
+
+![Cuelist Cue table and playback execution surface](../../assets/screenshots/cuelist-playback.png)

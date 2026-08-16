@@ -22,7 +22,7 @@ Anything that flies appears twice: `<model>.glb` with its mounting hardware and
 count, where its origin sits, its node list with each node's classification, which node is
 its truss coupler, and the hinges its hardware swivels on.
 
-`docs/help/45-Visualizer/` shows the whole set with a render of each model; both the
+`docs/help/20-ToskLight-PreViz/` shows the whole set with a render of each model; both the
 renders and that catalogue page come from `npm run models:render`.
 
 ## Using one in a fixture package

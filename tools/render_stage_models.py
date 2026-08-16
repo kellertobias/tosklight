@@ -5,7 +5,7 @@ Run through Blender::
 
     blender --background --factory-startup --python tools/render_stage_models.py -- \
         --models assets/models --images docs/help/assets/models \
-        --page docs/help/45-Visualizer/02-model-catalogue.md
+        --page docs/help/20-ToskLight-PreViz/02-model-catalogue.md
 
 Or through the npm script, which does the same thing::
 
@@ -32,7 +32,7 @@ from mathutils import Vector
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_MODELS = ROOT / "assets" / "models"
 DEFAULT_IMAGES = ROOT / "docs" / "help" / "assets" / "models"
-DEFAULT_PAGE = ROOT / "docs" / "help" / "45-Visualizer" / "02-model-catalogue.md"
+DEFAULT_PAGE = ROOT / "docs" / "help" / "20-ToskLight-PreViz" / "02-model-catalogue.md"
 
 GROUP_TITLES = {
     "lamps": "Lamps",

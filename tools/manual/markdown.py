@@ -43,7 +43,7 @@ def render_link(match: re.Match[str], page: SourcePage, bookmarks: dict[str, str
     if target.startswith(("http://", "https://", "mailto:")):
         escaped = html.escape(target, quote=True)
         return f'<link href="{escaped}" color="#087f8c">{label}</link>'
-    clean = target.split("#", 1)[0]
+    clean, separator, fragment = target.partition("#")
     if not clean:
         return label
     resolved = (page.path.parent / clean).resolve()
@@ -52,7 +52,10 @@ def render_link(match: re.Match[str], page: SourcePage, bookmarks: dict[str, str
     except ValueError:
         return label
     destination = bookmarks.get(relative)
-    return f'<link href="#{destination}" color="#087f8c">{label}</link>' if destination else label
+    if not destination:
+        return label
+    anchor = f"{destination}-{slug(fragment)}" if separator and fragment else destination
+    return f'<link href="#{anchor}" color="#087f8c">{label}</link>'
 
 
 def inline_markup(text: str, page: SourcePage, bookmarks: dict[str, str]) -> str:
@@ -201,9 +204,9 @@ class StoryParser:
 
     def configure_heading(self, flowable: Paragraph, level: int, title: str) -> None:
         if level == 1:
-            flowable.manual_toc_level = 0 if self.page.is_chapter else 1
+            flowable.manual_toc_level = min(self.page.toc_level, 2)
         else:
-            flowable.manual_toc_level = min(level - (1 if self.page.is_chapter else 0), 2)
+            flowable.manual_toc_level = min(self.page.toc_level + level - 1, 2)
         flowable.manual_plain_title = title
         flowable.manual_is_chapter = level == 1 and self.page.is_chapter
 

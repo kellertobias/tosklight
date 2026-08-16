@@ -10,7 +10,7 @@ Honor the narrowest requested scope. If the request says to edit planning or tes
 
 - For fixture-profile and fixture-package work, use the repository-owned skill at `.agents/skills/build-light-fixtures/SKILL.md` and its referenced contract.
 - Read the relevant numbered files under `docs/help/` for operator-facing behavior.
-- Treat `docs/help/30-Programmer/01-command-line.md` and the current command-line help file at that location as the command and keypad contract.
+- Treat `docs/help/10-Desk/20-Programmer-and-Cues/01-command-line.md` and the current command-line help file at that location as the command and keypad contract.
 - Treat `docs/testing/` scenario Markdown as the acceptance contract. When implementing one named scenario, keep executable Playwright coverage under root `tests/` and do not silently expand to every scenario.
 - Read `docs/acceptance-criteria.md` before changing persisted show or desk data.
 - Follow `docs/engineering/api-rules.md` for every new or reworked HTTP/WS route and client call site; bring violating routes you touch into compliance in the same chunk.

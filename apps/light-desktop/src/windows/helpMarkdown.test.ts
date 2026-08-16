@@ -34,5 +34,8 @@ describe("help Markdown extensions", () => {
     ).toBeUndefined();
     expect(safeHelpUrl("javascript:alert(1)", "link")).toBeUndefined();
     expect(safeHelpUrl("https://example.com/help", "link")).toBe("https://example.com/help");
+    expect(
+      safeHelpUrl("../20-Programmer-and-Cues/01-command-line.md#speed-groups", "link", "10-Desk/30-Windows/index.md"),
+    ).toBe("#help-topic:10-Desk%2F20-Programmer-and-Cues%2F01-command-line.md");
   });
 });
