@@ -24,12 +24,8 @@ serde_json.workspace = true
 uuid.workspace = true
 viz-document = { path = "../../../crates/viz/document" }
 viz-planning = { path = "../../../crates/viz/planning" }
+viz-scene = { path = "../../../crates/viz/scene" }
 tokio.workspace = true
-
-[dev-dependencies]
-# The demo tests open the real generated demo show rather than a stand-in, so they build one.
-light-show = { path = "../../../crates/shared/show" }
-viz-demo = { path = "../../../crates/viz/demo" }
 
 [features]
 # Tauri decides between a development build and a real one by this feature: without it the app

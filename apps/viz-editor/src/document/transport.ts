@@ -8,7 +8,6 @@ import type {
 } from "@tosklight/patch";
 import { PatchTransportError } from "@tosklight/patch";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 
 /**
  * The patch authority for a planning document.
@@ -26,59 +25,34 @@ export class TauriPatchTransport implements PatchTransport {
 
 	async patchFixtures(
 		_showId: string,
-		expectedPatchRevision: number,
+		_expectedPatchRevision: number,
 		mutation: PatchMutation,
 	): Promise<PatchMutationOutcome> {
-		try {
-			return await invoke<PatchMutationOutcome>("patch_fixtures", {
-				expectedPatchRevision,
-				mutation: {
-					requestId: mutation.requestId,
-					fixtures: mutation.fixtures,
-					removeFixtureIds: mutation.removeFixtureIds,
-				},
-			});
-		} catch (reason) {
-			const message = String(reason);
-			const conflict = /revision|stale|changed/i.test(message);
-			throw new PatchTransportError(message, conflict ? 409 : 400, null, conflict);
-		}
+		return await call<PatchMutationOutcome>("patch_fixtures", {
+			mutation: {
+				requestId: mutation.requestId,
+				fixtures: mutation.fixtures,
+				removeFixtureIds: mutation.removeFixtureIds,
+				placements: mutation.placements ?? [],
+			},
+		});
 	}
 
 	subscribe(
 		_showId: string,
-		afterSequence: number,
+		_afterSequence: number,
 		observer: PatchEventObserver,
 	): PatchEventStream {
 		let closed = false;
-		let newest = afterSequence;
-		const unlisten = listen<{ sceneRevision: number }>("cad-scene-delta", () => {
-			if (closed) return;
-			// CAD commits through the same Patch authority. Asking the Patch session to repair from a
-			// complete snapshot makes its rows adopt the committed transforms without inventing a
-			// second fixture DTO in the web renderer.
-			observer.message({
-				type: "gap",
-				afterSequence: newest,
-				oldestAvailable: newest + 1,
-				latestSequence: newest + 1,
-			});
-			newest += 1;
-		});
-		void unlisten.catch((reason) => observer.error(new Error(String(reason))));
 		// Deliver asynchronously so a subscriber that reads its own stream synchronously during
 		// setup behaves the same here as against a real socket.
 		queueMicrotask(() => {
 			if (!closed) observer.message({ type: "ready", cursor: 0 });
 		});
 		return {
-			repair: (cursor) => {
-				newest = cursor;
-				observer.message({ type: "repaired", cursor });
-			},
+			repair: () => undefined,
 			close: () => {
 				closed = true;
-				void unlisten.then((stop) => stop());
 				observer.closed();
 			},
 		};

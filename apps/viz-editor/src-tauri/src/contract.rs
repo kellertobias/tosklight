@@ -8,7 +8,9 @@
 
 use light_application::{
     PatchChange, PatchFixtureCandidate, PatchFixtureProjection, PatchFixturesCommand,
-    PatchModeProjection, PatchProfileRevisionProjection, PatchSnapshot,
+    PatchModeProjection, PatchOperatorAddressOverride, PatchPlacementIntent,
+    PatchProfileRevisionProjection, PatchSnapshot, PatchSplitPlacementIntent,
+    PatchSplitPlacementMode,
 };
 use light_core::{FixtureId, ShowId};
 use light_fixture::{
@@ -36,7 +38,7 @@ pub struct SnapshotDto {
 pub struct ChangeDto {
     pub show_id: Uuid,
     pub show_revision: u64,
-    pub(crate) patch_revision: u64,
+    pub patch_revision: u64,
     pub event_sequence: Option<u64>,
     pub fixtures: Vec<FixtureDto>,
     pub removed_fixture_ids: Vec<Uuid>,
@@ -102,6 +104,8 @@ pub struct InstalledAppearanceDto {
     #[serde(default)]
     pub color_temperature_kelvin: Option<u32>,
     #[serde(default)]
+    pub luminous_output_lumens: Option<f32>,
+    #[serde(default)]
     pub gel: GelAssignmentDto,
     #[serde(default)]
     pub shaper_angles_degrees: [f32; 4],
@@ -112,6 +116,7 @@ impl Default for InstalledAppearanceDto {
         Self {
             light_source: InstalledLightSourceDto::ProfileDefault,
             color_temperature_kelvin: None,
+            luminous_output_lumens: None,
             gel: GelAssignmentDto::OpenWhite,
             shaper_angles_degrees: [0.0; 4],
         }
@@ -278,11 +283,47 @@ pub struct ProfileRevisionDto {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MutationDto {
-    pub(crate) request_id: String,
+    pub request_id: String,
     #[serde(default)]
-    pub(crate) fixtures: Vec<FixtureDto>,
+    pub fixtures: Vec<FixtureDto>,
     #[serde(default)]
-    pub(crate) remove_fixture_ids: Vec<Uuid>,
+    pub remove_fixture_ids: Vec<Uuid>,
+    #[serde(default)]
+    pub placements: Vec<PlacementDto>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlacementDto {
+    pub fixture_ids: Vec<Uuid>,
+    pub splits: Vec<PlacementSplitDto>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlacementSplitDto {
+    pub split: u16,
+    pub universe: Option<u16>,
+    pub address: Option<u16>,
+    pub mode: PlacementModeDto,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum PlacementModeDto {
+    Consecutive,
+    OperatorOverrides {
+        #[serde(default)]
+        overrides: Vec<PlacementOverrideDto>,
+    },
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlacementOverrideDto {
+    pub fixture_id: Uuid,
+    pub universe: u16,
+    pub address: u16,
 }
 
 impl From<PatchSnapshot> for SnapshotDto {
@@ -487,9 +528,51 @@ impl MutationDto {
                 .map(PatchFixtureCandidate::from)
                 .collect(),
             remove_fixture_ids: self.remove_fixture_ids.into_iter().map(FixtureId).collect(),
-            placements: Vec::new(),
+            placements: self
+                .placements
+                .into_iter()
+                .map(PatchPlacementIntent::from)
+                .collect(),
             vector_spreads: Vec::new(),
             fixture_updates: Vec::new(),
+        }
+    }
+}
+
+impl From<PlacementDto> for PatchPlacementIntent {
+    fn from(dto: PlacementDto) -> Self {
+        Self {
+            fixture_ids: dto.fixture_ids.into_iter().map(FixtureId).collect(),
+            splits: dto
+                .splits
+                .into_iter()
+                .map(PatchSplitPlacementIntent::from)
+                .collect(),
+        }
+    }
+}
+
+impl From<PlacementSplitDto> for PatchSplitPlacementIntent {
+    fn from(dto: PlacementSplitDto) -> Self {
+        Self {
+            split: dto.split,
+            universe: dto.universe,
+            address: dto.address,
+            mode: match dto.mode {
+                PlacementModeDto::Consecutive => PatchSplitPlacementMode::Consecutive,
+                PlacementModeDto::OperatorOverrides { overrides } => {
+                    PatchSplitPlacementMode::OperatorOverrides(
+                        overrides
+                            .into_iter()
+                            .map(|value| PatchOperatorAddressOverride {
+                                fixture_id: FixtureId(value.fixture_id),
+                                universe: value.universe,
+                                address: value.address,
+                            })
+                            .collect(),
+                    )
+                }
+            },
         }
     }
 }
@@ -615,6 +698,7 @@ impl From<&InstalledFixtureAppearance> for InstalledAppearanceDto {
                 },
             },
             color_temperature_kelvin: value.color_temperature_kelvin,
+            luminous_output_lumens: value.luminous_output_lumens,
             gel: match &value.gel {
                 GelAssignment::OpenWhite => GelAssignmentDto::OpenWhite,
                 GelAssignment::BuiltIn {
@@ -660,6 +744,7 @@ impl From<InstalledAppearanceDto> for InstalledFixtureAppearance {
                 InstalledLightSourceDto::Other { label } => InstalledLightSource::Other { label },
             },
             color_temperature_kelvin: value.color_temperature_kelvin,
+            luminous_output_lumens: value.luminous_output_lumens,
             gel: match value.gel {
                 GelAssignmentDto::OpenWhite => GelAssignment::OpenWhite,
                 GelAssignmentDto::BuiltIn {
@@ -700,6 +785,7 @@ mod tests {
         let appearance = InstalledFixtureAppearance {
             light_source: InstalledLightSource::Tungsten,
             color_temperature_kelvin: Some(3_200),
+            luminous_output_lumens: Some(18_000.0),
             gel: GelAssignment::BuiltIn {
                 catalog_id: "touring-gels".into(),
                 entry_id: "deep-red".into(),
@@ -716,6 +802,7 @@ mod tests {
         let value = serde_json::to_value(InstalledAppearanceDto::from(&appearance)).unwrap();
         assert_eq!(value["lightSource"]["type"], "tungsten");
         assert_eq!(value["colorTemperatureKelvin"], 3_200);
+        assert_eq!(value["luminousOutputLumens"], 18_000.0);
         assert_eq!(value["gel"]["catalogId"], "touring-gels");
         assert_eq!(
             value["gel"]["embeddedFallback"]["visualizerSrgb"],
@@ -723,5 +810,38 @@ mod tests {
         );
         let decoded: InstalledAppearanceDto = serde_json::from_value(value).unwrap();
         assert_eq!(InstalledFixtureAppearance::from(decoded), appearance);
+    }
+
+    #[test]
+    fn mutation_keeps_dmx_placement_intent() {
+        let fixture_id = Uuid::new_v4();
+        let mutation: MutationDto = serde_json::from_value(serde_json::json!({
+            "requestId": "placement-test",
+            "fixtures": [],
+            "removeFixtureIds": [],
+            "placements": [{
+                "fixtureIds": [fixture_id],
+                "splits": [{
+                    "split": 1,
+                    "universe": 2,
+                    "address": 101,
+                    "mode": { "type": "consecutive" }
+                }]
+            }]
+        }))
+        .expect("mutation DTO");
+
+        let command = mutation.into_command(ShowId(Uuid::new_v4()));
+        assert_eq!(command.placements.len(), 1);
+        assert_eq!(
+            command.placements[0].fixture_ids,
+            vec![FixtureId(fixture_id)]
+        );
+        assert_eq!(command.placements[0].splits[0].universe, Some(2));
+        assert_eq!(command.placements[0].splits[0].address, Some(101));
+        assert_eq!(
+            command.placements[0].splits[0].mode,
+            PatchSplitPlacementMode::Consecutive
+        );
     }
 }

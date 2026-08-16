@@ -1,1 +1,14 @@
-{"$schema":"../gen/schemas/desktop-schema.json","identifier":"default","description":"Viz rig planning and CAD windows","windows":["main","cad"],"permissions":["core:default","dialog:default"]}
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Viz rig planning window",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-close",
+    "core:window:allow-is-fullscreen",
+    "core:window:allow-set-fullscreen",
+    "core:window:allow-start-dragging",
+    "dialog:default"
+  ]
+}

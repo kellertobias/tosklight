@@ -48,12 +48,7 @@ export interface MvrResolution {
 }
 
 /** The semantic parameters Simple mode offers. */
-export type PreviewParameter =
-	| "intensity"
-	| "pan"
-	| "tilt"
-	| "colour"
-	| "gobo";
+export type PreviewParameter = "intensity" | "pan" | "tilt" | "colour" | "gobo";
 
 /**
  * One thing the operator set in the preview controls.
@@ -84,6 +79,24 @@ export interface DeskPeer {
 	name: string;
 	show: string | null;
 	address: string;
+}
+
+export type LiveDmxProtocol = "artnet" | "sacn";
+export type LiveDmxDelivery = "broadcast" | "multicast" | "unicast";
+
+export interface LiveDmxInputMapping {
+	id: string;
+	logicalUniverse: number;
+	protocol: LiveDmxProtocol;
+	destinationUniverse: number;
+	port: number;
+	enabled: boolean;
+	delivery: LiveDmxDelivery;
+}
+
+export interface LiveDmxInputs {
+	schemaVersion: 1;
+	mappings: LiveDmxInputMapping[];
 }
 
 export interface MediaTransform {
@@ -130,6 +143,8 @@ export type MediaSurfaceSection = MediaSectionKind & {
 export interface MediaServer {
 	id: string;
 	name: string;
+	/** The patched DMX fixture that controls this server, when it was added from the library. */
+	fixtureId?: string | null;
 	citp: { host: string; port: number; discoveryIdentity?: string | null };
 	lastKnownEndpoint?: string | null;
 }
@@ -185,7 +200,18 @@ export interface MediaProjector {
 }
 
 export type MediaObject =
-	| { kind: "media_fallback_asset"; body: { id: string; name: string; mediaType: string; digest: string; width: number; height: number; bytesBase64: string } }
+	| {
+			kind: "media_fallback_asset";
+			body: {
+				id: string;
+				name: string;
+				mediaType: string;
+				digest: string;
+				width: number;
+				height: number;
+				bytesBase64: string;
+			};
+	  }
 	| { kind: "media_server"; body: MediaServer }
 	| { kind: "media_source"; body: MediaSource }
 	| { kind: "led_module_type"; body: LedModuleType }
@@ -211,6 +237,37 @@ export interface MediaLayoutOutcome {
 	replayed: boolean;
 	changed: boolean;
 	snapshot: MediaLayoutSnapshot;
+}
+
+export interface RendererInputOverride {
+	universe: number;
+	protocol: "artnet" | "sacn";
+}
+
+export interface RendererSettings {
+	source: "lighting_desk" | "planning_software";
+	host: string;
+	port: number;
+	user: string;
+	quality: "draft" | "standard" | "high" | "ultra" | null;
+	fog: number;
+	persistence: number;
+	persistenceFalloff: number;
+	ambient: number;
+	exposure: number;
+	laserBrightness: number;
+	lampFogCloudiness: number;
+	lampFogTurbulence: number;
+	laserFogCloudiness: number;
+	laserFogTurbulence: number;
+	crowdAmount: number;
+	theme: "light_on_dark" | "dark_on_light";
+	background: [number, number, number] | null;
+	showLabels: boolean;
+	showSelection: boolean;
+	floorGrid: boolean | null;
+	blender: string;
+	inputOverrides: RendererInputOverride[];
 }
 
 export type MediaObjectIntent = {
@@ -240,6 +297,11 @@ export const documentSession = {
 	 * folder and opens that one, so nothing an operator does to a demo reaches the next one.
 	 */
 	openDemoShow: () => invoke<DocumentSummary>("open_demo_show"),
+	/** Open the separate visualizer output for the document currently being edited. */
+	openVisualizer: () => invoke<void>("open_visualizer"),
+	rendererSettings: () => invoke<RendererSettings>("renderer_settings"),
+	saveRendererSettings: (settings: RendererSettings) =>
+		invoke<RendererSettings>("save_renderer_settings", { settings }),
 	/**
 	 * Set one preview value.
 	 *
@@ -251,8 +313,6 @@ export const documentSession = {
 	clearPreview: (fixtures: readonly string[] = []) =>
 		invoke<void>("clear_preview", { fixtures }),
 	previewIsActive: () => invoke<boolean>("preview_is_active"),
-	openCad: () => invoke<void>("open_cad"),
-	openVisualizer: () => invoke<void>("open_visualizer"),
 	/**
 	 * Report that the document surface is on screen.
 	 *
@@ -269,6 +329,12 @@ export const documentSession = {
 		invoke<MvrImportReport>("import_mvr", { path, resolutions }),
 	/** The desks on the network that have a show to offer. */
 	discoveredDesks: () => invoke<DeskPeer[]>("discovered_desks"),
+	liveDmxInputs: () => invoke<LiveDmxInputs>("live_dmx_inputs"),
+	saveLiveDmxInputs: (inputs: LiveDmxInputs) =>
+		invoke<LiveDmxInputs>("save_live_dmx_inputs", { inputs }),
+	/** Preview compatible routes from a desk; the caller must still explicitly Apply them. */
+	takeLiveDmxInputsFromDesk: (instance: string) =>
+		invoke<LiveDmxInputs>("take_live_dmx_inputs_from_desk", { instance }),
 	/** Take a copy of that desk's show and open it here. */
 	loadFromDesk: (instance: string) =>
 		invoke<DocumentSummary>("load_from_desk", { instance }),
@@ -276,12 +342,27 @@ export const documentSession = {
 	patchSnapshot: () => invoke<PatchSnapshot>("patch_snapshot"),
 	mediaLayout: () => invoke<MediaLayoutSnapshot>("media_layout"),
 	inspectCitpServer: (host: string, port: number) =>
-		invoke<Array<{ id: number; name: string; physical_output: number; layer: number | null; width: number; height: number }>>("inspect_citp_server", { host, port }),
-	discoverCitpServers: () => invoke<Array<{ name: string; host: string; port: number }>>("discover_citp_servers"),
+		invoke<
+			Array<{
+				id: number;
+				name: string;
+				physical_output: number;
+				layer: number | null;
+				width: number;
+				height: number;
+			}>
+		>("inspect_citp_server", { host, port }),
+	discoverCitpServers: () =>
+		invoke<Array<{ name: string; host: string; port: number }>>(
+			"discover_citp_servers",
+		),
 	applyMediaIntent: (intent: MediaObjectIntent) =>
 		invoke<MediaLayoutOutcome>("apply_media_intent", { intent }),
 	importMediaFallback: (path: string) =>
-		invoke<{ reference: NonNullable<MediaSurface["fallback"]>; outcome: MediaLayoutOutcome }>("import_media_fallback", { path }),
+		invoke<{
+			reference: NonNullable<MediaSurface["fallback"]>;
+			outcome: MediaLayoutOutcome;
+		}>("import_media_fallback", { path }),
 	patchLayers: () => invoke<PatchLayer[]>("patch_layers"),
 	savePatchLayer: (layer: PatchLayer) =>
 		invoke<PatchLayer>("save_patch_layer", { layer }),

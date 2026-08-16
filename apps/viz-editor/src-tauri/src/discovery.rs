@@ -14,6 +14,7 @@ use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use viz_document::{LiveDmxInputMapping, LiveDmxInputs};
 
 /// The editor's own announcement, and what it has heard.
 #[derive(Default)]
@@ -154,6 +155,140 @@ pub async fn load_from_desk(
     Ok(summary)
 }
 
+/// Preview only the selected desk's compatible output routes as this document's live inputs.
+///
+/// Nothing is written here. The Show screen presents the result as a draft and its ordinary Apply
+/// action is the only path that changes the current planning document.
+#[tauri::command]
+pub async fn take_live_dmx_inputs_from_desk(
+    discovery: tauri::State<'_, Discovery>,
+    instance: String,
+) -> Answer<LiveDmxInputs> {
+    let desk = discovery
+        .desks()
+        .into_iter()
+        .find(|desk| desk.instance == instance)
+        .ok_or("that desk is no longer on the network")?;
+    fetch_live_dmx_inputs(&desk).await
+}
+
+async fn fetch_live_dmx_inputs(desk: &Peer) -> Answer<LiveDmxInputs> {
+    let client = discovery_client(std::time::Duration::from_secs(20))?;
+    let mut failures = Vec::new();
+    for base in desk.base_urls() {
+        match fetch_live_dmx_inputs_from(&client, &base).await {
+            Ok(inputs) => return Ok(inputs),
+            Err(error) => failures.push(format!("{base}: {error}")),
+        }
+    }
+    Err(format!(
+        "Could not read output routes from {}. {}",
+        desk.name,
+        failures.join("; ")
+    ))
+}
+
+#[derive(Deserialize)]
+struct RouteCollection {
+    objects: Vec<RouteRecord>,
+}
+
+#[derive(Deserialize)]
+struct RouteRecord {
+    id: String,
+    body: serde_json::Value,
+}
+
+async fn fetch_live_dmx_inputs_from(client: &reqwest::Client, base: &str) -> Answer<LiveDmxInputs> {
+    let token = open_read_only_session(client, base).await?;
+    let routes: RouteCollection = client
+        .get(format!("{base}/api/v2/objects/route"))
+        .bearer_auth(token)
+        .send()
+        .await
+        .map_err(|error| format!("did not answer while reading output routes: {error}"))?
+        .error_for_status()
+        .map_err(|error| format!("refused its output routes: {error}"))?
+        .json()
+        .await
+        .map_err(|error| format!("returned invalid output routes: {error}"))?;
+    Ok(inputs_from_routes(routes.objects))
+}
+
+fn inputs_from_routes(routes: Vec<RouteRecord>) -> LiveDmxInputs {
+    let mut logical = HashSet::new();
+    let mappings = routes
+        .into_iter()
+        .filter_map(|route| {
+            let protocol = match route.body.get("protocol")?.as_str()? {
+                "art_net" | "artnet" => "artnet",
+                "sacn" | "s_acn" => "sacn",
+                _ => return None,
+            };
+            let logical_universe = u16::try_from(route.body.get("logical_universe")?.as_u64()?)
+                .ok()
+                .filter(|universe| *universe > 0)?;
+            if !logical.insert(logical_universe) {
+                // The first declared compatible route is the desk's deterministic winner.
+                return None;
+            }
+            let destination_universe = route
+                .body
+                .get("destination_universe")
+                .and_then(serde_json::Value::as_u64)
+                .and_then(|value| u16::try_from(value).ok())
+                .unwrap_or(logical_universe);
+            let delivery = route
+                .body
+                .get("delivery_mode")
+                .and_then(serde_json::Value::as_str)
+                .filter(|value| {
+                    matches!(
+                        (protocol, *value),
+                        ("artnet", "broadcast" | "unicast") | ("sacn", "multicast" | "unicast")
+                    )
+                })
+                .unwrap_or(if protocol == "sacn" {
+                    "multicast"
+                } else {
+                    "broadcast"
+                });
+            let default_port = if protocol == "sacn" { 5568 } else { 6454 };
+            let port = route
+                .body
+                .get("destination")
+                .and_then(serde_json::Value::as_str)
+                .and_then(destination_port)
+                .unwrap_or(default_port);
+            Some(LiveDmxInputMapping {
+                id: route.id,
+                logical_universe,
+                protocol: protocol.into(),
+                destination_universe,
+                port,
+                enabled: route
+                    .body
+                    .get("enabled")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(true),
+                delivery: delivery.into(),
+            })
+        })
+        .collect();
+    LiveDmxInputs {
+        schema_version: 1,
+        mappings,
+    }
+}
+
+fn destination_port(destination: &str) -> Option<u16> {
+    destination
+        .parse::<std::net::SocketAddr>()
+        .ok()
+        .map(|address| address.port())
+        .or_else(|| destination.rsplit_once(':')?.1.parse().ok())
+}
+
 /// The desk's active show as a portable file, through the same API the visualizer uses.
 ///
 /// A desk answers on every interface its machine has, and only one of them may be the network
@@ -225,6 +360,26 @@ async fn enabled_session_user(client: &reqwest::Client, base: &str) -> Answer<St
     preferred_enabled_user(bootstrap.users)
 }
 
+async fn open_read_only_session(client: &reqwest::Client, base: &str) -> Answer<String> {
+    let username = enabled_session_user(client, base).await?;
+    let session: serde_json::Value = client
+        .post(format!("{base}/api/v2/sessions"))
+        .json(&serde_json::json!({"username": username, "role": "visualizer"}))
+        .send()
+        .await
+        .map_err(|error| format!("did not answer while creating a read-only session: {error}"))?
+        .error_for_status()
+        .map_err(|error| format!("refused a read-only Visualizer session: {error}"))?
+        .json()
+        .await
+        .map_err(|error| error.to_string())?;
+    session
+        .get("token")
+        .and_then(|token| token.as_str())
+        .map(str::to_owned)
+        .ok_or_else(|| "that desk answered without a session token".to_owned())
+}
+
 fn preferred_enabled_user(users: Vec<BootstrapUser>) -> Answer<String> {
     let mut enabled = users
         .into_iter()
@@ -245,26 +400,11 @@ async fn fetch_from(
     desk: &Peer,
     base: &str,
 ) -> Answer<(String, Vec<u8>)> {
-    let username = enabled_session_user(client, base).await?;
     // A read-only session, which is what this is: the editor takes a copy and issues nothing else.
-    let session: serde_json::Value = client
-        .post(format!("{base}/api/v2/sessions"))
-        .json(&serde_json::json!({"username": username, "role": "visualizer"}))
-        .send()
-        .await
-        .map_err(|error| format!("did not answer while creating a read-only session: {error}"))?
-        .error_for_status()
-        .map_err(|error| format!("refused a read-only Visualizer session: {error}"))?
-        .json()
-        .await
-        .map_err(|error| error.to_string())?;
-    let token = session
-        .get("token")
-        .and_then(|token| token.as_str())
-        .ok_or("that desk answered without a session token")?;
+    let token = open_read_only_session(client, base).await?;
     let readiness: serde_json::Value = client
         .get(format!("{base}/api/v2/readiness"))
-        .bearer_auth(token)
+        .bearer_auth(&token)
         .send()
         .await
         .map_err(|error| error.to_string())?
@@ -277,7 +417,7 @@ async fn fetch_from(
         .ok_or("that desk has no show open")?;
     let response = client
         .get(format!("{base}/api/v2/shows/{show_id}/download"))
-        .bearer_auth(token)
+        .bearer_auth(&token)
         .send()
         .await
         .map_err(|error| error.to_string())?;
@@ -453,6 +593,49 @@ mod tests {
         assert_eq!(found.len(), 1);
     }
 
+    #[test]
+    fn desk_routes_become_portable_inputs_without_machine_interfaces() {
+        let inputs = inputs_from_routes(vec![
+            RouteRecord {
+                id: "artnet-u1".into(),
+                body: serde_json::json!({
+                    "protocol":"art_net","logical_universe":1,"destination_universe":11,
+                    "delivery_mode":"unicast","destination":"10.0.0.9:6455","enabled":true
+                }),
+            },
+            RouteRecord {
+                id: "sacn-u2".into(),
+                body: serde_json::json!({
+                    "protocol":"sacn","logical_universe":2,"destination_universe":22,
+                    "delivery_mode":"multicast","enabled":false
+                }),
+            },
+        ]);
+        assert_eq!(inputs.mappings.len(), 2);
+        assert_eq!(inputs.mappings[0].protocol, "artnet");
+        assert_eq!(inputs.mappings[0].port, 6455);
+        assert_eq!(inputs.mappings[1].protocol, "sacn");
+        assert_eq!(inputs.mappings[1].port, 5568);
+        assert!(!inputs.mappings[1].enabled);
+        inputs.validate().expect("desk routes produce valid inputs");
+    }
+
+    #[test]
+    fn first_compatible_desk_route_wins_one_logical_universe() {
+        let inputs = inputs_from_routes(vec![
+            RouteRecord {
+                id: "first".into(),
+                body: serde_json::json!({"protocol":"art_net","logical_universe":1,"destination_universe":1}),
+            },
+            RouteRecord {
+                id: "second".into(),
+                body: serde_json::json!({"protocol":"sacn","logical_universe":1,"destination_universe":1}),
+            },
+        ]);
+        assert_eq!(inputs.mappings.len(), 1);
+        assert_eq!(inputs.mappings[0].id, "first");
+    }
+
     #[tokio::test]
     async fn an_ipv6_then_ipv4_peer_falls_back_to_the_ipv4_only_desk() {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
@@ -546,6 +729,55 @@ mod tests {
         let (name, bytes) = fetch_active_show(&peer).await.expect("downloaded show");
         assert_eq!(name, "IPv4 Tour");
         assert_eq!(bytes, b"portable-show");
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn an_ipv4_only_clean_desk_previews_its_routes_read_only() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("IPv4 listener");
+        let port = listener.local_addr().unwrap().port();
+        let server = tokio::spawn(async move {
+            answer_http(
+                &listener,
+                "GET /api/v2/bootstrap",
+                br#"{"users":[{"name":"Operator","enabled":true}]}"#,
+                "content-type: application/json\r\n",
+            )
+            .await;
+            let session = answer_http(
+                &listener,
+                "POST /api/v2/sessions",
+                br#"{"token":"visualizer-token"}"#,
+                "content-type: application/json\r\n",
+            )
+            .await;
+            assert!(session.contains(r#""role":"visualizer""#));
+            let routes = answer_http(
+                &listener,
+                "GET /api/v2/objects/route",
+                br#"{"objects":[{"id":"route-1","body":{"protocol":"art_net","logical_universe":1,"destination_universe":12,"delivery_mode":"broadcast","enabled":true}}]}"#,
+                "content-type: application/json\r\n",
+            )
+            .await;
+            assert!(
+                routes
+                    .to_ascii_lowercase()
+                    .contains("authorization: bearer visualizer-token")
+            );
+        });
+        let peer = Peer {
+            role: Role::Desk,
+            name: "Clean desk".into(),
+            show: Some("IPv4 Tour".into()),
+            addresses: vec![format!("127.0.0.1:{port}")],
+            instance: "clean.local".into(),
+        };
+
+        let inputs = fetch_live_dmx_inputs(&peer).await.expect("route preview");
+        assert_eq!(inputs.mappings.len(), 1);
+        assert_eq!(inputs.mappings[0].destination_universe, 12);
         server.await.unwrap();
     }
 

@@ -6,7 +6,6 @@
 //! visualizer renders whatever this document describes, lit by whatever console is actually on
 //! the network.
 
-mod cad;
 mod contract;
 mod demo;
 mod discovery;
@@ -160,12 +159,18 @@ fn announce_on_the_network(app: &tauri::App) {
     discovery.start(address.port(), session.document_name());
 }
 
-/// Bind the renderer's private loopback source before the Open Viz action becomes available.
+/// Bind the editor-to-renderer scene source before Open Viz can be pressed.
+///
+/// This listener is intentionally independent from discovery: local visualization keeps working
+/// even when the network-facing announcement cannot bind or advertise itself.
 fn prepare_local_visualizer(app: &tauri::App) -> Result<(), String> {
     let source = app.state::<session::Session>().scene_source();
-    let (listener, address) =
-        tauri::async_runtime::block_on(viz_planning::bind(SocketAddr::from(([127, 0, 0, 1], 0))))
-            .map_err(|error| format!("could not prepare the local visualizer source: {error}"))?;
+    let settings = visualizer::restored_renderer_settings()?;
+    source.set_renderer_settings("editor-startup", settings)?;
+    let (listener, address) = tauri::async_runtime::block_on(viz_planning::bind(SocketAddr::from(
+        ([127, 0, 0, 1], 0),
+    )))
+    .map_err(|error| format!("could not prepare the local visualizer scene source: {error}"))?;
     tauri::async_runtime::spawn(async move {
         if let Err(error) = viz_planning::serve_on(source, listener).await {
             eprintln!("local visualizer scene source on {address}: {error}");
@@ -179,15 +184,19 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(session::Session::default())
-        .manage(cad::CadState::default())
         .manage(discovery::Discovery::default())
         .manage(Arc::new(verify::SurfaceReady::default()))
         .invoke_handler(tauri::generate_handler![
             session::create_document,
             session::open_document,
+            visualizer::open_visualizer,
+            visualizer::renderer_settings,
+            visualizer::save_renderer_settings,
             demo::open_demo_show,
             verify::surface_ready,
             session::document_summary,
+            session::live_dmx_inputs,
+            session::save_live_dmx_inputs,
             session::save_document_as,
             session::rename_document,
             session::patch_snapshot,
@@ -206,15 +215,9 @@ fn main() {
             session::export_mvr,
             session::preview_mvr,
             session::import_mvr,
-            cad::open_cad,
-            visualizer::open_visualizer,
-            cad::cad_scene_snapshot,
-            cad::cad_replace_selection,
-            cad::cad_transform,
-            cad::cad_undo,
-            cad::cad_redo,
             discovery::discovered_desks,
             discovery::load_from_desk,
+            discovery::take_live_dmx_inputs_from_desk,
         ])
         .setup(|app| {
             // Before the window is shown, so the tile never appears and then disappears.
@@ -245,8 +248,13 @@ fn main() {
                 });
                 session.reopen_recent();
             }
-            announce_on_the_network(app);
+            if session.document_name().is_none()
+                && let Err(error) = demo::open_default_copy(app.handle(), &session)
+            {
+                eprintln!("open the default Demo Show: {error}");
+            }
             prepare_local_visualizer(app).map_err(std::io::Error::other)?;
+            announce_on_the_network(app);
             if let Some(address) = scene_address() {
                 let source = session.scene_source();
                 tauri::async_runtime::spawn(async move {
