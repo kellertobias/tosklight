@@ -11,18 +11,18 @@ export const builtIns: readonly BuiltInDestination[] = [
 	["stage", "⌖", "Stage"],
 	["fixtures", "♙", "Fixtures"],
 	["presets", "▣", "Presets"],
-	["cuelists", "▶", "Cuelists"],
+	["cuelists", "▶", "Cue Lists"],
 	["dynamics", "∿", "Dynamics"],
 	["channels", "▥", "Channels"],
 ];
 
 export const shiftedBuiltIns: readonly BuiltInDestination[] = [
+	["dmx", "▥", "DMX"],
 	["media", "▤", "Media"],
 	["groups", "♟", "Groups"],
-	["presets", "▣", "Presets"],
 	["timecode", "◷", "Timecode"],
-	["macros", "⚙", "Macros"],
-	["dmx", "▥", "DMX"],
+	["macros", "⚙", "Macro"],
+	["scheduler", "◫", "Scheduler"],
 ];
 
 export function builtInsForShift(shiftHeld: boolean) {
@@ -41,12 +41,12 @@ const normalDeskCommandWindows: Partial<Record<DeskCommand, BuiltInWindow>> = {
 };
 
 const shiftedDeskCommandWindows: Partial<Record<DeskCommand, BuiltInWindow>> = {
-	stage: "media",
-	fixtures: "groups",
-	presets: "presets",
+	stage: "dmx",
+	fixtures: "media",
+	presets: "groups",
 	cues: "timecode",
 	dynamics: "macros",
-	channels: "dmx",
+	channels: "scheduler",
 };
 
 export function builtInForDeskCommand(

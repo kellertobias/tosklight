@@ -11,6 +11,14 @@ use super::programming_ports::ServerProgrammingPorts;
 enum PlaybackTargetOperation {
     Record,
     Set,
+    Off,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum PlaybackTargetInterception {
+    NotArmed,
+    Consumed,
+    Off,
 }
 
 pub(crate) fn intercept_armed_playback(
@@ -18,17 +26,21 @@ pub(crate) fn intercept_armed_playback(
     session: &Session,
     address: PlaybackAddress,
     touched: bool,
-) -> bool {
+) -> PlaybackTargetInterception {
     let Some(operation) = active_playback_target_operation(state, session) else {
-        return false;
+        return PlaybackTargetInterception::NotArmed;
     };
     if !touched {
-        return true;
+        return PlaybackTargetInterception::Consumed;
+    }
+    if operation == PlaybackTargetOperation::Off {
+        return PlaybackTargetInterception::Off;
     }
     let selected_address = address.clone();
     let result = match operation {
         PlaybackTargetOperation::Record => record_target(state, session, address),
         PlaybackTargetOperation::Set => set_target(state, session, address),
+        PlaybackTargetOperation::Off => unreachable!("Off returns before target mutation"),
     };
     match result {
         Ok(()) => emit_result(state, session, operation, &selected_address, None),
@@ -40,7 +52,20 @@ pub(crate) fn intercept_armed_playback(
             Some(error.message),
         ),
     }
-    true
+    PlaybackTargetInterception::Consumed
+}
+
+pub(crate) fn complete_off_target(state: &AppState, session: &Session, address: &PlaybackAddress) {
+    state
+        .programming
+        .set_command_line(session.id, String::new());
+    let _ = super::super::persist_programmer(state, session);
+    emit_result(state, session, PlaybackTargetOperation::Off, address, None);
+    emit(
+        state,
+        "programmer_changed",
+        serde_json::json!({"session_id":session.id,"desk_id":session.desk.id,"source":"osc_target"}),
+    );
 }
 
 fn active_playback_target_operation(
@@ -55,6 +80,7 @@ fn playback_target_operation(command: &str) -> Option<PlaybackTargetOperation> {
     let normalized = command.trim().to_ascii_uppercase();
     match normalized.as_str() {
         "RECORD" | "REC" => Some(PlaybackTargetOperation::Record),
+        "OFF" => Some(PlaybackTargetOperation::Off),
         _ if supported_pending_set(&normalized) => Some(PlaybackTargetOperation::Set),
         // COPY, MOVE, and DELETE have no whole-Playback mutation in the authoritative command
         // grammar. Their Cue and Preset forms require a complete source/destination address, so a
@@ -240,6 +266,8 @@ fn emit_result(
         (PlaybackTargetOperation::Record, true) => "cue_record_rejected",
         (PlaybackTargetOperation::Set, false) => "playback_target_selected",
         (PlaybackTargetOperation::Set, true) => "playback_target_rejected",
+        (PlaybackTargetOperation::Off, false) => "playback_off_targeted",
+        (PlaybackTargetOperation::Off, true) => "playback_off_target_rejected",
     };
     emit(
         state,
@@ -285,7 +313,7 @@ mod tests {
     use super::{PlaybackTargetOperation, playback_target_operation, supported_pending_set};
 
     #[test]
-    fn only_bare_record_and_set_arm_supported_playback_targeting() {
+    fn only_bare_record_set_and_off_arm_supported_playback_targeting() {
         for command in ["RECORD", "record ", " REC "] {
             assert_eq!(
                 playback_target_operation(command),
@@ -297,6 +325,12 @@ mod tests {
             assert_eq!(
                 playback_target_operation(command),
                 Some(PlaybackTargetOperation::Set)
+            );
+        }
+        for command in ["OFF", " off "] {
+            assert_eq!(
+                playback_target_operation(command),
+                Some(PlaybackTargetOperation::Off)
             );
         }
         for unsupported in [

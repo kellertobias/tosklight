@@ -66,8 +66,10 @@ describe("ModalTitleBar", () => {
 		]);
 		const chrome = titlebar.querySelector(".ui-title-chrome")!;
 		expect([...chrome.children].map((child) => child.className)).toEqual([
-			"ui-title-chrome-groups",
 			"ui-title-chrome-search ui-modal-title-search",
+			"ui-title-chrome-search-toggle",
+			"ui-title-chrome-search-close",
+			"ui-title-chrome-groups",
 			"ui-title-chrome-terminals ui-modal-title-terminals",
 		]);
 		expect(screen.getByText("Reset")).toBeInTheDocument();

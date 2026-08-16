@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DeskConfiguration } from "../../api/types";
 import type { SetupWindowController } from "./controller";
@@ -56,18 +62,23 @@ function setupController() {
 	return {
 		draft,
 		editDraft,
-		controller: { draft, editDraft } as unknown as SetupWindowController,
+		controller: {
+			draft,
+			editDraft,
+			outputsTab: "engine",
+		} as unknown as SetupWindowController,
 	};
 }
 
 describe("Outputs audio configuration", () => {
-	it("uses exactly the Output Engine, Routes, and Audio Output tabs", () => {
+	it("renders the panel selected by the window-title Output tab", () => {
 		const { controller } = setupController();
-		render(<OutputsSection controller={controller} />);
-		expect(
-			screen.getAllByRole("tab").map((tab) => tab.textContent),
-		).toEqual(["Output Engine", "Routes", "Audio Output"]);
-		fireEvent.click(screen.getByRole("tab", { name: "Routes" }));
+		const view = render(<OutputsSection controller={controller} />);
+		expect(screen.getByLabelText("Frame rate")).toBeVisible();
+		expect(screen.queryByRole("tab")).toBeNull();
+		view.rerender(
+			<OutputsSection controller={{ ...controller, outputsTab: "routes" }} />,
+		);
 		expect(screen.getByText("Output routes")).toBeVisible();
 	});
 
@@ -76,7 +87,9 @@ describe("Outputs audio configuration", () => {
 		const view = render(<OutputsSection controller={controller} />);
 		expect(screen.queryByLabelText("Audio library bindings")).toBeNull();
 
-		fireEvent.click(screen.getByRole("tab", { name: "Audio Output" }));
+		view.rerender(
+			<OutputsSection controller={{ ...controller, outputsTab: "audio" }} />,
+		);
 		await waitFor(() =>
 			expect(screen.getByLabelText("Audio library bindings")).toHaveValue(
 				"show = /Volumes/Show/Audio",

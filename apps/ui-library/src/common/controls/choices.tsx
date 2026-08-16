@@ -438,6 +438,10 @@ export type SwitchFieldProps = CheckProps & {
 	offLabel?: ReactNode;
 	/** Describes the true state. Both state labels remain visible. */
 	onLabel?: ReactNode;
+	/** Renders the label and switch without FormField chrome for compact toolbars and docks. */
+	bare?: boolean;
+	/** Renders only the switch control. The accessible name must be supplied with aria-label. */
+	controlOnly?: boolean;
 };
 
 function useFieldId(id?: string) {
@@ -543,12 +547,49 @@ function renderSwitchField(
 		id,
 		offLabel = "Off",
 		onLabel = "On",
+		bare = false,
+		controlOnly = false,
 		"aria-label": ariaLabel,
 		...props
 	}: SwitchFieldProps,
 	ref: ForwardedRef<HTMLInputElement>,
 	fieldId: string,
 ) {
+	const control = (
+		<label className="ui-switch-control">
+			<input
+				{...props}
+				ref={ref}
+				id={fieldId}
+				aria-label={
+					ariaLabel ?? (typeof label === "string" ? label : undefined)
+				}
+				type="checkbox"
+				role="switch"
+			/>
+			<span className="ui-switch-track" aria-hidden="true">
+				<i />
+			</span>
+			<span className="ui-switch-states" aria-hidden="true">
+				<span className="ui-switch-state ui-switch-state-off">{offLabel}</span>
+				<span className="ui-switch-state ui-switch-state-on">{onLabel}</span>
+			</span>
+		</label>
+	);
+	if (controlOnly) return control;
+	if (bare)
+		return (
+			<div className={`ui-switch-field-bare ${className}`.trim()}>
+				<label htmlFor={fieldId}>{label}</label>
+				{control}
+				{description && !error && <small>{description}</small>}
+				{error && (
+					<small className="ui-field-error" role="alert">
+						{error}
+					</small>
+				)}
+			</div>
+		);
 	return (
 		<FormField
 			label={label}
@@ -558,27 +599,7 @@ function renderSwitchField(
 			labelPlacement={labelPlacement}
 			className={className}
 		>
-			<label className="ui-switch-control">
-				<input
-					{...props}
-					ref={ref}
-					id={fieldId}
-					aria-label={
-						ariaLabel ?? (typeof label === "string" ? label : undefined)
-					}
-					type="checkbox"
-					role="switch"
-				/>
-				<span className="ui-switch-track" aria-hidden="true">
-					<i />
-				</span>
-				<span className="ui-switch-states" aria-hidden="true">
-					<span className="ui-switch-state ui-switch-state-off">
-						{offLabel}
-					</span>
-					<span className="ui-switch-state ui-switch-state-on">{onLabel}</span>
-				</span>
-			</label>
+			{control}
 		</FormField>
 	);
 }

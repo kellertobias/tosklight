@@ -28,6 +28,7 @@ export interface PoolCardViewModel {
 	kind?: "group" | "preset" | "cuelist" | "generic";
 	derived?: boolean;
 	derivedLabel?: ReactNode;
+	derivedDescription?: string;
 	frozen?: boolean;
 	frozenLabel?: ReactNode;
 }
@@ -244,7 +245,7 @@ function PoolCardContents({
 						<span
 							className="pool-card-state-marker derived"
 							role="img"
-							aria-label="Derived state"
+							aria-label={model.derivedDescription ?? "Derived state"}
 						>
 							{model.derivedLabel ?? "Derived"}
 						</span>

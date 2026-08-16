@@ -8,7 +8,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MacrosApiClient, MacroValidation } from "../../api/client/macros";
-import { MacroEditor } from "./MacroEditor";
+import { MACRO_HELP_COMMANDS, MacroEditor } from "./MacroEditor";
 
 afterEach(() => {
 	cleanup();
@@ -160,7 +160,7 @@ describe("MacroEditor", () => {
 		expect(onClose).toHaveBeenCalledOnce();
 	});
 
-	it("hides stale errors while editing, then autosaves a settled valid command", async () => {
+	it("hides an invalid caret line until the caret moves to the next line", async () => {
 		vi.useFakeTimers();
 		const incomplete = valid({
 			valid: false,
@@ -176,6 +176,7 @@ describe("MacroEditor", () => {
 		const client = api(valid());
 		vi.mocked(client.validate)
 			.mockResolvedValueOnce(valid())
+			.mockResolvedValueOnce(incomplete)
 			.mockResolvedValueOnce(incomplete)
 			.mockResolvedValueOnce(valid());
 		vi.mocked(client.update).mockResolvedValue({
@@ -210,11 +211,20 @@ describe("MacroEditor", () => {
 		expect(screen.queryByText(/needs a number/)).not.toBeInTheDocument();
 
 		await act(async () => vi.advanceTimersByTime(180));
+		expect(screen.getByRole("status")).toHaveTextContent(
+			"Editing current line",
+		);
+		expect(screen.queryByText(/needs a number/)).not.toBeInTheDocument();
+		expect(client.update).not.toHaveBeenCalled();
+
+		fireEvent.change(source, { target: { value: "FIXTURE\n" } });
+		(source as HTMLTextAreaElement).setSelectionRange(8, 8);
+		fireEvent.select(source);
+		await act(async () => vi.advanceTimersByTime(180));
 		expect(screen.getByRole("alert")).toHaveTextContent(
 			"Command line needs attention",
 		);
 		expect(screen.getByText(/needs a number/)).toBeInTheDocument();
-		expect(client.update).not.toHaveBeenCalled();
 
 		fireEvent.change(source, { target: { value: "FIXTURE 1" } });
 		expect(screen.queryByText(/needs a number/)).not.toBeInTheDocument();
@@ -234,6 +244,48 @@ describe("MacroEditor", () => {
 		});
 		expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
 		expect(screen.getByRole("status")).toHaveTextContent("Saved");
+	});
+
+	it("toggles persistent in-editor help with the authoritative Macro subset", async () => {
+		const client = api(valid());
+		render(
+			<MacroEditor
+				showId="show-a"
+				macro={macro}
+				api={client}
+				onClose={vi.fn()}
+				onSaved={vi.fn()}
+			/>,
+		);
+
+		const toggle = screen.getByRole("button", { name: "Toggle Macro help" });
+		expect(
+			screen.queryByRole("complementary", { name: "Macro Editor help" }),
+		).toBeNull();
+		fireEvent.click(toggle);
+		const help = screen.getByRole("complementary", {
+			name: "Macro Editor help",
+		});
+		expect(toggle).toHaveClass("is-active");
+		expect(help).toHaveTextContent("one desk command per line");
+		expect(help).toHaveTextContent("unfinished current line stays neutral");
+		expect(help).toHaveTextContent("initiating selection");
+		for (const [command] of MACRO_HELP_COMMANDS)
+			expect(help).toHaveTextContent(command);
+
+		fireEvent.change(
+			screen.getByRole("textbox", { name: "Macro command lines" }),
+			{
+				target: { value: "FIXTURE 1" },
+			},
+		);
+		expect(
+			screen.getByRole("complementary", { name: "Macro Editor help" }),
+		).toBeInTheDocument();
+		fireEvent.click(toggle);
+		expect(
+			screen.queryByRole("complementary", { name: "Macro Editor help" }),
+		).toBeNull();
 	});
 
 	it("inserts the authoritative completion and exposes DEFINE expansion on hover", async () => {

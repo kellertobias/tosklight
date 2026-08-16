@@ -1,5 +1,5 @@
-import { Button, ModalPortal, ModalTitleBar } from "@tosklight/ui";
-import { useMemo, useState } from "react";
+import { ModalPortal, ModalTitleBar } from "@tosklight/ui";
+import { useMemo } from "react";
 import { useProgrammerFadeMillis } from "../../features/configuration/ConfigurationState";
 import { useSelectedPatchedFixtures } from "../../features/patch/PatchState";
 import {
@@ -9,15 +9,25 @@ import {
 } from "../../features/programmerValues/useProgrammerValuesMutationQueue";
 import { useProgrammingSelectionView } from "../../features/programmingInteraction/ProgrammingInteractionView";
 import { useApp } from "../../state/AppContext";
+import {
+	type IndexedPresetChoice,
+	indexedPresetChoices,
+} from "../control/parameterControls/indexedPresetChoices";
+import { useParameterPreloadValues } from "../control/parameterControls/useParameterPreloadValues";
+import { useParameterProgrammerValues } from "../control/parameterControls/useParameterProgrammerValues";
 import { selectedFixtureIdsSupportingAttribute } from "./specialColor";
 import {
 	availableSpecialDialogAttributes,
-	BeamShapersDialog,
 	beamAttributesForFamily,
 } from "./specialDialogs/beamShapers";
 import { ColorDialog, useColorDialog } from "./specialDialogs/color";
 import { ControlDialog } from "./specialDialogs/control";
+import { MediaPlayModeDialog, playModeMutations } from "./specialDialogs/media";
 import { PositionDialog, usePositionDialog } from "./specialDialogs/position";
+import {
+	type ShaperAttributeValue,
+	ShapersDialog,
+} from "./specialDialogs/shapers";
 
 export {
 	type AuthoredFixtureControlChoice,
@@ -31,7 +41,6 @@ const EMPTY_FIXTURE_IDS: readonly string[] = [];
 export function SpecialDialogsModal() {
 	const { state, dispatch } = useApp();
 	const programmerFadeMillis = useProgrammerFadeMillis() ?? undefined;
-	const [beamPage, setBeamPage] = useState(0);
 	const family = state.specialDialogFamily;
 	const selection = useProgrammingSelectionView(state.specialDialogsOpen);
 	const valueWrites = useProgrammerValuesMutationQueue(
@@ -77,13 +86,76 @@ export function SpecialDialogsModal() {
 			availableSpecialDialogAttributes(selectedFixtures, selectedFixtureIds),
 		[selectedFixtures, selectedFixtureIds],
 	);
+	const programmerValues = useParameterProgrammerValues(
+		selectedFixtureIds,
+		null,
+		state.specialDialogsOpen &&
+			(family === "Shapers" || family === "Media") &&
+			valueWrites.route !== "preload",
+	);
+	const preloadValues = useParameterPreloadValues(
+		selectedFixtureIds,
+		null,
+		state.specialDialogsOpen &&
+			(family === "Shapers" || family === "Media") &&
+			valueWrites.route === "preload",
+	);
+	const activeProgrammerValues =
+		valueWrites.route === "preload" ? preloadValues : programmerValues;
+	const shaperValues = useMemo(() => {
+		const result: Record<string, ShaperAttributeValue> = {};
+		for (const attribute of available) {
+			if (!attribute.startsWith("shaper.")) continue;
+			const entries =
+				activeProgrammerValues?.fixtureValues.filter(
+					(entry) =>
+						entry.attribute === attribute && entry.value.kind === "normalized",
+				) ?? [];
+			const normalized = entries.flatMap((entry) =>
+				entry.value.kind === "normalized" ? [entry.value.value] : [],
+			);
+			if (!normalized.length) continue;
+			result[attribute] = {
+				value:
+					normalized.reduce((sum, value) => sum + value, 0) / normalized.length,
+				mixed: normalized.some((value) => value !== normalized[0]),
+			};
+		}
+		return result;
+	}, [activeProgrammerValues, available]);
+	const playModeChoices = useMemo(
+		() =>
+			indexedPresetChoices(
+				selectedFixtures,
+				selectedFixtureIds,
+				"media.play_mode",
+			),
+		[selectedFixtures, selectedFixtureIds],
+	);
+	const playModeValue = useMemo(() => {
+		const values =
+			activeProgrammerValues?.fixtureValues.flatMap((entry) =>
+				entry.attribute === "media.play_mode" && entry.value.kind === "discrete"
+					? [entry.value.value]
+					: [],
+			) ?? [];
+		return {
+			value: values[0] ?? null,
+			mixed: values.some((value) => value !== values[0]),
+		};
+	}, [activeProgrammerValues]);
 
 	const close = () =>
 		dispatch({ type: "SET_MODAL", modal: "specialDialogsOpen", value: false });
 
 	const apply = async (attribute: string, value: number) => {
+		const fixtureIds = selectedFixtureIdsSupportingAttribute(
+			selectedFixtures,
+			selectedFixtureIds,
+			[attribute],
+		);
 		const mutations = normalizedFixtureMutations(
-			selectedFixtureIds.map((fixtureId) => ({
+			fixtureIds.map((fixtureId) => ({
 				fixtureId,
 				attribute,
 				value,
@@ -95,12 +167,14 @@ export function SpecialDialogsModal() {
 			mutations,
 		);
 	};
+	const applyPlayMode = async (choice: IndexedPresetChoice) => {
+		const mutations = playModeMutations(choice, programmerFadeMillis);
+		await valueWrites.submitBarrier(mutations);
+	};
 
 	if (!state.specialDialogsOpen) return null;
-	const beamAttributes =
-		family === "Beam" || family === "Shapers"
-			? beamAttributesForFamily(available, family)
-			: [];
+	const shaperAttributes =
+		family === "Shapers" ? beamAttributesForFamily(available, "Shapers") : [];
 
 	return (
 		<ModalPortal onClose={close}>
@@ -112,7 +186,11 @@ export function SpecialDialogsModal() {
 			>
 				<section
 					className={`modal-card special-dialog-card ${
-						family === "Position" ? "position-special-dialog" : ""
+						family === "Position"
+							? "position-special-dialog"
+							: family === "Shapers"
+								? "shapers-special-dialog-card"
+								: ""
 					}`}
 				>
 					<ModalTitleBar title={`${family} · Special Dialog`} onClose={close} />
@@ -125,14 +203,21 @@ export function SpecialDialogsModal() {
 						{family === "Color" && (
 							<ColorDialog {...colorDialog} shiftArmed={state.shiftArmed} />
 						)}
-						{(family === "Beam" || family === "Shapers") && (
-							<BeamShapersDialog
-								attributes={beamAttributes}
-								family={family}
-								page={beamPage}
-								setPage={setBeamPage}
+						{family === "Shapers" && (
+							<ShapersDialog
+								attributes={shaperAttributes}
+								values={shaperValues}
 								disabled={!valueWrites.canWrite}
 								apply={apply}
+							/>
+						)}
+						{family === "Media" && (
+							<MediaPlayModeDialog
+								choices={playModeChoices}
+								value={playModeValue.value}
+								mixed={playModeValue.mixed}
+								disabled={!valueWrites.canWrite}
+								apply={applyPlayMode}
 							/>
 						)}
 						{family === "Control" && (

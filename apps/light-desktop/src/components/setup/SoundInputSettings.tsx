@@ -1,6 +1,6 @@
+import { Button, SelectField } from "@tosklight/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSessionSnapshot } from "../../features/deskSnapshot/DeskSnapshotState";
-import { Button, SelectField } from "@tosklight/ui";
 import { useSoundDeviceSelection } from "../control/useSoundDeviceSelection";
 
 export function SoundInputSettings() {
@@ -38,7 +38,9 @@ export function SoundInputSettings() {
 			for (const track of stream.getTracks()) track.stop();
 			await sound.refreshInputs();
 		} catch (reason) {
-			setRequestError(reason instanceof Error ? reason.message : String(reason));
+			setRequestError(
+				reason instanceof Error ? reason.message : String(reason),
+			);
 		}
 	};
 	return (
@@ -54,7 +56,7 @@ export function SoundInputSettings() {
 				onChange={sound.setDeskDevice}
 				description="This desk/browser selection is never stored in a portable show."
 			/>
-			<div>
+			<div className="sound-input-actions">
 				<Button onClick={() => void requestPermission()}>
 					Request microphone access
 				</Button>

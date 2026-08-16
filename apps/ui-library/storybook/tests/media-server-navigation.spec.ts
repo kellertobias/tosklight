@@ -83,20 +83,47 @@ test("Media Server Library story exercises metadata, multi-move, folder configur
 	const secondFolder = page.getByRole("button", {
 		name: /002\s+Empty folder/u,
 	});
-	await secondFolder.click({ button: "right" });
+	const folderGrid = page.locator(".media-library-folder-pool");
+	const columns = await folderGrid.evaluate((element) =>
+		getComputedStyle(element).gridTemplateColumns.split(" ").filter(Boolean),
+	);
+	expect(columns.length).toBeGreaterThanOrEqual(3);
+	await secondFolder.click();
+	await expect(page.getByText("Folder icon")).toBeVisible();
+	await expect(page.getByText("Upload media to this folder")).toBeVisible();
 	await page.getByLabel("Folder name").fill("Act two");
-	await page.getByRole("button", { name: "Save folder" }).click();
+	await expect(page.getByRole("button", { name: "Save folder" })).toHaveCount(
+		0,
+	);
 	await expect(
 		page.getByRole("button", { name: /002\s+Act two/u }),
 	).toBeVisible();
+	await page.getByRole("button", { name: "Choose icon" }).click();
+	await page.getByRole("button", { name: "Icon group" }).click();
+	await page.getByRole("option", { name: "Fixture type" }).click();
+	await page.getByRole("button", { name: "Acl Set" }).click();
+	await expect(page.getByRole("button", { name: "Choose icon" })).toContainText(
+		"Acl Set",
+	);
 
 	await page.getByRole("button", { name: /001\s+Show content/u }).click();
+	const mediaGrid = page.locator(
+		".media-library-pool .media-file-pool-grid.media-library-file-pool-grid",
+	);
+	await expect(mediaGrid).toBeVisible();
+	await expect(mediaGrid).toHaveCSS("--grid-cell-min", "112px");
 	await page.getByRole("button", { name: /Storm Clouds/u }).click();
+	await expect(
+		page.getByRole("button", { name: /Storm Clouds/u }),
+	).toHaveAttribute("draggable", "true");
+	await expect(
+		page.getByRole("button", { name: /Storm Clouds/u }).locator("img"),
+	).toHaveCSS("object-fit", "contain");
 	await page.getByLabel("Media name").fill("Storm reprise");
 	await page.getByLabel("BPM").fill("126");
 	await page.getByRole("button", { name: "Save media" }).click();
 	await expect(
-		page.getByRole("button", { name: /Storm reprise.*126 BPM/u }),
+		page.getByRole("button", { name: /Storm reprise/u }),
 	).toBeVisible();
 
 	const first = page.getByRole("button", { name: /Storm reprise/u });
@@ -194,15 +221,10 @@ test("Media Server windows fill the viewport without nested frames and use pool 
 	page,
 }) => {
 	await page.goto(
-		"/iframe.html?id=tosklight-media-server--dashboard&viewMode=story",
+		"/iframe.html?id=tosklight-media-server--media&viewMode=story",
 	);
-	const dashboard = await page.locator(".media-dashboard-window").boundingBox();
-	expect(dashboard?.height).toBe(await page.evaluate(() => window.innerHeight));
-	expect(
-		await page
-			.locator(".media-recent-activity ul")
-			.evaluate((element) => getComputedStyle(element).listStyleType),
-	).toBe("none");
+	const playback = await page.locator(".media-pane-surface").boundingBox();
+	expect(playback?.height).toBe(await page.evaluate(() => window.innerHeight));
 
 	await page.goto(
 		"/iframe.html?id=tosklight-media-server--settings-outputs&viewMode=story",

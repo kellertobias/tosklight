@@ -34,6 +34,7 @@ function playbackCommandTarget(controller: PlaybackBankController) {
 		isPlaybackSetClickArmed(controller)
 	)
 		return "set" as const;
+	if (controller.offPending) return "off" as const;
 	return null;
 }
 

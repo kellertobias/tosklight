@@ -417,6 +417,221 @@ async fn real_osc_set_touch_selects_current_or_explicit_page_target_and_suppress
 }
 
 #[tokio::test]
+async fn real_osc_off_touch_uses_internal_off_for_current_and_explicit_page_targets() {
+    let scenario = CommandHttpScenario::new().await;
+    let show_id = scenario.create_and_open_show("OSC OFF Playback target").await;
+    set_cue_record_value(&scenario);
+    for (playback, page) in [(41, 4), (42, 5)] {
+        assert_eq!(
+            scenario
+                .execute(
+                    &format!("off-target-record-{playback}"),
+                    Some(&format!("RECORD SET {playback} CUE 1")),
+                )
+                .await
+                .status(),
+            StatusCode::OK
+        );
+        let mapped = dispatch_live_action(
+            &scenario.state,
+            &scenario.session,
+            live_action_frame(
+                &scenario.session,
+                &format!("off-target-map-{playback}"),
+                light_wire::v2::live_action::LiveAction::CommandLineExecute(
+                    light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
+                        value: format!("SET {playback} AT {page} . 7"),
+                    },
+                ),
+            ),
+        );
+        assert!(mapped.ok, "{:?}", mapped.error);
+    }
+    scenario
+        .state
+        .installation
+        .set_desk_page(
+            scenario.session.desk.id,
+            light_core::ShowId(Uuid::parse_str(&show_id).unwrap()),
+            4,
+        )
+        .unwrap();
+    let source: SocketAddr = "127.0.0.1:9030".parse().unwrap();
+    scenario.state.integrations.register_osc_subscriber(
+        "off-playback-touch".into(),
+        OscSubscriber {
+            desk_alias: scenario.session.desk.osc_alias.clone(),
+            target: source,
+            command_source: source,
+            session_id: scenario.session.id,
+            last_seen: Instant::now(),
+            shifted: false,
+            shift_held: false,
+            update_record_started: None,
+            update_first_release: None,
+            last_highlight_action: None,
+        },
+    );
+    for playback in [41, 42] {
+        assert_eq!(
+            scenario
+                .playback_action_for(
+                    &scenario.token,
+                    scenario.session.desk.id,
+                    serde_json::json!({
+                        "request_id":format!("off-target-go-{playback}"),
+                        "address":{"kind":"playback","playback_number":playback},
+                        "action":{"type":"go","pressed":true},
+                        "surface":"physical",
+                    }),
+                )
+                .await
+                .status(),
+            StatusCode::OK
+        );
+    }
+    assert!(playback_is_enabled(&scenario, 41));
+    assert!(playback_is_enabled(&scenario, 42));
+
+    scenario
+        .state
+        .programming
+        .set_command_line(scenario.session.id, "OFF".into());
+    let current_address = format!(
+        "/light/{}/page-playback/7/button/1",
+        scenario.session.desk.osc_alias
+    );
+    assert!(handle_playback_osc(
+        &scenario.state,
+        &current_address,
+        &[OscArgument::Bool(true)],
+        Some("127.0.0.1:9030"),
+    ));
+    assert!(!playback_is_enabled(&scenario, 41));
+    assert!(playback_is_enabled(&scenario, 42));
+    assert_eq!(
+        scenario
+            .state
+            .programming
+            .get(scenario.session.id)
+            .unwrap()
+            .command_line,
+        ""
+    );
+    let current = scenario
+        .state
+        .events
+        .audit_events()
+        .into_iter()
+        .rev()
+        .find(|event| event.kind == "playback_off_targeted")
+        .unwrap();
+    assert_eq!(
+        current.payload["target"],
+        serde_json::json!({"addressing":"current_page","slot":7})
+    );
+
+    assert_eq!(
+        scenario
+            .playback_action_for(
+                &scenario.token,
+                scenario.session.desk.id,
+                serde_json::json!({
+                    "request_id":"off-target-go-again",
+                    "address":{"kind":"playback","playback_number":41},
+                    "action":{"type":"go","pressed":true},
+                    "surface":"physical",
+                }),
+            )
+            .await
+            .status(),
+        StatusCode::OK
+    );
+    assert!(playback_is_enabled(&scenario, 41));
+    scenario
+        .state
+        .installation
+        .set_desk_page(
+            scenario.session.desk.id,
+            light_core::ShowId(Uuid::parse_str(&show_id).unwrap()),
+            5,
+        )
+        .unwrap();
+    scenario
+        .state
+        .programming
+        .set_command_line(scenario.session.id, "OFF".into());
+    assert!(handle_playback_osc(
+        &scenario.state,
+        "/light/playback/4/7/fader",
+        &[OscArgument::Float(0.25)],
+        Some("127.0.0.1:9030"),
+    ));
+    assert!(!playback_is_enabled(&scenario, 41));
+    assert!(playback_is_enabled(&scenario, 42));
+    let explicit = scenario
+        .state
+        .events
+        .audit_events()
+        .into_iter()
+        .rev()
+        .find(|event| event.kind == "playback_off_targeted")
+        .unwrap();
+    assert_eq!(
+        explicit.payload["target"],
+        serde_json::json!({"addressing":"explicit_page","page":4,"slot":7})
+    );
+    let after_off = scenario.state.events.latest_sequence();
+    handle_playback_osc(
+        &scenario.state,
+        "/light/playback/4/7/fader",
+        &[OscArgument::Float(0.75)],
+        Some("127.0.0.1:9030"),
+    );
+    assert_eq!(scenario.state.events.latest_sequence(), after_off);
+
+    scenario
+        .state
+        .programming
+        .set_command_line(scenario.session.id, "OFF".into());
+    assert!(handle_playback_osc(
+        &scenario.state,
+        &format!(
+            "/light/{}/page-playback/7/label",
+            scenario.session.desk.osc_alias
+        ),
+        &[OscArgument::Bool(true)],
+        Some("127.0.0.1:9030"),
+    ));
+    assert!(!playback_is_enabled(&scenario, 42));
+
+    scenario
+        .state
+        .programming
+        .set_command_line(scenario.session.id, "OFF".into());
+    assert!(handle_playback_osc(
+        &scenario.state,
+        &format!(
+            "/light/{}/page-playback/7/label",
+            scenario.session.desk.osc_alias
+        ),
+        &[OscArgument::Bool(true)],
+        Some("127.0.0.1:9030"),
+    ));
+    assert!(!playback_is_enabled(&scenario, 42));
+    assert_eq!(
+        scenario
+            .state
+            .programming
+            .get(scenario.session.id)
+            .unwrap()
+            .command_line,
+        ""
+    );
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}
+
+#[tokio::test]
 async fn osc_copy_move_and_delete_do_not_guess_a_whole_playback_mutation() {
     let scenario = CommandHttpScenario::new().await;
     let _show_id = scenario
@@ -575,6 +790,16 @@ fn has_runtime_for_playback(scenario: &CommandHttpScenario, playback: u16) -> bo
         .playback_runtime_status()
         .iter()
         .any(|runtime| runtime.playback.playback_number == Some(playback))
+}
+
+fn playback_is_enabled(scenario: &CommandHttpScenario, playback: u16) -> bool {
+    scenario
+        .state
+        .output
+        .playback_runtime_status()
+        .iter()
+        .find(|runtime| runtime.playback.playback_number == Some(playback))
+        .is_some_and(|runtime| runtime.playback.enabled)
 }
 
 fn stored_cue_list(

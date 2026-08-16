@@ -11,12 +11,18 @@ export function ExpandedPlaybackControls({
 	controller: PlaybackBankController;
 	slotData: PlaybackSlotProjection;
 }) {
-	const { playback, footprint } = slotData;
+	const { playback, footprint, row } = slotData;
 	if (!playback || !footprint || footprint.effective === "normal") return null;
 	const stored = playback.footprint;
 	if (!stored || stored.type !== footprint.effective) return null;
+	const visibleButtonCount = Math.min(
+		row?.button_count ?? 3,
+		playback.button_count ?? 3,
+	);
 	const buttons =
-		stored.type === "taller" ? [stored.upper_button] : stored.right_buttons;
+		stored.type === "taller"
+			? [stored.upper_button]
+			: stored.right_buttons.slice(0, visibleButtonCount);
 	return (
 		<fieldset
 			className={`expanded-playback-controls ${stored.type}`}

@@ -2,8 +2,21 @@
 .setup-window > div {
 	background: #0b1014;
 }
+.setup-window {
+	container-name: setup-window;
+	container-type: inline-size;
+}
 .setup-window nav {
 	background: #0b0e12;
+}
+.setup-navigation-scroll {
+	min-width: 0;
+	min-height: 0;
+	background: #0b0e12;
+}
+.setup-window .setup-navigation-scroll nav {
+	min-height: 100%;
+	overflow: visible;
 }
 .setup-navigation-group {
 	margin: 12px 8px 4px;
@@ -35,7 +48,10 @@
 	display: grid;
 	gap: 8px;
 }
-.programmer-setup-list .attribute-layout-group > .attribute-layout-page + .attribute-layout-page {
+.programmer-setup-list
+	.attribute-layout-group
+	> .attribute-layout-page
+	+ .attribute-layout-page {
 	margin-top: 10px;
 	padding-top: 10px;
 	border-top: 1px solid var(--line);
@@ -197,16 +213,20 @@
 	min-height: 100%;
 	padding: 12px;
 }
+.setup-content > h2 {
+	margin: 2px 0 10px;
+}
 .outputs-setup-tabs {
 	grid-template-columns: repeat(3, minmax(0, 1fr));
 	margin-bottom: 12px;
 }
 .programmer-setup-list {
-	max-width: 980px;
-	gap: 12px;
+	max-width: 1180px;
+	gap: 8px;
 }
 .defaults-record-update {
 	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
 	gap: 8px;
 }
 /* The attribute tabs render several sibling cards, so the panel itself must not become a box. */
@@ -215,14 +235,14 @@
 }
 .programmer-setup-list article {
 	display: block;
-	padding: 14px;
+	padding: 10px 12px;
 }
 .programmer-setup-list article > header {
 	display: flex;
 	align-items: baseline;
 	justify-content: space-between;
 	gap: 14px;
-	margin-bottom: 10px;
+	margin-bottom: 8px;
 }
 .programmer-setup-list article > header b,
 .programmer-setup-list article > header h3 {
@@ -233,7 +253,37 @@
 	color: var(--muted);
 }
 .programmer-setup-list .ui-form-layout {
-	max-width: 850px;
+	max-width: none;
+}
+.pool-color-defaults-card .pool-palette-settings {
+	display: grid;
+	gap: 10px;
+}
+.pool-color-defaults-card .pool-color-defaults-grid {
+	width: 100%;
+	gap: 4px 14px;
+}
+.pool-color-defaults-grid .ui-form-field {
+	gap: 2px;
+	margin-block: 0;
+}
+.pool-color-defaults-grid .ui-color-input-trigger {
+	min-height: 44px;
+}
+.highlight-look-grid {
+	gap: 4px 14px;
+}
+.highlight-look-grid .ui-form-field {
+	gap: 2px;
+	margin-block: 0;
+}
+.pool-color-defaults-card .pool-palette-settings > .ui-button {
+	justify-self: start;
+}
+.sound-input-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
 }
 .setup-subsection-title {
 	margin: 10px 0 0;
@@ -382,6 +432,58 @@
 .default-screen-settings > header {
 	align-items: center;
 	justify-content: space-between;
+}
+.default-screen-compact-row {
+	display: grid;
+	grid-template-columns: minmax(150px, 0.8fr) minmax(220px, 1fr) minmax(220px, 1fr) auto;
+	align-items: end;
+	gap: 10px;
+}
+.default-screen-compact-row > .ui-form-field {
+	margin: 0;
+}
+.screen-configuration-modal {
+	width: min(980px, 100%) !important;
+	max-height: min(820px, 94vh);
+	display: flex;
+	flex-direction: column;
+	overflow: hidden !important;
+}
+.screen-configuration-modal-content {
+	min-height: 0;
+	overflow: auto;
+	padding: 12px;
+}
+.screen-configuration-modal-content > section {
+	padding: 10px;
+	border: 1px solid var(--line);
+	border-radius: 7px;
+	background: var(--panel2);
+}
+.screen-playbacks-tab {
+	display: grid;
+	justify-items: start;
+	gap: 10px;
+}
+@container setup-window (max-width: 920px) {
+	.default-screen-compact-row {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+	.pool-color-defaults-grid,
+	.highlight-look-grid {
+		--form-columns: 2 !important;
+	}
+}
+@container setup-window (max-width: 780px) {
+	.defaults-record-update {
+		grid-template-columns: 1fr;
+	}
+}
+@container setup-window (max-width: 660px) {
+	.pool-color-defaults-grid,
+	.highlight-look-grid {
+		--form-columns: 1 !important;
+	}
 }
 .playback-layout-summary {
 	min-width: 0;
@@ -622,12 +724,8 @@
 	display: flex !important;
 	align-items: stretch;
 }
-.ui-modal-title-search
-	.console-search-input
-	> button.console-search-options,
-.ui-window-header-search
-	.console-search-input
-	> button.console-search-options {
+.ui-modal-title-search .console-search-input > button.console-search-options,
+.ui-window-header-search .console-search-input > button.console-search-options {
 	border-radius: 0;
 }
 .ui-modal-title-search .console-search-input > .ui-text-control,
@@ -729,7 +827,8 @@
 	transform: translateY(calc(-50% + 2px));
 }
 .ui-window-header-search .console-search-input > .ui-text-control > .ui-input {
-	padding-bottom: 8px;
+	padding-top: 8px;
+	padding-bottom: 0;
 }
 .ui-window-header-search
 	.console-search-input

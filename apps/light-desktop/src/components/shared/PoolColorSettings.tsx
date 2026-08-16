@@ -91,7 +91,11 @@ export function PoolColorSettings({
 	);
 }
 
-export function PoolPaletteSettings() {
+export function PoolPaletteSettings({
+	hideTitle = false,
+}: {
+	hideTitle?: boolean;
+} = {}) {
 	const settings = usePoolPresentationSettings();
 	const [saving, setSaving] = useState(false);
 	const persist = async (operation: () => Promise<void>) => {
@@ -105,12 +109,13 @@ export function PoolPaletteSettings() {
 	const palette = settings.configuration.palette;
 	return (
 		<section className="pool-palette-settings" aria-label="Pool color defaults">
-			<h3>Pool color defaults</h3>
-			<p>
-				These server-wide presentation colors apply to every desktop and do not
-				change portable show objects.
-			</p>
-			<FormLayout labelPlacement="side">
+			{!hideTitle && <h3>Pool color defaults</h3>}
+			<FormLayout
+				className="pool-color-defaults-grid"
+				labelPlacement="top"
+				columns={3}
+				minColumnWidth={180}
+			>
 				{(
 					[
 						["group", "Groups", palette.group],

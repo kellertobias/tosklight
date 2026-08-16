@@ -9,6 +9,7 @@ import type {
 	GroupedSelectionOption,
 } from "../common/controls/GroupedSelectionField";
 import { ModalTitleBar } from "../common/ModalTitleBar";
+import type { TitleActionGroup } from "../common/TitleChrome";
 import { VerticalTouchFaderControl } from "../faders/VerticalTouchFaderControl";
 import { ModalLayer } from "../modals/ModalStack";
 import { ModalNumberInput, ModalNumberValue } from "./ModalInputControls";
@@ -105,6 +106,15 @@ export function ModalNumberEditor({
 		setConfirmClose(false);
 		onClose();
 	};
+	const titleGroups = modalNumberTitleGroups({
+		hasPresets,
+		mode,
+		onRelease,
+		presets,
+		presetsOnly,
+		releaseLabel,
+		setMode,
+	});
 	return (
 		<>
 			<ModalLayer
@@ -121,44 +131,7 @@ export function ModalNumberEditor({
 				<ModalTitleBar
 					title={title}
 					toolbar={beforeTitle}
-					groups={[
-						...(hasPresets && !presetsOnly
-							? [
-									{
-										id: "mode",
-										kind: "tabs" as const,
-										activeId: mode,
-										onActiveChange: (id: string) =>
-											setMode(id as "value" | "presets"),
-										actions: [
-											{
-												id: "value",
-												label: presets?.valueTabLabel ?? "Value",
-											},
-											{
-												id: "presets",
-												label: presets?.presetsTabLabel ?? "Presets",
-											},
-										],
-									},
-								]
-							: []),
-						...(onRelease
-							? [
-									{
-										id: "release",
-										actions: [
-											{
-												id: "release",
-												label: releaseLabel,
-												variant: "danger" as const,
-												onPress: onRelease,
-											},
-										],
-									},
-								]
-							: []),
-					]}
+					groups={titleGroups}
 					closeLabel={`Close ${ariaLabel}`}
 					onClose={requestClose}
 				/>
@@ -226,6 +199,47 @@ export function ModalNumberEditor({
 			)}
 		</>
 	);
+}
+
+function modalNumberTitleGroups({
+	hasPresets,
+	mode,
+	onRelease,
+	presets,
+	presetsOnly,
+	releaseLabel,
+	setMode,
+}: {
+	hasPresets: boolean;
+	mode: "value" | "presets";
+	onRelease?: () => void;
+	presets?: ModalNumberPresetConfig;
+	presetsOnly: boolean;
+	releaseLabel: string;
+	setMode(mode: "value" | "presets"): void;
+}): TitleActionGroup[] {
+	const groups: TitleActionGroup[] = [];
+	if (hasPresets && !presetsOnly) {
+		groups.push({
+			id: "mode",
+			kind: "tabs",
+			activeId: mode,
+			onActiveChange: (id) => setMode(id as "value" | "presets"),
+			actions: [
+				{ id: "value", label: presets?.valueTabLabel ?? "Value" },
+				{ id: "presets", label: presets?.presetsTabLabel ?? "Presets" },
+			],
+		});
+	}
+	if (onRelease) {
+		groups.push({
+			id: "release",
+			actions: [
+				{ id: "release", label: releaseLabel, variant: "danger", onPress: onRelease },
+			],
+		});
+	}
+	return groups;
 }
 
 function ModalNumberKeypad({

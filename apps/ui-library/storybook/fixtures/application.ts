@@ -90,6 +90,7 @@ export const stageOptions: StageOptionsModel = {
 	groupsVisible: true,
 	showSelection: true,
 	showFloorGrid: true,
+	showBeamGuides: false,
 	environmentBrightness: 1,
 };
 

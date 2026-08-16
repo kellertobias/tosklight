@@ -51,6 +51,7 @@ describe("autosave interval setup placement", () => {
 		const controller = {
 			draft,
 			editDraft,
+			outputsTab: "engine",
 		} as unknown as SetupWindowController;
 
 		render(<ShowsRecoverySection controller={controller} />);

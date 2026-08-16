@@ -4,7 +4,7 @@ use crate::selection::{ProgrammerSelection, SelectionContext};
 use crate::state::{ProgrammerOutputState, ProgrammerState};
 use light_core::{SessionId, SharedClock, SystemClock, UserId};
 use parking_lot::{ReentrantMutex, RwLock};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -534,9 +534,11 @@ impl ProgrammerRegistry {
     }
     pub fn active_dynamic_sources_for_sessions(&self) -> Vec<ActiveDynamicSessionSource> {
         let states = self.states.read();
-        self.sessions
-            .read()
+        let sessions = self.sessions.read();
+        let mut active_programmers = HashSet::new();
+        sessions
             .values()
+            .filter(|key| active_programmers.insert(**key))
             .filter_map(|key| states.get(key))
             .map(|state| {
                 (

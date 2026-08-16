@@ -30,10 +30,11 @@ describe("Desk Setup navigation", () => {
 			"Network & Inputs",
 			"Screens & playback",
 			"Defaults",
-			"Attributes & encoders",
 			"Highlight",
+			"Attributes & encoders",
 			"Others",
 		]);
+		expect(navigation.closest(".setup-navigation-scroll")).not.toBeNull();
 		expect(within(navigation).getByText("Preferences")).toBeInTheDocument();
 		expect(within(navigation).queryByText("Users & sessions")).toBeNull();
 		expect(
@@ -62,6 +63,8 @@ describe("Desk Setup focused title tabs", () => {
 			setNetworkTab: vi.fn(),
 			defaultsTab: "record-update",
 			setDefaultsTab: vi.fn(),
+			outputsTab: "engine",
+			setOutputsTab: vi.fn(),
 			programmerSettingsLoaded: true,
 			attributeTab: "encoder-groups",
 			setAttributeTab: vi.fn(),
@@ -73,9 +76,16 @@ describe("Desk Setup focused title tabs", () => {
 		} as unknown as SetupWindowController;
 	}
 
-	it("offers the literal Network and Defaults tab sets", () => {
+	it("offers the literal Output, Network, and Defaults title-tab sets", () => {
+		const outputs = controller({ section: "outputs" });
+		const { rerender } = render(<SetupHeader controller={outputs} />);
+		for (const label of ["Output Engine", "Routes", "Audio Output"])
+			expect(screen.getByRole("tab", { name: label })).toBeInTheDocument();
+		fireEvent.click(screen.getByRole("tab", { name: "Routes" }));
+		expect(outputs.setOutputsTab).toHaveBeenCalledWith("routes");
+
 		const network = controller({ section: "network" });
-		const { rerender } = render(<SetupHeader controller={network} />);
+		rerender(<SetupHeader controller={network} />);
 		for (const label of ["Control & server", "Sound", "Bridges"])
 			expect(screen.getByRole("tab", { name: label })).toBeInTheDocument();
 		fireEvent.click(screen.getByRole("tab", { name: "Sound" }));

@@ -322,6 +322,89 @@ function AllOffConfirmation({
 
 type RunningOutputTab = SystemControlsTab | "visualizer";
 
+function SystemControlsContent({
+	activeTab,
+	model,
+	visualizer,
+	deskDiagnostics,
+}: {
+	activeTab: RunningOutputTab;
+	model: ReturnType<typeof useSystemControlsModel>;
+	visualizer: ReturnType<typeof useVisualizerViewControls>;
+	deskDiagnostics: ReturnType<typeof useDeskStateDiagnostics>;
+}) {
+	if (activeTab === "visualizer")
+		return (
+			<VisualizerControls
+				view={visualizer.view}
+				targets={visualizer.targets}
+				target={visualizer.target}
+				busy={visualizer.busy}
+				error={visualizer.error}
+				onSelectTarget={visualizer.selectTarget}
+				onSelectMode={visualizer.selectMode}
+				onSelectQuality={visualizer.selectQuality}
+				onResetPhysics={visualizer.resetPhysics}
+			/>
+		);
+	if (activeTab === "desk-state")
+		return <DeskStatePanel diagnostics={deskDiagnostics} />;
+	if (activeTab === "active-programmers")
+		return (
+			<section
+				className="system-controls-programmers"
+				aria-label="Active Programmers"
+			>
+				<ProgrammerList
+					programmers={model.programmers}
+					loading={model.lifecycle === null}
+					currentUserId={model.session?.user.id ?? null}
+					currentUserName={model.session?.user.name ?? null}
+					onClear={(sessionId) =>
+						void model.programmerActions?.clearProgrammer(sessionId)
+					}
+				/>
+			</section>
+		);
+	return (
+		<div className="system-controls-body">
+			<OutputControls
+				master={model.master}
+				blackout={model.blackout}
+				ready={model.outputReady}
+				fixtureActionResult={model.fixtureActionResult}
+				fixturesSelected={model.fixturesSelected}
+				availableFixtureActions={model.availableFixtureActions}
+				onMaster={model.setMaster}
+				onBlackout={model.toggleBlackout}
+				onFixtureAction={(semantic, phase) =>
+					void model.triggerFixtureAction(semantic, phase)
+				}
+			/>
+			<RunningSections
+				playbacks={model.runningSources}
+				dynamics={model.dynamicsAuthority.rows}
+				dynamicsLoading={model.dynamicsAuthority.loading}
+				dynamicsError={model.dynamicsAuthority.error}
+				dynamicsCanStop={model.dynamicsAuthority.canStop}
+				stoppingDynamicControllerIds={
+					model.dynamicsAuthority.stoppingControllerIds
+				}
+				preloadActive={model.preload.active}
+				playbacksLoading={model.playbackAuthority.loading}
+				releaseAvailable={model.playbackAuthority.canRelease}
+				onReleasePlayback={(source) =>
+					void model.playbackAuthority.release(source)
+				}
+				onReleasePreload={() => void model.preload.actions?.release()}
+				onTurnOffDynamic={(dynamic) =>
+					void model.dynamicsAuthority.off(dynamic)
+				}
+			/>
+		</div>
+	);
+}
+
 export function SystemControlsModal() {
 	const model = useSystemControlsModel();
 	const visualizer = useVisualizerViewControls(model.open);
@@ -407,72 +490,12 @@ export function SystemControlsModal() {
 							closeLabel="Close Running & Output"
 							onClose={model.close}
 						/>
-						{activeTab === "visualizer" ? (
-							<VisualizerControls
-								view={visualizer.view}
-								targets={visualizer.targets}
-								target={visualizer.target}
-								busy={visualizer.busy}
-								error={visualizer.error}
-								onSelectTarget={visualizer.selectTarget}
-								onSelectMode={visualizer.selectMode}
-								onSelectQuality={visualizer.selectQuality}
-								onResetPhysics={visualizer.resetPhysics}
-							/>
-						) : activeTab === "desk-state" ? (
-							<DeskStatePanel diagnostics={deskDiagnostics} />
-						) : activeTab === "active-programmers" ? (
-							<section
-								className="system-controls-programmers"
-								aria-label="Active Programmers"
-							>
-								<ProgrammerList
-									programmers={model.programmers}
-									loading={model.lifecycle === null}
-									currentUserId={model.session?.user.id ?? null}
-									currentUserName={model.session?.user.name ?? null}
-									onClear={(sessionId) =>
-										void model.programmerActions?.clearProgrammer(sessionId)
-									}
-								/>
-							</section>
-						) : (
-							<div className="system-controls-body">
-								<OutputControls
-									master={model.master}
-									blackout={model.blackout}
-									ready={model.outputReady}
-									fixtureActionResult={model.fixtureActionResult}
-									fixturesSelected={model.fixturesSelected}
-									availableFixtureActions={model.availableFixtureActions}
-									onMaster={model.setMaster}
-									onBlackout={model.toggleBlackout}
-									onFixtureAction={(semantic, phase) =>
-										void model.triggerFixtureAction(semantic, phase)
-									}
-								/>
-								<RunningSections
-									playbacks={model.runningSources}
-									dynamics={model.dynamicsAuthority.rows}
-									dynamicsLoading={model.dynamicsAuthority.loading}
-									dynamicsError={model.dynamicsAuthority.error}
-									dynamicsCanStop={model.dynamicsAuthority.canStop}
-									stoppingDynamicControllerIds={
-										model.dynamicsAuthority.stoppingControllerIds
-									}
-									preloadActive={model.preload.active}
-									playbacksLoading={model.playbackAuthority.loading}
-									releaseAvailable={model.playbackAuthority.canRelease}
-									onReleasePlayback={(source) =>
-										void model.playbackAuthority.release(source)
-									}
-									onReleasePreload={() => void model.preload.actions?.release()}
-									onTurnOffDynamic={(dynamic) =>
-										void model.dynamicsAuthority.off(dynamic)
-									}
-								/>
-							</div>
-						)}
+						<SystemControlsContent
+							activeTab={activeTab}
+							model={model}
+							visualizer={visualizer}
+							deskDiagnostics={deskDiagnostics}
+						/>
 					</section>
 				</div>
 			</ModalPortal>

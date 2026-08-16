@@ -1,7 +1,7 @@
-import { useState } from "react";
-import type { ClientSummary } from "../../../api/types";
 import { Button, ModalRegistration, ModalTitleBar } from "@tosklight/ui";
 import { WindowScrollArea } from "@tosklight/ui/window-kit";
+import { useState } from "react";
+import type { ClientSummary } from "../../../api/types";
 
 function defaultScreenGroupId(heading: string) {
 	return `client-group-${heading.replaceAll(" ", "-").toLowerCase()}`;
@@ -104,32 +104,32 @@ function RemoveClientConfirmation({
 	return (
 		<ModalRegistration onClose={onCancel}>
 			<div className="stacked-modal-layer">
-			<section
-				className="nested-modal default-screen-remove-confirm"
-				role="alertdialog"
-				aria-modal="true"
-				aria-label={`Remove client ${client.name}?`}
-			>
-				<ModalTitleBar title={`Remove client ${client.name}?`} />
-				<p>
-					Remove {client.name} and its client registration, default-screen
-					configuration, per-show page and playback selection, desk lock, Update
-					defaults.
-				</p>
-				<p>
-					Portable shows, Virtual Playback assignments and exclusion zones,
-					users, optional screens, other clients, and installation-wide
-					configuration will not change.
-				</p>
-				<div className="modal-actions">
-					<Button disabled={removing} onClick={onCancel}>
-						Cancel
-					</Button>
-					<Button variant="danger" disabled={removing} onClick={onConfirm}>
-						{removing ? "Removing…" : "Remove client"}
-					</Button>
-				</div>
-			</section>
+				<section
+					className="nested-modal default-screen-remove-confirm"
+					role="alertdialog"
+					aria-modal="true"
+					aria-label={`Remove client ${client.name}?`}
+				>
+					<ModalTitleBar title={`Remove client ${client.name}?`} />
+					<p>
+						Remove {client.name} and its client registration, default-screen
+						configuration, per-show page and playback selection, desk lock,
+						Update defaults.
+					</p>
+					<p>
+						Portable shows, Virtual Playback assignments and exclusion zones,
+						users, optional screens, other clients, and installation-wide
+						configuration will not change.
+					</p>
+					<div className="modal-actions">
+						<Button disabled={removing} onClick={onCancel}>
+							Cancel
+						</Button>
+						<Button variant="danger" disabled={removing} onClick={onConfirm}>
+							{removing ? "Removing…" : "Remove client"}
+						</Button>
+					</div>
+				</section>
 			</div>
 		</ModalRegistration>
 	);
@@ -141,6 +141,7 @@ export function DefaultScreenPicker({
 	currentDeskId,
 	onSelect,
 	onRemove,
+	onRemoveAll,
 	onClose,
 }: {
 	clients: ClientSummary[];
@@ -148,6 +149,7 @@ export function DefaultScreenPicker({
 	currentDeskId?: string;
 	onSelect: (id: string) => void;
 	onRemove: (deskId: string) => Promise<boolean>;
+	onRemoveAll: () => Promise<boolean>;
 	onClose: () => void;
 }) {
 	const [removeCandidate, setRemoveCandidate] = useState<ClientSummary | null>(
@@ -155,6 +157,7 @@ export function DefaultScreenPicker({
 	);
 	const [removing, setRemoving] = useState(false);
 	const [removeError, setRemoveError] = useState<string | null>(null);
+	const [removeAllOpen, setRemoveAllOpen] = useState(false);
 	const sorted = [...clients].sort(
 		(left, right) =>
 			Number(right.connected) - Number(left.connected) ||
@@ -182,63 +185,122 @@ export function DefaultScreenPicker({
 					event.target === event.currentTarget && onClose()
 				}
 			>
-			<section
-				className="nested-modal default-screen-picker"
-				role="dialog"
-				aria-modal="true"
-				aria-label="Choose default screen"
-			>
-				<ModalTitleBar
-					title="Choose default screen"
-					closeLabel="Close default screen chooser"
-					onClose={onClose}
-				/>
-				<p>
-					Choose which known client configuration this app should use as its
-					default screen.
-				</p>
-				<WindowScrollArea className="default-screen-client-list">
-					{groups.map((group) => (
-						<DefaultScreenClientGroup
-							key={group.heading}
-							heading={group.heading}
-							clients={group.clients}
-							currentClientId={currentClientId}
-							currentDeskId={currentDeskId}
-							onSelect={onSelect}
-							onRemove={(client) => {
-								setRemoveError(null);
-								setRemoveCandidate(client);
-							}}
-						/>
-					))}
-				</WindowScrollArea>
-				{removeError && (
-					<p className="default-screen-remove-error" role="alert">
-						{removeError}
+				<section
+					className="nested-modal default-screen-picker"
+					role="dialog"
+					aria-modal="true"
+					aria-label="Choose default screen"
+				>
+					<ModalTitleBar
+						title="Choose default screen"
+						groups={[
+							{
+								id: "client-cleanup",
+								actions: [
+									{
+										id: "remove-all-other-clients",
+										label: "Remove all other clients",
+										variant: "danger",
+										onPress: () => setRemoveAllOpen(true),
+									},
+								],
+							},
+						]}
+						closeLabel="Close default screen chooser"
+						onClose={onClose}
+					/>
+					<p>
+						Choose which known client configuration this app should use as its
+						default screen.
 					</p>
+					<WindowScrollArea className="default-screen-client-list">
+						{groups.map((group) => (
+							<DefaultScreenClientGroup
+								key={group.heading}
+								heading={group.heading}
+								clients={group.clients}
+								currentClientId={currentClientId}
+								currentDeskId={currentDeskId}
+								onSelect={onSelect}
+								onRemove={(client) => {
+									setRemoveError(null);
+									setRemoveCandidate(client);
+								}}
+							/>
+						))}
+					</WindowScrollArea>
+					{removeError && (
+						<p className="default-screen-remove-error" role="alert">
+							{removeError}
+						</p>
+					)}
+				</section>
+				{removeCandidate && (
+					<RemoveClientConfirmation
+						client={removeCandidate}
+						removing={removing}
+						onCancel={() => setRemoveCandidate(null)}
+						onConfirm={() => {
+							setRemoving(true);
+							setRemoveError(null);
+							void onRemove(removeCandidate.desk.id).then((removed) => {
+								setRemoving(false);
+								setRemoveCandidate(null);
+								if (!removed) {
+									setRemoveError(
+										`${removeCandidate.name} could not be removed. It may have reconnected; disconnect it and try again.`,
+									);
+								}
+							});
+						}}
+					/>
 				)}
-			</section>
-			{removeCandidate && (
-				<RemoveClientConfirmation
-					client={removeCandidate}
-					removing={removing}
-					onCancel={() => setRemoveCandidate(null)}
-					onConfirm={() => {
-						setRemoving(true);
-						setRemoveError(null);
-						void onRemove(removeCandidate.desk.id).then((removed) => {
-							setRemoving(false);
-							setRemoveCandidate(null);
-							if (!removed) {
-								setRemoveError(
-									`${removeCandidate.name} could not be removed. It may have reconnected; disconnect it and try again.`,
-								);
-							}
-						});
-					}}
-				/>
-			)}
+				{removeAllOpen && (
+					<ModalRegistration onClose={() => setRemoveAllOpen(false)}>
+						<section
+							className="nested-modal default-screen-remove-confirm"
+							role="alertdialog"
+							aria-modal="true"
+							aria-label="Remove all other clients?"
+						>
+							<ModalTitleBar title="Remove all other clients?" />
+							<p>
+								Remove every eligible disconnected client configuration. The
+								current client and connected clients remain protected.
+							</p>
+							<p>
+								Portable shows, users, optional screens, and installation-wide
+								configuration will not change.
+							</p>
+							<div className="modal-actions">
+								<Button
+									disabled={removing}
+									onClick={() => setRemoveAllOpen(false)}
+								>
+									Cancel
+								</Button>
+								<Button
+									variant="danger"
+									disabled={removing}
+									onClick={() => {
+										setRemoving(true);
+										setRemoveError(null);
+										void onRemoveAll().then((removed) => {
+											setRemoving(false);
+											setRemoveAllOpen(false);
+											if (!removed)
+												setRemoveError(
+													"Some clients could not be removed because their state changed.",
+												);
+										});
+									}}
+								>
+									{removing ? "Removing…" : "Remove all other clients"}
+								</Button>
+							</div>
+						</section>
+					</ModalRegistration>
+				)}
 			</div>
 		</ModalRegistration>
 	);

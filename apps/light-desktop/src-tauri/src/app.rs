@@ -12,8 +12,6 @@ pub(crate) fn run() {
             crate::visualizer::close_visualizer,
             crate::visualizer::visualizer_state,
             crate::visualizer::visualizer_renderer,
-            crate::visualizer::send_visualizer_scene,
-            crate::visualizer::send_visualizer_values,
             crate::stage_pane::stage_pane_available,
             crate::stage_pane::open_stage_pane,
             crate::stage_pane::set_stage_pane,

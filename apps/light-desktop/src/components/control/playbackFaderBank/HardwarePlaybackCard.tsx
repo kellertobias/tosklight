@@ -21,6 +21,7 @@ import {
 	PlaybackAssignmentTarget,
 	PlaybackCommandTargetBadge,
 	PlaybackConfigurationTarget,
+	PlaybackOffTarget,
 } from "./SlotControls";
 import type { PlaybackSlotProjection, PlaybackSnapshotActive } from "./types";
 
@@ -38,7 +39,7 @@ type HardwarePlaybackCardProps = {
 	actions: VerticalTouchFaderAction[];
 	className: string;
 	cardStyle: CSSProperties | undefined;
-	commandTarget: "record" | "set" | null;
+	commandTarget: "record" | "set" | "off" | null;
 	interceptPointer: (event: ReactPointerEvent<HTMLElement>) => void;
 	interceptClick: (event: ReactMouseEvent<HTMLElement>) => void;
 };
@@ -116,6 +117,7 @@ export function HardwarePlaybackCard({
 							playback={playback}
 							slot={slot}
 						/>
+						<PlaybackOffTarget controller={controller} playback={playback} />
 					</>
 				),
 			}}

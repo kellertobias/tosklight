@@ -173,6 +173,26 @@ describe("playback footprint projection", () => {
 		});
 	});
 
+	it.each([
+		1, 2,
+	] as const)("binds only %i right-side button(s) for that Playback topology", (buttonCount) => {
+		const playback = definition(8, {
+			type: "wider",
+			right_buttons: ["go_minus", "go", "flash"],
+			right_fader: "x_fade",
+		});
+		playback.body.button_count = buttonCount;
+		const result = project([playback], { "31": 8 });
+		const controls = result.bindings.get(32)?.controls ?? [];
+
+		expect(
+			controls.filter(({ control }) => control.type === "right_button"),
+		).toHaveLength(buttonCount);
+		expect(controls.at(-1)).toEqual({
+			control: { type: "right_fader" },
+		});
+	});
+
 	it("falls back at boundaries, on incompatible upper rows, and on occupied neighbors", () => {
 		const incompatible: PlaybackSurfaceLayout = {
 			...layout,

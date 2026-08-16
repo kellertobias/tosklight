@@ -217,6 +217,34 @@ function CueTimingCells({
 	);
 }
 
+function CuePreviewCell({
+	cueNumber,
+	thumbnail,
+	onOpenPreview,
+}: {
+	cueNumber: number;
+	thumbnail: string | undefined;
+	onOpenPreview: () => void;
+}) {
+	return (
+		<td className="cue-preview-column">
+			{thumbnail && (
+				<Button
+					type="button"
+					className="cue-preview-image-button"
+					aria-label={`Open Cue ${cueNumber} preview`}
+					onClick={(event) => {
+						event.stopPropagation();
+						onOpenPreview();
+					}}
+				>
+					<img src={thumbnail} alt="" />
+				</Button>
+			)}
+		</td>
+	);
+}
+
 function CueTableRow({
 	cue,
 	index,
@@ -262,21 +290,11 @@ function CueTableRow({
 			className={`${active?.cue_index === index ? "current" : active?.effective_next_cue_number === cue.number ? "next" : ""} ${selected ? "selected" : ""} ${mutationTarget ? `${mutationTarget.operation}-target cue-command-target` : ""}`}
 		>
 			{!compactRows && (
-				<td className="cue-preview-column">
-					{thumbnail && (
-						<Button
-							type="button"
-							className="cue-preview-image-button"
-							aria-label={`Open Cue ${cue.number} preview`}
-							onClick={(event) => {
-								event.stopPropagation();
-								onOpenPreview();
-							}}
-						>
-							<img src={thumbnail} alt="" />
-						</Button>
-					)}
-				</td>
+				<CuePreviewCell
+					cueNumber={cue.number}
+					thumbnail={thumbnail}
+					onOpenPreview={onOpenPreview}
+				/>
 			)}
 			<td>
 				<b>{cue.number}</b>

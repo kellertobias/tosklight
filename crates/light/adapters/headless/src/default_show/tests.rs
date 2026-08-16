@@ -289,14 +289,19 @@ fn installs_the_generated_product_demo_as_the_default_show() {
     let store = ShowStore::open(&path).unwrap();
     let fixtures = store.objects("patched_fixture").unwrap();
     assert_eq!(store.name().unwrap(), DEFAULT_SHOW_NAME);
-    assert_eq!(fixtures.len(), 264);
-    assert_eq!(store.objects("patch_layer").unwrap().len(), 12);
+    assert_eq!(fixtures.len(), 296);
+    assert_eq!(store.objects("patch_layer").unwrap().len(), 18);
     assert_eq!(store.objects("group").unwrap().len(), 35);
     assert_eq!(store.objects("cue_list").unwrap().len(), 8);
     assert_eq!(store.objects("playback").unwrap().len(), 14);
     assert_eq!(store.objects("preset").unwrap().len(), 30);
     assert_eq!(store.objects("dynamic").unwrap().len(), 30);
     assert_eq!(store.objects("user_layout").unwrap().len(), 1);
+    assert_eq!(store.objects("media_server").unwrap().len(), 2);
+    assert_eq!(store.objects("media_source").unwrap().len(), 2);
+    assert_eq!(store.objects("media_surface").unwrap().len(), 2);
+    assert_eq!(store.objects("led_module_type").unwrap().len(), 1);
+    assert_eq!(store.objects("venue").unwrap().len(), 57);
     drop(store);
     std::fs::remove_file(path).unwrap();
 }

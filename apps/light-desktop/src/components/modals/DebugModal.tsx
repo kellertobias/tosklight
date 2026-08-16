@@ -1,9 +1,8 @@
+import { ModalPortal, ModalTitleBar } from "@tosklight/ui";
 import { useEffect, useRef, useState } from "react";
-import { useApp } from "../../state/AppContext";
 import { useOutputHealth } from "../../features/deskSnapshot/DeskSnapshotState";
 import { useShellStatusActions } from "../../features/shellStatus/ShellStatusActionsProvider";
-import { Button, ModalPortal } from "@tosklight/ui";
-import { ModalTitleBar } from "@tosklight/ui";
+import { useApp } from "../../state/AppContext";
 
 type LogEntry = { revision: number; kind: string; payload: unknown };
 
@@ -23,15 +22,15 @@ export function isMajorDeskEvent(entry: LogEntry) {
 	);
 }
 
-export function DebugModal() {
-	const { state, dispatch } = useApp();
-	const shellStatus = useShellStatusActions();
-	const outputHealth = useOutputHealth();
+function useMajorDeskEvents(
+	open: boolean,
+	shellStatus: ReturnType<typeof useShellStatusActions>,
+) {
 	const [logs, setLogs] = useState<LogEntry[]>([]);
 	const lastRevision = useRef(0);
 	const reading = useRef(false);
 	useEffect(() => {
-		if (!state.debugOpen || !shellStatus) return;
+		if (!open || !shellStatus) return;
 		let cancelled = false;
 		lastRevision.current = 0;
 		setLogs([]);
@@ -62,13 +61,21 @@ export function DebugModal() {
 				reading.current = false;
 			}
 		};
-		refresh();
+		void refresh();
 		const timer = window.setInterval(() => void refresh(), 5_000);
 		return () => {
 			cancelled = true;
 			window.clearInterval(timer);
 		};
-	}, [state.debugOpen, shellStatus]);
+	}, [open, shellStatus]);
+	return logs;
+}
+
+export function DebugModal() {
+	const { state, dispatch } = useApp();
+	const shellStatus = useShellStatusActions();
+	const outputHealth = useOutputHealth();
+	const logs = useMajorDeskEvents(state.debugOpen, shellStatus);
 	if (!state.debugOpen) return null;
 	const close = () =>
 		dispatch({ type: "SET_MODAL", modal: "debugOpen", value: false });

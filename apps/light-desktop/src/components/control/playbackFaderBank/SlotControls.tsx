@@ -1,12 +1,16 @@
 import { Button } from "@tosklight/ui";
 import type { PlaybackDefinition } from "../../../api/types";
-import { assignPlayback, isPlaybackSetClickArmed } from "./actions";
+import {
+	assignPlayback,
+	isPlaybackSetClickArmed,
+	offPlayback,
+} from "./actions";
 import type { PlaybackBankController } from "./controller";
 
 export function PlaybackCommandTargetBadge({
 	command,
 }: {
-	command: "record" | "set";
+	command: "record" | "set" | "off";
 }) {
 	return (
 		<div
@@ -15,6 +19,27 @@ export function PlaybackCommandTargetBadge({
 		>
 			{command.toUpperCase()} TARGET
 		</div>
+	);
+}
+
+export function PlaybackOffTarget({
+	controller,
+	playback,
+}: {
+	controller: PlaybackBankController;
+	playback: PlaybackDefinition | null;
+}) {
+	if (!controller.offPending || !playback) return null;
+	return (
+		<Button
+			className="playback-assignment-target playback-off-target"
+			aria-label={`Turn off ${playback.name}`}
+			onClick={() => void offPlayback(controller, playback)}
+		>
+			<PlaybackCommandTargetBadge command="off" />
+			<b>Turn Playback Off</b>
+			<small>{playback.name}</small>
+		</Button>
 	);
 }
 

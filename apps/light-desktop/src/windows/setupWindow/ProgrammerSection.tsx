@@ -88,8 +88,10 @@ function OptionalHighlightValue({
 
 export function HighlightLookSettings({
 	controller,
+	includePatch = false,
 }: {
 	controller: SetupWindowController;
+	includePatch?: boolean;
 }) {
 	const { draft } = controller;
 	if (!draft) return null;
@@ -106,14 +108,21 @@ export function HighlightLookSettings({
 				? "NeedsReview: existing raw Highlight overrides could not be translated unambiguously. Review this look before choosing it."
 				: null;
 	return (
-		<article>
+		<article className="highlight-look-settings">
 			<header>
 				<b>Highlight look</b>
-				<small>
-					One semantic identification look for every show on this desk.
-				</small>
+				{!includePatch && (
+					<small>
+						One semantic identification look for every show on this desk.
+					</small>
+				)}
 			</header>
-			<FormLayout labelPlacement="side">
+			<FormLayout
+				className="highlight-look-grid"
+				labelPlacement={includePatch ? "top" : "side"}
+				columns={3}
+				minColumnWidth={220}
+			>
 				<NumberField
 					label="Intensity (%)"
 					required
@@ -136,7 +145,11 @@ export function HighlightLookSettings({
 					disabled
 					options={[{ value: "open", label: "Open where available" }]}
 					onChange={() => undefined}
-					description="Uses the fixture profile's authored Open function; raw maximum is never assumed."
+					description={
+						includePatch
+							? undefined
+							: "Uses the fixture profile's authored Open function; raw maximum is never assumed."
+					}
 				/>
 				<SelectField
 					label="Color"
@@ -169,6 +182,9 @@ export function HighlightLookSettings({
 					value={look.frost}
 					onChange={(frost) => update({ frost })}
 				/>
+				{includePatch && (
+					<HighlightPatchField controller={controller} compact />
+				)}
 			</FormLayout>
 			{compatibilityMessage && (
 				<div className="modal-error" role="alert">
@@ -179,6 +195,36 @@ export function HighlightLookSettings({
 				</div>
 			)}
 		</article>
+	);
+}
+
+function HighlightPatchField({
+	controller,
+	compact = false,
+}: {
+	controller: SetupWindowController;
+	compact?: boolean;
+}) {
+	const { draft } = controller;
+	if (!draft) return null;
+	return (
+		<SwitchField
+			label="Highlight patch selection via DMX"
+			offLabel="Stage only"
+			onLabel="Stage and DMX"
+			checked={draft.patch_preview_highlight_dmx ?? false}
+			description={
+				compact
+					? undefined
+					: "Virtual Stage highlighting remains active in both modes."
+			}
+			onChange={(event) =>
+				controller.editDraft({
+					...draft,
+					patch_preview_highlight_dmx: event.target.checked,
+				})
+			}
+		/>
 	);
 }
 
@@ -198,18 +244,7 @@ export function PatchHighlightSettings({
 				</small>
 			</header>
 			<FormLayout labelPlacement="side">
-				<SwitchField
-					label="Highlight patch selection via DMX"
-					offLabel="Stage only"
-					onLabel="Stage and DMX"
-					checked={draft.patch_preview_highlight_dmx ?? false}
-					onChange={(event) =>
-						controller.editDraft({
-							...draft,
-							patch_preview_highlight_dmx: event.target.checked,
-						})
-					}
-				/>
+				<HighlightPatchField controller={controller} />
 			</FormLayout>
 		</article>
 	);
@@ -330,6 +365,14 @@ export function DefaultsSection({
 }: {
 	controller: SetupWindowController;
 }) {
+	if (controller.defaultsTab === "pools")
+		return (
+			<PreferencesPage title="Pool color defaults" controller={controller}>
+				<article className="pool-color-defaults-card">
+					<PoolPaletteSettings hideTitle />
+				</article>
+			</PreferencesPage>
+		);
 	return (
 		<PreferencesPage title="Defaults" controller={controller}>
 			{controller.defaultsTab === "record-update" && (
@@ -342,6 +385,9 @@ export function DefaultsSection({
 						<RecordDefaultsFields
 							settings={controller.recordSettings}
 							onChange={controller.setRecordSettings}
+							labelPlacement="top"
+							columns={2}
+							minColumnWidth={170}
 						/>
 					</article>
 					<article>
@@ -352,17 +398,15 @@ export function DefaultsSection({
 						<UpdateDefaultsFields
 							settings={controller.updateSettings}
 							onChange={controller.setUpdateSettings}
+							labelPlacement="top"
+							columns={2}
+							minColumnWidth={170}
 						/>
 					</article>
 				</div>
 			)}
 			{controller.defaultsTab === "playback" && (
 				<PlaybackDefaultsSettings controller={controller} />
-			)}
-			{controller.defaultsTab === "pools" && (
-				<article>
-					<PoolPaletteSettings />
-				</article>
 			)}
 		</PreferencesPage>
 	);
@@ -445,8 +489,7 @@ export function HighlightSection({
 }) {
 	return (
 		<PreferencesPage title="Highlight" controller={controller}>
-			<HighlightLookSettings controller={controller} />
-			<PatchHighlightSettings controller={controller} />
+			<HighlightLookSettings controller={controller} includePatch />
 		</PreferencesPage>
 	);
 }

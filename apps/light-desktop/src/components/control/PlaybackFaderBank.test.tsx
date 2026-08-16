@@ -541,6 +541,39 @@ describe("PlaybackFaderBank layout and configuration surfaces", () => {
 		expect(screen.getAllByRole("slider")).toHaveLength(2);
 	});
 
+	it.each([
+		1, 2,
+	] as const)("limits a wider Playback to its persisted %i-button topology", (buttonCount) => {
+		assignPlayback({
+			button_count: buttonCount,
+			footprint: {
+				type: "wider",
+				right_buttons: ["go", "pause", "flash"],
+				right_fader: "x_fade",
+			},
+		});
+		const { container } = render(
+			<PlaybackFaderBank
+				playbackLayout={{
+					playbacks_per_row: 2,
+					rows: [{ first_playback_slot: 1, has_fader: true, button_count: 3 }],
+				}}
+			/>,
+		);
+
+		expect(
+			container.querySelectorAll(
+				".expanded-playback-controls [data-playback-button-index]",
+			),
+		).toHaveLength(buttonCount);
+		expect(
+			container.querySelector('[data-playback-button-index="4"]'),
+		).not.toBeNull();
+		expect(
+			container.querySelector('[data-playback-button-index="6"]'),
+		).toBeNull();
+	});
+
 	it("fills hardware height with faderless and fader row weights", () => {
 		mocks.hardwareConnected = true;
 		Object.assign(mocks.state, {
@@ -656,6 +689,61 @@ describe("PlaybackFaderBank layout and configuration surfaces", () => {
 			screen.getByRole("dialog", { name: "Playback Configuration" }),
 		).toHaveAttribute("data-slot", "1");
 		expect(mocks.poolPlaybackAction).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		["touch", false, "virtual"],
+		["hardware-connected", true, "physical"],
+	] as const)("OFF makes the entire %s Playback an authoritative Off target", async (_surface, hardwareConnected, actionSurface) => {
+		assignPlayback();
+		mocks.hardwareConnected = hardwareConnected;
+		mocks.commandLine = "OFF";
+		const { container } = render(<PlaybackFaderBank count={1} />);
+
+		expect(container.querySelector("article")).toHaveClass(
+			"playback-command-target",
+			"command-target-off",
+		);
+		fireEvent.click(
+			screen.getByRole("button", { name: "Turn off Front Wash" }),
+		);
+
+		await waitFor(() =>
+			expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(7, "off", {
+				surface: actionSurface,
+			}),
+		);
+		expect(mocks.poolPlaybackAction).toHaveBeenCalledTimes(1);
+		expect(mocks.resetCommandLine).toHaveBeenCalledOnce();
+	});
+
+	it("OFF targets only the chosen Playback and is valid when it is already off", async () => {
+		mocks.playbacks.pages[0].slots = { "1": 7, "2": 8 };
+		mocks.playbacks.pool = [
+			playbackDefinition(7),
+			playbackDefinition(8, { name: "Neighbor" }),
+		];
+		Object.assign(mocks.state, {
+			cueListSetTarget: null,
+			cueListSetArmed: false,
+		});
+		mocks.commandLine = "OFF";
+		mocks.poolPlaybackAction.mockResolvedValue({ status: "no_change" });
+		render(<PlaybackFaderBank count={2} />);
+
+		fireEvent.click(screen.getByRole("button", { name: "Turn off Neighbor" }));
+
+		await waitFor(() =>
+			expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(8, "off", {
+				surface: "virtual",
+			}),
+		);
+		expect(mocks.poolPlaybackAction).not.toHaveBeenCalledWith(
+			7,
+			"off",
+			expect.anything(),
+		);
+		expect(mocks.resetCommandLine).toHaveBeenCalledOnce();
 	});
 
 	it("opens an empty slot without fabricating a playback number and allocates a changed draft on Apply", async () => {
@@ -967,7 +1055,7 @@ describe("PlaybackFaderBank Record targets", () => {
 					screen.getByRole("button", { name: "GO −" }),
 					screen.getByRole("button", { name: "FLASH" }),
 					screen.getByRole("slider", { name: "Master" }),
-		];
+				];
 		for (const surface of surfaces) {
 			expect(fireEvent.pointerDown(surface, { pointerId: 4 })).toBe(true);
 			fireEvent.click(surface);
@@ -1247,9 +1335,7 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 				count={1}
 				playbackLayout={{
 					playbacks_per_row: 1,
-					rows: [
-						{ first_playback_slot: 1, has_fader: false, button_count: 1 },
-					],
+					rows: [{ first_playback_slot: 1, has_fader: false, button_count: 1 }],
 				}}
 			/>,
 		);
@@ -1262,9 +1348,7 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 				count={1}
 				playbackLayout={{
 					playbacks_per_row: 1,
-					rows: [
-						{ first_playback_slot: 1, has_fader: false, button_count: 2 },
-					],
+					rows: [{ first_playback_slot: 1, has_fader: false, button_count: 2 }],
 				}}
 			/>,
 		);

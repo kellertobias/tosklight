@@ -462,24 +462,39 @@ pub(super) fn handle_playback_osc(
     // read-side OSC activation before interception so Group/Cuelist assignment can acquire its own
     // authoritative show transaction instead of deadlocking behind this ingress guard.
     drop(activation);
-    if let Some(session) = session.as_ref()
-        && command_http::intercept_armed_cue_playback(
+    let mut off_target = false;
+    if let Some(session) = session.as_ref() {
+        match command_http::intercept_armed_cue_playback(
             state,
             session,
             playback_address.clone(),
             action == "master" || pressed,
-        )
-    {
-        if let Some(input) = suppression_input {
-            state
-                .integrations
-                .remember_osc_intercept(input, Instant::now());
+        ) {
+            command_http::PlaybackTargetInterception::NotArmed => {}
+            command_http::PlaybackTargetInterception::Consumed => {
+                if let Some(input) = suppression_input {
+                    state
+                        .integrations
+                        .remember_osc_intercept(input, Instant::now());
+                }
+                return true;
+            }
+            command_http::PlaybackTargetInterception::Off => {
+                if let Some(input) = suppression_input {
+                    state
+                        .integrations
+                        .remember_osc_intercept(input, Instant::now());
+                }
+                action = "off";
+                input.pressed = Some(true);
+                off_target = true;
+            }
         }
-        return true;
     }
     let Ok(_activation) = state.active_show.try_acquire() else {
         return false;
     };
+    let off_target_address = off_target.then(|| playback_address.clone());
     let Ok(result) = playback_service::osc_action(
         state,
         session.as_ref(),
@@ -490,6 +505,9 @@ pub(super) fn handle_playback_osc(
     ) else {
         return false;
     };
+    if let (Some(address), Some(session)) = (off_target_address.as_ref(), session.as_ref()) {
+        command_http::complete_off_target(state, session, address);
+    }
     let changed = matches!(
         result.execution,
         PlaybackExecution::Pool { changed: true, .. }

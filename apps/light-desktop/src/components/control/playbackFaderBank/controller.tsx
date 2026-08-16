@@ -126,6 +126,7 @@ export function usePlaybackBankController({
 		setConfiguration,
 		assignmentPending: state.cueListSetTarget != null,
 		selectionPending: /^SELECT\s*$/i.test(commandLine?.text ?? ""),
+		offPending: /^OFF\s*$/i.test(commandLine?.text ?? ""),
 		dynamicAssignmentPending: /^SET\s+DYNAMIC\s+\d+\s*$/i.test(
 			commandLine?.text ?? "",
 		),

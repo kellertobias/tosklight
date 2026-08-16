@@ -269,7 +269,7 @@ export function FileManagerHeader({
 			title={headerPath}
 			onClick={(event) => openMenu("location", event)}
 		>
-			<span>{headerPath}</span>
+			<span>Path: {headerPath}</span>
 			<FileMenuIcon name="chevron" />
 		</Button>
 	);
@@ -356,30 +356,36 @@ export function FileManagerHeader({
 					groups={
 						controller.picker
 							? [
-									{ id: "file-manager-terminal", actions: [
-										{
-											id: "cancel",
-											label: "×",
-											ariaLabel: "Close File Manager",
-											onPress: controller.picker.onCancel,
-										},
-									] },
+									{
+										id: "file-manager-terminal",
+										actions: [
+											{
+												id: "cancel",
+												label: "×",
+												ariaLabel: "Close File Manager",
+												onPress: controller.picker.onCancel,
+											},
+										],
+									},
 								]
 							: controller.closeable && controller.app
-							? [
-									{ id: "file-manager-terminal", actions: [
+								? [
 										{
-											id: "close",
-											label: "×",
-											ariaLabel: "Close File Manager",
-											onPress: () =>
-												controller.app?.dispatch({
-													type: "CLOSE_FILE_MANAGER",
-												}),
+											id: "file-manager-terminal",
+											actions: [
+												{
+													id: "close",
+													label: "×",
+													ariaLabel: "Close File Manager",
+													onPress: () =>
+														controller.app?.dispatch({
+															type: "CLOSE_FILE_MANAGER",
+														}),
+												},
+											],
 										},
-									] },
-								]
-							: []
+									]
+								: []
 					}
 				/>
 			)}

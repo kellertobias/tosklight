@@ -50,6 +50,17 @@ function dynamicPoolLabel(dynamic: DynamicObject) {
 	return dynamic.body.name.trim() || `Dynamic ${dynamic.body.pool_number}`;
 }
 
+function dynamicWarningMessage(
+	dynamic: DynamicObject,
+	runtimeWarning: string | null | undefined,
+) {
+	if (dynamic.validationError)
+		return `Dynamic ${dynamic.body.pool_number}: ${dynamic.validationError} Open the Dynamic editor to correct it.`;
+	if (runtimeWarning)
+		return `Dynamic ${dynamic.body.pool_number}: ${runtimeWarning}. Open the Dynamic editor to change its targets or lanes.`;
+	return null;
+}
+
 export function DynamicsWindow({
 	active = true,
 	compact = false,
@@ -518,14 +529,19 @@ function DynamicsPool(props: DynamicsPoolProps) {
 		200,
 		...dynamics.map((dynamic) => dynamic.body.pool_number),
 	);
-	const slots: PoolSlotViewModel<number>[] = dynamics.map((dynamic) => ({
-		id: dynamic.body.pool_number,
-		position: dynamic.body.pool_number - 1,
-		card: {
-			number: dynamic.body.pool_number,
-			primary: dynamicPoolLabel(dynamic),
-		},
-	}));
+	const slots: PoolSlotViewModel<string | number>[] = dynamics.map(
+		(dynamic) => ({
+			// Storage identity must survive edits, ordering changes and reconnects. The numbered address
+			// is the position; using it as the identity made a briefly empty cell and its returning
+			// Dynamic the same retained WebKit grid item.
+			id: dynamic.id,
+			position: dynamic.body.pool_number - 1,
+			card: {
+				number: dynamic.body.pool_number,
+				primary: dynamicPoolLabel(dynamic),
+			},
+		}),
+	);
 	return (
 		<section className="dynamics-window" aria-busy={props.busy}>
 			{!props.compact && (
@@ -548,12 +564,13 @@ function DynamicsPool(props: DynamicsPoolProps) {
 						position: index,
 						card: { number: index + 1, primary: "Empty", states: ["empty"] },
 					})}
-					renderSlot={(_, index) => (
+					renderSlot={(slot) => (
 						<DynamicPoolTile
-							key={index}
 							{...props}
-							poolNumber={index + 1}
-							dynamic={occupied.get(index + 1)}
+							slotId={slot.id}
+							slotPosition={slot.position}
+							poolNumber={slot.position + 1}
+							dynamic={occupied.get(slot.position + 1)}
 							runtime={runtime}
 						/>
 					)}
@@ -577,11 +594,15 @@ function DynamicsPool(props: DynamicsPoolProps) {
 }
 
 function DynamicPoolTile({
+	slotId,
+	slotPosition,
 	poolNumber,
 	dynamic,
 	runtime,
 	...actions
 }: DynamicsPoolProps & {
+	slotId: string | number;
+	slotPosition: number;
 	poolNumber: number;
 	dynamic: DynamicObject | undefined;
 }) {
@@ -589,11 +610,16 @@ function DynamicPoolTile({
 	const running = count > 0;
 	const status = dynamic ? definitionStatus(runtime, dynamic.id) : null;
 	const validationError = dynamic?.validationError ?? null;
+	const warningMessage = dynamic
+		? dynamicWarningMessage(dynamic, status?.warning)
+		: null;
 	const open = () => {
 		if (dynamic) actions.onOpen(dynamic);
 	};
 	return (
 		<PoolCard
+			data-pool-slot-id={String(slotId)}
+			data-pool-position={slotPosition}
 			className={`dynamic-pool-card ${running ? "running" : ""} ${validationError ? "invalid" : ""}`}
 			aria-pressed={running}
 			model={{
@@ -604,7 +630,15 @@ function DynamicPoolTile({
 						? `G${dynamic.body.target_binding.group_id}`
 						: "Live"
 					: "Tap to choose first lane",
-				status: validationError || status?.warning ? "⚠" : undefined,
+				status: warningMessage ? (
+					<span
+						role="img"
+						aria-label={`Warning: ${warningMessage}`}
+						title={warningMessage}
+					>
+						⚠
+					</span>
+				) : undefined,
 				icon: dynamic?.body.icon,
 				iconColor: dynamic?.body.color ?? "#4edcff",
 				color: dynamic?.body.color ?? "#4edcff",
@@ -622,7 +656,7 @@ function DynamicPoolTile({
 					if (dynamic) actions.onDelete(dynamic);
 				} else if (!dynamic) actions.onChooseSlot(poolNumber);
 				else if (validationError) {
-					actions.onError(validationError);
+					actions.onError(warningMessage ?? validationError);
 					actions.onClearShift();
 				} else if (event.shiftKey || actions.shiftArmed) {
 					open();
@@ -634,7 +668,10 @@ function DynamicPoolTile({
 							: "Finish or cancel Record/Store before operating a Dynamic tile.",
 					);
 				else if (actions.setArmed) actions.onSet(poolNumber);
-				else actions.onToggle(dynamic);
+				else {
+					actions.onToggle(dynamic);
+					if (warningMessage) actions.onError(warningMessage);
+				}
 			}}
 			onContextMenu={(event) => {
 				event.preventDefault();

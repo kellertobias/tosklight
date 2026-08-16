@@ -210,8 +210,8 @@ export function DmxWindowView({
     patchedFixtures.forEach((fixture) => fixtureDmxPatchBindings(fixture).forEach((patch) => values.add(patch.universe)));
     outputRoutes.forEach((route) => values.add(route.body.logical_universe));
     if (!values.size) values.add(1);
-    return [...values].sort((a, b) => a - b).slice(0, compact ? 2 : 8);
-  }, [snapshot, patchedFixtures, outputRoutes, compact]);
+    return [...values].sort((a, b) => a - b);
+  }, [snapshot, patchedFixtures, outputRoutes]);
 
   useEffect(() => {
     if (!slot || !snapshot) return;

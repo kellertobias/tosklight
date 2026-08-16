@@ -370,6 +370,17 @@ describe("shared controls", () => {
 		expect(screen.getByText("Off")).toBeInTheDocument();
 		expect(screen.getByText("On")).toBeInTheDocument();
 	});
+	it("renders an explicitly bare switch without form-control chrome", () => {
+		const { container } = render(
+			<SwitchField bare label="Take over playback" checked />,
+		);
+		const bare = container.querySelector(".ui-switch-field-bare");
+		expect(bare).toContainElement(
+			screen.getByRole("switch", { name: "Take over playback" }),
+		);
+		expect(bare?.querySelector(".ui-form-control")).toBeNull();
+		expect(bare?.querySelector(".ui-form-field")).toBeNull();
+	});
 	it("selects one value from a shared multi-value toggle", () => {
 		const change = vi.fn();
 		render(

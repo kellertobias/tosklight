@@ -211,9 +211,37 @@ describe("TitleChrome", () => {
 				/>
 			</ModalProvider>,
 		);
-		fireEvent.click(
-			screen.getByRole("button", { name: "Search settings" }),
-		);
+		fireEvent.click(screen.getByRole("button", { name: "Search settings" }));
 		expect(screen.getByText("Only active cues")).toBeInTheDocument();
+	});
+
+	it("replaces right-side actions with compact search and restores them", () => {
+		const close = vi.fn();
+		renderChrome(
+			<ModalTitleBar
+				title="Cues"
+				search={{ value: "front", onSearch: vi.fn(), ariaLabel: "Search cues" }}
+				groups={[
+					{
+						id: "actions",
+						actions: [{ id: "add", label: "Add Cue" }],
+					},
+				]}
+				onClose={close}
+			/>,
+		);
+
+		fireEvent.click(screen.getByRole("button", { name: "Open Search cues" }));
+		expect(screen.getByRole("heading", { name: "Cues" })).toBeInTheDocument();
+		expect(screen.getByRole("textbox", { name: "Search cues" })).toHaveFocus();
+		expect(screen.queryByRole("button", { name: "Add Cue" })).toBeNull();
+		expect(screen.queryByRole("button", { name: "Close modal" })).toBeNull();
+
+		fireEvent.click(screen.getByRole("button", { name: "Close search" }));
+		expect(screen.getByRole("button", { name: "Add Cue" })).toBeInTheDocument();
+		expect(
+			screen.getByRole("button", { name: "Close modal" }),
+		).toBeInTheDocument();
+		expect(close).not.toHaveBeenCalled();
 	});
 });

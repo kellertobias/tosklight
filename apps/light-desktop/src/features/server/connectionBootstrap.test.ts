@@ -7,12 +7,15 @@ import type {
 import {
 	bootstrapConnection,
 	deferredConnectionWarmupTasks,
+	removeDisconnectedOtherClients,
+	SINGLE_CLIENT_MODE_STORAGE_KEY,
 } from "./connectionBootstrap";
 import type { ServerState } from "./useServerState";
 
 const user = { id: "user-1", name: "Operator", enabled: true };
 const session = {
 	session_id: "session-1",
+	client_id: "current-client",
 	token: "token-1",
 	user,
 	desk: { id: "desk-1", osc_alias: "main" },
@@ -69,6 +72,7 @@ function createHarness() {
 		fixtureProfiles: vi.fn().mockResolvedValue([]),
 		fixtureProfileWarnings: vi.fn().mockResolvedValue([]),
 		screens: vi.fn().mockResolvedValue(screens),
+		removeClient: vi.fn().mockResolvedValue(undefined),
 		commandHistory: vi.fn().mockResolvedValue([]),
 	};
 	const client = new Proxy(clientMethods, {
@@ -102,7 +106,10 @@ function createHarness() {
 				patch: client.patch,
 			},
 			mediaOutput: { mediaServers: client.mediaServers },
-			playback: { screens: client.screens },
+			playback: {
+				screens: client.screens,
+				removeClient: client.removeClient,
+			},
 			shows: { shows: client.shows },
 		},
 		commandTargetModeRef: { current: "FIXTURE" },
@@ -140,6 +147,64 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("connection bootstrap resources", () => {
+	it("removes only eligible disconnected clients by default and can be disabled", async () => {
+		const harness = createHarness();
+		const original = {
+			...bootstrap(),
+			clients: [
+				{
+					client_id: "current-client",
+					connected: true,
+					can_remove: false,
+					desk: { id: "desk-current" },
+				},
+				{
+					client_id: "connected-client",
+					connected: true,
+					can_remove: false,
+					desk: { id: "desk-connected" },
+				},
+				{
+					client_id: "retained-client",
+					connected: false,
+					can_remove: false,
+					desk: { id: "desk-retained" },
+				},
+				{
+					client_id: "old-client",
+					connected: false,
+					can_remove: true,
+					desk: { id: "desk-old" },
+				},
+			],
+		} as unknown as BootstrapSnapshot;
+		const refreshed = { ...original, clients: [] } as BootstrapSnapshot;
+		harness.clientMethods.bootstrap.mockResolvedValue(refreshed);
+
+		await expect(
+			removeDisconnectedOtherClients(
+				harness.state.api,
+				original,
+				"current-client",
+			),
+		).resolves.toBe(refreshed);
+		expect(harness.clientMethods.removeClient).toHaveBeenCalledOnce();
+		expect(harness.clientMethods.removeClient).toHaveBeenCalledWith("desk-old");
+
+		localStorage.setItem(SINGLE_CLIENT_MODE_STORAGE_KEY, "false");
+		harness.clientMethods.removeClient.mockClear();
+		harness.clientMethods.bootstrap.mockClear();
+		await expect(
+			removeDisconnectedOtherClients(
+				harness.state.api,
+				original,
+				"current-client",
+			),
+		).resolves.toBe(original);
+		expect(harness.clientMethods.removeClient).not.toHaveBeenCalled();
+		expect(harness.clientMethods.bootstrap).not.toHaveBeenCalled();
+	});
+
 	it("loads only interactive resources before making the desk available", async () => {
 		const harness = createHarness();
 		const loadShowObjects = vi.fn().mockResolvedValue(undefined);

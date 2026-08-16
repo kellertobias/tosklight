@@ -1,3 +1,13 @@
+import {
+	Button,
+	FormField,
+	FormLayout,
+	Input,
+	ModalRegistration,
+	ModalTitleBar,
+	NumberField,
+	SelectField,
+} from "@tosklight/ui";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import type {
@@ -9,17 +19,7 @@ import type {
 	SpeedGroupSoundState,
 	SpeedGroupSource,
 } from "../../api/types";
-import {
-	Button,
-	FormField,
-	FormLayout,
-	Input,
-	ModalRegistration,
-	ModalTitleBar,
-	NumberField,
-	SelectField,
-} from "@tosklight/ui";
-import { type SoundCaptureStatus } from "./soundToLightAnalyzer";
+import type { SoundCaptureStatus } from "./soundToLightAnalyzer";
 import { formatSpeedGroupBpm } from "./speedGroupFormatting";
 import "./SoundToLightModal.css";
 
@@ -203,7 +203,6 @@ function SoundToLightFields({
 		high_hz?: number;
 	}) => void;
 }) {
-	const observation = capture.observation;
 	return (
 		<>
 			<SelectField
@@ -231,197 +230,252 @@ function SoundToLightFields({
 					}
 				/>
 			)}
-			<section className="sound-live-panel" aria-label="Live sound analysis">
-				<div className="sound-meter-stack">
-					<Meter label="Input level" value={inputLevel} />
-					<div>
-						<Meter label="Selected band" value={bandLevel} />
-						{source.type === "sound_to_light" && (
-							<SelectField
-								label="Frequency region"
-								value={frequency}
-								options={frequencyOptions}
-								onChange={(value) =>
-									onUpdate(
-										"frequency",
-										value === "custom"
-											? { type: "custom", low_hz: 60, high_hz: 180 }
-											: { type: "preset", preset: value },
-									)
-								}
-							/>
-						)}
-					</div>
-				</div>
-				<dl>
-					<div>
-						<dt>Detected tempo</dt>
-						<dd>
-							{detectedBpm == null
-								? "—"
-								: `${formatSpeedGroupBpm(detectedBpm)} BPM`}
-						</dd>
-					</div>
-					<div>
-						<dt>Confidence</dt>
-						<dd>{Math.round(confidence * 100)}%</dd>
-					</div>
-					<div>
-						<dt>Effective speed</dt>
-						<dd>{formatSpeedGroupBpm(state.snapshot.effective_bpm)} BPM</dd>
-					</div>
-					<div>
-						<dt>Authoritative source</dt>
-						<dd>{sourceLabel(state)}</dd>
-					</div>
-				</dl>
-			</section>
+			<SoundLivePanel
+				{...{
+					state,
+					source,
+					frequency,
+					inputLevel,
+					bandLevel,
+					detectedBpm,
+					confidence,
+					onUpdate,
+				}}
+			/>
 			{source.type === "sound_to_light" && (
-				<>
-					<div className="sound-status-grid" aria-label="Audio status">
-						<article className={`status-${capture.phase}`}>
-							<small>Audio source</small>
-							<strong>{captureLabel(capture)}</strong>
-						</article>
-						<article
-							className={
-								observation?.usable_signal || state.snapshot.usable_signal
-									? "status-usable"
-									: "status-waiting"
-							}
-						>
-							<small>Selected-band signal</small>
-							<strong>
-								{observation?.usable_signal || state.snapshot.usable_signal
-									? "Usable"
-									: "Waiting / quiet"}
-							</strong>
-						</article>
-					</div>
-					<p className="sound-capture-message">{capture.message}</p>
-					<FormLayout
-						columns={2}
-						minColumnWidth={250}
-						className="sound-configuration-grid"
-					>
+				<SoundConfigurationFields
+					{...{ state, capture, draft, onUpdate, onCustomFrequencyChange }}
+				/>
+			)}
+		</>
+	);
+}
+
+function SoundLivePanel({
+	state,
+	source,
+	frequency,
+	inputLevel,
+	bandLevel,
+	detectedBpm,
+	confidence,
+	onUpdate,
+}: {
+	state: SpeedGroupSoundState;
+	source: SpeedGroupSource;
+	frequency: FrequencyPreset | "custom";
+	inputLevel: number;
+	bandLevel: number;
+	detectedBpm: number | null;
+	confidence: number;
+	onUpdate: <Key extends keyof SoundToLightConfig>(
+		key: Key,
+		value: SoundToLightConfig[Key],
+	) => void;
+}) {
+	return (
+		<section className="sound-live-panel" aria-label="Live sound analysis">
+			<div className="sound-meter-stack">
+				<Meter label="Input level" value={inputLevel} />
+				<div>
+					<Meter label="Selected band" value={bandLevel} />
+					{source.type === "sound_to_light" && (
 						<SelectField
-							label="Analysis"
-							value="tempo_bpm"
-							disabled
-							options={[{ value: "tempo_bpm", label: "Tempo / BPM" }]}
-							onChange={() => undefined}
-						/>
-						{draft.frequency.type === "custom" && (
-							<div className="sound-custom-frequency">
-								<NumberField
-									label="Low frequency"
-									aria-label="Custom low frequency"
-									value={draft.frequency.low_hz}
-									min={20}
-									max={19_999}
-									unit="Hz"
-									onValueChange={(value) =>
-										onCustomFrequencyChange({ low_hz: Number(value) })
-									}
-								/>
-								<NumberField
-									label="High frequency"
-									aria-label="Custom high frequency"
-									value={draft.frequency.high_hz}
-									min={21}
-									max={20_000}
-									unit="Hz"
-									onValueChange={(value) =>
-										onCustomFrequencyChange({ high_hz: Number(value) })
-									}
-								/>
-							</div>
-						)}
-						<RangeField
-							label="Input gain"
-							value={draft.input_gain_db}
-							minimum={-60}
-							maximum={60}
-							step={1}
-							unit=" dB"
-							onChange={(value) => onUpdate("input_gain_db", value)}
-						/>
-						<RangeField
-							label="Confidence threshold"
-							value={draft.confidence_threshold}
-							minimum={0}
-							maximum={1}
-							step={0.01}
-							unit=""
-							onChange={(value) => onUpdate("confidence_threshold", value)}
-						/>
-						<RangeField
-							label="Tempo smoothing"
-							value={draft.smoothing}
-							minimum={0}
-							maximum={0.99}
-							step={0.01}
-							unit=""
-							onChange={(value) => onUpdate("smoothing", value)}
-						/>
-						<NumberField
-							label="Minimum accepted tempo"
-							aria-label="Minimum accepted BPM"
-							value={draft.minimum_bpm}
-							min={0.1}
-							max={998}
-							step={1}
-							allowDecimal
-							unit="BPM"
-							onChange={(event) =>
-								onUpdate("minimum_bpm", Number(event.target.value))
-							}
-						/>
-						<NumberField
-							label="Maximum accepted tempo"
-							aria-label="Maximum accepted BPM"
-							value={draft.maximum_bpm}
-							min={0.2}
-							max={999}
-							step={1}
-							allowDecimal
-							unit="BPM"
-							onChange={(event) =>
-								onUpdate("maximum_bpm", Number(event.target.value))
-							}
-						/>
-						<NumberField
-							label="Signal-loss hold"
-							aria-label="Signal hold seconds"
-							value={draft.signal_hold_millis / 1_000}
-							min={0}
-							max={60}
-							step={0.5}
-							allowDecimal
-							unit="s"
-							onChange={(event) =>
+							label="Frequency region"
+							value={frequency}
+							options={frequencyOptions}
+							onChange={(value) =>
 								onUpdate(
-									"signal_hold_millis",
-									Math.round(Number(event.target.value) * 1_000),
+									"frequency",
+									value === "custom"
+										? { type: "custom", low_hz: 60, high_hz: 180 }
+										: { type: "preset", preset: value },
 								)
 							}
 						/>
+					)}
+				</div>
+			</div>
+			<dl>
+				<div>
+					<dt>Detected tempo</dt>
+					<dd>
+						{detectedBpm == null
+							? "—"
+							: `${formatSpeedGroupBpm(detectedBpm)} BPM`}
+					</dd>
+				</div>
+				<div>
+					<dt>Confidence</dt>
+					<dd>{Math.round(confidence * 100)}%</dd>
+				</div>
+				<div>
+					<dt>Effective speed</dt>
+					<dd>{formatSpeedGroupBpm(state.snapshot.effective_bpm)} BPM</dd>
+				</div>
+				<div>
+					<dt>Authoritative source</dt>
+					<dd>{sourceLabel(state)}</dd>
+				</div>
+			</dl>
+		</section>
+	);
+}
+
+type ConfigurationFieldsProps = {
+	state: SpeedGroupSoundState;
+	capture: SoundCaptureStatus;
+	draft: SoundToLightConfig;
+	onUpdate: <Key extends keyof SoundToLightConfig>(
+		key: Key,
+		value: SoundToLightConfig[Key],
+	) => void;
+	onCustomFrequencyChange(change: { low_hz?: number; high_hz?: number }): void;
+};
+
+function SoundConfigurationFields({
+	state,
+	capture,
+	draft,
+	onUpdate,
+	onCustomFrequencyChange,
+}: ConfigurationFieldsProps) {
+	const usable =
+		capture.observation?.usable_signal || state.snapshot.usable_signal;
+	return (
+		<>
+			<div className="sound-status-grid" aria-label="Audio status">
+				<article className={`status-${capture.phase}`}>
+					<small>Audio source</small>
+					<strong>{captureLabel(capture)}</strong>
+				</article>
+				<article className={usable ? "status-usable" : "status-waiting"}>
+					<small>Selected-band signal</small>
+					<strong>{usable ? "Usable" : "Waiting / quiet"}</strong>
+				</article>
+			</div>
+			<p className="sound-capture-message">{capture.message}</p>
+			<FormLayout
+				columns={2}
+				minColumnWidth={250}
+				className="sound-configuration-grid"
+			>
+				<SelectField
+					label="Analysis"
+					value="tempo_bpm"
+					disabled
+					options={[{ value: "tempo_bpm", label: "Tempo / BPM" }]}
+					onChange={() => undefined}
+				/>
+				{draft.frequency.type === "custom" && (
+					<div className="sound-custom-frequency">
 						<NumberField
-							label="Sound speed ratio"
-							aria-label="Sound multiplier"
-							value={draft.multiplier}
-							min={0.125}
-							max={8}
-							step={0.125}
-							allowDecimal
-							unit="×"
-							onChange={(event) =>
-								onUpdate("multiplier", Number(event.target.value))
+							label="Low frequency"
+							aria-label="Custom low frequency"
+							value={draft.frequency.low_hz}
+							min={20}
+							max={19_999}
+							unit="Hz"
+							onValueChange={(value) =>
+								onCustomFrequencyChange({ low_hz: Number(value) })
 							}
 						/>
-					</FormLayout>
-				</>
-			)}
+						<NumberField
+							label="High frequency"
+							aria-label="Custom high frequency"
+							value={draft.frequency.high_hz}
+							min={21}
+							max={20_000}
+							unit="Hz"
+							onValueChange={(value) =>
+								onCustomFrequencyChange({ high_hz: Number(value) })
+							}
+						/>
+					</div>
+				)}
+				<RangeField
+					label="Input gain"
+					value={draft.input_gain_db}
+					minimum={-60}
+					maximum={60}
+					step={1}
+					unit=" dB"
+					onChange={(value) => onUpdate("input_gain_db", value)}
+				/>
+				<RangeField
+					label="Confidence threshold"
+					value={draft.confidence_threshold}
+					minimum={0}
+					maximum={1}
+					step={0.01}
+					unit=""
+					onChange={(value) => onUpdate("confidence_threshold", value)}
+				/>
+				<RangeField
+					label="Tempo smoothing"
+					value={draft.smoothing}
+					minimum={0}
+					maximum={0.99}
+					step={0.01}
+					unit=""
+					onChange={(value) => onUpdate("smoothing", value)}
+				/>
+				<NumberField
+					label="Minimum accepted tempo"
+					aria-label="Minimum accepted BPM"
+					value={draft.minimum_bpm}
+					min={0.1}
+					max={998}
+					step={1}
+					allowDecimal
+					unit="BPM"
+					onChange={(event) =>
+						onUpdate("minimum_bpm", Number(event.target.value))
+					}
+				/>
+				<NumberField
+					label="Maximum accepted tempo"
+					aria-label="Maximum accepted BPM"
+					value={draft.maximum_bpm}
+					min={0.2}
+					max={999}
+					step={1}
+					allowDecimal
+					unit="BPM"
+					onChange={(event) =>
+						onUpdate("maximum_bpm", Number(event.target.value))
+					}
+				/>
+				<NumberField
+					label="Signal-loss hold"
+					aria-label="Signal hold seconds"
+					value={draft.signal_hold_millis / 1_000}
+					min={0}
+					max={60}
+					step={0.5}
+					allowDecimal
+					unit="s"
+					onChange={(event) =>
+						onUpdate(
+							"signal_hold_millis",
+							Math.round(Number(event.target.value) * 1_000),
+						)
+					}
+				/>
+				<NumberField
+					label="Sound speed ratio"
+					aria-label="Sound multiplier"
+					value={draft.multiplier}
+					min={0.125}
+					max={8}
+					step={0.125}
+					allowDecimal
+					unit="×"
+					onChange={(event) =>
+						onUpdate("multiplier", Number(event.target.value))
+					}
+				/>
+			</FormLayout>
 		</>
 	);
 }
@@ -476,16 +530,7 @@ function selectedSource(value: string, group: SpeedGroupId): SpeedGroupSource {
 	return { type: "manual" };
 }
 
-export function SoundToLightModal({
-	group,
-	state,
-	capture,
-	controllerError,
-	onPreview,
-	onSave,
-	onAction,
-	onClose,
-}: {
+interface SoundToLightModalProps {
 	group: SpeedGroupId;
 	state: SpeedGroupSoundState;
 	capture: SoundCaptureStatus;
@@ -495,55 +540,44 @@ export function SoundToLightModal({
 	onDeviceChange?: (deviceId: string) => void;
 	onRefreshInputs?: () => Promise<void>;
 	controllerError?: string | null;
-	onPreview: (
+	onPreview(
 		group: SpeedGroupId,
 		configuration: SoundToLightConfig | null,
-	) => void;
-	onSave: (
+	): void;
+	onSave(
 		configuration: SoundToLightConfig,
 		source: SpeedGroupSource,
-	) => Promise<SpeedGroupSoundState>;
-	onAction: (input: SpeedGroupActionInput) => Promise<SpeedGroupSoundState>;
-	onClose: () => void;
-}) {
+	): Promise<SpeedGroupSoundState>;
+	onAction(input: SpeedGroupActionInput): Promise<SpeedGroupSoundState>;
+	onClose(): void;
+}
+
+function useSoundToLightDraft({
+	group,
+	state,
+	capture,
+	onPreview,
+}: Pick<SoundToLightModalProps, "group" | "state" | "capture" | "onPreview">) {
+	const initialSource = () =>
+		state.source ??
+		(state.configuration.enabled
+			? ({ type: "sound_to_light" } as const)
+			: ({ type: "manual" } as const));
 	const [draft, setDraft] = useState<SoundToLightConfig>(() =>
 		structuredClone(state.configuration),
 	);
-	const [source, setSource] = useState<SpeedGroupSource>(
-		() =>
-			state.source ??
-			(state.configuration.enabled
-				? { type: "sound_to_light" }
-				: { type: "manual" }),
-	);
+	const [source, setSource] = useState<SpeedGroupSource>(initialSource);
 	const [baseline, setBaseline] = useState(() => ({
 		configuration: structuredClone(state.configuration),
-		source:
-			state.source ??
-			(state.configuration.enabled
-				? ({ type: "sound_to_light" } as const)
-				: ({ type: "manual" } as const)),
+		source: initialSource(),
 	}));
 	const [confirmClose, setConfirmClose] = useState(false);
 	const [busy, setBusy] = useState(false);
 	const [localError, setLocalError] = useState<string | null>(null);
-	useEffect(() => {
-		onPreview(group, draft);
-	}, [draft, group, onPreview]);
+	useEffect(() => onPreview(group, draft), [draft, group, onPreview]);
 	useEffect(() => () => onPreview(group, null), [group, onPreview]);
-	const invalid = validationError(draft);
 	const observation = capture.observation;
-	const inputLevel = observation?.level ?? state.snapshot.input_level;
-	const bandLevel =
-		observation?.selected_band_level ?? state.snapshot.selected_band_level;
-	const detectedBpm = observation?.detected_bpm ?? state.snapshot.sound_bpm;
-	const confidence =
-		observation?.confidence ??
-		(state.snapshot.sound_status.state === "active"
-			? state.snapshot.sound_status.confidence
-			: 0);
-	const frequency =
-		draft.frequency.type === "preset" ? draft.frequency.preset : "custom";
+	const invalid = validationError(draft);
 	const dirty =
 		JSON.stringify({ configuration: draft, source }) !==
 		JSON.stringify(baseline);
@@ -562,6 +596,72 @@ export function SoundToLightModal({
 					: { type: "custom" as const, low_hz: 60, high_hz: 180 };
 			return { ...current, frequency: { ...frequency, ...change } };
 		});
+	const selectSource = (value: string) => {
+		const next = selectedSource(value, group);
+		setSource(next);
+		setDraft((current) => ({
+			...current,
+			enabled: next.type === "sound_to_light",
+		}));
+	};
+	return {
+		draft,
+		setDraft,
+		source,
+		setSource,
+		baseline,
+		setBaseline,
+		confirmClose,
+		setConfirmClose,
+		busy,
+		setBusy,
+		localError,
+		setLocalError,
+		invalid,
+		dirty,
+		update,
+		updateCustomFrequency,
+		selectSource,
+		frequency:
+			draft.frequency.type === "preset"
+				? draft.frequency.preset
+				: ("custom" as const),
+		inputLevel: observation?.level ?? state.snapshot.input_level,
+		bandLevel:
+			observation?.selected_band_level ?? state.snapshot.selected_band_level,
+		detectedBpm: observation?.detected_bpm ?? state.snapshot.sound_bpm,
+		confidence:
+			observation?.confidence ??
+			(state.snapshot.sound_status.state === "active"
+				? state.snapshot.sound_status.confidence
+				: 0),
+	};
+}
+
+export function SoundToLightModal({
+	group,
+	state,
+	capture,
+	controllerError,
+	onPreview,
+	onSave,
+	onAction,
+	onClose,
+}: SoundToLightModalProps) {
+	const controller = useSoundToLightDraft({ group, state, capture, onPreview });
+	const {
+		draft,
+		setDraft,
+		source,
+		setSource,
+		baseline,
+		setBaseline,
+		setConfirmClose,
+		setBusy,
+		setLocalError,
+		invalid,
+		dirty,
+	} = controller;
 	const apply = async (closeAfterSave = true) => {
 		if (invalid) {
 			setLocalError(invalid);
@@ -623,15 +723,63 @@ export function SoundToLightModal({
 		}
 	};
 	const requestClose = () => (dirty ? setConfirmClose(true) : onClose());
-	const selectSource = (value: string) => {
-		const next = selectedSource(value, group);
-		setSource(next);
-		setDraft((current) => ({
-			...current,
-			enabled: next.type === "sound_to_light",
-		}));
-	};
 	return createPortal(
+		<SoundToLightDialog
+			{...{
+				group,
+				state,
+				capture,
+				controllerError,
+				onClose,
+				controller,
+				action,
+				apply,
+				requestClose,
+			}}
+		/>,
+		document.body,
+	);
+}
+
+function SoundToLightDialog({
+	group,
+	state,
+	capture,
+	controllerError,
+	onClose,
+	controller,
+	action,
+	apply,
+	requestClose,
+}: Pick<
+	SoundToLightModalProps,
+	"group" | "state" | "capture" | "controllerError" | "onClose"
+> & {
+	controller: ReturnType<typeof useSoundToLightDraft>;
+	action(input: SpeedGroupActionInput): Promise<void>;
+	apply(closeAfterSave?: boolean): Promise<void>;
+	requestClose(): void;
+}) {
+	const {
+		draft,
+		source,
+		setSource,
+		confirmClose,
+		setConfirmClose,
+		busy,
+		localError,
+		invalid,
+		dirty,
+		update,
+		updateCustomFrequency,
+		selectSource,
+		frequency,
+		inputLevel,
+		bandLevel,
+		detectedBpm,
+		confidence,
+	} = controller;
+	return (
 		<ModalRegistration onClose={requestClose}>
 			<div
 				className="stacked-modal-layer"
@@ -721,7 +869,6 @@ export function SoundToLightModal({
 					/>
 				</section>
 			</div>
-		</ModalRegistration>,
-		document.body,
+		</ModalRegistration>
 	);
 }

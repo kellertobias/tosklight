@@ -57,6 +57,24 @@ describe("PoolCard", () => {
 		expect(select).toHaveBeenCalledOnce();
 	});
 
+	it("uses a literal accessible description for a compact derived marker", () => {
+		render(
+			<PoolCard
+				model={{
+					number: 12,
+					primary: "Referenced group",
+					derived: true,
+					derivedLabel: "Ref: 7",
+					derivedDescription: "References Group 7",
+				}}
+			/>,
+		);
+
+		expect(screen.getByLabelText("References Group 7")).toHaveTextContent(
+			"Ref: 7",
+		);
+	});
+
 	it("maps high-level workflow states to their literal target actions", () => {
 		const { rerender } = render(
 			<PoolCard

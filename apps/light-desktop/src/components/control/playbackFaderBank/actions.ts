@@ -78,6 +78,21 @@ export async function selectPlayback(
 	return true;
 }
 
+export async function offPlayback(
+	controller: PlaybackBankController,
+	playback: PlaybackDefinition,
+) {
+	if (!controller.offPending) return false;
+	const outcome = await controller.runtimeActions?.poolPlaybackAction(
+		playback.number,
+		"off",
+		{ surface: controller.hardware ? "physical" : "virtual" },
+	);
+	if (!outcome) return false;
+	await controller.commandLineActions?.reset();
+	return true;
+}
+
 export async function assignDynamicPlayback(
 	controller: PlaybackBankController,
 	playback: PlaybackDefinition,

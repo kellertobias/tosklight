@@ -36,6 +36,16 @@
 	--pool-card-accent: #4edcff;
 }
 
+/*
+ * A stored Dynamic is authoritative operator state, not disposable off-screen decoration.
+ * WebKit can retain skipped contents after a square pool cell scrolls back into view; keep the
+ * populated cells paintable while the shared pool optimization continues to cull empty slots.
+ */
+.dynamics-window .pool-window-grid > .dynamic-pool-card:not(.empty) {
+	content-visibility: visible;
+	contain-intrinsic-size: none;
+}
+
 .dynamic-pool-card.running {
 	box-shadow:
 		inset 0 0 0 2px #4edcff,

@@ -1,11 +1,77 @@
 .macro-window,
 .macro-editor {
+	container: macro-editor / inline-size;
 	display: flex;
 	min-height: 0;
 	height: 100%;
 	flex-direction: column;
 	background: var(--surface-1, #151719);
 	color: var(--text-primary, #f5f5f5);
+}
+
+.macro-editor-workspace {
+	display: grid;
+	min-width: 0;
+	min-height: 0;
+	flex: 1;
+	grid-template-columns: minmax(0, 1fr);
+}
+
+.macro-editor-workspace.has-help {
+	grid-template-columns: minmax(18rem, 1fr) clamp(16rem, 28cqw, 22rem);
+}
+
+.macro-help-sidebar {
+	min-width: 0;
+	min-height: 0;
+	overflow-y: auto;
+	padding: 0.8rem;
+	border-left: 1px solid var(--border-subtle, #393c3f);
+	background: var(--surface-2, #1c2024);
+	color: var(--text-secondary, #c1c7cd);
+	font-size: 0.82rem;
+	line-height: 1.45;
+}
+
+.macro-help-sidebar header,
+.macro-help-sidebar p,
+.macro-help-sidebar dl {
+	margin: 0 0 0.8rem;
+}
+
+.macro-help-sidebar header {
+	color: var(--text-primary, #fff);
+	font-size: 1rem;
+}
+
+.macro-help-sidebar dl > div {
+	display: grid;
+	gap: 0.2rem;
+	padding: 0.55rem 0;
+	border-top: 1px solid var(--border-subtle, #393c3f);
+}
+
+.macro-help-sidebar dt,
+.macro-help-sidebar dd {
+	margin: 0;
+}
+
+.macro-help-sidebar code {
+	color: #a9d47d;
+}
+
+@container macro-editor (max-width: 44rem) {
+	.macro-editor-workspace.has-help {
+		overflow-y: auto;
+		grid-template-columns: minmax(0, 1fr);
+		grid-template-rows: minmax(18rem, 1fr) auto;
+	}
+
+	.macro-help-sidebar {
+		max-height: 18rem;
+		border-top: 1px solid var(--border-subtle, #393c3f);
+		border-left: 0;
+	}
 }
 
 .macro-window .ui-pool-card {
@@ -27,7 +93,7 @@
 .macro-source-editor {
 	display: grid;
 	min-height: 18rem;
-	flex: 1;
+	height: 100%;
 	grid-template-columns: 3.5rem minmax(0, 1fr);
 	background: #101214;
 	font-family: var(

@@ -49,13 +49,144 @@ export function MacroEditor(props: MacroEditorProps) {
 		>
 			<MacroEditorHeader {...props} controller={controller} />
 			{controller.settingsOpen && <MacroSettings controller={controller} />}
-			<MacroSource controller={controller} />
+			<div
+				className={`macro-editor-workspace ${controller.helpOpen ? "has-help" : ""}`}
+			>
+				<MacroSource controller={controller} />
+				{controller.helpOpen && <MacroHelpSidebar />}
+			</div>
 			<MacroDiagnostics
-				diagnostics={controller.validation?.diagnostics ?? []}
+				diagnostics={controller.visibleDiagnostics}
 				settled={controller.validation !== null}
 			/>
 		</section>
 	);
+}
+
+function useMacroValidation(
+	showId: string | null,
+	api: MacrosApiClient,
+	source: string,
+	cursor: number,
+	setNotice: (value: string | null) => void,
+) {
+	const [validation, setValidation] = useState<MacroValidation | null>(null);
+	const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+	const [suggestionIndex, setSuggestionIndex] = useState(0);
+	const generationRef = useRef(0);
+	useEffect(() => {
+		if (!showId) return;
+		const generation = ++generationRef.current;
+		setSuggestionsOpen(false);
+		const timer = window.setTimeout(() => {
+			void api
+				.validate(showId, source, cursor)
+				.then((next) => {
+					if (generationRef.current !== generation) return;
+					setValidation(next);
+					setSuggestionsOpen(next.suggestions.length > 0);
+					setSuggestionIndex(0);
+				})
+				.catch((reason) => {
+					if (generationRef.current === generation) setNotice(String(reason));
+				});
+		}, 180);
+		return () => {
+			window.clearTimeout(timer);
+			if (generationRef.current === generation) generationRef.current += 1;
+		};
+	}, [api, cursor, setNotice, showId, source]);
+	return {
+		validation,
+		setValidation,
+		suggestionsOpen,
+		setSuggestionsOpen,
+		suggestionIndex,
+		setSuggestionIndex,
+	};
+}
+
+function useMacroEditorInput({
+	api,
+	draft,
+	editDraft,
+	setCursor,
+	setNotice,
+	setSuggestionsOpen,
+}: {
+	api: MacrosApiClient;
+	draft: MacroDefinition;
+	editDraft(next: MacroDefinition): void;
+	setCursor(value: number): void;
+	setNotice(value: string | null): void;
+	setSuggestionsOpen(value: boolean): void;
+}) {
+	const editor = useRef<HTMLTextAreaElement | null>(null);
+	const pendingCaret = useRef<number | null>(null);
+	const instanceId = useRef(`macro-editor:${crypto.randomUUID()}`).current;
+	const focusGeneration = useRef(0);
+	useEffect(() => {
+		if (pendingCaret.current === null || !editor.current) return;
+		editor.current.focus();
+		editor.current.setSelectionRange(
+			pendingCaret.current,
+			pendingCaret.current,
+		);
+		setCursor(pendingCaret.current);
+		pendingCaret.current = null;
+	}, [draft.source, setCursor]);
+	useEffect(
+		() => () => {
+			focusGeneration.current += 1;
+			void api.releaseEditorInput(instanceId).catch(() => undefined);
+		},
+		[api, instanceId],
+	);
+	return {
+		editor,
+		instanceId,
+		insertSuggestion(suggestion: MacroSuggestion) {
+			const source = draft.source;
+			const next =
+				source.slice(0, suggestion.replaceStart) +
+				suggestion.insertText +
+				source.slice(suggestion.replaceEnd);
+			pendingCaret.current =
+				suggestion.replaceStart + suggestion.insertText.length;
+			editDraft({ ...draft, source: next });
+			setSuggestionsOpen(false);
+		},
+		async claim() {
+			const generation = ++focusGeneration.current;
+			try {
+				await api.claimEditorInput(instanceId);
+				if (focusGeneration.current !== generation)
+					await api.releaseEditorInput(instanceId);
+			} catch (reason) {
+				if (focusGeneration.current === generation)
+					setNotice(
+						`Attached desk input remains unavailable: ${String(reason)}`,
+					);
+			}
+		},
+		release() {
+			focusGeneration.current += 1;
+			void api.releaseEditorInput(instanceId).catch(() => undefined);
+		},
+		apply(action: string) {
+			const target = editor.current;
+			if (!target || document.activeElement !== target) return;
+			const edit = editMacroSourceWithInput(
+				draft.source,
+				target.selectionStart,
+				target.selectionEnd,
+				action,
+			);
+			if (!edit) return;
+			pendingCaret.current = edit.caret;
+			editDraft({ ...draft, source: edit.source });
+		},
+	};
 }
 
 function useMacroEditorController({
@@ -68,25 +199,31 @@ function useMacroEditorController({
 	const [draft, setDraft] = useState(macro.body);
 	const [savedBody, setSavedBody] = useState(macro.body);
 	const [revision, setRevision] = useState(macro.revision);
-	const [validation, setValidation] = useState<MacroValidation | null>(null);
 	const [notice, setNotice] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
 	const [settingsOpen, setSettingsOpen] = useState(false);
+	const [helpOpen, setHelpOpen] = useState(false);
 	const [cursor, setCursor] = useState(0);
-	const [suggestionsOpen, setSuggestionsOpen] = useState(false);
-	const [suggestionIndex, setSuggestionIndex] = useState(0);
+	const validationState = useMacroValidation(
+		showId,
+		api,
+		draft.source,
+		cursor,
+		setNotice,
+	);
+	const {
+		validation,
+		setValidation,
+		suggestionsOpen,
+		setSuggestionsOpen,
+		suggestionIndex,
+		setSuggestionIndex,
+	} = validationState;
 	const [runLineUndo, setRunLineUndo] = useState<{
 		executionId: string;
 		line: number;
 	} | null>(null);
-	const editor = useRef<HTMLTextAreaElement | null>(null);
 	const highlightOverlay = useRef<HTMLPreElement | null>(null);
-	const pendingCaret = useRef<number | null>(null);
-	const editorInputInstanceId = useRef(
-		`macro-editor:${crypto.randomUUID()}`,
-	).current;
-	const editorInputFocusGeneration = useRef(0);
-	const validationGeneration = useRef(0);
 	const suggestionListId = useId();
 	const definitionHelpId = useId();
 	const editDraft = (next: MacroDefinition) => {
@@ -96,87 +233,25 @@ function useMacroEditorController({
 		setRunLineUndo(null);
 	};
 
-	useEffect(() => {
-		if (!showId) return;
-		const generation = ++validationGeneration.current;
-		setSuggestionsOpen(false);
-		const timer = window.setTimeout(() => {
-			void api
-				.validate(showId, draft.source, cursor)
-				.then((next) => {
-					if (validationGeneration.current !== generation) return;
-					setValidation(next);
-					setSuggestionsOpen(next.suggestions.length > 0);
-					setSuggestionIndex(0);
-				})
-				.catch((reason) => {
-					if (validationGeneration.current === generation)
-						setNotice(String(reason));
-				});
-		}, 180);
-		return () => {
-			window.clearTimeout(timer);
-			if (validationGeneration.current === generation)
-				validationGeneration.current += 1;
-		};
-	}, [api, cursor, draft.source, showId]);
-
-	useEffect(() => {
-		if (pendingCaret.current === null || !editor.current) return;
-		editor.current.focus();
-		editor.current.setSelectionRange(
-			pendingCaret.current,
-			pendingCaret.current,
-		);
-		setCursor(pendingCaret.current);
-		pendingCaret.current = null;
-	}, [draft.source]);
-
-	const insertSuggestion = (suggestion: MacroSuggestion) => {
-		const source = draft.source;
-		const next =
-			source.slice(0, suggestion.replaceStart) +
-			suggestion.insertText +
-			source.slice(suggestion.replaceEnd);
-		pendingCaret.current =
-			suggestion.replaceStart + suggestion.insertText.length;
-		editDraft({ ...draft, source: next });
-		setSuggestionsOpen(false);
-	};
-	const claimEditorInput = async () => {
-		const generation = ++editorInputFocusGeneration.current;
-		try {
-			await api.claimEditorInput(editorInputInstanceId);
-			if (editorInputFocusGeneration.current !== generation)
-				await api.releaseEditorInput(editorInputInstanceId);
-		} catch (reason) {
-			if (editorInputFocusGeneration.current === generation)
-				setNotice(`Attached desk input remains unavailable: ${String(reason)}`);
-		}
-	};
-	const releaseEditorInput = () => {
-		editorInputFocusGeneration.current += 1;
-		void api.releaseEditorInput(editorInputInstanceId).catch(() => undefined);
-	};
-	const applyEditorInput = (action: string) => {
-		const target = editor.current;
-		if (!target || document.activeElement !== target) return;
-		const edit = editMacroSourceWithInput(
-			draft.source,
-			target.selectionStart,
-			target.selectionEnd,
-			action,
-		);
-		if (!edit) return;
-		pendingCaret.current = edit.caret;
-		editDraft({ ...draft, source: edit.source });
-	};
-	useEffect(
-		() => () => {
-			editorInputFocusGeneration.current += 1;
-			void api.releaseEditorInput(editorInputInstanceId).catch(() => undefined);
-		},
-		[api, editorInputInstanceId],
+	const editorInput = useMacroEditorInput({
+		api,
+		draft,
+		editDraft,
+		setCursor,
+		setNotice,
+		setSuggestionsOpen,
+	});
+	const editor = editorInput.editor;
+	const activeLine = macroLineAtCursor(draft.source, cursor);
+	const visibleDiagnostics = (validation?.diagnostics ?? []).filter(
+		(diagnostic) =>
+			diagnostic.status !== "invalid" || diagnostic.line !== activeLine,
+	);
+	const activeLineHasInvalidDiagnostic = Boolean(
+		validation?.diagnostics.some(
+			(diagnostic) =>
+				diagnostic.status === "invalid" && diagnostic.line === activeLine,
+		),
 	);
 
 	const persistence = useMacroPersistence({
@@ -222,21 +297,26 @@ function useMacroEditorController({
 			notice,
 			busy,
 			isNew: persistence.isNew,
+			visibleDiagnostics,
+			activeLineHasInvalidDiagnostic,
 		}),
 		busy,
 		settingsOpen,
 		setSettingsOpen,
+		helpOpen,
+		setHelpOpen,
+		visibleDiagnostics,
 		cursor,
 		setCursor,
 		suggestionsOpen,
 		setSuggestionsOpen,
 		suggestionIndex,
 		setSuggestionIndex,
-		insertSuggestion,
-		editorInputInstanceId,
-		claimEditorInput,
-		releaseEditorInput,
-		applyEditorInput,
+		insertSuggestion: editorInput.insertSuggestion,
+		editorInputInstanceId: editorInput.instanceId,
+		claimEditorInput: editorInput.claim,
+		releaseEditorInput: editorInput.release,
+		applyEditorInput: editorInput.apply,
 		suggestionListId,
 		definitionHelpId,
 		runLineUndo,
@@ -475,6 +555,8 @@ function macroEditorStatus({
 	notice,
 	busy,
 	isNew,
+	visibleDiagnostics,
+	activeLineHasInvalidDiagnostic,
 }: {
 	draft: MacroDefinition;
 	savedBody: MacroDefinition;
@@ -482,6 +564,8 @@ function macroEditorStatus({
 	notice: string | null;
 	busy: boolean;
 	isNew: boolean;
+	visibleDiagnostics: MacroLineDiagnostic[];
+	activeLineHasInvalidDiagnostic: boolean;
 }) {
 	if (busy) return { text: "Saving…", error: false };
 	if (notice) {
@@ -492,6 +576,10 @@ function macroEditorStatus({
 	}
 	if (validation === null)
 		return { text: "Checking command line…", error: false };
+	if (visibleDiagnostics.some((diagnostic) => diagnostic.status !== "valid"))
+		return { text: "Command line needs attention", error: true };
+	if (activeLineHasInvalidDiagnostic)
+		return { text: "Editing current line…", error: false };
 	if (!validation.valid)
 		return { text: "Command line needs attention", error: true };
 	if (!sameMacroDefinition(draft, savedBody))
@@ -521,32 +609,51 @@ function MacroEditorHeader({
 				),
 			}}
 			groups={[
-				{ id: "macro-navigation", actions: [{ id: "back", label: "← Macros", onPress: onClose }] },
-				{ id: "macro-run", actions: [
-					{
-						id: "run-macro",
-						label: (
-							<span>
-								<span aria-hidden="true">▶</span> Run Macro
-							</span>
-						),
-						ariaLabel: "Run Macro",
-						disabled: controller.isNew || controller.busy,
-						onPress: () => void controller.runMacro(),
-					},
-					{
-						id: "run-line",
-						label: "Run line",
-						onPress: () => void controller.runLine(),
-					},
-					{
-						id: "undo-run-line",
-						label: "Undo last run",
-						disabled: !controller.runLineUndo || controller.busy,
-						onPress: () => void controller.undoLastRun(),
-					},
-				] },
+				{
+					id: "macro-navigation",
+					actions: [{ id: "back", label: "← Macros", onPress: onClose }],
+				},
+				{
+					id: "macro-run",
+					actions: [
+						{
+							id: "run-macro",
+							label: (
+								<span>
+									<span aria-hidden="true">▶</span> Run Macro
+								</span>
+							),
+							ariaLabel: "Run Macro",
+							disabled: controller.isNew || controller.busy,
+							onPress: () => void controller.runMacro(),
+						},
+						{
+							id: "run-line",
+							label: "Run line",
+							onPress: () => void controller.runLine(),
+						},
+						{
+							id: "undo-run-line",
+							label: "Undo last run",
+							disabled: !controller.runLineUndo || controller.busy,
+							onPress: () => void controller.undoLastRun(),
+						},
+					],
+				},
+				{
+					id: "macro-help",
+					actions: [
+						{
+							id: "toggle-help",
+							icon: <span aria-hidden="true">?</span>,
+							ariaLabel: "Toggle Macro help",
+							active: controller.helpOpen,
+							onPress: () => controller.setHelpOpen(!controller.helpOpen),
+						},
+					],
+				},
 			]}
+			settings
 			onSettings={() => controller.setSettingsOpen(true)}
 		/>
 	);
@@ -622,8 +729,62 @@ function MacroSettings({ controller }: { controller: MacroEditorController }) {
 	);
 }
 
+export const MACRO_HELP_COMMANDS = [
+	["FIXTURE / GROUP", "Build the target selection."],
+	["AT / PRESET", "Apply a value or Preset to the current target."],
+	["CUE / PLAYBACK", "Address Cue and Playback operations."],
+	["RECORD / UPDATE", "Store or update through the desk command grammar."],
+	["DELETE / MOVE / COPY", "Change stored show objects."],
+	["SET", "Open or address configuration."],
+	["DEFINE _name …", "Define a reusable command expansion."],
+	[
+		"RESTORE SELECTION",
+		"Restore the concrete ordered initiating selection captured when this Macro run began.",
+	],
+] as const;
+
+function MacroHelpSidebar() {
+	return (
+		<aside className="macro-help-sidebar" aria-label="Macro Editor help">
+			<header>
+				<strong>Macro Editor help</strong>
+			</header>
+			<p>
+				Write one desk command per line, or separate commands with a semicolon.
+				The last semicolon is optional.
+			</p>
+			<p>
+				Validation follows the caret: an unfinished current line stays neutral
+				while you type. Move to another line to see any remaining error.
+				Suggestions can complete the command at the caret.
+			</p>
+			<p>
+				Macros autosave only after the complete source validates.{" "}
+				<b>Run line</b>
+				runs the saved line at the caret; <b>Run Macro</b> runs the saved Macro
+				from top to bottom.
+			</p>
+			<dl>
+				{MACRO_HELP_COMMANDS.map(([command, detail]) => (
+					<div key={command}>
+						<dt>
+							<code>{command}</code>
+						</dt>
+						<dd>{detail}</dd>
+					</div>
+				))}
+			</dl>
+		</aside>
+	);
+}
+
+function macroLineAtCursor(source: string, cursor: number) {
+	const boundedCursor = Math.max(0, Math.min(cursor, source.length));
+	return source.slice(0, boundedCursor).split("\n").length;
+}
+
 function MacroSource({ controller }: { controller: MacroEditorController }) {
-	const diagnostics = controller.validation?.diagnostics ?? [];
+	const diagnostics = controller.visibleDiagnostics;
 	const suggestions = controller.validation?.suggestions ?? [];
 	const updateCursor = (target: HTMLTextAreaElement) =>
 		controller.setCursor(target.selectionStart);
@@ -633,8 +794,9 @@ function MacroSource({ controller }: { controller: MacroEditorController }) {
 		.filter((expansion, index, all) => all.indexOf(expansion) === index);
 	useEffect(() => {
 		const routeInput = (event: Event) => {
-			const payload = (event as CustomEvent<{ instance_id?: string; action?: string }>)
-				.detail;
+			const payload = (
+				event as CustomEvent<{ instance_id?: string; action?: string }>
+			).detail;
 			if (
 				payload?.instance_id === controller.editorInputInstanceId &&
 				payload.action
@@ -789,28 +951,28 @@ function macroInputText(action: string): string | null {
 	const digit = action.match(/^digit-([0-9])$/)?.[1];
 	if (digit) return digit;
 	const tokens: Record<string, string> = {
-			at: " AT ",
-			clear: "CLEAR ",
-			cpy: "COPY ",
-			cue: "CUE ",
-			del: "DELETE ",
-			delete: "DELETE ",
-			diff: "DIFF ",
-			div: " DIV ",
-			dot: ".",
-			enter: "\n",
-			group: "GROUP ",
-			minus: " - ",
-			mov: "MOVE ",
-			off: "OFF ",
-			playback: "PLAYBACK ",
-			plus: " + ",
-			preload: "PRELOAD ",
-			record: "RECORD ",
-			set: "SET ",
-			thru: " THRU ",
-			time: " TIME ",
-			undo: "UNDO ",
+		at: " AT ",
+		clear: "CLEAR ",
+		cpy: "COPY ",
+		cue: "CUE ",
+		del: "DELETE ",
+		delete: "DELETE ",
+		diff: "DIFF ",
+		div: " DIV ",
+		dot: ".",
+		enter: "\n",
+		group: "GROUP ",
+		minus: " - ",
+		mov: "MOVE ",
+		off: "OFF ",
+		playback: "PLAYBACK ",
+		plus: " + ",
+		preload: "PRELOAD ",
+		record: "RECORD ",
+		set: "SET ",
+		thru: " THRU ",
+		time: " TIME ",
+		undo: "UNDO ",
 	};
 	return tokens[action] ?? null;
 }

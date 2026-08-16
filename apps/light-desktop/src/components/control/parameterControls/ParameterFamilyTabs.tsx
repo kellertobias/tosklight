@@ -92,7 +92,29 @@ function SpecialDialogButton({
 	controller: ParameterController;
 }) {
 	if (
-		!specialParameterFamilies.has(controller.family as SpecialParameterFamily)
+		!specialParameterFamilies.has(
+			controller.family as SpecialParameterFamily,
+		) ||
+		(controller.family === "Media" &&
+			!controller.selectedFixtures.some((fixture) => {
+				const selected = new Set(controller.selectedFixtureIds);
+				if (
+					selected.has(fixture.fixture_id) &&
+					fixture.definition.heads.some((head) =>
+						head.parameters.some(
+							(parameter) => parameter.attribute === "media.play_mode",
+						),
+					)
+				)
+					return true;
+				return fixture.logical_heads.some(
+					(head) =>
+						selected.has(head.fixture_id) &&
+						fixture.definition.heads[head.head_index]?.parameters.some(
+							(parameter) => parameter.attribute === "media.play_mode",
+						),
+				);
+			}))
 	)
 		return null;
 	return (

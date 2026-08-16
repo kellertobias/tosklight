@@ -21,6 +21,7 @@ import type {
 	AttributeSettingsTab,
 	DefaultsSettingsTab,
 	NetworkSettingsTab,
+	OutputsSettingsTab,
 	SetupSection,
 } from "./SetupChrome";
 
@@ -154,6 +155,7 @@ export function useSetupWindowController() {
 		useState<NetworkSettingsTab>("control-server");
 	const [defaultsTab, setDefaultsTab] =
 		useState<DefaultsSettingsTab>("record-update");
+	const [outputsTab, setOutputsTab] = useState<OutputsSettingsTab>("engine");
 	const screenUndo = useRef<(() => void) | null>(null);
 	const deskSaveQueue = useRef(Promise.resolve());
 	const lastQueuedConfiguration = useRef<string | null>(null);
@@ -205,6 +207,7 @@ export function useSetupWindowController() {
 		recordSettings,
 		restartRequired,
 		networkTab,
+		outputsTab,
 		screenCanUndo,
 		screenUndo,
 		section,
@@ -215,6 +218,7 @@ export function useSetupWindowController() {
 		setFixtureLibraryOpen,
 		setRecordSettings,
 		setNetworkTab,
+		setOutputsTab,
 		setSection,
 		setServerUrl,
 		setUpdateSettings,

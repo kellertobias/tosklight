@@ -1,6 +1,7 @@
 import {
 	Button,
 	FormLayout,
+	ModalRegistration,
 	ModalTitleBar,
 	NumberField,
 	SelectField,
@@ -11,7 +12,6 @@ import { useEffect, useRef, useState } from "react";
 import { configuredServerUrl } from "../../../api/client/serverLocation";
 import type {
 	FixedScreenPane,
-	PlaybackSurfaceLayout,
 	ProgrammerControlSurfacePatch,
 	ScreenConfiguration,
 } from "../../../api/types";
@@ -691,36 +691,13 @@ function ScreenPlacementFields({
 	);
 }
 
-function ScreenSettingsFields(props: ScreenSettingsFieldsProps) {
-	return (
-		<div className="screen-settings-columns">
-			<ScreenLayoutFields
-				draft={props.draft}
-				desks={props.desks}
-				update={props.update}
-			/>
-			<ScreenPaneSettings
-				draft={props.draft}
-				cueLists={props.cueLists}
-				textFiles={props.textFiles}
-				update={props.update}
-			/>
-			<ScreenPlacementFields
-				draft={props.draft}
-				displays={props.displays}
-				update={props.update}
-			/>
-		</div>
-	);
-}
-
 function ScreenCardHeader(props: {
 	draft: ScreenConfiguration;
-	browserLink: string;
 	programmerOwner: boolean;
 	update: (changes: Partial<ScreenConfiguration>) => void;
 	copyBrowserLink: () => Promise<void>;
-	openPlaybackModal: () => void;
+	copyState: "idle" | "success" | "error";
+	openConfiguration: () => void;
 	remove: () => void;
 }) {
 	return (
@@ -731,18 +708,23 @@ function ScreenCardHeader(props: {
 				onChange={(event) => props.update({ name: event.target.value })}
 			/>
 			<div className="screen-settings-actions">
-				<a
-					className="ui-button ui-secondary ui-default"
-					href={props.browserLink}
-					target="_blank"
-					rel="noreferrer"
+				<Button
+					variant={
+						props.copyState === "success"
+							? "success"
+							: props.copyState === "error"
+								? "warning"
+								: "secondary"
+					}
+					onClick={() => void props.copyBrowserLink()}
 				>
-					Open in browser
-				</a>
-				<Button onClick={() => void props.copyBrowserLink()}>
-					Copy browser link
+					{props.copyState === "success"
+						? "✓ Copied browser link"
+						: props.copyState === "error"
+							? "Copy failed"
+							: "Copy browser link"}
 				</Button>
-				<Button onClick={props.openPlaybackModal}>Configure Playbacks</Button>
+				<Button onClick={props.openConfiguration}>Configure screen</Button>
 				<Button
 					variant={props.draft.desired_open ? "warning" : "success"}
 					onClick={() =>
@@ -756,6 +738,90 @@ function ScreenCardHeader(props: {
 				</Button>
 			</div>
 		</header>
+	);
+}
+
+type ScreenConfigurationTab = "layout" | "settings" | "placement" | "playbacks";
+
+function ScreenConfigurationModal(
+	props: ScreenSettingsFieldsProps & {
+		programmerOwner: boolean;
+		onClose: () => void;
+		onConfigurePlaybacks: () => void;
+	},
+) {
+	const [tab, setTab] = useState<ScreenConfigurationTab>("layout");
+	return (
+		<ModalRegistration onClose={props.onClose}>
+			<div className="stacked-modal-layer">
+				<section
+					className="nested-modal screen-configuration-modal"
+					role="dialog"
+					aria-modal="true"
+					aria-label={`Configure ${props.draft.name}`}
+				>
+					<ModalTitleBar
+						title={`Configure ${props.draft.name}`}
+						groups={[
+							{
+								id: "screen-configuration-tabs",
+								kind: "tabs",
+								activeId: tab,
+								onActiveChange: (id) => setTab(id as ScreenConfigurationTab),
+								actions: [
+									{ id: "layout", label: "Layout" },
+									{ id: "settings", label: "Settings" },
+									{ id: "placement", label: "Placement" },
+									{ id: "playbacks", label: "Playbacks" },
+								],
+							},
+						]}
+						closeLabel="Close screen configuration"
+						onClose={props.onClose}
+					/>
+					<div className="screen-configuration-modal-content">
+						{tab === "layout" && (
+							<ScreenLayoutFields
+								draft={props.draft}
+								desks={props.desks}
+								update={props.update}
+							/>
+						)}
+						{tab === "settings" && (
+							<>
+								<ScreenControlSurfaceNote
+									draft={props.draft}
+									programmerOwner={props.programmerOwner}
+								/>
+								<ScreenPaneSettings
+									draft={props.draft}
+									cueLists={props.cueLists}
+									textFiles={props.textFiles}
+									update={props.update}
+								/>
+							</>
+						)}
+						{tab === "placement" && (
+							<ScreenPlacementFields
+								draft={props.draft}
+								displays={props.displays}
+								update={props.update}
+							/>
+						)}
+						{tab === "playbacks" && (
+							<div className="screen-playbacks-tab">
+								<p>
+									Configure the Playback rows, faders, buttons, and page mode.
+								</p>
+								<Button variant="primary" onClick={props.onConfigurePlaybacks}>
+									Configure Playbacks
+								</Button>
+							</div>
+						)}
+					</div>
+				</section>
+			</div>
+		</ModalRegistration>
 	);
 }
 
@@ -807,7 +873,10 @@ function ScreenRemovalConfirmation(props: {
 			role="dialog"
 			aria-label={`Remove ${props.draft.name}`}
 		>
-			<ModalTitleBar title={`Remove ${props.draft.name}`} onClose={props.cancel} />
+			<ModalTitleBar
+				title={`Remove ${props.draft.name}`}
+				onClose={props.cancel}
+			/>
 			<b>{props.draft.name} carries the encoders.</b>
 			<p>
 				Removing it will move the encoders back to the main screen in the same
@@ -832,19 +901,15 @@ function ScreenRemovalConfirmation(props: {
 	);
 }
 
-async function copyScreenBrowserLink(
-	browserLink: string,
-	setStatus: (status: string) => void,
-) {
+async function copyScreenBrowserLink(browserLink: string) {
 	try {
 		if (!navigator.clipboard)
 			throw new Error("Clipboard access is unavailable in this browser.");
 		await navigator.clipboard.writeText(browserLink);
-		setStatus("Browser link copied.");
+		return true;
 	} catch (error) {
-		setStatus(
-			error instanceof Error ? error.message : "Could not copy browser link.",
-		);
+		void error;
+		return false;
 	}
 }
 
@@ -873,8 +938,9 @@ export function ScreenSettingsCard({
 }) {
 	const [draft, setDraft] = useState(screen);
 	const [playbackModalOpen, setPlaybackModalOpen] = useState(false);
-	const [browserLinkStatus, setBrowserLinkStatus] = useState<string | null>(
-		null,
+	const [configurationOpen, setConfigurationOpen] = useState(false);
+	const [copyState, setCopyState] = useState<"idle" | "success" | "error">(
+		"idle",
 	);
 	const [removeConfirmationOpen, setRemoveConfirmationOpen] = useState(false);
 	const [removeError, setRemoveError] = useState<string | null>(null);
@@ -914,8 +980,16 @@ export function ScreenSettingsCard({
 			});
 	};
 	const browserLink = browserScreenUrl(draft.id, configuredServerUrl());
-	const copyBrowserLink = () =>
-		copyScreenBrowserLink(browserLink, setBrowserLinkStatus);
+	const copyBrowserLink = async () => {
+		setCopyState(
+			(await copyScreenBrowserLink(browserLink)) ? "success" : "error",
+		);
+	};
+	useEffect(() => {
+		if (copyState === "idle") return;
+		const timer = window.setTimeout(() => setCopyState("idle"), 2500);
+		return () => window.clearTimeout(timer);
+	}, [copyState]);
 	const confirmOwnerRemoval = async () => {
 		if (!updateProgrammerOwner || removing) return;
 		setRemoving(true);
@@ -940,20 +1014,15 @@ export function ScreenSettingsCard({
 		>
 			<ScreenCardHeader
 				draft={draft}
-				browserLink={browserLink}
 				programmerOwner={programmerOwner}
 				update={update}
 				copyBrowserLink={copyBrowserLink}
-				openPlaybackModal={() => setPlaybackModalOpen(true)}
+				copyState={copyState}
+				openConfiguration={() => setConfigurationOpen(true)}
 				remove={() =>
 					programmerOwner ? setRemoveConfirmationOpen(true) : void remove(draft)
 				}
 			/>
-			{browserLinkStatus && (
-				<small className="screen-browser-link-status" role="status">
-					{browserLinkStatus}
-				</small>
-			)}
 			{removeConfirmationOpen && (
 				<ScreenRemovalConfirmation
 					draft={draft}
@@ -964,18 +1033,19 @@ export function ScreenSettingsCard({
 					error={removeError}
 				/>
 			)}
-			<ScreenControlSurfaceNote
-				draft={draft}
-				programmerOwner={programmerOwner}
-			/>
-			<ScreenSettingsFields
-				draft={draft}
-				desks={desks}
-				displays={displays}
-				cueLists={cueLists}
-				textFiles={textFiles}
-				update={update}
-			/>
+			{configurationOpen && (
+				<ScreenConfigurationModal
+					draft={draft}
+					desks={desks}
+					displays={displays}
+					cueLists={cueLists}
+					textFiles={textFiles}
+					update={update}
+					programmerOwner={programmerOwner}
+					onClose={() => setConfigurationOpen(false)}
+					onConfigurePlaybacks={() => setPlaybackModalOpen(true)}
+				/>
+			)}
 			{playbackModalOpen && (
 				<PlaybackLayoutModal
 					initialLayout={screenPlaybackLayout(draft)}
@@ -999,35 +1069,27 @@ export function ScreenSettingsCard({
 }
 
 export function DefaultScreenSettings({
-	deskName,
 	deskAlias,
-	playbackLayout,
-	fallbackColumns,
-	fallbackRows,
-	playbackSlots,
 	keyboardShortcuts,
-	onName,
 	onAlias,
 	onTextFocus,
 	onTextBlur,
 	onKeyboardShortcuts,
 	onConfigurePlaybacks,
 	onChooseDefault,
+	singleClientMode,
+	onSingleClientMode,
 }: {
-	deskName: string;
 	deskAlias: string;
-	playbackLayout: PlaybackSurfaceLayout | null;
-	fallbackColumns: number;
-	fallbackRows: number;
-	playbackSlots: number;
 	keyboardShortcuts: boolean;
-	onName: (name: string) => void;
 	onAlias: (alias: string) => void;
 	onTextFocus: (field: "name" | "osc_alias") => void;
 	onTextBlur: (field: "name" | "osc_alias") => void;
 	onKeyboardShortcuts: (enabled: boolean) => void;
 	onConfigurePlaybacks: () => void;
 	onChooseDefault: () => void;
+	singleClientMode: boolean;
+	onSingleClientMode: (enabled: boolean) => void;
 }) {
 	return (
 		<article className="default-screen-settings">
@@ -1037,18 +1099,7 @@ export function DefaultScreenSettings({
 					<small>Primary desk window</small>
 				</div>
 			</header>
-			<FormLayout
-				className="screen-settings-grid"
-				columns={3}
-				minColumnWidth={180}
-			>
-				<TextField
-					label="Name"
-					value={deskName}
-					onFocus={() => onTextFocus("name")}
-					onBlur={() => onTextBlur("name")}
-					onChange={(event) => onName(event.target.value)}
-				/>
+			<div className="default-screen-compact-row">
 				<TextField
 					label="OSC alias"
 					value={deskAlias}
@@ -1056,14 +1107,6 @@ export function DefaultScreenSettings({
 					onBlur={() => onTextBlur("osc_alias")}
 					onChange={(event) => onAlias(event.target.value)}
 				/>
-				<div className="playback-layout-summary">
-					<b>Playback surface</b>
-					<small>
-						{playbackLayout?.rows.length ?? fallbackRows} rows ·{" "}
-						{playbackLayout?.playbacks_per_row ?? fallbackColumns} playbacks per
-						row
-					</small>
-				</div>
 				<SwitchField
 					label="Enable software keyboard shortcuts"
 					offLabel="Disabled"
@@ -1072,16 +1115,18 @@ export function DefaultScreenSettings({
 					description="Keyboard shortcuts are always disabled while hardware controls are connected."
 					onChange={(event) => onKeyboardShortcuts(event.target.checked)}
 				/>
-			</FormLayout>
-			<footer className="default-screen-status">
-				<small>
-					{playbackSlots} playback slots · OSC /light/{deskAlias || "desk"}/
-				</small>
+				<SwitchField
+					label="Single-client mode"
+					offLabel="Keep clients"
+					onLabel="Clean disconnected clients"
+					checked={singleClientMode}
+					onChange={(event) => onSingleClientMode(event.target.checked)}
+				/>
 				<div className="screen-settings-actions default-screen-bottom-actions">
 					<Button onClick={onConfigurePlaybacks}>Configure Playbacks</Button>
 					<Button onClick={onChooseDefault}>Choose default screen</Button>
 				</div>
-			</footer>
+			</div>
 		</article>
 	);
 }

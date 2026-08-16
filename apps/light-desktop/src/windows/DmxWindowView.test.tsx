@@ -6,6 +6,7 @@ import {
   dmxSnapshot,
   dmxSnapshotWithoutOverrides,
 } from "../../../ui-library/storybook/fixtures/dmx";
+import type { OutputRoute, VersionedObject } from "../api/types";
 import { DmxWindowView } from "./DmxWindow";
 
 beforeEach(() => {
@@ -33,6 +34,52 @@ function renderView(overrides: Partial<Parameters<typeof DmxWindowView>[0]> = {}
 }
 
 describe("DMX application view", () => {
+	it("shows the complete authoritative universe list in compact and full views", () => {
+		const routes: VersionedObject<OutputRoute>[] = Array.from(
+			{ length: 9 },
+			(_, index) => ({
+				kind: "route",
+				id: `route-${index + 1}`,
+				revision: 1,
+				updated_at: "2026-08-15T00:00:00Z",
+				body: {
+					protocol: "art_net",
+					logical_universe: index + 1,
+					destination_universe: index + 1,
+					delivery_mode: "broadcast",
+					destination: null,
+					enabled: true,
+					minimum_slots: 512,
+				},
+			}),
+		);
+		const { container, rerender, onDotSizeChange, onSetDmxOverride } = renderView({
+			compact: true,
+			outputRoutes: routes,
+			patchedFixtures: [],
+			snapshot: null,
+		});
+		const headings = () => Array.from(
+			container.querySelectorAll(".dmx-universe header b"),
+			(node) => node.textContent,
+		);
+		expect(headings()).toEqual(Array.from(
+			{ length: 9 },
+			(_, index) => `Logical universe ${index + 1} · channels 1–512`,
+		));
+
+		rerender(<DmxWindowView
+			dotSize="small"
+			onDotSizeChange={onDotSizeChange}
+			onSetDmxOverride={onSetDmxOverride}
+			outputHealth={dmxOutputHealth}
+			outputRoutes={routes}
+			patchedFixtures={[]}
+			snapshot={null}
+		/>);
+		expect(headings()).toHaveLength(9);
+	}, 30_000);
+
   it("labels the two output modes Values and Sources", () => {
     renderView();
 

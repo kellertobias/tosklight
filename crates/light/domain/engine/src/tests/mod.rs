@@ -142,6 +142,35 @@ fn same_length_dynamic_programmer_edit_invalidates_flattened_projection() {
     ));
 }
 
+#[test]
+fn shared_programmer_sessions_contribute_dynamic_values_once() {
+    let registry = ProgrammerRegistry::default();
+    let first_session = SessionId::new();
+    let second_session = SessionId::new();
+    let user = UserId::new();
+    let fixture = FixtureId::new();
+    registry.start(first_session, user);
+    registry.start(second_session, user);
+    let engine = Engine::new(registry.clone());
+
+    assert!(registry.apply_dynamic_values(
+        first_session,
+        &[DynamicProgrammerValueMutation::Set {
+            fixture_id: fixture,
+            attribute: AttributeKey::intensity(),
+            value: light_dynamics::DynamicSemanticValue::DynamicOff {
+                instance_link: uuid::Uuid::new_v4(),
+                timing: light_dynamics::DynamicValueTiming::default(),
+            },
+        }],
+        None,
+    ));
+
+    let values = engine.dynamic_programmer_values();
+    assert_eq!(values.len(), 1);
+    assert_eq!(values[0].2.fixture_id, fixture);
+}
+
 fn schema_v2_fixture(
     channels: &[(&str, bool, bool, bool, bool, bool)],
 ) -> (PatchedFixture, FixtureId) {

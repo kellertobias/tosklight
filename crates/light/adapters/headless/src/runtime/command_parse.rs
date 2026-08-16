@@ -189,7 +189,10 @@ pub(super) fn parse_fixture_selection(
         return parse_fixture_selection(fixtures, &normalized);
     }
     if tokens == ["THRU"] {
-        let mut ordered = fixtures.iter().collect::<Vec<_>>();
+        let mut ordered = fixtures
+            .iter()
+            .filter(|fixture| fixture.definition.patch_policy() == light_fixture::PatchPolicy::Dmx)
+            .collect::<Vec<_>>();
         ordered.sort_by_key(|fixture| fixture.fixture_number.unwrap_or(u32::MAX));
         let mut selected = Vec::new();
         for fixture in ordered {

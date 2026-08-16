@@ -384,50 +384,58 @@ function SchedulerHeader({
 						}
 			}
 			groups={[
-				{ id: "scheduler-create", actions: [
-					{
-						id: "create",
-						label: "+ Schedule",
-						variant: "primary",
-						disabled:
-							!controller || !snapshot.canWrite || snapshot.status !== "ready",
-						onPress: onCreate,
-					},
-				] },
-				{ id: "scheduler-period", actions: [
-					{
-						id: "previous",
-						label: "‹",
-						ariaLabel: "Previous period",
-						onPress: () => onPeriod(-1),
-					},
-					{
-						id: "today",
-						label: "Today",
-						disabled: !snapshot.serverDate,
-						onPress: onToday,
-					},
-					{
-						id: "next",
-						label: "›",
-						ariaLabel: "Next period",
-						onPress: () => onPeriod(1),
-					},
-				] },
+				{
+					id: "scheduler-create",
+					actions: [
+						{
+							id: "create",
+							label: "+ Schedule",
+							variant: "primary",
+							disabled:
+								!controller ||
+								!snapshot.canWrite ||
+								snapshot.status !== "ready",
+							onPress: onCreate,
+						},
+					],
+				},
+				{
+					id: "scheduler-period",
+					actions: [
+						{
+							id: "previous",
+							label: "‹",
+							ariaLabel: "Previous period",
+							onPress: () => onPeriod(-1),
+						},
+						{
+							id: "today",
+							label: "Today",
+							disabled: !snapshot.serverDate,
+							onPress: onToday,
+						},
+						{
+							id: "next",
+							label: "›",
+							ariaLabel: "Next period",
+							onPress: () => onPeriod(1),
+						},
+					],
+				},
 				{
 					id: "scheduler-view",
 					kind: "tabs",
 					activeId: view,
 					onActiveChange: (id) => setView(id as typeof view),
 					actions: [
-					{
-						id: "month",
-						label: "Month",
-					},
-					{
-						id: "year",
-						label: "Year",
-					},
+						{
+							id: "month",
+							label: "Month",
+						},
+						{
+							id: "year",
+							label: "Year",
+						},
 					],
 				},
 			]}
@@ -575,6 +583,17 @@ function SchedulerReadyContent({
 	);
 }
 
+function scheduleSourceDraft(schedule: ScheduleProjection | null) {
+	return schedule
+		? {
+				name: schedule.definition.name,
+				enabled: schedule.definition.enabled,
+				timing: schedule.definition.timing,
+				target: schedule.definition.target,
+			}
+		: null;
+}
+
 function ScheduleEditor({
 	controller,
 	schedule,
@@ -585,14 +604,7 @@ function ScheduleEditor({
 	onClose(): void;
 }) {
 	const { snapshot } = controller;
-	const sourceDraft = schedule
-		? {
-				name: schedule.definition.name,
-				enabled: schedule.definition.enabled,
-				timing: schedule.definition.timing,
-				target: schedule.definition.target,
-			}
-		: null;
+	const sourceDraft = scheduleSourceDraft(schedule);
 	const [tab, setTab] = useState<ScheduleEditorTab>("name");
 	const [form, setForm] = useState(() =>
 		scheduleEditorForm(

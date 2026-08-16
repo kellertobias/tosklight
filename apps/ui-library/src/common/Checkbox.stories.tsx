@@ -21,7 +21,11 @@ export const Primary: Story = {
 					checked={checked}
 					onChange={(event) => setChecked(event.target.checked)}
 				/>
-				<CheckboxField label="Unavailable option" disabled />
+				<CheckboxField
+					label="Unavailable option"
+					stateLabel="Unavailable"
+					disabled
+				/>
 			</div>
 		);
 	},

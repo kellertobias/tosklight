@@ -1,0 +1,1257 @@
+import type { PlaybackButtonAction, PlaybackDefinition } from "../../api/types";
+import {
+	Button,
+	ColorPickerField,
+	FormLayout,
+	GroupedSelectionField,
+	MultiValueToggleField,
+	NumberField,
+	SelectField,
+	SwitchField,
+	TextField,
+} from "@tosklight/ui";
+import {
+	SelectionTree,
+	type SelectionListOption,
+} from "@tosklight/ui/window-kit";
+import { useDynamics } from "../../features/showObjects/ShowObjectsState";
+import { RootConfinedFilePickerButton } from "../files/RootConfinedFilePickerButton";
+
+export type PlaybackFamily =
+	| "cue_list"
+	| "dynamic"
+	| "group"
+	| "speed_group"
+	| "special"
+	| "none";
+type LayoutChoice = PlaybackButtonAction | PlaybackDefinition["fader"];
+
+const cueActions: PlaybackButtonAction[] = [
+	"go_minus",
+	"go",
+	"fast_forward",
+	"fast_rewind",
+	"pause",
+	"on",
+	"off",
+	"toggle",
+	"flash",
+	"temp",
+	"swap",
+	"select",
+	"select_contents",
+];
+const buttonLabels: Record<PlaybackButtonAction, string> = {
+	on: "On",
+	off: "Off",
+	toggle: "Toggle",
+	go: "GO +",
+	go_minus: "GO −",
+	fast_forward: "FFW",
+	fast_rewind: "FRW",
+	flash: "Flash",
+	temp: "Temp",
+	swap: "Swap",
+	select: "Select",
+	select_contents: "Select contents",
+	select_dereferenced: "Select dereferenced",
+	learn: "Learn",
+	double: "Double",
+	half: "Half",
+	pause: "Pause",
+	blackout: "Blackout",
+	pause_dynamics: "Pause Dynamics",
+	none: "Empty Button",
+	dynamic_restart: "Restart",
+	dynamic_double_speed: "Double Dynamic Speed",
+	dynamic_half_speed: "Half Dynamic Speed",
+	dynamic_learn_speed: "Learn Dynamic Speed",
+};
+const buttonDescriptions: Record<PlaybackButtonAction, string> = {
+	on: "Activates the playback at full virtual level without moving the physical fader.",
+	off: "Releases the playback while retaining its physical fader position.",
+	toggle: "Alternates the playback between its normal On and Off behavior.",
+	go: "Advances to the next cue using its configured timing.",
+	go_minus: "Returns to the previous cue using its configured timing.",
+	fast_forward:
+		"Advances to the next cue with fade and delay bypassed for this transition.",
+	fast_rewind:
+		"Returns to the previous cue with fade and delay bypassed for this transition.",
+	flash: "Applies the playback temporarily while the button is held.",
+	temp: "Toggles a temporary, non-destructive playback contribution.",
+	swap: "Flashes this playback while temporarily forcing unprotected playbacks to zero.",
+	select:
+		"Selects this playback or its live Group reference without executing it.",
+	select_contents:
+		"Selects the fixtures and live Group references used by the cue list.",
+	select_dereferenced:
+		"Selects the Group's current members as individual fixtures.",
+	learn: "Learns the selected Speed Group rate from repeated taps.",
+	double: "Doubles the selected Speed Group rate.",
+	half: "Halves the selected Speed Group rate.",
+	pause:
+		"Pauses speed or phase advancement without discarding the learned rate.",
+	blackout: "Toggles global blackout.",
+	pause_dynamics:
+		"Pauses or resumes Effects and Dynamics without deleting their setup.",
+	dynamic_restart:
+		"Restarts this Dynamic Playback using its configured activation policy.",
+	dynamic_double_speed:
+		"Doubles this Dynamic Playback's local speed multiplier.",
+	dynamic_half_speed: "Halves this Dynamic Playback's local speed multiplier.",
+	dynamic_learn_speed:
+		"Learns this Dynamic Playback's cycle duration from repeated taps.",
+	none: "Leaves this physical button without an assigned action.",
+};
+const faderLabels: Record<PlaybackDefinition["fader"], string> = {
+	master: "Master",
+	temp: "Temp",
+	speed: "Speed",
+	x_fade: "X-fade",
+	direct_bpm: "Direct BPM",
+	centered_relative: "Centered relative",
+	learned_percentage: "Learned-speed percentage",
+};
+const faderDescriptions: Record<PlaybackDefinition["fader"], string> = {
+	master: "Controls the assigned playback or master level.",
+	temp: "Applies a temporary playback contribution continuously with fader travel.",
+	speed: "Controls playback speed.",
+	x_fade: "Manually progresses between the current cue and the next cue.",
+	direct_bpm: "Maps the fader directly from 0 to 300 BPM.",
+	centered_relative:
+		"Uses the center as 1× learned speed, slower below and faster above.",
+	learned_percentage:
+		"Maps the fader from Pause through half speed to the learned speed.",
+};
+
+type FunctionTabProps = {
+	family: PlaybackFamily;
+	draft: PlaybackDefinition;
+	virtual: boolean;
+	presentation: "label" | "icon" | "image";
+	cueLists: Array<{ id: string; name: string; number: number }>;
+	dynamics: ReturnType<typeof useDynamics>;
+	groups: ReadonlyArray<{ id: string; body: { name?: string } }>;
+	onFamilyChange: (family: PlaybackFamily) => void;
+	onSpecialChange: (
+		type: "programmer_fade" | "cue_fade" | "grand_master",
+	) => void;
+	onPresentationChange: (presentation: "label" | "icon" | "image") => void;
+	onDraftChange: (playback: PlaybackDefinition) => void;
+};
+
+function playbackTargetColumn(
+	props: Pick<
+		FunctionTabProps,
+		| "family"
+		| "draft"
+		| "cueLists"
+		| "dynamics"
+		| "groups"
+		| "onSpecialChange"
+		| "onDraftChange"
+	>,
+) {
+	const {
+		family,
+		draft,
+		cueLists,
+		dynamics,
+		groups,
+		onSpecialChange,
+		onDraftChange,
+	} = props;
+	let value: string | undefined;
+	let label = `${family === "cue_list" ? "Cue List" : family === "group" ? "Group" : family === "speed_group" ? "Speed Group" : "Special"} options`;
+	let options: SelectionListOption[] = [];
+	let onChange = (_value: string) => {};
+	if (family === "cue_list" && draft.target.type === "cue_list") {
+		value = draft.target.cue_list_id;
+		options = cueLists.map((cue) => ({
+			value: cue.id,
+			label: <NumberedObjectLabel number={cue.number} name={cue.name} />,
+		}));
+		onChange = (cue_list_id) =>
+			onDraftChange({ ...draft, target: { type: "cue_list", cue_list_id } });
+	} else if (family === "dynamic" && draft.target.type === "dynamic") {
+		const assignment = draft.target.assignment;
+		label = "Dynamic options";
+		value = assignment.dynamic_id ?? undefined;
+		options = dynamics.map((dynamic) => ({
+			value: dynamic.id,
+			label: (
+				<NumberedObjectLabel
+					number={dynamic.body.pool_number}
+					name={`${dynamic.body.name}${dynamic.body.target_binding.type === "targetless" ? " · targetless" : ""}`}
+				/>
+			),
+		}));
+		onChange = (dynamicId) => {
+			const dynamic = dynamics.find((candidate) => candidate.id === dynamicId);
+			if (!dynamic) return;
+			onDraftChange({
+				...draft,
+				target: {
+					type: "dynamic",
+					assignment: {
+						...assignment,
+						dynamic_id: dynamic.id,
+						last_known_pool_number: dynamic.body.pool_number,
+						embedded_fallback: dynamic.body,
+						target_scope:
+							dynamic.body.target_binding.type === "targetless"
+								? assignment.target_scope
+								: null,
+						revision: assignment.revision + 1,
+					},
+				},
+			});
+		};
+	} else if (family === "group" && draft.target.type === "group") {
+		const target = draft.target;
+		value = target.group_id;
+		options = groups.map((group, index) => ({
+			value: group.id,
+			label: (
+				<NumberedObjectLabel
+					number={index + 1}
+					name={group.body.name ?? group.id}
+				/>
+			),
+		}));
+		onChange = (group_id) =>
+			onDraftChange({
+				...draft,
+				target: {
+					type: "group",
+					group_id,
+					...(group_id === target.group_id && target.initial_master != null
+						? { initial_master: target.initial_master }
+						: {}),
+				},
+			});
+	} else if (family === "speed_group" && draft.target.type === "speed_group") {
+		value = draft.target.group;
+		options = ["A", "B", "C", "D", "E"].map((group) => ({
+			value: group,
+			label: `Speed Group ${group}`,
+		}));
+		onChange = (group) =>
+			onDraftChange({ ...draft, target: { type: "speed_group", group } });
+	} else if (family === "special") {
+		value = isSpecial(draft.target.type)
+			? draft.target.type
+			: "programmer_fade";
+		options = [
+			{ value: "programmer_fade", label: "Programmer Fade" },
+			{ value: "cue_fade", label: "Cue Fade" },
+			{ value: "grand_master", label: "Grand Master" },
+		];
+		onChange = (next) =>
+			onSpecialChange(next as "programmer_fade" | "cue_fade" | "grand_master");
+	}
+	return { value, label, options, onChange };
+}
+
+export function PlaybackFunctionTab({
+	family,
+	draft,
+	virtual,
+	presentation,
+	cueLists,
+	dynamics,
+	groups,
+	onFamilyChange,
+	onSpecialChange,
+	onPresentationChange,
+	onDraftChange,
+}: FunctionTabProps) {
+	const functionOptions: SelectionListOption[] = [
+		{ value: "cue_list", label: "Cue List" },
+		...(dynamics.length > 0 ? [{ value: "dynamic", label: "Dynamic" }] : []),
+		{ value: "group", label: "Group Master" },
+		{ value: "speed_group", label: "Speed Master" },
+		{ value: "special", label: "Special" },
+		{ value: "none", label: "None", tone: "danger" },
+	];
+	const targetColumn = playbackTargetColumn({
+		family,
+		draft,
+		cueLists,
+		dynamics,
+		groups,
+		onSpecialChange,
+		onDraftChange,
+	});
+	const presentationOptions =
+		virtual && family !== "none" ? (
+			<FormLayout className="playback-presentation-options">
+				<SelectField
+					label="Presentation"
+					value={presentation}
+					onChange={(value) => {
+						onPresentationChange(value);
+						onDraftChange({
+							...draft,
+							presentation_icon: undefined,
+							presentation_image: undefined,
+						});
+					}}
+					options={[
+						{ value: "label", label: "Label" },
+						{ value: "icon", label: "Icon" },
+						{ value: "image", label: "Image background" },
+					]}
+				/>
+				{presentation === "icon" && (
+					<TextField
+						label="Icon"
+						value={draft.presentation_icon ?? ""}
+						maxLength={1024}
+						onChange={(event) =>
+							onDraftChange({
+								...draft,
+								presentation_icon: event.target.value,
+								presentation_image: undefined,
+							})
+						}
+					/>
+				)}{" "}
+				{presentation === "image" && (
+					<div className="playback-image-setting">
+						{draft.presentation_image ? (
+							<img
+								src={draft.presentation_image}
+								alt="Selected playback background"
+							/>
+						) : (
+							<small>No image selected.</small>
+						)}
+						<RootConfinedFilePickerButton
+							label={draft.presentation_image ? "Change image" : "Choose image"}
+							allowedExtensions={["png", "jpg", "jpeg", "gif", "webp"]}
+							onFiles={async (files) => {
+								const file = files[0];
+								if (!file) return;
+								const presentation_image = await playbackImageDataUrl(file);
+								onDraftChange({
+									...draft,
+									presentation_image,
+									presentation_icon: undefined,
+								});
+							}}
+						/>
+						{draft.presentation_image && (
+							<Button
+								onClick={() =>
+									onDraftChange({ ...draft, presentation_image: undefined })
+								}
+							>
+								Remove image
+							</Button>
+						)}
+					</div>
+				)}
+			</FormLayout>
+		) : undefined;
+	return (
+		<div className="playback-function-screen">
+			<SelectionTree
+				className={`playback-function-tree ${family === "none" ? "has-inactive-detail" : ""}`}
+				columns={[
+					{
+						id: "function",
+						title: "Function",
+						ariaLabel: "Playback function",
+						value: family,
+						options: functionOptions,
+						onChange: (value) => onFamilyChange(value as PlaybackFamily),
+					},
+					{
+						id: "options",
+						title: "Options",
+						ariaLabel: targetColumn.label,
+						value: targetColumn.value,
+						options: targetColumn.options,
+						onChange: targetColumn.onChange,
+						emptyLabel:
+							family === "none"
+								? "Playback will be cleared"
+								: "No options are available",
+						footer: presentationOptions,
+					},
+				]}
+			/>
+			<section
+				className={`playback-function-identity ${family === "none" ? "inactive" : ""}`}
+			>
+				<FormLayout columns={2} minColumnWidth={220}>
+					<TextField
+						label="Playback name"
+						value={draft.name}
+						maxLength={80}
+						disabled={family === "none"}
+						onChange={(event) =>
+							onDraftChange({ ...draft, name: event.target.value })
+						}
+					/>
+					<ColorPickerField
+						label="Playback color"
+						value={draft.color ?? "#20c997"}
+						disabled={family === "none"}
+						onChange={(color) => onDraftChange({ ...draft, color })}
+					/>
+				</FormLayout>
+			</section>
+		</div>
+	);
+}
+
+function NumberedObjectLabel({
+	number,
+	name,
+}: {
+	number: number;
+	name: string;
+}) {
+	return (
+		<span
+			className="playback-numbered-object-label"
+			aria-label={`${number} ${name}`}
+		>
+			<span className="playback-numbered-object-number">{number}</span>
+			<span>{name}</span>
+		</span>
+	);
+}
+
+const MAX_PLAYBACK_IMAGE_BYTES = 400 * 1024;
+
+export function playbackImageDataUrl(file: File): Promise<string> {
+	if (!file.type.startsWith("image/"))
+		return Promise.reject(new Error("Choose a PNG, JPEG, GIF, or WebP image."));
+	if (file.size > MAX_PLAYBACK_IMAGE_BYTES)
+		return Promise.reject(
+			new Error("Playback images must be 400 KB or smaller."),
+		);
+	return new Promise((resolve, reject) => {
+		const reader = new FileReader();
+		reader.onerror = () =>
+			reject(new Error("The selected image could not be read."));
+		reader.onload = () => {
+			if (typeof reader.result === "string") resolve(reader.result);
+			else reject(new Error("The selected image could not be read."));
+		};
+		reader.readAsDataURL(file);
+	});
+}
+
+export function PlaybackBehaviorTab({
+	draft,
+	dynamics,
+	groups,
+	cueListBehavior,
+	onCueListBehaviorChange,
+	onDraftChange,
+}: {
+	draft: PlaybackDefinition;
+	dynamics: ReturnType<typeof useDynamics>;
+	groups: ReadonlyArray<{ id: string; body: { name?: string } }>;
+	cueListBehavior: {
+		auto_off_at_zero: boolean;
+		auto_off_flash_release: boolean;
+	} | null;
+	onCueListBehaviorChange: (
+		value: {
+			auto_off_at_zero: boolean;
+			auto_off_flash_release: boolean;
+		} | null,
+	) => void;
+	onDraftChange: (playback: PlaybackDefinition) => void;
+}) {
+	const cueList = draft.target.type === "cue_list";
+	if (draft.target.type === "dynamic")
+		return (
+			<DynamicPlaybackBehavior
+				draft={draft as DynamicPlayback}
+				dynamics={dynamics}
+				groups={groups}
+				onDraftChange={onDraftChange}
+			/>
+		);
+	return (
+		<FormLayout labelPlacement="side">
+			{cueList ? (
+				<>
+					{cueListBehavior && (
+						<>
+							<PlaybackAutoOffSettings
+								autoOffAtZero={cueListBehavior.auto_off_at_zero}
+								autoOffFlashRelease={cueListBehavior.auto_off_flash_release}
+								onAutoOffAtZeroChange={(auto_off_at_zero) =>
+									onCueListBehaviorChange({
+										...cueListBehavior,
+										auto_off_at_zero,
+									})
+								}
+								onAutoOffFlashReleaseChange={(auto_off_flash_release) =>
+									onCueListBehaviorChange({
+										...cueListBehavior,
+										auto_off_flash_release,
+									})
+								}
+							/>
+							<p className="playback-topology-note">
+								These Auto-off settings are shared by every playback using this
+								Cuelist.
+							</p>
+						</>
+					)}
+					<SwitchField
+						label="Turn off when other playbacks take full control"
+						offLabel="Keep active"
+						onLabel="Auto off"
+						description="Automatically turns this Cue List off once other normal playbacks at full level control every value it was outputting. Partial takeovers, Flash, and Temp do not count."
+						checked={draft.auto_off}
+						onChange={(event) =>
+							onDraftChange({ ...draft, auto_off: event.target.checked })
+						}
+					/>
+				</>
+			) : (
+				<p className="playback-topology-note">
+					Flash/Swap release and automatic turn-off are available for Cue Lists
+					only.
+				</p>
+			)}
+			<SwitchField
+				label="Protect from Swap"
+				offLabel="Affected by Swap"
+				onLabel="Protected"
+				description="Keeps this playback at its current level while another playback’s Swap button is held."
+				checked={Boolean(draft.protect_from_swap)}
+				onChange={(event) =>
+					onDraftChange({ ...draft, protect_from_swap: event.target.checked })
+				}
+			/>
+		</FormLayout>
+	);
+}
+
+type DynamicPlayback = PlaybackDefinition & {
+	target: Extract<PlaybackDefinition["target"], { type: "dynamic" }>;
+};
+type DynamicAssignment = DynamicPlayback["target"]["assignment"];
+type DynamicUpdate = (patch: Partial<DynamicAssignment>) => void;
+
+function DynamicPlaybackBehavior({
+	draft,
+	dynamics,
+	groups,
+	onDraftChange,
+}: {
+	draft: DynamicPlayback;
+	dynamics: ReturnType<typeof useDynamics>;
+	groups: ReadonlyArray<{ id: string; body: { name?: string } }>;
+	onDraftChange: (playback: PlaybackDefinition) => void;
+}) {
+	const assignment = draft.target.assignment;
+	const update: DynamicUpdate = (patch) =>
+		onDraftChange({
+			...draft,
+			target: { type: "dynamic", assignment: { ...assignment, ...patch } },
+		});
+	const definition =
+		dynamics.find(({ id }) => id === assignment.dynamic_id)?.body ??
+		assignment.embedded_fallback;
+	return (
+		<FormLayout labelPlacement="side">
+			<DynamicTargetSettings
+				assignment={assignment}
+				definition={definition}
+				groups={groups}
+				update={update}
+			/>
+			<DynamicPolicySettings assignment={assignment} update={update} />
+			<PlaybackAutoOffSettings
+				autoOffAtZero={assignment.auto_off_at_zero}
+				autoOffFlashRelease={assignment.auto_off_flash_release}
+				onAutoOffAtZeroChange={(auto_off_at_zero) =>
+					update({ auto_off_at_zero })
+				}
+				onAutoOffFlashReleaseChange={(auto_off_flash_release) =>
+					update({ auto_off_flash_release })
+				}
+			/>
+			<SwitchField
+				label="Turn off when other playbacks take full control"
+				offLabel="Keep hidden"
+				onLabel="Auto off"
+				checked={assignment.auto_off_full_control}
+				onChange={(event) =>
+					update({ auto_off_full_control: event.target.checked })
+				}
+			/>
+			<SwitchField
+				label="Protect from Swap"
+				offLabel="Affected by Swap"
+				onLabel="Protected"
+				checked={Boolean(draft.protect_from_swap)}
+				onChange={(event) =>
+					onDraftChange({ ...draft, protect_from_swap: event.target.checked })
+				}
+			/>
+		</FormLayout>
+	);
+}
+
+function DynamicTargetSettings({
+	assignment,
+	definition,
+	groups,
+	update,
+}: {
+	assignment: DynamicAssignment;
+	definition: DynamicAssignment["embedded_fallback"];
+	groups: ReadonlyArray<{ id: string; body: { name?: string } }>;
+	update: DynamicUpdate;
+}) {
+	const scope = assignment.target_scope;
+	const targetless = definition.target_binding.type === "targetless";
+	const scopeSummary =
+		definition.target_binding.type === "live_group"
+			? `Live Group ${definition.target_binding.group_id}`
+			: definition.target_binding.type === "frozen_targets"
+				? `${definition.target_binding.targets.length} frozen target${definition.target_binding.targets.length === 1 ? "" : "s"}`
+				: scope?.type === "live_group"
+					? `Targetless · Live Group ${scope.group_id}`
+					: scope?.type === "frozen_targets"
+						? `Targetless · ${scope.targets.length} frozen target${scope.targets.length === 1 ? "" : "s"}`
+						: "Targetless · assignment scope required";
+	return (
+		<>
+			<div className="playback-topology-note">
+				<b>
+					{assignment.dynamic_id
+						? `Dynamic ${assignment.last_known_pool_number} · ${definition.name}`
+						: `Embedded Dynamic ${assignment.last_known_pool_number}`}
+				</b>
+				<span>{scopeSummary}</span>
+			</div>
+			{targetless && (
+				<>
+					<SelectField
+						label="Target scope"
+						value={scope?.type ?? "unassigned"}
+						onChange={(value) =>
+							update({
+								target_scope:
+									value === "live_group"
+										? { type: "live_group", group_id: "" }
+										: value === "frozen_targets"
+											? { type: "frozen_targets", targets: [] }
+											: null,
+							})
+						}
+						options={[
+							{ value: "unassigned", label: "Choose a target scope" },
+							{ value: "live_group", label: "Live Group" },
+							{ value: "frozen_targets", label: "Frozen ordered targets" },
+						]}
+					/>
+					{scope?.type === "live_group" && (
+						<SelectField
+							label="Live Group"
+							value={scope.group_id}
+							onChange={(group_id) =>
+								update({ target_scope: { type: "live_group", group_id } })
+							}
+							options={groups.map((group) => ({
+								value: group.id,
+								label: group.body.name
+									? `${group.id} · ${group.body.name}`
+									: group.id,
+							}))}
+						/>
+					)}
+					{scope?.type === "frozen_targets" && (
+						<TextField
+							label="Frozen target UUIDs"
+							value={scope.targets.join(", ")}
+							onChange={(event) =>
+								update({
+									target_scope: {
+										type: "frozen_targets",
+										targets: event.target.value
+											.split(",")
+											.map((target) => target.trim())
+											.filter(Boolean),
+									},
+								})
+							}
+							description="Ordered fixture/head UUIDs, separated by commas. The assignment will not fall back to all fixtures."
+						/>
+					)}
+					{!scope && (
+						<p role="alert" className="modal-error">
+							Choose a reviewable Live Group or frozen ordered target scope
+							before applying this targetless Dynamic.
+						</p>
+					)}
+				</>
+			)}
+		</>
+	);
+}
+
+function DynamicPolicySettings({
+	assignment,
+	update,
+}: {
+	assignment: DynamicAssignment;
+	update: DynamicUpdate;
+}) {
+	return (
+		<>
+			<SelectField
+				label="Fader control"
+				value={assignment.fader_mode}
+				onChange={(fader_mode) => update({ fader_mode })}
+				options={[
+					{ value: "none", label: "None" },
+					{ value: "master", label: "Master" },
+					{ value: "size", label: "Size" },
+					{ value: "size_and_master", label: "Size + Master" },
+				]}
+			/>
+			<NumberField
+				label="Dynamic priority"
+				value={assignment.priority}
+				min={-32768}
+				max={32767}
+				step={1}
+				onChange={(event) => update({ priority: Number(event.target.value) })}
+			/>
+			<SelectField
+				label="Activation policy"
+				value={assignment.activation_override ?? "follow_dynamic"}
+				onChange={(value) =>
+					update({
+						activation_override:
+							value === "follow_dynamic"
+								? null
+								: (value as typeof assignment.activation_override),
+					})
+				}
+				options={[
+					{ value: "follow_dynamic", label: "Follow Dynamic" },
+					{ value: "start_now", label: "Start now" },
+					{ value: "join_sync_now", label: "Join sync now" },
+					{ value: "next_boundary", label: "Next boundary" },
+				]}
+			/>
+			<SelectField
+				label="Resume policy"
+				value={assignment.resume_policy}
+				onChange={(resume_policy) => update({ resume_policy })}
+				options={[
+					{ value: "follow_dynamic", label: "Follow Dynamic" },
+					{ value: "resume_frozen_phase", label: "Resume frozen phase" },
+					{
+						value: "rejoin_synchronized_position",
+						label: "Rejoin synchronized position",
+					},
+					{
+						value: "resume_on_next_boundary",
+						label: "Resume on next boundary",
+					},
+				]}
+			/>
+			<NumberField
+				label="Local speed numerator"
+				value={assignment.local_speed_multiplier.numerator}
+				min={1}
+				max={1024}
+				step={1}
+				onChange={(event) =>
+					update({
+						local_speed_multiplier: {
+							...assignment.local_speed_multiplier,
+							numerator: Number(event.target.value),
+						},
+					})
+				}
+			/>
+			<NumberField
+				label="Local speed denominator"
+				value={assignment.local_speed_multiplier.denominator}
+				min={1}
+				max={1024}
+				step={1}
+				onChange={(event) =>
+					update({
+						local_speed_multiplier: {
+							...assignment.local_speed_multiplier,
+							denominator: Number(event.target.value),
+						},
+					})
+				}
+			/>
+			<SwitchField
+				label="Crossfade non-intensity"
+				offLabel="Switch by LTP"
+				onLabel="Crossfade"
+				description="When Master contributes to this fader mode, crossfade Position, Color, Beam, and Focus instead of switching them at full ownership."
+				checked={assignment.crossfade_non_intensity}
+				onChange={(event) =>
+					update({ crossfade_non_intensity: event.target.checked })
+				}
+			/>
+		</>
+	);
+}
+
+function PlaybackAutoOffSettings({
+	autoOffAtZero,
+	autoOffFlashRelease,
+	onAutoOffAtZeroChange,
+	onAutoOffFlashReleaseChange,
+}: {
+	autoOffAtZero: boolean;
+	autoOffFlashRelease: boolean;
+	onAutoOffAtZeroChange: (enabled: boolean) => void;
+	onAutoOffFlashReleaseChange: (enabled: boolean) => void;
+}) {
+	return (
+		<fieldset className="playback-auto-off-settings">
+			<legend>Auto-off</legend>
+			<MultiValueToggleField
+				label="When fader reaches zero"
+				description="Keep Running leaves the playback active at zero. Release All turns the playback off."
+				value={autoOffAtZero ? "release_all" : "keep_running"}
+				onChange={(value) => onAutoOffAtZeroChange(value === "release_all")}
+				options={[
+					{ value: "keep_running", label: "Keep Running" },
+					{ value: "release_all", label: "Release All" },
+				]}
+			/>
+			<MultiValueToggleField
+				label="When Flash or Swap is released"
+				description="Keep Running leaves a playback started by Flash or Swap active at zero. Release All turns that playback off."
+				value={autoOffFlashRelease ? "release_all" : "keep_running"}
+				onChange={(value) =>
+					onAutoOffFlashReleaseChange(value === "release_all")
+				}
+				options={[
+					{ value: "keep_running", label: "Keep Running" },
+					{ value: "release_all", label: "Release All" },
+				]}
+			/>
+		</fieldset>
+	);
+}
+
+export function PlaybackLayoutTab({
+	draft,
+	virtual,
+	options,
+	onDraftChange,
+}: {
+	draft: PlaybackDefinition;
+	virtual: boolean;
+	options: Array<{
+		value: PlaybackButtonAction;
+		label: string;
+		description: string;
+	}>;
+	onDraftChange: (playback: PlaybackDefinition) => void;
+}) {
+	const footprint = draft.footprint ?? { type: "normal" as const };
+	return (
+		<FormLayout labelPlacement="side">
+			<PlaybackFootprintField
+				draft={draft}
+				virtual={virtual}
+				onDraftChange={onDraftChange}
+			/>
+			{Array.from({ length: draft.button_count ?? 3 }, (_, index) => (
+				<LayoutChoiceField
+					kind="button"
+					key={index}
+					label={["Top button", "Middle button", "Bottom button"][index]}
+					value={draft.buttons[index]}
+					options={options}
+					onChange={(value) => {
+						const next = [...draft.buttons] as PlaybackDefinition["buttons"];
+						next[index] = value as PlaybackButtonAction;
+						onDraftChange({ ...draft, buttons: next });
+					}}
+				/>
+			))}
+			{draft.button_count === 0 && (
+				<p className="playback-topology-note">This playback has no buttons.</p>
+			)}
+			{draft.has_fader ? (
+				<LayoutChoiceField
+					kind="fader"
+					label="Fader"
+					value={draft.fader}
+					disabled={fixedFader(draft)}
+					onChange={(fader) =>
+						onDraftChange({
+							...draft,
+							fader: fader as PlaybackDefinition["fader"],
+						})
+					}
+					options={faderModes(draft).map((value) => ({
+						value,
+						label: fixedFaderLabel(draft) ?? faderLabels[value],
+						description:
+							fixedFaderDescription(draft) ?? faderDescriptions[value],
+					}))}
+				/>
+			) : (
+				<p className="playback-topology-note">No fader on this playback.</p>
+			)}
+			{footprint.type === "taller" && (
+				<LayoutChoiceField
+					kind="button"
+					label="Additional upper button"
+					value={footprint.upper_button}
+					options={options}
+					onChange={(upper_button) =>
+						onDraftChange({
+							...draft,
+							footprint: {
+								type: "taller",
+								upper_button: upper_button as PlaybackButtonAction,
+							},
+						})
+					}
+				/>
+			)}
+			{footprint.type === "wider" && (
+				<>
+					{footprint.right_buttons
+						.slice(0, draft.button_count ?? 3)
+						.map((value, index) => (
+							<LayoutChoiceField
+								kind="button"
+								key={`right-${index}`}
+								label={`Right ${["top", "middle", "bottom"][index]} button`}
+								value={value}
+								options={options}
+								onChange={(button) => {
+									const right_buttons = [
+										...footprint.right_buttons,
+									] as typeof footprint.right_buttons;
+									right_buttons[index] = button as PlaybackButtonAction;
+									onDraftChange({
+										...draft,
+										footprint: { ...footprint, right_buttons },
+									});
+								}}
+							/>
+						))}
+					<LayoutChoiceField
+						kind="fader"
+						label="Right fader"
+						value={footprint.right_fader}
+						disabled={fixedFader(draft)}
+						onChange={(right_fader) =>
+							onDraftChange({
+								...draft,
+								footprint: {
+									...footprint,
+									right_fader: right_fader as PlaybackDefinition["fader"],
+								},
+							})
+						}
+						options={faderModes(draft).map((value) => ({
+							value,
+							label: fixedFaderLabel(draft) ?? faderLabels[value],
+							description:
+								fixedFaderDescription(draft) ?? faderDescriptions[value],
+						}))}
+					/>
+				</>
+			)}
+			{draft.target.type === "speed_group" &&
+				draft.fader === "centered_relative" && (
+					<p className="playback-topology-note">
+						50% is exactly 1× the learned speed; lower travel slows and higher
+						travel speeds up.
+					</p>
+				)}
+		</FormLayout>
+	);
+}
+
+function PlaybackFootprintField({
+	draft,
+	virtual,
+	onDraftChange,
+}: {
+	draft: PlaybackDefinition;
+	virtual: boolean;
+	onDraftChange: (playback: PlaybackDefinition) => void;
+}) {
+	const footprint = draft.footprint ?? { type: "normal" as const };
+	const choose = (type: "normal" | "taller" | "wider") => {
+		if (type === "normal") onDraftChange({ ...draft, footprint: { type } });
+		else if (type === "taller")
+			onDraftChange({ ...draft, footprint: { type, upper_button: "none" } });
+		else
+			onDraftChange({
+				...draft,
+				footprint: {
+					type,
+					right_buttons: defaultButtons(draft.target.type),
+					right_fader: defaultFader(draft.target.type),
+				},
+			});
+	};
+	return (
+		<MultiValueToggleField
+			label="Footprint"
+			value={virtual ? "normal" : footprint.type}
+			onChange={(value) => choose(value as "normal" | "taller" | "wider")}
+			options={
+				virtual
+					? [{ value: "normal", label: "Normal" }]
+					: [
+							{ value: "normal", label: "Normal" },
+							{ value: "taller", label: "Taller" },
+							{ value: "wider", label: "Wider" },
+						]
+			}
+			description={
+				virtual
+					? "Virtual Playbacks use one grid position."
+					: "Expanded controls remain saved when this surface cannot expose them."
+			}
+		/>
+	);
+}
+
+function LayoutChoiceField({
+	kind,
+	label,
+	value,
+	options,
+	onChange,
+	disabled = false,
+}: {
+	kind: "button" | "fader";
+	label: string;
+	value: LayoutChoice;
+	options: Array<{ value: LayoutChoice; label: string; description: string }>;
+	onChange: (value: LayoutChoice) => void;
+	disabled?: boolean;
+}) {
+	const groups = groupLayoutChoices(kind, options);
+	return (
+		<GroupedSelectionField
+			label={label}
+			dialogTitle={`Choose ${label} function`}
+			closeLabel={`Close ${label} function choices`}
+			value={value}
+			groups={groups}
+			onChange={onChange}
+			disabled={disabled}
+			clearAction={
+				kind === "button" ? { label: "Empty Button", value: "none" } : undefined
+			}
+		/>
+	);
+}
+
+function groupLayoutChoices(
+	kind: "button" | "fader",
+	options: Array<{ value: LayoutChoice; label: string; description: string }>,
+) {
+	const groups: Array<{ label: string; options: typeof options }> = [];
+	const add = (label: string, option: (typeof options)[number]) => {
+		const group = groups.find((candidate) => candidate.label === label);
+		if (group) group.options.push(option);
+		else groups.push({ label, options: [option] });
+	};
+	const timeButtons =
+		kind === "button" &&
+		options.some((option) => option.value === "off") &&
+		options.some(
+			(option) => option.value === "double" || option.value === "half",
+		);
+	const speedButtons =
+		kind === "button" &&
+		!timeButtons &&
+		options.some(
+			(option) =>
+				option.value === "double" ||
+				option.value === "half" ||
+				option.value === "learn",
+		);
+	const grandMasterButtons =
+		kind === "button" &&
+		options.some(
+			(option) =>
+				option.value === "blackout" || option.value === "pause_dynamics",
+		);
+	for (const option of options) {
+		if (timeButtons) add("Time Control", option);
+		else if (speedButtons) add("Speed Control", option);
+		else if (grandMasterButtons) add("Grand Master Control", option);
+		else if (kind === "fader")
+			add(
+				option.value === "x_fade"
+					? "Cue Transition"
+					: [
+								"direct_bpm",
+								"centered_relative",
+								"learned_percentage",
+								"speed",
+							].includes(option.value)
+						? "Speed Control"
+						: "Level Control",
+				option,
+			);
+		else if (
+			["go", "go_minus", "fast_forward", "fast_rewind", "pause"].includes(
+				option.value,
+			)
+		)
+			add("Step Control", option);
+		else if (["on", "off", "toggle"].includes(option.value))
+			add("Permanent State", option);
+		else if (["flash", "temp", "swap"].includes(option.value))
+			add("Temporary State", option);
+		else add("Selection", option);
+	}
+	return groups;
+}
+
+export function InactivePlaybackDetail() {
+	return (
+		<div className="playback-cleared-message">
+			<b>Playback will be cleared</b>
+			<span>
+				Apply to remove this playback assignment. Closing the modal keeps it
+				unchanged.
+			</span>
+		</div>
+	);
+}
+
+function defaultButtons(
+	type: PlaybackDefinition["target"]["type"],
+): PlaybackDefinition["buttons"] {
+	if (type === "cue_list") return ["go_minus", "go", "flash"];
+	if (type === "dynamic") return ["off", "pause", "flash"];
+	if (type === "group") return ["select", "select_dereferenced", "flash"];
+	if (type === "speed_group") return ["double", "half", "learn"];
+	if (type === "grand_master") return ["blackout", "pause_dynamics", "flash"];
+	return ["double", "half", "off"];
+}
+
+function defaultFader(
+	type: PlaybackDefinition["target"]["type"],
+): PlaybackDefinition["fader"] {
+	return type === "speed_group" ? "learned_percentage" : "master";
+}
+
+export function familyFromTarget(
+	type: PlaybackDefinition["target"]["type"],
+): PlaybackFamily {
+	return isSpecial(type) ? "special" : type;
+}
+export function isSpecial(
+	type: PlaybackDefinition["target"]["type"],
+): type is "programmer_fade" | "cue_fade" | "grand_master" {
+	return (
+		type === "programmer_fade" || type === "cue_fade" || type === "grand_master"
+	);
+}
+function layoutActions(playback: PlaybackDefinition): PlaybackButtonAction[] {
+	if (playback.target.type === "cue_list") return cueActions;
+	if (playback.target.type === "dynamic")
+		return [
+			"on",
+			"off",
+			"toggle",
+			"dynamic_restart",
+			"pause",
+			"dynamic_double_speed",
+			"dynamic_half_speed",
+			"dynamic_learn_speed",
+			"flash",
+			"temp",
+			"swap",
+		];
+	if (playback.target.type === "speed_group")
+		return ["double", "half", "learn", "pause"];
+	if (playback.target.type === "group")
+		return ["select", "select_dereferenced", "flash"];
+	if (
+		playback.target.type === "programmer_fade" ||
+		playback.target.type === "cue_fade"
+	)
+		return ["double", "half", "off"];
+	if (playback.target.type === "grand_master")
+		return ["blackout", "pause_dynamics", "flash"];
+	return [];
+}
+function faderModes(
+	playback: PlaybackDefinition,
+): PlaybackDefinition["fader"][] {
+	if (playback.target.type === "cue_list") return ["master", "x_fade", "temp"];
+	if (playback.target.type === "speed_group")
+		return ["learned_percentage", "direct_bpm", "centered_relative"];
+	return ["master"];
+}
+function layoutActionDescription(
+	playback: PlaybackDefinition,
+	action: PlaybackButtonAction,
+) {
+	if (
+		playback.target.type === "programmer_fade" ||
+		playback.target.type === "cue_fade"
+	) {
+		if (action === "double") return "Doubles the current fade time.";
+		if (action === "half") return "Halves the current fade time.";
+		if (action === "off")
+			return "Sets the fade time to zero, disabling the fade delay.";
+	}
+	return buttonDescriptions[action];
+}
+export function playbackLayoutOptions(playback: PlaybackDefinition) {
+	return layoutActions(playback).map((value) => ({
+		value,
+		label: buttonLabels[value],
+		description: layoutActionDescription(playback, value),
+	}));
+}
+function fixedFader(playback: PlaybackDefinition) {
+	return !["cue_list", "speed_group"].includes(playback.target.type);
+}
+function fixedFaderLabel(playback: PlaybackDefinition) {
+	if (playback.target.type === "dynamic")
+		return `Dynamic ${playback.target.assignment.fader_mode.replaceAll("_", " + ")}`;
+	if (playback.target.type === "group") return "Group intensity master";
+	if (playback.target.type === "grand_master") return "Grand Master";
+	if (playback.target.type === "programmer_fade") return "Programmer Fade time";
+	if (playback.target.type === "cue_fade") return "Cue Fade time";
+	return null;
+}
+function fixedFaderDescription(playback: PlaybackDefinition) {
+	if (playback.target.type === "dynamic")
+		return "The Dynamic assignment maps this physical fader through its configured Size/Master mode.";
+	if (playback.target.type === "group")
+		return "Controls the assigned Group's intensity master.";
+	if (playback.target.type === "grand_master")
+		return "Controls the global Grand Master.";
+	if (playback.target.type === "programmer_fade")
+		return "Controls the Programmer Fade time master.";
+	if (playback.target.type === "cue_fade")
+		return "Controls the Cue Fade time master.";
+	return null;
+}

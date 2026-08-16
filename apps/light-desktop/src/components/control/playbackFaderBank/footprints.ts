@@ -363,10 +363,15 @@ function claimedBinding(
 	const controls: PlaybackPhysicalControlBinding[] =
 		position === "taller_upper"
 			? [{ physicalButton: 1, control: { type: "taller_button" } }]
-			: Array.from({ length: cell.row.button_count }, (_, index) => ({
-					physicalButton: index + 1,
-					control: { type: "right_button" as const, number: index + 1 },
-				}));
+			: Array.from(
+					{
+						length: Math.min(cell.row.button_count, playback.button_count ?? 3),
+					},
+					(_, index) => ({
+						physicalButton: index + 1,
+						control: { type: "right_button" as const, number: index + 1 },
+					}),
+				);
 	if (position === "wider_right" && cell.row.has_fader)
 		controls.push({ control: { type: "right_fader" } });
 	return {

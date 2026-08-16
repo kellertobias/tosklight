@@ -40,6 +40,16 @@ function emptyGroupHint(storeArmed: boolean, updateArmed: boolean) {
 	return "Press Record to use this slot";
 }
 
+export function groupReferencePresentation(
+	references: readonly { group_id: string }[],
+) {
+	const numbers = references.map((reference) => reference.group_id);
+	return {
+		compact: `Ref: ${numbers.join(", ")}`,
+		description: `References ${numbers.length === 1 ? "Group" : "Groups"} ${numbers.join(", ")}`,
+	};
+}
+
 export function GroupCard({
 	group,
 	index,
@@ -106,6 +116,7 @@ export function GroupCard({
 	const canonicalSource = group ? canonicalGroupSource(group.body) : null;
 	const canonicalReferences =
 		canonicalSource?.type === "references" ? canonicalSource.references : [];
+	const referencePresentation = groupReferencePresentation(canonicalReferences);
 	const attributes = Object.keys(group?.body.programming ?? {});
 	const unsupported = unsupportedValueCount(group, attributes, capabilities);
 	const presentation = resolveConfiguredPoolPresentation(poolPresentation, {
@@ -158,10 +169,14 @@ export function GroupCard({
 					canonicalReferences.length > 0 || Boolean(group?.body.derived_from),
 				derivedLabel:
 					canonicalReferences.length > 0
-						? `Referenced · ${canonicalReferences.length} ${canonicalReferences.length === 1 ? "Group" : "Groups"}`
+						? referencePresentation.compact
 						: group?.body.derived_from
 							? `Derived · ${group.body.derived_from.rule.type}`
 							: undefined,
+				derivedDescription:
+					canonicalReferences.length > 0
+						? referencePresentation.description
+						: undefined,
 				frozen: Boolean(group?.body.frozen_from),
 				frozenLabel: group?.body.frozen_from
 					? `Frozen · rev ${group.body.frozen_from.source_revision}`

@@ -1,12 +1,9 @@
-import { Button, FormLayout, NumberField, TextField } from "@tosklight/ui";
-import { useState } from "react";
+import { FormLayout, NumberField, TextField } from "@tosklight/ui";
 import { OutputRoutesSetup } from "../../components/setup/OutputRoutesSetup";
 import { useUsbDmxDiscovery } from "../../components/setup/UsbDmxEndpointsSetup";
 import { useDmxDiagnostics } from "../../features/dmxDiagnostics/DmxDiagnosticsContext";
 import { AudioOutputSection } from "./AudioOutputSection";
 import type { SetupWindowController } from "./controller";
-
-type OutputsTab = "engine" | "routes" | "audio";
 
 export function OutputsSection({
 	controller,
@@ -16,33 +13,11 @@ export function OutputsSection({
 	const { draft } = controller;
 	const dmx = useDmxDiagnostics();
 	const usb = useUsbDmxDiscovery();
-	const [tab, setTab] = useState<OutputsTab>("engine");
 	if (!draft) return null;
 	return (
 		<>
 			<h2>Outputs</h2>
-			<div
-				className="segmented-control outputs-setup-tabs"
-				role="tablist"
-				aria-label="Outputs"
-			>
-				{([
-					["engine", "Output Engine"],
-					["routes", "Routes"],
-					["audio", "Audio Output"],
-				] as const).map(([value, label]) => (
-					<Button
-						key={value}
-						role="tab"
-						aria-selected={tab === value}
-						className={tab === value ? "active" : undefined}
-						onClick={() => setTab(value)}
-					>
-						{label}
-					</Button>
-				))}
-			</div>
-			{tab === "engine" && (
+			{controller.outputsTab === "engine" && (
 				<FormLayout
 					className="configuration-form"
 					columns={3}
@@ -85,7 +60,7 @@ export function OutputsSection({
 					/>
 				</FormLayout>
 			)}
-			{tab === "routes" && (
+			{controller.outputsTab === "routes" && (
 				<OutputRoutesSetup
 					routes={dmx?.outputRoutes ?? []}
 					onSave={dmx?.saveOutputRoute ?? (async () => false)}
@@ -100,7 +75,9 @@ export function OutputsSection({
 					onProvisionUsbDevice={usb.provision}
 				/>
 			)}
-			{tab === "audio" && <AudioOutputSection controller={controller} />}
+			{controller.outputsTab === "audio" && (
+				<AudioOutputSection controller={controller} />
+			)}
 		</>
 	);
 }

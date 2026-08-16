@@ -2,6 +2,7 @@ import {
 	type CSSProperties,
 	type PointerEvent,
 	type ReactNode,
+	useCallback,
 	useEffect,
 	useRef,
 	useState,
@@ -24,7 +25,7 @@ type TitleActionBase = TitleActionContent & {
 	variant?: ButtonVariant;
 	active?: boolean;
 	loading?: boolean;
-	onPress?: () => void;
+	onPress?: (anchor: HTMLElement) => void;
 	onLongPress?: () => void;
 	className?: string;
 	type?: "button" | "submit";
@@ -112,33 +113,91 @@ export function TitleChrome({
 	terminalClassName = "",
 }: TitleChromeProps) {
 	const populatedGroups = groups.filter((group) => group.actions.length > 0);
+	const [compactSearchOpen, setCompactSearchOpen] = useState(false);
+	const chrome = useRef<HTMLDivElement>(null);
+	const searchTrigger = useRef<HTMLButtonElement>(null);
+	const closeCompactSearch = useCallback(() => {
+		setCompactSearchOpen(false);
+		requestAnimationFrame(() => searchTrigger.current?.focus());
+	}, []);
+	useEffect(() => {
+		if (!compactSearchOpen) return;
+		chrome.current?.querySelector<HTMLInputElement>("input")?.focus();
+		const closeOnEscape = (event: globalThis.KeyboardEvent) => {
+			if (event.key !== "Escape") return;
+			event.preventDefault();
+			closeCompactSearch();
+		};
+		window.addEventListener("keydown", closeOnEscape);
+		return () => window.removeEventListener("keydown", closeOnEscape);
+	}, [compactSearchOpen, closeCompactSearch]);
 	return (
-		<div className={`ui-title-chrome ${className}`.trim()}>
-			<div className="ui-title-chrome-groups">
-				{populatedGroups.map((group) => (
-					<TitleGroup key={group.id} group={group} className={groupClassName} />
-				))}
-			</div>
+		<div
+			ref={chrome}
+			className={`ui-title-chrome ${compactSearchOpen ? "is-searching" : ""} ${className}`.trim()}
+		>
 			{search && (
-				<div className={`ui-title-chrome-search ${searchClassName}`.trim()}>
-					<TitleSearchControl search={search} />
-				</div>
+				<>
+					<div className={`ui-title-chrome-search ${searchClassName}`.trim()}>
+						<TitleSearchControl search={search} />
+					</div>
+					<div className="ui-title-chrome-search-toggle">
+						<Button
+							ref={searchTrigger}
+							iconOnly
+							aria-label={`Open ${search.ariaLabel ?? "search"}`}
+							onClick={() => setCompactSearchOpen(true)}
+						>
+							<TitleSearchIcon />
+						</Button>
+					</div>
+					<div className="ui-title-chrome-search-close">
+						<Button
+							iconOnly
+							aria-label="Close search"
+							onClick={closeCompactSearch}
+						>
+							<span aria-hidden="true">×</span>
+						</Button>
+					</div>
+				</>
 			)}
-			{(leadingTerminalContent != null || terminalActions.length > 0) && (
-				<div
-					className={`ui-title-chrome-terminals ${terminalClassName}`.trim()}
-				>
-					{leadingTerminalContent != null && (
-						<div className="ui-modal-title-actions">
-							{leadingTerminalContent}
-						</div>
-					)}
-					{terminalActions.map((action) => (
-						<TitleActionControl key={action.id} action={action} />
+			{!compactSearchOpen && (
+				<div className="ui-title-chrome-groups">
+					{populatedGroups.map((group) => (
+						<TitleGroup
+							key={group.id}
+							group={group}
+							className={groupClassName}
+						/>
 					))}
 				</div>
 			)}
+			{!compactSearchOpen &&
+				(leadingTerminalContent != null || terminalActions.length > 0) && (
+					<div
+						className={`ui-title-chrome-terminals ${terminalClassName}`.trim()}
+					>
+						{leadingTerminalContent != null && (
+							<div className="ui-modal-title-actions">
+								{leadingTerminalContent}
+							</div>
+						)}
+						{terminalActions.map((action) => (
+							<TitleActionControl key={action.id} action={action} />
+						))}
+					</div>
+				)}
 		</div>
+	);
+}
+
+function TitleSearchIcon() {
+	return (
+		<svg viewBox="0 0 20 20" aria-hidden="true">
+			<circle cx="8.5" cy="8.5" r="5.5" />
+			<path d="m12.5 12.5 4 4" />
+		</svg>
 	);
 }
 
@@ -252,12 +311,12 @@ function TitleActionControl({
 				onPointerUp={action.onLongPress ? clearHold : undefined}
 				onPointerCancel={action.onLongPress ? clearHold : undefined}
 				onPointerLeave={action.onLongPress ? clearHold : undefined}
-				onClick={() => {
+				onClick={(event) => {
 					if (held.current) {
 						held.current = false;
 						return;
 					}
-					action.onPress?.();
+					action.onPress?.(event.currentTarget);
 				}}
 			>
 				{action.label != null ? action.label : action.icon}
@@ -273,7 +332,8 @@ function TitleActionControl({
 }
 
 function TitleSearchControl({ search }: { search: TitleSearch }) {
-	const { onSearch, settings, settingsConfiguration, ...configuration } = search;
+	const { onSearch, settings, settingsConfiguration, ...configuration } =
+		search;
 	const settingsLabel = search.settingsTitle ?? "Search settings";
 	return (
 		<div className="ui-title-chrome-search-control">

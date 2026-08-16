@@ -1,5 +1,5 @@
 import { Button } from "@tosklight/ui";
-import { WindowHeader } from "@tosklight/ui/window-kit";
+import { WindowHeader, WindowScrollArea } from "@tosklight/ui/window-kit";
 import type { SetupWindowController } from "./controller";
 
 export type SetupSection =
@@ -24,12 +24,12 @@ const SETUP_SECTIONS: ReadonlyArray<{
 	{ id: "network", label: "Network & Inputs" },
 	{ id: "screens", label: "Screens & playback" },
 	{ id: "preferences-defaults", label: "Defaults", group: "Preferences" },
+	{ id: "preferences-highlight", label: "Highlight", group: "Preferences" },
 	{
 		id: "preferences-attributes",
 		label: "Attributes & encoders",
 		group: "Preferences",
 	},
-	{ id: "preferences-highlight", label: "Highlight", group: "Preferences" },
 	{ id: "preferences-others", label: "Others", group: "Preferences" },
 ];
 
@@ -49,6 +49,16 @@ export const ATTRIBUTE_SETTINGS_TABS: ReadonlyArray<{
 
 export type NetworkSettingsTab = "control-server" | "sound" | "bridges";
 export type DefaultsSettingsTab = "record-update" | "playback" | "pools";
+export type OutputsSettingsTab = "engine" | "routes" | "audio";
+
+export const OUTPUTS_SETTINGS_TABS: ReadonlyArray<{
+	id: OutputsSettingsTab;
+	label: string;
+}> = [
+	{ id: "engine", label: "Output Engine" },
+	{ id: "routes", label: "Routes" },
+	{ id: "audio", label: "Audio Output" },
+];
 
 const NETWORK_SETTINGS_TABS: ReadonlyArray<{
 	id: NetworkSettingsTab;
@@ -87,37 +97,60 @@ export function SetupHeader({
 	const groups =
 		controller.section === "screens"
 			? [
-					{ id: "screen-configuration", actions: [
-						{
-							id: "undo",
-							label: "Undo",
-							disabled: !controller.screenCanUndo,
-							onPress: () => controller.screenUndo.current?.(),
-						},
-						{
-							id: "encoder-placement",
-							label: "Configure encoder placement",
-							onPress: () => controller.setEncoderPlacementOpen(true),
-						},
-						{
-							id: "desk-lock",
-							label: "Configure desk lock",
-							onPress: () => controller.setDeskLockSettingsOpen(true),
-						},
-					] },
+					{
+						id: "screen-configuration",
+						actions: [
+							{
+								id: "undo",
+								label: "Undo",
+								disabled: !controller.screenCanUndo,
+								onPress: () => controller.screenUndo.current?.(),
+							},
+							{
+								id: "encoder-placement",
+								label: "Configure encoder placement",
+								onPress: () => controller.setEncoderPlacementOpen(true),
+							},
+							{
+								id: "desk-lock",
+								label: "Configure desk lock",
+								onPress: () => controller.setDeskLockSettingsOpen(true),
+							},
+						],
+					},
 				]
 			: [
+					...(controller.section === "outputs"
+						? [
+								{
+									id: "output-settings",
+									kind: "tabs" as const,
+									activeId: controller.outputsTab,
+									onActiveChange: (id: string) =>
+										controller.setOutputsTab(
+											id as typeof controller.outputsTab,
+										),
+									actions: OUTPUTS_SETTINGS_TABS.map(({ id, label }) => ({
+										id,
+										label,
+									})),
+								},
+							]
+						: []),
 					...(controller.section === "network"
 						? [
 								{
 									id: "network-settings",
 									kind: "tabs" as const,
 									activeId: controller.networkTab,
-									onActiveChange: (id: string) => controller.setNetworkTab(id as typeof controller.networkTab),
+									onActiveChange: (id: string) =>
+										controller.setNetworkTab(
+											id as typeof controller.networkTab,
+										),
 									actions: NETWORK_SETTINGS_TABS.map(({ id, label }) => ({
-									id,
-									label,
-								})),
+										id,
+										label,
+									})),
 								},
 							]
 						: []),
@@ -127,11 +160,14 @@ export function SetupHeader({
 									id: "defaults-settings",
 									kind: "tabs" as const,
 									activeId: controller.defaultsTab,
-									onActiveChange: (id: string) => controller.setDefaultsTab(id as typeof controller.defaultsTab),
+									onActiveChange: (id: string) =>
+										controller.setDefaultsTab(
+											id as typeof controller.defaultsTab,
+										),
 									actions: DEFAULTS_SETTINGS_TABS.map(({ id, label }) => ({
-									id,
-									label,
-								})),
+										id,
+										label,
+									})),
 								},
 							]
 						: []),
@@ -141,11 +177,14 @@ export function SetupHeader({
 									id: "attribute-settings",
 									kind: "tabs" as const,
 									activeId: controller.attributeTab,
-									onActiveChange: (id: string) => controller.setAttributeTab(id as typeof controller.attributeTab),
+									onActiveChange: (id: string) =>
+										controller.setAttributeTab(
+											id as typeof controller.attributeTab,
+										),
 									actions: ATTRIBUTE_SETTINGS_TABS.map(({ id, label }) => ({
-									id,
-									label,
-								})),
+										id,
+										label,
+									})),
 								},
 							]
 						: []),
@@ -171,31 +210,33 @@ export function SetupNavigation({
 }) {
 	let renderedPreferencesLabel = false;
 	return (
-		<nav aria-label="Desk Setup">
-			{SETUP_SECTIONS.map(({ id, label, group }) => {
-				const groupLabel =
-					group && !renderedPreferencesLabel ? (
-						<div className="setup-navigation-group" key={`${group}-label`}>
-							{group}
-						</div>
-					) : null;
-				if (group) renderedPreferencesLabel = true;
-				return (
-					<div
-						className={group ? "setup-navigation-child" : undefined}
-						key={id}
-					>
-						{groupLabel}
-						<Button
-							onClick={() => onSelect(id)}
-							className={id === section ? "active" : ""}
-							aria-current={id === section ? "page" : undefined}
+		<WindowScrollArea className="setup-navigation-scroll">
+			<nav aria-label="Desk Setup">
+				{SETUP_SECTIONS.map(({ id, label, group }) => {
+					const groupLabel =
+						group && !renderedPreferencesLabel ? (
+							<div className="setup-navigation-group" key={`${group}-label`}>
+								{group}
+							</div>
+						) : null;
+					if (group) renderedPreferencesLabel = true;
+					return (
+						<div
+							className={group ? "setup-navigation-child" : undefined}
+							key={id}
 						>
-							{label}
-						</Button>
-					</div>
-				);
-			})}
-		</nav>
+							{groupLabel}
+							<Button
+								onClick={() => onSelect(id)}
+								className={id === section ? "active" : ""}
+								aria-current={id === section ? "page" : undefined}
+							>
+								{label}
+							</Button>
+						</div>
+					);
+				})}
+			</nav>
+		</WindowScrollArea>
 	);
 }

@@ -6,6 +6,10 @@ import type {
 } from "../../api/types";
 import { useFiles } from "../../features/files/FilesContext";
 import { useScreens } from "../../features/screens/ScreensContext";
+import {
+	SINGLE_CLIENT_MODE_STORAGE_KEY,
+	singleClientModeEnabled,
+} from "../../features/server/connectionBootstrap";
 import { useCueLists } from "../../features/showObjects/ShowObjectsState";
 import { useShowObjectView } from "../../features/showObjects/ShowObjectsView";
 import { useDesktopBridge } from "../../platform/desktop";
@@ -115,9 +119,9 @@ export function ProgrammerControlSurfaceSettings() {
 				<div>
 					<h3>Encoder placement</h3>
 					<p>
-						Choose which screen carries the encoder section and how many software
-						encoders it shows. Playback controls stay on the main screen either
-						way, and attached hardware remains six encoders.
+						Choose which screen carries the encoder section and how many
+						software encoders it shows. Playback controls stay on the main
+						screen either way, and attached hardware remains six encoders.
 					</p>
 				</div>
 			</header>
@@ -192,6 +196,9 @@ export function ScreensSetup({
 	const [defaultScreenPickerOpen, setDefaultScreenPickerOpen] = useState(false);
 	const [defaultPlaybackModalOpen, setDefaultPlaybackModalOpen] =
 		useState(false);
+	const [singleClientMode, setSingleClientMode] = useState(() =>
+		singleClientModeEnabled(),
+	);
 	const updateKeyboardShortcuts = useCallback(
 		(value: boolean) =>
 			dispatch({ type: "SET_REGULAR_NUMBER_SHORTCUTS", value }),
@@ -234,20 +241,22 @@ export function ScreensSetup({
 			/>
 			<div className="screens-setup-list">
 				<DefaultScreenSettings
-					deskName={defaultScreen.draft?.name ?? ""}
 					deskAlias={defaultScreen.draft?.osc_alias ?? ""}
-					playbackLayout={defaultScreen.playbackLayout}
-					fallbackColumns={state.playbackColumns}
-					fallbackRows={state.playbackRows}
-					playbackSlots={state.playbackColumns * state.playbackRows}
 					keyboardShortcuts={state.regularNumberShortcuts}
-					onName={(name) => defaultScreen.updateText("name", name)}
 					onAlias={(alias) => defaultScreen.updateText("osc_alias", alias)}
 					onTextFocus={defaultScreen.beginTextEdit}
 					onTextBlur={defaultScreen.endTextEdit}
 					onKeyboardShortcuts={defaultScreen.updateKeyboardShortcuts}
 					onConfigurePlaybacks={() => setDefaultPlaybackModalOpen(true)}
 					onChooseDefault={() => setDefaultScreenPickerOpen(true)}
+					singleClientMode={singleClientMode}
+					onSingleClientMode={(enabled) => {
+						localStorage.setItem(
+							SINGLE_CLIENT_MODE_STORAGE_KEY,
+							String(enabled),
+						);
+						setSingleClientMode(enabled);
+					}}
 				/>
 				{!desktop.available && (
 					<p>
@@ -284,6 +293,18 @@ export function ScreensSetup({
 					currentDeskId={server.session?.desk.id}
 					onSelect={server.selectControlDesk}
 					onRemove={server.removeClient}
+					onRemoveAll={async () => {
+						const candidates = (server.bootstrap?.clients ?? []).filter(
+							(client) =>
+								client.client_id !== server.session?.client_id &&
+								!client.connected &&
+								client.can_remove,
+						);
+						const results = await Promise.all(
+							candidates.map((client) => server.removeClient(client.desk.id)),
+						);
+						return results.every(Boolean);
+					}}
 					onClose={() => setDefaultScreenPickerOpen(false)}
 				/>
 			)}

@@ -49,12 +49,6 @@
 	align-items: center;
 	min-width: 88px;
 }
-.ui-window-layout.has-navigation.has-info-section {
-	grid-template-columns: minmax(160px, 210px) minmax(0, 1fr) minmax(
-			220px,
-			285px
-		);
-}
 .ui-window-settings > .ui-modal-titlebar {
 	flex: none;
 	margin: 0;

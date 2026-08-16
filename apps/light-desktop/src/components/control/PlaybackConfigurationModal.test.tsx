@@ -133,13 +133,11 @@ afterEach(cleanup);
 beforeEach(() => {
 	mocks.savePlaybackSlot.mockReset().mockResolvedValue(true);
 	mocks.clearPlaybackSlot.mockReset().mockResolvedValue(true);
-	mocks.saveCueList
-		.mockReset()
-		.mockImplementation(async (_basis, body) => ({
-			id: body.id,
-			revision: 2,
-			body,
-		}));
+	mocks.saveCueList.mockReset().mockImplementation(async (_basis, body) => ({
+		id: body.id,
+		revision: 2,
+		body,
+	}));
 	mocks.error = null;
 	mocks.playbacks.cue_lists = [
 		{ id: "cue-1", name: "Main sequence" },
@@ -790,5 +788,24 @@ describe("PlaybackConfigurationModal topology defaults", () => {
 		expect(
 			screen.queryByText("Additional upper button"),
 		).not.toBeInTheDocument();
+	});
+
+	it.each([
+		[1, ["Right top button"]],
+		[2, ["Right top button", "Right middle button"]],
+	] as const)("offers only %i wider button control(s) for that Playback topology", (buttonCount, visibleLabels) => {
+		show({ ...base, button_count: buttonCount });
+		fireEvent.click(screen.getByRole("button", { name: "Layout" }));
+		fireEvent.click(screen.getByRole("radio", { name: "Wider" }));
+
+		for (const label of visibleLabels)
+			expect(selectTrigger(label)).toBeInTheDocument();
+		expect(
+			screen.queryByLabelText("Right bottom button"),
+		).not.toBeInTheDocument();
+		if (buttonCount === 1)
+			expect(
+				screen.queryByLabelText("Right middle button"),
+			).not.toBeInTheDocument();
 	});
 });

@@ -22,7 +22,12 @@ export const Primary: Story = {
 					checked={enabled}
 					onChange={(event) => setEnabled(event.target.checked)}
 				/>
-				<SwitchField label="Unavailable route" disabled />
+				<SwitchField
+					label="Unavailable route"
+					offLabel="Disabled"
+					onLabel="Enabled"
+					disabled
+				/>
 			</div>
 		);
 	},

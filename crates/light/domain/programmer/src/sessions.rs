@@ -222,19 +222,21 @@ impl ProgrammerRegistry {
                 pending_choice: None,
             },
         );
+        // Persisted session ids retain their durable interaction snapshots, but they are not live
+        // connections after a process restart. Only `start` may add a session to `self.sessions`;
+        // otherwise every historical browser session is projected as connected and its desk-local
+        // selection is added to lifecycle counts (and formerly duplicated output-side work).
         let existing = self
             .states
             .read()
             .iter()
             .find_map(|(key, current)| (current.user_id == state.user_id).then_some(*key));
         if let Some(existing) = existing {
-            self.sessions.write().insert(session_id, existing);
             let mut shared = state;
             shared.session_id = existing;
             shared.command_line.clear();
             self.states.write().insert(existing, shared);
         } else {
-            self.sessions.write().insert(session_id, session_id);
             let mut shared = state;
             shared.command_line.clear();
             self.states.write().insert(session_id, shared);

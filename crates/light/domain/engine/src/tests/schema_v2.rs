@@ -71,7 +71,7 @@ fn robin_dls_full_white_keeps_its_shutter_open_in_resolved_dmx() {
             z: 1.088_83,
         }),
     );
-    let engine = Engine::new(programmers);
+    let engine = Engine::new(programmers.clone());
     engine
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture].into(),
@@ -81,6 +81,16 @@ fn robin_dls_full_white_keeps_its_shutter_open_in_resolved_dmx() {
         .unwrap();
 
     let rendered = engine.render(RenderOptions::default()).unwrap();
+    programmers.select(session, [fixture_id]);
+    let selected_rendered = engine.render(RenderOptions::default()).unwrap();
+    assert_eq!(
+        rendered.universes, selected_rendered.universes,
+        "selection alone must not change physical output"
+    );
+    assert_eq!(
+        rendered.profile_visualization_values, selected_rendered.profile_visualization_values,
+        "selection alone must not change either Stage value projection"
+    );
     let frame = &rendered.universes[&1];
     assert_eq!(frame[usize::from(slots[&shutter.id] - 1)], 32);
     assert_eq!(frame[usize::from(slots[&intensity.id] - 1)], 255);

@@ -27,6 +27,8 @@ let commandPristine = true;
 let selected: string[] = [];
 let selectedGroupId: string | null = null;
 const speedGroupAction = vi.fn();
+const toggleDynamic = vi.fn();
+let runtimeDefinitions: Array<Record<string, unknown>> = [];
 const showObjectsStore = {
 	subscribe: () => () => undefined,
 	getSnapshot: () => ({ dynamics, authorityGeneration: 1, showRevision: 1 }),
@@ -84,9 +86,9 @@ vi.mock("../features/dynamics/DynamicsActionsContext", () => ({
 			runtime: vi.fn().mockResolvedValue({
 				global_paused: false,
 				instances: [],
-				definitions: [],
+				definitions: runtimeDefinitions,
 			}),
-			toggle: vi.fn(),
+			toggle: toggleDynamic,
 		},
 		showObjects: {
 			deleteDynamic,
@@ -113,11 +115,15 @@ vi.mock(
 );
 
 function renderWindow() {
-	return render(
+	return render(windowView());
+}
+
+function windowView() {
+	return (
 		<AppProvider>
 			<TestShiftLatch />
 			<DynamicsWindow compact={false} />
-		</AppProvider>,
+		</AppProvider>
 	);
 }
 
@@ -169,6 +175,7 @@ describe("DynamicsWindow", () => {
 			},
 		});
 		dynamics = [];
+		runtimeDefinitions = [];
 		deleteArmed = false;
 		commandText = "";
 		commandPristine = true;
@@ -194,6 +201,7 @@ describe("DynamicsWindow", () => {
 			);
 		resetCommand.mockReset().mockResolvedValue(true);
 		speedGroupAction.mockReset().mockResolvedValue({});
+		toggleDynamic.mockReset().mockResolvedValue({});
 	});
 
 	it("does not manufacture an icon for a new or iconless Dynamic", () => {
@@ -231,6 +239,122 @@ describe("DynamicsWindow", () => {
 		expect(
 			container.querySelector(".dynamic-pool-card .pool-card-name"),
 		).toHaveTextContent("Dynamic 1");
+	});
+
+	it("keeps Dynamic 29's storage identity visible through editing, ordering and reconnect projection", () => {
+		const makeDynamic = (poolNumber: number) => {
+			const object = dynamicObject();
+			object.id = `dynamic-${poolNumber}`;
+			object.body.id = object.id;
+			object.body.pool_number = poolNumber;
+			object.body.name = `Dynamic ${poolNumber}`;
+			return object;
+		};
+		const neighbors = [makeDynamic(28), makeDynamic(29), makeDynamic(30)];
+		dynamics = neighbors;
+		const rendered = renderWindow();
+
+		const dynamic29 = () => screen.getByRole("button", { name: /Dynamic 29/i });
+		expect(dynamic29()).toHaveAttribute("data-pool-slot-id", "dynamic-29");
+		expect(dynamic29()).toHaveAttribute("data-pool-position", "28");
+		expect(dynamic29()).not.toHaveClass("empty");
+
+		fireEvent.contextMenu(dynamic29());
+		fireEvent.click(screen.getByRole("button", { name: "← Dynamics" }));
+		dynamics = [neighbors[2], neighbors[0], neighbors[1]];
+		rendered.rerender(windowView());
+		expect(dynamic29()).toHaveAttribute("data-pool-slot-id", "dynamic-29");
+		expect(dynamic29()).not.toHaveClass("empty");
+
+		// A genuinely absent collection remains empty; reconnecting the authoritative object restores
+		// that same storage identity rather than synthesizing a numbered Dynamic.
+		dynamics = [];
+		rendered.rerender(windowView());
+		expect(document.querySelector('[data-pool-position="28"]')).toHaveClass(
+			"empty",
+		);
+		dynamics = neighbors;
+		rendered.rerender(windowView());
+		expect(dynamic29()).toHaveAttribute("data-pool-slot-id", "dynamic-29");
+	});
+
+	it("explains a partial-coverage warning when the Dynamic tile is touched", async () => {
+		const dynamic29 = dynamicObject();
+		dynamic29.id = "dynamic-29";
+		dynamic29.body.id = dynamic29.id;
+		dynamic29.body.pool_number = 29;
+		dynamic29.body.name = "Sunstrip Rain";
+		dynamics = [dynamic29];
+		runtimeDefinitions = [
+			{
+				dynamic_id: dynamic29.id,
+				target_count: 80,
+				compatible_target_count: 80,
+				missing_target_count: 0,
+				unpatched_target_count: 0,
+				lane_count: 3,
+				supported_address_count: 160,
+				skipped_address_count: 80,
+				warning:
+					"160 of 240 target/lane addresses run; 80 skipped (0 missing targets, 0 unpatched targets)",
+			},
+		];
+		renderWindow();
+
+		const warning = await screen.findByRole("img", {
+			name: /160 of 240 target\/lane addresses run; 80 skipped/i,
+		});
+		expect(warning).toHaveAttribute(
+			"title",
+			expect.stringContaining(
+				"Open the Dynamic editor to change its targets or lanes.",
+			),
+		);
+		fireEvent.click(screen.getByRole("button", { name: /Sunstrip Rain/i }));
+		expect(executeCommand).toHaveBeenCalledWith("DYNAMIC 29");
+		expect(screen.getByRole("alert")).toHaveTextContent(
+			"Dynamic 29: 160 of 240 target/lane addresses run; 80 skipped",
+		);
+	});
+
+	it("explains a stored validation error and sends the operator to the editor", () => {
+		const invalid = dynamicObject() as ReturnType<typeof dynamicObject> & {
+			validationError?: string;
+		};
+		invalid.validationError = "Lane 2 has no attribute.";
+		dynamics = [invalid];
+		renderWindow();
+
+		fireEvent.click(screen.getByRole("button", { name: /Pulse/i }));
+		expect(toggleDynamic).not.toHaveBeenCalled();
+		expect(executeCommand).not.toHaveBeenCalled();
+		expect(screen.getByRole("alert")).toHaveTextContent(
+			"Dynamic 1: Lane 2 has no attribute. Open the Dynamic editor to correct it.",
+		);
+	});
+
+	it("executes a Dynamic against the visible Group selection through the command authority", () => {
+		dynamics = [dynamicObject()];
+		commandText = "GROUP 18";
+		commandPristine = false;
+		renderWindow();
+
+		fireEvent.click(screen.getByRole("button", { name: /Pulse/i }));
+
+		expect(executeCommand).toHaveBeenCalledWith("GROUP 18 DYNAMIC 1");
+		expect(toggleDynamic).not.toHaveBeenCalled();
+	});
+
+	it("uses OFF followed by a Dynamic as an explicit Dynamic off command", () => {
+		dynamics = [dynamicObject()];
+		commandText = "OFF";
+		commandPristine = false;
+		renderWindow();
+
+		fireEvent.click(screen.getByRole("button", { name: /Pulse/i }));
+
+		expect(executeCommand).toHaveBeenCalledWith("DYNAMIC 1 OFF");
+		expect(toggleDynamic).not.toHaveBeenCalled();
 	});
 
 	it("shows only the concise target scope as populated card metadata", () => {

@@ -30,6 +30,29 @@ function selectOperator(bootstrap: BootstrapSnapshot): DeskUser {
 	);
 }
 
+export const SINGLE_CLIENT_MODE_STORAGE_KEY = "light.single-client-mode";
+
+export function singleClientModeEnabled(storage: Storage = localStorage) {
+	return storage.getItem(SINGLE_CLIENT_MODE_STORAGE_KEY) !== "false";
+}
+
+export async function removeDisconnectedOtherClients(
+	api: LightApi,
+	bootstrap: BootstrapSnapshot,
+	currentClientId: string,
+) {
+	if (!singleClientModeEnabled()) return bootstrap;
+	const removable = (bootstrap.clients ?? []).filter(
+		(client) =>
+			client.client_id !== currentClientId &&
+			!client.connected &&
+			client.can_remove,
+	);
+	for (const client of removable)
+		await api.playback.removeClient(client.desk.id);
+	return removable.length ? api.runtime.bootstrap() : bootstrap;
+}
+
 async function restoreOrLogin(
 	api: LightApi,
 	user: DeskUser,
@@ -174,9 +197,19 @@ export async function bootstrapConnection(
 	state.setBootstrap(initial);
 	const user = selectOperator(initial);
 	const session = await restoreOrLogin(state.api, user, role);
+	const connectedBootstrap = await removeDisconnectedOtherClients(
+		state.api,
+		await state.api.runtime.bootstrap(),
+		session.client_id,
+	);
+	state.setBootstrap(connectedBootstrap);
 	const deskLock = await state.api.desk.deskLock();
 	localStorage.setItem("light.operator", user.name);
-	const bootstrap = await ensureActiveShow(state, initial, deskLock.locked);
+	const bootstrap = await ensureActiveShow(
+		state,
+		connectedBootstrap,
+		deskLock.locked,
+	);
 	const finishResources =
 		frontendPerformanceDiagnostics.beginPhase("initial-resources");
 	const resources = await loadForegroundResources(state.api, session.desk.id);

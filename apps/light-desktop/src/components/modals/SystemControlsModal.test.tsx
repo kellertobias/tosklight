@@ -408,7 +408,9 @@ describe("SystemControlsModal", () => {
 			screen.queryByRole("button", { name: "Close" }),
 		).not.toBeInTheDocument();
 		expect(
-			screen.getByText("1 fixtures · 3 values · 1 session · Connected"),
+			screen.getByText(
+				"1 selected fixture · 3 values · 1 session · Connected",
+			),
 		).toBeInTheDocument();
 		expect(legacyReads).toBe(0);
 	});
@@ -460,10 +462,14 @@ describe("SystemControlsModal", () => {
 
 		expect(screen.getAllByText(/3 values/)).toHaveLength(2);
 		expect(
-			screen.getByText("1 fixtures · 3 values · 2 sessions · Connected"),
+			screen.getByText(
+				"1 selected fixture · 3 values · 2 sessions · Connected",
+			),
 		).toBeInTheDocument();
 		expect(
-			screen.getByText("0 fixtures · 3 values · 1 session · Connected"),
+			screen.getByText(
+				"0 selected fixtures · 3 values · 1 session · Connected",
+			),
 		).toBeInTheDocument();
 		fireEvent.click(
 			screen.getByRole("button", { name: "Clear programmer other-user" }),

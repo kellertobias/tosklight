@@ -77,7 +77,13 @@ fn restoring_multiple_sessions_for_one_user_does_not_deadlock() {
     restored.restore(first_state);
     restored.restore(second_state);
     assert_eq!(restored.active().len(), 1);
-    assert_eq!(restored.active_for_sessions().len(), 2);
+    assert!(
+        restored.active_for_sessions().is_empty(),
+        "persisted session aliases are disconnected after restart"
+    );
+    let current = SessionId::new();
+    restored.start(current, user);
+    assert_eq!(restored.active_for_sessions().len(), 1);
 }
 #[test]
 fn legacy_group_programmer_values_migrate_with_a_timestamp() {

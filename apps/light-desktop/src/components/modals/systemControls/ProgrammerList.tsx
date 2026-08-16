@@ -57,14 +57,14 @@ function ProgrammerRow({
 		? `${currentUserName ?? "User"} · Current user`
 		: `User ${programmer.userId.slice(0, 8)}`;
 	const sessionSummary = `${programmer.sessions.length} session${programmer.sessions.length === 1 ? "" : "s"}`;
+	const fixtureSummary = `${programmer.selectedFixtureCount} selected fixture${programmer.selectedFixtureCount === 1 ? "" : "s"}`;
 	const clearSession = programmer.sessions[0]?.sessionId;
 	return (
 		<article>
 			<span>
 				<b>{userLabel}</b>
 				<small>
-					{programmer.selectedFixtureCount} fixtures ·{" "}
-					{programmer.normalValueCount} values · {sessionSummary} ·{" "}
+					{fixtureSummary} · {programmer.normalValueCount} values · {sessionSummary} ·{" "}
 					{programmer.connected ? "Connected" : "Disconnected"}
 				</small>
 			</span>

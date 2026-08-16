@@ -11,6 +11,7 @@ import type { SetupWindowController } from "./controller";
 import {
 	DefaultsSection,
 	HighlightLookSettings,
+	HighlightSection,
 	OthersSection,
 	PatchHighlightSettings,
 	PlaybackDefaultsSettings,
@@ -44,7 +45,7 @@ describe("Desk Setup Defaults layout", () => {
 		editDraft: vi.fn(),
 	} as unknown as SetupWindowController;
 
-	it("keeps Record and Update defaults in a dedicated spaced group", () => {
+	it("keeps Record and Update defaults in one compact two-card group", () => {
 		const { container } = render(<DefaultsSection controller={controller} />);
 
 		const group = container.querySelector(".defaults-record-update");
@@ -74,7 +75,13 @@ describe("Desk Setup Defaults layout", () => {
 		);
 		expect(screen.queryByText("Record defaults")).toBeNull();
 		expect(screen.queryByText("Cuelist playback defaults")).toBeNull();
-		expect(screen.getByText("Pool color defaults")).toBeInTheDocument();
+		expect(
+			screen.getByRole("heading", { name: "Pool color defaults" }),
+		).toBeInTheDocument();
+		expect(screen.queryByRole("heading", { name: "Defaults" })).toBeNull();
+		expect(screen.queryByText(/server-wide presentation colors/)).toBeNull();
+		const grid = view.container.querySelector(".pool-color-defaults-grid");
+		expect(grid).toHaveStyle({ "--form-columns": "3" });
 	});
 });
 
@@ -92,11 +99,68 @@ function renderSettings(
 		draft,
 		editDraft,
 	} as unknown as SetupWindowController;
-	render(<HighlightLookSettings controller={controller} />);
-	return { draft, editDraft };
+	const { container } = render(
+		<HighlightLookSettings controller={controller} />,
+	);
+	return { container, draft, editDraft };
 }
 
 describe("Desk Setup Highlight Look", () => {
+	it("combines the patch switch into the compact top-label Highlight grid", () => {
+		const draft = {
+			frame_rate_hz: 44,
+			highlight_look: {
+				intensity: 1,
+				color: "white",
+				iris: null,
+				zoom: null,
+				focus: null,
+				frost: null,
+				compatibility: "semantic",
+			},
+			patch_preview_highlight_dmx: false,
+		} as DeskConfiguration;
+		const { container } = render(
+			<HighlightSection
+				controller={
+					{
+						draft,
+						editDraft: vi.fn(),
+						programmerSettingsError: null,
+					} as unknown as SetupWindowController
+				}
+			/>,
+		);
+		expect(
+			container.querySelectorAll(".programmer-setup-list > article"),
+		).toHaveLength(1);
+		expect(container.querySelector(".highlight-look-grid")).toHaveClass(
+			"labels-top",
+		);
+		expect(
+			screen.getByLabelText("Highlight patch selection via DMX"),
+		).not.toBeChecked();
+		expect(
+			screen.queryByText(
+				"One semantic identification look for every show on this desk.",
+			),
+		).toBeNull();
+	});
+
+	it("uses the compact multi-column Highlight layout", () => {
+		const { container } = renderSettings({
+			intensity: 1,
+			color: "white",
+			iris: null,
+			zoom: null,
+			focus: null,
+			frost: null,
+			compatibility: "semantic",
+		});
+		const grid = container.querySelector(".highlight-look-grid");
+		expect(grid).toHaveStyle({ "--form-columns": "3" });
+	});
+
 	it("keeps intensity required, Shutter fixed to Open, and optional parts ignored independently", () => {
 		const { draft, editDraft } = renderSettings({
 			intensity: 0.8,
@@ -271,19 +335,29 @@ describe("Desk Setup direct timing and Preload defaults", () => {
 		} as DeskConfiguration;
 		render(
 			<OthersSection
-				controller={{
-					draft,
-					editDraft: vi.fn(),
-					programmerSettingsError: null,
-				} as unknown as SetupWindowController}
+				controller={
+					{
+						draft,
+						editDraft: vi.fn(),
+						programmerSettingsError: null,
+					} as unknown as SetupWindowController
+				}
 			/>,
 		);
 
-		expect(screen.getByLabelText("Direct entry uses Programmer Fade")).not.toBeChecked();
+		expect(
+			screen.getByLabelText("Direct entry uses Programmer Fade"),
+		).not.toBeChecked();
 		expect(screen.getByText("Immediate")).toBeInTheDocument();
 		expect(screen.getByLabelText("Preload programmer changes")).toBeChecked();
-		expect(screen.getByLabelText("Preload physical playback actions")).not.toBeChecked();
-		expect(screen.getByLabelText("Preload virtual playback actions")).toBeChecked();
-		expect(screen.getByText(/Physical Flash and hardware\/physical fader movements/)).toBeInTheDocument();
+		expect(
+			screen.getByLabelText("Preload physical playback actions"),
+		).not.toBeChecked();
+		expect(
+			screen.getByLabelText("Preload virtual playback actions"),
+		).toBeChecked();
+		expect(
+			screen.getByText(/Physical Flash and hardware\/physical fader movements/),
+		).toBeInTheDocument();
 	});
 });

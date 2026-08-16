@@ -12,6 +12,7 @@ import {
 	DataTable,
 	GridButton,
 	WindowDropdown,
+	WindowFrame,
 	WindowHeader,
 	WindowScrollArea,
 	WindowSettings,
@@ -22,6 +23,7 @@ const render = (ui: ReactElement) => rtlRender(ui, { wrapper: ModalProvider });
 describe("window kit", () => {
 	afterEach(cleanup);
 	it("renders two-line information, grouped actions, and Settings last", () => {
+		const onSettings = vi.fn();
 		const { container } = render(
 			<WindowHeader
 				title="Stage"
@@ -41,7 +43,7 @@ describe("window kit", () => {
 					},
 				]}
 				settings
-				onSettings={vi.fn()}
+				onSettings={onSettings}
 			/>,
 		);
 		expect(screen.getByText("Stage")).toBeInTheDocument();
@@ -66,16 +68,22 @@ describe("window kit", () => {
 		expect(chrome).not.toBeNull();
 		if (!header || !search || !chrome)
 			throw new Error("Missing window header controls");
-		expect([...chrome.children].indexOf(search)).toBeGreaterThan(
+		expect([...chrome.children].indexOf(search)).toBeLessThan(
 			[...chrome.children].indexOf(
 				chrome.querySelector(".ui-title-chrome-groups")!,
 			),
 		);
+		const settingsButton = screen.getByRole("button", { name: "Settings" });
+		fireEvent.click(settingsButton);
+		expect(onSettings).toHaveBeenCalledWith(settingsButton);
 	});
 	it("renders standard controlled search only when a callback is supplied", () => {
 		const onSearch = vi.fn();
 		const { rerender } = render(<WindowHeader title="Groups" />);
 		expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+		expect(
+			screen.queryByRole("button", { name: "Settings" }),
+		).not.toBeInTheDocument();
 		rerender(
 			<WindowHeader
 				title="Groups"
@@ -85,6 +93,18 @@ describe("window kit", () => {
 		const input = screen.getByRole("textbox", { name: "Search Groups" });
 		fireEvent.change(input, { target: { value: "front" } });
 		expect(onSearch).toHaveBeenCalledWith("front");
+	});
+	it("can keep Settings visible but disabled when the current tab has none", () => {
+		render(<WindowHeader title="Running" settings />);
+
+		expect(screen.getByRole("button", { name: "Settings" })).toBeDisabled();
+	});
+	it("hides Settings in a full window with no configured settings tabs", () => {
+		render(<WindowFrame title="Running">Running body</WindowFrame>);
+
+		expect(
+			screen.queryByRole("button", { name: "Settings" }),
+		).not.toBeInTheDocument();
 	});
 	it("opens and closes the standard title dropdown around one selected action", () => {
 		const selected = vi.fn();

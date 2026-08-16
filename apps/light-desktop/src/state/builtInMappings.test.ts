@@ -7,22 +7,22 @@ import {
 } from "./builtInMappings";
 
 describe("Shift-held Built-ins", () => {
-	it("replaces the five alternate destinations in their normal positions", () => {
-		expect(builtIns.map(([kind]) => kind)).toEqual([
-			"stage",
-			"fixtures",
-			"presets",
-			"cuelists",
-			"dynamics",
-			"channels",
+	it("uses the exact normal and alternate destinations in the same six positions", () => {
+		expect(builtIns.map(([kind, , label]) => [kind, label])).toEqual([
+			["stage", "Stage"],
+			["fixtures", "Fixtures"],
+			["presets", "Presets"],
+			["cuelists", "Cue Lists"],
+			["dynamics", "Dynamics"],
+			["channels", "Channels"],
 		]);
-		expect(shiftedBuiltIns.map(([kind]) => kind)).toEqual([
-			"media",
-			"groups",
-			"presets",
-			"timecode",
-			"macros",
-			"dmx",
+		expect(shiftedBuiltIns.map(([kind, , label]) => [kind, label])).toEqual([
+			["dmx", "DMX"],
+			["media", "Media"],
+			["groups", "Groups"],
+			["timecode", "Timecode"],
+			["macros", "Macro"],
+			["scheduler", "Scheduler"],
 		]);
 	});
 
@@ -32,12 +32,12 @@ describe("Shift-held Built-ins", () => {
 	});
 
 	it.each([
-		["stage", "stage", "media"],
-		["fixtures", "fixtures", "groups"],
-		["presets", "presets", "presets"],
+		["stage", "stage", "dmx"],
+		["fixtures", "fixtures", "media"],
+		["presets", "presets", "groups"],
 		["cues", "cuelists", "timecode"],
 		["dynamics", "dynamics", "macros"],
-		["channels", "channels", "dmx"],
+		["channels", "channels", "scheduler"],
 	] as const)("maps the %s attached desk command through the same normal and Shift destinations", (command, normal, shifted) => {
 		expect(builtInForDeskCommand(command, false)).toBe(normal);
 		expect(builtInForDeskCommand(command, true)).toBe(shifted);

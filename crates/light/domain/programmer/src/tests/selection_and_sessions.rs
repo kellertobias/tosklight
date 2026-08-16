@@ -44,6 +44,38 @@ fn persisted_programmer_omits_live_undo_and_redo_history() {
 }
 
 #[test]
+fn restored_session_aliases_are_retained_but_not_reported_as_live_connections() {
+    let user = UserId::new();
+    let old_session = SessionId::new();
+    let old_fixtures = [FixtureId::new(), FixtureId::new(), FixtureId::new()];
+    let source = ProgrammerRegistry::default();
+    source.start(old_session, user);
+    source.select(old_session, old_fixtures);
+    let mut persisted = source.get(old_session).unwrap();
+    persisted.connected = false;
+
+    let restored = ProgrammerRegistry::default();
+    restored.restore(persisted);
+    assert!(
+        restored.get(old_session).is_some(),
+        "durable state remains available"
+    );
+    assert!(
+        restored.active_programmer_lifecycles().is_empty(),
+        "a historical browser session is not a current connection"
+    );
+
+    let current_session = SessionId::new();
+    let current_fixtures = [FixtureId::new(), FixtureId::new()];
+    restored.start(current_session, user);
+    restored.select(current_session, current_fixtures);
+    let lifecycle = restored.programmer_lifecycle(user).unwrap();
+    assert_eq!(lifecycle.connected_sessions.len(), 1);
+    assert_eq!(lifecycle.connected_sessions[0].session_id, current_session);
+    assert_eq!(lifecycle.selected_fixture_count, 2);
+}
+
+#[test]
 fn revisioned_selection_replacement_cannot_overwrite_a_concurrent_change() {
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();

@@ -1,10 +1,10 @@
-import type { UpdateSettings } from "../../api/types";
 import {
 	FormLayout,
 	MultiValueToggleField,
 	SelectField,
 	SwitchField,
 } from "@tosklight/ui";
+import type { UpdateSettings } from "../../api/types";
 import {
 	cueUpdateModes,
 	existingContentModes,
@@ -28,10 +28,7 @@ export function loadRecordSettings(): RecordSettings {
 			? globalThis.localStorage.getItem(key)
 			: null;
 	return {
-		mode:
-			stored("light.store-mode") === "overwrite"
-				? "overwrite"
-				: "merge",
+		mode: stored("light.store-mode") === "overwrite" ? "overwrite" : "merge",
 		cueOnly: stored("light.store-cue-only") === "true",
 		mergeActiveCue: stored("light.store-merge-active-cue") === "true",
 	};
@@ -50,13 +47,21 @@ export function RecordDefaultsFields({
 	settings,
 	onChange,
 	labelPlacement = "side",
+	columns = 1,
+	minColumnWidth = 240,
 }: {
 	settings: RecordSettings;
 	onChange: (settings: RecordSettings) => void;
 	labelPlacement?: "side" | "top";
+	columns?: number;
+	minColumnWidth?: number;
 }) {
 	return (
-		<FormLayout labelPlacement={labelPlacement}>
+		<FormLayout
+			labelPlacement={labelPlacement}
+			columns={columns}
+			minColumnWidth={minColumnWidth}
+		>
 			<MultiValueToggleField
 				label="Record mode"
 				ariaLabel="Default Record mode"
@@ -94,35 +99,37 @@ export function UpdateDefaultsFields({
 	settings,
 	onChange,
 	labelPlacement = "side",
+	columns = 1,
+	minColumnWidth = 240,
 }: {
 	settings: UpdateSettings;
 	onChange: (settings: UpdateSettings) => void;
 	labelPlacement?: "side" | "top";
+	columns?: number;
+	minColumnWidth?: number;
 }) {
 	return (
-		<FormLayout labelPlacement={labelPlacement}>
+		<FormLayout
+			labelPlacement={labelPlacement}
+			columns={columns}
+			minColumnWidth={minColumnWidth}
+		>
 			<SelectField
 				label="Cue/Cuelist default"
 				value={settings.cue_mode}
-				onChange={(value) =>
-					onChange({ ...settings, cue_mode: value })
-				}
+				onChange={(value) => onChange({ ...settings, cue_mode: value })}
 				options={cueUpdateModes}
 			/>
 			<SelectField
 				label="Preset default"
 				value={settings.preset_mode}
-				onChange={(value) =>
-					onChange({ ...settings, preset_mode: value })
-				}
+				onChange={(value) => onChange({ ...settings, preset_mode: value })}
 				options={existingContentModes}
 			/>
 			<SelectField
 				label="Group default"
 				value={settings.group_mode}
-				onChange={(value) =>
-					onChange({ ...settings, group_mode: value })
-				}
+				onChange={(value) => onChange({ ...settings, group_mode: value })}
 				options={existingContentModes}
 			/>
 			<SwitchField

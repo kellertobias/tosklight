@@ -83,7 +83,11 @@ function fixtureNameColumn(
 	};
 }
 
-function FreezeStatus({ freeze }: { freeze: NonNullable<FixtureSheetRow["freeze"]> }) {
+function FreezeStatus({
+	freeze,
+}: {
+	freeze: NonNullable<FixtureSheetRow["freeze"]>;
+}) {
 	const families = freeze.families
 		.map((family) => family[0]?.toUpperCase() + family.slice(1))
 		.join(" · ");
@@ -95,7 +99,8 @@ function FreezeStatus({ freeze }: { freeze: NonNullable<FixtureSheetRow["freeze"
 			: `${label}: Grand Master and Blackout remain active`;
 	return (
 		<em className="fixture-freeze-status" title={title}>
-			❄ {label}{freeze.contained ? " INSIDE" : ""}
+			❄ {label}
+			{freeze.contained ? " INSIDE" : ""}
 		</em>
 	);
 }
@@ -385,7 +390,7 @@ function valueColumn(
 					className="fixture-sheet-group-value"
 				>
 					<span
-						className="fixture-sheet-group-presentation"
+						className="fixture-sheet-group-presentation fixture-sheet-multi-value-presentation"
 						role="img"
 						aria-label={group.accessibleName}
 					>
@@ -394,6 +399,7 @@ function valueColumn(
 								<span
 									className="fixture-sheet-member-value"
 									key={member.attribute}
+									title={`${member.label} ${member.text}`}
 								>
 									<MemberGlyph member={member} group={id} />
 									<span className="fixture-sheet-value-text">

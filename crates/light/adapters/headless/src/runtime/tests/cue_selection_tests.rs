@@ -277,6 +277,44 @@ fn fixture_selection_skips_missing_positive_numbers_and_supports_fixture_thru() 
 }
 
 #[test]
+fn fixture_thru_excludes_stage_only_and_internal_objects_but_keeps_unpatched_dmx_fixtures() {
+    let mut controllable = schema_v2_direct_fixture().0;
+    controllable.fixture_id = light_core::FixtureId::new();
+    controllable.fixture_number = Some(1);
+    controllable.universe = None;
+    controllable.address = None;
+
+    let mut visual_only = controllable.clone();
+    visual_only.fixture_id = light_core::FixtureId::new();
+    visual_only.fixture_number = None;
+    visual_only
+        .definition
+        .profile_snapshot
+        .as_mut()
+        .unwrap()
+        .patch_policy = light_fixture::PatchPolicy::VisualOnly;
+
+    let mut internal = controllable.clone();
+    internal.fixture_id = light_core::FixtureId::new();
+    internal.fixture_number = None;
+    internal
+        .definition
+        .profile_snapshot
+        .as_mut()
+        .unwrap()
+        .patch_policy = light_fixture::PatchPolicy::Internal;
+
+    assert_eq!(
+        parse_fixture_selection(
+            &[visual_only, controllable.clone(), internal],
+            &["THRU".into()]
+        )
+        .unwrap(),
+        vec![controllable.fixture_id]
+    );
+}
+
+#[test]
 fn bare_multi_head_selection_expands_to_children_and_steps_without_parent_identity() {
     let mut fixture = schema_v2_direct_fixture().0;
     fixture.fixture_number = Some(1);

@@ -138,7 +138,10 @@ pub(super) use adapter::{
 pub(super) use color_attributes::color_attribute_index;
 pub(crate) use cue_deletion_ports::ServerProgrammingCueDeletionPorts;
 pub(super) use cue_navigation_action::execute_compatibility as execute_compatibility_cue_navigation;
-pub(crate) use cue_recording_osc::intercept_armed_playback as intercept_armed_cue_playback;
+pub(crate) use cue_recording_osc::{
+    PlaybackTargetInterception, complete_off_target,
+    intercept_armed_playback as intercept_armed_cue_playback,
+};
 pub(crate) use cue_transfer_ports::ServerProgrammingCueTransferPorts;
 pub(crate) use events::publish_service_result;
 pub(super) use interaction_wire::interaction_change;

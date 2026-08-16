@@ -86,6 +86,7 @@ export function reduceWorkspace(
 				stageGroupsVisible: action.groupsVisible ?? state.stageGroupsVisible,
 				stageShowSelection: action.showSelection ?? state.stageShowSelection,
 				stageShowFloorGrid: action.showFloorGrid ?? state.stageShowFloorGrid,
+				stageShowBeamGuides: action.showBeamGuides ?? state.stageShowBeamGuides,
 				stage2dSide: action.side2d ?? state.stage2dSide,
 				stageVizBackground: action.vizBackground ?? state.stageVizBackground,
 				stageEnvironmentBrightness: clamp(
@@ -109,8 +110,7 @@ export function reduceWorkspace(
 					0,
 					4,
 				),
-				stageVizShowLabels:
-					action.vizShowLabels ?? state.stageVizShowLabels,
+				stageVizShowLabels: action.vizShowLabels ?? state.stageVizShowLabels,
 			};
 		case "SET_DMX_DOT_SIZE":
 			return { ...state, dmxDotSize: action.value };

@@ -270,6 +270,7 @@ describe("FileManager layout", () => {
 		const { container } = render(<FileManager instanceId="layout" />);
 		expect(screen.getByText("File Manager")).toBeVisible();
 		expect(screen.getByText("Browse and manage files")).toBeVisible();
+		expect(screen.getByText("Path: /")).toBeVisible();
 		expect(
 			await screen.findByRole("button", { name: "Current path /" }),
 		).toHaveTextContent("/");

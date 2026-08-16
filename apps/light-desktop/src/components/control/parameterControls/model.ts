@@ -46,9 +46,9 @@ export const parameterFamilyOrder = Object.keys(
 export type SpecialParameterFamily =
 	| "Color"
 	| "Position"
-	| "Beam"
 	| "Shapers"
-	| "Control";
+	| "Control"
+	| "Media";
 export const alignModes = ["left", "right", "out", "in"] as const;
 export type AlignMode = (typeof alignModes)[number];
 
@@ -99,9 +99,9 @@ export const parameterLabels: Record<string, string> = {
 export const specialParameterFamilies = new Set<SpecialParameterFamily>([
 	"Color",
 	"Position",
-	"Beam",
 	"Shapers",
 	"Control",
+	"Media",
 ]);
 
 export function normalizedProgrammerTarget(value: unknown): number | undefined {

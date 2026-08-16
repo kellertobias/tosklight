@@ -1667,6 +1667,136 @@ button:not(:disabled):active {
 	grid-template-columns: repeat(4, minmax(0, 1fr));
 	gap: 6px;
 }
+.shapers-special-dialog-card {
+	width: min(760px, calc(100vw - 24px));
+}
+.shapers-special-dialog-card .special-dialog-content {
+	height: min(480px, calc(100vh - 180px));
+}
+.shapers-special-dialog {
+	height: 100%;
+	display: grid;
+	grid-template-columns: minmax(280px, 1fr) minmax(150px, 190px);
+	align-items: center;
+	gap: 18px;
+}
+.shapers-aperture {
+	width: min(100%, 460px);
+	max-height: 100%;
+	justify-self: center;
+	overflow: visible;
+	touch-action: none;
+}
+.shapers-aperture-field {
+	fill: #dffaff;
+	stroke: #38535f;
+	stroke-width: 2;
+	filter: drop-shadow(0 0 12px #76ddf466);
+}
+.shapers-module {
+	transform-box: view-box;
+	transform-origin: center;
+}
+.shaper-blade-plate {
+	fill: #071015;
+	stroke: #5f7780;
+	stroke-width: 2;
+	pointer-events: none;
+}
+.shaper-blade-handle {
+	fill: #173b46;
+	stroke: var(--cyan);
+	stroke-width: 3;
+	cursor: grab;
+}
+.shaper-blade-handle.mixed {
+	stroke-dasharray: 5 4;
+}
+.shaper-blade-number {
+	fill: #fff;
+	font-size: 17px;
+	font-weight: 800;
+	text-anchor: middle;
+	dominant-baseline: central;
+	pointer-events: none;
+}
+.shapers-rotation-track {
+	fill: none;
+	stroke: #38535f;
+	stroke-width: 8;
+}
+.shapers-rotation-hitarea {
+	fill: none;
+	stroke: transparent;
+	stroke-width: 40;
+	cursor: grab;
+}
+.shapers-rotation-handle {
+	fill: var(--cyan);
+	stroke: #fff;
+	stroke-width: 2;
+	pointer-events: none;
+}
+.shapers-special-help {
+	display: grid;
+	gap: 10px;
+	color: var(--muted);
+	line-height: 1.35;
+}
+.shapers-special-help b {
+	color: var(--cyan);
+	font-size: 20px;
+}
+.media-play-mode-dialog {
+	height: 100%;
+	display: grid;
+	grid-template-rows: auto minmax(0, 1fr);
+	gap: 14px;
+}
+.media-play-mode-dialog > header {
+	display: flex;
+	align-items: baseline;
+	gap: 12px;
+}
+.media-play-mode-dialog > header b {
+	font-size: 20px;
+	color: var(--cyan);
+}
+.media-play-mode-dialog > header span {
+	color: var(--muted);
+}
+.media-play-mode-options {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+	grid-auto-rows: minmax(64px, auto);
+	align-content: start;
+	gap: 8px;
+}
+.media-play-mode-options .ui-button {
+	display: grid;
+	place-content: center;
+	gap: 4px;
+	min-height: 64px;
+}
+.media-play-mode-options .ui-button small {
+	color: var(--muted);
+}
+.media-play-mode-options .ui-button.active {
+	border-color: var(--cyan);
+	background: #153541;
+	color: var(--cyan);
+}
+@media (max-width: 620px) {
+	.shapers-special-dialog {
+		grid-template-columns: 1fr;
+		grid-template-rows: minmax(240px, 1fr) auto;
+		gap: 8px;
+	}
+	.shapers-special-help {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		font-size: 12px;
+	}
+}
 .app-mark {
 	border: 0;
 	background: transparent;

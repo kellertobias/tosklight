@@ -100,6 +100,22 @@ function orderedFixtureTargets({
 		});
 }
 
+function fixtureFreezeTargets(target: FixtureSheetTarget) {
+	const patched = target.fixture;
+	const exact = (patched.freeze_targets ?? []).find(
+		(candidate) => candidate.fixture_id === target.fixtureId,
+	);
+	const contained =
+		target.order === 0
+			? (patched.freeze_targets ?? []).filter((candidate) =>
+					patched.logical_heads.some(
+						(head) => head.fixture_id === candidate.fixture_id,
+					),
+				)
+			: [];
+	return { exact, contained, targets: exact ? [exact] : contained };
+}
+
 function fixtureSheetRow({
 	target,
 	programmerValues,
@@ -122,18 +138,11 @@ function fixtureSheetRow({
 	highlightBypassesGroupMaster: boolean;
 }) {
 	const patched = target.fixture;
-	const exactFreeze = (patched.freeze_targets ?? []).find(
-		(candidate) => candidate.fixture_id === target.fixtureId,
-	);
-	const containedFreeze =
-		target.order === 0
-			? (patched.freeze_targets ?? []).filter((candidate) =>
-					patched.logical_heads.some(
-						(head) => head.fixture_id === candidate.fixture_id,
-					),
-				)
-			: [];
-	const freezeTargets = exactFreeze ? [exactFreeze] : containedFreeze;
+	const {
+		exact: exactFreeze,
+		contained: containedFreeze,
+		targets: freezeTargets,
+	} = fixtureFreezeTargets(target);
 	const freezeFamilies = [
 		...new Set(freezeTargets.flatMap((candidate) => candidate.families)),
 	];
@@ -378,7 +387,9 @@ function indexLimitingGroups(
 	return result;
 }
 
-function fixtureSheetHighlightIds(highlight: HighlightState | null | undefined) {
+function fixtureSheetHighlightIds(
+	highlight: HighlightState | null | undefined,
+) {
 	if (!highlight?.active || !highlight.output_enabled) return new Set<string>();
 	if (highlight.mode === "step")
 		return new Set(
