@@ -21,11 +21,15 @@ import type { TimecodeDefinition } from "../../api/types/timecode";
 import {
 	sameSelection,
 	deleteTimelineItem,
+	moveTimelineItem,
 	type TimecodeEditorSelection,
 	timelineItems,
 } from "./editorModel";
+import {
+	clearTimecodeEncoderDeck,
+	publishTimecodeEncoderDeck,
+} from "./timecodeEncoderBridge";
 import { CueListChooser } from "./TimecodeCueListChooser";
-import { TimelineTools } from "./TimecodeTimelineTools";
 import {
 	TIMECODE_SPEED_GROUPS,
 	TimecodeSpeedGroupChooser,
@@ -119,6 +123,7 @@ function TimelineCanvas(props: {
 			className="timecode-timeline-scroll"
 			aria-label="Timecode timeline viewport"
 		>
+			<div className="timecode-lane-header-column" aria-hidden="true" />
 			<div
 				className="timecode-timeline-canvas"
 				style={{ width: props.width + TIMECODE_LANE_HEADER_WIDTH }}
@@ -182,25 +187,14 @@ function EditorLane(
 		<div
 			className={`timecode-editor-lane lane-${lane.content.kind} ${props.selectedLaneId === lane.id ? "selected" : ""}`}
 			onPointerDown={(event) => {
+				const target = event.target as Element;
 				if (
-					event.target !== event.currentTarget ||
-					lane.content.kind !== "audio_volume"
+					target.closest(
+						".timecode-timeline-item, .timecode-editor-lane-label button",
+					)
 				)
 					return;
-				const bounds = event.currentTarget.getBoundingClientRect();
-				props.addKeyframe(
-					lane.id,
-					Math.max(
-						0,
-						Math.min(
-							props.duration,
-							Math.round(
-								(event.clientX - bounds.left - TIMECODE_LANE_HEADER_WIDTH) /
-									props.pixelsPerFrame,
-							),
-						),
-					),
-				);
+				props.onSelectLane(lane.id);
 			}}
 		>
 			{lane.content.kind === "audio_volume" && (
@@ -254,11 +248,7 @@ function EditorLane(
 					>
 						+ clip
 					</Button>
-				) : (
-					<Button size="compact" onClick={() => props.addKeyframe(lane.id)}>
-						+ keyframe
-					</Button>
-				)}
+				) : null}
 			</div>
 			{props.items
 				.filter((item) => item.laneId === lane.id)
@@ -381,6 +371,19 @@ export interface TimecodeAudioPlayerOption {
 
 const TARGET_MAX_PIXELS_PER_FRAME = 17.5;
 const FALLBACK_VIEWPORT_WIDTH = 720;
+const TIMECODE_EASINGS: Array<{
+	value: "linear" | "ease_in" | "ease_out" | "ease_in_out";
+	label: string;
+}> = [
+	{ value: "linear", label: "Linear" },
+	{ value: "ease_in", label: "Ease in" },
+	{ value: "ease_out", label: "Ease out" },
+	{ value: "ease_in_out", label: "Ease in/out" },
+];
+
+function clampIndex(value: number, length: number): number {
+	return Math.max(0, Math.min(Math.max(0, length - 1), Math.round(value)));
+}
 
 function useTimelineViewportWidth(scrollRef: RefObject<HTMLDivElement | null>) {
 	const [viewportWidth, setViewportWidth] = useState(FALLBACK_VIEWPORT_WIDTH);
@@ -463,11 +466,38 @@ export const TimecodeTimelineEditor = forwardRef<
 	);
 	const width = Math.max(timelineViewportWidth, duration * pixelsPerFrame);
 	const items = useMemo(() => timelineItems(definition), [definition]);
-	const selected = items.find((item) =>
-		sameSelection(item.selection, selection),
-	);
 	const activeLaneId =
 		selection && "laneId" in selection ? selection.laneId : selectedLaneId;
+	const encoderOwner = useRef(Symbol("timecode-editor")).current;
+	const keyframeItems = items.filter(
+		(item) =>
+			item.laneId === activeLaneId &&
+			(item.kind === "speed" || item.kind === "volume"),
+	);
+	const laneIndex = Math.max(
+		0,
+		definition.lanes.findIndex((lane) => lane.id === activeLaneId),
+	);
+	const keyframeIndex = Math.max(
+		0,
+		keyframeItems.findIndex((item) => sameSelection(item.selection, selection)),
+	);
+	const activeLane = definition.lanes.find((lane) => lane.id === activeLaneId);
+	const activeKeyframe = keyframeItems.find((item) =>
+		sameSelection(item.selection, selection),
+	);
+	const speedKeyframe =
+		selection?.kind === "speed" && activeLane?.content.kind === "speed_group"
+			? activeLane.content.keyframes.find(
+					(keyframe) => keyframe.id === selection.itemId,
+				)
+			: undefined;
+	const volumeKeyframe =
+		selection?.kind === "volume" && activeLane?.content.kind === "audio_volume"
+			? activeLane.content.keyframes.find(
+					(keyframe) => keyframe.id === selection.itemId,
+				)
+			: undefined;
 	useEffect(() => {
 		if (selection && "laneId" in selection) setSelectedLaneId(selection.laneId);
 	}, [selection]);
@@ -527,6 +557,212 @@ export const TimecodeTimelineEditor = forwardRef<
 		if (!availableSpeedGroups.includes(speedGroup as never))
 			setSpeedGroup(availableSpeedGroups[0] ?? "");
 	}, [availableSpeedGroups, speedGroup]);
+	useEffect(() => {
+		const selectLane = (requested: number) => {
+			const index = clampIndex(requested, definition.lanes.length);
+			const lane = definition.lanes[index];
+			if (!lane) return;
+			setSelectedLaneId(lane.id);
+			const first = items.find(
+				(item) =>
+					item.laneId === lane.id &&
+					(item.kind === "speed" || item.kind === "volume"),
+			);
+			setSelection(first?.selection ?? null);
+		};
+		const selectKeyframe = (requested: number) => {
+			const item = keyframeItems[clampIndex(requested, keyframeItems.length)];
+			if (!item) return;
+			setSelection(item.selection);
+			onScrub(item.frame);
+		};
+		const setSelectedFrame = (requested: number) => {
+			if (!selection || !activeKeyframe) return;
+			const next = Math.max(0, Math.min(duration, Math.round(requested)));
+			onCommit(moveTimelineItem(definition, selection, next));
+			onScrub(next);
+		};
+		const updateSelected = (
+			value: number,
+			field: "value" | "aux" | "easing",
+		) => {
+			if (!selection || !activeLane) return;
+			onCommit({
+				...definition,
+				lanes: definition.lanes.map((lane) => {
+					if (lane.id !== activeLane.id) return lane;
+					if (
+						selection.kind === "speed" &&
+						lane.content.kind === "speed_group"
+					)
+						return {
+							...lane,
+							content: {
+								...lane.content,
+								keyframes: lane.content.keyframes.map((keyframe) =>
+									keyframe.id !== selection.itemId
+										? keyframe
+										: field === "value"
+											? { ...keyframe, bpm: Math.max(1, Math.min(999, value)) }
+											: field === "aux"
+												? { ...keyframe, phase: value }
+												: keyframe,
+								),
+							},
+						};
+					if (
+						selection.kind === "volume" &&
+						lane.content.kind === "audio_volume"
+					)
+						return {
+							...lane,
+							content: {
+								...lane.content,
+								keyframes: lane.content.keyframes.map((keyframe) => {
+									if (keyframe.id !== selection.itemId) return keyframe;
+									if (field === "value")
+										return {
+											...keyframe,
+											value: Math.max(0, Math.min(1, value / 100)),
+										};
+									if (field === "aux")
+										return {
+											...keyframe,
+											fade_frames: Math.max(0, Math.round(value)),
+										};
+									return {
+										...keyframe,
+										curve: TIMECODE_EASINGS[clampIndex(value, TIMECODE_EASINGS.length)]
+											?.value ?? "linear",
+									};
+								}),
+							},
+						};
+					return lane;
+				}),
+			});
+		};
+		const selectedValue = speedKeyframe?.bpm ?? (volumeKeyframe?.value ?? 0) * 100;
+		const selectedAux = speedKeyframe?.phase ?? volumeKeyframe?.fade_frames ?? 0;
+		const easingIndex = Math.max(
+			0,
+			TIMECODE_EASINGS.findIndex(
+				(easing) => easing.value === volumeKeyframe?.curve,
+			),
+		);
+		publishTimecodeEncoderDeck(encoderOwner, {
+			timeline: [
+				{
+					id: "timecode-zoom",
+					label: "Timeline zoom",
+					display: `${Math.round(zoom * 100)}%`,
+					value: zoom,
+					minimum: 1,
+					maximum: maximumZoom,
+					fineStep: 0.05,
+					coarseStep: 0.25,
+					set: (value) => setZoom(Math.max(1, Math.min(maximumZoom, value))),
+				},
+				{
+					id: "timecode-playhead",
+					label: "Playhead",
+					display: formatFrame(frame, fps),
+					value: frame,
+					minimum: 0,
+					maximum: duration,
+					fineStep: 1,
+					coarseStep: fps,
+					set: (value) => onScrub(Math.max(0, Math.min(duration, Math.round(value)))),
+				},
+				{
+					id: "timecode-keyframe-navigation",
+					label: "Keyframe",
+					display: keyframeItems.length
+						? `${keyframeIndex + 1} / ${keyframeItems.length}`
+						: "—",
+					value: keyframeIndex,
+					minimum: 0,
+					maximum: Math.max(0, keyframeItems.length - 1),
+					fineStep: 1,
+					coarseStep: 1,
+					disabled: !keyframeItems.length,
+					set: selectKeyframe,
+				},
+				{
+					id: "timecode-lane-navigation",
+					label: "Lane",
+					display: activeLane?.name ?? "—",
+					value: laneIndex,
+					minimum: 0,
+					maximum: Math.max(0, definition.lanes.length - 1),
+					fineStep: 1,
+					coarseStep: 1,
+					disabled: !definition.lanes.length,
+					set: selectLane,
+				},
+			],
+			keyframe: [
+				{
+					id: "timecode-keyframe-frame",
+					label: "Keyframe position",
+					display: activeKeyframe ? formatFrame(activeKeyframe.frame, fps) : "—",
+					value: activeKeyframe?.frame ?? 0,
+					minimum: 0,
+					maximum: duration,
+					fineStep: 1,
+					coarseStep: fps,
+					disabled: !activeKeyframe,
+					set: setSelectedFrame,
+				},
+				{
+					id: "timecode-keyframe-value",
+					label: speedKeyframe ? "BPM" : "Volume",
+					display: speedKeyframe
+						? `${Math.round(selectedValue)} BPM`
+						: volumeKeyframe
+							? `${Math.round(selectedValue)}%`
+							: "—",
+					value: selectedValue,
+					minimum: speedKeyframe ? 1 : 0,
+					maximum: speedKeyframe ? 999 : 100,
+					fineStep: 1,
+					coarseStep: speedKeyframe ? 5 : 10,
+					disabled: !activeKeyframe,
+					set: (value) => updateSelected(value, "value"),
+				},
+				{
+					id: "timecode-keyframe-aux",
+					label: speedKeyframe ? "Phase" : "Fade frames",
+					display: activeKeyframe ? String(Math.round(selectedAux)) : "—",
+					value: selectedAux,
+					minimum: 0,
+					maximum: speedKeyframe ? 360 : duration,
+					fineStep: 1,
+					coarseStep: speedKeyframe ? 10 : fps,
+					disabled: !activeKeyframe,
+					set: (value) => updateSelected(value, "aux"),
+				},
+				{
+					id: "timecode-keyframe-easing",
+					label: "Easing",
+					display: volumeKeyframe
+						? (TIMECODE_EASINGS[easingIndex]?.label ?? "Linear")
+						: "—",
+					value: easingIndex,
+					minimum: 0,
+					maximum: TIMECODE_EASINGS.length - 1,
+					fineStep: 1,
+					coarseStep: 1,
+					disabled: !volumeKeyframe,
+					set: (value) => updateSelected(value, "easing"),
+				},
+			],
+		});
+	});
+	useEffect(
+		() => () => clearTimecodeEncoderDeck(encoderOwner),
+		[encoderOwner],
+	);
 
 	return (
 		<section
@@ -559,15 +795,18 @@ export const TimecodeTimelineEditor = forwardRef<
 					selectedLaneId: activeLaneId,
 				}}
 			/>
-			<SelectionInspector
+			<KeyframeActionStrip
 				definition={definition}
 				selection={selection}
-				selectedLabel={selected?.label}
-				cueLists={cueLists}
-				fps={fps}
+				laneId={activeLaneId}
+				frame={frame}
+				items={items}
+				onSelection={(item) => setSelection(item.selection)}
+				onInsert={() => {
+					if (activeLaneId) addKeyframe(activeLaneId, frame);
+				}}
 				onCommit={onCommit}
 			/>
-			<TimelineTools zoom={zoom} setZoom={setZoom} maximumZoom={maximumZoom} />
 			{cueListChooserOpen && (
 				<CueListChooser
 					cueLists={cueLists}
@@ -664,6 +903,8 @@ function KeyframeActionStrip({
 	const canInsert =
 		lane?.content.kind === "audio_volume" ||
 		lane?.content.kind === "speed_group";
+	const canDelete =
+		selection?.kind === "volume" || selection?.kind === "speed";
 	return (
 		<div
 			className="timecode-keyframe-actions"
@@ -684,17 +925,12 @@ function KeyframeActionStrip({
 				value={selectedVolume?.curve ?? "linear"}
 				disabled={!selectedVolume}
 				onChange={updateEasing}
-				options={[
-					{ value: "linear", label: "Linear" },
-					{ value: "ease_in", label: "Ease in" },
-					{ value: "ease_out", label: "Ease out" },
-					{ value: "ease_in_out", label: "Ease in/out" },
-				]}
+				options={TIMECODE_EASINGS}
 			/>
 			<Button
-				disabled={!selection || selection.kind === "marker"}
+				disabled={!canDelete}
 				onClick={() => {
-					if (selection && selection.kind !== "marker")
+					if (canDelete && selection)
 						onCommit(deleteTimelineItem(definition, selection));
 				}}
 			>
@@ -1309,19 +1545,26 @@ function Ruler({
 		(_, index) => index * step,
 	);
 	return (
-		<div className="timecode-ruler">
-			{ticks.map((tick) => (
-				<span
-					key={tick}
-					className={
-						tick === duration ? "timecode-ruler-final-tick" : undefined
-					}
-					style={{ left: tick * pixelsPerFrame }}
-				>
-					{formatFrame(tick, fps)}
-				</span>
-			))}
-		</div>
+		<>
+			<div className="timecode-ruler-stripes" aria-hidden="true">
+				{ticks.map((tick) => (
+					<i key={tick} style={{ left: tick * pixelsPerFrame }} />
+				))}
+			</div>
+			<div className="timecode-ruler">
+				{ticks.map((tick) => (
+					<span
+						key={tick}
+						className={
+							tick === duration ? "timecode-ruler-final-tick" : undefined
+						}
+						style={{ left: tick * pixelsPerFrame }}
+					>
+						{formatFrame(tick, fps)}
+					</span>
+				))}
+			</div>
+		</>
 	);
 }
 

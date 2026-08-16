@@ -159,6 +159,10 @@ describe("TimecodeEditor title and settings", () => {
 		});
 		for (const label of ["Name", "Duration", "Transport offset", "Auto-start"])
 			expect(within(settings).getByLabelText(label)).toBeTruthy();
+		const markerLock = within(settings).getByLabelText("Lock markers");
+		expect(markerLock).not.toBeChecked();
+		fireEvent.click(markerLock);
+		expect(markerLock).toBeChecked();
 		expect(within(settings).queryByLabelText("Number")).toBeNull();
 		expect(within(settings).queryByLabelText("Frames")).toBeNull();
 		expect(

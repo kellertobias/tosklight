@@ -1,16 +1,43 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import {
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+	within,
+} from "@testing-library/react";
 import { act } from "react";
 import { createRef, useState } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TimecodeDefinition } from "../../api/types/timecode";
 import {
 	TIMECODE_LANE_HEADER_WIDTH,
 	TimecodeTimelineEditor,
 	type TimecodeTimelineEditorHandle,
 	timelineFrameX,
-	timelineZoomGeometry,
 } from "./TimecodeTimelineEditor";
+import { useTimecodeEncoderDeck } from "./timecodeEncoderBridge";
+
+function TimecodeEncoderProbe() {
+	const deck = useTimecodeEncoderDeck();
+	if (!deck) return null;
+	return (
+		<div aria-label="Timecode encoder probe">
+			<button type="button" onClick={() => deck.timeline[0]?.set(2)}>
+				Set timeline zoom
+			</button>
+			<button type="button" onClick={() => deck.timeline[1]?.set(132)}>
+				Set playhead
+			</button>
+			<button type="button" onClick={() => deck.keyframe[1]?.set(42)}>
+				Set keyframe value
+			</button>
+			<button type="button" onClick={() => deck.keyframe[3]?.set(2)}>
+				Set keyframe easing
+			</button>
+		</div>
+	);
+}
 
 const definition: TimecodeDefinition = {
 	id: "00000000-0000-0000-0000-000000000001",
@@ -51,10 +78,112 @@ const definition: TimecodeDefinition = {
 	],
 };
 
+afterEach(cleanup);
+
 describe("TimecodeTimelineEditor", () => {
-	it("fits the whole timeline at 1x and reaches 17.5 CSS pixels per frame", () => {
+	it("publishes timeline navigation and selected-keyframe encoder groups", () => {
+		const onScrub = vi.fn();
+		function Harness() {
+			const [draft, setDraft] = useState(definition);
+			return (
+				<>
+					<TimecodeTimelineEditor
+						definition={draft}
+						frame={44}
+						fps={44}
+						cueLists={[]}
+						audioPlayers={[]}
+						onScrub={onScrub}
+						onCommit={setDraft}
+						onPreview={setDraft}
+						onBeginGesture={vi.fn()}
+						onEndGesture={vi.fn()}
+					/>
+					<TimecodeEncoderProbe />
+				</>
+			);
+		}
+		render(<Harness />);
+		fireEvent.click(
+			screen.getByRole("button", { name: /Audio.*audio volume/i }),
+		);
+		fireEvent.click(screen.getByRole("button", { name: "Set timeline zoom" }));
+		const canvas = screen
+			.getByLabelText("Timecode timeline viewport")
+			.querySelector<HTMLElement>(".timecode-timeline-canvas");
+		expect(Number(canvas?.dataset.pixelsPerFrame)).toBeCloseTo((560 / 440) * 2);
+
+		fireEvent.click(screen.getByRole("button", { name: "Set playhead" }));
+		expect(onScrub).toHaveBeenCalledWith(132);
+		fireEvent.click(screen.getByRole("button", { name: "Set keyframe value" }));
+		expect(screen.getByTitle(/Audio · 42%/)).toBeTruthy();
+		fireEvent.click(screen.getByRole("button", { name: "Set keyframe easing" }));
+		expect(screen.getByTitle(/Audio · 42% · ease_out/)).toBeTruthy();
+	});
+
+	it("offers only unused Speed Groups when adding a lane", () => {
+		const ref = createRef<TimecodeTimelineEditorHandle>();
+		const onCommit = vi.fn();
+		render(
+			<TimecodeTimelineEditor
+				ref={ref}
+				definition={{
+					...definition,
+					lanes: [
+						{
+							id: "speed-a",
+							name: "Speed Group A",
+							content: { kind: "speed_group", group: "A", keyframes: [] },
+						},
+						{
+							id: "speed-c",
+							name: "Speed Group C",
+							content: { kind: "speed_group", group: "C", keyframes: [] },
+						},
+					],
+				}}
+				frame={0}
+				fps={44}
+				cueLists={[]}
+				audioPlayers={[]}
+				onScrub={vi.fn()}
+				onCommit={onCommit}
+				onPreview={vi.fn()}
+				onBeginGesture={vi.fn()}
+				onEndGesture={vi.fn()}
+			/>,
+		);
+		act(() => ref.current?.chooseSpeedLane());
+		const picker = within(
+			screen.getByRole("dialog", { name: "Choose Speed Group" }),
+		).getByRole("button", { name: "Speed Group B" });
+		fireEvent.click(picker);
+		expect(screen.queryByRole("option", { name: "Speed Group A" })).toBeNull();
+		expect(screen.queryByRole("option", { name: "Speed Group C" })).toBeNull();
+		for (const group of ["B", "D", "E"])
+			expect(
+				screen.getByRole("option", { name: `Speed Group ${group}` }),
+			).toBeInTheDocument();
+		fireEvent.click(screen.getByRole("option", { name: "Speed Group D" }));
+		fireEvent.click(screen.getByRole("button", { name: "Add lane" }));
+		expect(onCommit).toHaveBeenCalledWith(
+			expect.objectContaining({
+				lanes: expect.arrayContaining([
+					expect.objectContaining({
+						content: expect.objectContaining({
+							kind: "speed_group",
+							group: "D",
+						}),
+					}),
+				]),
+			}),
+		);
+	});
+
+	it("fits the whole timeline at 1x with continuous headers and ruler stripes", () => {
 		const onCommit = vi.fn();
 		const onScrub = vi.fn();
+		const onPreview = vi.fn();
 		const ref = createRef<TimecodeTimelineEditorHandle>();
 		render(
 			<TimecodeTimelineEditor
@@ -80,7 +209,7 @@ describe("TimecodeTimelineEditor", () => {
 				markersLocked
 				onScrub={onScrub}
 				onCommit={onCommit}
-				onPreview={vi.fn()}
+				onPreview={onPreview}
 				onBeginGesture={vi.fn()}
 				onEndGesture={vi.fn()}
 			/>,
@@ -94,19 +223,16 @@ describe("TimecodeTimelineEditor", () => {
 			String(TIMECODE_LANE_HEADER_WIDTH),
 		);
 		expect(Number(canvas?.dataset.pixelsPerFrame)).toBeCloseTo(560 / 440);
-		const editor = screen.getByLabelText("Timecode timeline editor");
-		const zoom = screen.getByLabelText("Timeline zoom");
+		expect(canvas?.firstElementChild).toHaveClass("timecode-ruler-stripes");
+		expect(viewport.querySelector(".timecode-lane-header-column")).toBeTruthy();
 		expect(
-			viewport.compareDocumentPosition(zoom) & Node.DOCUMENT_POSITION_FOLLOWING,
-		).toBeTruthy();
-		expect(canvas?.firstElementChild).toHaveClass("timecode-ruler");
-		const { maximumZoom } = timelineZoomGeometry(440, 560);
-		fireEvent.input(screen.getByLabelText("Timeline zoom"), {
-			target: { value: maximumZoom },
-		});
-		expect(Number(canvas?.dataset.pixelsPerFrame)).toBeCloseTo(17.5);
-		expect(Number.parseFloat(canvas?.style.width ?? "0")).toBeCloseTo(7860);
-		expect(editor.lastElementChild).toContainElement(zoom);
+			viewport.querySelectorAll(".timecode-ruler-stripes i").length,
+		).toBeGreaterThan(1);
+		expect(screen.queryByLabelText("Timeline zoom")).toBeNull();
+		expect(
+			screen.getByLabelText("Selected lane and keyframe actions"),
+		).toBeInTheDocument();
+		expect(screen.queryByText(/inspect, copy, move, or delete/)).toBeNull();
 		expect(
 			screen.getByLabelText("Linked audio waveform").querySelectorAll("line"),
 		).toHaveLength(3);
@@ -119,13 +245,17 @@ describe("TimecodeTimelineEditor", () => {
 		expect(marker).toHaveAttribute("aria-disabled", "true");
 		expect(marker).toHaveStyle({ color: "#33aa77" });
 		expect(marker).toHaveStyle({
-			left: `${timelineFrameX(88, 17.5)}px`,
+			left: `${timelineFrameX(88, Number(canvas?.dataset.pixelsPerFrame))}px`,
 			width: "44px",
 			transform: "translateX(-22px)",
 		});
 		expect(
 			marker.querySelector(".timecode-timeline-marker-line"),
 		).toBeInTheDocument();
+		fireEvent.pointerDown(marker, { pointerId: 7, clientX: 272 });
+		fireEvent.pointerMove(window, { clientX: 400 });
+		fireEvent.pointerUp(window);
+		expect(onPreview).not.toHaveBeenCalled();
 		expect(
 			screen.getByRole("button", { name: "Drag playhead to seek" }),
 		).toHaveTextContent("00:00:01.00");
@@ -133,7 +263,7 @@ describe("TimecodeTimelineEditor", () => {
 			name: "Drag playhead to seek",
 		});
 		expect(playhead).toHaveStyle({
-			left: `${timelineFrameX(44, 17.5)}px`,
+			left: `${timelineFrameX(44, Number(canvas?.dataset.pixelsPerFrame))}px`,
 		});
 		playhead.setPointerCapture = vi.fn();
 		playhead.hasPointerCapture = vi.fn(() => true);
@@ -161,7 +291,7 @@ describe("TimecodeTimelineEditor", () => {
 		expect(screen.queryByRole("button", { name: "Add Marker" })).toBeNull();
 	});
 
-	it("creates and edits a clip on a patched Audio Player lane", () => {
+	it("creates a clip on a patched Audio Player lane without the old inspector", () => {
 		const commits: TimecodeDefinition[] = [];
 		function Harness() {
 			const [draft, setDraft] = useState<TimecodeDefinition>({
@@ -205,37 +335,27 @@ describe("TimecodeTimelineEditor", () => {
 		render(<Harness />);
 		fireEvent.click(screen.getByRole("button", { name: "+ clip" }));
 		expect(screen.getByTitle(/Audio Player 201 · 000\.000/)).toBeTruthy();
-		fireEvent.input(screen.getByLabelText("Audio Folder"), {
-			target: { value: "12" },
-		});
-		fireEvent.input(screen.getByLabelText("Audio File"), {
-			target: { value: "34" },
-		});
-		fireEvent.click(screen.getByLabelText("Repeat"));
-		fireEvent.input(screen.getByLabelText("Volume %"), {
-			target: { value: "65" },
-		});
-		fireEvent.click(screen.getByRole("button", { name: "Add volume point" }));
+		expect(screen.queryByLabelText("Audio Folder")).toBeNull();
+		expect(
+			screen.getByRole("button", { name: "Delete selected keyframe" }),
+		).toBeDisabled();
 		const content = commits.at(-1)?.lanes[0].content;
 		expect(content).toMatchObject({
 			kind: "audio_player",
 			clips: [
 				expect.objectContaining({
-					folder: 12,
-					file: 34,
-					repeat: true,
-					volume_keyframes: [
-						expect.objectContaining({ value: 0.65 }),
-						expect.objectContaining({ value: 0.65 }),
-					],
+					folder: 0,
+					file: 0,
+					repeat: false,
 				}),
 			],
 		});
 	});
 
 	it("moves a Cue List clip and resizes each boundary through its drag handles", () => {
+		const latest = { current: definition };
 		function Harness() {
-			const [draft, setDraft] = useState<TimecodeDefinition>({
+			const [draft, setDraft] = useState<TimecodeDefinition>(() => ({
 				...definition,
 				lanes: [
 					{
@@ -258,7 +378,8 @@ describe("TimecodeTimelineEditor", () => {
 						},
 					},
 				],
-			});
+			}));
+			latest.current = draft;
 			return (
 				<TimecodeTimelineEditor
 					definition={draft}
@@ -286,22 +407,34 @@ describe("TimecodeTimelineEditor", () => {
 		fireEvent.pointerDown(clip, { pointerId: 1, clientX: 72 });
 		fireEvent.pointerMove(window, { clientX: 128 });
 		fireEvent.pointerUp(window);
-		expect(editor.getByLabelText("Start frame")).toHaveValue("88");
+		let cueLane = latest.current.lanes[0].content;
+		expect(cueLane).toMatchObject({
+			kind: "cue_list",
+			clips: [expect.objectContaining({ start_frame: 88, end_frame: 176 })],
+		});
 		const start = clip.querySelector<HTMLElement>(".timecode-clip-edge.start");
 		expect(start).toBeTruthy();
 		fireEvent.pointerDown(start as HTMLElement, { pointerId: 2, clientX: 144 });
 		fireEvent.pointerMove(window, { clientX: 172 });
 		fireEvent.pointerUp(window);
-		expect(editor.getByLabelText("Start frame")).toHaveValue("110");
+		cueLane = latest.current.lanes[0].content;
+		expect(cueLane).toMatchObject({
+			kind: "cue_list",
+			clips: [expect.objectContaining({ start_frame: 110 })],
+		});
 		const end = clip.querySelector<HTMLElement>(".timecode-clip-edge.end");
 		expect(end).toBeTruthy();
 		fireEvent.pointerDown(end as HTMLElement, { pointerId: 3, clientX: 324 });
 		fireEvent.pointerMove(window, { clientX: 352 });
 		fireEvent.pointerUp(window);
-		expect(editor.getByLabelText("End frame")).toHaveValue("198");
+		cueLane = latest.current.lanes[0].content;
+		expect(cueLane).toMatchObject({
+			kind: "cue_list",
+			clips: [expect.objectContaining({ end_frame: 198 })],
+		});
 	});
 
-	it("adds and drags audio-volume keyframes through the lane", () => {
+	it("selects a whole lane and edits keyframes through the compact action strip", () => {
 		function Harness() {
 			const [draft, setDraft] = useState<TimecodeDefinition>({
 				...definition,
@@ -332,7 +465,16 @@ describe("TimecodeTimelineEditor", () => {
 		const lane =
 			view.container.querySelector<HTMLElement>(".lane-audio_volume");
 		expect(lane).toBeTruthy();
-		fireEvent.pointerDown(lane as HTMLElement, { clientX: 80, clientY: 100 });
+		fireEvent.pointerDown(
+			within(lane as HTMLElement).getByLabelText("Linked audio waveform"),
+		);
+		expect(lane).toHaveClass("selected");
+		expect(screen.queryByRole("button", { name: "+ keyframe" })).toBeNull();
+		fireEvent.click(
+			screen.getByRole("button", {
+				name: "Insert keyframe at 00:00:00.00",
+			}),
+		);
 		const keyframe = view.getByTitle(/Main audio volume · 100%/);
 		fireEvent.pointerDown(keyframe, {
 			pointerId: 1,
@@ -341,6 +483,10 @@ describe("TimecodeTimelineEditor", () => {
 		});
 		fireEvent.pointerMove(window, { clientX: 112, clientY: 132 });
 		fireEvent.pointerUp(window);
-		expect(within(view.container).getByLabelText("Volume %")).toHaveValue("80");
+		expect(view.getByTitle(/Main audio volume · 80%/)).toBeTruthy();
+		fireEvent.click(
+			screen.getByRole("button", { name: "Delete selected keyframe" }),
+		);
+		expect(view.queryByTitle(/Main audio volume · 80%/)).toBeNull();
 	});
 });

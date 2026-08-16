@@ -5,6 +5,7 @@ import {
 	deleteTimelineItem,
 	moveTimelineItem,
 	parseMarkerCsv,
+	reconcileAutomaticAudioLane,
 	snapTimelineFrame,
 	timelineItems,
 } from "./editorModel";
@@ -40,6 +41,41 @@ const definition: TimecodeDefinition = {
 };
 
 describe("Timecode editor model", () => {
+	it("keeps exactly one automatic audio lane only while audio is linked", () => {
+		const withoutLane = {
+			...definition,
+			audio: {
+				asset_id: "00000000-0000-0000-0000-000000000099",
+				asset_revision: 1,
+			},
+			lanes: [],
+		};
+		const ids = ["audio-lane", "audio-keyframe"];
+		const linked = reconcileAutomaticAudioLane(
+			withoutLane,
+			() => ids.shift() ?? "unexpected",
+		);
+		expect(linked.lanes).toEqual([
+			expect.objectContaining({
+				id: "audio-lane",
+				content: expect.objectContaining({
+					kind: "audio_volume",
+					keyframes: [expect.objectContaining({ id: "audio-keyframe" })],
+				}),
+			}),
+		]);
+		expect(
+			reconcileAutomaticAudioLane({
+				...linked,
+				lanes: [...linked.lanes, { ...linked.lanes[0], id: "duplicate-audio" }],
+			})
+				.lanes,
+		).toHaveLength(1);
+		expect(
+			reconcileAutomaticAudioLane({ ...linked, audio: null }).lanes,
+		).toHaveLength(0);
+	});
+
 	it("projects labels and moves frame-accurate keyframes with marker snapping", () => {
 		const selection = {
 			kind: "volume" as const,

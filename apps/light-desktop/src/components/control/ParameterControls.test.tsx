@@ -13,6 +13,10 @@ import type {
 	VisualizationSnapshot,
 } from "../../api/types";
 import { DynamicEditorSessionProvider } from "../../features/dynamics/DynamicEditorSessionContext";
+import {
+	clearTimecodeEncoderDeck,
+	publishTimecodeEncoderDeck,
+} from "../../features/timecode/timecodeEncoderBridge";
 import { selectFixturesForSelection } from "../../features/patch/selectors";
 import type {
 	ProgrammerFixtureValue,
@@ -41,6 +45,7 @@ const state = {
 	preload: "idle",
 	shiftArmed: false,
 };
+const timecodeEncoderOwner = Symbol("parameter-controls-test");
 const dispatch = vi.fn((action: { type: string; value?: boolean }) => {
 	if (action.type === "SET_SHIFT_ARMED")
 		state.shiftArmed = Boolean(action.value);
@@ -241,6 +246,7 @@ vi.mock("./parameterControls/useParameterProgrammerValues", () => ({
 
 afterEach(() => {
 	cleanup();
+	clearTimecodeEncoderDeck(timecodeEncoderOwner);
 	state.stageMode = "select";
 	state.stageView = "2d";
 	state.builtIn = null;
@@ -269,6 +275,86 @@ afterEach(() => {
 });
 
 describe("ParameterControls projection lifecycle", () => {
+	it("gives an active Timecode both encoder groups instead of generic controls", () => {
+		const timelineSet = vi.fn();
+		const keyframeSet = vi.fn();
+		publishTimecodeEncoderDeck(timecodeEncoderOwner, {
+			timeline: [
+				{
+					id: "zoom",
+					label: "Timeline zoom",
+					display: "100%",
+					value: 1,
+					minimum: 1,
+					maximum: 4,
+					fineStep: 0.05,
+					coarseStep: 0.25,
+					set: timelineSet,
+				},
+			],
+			keyframe: [
+				{
+					id: "value",
+					label: "Volume",
+					display: "80%",
+					value: 80,
+					minimum: 0,
+					maximum: 100,
+					fineStep: 1,
+					coarseStep: 10,
+					set: keyframeSet,
+				},
+			],
+		});
+		state.builtIn = "timecode";
+
+		render(<ParameterControls />);
+
+		expect(
+			screen.getByRole("button", { name: "Timecode Timeline" }),
+		).toHaveClass("is-active");
+		expect(
+			screen.getByRole("group", { name: "Enc 1 · Timeline zoom" }),
+		).toHaveTextContent("100%");
+		expect(screen.queryByRole("button", { name: "Intensity" })).toBeNull();
+
+		fireEvent.click(screen.getByRole("button", { name: "Selected Keyframe" }));
+		expect(
+			screen.getByRole("group", { name: "Enc 1 · Volume" }),
+		).toHaveTextContent("80%");
+	});
+
+	it("routes hardware encoder turns to the active Timecode deck", () => {
+		const set = vi.fn();
+		publishTimecodeEncoderDeck(timecodeEncoderOwner, {
+			timeline: [
+				{
+					id: "zoom",
+					label: "Timeline zoom",
+					display: "100%",
+					value: 1,
+					minimum: 1,
+					maximum: 4,
+					fineStep: 0.05,
+					coarseStep: 0.25,
+					set,
+				},
+			],
+			keyframe: [],
+		});
+		state.builtIn = "timecode";
+		server.bootstrap.hardware_connected = true;
+		render(<ParameterControls />);
+
+		window.dispatchEvent(
+			new CustomEvent("light:encoder-action", {
+				detail: { control: "encode/1", value: "up" },
+			}),
+		);
+
+		expect(set).toHaveBeenCalledWith(1.05);
+	});
+
 	it("shows fixture-profile Color defaults before a programmer value exists", () => {
 		server.selectedFixtures = ["fixture-1"];
 		server.patch.fixtures = [
