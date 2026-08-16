@@ -212,7 +212,8 @@ export function App() {
 	}
 
 	useEffect(() => {
-		if (workspace !== "patch" || !selected.length) return;
+		if ((workspace !== "patch" && workspace !== "venue") || !selected.length)
+			return;
 		const frame = window.requestAnimationFrame(() => {
 			const row = window.document.querySelector<HTMLElement>(
 				`[data-fixture-id="${selected[0]}"]`,
@@ -511,6 +512,7 @@ export function App() {
 								<FixturePatchSetup
 									title={workspaceTitle}
 									scope={workspace === "patch" ? "dmx" : workspace}
+									showAllLayersRequest={selectionRevision}
 								/>
 							</PatchViewProvider>
 							{visualizerRunning ? (

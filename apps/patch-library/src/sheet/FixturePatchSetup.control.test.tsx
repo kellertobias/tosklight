@@ -315,6 +315,38 @@ afterEach(() => {
 });
 
 describe("patch layer locks", () => {
+	it("returns to All fixtures when an external selection requests a reveal", () => {
+		const floorFixture = splitFixture();
+		floorFixture.fixture_id = "fixture-floor";
+		floorFixture.fixture_number = 18;
+		floorFixture.name = "Floor Wash 18";
+		floorFixture.layer_id = "floor";
+		server.patch.fixtures = [splitFixture(), floorFixture];
+		server.patchLayers = [
+			{ body: { id: "default", name: "Stage", order: 0, locked: false } },
+			{ body: { id: "floor", name: "Floor", order: 1, locked: false } },
+		];
+		const { rerender } = render(<FixturePatchSetup showAllLayersRequest={0} />);
+		const layers = screen
+			.getByRole("heading", { name: "Layers" })
+			.closest("aside");
+		if (!layers) throw new Error("Layers sidebar was not rendered");
+
+		fireEvent.click(within(layers).getByRole("button", { name: /^Stage/ }));
+		expect(
+			screen.getByRole("row", { name: /Split Wash 17/ }),
+		).toBeInTheDocument();
+		expect(screen.queryByRole("row", { name: /Floor Wash 18/ })).toBeNull();
+
+		rerender(<FixturePatchSetup showAllLayersRequest={1} />);
+		expect(
+			screen.getByRole("row", { name: /Floor Wash 18/ }),
+		).toBeInTheDocument();
+		expect(
+			within(layers).getByRole("button", { name: /^All fixtures/ }),
+		).toHaveClass("active");
+	});
+
 	it("offers Lock Layer in the title only after selecting an unlocked layer", async () => {
 		server.patchLayers = [
 			{ body: { id: "default", name: "Stage", order: 0, locked: false } },

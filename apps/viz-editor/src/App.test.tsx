@@ -1,5 +1,6 @@
 import * as dialog from "@tauri-apps/plugin-dialog";
 import {
+	act,
 	fireEvent,
 	render,
 	screen,
@@ -362,6 +363,35 @@ describe("the Viz editor window", () => {
 		expect(
 			await screen.findByText("0 fixtures · 2 layers"),
 		).toBeInTheDocument();
+	});
+
+	it("returns to All fixtures before revealing a CAD-selected entity", async () => {
+		renderApp();
+		fireEvent.click(await screen.findByRole("button", { name: "Patch" }));
+		await screen.findByText("0 fixtures · 2 layers");
+		const layers = screen
+			.getByRole("heading", { name: "Layers" })
+			.closest("aside");
+		if (!layers) throw new Error("Layers sidebar was not rendered");
+		fireEvent.click(within(layers).getByRole("button", { name: /^House/ }));
+		expect(within(layers).getByRole("button", { name: /^House/ })).toHaveClass(
+			"active",
+		);
+
+		await waitFor(() =>
+			expect(eventHandlers.get("cad-selection-delta")).toBeDefined(),
+		);
+		await act(async () => {
+			eventHandlers.get("cad-selection-delta")?.({
+				payload: { revision: 1, selectedIds: [PROFILE_ID] },
+			});
+		});
+
+		await waitFor(() =>
+			expect(
+				within(layers).getByRole("button", { name: /^All fixtures/ }),
+			).toHaveClass("active"),
+		);
 	});
 
 	it("offers the desk it finds on the network, and opens what that desk sends", async () => {
