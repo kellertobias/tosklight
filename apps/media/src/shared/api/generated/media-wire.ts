@@ -311,7 +311,7 @@ effectType?: string | null, effectEnabled?: boolean | null, effectMix?: number |
 /**
  * `every-beat`, `every-half-beat`, or `every-second` for the opacity cycle effect.
  */
-cycleInterval?: string | null, blurAmount?: number | null, feedbackAmount?: number | null, feedbackMotion?: number | null, feedbackDirection?: string | null, beatMoveAmount?: number | null, beatMoveDirection?: string | null, beatMoveDecay?: number | null, kaleidoscopeRepetitions?: number | null, kaleidoscopeAngle?: number | null, rasterizeMode?: string | null, rasterizeDotSize?: number | null, beatScanWidth?: number | null, beatScanEdge?: string | null, beatScanFalloff?: number | null, beatScanDuration?: number | null, beatScaleAmount?: number | null, beatTurnEnabled?: boolean | null, beatTurnRotation?: number | null, beatScaleDecay?: number | null,
+cycleInterval?: string | null, blurAmount?: number | null, feedbackAmount?: number | null, feedbackMotion?: number | null, feedbackDirection?: string | null, beatMoveAmount?: number | null, beatMoveDirection?: string | null, beatMoveDecay?: number | null, kaleidoscopeRepetitions?: number | null, kaleidoscopeAngle?: number | null, rasterizeMode?: string | null, rasterizeDotSize?: number | null, beatScanWidth?: number | null, beatScanEdge?: string | null, beatScanFalloff?: number | null, beatScanDuration?: number | null, beatScaleAmount?: number | null, beatTurnEnabled?: boolean | null, beatTurnRotation?: number | null, beatScaleDecay?: number | null, beatGridDensity?: number | null, beatGridHeight?: number | null, beatGridDuration?: number | null, beatGridOrigin?: string | null, beatGridHue?: number | null, beatGridBrightness?: number | null,
 /**
  * Complete per-layer visualizer settings routed through effect slot one.
  */

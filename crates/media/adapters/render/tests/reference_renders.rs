@@ -10,9 +10,10 @@
 
 use media_domain::geometry::Size;
 use media_domain::{
-    AnalogTvParameters, BeatScanEdge, BeatScanParameters, BlurParameters, DigitalTvParameters,
-    EffectSlot, FeedbackMotion, FeedbackParameters, FlipMirror, KaleidoscopeParameters, LayerState,
-    MaskSource, MaskState, MasterState, MediaAddress, OutputId, PresentationMode, RasterizeMode,
+    AnalogTvParameters, BeatGridWaveOrigin, BeatGridWaveParameters, BeatScanEdge,
+    BeatScanParameters, BlurParameters, DigitalTvParameters, EffectSlot, FeedbackMotion,
+    FeedbackParameters, FlipMirror, KaleidoscopeParameters, LayerState, MaskSource, MaskState,
+    MasterState, MediaAddress, OutputId, PresentationMode, RasterizeMode,
     RasterizeParameters, ScalingMode, SourceStatus, Timestamp, Tint,
 };
 use media_render::{Gpu, LayerDraw, OutputRenderer, SourceTexture};
@@ -190,6 +191,36 @@ fn beat_scan_state(edge: BeatScanEdge, events: &[(f32, f32)], enabled: bool) -> 
     .to_vec();
     for (position, count) in events {
         effect.parameters.extend([*position, *count]);
+    }
+    let mut effects: [EffectSlot; 4] = Default::default();
+    effects[0] = effect;
+    ready(LayerState {
+        effects,
+        ..Default::default()
+    })
+}
+
+fn beat_grid_wave_state(
+    origin: BeatGridWaveOrigin,
+    density: f32,
+    height: f32,
+    events: &[(f32, f32)],
+    enabled: bool,
+) -> LayerState {
+    let mut effect = EffectSlot::beat_grid_wave();
+    effect.enabled = enabled;
+    effect.parameters = BeatGridWaveParameters {
+        density,
+        height,
+        duration_seconds: 1.0,
+        origin,
+        hue_degrees: 190.0,
+        brightness: 1.3,
+    }
+    .as_array()
+    .to_vec();
+    for (progress, strength) in events {
+        effect.parameters.extend([*progress, *strength]);
     }
     let mut effects: [EffectSlot; 4] = Default::default();
     effects[0] = effect;
@@ -409,6 +440,40 @@ fn beat_scan_draws_sharp_soft_and_multiple_live_lines_with_exact_bypass() {
     assert!(changed_pixels(&sharp, &clear) > 200);
     assert!(changed_pixels(&soft, &sharp) > 100);
     assert!(changed_pixels(&multiple, &soft) > 500);
+    assert_eq!(disabled.pixels, clear.pixels, "bypass restores the source");
+}
+
+#[test]
+fn beat_grid_wave_renders_perspective_origins_density_and_overlapping_live_waves() {
+    let mut bench = Bench::new();
+    let source = bench.solid(OUTPUT, BLACK);
+    let plain = ready(LayerState::default());
+    let centre = beat_grid_wave_state(BeatGridWaveOrigin::Centre, 20.0, 0.6, &[(0.45, 1.0)], true);
+    let left = beat_grid_wave_state(BeatGridWaveOrigin::Left, 20.0, 0.6, &[(0.45, 1.0)], true);
+    let dense_overlapping = beat_grid_wave_state(
+        BeatGridWaveOrigin::Centre,
+        48.0,
+        0.9,
+        &[(0.25, 0.7), (0.72, 1.0)],
+        true,
+    );
+    let disabled =
+        beat_grid_wave_state(BeatGridWaveOrigin::Centre, 48.0, 0.9, &[(0.45, 1.0)], false);
+    let draw = |state| LayerDraw {
+        state,
+        source: &source,
+        mask: None,
+    };
+
+    let clear = bench.render(&[draw(&plain)], &MasterState::default());
+    let centre = bench.render(&[draw(&centre)], &MasterState::default());
+    let left = bench.render(&[draw(&left)], &MasterState::default());
+    let dense = bench.render(&[draw(&dense_overlapping)], &MasterState::default());
+    let disabled = bench.render(&[draw(&disabled)], &MasterState::default());
+
+    assert!(changed_pixels(&centre, &clear) > 1_000);
+    assert!(changed_pixels(&left, &centre) > 250);
+    assert!(changed_pixels(&dense, &centre) > 700);
     assert_eq!(disabled.pixels, clear.pixels, "bypass restores the source");
 }
 

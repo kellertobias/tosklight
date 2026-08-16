@@ -536,6 +536,51 @@ describe("the production Media pane", () => {
 		);
 	});
 
+	it("configures live Beat Grid Wave density, height, origin, colour, timing, and bypass", async () => {
+		const server = stubServer();
+		render(<MediaPanePage />);
+		await userEvent.click(
+			await screen.findByRole("switch", { name: "Take over playback" }),
+		);
+		await userEvent.click(screen.getByRole("tab", { name: "Effects" }));
+		await chooseEffect(1, "Beat Grid Wave");
+		await waitFor(() =>
+			expect(server.outputs[0].layers[0].effects[0].effectType).toBe(
+				"beat-grid-wave",
+			),
+		);
+		fireEvent.input(screen.getByLabelText("Slot 1 · Grid density"), {
+			target: { value: "36" },
+		});
+		fireEvent.input(screen.getByLabelText("Slot 1 · Wave height"), {
+			target: { value: "72" },
+		});
+		fireEvent.input(screen.getByLabelText("Slot 1 · Travel time"), {
+			target: { value: "1.8" },
+		});
+		await chooseNamedChoice("Slot 1 · Wave origin", "Left");
+		fireEvent.input(screen.getByLabelText("Slot 1 · Grid hue"), {
+			target: { value: "280" },
+		});
+		fireEvent.input(screen.getByLabelText("Slot 1 · Brightness"), {
+			target: { value: "140" },
+		});
+		await waitFor(() => {
+			const parameters = server.outputs[0].layers[0].effects[0].parameters;
+			expect(parameters.map(({ value }) => value)).toEqual([
+				36, 0.72, 1.8, 4, 280, 1.4,
+			]);
+		});
+		await userEvent.click(
+			within(
+				screen.getByRole("radiogroup", { name: "Slot 1 state" }),
+			).getByRole("radio", { name: "Bypassed" }),
+		);
+		await waitFor(() =>
+			expect(server.outputs[0].layers[0].effects[0].enabled).toBe(false),
+		);
+	});
+
 	it("shows an actionable capability error for an effect this build cannot render", async () => {
 		const output = anOutput();
 		output.layers[0].effects[0] = {

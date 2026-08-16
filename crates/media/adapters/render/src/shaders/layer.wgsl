@@ -24,7 +24,7 @@ struct Layer {
     // x: 1 when the mask reads its strength from alpha rather than luminance.
     mask_source: vec4<f32>,
     // 0: none/unsupported, 1: Analog TV, 2: Digital TV, 3: Blur, 4: Kaleidoscope,
-    // 5: Rasterized Print, 6: Beat Scan. One type per ordered slot.
+    // 5: Rasterized Print, 6: Beat Scan, 7: Beat Grid Wave. One type per ordered slot.
     effect_types: vec4<u32>,
     effect_mixes: vec4<f32>,
     // Typed normalized parameters for slots 1..4. Analog TV is curvature, distortion, grain,
@@ -419,6 +419,69 @@ fn beat_scan_source(
     return vec4<f32>(mix(original.rgb, scanned, effect_mix), original.a);
 }
 
+fn hue_colour(degrees: f32) -> vec3<f32> {
+    let hue = fract(degrees / 360.0);
+    let shifted = abs(fract(hue + vec3<f32>(1.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0);
+    return clamp(shifted - 1.0, vec3<f32>(0.0), vec3<f32>(1.0));
+}
+
+fn beat_grid_wave_source(
+    original: vec4<f32>,
+    uv: vec2<f32>,
+    parameters: vec4<f32>,
+    hue: f32,
+    brightness: f32,
+    effect_mix: f32,
+    slot: u32,
+) -> vec4<f32> {
+    if effect_mix <= 0.0 {
+        return original;
+    }
+    let density = clamp(parameters.x, 6.0, 64.0);
+    let wave_height = clamp(parameters.y, 0.0, 1.0);
+    let origin = u32(clamp(round(parameters.w), 0.0, 4.0));
+    var distance_from_origin = length((uv - vec2<f32>(0.5)) * vec2<f32>(1.35, 1.0)) / 0.84;
+    if origin == 1u {
+        distance_from_origin = uv.y;
+    } else if origin == 2u {
+        distance_from_origin = 1.0 - uv.x;
+    } else if origin == 3u {
+        distance_from_origin = 1.0 - uv.y;
+    } else if origin == 4u {
+        distance_from_origin = uv.x;
+    }
+
+    var displacement = 0.0;
+    var crest = 0.0;
+    for (var event = 0u; event < 16u; event += 1u) {
+        let progress = layer.beat_scan_positions[event][slot];
+        if progress >= 0.0 && progress <= 1.0 {
+            let strength = clamp(layer.beat_scan_counts[event][slot], 0.0, 1.0);
+            let distance = abs(distance_from_origin - progress * 1.18);
+            let pulse = 1.0 - smoothstep(0.015, 0.12, distance);
+            displacement += pulse * wave_height * strength;
+            crest = max(crest, pulse * strength);
+        }
+    }
+
+    // A reciprocal-depth plane makes the horizontal lines bunch toward the horizon while the
+    // vertical lines converge, giving the generated grid visible three-dimensional perspective.
+    let depth = clamp(uv.y - 0.08 + displacement * 0.075, 0.025, 0.92);
+    let plane_y = 1.0 / depth;
+    let plane_x = (uv.x - 0.5) / depth;
+    let grid_coordinates = vec2<f32>(plane_x * density * 0.16, plane_y * density * 0.055);
+    let cell = abs(fract(grid_coordinates) - vec2<f32>(0.5));
+    let derivatives = max(fwidth(grid_coordinates), vec2<f32>(0.001));
+    let vertical = 1.0 - smoothstep(0.45 - derivatives.x, 0.5, cell.x);
+    let horizontal = 1.0 - smoothstep(0.45 - derivatives.y, 0.5, cell.y);
+    let line = clamp(max(vertical, horizontal), 0.0, 1.0);
+    let horizon = smoothstep(0.08, 0.22, uv.y);
+    let colour = hue_colour(hue) * clamp(brightness, 0.1, 2.0);
+    let grid = colour * (line * (0.42 + depth * 0.58) + crest * 0.8) * horizon;
+    let scene = vec3<f32>(0.003, 0.005, 0.012) + grid;
+    return vec4<f32>(mix(original.rgb, scene, effect_mix), original.a);
+}
+
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     var coordinates: EffectCoordinates;
@@ -470,6 +533,16 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
                 sampled,
                 coordinates.uv,
                 layer.effect_parameters[slot],
+                layer.effect_mixes[slot],
+                slot,
+            );
+        } else if layer.effect_types[slot] == 7u {
+            sampled = beat_grid_wave_source(
+                sampled,
+                coordinates.uv,
+                layer.effect_parameters[slot],
+                layer.effect_parameter_tail[slot],
+                layer.effect_seeds[slot],
                 layer.effect_mixes[slot],
                 slot,
             );

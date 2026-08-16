@@ -660,7 +660,7 @@ function tintChange(value: string) {
 function layerChange(id: string, value: string | number): UpdateLayer {
 	const number = Number(value);
 	const effect =
-		/^effect-(\d+)-(type|enabled|mix|tv-curvature|distortion|image-grain|compression-damage|block-size|tile-displacement|chroma-damage|glitching|cycle-interval|blur-amount|feedback-amount|feedback-motion|feedback-direction|beat-move-amount|beat-move-direction|beat-move-decay|kaleidoscope-repetitions|kaleidoscope-angle|rasterize-mode|rasterize-dot-size|beat-scan-width|beat-scan-edge|beat-scan-falloff|beat-scan-duration|beat-scale-amount|beat-turn-enabled|beat-turn-rotation|beat-scale-decay)$/.exec(
+		/^effect-(\d+)-(type|enabled|mix|tv-curvature|distortion|image-grain|compression-damage|block-size|tile-displacement|chroma-damage|glitching|cycle-interval|blur-amount|feedback-amount|feedback-motion|feedback-direction|beat-move-amount|beat-move-direction|beat-move-decay|kaleidoscope-repetitions|kaleidoscope-angle|rasterize-mode|rasterize-dot-size|beat-scan-width|beat-scan-edge|beat-scan-falloff|beat-scan-duration|beat-scale-amount|beat-turn-enabled|beat-turn-rotation|beat-scale-decay|beat-grid-density|beat-grid-height|beat-grid-duration|beat-grid-origin|beat-grid-hue|beat-grid-brightness)$/.exec(
 			id,
 		);
 	if (effect) {
@@ -728,6 +728,18 @@ function layerChange(id: string, value: string | number): UpdateLayer {
 				return { effectSlot, beatTurnRotation: number };
 			case "beat-scale-decay":
 				return { effectSlot, beatScaleDecay: number };
+			case "beat-grid-density":
+				return { effectSlot, beatGridDensity: number };
+			case "beat-grid-height":
+				return { effectSlot, beatGridHeight: number / 100 };
+			case "beat-grid-duration":
+				return { effectSlot, beatGridDuration: number };
+			case "beat-grid-origin":
+				return { effectSlot, beatGridOrigin: String(value) };
+			case "beat-grid-hue":
+				return { effectSlot, beatGridHue: number };
+			case "beat-grid-brightness":
+				return { effectSlot, beatGridBrightness: number / 100 };
 		}
 	}
 	switch (id) {
@@ -798,6 +810,7 @@ function effectControls(
 					{ value: "rasterize", label: "Rasterized Print" },
 					{ value: "beat-scan", label: "Beat Scan" },
 					{ value: "beat-scale-turn", label: "Beat Scale and Turn" },
+					{ value: "beat-grid-wave", label: "Beat Grid Wave" },
 				],
 				disabled,
 			},
@@ -1219,6 +1232,98 @@ function effectControls(
 					disabled,
 					" s",
 					0.05,
+				),
+			];
+		}
+		if (effect.effectType === "beat-grid-wave") {
+			const parameter = (id: string, fallback: number) =>
+				effect.parameters.find((candidate) => candidate.id === id)?.value ??
+				fallback;
+			const origins = ["centre", "top", "right", "bottom", "left"];
+			return [
+				...controls,
+				{
+					id: `${prefix}-enabled`,
+					kind: "choice" as const,
+					label: `${slot} state`,
+					value: String(effect.enabled),
+					options: [
+						{ value: "true", label: "Enabled" },
+						{ value: "false", label: "Bypassed" },
+					],
+					disabled,
+				},
+				valueControl(
+					`${prefix}-mix`,
+					`${slot} mix`,
+					effect.mix * 100,
+					0,
+					100,
+					disabled,
+					"%",
+				),
+				valueControl(
+					`${prefix}-beat-grid-density`,
+					`${slot} · Grid density`,
+					parameter("beat-grid-density", 24),
+					6,
+					64,
+					disabled,
+					" lines",
+					1,
+				),
+				valueControl(
+					`${prefix}-beat-grid-height`,
+					`${slot} · Wave height`,
+					parameter("beat-grid-height", 0.5) * 100,
+					0,
+					100,
+					disabled,
+					"%",
+				),
+				valueControl(
+					`${prefix}-beat-grid-duration`,
+					`${slot} · Travel time`,
+					parameter("beat-grid-duration", 1.2),
+					0.2,
+					4,
+					disabled,
+					" s",
+					0.05,
+				),
+				{
+					id: `${prefix}-beat-grid-origin`,
+					kind: "choice" as const,
+					label: `${slot} · Wave origin`,
+					value:
+						origins[Math.round(parameter("beat-grid-origin", 0))] ?? "centre",
+					options: [
+						{ value: "centre", label: "Centre" },
+						{ value: "top", label: "Top" },
+						{ value: "right", label: "Right" },
+						{ value: "bottom", label: "Bottom" },
+						{ value: "left", label: "Left" },
+					],
+					disabled,
+				},
+				valueControl(
+					`${prefix}-beat-grid-hue`,
+					`${slot} · Grid hue`,
+					parameter("beat-grid-hue", 190),
+					0,
+					360,
+					disabled,
+					"°",
+					1,
+				),
+				valueControl(
+					`${prefix}-beat-grid-brightness`,
+					`${slot} · Brightness`,
+					parameter("beat-grid-brightness", 1) * 100,
+					10,
+					200,
+					disabled,
+					"%",
 				),
 			];
 		}

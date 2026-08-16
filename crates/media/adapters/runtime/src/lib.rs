@@ -7,6 +7,7 @@
 //! so an unusable configuration stops the process with an actionable error instead of bringing
 //! half a server up.
 
+mod beat_grid_wave;
 mod beat_move;
 mod beat_scale_turn;
 mod beat_scan;

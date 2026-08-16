@@ -133,6 +133,7 @@ struct HostedOutput {
     beat_move: crate::beat_move::BeatMove,
     beat_scale_turn: crate::beat_scale_turn::BeatScaleTurn,
     beat_scan: crate::beat_scan::BeatScan,
+    beat_grid_wave: crate::beat_grid_wave::BeatGridWave,
     standby: Option<SourceTexture>,
 }
 
@@ -312,6 +313,7 @@ impl PresentationHost {
                     beat_move: crate::beat_move::BeatMove::default(),
                     beat_scale_turn: crate::beat_scale_turn::BeatScaleTurn::default(),
                     beat_scan: crate::beat_scan::BeatScan::default(),
+                    beat_grid_wave: crate::beat_grid_wave::BeatGridWave::default(),
                     standby,
                 });
             }
@@ -427,6 +429,12 @@ impl PresentationHost {
                     .beat_scale_turn
                     .apply(&effective_layers, seconds, heard.beat);
             let effective_layers = hosted.beat_scan.apply(
+                &effective_layers,
+                seconds,
+                heard.beat,
+                heard.analysis.peak.max(heard.analysis.energy * 4.0),
+            );
+            let effective_layers = hosted.beat_grid_wave.apply(
                 &effective_layers,
                 seconds,
                 heard.beat,

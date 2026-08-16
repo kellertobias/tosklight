@@ -106,6 +106,17 @@ impl LayerUniform {
                     beat_scan_positions[event][index] = values[0];
                     beat_scan_counts[event][index] = values[1];
                 }
+            } else if let Some(parameters) = effect.beat_grid_wave_parameters() {
+                let values = parameters.as_array();
+                effect_types[index] = 7;
+                effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
+                effect_parameters[index].copy_from_slice(&values[..4]);
+                effect_parameter_tail[index] = values[4];
+                effect_seeds[index] = values[5];
+                for (event, values) in effect.parameters[6..].chunks_exact(2).take(16).enumerate() {
+                    beat_scan_positions[event][index] = values[0];
+                    beat_scan_counts[event][index] = values[1];
+                }
             }
         }
         Self {

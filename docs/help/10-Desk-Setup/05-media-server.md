@@ -186,6 +186,10 @@ no fixed spawn-count control. **Scan width**, **Sharp** or **Soft** edges, **Edg
 **Beat Scale and Turn** pulses the live image larger on each detected beat, then eases it back to
 its configured resting transform. **Turn** independently enables a subtle rotation; **Scale
 amount**, **Rotation amount**, and **Return time** define the pulse without changing the source.
+**Beat Grid Wave** replaces the live image with a perspective grid and launches a visible wave on
+each detected beat. Select **Centre**, **Top**, **Right**, **Bottom**, or **Left** as the origin,
+then tune **Grid density**, **Wave height**, **Travel time**, **Grid hue**, and **Brightness**.
+Repeated beats keep their own waves while they overlap; bypass restores the unchanged source.
 After configuring a slot, release takeover to return control to the desk. The matching **Effect 1**
 through **Effect 4** DMX channel then controls that slot's mix without erasing its selected effect or
 typed parameters.

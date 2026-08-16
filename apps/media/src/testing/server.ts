@@ -268,6 +268,10 @@ export function stubServer(
 						layer.effects[body.effectSlot] = beatScaleTurnEffect(
 							body.effectSlot,
 						);
+					} else if (body.effectType === "beat-grid-wave") {
+						layer.effects[body.effectSlot] = beatGridWaveEffect(
+							body.effectSlot,
+						);
 					}
 					const selectedEffect = layer.effects[body.effectSlot];
 					if (body.visualizerParameters !== undefined)
@@ -341,6 +345,24 @@ export function stubServer(
 						selectedEffect.parameters[2].value = body.beatTurnRotation;
 					if (body.beatScaleDecay !== undefined)
 						selectedEffect.parameters[3].value = body.beatScaleDecay;
+					if (body.beatGridDensity !== undefined)
+						selectedEffect.parameters[0].value = body.beatGridDensity;
+					if (body.beatGridHeight !== undefined)
+						selectedEffect.parameters[1].value = body.beatGridHeight;
+					if (body.beatGridDuration !== undefined)
+						selectedEffect.parameters[2].value = body.beatGridDuration;
+					if (body.beatGridOrigin !== undefined)
+						selectedEffect.parameters[3].value = [
+							"centre",
+							"top",
+							"right",
+							"bottom",
+							"left",
+						].indexOf(body.beatGridOrigin);
+					if (body.beatGridHue !== undefined)
+						selectedEffect.parameters[4].value = body.beatGridHue;
+					if (body.beatGridBrightness !== undefined)
+						selectedEffect.parameters[5].value = body.beatGridBrightness;
 					for (const [id, key] of [
 						["tv-curvature", "tvCurvature"],
 						["distortion", "effectDistortion"],
@@ -891,6 +913,51 @@ function beatScaleTurnEffect(
 				label: "Return time",
 				value: 0.35,
 				defaultValue: 0.35,
+			},
+		],
+	};
+}
+
+function beatGridWaveEffect(
+	index: number,
+): OutputView["layers"][number]["effects"][number] {
+	return {
+		...emptyEffect(index),
+		effectType: "beat-grid-wave",
+		label: "Beat Grid Wave",
+		enabled: true,
+		mix: 1,
+		parameters: [
+			{
+				id: "beat-grid-density",
+				label: "Grid density",
+				value: 24,
+				defaultValue: 24,
+			},
+			{
+				id: "beat-grid-height",
+				label: "Wave height",
+				value: 0.5,
+				defaultValue: 0.5,
+			},
+			{
+				id: "beat-grid-duration",
+				label: "Travel time",
+				value: 1.2,
+				defaultValue: 1.2,
+			},
+			{
+				id: "beat-grid-origin",
+				label: "Wave origin",
+				value: 0,
+				defaultValue: 0,
+			},
+			{ id: "beat-grid-hue", label: "Grid hue", value: 190, defaultValue: 190 },
+			{
+				id: "beat-grid-brightness",
+				label: "Brightness",
+				value: 1,
+				defaultValue: 1,
 			},
 		],
 	};
