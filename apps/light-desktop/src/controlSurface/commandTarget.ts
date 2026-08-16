@@ -5,8 +5,7 @@ export function commandTargetAfterEnter(
 	target: CommandTargetMode,
 	pristine: boolean,
 ): CommandTargetMode | null {
-	const opposite = target === "GROUP" ? "FIXTURE" : "GROUP";
-	if (pristine || command.trim().toUpperCase() !== opposite) return null;
+	if (pristine || command.trim().toUpperCase() !== "DEGROUP") return null;
 	return target === "GROUP" ? "FIXTURE" : "GROUP";
 }
 

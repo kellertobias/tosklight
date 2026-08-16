@@ -151,8 +151,8 @@ fn group_marker(tokens: &[String], index: &mut usize) -> Result<TermKind, String
         .get(*index + 1)
         .is_some_and(|candidate| candidate == "GROUP");
     if repeated {
-        // The keypad never produces this: the second Group press replaces GROUP with DEGRP.
-        return Err("GROUP GROUP is not a command; use DEGRP to dereference a group".into());
+        // The keypad normally normalizes this to DEGROUP before execution.
+        return Err("GROUP GROUP is not a command; use DEGROUP to dereference a group".into());
     }
     *index += 1;
     Ok(TermKind::LiveGroup)
@@ -180,7 +180,7 @@ fn parse_selection_sources(
                 index += 1;
             }
             "GROUP" => kind = group_marker(tokens, &mut index)?,
-            "DEGRP" => {
+            "DEGROUP" | "DEGRP" => {
                 kind = TermKind::DereferencedGroup;
                 index += 1;
             }

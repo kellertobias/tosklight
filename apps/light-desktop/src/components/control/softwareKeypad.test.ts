@@ -313,19 +313,29 @@ describe("software keypad", () => {
 				entered.pristine,
 			),
 		).toEqual({
-			command: "DEGRP",
+			command: "DEGROUP",
 			execute: false,
 			pristine: false,
 		});
 	});
 
-	it("toggles the persistent target in both directions on bare opposite-prefix Enter", () => {
-		const group = commandTargetAfterEnter("GROUP ", "FIXTURE", false);
+	it("toggles the persistent target only for bare double-GRP and keeps numbered DEGROUP distinct", () => {
+		const group = commandTargetAfterEnter("DEGROUP ", "FIXTURE", false);
 		expect(group).toBe("GROUP");
 		expect(defaultCommandLine(group!)).toBe("GROUP");
-		const fixture = commandTargetAfterEnter("FIXTURE", "GROUP", false);
+		const fixture = commandTargetAfterEnter("DEGROUP", "GROUP", false);
 		expect(fixture).toBe("FIXTURE");
 		expect(defaultCommandLine(fixture!)).toBe("FIXTURE");
+		expect(commandTargetAfterEnter("GROUP", "FIXTURE", false)).toBeNull();
+		expect(commandTargetAfterEnter("DEGROUP 7", "FIXTURE", false)).toBeNull();
+		expect(
+			editTargetedCommandWithSoftwareKey(
+				"DEGROUP",
+				"7",
+				"FIXTURE",
+				false,
+			),
+		).toEqual({ command: "DEGROUP 7", execute: false, pristine: false });
 	});
 
 	it("edits the fixture selection before a Freeze family suffix", () => {

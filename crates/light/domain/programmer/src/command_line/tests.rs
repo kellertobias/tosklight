@@ -73,7 +73,7 @@ fn keeps_target_scoping_and_group_dereference_rules() {
     );
     assert_eq!(
         press("GROUP", CommandTarget::Fixture, false, "GRP").text,
-        "DEGRP"
+        "DEGROUP"
     );
     assert_eq!(
         press("RECORD + ", CommandTarget::Group, false, "GRP").text,
@@ -129,11 +129,17 @@ fn builds_cue_select_and_complete_group_mode_sequences() {
 }
 
 #[test]
-fn bare_opposite_target_enter_changes_the_persistent_scope() {
-    let group = press("GROUP", CommandTarget::Fixture, false, "ENT");
+fn bare_double_group_enter_changes_the_persistent_scope_without_colliding_with_dereference() {
+    let group = press("DEGROUP", CommandTarget::Fixture, false, "ENT");
     assert_eq!(group, default_edit(CommandTarget::Group));
-    let fixture = press("FIXTURE", CommandTarget::Group, false, "ENT");
+    let fixture = press("DEGROUP", CommandTarget::Group, false, "ENT");
     assert_eq!(fixture, default_edit(CommandTarget::Fixture));
+
+    assert_eq!(
+        press("DEGROUP", CommandTarget::Fixture, false, "7").text,
+        "DEGROUP 7"
+    );
+    assert!(press("GROUP", CommandTarget::Fixture, false, "ENT").execute);
 }
 
 #[test]

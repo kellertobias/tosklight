@@ -46,7 +46,7 @@ fn repeated_group_command_freezes_membership_while_live_reference_refreshes() {
         .output.replace_snapshot(snapshot(vec![first, second]))
         .unwrap();
     assert_eq!(
-        execute_programmer_command(&state, &session, "DEGRP 1").unwrap(),
+        execute_programmer_command(&state, &session, "DEGROUP 1").unwrap(),
         2
     );
     state
@@ -56,13 +56,18 @@ fn repeated_group_command_freezes_membership_while_live_reference_refreshes() {
         state.programming.get(session.id).unwrap().selected,
         vec![first, second]
     );
-    assert!(execute_programmer_command(&state, &session, "DEGRP 2").is_err());
+    assert!(execute_programmer_command(&state, &session, "DEGROUP 2").is_err());
+    assert_eq!(
+        execute_programmer_command(&state, &session, "DEGRP 1").unwrap(),
+        3,
+        "the legacy DEGRP spelling remains a compatible input alias"
+    );
     // GROUP GROUP is not a command in any string surface; the keypad's second Group press
-    // replaces GROUP with DEGRP instead of appending a second word.
+    // replaces GROUP with DEGROUP instead of appending a second word.
     assert!(
         execute_programmer_command(&state, &session, "GROUP GROUP 1")
             .unwrap_err()
-            .contains("DEGRP")
+            .contains("DEGROUP")
     );
     execute_programmer_command(&state, &session, "GROUP 1").unwrap();
     state
@@ -130,7 +135,7 @@ fn mixed_selection_sources_dereference_only_the_addressed_term_and_replay_left_t
     state.output.replace_snapshot(snapshot.clone()).unwrap();
 
     assert_eq!(
-        execute_programmer_command(&state, &session, "DEGRP 3 + G5").unwrap(),
+        execute_programmer_command(&state, &session, "DEGROUP 3 + G5").unwrap(),
         8
     );
     let mixed = state.programming.get(session.id).unwrap();

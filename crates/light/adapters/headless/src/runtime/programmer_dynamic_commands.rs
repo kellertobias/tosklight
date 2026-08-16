@@ -177,7 +177,7 @@ fn command_dynamic_targets(
     }
     let (targets, expression) = if address
         .iter()
-        .any(|token| matches!(token.as_str(), "GROUP" | "DEGRP"))
+        .any(|token| matches!(token.as_str(), "GROUP" | "DEGROUP" | "DEGRP"))
     {
         let parsed = parse_group_mixed_selection(snapshot, address, true)?;
         (

@@ -170,12 +170,7 @@ fn enter_edit(state: &CommandLineState) -> CommandLineEdit {
         CommandTarget::Fixture => CommandTarget::Group,
         CommandTarget::Group => CommandTarget::Fixture,
     };
-    if !state.pristine
-        && state
-            .visible_text()
-            .trim()
-            .eq_ignore_ascii_case(opposite.as_str())
-    {
+    if !state.pristine && state.visible_text().trim().eq_ignore_ascii_case("DEGROUP") {
         return default_edit(opposite);
     }
     CommandLineEdit {
@@ -235,7 +230,7 @@ fn edit_text(state: &CommandLineState, key: CommandKey) -> CommandLineEdit {
         );
     }
     if key == CommandKey::Group && last_word_is_any(command, &["GROUP", "G", "F"]) {
-        return edited(replace_last_word(command, "DEGRP"), state.target);
+        return edited(replace_last_word(command, "DEGROUP"), state.target);
     }
     if key == CommandKey::At && last_word_is_any(command, &["AT"]) {
         let mut edit = edited(replace_last_word(command, "AT 100"), state.target);

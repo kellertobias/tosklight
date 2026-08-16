@@ -198,7 +198,7 @@ pub(super) fn execute_programmer_command_effect_from(
         command if show_command(command) => {
             execute_show_command(state, session, &tokens, timing, context)
         }
-        "GROUP" | "DEGRP" => execute_group_programmer_command(
+        "GROUP" | "DEGROUP" | "DEGRP" => execute_group_programmer_command(
             state,
             session,
             command_line,
@@ -265,7 +265,7 @@ fn execute_fix_at_command(
         let snapshot = state.output.snapshot();
         if address
             .iter()
-            .any(|token| matches!(token.as_str(), "GROUP" | "DEGRP"))
+            .any(|token| matches!(token.as_str(), "GROUP" | "DEGROUP" | "DEGRP"))
         {
             let parsed = parse_group_mixed_selection(&snapshot, address, true)?;
             (

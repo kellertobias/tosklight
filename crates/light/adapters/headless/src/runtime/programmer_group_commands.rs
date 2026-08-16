@@ -116,7 +116,7 @@ fn apply_group_value(
     let relative = value.len() == 2 && matches!(value[0].as_str(), "+" | "-");
     if relative && !frozen {
         return Err(
-            "relative group values require DEGRP so each fixture keeps its own offset".into(),
+            "relative group values require DEGROUP so each fixture keeps its own offset".into(),
         );
     }
     if relative && value[1] == "FULL" {
@@ -158,15 +158,17 @@ pub(super) fn execute_group_programmer_command(
     tokens: &[String],
     timing: CommandTiming,
 ) -> Result<usize, String> {
-    // DEGRP is the only dereference vocabulary: the keypad's second Group press replaces
-    // GROUP with DEGRP, and string input uses the same word. `GROUP GROUP` is not a command.
+    // The keypad normalizes the double Group gesture to DEGROUP. Keep DEGRP as a
+    // backwards-compatible string-input alias for shows and integrations using the old spelling.
     if tokens
         .windows(2)
         .any(|pair| pair[0] == "GROUP" && pair[1] == "GROUP")
     {
-        return Err("GROUP GROUP is not a command; use DEGRP to dereference a group".into());
+        return Err("GROUP GROUP is not a command; use DEGROUP to dereference a group".into());
     }
-    let frozen = tokens.first().is_some_and(|token| token == "DEGRP");
+    let frozen = tokens
+        .first()
+        .is_some_and(|token| matches!(token.as_str(), "DEGROUP" | "DEGRP"));
     let id_index = 1;
     let at_index = tokens
         .iter()
@@ -182,7 +184,9 @@ pub(super) fn execute_group_programmer_command(
                 "FIXTURE" | "FIXTURES" | "CHANNEL" | "CHANNELS"
             )
         })
-        || tokens[1..at_index].iter().any(|token| token == "DEGRP");
+        || tokens[1..at_index]
+            .iter()
+            .any(|token| matches!(token.as_str(), "DEGROUP" | "DEGRP"));
     if at_index < tokens.len() && mixed {
         return execute_mixed_group_value(
             state,
@@ -221,7 +225,7 @@ pub(super) fn execute_group_programmer_command(
     let rule = parse_subset_rule(&tokens[id_index + 1..at_index])?;
     let fixtures = light_programmer::apply_selection_rule(&base, &rule);
     let expression = if frozen {
-        // DEGRP (GROUP GROUP) dereferences to individual fixtures with no group reference,
+        // DEGROUP (GROUP GROUP) dereferences to individual fixtures with no group reference,
         // identical to the double-click dereference gesture.
         light_programmer::SelectionExpression::Sources {
             items: fixtures

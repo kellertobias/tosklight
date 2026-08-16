@@ -114,6 +114,7 @@ async function pressProgrammerKey(
 const TOKEN_ALIASES: Readonly<Record<string, readonly SoftwareKey[]>> = {
 	GROUP: ["GRP"],
 	DEGRP: ["GRP", "GRP"],
+	DEGROUP: ["GRP", "GRP"],
 	THRU: ["TRU"],
 	RECORD: ["REC"],
 	DELETE: ["DEL"],

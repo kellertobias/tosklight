@@ -132,7 +132,7 @@ export function editTargetedCommandWithSoftwareKey(
 		const selection = freeze[2].trim();
 		const family = selection.match(
 			/(?:^|\s)(INTENSITY|COL(?:OR|OUR)|POSITION|BEAM)(?:\s|$)/i,
-		);
+	);
 		const selectionText = family
 			? selection.slice(0, family.index).trim()
 			: selection;
@@ -156,9 +156,8 @@ export function editTargetedCommandWithSoftwareKey(
 		if (edit) return edit;
 	}
 
-	const selectionCommand = /^\s*(?:F\d|G\d|FIXTURE\b|GROUP\b|DEGRP\b)/i.test(
-		command,
-	);
+	const selectionCommand =
+		/^\s*(?:F\d|G\d|FIXTURE\b|GROUP\b|DEGROUP\b|DEGRP\b)/i.test(command);
 	if (key === "GRP" && selectionCommand && /(?:\+|-)\s*$/.test(command)) {
 		const override = target === "GROUP" ? "F" : "G";
 		return {
@@ -169,7 +168,7 @@ export function editTargetedCommandWithSoftwareKey(
 	}
 	if (repeated !== false && key === "GRP" && /(?:^|\s)(?:GROUP|G|F)\s*$/i.test(command)) {
 		return {
-			command: command.replace(/(?:GROUP|G|F)\s*$/i, "DEGRP"),
+			command: command.replace(/(?:GROUP|G|F)\s*$/i, "DEGROUP"),
 			execute: false,
 			pristine: false,
 		};

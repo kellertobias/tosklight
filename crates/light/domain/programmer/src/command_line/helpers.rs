@@ -26,14 +26,16 @@ pub(super) fn is_selection_command(value: &str) -> bool {
     {
         return true;
     }
-    ["FIXTURE", "GROUP", "DEGRP"].iter().any(|prefix| {
-        trimmed
-            .get(..prefix.len())
-            .is_some_and(|head| head.eq_ignore_ascii_case(prefix))
-            && trimmed
-                .get(prefix.len()..)
-                .is_some_and(|tail| tail.is_empty() || tail.starts_with(char::is_whitespace))
-    })
+    ["FIXTURE", "GROUP", "DEGROUP", "DEGRP"]
+        .iter()
+        .any(|prefix| {
+            trimmed
+                .get(..prefix.len())
+                .is_some_and(|head| head.eq_ignore_ascii_case(prefix))
+                && trimmed
+                    .get(prefix.len()..)
+                    .is_some_and(|tail| tail.is_empty() || tail.starts_with(char::is_whitespace))
+        })
 }
 
 pub(super) fn contains_word(value: &str, word: &str) -> bool {

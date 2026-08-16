@@ -304,6 +304,7 @@ const TOKEN_ALIASES: Readonly<Record<string, readonly SoftwareKey[]>> = {
 	UNDO: ["UND"],
 	PRELOAD: ["PRE"],
 	DEGRP: ["GRP", "GRP"],
+	DEGROUP: ["GRP", "GRP"],
 };
 
 const NAMED_COMMAND_KEYS = new Set<SoftwareKey>([

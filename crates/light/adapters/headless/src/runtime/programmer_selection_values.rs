@@ -73,7 +73,7 @@ pub(super) fn apply_current_selection_value(
     {
         if relative {
             return Err(
-                "relative group values require DEGRP so each fixture keeps its own offset".into(),
+                "relative group values require DEGROUP so each fixture keeps its own offset".into(),
             );
         }
         state.programming.set_group_faded_with_timing(

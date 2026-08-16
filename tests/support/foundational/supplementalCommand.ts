@@ -142,7 +142,7 @@ async function exerciseFixtureCommandMode(api: ApiDriver, page: Page) {
 	await clear("FIXTURE");
 	await press("GRP");
 	await press("GRP");
-	await expect(commandLine).toHaveValue("DEGRP");
+	await expect(commandLine).toHaveValue("DEGROUP");
 	await enter(
 		["3", "+", "GRP", "5"],
 		"DEGRP 3 + G5",

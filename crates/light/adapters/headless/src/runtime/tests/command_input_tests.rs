@@ -37,6 +37,13 @@ fn osc_keypad_uses_the_same_scoped_selection_edits_as_the_ui() {
     }
     assert_eq!(state.visible_text(), "G7 + F8");
 
+    let mut double_group = CommandLineState::default();
+    press(&mut double_group, "grp");
+    press(&mut double_group, "grp");
+    assert_eq!(double_group.visible_text(), "DEGROUP");
+    press(&mut double_group, "digit-7");
+    assert_eq!(double_group.visible_text(), "DEGROUP 7");
+
     let mut override_scope = CommandLineState {
         text: "G7 +".into(),
         target: CommandTarget::Fixture,

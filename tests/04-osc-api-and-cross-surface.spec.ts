@@ -380,16 +380,31 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
       action: "edited",
       command_line: { text: "GROUP", target: "FIXTURE", pristine: false, revision: 1 },
     });
+    const degroupPrefix = await api.sendCommandKey("GRP", "press", "api-003-degroup-prefix");
+    expect(degroupPrefix).toMatchObject({
+      outcome: "accepted",
+      action: "edited",
+      command_line: { text: "DEGROUP", target: "FIXTURE", pristine: false, revision: 2 },
+    });
     const toggled = await api.sendCommandKey("ENT", "press", "api-003-group-mode");
     expect(toggled).toMatchObject({
       outcome: "accepted",
       action: "edited",
-      command_line: { text: "GROUP", target: "GROUP", pristine: true, revision: 2 },
+      command_line: { text: "GROUP", target: "GROUP", pristine: true, revision: 3 },
+    });
+    const escaped = await api.sendCommandKey("ESC", "press", "api-003-group-mode-escape");
+    expect(escaped).toMatchObject({
+      outcome: "accepted",
+      action: "edited",
+      command_line: { text: "GROUP", target: "GROUP", pristine: true, revision: 3 },
+    });
+    expect(await api.getCommandLine()).toMatchObject({
+      commandLine: { text: "GROUP", target: "GROUP", pristine: true, revision: 3 },
     });
 
-    const replaced = await api.replaceCommandLine("GROUP 1 AT 50", toggled.command_line.revision);
-    expect(replaced.commandLine).toMatchObject({ text: "GROUP 1 AT 50", revision: 3 });
-    await expect(api.replaceCommandLine("GROUP 2 AT 25", toggled.command_line.revision))
+    const replaced = await api.replaceCommandLine("GROUP 1 AT 50", escaped.command_line.revision);
+    expect(replaced.commandLine).toMatchObject({ text: "GROUP 1 AT 50", revision: 4 });
+    await expect(api.replaceCommandLine("GROUP 2 AT 25", escaped.command_line.revision))
       .rejects.toThrow(/409.*revision conflict/i);
 
     const requestId = "api-003-execute-group-1";
@@ -724,7 +739,8 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
       await secondPage.getByLabel("Command line").fill("");
       await expect(secondPage.getByLabel("Command line")).toHaveValue("FIXTURE");
       await secondPage.getByRole("button", { name: "GRP", exact: true }).click();
-      await expect(secondPage.getByLabel("Command line")).toHaveValue("GROUP");
+      await secondPage.getByRole("button", { name: "GRP", exact: true }).click();
+      await expect(secondPage.getByLabel("Command line")).toHaveValue("DEGROUP");
       await secondPage.getByRole("button", { name: "ENT", exact: true }).click();
       await expect(secondPage.getByLabel("Command line")).toHaveValue("GROUP");
       await expect.poll(async () => programmerCommand(api, secondSession)).toBe("GROUP");
