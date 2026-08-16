@@ -64,16 +64,16 @@ Keyboard positions describe the position of the key on a German keyboard. The so
 
 | `[GRP]`  | Group      | `[KBD:SHIFT + ^]` | Select a group. Hold for showing the group built-in. Press twice for `#> DEGROUP`|
 | `[CUE]`  | Cue        | `[KBD:SHIFT + ?]` | Select or Target a particular cue. Press twice for `#> CUELIST` |
-| `[PBK]`  | Playback   | -                 | Select or Target a particular playback. Press twice for `#> PBKPAGE` |
+| `[PBK]`  | Playback   | -                 | Select or Target a particular playback. Press twice for `#> VPBK` (virtual playback) |
 
 | `[REC]`  | Record     | `[KBD:END]`       | Store cues, presets, and groups. Hold for record options. |
-| `[PRELD]`| Preload    | `[KBD:^]`         | Run Preload or Preload GO. Hold to clear Preload. |
+| `[PRELD]`| Preload    | `[KBD:^]`         | Run Preload or Preload GO. Hold to inspect and edit the pending Preload. |
 | `[CLR]`  | Clear      | `[KBD:DELETE]`    | First Click: Clear Selection, Second Click: Clear Programmer |
 
 | `[DEL]`  | Delete     | `[KBD:SHIFT + ´]` | Delete a cue, preset, or other supported element.  |
 | `[MOV]`  | Move       | `[KBD:SHIFT + #]` | Move a cue or preset. |
 | `[CPY]`  | Copy       | `[KBD:SHIFT + +]` | Copy a cue or preset. Not available on touch only, reach with `[^MOV]` |
-| `[SET]`  | Set        | `[KBD:HOME]`      | Set a non-output value, or open configuration.  Press twice for `#> ASSIGN` |
+| `[SET]`  | Set        | `[KBD:HOME]`      | Edit a value or open the selected object's configuration. |
 | `[OFF]`  | Off        | -                 | Turn off the target; Press twice for opening "Running & Output" |
 
 
@@ -114,6 +114,9 @@ The following table shows the second layer assignment, the user can reach with h
 | `[^GRP]`  | Fixture       | Select a fixture in group mode. Hold for showing the fixture built-in.  Press twice for `#> DMX` |
 | `[^CUE]`  | Timecode      | Select or Target a particular timecode |
 | `[^PBK]`  | Macro         | Select or Target a particular macro |
+| `[^SET]`  | Assign        | Assign a source object to a playback. |
+| `[^TIME]` | Go To         | Go directly to a Cue on an addressed playback. Press twice for `#> LOAD`. |
+| `[^OFF]`  | Release       | Enter Release as a recordable programmer value. |
 | `[^MOV]`  | Copy          | Copy a cue or preset. Same as the `[CPY]` button if it is available. |
 | `[^REC]`  | Update        | Updates cues, presets, and groups. Hold for update options. |
 | `[^PRELD]`| Clear Preload | Clear Preload. |
@@ -235,6 +238,16 @@ What's important is that every value you provide in a spread range always is tak
 
 You can also use spread ranges for other values, e.g. `<selection>[AT][^2] 100 [DIV] 0 [DIV] 0 [THRU] 0 [DIV] 100 [DIV] 0`. This lets the lamps range from red via yellow to green.
 
+### Releasing Values
+
+`[^OFF]` enters **RELEASE**. Release is a programmer value, not the same action as clearing the programmer. The complete form is `<selection> [AT] RELEASE [ENT]`; as a quick command, `[AT]` may be omitted: `<selection> [^OFF] [ENT]`. Without another attribute-family key, Release affects Intensity.
+
+Because Release is a value, it can be recorded into a Cue. When that Cue runs, the Cuelist releases the addressed fixture attribute and stops supplying or tracking a value for it. The desk then resolves the attribute as if that value had never been introduced by the Cuelist, revealing the next applicable source or default.
+
+Choose another attribute group by adding its second-layer family key. For example, `<selection> [^OFF] [^2] [ENT]` releases only the Color attributes of the selection. To release every attribute group, use `<selection> [^OFF] [^0] [ENT]`. Attribute groups that are not part of the Release remain in the programmer or Cuelist unchanged.
+
+For example, if an earlier Cue gives a fixture 100% intensity and a later Cue contains RELEASE for that intensity, the later Cue does not store 0%. It removes the Cuelist's ownership of the intensity entirely. In contrast, `[CLR]` only removes the current programmer entry and does not create a Release instruction that can be recorded.
+
 
 ### Recording a Preset
 
@@ -288,320 +301,201 @@ Hint: As you have read in the earlier section - if programmer fade time is enabl
 
 ## Recording Cues
 
-We finally arrived at the point where we are able to
+What is in the programmer is what gets stored in a Cue. First select the fixtures and set the values, presets, Dynamics, fade times, and delay times that should be part of the Cue. Values that only come from a running playback, defaults, Highlight, or the resolved output are not added merely because they are visible on stage.
 
-### Inserting Cues
+### Recording the First Cue
+
+After setting up the scene in the programmer, press `[REC]`. You can now touch either a Cuelist in the Cuelist Pool or a playback.
+
+Touching an empty Cuelist creates its first Cue. Touching an empty playback creates a new Cuelist, records its first Cue, and assigns that Cuelist to the playback.
+
+On the touch playback surface, the whole playback is the Record target. On an attached desk, only the topmost playback button is the Record target. If the playback has one button, that button is necessarily the topmost button. If it has no buttons, only the playback's visible section on the screen is a Record target. The hardware-fader is explicitly never intercepted by Record, so its level can still be changed while programming the Cue.
+
+If the Cuelist contains exactly one Cue, the desk asks what you want to do:
+
+- **Add Cue** records the programmer as a new Cue at the end of the Cuelist.
+- **Merge Cue** adds the programmer contents to the existing Cue and replaces values at matching fixture/attribute addresses.
+- **Overwrite Cue** replaces the contents of the existing Cue with the programmer.
+
+The same choice appears when recording onto a playback whose assigned Cuelist contains exactly one Cue. Once the Cuelist contains two or more Cues, recording onto the Cuelist or playback always chooses **Add Cue** and appends at the end.
+
+### Recording a Cue from the Command Line
+
+Set up the scene in the programmer first, press `[REC]`, and then enter the recording target.
+
+To record directly into a Cuelist, press the Cue button twice to enter `CUELIST`: `[REC][CUE][CUE] <Cuelist-number> [ENT]`. The programmer is recorded as a new Cue at the end of that Cuelist and it selects this cuelist as the active cuelist.
+
+For the next cue, you can omit the Cuelist number and press the Cue button only once: `[REC][CUE][ENT]`. This records a new Cue at the end of the selected Cuelist.
+
+To record onto a playback, use `[REC][PBK] <playback-number> [ENT]`. A playback number without a dot addresses that playback on the current page. To address an explicit page, enter `<page>.<playback-number>`, for example `[REC][PBK] 2.6 [ENT]` for playback 6 on page 2. If the playback is empty, the desk creates a new Cuelist, records its first Cue, and assigns it to that playback. If it already has a Cuelist, the desk adds the new Cue at the end.
+
+For a Virtual Playback, press the Playback button twice: `[REC][PBK][PBK] <virtual-playback-number> [ENT]`. This creates or extends its assigned Cuelist in the same way. The command line shows `#> RECORD vPBK <virtual-playback-number>`
+
+### Recording a Specific Cue
+
+If you want to decide the Cue number, enter the complete Cuelist and Cue address:
+
+`[REC][CUE][CUE] <Cuelist-number> [CUE] <Cue-number> [ENT]`
+
+For example, `[REC][CUE][CUE] 4 [CUE] 2.1 [ENT]` records Cue `2.1` in Cuelist 4. If that Cue already exists, it is overwritten. If it does not exist, it is inserted at the correct position.
+
+For the selected Cuelist, the shorter form is `[REC][CUE] <Cue-number> [ENT]`.
+
+Use `[REC][+]` instead of `[REC]` to merge the programmer into an existing Cue. Use `[REC][-]` to remove the programmer's fixture/attribute addresses from an existing Cue without changing its other values.
+
+### Inserting Cues, Cue Numbers, and Their Order
+
+Cue numbers are not decimal numbers. They are paths made from numeric parts separated by dots, and they can contain as many dots as required. Cue `2` and Cue `2.0` are therefore different Cues.
+
+The desk compares each part in order. A Cue without another part comes before a Cue that continues from the same number. This produces the following order:
+
+`2`, `2.0`, `2.1`, `2.1.0`, `2.1.1`, `2.2`, `3`
+
+This allows more Cues to be inserted between existing Cues without first renumbering the Cuelist. To insert one, record the programmer at an unused Cue number in the required position. If Cues 2 and 3 already exist, `[REC][CUE] 2.1 [ENT]` inserts Cue `2.1` between them in the selected Cuelist. More levels remain available: Cue `2.1.1` can be inserted between `2.1` and `2.2`.
+
+### Selecting Playbacks and Cuelists
+
+There is no separate Select button. To select a playback on the current page, press `[PBK] <playback-number> [ENT]`. To select a playback on an explicit page, press `[PBK] <page> [.] <playback-number> [ENT]`. The part before the dot is always the playback page; the part after it is always the playback number. The selected playback's assigned Cuelist becomes the selected Cuelist. To select a Virtual Playback, press `[PBK][PBK] <virtual-playback-number> [ENT]`.
+
+To select a Cuelist directly, press `[CUE][CUE] <Cuelist-number> [ENT]`. A single `[CUE]` always addresses a Cue inside the selected Cuelist. For example, `[CUE] 2.1 [ENT]` addresses Cue `2.1` in the selected Cuelist, while `[CUE][CUE] 4 [CUE] 2.1 [ENT]` addresses Cue `2.1` in Cuelist 4.
+
+Running a different playback does not silently change the selection.
+
+### Going To and Loading Cues
+
+`[^TIME]` enters **GO TO**. A Go To command must address a playback and then a Cue: `[^TIME][PBK] <playback-number> [CUE] <Cue-number> [ENT]`. When `[ENT]` is pressed, that playback goes directly to the addressed Cue in its assigned Cuelist.
+
+For example, `[^TIME][PBK] 6 [CUE] 2.1 [ENT]` goes to Cue `2.1` on playback 6 of the current page. Use `[PBK] 2.6` to address playback 6 on page 2, or `[PBK][PBK] <virtual-playback-number>` to address a Virtual Playback.
+
+The Cuelist must be assigned to the addressed playback. A Cuelist pool address alone cannot execute Go To because it does not identify the playback that should run the Cue.
+
+Press `[^TIME]` twice to enter **LOAD**: `[^TIME][^TIME][PBK] <playback-number> [CUE] <Cue-number> [ENT]`. Load does not run the Cue immediately. It makes the addressed Cue the selected next Cue for that playback; the next forward GO runs it.
+
+### Cue Timing and Triggers
+
+The individual fade and delay times in the programmer are stored with the Cue. Append `[TIME] <seconds>` to the complete record command to give that Cue a master fade. For example, `[REC][CUE][CUE] 4 [CUE] 2.1 [TIME] 3 [ENT]` records Cue `2.1` in Cuelist 4 with a three-second master fade.
+
+The Cue master fade behaves like a Programmer Fade that belongs only to that Cue. When Programmer Fade is enabled and configured to apply to Cues, its current value overrides the Cue master fade during playback. Press `[TIME]` twice to enter the Cue's trigger delay. The complete GO, FOLLOW, TIME, per-value timing, and Cuelist timing behavior is explained in [Cues and Playbacks](../40-Running-a-Show/01-cues-and-playbacks.md).
+
+## Updating Existing Programming
+
+Hold `[^]`, press `[REC]` twice, and then release `[^]`. This is written as `[^REC][^REC]` in this manual. It opens the **Update Update** modal with everything that can currently be updated from the programmer. Opening the modal does not update anything by itself; choose the target and Update mode there, or close it without making a change.
 
 ### Updating Cues
 
+Use `[^REC]` to Update programming that is already stored instead of recording a replacement. Update reads actual programmer changes only; it does not pull Highlight, defaults, unchanged tracked values, or resolved playback output into the Cue.
+
+After arming Update, touch the Cuelist or playback that should receive the changes, or enter an explicit address with the new grammar:
+
+- `[^REC] [CUE] <Cue-number> [ENT]` updates that Cue in the selected Cuelist.
+- `[^REC] [CUE][CUE] <Cuelist-number> [CUE] <Cue-number> [ENT]` updates a Cue in an explicit Cuelist.
+- `[^REC] [PBK] <playback-number> [ENT]` updates the current Cue of that playback on the current page; use `<page>.<playback-number>` for an explicit page.
+- `[^REC] [PBK][PBK] <virtual-playback-number> [ENT]` updates the current Cue of that Virtual Playback.
+
+The four Cue Update modes decide where each programmer address is written:
+
+- **Update** changes only values that are already stored directly in the current Cue. Inherited values and completely new values are ignored.
+- **Tracked** changes each value in the Cue where that value currently comes from. If the current look inherits a value from an earlier Cue, that earlier Cue is updated. Values that do not yet exist anywhere in the Cuelist are ignored.
+- **Known** puts the programmer value into the current Cue when that fixture attribute already exists somewhere in the Cuelist. This can bring an inherited value forward into the current Cue, but it does not introduce a completely new fixture attribute.
+- **All** puts every applicable programmer value into the current Cue, including fixture attributes that have never appeared anywhere in the Cuelist.
+
+Touch targets open the Update preview with **Update** selected by default and let you choose another mode. A complete keypad command selects the mode before the target:
+
+- `[^REC] <target> [ENT]` uses the default **Update** mode and displays `UPDATE`.
+- `[^REC][-] <target> [ENT]` uses **Tracked** and displays `UPDATE TRACKED`.
+- `[^REC][+][+] <target> [ENT]` uses **Known** and displays `UPDATE KNOWN`.
+- `[^REC][+] <target> [ENT]` uses **All** and displays `UPDATE ALL`.
+
+For example, `[^REC][+][+][CUE][CUE] 4 [CUE] 2.1 [ENT]` adds eligible, already-known addresses to Cue `2.1` in Cuelist 4. The command line displays the full selected mode instead of only the `+` or `-` shorthand.
+
+### Updating Presets
+
+Use `[^REC]` to Update a Preset from the current programmer instead of recording it again. After arming Update, touch the Preset tile or enter its preset-family key and number. For example, `[^REC][^2] 22 [ENT]` displays `#> UPDATE COLOR PRESET 22` and changes only fixture/attribute addresses that are already part of Color Preset 22.
+
+Use **Update All** when programmer addresses that are not yet part of the Preset should also be added. For example, `[^REC][+][^2] 22 [ENT]` displays `#> UPDATE ALL COLOR PRESET 22`. The Update preview shows what will change and what will be ignored before the desk writes the Preset.
+
+## Assigning, Moving, and Copying
+
 ### Moving and Copying Cues
+
+Both sides of a Move or Copy use complete Cue addresses. `[AT]` separates the source from the destination:
+
+`[CPY] [CUE][CUE] 1 [CUE] 2.1 [AT] [CUE][CUE] 2 [CUE] 4 [ENT]`
+
+This copies Cue `2.1` from Cuelist 1 to Cue 4 in Cuelist 2. Use `[MOV]` instead of `[CPY]` to remove the source after creating the destination.
+
+When both Cues are in the selected Cuelist, the Cuelist address can be omitted:
+
+`[MOV] [CUE] 2.1 [AT] [CUE] 2.2 [ENT]`
+
+The desk asks whether the operation should use only the Cue's explicitly stored commands and deltas or its complete tracked status. Copy keeps the source Cue. Move removes it and recalculates tracking through the remaining Cues.
+
+### Moving and Copying Objects
+
+Groups, Presets, Cuelists, and other movable or copyable pool objects use the same source-and-destination structure. Press `[MOV]` or `[CPY]`, choose the source object, and then choose the destination. This can be completed entirely by touch, entirely through the command line, or by choosing one side with each input method.
+
+In a complete command, `[AT]` separates source and destination: `<operation> <source-object> [AT] <destination-object> [ENT]`. The source and destination must be compatible object types. A Preset remains in its Preset family, while Cue-specific tracked-status choices use the Cue workflow above.
+
+### Assigning Objects to Playbacks
+
+`[^SET]` enters **ASSIGN**. A regular `[SET]` does not assign anything; it edits a value or opens the selected object's configuration.
+
+If no source object has been chosen, pressing `[^SET]` and then touching a playback button or the playback's touch area opens that playback's configuration modal. The command-line equivalent is `[^SET][PBK] <playback-number> [ENT]`. Use `<page>.<playback-number>` for an explicit playback page, or `[PBK][PBK] <virtual-playback-number>` for a Virtual Playback. Completing the playback address with `[ENT]` opens the same configuration modal.
+
+For touch assignment, press `[^SET]`, choose the source Cuelist, Group, Dynamic, Macro, Timecode, or other assignable object, and then touch the target playback. The same source-then-target order applies on an attached desk.
+
+The command-line form places `[AT]` between source and target. For example, `[^SET][CUE][CUE] 4 [AT][PBK] 6 [ENT]` assigns Cuelist 4 to playback 6 on the current page. `[^SET][CUE][CUE] 4 [AT][PBK] 2.6 [ENT]` assigns it to playback 6 on page 2. Use `[PBK][PBK]` for a Virtual Playback target. The command remains armed between source and target so touch and command-line input can be mixed.
+
+### Setting Values and Opening Editors
+
+A regular `[SET]` acts on the value or object you choose next. Press `[SET]` and then touch an editable value in a table to open its value-entry modal. Depending on the value type, the modal provides the virtual keyboard or virtual number pad required to enter the new value.
+
+In most places, right-clicking an editable value or object is a shortcut for pressing `[SET]` and then touching it. Pressing `[SET]` before a pool object opens that object's editor or configuration instead of changing output. For example, `[SET]` followed by a Dynamic opens the Dynamic editor, while `[SET]` followed by a Timecode opens the Timecode editor. The same rule applies to other editable pool objects where an editor is available.
 
 ## Blind Programming & Preload GO
 
+Preload is the desk's blind programming workflow and a tool to perform multiple actions at the same time.
+
+Press `[PRELD]` to enter Preload, then program values or operate the playback domains configured for capture. Live output remains unchanged for captured domains while Preload-aware Fixture Sheet and Stage panes show the prepared result.
+
+Press `[PRELD]` again for **Preload GO**. It applies all captured programmer values and queued playback actions together at one commit point. At that moment, the values move out of the Preload programmer and into a temporary transition queue. The programmer is therefore empty immediately after Preload GO, while the temporary queue remains responsible for completing the transition.
+
+The Programmer Fade value at the moment of Preload GO supplies the transition time for the queued programmer values; changing it afterwards does not alter the running transition. Playback actions with explicit Cue timing retain that timing.
+
+Hold `[PRELD+]` to open the Preload modal. It lists the currently preloaded programmer changes and captured playback actions, and allows individual pending changes to be removed before Preload GO.
+
+Press `[^PRELD]` to clear the complete pending Preload without applying it. After Preload GO has committed the work, the values are no longer pending programmer values; clearing Preload does not cancel the temporary transition queue or playback actions already committed by Preload GO.
+
+Desk Setup independently decides whether programmer changes, physical playback actions, and Virtual Playback actions are captured by Preload or executed live. See [Preload and Preload GO](../40-Running-a-Show/03-preload.md) for those capture domains and the complete live-output behavior.
+
 ## Dynamics and FixAT
 
+Use `[^5]` to open Dynamics or to address a Dynamic preset. A Dynamic continuously modulates one or more fixture attributes over the ordinary programmer or playback value. Starting or stopping a Dynamic does not rewrite that underlying value.
 
-## Freezing
+A Dynamic without a fixed Group assignment can behave like a Preset: select the fixtures first, then apply the Dynamic to that current selection. A Dynamic with a fixed Group assignment always uses its stored Group target instead of the current selection.
 
-`[SHIFT] [CLR]` enters **FREEZE** on the shared command line. Enter a Fixture or Group selection and
-press `[ENT]` to capture a full Freeze. A Group resolves to its current fixtures before the action;
-Freeze state is never stored on the Group object. A full
-Freeze ignores later Programmer, Cue, Dynamic, direct-control, Group Master, Grand Master, and
-Blackout changes. Removing it immediately reveals the current underlying state; Freeze does not
-rewrite that state.
+`[^AT]` enters **FixAT** (Fixed At). FixAT temporarily fixes the active attribute at a static programmer value above a running Dynamic without stopping the Dynamic's clock. When FixAT is removed or cleared, the Dynamic is revealed again at its current phase rather than restarting from the beginning.
 
+For example, select the fixtures and active attribute, then enter `[^AT] 50 [ENT]` to hold that attribute at 50%. An explicit attribute may also be chosen before FixAT. Fade and start-delay clauses work like other programmer values.
 
-To remove Freeze, keep `[SHIFT]` held and press `[CLR]` twice, then release `[SHIFT]`. The command
-line shows **UNFREEZE**. Enter a selection and `[ENT]` to remove the complete Freeze state, or add
-the same `[SHIFT] [1]` through `[SHIFT] [4]` family keys before `[ENT]` to remove only those partial
-families. `[UND]` uses ordinary desk-local Programmer history to restore the Freeze state from
-before the last Freeze or Unfreeze action. Freeze has no Redo action.
+FixAT can also use a Preset instead of a numeric value. Enter `[^AT]` first and then select the Preset, either by touching its tile or by entering the normal Preset recall command. For example, `<selection> [^AT] [^2][^2] 22 [ENT]` displays `FixAT COLOR PRESET 22` and fixes the applicable Color Preset 22 values above the running Dynamic. Removing FixAT reveals the Dynamic again at its current phase.
 
-The Fixture Sheet marks a full Freeze as `❄ FREEZE`. Partial Freeze state uses the same marker plus
-the frozen family names: Intensity, Color, Position, and Beam. Partial families keep ordinary Group
-Master, Grand Master, and Blackout behavior. Setting a full Freeze replaces partial-family metadata;
-removing the full Freeze therefore removes every family Freeze on that target.
+The full Dynamic editor, target ordering, phases, lanes, speed behavior, and the relationship between the static base, Dynamic modulation, and FixAT are explained in [Dynamics](../05-Pane-Reference/01-programming-and-visualization.md#dynamics).
 
-### Freezing individual attribues only
-For a partial Freeze, enter **FREEZE**, the selection, and one or more family keys before `[ENT]`:
-`[SHIFT] [1]` Intensity, `[SHIFT] [2]` Color, `[SHIFT] [3]` Position, and `[SHIFT] [4]` Beam.
-These mappings apply while FREEZE or UNFREEZE is pending. Otherwise, with a current selection,
-Shift+1 through Shift+4 begin the Intensity, Color, Position, or Beam Preset category. Without a
-selection, Shift+1 through Shift+9 select the Intensity, Color, Position, Beam, Dynamics, Shapers,
-Focus, Control, or Media encoder page. Shift+5 through Shift+9 deliberately do not create a Preset
-command when a selection exists.
+## Freezing Fixtures and Fixture Attributes
 
-## Moving and copying Cues
+Freeze captures the resolved output of a fixture or attribute family and keeps it unchanged while later programmer, Cue, Dynamic, direct-control, Group Master, Grand Master, and Blackout values change underneath it.
 
-Address a Cue through its pool playback number: `[CPY] [SET] 1 [CUE] 2 [AT] [SET] 2 [CUE] 2 [ENT]`, or begin with `[MOV]` to move it. Entering the complete command opens a required choice instead of guessing the transfer meaning:
+Press `[^CLR]`, enter a Fixture or Group selection, and press `[ENT]` to apply a full Freeze. A Group resolves to its current fixtures; Freeze is stored on those targets, not on the Group object. Removing Freeze immediately reveals the current underlying state without rewriting it.
 
-- **Plain Copy** or **Plain Move** transfers only the selected Cue's stored commands and deltas.
-- **Status Copy** or **Status Move** materializes the complete tracked source status for attributes touched at or before that Cue.
-- **Cancel** closes the choice without changing either Cuelist.
+Press `[^CLR][^CLR]` to enter **UNFREEZE**, then enter the selection and press `[ENT]`. To Freeze or Unfreeze only specific attribute families, add the corresponding second-layer family keys before `[ENT]`: `[^1]` Intensity, `[^2]` Color, `[^3]` Position, and `[^4]` Beam.
 
-Copy retains the source Cue. Move removes it and recalculates tracking from the remaining stored Cues. The Plain/Status choice independently controls the destination contents.
+The Fixture Sheet marks a full Freeze as `❄ FREEZE`. A partial Freeze shows the same marker together with its frozen family names. `[UND]` restores the state from before the most recent Freeze or Unfreeze action; Freeze has no separate Redo action.
 
+## Timecodes and Macros
 
-### Dynamics and Fixed At
+`[^CUE] <timecode-number> [ENT]` runs the addressed Timecode. Add `[+]` before Enter to arm it for autoplay: `[^CUE] <timecode-number> [+] [ENT]`. Add `[-]` instead to disarm its autoplay: `[^CUE] <timecode-number> [-] [ENT]`.
 
-`DYNAMIC <number>` toggles a Dynamic on the current ordered selection. Put an explicit fixture or
-Group selection before `DYNAMIC` to address a targetless Dynamic, for example
-`FIXTURE 1 THRU 10 DYNAMIC 12`. A target-bound Dynamic accepts only its exact stored target scope;
-it is never retargeted by a command.
+`[^PBK] <macro-number> [ENT]` runs the addressed Macro.
 
-The live instance forms are:
-
-| Operation | Command |
-| --- | --- |
-| Toggle | `DYNAMIC 12` |
-| Off | `DYNAMIC 12 OFF` |
-| Size | `DYNAMIC 12 SIZE AT 50` |
-| Local speed | `DYNAMIC 12 SPEED AT 2` |
-| Phase offset | `DYNAMIC 12 PHASE AT 90` |
-| Assign to Playback | `SET DYNAMIC 12 PLAYBACK 5` |
-
-Size uses percent, speed uses a positive multiplier, and phase uses degrees. When more than one
-targetless running instance could match, the desk opens an exact instance choice with each running
-controller and target count. Choosing one executes a revision-checked `INSTANCE` command; the desk
-never selects one by array order.
-
-The command line spells a Fixed At value **`FixAT`**; operator buttons and help labels use **FAT**.
-FAT temporarily fixes the current attribute above a Dynamic without stopping its clock. Clearing
-or releasing FAT reveals the current phase of the underlying winning Dynamic.
-
-`[SHIFT] [AT]` enters `FixAT` without also entering ordinary `AT`. `FixAT 100` uses the most
-recently authored continuous parameter as the active parameter context. Use
-`ATTRIBUTE <attribute-name>` before `FixAT` for an explicit parameter, with the normal fixture or
-Group selection grammar before it:
-
-| FAT command | Result |
-| --- | --- |
-| `FixAT 100` | Fix the active parameter on the current selection at full. |
-| `FIXTURE 1 THRU 10 ATTRIBUTE pan FixAT 50` | Fix Pan at 50% on the explicit ordered fixture selection. |
-| `GROUP 2 ATTRIBUTE intensity FixAT 75 TIME 2 DELAY 1` | Fix Group 2 intensity after one second, fading for two seconds. |
-
-An absent active parameter, unsupported parameter, or discrete parameter is rejected before any
-Programmer value changes.
-
-### Value fade and delay times
-
-Append `[TIME] <seconds>` to set an explicit fade for only the values in this command. Pressing `[TIME]` twice changes the second press to `DELAY` in the command line; append the delay in seconds after it. Fade and delay may appear in either order because fading always begins after the delay.
-
-| Timing | Command | Result |
-| --- | --- | --- |
-| Fade override | `<selection> [AT] 100 [TIME] 2 [ENTER]` | Fade these values over two seconds instead of using Programmer Fade. |
-| Delay then fade | `<selection> [AT] 100 [TIME][TIME] 1 [TIME] 2 [ENTER]` | Display `DELAY 1 TIME 2`, wait one second, then fade for two seconds. |
-| Fade then delay | `<selection> [AT] 100 [TIME] 2 [TIME][TIME] 1 [ENTER]` | Produce the same timing with the clauses entered in the opposite order. |
-
-The programmer remembers explicit fade and start delay on each changed value. Direct entry is **Immediate** on a fresh desk: command-line `AT` without `[TIME]` and absolute encoder Set Value retain no per-value fade override. Enable **Direct entry uses Programmer Fade** when those direct entries should instead capture the current Programmer Fade. Explicit `[TIME]` remains authoritative in either mode. Recording several values with different command times into one Cue preserves those individual timings. A value with no retained per-value fade uses the Cue's master Fade, then the configured Cue Fade fallback. A value without an explicit start delay uses the Cue's master Delay. Cue Delay is edited in the Cuelist View. `DELAY` has a different scope in a Cue-record command: there it stores the Cue's GO/FOLLOW/TIME trigger as described below, not Cue Delay or an attribute start delay.
-
-## Recording
-
-After building a scene in the programmer, press `[REC]` and choose a recordable target in the UI. Targets include presets, groups, and Cuelists in their pools, as well as the complete Playback card on touch, hardware-layout, physical, and simulated surfaces. The outlined Playback target includes its full label area, every assigned button, and its fader. Touching any part records to that Playback once and suppresses the touched control's normal press, hold, release, or fader action. Recording a Cuelist in the pool does not assign it to any playback page.
-
-### Command target outlines
-
-Bare **Record**, **Set**, **Copy**, **Move**, and **Delete** commands outline only entries that already support the corresponding operation. The literal operation appears inside every outlined target, so the target is not identified by color alone. Press anywhere inside the complete outline; nested controls belong to the outlined target while the command is active.
-
-The command does not turn unsupported entries into new storage operations. For example, whole Playback cards accept Record and Set but not Copy, Move, or Delete. Group cards accept Record, Set, and Delete. Preset cards accept all five operations: Copy and Move first outline occupied sources, then outline only empty destinations in the same Preset family. Dynamic tiles accept their existing Set and Delete operations. Ineligible entries are not outlined.
-
-View changes, Playback page controls, pool navigation, scrolling, search, settings, and other navigation remain ordinary navigation while a target command is armed. Attached Playback controls follow the same rule: an eligible Record or Set target is intercepted for the whole gesture, while Page, NAV, MENU, PROG/PLAYBACK, ESCAPE, and Speed Group controls retain their navigation function.
-
-A Pane supports only bare **Delete**: it outlines the Pane title with a literal **DELETE** badge, and touching that title removes the Pane after its normal confirmation. The Pane body, Settings button, and all Pane navigation remain ordinary controls. Record, Set, Copy, and Move never outline a Pane title.
-
-The key immediately after `[REC]` chooses the record operation:
-
-- no modifier means **Overwrite**;
-- `[+]` means **Merge** the current selection or values into the target; and
-- `[-]` means **Subtract** the current selection or values from the target.
-
-For a Group or a specific Cue, `[-]` with an empty applicable source deletes the target instead. Thus `[REC] [-] [GRP] 3 [ENTER]` with an empty selection is exactly equivalent to `[DEL] [GRP] 3 [ENTER]`. `[REC] [+]` and `[REC] [-]` require an existing, explicit target; they never append to an implicitly chosen next Cue. Cancel in a recording dialog always cancels the operation and writes nothing.
-
-### Presets and groups
-
-| Target | Command | Result |
-| --- | --- | --- |
-| UI target | `[REC] <target+>` | Record the programmer into the chosen UI or hardware target. |
-| Numbered preset | `[REC] <preset-type> [ . ] <preset-number> [ENTER]` | Record a preset. Types 0 through 4 are Mixed, Intensity, Color, Position, and Beam; only Mixed accepts attributes from any family. |
-| Overwrite Group | `[REC] [GRP] <group-number> [ENTER]` | Replace the complete ordered membership with the resolved current selection. Recording a live reference back onto the same Group materializes concrete fixtures and cannot create a self-reference. |
-| Merge into Group | `[REC] [+] [GRP] <group-number> [ENTER]` | Retain the existing order and append selected fixtures that are not already members. |
-| Subtract from Group | `[REC] [-] [GRP] <group-number> [ENTER]` | Remove every currently selected fixture and retain the relative order of the other members. |
-| Delete Group | `[REC] [-] [GRP] <group-number> [ENTER]` with an empty selection, or `[DEL] [GRP] <group-number> [ENTER]` | Delete the Group. Deletion is rejected while a derived Group depends on it. |
-
-To merge fixtures 5 and 6 into Group 3 entirely from the keypad, first click fixture 5 and then fixture 6, without a modifier or value change. Press `[REC]`, `[+]`, `[GRP]`, `[3]`, `[ENTER]`. To overwrite Group 3 with the resolved selection `Group 3 + fixture 5 + fixture 6`, first press `[GRP] [3] [+] [5] [+] [6] [ENTER]`, then press `[REC] [GRP] [3] [ENTER]`.
-
-### Updating existing programming
-
-`[SHIFT] [REC]` arms **UPDATE**. Update reads only actual programmer changes; Highlight, defaults, resolved playback output, and unchanged tracked values are never pulled into storage. The same armed state is shared by the software desk and attached OSC hardware for that desk. While armed, an attached playback button or fader identifies that playback as the Update target and is intercepted before its normal playback action; the main desk opens the same touch-confirmation workflow.
-
-The Record gesture has three mutually exclusive Update forms:
-
-| Gesture | Result |
-| --- | --- |
-| Short `[SHIFT] [REC]` | Arm Update and wait for a target. |
-| While Shift remains held, press `[REC]` a second time | Open **Update Update**, the eligible-target menu. |
-| Hold `[SHIFT] [REC]` for about 2.5 seconds | Open **Update Settings** without arming or applying an Update. |
-
-After arming Update, touch an existing Cuelist, assigned playback, Preset, or Group. Touch normally opens a preview that identifies the concrete target, current Cue when applicable, eligible changes, ignored changes, and the storage location. **Cancel** disarms Update and writes nothing. **Show Update modal on touch** can be disabled in Update Settings; touch then applies the configured default directly. Completing an address with `[ENT]` always applies that default directly.
-
-For a playback target, `[UPDATE] [SET] <playback-number> [ENT]` addresses the slot on this desk's current page. `[UPDATE] [SET] <page> [ . ] <playback-number> [ENT]` pins the explicit page. Append `[CUE] <Cue-number>` to address a particular Cue. Changing the desk page changes only the current-page form; an explicit-page address remains pinned.
-
-Cue targets offer exactly these modes:
-
-| Mode | Result |
-| --- | --- |
-| **Existing Only** | Update eligible fixture/attribute values at the Cue events currently supplying the tracked values. New addresses are ignored. |
-| **Existing in Current Cue** | Update only exact addresses already stored in the current Cue. |
-| **Add to Current Cue** | Write eligible addresses that exist somewhere in the Cuelist into the current Cue. This is the initial default. |
-| **Add New** | Merge all applicable programmer addresses into the current Cue, including addresses new to the Cuelist. |
-
-Preset and Group targets offer **Update Existing** and **Add New**. Preset eligibility is per exact fixture/attribute address. For a Group, existing-only retains its ordered membership and does not introduce a fixture; add-new appends selected fixtures according to normal ordered Group Merge behavior without implicit removal or reordering.
-
-**Update Update** initially shows **Eligible for Update Existing**. Switch to **Show All Active** to include active targets that would otherwise be no-ops and choose Update Existing or Add New per target. Distinct playbacks keep their concrete current-Cue context even when they share one Cuelist. No-op rows cannot report success.
-
-Update Settings stores desk workflow preferences, not show programming. It controls the Cue, Preset, and Group defaults and whether touch opens the modal. A confirmed Update performs one revision-checked show mutation, retains the programmer like Record, and reports the changed object, changed Cue/source events, ignored values, and new revision. A preview also fingerprints the exact programmer contents and live playback/current-Cue context it displayed; changing either before confirmation rejects the stale operation and writes nothing. The single resulting object revision is one Undo step. Missing, ambiguous, stale, or empty targets fail atomically.
-
-### Cuelists, Cues, and playbacks
-
-Cuelist and Cue selection uses one unambiguous address grammar. A playback is the page slot containing the fader and buttons; a Cuelist is the ordered collection of Cues assigned to that playback.
-
-The logical `[LINK]` command key is available to attached OSC control surfaces as `programmer/link`; on a computer keyboard press `[KBD:SHIFT]` + `[KBD:L]`.
-
-Press `[KBD:SHIFT]` + `[KBD:Z]` to enter `SELECT`, then touch a playback to make it the selected playback. The selection is retained for that desk and show: another session attached to the same desk sees the same selection, while another desk used by the same operator may select a different playback. Running a different playback never changes it implicitly. The selected playback supplies the default Cuelist whenever a command omits both a playback address and a Cuelist Pool number. It is also the playback whose Cue details open with `[SHIFT] 4`.
-
-- `[SET] <Cuelist-number>` selects a Cuelist.
-- `[SET] <Cuelist-number> [CUE] <Cue-number>` selects a Cue in that Cuelist.
-- `[SET] <playback-page> [ . ] <playback-number>` selects a playback by its page position.
-- `[SET] <playback-page> [ . ] <playback-number> [CUE] <Cue-number>` selects a Cue in the Cuelist assigned to that playback.
-
-| Target | Command | Result |
-| --- | --- | --- |
-| Go To on selected playback | `[CUE] <Cue-number> [ENTER]` | Make the Cue current immediately, activate an Off playback, set its fader to full, and use normal tracked state, timing, arbitration, Grand Master, and Blackout. |
-| Load on selected playback | `[CUE] [CUE] <Cue-number> [ENTER]` | Mark the Cue as the loaded next Cue without changing current output, activation, or fader level. The next forward GO consumes it. |
-| Explicit Go To | `[CUE] [SET] <Cuelist/playback-number> [CUE] <Cue-number> [ENTER]` | Go To on the concrete addressed playback. Page form: `[CUE] [SET] <page> [ . ] <playback> [CUE] <Cue> [ENTER]`. |
-| Explicit Load | `[CUE] [CUE] [SET] <Cuelist/playback-number> [CUE] <Cue-number> [ENTER]` | Load on the concrete addressed playback. The same page form is accepted after the two initial Cue keys. |
-| Cue on the active playback | `[REC] [CUE] <Cue-number> [ENTER]` | Record the numbered Cue in the Cuelist assigned to the active playback. The omitted playback/Cuelist address resolves only through the explicit active-playback selection. |
-| Cuelist | `[REC] [SET] <Cuelist-number> [ENTER]` | Create a Cuelist in an empty pool slot, or append a Cue to an existing Cuelist. The Cuelist remains unassigned. |
-| Specific Cue | `[REC] [SET] <Cuelist-number> [CUE] <Cue-number> [ENTER]` | Record at the specified Cue number. |
-| Page playback | `[REC] [SET] <page> [ . ] <playback-number> [ENTER]` | Append a Cue to the Cuelist assigned to that playback. |
-| Cue on a page playback | `[REC] [SET] <page> [ . ] <playback-number> [CUE] <Cue-number> [ENTER]` | Record at a specified Cue in the assigned Cuelist. |
-| Cue with explicit fade | `[REC] [SET] <Cuelist-number> [CUE] <Cue-number> [TIME] 3 [ENTER]` | Record the Cue with a three-second default fade while retaining per-value timing overrides. |
-| Cue with FOLLOW trigger | `[REC] [SET] <Cuelist-number> [CUE] <Cue-number> [TIME] [TIME] 0 [ENTER]` | The second consecutive Time becomes `DELAY`; zero, or `DELAY` confirmed without a number, stores FOLLOW. This Cue starts when the preceding Cue has finished all value delays and fades. |
-| Cue with TIME trigger | `[REC] [SET] <Cuelist-number> [CUE] <Cue-number> [TIME] [TIME] 4 [ENTER]` | Store `DELAY 4`, displayed as a TIME trigger of four seconds. This Cue starts four seconds after the preceding Cue receives GO. |
-| Link from one Cue | `[LINK] [SET] <Cuelist-number> [CUE] <source-Cue> [AT] [CUE] <destination-Cue> [ENTER]` | Store the destination Cue's stable identity on the source Cue. After the source completes, playback jumps to that identity. Omit SET and the Cuelist number to use the selected playback. Page form: `[LINK] [SET] <page> [ . ] <playback> [CUE] <source> [AT] [CUE] <destination> [ENTER]`. |
-| Delayed Link | `[LINK] [SET] <Cuelist-number> [CUE] <source-Cue> [AT] [CUE] <destination-Cue> [TIME] [TIME] 2 [ENTER]` | Add a two-second Link delay after the source Cue's latest actual incoming/outgoing completion. |
-| Merge into a Cue | `[REC] [+] [SET] <Cuelist-number> [CUE] <Cue-number> [ENTER]` | Add the programmer's fixture/group attribute addresses to the existing Cue; an incoming address replaces the value already stored at that same address. |
-| Subtract from a Cue | `[REC] [-] [SET] <Cuelist-number> [CUE] <Cue-number> [ENTER]` | Remove the fixture/group attribute addresses currently present in the programmer from that Cue. Values at all other addresses remain unchanged. |
-| Delete a Cue with Record-minus | `[REC] [-] [SET] <Cuelist-number> [CUE] <Cue-number> [ENTER]` with no programmer values | Delete that Cue. The only Cue in a Cuelist cannot be deleted this way. |
-
-Dots after `[CUE]` form decimal Cue numbers. For example, `[REC] [SET] 1 [CUE] 2 [ . ] 5 [ENTER]` records Cue `2.5` in Cuelist 1. The `Cues · Cuelist1` view can renumber the Cuelist later. A fully entered command uses its explicit operation without opening a confirmation dialog. Clicking an existing Cuelist pool cell records the next Cue; it does not target an existing Cue. Use the complete command-line address above to overwrite, merge, subtract, or delete a specific Cue.
-
-The two initial Cue keys are the operation: one means Go To and two consecutive keys mean Load. The later Cue key after `SET ...` is only the address separator. Load is transient and visibly replaces the ordinary next Cue; GO minus preserves it, while Off or release clears it. Renumbering follows the Cue's stable identity, deleting the loaded Cue clears the override, and reopening the show does not persist a Load. A missing selection, missing Cue, incomplete address, unassigned target, or ambiguous Cuelist assignment is rejected without moving any playback or fader.
-
-A Cue-record command without `DELAY` stores the Cue with a **GO** trigger, so it waits indefinitely for GO. Bare `DELAY` and `DELAY 0` normalize to **FOLLOW**. A positive `DELAY <seconds>` stores **TIME** with that duration. The trigger belongs to the Cue being recorded: FOLLOW starts after the preceding Cue's latest value `start delay + fade` endpoint, while TIME counts from the preceding Cue's GO. A Cue 2 set to TIME 4 can therefore begin four seconds after Cue 1's GO even while Cue 1 still fades.
-
-LINK is an explicit Cue edit and captures no programmer values. Its source and destination numbers are resolved inside one Cuelist when Enter is pressed; the stored destination is the Cue's stable identity. Renumbering keeps the Link, while a missing destination, self-link, or cycle rejects the complete command without changing the show or output. LINK timing starts after the source Cue's latest actual incoming/outgoing completion. A delayed Link uses the same `DELAY` entry produced by pressing Time twice. Live Timecode is authoritative and suppresses Link execution until Timecode is absent.
-
-The Cuelist setting **Force Cue Timing** makes each Cue's master Fade and Delay authoritative for every value during playback, ignoring stored per-value fades and start delays without deleting them. When the setting is disabled again, the original per-value timing applies on the next execution.
-
-The Cuelist setting **Disable Cue Timing** is a rehearsal bypass. It treats per-value and Cue Fade/Delay, TIME-trigger waits, and the effective Chaser X-fade duration as zero without rewriting them. Chaser X-fade remains stored as its `0–100%` share of the current Speed Group/BPM/multiplier step, and Chaser step cadence remains active. Disable Cue Timing takes precedence over Force Cue Timing; turning it off restores every configured duration.
-
-## Deleting, moving, and copying
-
-### Groups
-
-| Action | Command | Result |
-| --- | --- | --- |
-| Delete | `[DEL] [GRP] <group-number> [ENTER]` | Delete the Group if no derived Group depends on it. This is equivalent to empty-selection `[REC] [-] [GRP] <group-number> [ENTER]`. |
-
-### Presets
-
-| Action | Command | Result |
-| --- | --- | --- |
-| Delete | `[DEL] <preset-type> [ . ] <preset-number> [ENTER]` | Delete the specified preset. |
-| Move | `[MOV] <preset-type> [ . ] <preset-number> [AT] <new-preset-number> [ENTER]` | Move the preset within its current type. |
-| Copy | `[CPY] <preset-type> [ . ] <preset-number> [AT] <new-preset-number> [ENTER]` | Copy the preset within its current type. |
-
-The destination omits the preset type because command-line copy and move operations cannot change a preset's type.
-
-### Cues
-
-Cue source and destination addresses both use the Cuelist/playback selection grammar above. A move or copy therefore has a complete `[SET] ... [CUE] ...` address on each side of `[AT]`.
-
-| Action | Command | Result |
-| --- | --- | --- |
-| Delete a Cue from a Cuelist | `[DEL] [SET] <Cuelist-number> [CUE] <Cue-number> [ENTER]` | Delete a Cue from a Cuelist. |
-| Delete a Cue through a playback | `[DEL] [SET] <page> [ . ] <playback-number> [CUE] <Cue-number> [ENTER]` | Delete a Cue from the Cuelist assigned to a playback. |
-| Move or copy between Cuelists | `<operation> [SET] <Cuelist-number> [CUE] <Cue-number> [AT] [SET] <Cuelist-number> [CUE] <Cue-number> [ENTER]` | Move or copy a Cue between Cuelists. `<operation>` is `[MOV]` or `[CPY]`. |
-| Move or copy using playbacks | `<operation> [SET] <page> [ . ] <playback-number> [CUE] <Cue-number> [AT] [SET] <page> [ . ] <playback-number> [CUE] <Cue-number> [ENTER]` | Move or copy a Cue using page-relative playback source and destination addresses. Cuelist and playback addresses may be mixed. |
-
-Deleting the active Cue removes it from the stored Cuelist but holds its fully reconstructed output until another playback action occurs. GO executes the next surviving Cue; GO minus executes the previous surviving Cue. Navigation then reconstructs tracking from the modified Cuelist, so values introduced only by the deleted Cue release according to the destination Cue's timing. Deleting the sole Cue remains prohibited.
-
-## Assigning and configuring playbacks
-
-On the touch UI, press `[SET]`, tap an existing entry in the Cuelist Pool, then tap the target playback fader. The selected Cuelist replaces the current assignment at that page position. To create a Group Master with the same physical workflow, press `[SET]`, tap the source Group tile, then tap the target playback. The command line remains armed as `SET GROUP <number>` between the two touches so the destination is explicit.
-
-Press `[SET] [GRP] <Group-number> [ENTER]` to open that Group's settings. Enter is significant:
-while `SET GROUP <number>` is pending, pressing a physical or Virtual Playback assigns that explicit
-Group to that explicit Playback instead. Pressing `[SET]` and a Playback without first choosing a
-Group always opens Playback Configuration, regardless of the current fixture or Group selection.
-`[CLR]`, `[ESC]`, a show/desk change, or leaving the originating surface cancels the pending source.
-
-In the Tauri app and browser UI, right-clicking an element is a shortcut for pressing `[SET]` and then left-clicking that same element. Use it wherever `[SET]` followed by a click configures an element, edits a SET-only value, renames an entry, or starts a SET assignment; the native context menu does not open. This includes Presets, Cuelist and Group assignment sources, Dynamics, Playback Page rename, File Manager rename, compact Cue values, and editable Patch values. A populated Cuelist is the deliberate exception to SET-source routing: right-click opens that exact Cuelist's settings, matching its hold action. Where no desk action is assigned, right-click does nothing and browser Reload, Inspect Element, and Autofill menus remain suppressed. On a touchscreen, continue to press `[SET]` and then tap the element.
-
-Right-click follows the SET-click action even when another gesture opens settings. For example, right-clicking a Group chooses it as an assignment source, while touch-hold or `[SET] [GRP] <Group-number> [ENTER]` opens Group settings. Right-clicking a Dynamic chooses it as an assignment source, while Shift-click or touch-hold opens its editor.
-
-To configure an assigned page playback, press `[SET]` and then tap the playback, press `[SHIFT]` and then its first button, or right-click anywhere on the playback. All three gestures open the same Playback configuration modal. **Unassign Playback** removes the Cuelist or Group from that page position and leaves the playback slot empty.
-
-| Action | Command | Result |
-| --- | --- | --- |
-| Assign a Cuelist | `[SET] <Cuelist-number> [AT] <page> [ . ] <playback-number> [ENTER]` | Assign a Cuelist to a playback on a page. |
-| Open Group settings | `[SET] [GRP] <Group-number> [ENTER]` | Open General, Projection, and Phase settings for that explicit Group. |
-| Assign a Group Master | `[SET]`, choose the Group, then press the destination Playback | Create or replace that physical or Virtual Playback with a Group Master targeting the explicit Group. |
-| Configure a Cuelist | `[SET] <Cuelist-number> [ENTER]` | Open the Cuelist configuration. |
-| Configure a page playback | `[SET] <page> [ . ] <playback-number> [ENTER]` | Open the configuration for the playback at that page position. |
-
-### Starting a Macro
-
-`MACRO <pool-number>` starts that show-owned Macro through the same authenticated, desk-scoped execution queue as a pool tap or assigned Playback. The command returns after the one-shot execution is queued; the Macro and Running windows show its live result. A Macro body cannot use `MACRO` to call another Macro, because Macro lines deliberately contain only non-interactive ordinary programming commands and have no call or recursion feature.
-
-Inside a Macro source document, either a newline or `;` ends a command; the final semicolon on a line is optional. `DEFINE _name <expansion>` declares an underscore-prefixed, no-space identifier whose expansion can contain arbitrary command text. The editor validates the expanded command through this same authoritative grammar and shows the expansion when the identifier is hovered. `RESTORE SELECTION` restores the concrete ordered fixtures selected when that individual Macro run began; it does not store or recall a Group. `DEFINE` and `RESTORE SELECTION` are Macro-source instructions, not commands for ordinary interactive entry.
-
-## OSC playback addressing
-
-Every keypad key is also accepted at `/light/{desk}/programmer/{key}` with a pressed value. Inputs include `playback`, `off`, `diff`, `page-up`, `page-down`, `minus`, `time`, `shift`, and `digit-0` through `digit-9`. OSC Shift follows the same shifted action labels; a held Shift remains active until release. Existing inputs such as `plus`, `at`, `thru`, `set`, `record`, `enter`, and `backspace` continue to use the same address family.
-
-The desk alias scopes interaction, not ownership of programmer values. A Tauri or browser desk and the OSC controllers subscribed to its alias share one in-progress command line, page, and button state, so a physical key continues the command visible in that desk UI exactly as an on-screen key would. Different desk aliases keep those partial interactions separate. After a command is completed, its values land in the logged-in user's programmer and are therefore visible in every session for that same user, including sessions attached to other desks.
-
-- `/light/{desk}/page-playback/{playback}/{fader-or-button}` addresses a numbered playback on the page currently active for that desk or screen.
-- `/light/playback/{page}/{playback}/{fader-or-button}` addresses that page and playback globally, independent of every desk's current page.
-- `/light/cuelist/{Cuelist}/{action}` directly operates a Cuelist when a page playback is not the intended target.
-
-The hardware simulator uses `page-playback`. The former `paged-playback`, `/light/qlist/{number}/{action}`, and direct `/light/playback/{Cuelist}/{action}` forms remain compatibility aliases for existing integrations.
-
-### OSC Dynamics
-
-Dynamics OSC is scoped to a subscribed desk alias. Pool actions take one pressed Boolean or numeric
-value; release values are ignored:
-
-- `/light/{desk}/dynamic/{pool-number}/toggle`
-- `/light/{desk}/dynamic/{pool-number}/off`
-
-Live-instance actions use the runtime instance UUID from feedback and one numeric argument:
-
-- `/light/{desk}/dynamic/instance/{uuid}/size` — normalized `0.0` through `1.0`
-- `/light/{desk}/dynamic/instance/{uuid}/speed` — positive multiplier
-- `/light/{desk}/dynamic/instance/{uuid}/phase` — finite degrees
-
-`/light/{desk}/programmer/fix-at` takes an attribute-name string followed by one normalized numeric
-value and uses the desk's current selection. Definition editing is not exposed through OSC.
-
-Rejected actions return
-`/light/{desk}/feedback/dynamic/error <original-address> <message>`. Subscription snapshots publish
-`global-paused`, `runtime-count`, and one
-`runtime/{runtime-uuid}/{active|pool-number|name|target-count|controller-count|winning-controller|paused}`
-family per running instance. Each controller publishes
-`controller/{controller-uuid}/{runtime-instance|source|priority|size|speed|phase|paused|winning|releasing}`.
-Programmer-owned summaries remain under `feedback/dynamic/instance/{uuid}` and
-`feedback/dynamic/{pool-number}/active`. Treat each refresh as authoritative: `runtime-count` and
-the identities present in that snapshot replace a locally cached list.
+Prefix an address with `[SET]` to edit instead of run it. `[SET][^CUE] <timecode-number> [ENT]` opens that Timecode's editor, and `[SET][^PBK] <macro-number> [ENT]` opens that Macro's editor. The same rule opens a Cuelist: `[SET][CUE][CUE] <Cuelist-number> [ENT]`.
