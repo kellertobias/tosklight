@@ -176,7 +176,7 @@ function sceneryEntries(backCurtain?: {
 		...[-3, -1, 1, 3].map((x, index) => ({
 			number: index + 22,
 			name: `Back Railing ${index + 1}`,
-			profile: "One-Point Truss / Pipe",
+			profile: "Stage Railing 2 m",
 			mode: "2 m",
 			layer: "Stage & Venue",
 			location: { x, y: 4.05, z: 1.35 },
@@ -185,7 +185,7 @@ function sceneryEntries(backCurtain?: {
 			[1, 3].map((y, index) => ({
 				number: 26 + sideIndex * 2 + index,
 				name: `${side < 0 ? "Left" : "Right"} Railing ${index + 1}`,
-				profile: "One-Point Truss / Pipe",
+				profile: "Stage Railing 2 m",
 				mode: "2 m",
 				layer: "Stage & Venue",
 				location: { x: side * 4.05, y, z: 1.35 },

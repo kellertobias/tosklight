@@ -82,22 +82,6 @@ describe("CAD plan projections", () => {
 	});
 
 	it("shows the declared three- and four-point chord arrangement in truss end views", () => {
-		const generatedSquareDrawing = {
-			id: "generated-truss",
-			projections: [
-				{
-					view: "left" as const,
-					svg: '<svg><path d="M 0 0 L 290 0 L 290 290 L 0 290 Z" fill="#66707a" /></svg>',
-					viewBoxMillimetres: [0, 0, 290, 290] as [
-						number,
-						number,
-						number,
-						number,
-					],
-					originMillimetres: [145, 145] as [number, number],
-				},
-			],
-		};
 		const endView = (name: string) =>
 			entityPlanGeometry(
 				{
@@ -107,7 +91,7 @@ describe("CAD plan projections", () => {
 					fixtureType: "truss",
 					sizeMillimetres: [4000, 290, 290],
 				},
-				generatedSquareDrawing,
+				undefined,
 				"left_to_right",
 			);
 
@@ -116,6 +100,36 @@ describe("CAD plan projections", () => {
 		expect(threePoint.source).toBe("typed");
 		expect(threePoint.outlines).toHaveLength(6);
 		expect(fourPoint.outlines).toHaveLength(8);
+	});
+
+	it("prefers canonical generated truss geometry over its typed fallback", () => {
+		const geometry = entityPlanGeometry(
+			{
+				...movingLight,
+				name: "Four-Point Truss 4 m",
+				kind: "venue",
+				fixtureType: "truss",
+				sizeMillimetres: [4000, 290, 290],
+			},
+			{
+				id: "generated-truss",
+				projections: [
+					{
+						view: "left",
+						svg: '<svg><path d="M 0 0 L 50 0 L 25 50 Z" fill="#171b20" /><path d="M 3 3 L 47 3 L 25 46 Z" fill="#7a828d" /></svg>',
+						viewBoxMillimetres: [0, 0, 50, 50],
+						originMillimetres: [25, 25],
+					},
+				],
+			},
+			"left_to_right",
+		);
+
+		expect(geometry.source).toBe("model");
+		expect(geometry.triangles.map(({ color }) => color)).toEqual([
+			[23 / 255, 27 / 255, 32 / 255],
+			[122 / 255, 130 / 255, 141 / 255],
+		]);
 	});
 
 	it("uses repeated human plan marks for crowd areas instead of the model box", () => {

@@ -51,9 +51,8 @@ export function entityPlanGeometry(
 	view: CadViewDirection,
 ): PlanGeometry {
 	const type = entityType(entity);
-	// Generated model silhouettes are useful for fixtures, but truss end views collapse into a
-	// solid square and crowd-area models read as an unexplained block. These two venue families
-	// deliberately use conventional plan symbols instead.
+	// Crowd-area models describe a procedural volume and read as an unexplained block in plan.
+	// Modeled fixtures and venue objects—including trusses—keep their canonical generated SVG.
 	if (isSemanticPlanSymbol(type)) return typedGeometry(entity, view, type);
 	const projection = drawing?.projections.find(
 		(candidate) => candidate.view === projectionViewForCad(view),
@@ -73,7 +72,7 @@ function entityType(entity: CadEntity): string {
 }
 
 function isSemanticPlanSymbol(type: string): boolean {
-	return /truss|pipe grid|pipe$|crowd/.test(type);
+	return /crowd/.test(type);
 }
 
 export function parseProjection(

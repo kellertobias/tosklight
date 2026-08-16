@@ -73,6 +73,24 @@ test("DEMO-GENERATOR-001 @api › installs the exact Plan 76 lighting patch from
 	expect(generatedShow.scenery).toHaveLength(33);
 	const completePatch = await api.patch();
 	expect(completePatch.fixtures).toHaveLength(264);
+	const railings = completePatch.fixtures.filter((fixture) =>
+		fixture.name?.includes("Railing"),
+	);
+	expect(railings).toHaveLength(8);
+	expect(
+		railings.map((fixture) => [
+			fixture.definition.manufacturer,
+			fixture.definition.model,
+			fixture.definition.mode,
+		]),
+	).toEqual(
+		Array.from({ length: 8 }, () => ["Venue", "Railing 2 m", "2 m"]),
+	);
+	expect(
+		railings
+			.filter((fixture) => /^(Left|Right) Railing/u.test(fixture.name ?? ""))
+			.map((fixture) => fixture.rotation.z),
+	).toEqual([90, 90, 90, 90]);
 	expect(
 		completePatch.fixtures.reduce(
 			(count, fixture) => count + 1 + fixture.multipatch.length,

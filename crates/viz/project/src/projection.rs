@@ -10,7 +10,7 @@ use sha2::{Digest, Sha256};
 use viz_scene::{FixtureModel, ModelPartKind};
 
 pub const GENERATOR_ID: &str = "tosklight.fixture-projection";
-pub const GENERATOR_VERSION: &str = "1";
+pub const GENERATOR_VERSION: &str = "2";
 pub const POSE_CONTRACT_VERSION: u16 = 1;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -165,13 +165,13 @@ fn generate_view(
             let points = [first, second, third];
             let world = points.map(|point| transform(Vec3::from_array(point)));
             let page = world.map(|point| project(point, view) * 1000.0);
-            let area = (page[1] - page[0]).perp_dot(page[2] - page[0]).abs() * 0.5;
-            if area < 0.04 {
-                continue;
-            }
             for point in page {
                 min = min.min(point);
                 max = max.max(point);
+            }
+            let area = (page[1] - page[0]).perp_dot(page[2] - page[0]).abs() * 0.5;
+            if area < 0.04 {
+                continue;
             }
             triangles.push(Triangle {
                 points: page,
@@ -186,10 +186,7 @@ fn generate_view(
         }
     }
     if triangles.is_empty() {
-        return Err(ProjectionError(format!(
-            "{} projection contains no visible major geometry",
-            view.wire()
-        )));
+        triangles = end_on_bounds_fallback(min, max, view)?;
     }
     triangles.sort_by(|left, right| {
         right
@@ -210,6 +207,36 @@ fn generate_view(
         orientation: view.orientation(),
         pose,
     })
+}
+
+fn end_on_bounds_fallback(
+    min: Vec2,
+    max: Vec2,
+    view: ProfileProjectionView,
+) -> Result<Vec<Triangle>, ProjectionError> {
+    if !min.is_finite() || !max.is_finite() || (max - min).min_element() <= 0.001 {
+        return Err(ProjectionError(format!(
+            "{} projection contains no visible major geometry",
+            view.wire()
+        )));
+    }
+    const SEGMENTS: usize = 16;
+    let centre = (min + max) / 2.0;
+    let radius = (max - min) / 2.0;
+    let ring = (0..SEGMENTS)
+        .map(|index| {
+            let angle = index as f32 / SEGMENTS as f32 * std::f32::consts::TAU;
+            centre + Vec2::new(angle.cos(), angle.sin()) * radius
+        })
+        .collect::<Vec<_>>();
+    Ok((0..SEGMENTS)
+        .map(|index| Triangle {
+            points: [centre, ring[index], ring[(index + 1) % SEGMENTS]],
+            depth: 0.0,
+            part: ModelPartKind::Base,
+            fill: "#555b64",
+        })
+        .collect())
 }
 
 fn simplified_away(name: &str) -> bool {
@@ -251,6 +278,18 @@ fn fill(kind: ModelPartKind, colour: [f32; 3]) -> &'static str {
         (ModelPartKind::Head, false) => "#565c66",
         (ModelPartKind::Head, true) => "#7a828d",
     }
+}
+
+fn inset_triangle(points: [Vec2; 3]) -> [Vec2; 3] {
+    const OUTLINE_WIDTH_MILLIMETRES: f32 = 1.25;
+    const MAX_INSET_FRACTION: f32 = 0.18;
+    let centre = points.into_iter().sum::<Vec2>() / 3.0;
+    points.map(|point| {
+        let toward_centre = centre - point;
+        let fraction =
+            (OUTLINE_WIDTH_MILLIMETRES / toward_centre.length().max(0.001)).min(MAX_INSET_FRACTION);
+        point + toward_centre * fraction
+    })
 }
 
 fn part_order(kind: ModelPartKind) -> u8 {
@@ -299,13 +338,28 @@ fn svg(
     };
     for triangle in triangles {
         output.push_str(&format!(
-            "<path d=\"M {:.3} {:.3} L {:.3} {:.3} L {:.3} {:.3} Z\" fill=\"{}\" fill-rule=\"nonzero\" data-part=\"{}-{pose}\"/>",
+            "<path d=\"M {:.3} {:.3} L {:.3} {:.3} L {:.3} {:.3} Z\" fill=\"#171b20\" fill-rule=\"nonzero\" data-part=\"{}-{pose}-outline\"/>",
             triangle.points[0].x,
             triangle.points[0].y,
             triangle.points[1].x,
             triangle.points[1].y,
             triangle.points[2].x,
             triangle.points[2].y,
+            match triangle.part {
+                ModelPartKind::Base => "base",
+                ModelPartKind::Yoke => "yoke",
+                ModelPartKind::Head => "head",
+            },
+        ));
+        let inset = inset_triangle(triangle.points);
+        output.push_str(&format!(
+            "<path d=\"M {:.3} {:.3} L {:.3} {:.3} L {:.3} {:.3} Z\" fill=\"{}\" fill-rule=\"nonzero\" data-part=\"{}-{pose}\"/>",
+            inset[0].x,
+            inset[0].y,
+            inset[1].x,
+            inset[1].y,
+            inset[2].x,
+            inset[2].y,
             triangle.fill,
             match triangle.part {
                 ModelPartKind::Base => "base",
@@ -384,6 +438,18 @@ mod tests {
                 .and_then(|bytes| String::from_utf8(bytes).ok())
                 .expect("generated SVG data URL");
             assert!(svg.contains(&format!("data-tosklight-view=\"{}\"", view.view.wire())));
+            assert!(svg.contains("-outline\""));
+            assert!(svg.contains("fill=\"#171b20\""));
+            let paths = svg
+                .split("<path")
+                .skip(1)
+                .map(|path| path.split_once("/>").expect("complete path").0)
+                .collect::<Vec<_>>();
+            assert_eq!(paths.len() % 2, 0, "outline/fill path pairs");
+            for pair in paths.chunks_exact(2) {
+                assert!(pair[0].contains("fill=\"#171b20\""));
+                assert!(!pair[1].contains("fill=\"#171b20\""));
+            }
             assert!(!svg.contains("<script"));
         }
         profile.projection_assets = Some(first);
@@ -401,5 +467,48 @@ mod tests {
             STANDARD.encode(changed)
         ));
         assert!(!projection_cache_is_current(&profile));
+    }
+
+    #[test]
+    fn shipped_railing_projects_posts_rails_and_toe_board_in_every_view() {
+        let profile = shipped_profile("venue--stage-railing-2-m.toskfixture");
+        let projections = generate_profile_projections(&profile).expect("railing projections");
+        assert_eq!(projections.views.len(), 5);
+        for projection in projections.views {
+            let svg = projection
+                .artwork_asset
+                .strip_prefix("data:image/svg+xml;base64,")
+                .and_then(|encoded| STANDARD.decode(encoded).ok())
+                .and_then(|bytes| String::from_utf8(bytes).ok())
+                .expect("generated railing SVG");
+            assert!(
+                svg.matches("<path").count() > 20,
+                "{} railing projection collapsed to insufficient geometry",
+                projection.view.wire()
+            );
+            assert!(svg.contains("-outline\""));
+            assert!(projection.physical_width_millimetres > 0.0);
+            assert!(projection.physical_height_millimetres > 0.0);
+        }
+    }
+
+    #[test]
+    fn shipped_pipe_keeps_a_round_end_view_when_its_surface_mesh_is_edge_on() {
+        let profile = shipped_profile("venue--one-point-truss-pipe.toskfixture");
+        let projections = generate_profile_projections(&profile).expect("pipe projections");
+        for view in [ProfileProjectionView::Left, ProfileProjectionView::Right] {
+            let projection = projections
+                .views
+                .iter()
+                .find(|projection| projection.view == view)
+                .expect("end view");
+            let svg = projection
+                .artwork_asset
+                .strip_prefix("data:image/svg+xml;base64,")
+                .and_then(|encoded| STANDARD.decode(encoded).ok())
+                .and_then(|bytes| String::from_utf8(bytes).ok())
+                .expect("generated pipe SVG");
+            assert_eq!(svg.matches("-outline\"").count(), 16);
+        }
     }
 }

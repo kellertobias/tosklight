@@ -127,6 +127,7 @@ fn requested_generic_and_venue_packages_have_exact_portable_contracts() {
         ("venue--three-point-truss.toskfixture", 5),
         ("venue--two-point-truss.toskfixture", 5),
         ("venue--one-point-truss-pipe.toskfixture", 6),
+        ("venue--stage-railing-2-m.toskfixture", 1),
         ("venue--curtain-1-m.toskfixture", 10),
         ("venue--curtain-2-m.toskfixture", 10),
         ("venue--curtain-3-m.toskfixture", 10),
@@ -320,6 +321,23 @@ fn shipped_crowd_area_has_every_visual_only_mode() {
             );
         }
     }
+}
+
+#[test]
+fn shipped_stage_railing_has_portable_visual_only_geometry() {
+    let profile = shipped_profile("venue--stage-railing-2-m.toskfixture");
+    assert_eq!(profile.name, "Stage Railing 2 m");
+    assert_eq!(profile.patch_policy, PatchPolicy::VisualOnly);
+    assert_eq!(profile.model_units, ModelUnits::Metres);
+    assert_eq!(profile.physical.width_millimetres, Some(2040.0));
+    assert_eq!(profile.physical.height_millimetres, Some(1000.0));
+    assert_eq!(profile.physical.depth_millimetres, Some(38.0));
+    assert_eq!(profile.modes.len(), 1);
+    assert_eq!(profile.modes[0].name, "2 m");
+    assert_eq!(profile.modes[0].splits[0].footprint, 0);
+    assert!(profile.modes[0].channels.is_empty());
+    assert!(profile.model_asset.is_some());
+    assert!(profile.notes.contains("not a structural certification"));
 }
 
 fn assert_moving_lamp_geometry(filename: &str) {
