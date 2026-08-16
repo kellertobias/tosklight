@@ -14,9 +14,10 @@ use media_application::configuration::{load, save};
 use media_domain::{
     ANALOG_TV_EFFECT, Applied, BEAT_MOVE_EFFECT, BLUR_EFFECT, BeatMoveDirection,
     BeatMoveParameters, BlurParameters, Command, CommandKind, CommandSource, DIGITAL_TV_EFFECT,
-    EffectSlot, FEEDBACK_EFFECT, FeedbackMotion, FeedbackParameters, FlipMirror, LayerControls,
-    MasterControls, MediaAddress, MediaState, OPACITY_CYCLE_EFFECT,
-    OpacityCycleInterval, OutputId, ScalingMode, Timestamp, Tint, apply,
+    EffectSlot, FEEDBACK_EFFECT, FeedbackMotion, FeedbackParameters, FlipMirror,
+    KALEIDOSCOPE_EFFECT, KaleidoscopeParameters, LayerControls, MasterControls, MediaAddress,
+    MediaState, OPACITY_CYCLE_EFFECT, OpacityCycleInterval, OutputId, ScalingMode, Timestamp, Tint,
+    apply,
 };
 
 use crate::error::ApiError;
@@ -160,6 +161,7 @@ pub(super) async fn update_layer(
         ("maskScaleX", body.mask_scale_x, 0.0, 2.0),
         ("maskScaleY", body.mask_scale_y, 0.0, 2.0),
         ("beatMoveDecay", body.beat_move_decay, 0.05, 5.0),
+        ("kaleidoscopeAngle", body.kaleidoscope_angle, -180.0, 180.0),
     ] {
         validate_range(name, value, minimum, maximum)?;
     }
@@ -201,6 +203,7 @@ pub(super) async fn update_layer(
                 BLUR_EFFECT => EffectSlot::blur(),
                 FEEDBACK_EFFECT => EffectSlot::feedback(),
                 BEAT_MOVE_EFFECT => EffectSlot::beat_move(),
+                KALEIDOSCOPE_EFFECT => EffectSlot::kaleidoscope(),
                 "none" => EffectSlot::default(),
                 _ => {
                     return Err(ApiError::bad_request(
@@ -291,6 +294,26 @@ pub(super) async fn update_layer(
                     )
                 })?;
             }
+            effect.parameters = parameters.as_array().to_vec();
+        }
+        if body.kaleidoscope_repetitions.is_some() || body.kaleidoscope_angle.is_some() {
+            if effect.effect_type.as_deref() != Some(KALEIDOSCOPE_EFFECT) {
+                return Err(ApiError::bad_request(
+                    "kaleidoscope-parameters-effect",
+                    "choose the Kaleidoscope effect before changing its controls",
+                ));
+            }
+            let mut parameters = KaleidoscopeParameters::from_parameters(&effect.parameters);
+            if let Some(repetitions) = body.kaleidoscope_repetitions {
+                if !(1..=16).contains(&repetitions) {
+                    return Err(ApiError::bad_request(
+                        "kaleidoscope-repetitions-range",
+                        "kaleidoscopeRepetitions must be between 1 and 16",
+                    ));
+                }
+                parameters.repetitions = repetitions;
+            }
+            parameters.angle_degrees = body.kaleidoscope_angle.unwrap_or(parameters.angle_degrees);
             effect.parameters = parameters.as_array().to_vec();
         }
         if body.feedback_amount.is_some()
@@ -1054,6 +1077,34 @@ mod tests {
         assert_eq!(effect["parameters"][0]["value"], 0.3);
         assert_eq!(effect["parameters"][1]["value"], 3.0);
         assert_eq!(effect["parameters"][2]["value"], 0.8);
+
+        let (_, bypassed) = send(
+            &bench.router,
+            post(uri, r#"{"effectSlot":0,"effectEnabled":false}"#),
+        )
+        .await;
+        assert_eq!(bypassed["layers"][0]["effects"][0]["enabled"], false);
+    }
+
+    #[tokio::test]
+    async fn kaleidoscope_persists_live_repetitions_angle_and_bypass() {
+        let bench = bench();
+        take_over(&bench).await;
+        let uri = format!("/api/v2/outputs/{}/layers/0/update", bench.output);
+        let (status, selected) = send(
+            &bench.router,
+            post(
+                uri.clone(),
+                r#"{"effectSlot":0,"effectType":"kaleidoscope","kaleidoscopeRepetitions":8,"kaleidoscopeAngle":37}"#,
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let effect = &selected["layers"][0]["effects"][0];
+        assert_eq!(effect["effectType"], "kaleidoscope");
+        assert_eq!(effect["label"], "Kaleidoscope");
+        assert_eq!(effect["parameters"][0]["value"], 8.0);
+        assert_eq!(effect["parameters"][1]["value"], 37.0);
 
         let (_, bypassed) = send(
             &bench.router,

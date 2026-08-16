@@ -82,6 +82,11 @@ impl LayerUniform {
                 effect_types[index] = 3;
                 effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
                 effect_parameters[index][0] = parameters.amount;
+            } else if let Some(parameters) = effect.kaleidoscope_parameters() {
+                effect_types[index] = 4;
+                effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
+                effect_parameters[index][0] = f32::from(parameters.repetitions);
+                effect_parameters[index][1] = parameters.angle_degrees;
             }
         }
         Self {

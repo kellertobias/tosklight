@@ -98,6 +98,53 @@ pub const OPACITY_CYCLE_EFFECT: &str = "opacity-cycle";
 pub const BLUR_EFFECT: &str = "blur";
 pub const FEEDBACK_EFFECT: &str = "feedback";
 pub const BEAT_MOVE_EFFECT: &str = "beat-move";
+pub const KALEIDOSCOPE_EFFECT: &str = "kaleidoscope";
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct KaleidoscopeParameters {
+    /// Number of mirrored angular repetitions around the source centre.
+    pub repetitions: u8,
+    /// Rotation of the mirror axis in degrees.
+    pub angle_degrees: f32,
+}
+
+impl KaleidoscopeParameters {
+    pub const IDS: [&'static str; 2] = ["kaleidoscope-repetitions", "kaleidoscope-angle"];
+    pub const LABELS: [&'static str; 2] = ["Mirror repetitions", "Angle"];
+
+    pub fn from_parameters(values: &[f32]) -> Self {
+        let defaults = Self::default();
+        let repetitions = values
+            .first()
+            .copied()
+            .filter(|value| value.is_finite())
+            .map(|value| value.round().clamp(1.0, 16.0) as u8)
+            .unwrap_or(defaults.repetitions);
+        let angle_degrees = values
+            .get(1)
+            .copied()
+            .filter(|value| value.is_finite())
+            .map(|value| value.clamp(-180.0, 180.0))
+            .unwrap_or(defaults.angle_degrees);
+        Self {
+            repetitions,
+            angle_degrees,
+        }
+    }
+
+    pub const fn as_array(self) -> [f32; 2] {
+        [self.repetitions as f32, self.angle_degrees]
+    }
+}
+
+impl Default for KaleidoscopeParameters {
+    fn default() -> Self {
+        Self {
+            repetitions: 6,
+            angle_degrees: 0.0,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum BeatMoveDirection {
@@ -595,6 +642,22 @@ impl EffectSlot {
             .then(|| BeatMoveParameters::from_parameters(&self.parameters))
     }
 
+    pub fn kaleidoscope() -> Self {
+        Self {
+            effect_type: Some(KALEIDOSCOPE_EFFECT.to_owned()),
+            enabled: true,
+            seed: 0,
+            mix: 1.0,
+            parameters: KaleidoscopeParameters::default().as_array().to_vec(),
+            visualizer_parameters: None,
+        }
+    }
+
+    pub fn kaleidoscope_parameters(&self) -> Option<KaleidoscopeParameters> {
+        (self.enabled && self.mix > 0.0 && self.effect_type.as_deref() == Some(KALEIDOSCOPE_EFFECT))
+            .then(|| KaleidoscopeParameters::from_parameters(&self.parameters))
+    }
+
     pub fn normalize(&mut self) {
         self.mix = if self.mix.is_finite() {
             self.mix.clamp(0.0, 1.0)
@@ -623,6 +686,10 @@ impl EffectSlot {
                 .to_vec();
         } else if self.effect_type.as_deref() == Some(BEAT_MOVE_EFFECT) {
             self.parameters = BeatMoveParameters::from_parameters(&self.parameters)
+                .as_array()
+                .to_vec();
+        } else if self.effect_type.as_deref() == Some(KALEIDOSCOPE_EFFECT) {
+            self.parameters = KaleidoscopeParameters::from_parameters(&self.parameters)
                 .as_array()
                 .to_vec();
         }
@@ -973,5 +1040,25 @@ mod tests {
         );
         effect.enabled = false;
         assert_eq!(effect.beat_move_parameters(), None);
+    }
+
+    #[test]
+    fn kaleidoscope_has_integer_repetitions_bounded_angle_and_safe_bypass() {
+        let mut effect = EffectSlot::kaleidoscope();
+        assert_eq!(
+            effect.kaleidoscope_parameters(),
+            Some(KaleidoscopeParameters::default())
+        );
+
+        effect.parameters = vec![1.6, 250.0];
+        effect.normalize();
+        assert_eq!(effect.parameters, vec![2.0, 180.0]);
+
+        effect.parameters = vec![-4.0, f32::NAN];
+        effect.normalize();
+        assert_eq!(effect.parameters, vec![1.0, 0.0]);
+
+        effect.enabled = false;
+        assert_eq!(effect.kaleidoscope_parameters(), None);
     }
 }

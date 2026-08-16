@@ -11,8 +11,9 @@
 use media_domain::geometry::Size;
 use media_domain::{
     AnalogTvParameters, BlurParameters, DigitalTvParameters, EffectSlot, FeedbackMotion,
-    FeedbackParameters, FlipMirror, LayerState, MaskSource, MaskState, MasterState,
-    MediaAddress, OutputId, PresentationMode, ScalingMode, SourceStatus, Timestamp, Tint,
+    FeedbackParameters, FlipMirror, KaleidoscopeParameters, LayerState, MaskSource, MaskState,
+    MasterState, MediaAddress, OutputId, PresentationMode, ScalingMode, SourceStatus, Timestamp,
+    Tint,
 };
 use media_render::{Gpu, LayerDraw, OutputRenderer, SourceTexture};
 use std::path::Path;
@@ -147,6 +148,23 @@ fn blur_state(amount: f32, enabled: bool) -> LayerState {
     })
 }
 
+fn kaleidoscope_state(repetitions: u8, angle_degrees: f32, enabled: bool) -> LayerState {
+    let mut effect = EffectSlot::kaleidoscope();
+    effect.enabled = enabled;
+    effect.parameters = KaleidoscopeParameters {
+        repetitions,
+        angle_degrees,
+    }
+    .as_array()
+    .to_vec();
+    let mut effects: [EffectSlot; 4] = Default::default();
+    effects[0] = effect;
+    ready(LayerState {
+        effects,
+        ..Default::default()
+    })
+}
+
 fn feedback_state(direction: FeedbackMotion, enabled: bool) -> LayerState {
     let mut effect = EffectSlot::feedback();
     effect.enabled = enabled;
@@ -262,6 +280,36 @@ fn blur_changes_live_pixels_and_disabled_is_an_exact_bypass() {
     assert!(changed_pixels(&mild, &clear) > 500);
     assert!(changed_pixels(&strong, &mild) > 500);
     assert_eq!(disabled.pixels, clear.pixels);
+}
+
+#[test]
+fn kaleidoscope_mirrors_repetitions_and_angle_live_with_exact_bypass() {
+    let mut bench = Bench::new();
+    let source = patterned_source(&bench.gpu);
+    let plain = ready(LayerState::default());
+    let one = kaleidoscope_state(1, 0.0, true);
+    let two = kaleidoscope_state(2, 0.0, true);
+    let six = kaleidoscope_state(6, 0.0, true);
+    let angled = kaleidoscope_state(6, 37.0, true);
+    let disabled = kaleidoscope_state(6, 37.0, false);
+    let draw = |state| LayerDraw {
+        state,
+        source: &source,
+        mask: None,
+    };
+
+    let clear = bench.render(&[draw(&plain)], &MasterState::default());
+    let one = bench.render(&[draw(&one)], &MasterState::default());
+    let two = bench.render(&[draw(&two)], &MasterState::default());
+    let six = bench.render(&[draw(&six)], &MasterState::default());
+    let angled = bench.render(&[draw(&angled)], &MasterState::default());
+    let disabled = bench.render(&[draw(&disabled)], &MasterState::default());
+
+    assert_eq!(one.pixels, clear.pixels, "one repetition is the source");
+    assert!(changed_pixels(&two, &clear) > 500);
+    assert!(changed_pixels(&six, &two) > 500);
+    assert!(changed_pixels(&angled, &six) > 500);
+    assert_eq!(disabled.pixels, clear.pixels, "bypass restores the source");
 }
 
 #[test]

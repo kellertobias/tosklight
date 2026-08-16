@@ -256,6 +256,10 @@ export function stubServer(
 						layer.effects[body.effectSlot] = feedbackEffect(body.effectSlot);
 					} else if (body.effectType === "beat-move") {
 						layer.effects[body.effectSlot] = beatMoveEffect(body.effectSlot);
+					} else if (body.effectType === "kaleidoscope") {
+						layer.effects[body.effectSlot] = kaleidoscopeEffect(
+							body.effectSlot,
+						);
 					}
 					const selectedEffect = layer.effects[body.effectSlot];
 					if (body.visualizerParameters !== undefined)
@@ -303,6 +307,10 @@ export function stubServer(
 					}
 					if (body.beatMoveDecay !== undefined)
 						selectedEffect.parameters[2].value = body.beatMoveDecay;
+					if (body.kaleidoscopeRepetitions !== undefined)
+						selectedEffect.parameters[0].value = body.kaleidoscopeRepetitions;
+					if (body.kaleidoscopeAngle !== undefined)
+						selectedEffect.parameters[1].value = body.kaleidoscopeAngle;
 					for (const [id, key] of [
 						["tv-curvature", "tvCurvature"],
 						["distortion", "effectDistortion"],
@@ -730,6 +738,32 @@ function beatMoveEffect(
 				label: "Return time",
 				value: 0.35,
 				defaultValue: 0.35,
+			},
+		],
+	};
+}
+
+function kaleidoscopeEffect(
+	index: number,
+): OutputView["layers"][number]["effects"][number] {
+	return {
+		...emptyEffect(index),
+		effectType: "kaleidoscope",
+		label: "Kaleidoscope",
+		enabled: true,
+		mix: 1,
+		parameters: [
+			{
+				id: "kaleidoscope-repetitions",
+				label: "Mirror repetitions",
+				value: 6,
+				defaultValue: 6,
+			},
+			{
+				id: "kaleidoscope-angle",
+				label: "Angle",
+				value: 0,
+				defaultValue: 0,
 			},
 		],
 	};

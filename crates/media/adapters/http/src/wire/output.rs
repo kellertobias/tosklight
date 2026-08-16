@@ -6,8 +6,8 @@ use media_application::configuration::{
 use media_domain::{
     ANALOG_TV_EFFECT, AnalogTvParameters, BEAT_MOVE_EFFECT, BLUR_EFFECT, BeatMoveParameters,
     BlurParameters, DIGITAL_TV_EFFECT, DigitalTvParameters, EffectSlot, FEEDBACK_EFFECT,
-    FeedbackParameters, LayerState, MaskSource, MaskState, MasterState, MediaAddress,
-    OPACITY_CYCLE_EFFECT, OpacityCycleInterval, OutputState,
+    FeedbackParameters, KALEIDOSCOPE_EFFECT, KaleidoscopeParameters, LayerState, MaskSource,
+    MaskState, MasterState, MediaAddress, OPACITY_CYCLE_EFFECT, OpacityCycleInterval, OutputState,
 };
 use media_domain::{LayerPersonality, PresentationMode};
 use serde::{Deserialize, Serialize};
@@ -83,6 +83,7 @@ impl EffectSlotView {
         let blur = effect.effect_type.as_deref() == Some(BLUR_EFFECT);
         let feedback = effect.effect_type.as_deref() == Some(FEEDBACK_EFFECT);
         let beat_move = effect.effect_type.as_deref() == Some(BEAT_MOVE_EFFECT);
+        let kaleidoscope = effect.effect_type.as_deref() == Some(KALEIDOSCOPE_EFFECT);
         let parameters = if analog {
             let defaults = AnalogTvParameters::default().as_array();
             let values = AnalogTvParameters::from_normalized(&effect.parameters).as_array();
@@ -151,13 +152,29 @@ impl EffectSlotView {
                 &values,
                 &defaults,
             )
+        } else if kaleidoscope {
+            let defaults = KaleidoscopeParameters::default().as_array();
+            let values = KaleidoscopeParameters::from_parameters(&effect.parameters).as_array();
+            parameter_views(
+                &KaleidoscopeParameters::IDS,
+                &KaleidoscopeParameters::LABELS,
+                &values,
+                &defaults,
+            )
         } else {
             Vec::new()
         };
         Self {
             index,
             effect_type: effect.effect_type.clone(),
-            label: if analog || digital || opacity_cycle || blur || feedback || beat_move {
+            label: if analog
+                || digital
+                || opacity_cycle
+                || blur
+                || feedback
+                || beat_move
+                || kaleidoscope
+            {
                 if analog {
                     "Analog TV"
                 } else if digital {
@@ -168,8 +185,10 @@ impl EffectSlotView {
                     "Blur"
                 } else if feedback {
                     "Feedback"
-                } else {
+                } else if beat_move {
                     "Beat Move"
+                } else {
+                    "Kaleidoscope"
                 }
                 .to_owned()
             } else {
@@ -183,13 +202,15 @@ impl EffectSlotView {
                 || opacity_cycle
                 || blur
                 || feedback
-                || beat_move,
+                || beat_move
+                || kaleidoscope,
             capability_detail: (!analog
                 && !digital
                 && !opacity_cycle
                 && !blur
                 && !feedback
                 && !beat_move
+                && !kaleidoscope
                 && effect.effect_type.is_some())
             .then(|| "This Media Server build cannot render the selected effect.".to_owned()),
             parameters,
@@ -821,6 +842,10 @@ pub struct UpdateLayer {
     pub beat_move_direction: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub beat_move_decay: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kaleidoscope_repetitions: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kaleidoscope_angle: Option<f32>,
     /// Complete per-layer visualizer settings routed through effect slot one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub visualizer_parameters: Option<VisualizerParametersView>,
@@ -868,6 +893,8 @@ impl UpdateLayer {
             || self.beat_move_amount.is_some()
             || self.beat_move_direction.is_some()
             || self.beat_move_decay.is_some()
+            || self.kaleidoscope_repetitions.is_some()
+            || self.kaleidoscope_angle.is_some()
             || self.visualizer_parameters.is_some()
     }
 }

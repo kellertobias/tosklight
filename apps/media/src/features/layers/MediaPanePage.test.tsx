@@ -377,6 +377,39 @@ describe("the production Media pane", () => {
 		);
 	});
 
+	it("configures live Kaleidoscope repetitions, angle, and bypass", async () => {
+		const server = stubServer();
+		render(<MediaPanePage />);
+		await userEvent.click(
+			await screen.findByRole("switch", { name: "Take over playback" }),
+		);
+		await userEvent.click(screen.getByRole("tab", { name: "Effects" }));
+		await chooseEffect(1, "Kaleidoscope");
+		await waitFor(() =>
+			expect(server.outputs[0].layers[0].effects[0].effectType).toBe(
+				"kaleidoscope",
+			),
+		);
+		expect(screen.getByLabelText("Slot 1 · Angle")).toHaveValue("0");
+		await chooseNamedChoice("Slot 1 · Mirror repetitions", "8");
+		fireEvent.input(screen.getByLabelText("Slot 1 · Angle"), {
+			target: { value: "37" },
+		});
+		await waitFor(() => {
+			const parameters = server.outputs[0].layers[0].effects[0].parameters;
+			expect(parameters[0].value).toBe(8);
+			expect(parameters[1].value).toBe(37);
+		});
+		await userEvent.click(
+			within(
+				screen.getByRole("radiogroup", { name: "Slot 1 state" }),
+			).getByRole("radio", { name: "Bypassed" }),
+		);
+		await waitFor(() =>
+			expect(server.outputs[0].layers[0].effects[0].enabled).toBe(false),
+		);
+	});
+
 	it("shows an actionable capability error for an effect this build cannot render", async () => {
 		const output = anOutput();
 		output.layers[0].effects[0] = {

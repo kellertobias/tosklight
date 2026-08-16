@@ -660,7 +660,7 @@ function tintChange(value: string) {
 function layerChange(id: string, value: string | number): UpdateLayer {
 	const number = Number(value);
 	const effect =
-		/^effect-(\d+)-(type|enabled|mix|tv-curvature|distortion|image-grain|compression-damage|block-size|tile-displacement|chroma-damage|glitching|cycle-interval|blur-amount|feedback-amount|feedback-motion|feedback-direction|beat-move-amount|beat-move-direction|beat-move-decay)$/.exec(
+		/^effect-(\d+)-(type|enabled|mix|tv-curvature|distortion|image-grain|compression-damage|block-size|tile-displacement|chroma-damage|glitching|cycle-interval|blur-amount|feedback-amount|feedback-motion|feedback-direction|beat-move-amount|beat-move-direction|beat-move-decay|kaleidoscope-repetitions|kaleidoscope-angle)$/.exec(
 			id,
 		);
 	if (effect) {
@@ -704,6 +704,10 @@ function layerChange(id: string, value: string | number): UpdateLayer {
 				return { effectSlot, beatMoveDirection: String(value) };
 			case "beat-move-decay":
 				return { effectSlot, beatMoveDecay: number };
+			case "kaleidoscope-repetitions":
+				return { effectSlot, kaleidoscopeRepetitions: number };
+			case "kaleidoscope-angle":
+				return { effectSlot, kaleidoscopeAngle: number };
 		}
 	}
 	switch (id) {
@@ -770,6 +774,7 @@ function effectControls(
 					{ value: "blur", label: "Blur" },
 					{ value: "feedback", label: "Feedback" },
 					{ value: "beat-move", label: "Beat Move" },
+					{ value: "kaleidoscope", label: "Kaleidoscope" },
 				],
 				disabled,
 			},
@@ -935,6 +940,58 @@ function effectControls(
 					disabled,
 					" s",
 					0.05,
+				),
+			];
+		}
+		if (effect.effectType === "kaleidoscope") {
+			const repetitions = effect.parameters.find(
+				(parameter) => parameter.id === "kaleidoscope-repetitions",
+			);
+			const angle = effect.parameters.find(
+				(parameter) => parameter.id === "kaleidoscope-angle",
+			);
+			return [
+				...controls,
+				{
+					id: `${prefix}-enabled`,
+					kind: "choice" as const,
+					label: `${slot} state`,
+					value: String(effect.enabled),
+					options: [
+						{ value: "true", label: "Enabled" },
+						{ value: "false", label: "Bypassed" },
+					],
+					disabled,
+				},
+				valueControl(
+					`${prefix}-mix`,
+					`${slot} mix`,
+					effect.mix * 100,
+					0,
+					100,
+					disabled,
+					"%",
+				),
+				{
+					id: `${prefix}-kaleidoscope-repetitions`,
+					kind: "choice" as const,
+					label: `${slot} · Mirror repetitions`,
+					value: String(Math.round(repetitions?.value ?? 6)),
+					options: [1, 2, 4, 6, 8, 12, 16].map((value) => ({
+						value: String(value),
+						label: String(value),
+					})),
+					disabled,
+				},
+				valueControl(
+					`${prefix}-kaleidoscope-angle`,
+					`${slot} · Angle`,
+					angle?.value ?? 0,
+					-180,
+					180,
+					disabled,
+					"°",
+					1,
 				),
 			];
 		}

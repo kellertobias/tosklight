@@ -172,6 +172,10 @@ source; enabling it again starts a new trail from the current frame.
 returns it to the saved resting position. **Movement amount** sets the maximum offset,
 **Direction** selects Up, Down, Left, or Right, and **Return time** sets the smooth decay duration.
 Bypassing the effect immediately restores the exact configured layer position.
+**Kaleidoscope** mirrors the live layer image around its centre without changing the source asset.
+**Mirror repetitions** selects one, two, or a higher supported number of repeated wedges, while
+**Angle** rotates the mirror axis. One repetition is the unchanged source; bypassing the effect
+also restores that exact source immediately.
 After configuring a slot, release takeover to return control to the desk. The matching **Effect 1**
 through **Effect 4** DMX channel then controls that slot's mix without erasing its selected effect or
 typed parameters.

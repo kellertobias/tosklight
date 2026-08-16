@@ -306,6 +306,30 @@ fn blurred_source(uv: vec2<f32>, amount: f32, effect_mix: f32) -> vec4<f32> {
     return mix(original, blurred, effect_mix);
 }
 
+fn kaleidoscope_coordinates(
+    coordinates: EffectCoordinates,
+    repetitions: f32,
+    angle_degrees: f32,
+    effect_mix: f32,
+) -> EffectCoordinates {
+    var result = coordinates;
+    let count = clamp(round(repetitions), 1.0, 16.0);
+    if count <= 1.0 || effect_mix <= 0.0 {
+        return result;
+    }
+
+    let centred = coordinates.uv - vec2<f32>(0.5);
+    let radius = length(centred);
+    let axis = radians(clamp(angle_degrees, -180.0, 180.0));
+    let sector = 6.28318530718 / count;
+    let source_angle = atan2(centred.y, centred.x) - axis;
+    let wrapped = fract(source_angle / sector + 0.5) * sector - sector * 0.5;
+    let mirrored_angle = abs(wrapped) + axis;
+    let mirrored = vec2<f32>(0.5) + radius * vec2<f32>(cos(mirrored_angle), sin(mirrored_angle));
+    result.uv = mix(coordinates.uv, clamp(mirrored, vec2<f32>(0.0), vec2<f32>(1.0)), effect_mix);
+    return result;
+}
+
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     var coordinates: EffectCoordinates;
@@ -326,6 +350,13 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
                 layer.effect_parameter_tail[slot],
                 layer.effect_mixes[slot],
                 layer.effect_seeds[slot],
+            );
+        } else if layer.effect_types[slot] == 4u {
+            coordinates = kaleidoscope_coordinates(
+                coordinates,
+                layer.effect_parameters[slot].x,
+                layer.effect_parameters[slot].y,
+                layer.effect_mixes[slot],
             );
         }
     }
