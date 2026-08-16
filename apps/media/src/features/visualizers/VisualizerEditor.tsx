@@ -98,10 +98,14 @@ export function VisualizerEditor({
 				}
 				const number = NUMBERS[control];
 				if (number) {
+					const label =
+						visualizer.typeId === 0 && control === "amount"
+							? "Bloom"
+							: number.label;
 					return (
 						<NumberField
 							key={control}
-							label={number.label}
+							label={label}
 							step={number.step}
 							value={String(parameters[number.field])}
 							onChange={(event) =>

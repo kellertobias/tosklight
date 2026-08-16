@@ -629,6 +629,30 @@ describe("the production Media pane", () => {
 		);
 	});
 
+	it("exposes Equalizer Bloom through slot one and changes it live", async () => {
+		const output = anOutput();
+		output.layers[0].address = {
+			folder: 250,
+			file: 1,
+			class: "generated-visualizer",
+		};
+		const server = stubServer({ outputs: [output] });
+		render(<MediaPanePage />);
+		await userEvent.click(
+			await screen.findByRole("switch", { name: "Take over playback" }),
+		);
+		await userEvent.click(screen.getByRole("radio", { name: "Effects" }));
+		const bloom = screen.getByLabelText("Slot 1 · Bloom");
+		expect(bloom).toHaveAttribute("min", "0");
+		expect(bloom).toHaveAttribute("max", "1");
+		fireEvent.input(bloom, { target: { value: "0.4" } });
+		await waitFor(() =>
+			expect(
+				server.outputs[0].layers[0].effects[0].visualizerParameters?.amount,
+			).toBeCloseTo(0.4),
+		);
+	});
+
 	it("shows an actionable capability error for an effect this build cannot render", async () => {
 		const output = anOutput();
 		output.layers[0].effects[0] = {

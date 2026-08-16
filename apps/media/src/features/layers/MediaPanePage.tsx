@@ -1667,10 +1667,14 @@ function visualizerControls(visualizer: VisualizerView, disabled: boolean) {
 	for (const parameter of visualizer.uses) {
 		const number = VISUALIZER_NUMBERS[parameter];
 		if (number) {
+			const label =
+				visualizer.typeId === 0 && parameter === "amount"
+					? "Bloom"
+					: number.label;
 			controls.push(
 				valueControl(
 					`visualizer-${parameter}`,
-					`Slot 1 · ${number.label}`,
+					`Slot 1 · ${label}`,
 					Number(visualizer.parameters[number.field]),
 					number.minimum,
 					number.maximum,

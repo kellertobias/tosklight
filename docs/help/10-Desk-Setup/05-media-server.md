@@ -154,6 +154,10 @@ separate and changes which records the running process captures. That level is i
 temporary: restarting reads `MEDIA_LOG` again. Raising it to Debug does not change the **Show**
 filter, and lowering the browser filter does not change the process.
 
+For **Equalizer Bars**, **Bloom** controls the additive glow around the bars from `0` (no glow) to
+`1` (full glow), with a default of `1`. The same persisted value is available in the visualizer
+editor and as **Slot 1 · Bloom** while an Equalizer layer is active.
+
 On **Playback**, take over the selected output before changing a layer. The **Effects** section has
 four ordered slots. **Analog TV** starts with restrained CRT defaults: **TV curvature** 30%,
 **Distortion** 18%, **Image grain** 20%, and **Glitching** 8%. Curvature bends the picture into a

@@ -24,6 +24,7 @@ describe("the visualizers page", () => {
 		expect(
 			screen.getByRole("heading", { name: "Equalizer Bars" }),
 		).toBeInTheDocument();
+		expect(screen.getByLabelText("Bloom")).toHaveValue("1");
 	});
 
 	it("does not offer a separate action that puts a visualizer on an output", async () => {

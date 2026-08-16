@@ -1079,7 +1079,15 @@ export function aVisualizer(
 		typeId: 0,
 		kind: "Equalizer Bars",
 		name: "Equalizer Bars",
-		uses: ["count", "size", "primary"],
+		uses: [
+			"count",
+			"size",
+			"primary",
+			"secondary",
+			"amount",
+			"smoothing",
+			"mirror",
+		],
 		parameters: {
 			count: 32,
 			size: 0.05,
