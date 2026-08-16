@@ -54,6 +54,9 @@ const fn body(kind: VisualizerKind) -> &'static str {
         VisualizerKind::RotatingShape => include_str!("shaders/visualizers/rotating-shape.wgsl"),
         VisualizerKind::FractalMorph => include_str!("shaders/visualizers/fractal-morph.wgsl"),
         VisualizerKind::CityTunnel => include_str!("shaders/visualizers/city-tunnel.wgsl"),
+        VisualizerKind::GridLandscape => {
+            include_str!("shaders/visualizers/grid-landscape.wgsl")
+        }
     }
 }
 

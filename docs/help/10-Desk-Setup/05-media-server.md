@@ -85,6 +85,10 @@ addresses are `1` through `254`. Media uses folders `1` through `199`, text uses
   forward travel rate, **Count** changes the building/window density, **Size** changes the tunnel
   structure, **Amount** controls its light intensity, and the two colour controls tune the city
   frame and window appearance.
+- **Grid Landscape** travels through transparent synthwave mountain grids on both sides of a
+  central route. **Radius** sizes the softly fading horizon sun; **Speed**, **Count**, **Size**,
+  **Amount**, and the two colours tune travel, grid, mountains, and light. **Left scenery** and
+  **Right scenery** independently select **Off**, **Street lamps**, or **Palm trees**.
 
 Thumbnail, source, metadata, and playable clip files follow a rename, move, folder reorder, or
 explicit swap together. A

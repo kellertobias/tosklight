@@ -10,6 +10,7 @@ import type {
 	VisualizerParametersView,
 	VisualizerView,
 } from "../../shared/api/generated/media-wire";
+import { GridLandscapeSceneryFields } from "./GridLandscapeSceneryFields";
 
 export interface VisualizerEditorProps {
 	visualizer: VisualizerView;
@@ -80,6 +81,21 @@ export function VisualizerEditor({
 			/>
 
 			{visualizer.uses.map((control) => {
+				if (
+					visualizer.kind === "Grid Landscape" &&
+					(control === "mode" || control === "iterations")
+				) {
+					if (control === "iterations") return null;
+					return (
+						<GridLandscapeSceneryFields
+							key="grid-landscape-scenery"
+							left={parameters.mode}
+							right={parameters.iterations}
+							onLeftChange={(value) => set("mode", value)}
+							onRightChange={(value) => set("iterations", value)}
+						/>
+					);
+				}
 				const number = NUMBERS[control];
 				if (number) {
 					return (

@@ -51,10 +51,11 @@ pub enum VisualizerKind {
     RotatingShape = 50,
     FractalMorph = 51,
     CityTunnel = 52,
+    GridLandscape = 53,
 }
 
 /// Every kind, in the order the shipped catalog assigns them.
-pub const ALL_KINDS: [VisualizerKind; 21] = [
+pub const ALL_KINDS: [VisualizerKind; 22] = [
     VisualizerKind::EqualizerBars,
     VisualizerKind::WaveformOscilloscope,
     VisualizerKind::CircularSpectrum,
@@ -76,6 +77,7 @@ pub const ALL_KINDS: [VisualizerKind; 21] = [
     VisualizerKind::RotatingShape,
     VisualizerKind::FractalMorph,
     VisualizerKind::CityTunnel,
+    VisualizerKind::GridLandscape,
 ];
 
 impl VisualizerKind {
@@ -111,6 +113,7 @@ impl VisualizerKind {
             Self::RotatingShape => "Rotating 3D Shape",
             Self::FractalMorph => "Fractal Morph",
             Self::CityTunnel => "City Tunnel",
+            Self::GridLandscape => "Grid Landscape",
         }
     }
 
@@ -146,6 +149,9 @@ impl VisualizerKind {
             Self::RotatingShape => &[Mode, Speed, Size, Primary, Wireframe],
             Self::FractalMorph => &[Zoom, Iterations],
             Self::CityTunnel => &[Speed, Count, Size, Amount, Primary, Secondary],
+            Self::GridLandscape => &[
+                Speed, Count, Size, Radius, Amount, Primary, Secondary, Mode, Iterations,
+            ],
         }
     }
 }
@@ -293,10 +299,18 @@ pub struct VisualizerConfiguration {
 
 impl VisualizerConfiguration {
     pub fn new(kind: VisualizerKind) -> Self {
+        let mut parameters = VisualizerParameters::default();
+        if kind == VisualizerKind::GridLandscape {
+            parameters.count = 24;
+            parameters.size = 0.4;
+            parameters.radius = 0.5;
+            parameters.mode = 1;
+            parameters.iterations = 2;
+        }
         Self {
             kind,
             name: kind.label().to_owned(),
-            parameters: VisualizerParameters::default(),
+            parameters,
         }
     }
 }
@@ -447,7 +461,22 @@ mod tests {
         assert_eq!(VisualizerKind::DigitalGlitch.type_id(), 40);
         assert_eq!(VisualizerKind::FractalMorph.type_id(), 51);
         assert_eq!(VisualizerKind::CityTunnel.type_id(), 52);
+        assert_eq!(VisualizerKind::GridLandscape.type_id(), 53);
         assert_eq!(VisualizerKind::from_type_id(999), None);
+    }
+
+    #[test]
+    fn grid_landscape_defaults_to_independent_supported_scenery() {
+        let configuration = VisualizerConfiguration::new(VisualizerKind::GridLandscape);
+        assert_eq!(configuration.parameters.mode, 1, "left uses street lamps");
+        assert_eq!(configuration.parameters.iterations, 2, "right uses palms");
+        assert!(configuration.kind.parameters().contains(&Parameter::Mode));
+        assert!(
+            configuration
+                .kind
+                .parameters()
+                .contains(&Parameter::Iterations)
+        );
     }
 
     #[test]

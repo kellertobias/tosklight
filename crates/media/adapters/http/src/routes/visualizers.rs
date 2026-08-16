@@ -78,7 +78,7 @@ mod tests {
 
         assert_eq!(status, StatusCode::OK);
         let entries = body.as_array().expect("a list");
-        assert_eq!(entries.len(), 21);
+        assert_eq!(entries.len(), 22);
 
         let first = &entries[0];
         assert_eq!(first["address"]["folder"], 250);
@@ -108,6 +108,21 @@ mod tests {
                 .contains(&serde_json::json!("speed")),
             "the operator can tune tunnel travel speed"
         );
+
+        let landscape = entries
+            .iter()
+            .find(|entry| entry["typeId"] == 53)
+            .expect("Grid Landscape is a shipped built-in");
+        assert_eq!(landscape["kind"], "Grid Landscape");
+        for control in ["speed", "radius", "mode", "iterations"] {
+            assert!(
+                landscape["uses"]
+                    .as_array()
+                    .expect("a list")
+                    .contains(&serde_json::json!(control)),
+                "Grid Landscape publishes {control}"
+            );
+        }
     }
 
     #[tokio::test]
