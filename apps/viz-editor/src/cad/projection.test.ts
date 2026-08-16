@@ -4,7 +4,7 @@ import {
 	parseProjection,
 	projectionViewForCad,
 } from "./projection";
-import type { CadEntity } from "./types";
+import type { CadDrawing, CadEntity } from "./types";
 
 const movingLight: CadEntity = {
 	id: "11111111-1111-4111-8111-111111111111",
@@ -46,6 +46,68 @@ describe("CAD plan projections", () => {
 			128 / 255,
 		]);
 		expect(geometry.triangles[3].color).toEqual([32 / 255, 32 / 255, 32 / 255]);
+	});
+
+	it("live-projects a fixture 151 equivalent after its complete compound rotation", () => {
+		const drawing: CadDrawing = {
+			id: "profile:151",
+			projections: [],
+			liveMeshes: ["top", "elevation"].map((pose) => ({
+				pose: pose as "top" | "elevation",
+				triangles: [
+					{
+						pointsMillimetres: [
+							[-180, -120, -80],
+							[220, -80, -40],
+							[-100, 160, 40],
+						],
+						colour: [0.8, 0.2, 0.2] as [number, number, number],
+					},
+					{
+						pointsMillimetres: [
+							[-60, -40, 160],
+							[160, 20, 200],
+							[20, 220, 260],
+						],
+						colour: [0.2, 0.8, 0.2] as [number, number, number],
+					},
+				],
+			})),
+		};
+		const fixture151 = {
+			...movingLight,
+			fixtureNumber: 151,
+			fixtureDisplayId: "151",
+			rotationDegrees: [17, 29, 41] as [number, number, number],
+		};
+		const views = ["top_down", "left_to_right", "front_to_back"] as const;
+		const geometries = views.map((view) =>
+			entityPlanGeometry(fixture151, drawing, view),
+		);
+
+		expect(geometries.every(({ source }) => source === "live_model")).toBe(
+			true,
+		);
+		expect(geometries.every(({ triangles }) => triangles.length === 4)).toBe(
+			true,
+		);
+		const bounds = geometries.map(({ triangles }) => {
+			const points = triangles.flatMap(({ points }) => points);
+			return [
+				Math.min(...points.map(([x]) => x)),
+				Math.max(...points.map(([x]) => x)),
+				Math.min(...points.map(([, y]) => y)),
+				Math.max(...points.map(([, y]) => y)),
+			].map((value) => Math.round(value));
+		});
+		expect(new Set(bounds.map((value) => value.join(","))).size).toBe(3);
+		const fillOrders = geometries.map(({ triangles }) =>
+			triangles
+				.filter((_, index) => index % 2 === 1)
+				.map(({ color }) => color.join(","))
+				.join("|"),
+		);
+		expect(new Set(fillOrders).size).toBeGreaterThan(1);
 	});
 
 	it("draws a representative moving-light side view when no model is available", () => {

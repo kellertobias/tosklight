@@ -39,6 +39,21 @@ export interface CadProjection {
 export interface CadDrawing {
 	id: string;
 	projections: CadProjection[];
+	liveMeshes?: CadLiveMesh[];
+}
+
+export interface CadLiveMesh {
+	pose: "top" | "elevation";
+	triangles: CadLiveTriangle[];
+}
+
+export interface CadLiveTriangle {
+	pointsMillimetres: [
+		[number, number, number],
+		[number, number, number],
+		[number, number, number],
+	];
+	colour: [number, number, number];
 }
 
 export interface EntityTransform {

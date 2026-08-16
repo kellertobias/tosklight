@@ -99,6 +99,21 @@ pub struct CadProjection {
 pub struct CadDrawing {
     pub id: String,
     pub projections: Vec<CadProjection>,
+    pub live_meshes: Vec<CadLiveMesh>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CadLiveMesh {
+    pub pose: String,
+    pub triangles: Vec<CadLiveTriangle>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CadLiveTriangle {
+    pub points_millimetres: [[f32; 3]; 3],
+    pub colour: [f32; 3],
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -560,6 +575,25 @@ fn drawings(snapshot: &PatchSnapshot, cad: &CadState) -> Vec<CadDrawing> {
 
 fn drawing(id: &str, snapshot: &serde_json::Value) -> Option<CadDrawing> {
     let profile = serde_json::from_value::<light_fixture::FixtureProfile>(snapshot.clone()).ok()?;
+    let live_meshes = viz_project::generate_live_projection_meshes(&profile)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|mesh| CadLiveMesh {
+            pose: match mesh.pose {
+                viz_project::LiveProjectionPose::Top => "top",
+                viz_project::LiveProjectionPose::Elevation => "elevation",
+            }
+            .to_owned(),
+            triangles: mesh
+                .triangles
+                .into_iter()
+                .map(|triangle| CadLiveTriangle {
+                    points_millimetres: triangle.points_millimetres,
+                    colour: triangle.colour,
+                })
+                .collect(),
+        })
+        .collect();
     let generated;
     let projections = if let Some(projections) = profile.projection_assets.as_ref() {
         projections
@@ -586,6 +620,7 @@ fn drawing(id: &str, snapshot: &serde_json::Value) -> Option<CadDrawing> {
     (!projections.is_empty()).then(|| CadDrawing {
         id: id.to_owned(),
         projections,
+        live_meshes,
     })
 }
 
@@ -886,6 +921,14 @@ mod tests {
             .expect("embedded model produces a CAD drawing");
 
         assert_eq!(drawing.projections.len(), 5);
+        assert_eq!(drawing.live_meshes.len(), 2);
+        assert!(
+            drawing
+                .live_meshes
+                .iter()
+                .all(|mesh| mesh.triangles.len() > 10),
+            "both deterministic poses retain live depth geometry"
+        );
         assert!(
             drawing
                 .projections

@@ -128,7 +128,10 @@ export function buildCadPdf(
 					);
 					const angle =
 						page.view === "top_down"
-							? ((-entity.rotationDegrees[2] + page.rotationQuarterTurns * 90) *
+							? (((geometry.source === "live_model"
+									? 0
+									: -entity.rotationDegrees[2]) +
+									page.rotationQuarterTurns * 90) *
 									Math.PI) /
 								180
 							: 0;

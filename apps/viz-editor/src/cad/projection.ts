@@ -13,7 +13,7 @@ export interface PlanTriangle {
 }
 
 export interface PlanGeometry {
-	source: "model" | "typed" | "unknown";
+	source: "live_model" | "model" | "typed" | "unknown";
 	triangles: PlanTriangle[];
 	outlines: PlanPoint[][];
 }
@@ -54,6 +54,8 @@ export function entityPlanGeometry(
 	// Crowd-area models describe a procedural volume and read as an unexplained block in plan.
 	// Modeled fixtures and venue objects—including trusses—keep their canonical generated SVG.
 	if (isSemanticPlanSymbol(type)) return typedGeometry(entity, view, type);
+	const live = liveModelGeometry(entity, drawing, view);
+	if (live) return live;
 	const projection = drawing?.projections.find(
 		(candidate) => candidate.view === projectionViewForCad(view),
 	);
@@ -65,6 +67,140 @@ export function entityPlanGeometry(
 		if (parsed.triangles.length) return parsed;
 	}
 	return typedGeometry(entity, view, type);
+}
+
+function liveModelGeometry(
+	entity: CadEntity,
+	drawing: CadDrawing | undefined,
+	view: CadViewDirection,
+): PlanGeometry | null {
+	const pose = view === "top_down" ? "top" : "elevation";
+	const mesh = drawing?.liveMeshes?.find(
+		(candidate) => candidate.pose === pose,
+	);
+	if (!mesh?.triangles.length) return null;
+	const faces = mesh.triangles
+		.map((triangle, index) => {
+			const world = triangle.pointsMillimetres.map((point) =>
+				rotateModelPoint(point, entity.rotationDegrees),
+			) as [
+				[number, number, number],
+				[number, number, number],
+				[number, number, number],
+			];
+			const points = world.map((point) => projectModelPoint(point, view)) as [
+				PlanPoint,
+				PlanPoint,
+				PlanPoint,
+			];
+			const area = Math.abs(
+				(points[1][0] - points[0][0]) * (points[2][1] - points[0][1]) -
+					(points[1][1] - points[0][1]) * (points[2][0] - points[0][0]),
+			);
+			return {
+				index,
+				points,
+				color: triangle.colour,
+				depth:
+					world.reduce((sum, point) => sum + modelDepth(point, view), 0) / 3,
+				area,
+			};
+		})
+		.filter((face) => face.area >= 0.08)
+		.sort(
+			(left, right) => right.depth - left.depth || left.index - right.index,
+		);
+	const triangles: PlanTriangle[] = [];
+	for (const face of faces) {
+		triangles.push({ points: face.points, color: DARK });
+		triangles.push({ points: insetTriangle(face.points), color: face.color });
+	}
+	return triangles.length
+		? { source: "live_model", triangles, outlines: [] }
+		: null;
+}
+
+function rotateModelPoint(
+	point: readonly [number, number, number],
+	rotation: readonly [number, number, number],
+): [number, number, number] {
+	// Desk rotations map to renderer-world (rx, rz, ry), where the shared scene contract is
+	// Rx * Ry * Rz. Applying the rightmost rotation first keeps CAD identical to the 3D renderer.
+	const rx = (rotation[0] * Math.PI) / 180;
+	const ry = (rotation[2] * Math.PI) / 180;
+	const rz = (rotation[1] * Math.PI) / 180;
+	const cosZ = Math.cos(rz);
+	const sinZ = Math.sin(rz);
+	const afterZ: [number, number, number] = [
+		point[0] * cosZ - point[1] * sinZ,
+		point[0] * sinZ + point[1] * cosZ,
+		point[2],
+	];
+	const cosY = Math.cos(ry);
+	const sinY = Math.sin(ry);
+	const afterY: [number, number, number] = [
+		afterZ[0] * cosY + afterZ[2] * sinY,
+		afterZ[1],
+		-afterZ[0] * sinY + afterZ[2] * cosY,
+	];
+	const cosX = Math.cos(rx);
+	const sinX = Math.sin(rx);
+	return [
+		afterY[0],
+		afterY[1] * cosX - afterY[2] * sinX,
+		afterY[1] * sinX + afterY[2] * cosX,
+	];
+}
+
+function projectModelPoint(
+	point: readonly [number, number, number],
+	view: CadViewDirection,
+): PlanPoint {
+	switch (view) {
+		case "top_down":
+			return [point[0], -point[2]];
+		case "left_to_right":
+			return [point[2], point[1]];
+		case "right_to_left":
+			return [-point[2], point[1]];
+		case "front_to_back":
+			return [point[0], point[1]];
+		case "back_to_front":
+			return [-point[0], point[1]];
+	}
+}
+
+function modelDepth(
+	point: readonly [number, number, number],
+	view: CadViewDirection,
+): number {
+	switch (view) {
+		case "top_down":
+			return -point[1];
+		case "left_to_right":
+			return point[0];
+		case "right_to_left":
+			return -point[0];
+		case "front_to_back":
+			return -point[2];
+		case "back_to_front":
+			return point[2];
+	}
+}
+
+function insetTriangle(
+	points: [PlanPoint, PlanPoint, PlanPoint],
+): [PlanPoint, PlanPoint, PlanPoint] {
+	const centre: PlanPoint = [
+		(points[0][0] + points[1][0] + points[2][0]) / 3,
+		(points[0][1] + points[1][1] + points[2][1]) / 3,
+	];
+	return points.map((point) => {
+		const dx = centre[0] - point[0];
+		const dy = centre[1] - point[1];
+		const fraction = Math.min(0.18, 1.25 / Math.max(0.001, Math.hypot(dx, dy)));
+		return [point[0] + dx * fraction, point[1] + dy * fraction];
+	}) as [PlanPoint, PlanPoint, PlanPoint];
 }
 
 function entityType(entity: CadEntity): string {

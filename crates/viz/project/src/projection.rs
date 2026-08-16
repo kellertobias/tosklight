@@ -32,6 +32,26 @@ struct Triangle {
     fill: &'static str,
 }
 
+/// The two deterministic model poses needed by the interactive orthographic CAD views.
+/// Top views point a moving head forwards; every elevation view points it down.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LiveProjectionPose {
+    Top,
+    Elevation,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct LiveProjectionTriangle {
+    pub points_millimetres: [[f32; 3]; 3],
+    pub colour: [f32; 3],
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct LiveProjectionMesh {
+    pub pose: LiveProjectionPose,
+    pub triangles: Vec<LiveProjectionTriangle>,
+}
+
 pub fn generate_profile_projections(
     profile: &FixtureProfile,
 ) -> Result<ProfileProjectionSet, ProjectionError> {
@@ -54,6 +74,77 @@ pub fn generate_profile_projections(
         pose_contract_version: POSE_CONTRACT_VERSION,
         views,
     })
+}
+
+/// Return simplified model-space triangles for live CAD projection. Unlike the portable SVG
+/// views, these retain depth so the client can apply the fixture's complete authored rotation
+/// before projecting and sorting the surfaces for each viewport.
+pub fn generate_live_projection_meshes(
+    profile: &FixtureProfile,
+) -> Result<Vec<LiveProjectionMesh>, ProjectionError> {
+    let source = profile
+        .model_asset
+        .as_deref()
+        .ok_or_else(|| ProjectionError("fixture profile has no 3D model asset".into()))?;
+    let bytes = decode_model(source)?;
+    let model = viz_scene::read_glb(&bytes).map_err(|error| ProjectionError(error.0))?;
+    let scale = physical_scale(profile, &model) * 1000.0;
+    [LiveProjectionPose::Top, LiveProjectionPose::Elevation]
+        .into_iter()
+        .map(|pose| live_projection_mesh(&model, pose, scale))
+        .collect()
+}
+
+fn live_projection_mesh(
+    model: &FixtureModel,
+    pose: LiveProjectionPose,
+    scale_millimetres: f32,
+) -> Result<LiveProjectionMesh, ProjectionError> {
+    let target_axis = model.has_head.then_some(match pose {
+        LiveProjectionPose::Top => Vec3::Z,
+        LiveProjectionPose::Elevation => Vec3::NEG_Y,
+    });
+    let head_rotation = head_rotation(model, target_axis);
+    let mut triangles = Vec::new();
+    for part in &model.parts {
+        if simplified_away(&part.name) {
+            continue;
+        }
+        let transform = |point: Vec3| {
+            (if part.kind == ModelPartKind::Head {
+                model.head_pivot + head_rotation * (point - model.head_pivot)
+            } else {
+                point
+            }) * scale_millimetres
+        };
+        for indices in part.indices.chunks_exact(3) {
+            let (Some(first), Some(second), Some(third)) = (
+                part.positions.get(indices[0] as usize).copied(),
+                part.positions.get(indices[1] as usize).copied(),
+                part.positions.get(indices[2] as usize).copied(),
+            ) else {
+                continue;
+            };
+            let points = [first, second, third].map(|point| transform(Vec3::from_array(point)));
+            if (points[1] - points[0])
+                .cross(points[2] - points[0])
+                .length_squared()
+                < 0.0001
+            {
+                continue;
+            }
+            triangles.push(LiveProjectionTriangle {
+                points_millimetres: points.map(|point| point.to_array()),
+                colour: fill_rgb(part.kind, part.colour),
+            });
+        }
+    }
+    if triangles.is_empty() {
+        return Err(ProjectionError(
+            "3D model contains no usable major geometry".into(),
+        ));
+    }
+    Ok(LiveProjectionMesh { pose, triangles })
 }
 
 pub fn projection_cache_is_current(profile: &FixtureProfile) -> bool {
@@ -124,15 +215,7 @@ fn generate_view(
         _ if model.has_head => Some(Vec3::NEG_Y),
         _ => None,
     };
-    let head_rotation = target_axis.map_or(Quat::IDENTITY, |target| {
-        Quat::from_rotation_arc(
-            model
-                .emitter_axis
-                .unwrap_or(Vec3::NEG_Y)
-                .normalize_or(Vec3::NEG_Y),
-            target,
-        )
-    });
+    let head_rotation = head_rotation(model, target_axis);
     let pose = if !model.has_head {
         ProfileProjectionPose::AuthoredHome
     } else if view == ProfileProjectionView::Top {
@@ -209,6 +292,18 @@ fn generate_view(
     })
 }
 
+fn head_rotation(model: &FixtureModel, target_axis: Option<Vec3>) -> Quat {
+    target_axis.map_or(Quat::IDENTITY, |target| {
+        Quat::from_rotation_arc(
+            model
+                .emitter_axis
+                .unwrap_or(Vec3::NEG_Y)
+                .normalize_or(Vec3::NEG_Y),
+            target,
+        )
+    })
+}
+
 fn end_on_bounds_fallback(
     min: Vec2,
     max: Vec2,
@@ -277,6 +372,18 @@ fn fill(kind: ModelPartKind, colour: [f32; 3]) -> &'static str {
         (ModelPartKind::Yoke, true) => "#676e78",
         (ModelPartKind::Head, false) => "#565c66",
         (ModelPartKind::Head, true) => "#7a828d",
+    }
+}
+
+fn fill_rgb(kind: ModelPartKind, colour: [f32; 3]) -> [f32; 3] {
+    match fill(kind, colour) {
+        "#34383f" => [52.0 / 255.0, 56.0 / 255.0, 63.0 / 255.0],
+        "#555b64" => [85.0 / 255.0, 91.0 / 255.0, 100.0 / 255.0],
+        "#454a53" => [69.0 / 255.0, 74.0 / 255.0, 83.0 / 255.0],
+        "#676e78" => [103.0 / 255.0, 110.0 / 255.0, 120.0 / 255.0],
+        "#565c66" => [86.0 / 255.0, 92.0 / 255.0, 102.0 / 255.0],
+        "#7a828d" => [122.0 / 255.0, 130.0 / 255.0, 141.0 / 255.0],
+        _ => unreachable!("fixture projection fill palette is closed"),
     }
 }
 
@@ -467,6 +574,31 @@ mod tests {
             STANDARD.encode(changed)
         ));
         assert!(!projection_cache_is_current(&profile));
+    }
+
+    #[test]
+    fn live_meshes_retain_three_dimensional_geometry_for_both_cad_poses() {
+        let profile = shipped_profile("robe--robin-dls-profile.toskfixture");
+        let first = generate_live_projection_meshes(&profile).expect("live meshes generate");
+        let second = generate_live_projection_meshes(&profile).expect("live meshes repeat");
+        assert_eq!(first, second);
+        assert_eq!(first.len(), 2);
+        assert_eq!(first[0].pose, LiveProjectionPose::Top);
+        assert_eq!(first[1].pose, LiveProjectionPose::Elevation);
+        assert!(first.iter().all(|mesh| mesh.triangles.len() > 10));
+        assert!(
+            first
+                .iter()
+                .flat_map(|mesh| &mesh.triangles)
+                .all(|triangle| {
+                    triangle
+                        .points_millimetres
+                        .iter()
+                        .flatten()
+                        .all(|coordinate| coordinate.is_finite())
+                })
+        );
+        assert_ne!(first[0].triangles, first[1].triangles);
     }
 
     #[test]

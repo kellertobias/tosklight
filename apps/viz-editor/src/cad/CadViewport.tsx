@@ -732,7 +732,7 @@ class LineRenderer {
 				? projectPoint(preview.deltaMillimetres, view, rotationQuarterTurns)
 				: ([0, 0] as const);
 			const drawing = drawings.get(entity.drawingId);
-			const key = `${entity.drawingId}:${view}:${entity.sizeMillimetres.join(",")}`;
+			const key = `${entity.drawingId}:${view}:${entity.sizeMillimetres.join(",")}:${entity.rotationDegrees.join(",")}`;
 			let geometry = this.geometryCache.get(key);
 			if (!geometry) {
 				geometry = entityPlanGeometry(entity, drawing, view);
@@ -944,7 +944,9 @@ function worldGeometry(
 	);
 	const angle =
 		view === "top_down"
-			? ((-entity.rotationDegrees[2] + rotationQuarterTurns * 90) * Math.PI) /
+			? (((geometry.source === "live_model" ? 0 : -entity.rotationDegrees[2]) +
+					rotationQuarterTurns * 90) *
+					Math.PI) /
 				180
 			: 0;
 	const cosine = Math.cos(angle);
