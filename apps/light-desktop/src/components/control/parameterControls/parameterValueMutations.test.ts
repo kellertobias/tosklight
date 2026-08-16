@@ -30,6 +30,7 @@ function projection(
 		programmerValuesReady: true,
 		programmerValues: [],
 		groupProgrammerValues: [],
+		dynamicProgrammerValues: [],
 		normalized: new Map(),
 		normalizedByFixture: new Map(),
 		discrete: new Map(),

@@ -633,3 +633,50 @@ fn cue_only_dynamic_layer_restores_prior_fat_without_touching_static_tracking() 
         DynamicSemanticValue::FixAt { value: 0.4, .. }
     ));
 }
+
+#[test]
+fn authored_release_records_both_ordinary_and_scalar_track_removal_without_zero() {
+    let fixture = FixtureId::new();
+    let attribute = AttributeKey::intensity();
+    let mut first = cue(
+        1.0,
+        "Owned",
+        vec![fixture_change(fixture, "intensity", 1.0)],
+    );
+    first.dynamic_changes = vec![fixed_at(fixture, 0.8)];
+    let list = cue_list(vec![first]);
+    let release = CueRecordingContent {
+        changes: vec![CueChange {
+            fixture_id: fixture,
+            attribute: attribute.clone(),
+            value: None,
+            automatic_restore: false,
+            fade_millis: None,
+            delay_millis: None,
+        }],
+        dynamic_changes: vec![CueDynamicChange {
+            fixture_id: fixture,
+            attribute: attribute.clone(),
+            value: DynamicSemanticValue::Release,
+            automatic_restore: false,
+        }],
+        ..Default::default()
+    };
+
+    let plan = list
+        .plan_recording(release, CueRecordOperation::Append)
+        .unwrap();
+    let stored = &plan.cue_list.cues[1];
+    assert_eq!(stored.changes.len(), 1);
+    assert_eq!(stored.changes[0].value, None);
+    assert!(matches!(
+        stored.dynamic_changes[0].value,
+        DynamicSemanticValue::Release
+    ));
+    assert!(
+        !plan
+            .cue_list
+            .state_at_index(1)
+            .contains_key(&(fixture, attribute))
+    );
+}

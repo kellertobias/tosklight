@@ -14,12 +14,15 @@ impl ProgrammerState {
             values: self.values.clone(),
             dynamic_values: self.dynamic_values.clone(),
             group_values: self.group_values.clone(),
+            group_release_values: self.group_release_values.clone(),
             preload_pending: self.preload_pending.clone(),
             preload_active: self.preload_active.clone(),
             preload_dynamic_pending: self.preload_dynamic_pending.clone(),
             preload_dynamic_active: self.preload_dynamic_active.clone(),
             preload_group_pending: self.preload_group_pending.clone(),
             preload_group_active: self.preload_group_active.clone(),
+            preload_group_release_pending: self.preload_group_release_pending.clone(),
+            preload_group_release_active: self.preload_group_release_active.clone(),
             preload_playback_pending: self.preload_playback_pending.clone(),
             command_line: self.command_line.clone(),
             blind: self.blind,
@@ -35,12 +38,15 @@ impl ProgrammerState {
         self.values = snapshot.values;
         self.dynamic_values = snapshot.dynamic_values;
         self.group_values = snapshot.group_values;
+        self.group_release_values = snapshot.group_release_values;
         self.preload_pending = snapshot.preload_pending;
         self.preload_active = snapshot.preload_active;
         self.preload_dynamic_pending = snapshot.preload_dynamic_pending;
         self.preload_dynamic_active = snapshot.preload_dynamic_active;
         self.preload_group_pending = snapshot.preload_group_pending;
         self.preload_group_active = snapshot.preload_group_active;
+        self.preload_group_release_pending = snapshot.preload_group_release_pending;
+        self.preload_group_release_active = snapshot.preload_group_release_active;
         self.preload_playback_pending = snapshot.preload_playback_pending;
         self.command_line = snapshot.command_line;
         self.blind = snapshot.blind;
@@ -98,9 +104,11 @@ impl ProgrammerRegistry {
             };
             let values_changed = state.values != previous.values
                 || state.group_values != previous.group_values
+                || state.group_release_values != previous.group_release_values
                 || state.dynamic_values != previous.dynamic_values;
             let preload_values_changed = state.preload_pending != previous.preload_pending
                 || state.preload_group_pending != previous.preload_group_pending
+                || state.preload_group_release_pending != previous.preload_group_release_pending
                 || state.preload_dynamic_pending != previous.preload_dynamic_pending;
             let queue_changed = state.preload_playback_pending != previous.preload_playback_pending;
             state.redo.push(Arc::new(state.snapshot()));

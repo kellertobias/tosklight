@@ -131,8 +131,7 @@ function useResolvedValues(
 			}
 		}
 		for (const fixtureId of selectedFixtureIds)
-			for (const [attribute, value] of
-				normalizedByFixture.get(fixtureId) ?? [])
+			for (const [attribute, value] of normalizedByFixture.get(fixtureId) ?? [])
 				if (!normalized.has(attribute)) normalized.set(attribute, value);
 		return { normalized, normalizedByFixture, discrete, discreteByFixture };
 	}, [visualization, selectedFixtureIds, fixtures]);
@@ -318,6 +317,8 @@ export function useParameterProjection(
 			programmerValuesView?.fixtureValues ?? EMPTY_PROGRAMMER_VALUES,
 		groupProgrammerValues:
 			programmerValuesView?.groupValues ?? EMPTY_PROGRAMMER_VALUES,
+		dynamicProgrammerValues:
+			programmerValuesView?.dynamicValues ?? EMPTY_PROGRAMMER_VALUES,
 		...values,
 		encoderGroups,
 		encoderPage: resolvedPage,

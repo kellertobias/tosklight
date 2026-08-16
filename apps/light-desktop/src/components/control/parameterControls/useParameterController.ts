@@ -12,6 +12,7 @@ import {
 	hasParameterValue,
 	normalizedParameterDisplay,
 	normalizedParameterTarget,
+	parameterSemanticDisplay,
 } from "./parameterProgrammerState";
 import { useHardwareParameterEncoders } from "./useHardwareParameterEncoders";
 import {
@@ -20,7 +21,9 @@ import {
 } from "./useParameterProjection";
 import { useParameterValueActions } from "./useParameterValueActions";
 
-export function parameterTargetForShiftDigit(key: string):
+export function parameterTargetForShiftDigit(
+	key: string,
+):
 	| { type: "all" }
 	| { type: "dynamics" }
 	| { type: "family"; family: ParameterFamily }
@@ -54,6 +57,8 @@ function createParameterActions(
 			normalizedParameterDisplay(projection, attribute),
 		encoderDiscreteDisplay: (attribute: string) =>
 			discreteParameterDisplay(projection, attribute),
+		encoderSemanticDisplay: (attribute: string) =>
+			parameterSemanticDisplay(projection, attribute),
 		hasProgrammerValue: (attribute: string) =>
 			hasParameterValue(projection, attribute),
 	};

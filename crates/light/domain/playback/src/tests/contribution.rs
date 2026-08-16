@@ -1,6 +1,52 @@
 use super::*;
 
 #[test]
+fn cue_release_removes_only_its_cuelist_contribution_and_reveals_the_underlay() {
+    let fixture = FixtureId::new();
+    let mut owned = Cue::new(1.0);
+    owned.changes.push(value(fixture, "intensity", 1.0));
+    let mut released = Cue::new(2.0);
+    released.changes.push(CueChange {
+        fixture_id: fixture,
+        attribute: AttributeKey::intensity(),
+        value: None,
+        automatic_restore: false,
+        fade_millis: None,
+        delay_millis: None,
+    });
+    let upper = list(vec![owned, released]);
+    let upper_id = upper.id;
+
+    let mut underlay = Cue::new(1.0);
+    underlay.changes.push(value(fixture, "intensity", 0.4));
+    let lower = list(vec![underlay]);
+    let lower_id = lower.id;
+
+    let mut engine = PlaybackEngine::default();
+    engine.register(upper).unwrap();
+    engine.register(lower).unwrap();
+    let mut upper_playback = definition(1, upper_id);
+    upper_playback.auto_off = false;
+    let mut lower_playback = definition(2, lower_id);
+    lower_playback.auto_off = false;
+    engine.register_definition(upper_playback).unwrap();
+    engine.register_definition(lower_playback).unwrap();
+    engine.go_playback(2).unwrap();
+    engine.go_playback(1).unwrap();
+    assert_eq!(
+        resolve(engine.contributions())[&(fixture, AttributeKey::intensity())],
+        AttributeValue::Normalized(1.0)
+    );
+
+    engine.go_playback(1).unwrap();
+    assert_eq!(
+        resolve(engine.contributions())[&(fixture, AttributeKey::intensity())],
+        AttributeValue::Normalized(0.4),
+        "Release removes this Cuelist's ownership rather than contributing zero"
+    );
+}
+
+#[test]
 fn move_in_black_looks_through_dark_cues_and_uses_future_position_timing() {
     let fixture = FixtureId::new();
     let mut first = Cue::new(1.0);

@@ -56,8 +56,9 @@ pub use command_macro_runtime::{
     CommandMacroTrigger, DEFAULT_MACRO_HISTORY_LIMIT,
 };
 pub use dynamics::{
-    DynamicControllerUpdate, DynamicFixAtCommand, DynamicOffCommand, DynamicStartCommand,
-    DynamicStartOutcome, DynamicsPorts, DynamicsService,
+    DynamicControllerUpdate, DynamicFixAtBatchCommand, DynamicFixAtCommand, DynamicFixAtValue,
+    DynamicOffCommand, DynamicReleaseCommand, DynamicStartCommand, DynamicStartOutcome,
+    DynamicsPorts, DynamicsService,
 };
 pub use event::{
     ApplicationEvent, DeliveryPolicy, DeskActionNotification, DeskEvent, DynamicRuntimeChange,

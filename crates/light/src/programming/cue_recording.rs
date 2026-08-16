@@ -198,8 +198,38 @@ impl ProgrammingCueCommit {
                 .fixture_values
                 .iter()
                 .map(fixture_change)
+                .chain(self.capture.dynamic_values.iter().filter_map(|value| {
+                    matches!(value.value, light_dynamics::DynamicSemanticValue::Release).then(
+                        || CueChange {
+                            fixture_id: value.fixture_id,
+                            attribute: value.attribute.clone(),
+                            value: None,
+                            automatic_restore: false,
+                            fade_millis: None,
+                            delay_millis: None,
+                        },
+                    )
+                }))
                 .collect(),
-            group_changes: self.capture.group_values.iter().map(group_change).collect(),
+            group_changes: self
+                .capture
+                .group_values
+                .iter()
+                .map(group_change)
+                .chain(
+                    self.capture
+                        .group_release_values
+                        .iter()
+                        .map(|value| GroupCueChange {
+                            group_id: value.group_id.clone(),
+                            attribute: value.attribute.clone(),
+                            value: None,
+                            automatic_restore: false,
+                            fade_millis: None,
+                            delay_millis: None,
+                        }),
+                )
+                .collect(),
             dynamic_changes: self
                 .capture
                 .dynamic_values

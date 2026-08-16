@@ -135,3 +135,126 @@ fn preload_go_moves_dynamic_values_atomically_and_recording_selects_the_right_la
         DynamicSemanticValue::FixAt { value: 0.8, .. }
     ));
 }
+
+#[test]
+fn release_is_one_recordable_undoable_instruction_without_removing_instance_tracks() {
+    let registry = ProgrammerRegistry::default();
+    let session = SessionId::new();
+    let fixture = FixtureId::new();
+    let intensity = AttributeKey::intensity();
+    let controller = Uuid::new_v4();
+    registry.start(session, UserId::new());
+    registry.set_faded(
+        session,
+        fixture,
+        intensity.clone(),
+        AttributeValue::Normalized(0.7),
+    );
+    assert!(registry.set_group(
+        session,
+        "front".into(),
+        intensity.clone(),
+        AttributeValue::Normalized(0.5),
+    ));
+    assert!(registry.apply_dynamic_values(
+        session,
+        &[
+            set(
+                fixture,
+                "intensity",
+                DynamicSemanticValue::DynamicOff {
+                    instance_link: controller,
+                    timing: Default::default(),
+                },
+            ),
+            set(
+                fixture,
+                "intensity",
+                DynamicSemanticValue::FixAt {
+                    value: 0.8,
+                    timing: Default::default(),
+                },
+            ),
+        ],
+        None,
+    ));
+    let undo_before = registry.undo_depth(session).unwrap();
+
+    assert!(registry.apply_release_values(
+        session,
+        &[ReleaseProgrammerFixtureValue {
+            fixture_id: fixture,
+            attribute: intensity.clone(),
+        }],
+        &[ReleaseProgrammerGroupValue {
+            group_id: "front".into(),
+            attribute: intensity.clone(),
+        }],
+    ));
+    let released = registry.get(session).unwrap();
+    assert!(released.values.is_empty());
+    assert!(released.group_values.is_empty());
+    assert_eq!(released.group_release_values.len(), 1);
+    assert!(released.dynamic_values.iter().any(|value| matches!(
+        value.value,
+        DynamicSemanticValue::DynamicOff { instance_link, .. } if instance_link == controller
+    )));
+    assert!(
+        released
+            .dynamic_values
+            .iter()
+            .any(|value| matches!(value.value, DynamicSemanticValue::Release))
+    );
+    assert_eq!(registry.undo_depth(session), Some(undo_before + 1));
+
+    let persisted: ProgrammerState =
+        serde_json::from_value(serde_json::to_value(&released).unwrap()).unwrap();
+    assert_eq!(persisted.group_release_values.len(), 1);
+    assert!(
+        persisted
+            .dynamic_values
+            .iter()
+            .any(|value| matches!(value.value, DynamicSemanticValue::Release))
+    );
+    let mut legacy = serde_json::to_value(&released).unwrap();
+    let legacy = legacy.as_object_mut().unwrap();
+    legacy.remove("group_release_values");
+    legacy.remove("preload_group_release_pending");
+    legacy.remove("preload_group_release_active");
+    let legacy: ProgrammerState = serde_json::from_value(legacy.clone().into()).unwrap();
+    assert!(legacy.group_release_values.is_empty());
+    assert!(legacy.preload_group_release_pending.is_empty());
+    assert!(legacy.preload_group_release_active.is_empty());
+
+    let capture = registry
+        .capture_cue_recording(session, CueRecordingSource::CurrentCapture)
+        .unwrap();
+    assert_eq!(capture.group_release_values.len(), 1);
+    assert!(
+        capture
+            .dynamic_values
+            .iter()
+            .any(|value| matches!(value.value, DynamicSemanticValue::Release))
+    );
+
+    assert!(registry.undo(session));
+    let restored = registry.get(session).unwrap();
+    assert_eq!(restored.values.len(), 1);
+    assert_eq!(restored.group_values["front"].len(), 1);
+    assert!(restored.group_release_values.is_empty());
+    assert!(
+        restored
+            .dynamic_values
+            .iter()
+            .any(|value| matches!(value.value, DynamicSemanticValue::FixAt { .. }))
+    );
+
+    assert!(registry.redo(session));
+    assert!(registry.clear_normal_values(session));
+    let cleared = registry.get(session).unwrap();
+    assert!(cleared.values.is_empty());
+    assert!(cleared.group_values.is_empty());
+    assert!(cleared.group_release_values.is_empty());
+    assert!(cleared.dynamic_values.is_empty());
+    assert!(!registry.clear_normal_values(session));
+}

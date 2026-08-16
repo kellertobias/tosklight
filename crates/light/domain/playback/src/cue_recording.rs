@@ -53,7 +53,6 @@ pub enum CueRecordingPlanError {
     CueDoesNotExist { cue_number: f64 },
     ActiveCueDoesNotExist { cue_id: Uuid },
     CannotDeleteOnlyCue,
-    SourceContainsRelease,
     SourceContainsAutomaticRestore,
     DuplicateFixtureAddress,
     DuplicateGroupAddress,
@@ -73,9 +72,6 @@ impl Display for CueRecordingPlanError {
             Self::CannotDeleteOnlyCue => formatter.write_str(
                 "cannot delete the only Cue; delete the Cuelist from its configuration instead",
             ),
-            Self::SourceContainsRelease => {
-                formatter.write_str("recording source must contain values, not releases")
-            }
             Self::SourceContainsAutomaticRestore => {
                 formatter.write_str("recording source cannot contain automatic restorations")
             }
@@ -354,12 +350,9 @@ fn validate_group_changes(changes: &[GroupCueChange]) -> Result<(), CueRecording
 }
 
 fn validate_source_change(
-    has_value: bool,
+    _has_value: bool,
     automatic_restore: bool,
 ) -> Result<(), CueRecordingPlanError> {
-    if !has_value {
-        return Err(CueRecordingPlanError::SourceContainsRelease);
-    }
     if automatic_restore {
         return Err(CueRecordingPlanError::SourceContainsAutomaticRestore);
     }

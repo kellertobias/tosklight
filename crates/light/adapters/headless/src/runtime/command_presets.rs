@@ -44,6 +44,25 @@ pub(super) fn decode_preset_object(
     Ok((address, preset))
 }
 
+pub(super) fn load_command_preset(
+    state: &AppState,
+    requested_address: light_programmer::PresetAddress,
+) -> Result<light_programmer::Preset, String> {
+    let (_, store) = active_show_store(state)?;
+    let requested = requested_address.storage_key();
+    let object = store
+        .objects("preset")
+        .map_err(|error| error.to_string())?
+        .into_iter()
+        .find(|object| {
+            object.id == requested
+                || decode_preset_object(object)
+                    .is_ok_and(|(address, _)| address == requested_address)
+        })
+        .ok_or_else(|| format!("preset {requested} does not exist"))?;
+    decode_preset_object(&object).map(|(_, preset)| preset)
+}
+
 pub(super) fn serialize_preset_preserving_extensions(
     original: &serde_json::Value,
     preset: &light_programmer::Preset,

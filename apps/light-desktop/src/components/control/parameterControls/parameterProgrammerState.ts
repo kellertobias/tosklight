@@ -25,6 +25,24 @@ function groupEntry(projection: ParameterProjection, attribute: string) {
 	);
 }
 
+export function parameterSemanticDisplay(
+	projection: ParameterProjection,
+	attribute: string,
+) {
+	const values = projection.dynamicProgrammerValues.filter(
+		(candidate) => candidate.attribute === attribute,
+	);
+	if (values.some((candidate) => candidate.value.type === "release"))
+		return "Release";
+	if (
+		values.some(
+			(candidate) =>
+				candidate.value.type === "fix_at" || candidate.value.type === "static",
+		)
+	)
+		return "FixAT";
+}
+
 export function normalizedParameterTarget(
 	projection: ParameterProjection,
 	attribute: string,

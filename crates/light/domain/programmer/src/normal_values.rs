@@ -119,6 +119,7 @@ impl ProgrammerRegistry {
         };
         if state.values.is_empty()
             && state.group_values.is_empty()
+            && state.group_release_values.is_empty()
             && state.dynamic_values.is_empty()
         {
             return false;
@@ -127,6 +128,7 @@ impl ProgrammerRegistry {
         state.active_value_undo_group = None;
         state.values.clear();
         state.group_values.clear();
+        state.group_release_values.clear();
         Arc::make_mut(&mut state.dynamic_values).clear();
         state.last_activity = self.clock.now();
         let user_id = state.user_id;
@@ -197,9 +199,16 @@ fn mutation_changes(
             attribute,
             value,
             timing,
-        } => fixture_index
-            .get(*fixture_id, attribute)
-            .is_none_or(|stored| !fixture_value_matches(stored, value, *timing)),
+        } => {
+            fixture_index
+                .get(*fixture_id, attribute)
+                .is_none_or(|stored| !fixture_value_matches(stored, value, *timing))
+                || state.dynamic_values.iter().any(|stored| {
+                    stored.fixture_id == *fixture_id
+                        && stored.attribute == *attribute
+                        && matches!(stored.value, light_dynamics::DynamicSemanticValue::Release)
+                })
+        }
         NormalProgrammerValueMutation::ReleaseFixture {
             fixture_id,
             attribute,
@@ -216,11 +225,17 @@ fn mutation_changes(
             attribute,
             value,
             timing,
-        } => state
-            .group_values
-            .get(group_id)
-            .and_then(|values| values.get(attribute))
-            .is_none_or(|stored| !group_value_matches(stored, value, *timing)),
+        } => {
+            state
+                .group_values
+                .get(group_id)
+                .and_then(|values| values.get(attribute))
+                .is_none_or(|stored| !group_value_matches(stored, value, *timing))
+                || state
+                    .group_release_values
+                    .iter()
+                    .any(|stored| stored.group_id == *group_id && stored.attribute == *attribute)
+        }
     }
 }
 
@@ -259,15 +274,22 @@ fn apply_mutation(
             attribute,
             value,
             timing,
-        } => fixture_batch.set(
-            registry,
-            state.priority,
-            *fixture_id,
-            attribute,
-            value,
-            fixture_timing(*timing),
-            changed_at,
-        ),
+        } => {
+            fixture_batch.set(
+                registry,
+                state.priority,
+                *fixture_id,
+                attribute,
+                value,
+                fixture_timing(*timing),
+                changed_at,
+            );
+            Arc::make_mut(&mut state.dynamic_values).retain(|stored| {
+                stored.fixture_id != *fixture_id
+                    || stored.attribute != *attribute
+                    || !matches!(stored.value, light_dynamics::DynamicSemanticValue::Release)
+            });
+        }
         NormalProgrammerValueMutation::ReleaseFixture {
             fixture_id,
             attribute,
@@ -277,9 +299,14 @@ fn apply_mutation(
             attribute,
             value,
             timing,
-        } => set_group(
-            registry, state, group_id, attribute, value, *timing, changed_at,
-        ),
+        } => {
+            set_group(
+                registry, state, group_id, attribute, value, *timing, changed_at,
+            );
+            state
+                .group_release_values
+                .retain(|stored| stored.group_id != *group_id || stored.attribute != *attribute);
+        }
         NormalProgrammerValueMutation::ReleaseGroup {
             group_id,
             attribute,

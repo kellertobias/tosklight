@@ -81,6 +81,36 @@ pub(super) fn validate_fix_at_targets(
     Ok(())
 }
 
+pub(super) fn validate_release_targets(
+    snapshot: &EngineSnapshot,
+    targets: &[light_programmer::ReleaseProgrammerFixtureValue],
+) -> Result<(), ActionError> {
+    for target in targets {
+        let supported = snapshot
+            .fixtures
+            .iter()
+            .find(|fixture| fixture.fixture_id == target.fixture_id)
+            .is_some_and(|fixture| {
+                fixture
+                    .definition
+                    .heads
+                    .iter()
+                    .flat_map(|head| &head.parameters)
+                    .any(|parameter| parameter.attribute == target.attribute)
+            });
+        if !supported {
+            return Err(ActionError::new(
+                ActionErrorKind::Invalid,
+                format!(
+                    "RELEASE attribute {} is unsupported on fixture {}",
+                    target.attribute.0, target.fixture_id.0
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
 #[derive(Clone, Copy)]
 pub(super) struct DynamicsIdentity {
     pub(super) session: SessionId,

@@ -123,7 +123,11 @@ fn clear_staged(
     } else if !programmer.selected.is_empty() {
         staged.select(session, []);
         ProgrammingAction::ClearedSelection
-    } else if !programmer.values.is_empty() || !programmer.group_values.is_empty() {
+    } else if !programmer.values.is_empty()
+        || !programmer.group_values.is_empty()
+        || !programmer.group_release_values.is_empty()
+        || !programmer.dynamic_values.is_empty()
+    {
         staged.clear_values(session);
         ProgrammingAction::ClearedValues
     } else if command.pristine {

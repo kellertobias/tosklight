@@ -22,7 +22,7 @@ async fn macro_preflight_keeps_one_detached_programmer_and_never_mutates_live_st
     prevalidate_programmer_commands_from(
         &scenario.state,
         &session,
-        &["FIXTURE 1", "AT 50"],
+        &["FIXTURE 1", "AT 50", "RELEASE"],
         &context,
     )
     .unwrap();

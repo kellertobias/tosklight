@@ -875,6 +875,7 @@ fn persistent_fat_values(
             matches!(
                 &stored.value,
                 light_dynamics::DynamicSemanticValue::FixAt { .. }
+                    | light_dynamics::DynamicSemanticValue::Static { .. }
             )
             .then_some(PersistentFatValue {
                 fixture_id: stored.fixture_id,
@@ -887,6 +888,7 @@ fn persistent_fat_values(
         matches!(
             &stored.value,
             light_dynamics::DynamicSemanticValue::FixAt { .. }
+                | light_dynamics::DynamicSemanticValue::Static { .. }
         )
         .then_some(PersistentFatValue {
             fixture_id: stored.fixture_id,

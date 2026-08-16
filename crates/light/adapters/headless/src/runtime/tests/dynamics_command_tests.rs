@@ -86,6 +86,165 @@ fn fix_at_command_uses_first_class_fat_timing_and_the_final_contribution_path() 
 }
 
 #[test]
+fn release_command_stores_a_non_contributing_instruction_and_preserves_other_tracks() {
+    let (state, data_dir) = test_state();
+    let user = state.installation.users().unwrap().remove(0);
+    let session = Session {
+        id: SessionId::new(),
+        user: user.clone(),
+        token: "release-command".into(),
+        connected: true,
+        desk: test_control_desk(),
+    };
+    state.programming.start(session.id, user.id);
+    state.sessions.insert_session(session.clone());
+    let fixture = light_core::FixtureId::new();
+    state.programming.select(session.id, [fixture]);
+    let mut snapshot = light_engine::EngineSnapshot::default();
+    let mut patched = operational_fixture(fixture);
+    let mut color = patched.definition.heads[0].parameters[0].clone();
+    color.attribute = light_core::AttributeKey("color.red".into());
+    patched.definition.heads[0].parameters.push(color);
+    snapshot.fixtures = vec![patched].into();
+    state.output.replace_snapshot(snapshot).unwrap();
+    state.programming.programmers().set_faded(
+        session.id,
+        fixture,
+        light_core::AttributeKey::intensity(),
+        light_core::AttributeValue::Normalized(0.75),
+    );
+    state.programming.programmers().set_faded(
+        session.id,
+        fixture,
+        light_core::AttributeKey("color.red".into()),
+        light_core::AttributeValue::Normalized(0.25),
+    );
+    let controller = Uuid::new_v4();
+    assert!(state.programming.programmers().apply_dynamic_values(
+        session.id,
+        &[light_programmer::DynamicProgrammerValueMutation::Set {
+            fixture_id: fixture,
+            attribute: light_core::AttributeKey::intensity(),
+            value: light_dynamics::DynamicSemanticValue::DynamicOff {
+                instance_link: controller,
+                timing: Default::default(),
+            },
+        }],
+        None,
+    ));
+
+    let context = operator_action_context(&session, light_application::ActionSource::Http);
+    assert_eq!(
+        execute_programmer_command_from(&state, &session, "AT RELEASE", &context).unwrap(),
+        1
+    );
+    let programmer = state.programming.get(session.id).unwrap();
+    assert_eq!(programmer.values.len(), 1);
+    assert_eq!(programmer.values[0].attribute.0, "color.red");
+    assert!(programmer.dynamic_values.iter().any(|value| matches!(
+        value.value,
+        light_dynamics::DynamicSemanticValue::DynamicOff { instance_link, .. }
+            if instance_link == controller
+    )));
+    assert!(programmer
+        .dynamic_values
+        .iter()
+        .any(|value| matches!(value.value, light_dynamics::DynamicSemanticValue::Release)));
+
+    assert!(state.programming.programmers().undo(session.id));
+    assert_eq!(
+        execute_programmer_command_from(&state, &session, "AT RELEASE COLOR", &context).unwrap(),
+        1
+    );
+    let color_release = state.programming.get(session.id).unwrap();
+    assert_eq!(color_release.values.len(), 1);
+    assert!(color_release.values[0].attribute.is_intensity());
+    assert!(color_release.dynamic_values.iter().any(|value| {
+        value.attribute.0 == "color.red"
+            && matches!(value.value, light_dynamics::DynamicSemanticValue::Release)
+    }));
+    assert_eq!(
+        execute_programmer_command_from(&state, &session, "RELEASE ALL", &context).unwrap(),
+        2
+    );
+    assert!(state.programming.get(session.id).unwrap().values.is_empty());
+    assert!(state.output.dynamic_contributions_for_test().is_empty());
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
+fn fix_at_command_accepts_a_named_preset_batch_with_timing() {
+    let (state, data_dir) = test_state();
+    let user = state.installation.users().unwrap().remove(0);
+    let session = Session {
+        id: SessionId::new(),
+        user: user.clone(),
+        token: "fix-at-preset".into(),
+        connected: true,
+        desk: test_control_desk(),
+    };
+    state.programming.start(session.id, user.id);
+    state.sessions.insert_session(session.clone());
+    let fixture = light_core::FixtureId::new();
+    state.programming.select(session.id, [fixture]);
+    let mut snapshot = light_engine::EngineSnapshot::default();
+    snapshot.fixtures = vec![operational_fixture(fixture)].into();
+    state.output.replace_snapshot(snapshot).unwrap();
+
+    let show_path = data_dir.join("shows/fix-at-preset.show");
+    let show_id = default_show::initialise_legacy_test_show(&show_path).unwrap();
+    let entry = ShowEntry {
+        id: show_id,
+        name: "FixAT Preset".into(),
+        path: show_path.display().to_string(),
+        revision: 0,
+        updated_at: String::new(),
+        revision_copy: None,
+    };
+    state.active_show.replace_current(Some(entry.clone()));
+    let preset = light_programmer::Preset {
+        name: "Half".into(),
+        family: light_programmer::PresetFamily::Intensity,
+        number: 7,
+        values: HashMap::from([(
+            fixture,
+            HashMap::from([(
+                light_core::AttributeKey::intensity(),
+                light_core::AttributeValue::Normalized(0.65),
+            )]),
+        )]),
+        group_values: HashMap::new(),
+    };
+    ActiveShowRepository::open(&entry.path)
+        .unwrap()
+        .put_object("preset", "1.7", &serde_json::to_value(preset).unwrap(), 0)
+        .unwrap();
+
+    let context = operator_action_context(&session, light_application::ActionSource::Http);
+    assert_eq!(
+        execute_programmer_command_from(
+            &state,
+            &session,
+            "FixAT INTENSITY PRESET 7 TIME 2 DELAY 1",
+            &context,
+        )
+        .unwrap(),
+        1
+    );
+    assert!(matches!(
+        &state.programming.get(session.id).unwrap().dynamic_values[0].value,
+        light_dynamics::DynamicSemanticValue::Static {
+            value: light_core::AttributeValue::Normalized(value),
+            timing: light_dynamics::DynamicValueTiming {
+                fade_millis: Some(2_000),
+                delay_millis: Some(1_000),
+            },
+        } if (*value - 0.65).abs() < f32::EPSILON
+    ));
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
 fn preload_dynamic_start_stays_projected_until_go_then_installs_and_persists_runtime() {
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);

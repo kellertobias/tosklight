@@ -39,7 +39,10 @@ function Probe({
 		<span data-testid={testId}>
 			{view.ready ? "Ready" : "Pending"}:
 			{view.fixtureValues.map(valueKey).join(",")}:
-			{view.groupValues.map(valueKey).join(",")}
+			{view.groupValues.map(valueKey).join(",")}:
+			{view.dynamicValues
+				.map((value) => `${value.attribute}=${value.value.type}`)
+				.join(",")}
 		</span>
 	);
 }
@@ -100,7 +103,7 @@ describe("useParameterProgrammerValues", () => {
 
 		rendered.rerender(view(true));
 		await waitFor(() => expect(loadSnapshot).toHaveBeenCalledOnce());
-		expect(screen.getByText("Pending::")).toBeInTheDocument();
+		expect(screen.getByText("Pending:::")).toBeInTheDocument();
 
 		await act(async () =>
 			snapshot.resolve({
@@ -123,13 +126,31 @@ describe("useParameterProgrammerValues", () => {
 						groupValue(0.6),
 						groupValue(0.8, { groupId: "back", programmerOrder: 4 }),
 					],
+					dynamicValues: [
+						{
+							fixtureId: FIXTURE_1,
+							attribute: "intensity",
+							value: { type: "release" },
+							programmerOrder: 5,
+							changedAtMillis: 1,
+						},
+						{
+							fixtureId: FIXTURE_3,
+							attribute: "zoom",
+							value: { type: "release" },
+							programmerOrder: 6,
+							changedAtMillis: 1,
+						},
+					],
 				}),
 			}),
 		);
 
 		await waitFor(() =>
 			expect(
-				screen.getByText("Ready:intensity=0.25,pan=0.5:intensity=0.6"),
+				screen.getByText(
+					"Ready:intensity=0.25,pan=0.5:intensity=0.6:intensity=release",
+				),
 			).toBeInTheDocument(),
 		);
 		expect(transport.subscriptions).toHaveLength(1);
@@ -158,6 +179,15 @@ describe("useParameterProgrammerValues", () => {
 					groupValues: [
 						groupValue(0.6),
 						groupValue(0.2, { groupId: "back", programmerOrder: 4 }),
+					],
+					dynamicValues: [
+						{
+							fixtureId: FIXTURE_1,
+							attribute: "intensity",
+							value: { type: "release" },
+							programmerOrder: 5,
+							changedAtMillis: 1,
+						},
 					],
 				}),
 			}),
@@ -202,12 +232,14 @@ describe("useParameterProgrammerValues", () => {
 
 		await waitFor(() =>
 			expect(
-				screen.getByText("Ready:intensity=0.25:intensity=0.6"),
+				screen.getByText("Ready:intensity=0.25:intensity=0.6:"),
 			).toBeInTheDocument(),
 		);
 		rendered.rerender(view([FIXTURE_2], "back"));
 
-		expect(screen.getByText("Ready:pan=0.5:intensity=0.8")).toBeInTheDocument();
+		expect(
+			screen.getByText("Ready:pan=0.5:intensity=0.8:"),
+		).toBeInTheDocument();
 		expect(loadSnapshot).toHaveBeenCalledOnce();
 		expect(transport.subscriptions).toHaveLength(1);
 	});
@@ -240,13 +272,13 @@ describe("useParameterProgrammerValues", () => {
 
 		await waitFor(() =>
 			expect(screen.getByTestId("first-values")).toHaveTextContent(
-				"Ready:intensity=0.25:intensity=0.6",
+				"Ready:intensity=0.25:intensity=0.6:",
 			),
 		);
 		rendered.rerender(view(true));
 
 		expect(screen.getByTestId("second-values")).toHaveTextContent(
-			"Ready:intensity=0.25:intensity=0.6",
+			"Ready:intensity=0.25:intensity=0.6:",
 		);
 		expect(loadSnapshot).toHaveBeenCalledOnce();
 		expect(transport.subscriptions).toHaveLength(1);

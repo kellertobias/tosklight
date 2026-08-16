@@ -47,7 +47,10 @@ pub use cue_recording::{
     CueRecordingCapture, CueRecordingCaptureError, CueRecordingCapturedSource,
     CueRecordingFixtureValue, CueRecordingGroupValue, CueRecordingSource,
 };
-pub use dynamic_values::DynamicProgrammerValueMutation;
+pub use dynamic_values::{
+    DynamicProgrammerValueMutation, GroupReleaseProgrammerValue, ReleaseProgrammerFixtureValue,
+    ReleaseProgrammerGroupValue,
+};
 pub use group_recording::{GroupRecordingCapture, group_delete_blocker};
 pub use groups::{
     DerivedGroup, FrozenGroup, GroupDefinition, GroupFixtureSource, GroupMappingProvenance,

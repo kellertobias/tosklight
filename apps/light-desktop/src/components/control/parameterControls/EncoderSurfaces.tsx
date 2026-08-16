@@ -174,6 +174,7 @@ function EncoderSurface({
 		0;
 	const discrete = controller.encoderDiscreteDisplay(activeAttribute);
 	const display =
+		controller.encoderSemanticDisplay(activeAttribute) ??
 		controller.encoderNormalizedDisplay(activeAttribute) ??
 		formatNormalizedValue(value);
 	const hasScopedValue = controller.hasProgrammerValue(activeAttribute);

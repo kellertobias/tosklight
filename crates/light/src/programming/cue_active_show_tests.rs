@@ -585,6 +585,7 @@ fn capture(level: f32) -> CueRecordingCapture {
             delay_millis: None,
         }],
         group_values: Vec::new(),
+        group_release_values: Vec::new(),
     }
 }
 
@@ -594,6 +595,7 @@ fn empty_capture() -> CueRecordingCapture {
         source: CueRecordingCapturedSource::Normal,
         fixture_values: Vec::new(),
         group_values: Vec::new(),
+        group_release_values: Vec::new(),
     }
 }
 

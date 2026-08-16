@@ -30,6 +30,7 @@ impl ProgrammerRegistry {
             !state.preload_active.is_empty()
                 || !state.preload_dynamic_active.is_empty()
                 || !state.preload_group_active.is_empty()
+                || !state.preload_group_release_active.is_empty()
                 || state.preload_playback_active,
         )
     }
@@ -74,7 +75,8 @@ impl ProgrammerRegistry {
             };
             let pending_values_changed = !state.preload_pending.is_empty()
                 || !state.preload_dynamic_pending.is_empty()
-                || !state.preload_group_pending.is_empty();
+                || !state.preload_group_pending.is_empty()
+                || !state.preload_group_release_pending.is_empty();
             state.checkpoint();
             for mut incoming in std::mem::take(&mut state.preload_pending) {
                 incoming.changed_at = committed_at;
@@ -101,6 +103,14 @@ impl ProgrammerRegistry {
                     .entry(group)
                     .or_default()
                     .extend(attributes);
+            }
+            for mut incoming in std::mem::take(&mut state.preload_group_release_pending) {
+                incoming.changed_at_millis =
+                    u64::try_from(committed_at.timestamp_millis()).unwrap_or_default();
+                state.preload_group_release_active.retain(|stored| {
+                    stored.group_id != incoming.group_id || stored.attribute != incoming.attribute
+                });
+                state.preload_group_release_active.push(incoming);
             }
             let committed_at_millis =
                 u64::try_from(committed_at.timestamp_millis()).unwrap_or_default();
@@ -215,12 +225,14 @@ impl ProgrammerRegistry {
             };
             let pending_values_changed = !state.preload_pending.is_empty()
                 || !state.preload_dynamic_pending.is_empty()
-                || !state.preload_group_pending.is_empty();
+                || !state.preload_group_pending.is_empty()
+                || !state.preload_group_release_pending.is_empty();
             let queue_changed = !state.preload_playback_pending.is_empty();
             state.checkpoint();
             state.preload_pending.clear();
             Arc::make_mut(&mut state.preload_dynamic_pending).clear();
             state.preload_group_pending.clear();
+            state.preload_group_release_pending.clear();
             state.preload_playback_pending.clear();
             state.last_activity = self.clock.now();
             (state.user_id, pending_values_changed, queue_changed)
@@ -242,7 +254,8 @@ impl ProgrammerRegistry {
         };
         let pending_values_changed = !state.preload_pending.is_empty()
             || !state.preload_dynamic_pending.is_empty()
-            || !state.preload_group_pending.is_empty();
+            || !state.preload_group_pending.is_empty()
+            || !state.preload_group_release_pending.is_empty();
         let queue_changed = !state.preload_playback_pending.is_empty();
         let changed = state.blind
             || !state.preload_pending.is_empty()
@@ -251,6 +264,8 @@ impl ProgrammerRegistry {
             || !state.preload_dynamic_active.is_empty()
             || !state.preload_group_pending.is_empty()
             || !state.preload_group_active.is_empty()
+            || !state.preload_group_release_pending.is_empty()
+            || !state.preload_group_release_active.is_empty()
             || !state.preload_playback_pending.is_empty()
             || state.preload_playback_active;
         if !changed {
@@ -263,6 +278,8 @@ impl ProgrammerRegistry {
         Arc::make_mut(&mut state.preload_dynamic_active).clear();
         state.preload_group_pending.clear();
         state.preload_group_active.clear();
+        state.preload_group_release_pending.clear();
+        state.preload_group_release_active.clear();
         state.preload_playback_pending.clear();
         state.preload_playback_active = false;
         state.blind = false;

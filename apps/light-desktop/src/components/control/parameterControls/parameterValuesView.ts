@@ -1,4 +1,5 @@
 import type { AttributeValue } from "../../../api/types/playback";
+import type { ProgrammerDynamicValue } from "../../../features/programmerValues/contracts";
 
 interface ParameterValueTiming {
 	fade: boolean;
@@ -23,6 +24,7 @@ export interface ParameterProgrammerValuesView {
 	ready: boolean;
 	fixtureValues: readonly ParameterFixtureValue[];
 	groupValues: readonly ParameterGroupValue[];
+	dynamicValues: readonly ProgrammerDynamicValue[];
 }
 
 interface ParameterValuesState {
@@ -30,6 +32,7 @@ interface ParameterValuesState {
 	projection: {
 		fixtureValues: readonly ParameterFixtureValue[];
 		groupValues: readonly ParameterGroupValue[];
+		dynamicValues?: readonly ProgrammerDynamicValue[];
 	} | null;
 }
 
@@ -38,6 +41,7 @@ const PENDING_VIEW: ParameterProgrammerValuesView = Object.freeze({
 	ready: false,
 	fixtureValues: EMPTY_VALUES,
 	groupValues: EMPTY_VALUES,
+	dynamicValues: EMPTY_VALUES,
 });
 
 export function selectParameterValues(
@@ -56,6 +60,9 @@ export function selectParameterValues(
 					(value) => value.groupId === groupId,
 				)
 			: EMPTY_VALUES,
+		dynamicValues: (state.projection.dynamicValues ?? EMPTY_VALUES).filter(
+			(value) => fixtureIds.has(value.fixtureId),
+		),
 	};
 }
 
@@ -66,7 +73,21 @@ export function equalParameterValues(
 	return (
 		left.ready === right.ready &&
 		equalValues(left.fixtureValues, right.fixtureValues, equalFixtureValue) &&
-		equalValues(left.groupValues, right.groupValues, equalGroupValue)
+		equalValues(left.groupValues, right.groupValues, equalGroupValue) &&
+		equalValues(left.dynamicValues, right.dynamicValues, equalDynamicValue)
+	);
+}
+
+function equalDynamicValue(
+	left: ProgrammerDynamicValue,
+	right: ProgrammerDynamicValue,
+) {
+	return (
+		left.fixtureId === right.fixtureId &&
+		left.attribute === right.attribute &&
+		left.programmerOrder === right.programmerOrder &&
+		left.changedAtMillis === right.changedAtMillis &&
+		JSON.stringify(left.value) === JSON.stringify(right.value)
 	);
 }
 

@@ -6,7 +6,7 @@ mod helpers;
 use crate::{ActionContext, ActionError, ActionErrorKind};
 use conversion::{factor_rational, runtime_error};
 use helpers::*;
-use light_core::{AttributeKey, FixtureId, SessionId, UserId};
+use light_core::{AttributeKey, AttributeValue, FixtureId, SessionId, UserId};
 use light_dynamics::{
     DynamicController, DynamicControllerSource, DynamicDefinition, DynamicDefinitionSnapshot,
     DynamicInstanceOverrides, DynamicReference, DynamicRuntimeError, DynamicSemanticValue,
@@ -14,7 +14,10 @@ use light_dynamics::{
     SpatialSelectionMapping,
 };
 use light_engine::EngineSnapshot;
-use light_programmer::{DynamicProgrammerValueMutation, ProgrammerRegistry, resolve_group_spatial};
+use light_programmer::{
+    DynamicProgrammerValueMutation, ProgrammerRegistry, ReleaseProgrammerFixtureValue,
+    ReleaseProgrammerGroupValue, resolve_group_spatial,
+};
 use parking_lot::Mutex;
 use std::{
     collections::{HashMap, VecDeque},
@@ -74,6 +77,25 @@ pub struct DynamicFixAtCommand {
     pub timing: DynamicValueTiming,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct DynamicFixAtValue {
+    pub fixture_id: FixtureId,
+    pub attribute: AttributeKey,
+    pub value: AttributeValue,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct DynamicFixAtBatchCommand {
+    pub values: Vec<DynamicFixAtValue>,
+    pub timing: DynamicValueTiming,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct DynamicReleaseCommand {
+    pub fixture_values: Vec<ReleaseProgrammerFixtureValue>,
+    pub group_values: Vec<ReleaseProgrammerGroupValue>,
+}
+
 const DYNAMICS_REPLAY_LIMIT: usize = 1_024;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -84,6 +106,8 @@ enum DynamicsReplayAction {
     Off(DynamicOffCommand),
     Update(DynamicControllerUpdate),
     FixAt(DynamicFixAtCommand),
+    FixAtBatch(DynamicFixAtBatchCommand),
+    Release(DynamicReleaseCommand),
 }
 
 #[derive(Clone, Debug)]
@@ -753,6 +777,101 @@ impl DynamicsService {
             DynamicsReplayOutcome::Unit,
         );
         Ok(())
+    }
+
+    pub fn fix_at_batch(
+        &self,
+        context: &ActionContext,
+        command: DynamicFixAtBatchCommand,
+        ports: &dyn DynamicsPorts,
+    ) -> Result<usize, ActionError> {
+        let identity = identity(context)?;
+        ports.authorize(context)?;
+        let replay_action = DynamicsReplayAction::FixAtBatch(command.clone());
+        if let Some(DynamicsReplayOutcome::Unit) =
+            self.cached(context, identity.session, &replay_action)?
+        {
+            return Ok(command.values.len());
+        }
+        if command.values.is_empty() {
+            return Err(ActionError::new(
+                ActionErrorKind::Invalid,
+                "FixAT Preset contains no applicable scalar values",
+            ));
+        }
+        let snapshot = ports.snapshot();
+        for value in &command.values {
+            validate_release_targets(
+                &snapshot,
+                &[ReleaseProgrammerFixtureValue {
+                    fixture_id: value.fixture_id,
+                    attribute: value.attribute.clone(),
+                }],
+            )?;
+        }
+        let mutations = command
+            .values
+            .iter()
+            .map(|value| DynamicProgrammerValueMutation::Set {
+                fixture_id: value.fixture_id,
+                attribute: value.attribute.clone(),
+                value: DynamicSemanticValue::Static {
+                    value: value.value.clone(),
+                    timing: command.timing,
+                },
+            })
+            .collect::<Vec<_>>();
+        if !self
+            .programmers
+            .apply_dynamic_values(identity.session, &mutations, None)
+        {
+            return Err(ActionError::new(
+                ActionErrorKind::Conflict,
+                "FixAT Preset produced no Programmer change",
+            ));
+        }
+        self.remember(
+            context,
+            identity.session,
+            replay_action,
+            DynamicsReplayOutcome::Unit,
+        );
+        Ok(command.values.len())
+    }
+
+    pub fn release_values(
+        &self,
+        context: &ActionContext,
+        command: DynamicReleaseCommand,
+        ports: &dyn DynamicsPorts,
+    ) -> Result<usize, ActionError> {
+        let identity = identity(context)?;
+        ports.authorize(context)?;
+        let replay_action = DynamicsReplayAction::Release(command.clone());
+        if let Some(DynamicsReplayOutcome::Unit) =
+            self.cached(context, identity.session, &replay_action)?
+        {
+            return Ok(command.fixture_values.len());
+        }
+        if command.fixture_values.is_empty() {
+            return Err(ActionError::new(
+                ActionErrorKind::Invalid,
+                "RELEASE requires at least one supported fixture attribute",
+            ));
+        }
+        validate_release_targets(&ports.snapshot(), &command.fixture_values)?;
+        self.programmers.apply_release_values(
+            identity.session,
+            &command.fixture_values,
+            &command.group_values,
+        );
+        self.remember(
+            context,
+            identity.session,
+            replay_action,
+            DynamicsReplayOutcome::Unit,
+        );
+        Ok(command.fixture_values.len())
     }
 
     fn cached(

@@ -1,3 +1,4 @@
+use crate::GroupReleaseProgrammerValue;
 use crate::groups::GroupProgrammerValues;
 use crate::preload::PreloadPlaybackAction;
 use crate::selection::SelectionExpression;
@@ -28,12 +29,15 @@ pub struct ProgrammerSnapshot {
     pub values: Vec<TimedValue>,
     pub dynamic_values: Arc<Vec<DynamicAddressValue>>,
     pub group_values: GroupProgrammerValues,
+    pub group_release_values: Vec<GroupReleaseProgrammerValue>,
     pub preload_pending: Vec<TimedValue>,
     pub preload_active: Vec<TimedValue>,
     pub preload_dynamic_pending: Arc<Vec<DynamicAddressValue>>,
     pub preload_dynamic_active: Arc<Vec<DynamicAddressValue>>,
     pub preload_group_pending: GroupProgrammerValues,
     pub preload_group_active: GroupProgrammerValues,
+    pub preload_group_release_pending: Vec<GroupReleaseProgrammerValue>,
+    pub preload_group_release_active: Vec<GroupReleaseProgrammerValue>,
     pub preload_playback_pending: Vec<PreloadPlaybackAction>,
     pub command_line: String,
     pub blind: bool,
@@ -61,6 +65,8 @@ pub struct ProgrammerState {
     #[serde(default)]
     pub group_values: GroupProgrammerValues,
     #[serde(default)]
+    pub group_release_values: Vec<GroupReleaseProgrammerValue>,
+    #[serde(default)]
     pub preload_pending: Vec<TimedValue>,
     #[serde(default)]
     pub preload_active: Vec<TimedValue>,
@@ -72,6 +78,10 @@ pub struct ProgrammerState {
     pub preload_group_pending: GroupProgrammerValues,
     #[serde(default)]
     pub preload_group_active: GroupProgrammerValues,
+    #[serde(default)]
+    pub preload_group_release_pending: Vec<GroupReleaseProgrammerValue>,
+    #[serde(default)]
+    pub preload_group_release_active: Vec<GroupReleaseProgrammerValue>,
     #[serde(default)]
     pub preload_playback_pending: Vec<PreloadPlaybackAction>,
     /// True while a Preload GO has committed queued Playback activations that hold-to-release has

@@ -4,6 +4,7 @@ use crate::fixture_value_batch::{
 use crate::{GroupProgrammerValue, ProgrammerRegistry};
 use light_core::{AttributeKey, AttributeValue, FixtureId, SessionId, TimedValue};
 use light_dynamics::DynamicAddressValue;
+use std::sync::Arc;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct PreloadProgrammerValueTiming {
@@ -195,9 +196,16 @@ fn mutation_changes(
             attribute,
             value,
             timing,
-        } => fixture_index
-            .get(*fixture_id, attribute)
-            .is_none_or(|stored| !fixture_value_matches(stored, value, *timing)),
+        } => {
+            fixture_index
+                .get(*fixture_id, attribute)
+                .is_none_or(|stored| !fixture_value_matches(stored, value, *timing))
+                || state.preload_dynamic_pending.iter().any(|stored| {
+                    stored.fixture_id == *fixture_id
+                        && stored.attribute == *attribute
+                        && matches!(stored.value, light_dynamics::DynamicSemanticValue::Release)
+                })
+        }
         PreloadProgrammerValueMutation::ReleaseFixture {
             fixture_id,
             attribute,
@@ -207,11 +215,17 @@ fn mutation_changes(
             attribute,
             value,
             timing,
-        } => state
-            .preload_group_pending
-            .get(group_id)
-            .and_then(|values| values.get(attribute))
-            .is_none_or(|stored| !group_value_matches(stored, value, *timing)),
+        } => {
+            state
+                .preload_group_pending
+                .get(group_id)
+                .and_then(|values| values.get(attribute))
+                .is_none_or(|stored| !group_value_matches(stored, value, *timing))
+                || state
+                    .preload_group_release_pending
+                    .iter()
+                    .any(|stored| stored.group_id == *group_id && stored.attribute == *attribute)
+        }
         PreloadProgrammerValueMutation::ReleaseGroup {
             group_id,
             attribute,
@@ -257,15 +271,22 @@ fn apply_mutation(
             attribute,
             value,
             timing,
-        } => fixture_batch.set(
-            registry,
-            state.priority,
-            *fixture_id,
-            attribute,
-            value,
-            fixture_timing(*timing),
-            changed_at,
-        ),
+        } => {
+            fixture_batch.set(
+                registry,
+                state.priority,
+                *fixture_id,
+                attribute,
+                value,
+                fixture_timing(*timing),
+                changed_at,
+            );
+            Arc::make_mut(&mut state.preload_dynamic_pending).retain(|stored| {
+                stored.fixture_id != *fixture_id
+                    || stored.attribute != *attribute
+                    || !matches!(stored.value, light_dynamics::DynamicSemanticValue::Release)
+            });
+        }
         PreloadProgrammerValueMutation::ReleaseFixture {
             fixture_id,
             attribute,
@@ -275,9 +296,14 @@ fn apply_mutation(
             attribute,
             value,
             timing,
-        } => set_group(
-            registry, state, group_id, attribute, value, *timing, changed_at,
-        ),
+        } => {
+            set_group(
+                registry, state, group_id, attribute, value, *timing, changed_at,
+            );
+            state
+                .preload_group_release_pending
+                .retain(|stored| stored.group_id != *group_id || stored.attribute != *attribute);
+        }
         PreloadProgrammerValueMutation::ReleaseGroup {
             group_id,
             attribute,
