@@ -442,7 +442,7 @@ function typedGeometry(
 	} else if (/curtain|drape/.test(type)) {
 		polygons = curtain(horizontal, vertical);
 	} else if (/crowd/.test(type)) {
-		polygons = crowd(horizontal, vertical, view === "top_down");
+		polygons = crowd(horizontal, vertical, view);
 	} else if (/sunstrip|pixel bar|light bar|matrix/.test(type)) {
 		polygons = bar(horizontal, vertical);
 	} else if (/media.server|media_server/.test(type)) {
@@ -717,7 +717,11 @@ function curtain(width: number, height: number): Polygon[] {
 	});
 }
 
-function crowd(width: number, height: number, top: boolean): Polygon[] {
+function crowd(
+	width: number,
+	height: number,
+	view: CadViewDirection,
+): Polygon[] {
 	const w = Math.max(600, width);
 	const h = Math.max(500, height);
 	const polygons: Polygon[] = [];
@@ -727,49 +731,165 @@ function crowd(width: number, height: number, top: boolean): Polygon[] {
 			const y = -h * 0.38 + (row / 3) * h * 0.76;
 			const personWidth = Math.min(w * 0.07, h * 0.1);
 			const personHeight = Math.min(h * 0.14, w * 0.1);
-			if (top) {
+			if (view === "top_down") {
+				const headRadius = personWidth * 0.22;
+				const bodyWidth = personWidth;
+				const bodyHeight = personHeight * 0.5;
+				polygons.push(
+					ellipse(x, y - bodyHeight * 0.72, headRadius, headRadius, DETAIL, 10),
+					roundedRect(
+						x,
+						y + bodyHeight * 0.08,
+						bodyWidth,
+						bodyHeight,
+						Math.min(bodyWidth, bodyHeight) * 0.28,
+						BODY,
+					),
+					segment(
+						[x - bodyWidth * 0.22, y + bodyHeight * 0.28],
+						[x - bodyWidth * 0.42, y + bodyHeight * 0.62],
+						personWidth * 0.12,
+						BODY,
+					),
+					segment(
+						[x + bodyWidth * 0.22, y + bodyHeight * 0.28],
+						[x + bodyWidth * 0.42, y + bodyHeight * 0.62],
+						personWidth * 0.12,
+						BODY,
+					),
+				);
+			} else if (view === "left_to_right" || view === "right_to_left") {
+				const direction = view === "left_to_right" ? 1 : -1;
+				const thickness = personWidth * 0.12;
+				const shoulder: PlanPoint = [x, y - personHeight * 0.08];
+				const hip: PlanPoint = [x, y + personHeight * 0.22];
 				polygons.push(
 					ellipse(
 						x,
-						y - personHeight * 0.18,
+						y - personHeight * 0.34,
 						personWidth * 0.22,
 						personWidth * 0.22,
 						DETAIL,
 						10,
 					),
-					ellipse(
-						x,
-						y + personHeight * 0.18,
-						personWidth * 0.5,
-						personHeight * 0.34,
+					segment(shoulder, hip, thickness, BODY),
+					segment(
+						shoulder,
+						[x + direction * personWidth * 0.62, y + personHeight * 0.02],
+						thickness,
 						BODY,
-						12,
+					),
+					segment(
+						[x, y],
+						[x + direction * personWidth * 0.58, y + personHeight * 0.12],
+						thickness,
+						BODY,
+					),
+					segment(
+						hip,
+						[x - personWidth * 0.08, y + personHeight * 0.48],
+						thickness,
+						BODY,
+					),
+					segment(
+						hip,
+						[x + personWidth * 0.08, y + personHeight * 0.48],
+						thickness,
+						BODY,
 					),
 				);
 			} else {
+				const thickness = personWidth * 0.11;
+				const shoulder: PlanPoint = [x, y - personHeight * 0.08];
+				const hip: PlanPoint = [x, y + personHeight * 0.2];
 				polygons.push(
 					ellipse(
 						x,
-						y - personHeight * 0.28,
-						personWidth * 0.24,
-						personHeight * 0.18,
+						y - personHeight * 0.34,
+						personWidth * 0.22,
+						personWidth * 0.22,
 						DETAIL,
 						10,
 					),
-					{
-						color: BODY,
-						points: [
-							[x - personWidth * 0.48, y],
-							[x + personWidth * 0.48, y],
-							[x + personWidth * 0.28, y + personHeight * 0.46],
-							[x - personWidth * 0.28, y + personHeight * 0.46],
-						],
-					},
+					segment(shoulder, hip, thickness, BODY),
+					segment(
+						shoulder,
+						[x - personWidth * 0.58, y + personHeight * 0.08],
+						thickness,
+						BODY,
+					),
+					segment(
+						shoulder,
+						[x + personWidth * 0.58, y + personHeight * 0.08],
+						thickness,
+						BODY,
+					),
+					segment(
+						hip,
+						[x - personWidth * 0.32, y + personHeight * 0.48],
+						thickness,
+						BODY,
+					),
+					segment(
+						hip,
+						[x + personWidth * 0.32, y + personHeight * 0.48],
+						thickness,
+						BODY,
+					),
 				);
 			}
 		}
 	}
 	return polygons;
+}
+
+function segment(
+	start: PlanPoint,
+	end: PlanPoint,
+	thickness: number,
+	color: Polygon["color"],
+): Polygon {
+	const dx = end[0] - start[0];
+	const dy = end[1] - start[1];
+	const length = Math.max(0.001, Math.hypot(dx, dy));
+	const nx = (-dy / length) * (thickness / 2);
+	const ny = (dx / length) * (thickness / 2);
+	return {
+		color,
+		points: [
+			[start[0] + nx, start[1] + ny],
+			[end[0] + nx, end[1] + ny],
+			[end[0] - nx, end[1] - ny],
+			[start[0] - nx, start[1] - ny],
+		],
+	};
+}
+
+function roundedRect(
+	cx: number,
+	cy: number,
+	width: number,
+	height: number,
+	radius: number,
+	color: Polygon["color"],
+): Polygon {
+	const r = Math.min(radius, width / 2, height / 2);
+	const points: PlanPoint[] = [];
+	for (const [cornerX, cornerY, start] of [
+		[cx + width / 2 - r, cy + height / 2 - r, 0],
+		[cx - width / 2 + r, cy + height / 2 - r, Math.PI / 2],
+		[cx - width / 2 + r, cy - height / 2 + r, Math.PI],
+		[cx + width / 2 - r, cy - height / 2 + r, Math.PI * 1.5],
+	] as const) {
+		for (let index = 0; index <= 3; index++) {
+			const angle = start + (index / 3) * (Math.PI / 2);
+			points.push([
+				cornerX + Math.cos(angle) * r,
+				cornerY + Math.sin(angle) * r,
+			]);
+		}
+	}
+	return { color, points };
 }
 
 function bar(width: number, height: number): Polygon[] {

@@ -258,30 +258,43 @@ describe("CAD plan projections", () => {
 	});
 
 	it("uses repeated human plan marks for crowd areas instead of the model box", () => {
-		const geometry = entityPlanGeometry(
-			{
-				...movingLight,
-				name: "Dancefloor Crowd",
-				kind: "venue",
-				fixtureType: "crowd_area",
-				sizeMillimetres: [8000, 4000, 1800],
-			},
-			{
-				id: "generated-crowd",
-				projections: [
-					{
-						view: "top",
-						svg: '<svg><path d="M 0 0 L 8000 0 L 8000 4000 L 0 4000 Z" fill="#66707a" /></svg>',
-						viewBoxMillimetres: [0, 0, 8000, 4000],
-						originMillimetres: [4000, 2000],
-					},
-				],
-			},
-			"top_down",
+		const crowd = {
+			...movingLight,
+			name: "Dancefloor Crowd",
+			kind: "venue",
+			fixtureType: "crowd_area",
+			sizeMillimetres: [8000, 4000, 1800] as [number, number, number],
+		};
+		const suppliedBox: CadDrawing = {
+			id: "generated-crowd",
+			projections: [
+				{
+					view: "top",
+					svg: '<svg><path d="M 0 0 L 8000 0 L 8000 4000 L 0 4000 Z" fill="#66707a" /></svg>',
+					viewBoxMillimetres: [0, 0, 8000, 4000],
+					originMillimetres: [4000, 2000],
+				},
+			],
+		};
+		const top = entityPlanGeometry(crowd, suppliedBox, "top_down");
+		const side = entityPlanGeometry(crowd, suppliedBox, "left_to_right");
+		const oppositeSide = entityPlanGeometry(
+			crowd,
+			suppliedBox,
+			"right_to_left",
 		);
+		const back = entityPlanGeometry(crowd, suppliedBox, "back_to_front");
+		const front = entityPlanGeometry(crowd, suppliedBox, "front_to_back");
 
-		expect(geometry.source).toBe("typed");
-		expect(geometry.outlines).toHaveLength(48);
-		expect(geometry.triangles.length).toBeGreaterThan(300);
+		expect(top.source).toBe("typed");
+		expect(top.outlines).toHaveLength(96);
+		expect(side.outlines).toHaveLength(144);
+		expect(oppositeSide.outlines).toHaveLength(144);
+		expect(back.outlines).toHaveLength(144);
+		expect(front.outlines).toHaveLength(144);
+		expect(top.triangles.length).toBeGreaterThan(300);
+		expect(side.outlines).not.toEqual(oppositeSide.outlines);
+		expect(side.outlines).not.toEqual(back.outlines);
+		expect(back.outlines).toEqual(front.outlines);
 	});
 });
