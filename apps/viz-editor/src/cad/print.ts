@@ -1,4 +1,5 @@
 import { entityPlanGeometry, type PlanPoint } from "./projection";
+import architectIconSvg from "../../../../assets/branding/tosklight-icon-print.svg?raw";
 import {
 	type CadPrintPage,
 	type CadSceneSnapshot,
@@ -318,12 +319,59 @@ export function buildCadPdf(
 }
 
 function mark(x: number, y: number) {
+	const cyanPath = svgIconPath("rgb(0,182,255)");
+	const whitePath = svgIconPath("white");
+	const scale = 50 / 1024;
 	return [
+		"0.01 0.03 0.08 rg",
+		`${n(x)} ${n(y - 2)} 52 52 re f`,
+		"q",
+		`${n(scale)} 0 0 ${n(-scale)} ${n(x + 1)} ${n(y + 49)} cm`,
 		"0.02 0.71 1 rg",
-		`${n(x)} ${n(y + 22)} m ${n(x + 16)} ${n(y + 31)} l ${n(x + 16)} ${n(y + 13)} l h f`,
-		"0.09 0.12 0.15 rg",
-		`${n(x + 16)} ${n(y + 12)} m ${n(x + 49)} ${n(y + 30)} l ${n(x + 49)} ${n(y - 1)} l ${n(x + 16)} ${n(y + 8)} l h f`,
+		"1.1301 0 0 1.10327 -91.1666 -52.8747 cm",
+		"2.27038 0 0 2.27038 479.14 600.211 cm",
+		`${cyanPath} f`,
+		"Q",
+		"q",
+		`${n(scale)} 0 0 ${n(-scale)} ${n(x + 1)} ${n(y + 49)} cm`,
+		"1 1 1 rg",
+		"1.1301 0 0 1.10327 -91.1666 -52.8747 cm",
+		"2.27038 0 0 2.27038 489.721 673.347 cm",
+		`${whitePath} f`,
+		"Q",
 	];
+}
+
+function svgIconPath(fill: string) {
+	const matches = [
+		...architectIconSvg.matchAll(/<path d="([^"]+)" style="fill:([^;]+);"/g),
+	]
+		.filter((match) => match[2] === fill)
+		.sort((left, right) => right[1].length - left[1].length);
+	if (!matches[0])
+		throw new Error(
+			`Tasklight application SVG is missing its ${fill} vector path`,
+		);
+	const tokens =
+		matches[0][1].match(/[MLCZ]|-?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?/gi) ?? [];
+	const output: string[] = [];
+	for (let index = 0; index < tokens.length; ) {
+		const command = tokens[index++].toUpperCase();
+		const take = (count: number) =>
+			tokens.slice(index, (index += count)).map(Number);
+		if (command === "M" || command === "L") {
+			const [px, py] = take(2);
+			output.push(`${n(px)} ${n(py)} ${command === "M" ? "m" : "l"}`);
+		} else if (command === "C") {
+			const values = take(6);
+			output.push(`${values.map(n).join(" ")} c`);
+		} else if (command === "Z") output.push("h");
+		else
+			throw new Error(
+				`Unsupported command ${command} in Tasklight application SVG`,
+			);
+	}
+	return output.join(" ");
 }
 function saved(seconds: number) {
 	return seconds
