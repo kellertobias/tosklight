@@ -87,6 +87,15 @@ pub struct PlanningDocument {
     ports: PlanningPorts,
 }
 
+const LIGHTING_DESIGNER_KEY: &str = "previs.lighting_designer";
+const SHOW_VERSION_KEY: &str = "previs.show_version";
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PaperworkMetadata {
+    pub lighting_designer: String,
+    pub show_version: String,
+}
+
 impl PlanningDocument {
     /// Creates a new show file and opens it.
     pub fn create(path: impl AsRef<Path>, name: &str) -> Result<Self, DocumentError> {
@@ -134,6 +143,27 @@ impl PlanningDocument {
 
     pub fn name(&self) -> Result<String, DocumentError> {
         Ok(self.store()?.name()?)
+    }
+
+    pub fn paperwork_metadata(&self) -> Result<PaperworkMetadata, DocumentError> {
+        let store = self.store()?;
+        Ok(PaperworkMetadata {
+            lighting_designer: store
+                .metadata_value(LIGHTING_DESIGNER_KEY)?
+                .unwrap_or_default(),
+            show_version: store.metadata_value(SHOW_VERSION_KEY)?.unwrap_or_default(),
+        })
+    }
+
+    pub fn save_paperwork_metadata(
+        &self,
+        metadata: &PaperworkMetadata,
+    ) -> Result<(), DocumentError> {
+        self.store()?.set_metadata_values(&[
+            (LIGHTING_DESIGNER_KEY, metadata.lighting_designer.trim()),
+            (SHOW_VERSION_KEY, metadata.show_version.trim()),
+        ])?;
+        Ok(())
     }
 
     pub(crate) fn store(&self) -> Result<ShowStore, DocumentError> {

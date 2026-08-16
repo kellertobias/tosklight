@@ -205,6 +205,7 @@ fn main() {
             demo::open_demo_show,
             verify::surface_ready,
             session::document_summary,
+            session::save_document_paperwork,
             session::live_dmx_inputs,
             session::save_live_dmx_inputs,
             session::save_document_as,

@@ -1331,6 +1331,52 @@ body {
 	padding: 8px;
 }
 
+.cad-print-project-info {
+	display: grid;
+	gap: 8px;
+	padding: 10px 12px 12px;
+	border-bottom: 1px solid #222d37;
+}
+
+.cad-print-project-info h3 {
+	margin: 0 0 2px;
+	font-size: 12px;
+}
+
+.cad-print-project-info label {
+	display: grid;
+	gap: 4px;
+	color: #9aa7b2;
+	font-size: 10px;
+}
+
+.cad-print-project-info input {
+	box-sizing: border-box;
+	width: 100%;
+	min-height: 29px;
+	padding: 5px 7px;
+	border: 1px solid #34424e;
+	border-radius: 3px;
+	background: #111820;
+	color: #eef3f7;
+}
+
+.cad-print-project-info dl {
+	display: grid;
+	gap: 3px;
+	margin: 2px 0;
+	font-size: 10px;
+}
+
+.cad-print-project-info dl div {
+	display: flex;
+	justify-content: space-between;
+	gap: 8px;
+}
+
+.cad-print-project-info dt { color: #798692; }
+.cad-print-project-info dd { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 .cad-print-row {
 	display: flex;
 	gap: 9px;
@@ -1393,12 +1439,23 @@ body {
 	cursor: move;
 }
 
+.cad-print-sheet {
+	position: absolute;
+	inset: 1.5%;
+	border: 1px solid rgb(235 241 246 / 72%);
+	background-image:
+		linear-gradient(rgb(191 204 214 / 16%) 1px, transparent 1px),
+		linear-gradient(90deg, rgb(191 204 214 / 16%) 1px, transparent 1px);
+	background-size: var(--cad-print-grid) var(--cad-print-grid);
+	pointer-events: none;
+}
+
 .cad-print-frame.is-selected {
 	border: 2px solid #05d6f5;
 	background: rgb(5 214 245 / 6%);
 }
 
-.cad-print-frame > span {
+.cad-print-page-name {
 	position: absolute;
 	top: 5px;
 	left: 7px;
@@ -1407,6 +1464,51 @@ body {
 	color: #dce4eb;
 	font-size: 10px;
 }
+
+.cad-print-title-block {
+	position: absolute;
+	right: 0;
+	bottom: 0;
+	display: grid;
+	grid-template-columns: 48px minmax(90px, 1fr);
+	width: 42%;
+	min-width: 170px;
+	border: 1px solid rgb(235 241 246 / 78%);
+	background: rgb(8 12 16 / 96%);
+	color: #dce5eb;
+	font-size: 8px;
+}
+
+.cad-print-title-block svg {
+	align-self: stretch;
+	width: 42px;
+	height: 100%;
+	padding: 5px 3px;
+	border-right: 1px solid rgb(235 241 246 / 40%);
+}
+
+.cad-print-title-block .beam { fill: #00b6ff; }
+.cad-print-title-block .lamp { fill: #dbe3e8; }
+
+.cad-print-brand {
+	display: grid;
+	gap: 1px;
+	padding: 4px 6px;
+	border-bottom: 1px solid rgb(235 241 246 / 40%);
+}
+
+.cad-print-brand span { overflow: hidden; color: #9eabb5; text-overflow: ellipsis; white-space: nowrap; }
+
+.cad-print-meta {
+	grid-column: 2;
+	display: grid;
+	grid-template-columns: auto 1fr;
+	gap: 1px 6px;
+	padding: 3px 6px 5px;
+	font-size: 7px;
+}
+
+.cad-print-meta span { color: #81909c; }
 
 .cad-print-scale {
 	position: absolute;

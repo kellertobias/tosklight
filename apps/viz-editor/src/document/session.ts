@@ -11,6 +11,11 @@ export interface DocumentSummary {
 	name: string;
 	path: string;
 	fixtureCount: number;
+	fileName: string;
+	lightingDesigner: string;
+	showVersion: string;
+	lastSavedAt: number;
+	universeCount: number;
 }
 
 export interface MvrImportReport {
@@ -325,6 +330,10 @@ export const documentSession = {
 	 */
 	surfaceReady: () => invoke<void>("surface_ready"),
 	current: () => invoke<DocumentSummary | null>("document_summary"),
+	savePaperwork: (paperwork: {
+		lightingDesigner: string;
+		showVersion: string;
+	}) => invoke<DocumentSummary>("save_document_paperwork", { paperwork }),
 	saveAs: (path: string) => invoke<void>("save_document_as", { path }),
 	rename: (name: string) => invoke<void>("rename_document", { name }),
 	exportMvr: (path: string) => invoke<number>("export_mvr", { path }),

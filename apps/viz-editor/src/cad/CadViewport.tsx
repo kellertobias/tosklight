@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+	type CadPrintDocumentInfo,
+	printGridMillimetres,
+	printScaleDenominator,
+} from "./print";
+import {
 	entityPlanGeometry,
 	type PlanGeometry,
 	type PlanPoint,
@@ -32,6 +37,7 @@ interface CadViewportProps {
 	selectedPrintPageId?: string | null;
 	onSelectPrintPage?(id: string): void;
 	onChangePrintPage?(id: string, change: Partial<CadPrintPage>): void;
+	documentInfo?: CadPrintDocumentInfo;
 	onCamera(camera: TileCamera): void;
 	onSelection(change: SelectionChange): void;
 	onPreview(preview: CadTransformPreview | null): void;
@@ -143,6 +149,7 @@ export function CadViewport({
 	selectedPrintPageId = null,
 	onSelectPrintPage,
 	onChangePrintPage,
+	documentInfo,
 	onCamera,
 	onSelection,
 	onPreview,
@@ -432,6 +439,7 @@ export function CadViewport({
 							onSelect={() => onSelectPrintPage?.(page.id)}
 							onChange={(change) => onChangePrintPage?.(page.id, change)}
 							onCamera={onCamera}
+							documentInfo={documentInfo}
 						/>
 					))}
 				</div>
@@ -447,6 +455,7 @@ function PrintFrame({
 	onSelect,
 	onChange,
 	onCamera,
+	documentInfo,
 }: {
 	page: CadPrintPage;
 	camera: TileCamera;
@@ -454,6 +463,7 @@ function PrintFrame({
 	onSelect(): void;
 	onChange(change: Partial<CadPrintPage>): void;
 	onCamera(camera: TileCamera): void;
+	documentInfo?: CadPrintDocumentInfo;
 }) {
 	const interaction = useRef<{
 		type: "move" | "scale" | "pan";
@@ -463,6 +473,7 @@ function PrintFrame({
 		camera: TileCamera;
 	} | null>(null);
 	const height = printPageHeight(page);
+	const gridSize = printGridMillimetres(page) * camera.zoom;
 	function move(event: React.PointerEvent<HTMLElement>) {
 		const active = interaction.current;
 		if (!active) return;
@@ -527,7 +538,40 @@ function PrintFrame({
 			onPointerUp={stop}
 			onPointerCancel={stop}
 		>
-			<span>{page.name}</span>
+			<div
+				className="cad-print-sheet"
+				style={{ "--cad-print-grid": `${gridSize}px` } as React.CSSProperties}
+				aria-hidden="true"
+			>
+				<div className="cad-print-page-name">{page.name}</div>
+				<div className="cad-print-title-block">
+					<svg
+						viewBox="0 0 64 48"
+						role="img"
+						aria-label="ToskLight application mark"
+					>
+						<path className="beam" d="M4 24 22 13v22z" />
+						<path className="lamp" d="m22 32 37-19v31l-37-9z" />
+					</svg>
+					<div className="cad-print-brand">
+						<strong>ToskLight Previs</strong>
+						<span>{documentInfo?.showFileName || "Untitled.show"}</span>
+					</div>
+					<div className="cad-print-meta">
+						<span>Designer</span>
+						<strong>{documentInfo?.lightingDesigner || "—"}</strong>
+						<span>Version</span>
+						<strong>{documentInfo?.showVersion || "—"}</strong>
+						<span>Scale</span>
+						<strong>1:{printScaleDenominator(page)}</strong>
+						<span>Rig</span>
+						<strong>
+							{documentInfo?.fixtureCount ?? 0} fixtures ·{" "}
+							{documentInfo?.universeCount ?? 0} universes
+						</strong>
+					</div>
+				</div>
+			</div>
 			<button
 				type="button"
 				className="cad-print-scale"

@@ -2,9 +2,10 @@ import { save } from "@tauri-apps/plugin-dialog";
 import { Button, SwitchField } from "@tosklight/ui";
 import { WindowHeader, WindowSettings } from "@tosklight/ui/window-kit";
 import { useEffect, useRef, useState } from "react";
+import { type DocumentSummary, documentSession } from "../document/session";
 import { beginWindowDrag, WindowControls } from "../WindowChrome";
 import { CadViewport } from "./CadViewport";
-import { buildCadPdf } from "./print";
+import { buildCadPdf, type CadPrintDocumentInfo } from "./print";
 import { cadSession } from "./session";
 import {
 	applySelectionChange,
@@ -54,6 +55,14 @@ export function CadApp() {
 	const [exporting, setExporting] = useState(false);
 	const [activeTileId, setActiveTileId] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
+	const [documentInfo, setDocumentInfo] = useState<DocumentSummary | null>(
+		null,
+	);
+	const [paperwork, setPaperwork] = useState({
+		lightingDesigner: "",
+		showVersion: "",
+	});
+	const [savingPaperwork, setSavingPaperwork] = useState(false);
 	const sceneRef = useRef<CadSceneSnapshot | null>(null);
 	const selectionQueue = useRef<Promise<void>>(Promise.resolve());
 
@@ -123,6 +132,20 @@ export function CadApp() {
 			sceneUnlisten?.();
 			selectionUnlisten?.();
 		};
+	}, []);
+
+	useEffect(() => {
+		documentSession
+			.current()
+			.then((summary) => {
+				setDocumentInfo(summary);
+				if (summary)
+					setPaperwork({
+						lightingDesigner: summary.lightingDesigner,
+						showVersion: summary.showVersion,
+					});
+			})
+			.catch((reason) => setError(String(reason)));
 	}, []);
 
 	useEffect(() => {
@@ -225,11 +248,30 @@ export function CadApp() {
 		const pdfPath = path.toLowerCase().endsWith(".pdf") ? path : `${path}.pdf`;
 		setExporting(true);
 		try {
-			await cadSession.exportPdf(pdfPath, buildCadPdf(scene, selected));
+			await cadSession.exportPdf(
+				pdfPath,
+				buildCadPdf(scene, selected, printInfo(documentInfo, paperwork)),
+			);
 		} catch (reason) {
 			setError(String(reason));
 		} finally {
 			setExporting(false);
+		}
+	}
+
+	async function savePaperwork() {
+		setSavingPaperwork(true);
+		try {
+			const summary = await documentSession.savePaperwork(paperwork);
+			setDocumentInfo(summary);
+			setPaperwork({
+				lightingDesigner: summary.lightingDesigner,
+				showVersion: summary.showVersion,
+			});
+		} catch (reason) {
+			setError(String(reason));
+		} finally {
+			setSavingPaperwork(false);
 		}
 	}
 
@@ -329,6 +371,7 @@ export function CadApp() {
 							onAddPrintPage={addPrintPage}
 							onSelectPrintPage={setSelectedPrintPageId}
 							onChangePrintPage={changePrintPage}
+							documentInfo={printInfo(documentInfo, paperwork)}
 						/>
 					) : (
 						<div className="cad-loading">Loading the canonical rig…</div>
@@ -340,6 +383,60 @@ export function CadApp() {
 							<h2>Prints</h2>
 							<span>A4 landscape</span>
 						</header>
+						<section
+							className="cad-print-project-info"
+							aria-label="Project information"
+						>
+							<h3>Project information</h3>
+							<label>
+								Lighting designer
+								<input
+									value={paperwork.lightingDesigner}
+									onChange={(event) =>
+										setPaperwork((current) => ({
+											...current,
+											lightingDesigner: event.currentTarget.value,
+										}))
+									}
+								/>
+							</label>
+							<label>
+								Show version
+								<input
+									value={paperwork.showVersion}
+									onChange={(event) =>
+										setPaperwork((current) => ({
+											...current,
+											showVersion: event.currentTarget.value,
+										}))
+									}
+								/>
+							</label>
+							<dl>
+								<div>
+									<dt>Show file</dt>
+									<dd>{documentInfo?.fileName || "—"}</dd>
+								</div>
+								<div>
+									<dt>Last saved</dt>
+									<dd>{formatLastSaved(documentInfo?.lastSavedAt)}</dd>
+								</div>
+								<div>
+									<dt>Fixtures</dt>
+									<dd>{documentInfo?.fixtureCount ?? 0}</dd>
+								</div>
+								<div>
+									<dt>Universes used</dt>
+									<dd>{documentInfo?.universeCount ?? 0}</dd>
+								</div>
+							</dl>
+							<Button
+								disabled={savingPaperwork}
+								onClick={() => void savePaperwork()}
+							>
+								{savingPaperwork ? "Saving…" : "Save project info"}
+							</Button>
+						</section>
 						<div className="cad-print-list">
 							{printPages.length ? (
 								printPages.map((page, index) => (
@@ -470,6 +567,7 @@ interface CadTileProps {
 	onAddPrintPage(tile: ViewportTile): void;
 	onSelectPrintPage(id: string): void;
 	onChangePrintPage(id: string, change: Partial<CadPrintPage>): void;
+	documentInfo: CadPrintDocumentInfo;
 }
 
 interface ClosePaneAction {
@@ -612,9 +710,28 @@ function CadTile(props: CadTileProps) {
 				selectedPrintPageId={props.selectedPrintPageId}
 				onSelectPrintPage={props.onSelectPrintPage}
 				onChangePrintPage={props.onChangePrintPage}
+				documentInfo={props.documentInfo}
 			/>
 		</section>
 	);
+}
+
+function printInfo(
+	summary: DocumentSummary | null,
+	draft: { lightingDesigner: string; showVersion: string },
+): CadPrintDocumentInfo {
+	return {
+		showFileName: summary?.fileName ?? "Untitled.show",
+		lightingDesigner: draft.lightingDesigner,
+		showVersion: draft.showVersion,
+		lastSavedAt: summary?.lastSavedAt ?? 0,
+		fixtureCount: summary?.fixtureCount ?? 0,
+		universeCount: summary?.universeCount ?? 0,
+	};
+}
+
+function formatLastSaved(seconds?: number) {
+	return seconds ? new Date(seconds * 1000).toLocaleString() : "—";
 }
 
 function restoreSettings(): CadSettings {

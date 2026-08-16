@@ -10,14 +10,14 @@ use light_application::MvrImportResolution;
 use light_fixture::FixtureLibrary;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
-use viz_document::PlanningDocument;
 use viz_document::{
     LiveDmxInputs, ManagedFallbackReference, MediaLayoutOutcome, MediaLayoutSnapshot,
     MediaObjectIntent,
 };
+use viz_document::{PaperworkMetadata, PlanningDocument};
 use viz_planning::SceneSource;
 
 /// The open document, shared with the visualizer.
@@ -39,6 +39,18 @@ pub struct DocumentSummary {
     pub name: String,
     pub path: String,
     pub fixture_count: usize,
+    pub file_name: String,
+    pub lighting_designer: String,
+    pub show_version: String,
+    pub last_saved_at: u64,
+    pub universe_count: usize,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaperworkInput {
+    pub lighting_designer: String,
+    pub show_version: String,
 }
 
 /// One fixture profile the operator can patch from.
@@ -144,11 +156,38 @@ fn summarize(document: &PlanningDocument) -> Answer<DocumentSummary> {
     let snapshot = document
         .patch_snapshot()
         .map_err(|error| error.to_string())?;
+    let paperwork = document
+        .paperwork_metadata()
+        .map_err(|error| error.to_string())?;
+    let universes: HashSet<u16> = snapshot
+        .fixtures
+        .iter()
+        .flat_map(|fixture| fixture.patch.split_patches.iter())
+        .filter_map(|split| split.universe)
+        .collect();
+    let last_saved_at = std::fs::metadata(document.path())
+        .and_then(|metadata| metadata.modified())
+        .and_then(|time| {
+            time.duration_since(std::time::UNIX_EPOCH)
+                .map_err(std::io::Error::other)
+        })
+        .map(|duration| duration.as_secs())
+        .unwrap_or_default();
     Ok(DocumentSummary {
         show_id: document.show_id().0.to_string(),
         name: document.name().map_err(|error| error.to_string())?,
         path: document.path().display().to_string(),
         fixture_count: snapshot.fixtures.len(),
+        file_name: document
+            .path()
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or_default()
+            .to_owned(),
+        lighting_designer: paperwork.lighting_designer,
+        show_version: paperwork.show_version,
+        last_saved_at,
+        universe_count: universes.len(),
     })
 }
 
@@ -178,6 +217,22 @@ pub fn open_document(
 #[tauri::command]
 pub fn document_summary(session: tauri::State<'_, Session>) -> Answer<Option<DocumentSummary>> {
     session.source.with(summarize).transpose()
+}
+
+#[tauri::command]
+pub fn save_document_paperwork(
+    session: tauri::State<'_, Session>,
+    paperwork: PaperworkInput,
+) -> Answer<DocumentSummary> {
+    session.change(|document| {
+        document
+            .save_paperwork_metadata(&PaperworkMetadata {
+                lighting_designer: paperwork.lighting_designer,
+                show_version: paperwork.show_version,
+            })
+            .map_err(|error| error.to_string())?;
+        summarize(document)
+    })
 }
 
 /// Portable Art-Net and sACN receiver intent for the current planning document.

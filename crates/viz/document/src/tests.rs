@@ -3,7 +3,7 @@
 //! These prove the claim the application rests on: a planning document patches a show with the
 //! desk's own semantics and produces an ordinary show file, without a desk running.
 
-use crate::PlanningDocument;
+use crate::{PaperworkMetadata, PlanningDocument};
 use light_application::{PatchFixtureCandidate, PatchFixturesCommand};
 use light_core::{FixtureId, Revision, ShowId};
 use light_fixture::{
@@ -114,6 +114,30 @@ fn a_new_document_starts_with_an_empty_patch() {
     let rig = rig("empty");
     let snapshot = rig.document.patch_snapshot().expect("snapshot");
     assert!(snapshot.fixtures.is_empty());
+}
+
+#[test]
+fn legacy_documents_default_to_blank_paperwork_and_round_trip_authored_values() {
+    let rig = rig("paperwork");
+    assert_eq!(
+        rig.document.paperwork_metadata().expect("legacy metadata"),
+        PaperworkMetadata::default()
+    );
+
+    rig.document
+        .save_paperwork_metadata(&PaperworkMetadata {
+            lighting_designer: "  Alex Designer  ".into(),
+            show_version: "  2.4  ".into(),
+        })
+        .expect("save paperwork");
+    let reopened = PlanningDocument::open(&rig.path).expect("reopen document");
+    assert_eq!(
+        reopened.paperwork_metadata().expect("saved metadata"),
+        PaperworkMetadata {
+            lighting_designer: "Alex Designer".into(),
+            show_version: "2.4".into(),
+        }
+    );
 }
 
 #[test]

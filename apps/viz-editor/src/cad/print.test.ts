@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildCadPdf } from "./print";
+import {
+	buildCadPdf,
+	printGridMillimetres,
+	printScaleDenominator,
+} from "./print";
 import type { CadPrintPage, CadSceneSnapshot } from "./types";
 
 const scene: CadSceneSnapshot = {
@@ -42,13 +46,30 @@ const page = (id: string): CadPrintPage => ({
 
 describe("CAD PDF export", () => {
 	it("writes one vector page per selected print outline", () => {
-		const bytes = buildCadPdf(scene, [page("Page 1"), page("Page 2")]);
+		const bytes = buildCadPdf(scene, [page("Page 1"), page("Page 2")], {
+			showFileName: "Festival.show",
+			lightingDesigner: "Alex Designer",
+			showVersion: "2.4",
+			lastSavedAt: 1_700_000_000,
+			fixtureCount: 128,
+			universeCount: 4,
+		});
 		const pdf = new TextDecoder().decode(bytes);
 		expect(pdf.startsWith("%PDF-1.4")).toBe(true);
 		expect(pdf).toContain("/Count 2");
 		expect(pdf.match(/\/Type \/Page\b/g)).toHaveLength(2);
 		expect(pdf).toContain(" re W n");
+		expect(pdf).toContain("ToskLight Previs");
+		expect(pdf).toContain("Festival.show");
+		expect(pdf).toContain("Alex Designer");
+		expect(pdf).toContain("128 fixtures / 4 universes");
+		expect(pdf).toContain("/BaseFont /Helvetica-Bold");
 		expect(pdf).toMatch(/\d+(?:\.\d+)? \d+(?:\.\d+)? m .* l/);
 		expect(pdf.endsWith("%%EOF\n")).toBe(true);
+	});
+
+	it("derives a stable drawing scale and useful grid from each outline", () => {
+		expect(printScaleDenominator(page("Scale"))).toBeGreaterThan(1);
+		expect(printGridMillimetres(page("Grid"))).toBe(500);
 	});
 });
