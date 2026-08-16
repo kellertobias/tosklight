@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import {
+	entityPlanGeometry,
+	type PlanGeometry,
+	type PlanPoint,
+} from "./projection";
 import type {
+	CadDrawing,
 	CadEntity,
 	CadViewDirection,
 	SelectionChange,
@@ -10,6 +16,7 @@ import { planeDelta, projectPoint, viewAxes } from "./types";
 
 interface CadViewportProps {
 	entities: readonly CadEntity[];
+	drawings: readonly CadDrawing[];
 	selectedIds: readonly string[];
 	view: CadViewDirection;
 	rotationQuarterTurns: number;
@@ -42,6 +49,7 @@ type MoveAxis = "plane" | "horizontal" | "vertical";
 
 export function CadViewport({
 	entities,
+	drawings,
 	selectedIds,
 	view,
 	rotationQuarterTurns,
@@ -57,6 +65,10 @@ export function CadViewport({
 	const [guide, setGuide] = useState<MoveAxis | null>(null);
 	const [selectionBox, setSelectionBox] = useState<SelectionBox | null>(null);
 	const selected = useMemo(() => new Set(selectedIds), [selectedIds]);
+	const drawingById = useMemo(
+		() => new Map(drawings.map((drawing) => [drawing.id, drawing])),
+		[drawings],
+	);
 
 	useEffect(() => {
 		if (!canvas.current) return;
@@ -72,6 +84,7 @@ export function CadViewport({
 	useEffect(() => {
 		renderer.current?.draw(
 			entities,
+			drawingById,
 			selected,
 			view,
 			rotationQuarterTurns,
@@ -82,6 +95,7 @@ export function CadViewport({
 		);
 	}, [
 		entities,
+		drawingById,
 		selected,
 		view,
 		rotationQuarterTurns,
@@ -102,21 +116,33 @@ export function CadViewport({
 
 	function pick(clientX: number, clientY: number): CadEntity | null {
 		const point = screenToPlane(clientX, clientY);
+		const ordered = [...entities].sort(
+			(left, right) => viewDepth(right, view) - viewDepth(left, view),
+		);
 		let best: { entity: CadEntity; distance: number } | null = null;
-		for (const entity of entities) {
+		for (const entity of ordered) {
 			const projected = projectPoint(
 				entity.positionMillimetres,
 				view,
 				rotationQuarterTurns,
 			);
+			const geometry = worldGeometry(
+				entity,
+				entityPlanGeometry(entity, drawingById.get(entity.drawingId), view),
+				view,
+				rotationQuarterTurns,
+			);
+			if (
+				geometry.triangles.some((triangle) =>
+					pointInTriangle(point, triangle.points),
+				)
+			)
+				return entity;
 			const distance = Math.hypot(
 				projected[0] - point[0],
 				projected[1] - point[1],
 			);
-			const threshold = Math.max(
-				180,
-				Math.min(800, entity.sizeMillimetres[0] / 2),
-			);
+			const threshold = Math.max(90, 8 / camera.zoom);
 			if (distance <= threshold && (!best || distance < best.distance)) {
 				best = { entity, distance };
 			}
@@ -271,6 +297,8 @@ export function CadViewport({
 }
 
 class LineRenderer {
+	private readonly geometryCache = new Map<string, PlanGeometry>();
+
 	private constructor(
 		private readonly canvas: HTMLCanvasElement,
 		private readonly gl: WebGL2RenderingContext,
@@ -318,6 +346,7 @@ class LineRenderer {
 
 	draw(
 		entities: readonly CadEntity[],
+		drawings: ReadonlyMap<string, CadDrawing>,
 		selected: ReadonlySet<string>,
 		view: CadViewDirection,
 		rotationQuarterTurns: number,
@@ -331,24 +360,66 @@ class LineRenderer {
 		gl.viewport(0, 0, this.canvas.width, this.canvas.height);
 		gl.clearColor(0.018, 0.024, 0.032, 1);
 		gl.clear(gl.COLOR_BUFFER_BIT);
-		const vertices: number[] = [];
+		const fillVertices: number[] = [];
+		const lineVertices: number[] = [];
+		const vertex = (
+			vertices: number[],
+			point: PlanPoint,
+			color: [number, number, number],
+		) => {
+			vertices.push(
+				((point[0] + camera.pan[0]) * camera.zoom * 2) /
+					this.canvas.clientWidth,
+				((point[1] + camera.pan[1]) * camera.zoom * 2) /
+					this.canvas.clientHeight,
+				...color,
+			);
+		};
 		const line = (
 			a: [number, number],
 			b: [number, number],
 			color: [number, number, number],
 		) => {
-			for (const point of [a, b]) {
-				vertices.push(
-					((point[0] + camera.pan[0]) * camera.zoom * 2) /
-						this.canvas.clientWidth,
-					((point[1] + camera.pan[1]) * camera.zoom * 2) /
-						this.canvas.clientHeight,
-					...color,
-				);
-			}
+			vertex(lineVertices, a, color);
+			vertex(lineVertices, b, color);
 		};
-		for (const entity of entities) {
+		const ordered = [...entities].sort(
+			(left, right) => viewDepth(left, view) - viewDepth(right, view),
+		);
+		for (const entity of ordered) {
 			const active = selected.has(entity.id);
+			const drawing = drawings.get(entity.drawingId);
+			const key = `${entity.drawingId}:${view}:${entity.sizeMillimetres.join(",")}`;
+			let geometry = this.geometryCache.get(key);
+			if (!geometry) {
+				geometry = entityPlanGeometry(entity, drawing, view);
+				this.geometryCache.set(key, geometry);
+			}
+			const projected = worldGeometry(
+				entity,
+				geometry,
+				view,
+				rotationQuarterTurns,
+				active ? preview : [0, 0],
+			);
+			for (const triangle of projected.triangles) {
+				const color = active ? selectedColor(triangle.color) : triangle.color;
+				for (const point of triangle.points) vertex(fillVertices, point, color);
+			}
+			const outlineColor: [number, number, number] = active
+				? [0.02, 0.82, 0.98]
+				: entity.kind === "venue"
+					? [0.56, 0.62, 0.68]
+					: [0.8, 0.84, 0.88];
+			for (const outline of projected.outlines) {
+				for (let index = 0; index < outline.length; index++) {
+					line(
+						outline[index],
+						outline[(index + 1) % outline.length],
+						outlineColor,
+					);
+				}
+			}
 			const centre = projectPoint(
 				entity.positionMillimetres,
 				view,
@@ -358,22 +429,6 @@ class LineRenderer {
 				centre[0] += preview[0];
 				centre[1] += preview[1];
 			}
-			const [width, height] = projectedSize(entity, view, rotationQuarterTurns);
-			const halfX = Math.max(90, width / 2);
-			const halfY = Math.max(90, height / 2);
-			const color: [number, number, number] = active
-				? [0.02, 0.82, 0.98]
-				: entity.kind === "venue"
-					? [0.56, 0.62, 0.68]
-					: [0.92, 0.94, 0.97];
-			const corners: [number, number][] = [
-				[centre[0] - halfX, centre[1] - halfY],
-				[centre[0] + halfX, centre[1] - halfY],
-				[centre[0] + halfX, centre[1] + halfY],
-				[centre[0] - halfX, centre[1] + halfY],
-			];
-			for (let index = 0; index < 4; index++)
-				line(corners[index], corners[(index + 1) % 4], color);
 			if (entity.kind !== "venue") {
 				const direction = projectPoint(
 					entity.outputDirection.map((value) => value * 420) as [
@@ -387,7 +442,7 @@ class LineRenderer {
 				line(
 					centre,
 					[centre[0] + direction[0], centre[1] + direction[1]],
-					color,
+					outlineColor,
 				);
 			}
 		}
@@ -453,14 +508,99 @@ class LineRenderer {
 		}
 		gl.useProgram(this.program);
 		gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
-		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.DYNAMIC_DRAW);
 		const position = gl.getAttribLocation(this.program, "position");
 		const color = gl.getAttribLocation(this.program, "color");
 		gl.enableVertexAttribArray(position);
 		gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 20, 0);
 		gl.enableVertexAttribArray(color);
 		gl.vertexAttribPointer(color, 3, gl.FLOAT, false, 20, 8);
-		gl.drawArrays(gl.LINES, 0, vertices.length / 5);
+		gl.bufferData(
+			gl.ARRAY_BUFFER,
+			new Float32Array(fillVertices),
+			gl.DYNAMIC_DRAW,
+		);
+		gl.drawArrays(gl.TRIANGLES, 0, fillVertices.length / 5);
+		gl.bufferData(
+			gl.ARRAY_BUFFER,
+			new Float32Array(lineVertices),
+			gl.DYNAMIC_DRAW,
+		);
+		gl.drawArrays(gl.LINES, 0, lineVertices.length / 5);
+	}
+}
+
+function worldGeometry(
+	entity: CadEntity,
+	geometry: PlanGeometry,
+	view: CadViewDirection,
+	rotationQuarterTurns: number,
+	offset: readonly [number, number] = [0, 0],
+): PlanGeometry {
+	const centre = projectPoint(
+		entity.positionMillimetres,
+		view,
+		rotationQuarterTurns,
+	);
+	const angle =
+		view === "top_down"
+			? ((-entity.rotationDegrees[2] + rotationQuarterTurns * 90) * Math.PI) /
+				180
+			: 0;
+	const cosine = Math.cos(angle);
+	const sine = Math.sin(angle);
+	const transform = (point: PlanPoint): PlanPoint => [
+		centre[0] + point[0] * cosine - point[1] * sine + offset[0],
+		centre[1] + point[0] * sine + point[1] * cosine + offset[1],
+	];
+	return {
+		...geometry,
+		triangles: geometry.triangles.map((triangle) => ({
+			...triangle,
+			points: triangle.points.map(transform) as [
+				PlanPoint,
+				PlanPoint,
+				PlanPoint,
+			],
+		})),
+		outlines: geometry.outlines.map((outline) => outline.map(transform)),
+	};
+}
+
+function pointInTriangle(
+	point: PlanPoint,
+	triangle: [PlanPoint, PlanPoint, PlanPoint],
+): boolean {
+	const [a, b, c] = triangle;
+	const area = (first: PlanPoint, second: PlanPoint, third: PlanPoint) =>
+		(first[0] - third[0]) * (second[1] - third[1]) -
+		(second[0] - third[0]) * (first[1] - third[1]);
+	const total = area(a, b, c);
+	if (Math.abs(total) < 0.0001) return false;
+	const first = area(point, b, c) / total;
+	const second = area(a, point, c) / total;
+	const third = 1 - first - second;
+	return first >= 0 && second >= 0 && third >= 0;
+}
+
+function selectedColor(
+	color: readonly [number, number, number],
+): [number, number, number] {
+	const lightness = (color[0] + color[1] + color[2]) / 3;
+	return [0.01, 0.45 + lightness * 0.42, 0.58 + lightness * 0.36];
+}
+
+function viewDepth(entity: CadEntity, view: CadViewDirection): number {
+	switch (view) {
+		case "top_down":
+			return entity.positionMillimetres[2];
+		case "left_to_right":
+			return -entity.positionMillimetres[0];
+		case "right_to_left":
+			return entity.positionMillimetres[0];
+		case "front_to_back":
+			return -entity.positionMillimetres[1];
+		case "back_to_front":
+			return entity.positionMillimetres[1];
 	}
 }
 
@@ -604,24 +744,4 @@ function shader(gl: WebGL2RenderingContext, type: number, source: string) {
 	gl.shaderSource(value, source);
 	gl.compileShader(value);
 	return gl.getShaderParameter(value, gl.COMPILE_STATUS) ? value : null;
-}
-
-function projectedSize(
-	entity: CadEntity,
-	view: CadViewDirection,
-	rotationQuarterTurns: number,
-): [number, number] {
-	const [width, depth, height] = entity.sizeMillimetres;
-	switch (view) {
-		case "top_down":
-			return Math.abs(rotationQuarterTurns) % 2 === 1
-				? [depth, width]
-				: [width, depth];
-		case "left_to_right":
-		case "right_to_left":
-			return [depth, height];
-		case "front_to_back":
-		case "back_to_front":
-			return [width, height];
-	}
 }

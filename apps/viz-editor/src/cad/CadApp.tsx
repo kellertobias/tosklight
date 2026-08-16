@@ -57,12 +57,18 @@ export function CadApp() {
 					const entities = new Map(
 						current.entities.map((entity) => [entity.id, entity]),
 					);
+					const drawings = new Map(
+						current.drawings.map((drawing) => [drawing.id, drawing]),
+					);
 					for (const id of delta.removedIds) entities.delete(id);
 					for (const entity of delta.upserted) entities.set(entity.id, entity);
+					for (const drawing of delta.drawings)
+						drawings.set(drawing.id, drawing);
 					const next = {
 						...current,
 						sceneRevision: delta.sceneRevision,
 						entities: [...entities.values()],
+						drawings: [...drawings.values()],
 						attachments: delta.attachments,
 					};
 					sceneRef.current = next;
@@ -367,6 +373,7 @@ function CadTile(props: CadTileProps) {
 			))}
 			<CadViewport
 				entities={props.scene.entities}
+				drawings={props.scene.drawings}
 				selectedIds={props.scene.selectedIds}
 				view={node.view}
 				rotationQuarterTurns={node.rotationQuarterTurns}

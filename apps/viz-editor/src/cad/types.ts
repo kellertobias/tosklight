@@ -10,10 +10,26 @@ export interface CadEntity {
 	name: string;
 	fixtureNumber: number | null;
 	kind: string;
+	fixtureType: string;
+	drawingId: string;
 	positionMillimetres: [number, number, number];
 	rotationDegrees: [number, number, number];
 	sizeMillimetres: [number, number, number];
 	outputDirection: [number, number, number];
+}
+
+export type CadProjectionView = "top" | "left" | "right" | "front" | "back";
+
+export interface CadProjection {
+	view: CadProjectionView;
+	svg: string;
+	viewBoxMillimetres: [number, number, number, number];
+	originMillimetres: [number, number];
+}
+
+export interface CadDrawing {
+	id: string;
+	projections: CadProjection[];
 }
 
 export interface EntityTransform {
@@ -34,6 +50,7 @@ export interface CadSceneSnapshot {
 	sceneRevision: number;
 	selectionRevision: number;
 	entities: CadEntity[];
+	drawings: CadDrawing[];
 	selectedIds: string[];
 	attachments: RigAttachment[];
 }
@@ -41,6 +58,7 @@ export interface CadSceneSnapshot {
 export interface CadSceneDelta {
 	sceneRevision: number;
 	upserted: CadEntity[];
+	drawings: CadDrawing[];
 	removedIds: string[];
 	attachments: RigAttachment[];
 }

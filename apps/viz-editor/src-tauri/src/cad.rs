@@ -6,6 +6,7 @@
 
 use crate::contract::{FixtureDto, MutationDto};
 use crate::session::Session;
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 use light_application::PatchSnapshot;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
@@ -20,6 +21,7 @@ pub const SELECTION_DELTA_EVENT: &str = "cad-selection-delta";
 pub struct CadState {
     selection: Mutex<SelectionState>,
     history: Mutex<History>,
+    drawings: Mutex<HashMap<String, Option<CadDrawing>>>,
 }
 
 #[derive(Default)]
@@ -57,10 +59,28 @@ pub struct CadEntity {
     pub name: String,
     pub fixture_number: Option<u32>,
     pub kind: String,
+    pub fixture_type: String,
+    pub drawing_id: String,
     pub position_millimetres: [i32; 3],
     pub rotation_degrees: [f32; 3],
     pub size_millimetres: [f32; 3],
     pub output_direction: [f32; 3],
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CadProjection {
+    pub view: String,
+    pub svg: String,
+    pub view_box_millimetres: [f32; 4],
+    pub origin_millimetres: [f32; 2],
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CadDrawing {
+    pub id: String,
+    pub projections: Vec<CadProjection>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -79,6 +99,7 @@ pub struct CadSceneSnapshot {
     pub scene_revision: u64,
     pub selection_revision: u64,
     pub entities: Vec<CadEntity>,
+    pub drawings: Vec<CadDrawing>,
     pub selected_ids: Vec<Uuid>,
     pub attachments: Vec<RigAttachment>,
 }
@@ -88,6 +109,7 @@ pub struct CadSceneSnapshot {
 pub struct CadSceneDelta {
     pub scene_revision: u64,
     pub upserted: Vec<CadEntity>,
+    pub drawings: Vec<CadDrawing>,
     pub removed_ids: Vec<Uuid>,
     pub attachments: Vec<RigAttachment>,
 }
@@ -375,6 +397,7 @@ pub fn emit_scene_delta(
         CadSceneDelta {
             scene_revision,
             upserted: current.entities,
+            drawings: current.drawings,
             removed_ids,
             attachments: current.attachments,
         },
@@ -391,6 +414,7 @@ fn snapshot(session: &Session, cad: &CadState) -> Result<CadSceneSnapshot, Strin
         scene_revision: patch.patch_revision.value(),
         selection_revision: selection.revision,
         entities: entities(&patch),
+        drawings: drawings(&patch, cad),
         selected_ids: selection.ids.clone(),
         attachments: attachments(session)?,
     })
@@ -428,6 +452,11 @@ fn entities(snapshot: &PatchSnapshot) -> Vec<CadEntity> {
                 name: fixture.patch.name.clone(),
                 fixture_number: fixture.patch.fixture_number,
                 kind,
+                fixture_type: fixture_type.to_owned(),
+                drawing_id: profile.map_or_else(
+                    || format!("unknown:{}", fixture.patch.fixture_id.0),
+                    |profile| drawing_id(profile),
+                ),
                 position_millimetres: [
                     fixture.patch.location.x,
                     fixture.patch.location.y,
@@ -443,6 +472,59 @@ fn entities(snapshot: &PatchSnapshot) -> Vec<CadEntity> {
             }
         })
         .collect()
+}
+
+fn drawing_id(profile: &light_application::PatchProfileRevisionProjection) -> String {
+    format!(
+        "{}:{}:{}",
+        profile.profile_id.0, profile.profile_revision, profile.content_digest
+    )
+}
+
+fn drawings(snapshot: &PatchSnapshot, cad: &CadState) -> Vec<CadDrawing> {
+    let mut cache = cad.drawings.lock();
+    snapshot
+        .profile_revisions
+        .iter()
+        .filter_map(|stored| {
+            let id = drawing_id(stored);
+            cache
+                .entry(id.clone())
+                .or_insert_with(|| drawing(&id, &stored.profile_snapshot))
+                .clone()
+        })
+        .collect()
+}
+
+fn drawing(id: &str, snapshot: &serde_json::Value) -> Option<CadDrawing> {
+    let profile = serde_json::from_value::<light_fixture::FixtureProfile>(snapshot.clone()).ok()?;
+    let generated;
+    let projections = if let Some(projections) = profile.projection_assets.as_ref() {
+        projections
+    } else {
+        generated = viz_project::generate_profile_projections(&profile).ok()?;
+        &generated
+    };
+    let projections = projections
+        .views
+        .iter()
+        .filter_map(|projection| {
+            let encoded = projection
+                .artwork_asset
+                .strip_prefix("data:image/svg+xml;base64,")?;
+            let svg = String::from_utf8(STANDARD.decode(encoded).ok()?).ok()?;
+            Some(CadProjection {
+                view: projection.view.wire().to_owned(),
+                svg,
+                view_box_millimetres: projection.view_box_millimetres,
+                origin_millimetres: projection.origin_millimetres,
+            })
+        })
+        .collect::<Vec<_>>();
+    (!projections.is_empty()).then(|| CadDrawing {
+        id: id.to_owned(),
+        projections,
+    })
 }
 
 fn dimensions(profile: &serde_json::Value) -> [f32; 3] {
@@ -703,7 +785,7 @@ fn snap_transforms(session: &Session, moved: &mut [EntityTransform]) -> Result<(
 
 #[cfg(test)]
 mod tests {
-    use super::{EntityTransform, apply_transforms, output_direction};
+    use super::{EntityTransform, apply_transforms, drawing, output_direction};
     use crate::session::Session;
     use light_application::{PatchFixtureCandidate, PatchFixturesCommand};
     use light_core::{FixtureId, Revision};
@@ -726,6 +808,27 @@ mod tests {
         });
         assert!((direction[0] - 1.0).abs() < 0.0001);
         assert!(direction[1].abs() < 0.0001);
+    }
+
+    #[test]
+    fn cad_drawing_generates_all_model_views_when_a_package_has_no_cached_projection() {
+        let package = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../assets/fixture-library/robe--robin-dls-profile.toskfixture");
+        let mut profile = light_fixture::read_fixture_package(&std::fs::read(package).unwrap())
+            .expect("fixture package reads");
+        profile.projection_assets = None;
+
+        let drawing = drawing("robe-dls:1", &serde_json::to_value(profile).unwrap())
+            .expect("embedded model produces a CAD drawing");
+
+        assert_eq!(drawing.projections.len(), 5);
+        assert!(
+            drawing
+                .projections
+                .iter()
+                .all(|projection| projection.svg.matches("<path").count() > 10),
+            "each direction contains representative opaque model surfaces"
+        );
     }
 
     fn transform_session() -> (Session, PathBuf, [Uuid; 2]) {

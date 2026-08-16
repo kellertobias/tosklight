@@ -17,12 +17,15 @@ const snapshot = {
 	selectionRevision: 4,
 	selectedIds: [fixtureId],
 	attachments: [],
+	drawings: [],
 	entities: [
 		{
 			id: fixtureId,
 			name: "Profile Stage 1",
 			fixtureNumber: 101,
 			kind: "profile",
+			fixtureType: "moving_head_profile",
+			drawingId: "profile:1",
 			positionMillimetres: [0, 0, 4000],
 			rotationDegrees: [0, 0, 0],
 			sizeMillimetres: [400, 500, 700],

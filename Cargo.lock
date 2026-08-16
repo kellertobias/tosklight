@@ -8142,6 +8142,7 @@ dependencies = [
 name = "viz-editor"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "light-application",
  "light-core",
  "light-discovery",
@@ -8160,6 +8161,7 @@ dependencies = [
  "uuid",
  "viz-document",
  "viz-planning",
+ "viz-project",
  "viz-scene",
 ]
 

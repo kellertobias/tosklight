@@ -1,0 +1,489 @@
+import type {
+	CadDrawing,
+	CadEntity,
+	CadProjectionView,
+	CadViewDirection,
+} from "./types";
+
+export type PlanPoint = [number, number];
+
+export interface PlanTriangle {
+	points: [PlanPoint, PlanPoint, PlanPoint];
+	color: [number, number, number];
+}
+
+export interface PlanGeometry {
+	source: "model" | "typed" | "unknown";
+	triangles: PlanTriangle[];
+	outlines: PlanPoint[][];
+}
+
+interface Polygon {
+	points: PlanPoint[];
+	color: [number, number, number];
+}
+
+const BASE: [number, number, number] = [0.25, 0.28, 0.32];
+const BODY: [number, number, number] = [0.38, 0.42, 0.47];
+const DETAIL: [number, number, number] = [0.57, 0.61, 0.66];
+const DARK: [number, number, number] = [0.13, 0.15, 0.18];
+
+export function projectionViewForCad(
+	view: CadViewDirection,
+): CadProjectionView {
+	switch (view) {
+		case "top_down":
+			return "top";
+		case "left_to_right":
+			return "left";
+		case "right_to_left":
+			return "right";
+		case "front_to_back":
+			return "front";
+		case "back_to_front":
+			return "back";
+	}
+}
+
+export function entityPlanGeometry(
+	entity: CadEntity,
+	drawing: CadDrawing | undefined,
+	view: CadViewDirection,
+): PlanGeometry {
+	const projection = drawing?.projections.find(
+		(candidate) => candidate.view === projectionViewForCad(view),
+	);
+	if (projection) {
+		const parsed = parseProjection(
+			projection.svg,
+			projection.originMillimetres,
+		);
+		if (parsed.triangles.length) return parsed;
+	}
+	return typedGeometry(entity, view);
+}
+
+export function parseProjection(
+	svg: string,
+	origin: readonly [number, number] = [0, 0],
+): PlanGeometry {
+	const triangles: PlanTriangle[] = [];
+	const pathPattern = /<path\b([^>]*)\/?\s*>/g;
+	for (const match of svg.matchAll(pathPattern)) {
+		const attributes = match[1];
+		const data = attribute(attributes, "d");
+		if (!data) continue;
+		const numbers = data.match(/-?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?/gi);
+		if (!numbers || numbers.length < 6 || numbers.length % 2 !== 0) continue;
+		const points: PlanPoint[] = [];
+		for (let index = 0; index < numbers.length; index += 2) {
+			points.push([
+				Number(numbers[index]) - origin[0],
+				-(Number(numbers[index + 1]) - origin[1]),
+			]);
+		}
+		const color = parseHex(attribute(attributes, "fill") ?? "#66707a");
+		for (let index = 1; index < points.length - 1; index++) {
+			triangles.push({
+				points: [points[0], points[index], points[index + 1]],
+				color,
+			});
+		}
+	}
+	return { source: "model", triangles, outlines: [] };
+}
+
+function attribute(source: string, name: string): string | null {
+	return source.match(new RegExp(`\\s${name}="([^"]*)"`))?.[1] ?? null;
+}
+
+function parseHex(value: string): [number, number, number] {
+	const match = /^#([0-9a-f]{6})$/i.exec(value);
+	if (!match) return DETAIL;
+	return [0, 2, 4].map(
+		(offset) => Number.parseInt(match[1].slice(offset, offset + 2), 16) / 255,
+	) as [number, number, number];
+}
+
+function typedGeometry(
+	entity: CadEntity,
+	view: CadViewDirection,
+): PlanGeometry {
+	const type =
+		`${entity.fixtureType} ${entity.kind} ${entity.name}`.toLowerCase();
+	const [width, depth, height] = entity.sizeMillimetres;
+	const horizontal = view === "top_down" ? width : depth;
+	const vertical = view === "top_down" ? depth : height;
+	let polygons: Polygon[];
+
+	if (/truss|pipe grid|pipe$/.test(type)) {
+		polygons = truss(horizontal, vertical, view === "top_down");
+	} else if (/stage element|riser|stage deck|stairs/.test(type)) {
+		polygons = stage(horizontal, vertical, view === "top_down");
+	} else if (/curtain|drape/.test(type)) {
+		polygons = curtain(horizontal, vertical);
+	} else if (/crowd/.test(type)) {
+		polygons = crowd(horizontal, vertical);
+	} else if (/sunstrip|pixel bar|light bar|matrix/.test(type)) {
+		polygons = bar(horizontal, vertical);
+	} else if (/media.server|media_server/.test(type)) {
+		polygons = mediaServer(horizontal, vertical);
+	} else if (/laser/.test(type)) {
+		polygons = laser(horizontal, vertical);
+	} else if (/spark|flame|effect/.test(type)) {
+		polygons = effect(horizontal, vertical, /flame/.test(type));
+	} else if (/moving|wash|beam|spot/.test(type)) {
+		polygons = movingLight(horizontal, vertical, view === "top_down");
+	} else if (/profile|fresnel|par|conventional|dimmer|acl|blinder/.test(type)) {
+		polygons = conventional(horizontal, vertical, view === "top_down");
+	} else if (entity.fixtureType && entity.fixtureType !== "fixture") {
+		polygons = generalFixture(horizontal, vertical);
+	} else if (entity.kind === "venue") {
+		polygons = venueProp(horizontal, vertical);
+	} else {
+		return unknownBox(horizontal, vertical);
+	}
+	return fromPolygons("typed", polygons);
+}
+
+function fromPolygons(
+	source: PlanGeometry["source"],
+	polygons: Polygon[],
+): PlanGeometry {
+	const triangles: PlanTriangle[] = [];
+	for (const polygon of polygons) {
+		for (let index = 1; index < polygon.points.length - 1; index++) {
+			triangles.push({
+				points: [
+					polygon.points[0],
+					polygon.points[index],
+					polygon.points[index + 1],
+				],
+				color: polygon.color,
+			});
+		}
+	}
+	return {
+		source,
+		triangles,
+		outlines: polygons.map((polygon) => polygon.points),
+	};
+}
+
+function rect(
+	x: number,
+	y: number,
+	width: number,
+	height: number,
+	color: Polygon["color"],
+): Polygon {
+	return {
+		color,
+		points: [
+			[x, y],
+			[x + width, y],
+			[x + width, y + height],
+			[x, y + height],
+		],
+	};
+}
+
+function ellipse(
+	x: number,
+	y: number,
+	rx: number,
+	ry: number,
+	color: Polygon["color"],
+	segments = 16,
+): Polygon {
+	return {
+		color,
+		points: Array.from({ length: segments }, (_, index) => {
+			const angle = (index / segments) * Math.PI * 2;
+			return [x + Math.cos(angle) * rx, y + Math.sin(angle) * ry];
+		}),
+	};
+}
+
+function thickLine(
+	start: PlanPoint,
+	end: PlanPoint,
+	thickness: number,
+	color: Polygon["color"],
+): Polygon {
+	const dx = end[0] - start[0];
+	const dy = end[1] - start[1];
+	const length = Math.max(1, Math.hypot(dx, dy));
+	const x = (-dy / length) * (thickness / 2);
+	const y = (dx / length) * (thickness / 2);
+	return {
+		color,
+		points: [
+			[start[0] + x, start[1] + y],
+			[end[0] + x, end[1] + y],
+			[end[0] - x, end[1] - y],
+			[start[0] - x, start[1] - y],
+		],
+	};
+}
+
+function movingLight(width: number, height: number, top: boolean): Polygon[] {
+	const w = Math.max(220, width);
+	const h = Math.max(280, height);
+	if (top) {
+		return [
+			ellipse(0, 0, w * 0.34, h * 0.34, BASE),
+			rect(-w * 0.28, -h * 0.08, w * 0.56, h * 0.16, BODY),
+			ellipse(0, h * 0.2, w * 0.24, h * 0.24, DETAIL),
+			ellipse(0, h * 0.29, w * 0.12, h * 0.12, DARK),
+		];
+	}
+	// The head is deliberately painted before the near yoke arms. Their opaque polygons hide the
+	// covered edge of the head, matching the side silhouette of an actual moving light.
+	return [
+		rect(-w * 0.34, -h * 0.48, w * 0.68, h * 0.16, BASE),
+		ellipse(0, h * 0.18, w * 0.29, h * 0.25, DETAIL),
+		ellipse(0, h * 0.18, w * 0.16, h * 0.14, DARK),
+		rect(-w * 0.35, -h * 0.3, w * 0.1, h * 0.53, BODY),
+		rect(w * 0.25, -h * 0.3, w * 0.1, h * 0.53, BODY),
+		thickLine([-w * 0.3, h * 0.2], [-w * 0.15, h * 0.36], w * 0.08, BODY),
+		thickLine([w * 0.3, h * 0.2], [w * 0.15, h * 0.36], w * 0.08, BODY),
+	];
+}
+
+function conventional(width: number, height: number, top: boolean): Polygon[] {
+	const w = Math.max(180, width);
+	const h = Math.max(260, height);
+	return top
+		? [
+				rect(-w * 0.22, -h * 0.42, w * 0.44, h * 0.58, BODY),
+				{
+					color: DETAIL,
+					points: [
+						[-w * 0.36, h * 0.16],
+						[w * 0.36, h * 0.16],
+						[w * 0.27, h * 0.43],
+						[-w * 0.27, h * 0.43],
+					],
+				},
+				ellipse(0, h * 0.29, w * 0.22, h * 0.12, DARK),
+			]
+		: [
+				rect(-w * 0.32, -h * 0.36, w * 0.64, h * 0.5, BODY),
+				{
+					color: DETAIL,
+					points: [
+						[-w * 0.42, h * 0.14],
+						[w * 0.42, h * 0.14],
+						[w * 0.3, h * 0.4],
+						[-w * 0.3, h * 0.4],
+					],
+				},
+				ellipse(0, h * 0.27, w * 0.25, h * 0.11, DARK),
+			];
+}
+
+function truss(width: number, height: number, top: boolean): Polygon[] {
+	const w = Math.max(500, width);
+	const h = Math.max(top ? 180 : 260, height);
+	const edge = Math.max(24, Math.min(70, h * 0.13));
+	const polygons = [
+		rect(-w / 2, -h / 2, w, edge, DETAIL),
+		rect(-w / 2, h / 2 - edge, w, edge, DETAIL),
+	];
+	const bays = Math.max(2, Math.min(12, Math.round(w / Math.max(400, h))));
+	for (let index = 0; index < bays; index++) {
+		const x0 = -w / 2 + (index / bays) * w;
+		const x1 = -w / 2 + ((index + 1) / bays) * w;
+		polygons.push(
+			thickLine([x0, -h / 2 + edge], [x1, h / 2 - edge], edge * 0.55, BODY),
+			thickLine([x0, h / 2 - edge], [x1, -h / 2 + edge], edge * 0.55, BODY),
+		);
+	}
+	return polygons;
+}
+
+function stage(width: number, height: number, top: boolean): Polygon[] {
+	const w = Math.max(300, width);
+	const h = Math.max(120, height);
+	if (top)
+		return [
+			rect(-w / 2, -h / 2, w, h, BODY),
+			rect(-w / 2 + 35, -h / 2 + 35, w - 70, h - 70, BASE),
+		];
+	return [
+		rect(-w / 2, h * 0.25, w, h * 0.22, DETAIL),
+		rect(-w * 0.44, -h * 0.48, w * 0.08, h * 0.73, BODY),
+		rect(w * 0.36, -h * 0.48, w * 0.08, h * 0.73, BODY),
+	];
+}
+
+function curtain(width: number, height: number): Polygon[] {
+	const w = Math.max(300, width);
+	const h = Math.max(300, height);
+	const folds = 10;
+	return Array.from({ length: folds }, (_, index) => {
+		const left = -w / 2 + (index / folds) * w;
+		const right = -w / 2 + ((index + 1) / folds) * w;
+		return {
+			color: index % 2 ? BASE : BODY,
+			points: [
+				[left, -h / 2],
+				[right, -h / 2],
+				[right - (w / folds) * 0.16, h / 2],
+				[left + (w / folds) * 0.16, h / 2],
+			],
+		};
+	});
+}
+
+function crowd(width: number, height: number): Polygon[] {
+	const w = Math.max(600, width);
+	const h = Math.max(500, height);
+	const polygons: Polygon[] = [];
+	for (let row = 0; row < 4; row++) {
+		for (let column = 0; column < 7; column++) {
+			const x = -w * 0.42 + (column / 6) * w * 0.84 + (row % 2 ? w * 0.035 : 0);
+			const y = -h * 0.38 + (row / 3) * h * 0.76;
+			polygons.push(
+				ellipse(x, y, w * 0.035, h * 0.06, row % 2 ? BODY : DETAIL, 10),
+			);
+		}
+	}
+	return polygons;
+}
+
+function bar(width: number, height: number): Polygon[] {
+	const w = Math.max(400, width);
+	const h = Math.max(100, height);
+	const polygons = [rect(-w / 2, -h * 0.22, w, h * 0.44, BASE)];
+	const cells = 10;
+	for (let index = 0; index < cells; index++) {
+		polygons.push(
+			ellipse(
+				-w * 0.44 + (index / (cells - 1)) * w * 0.88,
+				0,
+				h * 0.14,
+				h * 0.14,
+				DETAIL,
+				10,
+			),
+		);
+	}
+	return polygons;
+}
+
+function mediaServer(width: number, height: number): Polygon[] {
+	const w = Math.max(360, width);
+	const h = Math.max(500, height);
+	const polygons = [rect(-w / 2, -h / 2, w, h, BASE)];
+	for (let row = 0; row < 5; row++) {
+		polygons.push(
+			rect(
+				-w * 0.42,
+				-h * 0.39 + row * h * 0.18,
+				w * 0.84,
+				h * 0.1,
+				row === 1 ? DETAIL : BODY,
+			),
+		);
+	}
+	return polygons;
+}
+
+function laser(width: number, height: number): Polygon[] {
+	const w = Math.max(220, width);
+	const h = Math.max(180, height);
+	return [
+		{
+			color: BASE,
+			points: [
+				[-w / 2, -h / 2],
+				[w / 2, -h / 2],
+				[w * 0.38, h / 2],
+				[-w * 0.38, h / 2],
+			],
+		},
+		ellipse(0, h * 0.18, w * 0.12, h * 0.12, DETAIL, 12),
+		{
+			color: DARK,
+			points: [
+				[-w * 0.08, h * 0.18],
+				[w * 0.08, h * 0.18],
+				[0, h * 0.46],
+			],
+		},
+	];
+}
+
+function effect(width: number, height: number, flame: boolean): Polygon[] {
+	const w = Math.max(180, width);
+	const h = Math.max(260, height);
+	const plume: Polygon = flame
+		? {
+				color: DETAIL,
+				points: [
+					[-w * 0.2, -h * 0.05],
+					[0, h * 0.5],
+					[w * 0.2, -h * 0.05],
+					[0, h * 0.16],
+				],
+			}
+		: {
+				color: DETAIL,
+				points: [
+					[-w * 0.34, 0],
+					[0, h * 0.5],
+					[w * 0.34, 0],
+					[0, h * 0.18],
+				],
+			};
+	return [rect(-w * 0.38, -h * 0.5, w * 0.76, h * 0.32, BASE), plume];
+}
+
+function generalFixture(width: number, height: number): Polygon[] {
+	const w = Math.max(180, width);
+	const h = Math.max(180, height);
+	return [
+		ellipse(0, 0, w * 0.42, h * 0.42, BODY),
+		ellipse(0, h * 0.06, w * 0.25, h * 0.25, DETAIL),
+		ellipse(0, h * 0.08, w * 0.12, h * 0.12, DARK),
+	];
+}
+
+function venueProp(width: number, height: number): Polygon[] {
+	return [
+		ellipse(
+			0,
+			0,
+			Math.max(120, width / 2),
+			Math.max(120, height / 2),
+			BODY,
+			20,
+		),
+		ellipse(
+			0,
+			0,
+			Math.max(60, width * 0.3),
+			Math.max(60, height * 0.3),
+			BASE,
+			20,
+		),
+	];
+}
+
+function unknownBox(width: number, height: number): PlanGeometry {
+	const w = Math.max(180, width);
+	const h = Math.max(180, height);
+	const polygon = rect(-w / 2, -h / 2, w, h, BASE);
+	const geometry = fromPolygons("unknown", [polygon]);
+	geometry.outlines.push([
+		[-w / 2, -h / 2],
+		[w / 2, h / 2],
+	]);
+	geometry.outlines.push([
+		[-w / 2, h / 2],
+		[w / 2, -h / 2],
+	]);
+	return geometry;
+}

@@ -8,6 +8,8 @@ const fixture: CadEntity = {
 	name: "Profile Stage 1",
 	fixtureNumber: 101,
 	kind: "profile",
+	fixtureType: "moving_head_profile",
+	drawingId: "profile:1",
 	positionMillimetres: [0, 0, 4000],
 	rotationDegrees: [0, 0, 0],
 	sizeMillimetres: [400, 500, 700],
@@ -33,6 +35,7 @@ function setup(selectedIds: readonly string[] = []) {
 	render(
 		<CadViewport
 			entities={[fixture]}
+			drawings={[]}
 			selectedIds={selectedIds}
 			view="top_down"
 			rotationQuarterTurns={0}
