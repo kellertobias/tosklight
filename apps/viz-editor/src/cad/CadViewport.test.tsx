@@ -6,6 +6,7 @@ import {
 	fitCadOverview,
 	observeViewportResize,
 	renderDepthMaskedLinework,
+	viewportGuideRange,
 } from "./CadViewport";
 import type { CadEntity } from "./types";
 
@@ -130,6 +131,25 @@ describe("CAD fixture interaction", () => {
 		canvas = screen.getByLabelText("CAD top down viewport");
 		expect(canvas).toHaveAttribute("data-floor-datum", "hidden");
 		expect(canvas).toHaveAttribute("data-coordinate-origins", "hidden");
+	});
+
+	it("keeps dotted guide bounds beyond both viewport edges while panned and zoomed", () => {
+		const panned = { pan: [4200, -1700] as [number, number], zoom: 0.5 };
+		const horizontal = viewportGuideRange(true, panned, 1000, 800);
+		const visibleHorizontal = [
+			-panned.pan[0] - 1000 / (2 * panned.zoom),
+			-panned.pan[0] + 1000 / (2 * panned.zoom),
+		];
+		expect(horizontal[0]).toBeLessThan(visibleHorizontal[0]);
+		expect(horizontal[1]).toBeGreaterThan(visibleHorizontal[1]);
+
+		const vertical = viewportGuideRange(false, panned, 1000, 800);
+		const visibleVertical = [
+			-panned.pan[1] - 800 / (2 * panned.zoom),
+			-panned.pan[1] + 800 / (2 * panned.zoom),
+		];
+		expect(vertical[0]).toBeLessThan(visibleVertical[0]);
+		expect(vertical[1]).toBeGreaterThan(visibleVertical[1]);
 	});
 
 	it("renders the Show overview in one fixed non-interactive orientation", () => {

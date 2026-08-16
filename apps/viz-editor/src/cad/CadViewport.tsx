@@ -1262,10 +1262,12 @@ function dottedGuide(
 	camera: TileCamera,
 	canvas: HTMLCanvasElement,
 ) {
-	const extent =
-		(horizontal ? canvas.clientWidth : canvas.clientHeight) / camera.zoom;
-	const start = (horizontal ? origin[0] : origin[1]) - extent;
-	const end = (horizontal ? origin[0] : origin[1]) + extent;
+	const [start, end] = viewportGuideRange(
+		horizontal,
+		camera,
+		canvas.clientWidth,
+		canvas.clientHeight,
+	);
 	const dash = 8 / camera.zoom;
 	for (let cursor = start; cursor < end; cursor += dash * 2) {
 		if (horizontal)
@@ -1281,6 +1283,20 @@ function dottedGuide(
 				color,
 			);
 	}
+}
+
+/** World-space guide bounds that remain just outside both screen edges at any pan and zoom. */
+export function viewportGuideRange(
+	horizontal: boolean,
+	camera: TileCamera,
+	viewportWidth: number,
+	viewportHeight: number,
+): [number, number] {
+	const pixels = horizontal ? viewportWidth : viewportHeight;
+	const pan = horizontal ? camera.pan[0] : camera.pan[1];
+	const halfVisible = pixels / (2 * camera.zoom);
+	const margin = 16 / camera.zoom;
+	return [-pan - halfVisible - margin, -pan + halfVisible + margin];
 }
 
 function shader(gl: WebGL2RenderingContext, type: number, source: string) {
