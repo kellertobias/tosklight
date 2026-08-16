@@ -7,6 +7,7 @@ use light_fixture::{
     ProfileProjectionView,
 };
 use sha2::{Digest, Sha256};
+use uuid::Uuid;
 use viz_scene::{FixtureModel, ModelPartKind};
 
 pub const GENERATOR_ID: &str = "tosklight.fixture-projection";
@@ -82,12 +83,34 @@ pub fn generate_profile_projections(
 pub fn generate_live_projection_meshes(
     profile: &FixtureProfile,
 ) -> Result<Vec<LiveProjectionMesh>, ProjectionError> {
+    generate_live_projection_meshes_for_mode(profile, None)
+}
+
+/// Generate live CAD geometry for one patched personality. A profile GLB may contain complete,
+/// mutually exclusive node variants for several modes, so the selected mode's geometry bindings
+/// are authoritative when they are present.
+pub fn generate_live_projection_meshes_for_mode(
+    profile: &FixtureProfile,
+    mode_id: impl Into<Option<Uuid>>,
+) -> Result<Vec<LiveProjectionMesh>, ProjectionError> {
     let source = profile
         .model_asset
         .as_deref()
         .ok_or_else(|| ProjectionError("fixture profile has no 3D model asset".into()))?;
     let bytes = decode_model(source)?;
-    let model = viz_scene::read_glb(&bytes).map_err(|error| ProjectionError(error.0))?;
+    let selected_nodes = mode_id
+        .into()
+        .and_then(|mode_id| profile.modes.iter().find(|mode| mode.id == mode_id))
+        .map(|mode| {
+            mode.geometry
+                .nodes
+                .iter()
+                .filter_map(|node| node.glb_node.as_deref())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let model = viz_scene::read_glb_nodes(&bytes, &selected_nodes)
+        .map_err(|error| ProjectionError(error.0))?;
     let scale = physical_scale(profile, &model) * 1000.0;
     [LiveProjectionPose::Top, LiveProjectionPose::Elevation]
         .into_iter()
@@ -636,6 +659,39 @@ mod tests {
         assert!((top.physical_height_millimetres - 1_000.0).abs() < 0.2);
         assert_eq!(top.physical_width_millimetres * 4.0, 8_000.0);
         assert_eq!(top.physical_height_millimetres * 4.0, 4_000.0);
+    }
+
+    #[test]
+    fn stage_live_projection_uses_only_the_selected_height_mode() {
+        let stage = shipped_profile("venue--stage-element-2-1-m.toskfixture");
+        let mode_10 = stage
+            .modes
+            .iter()
+            .find(|mode| mode.name == "10 cm")
+            .expect("10 cm stage mode");
+        let mode_50 = stage
+            .modes
+            .iter()
+            .find(|mode| mode.name == "50 cm")
+            .expect("50 cm stage mode");
+        let all = generate_live_projection_meshes(&stage).expect("unfiltered profile mesh");
+        let short =
+            generate_live_projection_meshes_for_mode(&stage, mode_10.id).expect("10 cm mode mesh");
+        let demo =
+            generate_live_projection_meshes_for_mode(&stage, mode_50.id).expect("50 cm mode mesh");
+
+        assert_eq!(short.len(), 2);
+        assert_eq!(demo.len(), 2);
+        assert_eq!(short[0].triangles.len(), demo[0].triangles.len());
+        assert!(
+            all[0].triangles.len() >= demo[0].triangles.len() * 8,
+            "the unfiltered profile should contain the mutually exclusive height variants"
+        );
+        assert_ne!(short[0].triangles, demo[0].triangles);
+        assert!(
+            demo[0].triangles.len() > 12,
+            "one deck retains its top and supports"
+        );
     }
 
     #[test]

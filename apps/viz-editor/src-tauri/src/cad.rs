@@ -537,7 +537,7 @@ fn entities(snapshot: &PatchSnapshot, locked_layers: &BTreeSet<String>) -> Vec<C
                 fixture_type: fixture_type.to_owned(),
                 drawing_id: profile.map_or_else(
                     || format!("unknown:{}", fixture.patch.fixture_id.0),
-                    |profile| drawing_id(profile),
+                    |profile| drawing_id(profile, fixture.profile.mode_id),
                 ),
                 layer_id: fixture.patch.layer_id.clone(),
                 selectable: !locked_layers.contains(&fixture.patch.layer_id),
@@ -596,31 +596,45 @@ fn selectable_ids(session: &Session) -> Result<BTreeSet<Uuid>, String> {
     })
 }
 
-fn drawing_id(profile: &light_application::PatchProfileRevisionProjection) -> String {
+fn drawing_id(
+    profile: &light_application::PatchProfileRevisionProjection,
+    mode_id: Uuid,
+) -> String {
     format!(
-        "{}:{}:{}",
-        profile.profile_id.0, profile.profile_revision, profile.content_digest
+        "{}:{}:{}:{}",
+        profile.profile_id.0, profile.profile_revision, profile.content_digest, mode_id
     )
 }
 
 fn drawings(snapshot: &PatchSnapshot, cad: &CadState) -> Vec<CadDrawing> {
     let mut cache = cad.drawings.lock();
-    snapshot
+    let profiles = snapshot
         .profile_revisions
         .iter()
-        .filter_map(|stored| {
-            let id = drawing_id(stored);
+        .map(|profile| ((profile.profile_id.0, profile.profile_revision), profile))
+        .collect::<HashMap<_, _>>();
+    snapshot
+        .fixtures
+        .iter()
+        .filter_map(|fixture| {
+            let stored = profiles.get(&(
+                fixture.profile.profile_id.0,
+                fixture.profile.profile_revision,
+            ))?;
+            let id = drawing_id(stored, fixture.profile.mode_id);
             cache
                 .entry(id.clone())
-                .or_insert_with(|| drawing(&id, &stored.profile_snapshot))
+                .or_insert_with(|| {
+                    drawing(&id, &stored.profile_snapshot, Some(fixture.profile.mode_id))
+                })
                 .clone()
         })
         .collect()
 }
 
-fn drawing(id: &str, snapshot: &serde_json::Value) -> Option<CadDrawing> {
+fn drawing(id: &str, snapshot: &serde_json::Value, mode_id: Option<Uuid>) -> Option<CadDrawing> {
     let profile = serde_json::from_value::<light_fixture::FixtureProfile>(snapshot.clone()).ok()?;
-    let live_meshes = viz_project::generate_live_projection_meshes(&profile)
+    let live_meshes = viz_project::generate_live_projection_meshes_for_mode(&profile, mode_id)
         .unwrap_or_default()
         .into_iter()
         .map(|mesh| CadLiveMesh {
@@ -963,8 +977,13 @@ mod tests {
             .expect("fixture package reads");
         profile.projection_assets = None;
 
-        let drawing = drawing("robe-dls:1", &serde_json::to_value(profile).unwrap())
-            .expect("embedded model produces a CAD drawing");
+        let mode_id = profile.modes[0].id;
+        let drawing = drawing(
+            "robe-dls:1",
+            &serde_json::to_value(profile).unwrap(),
+            Some(mode_id),
+        )
+        .expect("embedded model produces a CAD drawing");
 
         assert_eq!(drawing.projections.len(), 5);
         assert_eq!(drawing.live_meshes.len(), 2);
