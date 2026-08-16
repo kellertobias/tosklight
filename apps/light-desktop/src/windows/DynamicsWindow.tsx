@@ -93,18 +93,17 @@ export function DynamicsWindow({
 			attribute.normalized_min != null &&
 			attribute.normalized_max != null,
 	);
-	const { runtime, refreshRuntime } = useDynamicsRuntime(
+	const { runtime } = useDynamicsRuntime(
 		active,
 		showId,
 		api,
 		setError,
 	);
 	const run = useBusyOperation(setBusy, setError);
-	const { toggle, create, mutate } = useDynamicsMutations({
+	const { create, mutate } = useDynamicsMutations({
 		showId,
 		api,
 		mutationWriter,
-		refreshRuntime,
 		run,
 		openEditor,
 		onCreated: (id) => {
@@ -160,7 +159,12 @@ export function DynamicsWindow({
 			deleteArmed={deleteArmed}
 			onChooseSlot={setChooserSlot}
 			onError={setError}
-			onToggle={toggle}
+			onToggle={(dynamic) => {
+				const current = command.read();
+				void command.execute(
+					dynamicPoolCommand(current.text, current.pristine, dynamic.body.pool_number),
+				);
+			}}
 			onCreate={create}
 			onOpen={(dynamic) => {
 				openEditor({
@@ -250,7 +254,6 @@ function useDynamicsMutations({
 	showId,
 	api,
 	mutationWriter,
-	refreshRuntime,
 	run,
 	openEditor,
 	onCreated,
@@ -258,18 +261,10 @@ function useDynamicsMutations({
 	showId: ReturnType<typeof useActiveShowId>;
 	api: NonNullable<ReturnType<typeof useDynamicsActions>>;
 	mutationWriter: DynamicMutationWriter;
-	refreshRuntime(): Promise<void>;
 	run(operation: () => Promise<void>): Promise<void>;
 	openEditor: ReturnType<typeof useDynamicEditorSession>["open"];
 	onCreated(id: string): void;
 }) {
-	const toggle = (dynamic: DynamicObject) =>
-		run(async () => {
-			if (!showId) throw new Error("No active show");
-			if (dynamic.validationError) throw new Error(dynamic.validationError);
-			await api.dynamics.toggle(dynamic.id);
-			await refreshRuntime();
-		});
 	const create = (poolNumber: number, attribute: string) =>
 		run(async () => {
 			if (!showId) throw new Error("No active show");
@@ -293,7 +288,21 @@ function useDynamicsMutations({
 			if (!showId) throw new Error("No active show");
 			await mutationWriter.update(showId, dynamic.id, intent, mutationGroup);
 		});
-	return { toggle, create, mutate };
+	return { create, mutate };
+}
+
+export function dynamicPoolCommand(
+	commandText: string,
+	pristine: boolean,
+	poolNumber: number,
+) {
+	const current = commandText.trim();
+	if (pristine || /^(?:FIXTURE|GROUP)$/iu.test(current))
+		return `DYNAMIC ${poolNumber}`;
+	if (/^OFF$/iu.test(current)) return `DYNAMIC ${poolNumber} OFF`;
+	if (/\sOFF$/iu.test(current))
+		return `${current.replace(/\sOFF$/iu, "")} DYNAMIC ${poolNumber} OFF`;
+	return `${current} DYNAMIC ${poolNumber}`;
 }
 
 type ConnectedDynamicEditorProps = Omit<

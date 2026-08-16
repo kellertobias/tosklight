@@ -44,10 +44,12 @@ pub(super) fn execute_dynamic_command(
             if explicit_controller.is_some() {
                 return Err("Dynamic INSTANCE requires OFF, SIZE, SPEED, or PHASE".into());
             }
-            state
-                .dynamics
-                .toggle(context, command, &ports)
-                .map_err(|error| error.message)?;
+            if command_controller_candidates(state, session, definition.id, &targets)?.is_empty() {
+                state
+                    .dynamics
+                    .start(context, command, &ports)
+                    .map_err(|error| error.message)?;
+            }
         }
         [off] if off == "OFF" => {
             let candidates =

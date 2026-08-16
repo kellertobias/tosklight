@@ -21,7 +21,9 @@ const deleteDynamic = vi.fn();
 const updateDynamic = vi.fn();
 const resetCommand = vi.fn();
 const replaceCommand = vi.fn();
+const executeCommand = vi.fn();
 let commandText = "";
+let commandPristine = true;
 let selected: string[] = [];
 let selectedGroupId: string | null = null;
 const speedGroupAction = vi.fn();
@@ -96,9 +98,10 @@ vi.mock("../components/control/commandLine/useCommandLineSurface", () => ({
 	useCommandLineSurface: () => ({
 		selected,
 		selectedGroupId,
-		read: () => ({ text: commandText }),
+		read: () => ({ text: commandText, pristine: commandPristine }),
 		reset: resetCommand,
 		replace: replaceCommand,
+		execute: executeCommand,
 	}),
 }));
 vi.mock(
@@ -168,9 +171,11 @@ describe("DynamicsWindow", () => {
 		dynamics = [];
 		deleteArmed = false;
 		commandText = "";
+		commandPristine = true;
 		selected = [];
 		selectedGroupId = null;
 		replaceCommand.mockReset().mockResolvedValue(true);
+		executeCommand.mockReset().mockResolvedValue(true);
 		deleteDynamic.mockReset().mockResolvedValue(undefined);
 		updateDynamic
 			.mockReset()

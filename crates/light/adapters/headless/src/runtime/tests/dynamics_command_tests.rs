@@ -782,7 +782,7 @@ fn live_and_preload_visualization_resolve_different_dynamic_layers_authoritative
 }
 
 #[test]
-fn dynamic_command_line_routes_toggle_parameters_and_off_through_one_controller() {
+fn dynamic_command_line_routes_start_parameters_and_off_through_one_controller() {
     let (state, data_dir) = test_state();
     state.installation.update_configuration(|configuration| {
         configuration.command_line_at_uses_programmer_fade = true;
@@ -830,6 +830,18 @@ fn dynamic_command_line_routes_toggle_parameters_and_off_through_one_controller(
         1
     );
     assert_eq!(state.output.dynamic_runtime_snapshot().instances.len(), 1);
+    assert_eq!(
+        execute_programmer_command_from(&state, &session, "DYNAMIC 12", &context).unwrap(),
+        1
+    );
+    assert_eq!(state.output.dynamic_runtime_snapshot().instances.len(), 1);
+    assert!(state
+        .programming
+        .get(session.id)
+        .unwrap()
+        .dynamic_values
+        .iter()
+        .all(|stored| matches!(stored.value, light_dynamics::DynamicSemanticValue::DynamicOn { .. })));
     assert_eq!(
         execute_programmer_command_from(&state, &session, "DYNAMIC 12 SIZE AT 50", &context,)
             .unwrap(),
