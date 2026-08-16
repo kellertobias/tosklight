@@ -50,6 +50,11 @@ export function entityPlanGeometry(
 	drawing: CadDrawing | undefined,
 	view: CadViewDirection,
 ): PlanGeometry {
+	const type = entityType(entity);
+	// Generated model silhouettes are useful for fixtures, but truss end views collapse into a
+	// solid square and crowd-area models read as an unexplained block. These two venue families
+	// deliberately use conventional plan symbols instead.
+	if (isSemanticPlanSymbol(type)) return typedGeometry(entity, view, type);
 	const projection = drawing?.projections.find(
 		(candidate) => candidate.view === projectionViewForCad(view),
 	);
@@ -60,7 +65,15 @@ export function entityPlanGeometry(
 		);
 		if (parsed.triangles.length) return parsed;
 	}
-	return typedGeometry(entity, view);
+	return typedGeometry(entity, view, type);
+}
+
+function entityType(entity: CadEntity): string {
+	return `${entity.fixtureType} ${entity.kind} ${entity.name}`.toLowerCase();
+}
+
+function isSemanticPlanSymbol(type: string): boolean {
+	return /truss|pipe grid|pipe$|crowd/.test(type);
 }
 
 export function parseProjection(
@@ -108,22 +121,26 @@ function parseHex(value: string): [number, number, number] {
 function typedGeometry(
 	entity: CadEntity,
 	view: CadViewDirection,
+	type = entityType(entity),
 ): PlanGeometry {
-	const type =
-		`${entity.fixtureType} ${entity.kind} ${entity.name}`.toLowerCase();
 	const [width, depth, height] = entity.sizeMillimetres;
-	const horizontal = view === "top_down" ? width : depth;
+	const horizontal =
+		view === "top_down"
+			? width
+			: view === "front_to_back" || view === "back_to_front"
+				? width
+				: depth;
 	const vertical = view === "top_down" ? depth : height;
 	let polygons: Polygon[];
 
 	if (/truss|pipe grid|pipe$/.test(type)) {
-		polygons = truss(horizontal, vertical, view === "top_down");
+		polygons = truss(horizontal, vertical, trussChordCount(type));
 	} else if (/stage element|riser|stage deck|stairs/.test(type)) {
 		polygons = stage(horizontal, vertical, view === "top_down");
 	} else if (/curtain|drape/.test(type)) {
 		polygons = curtain(horizontal, vertical);
 	} else if (/crowd/.test(type)) {
-		polygons = crowd(horizontal, vertical);
+		polygons = crowd(horizontal, vertical, view === "top_down");
 	} else if (/sunstrip|pixel bar|light bar|matrix/.test(type)) {
 		polygons = bar(horizontal, vertical);
 	} else if (/media.server|media_server/.test(type)) {
@@ -283,21 +300,81 @@ function conventional(width: number, height: number, top: boolean): Polygon[] {
 			];
 }
 
-function truss(width: number, height: number, top: boolean): Polygon[] {
+function trussChordCount(type: string): 2 | 3 | 4 {
+	if (/three[- ]point|3[- ]point|tri(?:angular)?/.test(type)) return 3;
+	if (/two[- ]point|2[- ]point|ladder/.test(type)) return 2;
+	return 4;
+}
+
+function truss(
+	width: number,
+	height: number,
+	chordCount: 2 | 3 | 4,
+): Polygon[] {
+	const crossSection = width / Math.max(1, height) < 1.7;
 	const w = Math.max(500, width);
-	const h = Math.max(top ? 180 : 260, height);
-	const edge = Math.max(24, Math.min(70, h * 0.13));
+	const h = Math.max(180, height);
+	const diameter = Math.max(24, Math.min(70, h * 0.16));
+
+	// Looking along the truss shows its declared chord arrangement, not one filled box.
+	if (crossSection) {
+		const radius = Math.min(w, h) * 0.34;
+		const centres: PlanPoint[] =
+			chordCount === 2
+				? [
+						[0, -radius],
+						[0, radius],
+					]
+				: chordCount === 3
+					? [
+							[0, -radius],
+							[-radius * 0.86, radius * 0.55],
+							[radius * 0.86, radius * 0.55],
+						]
+					: [
+							[-radius, -radius],
+							[radius, -radius],
+							[radius, radius],
+							[-radius, radius],
+						];
+		const polygons: Polygon[] = [];
+		for (let index = 0; index < centres.length; index++) {
+			polygons.push(
+				thickLine(
+					centres[index],
+					centres[(index + 1) % centres.length],
+					diameter * 0.45,
+					BODY,
+				),
+			);
+		}
+		for (const [x, y] of centres) {
+			polygons.push(ellipse(x, y, diameter / 2, diameter / 2, DETAIL, 14));
+		}
+		return polygons;
+	}
+
 	const polygons = [
-		rect(-w / 2, -h / 2, w, edge, DETAIL),
-		rect(-w / 2, h / 2 - edge, w, edge, DETAIL),
+		rect(-w / 2, -h / 2, w, diameter, DETAIL),
+		rect(-w / 2, h / 2 - diameter, w, diameter, DETAIL),
 	];
 	const bays = Math.max(2, Math.min(12, Math.round(w / Math.max(400, h))));
 	for (let index = 0; index < bays; index++) {
 		const x0 = -w / 2 + (index / bays) * w;
 		const x1 = -w / 2 + ((index + 1) / bays) * w;
 		polygons.push(
-			thickLine([x0, -h / 2 + edge], [x1, h / 2 - edge], edge * 0.55, BODY),
-			thickLine([x0, h / 2 - edge], [x1, -h / 2 + edge], edge * 0.55, BODY),
+			thickLine(
+				[x0, -h / 2 + diameter],
+				[x1, h / 2 - diameter],
+				diameter * 0.45,
+				BODY,
+			),
+			thickLine(
+				[x0, h / 2 - diameter],
+				[x1, -h / 2 + diameter],
+				diameter * 0.45,
+				BODY,
+			),
 		);
 	}
 	return polygons;
@@ -337,17 +414,56 @@ function curtain(width: number, height: number): Polygon[] {
 	});
 }
 
-function crowd(width: number, height: number): Polygon[] {
+function crowd(width: number, height: number, top: boolean): Polygon[] {
 	const w = Math.max(600, width);
 	const h = Math.max(500, height);
 	const polygons: Polygon[] = [];
 	for (let row = 0; row < 4; row++) {
-		for (let column = 0; column < 7; column++) {
-			const x = -w * 0.42 + (column / 6) * w * 0.84 + (row % 2 ? w * 0.035 : 0);
+		for (let column = 0; column < 6; column++) {
+			const x = -w * 0.4 + (column / 5) * w * 0.8 + (row % 2 ? w * 0.04 : 0);
 			const y = -h * 0.38 + (row / 3) * h * 0.76;
-			polygons.push(
-				ellipse(x, y, w * 0.035, h * 0.06, row % 2 ? BODY : DETAIL, 10),
-			);
+			const personWidth = Math.min(w * 0.07, h * 0.1);
+			const personHeight = Math.min(h * 0.14, w * 0.1);
+			if (top) {
+				polygons.push(
+					ellipse(
+						x,
+						y - personHeight * 0.18,
+						personWidth * 0.22,
+						personWidth * 0.22,
+						DETAIL,
+						10,
+					),
+					ellipse(
+						x,
+						y + personHeight * 0.18,
+						personWidth * 0.5,
+						personHeight * 0.34,
+						BODY,
+						12,
+					),
+				);
+			} else {
+				polygons.push(
+					ellipse(
+						x,
+						y - personHeight * 0.28,
+						personWidth * 0.24,
+						personHeight * 0.18,
+						DETAIL,
+						10,
+					),
+					{
+						color: BODY,
+						points: [
+							[x - personWidth * 0.48, y],
+							[x + personWidth * 0.48, y],
+							[x + personWidth * 0.28, y + personHeight * 0.46],
+							[x - personWidth * 0.28, y + personHeight * 0.46],
+						],
+					},
+				);
+			}
 		}
 	}
 	return polygons;

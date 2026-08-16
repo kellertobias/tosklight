@@ -64,7 +64,7 @@ describe("CAD plan projections", () => {
 		expect(nearYoke).toBeGreaterThan(head);
 	});
 
-	it("uses detailed lattice geometry for truss instead of a box", () => {
+	it("uses longitudinal chord pipes and lattice braces for truss instead of a box", () => {
 		const geometry = entityPlanGeometry(
 			{
 				...movingLight,
@@ -74,10 +74,75 @@ describe("CAD plan projections", () => {
 				sizeMillimetres: [4000, 290, 290],
 			},
 			undefined,
-			"front_to_back",
+			"top_down",
 		);
 
 		expect(geometry.source).toBe("typed");
 		expect(geometry.outlines.length).toBeGreaterThan(4);
+	});
+
+	it("shows the declared three- and four-point chord arrangement in truss end views", () => {
+		const generatedSquareDrawing = {
+			id: "generated-truss",
+			projections: [
+				{
+					view: "left" as const,
+					svg: '<svg><path d="M 0 0 L 290 0 L 290 290 L 0 290 Z" fill="#66707a" /></svg>',
+					viewBoxMillimetres: [0, 0, 290, 290] as [
+						number,
+						number,
+						number,
+						number,
+					],
+					originMillimetres: [145, 145] as [number, number],
+				},
+			],
+		};
+		const endView = (name: string) =>
+			entityPlanGeometry(
+				{
+					...movingLight,
+					name,
+					kind: "venue",
+					fixtureType: "truss",
+					sizeMillimetres: [4000, 290, 290],
+				},
+				generatedSquareDrawing,
+				"left_to_right",
+			);
+
+		const threePoint = endView("Three-Point Truss 4 m");
+		const fourPoint = endView("Four-Point Truss 4 m");
+		expect(threePoint.source).toBe("typed");
+		expect(threePoint.outlines).toHaveLength(6);
+		expect(fourPoint.outlines).toHaveLength(8);
+	});
+
+	it("uses repeated human plan marks for crowd areas instead of the model box", () => {
+		const geometry = entityPlanGeometry(
+			{
+				...movingLight,
+				name: "Dancefloor Crowd",
+				kind: "venue",
+				fixtureType: "crowd_area",
+				sizeMillimetres: [8000, 4000, 1800],
+			},
+			{
+				id: "generated-crowd",
+				projections: [
+					{
+						view: "top",
+						svg: '<svg><path d="M 0 0 L 8000 0 L 8000 4000 L 0 4000 Z" fill="#66707a" /></svg>',
+						viewBoxMillimetres: [0, 0, 8000, 4000],
+						originMillimetres: [4000, 2000],
+					},
+				],
+			},
+			"top_down",
+		);
+
+		expect(geometry.source).toBe("typed");
+		expect(geometry.outlines).toHaveLength(48);
+		expect(geometry.triangles.length).toBeGreaterThan(300);
 	});
 });
