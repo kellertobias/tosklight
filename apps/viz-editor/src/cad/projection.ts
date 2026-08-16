@@ -1,3 +1,4 @@
+import { audienceOutlineFor } from "./audienceOutline";
 import type {
 	CadDrawing,
 	CadEntity,
@@ -442,7 +443,7 @@ function typedGeometry(
 	} else if (/curtain|drape/.test(type)) {
 		polygons = curtain(horizontal, vertical);
 	} else if (/crowd/.test(type)) {
-		polygons = crowd(horizontal, vertical, view);
+		return fromOutlinePolygons(crowd(horizontal, vertical, view));
 	} else if (/sunstrip|pixel bar|light bar|matrix/.test(type)) {
 		polygons = bar(horizontal, vertical);
 	} else if (/media.server|media_server/.test(type)) {
@@ -463,6 +464,15 @@ function typedGeometry(
 		return unknownBox(horizontal, vertical);
 	}
 	return fromPolygons("typed", polygons);
+}
+
+function fromOutlinePolygons(polygons: Polygon[]): PlanGeometry {
+	return {
+		source: "typed",
+		triangles: [],
+		outlines: polygons.map((polygon) => polygon.points),
+		lines: [],
+	};
 }
 
 function fromPolygons(
@@ -727,36 +737,15 @@ function crowd(
 
 	const h = Math.max(500, height);
 	const polygons: Polygon[] = [];
+	const outline = audienceOutlineFor("top");
+	const outlineWidth = outlineRange(outline, 0);
 	for (let row = 0; row < 4; row++) {
 		for (let column = 0; column < 6; column++) {
 			const x = -w * 0.4 + (column / 5) * w * 0.8 + (row % 2 ? w * 0.04 : 0);
 			const y = -h * 0.38 + (row / 3) * h * 0.76;
 			const personWidth = Math.min(w * 0.07, h * 0.1);
-			const bodyHeight = Math.min(h * 0.07, w * 0.05);
-			const headRadius = personWidth * 0.22;
-			polygons.push(
-				ellipse(x, y - bodyHeight * 0.72, headRadius, headRadius, DETAIL, 10),
-				roundedRect(
-					x,
-					y + bodyHeight * 0.08,
-					personWidth,
-					bodyHeight,
-					Math.min(personWidth, bodyHeight) * 0.28,
-					BODY,
-				),
-				segment(
-					[x - personWidth * 0.22, y + bodyHeight * 0.28],
-					[x - personWidth * 0.42, y + bodyHeight * 0.62],
-					personWidth * 0.12,
-					BODY,
-				),
-				segment(
-					[x + personWidth * 0.22, y + bodyHeight * 0.28],
-					[x + personWidth * 0.42, y + bodyHeight * 0.62],
-					personWidth * 0.12,
-					BODY,
-				),
-			);
+			const scale = personWidth / outlineWidth;
+			polygons.push(outlinePolygon(outline, x, y, scale, true));
 		}
 	}
 	return polygons;
@@ -766,119 +755,43 @@ function elevationCrowd(width: number, view: CadViewDirection): Polygon[] {
 	const count = Math.max(6, Math.min(14, Math.round(width / 500)));
 	const spacing = width / count;
 	const side = view === "left_to_right" || view === "right_to_left";
-	const direction = view === "right_to_left" ? -1 : 1;
+	const mirror = view === "right_to_left";
+	const outline = audienceOutlineFor(side ? "side" : "front");
 	const polygons: Polygon[] = [];
 	for (let index = 0; index < count; index++) {
 		const height = audiencePersonHeight(index);
 		const x = -width / 2 + spacing * (index + 0.5);
-		const personWidth = Math.min(height * 0.22, spacing * 0.64);
-		const thickness = Math.max(24, personWidth * 0.08);
-		const headRadius = height * 0.055;
-		const shoulder: PlanPoint = [x, height * 0.72];
-		const hip: PlanPoint = [x, height * 0.42];
-		polygons.push(
-			ellipse(x, height - headRadius, headRadius, headRadius, DETAIL, 10),
-			segment(shoulder, hip, thickness, BODY),
-			segment(
-				hip,
-				[x - personWidth * (side ? 0.08 : 0.34), 0],
-				thickness,
-				BODY,
-			),
-			segment(
-				hip,
-				[x + personWidth * (side ? 0.08 : 0.34), 0],
-				thickness,
-				BODY,
-			),
-		);
-		if (side) {
-			polygons.push(
-				segment(
-					shoulder,
-					[x + direction * personWidth * 0.7, height * 0.61],
-					thickness,
-					BODY,
-				),
-				segment(
-					[x, height * 0.64],
-					[x + direction * personWidth * 0.66, height * 0.53],
-					thickness,
-					BODY,
-				),
-			);
-		} else {
-			polygons.push(
-				segment(
-					shoulder,
-					[x - personWidth * 0.62, height * 0.57],
-					thickness,
-					BODY,
-				),
-				segment(
-					shoulder,
-					[x + personWidth * 0.62, height * 0.57],
-					thickness,
-					BODY,
-				),
-			);
-		}
+		polygons.push(outlinePolygon(outline, x, 0, height, false, mirror));
 	}
 	return polygons;
+}
+
+function outlinePolygon(
+	outline: readonly PlanPoint[],
+	x: number,
+	y: number,
+	scale: number,
+	centerVertically: boolean,
+	mirror = false,
+): Polygon {
+	const yOffset = centerVertically ? (outlineRange(outline, 1) * scale) / 2 : 0;
+	return {
+		color: BODY,
+		points: outline.map(([pointX, pointY]) => [
+			x + pointX * scale * (mirror ? -1 : 1),
+			y + pointY * scale - yOffset,
+		]),
+	};
+}
+
+function outlineRange(outline: readonly PlanPoint[], axis: 0 | 1): number {
+	const values = outline.map((point) => point[axis]);
+	return Math.max(...values) - Math.min(...values);
 }
 
 /** Stable pseudo-random audience stature in millimetres for repeatable technical drawings. */
 export function audiencePersonHeight(index: number): number {
 	return 1600 + ((Math.max(0, Math.trunc(index)) * 73 + 41) % 251);
-}
-
-function segment(
-	start: PlanPoint,
-	end: PlanPoint,
-	thickness: number,
-	color: Polygon["color"],
-): Polygon {
-	const dx = end[0] - start[0];
-	const dy = end[1] - start[1];
-	const length = Math.max(0.001, Math.hypot(dx, dy));
-	const nx = (-dy / length) * (thickness / 2);
-	const ny = (dx / length) * (thickness / 2);
-	return {
-		color,
-		points: [
-			[start[0] + nx, start[1] + ny],
-			[end[0] + nx, end[1] + ny],
-			[end[0] - nx, end[1] - ny],
-			[start[0] - nx, start[1] - ny],
-		],
-	};
-}
-
-function roundedRect(
-	cx: number,
-	cy: number,
-	width: number,
-	height: number,
-	radius: number,
-	color: Polygon["color"],
-): Polygon {
-	const r = Math.min(radius, width / 2, height / 2);
-	const points: PlanPoint[] = [];
-	for (const [cornerX, cornerY, start] of [
-		[cx + width / 2 - r, cy + height / 2 - r, 0],
-		[cx - width / 2 + r, cy + height / 2 - r, Math.PI / 2],
-		[cx - width / 2 + r, cy - height / 2 + r, Math.PI],
-		[cx + width / 2 - r, cy - height / 2 + r, Math.PI * 1.5],
-	] as const) {
-		for (let index = 0; index <= 3; index++) {
-			const angle = start + (index / 3) * (Math.PI / 2);
-			points.push([
-				cornerX + Math.cos(angle) * r,
-				cornerY + Math.sin(angle) * r,
-			]);
-		}
-	}
-	return { color, points };
 }
 
 function bar(width: number, height: number): Polygon[] {

@@ -266,6 +266,8 @@ export function CadViewport({
 				)
 			)
 				return entity;
+			if (geometry.outlines.some((outline) => pointInPolygon(point, outline)))
+				return entity;
 			const distance = Math.hypot(
 				projected[0] - point[0],
 				projected[1] - point[1],
@@ -1108,6 +1110,29 @@ function pointInTriangle(
 	const second = area(a, point, c) / total;
 	const third = 1 - first - second;
 	return first >= 0 && second >= 0 && third >= 0;
+}
+
+function pointInPolygon(
+	point: PlanPoint,
+	polygon: readonly PlanPoint[],
+): boolean {
+	let inside = false;
+	for (
+		let current = 0, previous = polygon.length - 1;
+		current < polygon.length;
+		previous = current++
+	) {
+		const [currentX, currentY] = polygon[current];
+		const [previousX, previousY] = polygon[previous];
+		const crosses =
+			currentY > point[1] !== previousY > point[1] &&
+			point[0] <
+				((previousX - currentX) * (point[1] - currentY)) /
+					(previousY - currentY) +
+					currentX;
+		if (crosses) inside = !inside;
+	}
+	return inside;
 }
 
 function viewDepth(entity: CadEntity, view: CadViewDirection): number {

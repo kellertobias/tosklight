@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { audienceOutline } from "./audienceOutline";
 import {
 	audiencePersonHeight,
 	entityPlanGeometry,
@@ -288,12 +289,16 @@ describe("CAD plan projections", () => {
 		const front = entityPlanGeometry(crowd, suppliedBox, "front_to_back");
 
 		expect(top.source).toBe("typed");
-		expect(top.outlines).toHaveLength(96);
-		expect(side.outlines).toHaveLength(48);
-		expect(oppositeSide.outlines).toHaveLength(48);
-		expect(back.outlines).toHaveLength(84);
-		expect(front.outlines).toHaveLength(84);
-		expect(top.triangles.length).toBeGreaterThan(300);
+		expect(audienceOutline.source).toBe("assets/viz/crowd/Person Outline.svg");
+		expect(top.outlines).toHaveLength(24);
+		expect(side.outlines).toHaveLength(8);
+		expect(oppositeSide.outlines).toHaveLength(8);
+		expect(back.outlines).toHaveLength(14);
+		expect(front.outlines).toHaveLength(14);
+		expect(top.outlines[0]).toHaveLength(audienceOutline.top.length);
+		expect(side.outlines[0]).toHaveLength(audienceOutline.side.length);
+		expect(front.outlines[0]).toHaveLength(audienceOutline.front.length);
+		expect(top.triangles).toEqual([]);
 		expect(side.outlines).not.toEqual(oppositeSide.outlines);
 		expect(side.outlines).not.toEqual(back.outlines);
 		expect(back.outlines).toEqual(front.outlines);
