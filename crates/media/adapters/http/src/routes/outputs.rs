@@ -12,13 +12,13 @@ use axum::response::{IntoResponse, Response};
 use media_application::MediaConfiguration;
 use media_application::configuration::{load, save};
 use media_domain::{
-    ANALOG_TV_EFFECT, Applied, BEAT_MOVE_EFFECT, BEAT_SCAN_EFFECT, BLUR_EFFECT, BeatMoveDirection,
-    BeatMoveParameters, BeatScanEdge, BeatScanParameters, BlurParameters, Command, CommandKind,
-    CommandSource, DIGITAL_TV_EFFECT, EffectSlot, FEEDBACK_EFFECT, FeedbackMotion,
-    FeedbackParameters, FlipMirror, KALEIDOSCOPE_EFFECT, KaleidoscopeParameters, LayerControls,
-    MasterControls, MediaAddress, MediaState, OPACITY_CYCLE_EFFECT,
-    OpacityCycleInterval, OutputId, RASTERIZE_EFFECT, RasterizeMode, RasterizeParameters,
-    ScalingMode, Timestamp, Tint, apply,
+    ANALOG_TV_EFFECT, Applied, BEAT_MOVE_EFFECT, BEAT_SCALE_TURN_EFFECT, BEAT_SCAN_EFFECT,
+    BLUR_EFFECT, BeatMoveDirection, BeatMoveParameters, BeatScaleTurnParameters, BeatScanEdge,
+    BeatScanParameters, BlurParameters, Command, CommandKind, CommandSource, DIGITAL_TV_EFFECT,
+    EffectSlot, FEEDBACK_EFFECT, FeedbackMotion, FeedbackParameters, FlipMirror,
+    KALEIDOSCOPE_EFFECT, KaleidoscopeParameters, LayerControls, MasterControls, MediaAddress,
+    MediaState, OPACITY_CYCLE_EFFECT, OpacityCycleInterval, OutputId,
+    RASTERIZE_EFFECT, RasterizeMode, RasterizeParameters, ScalingMode, Timestamp, Tint, apply,
 };
 
 use crate::error::ApiError;
@@ -151,6 +151,7 @@ pub(super) async fn update_layer(
         ("feedbackMotion", body.feedback_motion),
         ("beatMoveAmount", body.beat_move_amount),
         ("beatScanFalloff", body.beat_scan_falloff),
+        ("beatScaleAmount", body.beat_scale_amount),
     ] {
         validate_unit(name, value)?;
     }
@@ -167,6 +168,8 @@ pub(super) async fn update_layer(
         ("rasterizeDotSize", body.rasterize_dot_size, 2.0, 32.0),
         ("beatScanWidth", body.beat_scan_width, 0.01, 0.25),
         ("beatScanDuration", body.beat_scan_duration, 0.2, 3.0),
+        ("beatTurnRotation", body.beat_turn_rotation, -30.0, 30.0),
+        ("beatScaleDecay", body.beat_scale_decay, 0.05, 5.0),
     ] {
         validate_range(name, value, minimum, maximum)?;
     }
@@ -211,6 +214,7 @@ pub(super) async fn update_layer(
                 KALEIDOSCOPE_EFFECT => EffectSlot::kaleidoscope(),
                 RASTERIZE_EFFECT => EffectSlot::rasterize(),
                 BEAT_SCAN_EFFECT => EffectSlot::beat_scan(),
+                BEAT_SCALE_TURN_EFFECT => EffectSlot::beat_scale_turn(),
                 "none" => EffectSlot::default(),
                 _ => {
                     return Err(ApiError::bad_request(
@@ -367,6 +371,26 @@ pub(super) async fn update_layer(
                     )
                 })?;
             }
+            effect.parameters = parameters.as_array().to_vec();
+        }
+        if body.beat_scale_amount.is_some()
+            || body.beat_turn_enabled.is_some()
+            || body.beat_turn_rotation.is_some()
+            || body.beat_scale_decay.is_some()
+        {
+            if effect.effect_type.as_deref() != Some(BEAT_SCALE_TURN_EFFECT) {
+                return Err(ApiError::bad_request(
+                    "beat-scale-turn-parameters-effect",
+                    "choose the Beat Scale and Turn effect before changing its controls",
+                ));
+            }
+            let mut parameters = BeatScaleTurnParameters::from_parameters(&effect.parameters);
+            parameters.scale_amount = body.beat_scale_amount.unwrap_or(parameters.scale_amount);
+            parameters.turn_enabled = body.beat_turn_enabled.unwrap_or(parameters.turn_enabled);
+            parameters.rotation_degrees = body
+                .beat_turn_rotation
+                .unwrap_or(parameters.rotation_degrees);
+            parameters.decay_seconds = body.beat_scale_decay.unwrap_or(parameters.decay_seconds);
             effect.parameters = parameters.as_array().to_vec();
         }
         if body.feedback_amount.is_some()
@@ -1216,6 +1240,36 @@ mod tests {
         assert_eq!(effect["parameters"][1]["value"], 1.0);
         assert_eq!(effect["parameters"][2]["value"], 0.7);
         assert_eq!(effect["parameters"][3]["value"], 2.25);
+
+        let (_, bypassed) = send(
+            &bench.router,
+            post(uri, r#"{"effectSlot":0,"effectEnabled":false}"#),
+        )
+        .await;
+        assert_eq!(bypassed["layers"][0]["effects"][0]["enabled"], false);
+    }
+
+    #[tokio::test]
+    async fn beat_scale_turn_persists_independent_turn_amounts_decay_and_bypass() {
+        let bench = bench();
+        take_over(&bench).await;
+        let uri = format!("/api/v2/outputs/{}/layers/0/update", bench.output);
+        let (status, selected) = send(
+            &bench.router,
+            post(
+                uri.clone(),
+                r#"{"effectSlot":0,"effectType":"beat-scale-turn","beatScaleAmount":0.22,"beatTurnEnabled":true,"beatTurnRotation":-7,"beatScaleDecay":0.8}"#,
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let effect = &selected["layers"][0]["effects"][0];
+        assert_eq!(effect["effectType"], "beat-scale-turn");
+        assert_eq!(effect["label"], "Beat Scale and Turn");
+        assert_eq!(effect["parameters"][0]["value"], 0.22);
+        assert_eq!(effect["parameters"][1]["value"], 1.0);
+        assert_eq!(effect["parameters"][2]["value"], -7.0);
+        assert_eq!(effect["parameters"][3]["value"], 0.8);
 
         let (_, bypassed) = send(
             &bench.router,

@@ -183,6 +183,9 @@ sets the apparent print-cell size from 2 to 32 source pixels. Bypassing restores
 audio hit strength decides whether that beat spawns one, two, or three lines; there is deliberately
 no fixed spawn-count control. **Scan width**, **Sharp** or **Soft** edges, **Edge falloff**, and
 **Travel time** shape the lines. Consecutive beats keep earlier lines travelling until they leave.
+**Beat Scale and Turn** pulses the live image larger on each detected beat, then eases it back to
+its configured resting transform. **Turn** independently enables a subtle rotation; **Scale
+amount**, **Rotation amount**, and **Return time** define the pulse without changing the source.
 After configuring a slot, release takeover to return control to the desk. The matching **Effect 1**
 through **Effect 4** DMX channel then controls that slot's mix without erasing its selected effect or
 typed parameters.

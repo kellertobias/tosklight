@@ -264,6 +264,10 @@ export function stubServer(
 						layer.effects[body.effectSlot] = rasterizeEffect(body.effectSlot);
 					} else if (body.effectType === "beat-scan") {
 						layer.effects[body.effectSlot] = beatScanEffect(body.effectSlot);
+					} else if (body.effectType === "beat-scale-turn") {
+						layer.effects[body.effectSlot] = beatScaleTurnEffect(
+							body.effectSlot,
+						);
 					}
 					const selectedEffect = layer.effects[body.effectSlot];
 					if (body.visualizerParameters !== undefined)
@@ -329,6 +333,14 @@ export function stubServer(
 						selectedEffect.parameters[2].value = body.beatScanFalloff;
 					if (body.beatScanDuration !== undefined)
 						selectedEffect.parameters[3].value = body.beatScanDuration;
+					if (body.beatScaleAmount !== undefined)
+						selectedEffect.parameters[0].value = body.beatScaleAmount;
+					if (body.beatTurnEnabled !== undefined)
+						selectedEffect.parameters[1].value = body.beatTurnEnabled ? 1 : 0;
+					if (body.beatTurnRotation !== undefined)
+						selectedEffect.parameters[2].value = body.beatTurnRotation;
+					if (body.beatScaleDecay !== undefined)
+						selectedEffect.parameters[3].value = body.beatScaleDecay;
 					for (const [id, key] of [
 						["tv-curvature", "tvCurvature"],
 						["distortion", "effectDistortion"],
@@ -846,6 +858,39 @@ function beatScanEffect(
 				label: "Travel time",
 				value: 1,
 				defaultValue: 1,
+			},
+		],
+	};
+}
+
+function beatScaleTurnEffect(
+	index: number,
+): OutputView["layers"][number]["effects"][number] {
+	return {
+		...emptyEffect(index),
+		effectType: "beat-scale-turn",
+		label: "Beat Scale and Turn",
+		enabled: true,
+		mix: 1,
+		parameters: [
+			{
+				id: "beat-scale-amount",
+				label: "Scale amount",
+				value: 0.15,
+				defaultValue: 0.15,
+			},
+			{ id: "beat-turn-enabled", label: "Turn", value: 0, defaultValue: 0 },
+			{
+				id: "beat-turn-rotation",
+				label: "Rotation amount",
+				value: 5,
+				defaultValue: 5,
+			},
+			{
+				id: "beat-scale-decay",
+				label: "Return time",
+				value: 0.35,
+				defaultValue: 0.35,
 			},
 		],
 	};

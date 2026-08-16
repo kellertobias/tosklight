@@ -101,6 +101,66 @@ pub const BEAT_MOVE_EFFECT: &str = "beat-move";
 pub const KALEIDOSCOPE_EFFECT: &str = "kaleidoscope";
 pub const RASTERIZE_EFFECT: &str = "rasterize";
 pub const BEAT_SCAN_EFFECT: &str = "beat-scan";
+pub const BEAT_SCALE_TURN_EFFECT: &str = "beat-scale-turn";
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BeatScaleTurnParameters {
+    /// Additional uniform scale at the beat peak, where 0.2 means twenty percent larger.
+    pub scale_amount: f32,
+    pub turn_enabled: bool,
+    pub rotation_degrees: f32,
+    pub decay_seconds: f32,
+}
+
+impl BeatScaleTurnParameters {
+    pub const IDS: [&'static str; 4] = [
+        "beat-scale-amount",
+        "beat-turn-enabled",
+        "beat-turn-rotation",
+        "beat-scale-decay",
+    ];
+    pub const LABELS: [&'static str; 4] =
+        ["Scale amount", "Turn", "Rotation amount", "Return time"];
+
+    pub fn from_parameters(values: &[f32]) -> Self {
+        let defaults = Self::default();
+        let bounded = |value: Option<f32>, fallback: f32, low: f32, high: f32| match value {
+            Some(value) if value.is_finite() => value.clamp(low, high),
+            _ => fallback,
+        };
+        Self {
+            scale_amount: bounded(values.first().copied(), defaults.scale_amount, 0.0, 1.0),
+            turn_enabled: values.get(1).copied().unwrap_or_default() >= 0.5,
+            rotation_degrees: bounded(
+                values.get(2).copied(),
+                defaults.rotation_degrees,
+                -30.0,
+                30.0,
+            ),
+            decay_seconds: bounded(values.get(3).copied(), defaults.decay_seconds, 0.05, 5.0),
+        }
+    }
+
+    pub const fn as_array(self) -> [f32; 4] {
+        [
+            self.scale_amount,
+            if self.turn_enabled { 1.0 } else { 0.0 },
+            self.rotation_degrees,
+            self.decay_seconds,
+        ]
+    }
+}
+
+impl Default for BeatScaleTurnParameters {
+    fn default() -> Self {
+        Self {
+            scale_amount: 0.15,
+            turn_enabled: false,
+            rotation_degrees: 5.0,
+            decay_seconds: 0.35,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum BeatScanEdge {
@@ -859,6 +919,24 @@ impl EffectSlot {
             .then(|| BeatScanParameters::from_parameters(&self.parameters))
     }
 
+    pub fn beat_scale_turn() -> Self {
+        Self {
+            effect_type: Some(BEAT_SCALE_TURN_EFFECT.to_owned()),
+            enabled: true,
+            seed: 0,
+            mix: 1.0,
+            parameters: BeatScaleTurnParameters::default().as_array().to_vec(),
+            visualizer_parameters: None,
+        }
+    }
+
+    pub fn beat_scale_turn_parameters(&self) -> Option<BeatScaleTurnParameters> {
+        (self.enabled
+            && self.mix > 0.0
+            && self.effect_type.as_deref() == Some(BEAT_SCALE_TURN_EFFECT))
+        .then(|| BeatScaleTurnParameters::from_parameters(&self.parameters))
+    }
+
     pub fn normalize(&mut self) {
         self.mix = if self.mix.is_finite() {
             self.mix.clamp(0.0, 1.0)
@@ -899,6 +977,10 @@ impl EffectSlot {
                 .to_vec();
         } else if self.effect_type.as_deref() == Some(BEAT_SCAN_EFFECT) {
             self.parameters = BeatScanParameters::from_parameters(&self.parameters)
+                .as_array()
+                .to_vec();
+        } else if self.effect_type.as_deref() == Some(BEAT_SCALE_TURN_EFFECT) {
+            self.parameters = BeatScaleTurnParameters::from_parameters(&self.parameters)
                 .as_array()
                 .to_vec();
         }
@@ -1317,5 +1399,19 @@ mod tests {
         assert_eq!(effect.parameters, vec![0.25, 1.0, 1.0, 3.0]);
         effect.enabled = false;
         assert_eq!(effect.beat_scan_parameters(), None);
+    }
+
+    #[test]
+    fn beat_scale_turn_has_independent_turn_and_bounded_persisted_controls() {
+        let mut effect = EffectSlot::beat_scale_turn();
+        assert_eq!(
+            effect.beat_scale_turn_parameters(),
+            Some(BeatScaleTurnParameters::default())
+        );
+        effect.parameters = vec![2.0, 1.0, 90.0, -1.0];
+        effect.normalize();
+        assert_eq!(effect.parameters, vec![1.0, 1.0, 30.0, 0.05]);
+        effect.enabled = false;
+        assert_eq!(effect.beat_scale_turn_parameters(), None);
     }
 }

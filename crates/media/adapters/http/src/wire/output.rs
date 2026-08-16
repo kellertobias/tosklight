@@ -4,11 +4,12 @@ use media_application::configuration::{
     DmxProtocol, MonitorSelector, OutputConfiguration, OutputTarget, Resolution, SoundOutput,
 };
 use media_domain::{
-    ANALOG_TV_EFFECT, AnalogTvParameters, BEAT_MOVE_EFFECT, BEAT_SCAN_EFFECT, BLUR_EFFECT,
-    BeatMoveParameters, BeatScanParameters, BlurParameters, DIGITAL_TV_EFFECT, DigitalTvParameters,
-    EffectSlot, FEEDBACK_EFFECT, FeedbackParameters, KALEIDOSCOPE_EFFECT, KaleidoscopeParameters,
-    LayerState, MaskSource, MaskState, MasterState, MediaAddress, OPACITY_CYCLE_EFFECT,
-    OpacityCycleInterval, OutputState, RASTERIZE_EFFECT, RasterizeParameters,
+    ANALOG_TV_EFFECT, AnalogTvParameters, BEAT_MOVE_EFFECT, BEAT_SCALE_TURN_EFFECT,
+    BEAT_SCAN_EFFECT, BLUR_EFFECT, BeatMoveParameters, BeatScaleTurnParameters, BeatScanParameters,
+    BlurParameters, DIGITAL_TV_EFFECT, DigitalTvParameters, EffectSlot, FEEDBACK_EFFECT,
+    FeedbackParameters, KALEIDOSCOPE_EFFECT, KaleidoscopeParameters, LayerState, MaskSource,
+    MaskState, MasterState, MediaAddress, OPACITY_CYCLE_EFFECT, OpacityCycleInterval, OutputState,
+    RASTERIZE_EFFECT, RasterizeParameters,
 };
 use media_domain::{LayerPersonality, PresentationMode};
 use serde::{Deserialize, Serialize};
@@ -87,6 +88,7 @@ impl EffectSlotView {
         let kaleidoscope = effect.effect_type.as_deref() == Some(KALEIDOSCOPE_EFFECT);
         let rasterize = effect.effect_type.as_deref() == Some(RASTERIZE_EFFECT);
         let beat_scan = effect.effect_type.as_deref() == Some(BEAT_SCAN_EFFECT);
+        let beat_scale_turn = effect.effect_type.as_deref() == Some(BEAT_SCALE_TURN_EFFECT);
         let parameters = if analog {
             let defaults = AnalogTvParameters::default().as_array();
             let values = AnalogTvParameters::from_normalized(&effect.parameters).as_array();
@@ -182,6 +184,15 @@ impl EffectSlotView {
                 &values,
                 &defaults,
             )
+        } else if beat_scale_turn {
+            let defaults = BeatScaleTurnParameters::default().as_array();
+            let values = BeatScaleTurnParameters::from_parameters(&effect.parameters).as_array();
+            parameter_views(
+                &BeatScaleTurnParameters::IDS,
+                &BeatScaleTurnParameters::LABELS,
+                &values,
+                &defaults,
+            )
         } else {
             Vec::new()
         };
@@ -197,6 +208,7 @@ impl EffectSlotView {
                 || kaleidoscope
                 || rasterize
                 || beat_scan
+                || beat_scale_turn
             {
                 if analog {
                     "Analog TV"
@@ -212,8 +224,12 @@ impl EffectSlotView {
                     "Beat Move"
                 } else if kaleidoscope {
                     "Kaleidoscope"
-                } else {
+                } else if rasterize {
                     "Rasterized Print"
+                } else if beat_scan {
+                    "Beat Scan"
+                } else {
+                    "Beat Scale and Turn"
                 }
                 .to_owned()
             } else {
@@ -230,7 +246,8 @@ impl EffectSlotView {
                 || beat_move
                 || kaleidoscope
                 || rasterize
-                || beat_scan,
+                || beat_scan
+                || beat_scale_turn,
             capability_detail: (!analog
                 && !digital
                 && !opacity_cycle
@@ -240,6 +257,7 @@ impl EffectSlotView {
                 && !kaleidoscope
                 && !rasterize
                 && !beat_scan
+                && !beat_scale_turn
                 && effect.effect_type.is_some())
             .then(|| "This Media Server build cannot render the selected effect.".to_owned()),
             parameters,
@@ -887,6 +905,14 @@ pub struct UpdateLayer {
     pub beat_scan_falloff: Option<f32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub beat_scan_duration: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub beat_scale_amount: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub beat_turn_enabled: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub beat_turn_rotation: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub beat_scale_decay: Option<f32>,
     /// Complete per-layer visualizer settings routed through effect slot one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub visualizer_parameters: Option<VisualizerParametersView>,
@@ -942,6 +968,10 @@ impl UpdateLayer {
             || self.beat_scan_edge.is_some()
             || self.beat_scan_falloff.is_some()
             || self.beat_scan_duration.is_some()
+            || self.beat_scale_amount.is_some()
+            || self.beat_turn_enabled.is_some()
+            || self.beat_turn_rotation.is_some()
+            || self.beat_scale_decay.is_some()
             || self.visualizer_parameters.is_some()
     }
 }

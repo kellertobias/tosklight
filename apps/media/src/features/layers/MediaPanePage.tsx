@@ -660,7 +660,7 @@ function tintChange(value: string) {
 function layerChange(id: string, value: string | number): UpdateLayer {
 	const number = Number(value);
 	const effect =
-		/^effect-(\d+)-(type|enabled|mix|tv-curvature|distortion|image-grain|compression-damage|block-size|tile-displacement|chroma-damage|glitching|cycle-interval|blur-amount|feedback-amount|feedback-motion|feedback-direction|beat-move-amount|beat-move-direction|beat-move-decay|kaleidoscope-repetitions|kaleidoscope-angle|rasterize-mode|rasterize-dot-size|beat-scan-width|beat-scan-edge|beat-scan-falloff|beat-scan-duration)$/.exec(
+		/^effect-(\d+)-(type|enabled|mix|tv-curvature|distortion|image-grain|compression-damage|block-size|tile-displacement|chroma-damage|glitching|cycle-interval|blur-amount|feedback-amount|feedback-motion|feedback-direction|beat-move-amount|beat-move-direction|beat-move-decay|kaleidoscope-repetitions|kaleidoscope-angle|rasterize-mode|rasterize-dot-size|beat-scan-width|beat-scan-edge|beat-scan-falloff|beat-scan-duration|beat-scale-amount|beat-turn-enabled|beat-turn-rotation|beat-scale-decay)$/.exec(
 			id,
 		);
 	if (effect) {
@@ -720,6 +720,14 @@ function layerChange(id: string, value: string | number): UpdateLayer {
 				return { effectSlot, beatScanFalloff: number / 100 };
 			case "beat-scan-duration":
 				return { effectSlot, beatScanDuration: number };
+			case "beat-scale-amount":
+				return { effectSlot, beatScaleAmount: number / 100 };
+			case "beat-turn-enabled":
+				return { effectSlot, beatTurnEnabled: value === "true" };
+			case "beat-turn-rotation":
+				return { effectSlot, beatTurnRotation: number };
+			case "beat-scale-decay":
+				return { effectSlot, beatScaleDecay: number };
 		}
 	}
 	switch (id) {
@@ -789,6 +797,7 @@ function effectControls(
 					{ value: "kaleidoscope", label: "Kaleidoscope" },
 					{ value: "rasterize", label: "Rasterized Print" },
 					{ value: "beat-scan", label: "Beat Scan" },
+					{ value: "beat-scale-turn", label: "Beat Scale and Turn" },
 				],
 				disabled,
 			},
@@ -1131,6 +1140,82 @@ function effectControls(
 					duration?.value ?? 1,
 					0.2,
 					3,
+					disabled,
+					" s",
+					0.05,
+				),
+			];
+		}
+		if (effect.effectType === "beat-scale-turn") {
+			const scale = effect.parameters.find(
+				(parameter) => parameter.id === "beat-scale-amount",
+			);
+			const turn = effect.parameters.find(
+				(parameter) => parameter.id === "beat-turn-enabled",
+			);
+			const rotation = effect.parameters.find(
+				(parameter) => parameter.id === "beat-turn-rotation",
+			);
+			const decay = effect.parameters.find(
+				(parameter) => parameter.id === "beat-scale-decay",
+			);
+			return [
+				...controls,
+				{
+					id: `${prefix}-enabled`,
+					kind: "choice" as const,
+					label: `${slot} state`,
+					value: String(effect.enabled),
+					options: [
+						{ value: "true", label: "Enabled" },
+						{ value: "false", label: "Bypassed" },
+					],
+					disabled,
+				},
+				valueControl(
+					`${prefix}-mix`,
+					`${slot} mix`,
+					effect.mix * 100,
+					0,
+					100,
+					disabled,
+					"%",
+				),
+				valueControl(
+					`${prefix}-beat-scale-amount`,
+					`${slot} · Scale amount`,
+					(scale?.value ?? 0.15) * 100,
+					0,
+					100,
+					disabled,
+					"%",
+				),
+				{
+					id: `${prefix}-beat-turn-enabled`,
+					kind: "choice" as const,
+					label: `${slot} · Turn`,
+					value: String((turn?.value ?? 0) >= 0.5),
+					options: [
+						{ value: "false", label: "Off" },
+						{ value: "true", label: "On" },
+					],
+					disabled,
+				},
+				valueControl(
+					`${prefix}-beat-turn-rotation`,
+					`${slot} · Rotation amount`,
+					rotation?.value ?? 5,
+					-30,
+					30,
+					disabled,
+					"°",
+				),
+				valueControl(
+					`${prefix}-beat-scale-decay`,
+					`${slot} · Return time`,
+					decay?.value ?? 0.35,
+					0.05,
+					5,
 					disabled,
 					" s",
 					0.05,
