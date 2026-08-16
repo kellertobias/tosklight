@@ -31,7 +31,24 @@ const definition: TimecodeDefinition = {
 			color: "#33aa77",
 		},
 	],
-	lanes: [],
+	lanes: [
+		{
+			id: "00000000-0000-0000-0000-000000000004",
+			name: "Audio",
+			content: {
+				kind: "audio_volume",
+				keyframes: [
+					{
+						id: "00000000-0000-0000-0000-000000000005",
+						frame: 0,
+						value: 1,
+						fade_frames: 0,
+						curve: "linear",
+					},
+				],
+			},
+		},
+	],
 };
 
 describe("TimecodeTimelineEditor", () => {
@@ -123,16 +140,6 @@ describe("TimecodeTimelineEditor", () => {
 		fireEvent.pointerDown(playhead, { pointerId: 1, clientX: 88 });
 		fireEvent.pointerMove(playhead, { pointerId: 1, clientX: 176 });
 		expect(onScrub).toHaveBeenCalled();
-		ref.current?.addAudioLane();
-		expect(onCommit).toHaveBeenCalledWith(
-			expect.objectContaining({
-				lanes: [
-					expect.objectContaining({
-						content: expect.objectContaining({ kind: "audio_volume" }),
-					}),
-				],
-			}),
-		);
 		act(() => ref.current?.chooseCueListLane());
 		expect(
 			screen.getByRole("dialog", { name: "Choose Cue List" }),
@@ -140,14 +147,14 @@ describe("TimecodeTimelineEditor", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Add lane" }));
 		expect(onCommit).toHaveBeenCalledWith(
 			expect.objectContaining({
-				lanes: [
+				lanes: expect.arrayContaining([
 					expect.objectContaining({
 						content: expect.objectContaining({
 							kind: "cue_list",
 							cue_list_id: "00000000-0000-0000-0000-000000000010",
 						}),
 					}),
-				],
+				]),
 			}),
 		);
 		expect(screen.queryByLabelText("Marker CSV")).toBeNull();

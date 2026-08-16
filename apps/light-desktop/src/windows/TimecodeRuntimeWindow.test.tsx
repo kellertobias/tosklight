@@ -92,9 +92,7 @@ describe("TimecodeEditor title and settings", () => {
 			);
 		expect(
 			screen.getByRole("button", { name: "Revert to beginning" }),
-		).toHaveTextContent(
-			"▏▶",
-		);
+		).toHaveTextContent("▏▶");
 		fireEvent.click(
 			screen.getByRole("button", { name: "Revert to beginning" }),
 		);
@@ -142,12 +140,12 @@ describe("TimecodeEditor title and settings", () => {
 		expect(
 			screen.getByRole("button", { name: "Timecode position" }),
 		).toHaveTextContent("00:00:01.00");
-		expect(view.container.querySelector(".ui-window-info > b")).toHaveTextContent(
-			"playing",
-		);
-		expect(view.container.querySelector(".ui-window-info > b")).not.toHaveTextContent(
-			"00:00:01.00",
-		);
+		expect(
+			view.container.querySelector(".ui-window-info > b"),
+		).toHaveTextContent("playing");
+		expect(
+			view.container.querySelector(".ui-window-info > b"),
+		).not.toHaveTextContent("00:00:01.00");
 		expect(
 			view.container.querySelector(".timecode-editor-playhead"),
 		).toHaveTextContent("00:00:01.00");
@@ -207,7 +205,6 @@ describe("TimecodeEditor title and settings", () => {
 				.map((item) => item.textContent),
 		).toEqual([
 			"Add Marker",
-			"Add Audio Lane",
 			"Add Audio Player 201 Lane",
 			"Add Speed Lane",
 			"Add Cuelist Lane",

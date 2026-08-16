@@ -16,6 +16,7 @@ export interface TimelineItem {
 	laneName?: string;
 	kind: TimecodeEditorSelection["kind"];
 	color?: string;
+	valueLabel?: string;
 }
 
 export function timelineItems(definition: TimecodeDefinition): TimelineItem[] {
@@ -50,6 +51,7 @@ export function timelineItems(definition: TimecodeDefinition): TimelineItem[] {
 						laneId: lane.id,
 						laneName: lane.name,
 						kind: "speed",
+						valueLabel: `${keyframe.bpm} BPM`,
 					});
 				}
 				break;
@@ -62,6 +64,7 @@ export function timelineItems(definition: TimecodeDefinition): TimelineItem[] {
 						laneId: lane.id,
 						laneName: lane.name,
 						kind: "volume",
+						valueLabel: `${Math.round(keyframe.value * 100)}%`,
 					});
 				}
 				break;
@@ -81,6 +84,56 @@ export function timelineItems(definition: TimecodeDefinition): TimelineItem[] {
 		}
 	}
 	return items.sort((left, right) => left.frame - right.frame);
+}
+
+export function reconcileAutomaticAudioLane(
+	definition: TimecodeDefinition,
+	createId: () => string = () => crypto.randomUUID(),
+): TimecodeDefinition {
+	const audioLanes = definition.lanes.filter(
+		(lane) => lane.content.kind === "audio_volume",
+	);
+	if (!definition.audio) {
+		if (!audioLanes.length) return definition;
+		return {
+			...definition,
+			lanes: definition.lanes.filter(
+				(lane) => lane.content.kind !== "audio_volume",
+			),
+		};
+	}
+	if (audioLanes.length === 1) return definition;
+	if (audioLanes.length > 1) {
+		const keep = audioLanes[0]?.id;
+		return {
+			...definition,
+			lanes: definition.lanes.filter(
+				(lane) => lane.content.kind !== "audio_volume" || lane.id === keep,
+			),
+		};
+	}
+	return {
+		...definition,
+		lanes: [
+			{
+				id: createId(),
+				name: "Audio",
+				content: {
+					kind: "audio_volume",
+					keyframes: [
+						{
+							id: createId(),
+							frame: 0,
+							value: 1,
+							fade_frames: 0,
+							curve: "linear",
+						},
+					],
+				},
+			},
+			...definition.lanes,
+		],
+	};
 }
 
 export function sameSelection(

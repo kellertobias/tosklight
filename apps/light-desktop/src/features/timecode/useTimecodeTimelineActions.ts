@@ -190,14 +190,22 @@ export function useTimelineActions({
 				}),
 			);
 	};
-	const addSpeedLane = () =>
+	const addSpeedLane = (group = speedGroup) => {
+		if (
+			definition.lanes.some(
+				(lane) =>
+					lane.content.kind === "speed_group" && lane.content.group === group,
+			)
+		)
+			return;
 		onCommit(
-			addLane(definition, `Speed Group ${speedGroup}`, {
+			addLane(definition, `Speed Group ${group}`, {
 				kind: "speed_group",
-				group: speedGroup,
+				group,
 				keyframes: [],
 			}),
 		);
+	};
 	const addCueListLane = (cueListId: string) => {
 		const cueList = cueLists.find((candidate) => candidate.id === cueListId);
 		if (cueList)

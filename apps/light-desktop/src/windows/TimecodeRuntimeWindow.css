@@ -358,6 +358,20 @@
 	font-size: 0.72rem;
 	text-transform: capitalize;
 }
+.timecode-editor-lane.selected {
+	background: rgb(88 212 239 / 8%);
+	box-shadow: inset 0 0 0 1px rgb(88 212 239 / 45%);
+}
+.timecode-lane-select.ui-button {
+	display: grid;
+	min-width: 0;
+	min-height: 0;
+	justify-items: start;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	text-align: left;
+}
 .timecode-editor-lane-label span {
 	color: #888c9d;
 }
@@ -415,6 +429,44 @@
 	border-color: #4c839a;
 	background: #173747;
 }
+.timecode-timeline-item.item-speed,
+.timecode-timeline-item.item-volume {
+	top: 50%;
+	display: block;
+	width: 1rem;
+	min-width: 1rem;
+	height: 1rem;
+	min-height: 1rem;
+	overflow: visible;
+	padding: 0;
+	transform: translate(-50%, -50%);
+	border-radius: 50%;
+	font-size: 0.68rem;
+	line-height: 1rem;
+	text-indent: 1.3rem;
+}
+.timecode-timeline-item.item-speed {
+	border-color: #d2a95f;
+	background: #d2a95f;
+	color: #f6dfad;
+}
+.timecode-timeline-item.item-volume small,
+.timecode-timeline-item.item-speed small {
+	display: none;
+}
+.timecode-audio-keyframe-curve {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	pointer-events: none;
+}
+.timecode-audio-keyframe-curve polyline {
+	fill: none;
+	stroke: #58d4ef;
+	stroke-width: 1.5;
+	vector-effect: non-scaling-stroke;
+}
 .timecode-timeline-item.selected {
 	outline: 2px solid #fff;
 	outline-offset: 1px;
@@ -461,6 +513,20 @@
 	padding: 0.5rem 0.7rem;
 	border-top: 1px solid #343644;
 	color: #9da1b1;
+}
+.timecode-keyframe-actions {
+	display: flex;
+	flex: 0 0 auto;
+	align-items: center;
+	gap: 0.45rem;
+	padding: 0.4rem 0.55rem;
+	border-top: 1px solid #343644;
+}
+.timecode-keyframe-actions > strong {
+	min-width: 8rem;
+}
+.timecode-keyframe-actions .ui-field {
+	min-width: 9rem;
 }
 .timecode-selection-inspector strong {
 	color: #fff;

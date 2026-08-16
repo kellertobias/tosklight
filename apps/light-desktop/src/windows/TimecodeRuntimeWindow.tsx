@@ -1,4 +1,9 @@
-import { CheckboxField, SelectField, TextField, type TitleAction } from "@tosklight/ui";
+import {
+	CheckboxField,
+	SelectField,
+	TextField,
+	type TitleAction,
+} from "@tosklight/ui";
 import {
 	PoolCard,
 	PoolGrid,
@@ -31,6 +36,7 @@ import { usePatchedFixturesView } from "../features/patch/PatchState";
 import { useCueLists } from "../features/showObjects/ShowObjectsState";
 import { useShowObjectView } from "../features/showObjects/ShowObjectsView";
 import { parseMarkerCsv } from "../features/timecode/editorModel";
+import { reconcileAutomaticAudioLane } from "../features/timecode/editorModel";
 import { useTimecodeActions } from "../features/timecode/TimecodeActionsContext";
 import { TimecodeAutosaveWriter } from "../features/timecode/TimecodeAutosaveWriter";
 import {
@@ -343,6 +349,10 @@ export function TimecodeEditor({
 	);
 	const [saving, setSaving] = useState(Boolean(writer && !initialRecord));
 	useEffect(() => {
+		const reconciled = reconcileAutomaticAudioLane(draft);
+		if (reconciled !== draft) setDraft(reconciled);
+	}, [draft, setDraft]);
+	useEffect(() => {
 		if (!writer) return;
 		let current = true;
 		setSaving(true);
@@ -394,16 +404,18 @@ export function TimecodeEditor({
 				api.importAudio(showId, file),
 				decodeAudioPeaks(file).catch(() => undefined),
 			]);
-			setDraft({
-				...draft,
-				duration_frame: Math.ceil(
-					(imported.sample_frames * FPS) / imported.sample_rate,
-				),
-				audio: {
-					asset_id: imported.asset_id,
-					asset_revision: imported.asset_revision,
-				},
-			});
+			setDraft(
+				reconcileAutomaticAudioLane({
+					...draft,
+					duration_frame: Math.ceil(
+						(imported.sample_frames * FPS) / imported.sample_rate,
+					),
+					audio: {
+						asset_id: imported.asset_id,
+						asset_revision: imported.asset_revision,
+					},
+				}),
+			);
 			setWaveformPeaks(peaks);
 		} catch (reason) {
 			setError(reason instanceof Error ? reason.message : String(reason));
@@ -492,36 +504,42 @@ export function TimecodeEditor({
 				}}
 				groups={[
 					{ id: "timecode-add", actions: [addAction] },
-					{ id: "timecode-history", actions: [
-						{
-							id: "back",
-							label: "Back",
-							onPress: () => void close(),
-							disabled: busy,
-						},
-						{
-							id: "undo",
-							label: "Undo",
-							onPress: undo,
-							disabled: !canUndo || busy,
-						},
-						{
-							id: "redo",
-							label: "Redo",
-							onPress: redo,
-							disabled: !canRedo || busy,
-						},
-					] },
-					{ id: "timecode-position", actions: [
-						{
-							id: "position",
-							label: formatFrame(snapshot?.frame ?? frame),
-							ariaLabel: "Timecode position",
-							className: "timecode-position-action",
-							onPress: () => void act({ type: "seek", frame }),
-							disabled: isNew || busy,
-						},
-					] },
+					{
+						id: "timecode-history",
+						actions: [
+							{
+								id: "back",
+								label: "Back",
+								onPress: () => void close(),
+								disabled: busy,
+							},
+							{
+								id: "undo",
+								label: "Undo",
+								onPress: undo,
+								disabled: !canUndo || busy,
+							},
+							{
+								id: "redo",
+								label: "Redo",
+								onPress: redo,
+								disabled: !canRedo || busy,
+							},
+						],
+					},
+					{
+						id: "timecode-position",
+						actions: [
+							{
+								id: "position",
+								label: formatFrame(snapshot?.frame ?? frame),
+								ariaLabel: "Timecode position",
+								className: "timecode-position-action",
+								onPress: () => void act({ type: "seek", frame }),
+								disabled: isNew || busy,
+							},
+						],
+					},
 					{ id: "timecode-transport", actions: transportActions },
 				]}
 				settings
@@ -770,16 +788,6 @@ function useTimecodeAddAction({
 					onPress: () =>
 						runAdd("add marker", () => timelineRef.current?.addMarker()),
 				},
-				{
-					kind: "action",
-					id: "audio",
-					label: "Add Audio Lane",
-					disabled: draft.lanes.some(
-						(lane) => lane.content.kind === "audio_volume",
-					),
-					onPress: () =>
-						runAdd("add audio lane", () => timelineRef.current?.addAudioLane()),
-				},
 				...audioPlayers.map((player) => ({
 					kind: "action" as const,
 					id: `audio-player-${player.fixtureId}`,
@@ -799,7 +807,9 @@ function useTimecodeAddAction({
 					id: "speed",
 					label: "Add Speed Lane",
 					onPress: () =>
-						runAdd("add speed lane", () => timelineRef.current?.addSpeedLane()),
+						runAdd("choose a speed group", () =>
+							timelineRef.current?.chooseSpeedLane(),
+						),
 				},
 				{
 					kind: "action",
