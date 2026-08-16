@@ -21,6 +21,7 @@ export const cadSession = {
 		entityIds: readonly string[],
 		deltaMillimetres: readonly [number, number, number],
 		snapToMounts: boolean,
+		spread: boolean,
 	) =>
 		invoke<CadTransformOutcome>("cad_transform", {
 			intent: {
@@ -28,6 +29,7 @@ export const cadSession = {
 				entityIds,
 				deltaMillimetres,
 				snapToMounts,
+				spread,
 			},
 		}),
 	undo: (expectedSceneRevision: number) =>

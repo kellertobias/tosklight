@@ -80,7 +80,11 @@ vi.mock("./CadViewport", () => ({
 		onSelection(change: unknown): void;
 		preview: { deltaMillimetres: [number, number, number] } | null;
 		onPreview(preview: unknown): void;
-		onMove(delta: [number, number, number], ids: readonly string[]): void;
+		onMove(
+			delta: [number, number, number],
+			ids: readonly string[],
+			spread: boolean,
+		): void;
 		showCoordinateOrigins: boolean;
 	}) => (
 		<button
@@ -95,11 +99,12 @@ vi.mock("./CadViewport", () => ({
 				onPreview({
 					entityIds: [fixtureId],
 					deltaMillimetres: [250, 0, 0],
+					spread: false,
 				})
 			}
 			onPointerUp={() => {
 				onPreview(null);
-				onMove([250, 0, 0], [fixtureId]);
+				onMove([250, 0, 0], [fixtureId], false);
 			}}
 			onClick={() =>
 				onSelection({
@@ -459,6 +464,7 @@ describe("the CAD planning window", () => {
 			[fixtureId],
 			[250, 0, 0],
 			true,
+			false,
 		);
 		expect(screen.getAllByTestId("cad-canvas")[1]).toHaveAttribute(
 			"data-preview",

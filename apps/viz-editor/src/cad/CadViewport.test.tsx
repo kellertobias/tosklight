@@ -40,7 +40,7 @@ beforeEach(() => {
 
 function setup(
 	selectedIds: readonly string[] = [],
-	entity: CadEntity = fixture,
+	entity: CadEntity | readonly CadEntity[] = fixture,
 	labels = { fixtureIds: false, dmxAddresses: false },
 ) {
 	const onSelection = vi.fn();
@@ -49,7 +49,7 @@ function setup(
 	const onCamera = vi.fn();
 	render(
 		<CadViewport
-			entities={[entity]}
+			entities={Array.isArray(entity) ? entity : [entity]}
 			drawings={[]}
 			selectedIds={selectedIds}
 			view="top_down"
@@ -271,6 +271,7 @@ describe("CAD fixture interaction", () => {
 		expect(onPreview).toHaveBeenCalledWith({
 			entityIds: [fixture.id],
 			deltaMillimetres: [400, 0, 0],
+			spread: false,
 		});
 		fireEvent.pointerUp(canvas, {
 			pointerId: 1,
@@ -279,8 +280,70 @@ describe("CAD fixture interaction", () => {
 			clientY: 390,
 		});
 		await waitFor(() =>
-			expect(onMove).toHaveBeenCalledWith([400, 0, 0], [fixture.id]),
+			expect(onMove).toHaveBeenCalledWith([400, 0, 0], [fixture.id], false),
 		);
+	});
+
+	it("spreads an axis drag in selection order while Shift is held", async () => {
+		const second = {
+			...fixture,
+			id: "22222222-2222-4222-8222-222222222222",
+			name: "Profile Stage 2",
+		};
+		const third = {
+			...fixture,
+			id: "33333333-3333-4333-8333-333333333333",
+			name: "Profile Stage 3",
+		};
+		const orderedSelection = [third.id, fixture.id, second.id];
+		const { canvas, onMove, onPreview } = setup(orderedSelection, [
+			fixture,
+			second,
+			third,
+		]);
+
+		fireEvent.pointerDown(canvas, {
+			pointerId: 1,
+			button: 0,
+			clientX: 558,
+			clientY: 364,
+		});
+		fireEvent.pointerMove(canvas, {
+			pointerId: 1,
+			clientX: 598,
+			clientY: 390,
+			shiftKey: true,
+		});
+		expect(onPreview).toHaveBeenLastCalledWith({
+			entityIds: orderedSelection,
+			deltaMillimetres: [400, 0, 0],
+			spread: true,
+		});
+
+		fireEvent.keyUp(window, { key: "Shift" });
+		expect(onPreview).toHaveBeenLastCalledWith({
+			entityIds: orderedSelection,
+			deltaMillimetres: [400, 0, 0],
+			spread: false,
+		});
+		fireEvent.keyDown(window, { key: "Shift" });
+		expect(onPreview).toHaveBeenLastCalledWith({
+			entityIds: orderedSelection,
+			deltaMillimetres: [400, 0, 0],
+			spread: true,
+		});
+
+		fireEvent.pointerUp(canvas, {
+			pointerId: 1,
+			button: 0,
+			clientX: 598,
+			clientY: 390,
+			shiftKey: true,
+		});
+		await waitFor(() =>
+			expect(onMove).toHaveBeenCalledWith([400, 0, 0], orderedSelection, true),
+		);
+		expect(onMove).toHaveBeenCalledTimes(1);
 	});
 
 	it("does not select locked entities and renders optional operator labels", () => {

@@ -4,6 +4,7 @@ import {
 	mapTile,
 	newTile,
 	planeDelta,
+	previewDeltaForEntity,
 	projectPoint,
 	removeSplitSide,
 	setSplitRatio,
@@ -30,6 +31,21 @@ describe("CAD workspace model", () => {
 		expect(planeDelta([120, -40], "front_to_back")).toEqual([120, 0, -40]);
 		expect(planeDelta([120, -40], "back_to_front")).toEqual([-120, 0, -40]);
 		expect(projectPoint([10, 20, 30], "top_down")).toEqual([10, -20]);
+	});
+
+	it("interpolates positive and negative spread deltas in selection order", () => {
+		const preview = {
+			entityIds: ["first", "second", "third", "last"],
+			deltaMillimetres: [900, -300, 120] as [number, number, number],
+			spread: true,
+		};
+		expect(previewDeltaForEntity(preview, "first")).toEqual([0, 0, 0]);
+		expect(previewDeltaForEntity(preview, "second")).toEqual([300, -100, 40]);
+		expect(previewDeltaForEntity(preview, "third")).toEqual([600, -200, 80]);
+		expect(previewDeltaForEntity(preview, "last")).toEqual([900, -300, 120]);
+		expect(
+			previewDeltaForEntity({ ...preview, spread: false }, "first"),
+		).toEqual([900, -300, 120]);
 	});
 
 	it("keeps top-down projection, movement, and axes aligned after rotation", () => {

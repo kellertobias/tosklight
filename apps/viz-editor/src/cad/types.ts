@@ -25,6 +25,24 @@ export interface CadEntity {
 export interface CadTransformPreview {
 	entityIds: readonly string[];
 	deltaMillimetres: [number, number, number];
+	spread: boolean;
+}
+
+export function previewDeltaForEntity(
+	preview: CadTransformPreview | null,
+	entityId: string,
+): [number, number, number] {
+	if (!preview) return [0, 0, 0];
+	const index = preview.entityIds.indexOf(entityId);
+	if (index < 0) return [0, 0, 0];
+	const factor =
+		preview.spread && preview.entityIds.length > 1
+			? index / (preview.entityIds.length - 1)
+			: 1;
+	return preview.deltaMillimetres.map((value) => {
+		const next = value * factor;
+		return Object.is(next, -0) ? 0 : next;
+	}) as [number, number, number];
 }
 
 export type CadProjectionView = "top" | "left" | "right" | "front" | "back";

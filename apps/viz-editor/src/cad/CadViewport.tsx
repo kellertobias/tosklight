@@ -19,7 +19,13 @@ import type {
 	TileCamera,
 	WorldAxis,
 } from "./types";
-import { planeDelta, printPageHeight, projectPoint, viewAxes } from "./types";
+import {
+	planeDelta,
+	previewDeltaForEntity,
+	printPageHeight,
+	projectPoint,
+	viewAxes,
+} from "./types";
 
 interface CadViewportProps {
 	entities: readonly CadEntity[];
@@ -45,6 +51,7 @@ interface CadViewportProps {
 	onMove(
 		deltaMillimetres: [number, number, number],
 		entityIds: readonly string[],
+		spread: boolean,
 	): Promise<void>;
 }
 
@@ -125,6 +132,7 @@ interface Drag {
 	startCamera?: TileCamera;
 	additive?: boolean;
 	deltaMillimetres?: [number, number, number];
+	spread?: boolean;
 }
 
 interface SelectionBox {
@@ -205,6 +213,23 @@ export function CadViewport({
 		showCoordinateOrigins,
 	]);
 
+	useEffect(() => {
+		const shift = (spread: boolean) => (event: KeyboardEvent) => {
+			if (event.key !== "Shift") return;
+			const active = drag.current;
+			if (active?.type !== "move" || active.axis === "plane") return;
+			updateMovePreview(active, ...active.last, spread);
+		};
+		const keyDown = shift(true);
+		const keyUp = shift(false);
+		window.addEventListener("keydown", keyDown);
+		window.addEventListener("keyup", keyUp);
+		return () => {
+			window.removeEventListener("keydown", keyDown);
+			window.removeEventListener("keyup", keyUp);
+		};
+	});
+
 	function screenToPlane(clientX: number, clientY: number): [number, number] {
 		const bounds = canvas.current?.getBoundingClientRect();
 		if (!bounds) return [0, 0];
@@ -275,14 +300,18 @@ export function CadViewport({
 			camera,
 		);
 		if (axis) {
+			const selectable = new Set(
+				entities
+					.filter((entity) => entity.selectable)
+					.map((entity) => entity.id),
+			);
 			drag.current = {
 				type: "move",
 				start: [event.clientX, event.clientY],
 				last: [event.clientX, event.clientY],
 				axis,
-				entityIds: entities
-					.filter((entity) => entity.selectable && selected.has(entity.id))
-					.map((entity) => entity.id),
+				entityIds: selectedIds.filter((id) => selectable.has(id)),
+				spread: axis !== "plane" && event.shiftKey,
 			};
 			setGuide(axis);
 			return;
@@ -302,6 +331,28 @@ export function CadViewport({
 			additive: event.shiftKey,
 		};
 		setSelectionBox({ start: point, end: point });
+	}
+
+	function updateMovePreview(
+		active: Drag,
+		clientX: number,
+		clientY: number,
+		spread: boolean,
+	) {
+		const dx = clientX - active.start[0];
+		const dy = clientY - active.start[1];
+		const localDelta: [number, number] = [
+			active.axis === "vertical" ? 0 : dx / camera.zoom,
+			active.axis === "horizontal" ? 0 : -dy / camera.zoom,
+		];
+		const deltaMillimetres = planeDelta(localDelta, view, rotationQuarterTurns);
+		active.deltaMillimetres = deltaMillimetres;
+		active.spread = active.axis !== "plane" && spread;
+		onPreview({
+			entityIds: active.entityIds ?? selectedIds,
+			deltaMillimetres,
+			spread: active.spread,
+		});
 	}
 
 	function pointerMove(event: React.PointerEvent<HTMLCanvasElement>) {
@@ -325,16 +376,7 @@ export function CadViewport({
 			});
 			return;
 		}
-		const localDelta: [number, number] = [
-			active.axis === "vertical" ? 0 : dx / camera.zoom,
-			active.axis === "horizontal" ? 0 : -dy / camera.zoom,
-		];
-		const deltaMillimetres = planeDelta(localDelta, view, rotationQuarterTurns);
-		active.deltaMillimetres = deltaMillimetres;
-		onPreview({
-			entityIds: active.entityIds ?? selectedIds,
-			deltaMillimetres,
-		});
+		updateMovePreview(active, event.clientX, event.clientY, event.shiftKey);
 	}
 
 	async function pointerUp(event: React.PointerEvent<HTMLCanvasElement>) {
@@ -369,11 +411,16 @@ export function CadViewport({
 			return;
 		}
 		if (active?.type !== "move") return;
+		active.spread = active.axis !== "plane" && event.shiftKey;
 		const current = active.deltaMillimetres ?? [0, 0, 0];
 		onPreview(null);
 		setGuide(null);
 		if (Math.hypot(...current) < 1) return;
-		await onMove(current, active.entityIds ?? selectedIds);
+		await onMove(
+			current,
+			active.entityIds ?? selectedIds,
+			active.spread ?? false,
+		);
 	}
 
 	return (
@@ -407,9 +454,7 @@ export function CadViewport({
 			{showFixtureIds || showDmxAddresses ? (
 				<div className="cad-entity-labels" aria-hidden="true">
 					{entities.map((entity) => {
-						const worldDelta = preview?.entityIds.includes(entity.id)
-							? preview.deltaMillimetres
-							: ([0, 0, 0] as const);
+						const worldDelta = previewDeltaForEntity(preview, entity.id);
 						const point = projectPoint(
 							entity.positionMillimetres.map(
 								(value, index) => value + worldDelta[index],
@@ -731,9 +776,12 @@ class LineRenderer {
 		);
 		for (const entity of ordered) {
 			const active = selected.has(entity.id);
-			const entityPreview = preview?.entityIds.includes(entity.id)
-				? projectPoint(preview.deltaMillimetres, view, rotationQuarterTurns)
-				: ([0, 0] as const);
+			const entityWorldPreview = previewDeltaForEntity(preview, entity.id);
+			const entityPreview = projectPoint(
+				entityWorldPreview,
+				view,
+				rotationQuarterTurns,
+			);
 			const drawing = drawings.get(entity.drawingId);
 			const key = `${entity.drawingId}:${view}:${entity.sizeMillimetres.join(",")}:${entity.rotationDegrees.join(",")}`;
 			let geometry = this.geometryCache.get(key);
@@ -750,9 +798,7 @@ class LineRenderer {
 			);
 			const baseDepth =
 				viewPositionDepth(entity.positionMillimetres, view) +
-				(preview?.entityIds.includes(entity.id)
-					? viewPositionDepth(preview.deltaMillimetres, view)
-					: 0);
+				viewPositionDepth(entityWorldPreview, view);
 			for (const triangle of projected.triangles) {
 				const color = active ? selectedColor(triangle.color) : triangle.color;
 				for (let index = 0; index < triangle.points.length; index++)

@@ -169,6 +169,8 @@ pub struct TransformIntent {
     pub delta_millimetres: [i32; 3],
     #[serde(default)]
     pub snap_to_mounts: bool,
+    #[serde(default)]
+    pub spread: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -253,7 +255,11 @@ pub fn cad_transform(
     if intent.entity_ids.is_empty() {
         return Err("Select at least one fixture or venue object to move".to_owned());
     }
-    let ids: BTreeSet<Uuid> = intent.entity_ids.into_iter().collect();
+    let ordered_ids = intent.entity_ids;
+    let ids: BTreeSet<Uuid> = ordered_ids.iter().copied().collect();
+    if ids.len() != ordered_ids.len() {
+        return Err("A CAD transform cannot contain the same entity more than once".to_owned());
+    }
     if !ids.is_subset(&selectable_ids(&session)?) {
         return Err("One or more selected CAD entities belong to a locked layer".to_owned());
     }
@@ -277,19 +283,27 @@ pub fn cad_transform(
         .into_iter()
         .filter(|attachment| ids.contains(&attachment.fixture_id))
         .collect::<Vec<_>>();
-    let mut after = before
-        .iter()
-        .cloned()
-        .map(|mut transform| {
-            for axis in 0..3 {
-                transform.position_millimetres[axis] = transform.position_millimetres[axis]
-                    .saturating_add(intent.delta_millimetres[axis]);
-            }
-            transform
+    let mut after = moved_transforms(
+        &before,
+        &ordered_ids,
+        intent.delta_millimetres,
+        intent.spread,
+    );
+    let anchor = (intent.spread && ordered_ids.len() > 1)
+        .then(|| {
+            before
+                .iter()
+                .find(|item| item.id == ordered_ids[0])
+                .cloned()
         })
-        .collect::<Vec<_>>();
+        .flatten();
     if intent.snap_to_mounts {
         snap_transforms(&session, &mut after)?;
+        if let Some(anchor) = anchor
+            && let Some(first) = after.iter_mut().find(|item| item.id == anchor.id)
+        {
+            *first = anchor;
+        }
     }
     let revision = apply_transforms(&session, intent.expected_scene_revision, &after)?;
     let changed_attachments = if intent.snap_to_mounts {
@@ -317,6 +331,37 @@ pub fn cad_transform(
         transforms: after,
         attachments: changed_attachments,
     })
+}
+
+fn moved_transforms(
+    before: &[EntityTransform],
+    ordered_ids: &[Uuid],
+    delta_millimetres: [i32; 3],
+    spread: bool,
+) -> Vec<EntityTransform> {
+    let positions = ordered_ids
+        .iter()
+        .enumerate()
+        .map(|(index, id)| (*id, index))
+        .collect::<HashMap<_, _>>();
+    before
+        .iter()
+        .cloned()
+        .map(|mut transform| {
+            let index = positions[&transform.id];
+            let factor = if spread && ordered_ids.len() > 1 {
+                index as f64 / (ordered_ids.len() - 1) as f64
+            } else {
+                1.0
+            };
+            for axis in 0..3 {
+                let delta = (delta_millimetres[axis] as f64 * factor).round() as i32;
+                transform.position_millimetres[axis] =
+                    transform.position_millimetres[axis].saturating_add(delta);
+            }
+            transform
+        })
+        .collect()
 }
 
 #[tauri::command]
@@ -883,7 +928,8 @@ fn snap_transforms(session: &Session, moved: &mut [EntityTransform]) -> Result<(
 #[cfg(test)]
 mod tests {
     use super::{
-        EntityTransform, apply_transforms, drawing, locked_layers, output_direction, selectable_ids,
+        EntityTransform, apply_transforms, drawing, locked_layers, moved_transforms,
+        output_direction, selectable_ids,
     };
     use crate::session::Session;
     use light_application::{PatchFixtureCandidate, PatchFixturesCommand};
@@ -1062,6 +1108,44 @@ mod tests {
             "the old revision cannot overwrite the committed move"
         );
         let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn spread_transform_interpolates_in_explicit_selection_order() {
+        let ids = [
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+        ];
+        let before = ids
+            .iter()
+            .map(|id| EntityTransform {
+                id: *id,
+                position_millimetres: [1_000, 2_000, 3_000],
+                rotation_degrees: [0.0; 3],
+            })
+            .collect::<Vec<_>>();
+        let ordered = [ids[2], ids[0], ids[3], ids[1]];
+        let after = moved_transforms(&before, &ordered, [900, -300, 120], true);
+        let position = |id| {
+            after
+                .iter()
+                .find(|transform| transform.id == id)
+                .unwrap()
+                .position_millimetres
+        };
+
+        assert_eq!(position(ids[2]), [1_000, 2_000, 3_000]);
+        assert_eq!(position(ids[0]), [1_300, 1_900, 3_040]);
+        assert_eq!(position(ids[3]), [1_600, 1_800, 3_080]);
+        assert_eq!(position(ids[1]), [1_900, 1_700, 3_120]);
+
+        let pair = moved_transforms(&before[..2], &ids[..2], [-400, 200, 0], true);
+        assert_eq!(pair[0].position_millimetres, [1_000, 2_000, 3_000]);
+        assert_eq!(pair[1].position_millimetres, [600, 2_200, 3_000]);
+        let ordinary = moved_transforms(&before[..1], &ids[..1], [50, 60, 70], false);
+        assert_eq!(ordinary[0].position_millimetres, [1_050, 2_060, 3_070]);
     }
 
     #[test]

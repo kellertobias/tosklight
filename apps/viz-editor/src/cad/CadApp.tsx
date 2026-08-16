@@ -191,6 +191,7 @@ export function CadApp() {
 	async function move(
 		deltaMillimetres: [number, number, number],
 		entityIds: readonly string[],
+		spread: boolean,
 	) {
 		if (!scene || !entityIds.length || printMode) return;
 		setPreview(null);
@@ -200,6 +201,7 @@ export function CadApp() {
 				entityIds,
 				deltaMillimetres.map(Math.round) as [number, number, number],
 				settings.snapToMounts,
+				spread,
 			);
 			applyScene(await cadSession.snapshot());
 		} catch (reason) {
@@ -573,6 +575,7 @@ interface CadTileProps {
 	onMove(
 		delta: [number, number, number],
 		entityIds: readonly string[],
+		spread: boolean,
 	): Promise<void>;
 	onFit(id: string): void;
 	printMode: boolean;
