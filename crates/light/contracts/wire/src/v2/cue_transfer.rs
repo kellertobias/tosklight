@@ -167,9 +167,9 @@ mod tests {
                 operation: CueTransferOperation::Copy,
                 mode: CueTransferMode::Status,
                 source_cue_id: Uuid::from_u128(3),
-                source_cue_number: 1.0,
+                source_cue_number: "1".into(),
                 destination_cue_id: Uuid::from_u128(4),
-                destination_cue_number: 2.0,
+                destination_cue_number: "2".into(),
             },
             show_revision: 8,
             projections: vec![CueTransferObjectProjection {

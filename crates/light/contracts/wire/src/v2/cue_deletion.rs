@@ -131,7 +131,7 @@ mod tests {
         let request = serde_json::json!({
             "request_id":"delete-1",
             "address":{"type":"current_page","expected_page":2,"slot":3},
-            "cue_number":2.5,
+            "cue_number":"2.5",
             "authority":{
                 "playback_number":7,
                 "cue_list_id":Uuid::from_u128(1),

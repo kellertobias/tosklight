@@ -1107,8 +1107,8 @@ describe("CuelistWindow topology-backed Cuelist settings", () => {
 		]);
 		const saved = mocks.saveTopologyCueList.mock.calls[0][3] as CueList;
 		expect(saved.cues).toEqual([
-			{ ...cueList.cues[0], number: 10 },
-			{ ...cueList.cues[1], number: 11 },
+			{ ...cueList.cues[0], number: "10" },
+			{ ...cueList.cues[1], number: "11" },
 		]);
 		expect(mocks.refresh).not.toHaveBeenCalled();
 	});
