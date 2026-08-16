@@ -115,7 +115,8 @@ The following table shows the second layer assignment, the user can reach with h
 | `[^CUE]`  | Timecode      | Select or Target a particular timecode |
 | `[^PBK]`  | Macro         | Select or Target a particular macro |
 | `[^SET]`  | Assign        | Assign a source object to a playback. |
-| `[^TIME]` | Go To         | Go directly to a Cue on an addressed playback. Press twice for `#> LOAD`. |
+| `[^TIME]` | Speed Group   | Address Speed Groups A-E as `#> SPD GRP 1-5`. |
+| `[^DIV]`  | Go To         | Go directly to a Cue on an addressed playback. Press twice for `#> LOAD`. |
 | `[^OFF]`  | Release       | Enter Release as a recordable programmer value. |
 | `[^MOV]`  | Copy          | Copy a cue or preset. Same as the `[CPY]` button if it is available. |
 | `[^REC]`  | Update        | Updates cues, presets, and groups. Hold for update options. |
@@ -363,13 +364,13 @@ Running a different playback does not silently change the selection.
 
 ### Going To and Loading Cues
 
-`[^TIME]` enters **GO TO**. A Go To command must address a playback and then a Cue: `[^TIME][PBK] <playback-number> [CUE] <Cue-number> [ENT]`. When `[ENT]` is pressed, that playback goes directly to the addressed Cue in its assigned Cuelist.
+`[^DIV]` enters **GO TO**. A Go To command must address a playback and then a Cue: `[^DIV][PBK] <playback-number> [CUE] <Cue-number> [ENT]`. When `[ENT]` is pressed, that playback goes directly to the addressed Cue in its assigned Cuelist.
 
-For example, `[^TIME][PBK] 6 [CUE] 2.1 [ENT]` goes to Cue `2.1` on playback 6 of the current page. Use `[PBK] 2.6` to address playback 6 on page 2, or `[PBK][PBK] <virtual-playback-number>` to address a Virtual Playback.
+For example, `[^DIV][PBK] 6 [CUE] 2.1 [ENT]` goes to Cue `2.1` on playback 6 of the current page. Use `[PBK] 2.6` to address playback 6 on page 2, or `[PBK][PBK] <virtual-playback-number>` to address a Virtual Playback.
 
 The Cuelist must be assigned to the addressed playback. A Cuelist pool address alone cannot execute Go To because it does not identify the playback that should run the Cue.
 
-Press `[^TIME]` twice to enter **LOAD**: `[^TIME][^TIME][PBK] <playback-number> [CUE] <Cue-number> [ENT]`. Load does not run the Cue immediately. It makes the addressed Cue the selected next Cue for that playback; the next forward GO runs it.
+Press `[^DIV]` twice to enter **LOAD**: `[^DIV][^DIV][PBK] <playback-number> [CUE] <Cue-number> [ENT]`. Load does not run the Cue immediately. It makes the addressed Cue the selected next Cue for that playback; the next forward GO runs it.
 
 ### Cue Timing and Triggers
 
@@ -499,3 +500,21 @@ The Fixture Sheet marks a full Freeze as `❄ FREEZE`. A partial Freeze shows th
 `[^PBK] <macro-number> [ENT]` runs the addressed Macro.
 
 Prefix an address with `[SET]` to edit instead of run it. `[SET][^CUE] <timecode-number> [ENT]` opens that Timecode's editor, and `[SET][^PBK] <macro-number> [ENT]` opens that Macro's editor. The same rule opens a Cuelist: `[SET][CUE][CUE] <Cuelist-number> [ENT]`.
+
+## Speed Groups
+
+`[^TIME]` enters **SPD GRP**. ToskLight has five Speed Groups: command-line numbers `1` through `5` address Speed Groups A through E.
+
+Set an absolute speed with `[^TIME] <Speed-Group-number> [AT] <BPM> [ENT]`. For example, `[^TIME] 1 [AT] 120 [ENT]` sets Speed Group A to 120 BPM, and `[^TIME] 2 [AT] 127.5 [ENT]` sets Speed Group B to 127.5 BPM.
+
+Use `[+]` or `[-]` after `[AT]` for a relative change. `[^TIME] 1 [AT][+] 5 [ENT]` increases Speed Group A by 5 BPM, while `[^TIME] 1 [AT][-] 5 [ENT]` decreases it by 5 BPM.
+
+To synchronize two Speed Groups, address both of them: `[^TIME] 1 [AT][^TIME] 3 [ENT]` displays `SPD GRP 1 AT SPD GRP 3` and synchronizes Speed Groups A and C to the same speed and phase. Directly setting or tapping either synchronized Speed Group breaks that synchronization and returns the changed group to independent control.
+
+A Cuelist, Playback, or Dynamic can use a Speed Group as its authoritative rate. Choose the source first, press `[AT]`, address the Speed Group, and press `[ENT]`:
+
+- `[CUE][CUE] 4 [AT][^TIME] 2 [ENT]` sets Cuelist 4 to Speed Group B.
+- `[PBK] 6 [AT][^TIME] 2 [ENT]` sets the object assigned to playback 6 on the current page to Speed Group B.
+- `[^5] 29 [AT][^TIME] 2 [ENT]` sets Dynamic 29 to Speed Group B.
+
+The source's own multiplier is applied to the Speed Group rate without changing the Speed Group itself. Selecting a different Speed Group replaces the source's previous Speed Group assignment.
