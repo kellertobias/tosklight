@@ -9,7 +9,9 @@ const PERSON_MARGIN: f32 = 0.5;
 pub(super) fn push_crowds(frame: &mut FrameInstances, scene: &Scene, style: &FrameStyle) {
     let quality_budget = match style.quality {
         RenderQuality::Draft | RenderQuality::Standard => return,
-        RenderQuality::High | RenderQuality::Ultra => style.crowd_person_budget,
+        RenderQuality::High | RenderQuality::Ultra | RenderQuality::Extreme => {
+            style.crowd_person_budget
+        }
     };
     let amount = style.crowd_amount.clamp(0.0, 1.0);
     if amount <= 0.0 {

@@ -11,7 +11,9 @@ pub const BUDGET_STANDARD: usize = 512;
 #[cfg(test)]
 pub const BUDGET_HIGH: usize = 2_048;
 #[cfg(test)]
-pub const BUDGET_ULTRA: usize = 8_192;
+pub const BUDGET_ULTRA: usize = 4_096;
+#[cfg(test)]
+pub const BUDGET_EXTREME: usize = 8_192;
 
 pub(super) fn push_effects(
     frame: &mut FrameInstances,
@@ -165,18 +167,20 @@ mod tests {
         assert!(BUDGET_DRAFT < BUDGET_STANDARD);
         assert!(BUDGET_STANDARD < BUDGET_HIGH);
         assert!(BUDGET_HIGH < BUDGET_ULTRA);
+        assert!(BUDGET_ULTRA < BUDGET_EXTREME);
         assert_eq!(BUDGET_HIGH, 2_048);
-        assert_eq!(BUDGET_ULTRA, 8_192);
+        assert_eq!(BUDGET_ULTRA, 4_096);
+        assert_eq!(BUDGET_EXTREME, 8_192);
     }
     #[test]
     fn overload_keeps_every_nozzle_before_filling_the_remaining_budget() {
         let requested = vec![220; 64];
         let high = allocate(&requested, BUDGET_HIGH);
-        let ultra = allocate(&requested, BUDGET_ULTRA);
+        let extreme = allocate(&requested, BUDGET_EXTREME);
         assert_eq!(high.iter().sum::<usize>(), BUDGET_HIGH);
-        assert_eq!(ultra.iter().sum::<usize>(), BUDGET_ULTRA);
+        assert_eq!(extreme.iter().sum::<usize>(), BUDGET_EXTREME);
         assert!(high.iter().all(|drawn| *drawn > 0));
-        assert!(ultra.iter().all(|drawn| *drawn > 0));
+        assert!(extreme.iter().all(|drawn| *drawn > 0));
         assert_eq!(
             high,
             allocate(&requested, BUDGET_HIGH),

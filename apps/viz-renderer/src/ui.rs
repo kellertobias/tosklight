@@ -275,6 +275,8 @@ mod tests {
             fog_percent: 50.0,
             ambient_percent: 6.0,
             degraded: false,
+            effective_quality: Some(RenderQuality::High),
+            crowd_reduction: None,
             particle_reduction: None,
             exposure: 1.0,
             renderer: "test".into(),
@@ -325,6 +327,8 @@ mod tests {
             fog_percent: 50.0,
             ambient_percent: 6.0,
             degraded: true,
+            effective_quality: Some(RenderQuality::High),
+            crowd_reduction: None,
             particle_reduction: None,
             exposure: 1.0,
             renderer: "test".into(),
@@ -475,6 +479,37 @@ mod tests {
     }
 
     #[test]
+    fn quick_settings_explains_the_requested_and_effective_quality() {
+        let connection = ConnectionState::Idle;
+        let diagnostics = ProviderDiagnostics::default();
+        let mut model = status_model(&connection, &diagnostics, 12, false, None);
+        model.quality = RenderQuality::Extreme;
+        model.degraded = true;
+        model.effective_quality = Some(RenderQuality::Ultra);
+        assert_eq!(
+            model.quality_reduction_reason().as_deref(),
+            Some("Extreme reduced to Ultra — GPU frame time exceeded the 16 ms Extreme budget")
+        );
+
+        model.quality = RenderQuality::Ultra;
+        model.effective_quality = Some(RenderQuality::Ultra);
+        model.crowd_reduction = Some((768, 1_080));
+        assert_eq!(
+            model.quality_reduction_reason().as_deref(),
+            Some("Ultra reduced — scene authored 1080 people; 768 fit this tier")
+        );
+
+        model.crowd_reduction = None;
+        model.particle_reduction = Some((4_096, 6_000));
+        assert!(
+            model
+                .quality_reduction_reason()
+                .expect("Ultra reduction has an operator-facing reason")
+                .starts_with("Ultra reduced — scene requested 6000 particles")
+        );
+    }
+
+    #[test]
     fn a_crowded_status_bar_never_overlaps_its_own_halves() {
         for width in [900.0_f32, 1280.0, 1600.0, 2560.0] {
             for notice in [
@@ -561,6 +596,8 @@ mod tests {
                 fog_percent: 50.0,
                 ambient_percent: 6.0,
                 degraded: false,
+                effective_quality: Some(RenderQuality::High),
+                crowd_reduction: None,
                 particle_reduction: None,
                 exposure: 1.0,
                 renderer: "test".into(),
@@ -886,6 +923,8 @@ mod tests {
             fog_percent: 50.0,
             ambient_percent: 6.0,
             degraded: false,
+            effective_quality: Some(RenderQuality::High),
+            crowd_reduction: None,
             particle_reduction: None,
             exposure: 1.0,
             renderer: "test".into(),
@@ -1012,11 +1051,15 @@ mod tests {
     }
 
     #[test]
-    fn quality_cycles_back_to_following_the_source() {
+    fn quality_cycles_in_operator_order_and_back_to_following_the_source() {
         let mut current = None;
-        for _ in 0..RenderQuality::ALL.len() + 1 {
+        let mut labels = Vec::new();
+        for _ in 0..RenderQuality::ALL.len() {
             current = cycle_quality(current, 1);
+            labels.push(current.expect("an explicit quality").label());
         }
+        assert_eq!(labels, ["Draft", "Standard", "High", "Ultra", "Extreme"]);
+        current = cycle_quality(current, 1);
         assert_eq!(current, None);
     }
 }

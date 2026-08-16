@@ -822,7 +822,7 @@ pub fn build_quick_settings(
         9.0
     } else {
         10.0
-    };
+    } + if model.degraded { 1.0 } else { 0.0 };
     // A line is held back for the list's own heading, and the margin keeps the panel and its
     // border clear of the window edge at every scale.
     let room = ((height - 72.0) / line - chrome_lines - 1.0)
@@ -937,6 +937,17 @@ pub fn build_quick_settings(
             scale,
             palette.dim,
             row,
+            x + panel_width - padding,
+        );
+        cursor += line;
+    }
+    if let Some(reason) = model.quality_reduction_reason() {
+        overlay.clipped_text(
+            x + padding,
+            cursor,
+            scale,
+            palette.warn,
+            &reason,
             x + panel_width - padding,
         );
         cursor += line;

@@ -37,6 +37,7 @@ pub enum VisualizerRenderQuality {
     Standard,
     High,
     Ultra,
+    Extreme,
 }
 
 /// A camera described without Euler-order ambiguity: where it is, what it is looking at, and

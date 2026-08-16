@@ -210,6 +210,7 @@ fn render_quality(quality: VisualizerRenderQuality) -> wire::VisualizerRenderQua
         VisualizerRenderQuality::Standard => wire::VisualizerRenderQuality::Standard,
         VisualizerRenderQuality::High => wire::VisualizerRenderQuality::High,
         VisualizerRenderQuality::Ultra => wire::VisualizerRenderQuality::Ultra,
+        VisualizerRenderQuality::Extreme => wire::VisualizerRenderQuality::Extreme,
     }
 }
 
@@ -219,6 +220,7 @@ fn domain_quality(quality: wire::VisualizerRenderQuality) -> VisualizerRenderQua
         wire::VisualizerRenderQuality::Standard => VisualizerRenderQuality::Standard,
         wire::VisualizerRenderQuality::High => VisualizerRenderQuality::High,
         wire::VisualizerRenderQuality::Ultra => VisualizerRenderQuality::Ultra,
+        wire::VisualizerRenderQuality::Extreme => VisualizerRenderQuality::Extreme,
     }
 }
 

@@ -25,6 +25,7 @@ struct FramePlan {
     shadow_budget: u32,
     render_scale: f32,
     adaptive_degraded: bool,
+    effective_quality: viz_scene::RenderQuality,
     exposure: f32,
     camera: ResolvedCamera,
 }
@@ -72,8 +73,8 @@ impl Renderer {
         }) && sample_id != self.last_timing_sample
         {
             self.last_timing_sample = sample_id;
-            if view.quality == viz_scene::RenderQuality::Ultra {
-                self.ultra_budget.observe(gpu_micros);
+            if view.quality == viz_scene::RenderQuality::Extreme {
+                self.extreme_budget.observe(gpu_micros);
             }
         }
         let plan = self.plan_frame(scene, values, view);
@@ -172,6 +173,7 @@ impl Renderer {
             volumetric_steps: plan.volumetric_steps,
             shadow_budget: plan.shadow_budget,
             render_scale: plan.render_scale,
+            effective_quality: Some(plan.effective_quality),
             crowd_authored: self.frame.crowd_authored,
             crowd_drawn: self.frame.crowd_drawn,
         };
@@ -186,16 +188,23 @@ impl Renderer {
         view: &ViewConfiguration,
     ) -> FramePlan {
         let plot = view.mode.is_plot();
-        let (volumetric_steps, shadow_budget, adaptive_scale, adaptive_degraded) =
-            if view.quality == viz_scene::RenderQuality::Ultra {
-                let (steps, shadows, scale) = self.ultra_budget.settings();
-                (steps, shadows, scale, self.ultra_budget.degraded())
+        let (volumetric_steps, shadow_budget, adaptive_scale, adaptive_degraded, effective_quality) =
+            if view.quality == viz_scene::RenderQuality::Extreme {
+                let (steps, shadows, scale) = self.extreme_budget.settings();
+                (
+                    steps,
+                    shadows,
+                    scale,
+                    self.extreme_budget.degraded(),
+                    effective_extreme_quality(steps, shadows, scale),
+                )
             } else {
                 (
                     view.quality.volumetric_steps(),
                     view.quality.shadow_budget(),
                     1.0,
                     false,
+                    view.quality,
                 )
             };
         // A plan is drawn at the display's own resolution whatever the tier says: a stage plot is
@@ -255,7 +264,8 @@ impl Renderer {
             crowd_person_budget: match view.quality {
                 viz_scene::RenderQuality::Draft | viz_scene::RenderQuality::Standard => 0,
                 viz_scene::RenderQuality::High => 384,
-                viz_scene::RenderQuality::Ultra => {
+                viz_scene::RenderQuality::Ultra => 768,
+                viz_scene::RenderQuality::Extreme => {
                     (1_024.0 * adaptive_scale * adaptive_scale).round() as usize
                 }
             },
@@ -263,7 +273,8 @@ impl Renderer {
                 viz_scene::RenderQuality::Draft => 128,
                 viz_scene::RenderQuality::Standard => 512,
                 viz_scene::RenderQuality::High => 2_048,
-                viz_scene::RenderQuality::Ultra => {
+                viz_scene::RenderQuality::Ultra => 4_096,
+                viz_scene::RenderQuality::Extreme => {
                     (8_192.0 * adaptive_scale * adaptive_scale).round() as usize
                 }
             },
@@ -296,6 +307,7 @@ impl Renderer {
                 view.quality.resolution_scale() * adaptive_scale
             },
             adaptive_degraded,
+            effective_quality,
             exposure,
             camera,
         }
@@ -320,7 +332,8 @@ impl Renderer {
             match view.quality {
                 viz_scene::RenderQuality::Draft | viz_scene::RenderQuality::Standard => 0,
                 viz_scene::RenderQuality::High => 2,
-                viz_scene::RenderQuality::Ultra => 4,
+                viz_scene::RenderQuality::Ultra => 3,
+                viz_scene::RenderQuality::Extreme => 4,
             }
         };
         let chosen = shadow_candidates(&self.frame.lights, budget, projector_budget);
@@ -836,6 +849,21 @@ impl Renderer {
         pass.set_vertex_buffer(0, self.overlay_quads.buffer.slice(..));
         pass.draw(0..6, 0..self.overlay_quads.length);
         drop(pass);
+    }
+}
+
+fn effective_extreme_quality(steps: u32, shadows: u32, scale: f32) -> viz_scene::RenderQuality {
+    use viz_scene::RenderQuality;
+    if steps >= 64 && shadows >= 10 && scale >= 1.0 {
+        RenderQuality::Extreme
+    } else if steps >= 48 && shadows >= 8 && scale >= 1.0 {
+        RenderQuality::Ultra
+    } else if steps >= 40 && shadows >= 6 {
+        RenderQuality::High
+    } else if steps >= 24 {
+        RenderQuality::Standard
+    } else {
+        RenderQuality::Draft
     }
 }
 

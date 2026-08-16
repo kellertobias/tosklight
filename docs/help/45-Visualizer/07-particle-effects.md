@@ -46,16 +46,15 @@ into portable show state.
 
 Population is best effort and the major shape is preserved: every active declarative nozzle gets
 one particle before the remaining budget is distributed round-robin. The upper bounds are
-128 particles in Draft, 512 in Standard, 2,048 in High and 8,192 in Ultra. Ultra follows the
-renderer hardware ladder, reducing that ceiling together with resolution and volumetric work when
-the measured GPU frame cost cannot sustain 60 Hz. When requested
+128 particles in Draft, 512 in Standard, 2,048 in High, 4,096 in Ultra and 8,192 in Extreme.
+Extreme follows the renderer hardware ladder, reducing that ceiling together with resolution and
+volumetric work when the measured GPU frame cost cannot sustain 60 Hz. When requested
 population is higher, **FrameStats** exposes requested and drawn counts and marks the frame
 degraded; density is reduced without dropping an entire nozzle or allowing a package to grow GPU
 buffers without limit.
 
 The standard built-in benchmark includes a package-equivalent cold-spark fountain. On the Apple
 M5 Max Metal reference machine, the 33-fixture Full 3D scene rendered its 220 requested particles
-without particle reduction at 59.9 fps in High and 59.3 fps in Ultra. The same run demonstrated
-the shared adaptive ladder independently reducing the heavier crowd workload while particle
-requested/drawn remained 220/220. These figures are evidence for that machine, not a product-wide
-maximum.
+without particle reduction in High, Ultra and Extreme. Extreme alone owns the adaptive ladder;
+High and Ultra keep their documented fixed budgets. Machine-specific measurements are recorded in
+the Visualizer GPU cost engineering note rather than presented as a product-wide maximum.

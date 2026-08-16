@@ -31,6 +31,8 @@ pub struct StatusModel<'a> {
     pub fog_percent: f32,
     pub ambient_percent: f32,
     pub degraded: bool,
+    pub effective_quality: Option<RenderQuality>,
+    pub crowd_reduction: Option<(u32, u32)>,
     pub particle_reduction: Option<(u32, u32)>,
     pub exposure: f32,
     pub renderer: String,
@@ -106,6 +108,37 @@ impl StatusModel<'_> {
             .map(|universe| universe.grade)
             .max()
             .unwrap_or(UniverseGrade::Waiting)
+    }
+
+    /// The explanation shown inside Quick Settings when the status bar says quality was reduced.
+    pub fn quality_reduction_reason(&self) -> Option<String> {
+        if !self.degraded {
+            return None;
+        }
+        let effective = self.effective_quality.unwrap_or(self.quality);
+        if effective < self.quality {
+            return Some(format!(
+                "{} reduced to {} — GPU frame time exceeded the 16 ms Extreme budget",
+                self.quality.label(),
+                effective.label()
+            ));
+        }
+        if let Some((drawn, requested)) = self.crowd_reduction {
+            return Some(format!(
+                "{} reduced — scene authored {requested} people; {drawn} fit this tier",
+                self.quality.label()
+            ));
+        }
+        if let Some((drawn, requested)) = self.particle_reduction {
+            return Some(format!(
+                "{} reduced — scene requested {requested} particles; {drawn} fit this frame",
+                self.quality.label()
+            ));
+        }
+        Some(format!(
+            "{} reduced — the visible scene exceeded a renderer capacity limit",
+            self.quality.label()
+        ))
     }
 }
 

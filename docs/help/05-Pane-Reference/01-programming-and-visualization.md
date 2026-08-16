@@ -168,8 +168,10 @@ adding to the one below it:
 - **Standard** — and the gobos, so a projected pattern is a pattern rather than a plain cone.
 - **High** — and the fall-off: a feathered field edge, the light dropping away across the pool, and
   shadows where a beam meets something opaque.
-- **Ultra** — and the haze itself, drifting and uneven, so a beam through it varies along its
-  length instead of running through a uniform slab.
+- **Ultra** — and bounded drifting, uneven haze, with more ray-march detail and shadowed lights
+  than High while retaining a fixed cost.
+- **Extreme** — the previous maximum Ultra picture: the densest haze sampling, largest shadow
+  budget and an adaptive 16 ms GPU ladder for the most capable renderer machine.
 
 On a fresh desk, **Environment brightness** starts at 5%, leaving an unlit rig just visible without
 flattening the fixtures' output. Changing it is persisted with the desk layout; an existing saved

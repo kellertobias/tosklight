@@ -87,6 +87,7 @@ pub(super) enum VisualizerRenderQuality {
     #[default]
     High,
     Ultra,
+    Extreme,
 }
 
 /// Position, aim and up in stage metres, with no Euler order to disagree about.
