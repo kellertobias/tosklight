@@ -410,6 +410,43 @@ describe("the production Media pane", () => {
 		);
 	});
 
+	it("configures live Rasterized Print mode, dot size, and bypass", async () => {
+		const server = stubServer();
+		render(<MediaPanePage />);
+		await userEvent.click(
+			await screen.findByRole("switch", { name: "Take over playback" }),
+		);
+		await userEvent.click(screen.getByRole("tab", { name: "Effects" }));
+		await chooseEffect(1, "Rasterized Print");
+		await waitFor(() =>
+			expect(server.outputs[0].layers[0].effects[0].effectType).toBe(
+				"rasterize",
+			),
+		);
+		expect(screen.getByLabelText("Slot 1 · Dot size")).toHaveValue("8");
+		await userEvent.click(
+			within(
+				screen.getByRole("radiogroup", { name: "Slot 1 · Print mode" }),
+			).getByRole("radio", { name: "CMYK" }),
+		);
+		fireEvent.input(screen.getByLabelText("Slot 1 · Dot size"), {
+			target: { value: "18" },
+		});
+		await waitFor(() => {
+			const parameters = server.outputs[0].layers[0].effects[0].parameters;
+			expect(parameters[0].value).toBe(1);
+			expect(parameters[1].value).toBe(18);
+		});
+		await userEvent.click(
+			within(
+				screen.getByRole("radiogroup", { name: "Slot 1 state" }),
+			).getByRole("radio", { name: "Bypassed" }),
+		);
+		await waitFor(() =>
+			expect(server.outputs[0].layers[0].effects[0].enabled).toBe(false),
+		);
+	});
+
 	it("shows an actionable capability error for an effect this build cannot render", async () => {
 		const output = anOutput();
 		output.layers[0].effects[0] = {

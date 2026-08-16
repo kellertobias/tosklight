@@ -176,6 +176,9 @@ Bypassing the effect immediately restores the exact configured layer position.
 **Mirror repetitions** selects one, two, or a higher supported number of repeated wedges, while
 **Angle** rotates the mirror axis. One repetition is the unchanged source; bypassing the effect
 also restores that exact source immediately.
+**Rasterized Print** turns the live image into a dot-based print without changing its source asset.
+**Print mode** selects **Black and White** ink or a four-colour **CMYK** treatment, and **Dot size**
+sets the apparent print-cell size from 2 to 32 source pixels. Bypassing restores the exact source.
 After configuring a slot, release takeover to return control to the desk. The matching **Effect 1**
 through **Effect 4** DMX channel then controls that slot's mix without erasing its selected effect or
 typed parameters.

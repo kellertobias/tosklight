@@ -16,8 +16,8 @@ use media_domain::{
     BeatMoveParameters, BlurParameters, Command, CommandKind, CommandSource, DIGITAL_TV_EFFECT,
     EffectSlot, FEEDBACK_EFFECT, FeedbackMotion, FeedbackParameters, FlipMirror,
     KALEIDOSCOPE_EFFECT, KaleidoscopeParameters, LayerControls, MasterControls, MediaAddress,
-    MediaState, OPACITY_CYCLE_EFFECT, OpacityCycleInterval, OutputId, ScalingMode, Timestamp, Tint,
-    apply,
+    MediaState, OPACITY_CYCLE_EFFECT, OpacityCycleInterval, OutputId,
+    RASTERIZE_EFFECT, RasterizeMode, RasterizeParameters, ScalingMode, Timestamp, Tint, apply,
 };
 
 use crate::error::ApiError;
@@ -162,6 +162,7 @@ pub(super) async fn update_layer(
         ("maskScaleY", body.mask_scale_y, 0.0, 2.0),
         ("beatMoveDecay", body.beat_move_decay, 0.05, 5.0),
         ("kaleidoscopeAngle", body.kaleidoscope_angle, -180.0, 180.0),
+        ("rasterizeDotSize", body.rasterize_dot_size, 2.0, 32.0),
     ] {
         validate_range(name, value, minimum, maximum)?;
     }
@@ -204,6 +205,7 @@ pub(super) async fn update_layer(
                 FEEDBACK_EFFECT => EffectSlot::feedback(),
                 BEAT_MOVE_EFFECT => EffectSlot::beat_move(),
                 KALEIDOSCOPE_EFFECT => EffectSlot::kaleidoscope(),
+                RASTERIZE_EFFECT => EffectSlot::rasterize(),
                 "none" => EffectSlot::default(),
                 _ => {
                     return Err(ApiError::bad_request(
@@ -314,6 +316,25 @@ pub(super) async fn update_layer(
                 parameters.repetitions = repetitions;
             }
             parameters.angle_degrees = body.kaleidoscope_angle.unwrap_or(parameters.angle_degrees);
+            effect.parameters = parameters.as_array().to_vec();
+        }
+        if body.rasterize_mode.is_some() || body.rasterize_dot_size.is_some() {
+            if effect.effect_type.as_deref() != Some(RASTERIZE_EFFECT) {
+                return Err(ApiError::bad_request(
+                    "rasterize-parameters-effect",
+                    "choose the Rasterized Print effect before changing its controls",
+                ));
+            }
+            let mut parameters = RasterizeParameters::from_parameters(&effect.parameters);
+            if let Some(mode) = body.rasterize_mode.as_deref() {
+                parameters.mode = RasterizeMode::parse(mode).ok_or_else(|| {
+                    ApiError::bad_request(
+                        "rasterize-mode-invalid",
+                        "rasterizeMode must be black-and-white or cmyk",
+                    )
+                })?;
+            }
+            parameters.dot_size = body.rasterize_dot_size.unwrap_or(parameters.dot_size);
             effect.parameters = parameters.as_array().to_vec();
         }
         if body.feedback_amount.is_some()
@@ -1105,6 +1126,34 @@ mod tests {
         assert_eq!(effect["label"], "Kaleidoscope");
         assert_eq!(effect["parameters"][0]["value"], 8.0);
         assert_eq!(effect["parameters"][1]["value"], 37.0);
+
+        let (_, bypassed) = send(
+            &bench.router,
+            post(uri, r#"{"effectSlot":0,"effectEnabled":false}"#),
+        )
+        .await;
+        assert_eq!(bypassed["layers"][0]["effects"][0]["enabled"], false);
+    }
+
+    #[tokio::test]
+    async fn rasterize_persists_print_mode_dot_size_and_bypass() {
+        let bench = bench();
+        take_over(&bench).await;
+        let uri = format!("/api/v2/outputs/{}/layers/0/update", bench.output);
+        let (status, selected) = send(
+            &bench.router,
+            post(
+                uri.clone(),
+                r#"{"effectSlot":0,"effectType":"rasterize","rasterizeMode":"cmyk","rasterizeDotSize":18}"#,
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let effect = &selected["layers"][0]["effects"][0];
+        assert_eq!(effect["effectType"], "rasterize");
+        assert_eq!(effect["label"], "Rasterized Print");
+        assert_eq!(effect["parameters"][0]["value"], 1.0);
+        assert_eq!(effect["parameters"][1]["value"], 18.0);
 
         let (_, bypassed) = send(
             &bench.router,

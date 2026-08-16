@@ -660,7 +660,7 @@ function tintChange(value: string) {
 function layerChange(id: string, value: string | number): UpdateLayer {
 	const number = Number(value);
 	const effect =
-		/^effect-(\d+)-(type|enabled|mix|tv-curvature|distortion|image-grain|compression-damage|block-size|tile-displacement|chroma-damage|glitching|cycle-interval|blur-amount|feedback-amount|feedback-motion|feedback-direction|beat-move-amount|beat-move-direction|beat-move-decay|kaleidoscope-repetitions|kaleidoscope-angle)$/.exec(
+		/^effect-(\d+)-(type|enabled|mix|tv-curvature|distortion|image-grain|compression-damage|block-size|tile-displacement|chroma-damage|glitching|cycle-interval|blur-amount|feedback-amount|feedback-motion|feedback-direction|beat-move-amount|beat-move-direction|beat-move-decay|kaleidoscope-repetitions|kaleidoscope-angle|rasterize-mode|rasterize-dot-size)$/.exec(
 			id,
 		);
 	if (effect) {
@@ -708,6 +708,10 @@ function layerChange(id: string, value: string | number): UpdateLayer {
 				return { effectSlot, kaleidoscopeRepetitions: number };
 			case "kaleidoscope-angle":
 				return { effectSlot, kaleidoscopeAngle: number };
+			case "rasterize-mode":
+				return { effectSlot, rasterizeMode: String(value) };
+			case "rasterize-dot-size":
+				return { effectSlot, rasterizeDotSize: number };
 		}
 	}
 	switch (id) {
@@ -775,6 +779,7 @@ function effectControls(
 					{ value: "feedback", label: "Feedback" },
 					{ value: "beat-move", label: "Beat Move" },
 					{ value: "kaleidoscope", label: "Kaleidoscope" },
+					{ value: "rasterize", label: "Rasterized Print" },
 				],
 				disabled,
 			},
@@ -991,6 +996,58 @@ function effectControls(
 					180,
 					disabled,
 					"°",
+					1,
+				),
+			];
+		}
+		if (effect.effectType === "rasterize") {
+			const mode = effect.parameters.find(
+				(parameter) => parameter.id === "rasterize-mode",
+			);
+			const dotSize = effect.parameters.find(
+				(parameter) => parameter.id === "rasterize-dot-size",
+			);
+			return [
+				...controls,
+				{
+					id: `${prefix}-enabled`,
+					kind: "choice" as const,
+					label: `${slot} state`,
+					value: String(effect.enabled),
+					options: [
+						{ value: "true", label: "Enabled" },
+						{ value: "false", label: "Bypassed" },
+					],
+					disabled,
+				},
+				valueControl(
+					`${prefix}-mix`,
+					`${slot} mix`,
+					effect.mix * 100,
+					0,
+					100,
+					disabled,
+					"%",
+				),
+				{
+					id: `${prefix}-rasterize-mode`,
+					kind: "choice" as const,
+					label: `${slot} · Print mode`,
+					value: (mode?.value ?? 0) >= 0.5 ? "cmyk" : "black-and-white",
+					options: [
+						{ value: "black-and-white", label: "Black and White" },
+						{ value: "cmyk", label: "CMYK" },
+					],
+					disabled,
+				},
+				valueControl(
+					`${prefix}-rasterize-dot-size`,
+					`${slot} · Dot size`,
+					dotSize?.value ?? 8,
+					2,
+					32,
+					disabled,
+					" px",
 					1,
 				),
 			];

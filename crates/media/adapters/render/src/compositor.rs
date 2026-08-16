@@ -87,6 +87,11 @@ impl LayerUniform {
                 effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
                 effect_parameters[index][0] = f32::from(parameters.repetitions);
                 effect_parameters[index][1] = parameters.angle_degrees;
+            } else if let Some(parameters) = effect.rasterize_parameters() {
+                effect_types[index] = 5;
+                effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
+                effect_parameters[index][0] = parameters.mode.parameter();
+                effect_parameters[index][1] = parameters.dot_size;
             }
         }
         Self {

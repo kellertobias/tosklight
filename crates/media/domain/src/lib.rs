@@ -49,7 +49,8 @@ pub use layer::{
     BeatMoveParameters, BlurParameters, DIGITAL_TV_EFFECT, DigitalTvParameters, EffectSlot,
     FEEDBACK_EFFECT, FeedbackMotion, FeedbackParameters, KALEIDOSCOPE_EFFECT,
     KaleidoscopeParameters, LayerState, MaskSource, MaskState, OPACITY_CYCLE_EFFECT,
-    OpacityCycleInterval, ScalingMode, SourceFailure, SourceStatus,
+    OpacityCycleInterval, RASTERIZE_EFFECT, RasterizeMode, RasterizeParameters, ScalingMode,
+    SourceFailure, SourceStatus,
 };
 pub use master::MasterState;
 pub use output::{OutputId, OutputName, PresentationMode};

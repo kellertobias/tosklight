@@ -12,8 +12,8 @@ use media_domain::geometry::Size;
 use media_domain::{
     AnalogTvParameters, BlurParameters, DigitalTvParameters, EffectSlot, FeedbackMotion,
     FeedbackParameters, FlipMirror, KaleidoscopeParameters, LayerState, MaskSource, MaskState,
-    MasterState, MediaAddress, OutputId, PresentationMode, ScalingMode, SourceStatus, Timestamp,
-    Tint,
+    MasterState, MediaAddress, OutputId, PresentationMode, RasterizeMode, RasterizeParameters,
+    ScalingMode, SourceStatus, Timestamp, Tint,
 };
 use media_render::{Gpu, LayerDraw, OutputRenderer, SourceTexture};
 use std::path::Path;
@@ -157,6 +157,18 @@ fn kaleidoscope_state(repetitions: u8, angle_degrees: f32, enabled: bool) -> Lay
     }
     .as_array()
     .to_vec();
+    let mut effects: [EffectSlot; 4] = Default::default();
+    effects[0] = effect;
+    ready(LayerState {
+        effects,
+        ..Default::default()
+    })
+}
+
+fn rasterize_state(mode: RasterizeMode, dot_size: f32, enabled: bool) -> LayerState {
+    let mut effect = EffectSlot::rasterize();
+    effect.enabled = enabled;
+    effect.parameters = RasterizeParameters { mode, dot_size }.as_array().to_vec();
     let mut effects: [EffectSlot; 4] = Default::default();
     effects[0] = effect;
     ready(LayerState {
@@ -309,6 +321,45 @@ fn kaleidoscope_mirrors_repetitions_and_angle_live_with_exact_bypass() {
     assert!(changed_pixels(&two, &clear) > 500);
     assert!(changed_pixels(&six, &two) > 500);
     assert!(changed_pixels(&angled, &six) > 500);
+    assert_eq!(disabled.pixels, clear.pixels, "bypass restores the source");
+}
+
+#[test]
+fn rasterize_has_distinct_monochrome_and_cmyk_dots_live_with_exact_bypass() {
+    let mut bench = Bench::new();
+    let source = patterned_source(&bench.gpu);
+    let plain = ready(LayerState::default());
+    let black_and_white = rasterize_state(RasterizeMode::BlackAndWhite, 8.0, true);
+    let cmyk = rasterize_state(RasterizeMode::Cmyk, 8.0, true);
+    let large_dots = rasterize_state(RasterizeMode::Cmyk, 24.0, true);
+    let disabled = rasterize_state(RasterizeMode::Cmyk, 8.0, false);
+    let draw = |state| LayerDraw {
+        state,
+        source: &source,
+        mask: None,
+    };
+
+    let clear = bench.render(&[draw(&plain)], &MasterState::default());
+    let black_and_white = bench.render(&[draw(&black_and_white)], &MasterState::default());
+    let cmyk = bench.render(&[draw(&cmyk)], &MasterState::default());
+    let large_dots = bench.render(&[draw(&large_dots)], &MasterState::default());
+    let disabled = bench.render(&[draw(&disabled)], &MasterState::default());
+
+    assert!(
+        black_and_white
+            .pixels
+            .chunks_exact(4)
+            .all(|pixel| pixel[0] == pixel[1] && pixel[1] == pixel[2])
+    );
+    assert!(
+        cmyk.pixels
+            .chunks_exact(4)
+            .filter(|pixel| pixel[0] != pixel[1] || pixel[1] != pixel[2])
+            .count()
+            > 500
+    );
+    assert!(changed_pixels(&black_and_white, &cmyk) > 1_000);
+    assert!(changed_pixels(&large_dots, &cmyk) > 500);
     assert_eq!(disabled.pixels, clear.pixels, "bypass restores the source");
 }
 

@@ -260,6 +260,8 @@ export function stubServer(
 						layer.effects[body.effectSlot] = kaleidoscopeEffect(
 							body.effectSlot,
 						);
+					} else if (body.effectType === "rasterize") {
+						layer.effects[body.effectSlot] = rasterizeEffect(body.effectSlot);
 					}
 					const selectedEffect = layer.effects[body.effectSlot];
 					if (body.visualizerParameters !== undefined)
@@ -311,6 +313,11 @@ export function stubServer(
 						selectedEffect.parameters[0].value = body.kaleidoscopeRepetitions;
 					if (body.kaleidoscopeAngle !== undefined)
 						selectedEffect.parameters[1].value = body.kaleidoscopeAngle;
+					if (body.rasterizeMode !== undefined)
+						selectedEffect.parameters[0].value =
+							body.rasterizeMode === "cmyk" ? 1 : 0;
+					if (body.rasterizeDotSize !== undefined)
+						selectedEffect.parameters[1].value = body.rasterizeDotSize;
 					for (const [id, key] of [
 						["tv-curvature", "tvCurvature"],
 						["distortion", "effectDistortion"],
@@ -764,6 +771,32 @@ function kaleidoscopeEffect(
 				label: "Angle",
 				value: 0,
 				defaultValue: 0,
+			},
+		],
+	};
+}
+
+function rasterizeEffect(
+	index: number,
+): OutputView["layers"][number]["effects"][number] {
+	return {
+		...emptyEffect(index),
+		effectType: "rasterize",
+		label: "Rasterized Print",
+		enabled: true,
+		mix: 1,
+		parameters: [
+			{
+				id: "rasterize-mode",
+				label: "Print mode",
+				value: 0,
+				defaultValue: 0,
+			},
+			{
+				id: "rasterize-dot-size",
+				label: "Dot size",
+				value: 8,
+				defaultValue: 8,
 			},
 		],
 	};

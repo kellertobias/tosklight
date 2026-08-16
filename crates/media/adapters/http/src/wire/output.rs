@@ -8,6 +8,7 @@ use media_domain::{
     BlurParameters, DIGITAL_TV_EFFECT, DigitalTvParameters, EffectSlot, FEEDBACK_EFFECT,
     FeedbackParameters, KALEIDOSCOPE_EFFECT, KaleidoscopeParameters, LayerState, MaskSource,
     MaskState, MasterState, MediaAddress, OPACITY_CYCLE_EFFECT, OpacityCycleInterval, OutputState,
+    RASTERIZE_EFFECT, RasterizeParameters,
 };
 use media_domain::{LayerPersonality, PresentationMode};
 use serde::{Deserialize, Serialize};
@@ -84,6 +85,7 @@ impl EffectSlotView {
         let feedback = effect.effect_type.as_deref() == Some(FEEDBACK_EFFECT);
         let beat_move = effect.effect_type.as_deref() == Some(BEAT_MOVE_EFFECT);
         let kaleidoscope = effect.effect_type.as_deref() == Some(KALEIDOSCOPE_EFFECT);
+        let rasterize = effect.effect_type.as_deref() == Some(RASTERIZE_EFFECT);
         let parameters = if analog {
             let defaults = AnalogTvParameters::default().as_array();
             let values = AnalogTvParameters::from_normalized(&effect.parameters).as_array();
@@ -161,6 +163,15 @@ impl EffectSlotView {
                 &values,
                 &defaults,
             )
+        } else if rasterize {
+            let defaults = RasterizeParameters::default().as_array();
+            let values = RasterizeParameters::from_parameters(&effect.parameters).as_array();
+            parameter_views(
+                &RasterizeParameters::IDS,
+                &RasterizeParameters::LABELS,
+                &values,
+                &defaults,
+            )
         } else {
             Vec::new()
         };
@@ -174,6 +185,7 @@ impl EffectSlotView {
                 || feedback
                 || beat_move
                 || kaleidoscope
+                || rasterize
             {
                 if analog {
                     "Analog TV"
@@ -187,8 +199,10 @@ impl EffectSlotView {
                     "Feedback"
                 } else if beat_move {
                     "Beat Move"
-                } else {
+                } else if kaleidoscope {
                     "Kaleidoscope"
+                } else {
+                    "Rasterized Print"
                 }
                 .to_owned()
             } else {
@@ -203,7 +217,8 @@ impl EffectSlotView {
                 || blur
                 || feedback
                 || beat_move
-                || kaleidoscope,
+                || kaleidoscope
+                || rasterize,
             capability_detail: (!analog
                 && !digital
                 && !opacity_cycle
@@ -211,6 +226,7 @@ impl EffectSlotView {
                 && !feedback
                 && !beat_move
                 && !kaleidoscope
+                && !rasterize
                 && effect.effect_type.is_some())
             .then(|| "This Media Server build cannot render the selected effect.".to_owned()),
             parameters,
@@ -846,6 +862,10 @@ pub struct UpdateLayer {
     pub kaleidoscope_repetitions: Option<u8>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kaleidoscope_angle: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rasterize_mode: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rasterize_dot_size: Option<f32>,
     /// Complete per-layer visualizer settings routed through effect slot one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub visualizer_parameters: Option<VisualizerParametersView>,
@@ -895,6 +915,8 @@ impl UpdateLayer {
             || self.beat_move_decay.is_some()
             || self.kaleidoscope_repetitions.is_some()
             || self.kaleidoscope_angle.is_some()
+            || self.rasterize_mode.is_some()
+            || self.rasterize_dot_size.is_some()
             || self.visualizer_parameters.is_some()
     }
 }

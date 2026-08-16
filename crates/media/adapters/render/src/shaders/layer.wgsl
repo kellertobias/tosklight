@@ -330,6 +330,54 @@ fn kaleidoscope_coordinates(
     return result;
 }
 
+fn print_dot(channel: f32, grid: vec2<f32>, phase: vec2<f32>) -> f32 {
+    let point = fract(grid + phase) - vec2<f32>(0.5);
+    let radius = sqrt(clamp(channel, 0.0, 1.0)) * 0.48;
+    return 1.0 - smoothstep(radius - 0.06, radius + 0.06, length(point));
+}
+
+fn rasterized_source(
+    uv: vec2<f32>,
+    mode: f32,
+    dot_size: f32,
+    effect_mix: f32,
+) -> vec4<f32> {
+    let original = textureSample(source, source_sampler, uv);
+    if effect_mix <= 0.0 {
+        return original;
+    }
+
+    let dimensions = max(vec2<f32>(textureDimensions(source)), vec2<f32>(1.0));
+    let cell_size = clamp(dot_size, 2.0, 32.0);
+    let pixels = uv * dimensions;
+    let grid = pixels / cell_size;
+    let centre_uv = clamp(
+        (floor(grid) + vec2<f32>(0.5)) * cell_size / dimensions,
+        vec2<f32>(0.0),
+        vec2<f32>(1.0),
+    );
+    let colour = textureSample(source, source_sampler, centre_uv);
+    var printed: vec3<f32>;
+    if mode < 0.5 {
+        let darkness = 1.0 - dot(colour.rgb, LUMINANCE);
+        let ink = print_dot(darkness, grid, vec2<f32>(0.0));
+        printed = vec3<f32>(1.0 - ink);
+    } else {
+        let cmy = vec3<f32>(1.0) - colour.rgb;
+        let black = min(cmy.r, min(cmy.g, cmy.b));
+        let cyan = print_dot(cmy.r - black, grid, vec2<f32>(0.00, 0.00));
+        let magenta = print_dot(cmy.g - black, grid, vec2<f32>(0.31, 0.17));
+        let yellow = print_dot(cmy.b - black, grid, vec2<f32>(0.13, 0.37));
+        let key = print_dot(black, grid, vec2<f32>(0.41, 0.43));
+        printed = vec3<f32>(
+            (1.0 - cyan) * (1.0 - key),
+            (1.0 - magenta) * (1.0 - key),
+            (1.0 - yellow) * (1.0 - key),
+        );
+    }
+    return vec4<f32>(mix(original.rgb, printed, effect_mix), original.a);
+}
+
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     var coordinates: EffectCoordinates;
@@ -367,6 +415,13 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
             sampled = blurred_source(
                 coordinates.uv,
                 layer.effect_parameters[slot].x,
+                layer.effect_mixes[slot],
+            );
+        } else if layer.effect_types[slot] == 5u {
+            sampled = rasterized_source(
+                coordinates.uv,
+                layer.effect_parameters[slot].x,
+                layer.effect_parameters[slot].y,
                 layer.effect_mixes[slot],
             );
         }

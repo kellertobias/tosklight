@@ -99,6 +99,82 @@ pub const BLUR_EFFECT: &str = "blur";
 pub const FEEDBACK_EFFECT: &str = "feedback";
 pub const BEAT_MOVE_EFFECT: &str = "beat-move";
 pub const KALEIDOSCOPE_EFFECT: &str = "kaleidoscope";
+pub const RASTERIZE_EFFECT: &str = "rasterize";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum RasterizeMode {
+    #[default]
+    BlackAndWhite,
+    Cmyk,
+}
+
+impl RasterizeMode {
+    pub const ALL: [Self; 2] = [Self::BlackAndWhite, Self::Cmyk];
+
+    pub const fn wire_name(self) -> &'static str {
+        match self {
+            Self::BlackAndWhite => "black-and-white",
+            Self::Cmyk => "cmyk",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|mode| mode.wire_name() == value)
+    }
+
+    pub const fn parameter(self) -> f32 {
+        match self {
+            Self::BlackAndWhite => 0.0,
+            Self::Cmyk => 1.0,
+        }
+    }
+
+    pub fn from_parameter(value: f32) -> Self {
+        if value.is_finite() && value >= 0.5 {
+            Self::Cmyk
+        } else {
+            Self::BlackAndWhite
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RasterizeParameters {
+    pub mode: RasterizeMode,
+    /// Apparent print-cell size in source pixels.
+    pub dot_size: f32,
+}
+
+impl RasterizeParameters {
+    pub const IDS: [&'static str; 2] = ["rasterize-mode", "rasterize-dot-size"];
+    pub const LABELS: [&'static str; 2] = ["Print mode", "Dot size"];
+
+    pub fn from_parameters(values: &[f32]) -> Self {
+        let defaults = Self::default();
+        Self {
+            mode: RasterizeMode::from_parameter(values.first().copied().unwrap_or_default()),
+            dot_size: values
+                .get(1)
+                .copied()
+                .filter(|value| value.is_finite())
+                .map(|value| value.clamp(2.0, 32.0))
+                .unwrap_or(defaults.dot_size),
+        }
+    }
+
+    pub const fn as_array(self) -> [f32; 2] {
+        [self.mode.parameter(), self.dot_size]
+    }
+}
+
+impl Default for RasterizeParameters {
+    fn default() -> Self {
+        Self {
+            mode: RasterizeMode::BlackAndWhite,
+            dot_size: 8.0,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct KaleidoscopeParameters {
@@ -658,6 +734,22 @@ impl EffectSlot {
             .then(|| KaleidoscopeParameters::from_parameters(&self.parameters))
     }
 
+    pub fn rasterize() -> Self {
+        Self {
+            effect_type: Some(RASTERIZE_EFFECT.to_owned()),
+            enabled: true,
+            seed: 0,
+            mix: 1.0,
+            parameters: RasterizeParameters::default().as_array().to_vec(),
+            visualizer_parameters: None,
+        }
+    }
+
+    pub fn rasterize_parameters(&self) -> Option<RasterizeParameters> {
+        (self.enabled && self.mix > 0.0 && self.effect_type.as_deref() == Some(RASTERIZE_EFFECT))
+            .then(|| RasterizeParameters::from_parameters(&self.parameters))
+    }
+
     pub fn normalize(&mut self) {
         self.mix = if self.mix.is_finite() {
             self.mix.clamp(0.0, 1.0)
@@ -690,6 +782,10 @@ impl EffectSlot {
                 .to_vec();
         } else if self.effect_type.as_deref() == Some(KALEIDOSCOPE_EFFECT) {
             self.parameters = KaleidoscopeParameters::from_parameters(&self.parameters)
+                .as_array()
+                .to_vec();
+        } else if self.effect_type.as_deref() == Some(RASTERIZE_EFFECT) {
+            self.parameters = RasterizeParameters::from_parameters(&self.parameters)
                 .as_array()
                 .to_vec();
         }
@@ -1060,5 +1156,30 @@ mod tests {
 
         effect.enabled = false;
         assert_eq!(effect.kaleidoscope_parameters(), None);
+    }
+
+    #[test]
+    fn rasterize_has_stable_modes_bounded_dot_size_and_safe_bypass() {
+        let mut effect = EffectSlot::rasterize();
+        assert_eq!(
+            effect.rasterize_parameters(),
+            Some(RasterizeParameters::default())
+        );
+        assert_eq!(
+            RasterizeMode::parse("black-and-white"),
+            Some(RasterizeMode::BlackAndWhite)
+        );
+        assert_eq!(RasterizeMode::parse("cmyk"), Some(RasterizeMode::Cmyk));
+        assert_eq!(RasterizeMode::parse("rgb"), None);
+
+        effect.parameters = vec![1.0, 100.0];
+        effect.normalize();
+        assert_eq!(effect.parameters, vec![1.0, 32.0]);
+        effect.parameters = vec![0.0, f32::NAN];
+        effect.normalize();
+        assert_eq!(effect.parameters, vec![0.0, 8.0]);
+
+        effect.enabled = false;
+        assert_eq!(effect.rasterize_parameters(), None);
     }
 }
