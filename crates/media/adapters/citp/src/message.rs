@@ -447,7 +447,9 @@ pub fn read_element_thumbnail_request(version: (u8, u8), body: &[u8]) -> Option<
     if reader.u8(9) != LIBRARY_TYPE_MEDIA {
         return None;
     }
-    let (folder, count, elements_at) = if version >= (1, 1) {
+    let (folder, count, elements_at) = if version >= (1, 2) {
+        (reader.u8(11), reader.u16(14) as u8, 16)
+    } else if version >= (1, 1) {
         (reader.u8(11), reader.u8(14), 15)
     } else {
         (reader.u8(10), reader.u8(11), 12)
@@ -752,6 +754,24 @@ mod tests {
         assert_eq!(asked.height, 54);
         assert!(asked.preserve_aspect);
         assert_eq!(asked.folder, 6);
+        assert_eq!(asked.elements, vec![1, 4]);
+    }
+
+    #[test]
+    fn a_v1_2_thumbnail_request_reads_its_sixteen_bit_element_count() {
+        let mut request = Body::new();
+        request
+            .four_cc(FORMAT_JPEG)
+            .u16(128)
+            .u16(72)
+            .u8(1)
+            .u8(LIBRARY_TYPE_MEDIA)
+            .library_id(1, 1)
+            .u16(2)
+            .u8(1)
+            .u8(4);
+        let asked = read_element_thumbnail_request((1, 2), request.as_slice()).expect("media");
+        assert_eq!(asked.folder, 1);
         assert_eq!(asked.elements, vec![1, 4]);
     }
 }

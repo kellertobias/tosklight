@@ -32,7 +32,8 @@ export function MediaServerSetup({ active = true }: { active?: boolean }) {
 	useEffect(() => {
 		if (!live.size || !active) return;
 		const timer = window.setInterval(() => {
-			for (const fixtureId of live) void server?.refreshMediaPreview(fixtureId);
+			for (const fixtureId of live)
+				void refreshAdvertisedPreview(server, fixtureId);
 		}, 1_000);
 		return () => window.clearInterval(timer);
 	}, [active, live, server]);
@@ -270,7 +271,7 @@ async function toggleLivePreview(
 	}
 	setBusy(fixtureId);
 	try {
-		if (await server?.refreshMediaPreview(fixtureId))
+		if (await refreshAdvertisedPreview(server, fixtureId))
 			setLive((current) => new Set(current).add(fixtureId));
 	} finally {
 		setBusy(null);
@@ -284,12 +285,27 @@ async function refreshThumbnails(
 ): Promise<void> {
 	setBusy(fixtureId);
 	try {
-		await server?.refreshMediaThumbnails(
-			fixtureId,
-			0,
-			Array.from({ length: 16 }, (_, index) => index),
-		);
+		const inspection = await server?.inspectMediaServer(fixtureId);
+		const firstFolder = inspection?.folders[0];
+		if (!firstFolder) return;
+		const elements = (inspection?.files ?? [])
+			.filter((file) => file.folder_id === firstFolder.id)
+			.slice(0, 16)
+			.map((file) => file.id);
+		if (elements.length)
+			await server?.refreshMediaThumbnails(fixtureId, firstFolder.id, elements);
 	} finally {
 		setBusy(null);
 	}
+}
+
+async function refreshAdvertisedPreview(
+	server: MediaServersState | null,
+	fixtureId: string,
+): Promise<boolean> {
+	const inspection = await server?.inspectMediaServer(fixtureId);
+	const source = inspection?.preview_sources[0];
+	return source
+		? (await server?.refreshMediaPreview(fixtureId, source.id)) === true
+		: false;
 }

@@ -159,7 +159,11 @@ impl CitpClient {
         let request = self.send(*b"GETh", payload).await?;
         let mut images = Vec::with_capacity(elements.len());
         while images.len() < elements.len() {
-            let packet = self.receive_relevant(*b"EThn", request).await?;
+            let packet = match self.receive_relevant(*b"EThn", request).await {
+                Ok(packet) => packet,
+                Err(MediaError::Timeout) if !images.is_empty() => break,
+                Err(error) => return Err(error),
+            };
             images.push(parse_thumbnail(&packet.payload, packet.version)?.1);
         }
         Ok(images)

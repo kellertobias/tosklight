@@ -115,6 +115,43 @@ async fn negotiates_and_retrieves_thumbnail_and_preview() {
 }
 
 #[tokio::test]
+async fn a_missing_thumbnail_does_not_discard_other_images_from_the_batch() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        let (mut stream, _) = listener.accept().await.unwrap();
+        let _ = read_wire_packet(&mut stream).await;
+        stream
+            .write_all(&encode_packet((1, 2), 1, *b"SInf", &sinf(1)))
+            .await
+            .unwrap();
+        let _ = read_wire_packet(&mut stream).await;
+        let mut thumbnail = vec![1, 0, 0, 0, 0, 7];
+        thumbnail.extend_from_slice(b"JPEG");
+        thumbnail.extend_from_slice(&2_u16.to_le_bytes());
+        thumbnail.extend_from_slice(&1_u16.to_le_bytes());
+        thumbnail.extend_from_slice(&3_u16.to_le_bytes());
+        thumbnail.extend_from_slice(&[1, 2, 3]);
+        stream
+            .write_all(&encode_packet((1, 2), 2, *b"EThn", &thumbnail))
+            .await
+            .unwrap();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    });
+    let mut client = CitpClient::connect(address, Duration::from_millis(50))
+        .await
+        .unwrap();
+    let thumbnails = client
+        .request_thumbnail(1, LibraryId::ROOT, &[7, 8], 64, 64)
+        .await
+        .unwrap();
+    assert_eq!(thumbnails.len(), 1);
+    assert_eq!(thumbnails[0].0, 7);
+    assert_eq!(thumbnails[0].1.bytes, [1, 2, 3]);
+    server.await.unwrap();
+}
+
+#[tokio::test]
 async fn honors_legacy_msex_version_and_thumbnail_layout() {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();

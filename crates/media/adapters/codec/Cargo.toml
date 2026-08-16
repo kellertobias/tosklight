@@ -20,5 +20,9 @@ snap = "1.1"
 texpresso = { version = "2.0", default-features = false, features = ["rayon"] }
 thiserror.workspace = true
 
+[dev-dependencies]
+jpeg-encoder = "0.6"
+png.workspace = true
+
 [lints]
 workspace = true

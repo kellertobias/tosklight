@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
 	refresh: vi.fn(),
 	refreshMediaPreview: vi.fn(),
 	refreshMediaThumbnails: vi.fn(),
+	inspectMediaServer: vi.fn(),
 }));
 
 const server = {
@@ -29,6 +30,7 @@ const server = {
 	mediaPreviewUrls: {},
 	refreshMediaPreview: mocks.refreshMediaPreview,
 	refreshMediaThumbnails: mocks.refreshMediaThumbnails,
+	inspectMediaServer: mocks.inspectMediaServer,
 	putObject: mocks.putObject,
 	deleteObject: mocks.deleteObject,
 	refresh: mocks.refresh,
@@ -38,6 +40,9 @@ let fixture: PatchedFixture;
 let patchFixtures: readonly PatchedFixture[];
 
 vi.mock("../../api/ServerContext", () => ({ useServer: () => server }));
+vi.mock("../../features/mediaServers/MediaServersContext", () => ({
+	useMediaServers: () => server,
+}));
 vi.mock("../../features/patch/PatchContext", () => ({
 	usePatch: () => ({
 		status: mocks.status,
@@ -52,6 +57,35 @@ beforeEach(() => {
 	vi.clearAllMocks();
 	mocks.status = "ready";
 	mocks.updateFixture.mockResolvedValue(true);
+	mocks.inspectMediaServer.mockResolvedValue({
+		library_revision: "test",
+		server: { name: "Media", layer_count: 2 },
+		folders: [{ id: 1, name: "CITP Test", element_count: 1 }],
+		files: [
+			{
+				folder_id: 1,
+				id: 1,
+				name: "CITP Test Pattern",
+				width: 128,
+				height: 72,
+				length_frames: 8,
+				fps: 8,
+			},
+		],
+		preview_sources: [
+			{
+				id: 42,
+				name: "Program",
+				physical_output: 0,
+				layer: null,
+				width: 128,
+				height: 72,
+			},
+		],
+		layers: [],
+		capabilities: { provider: "citp_msex", native_action: null, layers: [] },
+	});
+	mocks.refreshMediaPreview.mockResolvedValue(true);
 	server.mediaServers = [];
 	fixture = mediaFixture();
 	patchFixtures = [fixture];
@@ -148,9 +182,52 @@ describe("Media server Patch authority", () => {
 
 		expect(screen.getByText("● Offline")).toBeInTheDocument();
 		expect(screen.queryByText("● Online")).toBeNull();
-		expect(
-			screen.getByText(/No successful response yet/),
-		).toBeInTheDocument();
+		expect(screen.getByText(/No successful response yet/)).toBeInTheDocument();
+	});
+
+	it("uses the server-advertised Program source for live preview", async () => {
+		fixture = {
+			...fixture,
+			direct_control: {
+				protocol: "citp",
+				ip_address: "127.0.0.1",
+				port: 4809,
+			},
+		};
+		patchFixtures = [fixture];
+		render(<MediaServerSetup />);
+		fireEvent.click(screen.getByRole("button", { name: "Start live preview" }));
+
+		await waitFor(() =>
+			expect(mocks.refreshMediaPreview).toHaveBeenCalledWith(
+				"fixture-media",
+				42,
+			),
+		);
+	});
+
+	it("refreshes real advertised files instead of invalid zero addresses", async () => {
+		fixture = {
+			...fixture,
+			direct_control: {
+				protocol: "citp",
+				ip_address: "127.0.0.1",
+				port: 4809,
+			},
+		};
+		patchFixtures = [fixture];
+		render(<MediaServerSetup />);
+		fireEvent.click(
+			screen.getByRole("button", { name: "Refresh thumbnails 1–16" }),
+		);
+
+		await waitFor(() =>
+			expect(mocks.refreshMediaThumbnails).toHaveBeenCalledWith(
+				"fixture-media",
+				1,
+				[1],
+			),
+		);
 	});
 });
 

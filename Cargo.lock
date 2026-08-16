@@ -3898,7 +3898,9 @@ dependencies = [
 name = "media-codec"
 version = "0.1.0"
 dependencies = [
+ "jpeg-encoder",
  "media-domain",
+ "png 0.18.1",
  "snap",
  "texpresso",
  "thiserror 2.0.20",
@@ -3993,7 +3995,9 @@ dependencies = [
  "anyhow",
  "arc-swap",
  "axum",
+ "image",
  "jpeg-encoder",
+ "light-media",
  "media-application",
  "media-audio",
  "media-citp",

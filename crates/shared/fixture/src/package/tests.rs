@@ -1081,6 +1081,12 @@ fn tosklight_media_server_package_exposes_complete_multi_head_personalities() {
     let profile = shipped_profile("tosklight--media-server.toskfixture");
     assert_eq!(profile.manufacturer, "ToskLight");
     assert_eq!(profile.name, "Media Server");
+    assert_eq!(profile.revision, 2);
+    assert_eq!(
+        profile.direct_control_protocols,
+        vec![crate::DirectControlProtocol::Citp],
+        "the shipped profile must permit the desk to store its CITP endpoint"
+    );
     assert_eq!(profile.modes.len(), 2);
 
     for (mode, layer_count, footprint) in [
@@ -1125,6 +1131,22 @@ fn tosklight_media_server_package_exposes_complete_multi_head_personalities() {
             }
         }
         assert_eq!(owned_slots, (1..=footprint).collect());
+
+        for (attribute, count) in [
+            ("media.folder", layer_count),
+            ("media.file", layer_count),
+            ("media.mask.folder", layer_count),
+            ("media.mask.file", layer_count),
+        ] {
+            assert_eq!(
+                mode.channels
+                    .iter()
+                    .filter(|channel| channel.attribute.0 == attribute)
+                    .count(),
+                count,
+                "{attribute} must use the desk's canonical programmer attribute"
+            );
+        }
     }
 
     assert!(profile.notes.contains("Legacy Media Server Layer"));

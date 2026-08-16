@@ -43,8 +43,8 @@ export function createMediaActions(
 					const next = {
 						...current,
 						[sourceKey]: url,
+						[fixtureId]: url,
 					};
-					if (source === 0) next[fixtureId] = url;
 					mediaPreviewUrlsRef.current = next;
 					return next;
 				});

@@ -1,0 +1,39 @@
+{
+  "version": 3,
+  "configuration": {
+    "instanceId": "citp-test",
+    "network": {
+      "sameComputerPreset": true,
+      "artNetListen": "127.0.0.1:6454",
+      "sacnListen": "127.0.0.1:5568",
+      "citpListen": "127.0.0.1:4809",
+      "httpListen": "127.0.0.1:8080",
+      "speedGroupEndpoint": null
+    },
+    "library": {
+      "root": "tests/fixtures/media-server-citp/library",
+      "targetCodec": "h264"
+    },
+    "outputs": [
+      {
+        "id": "9bd9cb35-5424-4c26-bc9a-2520628689bd",
+        "name": "CITP Test Program",
+        "enabled": true,
+        "target": { "kind": "offScreen" },
+        "resolution": { "width": 128, "height": 72 },
+        "presentation": "display-synchronized",
+        "soundOutput": { "kind": "disabled" },
+        "personality": "two-layers",
+        "protocol": "art-net",
+        "universe": 1,
+        "startAddress": 1,
+        "citp": {
+          "layerBase": 0,
+          "sourceName": "CITP Test Program"
+        },
+        "tempoSource": { "kind": "playback-bpm-channel" },
+        "statusOverlay": false
+      }
+    ]
+  }
+}
