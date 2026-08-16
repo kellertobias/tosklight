@@ -14,7 +14,7 @@ import {
 interface CueListOption {
 	id: string;
 	name: string;
-	cues: readonly { id: string; number: number; name: string }[];
+	cues: readonly { id: string; number: string; name: string }[];
 }
 
 interface DragState {

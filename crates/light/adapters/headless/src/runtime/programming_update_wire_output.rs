@@ -91,7 +91,7 @@ fn wire_request_target(
             cue_list_id: cue_list_id.0,
             playback_number,
             cue_id,
-            cue_number,
+            cue_number: cue_number.map(|number| number.to_string()),
             validate_active_context,
         },
         application::ProgrammingUpdateTargetRequest::Preset { object_id } => {
@@ -167,7 +167,7 @@ fn wire_target_identity(
         playback_number: target.playback_number,
         cue: target.cue.map(|cue| wire::ProgrammingUpdateCueIdentity {
             id: cue.id,
-            number: cue.number,
+            number: cue.number.to_string(),
         }),
     })
 }
@@ -292,7 +292,7 @@ fn wire_cue_source(
 ) -> Result<wire::ProgrammingUpdateCueSource, app::ActionError> {
     Ok(wire::ProgrammingUpdateCueSource {
         cue_id: source.cue_id,
-        cue_number: source.cue_number,
+        cue_number: source.cue_number.to_string(),
         cue_index: count(source.cue_index)?,
     })
 }

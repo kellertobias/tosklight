@@ -93,7 +93,7 @@ fn manual_transition(
     })
 }
 
-const fn navigation_cause(action: PlaybackAction) -> Option<PlaybackTransitionCause> {
+fn navigation_cause(action: PlaybackAction) -> Option<PlaybackTransitionCause> {
     match action {
         PlaybackAction::Go { pressed: true } | PlaybackAction::FastForward { pressed: true } => {
             Some(PlaybackTransitionCause::Go)

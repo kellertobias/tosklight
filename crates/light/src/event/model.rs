@@ -353,7 +353,7 @@ pub struct UpdateTargetNotification {
     pub object_id: String,
     pub playback_number: Option<u16>,
     pub cue_id: Option<String>,
-    pub cue_number: Option<f64>,
+    pub cue_number: Option<String>,
     pub validate_active_context: Option<bool>,
 }
 

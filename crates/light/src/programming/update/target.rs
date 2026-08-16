@@ -11,7 +11,7 @@ pub struct ActiveCueContext {
     pub playback_number: u16,
     pub cue_list_id: CueListId,
     pub cue_id: Uuid,
-    pub cue_number: f64,
+    pub cue_number: light_playback::CueNumber,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -19,7 +19,7 @@ pub struct ResolvedCueTarget {
     pub cue_list_id: CueListId,
     pub playback_number: Option<u16>,
     pub cue_id: Uuid,
-    pub cue_number: f64,
+    pub cue_number: light_playback::CueNumber,
 }
 
 impl From<&ActiveCueContext> for ResolvedCueTarget {
@@ -28,7 +28,7 @@ impl From<&ActiveCueContext> for ResolvedCueTarget {
             cue_list_id: context.cue_list_id,
             playback_number: Some(context.playback_number),
             cue_id: context.cue_id,
-            cue_number: context.cue_number,
+            cue_number: context.cue_number.clone(),
         }
     }
 }

@@ -17,10 +17,14 @@ async fn command_keyboard_and_websocket_cue_recording_share_the_typed_action() {
     assert_eq!(command.status(), StatusCode::OK);
     assert_eq!(json(command).await["outcome"], "accepted");
     let (_, _, recorded) = stored_cue_list(&scenario, 31);
-    let cue = recorded.cues.iter().find(|cue| cue.number == 2.5).unwrap();
-    assert_eq!(cue.fade_millis, 2_000);
+    let recorded_cue = recorded
+        .cues
+        .iter()
+        .find(|item| item.number == cue("2.5"))
+        .unwrap();
+    assert_eq!(recorded_cue.fade_millis, 2_000);
     assert_eq!(
-        cue.trigger,
+        recorded_cue.trigger,
         light_playback::CueTrigger::Wait {
             delay_millis: 1_000
         }
@@ -48,7 +52,7 @@ async fn command_keyboard_and_websocket_cue_recording_share_the_typed_action() {
             .2
             .cues
             .iter()
-            .any(|cue| cue.number == 1.0)
+            .any(|item| item.number == cue("1"))
     );
 
     let source: SocketAddr = "127.0.0.1:9026".parse().unwrap();
@@ -93,7 +97,7 @@ async fn command_keyboard_and_websocket_cue_recording_share_the_typed_action() {
             .2
             .cues
             .iter()
-            .any(|cue| cue.number == 1.0)
+            .any(|item| item.number == cue("1"))
     );
 
     let ws_command = || {
@@ -114,7 +118,7 @@ async fn command_keyboard_and_websocket_cue_recording_share_the_typed_action() {
             .2
             .cues
             .iter()
-            .any(|cue| cue.number == 1.0)
+            .any(|item| item.number == cue("1"))
     );
     let sequence = scenario.state.events.latest_sequence();
     let history = scenario.history_len();
@@ -735,7 +739,7 @@ fn assert_osc_surface_records(
     };
     assert_eq!(action_events.len(), 3);
     let runtime = runtime_for_page_slot(scenario, slot);
-    assert_eq!(runtime.current_cue_number, Some(1.0));
+    assert_eq!(runtime.current_cue_number, Some(cue("1")));
     assert_eq!(runtime.master, 1.0, "the fader action must be suppressed");
     assert_eq!(
         scenario

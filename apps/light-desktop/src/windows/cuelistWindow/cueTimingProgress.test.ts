@@ -6,7 +6,7 @@ const START = Date.parse("2026-08-08T12:00:00.000Z");
 const cues: Cue[] = [
 	{
 		id: "source",
-		number: 1,
+		number: "1",
 		name: "Source",
 		fade_millis: 1_000,
 		delay_millis: 500,
@@ -15,7 +15,7 @@ const cues: Cue[] = [
 	},
 	{
 		id: "current",
-		number: 2,
+		number: "2",
 		name: "Current",
 		fade_millis: 1_000,
 		delay_millis: 500,
@@ -24,7 +24,7 @@ const cues: Cue[] = [
 	},
 	{
 		id: "target",
-		number: 3,
+		number: "3",
 		name: "Target",
 		fade_millis: 0,
 		delay_millis: 0,
@@ -115,7 +115,7 @@ describe("Cuelist timing progress", () => {
 				...runtime().cue_timing!,
 				cue_id: "current",
 				active_trigger: {
-					cue: { id: "source", number: 1 },
+					cue: { id: "source", number: "1" },
 					kind: "wait",
 					started_at: new Date(START).toISOString(),
 					duration_millis: 400,
@@ -131,7 +131,7 @@ describe("Cuelist timing progress", () => {
 			cue_timing: {
 				...runtime().cue_timing!,
 				active_trigger: {
-					cue: { id: "source", number: 1 },
+					cue: { id: "source", number: "1" },
 					kind: "link",
 					started_at: new Date(START).toISOString(),
 					duration_millis: 400,

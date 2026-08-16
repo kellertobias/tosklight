@@ -245,7 +245,7 @@ impl PlaybackEngine {
     pub fn goto_playback(
         &mut self,
         number: u16,
-        cue_number: f64,
+        cue_number: CueNumber,
     ) -> Result<&ActivePlayback, String> {
         self.goto_playback_mutation(number, cue_number)
             .map(|mutation| mutation.value)
@@ -257,7 +257,7 @@ impl PlaybackEngine {
     pub fn goto_playback_mutation(
         &mut self,
         number: u16,
-        cue_number: f64,
+        cue_number: CueNumber,
     ) -> Result<PlaybackMutation<&ActivePlayback>, String> {
         let id = self.cue_list_for(number)?;
         let cue = self.cue_lists[&id]
@@ -265,15 +265,14 @@ impl PlaybackEngine {
             .iter()
             .find(|cue| cue.number == cue_number)
             .ok_or("cue does not exist")?;
-        let (cue_id, cue_number) = (cue.id, cue.number);
+        let (cue_id, cue_number) = (cue.id, cue.number.clone());
         let key = PlaybackKey::CueList(id);
         self.reset_crossed_jump_counts(key, id, cue_id);
         self.disarm_cuelist_flash(id);
         let now = self.clock.now();
-        let changed = self
-            .active
-            .get(&key)
-            .is_none_or(|playback| goto_changes_runtime(playback, number, cue_id, cue_number, now));
+        let changed = self.active.get(&key).is_none_or(|playback| {
+            goto_changes_runtime(playback, number, cue_id, &cue_number, now)
+        });
         self.jump_at_key(key, id, cue_number, now)?;
         let playback = self.active.get_mut(&key).unwrap();
         playback.playback_number = Some(number);
@@ -298,7 +297,7 @@ impl PlaybackEngine {
     pub fn goto_playback_at_mutation(
         &mut self,
         identity: PlaybackIdentity,
-        cue_number: f64,
+        cue_number: CueNumber,
     ) -> Result<PlaybackMutation<&ActivePlayback>, String> {
         if let PlaybackIdentity::Physical(number) = identity {
             return self.goto_playback_mutation(number.get(), cue_number);
@@ -317,14 +316,14 @@ impl PlaybackEngine {
             .iter()
             .find(|cue| cue.number == cue_number)
             .ok_or("cue does not exist")?;
-        let (cue_id, cue_number) = (cue.id, cue.number);
+        let (cue_id, cue_number) = (cue.id, cue.number.clone());
         let key = PlaybackKey::CueList(cue_list_id);
         self.reset_crossed_jump_counts(key, cue_list_id, cue_id);
         self.disarm_cuelist_flash(cue_list_id);
         let now = self.clock.now();
         let changed = self.active.get(&key).is_none_or(|playback| {
             playback.playback_identity != Some(identity)
-                || goto_changes_runtime(playback, address.number().get(), cue_id, cue_number, now)
+                || goto_changes_runtime(playback, address.number().get(), cue_id, &cue_number, now)
         });
         self.jump_at_key(key, cue_list_id, cue_number, now)?;
         let playback = self.active.get_mut(&key).unwrap();
@@ -351,7 +350,7 @@ impl PlaybackEngine {
     pub fn load_playback(
         &mut self,
         number: u16,
-        cue_number: f64,
+        cue_number: CueNumber,
     ) -> Result<&ActivePlayback, String> {
         self.load_playback_mutation(number, cue_number)
             .map(|mutation| mutation.value)
@@ -360,7 +359,7 @@ impl PlaybackEngine {
     pub fn load_playback_mutation(
         &mut self,
         number: u16,
-        cue_number: f64,
+        cue_number: CueNumber,
     ) -> Result<PlaybackMutation<&ActivePlayback>, String> {
         let id = self.cue_list_for(number)?;
         let cue = self.cue_lists[&id]
@@ -368,7 +367,7 @@ impl PlaybackEngine {
             .iter()
             .find(|cue| cue.number == cue_number)
             .ok_or("cue does not exist")?;
-        let (cue_id, cue_number) = (cue.id, cue.number);
+        let (cue_id, cue_number) = (cue.id, cue.number.clone());
         let key = PlaybackKey::CueList(id);
         let inserted = !self.active.contains_key(&key);
         let now = self.clock.now();
@@ -379,7 +378,7 @@ impl PlaybackEngine {
         let changed = inserted
             || playback.playback_number != Some(number)
             || playback.loaded_cue_id != Some(cue_id)
-            || playback.loaded_cue_number != Some(cue_number);
+            || playback.loaded_cue_number.as_ref() != Some(&cue_number);
         playback.playback_number = Some(number);
         playback.loaded_cue_id = Some(cue_id);
         playback.loaded_cue_number = Some(cue_number);
@@ -394,7 +393,7 @@ impl PlaybackEngine {
     pub fn load_playback_at_mutation(
         &mut self,
         identity: PlaybackIdentity,
-        cue_number: f64,
+        cue_number: CueNumber,
     ) -> Result<PlaybackMutation<&ActivePlayback>, String> {
         if let PlaybackIdentity::Physical(number) = identity {
             return self.load_playback_mutation(number.get(), cue_number);
@@ -413,7 +412,7 @@ impl PlaybackEngine {
             .iter()
             .find(|cue| cue.number == cue_number)
             .ok_or("cue does not exist")?;
-        let (cue_id, cue_number) = (cue.id, cue.number);
+        let (cue_id, cue_number) = (cue.id, cue.number.clone());
         let key = PlaybackKey::CueList(cue_list_id);
         let inserted = !self.active.contains_key(&key);
         let now = self.clock.now();
@@ -425,7 +424,7 @@ impl PlaybackEngine {
         let changed = inserted
             || playback.playback_identity != Some(identity)
             || playback.loaded_cue_id != Some(cue_id)
-            || playback.loaded_cue_number != Some(cue_number);
+            || playback.loaded_cue_number.as_ref() != Some(&cue_number);
         playback.playback_number = Some(address.number().get());
         playback.playback_identity = Some(identity);
         playback.loaded_cue_id = Some(cue_id);
@@ -438,12 +437,12 @@ fn goto_changes_runtime(
     playback: &ActivePlayback,
     number: u16,
     cue_id: Uuid,
-    cue_number: f64,
+    cue_number: &CueNumber,
     now: DateTime<Utc>,
 ) -> bool {
     playback.playback_number != Some(number)
         || playback.current_cue_id != Some(cue_id)
-        || playback.current_cue_number != Some(cue_number)
+        || playback.current_cue_number.as_ref() != Some(cue_number)
         || playback.deleted_cue_hold.is_some()
         || playback.deleted_cue_transition_source.is_some()
         || playback.loaded_cue_id.is_some()

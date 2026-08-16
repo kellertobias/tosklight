@@ -12,7 +12,9 @@ fn engine_with_cues(cues: Vec<Cue>) -> (PlaybackEngine, CueListId) {
 }
 
 fn single_cue_engine() -> (PlaybackEngine, CueListId) {
-    engine_with_cues(vec![Cue::new(1.0)])
+    engine_with_cues(vec![Cue::new(
+        crate::CueNumber::try_from_legacy_f64(1.0).unwrap(),
+    )])
 }
 
 #[test]
@@ -67,7 +69,10 @@ fn on_and_off_report_exact_durable_changes() {
 fn off_reports_cleanup_even_when_the_playback_was_disabled() {
     let (mut engine, _) = single_cue_engine();
     assert_eq!(
-        engine.load_playback_mutation(1, 1.0).unwrap().effect,
+        engine
+            .load_playback_mutation(1, cue_number(1.0))
+            .unwrap()
+            .effect,
         PlaybackRuntimeEffect::Durable
     );
     let cleanup = engine.off_mutation(1).unwrap();
@@ -81,17 +86,29 @@ fn off_reports_cleanup_even_when_the_playback_was_disabled() {
 
 #[test]
 fn load_and_pause_suppress_repeated_explicit_state() {
-    let (mut engine, cue_list_id) = engine_with_cues(vec![Cue::new(1.0), Cue::new(2.0)]);
+    let (mut engine, cue_list_id) = engine_with_cues(vec![
+        Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap()),
+        Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap()),
+    ]);
     assert_eq!(
-        engine.load_playback_mutation(1, 1.0).unwrap().effect,
+        engine
+            .load_playback_mutation(1, cue_number(1.0))
+            .unwrap()
+            .effect,
         PlaybackRuntimeEffect::Durable
     );
     assert_eq!(
-        engine.load_playback_mutation(1, 1.0).unwrap().effect,
+        engine
+            .load_playback_mutation(1, cue_number(1.0))
+            .unwrap()
+            .effect,
         PlaybackRuntimeEffect::None
     );
     assert_eq!(
-        engine.load_playback_mutation(1, 2.0).unwrap().effect,
+        engine
+            .load_playback_mutation(1, cue_number(2.0))
+            .unwrap()
+            .effect,
         PlaybackRuntimeEffect::Durable
     );
     engine.on(1).unwrap();
@@ -109,7 +126,9 @@ fn load_and_pause_suppress_repeated_explicit_state() {
 fn goto_is_exact_for_the_same_runtime_instant_but_retriggering_is_durable() {
     let started = Utc::now();
     let clock = Arc::new(light_core::ManualClock::new(started));
-    let cue_list = list(vec![Cue::new(1.0)]);
+    let cue_list = list(vec![Cue::new(
+        crate::CueNumber::try_from_legacy_f64(1.0).unwrap(),
+    )]);
     let cue_list_id = cue_list.id;
     let mut engine = PlaybackEngine::with_clock(clock.clone());
     engine.register(cue_list).unwrap();
@@ -117,19 +136,21 @@ fn goto_is_exact_for_the_same_runtime_instant_but_retriggering_is_durable() {
         .register_definition(definition(1, cue_list_id))
         .unwrap();
 
-    let first = engine.goto_playback_mutation(1, 1.0).unwrap();
+    let first = engine.goto_playback_mutation(1, cue_number(1.0)).unwrap();
     assert_eq!(first.addressed_effect, PlaybackRuntimeEffect::Durable);
-    let repeated = engine.goto_playback_mutation(1, 1.0).unwrap();
+    let repeated = engine.goto_playback_mutation(1, cue_number(1.0)).unwrap();
     assert_eq!(repeated.addressed_effect, PlaybackRuntimeEffect::None);
 
     clock.advance_millis(1);
-    let retriggered = engine.goto_playback_mutation(1, 1.0).unwrap();
+    let retriggered = engine.goto_playback_mutation(1, cue_number(1.0)).unwrap();
     assert_eq!(retriggered.addressed_effect, PlaybackRuntimeEffect::Durable);
 }
 
 #[test]
 fn direct_cue_list_pause_reports_exact_repetition() {
-    let cue_list = list(vec![Cue::new(1.0)]);
+    let cue_list = list(vec![Cue::new(
+        crate::CueNumber::try_from_legacy_f64(1.0).unwrap(),
+    )]);
     let cue_list_id = cue_list.id;
     let mut engine = PlaybackEngine::default();
     engine.register(cue_list).unwrap();
@@ -227,9 +248,13 @@ fn temporary_controls_are_transient_and_duplicate_explicit_state_is_none() {
 
 #[test]
 fn flash_and_swap_release_promotion_is_durable() {
-    let first = list(vec![Cue::new(1.0)]);
+    let first = list(vec![Cue::new(
+        crate::CueNumber::try_from_legacy_f64(1.0).unwrap(),
+    )]);
     let first_id = first.id;
-    let second = list(vec![Cue::new(1.0)]);
+    let second = list(vec![Cue::new(
+        crate::CueNumber::try_from_legacy_f64(1.0).unwrap(),
+    )]);
     let second_id = second.id;
     let mut engine = PlaybackEngine::default();
     engine.register(first).unwrap();
@@ -300,7 +325,10 @@ fn release_all_flash_remains_transient() {
 
 #[test]
 fn manual_and_automatic_xfade_report_endpoint_no_ops() {
-    let (mut manual, _) = engine_with_cues(vec![Cue::new(1.0), Cue::new(2.0)]);
+    let (mut manual, _) = engine_with_cues(vec![
+        Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap()),
+        Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap()),
+    ]);
     manual.definitions.get_mut(&1).unwrap().fader = PlaybackFaderMode::XFade;
     manual.on(1).unwrap();
     assert_eq!(
@@ -393,9 +421,9 @@ fn auto_off_peer_changes_upgrade_an_otherwise_repeated_on() {
     let started = Utc::now();
     let clock = Arc::new(light_core::ManualClock::new(started));
     let fixture = FixtureId::new();
-    let mut low = Cue::new(1.0);
+    let mut low = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     low.changes.push(value(fixture, "pan", 0.2));
-    let mut high = Cue::new(1.0);
+    let mut high = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     high.changes.push(value(fixture, "pan", 0.8));
     let low = list(vec![low]);
     let low_id = low.id;

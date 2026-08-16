@@ -280,7 +280,7 @@ fn stored_projection<T>(
 fn recorded_cue(plan: &CueListRecordingPlan) -> ProgrammingRecordedCue {
     ProgrammingRecordedCue {
         id: plan.cue_id,
-        number: crate::CueNumber::new(plan.cue_number),
+        number: plan.cue_number.clone(),
         deleted: plan.deleted,
     }
 }

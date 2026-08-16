@@ -487,7 +487,7 @@ fn demo_playback_for_groups(group_ids: &[String]) -> (CueList, PlaybackDefinitio
     let cue_list_id = CueListId(fixed_uuid(0x83, 1));
     let cue = Cue {
         id: fixed_uuid(0x84, 1),
-        number: 1.0,
+        number: light_playback::CueNumber::from(1_u8),
         name: "Overlapping sustained-show intensity and Dynamic".into(),
         information: String::new(),
         changes: vec![],

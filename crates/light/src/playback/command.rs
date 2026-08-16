@@ -2,6 +2,7 @@ use super::{PlaybackDeskProjection, PlaybackGroupId, PlaybackRuntimeProjection};
 use crate::{ActionContext, ApplicationCommand, CommandFamily};
 use light_core::CueListId;
 use light_playback::ActivePlayback;
+pub use light_playback::CueNumber;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum PlaybackAddress {
@@ -54,20 +55,7 @@ impl PlaybackLevel {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub struct CueNumber(u64);
-
-impl CueNumber {
-    pub fn new(value: f64) -> Self {
-        Self(value.to_bits())
-    }
-
-    pub fn value(self) -> f64 {
-        f64::from_bits(self.0)
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum PlaybackAction {
     Go {
         pressed: bool,
@@ -167,7 +155,7 @@ pub enum PlaybackAction {
 }
 
 impl PlaybackAction {
-    pub const fn pressed(self) -> Option<bool> {
+    pub fn pressed(self) -> Option<bool> {
         match self {
             Self::Release
             | Self::Master(_)

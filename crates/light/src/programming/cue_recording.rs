@@ -156,21 +156,25 @@ impl ProgrammingCueCommit {
                 && self.request.cue_number.is_none());
         if !creates_first_cue {
             return Err(CueRecordingPlanError::CueDoesNotExist {
-                cue_number: self.request.cue_number.map_or(1.0, CueNumber::value),
+                cue_number: self
+                    .request
+                    .cue_number
+                    .clone()
+                    .unwrap_or_else(|| CueNumber::from(1_u8)),
             });
         }
         CueList::new_recording(
             cue_list_id,
             name,
             self.content(),
-            self.request.cue_number.map(CueNumber::value),
+            self.request.cue_number.clone(),
             self.environment.cuelist_auto_off_at_zero_default,
             self.environment.cuelist_auto_off_flash_release_default,
         )
     }
 
     fn domain_operation(&self) -> CueRecordOperation {
-        let cue_number = self.request.cue_number.map(CueNumber::value);
+        let cue_number = self.request.cue_number.clone();
         match (self.request.operation, cue_number) {
             (ProgrammingCueRecordOperation::Overwrite, None) => CueRecordOperation::Append,
             (ProgrammingCueRecordOperation::Overwrite, Some(cue_number)) => {
@@ -290,7 +294,7 @@ pub struct ProgrammingCueProjections {
     pub page: Option<ProgrammingCueObjectProjection>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ProgrammingRecordedCue {
     pub id: Uuid,
     pub number: CueNumber,

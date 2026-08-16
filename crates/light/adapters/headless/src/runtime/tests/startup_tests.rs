@@ -501,7 +501,10 @@ fn automatic_chaser_transition_checkpoints_its_order_before_restart() {
         chaser_xfade_millis: 0,
         chaser_xfade_percent: Some(0),
         speed_multiplier: 1.0,
-        cues: vec![light_playback::Cue::new(1.0), light_playback::Cue::new(2.0)],
+        cues: vec![
+            light_playback::Cue::new(cue("1")),
+            light_playback::Cue::new(cue("2")),
+        ],
     };
     let cue_list_id = cue_list.id;
     engine
@@ -768,7 +771,7 @@ fn restored_exclusion_snapshot(cue_list_id: light_core::CueListId) -> EngineSnap
                 chaser_xfade_millis: 0,
                 chaser_xfade_percent: Some(0),
                 speed_multiplier: 1.0,
-                cues: vec![light_playback::Cue::new(1.0)],
+                cues: vec![light_playback::Cue::new(cue("1"))],
             })
             .collect::<Vec<_>>()
             .into(),

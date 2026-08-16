@@ -3,12 +3,12 @@ use super::*;
 #[test]
 fn follow_chaser_and_timecode_advance_without_manual_go() {
     let fixture = FixtureId::new();
-    let mut first = Cue::new(1.0);
+    let mut first = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     first.changes.push(value(fixture, "intensity", 0.2));
-    let mut second = Cue::new(2.0);
+    let mut second = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
     second.trigger = CueTrigger::Follow { delay_millis: 100 };
     second.changes.push(value(fixture, "intensity", 0.8));
-    let mut third = Cue::new(3.0);
+    let mut third = Cue::new(crate::CueNumber::try_from_legacy_f64(3.0).unwrap());
     third.trigger = CueTrigger::Timecode { frame: 250 };
     let mut cue_list = list(vec![first, second, third]);
     let id = cue_list.id;
@@ -30,7 +30,7 @@ fn follow_chaser_and_timecode_advance_without_manual_go() {
     chaser.go_at(id, started).unwrap();
     chaser.tick(started + ChronoDuration::milliseconds(50), None);
     assert_eq!(chaser.active()[0].cue_index, 1);
-    chaser.jump_at(id, 1.0, started).unwrap();
+    chaser.jump_at(id, cue_number(1.0), started).unwrap();
     chaser.tick(started, Some(250));
     assert_eq!(chaser.active()[0].cue_index, 2);
 }
@@ -39,16 +39,16 @@ fn follow_chaser_and_timecode_advance_without_manual_go() {
 fn follow_waits_for_actual_outgoing_work_without_phantom_out_duration() {
     let outgoing = FixtureId::new();
     let incoming = FixtureId::new();
-    let mut first = Cue::new(1.0);
+    let mut first = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     first.out_delay_millis = Some(500);
     first.out_fade_millis = Some(2_000);
     first.changes.push(value(outgoing, "intensity", 1.0));
     first.changes.push(value(incoming, "intensity", 0.0));
-    let mut second = Cue::new(2.0);
+    let mut second = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
     second.fade_millis = 1_000;
     second.changes.push(value(outgoing, "intensity", 0.0));
     second.changes.push(value(incoming, "intensity", 1.0));
-    let mut third = Cue::new(3.0);
+    let mut third = Cue::new(crate::CueNumber::try_from_legacy_f64(3.0).unwrap());
     third.trigger = CueTrigger::Follow { delay_millis: 0 };
     let cue_list = list(vec![first, second, third]);
     let id = cue_list.id;
@@ -63,11 +63,11 @@ fn follow_waits_for_actual_outgoing_work_without_phantom_out_duration() {
     engine.tick(started + ChronoDuration::milliseconds(2_500), None);
     assert_eq!(engine.active()[0].cue_index, 2);
 
-    let mut only_rises = Cue::new(1.0);
+    let mut only_rises = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     only_rises.fade_millis = 1_000;
     only_rises.out_fade_millis = Some(10_000);
     only_rises.changes.push(value(incoming, "intensity", 1.0));
-    let mut follows = Cue::new(2.0);
+    let mut follows = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
     follows.trigger = CueTrigger::Follow { delay_millis: 0 };
     let cue_list = list(vec![only_rises, follows]);
     let id = cue_list.id;
@@ -82,17 +82,17 @@ fn follow_waits_for_actual_outgoing_work_without_phantom_out_duration() {
 fn link_uses_stable_destination_identity_after_source_completion() {
     let outgoing = FixtureId::new();
     let incoming = FixtureId::new();
-    let mut first = Cue::new(1.0);
+    let mut first = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     first.out_delay_millis = Some(500);
     first.out_fade_millis = Some(2_000);
     first.changes.push(value(outgoing, "intensity", 1.0));
     first.changes.push(value(incoming, "intensity", 0.0));
-    let mut source = Cue::new(2.0);
+    let mut source = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
     source.fade_millis = 1_000;
     source.changes.push(value(outgoing, "intensity", 0.0));
     source.changes.push(value(incoming, "intensity", 1.0));
-    let skipped = Cue::new(3.0);
-    let mut destination = Cue::new(30.0);
+    let skipped = Cue::new(crate::CueNumber::try_from_legacy_f64(3.0).unwrap());
+    let mut destination = Cue::new(crate::CueNumber::try_from_legacy_f64(30.0).unwrap());
     destination.changes.push(value(incoming, "intensity", 0.4));
     source.trigger = CueTrigger::Link {
         cue_id: destination.id,
@@ -110,7 +110,10 @@ fn link_uses_stable_destination_identity_after_source_completion() {
     assert_eq!(engine.active()[0].cue_index, 1);
     let result = engine.tick(started + ChronoDuration::milliseconds(2_750), None);
     assert_eq!(engine.active()[0].current_cue_id, Some(destination.id));
-    assert_eq!(engine.active()[0].current_cue_number, Some(30.0));
+    assert_eq!(
+        engine.active()[0].current_cue_number,
+        Some(cue_number(30.0))
+    );
     assert_eq!(
         result.transitions[0].cause,
         AutomaticPlaybackTransitionCause::Link
@@ -119,7 +122,7 @@ fn link_uses_stable_destination_identity_after_source_completion() {
 
 #[test]
 fn link_validation_rejects_dangling_self_and_cycles() {
-    let mut dangling = Cue::new(1.0);
+    let mut dangling = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     dangling.trigger = CueTrigger::Link {
         cue_id: Uuid::new_v4(),
         delay_millis: 0,
@@ -131,7 +134,7 @@ fn link_validation_rejects_dangling_self_and_cycles() {
             .contains("missing")
     );
 
-    let mut self_link = Cue::new(1.0);
+    let mut self_link = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     self_link.trigger = CueTrigger::Link {
         cue_id: self_link.id,
         delay_millis: 0,
@@ -143,8 +146,8 @@ fn link_validation_rejects_dangling_self_and_cycles() {
             .contains("itself")
     );
 
-    let mut first = Cue::new(1.0);
-    let mut second = Cue::new(2.0);
+    let mut first = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
+    let mut second = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
     first.trigger = CueTrigger::Link {
         cue_id: second.id,
         delay_millis: 0,
@@ -163,8 +166,8 @@ fn link_validation_rejects_dangling_self_and_cycles() {
 
 #[test]
 fn live_timecode_suppresses_link_and_disable_timing_makes_it_immediate() {
-    let mut source = Cue::new(1.0);
-    let destination = Cue::new(2.0);
+    let mut source = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
+    let destination = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
     source.trigger = CueTrigger::Link {
         cue_id: destination.id,
         delay_millis: 10_000,
@@ -189,8 +192,8 @@ fn live_timecode_suppresses_link_and_disable_timing_makes_it_immediate() {
 #[test]
 fn link_identity_and_pending_deadline_survive_restart() {
     let started = Utc::now();
-    let mut source = Cue::new(1.0);
-    let destination = Cue::new(8.0);
+    let mut source = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
+    let destination = Cue::new(crate::CueNumber::try_from_legacy_f64(8.0).unwrap());
     source.trigger = CueTrigger::Link {
         cue_id: destination.id,
         delay_millis: 500,
@@ -219,7 +222,10 @@ fn link_identity_and_pending_deadline_survive_restart() {
 
 #[test]
 fn legacy_looped_lists_migrate_to_tracking_wrap_defaults() {
-    let mut encoded = serde_json::to_value(list(vec![Cue::new(1.0)])).unwrap();
+    let mut encoded = serde_json::to_value(list(vec![Cue::new(
+        crate::CueNumber::try_from_legacy_f64(1.0).unwrap(),
+    )]))
+    .unwrap();
     let object = encoded.as_object_mut().unwrap();
     for field in [
         "intensity_priority_mode",
@@ -243,7 +249,9 @@ fn legacy_looped_lists_migrate_to_tracking_wrap_defaults() {
 
 #[test]
 fn legacy_chaser_xfade_migrates_once_to_stable_integer_percent() {
-    let mut legacy = list(vec![Cue::new(1.0)]);
+    let mut legacy = list(vec![Cue::new(
+        crate::CueNumber::try_from_legacy_f64(1.0).unwrap(),
+    )]);
     legacy.mode = CueListMode::Chaser;
     legacy.chaser_step_millis = 1_000;
     legacy.chaser_xfade_millis = 255;
@@ -267,7 +275,9 @@ fn legacy_chaser_xfade_migrates_once_to_stable_integer_percent() {
 
 #[test]
 fn chaser_xfade_percent_tracks_live_step_duration_exactly() {
-    let mut chaser = list(vec![Cue::new(1.0)]);
+    let mut chaser = list(vec![Cue::new(
+        crate::CueNumber::try_from_legacy_f64(1.0).unwrap(),
+    )]);
     chaser.mode = CueListMode::Chaser;
     chaser.speed_group = Some("A".into());
     chaser.chaser_xfade_percent = Some(50);
@@ -287,9 +297,9 @@ fn chaser_xfade_percent_tracks_live_step_duration_exactly() {
 #[test]
 fn tracking_wrap_keeps_final_state_while_reset_wrap_releases_it() {
     let fixture = FixtureId::new();
-    let mut first = Cue::new(1.0);
+    let mut first = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     first.changes.push(value(fixture, "intensity", 0.2));
-    let mut second = Cue::new(2.0);
+    let mut second = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
     second.changes.push(value(fixture, "pan", 0.7));
     let mut tracking = list(vec![first.clone(), second.clone()]);
     tracking.wrap_mode = Some(WrapMode::Tracking);
@@ -326,11 +336,11 @@ fn tracking_wrap_keeps_final_state_while_reset_wrap_releases_it() {
 #[test]
 fn deleting_the_active_cue_holds_output_and_anchors_navigation() {
     let fixture = FixtureId::new();
-    let mut one = Cue::new(1.0);
+    let mut one = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     one.changes.push(value(fixture, "intensity", 0.1));
-    let mut two = Cue::new(2.0);
+    let mut two = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
     two.changes.push(value(fixture, "intensity", 0.6));
-    let mut three = Cue::new(3.0);
+    let mut three = Cue::new(crate::CueNumber::try_from_legacy_f64(3.0).unwrap());
     three.fade_millis = 1_000;
     three.changes.push(value(fixture, "intensity", 0.9));
     let original = list(vec![one.clone(), two, three.clone()]);
@@ -345,14 +355,17 @@ fn deleting_the_active_cue_holds_output_and_anchors_navigation() {
     let active = engine.active_for_snapshot(&[replacement.clone()], started);
     assert_eq!(
         active[0].deleted_cue_hold.as_ref().unwrap().deleted_number,
-        2.0
+        cue_number(2.0)
     );
     let mut replaced = PlaybackEngine::default();
     replaced.register(replacement).unwrap();
     replaced.restore_active(active);
     assert_eq!(contribution_level(&replaced, started, fixture), 0.6);
     replaced.go_at(id, started).unwrap();
-    assert_eq!(replaced.active()[0].current_cue_number, Some(3.0));
+    assert_eq!(
+        replaced.active()[0].current_cue_number,
+        Some(cue_number(3.0))
+    );
     assert_eq!(contribution_level(&replaced, started, fixture), 0.6);
     assert!(
         (contribution_level(
@@ -374,7 +387,10 @@ fn deleting_the_active_cue_holds_output_and_anchors_navigation() {
     replaced
         .back_at(id, started + ChronoDuration::milliseconds(1_000))
         .unwrap();
-    assert_eq!(replaced.active()[0].current_cue_number, Some(1.0));
+    assert_eq!(
+        replaced.active()[0].current_cue_number,
+        Some(cue_number(1.0))
+    );
 }
 
 #[test]
@@ -383,7 +399,11 @@ fn go_activate_honors_restart_mode_when_playback_is_off() {
         (RestartMode::FirstCue, 0),
         (RestartMode::ContinueCurrentCue, 1),
     ] {
-        let mut cue_list = list(vec![Cue::new(1.0), Cue::new(2.0), Cue::new(3.0)]);
+        let mut cue_list = list(vec![
+            Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap()),
+            Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap()),
+            Cue::new(crate::CueNumber::try_from_legacy_f64(3.0).unwrap()),
+        ]);
         cue_list.restart_mode = restart_mode;
         let id = cue_list.id;
         let mut engine = PlaybackEngine::default();
@@ -400,7 +420,11 @@ fn go_activate_honors_restart_mode_when_playback_is_off() {
 
 #[test]
 fn continue_restart_falls_back_to_first_if_remembered_cue_was_deleted_while_off() {
-    let mut original = list(vec![Cue::new(1.0), Cue::new(2.0), Cue::new(3.0)]);
+    let mut original = list(vec![
+        Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap()),
+        Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap()),
+        Cue::new(crate::CueNumber::try_from_legacy_f64(3.0).unwrap()),
+    ]);
     original.restart_mode = RestartMode::ContinueCurrentCue;
     let id = original.id;
     let started = Utc::now();
@@ -411,7 +435,10 @@ fn continue_restart_falls_back_to_first_if_remembered_cue_was_deleted_while_off(
     engine.go_playback(1).unwrap();
     engine.off(1).unwrap();
 
-    let mut replacement = list(vec![Cue::new(1.0), Cue::new(3.0)]);
+    let mut replacement = list(vec![
+        Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap()),
+        Cue::new(crate::CueNumber::try_from_legacy_f64(3.0).unwrap()),
+    ]);
     replacement.id = id;
     replacement.restart_mode = RestartMode::ContinueCurrentCue;
     let active = engine.active_for_snapshot(&[replacement.clone()], started);
@@ -424,12 +451,19 @@ fn continue_restart_falls_back_to_first_if_remembered_cue_was_deleted_while_off(
     replaced.restore_active(active);
     replaced.on(1).unwrap();
     assert_eq!(replaced.active()[0].cue_index, 0);
-    assert_eq!(replaced.active()[0].current_cue_number, Some(1.0));
+    assert_eq!(
+        replaced.active()[0].current_cue_number,
+        Some(cue_number(1.0))
+    );
 }
 
 #[test]
 fn deleting_an_inactive_earlier_cue_preserves_current_identity() {
-    let original = list(vec![Cue::new(1.0), Cue::new(2.0), Cue::new(3.0)]);
+    let original = list(vec![
+        Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap()),
+        Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap()),
+        Cue::new(crate::CueNumber::try_from_legacy_f64(3.0).unwrap()),
+    ]);
     let id = original.id;
     let started = Utc::now();
     let mut engine = PlaybackEngine::default();
@@ -437,27 +471,33 @@ fn deleting_an_inactive_earlier_cue_preserves_current_identity() {
     engine.go_at(id, started).unwrap();
     engine.go_at(id, started).unwrap();
     engine.go_at(id, started).unwrap();
-    let mut replacement = list(vec![Cue::new(2.0), Cue::new(3.0)]);
+    let mut replacement = list(vec![
+        Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap()),
+        Cue::new(crate::CueNumber::try_from_legacy_f64(3.0).unwrap()),
+    ]);
     replacement.id = id;
     let active = engine.active_for_snapshot(&[replacement.clone()], started);
     let mut replaced = PlaybackEngine::default();
     replaced.register(replacement).unwrap();
     replaced.restore_active(active);
     assert_eq!(replaced.active()[0].cue_index, 1);
-    assert_eq!(replaced.active()[0].current_cue_number, Some(3.0));
+    assert_eq!(
+        replaced.active()[0].current_cue_number,
+        Some(cue_number(3.0))
+    );
 }
 
 #[test]
 fn restart_and_timing_settings_have_contract_precedence() {
     let fixture = FixtureId::new();
-    let mut first = Cue::new(1.0);
+    let mut first = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     first.fade_millis = 1_000;
     first.delay_millis = 500;
     let mut change = value(fixture, "intensity", 1.0);
     change.fade_millis = Some(2_000);
     change.delay_millis = Some(100);
     first.changes.push(change);
-    let mut second = Cue::new(2.0);
+    let mut second = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
     second.trigger = CueTrigger::Wait {
         delay_millis: 4_000,
     };

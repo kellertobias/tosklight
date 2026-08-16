@@ -335,7 +335,7 @@ fn attribute_configuration_uses_one_lossless_non_deletable_default_object() {
 fn cue_list_mutation_uses_one_prepared_boundary_and_keeps_action_context() {
     let rig = TestRig::new();
     let cue_list_id = light_core::CueListId(Uuid::from_u128(0x601));
-    let mut cue = light_playback::Cue::new(1.0);
+    let mut cue = light_playback::Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     cue.id = Uuid::from_u128(0x602);
     let body = serde_json::to_value(light_playback::CueList {
         id: light_core::CueListId::new(),
@@ -1139,7 +1139,9 @@ fn cue_list_body(id: light_core::CueListId, name: &str) -> Value {
         chaser_xfade_millis: 0,
         chaser_xfade_percent: Some(0),
         speed_multiplier: 1.0,
-        cues: vec![light_playback::Cue::new(1.0)],
+        cues: vec![light_playback::Cue::new(
+            crate::CueNumber::try_from_legacy_f64(1.0).unwrap(),
+        )],
     })
     .unwrap()
 }

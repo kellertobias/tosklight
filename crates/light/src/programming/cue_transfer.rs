@@ -22,7 +22,7 @@ pub enum ProgrammingCueTransferAddress {
     PageSlot { page: u8, slot: u8 },
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct ProgrammingCueTransferEndpoint {
     pub address: ProgrammingCueTransferAddress,
     pub cue_number: CueNumber,
@@ -67,7 +67,7 @@ pub struct ProgrammingCueTransferObjectProjection {
     pub raw_body: Arc<Value>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ProgrammingCueTransferSummary {
     pub operation: CueTransferOperation,
     pub mode: ProgrammingCueTransferMode,

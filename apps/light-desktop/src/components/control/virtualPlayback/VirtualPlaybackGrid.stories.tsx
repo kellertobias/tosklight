@@ -67,7 +67,7 @@ const cueLists = new Map<string, CueList>([
 			cues: [
 				{
 					id: "44444444-4444-4444-8444-444444444444",
-					number: 4,
+					number: "4",
 					name: "Solo",
 					fade_millis: 2500,
 					delay_millis: 0,

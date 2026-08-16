@@ -3,20 +3,23 @@ use super::*;
 #[test]
 fn tracked_direct_jump_equals_sequential_state() {
     let fixture = FixtureId::new();
-    let mut one = Cue::new(1.0);
+    let mut one = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     one.changes.push(value(fixture, "intensity", 1.0));
-    let mut two = Cue::new(2.0);
+    let mut two = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
     two.changes.push(value(fixture, "pan", 0.5));
-    let three = Cue::new(3.0);
+    let three = Cue::new(crate::CueNumber::try_from_legacy_f64(3.0).unwrap());
     let list = list(vec![one, two, three]);
-    assert_eq!(list.state_at_number(3.0), list.state_at_index(2));
+    assert_eq!(
+        list.state_at_number(&cue_number(3.0)),
+        list.state_at_index(2)
+    );
     assert_eq!(list.state_at_index(2).len(), 2);
 }
 
 #[test]
 fn zero_delay_zero_fade_cue_is_active_at_go_timestamp() {
     let fixture = FixtureId::new();
-    let mut cue = Cue::new(1.0);
+    let mut cue = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     cue.changes.push(value(fixture, "pan", 0.25));
     let cue_list = list(vec![cue]);
     let cue_list_id = cue_list.id;
@@ -32,10 +35,10 @@ fn zero_delay_zero_fade_cue_is_active_at_go_timestamp() {
 #[test]
 fn cue_only_restores_previous_value_in_following_cue() {
     let fixture = FixtureId::new();
-    let mut one = Cue::new(1.0);
+    let mut one = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     one.changes.push(value(fixture, "intensity", 0.2));
-    let two = Cue::new(2.0);
-    let three = Cue::new(3.0);
+    let two = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
+    let three = Cue::new(crate::CueNumber::try_from_legacy_f64(3.0).unwrap());
     let mut list = list(vec![one, two, three]);
     list.store_cue_only(1, vec![value(fixture, "intensity", 1.0)])
         .unwrap();
@@ -54,7 +57,11 @@ fn cue_only_restores_previous_value_in_following_cue() {
 #[test]
 fn cue_only_releases_new_attribute_in_following_cue() {
     let fixture = FixtureId::new();
-    let mut list = list(vec![Cue::new(1.0), Cue::new(2.0), Cue::new(3.0)]);
+    let mut list = list(vec![
+        Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap()),
+        Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap()),
+        Cue::new(crate::CueNumber::try_from_legacy_f64(3.0).unwrap()),
+    ]);
     list.store_cue_only(1, vec![value(fixture, "intensity", 1.0)])
         .unwrap();
     assert!(list.state_at_index(2).is_empty());
@@ -62,7 +69,10 @@ fn cue_only_releases_new_attribute_in_following_cue() {
 
 #[test]
 fn legacy_cues_default_optional_metadata() {
-    let mut body = serde_json::to_value(Cue::new(1.0)).unwrap();
+    let mut body = serde_json::to_value(Cue::new(
+        crate::CueNumber::try_from_legacy_f64(1.0).unwrap(),
+    ))
+    .unwrap();
     body.as_object_mut().unwrap().remove("cue_only");
     body.as_object_mut().unwrap().remove("information");
     body["group_changes"] = serde_json::json!([{
@@ -78,7 +88,7 @@ fn legacy_cues_default_optional_metadata() {
 
 #[test]
 fn cue_information_round_trips_with_the_cue() {
-    let mut cue = Cue::new(1.0);
+    let mut cue = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     cue.information = "Stand by follow spot".into();
     let restored: Cue = serde_json::from_value(serde_json::to_value(cue).unwrap()).unwrap();
     assert_eq!(restored.information, "Stand by follow spot");
@@ -87,9 +97,9 @@ fn cue_information_round_trips_with_the_cue() {
 #[test]
 fn explicit_next_cue_change_beats_automatic_restore() {
     let fixture = FixtureId::new();
-    let one = Cue::new(1.0);
-    let two = Cue::new(2.0);
-    let mut three = Cue::new(3.0);
+    let one = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
+    let two = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
+    let mut three = Cue::new(crate::CueNumber::try_from_legacy_f64(3.0).unwrap());
     three.changes.push(value(fixture, "intensity", 0.7));
     let mut list = list(vec![one, two, three]);
     list.store_cue_only(1, vec![value(fixture, "intensity", 1.0)])
@@ -129,10 +139,10 @@ fn priority_then_htp_resolution() {
 #[test]
 fn fades_from_zero_and_between_tracked_states() {
     let fixture = FixtureId::new();
-    let mut first = Cue::new(1.0);
+    let mut first = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     first.fade_millis = 1_000;
     first.changes.push(value(fixture, "intensity", 1.0));
-    let mut second = Cue::new(2.0);
+    let mut second = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
     second.fade_millis = 1_000;
     second.changes.push(value(fixture, "intensity", 0.0));
     let cue_list = list(vec![first, second]);
@@ -168,12 +178,12 @@ fn fades_from_zero_and_between_tracked_states() {
 fn intensity_uses_independent_in_and_out_master_timing() {
     let incoming = FixtureId::new();
     let outgoing = FixtureId::new();
-    let mut first = Cue::new(1.0);
+    let mut first = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     first.out_fade_millis = Some(2_000);
     first.out_delay_millis = Some(500);
     first.changes.push(value(incoming, "intensity", 0.0));
     first.changes.push(value(outgoing, "intensity", 1.0));
-    let mut second = Cue::new(2.0);
+    let mut second = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
     second.fade_millis = 1_000;
     second.delay_millis = 0;
     second.out_fade_millis = Some(100);
@@ -200,12 +210,12 @@ fn intensity_uses_independent_in_and_out_master_timing() {
 #[test]
 fn interrupted_go_fades_from_the_current_resolved_intensity() {
     let fixture = FixtureId::new();
-    let mut first = Cue::new(1.0);
+    let mut first = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     first.changes.push(value(fixture, "intensity", 0.0));
-    let mut second = Cue::new(2.0);
+    let mut second = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
     second.fade_millis = 10_000;
     second.changes.push(value(fixture, "intensity", 1.0));
-    let mut third = Cue::new(3.0);
+    let mut third = Cue::new(crate::CueNumber::try_from_legacy_f64(3.0).unwrap());
     third.out_fade_millis = Some(10_000);
     third.changes.push(value(fixture, "intensity", 0.0));
     let cue_list = list(vec![first, second, third]);
@@ -248,7 +258,10 @@ fn interrupted_go_fades_from_the_current_resolved_intensity() {
 
 #[test]
 fn legacy_cue_out_timing_follows_existing_fade_and_delay() {
-    let mut body = serde_json::to_value(Cue::new(1.0)).unwrap();
+    let mut body = serde_json::to_value(Cue::new(
+        crate::CueNumber::try_from_legacy_f64(1.0).unwrap(),
+    ))
+    .unwrap();
     let object = body.as_object_mut().unwrap();
     object.remove("out_fade_millis");
     object.remove("out_delay_millis");
@@ -264,17 +277,17 @@ fn legacy_cue_out_timing_follows_existing_fade_and_delay() {
 fn absent_out_fade_follows_the_effective_sequence_master_but_explicit_zero_snaps() {
     let inherited = FixtureId::new();
     let snapped = FixtureId::new();
-    let mut first = Cue::new(1.0);
+    let mut first = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     first.changes.push(value(inherited, "intensity", 1.0));
     first.changes.push(value(snapped, "intensity", 1.0));
-    let mut second = Cue::new(2.0);
+    let mut second = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
     second.changes.push(value(inherited, "intensity", 0.0));
     second.changes.push(value(snapped, "intensity", 0.0));
-    let mut third = Cue::new(3.0);
+    let mut third = Cue::new(crate::CueNumber::try_from_legacy_f64(3.0).unwrap());
     third.out_fade_millis = Some(0);
     third.changes.push(value(inherited, "intensity", 1.0));
     third.changes.push(value(snapped, "intensity", 1.0));
-    let mut fourth = Cue::new(4.0);
+    let mut fourth = Cue::new(crate::CueNumber::try_from_legacy_f64(4.0).unwrap());
     fourth.out_fade_millis = Some(0);
     fourth.changes.push(value(inherited, "intensity", 0.0));
     fourth.changes.push(value(snapped, "intensity", 0.0));
@@ -308,7 +321,7 @@ fn absent_out_fade_follows_the_effective_sequence_master_but_explicit_zero_snaps
 fn cue_changes_keep_independent_fade_and_delay_times() {
     let first = FixtureId::new();
     let second = FixtureId::new();
-    let mut cue = Cue::new(1.0);
+    let mut cue = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     let mut immediate = value(first, "intensity", 1.0);
     immediate.fade_millis = Some(1_000);
     immediate.delay_millis = Some(0);
@@ -346,11 +359,11 @@ fn cue_changes_keep_independent_fade_and_delay_times() {
 #[test]
 fn per_value_force_and_disable_precedence_apply_to_outgoing_intensity() {
     let fixture = FixtureId::new();
-    let mut first = Cue::new(1.0);
+    let mut first = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     first.out_delay_millis = Some(1_000);
     first.out_fade_millis = Some(4_000);
     first.changes.push(value(fixture, "intensity", 1.0));
-    let mut second = Cue::new(2.0);
+    let mut second = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
     let mut outgoing = value(fixture, "intensity", 0.0);
     outgoing.delay_millis = Some(0);
     outgoing.fade_millis = Some(500);
@@ -383,7 +396,7 @@ fn per_value_force_and_disable_precedence_apply_to_outgoing_intensity() {
 #[test]
 fn pause_freezes_and_resume_continues_fade() {
     let fixture = FixtureId::new();
-    let mut cue = Cue::new(1.0);
+    let mut cue = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     cue.fade_millis = 1_000;
     cue.changes.push(value(fixture, "intensity", 1.0));
     let cue_list = list(vec![cue]);

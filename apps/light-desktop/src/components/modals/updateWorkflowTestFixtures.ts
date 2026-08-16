@@ -23,7 +23,7 @@ export const cueTarget: UpdateTargetIdentity = {
 	object_id: "cue-list-a",
 	name: "Main Cuelist",
 	playback_number: 7,
-	cue: { id: "cue-2", number: 2 },
+	cue: { id: "cue-2", number: "2" },
 };
 
 export const cueRequestTarget: ProgrammingUpdateTarget = {
@@ -31,7 +31,7 @@ export const cueRequestTarget: ProgrammingUpdateTarget = {
 	cue_list_id: "cue-list-a",
 	playback_number: 7,
 	cue_id: "cue-2",
-	cue_number: 2,
+	cue_number: "2",
 	validate_active_context: true,
 };
 
@@ -56,7 +56,7 @@ export const existingPreview: UpdatePreview = {
 			},
 			outcome: {
 				outcome: "change_at_source",
-				source: { cue_id: "cue-1", cue_number: 1, cue_index: 0 },
+				source: { cue_id: "cue-1", cue_number: "1", cue_index: 0 },
 			},
 		},
 	],
@@ -74,7 +74,7 @@ export const addNewPreview: UpdatePreview = {
 			},
 			outcome: {
 				outcome: "add_new_to_current_cue",
-				cue: { cue_id: "cue-2", cue_number: 2, cue_index: 1 },
+				cue: { cue_id: "cue-2", cue_number: "2", cue_index: 1 },
 			},
 		},
 	],

@@ -13,7 +13,10 @@ pub(super) fn application_command(
         application::ProgrammingCueDeletionRequest {
             show_id,
             address: address(request.address),
-            cue_number: application::CueNumber::new(request.cue_number),
+            cue_number: request
+                .cue_number
+                .parse()
+                .map_err(|error: String| format!("cue_number is invalid: {error}"))?,
             expectation: application::ProgrammingCueDeletionExpectation::Exact(
                 application::ProgrammingCueDeletionAuthority {
                     playback_number: request.authority.playback_number,
@@ -34,7 +37,7 @@ pub(super) fn outcome(
     let cue_list = projection(outcome.cue_list);
     let deleted_cue = wire::DeletedCueProjection {
         id: outcome.deleted_cue.id,
-        number: outcome.deleted_cue.number.value(),
+        number: outcome.deleted_cue.number.to_string(),
     };
     match outcome.state {
         application::ProgrammingCueDeletionState::Changed {
@@ -64,9 +67,10 @@ pub(super) fn outcome(
 }
 
 fn validate_request(request: &wire::CueDeletionRequest) -> Result<(), String> {
-    if !request.cue_number.is_finite() || request.cue_number <= 0.0 {
-        return Err("cue_number must be finite and greater than zero".into());
-    }
+    request
+        .cue_number
+        .parse::<application::CueNumber>()
+        .map_err(|error| format!("cue_number is invalid: {error}"))?;
     if request.authority.cue_list_id.is_nil() || request.authority.cue_id.is_nil() {
         return Err("Cue deletion authority IDs must not be nil".into());
     }

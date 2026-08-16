@@ -357,7 +357,7 @@ fn playback(fixture_footprint: u16) -> (CueList, PlaybackDefinition) {
     let cue_list_id = CueListId(fixed_uuid(0x50, 1));
     let cue = Cue {
         id: fixed_uuid(0x51, 1),
-        number: 1.0,
+        number: light_playback::CueNumber::from(1_u8),
         name: "Overlapping static and animated values".into(),
         information: String::new(),
         changes: vec![],

@@ -1,3 +1,5 @@
+use light_playback::CueNumber;
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) enum CueLinkAddress {
     Selected,
@@ -5,11 +7,11 @@ pub(super) enum CueLinkAddress {
     PageSlot { page: u8, slot: u8 },
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(super) struct CueLinkCommand {
     pub address: CueLinkAddress,
-    pub source_number: f64,
-    pub destination_number: f64,
+    pub source_number: CueNumber,
+    pub destination_number: CueNumber,
     pub delay_millis: u64,
 }
 
@@ -32,7 +34,7 @@ pub(super) fn parse(command: &str) -> Result<Option<CueLinkCommand>, String> {
     }))
 }
 
-fn source(tokens: &[String]) -> Result<(CueLinkAddress, f64), String> {
+fn source(tokens: &[String]) -> Result<(CueLinkAddress, CueNumber), String> {
     if tokens.first().is_some_and(|token| token == "CUE") {
         return Ok((CueLinkAddress::Selected, cue_number(tokens, "Link source")?));
     }
@@ -59,7 +61,7 @@ fn source(tokens: &[String]) -> Result<(CueLinkAddress, f64), String> {
     Ok((address, cue_number(&tokens[cue_index..], "Link source")?))
 }
 
-fn cue_number(tokens: &[String], label: &str) -> Result<f64, String> {
+fn cue_number(tokens: &[String], label: &str) -> Result<CueNumber, String> {
     if tokens.first().is_none_or(|token| token != "CUE") {
         return Err(format!("{label} requires CUE <cue-number>"));
     }
@@ -80,7 +82,8 @@ fn cue_number(tokens: &[String], label: &str) -> Result<f64, String> {
     if index != tokens.len() {
         return Err(format!("unexpected tokens after {label}"));
     }
-    text.parse().map_err(|_| format!("{label} is invalid"))
+    text.parse()
+        .map_err(|error: String| format!("{label} is invalid: {error}"))
 }
 
 fn number<T: std::str::FromStr>(value: Option<&String>, label: &str) -> Result<T, String> {
@@ -102,8 +105,16 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(pool.delay_millis, 2_000);
-        assert_eq!(pool.source_number, 1.5);
+        assert_eq!(pool.source_number.to_string(), "1.5");
         let page = parse("LINK SET 2.3 CUE 1 AT CUE 4").unwrap().unwrap();
         assert_eq!(page.address, CueLinkAddress::PageSlot { page: 2, slot: 3 });
+    }
+
+    #[test]
+    fn preserves_deep_paths_and_rejects_leading_zeroes() {
+        let parsed = parse("LINK CUE 2.0.15 AT CUE 7.3.1").unwrap().unwrap();
+        assert_eq!(parsed.source_number.to_string(), "2.0.15");
+        assert_eq!(parsed.destination_number.to_string(), "7.3.1");
+        assert!(parse("LINK CUE 02 AT CUE 3").is_err());
     }
 }

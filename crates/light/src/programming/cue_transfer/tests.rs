@@ -48,8 +48,14 @@ fn same_list_plain_copy_preserves_source_identity_and_lossless_fields() {
     let list = decoded_list(body);
     let source = cue(&list, rig.source_cue_id);
     let copied = cue(&list, outcome.summary.destination_cue_id);
-    assert_eq!(source.number, 2.0);
-    assert_eq!(copied.number, 4.0);
+    assert_eq!(
+        source.number,
+        crate::CueNumber::try_from_legacy_f64(2.0).unwrap()
+    );
+    assert_eq!(
+        copied.number,
+        crate::CueNumber::try_from_legacy_f64(4.0).unwrap()
+    );
     assert_eq!(copied.changes, source.changes);
     assert_eq!(copied.group_changes, source.group_changes);
     rig.assert_one_show_event(1);
@@ -74,9 +80,17 @@ fn same_list_status_move_preserves_id_and_materializes_tracked_state() {
     let body = outcome.projections[0].raw_body.as_ref();
     assert_eq!(future_cue_owner(body, rig.source_cue_id), "source-cue");
     let list = decoded_list(body);
-    assert!(!list.cues.iter().any(|cue| cue.number == 2.0));
+    assert!(
+        !list
+            .cues
+            .iter()
+            .any(|cue| cue.number == crate::CueNumber::try_from_legacy_f64(2.0).unwrap())
+    );
     let moved = cue(&list, rig.source_cue_id);
-    assert_eq!(moved.number, 4.0);
+    assert_eq!(
+        moved.number,
+        crate::CueNumber::try_from_legacy_f64(4.0).unwrap()
+    );
     assert_eq!(moved.name, "Transfer me");
     assert_eq!(moved.changes.len(), 2);
     assert!(moved.changes.iter().all(|change| {
@@ -149,7 +163,10 @@ fn cross_list_plain_move_commits_two_projections_in_one_event() {
     let destination = decoded_list(&outcome.projections[1].raw_body);
     assert!(!source.cues.iter().any(|cue| cue.id == rig.source_cue_id));
     let moved = cue(&destination, rig.source_cue_id);
-    assert_eq!(moved.number, 4.0);
+    assert_eq!(
+        moved.number,
+        crate::CueNumber::try_from_legacy_f64(4.0).unwrap()
+    );
     assert_eq!(moved.changes.len(), 1);
     assert_eq!(moved.changes[0].fixture_id, FixtureId(Uuid::from_u128(12)));
     assert_eq!(
@@ -598,12 +615,12 @@ impl ProgrammingCueTransferPorts for TestPorts {
 fn endpoint(playback_number: u16, cue_number: f64) -> ProgrammingCueTransferEndpoint {
     ProgrammingCueTransferEndpoint {
         address: ProgrammingCueTransferAddress::Pool { playback_number },
-        cue_number: crate::CueNumber::new(cue_number),
+        cue_number: crate::CueNumber::try_from_legacy_f64(cue_number).unwrap(),
     }
 }
 
 fn first_cue() -> Cue {
-    let mut cue = Cue::new(1.0);
+    let mut cue = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     cue.changes.push(CueChange::set(
         FixtureId(Uuid::from_u128(11)),
         AttributeKey::intensity(),
@@ -614,7 +631,7 @@ fn first_cue() -> Cue {
 }
 
 fn transfer_cue() -> Cue {
-    let mut cue = Cue::new(2.0);
+    let mut cue = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
     cue.name = "Transfer me".into();
     cue.fade_millis = 700;
     cue.delay_millis = 20;
@@ -630,7 +647,7 @@ fn transfer_cue() -> Cue {
 }
 
 fn final_cue() -> Cue {
-    let mut cue = Cue::new(3.0);
+    let mut cue = Cue::new(crate::CueNumber::try_from_legacy_f64(3.0).unwrap());
     cue.changes.push(CueChange {
         fixture_id: FixtureId(Uuid::from_u128(11)),
         attribute: AttributeKey::intensity(),
@@ -643,7 +660,7 @@ fn final_cue() -> Cue {
 }
 
 fn destination_cue() -> Cue {
-    let mut cue = Cue::new(1.0);
+    let mut cue = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     cue.changes.push(CueChange::set(
         FixtureId(Uuid::from_u128(13)),
         AttributeKey::intensity(),

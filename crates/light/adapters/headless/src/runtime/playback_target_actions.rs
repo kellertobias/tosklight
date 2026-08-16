@@ -71,7 +71,12 @@ fn execute_pool_with_exclusions(
 ) -> Result<PlaybackTargetOutcome, ApiError> {
     let transition = state
         .output
-        .execute_pool_playback_with_activation(number, action, exclusion_zones, activation_origin)
+        .execute_pool_playback_with_activation(
+            number,
+            action.clone(),
+            exclusion_zones,
+            activation_origin,
+        )
         .map_err(ApiError::bad_request)?;
     let EnginePlaybackOutcome::Changed(effect) = transition.outcome else {
         return Err(ApiError::internal("unexpected pool Playback outcome"));
@@ -86,7 +91,7 @@ fn execute_pool_with_exclusions(
     })
 }
 
-const fn may_change_unprojected_runtime(action: PoolPlaybackAction) -> bool {
+fn may_change_unprojected_runtime(action: PoolPlaybackAction) -> bool {
     matches!(
         action,
         PoolPlaybackAction::On
@@ -178,7 +183,13 @@ pub(super) fn apply_direct_playback_action(
     let cue = || {
         input
             .cue_number
+            .as_deref()
             .ok_or_else(|| ApiError::bad_request("cue_number is required"))
+            .and_then(|number| {
+                number
+                    .parse::<light_playback::CueNumber>()
+                    .map_err(ApiError::bad_request)
+            })
     };
     let outcome = match action {
         "go-to" => execute_pool_with_exclusions(

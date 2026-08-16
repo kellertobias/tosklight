@@ -22,7 +22,7 @@ const cueList: CueList = {
 	cues: [
 		{
 			id: "opening",
-			number: 1,
+			number: "1",
 			name: "Opening Look",
 			fade_millis: 2_500,
 			delay_millis: 0,
@@ -31,7 +31,7 @@ const cueList: CueList = {
 		},
 		{
 			id: "dialogue",
-			number: 2,
+			number: "2",
 			name: "Dialogue",
 			fade_millis: 1_200,
 			delay_millis: 0,
@@ -40,7 +40,7 @@ const cueList: CueList = {
 		},
 		{
 			id: "solo",
-			number: 3,
+			number: "3",
 			name: "Solo",
 			fade_millis: 1_800,
 			delay_millis: 200,
@@ -49,7 +49,7 @@ const cueList: CueList = {
 		},
 		{
 			id: "finale",
-			number: 4,
+			number: "4",
 			name: "Finale",
 			fade_millis: 3_500,
 			delay_millis: 0,
@@ -58,7 +58,7 @@ const cueList: CueList = {
 		},
 		{
 			id: "blackout",
-			number: 5,
+			number: "5",
 			name: "Blackout",
 			fade_millis: 1_000,
 			delay_millis: 0,
@@ -67,7 +67,7 @@ const cueList: CueList = {
 		},
 		{
 			id: "interval",
-			number: 6,
+			number: "6",
 			name: "Interval",
 			fade_millis: 2_000,
 			delay_millis: 0,
@@ -76,7 +76,7 @@ const cueList: CueList = {
 		},
 		{
 			id: "encore",
-			number: 7,
+			number: "7",
 			name: "Encore",
 			fade_millis: 1_500,
 			delay_millis: 0,
@@ -86,7 +86,7 @@ const cueList: CueList = {
 		},
 		{
 			id: "house",
-			number: 8,
+			number: "8",
 			name: "House Open",
 			fade_millis: 4_000,
 			delay_millis: 0,

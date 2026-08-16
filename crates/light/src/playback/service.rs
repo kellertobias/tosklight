@@ -64,7 +64,7 @@ impl PlaybackService {
         envelope: &ActionEnvelope<PlaybackCommand>,
         ports: &dyn PlaybackPorts,
     ) -> Result<PlaybackResult, ActionError> {
-        validate_address_action(&envelope.command.address, envelope.command.action)?;
+        validate_address_action(&envelope.command.address, envelope.command.action.clone())?;
         let resolved = resolve(&envelope.command.address, &envelope.context, ports)?;
         let identity = runtime_identity(&resolved);
         let before = ports.projection(&envelope.context, identity.clone())?;
@@ -76,12 +76,15 @@ impl PlaybackService {
             ports,
         )?;
         let before_desk = ports.desk_projection(&envelope.context)?;
-        let configured_cause =
-            ports.transition_cause(&envelope.context, resolved.clone(), envelope.command.action)?;
+        let configured_cause = ports.transition_cause(
+            &envelope.context,
+            resolved.clone(),
+            envelope.command.action.clone(),
+        )?;
         let execution = ports.execute(
             &envelope.context,
             resolved.clone(),
-            envelope.command.action,
+            envelope.command.action.clone(),
             envelope.command.surface,
         )?;
         let durability = ports.durability();
@@ -104,7 +107,7 @@ impl PlaybackService {
         let primary_event_sequence = if applied {
             committed_playback_effect_event(
                 &envelope.context,
-                envelope.command.action,
+                envelope.command.action.clone(),
                 configured_cause,
                 before,
                 projection.clone(),

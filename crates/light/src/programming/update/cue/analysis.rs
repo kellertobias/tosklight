@@ -141,7 +141,7 @@ pub(super) fn cue_source(cue_list: &CueList, cue_index: usize) -> CueSource {
     let cue = &cue_list.cues[cue_index];
     CueSource {
         cue_id: cue.id,
-        cue_number: cue.number,
+        cue_number: cue.number.clone(),
         cue_index,
     }
 }

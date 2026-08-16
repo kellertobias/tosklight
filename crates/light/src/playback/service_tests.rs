@@ -360,10 +360,19 @@ fn changed_runtime_publishes_one_authoritative_event_and_replay_reuses_it() {
     else {
         panic!("expected runtime projection event");
     };
-    assert_eq!(change.projection.current_cue().unwrap().number, 2.0);
+    assert_eq!(
+        change.projection.current_cue().unwrap().number,
+        crate::CueNumber::try_from_legacy_f64(2.0).unwrap()
+    );
     let transition = change.transition.as_ref().unwrap();
-    assert_eq!(transition.previous.as_ref().unwrap().number, 1.0);
-    assert_eq!(transition.current.as_ref().unwrap().number, 2.0);
+    assert_eq!(
+        transition.previous.as_ref().unwrap().number,
+        crate::CueNumber::try_from_legacy_f64(1.0).unwrap()
+    );
+    assert_eq!(
+        transition.current.as_ref().unwrap().number,
+        crate::CueNumber::try_from_legacy_f64(2.0).unwrap()
+    );
     assert_eq!(transition.cause, PlaybackTransitionCause::Go);
 }
 
@@ -439,7 +448,7 @@ fn related_runtime_changes_publish_changed_peers_before_the_primary_once() {
             .current_cue()
             .unwrap()
             .number,
-        2.0
+        crate::CueNumber::try_from_legacy_f64(2.0).unwrap()
     );
 }
 
@@ -633,7 +642,7 @@ fn configured_control_numbers_are_validated_before_ports_execute() {
         ports
             .actions()
             .iter()
-            .map(|observed| observed.action)
+            .map(|observed| observed.action.clone())
             .collect::<Vec<_>>(),
         vec![
             PlaybackAction::ConfiguredButton {

@@ -43,7 +43,7 @@ function cueList(
 			cues: [
 				{
 					id: CUE_ID,
-					number: 1,
+					number: "1",
 					name,
 					fade_millis: 1000,
 					delay_millis: 0,
@@ -128,7 +128,7 @@ function outcome(
 		replayed: options.replayed ?? false,
 		capturedSource: "normal" as const,
 		showRevision: options.status === "no_change" ? 7 : 8,
-		recordedCue: { id: CUE_ID, number: 1, deleted: false },
+		recordedCue: { id: CUE_ID, number: "1", deleted: false },
 		projections: {
 			cueList: options.cueList ?? cueList(2, "Response"),
 			playback: options.playback === undefined ? playback(2) : options.playback,
@@ -159,7 +159,7 @@ function input(
 	return {
 		target,
 		operation: "overwrite",
-		cueNumber: 1,
+		cueNumber: "1",
 		timing: {},
 		cueOnly: false,
 		capturePolicy: "current_capture",

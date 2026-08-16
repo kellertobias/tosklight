@@ -20,7 +20,7 @@ fn transition_draft(desk_id: Uuid, playback_number: u16, delivery: DeliveryPolic
         previous: None,
         current: Some(PlaybackCueReference {
             id: Uuid::from_u128(30),
-            number: 2.0,
+            number: crate::CueNumber::try_from_legacy_f64(2.0).unwrap(),
         }),
         cause: PlaybackTransitionCause::Chaser,
         transition_ordinal: 41,

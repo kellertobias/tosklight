@@ -72,14 +72,14 @@ fn endpoint(tokens: &[String], label: &str) -> Result<ProgrammingCueTransferEndp
     if tokens.get(cue_index).is_none_or(|token| token != "CUE") {
         return Err(format!("Cue transfer {label} requires CUE <cue-number>"));
     }
-    let cue_number = decimal(&tokens[cue_index + 1..])?;
+    let cue_number = cue_number(&tokens[cue_index + 1..])?;
     Ok(ProgrammingCueTransferEndpoint {
         address,
-        cue_number: CueNumber::new(cue_number),
+        cue_number,
     })
 }
 
-fn decimal(tokens: &[String]) -> Result<f64, String> {
+fn cue_number(tokens: &[String]) -> Result<CueNumber, String> {
     let whole = tokens.first().ok_or("CUE requires a cue number")?;
     let mut value = whole.clone();
     let mut index = 1;
@@ -96,8 +96,8 @@ fn decimal(tokens: &[String]) -> Result<f64, String> {
         return Err("unexpected tokens after Cue transfer address".into());
     }
     value
-        .parse::<f64>()
-        .map_err(|_| "cue number is invalid".into())
+        .parse()
+        .map_err(|error: String| format!("cue number is invalid: {error}"))
 }
 
 fn number<T: std::str::FromStr>(value: Option<&String>, label: &str) -> Result<T, String> {
@@ -142,12 +142,19 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(parsed.request.operation, CueTransferOperation::Copy);
-        assert_eq!(parsed.request.source.cue_number.value(), 1.2);
+        assert_eq!(parsed.request.source.cue_number.to_string(), "1.2");
         assert!(matches!(
             parsed.request.destination.address,
             ProgrammingCueTransferAddress::PageSlot { page: 2, slot: 3 }
         ));
         assert_eq!(parsed.mode, None);
+
+        let deep = parse("COPY SET 7 CUE 2.0.15 AT SET 8 CUE 7.3.1", ShowId::new())
+            .unwrap()
+            .unwrap();
+        assert_eq!(deep.request.source.cue_number.to_string(), "2.0.15");
+        assert_eq!(deep.request.destination.cue_number.to_string(), "7.3.1");
+        assert!(parse("COPY SET 7 CUE 02 AT SET 8 CUE 3", ShowId::new()).is_err());
     }
 
     #[test]

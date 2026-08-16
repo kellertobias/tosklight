@@ -183,7 +183,7 @@ fn template_cue_list(
     id: light_core::CueListId,
     preset: &light_programmer::Preset,
 ) -> light_playback::CueList {
-    let mut cue = light_playback::Cue::new(1.0);
+    let mut cue = light_playback::Cue::new(cue("1"));
     cue.name = "All groups white".into();
     cue.trigger = light_playback::CueTrigger::Manual;
     cue.group_changes = preset

@@ -75,7 +75,7 @@ function decodeCueReference(value: unknown, path: string) {
 	const cue = recordAt(value, path);
 	return {
 		id: stringAt(cue.id, `${path}.id`),
-		number: numberAt(cue.number, `${path}.number`),
+		number: stringAt(cue.number, `${path}.number`),
 	};
 }
 
@@ -166,19 +166,19 @@ function decodeCueRuntime(
 			(value, holdPath) => {
 				const hold = recordAt(value, holdPath);
 				return {
-					deleted_number: numberAt(
+					deleted_number: stringAt(
 						hold.deleted_number,
 						`${holdPath}.deleted_number`,
 					),
 					previous_number: nullable(
 						hold.previous_number,
 						`${holdPath}.previous_number`,
-						numberAt,
+						stringAt,
 					),
 					next_number: nullable(
 						hold.next_number,
 						`${holdPath}.next_number`,
-						numberAt,
+						stringAt,
 					),
 				};
 			},

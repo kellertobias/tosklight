@@ -137,7 +137,7 @@ fn runtime_current_cue(
     status
         .playback
         .current_cue_id
-        .zip(status.playback.current_cue_number)
+        .zip(status.playback.current_cue_number.clone())
         .map(|(id, number)| PlaybackCueReference { id, number })
 }
 

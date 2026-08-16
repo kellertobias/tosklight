@@ -6,7 +6,7 @@ import { CuePropertyModal } from "./CueProperties";
 
 const cue: Cue = {
 	id: "cue-1",
-	number: 1,
+	number: "1",
 	name: "Opening",
 	fade_millis: 2_000,
 	delay_millis: 500,
@@ -114,7 +114,7 @@ describe("CuePropertyModal direct editors", () => {
 		const destination: Cue = {
 			...cue,
 			id: "cue-2",
-			number: 2,
+			number: "2",
 			name: "Second",
 		};
 		const { onSave } = renderProperty("jump", {

@@ -46,7 +46,7 @@ export function configuredUpdateMode(
 export function cueUpdateTarget(
 	objectId: string,
 	playbackNumber?: number,
-	cue?: { id: string; number: number } | null,
+	cue?: { id: string; number: string } | null,
 ): UpdateTargetRequest {
 	return {
 		family: { type: "cue" },

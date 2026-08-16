@@ -315,13 +315,13 @@ fn confirmed_live_cue_update_rejects_an_unpinned_preview_target() {
     let rig = TestRig::new();
     let fixture = FixtureId::new();
     let cue_list_id = CueListId(Uuid::from_u128(899));
-    let mut first = Cue::new(1.0);
+    let mut first = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     first.changes.push(CueChange::set(
         fixture,
         AttributeKey::intensity(),
         AttributeValue::Normalized(0.2),
     ));
-    let mut second = Cue::new(2.0);
+    let mut second = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
     second.changes.push(CueChange::set(
         fixture,
         AttributeKey::intensity(),
@@ -383,7 +383,7 @@ fn cue_update_preserves_legacy_storage_identity_and_revalidates_live_context() {
     let rig = TestRig::new();
     let fixture = FixtureId::new();
     let cue_list_id = CueListId(Uuid::from_u128(900));
-    let mut cue = Cue::new(1.0);
+    let mut cue = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     cue.changes.push(CueChange::set(
         fixture,
         AttributeKey::intensity(),
@@ -404,7 +404,7 @@ fn cue_update_preserves_legacy_storage_identity_and_revalidates_live_context() {
         playback_number: 7,
         cue_list_id,
         cue_id,
-        cue_number: 1.0,
+        cue_number: crate::CueNumber::try_from_legacy_f64(1.0).unwrap(),
     };
     rig.set_active_contexts(vec![active.clone()]);
     let target = cue_target(cue_list_id, cue_id);
@@ -422,7 +422,7 @@ fn cue_update_preserves_legacy_storage_identity_and_revalidates_live_context() {
     rig.registry.select(rig.session, [FixtureId::new()]);
 
     rig.set_active_contexts(vec![ActiveCueContext {
-        cue_number: 2.0,
+        cue_number: crate::CueNumber::try_from_legacy_f64(2.0).unwrap(),
         ..active.clone()
     }]);
     let error = rig.apply(command.clone(), "cue-conflict").unwrap_err();
@@ -448,7 +448,7 @@ fn target_menu_uses_one_capture_one_document_and_distinct_playback_contexts() {
     let rig = TestRig::new();
     let fixture = FixtureId::new();
     let cue_list_id = CueListId(Uuid::from_u128(901));
-    let mut cue = Cue::new(1.0);
+    let mut cue = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     cue.changes.push(CueChange::set(
         fixture,
         AttributeKey::intensity(),
@@ -494,13 +494,13 @@ fn target_menu_uses_one_capture_one_document_and_distinct_playback_contexts() {
             playback_number: 7,
             cue_list_id,
             cue_id,
-            cue_number: 1.0,
+            cue_number: crate::CueNumber::try_from_legacy_f64(1.0).unwrap(),
         },
         ActiveCueContext {
             playback_number: 8,
             cue_list_id,
             cue_id,
-            cue_number: 1.0,
+            cue_number: crate::CueNumber::try_from_legacy_f64(1.0).unwrap(),
         },
     ]);
 
@@ -627,7 +627,7 @@ fn cue_target(cue_list_id: CueListId, cue_id: Uuid) -> ProgrammingUpdateTargetRe
         cue_list_id,
         playback_number: Some(7),
         cue_id: Some(cue_id),
-        cue_number: Some(1.0),
+        cue_number: Some(crate::CueNumber::try_from_legacy_f64(1.0).unwrap()),
         validate_active_context: true,
     }
 }

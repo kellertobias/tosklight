@@ -118,7 +118,7 @@ mod tests {
     use uuid::Uuid;
 
     fn cue_list(id: u128, action: Option<CueAction>) -> CueList {
-        let mut cue = Cue::new(1.0);
+        let mut cue = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
         cue.actions.extend(action);
         CueList {
             id: CueListId(Uuid::from_u128(id)),

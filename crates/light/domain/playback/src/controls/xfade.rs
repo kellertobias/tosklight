@@ -329,7 +329,7 @@ fn complete_manual_xfade(active: &mut ActivePlayback, cue_list: &CueList, now: D
         .expect("manual X-fade target accompanies source");
     active.cue_index = target;
     active.current_cue_id = Some(cue_list.cues[target].id);
-    active.current_cue_number = Some(cue_list.cues[target].number);
+    active.current_cue_number = Some(cue_list.cues[target].number.clone());
     active.previous_index = None;
     active.transition_timing_bypassed = true;
     active.tracking_wrap = target == 0 && cue_list.effective_wrap_mode() == WrapMode::Tracking;

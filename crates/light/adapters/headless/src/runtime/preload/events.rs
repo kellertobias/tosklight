@@ -95,7 +95,7 @@ fn change_event(
     .map(|draft| (draft, outcome))
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 struct FinalEventCause {
     action: light_application::PlaybackAction,
     addressed_effect_changed: bool,

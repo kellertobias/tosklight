@@ -72,7 +72,7 @@ function decodeCue(value: unknown, path: string): Cue {
 	return {
 		...cue,
 		id: stringAt(cue.id, `${path}.id`),
-		number: positiveNumberAt(cue.number, `${path}.number`),
+		number: stringAt(cue.number, `${path}.number`),
 		name: plainStringAt(cue.name, `${path}.name`),
 		fade_millis: integerAt(cue.fade_millis, `${path}.fade_millis`),
 		delay_millis: integerAt(cue.delay_millis, `${path}.delay_millis`),

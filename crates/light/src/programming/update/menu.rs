@@ -252,7 +252,7 @@ fn cue_target(context: &ActiveCueContext) -> ProgrammingUpdateTargetRequest {
         cue_list_id: context.cue_list_id,
         playback_number: Some(context.playback_number),
         cue_id: Some(context.cue_id),
-        cue_number: Some(context.cue_number),
+        cue_number: Some(context.cue_number.clone()),
         validate_active_context: true,
     }
 }

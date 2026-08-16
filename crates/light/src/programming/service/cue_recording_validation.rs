@@ -13,12 +13,6 @@ pub(super) fn validate_request(request: &ProgrammingCueRecordRequest) -> Result<
         return Err(invalid("Cue recording requires a valid show_id"));
     }
     validate_target(request.target)?;
-    if let Some(number) = request.cue_number {
-        let number = number.value();
-        if !number.is_finite() || number <= 0.0 {
-            return Err(invalid("Cue number must be finite and positive"));
-        }
-    }
     if request.operation == ProgrammingCueRecordOperation::Subtract && request.cue_number.is_none()
     {
         return Err(invalid("Cue subtract requires an explicit Cue number"));
@@ -137,8 +131,6 @@ pub(super) fn validate_completion(
         && creation_matches
         && validate_projections(commit, completion)
         && topology_matches(commit, completion)
-        && completion.recorded_cue.number.value().is_finite()
-        && completion.recorded_cue.number.value() > 0.0
     {
         Ok(())
     } else {
@@ -159,8 +151,7 @@ pub(super) fn validate_activation(
             .event_sequence
             .is_none_or(|sequence| sequence > 0)
         && current.is_some_and(|cue| {
-            cue.id == completion.recorded_cue.id
-                && cue.number.to_bits() == completion.recorded_cue.number.value().to_bits()
+            cue.id == completion.recorded_cue.id && cue.number == completion.recorded_cue.number
         })
     {
         Ok(())
@@ -247,7 +238,7 @@ fn validate_projections(
     projections.show_id == commit.show_id
         && projections.cue_list.kind == crate::ActiveShowObjectKind::CueList
         && object_is_valid(&projections.cue_list)
-        && cue_presence_matches(&projections.cue_list.raw_body, result.recorded_cue)
+        && cue_presence_matches(&projections.cue_list.raw_body, &result.recorded_cue)
         && projections.playback.as_ref().is_none_or(|projection| {
             projection.kind == crate::ActiveShowObjectKind::Playback && object_is_valid(projection)
         })
@@ -264,7 +255,7 @@ fn object_is_valid(projection: &ProgrammingCueObjectProjection) -> bool {
         && projection.raw_body.is_object()
 }
 
-fn cue_presence_matches(body: &serde_json::Value, recorded: ProgrammingRecordedCue) -> bool {
+fn cue_presence_matches(body: &serde_json::Value, recorded: &ProgrammingRecordedCue) -> bool {
     let present = body
         .get("cues")
         .and_then(serde_json::Value::as_array)
@@ -274,8 +265,8 @@ fn cue_presence_matches(body: &serde_json::Value, recorded: ProgrammingRecordedC
                     .and_then(serde_json::Value::as_str)
                     .and_then(|id| uuid::Uuid::parse_str(id).ok())
                     == Some(recorded.id)
-                    && cue.get("number").and_then(serde_json::Value::as_f64)
-                        == Some(recorded.number.value())
+                    && cue.get("number").and_then(serde_json::Value::as_str)
+                        == Some(recorded.number.to_string().as_str())
             })
         });
     present != recorded.deleted

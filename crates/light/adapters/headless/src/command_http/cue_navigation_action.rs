@@ -7,8 +7,8 @@
 
 use super::cue_navigation_command::{CueNavigationCommand, CueNavigationTarget};
 use light_application::{
-    ActionContext, ActionSource, CueNumber, PlaybackAction, PlaybackAddress, PlaybackCommand,
-    PlaybackOutcome, PlaybackSurface,
+    ActionContext, ActionSource, PlaybackAction, PlaybackAddress, PlaybackCommand, PlaybackOutcome,
+    PlaybackSurface,
 };
 
 use super::super::{AppState, Session};
@@ -128,7 +128,7 @@ pub(crate) fn execute_compatibility(
 ) -> Result<usize, String> {
     let parsed = super::cue_navigation_command::parse(command)?
         .ok_or("expected a CUE navigation command")?;
-    let transition = execute(state, session, context, parsed)?;
+    let transition = execute(state, session, context, parsed.clone())?;
     if transition.applied && !transition.replayed {
         emit_compatibility_change(state, session, transition.playback, parsed);
     }
@@ -136,11 +136,10 @@ pub(crate) fn execute_compatibility(
 }
 
 fn action(parsed: CueNavigationCommand) -> PlaybackAction {
-    let cue = CueNumber::new(parsed.cue_number);
     if parsed.load {
-        PlaybackAction::Load(cue)
+        PlaybackAction::Load(parsed.cue_number)
     } else {
-        PlaybackAction::GoTo(cue)
+        PlaybackAction::GoTo(parsed.cue_number)
     }
 }
 

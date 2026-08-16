@@ -178,7 +178,7 @@ function RecordCueButton() {
 				void actions?.record({
 					target: { kind: "page_slot", page: 4, slot: 2 },
 					operation: "overwrite",
-					cueNumber: 1,
+					cueNumber: "1",
 					timing: {},
 					cueOnly: false,
 					capturePolicy: "current_capture",
@@ -230,7 +230,7 @@ function cueList(revision: number, cueName: string): ShowObject<"cue_list"> {
 			cues: [
 				{
 					id: CUE_ID,
-					number: 1,
+					number: "1",
 					name: cueName,
 					fade_millis: 1000,
 					delay_millis: 0,

@@ -24,9 +24,9 @@ export interface CueTransferSummary {
 	operation: "copy" | "move";
 	mode: CueTransferMode;
 	sourceCueId: string;
-	sourceCueNumber: number;
+	sourceCueNumber: string;
 	destinationCueId: string;
-	destinationCueNumber: number;
+	destinationCueNumber: string;
 }
 
 export interface CueTransferActionOutcome {

@@ -222,7 +222,7 @@ function CuePreviewCell({
 	thumbnail,
 	onOpenPreview,
 }: {
-	cueNumber: number;
+	cueNumber: string;
 	thumbnail: string | undefined;
 	onOpenPreview: () => void;
 }) {

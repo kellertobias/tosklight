@@ -173,13 +173,13 @@ mod tests {
         let fixture = FixtureId::new();
         let attribute = AttributeKey("pan".into());
         let untouched = AttributeKey("tilt".into());
-        let mut first = Cue::new(1.0);
+        let mut first = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
         first.changes.push(CueChange::set(
             fixture,
             attribute.clone(),
             AttributeValue::Normalized(0.2),
         ));
-        let mut second = Cue::new(2.0);
+        let mut second = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
         second.changes.push(CueChange {
             fixture_id: fixture,
             attribute: attribute.clone(),
@@ -237,13 +237,13 @@ mod tests {
     fn cue_bound_indexes_exclude_future_only_addresses_and_fixtures() {
         let first_fixture = FixtureId::new();
         let future_fixture = FixtureId::new();
-        let mut first = Cue::new(1.0);
+        let mut first = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
         first.changes.push(CueChange::set(
             first_fixture,
             AttributeKey("pan".into()),
             AttributeValue::Normalized(0.2),
         ));
-        let mut second = Cue::new(2.0);
+        let mut second = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
         second.changes.push(CueChange::set(
             future_fixture,
             AttributeKey("tilt".into()),

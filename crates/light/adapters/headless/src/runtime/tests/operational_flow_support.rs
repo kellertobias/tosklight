@@ -70,7 +70,7 @@ fn operational_cue_list(
     cue_list_id: light_core::CueListId,
     fixture_id: light_core::FixtureId,
 ) -> light_playback::CueList {
-    let mut cue = light_playback::Cue::new(1.0);
+    let mut cue = light_playback::Cue::new(cue("1"));
     cue.changes.push(light_playback::CueChange::set(
         fixture_id,
         light_core::AttributeKey::intensity(),

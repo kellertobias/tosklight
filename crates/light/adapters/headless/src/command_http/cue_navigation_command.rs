@@ -4,6 +4,8 @@
 //! the show. Resolving a page slot, a selected Playback, or a Cue belongs to the typed Playback
 //! application service, so the same parsed command describes HTTP, WebSocket, and OSC input.
 
+use light_playback::CueNumber;
+
 /// The addressed Playback, before the desk or page topology resolves it.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) enum CueNavigationTarget {
@@ -16,12 +18,12 @@ pub(super) enum CueNavigationTarget {
 }
 
 /// One `CUE`/`CUE CUE` navigation command.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(super) struct CueNavigationCommand {
     /// Two leading Cue keys mean Load; one means Go To. A later `CUE` is only an address separator.
     pub load: bool,
     pub target: CueNavigationTarget,
-    pub cue_number: f64,
+    pub cue_number: CueNumber,
 }
 
 /// Claims the family by its leading key after timing clauses are lifted out, so `DELAY 0.5 CUE 2`
@@ -104,7 +106,7 @@ mod tests {
             CueNavigationCommand {
                 load: false,
                 target: CueNavigationTarget::SelectedPlayback,
-                cue_number: 3.0,
+                cue_number: "3".parse().unwrap(),
             }
         );
         assert_eq!(
@@ -112,7 +114,7 @@ mod tests {
             CueNavigationCommand {
                 load: true,
                 target: CueNavigationTarget::SelectedPlayback,
-                cue_number: 2.0,
+                cue_number: "2".parse().unwrap(),
             }
         );
     }
@@ -129,19 +131,27 @@ mod tests {
             page.target,
             CueNavigationTarget::ExplicitPage { page: 1, slot: 2 }
         );
-        assert_eq!(page.cue_number, 2.0);
+        assert_eq!(page.cue_number.to_string(), "2");
     }
 
     #[test]
     fn parses_decimal_cue_numbers_on_both_addressing_forms() {
-        assert_eq!(parse("CUE 2.5").unwrap().unwrap().cue_number, 2.5);
+        assert_eq!(
+            parse("CUE 2.5").unwrap().unwrap().cue_number.to_string(),
+            "2.5"
+        );
         assert_eq!(
             parse("CUE CUE SET 2 . 3 CUE 10.25")
                 .unwrap()
                 .unwrap()
                 .cue_number,
-            10.25
+            "10.25".parse().unwrap()
         );
+        assert_eq!(
+            parse("CUE 2.0.15").unwrap().unwrap().cue_number.to_string(),
+            "2.0.15"
+        );
+        assert!(parse("CUE 02").is_err());
     }
 
     #[test]
@@ -154,8 +164,15 @@ mod tests {
 
     #[test]
     fn owns_the_family_after_lifted_timing_clauses_and_lowercase_input() {
-        assert_eq!(parse("cue 3").unwrap().unwrap().cue_number, 3.0);
-        assert_eq!(parse("DELAY 0.5 CUE 2").unwrap().unwrap().cue_number, 2.0);
+        assert_eq!(parse("cue 3").unwrap().unwrap().cue_number.to_string(), "3");
+        assert_eq!(
+            parse("DELAY 0.5 CUE 2")
+                .unwrap()
+                .unwrap()
+                .cue_number
+                .to_string(),
+            "2"
+        );
     }
 
     #[test]

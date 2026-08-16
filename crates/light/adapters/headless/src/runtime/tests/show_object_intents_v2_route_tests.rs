@@ -1281,6 +1281,6 @@ fn test_cue_list() -> light_playback::CueList {
         chaser_xfade_millis: 0,
         chaser_xfade_percent: Some(0),
         speed_multiplier: 1.0,
-        cues: vec![light_playback::Cue::new(1.0)],
+        cues: vec![light_playback::Cue::new(cue("1"))],
     }
 }

@@ -18,9 +18,9 @@ fn cue_selection_snapshot(list_id: light_core::CueListId) -> EngineSnapshot {
         chaser_xfade_percent: Some(0),
         speed_multiplier: 1.0,
         cues: vec![
-            light_playback::Cue::new(1.0),
-            light_playback::Cue::new(2.0),
-            light_playback::Cue::new(3.0),
+            light_playback::Cue::new(cue("1")),
+            light_playback::Cue::new(cue("2")),
+            light_playback::Cue::new(cue("3")),
         ],
     };
     let definition = |number| light_playback::PlaybackDefinition {
@@ -126,7 +126,7 @@ fn cue_commands_use_the_desk_selected_concrete_playback() {
         "CUE 2",
         light_application::ActionSource::Keyboard,
         1,
-        Some(2.0),
+        Some(cue("2")),
         None,
     );
     execute_programmer_command(&state, &second, "CUE 3").unwrap();
@@ -136,8 +136,8 @@ fn cue_commands_use_the_desk_selected_concrete_playback() {
         "CUE CUE 1",
         light_application::ActionSource::Osc,
         1,
-        Some(3.0),
-        Some(1.0),
+        Some(cue("3")),
+        Some(cue("1")),
     );
     for number in [1, 2] {
         let runtime = state
@@ -149,7 +149,7 @@ fn cue_commands_use_the_desk_selected_concrete_playback() {
                 runtime.playback.current_cue_number,
                 runtime.playback.loaded_cue_number
             ),
-            (Some(3.0), Some(1.0))
+            (Some(cue("3")), Some(cue("1")))
         );
     }
     execute_programmer_command(&state, &first, "CUE SET 2 CUE 1").unwrap();
@@ -164,7 +164,7 @@ fn cue_commands_use_the_desk_selected_concrete_playback() {
                 runtime.playback.current_cue_number,
                 runtime.playback.loaded_cue_number
             ),
-            (Some(1.0), Some(2.0))
+            (Some(cue("1")), Some(cue("2")))
         );
     }
     assert_eq!(
@@ -182,8 +182,8 @@ fn execute_cue_and_assert_typed_event(
     command: &str,
     source: light_application::ActionSource,
     playback: u16,
-    current: Option<f64>,
-    loaded: Option<f64>,
+    current: Option<light_playback::CueNumber>,
+    loaded: Option<light_playback::CueNumber>,
 ) {
     let context = operator_action_context(session, source);
     let before = state.events.latest_sequence();
@@ -218,8 +218,8 @@ fn execute_cue_and_assert_typed_event(
     };
     assert_eq!(change.projection.playback_number, Some(playback));
     let runtime = change.projection.cue_list_runtime().unwrap();
-    assert_eq!(runtime.current.as_ref().map(|cue| cue.number), current);
-    assert_eq!(runtime.loaded.as_ref().map(|cue| cue.number), loaded);
+    assert_eq!(runtime.current.as_ref().map(|cue| cue.number.clone()), current);
+    assert_eq!(runtime.loaded.as_ref().map(|cue| cue.number.clone()), loaded);
 }
 
 #[test]

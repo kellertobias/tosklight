@@ -1,6 +1,6 @@
 use light_application::{CueNumber, ProgrammingCueDeletionAddress};
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct ParsedCueDeletionCommand {
     pub address: ProgrammingCueDeletionAddress,
     pub cue_number: CueNumber,
@@ -33,14 +33,14 @@ pub(crate) fn parse(command: &str) -> Result<Option<ParsedCueDeletionCommand>, S
     if tokens.get(cue_index).is_none_or(|token| token != "CUE") {
         return Err("Cue deletion requires CUE <cue-number>".into());
     }
-    let cue_number = decimal(&tokens[cue_index + 1..])?;
+    let cue_number = cue_number(&tokens[cue_index + 1..])?;
     Ok(Some(ParsedCueDeletionCommand {
         address,
-        cue_number: CueNumber::new(cue_number),
+        cue_number,
     }))
 }
 
-fn decimal(tokens: &[String]) -> Result<f64, String> {
+fn cue_number(tokens: &[String]) -> Result<CueNumber, String> {
     let whole = tokens.first().ok_or("CUE requires a cue number")?;
     let mut value = whole.clone();
     let mut index = 1;
@@ -57,8 +57,8 @@ fn decimal(tokens: &[String]) -> Result<f64, String> {
         return Err("unexpected tokens after Cue deletion address".into());
     }
     value
-        .parse::<f64>()
-        .map_err(|_| "cue number is invalid".into())
+        .parse()
+        .map_err(|error: String| format!("cue number is invalid: {error}"))
 }
 
 fn number<T: std::str::FromStr>(value: Option<&String>, label: &str) -> Result<T, String> {
@@ -88,7 +88,7 @@ mod tests {
             pool.address,
             ProgrammingCueDeletionAddress::Pool { playback_number: 7 }
         ));
-        assert_eq!(pool.cue_number.value(), 2.5);
+        assert_eq!(pool.cue_number.to_string(), "2.5");
         let page = parse("DELETE SET 2 . 3 CUE 4").unwrap().unwrap();
         assert!(matches!(
             page.address,
@@ -102,5 +102,12 @@ mod tests {
         assert!(!is_cue_deletion("DELETE GROUP 4"));
         assert!(!is_cue_deletion("DELETE PRESET 2 . 1"));
         assert!(parse("DELETE SET 1").is_err());
+        assert!(parse("DELETE SET 1 CUE 01").is_err());
+    }
+
+    #[test]
+    fn preserves_deep_cue_paths() {
+        let parsed = parse("DELETE SET 1 CUE 2.0.15").unwrap().unwrap();
+        assert_eq!(parsed.cue_number.to_string(), "2.0.15");
     }
 }

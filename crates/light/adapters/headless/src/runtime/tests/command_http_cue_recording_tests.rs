@@ -9,7 +9,7 @@ fn cue_record_request(
         "request_id": request_id,
         "target": target,
         "operation": "overwrite",
-        "cue_number": cue_number,
+        "cue_number": cue_number.map(|number| number.to_string()),
         "timing": {},
         "cue_only": false,
         "name": null,
@@ -136,7 +136,7 @@ async fn cue_record_route_is_atomic_replay_safe_sparse_and_revisioned() {
     else {
         panic!("first Cue capture must change the show")
     };
-    assert_eq!(recorded_cue.number, 2.5);
+    assert_eq!(recorded_cue.number, "2.5");
     assert_eq!(
         projections.cue_list.body["cues"][0]["changes"][0]["fixture_id"],
         serde_json::json!(fixture.0)
@@ -230,7 +230,7 @@ async fn cue_record_route_is_atomic_replay_safe_sparse_and_revisioned() {
     );
 
     let mut changed_replay = request;
-    changed_replay["cue_number"] = 4.0.into();
+    changed_replay["cue_number"] = "4".into();
     assert_eq!(
         scenario
             .cue_recording_action(
@@ -686,7 +686,7 @@ async fn explicit_and_implicit_cue_merges_use_the_one_shared_active_cue() {
         assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(
             json(response).await["projection"]["runtime"]["current"]["number"],
-            cue_number
+            cue_number.to_string()
         );
     }
 

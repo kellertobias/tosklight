@@ -19,7 +19,7 @@ export type ProgrammingUpdateTarget =
 			cue_list_id: string;
 			playback_number?: number | null;
 			cue_id?: string | null;
-			cue_number?: number | null;
+			cue_number?: string | null;
 			validate_active_context: boolean;
 	  }
 	| { type: "preset"; object_id: string }

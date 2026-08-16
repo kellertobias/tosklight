@@ -251,7 +251,7 @@ impl PlaybackPorts for ServerPlaybackPorts<'_> {
                     }),
             );
         }
-        if semantics::may_activate_playback(semantic_action) {
+        if semantics::may_activate_playback(semantic_action.clone()) {
             if let ResolvedPlaybackAddress::Virtual(activated) = address {
                 related.extend(
                     self.exclusion_context(address)
@@ -265,10 +265,9 @@ impl PlaybackPorts for ServerPlaybackPorts<'_> {
                 );
             }
         }
-        if definition
-            .as_ref()
-            .is_some_and(|definition| semantics::may_trigger_auto_off(semantic_action, definition))
-        {
+        if definition.as_ref().is_some_and(|definition| {
+            semantics::may_trigger_auto_off(semantic_action.clone(), definition)
+        }) {
             related.extend(
                 self.state
                     .output
@@ -320,7 +319,7 @@ impl ServerPlaybackPorts<'_> {
     ) -> Result<PlaybackExecution, ActionError> {
         let definition = virtual_playback_definition(self.state, address)?;
         let (definition, action) = configured_control_definition(&definition, action)?;
-        let (action_name, input) = legacy_action(action);
+        let (action_name, input) = legacy_action(action.clone());
         if captures_preload(context.source)
             && let Some(pending) = self.capture(
                 context,
@@ -588,7 +587,7 @@ impl ServerPlaybackPorts<'_> {
                 pending: None,
             });
         }
-        let (action_name, input) = legacy_action(action);
+        let (action_name, input) = legacy_action(action.clone());
         if captures_preload(context.source)
             && let Some(pending) =
                 self.capture(context, &definition, action_name, &input, surface, page)?
@@ -703,8 +702,8 @@ fn virtual_runtime_action(
         PlaybackAction::Release => Some(VirtualPlaybackAction::Release),
         PlaybackAction::Toggle { pressed: true } => Some(VirtualPlaybackAction::Toggle),
         PlaybackAction::Master(level) => Some(VirtualPlaybackAction::SetMaster(level.value())),
-        PlaybackAction::GoTo(cue) => Some(VirtualPlaybackAction::GoTo(cue.value())),
-        PlaybackAction::Load(cue) => Some(VirtualPlaybackAction::Load(cue.value())),
+        PlaybackAction::GoTo(cue) => Some(VirtualPlaybackAction::GoTo(cue)),
+        PlaybackAction::Load(cue) => Some(VirtualPlaybackAction::Load(cue)),
         PlaybackAction::Crossfade { enabled } => Some(VirtualPlaybackAction::XFade(enabled)),
         PlaybackAction::Temporary { enabled, .. } => {
             Some(VirtualPlaybackAction::SetTempButton(enabled))
@@ -768,7 +767,7 @@ fn virtual_runtime_action(
                 _ => None,
             }
         }
-        action if action.pressed() == Some(false) => None,
+        action if action.clone().pressed() == Some(false) => None,
         _ => {
             return Err(invalid(
                 "action is not supported by the dedicated Virtual Playback runtime",

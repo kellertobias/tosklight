@@ -123,7 +123,7 @@ function runningSource(
 			cue_index: 0,
 			current: {
 				id: `${cueListId}-cue-1`,
-				number: playbackNumber == null ? 3 : 1,
+				number: playbackNumber == null ? "3" : "1",
 			},
 			master: options.master ?? 1,
 			paused: options.paused ?? false,
@@ -134,13 +134,13 @@ function runningSource(
 			cues: [
 				{
 					id: `${cueListId}-cue-1`,
-					number: playbackNumber == null ? 3 : 1,
+					number: playbackNumber == null ? "3" : "1",
 				} as RunningCueListSource["cue"],
 			],
 		} as RunningCueListSource["cueList"],
 		cue: {
 			id: `${cueListId}-cue-1`,
-			number: playbackNumber == null ? 3 : 1,
+		number: playbackNumber == null ? "3" : "1",
 		} as RunningCueListSource["cue"],
 	};
 }

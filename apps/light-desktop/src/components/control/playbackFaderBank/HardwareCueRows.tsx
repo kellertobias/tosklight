@@ -7,7 +7,7 @@ type HardwareCueRowsProps = {
 	cueIndex: number;
 	activatedAt?: string;
 	compact: boolean;
-	effectiveNextCueNumber?: number | null;
+	effectiveNextCueNumber?: string | null;
 	effectiveNextIsLoaded?: boolean;
 };
 

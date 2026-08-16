@@ -137,8 +137,7 @@
           "format": "uuid"
         },
         "number": {
-          "type": "number",
-          "format": "double"
+          "type": "string"
         }
       },
       "additionalProperties": false,
@@ -169,8 +168,7 @@
           "minimum": 0
         },
         "cue_number": {
-          "type": "number",
-          "format": "double"
+          "type": "string"
         }
       },
       "additionalProperties": false,
@@ -461,10 +459,9 @@
             },
             "cue_number": {
               "type": [
-                "number",
+                "string",
                 "null"
-              ],
-              "format": "double"
+              ]
             },
             "playback_number": {
               "type": [

@@ -149,8 +149,7 @@
           "format": "uuid"
         },
         "number": {
-          "type": "number",
-          "format": "double"
+          "type": "string"
         }
       },
       "additionalProperties": false,

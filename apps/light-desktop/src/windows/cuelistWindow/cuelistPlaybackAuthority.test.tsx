@@ -165,7 +165,7 @@ function cueListBody(id: string, name: string, cueNames: string[]): CueList {
 		looped: false,
 		cues: cueNames.map((cueName, index) => ({
 			id: `${id}-cue-${index + 1}`,
-			number: index + 1,
+			number: String(index + 1),
 			name: cueName,
 			fade_millis: 0,
 			delay_millis: 0,

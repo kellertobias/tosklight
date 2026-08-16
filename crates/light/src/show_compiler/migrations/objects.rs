@@ -228,12 +228,13 @@ fn migrate_stage_layout(object: PortableShowCandidateObject<'_>) -> Result<Value
 }
 
 fn migrate_cue_list(object: PortableShowCandidateObject<'_>) -> Result<Value, ActionError> {
-    let mut cue_list = serde_json::from_value::<CueList>(object.body().clone())
-        .map_err(|error| invalid_object(object, error))?;
     let missing_cue_ids = missing_cue_ids(object);
+    let mut migrated = object.body().clone();
+    migrate_cue_numbers(object, &mut migrated)?;
+    let mut cue_list = serde_json::from_value::<CueList>(migrated.clone())
+        .map_err(|error| invalid_object(object, error))?;
     cue_list.migrate_legacy_chaser_xfade(&LEGACY_SPEED_GROUPS_BPM);
 
-    let mut migrated = object.body().clone();
     let body = required_object_mut(&mut migrated, object)?;
     body.remove("chaser_xfade_millis");
     body.insert(
@@ -298,6 +299,67 @@ fn migrate_cue_list(object: PortableShowCandidateObject<'_>) -> Result<Value, Ac
         }
     }
     Ok(migrated)
+}
+
+fn migrate_cue_numbers(
+    object: PortableShowCandidateObject<'_>,
+    migrated: &mut Value,
+) -> Result<(), ActionError> {
+    let cues = required_object_mut(migrated, object)?
+        .get_mut("cues")
+        .and_then(Value::as_array_mut)
+        .ok_or_else(|| invalid_object(object, "cues must be an array"))?;
+    let mut normalized = std::collections::HashMap::<String, String>::with_capacity(cues.len());
+    let mut previous = None::<(String, light_playback::CueNumber)>;
+    for (index, cue) in cues.iter_mut().enumerate() {
+        let cue = cue
+            .as_object_mut()
+            .ok_or_else(|| invalid_object(object, format!("cue {index} must be an object")))?;
+        let raw = cue
+            .get("number")
+            .ok_or_else(|| invalid_object(object, format!("cue {index} has no number")))?;
+        let original = match raw {
+            Value::String(number) => number.clone(),
+            Value::Number(number) => number.to_string(),
+            _ => {
+                return Err(invalid_object(
+                    object,
+                    format!("cue {index} number must be a string or legacy number"),
+                ));
+            }
+        };
+        let number = match raw {
+            Value::String(number) => number.parse::<light_playback::CueNumber>(),
+            Value::Number(number) => number
+                .as_f64()
+                .ok_or_else(|| "legacy Cue number is outside the supported numeric range".into())
+                .and_then(light_playback::CueNumber::try_from_legacy_f64),
+            _ => unreachable!("number kind checked above"),
+        }
+        .map_err(|error| invalid_object(object, format!("Cue {original}: {error}")))?;
+        let canonical = number.to_string();
+        if let Some(previous) = normalized.insert(canonical.clone(), original.clone()) {
+            return Err(invalid_object(
+                object,
+                format!(
+                    "legacy Cue numbers {previous} and {original} both normalize to {canonical}; manually renumber one Cue before opening this show"
+                ),
+            ));
+        }
+        if let Some((previous_label, previous_number)) = previous.as_ref()
+            && previous_number >= &number
+        {
+            return Err(invalid_object(
+                object,
+                format!(
+                    "legacy Cue order would change when {previous_label} and {original} become canonical integer paths; manually renumber these Cues before opening this show"
+                ),
+            ));
+        }
+        previous = Some((original, number));
+        cue.insert("number".into(), Value::String(canonical));
+    }
+    Ok(())
 }
 
 fn missing_cue_ids(object: PortableShowCandidateObject<'_>) -> Vec<usize> {

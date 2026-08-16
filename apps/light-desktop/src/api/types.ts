@@ -65,7 +65,7 @@ export interface UpdateTargetRequest {
 	object_id: string;
 	playback_number?: number;
 	cue_id?: string;
-	cue_number?: number;
+	cue_number?: string;
 	validate_active_context?: boolean;
 }
 
@@ -78,7 +78,7 @@ export interface UpdateSettings {
 
 export interface UpdateCueIdentity {
 	id: string;
-	number: number;
+	number: string;
 }
 
 export interface UpdateTargetIdentity {
@@ -102,7 +102,7 @@ export type UpdateAddress =
 
 export interface UpdateCueSource {
 	cue_id: string;
-	cue_number: number;
+	cue_number: string;
 	cue_index: number;
 }
 

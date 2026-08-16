@@ -37,6 +37,12 @@ export function stringAt(value: unknown, path: string) {
 	return value;
 }
 
+export function cueNumberAt(value: unknown, path: string) {
+	if (typeof value !== "string" || !/^(?:0|[1-9]\d*)(?:\.(?:0|[1-9]\d*))*$/.test(value))
+		throw new WireValidationError(path, "canonical dotted Cue path", value);
+	return value;
+}
+
 export function integerAt(value: unknown, path: string) {
 	if (!Number.isSafeInteger(value) || (value as number) < 0)
 		throw new WireValidationError(path, "unsigned integer", value);

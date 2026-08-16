@@ -112,7 +112,10 @@ fn application_target(
             validate_active_context,
         } => {
             validate_non_nil(cue_list_id, "target.cue_list_id")?;
-            validate_optional_cue(cue_id, cue_number)?;
+            validate_optional_cue(cue_id, cue_number.as_deref())?;
+            let cue_number = cue_number
+                .map(|number| number.parse::<light_playback::CueNumber>())
+                .transpose()?;
             application::ProgrammingUpdateTargetRequest::Cue {
                 cue_list_id: CueListId(cue_list_id),
                 playback_number,
@@ -204,7 +207,7 @@ fn validate_confirmed_target(target: &wire::ProgrammingUpdateTarget) -> Result<(
 
 fn validate_optional_cue(
     cue_id: Option<uuid::Uuid>,
-    cue_number: Option<f64>,
+    cue_number: Option<&str>,
 ) -> Result<(), String> {
     if cue_id.is_some() != cue_number.is_some() {
         return Err("target.cue_id and target.cue_number must be supplied together".into());
@@ -212,8 +215,8 @@ fn validate_optional_cue(
     if let Some(cue_id) = cue_id {
         validate_non_nil(cue_id, "target.cue_id")?;
     }
-    if cue_number.is_some_and(|number| !number.is_finite()) {
-        return Err("target.cue_number must be finite".into());
+    if let Some(number) = cue_number {
+        number.parse::<light_playback::CueNumber>()?;
     }
     Ok(())
 }

@@ -78,12 +78,12 @@ function visualization(): VisualizationSnapshot {
 }
 
 function cue(
-	number: number,
+	number: string | number,
 	groupId = "group-a",
 	directFixture = `direct-${number}`,
 ): Cue {
-	return {
-		number,
+		return {
+		number: String(number),
 		name: `Cue ${number}`,
 		fade_millis: 0,
 		delay_millis: 0,
@@ -92,14 +92,14 @@ function cue(
 			{
 				fixture_id: directFixture,
 				attribute: "intensity",
-				value: { kind: "normalized", value: number / 10 },
+				value: { kind: "normalized", value: Number(number) / 10 },
 			},
 		],
 		group_changes: [
 			{
 				group_id: groupId,
 				attribute: "tilt",
-				value: { kind: "normalized", value: number / 20 },
+				value: { kind: "normalized", value: Number(number) / 20 },
 			},
 		],
 	};

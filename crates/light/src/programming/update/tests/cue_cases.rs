@@ -21,14 +21,14 @@ fn existing_only_changes_the_latest_authoritative_tracked_source() {
     )
     .unwrap();
     assert!(matches!(
-        plan.preview.items[0].outcome,
+        &plan.preview.items[0].outcome,
         UpdateItemOutcome::ChangeAtSource {
             source: CueSource {
-                cue_number: 2.0,
+                cue_number,
                 cue_index: 1,
                 ..
             }
-        }
+        } if cue_number == &crate::CueNumber::try_from_legacy_f64(2.0).unwrap()
     ));
     let updated = planned_cue_list(plan);
     assert_eq!(

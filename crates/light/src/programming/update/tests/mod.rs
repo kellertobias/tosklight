@@ -55,7 +55,7 @@ pub(super) fn content(values: Vec<ProgrammerFixtureUpdate>) -> ProgrammerUpdateC
 }
 
 pub(super) fn cue(number: f64, changes: Vec<CueChange>) -> Cue {
-    let mut cue = Cue::new(number);
+    let mut cue = Cue::new(crate::CueNumber::try_from_legacy_f64(number).unwrap());
     cue.changes = changes;
     cue
 }
@@ -96,7 +96,7 @@ pub(super) fn target(
         cue_list_id: list.id,
         playback_number,
         cue_id: list.cues[index].id,
-        cue_number: list.cues[index].number,
+        cue_number: list.cues[index].number.clone(),
     }
 }
 

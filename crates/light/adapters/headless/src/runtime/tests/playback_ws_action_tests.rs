@@ -145,7 +145,7 @@ fn install_playback(state: &AppState) {
         chaser_xfade_millis: 0,
         chaser_xfade_percent: Some(0),
         speed_multiplier: 1.0,
-        cues: vec![light_playback::Cue::new(1.0)],
+        cues: vec![light_playback::Cue::new(cue("1"))],
     };
     let target = light_playback::PlaybackTarget::CueList {
         cue_list_id: cue_list.id,

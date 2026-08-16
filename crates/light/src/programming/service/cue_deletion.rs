@@ -102,13 +102,6 @@ impl ProgrammingService {
 }
 
 fn validate_request(request: &ProgrammingCueDeletionRequest) -> Result<(), ActionError> {
-    let cue = request.cue_number.value();
-    if !cue.is_finite() || cue <= 0.0 {
-        return Err(ActionError::new(
-            ActionErrorKind::Invalid,
-            "Cue number must be finite and greater than zero",
-        ));
-    }
     match request.address {
         ProgrammingCueDeletionAddress::Pool { playback_number }
             if !(1..=light_playback::MAX_PLAYBACKS).contains(&playback_number) =>
@@ -170,7 +163,7 @@ fn resolve_request<P: ProgrammingCueDeletionPorts>(
     Ok(ResolvedCueDeletionRequest {
         show_id: request.show_id,
         address,
-        cue_number: request.cue_number,
+        cue_number: request.cue_number.clone(),
         expectation: request.expectation.clone(),
     })
 }

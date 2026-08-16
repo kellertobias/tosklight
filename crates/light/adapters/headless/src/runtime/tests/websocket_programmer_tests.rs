@@ -994,7 +994,7 @@ async fn direct_programmer_writes_preserve_resolved_fade_for_recording() {
         Some(3_000),
         "commands without TIME resolve Programmer Fade when the value is written"
     );
-    let recorded = programmer_cue(&command, 1.0, CommandTiming::default());
+    let recorded = programmer_cue(&command, cue("1"), CommandTiming::default());
     assert_eq!(recorded.changes[0].fade_millis, Some(3_000));
     assert_eq!(recorded.group_changes[0].fade_millis, Some(3_000));
     assert_eq!(

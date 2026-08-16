@@ -39,15 +39,15 @@ pub struct CueTransferObjectProjection {
     pub body: Arc<Value>,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct CueTransferSummary {
     pub operation: CueTransferOperation,
     pub mode: CueTransferMode,
     pub source_cue_id: Uuid,
-    pub source_cue_number: f64,
+    pub source_cue_number: String,
     pub destination_cue_id: Uuid,
-    pub destination_cue_number: f64,
+    pub destination_cue_number: String,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]

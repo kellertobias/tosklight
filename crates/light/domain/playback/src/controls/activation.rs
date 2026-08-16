@@ -112,7 +112,7 @@ impl PlaybackEngine {
             return false;
         }
         let first = &self.cue_lists[&id].cues[0];
-        let (cue_id, cue_number, now) = (first.id, first.number, self.clock.now());
+        let (cue_id, cue_number, now) = (first.id, first.number.clone(), self.clock.now());
         let active = self.active.get_mut(&key).unwrap();
         active.previous_index = None;
         active.cue_index = 0;
@@ -139,12 +139,15 @@ impl PlaybackEngine {
                 .cues
                 .iter()
                 .any(|cue| cue.id == current_id),
-            None => !active.current_cue_number.is_some_and(|current_number| {
-                self.cue_lists[&id]
-                    .cues
-                    .iter()
-                    .any(|cue| cue.number == current_number)
-            }),
+            None => !active
+                .current_cue_number
+                .as_ref()
+                .is_some_and(|current_number| {
+                    self.cue_lists[&id]
+                        .cues
+                        .iter()
+                        .any(|cue| cue.number == *current_number)
+                }),
         }
     }
 

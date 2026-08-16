@@ -169,7 +169,7 @@ export function useCuelistSettings({
 			priority: Number(priorityInputRef.current?.value ?? object.body.priority),
 			cues: object.body.cues.map((cue, index) => ({
 				...cue,
-				number: start + index,
+				number: String(start + index),
 			})),
 		};
 		setRenumberError("");

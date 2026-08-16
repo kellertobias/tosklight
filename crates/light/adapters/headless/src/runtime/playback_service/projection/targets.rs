@@ -39,21 +39,24 @@ fn runtime_projection(status: &PlaybackRuntimeStatus) -> CueListRuntimeProjectio
     CueListRuntimeProjection {
         cue_index: playback.cue_index,
         previous_index: playback.previous_index,
-        current: cue(playback.current_cue_id, playback.current_cue_number),
-        loaded: cue(playback.loaded_cue_id, playback.loaded_cue_number),
-        normal_next: cue(status.normal_next_cue_id, status.normal_next_cue_number),
+        current: cue(playback.current_cue_id, playback.current_cue_number.clone()),
+        loaded: cue(playback.loaded_cue_id, playback.loaded_cue_number.clone()),
+        normal_next: cue(
+            status.normal_next_cue_id,
+            status.normal_next_cue_number.clone(),
+        ),
         effective_next: cue(
             status.effective_next_cue_id,
-            status.effective_next_cue_number,
+            status.effective_next_cue_number.clone(),
         ),
         effective_next_is_loaded: status.effective_next_is_loaded,
         deleted_cue_hold: playback
             .deleted_cue_hold
             .as_ref()
             .map(|hold| DeletedCueHoldProjection {
-                deleted_number: hold.deleted_number,
-                previous_number: hold.previous_number,
-                next_number: hold.next_number,
+                deleted_number: hold.deleted_number.clone(),
+                previous_number: hold.previous_number.clone(),
+                next_number: hold.next_number.clone(),
             }),
         paused: playback.paused,
         activated_at: playback.activated_at,
@@ -72,7 +75,7 @@ fn runtime_projection(status: &PlaybackRuntimeStatus) -> CueListRuntimeProjectio
                     CueTriggerTimingProjection {
                         cue: PlaybackCueReference {
                             id: trigger.cue_id,
-                            number: trigger.cue_number,
+                            number: trigger.cue_number.clone(),
                         },
                         kind: match trigger.kind {
                             light_playback::CueTriggerTimingKind::Follow => {
@@ -230,7 +233,10 @@ pub(super) fn grand_master_projection(ports: &ServerPlaybackPorts<'_>) -> Playba
     })
 }
 
-fn cue(id: Option<uuid::Uuid>, number: Option<f64>) -> Option<PlaybackCueReference> {
+fn cue(
+    id: Option<uuid::Uuid>,
+    number: Option<light_playback::CueNumber>,
+) -> Option<PlaybackCueReference> {
     id.zip(number)
         .map(|(id, number)| PlaybackCueReference { id, number })
 }

@@ -78,8 +78,10 @@ fn parse_master(input: &PoolPlaybackInput) -> Result<PlaybackAction, ApiError> {
 fn parse_cue_number(input: &PoolPlaybackInput, go_to: bool) -> Result<PlaybackAction, ApiError> {
     let number = input
         .cue_number
-        .map(CueNumber::new)
-        .ok_or_else(|| ApiError::bad_request("cue_number is required"))?;
+        .as_deref()
+        .ok_or_else(|| ApiError::bad_request("cue_number is required"))?
+        .parse::<CueNumber>()
+        .map_err(ApiError::bad_request)?;
     Ok(if go_to {
         PlaybackAction::GoTo(number)
     } else {
@@ -88,13 +90,14 @@ fn parse_cue_number(input: &PoolPlaybackInput, go_to: bool) -> Result<PlaybackAc
 }
 
 pub(super) fn legacy_action(action: PlaybackAction) -> (&'static str, PoolPlaybackInput) {
+    let pressed = action.clone().pressed();
     let (name, value, cue_number, button) = structured_action(action);
     (
         name,
         PoolPlaybackInput {
             value,
             cue_number,
-            pressed: action.pressed(),
+            pressed,
             button,
         },
     )
@@ -102,14 +105,14 @@ pub(super) fn legacy_action(action: PlaybackAction) -> (&'static str, PoolPlayba
 
 fn structured_action(
     action: PlaybackAction,
-) -> (&'static str, Option<f32>, Option<f64>, Option<u8>) {
+) -> (&'static str, Option<f32>, Option<String>, Option<u8>) {
     match action {
         PlaybackAction::Master(value) => ("master", Some(value.value()), None, None),
         PlaybackAction::MasterTransition { .. } => {
             unreachable!("master transitions use the typed Playback boundary")
         }
-        PlaybackAction::GoTo(number) => ("go-to", None, Some(number.value()), None),
-        PlaybackAction::Load(number) => ("load", None, Some(number.value()), None),
+        PlaybackAction::GoTo(number) => ("go-to", None, Some(number.to_string()), None),
+        PlaybackAction::Load(number) => ("load", None, Some(number.to_string()), None),
         PlaybackAction::ConfiguredButton { number, .. } => ("button", None, None, Some(number)),
         PlaybackAction::ConfiguredFader { .. } => {
             unreachable!("configured faders are resolved before legacy dispatch")

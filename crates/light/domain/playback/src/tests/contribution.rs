@@ -3,9 +3,9 @@ use super::*;
 #[test]
 fn cue_release_removes_only_its_cuelist_contribution_and_reveals_the_underlay() {
     let fixture = FixtureId::new();
-    let mut owned = Cue::new(1.0);
+    let mut owned = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     owned.changes.push(value(fixture, "intensity", 1.0));
-    let mut released = Cue::new(2.0);
+    let mut released = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
     released.changes.push(CueChange {
         fixture_id: fixture,
         attribute: AttributeKey::intensity(),
@@ -17,7 +17,7 @@ fn cue_release_removes_only_its_cuelist_contribution_and_reveals_the_underlay() 
     let upper = list(vec![owned, released]);
     let upper_id = upper.id;
 
-    let mut underlay = Cue::new(1.0);
+    let mut underlay = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     underlay.changes.push(value(fixture, "intensity", 0.4));
     let lower = list(vec![underlay]);
     let lower_id = lower.id;
@@ -49,14 +49,14 @@ fn cue_release_removes_only_its_cuelist_contribution_and_reveals_the_underlay() 
 #[test]
 fn move_in_black_looks_through_dark_cues_and_uses_future_position_timing() {
     let fixture = FixtureId::new();
-    let mut first = Cue::new(1.0);
+    let mut first = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     first.changes.push(value(fixture, "intensity", 1.0));
     first.changes.push(value(fixture, "pan", 0.2));
     first.changes.push(value(fixture, "color.red", 0.1));
-    let mut dark = Cue::new(2.0);
+    let mut dark = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
     dark.changes.push(value(fixture, "intensity", 0.0));
-    let another_dark = Cue::new(2.5);
-    let mut lit = Cue::new(3.0);
+    let another_dark = Cue::new(crate::CueNumber::try_from_legacy_f64(2.5).unwrap());
+    let mut lit = Cue::new(crate::CueNumber::try_from_legacy_f64(3.0).unwrap());
     lit.changes.push(value(fixture, "intensity", 1.0));
     let mut pan = value(fixture, "pan", 0.8);
     pan.fade_millis = Some(3_000);
@@ -73,8 +73,8 @@ fn move_in_black_looks_through_dark_cues_and_uses_future_position_timing() {
     let candidates = engine.move_in_black_candidates();
     assert_eq!(candidates.len(), 1);
     let candidate = &candidates[0];
-    assert_eq!(candidate.current_cue_number, 2.0);
-    assert_eq!(candidate.target_cue_number, 3.0);
+    assert_eq!(candidate.current_cue_number, cue_number(2.0));
+    assert_eq!(candidate.target_cue_number, cue_number(3.0));
     assert_eq!(
         candidate.values.len(),
         1,
@@ -89,10 +89,10 @@ fn move_in_black_looks_through_dark_cues_and_uses_future_position_timing() {
 #[test]
 fn move_in_black_does_not_look_across_the_end_of_a_cuelist() {
     let fixture = FixtureId::new();
-    let mut lit = Cue::new(1.0);
+    let mut lit = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     lit.changes.push(value(fixture, "intensity", 1.0));
     lit.changes.push(value(fixture, "pan", 0.8));
-    let mut dark = Cue::new(2.0);
+    let mut dark = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
     dark.changes.push(value(fixture, "intensity", 0.0));
     dark.changes.push(value(fixture, "pan", 0.2));
     let mut cue_list = list(vec![lit, dark]);
@@ -111,10 +111,10 @@ fn snap_attributes_bypass_cue_crossfades() {
     let started = Utc::now();
     let clock = Arc::new(light_core::ManualClock::new(started));
     let fixture = FixtureId::new();
-    let mut first = Cue::new(1.0);
+    let mut first = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     first.changes.push(value(fixture, "pan", 0.0));
     first.changes.push(value(fixture, "tilt", 0.0));
-    let mut second = Cue::new(2.0);
+    let mut second = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
     second.fade_millis = 1_000;
     second.changes.push(value(fixture, "pan", 1.0));
     second.changes.push(value(fixture, "tilt", 1.0));
@@ -148,7 +148,7 @@ fn snap_attributes_bypass_playback_master_crossfades() {
     let clock = Arc::new(light_core::ManualClock::new(started));
     let snap_fixture = FixtureId::new();
     let faded_fixture = FixtureId::new();
-    let mut cue = Cue::new(1.0);
+    let mut cue = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     for fixture in [snap_fixture, faded_fixture] {
         cue.changes.push(value(fixture, "intensity", 1.0));
     }

@@ -6,10 +6,10 @@ import type {
 } from "../features/cueRecording/contracts";
 import {
 	booleanAt,
+	cueNumberAt,
 	enumAt,
 	exactRecordAt,
 	integerAt,
-	numberAt,
 	recordAt,
 	stringAt,
 } from "./playbackWirePrimitives";
@@ -240,7 +240,7 @@ function decodeRecordedCue(
 	]);
 	const recorded = {
 		id: uuidAt(cue.id, "$.recorded_cue.id"),
-		number: positiveNumberAt(cue.number, "$.recorded_cue.number"),
+		number: stringAt(cue.number, "$.recorded_cue.number"),
 		deleted: booleanAt(cue.deleted, "$.recorded_cue.deleted"),
 	};
 	if (request.cueNumber != null && recorded.number !== request.cueNumber)
@@ -330,7 +330,7 @@ function validateRequest(request: CueRecordingRequest) {
 		boundedPositiveInteger(request.target.slot, "$.target.slot", 127);
 	}
 	if (request.target.kind === "cue_list") uuidAt(request.target.cueListId, "$.target.cueListId");
-	if (request.cueNumber != null) positiveNumberAt(request.cueNumber, "$.cueNumber");
+	if (request.cueNumber != null) cueNumberAt(request.cueNumber, "$.cueNumber");
 	if (request.name != null) printableAt(request.name, "$.name", 256);
 	if (request.timing.fadeMillis != null)
 		integerAt(request.timing.fadeMillis, "$.timing.fadeMillis");
@@ -358,12 +358,6 @@ function boundedPositiveInteger(value: unknown, path: string, maximum: number) {
 	if (integer < 1 || integer > maximum)
 		invalid(path, `integer between 1 and ${maximum}`, value);
 	return integer;
-}
-
-function positiveNumberAt(value: unknown, path: string) {
-	const number = numberAt(value, path);
-	if (number <= 0) invalid(path, "positive number", value);
-	return number;
 }
 
 function printableAt(value: unknown, path: string, maximumBytes: number) {

@@ -143,7 +143,7 @@ pub enum DynamicPlaybackSpeedSource {
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct PlaybackCueReference {
     pub id: Uuid,
-    pub number: f64,
+    pub number: String,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
@@ -180,9 +180,9 @@ pub struct CueListRuntimeProjection {
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct DeletedCueHoldProjection {
-    pub deleted_number: f64,
-    pub previous_number: Option<f64>,
-    pub next_number: Option<f64>,
+    pub deleted_number: String,
+    pub previous_number: Option<String>,
+    pub next_number: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]

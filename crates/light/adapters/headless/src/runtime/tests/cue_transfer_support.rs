@@ -133,17 +133,17 @@ fn transfer_cue_lists(
     fixtures: [light_core::FixtureId; 3],
 ) -> (light_playback::CueList, light_playback::CueList, Uuid) {
     let intensity = light_core::AttributeKey::intensity();
-    let mut source_one = transfer_cue(1.0, fixtures[0], 1.0);
+    let mut source_one = transfer_cue("1", fixtures[0], 1.0);
     source_one
         .group_changes
         .push(transfer_group_change("1", 1.0));
-    let mut source_two = transfer_cue(2.0, fixtures[1], 1.0);
+    let mut source_two = transfer_cue("2", fixtures[1], 1.0);
     source_two
         .group_changes
         .push(transfer_group_change("2", 1.0));
     let source_cue_id = source_two.id;
-    let source_three = transfer_cue(3.0, fixtures[0], 0.0);
-    let mut destination_one = transfer_cue(1.0, fixtures[0], 0.0);
+    let source_three = transfer_cue("3", fixtures[0], 0.0);
+    let mut destination_one = transfer_cue("1", fixtures[0], 0.0);
     destination_one.changes.push(light_playback::CueChange::set(
         fixtures[2],
         intensity,
@@ -167,11 +167,11 @@ fn transfer_cue_lists(
 }
 
 fn transfer_cue(
-    number: f64,
+    number: &str,
     fixture: light_core::FixtureId,
     value: f32,
 ) -> light_playback::Cue {
-    let mut cue = light_playback::Cue::new(number);
+    let mut cue = light_playback::Cue::new(cue(number));
     cue.changes.push(light_playback::CueChange::set(
         fixture,
         light_core::AttributeKey::intensity(),

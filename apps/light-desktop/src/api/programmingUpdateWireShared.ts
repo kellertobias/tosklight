@@ -8,10 +8,10 @@ import type {
 	ProgrammingUpdateTargetIdentity,
 } from "./generated/light-wire";
 import {
+	cueNumberAt,
 	enumAt,
 	exactRecordAt,
 	integerAt,
-	numberAt,
 	stringAt,
 } from "./playbackWirePrimitives";
 import { programmingUuidAt } from "./programmingWireProjection";
@@ -164,7 +164,7 @@ export function decodeCueSource(
 		"cue_index",
 	]);
 	scopedUuidAt(source.cue_id, `${path}.cue_id`);
-	numberAt(source.cue_number, `${path}.cue_number`);
+	cueNumberAt(source.cue_number, `${path}.cue_number`);
 	integerAt(source.cue_index, `${path}.cue_index`);
 	return value as ProgrammingUpdateCueSource;
 }
@@ -261,7 +261,7 @@ function decodeCueTarget(target: Record<string, unknown>, path: string) {
 	if ("cue_id" in target)
 		nullableAt(target.cue_id, `${path}.cue_id`, scopedUuidAt);
 	if ("cue_number" in target)
-		nullableAt(target.cue_number, `${path}.cue_number`, numberAt);
+		nullableAt(target.cue_number, `${path}.cue_number`, cueNumberAt);
 	if (typeof target.validate_active_context !== "boolean")
 		throw new WireValidationError(
 			`${path}.validate_active_context`,
@@ -273,7 +273,7 @@ function decodeCueTarget(target: Record<string, unknown>, path: string) {
 function decodeCueIdentity(value: unknown, path: string) {
 	const cue = exactRecordAt(value, path, ["id", "number"]);
 	scopedUuidAt(cue.id, `${path}.id`);
-	numberAt(cue.number, `${path}.number`);
+	cueNumberAt(cue.number, `${path}.number`);
 	return value;
 }
 

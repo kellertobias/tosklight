@@ -40,7 +40,7 @@ pub(super) fn prepare_transfer(
     let source_index = source_position(&source.typed, &authority.source)?;
     ensure_destination_available(
         &destination.typed,
-        authority.destination.requested.cue_number,
+        &authority.destination.requested.cue_number,
     )?;
     build_candidate(document, authority, mode, source, destination, source_index)
 }
@@ -66,7 +66,7 @@ fn build_candidate(
     let mut transferred = light_playback::transferred_cue(
         &source.typed,
         source_index,
-        authority.destination.requested.cue_number.value(),
+        authority.destination.requested.cue_number.clone(),
         playback_mode(mode),
     )
     .map_err(invalid)?;
@@ -183,7 +183,7 @@ struct TransferredRaw {
     source_raw: Value,
     source_typed: Cue,
     destination_id: Uuid,
-    destination_number: f64,
+    destination_number: CueNumber,
 }
 
 fn transferred_raw(
@@ -203,7 +203,7 @@ fn transferred_raw(
         source_raw,
         source_typed: source_cue.clone(),
         destination_id: transferred.id,
-        destination_number: transferred.number,
+        destination_number: transferred.number.clone(),
     })
 }
 
@@ -240,9 +240,9 @@ fn prepared_candidate(
                 operation: authority.operation,
                 mode,
                 source_cue_id: source_cue.id,
-                source_cue_number: CueNumber::new(source_cue.number),
+                source_cue_number: source_cue.number,
                 destination_cue_id: transferred.id,
-                destination_cue_number: CueNumber::new(transferred.number),
+                destination_cue_number: transferred.number,
             },
             projections: projections.into(),
             changes,
@@ -332,7 +332,7 @@ fn object_change(projection: &ProgrammingCueTransferObjectProjection) -> ActiveS
 
 fn sort_cues(list: &mut CueList) {
     list.cues
-        .sort_by(|left, right| left.number.total_cmp(&right.number));
+        .sort_by(|left, right| left.number.cmp(&right.number));
 }
 
 const fn playback_mode(mode: ProgrammingCueTransferMode) -> light_playback::CueTransferMode {

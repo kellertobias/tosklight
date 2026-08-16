@@ -40,7 +40,7 @@ export interface PoolPlaybackInput {
 	pressed?: boolean;
 	button?: number;
 	fader?: number;
-	cue_number?: number;
+	cue_number?: string;
 	surface?: PlaybackSurface;
 }
 
@@ -126,7 +126,7 @@ function simpleActionType(action: PoolPlaybackAction) {
 	);
 }
 
-function required(value: number | undefined, label: string) {
+function required<T>(value: T | undefined, label: string): T {
 	if (value == null) throw new Error(`${label} is required`);
 	return value;
 }

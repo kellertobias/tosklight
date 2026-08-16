@@ -26,7 +26,7 @@ export interface CueRecordingRequest {
 	requestId: string;
 	target: CueRecordTarget;
 	operation: CueRecordOperation;
-	cueNumber?: number;
+	cueNumber?: string;
 	timing: CueRecordTiming;
 	cueOnly: boolean;
 	name?: string;
@@ -46,7 +46,7 @@ interface CueRecordingOutcomeBase {
 	replayed: boolean;
 	capturedSource: CueRecordCapturedSource;
 	showRevision: number;
-	recordedCue: { id: string; number: number; deleted: boolean };
+	recordedCue: { id: string; number: string; deleted: boolean };
 	projections: CueRecordProjections;
 }
 

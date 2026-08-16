@@ -57,7 +57,7 @@ pub struct ProgrammingCueDeletionObjectProjection {
     pub raw_body: Arc<Value>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ProgrammingDeletedCue {
     pub id: Uuid,
     pub number: CueNumber,

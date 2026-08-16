@@ -56,7 +56,7 @@ fn preload_atomicity_test_snapshot() -> EngineSnapshot {
         chaser_xfade_millis: 0,
         chaser_xfade_percent: Some(0),
         speed_multiplier: 1.0,
-        cues: vec![light_playback::Cue::new(1.0)],
+        cues: vec![light_playback::Cue::new(cue("1"))],
     };
     let playback = |number, target| light_playback::PlaybackDefinition {
         number,
@@ -159,7 +159,7 @@ fn matter_test_snapshot() -> EngineSnapshot {
         chaser_xfade_millis: 0,
         chaser_xfade_percent: Some(0),
         speed_multiplier: 1.0,
-        cues: vec![light_playback::Cue::new(1.0)],
+        cues: vec![light_playback::Cue::new(cue("1"))],
     };
     let definition = |number, has_fader| light_playback::PlaybackDefinition {
         number,

@@ -147,9 +147,9 @@ fn cue_list_runtime(
         effective_next_is_loaded: runtime.effective_next_is_loaded,
         deleted_cue_hold: runtime.deleted_cue_hold.as_ref().map(|hold| {
             wire::DeletedCueHoldProjection {
-                deleted_number: hold.deleted_number,
-                previous_number: hold.previous_number,
-                next_number: hold.next_number,
+                deleted_number: hold.deleted_number.to_string(),
+                previous_number: hold.previous_number.as_ref().map(ToString::to_string),
+                next_number: hold.next_number.as_ref().map(ToString::to_string),
             }
         }),
         paused: runtime.paused,
@@ -286,6 +286,6 @@ fn grand_master(
 fn cue_reference(cue: &application::PlaybackCueReference) -> wire::PlaybackCueReference {
     wire::PlaybackCueReference {
         id: cue.id,
-        number: cue.number,
+        number: cue.number.to_string(),
     }
 }

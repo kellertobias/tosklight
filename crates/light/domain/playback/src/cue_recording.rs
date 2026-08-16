@@ -28,12 +28,12 @@ impl CueRecordingContent {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum CueRecordOperation {
     Append,
-    Overwrite { cue_number: f64 },
-    Merge { cue_number: f64 },
-    Subtract { cue_number: f64 },
+    Overwrite { cue_number: CueNumber },
+    Merge { cue_number: CueNumber },
+    Subtract { cue_number: CueNumber },
     MergeActive { active_cue_id: Option<Uuid> },
 }
 
@@ -42,7 +42,7 @@ pub struct CueListRecordingPlan {
     pub cue_list: CueList,
     pub changed: bool,
     pub cue_id: Uuid,
-    pub cue_number: f64,
+    pub cue_number: CueNumber,
     pub deleted: bool,
 }
 
@@ -50,7 +50,7 @@ pub struct CueListRecordingPlan {
 pub enum CueRecordingPlanError {
     EmptySource,
     InvalidCueNumber,
-    CueDoesNotExist { cue_number: f64 },
+    CueDoesNotExist { cue_number: CueNumber },
     ActiveCueDoesNotExist { cue_id: Uuid },
     CannotDeleteOnlyCue,
     SourceContainsAutomaticRestore,
@@ -62,7 +62,7 @@ impl Display for CueRecordingPlanError {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::EmptySource => formatter.write_str("the programmer has no values to record"),
-            Self::InvalidCueNumber => formatter.write_str("Cue number must be finite and positive"),
+            Self::InvalidCueNumber => formatter.write_str("Cue number must be a canonical path"),
             Self::CueDoesNotExist { cue_number } => {
                 write!(formatter, "Cue {cue_number} does not exist")
             }
@@ -108,7 +108,7 @@ impl CueList {
         }
         cue_list
             .cues
-            .sort_by(|left, right| left.number.total_cmp(&right.number));
+            .sort_by(|left, right| left.number.cmp(&right.number));
         restoration::regenerate_automatic_restorations(&mut cue_list);
         Ok(CueListRecordingPlan {
             changed: target.appended || cue_list != *original,
@@ -120,10 +120,10 @@ impl CueList {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 struct AppliedTarget {
     cue_id: Uuid,
-    cue_number: f64,
+    cue_number: CueNumber,
     deleted: bool,
     appended: bool,
 }
@@ -135,15 +135,9 @@ fn apply_operation(
 ) -> Result<AppliedTarget, CueRecordingPlanError> {
     match operation {
         CueRecordOperation::Append => append(cue_list, content, next_whole_number(cue_list)?),
-        CueRecordOperation::Overwrite { cue_number } => {
-            overwrite(cue_list, content, validated_number(cue_number)?)
-        }
-        CueRecordOperation::Merge { cue_number } => {
-            merge_numbered(cue_list, content, validated_number(cue_number)?)
-        }
-        CueRecordOperation::Subtract { cue_number } => {
-            subtract(cue_list, content, validated_number(cue_number)?)
-        }
+        CueRecordOperation::Overwrite { cue_number } => overwrite(cue_list, content, cue_number),
+        CueRecordOperation::Merge { cue_number } => merge_numbered(cue_list, content, cue_number),
+        CueRecordOperation::Subtract { cue_number } => subtract(cue_list, content, cue_number),
         CueRecordOperation::MergeActive { active_cue_id } => {
             merge_active(cue_list, content, active_cue_id)
         }
@@ -153,7 +147,7 @@ fn apply_operation(
 fn append(
     cue_list: &mut CueList,
     content: CueRecordingContent,
-    cue_number: f64,
+    cue_number: CueNumber,
 ) -> Result<AppliedTarget, CueRecordingPlanError> {
     require_values(&content)?;
     let cue = new_cue(content, cue_number);
@@ -165,10 +159,10 @@ fn append(
 fn overwrite(
     cue_list: &mut CueList,
     content: CueRecordingContent,
-    cue_number: f64,
+    cue_number: CueNumber,
 ) -> Result<AppliedTarget, CueRecordingPlanError> {
     require_values(&content)?;
-    let Some(index) = cue_index(cue_list, cue_number) else {
+    let Some(index) = cue_index(cue_list, &cue_number) else {
         return append(cue_list, content, cue_number);
     };
     let cue = &mut cue_list.cues[index];
@@ -187,11 +181,13 @@ fn overwrite(
 fn merge_numbered(
     cue_list: &mut CueList,
     content: CueRecordingContent,
-    cue_number: f64,
+    cue_number: CueNumber,
 ) -> Result<AppliedTarget, CueRecordingPlanError> {
     require_values(&content)?;
-    let index = cue_index(cue_list, cue_number)
-        .ok_or(CueRecordingPlanError::CueDoesNotExist { cue_number })?;
+    let index =
+        cue_index(cue_list, &cue_number).ok_or_else(|| CueRecordingPlanError::CueDoesNotExist {
+            cue_number: cue_number.clone(),
+        })?;
     Ok(merge_at(&mut cue_list.cues[index], content))
 }
 
@@ -222,10 +218,12 @@ fn merge_at(cue: &mut Cue, content: CueRecordingContent) -> AppliedTarget {
 fn subtract(
     cue_list: &mut CueList,
     content: CueRecordingContent,
-    cue_number: f64,
+    cue_number: CueNumber,
 ) -> Result<AppliedTarget, CueRecordingPlanError> {
-    let index = cue_index(cue_list, cue_number)
-        .ok_or(CueRecordingPlanError::CueDoesNotExist { cue_number })?;
+    let index =
+        cue_index(cue_list, &cue_number).ok_or_else(|| CueRecordingPlanError::CueDoesNotExist {
+            cue_number: cue_number.clone(),
+        })?;
     if content.is_empty() {
         return delete_at(cue_list, index);
     }
@@ -249,7 +247,7 @@ fn delete_at(cue_list: &mut CueList, index: usize) -> Result<AppliedTarget, CueR
     })
 }
 
-fn new_cue(content: CueRecordingContent, cue_number: f64) -> Cue {
+fn new_cue(content: CueRecordingContent, cue_number: CueNumber) -> Cue {
     let mut cue = Cue::new(cue_number);
     cue.name = content.name.unwrap_or_default();
     cue.changes = content.changes;
@@ -272,33 +270,26 @@ fn trigger(delay_millis: Option<u64>) -> CueTrigger {
 fn stored_target(cue: &Cue, appended: bool) -> AppliedTarget {
     AppliedTarget {
         cue_id: cue.id,
-        cue_number: cue.number,
+        cue_number: cue.number.clone(),
         deleted: false,
         appended,
     }
 }
 
-fn cue_index(cue_list: &CueList, cue_number: f64) -> Option<usize> {
+fn cue_index(cue_list: &CueList, cue_number: &CueNumber) -> Option<usize> {
     cue_list
         .cues
         .iter()
-        .position(|cue| cue.number == cue_number)
+        .position(|cue| cue.number == *cue_number)
 }
 
-fn next_whole_number(cue_list: &CueList) -> Result<f64, CueRecordingPlanError> {
-    let maximum = cue_list
+fn next_whole_number(cue_list: &CueList) -> Result<CueNumber, CueRecordingPlanError> {
+    Ok(cue_list
         .cues
         .iter()
-        .map(|cue| cue.number)
-        .max_by(f64::total_cmp)
-        .unwrap_or(0.0);
-    validated_number(maximum.floor() + 1.0)
-}
-
-fn validated_number(cue_number: f64) -> Result<f64, CueRecordingPlanError> {
-    (cue_number.is_finite() && cue_number > 0.0)
-        .then_some(cue_number)
-        .ok_or(CueRecordingPlanError::InvalidCueNumber)
+        .map(|cue| &cue.number)
+        .max()
+        .map_or_else(|| CueNumber::from(1_u8), CueNumber::next_whole))
 }
 
 fn require_values(content: &CueRecordingContent) -> Result<(), CueRecordingPlanError> {

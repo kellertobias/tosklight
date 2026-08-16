@@ -1,4 +1,4 @@
-use crate::{Cue, CueChange, CueList, GroupCueChange};
+use crate::{Cue, CueChange, CueList, CueNumber, GroupCueChange};
 use light_core::{AttributeKey, AttributeValue};
 use std::collections::HashMap;
 
@@ -16,7 +16,7 @@ pub enum CueTransferMode {
 pub fn transferred_cue(
     source: &CueList,
     source_index: usize,
-    destination_number: f64,
+    destination_number: CueNumber,
     mode: CueTransferMode,
 ) -> Result<Cue, String> {
     let mut cue = source
@@ -103,11 +103,15 @@ mod tests {
     use crate::{CueListMode, CueTrigger, IntensityPriorityMode, RestartMode, WrapMode};
     use light_core::{CueListId, FixtureId};
 
+    fn number(value: f64) -> CueNumber {
+        CueNumber::try_from_legacy_f64(value).unwrap()
+    }
+
     #[test]
     fn plain_retains_delta_and_status_materializes_touched_addresses() {
         let first = FixtureId::new();
         let second = FixtureId::new();
-        let mut cue_one = Cue::new(1.0);
+        let mut cue_one = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
         cue_one.changes.push(CueChange::set(
             first,
             AttributeKey::intensity(),
@@ -121,7 +125,7 @@ mod tests {
             fade_millis: Some(500),
             delay_millis: Some(20),
         });
-        let mut cue_two = Cue::new(2.0);
+        let mut cue_two = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
         cue_two.name = "Transfer me".into();
         cue_two.trigger = CueTrigger::Follow { delay_millis: 700 };
         cue_two.changes.push(CueChange::set(
@@ -131,11 +135,11 @@ mod tests {
         ));
         let source = list(vec![cue_one, cue_two]);
 
-        let plain = transferred_cue(&source, 1, 7.0, CueTransferMode::Plain).unwrap();
+        let plain = transferred_cue(&source, 1, number(7.0), CueTransferMode::Plain).unwrap();
         assert_eq!(plain.changes.len(), 1);
         assert_eq!(plain.changes[0].fixture_id, second);
 
-        let status = transferred_cue(&source, 1, 7.0, CueTransferMode::Status).unwrap();
+        let status = transferred_cue(&source, 1, number(7.0), CueTransferMode::Status).unwrap();
         assert_eq!(status.name, "Transfer me");
         assert!(matches!(status.trigger, CueTrigger::Follow { .. }));
         assert_eq!(status.changes.len(), 2);
@@ -154,7 +158,7 @@ mod tests {
     #[test]
     fn plain_changes_only_the_number_and_keeps_the_source_cue_identity() {
         let fixture = FixtureId::new();
-        let mut source_cue = Cue::new(2.0);
+        let mut source_cue = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
         source_cue.name = "Keep every stored field".into();
         source_cue.fade_millis = 900;
         source_cue.delay_millis = 40;
@@ -168,12 +172,12 @@ mod tests {
         let source_id = source_cue.id;
         let source = list(vec![source_cue.clone()]);
 
-        let transferred = transferred_cue(&source, 0, 8.5, CueTransferMode::Plain).unwrap();
+        let transferred = transferred_cue(&source, 0, number(8.5), CueTransferMode::Plain).unwrap();
 
         assert_eq!(transferred.id, source_id);
-        assert_eq!(transferred.number, 8.5);
+        assert_eq!(transferred.number, number(8.5));
         let mut expected = source_cue;
-        expected.number = 8.5;
+        expected.number = number(8.5);
         assert_eq!(transferred, expected);
     }
 
@@ -181,7 +185,7 @@ mod tests {
     fn status_omits_released_addresses_and_resets_per_address_timing() {
         let released = FixtureId::new();
         let retained = FixtureId::new();
-        let mut first = Cue::new(1.0);
+        let mut first = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
         first.changes.extend([
             timed_fixture_set(released, 0.2),
             timed_fixture_set(retained, 0.4),
@@ -190,7 +194,7 @@ mod tests {
             timed_group_set("released", 0.3),
             timed_group_set("retained", 0.5),
         ]);
-        let mut second = Cue::new(2.0);
+        let mut second = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
         second.changes.push(CueChange {
             fixture_id: released,
             attribute: AttributeKey::intensity(),
@@ -205,7 +209,7 @@ mod tests {
         });
         let source = list(vec![first, second]);
 
-        let status = transferred_cue(&source, 1, 3.0, CueTransferMode::Status).unwrap();
+        let status = transferred_cue(&source, 1, number(3.0), CueTransferMode::Status).unwrap();
 
         assert_eq!(status.changes.len(), 1);
         assert_eq!(status.changes[0].fixture_id, retained);
@@ -221,7 +225,8 @@ mod tests {
 
     #[test]
     fn missing_source_index_is_rejected() {
-        let error = transferred_cue(&list(Vec::new()), 0, 2.0, CueTransferMode::Plain).unwrap_err();
+        let error =
+            transferred_cue(&list(Vec::new()), 0, number(2.0), CueTransferMode::Plain).unwrap_err();
         assert_eq!(error, "source Cue index is out of range");
     }
 

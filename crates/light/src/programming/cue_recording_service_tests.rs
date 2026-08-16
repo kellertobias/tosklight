@@ -531,7 +531,7 @@ impl Setup {
                 show_id: self.show_id,
                 target: ProgrammingCueRecordTarget::Pool { playback_number: 7 },
                 operation: ProgrammingCueRecordOperation::Overwrite,
-                cue_number: Some(CueNumber::new(1.0)),
+                cue_number: Some(crate::CueNumber::try_from_legacy_f64(1.0).unwrap()),
                 timing: ProgrammingCueRecordTiming::default(),
                 cue_only: false,
                 name: None,
@@ -624,7 +624,11 @@ impl TestPorts {
 
     fn completion(&self) -> ProgrammingCueCommitResult {
         let cue_list_id = CueListId::new();
-        let mut cue = light_playback::Cue::new(if self.deleted { 0.5 } else { 1.0 });
+        let mut cue = light_playback::Cue::new(if self.deleted {
+            crate::CueNumber::try_from_legacy_f64(0.5).unwrap()
+        } else {
+            crate::CueNumber::try_from_legacy_f64(1.0).unwrap()
+        });
         if !self.deleted {
             cue.id = self.cue_id;
         }
@@ -671,7 +675,7 @@ impl TestPorts {
             },
             recorded_cue: ProgrammingRecordedCue {
                 id: self.cue_id,
-                number: CueNumber::new(1.0),
+                number: crate::CueNumber::try_from_legacy_f64(1.0).unwrap(),
                 deleted: self.deleted,
             },
             show_revision: PortableShowRevision::from_value(if self.changed { 2 } else { 1 }),
@@ -750,7 +754,7 @@ fn runtime_projection(show_id: ShowId, playback: u16, cue_id: Uuid) -> PlaybackR
                 previous_index: None,
                 current: Some(PlaybackCueReference {
                     id: cue_id,
-                    number: 1.0,
+                    number: crate::CueNumber::try_from_legacy_f64(1.0).unwrap(),
                 }),
                 loaded: None,
                 normal_next: None,

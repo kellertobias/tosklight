@@ -656,7 +656,7 @@ fn playback(number: u16) -> light_playback::PlaybackDefinition {
 }
 
 fn cue_list(id: &str) -> Value {
-    let mut cue = light_playback::Cue::new(1.0);
+    let mut cue = light_playback::Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     cue.id = uuid::Uuid::from_u128(0x700);
     serde_json::to_value(light_playback::CueList {
         id: light_core::CueListId(uuid::Uuid::parse_str(id).unwrap()),

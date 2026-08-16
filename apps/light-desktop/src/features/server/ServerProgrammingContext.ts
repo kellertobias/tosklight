@@ -27,7 +27,7 @@ export interface ServerProgrammingContext {
 		input: {
 			target: "preset" | "cue";
 			target_id: string;
-			cue_number?: number;
+			cue_number?: string;
 			name?: string;
 			mode?: "merge" | "overwrite" | "add_missing_fixtures";
 			family?: PresetFamily;

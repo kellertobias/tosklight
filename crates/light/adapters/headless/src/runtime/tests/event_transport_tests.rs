@@ -25,6 +25,10 @@ use super::super::playback_service;
 use super::super::{Engine, EngineSnapshot, ProgrammerRegistry, RenderOptions};
 use super::*;
 
+fn test_cue(value: &str) -> light_playback::CueNumber {
+    value.parse().expect("test Cue number is canonical")
+}
+
 #[test]
 fn multiplexed_client_messages_keep_subscriptions_and_actions_distinct() {
     let subscribe =
@@ -931,11 +935,11 @@ fn transition_draft(playback_number: Option<u16>, cue_list_id: Uuid) -> EventDra
                 cue_list_id,
                 previous: Some(AppCue {
                     id: Uuid::from_u128(1),
-                    number: 1.0,
+                    number: test_cue("1"),
                 }),
                 current: Some(AppCue {
                     id: Uuid::from_u128(2),
-                    number: 2.0,
+                    number: test_cue("2"),
                 }),
                 cause: PlaybackTransitionCause::Chaser,
                 transition_ordinal: 73,
@@ -973,6 +977,6 @@ fn chaser() -> CueList {
         chaser_xfade_millis: 0,
         chaser_xfade_percent: Some(0),
         speed_multiplier: 1.0,
-        cues: vec![Cue::new(1.0), Cue::new(2.0)],
+        cues: vec![Cue::new(test_cue("1")), Cue::new(test_cue("2"))],
     }
 }

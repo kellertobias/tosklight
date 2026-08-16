@@ -25,7 +25,7 @@ fn mapped_cue_action_uses_playback_service_and_publishes_one_osc_event() {
 
     let active = state.output.active_playbacks();
     assert_eq!(active.len(), 1);
-    assert_eq!(active[0].current_cue_number, Some(1.0));
+    assert_eq!(active[0].current_cue_number, Some(cue("1")));
     let light_application::EventReplay::Events(events) = state.events.replay(
         0,
         &light_application::EventFilter::default()
@@ -240,7 +240,7 @@ fn mapped_test_cue_list() -> light_playback::CueList {
         chaser_xfade_millis: 0,
         chaser_xfade_percent: Some(0),
         speed_multiplier: 1.0,
-        cues: vec![light_playback::Cue::new(1.0)],
+        cues: vec![light_playback::Cue::new(cue("1"))],
     }
 }
 

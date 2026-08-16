@@ -164,7 +164,7 @@ fn generated_document() -> Result<(ShowStore, PortableShowDocument), String> {
             chaser_xfade_millis: 0,
             chaser_xfade_percent: None,
             speed_multiplier: 1.0,
-            cues: (1..=20).map(|number| Cue::new(number as f64)).collect(),
+            cues: (1_u8..=20).map(|number| Cue::new(number.into())).collect(),
         };
         store
             .put_object(

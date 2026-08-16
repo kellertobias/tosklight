@@ -23,7 +23,7 @@ interface RunningRowBase {
 	number: number | null;
 	name: string;
 	status: string;
-	cueNumber: number | null;
+	cueNumber: string | null;
 	off(): Promise<unknown>;
 }
 
@@ -81,7 +81,7 @@ export function buildRunningRows(input: RunningModelInput): RunningRow[] {
 		const cueNumber =
 			source.cue?.number ??
 			source.runtime.current?.number ??
-			source.runtime.cue_index + 1;
+			String(source.runtime.cue_index + 1);
 		rows.push({
 			key: `cue-list:${source.cueListId}`,
 			kind: "cue_list",

@@ -112,7 +112,7 @@ pub enum UpdateConfirmationBehavior {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct CueIdentity {
     pub id: Uuid,
-    pub number: f64,
+    pub number: light_playback::CueNumber,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -135,7 +135,7 @@ impl UpdateTargetIdentity {
             playback_number: target.playback_number,
             cue: Some(CueIdentity {
                 id: current_cue.id,
-                number: current_cue.number,
+                number: current_cue.number.clone(),
             }),
         }
     }
@@ -185,7 +185,7 @@ pub enum UpdateAddress {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct CueSource {
     pub cue_id: Uuid,
-    pub cue_number: f64,
+    pub cue_number: light_playback::CueNumber,
     pub cue_index: usize,
 }
 

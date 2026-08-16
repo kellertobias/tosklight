@@ -77,31 +77,22 @@ fn send_cue_feedback(
     selected: bool,
     running: Option<&light_playback::PlaybackRuntimeStatus>,
 ) {
+    let current = running.and_then(|item| item.playback.current_cue_number.as_ref());
+    let normal_next = running.and_then(|item| item.normal_next_cue_number.as_ref());
+    let effective_next = running.and_then(|item| item.effective_next_cue_number.as_ref());
     let values = [
         ("selected", OscArgument::Bool(selected)),
         (
             "current-cue",
-            OscArgument::Float(
-                running
-                    .and_then(|item| item.playback.current_cue_number)
-                    .unwrap_or(-1.0) as f32,
-            ),
+            OscArgument::Float(legacy_cue_number(current)),
         ),
         (
             "normal-next-cue",
-            OscArgument::Float(
-                running
-                    .and_then(|item| item.normal_next_cue_number)
-                    .unwrap_or(-1.0) as f32,
-            ),
+            OscArgument::Float(legacy_cue_number(normal_next)),
         ),
         (
             "effective-next-cue",
-            OscArgument::Float(
-                running
-                    .and_then(|item| item.effective_next_cue_number)
-                    .unwrap_or(-1.0) as f32,
-            ),
+            OscArgument::Float(legacy_cue_number(effective_next)),
         ),
         (
             "loaded-next",
@@ -116,6 +107,26 @@ fn send_cue_feedback(
             vec![argument],
         );
     }
+    for (suffix, number) in [
+        ("current-cue-path", current),
+        ("normal-next-cue-path", normal_next),
+        ("effective-next-cue-path", effective_next),
+    ] {
+        send_osc(
+            state,
+            subscriber.target,
+            format!("{prefix}/{suffix}"),
+            vec![OscArgument::String(
+                number.map_or_else(|| "-1".into(), ToString::to_string),
+            )],
+        );
+    }
+}
+
+fn legacy_cue_number(number: Option<&light_playback::CueNumber>) -> f32 {
+    number
+        .and_then(|number| number.to_string().parse::<f32>().ok())
+        .unwrap_or(-1.0)
 }
 
 fn send_button_feedback(

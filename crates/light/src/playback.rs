@@ -149,8 +149,14 @@ mod tests {
         assert_eq!(event.cause, PlaybackTransitionCause::Chaser);
         assert_eq!(event.transition_ordinal, 37);
         assert_eq!(event.advanced_steps, 7);
-        assert_eq!(event.previous.as_ref().map(|cue| cue.number), Some(1.0));
-        assert_eq!(event.current.as_ref().map(|cue| cue.number), Some(4.0));
+        assert_eq!(
+            event.previous.as_ref().map(|cue| cue.number.clone()),
+            Some(crate::CueNumber::try_from_legacy_f64(1.0).unwrap())
+        );
+        assert_eq!(
+            event.current.as_ref().map(|cue| cue.number.clone()),
+            Some(crate::CueNumber::try_from_legacy_f64(4.0).unwrap())
+        );
     }
 
     #[test]
@@ -177,7 +183,7 @@ mod tests {
     fn domain_cue(value: u128, number: f64) -> PlaybackCueReference {
         PlaybackCueReference {
             id: Uuid::from_u128(value),
-            number,
+            number: crate::CueNumber::try_from_legacy_f64(number).unwrap(),
         }
     }
 

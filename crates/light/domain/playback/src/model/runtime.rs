@@ -152,7 +152,7 @@ pub struct ActivePlayback {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub current_cue_id: Option<Uuid>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub current_cue_number: Option<f64>,
+    pub current_cue_number: Option<CueNumber>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub deleted_cue_hold: Option<DeletedCueHold>,
     /// Resolved pre-master values captured at a navigation boundary. They keep an interrupted
@@ -163,7 +163,7 @@ pub struct ActivePlayback {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub loaded_cue_id: Option<Uuid>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub loaded_cue_number: Option<f64>,
+    pub loaded_cue_number: Option<CueNumber>,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
@@ -179,9 +179,9 @@ pub struct PlaybackRuntimeStatus {
     #[serde(flatten)]
     pub playback: ActivePlayback,
     pub normal_next_cue_id: Option<Uuid>,
-    pub normal_next_cue_number: Option<f64>,
+    pub normal_next_cue_number: Option<CueNumber>,
     pub effective_next_cue_id: Option<Uuid>,
-    pub effective_next_cue_number: Option<f64>,
+    pub effective_next_cue_number: Option<CueNumber>,
     pub effective_next_is_loaded: bool,
     pub temporary_active: bool,
     pub temporary_master: f32,
@@ -200,7 +200,7 @@ pub enum CueTriggerTimingKind {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct CueTriggerTimingStatus {
     pub cue_id: Uuid,
-    pub cue_number: f64,
+    pub cue_number: CueNumber,
     pub kind: CueTriggerTimingKind,
     pub started_at: DateTime<Utc>,
     pub duration_millis: u64,
@@ -290,9 +290,9 @@ pub struct MoveInBlackCandidate {
     pub playback_number: Option<u16>,
     pub cue_list_id: CueListId,
     pub current_cue_id: Uuid,
-    pub current_cue_number: f64,
+    pub current_cue_number: CueNumber,
     pub target_cue_id: Uuid,
-    pub target_cue_number: f64,
+    pub target_cue_number: CueNumber,
     pub fixture_id: FixtureId,
     pub priority: i16,
     pub transition_ordinal: u64,
@@ -320,9 +320,9 @@ pub struct PlaybackContribution {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct DeletedCueHold {
-    pub deleted_number: f64,
-    pub previous_number: Option<f64>,
-    pub next_number: Option<f64>,
+    pub deleted_number: CueNumber,
+    pub previous_number: Option<CueNumber>,
+    pub next_number: Option<CueNumber>,
     pub contributions: Vec<TimedValue>,
 }
 
@@ -358,7 +358,7 @@ pub(crate) fn advance_chaser_steps(
             playback.tracking_wrap = false;
         }
     }
-    playback.current_cue_number = Some(cue_list.cues[playback.cue_index].number);
+    playback.current_cue_number = Some(cue_list.cues[playback.cue_index].number.clone());
     playback.current_cue_id = Some(cue_list.cues[playback.cue_index].id);
     if cue_list.effective_wrap_mode() == WrapMode::Off {
         steps.min(last.saturating_sub(start as usize) as u64)
@@ -428,7 +428,7 @@ pub(crate) fn new_active_playback(
         manual_xfade_progress: 0.0,
         tracking_wrap: false,
         current_cue_id: cue_list.cues.first().map(|cue| cue.id),
-        current_cue_number: cue_list.cues.first().map(|cue| cue.number),
+        current_cue_number: cue_list.cues.first().map(|cue| cue.number.clone()),
         deleted_cue_hold: None,
         deleted_cue_transition_source: None,
         loaded_cue_id: None,

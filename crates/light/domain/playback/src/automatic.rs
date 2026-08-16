@@ -3,9 +3,9 @@ use light_core::{CueListId, TimedValue};
 use uuid::Uuid;
 
 use super::{
-    ActivePlayback, CompiledCueList, Cue, CueList, CueListMode, CueTrigger, PlaybackEngine,
-    PlaybackKey, PlaybackMasterTransition, WrapMode, advance_chaser_steps, cue_completion_millis,
-    effective_chaser_step_millis, effective_cue_fade_millis,
+    ActivePlayback, CompiledCueList, Cue, CueList, CueListMode, CueNumber, CueTrigger,
+    PlaybackEngine, PlaybackKey, PlaybackMasterTransition, WrapMode, advance_chaser_steps,
+    cue_completion_millis, effective_chaser_step_millis, effective_cue_fade_millis,
 };
 
 /// The scheduler-owned reason that advanced a playback without an operator action.
@@ -19,10 +19,10 @@ pub enum AutomaticPlaybackTransitionCause {
 }
 
 /// Stable Cue identity captured at an automatic transition boundary.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct PlaybackCueReference {
     pub id: Uuid,
-    pub number: f64,
+    pub number: CueNumber,
 }
 
 /// One final playback state produced by a scheduler tick.
@@ -434,7 +434,7 @@ fn set_current_cue(playback: &mut ActivePlayback, cue_list: &CueList, index: usi
     playback.external_completion_millis = 0;
     playback.cue_index = index;
     playback.current_cue_id = Some(cue_list.cues[index].id);
-    playback.current_cue_number = Some(cue_list.cues[index].number);
+    playback.current_cue_number = Some(cue_list.cues[index].number.clone());
 }
 
 fn cue_transition(
@@ -458,6 +458,6 @@ fn cue_transition(
 fn cue_reference(cue: &Cue) -> PlaybackCueReference {
     PlaybackCueReference {
         id: cue.id,
-        number: cue.number,
+        number: cue.number.clone(),
     }
 }

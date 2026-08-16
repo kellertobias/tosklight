@@ -95,7 +95,7 @@ mod tests {
         );
         assert_eq!(definition.buttons[0], PlaybackButtonAction::Toggle);
         assert_eq!(
-            super::super::semantics::configured_transition_cause(&resolved, action),
+            super::super::semantics::configured_transition_cause(&resolved, action.clone()),
             Some(light_application::PlaybackTransitionCause::Go)
         );
         assert!(super::super::semantics::may_trigger_auto_off(

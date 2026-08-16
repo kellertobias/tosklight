@@ -138,14 +138,16 @@ fn application_action(action: wire::PlaybackAction) -> Result<application::Playb
             App::Master(application::PlaybackLevel::new(value))
         }
         Wire::Master { .. } => return Err("master value must be finite and within 0-1".into()),
-        Wire::GoTo { cue_number } if cue_number.is_finite() && cue_number > 0.0 => {
-            App::GoTo(application::CueNumber::new(cue_number))
-        }
-        Wire::GoTo { .. } => return Err("cue_number must be finite and greater than zero".into()),
-        Wire::Load { cue_number } if cue_number.is_finite() && cue_number > 0.0 => {
-            App::Load(application::CueNumber::new(cue_number))
-        }
-        Wire::Load { .. } => return Err("cue_number must be finite and greater than zero".into()),
+        Wire::GoTo { cue_number } => App::GoTo(
+            cue_number
+                .parse()
+                .map_err(|error: String| format!("cue_number is invalid: {error}"))?,
+        ),
+        Wire::Load { cue_number } => App::Load(
+            cue_number
+                .parse()
+                .map_err(|error: String| format!("cue_number is invalid: {error}"))?,
+        ),
         Wire::Crossfade { enabled } => App::Crossfade { enabled },
         Wire::Temporary { enabled, pressed } => App::Temporary { enabled, pressed },
         Wire::ConfiguredButton { number, pressed } if (1..=6).contains(&number) => {
@@ -237,8 +239,11 @@ fn telemetry_sample(
         master: sample.master,
         current_cue: sample
             .current_cue_id
-            .zip(sample.current_cue_number)
-            .map(|(id, number)| wire::PlaybackCueReference { id, number }),
+            .zip(sample.current_cue_number.as_ref())
+            .map(|(id, number)| wire::PlaybackCueReference {
+                id,
+                number: number.to_string(),
+            }),
         fade_progress: sample.fade_progress,
         flash: sample.flash,
         temporary_active: sample.temporary_active,
@@ -299,7 +304,7 @@ fn cue_transition(transition: &application::PlaybackCueTransition) -> wire::Play
 fn cue_reference(cue: &application::PlaybackCueReference) -> wire::PlaybackCueReference {
     wire::PlaybackCueReference {
         id: cue.id,
-        number: cue.number,
+        number: cue.number.to_string(),
     }
 }
 

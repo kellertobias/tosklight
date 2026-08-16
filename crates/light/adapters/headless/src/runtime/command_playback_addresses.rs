@@ -3,7 +3,7 @@ use super::*;
 #[derive(Clone)]
 pub(super) struct CommandPlaybackAddress {
     pub(super) playback: u16,
-    pub(super) cue: Option<f64>,
+    pub(super) cue: Option<light_playback::CueNumber>,
     application: light_application::PlaybackAddress,
 }
 
@@ -75,10 +75,9 @@ pub(super) fn parse_playback_address(
             cue.push_str(tokens.get(index).ok_or("DOT requires another cue part")?);
             index += 1;
         }
-        let cue = cue.parse::<f64>().map_err(|_| "cue number is invalid")?;
-        if !cue.is_finite() || cue <= 0.0 {
-            return Err("cue number must be positive".into());
-        }
+        let cue = cue
+            .parse::<light_playback::CueNumber>()
+            .map_err(|error| format!("cue number is invalid: {error}"))?;
         Some(cue)
     } else {
         None
@@ -168,7 +167,7 @@ pub(super) fn programmer_preset(
 
 pub(super) fn programmer_cue(
     programmer: &light_programmer::ProgrammerState,
-    number: f64,
+    number: light_playback::CueNumber,
     timing: CommandTiming,
 ) -> light_playback::Cue {
     let mut cue = light_playback::Cue::new(number);

@@ -107,10 +107,11 @@ pub(super) fn prepare_preload_cue(
     let mut cue_list = before.clone();
     let number = input
         .cue_number
+        .as_ref()
         .ok_or_else(|| ApiError::bad_request("cue_number is required for cue storage"))?;
-    if !number.is_finite() {
-        return Err(ApiError::bad_request("cue_number must be finite"));
-    }
+    let number = number
+        .parse::<light_playback::CueNumber>()
+        .map_err(ApiError::bad_request)?;
     let index = cue_index(&mut cue_list, number);
     let cue = &mut cue_list.cues[index];
     if let Some(name) = &input.name {
@@ -150,16 +151,16 @@ pub(super) fn prepare_preload_cue(
     })
 }
 
-fn cue_index(cue_list: &mut light_playback::CueList, number: f64) -> usize {
+fn cue_index(cue_list: &mut light_playback::CueList, number: light_playback::CueNumber) -> usize {
     cue_list
         .cues
         .iter()
         .position(|cue| cue.number == number)
         .unwrap_or_else(|| {
-            cue_list.cues.push(light_playback::Cue::new(number));
+            cue_list.cues.push(light_playback::Cue::new(number.clone()));
             cue_list
                 .cues
-                .sort_by(|left, right| left.number.total_cmp(&right.number));
+                .sort_by(|left, right| left.number.cmp(&right.number));
             cue_list
                 .cues
                 .iter()

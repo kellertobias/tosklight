@@ -5,8 +5,9 @@ use crate::{
 use chrono::{DateTime, Utc};
 use light_core::CueListId;
 use light_playback::{
-    ActiveDynamicPlayback, ActivePlayback, PlaybackContribution, PlaybackEngine, PlaybackIdentity,
-    PlaybackMutation, PlaybackRuntimeEffect, PlaybackRuntimeStatus, VirtualPlaybackAddress,
+    ActiveDynamicPlayback, ActivePlayback, CueNumber, PlaybackContribution, PlaybackEngine,
+    PlaybackIdentity, PlaybackMutation, PlaybackRuntimeEffect, PlaybackRuntimeStatus,
+    VirtualPlaybackAddress,
 };
 use std::collections::HashSet;
 
@@ -38,17 +39,17 @@ pub enum EnginePlaybackCommand {
     ToggleDynamicsPaused,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub enum CueListPlaybackAction {
     Go,
     GoAt(DateTime<Utc>),
     Back,
-    Jump(f64),
+    Jump(CueNumber),
     Pause,
     Release,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub enum PoolPlaybackAction {
     Go,
     Back,
@@ -59,8 +60,8 @@ pub enum PoolPlaybackAction {
     On,
     Off,
     Toggle,
-    GoTo(f64),
-    Load(f64),
+    GoTo(CueNumber),
+    Load(CueNumber),
     SetMaster(f32),
     /// An automation fader whose zero/non-zero value is also authoritative Off/On state.
     SetMasterWithExplicitActivation(f32),
@@ -93,7 +94,7 @@ pub enum PoolPlaybackAction {
 ///
 /// This intentionally stays narrower than `PoolPlaybackAction`: unsupported physical fader and
 /// temporary-control semantics must not silently collapse a Virtual address to a pool number.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum VirtualPlaybackAction {
     Go,
     Back,
@@ -104,8 +105,8 @@ pub enum VirtualPlaybackAction {
     Off,
     Release,
     Toggle,
-    GoTo(f64),
-    Load(f64),
+    GoTo(CueNumber),
+    Load(CueNumber),
     SetMaster(f32),
     XFade(bool),
     SetTempButton(bool),

@@ -36,7 +36,7 @@ impl CueChange {
 pub struct Cue {
     #[serde(default = "Uuid::new_v4")]
     pub id: Uuid,
-    pub number: f64,
+    pub number: CueNumber,
     pub name: String,
     /// Operator-authored context shown in Cue-list overview and current/next information blocks.
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -116,7 +116,7 @@ pub struct GroupCueChange {
 }
 
 impl Cue {
-    pub fn new(number: f64) -> Self {
+    pub fn new(number: CueNumber) -> Self {
         Self {
             id: Uuid::new_v4(),
             number,
@@ -486,12 +486,15 @@ impl CueList {
                 return Err("cue identities must be unique within a cue list".into());
             }
         }
-        let mut previous = f64::NEG_INFINITY;
+        let mut previous: Option<&CueNumber> = None;
         for cue in &self.cues {
-            if !cue.number.is_finite() || cue.number <= previous {
-                return Err("cue numbers must be finite and strictly increasing".into());
+            if previous.is_some_and(|previous| cue.number <= *previous) {
+                return Err(
+                    "Cue numbers must be unique and strictly increasing; legacy decimal Cue numbers may need manual renumbering after canonicalization"
+                        .into(),
+                );
             }
-            previous = cue.number;
+            previous = Some(&cue.number);
             let mut addresses = HashSet::new();
             for change in &cue.changes {
                 if !addresses.insert(change.address()) {
@@ -588,8 +591,8 @@ impl CueList {
         state
     }
 
-    pub fn state_at_number(&self, number: f64) -> HashMap<AttributeAddress, AttributeValue> {
-        let index = self.cues.iter().rposition(|cue| cue.number <= number);
+    pub fn state_at_number(&self, number: &CueNumber) -> HashMap<AttributeAddress, AttributeValue> {
+        let index = self.cues.iter().rposition(|cue| cue.number <= *number);
         index
             .map(|index| self.state_at_index(index))
             .unwrap_or_default()

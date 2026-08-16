@@ -41,7 +41,9 @@ pub(super) fn ensure_spread_fits(points: &[f32], count: usize) -> Result<(), Str
     Ok(())
 }
 
-pub(super) fn parse_command_cue_number(tokens: &[String]) -> Result<f64, String> {
+pub(super) fn parse_command_cue_number(
+    tokens: &[String],
+) -> Result<light_playback::CueNumber, String> {
     if tokens.is_empty() {
         return Err("CUE requires a cue number".into());
     }
@@ -49,8 +51,8 @@ pub(super) fn parse_command_cue_number(tokens: &[String]) -> Result<f64, String>
         return Err("cue number is invalid".into());
     }
     let value = tokens.join("");
-    let number = value.parse::<f64>().map_err(|_| "cue number is invalid")?;
-    if !number.is_finite() || number <= 0.0 {
+    let number = value.parse().map_err(|_: String| "cue number is invalid")?;
+    if number == light_playback::CueNumber::from(0_u8) {
         return Err("cue number must be positive".into());
     }
     Ok(number)

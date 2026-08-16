@@ -103,14 +103,14 @@ impl PlaybackEngine {
                     .current_cue_id
                     .and_then(|id| cue_list.cues.iter().position(|cue| cue.id == id))
                     .or_else(|| {
-                        playback.current_cue_number.and_then(|number| {
-                            cue_list.cues.iter().position(|cue| cue.number == number)
+                        playback.current_cue_number.as_ref().and_then(|number| {
+                            cue_list.cues.iter().position(|cue| cue.number == *number)
                         })
                     })
             {
                 playback.cue_index = index;
                 playback.current_cue_id = Some(cue_list.cues[index].id);
-                playback.current_cue_number = Some(cue_list.cues[index].number);
+                playback.current_cue_number = Some(cue_list.cues[index].number.clone());
             } else {
                 playback.cue_index = playback.cue_index.min(last);
             }
@@ -125,7 +125,7 @@ impl PlaybackEngine {
             if let Some(loaded) = playback.loaded_cue_id
                 && let Some(cue) = cue_list.cues.iter().find(|cue| cue.id == loaded)
             {
-                playback.loaded_cue_number = Some(cue.number);
+                playback.loaded_cue_number = Some(cue.number.clone());
             } else if playback.loaded_cue_id.is_some() {
                 playback.loaded_cue_id = None;
                 playback.loaded_cue_number = None;
@@ -299,12 +299,17 @@ impl PlaybackEngine {
                         .flatten()
                 });
                 playback.current_cue_id = current_id;
-                let number = playback.current_cue_number.or_else(|| {
+                let number = playback.current_cue_number.clone().or_else(|| {
                     infer_legacy_current
-                        .then(|| old_list.cues.get(playback.cue_index).map(|cue| cue.number))
+                        .then(|| {
+                            old_list
+                                .cues
+                                .get(playback.cue_index)
+                                .map(|cue| cue.number.clone())
+                        })
                         .flatten()
                 });
-                playback.current_cue_number = number;
+                playback.current_cue_number = number.clone();
                 let Some(number) = number else {
                     return playback;
                 };
@@ -318,7 +323,7 @@ impl PlaybackEngine {
                     current_id.and_then(|id| next.cues.iter().position(|cue| cue.id == id))
                 {
                     playback.cue_index = index;
-                    playback.current_cue_number = Some(next.cues[index].number);
+                    playback.current_cue_number = Some(next.cues[index].number.clone());
                     return playback;
                 }
                 if !playback.enabled {
@@ -334,12 +339,12 @@ impl PlaybackEngine {
                     .cues
                     .iter()
                     .rfind(|cue| cue.number < number)
-                    .map(|cue| cue.number);
+                    .map(|cue| cue.number.clone());
                 let next_number = next
                     .cues
                     .iter()
                     .find(|cue| cue.number > number)
-                    .map(|cue| cue.number);
+                    .map(|cue| cue.number.clone());
                 let mut isolated = PlaybackEngine {
                     cue_lists: self.cue_lists.clone(),
                     compiled_cue_lists: self.compiled_cue_lists.clone(),

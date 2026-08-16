@@ -175,7 +175,7 @@ impl TestRig {
         ProgrammingCueDeletionRequest {
             show_id: self.show_id,
             address,
-            cue_number: crate::CueNumber::new(cue_number),
+            cue_number: crate::CueNumber::try_from_legacy_f64(cue_number).unwrap(),
             expectation: ProgrammingCueDeletionExpectation::Exact(
                 ProgrammingCueDeletionAuthority {
                     playback_number: 1,
@@ -192,7 +192,7 @@ impl TestRig {
         ProgrammingCueDeletionRequest {
             show_id: self.show_id,
             address: ProgrammingCueDeletionAddress::Pool { playback_number: 1 },
-            cue_number: crate::CueNumber::new(cue_number),
+            cue_number: crate::CueNumber::try_from_legacy_f64(cue_number).unwrap(),
             expectation: ProgrammingCueDeletionExpectation::Current,
         }
     }
@@ -243,7 +243,7 @@ impl TestRig {
         let list: CueList = serde_json::from_value(object.body().clone()).unwrap();
         list.cues
             .iter()
-            .find(|cue| cue.number == number)
+            .find(|cue| cue.number == crate::CueNumber::try_from_legacy_f64(number).unwrap())
             .unwrap_or(&list.cues[0])
             .id
     }
@@ -275,7 +275,7 @@ impl Drop for TestRig {
 
 fn seed_show(store: &ShowStore, cue_list_id: CueListId, cue_count: usize) {
     let cues = (1..=cue_count)
-        .map(|number| Cue::new(number as f64))
+        .map(|number| Cue::new(crate::CueNumber::from(number)))
         .collect::<Vec<_>>();
     let mut body = serde_json::to_value(cue_list(cue_list_id, cues)).unwrap();
     body["future_list"] = json!("preserved");

@@ -186,7 +186,7 @@ function decodeSummary(
 			summary.source_cue_id,
 			"$.summary.source_cue_id",
 		),
-		sourceCueNumber: positiveNumberAt(
+		sourceCueNumber: stringAt(
 			summary.source_cue_number,
 			"$.summary.source_cue_number",
 		),
@@ -194,7 +194,7 @@ function decodeSummary(
 			summary.destination_cue_id,
 			"$.summary.destination_cue_id",
 		),
-		destinationCueNumber: positiveNumberAt(
+		destinationCueNumber: stringAt(
 			summary.destination_cue_number,
 			"$.summary.destination_cue_number",
 		),

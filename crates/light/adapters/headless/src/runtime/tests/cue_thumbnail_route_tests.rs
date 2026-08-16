@@ -25,7 +25,7 @@ fn cue_list_body(cue_ids: &[Uuid]) -> serde_json::Value {
         .enumerate()
         .map(|(index, id)| light_playback::Cue {
             id: *id,
-            ..light_playback::Cue::new((index + 1) as f64)
+            ..light_playback::Cue::new(cue(&(index + 1).to_string()))
         })
         .collect();
     serde_json::to_value(light_playback::CueList {

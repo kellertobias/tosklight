@@ -2,13 +2,13 @@ fn update_undo_snapshot(
     fixture: light_core::FixtureId,
 ) -> (light_playback::CueList, EngineSnapshot) {
     let cue_list_id = light_core::CueListId::new();
-    let mut first = light_playback::Cue::new(1.0);
+    let mut first = light_playback::Cue::new(cue("1"));
     first.changes.push(light_playback::CueChange::set(
         fixture,
         light_core::AttributeKey::intensity(),
         light_core::AttributeValue::Normalized(0.2),
     ));
-    let mut second = light_playback::Cue::new(2.0);
+    let mut second = light_playback::Cue::new(cue("2"));
     second.changes.push(light_playback::CueChange::set(
         fixture,
         light_core::AttributeKey("color.red".into()),
@@ -32,7 +32,7 @@ fn update_undo_snapshot(
         chaser_xfade_millis: 0,
         chaser_xfade_percent: Some(0),
         speed_multiplier: 1.0,
-        cues: vec![first, second, light_playback::Cue::new(3.0)],
+        cues: vec![first, second, light_playback::Cue::new(cue("3"))],
     };
     let playback = light_playback::PlaybackDefinition {
         number: 7,
@@ -148,14 +148,14 @@ fn touched_update_target_rejects_a_changed_playback_context_but_explicit_cue_rem
         playback_number: 7,
         cue_list_id,
         cue_id: second_cue,
-        cue_number: 2.0,
+        cue_number: cue("2"),
     }];
     let touched = UpdateApiTarget {
         family: UpdateApiTargetFamily::Cue,
         object_id: Some(cue_list_id.0.to_string()),
         playback_number: Some(7),
         cue_id: Some(first_cue),
-        cue_number: Some(1.0),
+        cue_number: Some("1".into()),
         validate_active_context: true,
     };
     let error = resolve_update_cue_target(&touched, &active).unwrap_err();
@@ -246,7 +246,7 @@ fn confirmed_update_rejects_changed_programmer_and_is_one_step_undoable() {
         object_id: Some(cue_list_object_id.clone()),
         playback_number: Some(7),
         cue_id: Some(cue_list.cues[2].id),
-        cue_number: Some(3.0),
+        cue_number: Some("3".into()),
         validate_active_context: true,
     };
     let preview_request = UpdateApiRequest {

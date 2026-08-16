@@ -2,7 +2,10 @@ use super::*;
 
 #[test]
 fn backend_speed_groups_drive_assigned_chasers() {
-    let mut cue_list = list(vec![Cue::new(1.0), Cue::new(2.0)]);
+    let mut cue_list = list(vec![
+        Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap()),
+        Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap()),
+    ]);
     cue_list.mode = CueListMode::Chaser;
     cue_list.speed_group = Some("B".into());
     let id = cue_list.id;
@@ -16,7 +19,10 @@ fn backend_speed_groups_drive_assigned_chasers() {
     engine.tick(started + ChronoDuration::milliseconds(500), None);
     assert_eq!(engine.active()[0].cue_index, 1);
 
-    let mut fifth = list(vec![Cue::new(1.0), Cue::new(2.0)]);
+    let mut fifth = list(vec![
+        Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap()),
+        Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap()),
+    ]);
     fifth.mode = CueListMode::Chaser;
     fifth.speed_group = Some("E".into());
     let fifth_id = fifth.id;
@@ -47,10 +53,10 @@ fn backend_speed_groups_drive_assigned_chasers() {
 #[test]
 fn chaser_large_virtual_jump_matches_incremental_phase() {
     let mut cue_list = list(vec![
-        Cue::new(1.0),
-        Cue::new(2.0),
-        Cue::new(3.0),
-        Cue::new(4.0),
+        Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap()),
+        Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap()),
+        Cue::new(crate::CueNumber::try_from_legacy_f64(3.0).unwrap()),
+        Cue::new(crate::CueNumber::try_from_legacy_f64(4.0).unwrap()),
     ]);
     cue_list.mode = CueListMode::Chaser;
     cue_list.speed_group = Some("A".into());
@@ -86,7 +92,10 @@ fn chaser_large_virtual_jump_matches_incremental_phase() {
 
 #[test]
 fn decimal_speed_group_bpm_reaches_chaser_scheduling_without_integer_rounding() {
-    let mut cue_list = list(vec![Cue::new(1.0), Cue::new(2.0)]);
+    let mut cue_list = list(vec![
+        Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap()),
+        Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap()),
+    ]);
     cue_list.mode = CueListMode::Chaser;
     cue_list.speed_group = Some("B".into());
     let id = cue_list.id;
@@ -106,7 +115,10 @@ fn decimal_speed_group_bpm_reaches_chaser_scheduling_without_integer_rounding() 
 
 #[test]
 fn chaser_bpm_change_preserves_normalized_step_phase() {
-    let mut cue_list = list(vec![Cue::new(1.0), Cue::new(2.0)]);
+    let mut cue_list = list(vec![
+        Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap()),
+        Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap()),
+    ]);
     cue_list.mode = CueListMode::Chaser;
     cue_list.speed_group = Some("A".into());
     let id = cue_list.id;
@@ -132,7 +144,7 @@ fn chaser_bpm_change_preserves_normalized_step_phase() {
 #[test]
 fn sequence_master_fade_only_fills_missing_cue_fades() {
     let fixture = FixtureId::new();
-    let mut fallback = Cue::new(1.0);
+    let mut fallback = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     fallback.changes.push(value(fixture, "intensity", 1.0));
     let mut cue_list = list(vec![fallback]);
     let id = cue_list.id;

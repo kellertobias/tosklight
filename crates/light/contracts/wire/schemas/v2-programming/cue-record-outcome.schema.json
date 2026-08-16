@@ -445,22 +445,19 @@
       "type": "object",
       "properties": {
         "deleted_number": {
-          "type": "number",
-          "format": "double"
+          "type": "string"
         },
         "next_number": {
           "type": [
-            "number",
+            "string",
             "null"
-          ],
-          "format": "double"
+          ]
         },
         "previous_number": {
           "type": [
-            "number",
+            "string",
             "null"
-          ],
-          "format": "double"
+          ]
         }
       },
       "required": [
@@ -714,8 +711,7 @@
           "format": "uuid"
         },
         "number": {
-          "type": "number",
-          "format": "double"
+          "type": "string"
         }
       },
       "required": [
@@ -1119,8 +1115,7 @@
           "format": "uuid"
         },
         "number": {
-          "type": "number",
-          "format": "double"
+          "type": "string"
         }
       },
       "additionalProperties": false,

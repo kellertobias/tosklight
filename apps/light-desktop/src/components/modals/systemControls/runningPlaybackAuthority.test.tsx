@@ -46,7 +46,7 @@ function cueList(id: string, name: string): CueList {
 		cues: [
 			{
 				id: `${id}-cue-1`,
-				number: 1,
+				number: "1",
 				name: "Opening",
 				fade_millis: 0,
 				delay_millis: 0,

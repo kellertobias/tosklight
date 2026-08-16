@@ -25,7 +25,7 @@ export function cueProjection(
 			previous_index: null,
 			current: {
 				id: "44444444-4444-4444-8444-444444444444",
-				number: cueIndex + 1,
+				number: String(cueIndex + 1),
 			},
 			loaded: null,
 			normal_next: null,

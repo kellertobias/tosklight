@@ -85,7 +85,7 @@ function visualization(): VisualizationSnapshot {
 function cue(): Cue {
 	return {
 		id: CUE_ID,
-		number: 1,
+		number: "1",
 		name: "Cue 1",
 		fade_millis: 0,
 		delay_millis: 0,

@@ -1281,6 +1281,8 @@ fn cue_list(id: CueListId, name: &str) -> CueList {
         chaser_xfade_millis: 0,
         chaser_xfade_percent: Some(0),
         speed_multiplier: 1.0,
-        cues: vec![Cue::new(1.0)],
+        cues: vec![Cue::new(
+            crate::CueNumber::try_from_legacy_f64(1.0).unwrap(),
+        )],
     }
 }

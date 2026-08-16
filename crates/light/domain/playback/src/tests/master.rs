@@ -69,9 +69,9 @@ fn shared_group_master_faders_require_pickup_and_retarget_peers() {
 #[test]
 fn preload_transition_uses_one_timestamp_and_programmer_fade_only_as_fallback() {
     let fixture = FixtureId::new();
-    let mut first = Cue::new(1.0);
+    let mut first = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     first.changes.push(value(fixture, "intensity", 0.0));
-    let mut second = Cue::new(2.0);
+    let mut second = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
     second.changes.push(value(fixture, "intensity", 1.0));
     let cue_list = list(vec![first, second]);
     let id = cue_list.id;
@@ -110,9 +110,9 @@ fn preload_transition_uses_one_timestamp_and_programmer_fade_only_as_fallback() 
 #[test]
 fn explicit_cue_time_remains_authoritative_for_a_preload_transition() {
     let fixture = FixtureId::new();
-    let mut first = Cue::new(1.0);
+    let mut first = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     first.changes.push(value(fixture, "intensity", 0.0));
-    let mut second = Cue::new(2.0);
+    let mut second = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
     second.fade_millis = 500;
     second.changes.push(value(fixture, "intensity", 1.0));
     let cue_list = list(vec![first, second]);
@@ -141,7 +141,7 @@ fn explicit_cue_time_remains_authoritative_for_a_preload_transition() {
 #[test]
 fn pool_master_scales_intensity_without_scaling_ltp_attributes() {
     let fixture = FixtureId::new();
-    let mut cue = Cue::new(1.0);
+    let mut cue = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     cue.changes.push(value(fixture, "intensity", 1.0));
     cue.changes.push(value(fixture, "pan", 0.8));
     let list = list(vec![cue]);
@@ -172,7 +172,7 @@ fn pool_master_scales_intensity_without_scaling_ltp_attributes() {
 #[test]
 fn virtual_master_controls_faderless_playback_without_adding_a_local_fader() {
     let fixture = FixtureId::new();
-    let mut cue = Cue::new(1.0);
+    let mut cue = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     cue.changes.push(value(fixture, "intensity", 1.0));
     let cue_list = list(vec![cue]);
     let cue_list_id = cue_list.id;
@@ -213,9 +213,9 @@ fn virtual_master_controls_faderless_playback_without_adding_a_local_fader() {
 #[test]
 fn virtual_master_drives_faderless_manual_xfade_without_enabling_local_input() {
     let fixture = FixtureId::new();
-    let mut first = Cue::new(1.0);
+    let mut first = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     first.changes.push(value(fixture, "intensity", 0.0));
-    let mut second = Cue::new(2.0);
+    let mut second = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
     second.changes.push(value(fixture, "intensity", 1.0));
     let cue_list = list(vec![first, second]);
     let cue_list_id = cue_list.id;
@@ -249,9 +249,9 @@ fn virtual_master_drives_faderless_manual_xfade_without_enabling_local_input() {
 #[test]
 fn full_later_same_timestamp_playback_auto_offs_covered_playback_but_99_percent_does_not() {
     let fixture = FixtureId::new();
-    let mut first = Cue::new(1.0);
+    let mut first = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     first.changes.push(value(fixture, "pan", 0.2));
-    let mut second = Cue::new(1.0);
+    let mut second = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     second.changes.push(value(fixture, "pan", 0.8));
     let first = list(vec![first]);
     let first_id = first.id;
@@ -276,7 +276,7 @@ fn full_later_same_timestamp_playback_auto_offs_covered_playback_but_99_percent_
 #[test]
 fn page_and_pool_validation_enforce_public_ranges() {
     let fixture = FixtureId::new();
-    let mut cue = Cue::new(1.0);
+    let mut cue = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     cue.changes.push(value(fixture, "pan", 0.1));
     let list = list(vec![cue]);
     let mut invalid = definition(1001, list.id);
@@ -310,9 +310,9 @@ fn page_and_pool_validation_enforce_public_ranges() {
 #[test]
 fn toggle_retains_cue_and_flash_keep_running_retains_current_cue() {
     let fixture = FixtureId::new();
-    let mut one = Cue::new(1.0);
+    let mut one = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     one.changes.push(value(fixture, "pan", 0.1));
-    let mut two = Cue::new(2.0);
+    let mut two = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
     two.changes.push(value(fixture, "pan", 0.2));
     let mut list = list(vec![one, two]);
     list.restart_mode = RestartMode::ContinueCurrentCue;

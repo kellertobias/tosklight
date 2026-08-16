@@ -12,7 +12,6 @@ import {
 	FormLayout,
 	ModalPortal,
 	ModalTitleBar,
-	NumberField,
 	SelectField,
 	TextField,
 } from "@tosklight/ui";
@@ -29,7 +28,7 @@ export function PreloadStoreModal() {
 	const [target, setTarget] = useState<StoreTarget>("preset");
 	const [presetId, setPresetId] = useState("1");
 	const [cueListId, setCueListId] = useState("");
-	const [cueNumber, setCueNumber] = useState(1);
+	const [cueNumber, setCueNumber] = useState("1");
 	const [name, setName] = useState("");
 	const [mode, setMode] = useState<PresetRecordMode>("merge");
 	const open = state.preloadStoreOpen;
@@ -97,12 +96,10 @@ export function PreloadStoreModal() {
 							/>
 						)}
 						{target === "cue" && (
-							<NumberField
+							<TextField
 								label="Cue number"
-								allowDecimal
-								step="0.1"
 								value={cueNumber}
-								onChange={(event) => setCueNumber(Number(event.target.value))}
+								onChange={(event) => setCueNumber(event.target.value)}
 							/>
 						)}
 						{target === "preset" && (
@@ -154,7 +151,7 @@ function useDefaultCueList(
 async function recordCue(
 	actions: ReturnType<typeof useCueRecording>,
 	cueListId: string,
-	cueNumber: number,
+	cueNumber: string,
 	name: string,
 ) {
 	if (!actions) return false;

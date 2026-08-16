@@ -81,7 +81,7 @@ pub enum PlaybackSurface {
     Physical,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum PlaybackAction {
     Go { pressed: bool },
@@ -110,8 +110,8 @@ pub enum PlaybackAction {
     DynamicLearnSpeed { pressed: bool },
     None { pressed: bool },
     Master { value: f32 },
-    GoTo { cue_number: f64 },
-    Load { cue_number: f64 },
+    GoTo { cue_number: String },
+    Load { cue_number: String },
     Crossfade { enabled: bool },
     Temporary { enabled: bool, pressed: bool },
     ConfiguredButton { number: u8, pressed: bool },

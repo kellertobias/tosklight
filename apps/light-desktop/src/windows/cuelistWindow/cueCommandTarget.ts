@@ -21,7 +21,7 @@ const OPERATION = {
 } as const;
 
 const CUE_SOURCE =
-	/^(CPY|COPY|MOV|MOVE)\s+(SET\s+[1-9]\d*\s+CUE\s+\d+(?:\.\d+)?)\s+AT$/iu;
+	/^(CPY|COPY|MOV|MOVE)\s+(SET\s+[1-9]\d*\s+CUE\s+\d+(?:\.\d+)*)\s+AT$/iu;
 
 export function cueMutationTarget(
 	commandLine: string,
@@ -36,7 +36,7 @@ export function cueMutationTarget(
 	return { operation, phase: "destination", source: destination[2] };
 }
 
-export function cueCommandAddress(playbackNumber: number, cueNumber: number) {
+export function cueCommandAddress(playbackNumber: number, cueNumber: string) {
 	return `SET ${playbackNumber} CUE ${cueNumber}`;
 }
 

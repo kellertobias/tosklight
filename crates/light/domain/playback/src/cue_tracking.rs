@@ -86,7 +86,7 @@ impl PlaybackEngine {
                 manual_xfade_progress: 0.0,
                 tracking_wrap: false,
                 current_cue_id: Some(cue_list.cues[0].id),
-                current_cue_number: Some(cue_list.cues[0].number),
+                current_cue_number: Some(cue_list.cues[0].number.clone()),
                 deleted_cue_hold: None,
                 deleted_cue_transition_source: None,
                 loaded_cue_id: None,
@@ -108,7 +108,7 @@ impl PlaybackEngine {
                     }
                     playback.cue_index = index;
                     playback.current_cue_id = Some(cue_list.cues[index].id);
-                    playback.current_cue_number = Some(cue_list.cues[index].number);
+                    playback.current_cue_number = Some(cue_list.cues[index].number.clone());
                     playback.loaded_cue_number = None;
                     playback.tracking_wrap = false;
                     playback.paused = false;
@@ -120,14 +120,15 @@ impl PlaybackEngine {
                     return Ok(playback);
                 }
                 if let Some(hold) = playback.deleted_cue_hold.take() {
-                    if let Some(next) = hold.next_number
-                        && let Some(index) = cue_list.cues.iter().position(|cue| cue.number == next)
+                    if let Some(next) = hold.next_number.as_ref()
+                        && let Some(index) =
+                            cue_list.cues.iter().position(|cue| cue.number == *next)
                     {
                         playback.deleted_cue_transition_source = Some(hold.contributions.clone());
                         playback.previous_index = None;
                         playback.cue_index = index;
                         playback.current_cue_id = Some(cue_list.cues[index].id);
-                        playback.current_cue_number = Some(next);
+                        playback.current_cue_number = Some(next.clone());
                         playback.tracking_wrap = false;
                         playback.activated_at = now;
                         playback.completed_trigger_cue_id = None;
@@ -164,7 +165,8 @@ impl PlaybackEngine {
                     playback.completed_trigger_cue_id = None;
                 }
                 playback.transition_ordinal = transition_ordinal;
-                playback.current_cue_number = Some(cue_list.cues[playback.cue_index].number);
+                playback.current_cue_number =
+                    Some(cue_list.cues[playback.cue_index].number.clone());
                 playback.current_cue_id = Some(cue_list.cues[playback.cue_index].id);
                 playback
             }
@@ -191,14 +193,18 @@ impl PlaybackEngine {
         })
     }
 
-    pub fn jump(&mut self, id: CueListId, cue_number: f64) -> Result<&ActivePlayback, String> {
+    pub fn jump(
+        &mut self,
+        id: CueListId,
+        cue_number: CueNumber,
+    ) -> Result<&ActivePlayback, String> {
         self.jump_at(id, cue_number, self.clock.now())
     }
 
     pub fn jump_at(
         &mut self,
         id: CueListId,
-        cue_number: f64,
+        cue_number: CueNumber,
         now: DateTime<Utc>,
     ) -> Result<&ActivePlayback, String> {
         let key = self.key_for_cue_list(id)?;
@@ -209,7 +215,7 @@ impl PlaybackEngine {
         &mut self,
         key: PlaybackKey,
         id: CueListId,
-        cue_number: f64,
+        cue_number: CueNumber,
         now: DateTime<Utc>,
     ) -> Result<&ActivePlayback, String> {
         let interrupted_source = self.transition_source_at(key, now);
@@ -252,7 +258,7 @@ impl PlaybackEngine {
             manual_xfade_progress: 0.0,
             tracking_wrap: false,
             current_cue_id: Some(cue_list.cues[index].id),
-            current_cue_number: Some(cue_list.cues[index].number),
+            current_cue_number: Some(cue_list.cues[index].number.clone()),
             deleted_cue_hold: None,
             deleted_cue_transition_source: None,
             loaded_cue_id: None,
@@ -302,17 +308,17 @@ impl PlaybackEngine {
         let playback = self.active.get_mut(&key).ok_or("cue list is not active")?;
         reset_manual_transition(playback);
         if let Some(hold) = playback.deleted_cue_hold.take() {
-            if let Some(previous) = hold.previous_number
+            if let Some(previous) = hold.previous_number.as_ref()
                 && let Some(index) = self.cue_lists[&id]
                     .cues
                     .iter()
-                    .position(|cue| cue.number == previous)
+                    .position(|cue| cue.number == *previous)
             {
                 playback.deleted_cue_transition_source = Some(hold.contributions.clone());
                 playback.previous_index = None;
                 playback.cue_index = index;
                 playback.current_cue_id = Some(self.cue_lists[&id].cues[index].id);
-                playback.current_cue_number = Some(previous);
+                playback.current_cue_number = Some(previous.clone());
                 playback.tracking_wrap = false;
                 playback.activated_at = now;
                 playback.completed_trigger_cue_id = None;
@@ -328,7 +334,8 @@ impl PlaybackEngine {
         playback.previous_index = Some(playback.cue_index);
         playback.cue_index = playback.cue_index.saturating_sub(1);
         playback.current_cue_id = Some(self.cue_lists[&id].cues[playback.cue_index].id);
-        playback.current_cue_number = Some(self.cue_lists[&id].cues[playback.cue_index].number);
+        playback.current_cue_number =
+            Some(self.cue_lists[&id].cues[playback.cue_index].number.clone());
         playback.tracking_wrap = false;
         playback.activated_at = now;
         playback.completed_trigger_cue_id = None;

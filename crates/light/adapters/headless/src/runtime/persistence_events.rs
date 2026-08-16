@@ -435,7 +435,7 @@ struct UpdateTargetPayload {
     object_id: String,
     playback_number: Option<u16>,
     cue_id: Option<String>,
-    cue_number: Option<f64>,
+    cue_number: Option<String>,
     validate_active_context: Option<bool>,
 }
 
@@ -740,6 +740,6 @@ mod event_publication_tests {
             target.family,
             light_application::UpdateTargetFamilyNotification::Cue
         );
-        assert_eq!(target.cue_number, Some(2.5));
+        assert_eq!(target.cue_number, Some("2.5".into()));
     }
 }

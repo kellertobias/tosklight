@@ -58,12 +58,16 @@ fn update_recorded_cue_list(
     object: &light_show::VersionedObject,
     mut list: light_playback::CueList,
     programmer: &light_programmer::ProgrammerState,
-    requested: Option<f64>,
+    requested: Option<light_playback::CueNumber>,
     timing: CommandTiming,
     operation: RecordOperation,
 ) -> Result<light_application::ActiveShowObjectMutation, String> {
-    let number =
-        requested.unwrap_or_else(|| list.cues.last().map_or(1.0, |cue| cue.number.floor() + 1.0));
+    let number = requested.unwrap_or_else(|| {
+        list.cues.last().map_or_else(
+            || light_playback::CueNumber::from(1_u8),
+            |cue| cue.number.next_whole(),
+        )
+    });
     if let Some(position) = list.cues.iter().position(|cue| cue.number == number) {
         if operation == RecordOperation::Subtract
             && programmer.values.is_empty()
@@ -79,7 +83,7 @@ fn update_recorded_cue_list(
         } else {
             merge_recorded_cue(
                 &mut list.cues[position],
-                programmer_cue(programmer, number, timing),
+                programmer_cue(programmer, number.clone(), timing),
                 operation,
             );
         }
@@ -89,7 +93,7 @@ fn update_recorded_cue_list(
         list.cues.push(programmer_cue(programmer, number, timing));
     }
     list.cues
-        .sort_by(|left, right| left.number.total_cmp(&right.number));
+        .sort_by(|left, right| left.number.cmp(&right.number));
     put_active_show_object(
         light_application::ActiveShowObjectKind::CueList,
         object.id.clone(),
@@ -178,7 +182,7 @@ pub(super) fn store_cue_at(
     state: &AppState,
     session: &Session,
     playback: u16,
-    requested: Option<f64>,
+    requested: Option<light_playback::CueNumber>,
     timing: CommandTiming,
     operation: RecordOperation,
     context: &light_application::ActionContext,
@@ -217,7 +221,7 @@ pub(super) fn store_cue_at(
         if !(1..=light_playback::MAX_PLAYBACKS).contains(&playback) {
             return Err("Cuelist number must be within 1-1000".into());
         }
-        let number = requested.unwrap_or(1.0);
+        let number = requested.unwrap_or_else(|| light_playback::CueNumber::from(1_u8));
         store_new_cue_list(playback, programmer_cue(&programmer, number, timing))?
     };
     let action = active_show_object_action(context.clone(), entry.id, mutations);

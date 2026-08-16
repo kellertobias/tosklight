@@ -10,7 +10,7 @@ export type PlaybackCueTransition = GeneratedPlaybackCueTransition;
 export interface Cue {
 	id?: string;
 	cue_only?: boolean;
-	number: number;
+	number: string;
 	name: string;
 	information?: string;
 	fade_millis: number;
@@ -151,15 +151,15 @@ export interface PlaybackSnapshot {
 		temporary_master?: number;
 		swap_active?: boolean;
 		enabled?: boolean;
-		current_cue_number?: number | null;
-		loaded_cue_number?: number | null;
-		normal_next_cue_number?: number | null;
-		effective_next_cue_number?: number | null;
+		current_cue_number?: string | null;
+		loaded_cue_number?: string | null;
+		normal_next_cue_number?: string | null;
+		effective_next_cue_number?: string | null;
 		effective_next_is_loaded?: boolean;
 		deleted_cue_hold?: {
-			deleted_number: number;
-			previous_number?: number | null;
-			next_number?: number | null;
+			deleted_number: string;
+			previous_number?: string | null;
+			next_number?: string | null;
 		} | null;
 	}>;
 	desk: ControlDesk;

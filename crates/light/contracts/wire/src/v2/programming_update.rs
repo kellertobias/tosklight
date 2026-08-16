@@ -54,7 +54,7 @@ pub enum ProgrammingUpdateTarget {
         cue_id: Option<Uuid>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional = nullable)]
-        cue_number: Option<f64>,
+        cue_number: Option<String>,
         validate_active_context: bool,
     },
     Preset {
@@ -85,11 +85,11 @@ pub enum ProgrammingUpdateTargetFamily {
     Group,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct ProgrammingUpdateCueIdentity {
     pub id: Uuid,
-    pub number: f64,
+    pub number: String,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]

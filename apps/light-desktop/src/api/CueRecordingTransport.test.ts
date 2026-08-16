@@ -16,7 +16,7 @@ function request(): CueRecordingRequest {
 		requestId: REQUEST_ID,
 		target: { kind: "cue_list", cueListId: CUE_LIST_ID },
 		operation: "merge",
-		cueNumber: 1,
+		cueNumber: "1",
 		timing: { fadeMillis: 1000 },
 		cueOnly: true,
 		capturePolicy: "current_capture",

@@ -17,15 +17,15 @@ pub(super) fn resolve_choice(
     request: &ProgrammingCueTransferChoiceRequest,
 ) -> Result<CueTransferAuthority, ActionError> {
     validate_show(document, request.show_id)?;
-    validate_endpoint(request.source)?;
-    validate_endpoint(request.destination)?;
-    let mut source = resolve_endpoint(document, request.source)?;
-    let destination = resolve_endpoint(document, request.destination)?;
+    validate_endpoint(&request.source)?;
+    validate_endpoint(&request.destination)?;
+    let mut source = resolve_endpoint(document, request.source.clone())?;
+    let destination = resolve_endpoint(document, request.destination.clone())?;
     let source_list = exact_cue_list(document, &source)?;
-    let source_cue = cue_at_number(&source_list.typed, request.source.cue_number)?;
+    let source_cue = cue_at_number(&source_list.typed, &request.source.cue_number)?;
     source.cue_id = Some(source_cue.id);
     let destination_list = exact_cue_list(document, &destination)?;
-    ensure_destination_available(&destination_list.typed, request.destination.cue_number)?;
+    ensure_destination_available(&destination_list.typed, &request.destination.cue_number)?;
     reject_sole_cue_cross_list_move(request.operation, &source, &destination, &source_list)?;
     Ok(CueTransferAuthority {
         choice_id: Uuid::new_v4(),
@@ -65,8 +65,8 @@ pub(super) fn validate_authority(
             document.revision().value(),
         ));
     }
-    let source = resolve_endpoint(document, authority.source.requested)?;
-    let destination = resolve_endpoint(document, authority.destination.requested)?;
+    let source = resolve_endpoint(document, authority.source.requested.clone())?;
+    let destination = resolve_endpoint(document, authority.destination.requested.clone())?;
     if !same_endpoint(&source, &authority.source)
         || !same_endpoint(&destination, &authority.destination)
     {
@@ -133,7 +133,7 @@ pub(super) fn source_position(
     let position = list
         .cues
         .iter()
-        .position(|cue| cue.number == endpoint.requested.cue_number.value())
+        .position(|cue| cue.number == endpoint.requested.cue_number)
         .ok_or_else(|| missing("source Cue does not exist"))?;
     if endpoint
         .cue_id
@@ -144,29 +144,25 @@ pub(super) fn source_position(
     Ok(position)
 }
 
-fn cue_at_number(list: &CueList, number: CueNumber) -> Result<&Cue, ActionError> {
+fn cue_at_number<'a>(list: &'a CueList, number: &CueNumber) -> Result<&'a Cue, ActionError> {
     list.cues
         .iter()
-        .find(|cue| cue.number == number.value())
-        .ok_or_else(|| missing(format!("cue {} does not exist", number.value())))
+        .find(|cue| cue.number == *number)
+        .ok_or_else(|| missing(format!("cue {number} does not exist")))
 }
 
 pub(super) fn ensure_destination_available(
     list: &CueList,
-    number: CueNumber,
+    number: &CueNumber,
 ) -> Result<(), ActionError> {
-    if list.cues.iter().any(|cue| cue.number == number.value()) {
+    if list.cues.iter().any(|cue| cue.number == *number) {
         Err(conflict("destination cue already exists"))
     } else {
         Ok(())
     }
 }
 
-fn validate_endpoint(endpoint: ProgrammingCueTransferEndpoint) -> Result<(), ActionError> {
-    let number = endpoint.cue_number.value();
-    if !number.is_finite() || number <= 0.0 {
-        return Err(invalid("Cue number must be finite and greater than zero"));
-    }
+fn validate_endpoint(endpoint: &ProgrammingCueTransferEndpoint) -> Result<(), ActionError> {
     validate_address(endpoint.address)
 }
 

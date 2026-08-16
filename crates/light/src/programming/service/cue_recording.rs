@@ -302,9 +302,11 @@ fn activate_if_authorized(
     let playback = completion
         .concrete_playback_number
         .ok_or_else(invalid_completion)?;
-    let Some(activation) =
-        ports.activate_recorded_cue(&envelope.context, playback, completion.recorded_cue.number)
-    else {
+    let Some(activation) = ports.activate_recorded_cue(
+        &envelope.context,
+        playback,
+        completion.recorded_cue.number.clone(),
+    ) else {
         return Ok(FirstRecordActivation {
             runtime: None,
             succeeded: false,

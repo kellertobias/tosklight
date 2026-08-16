@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn started_timecode_extends_cue_completion_without_changing_legacy_trigger() {
-    let mut cue = Cue::new(1.0);
+    let mut cue = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     cue.fade_millis = 1_000;
     cue.actions.push(CueAction::TimecodeStart {
         timecode_id: TimecodeId(uuid::Uuid::from_u128(70)),
@@ -29,19 +29,19 @@ fn started_timecode_extends_cue_completion_without_changing_legacy_trigger() {
 fn runtime_timing_projects_effective_phases_and_retains_completed_trigger_until_retrigger() {
     let outgoing = FixtureId::new();
     let incoming = FixtureId::new();
-    let mut first = Cue::new(1.0);
+    let mut first = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     first.out_delay_millis = Some(200);
     first.out_fade_millis = Some(1_800);
     first.changes.push(value(outgoing, "intensity", 1.0));
     first.changes.push(value(incoming, "intensity", 0.0));
-    let mut second = Cue::new(2.0);
+    let mut second = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
     second.delay_millis = 100;
     second.fade_millis = 900;
     second.out_delay_millis = Some(200);
     second.out_fade_millis = Some(1_800);
     second.changes.push(value(outgoing, "intensity", 0.0));
     second.changes.push(value(incoming, "intensity", 1.0));
-    let mut third = Cue::new(3.0);
+    let mut third = Cue::new(crate::CueNumber::try_from_legacy_f64(3.0).unwrap());
     third.trigger = CueTrigger::Wait { delay_millis: 300 };
     let third_id = third.id;
     let cue_list = list(vec![first, second, third]);
@@ -76,7 +76,11 @@ fn runtime_timing_projects_effective_phases_and_retains_completed_trigger_until_
     assert_eq!(timing.completed_trigger_cue_id, Some(third_id));
 
     engine
-        .jump_at(id, 3.0, started + ChronoDuration::milliseconds(2_400))
+        .jump_at(
+            id,
+            cue_number(3.0),
+            started + ChronoDuration::milliseconds(2_400),
+        )
         .unwrap();
     let status = engine.runtime_status().remove(0);
     assert_eq!(
@@ -92,9 +96,9 @@ fn runtime_timing_projects_effective_phases_and_retains_completed_trigger_until_
 
 #[test]
 fn runtime_timing_associates_link_delay_with_its_source_row() {
-    let mut source = Cue::new(1.0);
-    let skipped = Cue::new(2.0);
-    let destination = Cue::new(3.0);
+    let mut source = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
+    let skipped = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
+    let destination = Cue::new(crate::CueNumber::try_from_legacy_f64(3.0).unwrap());
     source.trigger = CueTrigger::Link {
         cue_id: destination.id,
         delay_millis: 250,
@@ -128,7 +132,7 @@ fn runtime_timing_associates_link_delay_with_its_source_row() {
 #[test]
 fn active_cue_dynamic_projection_tracks_fat_and_honors_release() {
     let fixture = FixtureId::new();
-    let mut one = Cue::new(1.0);
+    let mut one = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     one.dynamic_changes.push(CueDynamicChange {
         fixture_id: fixture,
         attribute: AttributeKey::intensity(),
@@ -141,8 +145,8 @@ fn active_cue_dynamic_projection_tracks_fat_and_honors_release() {
         },
         automatic_restore: false,
     });
-    let two = Cue::new(2.0);
-    let mut three = Cue::new(3.0);
+    let two = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
+    let mut three = Cue::new(crate::CueNumber::try_from_legacy_f64(3.0).unwrap());
     three.dynamic_changes.push(CueDynamicChange {
         fixture_id: fixture,
         attribute: AttributeKey::intensity(),
@@ -185,11 +189,11 @@ fn active_cue_dynamic_projection_preserves_tracking_order_after_indexed_updates(
         },
         automatic_restore: false,
     };
-    let mut one = Cue::new(1.0);
+    let mut one = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     one.dynamic_changes.push(value(first_fixture, 0.1));
     one.dynamic_changes.push(value(second_fixture, 0.2));
     one.dynamic_changes.push(value(first_fixture, 0.3));
-    let mut two = Cue::new(2.0);
+    let mut two = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
     two.dynamic_changes.push(CueDynamicChange {
         fixture_id: first_fixture,
         attribute: AttributeKey::intensity(),
@@ -233,9 +237,9 @@ fn active_cue_dynamic_projection_preserves_tracking_order_after_indexed_updates(
 #[test]
 fn ltp_intensity_can_select_a_newer_lower_value() {
     let fixture = FixtureId::new();
-    let mut high = Cue::new(1.0);
+    let mut high = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     high.changes.push(value(fixture, "intensity", 0.8));
-    let mut low = Cue::new(1.0);
+    let mut low = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     low.changes.push(value(fixture, "intensity", 0.2));
     let mut high = list(vec![high]);
     high.intensity_priority_mode = IntensityPriorityMode::Ltp;
@@ -261,9 +265,9 @@ fn ltp_intensity_can_select_a_newer_lower_value() {
 #[test]
 fn equal_timestamp_transitions_receive_persistable_monotonic_order() {
     let fixture = FixtureId::new();
-    let mut high = Cue::new(1.0);
+    let mut high = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     high.changes.push(value(fixture, "pan", 0.8));
-    let mut low = Cue::new(1.0);
+    let mut low = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     low.changes.push(value(fixture, "pan", 0.2));
     let high = list(vec![high]);
     let low = list(vec![low]);
@@ -295,7 +299,7 @@ fn equal_timestamp_transitions_receive_persistable_monotonic_order() {
     restored.register(high).unwrap();
     restored.register(low).unwrap();
     restored.restore_active(persisted);
-    restored.jump_at(high_id, 1.0, started).unwrap();
+    restored.jump_at(high_id, cue_number(1.0), started).unwrap();
     assert!(
         restored
             .active()
@@ -310,11 +314,11 @@ fn equal_timestamp_transitions_receive_persistable_monotonic_order() {
 #[test]
 fn concrete_playbacks_share_one_cuelist_runtime() {
     let fixture = FixtureId::new();
-    let mut one = Cue::new(1.0);
+    let mut one = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     one.changes.push(value(fixture, "intensity", 0.1));
-    let mut two = Cue::new(2.0);
+    let mut two = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
     two.changes.push(value(fixture, "intensity", 0.5));
-    let mut three = Cue::new(3.0);
+    let mut three = Cue::new(crate::CueNumber::try_from_legacy_f64(3.0).unwrap());
     three.changes.push(value(fixture, "intensity", 0.9));
     let cue_list = list(vec![one, two, three]);
     let id = cue_list.id;
@@ -322,43 +326,46 @@ fn concrete_playbacks_share_one_cuelist_runtime() {
     engine.register(cue_list).unwrap();
     engine.register_definition(definition(1, id)).unwrap();
     engine.register_definition(definition(2, id)).unwrap();
-    engine.goto_playback(1, 2.0).unwrap();
-    engine.goto_playback(2, 3.0).unwrap();
+    engine.goto_playback(1, cue_number(2.0)).unwrap();
+    engine.goto_playback(2, cue_number(3.0)).unwrap();
     let runtime = engine.runtime();
     assert_eq!(runtime.len(), 1);
-    assert_eq!(runtime[0].current_cue_number, Some(3.0));
+    assert_eq!(runtime[0].current_cue_number, Some(cue_number(3.0)));
     assert_eq!(engine.playback_runtime(1), engine.playback_runtime(2));
-    assert_eq!(engine.go(id).unwrap().current_cue_number, Some(3.0));
+    assert_eq!(
+        engine.go(id).unwrap().current_cue_number,
+        Some(cue_number(3.0))
+    );
 }
 
 #[test]
 fn load_is_silent_consumed_by_go_and_cleared_by_off() {
     let fixture = FixtureId::new();
-    let mut one = Cue::new(1.0);
+    let mut one = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     one.changes.push(value(fixture, "intensity", 0.1));
-    let mut two = Cue::new(2.0);
+    let mut two = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
     two.changes.push(value(fixture, "intensity", 0.5));
-    let mut three = Cue::new(3.0);
+    let mut three = Cue::new(crate::CueNumber::try_from_legacy_f64(3.0).unwrap());
     three.changes.push(value(fixture, "intensity", 0.9));
     let cue_list = list(vec![one, two, three]);
     let id = cue_list.id;
     let mut engine = PlaybackEngine::default();
     engine.register(cue_list).unwrap();
     engine.register_definition(definition(1, id)).unwrap();
-    engine.load_playback(1, 2.0).unwrap();
+    engine.load_playback(1, cue_number(2.0)).unwrap();
     assert!(engine.active().is_empty());
     assert!(engine.contributions().is_empty());
-    assert_eq!(engine.runtime()[0].loaded_cue_number, Some(2.0));
+    assert_eq!(engine.runtime()[0].loaded_cue_number, Some(cue_number(2.0)));
     engine.go_playback(1).unwrap();
-    assert_eq!(engine.active()[0].current_cue_number, Some(2.0));
+    assert_eq!(engine.active()[0].current_cue_number, Some(cue_number(2.0)));
     assert_eq!(engine.active()[0].loaded_cue_number, None);
     engine.go_playback(1).unwrap();
-    assert_eq!(engine.active()[0].current_cue_number, Some(3.0));
-    engine.load_playback(1, 1.0).unwrap();
+    assert_eq!(engine.active()[0].current_cue_number, Some(cue_number(3.0)));
+    engine.load_playback(1, cue_number(1.0)).unwrap();
     engine.back_playback(1).unwrap();
     assert_eq!(
         engine.active()[0].loaded_cue_number,
-        Some(1.0),
+        Some(cue_number(1.0)),
         "GO minus deliberately preserves Load"
     );
     engine.off(1).unwrap();
@@ -367,13 +374,17 @@ fn load_is_silent_consumed_by_go_and_cleared_by_off() {
 
 #[test]
 fn loaded_feedback_tracks_stable_identity_through_renumber_and_deletion() {
-    let original = list(vec![Cue::new(1.0), Cue::new(2.0), Cue::new(3.0)]);
+    let original = list(vec![
+        Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap()),
+        Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap()),
+        Cue::new(crate::CueNumber::try_from_legacy_f64(3.0).unwrap()),
+    ]);
     let id = original.id;
     let loaded_id = original.cues[1].id;
     let mut engine = PlaybackEngine::default();
     engine.register(original.clone()).unwrap();
     engine.register_definition(definition(1, id)).unwrap();
-    engine.load_playback(1, 2.0).unwrap();
+    engine.load_playback(1, cue_number(2.0)).unwrap();
     let status = engine.runtime_status().remove(0);
     assert_eq!(
         (
@@ -381,14 +392,14 @@ fn loaded_feedback_tracks_stable_identity_through_renumber_and_deletion() {
             status.effective_next_cue_number,
             status.effective_next_is_loaded
         ),
-        (Some(1.0), Some(2.0), true)
+        (Some(cue_number(1.0)), Some(cue_number(2.0)), true)
     );
 
     let mut renumbered = original.clone();
-    renumbered.cues[1].number = 8.0;
+    renumbered.cues[1].number = cue_number(8.0);
     renumbered
         .cues
-        .sort_by(|left, right| left.number.total_cmp(&right.number));
+        .sort_by(|left, right| left.number.cmp(&right.number));
     let active = engine.active_for_snapshot(&[renumbered.clone()], Utc::now());
     let mut restored = PlaybackEngine::default();
     restored.register(renumbered.clone()).unwrap();
@@ -396,7 +407,7 @@ fn loaded_feedback_tracks_stable_identity_through_renumber_and_deletion() {
     restored.restore_active(active);
     let status = restored.runtime_status().remove(0);
     assert_eq!(status.playback.loaded_cue_id, Some(loaded_id));
-    assert_eq!(status.effective_next_cue_number, Some(8.0));
+    assert_eq!(status.effective_next_cue_number, Some(cue_number(8.0)));
 
     renumbered.cues.retain(|cue| cue.id != loaded_id);
     let active = restored.active_for_snapshot(&[renumbered.clone()], Utc::now());
@@ -407,14 +418,14 @@ fn loaded_feedback_tracks_stable_identity_through_renumber_and_deletion() {
     let status = deleted.runtime_status().remove(0);
     assert_eq!(status.playback.loaded_cue_id, None);
     assert!(!status.effective_next_is_loaded);
-    assert_eq!(status.effective_next_cue_number, Some(1.0));
+    assert_eq!(status.effective_next_cue_number, Some(cue_number(1.0)));
 }
 
 #[test]
 fn link_feedback_uses_stable_effective_next_and_load_overrides_it() {
-    let mut source = Cue::new(1.0);
-    let sequential = Cue::new(2.0);
-    let destination = Cue::new(3.0);
+    let mut source = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
+    let sequential = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
+    let destination = Cue::new(crate::CueNumber::try_from_legacy_f64(3.0).unwrap());
     source.trigger = CueTrigger::Link {
         cue_id: destination.id,
         delay_millis: 0,
@@ -426,15 +437,15 @@ fn link_feedback_uses_stable_effective_next_and_load_overrides_it() {
     engine.register_definition(definition(1, id)).unwrap();
     engine.go_playback(1).unwrap();
     let status = engine.runtime_status().remove(0);
-    assert_eq!(status.normal_next_cue_number, Some(2.0));
+    assert_eq!(status.normal_next_cue_number, Some(cue_number(2.0)));
     assert_eq!(status.effective_next_cue_id, Some(destination.id));
 
-    engine.load_playback(1, 2.0).unwrap();
+    engine.load_playback(1, cue_number(2.0)).unwrap();
     let status = engine.runtime_status().remove(0);
-    assert_eq!(status.effective_next_cue_number, Some(2.0));
+    assert_eq!(status.effective_next_cue_number, Some(cue_number(2.0)));
     assert!(status.effective_next_is_loaded);
 
-    cue_list.cues[2].number = 30.0;
+    cue_list.cues[2].number = cue_number(30.0);
     let active = engine.active_for_snapshot(&[cue_list.clone()], Utc::now());
     let mut restored = PlaybackEngine::default();
     restored.register(cue_list).unwrap();
@@ -444,5 +455,5 @@ fn link_feedback_uses_stable_effective_next_and_load_overrides_it() {
     restored.go_playback(1).unwrap();
     let status = restored.runtime_status().remove(0);
     assert_eq!(status.effective_next_cue_id, Some(destination.id));
-    assert_eq!(status.effective_next_cue_number, Some(30.0));
+    assert_eq!(status.effective_next_cue_number, Some(cue_number(30.0)));
 }

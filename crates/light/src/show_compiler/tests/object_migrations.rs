@@ -162,7 +162,9 @@ fn defaults_are_raw_preserving_side_effect_free_and_compile_equivalent() {
         chaser_xfade_millis: 250,
         chaser_xfade_percent: None,
         speed_multiplier: 1.0,
-        cues: vec![Cue::new(1.0)],
+        cues: vec![Cue::new(
+            crate::CueNumber::try_from_legacy_f64(1.0).unwrap(),
+        )],
     };
     let mut legacy_cue = serde_json::to_value(cue_list).unwrap();
     legacy_cue["cues"][0].as_object_mut().unwrap().remove("id");
@@ -274,9 +276,9 @@ fn defaults_are_raw_preserving_side_effect_free_and_compile_equivalent() {
 #[test]
 fn duplicate_cue_ids_are_repaired_deterministically_once_without_losing_raw_fields() {
     let cue_list_id = CueListId::new();
-    let first = Cue::new(1.0);
+    let first = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     let duplicate_id = first.id;
-    let mut second = Cue::new(2.0);
+    let mut second = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
     second.id = duplicate_id;
     let cue_list = CueList {
         id: cue_list_id,
@@ -768,7 +770,7 @@ fn legacy_dynamic_phase_ordering_migrates_losslessly_across_pool_cue_and_playbac
             definition: std::sync::Arc::new(dynamic.clone()),
         },
     };
-    let mut cue = Cue::new(1.0);
+    let mut cue = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     cue.dynamic_changes.push(light_playback::CueDynamicChange {
         fixture_id: target,
         attribute: light_core::AttributeKey::intensity(),
@@ -1238,7 +1240,7 @@ fn dynamics_persist_preset_fallbacks_losslessly_before_the_preset_is_deleted() {
 fn retired_strobe_identity_migrates_losslessly_across_show_value_owners() {
     let fixture = light_core::FixtureId::new();
     let strobe = light_core::AttributeKey("strobe".into());
-    let mut cue = Cue::new(1.0);
+    let mut cue = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     cue.changes.push(light_playback::CueChange::set(
         fixture,
         strobe.clone(),
@@ -1721,7 +1723,7 @@ fn legacy_emitter_and_softness_controls_retire_with_values_and_preserve_unknown_
 fn legacy_cmy_static_values_migrate_inverse_to_rgb_without_losing_unknown_data() {
     let fixture = light_core::FixtureId::new();
     let cyan = light_core::AttributeKey("color.cyan".into());
-    let mut cue = Cue::new(1.0);
+    let mut cue = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     cue.changes.push(light_playback::CueChange::set(
         fixture,
         cyan.clone(),

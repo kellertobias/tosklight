@@ -12,7 +12,7 @@ pub(super) fn cue_projection(number: u16, cue_number: f64) -> PlaybackRuntimePro
                 previous_index: None,
                 current: Some(PlaybackCueReference {
                     id: Uuid::from_u128(100 + cue_number as u128),
-                    number: cue_number,
+                    number: crate::CueNumber::try_from_legacy_f64(cue_number).unwrap(),
                 }),
                 loaded: None,
                 normal_next: None,

@@ -150,12 +150,12 @@ function ProductionEditorStory() {
 						cues: [
 							{
 								id: "00000000-0000-0000-0000-000000000081",
-								number: 1,
+								number: "1",
 								name: "Preset",
 							},
 							{
 								id: "00000000-0000-0000-0000-000000000082",
-								number: 2,
+								number: "2",
 								name: "Hit",
 							},
 						],

@@ -284,9 +284,9 @@ fn install_timecode_playbacks(state: &AppState, timecode_id: light_playback::Tim
     let mut virtual_definition = definition(1001);
     virtual_definition.buttons[1] = light_playback::PlaybackButtonAction::None;
     virtual_definition.buttons[2] = light_playback::PlaybackButtonAction::None;
-    let mut first = light_playback::Cue::new(1.0);
+    let mut first = light_playback::Cue::new(cue("1"));
     first.name = "Before Timecode".into();
-    let mut second = light_playback::Cue::new(2.0);
+    let mut second = light_playback::Cue::new(cue("2"));
     second.name = "Start Timecode".into();
     second.trigger = light_playback::CueTrigger::Follow { delay_millis: 0 };
     second

@@ -447,8 +447,7 @@
           "type": "object",
           "properties": {
             "cue_number": {
-              "type": "number",
-              "format": "double"
+              "type": "string"
             },
             "type": {
               "type": "string",
@@ -464,8 +463,7 @@
           "type": "object",
           "properties": {
             "cue_number": {
-              "type": "number",
-              "format": "double"
+              "type": "string"
             },
             "type": {
               "type": "string",

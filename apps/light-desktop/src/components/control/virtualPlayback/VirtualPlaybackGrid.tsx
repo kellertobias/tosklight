@@ -346,7 +346,7 @@ export function validPlaybackSlot(slot: number) {
 
 function currentCueFrom(
 	cueList: Pick<CueList, "cues"> | undefined,
-	reference: { id: string; number: number } | null,
+	reference: { id: string; number: string } | null,
 ) {
 	if (!cueList || !reference) return null;
 	return cueList.cues.find(

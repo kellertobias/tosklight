@@ -132,9 +132,9 @@ fn cue_copy_preserves_extensions_on_duplicate_id_destination_cues() {
         destination
             .cues
             .iter()
-            .map(|cue| cue.number)
+            .map(|cue| cue.number.to_string())
             .collect::<Vec<_>>(),
-        vec![1.0, 2.0, 3.0]
+        vec!["1", "2", "3"]
     );
     let cues = destination_object.body["cues"].as_array().unwrap();
     assert_eq!(cues[0]["future_cue_metadata"]["position"], "first");
@@ -256,9 +256,9 @@ fn execute_and_verify_cue_transfer(
     );
     if case.moves {
         assert_eq!(source.cues.len(), 2);
-        assert!(source.cues.iter().all(|cue| cue.number != 2.0));
+        assert!(source.cues.iter().all(|item| item.number != cue("2")));
         assert!(source_object.revision > before.source_revision);
-        let remaining = source.state_at_number(3.0);
+        let remaining = source.state_at_number(&cue("3"));
         assert_eq!(
             remaining.get(&(
                 scenario.fixtures[0],
@@ -276,10 +276,14 @@ fn execute_and_verify_cue_transfer(
     }
     assert!(destination_object.revision > before.destination_revision);
     assert_eq!(
-        destination.cues.iter().map(|cue| cue.number).collect::<Vec<_>>(),
-        vec![1.0, 2.0]
+        destination
+            .cues
+            .iter()
+            .map(|cue| cue.number.to_string())
+            .collect::<Vec<_>>(),
+        vec!["1", "2"]
     );
-    let transferred = destination.cues.iter().find(|cue| cue.number == 2.0).unwrap();
+    let transferred = destination.cues.iter().find(|item| item.number == cue("2")).unwrap();
     assert_eq!(transferred.id == scenario.source_cue_id, case.moves);
     assert_eq!(transferred.changes.len(), if case.status { 2 } else { 1 });
     assert_eq!(
@@ -328,7 +332,7 @@ fn verify_transferred_state(
     destination: &light_playback::CueList,
     status: bool,
 ) {
-    let replayed = destination.state_at_number(2.0);
+    let replayed = destination.state_at_number(&cue("2"));
     let intensity = light_core::AttributeKey::intensity();
     assert_eq!(
         replayed.get(&(scenario.fixtures[0], intensity.clone())),
@@ -355,7 +359,7 @@ fn cue_addresses_use_cue_for_pool_and_page_playbacks() {
     };
     let pool = ["SET", "25", "CUE", "2", ".", "5"].map(String::from);
     let (address, used) = parse_playback_address(&pool, true, &snapshot).unwrap();
-    assert_eq!((address.playback, address.cue, used), (25, Some(2.5), 6));
+    assert_eq!((address.playback, address.cue.clone(), used), (25, Some(cue("2.5")), 6));
     assert_eq!(
         address.application_address(),
         light_application::PlaybackAddress::Pool(25)
@@ -365,7 +369,7 @@ fn cue_addresses_use_cue_for_pool_and_page_playbacks() {
     assert_eq!((address.playback, address.cue, used), (25, None, 2));
     let page = ["SET", "4", ".", "7", "CUE", "12"].map(String::from);
     let (address, used) = parse_playback_address(&page, true, &snapshot).unwrap();
-    assert_eq!((address.playback, address.cue, used), (25, Some(12.0), 6));
+    assert_eq!((address.playback, address.cue.clone(), used), (25, Some(cue("12")), 6));
     assert_eq!(
         address.application_address(),
         light_application::PlaybackAddress::ExplicitPage { page: 4, slot: 7 }
@@ -404,9 +408,9 @@ fn update_addresses_keep_current_page_and_explicit_page_distinct() {
     let page_four = parse_update_playback_address(&current, 4, &snapshot).unwrap();
     let pinned = parse_update_playback_address(&explicit, 4, &snapshot).unwrap();
 
-    assert_eq!((page_one.playback, page_one.cue), (11, Some(2.5)));
-    assert_eq!((page_four.playback, page_four.cue), (25, Some(2.5)));
-    assert_eq!((pinned.playback, pinned.cue), (11, Some(2.5)));
+    assert_eq!((page_one.playback, page_one.cue.clone()), (11, Some(cue("2.5"))));
+    assert_eq!((page_four.playback, page_four.cue.clone()), (25, Some(cue("2.5"))));
+    assert_eq!((pinned.playback, pinned.cue.clone()), (11, Some(cue("2.5"))));
     assert_eq!(
         page_one.application_address(),
         light_application::PlaybackAddress::CurrentPage { slot: 7 }

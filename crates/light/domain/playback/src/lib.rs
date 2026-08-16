@@ -27,6 +27,7 @@ pub use cue_recording::{
 };
 pub use cue_transfer::{CueTransferMode, transferred_cue};
 pub use engine::PlaybackEngine;
+pub use model::CueNumber;
 pub use model::{cue::*, playback::*, runtime::*};
 pub use runtime::PlaybackTelemetrySample;
 pub use timecode::*;

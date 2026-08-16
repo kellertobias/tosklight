@@ -1,5 +1,9 @@
 use crate::*;
 
+fn cue_number(value: f64) -> CueNumber {
+    CueNumber::try_from_legacy_f64(value).unwrap()
+}
+
 fn value(fixture: FixtureId, attribute: &str, value: f32) -> CueChange {
     CueChange::set(
         fixture,

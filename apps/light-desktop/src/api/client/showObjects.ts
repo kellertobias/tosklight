@@ -23,7 +23,7 @@ import { type ClientTransport, jsonRequest } from "./transport";
 interface PreloadStoreInput {
 	target: "preset" | "cue";
 	target_id: string;
-	cue_number?: number;
+	cue_number?: string;
 	name?: string;
 	mode?: "merge" | "overwrite" | "add_missing_fixtures";
 	family?: PresetFamily;
@@ -276,9 +276,12 @@ export class ShowObjectsApiClient {
 			};
 		} else {
 			const cueNumber = input.cue_number;
-			if (cueNumber === undefined || !Number.isFinite(cueNumber)) {
+			if (
+				cueNumber === undefined ||
+				!/^(?:0|[1-9]\d*)(?:\.(?:0|[1-9]\d*))*$/.test(cueNumber)
+			) {
 				throw new Error(
-					"A finite cue number is required when storing to a cue",
+					"A canonical dotted cue path is required when storing to a cue",
 				);
 			}
 			action = {

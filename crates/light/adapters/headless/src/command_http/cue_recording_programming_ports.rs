@@ -165,7 +165,7 @@ impl ProgrammingCueRecordingPorts for ServerProgrammingPorts<'_> {
     ) -> Option<light_application::ProgrammingCueActivationCompletion> {
         let command = light_application::PlaybackCommand {
             address: light_application::PlaybackAddress::Pool(playback_number),
-            action: light_application::PlaybackAction::GoTo(cue_number),
+            action: light_application::PlaybackAction::GoTo(cue_number.clone()),
             surface: playback_surface(context.source),
         };
         let result = super::super::playback_service::execute(
@@ -205,7 +205,7 @@ fn report_activation_failure(
             "desk_id": context.desk_id,
             "session_id": context.session_id,
             "playback_number": playback_number,
-            "cue_number": cue_number.value(),
+            "cue_number": cue_number.to_string(),
             "error": error.message,
         }),
     );

@@ -23,7 +23,7 @@ impl RelatedTransitionSet {
         let mut identities = ports.related_runtime_identities(
             &envelope.context,
             resolved,
-            envelope.command.action,
+            envelope.command.action.clone(),
             envelope.command.surface,
         )?;
         identities.retain(|identity| identity != &primary);

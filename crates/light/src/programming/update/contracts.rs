@@ -14,7 +14,7 @@ pub enum ProgrammingUpdateTargetRequest {
         cue_list_id: CueListId,
         playback_number: Option<u16>,
         cue_id: Option<Uuid>,
-        cue_number: Option<f64>,
+        cue_number: Option<light_playback::CueNumber>,
         validate_active_context: bool,
     },
     Preset {

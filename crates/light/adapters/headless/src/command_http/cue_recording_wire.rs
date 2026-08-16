@@ -16,7 +16,10 @@ pub(super) fn application_command(
         show_id,
         target: target(request.target)?,
         operation: operation(request.operation),
-        cue_number: request.cue_number.map(application::CueNumber::new),
+        cue_number: request
+            .cue_number
+            .map(|number| number.parse::<application::CueNumber>())
+            .transpose()?,
         timing: application::ProgrammingCueRecordTiming {
             fade_millis: request.timing.fade_millis,
             delay_millis: request.timing.delay_millis,
@@ -84,7 +87,7 @@ impl OutcomeCommon {
             show_revision: result.outcome.show_revision().value(),
             recorded_cue: wire::RecordedCueProjection {
                 id: recorded.id,
-                number: recorded.number.value(),
+                number: recorded.number.to_string(),
                 deleted: recorded.deleted,
             },
             projections: wire::CueRecordProjections {
@@ -119,7 +122,9 @@ fn recorded_cue(
 ) -> application::ProgrammingRecordedCue {
     match outcome {
         application::ProgrammingCueRecordOutcome::Changed { recorded_cue, .. }
-        | application::ProgrammingCueRecordOutcome::NoChange { recorded_cue, .. } => *recorded_cue,
+        | application::ProgrammingCueRecordOutcome::NoChange { recorded_cue, .. } => {
+            recorded_cue.clone()
+        }
     }
 }
 
@@ -150,10 +155,10 @@ fn runtime_outcome(
 }
 
 fn validate_request(request: &wire::CueRecordRequest) -> Result<(), String> {
-    if let Some(number) = request.cue_number
-        && (!number.is_finite() || number <= 0.0)
-    {
-        return Err("cue_number must be finite and greater than zero".into());
+    if let Some(number) = request.cue_number.as_deref() {
+        number
+            .parse::<light_playback::CueNumber>()
+            .map_err(|error| format!("cue_number is invalid: {error}"))?;
     }
     if let Some(name) = request.name.as_deref()
         && (name.trim().is_empty() || name.len() > 256 || name.chars().any(char::is_control))
@@ -276,9 +281,11 @@ mod tests {
     #[test]
     fn request_validation_rejects_invalid_cue_number_and_name() {
         let mut request = request();
-        request.cue_number = Some(f64::NAN);
+        request.cue_number = Some("not-a-cue".into());
         assert!(validate_request(&request).is_err());
-        request.cue_number = Some(1.0);
+        request.cue_number = Some("01".into());
+        assert!(validate_request(&request).is_err());
+        request.cue_number = Some("2.0.15".into());
         request.name = Some("\n".into());
         assert!(validate_request(&request).is_err());
     }

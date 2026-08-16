@@ -73,9 +73,9 @@ fn summary(value: application::ProgrammingCueTransferSummary) -> wire::CueTransf
         operation: operation(value.operation),
         mode: wire_mode(value.mode),
         source_cue_id: value.source_cue_id,
-        source_cue_number: value.source_cue_number.value(),
+        source_cue_number: value.source_cue_number.to_string(),
         destination_cue_id: value.destination_cue_id,
-        destination_cue_number: value.destination_cue_number.value(),
+        destination_cue_number: value.destination_cue_number.to_string(),
     }
 }
 

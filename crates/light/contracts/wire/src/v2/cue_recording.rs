@@ -72,7 +72,7 @@ pub struct CueRecordRequest {
     pub operation: CueRecordOperation,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional = nullable)]
-    pub cue_number: Option<f64>,
+    pub cue_number: Option<String>,
     pub timing: CueRecordTiming,
     pub cue_only: bool,
     #[schemars(length(max = 256))]
@@ -110,11 +110,11 @@ pub struct CueRecordProjections {
     pub page: Option<RecordedCueObjectProjection>,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct RecordedCueProjection {
     pub id: Uuid,
-    pub number: f64,
+    pub number: String,
     pub deleted: bool,
 }
 

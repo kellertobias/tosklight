@@ -2,6 +2,10 @@
 
 use super::*;
 
+pub(super) fn cue(value: &str) -> light_playback::CueNumber {
+    value.parse().expect("test Cue number is canonical")
+}
+
 fn v2_show_object_get(
     token: &str,
     show_id: &str,

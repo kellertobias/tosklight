@@ -56,7 +56,7 @@ function cueList(
 	cueListId: string,
 	revision: number,
 	name: string,
-	cues: Array<{ id: string; number: number }>,
+	cues: Array<{ id: string; number: string }>,
 ): ShowObject<"cue_list"> {
 	return {
 		kind: "cue_list",
@@ -88,7 +88,7 @@ function outcome(
 	name = "Response",
 ): CueTransferActionOutcome {
 	const destination = cueList("destination", DESTINATION_LIST_ID, 2, name, [
-		{ id: DESTINATION_CUE_ID, number: 2 },
+		{ id: DESTINATION_CUE_ID, number: "2" },
 	]);
 	return {
 		requestId: request.requestId,
@@ -100,9 +100,9 @@ function outcome(
 			operation: "copy",
 			mode: request.mode,
 			sourceCueId: SOURCE_CUE_ID,
-			sourceCueNumber: 1,
+			sourceCueNumber: "1",
 			destinationCueId: DESTINATION_CUE_ID,
-			destinationCueNumber: 2,
+			destinationCueNumber: "2",
 		},
 		showRevision: 8,
 		projections: [
@@ -131,7 +131,7 @@ function setup(
 		"cue_list",
 		[
 			cueList("source", SOURCE_LIST_ID, 1, "Source", [
-				{ id: SOURCE_CUE_ID, number: 1 },
+				{ id: SOURCE_CUE_ID, number: "1" },
 			]),
 			cueList("destination", DESTINATION_LIST_ID, 1, "Destination", []),
 		],
@@ -372,7 +372,7 @@ describe("CueTransferWriter", () => {
 
 function showChange(name: string) {
 	const destination = cueList("destination", DESTINATION_LIST_ID, 2, name, [
-		{ id: DESTINATION_CUE_ID, number: 2 },
+		{ id: DESTINATION_CUE_ID, number: "2" },
 	]);
 	return {
 		showId: SHOW_ID,

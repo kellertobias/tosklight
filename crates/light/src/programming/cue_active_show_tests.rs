@@ -122,7 +122,10 @@ fn merge_active_without_existing_topology_creates_the_first_pool_cue() {
         .unwrap();
 
     assert!(result.changed);
-    assert_eq!(result.recorded_cue.number.value(), 1.0);
+    assert_eq!(
+        result.recorded_cue.number,
+        crate::CueNumber::try_from_legacy_f64(1.0).unwrap()
+    );
     assert_eq!(result.concrete_playback_number, Some(8));
     assert!(result.projections.playback.is_some());
     assert!(result.projections.page.is_none());
@@ -300,7 +303,7 @@ fn empty_subtract_deletes_the_exact_cue_but_not_the_cuelist() {
     let cue_list_id = CueListId::new();
     let first = Uuid::new_v4();
     let mut list: CueList = serde_json::from_value(cue_list(cue_list_id, first, 0.5)).unwrap();
-    let second = Cue::new(2.0);
+    let second = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
     let second_id = second.id;
     list.cues.push(second);
     rig.seed(
@@ -447,7 +450,8 @@ impl TestRig {
                 show_id: self.show_id,
                 target,
                 operation,
-                cue_number: cue_number.map(crate::CueNumber::new),
+                cue_number: cue_number
+                    .map(|number| crate::CueNumber::try_from_legacy_f64(number).unwrap()),
                 timing: ProgrammingCueRecordTiming::default(),
                 cue_only: false,
                 name: None,
@@ -600,7 +604,7 @@ fn empty_capture() -> CueRecordingCapture {
 }
 
 fn cue_list(id: CueListId, cue_id: Uuid, level: f32) -> Value {
-    let mut cue = Cue::new(1.0);
+    let mut cue = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     cue.id = cue_id;
     cue.changes = vec![light_playback::CueChange::set(
         FixtureId(Uuid::from_u128(10)),

@@ -112,7 +112,8 @@ impl PlaybackEngine {
                     if let Some(hold) = &playback.deleted_cue_hold {
                         return hold
                             .next_number
-                            .and_then(|number| list.cues.iter().find(|cue| cue.number == number));
+                            .as_ref()
+                            .and_then(|number| list.cues.iter().find(|cue| cue.number == *number));
                     }
                     if playback.current_cue_id.is_none() && playback.current_cue_number.is_none() {
                         return list.cues.first();
@@ -121,8 +122,8 @@ impl PlaybackEngine {
                         .current_cue_id
                         .and_then(|id| list.cues.iter().position(|cue| cue.id == id))
                         .or_else(|| {
-                            playback.current_cue_number.and_then(|number| {
-                                list.cues.iter().position(|cue| cue.number == number)
+                            playback.current_cue_number.as_ref().and_then(|number| {
+                                list.cues.iter().position(|cue| cue.number == *number)
                             })
                         })
                         .unwrap_or(playback.cue_index.min(list.cues.len().saturating_sub(1)));
@@ -142,8 +143,8 @@ impl PlaybackEngine {
                         .current_cue_id
                         .and_then(|id| list.cues.iter().find(|cue| cue.id == id))
                         .or_else(|| {
-                            playback.current_cue_number.and_then(|number| {
-                                list.cues.iter().find(|cue| cue.number == number)
+                            playback.current_cue_number.as_ref().and_then(|number| {
+                                list.cues.iter().find(|cue| cue.number == *number)
                             })
                         })?;
                     let CueTrigger::Link { cue_id, .. } = current.trigger else {
@@ -155,9 +156,9 @@ impl PlaybackEngine {
                 let cue_timing = cue_list.and_then(|list| self.cue_timing_status(&playback, list));
                 PlaybackRuntimeStatus {
                     normal_next_cue_id: normal.map(|cue| cue.id),
-                    normal_next_cue_number: normal.map(|cue| cue.number),
+                    normal_next_cue_number: normal.map(|cue| cue.number.clone()),
                     effective_next_cue_id: effective.map(|cue| cue.id),
-                    effective_next_cue_number: effective.map(|cue| cue.number),
+                    effective_next_cue_number: effective.map(|cue| cue.number.clone()),
                     effective_next_is_loaded: loaded.is_some(),
                     temporary_active,
                     temporary_master,
@@ -391,9 +392,9 @@ impl PlaybackEngine {
             playback_number: playback.playback_number,
             cue_list_id: cue_list.id,
             current_cue_id: current_cue.id,
-            current_cue_number: current_cue.number,
+            current_cue_number: current_cue.number.clone(),
             target_cue_id: target_cue.id,
-            target_cue_number: target_cue.number,
+            target_cue_number: target_cue.number.clone(),
             fixture_id,
             priority: cue_list.priority,
             transition_ordinal: playback.transition_ordinal,
@@ -446,7 +447,7 @@ fn active_trigger_timing(
         ChronoDuration::milliseconds(i64::try_from(start_offset_millis).unwrap_or(i64::MAX));
     Some(CueTriggerTimingStatus {
         cue_id: cue.id,
-        cue_number: cue.number,
+        cue_number: cue.number.clone(),
         kind,
         started_at: playback.activated_at + offset,
         duration_millis,
@@ -460,7 +461,8 @@ fn current_cue_index(playback: &ActivePlayback, cue_list: &CueList) -> Option<us
         .or_else(|| {
             playback
                 .current_cue_number
-                .and_then(|number| cue_list.cues.iter().position(|cue| cue.number == number))
+                .as_ref()
+                .and_then(|number| cue_list.cues.iter().position(|cue| cue.number == *number))
         })
         .or_else(|| {
             cue_list

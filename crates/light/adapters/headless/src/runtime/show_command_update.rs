@@ -36,7 +36,7 @@ fn cue_update_request(
                 .iter()
                 .find(|list| list.id == *cue_list_id)
                 .and_then(|list| list.cues.iter().find(|cue| cue.number == number))
-                .map(|cue| (cue.id, cue.number))
+                .map(|cue| (cue.id, cue.number.clone()))
                 .ok_or_else(|| format!("Cue {number} does not exist"))
         })
         .transpose()?;
@@ -45,8 +45,8 @@ fn cue_update_request(
             family: UpdateApiTargetFamily::Cue,
             object_id: Some(cue_list_id.0.to_string()),
             playback_number: Some(address.playback),
-            cue_id: explicit.map(|cue| cue.0),
-            cue_number: explicit.map(|cue| cue.1),
+            cue_id: explicit.as_ref().map(|cue| cue.0),
+            cue_number: explicit.map(|cue| cue.1.to_string()),
             validate_active_context: false,
         },
         mode: update::UpdateMode::Cue(settings.cue_mode),

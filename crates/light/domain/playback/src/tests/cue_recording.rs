@@ -28,7 +28,7 @@ fn content(changes: Vec<CueChange>) -> CueRecordingContent {
 }
 
 fn cue(number: f64, name: &str, changes: Vec<CueChange>) -> Cue {
-    let mut cue = Cue::new(number);
+    let mut cue = Cue::new(cue_number(number));
     cue.name = name.into();
     cue.changes = changes;
     cue
@@ -113,7 +113,7 @@ fn append_uses_floor_of_maximum_plus_one_and_keeps_sparse_source_order() {
     let stored = plan.cue_list.cues.last().unwrap();
 
     assert!(plan.changed);
-    assert_eq!(stored.number, 4.0);
+    assert_eq!(stored.number, cue_number(4.0));
     assert_eq!(stored.name, "");
     assert_eq!(stored.fade_millis, 0);
     assert_eq!(stored.delay_millis, 0);
@@ -157,7 +157,7 @@ fn new_recording_and_playback_use_backend_canonical_defaults_and_explicit_zeroes
     assert_eq!(list.mode, CueListMode::Sequence);
     assert_eq!(list.wrap_mode, Some(WrapMode::Off));
     assert_eq!(list.chaser_xfade_percent, Some(0));
-    assert_eq!(first.number, 1.0);
+    assert_eq!(first.number, cue_number(1.0));
     assert_eq!(first.name, "Opening");
     assert_eq!(first.fade_millis, 0);
     assert_eq!(first.delay_millis, 0);
@@ -189,7 +189,9 @@ fn overwrite_preserves_existing_identity_and_name() {
     let plan = list
         .plan_recording(
             content(vec![fixture_change(fixture, "tilt", 0.7)]),
-            CueRecordOperation::Overwrite { cue_number: 2.5 },
+            CueRecordOperation::Overwrite {
+                cue_number: cue_number(2.5),
+            },
         )
         .unwrap();
     let stored = &plan.cue_list.cues[1];
@@ -210,7 +212,9 @@ fn overwrite_preserves_existing_identity_and_name() {
                 name: Some("Renamed".into()),
                 ..Default::default()
             },
-            CueRecordOperation::Overwrite { cue_number: 2.5 },
+            CueRecordOperation::Overwrite {
+                cue_number: cue_number(2.5),
+            },
         )
         .unwrap();
     assert_eq!(named_recording.cue_list.cues[1].id, target_id);
@@ -228,7 +232,9 @@ fn missing_overwrite_inserts_in_decimal_numeric_order() {
     let plan = list
         .plan_recording(
             content(vec![fixture_change(fixture, "intensity", 0.4)]),
-            CueRecordOperation::Overwrite { cue_number: 1.75 },
+            CueRecordOperation::Overwrite {
+                cue_number: cue_number(1.75),
+            },
         )
         .unwrap();
 
@@ -237,9 +243,9 @@ fn missing_overwrite_inserts_in_decimal_numeric_order() {
         plan.cue_list
             .cues
             .iter()
-            .map(|cue| cue.number)
+            .map(|cue| cue.number.clone())
             .collect::<Vec<_>>(),
-        vec![1.0, 1.75, 2.5]
+        vec![cue_number(1.0), cue_number(1.75), cue_number(2.5)]
     );
 }
 
@@ -270,7 +276,9 @@ fn merge_replaces_only_source_addresses_and_preserves_metadata() {
     let plan = list
         .plan_recording(
             recorded.clone(),
-            CueRecordOperation::Merge { cue_number: 2.0 },
+            CueRecordOperation::Merge {
+                cue_number: cue_number(2.0),
+            },
         )
         .unwrap();
     let stored = &plan.cue_list.cues[1];
@@ -285,7 +293,12 @@ fn merge_replaces_only_source_addresses_and_preserves_metadata() {
 
     let repeated = plan
         .cue_list
-        .plan_recording(recorded, CueRecordOperation::Merge { cue_number: 2.0 })
+        .plan_recording(
+            recorded,
+            CueRecordOperation::Merge {
+                cue_number: cue_number(2.0),
+            },
+        )
         .unwrap();
     assert!(!repeated.changed);
 }
@@ -299,13 +312,24 @@ fn missing_explicit_merge_and_subtract_are_rejected() {
     assert_eq!(
         list.plan_recording(
             recorded.clone(),
-            CueRecordOperation::Merge { cue_number: 2.0 },
+            CueRecordOperation::Merge {
+                cue_number: cue_number(2.0)
+            },
         ),
-        Err(CueRecordingPlanError::CueDoesNotExist { cue_number: 2.0 })
+        Err(CueRecordingPlanError::CueDoesNotExist {
+            cue_number: cue_number(2.0)
+        })
     );
     assert_eq!(
-        list.plan_recording(recorded, CueRecordOperation::Subtract { cue_number: 2.0 },),
-        Err(CueRecordingPlanError::CueDoesNotExist { cue_number: 2.0 })
+        list.plan_recording(
+            recorded,
+            CueRecordOperation::Subtract {
+                cue_number: cue_number(2.0)
+            },
+        ),
+        Err(CueRecordingPlanError::CueDoesNotExist {
+            cue_number: cue_number(2.0)
+        })
     );
 }
 
@@ -326,7 +350,9 @@ fn subtract_is_sparse_and_empty_source_deletes_except_for_the_only_cue() {
     let no_match = list
         .plan_recording(
             content(vec![fixture_change(fixtures[2], "tilt", 0.5)]),
-            CueRecordOperation::Subtract { cue_number: 2.0 },
+            CueRecordOperation::Subtract {
+                cue_number: cue_number(2.0),
+            },
         )
         .unwrap();
     assert!(!no_match.changed);
@@ -334,7 +360,9 @@ fn subtract_is_sparse_and_empty_source_deletes_except_for_the_only_cue() {
     let subtracted = list
         .plan_recording(
             content(vec![fixture_change(fixtures[1], "pan", 0.0)]),
-            CueRecordOperation::Subtract { cue_number: 2.0 },
+            CueRecordOperation::Subtract {
+                cue_number: cue_number(2.0),
+            },
         )
         .unwrap();
     assert!(subtracted.changed);
@@ -344,7 +372,9 @@ fn subtract_is_sparse_and_empty_source_deletes_except_for_the_only_cue() {
     let deleted = list
         .plan_recording(
             CueRecordingContent::default(),
-            CueRecordOperation::Subtract { cue_number: 2.0 },
+            CueRecordOperation::Subtract {
+                cue_number: cue_number(2.0),
+            },
         )
         .unwrap();
     assert!(deleted.changed && deleted.deleted);
@@ -354,7 +384,9 @@ fn subtract_is_sparse_and_empty_source_deletes_except_for_the_only_cue() {
     assert_eq!(
         deleted.cue_list.plan_recording(
             CueRecordingContent::default(),
-            CueRecordOperation::Subtract { cue_number: 1.0 },
+            CueRecordOperation::Subtract {
+                cue_number: cue_number(1.0)
+            },
         ),
         Err(CueRecordingPlanError::CannotDeleteOnlyCue)
     );
@@ -390,7 +422,9 @@ fn unmatched_subtract_does_not_reorder_existing_automatic_restorations() {
     let plan = list
         .plan_recording(
             content(vec![fixture_change(fixtures[2], "tilt", 0.5)]),
-            CueRecordOperation::Subtract { cue_number: 2.0 },
+            CueRecordOperation::Subtract {
+                cue_number: cue_number(2.0),
+            },
         )
         .unwrap();
 
@@ -426,7 +460,7 @@ fn merge_active_updates_the_active_cue_or_appends_when_no_cue_is_active() {
         .unwrap();
     assert!(appended.changed);
     assert_eq!(appended.cue_list.cues.len(), 2);
-    assert_eq!(appended.cue_number, 2.0);
+    assert_eq!(appended.cue_number, cue_number(2.0));
 
     let missing = Uuid::new_v4();
     assert_eq!(
@@ -455,7 +489,9 @@ fn byte_identical_overwrite_is_no_change_but_append_always_changes() {
     let unchanged = list
         .plan_recording(
             recorded.clone(),
-            CueRecordOperation::Overwrite { cue_number: 1.0 },
+            CueRecordOperation::Overwrite {
+                cue_number: cue_number(1.0),
+            },
         )
         .unwrap();
     assert!(!unchanged.changed);
@@ -485,11 +521,13 @@ fn cue_only_restoration_is_regenerated_after_insertion() {
     let inserted = list
         .plan_recording(
             content(vec![fixture_change(FixtureId::new(), "pan", 0.5)]),
-            CueRecordOperation::Overwrite { cue_number: 1.5 },
+            CueRecordOperation::Overwrite {
+                cue_number: cue_number(1.5),
+            },
         )
         .unwrap();
 
-    assert_eq!(inserted.cue_list.cues[1].number, 1.5);
+    assert_eq!(inserted.cue_list.cues[1].number, cue_number(1.5));
     assert!(inserted.cue_list.cues[1].changes[1].automatic_restore);
     assert_eq!(inserted.cue_list.cues[1].changes[1].fixture_id, fixture);
     assert!(inserted.cue_list.cues[1].changes[1].value.is_none());
@@ -512,7 +550,9 @@ fn cue_only_restoration_is_regenerated_after_overwrite() {
     let overwritten = list
         .plan_recording(
             content(vec![fixture_change(FixtureId::new(), "pan", 0.5)]),
-            CueRecordOperation::Overwrite { cue_number: 1.0 },
+            CueRecordOperation::Overwrite {
+                cue_number: cue_number(1.0),
+            },
         )
         .unwrap();
 
@@ -553,7 +593,9 @@ fn cue_only_fixture_and_group_restoration_is_regenerated_after_subtract() {
     let subtracted = list
         .plan_recording(
             content(vec![fixture_change(fixtures[1], "pan", 0.0)]),
-            CueRecordOperation::Subtract { cue_number: 2.0 },
+            CueRecordOperation::Subtract {
+                cue_number: cue_number(2.0),
+            },
         )
         .unwrap();
     let restores = &subtracted.cue_list.cues[2];
@@ -593,7 +635,9 @@ fn cue_only_restoration_is_regenerated_after_delete() {
     let deleted = list
         .plan_recording(
             CueRecordingContent::default(),
-            CueRecordOperation::Subtract { cue_number: 2.0 },
+            CueRecordOperation::Subtract {
+                cue_number: cue_number(2.0),
+            },
         )
         .unwrap();
 
@@ -621,7 +665,12 @@ fn cue_only_dynamic_layer_restores_prior_fat_without_touching_static_tracking() 
     };
 
     let plan = list
-        .plan_recording(recording, CueRecordOperation::Overwrite { cue_number: 2.0 })
+        .plan_recording(
+            recording,
+            CueRecordOperation::Overwrite {
+                cue_number: cue_number(2.0),
+            },
+        )
         .unwrap();
 
     assert_eq!(plan.cue_list.cues[0].changes.len(), 1);

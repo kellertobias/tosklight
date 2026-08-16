@@ -7,8 +7,8 @@ use crate::programming::cue_list_resolution::{
     CueListAddress, ResolvedCueList, StoredCueList, exact_cue_list, resolve_cue_list,
 };
 use crate::{
-    ActionError, ActionErrorKind, ActiveShowObjectChange, ActiveShowObjectKind, lossless_json,
-    prepare_show_candidate,
+    ActionError, ActionErrorKind, ActiveShowObjectChange, ActiveShowObjectKind, CueNumber,
+    lossless_json, prepare_show_candidate,
 };
 use light_playback::{Cue, CueList};
 use light_show::{PortableShowDocument, PortableShowRevision};
@@ -34,7 +34,7 @@ pub(super) fn prepare_deletion(
     validate_show_revision(document, request, expected_show_revision)?;
     let resolved = resolve_cue_list(document, request.address)?;
     let stored = exact_resolved_cue_list(document, resolved, &request.expectation)?;
-    let index = cue_index(&stored.typed, request.cue_number.value())?;
+    let index = cue_index(&stored.typed, &request.cue_number)?;
     let deleted = stored.typed.cues[index].clone();
     validate_deleted_cue(&deleted, &request.expectation)?;
     if stored.typed.cues.len() == 1 {
@@ -46,10 +46,6 @@ pub(super) fn prepare_deletion(
 }
 
 fn validate_request(request: &ResolvedCueDeletionRequest) -> Result<(), ActionError> {
-    let cue = request.cue_number.value();
-    if !cue.is_finite() || cue <= 0.0 {
-        return Err(invalid("Cue number must be finite and greater than zero"));
-    }
     match request.address {
         CueListAddress::Pool { playback_number }
             if !(1..=light_playback::MAX_PLAYBACKS).contains(&playback_number) =>
@@ -121,7 +117,7 @@ fn build_candidate(
             projection,
             deleted_cue: ProgrammingDeletedCue {
                 id: deleted.id,
-                number: crate::CueNumber::new(deleted.number),
+                number: deleted.number,
             },
             changes: vec![change],
         },
@@ -199,10 +195,10 @@ fn validate_deleted_cue(
     Ok(())
 }
 
-fn cue_index(list: &CueList, number: f64) -> Result<usize, ActionError> {
+fn cue_index(list: &CueList, number: &CueNumber) -> Result<usize, ActionError> {
     list.cues
         .iter()
-        .position(|cue| cue.number == number)
+        .position(|cue| cue.number == *number)
         .ok_or_else(|| missing(format!("cue {number} does not exist")))
 }
 

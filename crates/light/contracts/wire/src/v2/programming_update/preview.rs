@@ -30,11 +30,11 @@ pub enum ProgrammingUpdateAddress {
     },
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct ProgrammingUpdateCueSource {
     pub cue_id: Uuid,
-    pub cue_number: f64,
+    pub cue_number: String,
     #[ts(type = "number")]
     pub cue_index: u64,
 }

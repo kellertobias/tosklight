@@ -144,7 +144,7 @@ impl PlaybackRuntimeProjection {
 #[derive(Clone, Debug, PartialEq)]
 pub struct PlaybackCueReference {
     pub id: Uuid,
-    pub number: f64,
+    pub number: crate::CueNumber,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -180,9 +180,9 @@ pub struct CueListRuntimeProjection {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct DeletedCueHoldProjection {
-    pub deleted_number: f64,
-    pub previous_number: Option<f64>,
-    pub next_number: Option<f64>,
+    pub deleted_number: crate::CueNumber,
+    pub previous_number: Option<crate::CueNumber>,
+    pub next_number: Option<crate::CueNumber>,
 }
 
 #[derive(Clone, Debug, PartialEq)]

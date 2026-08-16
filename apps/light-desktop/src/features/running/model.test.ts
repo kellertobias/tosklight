@@ -31,7 +31,7 @@ function playback(
 		cue: undefined,
 		runtime: {
 			cue_index: 4,
-			current: { id: "cue-5", number: 5 },
+			current: { id: "cue-5", number: "5" },
 			paused: false,
 			master: 1,
 		} as RunningCueListSource["runtime"],

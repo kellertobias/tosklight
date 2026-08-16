@@ -497,7 +497,7 @@ impl CommandHttpScenario {
                     serde_json::json!({
                         "request_id": request_id,
                         "address": {"kind":"playback","playback_number":playback_number},
-                        "action": {"type":"go_to","cue_number":cue_number},
+                        "action": {"type":"go_to","cue_number":cue_number.to_string()},
                         "surface":"virtual"
                     })
                     .to_string(),

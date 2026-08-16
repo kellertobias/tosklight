@@ -5,7 +5,7 @@ import { CueTable } from "./CueTable";
 
 const cue: Cue = {
 	id: "cue-1",
-	number: 1,
+	number: "1",
 	name: "Opening",
 	information: "House opens",
 	fade_millis: 2_000,
@@ -117,7 +117,7 @@ describe("CueTable timing progress", () => {
 	});
 
 	it("resolves a Jump destination through stable identity after renumbering", () => {
-		const destination = { ...cue, id: "destination", number: 42, name: "Encore" };
+		const destination = { ...cue, id: "destination", number: "42", name: "Encore" };
 		const source: Cue = {
 			...cue,
 			actions: [{ type: "jump", cue_id: "destination", count: 2 }],
@@ -141,7 +141,7 @@ describe("CueTable timing progress", () => {
 });
 
 describe("CueTable command targets", () => {
-	const secondCue = { ...cue, id: "cue-2", number: 2, name: "Second" };
+	const secondCue = { ...cue, id: "cue-2", number: "2", name: "Second" };
 	const emptyState = { title: "Empty", description: "Empty", icon: "◎" };
 
 	function renderTable(commandText: string) {

@@ -9,9 +9,9 @@ fn jump_to(cue: &mut Cue, destination: Uuid, count: u32) {
 
 #[test]
 fn cue_jump_count_exhausts_then_continues_normally() {
-    let one = Cue::new(1.0);
-    let mut two = Cue::new(2.0);
-    let three = Cue::new(3.0);
+    let one = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
+    let mut two = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
+    let three = Cue::new(crate::CueNumber::try_from_legacy_f64(3.0).unwrap());
     jump_to(&mut two, one.id, 2);
     let cue_list = list(vec![one, two, three]);
     let id = cue_list.id;
@@ -20,10 +20,16 @@ fn cue_jump_count_exhausts_then_continues_normally() {
     engine.register_definition(definition(1, id)).unwrap();
 
     engine.on(1).unwrap();
-    assert_eq!(engine.runtime()[0].current_cue_number, Some(1.0));
+    assert_eq!(
+        engine.runtime()[0].current_cue_number,
+        Some(cue_number(1.0))
+    );
     for expected in [2.0, 1.0, 2.0, 1.0, 2.0, 3.0] {
         engine.go_playback(1).unwrap();
-        assert_eq!(engine.runtime()[0].current_cue_number, Some(expected));
+        assert_eq!(
+            engine.runtime()[0].current_cue_number,
+            Some(cue_number(expected))
+        );
     }
     assert_eq!(
         engine.jump_counts.values().copied().collect::<Vec<_>>(),
@@ -33,9 +39,9 @@ fn cue_jump_count_exhausts_then_continues_normally() {
 
 #[test]
 fn each_jump_point_keeps_an_independent_runtime_count() {
-    let mut one = Cue::new(1.0);
-    let mut two = Cue::new(2.0);
-    let three = Cue::new(3.0);
+    let mut one = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
+    let mut two = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
+    let three = Cue::new(crate::CueNumber::try_from_legacy_f64(3.0).unwrap());
     let one_destination = one.id;
     jump_to(&mut one, one_destination, 1);
     jump_to(&mut two, three.id, 1);
@@ -50,7 +56,10 @@ fn each_jump_point_keeps_an_independent_runtime_count() {
     engine.on(1).unwrap();
     for expected in [1.0, 2.0, 3.0] {
         engine.go_playback(1).unwrap();
-        assert_eq!(engine.runtime()[0].current_cue_number, Some(expected));
+        assert_eq!(
+            engine.runtime()[0].current_cue_number,
+            Some(cue_number(expected))
+        );
     }
     assert_eq!(engine.jump_counts[&(id, one_id)], 2);
     assert_eq!(engine.jump_counts[&(id, two_id)], 1);
@@ -58,9 +67,9 @@ fn each_jump_point_keeps_an_independent_runtime_count() {
 
 #[test]
 fn off_and_restart_reset_every_jump_count() {
-    let one = Cue::new(1.0);
-    let mut two = Cue::new(2.0);
-    let three = Cue::new(3.0);
+    let one = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
+    let mut two = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
+    let three = Cue::new(crate::CueNumber::try_from_legacy_f64(3.0).unwrap());
     jump_to(&mut two, one.id, 2);
     let cue_list = list(vec![one, two, three]);
     let id = cue_list.id;
@@ -77,15 +86,18 @@ fn off_and_restart_reset_every_jump_count() {
     engine.on(1).unwrap();
     for expected in [2.0, 1.0, 2.0, 1.0] {
         engine.go_playback(1).unwrap();
-        assert_eq!(engine.runtime()[0].current_cue_number, Some(expected));
+        assert_eq!(
+            engine.runtime()[0].current_cue_number,
+            Some(cue_number(expected))
+        );
     }
 }
 
 #[test]
 fn fast_forward_skips_and_resets_a_jump_point() {
-    let one = Cue::new(1.0);
-    let mut two = Cue::new(2.0);
-    let three = Cue::new(3.0);
+    let one = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
+    let mut two = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
+    let three = Cue::new(crate::CueNumber::try_from_legacy_f64(3.0).unwrap());
     jump_to(&mut two, one.id, 3);
     let cue_list = list(vec![one, two, three]);
     let id = cue_list.id;
@@ -96,15 +108,18 @@ fn fast_forward_skips_and_resets_a_jump_point() {
     engine.on(1).unwrap();
     engine.go_playback(1).unwrap();
     engine.fast_forward_playback(1).unwrap();
-    assert_eq!(engine.runtime()[0].current_cue_number, Some(3.0));
+    assert_eq!(
+        engine.runtime()[0].current_cue_number,
+        Some(cue_number(3.0))
+    );
     assert!(engine.jump_counts.is_empty());
 }
 
 #[test]
 fn goto_resets_jump_points_that_it_bypasses() {
-    let one = Cue::new(1.0);
-    let mut two = Cue::new(2.0);
-    let three = Cue::new(3.0);
+    let one = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
+    let mut two = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
+    let three = Cue::new(crate::CueNumber::try_from_legacy_f64(3.0).unwrap());
     jump_to(&mut two, one.id, 3);
     let cue_list = list(vec![one, two, three]);
     let id = cue_list.id;
@@ -117,7 +132,7 @@ fn goto_resets_jump_points_that_it_bypasses() {
     engine.go_playback(1).unwrap();
     assert_eq!(engine.jump_counts.values().next(), Some(&1));
     engine.go_playback(1).unwrap();
-    engine.goto_playback(1, 3.0).unwrap();
+    engine.goto_playback(1, cue_number(3.0)).unwrap();
     assert!(engine.jump_counts.is_empty());
 }
 
@@ -126,9 +141,9 @@ fn fast_navigation_bypasses_only_the_current_transition_timing() {
     let started = Utc::now();
     let clock = Arc::new(light_core::ManualClock::new(started));
     let fixture = FixtureId::new();
-    let mut one = Cue::new(1.0);
+    let mut one = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     one.changes.push(value(fixture, "pan", 0.2));
-    let mut two = Cue::new(2.0);
+    let mut two = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
     two.fade_millis = 10_000;
     two.delay_millis = 5_000;
     let mut change = value(fixture, "pan", 0.8);
@@ -168,7 +183,7 @@ fn fast_navigation_bypasses_only_the_current_transition_timing() {
 #[test]
 fn off_requires_zero_pickup_without_moving_the_recorded_fader() {
     let fixture = FixtureId::new();
-    let mut cue = Cue::new(1.0);
+    let mut cue = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     cue.changes.push(value(fixture, "intensity", 1.0));
     let cue_list = list(vec![cue]);
     let cue_list_id = cue_list.id;
@@ -222,7 +237,9 @@ fn off_requires_zero_pickup_without_moving_the_recorded_fader() {
 
 #[test]
 fn explicit_fader_activation_ignores_cuelist_zero_policy() {
-    let cue_list = list(vec![Cue::new(1.0)]);
+    let cue_list = list(vec![Cue::new(
+        crate::CueNumber::try_from_legacy_f64(1.0).unwrap(),
+    )]);
     let cue_list_id = cue_list.id;
     let mut playback = definition(1, cue_list_id);
     playback.go_activates = false;
@@ -247,9 +264,9 @@ fn explicit_fader_activation_ignores_cuelist_zero_policy() {
 #[test]
 fn cuelist_zero_auto_off_resumes_only_its_own_current_cue() {
     let fixture = FixtureId::new();
-    let mut one = Cue::new(1.0);
+    let mut one = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     one.changes.push(value(fixture, "intensity", 0.5));
-    let mut two = Cue::new(2.0);
+    let mut two = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
     two.changes.push(value(fixture, "intensity", 1.0));
     let mut cue_list = list(vec![one, two]);
     cue_list.auto_off_at_zero = true;
@@ -259,7 +276,7 @@ fn cuelist_zero_auto_off_resumes_only_its_own_current_cue() {
     engine
         .register_definition(definition(1, cue_list_id))
         .unwrap();
-    engine.goto_playback(1, 2.0).unwrap();
+    engine.goto_playback(1, cue_number(2.0)).unwrap();
     let cue_id = engine.runtime()[0].current_cue_id;
 
     engine.set_master(1, 1.0).unwrap();
@@ -272,13 +289,13 @@ fn cuelist_zero_auto_off_resumes_only_its_own_current_cue() {
     assert!(runtime.enabled);
     assert_eq!(runtime.master, 0.6);
     assert_eq!(runtime.current_cue_id, cue_id);
-    assert_eq!(runtime.current_cue_number, Some(2.0));
+    assert_eq!(runtime.current_cue_number, Some(cue_number(2.0)));
     assert!(!runtime.fader_zero_auto_off_armed);
 }
 
 #[test]
 fn cuelist_flash_auto_off_is_armed_only_by_the_flash_that_started_it() {
-    let mut cue = Cue::new(1.0);
+    let mut cue = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     cue.changes.push(value(FixtureId::new(), "intensity", 1.0));
     let mut cue_list = list(vec![cue]);
     cue_list.auto_off_flash_release = true;
@@ -302,7 +319,7 @@ fn cuelist_flash_auto_off_is_armed_only_by_the_flash_that_started_it() {
 #[test]
 fn cuelist_flash_and_swap_share_keep_running_or_release_all_policy() {
     let build = |release_all| {
-        let mut cue = Cue::new(1.0);
+        let mut cue = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
         cue.changes.push(value(FixtureId::new(), "intensity", 1.0));
         let mut cue_list = list(vec![cue]);
         cue_list.auto_off_flash_release = release_all;
@@ -343,7 +360,7 @@ fn cuelist_flash_and_swap_share_keep_running_or_release_all_policy() {
 
 #[test]
 fn physical_shared_runtime_keeps_legacy_serializable_number_provenance() {
-    let mut cue = Cue::new(1.0);
+    let mut cue = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     cue.changes.push(value(FixtureId::new(), "intensity", 1.0));
     let cue_list = list(vec![cue]);
     let cue_list_id = cue_list.id;
@@ -364,7 +381,7 @@ fn physical_shared_runtime_keeps_legacy_serializable_number_provenance() {
 #[test]
 fn physical_faders_take_over_one_shared_master_independently() {
     let fixture = FixtureId::new();
-    let mut cue = Cue::new(1.0);
+    let mut cue = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     cue.changes.push(value(fixture, "intensity", 1.0));
     let cue_list = list(vec![cue]);
     let cue_list_id = cue_list.id;
@@ -407,7 +424,9 @@ fn physical_faders_take_over_one_shared_master_independently() {
 
 #[test]
 fn restored_shared_master_requires_each_physical_fader_to_reacquire() {
-    let cue_list = list(vec![Cue::new(1.0)]);
+    let cue_list = list(vec![Cue::new(
+        crate::CueNumber::try_from_legacy_f64(1.0).unwrap(),
+    )]);
     let cue_list_id = cue_list.id;
     let mut engine = PlaybackEngine::default();
     engine.register(cue_list.clone()).unwrap();
@@ -455,9 +474,9 @@ fn temp_is_a_separate_entry_and_never_auto_offs_the_underlying_playback() {
     let started = Utc::now();
     let clock = Arc::new(light_core::ManualClock::new(started));
     let fixture = FixtureId::new();
-    let mut a = Cue::new(1.0);
+    let mut a = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     a.changes.push(value(fixture, "pan", 0.2));
-    let mut b = Cue::new(1.0);
+    let mut b = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     b.changes.push(value(fixture, "pan", 0.8));
     let a = list(vec![a]);
     let a_id = a.id;
@@ -502,7 +521,7 @@ fn keep_running_release_and_swap_protection_preserve_normal_runtime() {
     let fixture_b = FixtureId::new();
     let fixture_c = FixtureId::new();
     let make = |fixture, level| {
-        let mut cue = Cue::new(1.0);
+        let mut cue = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
         cue.changes.push(value(fixture, "intensity", level));
         cue.changes.push(value(fixture, "pan", level));
         list(vec![cue])
@@ -601,7 +620,7 @@ fn manual_xfade_uses_authoritative_alternating_progress_and_survives_restore() {
         .into_iter()
         .enumerate()
         .map(|(index, level)| {
-            let mut cue = Cue::new(index as f64 + 1.0);
+            let mut cue = Cue::new(CueNumber::from(index + 1));
             cue.fade_millis = 30_000;
             cue.delay_millis = 10_000;
             cue.out_fade_millis = Some(60_000);
@@ -626,7 +645,10 @@ fn manual_xfade_uses_authoritative_alternating_progress_and_survives_restore() {
         AttributeValue::Normalized(0.25)
     );
     engine.set_master(1, 1.0).unwrap();
-    assert_eq!(engine.runtime()[0].current_cue_number, Some(2.0));
+    assert_eq!(
+        engine.runtime()[0].current_cue_number,
+        Some(cue_number(2.0))
+    );
     assert_eq!(
         resolve(engine.contributions())[&(fixture, AttributeKey::intensity())],
         AttributeValue::Normalized(1.0)
@@ -636,7 +658,10 @@ fn manual_xfade_uses_authoritative_alternating_progress_and_survives_restore() {
         ManualXFadeDirection::TowardsLow
     );
     engine.set_master(1, 1.0).unwrap();
-    assert_eq!(engine.runtime()[0].current_cue_number, Some(2.0));
+    assert_eq!(
+        engine.runtime()[0].current_cue_number,
+        Some(cue_number(2.0))
+    );
     engine.set_master(1, 0.5).unwrap();
     assert_eq!(
         resolve(engine.contributions())[&(fixture, AttributeKey::intensity())],
@@ -653,7 +678,10 @@ fn manual_xfade_uses_authoritative_alternating_progress_and_survives_restore() {
     assert_eq!(restored.runtime()[0].manual_xfade_position, 0.5);
     assert_eq!(restored.runtime()[0].manual_xfade_progress, 0.5);
     restored.set_master(1, 0.0).unwrap();
-    assert_eq!(restored.runtime()[0].current_cue_number, Some(3.0));
+    assert_eq!(
+        restored.runtime()[0].current_cue_number,
+        Some(cue_number(3.0))
+    );
 }
 
 #[test]
@@ -661,7 +689,7 @@ fn pause_dynamics_does_not_freeze_ordinary_cue_transitions() {
     let started = Utc::now();
     let clock = Arc::new(light_core::ManualClock::new(started));
     let fixture = FixtureId::new();
-    let mut cue = Cue::new(1.0);
+    let mut cue = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     cue.fade_millis = 1_000;
     cue.changes.push(value(fixture, "intensity", 1.0));
     let cue_list = list(vec![cue]);
@@ -1118,7 +1146,7 @@ fn scheduled_master_transitions_are_advanced_by_the_playback_tick() {
     let started = Utc::now();
     let clock = Arc::new(light_core::ManualClock::new(started));
     let fixture = FixtureId::new();
-    let mut cue = Cue::new(1.0);
+    let mut cue = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     cue.changes.push(value(fixture, "intensity", 1.0));
     let cue_list = list(vec![cue]);
     let cue_list_id = cue_list.id;

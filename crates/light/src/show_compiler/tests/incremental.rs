@@ -27,7 +27,9 @@ fn normalized_document() -> (light_show::ShowStore, light_show::PortableShowDocu
         chaser_xfade_millis: 0,
         chaser_xfade_percent: None,
         speed_multiplier: 1.0,
-        cues: vec![Cue::new(1.0)],
+        cues: vec![Cue::new(
+            crate::CueNumber::try_from_legacy_f64(1.0).unwrap(),
+        )],
     };
     let (store, document) = document_with_objects(&[
         ("cue_list", "main", serde_json::to_value(cue).unwrap()),

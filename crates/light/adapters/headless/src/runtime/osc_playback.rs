@@ -119,7 +119,7 @@ pub(super) fn update_target_for_playback(
                 object_id: Some(cue_list_id.0.to_string()),
                 playback_number: Some(definition.number),
                 cue_id: context.as_ref().map(|context| context.cue_id),
-                cue_number: context.map(|context| context.cue_number),
+                cue_number: context.map(|context| context.cue_number.to_string()),
                 validate_active_context: true,
             })
         }

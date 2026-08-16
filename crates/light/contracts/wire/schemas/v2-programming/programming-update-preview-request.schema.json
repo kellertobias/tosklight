@@ -94,10 +94,9 @@
             },
             "cue_number": {
               "type": [
-                "number",
+                "string",
                 "null"
-              ],
-              "format": "double"
+              ]
             },
             "playback_number": {
               "type": [

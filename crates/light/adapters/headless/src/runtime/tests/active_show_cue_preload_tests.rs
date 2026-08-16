@@ -196,7 +196,7 @@ impl CuePreloadScenario {
                                 "type":"cue",
                                 "cue_list_id":self.cue_list_id(),
                                 "expected_revision":expected,
-                                "cue_number":1.0,
+                                "cue_number":"1",
                                 "name":"From active Preload"
                             }
                         })
@@ -323,7 +323,7 @@ fn seed_cue_preload_show(entry: &ShowEntry, cue_list_id: light_core::CueListId) 
             0,
         )
         .unwrap();
-    let mut cue = light_playback::Cue::new(1.0);
+    let mut cue = light_playback::Cue::new(cue("1"));
     cue.id = Uuid::from_u128(0xc001);
     cue.group_changes.push(light_playback::GroupCueChange {
         group_id: "1".into(),

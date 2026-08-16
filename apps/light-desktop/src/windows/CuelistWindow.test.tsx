@@ -203,7 +203,7 @@ function editableCueList(): CueList {
 		cues: [
 			{
 				id: "cue-1",
-				number: 1,
+				number: "1",
 				name: "Opening",
 				information: "House opens",
 				fade_millis: 2_500,
@@ -283,7 +283,7 @@ describe("CuelistWindow Cue settings", () => {
 				cues: [
 					{
 						id: "cue-opening",
-						number: 1,
+						number: "1",
 						name: "Opening",
 						fade_millis: 1000,
 						delay_millis: 0,
@@ -353,7 +353,7 @@ describe("CuelistWindow Cue settings", () => {
 	it("shows a Link destination by stable Cue identity in its Trigger modal", () => {
 		const destination = {
 			id: "cue-blackout",
-			number: 12,
+			number: "12",
 			name: "Blackout",
 			fade_millis: 0,
 			delay_millis: 0,
@@ -399,7 +399,7 @@ describe("CuelistWindow pane selection", () => {
 				looped: false,
 				cues: [
 					{
-						number: 1,
+						number: "1",
 						name: "Opening",
 						fade_millis: 1000,
 						delay_millis: 0,
@@ -493,7 +493,7 @@ describe("CuelistWindow pane selection", () => {
 		cueList.cues.push({
 			...cueList.cues[0],
 			id: "cue-2",
-			number: 2,
+			number: "2",
 			name: "Blackout",
 			information: "Clear the stage",
 		});
@@ -506,7 +506,7 @@ describe("CuelistWindow pane selection", () => {
 				paused: false,
 				master: 1,
 				flash: false,
-				effective_next_cue_number: 2,
+				effective_next_cue_number: "2",
 			},
 		];
 		const view = render(
@@ -628,7 +628,7 @@ describe("CuelistWindow fixed and selected playback sources", () => {
 				looped: false,
 				cues: [
 					{
-						number: 1,
+						number: "1",
 						name: "Main opening",
 						fade_millis: 0,
 						delay_millis: 0,
@@ -636,7 +636,7 @@ describe("CuelistWindow fixed and selected playback sources", () => {
 						changes: [],
 					},
 					{
-						number: 2,
+						number: "2",
 						name: "Main chase step",
 						fade_millis: 0,
 						delay_millis: 0,
@@ -653,7 +653,7 @@ describe("CuelistWindow fixed and selected playback sources", () => {
 				looped: false,
 				cues: [
 					{
-						number: 1,
+						number: "1",
 						name: "Encore look",
 						fade_millis: 0,
 						delay_millis: 0,
@@ -827,7 +827,7 @@ describe("CuelistWindow pane and Cuelist settings", () => {
 			looped: false,
 			cues: [
 				{
-					number: 1,
+					number: "1",
 					name: "Opening",
 					fade_millis: 1000,
 					delay_millis: 0,
@@ -1058,7 +1058,7 @@ describe("CuelistWindow topology-backed Cuelist settings", () => {
 		cueList.cues.push({
 			...cueList.cues[0],
 			id: "cue-2",
-			number: 2.5,
+			number: "2.5",
 			name: "Look",
 			fade_millis: 4_000,
 		});

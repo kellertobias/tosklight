@@ -8,13 +8,13 @@ fn pool_cuelist_requires_one_concrete_active_playback_context() {
             playback_number: 1,
             cue_list_id,
             cue_id: Uuid::from_u128(11),
-            cue_number: 1.0,
+            cue_number: crate::CueNumber::try_from_legacy_f64(1.0).unwrap(),
         },
         ActiveCueContext {
             playback_number: 2,
             cue_list_id,
             cue_id: Uuid::from_u128(12),
-            cue_number: 2.0,
+            cue_number: crate::CueNumber::try_from_legacy_f64(2.0).unwrap(),
         },
     ];
     assert_eq!(
@@ -30,7 +30,10 @@ fn pool_cuelist_requires_one_concrete_active_playback_context() {
     )
     .unwrap();
     assert_eq!(concrete.playback_number, Some(2));
-    assert_eq!(concrete.cue_number, 2.0);
+    assert_eq!(
+        concrete.cue_number,
+        crate::CueNumber::try_from_legacy_f64(2.0).unwrap()
+    );
 }
 
 #[test]

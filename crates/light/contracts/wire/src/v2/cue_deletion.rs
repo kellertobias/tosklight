@@ -34,7 +34,7 @@ pub struct CueDeletionRequest {
     #[schemars(length(min = 1, max = 128))]
     pub request_id: String,
     pub address: CueDeletionAddress,
-    pub cue_number: f64,
+    pub cue_number: String,
     pub authority: CueDeletionAuthority,
 }
 
@@ -50,11 +50,11 @@ pub struct CueDeletionObjectProjection {
     pub body: Arc<Value>,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct DeletedCueProjection {
     pub id: Uuid,
-    pub number: f64,
+    pub number: String,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]

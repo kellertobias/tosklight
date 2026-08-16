@@ -256,8 +256,7 @@
           "format": "uuid"
         },
         "destination_cue_number": {
-          "type": "number",
-          "format": "double"
+          "type": "string"
         },
         "mode": {
           "$ref": "#/$defs/CueTransferMode"
@@ -270,8 +269,7 @@
           "format": "uuid"
         },
         "source_cue_number": {
-          "type": "number",
-          "format": "double"
+          "type": "string"
         }
       },
       "additionalProperties": false,

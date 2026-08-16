@@ -12,10 +12,9 @@
     },
     "cue_number": {
       "type": [
-        "number",
+        "string",
         "null"
-      ],
-      "format": "double"
+      ]
     },
     "cue_only": {
       "type": "boolean"

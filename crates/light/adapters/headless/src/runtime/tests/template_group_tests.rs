@@ -162,7 +162,7 @@ impl TemplateGroupScenario {
         self.state
             .output.execute_playback(EnginePlaybackCommand::CueList {
                 id: self.cue_list_id,
-                action: light_engine::CueListPlaybackAction::Jump(2.0),
+                action: light_engine::CueListPlaybackAction::Jump(cue("2")),
             })
             .unwrap();
         let address = self.profiles[0].address.unwrap();
@@ -231,7 +231,7 @@ impl TemplateGroupScenario {
         self.state
             .output.execute_playback(EnginePlaybackCommand::CueList {
                 id: self.cue_list_id,
-                action: light_engine::CueListPlaybackAction::Jump(2.0),
+                action: light_engine::CueListPlaybackAction::Jump(cue("2")),
             })
             .unwrap();
         let expanded = self.render();

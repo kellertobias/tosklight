@@ -60,7 +60,7 @@ function cueList(revision: number, name: string): ShowObject<"cue_list"> {
 			cues: [
 				{
 					id: CUE_ID,
-					number: 1,
+					number: "1",
 					name,
 					fade_millis: 0,
 					delay_millis: 0,
@@ -179,7 +179,7 @@ function cuePreviewResponse(
 				object_id: CUE_LIST_ID,
 				name: "Main",
 				playback_number: 7,
-				cue: { id: CUE_ID, number: 1 },
+				cue: { id: CUE_ID, number: "1" },
 			},
 			mode: { target_type: "cue", mode: "existing_only" },
 			items: [],
@@ -509,7 +509,7 @@ describe("ProgrammingUpdateWriter", () => {
 			object_id: CUE_LIST_ID,
 			playback_number: 7,
 			cue_id: CUE_ID,
-			cue_number: 1,
+			cue_number: "1",
 			validate_active_context: false,
 		};
 		const cueMode: UpdateMode = {

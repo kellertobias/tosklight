@@ -333,7 +333,7 @@ export function TimecodeEditor({
 	cueLists: Array<{
 		id: string;
 		name: string;
-		cues: Array<{ id: string; number: number; name: string }>;
+		cues: Array<{ id: string; number: string; name: string }>;
 	}>;
 	audioPlayers: TimecodeAudioPlayerOption[];
 	onClose(): Promise<void>;

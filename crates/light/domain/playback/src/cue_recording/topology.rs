@@ -6,14 +6,14 @@ impl CueList {
         id: CueListId,
         name: impl Into<String>,
         content: CueRecordingContent,
-        cue_number: Option<f64>,
+        cue_number: Option<CueNumber>,
         auto_off_at_zero: bool,
         auto_off_flash_release: bool,
     ) -> Result<CueListRecordingPlan, CueRecordingPlanError> {
         validate_content(&content)?;
         require_values(&content)?;
-        let cue_number = validated_number(cue_number.unwrap_or(1.0))?;
-        let cue = new_cue(content, cue_number);
+        let cue_number = cue_number.unwrap_or_else(|| CueNumber::from(1_u8));
+        let cue = new_cue(content, cue_number.clone());
         let cue_id = cue.id;
         let cue_list = Self {
             id,
@@ -39,7 +39,7 @@ impl CueList {
             cue_list,
             changed: true,
             cue_id,
-            cue_number,
+            cue_number: cue_number.clone(),
             deleted: false,
         })
     }

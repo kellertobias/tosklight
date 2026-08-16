@@ -83,14 +83,22 @@ pub(super) fn resolve_requested_cue(
         return Err(invalid("Update target is not a Cue"));
     };
     if *validate_active_context {
-        return validate_active_cue(*cue_list_id, *playback_number, *cue_id, *cue_number, active);
+        return validate_active_cue(
+            *cue_list_id,
+            *playback_number,
+            *cue_id,
+            cue_number.clone(),
+            active,
+        );
     }
     let target = match (*cue_id, *playback_number) {
         (Some(cue_id), playback_number) => CueTargetRequest::Explicit(ResolvedCueTarget {
             cue_list_id: *cue_list_id,
             playback_number,
             cue_id,
-            cue_number: cue_number.ok_or_else(|| invalid("explicit Cue requires cue_number"))?,
+            cue_number: cue_number
+                .clone()
+                .ok_or_else(|| invalid("explicit Cue requires cue_number"))?,
         }),
         (None, Some(playback_number)) => CueTargetRequest::ActivePlayback { playback_number },
         (None, None) => CueTargetRequest::PoolCueList {
@@ -104,7 +112,7 @@ fn validate_active_cue(
     cue_list_id: CueListId,
     playback_number: Option<u16>,
     cue_id: Option<uuid::Uuid>,
-    cue_number: Option<f64>,
+    cue_number: Option<light_playback::CueNumber>,
     active: &[super::ActiveCueContext],
 ) -> Result<ResolvedCueTarget, ActionError> {
     let playback_number = playback_number
@@ -115,7 +123,9 @@ fn validate_active_cue(
         .ok_or_else(|| conflict("the touched playback is no longer active"))?;
     if context.cue_list_id != cue_list_id
         || cue_id.is_some_and(|cue_id| cue_id != context.cue_id)
-        || cue_number.is_some_and(|cue_number| cue_number != context.cue_number)
+        || cue_number
+            .as_ref()
+            .is_some_and(|cue_number| cue_number != &context.cue_number)
     {
         return Err(conflict("the touched playback/Cue context changed"));
     }

@@ -307,9 +307,9 @@ function PlaybackBankExample({ mode }: { mode: "touch" | "hardware" }) {
 					cueRows:
 						index === 0 ? (
 							<HardwareCueRowsView
-								previous={{ number: 3, name: "Build" }}
-								current={{ number: 4, name: "Solo", fadeMillis: 2500 }}
-								next={{ number: 5, name: "Blackout" }}
+								previous={{ number: "3", name: "Build" }}
+								current={{ number: "4", name: "Solo", fadeMillis: 2500 }}
+								next={{ number: "5", name: "Blackout" }}
 								progress={0.42}
 							/>
 						) : undefined,

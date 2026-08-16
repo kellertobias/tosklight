@@ -23,7 +23,7 @@ function request(
 		requestId: REQUEST_ID,
 		target,
 		operation: "overwrite",
-		cueNumber: 1,
+		cueNumber: "1",
 		timing: { fadeMillis: 1200, delayMillis: 250 },
 		cueOnly: false,
 		name: "Opening",
@@ -42,7 +42,7 @@ function cueListBody(name = "Opening") {
 		cues: [
 			{
 				id: CUE_ID,
-				number: 1,
+				number: "1",
 				name,
 				fade_millis: 1200,
 				delay_millis: 250,
@@ -99,7 +99,7 @@ function changedOutcome(overrides: Record<string, unknown> = {}) {
 		replayed: false,
 		captured_source: "normal",
 		show_revision: 8,
-		recorded_cue: { id: CUE_ID, number: 1, deleted: false },
+		recorded_cue: { id: CUE_ID, number: "1", deleted: false },
 		projections: {
 			cue_list: wireCueList(),
 			playback: wirePlayback(),
@@ -166,7 +166,7 @@ describe("Cue recording v2 wire", () => {
 			expect(encoded).toMatchObject({
 				request_id: REQUEST_ID,
 				operation: "overwrite",
-				cue_number: 1,
+				cue_number: "1",
 				timing: { fade_millis: 1200, delay_millis: 250 },
 				cue_only: false,
 				name: "Opening",
@@ -212,7 +212,7 @@ describe("Cue recording v2 wire", () => {
 			showRevision: 8,
 			showEventSequence: 12,
 			capturedSource: "normal",
-			recordedCue: { id: CUE_ID, number: 1, deleted: false },
+			recordedCue: { id: CUE_ID, number: "1", deleted: false },
 			projections: {
 				cueList: { kind: "cue_list", id: CUE_LIST_ID, revision: 2 },
 				playback: { kind: "playback", id: "7", revision: 2 },
@@ -243,7 +243,7 @@ describe("Cue recording v2 wire", () => {
 			operation: "subtract",
 		};
 		const outcome = changedOutcome({
-			recorded_cue: { id: CUE_ID, number: 1, deleted: true },
+			recorded_cue: { id: CUE_ID, number: "1", deleted: true },
 			projections: {
 				cue_list: wireCueList(2, { ...cueListBody(), cues: [] }),
 				playback: null,
@@ -255,7 +255,7 @@ describe("Cue recording v2 wire", () => {
 
 		expect(decoded.recordedCue).toEqual({
 			id: CUE_ID,
-			number: 1,
+			number: "1",
 			deleted: true,
 		});
 		expect(decoded.status === "changed" && decoded.runtime).toBeNull();
@@ -275,7 +275,7 @@ describe("Cue recording v2 wire", () => {
 		[
 			"recorded Cue number",
 			changedOutcome({
-				recorded_cue: { id: CUE_ID, number: 2, deleted: false },
+				recorded_cue: { id: CUE_ID, number: "2", deleted: false },
 			}),
 			"$.recorded_cue.number",
 		],
@@ -284,7 +284,7 @@ describe("Cue recording v2 wire", () => {
 			changedOutcome({
 				recorded_cue: {
 					id: "66666666-6666-4666-8666-666666666666",
-					number: 1,
+					number: "1",
 					deleted: false,
 				},
 			}),
@@ -466,7 +466,7 @@ describe("Cue recording v2 wire", () => {
 				...request(),
 				target: { kind: "cue_list" as const, cueListId: "foreign" },
 			},
-			{ ...request(), cueNumber: 0 },
+			{ ...request(), cueNumber: "01" },
 			{ ...request(), timing: { fadeMillis: -1 } },
 			{ ...request(), name: "x".repeat(257) },
 		])

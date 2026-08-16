@@ -618,7 +618,7 @@ fn wire_update_workflow(
                     object_id: target.object_id.clone(),
                     playback_number: target.playback_number,
                     cue_id: target.cue_id.clone(),
-                    cue_number: target.cue_number,
+                    cue_number: target.cue_number.clone(),
                     validate_active_context: target.validate_active_context,
                 },
             }

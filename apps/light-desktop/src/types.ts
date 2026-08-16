@@ -171,6 +171,8 @@ export interface PaneModel extends GridRect {
 	mediaServerId?: string;
 	mediaLayerId?: string;
 	mediaBrowserMode?: "media" | "mask";
+	mediaSourceFilter?: "media" | "visualizers" | "text";
+	mediaControlSectionId?: string;
 	mediaMainSectionId?: string;
 	mediaRightPaneVisible?: boolean;
 	runningFilter?: "all" | "cue_list" | "dynamic" | "timecode" | "macro";

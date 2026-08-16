@@ -3,7 +3,7 @@ use light_application::{
     ProgrammingCueRecordTiming,
 };
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(super) struct CueRecordCommand {
     pub target: ProgrammingCueRecordTarget,
     pub operation: ProgrammingCueRecordOperation,
@@ -93,8 +93,7 @@ fn optional_cue(tokens: &[String]) -> Result<Option<CueNumber>, String> {
 }
 
 fn cue_number(tokens: &[String]) -> Result<CueNumber, String> {
-    let value = super::super::parse_command_cue_number(tokens)?;
-    Ok(CueNumber::new(value))
+    super::super::parse_command_cue_number(tokens)
 }
 
 fn bounded_u8(value: &str, label: &str) -> Result<u8, String> {
@@ -118,7 +117,7 @@ mod tests {
             selected.target,
             ProgrammingCueRecordTarget::SelectedPlayback
         );
-        assert_eq!(selected.cue_number.unwrap().value(), 2.5);
+        assert_eq!(selected.cue_number.unwrap().to_string(), "2.5");
 
         let pool = parse("REC SET 27").unwrap().unwrap();
         assert_eq!(
@@ -128,6 +127,10 @@ mod tests {
             }
         );
         assert!(pool.cue_number.is_none());
+
+        let deep = parse("RECORD CUE 2.0.15").unwrap().unwrap();
+        assert_eq!(deep.cue_number.unwrap().to_string(), "2.0.15");
+        assert!(parse("RECORD CUE 02").is_err());
 
         let page = parse("RECORD SET 2.7 CUE 3").unwrap().unwrap();
         assert_eq!(

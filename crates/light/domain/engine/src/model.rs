@@ -4,7 +4,8 @@ use light_dynamics::{DynamicDefinition, validate_definition};
 use light_fixture::{PatchedFixture, validate_patch};
 use light_output::{DmxFrame, OutputRoute};
 use light_playback::{
-    AutomaticPlaybackTransition, CueList, PlaybackDefinition, PlaybackPage, PlaybackTarget,
+    AutomaticPlaybackTransition, CueList, CueNumber, PlaybackDefinition, PlaybackPage,
+    PlaybackTarget,
 };
 use light_programmer::{GroupDefinition, GroupFixtureSource, resolve_group};
 use serde::{Deserialize, Serialize};
@@ -245,9 +246,9 @@ pub struct MoveInBlackDiagnostic {
     pub playback_number: Option<u16>,
     pub cue_list_id: light_core::CueListId,
     pub current_cue_id: uuid::Uuid,
-    pub current_cue_number: f64,
+    pub current_cue_number: CueNumber,
     pub target_cue_id: uuid::Uuid,
-    pub target_cue_number: f64,
+    pub target_cue_number: CueNumber,
     pub state: MoveInBlackState,
     pub positions: Vec<MoveInBlackPosition>,
     pub dark_since: Option<chrono::DateTime<chrono::Utc>>,

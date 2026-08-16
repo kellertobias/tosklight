@@ -10,7 +10,7 @@ pub struct PlaybackTelemetrySample {
     pub enabled: bool,
     pub master: f32,
     pub current_cue_id: Option<Uuid>,
-    pub current_cue_number: Option<f64>,
+    pub current_cue_number: Option<CueNumber>,
     /// 0..=1 progress into the current Cue transition, or `None` while no Cuelist is active.
     pub fade_progress: Option<f32>,
     pub flash: bool,
@@ -92,7 +92,8 @@ fn current_telemetry_cue<'a>(playback: &ActivePlayback, cue_list: &'a CueList) -
         .or_else(|| {
             playback
                 .current_cue_number
-                .and_then(|number| cue_list.cues.iter().find(|cue| cue.number == number))
+                .as_ref()
+                .and_then(|number| cue_list.cues.iter().find(|cue| cue.number == *number))
         })
         .or_else(|| cue_list.cues.get(playback.cue_index))
 }

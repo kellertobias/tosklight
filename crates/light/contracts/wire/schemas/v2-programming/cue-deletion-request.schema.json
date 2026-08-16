@@ -10,8 +10,7 @@
       "$ref": "#/$defs/CueDeletionAuthority"
     },
     "cue_number": {
-      "type": "number",
-      "format": "double"
+      "type": "string"
     },
     "request_id": {
       "type": "string",

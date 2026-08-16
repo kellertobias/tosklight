@@ -176,9 +176,9 @@ async fn cue_jump_round_trips_by_stable_identity_when_its_destination_is_renumbe
         .push(
             serde_json::to_value(light_playback::Cue {
                 id: destination_id,
-                number: 2.0,
+                number: cue("2"),
                 name: "Destination".into(),
-                ..light_playback::Cue::new(2.0)
+                ..light_playback::Cue::new(cue("2"))
             })
             .unwrap(),
         );
@@ -194,11 +194,11 @@ async fn cue_jump_round_trips_by_stable_identity_when_its_destination_is_renumbe
     request["request_id"] = serde_json::json!("renumber-jump-destination");
     request["action"]["expected_revision"] = serde_json::json!(1);
     request["action"]["expected_object_id"] = serde_json::json!(cue_list_id);
-    request["action"]["body"]["cues"][1]["number"] = serde_json::json!(42.0);
+    request["action"]["body"]["cues"][1]["number"] = serde_json::json!("42");
     let response = scenario.action(revision + 1, request).await;
     assert_eq!(response.status(), StatusCode::OK);
     let saved = json(response).await;
-    assert_eq!(saved["objects"][0]["body"]["cues"][1]["number"], 42.0);
+    assert_eq!(saved["objects"][0]["body"]["cues"][1]["number"], "42");
     assert_eq!(
         saved["objects"][0]["body"]["cues"][0]["actions"][0]["cue_id"],
         destination_id.to_string()

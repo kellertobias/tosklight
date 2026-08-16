@@ -22,7 +22,7 @@ import { cueMenuEntryFor } from "./updateWorkflowTestFixtures";
 
 const request: UpdateTargetRequest = cueUpdateTarget("cue-list-a", 7, {
 	id: "cue-2",
-	number: 2,
+	number: "2",
 });
 const existingOnly: UpdateMode = { target_type: "cue", mode: "existing_only" };
 const target = {
@@ -30,7 +30,7 @@ const target = {
 	object_id: "cue-list-a",
 	name: "Main Cuelist",
 	playback_number: 7,
-	cue: { id: "cue-2", number: 2 },
+	cue: { id: "cue-2", number: "2" },
 };
 const preview: UpdatePreview = {
 	revision: 4,
@@ -47,7 +47,7 @@ const preview: UpdatePreview = {
 			},
 			outcome: {
 				outcome: "change_at_source",
-				source: { cue_id: "cue-1", cue_number: 1, cue_index: 0 },
+				source: { cue_id: "cue-1", cue_number: "1", cue_index: 0 },
 			},
 		},
 		{

@@ -83,7 +83,7 @@ function cueListObject(
 		looped: false,
 		cues: [
 			{
-				number: 1,
+				number: "1",
 				name: "Opening",
 				fade_millis: 0,
 				delay_millis: 0,

@@ -68,7 +68,7 @@ describe("TimecodeEditor title and settings", () => {
 						cues: [
 							{
 								id: "00000000-0000-4000-8000-000000000171",
-								number: 1,
+								number: "1",
 								name: "First",
 							},
 						],

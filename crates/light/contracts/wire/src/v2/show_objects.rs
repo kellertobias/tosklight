@@ -187,7 +187,7 @@ pub enum PreloadRecordAction {
         cue_list_id: String,
         #[ts(type = "number")]
         expected_revision: u64,
-        cue_number: f64,
+        cue_number: String,
         name: Option<String>,
     },
 }

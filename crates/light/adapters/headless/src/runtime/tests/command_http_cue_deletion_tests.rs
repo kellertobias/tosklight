@@ -1,4 +1,4 @@
-fn cue_deletion_authority(scenario: &CommandHttpScenario, cue_number: f64) -> (u64, u64, Uuid) {
+fn cue_deletion_authority(scenario: &CommandHttpScenario, cue_number: &str) -> (u64, u64, Uuid) {
     let show_path = scenario
         .state
         .active_show
@@ -14,7 +14,7 @@ fn cue_deletion_authority(scenario: &CommandHttpScenario, cue_number: f64) -> (u
     let cue_id = list
         .cues
         .iter()
-        .find(|cue| cue.number == cue_number)
+        .find(|item| item.number == cue(cue_number))
         .unwrap()
         .id;
     (document.revision().value(), object.revision(), cue_id)
@@ -23,7 +23,7 @@ fn cue_deletion_authority(scenario: &CommandHttpScenario, cue_number: f64) -> (u
 fn cue_deletion_request(
     request_id: &str,
     address: serde_json::Value,
-    cue_number: f64,
+    cue_number: &str,
     object_revision: u64,
     cue_id: Uuid,
     playback_number: u16,
@@ -104,8 +104,8 @@ async fn atomic_command_deletes_once_preserves_runtime_hold_and_replays_without_
         .execute("activate-before-delete", Some("CUE SET 1 CUE 2"))
         .await;
     assert_eq!(active.status(), StatusCode::OK);
-    assert_eq!(current_cue(&scenario, 1), Some(2.0));
-    assert_eq!(current_cue(&scenario, 2), Some(2.0));
+    assert_eq!(current_cue(&scenario, 1), Some("2".into()));
+    assert_eq!(current_cue(&scenario, 2), Some("2".into()));
     let baseline = scenario.state.events.latest_sequence();
     let compatibility = cue_delete_compatibility_events(&scenario).len();
     let history = history_len(&scenario);
@@ -123,15 +123,15 @@ async fn atomic_command_deletes_once_preserves_runtime_hold_and_replays_without_
         compatibility
     );
     let runtime = active_playback(&scenario, 1).unwrap();
-    assert_eq!(runtime.current_cue_number, Some(2.0));
-    assert_eq!(runtime.deleted_cue_hold.unwrap().deleted_number, 2.0);
+    assert_eq!(runtime.current_cue_number, Some(cue("2")));
+    assert_eq!(runtime.deleted_cue_hold.unwrap().deleted_number, cue("2"));
     assert_eq!(
         active_playback(&scenario, 2)
             .unwrap()
             .deleted_cue_hold
             .unwrap()
             .deleted_number,
-        2.0
+        cue("2")
     );
 
     let replay = scenario
@@ -161,11 +161,11 @@ async fn atomic_command_deletes_once_preserves_runtime_hold_and_replays_without_
 #[tokio::test]
 async fn direct_current_page_action_returns_authority_and_replays_before_page_and_lock_checks() {
     let (scenario, show_id) = cue_navigation_scenario().await;
-    let (show_revision, object_revision, cue_id) = cue_deletion_authority(&scenario, 2.5);
+    let (show_revision, object_revision, cue_id) = cue_deletion_authority(&scenario, "2.5");
     let request = cue_deletion_request(
         "direct-cue-delete",
         serde_json::json!({"type":"current_page","expected_page":1,"slot":2}),
-        2.5,
+        "2.5",
         object_revision,
         cue_id,
         2,
@@ -243,11 +243,11 @@ async fn direct_current_page_action_returns_authority_and_replays_before_page_an
 #[tokio::test]
 async fn direct_action_rejects_stale_authority_and_foreign_desk_atomically() {
     let (scenario, show_id) = cue_navigation_scenario().await;
-    let (show_revision, object_revision, cue_id) = cue_deletion_authority(&scenario, 2.0);
+    let (show_revision, object_revision, cue_id) = cue_deletion_authority(&scenario, "2");
     let request = cue_deletion_request(
         "secure-delete",
         serde_json::json!({"type":"pool","playback_number":1}),
-        2.0,
+        "2",
         object_revision - 1,
         cue_id,
         1,
@@ -268,11 +268,11 @@ async fn direct_action_rejects_stale_authority_and_foreign_desk_atomically() {
     );
     assert_eq!(cue_deletion_show_events(&scenario, baseline), 0);
 
-    let (_, current_object_revision, cue_id) = cue_deletion_authority(&scenario, 2.0);
+    let (_, current_object_revision, cue_id) = cue_deletion_authority(&scenario, "2");
     let request = cue_deletion_request(
         "foreign-desk-delete",
         serde_json::json!({"type":"pool","playback_number":1}),
-        2.0,
+        "2",
         current_object_revision,
         cue_id,
         1,
@@ -289,7 +289,7 @@ async fn multiplexed_websocket_uses_typed_delete_and_emits_one_exact_facade_noti
     let (scenario, _) = cue_navigation_scenario().await;
     let baseline = scenario.state.events.latest_sequence();
     let compatibility = cue_delete_compatibility_events(&scenario).len();
-    let (_, object_revision, _) = cue_deletion_authority(&scenario, 2.0);
+    let (_, object_revision, _) = cue_deletion_authority(&scenario, "2");
     let response = dispatch_live_action(
         &scenario.state,
         &scenario.session,

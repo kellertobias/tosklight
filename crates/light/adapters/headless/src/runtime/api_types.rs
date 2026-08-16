@@ -89,7 +89,7 @@ pub(super) struct MasterInput {
 pub(super) struct PreloadStoreInput {
     pub(super) target: String,
     pub(super) target_id: String,
-    pub(super) cue_number: Option<f64>,
+    pub(super) cue_number: Option<String>,
     pub(super) name: Option<String>,
     pub(super) mode: Option<light_programmer::PresetStoreMode>,
     pub(super) family: Option<light_programmer::PresetFamily>,
@@ -113,7 +113,7 @@ pub(super) struct UpdateApiTarget {
     #[serde(default)]
     pub(super) cue_id: Option<Uuid>,
     #[serde(default)]
-    pub(super) cue_number: Option<f64>,
+    pub(super) cue_number: Option<String>,
     /// Touch/menu targets are snapshots of a live playback context and must still match it when
     /// the operator confirms. Explicit command-line Cue addressing deliberately leaves this off.
     #[serde(default)]

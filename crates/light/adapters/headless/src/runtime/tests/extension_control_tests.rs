@@ -119,7 +119,7 @@ fn canonical_extension_controls_use_authoritative_output_and_playback_services()
         chaser_xfade_millis: 0,
         chaser_xfade_percent: Some(0),
         speed_multiplier: 1.0,
-        cues: vec![light_playback::Cue::new(1.0)],
+        cues: vec![light_playback::Cue::new(cue("1"))],
     };
     let cue_list_id = cue_list.id;
     let playback =
@@ -161,7 +161,7 @@ fn canonical_extension_controls_use_authoritative_output_and_playback_services()
     .unwrap();
     assert_eq!(
         state.output.active_playbacks()[0].current_cue_number,
-        Some(1.0)
+        Some(cue("1"))
     );
     let _ = std::fs::remove_dir_all(data_dir);
 }

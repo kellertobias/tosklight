@@ -82,6 +82,12 @@ pub(super) fn resolve_update_cue_target(
     target: &UpdateApiTarget,
     active: &[update::ActiveCueContext],
 ) -> Result<update::ResolvedCueTarget, ApiError> {
+    let requested_number = target
+        .cue_number
+        .as_deref()
+        .map(str::parse::<light_playback::CueNumber>)
+        .transpose()
+        .map_err(ApiError::bad_request)?;
     if target.validate_active_context {
         let playback_number = target.playback_number.ok_or_else(|| {
             ApiError::bad_request("a live Update target requires playback_number")
@@ -95,9 +101,9 @@ pub(super) fn resolve_update_cue_target(
             })?;
         if context.cue_list_id != cue_list_id
             || target.cue_id.is_some_and(|cue_id| context.cue_id != cue_id)
-            || target
-                .cue_number
-                .is_some_and(|number| context.cue_number != number)
+            || requested_number
+                .as_ref()
+                .is_some_and(|number| &context.cue_number != number)
         {
             return Err(ApiError::conflict(
                 "the touched playback/Cue context changed; preview Update again",
@@ -114,7 +120,9 @@ pub(super) fn resolve_update_cue_target(
                 cue_list_id,
                 playback_number: target.playback_number,
                 cue_id,
-                cue_number: target.cue_number.unwrap_or_default(),
+                cue_number: requested_number.ok_or_else(|| {
+                    ApiError::bad_request("explicit Cue Update requires cue_number")
+                })?,
             })
         } else {
             let context = active

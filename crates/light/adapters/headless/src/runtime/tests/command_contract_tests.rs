@@ -115,9 +115,9 @@ impl CommandContractScenario {
         cue_list
             .cues
             .iter()
-            .map(|cue| cue.number)
+            .map(|cue| cue.number.to_string())
             .collect::<Vec<_>>(),
-        vec![1.0, 2.5]
+        vec!["1", "2.5"]
     );
     assert_eq!(cue_list.cues[0].fade_millis, 3_000);
     assert_eq!(cue_list.cues[0].delay_millis, 0);
@@ -145,7 +145,7 @@ impl CommandContractScenario {
         cue_list
             .cues
             .iter()
-            .find(|cue| cue.number == 2.5)
+            .find(|item| item.number == cue("2.5"))
             .unwrap()
             .trigger,
         light_playback::CueTrigger::Follow { delay_millis: 0 }
@@ -161,7 +161,7 @@ impl CommandContractScenario {
         25,
     )
     .unwrap();
-    assert!(selected_list.cues.iter().any(|cue| cue.number == 7.0));
+    assert!(selected_list.cues.iter().any(|item| item.number == cue("7")));
     }
 
     fn verify_record_modes(&self) {
@@ -186,7 +186,7 @@ impl CommandContractScenario {
         25,
     )
     .unwrap();
-    let merged = cue_list.cues.iter().find(|cue| cue.number == 2.5).unwrap();
+    let merged = cue_list.cues.iter().find(|item| item.number == cue("2.5")).unwrap();
     assert_eq!(merged.group_changes.len(), 2);
 
     execute_programmer_command(&self.state, &self.session, "RECORD - SET 25 CUE 2.5").unwrap();
@@ -196,7 +196,7 @@ impl CommandContractScenario {
         25,
     )
     .unwrap();
-    let subtracted = cue_list.cues.iter().find(|cue| cue.number == 2.5).unwrap();
+    let subtracted = cue_list.cues.iter().find(|item| item.number == cue("2.5")).unwrap();
     assert_eq!(subtracted.group_changes.len(), 1);
     assert_eq!(
         subtracted.group_changes[0].attribute,
@@ -211,7 +211,7 @@ impl CommandContractScenario {
         25,
     )
     .unwrap();
-    let overwritten = cue_list.cues.iter().find(|cue| cue.number == 2.5).unwrap();
+    let overwritten = cue_list.cues.iter().find(|item| item.number == cue("2.5")).unwrap();
     assert_eq!(overwritten.group_changes.len(), 1);
     assert_eq!(overwritten.group_changes[0].attribute, color);
 
@@ -230,9 +230,9 @@ impl CommandContractScenario {
         cue_list
             .cues
             .iter()
-            .map(|cue| cue.number)
+            .map(|cue| cue.number.to_string())
             .collect::<Vec<_>>(),
-        vec![1.0, 7.0]
+        vec!["1", "7"]
     );
     }
 }
@@ -615,8 +615,8 @@ fn typed_link_command_stores_the_destination_cue_identity() {
         25,
     )
     .unwrap();
-    let source = cue_list.cues.iter().find(|cue| cue.number == 1.0).unwrap();
-    let destination = cue_list.cues.iter().find(|cue| cue.number == 7.0).unwrap();
+    let source = cue_list.cues.iter().find(|item| item.number == cue("1")).unwrap();
+    let destination = cue_list.cues.iter().find(|item| item.number == cue("7")).unwrap();
     assert!(matches!(
         source.trigger,
         light_playback::CueTrigger::Link {

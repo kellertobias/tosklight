@@ -167,7 +167,7 @@ function decodePlaybackTransition(
 		const cue = recordAt(candidate, cuePath);
 		return {
 			id: stringAt(cue.id, `${cuePath}.id`),
-			number: numberAt(cue.number, `${cuePath}.number`),
+			number: stringAt(cue.number, `${cuePath}.number`),
 		};
 	};
 	return {
@@ -245,7 +245,7 @@ function decodeTelemetrySample(
 				const cue = recordAt(value, cuePath);
 				return {
 					id: opaqueStringAt(cue.id, `${cuePath}.id`, 64),
-					number: numberAt(cue.number, `${cuePath}.number`),
+					number: stringAt(cue.number, `${cuePath}.number`),
 				};
 			},
 		),

@@ -6,6 +6,10 @@ use light_playback::{
     WrapMode,
 };
 
+fn cue(value: &str) -> light_playback::CueNumber {
+    value.parse().expect("test Cue number is canonical")
+}
+
 #[test]
 fn every_assignment_projects_one_shared_cuelist_runtime() {
     let cue_list = cue_list();
@@ -16,8 +20,8 @@ fn every_assignment_projects_one_shared_cuelist_runtime() {
     engine.register(cue_list).unwrap();
     engine.register_definition(first.clone()).unwrap();
     engine.register_definition(second.clone()).unwrap();
-    engine.goto_playback(1, 2.0).unwrap();
-    engine.goto_playback(2, 3.0).unwrap();
+    engine.goto_playback(1, cue("2")).unwrap();
+    engine.goto_playback(2, cue("3")).unwrap();
     let scope = test_scope();
     let first = engine
         .runtime_status_at(PlaybackIdentity::physical(1).unwrap())
@@ -33,7 +37,10 @@ fn every_assignment_projects_one_shared_cuelist_runtime() {
     ] {
         let projection = cue_list_projection(scope, requested, number, cue_list_id, Some(status));
         assert_eq!(projection.playback_number, number);
-        assert_eq!(projection.current_cue().map(|cue| cue.number), Some(3.0));
+        assert_eq!(
+            projection.current_cue().map(|item| item.number.clone()),
+            Some(cue("3"))
+        );
     }
 }
 
@@ -269,7 +276,7 @@ fn cue_list() -> CueList {
         chaser_xfade_millis: 0,
         chaser_xfade_percent: Some(0),
         speed_multiplier: 1.0,
-        cues: vec![Cue::new(1.0), Cue::new(2.0), Cue::new(3.0)],
+        cues: vec![Cue::new(cue("1")), Cue::new(cue("2")), Cue::new(cue("3"))],
     }
 }
 

@@ -23,7 +23,9 @@ fn physical_and_virtual_playback_ranges_are_explicit_and_disjoint() {
 
 #[test]
 fn banked_virtual_assignments_for_one_cuelist_share_runtime() {
-    let cue_list = list(vec![Cue::new(1.0)]);
+    let cue_list = list(vec![Cue::new(
+        crate::CueNumber::try_from_legacy_f64(1.0).unwrap(),
+    )]);
     let cue_list_id = cue_list.id;
     let page_one = VirtualPlaybackAddress::new(1, 1_001).unwrap();
     let page_two = VirtualPlaybackAddress::new(2, 1_301).unwrap();
@@ -71,7 +73,9 @@ fn banked_virtual_assignments_for_one_cuelist_share_runtime() {
 
 #[test]
 fn page_qualified_virtual_runtime_survives_persistence_restore() {
-    let cue_list = list(vec![Cue::new(1.0)]);
+    let cue_list = list(vec![Cue::new(
+        crate::CueNumber::try_from_legacy_f64(1.0).unwrap(),
+    )]);
     let cue_list_id = cue_list.id;
     let page_one = VirtualPlaybackAddress::new(1, 1_001).unwrap();
     let page_two = VirtualPlaybackAddress::new(2, 1_301).unwrap();
@@ -111,7 +115,10 @@ fn page_qualified_virtual_runtime_survives_persistence_restore() {
 
 #[test]
 fn legacy_duplicate_runtime_restore_uses_the_newest_activation_ordinal() {
-    let cue_list = list(vec![Cue::new(1.0), Cue::new(2.0)]);
+    let cue_list = list(vec![
+        Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap()),
+        Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap()),
+    ]);
     let cue_list_id = cue_list.id;
     let mut source = PlaybackEngine::default();
     source.register(cue_list.clone()).unwrap();
@@ -139,7 +146,7 @@ fn legacy_duplicate_runtime_restore_uses_the_newest_activation_ordinal() {
     newer.activation.as_mut().unwrap().ordinal = 5;
     newer.cue_index = 1;
     newer.current_cue_id = Some(cue_list.cues[1].id);
-    newer.current_cue_number = Some(2.0);
+    newer.current_cue_number = Some(cue_number(2.0));
 
     let mut restored = PlaybackEngine::default();
     restored.register(cue_list).unwrap();
@@ -152,13 +159,19 @@ fn legacy_duplicate_runtime_restore_uses_the_newest_activation_ordinal() {
     restored.restore_active([newer, older]);
 
     assert_eq!(restored.runtime().len(), 1);
-    assert_eq!(restored.runtime()[0].current_cue_number, Some(2.0));
+    assert_eq!(
+        restored.runtime()[0].current_cue_number,
+        Some(cue_number(2.0))
+    );
     assert_eq!(restored.playback_runtime(1), restored.playback_runtime(2));
 }
 
 #[test]
 fn page_qualified_virtual_go_advances_the_shared_target_runtime() {
-    let cue_list = list(vec![Cue::new(1.0), Cue::new(2.0)]);
+    let cue_list = list(vec![
+        Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap()),
+        Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap()),
+    ]);
     let cue_list_id = cue_list.id;
     let page_one = VirtualPlaybackAddress::new(1, 1_001).unwrap();
     let page_two = VirtualPlaybackAddress::new(2, 1_301).unwrap();
@@ -180,20 +193,22 @@ fn page_qualified_virtual_go_advances_the_shared_target_runtime() {
     assert_eq!(
         engine
             .playback_runtime_at(PlaybackIdentity::Virtual(page_one))
-            .and_then(|runtime| runtime.current_cue_number),
-        Some(2.0)
+            .and_then(|runtime| runtime.current_cue_number.clone()),
+        Some(cue_number(2.0))
     );
     assert_eq!(
         engine
             .playback_runtime_at(PlaybackIdentity::Virtual(page_two))
-            .and_then(|runtime| runtime.current_cue_number),
-        Some(2.0)
+            .and_then(|runtime| runtime.current_cue_number.clone()),
+        Some(cue_number(2.0))
     );
 }
 
 #[test]
 fn virtual_temp_flash_and_swap_hold_full_page_qualified_identity() {
-    let cue_list = list(vec![Cue::new(1.0)]);
+    let cue_list = list(vec![Cue::new(
+        crate::CueNumber::try_from_legacy_f64(1.0).unwrap(),
+    )]);
     let cue_list_id = cue_list.id;
     let page_one = VirtualPlaybackAddress::new(1, 1_001).unwrap();
     let page_two = VirtualPlaybackAddress::new(2, 1_301).unwrap();
@@ -269,7 +284,9 @@ fn virtual_temp_flash_and_swap_hold_full_page_qualified_identity() {
 
 #[test]
 fn physical_registration_still_rejects_virtual_numbers() {
-    let cue_list = list(vec![Cue::new(1.0)]);
+    let cue_list = list(vec![Cue::new(
+        crate::CueNumber::try_from_legacy_f64(1.0).unwrap(),
+    )]);
     let cue_list_id = cue_list.id;
     let mut engine = PlaybackEngine::default();
     engine.register(cue_list).unwrap();

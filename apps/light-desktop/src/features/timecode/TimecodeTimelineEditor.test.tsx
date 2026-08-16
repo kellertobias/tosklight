@@ -198,7 +198,7 @@ describe("TimecodeTimelineEditor", () => {
 						cues: [
 							{
 								id: "00000000-0000-0000-0000-000000000011",
-								number: 1,
+								number: "1",
 								name: "First",
 							},
 						],
@@ -389,7 +389,7 @@ describe("TimecodeTimelineEditor", () => {
 						{
 							id: "00000000-0000-0000-0000-000000000010",
 							name: "Opening",
-							cues: [{ id: "cue-1", number: 1, name: "First" }],
+							cues: [{ id: "cue-1", number: "1", name: "First" }],
 						},
 					]}
 					audioPlayers={[]}

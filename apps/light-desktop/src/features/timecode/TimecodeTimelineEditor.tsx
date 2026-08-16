@@ -361,7 +361,7 @@ function TimelineItemButton({
 export interface TimecodeCueListOption {
 	id: string;
 	name: string;
-	cues: readonly { id: string; number: number; name: string }[];
+	cues: readonly { id: string; number: string; name: string }[];
 }
 
 export interface TimecodeAudioPlayerOption {
@@ -1411,7 +1411,7 @@ function ClipInspector({
 }: {
 	label?: string;
 	clip: CueClip;
-	cues: readonly { id: string; number: number; name: string }[];
+	cues: readonly { id: string; number: string; name: string }[];
 	duration?: number | null;
 	update(patch: Partial<CueClip>): void;
 }) {
@@ -1501,7 +1501,7 @@ function CueSelect({
 }: {
 	label: string;
 	value: string;
-	cues: readonly { id: string; number: number; name: string }[];
+	cues: readonly { id: string; number: string; name: string }[];
 	onValue(value: string): void;
 }) {
 	return (
