@@ -157,6 +157,9 @@ filter, and lowering the browser filter does not change the process.
 For **Equalizer Bars**, **Bloom** controls the additive glow around the bars from `0` (no glow) to
 `1` (full glow), with a default of `1`. The same persisted value is available in the visualizer
 editor and as **Slot 1 · Bloom** while an Equalizer layer is active.
+For **Waveform Oscilloscope**, **Size** controls the trace's vertical expansion from `0.005`
+(10% of the designed height) through the persisted default `0.05` to `0.1` (200%). The same Size
+value is available as **Slot 1 · Size** on an active Waveform layer and updates live.
 
 On **Playback**, take over the selected output before changing a layer. The **Effects** section has
 four ordered slots. **Analog TV** starts with restrained CRT defaults: **TV curvature** 30%,

@@ -1671,13 +1671,19 @@ function visualizerControls(visualizer: VisualizerView, disabled: boolean) {
 				visualizer.typeId === 0 && parameter === "amount"
 					? "Bloom"
 					: number.label;
+			const minimum =
+				visualizer.typeId === 1 && parameter === "size"
+					? 0.005
+					: number.minimum;
+			const maximum =
+				visualizer.typeId === 1 && parameter === "size" ? 0.1 : number.maximum;
 			controls.push(
 				valueControl(
 					`visualizer-${parameter}`,
 					`Slot 1 · ${label}`,
 					Number(visualizer.parameters[number.field]),
-					number.minimum,
-					number.maximum,
+					minimum,
+					maximum,
 					disabled,
 					"",
 					number.step,

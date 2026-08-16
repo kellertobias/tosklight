@@ -132,7 +132,7 @@ impl VisualizerKind {
         };
         match self {
             Self::EqualizerBars => &[Count, Size, Primary, Secondary, Amount, Smoothing, Mirror],
-            Self::WaveformOscilloscope => &[Thickness, Amount, Primary, Filled, Smoothing],
+            Self::WaveformOscilloscope => &[Size, Thickness, Amount, Primary, Filled, Smoothing],
             Self::CircularSpectrum => &[Radius, Count, Size, Primary, Mirror],
             Self::WaveTerrain => &[Speed, Size, Zoom, Primary, Wireframe],
             Self::PulsingCircles => &[Count, Size, Primary, Filled, Reactivity, Decay],

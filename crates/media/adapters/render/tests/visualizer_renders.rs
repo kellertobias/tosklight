@@ -168,6 +168,37 @@ fn every_visualizer_answers_to_audio() {
 }
 
 #[test]
+fn waveform_size_changes_the_live_trace_expansion() {
+    let gpu = gpu();
+    let mut renderer = VisualizerRenderer::new(&gpu, OUTPUT);
+    let analysis = loud();
+    let frame = frame(&analysis, 1.0, 0.0);
+    let small = VisualizerParameters {
+        size: 0.005,
+        ..Default::default()
+    };
+    let large = VisualizerParameters {
+        size: 0.1,
+        ..Default::default()
+    };
+    let small = draw(
+        &gpu,
+        &mut renderer,
+        VisualizerKind::WaveformOscilloscope,
+        &small,
+        &frame,
+    );
+    let large = draw(
+        &gpu,
+        &mut renderer,
+        VisualizerKind::WaveformOscilloscope,
+        &large,
+        &frame,
+    );
+    assert_ne!(small, large, "Size must change rendered waveform pixels");
+}
+
+#[test]
 fn a_visualizer_animates_without_audio() {
     // Several visualizers are driven by time as much as by sound; a silent room must not freeze
     // a Kaleidoscope or a Starfield on one frame.
