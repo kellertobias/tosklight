@@ -246,6 +246,13 @@ describe("CAD fixture interaction", () => {
 			clientX: 500,
 			clientY: 400,
 		});
+		fireEvent.pointerUp(canvas, {
+			pointerId: 1,
+			button: 0,
+			shiftKey: true,
+			clientX: 500,
+			clientY: 400,
+		});
 		expect(onSelection).toHaveBeenCalledWith({
 			type: "toggle",
 			ids: [fixture.id],
@@ -266,6 +273,76 @@ describe("CAD fixture interaction", () => {
 		expect(onSelection).toHaveBeenLastCalledWith({
 			type: "replace",
 			ids: [fixture.id],
+		});
+	});
+
+	it("turns a drag begun inside fixture geometry into marquee selection", () => {
+		const second = {
+			...fixture,
+			id: "22222222-2222-4222-8222-222222222222",
+			positionMillimetres: [600, 0, 4000] as [number, number, number],
+		};
+		const { canvas, onSelection } = setup([], [fixture, second]);
+
+		fireEvent.pointerDown(canvas, {
+			pointerId: 7,
+			button: 0,
+			clientX: 500,
+			clientY: 400,
+		});
+		fireEvent.pointerMove(canvas, {
+			pointerId: 7,
+			buttons: 1,
+			clientX: 570,
+			clientY: 350,
+		});
+		fireEvent.pointerUp(canvas, {
+			pointerId: 7,
+			button: 0,
+			clientX: 570,
+			clientY: 350,
+		});
+
+		expect(onSelection).toHaveBeenCalledTimes(1);
+		expect(onSelection).toHaveBeenCalledWith({
+			type: "replace",
+			ids: [fixture.id, second.id],
+		});
+	});
+
+	it("adds a marquee begun inside a fixture while Shift is held", () => {
+		const second = {
+			...fixture,
+			id: "22222222-2222-4222-8222-222222222222",
+			positionMillimetres: [600, 0, 4000] as [number, number, number],
+		};
+		const { canvas, onSelection } = setup([fixture.id], [fixture, second]);
+
+		fireEvent.pointerDown(canvas, {
+			pointerId: 8,
+			button: 0,
+			shiftKey: true,
+			clientX: 500,
+			clientY: 400,
+		});
+		fireEvent.pointerMove(canvas, {
+			pointerId: 8,
+			buttons: 1,
+			shiftKey: true,
+			clientX: 570,
+			clientY: 350,
+		});
+		fireEvent.pointerUp(canvas, {
+			pointerId: 8,
+			button: 0,
+			shiftKey: true,
+			clientX: 570,
+			clientY: 350,
+		});
+
+		expect(onSelection).toHaveBeenCalledWith({
+			type: "add",
+			ids: [fixture.id, second.id],
 		});
 	});
 

@@ -133,6 +133,8 @@ interface Drag {
 	additive?: boolean;
 	deltaMillimetres?: [number, number, number];
 	spread?: boolean;
+	hitId?: string;
+	marquee?: boolean;
 }
 
 interface SelectionBox {
@@ -316,21 +318,15 @@ export function CadViewport({
 			setGuide(axis);
 			return;
 		}
-		if (hit) {
-			onSelection({
-				type: event.shiftKey ? "toggle" : "replace",
-				ids: [hit.id],
-			});
-			return;
-		}
 		drag.current = {
 			type: "box",
 			start: [event.clientX, event.clientY],
 			last: [event.clientX, event.clientY],
 			axis: "plane",
 			additive: event.shiftKey,
+			hitId: hit?.id,
+			marquee: false,
 		};
-		setSelectionBox({ start: point, end: point });
 	}
 
 	function updateMovePreview(
@@ -370,6 +366,8 @@ export function CadViewport({
 			return;
 		}
 		if (active.type === "box") {
+			if (Math.hypot(dx, dy) < 3 && !active.marquee) return;
+			active.marquee = true;
 			setSelectionBox({
 				start: screenToPlane(...active.start),
 				end: screenToPlane(event.clientX, event.clientY),
@@ -384,29 +382,31 @@ export function CadViewport({
 		drag.current = null;
 		canvas.current?.releasePointerCapture(event.pointerId);
 		if (active?.type === "box") {
-			const box = selectionBox;
 			setSelectionBox(null);
-			if (!box) return;
-			const moved = Math.hypot(
-				event.clientX - active.start[0],
-				event.clientY - active.start[1],
-			);
-			const ids =
-				moved < 3
-					? []
-					: entities
-							.filter((entity) => entity.selectable)
-							.filter((entity) =>
-								pointInside(
-									projectPoint(
-										entity.positionMillimetres,
-										view,
-										rotationQuarterTurns,
-									),
-									box,
-								),
-							)
-							.map((entity) => entity.id);
+			if (!active.marquee) {
+				onSelection({
+					type: active.additive ? "toggle" : "replace",
+					ids: active.hitId ? [active.hitId] : [],
+				});
+				return;
+			}
+			const box = {
+				start: screenToPlane(...active.start),
+				end: screenToPlane(event.clientX, event.clientY),
+			};
+			const ids = entities
+				.filter((entity) => entity.selectable)
+				.filter((entity) =>
+					pointInside(
+						projectPoint(
+							entity.positionMillimetres,
+							view,
+							rotationQuarterTurns,
+						),
+						box,
+					),
+				)
+				.map((entity) => entity.id);
 			onSelection({ type: active.additive ? "add" : "replace", ids });
 			return;
 		}
