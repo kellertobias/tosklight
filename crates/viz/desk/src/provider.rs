@@ -103,6 +103,7 @@ enum Message {
     /// The desk's own view for this target, as read. Converting it needs the scene, which lives
     /// on the render thread, so the raw reading travels and the conversion happens there.
     View(Box<DeskView>),
+    RendererSettings(Box<viz_scene::RendererSettingsUpdate>),
     Resync(String),
 }
 
@@ -127,12 +128,13 @@ pub struct DeskView {
 /// worker reconnecting after shutdown.
 enum Command {
     Resync,
+    RendererSettings(viz_scene::RendererSettingsIntent),
 }
 
 pub struct DeskProvider {
     connection: DeskConnection,
     inbox: Receiver<Message>,
-    commands: Sender<Command>,
+    commands: tokio::sync::mpsc::UnboundedSender<Command>,
     stop: Arc<AtomicBool>,
     worker: Option<std::thread::JoinHandle<()>>,
     receivers: Option<DmxReceiver>,
@@ -179,7 +181,7 @@ pub struct DeskProvider {
 impl DeskProvider {
     pub fn start(connection: DeskConnection, epoch: Instant) -> Self {
         let (outbox, inbox) = channel();
-        let (commands, orders) = channel();
+        let (commands, orders) = tokio::sync::mpsc::unbounded_channel();
         let worker_connection = connection.clone();
         let stop = Arc::new(AtomicBool::new(false));
         let worker_stop = stop.clone();
@@ -414,6 +416,9 @@ impl DeskProvider {
                         .is_none_or(|current| current.revision != view.revision);
                     self.view = Some(*view);
                 }
+                Ok(Message::RendererSettings(settings)) => {
+                    events.push(ProviderEvent::RendererSettings(*settings));
+                }
                 Ok(Message::Resync(reason)) => {
                     events.push(ProviderEvent::ResyncRequired { reason });
                 }
@@ -628,6 +633,10 @@ impl SceneProvider for DeskProvider {
         let _ = self.commands.send(Command::Resync);
     }
 
+    fn update_renderer_settings(&mut self, intent: viz_scene::RendererSettingsIntent) {
+        let _ = self.commands.send(Command::RendererSettings(intent));
+    }
+
     fn shutdown(&mut self) {
         self.stop.store(true, Ordering::Relaxed);
         if let Some(mut receivers) = self.receivers.take() {
@@ -643,7 +652,7 @@ impl SceneProvider for DeskProvider {
 fn run(
     connection: DeskConnection,
     outbox: Sender<Message>,
-    orders: Receiver<Command>,
+    mut orders: tokio::sync::mpsc::UnboundedReceiver<Command>,
     stop: Arc<AtomicBool>,
 ) {
     let runtime = match tokio::runtime::Builder::new_current_thread()
@@ -665,11 +674,10 @@ fn run(
             if stop.load(Ordering::Relaxed) {
                 return;
             }
-            match orders.try_recv() {
-                Err(TryRecvError::Disconnected) => return,
-                Ok(Command::Resync) | Err(TryRecvError::Empty) => {}
+            if orders.is_closed() {
+                return;
             }
-            match connect_once(&connection, &outbox, &orders, &stop).await {
+            match connect_once(&connection, &outbox, &mut orders, &stop).await {
                 Ok(()) => {
                     backoff = connection.retry;
                 }
@@ -700,7 +708,7 @@ fn run(
 async fn connect_once(
     connection: &DeskConnection,
     outbox: &Sender<Message>,
-    orders: &Receiver<Command>,
+    orders: &mut tokio::sync::mpsc::UnboundedReceiver<Command>,
     stop: &AtomicBool,
 ) -> Result<(), ProviderError> {
     let endpoint = format!("http://{}:{}", connection.host, connection.port);
@@ -772,7 +780,6 @@ async fn connect_once(
     if let Some(selection) = client.selection().await {
         let _ = outbox.send(Message::Selection(Box::new(selection)));
     }
-
     watch(&client, &endpoint, connection, outbox, orders, stop).await;
     client.close_session().await;
     Ok(())
@@ -796,8 +803,17 @@ async fn read_scene(
     let models = read_models(client, endpoint).await?;
     // Output routes are stored as show objects of kind `route`.
     let route_objects = client.objects("route").await?.objects;
+    let input_objects = client
+        .objects(viz_document::LIVE_DMX_INPUT_KIND)
+        .await
+        .map(|collection| collection.objects)
+        .unwrap_or_default();
     let plan = scene_build::build(&models);
-    let mappings = routes::mappings(&route_objects, connection.bind_interface);
+    let (mappings, input_warnings) = routes::apply_document_inputs(
+        routes::mappings(&route_objects, connection.bind_interface),
+        &input_objects,
+        connection.bind_interface,
+    );
     let mut diagnostics = ProviderDiagnostics {
         endpoint: endpoint.to_owned(),
         resolved_address: endpoint.to_owned(),
@@ -813,6 +829,7 @@ async fn read_scene(
         preview_universes: Vec::new(),
         warnings: plan.warnings.clone(),
     };
+    diagnostics.warnings.extend(input_warnings);
     if mappings.is_empty() {
         diagnostics.warnings.push(
             "The show configures no output routes; listening on the Art-Net and sACN defaults."
@@ -877,7 +894,7 @@ async fn watch(
     endpoint: &str,
     connection: &DeskConnection,
     outbox: &Sender<Message>,
-    orders: &Receiver<Command>,
+    orders: &mut tokio::sync::mpsc::UnboundedReceiver<Command>,
     stop: &AtomicBool,
 ) {
     use futures_util::SinkExt;
@@ -930,18 +947,15 @@ async fn watch(
         }));
         return;
     }
+    // Close the GET-to-WebSocket subscription gap: a settings write between the initial scene
+    // read and this subscription is still observed as the newest authoritative snapshot.
+    if let Some(settings) = client.renderer_settings().await {
+        let _ = outbox.send(Message::RendererSettings(Box::new(settings)));
+    }
 
     loop {
         if stop.load(Ordering::Relaxed) {
             return;
-        }
-        match orders.try_recv() {
-            Err(TryRecvError::Disconnected) => return,
-            Ok(Command::Resync) => {
-                let _ = outbox.send(Message::Resync("operator requested".into()));
-                return;
-            }
-            Err(TryRecvError::Empty) => {}
         }
         if connection.values_from_desk_output {
             if let Some(output) = client.output_dmx().await {
@@ -958,11 +972,26 @@ async fn watch(
         } else {
             500
         };
-        let next = tokio::time::timeout(Duration::from_millis(poll), socket.next()).await;
-        let Ok(Some(Ok(message))) = next else {
-            if next.is_err() {
-                continue;
+        let next = tokio::select! {
+            command = orders.recv() => {
+                match command {
+                    None => return,
+                    Some(Command::Resync) => {
+                        let _ = outbox.send(Message::Resync("operator requested".into()));
+                        return;
+                    }
+                    Some(Command::RendererSettings(intent)) => {
+                        if let Ok(update) = client.update_renderer_settings(&intent).await {
+                            let _ = outbox.send(Message::RendererSettings(Box::new(update)));
+                        }
+                        continue;
+                    }
+                }
             }
+            message = socket.next() => message,
+            _ = tokio::time::sleep(Duration::from_millis(poll)) => continue,
+        };
+        let Some(Ok(message)) = next else {
             let _ = outbox.send(Message::Connection(ConnectionState::Stale {
                 endpoint: endpoint.to_owned(),
                 reason: "the configuration event stream closed".into(),
@@ -975,6 +1004,14 @@ async fn watch(
         let Some(frame) = crate::wire::EventFrame::parse(&text) else {
             continue;
         };
+        if frame.kind == "renderer_settings_changed" {
+            if let Some(settings) = frame.renderer_settings {
+                let _ = outbox.send(Message::RendererSettings(Box::new(settings)));
+            } else if let Some(settings) = client.renderer_settings().await {
+                let _ = outbox.send(Message::RendererSettings(Box::new(settings)));
+            }
+            continue;
+        }
         // A different show is a different scene: its values, mappings and identity all change
         // together, so it is staged as a whole rather than merged into what is displayed.
         if replaces_the_show(&frame.kind) {

@@ -5,8 +5,8 @@
 //! subset of that API it actually consumes, backed by a show file instead of a running desk. The
 //! renderer needs no new provider, no new protocol, and no knowledge that a desk is absent.
 //!
-//! Nothing here writes. Editing happens through the document's own patch boundary; this side only
-//! projects what is currently in it.
+//! Nothing here writes the show. Editing happens through the document's own patch boundary; the
+//! only writable route carries renderer-local settings between the two windows of PreViz.
 
 pub mod preview;
 pub mod wire;
@@ -19,6 +19,7 @@ pub use wire::{ObjectCollection, ObjectRecord, PatchSnapshotDto};
 
 use axum::{
     Json, Router,
+    body::Bytes,
     extract::{
         Path, State,
         ws::{Message, WebSocket, WebSocketUpgrade},
@@ -29,6 +30,7 @@ use axum::{
 };
 use parking_lot::Mutex;
 use std::{
+    collections::VecDeque,
     net::SocketAddr,
     sync::{
         Arc,
@@ -68,6 +70,11 @@ pub struct SceneSource {
     selection: Arc<Mutex<Vec<Uuid>>>,
     selection_revision: Arc<AtomicU64>,
     selection_changes: Arc<tokio::sync::watch::Sender<u64>>,
+    /// Renderer-local settings shared live by the Editor and each connected Visualizer.
+    renderer_settings: Arc<Mutex<Option<viz_scene::RendererSettingsUpdate>>>,
+    renderer_settings_revision: Arc<AtomicU64>,
+    renderer_settings_changes: Arc<tokio::sync::watch::Sender<u64>>,
+    renderer_settings_requests: Arc<Mutex<VecDeque<(String, viz_scene::RendererSettingsUpdate)>>>,
 }
 
 impl Default for SceneSource {
@@ -82,6 +89,10 @@ impl Default for SceneSource {
             selection: Arc::new(Mutex::new(Vec::new())),
             selection_revision: Arc::new(AtomicU64::new(0)),
             selection_changes: Arc::new(tokio::sync::watch::Sender::new(0)),
+            renderer_settings: Arc::new(Mutex::new(None)),
+            renderer_settings_revision: Arc::new(AtomicU64::new(0)),
+            renderer_settings_changes: Arc::new(tokio::sync::watch::Sender::new(0)),
+            renderer_settings_requests: Arc::new(Mutex::new(VecDeque::new())),
         }
     }
 }
@@ -159,6 +170,71 @@ impl SceneSource {
         let _ = self.preview_changes.send(revision);
     }
 
+    pub fn renderer_settings(&self) -> Option<viz_scene::RendererSettingsUpdate> {
+        self.renderer_settings.lock().clone()
+    }
+
+    /// Store one authoritative settings candidate and announce exactly which fields moved.
+    pub fn set_renderer_settings(
+        &self,
+        source: impl Into<String>,
+        settings: viz_scene::RendererSettings,
+    ) -> Result<viz_scene::RendererSettingsUpdate, String> {
+        settings.validate()?;
+        let mut current = self.renderer_settings.lock();
+        let changed = current
+            .as_ref()
+            .map(|previous| settings.changes_from(&previous.settings))
+            .unwrap_or_else(|| settings.changes_from(&viz_scene::RendererSettings::default()))
+            .iter()
+            .map(|change| change.field_name().into())
+            .collect::<Vec<_>>();
+        if changed.is_empty()
+            && let Some(existing) = current.as_ref()
+        {
+            return Ok(existing.clone());
+        }
+        let revision = self
+            .renderer_settings_revision
+            .fetch_add(1, Ordering::Relaxed)
+            + 1;
+        let update = viz_scene::RendererSettingsUpdate {
+            revision,
+            source: source.into(),
+            changed,
+            settings,
+        };
+        *current = Some(update.clone());
+        let _ = self.renderer_settings_changes.send(revision);
+        Ok(update)
+    }
+
+    fn apply_renderer_settings_intent(
+        &self,
+        intent: viz_scene::RendererSettingsIntent,
+    ) -> Result<viz_scene::RendererSettingsUpdate, String> {
+        Uuid::parse_str(&intent.request_id)
+            .map_err(|_| "renderer settings requestId must be a UUID".to_owned())?;
+        let mut requests = self.renderer_settings_requests.lock();
+        if let Some((_, update)) = requests
+            .iter()
+            .find(|(request_id, _)| request_id == &intent.request_id)
+        {
+            return Ok(update.clone());
+        }
+        let mut candidate = self
+            .renderer_settings()
+            .map(|update| update.settings)
+            .unwrap_or_default();
+        candidate.apply(&intent.changes);
+        let update = self.set_renderer_settings(intent.source, candidate)?;
+        if requests.len() == 128 {
+            requests.pop_front();
+        }
+        requests.push_back((intent.request_id, update.clone()));
+        Ok(update)
+    }
+
     pub fn is_open(&self) -> bool {
         self.document.lock().is_some()
     }
@@ -192,6 +268,11 @@ pub fn router(source: SceneSource) -> Router {
         .route("/api/v2/patch", get(patch))
         .route("/api/v2/preview-values", get(preview_values))
         .route("/api/v2/selection", get(selection))
+        .route("/api/v2/renderer-settings", get(renderer_settings))
+        .route(
+            "/api/v2/renderer-settings/update",
+            post(update_renderer_settings),
+        )
         .route("/api/v2/objects/{kind}", get(objects))
         .route("/api/v2/document/download", get(download_document))
         .route("/api/v2/events", get(events))
@@ -342,6 +423,38 @@ async fn selection(State(source): State<SceneSource>) -> Json<wire::SelectionSna
     Json(source.selection_snapshot())
 }
 
+async fn renderer_settings(
+    State(source): State<SceneSource>,
+) -> Result<Json<viz_scene::RendererSettingsUpdate>, StatusCode> {
+    source
+        .renderer_settings()
+        .map(Json)
+        .ok_or(StatusCode::NOT_FOUND)
+}
+
+async fn update_renderer_settings(
+    State(source): State<SceneSource>,
+    body: Bytes,
+) -> Result<Json<viz_scene::RendererSettingsUpdate>, (StatusCode, String)> {
+    let mut deserializer = serde_json::Deserializer::from_slice(&body);
+    let mut ignored = Vec::new();
+    let intent =
+        serde_ignored::deserialize(&mut deserializer, |path| ignored.push(path.to_string()))
+            .map_err(|error| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    format!("invalid renderer settings intent: {error}"),
+                )
+            })?;
+    for path in ignored {
+        eprintln!("POST /api/v2/renderer-settings/update ignored unknown field {path}");
+    }
+    source
+        .apply_renderer_settings_intent(intent)
+        .map(Json)
+        .map_err(|reason| (StatusCode::UNPROCESSABLE_ENTITY, reason))
+}
+
 /// The configuration event stream.
 ///
 /// Without it the renderer's desk provider has nothing to wait on: it would finish reading and
@@ -358,10 +471,12 @@ async fn stream_events(mut socket: WebSocket, source: SceneSource) {
     let mut changes = source.changes.subscribe();
     let mut preview_changes = source.preview_changes.subscribe();
     let mut selection_changes = source.selection_changes.subscribe();
+    let mut renderer_settings_changes = source.renderer_settings_changes.subscribe();
     // Only changes from here on are news: the renderer has just read the document.
     let _ = changes.borrow_and_update();
     let _ = preview_changes.borrow_and_update();
     let _ = selection_changes.borrow_and_update();
+    let _ = renderer_settings_changes.borrow_and_update();
     let mut sequence = 0_u64;
     let mut revision = source
         .with(|document| document.patch_revision().ok())
@@ -370,24 +485,30 @@ async fn stream_events(mut socket: WebSocket, source: SceneSource) {
         // What, if anything, the renderer has to be told about. Preview values are announced
         // separately from the patch so a fader move costs the renderer one small refetch rather
         // than a whole scene resynchronisation.
-        let announced: Option<&'static str> = tokio::select! {
+        let announced: Option<(&'static str, Option<viz_scene::RendererSettingsUpdate>)> = tokio::select! {
             changed = changes.changed() => {
                 if changed.is_err() {
                     return;
                 }
-                Some("show_patch_changed")
+                Some(("show_patch_changed", None))
             }
             changed = preview_changes.changed() => {
                 if changed.is_err() {
                     return;
                 }
-                Some("preview_values_changed")
+                Some(("preview_values_changed", None))
             }
             changed = selection_changes.changed() => {
                 if changed.is_err() {
                     return;
                 }
-                Some("visualizer_selection_changed")
+                Some(("visualizer_selection_changed", None))
+            }
+            changed = renderer_settings_changes.changed() => {
+                if changed.is_err() {
+                    return;
+                }
+                Some(("renderer_settings_changed", source.renderer_settings()))
             }
             // A renderer that has gone is noticed when it goes, not when the document next
             // changes: this stream outlives nothing.
@@ -403,17 +524,22 @@ async fn stream_events(mut socket: WebSocket, source: SceneSource) {
                     .flatten();
                 let moved = current != revision;
                 revision = current;
-                moved.then_some("show_patch_changed")
+                moved.then_some(("show_patch_changed", None))
             }
         };
-        let Some(kind) = announced else {
+        let Some((kind, renderer_settings)) = announced else {
             continue;
         };
         revision = source
             .with(|document| document.patch_revision().ok())
             .flatten();
         sequence += 1;
-        let frame = format!("{{\"kind\":\"{kind}\",\"sequence\":{sequence}}}");
+        let frame = serde_json::json!({
+            "kind": kind,
+            "sequence": sequence,
+            "rendererSettings": renderer_settings,
+        })
+        .to_string();
         if socket.send(Message::Text(frame.into())).await.is_err() {
             return;
         }

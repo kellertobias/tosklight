@@ -297,6 +297,8 @@ export const documentSession = {
 	 * folder and opens that one, so nothing an operator does to a demo reaches the next one.
 	 */
 	openDemoShow: () => invoke<DocumentSummary>("open_demo_show"),
+	/** Open the synchronized orthographic CAD planning window. */
+	openCad: () => invoke<void>("open_cad"),
 	/** Open the separate visualizer output for the document currently being edited. */
 	openVisualizer: () => invoke<void>("open_visualizer"),
 	rendererSettings: () => invoke<RendererSettings>("renderer_settings"),

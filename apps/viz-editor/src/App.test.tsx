@@ -241,12 +241,12 @@ describe("the Viz editor window", () => {
 			"Venue",
 			"Effects",
 			"Media",
-			"CAD · Planned",
 		])
 			expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
-		expect(
-			screen.getByRole("button", { name: "CAD · Planned" }),
-		).toBeDisabled();
+		const openCad = screen.getByRole("button", { name: "Open CAD" });
+		const openViz = screen.getByRole("button", { name: "Open Viz" });
+		expect(openCad).toBeEnabled();
+		expect(openCad.nextElementSibling).toBe(openViz);
 		fireEvent.click(screen.getByRole("button", { name: "Patch" }));
 		await screen.findByRole("columnheader", { name: "Fixture ID" });
 		expect(
@@ -584,6 +584,23 @@ describe("the Viz editor window", () => {
 		renderApp();
 		fireEvent.click(await screen.findByRole("button", { name: "Open Viz" }));
 		await waitFor(() => expect(invoke).toHaveBeenCalledWith("open_visualizer"));
+	});
+
+	it("opens the separate CAD planner immediately above the visualizer action", async () => {
+		invoke.mockImplementation((command: string) => {
+			if (command === "open_cad") return Promise.resolve();
+			if (command === "document_summary") return Promise.resolve(document);
+			if (command === "patch_snapshot") return Promise.resolve(snapshot);
+			if (command === "live_dmx_inputs") return Promise.resolve(liveInputs);
+			return Promise.resolve([]);
+		});
+		renderApp();
+		const openCad = await screen.findByRole("button", { name: "Open CAD" });
+		expect(openCad.nextElementSibling).toBe(
+			screen.getByRole("button", { name: "Open Viz" }),
+		);
+		fireEvent.click(openCad);
+		await waitFor(() => expect(invoke).toHaveBeenCalledWith("open_cad"));
 	});
 
 	it("applies renderer Settings directly above Open Viz", async () => {

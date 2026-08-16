@@ -3,7 +3,7 @@
 use crate::transform::{self, PlacementSource};
 use crate::wire::{ObjectRecord, PatchSnapshot, StageLayoutBody};
 use glam::Vec3;
-use light_fixture::FixtureProfile;
+use light_fixture::{FixtureProfile, apply_runtime_profile_compatibility};
 use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -417,8 +417,9 @@ fn decode_profiles(patch: &PatchSnapshot) -> HashMap<(Uuid, u64), Arc<FixturePro
             if revision.profile_snapshot.is_null() {
                 return None;
             }
-            let profile: FixtureProfile =
+            let mut profile: FixtureProfile =
                 serde_json::from_value(revision.profile_snapshot.clone()).ok()?;
+            apply_runtime_profile_compatibility(&mut profile);
             Some((
                 (revision.profile_id, revision.profile_revision),
                 Arc::new(profile),
@@ -475,6 +476,7 @@ fn build_scenery(scene: &viz_scene::Scene, venue: &[ObjectRecord]) -> Vec<Scener
             continue;
         };
         let size = venue_size(&object.body).unwrap_or(Vec3::splat(1.0));
+        let rotation_degrees = venue_rotation(&object.body).unwrap_or(Vec3::ZERO);
         let kind = venue_kind(&object.body);
         let chords = venue_chords(&object.body, kind);
         scenery.push(SceneryObject {
@@ -486,11 +488,14 @@ fn build_scenery(scene: &viz_scene::Scene, venue: &[ObjectRecord]) -> Vec<Scener
                 .unwrap_or(&object.id)
                 .to_owned(),
             position,
-            rotation_degrees: Vec3::ZERO,
+            rotation_degrees,
             size,
             colour: match kind {
                 SceneryKind::Truss => [0.2, 0.205, 0.215],
                 SceneryKind::Wall => [0.1, 0.1, 0.11],
+                // Stage drape is black wool serge. The generic prop grey made the canonical
+                // black legs and backcloth look like painted scenery in PreViz.
+                SceneryKind::Curtain => [0.008, 0.008, 0.01],
                 _ => [0.14, 0.14, 0.15],
             },
             // Wool serge is the matt-est thing in a venue and aluminium the least: a drape
@@ -511,6 +516,16 @@ fn venue_vector(body: &serde_json::Value, key: &str) -> Option<Vec3> {
     let value = body.get(key)?;
     let read = |name: &str| value.get(name).and_then(serde_json::Value::as_f64);
     Some(transform::to_world(
+        read("x")? as f32,
+        read("y")? as f32,
+        read("z")? as f32,
+    ))
+}
+
+fn venue_rotation(body: &serde_json::Value) -> Option<Vec3> {
+    let value = body.get("rotation_degrees")?;
+    let read = |name: &str| value.get(name).and_then(serde_json::Value::as_f64);
+    Some(transform::rotation_to_world(
         read("x")? as f32,
         read("y")? as f32,
         read("z")? as f32,
@@ -544,6 +559,12 @@ fn venue_kind(body: &serde_json::Value) -> SceneryKind {
     let says = |needle: &str| named.contains(needle) || name.contains(needle);
     if says("truss") || says("bar") || says("boom") {
         SceneryKind::Truss
+    } else if says("mirror_ball") || says("mirror ball") || says("disco ball") {
+        SceneryKind::MirrorBall
+    } else if says("curtain") || says("drape") || says("serge") {
+        SceneryKind::Curtain
+    } else if says("railing") || says("handrail") {
+        SceneryKind::Railing
     } else if says("wall") || says("cyc") || says("backdrop") || says("screen") {
         SceneryKind::Wall
     } else if says("riser") || says("deck") || says("rostrum") || says("stage") {

@@ -22,6 +22,7 @@ import { MediaWorkspace } from "./MediaWorkspace";
 import { PreviewControls } from "./PreviewControls";
 import { RendererSettingsWorkspace } from "./RendererSettingsWorkspace";
 import { beginWindowDrag, WindowControls } from "./WindowChrome";
+import { cadSession } from "./cad/session";
 
 const DEFAULT_LAYER: PatchLayer = { id: "default", name: "Default", order: 0 };
 type ShowPage =
@@ -41,12 +42,14 @@ export function App() {
 		"show" | "patch" | "venue" | "effects" | "media" | "settings"
 	>("show");
 	const [showPage, setShowPage] = useState<ShowPage>("show");
+	const [openingCad, setOpeningCad] = useState(false);
 	const [openingViz, setOpeningViz] = useState(false);
 	// Bumped when something outside the sheet changed the document — an MVR import — so the sheet
 	// reads the new snapshot instead of showing the rig as it was before.
 	const [reload, setReload] = useState(0);
 	// What the patch sheet has selected, and what the preview controls therefore drive.
 	const [selected, setSelected] = useState<readonly string[]>([]);
+	const [selectionRevision, setSelectionRevision] = useState(0);
 	// The rig itself, for the preview controls: the sheet owns the table, this owns the values.
 	const [fixtures, setFixtures] = useState<readonly PatchFixtureProjection[]>(
 		[],
@@ -73,6 +76,56 @@ export function App() {
 		// a window that opens white reports nothing, which is exactly the failure to catch.
 		documentSession.surfaceReady().catch(() => undefined);
 	}, []);
+
+	useEffect(() => {
+		let selectionUnlisten: (() => void) | undefined;
+		let sceneUnlisten: (() => void) | undefined;
+		cadSession
+			.snapshot()
+			.then((snapshot) => {
+				setSelected(snapshot.selectedIds);
+				setSelectionRevision(snapshot.selectionRevision);
+			})
+			.catch(() => undefined);
+		cadSession
+			.onSelectionDelta((delta) => {
+				setSelected(delta.selectedIds);
+				setSelectionRevision(delta.revision);
+				if (delta.selectedIds.length) setWorkspace("patch");
+			})
+			.then((unlisten) => {
+				selectionUnlisten = unlisten;
+			})
+			.catch(() => undefined);
+		cadSession
+			.onSceneDelta(() => loadFixtures())
+			.then((unlisten) => {
+				sceneUnlisten = unlisten;
+			})
+			.catch(() => undefined);
+		return () => {
+			selectionUnlisten?.();
+			sceneUnlisten?.();
+		};
+	}, []);
+
+	async function replaceSelection(ids: readonly string[]) {
+		setSelected(ids);
+		try {
+			const delta = await cadSession.replaceSelection(selectionRevision, ids);
+			setSelectionRevision(delta.revision);
+			setSelected(delta.selectedIds);
+		} catch (reason) {
+			report(reason);
+			cadSession
+				.snapshot()
+				.then((snapshot) => {
+					setSelectionRevision(snapshot.selectionRevision);
+					setSelected(snapshot.selectedIds);
+				})
+				.catch(report);
+		}
+	}
 
 	/// The preview controls drive fixtures, so they need the rig the sheet is showing.
 	function loadFixtures() {
@@ -135,14 +188,14 @@ export function App() {
 			selection: {
 				fixtureIds: new Set(selected),
 				orderedFixtureIds: selected,
-				replace: (intent) => setSelected(intent.resolvedFixtures),
+				replace: (intent) => void replaceSelection(intent.resolvedFixtures),
 			},
 			// No `Set` key either, so editing a cell is always allowed.
 			editArmed: true,
 			desktopEditing: true,
 			setEditArmed: () => undefined,
 		}),
-		[profiles, layers, selected],
+		[profiles, layers, selected, selectionRevision],
 	);
 
 	const definitions = useMemo(
@@ -213,12 +266,6 @@ export function App() {
 								icon: <span>▣</span>,
 								disabled: !document,
 							},
-							{
-								id: "cad",
-								label: "CAD · Planned",
-								icon: <span>⌗</span>,
-								disabled: true,
-							},
 						]}
 					/>
 					<Button
@@ -230,6 +277,19 @@ export function App() {
 						}}
 					>
 						Settings
+					</Button>
+					<Button
+						className="viz-editor-open-cad"
+						disabled={!document || openingCad}
+						onClick={() => {
+							setOpeningCad(true);
+							documentSession
+								.openCad()
+								.catch(report)
+								.finally(() => setOpeningCad(false));
+						}}
+					>
+						{openingCad ? "Opening CAD…" : "Open CAD"}
 					</Button>
 					<Button
 						className="viz-editor-open-viz"

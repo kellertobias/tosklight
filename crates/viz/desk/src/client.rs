@@ -1,4 +1,5 @@
-//! Authenticated read-only HTTP client for the desk API.
+//! Authenticated scene client for the desk-compatible API. Show reads remain read-only; only a
+//! planning source accepts renderer-local settings written by its connected Visualizer.
 
 use crate::wire::{
     ObjectCollection, PatchSnapshot, Readiness, SessionResponse, VisualizerViewSnapshot,
@@ -115,6 +116,45 @@ impl DeskClient {
         self.get_json::<crate::wire::SelectionSnapshot>("/api/v2/selection", "selection")
             .await
             .ok()
+    }
+
+    pub async fn renderer_settings(&self) -> Option<viz_scene::RendererSettingsUpdate> {
+        self.get_json::<viz_scene::RendererSettingsUpdate>(
+            "/api/v2/renderer-settings",
+            "renderer settings",
+        )
+        .await
+        .ok()
+    }
+
+    pub async fn update_renderer_settings(
+        &self,
+        intent: &viz_scene::RendererSettingsIntent,
+    ) -> Result<viz_scene::RendererSettingsUpdate, ProviderError> {
+        let mut request = self
+            .http
+            .post(format!("{}/api/v2/renderer-settings/update", self.base))
+            .json(intent);
+        if let Some(token) = &self.token {
+            request = request.bearer_auth(token);
+        }
+        let response = request
+            .send()
+            .await
+            .map_err(|error| ProviderError::new("renderer settings", error.to_string(), true))?;
+        let status = response.status();
+        if !status.is_success() {
+            let body = response.text().await.unwrap_or_default();
+            return Err(ProviderError::new(
+                "renderer settings",
+                format!("{status}: {body}"),
+                status.is_server_error() || status.as_u16() == 409,
+            ));
+        }
+        response
+            .json()
+            .await
+            .map_err(|error| ProviderError::new("renderer settings", error.to_string(), false))
     }
 
     /// The desk's own live output universes.

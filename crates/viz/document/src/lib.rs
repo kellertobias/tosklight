@@ -14,6 +14,7 @@
 //! The file it writes is an ordinary portable show. The desk opens it directly; no conversion,
 //! no export step, no second format.
 
+mod inputs;
 mod media;
 mod mvr;
 mod ports;
@@ -22,6 +23,7 @@ pub mod standalone;
 #[cfg(test)]
 mod tests;
 
+pub use inputs::{LIVE_DMX_INPUT_KIND, LiveDmxInputMapping, LiveDmxInputs};
 pub use media::{
     CitpConfiguration, CropRectangle, LedModuleType, ManagedFallbackReference, MediaFallbackAsset,
     MediaIntentAction, MediaLayoutOutcome, MediaLayoutSnapshot, MediaObject, MediaObjectIntent,

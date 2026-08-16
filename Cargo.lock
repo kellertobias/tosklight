@@ -8158,9 +8158,9 @@ dependencies = [
  "tauri-plugin-dialog",
  "tokio",
  "uuid",
- "viz-demo",
  "viz-document",
  "viz-planning",
+ "viz-scene",
 ]
 
 [[package]]
@@ -8201,6 +8201,7 @@ dependencies = [
  "light-show",
  "parking_lot",
  "serde",
+ "serde_ignored",
  "serde_json",
  "tokio",
  "tower",

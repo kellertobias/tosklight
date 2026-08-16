@@ -537,6 +537,7 @@ fn apply_transforms(
             request_id: Uuid::new_v4().to_string(),
             fixtures,
             remove_fixture_ids: Vec::new(),
+            placements: Vec::new(),
         }
         .into_command(document.show_id());
         document

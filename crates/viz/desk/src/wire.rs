@@ -329,6 +329,8 @@ pub struct EventFrame {
     pub kind: String,
     #[serde(default)]
     pub sequence: u64,
+    #[serde(default, rename = "rendererSettings")]
+    pub renderer_settings: Option<viz_scene::RendererSettingsUpdate>,
 }
 
 /// Preview values a planning window is driving the rig with.
@@ -400,6 +402,7 @@ impl EventFrame {
             return Some(Self {
                 kind: payload.kind,
                 sequence: event.sequence,
+                renderer_settings: None,
             });
         }
         let frame = serde_json::from_str::<Self>(text).ok()?;
@@ -424,6 +427,30 @@ mod tests {
         let frame = EventFrame::parse(planner).expect("a planning frame");
         assert_eq!(frame.kind, "show_patch_changed");
         assert_eq!(frame.sequence, 7);
+    }
+
+    #[test]
+    fn a_planning_settings_event_carries_its_exact_changed_fields() {
+        let text = serde_json::json!({
+            "kind": "renderer_settings_changed",
+            "sequence": 8,
+            "rendererSettings": {
+                "revision": 12,
+                "source": "editor",
+                "changed": ["quality", "fog"],
+                "settings": viz_scene::RendererSettings {
+                    quality: Some("draft".into()),
+                    fog: 0.02,
+                    ..viz_scene::RendererSettings::default()
+                }
+            }
+        })
+        .to_string();
+        let frame = EventFrame::parse(&text).expect("settings event");
+        let update = frame.renderer_settings.expect("settings payload");
+        assert_eq!(update.changed, ["quality", "fog"]);
+        assert_eq!(update.settings.quality.as_deref(), Some("draft"));
+        assert_eq!(update.settings.fog, 0.02);
     }
 
     /// A frame that names nothing — the socket's own hello, or an error — is not a change.

@@ -636,6 +636,9 @@ pub struct ViewConfiguration {
     pub background: Option<[f32; 3]>,
     /// Draw the reference grid on the ground plane.
     pub floor_grid: bool,
+    /// Draw dashed direction guides for unlit fixtures in the 3D diagram.
+    #[serde(default)]
+    pub show_aim_guides: bool,
     /// Desk-issued monotonic generation; an increase resets every physics body authoritatively.
     #[serde(default)]
     pub physics_reset_generation: u64,
@@ -659,6 +662,7 @@ impl Default for ViewConfiguration {
             show_labels: true,
             background: Some(DEFAULT_BACKGROUND),
             floor_grid: true,
+            show_aim_guides: false,
             physics_reset_generation: 0,
         }
     }

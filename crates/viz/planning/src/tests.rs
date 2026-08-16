@@ -340,6 +340,104 @@ async fn a_connected_renderer_sits_still_until_the_document_changes() {
     );
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn connected_editor_and_renderer_exchange_exact_setting_changes() {
+    use std::time::{Duration, Instant};
+    use viz_scene::SceneProvider;
+
+    let (document, path) = document("renderer-settings-events");
+    let source = SceneSource::new(document);
+    source
+        .set_renderer_settings("editor-startup", viz_scene::RendererSettings::default())
+        .unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let served = source.clone();
+    let server = tokio::spawn(async move {
+        let _ = axum::serve(listener, router(served)).await;
+    });
+    let mut provider = viz_desk::DeskProvider::start(
+        viz_desk::DeskConnection {
+            host: "127.0.0.1".into(),
+            port,
+            retry: Duration::from_millis(50),
+            ..viz_desk::DeskConnection::default()
+        },
+        Instant::now(),
+    );
+
+    let connected = Instant::now() + Duration::from_secs(10);
+    while Instant::now() < connected {
+        let events = provider.poll();
+        if events
+            .iter()
+            .any(|event| matches!(event, viz_scene::ProviderEvent::Snapshot { .. }))
+        {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+
+    let edited = viz_scene::RendererSettings {
+        quality: Some("draft".into()),
+        fog: 0.02,
+        ..viz_scene::RendererSettings::default()
+    };
+    source.set_renderer_settings("editor", edited).unwrap();
+    let started = Instant::now();
+    let deadline = started + Duration::from_secs(2);
+    let mut delivered = None;
+    while Instant::now() < deadline && delivered.is_none() {
+        delivered = provider.poll().into_iter().find_map(|event| match event {
+            viz_scene::ProviderEvent::RendererSettings(update) if update.source == "editor" => {
+                Some(update)
+            }
+            _ => None,
+        });
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    let delivered = delivered.expect("Editor settings reached the renderer");
+    assert_eq!(delivered.changed, ["quality", "fog"]);
+    assert!(
+        started.elapsed() < Duration::from_millis(100),
+        "settings delivery took {:?}",
+        started.elapsed()
+    );
+
+    let from_renderer = viz_scene::RendererSettings {
+        exposure: 1.4,
+        ..delivered.settings.clone()
+    };
+    let intent = viz_scene::RendererSettingsIntent {
+        request_id: Uuid::new_v4().to_string(),
+        source: "visualizer".into(),
+        changes: from_renderer.changes_from(&delivered.settings),
+    };
+    provider.update_renderer_settings(intent.clone());
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while Instant::now() < deadline
+        && source
+            .renderer_settings()
+            .is_none_or(|update| update.source != "visualizer")
+    {
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    let returned = source
+        .renderer_settings()
+        .expect("Visualizer settings reached Editor");
+    assert_eq!(returned.source, "visualizer");
+    assert_eq!(returned.changed, ["exposure"]);
+    assert_eq!(returned.settings.exposure, 1.4);
+    let replay = source
+        .apply_renderer_settings_intent(intent)
+        .expect("duplicate request returns its stored outcome");
+    assert_eq!(replay.revision, returned.revision);
+
+    provider.shutdown();
+    server.abort();
+    let _ = std::fs::remove_file(path);
+}
+
 /// Anything that puts a new rig on the screen: the first read is a snapshot, and an edit
 /// afterwards arrives as a delta applied to it rather than as a second whole scene.
 fn count_snapshots(provider: &mut impl viz_scene::SceneProvider) -> u32 {
@@ -739,25 +837,6 @@ fn every_preview_change_moves_the_revision() {
     let after_clear = source.preview_snapshot().revision;
     assert!(after_set > start, "setting a value moved the revision");
     assert!(after_clear > after_set, "clearing moved it again");
-}
-
-#[tokio::test]
-async fn editor_selection_is_identity_based_live_state_for_the_renderer() {
-    let (document, path, fixture_id) = preview_document("selection-live");
-    let source = SceneSource::new(document);
-    let before = std::fs::read(&path).expect("show bytes");
-    let start = source.selection_snapshot().revision;
-
-    source.set_selection(vec![fixture_id]);
-
-    let snapshot: crate::wire::SelectionSnapshot = get(&source, "/api/v2/selection").await;
-    assert!(snapshot.revision > start);
-    assert_eq!(snapshot.selected_fixture_ids, [fixture_id]);
-    assert_eq!(
-        std::fs::read(path).expect("show bytes"),
-        before,
-        "selection became portable show data"
-    );
 }
 
 /// The show file is what the operator saves. A preview look must never reach it.

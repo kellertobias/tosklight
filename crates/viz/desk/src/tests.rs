@@ -6,6 +6,44 @@ use serde_json::json;
 use std::io::Read;
 use viz_scene::{BodyKind, EmitterKind, euler_degrees};
 
+#[test]
+fn patch_api_jbled_a7_revision_one_uses_the_same_safe_shutter_table_as_the_desk() {
+    let mut profile = shipped_profile("jb-lighting--jbled-a7");
+    profile["revision"] = json!(1);
+    for mode in profile["modes"].as_array_mut().expect("fixture modes") {
+        let shutter = mode["channels"]
+            .as_array_mut()
+            .expect("mode channels")
+            .iter_mut()
+            .find(|channel| channel["attribute"] == "shutter")
+            .expect("A7 shutter");
+        shutter["default_raw"] = json!(0);
+        shutter["functions"] = json!([{
+            "id": "c0bef916-4b0f-fb06-4f64-0c608a79a70f",
+            "name": "Shutter / Strobe",
+            "dmx_from": 0,
+            "dmx_to": 255,
+            "attribute": "shutter",
+            "priority": 0,
+            "behavior": {
+                "type": "continuous",
+                "physical_min": 0.0,
+                "physical_max": 1.0,
+                "unit": null
+            }
+        }]);
+    }
+
+    let plan = scene_build::build(&models(profile, StageLayoutBody::default()));
+    let shutter = plan.bindings[0].shutter.as_ref().expect("shutter binding");
+    let mut slots = [0_u8; viz_dmx::DMX_SLOTS];
+    slots[usize::from(shutter.slots[0] - 1)] = 16;
+    assert_eq!(
+        shutter.function(&slots).expect("safe home function").name,
+        "Shutter open"
+    );
+}
+
 /// Read one shipped `.toskfixture` package and return its profile snapshot as JSON.
 fn shipped_profile(name: &str) -> serde_json::Value {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -375,6 +413,7 @@ fn venue_objects_are_accepted_as_scenery() {
         id: "riser".into(),
         revision: 1,
         body: json!({"name": "Riser", "position": {"x": 0.0, "y": 2.0, "z": 0.4},
+                     "rotation_degrees": {"x": 0.0, "y": 90.0, "z": 0.0},
                      "size": {"x": 4.0, "y": 2.0, "z": 0.6}}),
     });
     let plan = scene_build::build(&models);
@@ -384,6 +423,61 @@ fn venue_objects_are_accepted_as_scenery() {
             .iter()
             .any(|object| object.name == "Riser")
     );
+    assert_eq!(
+        plan.scene
+            .scenery
+            .iter()
+            .find(|object| object.name == "Riser")
+            .map(|object| object.rotation_degrees),
+        Some(glam::Vec3::new(0.0, 0.0, 90.0))
+    );
+}
+
+#[test]
+fn authored_disco_balls_curtains_and_railings_keep_their_scenery_kinds() {
+    let mut models = models(
+        shipped_profile("claypaky--sharpy"),
+        StageLayoutBody::default(),
+    );
+    for (id, name, kind) in [
+        ("disco", "Dancefloor Disco Ball", "mirror_ball"),
+        ("curtain", "Back Curtain", "curtain"),
+        ("railing", "Stage Railing", "railing"),
+    ] {
+        models.venue_objects.push(ObjectRecord {
+            id: id.into(),
+            revision: 1,
+            body: json!({
+                "name": name,
+                "kind": kind,
+                "position": {"x": 0.0, "y": -3.0, "z": 4.5},
+                "size": {"x": 0.5, "y": 0.5, "z": 0.75}
+            }),
+        });
+    }
+    let plan = scene_build::build(&models);
+    for (name, expected) in [
+        ("Dancefloor Disco Ball", viz_scene::SceneryKind::MirrorBall),
+        ("Back Curtain", viz_scene::SceneryKind::Curtain),
+        ("Stage Railing", viz_scene::SceneryKind::Railing),
+    ] {
+        assert_eq!(
+            plan.scene
+                .scenery
+                .iter()
+                .find(|object| object.name == name)
+                .map(|object| object.kind),
+            Some(expected)
+        );
+    }
+    let curtain = plan
+        .scene
+        .scenery
+        .iter()
+        .find(|object| object.name == "Back Curtain")
+        .expect("curtain scenery");
+    assert_eq!(curtain.colour, [0.008, 0.008, 0.01]);
+    assert_eq!(curtain.roughness, 0.96);
 }
 
 /// The end of the chain the whole feature hangs on: a shipped laser package, read the way the desk

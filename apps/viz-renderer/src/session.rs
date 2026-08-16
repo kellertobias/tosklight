@@ -135,6 +135,7 @@ impl Session {
                     self.source_view_epoch += 1;
                 }
                 ProviderEvent::Diagnostics(diagnostics) => self.diagnostics = *diagnostics,
+                ProviderEvent::RendererSettings(_) => {}
                 ProviderEvent::ResyncRequired { reason } => {
                     self.awaiting_snapshot = true;
                     self.connection = ConnectionState::Stale {

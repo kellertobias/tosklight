@@ -183,6 +183,30 @@ fn installed_appearance_validation_applies_to_root_and_multipatch_instances() {
 }
 
 #[test]
+fn legacy_installed_appearance_without_luminous_output_inherits_the_profile() {
+    let appearance: InstalledFixtureAppearance = serde_json::from_value(serde_json::json!({
+        "light_source": { "type": "profile_default" },
+        "color_temperature_kelvin": null,
+        "gel": { "type": "open_white" },
+        "shaper_angles_degrees": [0.0, 0.0, 0.0, 0.0]
+    }))
+    .unwrap();
+
+    assert_eq!(appearance.luminous_output_lumens, None);
+}
+
+#[test]
+fn installed_luminous_output_must_be_positive_and_finite() {
+    let mut fixture = schema_v2_two_split_fixture();
+    fixture.installed_appearance.luminous_output_lumens = Some(0.0);
+    let error = validate_patch(std::slice::from_ref(&fixture)).unwrap_err();
+    assert!(error.to_string().contains("positive finite lumen value"));
+
+    fixture.installed_appearance.luminous_output_lumens = Some(18_000.0);
+    validate_patch(std::slice::from_ref(&fixture)).unwrap();
+}
+
+#[test]
 fn explicit_installed_sources_require_an_explicit_or_embedded_profile_cct() {
     let mut fixture = schema_v2_two_split_fixture();
     fixture.installed_appearance.light_source = InstalledLightSource::Led;

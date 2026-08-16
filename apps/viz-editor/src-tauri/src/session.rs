@@ -118,7 +118,7 @@ impl Session {
         Ok(summary)
     }
 
-    fn with<T>(&self, action: impl FnOnce(&PlanningDocument) -> Answer<T>) -> Answer<T> {
+    pub(crate) fn with<T>(&self, action: impl FnOnce(&PlanningDocument) -> Answer<T>) -> Answer<T> {
         self.source
             .with(action)
             .unwrap_or_else(|| Err("no document is open".to_owned()))
@@ -128,7 +128,10 @@ impl Session {
     ///
     /// A rig the operator just patched has to appear in the picture now, not on whatever the
     /// renderer's next reconnection would have been.
-    fn change<T>(&self, action: impl FnOnce(&PlanningDocument) -> Answer<T>) -> Answer<T> {
+    pub(crate) fn change<T>(
+        &self,
+        action: impl FnOnce(&PlanningDocument) -> Answer<T>,
+    ) -> Answer<T> {
         let outcome = self.with(action);
         if outcome.is_ok() {
             self.source.mark_changed();

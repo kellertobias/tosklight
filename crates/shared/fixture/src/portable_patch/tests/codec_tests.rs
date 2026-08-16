@@ -412,6 +412,7 @@ fn installed_appearance_round_trips_catalog_fallbacks_and_custom_gels_per_instan
     fixture.installed_appearance = InstalledFixtureAppearance {
         light_source: InstalledLightSource::Halogen,
         color_temperature_kelvin: Some(3_200),
+        luminous_output_lumens: Some(18_000.0),
         gel: GelAssignment::BuiltIn {
             catalog_id: "touring-gels".into(),
             entry_id: "deep-red".into(),
@@ -429,6 +430,7 @@ fn installed_appearance_round_trips_catalog_fallbacks_and_custom_gels_per_instan
             label: "Carbon arc".into(),
         },
         color_temperature_kelvin: Some(5_600),
+        luminous_output_lumens: Some(9_500.0),
         gel: GelAssignment::Custom {
             name: "Window blue".into(),
             color_srgb: "#80A0FF".into(),
@@ -442,6 +444,17 @@ fn installed_appearance_round_trips_catalog_fallbacks_and_custom_gels_per_instan
         .unwrap()
         .patch()
         .unwrap();
+
+    assert_eq!(
+        patch.installed_appearance.luminous_output_lumens,
+        Some(18_000.0)
+    );
+    assert_eq!(
+        patch.multipatch[0]
+            .installed_appearance
+            .luminous_output_lumens,
+        Some(9_500.0)
+    );
 
     assert_eq!(patch.installed_appearance, fixture.installed_appearance);
     assert_eq!(

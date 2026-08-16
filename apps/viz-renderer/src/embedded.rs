@@ -254,7 +254,9 @@ fn drain(events: Vec<ProviderEvent>, state: &mut PaneState) -> bool {
             ProviderEvent::Connection(connection) => {
                 finished |= matches!(connection, viz_scene::ConnectionState::Failed { .. });
             }
-            ProviderEvent::Diagnostics(_) | ProviderEvent::ResyncRequired { .. } => {}
+            ProviderEvent::Diagnostics(_)
+            | ProviderEvent::RendererSettings(_)
+            | ProviderEvent::ResyncRequired { .. } => {}
         }
     }
     finished

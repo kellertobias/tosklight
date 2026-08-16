@@ -27,6 +27,9 @@ viz-planning = { path = "../../../crates/viz/planning" }
 viz-scene = { path = "../../../crates/viz/scene" }
 tokio.workspace = true
 
+[dev-dependencies]
+light-show = { path = "../../../crates/shared/show" }
+
 [features]
 # Tauri decides between a development build and a real one by this feature: without it the app
 # embeds no frontend and opens the dev-server URL instead, which is a white window on any machine
