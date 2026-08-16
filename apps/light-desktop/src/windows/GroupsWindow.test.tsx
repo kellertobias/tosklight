@@ -285,7 +285,7 @@ describe("GroupsWindow action routing", () => {
 		expect(mocks.selectLive).not.toHaveBeenCalled();
 	});
 
-	it("right-click chooses the Group SET source and suppresses the native menu", async () => {
+	it("right-click opens Group Settings and suppresses the native menu", async () => {
 		render(<GroupsWindow />);
 		const button = buttonForText("Stored Empty");
 		const contextMenu = new MouseEvent("contextmenu", {
@@ -295,12 +295,11 @@ describe("GroupsWindow action routing", () => {
 		button.dispatchEvent(contextMenu);
 
 		expect(contextMenu.defaultPrevented).toBe(true);
-		await waitFor(() =>
-			expect(mocks.replaceCommand).toHaveBeenCalledWith("SET GROUP 4", false),
-		);
 		expect(
-			screen.queryByRole("dialog", { name: "Group 4 settings" }),
-		).toBeNull();
+			await screen.findByRole("dialog", { name: "Group 4 settings" }),
+		).toBeInTheDocument();
+		expect(mocks.replaceCommand).not.toHaveBeenCalled();
+		expect(mocks.selectLive).not.toHaveBeenCalled();
 	});
 
 	it("does not reopen long-held Group settings after authority replacement", () => {

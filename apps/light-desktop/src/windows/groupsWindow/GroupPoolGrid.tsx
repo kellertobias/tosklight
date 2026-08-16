@@ -111,7 +111,7 @@ function GroupPoolCardSlot({
 				held.current = false;
 				return consumed;
 			}}
-			openSettings={() => group && chooseSetSource(group)}
+			openSettings={() => openSettings("context_menu")}
 			dereference={() => group && dereference(group)}
 			select={select}
 		/>
