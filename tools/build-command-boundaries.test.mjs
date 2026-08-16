@@ -105,6 +105,18 @@ test("secondary app open functions only consume existing artifacts", () => {
 	}
 });
 
+test("local Viz builds stage the Desk's canonical demo instead of generating another rig", () => {
+	const buildScript = read("tools/build.sh");
+	const demoFunction = shellFunction(
+		buildScript,
+		"build_demo_show",
+		"capture_demo",
+	);
+	assert.match(demoFunction, /assets\/demo\.show/u);
+	assert.match(demoFunction, /LIGHT_DEMO_SHOW_DIR\/demo-show\.show/u);
+	assert.doesNotMatch(demoFunction, /viz-demo|viz-demo-show|cargo build/u);
+});
+
 test("repository Tauri overlays disable a duplicate frontend build", () => {
 	const configWriter = read("tools/write-tauri-artifact-config.mjs");
 	assert.match(configWriter, /beforeBuildCommand: ""/u);
@@ -234,15 +246,12 @@ test("macOS release apps are sealed only after their final helpers and resources
 	assert.ok(desktopSeal < desktopSmoke);
 	assert.match(sealer, /codesign --force --deep --sign - --timestamp=none/u);
 	assert.match(sealer, /codesign --verify --deep --strict/u);
-	assert.match(workflow, /ToskLight Visualizer\.app[\s\S]*seal-macos-app\.sh/u);
+	assert.match(workflow, /ToskLight PreViz\.app[\s\S]*seal-macos-app\.sh/u);
 	assert.match(
 		workflow,
-		/editor_app="\$bundle\/macos\/ToskLight Visualizer\.app"[\s\S]*accessory\/viz-editor[\s\S]*ToskLight Visualizer\.app\/Contents\/MacOS\/viz-editor[\s\S]*seal-macos-app\.sh/u,
+		/editor_app="\$bundle\/macos\/ToskLight PreViz\.app"[\s\S]*accessory\/viz-editor[\s\S]*ToskLight PreViz\.app\/Contents\/MacOS\/viz-editor[\s\S]*seal-macos-app\.sh/u,
 	);
-	assert.match(
-		workflow,
-		/bundle-media-macos\.sh[\s\S]*seal-macos-app\.sh/u,
-	);
+	assert.match(workflow, /bundle-media-macos\.sh[\s\S]*seal-macos-app\.sh/u);
 	assert.match(assembler, /codesign --verify --deep --strict/u);
 	assert.match(assembler, /macos-first-start\.txt/u);
 	assert.match(assembler, /sign-macos-apps-locally\.sh/u);
@@ -283,12 +292,34 @@ test("the Viz release keeps one product identity and literal accessory names", (
 	const workflow = read(".github/workflows/release.yml");
 	const assembler = read("tools/assemble-release-bundle.sh");
 	const config = read("apps/viz-editor/src-tauri/tauri.conf.json");
+	const bundler = read("tools/bundle-visualizer-macos.sh");
 
-	assert.match(config, /"productName": "ToskLight Visualizer"/u);
-	assert.match(config, /"title": "Rig Editor"/u);
+	assert.match(config, /"productName": "ToskLight PreViz"/u);
+	assert.match(config, /"title": "ToskLight PreViz"/u);
+	assert.match(config, /"identifier": "de\.tokenet\.tosklight\.visualizer"/u);
+	assert.match(config, /"icons\/icon\.icns"/u);
+	assert.match(bundler, /PRODUCT_NAME="ToskLight PreViz"/u);
+	assert.match(bundler, /IDENTIFIER="de\.tokenet\.tosklight\.visualizer"/u);
+	assert.match(bundler, /apps\/viz-editor\/src-tauri\/icons\/icon\.icns/u);
 	assert.doesNotMatch(workflow, /tosklight-viz-\$version-windows-amd64-setup/u);
-	assert.match(assembler, /ToskLight Visualizer\.exe/u);
+	assert.match(assembler, /ToskLight PreViz\.exe/u);
+	assert.match(assembler, /tosklight-previz-\$asset_slug\.app/u);
+	assert.match(workflow, /tosklight-previz-\$version-macos-arm64\.zip/u);
 	assert.doesNotMatch(assembler, /mv "\$previz\/viz-editor(?:\.exe)?"/u);
+});
+
+test("the editor-owned renderer is an accessory of the same PreViz application", () => {
+	const launcher = read("apps/viz-editor/src-tauri/src/visualizer.rs");
+	const renderer = read("apps/viz-renderer/src/main.rs");
+	const editor = read("apps/viz-editor/src-tauri/src/main.rs");
+
+	assert.match(launcher, /\.env\("TOSKLIGHT_VIZ_LAUNCHED_BY", "editor"\)/u);
+	assert.match(renderer, /Some\("desk" \| "editor"\)/u);
+	assert.match(renderer, /ActivationPolicy::Accessory/u);
+	assert.match(
+		editor,
+		/opened_by_the_visualizer\(\)[\s\S]*ActivationPolicy::Accessory/u,
+	);
 });
 
 test("open:viz requires every helper path it exports without rebuilding", () => {
@@ -321,6 +352,10 @@ test("open:viz requires every helper path it exports without rebuilding", () => 
 	assert.match(
 		openVisualizer,
 		/TOSKLIGHT_VIZ_HEADLESS="\$TARGET_DIR\/release\/light-headless"/u,
+	);
+	assert.match(
+		openVisualizer,
+		/TOSKLIGHT_VIZ_RENDERER="\$\(visualizer_executable\)"[\s\S]*"\$TARGET_DIR\/release\/viz-editor"[\s\S]*return/u,
 	);
 });
 
@@ -443,10 +478,15 @@ test("release packaging and Pages cover the supported product matrix", () => {
 		/Assemble the operator-facing platform bundle[\s\S]*assemble-release-bundle\.sh/u,
 	);
 	assert.equal(
-		fs.existsSync(path.join(repositoryRoot, ".github/workflows/media-release.yml")),
+		fs.existsSync(
+			path.join(repositoryRoot, ".github/workflows/media-release.yml"),
+		),
 		false,
 	);
-	assert.equal(fs.existsSync(path.join(repositoryRoot, ".github/workflows/media.yml")), false);
+	assert.equal(
+		fs.existsSync(path.join(repositoryRoot, ".github/workflows/media.yml")),
+		false,
+	);
 
 	for (const slug of [
 		"macos_arm64",
@@ -465,10 +505,7 @@ test("release packaging and Pages cover the supported product matrix", () => {
 		"linux-amd64",
 		"linux-arm64",
 	]) {
-		assert.ok(
-			workflow.includes(`slug: ${slug}`),
-			`Media should build ${slug}`,
-		);
+		assert.ok(workflow.includes(`slug: ${slug}`), `Media should build ${slug}`);
 	}
 	assert.match(landingPage, /assets-demo-show\.show/u);
 	assert.match(landingPage, /assets-handbook\.pdf/u);

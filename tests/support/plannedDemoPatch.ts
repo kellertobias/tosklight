@@ -176,11 +176,11 @@ export async function installPlannedDemoPatch(
 	);
 	if (lightingFixtures.length !== PLANNED_DEMO_CONTROL_FIXTURES)
 		throw new Error(
-			`Plan 76 patch has ${lightingFixtures.length} controls; expected 231`,
+			`Demo patch has ${lightingFixtures.length} controls; expected ${PLANNED_DEMO_CONTROL_FIXTURES}`,
 		);
 	if (physicalInstances !== PLANNED_DEMO_PHYSICAL_INSTANCES)
 		throw new Error(
-			`Plan 76 patch has ${physicalInstances} physical instances; expected 264`,
+			`Demo patch has ${physicalInstances} physical instances; expected ${PLANNED_DEMO_PHYSICAL_INSTANCES}`,
 		);
 	return {
 		...built,
@@ -448,13 +448,25 @@ function layerFor(
 		(entry.patch.address <= 24 || entry.roles.includes("Hazers"));
 	const preferred = conventional
 		? "Conventional Light"
-		: entry.family === "profile"
-			? `Profile ${location}`
-			: entry.family === "wash"
-				? `Wash ${location}`
-				: entry.family === "led" || entry.roles.includes("Sunstrips")
-					? `LED PAR ${location}`
-					: "Stage & Venue";
+		: entry.roles.includes("Media Servers")
+			? "Media Servers"
+			: entry.roles.includes("Audience Beams")
+				? "Audience Beams"
+				: entry.roles.includes("Sunstrips")
+					? "Sunstrips"
+					: entry.roles.includes("Lasers")
+						? "Lasers"
+						: entry.roles.includes("Sparklers")
+							? "Sparklers"
+							: entry.roles.includes("Flame Jets")
+								? "Flame Jets"
+								: entry.family === "profile"
+										? `Profile ${location}`
+										: entry.family === "wash"
+											? `Wash ${location}`
+											: entry.family === "led"
+												? `LED PAR ${location}`
+												: "Stage & Venue";
 	return (
 		layers[preferred] ??
 		layers["Stage & Venue"] ??
@@ -598,6 +610,28 @@ function configuredSpread(value: string, index: number, count: number) {
 
 function ordinaryLocation(entry: DemoFixtureManifestEntry): Point {
 	const index = familyIndex(entry);
+	if (entry.roles.includes("Media Servers"))
+		return { x: entry.number === 1001 ? -4.5 : 4.5, y: 3.5, z: 0.5 };
+	if (entry.roles.includes("Lasers"))
+		return {
+			x: [-3, 0, 3][entry.number - 1101] ?? 0,
+			y: 4.0,
+			z: entry.number === 1102 ? 3.55 : 1.0,
+		};
+	if (entry.roles.includes("Sparklers"))
+		return {
+			x: spread(entry.number - 1201, 6, -3.75, 3.75),
+			y: -0.55,
+			z: 0,
+		};
+	if (entry.roles.includes("Flame Jets"))
+		return {
+			x: spread(entry.number - 1301, 3, -2.5, 2.5),
+			y: -1.15,
+			z: 0,
+		};
+	if (entry.roles.includes("Audience Beams"))
+		return grid(entry.number - 451, 4, 1.8, -2.7, -4.5, 4.2);
 	if (entry.family === "profile" && entry.location === "stage")
 		return trussLine(
 			index < 16 ? index : index - 16,
@@ -651,6 +685,8 @@ function ordinaryRotation(
 	if (entry.family === "profile" || entry.family === "wash")
 		return { x: 0, y: 0, z: 0 };
 	if (entry.roles.includes("Sunstrips")) return { x: 0, y: 90, z: 0 };
+	if (entry.roles.includes("Lasers"))
+		return aimAt(origin, { x: origin.x, y: -3, z: 1.2 });
 	if (entry.location === "audience")
 		return aimAt(origin, { x: origin.x, y: origin.y, z: 0 });
 	if (entry.location === "aux") return { x: 0, y: 0, z: 0 };

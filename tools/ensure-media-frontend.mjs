@@ -20,6 +20,9 @@ const inputs = [
 	"apps/media/tsconfig.json",
 	"apps/media/vite.config.ts",
 	"apps/media/src",
+	// The dedicated Media app imports the shared Media pane directly. A change there must rebuild
+	// the embedded bundle or `build:media:open` would silently launch stale operator UI.
+	"apps/light-desktop/src/windows/media",
 	"apps/ui-library/package.json",
 	"apps/ui-library/src",
 ];

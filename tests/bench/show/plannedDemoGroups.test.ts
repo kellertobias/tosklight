@@ -1,18 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { plannedDemoGroupSpecs } from "../../support/plannedDemoGroups";
 
-describe("Plan 76 Group manifest", () => {
+describe("overall demo show Group manifest", () => {
 	it("builds family, Show, Aux Show, odd/even, ACL, and utility memberships", () => {
 		const groups = plannedDemoGroupSpecs();
 		const byName = new Map(
 			groups.map((group) => [group.name, group.fixtureNumbers]),
 		);
 		expect(byName.get("Beam Stage")).toHaveLength(28);
-		expect(byName.get("Beam Audience")).toHaveLength(6);
+		expect(byName.get("Beam Audience")).toHaveLength(14);
 		expect(byName.get("Beam Auxiliary")).toHaveLength(4);
-		expect(byName.get("Beam Show")).toHaveLength(34);
-		expect(byName.get("Beam Show Odd")).toHaveLength(17);
-		expect(byName.get("Beam Show Even")).toHaveLength(17);
+		expect(byName.get("Beam Show")).toHaveLength(42);
+		expect(byName.get("Beam Show Odd")).toHaveLength(21);
+		expect(byName.get("Beam Show Even")).toHaveLength(21);
 		expect(byName.get("All ACLs")).toEqual([601, 602, 603, 604]);
 		expect(byName.get("Strobe")).toEqual([]);
 		expect(byName.get("Floor Spots")).toEqual([]);

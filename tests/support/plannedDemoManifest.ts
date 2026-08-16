@@ -1,5 +1,5 @@
-export const PLANNED_DEMO_CONTROL_FIXTURES = 231;
-export const PLANNED_DEMO_PHYSICAL_INSTANCES = 264;
+export const PLANNED_DEMO_CONTROL_FIXTURES = 253;
+export const PLANNED_DEMO_PHYSICAL_INSTANCES = 286;
 
 export type DemoLocation = "stage" | "audience" | "aux";
 export type DemoFamily = "profile" | "wash" | "led";
@@ -43,6 +43,12 @@ const PROFILES = {
 		"DRGBW 8-bit dimmer first",
 		"generic--rgbw-led.toskfixture",
 	),
+	audienceBeam: profile(
+		"ROBE",
+		"Robin LEDBeam 150",
+		"Mode 1 – Standard 16-bit",
+		"robe--robin-ledbeam-150.toskfixture",
+	),
 	staticProfile: profile(
 		"Generic",
 		"Dimmer Profile",
@@ -75,6 +81,30 @@ const PROFILES = {
 		"generic--blinder.toskfixture",
 	),
 	hazer: profile("Generic", "Hazer", "Fan, Fog", "generic--hazer.toskfixture"),
+	mediaServer: profile(
+		"ToskLight",
+		"Media Server",
+		"2 layers",
+		"tosklight--media-server.toskfixture",
+	),
+	laser: profile(
+		"ToskLight",
+		"Visualizer Laser",
+		"12 Channel",
+		"tosklight--visualizer-laser.toskfixture",
+	),
+	sparkler: profile(
+		"Generic",
+		"Cold Spark Fountain",
+		"Intensity, Height, Lifetime",
+		"generic--cold-spark.toskfixture",
+	),
+	flameJet: profile(
+		"Generic",
+		"Flame Jet",
+		"Intensity, Height, Colour",
+		"generic--flame-jet.toskfixture",
+	),
 } as const;
 
 export const PLANNED_DEMO_FIXTURES: readonly DemoFixtureManifestEntry[] = [
@@ -110,6 +140,9 @@ export const PLANNED_DEMO_FIXTURES: readonly DemoFixtureManifestEntry[] = [
 	...family("led", "stage", 301, 16, PROFILES.led, "LED Stage"),
 	...family("led", "audience", 317, 100, PROFILES.led, "LED Audience"),
 	...family("led", "aux", 417, 10, PROFILES.led, "LED Aux"),
+	...namedRange(451, 8, "Beam Audience", PROFILES.audienceBeam, [
+		"Audience Beams",
+	]),
 	patchedFixture(
 		1,
 		"Front Truss Left 1",
@@ -208,6 +241,18 @@ export const PLANNED_DEMO_FIXTURES: readonly DemoFixtureManifestEntry[] = [
 		),
 		patch: { universe: 1, address: 17, multipatchAddresses: [18, 19, 20] },
 	},
+	...namedRange(1001, 2, "Media Server", PROFILES.mediaServer, [
+		"Media Servers",
+	]),
+	...[
+		["Laser Left", 1101],
+		["Laser Center", 1102],
+		["Laser Right", 1103],
+	].map(([name, number]) =>
+		fixture(Number(number), String(name), PROFILES.laser, ["Lasers"]),
+	),
+	...namedRange(1201, 6, "Sparkler", PROFILES.sparkler, ["Sparklers"]),
+	...namedRange(1301, 3, "Flame Jet", PROFILES.flameJet, ["Flame Jets"]),
 ];
 
 export const PLANNED_DEMO_FIRST_LEVEL_GROUPS = [

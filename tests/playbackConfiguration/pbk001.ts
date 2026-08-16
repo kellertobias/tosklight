@@ -257,6 +257,132 @@ export function registerPbk001PhysicalControlsScenario(): void {
 		expect((await pageObject(api, 1)).body.slots["2"]).toBeUndefined();
 		expect(await inertSnapshot(api, 41)).toEqual(before);
 	});
+
+	test("PBK-001 @ui › wider footprints keep the Playback's one- or two-button topology", async ({
+		api,
+		bench,
+		desk,
+		page,
+	}) => {
+		const prepared = await prepareShow(
+			api,
+			bench,
+			"pbk-001-footprint-buttons",
+			"compact-rig",
+		);
+		const wider = {
+			type: "wider" as const,
+			right_buttons: ["go_minus", "go", "flash"] as [string, string, string],
+			right_fader: "master",
+		};
+		await installPlaybacks(
+			api,
+			[
+				definition(
+					43,
+					"One button wider",
+					{ type: "cue_list", cue_list_id: prepared.cueListId },
+					{
+						buttons: ["go", "none", "none"],
+						button_count: 1,
+						has_fader: false,
+						footprint: wider,
+					},
+				),
+				definition(
+					44,
+					"Two buttons wider",
+					{ type: "cue_list", cue_list_id: prepared.cueListId },
+					{
+						buttons: ["go_minus", "go", "none"],
+						button_count: 2,
+						has_fader: false,
+						footprint: wider,
+					},
+				),
+			],
+			{ 1: 43, 4: 44 },
+		);
+
+		await desk.open(bench.baseUrl);
+		await openPlaybackMode(page);
+		await expect(
+			playbackCard(page, 1).locator("[data-playback-button-index]"),
+		).toHaveCount(2);
+		await expect(
+			playbackCard(page, 4).locator("[data-playback-button-index]"),
+		).toHaveCount(4);
+
+		await playbackCard(page, 1).click({ button: "right" });
+		const modal = await expectConfigurationModal(page, 1, 1);
+		await modal.getByRole("button", { name: "Layout", exact: true }).click();
+		await expect(
+			modal.getByText("Right top button", { exact: true }),
+		).toBeVisible();
+		await expect(
+			modal.getByText("Right middle button", { exact: true }),
+		).toHaveCount(0);
+		await expect(
+			modal.getByText("Right bottom button", { exact: true }),
+		).toHaveCount(0);
+	});
+
+	test("PBK-001 @ui › OFF makes the whole Playback target use its internal Off action", async ({
+		api,
+		bench,
+		desk,
+		page,
+	}) => {
+		const prepared = await prepareShow(
+			api,
+			bench,
+			"pbk-001-off-target",
+			"compact-rig",
+		);
+		await installPlaybacks(
+			api,
+			[
+				definition(45, "OFF target", {
+					type: "cue_list",
+					cue_list_id: prepared.cueListId,
+				}),
+				definition(46, "Running neighbor", {
+					type: "cue_list",
+					cue_list_id: prepared.cueListId,
+				}),
+			],
+			{ 1: 45, 2: 46 },
+		);
+		await poolAction(api, 45, "go");
+		await poolAction(api, 46, "go");
+
+		await desk.open(bench.baseUrl);
+		await openPlaybackMode(page);
+		await page.evaluate(() =>
+			window.dispatchEvent(
+				new CustomEvent("light:programmer-key", { detail: "off" }),
+			),
+		);
+		await expect(page.getByLabel("Command line")).toHaveValue("OFF");
+		await page.getByRole("button", { name: "Turn off OFF target" }).click();
+
+		await expect
+			.poll(async () => {
+				const active = (await playbackSnapshot(api)).active;
+				return {
+					target: Boolean(
+						active.find((item: any) => item.playback_number === 45),
+					),
+					neighbor: Boolean(
+						active.find((item: any) => item.playback_number === 46),
+					),
+				};
+			})
+			.toEqual({ target: false, neighbor: true });
+		await expect(
+			page.getByRole("button", { name: "Turn off OFF target" }),
+		).toHaveCount(0);
+	});
 }
 
 export function registerPbk001VirtualCellsScenario(): void {
@@ -355,7 +481,9 @@ export function registerPbk001VirtualCellsScenario(): void {
 
 		await armSet(page);
 		await pane
-			.getByRole("button", { name: /Virtual playback 1002 page 1 cell 2 empty/ })
+			.getByRole("button", {
+				name: /Virtual playback 1002 page 1 cell 2 empty/,
+			})
 			.click();
 		modal = await expectConfigurationModal(page, 1, 2);
 		await expect(modal).toHaveAttribute(

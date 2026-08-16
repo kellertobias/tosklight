@@ -10,6 +10,16 @@ const PLANNED_DEMO_PACKAGES = [
 			fixture.profile,
 		]),
 	).values(),
+	{
+		manufacturer: "Venue",
+		name: "Crowd Area",
+		archive: "venue--crowd-area.toskfixture",
+	},
+	{
+		manufacturer: "Venue",
+		name: "Disco Ball 50 cm",
+		archive: "venue--disco-ball-50-cm.toskfixture",
+	},
 ];
 
 export async function ensurePlannedDemoFixtureLibrary(api: ApiDriver) {

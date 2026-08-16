@@ -838,48 +838,48 @@ jobs:
 
           case "$SLUG" in
             macos-arm64)
-              editor_app="$bundle/macos/ToskLight Visualizer.app"
+              editor_app="$bundle/macos/ToskLight PreViz.app"
               accessory="$(mktemp -d ".artifacts/tmp/viz-accessory.XXXXXX")"
               cp "$editor_app/Contents/MacOS/viz-editor" "$accessory/viz-editor"
               mkdir -p "$accessory/resources"
               cp -R "$editor_app/Contents/Resources/." "$accessory/resources/"
               bash tools/bundle-visualizer-macos.sh "$release/viz-renderer" "$bundle/macos"
               cp "$release/light-headless" \
-                "$bundle/macos/ToskLight Visualizer.app/Contents/MacOS/light-headless"
+                "$bundle/macos/ToskLight PreViz.app/Contents/MacOS/light-headless"
               cp "$accessory/viz-editor" \
-                "$bundle/macos/ToskLight Visualizer.app/Contents/MacOS/viz-editor"
+                "$bundle/macos/ToskLight PreViz.app/Contents/MacOS/viz-editor"
               cp -R "$accessory/resources/." \
-                "$bundle/macos/ToskLight Visualizer.app/Contents/Resources/"
+                "$bundle/macos/ToskLight PreViz.app/Contents/Resources/"
               bash tools/seal-macos-app.sh \
-                "$bundle/macos/ToskLight Visualizer.app"
+                "$bundle/macos/ToskLight PreViz.app"
               ditto -c -k --sequesterRsrc --keepParent \
-                "$bundle/macos/ToskLight Visualizer.app" \
-                "$out/tosklight-visualizer-$version-macos-arm64.zip"
+                "$bundle/macos/ToskLight PreViz.app" \
+                "$out/tosklight-previz-$version-macos-arm64.zip"
               ditto -c -k --sequesterRsrc --keepParent \
-                "$bundle/macos/ToskLight Visualizer.app" "$out/tosklight-viz-$version-macos-arm64.zip"
+                "$bundle/macos/ToskLight PreViz.app" "$out/tosklight-viz-$version-macos-arm64.zip"
               ;;
             windows-amd64)
               stage_root="$(mktemp -d ".artifacts/tmp/viz-stage.XXXXXX")"
               trap 'rm -rf -- "$stage_root"' EXIT
-              stage="$stage_root/tosklight-visualizer-$version-windows-amd64"
+              stage="$stage_root/tosklight-previz-$version-windows-amd64"
               mkdir -p "$stage"
               cp "$release/viz-renderer.exe" "$stage/"
               cp "$release/light-headless.exe" "$stage/"
               cp "$release/viz-editor.exe" "$stage/"
               (cd "$stage_root" && 7z a -tzip \
-                "$OLDPWD/$out/tosklight-visualizer-$version-windows-amd64.zip" \
+                "$OLDPWD/$out/tosklight-previz-$version-windows-amd64.zip" \
                 "$(basename "$stage")")
               ;;
             linux-amd64)
               stage_root="$(mktemp -d ".artifacts/tmp/viz-stage.XXXXXX")"
               trap 'rm -rf -- "$stage_root"' EXIT
-              stage="$stage_root/tosklight-visualizer-$version-linux-amd64"
+              stage="$stage_root/tosklight-previz-$version-linux-amd64"
               mkdir -p "$stage"
               cp "$release/viz-renderer" "$stage/"
               cp "$release/light-headless" "$stage/"
               cp "$release/viz-editor" "$stage/"
               (cd "$stage_root" && zip -q -r \
-                "$OLDPWD/$out/tosklight-visualizer-$version-linux-amd64.zip" \
+                "$OLDPWD/$out/tosklight-previz-$version-linux-amd64.zip" \
                 "$(basename "$stage")")
               ;;
           esac

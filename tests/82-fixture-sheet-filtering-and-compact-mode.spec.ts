@@ -162,6 +162,92 @@ test("FIXTURE-SHEET-002-001 @ui › independent scenery identities stay out of t
 	);
 });
 
+test("FIXTURE-SHEET-002-004 @ui › narrow Beam members do not paint into their neighbor", async ({
+	api,
+	desk,
+	page,
+}) => {
+	await desk.open(api.baseUrl);
+	await page.evaluate(() => {
+		document.body.classList.add("touch-connected");
+		const table = document.createElement("div");
+		table.id = "fixture-sheet-fitting-regression";
+		table.className = "fixture-table ui-data-table";
+		table.style.setProperty("--table-columns", "95px 125px");
+		table.innerHTML = `
+			<div class="ui-data-table-row" style="--table-row-height: 43px">
+				<span role="cell">
+					<span class="source-value fixture-sheet-group-value">
+						<span class="fixture-sheet-group-presentation fixture-sheet-multi-value-presentation">
+							<span class="fixture-sheet-member-value"><i class="fixture-sheet-group-glyph">Pr</i><span class="fixture-sheet-value-text">Prism 8 facet</span></span>
+							<span class="fixture-sheet-member-value"><i class="fixture-sheet-group-glyph">Pr</i><span class="fixture-sheet-value-text">Prism rotation 44%</span></span>
+						</span>
+					</span>
+				</span>
+				<span role="cell" data-neighbor>Neighbor value</span>
+			</div>`;
+		document.body.append(table);
+	});
+
+	const narrow = await page
+		.locator("#fixture-sheet-fitting-regression")
+		.evaluate((table) => {
+			const presentation = table.querySelector<HTMLElement>(
+				".fixture-sheet-multi-value-presentation",
+			);
+			const members = table.querySelectorAll<HTMLElement>(
+				".fixture-sheet-member-value",
+			);
+			const cells = table.querySelectorAll<HTMLElement>("[role=cell]");
+			if (!presentation || members.length !== 2 || cells.length !== 2)
+				throw new Error("Fixture Sheet fitting harness is incomplete");
+			const viewport = presentation.getBoundingClientRect();
+			const first = members[0].getBoundingClientRect();
+			const second = members[1].getBoundingClientRect();
+			const beamCell = cells[0].getBoundingClientRect();
+			const neighbor = cells[1].getBoundingClientRect();
+			return {
+				firstVisible:
+					first.top < viewport.bottom && first.left < viewport.right,
+				secondWrappedOutside: second.top >= viewport.bottom,
+				presentationClips: getComputedStyle(presentation).overflow === "hidden",
+				cellsDoNotOverlap: beamCell.right <= neighbor.left,
+				neighborText: cells[1].textContent,
+			};
+		});
+	expect(narrow).toEqual({
+		firstVisible: true,
+		secondWrappedOutside: true,
+		presentationClips: true,
+		cellsDoNotOverlap: true,
+		neighborText: "Neighbor value",
+	});
+
+	await page
+		.locator("#fixture-sheet-fitting-regression")
+		.evaluate((table: HTMLElement) => {
+			table.style.setProperty("--table-columns", "300px 125px");
+		});
+	const wide = await page
+		.locator("#fixture-sheet-fitting-regression")
+		.evaluate((table) => {
+			const presentation = table.querySelector<HTMLElement>(
+				".fixture-sheet-multi-value-presentation",
+			);
+			const members = table.querySelectorAll<HTMLElement>(
+				".fixture-sheet-member-value",
+			);
+			if (!presentation || members.length !== 2)
+				throw new Error("Fixture Sheet fitting harness is incomplete");
+			const viewport = presentation.getBoundingClientRect();
+			return Array.from(members).every((member) => {
+				const bounds = member.getBoundingClientRect();
+				return bounds.top < viewport.bottom && bounds.right <= viewport.right;
+			});
+		});
+	expect(wide).toBe(true);
+});
+
 test("FIXTURE-SHEET-002-003 @ui › a Dynamic changes DMX while the Fixture Sheet base stays stable", async ({
 	api,
 	bench,

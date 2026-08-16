@@ -2,6 +2,7 @@ import type { ApiDriver } from "../bench/core/api";
 import { installPlannedDemoDynamics } from "./plannedDemoDynamics";
 import { installPlannedDemoGroups } from "./plannedDemoGroups";
 import { installPlannedDemoLayout } from "./plannedDemoLayouts";
+import { installPlannedDemoMedia } from "./plannedDemoMedia";
 import { putPlannedDemoObject } from "./plannedDemoObjects";
 import { installPlannedDemoPatch } from "./plannedDemoPatch";
 import { installPlannedDemoPlaybacks } from "./plannedDemoPlaybacks";
@@ -18,6 +19,7 @@ export async function generatePlannedDemo(
 	const outputRoutes = await installPlannedDemoOutputRoutes(api, showId);
 	const scenery = await installPlannedDemoScenery(api, showId, resolvedLayers);
 	const patch = await installPlannedDemoPatch(api, showId, resolvedLayers);
+	const media = await installPlannedDemoMedia(api, showId);
 	const groups = await installPlannedDemoGroups(api, showId, patch.fixtures);
 	const presets = await installPlannedDemoPresets(api, showId, patch.fixtures);
 	const topology = await installPlannedDemoPlaybacks(
@@ -32,6 +34,7 @@ export async function generatePlannedDemo(
 	return {
 		outputRoutes,
 		patch,
+		media,
 		scenery,
 		groups,
 		presets,
@@ -48,7 +51,7 @@ export async function installPlannedDemoOutputRoutes(
 ) {
 	for (const route of await api.showObjects<any>(showId, "route"))
 		await api.deleteSeededShowObject(showId, "route", route.id, route.revision);
-	const routes = Array.from({ length: 8 }, (_, index) => {
+	const routes = Array.from({ length: 9 }, (_, index) => {
 		const universe = index + 1;
 		return {
 			id: `planned-demo-artnet-${universe}`,
@@ -80,7 +83,13 @@ const LAYER_NAMES = [
 	"LED PAR Stage",
 	"LED PAR Audience",
 	"LED PAR Auxilliary",
+	"Audience Beams",
+	"Sunstrips",
 	"Conventional Light",
+	"Media Servers",
+	"Lasers",
+	"Sparklers",
+	"Flame Jets",
 ] as const;
 
 export async function ensurePlannedDemoLayers(

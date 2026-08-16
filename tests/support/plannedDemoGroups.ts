@@ -43,19 +43,26 @@ export function plannedDemoGroupSpecs(): PlannedDemoGroupSpec[] {
 	] as const) {
 		const first = row * 7 + 1;
 		const show = showNumbers(family);
+		const audience =
+			family === "profile"
+				? [
+						...plannedDemoFamilyNumbers(family, "audience"),
+						...plannedDemoRoleNumbers("Audience Beams"),
+					]
+				: plannedDemoFamilyNumbers(family, "audience");
+		const completeShow =
+			family === "profile"
+				? [...show, ...plannedDemoRoleNumbers("Audience Beams")]
+				: show;
 		specs.push(
 			group(first, `${label} Stage`, plannedDemoFamilyNumbers(family, "stage")),
-			group(
-				first + 1,
-				`${label} Audience`,
-				plannedDemoFamilyNumbers(family, "audience"),
-			),
+			group(first + 1, `${label} Audience`, audience),
 			group(
 				first + 2,
 				`${label} Auxiliary`,
 				plannedDemoFamilyNumbers(family, "aux"),
 			),
-			group(first + 3, `${label} Show`, show),
+			group(first + 3, `${label} Show`, completeShow),
 			group(
 				first + 4,
 				`${label} Auxiliary Show`,
@@ -64,12 +71,12 @@ export function plannedDemoGroupSpecs(): PlannedDemoGroupSpec[] {
 			group(
 				first + 5,
 				`${label} Show Odd`,
-				show.filter((_, index) => index % 2 === 0),
+				completeShow.filter((_, index) => index % 2 === 0),
 			),
 			group(
 				first + 6,
 				`${label} Show Even`,
-				show.filter((_, index) => index % 2 === 1),
+				completeShow.filter((_, index) => index % 2 === 1),
 			),
 		);
 	}

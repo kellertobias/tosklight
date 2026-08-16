@@ -8,23 +8,26 @@ import {
 	plannedDemoRoleNumbers,
 } from "../../support/plannedDemoManifest";
 
-describe("Plan 76 demo manifest", () => {
+describe("overall demo show manifest", () => {
 	it("owns the exact controllable and physical inventory", () => {
 		expect(PLANNED_DEMO_FIXTURES).toHaveLength(PLANNED_DEMO_CONTROL_FIXTURES);
 		expect(
 			new Set(PLANNED_DEMO_FIXTURES.map((fixture) => fixture.number)).size,
-		).toBe(231);
+		).toBe(PLANNED_DEMO_CONTROL_FIXTURES);
 		expect(
 			PLANNED_DEMO_FIXTURES.reduce(
 				(count, fixture) => count + 1 + fixture.multipatches,
 				0,
 			),
 		).toBe(PLANNED_DEMO_PHYSICAL_INSTANCES);
-		expect(
-			PLANNED_DEMO_FIXTURES.some((fixture) =>
-				fixture.profile.name.toLowerCase().includes("beam"),
-			),
-		).toBe(false);
+		expect(plannedDemoRoleNumbers("Audience Beams")).toEqual([
+			451, 452, 453, 454, 455, 456, 457, 458,
+		]);
+		expect(plannedDemoRoleNumbers("Sunstrips")).toHaveLength(8);
+		expect(plannedDemoRoleNumbers("Lasers")).toHaveLength(3);
+		expect(plannedDemoRoleNumbers("Sparklers")).toHaveLength(6);
+		expect(plannedDemoRoleNumbers("Flame Jets")).toHaveLength(3);
+		expect(plannedDemoRoleNumbers("Kabuki Curtains")).toEqual([1401]);
 	});
 
 	it("reconciles every moving-family location group", () => {

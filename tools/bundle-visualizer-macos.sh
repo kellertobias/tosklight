@@ -20,7 +20,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BINARY="$1"
 OUTPUT_DIR="$2"
 VERSION="${3:-${LIGHT_RELEASE_VERSION:-0.1.0}}"
-PRODUCT_NAME="ToskLight Visualizer"
+PRODUCT_NAME="ToskLight PreViz"
 IDENTIFIER="de.tokenet.tosklight.visualizer"
 ICON="$ROOT/apps/viz-editor/src-tauri/icons/icon.icns"
 

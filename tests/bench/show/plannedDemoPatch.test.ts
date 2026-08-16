@@ -6,6 +6,7 @@ const footprintByName: Record<string, number> = {
 	"Robin DLS Profile": 36,
 	"JBLED A7": 19,
 	"RGBW LED": 5,
+	"Robin LEDBeam 150": 22,
 	"Dimmer Profile": 1,
 	"Dimmer Fresnel": 1,
 	"Dimmer PAR Can": 1,
@@ -13,6 +14,11 @@ const footprintByName: Record<string, number> = {
 	ACL: 1,
 	Blinder: 2,
 	Hazer: 2,
+	"Media Server": 75,
+	"Visualizer Laser": 12,
+	"Cold Spark Fountain": 3,
+	"Flame Jet": 3,
+	"Kabuki Curtain": 1,
 };
 const uniqueProfiles = [
 	...new Map(
@@ -49,18 +55,25 @@ const layers = Object.fromEntries(
 		"LED PAR Audience",
 		"LED PAR Auxilliary",
 		"Conventional Light",
+		"Media Servers",
+		"Audience Beams",
+		"Sunstrips",
+		"Lasers",
+		"Sparklers",
+		"Flame Jets",
+		"Kabuki Curtain",
 	].map((name) => [name, `layer-${name}`]),
 );
 
-describe("Plan 76 patch builder", () => {
-	it("builds 231 stable controls and 264 physical instances with valid patches", () => {
+describe("overall demo show patch builder", () => {
+	it("builds 254 stable controls and 287 physical instances with valid patches", () => {
 		const built = createPlannedDemoPatchInputs(profiles, layers);
-		expect(built.fixtureRecords).toBe(231);
-		expect(built.physicalInstances).toBe(264);
+		expect(built.fixtureRecords).toBe(254);
+		expect(built.physicalInstances).toBe(287);
 		expect(built.lastUniverse).toBeGreaterThan(1);
 		expect(
 			new Set(built.fixtures.map((fixture) => fixture.fixture_id)).size,
-		).toBe(231);
+		).toBe(254);
 		const occupied = new Set<string>();
 		for (const fixture of built.fixtures) {
 			for (const instance of [fixture, ...fixture.multipatch]) {
@@ -81,7 +94,7 @@ describe("Plan 76 patch builder", () => {
 				}
 			}
 		}
-		expect(occupied.size).toBe(2_988);
+		expect(occupied.size).toBe(3_378);
 	});
 
 	it("keeps Conventional, Stage, Audience, and Auxiliary bands separate", () => {
@@ -157,6 +170,13 @@ describe("Plan 76 patch builder", () => {
 			"Profile Auxilliary",
 			"Wash Auxilliary",
 			"LED PAR Auxilliary",
+			"Sunstrips",
+			"Audience Beams",
+			"Media Servers",
+			"Lasers",
+			"Sparklers",
+			"Flame Jets",
+			"Kabuki Curtain",
 		]);
 	});
 

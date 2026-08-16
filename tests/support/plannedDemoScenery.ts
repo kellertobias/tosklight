@@ -1,10 +1,11 @@
 import type { FixtureProfile } from "../../apps/light-desktop/src/api/types";
 import type { ApiDriver } from "../bench/core/api";
 import { ensurePlannedDemoFixtureLibrary } from "./plannedDemoFixtureLibrary";
+import { putPlannedDemoObject } from "./plannedDemoObjects";
 
-export const PLANNED_DEMO_SCENERY_FIXTURES = 33;
-export const PLANNED_DEMO_TOTAL_FIXTURE_RECORDS = 264;
-export const PLANNED_DEMO_TOTAL_PHYSICAL_INSTANCES = 306;
+export const PLANNED_DEMO_SCENERY_FIXTURES = 43;
+export const PLANNED_DEMO_TOTAL_FIXTURE_RECORDS = 296;
+export const PLANNED_DEMO_TOTAL_PHYSICAL_INSTANCES = 344;
 
 type Point = { x: number; y: number; z: number };
 type SceneryEntry = {
@@ -123,6 +124,7 @@ export async function installPlannedDemoScenery(
 		);
 		await options.onItem?.();
 	}
+	await installVenueObjects(api, showId, sceneryEntries(options.backCurtain));
 	return fixtures;
 }
 
@@ -147,15 +149,18 @@ function sceneryEntries(backCurtain?: {
 			location: { x, y: Number(y), z: 4.15 },
 		})),
 	}));
-	const stage = Array.from({ length: 16 }, (_, index) => ({
+	// Five two-metre decks across gives the 28 stage profiles and 26 washes a credible
+	// ten-metre stage. The old eight-metre deck put the outer fixtures exactly on its edge,
+	// making correctly sized people read as giants beside a toy stage.
+	const stage = Array.from({ length: 20 }, (_, index) => ({
 		number: index + 4,
 		name: `Stage Element ${index + 1}`,
 		profile: "Stage Element 2 × 1 m",
 		mode: "50 cm",
 		layer: "Stage & Venue",
 		location: {
-			x: -3 + (index % 4) * 2,
-			y: 0.5 + Math.floor(index / 4),
+			x: -4 + (index % 5) * 2,
+			y: 0.5 + Math.floor(index / 5),
 			z: 0,
 		},
 	}));
@@ -164,7 +169,7 @@ function sceneryEntries(backCurtain?: {
 		.map(Number);
 	const curtains = [curtainRange[0], curtainRange[1] ?? curtainRange[0]].map(
 		(x, index) => ({
-			number: index + 20,
+				number: index + 24,
 			name: `Back Curtain ${index + 1}`,
 			profile: "Curtain 5 m",
 			mode: "5 m",
@@ -174,7 +179,7 @@ function sceneryEntries(backCurtain?: {
 	);
 	const railings = [
 		...[-3, -1, 1, 3].map((x, index) => ({
-			number: index + 22,
+			number: index + 26,
 			name: `Back Railing ${index + 1}`,
 			profile: "One-Point Truss / Pipe",
 			mode: "2 m",
@@ -183,7 +188,7 @@ function sceneryEntries(backCurtain?: {
 		})),
 		...[-1, 1].flatMap((side, sideIndex) =>
 			[1, 3].map((y, index) => ({
-				number: 26 + sideIndex * 2 + index,
+				number: 30 + sideIndex * 2 + index,
 				name: `${side < 0 ? "Left" : "Right"} Railing ${index + 1}`,
 				profile: "One-Point Truss / Pipe",
 				mode: "2 m",
@@ -194,7 +199,7 @@ function sceneryEntries(backCurtain?: {
 		),
 	];
 	const pipes = [-3, -1, 1, 3].map((x, index) => ({
-		number: index + 30,
+		number: index + 34,
 		name: `Vertical Pipe ${index + 1}`,
 		profile: "One-Point Truss / Pipe",
 		mode: "2.5 m",
@@ -202,7 +207,117 @@ function sceneryEntries(backCurtain?: {
 		location: { x, y: 4.15, z: 2.9 },
 		rotation: { x: 0, y: 90, z: 0 },
 	}));
-	return [...trusses, ...stage, ...curtains, ...railings, ...pipes];
+	const crowd = {
+		number: 38,
+		name: "Dancefloor Crowd",
+		profile: "Crowd Area",
+		mode: "Dancing — Dense",
+		layer: "Stage & Venue",
+		location: { x: 0, y: -3, z: 0 },
+	};
+	const discoBall = {
+		number: 39,
+		name: "Audience Mirror Ball",
+		profile: "Disco Ball 50 cm",
+		mode: "50 cm",
+		layer: "Stage & Venue",
+		location: { x: 0, y: -3, z: 4.5 },
+	};
+	const audienceTrusses = [
+		["Audience Front", -1.5],
+		["Audience Rear", -4.5],
+	].map(([name, y], row) => ({
+		number: 40 + row,
+		name: `${name} Truss Segment 1`,
+		profile: "Four-Point Truss",
+		mode: "2 m",
+		layer: "Trusses",
+		location: { x: -3, y: Number(y), z: 4.2 },
+		multipatches: [-1, 1, 3].map((x, index) => ({
+			name: `${name} Truss Segment ${index + 2}`,
+			location: { x, y: Number(y), z: 4.2 },
+		})),
+	}));
+	const sideCurtains = [
+		["Stage Left Curtain", -5.2],
+		["Stage Right Curtain", 5.2],
+	].map(([name, x], index) => ({
+		number: 42 + index,
+		name: String(name),
+		profile: "Curtain 5 m",
+		mode: "5 m",
+		layer: "Stage & Venue",
+		location: { x: Number(x), y: 2.0, z: 2.0 },
+		rotation: { x: 0, y: 0, z: 90 },
+	}));
+	return [
+		...trusses,
+		...audienceTrusses,
+		...stage,
+		...curtains,
+		...sideCurtains,
+		...railings,
+		...pipes,
+		crowd,
+		discoBall,
+	];
+}
+
+async function installVenueObjects(
+	api: ApiDriver,
+	showId: string,
+	entries: readonly SceneryEntry[],
+) {
+	for (const object of await api.showObjects<any>(showId, "venue"))
+		await api.deleteSeededShowObject(
+			showId,
+			"venue",
+			object.id,
+			object.revision,
+		);
+	for (const entry of entries) {
+		if (entry.profile === "Crowd Area") continue;
+		const instances = [
+			{ name: entry.name, location: entry.location, rotation: entry.rotation },
+			...(entry.multipatches ?? []),
+		];
+		for (const [index, instance] of instances.entries()) {
+			const id = `planned-demo-venue-${entry.number}-${index + 1}`;
+			await putPlannedDemoObject(api, showId, "venue", id, {
+				id,
+				name: instance.name,
+				kind: venueKind(entry),
+				position: instance.location,
+				rotation_degrees: instance.rotation ?? { x: 0, y: 0, z: 0 },
+				size: venueSize(entry),
+				chords: entry.profile === "Four-Point Truss" ? 4 : undefined,
+			});
+		}
+	}
+}
+
+function venueKind(entry: SceneryEntry) {
+	if (entry.profile === "Disco Ball 50 cm") return "mirror_ball";
+	if (entry.profile.startsWith("Curtain")) return "curtain";
+	if (entry.name.includes("Railing")) return "railing";
+	if (entry.profile.includes("Truss") || entry.profile.includes("Pipe"))
+		return "truss";
+	if (entry.profile.startsWith("Stage Element")) return "riser";
+	return "prop";
+}
+
+function venueSize(entry: SceneryEntry): Point {
+	if (entry.profile === "Disco Ball 50 cm") return { x: 0.5, y: 0.5, z: 0.75 };
+	if (
+		entry.name === "Stage Left Curtain" ||
+		entry.name === "Stage Right Curtain"
+	)
+		return { x: 0.12, y: 5, z: 5 };
+	if (entry.profile.startsWith("Curtain")) return { x: 5, y: 0.12, z: 5 };
+	if (entry.profile.startsWith("Stage Element")) return { x: 2, y: 1, z: 0.5 };
+	if (entry.profile.includes("Truss") || entry.profile.includes("Pipe"))
+		return { x: Number.parseFloat(entry.mode), y: 0.3, z: 0.3 };
+	return { x: 1, y: 1, z: 1 };
 }
 
 function millimetres(point: Point) {

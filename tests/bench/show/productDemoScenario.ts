@@ -833,9 +833,9 @@ export class BrowserProductDemo {
 				visibleLightingIdentities,
 			);
 			expect(canonical.patch).toMatchObject({
-				fixtureRecords: 231,
-				physicalInstances: 264,
-				occupiedSlots: 2_988,
+				fixtureRecords: 254,
+				physicalInstances: 287,
+				occupiedSlots: 3_378,
 			});
 			await expect
 				.poll(async () => (await api.patch()).fixtures.length)
@@ -1723,8 +1723,8 @@ async function configureOutput(
 		page,
 		routes,
 		"Art-Net",
-		"1 THRU 8",
-		"1 THRU 8",
+		"1 THRU 9",
+		"1 THRU 9",
 		bench.artnet.port,
 		{
 			modalHoldFrames: PRODUCT_DEMO_SCRIPT.pacing.outputModalHoldFrames,
@@ -1734,9 +1734,9 @@ async function configureOutput(
 	);
 	await expect
 		.poll(async () => (await api.showObjects(showId, "route")).length)
-		.toBe(8);
-	await expect(routes.locator(".output-route-list > article")).toHaveCount(8);
-	for (let universe = 1; universe <= 8; universe++)
+		.toBe(9);
+	await expect(routes.locator(".output-route-list > article")).toHaveCount(9);
+	for (let universe = 1; universe <= 9; universe++)
 		await expect(routes).toContainText(`Logical ${universe} →`);
 	await routes
 		.locator(".output-route-list > article")
@@ -2704,8 +2704,7 @@ async function demonstrateBuskingAndPreload(
 			playbackCount: 0,
 		});
 	for (let step = 0; step < 8; step++) {
-		const fadeStepMillis =
-			PRODUCT_DEMO_SCRIPT.pacing.programmerFadeMillis / 8;
+		const fadeStepMillis = PRODUCT_DEMO_SCRIPT.pacing.programmerFadeMillis / 8;
 		await bench.tick(fadeStepMillis);
 		await demoPause(
 			demo.page(),

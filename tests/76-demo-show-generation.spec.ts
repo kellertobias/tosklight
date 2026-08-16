@@ -15,7 +15,7 @@ const DEMO_SHOW_ASSET = process.env.LIGHT_DEMO_SHOW_OUTPUT
 	? path.resolve(process.env.LIGHT_DEMO_SHOW_OUTPUT)
 	: fileURLToPath(new URL("../assets/demo.show", import.meta.url));
 
-test("DEMO-GENERATOR-001 @api › installs the exact Plan 76 lighting patch from one manifest", async ({
+test("DEMO-GENERATOR-001 @api › installs the one overall Desk and PreViz demo show", async ({
 	api,
 	bench,
 }) => {
@@ -51,16 +51,16 @@ test("DEMO-GENERATOR-001 @api › installs the exact Plan 76 lighting patch from
 		);
 
 	const generatedShow = await generatePlannedDemo(api, showId, layers);
-	expect(generatedShow.outputRoutes).toHaveLength(8);
-	expect(await api.showObjects(showId, "route")).toHaveLength(8);
+	expect(generatedShow.outputRoutes).toHaveLength(9);
+	expect(await api.showObjects(showId, "route")).toHaveLength(9);
 	const generated = generatedShow.patch;
 	expect(generated).toMatchObject({
-		fixtureRecords: 231,
-		physicalInstances: 264,
+		fixtureRecords: 253,
+		physicalInstances: 286,
 		firstUniverse: 1,
 	});
 	expect(generated.lastUniverse).toBeGreaterThan(1);
-	expect(generated.occupiedSlots).toBe(2_988);
+	expect(generated.occupiedSlots).toBe(3_377);
 	const frontLights = generated.fixtures.filter(
 		(fixture) => fixture.fixture_number >= 1 && fixture.fixture_number <= 8,
 	);
@@ -70,15 +70,172 @@ test("DEMO-GENERATOR-001 @api › installs the exact Plan 76 lighting patch from
 			fixture.split_patches[0].address,
 		]),
 	).toEqual(Array.from({ length: 8 }, (_, index) => [1, index + 1]));
-	expect(generatedShow.scenery).toHaveLength(33);
+	expect(generatedShow.scenery).toHaveLength(43);
 	const completePatch = await api.patch();
-	expect(completePatch.fixtures).toHaveLength(264);
+	expect(completePatch.fixtures).toHaveLength(296);
 	expect(
 		completePatch.fixtures.reduce(
 			(count, fixture) => count + 1 + fixture.multipatch.length,
 			0,
 		),
-	).toBe(306);
+	).toBe(344);
+
+	const demoFixtures = (first: number, last: number) =>
+		generated.fixtures.filter(
+			(fixture) =>
+				fixture.fixture_number >= first && fixture.fixture_number <= last,
+		);
+	expect(demoFixtures(1001, 1002).map((fixture) => fixture.name)).toEqual([
+		"Media Server 1",
+		"Media Server 2",
+	]);
+	expect(demoFixtures(1101, 1103).map((fixture) => fixture.name)).toEqual([
+		"Laser Left",
+		"Laser Center",
+		"Laser Right",
+	]);
+	expect(demoFixtures(1101, 1103).map((fixture) => fixture.location.x)).toEqual(
+		[-3_000, 0, 3_000],
+	);
+	expect(demoFixtures(1101, 1103).map((fixture) => fixture.location.y)).toEqual(
+		[4_000, 4_000, 4_000],
+	);
+	expect(demoFixtures(1101, 1103).map((fixture) => fixture.location.z)).toEqual(
+		[1_000, 3_550, 1_000],
+	);
+	expect(demoFixtures(1201, 1206)).toHaveLength(6);
+	expect(demoFixtures(1201, 1206).map((fixture) => fixture.location.y)).toEqual(
+		Array(6).fill(-550),
+	);
+	expect(demoFixtures(1301, 1303)).toHaveLength(3);
+	expect(demoFixtures(1301, 1303).map((fixture) => fixture.location.y)).toEqual(
+		Array(3).fill(-1_150),
+	);
+	expect(
+		demoFixtures(1301, 1303).every(
+			(fixture) => fixture.definition.model === "Flame Jet",
+		),
+	).toBe(true);
+	expect(demoFixtures(451, 458)).toHaveLength(8);
+	expect(
+		demoFixtures(451, 458).every(
+			(fixture) => fixture.definition.model === "Robin LEDBeam 150",
+		),
+	).toBe(true);
+	expect(demoFixtures(1401, 1401)).toEqual([]);
+
+	const storedLayers = await api.showObjects<any>(showId, "patch_layer");
+	const layerNameById = new Map(
+		storedLayers.map((layer) => [layer.id, layer.body.name]),
+	);
+	for (const [first, last, layer] of [
+		[101, 128, "Profile Stage"],
+		[129, 150, "Profile Audience"],
+		[151, 154, "Profile Auxilliary"],
+		[201, 226, "Wash Stage"],
+		[227, 234, "Wash Audience"],
+		[243, 246, "Wash Auxilliary"],
+		[301, 316, "LED PAR Stage"],
+		[317, 416, "LED PAR Audience"],
+		[417, 426, "LED PAR Auxilliary"],
+		[451, 458, "Audience Beams"],
+		[501, 508, "Sunstrips"],
+		[1001, 1002, "Media Servers"],
+		[1101, 1103, "Lasers"],
+		[1201, 1206, "Sparklers"],
+		[1301, 1303, "Flame Jets"],
+	] as const) {
+		expect(
+			demoFixtures(first, last).every(
+				(fixture) => layerNameById.get(fixture.layer_id) === layer,
+			),
+			`${first} THRU ${last} must be in ${layer}`,
+		).toBe(true);
+	}
+
+	const mediaServers = await api.showObjects<any>(showId, "media_server");
+	const mediaSources = await api.showObjects<any>(showId, "media_source");
+	const mediaSurfaces = await api.showObjects<any>(showId, "media_surface");
+	const ledModules = await api.showObjects<any>(showId, "led_module_type");
+	expect(mediaServers).toHaveLength(2);
+	expect(mediaServers.map((server) => server.body.fixtureId)).toEqual([
+		"00000000-0000-4001-8000-0000000003e9",
+		"00000000-0000-4001-8000-0000000003ea",
+	]);
+	expect(mediaSources).toHaveLength(2);
+	expect(mediaSources.map((source) => source.body.serverId).sort()).toEqual(
+		mediaServers.map((server) => server.id).sort(),
+	);
+	expect(ledModules).toHaveLength(1);
+	const projection = mediaSurfaces.find(
+		(surface) => surface.body.name === "Projection Screens",
+	);
+	const led = mediaSurfaces.find(
+		(surface) => surface.body.name === "Sunstrip LED Panels",
+	);
+	expect(projection.body.sections.map((section: any) => section.name)).toEqual([
+		"Projection Screen Left",
+		"Projection Screen Right",
+	]);
+	expect(
+		projection.body.sections.every(
+			(section: any) =>
+				section.type === "projection_screen" &&
+				section.module_type_id == null &&
+				section.moduleTypeId == null,
+		),
+	).toBe(true);
+	expect(led.body.sections.map((section: any) => section.name)).toEqual([
+		"LED Panel Left of Sunstrips",
+		"LED Panel Between Sunstrips",
+		"LED Panel Right of Sunstrips",
+	]);
+	expect(
+		led.body.sections.every(
+			(section: any) =>
+				section.type === "led" && section.module_type_id === ledModules[0].id,
+		),
+	).toBe(true);
+
+	const venue = await api.showObjects<any>(showId, "venue");
+	expect(venue.filter((object) => object.body.kind === "truss")).toHaveLength(
+		24,
+	);
+	expect(venue.filter((object) => object.body.kind === "riser")).toHaveLength(
+		20,
+	);
+	expect(venue.filter((object) => object.body.kind === "curtain")).toHaveLength(
+		4,
+	);
+	expect(
+		venue
+			.filter((object) => object.body.name.startsWith("Audience "))
+			.filter((object) => object.body.kind === "truss"),
+	).toHaveLength(8);
+	expect(
+		venue
+			.filter((object) => object.body.kind === "curtain")
+			.map((object) => object.body.name),
+	).toEqual([
+		"Back Curtain 1",
+		"Back Curtain 2",
+		"Stage Left Curtain",
+		"Stage Right Curtain",
+	]);
+	expect(
+		venue.find((object) => object.body.kind === "mirror_ball")?.body,
+	).toMatchObject({
+		name: "Audience Mirror Ball",
+		position: { x: 0, y: -3, z: 4.5 },
+	});
+	const crowd = completePatch.fixtures.find(
+		(fixture) => fixture.name === "Dancefloor Crowd",
+	);
+	expect(crowd).toMatchObject({
+		virtual_fixture_number: 38,
+		definition: { model: "Crowd Area", mode: "Dancing — Dense" },
+		location: { x: 0, y: -3_000, z: 0 },
+	});
 
 	const acls = generated.fixtures.filter(
 		(fixture) => fixture.fixture_number >= 601 && fixture.fixture_number <= 604,
@@ -104,7 +261,7 @@ test("DEMO-GENERATOR-001 @api › installs the exact Plan 76 lighting patch from
 	expect(groups).toHaveLength(35);
 	expect(
 		groups.find((group) => group.body.name === "Beam Show")?.body.fixtures,
-	).toHaveLength(34);
+	).toHaveLength(42);
 	expect(
 		groups.find((group) => group.body.name === "Beam Auxiliary Show")?.body
 			.fixtures,
