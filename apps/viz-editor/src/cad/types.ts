@@ -101,6 +101,23 @@ export interface ViewportTile {
 	camera: TileCamera;
 }
 
+export interface CadPrintPage {
+	id: string;
+	tileId: string;
+	name: string;
+	view: CadViewDirection;
+	rotationQuarterTurns: number;
+	centreMillimetres: [number, number];
+	widthMillimetres: number;
+	included: boolean;
+}
+
+export const PRINT_PAGE_ASPECT = 297 / 210;
+
+export function printPageHeight(page: Pick<CadPrintPage, "widthMillimetres">) {
+	return page.widthMillimetres / PRINT_PAGE_ASPECT;
+}
+
 export interface SplitTile {
 	type: "split";
 	id: string;

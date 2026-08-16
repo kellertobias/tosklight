@@ -1,12 +1,15 @@
+import { save } from "@tauri-apps/plugin-dialog";
 import { Button, SwitchField } from "@tosklight/ui";
 import { WindowHeader, WindowSettings } from "@tosklight/ui/window-kit";
 import { useEffect, useRef, useState } from "react";
 import { beginWindowDrag, WindowControls } from "../WindowChrome";
 import { CadViewport } from "./CadViewport";
+import { buildCadPdf } from "./print";
 import { cadSession } from "./session";
 import {
 	applySelectionChange,
 	CAD_VIEW_LABELS,
+	type CadPrintPage,
 	type CadSceneSnapshot,
 	type CadTransformPreview,
 	type CadViewDirection,
@@ -27,6 +30,7 @@ import {
 
 const WORKSPACE_KEY = "tosklight:viz-editor:cad-workspace:v1";
 const SETTINGS_KEY = "tosklight:viz-editor:cad-settings:v1";
+const PRINT_KEY = "tosklight:viz-editor:cad-print-pages:v1";
 
 interface CadSettings {
 	snapToMounts: boolean;
@@ -40,6 +44,13 @@ export function CadApp() {
 	const [settings, setSettings] = useState<CadSettings>(restoreSettings);
 	const [settingsOpen, setSettingsOpen] = useState(false);
 	const [preview, setPreview] = useState<CadTransformPreview | null>(null);
+	const [printMode, setPrintMode] = useState(false);
+	const [printPages, setPrintPages] =
+		useState<CadPrintPage[]>(restorePrintPages);
+	const [selectedPrintPageId, setSelectedPrintPageId] = useState<string | null>(
+		null,
+	);
+	const [exporting, setExporting] = useState(false);
 	const [activeTileId, setActiveTileId] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const sceneRef = useRef<CadSceneSnapshot | null>(null);
@@ -121,6 +132,10 @@ export function CadApp() {
 		localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
 	}, [settings]);
 
+	useEffect(() => {
+		localStorage.setItem(PRINT_KEY, JSON.stringify(printPages));
+	}, [printPages]);
+
 	function select(change: SelectionChange) {
 		selectionQueue.current = selectionQueue.current.then(async () => {
 			const current = sceneRef.current;
@@ -152,7 +167,7 @@ export function CadApp() {
 		deltaMillimetres: [number, number, number],
 		entityIds: readonly string[],
 	) {
-		if (!scene || !entityIds.length) return;
+		if (!scene || !entityIds.length || printMode) return;
 		setPreview(null);
 		try {
 			await cadSession.transform(
@@ -165,6 +180,55 @@ export function CadApp() {
 		} catch (reason) {
 			setError(String(reason));
 			applyScene(await cadSession.snapshot());
+		}
+	}
+
+	function togglePrintMode() {
+		setPreview(null);
+		setPrintMode((current) => !current);
+	}
+
+	function addPrintPage(tile: ViewportTile) {
+		const pageNumber = printPages.length + 1;
+		const page: CadPrintPage = {
+			id:
+				globalThis.crypto?.randomUUID?.() ?? `page-${Date.now()}-${pageNumber}`,
+			tileId: tile.id,
+			name: `Page ${pageNumber}`,
+			view: tile.view,
+			rotationQuarterTurns: tile.rotationQuarterTurns,
+			centreMillimetres: [-tile.camera.pan[0], -tile.camera.pan[1]],
+			widthMillimetres: Math.max(3000, 360 / tile.camera.zoom),
+			included: true,
+		};
+		setPrintPages((current) => [...current, page]);
+		setSelectedPrintPageId(page.id);
+	}
+
+	function changePrintPage(id: string, change: Partial<CadPrintPage>) {
+		setPrintPages((current) =>
+			current.map((page) => (page.id === id ? { ...page, ...change } : page)),
+		);
+	}
+
+	async function exportPdf() {
+		if (!scene) return;
+		const selected = printPages.filter((page) => page.included);
+		if (!selected.length) return;
+		const path = await save({
+			title: "Export CAD plan pages",
+			defaultPath: "ToskLight Rig Plan.pdf",
+			filters: [{ name: "PDF document", extensions: ["pdf"] }],
+		});
+		if (!path) return;
+		const pdfPath = path.toLowerCase().endsWith(".pdf") ? path : `${path}.pdf`;
+		setExporting(true);
+		try {
+			await cadSession.exportPdf(pdfPath, buildCadPdf(scene, selected));
+		} catch (reason) {
+			setError(String(reason));
+		} finally {
+			setExporting(false);
 		}
 	}
 
@@ -213,6 +277,12 @@ export function CadApp() {
 						id: "cad-actions",
 						actions: [
 							{
+								id: "print",
+								label: "Print",
+								active: printMode,
+								onPress: togglePrintMode,
+							},
+							{
 								id: "undo",
 								label: "Undo",
 								disabled: !scene,
@@ -231,30 +301,87 @@ export function CadApp() {
 				onSettings={() => setSettingsOpen(true)}
 			/>
 			{error ? <output className="cad-error">{error}</output> : null}
-			<section className="cad-workspace">
-				{scene ? (
-					<CadTile
-						node={layout}
-						root={layout}
-						scene={scene}
-						settings={settings}
-						preview={preview}
-						onLayout={setLayout}
-						onTile={updateTile}
-						onSplitRatio={(id, ratio) =>
-							setLayout((current) => setSplitRatio(current, id, ratio))
-						}
-						activeTileId={activeTileId}
-						onActivate={setActiveTileId}
-						onSelection={select}
-						onPreview={setPreview}
-						onMove={move}
-						onFit={fit}
-					/>
-				) : (
-					<div className="cad-loading">Loading the canonical rig…</div>
-				)}
-			</section>
+			<div className={`cad-print-layout ${printMode ? "is-printing" : ""}`}>
+				<section className="cad-workspace">
+					{scene ? (
+						<CadTile
+							node={layout}
+							root={layout}
+							scene={scene}
+							settings={settings}
+							preview={preview}
+							onLayout={setLayout}
+							onTile={updateTile}
+							onSplitRatio={(id, ratio) =>
+								setLayout((current) => setSplitRatio(current, id, ratio))
+							}
+							activeTileId={activeTileId}
+							onActivate={setActiveTileId}
+							onSelection={select}
+							onPreview={setPreview}
+							onMove={move}
+							onFit={fit}
+							printMode={printMode}
+							printPages={printPages}
+							selectedPrintPageId={selectedPrintPageId}
+							onAddPrintPage={addPrintPage}
+							onSelectPrintPage={setSelectedPrintPageId}
+							onChangePrintPage={changePrintPage}
+						/>
+					) : (
+						<div className="cad-loading">Loading the canonical rig…</div>
+					)}
+				</section>
+				{printMode ? (
+					<aside className="cad-print-sidebar" aria-label="Print pages">
+						<header>
+							<h2>Prints</h2>
+							<span>A4 landscape</span>
+						</header>
+						<div className="cad-print-list">
+							{printPages.length ? (
+								printPages.map((page, index) => (
+									<div
+										key={page.id}
+										className={`cad-print-row ${
+											page.id === selectedPrintPageId ? "is-selected" : ""
+										}`}
+									>
+										<input
+											aria-label={`Include ${page.name}`}
+											type="checkbox"
+											checked={page.included}
+											onChange={(event) =>
+												changePrintPage(page.id, {
+													included: event.currentTarget.checked,
+												})
+											}
+										/>
+										<button
+											type="button"
+											onClick={() => setSelectedPrintPageId(page.id)}
+										>
+											<strong>
+												{index + 1}. {page.name}
+											</strong>
+											<small>{CAD_VIEW_LABELS[page.view]}</small>
+										</button>
+									</div>
+								))
+							) : (
+								<p>Add a page from any view.</p>
+							)}
+						</div>
+						<Button
+							className="cad-export-pdf"
+							disabled={exporting || !printPages.some((page) => page.included)}
+							onClick={() => void exportPdf()}
+						>
+							{exporting ? "Exporting…" : "Export to PDF"}
+						</Button>
+					</aside>
+				) : null}
+			</div>
 			{settingsOpen ? (
 				<WindowSettings
 					title="CAD Settings"
@@ -334,6 +461,12 @@ interface CadTileProps {
 		entityIds: readonly string[],
 	): Promise<void>;
 	onFit(id: string): void;
+	printMode: boolean;
+	printPages: readonly CadPrintPage[];
+	selectedPrintPageId: string | null;
+	onAddPrintPage(tile: ViewportTile): void;
+	onSelectPrintPage(id: string): void;
+	onChangePrintPage(id: string, change: Partial<CadPrintPage>): void;
 }
 
 function CadTile(props: CadTileProps) {
@@ -357,6 +490,15 @@ function CadTile(props: CadTileProps) {
 			className={`cad-tile ${props.activeTileId === node.id ? "is-active" : ""}`}
 			onPointerDown={() => props.onActivate(node.id)}
 		>
+			{props.printMode ? (
+				<Button
+					className="cad-add-print-page"
+					onPointerDown={(event) => event.stopPropagation()}
+					onClick={() => props.onAddPrintPage(node)}
+				>
+					Add New Page
+				</Button>
+			) : null}
 			<div className="cad-view-control">
 				<select
 					aria-label="View direction"
@@ -431,6 +573,16 @@ function CadTile(props: CadTileProps) {
 				onSelection={props.onSelection}
 				onPreview={props.onPreview}
 				onMove={props.onMove}
+				editEnabled={!props.printMode}
+				printPages={props.printPages.filter(
+					(page) =>
+						page.tileId === node.id &&
+						page.view === node.view &&
+						page.rotationQuarterTurns === node.rotationQuarterTurns,
+				)}
+				selectedPrintPageId={props.selectedPrintPageId}
+				onSelectPrintPage={props.onSelectPrintPage}
+				onChangePrintPage={props.onChangePrintPage}
 			/>
 		</section>
 	);
@@ -450,6 +602,23 @@ function restoreSettings(): CadSettings {
 			showFixtureIds: false,
 			showDmxAddresses: false,
 		};
+	}
+}
+
+function restorePrintPages(): CadPrintPage[] {
+	try {
+		const stored = JSON.parse(localStorage.getItem(PRINT_KEY) ?? "[]");
+		if (!Array.isArray(stored)) return [];
+		return stored.filter(
+			(page): page is CadPrintPage =>
+				typeof page?.id === "string" &&
+				typeof page?.tileId === "string" &&
+				typeof page?.name === "string" &&
+				page?.centreMillimetres?.length === 2 &&
+				Number.isFinite(page?.widthMillimetres),
+		);
+	} catch {
+		return [];
 	}
 }
 

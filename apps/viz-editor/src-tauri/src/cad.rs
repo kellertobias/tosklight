@@ -10,12 +10,26 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 use light_application::PatchSnapshot;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeSet, HashMap};
+use std::{
+    collections::{BTreeSet, HashMap},
+    fs,
+};
 use tauri::{Emitter, Manager};
 use uuid::Uuid;
 
 pub const SCENE_DELTA_EVENT: &str = "cad-scene-delta";
 pub const SELECTION_DELTA_EVENT: &str = "cad-selection-delta";
+
+#[tauri::command]
+pub fn cad_export_pdf(path: String, bytes_base64: String) -> Result<(), String> {
+    let bytes = STANDARD
+        .decode(bytes_base64)
+        .map_err(|error| format!("The PDF data is invalid: {error}"))?;
+    if !bytes.starts_with(b"%PDF-") {
+        return Err("The exported document is not a PDF".to_string());
+    }
+    fs::write(&path, bytes).map_err(|error| format!("Could not save {path}: {error}"))
+}
 
 #[derive(Default)]
 pub struct CadState {

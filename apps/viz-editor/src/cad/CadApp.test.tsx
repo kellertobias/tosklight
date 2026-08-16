@@ -44,6 +44,7 @@ const mocks = vi.hoisted(() => ({
 	transform: vi.fn(),
 	undo: vi.fn(),
 	redo: vi.fn(),
+	exportPdf: vi.fn(),
 	onSceneDelta: vi.fn(),
 	onSelectionDelta: vi.fn(),
 }));
@@ -56,6 +57,9 @@ const nativeWindow = vi.hoisted(() => ({
 const workspace = new Map<string, string>();
 
 vi.mock("./session", () => ({ cadSession: mocks }));
+vi.mock("@tauri-apps/plugin-dialog", () => ({
+	save: vi.fn().mockResolvedValue("/tmp/rig-plan.pdf"),
+}));
 vi.mock("@tauri-apps/api/window", () => ({
 	getCurrentWindow: () => nativeWindow,
 }));
@@ -119,6 +123,7 @@ beforeEach(() => {
 	mocks.transform.mockReset();
 	mocks.undo.mockReset();
 	mocks.redo.mockReset();
+	mocks.exportPdf.mockReset().mockResolvedValue(undefined);
 	mocks.onSceneDelta.mockReset().mockResolvedValue(() => undefined);
 	mocks.onSelectionDelta.mockReset().mockResolvedValue(() => undefined);
 	for (const action of Object.values(nativeWindow)) action.mockClear();
@@ -178,7 +183,7 @@ describe("the CAD planning window", () => {
 			within(header as HTMLElement)
 				.getAllByRole("button")
 				.map((button) => button.textContent),
-		).toEqual(["Undo", "Redo", "⚙"]);
+		).toEqual(["Print", "Undo", "Redo", "⚙"]);
 		expect(
 			screen.getByRole("button", {
 				name: "Rotate top-down view 90 degrees counterclockwise",
@@ -189,6 +194,36 @@ describe("the CAD planning window", () => {
 				name: "Rotate top-down view 90 degrees clockwise",
 			}),
 		).toBeInTheDocument();
+	});
+
+	it("lays out multiple selected print pages and blocks rig transforms", async () => {
+		render(
+			<ModalProvider>
+				<CadApp />
+			</ModalProvider>,
+		);
+		await screen.findByTestId("cad-canvas");
+		expect(
+			screen.queryByRole("button", { name: "Add New Page" }),
+		).not.toBeInTheDocument();
+		fireEvent.click(screen.getByRole("button", { name: "Print" }));
+		fireEvent.click(screen.getByRole("button", { name: "Add New Page" }));
+		expect(
+			screen.getByRole("complementary", { name: "Print pages" }),
+		).toHaveTextContent("1. Page 1");
+		expect(screen.getByText("A4 landscape")).toBeInTheDocument();
+
+		fireEvent.pointerMove(screen.getByTestId("cad-canvas"));
+		fireEvent.pointerUp(screen.getByTestId("cad-canvas"));
+		await waitFor(() => expect(mocks.transform).not.toHaveBeenCalled());
+
+		fireEvent.click(screen.getByRole("button", { name: "Export to PDF" }));
+		await waitFor(() => expect(mocks.exportPdf).toHaveBeenCalledTimes(1));
+		const bytes = mocks.exportPdf.mock.calls[0][1] as Uint8Array;
+		expect(new TextDecoder().decode(bytes)).toContain("/Count 1");
+		expect(workspace.get("tosklight:viz-editor:cad-print-pages:v1")).toContain(
+			"Page 1",
+		);
 	});
 
 	it("fits automatically when the view changes and rotates only top down", async () => {

@@ -178,4 +178,57 @@ describe("CAD fixture interaction", () => {
 		});
 		expect(onSelection).toHaveBeenCalledWith({ type: "replace", ids: [] });
 	});
+
+	it("moves and uniformly scales print frames while rig editing is disabled", () => {
+		const onSelection = vi.fn();
+		const onChangePrintPage = vi.fn();
+		render(
+			<CadViewport
+				entities={[fixture]}
+				drawings={[]}
+				selectedIds={[fixture.id]}
+				view="top_down"
+				rotationQuarterTurns={0}
+				camera={camera}
+				preview={null}
+				showFixtureIds={false}
+				showDmxAddresses={false}
+				editEnabled={false}
+				printPages={[
+					{
+						id: "page-1",
+						tileId: "tile",
+						name: "Page 1",
+						view: "top_down",
+						rotationQuarterTurns: 0,
+						centreMillimetres: [0, 0],
+						widthMillimetres: 5000,
+						included: true,
+					},
+				]}
+				selectedPrintPageId="page-1"
+				onCamera={() => undefined}
+				onSelection={onSelection}
+				onPreview={() => undefined}
+				onMove={vi.fn()}
+				onSelectPrintPage={() => undefined}
+				onChangePrintPage={onChangePrintPage}
+			/>,
+		);
+		const frame = screen.getByText("Page 1").parentElement as HTMLElement;
+		fireEvent.pointerDown(frame, { pointerId: 1, clientX: 100, clientY: 100 });
+		fireEvent.pointerMove(frame, { pointerId: 1, clientX: 120, clientY: 110 });
+		expect(onChangePrintPage).toHaveBeenCalledWith("page-1", {
+			centreMillimetres: [200, -100],
+		});
+
+		const scale = screen.getByRole("button", { name: "Scale Page 1" });
+		fireEvent.pointerDown(scale, { pointerId: 2, clientX: 100, clientY: 100 });
+		fireEvent.pointerMove(scale, { pointerId: 2, clientX: 110, clientY: 110 });
+		expect(onChangePrintPage).toHaveBeenLastCalledWith("page-1", {
+			widthMillimetres: expect.any(Number),
+		});
+		const width = onChangePrintPage.mock.calls.at(-1)?.[1].widthMillimetres;
+		expect(width).toBeGreaterThan(5000);
+	});
 });

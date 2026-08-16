@@ -197,6 +197,7 @@ fn main() {
             cad::cad_transform,
             cad::cad_undo,
             cad::cad_redo,
+            cad::cad_export_pdf,
             visualizer::open_visualizer,
             visualizer::visualizer_is_running,
             visualizer::renderer_settings,

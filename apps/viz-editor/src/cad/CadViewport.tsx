@@ -7,13 +7,14 @@ import {
 import type {
 	CadDrawing,
 	CadEntity,
+	CadPrintPage,
 	CadTransformPreview,
 	CadViewDirection,
 	SelectionChange,
 	TileCamera,
 	WorldAxis,
 } from "./types";
-import { planeDelta, projectPoint, viewAxes } from "./types";
+import { planeDelta, printPageHeight, projectPoint, viewAxes } from "./types";
 
 interface CadViewportProps {
 	entities: readonly CadEntity[];
@@ -25,6 +26,11 @@ interface CadViewportProps {
 	preview: CadTransformPreview | null;
 	showFixtureIds: boolean;
 	showDmxAddresses: boolean;
+	editEnabled?: boolean;
+	printPages?: readonly CadPrintPage[];
+	selectedPrintPageId?: string | null;
+	onSelectPrintPage?(id: string): void;
+	onChangePrintPage?(id: string, change: Partial<CadPrintPage>): void;
 	onCamera(camera: TileCamera): void;
 	onSelection(change: SelectionChange): void;
 	onPreview(preview: CadTransformPreview | null): void;
@@ -62,6 +68,11 @@ export function CadViewport({
 	preview,
 	showFixtureIds,
 	showDmxAddresses,
+	editEnabled = true,
+	printPages = [],
+	selectedPrintPageId = null,
+	onSelectPrintPage,
+	onChangePrintPage,
 	onCamera,
 	onSelection,
 	onPreview,
@@ -98,6 +109,7 @@ export function CadViewport({
 			rotationQuarterTurns,
 			camera,
 			preview,
+			editEnabled,
 			guide,
 			selectionBox,
 		);
@@ -109,6 +121,7 @@ export function CadViewport({
 		rotationQuarterTurns,
 		camera,
 		preview,
+		editEnabled,
 		guide,
 		selectionBox,
 	]);
@@ -173,6 +186,7 @@ export function CadViewport({
 			return;
 		}
 		const point = screenToPlane(event.clientX, event.clientY);
+		if (!editEnabled) return;
 		const axis = pickGizmo(
 			point,
 			entities,
@@ -339,6 +353,119 @@ export function CadViewport({
 					})}
 				</div>
 			) : null}
+			{printPages.length ? (
+				<div className="cad-print-frames">
+					{printPages.map((page) => (
+						<PrintFrame
+							key={page.id}
+							page={page}
+							camera={camera}
+							selected={page.id === selectedPrintPageId}
+							onSelect={() => onSelectPrintPage?.(page.id)}
+							onChange={(change) => onChangePrintPage?.(page.id, change)}
+						/>
+					))}
+				</div>
+			) : null}
+		</div>
+	);
+}
+
+function PrintFrame({
+	page,
+	camera,
+	selected,
+	onSelect,
+	onChange,
+}: {
+	page: CadPrintPage;
+	camera: TileCamera;
+	selected: boolean;
+	onSelect(): void;
+	onChange(change: Partial<CadPrintPage>): void;
+}) {
+	const interaction = useRef<{
+		type: "move" | "scale";
+		start: [number, number];
+		centre: [number, number];
+		width: number;
+	} | null>(null);
+	const height = printPageHeight(page);
+	function move(event: React.PointerEvent<HTMLElement>) {
+		const active = interaction.current;
+		if (!active) return;
+		const dx = event.clientX - active.start[0];
+		const dy = event.clientY - active.start[1];
+		if (active.type === "move") {
+			onChange({
+				centreMillimetres: [
+					active.centre[0] + dx / camera.zoom,
+					active.centre[1] - dy / camera.zoom,
+				],
+			});
+		} else {
+			onChange({
+				widthMillimetres: Math.max(
+					500,
+					active.width +
+						Math.max(
+							(dx * 2) / camera.zoom,
+							(dy * 2 * 297) / (camera.zoom * 210),
+						),
+				),
+			});
+		}
+	}
+	function stop(event: React.PointerEvent<HTMLElement>) {
+		interaction.current = null;
+		event.currentTarget.releasePointerCapture?.(event.pointerId);
+	}
+	return (
+		<div
+			className={`cad-print-frame ${selected ? "is-selected" : ""}`}
+			style={{
+				left: `calc(50% + ${(page.centreMillimetres[0] - page.widthMillimetres / 2 + camera.pan[0]) * camera.zoom}px)`,
+				top: `calc(50% - ${(page.centreMillimetres[1] + height / 2 + camera.pan[1]) * camera.zoom}px)`,
+				width: `${page.widthMillimetres * camera.zoom}px`,
+				height: `${height * camera.zoom}px`,
+			}}
+			onPointerDown={(event) => {
+				event.preventDefault();
+				event.stopPropagation();
+				onSelect();
+				interaction.current = {
+					type: "move",
+					start: [event.clientX, event.clientY],
+					centre: page.centreMillimetres,
+					width: page.widthMillimetres,
+				};
+				event.currentTarget.setPointerCapture?.(event.pointerId);
+			}}
+			onPointerMove={move}
+			onPointerUp={stop}
+			onPointerCancel={stop}
+		>
+			<span>{page.name}</span>
+			<button
+				type="button"
+				className="cad-print-scale"
+				aria-label={`Scale ${page.name}`}
+				onPointerDown={(event) => {
+					event.preventDefault();
+					event.stopPropagation();
+					onSelect();
+					interaction.current = {
+						type: "scale",
+						start: [event.clientX, event.clientY],
+						centre: page.centreMillimetres,
+						width: page.widthMillimetres,
+					};
+					event.currentTarget.setPointerCapture?.(event.pointerId);
+				}}
+				onPointerMove={move}
+				onPointerUp={stop}
+				onPointerCancel={stop}
+			/>
 		</div>
 	);
 }
@@ -399,6 +526,7 @@ class LineRenderer {
 		rotationQuarterTurns: number,
 		camera: TileCamera,
 		preview: CadTransformPreview | null,
+		editEnabled: boolean,
 		guide: MoveAxis | null,
 		selectionBox: SelectionBox | null,
 	) {
@@ -494,16 +622,18 @@ class LineRenderer {
 				);
 			}
 		}
-		const gizmo = gizmoGeometry(
-			entities,
-			selected,
-			view,
-			rotationQuarterTurns,
-			camera,
-			preview
-				? projectPoint(preview.deltaMillimetres, view, rotationQuarterTurns)
-				: [0, 0],
-		);
+		const gizmo = editEnabled
+			? gizmoGeometry(
+					entities,
+					selected,
+					view,
+					rotationQuarterTurns,
+					camera,
+					preview
+						? projectPoint(preview.deltaMillimetres, view, rotationQuarterTurns)
+						: [0, 0],
+				)
+			: null;
 		if (gizmo) {
 			const axes = viewAxes(view, rotationQuarterTurns);
 			const horizontal = axisColor(axes.horizontal.axis);
