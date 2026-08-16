@@ -104,6 +104,38 @@ pub const BEAT_SCAN_EFFECT: &str = "beat-scan";
 pub const BEAT_SCALE_TURN_EFFECT: &str = "beat-scale-turn";
 pub const BEAT_GRID_WAVE_EFFECT: &str = "beat-grid-wave";
 pub const BEAT_FORM_FLASH_EFFECT: &str = "beat-form-flash";
+pub const DRAWN_IMAGE_EFFECT: &str = "drawn-image";
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DrawnImageParameters {
+    pub strength: f32,
+    pub line_detail: f32,
+}
+impl DrawnImageParameters {
+    pub const IDS: [&'static str; 2] = ["drawn-strength", "drawn-line-detail"];
+    pub const LABELS: [&'static str; 2] = ["Stylization strength", "Line detail"];
+    pub fn from_parameters(values: &[f32]) -> Self {
+        let d = Self::default();
+        let b = |v: Option<f32>, f: f32| match v {
+            Some(v) if v.is_finite() => v.clamp(0.0, 1.0),
+            _ => f,
+        };
+        Self {
+            strength: b(values.first().copied(), d.strength),
+            line_detail: b(values.get(1).copied(), d.line_detail),
+        }
+    }
+    pub const fn as_array(self) -> [f32; 2] {
+        [self.strength, self.line_detail]
+    }
+}
+impl Default for DrawnImageParameters {
+    fn default() -> Self {
+        Self {
+            strength: 0.8,
+            line_detail: 0.55,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct BeatFormFlashParameters {
@@ -1155,6 +1187,20 @@ impl EffectSlot {
             && self.effect_type.as_deref() == Some(BEAT_FORM_FLASH_EFFECT))
         .then(|| BeatFormFlashParameters::from_parameters(&self.parameters))
     }
+    pub fn drawn_image() -> Self {
+        Self {
+            effect_type: Some(DRAWN_IMAGE_EFFECT.to_owned()),
+            enabled: true,
+            seed: 0,
+            mix: 1.0,
+            parameters: DrawnImageParameters::default().as_array().to_vec(),
+            visualizer_parameters: None,
+        }
+    }
+    pub fn drawn_image_parameters(&self) -> Option<DrawnImageParameters> {
+        (self.enabled && self.mix > 0.0 && self.effect_type.as_deref() == Some(DRAWN_IMAGE_EFFECT))
+            .then(|| DrawnImageParameters::from_parameters(&self.parameters))
+    }
 
     pub fn normalize(&mut self) {
         self.mix = if self.mix.is_finite() {
@@ -1208,6 +1254,10 @@ impl EffectSlot {
                 .to_vec();
         } else if self.effect_type.as_deref() == Some(BEAT_FORM_FLASH_EFFECT) {
             self.parameters = BeatFormFlashParameters::from_parameters(&self.parameters)
+                .as_array()
+                .to_vec();
+        } else if self.effect_type.as_deref() == Some(DRAWN_IMAGE_EFFECT) {
+            self.parameters = DrawnImageParameters::from_parameters(&self.parameters)
                 .as_array()
                 .to_vec();
         }
@@ -1677,5 +1727,18 @@ mod tests {
         assert_eq!(effect.parameters, vec![4.0, 0.1, 4.0, 0.0]);
         effect.enabled = false;
         assert_eq!(effect.beat_form_flash_parameters(), None);
+    }
+    #[test]
+    fn drawn_image_has_bounded_persisted_stylization_controls() {
+        let mut effect = EffectSlot::drawn_image();
+        assert_eq!(
+            effect.drawn_image_parameters(),
+            Some(DrawnImageParameters::default())
+        );
+        effect.parameters = vec![2.0, -1.0];
+        effect.normalize();
+        assert_eq!(effect.parameters, vec![1.0, 0.0]);
+        effect.enabled = false;
+        assert_eq!(effect.drawn_image_parameters(), None);
     }
 }

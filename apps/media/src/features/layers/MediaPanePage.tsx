@@ -660,7 +660,7 @@ function tintChange(value: string) {
 function layerChange(id: string, value: string | number): UpdateLayer {
 	const number = Number(value);
 	const effect =
-		/^effect-(\d+)-(type|enabled|mix|tv-curvature|distortion|image-grain|compression-damage|block-size|tile-displacement|chroma-damage|glitching|cycle-interval|blur-amount|feedback-amount|feedback-motion|feedback-direction|beat-move-amount|beat-move-direction|beat-move-decay|kaleidoscope-repetitions|kaleidoscope-angle|rasterize-mode|rasterize-dot-size|beat-scan-width|beat-scan-edge|beat-scan-falloff|beat-scan-duration|beat-scale-amount|beat-turn-enabled|beat-turn-rotation|beat-scale-decay|beat-grid-density|beat-grid-height|beat-grid-duration|beat-grid-origin|beat-grid-hue|beat-grid-brightness|beat-form-enlargement|beat-form-lifetime|beat-form-density|beat-form-variation)$/.exec(
+		/^effect-(\d+)-(type|enabled|mix|tv-curvature|distortion|image-grain|compression-damage|block-size|tile-displacement|chroma-damage|glitching|cycle-interval|blur-amount|feedback-amount|feedback-motion|feedback-direction|beat-move-amount|beat-move-direction|beat-move-decay|kaleidoscope-repetitions|kaleidoscope-angle|rasterize-mode|rasterize-dot-size|beat-scan-width|beat-scan-edge|beat-scan-falloff|beat-scan-duration|beat-scale-amount|beat-turn-enabled|beat-turn-rotation|beat-scale-decay|beat-grid-density|beat-grid-height|beat-grid-duration|beat-grid-origin|beat-grid-hue|beat-grid-brightness|beat-form-enlargement|beat-form-lifetime|beat-form-density|beat-form-variation|drawn-strength|drawn-line-detail)$/.exec(
 			id,
 		);
 	if (effect) {
@@ -748,6 +748,10 @@ function layerChange(id: string, value: string | number): UpdateLayer {
 				return { effectSlot, beatFormDensity: number };
 			case "beat-form-variation":
 				return { effectSlot, beatFormVariation: number / 100 };
+			case "drawn-strength":
+				return { effectSlot, drawnStrength: number / 100 };
+			case "drawn-line-detail":
+				return { effectSlot, drawnLineDetail: number / 100 };
 		}
 	}
 	switch (id) {
@@ -820,6 +824,7 @@ function effectControls(
 					{ value: "beat-scale-turn", label: "Beat Scale and Turn" },
 					{ value: "beat-grid-wave", label: "Beat Grid Wave" },
 					{ value: "beat-form-flash", label: "Beat Form Flash" },
+					{ value: "drawn-image", label: "Drawn Image" },
 				],
 				disabled,
 			},
@@ -1395,6 +1400,52 @@ function effectControls(
 					`${prefix}-beat-form-variation`,
 					`${slot} · Variation`,
 					parameter("beat-form-variation", 0.35) * 100,
+					0,
+					100,
+					disabled,
+					"%",
+				),
+			];
+		}
+		if (effect.effectType === "drawn-image") {
+			const parameter = (id: string, fallback: number) =>
+				effect.parameters.find((candidate) => candidate.id === id)?.value ??
+				fallback;
+			return [
+				...controls,
+				{
+					id: `${prefix}-enabled`,
+					kind: "choice" as const,
+					label: `${slot} state`,
+					value: String(effect.enabled),
+					options: [
+						{ value: "true", label: "Enabled" },
+						{ value: "false", label: "Bypassed" },
+					],
+					disabled,
+				},
+				valueControl(
+					`${prefix}-mix`,
+					`${slot} mix`,
+					effect.mix * 100,
+					0,
+					100,
+					disabled,
+					"%",
+				),
+				valueControl(
+					`${prefix}-drawn-strength`,
+					`${slot} · Stylization strength`,
+					parameter("drawn-strength", 0.8) * 100,
+					0,
+					100,
+					disabled,
+					"%",
+				),
+				valueControl(
+					`${prefix}-drawn-line-detail`,
+					`${slot} · Line detail`,
+					parameter("drawn-line-detail", 0.55) * 100,
 					0,
 					100,
 					disabled,

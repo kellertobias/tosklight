@@ -177,6 +177,22 @@ fn rasterize_state(mode: RasterizeMode, dot_size: f32, enabled: bool) -> LayerSt
         ..Default::default()
     })
 }
+fn drawn_image_state(strength: f32, detail: f32, enabled: bool) -> LayerState {
+    let mut effect = EffectSlot::drawn_image();
+    effect.enabled = enabled;
+    effect.parameters = media_domain::DrawnImageParameters {
+        strength,
+        line_detail: detail,
+    }
+    .as_array()
+    .to_vec();
+    let mut effects: [EffectSlot; 4] = Default::default();
+    effects[0] = effect;
+    ready(LayerState {
+        effects,
+        ..Default::default()
+    })
+}
 
 fn beat_scan_state(edge: BeatScanEdge, events: &[(f32, f32)], enabled: bool) -> LayerState {
     let mut effect = EffectSlot::beat_scan();
@@ -527,6 +543,31 @@ fn beat_form_flash_samples_the_source_and_renders_independent_shrinking_forms() 
     assert!(changed_pixels(&first, &waiting) > 200);
     assert!(changed_pixels(&progressed, &first) > 200);
     assert!(changed_pixels(&overlapping, &first) > 200);
+    assert_eq!(disabled.pixels, plain.pixels, "bypass restores the source");
+}
+
+#[test]
+fn drawn_image_preserves_composition_with_distinct_strength_detail_and_exact_bypass() {
+    let mut bench = Bench::new();
+    let source = patterned_source(&bench.gpu);
+    let plain = ready(LayerState::default());
+    let mild = drawn_image_state(0.35, 0.25, true);
+    let strong = drawn_image_state(1.0, 0.25, true);
+    let detailed = drawn_image_state(1.0, 0.9, true);
+    let disabled = drawn_image_state(1.0, 0.9, false);
+    let draw = |state| LayerDraw {
+        state,
+        source: &source,
+        mask: None,
+    };
+    let plain = bench.render(&[draw(&plain)], &MasterState::default());
+    let mild = bench.render(&[draw(&mild)], &MasterState::default());
+    let strong = bench.render(&[draw(&strong)], &MasterState::default());
+    let detailed = bench.render(&[draw(&detailed)], &MasterState::default());
+    let disabled = bench.render(&[draw(&disabled)], &MasterState::default());
+    assert!(changed_pixels(&mild, &plain) > 500);
+    assert!(changed_pixels(&strong, &mild) > 500);
+    assert!(changed_pixels(&detailed, &strong) > 200);
     assert_eq!(disabled.pixels, plain.pixels, "bypass restores the source");
 }
 

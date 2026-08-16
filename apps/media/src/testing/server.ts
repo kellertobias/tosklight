@@ -276,6 +276,8 @@ export function stubServer(
 						layer.effects[body.effectSlot] = beatFormFlashEffect(
 							body.effectSlot,
 						);
+					} else if (body.effectType === "drawn-image") {
+						layer.effects[body.effectSlot] = drawnImageEffect(body.effectSlot);
 					}
 					const selectedEffect = layer.effects[body.effectSlot];
 					if (body.visualizerParameters !== undefined)
@@ -375,6 +377,10 @@ export function stubServer(
 						selectedEffect.parameters[2].value = body.beatFormDensity;
 					if (body.beatFormVariation !== undefined)
 						selectedEffect.parameters[3].value = body.beatFormVariation;
+					if (body.drawnStrength !== undefined)
+						selectedEffect.parameters[0].value = body.drawnStrength;
+					if (body.drawnLineDetail !== undefined)
+						selectedEffect.parameters[1].value = body.drawnLineDetail;
 					for (const [id, key] of [
 						["tv-curvature", "tvCurvature"],
 						["distortion", "effectDistortion"],
@@ -1011,6 +1017,31 @@ function beatFormFlashEffect(
 				label: "Variation",
 				value: 0.35,
 				defaultValue: 0.35,
+			},
+		],
+	};
+}
+function drawnImageEffect(
+	index: number,
+): OutputView["layers"][number]["effects"][number] {
+	return {
+		...emptyEffect(index),
+		effectType: "drawn-image",
+		label: "Drawn Image",
+		enabled: true,
+		mix: 1,
+		parameters: [
+			{
+				id: "drawn-strength",
+				label: "Stylization strength",
+				value: 0.8,
+				defaultValue: 0.8,
+			},
+			{
+				id: "drawn-line-detail",
+				label: "Line detail",
+				value: 0.55,
+				defaultValue: 0.55,
 			},
 		],
 	};

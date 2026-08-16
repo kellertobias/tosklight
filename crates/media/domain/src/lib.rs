@@ -49,10 +49,11 @@ pub use layer::{
     BEAT_MOVE_EFFECT, BEAT_SCALE_TURN_EFFECT, BEAT_SCAN_EFFECT, BLUR_EFFECT,
     BeatFormFlashParameters, BeatGridWaveOrigin, BeatGridWaveParameters, BeatMoveDirection,
     BeatMoveParameters, BeatScaleTurnParameters, BeatScanEdge, BeatScanParameters, BlurParameters,
-    DIGITAL_TV_EFFECT, DigitalTvParameters, EffectSlot, FEEDBACK_EFFECT, FeedbackMotion,
-    FeedbackParameters, KALEIDOSCOPE_EFFECT, KaleidoscopeParameters, LayerState, MaskSource,
-    MaskState, OPACITY_CYCLE_EFFECT, OpacityCycleInterval, RASTERIZE_EFFECT, RasterizeMode,
-    RasterizeParameters, ScalingMode, SourceFailure, SourceStatus,
+    DIGITAL_TV_EFFECT, DRAWN_IMAGE_EFFECT, DigitalTvParameters, DrawnImageParameters, EffectSlot,
+    FEEDBACK_EFFECT, FeedbackMotion, FeedbackParameters, KALEIDOSCOPE_EFFECT,
+    KaleidoscopeParameters, LayerState, MaskSource, MaskState, OPACITY_CYCLE_EFFECT,
+    OpacityCycleInterval, RASTERIZE_EFFECT, RasterizeMode, RasterizeParameters, ScalingMode,
+    SourceFailure, SourceStatus,
 };
 pub use master::MasterState;
 pub use output::{OutputId, OutputName, PresentationMode};

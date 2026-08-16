@@ -131,6 +131,12 @@ impl LayerUniform {
                     beat_event_y[event][index] = values[2];
                     beat_scan_counts[event][index] = values[3];
                 }
+            } else if let Some(parameters) = effect.drawn_image_parameters() {
+                effect_types[index] = 9;
+                effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
+                let values = parameters.as_array();
+                effect_parameters[index][0] = values[0];
+                effect_parameters[index][1] = values[1];
             }
         }
         Self {

@@ -16,10 +16,11 @@ use media_domain::{
     BEAT_SCALE_TURN_EFFECT, BEAT_SCAN_EFFECT, BLUR_EFFECT, BeatFormFlashParameters,
     BeatGridWaveOrigin, BeatGridWaveParameters, BeatMoveDirection, BeatMoveParameters,
     BeatScaleTurnParameters, BeatScanEdge, BeatScanParameters, BlurParameters, Command,
-    CommandKind, CommandSource, DIGITAL_TV_EFFECT, EffectSlot, FEEDBACK_EFFECT, FeedbackMotion,
-    FeedbackParameters, FlipMirror, KALEIDOSCOPE_EFFECT, KaleidoscopeParameters, LayerControls,
-    MasterControls, MediaAddress, MediaState, OPACITY_CYCLE_EFFECT, OpacityCycleInterval, OutputId,
-    RASTERIZE_EFFECT, RasterizeMode, RasterizeParameters, ScalingMode, Timestamp, Tint, apply,
+    CommandKind, CommandSource, DIGITAL_TV_EFFECT, DRAWN_IMAGE_EFFECT, DrawnImageParameters,
+    EffectSlot, FEEDBACK_EFFECT, FeedbackMotion, FeedbackParameters, FlipMirror,
+    KALEIDOSCOPE_EFFECT, KaleidoscopeParameters, LayerControls, MasterControls, MediaAddress,
+    MediaState, OPACITY_CYCLE_EFFECT, OpacityCycleInterval, OutputId, RASTERIZE_EFFECT,
+    RasterizeMode, RasterizeParameters, ScalingMode, Timestamp, Tint, apply,
 };
 
 use crate::error::ApiError;
@@ -223,6 +224,7 @@ pub(super) async fn update_layer(
                 BEAT_SCALE_TURN_EFFECT => EffectSlot::beat_scale_turn(),
                 BEAT_GRID_WAVE_EFFECT => EffectSlot::beat_grid_wave(),
                 BEAT_FORM_FLASH_EFFECT => EffectSlot::beat_form_flash(),
+                DRAWN_IMAGE_EFFECT => EffectSlot::drawn_image(),
                 "none" => EffectSlot::default(),
                 _ => {
                     return Err(ApiError::bad_request(
@@ -450,6 +452,18 @@ pub(super) async fn update_layer(
                 .unwrap_or(parameters.lifetime_seconds);
             parameters.density = body.beat_form_density.unwrap_or(parameters.density);
             parameters.variation = body.beat_form_variation.unwrap_or(parameters.variation);
+            effect.parameters = parameters.as_array().to_vec();
+        }
+        if body.drawn_strength.is_some() || body.drawn_line_detail.is_some() {
+            if effect.effect_type.as_deref() != Some(DRAWN_IMAGE_EFFECT) {
+                return Err(ApiError::bad_request(
+                    "drawn-image-parameters-effect",
+                    "choose the Drawn Image effect before changing its controls",
+                ));
+            }
+            let mut parameters = DrawnImageParameters::from_parameters(&effect.parameters);
+            parameters.strength = body.drawn_strength.unwrap_or(parameters.strength);
+            parameters.line_detail = body.drawn_line_detail.unwrap_or(parameters.line_detail);
             effect.parameters = parameters.as_array().to_vec();
         }
         if body.feedback_amount.is_some()

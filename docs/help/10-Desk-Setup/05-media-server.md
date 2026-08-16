@@ -198,6 +198,10 @@ Repeated beats keep their own waves while they overlap; bypass restores the unch
 more independently shrinking and fading copies at deterministic varied positions. **Start size**,
 **Lifetime**, **Forms per beat**, and **Variation** control the result; a held beat does not create
 extra copies, and bypass restores the unchanged source immediately.
+**Drawn Image** turns the live source into a color-reduced illustration with source-derived ink
+lines. **Stylization strength** blends from the unchanged source to the illustrated treatment;
+**Line detail** chooses broader graphic edges or finer subject detail. Bypass restores the exact
+source immediately and never alters the library asset.
 After configuring a slot, release takeover to return control to the desk. The matching **Effect 1**
 through **Effect 4** DMX channel then controls that slot's mix without erasing its selected effect or
 typed parameters.
