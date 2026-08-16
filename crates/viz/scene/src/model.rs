@@ -76,7 +76,9 @@ impl FixtureModel {
 }
 
 /// Which moving part of a fixture a piece of geometry belongs to.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone, Copy, Debug, Default, Eq, Hash, PartialEq, serde::Serialize, serde::Deserialize,
+)]
 pub enum ModelPartKind {
     /// Bolted to the truss: never moves.
     #[default]

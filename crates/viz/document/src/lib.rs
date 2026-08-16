@@ -14,6 +14,7 @@
 //! The file it writes is an ordinary portable show. The desk opens it directly; no conversion,
 //! no export step, no second format.
 
+mod inputs;
 mod media;
 mod mvr;
 mod ports;
@@ -22,6 +23,7 @@ pub mod standalone;
 #[cfg(test)]
 mod tests;
 
+pub use inputs::{LIVE_DMX_INPUT_KIND, LiveDmxInputMapping, LiveDmxInputs};
 pub use media::{
     CitpConfiguration, CropRectangle, LedModuleType, ManagedFallbackReference, MediaFallbackAsset,
     MediaIntentAction, MediaLayoutOutcome, MediaLayoutSnapshot, MediaObject, MediaObjectIntent,
@@ -161,15 +163,6 @@ impl PlanningDocument {
         command: PatchFixturesCommand,
     ) -> Result<PatchFixturesResult, DocumentError> {
         let expected = self.patch_revision()?;
-        self.patch_fixtures_at(command, expected)
-    }
-
-    /// Applies a Patch command only at the revision the editing surface actually read.
-    pub fn patch_fixtures_at(
-        &self,
-        command: PatchFixturesCommand,
-        expected: u64,
-    ) -> Result<PatchFixturesResult, DocumentError> {
         let context = self
             .context()
             .with_request_id(Uuid::new_v4().to_string())
@@ -203,11 +196,6 @@ impl PlanningDocument {
             .map_or(light_core::Revision::default(), |object| object.revision);
         store.put_object(kind, id, body, expected)?;
         Ok(())
-    }
-
-    /// Deletes one optional stored object. Missing objects are an idempotent no-op.
-    pub fn delete_object(&self, kind: &str, id: &str) -> Result<bool, DocumentError> {
-        Ok(self.store()?.delete_object(kind, id)?)
     }
 
     /// The portable media layout authored by the standalone Viz product.

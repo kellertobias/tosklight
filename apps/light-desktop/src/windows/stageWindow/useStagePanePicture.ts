@@ -62,6 +62,7 @@ export function useStagePanePicture(
 	mode = "full_3d",
 	followPreload = false,
 	paneId?: string,
+	forcedShowBeamGuides?: boolean,
 ) {
 	const bridge = useDesktopBridge();
 	const { state } = useApp();
@@ -74,6 +75,7 @@ export function useStagePanePicture(
 		stageVizLaserBrightness,
 		stageVizShowLabels,
 		stageShowFloorGrid,
+		stageShowBeamGuides,
 		stageVizBackground,
 	} = state;
 	const paneSettings = paneId
@@ -85,6 +87,7 @@ export function useStagePanePicture(
 	const lampFogTurbulence = paneSettings?.lampFogTurbulence ?? 1;
 	const laserFogCloudiness = paneSettings?.laserFogCloudiness ?? 0;
 	const laserFogTurbulence = paneSettings?.laserFogTurbulence ?? 0;
+	const showBeamGuides = forcedShowBeamGuides ?? stageShowBeamGuides;
 
 	useEffect(() => {
 		if (!active) return;
@@ -100,6 +103,7 @@ export function useStagePanePicture(
 			laserFogTurbulence,
 			showLabels: stageVizShowLabels,
 			floorGrid: stageShowFloorGrid,
+			showBeamGuides,
 			background: backgroundColour(stageVizBackground),
 			mode,
 			followPreload,
@@ -120,6 +124,7 @@ export function useStagePanePicture(
 		laserFogTurbulence,
 		stageVizShowLabels,
 		stageShowFloorGrid,
+		showBeamGuides,
 		stageVizBackground,
 		pane.id,
 	]);

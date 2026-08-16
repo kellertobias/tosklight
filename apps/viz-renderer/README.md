@@ -1,4 +1,4 @@
-# ToskLight Visualizer
+# ToskLight PreViz
 
 The standalone, network-connected live visualizer. It runs as its own process with its own window,
 its own connection to a scene source, and its own Art-Net and sACN receivers.
@@ -30,7 +30,7 @@ To build without launching anything:
 npm run build:viz
 ```
 
-On macOS that build also assembles `ToskLight Visualizer.app` around the binary, and `npm run
+On macOS that build also assembles `ToskLight PreViz.app` around the binary, and `npm run
 open:viz` launches the executable from inside it. A bare Mach-O process gets the generic executable
 icon and is named after its binary in the Dock and the application menu, so the bundle is what makes
 the visualizer look like the product it is. Its icon is the Viz icon — the ToskLight mark badged
@@ -45,10 +45,10 @@ and taskbar icon are set from the same artwork at runtime.
 | `--target <name>` | Which renderer the desk is addressing. Default `main`. |
 | `--demo` | Render the built-in deterministic scene without connecting to anything. |
 | `--view <name>` | Start in a named view: `top_down`, `left_to_right`, `right_to_left`, `front_to_back`, `back_to_front`, `lines_3d`, `simple_3d`, `full_3d`. |
-| `--quality <tier>` | `draft`, `standard`, `high`, `ultra`, or `extreme`. |
+| `--quality <tier>` | `draft`, `standard`, `high`, or `ultra`. |
 | `--theme <name>` | `light_on_dark` or `dark_on_light`. |
 | `--ambient <pct>` | How bright everything that is not a light source is, so trusses stay readable with the rig dark. |
-| `--fog <pct>` | Haze amount to render with (default 50). |
+| `--fog <pct>` | Haze amount to render with (default 15). |
 | `--exposure <x>` | Operator exposure trim, `0.05`–`4.0`, on top of the automatic adaptation. |
 | `--capture <path>` | Render, write one PNG, and exit. Used for golden images and benchmark evidence. |
 | `--capture-frames <n>` | Frames to let the scene settle before capturing. Default `60`. |
@@ -60,7 +60,7 @@ and taskbar icon are set from the same artwork at runtime.
 The first launch needs no network configuration when ToskLight runs on the same computer.
 
 Effect fixtures run their package-owned `effect.js` in isolated bounded QuickJS contexts. Particle
-budgets are Draft 128, Standard 512, High 2,048, Ultra 4,096 and Extreme 8,192; overload retains one particle per
+budgets are Draft 128, Standard 512, High 2,048 and Ultra 8,192; overload retains one particle per
 active nozzle before distributing the remaining capacity and reports requested/drawn counts in
 renderer frame statistics. See the operator manual's **Particle Effects** page for the script and
 restart contract.
@@ -454,15 +454,15 @@ light does ask, and a spot left inside its own head lights nothing at all.
 
 ## Shadows
 
-`3D Full` renders real shadow maps. The budget is per quality tier — 3 at Standard, 6 at High, 8
-at Ultra and 10 at Extreme — and goes to the brightest beams, because those are the shadows an operator notices.
+`3D Full` renders real shadow maps. The budget is per quality tier — 3 at Standard, 6 at High, 10
+at Ultra — and goes to the brightest beams, because those are the shadows an operator notices.
 Both the surface pass and the volumetric pass sample them, so a truss standing in a beam casts its
 shadow through the haze as well as onto the floor. A light with no map is drawn unshadowed rather
 than dark.
 
 ## Fog and ambient light
 
-Haze is the renderer's own **Fog amount**, `50%` until you change it. It is never taken from the
+Haze is the renderer's own **Fog amount**, `15%` until you change it. It is never taken from the
 show: a hazer's DMX output says how hard the machine is working, not how thick the air in the room
 became, and following it swings the picture between an invisible rig and a milky one on a value
 nobody is watching. Patched hazers still appear in the rig and their output is still decoded; they
@@ -472,11 +472,11 @@ Set the amount in **Quick Settings → Fog amount**, with the wheel over the fog
 `--fog <pct>` at startup. `0%` is clear air even with every hazer running flat out. The amount is
 renderer-local: it never touches the show.
 
-Ultra and Extreme add four independent character controls beside that amount: **Lamp fog cloudiness** and
+Ultra adds four independent character controls beside that amount: **Lamp fog cloudiness** and
 **Lamp fog turbulence**, plus the corresponding two **Laser fog** controls. Cloudiness changes
 the air from spatially even at `0%` to strongly patchy at `100%`; turbulence leaves the pattern
 stationary at `0%` and makes it move and change rapidly at `100%`. The lamp defaults preserve the
-original Extreme haze (`70%` cloudiness, `100%` turbulence), while both laser defaults are `0%` and
+original Ultra haze (`70%` cloudiness, `100%` turbulence), while both laser defaults are `0%` and
 therefore preserve the original uniform laser haze. Draft, Standard and High retain their uniform
 fog even while the four stored values remain set.
 

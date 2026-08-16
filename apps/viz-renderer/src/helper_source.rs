@@ -449,7 +449,7 @@ mod tests {
         let hello = ToHelper::Hello {
             protocol_major: PROTOCOL_MAJOR,
             protocol_minor: PROTOCOL_MINOR,
-            title: "ToskLight Visualizer".to_owned(),
+            title: "ToskLight PreViz".to_owned(),
         };
         write_frame(&mut buffer, &encode(&hello).expect("encodes")).expect("writes");
         for message in messages {
@@ -491,7 +491,7 @@ mod tests {
             "test renderer".to_owned(),
         )
         .expect("the handshake completes");
-        assert_eq!(source.take_title().as_deref(), Some("ToskLight Visualizer"));
+        assert_eq!(source.take_title().as_deref(), Some("ToskLight PreViz"));
         // And the desk was answered, so it knows what is drawing.
         let written = answer.written();
         let ready: FromHelper = {

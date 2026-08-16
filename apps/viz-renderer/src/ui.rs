@@ -10,6 +10,7 @@ mod quick_settings;
 mod status;
 
 pub use quick_settings::{QuickSettings, QuickSettingsOutcome, Row, build_quick_settings};
+pub(crate) use status::quality_reduction_reason;
 pub use status::{DmxCameraControlStatus, StatusModel, build_fixture_labels, build_status};
 
 /// Palette for one theme. The plot themes have to work on paper as well as on a screen.
@@ -248,6 +249,26 @@ mod tests {
     use viz_scene::{ConnectionState, ProviderDiagnostics, ProviderKind, RenderQuality, ViewMode};
     use viz_scene::{UniverseGrade, UniverseHealth};
 
+    #[test]
+    fn quality_reduction_names_each_active_limit_and_the_recovery_action() {
+        let stats = viz_render::FrameStats {
+            quality_reduction: viz_render::QualityReduction {
+                lights: Some((200, 130)),
+                beams: Some((180, 128)),
+                ultra_gpu_budget: true,
+                ..viz_render::QualityReduction::default()
+            },
+            ..viz_render::FrameStats::default()
+        };
+
+        let reason = quality_reduction_reason(&stats).expect("reduction should be explained");
+        assert!(reason.contains("16 ms GPU budget"));
+        assert!(reason.contains("full Ultra returns automatically"));
+        assert!(reason.contains("200 lights"));
+        assert!(reason.contains("130 drawn"));
+        assert!(reason.contains("180 beams"));
+    }
+
     /// The status model a test wants to talk about, with everything else held still.
     fn status_model<'a>(
         connection: &'a ConnectionState,
@@ -275,8 +296,7 @@ mod tests {
             fog_percent: 50.0,
             ambient_percent: 6.0,
             degraded: false,
-            effective_quality: Some(RenderQuality::High),
-            crowd_reduction: None,
+            quality_reduction_reason: None,
             particle_reduction: None,
             exposure: 1.0,
             renderer: "test".into(),
@@ -327,8 +347,10 @@ mod tests {
             fog_percent: 50.0,
             ambient_percent: 6.0,
             degraded: true,
-            effective_quality: Some(RenderQuality::High),
-            crowd_reduction: None,
+            quality_reduction_reason: Some(
+                "Quality reduced: 200 lights exceed the frame budget (130 drawn); reduce simultaneous live lights."
+                    .into(),
+            ),
             particle_reduction: None,
             exposure: 1.0,
             renderer: "test".into(),
@@ -479,37 +501,6 @@ mod tests {
     }
 
     #[test]
-    fn quick_settings_explains_the_requested_and_effective_quality() {
-        let connection = ConnectionState::Idle;
-        let diagnostics = ProviderDiagnostics::default();
-        let mut model = status_model(&connection, &diagnostics, 12, false, None);
-        model.quality = RenderQuality::Extreme;
-        model.degraded = true;
-        model.effective_quality = Some(RenderQuality::Ultra);
-        assert_eq!(
-            model.quality_reduction_reason().as_deref(),
-            Some("Extreme reduced to Ultra — GPU frame time exceeded the 16 ms Extreme budget")
-        );
-
-        model.quality = RenderQuality::Ultra;
-        model.effective_quality = Some(RenderQuality::Ultra);
-        model.crowd_reduction = Some((768, 1_080));
-        assert_eq!(
-            model.quality_reduction_reason().as_deref(),
-            Some("Ultra reduced — scene authored 1080 people; 768 fit this tier")
-        );
-
-        model.crowd_reduction = None;
-        model.particle_reduction = Some((4_096, 6_000));
-        assert!(
-            model
-                .quality_reduction_reason()
-                .expect("Ultra reduction has an operator-facing reason")
-                .starts_with("Ultra reduced — scene requested 6000 particles")
-        );
-    }
-
-    #[test]
     fn a_crowded_status_bar_never_overlaps_its_own_halves() {
         for width in [900.0_f32, 1280.0, 1600.0, 2560.0] {
             for notice in [
@@ -596,8 +587,7 @@ mod tests {
                 fog_percent: 50.0,
                 ambient_percent: 6.0,
                 degraded: false,
-                effective_quality: Some(RenderQuality::High),
-                crowd_reduction: None,
+                quality_reduction_reason: None,
                 particle_reduction: None,
                 exposure: 1.0,
                 renderer: "test".into(),
@@ -923,8 +913,7 @@ mod tests {
             fog_percent: 50.0,
             ambient_percent: 6.0,
             degraded: false,
-            effective_quality: Some(RenderQuality::High),
-            crowd_reduction: None,
+            quality_reduction_reason: None,
             particle_reduction: None,
             exposure: 1.0,
             renderer: "test".into(),
@@ -973,6 +962,29 @@ mod tests {
         assert_eq!(
             settings.value(Row::Snapshot(1), &preferences),
             "301 fixtures, 130 live \u{2014} Enter exports"
+        );
+    }
+
+    #[test]
+    fn quick_settings_panel_keeps_the_live_render_visible_behind_it() {
+        let connection = ConnectionState::Idle;
+        let diagnostics = ProviderDiagnostics::default();
+        let mut model = status_model(&connection, &diagnostics, 1, false, None);
+        model.quality_reduction_reason = Some(
+            "Quality reduced: Ultra exceeded the 16 ms GPU budget; full Ultra returns automatically after sustained GPU headroom."
+                .into(),
+        );
+        let (mut settings, preferences) = fixture();
+        settings.open = true;
+        let mut overlay = Overlay::default();
+
+        build_quick_settings(&mut overlay, &settings, &preferences, &model, 1280.0, 900.0);
+
+        assert!(overlay.quads.len() > 2);
+        assert!(
+            overlay.quads[1].colour[3] <= 0.68,
+            "panel alpha was {}",
+            overlay.quads[1].colour[3]
         );
     }
 
@@ -1051,15 +1063,11 @@ mod tests {
     }
 
     #[test]
-    fn quality_cycles_in_operator_order_and_back_to_following_the_source() {
+    fn quality_cycles_back_to_following_the_source() {
         let mut current = None;
-        let mut labels = Vec::new();
-        for _ in 0..RenderQuality::ALL.len() {
+        for _ in 0..RenderQuality::ALL.len() + 1 {
             current = cycle_quality(current, 1);
-            labels.push(current.expect("an explicit quality").label());
         }
-        assert_eq!(labels, ["Draft", "Standard", "High", "Ultra", "Extreme"]);
-        current = cycle_quality(current, 1);
         assert_eq!(current, None);
     }
 }

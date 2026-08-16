@@ -6,6 +6,7 @@
 use crate::wire::{ObjectRecord, OutputRouteBody};
 use std::net::{Ipv4Addr, SocketAddr};
 use viz_dmx::{Delivery, InputMapping, Protocol};
+use viz_document::LiveDmxInputs;
 
 /// Convert stored output routes into receiver mappings.
 ///
@@ -35,6 +36,66 @@ pub fn mappings(routes: &[ObjectRecord], bind_interface: Option<Ipv4Addr>) -> Ve
         });
     }
     mappings
+}
+
+/// Apply the planning document's explicit receiver configuration over routes derived from output.
+///
+/// One configured logical universe replaces every derived route for that universe. Local renderer
+/// overrides are applied later and therefore remain the final authority.
+pub fn apply_document_inputs(
+    mut derived: Vec<InputMapping>,
+    records: &[ObjectRecord],
+    bind_interface: Option<Ipv4Addr>,
+) -> (Vec<InputMapping>, Vec<String>) {
+    let Some(record) = records.iter().find(|record| record.id == "main") else {
+        return (derived, Vec::new());
+    };
+    let inputs = match serde_json::from_value::<LiveDmxInputs>(record.body.clone()) {
+        Ok(inputs) => inputs,
+        Err(error) => {
+            return (
+                derived,
+                vec![format!(
+                    "The show's Live DMX Inputs are unreadable: {error}"
+                )],
+            );
+        }
+    };
+    if let Err(error) = inputs.validate() {
+        return (
+            derived,
+            vec![format!("The show's Live DMX Inputs are invalid: {error}")],
+        );
+    }
+    let configured: std::collections::HashSet<u16> = inputs
+        .mappings
+        .iter()
+        .map(|mapping| mapping.logical_universe)
+        .collect();
+    derived.retain(|mapping| !configured.contains(&mapping.logical_universe));
+    derived.extend(inputs.mappings.into_iter().filter_map(|mapping| {
+        let protocol = Protocol::from_wire(&mapping.protocol)?;
+        let delivery = match mapping.delivery.as_str() {
+            "broadcast" => Delivery::Broadcast,
+            "multicast" => Delivery::Multicast,
+            "unicast" => Delivery::Unicast,
+            _ => return None,
+        };
+        Some(InputMapping {
+            id: format!("document-{}", mapping.id),
+            protocol,
+            logical_universe: mapping.logical_universe,
+            destination_universe: mapping.destination_universe,
+            delivery,
+            bind: SocketAddr::from((
+                bind_interface.unwrap_or(Ipv4Addr::UNSPECIFIED),
+                mapping.port,
+            )),
+            priority: 240,
+            enabled: mapping.enabled,
+        })
+    }));
+    (derived, Vec::new())
 }
 
 fn protocol(value: &str) -> Option<Protocol> {
@@ -184,6 +245,45 @@ mod tests {
             mappings
                 .iter()
                 .any(|mapping| mapping.protocol == Protocol::Sacn)
+        );
+    }
+
+    #[test]
+    fn document_inputs_replace_only_their_logical_universe() {
+        let routes = mappings(
+            &[
+                record(
+                    "u1",
+                    json!({"protocol":"art_net","logical_universe":1,"destination_universe":1}),
+                ),
+                record(
+                    "u2",
+                    json!({"protocol":"art_net","logical_universe":2,"destination_universe":2}),
+                ),
+            ],
+            None,
+        );
+        let input = record(
+            "main",
+            json!({"schemaVersion":1,"mappings":[{
+                "id":"input-u2","logicalUniverse":2,"protocol":"sacn",
+                "destinationUniverse":22,"port":5568,"enabled":true,"delivery":"multicast"
+            }]}),
+        );
+        let (resolved, warnings) = apply_document_inputs(routes, &[input], None);
+        assert!(warnings.is_empty());
+        assert!(
+            resolved.iter().any(
+                |mapping| mapping.logical_universe == 1 && mapping.protocol == Protocol::ArtNet
+            )
+        );
+        assert!(resolved.iter().any(|mapping| mapping.logical_universe == 2
+            && mapping.protocol == Protocol::Sacn
+            && mapping.destination_universe == 22));
+        assert!(
+            !resolved.iter().any(
+                |mapping| mapping.logical_universe == 2 && mapping.protocol == Protocol::ArtNet
+            )
         );
     }
 }

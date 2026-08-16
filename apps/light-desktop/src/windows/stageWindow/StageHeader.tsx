@@ -1,9 +1,4 @@
-import {
-	Button,
-	FormLayout,
-	SelectField,
-	SwitchField,
-} from "@tosklight/ui";
+import { Button, FormLayout, SelectField, SwitchField } from "@tosklight/ui";
 import { WindowHeader, WindowSettings } from "@tosklight/ui/window-kit";
 import { useState } from "react";
 import { useDesktopBridge } from "../../platform/desktop";
@@ -53,7 +48,7 @@ function StageSettings({
 					label: "3D",
 					content: (
 						<FormLayout labelPlacement="side">
-							<Stage3dSettings />
+							<Stage3dSettings options={options} />
 							<StageCommonSettings options={options} />
 						</FormLayout>
 					),
@@ -128,12 +123,11 @@ function Stage2dSettings({ options }: { options: StageOptionsModel }) {
 /**
  * The 3D Stage, which is a model-and-lines diagram rather than a picture of light.
  *
- * Deliberately almost empty. This view draws fixture models and aim lines and simulates no light at
+ * Deliberately almost empty. This view draws fixture models and optional aim lines and simulates no light at
  * all, so a render style and an environment brightness would both be controls over something that
- * is not happening — and the beam guidelines are not offered either, because here they are the
- * picture rather than an addition to it.
+ * is not happening.
  */
-function Stage3dSettings() {
+function Stage3dSettings({ options }: { options: StageOptionsModel }) {
 	const { state, dispatch } = useApp();
 	const bridge = useDesktopBridge();
 	return (
@@ -147,6 +141,18 @@ function Stage3dSettings() {
 			<Button onClick={() => void bridge.sendStagePaneInput("frame", 0, 0)}>
 				Reset view
 			</Button>
+			<SwitchField
+				label="Beam direction guidelines"
+				offLabel="Hidden"
+				onLabel="Visible"
+				checked={options.showBeamGuides}
+				onChange={(event) =>
+					dispatch({
+						type: "SET_STAGE_OPTIONS",
+						showBeamGuides: event.target.checked,
+					})
+				}
+			/>
 			<SwitchField
 				label="Floor grid"
 				offLabel="Hidden"
@@ -182,28 +188,31 @@ export function StageHeader({
 						"Tap to select · Shift for range · Control/Command tracks macro",
 				}}
 				groups={[
-					{ id: "stage-follow", actions: [
-						{
-							id: "follow",
-							label: "Follow Preload",
-							active: options.followPreload,
-							onPress: options.toggleFollowPreload,
-						},
-					] },
+					{
+						id: "stage-follow",
+						actions: [
+							{
+								id: "follow",
+								label: "Follow Preload",
+								active: options.followPreload,
+								onPress: options.toggleFollowPreload,
+							},
+						],
+					},
 					{
 						id: "stage-mode",
 						kind: "tabs",
 						activeId: options.mode,
 						onActiveChange: (id) => options.setMode(id as typeof options.mode),
 						actions: [
-						{
-							id: "select",
-							label: "Select fixtures",
-						},
-						{
-							id: "navigate",
-							label: "Navigate",
-						},
+							{
+								id: "select",
+								label: "Select fixtures",
+							},
+							{
+								id: "navigate",
+								label: "Navigate",
+							},
 						],
 					},
 				]}

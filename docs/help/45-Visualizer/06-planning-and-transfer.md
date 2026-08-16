@@ -9,7 +9,14 @@ the same rig, and neither side should have to go looking for a file to get from 
 The editor's file bar has an **Open Demo Show** button, and it needs nothing else: no file to find,
 no desk on the network, and no rig to patch first. It opens a full demonstration rig — front-of-house
 profiles and PAR cans, moving washes and profiles, beams, strobes, scanners, Sunstrips, blinders, a
-laser and a hazer — as an ordinary show of your own.
+hazer, three lasers, six cold-spark fountains, four flame jets and two media servers — as an
+ordinary show of your own. The venue includes its trusses, stage decks, curtains, a dancing crowd
+and a disco ball over the dancefloor. One media server feeds the two projection screens at the
+stage sides; the other feeds the three LED panels around the Sunstrips.
+
+On a new installation the editor opens a writable copy of this Demo Show immediately. The Desk's
+**Default Stage Show**, the editor copy, **Open Demo Show**, and Visualizer demo mode all come from
+this same portable template.
 
 What opens is always a **copy**. The demo that ships with ToskLight is a template and is never
 opened, never written to, and never changed by anything you do. The copy is written into this
@@ -24,12 +31,6 @@ the last one.
 The demo is built from the fixture packages this version of ToskLight ships, so its fixtures carry
 the same profile revisions, models and modes the fixture library does. It is the quickest way to
 see what the Visualizer draws, and the rig the product demonstration video is shot from.
-
-When the demo is opened on a desk, Mixed Preset **0.1 Gobo + Prism Demo** is a repeatable beam
-look for fixtures **511 Gobo Demo** and **512 Prism Demo**. Recall it to light the pair, place two
-different gobos in their beams, and insert and rotate the prism on fixture 512. The preset uses the
-same shipped ROBE Robin DLS Profile Mode 3 parameters and stable fixture identities each time the
-demo show is generated.
 
 ## Lighting the rig without a desk
 
@@ -81,6 +82,21 @@ each naming its own machine; hovering one shows the address it was found at.
 What arrives is a copy. Patching it here does not reach the desk, and the desk does not know the
 copy exists. To send work back, use **Load from Visualizer** in the desk's **Load Show** menu.
 
+## Configure live DMX inputs
+
+The **Show** screen's **Live DMX Inputs** section maps a logical show universe to the Art-Net or
+sACN universe the separate Visualizer output receives. Each mapping can be enabled or disabled
+and carries its protocol, wire universe, delivery mode, and UDP port. Art-Net offers Broadcast or
+Unicast; sACN offers Multicast or Unicast. Choose **Apply** to store the mappings in the portable
+show, or **Cancel** to discard the draft. The receiving machine's network-interface choice stays
+local to that machine and is never written into the show.
+
+When a desk is detected, **Take from Desk** reads that desk's compatible output routes through a
+read-only Visualizer session. With more than one desk, first select the source. The imported routes
+are only a preview until **Apply** is chosen: taking routes does not replace the show and does not
+change the desk. An explicit show input wins over a derived output route for the same logical
+universe; a renderer-local override remains the final authority.
+
 ## Load from Visualizer
 
 The desk's **Load Show** menu offers the document this editor has open, in the same way and with
@@ -97,37 +113,6 @@ machine, so a rig with two editors is two entries an operator can tell apart.
 
 The document served to the network is read-only, and it is the same read-only document the
 Visualizer itself reads. There is no route into the editor that changes anything from outside it.
-
-## Open CAD: the first Rig Planner slice
-
-With a show open, **Open CAD** sits immediately above **Open Viz** in the Viz Editor. It opens a
-second window of the same PreViz application and draws the canonical rig as a fast 2D plan. This
-is the first operator-facing slice of the broader Rig Planner described by TL-60; it is not the
-complete Rig Planner and does not yet provide paperwork, cable planning, structural calculations,
-MVR/CAD exchange, or high-quality rendering.
-
-Each CAD tile has a dark background. Ordinary fixture and venue drawings are white or grey, and
-the shared selection is red. Choose **Top down**, **Left to right**, **Right to left**, **Front to
-back**, or **Back to front** independently for each tile. **Fit**, pan, and zoom also belong to the
-individual tile. **Split H** and **Split V** split any tile again, so one side can remain whole
-while the other is divided into additional views. The layout and tile cameras are restored as an
-editor-workspace preference and never become fixture coordinates in the show.
-
-Selection is shared by stable fixture identity. Selecting in Patch & Venue highlights the same
-object in every CAD tile; selecting in CAD brings it back to Patch & Venue. A light drawing always
-includes a short output-direction line, but CAD deliberately draws no beams, fog, shadows, media,
-or photorealistic lighting.
-
-The red two-axis gizmo moves the shared selection in the visible plane. Drag an arrow for one
-axis, or drag its centre/body for both axes. Multiple selected fixtures and venue objects retain
-their spacing. The drag is previewed in the tile and committed once through the show's
-revision-checked Patch boundary; one drag is one undo step. If the rig changed first, the drag is
-rejected and the authoritative positions are restored instead of overwriting newer work.
-
-**Snap to declared truss mounts** is deliberately basic in this slice. When a moved fixture enters
-the conservative attraction range of a truss or pipe member, it snaps to that member and stores an
-explicit fixture, member, mounting-point, and fixture-local-transform relationship. Advanced
-spacing and distribution tools remain later Rig Planner work.
 
 ## When there is nothing to offer
 

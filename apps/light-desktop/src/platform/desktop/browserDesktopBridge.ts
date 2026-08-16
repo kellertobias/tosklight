@@ -14,6 +14,7 @@ export const browserDesktopBridge: DesktopBridge = {
 	openConsoleScreen: noAction,
 	hideConsoleScreen: noAction,
 	closeConsoleScreen: noAction,
+	openVisualizer: noAction,
 	// A browser has no second process and no window to draw underneath, so the Stage is always
 	// the web renderer here. Saying so plainly is what keeps the pane from being asked for.
 	stagePaneAvailable: async () => false,

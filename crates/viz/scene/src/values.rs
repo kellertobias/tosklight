@@ -65,6 +65,39 @@ pub struct ExternalCameraState {
 }
 
 impl SceneValues {
+    /// Keep renderer-clock motion between authoritative value snapshots.
+    ///
+    /// Providers own targets; renderers own the simulated position and velocity between those
+    /// targets. Replacing all three every time a 10 Hz DMX snapshot arrives makes a moving head
+    /// repeatedly jump back to its provider-side home position.
+    pub fn retain_visual_motion_runtime_from(&mut self, previous: &Self) {
+        fn retain_kinematics(next: &mut PhysicalMotionState, previous: &PhysicalMotionState) {
+            next.position_degrees = previous.position_degrees;
+            next.velocity_degrees_per_second = previous.velocity_degrees_per_second;
+        }
+
+        for (next, previous) in self.emitters.iter_mut().zip(&previous.emitters) {
+            retain_kinematics(&mut next.pan_motion, &previous.pan_motion);
+            retain_kinematics(&mut next.tilt_motion, &previous.tilt_motion);
+            retain_kinematics(
+                &mut next.gobo_rotation_motion,
+                &previous.gobo_rotation_motion,
+            );
+            retain_kinematics(
+                &mut next.prism_rotation_motion,
+                &previous.prism_rotation_motion,
+            );
+            retain_kinematics(
+                &mut next.gobo_wheel_motion.motion,
+                &previous.gobo_wheel_motion.motion,
+            );
+            retain_kinematics(
+                &mut next.colour_wheel_motion.motion,
+                &previous.colour_wheel_motion.motion,
+            );
+        }
+    }
+
     pub fn resize(&mut self, emitters: usize) {
         self.emitters.resize_with(emitters, EmitterValues::default);
         self.laser_scans.resize_with(emitters, LaserScan::default);
@@ -530,7 +563,10 @@ impl PhysicalMotionState {
             return;
         }
         let direction = error.signum();
-        let moving_toward = self.velocity_degrees_per_second.signum() == direction;
+        // A stopped axis can start in either direction. `f32::signum(0.0)` is positive, so
+        // comparing signs alone leaves every negative target permanently stuck at rest.
+        let moving_toward = self.velocity_degrees_per_second.abs() <= f32::EPSILON
+            || self.velocity_degrees_per_second.signum() == direction;
         let stopping_distance =
             self.velocity_degrees_per_second.powi(2) / (2.0 * deceleration.max(f32::EPSILON));
         let desired_velocity = if !moving_toward || stopping_distance >= error.abs() {
@@ -792,6 +828,57 @@ mod tests {
         }
         assert!((motion.position_degrees - 630.0).abs() < 0.001);
         assert_eq!(motion.velocity_degrees_per_second, 0.0);
+    }
+
+    #[test]
+    fn position_motion_can_start_toward_a_negative_target_from_rest() {
+        let mut motion = PhysicalMotionState::default();
+        motion.set_target(PhysicalMotionTarget::Position {
+            degrees: -54.0,
+            max_speed: 180.0,
+            acceleration: 360.0,
+            deceleration: 360.0,
+        });
+
+        motion.advance(0.1);
+
+        assert!(motion.position_degrees < 0.0);
+        assert!(motion.velocity_degrees_per_second < 0.0);
+    }
+
+    #[test]
+    fn provider_frames_keep_renderer_kinematics_but_replace_the_target() {
+        let old_target = PhysicalMotionTarget::Position {
+            degrees: -54.0,
+            max_speed: 180.0,
+            acceleration: 360.0,
+            deceleration: 360.0,
+        };
+        let new_target = PhysicalMotionTarget::Position {
+            degrees: 54.0,
+            max_speed: 180.0,
+            acceleration: 360.0,
+            deceleration: 360.0,
+        };
+        let mut previous = SceneValues::default();
+        previous.resize(1);
+        previous.emitters[0].pan_motion = PhysicalMotionState {
+            position_degrees: -12.0,
+            velocity_degrees_per_second: -40.0,
+            target: Some(old_target),
+        };
+        let mut incoming = SceneValues::default();
+        incoming.resize(1);
+        incoming.emitters[0].pan_motion.target = Some(new_target);
+
+        incoming.retain_visual_motion_runtime_from(&previous);
+
+        assert_eq!(incoming.emitters[0].pan_motion.position_degrees, -12.0);
+        assert_eq!(
+            incoming.emitters[0].pan_motion.velocity_degrees_per_second,
+            -40.0
+        );
+        assert_eq!(incoming.emitters[0].pan_motion.target, Some(new_target));
     }
 
     #[test]

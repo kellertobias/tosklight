@@ -149,7 +149,7 @@ pub enum ProjectionScreenMaterial {
 pub enum MediaSurfaceSectionKind {
     ProjectionScreen {
         material: ProjectionScreenMaterial,
-        #[serde(default)]
+        #[serde(default, alias = "edgeFeather")]
         edge_feather: f32,
     },
     Tv {
@@ -159,10 +159,12 @@ pub enum MediaSurfaceSectionKind {
         spill: f32,
     },
     Led {
+        #[serde(alias = "moduleTypeId")]
         module_type_id: Uuid,
         rows: u16,
         columns: u16,
         /// Row-major occupied cells. Missing indices are deliberate holes.
+        #[serde(alias = "occupiedCells")]
         occupied_cells: Vec<u32>,
     },
 }
@@ -992,5 +994,42 @@ mod tests {
         let requests = store.objects(REQUEST_KIND).unwrap();
         assert_eq!(requests.len(), 1);
         assert_eq!(requests[0].id, "module");
+    }
+
+    #[test]
+    fn media_sections_accept_legacy_camel_case_and_keep_screens_module_free() {
+        let module_id = Uuid::new_v4();
+        let led: MediaSurfaceSection = serde_json::from_value(serde_json::json!({
+            "id": Uuid::new_v4(),
+            "name": "Legacy LED wall",
+            "widthMetres": 2.0,
+            "heightMetres": 1.0,
+            "type": "led",
+            "moduleTypeId": module_id,
+            "rows": 2,
+            "columns": 4,
+            "occupiedCells": [0, 1, 2, 3]
+        }))
+        .expect("the shipped camel-case demo remains readable");
+        assert!(matches!(
+            led.kind,
+            MediaSurfaceSectionKind::Led { module_type_id, .. } if module_type_id == module_id
+        ));
+
+        let screen: MediaSurfaceSection = serde_json::from_value(serde_json::json!({
+            "id": Uuid::new_v4(),
+            "name": "Projection screen",
+            "widthMetres": 4.0,
+            "heightMetres": 2.25,
+            "type": "projection_screen",
+            "material": { "type": "white" },
+            "edgeFeather": 0.02
+        }))
+        .expect("a projection screen never needs an LED module");
+        assert!(matches!(
+            screen.kind,
+            MediaSurfaceSectionKind::ProjectionScreen { edge_feather, .. }
+                if (edge_feather - 0.02).abs() < f32::EPSILON
+        ));
     }
 }

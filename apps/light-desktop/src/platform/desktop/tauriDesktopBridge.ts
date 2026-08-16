@@ -126,6 +126,7 @@ export const tauriDesktopBridge: DesktopBridge = {
 	hideConsoleScreen: (screenId) => invoke("hide_console_screen", { screenId }),
 	closeConsoleScreen: (screenId) =>
 		invoke("close_console_screen", { screenId }),
+	openVisualizer: () => invoke("open_visualizer"),
 	setStagePaneSelection: (paneId, fixtures) =>
 		invoke("set_stage_pane_selection", { paneId, fixtures }),
 	stagePaneAvailable: async () => {
@@ -150,9 +151,12 @@ export const tauriDesktopBridge: DesktopBridge = {
 	placeStagePaneCamera: (place) => invoke("place_stage_pane_camera", place),
 	takeStagePanePicks: async (paneId) => {
 		const api = await coreApi();
-		return api.invoke<Array<[string | null, boolean]>>("take_stage_pane_picks", {
-			paneId,
-		});
+		return api.invoke<Array<[string | null, boolean]>>(
+			"take_stage_pane_picks",
+			{
+				paneId,
+			},
+		);
 	},
 	stagePaneStatus: async (paneId) => {
 		const api = await coreApi();

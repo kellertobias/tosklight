@@ -83,6 +83,7 @@ impl HelperState {
 pub struct SupervisedHelper {
     program: std::path::PathBuf,
     arguments: Vec<String>,
+    environment: Vec<(String, String)>,
     child: Option<Child>,
     state: HelperState,
     failures: u32,
@@ -95,11 +96,18 @@ impl SupervisedHelper {
         Self {
             program: program.into(),
             arguments,
+            environment: Vec::new(),
             child: None,
             state: HelperState::Down,
             failures: 0,
             restart_at: None,
         }
+    }
+
+    /// Add one environment value to every initial or restarted child process.
+    pub fn with_environment(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.environment.push((key.into(), value.into()));
+        self
     }
 
     pub fn state(&self) -> &HelperState {
@@ -141,6 +149,7 @@ impl SupervisedHelper {
         // is the opposite of isolation.
         let child = Command::new(&self.program)
             .args(&self.arguments)
+            .envs(self.environment.iter().map(|(key, value)| (key, value)))
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())

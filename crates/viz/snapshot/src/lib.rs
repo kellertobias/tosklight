@@ -60,7 +60,7 @@ pub struct Capture {
 pub fn capture(scene: &Scene, values: &SceneValues, context: &CaptureContext) -> Capture {
     let geometry = viz_render::scene_geometry(scene, values);
     let lights = describe_lights(scene, values);
-    let generator = format!("ToskLight Visualizer snapshot {FORMAT_VERSION}");
+    let generator = format!("ToskLight PreViz snapshot {FORMAT_VERSION}");
     let proxies = scene
         .fixtures
         .iter()
@@ -83,7 +83,7 @@ pub fn capture(scene: &Scene, values: &SceneValues, context: &CaptureContext) ->
 
     let document = SnapshotDocument {
         format: FORMAT_VERSION,
-        application: "ToskLight Visualizer".to_owned(),
+        application: "ToskLight PreViz".to_owned(),
         captured_at: chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
         show: context.show.clone(),
         source: context.source.clone(),

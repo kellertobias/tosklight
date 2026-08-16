@@ -6,6 +6,7 @@
 //! failure cannot affect the desk's server, output engine, or user interface.
 
 mod app;
+#[cfg(test)]
 mod demo;
 mod effects;
 mod embedded;
@@ -31,17 +32,17 @@ use winit::event_loop::{ControlFlow, EventLoop};
 
 /// The event loop, with the activation policy this launch should have.
 #[cfg(target_os = "macos")]
-fn build_event_loop(helper: bool) -> Result<EventLoop<()>, winit::error::EventLoopError> {
+fn build_event_loop(accessory: bool) -> Result<EventLoop<()>, winit::error::EventLoopError> {
     use winit::platform::macos::{ActivationPolicy, EventLoopBuilderExtMacOS};
     let mut builder = EventLoop::builder();
-    if helper {
+    if accessory {
         builder.with_activation_policy(ActivationPolicy::Accessory);
     }
     builder.build()
 }
 
 #[cfg(not(target_os = "macos"))]
-fn build_event_loop(_helper: bool) -> Result<EventLoop<()>, winit::error::EventLoopError> {
+fn build_event_loop(_accessory: bool) -> Result<EventLoop<()>, winit::error::EventLoopError> {
     EventLoop::builder().build()
 }
 
@@ -87,11 +88,14 @@ fn main() {
         std::process::exit(run_embedded());
     }
 
-    // A helper is the desk's window, not a second application. On macOS that means an accessory
-    // activation policy: it draws, it takes key input, and it is absent from the Dock and the App
-    // Switcher, so an operator sees one ToskLight rather than two. The standalone visualizer is a
-    // product in its own right and keeps its tile.
-    let event_loop = match build_event_loop(options.helper) {
+    // A renderer launched by the desk or the PreViz editor is their window, not another
+    // application. On macOS it therefore uses an accessory activation policy: it draws and takes
+    // key input, but stays out of the Dock and App Switcher. A directly launched PreViz renderer
+    // owns the product's one regular application identity.
+    let event_loop = match build_event_loop(accessory_process(
+        options.helper,
+        std::env::var("TOSKLIGHT_VIZ_LAUNCHED_BY").ok().as_deref(),
+    )) {
         Ok(event_loop) => event_loop,
         Err(error) => {
             eprintln!("window system: {error}");
@@ -106,5 +110,22 @@ fn main() {
     if let Err(error) = event_loop.run_app(&mut application) {
         eprintln!("window system: {error}");
         std::process::exit(1);
+    }
+}
+
+fn accessory_process(helper: bool, launched_by: Option<&str>) -> bool {
+    helper || matches!(launched_by, Some("desk" | "editor"))
+}
+
+#[cfg(test)]
+mod identity_tests {
+    use super::accessory_process;
+
+    #[test]
+    fn companion_renderers_are_accessories_but_direct_previz_is_regular() {
+        assert!(accessory_process(false, Some("editor")));
+        assert!(accessory_process(false, Some("desk")));
+        assert!(accessory_process(true, None));
+        assert!(!accessory_process(false, None));
     }
 }

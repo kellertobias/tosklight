@@ -108,6 +108,8 @@ fn editor_binary() -> Result<PathBuf, String> {
 #[cfg(target_os = "macos")]
 fn installed_editor() -> Option<PathBuf> {
     let bundles = [
+        "Applications/ToskLight PreViz.app/Contents/MacOS/viz-editor",
+        // Keep the previous bundle discoverable during the product-name migration.
         "Applications/ToskLight Visualizer.app/Contents/MacOS/viz-editor",
         // Legacy standalone editor installations remain discoverable during migration.
         "Applications/ToskLight Viz Editor.app/Contents/MacOS/viz-editor",

@@ -22,7 +22,9 @@ pub use appearance::{
 pub use binding::ChannelRef;
 pub use colour::{ResolvedColour, named_colour};
 pub use decode::Decoder;
-pub use default_model::{DefaultModel, FixtureTraits, choose as choose_default_model};
+pub use default_model::{
+    DefaultModel, FixtureTraits, all as all_default_models, choose as choose_default_model,
+};
 pub use fallback::{OpticalClass, classify};
 pub use plan::{
     ColourBinding, EmitterBinding, ExternalCameraBinding, GOBO_ARTWORK_EDGE, PatchedFixture,
@@ -31,5 +33,5 @@ pub use plan::{
 pub use projection::{
     GENERATOR_ID as FIXTURE_PROJECTION_GENERATOR,
     GENERATOR_VERSION as FIXTURE_PROJECTION_GENERATOR_VERSION, ProjectionError,
-    generate_profile_projections, projection_cache_is_current,
+    generate_default_model_projection, generate_profile_projections, projection_cache_is_current,
 };

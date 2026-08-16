@@ -178,6 +178,129 @@ fn embedded_robin_dls_open_shutter_band_stays_lit_on_stage() {
     );
 }
 
+#[test]
+fn shipped_jbled_a7_home_shutter_is_steady_and_open_on_stage() {
+    let package = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../..")
+        .join("assets/fixture-library/jb-lighting--jbled-a7.toskfixture");
+    let profile = light_fixture::read_fixture_package(&std::fs::read(package).unwrap()).unwrap();
+    let mode = profile
+        .modes
+        .iter()
+        .find(|mode| mode.name == "Standard RGB 16 Bit (S16)")
+        .unwrap();
+    let mode_id = mode.id;
+    let primary = mode.primary_slots().unwrap();
+    let channels = mode.channels.clone();
+    let fixture = PatchedFixture {
+        fixture_id: Uuid::new_v4(),
+        name: "JBLED A7".into(),
+        number: Some(1),
+        profile: Arc::new(profile),
+        mode_id,
+        instances: vec![PhysicalInstance {
+            instance_id: Uuid::new_v4(),
+            name: "JBLED A7".into(),
+            split_patches: vec![(1, Some((1, 1)))],
+            position: Vec3::ZERO,
+            rotation_degrees: Vec3::ZERO,
+            invert_pan: false,
+            invert_tilt: false,
+            bracket_angle: 0.0,
+            shaper_angle: None,
+            installed_appearance: InstalledFixtureAppearance::default(),
+        }],
+    };
+    let plan = compile(&[fixture]);
+    let mut slots = [0_u8; viz_dmx::DMX_SLOTS];
+    for channel in &channels {
+        let raw = if channel.attribute.is_intensity() || channel.attribute.0.starts_with("color.") {
+            channel.resolution.max_raw()
+        } else {
+            channel.default_raw
+        };
+        let bytes = raw.to_be_bytes();
+        let channel_slots = std::iter::once(primary[&channel.id])
+            .chain(channel.secondary_slots.iter().copied())
+            .collect::<Vec<_>>();
+        let offset = bytes.len() - channel_slots.len();
+        for (slot, value) in channel_slots.iter().zip(&bytes[offset..]) {
+            slots[usize::from(*slot - 1)] = *value;
+        }
+    }
+    let frame = UniverseFrame {
+        logical_universe: 1,
+        slots,
+        received_micros: 1_000,
+        stale: false,
+    };
+    let mut decoder = Decoder::new(plan.bindings.clone());
+    let mut values = SceneValues::default();
+    decoder.apply(&plan.scene, &[frame], &mut values, 0.0);
+
+    assert_eq!(values.emitters[0].shutter, 1.0);
+    assert_eq!(values.emitters[0].strobe_hz, 0.0);
+    assert!(values.emitters[0].visible_intensity() > 0.0);
+}
+
+#[test]
+fn shipped_moving_light_models_apply_the_profile_head_offset() {
+    for filename in [
+        "robe--robin-dls-profile.toskfixture",
+        "jb-lighting--jbled-a7.toskfixture",
+    ] {
+        let package = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../..")
+            .join("assets/fixture-library")
+            .join(filename);
+        let profile =
+            light_fixture::read_fixture_package(&std::fs::read(package).unwrap()).unwrap();
+        let mode_id = profile.modes[0].id;
+        let fixture = PatchedFixture {
+            fixture_id: Uuid::new_v4(),
+            name: profile.name.clone(),
+            number: Some(1),
+            profile: Arc::new(profile),
+            mode_id,
+            instances: vec![PhysicalInstance {
+                instance_id: Uuid::new_v4(),
+                name: "Model check".into(),
+                split_patches: vec![(1, Some((1, 1)))],
+                position: Vec3::ZERO,
+                rotation_degrees: Vec3::ZERO,
+                invert_pan: false,
+                invert_tilt: false,
+                bracket_angle: 0.0,
+                shaper_angle: None,
+                installed_appearance: InstalledFixtureAppearance::default(),
+            }],
+        };
+        let plan = compile(&[fixture]);
+        let model_index = plan.scene.fixtures[0].model.expect("package model");
+        let model = &plan.scene.models[model_index as usize];
+        assert!(model.has_head, "{filename} has an articulated head");
+        assert!(
+            model.head_pivot.y < -0.15,
+            "{filename} head stayed inside its base at y={}",
+            model.head_pivot.y
+        );
+        assert!(
+            model
+                .parts
+                .iter()
+                .flat_map(|part| &part.positions)
+                .flatten()
+                .all(|coordinate| coordinate.is_finite()),
+            "{filename} model coordinates remain finite"
+        );
+        assert!(
+            model.extent.max_element() < 1.0,
+            "{filename} model exploded to {:?}",
+            model.extent
+        );
+    }
+}
+
 fn frame_with_slot(slot: usize, value: u8) -> UniverseFrame {
     let mut slots = [0_u8; viz_dmx::DMX_SLOTS];
     slots[slot - 1] = value;
@@ -481,6 +604,24 @@ fn declared_optics_replace_the_fallback_for_that_fixture() {
     assert!((optics.source.height - 0.06).abs() < 1e-6);
 }
 
+#[test]
+fn installed_source_output_overrides_only_its_physical_instance() {
+    let mut fixture = patched("profile", ProfileOptics::default());
+    fixture.instances[0]
+        .installed_appearance
+        .luminous_output_lumens = Some(3_000.0);
+    let mut copy = fixture.instances[0].clone();
+    copy.instance_id = Uuid::new_v4();
+    copy.installed_appearance.luminous_output_lumens = Some(18_000.0);
+    fixture.instances.push(copy);
+
+    let plan = compile(&[fixture]);
+
+    assert_eq!(plan.scene.emitters.len(), 2);
+    assert!((plan.scene.emitters[0].optics.output - 0.5).abs() < 1e-6);
+    assert!((plan.scene.emitters[1].optics.output - 3.0).abs() < 1e-6);
+}
+
 /// A declared lens is stated, not guessed, so it is not second-guessed against the body — but
 /// a lens the renderer had to invent is kept inside the lantern that carries it.
 #[test]
@@ -538,6 +679,16 @@ fn fallback_strip_cells_fit_inside_their_body() {
     assert!(first - half_face >= -0.5 - 1e-6);
     assert!(last + half_face <= 0.5 + 1e-6);
     assert!(fitted.source.width <= 0.09 + 1e-6);
+}
+
+#[test]
+fn default_profile_model_supplies_all_orthographic_plan_views() {
+    let compiled = compile(&[patched("profile", ProfileOptics::default())]);
+
+    let artwork = compiled.scene.fixture_plan[0].artwork;
+    assert!(artwork.iter().all(Option::is_some));
+    assert_eq!(compiled.scene.plan_artwork.len(), 5);
+    assert!(compiled.warnings.is_empty());
 }
 
 #[test]

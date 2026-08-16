@@ -65,7 +65,7 @@ export type StagePaneGesture =
 export interface StagePanePicture {
 	atmosphere: number;
 	ambient: number;
-	quality: "draft" | "standard" | "high" | "ultra" | "extreme";
+	quality: "draft" | "standard" | "high" | "ultra";
 	exposure: number;
 	laserBrightness: number;
 	lampFogCloudiness: number;
@@ -75,6 +75,8 @@ export interface StagePanePicture {
 	showLabels: boolean;
 	/** Lay the reference grid on the ground plane. */
 	floorGrid: boolean;
+	/** Draw dashed direction guides for unlit fixtures in the 3D diagram. */
+	showBeamGuides: boolean;
 	/** The colour behind the rig, as linear RGB. */
 	background: [number, number, number];
 	/** Which way the Stage is being looked at. */
@@ -96,7 +98,7 @@ export interface StagePaneBenchmarkSample {
 	drawCalls: number;
 	degraded: boolean;
 	renderer: string;
-	quality: "draft" | "standard" | "high" | "ultra" | "extreme";
+	quality: "draft" | "standard" | "high" | "ultra";
 	followPreload: boolean;
 	width: number;
 	height: number;
@@ -113,6 +115,8 @@ export interface DesktopBridge {
 	openConsoleScreen(screen: ConsoleScreenWindow): Promise<void>;
 	hideConsoleScreen(screenId: string): Promise<void>;
 	closeConsoleScreen(screenId: string): Promise<void>;
+	/** Open the desk-owned Stage renderer as a dedicated native window. */
+	openVisualizer(): Promise<void>;
 	/**
 	 * Whether the renderer can draw the Stage into a rectangle of the desk's own window.
 	 *

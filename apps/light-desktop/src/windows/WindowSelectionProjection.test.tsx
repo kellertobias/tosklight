@@ -98,6 +98,7 @@ const mocks = vi.hoisted(() => {
 	});
 	return {
 		server,
+		openVisualizer: vi.fn(async () => undefined),
 		selectionAccess,
 		mutationQueue,
 		mutationQueueUse: vi.fn(),
@@ -237,15 +238,15 @@ vi.mock("@tosklight/ui/tables", async (importOriginal) => {
 });
 vi.mock("../components/setup/FixturePatchSetup", () => ({
 	FixturePatchSetupContent: ({
-		onStagePreview,
+		onOpenStageWindow,
 		onMedia,
 	}: {
-		onStagePreview: () => void;
+		onOpenStageWindow?: () => void;
 		onMedia: () => void;
 	}) => (
 		<>
-			<button type="button" onClick={onStagePreview}>
-				Preview Stage
+			<button type="button" onClick={onOpenStageWindow}>
+				Open Stage Renderer
 			</button>
 			<button type="button" onClick={onMedia}>
 				Media Servers
@@ -263,12 +264,10 @@ vi.mock("../features/patch/PatchContext", () => ({
 	usePatch: () => ({ fixtures: mocks.server.patch.fixtures }),
 }));
 vi.mock("../platform/desktop", () => ({
-	useDesktopBridge: () => ({ available: false }),
-}));
-vi.mock("./StageWindow", () => ({
-	StageWindow: ({ active }: { active?: boolean }) => (
-		<div data-testid="patch-stage" data-active={String(active)} />
-	),
+	useDesktopBridge: () => ({
+		available: true,
+		openVisualizer: mocks.openVisualizer,
+	}),
 }));
 
 function deferred<T>() {
@@ -332,6 +331,7 @@ beforeEach(() => {
 	mocks.selectionAccess.mockClear();
 	mocks.server.readVisualization.mockClear();
 	mocks.server.setPatchPreviewHighlight.mockClear();
+	mocks.openVisualizer.mockClear();
 	mocks.mutationQueue.canWrite = true;
 	mocks.mutationQueue.unavailableReason = null;
 	mocks.mutationQueue.submitLatest.mockClear();
@@ -513,39 +513,16 @@ describe("window selection projections", () => {
 		});
 	});
 
-	it("streams scoped selection into Patch DMX preview only while relevant", async () => {
+	it("opens the dedicated Stage renderer without subscribing Patch to selection", () => {
 		const { transport } = renderSelectionView(<PatchWindow />);
 		expect(transport.subscriptions).toHaveLength(0);
 
-		fireEvent.click(screen.getByRole("button", { name: "Preview Stage" }));
-		await waitFor(() =>
-			expect(mocks.server.setPatchPreviewHighlight).toHaveBeenLastCalledWith(
-				true,
-				[FIXTURE_1],
-			),
+		fireEvent.click(
+			screen.getByRole("button", { name: "Open Stage Renderer" }),
 		);
-		expect(screen.getByTestId("patch-stage")).toHaveAttribute(
-			"data-active",
-			"true",
-		);
-
-		act(() =>
-			transport.emit({
-				type: "event",
-				sequence: 20,
-				correlationId: null,
-				change: selectionChange({
-					revision: 2,
-					selected: [FIXTURE_2, FIXTURE_1],
-				}),
-			}),
-		);
-		await waitFor(() =>
-			expect(mocks.server.setPatchPreviewHighlight).toHaveBeenLastCalledWith(
-				true,
-				[FIXTURE_2, FIXTURE_1],
-			),
-		);
+		expect(mocks.openVisualizer).toHaveBeenCalledOnce();
+		expect(mocks.server.setPatchPreviewHighlight).not.toHaveBeenCalled();
+		expect(transport.subscriptions).toHaveLength(0);
 		expect(mocks.selectionAccess).not.toHaveBeenCalled();
 	});
 
@@ -561,12 +538,11 @@ describe("window selection projections", () => {
 			{ loadSnapshot },
 		);
 
-		fireEvent.click(screen.getByRole("button", { name: "Preview Stage" }));
-
-		expect(screen.getByTestId("patch-stage")).toHaveAttribute(
-			"data-active",
-			"false",
+		fireEvent.click(
+			screen.getByRole("button", { name: "Open Stage Renderer" }),
 		);
+
+		expect(mocks.openVisualizer).toHaveBeenCalledOnce();
 		expect(loadSnapshot).not.toHaveBeenCalled();
 		expect(transport.subscriptions).toHaveLength(0);
 		expect(mocks.mutationQueueUse).toHaveBeenCalledWith(false);

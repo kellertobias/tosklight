@@ -13,6 +13,8 @@ use crate::instances::{BeamInstance, GpuMediaPanel, LaserInstance, LineVertex, M
 use crate::mesh::Vertex;
 use crate::targets::{DEPTH_FORMAT, HDR_FORMAT};
 
+const BEAM_BLEND: wgpu::BlendState = wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING;
+
 /// Every compiled shader module, built once at startup.
 pub(super) struct Modules {
     pub surface: wgpu::ShaderModule,
@@ -307,7 +309,7 @@ fn beam_pipeline(
             entry_point: Some("fragment_main"),
             targets: &[Some(wgpu::ColorTargetState {
                 format: HDR_FORMAT,
-                blend: Some(additive_blend()),
+                blend: Some(BEAM_BLEND),
                 write_mask: wgpu::ColorWrites::ALL,
             })],
             compilation_options: Default::default(),
@@ -500,4 +502,25 @@ fn fullscreen_pipeline(
         multiview_mask: None,
         cache: None,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{BEAM_BLEND, BEAM_WGSL};
+
+    #[test]
+    fn overlapping_haze_is_bounded_and_composited_as_premultiplied_light() {
+        assert!(BEAM_WGSL.contains("1.0 - exp(-scatter)"));
+        assert!(BEAM_WGSL.contains("input.colour.rgb * opacity, opacity"));
+        assert_eq!(
+            BEAM_BLEND.color.src_factor,
+            wgpu::BlendFactor::One,
+            "premultiplied beam colour must not be multiplied by alpha twice"
+        );
+        assert_eq!(
+            BEAM_BLEND.color.dst_factor,
+            wgpu::BlendFactor::OneMinusSrcAlpha,
+            "each beam must converge instead of adding unbounded energy"
+        );
+    }
 }

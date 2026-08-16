@@ -12,9 +12,6 @@
 
 use std::path::PathBuf;
 use std::sync::Mutex;
-use viz_helper::framing::write_frame;
-use viz_helper::handshake::{HelperIdentity, greet_helper};
-use viz_helper::protocol::{ToHelper, encode};
 use viz_helper::{HelperState, SupervisedHelper};
 
 /// The visualizer this desk has open, if any.
@@ -24,114 +21,32 @@ use viz_helper::{HelperState, SupervisedHelper};
 #[derive(Default)]
 pub(crate) struct Visualizer {
     helper: Mutex<Option<SupervisedHelper>>,
-    /// The writing end of the channel, once the helper has been greeted and accepted.
-    to_helper: Mutex<Option<std::process::ChildStdin>>,
-    /// What answered the greeting, for the desk's diagnostics.
-    identity: Mutex<Option<HelperIdentity>>,
-    /// The authoritative state a replacement helper needs before its first frame.
-    snapshot: Mutex<VisualizerSnapshot>,
-}
-
-#[derive(Default)]
-struct VisualizerSnapshot {
-    scene: Option<Vec<u8>>,
-    values: Option<Vec<u8>>,
-}
-
-impl VisualizerSnapshot {
-    fn messages(&self) -> impl Iterator<Item = ToHelper> + '_ {
-        self.scene
-            .iter()
-            .cloned()
-            .map(|payload| ToHelper::Scene { payload })
-            .chain(
-                self.values
-                    .iter()
-                    .cloned()
-                    .map(|payload| ToHelper::Values { payload }),
-            )
-    }
 }
 
 impl Visualizer {
     /// Start it, replacing one already running.
     pub(crate) fn open(&self) -> Result<(), String> {
         self.close()?;
-        *self.snapshot.lock().map_err(|_| "visualizer state")? = VisualizerSnapshot::default();
         let program = helper_binary()?;
-        // `--helper` is what makes it this desk's window rather than the standalone product: it
-        // takes its scene, values and view over the channel and opens nothing of its own.
-        let mut helper = SupervisedHelper::new(program, vec!["--helper".to_owned()]);
+        let address = crate::server::address();
+        // The renderer's desk provider is the authoritative scene path: it reads the active show and
+        // follows show events itself, while its normal DMX receivers keep live values current.
+        let mut helper = SupervisedHelper::new(program, desk_arguments(address))
+            .with_environment("TOSKLIGHT_VIZ_LAUNCHED_BY", "desk");
         helper.start()?;
-
-        // Greet it before anything else. A helper this desk cannot talk to is stopped here rather
-        // than left with a window showing something nobody can vouch for.
-        let (mut to_helper, mut from_helper) = helper
-            .take_channel()
-            .ok_or("the visualizer started without a channel")?;
-        let identity = match greet_helper(&mut to_helper, &mut from_helper, "ToskLight Visualizer")
-        {
-            Ok(identity) => identity,
-            Err(error) => {
-                helper.stop();
-                return Err(error.to_string());
-            }
-        };
-
-        *self.to_helper.lock().map_err(|_| "visualizer state")? = Some(to_helper);
-        *self.identity.lock().map_err(|_| "visualizer state")? = Some(identity);
         *self.helper.lock().map_err(|_| "visualizer state")? = Some(helper);
         Ok(())
     }
 
-    /// Send the helper a message, if one is running.
-    ///
-    /// A helper that has died is not an error to send to: the supervisor is already restarting or
-    /// has given up, and the desk keeps running either way. The frame is dropped and the next
-    /// scene the desk sends will find a channel again.
-    pub(crate) fn send(&self, message: &ToHelper) -> Result<(), String> {
-        let mut channel = self.to_helper.lock().map_err(|_| "visualizer state")?;
-        let Some(to_helper) = channel.as_mut() else {
-            return Ok(());
-        };
-        let payload = encode(message)?;
-        if write_frame(to_helper, &payload).is_err() {
-            // The pipe has gone with the process. Drop the end so the next send does not retry a
-            // channel nothing is reading.
-            *channel = None;
-        }
-        Ok(())
-    }
-
-    pub(crate) fn send_scene(&self, payload: Vec<u8>) -> Result<(), String> {
-        self.snapshot.lock().map_err(|_| "visualizer state")?.scene = Some(payload.clone());
-        self.send(&ToHelper::Scene { payload })
-    }
-
-    pub(crate) fn send_values(&self, payload: Vec<u8>) -> Result<(), String> {
-        self.snapshot.lock().map_err(|_| "visualizer state")?.values = Some(payload.clone());
-        self.send(&ToHelper::Values { payload })
-    }
-
     /// What is drawing, once the helper has said. `None` before the greeting completes.
     pub(crate) fn renderer(&self) -> Result<Option<String>, String> {
-        Ok(self
-            .identity
-            .lock()
-            .map_err(|_| "visualizer state")?
-            .as_ref()
-            .map(|identity| identity.renderer.clone()))
+        Ok(self.is_open()?.then(|| "ToskLight PreViz".to_owned()))
     }
 
     pub(crate) fn close(&self) -> Result<(), String> {
-        // Ask first, so the helper closes its own window rather than being killed mid-frame.
-        let _ = self.send(&ToHelper::Shutdown);
-        if let Some(helper) = self.helper.lock().map_err(|_| "visualizer state")?.as_mut() {
+        if let Some(mut helper) = self.helper.lock().map_err(|_| "visualizer state")?.take() {
             helper.stop();
         }
-        *self.to_helper.lock().map_err(|_| "visualizer state")? = None;
-        *self.identity.lock().map_err(|_| "visualizer state")? = None;
-        *self.snapshot.lock().map_err(|_| "visualizer state")? = VisualizerSnapshot::default();
         Ok(())
     }
 
@@ -143,36 +58,6 @@ impl Visualizer {
             return Ok(());
         };
         helper.poll(std::time::Instant::now());
-        if helper.state() != &HelperState::Running {
-            *self.to_helper.lock().map_err(|_| "visualizer state")? = None;
-            *self.identity.lock().map_err(|_| "visualizer state")? = None;
-            return Ok(());
-        }
-        if self
-            .to_helper
-            .lock()
-            .map_err(|_| "visualizer state")?
-            .is_some()
-        {
-            return Ok(());
-        }
-
-        let (mut to_helper, mut from_helper) = helper
-            .take_channel()
-            .ok_or("the restarted visualizer has no channel")?;
-        let identity = greet_helper(&mut to_helper, &mut from_helper, "ToskLight Visualizer")
-            .map_err(|error| error.to_string())?;
-        for message in self
-            .snapshot
-            .lock()
-            .map_err(|_| "visualizer state")?
-            .messages()
-        {
-            write_frame(&mut to_helper, &encode(&message)?)
-                .map_err(|error| format!("restore the visualizer: {error}"))?;
-        }
-        *self.to_helper.lock().map_err(|_| "visualizer state")? = Some(to_helper);
-        *self.identity.lock().map_err(|_| "visualizer state")? = Some(identity);
         Ok(())
     }
 
@@ -192,6 +77,15 @@ impl Visualizer {
             .map_err(|_| "visualizer state")?
             .is_some())
     }
+}
+
+fn desk_arguments(address: std::net::SocketAddr) -> Vec<String> {
+    vec![
+        "--server".to_owned(),
+        address.ip().to_string(),
+        "--port".to_owned(),
+        address.port().to_string(),
+    ]
 }
 
 /// The renderer shipped inside this bundle.
@@ -258,28 +152,6 @@ pub(crate) fn close_visualizer(visualizer: tauri::State<'_, Visualizer>) -> Resu
 ///
 /// Polled here rather than pushed, so noticing a dead helper and reporting it are the same call
 /// and cannot disagree.
-/// Send the visualizer the rig to draw.
-///
-/// The payload is already encoded by whoever built it: the desk's scene comes from the render
-/// pipeline, not from this module, and re-encoding it here would be a second opinion about what
-/// the helper is looking at.
-#[tauri::command]
-pub(crate) fn send_visualizer_scene(
-    visualizer: tauri::State<'_, Visualizer>,
-    payload: Vec<u8>,
-) -> Result<(), String> {
-    visualizer.send_scene(payload)
-}
-
-/// Send the visualizer what the rig is currently doing.
-#[tauri::command]
-pub(crate) fn send_visualizer_values(
-    visualizer: tauri::State<'_, Visualizer>,
-    payload: Vec<u8>,
-) -> Result<(), String> {
-    visualizer.send_values(payload)
-}
-
 /// What the visualizer is drawing with, once it has said. Empty before the greeting completes.
 #[tauri::command]
 pub(crate) fn visualizer_renderer(
@@ -331,34 +203,6 @@ mod tests {
         assert_eq!(visualizer.state().expect("state"), HelperState::Down);
     }
 
-    /// Sending to a visualizer that is not running is not an error. The supervisor is already
-    /// restarting it or has given up, and the desk carries on either way — a show does not stop
-    /// because a window went.
-    #[test]
-    fn sending_to_a_visualizer_that_is_not_running_is_harmless() {
-        let visualizer = Visualizer::default();
-        visualizer
-            .send(&ToHelper::Shutdown)
-            .expect("sending into the void is not a failure");
-        assert_eq!(visualizer.renderer().expect("renderer"), None);
-    }
-
-    #[test]
-    fn a_replacement_visualizer_replays_latest_scene_before_values() {
-        let mut snapshot = VisualizerSnapshot::default();
-        snapshot.scene = Some(vec![1]);
-        snapshot.values = Some(vec![2]);
-        snapshot.scene = Some(vec![3]);
-
-        assert_eq!(
-            snapshot.messages().collect::<Vec<_>>(),
-            vec![
-                ToHelper::Scene { payload: vec![3] },
-                ToHelper::Values { payload: vec![2] },
-            ]
-        );
-    }
-
     /// The desk supervises a helper it ships. Anything else would be another build speaking an
     /// unknown version of the protocol.
     #[test]
@@ -366,5 +210,13 @@ mod tests {
         let name = renderer_binary_name();
         assert!(name.starts_with("viz-renderer"), "{name}");
         assert!(!Path::new(name).is_absolute(), "a sibling, not a path");
+    }
+
+    #[test]
+    fn a_desk_renderer_is_given_the_authoritative_server_endpoint() {
+        assert_eq!(
+            desk_arguments("127.0.0.1:51234".parse().expect("address")),
+            ["--server", "127.0.0.1", "--port", "51234"]
+        );
     }
 }

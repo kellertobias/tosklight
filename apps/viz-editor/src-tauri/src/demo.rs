@@ -47,6 +47,21 @@ pub fn template_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 /// Names the demo template, for a development tree or an unusual installation.
 pub const TEMPLATE_PATH_ENV: &str = "TOSKLIGHT_VIZ_DEMO_SHOW";
 
+/// Open the canonical demo as the first document for a new editor installation.
+pub(crate) fn open_default_copy(
+    app: &tauri::AppHandle,
+    session: &Session,
+) -> Result<DocumentSummary, String> {
+    let template = template_path(app)?;
+    let shows = tauri::Manager::path(app)
+        .app_data_dir()
+        .map_err(|error| format!("this installation has no application data folder: {error}"))?
+        .join("shows");
+    std::fs::create_dir_all(&shows)
+        .map_err(|error| format!("could not create {}: {error}", shows.display()))?;
+    open_copy(session, &template, &shows)
+}
+
 /// Opens a fresh writable copy of the packaged demo.
 #[tauri::command]
 pub fn open_demo_show(
@@ -54,15 +69,7 @@ pub fn open_demo_show(
     session: tauri::State<'_, Session>,
     discovery: tauri::State<'_, Discovery>,
 ) -> Result<DocumentSummary, String> {
-    let template = template_path(&app)?;
-    let shows = tauri::Manager::path(&app)
-        .app_data_dir()
-        .map_err(|error| format!("this installation has no application data folder: {error}"))?
-        .join("shows");
-    std::fs::create_dir_all(&shows)
-        .map_err(|error| format!("could not create {}: {error}", shows.display()))?;
-
-    let summary = open_copy(&session, &template, &shows)?;
+    let summary = open_default_copy(&app, &session)?;
     discovery.announce_document(Some(summary.name.clone()));
     Ok(summary)
 }
@@ -157,17 +164,14 @@ mod tests {
         assert_eq!(name, "Demo Show 2");
     }
 
-    /// The real packaged demo, generated exactly as a release generates it.
+    /// The real packaged demo, shared byte-for-byte with the Desk default.
     fn template(directory: &Path) -> PathBuf {
-        let library = light_fixture::FixtureLibrary::open(directory.join("fixtures.sqlite"))
-            .expect("library");
-        library
-            .load_fixture_package_directory(
-                PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../assets/fixture-library"),
-            )
-            .expect("the shipped packages load");
         let path = directory.join("packaged-demo.show");
-        viz_demo::generate(library, &path).expect("the demo generates");
+        std::fs::copy(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../assets/demo.show"),
+            &path,
+        )
+        .expect("the Desk demo asset is available");
         path
     }
 

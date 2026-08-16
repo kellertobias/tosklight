@@ -31,8 +31,8 @@ pub struct StatusModel<'a> {
     pub fog_percent: f32,
     pub ambient_percent: f32,
     pub degraded: bool,
-    pub effective_quality: Option<RenderQuality>,
-    pub crowd_reduction: Option<(u32, u32)>,
+    /// Why the requested quality is not fully active, including what restores it.
+    pub quality_reduction_reason: Option<String>,
     pub particle_reduction: Option<(u32, u32)>,
     pub exposure: f32,
     pub renderer: String,
@@ -109,37 +109,38 @@ impl StatusModel<'_> {
             .max()
             .unwrap_or(UniverseGrade::Waiting)
     }
+}
 
-    /// The explanation shown inside Quick Settings when the status bar says quality was reduced.
-    pub fn quality_reduction_reason(&self) -> Option<String> {
-        if !self.degraded {
-            return None;
-        }
-        let effective = self.effective_quality.unwrap_or(self.quality);
-        if effective < self.quality {
-            return Some(format!(
-                "{} reduced to {} — GPU frame time exceeded the 16 ms Extreme budget",
-                self.quality.label(),
-                effective.label()
-            ));
-        }
-        if let Some((drawn, requested)) = self.crowd_reduction {
-            return Some(format!(
-                "{} reduced — scene authored {requested} people; {drawn} fit this tier",
-                self.quality.label()
-            ));
-        }
-        if let Some((drawn, requested)) = self.particle_reduction {
-            return Some(format!(
-                "{} reduced — scene requested {requested} particles; {drawn} fit this frame",
-                self.quality.label()
-            ));
-        }
-        Some(format!(
-            "{} reduced — the visible scene exceeded a renderer capacity limit",
-            self.quality.label()
-        ))
+pub(crate) fn quality_reduction_reason(stats: &viz_render::FrameStats) -> Option<String> {
+    let reduction = stats.quality_reduction;
+    let mut reasons = Vec::new();
+    if reduction.ultra_gpu_budget {
+        reasons.push(
+            "Ultra exceeded the 16 ms GPU budget; full Ultra returns automatically after sustained GPU headroom"
+                .to_owned(),
+        );
     }
+    if let Some((requested, drawn)) = reduction.lights {
+        reasons.push(format!(
+            "{requested} lights exceed the frame budget ({drawn} drawn); reduce simultaneous live lights"
+        ));
+    }
+    if let Some((requested, drawn)) = reduction.beams {
+        reasons.push(format!(
+            "{requested} beams exceed the frame budget ({drawn} drawn); reduce simultaneous live beams"
+        ));
+    }
+    if let Some((requested, drawn)) = reduction.crowd {
+        reasons.push(format!(
+            "the audience exceeds this quality budget ({drawn}/{requested} people drawn); reduce Crowd amount"
+        ));
+    }
+    if let Some((requested, drawn)) = reduction.particles {
+        reasons.push(format!(
+            "effects exceed this quality budget ({drawn}/{requested} particles drawn); reduce active effects"
+        ));
+    }
+    (!reasons.is_empty()).then(|| format!("Quality reduced: {}.", reasons.join("; ")))
 }
 
 /// What separates one shortcut from the next in the status bar.

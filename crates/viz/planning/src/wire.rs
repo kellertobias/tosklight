@@ -9,14 +9,8 @@ use light_application::{PatchProfileRevisionProjection, PatchSnapshot};
 use light_fixture::{
     InstalledFixtureAppearance, MultiPatchInstance, PatchedFixturePatch, SplitPatch,
 };
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use uuid::Uuid;
-
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
-pub struct SelectionSnapshot {
-    pub revision: u64,
-    pub selected_fixture_ids: Vec<Uuid>,
-}
 
 #[derive(Debug, Serialize)]
 pub struct Readiness {

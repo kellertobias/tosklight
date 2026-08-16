@@ -4,7 +4,7 @@
 //! plan pans and zooms and never turns, a perspective view turns and walks. Keeping that in one
 //! place is what stops the two drifting apart.
 
-use super::{Application, LOOK_RADIANS_PER_UNIT, trace_input};
+use super::{Application, LOOK_RADIANS_PER_UNIT, pan_pixels, trace_input};
 use crate::session::Session;
 use crate::ui;
 use viz_render::ResolvedCamera;
@@ -66,7 +66,7 @@ impl Application {
         let mode = self.view_mode();
         if Self::right_drag_pans(mode, self.modifiers) {
             // The picture follows the hand: the stage moves with the drag.
-            let (right, down) = (hand_right * scale, hand_down * scale);
+            let (right, down) = (pan_pixels(hand_right, scale), pan_pixels(hand_down, scale));
             self.camera.pan_floor_plane(mode, -right, -down);
         } else {
             self.camera.look(
@@ -87,7 +87,7 @@ impl Application {
         if hand_right == 0.0 && hand_down == 0.0 {
             return;
         }
-        let (right, down) = (hand_right * scale, hand_down * scale);
+        let (right, down) = (pan_pixels(hand_right, scale), pan_pixels(hand_down, scale));
         trace_input(&format!("drag {right:.1},{down:.1}"));
         let mode = self.view_mode();
         if self.panning_camera_plane {

@@ -57,6 +57,7 @@ export const initialState: AppState = {
 	stageGroupsVisible: true,
 	stageShowSelection: true,
 	stageShowFloorGrid: true,
+	stageShowBeamGuides: false,
 	// Over the rig, which is the plan a paper stage plot is drawn as.
 	stage2dSide: "top",
 	// Just enough ambient light to read an unlit rig without flattening fixture output.

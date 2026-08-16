@@ -33,6 +33,7 @@ pub struct Session {
     last_value_instant: Option<Instant>,
     dmx_intervals: VecDeque<f32>,
     awaiting_snapshot: bool,
+    pending_renderer_settings: Option<viz_scene::RendererSettingsUpdate>,
 }
 
 impl Session {
@@ -52,6 +53,7 @@ impl Session {
             last_value_instant: None,
             dmx_intervals: VecDeque::with_capacity(LATENCY_SAMPLES),
             awaiting_snapshot: true,
+            pending_renderer_settings: None,
         }
     }
 
@@ -70,6 +72,7 @@ impl Session {
         self.awaiting_snapshot = true;
         self.connection = ConnectionState::Idle;
         self.source_view_epoch = 0;
+        self.pending_renderer_settings = None;
     }
 
     pub fn capabilities(&self) -> viz_scene::ProviderCapabilities {
@@ -79,6 +82,14 @@ impl Session {
     pub fn request_resync(&mut self) {
         self.awaiting_snapshot = true;
         self.provider.request_resync();
+    }
+
+    pub fn update_renderer_settings(&mut self, intent: viz_scene::RendererSettingsIntent) {
+        self.provider.update_renderer_settings(intent);
+    }
+
+    pub fn take_renderer_settings(&mut self) -> Option<viz_scene::RendererSettingsUpdate> {
+        self.pending_renderer_settings.take()
     }
 
     /// Drain the provider and fold its events into the displayed state.
@@ -134,6 +145,9 @@ impl Session {
                     self.source_view = view;
                     self.source_view_epoch += 1;
                 }
+                ProviderEvent::RendererSettings(settings) => {
+                    self.pending_renderer_settings = Some(settings);
+                }
                 ProviderEvent::Diagnostics(diagnostics) => self.diagnostics = *diagnostics,
                 ProviderEvent::ResyncRequired { reason } => {
                     self.awaiting_snapshot = true;
@@ -149,6 +163,7 @@ impl Session {
 
     fn accept_values(&mut self, mut values: SceneValues, now: Instant) {
         values.resize(self.scene.emitters.len());
+        values.retain_visual_motion_runtime_from(&self.values);
         values.retain_physics_runtime_from(&self.values, self.scene.physics_scenery.len());
         if values.frame > self.last_value_frame {
             if let Some(previous) = self.last_value_instant {
@@ -332,6 +347,40 @@ mod tests {
     }
 
     #[test]
+    fn provider_values_do_not_reset_motion_advanced_by_the_window() {
+        let mut session = session();
+        session.pump(Instant::now());
+        assert!(!session.values.emitters.is_empty());
+        session.values.emitters[0].pan_motion.position_degrees = -12.0;
+        session.values.emitters[0]
+            .pan_motion
+            .velocity_degrees_per_second = -40.0;
+        let target = viz_scene::PhysicalMotionTarget::Position {
+            degrees: 54.0,
+            max_speed: 180.0,
+            acceleration: 360.0,
+            deceleration: 360.0,
+        };
+        let mut incoming = SceneValues::default();
+        incoming.resize(session.scene.emitters.len());
+        incoming.emitters[0].pan_motion.target = Some(target);
+
+        session.accept_values(incoming, Instant::now());
+
+        assert_eq!(
+            session.values.emitters[0].pan_motion.position_degrees,
+            -12.0
+        );
+        assert_eq!(
+            session.values.emitters[0]
+                .pan_motion
+                .velocity_degrees_per_second,
+            -40.0
+        );
+        assert_eq!(session.values.emitters[0].pan_motion.target, Some(target));
+    }
+
+    #[test]
     fn the_local_quality_override_replaces_the_source_setting() {
         let mut session = session();
         session.pump(Instant::now());
@@ -488,6 +537,36 @@ mod tests {
             session.values.emitters[1].intensity, 0.0,
             "the new fixture starts dark"
         );
+    }
+
+    #[test]
+    fn an_installed_gel_change_replaces_scene_colour_without_dropping_live_level() {
+        let mut session = Session::new(
+            Box::new(ScriptedProvider {
+                events: vec![ProviderEvent::Snapshot {
+                    scene: Box::new(one_fixture_scene(&[1])),
+                    view: None,
+                }],
+            }),
+            ProviderKind::LightingDesk,
+            Instant::now(),
+        );
+        session.pump(Instant::now());
+        session.values.emitters[0].intensity = 0.72;
+        let mut changed = one_fixture_scene(&[1]);
+        changed.revision = session.scene.revision + 1;
+        changed.fixtures[0].installed_colour = [0.7, 0.04, 0.02];
+        session.provider = Box::new(ScriptedProvider {
+            events: vec![ProviderEvent::SceneDelta(Box::new(changed))],
+        });
+
+        session.pump(Instant::now());
+
+        assert_eq!(
+            session.scene.fixtures[0].installed_colour,
+            [0.7, 0.04, 0.02]
+        );
+        assert_eq!(session.values.emitters[0].intensity, 0.72);
     }
 
     /// The delta path validates its candidate exactly as the snapshot path does.

@@ -1,11 +1,10 @@
 //! Compile a patched show into a renderer scene plus the channel bindings that decode it.
-//!
 //! This runs once per patch revision. A DMX frame never re-enters this code.
 
 use crate::binding::ChannelRef;
 use crate::default_model::{self, FixtureTraits};
 use crate::fallback::{self, OpticalClass};
-use glam::{Quat, Vec3};
+use glam::{EulerRot, Mat4, Quat, Vec3};
 use light_fixture::{
     ChannelBehavior, ChannelFunction, ChannelFunctionBehavior, FixtureChannel, FixtureMode,
     FixtureProfile, GeometryMotionKind, InstalledFixtureAppearance, LightSourceForm, PatchPolicy,
@@ -28,8 +27,7 @@ pub struct PhysicalInstance {
     pub name: String,
     /// Split number to `(logical universe, start address)`. An unpatched split is absent.
     pub split_patches: Vec<(u16, Option<(u16, u16)>)>,
-    /// Metres, renderer world space.
-    pub position: Vec3,
+    pub position: Vec3, // Metres, renderer world space.
     /// Degrees about the world axes, applied `Rx * Ry * Rz`.
     pub rotation_degrees: Vec3,
     pub invert_pan: bool,
@@ -265,7 +263,8 @@ fn resolve_model(
         std::collections::hash_map::Entry::Vacant(entry) => {
             let resolved = match fixture.profile.model_asset.as_deref() {
                 Some(asset) => match read_model_asset(asset) {
-                    Ok(model) => {
+                    Ok(mut model) => {
+                        apply_profile_model_pose(&mut model, mode);
                         scene.models.push(model);
                         Some(scene.models.len() as u32 - 1)
                     }
@@ -304,10 +303,133 @@ fn resolve_model(
     }
 }
 
+/// Put model parts onto the authoritative profile geometry graph before the renderer animates
+/// them. Package GLBs keep `moving-base`, `moving-yoke`, and `moving-head` as reusable local
+/// subtrees; the graph supplies their real offsets and pivots. Flattening the GLB without this
+/// step left the head inside the base on the ROBE and JB moving lights.
+fn apply_profile_model_pose(model: &mut viz_scene::FixtureModel, mode: &FixtureMode) {
+    let bound = mode
+        .geometry
+        .nodes
+        .iter()
+        .filter(|node| node.glb_node.is_some())
+        .collect::<Vec<_>>();
+    if bound.is_empty() {
+        return;
+    }
+
+    let mut world = HashMap::<Uuid, Mat4>::new();
+    for _ in 0..=bound.len() {
+        let mut progressed = false;
+        for node in &bound {
+            if world.contains_key(&node.id) {
+                continue;
+            }
+            let parent = match node.parent_id {
+                Some(parent) => match world.get(&parent) {
+                    Some(parent) => *parent,
+                    None => continue,
+                },
+                None => Mat4::IDENTITY,
+            };
+            world.insert(node.id, parent * profile_geometry_transform(node));
+            progressed = true;
+        }
+        if !progressed {
+            break;
+        }
+    }
+
+    let mut transforms = HashMap::new();
+    for node in bound {
+        let Some(name) = node.glb_node.as_deref() else {
+            continue;
+        };
+        let Some(transform) = world.get(&node.id).copied() else {
+            continue;
+        };
+        transforms.insert(viz_scene::ModelPartKind::from_node_name(name), transform);
+    }
+    if transforms
+        .values()
+        .all(|matrix| matrix.abs_diff_eq(Mat4::IDENTITY, 1e-6))
+    {
+        return;
+    }
+
+    for part in &mut model.parts {
+        let Some(transform) = transforms.get(&part.kind).copied() else {
+            continue;
+        };
+        for position in &mut part.positions {
+            *position = transform
+                .transform_point3(Vec3::from_array(*position))
+                .to_array();
+        }
+        for normal in &mut part.normals {
+            *normal = transform
+                .transform_vector3(Vec3::from_array(*normal))
+                .normalize_or(Vec3::Y)
+                .to_array();
+        }
+    }
+
+    if let Some(head) = transforms.get(&viz_scene::ModelPartKind::Head).copied() {
+        model.head_pivot = head.transform_point3(model.head_pivot);
+        model.emitter_anchor = model
+            .emitter_anchor
+            .map(|anchor| head.transform_point3(anchor));
+        model.emitter_axis = model
+            .emitter_axis
+            .map(|axis| head.transform_vector3(axis).normalize_or(Vec3::NEG_Y));
+    }
+    let mut min = Vec3::splat(f32::INFINITY);
+    let mut max = Vec3::splat(f32::NEG_INFINITY);
+    for point in model
+        .parts
+        .iter()
+        .flat_map(|part| part.positions.iter().copied())
+        .map(Vec3::from_array)
+    {
+        min = min.min(point);
+        max = max.max(point);
+    }
+    if min.x <= max.x {
+        model.extent = ((max - min) * 0.5).max(Vec3::splat(0.001));
+    }
+}
+
+fn profile_geometry_transform(node: &light_fixture::GeometryNode) -> Mat4 {
+    let translation = Vec3::new(
+        node.transform.translation.x,
+        node.transform.translation.y,
+        node.transform.translation.z,
+    ) / 1_000.0;
+    let pivot = Vec3::new(node.pivot.x, node.pivot.y, node.pivot.z) / 1_000.0;
+    let rotation = &node.transform.rotation_degrees;
+    let rotation = Quat::from_euler(
+        EulerRot::XYZ,
+        rotation.x.to_radians(),
+        rotation.y.to_radians(),
+        rotation.z.to_radians(),
+    );
+    let read_scale = |value: f32| if value == 0.0 { 1.0 } else { value };
+    let scale = Vec3::new(
+        read_scale(node.transform.scale.x),
+        read_scale(node.transform.scale.y),
+        read_scale(node.transform.scale.z),
+    );
+    Mat4::from_translation(translation + pivot)
+        * Mat4::from_quat(rotation)
+        * Mat4::from_scale(scale)
+        * Mat4::from_translation(-pivot)
+}
+
 fn resolve_plan_artwork(
     fixture: &PatchedFixture,
     scene: &mut Scene,
     cache: &mut HashMap<light_core::FixtureId, [Option<u32>; 5]>,
+    default_model: Option<&viz_scene::FixtureModel>,
     warnings: &mut Vec<String>,
 ) -> [Option<u32>; 5] {
     if let Some(indices) = cache.get(&fixture.profile.id) {
@@ -328,6 +450,31 @@ fn resolve_plan_artwork(
                     fixture.profile.name,
                     projection.view.wire()
                 )),
+            }
+        }
+    }
+    // A renderer-owned default body still needs its real silhouette in every orthographic
+    // Stage view. Keep this transient: package projections remain the portable source of truth
+    // whenever a package actually carries them.
+    if fixture.profile.projection_assets.is_none() {
+        if let Some(model) = default_model {
+            for view in light_fixture::ProfileProjectionView::ALL {
+                match crate::generate_default_model_projection(model, view)
+                    .map_err(|error| error.to_string())
+                    .and_then(|projection| assets::read_plan_artwork(&projection))
+                {
+                    Ok(artwork) => {
+                        let index = scene.plan_artwork.len() as u32;
+                        indices[artwork.view.index()] = Some(index);
+                        scene.plan_artwork.push(artwork);
+                    }
+                    Err(reason) => warnings.push(format!(
+                        "{} {} default {} projection: {reason}; using renderer fallback",
+                        fixture.profile.manufacturer,
+                        fixture.profile.name,
+                        view.wire()
+                    )),
+                }
             }
         }
     }
@@ -378,8 +525,20 @@ pub fn compile(fixtures: &[PatchedFixture]) -> ScenePlan {
             &mut defaults,
             &mut warnings,
         );
-        let plan_projections =
-            resolve_plan_artwork(fixture, &mut scene, &mut plan_artwork, &mut warnings);
+        let default_plan_model = if fixture.profile.model_asset.is_none()
+            && fixture.profile.projection_assets.is_none()
+        {
+            model.and_then(|index| scene.models.get(index as usize).cloned())
+        } else {
+            None
+        };
+        let plan_projections = resolve_plan_artwork(
+            fixture,
+            &mut scene,
+            &mut plan_artwork,
+            default_plan_model.as_ref(),
+            &mut warnings,
+        );
         let plan_fallback = if fallback::has_generic_plan_type(&fixture.profile.fixture_type) {
             PlanFallback::GenericType
         } else {
@@ -398,8 +557,8 @@ pub fn compile(fixtures: &[PatchedFixture]) -> ScenePlan {
             fixture.profile.physical.height_millimetres,
             fixture.profile.physical.depth_millimetres,
         );
-        // What light out of this fixture looks like. It belongs to the profile, not to one
-        // patched instance, so it is resolved once and shared by every instance of it.
+        // What light out of this fixture looks like. Profile optics are resolved once; an
+        // installed source may override only its physical instance's rated output below.
         let mut optics = fallback::emitter_optics(
             class,
             body_size,
@@ -1250,77 +1409,16 @@ fn cone_angles(class: OpticalClass, binding: &EmitterBinding) -> (f32, f32) {
     zoom_refined(narrow, wide, binding)
 }
 
-/// Spread fallback heads along the body so a bar's heads do not stack on one point.
-fn head_offset(head_index: usize, count: usize, face_width: f32, body_width: f32) -> Vec3 {
-    if count <= 1 {
-        return Vec3::ZERO;
-    }
-    let position = head_index as f32 / (count - 1) as f32 - 0.5;
-    // Leave half a face at either end. Even a generously modelled merged `source-array` can no
-    // longer push the first or last cell outside the fixture carrying it.
-    Vec3::new(position * (body_width - face_width).max(0.0), 0.0, 0.0)
-}
-
-/// How far along the body the fallback layout spreads a fixture's heads, in metres.
-fn head_span(class: OpticalClass) -> f32 {
-    match class {
-        OpticalClass::Emissive | OpticalClass::Blinder => 1.0,
-        _ => 0.6,
-    }
-}
-
-/// The optics one head of a fallback layout is given: the fixture's own, trimmed to the pitch the
-/// heads are spread at.
-///
-/// No lamp face is wider than the distance to the next lamp — a ten-lamp bar a metre long has
-/// hundred-millimetre lamps, whatever a class default says in the abstract. Without this a bank of
-/// round lenses reads as one continuous glowing tube instead of as the row of lamps it is.
-fn fitted_to_head_pitch(
-    optics: &EmitterOptics,
-    head_count: usize,
-    body_width: f32,
-) -> EmitterOptics {
-    let mut fitted = optics.clone();
-    if head_count < 2 {
-        return fitted;
-    }
-    let pitch = body_width / head_count as f32;
-    let bound = (pitch * 0.9).max(0.01);
-    fitted.source.width = fitted.source.width.min(bound);
-    fitted.source.height = fitted.source.height.min(bound);
-    fitted
-}
-
-/// Pan travel, taken from the geometry graph when it declares motion and otherwise from the
-/// documented fallback whenever the mode actually has a pan channel.
-fn pan_axis(motion: &MotionAxes, binding: &EmitterBinding) -> Option<MotionAxis> {
-    motion.pan.or_else(|| {
-        binding.pan.as_ref().map(|_| MotionAxis {
-            axis: Vec3::Y,
-            min_degrees: -fallback::FALLBACK_PAN_DEGREES,
-            max_degrees: fallback::FALLBACK_PAN_DEGREES,
-        })
-    })
-}
-
-fn tilt_axis(motion: &MotionAxes, binding: &EmitterBinding) -> Option<MotionAxis> {
-    motion.tilt.or_else(|| {
-        binding.tilt.as_ref().map(|_| MotionAxis {
-            axis: Vec3::X,
-            min_degrees: -fallback::FALLBACK_TILT_DEGREES,
-            max_degrees: fallback::FALLBACK_TILT_DEGREES,
-        })
-    })
-}
-
 mod assets;
 mod bindings;
 mod compile_instances;
+mod head_geometry;
 
 pub use assets::{GOBO_ARTWORK_EDGE, decode_gobo_artwork};
 use assets::{decode_script, gobo_wheel, read_model_asset, script_key};
 use bindings::{build_binding, cell_bindings, group_by_head, layout_cells};
 use compile_instances::compile_instances;
+use head_geometry::{fitted_to_head_pitch, head_offset, head_span, pan_axis, tilt_axis};
 
 #[cfg(test)]
 mod model_tests;

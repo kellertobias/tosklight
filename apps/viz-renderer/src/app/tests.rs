@@ -2,6 +2,18 @@ use super::draw::splash_state;
 use super::*;
 
 #[test]
+fn demo_mode_resolves_the_same_portable_show_as_the_desk() {
+    let resolved = canonical_demo_show_path().expect("canonical demo show");
+    let desk = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join("assets/demo.show");
+    assert_eq!(
+        std::fs::read(resolved).expect("resolved demo bytes"),
+        std::fs::read(desk).expect("Desk demo bytes")
+    );
+}
+
+#[test]
 fn media_workers_exist_only_for_the_normal_standalone_product() {
     let standalone = Application::new(Options::default());
     assert!(standalone.media_workers.is_some());
@@ -17,6 +29,57 @@ fn media_workers_exist_only_for_the_normal_standalone_product() {
         ..Options::default()
     });
     assert!(embedded.media_workers.is_none());
+}
+
+#[test]
+fn renderer_adopts_settings_delivered_by_the_connected_editor() {
+    struct SettingsProvider(Option<viz_scene::RendererSettingsUpdate>);
+    impl viz_scene::SceneProvider for SettingsProvider {
+        fn capabilities(&self) -> viz_scene::ProviderCapabilities {
+            viz_scene::ProviderCapabilities {
+                kind: ProviderKind::PlanningSoftware,
+                available: true,
+                unavailable_reason: None,
+                default_host: "127.0.0.1".into(),
+                default_port: 5310,
+                uses_network_input: true,
+            }
+        }
+        fn poll(&mut self) -> Vec<viz_scene::ProviderEvent> {
+            self.0
+                .take()
+                .map(viz_scene::ProviderEvent::RendererSettings)
+                .into_iter()
+                .collect()
+        }
+        fn request_resync(&mut self) {}
+        fn shutdown(&mut self) {}
+    }
+
+    let mut application = Application::new(Options::default());
+    let settings = viz_scene::RendererSettings {
+        quality: Some("draft".into()),
+        fog: 0.02,
+        ..application.preferences.renderer_settings()
+    };
+    let mut session = Session::new(
+        Box::new(SettingsProvider(Some(viz_scene::RendererSettingsUpdate {
+            revision: 2,
+            source: "editor".into(),
+            changed: vec!["quality".into(), "fog".into()],
+            settings,
+        }))),
+        ProviderKind::PlanningSoftware,
+        Instant::now(),
+    );
+    session.pump(Instant::now());
+    application.adopt_connected_renderer_settings(&mut session);
+
+    assert_eq!(
+        application.preferences.quality_override,
+        Some(viz_scene::RenderQuality::Draft)
+    );
+    assert_eq!(application.preferences.atmosphere.amount, 0.02);
 }
 
 /// An empty window has to say which kind of empty it is, and a window with a rig in it must
@@ -106,15 +169,34 @@ fn a_right_drag_pans_the_plan_views_and_any_view_with_shift() {
     ));
 }
 
-/// The drag has to turn the camera by an amount a hand can produce: a window-wide drag is
-/// about half a turn, and never several.
+/// The drag has to turn the camera by an amount a hand can produce: a window-wide drag is useful,
+/// while still leaving ample travel for precise framing.
 #[test]
 fn the_turn_a_full_drag_makes_is_usable() {
     let across_a_window = 1400.0 * LOOK_RADIANS_PER_UNIT;
-    assert!(across_a_window > 1.5, "{across_a_window} is too slow");
+    assert!(across_a_window > 1.0, "{across_a_window} is too slow");
     assert!(
-        across_a_window < std::f32::consts::TAU * 0.75,
+        across_a_window < std::f32::consts::FRAC_PI_2,
         "{across_a_window} is too fast"
+    );
+}
+
+#[test]
+fn a_small_pointer_motion_stays_precise() {
+    let turn = 4.0 * LOOK_RADIANS_PER_UNIT;
+    assert!(turn > 0.0);
+    assert!(turn <= 0.005, "four hand points turned {turn} radians");
+}
+
+#[test]
+fn device_motion_is_normalized_and_camera_pans_are_damped() {
+    let scale = 2.0;
+    let hand = hand_points(20.0, scale);
+    assert_eq!(hand, 10.0, "Retina pixels must become hand points");
+    assert_eq!(
+        pan_pixels(hand, scale),
+        10.0,
+        "pan follows half the hand travel"
     );
 }
 

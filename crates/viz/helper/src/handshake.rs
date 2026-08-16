@@ -187,7 +187,7 @@ mod tests {
         let hello = encode(&ToHelper::Hello {
             protocol_major: PROTOCOL_MAJOR,
             protocol_minor: PROTOCOL_MINOR,
-            title: "ToskLight Visualizer".to_owned(),
+            title: "ToskLight PreViz".to_owned(),
         })
         .expect("encodes");
         write_frame(&mut desk_to_helper, &hello).expect("writes");
@@ -199,14 +199,14 @@ mod tests {
             &[FrameTransport::Copy, FrameTransport::Shared],
         )
         .expect("the helper answers");
-        assert_eq!(title, "ToskLight Visualizer");
+        assert_eq!(title, "ToskLight PreViz");
 
         // And the desk accepts what came back.
         let mut sent = Vec::new();
         let identity = greet_helper(
             &mut sent,
             &mut helper_to_desk.as_slice(),
-            "ToskLight Visualizer",
+            "ToskLight PreViz",
         )
         .expect("the desk accepts");
         assert_eq!(identity.protocol, (PROTOCOL_MAJOR, PROTOCOL_MINOR));

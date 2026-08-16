@@ -10,6 +10,7 @@ export function useStageOptions({
 	followPreload: paneFollowPreload,
 	showSelection: forcedShowSelection,
 	showFloorGrid: forcedShowFloorGrid,
+	showBeamGuides: forcedShowBeamGuides,
 	environmentBrightness: forcedEnvironmentBrightness,
 	paneId,
 }: StageWindowProps): StageOptionsModel {
@@ -39,6 +40,7 @@ export function useStageOptions({
 			: state.stageGroupsVisible,
 		showSelection: forcedShowSelection ?? state.stageShowSelection,
 		showFloorGrid: forcedShowFloorGrid ?? state.stageShowFloorGrid,
+		showBeamGuides: forcedShowBeamGuides ?? state.stageShowBeamGuides,
 		environmentBrightness:
 			forcedEnvironmentBrightness ?? state.stageEnvironmentBrightness,
 	};

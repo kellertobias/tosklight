@@ -1,6 +1,5 @@
 //! Window, input, and the frame loop.
 
-use crate::demo::DemoProvider;
 use crate::pacing::{DEFAULT_FRAME_INTERVAL, FRAME_PACE, HIDDEN_FRAME_INTERVAL, paced_interval};
 use crate::session::Session;
 use crate::settings::{Options, Preferences, Startup};
@@ -20,10 +19,23 @@ use winit::window::{Window, WindowId};
 
 /// How far a right-button drag turns the camera, in radians per unit of hand movement.
 ///
-/// A drag across the width of a typical window is about half a turn, which is what mouse-look feels
-/// like everywhere else. It is deliberately not scaled by the display: the same hand movement has
-/// to turn the camera the same amount on any screen.
-const LOOK_RADIANS_PER_UNIT: f32 = 0.0025;
+/// A drag across the width of a typical window turns roughly eighty degrees. That leaves enough
+/// travel for precise framing without making an ordinary hand movement cross the whole scene.
+/// It is deliberately not scaled by the display: the same hand movement has to turn the camera
+/// the same amount on any screen.
+const LOOK_RADIANS_PER_UNIT: f32 = 0.001;
+
+/// A camera pan follows half of the pointer's physical travel. Full-speed tracking made small
+/// trackpad and high-resolution mouse deltas move the rig too far to frame it precisely.
+const PAN_PIXELS_PER_HAND_POINT: f32 = 0.5;
+
+fn hand_points(physical_delta: f64, scale: f32) -> f32 {
+    physical_delta as f32 / scale.max(f32::EPSILON)
+}
+
+fn pan_pixels(hand_delta: f32, scale: f32) -> f32 {
+    hand_delta * scale * PAN_PIXELS_PER_HAND_POINT
+}
 
 /// The patched virtual camera has exactly one target: this application's own perspective
 /// presentation. A helper embedded in the desk and every orthographic view remain local.
@@ -240,6 +252,40 @@ struct Measured {
     scene_ready: bool,
 }
 
+fn canonical_demo_show_path() -> Result<std::path::PathBuf, String> {
+    if let Some(path) = std::env::var_os("TOSKLIGHT_VIZ_DEMO_SHOW")
+        .filter(|value| !value.is_empty())
+        .map(std::path::PathBuf::from)
+    {
+        return path
+            .is_file()
+            .then_some(path.clone())
+            .ok_or_else(|| format!("{} is not a file", path.display()));
+    }
+    let checkout = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join("assets/demo.show");
+    if checkout.is_file() {
+        return Ok(checkout);
+    }
+    let executable = std::env::current_exe()
+        .map_err(|error| format!("resolve visualizer executable: {error}"))?;
+    let parent = executable
+        .parent()
+        .ok_or_else(|| "visualizer executable has no parent directory".to_owned())?;
+    for candidate in [
+        parent.join("demo-show/demo-show.show"),
+        parent.join("demo-show/demo.show"),
+        parent.join("../Resources/demo-show/demo-show.show"),
+        parent.join("../Resources/demo-show/demo.show"),
+    ] {
+        if candidate.is_file() {
+            return Ok(candidate);
+        }
+    }
+    Err("this build has no assets/demo.show or packaged demo-show/demo-show.show".to_owned())
+}
+
 impl Application {
     pub fn new(options: Options) -> Self {
         let laser_scripts = crate::lasers::Lasers::directory(options.laser_scripts.clone());
@@ -256,6 +302,7 @@ impl Application {
         // have used rather than pretending the source does not exist.
         let planner = crate::planner::availability();
         let mut quick_settings = QuickSettings::new(&preferences, options.demo || planner.is_ok());
+        let stored_preferences = preferences.to_file();
         if let Err(reason) = planner {
             quick_settings.planner_unavailable_reason = reason;
         }
@@ -306,7 +353,7 @@ impl Application {
             startup_error: None,
             lasting_failure: None,
             preferences_path,
-            stored_preferences: String::new(),
+            stored_preferences,
             next_preferences_save: Instant::now(),
             next_child_check: Instant::now(),
             presented_frames: 0,
@@ -328,8 +375,8 @@ impl Application {
         self.session = Some(Session::new(provider, kind, self.epoch));
     }
 
-    /// Build the provider the current preferences select. The demo flag forces the deterministic
-    /// built-in scene so the renderer can be inspected without a desk.
+    /// Build the provider the current preferences select. Demo mode hosts the canonical show file
+    /// through the same path as every other standalone show.
     fn build_provider(&mut self) -> (Box<dyn viz_scene::SceneProvider>, ProviderKind) {
         // Started by the desk: everything drawn arrives over the channel on stdin, and this
         // process chooses nothing. Taken once — the pipe cannot be read from twice — so a rebuild
@@ -340,16 +387,11 @@ impl Application {
         {
             return (Box::new(source), ProviderKind::LightingDesk);
         }
-        if self.options.demo {
-            return (
-                Box::new(DemoProvider::new()),
-                ProviderKind::PlanningSoftware,
-            );
-        }
         // The planning source is a document held by the Viz editor, so choosing it opens that
         // window if it is not already open and connects to what it serves.
         if self.preferences.source == ProviderKind::PlanningSoftware
             && self.planning_window.is_none()
+            && !self.options.planning_server_requested
             // An opened show file is the source for as long as it is open; nothing else is being
             // asked for, and a planning window nobody wanted must not appear beside it.
             && self.hosted_show.is_none()
@@ -522,6 +564,22 @@ impl Application {
                 }
                 self.stored_preferences = text;
             }
+        }
+    }
+
+    fn adopt_connected_renderer_settings(&mut self, session: &mut Session) {
+        let Some(update) = session.take_renderer_settings() else {
+            return;
+        };
+        let before = self.preferences.to_file();
+        self.preferences
+            .adopt_file(&update.settings.to_file(), &self.options);
+        if self.preferences.to_file() == before {
+            return;
+        }
+        self.next_preferences_save = Instant::now();
+        if self.quick_settings.open {
+            self.quick_settings.refresh(&self.preferences);
         }
     }
 
@@ -770,7 +828,22 @@ impl Application {
                 QuickSettingsOutcome::None
             }
         };
+        let previous_settings = self.preferences.renderer_settings();
+        let preferences_changed = preferences.to_file() != self.preferences.to_file();
         self.preferences = preferences;
+        if preferences_changed {
+            self.next_preferences_save = Instant::now();
+            if let Some(session) = self.session.as_mut()
+                && session.kind == ProviderKind::PlanningSoftware
+            {
+                let settings = self.preferences.renderer_settings();
+                session.update_renderer_settings(viz_scene::RendererSettingsIntent {
+                    request_id: viz_scene::uuid::Uuid::new_v4().to_string(),
+                    source: "visualizer".into(),
+                    changes: settings.changes_from(&previous_settings),
+                });
+            }
+        }
         self.apply_outcome(outcome);
     }
 
@@ -905,7 +978,7 @@ impl ApplicationHandler for Application {
             .helper_source
             .as_mut()
             .and_then(crate::helper_source::HelperSource::take_title)
-            .unwrap_or_else(|| "ToskLight Visualizer".to_owned());
+            .unwrap_or_else(|| "ToskLight PreViz".to_owned());
         let attributes = Window::default_attributes()
             .with_title(title)
             .with_inner_size(winit::dpi::LogicalSize::new(1600.0, 900.0));
@@ -961,6 +1034,19 @@ impl ApplicationHandler for Application {
                     lasting_failure = Some((path.display().to_string(), error));
                 }
             },
+            Startup::Demo => match canonical_demo_show_path() {
+                Ok(path) => match crate::showfile::HostedShow::open(&path) {
+                    Ok(hosted) => self.hosted_show = Some(hosted),
+                    Err(error) => {
+                        eprintln!("open canonical demo show: {error}");
+                        lasting_failure = Some((path.display().to_string(), error));
+                    }
+                },
+                Err(error) => {
+                    eprintln!("find canonical demo show: {error}");
+                    lasting_failure = Some(("canonical demo show".to_owned(), error));
+                }
+            },
             Startup::Planning => {
                 // Nothing was named, so this launch is looking at a planning document: the source
                 // control has to say so, and switching away from it has to mean something.
@@ -990,7 +1076,7 @@ impl ApplicationHandler for Application {
                     }
                 }
             }
-            Startup::Desk | Startup::Demo => {}
+            Startup::Desk => {}
         }
         // The connection the session then makes has its own states to report, so the reason this
         // launch could not open what it was asked for is kept beside them until it is fixed.
@@ -1097,8 +1183,8 @@ impl ApplicationHandler for Application {
                     // The cursor is in physical pixels; a drag is calibrated on how far the hand
                     // moved, which is that divided by the scale of the display it moved across.
                     let scale = self.window_scale();
-                    let hand_right = (position.x - previous.0) as f32 / scale;
-                    let hand_down = (position.y - previous.1) as f32 / scale;
+                    let hand_right = hand_points(position.x - previous.0, scale);
+                    let hand_down = hand_points(position.y - previous.1, scale);
                     self.drag_camera(hand_right, hand_down, scale);
                 }
             }
@@ -1132,8 +1218,10 @@ impl ApplicationHandler for Application {
                         } else {
                             // The delta is in physical pixels; turning is calibrated on the hand.
                             let scale = self.window_scale();
-                            let (hand_right, hand_down) =
-                                (position.x as f32 / scale, position.y as f32 / scale);
+                            let (hand_right, hand_down) = (
+                                hand_points(position.x, scale),
+                                hand_points(position.y, scale),
+                            );
                             trace_input(&format!("turn {hand_right:.1},{hand_down:.1}"));
                             self.turn_camera(hand_right, hand_down, scale);
                             trace_input(&format!(
@@ -1174,7 +1262,11 @@ impl ApplicationHandler for Application {
                 }
                 self.drag_moved_by_device = true;
                 let scale = self.window_scale();
-                self.drag_camera(delta.0 as f32, delta.1 as f32, scale);
+                self.drag_camera(
+                    hand_points(delta.0, scale),
+                    hand_points(delta.1, scale),
+                    scale,
+                );
             }
             DeviceEvent::Button { button, state } => {
                 trace_input(&format!("device button {button} {state:?}"));

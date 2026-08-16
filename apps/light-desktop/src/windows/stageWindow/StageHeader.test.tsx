@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import {
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+	within,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { StageHeader } from "./StageHeader";
 import type { StageOptionsModel } from "./types";
@@ -7,6 +13,7 @@ const app = vi.hoisted(() => ({
 	state: {
 		stageShowSelection: true,
 		stageShowFloorGrid: true,
+		stageShowBeamGuides: false,
 		stage2dSide: "top",
 		stageEnvironmentBrightness: 1,
 		stageVizAtmosphere: 0.12,
@@ -39,13 +46,12 @@ const options: StageOptionsModel = {
 	groupsVisible: false,
 	showSelection: true,
 	showFloorGrid: true,
+	showBeamGuides: false,
 	environmentBrightness: 1,
 };
 
 function openSettings(stageOptions: StageOptionsModel = options) {
-	const view = render(
-		<StageHeader options={stageOptions} selectedCount={0} />,
-	);
+	const view = render(<StageHeader options={stageOptions} selectedCount={0} />);
 	fireEvent.click(screen.getByRole("button", { name: /settings/i }));
 	return view;
 }
@@ -76,12 +82,20 @@ describe("Stage settings are split between the views", () => {
 	 * environment brightness would both be controls over nothing. The guidelines are not offered
 	 * either: here they are the picture rather than an addition to it.
 	 */
-	it("offers a 3D Stage no render style, no brightness and no guideline switch", () => {
+	it("offers a 3D Stage optional beam direction guidelines", () => {
 		openSettings({ ...options, view: "3d" });
 		expect(screen.getByText(/floor grid/i)).toBeTruthy();
 		expect(screen.queryByText(/render style/i)).toBeNull();
 		expect(screen.queryByText(/environment brightness/i)).toBeNull();
-		expect(screen.queryByText(/beam guidelines/i)).toBeNull();
+		const guidelines = screen.getByRole("switch", {
+			name: /beam direction guidelines/i,
+		});
+		expect(guidelines).not.toBeChecked();
+		fireEvent.click(guidelines);
+		expect(app.dispatch).toHaveBeenCalledWith({
+			type: "SET_STAGE_OPTIONS",
+			showBeamGuides: true,
+		});
 	});
 
 	/*
@@ -93,7 +107,7 @@ describe("Stage settings are split between the views", () => {
 		expect(screen.getByText(/environment brightness/i)).toBeTruthy();
 		expect(screen.getByText(/render quality/i)).toBeTruthy();
 		expect(screen.getByText(/^Background$/)).toBeTruthy();
-		expect(screen.queryByText(/beam guidelines/i)).toBeNull();
+		expect(screen.queryByText(/beam direction guidelines/i)).toBeNull();
 	});
 
 	/*
@@ -131,7 +145,9 @@ describe("Stage settings are split between the views", () => {
 	it("keeps every view's tab present whether or not the renderer can draw it", () => {
 		openSettings();
 		expect(
-			within(screen.getByRole("dialog", { name: "Stage Settings" })).getAllByRole("tab"),
+			within(
+				screen.getByRole("dialog", { name: "Stage Settings" }),
+			).getAllByRole("tab"),
 		).toHaveLength(3);
 	});
 });

@@ -4,7 +4,7 @@ Two complaints, and they have almost nothing in common:
 
 - **Draft, and the outline view, cost far more than what they draw.** An outline view is a few
   thousand lines. It should be nearly free and is not.
-- **The former Ultra maximum pins the GPU at 100%.** It looks right, and it costs everything.
+- **Ultra pins the GPU at 100%.** It looks right, and it costs everything.
 
 The first is waste. The second is a budget that is not bounded by anything. They need different
 answers, so they are listed separately, cheapest and most certain first.
@@ -17,7 +17,7 @@ Stage pane share one redraw gate and submit nothing when the scene revision, val
 view, size, selection and overlay are unchanged.
 
 The gate deliberately keeps drawing while display time can change the picture: physical velocity
-or unsettled position motion, persistence decay, laser scans, and animated Ultra/Extreme haze.
+or unsettled position motion, persistence decay, laser scans, and animated Ultra haze.
 
 Two remaining constraints matter:
 
@@ -35,7 +35,7 @@ value counter, the camera, the view and the size are all unchanged is a frame id
 already on screen.
 
 Careful with what is genuinely animated: gobo rotation, prism rotation, persistence of vision and
-the Ultra/Extreme fog all move on a clock rather than on a value change, so "nothing changed" has to mean
+the Ultra fog all move on a clock rather than on a value change, so "nothing changed" has to mean
 "and nothing in this frame is time-driven", which the instance builder knows. A still rig in the
 outline view — the common case while patching — would drop to zero frames.
 
@@ -64,44 +64,30 @@ That is most of a frame's fixed cost removed from the cheap views, which is what
 GPU for what it draws" complaint. My expectation is that this plus redraw-on-change takes the
 outline view to near zero.
 
-## Ultra and Extreme: one bounded tier and one adaptive maximum
+## Ultra: a bounded adaptive budget
 
-Extreme preserves the former Ultra maximum: 64 ray-march steps per beam fragment, a 3D noise
-lookup at every step, up to ten shadow-mapped lights, 1,024 crowd members and 8,192 effect
-particles. Ultra is now a deliberately lighter fixed tier with 48 volumetric steps, eight shadowed
-lights, 768 crowd members, 4,096 effect particles and lower fog detail. It remains visibly richer
-than High, which uses 40 steps, six shadows, 384 crowd members, 2,048 effect particles and uniform
-fog.
+Ultra is 64 ray-march steps per beam fragment, with a 3D noise lookup at every step, plus up to ten
+shadow-mapped lights. Nothing in that scales with how many beams are on screen or how large the
+pane is, which is why it saturates: a rig with sixty beams across a full-screen Stage is asking for
+roughly sixty times the work of one beam, and it gets it.
 
-Extreme targets 16 ms of measured GPU work. Two consecutive over-budget samples step down a
+Ultra now targets 16 ms of measured GPU work. Two consecutive over-budget samples step down a
 bounded ladder of volumetric steps, shadow maps, and shaded resolution; recovery requires 120
 samples below 12 ms so quality does not oscillate. The ladder runs from 64 steps, ten shadows and
 full resolution to 16 steps, no shadows and 60% resolution. `FrameStats.degraded` says when a rung
-below requested Extreme was used, and `FrameStats.effective_quality` names the closest effective
-tier.
+below authored Ultra was used.
 
 Adapters with timestamp queries use named asynchronous measurements for cull, shadow, opaque,
 beams, lasers, bloom, composite and overlay. An adapter that does not deliver a completed sample
-uses presented-frame intervals until the first GPU sample arrives. That fallback keeps Extreme
+uses presented-frame intervals until the first GPU sample arrives. That fallback keeps Ultra
 bounded without mislabelling a display interval as GPU time.
-
-Quick Settings shows the cause at the control point: for an adaptive reduction it names the
-requested and effective tiers and the 16 ms GPU budget. Capacity-only reductions, such as a scene
-authoring more people or requesting more particles than fit, report requested and drawn counts
-instead of the ambiguous
-`Quality reduced` label alone.
-
-Preferences written before quality schema 2 migrate `quality ultra` to Extreme, preserving the
-old maximum picture. New files carry `quality_schema 2`, so a newly selected Ultra remains the new
-bounded Ultra tier. Embedded Stage quality is desk-layout state, not portable show content; adding
-Extreme to that wire/layout enum does not reinterpret an authored show.
 
 Further options, roughly in order of value for effort:
 
 **4. March at a lower resolution and upsample.** Volumetrics are low-frequency — that is what makes
 this the standard trick. Render the beam pass at half resolution into its own target and composite
 it up with a depth-aware filter. Close to a 4× saving on the dominant pass for a difference most
-operators will not find. This is the single biggest Extreme win.
+operators will not find. This is the single biggest Ultra win.
 
 **5. Scale steps by what the beam actually covers.** A beam ten metres away crossing forty pixels
 does not need the same march count as one filling the screen. Step count from the fragment's own
@@ -121,32 +107,7 @@ full treatment and the rest a cheaper one.
 the pane at 60 is a one-line change that halves the cost on this hardware, and it should probably
 be a setting rather than a constant.
 
-## Quality-split measurement and captures
-
-Measured 2026-08-16 on Apple M5 Max / Metal / 4× MSAA with the release Visualizer, the same
-deterministic 33-fixture Full 3D demo, and three-second forced-redraw runs:
-
-| Requested tier | Command | Result |
-| --- | --- | --- |
-| High | `--demo --view full_3d --quality high --benchmark 3` | 60.0 fps; 16.64 ms median, 18.36 ms p95, 2.06 ms CPU p95; crowd 1,080/384; particles 220/220 |
-| Ultra | `--demo --view full_3d --quality ultra --benchmark 3` | 60.0 fps; 16.67 ms median, 18.78 ms p95, 2.20 ms CPU p95; crowd 1,080/768; particles 220/220 |
-| Extreme | `--demo --view full_3d --quality extreme --benchmark 3` | 60.0 fps; 16.60 ms median, 19.07 ms p95, 1.94 ms CPU p95; adaptive crowd 1,080/369; particles 220/220 |
-
-The adapter again supplied no completed timestamp sample during these short runs, so the table
-does not invent GPU time from presentation cadence. It does prove the authored cost separation:
-Ultra draws twice High's crowd budget and uses 48/8 volumetric/shadow controls instead of 40/6;
-Extreme requests the old 64/10 maximum and visibly adapts when the interval fallback sees no
-16 ms headroom. Every run reports degradation because the demo deliberately authors 1,080 people,
-above every current per-frame crowd budget; Quick Settings names that exact authored/drawn cause.
-
-Representative settled captures were produced with the same commands plus `--capture-frames 60`
-and `--capture` into `.artifacts/generated/tl-272-quality/{high,ultra,extreme}.png`. Each is
-1,600 × 900 and the files are pairwise distinct. ImageMagick normalized RMSE is 0.0933 for
-High/Ultra, 0.0952 for Ultra/Extreme, and 0.0345 for High/Extreme. The last pair is closer because
-Extreme had already reduced itself on this machine; that is the intended effective-tier behavior,
-not a claim that requested Extreme is cheaper than Ultra.
-
-## Historical measured result before the tier split
+## Measured result on the development Mac
 
 Measured 2026-08-09 on Apple M5 Max / Metal / 4× MSAA, using the deterministic 32-fixture demo
 scene and the real Visualizer window.
@@ -156,10 +117,9 @@ scene and the real Visualizer window.
 | 3D Lines requested frames | `--demo --view lines_3d --quality ultra --benchmark 3` | 60.0 fps, 16.49 ms median, 18.68 ms p95, 0.56 ms CPU p95 | 60.5 fps, 16.54 ms median, 18.58 ms p95, 0.50 ms CPU p95; cull/shadow/bloom disabled by the pass plan |
 | Full 3D Ultra | `--demo --view full_3d --quality ultra --benchmark 3` | 45.8 fps, 21.14 ms median, 28.80 ms p95 | 59.9 fps, 16.66 ms median, 18.63 ms p95; adaptive rung active on all 180 measured frames |
 
-These measurements predate the Ultra/Extreme split: the rows labelled Ultra refer to the maximum
-that is now named Extreme. The Metal adapter advertised timestamps but produced no completed mapped sample during these short
+The Metal adapter advertised timestamps but produced no completed mapped sample during these short
 runs, so the GPU and pass columns truthfully remain absent. Unit decoding and host-GPU capture
-tests cover the query path; the measured result above therefore used the documented frame-
+tests cover the query path; the measured Ultra result above therefore used the documented frame-
 interval fallback. For static 3D Lines, the benchmark is the conservative forced-redraw case; the
 normal application gate issues no new renderer frame after the redraw identity is unchanged.
 
@@ -175,8 +135,7 @@ prefix of the authored population:
 | High | `--demo --view full_3d --quality high --benchmark 3` | 59.7 fps, 16.62 ms median, 17.91 ms p95, 3.23 ms CPU p95; 1,080 authored / 384 drawn |
 | Ultra | `--demo --view full_3d --quality ultra --benchmark 3` | 60.0 fps, 16.61 ms median, 17.87 ms p95, 2.67 ms CPU p95; 1,080 authored / 369 drawn |
 
-In this historical table High's fixed cap is 384 and old Ultra is current Extreme. Extreme begins
-at 1,024 and follows the existing six-rung 16 ms controller;
+High's fixed cap is 384. Ultra begins at 1,024 and follows the existing six-rung 16 ms controller;
 this adapter again supplied no timestamp sample, so the conservative frame-interval fallback
 settled on its 0.6 scale rung (`1,024 × 0.6²`, rounded to 369). All measured frames reported
 degradation because authored demand exceeded the current person budget; that signal makes the

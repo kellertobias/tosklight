@@ -30,6 +30,14 @@ pub(super) fn compile_instances(
         .find(|addresses| !addresses.is_empty())
         .unwrap_or_default();
     for instance in &fixture.instances {
+        let mut instance_optics = optics.clone();
+        if let Some(output) = instance
+            .installed_appearance
+            .luminous_output_lumens
+            .and_then(|lumens| fallback::output_for_lumens(class, lumens))
+        {
+            instance_optics.output = output;
+        }
         let fixture_index = scene.fixtures.len() as u32;
         let missing_optics = mode.geometry.emitters.is_empty();
         scene.fixtures.push(FixtureInstance {
@@ -141,7 +149,7 @@ pub(super) fn compile_instances(
             instance,
             fixture_index,
             &channels,
-            optics.clone(),
+            instance_optics,
             mount,
             laser.clone(),
             effect.clone(),

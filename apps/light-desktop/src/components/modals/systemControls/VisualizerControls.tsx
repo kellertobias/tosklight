@@ -22,7 +22,6 @@ const QUALITIES = [
 	{ quality: "standard", label: "Standard" },
 	{ quality: "high", label: "High" },
 	{ quality: "ultra", label: "Ultra" },
-	{ quality: "extreme", label: "Extreme" },
 ] as const satisfies readonly {
 	quality: VisualizerRenderQuality;
 	label: string;

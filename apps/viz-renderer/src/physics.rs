@@ -223,7 +223,9 @@ impl Physics {
             let gravity = body.body.gravity_metres_per_second_squared;
             let authored_bottom = body.scenery.position.y - body.scenery.size.y * 0.5;
             let mut floor = body.constraints.floor_y_metres;
-            if quality >= RenderQuality::High && body.constraints.scenery_collision {
+            if matches!(quality, RenderQuality::High | RenderQuality::Ultra)
+                && body.constraints.scenery_collision
+            {
                 for object in &scene.scenery {
                     let half = object.size * 0.5;
                     let p = body.scenery.position;
@@ -237,7 +239,9 @@ impl Physics {
                     }
                 }
             }
-            if quality >= RenderQuality::High && body.constraints.self_collision {
+            if matches!(quality, RenderQuality::High | RenderQuality::Ultra)
+                && body.constraints.self_collision
+            {
                 for (other, other_state) in scene.physics_scenery[..index].iter().zip(prior_frames)
                 {
                     let other_position = other.scenery.position

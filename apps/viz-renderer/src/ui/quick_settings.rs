@@ -239,6 +239,16 @@ impl QuickSettings {
         }
     }
 
+    /// Refresh fields shown by an open panel after another settings surface changed them.
+    pub fn refresh(&mut self, preferences: &Preferences) {
+        if self.editing {
+            return;
+        }
+        self.staged = StagedConnection::from_preferences(preferences);
+        self.staged_user = preferences.user.clone();
+        self.staged_blender = preferences.blender.clone();
+    }
+
     /// Every row in the panel, in the order they are drawn.
     pub fn rows(&self) -> Vec<Row> {
         let mut rows = match self.tab {
@@ -822,7 +832,11 @@ pub fn build_quick_settings(
         9.0
     } else {
         10.0
-    } + if model.degraded { 1.0 } else { 0.0 };
+    } + if model.quality_reduction_reason.is_some() {
+        1.0
+    } else {
+        0.0
+    };
     // A line is held back for the list's own heading, and the margin keeps the panel and its
     // border clear of the window edge at every scale.
     let room = ((height - 72.0) / line - chrome_lines - 1.0)
@@ -845,7 +859,11 @@ pub fn build_quick_settings(
         panel_height + 4.0,
         palette.accent,
     );
-    overlay.rect(x, y, panel_width, panel_height, palette.panel);
+    // The settings sit over the live picture, so this is deliberately translucent enough to
+    // keep fixture positions and beam changes visible while the operator adjusts them.
+    let mut panel = palette.panel;
+    panel[3] = panel[3].min(0.68);
+    overlay.rect(x, y, panel_width, panel_height, panel);
 
     let padding = 16.0 * scale;
     let mut cursor = y + padding;
@@ -929,6 +947,17 @@ pub fn build_quick_settings(
         );
         cursor += line;
     }
+    if let Some(reason) = model.quality_reduction_reason.as_deref() {
+        overlay.clipped_text(
+            x + padding,
+            cursor,
+            scale,
+            palette.warn,
+            reason,
+            x + panel_width - padding,
+        );
+        cursor += line;
+    }
     let diagnostic_rows = diagnostic_rows(model);
     for row in &diagnostic_rows[..2] {
         overlay.clipped_text(
@@ -937,17 +966,6 @@ pub fn build_quick_settings(
             scale,
             palette.dim,
             row,
-            x + panel_width - padding,
-        );
-        cursor += line;
-    }
-    if let Some(reason) = model.quality_reduction_reason() {
-        overlay.clipped_text(
-            x + padding,
-            cursor,
-            scale,
-            palette.warn,
-            &reason,
             x + panel_width - padding,
         );
         cursor += line;

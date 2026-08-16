@@ -677,6 +677,25 @@ mod tests {
         assert_eq!(status[0].malformed_packets, 0);
     }
 
+    /// Send one real E1.31 packet through the operating-system network stack and read it back.
+    #[test]
+    fn a_real_sacn_packet_reaches_the_receiver_over_loopback() {
+        let port = free_port();
+        let receiver = start(&[(Protocol::Sacn, 17, port)]);
+        let sender = UdpSocket::bind((Ipv4Addr::LOCALHOST, 0)).expect("sender socket");
+
+        let frame = deliver(&receiver, &sender, port, &sacn(17, 1, &[90, 45, 0, 0]));
+        assert_eq!(frame.logical_universe, 17);
+        assert_eq!(frame.slots[0], 90);
+        assert_eq!(frame.slots[1], 45);
+        assert!(!frame.stale);
+
+        let status = receiver.status();
+        assert_eq!(status[0].health, InputHealth::Healthy);
+        assert!(status[0].accepted_packets >= 1);
+        assert_eq!(status[0].malformed_packets, 0);
+    }
+
     #[test]
     fn a_universe_this_show_does_not_map_is_ignored_rather_than_counted_as_malformed() {
         let port = free_port();
@@ -808,6 +827,28 @@ mod tests {
             })
             .collect();
         DmxReceiver::start(mappings, Instant::now())
+    }
+
+    fn sacn(universe: u16, sequence: u8, slots: &[u8]) -> Vec<u8> {
+        let size = 126 + slots.len();
+        let mut packet = vec![0_u8; size];
+        packet[0..2].copy_from_slice(&0x0010_u16.to_be_bytes());
+        packet[4..16].copy_from_slice(b"ASC-E1.17\0\0\0");
+        packet[16..18].copy_from_slice(&(0x7000_u16 | (size - 16) as u16).to_be_bytes());
+        packet[18..22].copy_from_slice(&0x0000_0004_u32.to_be_bytes());
+        packet[38..40].copy_from_slice(&(0x7000_u16 | (size - 38) as u16).to_be_bytes());
+        packet[40..44].copy_from_slice(&0x0000_0002_u32.to_be_bytes());
+        packet[44..49].copy_from_slice(b"Tosk\0");
+        packet[108] = 100;
+        packet[111] = sequence;
+        packet[113..115].copy_from_slice(&universe.to_be_bytes());
+        packet[115..117].copy_from_slice(&(0x7000_u16 | (size - 115) as u16).to_be_bytes());
+        packet[117] = 0x02;
+        packet[118] = 0xa1;
+        packet[121..123].copy_from_slice(&1_u16.to_be_bytes());
+        packet[123..125].copy_from_slice(&((slots.len() + 1) as u16).to_be_bytes());
+        packet[126..].copy_from_slice(slots);
+        packet
     }
 
     fn deliver(

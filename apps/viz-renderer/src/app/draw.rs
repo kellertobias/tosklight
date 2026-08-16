@@ -38,6 +38,7 @@ impl Application {
         height: f32,
     ) {
         session.pump(now);
+        self.adopt_connected_renderer_settings(session);
         if let Some(workers) = self.media_workers.as_mut() {
             workers.reconcile(&session.scene);
             if let Some(renderer) = self.renderer.as_mut() {
@@ -318,9 +319,7 @@ fn status_model<'a>(
         fog_percent: atmosphere.density * 100.0,
         ambient_percent: view.ambient * 100.0,
         degraded: stats.degraded,
-        effective_quality: stats.effective_quality,
-        crowd_reduction: (stats.crowd_drawn < stats.crowd_authored)
-            .then_some((stats.crowd_drawn, stats.crowd_authored)),
+        quality_reduction_reason: ui::quality_reduction_reason(stats),
         particle_reduction: (stats.particles_drawn < stats.particles_requested)
             .then_some((stats.particles_drawn, stats.particles_requested)),
         exposure: preferences.exposure,

@@ -201,7 +201,7 @@ function NativeBenchmark({ config }: { config: PackagedStageBenchmarkConfig }) {
 
 	useEffect(() => {
 		if (!stageEnabled) return;
-		const qualities = ["draft", "standard", "high", "ultra", "extreme"] as const;
+		const qualities = ["draft", "standard", "high", "ultra"] as const;
 		let index = 0;
 		const qualityStep = Math.max(
 			100,

@@ -17,7 +17,7 @@ export type VisualizerViewMode =
 	| "simple_3d"
 	| "full_3d";
 
-export type VisualizerRenderQuality = "draft" | "standard" | "high" | "ultra" | "extreme";
+export type VisualizerRenderQuality = "draft" | "standard" | "high" | "ultra";
 
 /** What one connected renderer is being told to look at. */
 export interface VisualizerView {

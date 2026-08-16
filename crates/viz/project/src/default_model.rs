@@ -68,6 +68,25 @@ shipped!(
 shipped!(HAZER, "hazer", "lamps/hazer.glb");
 shipped!(SHOW_LASER, "show-laser", "av/show-laser.glb");
 
+/// Every renderer-owned fallback body, in stable gallery order.
+pub fn all() -> [&'static DefaultModel; 13] {
+    [
+        &FRESNEL,
+        &PROFILE_SPOT,
+        &PAR_CAN,
+        &MOVING_PROFILE,
+        &MOVING_WASH,
+        &MOVING_LED_WASH,
+        &LED_PAR,
+        &LED_STROBE,
+        &BLINDER,
+        &SCANNER,
+        &LED_STRIP,
+        &HAZER,
+        &SHOW_LASER,
+    ]
+}
+
 /// What a mode has channels for, which is all the rules need to know about it.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct FixtureTraits {
@@ -223,22 +242,6 @@ mod tests {
 
     /// Every model this module can hand back, so a new one cannot be added without meeting what
     /// the rest of these tests ask of a shipped body.
-    const SHIPPED: [&DefaultModel; 13] = [
-        &FRESNEL,
-        &PROFILE_SPOT,
-        &PAR_CAN,
-        &MOVING_PROFILE,
-        &MOVING_WASH,
-        &MOVING_LED_WASH,
-        &LED_PAR,
-        &LED_STROBE,
-        &BLINDER,
-        &SCANNER,
-        &LED_STRIP,
-        &HAZER,
-        &SHOW_LASER,
-    ];
-
     /// The model's own bounding box, which is not centred on its origin: the origin is the rigging
     /// point and the body hangs below it.
     fn bounds(model: &viz_scene::FixtureModel) -> (glam::Vec3, glam::Vec3) {
@@ -256,7 +259,7 @@ mod tests {
 
     #[test]
     fn every_shipped_default_model_is_readable() {
-        for model in SHIPPED {
+        for model in all() {
             let read = viz_scene::read_glb(model.bytes)
                 .unwrap_or_else(|error| panic!("{}: {error}", model.name));
             assert!(!read.is_empty(), "{} has no triangles", model.name);
@@ -273,7 +276,7 @@ mod tests {
     /// fixture's origin — which in this set is the rigging point, a lamp's length above the lens.
     #[test]
     fn every_shipped_default_model_says_where_its_light_leaves() {
-        for model in SHIPPED {
+        for model in all() {
             let read = viz_scene::read_glb(model.bytes).expect("the model reads");
             let anchor = read
                 .emitter_anchor
@@ -297,7 +300,7 @@ mod tests {
     /// the beam leaves out of the side of the box.
     #[test]
     fn every_shipped_default_model_says_which_way_its_light_goes() {
-        for model in SHIPPED {
+        for model in all() {
             let read = viz_scene::read_glb(model.bytes).expect("the model reads");
             let axis = read
                 .emitter_axis

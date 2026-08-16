@@ -333,7 +333,7 @@ pub struct FrameStyle {
     /// Per-frame crowd budget selected from quality and the renderer's adaptive hardware ladder.
     pub crowd_person_budget: usize,
     /// Per-frame Effect-particle budget selected from quality and the same adaptive hardware
-    /// ladder as the expensive Extreme rendering features.
+    /// ladder as the expensive Ultra rendering features.
     pub effect_particle_budget: usize,
     /// Live/fallback media is a standalone capability. Helpers and embedded Stage panes draw the
     /// same authored geometry with neutral faces and open no media transport.

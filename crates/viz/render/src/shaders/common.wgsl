@@ -14,8 +14,8 @@ struct Globals {
 };
 
 // What the quality tier has paid for. The tiers are a ladder of what is in the beam: Draft draws
-// the cone, Standard puts the glass in it, High gives it its fall-off, and Ultra/Extreme make the
-// haze itself uneven. Asking here rather than branching on a tier number keeps tiers a renderer concern.
+// the cone, Standard puts the glass in it, High gives it its fall-off, Ultra makes the haze itself
+// uneven. Asking here rather than branching on a tier number keeps the tiers a renderer concern.
 fn gobos_enabled() -> bool {
     return globals.params4.x > 0.5;
 }

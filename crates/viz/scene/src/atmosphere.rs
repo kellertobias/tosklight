@@ -7,8 +7,9 @@ pub struct Atmosphere {
     pub density: f32,
 }
 
-/// Atmosphere the renderer starts with: enough haze to see beams at all.
-pub const DEFAULT_DENSITY: f32 = 0.5;
+/// Atmosphere the renderer starts with: enough haze to see beams without turning a full rig into
+/// a milky white volume. Existing persisted operator choices remain unchanged.
+pub const DEFAULT_DENSITY: f32 = 0.15;
 
 /// Renderer-local haze setting, persisted independently from the show.
 ///
@@ -57,9 +58,7 @@ mod tests {
 
     #[test]
     fn the_default_shows_beams_without_any_operator_input() {
-        assert_eq!(
-            AtmospherePreference::default().resolve().density,
-            DEFAULT_DENSITY
-        );
+        assert_eq!(AtmospherePreference::default().resolve().density, 0.15);
+        assert_eq!(DEFAULT_DENSITY, 0.15);
     }
 }

@@ -173,6 +173,7 @@ export type Action =
 			groupsVisible?: boolean;
 			showSelection?: boolean;
 			showFloorGrid?: boolean;
+			showBeamGuides?: boolean;
 			side2d?: AppState["stage2dSide"];
 			vizBackground?: string;
 			environmentBrightness?: number;

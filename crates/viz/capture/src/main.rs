@@ -287,7 +287,7 @@ fn scripted_look(
             });
         }
     }
-    apply_prism_demo(&mut state, &snapshot)?;
+    apply_gobo_prism_demo(&mut state, &snapshot)?;
     let projected = viz_planning::preview::project(&state, &snapshot, 1);
     Ok(projected
         .universes
@@ -306,48 +306,68 @@ fn scripted_look(
         .collect())
 }
 
-/// Fixture 512 is the canonical demo's prism evidence. Simple Viz preview deliberately exposes
-/// only Gobo, so the product capture sets the prism through the same fixture-relative raw slot as
-/// Full DMX mode. The profile remains authoritative for that slot and its resolution.
-fn apply_prism_demo(
+/// Simple Viz deliberately keeps shutter and prism out of its five planning controls. The product
+/// demo therefore opens both featured fixtures and inserts the prism through their profile-owned
+/// raw slots, exactly as Full DMX mode does.
+fn apply_gobo_prism_demo(
     state: &mut viz_planning::preview::PreviewState,
     snapshot: &light_application::PatchSnapshot,
 ) -> Result<(), String> {
-    let Some(fixture) = snapshot.fixtures.iter().find(|fixture| {
-        fixture.patch.fixture_number == Some(512) && fixture.patch.name == "Prism Demo"
-    }) else {
-        return Ok(());
-    };
-    let revision = snapshot
-        .profile_revisions
-        .iter()
-        .find(|profile| {
-            profile.profile_id == fixture.profile.profile_id
-                && profile.profile_revision == fixture.profile.profile_revision
-        })
-        .ok_or_else(|| "Prism Demo has no embedded profile revision".to_owned())?;
-    let profile: light_fixture::FixtureProfile =
-        serde_json::from_value(revision.profile_snapshot.clone())
-            .map_err(|error| format!("Prism Demo profile: {error}"))?;
-    let mode = profile
-        .mode(fixture.profile.mode_id)
-        .ok_or_else(|| "Prism Demo profile has no selected mode".to_owned())?;
-    let primary = mode.primary_slots().map_err(|error| error.to_string())?;
-    for (attribute, value) in [("prism.1", 255), ("prism.1.rotation", 166)] {
-        let channel = mode
+    for name in ["Gobo Demo", "Prism Demo"] {
+        let Some(fixture) = snapshot
+            .fixtures
+            .iter()
+            .find(|fixture| fixture.patch.name == name)
+        else {
+            continue;
+        };
+        let revision = snapshot
+            .profile_revisions
+            .iter()
+            .find(|profile| {
+                profile.profile_id == fixture.profile.profile_id
+                    && profile.profile_revision == fixture.profile.profile_revision
+            })
+            .ok_or_else(|| format!("{name} has no embedded profile revision"))?;
+        let profile: light_fixture::FixtureProfile =
+            serde_json::from_value(revision.profile_snapshot.clone())
+                .map_err(|error| format!("{name} profile: {error}"))?;
+        let mode = profile
+            .mode(fixture.profile.mode_id)
+            .ok_or_else(|| format!("{name} profile has no selected mode"))?;
+        let primary = mode.primary_slots().map_err(|error| error.to_string())?;
+        let shutter = mode
             .channels
             .iter()
-            .find(|channel| channel.attribute.0 == attribute)
-            .ok_or_else(|| format!("Prism Demo mode has no {attribute}"))?;
-        let offset = *primary
-            .get(&channel.id)
-            .ok_or_else(|| format!("Prism Demo {attribute} has no primary slot"))?;
+            .find(|channel| channel.attribute.0 == "shutter")
+            .ok_or_else(|| format!("{name} mode has no shutter"))?;
+        let shutter_offset = *primary
+            .get(&shutter.id)
+            .ok_or_else(|| "shutter channel has no primary slot".to_owned())?;
         state.apply(viz_planning::PreviewSet::Slot {
             fixture_id: fixture.patch.fixture_id.0,
-            split: channel.split,
-            offset,
-            value,
+            split: shutter.split,
+            offset: shutter_offset,
+            value: shutter.highlight_raw as u8,
         });
+        if name == "Prism Demo" {
+            for (attribute, value) in [("prism.1", 255), ("prism.1.rotation", 166)] {
+                let channel = mode
+                    .channels
+                    .iter()
+                    .find(|channel| channel.attribute.0 == attribute)
+                    .ok_or_else(|| format!("{name} mode has no {attribute}"))?;
+                let offset = *primary
+                    .get(&channel.id)
+                    .ok_or_else(|| format!("{attribute} channel has no primary slot"))?;
+                state.apply(viz_planning::PreviewSet::Slot {
+                    fixture_id: fixture.patch.fixture_id.0,
+                    split: channel.split,
+                    offset,
+                    value,
+                });
+            }
+        }
     }
     Ok(())
 }
@@ -611,7 +631,7 @@ mod tests {
                     .expect("the same active pool renders again");
                 let first_brightness = picture_brightness(&first);
                 let repeated_brightness = picture_brightness(&repeated);
-                if quality == RenderQuality::Extreme
+                if quality == RenderQuality::Ultra
                     && camera_offset > 0.0
                     && let Some(directory) = evidence.as_deref()
                 {
@@ -991,20 +1011,18 @@ mod profile_moving_light {
         );
     }
 
-    /// The demo show is regenerated from source on every build, so its embedded profile revisions
-    /// are always this commit's. That is what the plan asks for in place of a migration: a
-    /// repository-owned show cannot carry a stale model if it is rebuilt rather than stored.
+    /// Desk, PreViz, and capture use one committed portable show rather than parallel demo rigs.
     #[test]
-    fn the_demo_show_is_generated_rather_than_stored() {
-        let stored = repository().join("assets/demo-show.show");
+    fn the_demo_show_has_one_canonical_asset() {
+        let canonical = repository().join("assets/demo.show");
         assert!(
-            !stored.exists(),
-            "a committed demo show would embed profile revisions that age; it is generated by \
-             `npm run demo-show` instead"
+            canonical.is_file(),
+            "the canonical demo show is missing: {}",
+            canonical.display()
         );
         assert!(
-            Path::new(&repository().join("crates/viz/demo/src/rig.rs")).is_file(),
-            "the demo rig is declared in source, which is what makes regeneration possible"
+            !Path::new(&repository().join("crates/viz/demo/src/rig.rs")).exists(),
+            "a second Rust demo rig would let capture drift from Desk and PreViz"
         );
     }
 }

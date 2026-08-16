@@ -7,6 +7,7 @@ import type { WindowProps } from "../windowTypes";
 export interface StageWindowProps extends WindowProps {
 	showSelection?: boolean;
 	showFloorGrid?: boolean;
+	showBeamGuides?: boolean;
 	environmentBrightness?: number;
 	visualizationIntervalMillis?: number;
 	pixelRatioCap?: number;
@@ -32,6 +33,7 @@ export interface StageOptionsModel {
 	groupsVisible: boolean;
 	showSelection: boolean;
 	showFloorGrid: boolean;
+	showBeamGuides: boolean;
 	environmentBrightness: number;
 }
 

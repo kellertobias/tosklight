@@ -150,13 +150,13 @@ async fn a_patch_leaves_every_field_it_does_not_name_alone() {
             &token,
             "main",
             "set-quality",
-            serde_json::json!({"quality": "extreme"}),
+            serde_json::json!({"quality": "ultra"}),
         )
         .await,
     )
     .await;
     assert_eq!(outcome["view"]["mode"], "top_down");
-    assert_eq!(outcome["view"]["quality"], "extreme");
+    assert_eq!(outcome["view"]["quality"], "ultra");
     assert_eq!(outcome["view"]["ambient"], 0.2);
     assert_eq!(outcome["view"]["exposure"], 1.0);
     let _ = std::fs::remove_dir_all(data_dir);

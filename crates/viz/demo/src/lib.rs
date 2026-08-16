@@ -1,89 +1,26 @@
 #![forbid(unsafe_code)]
-//! Generating the canonical ToskLight demo show.
+//! Compatibility staging for the one canonical ToskLight demo show.
 //!
-//! The demo show is a product artefact, not a file somebody once saved: it is built here from the
-//! rig declared in [`rig`] and the shipped fixture packages, through the same patch boundary the
-//! Viz editor and the desk use. A release therefore ships a demo whose embedded profile revisions
-//! are the ones that were current when it was built, and a fixture package that gains a model or a
-//! mode reaches the demo by regenerating it.
-//!
-//! Nothing here reads the operator's data or writes anywhere but the destination it is given.
+//! The complete demo is authored through the Desk API generator and committed as
+//! `assets/demo.show`. Desk, PreViz, captures, and release packaging must copy those exact bytes;
+//! this crate remains only for callers of the former `viz-demo-show` command.
 
-pub mod rig;
-
-#[cfg(test)]
-mod tests;
-
-use light_application::{PatchFixtureCandidate, PatchFixturesCommand};
-use light_core::{DmxAddress, FixtureId, Universe};
-use light_fixture::{
-    FixtureLibrary, FixtureLocation, FixtureProfile, FixtureVector, InstalledFixtureAppearance,
-    PatchedFixturePatch, PatchedFixtureProfileReference, SplitPatch,
-};
-use rig::{DEMO_RIG, RigBlock};
-use serde_json::json;
+use light_fixture::FixtureLibrary;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use viz_document::PlanningDocument;
 
-/// The name the generated show carries, and the name every copy of it is derived from.
 pub const DEMO_SHOW_NAME: &str = "Demo Show";
-
-/// The file name the packaged template is shipped under.
 pub const DEMO_SHOW_FILE_NAME: &str = "demo-show.show";
-
-/// The last slot of a DMX universe. A rig that will not fit is a mistake in the rig, not something
-/// to silently wrap into the next universe.
-const LAST_SLOT: u32 = 512;
-
-/// Stable namespace for fixture identities in this generated product artefact. Fixture numbers
-/// are already an explicit compatibility surface in [`DEMO_RIG`], so deriving the UUID from that
-/// number makes regeneration stable without coupling identity to patch order or display wording.
-const DEMO_FIXTURE_NAMESPACE: u128 = 0x58a4_5aea_0b69_4ed6_9e08_a435_c65f_bec3;
-
-pub const GOBO_DEMO_FIXTURE_NUMBER: u32 = 511;
-pub const PRISM_DEMO_FIXTURE_NUMBER: u32 = 512;
-pub const GOBO_PRISM_DEMO_PRESET: &str = "0.1";
 
 #[derive(Debug)]
 pub enum DemoError {
-    /// The shipped library has no profile the rig names. Regenerating against a library that is
-    /// missing a package must fail rather than quietly ship a smaller rig.
-    MissingProfile {
-        manufacturer: String,
-        profile: String,
-    },
-    MissingMode {
-        profile: String,
-        mode: String,
-    },
-    UniverseFull {
-        universe: u16,
-        fixture: String,
-    },
-    Library(String),
     Document(String),
 }
 
 impl std::fmt::Display for DemoError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::MissingProfile {
-                manufacturer,
-                profile,
-            } => write!(
-                formatter,
-                "the fixture library has no {manufacturer} {profile}; the demo rig cannot be built \
-                 from it"
-            ),
-            Self::MissingMode { profile, mode } => {
-                write!(formatter, "{profile} has no mode called {mode}")
-            }
-            Self::UniverseFull { universe, fixture } => write!(
-                formatter,
-                "universe {universe} has no room left for {fixture}"
-            ),
-            Self::Library(detail) => write!(formatter, "fixture library: {detail}"),
             Self::Document(detail) => write!(formatter, "show file: {detail}"),
         }
     }
@@ -91,218 +28,43 @@ impl std::fmt::Display for DemoError {
 
 impl std::error::Error for DemoError {}
 
-/// What was written, for the caller to report.
 #[derive(Debug)]
 pub struct GeneratedShow {
     pub path: PathBuf,
     pub name: String,
     pub fixtures: usize,
-    /// The profile revisions the rig actually embedded, so a build log records what shipped.
     pub profile_revisions: BTreeMap<String, u32>,
 }
 
-/// Build the demo show at `destination` from the packages in `library`.
+fn canonical_demo_show() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../assets/demo.show")
+}
+
+/// Copy the canonical demo asset to `destination` and prove that the copied show reopens.
 ///
-/// The destination is created; an existing file there is replaced, because this is a generated
-/// artefact and regenerating it is the only way it is ever updated.
-pub fn generate(library: FixtureLibrary, destination: &Path) -> Result<GeneratedShow, DemoError> {
-    let profiles = library
-        .profiles()
-        .map_err(|error| DemoError::Library(error.to_string()))?;
-    if destination.exists() {
-        std::fs::remove_file(destination)
-            .map_err(|error| DemoError::Document(error.to_string()))?;
-    }
+/// `library` is accepted for source compatibility with the retired rig generator. The canonical
+/// show already embeds the exact portable profile revisions it uses.
+pub fn generate(_library: FixtureLibrary, destination: &Path) -> Result<GeneratedShow, DemoError> {
+    let source = canonical_demo_show();
+    let bytes = std::fs::read(&source).map_err(|error| {
+        DemoError::Document(format!("reading canonical {}: {error}", source.display()))
+    })?;
     if let Some(parent) = destination.parent() {
         std::fs::create_dir_all(parent).map_err(|error| DemoError::Document(error.to_string()))?;
     }
-
-    let document = PlanningDocument::create(destination, DEMO_SHOW_NAME)
-        .map_err(|error| DemoError::Document(error.to_string()))?
-        .with_library(library);
-
-    let mut candidates = Vec::new();
-    let mut revisions = BTreeMap::new();
-    // Addresses are handed out per universe in patch order, exactly as an operator patching the
-    // rig from the top of the sheet downwards would get them.
-    let mut next_slot: BTreeMap<u16, u32> = BTreeMap::new();
-
-    for block in DEMO_RIG {
-        let profile = find_profile(&profiles, block)?;
-        let mode = profile
-            .modes
-            .iter()
-            .find(|mode| mode.name == block.mode)
-            .ok_or_else(|| DemoError::MissingMode {
-                profile: profile.name.clone(),
-                mode: block.mode.to_owned(),
-            })?;
-        revisions.insert(
-            format!("{} {}", profile.manufacturer, profile.name),
-            profile.revision,
-        );
-        for index in 0..block.count {
-            let name = block.fixture_name(index);
-            let cursor = next_slot.entry(block.universe).or_insert(1);
-            let mut split_patches = Vec::with_capacity(mode.splits.len());
-            for split in &mode.splits {
-                let end = *cursor + u32::from(split.footprint) - 1;
-                if end > LAST_SLOT {
-                    return Err(DemoError::UniverseFull {
-                        universe: block.universe,
-                        fixture: name.clone(),
-                    });
-                }
-                split_patches.push(SplitPatch {
-                    split: split.number,
-                    universe: Some(block.universe as Universe),
-                    address: Some(*cursor as DmxAddress),
-                });
-                *cursor = end + 1;
-            }
-            candidates.push(candidate(
-                block,
-                profile,
-                mode.id,
-                index,
-                name,
-                split_patches,
-            ));
-        }
-    }
-
-    let fixtures = candidates.len();
-    document
-        .patch_fixtures(PatchFixturesCommand {
-            show_id: document.show_id(),
-            fixtures: candidates,
-            remove_fixture_ids: Vec::new(),
-            placements: Vec::new(),
-            vector_spreads: Vec::new(),
-            fixture_updates: Vec::new(),
-        })
+    std::fs::write(destination, bytes).map_err(|error| DemoError::Document(error.to_string()))?;
+    let document = PlanningDocument::open(destination)
         .map_err(|error| DemoError::Document(error.to_string()))?;
-
-    install_gobo_prism_demo_look(&document)?;
-
+    let snapshot = document
+        .patch_snapshot()
+        .map_err(|error| DemoError::Document(error.to_string()))?;
     Ok(GeneratedShow {
-        path: destination.to_path_buf(),
+        path: destination.to_owned(),
         name: DEMO_SHOW_NAME.to_owned(),
-        fixtures,
-        profile_revisions: revisions,
+        fixtures: snapshot.fixtures.len(),
+        profile_revisions: BTreeMap::new(),
     })
 }
 
-fn find_profile<'a>(
-    profiles: &'a [FixtureProfile],
-    block: &RigBlock,
-) -> Result<&'a FixtureProfile, DemoError> {
-    profiles
-        .iter()
-        .filter(|profile| {
-            profile.manufacturer == block.manufacturer && profile.name == block.profile
-        })
-        // A library may hold more than one revision of a package; the demo ships the newest, which
-        // is the one the desk would patch from too.
-        .max_by_key(|profile| profile.revision)
-        .ok_or_else(|| DemoError::MissingProfile {
-            manufacturer: block.manufacturer.to_owned(),
-            profile: block.profile.to_owned(),
-        })
-}
-
-fn candidate(
-    block: &RigBlock,
-    profile: &FixtureProfile,
-    mode_id: uuid::Uuid,
-    index: u32,
-    name: String,
-    split_patches: Vec<SplitPatch>,
-) -> PatchFixtureCandidate {
-    let (x, y, z) = block.position(index);
-    PatchFixtureCandidate {
-        profile: PatchedFixtureProfileReference {
-            profile_id: profile.id,
-            profile_revision: u64::from(profile.revision),
-            mode_id,
-        },
-        patch: PatchedFixturePatch {
-            fixture_id: demo_fixture_id(block.first_number + index),
-            fixture_number: Some(block.first_number + index),
-            virtual_fixture_number: None,
-            name,
-            universe: split_patches.first().and_then(|split| split.universe),
-            address: split_patches.first().and_then(|split| split.address),
-            split_patches,
-            layer_id: "default".to_owned(),
-            direct_control: None,
-            internal_bindings: Default::default(),
-            location: FixtureLocation { x, y, z },
-            rotation: FixtureVector {
-                x: block.rotation.0,
-                y: block.rotation.1,
-                z: block.rotation.2,
-            },
-            logical_heads: Vec::new(),
-            multipatch: Vec::new(),
-            group_masters_enabled: true,
-            grand_master_enabled: true,
-            invert_pan: false,
-            invert_tilt: false,
-            bracket_angle: 0.0,
-            shaper_angle: None,
-            installed_appearance: InstalledFixtureAppearance::default(),
-            move_in_black_enabled: true,
-            move_in_black_delay_millis: 0,
-            highlight_overrides: Default::default(),
-            freeze: Default::default(),
-        },
-    }
-}
-
-/// Stable identity of one canonical demo fixture.
-pub fn demo_fixture_id(number: u32) -> FixtureId {
-    let namespace = uuid::Uuid::from_u128(DEMO_FIXTURE_NAMESPACE);
-    FixtureId(uuid::Uuid::new_v5(
-        &namespace,
-        format!("fixture:{number}").as_bytes(),
-    ))
-}
-
-fn install_gobo_prism_demo_look(document: &PlanningDocument) -> Result<(), DemoError> {
-    let gobo = demo_fixture_id(GOBO_DEMO_FIXTURE_NUMBER).0.to_string();
-    let prism = demo_fixture_id(PRISM_DEMO_FIXTURE_NUMBER).0.to_string();
-    document
-        .put_object(
-            "preset",
-            GOBO_PRISM_DEMO_PRESET,
-            &json!({
-                "name": "Gobo + Prism Demo",
-                "family": "Mixed",
-                "number": 1,
-                "values": {
-                    gobo: {
-                        "intensity": { "kind": "normalized", "value": 1.0 },
-                        "shutter": { "kind": "normalized", "value": 1.0 },
-                        "pan": { "kind": "normalized", "value": 0.42 },
-                        "tilt": { "kind": "normalized", "value": 0.58 },
-                        "gobo.1": { "kind": "normalized", "value": 0.42 },
-                        "gobo.1.rotation": { "kind": "normalized", "value": 0.28 },
-                        "focus": { "kind": "normalized", "value": 0.72 }
-                    },
-                    prism: {
-                        "intensity": { "kind": "normalized", "value": 1.0 },
-                        "shutter": { "kind": "normalized", "value": 1.0 },
-                        "pan": { "kind": "normalized", "value": 0.58 },
-                        "tilt": { "kind": "normalized", "value": 0.58 },
-                        "gobo.1": { "kind": "normalized", "value": 0.68 },
-                        "prism.1": { "kind": "normalized", "value": 1.0 },
-                        "prism.1.rotation": { "kind": "normalized", "value": 0.65 },
-                        "focus": { "kind": "normalized", "value": 0.72 }
-                    }
-                },
-                "group_values": {}
-            }),
-        )
-        .map_err(|error| DemoError::Document(error.to_string()))
-}
+#[cfg(test)]
+mod tests;

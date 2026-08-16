@@ -153,7 +153,7 @@ export interface PaneModel extends GridRect {
 	stageView?: StageView;
 	stage2dSide?: Stage2dSide;
 	followPreload?: boolean;
-	/** Ultra/Extreme fog character, stored with this portable Visualizer pane. */
+	/** Ultra-only fog character, stored with this portable Visualizer pane. */
 	lampFogCloudiness?: number;
 	lampFogTurbulence?: number;
 	laserFogCloudiness?: number;
@@ -278,6 +278,7 @@ export interface AppState {
 		| "Beam"
 		| "Shapers"
 		| "Control"
+		| "Media"
 		| "Dynamics";
 	systemControlsOpen: boolean;
 	preloadStoreOpen: boolean;
@@ -303,6 +304,8 @@ export interface AppState {
 	stageGroupsVisible: boolean;
 	stageShowSelection: boolean;
 	stageShowFloorGrid: boolean;
+	/** Draw dashed direction guides for unlit fixtures in the 3D diagram. */
+	stageShowBeamGuides: boolean;
 	/** Which side a 2D Stage is the plan from. */
 	stage2dSide: Stage2dSide;
 	stageEnvironmentBrightness: number;
@@ -311,7 +314,7 @@ export interface AppState {
 	/** Haze the 3D Viz renderer draws its beams through, `0..=1`. */
 	stageVizAtmosphere: number;
 	/** How much the 3D Viz renderer is asked to do per frame. */
-	stageVizQuality: "draft" | "standard" | "high" | "ultra" | "extreme";
+	stageVizQuality: "draft" | "standard" | "high" | "ultra";
 	stageVizExposure: number;
 	stageVizLaserBrightness: number;
 	stageVizShowLabels: boolean;
@@ -368,6 +371,7 @@ export interface WindowSettings {
 	stageGroupsVisible: boolean;
 	stageShowSelection: boolean;
 	stageShowFloorGrid: boolean;
+	stageShowBeamGuides: boolean;
 	/** Which side a 2D Stage is the plan from. */
 	stage2dSide: Stage2dSide;
 	stageEnvironmentBrightness: number;
@@ -376,12 +380,11 @@ export interface WindowSettings {
 	/** Haze the 3D Viz renderer draws its beams through, `0..=1`. */
 	stageVizAtmosphere: number;
 	/** How much the 3D Viz renderer is asked to do per frame. */
-	stageVizQuality: "draft" | "standard" | "high" | "ultra" | "extreme";
+	stageVizQuality: "draft" | "standard" | "high" | "ultra";
 	stageVizExposure: number;
 	stageVizLaserBrightness: number;
 	stageVizShowLabels: boolean;
-	/** Legacy fields retained only for tolerant persisted-layout decoding. */
-	stageShowBeamGuides?: boolean;
+	/** Legacy field retained only for tolerant persisted-layout decoding. */
 	stageRenderQuality?: StageRenderQuality;
 	layoutGroupId?: string;
 	dmxDotSize: DmxDotSize;

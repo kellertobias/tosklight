@@ -56,7 +56,7 @@ impl ApplicationMenu {
             Some(Accelerator::new(Some(Modifiers::META), Code::Comma)),
         );
 
-        let application = Submenu::new("ToskLight Visualizer", true);
+        let application = Submenu::new("ToskLight PreViz", true);
         application
             .append_items(&[
                 &settings,

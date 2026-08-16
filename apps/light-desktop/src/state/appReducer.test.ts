@@ -385,12 +385,14 @@ describe("appReducer Stage and Development pane settings", () => {
 			groupsVisible: false,
 			showSelection: false,
 			showFloorGrid: false,
+			showBeamGuides: true,
 			side2d: "front",
 			environmentBrightness: 3,
 		});
 		expect(hidden.stageGroupsVisible).toBe(false);
 		expect(hidden.stageShowSelection).toBe(false);
 		expect(hidden.stageShowFloorGrid).toBe(false);
+		expect(hidden.stageShowBeamGuides).toBe(true);
 		expect(hidden.stage2dSide).toBe("front");
 		expect(hidden.stageEnvironmentBrightness).toBe(2);
 		expect(
@@ -399,6 +401,24 @@ describe("appReducer Stage and Development pane settings", () => {
 				environmentBrightness: -1,
 			}).stageEnvironmentBrightness,
 		).toBe(0);
+	});
+
+	it("defaults beam direction guidelines off and preserves an explicit saved choice", () => {
+		expect(initialState.stageShowBeamGuides).toBe(false);
+		const legacy = appReducer(initialState, {
+			type: "HYDRATE_LAYOUT",
+			desks: initialState.desks,
+			activeDeskId: initialState.activeDeskId,
+			windowSettings: {},
+		});
+		expect(legacy.stageShowBeamGuides).toBe(false);
+		const enabled = appReducer(initialState, {
+			type: "HYDRATE_LAYOUT",
+			desks: initialState.desks,
+			activeDeskId: initialState.activeDeskId,
+			windowSettings: { stageShowBeamGuides: true },
+		});
+		expect(enabled.stageShowBeamGuides).toBe(true);
 	});
 
 	it("defaults new visualizers to 5% ambient light without replacing persisted values", () => {

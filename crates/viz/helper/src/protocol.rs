@@ -12,9 +12,9 @@
 use serde::{Deserialize, Serialize};
 
 /// The protocol this build speaks.
-// Picture gained four fog-character fields. That changes the postcard shape, so a stale helper
+// Picture gained a beam-guideline field. That changes the postcard shape, so a stale helper
 // must be refused instead of accepting a message it cannot decode.
-pub const PROTOCOL_MAJOR: u16 = 2;
+pub const PROTOCOL_MAJOR: u16 = 3;
 pub const PROTOCOL_MINOR: u16 = 1;
 
 /// How a rendered pane gets from the helper to the desk.
@@ -140,7 +140,7 @@ pub enum ToHelper {
         atmosphere: f32,
         /// How brightly everything that is not a light source is lit, `0..=2`.
         ambient: f32,
-        /// Draft, Standard, High, Ultra or Extreme, as the renderer names them.
+        /// Draft, Standard, High or Ultra, as the renderer names them.
         quality: RenderQuality,
         /// Operator-safe exposure multiplier.
         exposure: f32,
@@ -148,16 +148,18 @@ pub enum ToHelper {
         /// reference — how strong a beam looks depends on the haze, the room and the eye — so it
         /// is the operator's, like the fog.
         laser_brightness: f32,
-        /// Ultra/Extreme lamp fog patchiness and movement, each `0..=1`.
+        /// Ultra-only lamp fog patchiness and movement, each `0..=1`.
         lamp_fog_cloudiness: f32,
         lamp_fog_turbulence: f32,
-        /// Ultra/Extreme laser fog patchiness and movement, each `0..=1`.
+        /// Ultra-only laser fog patchiness and movement, each `0..=1`.
         laser_fog_cloudiness: f32,
         laser_fog_turbulence: f32,
         /// Screen-space fixture numbers and patch addresses beside fixtures in every Stage view.
         show_labels: bool,
         /// Lay the reference grid on the ground plane.
         floor_grid: bool,
+        /// Draw dashed direction guides for unlit fixtures in the 3D diagram.
+        show_beam_guides: bool,
         /// The colour behind the rig, linear RGB.
         background: [f32; 3],
         /// Which way the Stage is being looked at.
@@ -207,7 +209,6 @@ pub enum RenderQuality {
     Standard,
     High,
     Ultra,
-    Extreme,
 }
 
 /// Where the desk serves the show the pane is to draw.
@@ -485,7 +486,7 @@ mod tests {
             ToHelper::Hello {
                 protocol_major: PROTOCOL_MAJOR,
                 protocol_minor: PROTOCOL_MINOR,
-                title: "ToskLight Visualizer".to_owned(),
+                title: "ToskLight PreViz".to_owned(),
             },
             ToHelper::Scene {
                 payload: vec![1, 2, 3],
@@ -535,6 +536,7 @@ mod tests {
                 laser_fog_turbulence: 0.0,
                 show_labels: false,
                 floor_grid: true,
+                show_beam_guides: false,
                 background: [0.008, 0.010, 0.016],
                 mode: StageViewMode::Full3d,
                 follow_preload: false,

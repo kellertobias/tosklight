@@ -282,5 +282,9 @@ fn fragment_main(input: BeamVertexOutput) -> @location(0) vec4<f32> {
     if (scatter <= 0.0005) {
         discard;
     }
-    return vec4<f32>(input.colour.rgb * scatter, 1.0);
+    // Participating haze approaches opacity; it does not add unbounded white energy for every
+    // overlapping cone. The exponential is the bounded transmittance form and the premultiplied
+    // result lets several beams build toward a bright volume without washing the whole room out.
+    let opacity = 1.0 - exp(-scatter);
+    return vec4<f32>(input.colour.rgb * opacity, opacity);
 }

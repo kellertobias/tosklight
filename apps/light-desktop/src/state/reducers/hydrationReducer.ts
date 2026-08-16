@@ -201,6 +201,10 @@ export function reduceHydration(
 					typeof action.windowSettings?.stageVizShowLabels === "boolean"
 						? action.windowSettings.stageVizShowLabels
 						: state.stageVizShowLabels,
+				stageShowBeamGuides:
+					typeof action.windowSettings?.stageShowBeamGuides === "boolean"
+						? action.windowSettings.stageShowBeamGuides
+						: false,
 				builtIn:
 					action.windowSettings?.builtIn == null
 						? (action.windowSettings?.builtIn ?? state.builtIn)

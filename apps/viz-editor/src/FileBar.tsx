@@ -1,20 +1,23 @@
-import { Button } from "@tosklight/ui";
 import { open, save } from "@tauri-apps/plugin-dialog";
+import { Button } from "@tosklight/ui";
 import { useEffect, useState } from "react";
-import { documentSession } from "./document/session";
 import type { DeskPeer, DocumentSummary, MvrPreview } from "./document/session";
+import { documentSession } from "./document/session";
+import { LiveDmxInputsPanel } from "./LiveDmxInputsPanel";
 import { MvrImport } from "./MvrImport";
 
 const SHOW_FILTER = [{ name: "ToskLight show", extensions: ["show"] }];
 const MVR_FILTER = [{ name: "MVR", extensions: ["mvr"] }];
 
 export function FileBar({
+	page = "show",
 	document,
 	onDocument,
 	onError,
 	onReloadProfiles,
 	onReloadDocument,
 }: {
+	page?: "show" | "dmx";
 	document: DocumentSummary | null;
 	onDocument: (summary: DocumentSummary) => void;
 	onError: (reason: unknown) => void;
@@ -30,7 +33,12 @@ export function FileBar({
 		path: string;
 		preview: MvrPreview;
 	} | null>(null);
-	const actions = useFileActions(onDocument, onReloadProfiles, setPendingMvr);
+	const actions = useFileActions(
+		onDocument,
+		onReloadProfiles,
+		onReloadDocument,
+		setPendingMvr,
+	);
 
 	function finishMvr(summary: string, imported: boolean) {
 		setPendingMvr(null);
@@ -54,60 +62,77 @@ export function FileBar({
 	}
 
 	return (
-		<header className="viz-editor-file-bar">
-			<h1>{document ? document.name : "ToskLight Viz"}</h1>
-			<p className="viz-editor-path">{document?.path ?? "No show open"}</p>
-			<div className="viz-editor-file-actions">
-				<Button
-					disabled={busy}
-					onClick={() => void run("Creating", actions.createShow)}
-				>
-					New
-				</Button>
-				<Button
-					disabled={busy}
-					onClick={() => void run("Opening", actions.openShow)}
-				>
-					Open
-				</Button>
-				<Button
-					disabled={busy}
-					title="Open a fresh copy of the demo rig that ships with ToskLight"
-					onClick={() => void run("Opening", actions.openDemoShow)}
-				>
-					Open Demo Show
-				</Button>
-				{desks.map((desk) => (
+		<section className="viz-editor-file-bar">
+			{page === "show" ? <div className="viz-show-actions">
+				<section>
+					<h2>New Show</h2>
 					<Button
-						key={desk.instance}
 						disabled={busy}
-						title={`${desk.name} at ${desk.address}`}
-						onClick={() => void run("Loading", () => actions.loadFrom(desk))}
+						onClick={() => void run("Creating", actions.createShow)}
 					>
-						Load from Desk · {desk.name}: {desk.show}
+						New Show
 					</Button>
-				))}
-				<Button
-					disabled={busy || !document}
-					onClick={() => void run("Saving", actions.saveShowAs)}
-				>
-					Save As
-				</Button>
-				<Button
-					disabled={busy || !document}
-					onClick={() => void run("Reading", actions.readMvr)}
-				>
-					Import MVR
-				</Button>
-				<Button
-					disabled={busy || !document}
-					onClick={() => void run("Exporting", actions.exportMvr)}
-				>
-					Export MVR
-				</Button>
-			</div>
-			<output className="viz-editor-status">{status}</output>
-			{pendingMvr && (
+				</section>
+				<section>
+					<h2>Open</h2>
+					<Button
+						disabled={busy}
+						onClick={() => void run("Opening", actions.openShow)}
+					>
+						Load Show from Disk
+					</Button>
+					<Button
+						disabled={busy}
+						title="Open a fresh copy of the demo rig that ships with ToskLight"
+						onClick={() => void run("Opening", actions.openDemoShow)}
+					>
+						Open Demo Show
+					</Button>
+					{desks.map((desk) => (
+						<Button
+							key={desk.instance}
+							disabled={busy}
+							title={`${desk.name} at ${desk.address}`}
+							onClick={() => void run("Loading", () => actions.loadFrom(desk))}
+						>
+							Load from Desk · {desk.name}: {desk.show}
+						</Button>
+					))}
+				</section>
+				<section>
+					<h2>Save As</h2>
+					<Button
+						disabled={busy || !document}
+						onClick={() => void run("Saving", actions.saveShowAs)}
+					>
+						Save As
+					</Button>
+				</section>
+				<section>
+					<h2>Import / Export</h2>
+					<Button
+						disabled={busy || !document}
+						onClick={() => void run("Reading", actions.readMvr)}
+					>
+						Import MVR
+					</Button>
+					<Button
+						disabled={busy || !document}
+						onClick={() => void run("Exporting", actions.exportMvr)}
+					>
+						Export MVR
+					</Button>
+				</section>
+			</div> : null}
+			{page === "dmx" && document ? (
+				<LiveDmxInputsPanel
+					document={document}
+					desks={desks}
+					onError={onError}
+				/>
+			) : null}
+			{page === "show" ? <output className="viz-editor-status">{status}</output> : null}
+			{page === "show" && pendingMvr && (
 				<MvrImport
 					// Keyed by the archive, so choosing another one starts its own decisions
 					// rather than inheriting the last archive's.
@@ -121,18 +146,20 @@ export function FileBar({
 					onError={onError}
 				/>
 			)}
-		</header>
+		</section>
 	);
 }
 
 function useFileActions(
 	onDocument: (summary: DocumentSummary) => void,
 	onReloadProfiles: () => void,
+	onReloadDocument: () => void,
 	setPendingMvr: (value: { path: string; preview: MvrPreview } | null) => void,
 ) {
 	const accept = (summary: DocumentSummary) => {
 		onDocument(summary);
 		onReloadProfiles();
+		onReloadDocument();
 		return summary;
 	};
 	return {

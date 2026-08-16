@@ -13,7 +13,7 @@ or **Reset physics scenery** in **Running & Output** > **Visualizer** restores t
 The desk command is authoritative and reaches every renderer following that target.
 
 The solver uses deterministic gravity against the authored floor and always settles a falling
-body with its lower face on that plane. High, Ultra and Extreme may also collide with static scenery;
+body with its lower face on that plane. High and Ultra may also collide with static scenery;
 Draft and Standard can omit that optional work while retaining gravity and the floor result.
 Scenery collision and collision between physics bodies are independent profile capabilities.
 Simulation steps and script execution are bounded so a slow or faulty body cannot make the whole

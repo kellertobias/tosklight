@@ -40,6 +40,10 @@ pub struct Options {
     /// Set when the operator or the desk named a connection, which distinguishes "connect to this
     /// desk" from "nothing was asked for".
     pub desk_requested: bool,
+    /// This launch was given an already-running Viz editor scene source. It uses the same HTTP
+    /// provider protocol as a desk, but must neither open another planning window nor inherit a
+    /// stored desk source.
+    pub planning_server_requested: bool,
     pub user: String,
     /// Set when this launch named the desk user, so stored preferences do not override it.
     pub user_requested: bool,
@@ -195,6 +199,7 @@ impl Default for Options {
             host: DEFAULT_DESK_HOST.to_owned(),
             port: DEFAULT_DESK_PORT,
             desk_requested: false,
+            planning_server_requested: false,
             user: "Operator".to_owned(),
             user_requested: false,
             target: "main".to_owned(),
@@ -232,15 +237,16 @@ impl Options {
             "Usage: viz-renderer [options]\n",
             "\n",
             "  --server <host>   Lighting-desk host or IP address (default 127.0.0.1)\n",
+            "  --planning-server <host>  Existing Viz editor scene source\n",
             "  --port <1-65535>  Lighting-desk API port (default 5000)\n",
             "  --user <name>     Desk user for the read-only visualizer session\n",
             "  --target <name>   Which renderer the desk addresses (default main)\n",
-            "  --demo            Render the built-in deterministic scene without connecting\n",
+            "  --demo            Open the same canonical Demo Show shipped with Desk and Editor\n",
             "  --verify          Open the window, present one frame, and exit\n",
             "  --capture <path>  Write one rendered PNG and exit\n",
             "  --capture-frames  Frames to settle before capturing (default 60)\n",
             "  --view <name>     Named view, for example top_down or full_3d\n",
-            "  --quality <tier>  draft | standard | high | ultra | extreme\n",
+            "  --quality <tier>  draft | standard | high | ultra\n",
             "  --show <path>     Open this show file instead of connecting to a running desk\n",
             "  --blender <path>  Blender to export snapshots with (found automatically otherwise)\n",
             "  --laser-scripts <dir>  Laser scan scripts overriding the ones fixtures ship\n",
@@ -248,7 +254,7 @@ impl Options {
             "  --helper          Run as the desk's supervised renderer helper\n",
             "  --theme <name>    light_on_dark | dark_on_light\n",
             "  --ambient <pct>   Brightness of everything that is not a light source\n",
-            "  --fog <pct>       Haze amount to render with (default 50)\n",
+            "  --fog <pct>       Haze amount to render with (default 15)\n",
             "  --exposure <x>    Operator exposure trim, 0.05-4.0\n",
             "  --laser <pct>     Brightness of every laser, 0-400 (default 100)\n",
             "  --crowd <pct>    Fraction of authored audiences to draw (default 100)\n",
@@ -383,6 +389,14 @@ impl Options {
                         .ok_or_else(|| "--server needs a host or IP address".to_owned())?;
                     options.desk_requested = true;
                 }
+                "--planning-server" => {
+                    options.host = arguments
+                        .next()
+                        .ok_or_else(|| "--planning-server needs a host or IP address".to_owned())?;
+                    options.source = ProviderKind::PlanningSoftware;
+                    options.desk_requested = true;
+                    options.planning_server_requested = true;
+                }
                 "--user" => {
                     options.user = arguments
                         .next()
@@ -499,7 +513,7 @@ pub struct Preferences {
     /// for the same reason the haze is: how strong a laser looks is a property of the room and the
     /// eye, not of the show.
     pub laser_brightness: f32,
-    /// Ultra/Extreme fog character. These remain renderer-local and never rewrite a show.
+    /// Ultra-only fog character. These remain renderer-local and never rewrite a show.
     pub fog_variation: viz_scene::FogVariation,
     /// Local audience amount; it never rewrites a Venue fixture or its deterministic seed.
     pub crowd_amount: f32,
@@ -595,9 +609,6 @@ impl Preferences {
         text.push_str(&format!("host {}\n", self.host));
         text.push_str(&format!("port {}\n", self.port));
         text.push_str(&format!("user {}\n", self.user));
-        // Version only the quality spelling. Before this marker, `ultra` named today's Extreme
-        // maximum; keeping that distinction lets old preferences retain their visual meaning.
-        text.push_str("quality_schema 2\n");
         text.push_str(&format!(
             "quality {}\n",
             match self.quality_override {
@@ -660,20 +671,47 @@ impl Preferences {
         text
     }
 
+    pub fn renderer_settings(&self) -> viz_scene::RendererSettings {
+        viz_scene::RendererSettings {
+            source: self.source.wire().into(),
+            host: self.host.clone(),
+            port: self.port,
+            user: self.user.clone(),
+            quality: self.quality_override.map(|quality| quality.wire().into()),
+            fog: self.atmosphere.amount,
+            persistence: self.persistence.decay_seconds,
+            persistence_falloff: self.persistence.falloff,
+            ambient: self.ambient,
+            exposure: self.exposure,
+            laser_brightness: self.laser_brightness,
+            lamp_fog_cloudiness: self.fog_variation.lamp_cloudiness,
+            lamp_fog_turbulence: self.fog_variation.lamp_turbulence,
+            laser_fog_cloudiness: self.fog_variation.laser_cloudiness,
+            laser_fog_turbulence: self.fog_variation.laser_turbulence,
+            crowd_amount: self.crowd_amount,
+            theme: self.theme.wire().into(),
+            background: self.background,
+            show_labels: self.show_labels,
+            show_selection: self.show_selection,
+            floor_grid: self.floor_grid,
+            blender: self.blender.clone(),
+            input_overrides: self
+                .input_overrides
+                .iter()
+                .map(|input| viz_scene::RendererInputOverride {
+                    universe: input.universe,
+                    protocol: input.protocol.wire().into(),
+                })
+                .collect(),
+        }
+    }
+
     /// Adopt stored preferences, keeping anything this launch named on the command line.
     ///
     /// An option given on the command line is what the operator asked for now, so it wins over
     /// what they last left the window set to. A line this build does not understand is skipped:
     /// preferences are a convenience, never a reason to refuse to start.
     pub fn adopt_file(&mut self, text: &str, options: &Options) {
-        let quality_schema = text
-            .lines()
-            .filter_map(|line| line.trim().split_once(char::is_whitespace))
-            .find_map(|(key, value)| {
-                (key == "quality_schema").then(|| value.trim().parse::<u32>().ok())
-            })
-            .flatten()
-            .unwrap_or(1);
         for line in text.lines() {
             let line = line.trim();
             if line.is_empty() || line.starts_with('#') {
@@ -705,11 +743,7 @@ impl Preferences {
                 }
                 "user" if !options.user_requested => self.user = value.to_owned(),
                 "quality" if options.quality.is_none() => {
-                    self.quality_override = if quality_schema < 2 && value == "ultra" {
-                        Some(RenderQuality::Extreme)
-                    } else {
-                        RenderQuality::from_wire(value)
-                    };
+                    self.quality_override = RenderQuality::from_wire(value);
                 }
                 "fog" if options.fog.is_none() => {
                     if let Ok(amount) = value.parse::<f32>() {
@@ -872,6 +906,28 @@ mod tests {
     }
 
     #[test]
+    fn an_existing_planning_server_is_used_without_opening_another_editor() {
+        let options = Options::from_arguments(arguments(&[
+            "--planning-server",
+            "127.0.0.1",
+            "--port",
+            "5311",
+        ]))
+        .unwrap();
+        assert_eq!(options.host, "127.0.0.1");
+        assert_eq!(options.port, 5311);
+        assert_eq!(options.source, ProviderKind::PlanningSoftware);
+        assert!(options.planning_server_requested);
+        assert_eq!(options.startup(), Startup::Desk);
+
+        let mut preferences = Preferences::from_options(&options);
+        preferences.adopt_file("source lighting_desk\nhost old-desk\nport 5000\n", &options);
+        assert_eq!(preferences.source, ProviderKind::PlanningSoftware);
+        assert_eq!(preferences.host, "127.0.0.1");
+        assert_eq!(preferences.port, 5311);
+    }
+
+    #[test]
     fn ports_outside_the_valid_range_are_rejected_with_a_readable_message() {
         assert!(parse_port("0").is_err());
         assert!(parse_port("65536").is_err());
@@ -944,12 +1000,6 @@ mod tests {
         let preferences = Preferences::from_options(&Options::default());
         assert_eq!(preferences.quality_label(), "Follow source");
     }
-
-    #[test]
-    fn extreme_is_a_named_command_line_quality() {
-        let options = Options::from_arguments(arguments(&["--quality", "extreme"])).unwrap();
-        assert_eq!(options.quality, Some(RenderQuality::Extreme));
-    }
 }
 
 #[cfg(test)]
@@ -968,7 +1018,7 @@ mod preference_tests {
         written.host = "10.0.0.9".into();
         written.port = 5310;
         written.user = "Board Op".into();
-        written.quality_override = Some(RenderQuality::Ultra);
+        written.quality_override = Some(RenderQuality::High);
         written.atmosphere.amount = 0.24;
         written.persistence.decay_seconds = 0.06;
         written.persistence.falloff = 3.5;
@@ -995,7 +1045,7 @@ mod preference_tests {
         assert_eq!(read.host, "10.0.0.9");
         assert_eq!(read.port, 5310);
         assert_eq!(read.user, "Board Op");
-        assert_eq!(read.quality_override, Some(RenderQuality::Ultra));
+        assert_eq!(read.quality_override, Some(RenderQuality::High));
         assert!((read.atmosphere.amount - 0.24).abs() < 1e-6);
         assert!((read.persistence.decay_seconds - 0.06).abs() < 1e-6);
         assert!((read.persistence.falloff - 3.5).abs() < 1e-6);
@@ -1010,19 +1060,6 @@ mod preference_tests {
         assert_eq!(read.floor_grid, Some(false));
         assert_eq!(read.blender, "/opt/blender");
         assert_eq!(read.input_for(3), Some(viz_dmx::Protocol::Sacn));
-    }
-
-    #[test]
-    fn legacy_ultra_preferences_migrate_to_extreme_while_new_ultra_stays_ultra() {
-        let options = Options::default();
-        let mut legacy = Preferences::from_options(&options);
-        legacy.adopt_file("quality ultra\n", &options);
-        assert_eq!(legacy.quality_override, Some(RenderQuality::Extreme));
-
-        let mut current = Preferences::from_options(&options);
-        current.adopt_file("quality_schema 2\nquality ultra\n", &options);
-        assert_eq!(current.quality_override, Some(RenderQuality::Ultra));
-        assert!(current.to_file().contains("quality_schema 2\n"));
     }
 
     /// A window that opens with nothing on it looks broken, so the one gesture that empties the

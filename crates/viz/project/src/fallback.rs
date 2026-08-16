@@ -389,6 +389,11 @@ fn reference_lumens(class: OpticalClass) -> f32 {
     }
 }
 
+/// Convert an installed source's rated output into the renderer's relative optical scale.
+pub(super) fn output_for_lumens(class: OpticalClass, lumens: f32) -> Option<f32> {
+    (lumens.is_finite() && lumens > 1.0).then(|| (lumens / reference_lumens(class)).clamp(0.2, 5.0))
+}
+
 /// The optics one head is given: the class's own character, with anything the profile actually
 /// declares taking precedence, and the lens kept inside the fixture that carries it.
 pub fn emitter_optics(
@@ -397,9 +402,10 @@ pub fn emitter_optics(
     luminous_output_lumens: Option<f32>,
 ) -> EmitterOptics {
     let mut optics = class.optics();
-    if let Some(lumens) = luminous_output_lumens.filter(|lumens| *lumens > 1.0) {
+    if let Some(output) = luminous_output_lumens.and_then(|lumens| output_for_lumens(class, lumens))
+    {
         // Bounded: one mistyped figure in a library must not wash out a whole rig.
-        optics.output = (lumens / reference_lumens(class)).clamp(0.2, 5.0);
+        optics.output = output;
     }
     // No lens is wider than the lantern it is fitted to. The narrowest side of the body is the
     // honest bound, because a bar is long in one axis and a lens is not.

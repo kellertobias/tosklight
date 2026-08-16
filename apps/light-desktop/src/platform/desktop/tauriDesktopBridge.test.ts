@@ -34,7 +34,10 @@ describe("Tauri desktop bridge", () => {
 		vi.clearAllMocks();
 		mocks.invoke.mockResolvedValue(undefined);
 		mocks.currentWindow.outerPosition.mockResolvedValue({ x: 200, y: 100 });
-		mocks.currentWindow.outerSize.mockResolvedValue({ width: 1600, height: 900 });
+		mocks.currentWindow.outerSize.mockResolvedValue({
+			width: 1600,
+			height: 900,
+		});
 		mocks.currentWindow.scaleFactor.mockResolvedValue(2);
 		mocks.currentWindow.isFullscreen.mockResolvedValue(true);
 		mocks.currentMonitor.mockResolvedValue({
@@ -61,6 +64,11 @@ describe("Tauri desktop bridge", () => {
 		});
 	});
 
+	it("opens the dedicated Stage renderer through the desktop command", async () => {
+		await tauriDesktopBridge.openVisualizer();
+		expect(mocks.invoke).toHaveBeenCalledWith("open_visualizer", undefined);
+	});
+
 	it("normalizes native geometry into logical screen coordinates", async () => {
 		await expect(tauriDesktopBridge.currentWindowState()).resolves.toEqual({
 			displayId: "Desk display|0,0|1920x1080",
@@ -70,15 +78,18 @@ describe("Tauri desktop bridge", () => {
 	});
 
 	it("owns native close prevention before notifying the application", async () => {
-		let nativeHandler: ((event: { preventDefault: () => void }) => void) | undefined;
+		let nativeHandler:
+			| ((event: { preventDefault: () => void }) => void)
+			| undefined;
 		const unsubscribe = vi.fn();
 		mocks.currentWindow.onCloseRequested.mockImplementation(async (handler) => {
 			nativeHandler = handler;
 			return unsubscribe;
 		});
 		const requested = vi.fn();
-		expect(await tauriDesktopBridge.onCurrentWindowCloseRequested(requested))
-			.toBe(unsubscribe);
+		expect(
+			await tauriDesktopBridge.onCurrentWindowCloseRequested(requested),
+		).toBe(unsubscribe);
 		const preventDefault = vi.fn();
 		nativeHandler?.({ preventDefault });
 		expect(preventDefault).toHaveBeenCalledOnce();

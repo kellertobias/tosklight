@@ -474,7 +474,6 @@ impl StagePane {
                     "draft" => viz_helper::protocol::RenderQuality::Draft,
                     "standard" => viz_helper::protocol::RenderQuality::Standard,
                     "ultra" => viz_helper::protocol::RenderQuality::Ultra,
-                    "extreme" => viz_helper::protocol::RenderQuality::Extreme,
                     _ => viz_helper::protocol::RenderQuality::High,
                 },
                 exposure: picture.exposure,
@@ -485,6 +484,7 @@ impl StagePane {
                 laser_fog_turbulence: picture.laser_fog_turbulence,
                 show_labels: picture.show_labels,
                 floor_grid: picture.floor_grid,
+                show_beam_guides: picture.show_beam_guides,
                 background: picture.background,
                 mode: match picture.mode.as_str() {
                     "top_down" => viz_helper::protocol::StageViewMode::TopDown,
@@ -816,7 +816,6 @@ fn read_renderer(mut from_helper: impl std::io::Read, outbox: &Sender<FromRender
                     viz_helper::protocol::RenderQuality::Standard => "standard",
                     viz_helper::protocol::RenderQuality::High => "high",
                     viz_helper::protocol::RenderQuality::Ultra => "ultra",
-                    viz_helper::protocol::RenderQuality::Extreme => "extreme",
                 },
                 follow_preload,
                 width,
@@ -1080,6 +1079,7 @@ pub(crate) struct Picture {
     laser_fog_turbulence: f32,
     show_labels: bool,
     floor_grid: bool,
+    show_beam_guides: bool,
     /// The colour behind the rig, linear RGB.
     background: [f32; 3],
     /// Which way the Stage is being looked at, as the web layer names it.

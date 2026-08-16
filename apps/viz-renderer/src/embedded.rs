@@ -108,6 +108,7 @@ pub fn run(mut source: HelperSource) -> Result<(), String> {
             laser_fog_turbulence,
             show_labels,
             floor_grid,
+            show_beam_guides,
             background,
             mode,
             follow_preload,
@@ -128,6 +129,7 @@ pub fn run(mut source: HelperSource) -> Result<(), String> {
             };
             state.view.show_labels = *show_labels;
             state.view.floor_grid = *floor_grid;
+            state.view.show_aim_guides = *show_beam_guides;
             state.view.background = Some(background.map(|channel| channel.clamp(0.0, 1.0)));
             // The provider is what lays the preload over the live picture, so the flag goes to it
             // rather than being kept here: the values are decoded there, and a second opinion about
@@ -177,7 +179,6 @@ pub fn run(mut source: HelperSource) -> Result<(), String> {
                 viz_helper::protocol::RenderQuality::Standard => viz_scene::RenderQuality::Standard,
                 viz_helper::protocol::RenderQuality::High => viz_scene::RenderQuality::High,
                 viz_helper::protocol::RenderQuality::Ultra => viz_scene::RenderQuality::Ultra,
-                viz_helper::protocol::RenderQuality::Extreme => viz_scene::RenderQuality::Extreme,
             };
         }
         state.resize_for(&embedding)?;
@@ -254,7 +255,9 @@ fn drain(events: Vec<ProviderEvent>, state: &mut PaneState) -> bool {
             ProviderEvent::Connection(connection) => {
                 finished |= matches!(connection, viz_scene::ConnectionState::Failed { .. });
             }
-            ProviderEvent::Diagnostics(_) | ProviderEvent::ResyncRequired { .. } => {}
+            ProviderEvent::Diagnostics(_)
+            | ProviderEvent::RendererSettings(_)
+            | ProviderEvent::ResyncRequired { .. } => {}
         }
     }
     finished
@@ -267,6 +270,7 @@ fn drain(events: Vec<ProviderEvent>, state: &mut PaneState) -> bool {
 /// render-state structure.
 fn adopt_provider_values(current: &mut SceneValues, mut next: SceneValues, physics_bodies: usize) {
     next.selected_fixtures = std::mem::take(&mut current.selected_fixtures);
+    next.retain_visual_motion_runtime_from(current);
     next.retain_physics_runtime_from(current, physics_bodies);
     *current = next;
 }
@@ -655,7 +659,6 @@ impl PaneState {
             viz_scene::RenderQuality::Standard => viz_helper::protocol::RenderQuality::Standard,
             viz_scene::RenderQuality::High => viz_helper::protocol::RenderQuality::High,
             viz_scene::RenderQuality::Ultra => viz_helper::protocol::RenderQuality::Ultra,
-            viz_scene::RenderQuality::Extreme => viz_helper::protocol::RenderQuality::Extreme,
         };
         let renderer = format!(
             "{} ({}, {}x MSAA)",
@@ -808,6 +811,32 @@ mod tests {
 
         assert_eq!(current.frame, 8, "the new output frame is still adopted");
         assert_eq!(current.selected_fixtures, [selected].into_iter().collect());
+    }
+
+    #[test]
+    fn live_value_frames_do_not_reset_motion_advanced_by_the_renderer() {
+        let target = viz_scene::PhysicalMotionTarget::Position {
+            degrees: 54.0,
+            max_speed: 180.0,
+            acceleration: 360.0,
+            deceleration: 360.0,
+        };
+        let mut current = SceneValues::default();
+        current.resize(1);
+        current.emitters[0].pan_motion.position_degrees = 12.0;
+        current.emitters[0].pan_motion.velocity_degrees_per_second = 40.0;
+        let mut next = SceneValues::default();
+        next.resize(1);
+        next.emitters[0].pan_motion.target = Some(target);
+
+        adopt_provider_values(&mut current, next, 0);
+
+        assert_eq!(current.emitters[0].pan_motion.position_degrees, 12.0);
+        assert_eq!(
+            current.emitters[0].pan_motion.velocity_degrees_per_second,
+            40.0
+        );
+        assert_eq!(current.emitters[0].pan_motion.target, Some(target));
     }
 
     /// The desk works in points and the texture in pixels. Getting this wrong is a pane that is

@@ -75,6 +75,8 @@ pub enum ProviderEvent {
     Values(Box<SceneValues>),
     /// Authoritative view configuration from the source.
     View(ViewConfiguration),
+    /// Renderer-local settings changed on another connected operator surface.
+    RendererSettings(crate::RendererSettingsUpdate),
     /// Diagnostics refresh.
     Diagnostics(Box<ProviderDiagnostics>),
     /// The provider needs the host to discard deltas and wait for a fresh snapshot.
@@ -116,6 +118,10 @@ pub trait SceneProvider: Send {
 
     /// Ask for a fresh full snapshot, for example after a revision gap.
     fn request_resync(&mut self);
+
+    /// Publish renderer settings changed on this surface to any connected planning window.
+    /// Lighting desks and providers without a writable settings contract ignore this.
+    fn update_renderer_settings(&mut self, _intent: crate::RendererSettingsIntent) {}
 
     /// Stop the provider and release its sockets and tasks.
     fn shutdown(&mut self);

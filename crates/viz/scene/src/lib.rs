@@ -18,6 +18,7 @@ mod diagnostics;
 mod model;
 mod persistence;
 mod provider;
+mod renderer_settings;
 mod scene;
 mod values;
 mod view;
@@ -34,6 +35,10 @@ pub use persistence::{
 };
 pub use provider::{
     ProviderCapabilities, ProviderError, ProviderEvent, ProviderKind, SceneProvider,
+};
+pub use renderer_settings::{
+    RendererInputOverride, RendererSettingChange, RendererSettings, RendererSettingsIntent,
+    RendererSettingsUpdate,
 };
 pub use scene::{
     Aabb, BodyKind, CrowdArea, CrowdDensity, CrowdPosture, EffectProgram, EmitterInstance,

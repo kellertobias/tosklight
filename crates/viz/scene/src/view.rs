@@ -199,13 +199,13 @@ impl ViewMode {
 /// Bounded rendering cost tier. Independent from [`ViewMode`]; `Full3d` at `Draft` still renders
 /// volumetrics, just with a smaller budget.
 ///
-/// The five tiers are a ladder of what is in the beam, and each one adds to the one below it:
+/// The four tiers are a ladder of what is in the beam, and each one adds to the one below it:
 ///
 /// - **Draft** — the light cones, and nothing in them.
 /// - **Standard** — and the gobos, so a projected pattern is a pattern rather than a plain cone.
 /// - **High** — and the fall-off: shaped edges, shadows where a beam meets something opaque.
-/// - **Ultra** — and moderate moving haze detail, with a practical fixed 48-step budget.
-/// - **Extreme** — the former Ultra maximum: full haze variation and the adaptive 64-step peak.
+/// - **Ultra** — and the haze itself, drifting and uneven, so a beam through it varies along
+///   its length instead of running through a uniform slab.
 #[derive(
     Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, serde::Serialize, serde::Deserialize,
 )]
@@ -214,14 +214,13 @@ pub enum RenderQuality {
     Standard,
     High,
     Ultra,
-    Extreme,
 }
 
-/// Ultra/Extreme controls for the spatial and temporal character of participating fog.
+/// Ultra-only controls for the spatial and temporal character of participating fog.
 ///
 /// These are part of the view rather than the scene: they describe how this Visualizer observes
 /// the room. Values are retained at every quality tier, while the renderer deliberately applies
-/// them only at Ultra and Extreme.
+/// them only at Ultra.
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct FogVariation {
     pub lamp_cloudiness: f32,
@@ -257,7 +256,7 @@ impl FogVariation {
     /// Values the shaders receive. Lower tiers retain authored values but keep their old uniform
     /// fog appearance.
     pub fn for_quality(self, quality: RenderQuality) -> Self {
-        if matches!(quality, RenderQuality::Ultra | RenderQuality::Extreme) {
+        if quality == RenderQuality::Ultra {
             self.clamped()
         } else {
             Self {
@@ -271,13 +270,7 @@ impl FogVariation {
 }
 
 impl RenderQuality {
-    pub const ALL: [Self; 5] = [
-        Self::Draft,
-        Self::Standard,
-        Self::High,
-        Self::Ultra,
-        Self::Extreme,
-    ];
+    pub const ALL: [Self; 4] = [Self::Draft, Self::Standard, Self::High, Self::Ultra];
 
     pub fn label(self) -> &'static str {
         match self {
@@ -285,7 +278,6 @@ impl RenderQuality {
             Self::Standard => "Standard",
             Self::High => "High",
             Self::Ultra => "Ultra",
-            Self::Extreme => "Extreme",
         }
     }
 
@@ -295,7 +287,6 @@ impl RenderQuality {
             Self::Standard => "standard",
             Self::High => "high",
             Self::Ultra => "ultra",
-            Self::Extreme => "extreme",
         }
     }
 
@@ -311,8 +302,7 @@ impl RenderQuality {
             Self::Draft => 12,
             Self::Standard => 24,
             Self::High => 40,
-            Self::Ultra => 48,
-            Self::Extreme => 64,
+            Self::Ultra => 64,
         }
     }
 
@@ -324,8 +314,7 @@ impl RenderQuality {
         match self {
             Self::Draft | Self::Standard => 0,
             Self::High => 6,
-            Self::Ultra => 8,
-            Self::Extreme => 10,
+            Self::Ultra => 10,
         }
     }
 
@@ -343,7 +332,7 @@ impl RenderQuality {
     /// Below this a beam is an evenly filled cone. That reads clearly and costs almost nothing,
     /// which is what the cheap tiers are for.
     pub fn draws_beam_falloff(self) -> bool {
-        self >= Self::High
+        matches!(self, Self::High | Self::Ultra)
     }
 
     /// Render-target scale applied before the upscale/composite pass.
@@ -353,22 +342,19 @@ impl RenderQuality {
             Self::Standard => 1.0,
             Self::High => 1.0,
             Self::Ultra => 1.0,
-            Self::Extreme => 1.0,
         }
     }
 
     /// How much the haze is allowed to vary through the room, `0..=1`.
     ///
     /// Real haze is never a uniform slab: it drifts, it is thicker where it was last pumped, and
-    /// a beam crossing it brightens and thins along its length. Ultra and Extreme pay for that.
-    /// Every tier below them keeps the uniform medium, because the noise costs a lookup at every march
-    /// step of every beam and it is the last thing an operator needs to see the rig. Ultra uses
-    /// half-strength variation; Extreme retains the former Ultra maximum.
+    /// a beam crossing it brightens and thins along its length. Only Ultra pays for that. Every
+    /// tier below it keeps the uniform medium, because the noise costs a lookup at every march
+    /// step of every beam and it is the last thing an operator needs to see the rig.
     pub fn fog_detail(self) -> f32 {
         match self {
             Self::Draft | Self::Standard | Self::High => 0.0,
-            Self::Ultra => 0.35,
-            Self::Extreme => 0.7,
+            Self::Ultra => 0.7,
         }
     }
 
@@ -636,6 +622,9 @@ pub struct ViewConfiguration {
     pub background: Option<[f32; 3]>,
     /// Draw the reference grid on the ground plane.
     pub floor_grid: bool,
+    /// Draw dashed direction guides for unlit fixtures in the 3D diagram.
+    #[serde(default)]
+    pub show_aim_guides: bool,
     /// Desk-issued monotonic generation; an increase resets every physics body authoritatively.
     #[serde(default)]
     pub physics_reset_generation: u64,
@@ -659,6 +648,7 @@ impl Default for ViewConfiguration {
             show_labels: true,
             background: Some(DEFAULT_BACKGROUND),
             floor_grid: true,
+            show_aim_guides: false,
             physics_reset_generation: 0,
         }
     }
@@ -688,23 +678,7 @@ mod tests {
     }
 
     #[test]
-    fn quality_ladder_orders_ultra_between_high_and_extreme_with_distinct_budgets() {
-        assert_eq!(
-            RenderQuality::ALL.map(RenderQuality::label),
-            ["Draft", "Standard", "High", "Ultra", "Extreme"]
-        );
-        assert_eq!(RenderQuality::High.volumetric_steps(), 40);
-        assert_eq!(RenderQuality::Ultra.volumetric_steps(), 48);
-        assert_eq!(RenderQuality::Extreme.volumetric_steps(), 64);
-        assert_eq!(RenderQuality::High.shadow_budget(), 6);
-        assert_eq!(RenderQuality::Ultra.shadow_budget(), 8);
-        assert_eq!(RenderQuality::Extreme.shadow_budget(), 10);
-        assert!(RenderQuality::High.fog_detail() < RenderQuality::Ultra.fog_detail());
-        assert!(RenderQuality::Ultra.fog_detail() < RenderQuality::Extreme.fog_detail());
-    }
-
-    #[test]
-    fn fog_character_defaults_are_explicit_and_only_apply_to_ultra_and_extreme() {
+    fn fog_character_defaults_are_explicit_and_only_apply_to_ultra() {
         assert_eq!(FogVariation::default(), DEFAULT_FOG_VARIATION);
         assert_eq!(DEFAULT_FOG_VARIATION.lamp_cloudiness, 0.7);
         assert_eq!(DEFAULT_FOG_VARIATION.lamp_turbulence, 1.0);
@@ -723,10 +697,6 @@ mod tests {
         }
         assert_eq!(
             FogVariation::default().for_quality(RenderQuality::Ultra),
-            DEFAULT_FOG_VARIATION
-        );
-        assert_eq!(
-            FogVariation::default().for_quality(RenderQuality::Extreme),
             DEFAULT_FOG_VARIATION
         );
     }
