@@ -126,6 +126,7 @@ impl Harness {
         self.handle(ProgrammingCommand::ApplyKey {
             key,
             phase: CommandKeyPhase::Press,
+            gesture: None,
             execute_policy: ExecutionPolicy::AtomicProgrammer,
         })
     }
@@ -313,6 +314,7 @@ fn request_replay_is_exactly_once_and_retains_original_context() {
     let command = ProgrammingCommand::ApplyKey {
         key: CommandKey::Digit(1),
         phase: CommandKeyPhase::Press,
+        gesture: None,
         execute_policy: ExecutionPolicy::AtomicProgrammer,
     };
     let first = harness.handle(command.clone());
@@ -332,6 +334,7 @@ fn request_replay_is_exactly_once_and_retains_original_context() {
             command: ProgrammingCommand::ApplyKey {
                 key: CommandKey::Digit(2),
                 phase: CommandKeyPhase::Press,
+                gesture: None,
                 execute_policy: ExecutionPolicy::AtomicProgrammer,
             },
         },
@@ -348,6 +351,7 @@ fn request_replay_retains_an_edit_persistence_warning() {
     let command = ProgrammingCommand::ApplyKey {
         key: CommandKey::Digit(1),
         phase: CommandKeyPhase::Press,
+        gesture: None,
         execute_policy: ExecutionPolicy::AtomicProgrammer,
     };
 

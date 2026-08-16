@@ -4,6 +4,16 @@
   "description": "Applies one logical key through the shared desk command-line state machine.",
   "type": "object",
   "properties": {
+    "gesture": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CommandGesture"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "key": {
       "$ref": "#/$defs/CommandKey"
     },
@@ -20,6 +30,29 @@
     "request_id"
   ],
   "$defs": {
+    "CommandGesture": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/CommandGestureKind"
+        },
+        "shifted": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": [
+        "kind"
+      ]
+    },
+    "CommandGestureKind": {
+      "type": "string",
+      "enum": [
+        "regular",
+        "double",
+        "hold"
+      ]
+    },
     "CommandKey": {
       "description": "A logical key name, independent of keyboard layout and transport.",
       "type": "string",
@@ -27,6 +60,8 @@
         "SET",
         "GRP",
         "CUE",
+        "PBK",
+        "OFF",
         "UND",
         "CLR",
         "DEL",
@@ -45,6 +80,15 @@
         "DELAY",
         "LINK",
         "SELECT",
+        "HIGH",
+        "PREV",
+        "NEXT",
+        "ALL",
+        "ENC",
+        "PGUP",
+        "PGDN",
+        "ALIGN",
+        "FADE",
         "+",
         "-",
         ".",

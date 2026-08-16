@@ -26,6 +26,13 @@ export type SoftwareKey =
 	| "TRU"
 	| "DIV"
 	| "DIFF"
+	| "HIGH"
+	| "PREV"
+	| "NEXT"
+	| "ALL"
+	| "ENC"
+	| "ALIGN"
+	| "FADE"
 	| "PAGE_UP"
 	| "PAGE_DOWN"
 	| "BACKSPACE"
@@ -144,6 +151,8 @@ const oscActionNames: Partial<Record<SoftwareKey, ProgrammerControlAction>> = {
 	DIFF: "diff",
 	PAGE_UP: "page-up",
 	PAGE_DOWN: "page-down",
+	ENC: "prog-playback",
+	ALIGN: "align",
 	TRU: "thru",
 	".": "dot",
 	"+": "plus",

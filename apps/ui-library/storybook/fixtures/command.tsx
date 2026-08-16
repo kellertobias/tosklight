@@ -54,7 +54,7 @@ export function StaticCommandLine({
 			onRecordCancel={() => undefined}
 			onRecordComplete={() => undefined}
 			onAdvancePreload={() => undefined}
-			onReleasePreload={() => undefined}
+			onInspectPreload={() => undefined}
 		/>
 	);
 }

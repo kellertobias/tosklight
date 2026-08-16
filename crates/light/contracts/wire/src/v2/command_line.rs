@@ -24,7 +24,25 @@ pub struct ReplaceCommandLineRequest {
 pub struct CommandKeyRequest {
     pub key: CommandKey,
     pub phase: CommandKeyPhase,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub gesture: Option<CommandGesture>,
     pub request_id: String,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct CommandGesture {
+    pub kind: CommandGestureKind,
+    #[serde(default)]
+    pub shifted: bool,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum CommandGestureKind {
+    Regular,
+    Double,
+    Hold,
 }
 
 /// Executes either the desk's current command line or an explicitly supplied complete line.
@@ -53,6 +71,10 @@ pub enum CommandKey {
     Group,
     #[serde(rename = "CUE")]
     Cue,
+    #[serde(rename = "PBK")]
+    Playback,
+    #[serde(rename = "OFF")]
+    Off,
     #[serde(rename = "UND")]
     Undo,
     #[serde(rename = "CLR")]
@@ -89,6 +111,24 @@ pub enum CommandKey {
     Link,
     #[serde(rename = "SELECT")]
     Select,
+    #[serde(rename = "HIGH")]
+    Highlight,
+    #[serde(rename = "PREV")]
+    Previous,
+    #[serde(rename = "NEXT")]
+    Next,
+    #[serde(rename = "ALL")]
+    All,
+    #[serde(rename = "ENC")]
+    EncoderPlayback,
+    #[serde(rename = "PGUP")]
+    PageUp,
+    #[serde(rename = "PGDN")]
+    PageDown,
+    #[serde(rename = "ALIGN")]
+    Align,
+    #[serde(rename = "FADE")]
+    Fade,
     #[serde(rename = "+")]
     Plus,
     #[serde(rename = "-")]
@@ -336,6 +376,7 @@ mod tests {
         let request = CommandKeyRequest {
             key: CommandKey::Plus,
             phase: CommandKeyPhase::Press,
+            gesture: None,
             request_id: "request-2".into(),
         };
         assert_eq!(
@@ -345,6 +386,28 @@ mod tests {
                 "phase": "press",
                 "request_id": "request-2"
             })
+        );
+    }
+
+    #[test]
+    fn semantic_gestures_and_manual_keys_round_trip() {
+        let request = CommandKeyRequest {
+            key: CommandKey::Playback,
+            phase: CommandKeyPhase::Press,
+            gesture: Some(CommandGesture {
+                kind: CommandGestureKind::Double,
+                shifted: true,
+            }),
+            request_id: "request-gesture".into(),
+        };
+        let value = serde_json::to_value(&request).expect("serialize gesture request");
+        assert_eq!(value["key"], "PBK");
+        assert_eq!(value["gesture"]["kind"], "double");
+        assert_eq!(value["gesture"]["shifted"], true);
+        assert_eq!(
+            serde_json::from_value::<CommandKeyRequest>(value)
+                .expect("deserialize gesture request"),
+            request
         );
     }
 

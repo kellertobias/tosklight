@@ -35,6 +35,7 @@ interface ShortcutCallbacks {
 	pressSet: () => void;
 	toggleRecord: () => void;
 	advancePreload: () => void;
+	inspectPreload: () => void;
 	clear: () => void;
 	toggleFixtureFreeze: () => void;
 	selectFixtureFreezeFamily: (key: "1" | "2" | "3" | "4") => void;
@@ -51,14 +52,24 @@ interface UpdateGesture {
 	mode: { current: "record" | "update" | null };
 }
 
+interface PreloadGesture {
+	hold: { current: number | null };
+	active: { current: boolean };
+	held: { current: boolean };
+}
+
 interface ShortcutContext extends ShortcutCallbacks, PlaybackShortcutContext {
 	state: AppState;
 	dispatch: Dispatch<Action>;
 	update: UpdateGesture;
+	preload: PreloadGesture;
 	setInteraction: ReturnType<typeof useSetInteraction>;
 	pageChord: PageKeyChord;
 	keyboardShiftDown: { current: boolean };
+	regularNumberShortcuts: boolean;
 }
+
+const PRELOAD_HOLD_MS = 650;
 
 export class PageKeyChord {
 	private held = new Set<"PageUp" | "PageDown">();
@@ -186,6 +197,16 @@ function beginRecordGesture(
 	}, RECORD_HOLD_MS);
 }
 
+function beginPreloadGesture(context: ShortcutContext, event: KeyboardEvent) {
+	if (event.repeat || context.preload.active.current) return;
+	context.preload.active.current = true;
+	context.preload.held.current = false;
+	context.preload.hold.current = window.setTimeout(() => {
+		context.preload.held.current = true;
+		context.inspectPreload();
+	}, PRELOAD_HOLD_MS);
+}
+
 function applySoftwareEdit(
 	context: ShortcutContext,
 	key: Parameters<typeof editTargetedCommandWithSoftwareKey>[1],
@@ -224,7 +245,7 @@ function handleSoftwareKey(context: ShortcutContext, event: KeyboardEvent) {
 		);
 		return;
 	}
-	const key = softwareKeyFromKeyboard(event, true);
+	const key = softwareKeyFromKeyboard(event, context.regularNumberShortcuts);
 	if (!key) return;
 	const shifted = context.state.shiftArmed || event.shiftKey;
 	if (key === "REC" && shifted) {
@@ -257,7 +278,7 @@ function handleSoftwareKey(context: ShortcutContext, event: KeyboardEvent) {
 	} else if (key === "REC") {
 		beginRecordGesture(context, event, event.shiftKey);
 	} else if (key === "PRE") {
-		context.advancePreload();
+		beginPreloadGesture(context, event);
 	} else if (key === "CLR" && event.shiftKey) {
 		context.toggleFixtureFreeze();
 	} else if (key === "CLR") {
@@ -273,6 +294,11 @@ function handleSoftwareKey(context: ShortcutContext, event: KeyboardEvent) {
 
 function handleKeyDown(context: ShortcutContext, event: KeyboardEvent) {
 	if (event.defaultPrevented || isExternalEditor(event.target)) return;
+	if (event.ctrlKey && !event.metaKey && !event.altKey && event.key.toLowerCase() === "z") {
+		event.preventDefault();
+		context.undo();
+		return;
+	}
 	if (event.metaKey || event.ctrlKey || event.altKey) return;
 	if (handleFunctionKey(context, event)) return;
 	if (handlePageKey(context, event)) return;
@@ -290,6 +316,15 @@ function finishUpdateGesture(context: ShortcutContext) {
 	}
 	context.update.held.current = false;
 	context.update.mode.current = null;
+}
+
+function finishPreloadGesture(context: ShortcutContext) {
+	if (context.preload.hold.current)
+		window.clearTimeout(context.preload.hold.current);
+	context.preload.hold.current = null;
+	context.preload.active.current = false;
+	if (!context.preload.held.current) context.advancePreload();
+	context.preload.held.current = false;
 }
 
 function handleKeyUp(context: ShortcutContext, event: KeyboardEvent) {
@@ -312,6 +347,10 @@ function handleKeyUp(context: ShortcutContext, event: KeyboardEvent) {
 		finishUpdateGesture(context);
 		return;
 	}
+	if (event.code === "Backquote" && context.preload.active.current) {
+		finishPreloadGesture(context);
+		return;
+	}
 	releasePlaybackSlot(context, event);
 }
 
@@ -321,6 +360,11 @@ function releaseHeldControls(context: ShortcutContext) {
 	context.update.hold.current = null;
 	context.update.active.current = false;
 	context.update.mode.current = null;
+	if (context.preload.hold.current)
+		window.clearTimeout(context.preload.hold.current);
+	context.preload.hold.current = null;
+	context.preload.active.current = false;
+	context.preload.held.current = false;
 	context.heldActions.releaseAll();
 	context.pageActions.invalidate();
 	context.pageChord.reset();
@@ -335,7 +379,7 @@ export function useCommandLineShortcuts(
 	callbacks: ShortcutCallbacks,
 ) {
 	const { state, dispatch } = useApp();
-	const active = !hardware && state.regularNumberShortcuts;
+	const active = !hardware;
 	const authority = usePlaybackShortcutAuthority(active);
 	const runtimeActions = usePlaybackRuntimeActions();
 	const topologyActions = usePlaybackTopologyActions();
@@ -345,6 +389,11 @@ export function useCommandLineShortcuts(
 		active: useRef(false),
 		held: useRef(false),
 		mode: useRef(null),
+	};
+	const preload: PreloadGesture = {
+		hold: useRef<number | null>(null),
+		active: useRef(false),
+		held: useRef(false),
 	};
 	const heldActions = useRef(new KeyboardHeldActions()).current;
 	const pageActions = useRef(new KeyboardPageActions()).current;
@@ -357,10 +406,12 @@ export function useCommandLineShortcuts(
 		authority,
 		runtimeActions,
 		update,
+		preload,
 		heldActions,
 		pageActions,
 		pageChord,
 		keyboardShiftDown,
+		regularNumberShortcuts: state.regularNumberShortcuts,
 		setInteraction,
 		...callbacks,
 	};

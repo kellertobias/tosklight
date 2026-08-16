@@ -530,6 +530,35 @@ impl CommandHttpScenario {
             .unwrap()
     }
 
+    async fn gesture_key(
+        &self,
+        key: &str,
+        kind: &str,
+        shifted: bool,
+        request_id: &str,
+    ) -> Response {
+        self.app
+            .clone()
+            .oneshot(
+                Request::post(format!("{}/keys", self.path))
+                    .header(header::AUTHORIZATION, format!("Bearer {}", self.token))
+                    .header("x-tosk-desk", self.session.desk.id.to_string())
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::json!({
+                            "key": key,
+                            "phase": "press",
+                            "gesture": { "kind": kind, "shifted": shifted },
+                            "request_id": request_id,
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap()
+    }
+
     async fn selection_action(&self, input: serde_json::Value) -> Response {
         self.selection_action_for(self.session.desk.id, input).await
     }

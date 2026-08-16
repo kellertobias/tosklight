@@ -64,7 +64,7 @@ const meta = {
 		onRecordCancel: () => undefined,
 		onRecordComplete: () => undefined,
 		onAdvancePreload: () => undefined,
-		onReleasePreload: () => undefined,
+		onInspectPreload: () => undefined,
 	},
 } satisfies Meta<typeof CommandLine>;
 
@@ -170,7 +170,7 @@ function CommandLineHarness({
 					setPreloadArmed((armed) => !armed);
 					setPreloadActive(true);
 				}}
-				onReleasePreload={() => {
+				onInspectPreload={() => {
 					setPreloadArmed(false);
 					setPreloadActive(false);
 				}}

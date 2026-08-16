@@ -703,35 +703,7 @@ fn apply_programmer_key(
     pressed: bool,
 ) -> Result<(), PortError> {
     let session = require_session(session, "Programmer control")?;
-    if state.extensions.shift_held(host) {
-        if pressed {
-            let handled = if key == ProgrammerKey::Clear {
-                super::fixture_freeze::advance_command_mode(state, session)
-            } else {
-                let digit = match key {
-                    ProgrammerKey::One => 1,
-                    ProgrammerKey::Two => 2,
-                    ProgrammerKey::Three => 3,
-                    ProgrammerKey::Four => 4,
-                    _ => 0,
-                };
-                super::fixture_freeze::append_command_family(state, session, digit)
-            };
-            if handled {
-                super::persist_programmer(state, session)
-                    .map_err(|error| PortError::new(error.message))?;
-                emit(
-                    state,
-                    "programmer_changed",
-                    serde_json::json!({"session_id":session.id,"source":"extension"}),
-                );
-                return Ok(());
-            }
-        }
-        if key == ProgrammerKey::Clear {
-            return Ok(());
-        }
-    }
+    let shifted = state.extensions.shift_held(host);
     if pressed
         && super::file_manager::route_control_input(
             state,
@@ -764,7 +736,89 @@ fn apply_programmer_key(
         return Ok(());
     }
     let key = application_programmer_key(key);
-    apply_application_programmer_key(state, session, key, pressed)
+    let gesture = pressed.then(|| {
+        let current = state
+            .programming
+            .get(session.id)
+            .map(|programmer| programmer.command_line)
+            .unwrap_or_default();
+        let repeated = if shifted {
+            match key {
+                light_programmer::command_line::CommandKey::Group => {
+                    current.trim_end().ends_with("FIXTURE")
+                }
+                light_programmer::command_line::CommandKey::Divide => {
+                    current.trim_end().ends_with("GO TO")
+                }
+                light_programmer::command_line::CommandKey::Clear => {
+                    current.trim_end().ends_with("FREEZE")
+                }
+                light_programmer::command_line::CommandKey::Digit(digit) => [
+                    "ALL",
+                    "INTENSITY",
+                    "COLOR",
+                    "POSITION",
+                    "BEAM",
+                    "DYNAMICS",
+                    "SHAPERS",
+                    "FOCUS",
+                    "CONTROL",
+                    "MEDIA",
+                ]
+                .get(usize::from(digit))
+                .is_some_and(|family| current.trim_end().ends_with(family)),
+                _ => false,
+            }
+        } else {
+            key == light_programmer::command_line::CommandKey::Off
+                && current.trim_end().ends_with("OFF")
+        };
+        light_programmer::command_line::CommandGesture {
+            kind: if repeated {
+                light_programmer::command_line::CommandGestureKind::Double
+            } else {
+                light_programmer::command_line::CommandGestureKind::Regular
+            },
+            shifted,
+        }
+    });
+    if let Some(gesture) = gesture {
+        let current = state
+            .programming
+            .command_line_state(session.id)
+            .ok_or_else(|| PortError::new("Programmer command line is unavailable"))?;
+        if let light_programmer::command_line::CommandGestureIntent::Immediate(action) =
+            light_programmer::command_line::command_gesture_intent(&current, key, gesture)
+        {
+            let action = match action {
+                light_programmer::command_line::CommandImmediateAction::RunningOutput => {
+                    "running-output"
+                }
+                light_programmer::command_line::CommandImmediateAction::Lock => "shift-enter",
+                light_programmer::command_line::CommandImmediateAction::Undo => "shift-escape",
+                light_programmer::command_line::CommandImmediateAction::ClearPreload => {
+                    "shift-preload"
+                }
+                light_programmer::command_line::CommandImmediateAction::AlignOff => "shift-align",
+                _ => return Ok(()),
+            };
+            emit(
+                state,
+                "desk_action",
+                serde_json::json!({
+                    "desk_alias": desk.osc_alias,
+                    "desk_id": desk.id,
+                    "session_id": session.id,
+                    "action": action,
+                    "source": "extension",
+                    "extension_id": host.extension_id,
+                    "extension_instance_id": host.extension_instance_id,
+                }),
+            );
+            return Ok(());
+        }
+    }
+    apply_application_programmer_key(state, session, key, pressed, gesture)
 }
 
 fn apply_application_programmer_key(
@@ -772,6 +826,7 @@ fn apply_application_programmer_key(
     session: &Session,
     key: light_programmer::command_line::CommandKey,
     pressed: bool,
+    gesture: Option<light_programmer::command_line::CommandGesture>,
 ) -> Result<(), PortError> {
     let _activation = super::programming_interaction::try_programming_activation(state)
         .map_err(PortError::new)?;
@@ -791,6 +846,7 @@ fn apply_application_programmer_key(
             } else {
                 light_programmer::command_line::CommandKeyPhase::Release
             },
+            gesture,
             execute_policy: light_application::ExecutionPolicy::Compatibility,
         },
         "extension",
@@ -816,6 +872,7 @@ fn apply_programmer_modifier(
         session,
         light_programmer::command_line::CommandKey::Shift,
         pressed,
+        None,
     )?;
     state.extensions.set_shift_held(host, pressed);
     Ok(())
@@ -898,14 +955,31 @@ fn application_programmer_key(key: ProgrammerKey) -> light_programmer::command_l
         At => App::At,
         Enter => App::Enter,
         Clear => App::Clear,
+        Undo => App::Undo,
         Group => App::Group,
         Cue => App::Cue,
+        Playback => App::Playback,
+        Off => App::Off,
         Record => App::Record,
+        Preload => App::Preload,
         Delete => App::Delete,
         Copy => App::Copy,
         Move => App::Move,
         Set => App::Set,
         Time => App::Time,
+        Thru => App::Thru,
+        Divide => App::Divide,
+        Backspace => App::Backspace,
+        Escape => App::Escape,
+        Highlight => App::Highlight,
+        Previous => App::Previous,
+        Next => App::Next,
+        All => App::All,
+        EncoderPlayback => App::EncoderPlayback,
+        PageUp => App::PageUp,
+        PageDown => App::PageDown,
+        Align => App::Align,
+        Fade => App::Fade,
     }
 }
 
@@ -1068,14 +1142,31 @@ fn programmer_key_name(key: ProgrammerKey) -> &'static str {
         At => "at",
         Enter => "enter",
         Clear => "clear",
+        Undo => "undo",
         Group => "group",
         Cue => "cue",
+        Playback => "playback",
+        Off => "off",
         Record => "record",
+        Preload => "preload",
         Delete => "delete",
         Copy => "copy",
         Move => "move",
         Set => "set",
         Time => "time",
+        Thru => "thru",
+        Divide => "divide",
+        Backspace => "backspace",
+        Escape => "escape",
+        Highlight => "highlight",
+        Previous => "previous",
+        Next => "next",
+        All => "all",
+        EncoderPlayback => "encoder_playback",
+        PageUp => "page_up",
+        PageDown => "page_down",
+        Align => "align",
+        Fade => "fade",
     }
 }
 

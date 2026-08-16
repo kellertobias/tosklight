@@ -39,14 +39,21 @@ export function shiftedSoftwareKeyLabel(key: SoftwareKey, shifted: boolean) {
 				"7": "FOCUS",
 				"8": "CONTROL",
 				"9": "MEDIA",
+				AT: "FixAT",
+				GRP: "FIXTURE",
 				CUE: "TIMECODE",
 				PLAYBACK: "MACRO",
+				SET: "ASSIGN",
+				TIME: "SPD GRP",
+				DIV: "GO TO",
+				OFF: "RELEASE",
 				ESC: "UNDO",
 				ENT: "LOCK",
 				CLR: "FREEZE",
-				PRE: "PRELOAD GO CLEAR",
+				PRE: "CLEAR PRELOAD",
 				REC: "UPDATE",
 				MOV: "COPY",
+				ALIGN: "ALIGN OFF",
 			} as Partial<Record<SoftwareKey, string>>
 		)[key] ?? softwareDeskKeyLabel(key)
 	);
@@ -106,6 +113,8 @@ export function NumericPad({
 				programmerFade={<ProgrammerFadeFader compact />}
 				highlightControls={<HighlightControls />}
 				onPress={pad.press}
+				onHold={pad.hold}
+				holdKeys={["GRP"]}
 				layout={softwareDeskKeypadLayout(mode)}
 				labelForKey={(key) => (
 					<SoftwareDeskKeyCaption

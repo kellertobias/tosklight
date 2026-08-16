@@ -31,6 +31,8 @@ pub enum CommandKey {
     Set,
     Group,
     Cue,
+    Playback,
+    Off,
     Undo,
     Clear,
     Delete,
@@ -49,6 +51,15 @@ pub enum CommandKey {
     Delay,
     Link,
     Select,
+    Highlight,
+    Previous,
+    Next,
+    All,
+    EncoderPlayback,
+    PageUp,
+    PageDown,
+    Align,
+    Fade,
     Plus,
     Minus,
     Dot,
@@ -69,6 +80,8 @@ impl TryFrom<&str> for CommandKey {
             "SET" => Ok(Self::Set),
             "GRP" => Ok(Self::Group),
             "CUE" => Ok(Self::Cue),
+            "PBK" | "PLAYBACK" => Ok(Self::Playback),
+            "OFF" => Ok(Self::Off),
             "UND" => Ok(Self::Undo),
             "CLR" => Ok(Self::Clear),
             "DEL" => Ok(Self::Delete),
@@ -87,6 +100,15 @@ impl TryFrom<&str> for CommandKey {
             "DELAY" => Ok(Self::Delay),
             "LINK" => Ok(Self::Link),
             "SELECT" => Ok(Self::Select),
+            "HIGH" => Ok(Self::Highlight),
+            "PREV" => Ok(Self::Previous),
+            "NEXT" => Ok(Self::Next),
+            "ALL" => Ok(Self::All),
+            "ENC" => Ok(Self::EncoderPlayback),
+            "PGUP" => Ok(Self::PageUp),
+            "PGDN" => Ok(Self::PageDown),
+            "ALIGN" => Ok(Self::Align),
+            "FADE" => Ok(Self::Fade),
             "+" => Ok(Self::Plus),
             "-" => Ok(Self::Minus),
             "." => Ok(Self::Dot),
@@ -111,6 +133,176 @@ pub enum CommandKeyIntent {
     Undo,
     Preload,
     Shift { pressed: bool },
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum CommandGestureKind {
+    Regular,
+    Double,
+    Hold,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct CommandGesture {
+    pub kind: CommandGestureKind,
+    pub shifted: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum CommandImmediateAction {
+    AlignOff,
+    ClearPreload,
+    InspectFixtures,
+    InspectGroups,
+    InspectPreload,
+    Lock,
+    RecordOptions,
+    RunningOutput,
+    Undo,
+    UpdateOptions,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum CommandGestureIntent {
+    Key(CommandKeyIntent),
+    Edit(CommandLineEdit),
+    Immediate(CommandImmediateAction),
+}
+
+pub fn command_gesture_intent(
+    state: &CommandLineState,
+    key: CommandKey,
+    gesture: CommandGesture,
+) -> CommandGestureIntent {
+    use CommandGestureKind::{Double, Hold};
+    use CommandImmediateAction as Action;
+
+    if gesture.kind == Hold {
+        let action = match (key, gesture.shifted) {
+            (CommandKey::Group, false) => Action::InspectGroups,
+            (CommandKey::Group, true) => Action::InspectFixtures,
+            (CommandKey::Record, false) => Action::RecordOptions,
+            (CommandKey::Record, true) => Action::UpdateOptions,
+            (CommandKey::Preload, _) => Action::InspectPreload,
+            _ => return CommandGestureIntent::Key(CommandKeyIntent::NoOp),
+        };
+        return CommandGestureIntent::Immediate(action);
+    }
+
+    if !gesture.shifted {
+        if gesture.kind == Double {
+            if key == CommandKey::Off {
+                return CommandGestureIntent::Immediate(Action::RunningOutput);
+            }
+            let replacement = match key {
+                CommandKey::Group => Some(("DEGROUP", &["GROUP", "FIXTURE"][..])),
+                CommandKey::Cue => Some(("CUELIST", &["CUE"][..])),
+                CommandKey::Playback => Some(("VPBK", &["PLAYBACK"][..])),
+                _ => None,
+            };
+            if let Some((text, roots)) = replacement {
+                return CommandGestureIntent::Edit(gesture_edit(state, text, roots));
+            }
+        }
+        return CommandGestureIntent::Key(command_key_intent(state, key, CommandKeyPhase::Press));
+    }
+
+    if gesture.kind == Double {
+        if let CommandKey::Digit(digit) = key
+            && let Some(family) = shifted_root(CommandKey::Digit(digit))
+        {
+            return CommandGestureIntent::Edit(gesture_edit(state, preset_root(family), &[family]));
+        }
+        let replacement = match key {
+            CommandKey::Group => Some(("DMX", &["FIXTURE"][..])),
+            CommandKey::Divide => Some(("LOAD", &["GO TO"][..])),
+            CommandKey::Clear => Some(("UNFREEZE", &["FREEZE"][..])),
+            _ => None,
+        };
+        if let Some((text, roots)) = replacement {
+            return CommandGestureIntent::Edit(gesture_edit(state, text, roots));
+        }
+    }
+
+    let action = match key {
+        CommandKey::Enter => Some(Action::Lock),
+        CommandKey::Escape => Some(Action::Undo),
+        CommandKey::Preload => Some(Action::ClearPreload),
+        CommandKey::Align => Some(Action::AlignOff),
+        _ => None,
+    };
+    if let Some(action) = action {
+        return CommandGestureIntent::Immediate(action);
+    }
+    if key == CommandKey::Clear {
+        return CommandGestureIntent::Edit(edited("FREEZE".into(), state.target));
+    }
+    shifted_root(key).map_or(CommandGestureIntent::Key(CommandKeyIntent::NoOp), |text| {
+        CommandGestureIntent::Edit(gesture_edit(state, text, &[]))
+    })
+}
+
+fn shifted_root(key: CommandKey) -> Option<&'static str> {
+    match key {
+        CommandKey::Digit(0) => Some("ALL"),
+        CommandKey::Digit(1) => Some("INTENSITY"),
+        CommandKey::Digit(2) => Some("COLOR"),
+        CommandKey::Digit(3) => Some("POSITION"),
+        CommandKey::Digit(4) => Some("BEAM"),
+        CommandKey::Digit(5) => Some("DYNAMICS"),
+        CommandKey::Digit(6) => Some("SHAPERS"),
+        CommandKey::Digit(7) => Some("FOCUS"),
+        CommandKey::Digit(8) => Some("CONTROL"),
+        CommandKey::Digit(9) => Some("MEDIA"),
+        CommandKey::At => Some("FixAT"),
+        CommandKey::Group => Some("FIXTURE"),
+        CommandKey::Cue => Some("TIMECODE"),
+        CommandKey::Playback => Some("MACRO"),
+        CommandKey::Set => Some("ASSIGN"),
+        CommandKey::Time => Some("SPD GRP"),
+        CommandKey::Divide => Some("GO TO"),
+        CommandKey::Off => Some("RELEASE"),
+        CommandKey::Move => Some("COPY"),
+        CommandKey::Record => Some("UPDATE"),
+        CommandKey::Clear => Some("FREEZE"),
+        _ => None,
+    }
+}
+
+fn preset_root(family: &str) -> &'static str {
+    match family {
+        "ALL" => "ALL PRESET",
+        "INTENSITY" => "INTENSITY PRESET",
+        "COLOR" => "COLOR PRESET",
+        "POSITION" => "POSITION PRESET",
+        "BEAM" => "BEAM PRESET",
+        "DYNAMICS" => "DYNAMICS PRESET",
+        "SHAPERS" => "SHAPERS PRESET",
+        "FOCUS" => "FOCUS PRESET",
+        "CONTROL" => "CONTROL PRESET",
+        "MEDIA" => "MEDIA PRESET",
+        _ => unreachable!("only documented shifted family roots are passed"),
+    }
+}
+
+fn gesture_edit(state: &CommandLineState, text: &str, replace: &[&str]) -> CommandLineEdit {
+    let current = state.visible_text().trim();
+    let next = replace
+        .iter()
+        .find_map(|root| {
+            let prefix = current.get(..current.len().saturating_sub(root.len()))?;
+            current
+                .ends_with(root)
+                .then(|| format!("{} {text}", prefix.trim_end()).trim().to_owned())
+        })
+        .unwrap_or_else(|| {
+            if state.pristine || matches!(current, "FIXTURE" | "GROUP") {
+                text.to_owned()
+            } else {
+                format!("{current} {text}")
+            }
+        });
+    edited(next, state.target)
 }
 
 pub fn command_key_intent(
@@ -232,6 +424,12 @@ fn edit_text(state: &CommandLineState, key: CommandKey) -> CommandLineEdit {
     if key == CommandKey::Group && last_word_is_any(command, &["GROUP", "G", "F"]) {
         return edited(replace_last_word(command, "DEGROUP"), state.target);
     }
+    if key == CommandKey::Cue && last_word_is_any(command, &["CUE"]) {
+        return edited(replace_last_word(command, "CUELIST"), state.target);
+    }
+    if key == CommandKey::Playback && last_word_is_any(command, &["PLAYBACK"]) {
+        return edited(replace_last_word(command, "VPBK"), state.target);
+    }
     if key == CommandKey::At && last_word_is_any(command, &["AT"]) {
         let mut edit = edited(replace_last_word(command, "AT 100"), state.target);
         edit.execute = true;
@@ -335,6 +533,8 @@ fn edited(text: String, target: CommandTarget) -> CommandLineEdit {
 fn root_token(key: CommandKey) -> Option<&'static str> {
     match key {
         CommandKey::Cue => Some("CUE"),
+        CommandKey::Playback => Some("PLAYBACK"),
+        CommandKey::Off => Some("OFF"),
         CommandKey::Delete => Some("DELETE"),
         CommandKey::Move => Some("MOVE"),
         CommandKey::Copy => Some("COPY"),
@@ -354,6 +554,8 @@ fn command_token(key: CommandKey) -> String {
     match key {
         CommandKey::Group => "GROUP".into(),
         CommandKey::Cue => "CUE".into(),
+        CommandKey::Playback => "PLAYBACK".into(),
+        CommandKey::Off => "OFF".into(),
         CommandKey::Delete => "DELETE".into(),
         CommandKey::Move => "MOVE".into(),
         CommandKey::Copy => "COPY".into(),

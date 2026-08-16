@@ -151,6 +151,7 @@ impl LiveSetup {
         self.handle(ProgrammingCommand::ApplyKey {
             key,
             phase: CommandKeyPhase::Press,
+            gesture: None,
             execute_policy: ExecutionPolicy::AtomicProgrammer,
         })
     }
@@ -259,6 +260,7 @@ fn unchanged_command_does_not_publish_and_replay_keeps_the_original_cursor() {
     let command = ProgrammingCommand::ApplyKey {
         key: CommandKey::Digit(1),
         phase: CommandKeyPhase::Release,
+        gesture: None,
         execute_policy: ExecutionPolicy::AtomicProgrammer,
     };
     let first = setup.handle(command.clone());
@@ -509,6 +511,7 @@ fn external_interaction_and_handle_share_the_private_desk_gate() {
                 command: ProgrammingCommand::ApplyKey {
                     key: CommandKey::Digit(1),
                     phase: CommandKeyPhase::Press,
+                    gesture: None,
                     execute_policy: ExecutionPolicy::AtomicProgrammer,
                 },
             },

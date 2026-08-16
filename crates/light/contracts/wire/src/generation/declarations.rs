@@ -591,6 +591,8 @@ fn command_line(config: &Config) -> Vec<String> {
         CommandTarget::decl(config),
         CommandKey::decl(config),
         CommandKeyPhase::decl(config),
+        CommandGestureKind::decl(config),
+        CommandGesture::decl(config),
         CommandAcceptedAction::decl(config),
         CommandChoiceOptionId::decl(config),
         CueTransferOperation::decl(config),

@@ -108,6 +108,7 @@ const callbacks = {
 	pressSet: vi.fn(),
 	toggleRecord: vi.fn(),
 	advancePreload: vi.fn(),
+	inspectPreload: vi.fn(),
 	clear: vi.fn(),
 	toggleFixtureFreeze: vi.fn(),
 	selectFixtureFreezeFamily: vi.fn(),
@@ -376,13 +377,6 @@ describe("useCommandLineShortcuts playback keys", () => {
 			"hardware mode taking the keys",
 			(view) => view.rerender({ hardware: true }),
 		],
-		[
-			"shortcuts being disabled",
-			(view) => {
-				appState.regularNumberShortcuts = false;
-				view.rerender({ hardware: false });
-			},
-		],
 	];
 
 	for (const [name, teardown] of teardowns)
@@ -608,6 +602,34 @@ describe("useCommandLineShortcuts authority gating", () => {
 });
 
 describe("useCommandLineShortcuts dormancy", () => {
+	it("defers keyboard Preload until release and inspects it on hold", () => {
+		vi.useFakeTimers();
+		try {
+			mount();
+			press("`", { code: "Backquote" });
+			expect(callbacks.advancePreload).not.toHaveBeenCalled();
+			release("Backquote");
+			expect(callbacks.advancePreload).toHaveBeenCalledOnce();
+
+			press("`", { code: "Backquote" });
+			act(() => vi.advanceTimersByTime(650));
+			expect(callbacks.inspectPreload).toHaveBeenCalledOnce();
+			expect(callbacks.advancePreload).toHaveBeenCalledOnce();
+			release("Backquote");
+			expect(callbacks.advancePreload).toHaveBeenCalledOnce();
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("keeps the documented Ctrl+Z programmer Undo shortcut", () => {
+		mount();
+		expect(press("z", { code: "KeyZ", ctrlKey: true }).defaultPrevented).toBe(
+			true,
+		);
+		expect(callbacks.undo).toHaveBeenCalledOnce();
+	});
+
 	it("leaves focused text editors alone and resumes command input off-editor", () => {
 		mount();
 		const editor = document.createElement("textarea");
@@ -637,13 +659,15 @@ describe("useCommandLineShortcuts dormancy", () => {
 		expect(poolPlaybackAction).not.toHaveBeenCalled();
 	});
 
-	it("opens no subscription while shortcuts are disabled", () => {
+	it("disables only regular number-row digits", () => {
 		appState.regularNumberShortcuts = false;
 		mount();
 
-		expect(kindsViewCalls.every((call) => !call.enabled)).toBe(true);
-		expect(deskViewCalls.every((enabled) => !enabled)).toBe(true);
-		expect(press("F1").defaultPrevented).toBe(false);
+		expect(kindsViewCalls.some((call) => call.enabled)).toBe(true);
+		expect(deskViewCalls.some((enabled) => enabled)).toBe(true);
+		expect(press("7", { code: "Digit7" }).defaultPrevented).toBe(false);
+		expect(press("7", { code: "Numpad7" }).defaultPrevented).toBe(true);
+		expect(press("F1").defaultPrevented).toBe(true);
 		expect(setActivePage).not.toHaveBeenCalled();
 	});
 });

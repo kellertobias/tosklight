@@ -96,6 +96,7 @@ function routeDeskAction(
 				"shift-enter",
 				"shift-preload",
 				"shift-mov",
+				"running-output",
 			].includes(payload.action)
 		) {
 			window.dispatchEvent(

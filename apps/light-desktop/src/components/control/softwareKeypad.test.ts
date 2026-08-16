@@ -43,19 +43,20 @@ describe("software keypad", () => {
 		]);
 	});
 
-	it("maps German physical key positions without consuming letter keys", () => {
+	it("maps German base positions while reserving physical Shift for the semantic layer", () => {
 		const key = (code: string, shiftKey = false, value = "") =>
 			softwareKeyFromKeyboard({ code, shiftKey, key: value }, true);
 		expect(key("Minus")).toBe("TRU");
-		expect(key("Minus", true, "?")).toBe("CUE");
+		expect(key("Minus", true, "?")).toBe("TRU");
 		expect(key("Backquote")).toBe("PRE");
-		expect(key("Backquote", true)).toBe("GRP");
+		expect(key("Backquote", true)).toBe("PRE");
 		expect(key("Equal")).toBe("DIV");
-		expect(key("Equal", true)).toBe("DEL");
+		expect(key("Equal", true)).toBe("DIV");
 		expect(key("Backslash")).toBe("AT");
-		expect(key("Backslash", true)).toBe("MOV");
-		expect(key("KeyY", true, "Z")).toBe("SELECT");
-		expect(key("KeyL", true, "L")).toBe("LINK");
+		expect(key("Backslash", true)).toBe("AT");
+		expect(key("BracketRight", true, "*")).toBe("+");
+		expect(key("KeyY", true, "Z")).toBeNull();
+		expect(key("KeyL", true, "L")).toBeNull();
 		expect(key("KeyA", false, "a")).toBeNull();
 		expect(key("NumpadSubtract", false, "-")).toBe("-");
 	});

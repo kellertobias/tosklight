@@ -1,4 +1,9 @@
-import type { CSSProperties, ReactNode } from "react";
+import {
+	type ComponentProps,
+	type CSSProperties,
+	type ReactNode,
+	useRef,
+} from "react";
 import { Button } from "../common";
 import {
 	type NumericPadLayoutItem,
@@ -13,6 +18,8 @@ export interface ProgrammerKeypadViewProps {
 	programmerFade: ReactNode;
 	highlightControls: ReactNode;
 	onPress: (key: SoftwareKey) => void;
+	onHold?: (key: SoftwareKey) => void;
+	holdKeys?: readonly SoftwareKey[];
 	activeKeys?: readonly SoftwareKey[];
 	clearState?: ProgrammerClearState;
 	disabledKeys?: readonly SoftwareKey[];
@@ -63,6 +70,8 @@ export function ProgrammerKeypadView({
 	programmerFade,
 	highlightControls,
 	onPress,
+	onHold,
+	holdKeys = [],
 	activeKeys = [],
 	clearState = "idle",
 	disabledKeys = [],
@@ -80,21 +89,22 @@ export function ProgrammerKeypadView({
 				const active = activeKeys.includes(key);
 				const disabled = disabledKeys.includes(key);
 				return (
-					<Button
+					<ProgrammerKeyButton
 						aria-label={ariaLabelForKey?.(key)}
 						aria-pressed={active || undefined}
 						className={`${programmerKeyClassName(key, clearState)} ${classNameForKey?.(key) ?? ""} ${active ? "active" : ""}`.trim()}
 						data-keypad-key={key}
 						disabled={disabled}
 						key={key}
-						onClick={() => onPress(key)}
+						onPress={() => onPress(key)}
+						onHold={holdKeys.includes(key) ? () => onHold?.(key) : undefined}
 						style={{
 							gridColumn: sectionColumn,
 							gridRow: `${displayRow} / span ${rowSpan}`,
 						}}
 					>
 						{labelForKey(key)}
-					</Button>
+					</ProgrammerKeyButton>
 				);
 			});
 	return (
@@ -115,6 +125,47 @@ export function ProgrammerKeypadView({
 				{renderKeys("numbers")}
 			</div>
 		</div>
+	);
+}
+
+function ProgrammerKeyButton({
+	onPress,
+	onHold,
+	children,
+	...props
+}: ComponentProps<typeof Button> & {
+	onPress: () => void;
+	onHold?: () => void;
+}) {
+	const timer = useRef<number | null>(null);
+	const held = useRef(false);
+	const cancel = () => {
+		if (timer.current != null) window.clearTimeout(timer.current);
+		timer.current = null;
+	};
+	return (
+		<Button
+			{...props}
+			onPointerDown={() => {
+				held.current = false;
+				if (!onHold) return;
+				timer.current = window.setTimeout(() => {
+					timer.current = null;
+					held.current = true;
+					onHold();
+				}, 650);
+			}}
+			onPointerUp={cancel}
+			onPointerCancel={cancel}
+			onPointerLeave={cancel}
+			onClick={() => {
+				cancel();
+				if (!held.current) onPress();
+				held.current = false;
+			}}
+		>
+			{children}
+		</Button>
 	);
 }
 

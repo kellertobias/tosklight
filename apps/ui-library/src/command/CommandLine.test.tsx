@@ -46,7 +46,7 @@ function props(overrides: Partial<CommandLineProps> = {}): CommandLineProps {
 		onRecordCancel: vi.fn(),
 		onRecordComplete: vi.fn(),
 		onAdvancePreload: vi.fn(),
-		onReleasePreload: vi.fn(),
+		onInspectPreload: vi.fn(),
 		...overrides,
 	};
 }
@@ -90,15 +90,15 @@ describe("CommandLine", () => {
 			name: "REC, Shift: UPDATE",
 		});
 		const preload = screen.getByRole("button", {
-			name: "PRELOAD, Shift: PRELOAD GO CLEAR",
+			name: "PRELOAD, Shift: CLEAR PRELOAD",
 		});
 		expect(escapeButton).toHaveTextContent("ESCUNDO");
 		expect(record).toHaveTextContent("RECUPDATE");
-		expect(preload).toHaveTextContent("PRELOADPRELOAD GO CLEAR");
+		expect(preload).toHaveTextContent("PRELOADCLEAR PRELOAD");
 		expect(escapeButton.querySelector("small")).toHaveTextContent("UNDO");
 		expect(record.querySelector("small")).toHaveTextContent("UPDATE");
 		expect(preload.querySelector("small")).toHaveTextContent(
-			"PRELOAD GO CLEAR",
+			"CLEAR PRELOAD",
 		);
 	});
 
@@ -220,6 +220,20 @@ describe("CommandLine", () => {
 			"title",
 			"Pending Preload: PROG 4 · GO MINUS 2",
 		);
+	});
+
+	it("holds Preload to inspect pending work without advancing it", () => {
+		vi.useFakeTimers();
+		const view = props({ preloadActive: true });
+		render(<CommandLine {...view} />);
+		const preload = screen.getByRole("button", { name: "PRELOAD" });
+		fireEvent.pointerDown(preload);
+		vi.advanceTimersByTime(650);
+		fireEvent.pointerUp(preload);
+		fireEvent.click(preload);
+		expect(view.onInspectPreload).toHaveBeenCalledOnce();
+		expect(view.onAdvancePreload).not.toHaveBeenCalled();
+		vi.useRealTimers();
 	});
 
 	it("opens, reuses, and dismisses command history through controlled state", () => {

@@ -4,7 +4,7 @@ use light_application::{
     ActionContext, ActionEnvelope, ActionError, ActionErrorKind, ActionSource, ExecutionPolicy,
     ProgrammingCommand, ProgrammingLiveSnapshot, ProgrammingResult,
 };
-use light_programmer::command_line::{CommandKey, CommandKeyPhase};
+use light_programmer::command_line::{CommandGesture, CommandKey, CommandKeyPhase};
 
 use super::super::{ApiError, AppState, Session, capability_resources::ProgrammingResource};
 
@@ -427,6 +427,17 @@ pub(crate) fn route_osc_command_key_outcome(
     action: &str,
     request_id: Option<&str>,
 ) -> Option<bool> {
+    route_osc_command_gesture_outcome(state, session, desk_alias, action, request_id, None)
+}
+
+pub(crate) fn route_osc_command_gesture_outcome(
+    state: &AppState,
+    session: &Session,
+    desk_alias: &str,
+    action: &str,
+    request_id: Option<&str>,
+    gesture: Option<CommandGesture>,
+) -> Option<bool> {
     let Some(key) = osc_command_key(action) else {
         return None;
     };
@@ -448,6 +459,7 @@ pub(crate) fn route_osc_command_key_outcome(
     let command = ProgrammingCommand::ApplyKey {
         key,
         phase: CommandKeyPhase::Press,
+        gesture,
         execute_policy: ExecutionPolicy::Compatibility,
     };
     Some(
@@ -490,6 +502,8 @@ pub(crate) fn osc_command_key(action: &str) -> Option<CommandKey> {
         "set" => CommandKey::Set,
         "grp" | "group" => CommandKey::Group,
         "cue" => CommandKey::Cue,
+        "playback" | "pbk" => CommandKey::Playback,
+        "off" => CommandKey::Off,
         "record" => CommandKey::Record,
         "undo" => CommandKey::Undo,
         "clear" => CommandKey::Clear,
@@ -506,6 +520,15 @@ pub(crate) fn osc_command_key(action: &str) -> Option<CommandKey> {
         "delay" => CommandKey::Delay,
         "link" => CommandKey::Link,
         "select" => CommandKey::Select,
+        "highlight" | "high" => CommandKey::Highlight,
+        "previous" | "prev" => CommandKey::Previous,
+        "next" => CommandKey::Next,
+        "all" => CommandKey::All,
+        "prog-playback" | "enc" => CommandKey::EncoderPlayback,
+        "page-up" | "pgup" => CommandKey::PageUp,
+        "page-down" | "pgdn" => CommandKey::PageDown,
+        "align" => CommandKey::Align,
+        "fade" => CommandKey::Fade,
         "plus" | "add" => CommandKey::Plus,
         "minus" | "subtract" => CommandKey::Minus,
         "dot" => CommandKey::Dot,

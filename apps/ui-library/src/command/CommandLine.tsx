@@ -68,7 +68,7 @@ export interface CommandLineProps {
 	onRecordCancel: () => void;
 	onRecordComplete: (shifted: boolean) => void;
 	onAdvancePreload: () => void | Promise<void>;
-	onReleasePreload: () => void | Promise<void>;
+	onInspectPreload: () => void | Promise<void>;
 	onEscape?: () => void;
 }
 
@@ -330,22 +330,21 @@ function CommandRecordPreload(props: CommandLineProps) {
 				aria-busy={!props.preloadReady}
 				aria-label={
 					props.recordShiftArmed
-						? `${props.preloadLabel}, Shift: PRELOAD GO CLEAR`
+						? `${props.preloadLabel}, Shift: CLEAR PRELOAD`
 						: props.preloadLabel
 				}
 				title={
 					props.preloadArmed && props.pendingSummary
 						? `Pending Preload: ${props.pendingSummary}`
 						: props.preloadActive
-							? "Hold to release the active preload scene"
+						? "Hold to inspect and edit the pending Preload"
 							: undefined
 				}
 				onPointerDown={() => {
 					preloadHeld.current = false;
-					if (!props.preloadActive) return;
 					preloadHold.current = window.setTimeout(() => {
 						preloadHeld.current = true;
-						void props.onReleasePreload();
+						void props.onInspectPreload();
 					}, 650);
 				}}
 				onPointerUp={cancelPreloadHold}
@@ -358,10 +357,10 @@ function CommandRecordPreload(props: CommandLineProps) {
 			>
 				<ShiftedKeyCaption
 					primary={props.preloadLabel}
-					secondary={props.recordShiftArmed ? "PRELOAD GO CLEAR" : null}
+					secondary={props.recordShiftArmed ? "CLEAR PRELOAD" : null}
 				/>
 				{!props.preloadArmed && props.preloadActive && (
-					<small>(Hold: release)</small>
+					<small>(Hold: inspect)</small>
 				)}
 			</Button>
 		</div>

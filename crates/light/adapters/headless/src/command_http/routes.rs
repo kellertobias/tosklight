@@ -3,7 +3,8 @@ use super::adapter::{run_service, run_snapshot};
 use super::events::publish_service_result;
 use super::interaction_wire::interaction_snapshot;
 use super::wire::{
-    command_key, command_key_phase, command_line_from_state, operation_response, with_etag,
+    command_gesture, command_key, command_key_phase, command_line_from_state, operation_response,
+    with_etag,
 };
 use axum::{
     Json, Router,
@@ -123,6 +124,7 @@ async fn apply_command_key(
         ProgrammingCommand::ApplyKey {
             key: command_key(input.key),
             phase: command_key_phase(input.phase),
+            gesture: input.gesture.map(command_gesture),
             execute_policy: ExecutionPolicy::AtomicProgrammer,
         },
     )?;

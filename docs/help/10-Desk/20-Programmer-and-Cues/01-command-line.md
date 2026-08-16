@@ -18,7 +18,7 @@ Another important concept to understand is that every button can have multiple f
 - Regular Press: You hold down and release a button in a regular typing speed, e.g. `[GRP]`. Once you held down the button the action is shown in the command line `#> GROUP`
 - Double-Press: If a button is pressed twice, it's indicated twice in this manual, e.g. `[GRP][GRP]`. The command line indicates the actual intention. When you press `[GRP]` the first time, it shows `#> GROUP`, once you pressed it the second time, it shows `#> DEGROUP`
 - Shift-Press: If a button is to be pressed with shift, we access the second function on that button. These are indicated with `[^GRP]`. You hold down shift, then press the desired button, then let go shift. The action is performed, once you click the actual button. If you need to press multiple buttons with shift directly after each other, you do not need to release shift in between. e.g. `[^GRP][^GRP]` can be either entered by holding down shift, then pressing `[GRP]`, then releasing shift, then holding down shift again, pressing `[GRP]` again, then releasing shift again; or you can hold down shift, press `[GRP]` twice and then release shift; the outcome is the same. The command line again indicates the intention, e.g. for `[^GRP]` it's `#> FIXTURE`, while `[^GRP][^GRP]`
-- Long-Press/ Hold: If a button is pressed long, it's indicated with a plus, e.g. `[PRELOAD+]` (which resets the preload store). Long presses do not need to be confirmed and directly trigger an action, such as opening a modal or resetting a value.
+- Long-Press/ Hold: If a button is pressed long, it's indicated with a plus, e.g. `[PRELOAD+]` (which opens the pending Preload for inspection and editing). Long presses do not need to be confirmed and directly trigger an action, such as opening a modal or resetting a value.
 
 
 ### Command Line Abbreviations
@@ -62,17 +62,17 @@ Keyboard positions describe the position of the key on a German keyboard. The so
 | `[DIV]`  | Division   | `[KBD:´]`         | Modulo operator on a selection (e.g. select every second). Divide value parts for direct value entry.  Press twice for `#> OFFSET` |
 | `[TIME]` | Time       | -                 | Give a value or recorded Cue an explicit fade time.  Press twice for `#> DELAY` |
 
-| `[GRP]`  | Group      | `[KBD:SHIFT + ^]` | Select a group. Hold for showing the group built-in. Press twice for `#> DEGROUP`|
-| `[CUE]`  | Cue        | `[KBD:SHIFT + ?]` | Select or Target a particular cue. Press twice for `#> CUELIST` |
+| `[GRP]`  | Group      | -                 | Select a group. Hold for showing the group built-in. Press twice for `#> DEGROUP`|
+| `[CUE]`  | Cue        | -                 | Select or Target a particular cue. Press twice for `#> CUELIST` |
 | `[PBK]`  | Playback   | -                 | Select or Target a particular playback. Press twice for `#> VPBK` (virtual playback) |
 
 | `[REC]`  | Record     | `[KBD:END]`       | Store cues, presets, and groups. Hold for record options. |
 | `[PRELD]`| Preload    | `[KBD:^]`         | Run Preload or Preload GO. Hold to inspect and edit the pending Preload. |
 | `[CLR]`  | Clear      | `[KBD:DELETE]`    | First Click: Clear Selection, Second Click: Clear Programmer |
 
-| `[DEL]`  | Delete     | `[KBD:SHIFT + ´]` | Delete a cue, preset, or other supported element.  |
-| `[MOV]`  | Move       | `[KBD:SHIFT + #]` | Move a cue or preset. |
-| `[CPY]`  | Copy       | `[KBD:SHIFT + +]` | Copy a cue or preset. Not available on touch only, reach with `[^MOV]` |
+| `[DEL]`  | Delete     | -                 | Delete a cue, preset, or other supported element.  |
+| `[MOV]`  | Move       | -                 | Move a cue or preset. |
+| `[CPY]`  | Copy       | -                 | Copy a cue or preset. Not available on touch only, reach with `[^MOV]` |
 | `[SET]`  | Set        | `[KBD:HOME]`      | Edit a value or open the selected object's configuration. |
 | `[OFF]`  | Off        | -                 | Turn off the target; Press twice for opening "Running & Output" |
 

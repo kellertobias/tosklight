@@ -1,6 +1,6 @@
 use crate::{ActionContext, ApplicationCommand, CommandFamily};
 use light_core::FixtureId;
-use light_programmer::command_line::{CommandKey, CommandKeyPhase};
+use light_programmer::command_line::{CommandGesture, CommandKey, CommandKeyPhase};
 use light_programmer::{
     CommandLineState, PendingCommandChoice, ProgrammerSelection, SelectionRule,
 };
@@ -16,6 +16,7 @@ pub enum ProgrammingCommand {
     ApplyKey {
         key: CommandKey,
         phase: CommandKeyPhase,
+        gesture: Option<CommandGesture>,
         execute_policy: ExecutionPolicy,
     },
     ReplaceCommandLine {

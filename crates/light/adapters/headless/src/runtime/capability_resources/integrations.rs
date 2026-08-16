@@ -152,13 +152,10 @@ impl IntegrationResource {
             return;
         };
         if pressed {
-            target.shifted = !target.shifted;
             target.shift_held = true;
         } else {
             target.shift_held = false;
-            if target.update_first_release.is_some() {
-                target.shifted = false;
-            }
+            target.shifted = false;
         }
     }
 

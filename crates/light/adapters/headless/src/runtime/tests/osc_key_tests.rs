@@ -277,7 +277,7 @@ fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
         &pressed,
         Some("127.0.0.1:9010"),
     );
-    assert!(state.integrations.osc_subscriber("test").unwrap().shifted);
+    assert!(state.integrations.osc_subscriber("test").unwrap().shift_held);
     handle_programmer_osc(
         &state,
         "/light/main/programmer/digit-1",
@@ -285,9 +285,10 @@ fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
         Some("127.0.0.1:9010"),
     );
     assert!(!state.integrations.osc_subscriber("test").unwrap().shifted);
+	assert!(state.integrations.osc_subscriber("test").unwrap().shift_held);
     assert_eq!(
         state.programming.get(session.id).unwrap().command_line,
-        "TIME -"
+        "TIME - INTENSITY"
     );
     handle_programmer_osc(
         &state,
@@ -302,6 +303,7 @@ fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
         Some("127.0.0.1:9010"),
     );
     assert!(!state.integrations.osc_subscriber("test").unwrap().shifted);
+	assert!(state.integrations.osc_subscriber("test").unwrap().shift_held);
     assert_eq!(
         state.programming.get(session.id).unwrap().command_line,
         "FREEZE"
@@ -316,11 +318,48 @@ fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
         state.programming.get(session.id).unwrap().command_line,
         "UNFREEZE"
     );
+	state
+		.programming
+		.set_command_line(session.id, "FIXTURE".into());
+	for expected in ["FIXTURE", "DMX"] {
+		handle_programmer_osc(
+			&state,
+			"/light/main/programmer/group",
+			&pressed,
+			Some("127.0.0.1:9010"),
+		);
+		assert_eq!(
+			state.programming.get(session.id).unwrap().command_line,
+			expected
+		);
+	}
+	handle_programmer_osc(
+		&state,
+		"/light/main/programmer/shift",
+		&[OscArgument::Bool(false)],
+		Some("127.0.0.1:9010"),
+	);
+	assert!(!state.integrations.osc_subscriber("test").unwrap().shift_held);
+	state
+		.programming
+		.set_command_line(session.id, "FIXTURE".into());
+	for expected in ["CUE", "CUELIST"] {
+		handle_programmer_osc(
+			&state,
+			"/light/main/programmer/cue",
+			&pressed,
+			Some("127.0.0.1:9010"),
+		);
+		assert_eq!(
+			state.programming.get(session.id).unwrap().command_line,
+			expected
+		);
+	}
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
 #[test]
-fn shifted_all_previous_and_next_are_unassigned_without_leaking_highlight_actions() {
+fn held_shift_all_previous_and_next_are_unassigned_without_leaking_highlight_actions() {
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
@@ -377,11 +416,12 @@ fn shifted_all_previous_and_next_are_unassigned_without_leaking_highlight_action
 
     for action in ["all", "next", "prev"] {
         send_programmer("shift", true);
-        send_programmer("shift", false);
-        assert!(state.integrations.osc_subscriber("grid-test").unwrap().shifted);
+		assert!(state.integrations.osc_subscriber("grid-test").unwrap().shift_held);
         send_highlight(action, true);
         send_highlight(action, false);
+		send_programmer("shift", false);
         assert!(!state.integrations.osc_subscriber("grid-test").unwrap().shifted);
+		assert!(!state.integrations.osc_subscriber("grid-test").unwrap().shift_held);
     }
     assert_eq!(ordinary_all_count(), 0);
     assert!(!state.events.audit_events().iter().any(|event| {

@@ -101,7 +101,7 @@ fn builds_cue_select_and_complete_group_mode_sequences() {
             "8"
         )
         .text,
-        "CUE CUE 8"
+        "CUELIST 8"
     );
     assert_eq!(
         press("FIXTURE", CommandTarget::Fixture, true, "SELECT").text,
@@ -166,4 +166,146 @@ fn backspace_removes_words_as_tokens_and_numbers_as_characters() {
     assert_eq!(remove_command_token("FIXTURE 1.5"), "FIXTURE 1.");
     assert_eq!(remove_command_token("FIXTURE 1 -"), "FIXTURE 1");
     assert_eq!(remove_command_token("FIXTURE 1 +"), "FIXTURE 1");
+}
+
+fn gesture(
+    text: &str,
+    key: CommandKey,
+    kind: CommandGestureKind,
+    shifted: bool,
+) -> CommandGestureIntent {
+    command_gesture_intent(
+        &state(text, CommandTarget::Fixture, text == "FIXTURE"),
+        key,
+        CommandGesture { kind, shifted },
+    )
+}
+
+#[test]
+fn maps_every_documented_shifted_command_root() {
+    let cases = [
+        (CommandKey::Digit(0), "ALL"),
+        (CommandKey::Digit(1), "INTENSITY"),
+        (CommandKey::Digit(2), "COLOR"),
+        (CommandKey::Digit(3), "POSITION"),
+        (CommandKey::Digit(4), "BEAM"),
+        (CommandKey::Digit(5), "DYNAMICS"),
+        (CommandKey::Digit(6), "SHAPERS"),
+        (CommandKey::Digit(7), "FOCUS"),
+        (CommandKey::Digit(8), "CONTROL"),
+        (CommandKey::Digit(9), "MEDIA"),
+        (CommandKey::At, "FixAT"),
+        (CommandKey::Group, "FIXTURE"),
+        (CommandKey::Cue, "TIMECODE"),
+        (CommandKey::Playback, "MACRO"),
+        (CommandKey::Set, "ASSIGN"),
+        (CommandKey::Time, "SPD GRP"),
+        (CommandKey::Divide, "GO TO"),
+        (CommandKey::Off, "RELEASE"),
+        (CommandKey::Move, "COPY"),
+        (CommandKey::Record, "UPDATE"),
+        (CommandKey::Clear, "FREEZE"),
+    ];
+    for (key, expected) in cases {
+        let CommandGestureIntent::Edit(edit) =
+            gesture("FIXTURE", key, CommandGestureKind::Regular, true)
+        else {
+            panic!("{key:?} should edit the command line");
+        };
+        assert_eq!(edit.text, expected, "{key:?}");
+    }
+}
+
+#[test]
+fn resolves_double_gestures_to_one_final_visible_intent() {
+    let cases = [
+        ("GROUP", CommandKey::Group, false, "DEGROUP"),
+        ("CUE", CommandKey::Cue, false, "CUELIST"),
+        ("PLAYBACK", CommandKey::Playback, false, "VPBK"),
+        ("FIXTURE", CommandKey::Group, true, "DMX"),
+        ("GO TO", CommandKey::Divide, true, "LOAD"),
+        ("FREEZE", CommandKey::Clear, true, "UNFREEZE"),
+        ("COLOR", CommandKey::Digit(2), true, "COLOR PRESET"),
+    ];
+    for (text, key, shifted, expected) in cases {
+        let CommandGestureIntent::Edit(edit) =
+            gesture(text, key, CommandGestureKind::Double, shifted)
+        else {
+            panic!("{key:?} should resolve to an edit");
+        };
+        assert_eq!(edit.text, expected, "{key:?}");
+    }
+}
+
+#[test]
+fn represents_immediate_and_hold_actions_without_adapter_strings() {
+    let cases = [
+        (
+            CommandKey::Off,
+            CommandGestureKind::Double,
+            false,
+            CommandImmediateAction::RunningOutput,
+        ),
+        (
+            CommandKey::Enter,
+            CommandGestureKind::Regular,
+            true,
+            CommandImmediateAction::Lock,
+        ),
+        (
+            CommandKey::Escape,
+            CommandGestureKind::Regular,
+            true,
+            CommandImmediateAction::Undo,
+        ),
+        (
+            CommandKey::Preload,
+            CommandGestureKind::Regular,
+            true,
+            CommandImmediateAction::ClearPreload,
+        ),
+        (
+            CommandKey::Align,
+            CommandGestureKind::Regular,
+            true,
+            CommandImmediateAction::AlignOff,
+        ),
+        (
+            CommandKey::Group,
+            CommandGestureKind::Hold,
+            false,
+            CommandImmediateAction::InspectGroups,
+        ),
+        (
+            CommandKey::Group,
+            CommandGestureKind::Hold,
+            true,
+            CommandImmediateAction::InspectFixtures,
+        ),
+        (
+            CommandKey::Record,
+            CommandGestureKind::Hold,
+            false,
+            CommandImmediateAction::RecordOptions,
+        ),
+        (
+            CommandKey::Record,
+            CommandGestureKind::Hold,
+            true,
+            CommandImmediateAction::UpdateOptions,
+        ),
+        (
+            CommandKey::Preload,
+            CommandGestureKind::Hold,
+            false,
+            CommandImmediateAction::InspectPreload,
+        ),
+    ];
+    for (key, kind, shifted, expected) in cases {
+        assert_eq!(
+            gesture("FIXTURE", key, kind, shifted),
+            CommandGestureIntent::Immediate(expected),
+            "{key:?}"
+        );
+    }
 }

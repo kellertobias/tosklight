@@ -223,10 +223,8 @@ function useCommandLineBarModel() {
 		if (preload.armed) await preload.actions.go();
 		else await preload.actions.enter();
 	};
-	const releasePreload = async () => {
-		if (!preload.ready || !preload.actions) return;
-		await preload.actions.release();
-	};
+	const inspectPreload = () =>
+		dispatch({ type: "SET_MODAL", modal: "preloadStoreOpen", value: true });
 	const openSystemControls = () =>
 		openSystemControlsModal(dispatch, deskDiagnostics.length > 0);
 	const toggleControlMode = () => dispatch({ type: "TOGGLE_CONTROL_MODE" });
@@ -244,6 +242,10 @@ function useCommandLineBarModel() {
 			} as const;
 			if (key in shiftedKey) {
 				numericPad.pressShifted(shiftedKey[key as keyof typeof shiftedKey]);
+				return;
+			}
+			if (key === "running-output") {
+				dispatch({ type: "SET_MODAL", modal: "systemControlsOpen", value: true });
 				return;
 			}
 			if (key === "playback") numericPad.press("PLAYBACK", "hardware");
@@ -279,6 +281,7 @@ function useCommandLineBarModel() {
 		pressSet: () => numericPad.press("SET", "keyboard"),
 		toggleRecord,
 		advancePreload: () => void advancePreload(),
+		inspectPreload,
 		clear: () => numericPad.press("CLR"),
 		toggleFixtureFreeze: () => void numericPad.toggleFixtureFreeze(),
 		selectFixtureFreezeFamily: (key) =>
@@ -311,7 +314,7 @@ function useCommandLineBarModel() {
 		execute,
 		record,
 		advancePreload,
-		releasePreload,
+		inspectPreload,
 		openSystemControls,
 		toggleControlMode,
 		undo: () => numericPad.press("UND", "touch"),
@@ -369,7 +372,7 @@ export function CommandLineBar() {
 			onRecordCancel={model.record.cancel}
 			onRecordComplete={model.record.complete}
 			onAdvancePreload={model.advancePreload}
-			onReleasePreload={model.releasePreload}
+			onInspectPreload={model.inspectPreload}
 			onEscape={model.undo}
 		/>
 	);

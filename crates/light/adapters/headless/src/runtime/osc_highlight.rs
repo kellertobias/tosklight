@@ -331,6 +331,69 @@ fn handle_shifted_shortcut(
         );
         return;
     }
+    if action.starts_with("digit-")
+        || matches!(
+            action,
+            "at" | "group"
+                | "grp"
+                | "cue"
+                | "playback"
+                | "pbk"
+                | "set"
+                | "time"
+                | "div"
+                | "off"
+                | "mov"
+                | "move"
+                | "record"
+                | "clear"
+        )
+    {
+        let current = state
+            .programming
+            .get(session.id)
+            .map(|programmer| programmer.command_line)
+            .unwrap_or_default();
+        let repeated = match action {
+            "group" | "grp" => current.trim_end().ends_with("FIXTURE"),
+            "div" => current.trim_end().ends_with("GO TO"),
+            _ => action
+                .strip_prefix("digit-")
+                .and_then(|digit| digit.parse::<u8>().ok())
+                .and_then(|digit| {
+                    [
+                        "ALL",
+                        "INTENSITY",
+                        "COLOR",
+                        "POSITION",
+                        "BEAM",
+                        "DYNAMICS",
+                        "SHAPERS",
+                        "FOCUS",
+                        "CONTROL",
+                        "MEDIA",
+                    ]
+                    .get(usize::from(digit))
+                })
+                .is_some_and(|family| current.trim_end().ends_with(family)),
+        };
+        let _ = command_http::route_osc_command_gesture_outcome(
+            state,
+            session,
+            desk_alias,
+            action,
+            request_id,
+            Some(light_programmer::command_line::CommandGesture {
+                kind: if repeated {
+                    light_programmer::command_line::CommandGestureKind::Double
+                } else {
+                    light_programmer::command_line::CommandGestureKind::Regular
+                },
+                shifted: true,
+            }),
+        );
+        return;
+    }
     emit(
         state,
         "desk_action",
@@ -426,6 +489,8 @@ pub(super) fn handle_programmer_osc(
             || matches!(
                 action,
                 "clear"
+                    | "group"
+                    | "grp"
                     | "delete"
                     | "del"
                     | "align"
@@ -435,33 +500,16 @@ pub(super) fn handle_programmer_osc(
                     | "enter"
                     | "preload"
                     | "mov"
+                    | "move"
+                    | "set"
+                    | "time"
+                    | "div"
+                    | "off"
+                    | "record"
+                    | "at"
             ))
     {
         handle_shifted_shortcut(state, &session, parts[1], action, source, request_id);
-        return true;
-    }
-    if subscriber.shifted && action == "at" {
-        if let Some(source) = source {
-            state.integrations.clear_shift(source);
-        }
-        let current = state
-            .programming
-            .get(session.id)
-            .map(|programmer| programmer.command_line)
-            .unwrap_or_default();
-        let current = current.trim();
-        let next = if matches!(current, "" | "FIXTURE" | "GROUP") {
-            "FixAT".to_owned()
-        } else {
-            format!("{current} FixAT")
-        };
-        state.programming.set_command_line(session.id, next);
-        let _ = persist_programmer(state, &session);
-        emit(
-            state,
-            "desk_action",
-            serde_json::json!({"desk_alias":parts[1],"desk_id":session.desk.id,"session_id":session.id,"request_id":request_id,"action":"shift-at","source":"osc"}),
-        );
         return true;
     }
     let handled = state.programming.run_desk_operation(session.desk.id, || {

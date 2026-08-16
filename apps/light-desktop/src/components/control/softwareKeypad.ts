@@ -85,16 +85,15 @@ export function softwareKeyFromKeyboard(
 	if (event.code === "Delete") return "CLR";
 	if (event.code === "Home") return "SET";
 	if (event.code === "End") return "REC";
-	if (event.shiftKey && event.key.toLowerCase() === "z") return "SELECT";
-	if (event.shiftKey && event.key.toLowerCase() === "l") return "LINK";
-
 	// Physical positions on a German keyboard. Using code keeps the shortcuts
-	// stable when the browser reports shifted glyphs such as *, ?, or °.
-	if (event.code === "BracketRight") return event.shiftKey ? "CPY" : "+";
-	if (event.code === "Minus") return event.shiftKey ? "CUE" : "TRU";
-	if (event.code === "Backquote") return event.shiftKey ? "GRP" : "PRE";
-	if (event.code === "Equal") return event.shiftKey ? "DEL" : "DIV";
-	if (event.code === "Backslash") return event.shiftKey ? "MOV" : "AT";
+	// stable when the browser reports localized glyphs. Shift is exclusively
+	// the command line's semantic second layer, so shifted layout shortcuts are
+	// intentionally not mapped to regular desk commands.
+	if (event.code === "BracketRight") return "+";
+	if (event.code === "Minus") return "TRU";
+	if (event.code === "Backquote") return "PRE";
+	if (event.code === "Equal") return "DIV";
+	if (event.code === "Backslash") return "AT";
 
 	// Fallbacks help browsers that do not expose a useful physical key code.
 	if (!event.shiftKey && event.key === "+") return "+";
@@ -102,11 +101,6 @@ export function softwareKeyFromKeyboard(
 	if (!event.shiftKey && event.key === "^") return "PRE";
 	if (!event.shiftKey && event.key === "´") return "DIV";
 	if (!event.shiftKey && event.key === "#") return "AT";
-	if (event.shiftKey && event.key === "?") return "CUE";
-	if (event.shiftKey && event.key === "*") return "CPY";
-	if (event.shiftKey && event.key === "'") return "MOV";
-	if (event.shiftKey && event.key === "°") return "GRP";
-	if (event.shiftKey && event.key === "`") return "DEL";
 	return null;
 }
 

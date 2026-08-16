@@ -19,6 +19,12 @@ import {
 	editTargetedCommandWithSoftwareKey,
 	type SoftwareKey,
 } from "../softwareKeypad";
+import { openUpdateSettings } from "../updateWorkflow";
+import {
+	applyGestureCommand,
+	resolveCommandKeyGesture,
+	type CommandKeyGestureIntent,
+} from "./commandKeyGesture";
 
 export function useNumericPadController() {
 	const programmerActions = useProgrammerActions();
@@ -81,8 +87,16 @@ export function useNumericPadController() {
 		},
 		press: (key: SoftwareKey, source: ControlSurfaceSource = "touch") =>
 			pressKey(context, key, source),
+		hold: (key: SoftwareKey) =>
+			applyGestureIntent(
+				context,
+				resolveCommandKeyGesture(key, {
+					kind: "hold",
+					shifted: state.shiftArmed,
+				}),
+			),
 		pressShifted: (key: SoftwareKey) =>
-			handleShiftedKey(context, key, command.read().text),
+			handleShiftedKey(context, key, command.read().text, false),
 	};
 }
 
@@ -134,7 +148,10 @@ function pressKey(
 		dispatch({ type: "SET_SHIFT_ARMED", value: !state.shiftArmed });
 		return;
 	}
-	if (state.shiftArmed && handleShiftedKey(context, key, currentCommand.text))
+	if (
+		state.shiftArmed &&
+		handleShiftedKey(context, key, currentCommand.text, repeated)
+	)
 		return;
 	if (repeated && handleRepeatedKey(context, key)) return;
 	if (key === "CLR") return clearStep(context);
@@ -153,83 +170,91 @@ function pressKey(
 }
 
 function handleShiftedKey(
-	{
-		programmerActions,
-		state,
-		dispatch,
-		command,
-		deskLock,
-		deskLockActions,
-		preload,
-	}: NumericPadContext,
+	context: NumericPadContext,
 	key: SoftwareKey,
 	text: string,
+	repeated: boolean,
 ) {
+	const { command } = context;
 	if (/^\s*(?:FREEZE|UNFREEZE)\b/i.test(text) && /^[1-4]$/.test(key)) {
 		selectFixtureFreezeFamily(command, key as "1" | "2" | "3" | "4");
 		return true;
 	}
-	if (key === "CLR") {
-		advanceFixtureFreezeCommand(command);
-		return true;
-	}
-	if (key === "ESC") {
-		void programmerActions?.undoProgrammer();
-		return true;
-	}
-	if (key === "CUE") {
-		dispatch({ type: "OPEN_BUILTIN", kind: "timecode" });
-		return true;
-	}
-	if (key === "PLAYBACK") {
-		dispatch({ type: "OPEN_BUILTIN", kind: "macros" });
-		return true;
-	}
-	if (key === "ENT") {
-		if (deskLockActions) {
-			if (deskLock?.locked) void deskLockActions.unlockDesk();
-			else void deskLockActions.lockDesk();
-		}
-		return true;
-	}
-	if (key === "PRE") {
-		void preload.actions?.clearPending();
-		return true;
-	}
-	if (key === "MOV") {
-		const current = text.trim();
-		void command.replace(current ? `${current} COPY` : "COPY", false);
-		return true;
-	}
-	if (/^[0-9]$/.test(key)) {
-		const digit = key as `${number}`;
-		if (command.selected.length > 0 && /^[0-4]$/.test(digit)) {
-			void command.replace(`${text.trim()} AT ${digit}.`.trim(), false);
-			return true;
-		}
-		if (command.selected.length === 0) {
-			window.dispatchEvent(new CustomEvent("light:parameter-family-key", { detail: digit }));
-			return true;
-		}
-		return true;
-	}
-	return false;
+	const intent = resolveCommandKeyGesture(key, {
+		kind: repeated ? "double" : "regular",
+		shifted: true,
+	});
+	return applyGestureIntent(context, intent);
 }
 
 function handleRepeatedKey(context: NumericPadContext, key: SoftwareKey) {
-	if (key === "OFF") {
-		context.dispatch({ type: "SET_MODAL", modal: "systemControlsOpen", value: true });
+	return applyGestureIntent(
+		context,
+		resolveCommandKeyGesture(key, { kind: "double", shifted: false }),
+	);
+}
+
+function applyGestureIntent(
+	context: NumericPadContext,
+	intent: CommandKeyGestureIntent,
+) {
+	if (!intent) return false;
+	if (intent.type === "command") {
+		const current = context.command.read();
+		void context.command.replace(
+			applyGestureCommand(current.text, current.pristine, intent),
+			false,
+		);
 		return true;
 	}
-	if (key === "CUE") {
-		context.dispatch({ type: "OPEN_BUILTIN", kind: "cuelists" });
-		return true;
+	switch (intent.action) {
+		case "undo":
+			void context.programmerActions?.undoProgrammer();
+			break;
+		case "lock":
+			if (context.deskLockActions) {
+				if (context.deskLock?.locked) void context.deskLockActions.unlockDesk();
+				else void context.deskLockActions.lockDesk();
+			}
+			break;
+		case "clear-preload":
+			void context.preload.actions?.clearPending();
+			break;
+		case "running-output":
+			context.dispatch({
+				type: "SET_MODAL",
+				modal: "systemControlsOpen",
+				value: true,
+			});
+			break;
+		case "inspect-groups":
+			context.dispatch({ type: "OPEN_BUILTIN", kind: "groups" });
+			break;
+		case "inspect-fixtures":
+			context.dispatch({ type: "OPEN_BUILTIN", kind: "fixtures" });
+			break;
+		case "inspect-preload":
+			context.dispatch({
+				type: "SET_MODAL",
+				modal: "preloadStoreOpen",
+				value: true,
+			});
+			break;
+		case "record-options":
+			context.dispatch({
+				type: "SET_MODAL",
+				modal: "storeSettingsOpen",
+				value: true,
+			});
+			break;
+		case "update-options":
+			openUpdateSettings();
+			break;
+		case "align-off":
+			window.dispatchEvent(new Event("light:align-off"));
+			break;
 	}
-	if (key === "PLAYBACK") {
-		window.dispatchEvent(new Event("light:playback-page-menu"));
-		return true;
-	}
-	return false;
+	return true;
 }
 
 function advanceFixtureFreezeCommand(

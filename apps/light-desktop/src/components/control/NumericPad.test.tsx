@@ -384,7 +384,7 @@ describe("NumericPad layout and Shift routing", () => {
 			"UNDO",
 			"LOCK",
 			"FREEZE",
-			"PRELOAD GO CLEAR",
+			"CLEAR PRELOAD",
 			"UPDATE",
 			"COPY",
 		]);
@@ -518,17 +518,15 @@ describe("NumericPad Shift routing", () => {
 		fireEvent.click(
 			screen.getByRole("button", { name: "CUE, Shift: TIMECODE" }),
 		);
-		expect(dispatch).toHaveBeenCalledWith({
-			type: "OPEN_BUILTIN",
-			kind: "timecode",
-		});
+		expect(commandActions.replace).toHaveBeenCalledWith(
+			"FREEZE F1 INTENSITY TIMECODE",
+		);
 		const playback = screen.getByRole("button", { name: "PBK, Shift: MACRO" });
 		expect(playback).toHaveTextContent("PBKMACRO");
 		fireEvent.click(playback);
-		expect(dispatch).toHaveBeenCalledWith({
-			type: "OPEN_BUILTIN",
-			kind: "macros",
-		});
+		expect(commandActions.replace).toHaveBeenCalledWith(
+			"FREEZE F1 INTENSITY TIMECODE MACRO",
+		);
 		expect(state.shiftArmed).toBe(true);
 	});
 
@@ -542,11 +540,29 @@ describe("NumericPad Shift routing", () => {
 });
 
 describe("NumericPad double presses", () => {
-	it("routes Off, Cue, and Playback double presses to their operator surfaces", () => {
-		const pageMenu = vi.fn();
-		window.addEventListener("light:playback-page-menu", pageMenu, {
-			once: true,
-		});
+	it("holds Group to inspect the matching Group or Fixture pool without typing", () => {
+		vi.useFakeTimers();
+		const { rerender } = render(<NumericPad inputMode="touch" />);
+		const hold = () => {
+			const group = screen.getByRole("button", {
+				name: state.shiftArmed ? "GRP, Shift: FIXTURE" : "GRP",
+			});
+			fireEvent.pointerDown(group);
+			vi.advanceTimersByTime(650);
+			fireEvent.pointerUp(group);
+			fireEvent.click(group);
+		};
+		hold();
+		expect(dispatch).toHaveBeenCalledWith({ type: "OPEN_BUILTIN", kind: "groups" });
+		expect(commandActions.replace).not.toHaveBeenCalled();
+		state.shiftArmed = true;
+		rerender(<NumericPad inputMode="touch" />);
+		hold();
+		expect(dispatch).toHaveBeenCalledWith({ type: "OPEN_BUILTIN", kind: "fixtures" });
+		vi.useRealTimers();
+	});
+
+	it("shows the documented Off, Cuelist, and Virtual Playback double intents", () => {
 		const { container } = render(<NumericPad />);
 		const pressTwice = (key: string) => {
 			const button = container.querySelector(`[data-keypad-key="${key}"]`);
@@ -561,13 +577,14 @@ describe("NumericPad double presses", () => {
 			modal: "systemControlsOpen",
 			value: true,
 		});
+		commandProjection.text = "FIXTURE";
+		commandProjection.pristine = true;
 		pressTwice("CUE");
-		expect(dispatch).toHaveBeenCalledWith({
-			type: "OPEN_BUILTIN",
-			kind: "cuelists",
-		});
+		expect(commandActions.replace).toHaveBeenLastCalledWith("CUELIST");
+		commandProjection.text = "FIXTURE";
+		commandProjection.pristine = true;
 		pressTwice("PLAYBACK");
-		expect(pageMenu).toHaveBeenCalledOnce();
+		expect(commandActions.replace).toHaveBeenLastCalledWith("VPBK");
 	});
 
 	it("executes the selected Dot and At value shortcuts", () => {

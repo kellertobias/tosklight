@@ -9,10 +9,13 @@ use light_application::{
     ProgrammingChoiceOptionId as ApplicationChoiceOptionId, ProgrammingOutcome, ProgrammingResult,
 };
 use light_programmer::CommandLineState;
-use light_programmer::command_line::{CommandKey, CommandKeyPhase};
+use light_programmer::command_line::{
+    CommandGesture, CommandGestureKind, CommandKey, CommandKeyPhase,
+};
 use light_wire::v2::command_line::{
     CommandAcceptedAction, CommandChoiceOption as WireChoiceOption,
-    CommandChoiceOptionId as WireChoiceOptionId, CommandKey as WireCommandKey,
+    CommandChoiceOptionId as WireChoiceOptionId, CommandGesture as WireCommandGesture,
+    CommandGestureKind as WireCommandGestureKind, CommandKey as WireCommandKey,
     CommandKeyPhase as WireCommandKeyPhase, CommandLineResponse, CommandOperationOutcome,
     CommandOperationResponse, CommandTarget as WireCommandTarget, CueMoveCopyChoice,
     CueMoveCopyChoiceType as WireChoiceType, CueTransferOperation as WireCueOperation,
@@ -156,11 +159,24 @@ pub(super) const fn command_key_phase(phase: WireCommandKeyPhase) -> CommandKeyP
     }
 }
 
+pub(super) const fn command_gesture(gesture: WireCommandGesture) -> CommandGesture {
+    CommandGesture {
+        kind: match gesture.kind {
+            WireCommandGestureKind::Regular => CommandGestureKind::Regular,
+            WireCommandGestureKind::Double => CommandGestureKind::Double,
+            WireCommandGestureKind::Hold => CommandGestureKind::Hold,
+        },
+        shifted: gesture.shifted,
+    }
+}
+
 pub(super) const fn command_key(key: WireCommandKey) -> CommandKey {
     match key {
         WireCommandKey::Set => CommandKey::Set,
         WireCommandKey::Group => CommandKey::Group,
         WireCommandKey::Cue => CommandKey::Cue,
+        WireCommandKey::Playback => CommandKey::Playback,
+        WireCommandKey::Off => CommandKey::Off,
         WireCommandKey::Undo => CommandKey::Undo,
         WireCommandKey::Clear => CommandKey::Clear,
         WireCommandKey::Delete => CommandKey::Delete,
@@ -179,6 +195,15 @@ pub(super) const fn command_key(key: WireCommandKey) -> CommandKey {
         WireCommandKey::Delay => CommandKey::Delay,
         WireCommandKey::Link => CommandKey::Link,
         WireCommandKey::Select => CommandKey::Select,
+        WireCommandKey::Highlight => CommandKey::Highlight,
+        WireCommandKey::Previous => CommandKey::Previous,
+        WireCommandKey::Next => CommandKey::Next,
+        WireCommandKey::All => CommandKey::All,
+        WireCommandKey::EncoderPlayback => CommandKey::EncoderPlayback,
+        WireCommandKey::PageUp => CommandKey::PageUp,
+        WireCommandKey::PageDown => CommandKey::PageDown,
+        WireCommandKey::Align => CommandKey::Align,
+        WireCommandKey::Fade => CommandKey::Fade,
         WireCommandKey::Plus => CommandKey::Plus,
         WireCommandKey::Minus => CommandKey::Minus,
         WireCommandKey::Dot => CommandKey::Dot,

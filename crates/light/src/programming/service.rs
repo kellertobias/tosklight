@@ -6,7 +6,10 @@ use super::{
 };
 use crate::{ActionEnvelope, ActionError, EventBus};
 use light_core::{SessionId, UserId};
-use light_programmer::command_line::{CommandKeyIntent, command_key_intent};
+use light_programmer::command_line::{
+    CommandGesture, CommandGestureIntent, CommandImmediateAction, CommandKeyIntent,
+    command_gesture_intent, command_key_intent,
+};
 use light_programmer::{HighlightRegistry, ProgrammerRegistry};
 use parking_lot::Mutex;
 use std::collections::HashMap;
@@ -291,11 +294,13 @@ impl ProgrammingService {
             ProgrammingCommand::ApplyKey {
                 key,
                 phase,
+                gesture,
                 execute_policy,
             } => self.apply_key(
                 session,
                 *key,
                 *phase,
+                *gesture,
                 *execute_policy,
                 &action.context,
                 ports,
@@ -384,6 +389,7 @@ impl ProgrammingService {
         session: SessionId,
         key: light_programmer::command_line::CommandKey,
         phase: light_programmer::command_line::CommandKeyPhase,
+        gesture: Option<CommandGesture>,
         policy: ExecutionPolicy,
         context: &crate::ActionContext,
         ports: &dyn ProgrammingPorts,
@@ -398,7 +404,42 @@ impl ProgrammingService {
             self.programmers.deactivate_alignment(session);
         }
         let current = command_line(&self.programmers, session)?;
-        match command_key_intent(&current, key, phase) {
+        if let Some(gesture) = gesture {
+            return match command_gesture_intent(&current, key, gesture) {
+                CommandGestureIntent::Key(intent) => {
+                    self.apply_key_intent(session, key, phase, policy, intent, context, ports)
+                }
+                CommandGestureIntent::Edit(edit) => {
+                    validate_command(&edit.text)?;
+                    self.programmers
+                        .update_command_line(session, |_| (edit.text, edit.target, edit.pristine))
+                        .ok_or_else(unknown_programmer)?;
+                    let warning = ports.persist(context, "programmer.command_line");
+                    Ok(accepted(ProgrammingAction::Edited, None, warning))
+                }
+                CommandGestureIntent::Immediate(CommandImmediateAction::Undo) => {
+                    self.undo(session, context, ports)
+                }
+                CommandGestureIntent::Immediate(_) => {
+                    Ok(accepted(ProgrammingAction::NoChange, None, None))
+                }
+            };
+        }
+        let intent = command_key_intent(&current, key, phase);
+        self.apply_key_intent(session, key, phase, policy, intent, context, ports)
+    }
+
+    fn apply_key_intent(
+        &self,
+        session: SessionId,
+        key: light_programmer::command_line::CommandKey,
+        phase: light_programmer::command_line::CommandKeyPhase,
+        policy: ExecutionPolicy,
+        intent: CommandKeyIntent,
+        context: &crate::ActionContext,
+        ports: &dyn ProgrammingPorts,
+    ) -> Result<ProgrammingOutcome, ActionError> {
+        match intent {
             CommandKeyIntent::NoOp => Ok(accepted(ProgrammingAction::IgnoredRelease, None, None)),
             CommandKeyIntent::Shift { pressed } => Ok(accepted(
                 if pressed {

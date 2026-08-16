@@ -83,3 +83,23 @@ async fn command_line_v2_keys_are_replay_safe_and_put_writers_use_one_atomic_bou
     verify_atomic_put_boundary(&scenario).await;
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
+
+#[tokio::test]
+async fn command_line_v2_accepts_transport_neutral_shift_and_double_gestures() {
+    let scenario = CommandHttpScenario::new().await;
+    let shifted = scenario
+        .gesture_key("CUE", "regular", true, "shift-cue")
+        .await;
+    assert_eq!(shifted.status(), StatusCode::OK);
+    assert_eq!(json(shifted).await["command_line"]["text"], "TIMECODE");
+
+    let reset = scenario.put("FIXTURE", 1).await;
+    assert_eq!(reset.status(), StatusCode::OK);
+    let double = scenario
+        .gesture_key("PBK", "double", false, "double-pbk")
+        .await;
+    assert_eq!(double.status(), StatusCode::OK);
+    assert_eq!(json(double).await["command_line"]["text"], "VPBK");
+
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}
