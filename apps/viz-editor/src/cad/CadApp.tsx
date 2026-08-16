@@ -17,6 +17,7 @@ import {
 	newTile,
 	normaliseQuarterTurns,
 	projectPoint,
+	removeSplitSide,
 	type SelectionChange,
 	setSplitRatio,
 	splitTileAtEdge,
@@ -307,6 +308,7 @@ export function CadApp() {
 						<CadTile
 							node={layout}
 							root={layout}
+							closeActions={{}}
 							scene={scene}
 							settings={settings}
 							preview={preview}
@@ -446,6 +448,7 @@ function findTile(node: TileNode, id: string): ViewportTile | null {
 interface CadTileProps {
 	node: TileNode;
 	root: TileNode;
+	closeActions: Partial<Record<TileEdge, ClosePaneAction>>;
 	scene: CadSceneSnapshot;
 	settings: CadSettings;
 	preview: CadTransformPreview | null;
@@ -469,6 +472,11 @@ interface CadTileProps {
 	onChangePrintPage(id: string, change: Partial<CadPrintPage>): void;
 }
 
+interface ClosePaneAction {
+	splitId: string;
+	remove: "first" | "second";
+}
+
 function CadTile(props: CadTileProps) {
 	const { node } = props;
 	if (node.type === "split") {
@@ -479,9 +487,17 @@ function CadTile(props: CadTileProps) {
 					{ "--cad-split-ratio": `${node.ratio * 100}%` } as React.CSSProperties
 				}
 			>
-				<CadTile {...props} node={node.first} />
+				<CadTile
+					{...props}
+					node={node.first}
+					closeActions={childCloseActions(props.closeActions, node, "first")}
+				/>
 				<CadDivider node={node} onRatio={props.onSplitRatio} />
-				<CadTile {...props} node={node.second} />
+				<CadTile
+					{...props}
+					node={node.second}
+					closeActions={childCloseActions(props.closeActions, node, "second")}
+				/>
 			</div>
 		);
 	}
@@ -530,33 +546,45 @@ function CadTile(props: CadTileProps) {
 			<CadOrientation
 				view={node.view}
 				rotationQuarterTurns={node.rotationQuarterTurns}
+				onRotate={
+					node.view === "top_down"
+						? (delta) => rotateTile(props, node, delta)
+						: undefined
+				}
 			/>
-			{node.view === "top_down" ? (
-				<>
-					<RotateViewButton
-						direction="counterclockwise"
-						onRotate={() => rotateTile(props, node, -1)}
-					/>
-					<RotateViewButton
-						direction="clockwise"
-						onRotate={() => rotateTile(props, node, 1)}
-					/>
-				</>
-			) : null}
-			{(["left", "right", "top", "bottom"] as TileEdge[]).map((edge) => (
-				<Button
-					key={edge}
-					className={`cad-add-viewport is-${edge}`}
-					aria-label={`Add viewport ${edge}`}
-					title={`Add viewport ${edge}`}
-					onPointerDown={(event) => event.stopPropagation()}
-					onClick={() =>
-						props.onLayout(splitTileAtEdge(props.root, node.id, edge))
-					}
-				>
-					<span aria-hidden="true">+</span>
-				</Button>
-			))}
+			{(["left", "right", "top", "bottom"] as TileEdge[]).map((edge) => {
+				const close = props.closeActions[edge];
+				return (
+					<div key={edge} className={`cad-edge-controls is-${edge}`}>
+						<Button
+							className="cad-add-viewport"
+							aria-label={`Add viewport ${edge}`}
+							title={`Add viewport ${edge}`}
+							onPointerDown={(event) => event.stopPropagation()}
+							onClick={() =>
+								props.onLayout(splitTileAtEdge(props.root, node.id, edge))
+							}
+						>
+							<span aria-hidden="true">+</span>
+						</Button>
+						{close ? (
+							<Button
+								className="cad-close-viewport"
+								aria-label={`Close pane ${edge}`}
+								title={`Close pane ${edge}`}
+								onPointerDown={(event) => event.stopPropagation()}
+								onClick={() =>
+									props.onLayout(
+										removeSplitSide(props.root, close.splitId, close.remove),
+									)
+								}
+							>
+								<span aria-hidden="true">{edgeArrow(edge)}</span>
+							</Button>
+						) : null}
+					</div>
+				);
+			})}
 			<CadViewport
 				entities={props.scene.entities}
 				drawings={props.scene.drawings}
@@ -652,9 +680,65 @@ function RotateViewButton({
 			onPointerDown={(event) => event.stopPropagation()}
 			onClick={onRotate}
 		>
-			<span aria-hidden="true">{direction === "clockwise" ? "↻" : "↺"}</span>
+			<svg aria-hidden="true" viewBox="0 0 56 56">
+				{direction === "counterclockwise" ? (
+					<>
+						<path d="M 54 9 A 45 45 0 0 0 9 54" />
+						<path d="M 9 54 L 8 43 M 9 54 L 20 53" />
+					</>
+				) : (
+					<>
+						<path d="M 2 47 A 45 45 0 0 0 47 2" />
+						<path d="M 47 2 L 36 3 M 47 2 L 48 13" />
+					</>
+				)}
+			</svg>
 		</Button>
 	);
+}
+
+function childCloseActions(
+	outer: Partial<Record<TileEdge, ClosePaneAction>>,
+	node: Extract<TileNode, { type: "split" }>,
+	branch: "first" | "second",
+): Partial<Record<TileEdge, ClosePaneAction>> {
+	const actions: Partial<Record<TileEdge, ClosePaneAction>> = {};
+	for (const edge of ["left", "right", "top", "bottom"] as TileEdge[]) {
+		if (touchesOuterEdge(node.direction, branch, edge) && outer[edge])
+			actions[edge] = outer[edge];
+	}
+	const edge =
+		node.direction === "horizontal"
+			? branch === "first"
+				? "right"
+				: "left"
+			: branch === "first"
+				? "bottom"
+				: "top";
+	actions[edge] = {
+		splitId: node.id,
+		remove: branch === "first" ? "second" : "first",
+	};
+	return actions;
+}
+
+function touchesOuterEdge(
+	direction: "horizontal" | "vertical",
+	branch: "first" | "second",
+	edge: TileEdge,
+) {
+	if (direction === "horizontal") {
+		if (edge === "left") return branch === "first";
+		if (edge === "right") return branch === "second";
+		return true;
+	}
+	if (edge === "top") return branch === "first";
+	if (edge === "bottom") return branch === "second";
+	return true;
+}
+
+function edgeArrow(edge: TileEdge) {
+	return { left: "←", right: "→", top: "↑", bottom: "↓" }[edge];
 }
 
 function CadDivider({
@@ -717,32 +801,48 @@ const DEPTH_AXIS: Record<CadViewDirection, { axis: WorldAxis; sign: 1 | -1 }> =
 function CadOrientation({
 	view,
 	rotationQuarterTurns,
+	onRotate,
 }: {
 	view: CadViewDirection;
 	rotationQuarterTurns: number;
+	onRotate?(delta: -1 | 1): void;
 }) {
 	const axes = viewAxes(view, rotationQuarterTurns);
 	const horizontal = axisLabel(axes.horizontal);
 	const vertical = axisLabel(axes.vertical);
 	const depth = axisLabel(DEPTH_AXIS[view]);
 	return (
-		<div
-			className="cad-orientation"
-			role="img"
-			aria-label={`Orientation: right ${horizontal}, up ${vertical}, depth ${depth}`}
-		>
-			<span className={`cad-axis-horizontal is-${axes.horizontal.axis}`}>
-				{horizontal}
-			</span>
-			<span className={`cad-axis-vertical is-${axes.vertical.axis}`}>
-				{vertical}
-			</span>
-			<span className="cad-axis-origin" aria-hidden="true">
-				+
-			</span>
-			<span className={`cad-axis-depth is-${DEPTH_AXIS[view].axis}`}>
-				{depth}
-			</span>
+		<div className="cad-orientation-wrap">
+			<div
+				className="cad-orientation"
+				role="img"
+				aria-label={`Orientation: right ${horizontal}, up ${vertical}, depth ${depth}`}
+			>
+				<span className={`cad-axis-horizontal is-${axes.horizontal.axis}`}>
+					{horizontal}
+				</span>
+				<span className={`cad-axis-vertical is-${axes.vertical.axis}`}>
+					{vertical}
+				</span>
+				<span className="cad-axis-origin" aria-hidden="true">
+					+
+				</span>
+				<span className={`cad-axis-depth is-${DEPTH_AXIS[view].axis}`}>
+					{depth}
+				</span>
+			</div>
+			{onRotate ? (
+				<>
+					<RotateViewButton
+						direction="counterclockwise"
+						onRotate={() => onRotate(-1)}
+					/>
+					<RotateViewButton
+						direction="clockwise"
+						onRotate={() => onRotate(1)}
+					/>
+				</>
+			) : null}
 		</div>
 	);
 }

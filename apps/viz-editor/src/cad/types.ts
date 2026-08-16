@@ -350,6 +350,20 @@ export function splitTileAtEdge(
 	});
 }
 
+export function removeSplitSide(
+	node: TileNode,
+	id: string,
+	remove: "first" | "second",
+): TileNode {
+	if (node.type === "tile") return node;
+	if (node.id === id) return remove === "first" ? node.second : node.first;
+	return {
+		...node,
+		first: removeSplitSide(node.first, id, remove),
+		second: removeSplitSide(node.second, id, remove),
+	};
+}
+
 export function setSplitRatio(
 	node: TileNode,
 	id: string,

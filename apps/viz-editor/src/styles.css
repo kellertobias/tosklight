@@ -1454,11 +1454,20 @@ body {
 	border-radius: 3px 0 0 3px;
 }
 
-.cad-orientation {
+.cad-orientation-wrap {
 	position: absolute;
 	z-index: 12;
+	top: 4px;
+	right: 4px;
+	width: 104px;
+	height: 104px;
+	pointer-events: none;
+}
+
+.cad-orientation {
+	position: absolute;
 	top: 14px;
-	right: 14px;
+	left: 14px;
 	width: 76px;
 	height: 76px;
 	border: 1px solid #2b343e;
@@ -1544,9 +1553,45 @@ body {
 	color: #3d7dff;
 }
 
-.cad-add-viewport.ui-button {
+.cad-edge-controls {
 	position: absolute;
 	z-index: 14;
+	display: flex;
+	gap: 3px;
+	align-items: center;
+}
+
+.cad-edge-controls.is-left,
+.cad-edge-controls.is-right {
+	top: 50%;
+	flex-direction: column;
+	transform: translateY(-50%);
+}
+
+.cad-edge-controls.is-left {
+	left: 7px;
+}
+
+.cad-edge-controls.is-right {
+	right: 7px;
+}
+
+.cad-edge-controls.is-top,
+.cad-edge-controls.is-bottom {
+	left: 50%;
+	transform: translateX(-50%);
+}
+
+.cad-edge-controls.is-top {
+	top: 7px;
+}
+
+.cad-edge-controls.is-bottom {
+	bottom: 7px;
+}
+
+.cad-add-viewport.ui-button,
+.cad-close-viewport.ui-button {
 	display: grid;
 	place-items: center;
 	width: 24px;
@@ -1563,78 +1608,63 @@ body {
 	opacity: 0.42;
 }
 
-.cad-add-viewport.ui-button:hover {
+.cad-close-viewport.ui-button {
+	font-size: 13px;
+}
+
+.cad-add-viewport.ui-button:hover,
+.cad-close-viewport.ui-button:hover {
 	border-color: #20d9f0;
 	background: #15333d;
 	color: #e8fcff;
 	opacity: 1;
 }
 
-.cad-add-viewport.ui-button:focus-visible {
+.cad-add-viewport.ui-button:focus-visible,
+.cad-close-viewport.ui-button:focus-visible {
 	border-color: #20d9f0;
 	background: #15333d;
 	color: #e8fcff;
 	opacity: 1;
-}
-
-.cad-add-viewport.is-left,
-.cad-add-viewport.is-right {
-	top: 50%;
-	transform: translateY(-50%);
-}
-
-.cad-add-viewport.is-left {
-	left: 7px;
-}
-
-.cad-add-viewport.is-right {
-	right: 7px;
-}
-
-.cad-add-viewport.is-top,
-.cad-add-viewport.is-bottom {
-	left: 50%;
-	transform: translateX(-50%);
-}
-
-.cad-add-viewport.is-top {
-	top: 7px;
-}
-
-.cad-add-viewport.is-bottom {
-	bottom: 7px;
 }
 
 .cad-rotate-view.ui-button {
 	position: absolute;
-	z-index: 13;
-	width: 28px;
-	height: 28px;
+	z-index: 2;
+	width: 56px;
+	height: 56px;
 	min-width: 0;
 	min-height: 0;
 	padding: 0;
-	border: 1px solid #27333e;
-	border-radius: 50%;
-	background: rgb(8 11 15 / 78%);
+	border: 0;
+	background: transparent;
 	color: #8f9ba5;
-	font-size: 18px;
-	line-height: 1;
+	pointer-events: auto;
+}
+
+.cad-rotate-view svg {
+	display: block;
+	width: 56px;
+	height: 56px;
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 2;
+	stroke-linecap: round;
+	stroke-linejoin: round;
 }
 
 .cad-rotate-view.ui-button:hover {
-	border-color: #20d9f0;
-	background: #15333d;
 	color: #e8fcff;
 }
 
 .cad-rotate-view.is-counterclockwise {
-	top: 12px;
-	left: 12px;
+	top: 0;
+	left: 0;
 }
 
 .cad-rotate-view.is-clockwise {
-	right: 12px;
-	bottom: 12px;
+	right: 0;
+	bottom: 0;
 }
 
 .cad-viewport {

@@ -244,6 +244,15 @@ describe("the CAD planning window", () => {
 		).not.toBeInTheDocument();
 
 		fireEvent.change(direction, { target: { value: "top_down" } });
+		const orientation = screen.getByRole("img", {
+			name: "Orientation: right +X, up −Y, depth +Z",
+		}).parentElement as HTMLElement;
+		expect(
+			within(orientation).getAllByRole("button", {
+				name: /Rotate top-down view/,
+			}),
+		).toHaveLength(2);
+		expect(orientation.querySelectorAll("svg")).toHaveLength(2);
 		fireEvent.click(
 			screen.getByRole("button", {
 				name: "Rotate top-down view 90 degrees clockwise",
@@ -312,6 +321,34 @@ describe("the CAD planning window", () => {
 		expect(
 			localStorage.getItem("tosklight:viz-editor:cad-workspace:v1"),
 		).toContain("split");
+	});
+
+	it("closes the neighboring pane in the direction of its edge arrow", async () => {
+		render(
+			<ModalProvider>
+				<CadApp />
+			</ModalProvider>,
+		);
+		fireEvent.click(
+			await screen.findByRole("button", { name: "Add viewport bottom" }),
+		);
+		await waitFor(() =>
+			expect(screen.getAllByTestId("cad-canvas")).toHaveLength(2),
+		);
+		expect(
+			screen.getByRole("button", { name: "Close pane bottom" }),
+		).toHaveTextContent("↓");
+		expect(
+			screen.getByRole("button", { name: "Close pane top" }),
+		).toHaveTextContent("↑");
+
+		fireEvent.click(screen.getByRole("button", { name: "Close pane bottom" }));
+		await waitFor(() =>
+			expect(screen.getAllByTestId("cad-canvas")).toHaveLength(1),
+		);
+		expect(
+			screen.queryByRole("button", { name: /Close pane/ }),
+		).not.toBeInTheDocument();
 	});
 
 	it("resizes neighboring viewports by dragging their divider", async () => {

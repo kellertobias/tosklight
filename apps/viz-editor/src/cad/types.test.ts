@@ -5,6 +5,7 @@ import {
 	newTile,
 	planeDelta,
 	projectPoint,
+	removeSplitSide,
 	setSplitRatio,
 	splitTile,
 	splitTileAtEdge,
@@ -88,5 +89,21 @@ describe("CAD workspace model", () => {
 		expect(setSplitRatio(split, "split", 0.72)).toMatchObject({ ratio: 0.72 });
 		expect(setSplitRatio(split, "split", 0.99)).toMatchObject({ ratio: 0.85 });
 		vi.unstubAllGlobals();
+	});
+
+	it("removes either side of a recursive split without removing the survivor", () => {
+		const first = newTile();
+		const second = newTile();
+		const split = {
+			type: "split" as const,
+			id: "split",
+			direction: "vertical" as const,
+			ratio: 0.4,
+			first,
+			second,
+		};
+		expect(removeSplitSide(split, "split", "second")).toBe(first);
+		expect(removeSplitSide(split, "split", "first")).toBe(second);
+		expect(removeSplitSide(first, "missing", "first")).toBe(first);
 	});
 });
