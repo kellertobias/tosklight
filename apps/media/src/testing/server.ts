@@ -272,6 +272,10 @@ export function stubServer(
 						layer.effects[body.effectSlot] = beatGridWaveEffect(
 							body.effectSlot,
 						);
+					} else if (body.effectType === "beat-form-flash") {
+						layer.effects[body.effectSlot] = beatFormFlashEffect(
+							body.effectSlot,
+						);
 					}
 					const selectedEffect = layer.effects[body.effectSlot];
 					if (body.visualizerParameters !== undefined)
@@ -363,6 +367,14 @@ export function stubServer(
 						selectedEffect.parameters[4].value = body.beatGridHue;
 					if (body.beatGridBrightness !== undefined)
 						selectedEffect.parameters[5].value = body.beatGridBrightness;
+					if (body.beatFormEnlargement !== undefined)
+						selectedEffect.parameters[0].value = body.beatFormEnlargement;
+					if (body.beatFormLifetime !== undefined)
+						selectedEffect.parameters[1].value = body.beatFormLifetime;
+					if (body.beatFormDensity !== undefined)
+						selectedEffect.parameters[2].value = body.beatFormDensity;
+					if (body.beatFormVariation !== undefined)
+						selectedEffect.parameters[3].value = body.beatFormVariation;
 					for (const [id, key] of [
 						["tv-curvature", "tvCurvature"],
 						["distortion", "effectDistortion"],
@@ -376,7 +388,8 @@ export function stubServer(
 						const parameter = selectedEffect.parameters.find(
 							(candidate) => candidate.id === id,
 						);
-						if (parameter && body[key] !== undefined) parameter.value = body[key];
+						if (parameter && body[key] !== undefined)
+							parameter.value = body[key];
 					}
 				}
 				return jsonResponse(output);
@@ -660,7 +673,9 @@ export function aLayer(index: number): OutputView["layers"][number] {
 	};
 }
 
-function emptyEffect(index: number): OutputView["layers"][number]["effects"][number] {
+function emptyEffect(
+	index: number,
+): OutputView["layers"][number]["effects"][number] {
 	return {
 		index,
 		effectType: null,
@@ -958,6 +973,44 @@ function beatGridWaveEffect(
 				label: "Brightness",
 				value: 1,
 				defaultValue: 1,
+			},
+		],
+	};
+}
+
+function beatFormFlashEffect(
+	index: number,
+): OutputView["layers"][number]["effects"][number] {
+	return {
+		...emptyEffect(index),
+		effectType: "beat-form-flash",
+		label: "Beat Form Flash",
+		enabled: true,
+		mix: 1,
+		parameters: [
+			{
+				id: "beat-form-enlargement",
+				label: "Start size",
+				value: 1.6,
+				defaultValue: 1.6,
+			},
+			{
+				id: "beat-form-lifetime",
+				label: "Lifetime",
+				value: 0.9,
+				defaultValue: 0.9,
+			},
+			{
+				id: "beat-form-density",
+				label: "Forms per beat",
+				value: 1,
+				defaultValue: 1,
+			},
+			{
+				id: "beat-form-variation",
+				label: "Variation",
+				value: 0.35,
+				defaultValue: 0.35,
 			},
 		],
 	};

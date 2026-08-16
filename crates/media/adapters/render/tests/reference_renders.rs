@@ -10,10 +10,10 @@
 
 use media_domain::geometry::Size;
 use media_domain::{
-    AnalogTvParameters, BeatGridWaveOrigin, BeatGridWaveParameters, BeatScanEdge,
-    BeatScanParameters, BlurParameters, DigitalTvParameters, EffectSlot, FeedbackMotion,
-    FeedbackParameters, FlipMirror, KaleidoscopeParameters, LayerState, MaskSource, MaskState,
-    MasterState, MediaAddress, OutputId, PresentationMode, RasterizeMode,
+    AnalogTvParameters, BeatFormFlashParameters, BeatGridWaveOrigin, BeatGridWaveParameters,
+    BeatScanEdge, BeatScanParameters, BlurParameters, DigitalTvParameters, EffectSlot,
+    FeedbackMotion, FeedbackParameters, FlipMirror, KaleidoscopeParameters, LayerState, MaskSource,
+    MaskState, MasterState, MediaAddress, OutputId, PresentationMode, RasterizeMode,
     RasterizeParameters, ScalingMode, SourceStatus, Timestamp, Tint,
 };
 use media_render::{Gpu, LayerDraw, OutputRenderer, SourceTexture};
@@ -221,6 +221,30 @@ fn beat_grid_wave_state(
     .to_vec();
     for (progress, strength) in events {
         effect.parameters.extend([*progress, *strength]);
+    }
+    let mut effects: [EffectSlot; 4] = Default::default();
+    effects[0] = effect;
+    ready(LayerState {
+        effects,
+        ..Default::default()
+    })
+}
+
+fn beat_form_flash_state(events: &[(f32, f32, f32, f32)], enabled: bool) -> LayerState {
+    let mut effect = EffectSlot::beat_form_flash();
+    effect.enabled = enabled;
+    effect.parameters = BeatFormFlashParameters {
+        enlargement: 1.8,
+        lifetime_seconds: 1.0,
+        density: 2,
+        variation: 0.4,
+    }
+    .as_array()
+    .to_vec();
+    for event in events {
+        effect
+            .parameters
+            .extend([event.0, event.1, event.2, event.3]);
     }
     let mut effects: [EffectSlot; 4] = Default::default();
     effects[0] = effect;
@@ -475,6 +499,35 @@ fn beat_grid_wave_renders_perspective_origins_density_and_overlapping_live_waves
     assert!(changed_pixels(&left, &centre) > 250);
     assert!(changed_pixels(&dense, &centre) > 700);
     assert_eq!(disabled.pixels, clear.pixels, "bypass restores the source");
+}
+
+#[test]
+fn beat_form_flash_samples_the_source_and_renders_independent_shrinking_forms() {
+    let mut bench = Bench::new();
+    let source = patterned_source(&bench.gpu);
+    let plain = ready(LayerState::default());
+    let waiting = beat_form_flash_state(&[], true);
+    let first = beat_form_flash_state(&[(0.1, 0.3, 0.4, 1.0)], true);
+    let progressed = beat_form_flash_state(&[(0.75, 0.3, 0.4, 1.0)], true);
+    let overlapping =
+        beat_form_flash_state(&[(0.25, 0.3, 0.4, 1.0), (0.05, 0.72, 0.65, 1.25)], true);
+    let disabled = beat_form_flash_state(&[(0.1, 0.3, 0.4, 1.0)], false);
+    let draw = |state| LayerDraw {
+        state,
+        source: &source,
+        mask: None,
+    };
+    let plain = bench.render(&[draw(&plain)], &MasterState::default());
+    let waiting = bench.render(&[draw(&waiting)], &MasterState::default());
+    let first = bench.render(&[draw(&first)], &MasterState::default());
+    let progressed = bench.render(&[draw(&progressed)], &MasterState::default());
+    let overlapping = bench.render(&[draw(&overlapping)], &MasterState::default());
+    let disabled = bench.render(&[draw(&disabled)], &MasterState::default());
+    assert!(changed_pixels(&waiting, &plain) > 1_000);
+    assert!(changed_pixels(&first, &waiting) > 200);
+    assert!(changed_pixels(&progressed, &first) > 200);
+    assert!(changed_pixels(&overlapping, &first) > 200);
+    assert_eq!(disabled.pixels, plain.pixels, "bypass restores the source");
 }
 
 #[test]

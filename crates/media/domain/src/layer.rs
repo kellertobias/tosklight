@@ -103,6 +103,63 @@ pub const RASTERIZE_EFFECT: &str = "rasterize";
 pub const BEAT_SCAN_EFFECT: &str = "beat-scan";
 pub const BEAT_SCALE_TURN_EFFECT: &str = "beat-scale-turn";
 pub const BEAT_GRID_WAVE_EFFECT: &str = "beat-grid-wave";
+pub const BEAT_FORM_FLASH_EFFECT: &str = "beat-form-flash";
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BeatFormFlashParameters {
+    pub enlargement: f32,
+    pub lifetime_seconds: f32,
+    pub density: u8,
+    pub variation: f32,
+}
+
+impl BeatFormFlashParameters {
+    pub const IDS: [&'static str; 4] = [
+        "beat-form-enlargement",
+        "beat-form-lifetime",
+        "beat-form-density",
+        "beat-form-variation",
+    ];
+    pub const LABELS: [&'static str; 4] = ["Start size", "Lifetime", "Forms per beat", "Variation"];
+    pub fn from_parameters(values: &[f32]) -> Self {
+        let defaults = Self::default();
+        let bounded = |value: Option<f32>, fallback: f32, low: f32, high: f32| match value {
+            Some(value) if value.is_finite() => value.clamp(low, high),
+            _ => fallback,
+        };
+        Self {
+            enlargement: bounded(values.first().copied(), defaults.enlargement, 1.0, 4.0),
+            lifetime_seconds: bounded(values.get(1).copied(), defaults.lifetime_seconds, 0.1, 5.0),
+            density: bounded(
+                values.get(2).copied(),
+                f32::from(defaults.density),
+                1.0,
+                4.0,
+            )
+            .round() as u8,
+            variation: bounded(values.get(3).copied(), defaults.variation, 0.0, 1.0),
+        }
+    }
+    pub const fn as_array(self) -> [f32; 4] {
+        [
+            self.enlargement,
+            self.lifetime_seconds,
+            self.density as f32,
+            self.variation,
+        ]
+    }
+}
+
+impl Default for BeatFormFlashParameters {
+    fn default() -> Self {
+        Self {
+            enlargement: 1.6,
+            lifetime_seconds: 0.9,
+            density: 1,
+            variation: 0.35,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum BeatGridWaveOrigin {
@@ -1081,6 +1138,24 @@ impl EffectSlot {
         .then(|| BeatGridWaveParameters::from_parameters(&self.parameters))
     }
 
+    pub fn beat_form_flash() -> Self {
+        Self {
+            effect_type: Some(BEAT_FORM_FLASH_EFFECT.to_owned()),
+            enabled: true,
+            seed: 0,
+            mix: 1.0,
+            parameters: BeatFormFlashParameters::default().as_array().to_vec(),
+            visualizer_parameters: None,
+        }
+    }
+
+    pub fn beat_form_flash_parameters(&self) -> Option<BeatFormFlashParameters> {
+        (self.enabled
+            && self.mix > 0.0
+            && self.effect_type.as_deref() == Some(BEAT_FORM_FLASH_EFFECT))
+        .then(|| BeatFormFlashParameters::from_parameters(&self.parameters))
+    }
+
     pub fn normalize(&mut self) {
         self.mix = if self.mix.is_finite() {
             self.mix.clamp(0.0, 1.0)
@@ -1129,6 +1204,10 @@ impl EffectSlot {
                 .to_vec();
         } else if self.effect_type.as_deref() == Some(BEAT_GRID_WAVE_EFFECT) {
             self.parameters = BeatGridWaveParameters::from_parameters(&self.parameters)
+                .as_array()
+                .to_vec();
+        } else if self.effect_type.as_deref() == Some(BEAT_FORM_FLASH_EFFECT) {
+            self.parameters = BeatFormFlashParameters::from_parameters(&self.parameters)
                 .as_array()
                 .to_vec();
         }
@@ -1584,5 +1663,19 @@ mod tests {
         assert_eq!(effect.parameters, vec![64.0, 1.0, 4.0, 4.0, 360.0, 0.1]);
         effect.enabled = false;
         assert_eq!(effect.beat_grid_wave_parameters(), None);
+    }
+
+    #[test]
+    fn beat_form_flash_has_bounded_persisted_spawn_controls() {
+        let mut effect = EffectSlot::beat_form_flash();
+        assert_eq!(
+            effect.beat_form_flash_parameters(),
+            Some(BeatFormFlashParameters::default())
+        );
+        effect.parameters = vec![9.0, 0.01, 9.0, -1.0];
+        effect.normalize();
+        assert_eq!(effect.parameters, vec![4.0, 0.1, 4.0, 0.0]);
+        effect.enabled = false;
+        assert_eq!(effect.beat_form_flash_parameters(), None);
     }
 }

@@ -24,7 +24,7 @@ struct Layer {
     // x: 1 when the mask reads its strength from alpha rather than luminance.
     mask_source: vec4<f32>,
     // 0: none/unsupported, 1: Analog TV, 2: Digital TV, 3: Blur, 4: Kaleidoscope,
-    // 5: Rasterized Print, 6: Beat Scan, 7: Beat Grid Wave. One type per ordered slot.
+    // 5: Rasterized Print, 6: Beat Scan, 7: Beat Grid Wave, 8: Beat Form Flash.
     effect_types: vec4<u32>,
     effect_mixes: vec4<f32>,
     // Typed normalized parameters for slots 1..4. Analog TV is curvature, distortion, grain,
@@ -37,6 +37,8 @@ struct Layer {
     effect_clock: vec4<f32>,
     beat_scan_positions: array<vec4<f32>, 16>,
     beat_scan_counts: array<vec4<f32>, 16>,
+    beat_event_x: array<vec4<f32>, 16>,
+    beat_event_y: array<vec4<f32>, 16>,
 };
 
 @group(0) @binding(0) var<uniform> layer: Layer;
@@ -482,6 +484,30 @@ fn beat_grid_wave_source(
     return vec4<f32>(mix(original.rgb, scene, effect_mix), original.a);
 }
 
+fn beat_form_flash_source(original: vec4<f32>, uv: vec2<f32>, parameters: vec4<f32>, effect_mix: f32, slot: u32) -> vec4<f32> {
+    if effect_mix <= 0.0 { return original; }
+    var colour = vec3<f32>(0.0);
+    var alpha = 0.0;
+    for (var event = 0u; event < 16u; event += 1u) {
+        let progress = layer.beat_scan_positions[event][slot];
+        if progress >= 0.0 && progress <= 1.0 {
+            let centre = vec2<f32>(layer.beat_event_x[event][slot], layer.beat_event_y[event][slot]);
+            let variation = clamp(layer.beat_scan_counts[event][slot], 0.25, 1.75);
+            let start_scale = clamp(parameters.x, 1.0, 4.0) * variation;
+            let scale = mix(start_scale, 0.18 * variation, smoothstep(0.0, 1.0, progress));
+            let source_uv = (uv - centre) / max(scale, 0.001) + vec2<f32>(0.5);
+            if all(source_uv >= vec2<f32>(0.0)) && all(source_uv <= vec2<f32>(1.0)) {
+                let form = textureSample(source, source_sampler, source_uv);
+                let form_alpha = form.a * pow(1.0 - progress, 2.0);
+                colour = colour + form.rgb * form_alpha * (1.0 - alpha);
+                alpha = alpha + form_alpha * (1.0 - alpha);
+            }
+        }
+    }
+    let forms = vec4<f32>(select(vec3<f32>(0.0), colour / max(alpha, 0.0001), alpha > 0.0), alpha);
+    return mix(original, forms, effect_mix);
+}
+
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     var coordinates: EffectCoordinates;
@@ -546,6 +572,8 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
                 layer.effect_mixes[slot],
                 slot,
             );
+        } else if layer.effect_types[slot] == 8u {
+            sampled = beat_form_flash_source(sampled, coordinates.uv, layer.effect_parameters[slot], layer.effect_mixes[slot], slot);
         }
     }
     for (var slot = 0u; slot < 4u; slot += 1u) {

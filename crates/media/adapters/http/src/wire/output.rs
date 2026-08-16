@@ -4,13 +4,13 @@ use media_application::configuration::{
     DmxProtocol, MonitorSelector, OutputConfiguration, OutputTarget, Resolution, SoundOutput,
 };
 use media_domain::{
-    ANALOG_TV_EFFECT, AnalogTvParameters, BEAT_GRID_WAVE_EFFECT, BEAT_MOVE_EFFECT,
-    BEAT_SCALE_TURN_EFFECT, BEAT_SCAN_EFFECT, BLUR_EFFECT, BeatGridWaveParameters,
-    BeatMoveParameters, BeatScaleTurnParameters, BeatScanParameters, BlurParameters,
-    DIGITAL_TV_EFFECT, DigitalTvParameters, EffectSlot, FEEDBACK_EFFECT, FeedbackParameters,
-    KALEIDOSCOPE_EFFECT, KaleidoscopeParameters, LayerState, MaskSource, MaskState, MasterState,
-    MediaAddress, OPACITY_CYCLE_EFFECT, OpacityCycleInterval, OutputState, RASTERIZE_EFFECT,
-    RasterizeParameters,
+    ANALOG_TV_EFFECT, AnalogTvParameters, BEAT_FORM_FLASH_EFFECT, BEAT_GRID_WAVE_EFFECT,
+    BEAT_MOVE_EFFECT, BEAT_SCALE_TURN_EFFECT, BEAT_SCAN_EFFECT, BLUR_EFFECT,
+    BeatFormFlashParameters, BeatGridWaveParameters, BeatMoveParameters, BeatScaleTurnParameters,
+    BeatScanParameters, BlurParameters, DIGITAL_TV_EFFECT, DigitalTvParameters, EffectSlot,
+    FEEDBACK_EFFECT, FeedbackParameters, KALEIDOSCOPE_EFFECT, KaleidoscopeParameters, LayerState,
+    MaskSource, MaskState, MasterState, MediaAddress, OPACITY_CYCLE_EFFECT, OpacityCycleInterval,
+    OutputState, RASTERIZE_EFFECT, RasterizeParameters,
 };
 use media_domain::{LayerPersonality, PresentationMode};
 use serde::{Deserialize, Serialize};
@@ -91,6 +91,7 @@ impl EffectSlotView {
         let beat_scan = effect.effect_type.as_deref() == Some(BEAT_SCAN_EFFECT);
         let beat_scale_turn = effect.effect_type.as_deref() == Some(BEAT_SCALE_TURN_EFFECT);
         let beat_grid_wave = effect.effect_type.as_deref() == Some(BEAT_GRID_WAVE_EFFECT);
+        let beat_form_flash = effect.effect_type.as_deref() == Some(BEAT_FORM_FLASH_EFFECT);
         let parameters = if analog {
             let defaults = AnalogTvParameters::default().as_array();
             let values = AnalogTvParameters::from_normalized(&effect.parameters).as_array();
@@ -204,6 +205,15 @@ impl EffectSlotView {
                 &values,
                 &defaults,
             )
+        } else if beat_form_flash {
+            let defaults = BeatFormFlashParameters::default().as_array();
+            let values = BeatFormFlashParameters::from_parameters(&effect.parameters).as_array();
+            parameter_views(
+                &BeatFormFlashParameters::IDS,
+                &BeatFormFlashParameters::LABELS,
+                &values,
+                &defaults,
+            )
         } else {
             Vec::new()
         };
@@ -221,6 +231,7 @@ impl EffectSlotView {
                 || beat_scan
                 || beat_scale_turn
                 || beat_grid_wave
+                || beat_form_flash
             {
                 if analog {
                     "Analog TV"
@@ -242,6 +253,8 @@ impl EffectSlotView {
                     "Beat Scan"
                 } else if beat_scale_turn {
                     "Beat Scale and Turn"
+                } else if beat_form_flash {
+                    "Beat Form Flash"
                 } else {
                     "Beat Grid Wave"
                 }
@@ -262,7 +275,8 @@ impl EffectSlotView {
                 || rasterize
                 || beat_scan
                 || beat_scale_turn
-                || beat_grid_wave,
+                || beat_grid_wave
+                || beat_form_flash,
             capability_detail: (!analog
                 && !digital
                 && !opacity_cycle
@@ -274,6 +288,7 @@ impl EffectSlotView {
                 && !beat_scan
                 && !beat_scale_turn
                 && !beat_grid_wave
+                && !beat_form_flash
                 && effect.effect_type.is_some())
             .then(|| "This Media Server build cannot render the selected effect.".to_owned()),
             parameters,
@@ -941,6 +956,14 @@ pub struct UpdateLayer {
     pub beat_grid_hue: Option<f32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub beat_grid_brightness: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub beat_form_enlargement: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub beat_form_lifetime: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub beat_form_density: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub beat_form_variation: Option<f32>,
     /// Complete per-layer visualizer settings routed through effect slot one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub visualizer_parameters: Option<VisualizerParametersView>,
@@ -1006,6 +1029,10 @@ impl UpdateLayer {
             || self.beat_grid_origin.is_some()
             || self.beat_grid_hue.is_some()
             || self.beat_grid_brightness.is_some()
+            || self.beat_form_enlargement.is_some()
+            || self.beat_form_lifetime.is_some()
+            || self.beat_form_density.is_some()
+            || self.beat_form_variation.is_some()
             || self.visualizer_parameters.is_some()
     }
 }

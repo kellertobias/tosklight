@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+	within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { anOutput, stubServer } from "../../testing/server";
@@ -581,6 +587,48 @@ describe("the production Media pane", () => {
 		);
 	});
 
+	it("configures live Beat Form Flash controls and bypass", async () => {
+		const server = stubServer();
+		render(<MediaPanePage />);
+		await userEvent.click(
+			await screen.findByRole("switch", { name: "Take over playback" }),
+		);
+		await userEvent.click(screen.getByRole("tab", { name: "Effects" }));
+		await chooseEffect(1, "Beat Form Flash");
+		await waitFor(() =>
+			expect(server.outputs[0].layers[0].effects[0].effectType).toBe(
+				"beat-form-flash",
+			),
+		);
+		fireEvent.input(screen.getByLabelText("Slot 1 · Start size"), {
+			target: { value: "240" },
+		});
+		fireEvent.input(screen.getByLabelText("Slot 1 · Lifetime"), {
+			target: { value: "1.6" },
+		});
+		fireEvent.input(screen.getByLabelText("Slot 1 · Forms per beat"), {
+			target: { value: "3" },
+		});
+		fireEvent.input(screen.getByLabelText("Slot 1 · Variation"), {
+			target: { value: "65" },
+		});
+		await waitFor(() =>
+			expect(
+				server.outputs[0].layers[0].effects[0].parameters.map(
+					({ value }) => value,
+				),
+			).toEqual([2.4, 1.6, 3, 0.65]),
+		);
+		await userEvent.click(
+			within(
+				screen.getByRole("radiogroup", { name: "Slot 1 state" }),
+			).getByRole("radio", { name: "Bypassed" }),
+		);
+		await waitFor(() =>
+			expect(server.outputs[0].layers[0].effects[0].enabled).toBe(false),
+		);
+	});
+
 	it("shows an actionable capability error for an effect this build cannot render", async () => {
 		const output = anOutput();
 		output.layers[0].effects[0] = {
@@ -597,7 +645,9 @@ describe("the production Media pane", () => {
 		stubServer({ outputs: [output] });
 		render(<MediaPanePage />);
 
-		await userEvent.click(await screen.findByRole("radio", { name: "Effects" }));
+		await userEvent.click(
+			await screen.findByRole("radio", { name: "Effects" }),
+		);
 		expect(screen.getByRole("status")).toHaveTextContent(
 			"Not supported by this layer · This Media Server build cannot render the selected effect.",
 		);

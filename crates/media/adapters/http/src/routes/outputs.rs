@@ -12,14 +12,14 @@ use axum::response::{IntoResponse, Response};
 use media_application::MediaConfiguration;
 use media_application::configuration::{load, save};
 use media_domain::{
-    ANALOG_TV_EFFECT, Applied, BEAT_GRID_WAVE_EFFECT, BEAT_MOVE_EFFECT, BEAT_SCALE_TURN_EFFECT,
-    BEAT_SCAN_EFFECT, BLUR_EFFECT, BeatGridWaveOrigin, BeatGridWaveParameters, BeatMoveDirection,
-    BeatMoveParameters, BeatScaleTurnParameters, BeatScanEdge, BeatScanParameters, BlurParameters,
-    Command, CommandKind, CommandSource, DIGITAL_TV_EFFECT, EffectSlot, FEEDBACK_EFFECT,
-    FeedbackMotion, FeedbackParameters, FlipMirror, KALEIDOSCOPE_EFFECT, KaleidoscopeParameters,
-    LayerControls, MasterControls, MediaAddress, MediaState, OPACITY_CYCLE_EFFECT,
-    OpacityCycleInterval, OutputId, RASTERIZE_EFFECT, RasterizeMode, RasterizeParameters,
-    ScalingMode, Timestamp, Tint, apply,
+    ANALOG_TV_EFFECT, Applied, BEAT_FORM_FLASH_EFFECT, BEAT_GRID_WAVE_EFFECT, BEAT_MOVE_EFFECT,
+    BEAT_SCALE_TURN_EFFECT, BEAT_SCAN_EFFECT, BLUR_EFFECT, BeatFormFlashParameters,
+    BeatGridWaveOrigin, BeatGridWaveParameters, BeatMoveDirection, BeatMoveParameters,
+    BeatScaleTurnParameters, BeatScanEdge, BeatScanParameters, BlurParameters, Command,
+    CommandKind, CommandSource, DIGITAL_TV_EFFECT, EffectSlot, FEEDBACK_EFFECT, FeedbackMotion,
+    FeedbackParameters, FlipMirror, KALEIDOSCOPE_EFFECT, KaleidoscopeParameters, LayerControls,
+    MasterControls, MediaAddress, MediaState, OPACITY_CYCLE_EFFECT, OpacityCycleInterval, OutputId,
+    RASTERIZE_EFFECT, RasterizeMode, RasterizeParameters, ScalingMode, Timestamp, Tint, apply,
 };
 
 use crate::error::ApiError;
@@ -222,6 +222,7 @@ pub(super) async fn update_layer(
                 BEAT_SCAN_EFFECT => EffectSlot::beat_scan(),
                 BEAT_SCALE_TURN_EFFECT => EffectSlot::beat_scale_turn(),
                 BEAT_GRID_WAVE_EFFECT => EffectSlot::beat_grid_wave(),
+                BEAT_FORM_FLASH_EFFECT => EffectSlot::beat_form_flash(),
                 "none" => EffectSlot::default(),
                 _ => {
                     return Err(ApiError::bad_request(
@@ -429,6 +430,26 @@ pub(super) async fn update_layer(
                     )
                 })?;
             }
+            effect.parameters = parameters.as_array().to_vec();
+        }
+        if body.beat_form_enlargement.is_some()
+            || body.beat_form_lifetime.is_some()
+            || body.beat_form_density.is_some()
+            || body.beat_form_variation.is_some()
+        {
+            if effect.effect_type.as_deref() != Some(BEAT_FORM_FLASH_EFFECT) {
+                return Err(ApiError::bad_request(
+                    "beat-form-flash-parameters-effect",
+                    "choose the Beat Form Flash effect before changing its controls",
+                ));
+            }
+            let mut parameters = BeatFormFlashParameters::from_parameters(&effect.parameters);
+            parameters.enlargement = body.beat_form_enlargement.unwrap_or(parameters.enlargement);
+            parameters.lifetime_seconds = body
+                .beat_form_lifetime
+                .unwrap_or(parameters.lifetime_seconds);
+            parameters.density = body.beat_form_density.unwrap_or(parameters.density);
+            parameters.variation = body.beat_form_variation.unwrap_or(parameters.variation);
             effect.parameters = parameters.as_array().to_vec();
         }
         if body.feedback_amount.is_some()
@@ -1341,6 +1362,28 @@ mod tests {
         assert_eq!(effect["parameters"][4]["value"], 280.0);
         assert_eq!(effect["parameters"][5]["value"], 1.4);
 
+        let (_, bypassed) = send(
+            &bench.router,
+            post(uri, r#"{"effectSlot":0,"effectEnabled":false}"#),
+        )
+        .await;
+        assert_eq!(bypassed["layers"][0]["effects"][0]["enabled"], false);
+    }
+
+    #[tokio::test]
+    async fn beat_form_flash_persists_size_lifetime_density_variation_and_bypass() {
+        let bench = bench();
+        take_over(&bench).await;
+        let uri = format!("/api/v2/outputs/{}/layers/0/update", bench.output);
+        let (status, selected) = send(&bench.router, post(uri.clone(), r#"{"effectSlot":0,"effectType":"beat-form-flash","beatFormEnlargement":2.4,"beatFormLifetime":1.6,"beatFormDensity":3,"beatFormVariation":0.65}"#)).await;
+        assert_eq!(status, StatusCode::OK);
+        let effect = &selected["layers"][0]["effects"][0];
+        assert_eq!(effect["effectType"], "beat-form-flash");
+        assert_eq!(effect["label"], "Beat Form Flash");
+        assert_eq!(effect["parameters"][0]["value"], 2.4);
+        assert_eq!(effect["parameters"][1]["value"], 1.6);
+        assert_eq!(effect["parameters"][2]["value"], 3.0);
+        assert_eq!(effect["parameters"][3]["value"], 0.65);
         let (_, bypassed) = send(
             &bench.router,
             post(uri, r#"{"effectSlot":0,"effectEnabled":false}"#),

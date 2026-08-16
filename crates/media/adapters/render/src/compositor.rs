@@ -51,6 +51,8 @@ struct LayerUniform {
     /// one event across effect slots 1..4; these never enter persisted layer state.
     beat_scan_positions: [[f32; 4]; 16],
     beat_scan_counts: [[f32; 4]; 16],
+    beat_event_x: [[f32; 4]; 16],
+    beat_event_y: [[f32; 4]; 16],
 }
 
 impl LayerUniform {
@@ -71,6 +73,8 @@ impl LayerUniform {
         let mut effect_seeds = [0.0; 4];
         let mut beat_scan_positions = [[-2.0; 4]; 16];
         let mut beat_scan_counts = [[0.0; 4]; 16];
+        let mut beat_event_x = [[0.5; 4]; 16];
+        let mut beat_event_y = [[0.5; 4]; 16];
         for (index, effect) in layer.effects.iter().enumerate() {
             if let Some(parameters) = effect.analog_tv_parameters() {
                 effect_types[index] = 1;
@@ -116,6 +120,16 @@ impl LayerUniform {
                 for (event, values) in effect.parameters[6..].chunks_exact(2).take(16).enumerate() {
                     beat_scan_positions[event][index] = values[0];
                     beat_scan_counts[event][index] = values[1];
+                }
+            } else if let Some(parameters) = effect.beat_form_flash_parameters() {
+                effect_types[index] = 8;
+                effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
+                effect_parameters[index] = parameters.as_array();
+                for (event, values) in effect.parameters[4..].chunks_exact(4).take(16).enumerate() {
+                    beat_scan_positions[event][index] = values[0];
+                    beat_event_x[event][index] = values[1];
+                    beat_event_y[event][index] = values[2];
+                    beat_scan_counts[event][index] = values[3];
                 }
             }
         }
@@ -163,6 +177,8 @@ impl LayerUniform {
             ],
             beat_scan_positions,
             beat_scan_counts,
+            beat_event_x,
+            beat_event_y,
         }
     }
 }
@@ -657,7 +673,7 @@ mod tests {
 
     #[test]
     fn the_uniforms_are_the_size_the_shaders_declare() {
-        assert_eq!(std::mem::size_of::<LayerUniform>(), 240);
+        assert_eq!(std::mem::size_of::<LayerUniform>(), 1264);
         assert_eq!(std::mem::size_of::<MasterUniform>(), 32);
     }
 

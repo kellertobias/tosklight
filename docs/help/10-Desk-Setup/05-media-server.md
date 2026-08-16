@@ -194,6 +194,10 @@ amount**, **Rotation amount**, and **Return time** define the pulse without chan
 each detected beat. Select **Centre**, **Top**, **Right**, **Bottom**, or **Left** as the origin,
 then tune **Grid density**, **Wave height**, **Travel time**, **Grid hue**, and **Brightness**.
 Repeated beats keep their own waves while they overlap; bypass restores the unchanged source.
+**Beat Form Flash** uses the selected live layer image as a form. Each detected beat places one or
+more independently shrinking and fading copies at deterministic varied positions. **Start size**,
+**Lifetime**, **Forms per beat**, and **Variation** control the result; a held beat does not create
+extra copies, and bypass restores the unchanged source immediately.
 After configuring a slot, release takeover to return control to the desk. The matching **Effect 1**
 through **Effect 4** DMX channel then controls that slot's mix without erasing its selected effect or
 typed parameters.
