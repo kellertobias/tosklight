@@ -5,6 +5,7 @@ import {
 	CadViewport,
 	fitCadOverview,
 	observeViewportResize,
+	renderDepthMaskedLinework,
 } from "./CadViewport";
 import type { CadEntity } from "./types";
 
@@ -182,6 +183,37 @@ describe("CAD fixture interaction", () => {
 
 		stop();
 		expect(disconnect).toHaveBeenCalledTimes(1);
+	});
+
+	it("offsets invisible depth masks before drawing coplanar technical outlines", () => {
+		const calls: string[] = [];
+		const gl = {
+			DEPTH_TEST: 1,
+			LEQUAL: 2,
+			POLYGON_OFFSET_FILL: 3,
+			enable: (value: number) => calls.push(`enable:${value}`),
+			disable: (value: number) => calls.push(`disable:${value}`),
+			depthFunc: (value: number) => calls.push(`depth:${value}`),
+			polygonOffset: (factor: number, units: number) =>
+				calls.push(`offset:${factor}:${units}`),
+		};
+
+		renderDepthMaskedLinework(
+			gl as unknown as WebGL2RenderingContext,
+			() => calls.push("masks"),
+			() => calls.push("lines"),
+		);
+
+		expect(calls).toEqual([
+			"enable:1",
+			"depth:2",
+			"enable:3",
+			"offset:1:1",
+			"masks",
+			"disable:3",
+			"lines",
+			"disable:1",
+		]);
 	});
 
 	it("selects fixture geometry without starting a transform drag", () => {

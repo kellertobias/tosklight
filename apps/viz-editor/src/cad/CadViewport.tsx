@@ -649,6 +649,33 @@ function PrintFrame({
 	);
 }
 
+export function renderDepthMaskedLinework(
+	gl: Pick<
+		WebGL2RenderingContext,
+		| "DEPTH_TEST"
+		| "LEQUAL"
+		| "POLYGON_OFFSET_FILL"
+		| "enable"
+		| "disable"
+		| "depthFunc"
+		| "polygonOffset"
+	>,
+	drawMasks: () => void,
+	drawLines: () => void,
+) {
+	gl.enable(gl.DEPTH_TEST);
+	gl.depthFunc(gl.LEQUAL);
+	// The masks and their technical outlines describe the same physical surface. Offset only the
+	// invisible masks so coplanar neighbouring decks cannot erase one another's exposed edges;
+	// genuinely nearer geometry remains in front and still suppresses hidden linework.
+	gl.enable(gl.POLYGON_OFFSET_FILL);
+	gl.polygonOffset(1, 1);
+	drawMasks();
+	gl.disable(gl.POLYGON_OFFSET_FILL);
+	drawLines();
+	gl.disable(gl.DEPTH_TEST);
+}
+
 class LineRenderer {
 	private readonly geometryCache = new Map<string, PlanGeometry>();
 
@@ -939,21 +966,25 @@ class LineRenderer {
 		gl.vertexAttribPointer(position, 3, gl.FLOAT, false, 24, 0);
 		gl.enableVertexAttribArray(color);
 		gl.vertexAttribPointer(color, 3, gl.FLOAT, false, 24, 12);
-		gl.enable(gl.DEPTH_TEST);
-		gl.depthFunc(gl.LEQUAL);
-		gl.bufferData(
-			gl.ARRAY_BUFFER,
-			new Float32Array(fillVertices),
-			gl.DYNAMIC_DRAW,
+		renderDepthMaskedLinework(
+			gl,
+			() => {
+				gl.bufferData(
+					gl.ARRAY_BUFFER,
+					new Float32Array(fillVertices),
+					gl.DYNAMIC_DRAW,
+				);
+				gl.drawArrays(gl.TRIANGLES, 0, fillVertices.length / 6);
+			},
+			() => {
+				gl.bufferData(
+					gl.ARRAY_BUFFER,
+					new Float32Array(depthLineVertices),
+					gl.DYNAMIC_DRAW,
+				);
+				gl.drawArrays(gl.LINES, 0, depthLineVertices.length / 6);
+			},
 		);
-		gl.drawArrays(gl.TRIANGLES, 0, fillVertices.length / 6);
-		gl.bufferData(
-			gl.ARRAY_BUFFER,
-			new Float32Array(depthLineVertices),
-			gl.DYNAMIC_DRAW,
-		);
-		gl.drawArrays(gl.LINES, 0, depthLineVertices.length / 6);
-		gl.disable(gl.DEPTH_TEST);
 		gl.bufferData(
 			gl.ARRAY_BUFFER,
 			new Float32Array(lineVertices),
