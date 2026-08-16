@@ -35,6 +35,7 @@ function setup(selectedIds: readonly string[] = []) {
 			entities={[fixture]}
 			selectedIds={selectedIds}
 			view="top_down"
+			rotationQuarterTurns={0}
 			camera={camera}
 			snapToMounts
 			onCamera={() => undefined}

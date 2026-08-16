@@ -8,6 +8,7 @@ import {
 	setSplitRatio,
 	splitTile,
 	splitTileAtEdge,
+	viewAxes,
 } from "./types";
 
 describe("CAD workspace model", () => {
@@ -30,13 +31,26 @@ describe("CAD workspace model", () => {
 		expect(projectPoint([10, 20, 30], "top_down")).toEqual([10, -20]);
 	});
 
+	it("keeps top-down projection, movement, and axes aligned after rotation", () => {
+		expect(projectPoint([10, 20, 30], "top_down", 1)).toEqual([-20, -10]);
+		expect(planeDelta([120, -40], "top_down", 1)).toEqual([40, -120, 0]);
+		expect(viewAxes("top_down", 1)).toEqual({
+			horizontal: { axis: "y", sign: -1 },
+			vertical: { axis: "x", sign: -1 },
+		});
+		expect(projectPoint([10, 20, 30], "top_down", -1)).toEqual([20, 10]);
+	});
+
 	it("recursively splits one branch while its sibling remains whole", () => {
-		vi.stubGlobal("crypto", { randomUUID: vi.fn()
-			.mockReturnValueOnce("root")
-			.mockReturnValueOnce("split-one")
-			.mockReturnValueOnce("right")
-			.mockReturnValueOnce("split-two")
-			.mockReturnValueOnce("lower") });
+		vi.stubGlobal("crypto", {
+			randomUUID: vi
+				.fn()
+				.mockReturnValueOnce("root")
+				.mockReturnValueOnce("split-one")
+				.mockReturnValueOnce("right")
+				.mockReturnValueOnce("split-two")
+				.mockReturnValueOnce("lower"),
+		});
 		const root = newTile();
 		const first = splitTile(root, "root", "horizontal");
 		expect(first.type).toBe("split");
@@ -57,10 +71,13 @@ describe("CAD workspace model", () => {
 	});
 
 	it("adds the new viewport on the edge the operator chose and clamps resizing", () => {
-		vi.stubGlobal("crypto", { randomUUID: vi.fn()
-			.mockReturnValueOnce("root")
-			.mockReturnValueOnce("left")
-			.mockReturnValueOnce("split") });
+		vi.stubGlobal("crypto", {
+			randomUUID: vi
+				.fn()
+				.mockReturnValueOnce("root")
+				.mockReturnValueOnce("left")
+				.mockReturnValueOnce("split"),
+		});
 		const root = newTile();
 		const split = splitTileAtEdge(root, "root", "left");
 		expect(split.type).toBe("split");

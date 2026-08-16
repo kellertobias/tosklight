@@ -11,6 +11,7 @@ import {
 	type CadViewDirection,
 	mapTile,
 	newTile,
+	normaliseQuarterTurns,
 	projectPoint,
 	type SelectionChange,
 	setSplitRatio,
@@ -19,6 +20,8 @@ import {
 	type TileEdge,
 	type TileNode,
 	type ViewportTile,
+	viewAxes,
+	type WorldAxis,
 } from "./types";
 
 const WORKSPACE_KEY = "tosklight:viz-editor:cad-workspace:v1";
@@ -166,22 +169,13 @@ export function CadApp() {
 		if (!scene?.entities.length) return;
 		const tile = findTile(layout, id);
 		if (!tile) return;
-		const positions = scene.entities.map((entity) =>
-			projectPoint(entity.positionMillimetres, tile.view),
-		);
-		const minX = Math.min(...positions.map((position) => position[0]));
-		const maxX = Math.max(...positions.map((position) => position[0]));
-		const minY = Math.min(...positions.map((position) => position[1]));
-		const maxY = Math.max(...positions.map((position) => position[1]));
 		updateTile(id, (tile) => ({
 			...tile,
-			camera: {
-				pan: [-(minX + maxX) / 2, -(minY + maxY) / 2],
-				zoom: Math.max(
-					0.008,
-					Math.min(0.2, 900 / Math.max(5000, maxX - minX, maxY - minY)),
-				),
-			},
+			camera: fittedCamera(
+				scene.entities,
+				tile.view,
+				tile.rotationQuarterTurns,
+			),
 		}));
 	}
 
@@ -215,12 +209,6 @@ export function CadApp() {
 								disabled: !scene,
 								onPress: () => void history("redo"),
 							},
-							{
-								id: "fit",
-								label: "Fit",
-								disabled: !scene?.entities.length,
-								onPress: () => fit(activeTileId ?? firstTileId(layout)),
-							},
 						],
 					},
 				]}
@@ -242,6 +230,7 @@ export function CadApp() {
 						onActivate={setActiveTileId}
 						onSelection={select}
 						onMove={move}
+						onFit={fit}
 					/>
 				) : (
 					<div className="cad-loading">Loading the canonical rig…</div>
@@ -274,10 +263,6 @@ export function CadApp() {
 	);
 }
 
-function firstTileId(node: TileNode): string {
-	return node.type === "tile" ? node.id : firstTileId(node.first);
-}
-
 function findTile(node: TileNode, id: string): ViewportTile | null {
 	if (node.type === "tile") return node.id === id ? node : null;
 	return findTile(node.first, id) ?? findTile(node.second, id);
@@ -298,6 +283,7 @@ interface CadTileProps {
 		delta: [number, number, number],
 		entityIds: readonly string[],
 	): Promise<void>;
+	onFit(id: string): void;
 }
 
 function CadTile(props: CadTileProps) {
@@ -327,7 +313,12 @@ function CadTile(props: CadTileProps) {
 					value={node.view}
 					onChange={(event) => {
 						const view = event.currentTarget.value as ViewportTile["view"];
-						props.onTile(node.id, (tile) => ({ ...tile, view }));
+						props.onTile(node.id, (tile) => ({
+							...tile,
+							view,
+							rotationQuarterTurns: 0,
+							camera: fittedCamera(props.scene.entities, view, 0),
+						}));
 					}}
 				>
 					{Object.entries(CAD_VIEW_LABELS).map(([value, label]) => (
@@ -336,8 +327,30 @@ function CadTile(props: CadTileProps) {
 						</option>
 					))}
 				</select>
+				<Button
+					className="cad-fit-view"
+					disabled={!props.scene.entities.length}
+					onClick={() => props.onFit(node.id)}
+				>
+					Fit
+				</Button>
 			</div>
-			<CadOrientation view={node.view} />
+			<CadOrientation
+				view={node.view}
+				rotationQuarterTurns={node.rotationQuarterTurns}
+			/>
+			{node.view === "top_down" ? (
+				<>
+					<RotateViewButton
+						direction="counterclockwise"
+						onRotate={() => rotateTile(props, node, -1)}
+					/>
+					<RotateViewButton
+						direction="clockwise"
+						onRotate={() => rotateTile(props, node, 1)}
+					/>
+				</>
+			) : null}
 			{(["left", "right", "top", "bottom"] as TileEdge[]).map((edge) => (
 				<Button
 					key={edge}
@@ -356,6 +369,7 @@ function CadTile(props: CadTileProps) {
 				entities={props.scene.entities}
 				selectedIds={props.scene.selectedIds}
 				view={node.view}
+				rotationQuarterTurns={node.rotationQuarterTurns}
 				camera={node.camera}
 				snapToMounts={props.snapToMounts}
 				onCamera={(camera: TileCamera) =>
@@ -365,6 +379,41 @@ function CadTile(props: CadTileProps) {
 				onMove={props.onMove}
 			/>
 		</section>
+	);
+}
+
+function rotateTile(props: CadTileProps, tile: ViewportTile, delta: -1 | 1) {
+	const rotationQuarterTurns = normaliseQuarterTurns(
+		tile.rotationQuarterTurns + delta,
+	);
+	props.onTile(tile.id, (current) => ({
+		...current,
+		rotationQuarterTurns,
+		camera: fittedCamera(
+			props.scene.entities,
+			current.view,
+			rotationQuarterTurns,
+		),
+	}));
+}
+
+function RotateViewButton({
+	direction,
+	onRotate,
+}: {
+	direction: "clockwise" | "counterclockwise";
+	onRotate(): void;
+}) {
+	return (
+		<Button
+			className={`cad-rotate-view is-${direction}`}
+			aria-label={`Rotate top-down view 90 degrees ${direction}`}
+			title={`Rotate 90 degrees ${direction}`}
+			onPointerDown={(event) => event.stopPropagation()}
+			onClick={onRotate}
+		>
+			<span aria-hidden="true">{direction === "clockwise" ? "↻" : "↺"}</span>
+		</Button>
 	);
 }
 
@@ -416,30 +465,72 @@ function CadDivider({
 	);
 }
 
-const ORIENTATION: Record<
-	CadViewDirection,
-	{ horizontal: string; vertical: string; depth: string }
-> = {
-	top_down: { horizontal: "+X", vertical: "−Y", depth: "+Z" },
-	left_to_right: { horizontal: "+Y", vertical: "+Z", depth: "+X" },
-	right_to_left: { horizontal: "−Y", vertical: "+Z", depth: "−X" },
-	front_to_back: { horizontal: "+X", vertical: "+Z", depth: "+Y" },
-	back_to_front: { horizontal: "−X", vertical: "+Z", depth: "−Y" },
-};
+const DEPTH_AXIS: Record<CadViewDirection, { axis: WorldAxis; sign: 1 | -1 }> =
+	{
+		top_down: { axis: "z", sign: 1 },
+		left_to_right: { axis: "x", sign: 1 },
+		right_to_left: { axis: "x", sign: -1 },
+		front_to_back: { axis: "y", sign: 1 },
+		back_to_front: { axis: "y", sign: -1 },
+	};
 
-function CadOrientation({ view }: { view: CadViewDirection }) {
-	const axes = ORIENTATION[view];
+function CadOrientation({
+	view,
+	rotationQuarterTurns,
+}: {
+	view: CadViewDirection;
+	rotationQuarterTurns: number;
+}) {
+	const axes = viewAxes(view, rotationQuarterTurns);
+	const horizontal = axisLabel(axes.horizontal);
+	const vertical = axisLabel(axes.vertical);
+	const depth = axisLabel(DEPTH_AXIS[view]);
 	return (
 		<div
 			className="cad-orientation"
 			role="img"
-			aria-label={`Orientation: right ${axes.horizontal}, up ${axes.vertical}, depth ${axes.depth}`}
+			aria-label={`Orientation: right ${horizontal}, up ${vertical}, depth ${depth}`}
 		>
-			<span className="cad-axis-horizontal">{axes.horizontal}</span>
-			<span className="cad-axis-vertical">{axes.vertical}</span>
-			<span className="cad-axis-depth">{axes.depth}</span>
+			<span className={`cad-axis-horizontal is-${axes.horizontal.axis}`}>
+				{horizontal}
+			</span>
+			<span className={`cad-axis-vertical is-${axes.vertical.axis}`}>
+				{vertical}
+			</span>
+			<span className="cad-axis-origin" aria-hidden="true">
+				+
+			</span>
+			<span className={`cad-axis-depth is-${DEPTH_AXIS[view].axis}`}>
+				{depth}
+			</span>
 		</div>
 	);
+}
+
+function axisLabel(value: { axis: WorldAxis; sign: 1 | -1 }) {
+	return `${value.sign === 1 ? "+" : "−"}${value.axis.toUpperCase()}`;
+}
+
+function fittedCamera(
+	entities: readonly CadSceneSnapshot["entities"][number][],
+	view: CadViewDirection,
+	rotationQuarterTurns: number,
+): TileCamera {
+	if (!entities.length) return { pan: [0, 0], zoom: 0.08 };
+	const positions = entities.map((entity) =>
+		projectPoint(entity.positionMillimetres, view, rotationQuarterTurns),
+	);
+	const minX = Math.min(...positions.map((position) => position[0]));
+	const maxX = Math.max(...positions.map((position) => position[0]));
+	const minY = Math.min(...positions.map((position) => position[1]));
+	const maxY = Math.max(...positions.map((position) => position[1]));
+	return {
+		pan: [-(minX + maxX) / 2, -(minY + maxY) / 2],
+		zoom: Math.max(
+			0.008,
+			Math.min(0.2, 900 / Math.max(5000, maxX - minX, maxY - minY)),
+		),
+	};
 }
 
 function restoreLayout(): TileNode {
@@ -447,10 +538,26 @@ function restoreLayout(): TileNode {
 		const stored = localStorage.getItem(WORKSPACE_KEY);
 		if (stored) {
 			const parsed = JSON.parse(stored) as TileNode;
-			return parsed;
+			return normaliseStoredLayout(parsed);
 		}
 	} catch {
 		// A broken workspace preference must not prevent the canonical show from opening.
 	}
 	return newTile();
+}
+
+function normaliseStoredLayout(node: TileNode): TileNode {
+	if (node.type === "tile") {
+		return {
+			...node,
+			rotationQuarterTurns: normaliseQuarterTurns(
+				node.rotationQuarterTurns ?? 0,
+			),
+		};
+	}
+	return {
+		...node,
+		first: normaliseStoredLayout(node.first),
+		second: normaliseStoredLayout(node.second),
+	};
 }

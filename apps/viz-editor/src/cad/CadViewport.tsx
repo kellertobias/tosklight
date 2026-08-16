@@ -12,6 +12,7 @@ interface CadViewportProps {
 	entities: readonly CadEntity[];
 	selectedIds: readonly string[];
 	view: CadViewDirection;
+	rotationQuarterTurns: number;
 	camera: TileCamera;
 	snapToMounts: boolean;
 	onCamera(camera: TileCamera): void;
@@ -43,6 +44,7 @@ export function CadViewport({
 	entities,
 	selectedIds,
 	view,
+	rotationQuarterTurns,
 	camera,
 	onCamera,
 	onSelection,
@@ -72,12 +74,22 @@ export function CadViewport({
 			entities,
 			selected,
 			view,
+			rotationQuarterTurns,
 			camera,
 			preview,
 			guide,
 			selectionBox,
 		);
-	}, [entities, selected, view, camera, preview, guide, selectionBox]);
+	}, [
+		entities,
+		selected,
+		view,
+		rotationQuarterTurns,
+		camera,
+		preview,
+		guide,
+		selectionBox,
+	]);
 
 	function screenToPlane(clientX: number, clientY: number): [number, number] {
 		const bounds = canvas.current?.getBoundingClientRect();
@@ -92,7 +104,11 @@ export function CadViewport({
 		const point = screenToPlane(clientX, clientY);
 		let best: { entity: CadEntity; distance: number } | null = null;
 		for (const entity of entities) {
-			const projected = projectPoint(entity.positionMillimetres, view);
+			const projected = projectPoint(
+				entity.positionMillimetres,
+				view,
+				rotationQuarterTurns,
+			);
 			const distance = Math.hypot(
 				projected[0] - point[0],
 				projected[1] - point[1],
@@ -122,7 +138,14 @@ export function CadViewport({
 			return;
 		}
 		const point = screenToPlane(event.clientX, event.clientY);
-		const axis = pickGizmo(point, entities, selected, view, camera);
+		const axis = pickGizmo(
+			point,
+			entities,
+			selected,
+			view,
+			rotationQuarterTurns,
+			camera,
+		);
 		if (axis) {
 			drag.current = {
 				type: "move",
@@ -196,7 +219,11 @@ export function CadViewport({
 					: entities
 							.filter((entity) =>
 								pointInside(
-									projectPoint(entity.positionMillimetres, view),
+									projectPoint(
+										entity.positionMillimetres,
+										view,
+										rotationQuarterTurns,
+									),
 									box,
 								),
 							)
@@ -209,7 +236,10 @@ export function CadViewport({
 		setPreview([0, 0]);
 		setGuide(null);
 		if (Math.hypot(current[0], current[1]) < 1) return;
-		await onMove(planeDelta(current, view), active.entityIds ?? selectedIds);
+		await onMove(
+			planeDelta(current, view, rotationQuarterTurns),
+			active.entityIds ?? selectedIds,
+		);
 	}
 
 	return (
@@ -290,6 +320,7 @@ class LineRenderer {
 		entities: readonly CadEntity[],
 		selected: ReadonlySet<string>,
 		view: CadViewDirection,
+		rotationQuarterTurns: number,
 		camera: TileCamera,
 		preview: readonly [number, number],
 		guide: MoveAxis | null,
@@ -318,12 +349,16 @@ class LineRenderer {
 		};
 		for (const entity of entities) {
 			const active = selected.has(entity.id);
-			const centre = projectPoint(entity.positionMillimetres, view);
+			const centre = projectPoint(
+				entity.positionMillimetres,
+				view,
+				rotationQuarterTurns,
+			);
 			if (active) {
 				centre[0] += preview[0];
 				centre[1] += preview[1];
 			}
-			const [width, height] = projectedSize(entity, view);
+			const [width, height] = projectedSize(entity, view, rotationQuarterTurns);
 			const halfX = Math.max(90, width / 2);
 			const halfY = Math.max(90, height / 2);
 			const color: [number, number, number] = active
@@ -347,6 +382,7 @@ class LineRenderer {
 						number,
 					],
 					view,
+					rotationQuarterTurns,
 				);
 				line(
 					centre,
@@ -355,9 +391,16 @@ class LineRenderer {
 				);
 			}
 		}
-		const gizmo = gizmoGeometry(entities, selected, view, camera, preview);
+		const gizmo = gizmoGeometry(
+			entities,
+			selected,
+			view,
+			rotationQuarterTurns,
+			camera,
+			preview,
+		);
 		if (gizmo) {
-			const axes = viewAxes(view);
+			const axes = viewAxes(view, rotationQuarterTurns);
 			const horizontal = axisColor(axes.horizontal.axis);
 			const vertical = axisColor(axes.vertical.axis);
 			const { origin, length, square } = gizmo;
@@ -434,12 +477,15 @@ function gizmoGeometry(
 	entities: readonly CadEntity[],
 	selected: ReadonlySet<string>,
 	view: CadViewDirection,
+	rotationQuarterTurns: number,
 	camera: TileCamera,
 	preview: readonly [number, number] = [0, 0],
 ) {
 	const points = entities
 		.filter((entity) => selected.has(entity.id))
-		.map((entity) => projectPoint(entity.positionMillimetres, view));
+		.map((entity) =>
+			projectPoint(entity.positionMillimetres, view, rotationQuarterTurns),
+		);
 	if (!points.length) return null;
 	const centre: [number, number] = [
 		points.reduce((sum, point) => sum + point[0], 0) / points.length +
@@ -462,9 +508,16 @@ function pickGizmo(
 	entities: readonly CadEntity[],
 	selected: ReadonlySet<string>,
 	view: CadViewDirection,
+	rotationQuarterTurns: number,
 	camera: TileCamera,
 ): MoveAxis | null {
-	const gizmo = gizmoGeometry(entities, selected, view, camera);
+	const gizmo = gizmoGeometry(
+		entities,
+		selected,
+		view,
+		rotationQuarterTurns,
+		camera,
+	);
 	if (!gizmo) return null;
 	const { origin, length } = gizmo;
 	const tolerance = 10 / camera.zoom;
@@ -556,11 +609,14 @@ function shader(gl: WebGL2RenderingContext, type: number, source: string) {
 function projectedSize(
 	entity: CadEntity,
 	view: CadViewDirection,
+	rotationQuarterTurns: number,
 ): [number, number] {
 	const [width, depth, height] = entity.sizeMillimetres;
 	switch (view) {
 		case "top_down":
-			return [width, depth];
+			return Math.abs(rotationQuarterTurns) % 2 === 1
+				? [depth, width]
+				: [width, depth];
 		case "left_to_right":
 		case "right_to_left":
 			return [depth, height];

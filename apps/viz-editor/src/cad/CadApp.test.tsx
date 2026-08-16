@@ -55,14 +55,21 @@ vi.mock("@tauri-apps/api/window", () => ({
 vi.mock("./CadViewport", () => ({
 	CadViewport: ({
 		view,
+		rotationQuarterTurns,
+		camera,
 		onSelection,
 	}: {
 		view: string;
+		rotationQuarterTurns: number;
+		camera: { pan: [number, number]; zoom: number };
 		onSelection(change: unknown): void;
 	}) => (
 		<button
 			type="button"
 			data-testid="cad-canvas"
+			data-rotation={rotationQuarterTurns}
+			data-pan={camera.pan.join(",")}
+			data-zoom={camera.zoom}
 			onClick={() =>
 				onSelection({
 					type: "replace",
@@ -119,6 +126,11 @@ describe("the CAD planning window", () => {
 		});
 		expect(direction.parentElement).toHaveClass("cad-view-control");
 		expect(
+			within(direction.parentElement as HTMLElement).getByRole("button", {
+				name: "Fit",
+			}),
+		).toBeInTheDocument();
+		expect(
 			within(direction)
 				.getAllByRole("option")
 				.map((option) => option.textContent),
@@ -142,7 +154,52 @@ describe("the CAD planning window", () => {
 			within(header as HTMLElement)
 				.getAllByRole("button")
 				.map((button) => button.textContent),
-		).toEqual(["Settings", "Undo", "Redo", "Fit"]);
+		).toEqual(["Settings", "Undo", "Redo"]);
+		expect(
+			screen.getByRole("button", {
+				name: "Rotate top-down view 90 degrees counterclockwise",
+			}),
+		).toBeInTheDocument();
+		expect(
+			screen.getByRole("button", {
+				name: "Rotate top-down view 90 degrees clockwise",
+			}),
+		).toBeInTheDocument();
+	});
+
+	it("fits automatically when the view changes and rotates only top down", async () => {
+		render(
+			<ModalProvider>
+				<CadApp />
+			</ModalProvider>,
+		);
+		const direction = await screen.findByRole("combobox", {
+			name: "View direction",
+		});
+		const canvas = screen.getByTestId("cad-canvas");
+		expect(canvas).toHaveAttribute("data-zoom", "0.08");
+		fireEvent.change(direction, { target: { value: "left_to_right" } });
+		expect(canvas).toHaveAttribute("data-zoom", "0.18");
+		expect(
+			screen.queryByRole("button", { name: /Rotate top-down view/ }),
+		).not.toBeInTheDocument();
+
+		fireEvent.change(direction, { target: { value: "top_down" } });
+		fireEvent.click(
+			screen.getByRole("button", {
+				name: "Rotate top-down view 90 degrees clockwise",
+			}),
+		);
+		expect(canvas).toHaveAttribute("data-rotation", "1");
+		expect(
+			screen.getByLabelText("Orientation: right −Y, up −X, depth +Z"),
+		).toBeInTheDocument();
+		fireEvent.click(
+			screen.getByRole("button", {
+				name: "Rotate top-down view 90 degrees counterclockwise",
+			}),
+		);
+		expect(canvas).toHaveAttribute("data-rotation", "0");
 	});
 
 	it("keeps snapping inside the Settings modal", async () => {

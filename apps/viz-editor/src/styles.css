@@ -1172,7 +1172,10 @@ body {
 
 .cad-app > .ui-window-header {
 	flex: none;
-	padding-left: 114px;
+	height: 31px;
+	min-height: 31px;
+	padding-left: 103px;
+	font-size: 12px;
 }
 
 .cad-error {
@@ -1282,6 +1285,8 @@ body {
 	z-index: 12;
 	left: 12px;
 	bottom: 12px;
+	display: flex;
+	align-items: stretch;
 }
 
 .cad-view-control select {
@@ -1296,6 +1301,22 @@ body {
 	font-size: 12px;
 }
 
+.cad-fit-view.ui-button {
+	min-width: 44px;
+	min-height: 32px;
+	padding: 0 10px;
+	border: 1px solid #344251;
+	border-left: 0;
+	border-radius: 0 3px 3px 0;
+	background: #171c22;
+	color: #bcc5cd;
+	font-size: 12px;
+}
+
+.cad-view-control select {
+	border-radius: 3px 0 0 3px;
+}
+
 .cad-orientation {
 	position: absolute;
 	z-index: 12;
@@ -1306,7 +1327,6 @@ body {
 	border: 1px solid #2b343e;
 	border-radius: 50%;
 	background: rgb(8 11 15 / 82%);
-	color: #b9c2ca;
 	font-size: 10px;
 	pointer-events: none;
 }
@@ -1317,23 +1337,25 @@ body {
 }
 
 .cad-axis-horizontal {
-	right: 6px;
+	left: 38px;
 	top: 33px;
+	padding-left: 27px;
 }
 
 .cad-axis-horizontal::before {
 	content: "";
 	position: absolute;
-	right: 18px;
+	left: 0;
 	top: 5px;
 	width: 23px;
-	height: 1px;
+	height: 2px;
 	background: currentColor;
 }
 
 .cad-axis-vertical {
-	left: 30px;
+	left: 31px;
 	top: 5px;
+	padding-bottom: 27px;
 }
 
 .cad-axis-vertical::after {
@@ -1341,14 +1363,27 @@ body {
 	position: absolute;
 	left: 7px;
 	top: 15px;
-	width: 1px;
+	width: 2px;
 	height: 22px;
 	background: currentColor;
 }
 
+.cad-axis-origin {
+	position: absolute;
+	left: 34px;
+	top: 31px;
+	width: 10px;
+	height: 10px;
+	display: grid;
+	place-items: center;
+	color: #d1d8de;
+	font-size: 11px;
+	line-height: 1;
+}
+
 .cad-axis-depth {
 	position: absolute;
-	left: 27px;
+	left: 26px;
 	bottom: 7px;
 	padding-left: 11px;
 }
@@ -1358,6 +1393,18 @@ body {
 	position: absolute;
 	left: -1px;
 	top: -1px;
+}
+
+.cad-orientation .is-x {
+	color: #f33c43;
+}
+
+.cad-orientation .is-y {
+	color: #38c956;
+}
+
+.cad-orientation .is-z {
+	color: #3d7dff;
 }
 
 .cad-add-viewport.ui-button {
@@ -1370,16 +1417,23 @@ body {
 	min-width: 0;
 	min-height: 0;
 	padding: 0;
-	border: 1px solid #394551;
+	border: 1px solid #171e25;
 	border-radius: 50%;
-	background: #11171d;
-	color: #aeb8c1;
+	background: #080b0f;
+	color: #3c4852;
 	font-size: 17px;
 	line-height: 1;
-	opacity: 0.72;
+	opacity: 0.42;
 }
 
 .cad-add-viewport.ui-button:hover {
+	border-color: #20d9f0;
+	background: #15333d;
+	color: #e8fcff;
+	opacity: 1;
+}
+
+.cad-add-viewport.ui-button:focus-visible {
 	border-color: #20d9f0;
 	background: #15333d;
 	color: #e8fcff;
@@ -1412,6 +1466,38 @@ body {
 
 .cad-add-viewport.is-bottom {
 	bottom: 7px;
+}
+
+.cad-rotate-view.ui-button {
+	position: absolute;
+	z-index: 13;
+	width: 28px;
+	height: 28px;
+	min-width: 0;
+	min-height: 0;
+	padding: 0;
+	border: 1px solid #27333e;
+	border-radius: 50%;
+	background: rgb(8 11 15 / 78%);
+	color: #8f9ba5;
+	font-size: 18px;
+	line-height: 1;
+}
+
+.cad-rotate-view.ui-button:hover {
+	border-color: #20d9f0;
+	background: #15333d;
+	color: #e8fcff;
+}
+
+.cad-rotate-view.is-counterclockwise {
+	top: 12px;
+	left: 12px;
+}
+
+.cad-rotate-view.is-clockwise {
+	right: 12px;
+	bottom: 12px;
 }
 
 .cad-canvas {
