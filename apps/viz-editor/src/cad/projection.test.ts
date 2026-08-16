@@ -290,14 +290,30 @@ describe("CAD plan projections", () => {
 
 		expect(top.source).toBe("typed");
 		expect(audienceOutline.source).toBe("assets/viz/crowd/Person Outline.svg");
-		expect(top.outlines).toHaveLength(24);
-		expect(side.outlines).toHaveLength(8);
-		expect(oppositeSide.outlines).toHaveLength(8);
-		expect(back.outlines).toHaveLength(14);
-		expect(front.outlines).toHaveLength(14);
-		expect(top.outlines[0]).toHaveLength(audienceOutline.top.length);
-		expect(side.outlines[0]).toHaveLength(audienceOutline.side.length);
-		expect(front.outlines[0]).toHaveLength(audienceOutline.front.length);
+		expect(audienceOutline.top_strokes).toHaveLength(5);
+		expect(audienceOutline.front_strokes).toHaveLength(4);
+		expect(audienceOutline.side_strokes).toHaveLength(5);
+		expect(top.outlines).toHaveLength(24 * 5);
+		expect(side.outlines).toHaveLength(8 * 5);
+		expect(oppositeSide.outlines).toHaveLength(8 * 5);
+		expect(back.outlines).toHaveLength(14 * 4);
+		expect(front.outlines).toHaveLength(14 * 4);
+		expect(top.outlines.slice(0, 5).map((outline) => outline.length)).toEqual(
+			audienceOutline.top_strokes.map((stroke) => stroke.length),
+		);
+		expect(side.outlines.slice(0, 5).map((outline) => outline.length)).toEqual(
+			audienceOutline.side_strokes.map((stroke) => stroke.length),
+		);
+		expect(front.outlines.slice(0, 4).map((outline) => outline.length)).toEqual(
+			audienceOutline.front_strokes.map((stroke) => stroke.length),
+		);
+		const sideBodyMaxX = Math.max(
+			...audienceOutline.side_strokes[1].map(([x]) => x),
+		);
+		const sideArmMaxX = Math.max(
+			...audienceOutline.side_strokes[2].map(([x]) => x),
+		);
+		expect(sideArmMaxX).toBeGreaterThan(sideBodyMaxX);
 		expect(top.triangles).toEqual([]);
 		expect(side.outlines).not.toEqual(oppositeSide.outlines);
 		expect(side.outlines).not.toEqual(back.outlines);

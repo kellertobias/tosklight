@@ -1,4 +1,4 @@
-import { audienceOutlineFor } from "./audienceOutline";
+import { audienceOutlineFor, audienceStrokesFor } from "./audienceOutline";
 import type {
 	CadDrawing,
 	CadEntity,
@@ -738,14 +738,18 @@ function crowd(
 	const h = Math.max(500, height);
 	const polygons: Polygon[] = [];
 	const outline = audienceOutlineFor("top");
+	const strokes = audienceStrokesFor("top");
 	const outlineWidth = outlineRange(outline, 0);
+	const outlineHeight = outlineRange(outline, 1);
 	for (let row = 0; row < 4; row++) {
 		for (let column = 0; column < 6; column++) {
 			const x = -w * 0.4 + (column / 5) * w * 0.8 + (row % 2 ? w * 0.04 : 0);
-			const y = -h * 0.38 + (row / 3) * h * 0.76;
 			const personWidth = Math.min(w * 0.07, h * 0.1);
 			const scale = personWidth / outlineWidth;
-			polygons.push(outlinePolygon(outline, x, y, scale, true));
+			const y = -h * 0.38 + (row / 3) * h * 0.76 - (outlineHeight * scale) / 2;
+			polygons.push(
+				...strokes.map((stroke) => outlinePolygon(stroke, x, y, scale, false)),
+			);
 		}
 	}
 	return polygons;
@@ -756,12 +760,17 @@ function elevationCrowd(width: number, view: CadViewDirection): Polygon[] {
 	const spacing = width / count;
 	const side = view === "left_to_right" || view === "right_to_left";
 	const mirror = view === "right_to_left";
-	const outline = audienceOutlineFor(side ? "side" : "front");
+	const outlineView = side ? "side" : "front";
+	const strokes = audienceStrokesFor(outlineView);
 	const polygons: Polygon[] = [];
 	for (let index = 0; index < count; index++) {
 		const height = audiencePersonHeight(index);
 		const x = -width / 2 + spacing * (index + 0.5);
-		polygons.push(outlinePolygon(outline, x, 0, height, false, mirror));
+		polygons.push(
+			...strokes.map((stroke) =>
+				outlinePolygon(stroke, x, 0, height, false, mirror),
+			),
+		);
 	}
 	return polygons;
 }

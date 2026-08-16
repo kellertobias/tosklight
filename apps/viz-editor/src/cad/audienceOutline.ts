@@ -7,6 +7,9 @@ export interface AudienceOutlineArtwork {
 	top: [number, number][];
 	front: [number, number][];
 	side: [number, number][];
+	top_strokes: [number, number][][];
+	front_strokes: [number, number][][];
+	side_strokes: [number, number][][];
 }
 
 /**
@@ -18,4 +21,8 @@ export const audienceOutline = artwork as AudienceOutlineArtwork;
 
 export function audienceOutlineFor(view: AudienceOutlineView) {
 	return audienceOutline[view];
+}
+
+export function audienceStrokesFor(view: AudienceOutlineView) {
+	return audienceOutline[`${view}_strokes`];
 }
