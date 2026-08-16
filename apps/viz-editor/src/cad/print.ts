@@ -3,31 +3,65 @@ import {
 	type CadPrintPage,
 	type CadSceneSnapshot,
 	printPageHeight,
+	printPaperSize,
 	projectPoint,
 } from "./types";
 
-const W = 841.89;
-const H = 595.28;
 const PT_MM = 72 / 25.4;
-const BORDER = 7 * PT_MM;
-const TITLE_H = 30 * PT_MM;
+export const PRINT_BORDER_MM = 7;
+export const PRINT_TITLE_WIDTH_MM = 116.42;
+export const PRINT_TITLE_HEIGHT_MM = 30;
+const BORDER = PRINT_BORDER_MM * PT_MM;
+const TITLE_H = PRINT_TITLE_HEIGHT_MM * PT_MM;
+const TITLE_W = PRINT_TITLE_WIDTH_MM * PT_MM;
 
 export interface CadPrintDocumentInfo {
-	showFileName: string;
+	showName: string;
 	lightingDesigner: string;
 	showVersion: string;
+	venue: string;
+	contactEmail: string;
+	contactPhone: string;
+	project: string;
+	showDate: string;
 	lastSavedAt: number;
 	fixtureCount: number;
 	universeCount: number;
 }
 
 export function printScaleDenominator(
-	page: Pick<CadPrintPage, "widthMillimetres">,
+	page: Pick<CadPrintPage, "widthMillimetres" | "orientation">,
 ) {
+	const paper = printPaperSize(page);
 	return Math.max(
 		1,
-		Math.round(page.widthMillimetres / ((W - BORDER * 2) / PT_MM)),
+		Math.round(page.widthMillimetres / (paper.width - PRINT_BORDER_MM * 2)),
 	);
+}
+
+export function printPageLayout(page: Pick<CadPrintPage, "orientation">) {
+	const paper = printPaperSize(page);
+	return {
+		widthPoints: paper.width * PT_MM,
+		heightPoints: paper.height * PT_MM,
+		paperWidthMillimetres: paper.width,
+		paperHeightMillimetres: paper.height,
+		titleWidthMillimetres: PRINT_TITLE_WIDTH_MM,
+		titleHeightMillimetres: PRINT_TITLE_HEIGHT_MM,
+	};
+}
+
+export function rotatePrintPage(page: CadPrintPage): CadPrintPage {
+	const oldPaper = printPaperSize(page);
+	const orientation =
+		page.orientation === "portrait" ? "landscape" : "portrait";
+	const nextPaper = printPaperSize({ orientation });
+	return {
+		...page,
+		orientation,
+		widthMillimetres:
+			page.widthMillimetres * (nextPaper.width / oldPaper.width),
+	};
 }
 
 export function printGridMillimetres(
@@ -46,9 +80,14 @@ export function buildCadPdf(
 	scene: CadSceneSnapshot,
 	pages: readonly CadPrintPage[],
 	info: CadPrintDocumentInfo = {
-		showFileName: "Untitled.show",
+		showName: "",
 		lightingDesigner: "",
 		showVersion: "",
+		venue: "",
+		contactEmail: "",
+		contactPhone: "",
+		project: "",
+		showDate: "",
 		lastSavedAt: 0,
 		fixtureCount: scene.entities.length,
 		universeCount: 0,
@@ -59,6 +98,9 @@ export function buildCadPdf(
 	);
 	return pdfDocument(
 		pages.map((page) => {
+			const layout = printPageLayout(page);
+			const W = layout.widthPoints;
+			const H = layout.heightPoints;
 			const pageHeight = printPageHeight(page);
 			const drawingBottom = BORDER + TITLE_H;
 			const scale = Math.min(
@@ -181,6 +223,26 @@ export function buildCadPdf(
 							false,
 						),
 					);
+					const labels = [
+						page.showFixtureIds ? `ID ${entity.fixtureDisplayId}` : "",
+						page.showDmxAddresses && entity.dmxAddress !== "—"
+							? `DMX ${entity.dmxAddress}`
+							: "",
+					].filter(Boolean);
+					if (labels.length) {
+						commands.push("0 0.71 0.92 rg");
+						labels.forEach((label, index) =>
+							commands.push(
+								text(
+									label,
+									point(centre)[0] + 3,
+									point(centre)[1] + 3 - index * 8,
+									6,
+									true,
+								),
+							),
+						);
+					}
 				}
 			}
 			commands.push(
@@ -190,32 +252,51 @@ export function buildCadPdf(
 				`${n(BORDER)} ${n(BORDER)} ${n(W - BORDER * 2)} ${n(H - BORDER * 2)} re S`,
 				`${n(BORDER)} ${n(drawingBottom)} ${n(W - BORDER * 2)} ${n(H - drawingBottom - BORDER)} re S`,
 			);
-			const tx = W - BORDER - 330;
+			const tx = W - BORDER - TITLE_W;
 			commands.push(
 				"1 1 1 rg",
-				`${n(tx)} ${n(BORDER)} 330 ${n(TITLE_H)} re f`,
+				`${n(tx)} ${n(BORDER)} ${n(TITLE_W)} ${n(TITLE_H)} re f`,
 				"0.08 G",
-				`${n(tx)} ${n(BORDER)} 330 ${n(TITLE_H)} re S`,
+				`${n(tx)} ${n(BORDER)} ${n(TITLE_W)} ${n(TITLE_H)} re S`,
 				`${n(tx + 70)} ${n(BORDER)} 0 ${n(TITLE_H)} re S`,
-				`${n(tx + 70)} ${n(BORDER + TITLE_H / 2)} 260 0 re S`,
+				`${n(tx + 70)} ${n(BORDER + TITLE_H / 2)} ${n(TITLE_W - 70)} 0 re S`,
 				...mark(tx + 12, BORDER + 18),
 			);
+			const details = [
+				["Project", info.project],
+				["Show", info.showName],
+				["Lighting designer", info.lightingDesigner],
+				["Venue", info.venue],
+				["Show date", info.showDate],
+				[
+					"Contact",
+					[info.contactEmail, info.contactPhone].filter(Boolean).join(" / "),
+				],
+				["Version", info.showVersion],
+			].filter((entry) => entry[1]);
 			commands.push(
-				text("ToskLight Previs", tx + 76, BORDER + TITLE_H - 18, 10, true),
-				text(
-					info.showFileName || "Untitled show",
-					tx + 76,
-					BORDER + TITLE_H - 34,
-					8,
-					true,
-				),
-				text(
-					`Lighting designer  ${info.lightingDesigner || "-"}`,
-					tx + 76,
-					BORDER + 29,
-					7,
-				),
-				text(`Version  ${info.showVersion || "-"}`, tx + 76, BORDER + 17, 7),
+				text("Tasklight Architect", tx + 76, BORDER + TITLE_H - 15, 10, true),
+				...details
+					.slice(0, 4)
+					.map(([label, value], index) =>
+						text(
+							`${label}  ${value}`,
+							tx + 76,
+							BORDER + TITLE_H - 29 - index * 10,
+							6.5,
+							index === 0,
+						),
+					),
+				...details
+					.slice(4)
+					.map(([label, value], index) =>
+						text(
+							`${label}  ${value}`,
+							tx + 190,
+							BORDER + TITLE_H - 29 - index * 10,
+							6.5,
+						),
+					),
 				text(`Saved  ${saved(info.lastSavedAt)}`, tx + 190, BORDER + 29, 7),
 				text(
 					`${info.fixtureCount} fixtures / ${info.universeCount} universes`,
@@ -231,7 +312,7 @@ export function buildCadPdf(
 				),
 				"Q",
 			);
-			return commands.join("\n");
+			return { content: commands.join("\n"), width: W, height: H };
 		}),
 	);
 }
@@ -266,7 +347,9 @@ function path(points: readonly PlanPoint[], fill: boolean, close = true) {
 function n(value: number) {
 	return Number.isFinite(value) ? value.toFixed(2).replace(/\.00$/, "") : "0";
 }
-function pdfDocument(streams: readonly string[]) {
+function pdfDocument(
+	streams: readonly { content: string; width: number; height: number }[],
+) {
 	const objects: string[] = [];
 	const ids = streams.map((_, index) => 3 + index * 2);
 	objects.push(
@@ -276,11 +359,11 @@ function pdfDocument(streams: readonly string[]) {
 	for (let i = 0; i < streams.length; i++) {
 		const contentId = ids[i] + 1;
 		objects.push(
-			`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${n(W)} ${n(H)}] /Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> /F2 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >> >> >> /Contents ${contentId} 0 R >>`,
-			`<< /Length ${new TextEncoder().encode(streams[i]).length} >>\nstream\n${streams[i]}\nendstream`,
+			`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${n(streams[i].width)} ${n(streams[i].height)}] /Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> /F2 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >> >> >> /Contents ${contentId} 0 R >>`,
+			`<< /Length ${new TextEncoder().encode(streams[i].content).length} >>\nstream\n${streams[i].content}\nendstream`,
 		);
 	}
-	let output = "%PDF-1.4\n%ToskLight\n";
+	let output = "%PDF-1.4\n%Tasklight Architect\n";
 	const offsets = [0];
 	for (let i = 0; i < objects.length; i++) {
 		offsets.push(new TextEncoder().encode(output).length);

@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import architectIconUrl from "../../../../assets/branding/tosklight-icon-print.svg";
 import {
 	type CadPrintDocumentInfo,
+	PRINT_BORDER_MM,
+	PRINT_TITLE_HEIGHT_MM,
+	PRINT_TITLE_WIDTH_MM,
 	printGridMillimetres,
 	printScaleDenominator,
 } from "./print";
@@ -23,6 +27,7 @@ import {
 	planeDelta,
 	previewDeltaForEntity,
 	printPageHeight,
+	printPaperSize,
 	projectPoint,
 	viewAxes,
 } from "./types";
@@ -494,6 +499,7 @@ export function CadViewport({
 						<PrintFrame
 							key={page.id}
 							page={page}
+							entities={entities}
 							camera={camera}
 							selected={page.id === selectedPrintPageId}
 							onSelect={() => onSelectPrintPage?.(page.id)}
@@ -519,6 +525,7 @@ export function cadEntityOutlineColor(
 
 function PrintFrame({
 	page,
+	entities,
 	camera,
 	selected,
 	onSelect,
@@ -527,6 +534,7 @@ function PrintFrame({
 	documentInfo,
 }: {
 	page: CadPrintPage;
+	entities: readonly CadEntity[];
 	camera: TileCamera;
 	selected: boolean;
 	onSelect(): void;
@@ -542,6 +550,8 @@ function PrintFrame({
 		camera: TileCamera;
 	} | null>(null);
 	const height = printPageHeight(page);
+	const paper = printPaperSize(page);
+	const millimetrePixels = (page.widthMillimetres * camera.zoom) / paper.width;
 	const gridSize = printGridMillimetres(page) * camera.zoom;
 	function move(event: React.PointerEvent<HTMLElement>) {
 		const active = interaction.current;
@@ -609,28 +619,109 @@ function PrintFrame({
 		>
 			<div
 				className="cad-print-sheet"
-				style={{ "--cad-print-grid": `${gridSize}px` } as React.CSSProperties}
+				style={
+					{
+						"--cad-print-grid": `${gridSize}px`,
+						"--cad-print-border": `${PRINT_BORDER_MM * millimetrePixels}px`,
+						"--cad-print-title-width": `${PRINT_TITLE_WIDTH_MM * millimetrePixels}px`,
+						"--cad-print-title-height": `${PRINT_TITLE_HEIGHT_MM * millimetrePixels}px`,
+					} as React.CSSProperties
+				}
 				aria-hidden="true"
 			>
 				<div className="cad-print-page-name">{page.name}</div>
+				{page.showFixtureIds || page.showDmxAddresses ? (
+					<div className="cad-print-labels">
+						{entities
+							.filter((entity) => entity.kind !== "venue")
+							.map((entity) => {
+								const point = projectPoint(
+									entity.positionMillimetres,
+									page.view,
+									page.rotationQuarterTurns,
+								);
+								const x =
+									(point[0] -
+										page.centreMillimetres[0] +
+										page.widthMillimetres / 2) *
+										camera.zoom -
+									PRINT_BORDER_MM * millimetrePixels;
+								const y =
+									(page.centreMillimetres[1] + height / 2 - point[1]) *
+										camera.zoom -
+									PRINT_BORDER_MM * millimetrePixels;
+								if (
+									x < 0 ||
+									y < 0 ||
+									x > page.widthMillimetres * camera.zoom ||
+									y > height * camera.zoom
+								)
+									return null;
+								return (
+									<span key={entity.id} style={{ left: x, top: y }}>
+										{page.showFixtureIds
+											? `ID ${entity.fixtureDisplayId}`
+											: null}
+										{page.showFixtureIds && page.showDmxAddresses
+											? " · "
+											: null}
+										{page.showDmxAddresses && entity.dmxAddress !== "—"
+											? `DMX ${entity.dmxAddress}`
+											: null}
+									</span>
+								);
+							})}
+					</div>
+				) : null}
 				<div className="cad-print-title-block">
-					<svg
-						viewBox="0 0 64 48"
-						role="img"
-						aria-label="ToskLight application mark"
-					>
-						<path className="beam" d="M4 24 22 13v22z" />
-						<path className="lamp" d="m22 32 37-19v31l-37-9z" />
-					</svg>
+					<img src={architectIconUrl} alt="ToskLight application icon" />
 					<div className="cad-print-brand">
-						<strong>ToskLight Previs</strong>
-						<span>{documentInfo?.showFileName || "Untitled.show"}</span>
+						<strong>Tasklight Architect</strong>
+						{documentInfo?.project ? <span>{documentInfo.project}</span> : null}
 					</div>
 					<div className="cad-print-meta">
-						<span>Designer</span>
-						<strong>{documentInfo?.lightingDesigner || "—"}</strong>
-						<span>Version</span>
-						<strong>{documentInfo?.showVersion || "—"}</strong>
+						{documentInfo?.showName ? (
+							<>
+								<span>Show</span>
+								<strong>{documentInfo.showName}</strong>
+							</>
+						) : null}
+						{documentInfo?.lightingDesigner ? (
+							<>
+								<span>Designer</span>
+								<strong>{documentInfo.lightingDesigner}</strong>
+							</>
+						) : null}
+						{documentInfo?.venue ? (
+							<>
+								<span>Venue</span>
+								<strong>{documentInfo.venue}</strong>
+							</>
+						) : null}
+						{documentInfo?.showDate ? (
+							<>
+								<span>Show date</span>
+								<strong>{documentInfo.showDate}</strong>
+							</>
+						) : null}
+						{documentInfo?.contactEmail ? (
+							<>
+								<span>Email</span>
+								<strong>{documentInfo.contactEmail}</strong>
+							</>
+						) : null}
+						{documentInfo?.contactPhone ? (
+							<>
+								<span>Phone</span>
+								<strong>{documentInfo.contactPhone}</strong>
+							</>
+						) : null}
+						{documentInfo?.showVersion ? (
+							<>
+								<span>Version</span>
+								<strong>{documentInfo.showVersion}</strong>
+							</>
+						) : null}
 						<span>Scale</span>
 						<strong>1:{printScaleDenominator(page)}</strong>
 						<span>Rig</span>

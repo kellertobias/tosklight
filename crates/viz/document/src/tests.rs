@@ -128,6 +128,11 @@ fn legacy_documents_default_to_blank_paperwork_and_round_trip_authored_values() 
         .save_paperwork_metadata(&PaperworkMetadata {
             lighting_designer: "  Alex Designer  ".into(),
             show_version: "  2.4  ".into(),
+            venue: "  Grand Hall  ".into(),
+            contact_email: "  alex@example.com  ".into(),
+            contact_phone: "  +49 123  ".into(),
+            project: "  Summer Show  ".into(),
+            show_date: "  2026-08-17  ".into(),
         })
         .expect("save paperwork");
     let reopened = PlanningDocument::open(&rig.path).expect("reopen document");
@@ -136,6 +141,11 @@ fn legacy_documents_default_to_blank_paperwork_and_round_trip_authored_values() 
         PaperworkMetadata {
             lighting_designer: "Alex Designer".into(),
             show_version: "2.4".into(),
+            venue: "Grand Hall".into(),
+            contact_email: "alex@example.com".into(),
+            contact_phone: "+49 123".into(),
+            project: "Summer Show".into(),
+            show_date: "2026-08-17".into(),
         }
     );
 }

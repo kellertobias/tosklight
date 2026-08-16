@@ -144,12 +144,22 @@ export interface CadPrintPage {
 	centreMillimetres: [number, number];
 	widthMillimetres: number;
 	included: boolean;
+	orientation: "landscape" | "portrait";
+	showFixtureIds: boolean;
+	showDmxAddresses: boolean;
 }
 
-export const PRINT_PAGE_ASPECT = 297 / 210;
+export function printPaperSize(page: Pick<CadPrintPage, "orientation">) {
+	return page.orientation === "portrait"
+		? { width: 210, height: 297 }
+		: { width: 297, height: 210 };
+}
 
-export function printPageHeight(page: Pick<CadPrintPage, "widthMillimetres">) {
-	return page.widthMillimetres / PRINT_PAGE_ASPECT;
+export function printPageHeight(
+	page: Pick<CadPrintPage, "widthMillimetres" | "orientation">,
+) {
+	const paper = printPaperSize(page);
+	return page.widthMillimetres * (paper.height / paper.width);
 }
 
 export interface SplitTile {

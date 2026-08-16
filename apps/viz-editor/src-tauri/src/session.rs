@@ -42,6 +42,11 @@ pub struct DocumentSummary {
     pub file_name: String,
     pub lighting_designer: String,
     pub show_version: String,
+    pub venue: String,
+    pub contact_email: String,
+    pub contact_phone: String,
+    pub project: String,
+    pub show_date: String,
     pub last_saved_at: u64,
     pub universe_count: usize,
 }
@@ -51,6 +56,11 @@ pub struct DocumentSummary {
 pub struct PaperworkInput {
     pub lighting_designer: String,
     pub show_version: String,
+    pub venue: String,
+    pub contact_email: String,
+    pub contact_phone: String,
+    pub project: String,
+    pub show_date: String,
 }
 
 /// One fixture profile the operator can patch from.
@@ -186,6 +196,11 @@ fn summarize(document: &PlanningDocument) -> Answer<DocumentSummary> {
             .to_owned(),
         lighting_designer: paperwork.lighting_designer,
         show_version: paperwork.show_version,
+        venue: paperwork.venue,
+        contact_email: paperwork.contact_email,
+        contact_phone: paperwork.contact_phone,
+        project: paperwork.project,
+        show_date: paperwork.show_date,
         last_saved_at,
         universe_count: universes.len(),
     })
@@ -229,6 +244,11 @@ pub fn save_document_paperwork(
             .save_paperwork_metadata(&PaperworkMetadata {
                 lighting_designer: paperwork.lighting_designer,
                 show_version: paperwork.show_version,
+                venue: paperwork.venue,
+                contact_email: paperwork.contact_email,
+                contact_phone: paperwork.contact_phone,
+                project: paperwork.project,
+                show_date: paperwork.show_date,
             })
             .map_err(|error| error.to_string())?;
         summarize(document)

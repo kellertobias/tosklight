@@ -5,7 +5,11 @@ import { useEffect, useRef, useState } from "react";
 import { type DocumentSummary, documentSession } from "../document/session";
 import { beginWindowDrag, WindowControls } from "../WindowChrome";
 import { CadViewport } from "./CadViewport";
-import { buildCadPdf, type CadPrintDocumentInfo } from "./print";
+import {
+	buildCadPdf,
+	type CadPrintDocumentInfo,
+	rotatePrintPage,
+} from "./print";
 import { cadSession } from "./session";
 import {
 	applySelectionChange,
@@ -62,6 +66,11 @@ export function CadApp() {
 	const [paperwork, setPaperwork] = useState({
 		lightingDesigner: "",
 		showVersion: "",
+		venue: "",
+		contactEmail: "",
+		contactPhone: "",
+		project: "",
+		showDate: "",
 	});
 	const [savingPaperwork, setSavingPaperwork] = useState(false);
 	const sceneRef = useRef<CadSceneSnapshot | null>(null);
@@ -141,6 +150,11 @@ export function CadApp() {
 					setPaperwork({
 						lightingDesigner: summary.lightingDesigner,
 						showVersion: summary.showVersion,
+						venue: summary.venue,
+						contactEmail: summary.contactEmail,
+						contactPhone: summary.contactPhone,
+						project: summary.project,
+						showDate: summary.showDate,
 					});
 			})
 			.catch((reason) => setError(String(reason)));
@@ -224,6 +238,9 @@ export function CadApp() {
 			centreMillimetres: [-tile.camera.pan[0], -tile.camera.pan[1]],
 			widthMillimetres: Math.max(3000, 360 / tile.camera.zoom),
 			included: true,
+			orientation: "landscape",
+			showFixtureIds: false,
+			showDmxAddresses: false,
 		};
 		setPrintPages((current) => [...current, page]);
 		setSelectedPrintPageId(page.id);
@@ -241,7 +258,7 @@ export function CadApp() {
 		if (!selected.length) return;
 		const path = await save({
 			title: "Export CAD plan pages",
-			defaultPath: "ToskLight Rig Plan.pdf",
+			defaultPath: "Tasklight Architect Plan.pdf",
 			filters: [{ name: "PDF document", extensions: ["pdf"] }],
 		});
 		if (!path) return;
@@ -267,6 +284,11 @@ export function CadApp() {
 			setPaperwork({
 				lightingDesigner: summary.lightingDesigner,
 				showVersion: summary.showVersion,
+				venue: summary.venue,
+				contactEmail: summary.contactEmail,
+				contactPhone: summary.contactPhone,
+				project: summary.project,
+				showDate: summary.showDate,
 			});
 		} catch (reason) {
 			setError(String(reason));
@@ -276,7 +298,14 @@ export function CadApp() {
 	}
 
 	function changePaperwork(
-		field: "lightingDesigner" | "showVersion",
+		field:
+			| "lightingDesigner"
+			| "showVersion"
+			| "venue"
+			| "contactEmail"
+			| "contactPhone"
+			| "project"
+			| "showDate",
 		value: string,
 	) {
 		setPaperwork((current) => ({ ...current, [field]: value }));
@@ -317,7 +346,7 @@ export function CadApp() {
 		<main className="cad-app">
 			<WindowControls />
 			<WindowHeader
-				title="Rig Planner · CAD"
+				title="Tasklight Architect"
 				dragHandleProps={{
 					"data-tauri-drag-region": true,
 					onPointerDown: beginWindowDrag,
@@ -388,13 +417,22 @@ export function CadApp() {
 					<aside className="cad-print-sidebar" aria-label="Print pages">
 						<header>
 							<h2>Prints</h2>
-							<span>A4 landscape</span>
+							<span>A4 pages</span>
 						</header>
 						<section
 							className="cad-print-project-info"
 							aria-label="Project information"
 						>
 							<h3>Project information</h3>
+							<label>
+								Project
+								<input
+									value={paperwork.project}
+									onChange={(event) =>
+										changePaperwork("project", event.currentTarget.value)
+									}
+								/>
+							</label>
 							<label>
 								Lighting designer
 								<input
@@ -404,6 +442,45 @@ export function CadApp() {
 											"lightingDesigner",
 											event.currentTarget.value,
 										)
+									}
+								/>
+							</label>
+							<label>
+								Venue
+								<input
+									value={paperwork.venue}
+									onChange={(event) =>
+										changePaperwork("venue", event.currentTarget.value)
+									}
+								/>
+							</label>
+							<label>
+								Contact email
+								<input
+									type="email"
+									value={paperwork.contactEmail}
+									onChange={(event) =>
+										changePaperwork("contactEmail", event.currentTarget.value)
+									}
+								/>
+							</label>
+							<label>
+								Contact phone
+								<input
+									type="tel"
+									value={paperwork.contactPhone}
+									onChange={(event) =>
+										changePaperwork("contactPhone", event.currentTarget.value)
+									}
+								/>
+							</label>
+							<label>
+								Show date
+								<input
+									type="date"
+									value={paperwork.showDate}
+									onChange={(event) =>
+										changePaperwork("showDate", event.currentTarget.value)
 									}
 								/>
 							</label>
@@ -418,8 +495,8 @@ export function CadApp() {
 							</label>
 							<dl>
 								<div>
-									<dt>Show file</dt>
-									<dd>{documentInfo?.fileName || "—"}</dd>
+									<dt>Show name</dt>
+									<dd>{documentInfo?.name || "—"}</dd>
 								</div>
 								<div>
 									<dt>Last saved</dt>
@@ -468,6 +545,7 @@ export function CadApp() {
 												{index + 1}. {page.name}
 											</strong>
 											<small>{CAD_VIEW_LABELS[page.view]}</small>
+											<small>A4 {page.orientation}</small>
 										</button>
 									</div>
 								))
@@ -475,6 +553,56 @@ export function CadApp() {
 								<p>Add a page from any view.</p>
 							)}
 						</div>
+						{selectedPrintPageId
+							? (() => {
+									const page = printPages.find(
+										(candidate) => candidate.id === selectedPrintPageId,
+									);
+									if (!page) return null;
+									return (
+										<section
+											className="cad-print-page-settings"
+											aria-label="Selected page settings"
+										>
+											<Button
+												onClick={() =>
+													setPrintPages((current) =>
+														current.map((candidate) =>
+															candidate.id === page.id
+																? rotatePrintPage(candidate)
+																: candidate,
+														),
+													)
+												}
+											>
+												Rotate page
+											</Button>
+											<SwitchField
+												label="Show fixture IDs"
+												offLabel={null}
+												onLabel={null}
+												checked={page.showFixtureIds}
+												onChange={(event) =>
+													changePrintPage(page.id, {
+														showFixtureIds: event.currentTarget.checked,
+													})
+												}
+											/>
+											<SwitchField
+												label="Show DMX patch"
+												offLabel={null}
+												onLabel={null}
+												checked={page.showDmxAddresses}
+												onChange={(event) =>
+													changePrintPage(page.id, {
+														showDmxAddresses: event.currentTarget.checked,
+													})
+												}
+											/>
+										</section>
+									);
+								})()
+							: null}
 						<Button
 							className="cad-export-pdf"
 							disabled={exporting || !printPages.some((page) => page.included)}
@@ -487,7 +615,7 @@ export function CadApp() {
 			</div>
 			{settingsOpen ? (
 				<WindowSettings
-					title="CAD Settings"
+					title="Architect Settings"
 					onClose={() => setSettingsOpen(false)}
 					tabs={[
 						{
@@ -737,12 +865,26 @@ function CadTile(props: CadTileProps) {
 
 function printInfo(
 	summary: DocumentSummary | null,
-	draft: { lightingDesigner: string; showVersion: string },
+	draft: Pick<
+		DocumentSummary,
+		| "lightingDesigner"
+		| "showVersion"
+		| "venue"
+		| "contactEmail"
+		| "contactPhone"
+		| "project"
+		| "showDate"
+	>,
 ): CadPrintDocumentInfo {
 	return {
-		showFileName: summary?.fileName ?? "Untitled.show",
+		showName: summary?.name ?? "",
 		lightingDesigner: draft.lightingDesigner,
 		showVersion: draft.showVersion,
+		venue: draft.venue,
+		contactEmail: draft.contactEmail,
+		contactPhone: draft.contactPhone,
+		project: draft.project,
+		showDate: draft.showDate,
 		lastSavedAt: summary?.lastSavedAt ?? 0,
 		fixtureCount: summary?.fixtureCount ?? 0,
 		universeCount: summary?.universeCount ?? 0,
@@ -776,14 +918,21 @@ function restorePrintPages(): CadPrintPage[] {
 	try {
 		const stored = JSON.parse(localStorage.getItem(PRINT_KEY) ?? "[]");
 		if (!Array.isArray(stored)) return [];
-		return stored.filter(
-			(page): page is CadPrintPage =>
-				typeof page?.id === "string" &&
-				typeof page?.tileId === "string" &&
-				typeof page?.name === "string" &&
-				page?.centreMillimetres?.length === 2 &&
-				Number.isFinite(page?.widthMillimetres),
-		);
+		return stored
+			.filter(
+				(page): page is CadPrintPage =>
+					typeof page?.id === "string" &&
+					typeof page?.tileId === "string" &&
+					typeof page?.name === "string" &&
+					page?.centreMillimetres?.length === 2 &&
+					Number.isFinite(page?.widthMillimetres),
+			)
+			.map((page) => ({
+				...page,
+				orientation: page.orientation === "portrait" ? "portrait" : "landscape",
+				showFixtureIds: page.showFixtureIds === true,
+				showDmxAddresses: page.showDmxAddresses === true,
+			}));
 	} catch {
 		return [];
 	}

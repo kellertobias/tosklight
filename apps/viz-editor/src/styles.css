@@ -1338,6 +1338,13 @@ body {
 	border-bottom: 1px solid #222d37;
 }
 
+.cad-print-page-settings {
+	display: grid;
+	gap: 8px;
+	padding: 10px 12px;
+	border-top: 1px solid #222d37;
+}
+
 .cad-print-project-info h3 {
 	margin: 0 0 2px;
 	font-size: 12px;
@@ -1374,8 +1381,15 @@ body {
 	gap: 8px;
 }
 
-.cad-print-project-info dt { color: #798692; }
-.cad-print-project-info dd { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cad-print-project-info dt {
+	color: #798692;
+}
+.cad-print-project-info dd {
+	margin: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
 
 .cad-print-row {
 	display: flex;
@@ -1441,7 +1455,7 @@ body {
 
 .cad-print-sheet {
 	position: absolute;
-	inset: 1.5%;
+	inset: var(--cad-print-border);
 	border: 1px solid rgb(235 241 246 / 72%);
 	background-image:
 		linear-gradient(rgb(191 204 214 / 16%) 1px, transparent 1px),
@@ -1470,25 +1484,24 @@ body {
 	right: 0;
 	bottom: 0;
 	display: grid;
-	grid-template-columns: 48px minmax(90px, 1fr);
-	width: 42%;
-	min-width: 170px;
+	grid-template-columns: 21% minmax(0, 1fr);
+	width: var(--cad-print-title-width);
+	height: var(--cad-print-title-height);
 	border: 1px solid rgb(235 241 246 / 78%);
 	background: rgb(8 12 16 / 96%);
 	color: #dce5eb;
 	font-size: 8px;
 }
 
-.cad-print-title-block svg {
+.cad-print-title-block img {
 	align-self: stretch;
-	width: 42px;
-	height: 100%;
-	padding: 5px 3px;
+	box-sizing: border-box;
+	width: 100%;
+	height: var(--cad-print-title-height);
+	padding: 8%;
 	border-right: 1px solid rgb(235 241 246 / 40%);
+	object-fit: contain;
 }
-
-.cad-print-title-block .beam { fill: #00b6ff; }
-.cad-print-title-block .lamp { fill: #dbe3e8; }
 
 .cad-print-brand {
 	display: grid;
@@ -1497,7 +1510,12 @@ body {
 	border-bottom: 1px solid rgb(235 241 246 / 40%);
 }
 
-.cad-print-brand span { overflow: hidden; color: #9eabb5; text-overflow: ellipsis; white-space: nowrap; }
+.cad-print-brand span {
+	overflow: hidden;
+	color: #9eabb5;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
 
 .cad-print-meta {
 	grid-column: 2;
@@ -1508,7 +1526,23 @@ body {
 	font-size: 7px;
 }
 
-.cad-print-meta span { color: #81909c; }
+.cad-print-meta span {
+	color: #81909c;
+}
+
+.cad-print-labels {
+	position: absolute;
+	inset: 0;
+	overflow: hidden;
+}
+
+.cad-print-labels span {
+	position: absolute;
+	color: #00b6eb;
+	font-size: 7px;
+	font-weight: 700;
+	white-space: nowrap;
+}
 
 .cad-print-scale {
 	position: absolute;

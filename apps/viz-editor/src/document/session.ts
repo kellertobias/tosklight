@@ -15,6 +15,11 @@ export interface DocumentSummary {
 	fileName: string;
 	lightingDesigner: string;
 	showVersion: string;
+	venue: string;
+	contactEmail: string;
+	contactPhone: string;
+	project: string;
+	showDate: string;
 	lastSavedAt: number;
 	universeCount: number;
 }
@@ -334,6 +339,11 @@ export const documentSession = {
 	savePaperwork: (paperwork: {
 		lightingDesigner: string;
 		showVersion: string;
+		venue: string;
+		contactEmail: string;
+		contactPhone: string;
+		project: string;
+		showDate: string;
 	}) => invoke<DocumentSummary>("save_document_paperwork", { paperwork }),
 	saveAs: (path: string) => invoke<void>("save_document_as", { path }),
 	rename: (name: string) => invoke<void>("rename_document", { name }),

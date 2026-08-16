@@ -89,11 +89,21 @@ pub struct PlanningDocument {
 
 const LIGHTING_DESIGNER_KEY: &str = "previs.lighting_designer";
 const SHOW_VERSION_KEY: &str = "previs.show_version";
+const VENUE_KEY: &str = "architect.venue";
+const CONTACT_EMAIL_KEY: &str = "architect.contact_email";
+const CONTACT_PHONE_KEY: &str = "architect.contact_phone";
+const PROJECT_KEY: &str = "architect.project";
+const SHOW_DATE_KEY: &str = "architect.show_date";
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct PaperworkMetadata {
     pub lighting_designer: String,
     pub show_version: String,
+    pub venue: String,
+    pub contact_email: String,
+    pub contact_phone: String,
+    pub project: String,
+    pub show_date: String,
 }
 
 impl PlanningDocument {
@@ -152,6 +162,11 @@ impl PlanningDocument {
                 .metadata_value(LIGHTING_DESIGNER_KEY)?
                 .unwrap_or_default(),
             show_version: store.metadata_value(SHOW_VERSION_KEY)?.unwrap_or_default(),
+            venue: store.metadata_value(VENUE_KEY)?.unwrap_or_default(),
+            contact_email: store.metadata_value(CONTACT_EMAIL_KEY)?.unwrap_or_default(),
+            contact_phone: store.metadata_value(CONTACT_PHONE_KEY)?.unwrap_or_default(),
+            project: store.metadata_value(PROJECT_KEY)?.unwrap_or_default(),
+            show_date: store.metadata_value(SHOW_DATE_KEY)?.unwrap_or_default(),
         })
     }
 
@@ -162,6 +177,11 @@ impl PlanningDocument {
         self.store()?.set_metadata_values(&[
             (LIGHTING_DESIGNER_KEY, metadata.lighting_designer.trim()),
             (SHOW_VERSION_KEY, metadata.show_version.trim()),
+            (VENUE_KEY, metadata.venue.trim()),
+            (CONTACT_EMAIL_KEY, metadata.contact_email.trim()),
+            (CONTACT_PHONE_KEY, metadata.contact_phone.trim()),
+            (PROJECT_KEY, metadata.project.trim()),
+            (SHOW_DATE_KEY, metadata.show_date.trim()),
         ])?;
         Ok(())
     }

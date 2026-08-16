@@ -147,6 +147,11 @@ beforeEach(() => {
 		fileName: "demo.show",
 		lightingDesigner: "",
 		showVersion: "",
+		venue: "",
+		contactEmail: "",
+		contactPhone: "",
+		project: "",
+		showDate: "",
 		lastSavedAt: 1_787_000_000,
 		universeCount: 1,
 	});
@@ -172,7 +177,7 @@ describe("the CAD planning window", () => {
 				<CadApp />
 			</ModalProvider>,
 		);
-		const title = screen.getByText("Rig Planner · CAD");
+		const title = screen.getByText("Tasklight Architect");
 		expect(title.closest(".ui-window-header")).toBeInTheDocument();
 		expect(
 			screen.queryByText(/First synchronized 2D planning slice/i),
@@ -295,6 +300,11 @@ describe("the CAD planning window", () => {
 			expect(documentMocks.savePaperwork).toHaveBeenCalledWith({
 				lightingDesigner: "Tobias Keller",
 				showVersion: "1.2",
+				venue: "",
+				contactEmail: "",
+				contactPhone: "",
+				project: "",
+				showDate: "",
 			}),
 		);
 		expect(screen.getByTestId("cad-canvas")).toBeInTheDocument();
@@ -352,7 +362,7 @@ describe("the CAD planning window", () => {
 		);
 		await screen.findByTestId("cad-canvas");
 		fireEvent.click(screen.getByRole("button", { name: "Settings" }));
-		const settings = screen.getByRole("dialog", { name: "CAD Settings" });
+		const settings = screen.getByRole("dialog", { name: "Architect Settings" });
 		const snapping = within(settings).getByRole("switch", {
 			name: "Enable snapping",
 		});

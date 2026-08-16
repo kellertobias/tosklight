@@ -568,6 +568,9 @@ describe("CAD fixture interaction", () => {
 						centreMillimetres: [0, 0],
 						widthMillimetres: 5000,
 						included: true,
+						orientation: "landscape",
+						showFixtureIds: false,
+						showDmxAddresses: false,
 					},
 				]}
 				selectedPrintPageId="page-1"
@@ -635,6 +638,9 @@ describe("CAD fixture interaction", () => {
 						centreMillimetres: [0, 0],
 						widthMillimetres: 5000,
 						included: true,
+						orientation: "landscape",
+						showFixtureIds: false,
+						showDmxAddresses: false,
 					},
 				]}
 				onCamera={() => undefined}
