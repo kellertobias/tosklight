@@ -11,6 +11,7 @@ use std::collections::HashMap;
 
 use media_domain::geometry::Size;
 use media_domain::text::{Countdown, Visibility};
+use media_domain::text_catalog::TextStyle;
 use media_domain::{LayerState, SourceFailure};
 use media_render::{Gpu, SourceTexture};
 use media_text::{Fonts, render_line};
@@ -21,6 +22,8 @@ use crate::layer_pipeline::FrameContext;
 struct Drawn {
     /// What was last rasterized, so unchanged text is not uploaded again.
     text: String,
+    /// Style is part of the raster cache key: the same words in a new font are new pixels.
+    style: Option<TextStyle>,
     countdown: Countdown,
     texture: Option<SourceTexture>,
 }
@@ -31,6 +34,7 @@ impl Drawn {
             // No text has been drawn yet, and an empty entry produces an empty string — so the
             // sentinel has to be something a text entry can never produce.
             text: "\u{0}".to_owned(),
+            style: None,
             countdown: Countdown::new(),
             texture: None,
         }
@@ -74,6 +78,7 @@ impl TextSources {
         for drawn in self.layers.values_mut() {
             drawn.texture = None;
             drawn.text = "\u{0}".to_owned();
+            drawn.style = None;
         }
     }
 
@@ -111,10 +116,11 @@ impl TextSources {
             // A disabled entry produces nothing, which is how an operator parks one.
             drawn.texture = None;
             drawn.text.clear();
+            drawn.style = None;
             return Ok(false);
         };
 
-        if text == drawn.text {
+        if raster_matches(drawn, &text, &slot.style) {
             return Ok(drawn.texture.is_some());
         }
 
@@ -145,6 +151,7 @@ impl TextSources {
         })?;
 
         drawn.text = text;
+        drawn.style = Some(slot.style.clone());
         drawn.texture = Some(texture);
         Ok(true)
     }
@@ -153,5 +160,29 @@ impl TextSources {
         self.layers
             .get(&layer_index)
             .and_then(|drawn| drawn.texture.as_ref())
+    }
+}
+
+fn raster_matches(drawn: &Drawn, text: &str, style: &TextStyle) -> bool {
+    text == drawn.text && drawn.style.as_ref() == Some(style)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn changing_style_invalidates_the_raster_even_when_the_words_are_identical() {
+        let mut drawn = Drawn::new();
+        let original = TextStyle::default();
+        drawn.text = "Stand by".to_owned();
+        drawn.style = Some(original.clone());
+        assert!(raster_matches(&drawn, "Stand by", &original));
+
+        let changed = TextStyle {
+            size: 0.4,
+            ..original
+        };
+        assert!(!raster_matches(&drawn, "Stand by", &changed));
     }
 }

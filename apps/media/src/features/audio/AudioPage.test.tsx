@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { anAudioPanel, stubServer } from "../../testing/server";
@@ -65,19 +65,64 @@ describe("the audio monitor", () => {
 		expect(await screen.findByText("Not receiving")).toBeInTheDocument();
 	});
 
-	it("saves a gain through the write path, with a request id", async () => {
+	it("persists a touch-adjusted gain live without an explicit submit", async () => {
 		const server = stubServer();
 		render(<AudioPage />);
 
 		await userEvent.click(
 			await screen.findByRole("button", { name: "Change audio settings" }),
 		);
+		expect(document.querySelector(".ui-window-info-section")).toContainElement(
+			screen.getByLabelText("Gain"),
+		);
 		const gain = screen.getByLabelText("Gain");
-		await userEvent.clear(gain);
-		await userEvent.type(gain, "2");
-		await userEvent.click(screen.getByRole("button", { name: "Save" }));
+		fireEvent.pointerDown(gain, { pointerType: "touch" });
+		fireEvent.input(gain, { target: { value: "2" } });
+		fireEvent.pointerUp(gain, { pointerType: "touch" });
 
 		await waitFor(() => expect(server.audio.settings.inputGain).toBe(2));
+		expect(server.writes).toContain("/audio/update");
+		expect(
+			screen.queryByRole("button", { name: "Save" }),
+		).not.toBeInTheDocument();
+		expect(document.querySelector(".ui-window-info-section")).not.toBeNull();
+	});
+
+	it("uses touch faders for every live tuning value", async () => {
+		const server = stubServer();
+		render(<AudioPage />);
+
+		await userEvent.click(
+			await screen.findByRole("button", { name: "Change audio settings" }),
+		);
+
+		const values = [
+			["Gain", "1.25"],
+			["Beat sensitivity", "2.5"],
+			["Bass", "3.75"],
+			["Mid", "4"],
+			["Treble", "5.5"],
+		] as const;
+		for (const [label, value] of values) {
+			const fader = screen.getByRole("slider", { name: label });
+			fireEvent.pointerDown(fader, {
+				pointerType: label === "Gain" ? "touch" : "mouse",
+			});
+			fireEvent.input(fader, { target: { value } });
+			fireEvent.pointerUp(fader, {
+				pointerType: label === "Gain" ? "touch" : "mouse",
+			});
+		}
+
+		await waitFor(() =>
+			expect(server.audio.settings).toMatchObject({
+				inputGain: 1.25,
+				beatSensitivity: 2.5,
+				eqBass: 3.75,
+				eqMid: 4,
+				eqTreble: 5.5,
+			}),
+		);
 		expect(server.writes).toContain("/audio/update");
 	});
 
@@ -114,7 +159,9 @@ describe("the audio monitor", () => {
 		await userEvent.click(
 			await screen.findByRole("button", { name: "Change audio settings" }),
 		);
-		await userEvent.click(screen.getByRole("button", { name: "Save" }));
+		fireEvent.input(screen.getByRole("slider", { name: "Gain" }), {
+			target: { value: "2" },
+		});
 
 		expect(await screen.findByRole("alert")).toHaveTextContent(
 			"inputGain must be between",

@@ -1,4 +1,3 @@
-import { SwitchField } from "@tosklight/ui/controls";
 import { useEffect, useMemo, useState } from "react";
 import {
 	type MediaBrowserMode,
@@ -6,9 +5,15 @@ import {
 	type MediaPaneModel,
 	MediaPaneSurface,
 	type MediaSecondaryControl,
+	type MediaSourceFilter,
 } from "../../../../light-desktop/src/windows/media/MediaPaneSurface";
+import { useFailureToast } from "../../app/ToastContext";
 import { resolveAddress } from "../../entities/catalog";
 import { sourceBadge } from "../../entities/output";
+import {
+	PlaybackTakeoverBoundary,
+	usePlaybackTakeover,
+} from "../../operator/PlaybackTakeoverContext";
 import { api } from "../../shared/api/client";
 import type {
 	OutputView,
@@ -18,10 +23,11 @@ import type {
 	VisualizerView,
 } from "../../shared/api/generated/media-wire";
 import {
-	useLayerControl,
-	useOutputsForControl,
-} from "../../shared/api/layerControl";
-import { useCatalog, useText, useVisualizers } from "../../shared/api/queries";
+	useCatalog,
+	useRuntime,
+	useText,
+	useVisualizers,
+} from "../../shared/api/queries";
 
 const CATALOG_POLL_MS = 15_000;
 
@@ -31,11 +37,20 @@ const CATALOG_POLL_MS = 15_000;
  * project its HTTP output/catalog state directly into the pane's view model.
  */
 export function MediaPanePage() {
-	const outputs = useOutputsForControl();
+	return (
+		<PlaybackTakeoverBoundary>
+			<MediaPanePageContent />
+		</PlaybackTakeoverBoundary>
+	);
+}
+
+function MediaPanePageContent() {
+	const { outputs, control, selectedOutputId, selectOutput } =
+		usePlaybackTakeover();
 	const catalog = useCatalog(CATALOG_POLL_MS);
+	const runtime = useRuntime();
 	const text = useText();
 	const visualizers = useVisualizers();
-	const control = useLayerControl();
 	const layers = useMemo(
 		() =>
 			(outputs.data ?? []).flatMap((output) =>
@@ -45,30 +60,28 @@ export function MediaPanePage() {
 	);
 	const [selectedLayerId, setSelectedLayerId] = useState("");
 	const [browserMode, setBrowserMode] = useState<MediaBrowserMode>("media");
+	const [sourceFilter, setSourceFilter] = useState<MediaSourceFilter>("media");
 	const [draftFolderId, setDraftFolderId] = useState("");
 	const [draftFileId, setDraftFileId] = useState<string | null>(null);
 	const [mainSectionId, setMainSectionId] = useState("content");
 	const [selectedControlSectionId, setSelectedControlSectionId] =
 		useState("playback");
-	const [rightPaneVisible, setRightPaneVisible] = useState(false);
+	const [rightPaneVisible, setRightPaneVisible] = useState(true);
+	const [previewRevision, setPreviewRevision] = useState(0);
 	const [previewSize, setPreviewSize] = useState<
 		{ width: number; height: number } | undefined
 	>();
-	const [selectedOutputId, setSelectedOutputId] = useState("");
-	const [takeoverError, setTakeoverError] = useState("");
-	const [takeoverBusy, setTakeoverBusy] = useState(false);
-
 	useEffect(() => {
 		const first = layers[0];
 		if (!selectedLayerId && first) {
 			setSelectedLayerId(layerId(first.output.id, first.layer.index));
-			setSelectedOutputId(first.output.id);
+			selectOutput(first.output.id);
 			setDraftFolderId(String(first.layer.address.folder || 1));
 			setDraftFileId(
 				first.layer.address.file ? String(first.layer.address.file) : null,
 			);
 		}
-	}, [layers, selectedLayerId]);
+	}, [layers, selectedLayerId, selectOutput]);
 
 	const selected =
 		selectedLayerId === "master"
@@ -93,10 +106,32 @@ export function MediaPanePage() {
 		? {
 				...selectedVisualizer,
 				parameters:
-					selected.layer.effects[0]?.visualizerParameters ??
+					selected?.layer.effects[0]?.visualizerParameters ??
 					selectedVisualizer.parameters,
 			}
 		: undefined;
+	const runningOutput = runtime.data?.outputs.find(
+		(output) => output.id === selectedOutput?.id,
+	);
+	const titleInfo = {
+		primary:
+			runtime.data && runningOutput
+				? `${runtime.data.administrationIp} · DMX U${runningOutput.universe} A${runningOutput.startAddress}`
+				: "Running output unavailable",
+		secondary: `${catalog.data?.itemCount ?? 0} library ${catalog.data?.itemCount === 1 ? "item" : "items"}`,
+	};
+	const sourceFailure = (outputs.data ?? [])
+		.flatMap((output) =>
+			output.layers.flatMap((layer) =>
+				layer.sourceStatus.failure
+					? [
+							`${output.name} layer ${layer.index + 1}: ${layer.sourceStatus.failure}`,
+						]
+					: [],
+			),
+		)
+		.join("\n");
+	useFailureToast(sourceFailure ? { message: sourceFailure } : undefined);
 	const previewOutputId = selectedOutput?.id;
 	useEffect(() => {
 		if (!previewOutputId) return;
@@ -117,12 +152,23 @@ export function MediaPanePage() {
 			current = false;
 		};
 	}, [previewOutputId]);
+	useEffect(() => {
+		const timer = window.setInterval(
+			() => setPreviewRevision((revision) => revision + 1),
+			500,
+		);
+		return () => window.clearInterval(timer);
+	}, []);
+	useEffect(() => {
+		if (takeover || !selected) return;
+		setDraftFolderId(String(selected.layer.address.folder || 1));
+		setDraftFileId(
+			selected.layer.address.file ? String(selected.layer.address.file) : null,
+		);
+	}, [takeover, selected]);
 	const draftFolder = Number(draftFolderId || 1);
 	const folder = catalog.data?.folders.find(
 		(candidate) => candidate.folder === draftFolder,
-	);
-	const selectedItem = folder?.items.find(
-		(item) => String(item.file) === draftFileId,
 	);
 	const generatedFolders = new Map<
 		number,
@@ -157,6 +203,8 @@ export function MediaPanePage() {
 	const generated = generatedFolders.get(draftFolder);
 
 	const model: MediaPaneModel = {
+		hasPatchedServer: true,
+		hasCitpEndpoint: true,
 		servers: [
 			{
 				id: "this-media-server",
@@ -166,17 +214,20 @@ export function MediaPanePage() {
 		],
 		selectedServerId: "this-media-server",
 		selectedLayerId,
-		preview: selectedItem
+		preview: selectedOutput
 			? {
 					kind: "ready",
-					imageSrc: api.thumbnailUrl(draftFolder, selectedItem.file),
+					imageSrc: api.outputPreviewUrl(
+						selectedOutput.id,
+						previewRevision,
+						previewSize,
+					),
 					outputSize: previewSize,
 				}
 			: {
 					kind: "unsupported",
 					capability: "preview",
-					detail: "Choose media to preview it.",
-					outputSize: previewSize,
+					detail: "No configured program output is available.",
 				},
 		layers: layers.map(({ output, layer }) => {
 			const item = resolveAddress(
@@ -196,9 +247,16 @@ export function MediaPanePage() {
 							? "stale"
 							: "online",
 				statusLabel: badge.label,
-				thumbnailSrc: item
-					? api.thumbnailUrl(layer.address.folder, layer.address.file)
-					: undefined,
+				thumbnailSrc:
+					layer.address.folder || layer.address.file
+						? api.outputLayerPreviewUrl(
+								output.id,
+								layer.index,
+								previewRevision,
+								previewSize,
+							)
+						: undefined,
+				errorDetail: layer.sourceStatus.failure ?? undefined,
 				liveSourceLabel: item?.name ?? "Nothing selected",
 				opacityPercent: Math.round(layer.dimmer * 100),
 				maskLabel:
@@ -214,27 +272,41 @@ export function MediaPanePage() {
 			};
 		}),
 		browserMode,
+		sourceFilter,
 		maskBrowser: "supported",
-		libraryFolders: [
-			...Array.from({ length: 199 }, (_, index) => {
-				const number = index + 1;
-				const entry = catalog.data?.folders.find(
-					(candidate) => candidate.folder === number,
-				);
-				return {
-					id: String(number),
-					kind: "folder" as const,
-					name: entry?.name || `Folder ${String(number).padStart(3, "0")}`,
-					detail: `${entry?.items.length ?? 0} files`,
-				};
-			}),
-			...Array.from(generatedFolders, ([number, entry]) => ({
-				id: String(number),
-				kind: "folder" as const,
-				name: entry.name,
-				detail: `${entry.files.length} sources`,
-			})),
-		],
+		libraryFolders:
+			sourceFilter === "media"
+				? Array.from({ length: 199 }, (_, index) => {
+						const number = index + 1;
+						const entry = catalog.data?.folders.find(
+							(candidate) => candidate.folder === number,
+						);
+						return {
+							id: String(number),
+							kind: "folder" as const,
+							name: entry?.name || `Folder ${String(number).padStart(3, "0")}`,
+							detail: `${entry?.items.length ?? 0} files`,
+							disabled: !takeover,
+						};
+					})
+				: Array.from(
+						{
+							length: sourceFilter === "text" ? 50 : 6,
+						},
+						(_, index) => {
+							const number = (sourceFilter === "text" ? 200 : 250) + index;
+							const entry = generatedFolders.get(number);
+							return {
+								id: String(number),
+								kind: "folder" as const,
+								name:
+									entry?.name ??
+									`${sourceFilter === "text" ? "Text" : "Visualizers"} ${number}`,
+								detail: `${entry?.files.length ?? 0} sources`,
+								disabled: !takeover,
+							};
+						},
+					),
 		libraryFiles:
 			generated?.files ??
 			(folder?.items ?? []).map((item) => ({
@@ -243,6 +315,7 @@ export function MediaPanePage() {
 				name: item.name,
 				detail: `${item.width}×${item.height}`,
 				thumbnailSrc: api.thumbnailUrl(draftFolder, item.file),
+				disabled: !takeover,
 			})),
 		draftFolderId: String(draftFolder),
 		draftFileId,
@@ -288,6 +361,11 @@ export function MediaPanePage() {
 											value: String(value),
 											label,
 										})),
+										quickActions: [
+											{ value: "216", label: "Stop" },
+											{ value: "60", label: "Play" },
+											{ value: "0", label: "Play looped" },
+										],
 										disabled: !takeover,
 									},
 									{
@@ -316,6 +394,7 @@ export function MediaPanePage() {
 										value: selected.layer.speedMultiplierDmx,
 										minimum: 0,
 										maximum: 255,
+										step: 1,
 										disabled: !takeover,
 										display: selected.layer.speedMultiplier,
 									},
@@ -326,6 +405,8 @@ export function MediaPanePage() {
 										0,
 										255,
 										!takeover,
+										"",
+										1,
 									),
 								],
 							},
@@ -469,6 +550,8 @@ export function MediaPanePage() {
 	};
 
 	const browse = (mode: MediaBrowserMode, item: MediaLibraryItem) => {
+		if (!takeover) return;
+		if (selectedLayerId === "master" && mode !== "mask") return;
 		if (item.kind === "folder") {
 			setDraftFolderId(item.id);
 			setDraftFileId(null);
@@ -497,49 +580,23 @@ export function MediaPanePage() {
 		<MediaPaneSurface
 			model={model}
 			title="Playback"
-			headerAction={
-				<>
-					<SwitchField
-						className="media-playback-takeover"
-						label="Take over playback"
-						aria-label="Take over playback"
-						offLabel="Release"
-						onLabel="Take over playback"
-						checked={takeover}
-						disabled={!selectedOutput || takeoverBusy}
-						onChange={async (event) => {
-							if (!selectedOutput) return;
-							setTakeoverBusy(true);
-							setTakeoverError("");
-							try {
-								await control.setTakeover(selectedOutput, event.target.checked);
-							} catch (error) {
-								setTakeoverError(
-									error instanceof Error ? error.message : String(error),
-								);
-							} finally {
-								setTakeoverBusy(false);
-							}
-						}}
-					/>
-					{takeoverError ? <span role="alert">{takeoverError}</span> : null}
-					{control.refusal ? (
-						<span role="alert">{control.refusal.message}</span>
-					) : null}
-				</>
-			}
+			info={titleInfo}
 			onSelectServer={() => {}}
 			onSelectLayer={(id) => {
 				setSelectedLayerId(id);
 				if (id === "master") {
 					setSelectedControlSectionId("output");
 					setMainSectionId("output");
+				} else {
+					setSelectedControlSectionId("playback");
+					setMainSectionId("playback");
 				}
 				const next = layers.find(
 					({ output, layer }) => layerId(output.id, layer.index) === id,
 				);
 				if (next) {
-					setSelectedOutputId(next.output.id);
+					selectOutput(next.output.id);
+					setSourceFilter(sourceFilterForFolder(next.layer.address.folder));
 					setDraftFolderId(String(next.layer.address.folder || 1));
 					setDraftFileId(
 						next.layer.address.file ? String(next.layer.address.file) : null,
@@ -549,6 +606,13 @@ export function MediaPanePage() {
 			onSelectBrowserMode={(mode) => {
 				setBrowserMode(mode);
 				setMainSectionId(mode === "mask" ? "mask" : "content");
+			}}
+			onSelectSourceFilter={(filter) => {
+				setSourceFilter(filter);
+				setDraftFolderId(
+					String(filter === "media" ? 1 : filter === "text" ? 200 : 250),
+				);
+				setDraftFileId(null);
 			}}
 			onBrowseItem={browse}
 			onSelectControlSection={(id) => {
@@ -590,6 +654,12 @@ export function MediaPanePage() {
 
 function layerId(outputId: string, index: number) {
 	return `${outputId}:${index}`;
+}
+
+function sourceFilterForFolder(folder: number): MediaSourceFilter {
+	if (folder >= 250) return "visualizers";
+	if (folder >= 200) return "text";
+	return "media";
 }
 
 const PLAY_MODES: Array<[number, string]> = [
@@ -1758,6 +1828,36 @@ function masterChange(id: string, value: string | number): UpdateMaster {
 			return tintChange(String(value));
 		case "flip-mirror":
 			return { flipMirror: String(value) };
+		case "master-scale-x":
+			return { scaleX: number };
+		case "master-scale-y":
+			return { scaleY: number };
+		case "master-scaling-mode":
+			return { scalingMode: String(value) };
+		case "master-position-x":
+			return { positionX: number };
+		case "master-position-y":
+			return { positionY: number };
+		case "master-rotation":
+			return { rotation: number };
+		case "shaper-left":
+			return { shaperLeft: number / 100 };
+		case "shaper-right":
+			return { shaperRight: number / 100 };
+		case "shaper-top":
+			return { shaperTop: number / 100 };
+		case "shaper-bottom":
+			return { shaperBottom: number / 100 };
+		case "shaper-left-rotation":
+			return { shaperLeftRotation: number };
+		case "shaper-right-rotation":
+			return { shaperRightRotation: number };
+		case "shaper-top-rotation":
+			return { shaperTopRotation: number };
+		case "shaper-bottom-rotation":
+			return { shaperBottomRotation: number };
+		case "shaper-rotation":
+			return { shaperRotation: number };
 		default:
 			return {};
 	}
@@ -1789,6 +1889,159 @@ function masterSections(
 					100,
 					!takeover,
 					"%",
+				),
+			],
+		},
+		{
+			id: "geometry",
+			label: "Geometry",
+			controls: [
+				valueControl(
+					"master-position-x",
+					"Position X",
+					output.master.positionX,
+					-2,
+					2,
+					!takeover,
+				),
+				valueControl(
+					"master-position-y",
+					"Position Y",
+					output.master.positionY,
+					-2,
+					2,
+					!takeover,
+				),
+				valueControl(
+					"master-scale-x",
+					"Scale X",
+					output.master.scaleX,
+					0,
+					4,
+					!takeover,
+				),
+				valueControl(
+					"master-scale-y",
+					"Scale Y",
+					output.master.scaleY,
+					0,
+					4,
+					!takeover,
+				),
+				valueControl(
+					"master-rotation",
+					"Rotation",
+					output.master.rotation,
+					-180,
+					180,
+					!takeover,
+					"°",
+					1,
+				),
+				{
+					id: "master-scaling-mode",
+					kind: "choice",
+					label: "Scale mode",
+					value: output.master.scalingMode,
+					options: [
+						{ value: "fit", label: "Fit" },
+						{ value: "fill", label: "Fill" },
+						{ value: "original", label: "Native" },
+						{ value: "stretch", label: "Stretch" },
+					],
+					disabled: !takeover,
+				},
+			],
+		},
+		{
+			id: "shapers",
+			label: "Shapers",
+			controls: [
+				valueControl(
+					"shaper-left",
+					"Left",
+					output.master.shaperLeft * 100,
+					0,
+					100,
+					!takeover,
+					"%",
+				),
+				valueControl(
+					"shaper-right",
+					"Right",
+					output.master.shaperRight * 100,
+					0,
+					100,
+					!takeover,
+					"%",
+				),
+				valueControl(
+					"shaper-top",
+					"Top",
+					output.master.shaperTop * 100,
+					0,
+					100,
+					!takeover,
+					"%",
+				),
+				valueControl(
+					"shaper-bottom",
+					"Bottom",
+					output.master.shaperBottom * 100,
+					0,
+					100,
+					!takeover,
+					"%",
+				),
+				valueControl(
+					"shaper-left-rotation",
+					"Left rotation",
+					output.master.shaperLeftRotation,
+					-45,
+					45,
+					!takeover,
+					"°",
+					1,
+				),
+				valueControl(
+					"shaper-right-rotation",
+					"Right rotation",
+					output.master.shaperRightRotation,
+					-45,
+					45,
+					!takeover,
+					"°",
+					1,
+				),
+				valueControl(
+					"shaper-top-rotation",
+					"Top rotation",
+					output.master.shaperTopRotation,
+					-45,
+					45,
+					!takeover,
+					"°",
+					1,
+				),
+				valueControl(
+					"shaper-bottom-rotation",
+					"Bottom rotation",
+					output.master.shaperBottomRotation,
+					-45,
+					45,
+					!takeover,
+					"°",
+					1,
+				),
+				valueControl(
+					"shaper-rotation",
+					"Module rotation",
+					output.master.shaperRotation,
+					-180,
+					180,
+					!takeover,
+					"°",
+					1,
 				),
 			],
 		},

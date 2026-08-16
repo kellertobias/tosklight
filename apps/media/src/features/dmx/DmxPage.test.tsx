@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { act } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { stubServer } from "../../testing/server";
@@ -18,10 +19,26 @@ class FakeSocket {
 
 afterEach(() => {
 	FakeSocket.opened = [];
+	window.history.replaceState(null, "", "/");
 	vi.unstubAllGlobals();
 });
 
 describe("DMX diagnostics", () => {
+	it("is a dedicated Diagnostics window with a link to DMX input settings", async () => {
+		stubServer();
+		vi.stubGlobal("WebSocket", undefined);
+		const { container } = render(<DmxPage />);
+
+		expect(screen.getByText("Diagnostics")).toHaveClass("ui-window-title");
+		expect(container.querySelector(".media-dmx-window")).toBeInTheDocument();
+		expect(container.querySelector(".media-dmx-content")).toBeInTheDocument();
+		await userEvent.click(
+			screen.getByRole("button", { name: "Configure DMX input" }),
+		);
+		expect(window.location.pathname).toBe("/settings");
+		expect(window.location.search).toBe("?section=dmx");
+	});
+
 	it("renders the canonical absolute channel map", async () => {
 		stubServer();
 		vi.stubGlobal("WebSocket", undefined);

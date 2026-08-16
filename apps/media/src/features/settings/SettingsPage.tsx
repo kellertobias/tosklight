@@ -3,79 +3,44 @@
 // Output identity is editable as stored configuration. The running surface is deliberately left
 // alone, and the page says so rather than pretending a monitor or resolution changed live.
 
-import { Button, MultiValueToggle } from "@tosklight/ui/controls";
+import { Button } from "@tosklight/ui/controls";
 import { useState } from "react";
 import { ResourceState } from "../../app/ResourceState";
+import { useFailureToast } from "../../app/ToastContext";
 import {
 	MediaSettingsLayout,
 	type MediaSettingsSection,
 } from "../../operator/MediaServerSurface";
 import { api } from "../../shared/api/client";
-import { useEditing } from "../../shared/api/editing";
+import { requestId, useEditing } from "../../shared/api/editing";
 import type {
 	Health,
 	NetworkView,
 } from "../../shared/api/generated/media-wire";
 import { useHealth, useNetwork, useOutputs } from "../../shared/api/queries";
-import { AudioPage } from "../audio/AudioPage";
-import { DmxPage } from "../dmx/DmxPage";
 import { LogsPage } from "../logs/LogsPage";
-import { BoundAddresses, NetworkEditor } from "./NetworkEditor";
+import { NetworkEditor } from "./NetworkEditor";
 import { OutputSettings } from "./OutputSettings";
+import { SettingsSaveState } from "./SettingsSaveState";
 
 const HEALTH_POLL_MS = 15_000;
-
-type NetworkInputsTab = "network" | "dmx" | "audio";
-type LogsTab = "logs" | "dmx-diagnostics";
 
 export function SettingsPage() {
 	const health = useHealth(HEALTH_POLL_MS);
 	const outputs = useOutputs(HEALTH_POLL_MS);
 	const network = useNetwork();
 	const editing = useEditing(network.reload);
-	const initialSection =
-		window.location.pathname === "/logs" || window.location.pathname === "/dmx"
+	const initialSection: MediaSettingsSection =
+		window.location.pathname === "/logs"
 			? "logs"
-			: window.location.pathname === "/audio"
-				? "network-inputs"
-				: "libraries";
+			: new URLSearchParams(window.location.search).get("section") === "dmx"
+				? "dmx"
+				: "network";
 	const [section, setSection] = useState<MediaSettingsSection>(initialSection);
-	const [networkInputsTab, setNetworkInputsTab] = useState<NetworkInputsTab>(
-		window.location.pathname === "/audio" ? "audio" : "network",
-	);
-	const [logsTab, setLogsTab] = useState<LogsTab>(
-		window.location.pathname === "/dmx" ? "dmx-diagnostics" : "logs",
-	);
-	const toolbar =
-		section === "network-inputs" ? (
-			<MultiValueToggle
-				ariaLabel="Network and input settings"
-				value={networkInputsTab}
-				options={[
-					{ value: "network", label: "Network" },
-					{ value: "dmx", label: "DMX" },
-					{ value: "audio", label: "Audio" },
-				]}
-				onChange={setNetworkInputsTab}
-			/>
-		) : section === "logs" ? (
-			<MultiValueToggle
-				ariaLabel="Logs and diagnostics"
-				value={logsTab}
-				options={[
-					{ value: "logs", label: "Logs" },
-					{ value: "dmx-diagnostics", label: "DMX Diagnostics" },
-				]}
-				onChange={setLogsTab}
-			/>
-		) : undefined;
+	useFailureToast(editing.failure);
 
 	return (
-		<MediaSettingsLayout
-			active={section}
-			onSelect={setSection}
-			toolbar={toolbar}
-		>
+		<MediaSettingsLayout active={section} onSelect={setSection}>
 			{section === "libraries" && (
 				<section className="media-page">
 					<ResourceState resource={health} subject="server settings">
@@ -88,8 +53,11 @@ export function SettingsPage() {
 					</ResourceState>
 
 					<article className="media-settings-section" aria-label="Libraries">
-						<h2>Libraries</h2>
-						<p className="media-state is-notice">
+						<div className="media-settings-section-heading">
+							<h2>Libraries</h2>
+							<SettingsSaveState busy={false} failed={false} />
+						</div>
+						<p>
 							The library folder is the <code>library.root</code> value in this
 							server's configuration file. Restart the server after changing it.
 						</p>
@@ -97,25 +65,14 @@ export function SettingsPage() {
 				</section>
 			)}
 
-			{section === "network-inputs" && networkInputsTab === "network" && (
+			{section === "network" && (
 				<section className="media-page">
-					{editing.failure && (
-						<p className="media-state is-error" role="alert">
-							{editing.failure.message}{" "}
-							<Button size="compact" onClick={editing.dismiss}>
-								Dismiss
-							</Button>
-						</p>
-					)}
-
 					<ResourceState resource={network} subject="the network settings">
 						{(data) => (
 							<Network
 								network={data}
-								editing={editing.editing === "network"}
 								busy={editing.busy}
-								onEdit={() => editing.begin("network")}
-								onCancel={editing.cancel}
+								failed={editing.failure !== undefined}
 								onSave={(edit) =>
 									void editing.save(() => api.updateNetwork(edit))
 								}
@@ -125,7 +82,7 @@ export function SettingsPage() {
 				</section>
 			)}
 
-			{section === "network-inputs" && networkInputsTab === "dmx" && (
+			{section === "dmx" && (
 				<section className="media-page">
 					<ResourceState
 						resource={outputs}
@@ -138,13 +95,14 @@ export function SettingsPage() {
 								className="media-settings-group"
 								aria-labelledby="dmx-inputs-heading"
 							>
-								<h2 id="dmx-inputs-heading">DMX</h2>
+								<h2 id="dmx-inputs-heading">DMX input</h2>
 								{data.map((output) => (
 									<OutputSettings
 										key={output.id}
 										outputId={output.id}
 										outputName={output.name}
 										mode="dmx"
+										direct
 									/>
 								))}
 							</section>
@@ -153,14 +111,12 @@ export function SettingsPage() {
 				</section>
 			)}
 
-			{section === "network-inputs" && networkInputsTab === "audio" && (
-				<AudioPage />
-			)}
-
-			{section === "outputs" && (
+			{(section === "picture-output" || section === "sound-output") && (
 				<ResourceState
 					resource={outputs}
-					subject="output settings"
+					subject={
+						section === "picture-output" ? "picture settings" : "sound settings"
+					}
 					isEmpty={(data) => data.length === 0}
 					empty="No outputs are enabled."
 				>
@@ -169,63 +125,73 @@ export function SettingsPage() {
 							className="media-settings-group"
 							aria-labelledby="outputs-heading"
 						>
-							<h2 id="outputs-heading">Outputs</h2>
+							<h2 id="outputs-heading">
+								{section === "picture-output" ? "Picture" : "Sound"}
+							</h2>
 							{data.map((output) => (
 								<OutputSettings
 									key={output.id}
 									outputId={output.id}
 									outputName={output.name}
-									mode="picture"
+									mode={section === "picture-output" ? "picture" : "sound"}
+									direct
 								/>
 							))}
 						</section>
 					)}
 				</ResourceState>
 			)}
-			{section === "logs" && logsTab === "logs" && <LogsPage />}
-			{section === "logs" && logsTab === "dmx-diagnostics" && <DmxPage />}
+			{section === "logs" && <LogsPage />}
 		</MediaSettingsLayout>
 	);
 }
 
 function Network({
+	formId,
 	network,
-	editing,
 	busy,
-	onEdit,
-	onCancel,
+	failed,
 	onSave,
 }: {
+	formId?: string;
 	network: NetworkView;
-	editing: boolean;
 	busy: boolean;
-	onEdit: () => void;
-	onCancel: () => void;
+	failed: boolean;
 	onSave: (edit: Parameters<typeof api.updateNetwork>[0]) => void;
 }) {
 	return (
 		<article className="media-settings-section" aria-label="Network">
-			<h2>Network</h2>
-			{editing ? (
-				<NetworkEditor
-					network={network}
-					busy={busy}
-					onSave={onSave}
-					onCancel={onCancel}
-				/>
-			) : (
+			<div className="media-settings-section-heading">
+				<h2>Network</h2>
+				<SettingsSaveState busy={busy} failed={failed} restartBound />
+			</div>
+			<NetworkEditor
+				formId={formId}
+				network={network}
+				busy={busy}
+				onSave={onSave}
+				showActions={false}
+			/>
+			{network.pendingRestart && network.takesEffectOnRestart && (
 				<>
-					<BoundAddresses network={network} />
+					<p className="media-state is-notice">
+						A saved change to these addresses is used the next time this server
+						starts. The sockets it is using now stay as they are.
+					</p>
 					<div className="media-settings-actions">
-						<Button onClick={onEdit}>Change network settings</Button>
+						<Button
+							onClick={() =>
+								onSave({
+									requestId: requestId(),
+									sameComputerPreset: network.activeSameComputerPreset,
+									...network.activeStored,
+								})
+							}
+						>
+							Revert to current settings
+						</Button>
 					</div>
 				</>
-			)}
-			{network.takesEffectOnRestart && (
-				<p className="media-state is-notice">
-					A saved change to these addresses is used the next time this server
-					starts. The sockets it is using now stay as they are.
-				</p>
 			)}
 		</article>
 	);

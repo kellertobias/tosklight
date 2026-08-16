@@ -4,12 +4,13 @@ use axum::extract::{Path, State};
 use axum::response::{IntoResponse, Response};
 use media_application::MediaConfiguration;
 use media_domain::MediaAddress;
+use media_domain::visualizer::{VisualizerConfiguration, VisualizerKind};
 
 use crate::error::ApiError;
 use crate::routes::ApiState;
 use crate::routes::edit::{self, Proceed};
 use crate::tolerant::TolerantJson;
-use crate::wire::{UpdateVisualizer, VisualizerView};
+use crate::wire::{CreateVisualizer, UpdateVisualizer, VisualizerView};
 
 /// Which generated visualizer answers at which address.
 ///
@@ -17,6 +18,48 @@ use crate::wire::{UpdateVisualizer, VisualizerView};
 /// frame to frame, so it is read once and not polled.
 pub(super) async fn visualizers(State(state): State<ApiState>) -> impl IntoResponse {
     axum::Json(VisualizerView::all(&state.configuration.load().visualizers))
+}
+
+/// Creates another instance of a shipped visualizer in the empty slot the operator selected.
+pub(super) async fn create_visualizer(
+    State(state): State<ApiState>,
+    TolerantJson(body): TolerantJson<CreateVisualizer>,
+) -> Result<Response, ApiError> {
+    if let Proceed::Replay(response) = edit::begin(&state, &body.request_id)? {
+        return Ok(response);
+    }
+
+    let kind = VisualizerKind::from_type_id(body.type_id).ok_or_else(|| {
+        ApiError::bad_request(
+            "unknown-visualizer-kind",
+            "choose one of the visualizer kinds published by this Media Server",
+        )
+    })?;
+    let mut visualizer = VisualizerConfiguration::new(kind);
+    if let Some(name) = body.name {
+        let trimmed = name.trim();
+        if trimmed.is_empty() {
+            return Err(ApiError::bad_request(
+                "empty-name",
+                "a visualizer needs a name an operator can find it by",
+            ));
+        }
+        visualizer.name = trimmed.to_owned();
+    }
+
+    let mut configuration = MediaConfiguration::clone(&state.configuration.load());
+    let address = MediaAddress::new(body.folder, body.file);
+    configuration
+        .visualizers
+        .assign(address, visualizer)
+        .map_err(|error| ApiError::bad_request("visualizer-not-created", error.to_string()))?;
+
+    let created = configuration
+        .visualizers
+        .resolve(address)
+        .expect("the assigned visualizer is immediately addressable");
+    let view = VisualizerView::of(address, created);
+    edit::commit(&state, configuration, &body.request_id, &view)
 }
 
 /// Edits one configured visualizer.
@@ -57,6 +100,17 @@ pub(super) async fn update_visualizer(
         }
         entry.configuration.name = trimmed.to_owned();
     }
+    if let Some(type_id) = body.type_id {
+        let kind = VisualizerKind::from_type_id(type_id).ok_or_else(|| {
+            ApiError::bad_request(
+                "unknown-visualizer-kind",
+                "choose one of the visualizer kinds published by this Media Server",
+            )
+        })?;
+        let name = entry.configuration.name.clone();
+        entry.configuration = VisualizerConfiguration::new(kind);
+        entry.configuration.name = name;
+    }
     if let Some(parameters) = body.parameters {
         entry.configuration.parameters = parameters.into_parameters();
     }
@@ -68,6 +122,7 @@ pub(super) async fn update_visualizer(
 #[cfg(test)]
 mod tests {
     use axum::http::StatusCode;
+    use media_domain::visualizer::VisualizerKind;
 
     use crate::routes::bench::{bench, get, post, send};
 
@@ -123,6 +178,78 @@ mod tests {
                 "Grid Landscape publishes {control}"
             );
         }
+    }
+
+    #[tokio::test]
+    async fn another_instance_of_a_built_in_kind_uses_the_selected_empty_address() {
+        let bench = bench();
+        let (status, body) = send(
+            &bench.router,
+            post(
+                "/api/v2/visualizers/create".into(),
+                r#"{"requestId":"new-bars","folder":251,"file":7,"typeId":0,"name":"Thin bars"}"#,
+            ),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["typeId"], 0);
+        assert_eq!(body["name"], "Thin bars");
+        assert_eq!(body["address"]["folder"], 251);
+        assert_eq!(body["address"]["file"], 7);
+
+        let stored = bench.stored.lock().unwrap();
+        assert_eq!(stored.len(), 1);
+        let equalizers = stored[0]
+            .visualizers
+            .entries
+            .iter()
+            .filter(|entry| entry.configuration.kind == VisualizerKind::EqualizerBars)
+            .count();
+        assert_eq!(equalizers, 2);
+    }
+
+    #[tokio::test]
+    async fn an_occupied_visualizer_address_is_not_reassigned() {
+        let bench = bench();
+        let (status, body) = send(
+            &bench.router,
+            post(
+                "/api/v2/visualizers/create".into(),
+                r#"{"requestId":"occupied","folder":250,"file":1,"typeId":0}"#,
+            ),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(body["code"], "visualizer-not-created");
+        assert!(bench.stored.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn changing_the_built_in_kind_keeps_the_address_and_resets_safe_defaults() {
+        let bench = bench();
+        let (status, body) = send(
+            &bench.router,
+            post(
+                "/api/v2/visualizers/250/1/update".into(),
+                r#"{"requestId":"change-kind","typeId":22}"#,
+            ),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["address"]["folder"], 250);
+        assert_eq!(body["address"]["file"], 1);
+        assert_eq!(body["typeId"], 22);
+        assert_eq!(body["kind"], "Starfield");
+        assert_eq!(body["name"], "Equalizer Bars");
+        assert!(
+            body["uses"]
+                .as_array()
+                .unwrap()
+                .contains(&serde_json::json!("speed"))
+        );
     }
 
     #[tokio::test]

@@ -22,14 +22,9 @@ import type {
 	CatalogView,
 } from "../shared/api/generated/media-wire";
 import {
-	DashboardScreen,
 	LibrariesSettings,
 	LogsSettings,
-	LogsTabs,
-	type LogsSettingsTab,
 	NetworkInputsSettings,
-	NetworkInputsTabs,
-	type NetworkInputsSettingsTab,
 	OutputsSettings,
 	SettingsScreen,
 } from "./MediaServerScreens";
@@ -47,30 +42,21 @@ import "./mediaServerSurface.css";
 const NOW = new Date("2026-08-12T21:31:00+02:00");
 
 const MEDIA_STORY_BY_SECTION: Record<MediaServerSection, string> = {
-	dashboard: "dashboard",
 	media: "media",
 	library: "library",
 	audio: "audio",
+	dmx: "settings-dmx-input",
 	settings: "settings-libraries",
 };
 
 const SETTINGS_STORY_BY_SECTION = {
 	libraries: "settings-libraries",
-	outputs: "settings-outputs",
-	"network-inputs": "settings-network-and-inputs",
-	logs: "settings-logs",
-} as const;
-
-const NETWORK_INPUT_STORY_BY_TAB: Record<NetworkInputsSettingsTab, string> = {
+	"picture-output": "settings-outputs",
+	"sound-output": "settings-outputs",
 	network: "settings-network-and-inputs",
 	dmx: "settings-dmx-input",
-	audio: "settings-audio-input",
-};
-
-const LOG_STORY_BY_TAB: Record<LogsSettingsTab, string> = {
 	logs: "settings-logs",
-	"dmx-diagnostics": "settings-dmx-diagnostics",
-};
+} as const;
 
 function mediaServerStoryPath(section: MediaServerSection) {
 	return `/?path=/story/tosklight-media-server--${MEDIA_STORY_BY_SECTION[section]}`;
@@ -85,32 +71,6 @@ function openStory(story: string) {
 function openLibraryType(type: LibrarySourceType) {
 	openStory(type === "media" ? "library" : type);
 }
-
-const outputs = [
-	{
-		id: "main",
-		name: "Main output",
-		target: "Display 2",
-		resolution: "1920 × 1080",
-		status: "Live",
-		layers: [
-			{ id: "1", name: "Layer 1", source: "Storm Clouds", level: "100%" },
-			{ id: "2", name: "Layer 2", source: "Prospero title", level: "82%" },
-			{ id: "3", name: "Layer 3", source: "Aurora Field", level: "35%" },
-		],
-	},
-	{
-		id: "foh",
-		name: "FOH confidence",
-		target: "Off-screen surface",
-		resolution: "1280 × 720",
-		status: "Live",
-		layers: [
-			{ id: "1", name: "Layer 1", source: "Running order", level: "100%" },
-			{ id: "2", name: "Layer 2", source: "Blank", level: "0%" },
-		],
-	},
-];
 
 const audioAnalysis = {
 	capturing: true,
@@ -257,6 +217,9 @@ function StatefulLibrary() {
 				onRenameFolder={(folder, name) =>
 					setCatalog((current) => withStoryFolderName(current, folder, name))
 				}
+				onSetFolderIcon={(folder, icon) =>
+					setCatalog((current) => withStoryFolderIcon(current, folder, icon))
+				}
 				onSwapFolders={(first, second) =>
 					setCatalog((current) => swapStoryFolders(current, first, second))
 				}
@@ -352,6 +315,19 @@ function withStoryFolderName(
 					entry.folder === folder ? { ...entry, name } : entry,
 				)
 			: [...catalog.folders, { folder, name, items: [] }],
+	};
+}
+
+function withStoryFolderIcon(
+	catalog: CatalogView,
+	folder: number,
+	icon: string,
+): CatalogView {
+	return {
+		...catalog,
+		folders: catalog.folders.map((entry) =>
+			entry.folder === folder ? { ...entry, icon } : entry,
+		),
 	};
 }
 
@@ -610,7 +586,13 @@ function StatefulText() {
 				selectedId={selected}
 				onSelect={setSelected}
 				onTypeChange={openLibraryType}
-				headerAction={<Button size="compact">New text source</Button>}
+				headerActions={[
+					{
+						id: "new-text-source",
+						label: "New text source",
+						onPress: () => undefined,
+					},
+				]}
 				detail={
 					item ? (
 						<div className="media-library-editor media-generated-library-detail">
@@ -697,27 +679,6 @@ export const Components: Story = {
 	),
 };
 
-export const Dashboard: Story = {
-	render: () => (
-		<Frame active="dashboard">
-			<DashboardScreen
-				instance="Stage Rack"
-				showName="The Tempest"
-				outputs={outputs}
-				libraryItems={286}
-				dmxRate="44 Hz"
-				recent={
-					<ul>
-						<li>23:31 · Light Desk identified The Tempest</li>
-						<li>23:29 · Main output synchronized to Display 2</li>
-						<li>23:27 · Storm Clouds import finished</li>
-					</ul>
-				}
-			/>
-		</Frame>
-	),
-};
-
 export const Media: Story = {
 	name: "Playback",
 	render: () => <StatefulPlayback />,
@@ -760,7 +721,7 @@ export const SettingsOutputs: Story = {
 	render: () => (
 		<Frame active="settings">
 			<SettingsScreen
-				active="outputs"
+				active="picture-output"
 				onSelect={(section) => openStory(SETTINGS_STORY_BY_SECTION[section])}
 			>
 				<OutputsSettings />
@@ -772,14 +733,8 @@ export const SettingsNetworkAndInputs: Story = {
 	render: () => (
 		<Frame active="settings">
 			<SettingsScreen
-				active="network-inputs"
+				active="network"
 				onSelect={(section) => openStory(SETTINGS_STORY_BY_SECTION[section])}
-				toolbar={
-					<NetworkInputsTabs
-						value="network"
-						onChange={(tab) => openStory(NETWORK_INPUT_STORY_BY_TAB[tab])}
-					/>
-				}
 			>
 				<NetworkInputsSettings active="network" />
 			</SettingsScreen>
@@ -790,14 +745,8 @@ export const SettingsDmxInput: Story = {
 	render: () => (
 		<Frame active="settings">
 			<SettingsScreen
-				active="network-inputs"
+				active="dmx"
 				onSelect={(section) => openStory(SETTINGS_STORY_BY_SECTION[section])}
-				toolbar={
-					<NetworkInputsTabs
-						value="dmx"
-						onChange={(tab) => openStory(NETWORK_INPUT_STORY_BY_TAB[tab])}
-					/>
-				}
 			>
 				<NetworkInputsSettings active="dmx" />
 			</SettingsScreen>
@@ -808,14 +757,8 @@ export const SettingsAudioInput: Story = {
 	render: () => (
 		<Frame active="settings">
 			<SettingsScreen
-				active="network-inputs"
+				active="network"
 				onSelect={(section) => openStory(SETTINGS_STORY_BY_SECTION[section])}
-				toolbar={
-					<NetworkInputsTabs
-						value="audio"
-						onChange={(tab) => openStory(NETWORK_INPUT_STORY_BY_TAB[tab])}
-					/>
-				}
 			>
 				<NetworkInputsSettings
 					active="audio"
@@ -831,33 +774,21 @@ export const SettingsLogs: Story = {
 			<SettingsScreen
 				active="logs"
 				onSelect={(section) => openStory(SETTINGS_STORY_BY_SECTION[section])}
-				toolbar={
-					<LogsTabs
-						value="logs"
-						onChange={(tab) => openStory(LOG_STORY_BY_TAB[tab])}
-					/>
-				}
 			>
 				<LogsSettings active="logs" />
 			</SettingsScreen>
 		</Frame>
 	),
 };
-export const SettingsDmxDiagnostics: Story = {
+export const DmxDiagnostics: Story = {
 	render: () => (
-		<Frame active="settings">
-			<SettingsScreen
-				active="logs"
-				onSelect={(section) => openStory(SETTINGS_STORY_BY_SECTION[section])}
-				toolbar={
-					<LogsTabs
-						value="dmx-diagnostics"
-						onChange={(tab) => openStory(LOG_STORY_BY_TAB[tab])}
-					/>
-				}
+		<Frame active="dmx">
+			<WindowFrame
+				title="Diagnostics"
+				info={{ primary: "DMX", secondary: "Input and channel diagnostics" }}
 			>
 				<LogsSettings active="dmx-diagnostics" />
-			</SettingsScreen>
+			</WindowFrame>
 		</Frame>
 	),
 };

@@ -4,12 +4,12 @@
 // reload on `/layers` works, and the client only has to map a path to a page.
 
 export const ROUTES = [
-	{ path: "/", label: "Dashboard" },
-	{ path: "/media", label: "Playback" },
+	{ path: "/", label: "Playback" },
 	{ path: "/library", label: "Library" },
 	{ path: "/visualizers", label: "Visualizers" },
 	{ path: "/text", label: "Text" },
 	{ path: "/audio", label: "Audio" },
+	{ path: "/dmx", label: "Diagnostics" },
 	{ path: "/settings", label: "Settings" },
 ] as const;
 
@@ -18,8 +18,8 @@ export type RoutePath = (typeof ROUTES)[number]["path"];
 export function normalizePath(pathname: string): RoutePath {
 	const trimmed = pathname.replace(/\/+$/u, "") || "/";
 	const legacy = {
-		"/layers": "/media",
-		"/dmx": "/settings",
+		"/media": "/",
+		"/layers": "/",
 		"/logs": "/settings",
 	} as const;
 	const canonical = legacy[trimmed as keyof typeof legacy] ?? trimmed;

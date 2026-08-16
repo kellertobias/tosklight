@@ -7,10 +7,13 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { KEYS } from "../../shared/api/queries";
+import { writeResource } from "../../shared/api/resource";
 import { anOutput, stubServer } from "../../testing/server";
 import { MediaPanePage } from "./MediaPanePage";
 
 afterEach(() => {
+	document.getElementById("media-playback-dock-action")?.remove();
 	vi.unstubAllGlobals();
 	vi.restoreAllMocks();
 });
@@ -26,6 +29,81 @@ beforeEach(() => {
 });
 
 describe("the production Media pane", () => {
+	it("opens with browser controls in a right-hand pane", async () => {
+		stubServer();
+		const { container } = render(<MediaPanePage />);
+
+		await screen.findByRole("button", { name: /Layer 1/iu });
+		const browser = container.querySelector(".media-library-browser");
+		const controls = container.querySelector(".media-secondary-controls");
+		expect(browser).toBeInTheDocument();
+		expect(controls).toBeInTheDocument();
+		expect(browser?.compareDocumentPosition(controls as Node)).toBe(
+			Node.DOCUMENT_POSITION_FOLLOWING,
+		);
+		const previewLoader = container.querySelector(
+			".media-composite-picture img[hidden]",
+		);
+		expect(previewLoader).toHaveAttribute(
+			"src",
+			expect.stringContaining(
+				"/outputs/11111111-1111-4111-8111-111111111111/preview",
+			),
+		);
+		expect(screen.getByTestId("master-output-picture")).toHaveStyle({
+			aspectRatio: "1920 / 1080",
+		});
+		expect(screen.getByText("192.0.2.10 · DMX U1 A1")).toBeInTheDocument();
+		expect(screen.getByText("2 library items")).toBeInTheDocument();
+	});
+
+	it("labels one catalog entry as one library item", async () => {
+		const server = stubServer();
+		server.catalog.itemCount = 1;
+		render(<MediaPanePage />);
+
+		expect(await screen.findByText("1 library item")).toBeInTheDocument();
+	});
+
+	it("changes the running DMX facts with the selected output", async () => {
+		const main = anOutput();
+		const backup = anOutput({
+			id: "22222222-2222-4222-8222-222222222222",
+			name: "Backup",
+		});
+		stubServer({
+			outputs: [main, backup],
+			runtime: {
+				administrationIp: "192.0.2.10",
+				outputs: [
+					{
+						id: main.id,
+						name: main.name,
+						protocol: "art-net",
+						universe: 1,
+						startAddress: 1,
+					},
+					{
+						id: backup.id,
+						name: backup.name,
+						protocol: "sacn",
+						universe: 23,
+						startAddress: 101,
+					},
+				],
+			},
+		});
+		render(<MediaPanePage />);
+
+		expect(
+			await screen.findByText("192.0.2.10 · DMX U1 A1"),
+		).toBeInTheDocument();
+		await userEvent.click(
+			screen.getByRole("button", { name: /Layer 1 Backup/iu }),
+		);
+		expect(screen.getByText("192.0.2.10 · DMX U23 A101")).toBeInTheDocument();
+	});
+
 	it("paints takeover feedback inside the 50 ms operator budget while the request is still pending", async () => {
 		const server = stubServer();
 		const request = deferred();
@@ -47,13 +125,40 @@ describe("the production Media pane", () => {
 		await waitFor(() => expect(server.outputs[0].playbackTakeover).toBe(true));
 	});
 
+	it("does not snap back on a stale poll and accepts a second toggle", async () => {
+		const server = stubServer();
+		const request = deferred();
+		server.holdWrites = request.promise;
+		render(<MediaPanePage />);
+
+		const takeover = await screen.findByRole("switch", {
+			name: "Take over playback",
+		});
+		fireEvent.click(takeover);
+		expect(takeover).toBeChecked();
+
+		writeResource(KEYS.outputs, structuredClone(server.outputs));
+		expect(takeover).toBeChecked();
+		expect(takeover).not.toBeDisabled();
+
+		fireEvent.click(takeover);
+		expect(takeover).not.toBeChecked();
+		request.resolve();
+		await waitFor(() =>
+			expect(
+				server.writes.filter((path) => /take-over|release/u.test(path)),
+			).toHaveLength(2),
+		);
+		expect(server.outputs[0].playbackTakeover).toBe(false);
+	});
+
 	it("keeps rapid fader feedback immediate and coalesces a stalled drag to its latest value", async () => {
 		const server = stubServer();
 		render(<MediaPanePage />);
 		await userEvent.click(
 			await screen.findByRole("switch", { name: "Take over playback" }),
 		);
-		await userEvent.click(screen.getByRole("radio", { name: "Frame" }));
+		await userEvent.click(screen.getByRole("tab", { name: "Frame" }));
 
 		const request = deferred();
 		server.holdWrites = request.promise;
@@ -79,6 +184,7 @@ describe("the production Media pane", () => {
 		fireEvent.input(scale, { target: { value: "9" } });
 		fireEvent.pointerUp(scale);
 		expect(scale).toHaveValue("9");
+		// All samples received while the first request is stalled occupy one latest slot.
 		expect(
 			server.writes.filter((path) => path.endsWith("/layers/0/update")),
 		).toHaveLength(1);
@@ -105,7 +211,7 @@ describe("the production Media pane", () => {
 		await userEvent.click(
 			screen.getByRole("switch", { name: "Take over playback" }),
 		);
-		await userEvent.click(screen.getByRole("radio", { name: "Frame" }));
+		await userEvent.click(screen.getByRole("tab", { name: "Frame" }));
 		const scale = screen.getByLabelText("Scale X");
 		fireEvent.pointerDown(scale);
 		fireEvent.input(scale, { target: { value: "2" } });
@@ -117,17 +223,61 @@ describe("the production Media pane", () => {
 		).toHaveLength(1);
 	});
 
-	it("puts Release on the off side and Take over playback on the on side", async () => {
+	it("serializes fractional speed and BPM gestures as bounded integers", async () => {
+		const server = stubServer();
+		render(<MediaPanePage />);
+		await userEvent.click(
+			await screen.findByRole("switch", { name: "Take over playback" }),
+		);
+		const speed = screen.getByLabelText("Speed");
+		const bpm = screen.getByLabelText("Playback BPM");
+		expect(speed).toHaveAttribute("step", "1");
+		expect(bpm).toHaveAttribute("step", "1");
+		fireEvent.input(speed, { target: { value: "127.6" } });
+		fireEvent.input(bpm, { target: { value: "120.1" } });
+
+		await waitFor(() =>
+			expect(server.writeBodies).toEqual(
+				expect.arrayContaining([
+					expect.objectContaining({ speedMultiplierDmx: 128 }),
+					expect.objectContaining({ playbackBpm: 120 }),
+				]),
+			),
+		);
+	});
+
+	it("renders one compact sidebar toggle labelled exactly Take over playback", async () => {
 		stubServer();
+		const dock = document.createElement("div");
+		dock.id = "media-playback-dock-action";
+		document.body.append(dock);
 		render(<MediaPanePage />);
 
 		await screen.findByRole("switch", { name: "Take over playback" });
-		expect(document.querySelector(".ui-switch-state-off")).toHaveTextContent(
-			"Release",
-		);
-		expect(document.querySelector(".ui-switch-state-on")).toHaveTextContent(
-			"Take over playback",
-		);
+		expect(dock).toHaveTextContent(/^Take over playback$/u);
+		expect(dock).not.toHaveTextContent("Release");
+		dock.remove();
+	});
+
+	it("release locks browsing and discards an uncommitted folder draft", async () => {
+		const server = stubServer();
+		render(<MediaPanePage />);
+		const takeover = await screen.findByRole("switch", {
+			name: "Take over playback",
+		});
+		await userEvent.click(takeover);
+		const secondFolder = screen.getByRole("button", {
+			name: /002Folder 0020 files/iu,
+		});
+		await userEvent.click(secondFolder);
+		expect(secondFolder).toHaveClass("selected");
+
+		await userEvent.click(takeover);
+		await waitFor(() => expect(server.outputs[0].playbackTakeover).toBe(false));
+		expect(secondFolder).toBeDisabled();
+		expect(
+			screen.getByRole("button", { name: /001Looks2 files/iu }),
+		).toHaveClass("selected");
 	});
 
 	it("takes over only the selected output and exposes the master's controls", async () => {
@@ -154,12 +304,84 @@ describe("the production Media pane", () => {
 		expect(dimmer).toBeEnabled();
 		fireEvent.input(dimmer, { target: { value: "35" } });
 		await waitFor(() => expect(second.master.dimmer).toBeCloseTo(0.35));
-		await userEvent.click(screen.getByRole("radio", { name: "Colour" }));
+		await userEvent.click(screen.getByRole("tab", { name: "Colour" }));
 		expect(
 			screen.getByRole("radiogroup", { name: "Flip / mirror" }),
 		).toBeInTheDocument();
 		await userEvent.click(screen.getByRole("radio", { name: "both" }));
 		await waitFor(() => expect(second.master.flipMirror).toBe("both"));
+		await userEvent.click(screen.getByRole("tab", { name: "Geometry" }));
+		fireEvent.input(screen.getByLabelText("Position X"), {
+			target: { value: "0.5" },
+		});
+		fireEvent.input(screen.getByLabelText("Scale Y"), {
+			target: { value: "1.5" },
+		});
+		fireEvent.input(screen.getByLabelText("Rotation"), {
+			target: { value: "30" },
+		});
+		await waitFor(() => {
+			expect(second.master.positionX).toBe(0.5);
+			expect(second.master.scaleY).toBe(1.5);
+			expect(second.master.rotation).toBe(30);
+		});
+		await userEvent.click(screen.getByRole("tab", { name: "Shapers" }));
+		fireEvent.input(screen.getByLabelText("Left"), {
+			target: { value: "25" },
+		});
+		fireEvent.input(screen.getByLabelText("Left rotation"), {
+			target: { value: "12" },
+		});
+		fireEvent.input(screen.getByLabelText("Module rotation"), {
+			target: { value: "15" },
+		});
+		await waitFor(() => {
+			expect(second.master.shaperLeft).toBe(0.25);
+			expect(second.master.shaperLeftRotation).toBe(12);
+			expect(second.master.shaperRotation).toBe(15);
+		});
+	});
+
+	it("switches from Master back to a layer without leaving an invalid active tab", async () => {
+		stubServer();
+		render(<MediaPanePage />);
+		await userEvent.click(
+			await screen.findByRole("button", { name: /Master output/iu }),
+		);
+		expect(screen.getByRole("tab", { name: "Output" })).toHaveAttribute(
+			"aria-selected",
+			"true",
+		);
+
+		await userEvent.click(screen.getByRole("button", { name: /Layer 1/iu }));
+		expect(screen.getByRole("tab", { name: "Playback" })).toHaveAttribute(
+			"aria-selected",
+			"true",
+		);
+		expect(screen.getByText("Master output live preview")).toBeInTheDocument();
+	});
+
+	it("uses renderer layer previews and surfaces source failures", async () => {
+		const output = anOutput();
+		output.layers[0].sourceStatus = {
+			state: "failed",
+			failure: "the file could not be decoded; it may be damaged",
+		};
+		stubServer({ outputs: [output] });
+		const { container } = render(<MediaPanePage />);
+
+		await screen.findByRole("button", { name: /Layer 1/iu });
+		expect(
+			container.querySelector(".media-layer-thumbnail img"),
+		).toHaveAttribute(
+			"src",
+			expect.stringContaining(
+				"/outputs/11111111-1111-4111-8111-111111111111/layers/0/preview",
+			),
+		);
+		expect(await screen.findByRole("alert")).toHaveTextContent(
+			"the file could not be decoded; it may be damaged",
+		);
 	});
 
 	it("keeps takeover failure on the selected output", async () => {
@@ -587,7 +809,7 @@ describe("the production Media pane", () => {
 		);
 	});
 
-	it("configures live Beat Form Flash controls and bypass", async () => {
+	it("configures live Beat Form Flash size, lifetime, density, variation, and bypass", async () => {
 		const server = stubServer();
 		render(<MediaPanePage />);
 		await userEvent.click(
@@ -612,13 +834,10 @@ describe("the production Media pane", () => {
 		fireEvent.input(screen.getByLabelText("Slot 1 · Variation"), {
 			target: { value: "65" },
 		});
-		await waitFor(() =>
-			expect(
-				server.outputs[0].layers[0].effects[0].parameters.map(
-					({ value }) => value,
-				),
-			).toEqual([2.4, 1.6, 3, 0.65]),
-		);
+		await waitFor(() => {
+			const parameters = server.outputs[0].layers[0].effects[0].parameters;
+			expect(parameters.map(({ value }) => value)).toEqual([2.4, 1.6, 3, 0.65]);
+		});
 		await userEvent.click(
 			within(
 				screen.getByRole("radiogroup", { name: "Slot 1 state" }),
@@ -626,30 +845,6 @@ describe("the production Media pane", () => {
 		);
 		await waitFor(() =>
 			expect(server.outputs[0].layers[0].effects[0].enabled).toBe(false),
-		);
-	});
-
-	it("exposes Equalizer Bloom through slot one and changes it live", async () => {
-		const output = anOutput();
-		output.layers[0].address = {
-			folder: 250,
-			file: 1,
-			class: "generated-visualizer",
-		};
-		const server = stubServer({ outputs: [output] });
-		render(<MediaPanePage />);
-		await userEvent.click(
-			await screen.findByRole("switch", { name: "Take over playback" }),
-		);
-		await userEvent.click(screen.getByRole("radio", { name: "Effects" }));
-		const bloom = screen.getByLabelText("Slot 1 · Bloom");
-		expect(bloom).toHaveAttribute("min", "0");
-		expect(bloom).toHaveAttribute("max", "1");
-		fireEvent.input(bloom, { target: { value: "0.4" } });
-		await waitFor(() =>
-			expect(
-				server.outputs[0].layers[0].effects[0].visualizerParameters?.amount,
-			).toBeCloseTo(0.4),
 		);
 	});
 
@@ -669,31 +864,159 @@ describe("the production Media pane", () => {
 		stubServer({ outputs: [output] });
 		render(<MediaPanePage />);
 
-		await userEvent.click(
-			await screen.findByRole("radio", { name: "Effects" }),
-		);
+		await userEvent.click(await screen.findByRole("tab", { name: "Effects" }));
 		expect(screen.getByRole("status")).toHaveTextContent(
 			"Not supported by this layer · This Media Server build cannot render the selected effect.",
 		);
 	});
 
-	it("lists generated Text and Visualizer address folders beside the media library", async () => {
-		stubServer();
+	it("routes slot 1 to the active visualizer and restores normal effects for media", async () => {
+		const output = anOutput();
+		output.layers[0].address = {
+			folder: 250,
+			file: 1,
+			class: "generated-visualizer",
+		};
+		const server = stubServer({ outputs: [output] });
 		render(<MediaPanePage />);
-		expect(await screen.findByText("Text")).toBeInTheDocument();
-		expect(screen.getByText("Visualizers")).toBeInTheDocument();
+		await userEvent.click(
+			await screen.findByRole("switch", { name: "Take over playback" }),
+		);
+		await userEvent.click(screen.getByRole("tab", { name: "Effects" }));
+
+		expect(screen.queryByText("Slot 1 effect")).not.toBeInTheDocument();
+		expect(screen.getByText("Slot 1 · Equalizer Bars")).toBeInTheDocument();
+		const size = screen.getByLabelText("Slot 1 · Size");
+		const bloom = screen.getByLabelText("Slot 1 · Bloom");
+		expect(bloom).toHaveAttribute("min", "0");
+		expect(bloom).toHaveAttribute("max", "1");
+		fireEvent.input(bloom, { target: { value: "0.4" } });
+		await waitFor(() =>
+			expect(
+				server.outputs[0].layers[0].effects[0].visualizerParameters?.amount,
+			).toBeCloseTo(0.4),
+		);
+		expect(size).toHaveAttribute("min", "0.001");
+		expect(size).toHaveAttribute("max", "1");
+		fireEvent.pointerDown(size);
+		fireEvent.input(size, { target: { value: "0.2" } });
+		fireEvent.pointerUp(size);
+		await waitFor(() =>
+			expect(
+				server.outputs[0].layers[0].effects[0].visualizerParameters?.size,
+			).toBeCloseTo(0.2),
+		);
+		expect(server.writes).toContain(
+			"/outputs/11111111-1111-4111-8111-111111111111/layers/0/update",
+		);
+
+		await userEvent.click(
+			screen.getByRole("radio", { name: "Reset parameters" }),
+		);
+		await waitFor(() =>
+			expect(
+				server.outputs[0].layers[0].effects[0].visualizerParameters?.size,
+			).toBeCloseTo(0.05),
+		);
+
+		server.outputs[0].layers[0].address = {
+			folder: 1,
+			file: 1,
+			class: "library",
+		};
+		writeResource(KEYS.outputs, structuredClone(server.outputs));
+		await waitFor(() =>
+			expect(screen.getByText("Slot 1 effect")).toBeInTheDocument(),
+		);
+		expect(screen.queryByLabelText("Slot 1 · Size")).not.toBeInTheDocument();
+	});
+
+	it("filters Media, VIS, and Text address spaces without writing playback", async () => {
+		const server = stubServer();
+		render(<MediaPanePage />);
+		const writes = server.writes.length;
+		expect(await screen.findByRole("tab", { name: "Media" })).toHaveAttribute(
+			"aria-selected",
+			"true",
+		);
+		await userEvent.click(screen.getByRole("tab", { name: "VIS" }));
+		expect(
+			screen.getByRole("button", { name: /250Visualizers/iu }),
+		).toBeInTheDocument();
+		await userEvent.click(screen.getByRole("tab", { name: "Text" }));
+		expect(
+			screen.getByRole("button", { name: /200Text/iu }),
+		).toBeInTheDocument();
+		expect(server.writes).toHaveLength(writes);
+	});
+
+	it("disables Master content while leaving its mask browser usable", async () => {
+		const server = stubServer();
+		render(<MediaPanePage />);
+		await userEvent.click(
+			await screen.findByRole("switch", { name: "Take over playback" }),
+		);
+		await userEvent.click(
+			screen.getByRole("button", { name: /Master output/iu }),
+		);
+		const contentFolder = screen.getByRole("button", {
+			name: /001Looks2 files/iu,
+		});
+		expect(contentFolder).toBeDisabled();
+		const writes = server.writes.length;
+		await userEvent.click(contentFolder, { pointerEventsCheck: 0 });
+		expect(server.writes).toHaveLength(writes);
+		await userEvent.click(screen.getByRole("tab", { name: "Mask" }));
+		expect(
+			screen.getByRole("button", { name: /001Looks2 files/iu }),
+		).toBeEnabled();
 	});
 
 	it("keeps network-controlled choices disabled and sends no writes in monitor mode", async () => {
 		const server = stubServer();
 		render(<MediaPanePage />);
-		await userEvent.click(
-			await screen.findByRole("radio", { name: "Playback" }),
-		);
-		const modes = screen.getByRole("radiogroup", { name: "Play mode" });
-		for (const option of modes.querySelectorAll("button"))
-			expect(option).toBeDisabled();
+		await userEvent.click(await screen.findByRole("tab", { name: "Playback" }));
+		expect(screen.getByRole("button", { name: "Loop" })).toBeDisabled();
+		for (const action of ["Stop", "Play", "Play looped"])
+			expect(screen.getByRole("button", { name: action })).toBeDisabled();
+		expect(
+			screen.getByRole("button", { name: /001Looks2 files/iu }),
+		).toBeDisabled();
+		expect(
+			screen.getByRole("button", { name: /001Blue haze/iu }),
+		).toBeDisabled();
+		fireEvent.click(screen.getByRole("button", { name: /001Blue haze/iu }));
 		expect(server.writes).toEqual([]);
+	});
+
+	it("uses compact play-mode quick actions and targets the selected layer", async () => {
+		const server = stubServer();
+		render(<MediaPanePage />);
+		await userEvent.click(
+			await screen.findByRole("switch", { name: "Take over playback" }),
+		);
+		await userEvent.click(screen.getByRole("button", { name: /Layer 2/iu }));
+		await userEvent.click(
+			screen.getByRole("button", { name: /001Blue haze/iu }),
+		);
+		await waitFor(() =>
+			expect(server.outputs[0].layers[1].address.file).toBe(1),
+		);
+		expect(server.outputs[0].layers[0].address.file).toBe(1);
+		expect(
+			server.writes.some((path) => path.endsWith("/layers/1/update")),
+		).toBe(true);
+
+		const quickActions = within(
+			screen.getByRole("toolbar", { name: "Play mode quick actions" }),
+		);
+		await userEvent.click(quickActions.getByRole("button", { name: "Stop" }));
+		await waitFor(() =>
+			expect(server.outputs[0].layers[1].playModeDmx).toBe(216),
+		);
+		expect(quickActions.getByRole("button", { name: "Stop" })).toHaveClass(
+			"is-active",
+		);
 	});
 
 	it("writes content and rich controls after takeover", async () => {
@@ -710,11 +1033,40 @@ describe("the production Media pane", () => {
 				server.writes.some((path) => path.endsWith("/layers/0/update")),
 			).toBe(true),
 		);
-		await userEvent.click(screen.getByRole("radio", { name: "Frame" }));
+		await userEvent.click(screen.getByRole("tab", { name: "Frame" }));
 		const scale = screen.getByLabelText("Scale X");
 		fireEvent.input(scale, { target: { value: "6" } });
 		await waitFor(() => expect(server.outputs[0].layers[0].scaleX).toBe(6));
 		expect(scale).toHaveAttribute("max", "10");
+	});
+
+	it("clears Content and Mask through the leading 000 file entry", async () => {
+		const server = stubServer();
+		render(<MediaPanePage />);
+		await userEvent.click(
+			await screen.findByRole("switch", { name: "Take over playback" }),
+		);
+
+		let clear = screen.getByRole("button", {
+			name: /000No file selected/iu,
+		});
+		await userEvent.click(clear);
+		await waitFor(() =>
+			expect(server.writeBodies.at(-1)).toEqual(
+				expect.objectContaining({ folder: 1, file: 0 }),
+			),
+		);
+
+		await userEvent.click(screen.getAllByRole("tab", { name: "Mask" })[0]);
+		clear = screen.getByRole("button", {
+			name: /000No file selected/iu,
+		});
+		await userEvent.click(clear);
+		await waitFor(() =>
+			expect(server.writeBodies.at(-1)).toEqual(
+				expect.objectContaining({ maskFolder: 1, maskFile: 0 }),
+			),
+		);
 	});
 
 	it("keeps a refused playback edit visible to the operator", async () => {
@@ -736,7 +1088,7 @@ describe("the production Media pane", () => {
 		);
 	});
 
-	it("routes a master mask selection to the master endpoint", async () => {
+	it("routes a generated Text master mask selection to the master endpoint", async () => {
 		const server = stubServer();
 		render(<MediaPanePage />);
 		await userEvent.click(
@@ -745,9 +1097,10 @@ describe("the production Media pane", () => {
 		await userEvent.click(
 			screen.getByRole("button", { name: /Master output/iu }),
 		);
-		await userEvent.click(screen.getByRole("radio", { name: "Mask" }));
+		await userEvent.click(screen.getByRole("tab", { name: "Mask" }));
+		await userEvent.click(screen.getByRole("tab", { name: "Text" }));
 		await userEvent.click(
-			await screen.findByRole("button", { name: /001Blue haze/iu }),
+			await screen.findByRole("button", { name: /001Clock/iu }),
 		);
 		await waitFor(() =>
 			expect(
@@ -757,6 +1110,9 @@ describe("the production Media pane", () => {
 		expect(
 			server.writes.some((path) => path.endsWith("/layers/0/update")),
 		).toBe(false);
+		expect(server.writeBodies.at(-1)).toEqual(
+			expect.objectContaining({ maskFolder: 200, maskFile: 1 }),
+		);
 	});
 });
 

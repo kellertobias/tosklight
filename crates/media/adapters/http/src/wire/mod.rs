@@ -32,17 +32,22 @@ pub use dmx::{
     DmxChannelGroupView, DmxChannelView, DmxIngressView, DmxMapView, DmxPersonalityView,
     DmxResolutionView, DmxValueSetView,
 };
-pub use health::{AddressView, Health, SourceStatusView};
+pub use health::{AddressView, Health, RunningOutputView, RunningServerView, SourceStatusView};
 pub use library::{
-    ImportJobView, ImportsView, PendingImportView, StartImport, UpdateLibraryFolder,
+    FolderPresentationView, FolderPresentationsView, ImportJobView, ImportsView, PendingImportView,
+    RemoveFolderPicture, StartImport, UpdateFolderPresentation, UpdateLibraryFolder,
     UpdateLibraryItem, UploadAcceptedView,
 };
 pub use logs::{LogRecordView, LogsView, ServerLogLevelView, UpdateServerLogLevel};
 pub use network::{NetworkAddressesView, NetworkEditError, NetworkView, UpdateNetwork};
 pub use output::{
-    EffectParameterView, EffectSlotView, LayerView, MaskView, MasterView,
-    OutputConfigurationEditError, OutputConfigurationView, OutputView, UpdateLayer, UpdateMaster,
-    UpdateOutputConfiguration,
+    AvailableMonitorView, EffectParameterView, EffectSlotView, LayerView, MaskView, MasterView,
+    OutputConfigurationEditError, OutputConfigurationValuesView, OutputConfigurationView,
+    OutputView, UpdateLayer, UpdateMaster, UpdateOutputConfiguration,
 };
-pub use text::{CreateText, DeleteText, TextEditError, TextSlotView, TextStyleView, UpdateText};
-pub use visualizer::{UpdateVisualizer, VisualizerParametersView, VisualizerView};
+pub use text::{
+    CreateText, DeleteText, TextEditError, TextFormatView, TextSlotView, TextStyleView, UpdateText,
+};
+pub use visualizer::{
+    CreateVisualizer, UpdateVisualizer, VisualizerParametersView, VisualizerView,
+};

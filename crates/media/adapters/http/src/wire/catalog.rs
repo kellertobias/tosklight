@@ -44,6 +44,10 @@ impl CatalogItemView {
 pub struct CatalogFolderView {
     pub folder: u16,
     pub name: Option<String>,
+    #[ts(optional)]
+    pub icon: Option<String>,
+    #[ts(optional)]
+    pub picture_url: Option<String>,
     pub items: Vec<CatalogItemView>,
 }
 
@@ -69,6 +73,11 @@ impl CatalogView {
                 .map(|folder| CatalogFolderView {
                     folder: folder.folder,
                     name: folder.name.clone(),
+                    icon: folder.icon.clone(),
+                    picture_url: folder
+                        .picture_content_type
+                        .as_ref()
+                        .map(|_| format!("/api/v2/folder-presentations/{}/picture", folder.folder)),
                     items: folder.items.iter().map(CatalogItemView::of).collect(),
                 })
                 .collect(),

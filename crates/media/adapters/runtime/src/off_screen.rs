@@ -112,18 +112,45 @@ pub fn run(configuration: &MediaConfiguration, shared: Shared, shutdown: Shutdow
                 .master_mask
                 .and_then(|slot| output.pipeline.texture(slot));
             output.renderer.present(&draws, &state.master, mask, now);
-            if let Some(preview) = shared.previews.for_output(state.id)
-                && preview.wanted()
-                && crate::preview::due(output.last_preview_millis, now.as_millis())
-            {
+            let program = shared.previews.for_output(state.id);
+            let wanted = program.is_some_and(|preview| preview.wanted())
+                || state.layers.iter().enumerate().any(|(layer, _)| {
+                    shared
+                        .previews
+                        .for_layer(state.id, layer)
+                        .is_some_and(|preview| preview.wanted())
+                });
+            if wanted && crate::preview::due(output.last_preview_millis, now.as_millis()) {
                 output.last_preview_millis = Some(now.as_millis());
-                let from = output.renderer.size();
-                let to = preview.requested_size();
-                let pixels = output.renderer.read_image();
-                match crate::preview::encode(&pixels, from, to) {
-                    Ok(frame) => preview.publish(frame),
-                    Err(error) => {
-                        tracing::warn!(%error, output = %state.id, "the off-screen preview could not be encoded")
+                if let Some(preview) = program.filter(|preview| preview.wanted()) {
+                    let from = output.renderer.size();
+                    let to = preview.requested_size();
+                    let pixels = output.renderer.read_image();
+                    preview.publish_pixels(&pixels, from, to, false);
+                }
+                for (layer_index, layer_state) in state.layers.iter().enumerate() {
+                    let Some(preview) = shared
+                        .previews
+                        .for_layer(state.id, layer_index)
+                        .filter(|preview| preview.wanted())
+                    else {
+                        continue;
+                    };
+                    let draw = draws
+                        .iter()
+                        .find(|draw| std::ptr::eq(draw.state, layer_state))
+                        .copied();
+                    let size = preview.requested_size();
+                    if let Some(draw) = draw {
+                        let pixels = output.renderer.capture_layer_preview(size, draw, now);
+                        preview.publish_pixels(&pixels, size, size, true);
+                    } else {
+                        preview.publish_pixels(
+                            &vec![0; size.width as usize * size.height as usize * 4],
+                            size,
+                            size,
+                            true,
+                        );
                     }
                 }
             }

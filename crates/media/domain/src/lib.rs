@@ -55,7 +55,7 @@ pub use layer::{
     OpacityCycleInterval, RASTERIZE_EFFECT, RasterizeMode, RasterizeParameters, ScalingMode,
     SourceFailure, SourceStatus,
 };
-pub use master::MasterState;
+pub use master::{MasterShaper, MasterState};
 pub use output::{OutputId, OutputName, PresentationMode};
 pub use personality::{LayerPersonality, SlotFootprint, StartAddressError};
 pub use playback::{OnceEndState, PlayMode};

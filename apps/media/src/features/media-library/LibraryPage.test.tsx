@@ -1,5 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { ICON_CATALOG_GROUPS } from "@tosklight/ui/controls";
+import { ModalProvider } from "@tosklight/ui/modals";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { aCatalog, stubServer } from "../../testing/server";
 import {
@@ -19,6 +21,13 @@ describe("the CITP media library", () => {
 		expect(
 			(await screen.findByText("Looks")).closest("button"),
 		).toBeInTheDocument();
+		expect(container.querySelector(".media-library-folder-pool")).toHaveClass(
+			"ui-button-grid",
+			"square-grid",
+		);
+		expect(container.querySelector(".media-library-folder-pool")).toHaveStyle({
+			"--grid-cell-min": "68px",
+		});
 		expect(
 			screen.getByRole("button", { name: /199Empty folder/u }),
 		).toBeInTheDocument();
@@ -32,20 +41,41 @@ describe("the CITP media library", () => {
 			screen.getByRole("button", { name: /900Parking0\/254/u }),
 		).toBeInTheDocument();
 		expect(screen.getByText("Blue haze").closest("button")).toBeInTheDocument();
+		expect(screen.getByRole("tablist")).toHaveTextContent(
+			"MediaVisualizersText",
+		);
+		const newMedia = screen.getByRole("button", { name: "New media" });
+		const tabs = screen.getByRole("tablist");
 		expect(
-			screen.getByRole("radiogroup", { name: "Library source type" }),
-		).toBeInTheDocument();
+			newMedia.compareDocumentPosition(tabs) & Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy();
+	});
+
+	it("opens the first free exact address from the leftmost New media action", async () => {
+		stubServer();
+		render(<LibraryPage />);
+
+		await userEvent.click(
+			await screen.findByRole("button", { name: "New media" }),
+		);
+
+		expect(screen.getByRole("heading", { name: "Empty" })).toBeInTheDocument();
+		expect(screen.getByText("001 / 003")).toBeInTheDocument();
 	});
 
 	it("opens one media item in the preview editor and persists name and BPM", async () => {
 		const server = stubServer();
-		render(<LibraryPage />);
+		render(
+			<ModalProvider>
+				<LibraryPage />
+			</ModalProvider>,
+		);
 		const media = (await screen.findByText("Blue haze")).closest("button");
 		if (!media) throw new Error("media card missing");
 		await userEvent.click(media);
-		expect(
-			screen.getByRole("img", { name: "Blue haze preview" }),
-		).toHaveAttribute("src", "/api/v2/library/1/1/thumbnail");
+		const preview = screen.getByRole("img", { name: "Blue haze preview" });
+		expect(preview).toHaveAttribute("src", "/api/v2/library/1/1/thumbnail");
+		expect(preview.parentElement).toHaveClass("media-library-item-preview");
 		const editor = screen
 			.getByRole("button", { name: "Save media" })
 			.closest("form");
@@ -82,18 +112,178 @@ describe("the CITP media library", () => {
 		});
 	});
 
-	it("right-clicking a media folder opens its configuration", async () => {
+	it("frames the larger inspector preview at the configured output ratio", async () => {
+		render(
+			<LibraryBrowserView
+				catalog={aCatalog()}
+				thumbnailUrl={() => "portrait-preview.png"}
+				previewAspectRatio={4 / 3}
+			/>,
+		);
+		await userEvent.click(
+			screen.getByText("Blue haze").closest("button") as HTMLButtonElement,
+		);
+
+		expect(
+			screen.getByRole("img", { name: "Blue haze preview" }).parentElement,
+		).toHaveStyle({ aspectRatio: String(4 / 3) });
+	});
+
+	it("clicking a media folder opens name, icon, and upload configuration", async () => {
 		const server = stubServer();
-		render(<LibraryPage />);
+		render(
+			<ModalProvider>
+				<LibraryPage />
+			</ModalProvider>,
+		);
 		const folder = (await screen.findByText("Looks")).closest("button");
 		if (!folder) throw new Error("folder button missing");
-		fireEvent.contextMenu(folder);
+		await userEvent.click(folder);
+		expect(screen.getByText("Folder icon")).toBeInTheDocument();
+		expect(screen.getByText("Upload media to this folder")).toBeInTheDocument();
 		await userEvent.clear(screen.getByLabelText("Folder name"));
 		await userEvent.type(screen.getByLabelText("Folder name"), "Act one");
-		await userEvent.click(screen.getByRole("button", { name: "Save folder" }));
+		expect(
+			screen.queryByRole("button", { name: "Save folder" }),
+		).not.toBeInTheDocument();
 		await vi.waitFor(() =>
 			expect(server.catalog.folders[0].name).toBe("Act one"),
 		);
+		const catalogGroup = ICON_CATALOG_GROUPS.find(
+			(group) => group.id !== "built-in" && group.icons.length > 0,
+		);
+		const catalogIcon = catalogGroup?.icons[0];
+		if (!catalogGroup || !catalogIcon)
+			throw new Error("full icon catalog missing");
+		await userEvent.click(screen.getByRole("button", { name: "Choose icon" }));
+		await userEvent.click(screen.getByRole("button", { name: "Icon group" }));
+		await userEvent.click(
+			screen.getByRole("option", { name: catalogGroup.label }),
+		);
+		await userEvent.click(
+			screen.getByRole("button", { name: catalogIcon.label }),
+		);
+		await vi.waitFor(() =>
+			expect(server.catalog.folders[0].icon).toBe(catalogIcon.value),
+		);
+	});
+
+	it("uploads, replaces, and removes a folder picture", async () => {
+		const server = stubServer();
+		render(<LibraryPage />);
+		await userEvent.click(
+			(await screen.findByText("Looks")).closest("button")!,
+		);
+
+		const pictureInput = document.querySelector(
+			'.media-folder-presentation-editor input[accept="image/*"]',
+		) as HTMLInputElement;
+		fireEvent.change(pictureInput, {
+			target: {
+				files: [new File(["picture"], "folder.png", { type: "image/png" })],
+			},
+		});
+		await vi.waitFor(() =>
+			expect(server.folderPresentations.folders[0].pictureUrl).toContain(
+				"/folder-presentations/1/picture",
+			),
+		);
+		await userEvent.click(
+			await screen.findByRole("button", { name: "Remove folder picture" }),
+		);
+		await vi.waitFor(() =>
+			expect(server.folderPresentations.folders[0].pictureUrl).toBeNull(),
+		);
+	});
+
+	it("uses Playback's responsive media-card grid without losing draggable slots", () => {
+		const { container } = render(
+			<LibraryBrowserView
+				catalog={aCatalog()}
+				thumbnailUrl={() => "preview.png"}
+			/>,
+		);
+		const grid = container.querySelector(
+			".media-file-pool-grid.media-library-file-pool-grid",
+		) as HTMLElement | null;
+		expect(grid).not.toBeNull();
+		expect(grid?.style.getPropertyValue("--grid-cell-min")).toBe("112px");
+		expect(grid?.style.gridTemplateColumns).toBe("");
+		expect(screen.getByText("Blue haze").closest("button")).toHaveAttribute(
+			"draggable",
+			"true",
+		);
+	});
+
+	it("opens an empty slot and uploads a named file to that exact address", async () => {
+		const onUploadAt = vi.fn();
+		const { container } = render(
+			<LibraryBrowserView
+				catalog={aCatalog()}
+				onUploadAt={onUploadAt}
+				thumbnailUrl={() => "preview.png"}
+			/>,
+		);
+		const empty = container.querySelector(
+			'.media-library-pool .pool-card.empty[data-pool-position="2"]',
+		) as HTMLButtonElement | null;
+		expect(empty).not.toBeNull();
+		await userEvent.click(empty as HTMLButtonElement);
+		expect(screen.getByRole("heading", { name: "Empty" })).toBeInTheDocument();
+		expect(screen.getByText("001 / 003")).toBeInTheDocument();
+		const nameInput = container.querySelector(
+			'.media-library-inspector input[type="text"]',
+		) as HTMLInputElement;
+		await userEvent.type(nameInput, "New loop");
+		const input = container.querySelector(
+			'.media-library-inspector input[type="file"]',
+		) as HTMLInputElement;
+		const file = new File(["pixels"], "loop.mov", { type: "video/quicktime" });
+		fireEvent.change(input, { target: { files: [file] } });
+		expect(onUploadAt).toHaveBeenCalledWith(
+			file,
+			{ folder: 1, file: 3 },
+			"New loop",
+			false,
+		);
+	});
+
+	it("replaces filled media without changing its address", async () => {
+		const onUploadAt = vi.fn();
+		const { container } = render(
+			<LibraryBrowserView
+				catalog={aCatalog()}
+				onUploadAt={onUploadAt}
+				thumbnailUrl={() => "preview.png"}
+			/>,
+		);
+		await userEvent.click(
+			screen.getByText("Blue haze").closest("button") as HTMLButtonElement,
+		);
+		const input = container.querySelector(
+			'.media-library-inspector input[type="file"]',
+		) as HTMLInputElement;
+		const file = new File(["new pixels"], "replacement.mov", {
+			type: "video/quicktime",
+		});
+		fireEvent.change(input, { target: { files: [file] } });
+		expect(onUploadAt).toHaveBeenCalledWith(
+			file,
+			{ folder: 1, file: 1 },
+			"Blue haze",
+			true,
+		);
+	});
+
+	it("centres the empty-folder message over an empty media grid", async () => {
+		stubServer();
+		render(<LibraryPage />);
+		await userEvent.click(
+			await screen.findByRole("button", { name: /002Empty folder/u }),
+		);
+		const empty = screen.getByText("This folder is empty").closest("div");
+		expect(empty).toHaveClass("media-library-empty-folder");
+		expect(empty).toHaveTextContent("This folder is empty");
 	});
 
 	it("right-clicking a different folder keeps that folder's editor open", async () => {
@@ -112,8 +302,12 @@ describe("the CITP media library", () => {
 			screen.getByRole("heading", { name: "Configure folder" }),
 		).toBeInTheDocument();
 		await userEvent.type(screen.getByLabelText("Folder name"), "Act two");
-		await userEvent.click(screen.getByRole("button", { name: "Save folder" }));
-		expect(onRenameFolder).toHaveBeenCalledWith(2, "Act two");
+		await vi.waitFor(() =>
+			expect(onRenameFolder).toHaveBeenCalledWith(2, "Act two"),
+		);
+		expect(
+			screen.queryByRole("button", { name: "Save folder" }),
+		).not.toBeInTheDocument();
 	});
 
 	it("moves exactly the item ids serialized when a multi-selection drag starts", () => {

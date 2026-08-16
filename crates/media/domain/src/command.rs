@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use crate::address::MediaAddress;
 use crate::color::{FlipMirror, Tint};
 use crate::layer::{EffectSlot, ScalingMode, SourceStatus};
+use crate::master::MasterShaper;
 use crate::output::OutputId;
 use crate::personality::decode::DecodedFrame;
 use crate::playback::PlayMode;
@@ -55,6 +56,13 @@ pub struct MasterControls {
     pub tint: Option<Tint>,
     pub flip_mirror: Option<FlipMirror>,
     pub mask: Option<MediaAddress>,
+    pub scale_x: Option<f32>,
+    pub scale_y: Option<f32>,
+    pub scaling_mode: Option<ScalingMode>,
+    pub position_x: Option<f32>,
+    pub position_y: Option<f32>,
+    pub rotation: Option<f32>,
+    pub shaper: Option<MasterShaper>,
 }
 
 /// How long external DMX keeps ownership after its last packet.
@@ -260,13 +268,11 @@ impl ControlOwnership {
             // External DMX and the application always write.
             CommandSource::ArtNet | CommandSource::Sacn => !self.web_takeover,
             CommandSource::Internal => true,
-            // The web UI may always inspect and may always perform administrative actions; it
-            // yields only the values a live desk is driving.
-            CommandSource::Web => {
-                !command.kind.is_continuously_controlled()
-                    || self.web_takeover
-                    || !self.dmx_is_active(command.at)
-            }
+            // The web UI may always inspect and perform administrative actions. Continuously
+            // controlled playback values require an explicit output-scoped takeover, even before
+            // the first DMX packet, so merely opening the administration page can never change
+            // program output.
+            CommandSource::Web => !command.kind.is_continuously_controlled() || self.web_takeover,
         }
     }
 }
@@ -308,9 +314,9 @@ mod tests {
     }
 
     #[test]
-    fn the_web_ui_owns_the_output_until_a_desk_starts_sending() {
+    fn the_web_ui_cannot_change_playback_without_explicit_takeover() {
         let mut ownership = ControlOwnership::default();
-        assert!(ownership.accepts(&select(0)));
+        assert!(!ownership.accepts(&select(0)));
 
         ownership.observe_dmx(CommandSource::ArtNet, Timestamp::from_millis(1_000));
         assert!(!ownership.accepts(&select(1_000)));
@@ -324,10 +330,9 @@ mod tests {
         let expiry = 1_000 + DMX_OWNERSHIP_TIMEOUT.as_millis() as u64;
         assert!(ownership.dmx_is_active(Timestamp::from_millis(expiry - 1)));
         assert!(!ownership.dmx_is_active(Timestamp::from_millis(expiry)));
-        assert!(
-            ownership.accepts(&select(expiry)),
-            "control returns to the web UI"
-        );
+        assert!(!ownership.accepts(&select(expiry)));
+        ownership.web_takeover = true;
+        assert!(ownership.accepts(&select(expiry)));
     }
 
     #[test]

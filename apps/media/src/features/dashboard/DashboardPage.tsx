@@ -16,7 +16,7 @@ export function DashboardPage() {
 	const showName = useDeskShowName();
 
 	return (
-		<section className="media-page">
+		<section className="media-page media-dashboard-page">
 			<div
 				className={`media-desk-identity ${showName ? "is-connected" : "is-waiting"}`}
 				role="status"

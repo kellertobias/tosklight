@@ -304,12 +304,14 @@ pub fn element_thumbnail(
     ))
 }
 
-/// One stable logical output advertised as a CITP preview source.
+/// One stable Program or isolated layer advertised as a CITP preview source.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VideoSource {
     pub id: u16,
     pub name: String,
     pub physical_output: u8,
+    /// `None` is the composited Program source; a value is an isolated live layer.
+    pub layer: Option<u8>,
     pub width: u16,
     pub height: u16,
 }
@@ -322,7 +324,7 @@ pub fn video_sources(version: (u8, u8), sources: &[VideoSource]) -> Vec<u8> {
         body.u16(source.id)
             .ucs2(&source.name)
             .u8(source.physical_output)
-            .u8(0xFF) // not tied to one layer
+            .u8(source.layer.unwrap_or(0xFF))
             .u16(0) // no flags
             .u16(source.width)
             .u16(source.height);
@@ -841,5 +843,36 @@ mod interoperability {
             u16::from_le_bytes([payload[10], payload[11]]) as usize,
             payload.len() - 12
         );
+    }
+
+    #[test]
+    fn light_can_distinguish_program_and_isolated_layer_preview_sources() {
+        let framed = parse(&video_sources(
+            (1, 2),
+            &[
+                VideoSource {
+                    id: 10,
+                    name: "P".into(),
+                    physical_output: 0,
+                    layer: None,
+                    width: 320,
+                    height: 180,
+                },
+                VideoSource {
+                    id: 11,
+                    name: "L".into(),
+                    physical_output: 0,
+                    layer: Some(3),
+                    width: 320,
+                    height: 180,
+                },
+            ],
+        ))
+        .expect("it frames");
+        let payload = &framed.body;
+
+        assert_eq!(u16::from_le_bytes(payload[0..2].try_into().unwrap()), 2);
+        assert_eq!(payload[9], u8::MAX, "Light treats 255 as Program");
+        assert_eq!(payload[23], 3, "Light maps the source to layer four");
     }
 }

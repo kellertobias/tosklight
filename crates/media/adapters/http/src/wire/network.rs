@@ -62,6 +62,9 @@ pub struct NetworkView {
     pub same_computer_preset: bool,
     /// What the operator configured.
     pub stored: NetworkAddressesView,
+    /// What this process was started with, used by Revert to current settings.
+    pub active_same_computer_preset: bool,
+    pub active_stored: NetworkAddressesView,
     /// What this run bound, after the preset was applied.
     pub resolved: NetworkAddressesView,
     /// The port CITP discovery announces. Always the port CITP actually listens on.
@@ -69,17 +72,22 @@ pub struct NetworkView {
     /// Sockets are bound once, at startup. An accepted change is stored and used by the next
     /// start; the API says so rather than letting a panel imply the change is already live.
     pub takes_effect_on_restart: bool,
+    /// Whether stored next-start values differ from the immutable startup values.
+    pub pending_restart: bool,
 }
 
 impl NetworkView {
-    pub fn of(network: &NetworkConfiguration) -> Self {
-        let resolved = network.resolved();
+    pub fn of(network: &NetworkConfiguration, active: &NetworkConfiguration) -> Self {
+        let resolved = active.resolved();
         Self {
             same_computer_preset: network.same_computer_preset,
             stored: NetworkAddressesView::stored(network),
+            active_same_computer_preset: active.same_computer_preset,
+            active_stored: NetworkAddressesView::stored(active),
             resolved: NetworkAddressesView::resolved(&resolved),
             citp_advertised_port: resolved.citp_advertised_port,
             takes_effect_on_restart: true,
+            pending_restart: network != active,
         }
     }
 }
@@ -253,7 +261,7 @@ mod tests {
             art_net_listen: "192.168.1.40:6454".parse().unwrap(),
             ..Default::default()
         };
-        let view = NetworkView::of(&network);
+        let view = NetworkView::of(&network, &network);
 
         assert_eq!(view.stored.art_net_listen, "192.168.1.40:6454");
         assert_eq!(
@@ -262,6 +270,7 @@ mod tests {
         );
         assert_eq!(view.citp_advertised_port, 4809);
         assert!(view.takes_effect_on_restart);
+        assert!(!view.pending_restart);
     }
 
     #[test]

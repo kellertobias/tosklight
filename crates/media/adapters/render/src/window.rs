@@ -134,6 +134,14 @@ impl WindowedOutput {
         self.clock.should_present(now)
     }
 
+    /// How long a fixed-rate output has left before its next frame.
+    ///
+    /// Display-synchronized and unlocked outputs return zero because surface acquisition provides
+    /// their pacing on the presentation worker.
+    pub fn time_until_deadline(&self, now: Timestamp) -> std::time::Duration {
+        self.clock.time_until_deadline(now)
+    }
+
     /// The refresh rate the monitor this window is on reports, in millihertz.
     ///
     /// Recorded rather than assumed. Two outputs on displays with different refresh rates never
@@ -195,6 +203,9 @@ impl WindowedOutput {
             .create_view(&wgpu::TextureViewDescriptor::default());
         self.compositor
             .render(layers, master, master_mask, &view, self.id, now);
+        // macOS does not use winit's pre-present notification, and calling it from the render
+        // worker would still enqueue a no-op on Cocoa's main queue for every frame.
+        #[cfg(not(target_os = "macos"))]
         self.window.pre_present_notify();
         self.gpu.queue.present(frame);
         self.clock.record_present(now);
@@ -252,6 +263,35 @@ impl WindowedOutput {
             wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Bgra8UnormSrgb
         ) {
             // A surface may be BGRA; everything above this expects RGBA.
+            for pixel in pixels.chunks_exact_mut(4) {
+                pixel.swap(0, 2);
+            }
+        }
+        pixels
+    }
+
+    /// Renders one layer through the real layer pipeline into the preview target. Unlike a
+    /// library thumbnail this advances with video, generated sources, transforms, masks, tint,
+    /// effects, and dimmer exactly as the program compositor sees them.
+    pub fn capture_layer_preview(
+        &mut self,
+        size: Size,
+        layer: crate::LayerDraw<'_>,
+        output: media_domain::OutputId,
+        now: media_domain::Timestamp,
+    ) -> Vec<u8> {
+        let format = self.configuration.format;
+        let target = self
+            .preview
+            .get_or_insert_with(|| crate::OffScreenOutput::with_format(&self.gpu, size, format));
+        target.resize(size);
+        self.compositor
+            .render_layer_preview(layer, target.view(), output, now);
+        let mut pixels = target.read_image();
+        if matches!(
+            format,
+            wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Bgra8UnormSrgb
+        ) {
             for pixel in pixels.chunks_exact_mut(4) {
                 pixel.swap(0, 2);
             }

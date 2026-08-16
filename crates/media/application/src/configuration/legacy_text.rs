@@ -31,7 +31,7 @@ use std::time::Duration;
 
 use media_domain::MediaAddress;
 use media_domain::color::Tint;
-use media_domain::text::{TextEntry, TextKind};
+use media_domain::text::{ClockPattern, CountdownPattern, TextEntry, TextKind};
 use media_domain::text_catalog::{
     Alignment, CATALOG_VERSION, DEFAULT_BANK, TextCatalog, TextSlot, TextStyle,
 };
@@ -114,6 +114,9 @@ struct LegacySource {
     /// A time of day, `HH:MM:SS`. Empty when the source counts a length instead.
     #[serde(default)]
     target_datetime: String,
+    /// One of the original server's documented clock/countdown format strings.
+    #[serde(default)]
+    format: String,
     #[serde(default = "default_family")]
     font_family: String,
     #[serde(default = "default_size")]
@@ -266,6 +269,24 @@ fn entry_of(slot: u16, source: &LegacySource, now_unix_millis: i64) -> (TextEntr
 
     let mut entry = TextEntry::new(kind);
     entry.enabled = source.enabled;
+    match source.format.as_str() {
+        "HH:MM" => entry.format.clock.pattern = ClockPattern::HoursMinutes24,
+        "HH:MM:SS" => entry.format.clock.pattern = ClockPattern::HoursMinutesSeconds24,
+        "hh:mm" => entry.format.clock.pattern = ClockPattern::HoursMinutes12,
+        "hh:mm:ss" if matches!(entry.kind, TextKind::Clock) => {
+            entry.format.clock.pattern = ClockPattern::HoursMinutesSeconds12;
+        }
+        "ss" => entry.format.countdown.pattern = CountdownPattern::Seconds,
+        "mm" => entry.format.countdown.pattern = CountdownPattern::Minutes,
+        "mm:ss" => entry.format.countdown.pattern = CountdownPattern::MinutesSeconds,
+        "h:mm:ss" => {
+            entry.format.countdown.pattern = CountdownPattern::CompactHoursMinutesSeconds;
+        }
+        "hh:mm:ss" => {
+            entry.format.countdown.pattern = CountdownPattern::HoursMinutesSeconds;
+        }
+        _ => {}
+    }
     (entry, notes)
 }
 
@@ -467,6 +488,23 @@ mod tests {
             migrated.notes.is_empty(),
             "nothing was lost: {:?}",
             migrated.notes
+        );
+    }
+
+    #[test]
+    fn documented_legacy_clock_and_countdown_formats_are_preserved() {
+        let migrated = document(
+            r#"{"201":{"type":"clock","format":"hh:mm","enabled":true},
+                "202":{"type":"countdown","format":"mm:ss","countdownDuration":600,
+                "countdownMode":"on_visible","enabled":true}}"#,
+        );
+        assert_eq!(
+            migrated.catalog.slots[0].entry.format.clock.pattern,
+            ClockPattern::HoursMinutes12,
+        );
+        assert_eq!(
+            migrated.catalog.slots[1].entry.format.countdown.pattern,
+            CountdownPattern::MinutesSeconds,
         );
     }
 

@@ -30,8 +30,10 @@ pub enum ConfigurationError {
     },
     #[error("output '{output}' has a zero {axis} resolution")]
     EmptyResolution { output: String, axis: &'static str },
-    #[error("output '{output}' requests a fixed rate of zero frames per second")]
-    ZeroFixedRate { output: String },
+    #[error(
+        "output '{output}' requests an invalid fixed frame rate; it must be between 1 and 65535"
+    )]
+    InvalidFixedRate { output: String },
     #[error(
         "output '{output}' requests {protocol} universe {universe}; {protocol} universes are {range}"
     )]
@@ -115,11 +117,10 @@ fn validate_output(output: &OutputConfiguration) -> Result<(), ConfigurationErro
         });
     }
 
-    if let PresentationMode::FixedFps {
-        frames_per_second: 0,
-    } = output.presentation
-    {
-        return Err(ConfigurationError::ZeroFixedRate { output: name });
+    if let PresentationMode::FixedFps { frames_per_second } = output.presentation {
+        if !frames_per_second.is_finite() || !(1.0..=65_535.0).contains(&frames_per_second) {
+            return Err(ConfigurationError::InvalidFixedRate { output: name });
+        }
     }
 
     Ok(())
@@ -256,12 +257,12 @@ mod tests {
     fn a_fixed_rate_of_zero_is_rejected() {
         let mut output = OutputConfiguration::new("Main");
         output.presentation = PresentationMode::FixedFps {
-            frames_per_second: 0,
+            frames_per_second: 0.0,
         };
         let error = validate(&configuration(vec![output])).unwrap_err();
         assert_eq!(
             error,
-            ConfigurationError::ZeroFixedRate {
+            ConfigurationError::InvalidFixedRate {
                 output: "Main".to_owned()
             }
         );

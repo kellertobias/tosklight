@@ -99,6 +99,12 @@ pub struct CatalogFolder {
     pub folder: u16,
     /// The operator's name for it, when they have given one.
     pub name: Option<String>,
+    /// Optional operator-chosen pool icon. Older catalogs omit this field.
+    #[serde(default)]
+    pub icon: Option<String>,
+    /// MIME type of the optional operator-uploaded folder picture. Its bytes stay on disk.
+    #[serde(default)]
+    pub picture_content_type: Option<String>,
     /// Items in file order. Order is maintained so a reindex is a deliberate rewrite rather than
     /// something that depends on how a directory happened to be read.
     pub items: Vec<CatalogItem>,
@@ -210,6 +216,8 @@ impl CatalogSnapshot {
                 self.folders.push(CatalogFolder {
                     folder,
                     name: None,
+                    icon: None,
+                    picture_content_type: None,
                     items: Vec::new(),
                 });
                 self.folders.sort_by_key(|entry| entry.folder);
@@ -316,6 +324,8 @@ impl CatalogSnapshot {
             self.folders.push(CatalogFolder {
                 folder,
                 name: None,
+                icon: None,
+                picture_content_type: None,
                 items: Vec::new(),
             });
             self.folders.sort_by_key(|entry| entry.folder);
@@ -329,6 +339,63 @@ impl CatalogSnapshot {
             .map(str::trim)
             .filter(|name| !name.is_empty())
             .map(str::to_owned);
+        self.bump();
+        Ok(())
+    }
+
+    /// Sets or clears the icon shown for a numbered folder.
+    pub fn set_folder_icon(&mut self, folder: u16, icon: Option<&str>) -> Result<(), CatalogError> {
+        if !is_storage_folder(folder) {
+            return Err(CatalogError::NotALibraryFolder { folder });
+        }
+        if self.folder(folder).is_none() {
+            self.folders.push(CatalogFolder {
+                folder,
+                name: None,
+                icon: None,
+                picture_content_type: None,
+                items: Vec::new(),
+            });
+            self.folders.sort_by_key(|entry| entry.folder);
+        }
+        let entry = self
+            .folders
+            .iter_mut()
+            .find(|entry| entry.folder == folder)
+            .expect("the folder was just ensured");
+        entry.icon = icon
+            .map(str::trim)
+            .filter(|icon| !icon.is_empty())
+            .map(str::to_owned);
+        self.bump();
+        Ok(())
+    }
+
+    /// Records or clears the uploaded picture associated with a library folder.
+    pub fn set_folder_picture(
+        &mut self,
+        folder: u16,
+        content_type: Option<&str>,
+    ) -> Result<(), CatalogError> {
+        if !is_storage_folder(folder) {
+            return Err(CatalogError::NotALibraryFolder { folder });
+        }
+        if self.folder(folder).is_none() {
+            self.folders.push(CatalogFolder {
+                folder,
+                name: None,
+                icon: None,
+                picture_content_type: None,
+                items: Vec::new(),
+            });
+            self.folders.sort_by_key(|entry| entry.folder);
+        }
+        let entry = self
+            .folders
+            .iter_mut()
+            .find(|entry| entry.folder == folder)
+            .expect("the folder was just ensured");
+        entry.picture_content_type = content_type.map(str::to_owned);
         self.bump();
         Ok(())
     }

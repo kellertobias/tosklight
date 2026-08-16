@@ -8,9 +8,11 @@ import { api } from "./client";
 import type {
 	AudioPanelView,
 	CatalogView,
+	FolderPresentationsView,
 	Health,
 	NetworkView,
 	OutputView,
+	RunningServerView,
 	TextSlotView,
 	VisualizerView,
 } from "./generated/media-wire";
@@ -18,7 +20,9 @@ import { type Resource, useResource } from "./resource";
 
 export const KEYS = {
 	health: "health",
+	runtime: "runtime",
 	catalog: "catalog",
+	folderPresentations: "folder-presentations",
 	outputs: "outputs",
 	visualizers: "visualizers",
 	network: "network",
@@ -30,8 +34,17 @@ export function useHealth(pollMs?: number): Resource<Health> {
 	return useResource(KEYS.health, api.health, { pollMs });
 }
 
+/** Facts fixed when this process started, distinct from saved next-start settings. */
+export function useRuntime(): Resource<RunningServerView> {
+	return useResource(KEYS.runtime, api.runtime);
+}
+
 export function useCatalog(pollMs?: number): Resource<CatalogView> {
 	return useResource(KEYS.catalog, api.catalog, { pollMs });
+}
+
+export function useFolderPresentations(): Resource<FolderPresentationsView> {
+	return useResource(KEYS.folderPresentations, api.folderPresentations);
 }
 
 export function useOutputs(pollMs?: number): Resource<OutputView[]> {

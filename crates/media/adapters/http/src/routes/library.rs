@@ -145,22 +145,29 @@ pub(super) async fn update_folder(
     if let Proceed::Replay(response) = edit::begin(&state, &body.request_id)? {
         return Ok(response);
     }
-    let operation = match (body.name, body.swap_with) {
-        (Some(name), None) => {
+    let operation = match (body.name, body.icon, body.swap_with) {
+        (Some(name), None, None) => {
             let name = name.trim();
             LibraryEdit::RenameFolder {
                 folder,
                 name: (!name.is_empty()).then(|| name.to_owned()),
             }
         }
-        (None, Some(second)) => LibraryEdit::SwapFolders {
+        (None, Some(icon), None) => {
+            let icon = icon.trim();
+            LibraryEdit::SetFolderIcon {
+                folder,
+                icon: (!icon.is_empty()).then(|| icon.to_owned()),
+            }
+        }
+        (None, None, Some(second)) => LibraryEdit::SwapFolders {
             first: folder,
             second,
         },
         _ => {
             return Err(ApiError::bad_request(
                 "ambiguous-library-folder-edit",
-                "rename with a name or reorder with swapWith",
+                "set name, set icon, or reorder with swapWith",
             ));
         }
     };
@@ -192,6 +199,8 @@ pub(super) struct UploadQuery {
     request_id: String,
     #[serde(default)]
     name: String,
+    #[serde(default)]
+    replace: bool,
 }
 
 /// Streams one browser-selected source into a hidden staging file and immediately queues its HAP
@@ -227,9 +236,13 @@ pub(super) async fn upload(
             ));
         }
         let filename = field.file_name().unwrap_or("upload").to_owned();
-        let mut stream =
-            (state.diagnostics.library.begin_upload)(address, query.name.trim(), &filename)
-                .map_err(|detail| library_edit_error("upload-not-started", detail))?;
+        let mut stream = (state.diagnostics.library.begin_upload)(
+            address,
+            query.name.trim(),
+            &filename,
+            query.replace,
+        )
+        .map_err(|detail| library_edit_error("upload-not-started", detail))?;
         while let Some(chunk) = field.chunk().await.map_err(|_| {
             ApiError::bad_request("invalid-upload", "the uploaded media could not be read")
         })? {
@@ -562,6 +575,15 @@ mod tests {
         let (status, _) = send(
             &bench.router,
             post(
+                "/api/v2/library/folders/7/update".into(),
+                r#"{"requestId":"folder-icon","icon":"▶"}"#,
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let (status, _) = send(
+            &bench.router,
+            post(
                 format!("/api/v2/library/items/{id}/update"),
                 r#"{"requestId":"move","folder":2,"file":8,"swap":true}"#,
             ),
@@ -592,6 +614,10 @@ mod tests {
                 LibraryEdit::RenameFolder {
                     folder: 7,
                     name: Some("Looks".to_owned()),
+                },
+                LibraryEdit::SetFolderIcon {
+                    folder: 7,
+                    icon: Some("▶".to_owned()),
                 },
                 LibraryEdit::MoveItem {
                     id: media_domain::AssetId::from_uuid(id),
@@ -672,9 +698,9 @@ mod tests {
                     let bytes = Arc::clone(&bytes);
                     let finished = Arc::clone(&finished);
                     let received = Arc::clone(&received);
-                    Arc::new(move |address, name, filename| {
+                    Arc::new(move |address, name, filename, replace| {
                         *received.lock().unwrap() =
-                            Some((address, name.to_owned(), filename.to_owned()));
+                            Some((address, name.to_owned(), filename.to_owned(), replace));
                         Ok(Box::new(RecordedUpload {
                             bytes: Arc::clone(&bytes),
                             finished: Arc::clone(&finished),
@@ -692,7 +718,7 @@ mod tests {
         );
         let request = axum::http::Request::builder()
             .method("POST")
-            .uri("/api/v2/library/3/7/upload?requestId=upload&name=Opening")
+            .uri("/api/v2/library/3/7/upload?requestId=upload&name=Opening&replace=true")
             .header(
                 "content-type",
                 format!("multipart/form-data; boundary={boundary}"),
@@ -711,6 +737,7 @@ mod tests {
                 media_domain::MediaAddress::new(3, 7),
                 "Opening".to_owned(),
                 "opening.mov".to_owned(),
+                true,
             ))
         );
     }

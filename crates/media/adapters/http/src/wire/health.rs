@@ -3,6 +3,8 @@
 //! The small projections several other views embed: what a client needs to label a selection or
 //! render a status badge without re-implementing a domain rule.
 
+use media_application::MediaConfiguration;
+use media_application::configuration::DmxProtocol;
 use media_domain::{MediaAddress, SourceFailure, SourceStatus};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -19,6 +21,51 @@ pub struct Health {
     #[ts(type = "number")]
     pub catalog_revision: u64,
     pub catalog_items: usize,
+}
+
+/// Stable facts about the process that is running now, not stored next-start settings.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct RunningServerView {
+    pub administration_ip: String,
+    pub outputs: Vec<RunningOutputView>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct RunningOutputView {
+    pub id: String,
+    pub name: String,
+    pub protocol: String,
+    pub universe: u16,
+    pub start_address: u16,
+}
+
+impl RunningServerView {
+    pub fn of(configuration: &MediaConfiguration, administration_endpoint: &str) -> Self {
+        let administration_ip = administration_endpoint
+            .parse::<std::net::SocketAddr>()
+            .map(|address| address.ip().to_string())
+            .unwrap_or_else(|_| administration_endpoint.to_owned());
+        Self {
+            administration_ip,
+            outputs: configuration
+                .outputs
+                .iter()
+                .map(|output| RunningOutputView {
+                    id: output.id.to_string(),
+                    name: output.name.to_string(),
+                    protocol: match output.protocol {
+                        DmxProtocol::ArtNet => "art-net",
+                        DmxProtocol::Sacn => "sacn",
+                    }
+                    .to_owned(),
+                    universe: output.universe,
+                    start_address: output.start_address,
+                })
+                .collect(),
+        }
+    }
 }
 
 /// A `(folder, file)` selection.

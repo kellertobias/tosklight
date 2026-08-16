@@ -319,6 +319,26 @@ export function applyMasterLocally(
 						tintGreen: change.tintGreen ?? output.master.tintGreen,
 						tintBlue: change.tintBlue ?? output.master.tintBlue,
 						flipMirror: change.flipMirror ?? output.master.flipMirror,
+						scaleX: change.scaleX ?? output.master.scaleX,
+						scaleY: change.scaleY ?? output.master.scaleY,
+						scalingMode: change.scalingMode ?? output.master.scalingMode,
+						positionX: change.positionX ?? output.master.positionX,
+						positionY: change.positionY ?? output.master.positionY,
+						rotation: change.rotation ?? output.master.rotation,
+						shaperLeft: change.shaperLeft ?? output.master.shaperLeft,
+						shaperRight: change.shaperRight ?? output.master.shaperRight,
+						shaperTop: change.shaperTop ?? output.master.shaperTop,
+						shaperBottom: change.shaperBottom ?? output.master.shaperBottom,
+						shaperLeftRotation:
+							change.shaperLeftRotation ?? output.master.shaperLeftRotation,
+						shaperRightRotation:
+							change.shaperRightRotation ?? output.master.shaperRightRotation,
+						shaperTopRotation:
+							change.shaperTopRotation ?? output.master.shaperTopRotation,
+						shaperBottomRotation:
+							change.shaperBottomRotation ?? output.master.shaperBottomRotation,
+						shaperRotation:
+							change.shaperRotation ?? output.master.shaperRotation,
 						mask: {
 							...output.master.mask,
 							folder: change.maskFolder ?? output.master.mask.folder,

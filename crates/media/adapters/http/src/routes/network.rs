@@ -12,7 +12,10 @@ use crate::wire::{NetworkView, UpdateNetwork};
 
 /// What this server listens on, and what it reaches out to.
 pub(super) async fn network(State(state): State<ApiState>) -> impl IntoResponse {
-    axum::Json(NetworkView::of(&state.configuration.load().network))
+    axum::Json(NetworkView::of(
+        &state.configuration.load().network,
+        &state.active_configuration.network,
+    ))
 }
 
 /// Edits the network settings.
@@ -33,7 +36,7 @@ pub(super) async fn update_network(
         .applied(&configuration.network)
         .map_err(|error| ApiError::bad_request("network-invalid", error.to_string()))?;
 
-    let view = NetworkView::of(&configuration.network);
+    let view = NetworkView::of(&configuration.network, &state.active_configuration.network);
     edit::commit(&state, configuration, &body.request_id, &view)
 }
 
@@ -54,6 +57,8 @@ mod tests {
         assert_eq!(body["stored"]["httpListen"], "127.0.0.1:8080");
         assert_eq!(body["citpAdvertisedPort"], 4809);
         assert_eq!(body["sameComputerPreset"], false);
+        assert_eq!(body["activeSameComputerPreset"], false);
+        assert_eq!(body["pendingRestart"], false);
         assert_eq!(
             body["takesEffectOnRestart"], true,
             "an operator must not think a rebind already happened"
@@ -74,7 +79,9 @@ mod tests {
 
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["stored"]["artNetListen"], "192.168.1.40:6454");
-        assert_eq!(body["resolved"]["artNetListen"], "127.0.0.1:6454");
+        assert_eq!(body["activeStored"]["artNetListen"], "0.0.0.0:6454");
+        assert_eq!(body["resolved"]["artNetListen"], "0.0.0.0:6454");
+        assert_eq!(body["pendingRestart"], true);
 
         let stored = bench.stored.lock().unwrap();
         assert_eq!(stored.len(), 1, "the edit was written, not just answered");

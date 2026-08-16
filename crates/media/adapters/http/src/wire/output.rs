@@ -421,6 +421,21 @@ pub struct MasterView {
     pub tint_blue: f32,
     pub flip_mirror: String,
     pub mask: AddressView,
+    pub scale_x: f32,
+    pub scale_y: f32,
+    pub scaling_mode: String,
+    pub position_x: f32,
+    pub position_y: f32,
+    pub rotation: f32,
+    pub shaper_left: f32,
+    pub shaper_right: f32,
+    pub shaper_top: f32,
+    pub shaper_bottom: f32,
+    pub shaper_left_rotation: f32,
+    pub shaper_right_rotation: f32,
+    pub shaper_top_rotation: f32,
+    pub shaper_bottom_rotation: f32,
+    pub shaper_rotation: f32,
 }
 
 impl MasterView {
@@ -439,6 +454,27 @@ impl MasterView {
             }
             .to_owned(),
             mask: AddressView::of(master.mask),
+            scale_x: master.scale_x,
+            scale_y: master.scale_y,
+            scaling_mode: match master.scaling_mode {
+                media_domain::ScalingMode::Fit => "fit",
+                media_domain::ScalingMode::Fill => "fill",
+                media_domain::ScalingMode::Original => "original",
+                media_domain::ScalingMode::Stretch => "stretch",
+            }
+            .to_owned(),
+            position_x: master.position_x,
+            position_y: master.position_y,
+            rotation: master.rotation,
+            shaper_left: master.shaper.left,
+            shaper_right: master.shaper.right,
+            shaper_top: master.shaper.top,
+            shaper_bottom: master.shaper.bottom,
+            shaper_left_rotation: master.shaper.left_rotation,
+            shaper_right_rotation: master.shaper.right_rotation,
+            shaper_top_rotation: master.shaper.top_rotation,
+            shaper_bottom_rotation: master.shaper.bottom_rotation,
+            shaper_rotation: master.shaper.rotation,
         }
     }
 }
@@ -483,7 +519,7 @@ impl OutputView {
 /// output setting either, so its target codec does not belong here. Every field this view does
 /// expose is settled when the output and its ingress are created, and therefore takes effect on
 /// restart.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct OutputConfigurationView {
     pub id: String,
@@ -499,23 +535,111 @@ pub struct OutputConfigurationView {
     pub height: u32,
     /// `display-synchronized`, `fixed-fps`, or `unlocked`.
     pub presentation: String,
-    pub frames_per_second: Option<u16>,
+    pub frames_per_second: Option<f64>,
     /// `disabled`, `system-default`, or `device`.
     pub sound_output_kind: String,
     /// The exact operating-system device name when `soundOutputKind` is `device`.
     pub sound_output_name: Option<String>,
+    /// Monitors the presentation event loop currently sees.
+    pub available_monitors: Vec<AvailableMonitorView>,
+    /// Audio outputs the operating system currently reports.
+    pub available_sound_outputs: Vec<String>,
     /// `two-layers` or `eight-layers`.
     pub personality: String,
     /// `art-net` or `sacn`.
     pub protocol: String,
     pub universe: u16,
     pub start_address: u16,
+    /// Exact startup values, used to restore what the running process is using now.
+    pub active: OutputConfigurationValuesView,
+    pub picture_pending_restart: bool,
+    pub sound_pending_restart: bool,
+    pub dmx_pending_restart: bool,
     /// Output surfaces, clocks, personalities, and DMX ingress are created once at startup.
     pub takes_effect_on_restart: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct OutputConfigurationValuesView {
+    pub target_kind: String,
+    pub monitor_by: Option<String>,
+    pub monitor_value: Option<String>,
+    pub fullscreen: bool,
+    pub width: u32,
+    pub height: u32,
+    pub presentation: String,
+    pub frames_per_second: Option<f64>,
+    pub sound_output_kind: String,
+    pub sound_output_name: Option<String>,
+    pub personality: String,
+    pub protocol: String,
+    pub universe: u16,
+    pub start_address: u16,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct AvailableMonitorView {
+    pub index: u32,
+    pub name: String,
+    pub width: u32,
+    pub height: u32,
+    pub refresh_millihertz: Option<u32>,
+}
+
 impl OutputConfigurationView {
-    pub fn of(output: &OutputConfiguration) -> Self {
+    pub fn of(
+        output: &OutputConfiguration,
+        active: &OutputConfiguration,
+        available_monitors: Vec<crate::diagnostics::MonitorDevice>,
+        available_sound_outputs: Vec<String>,
+    ) -> Self {
+        let values = OutputConfigurationValuesView::of(output);
+        let active = OutputConfigurationValuesView::of(active);
+        let picture_pending_restart = values.picture_differs(&active);
+        let sound_pending_restart = values.sound_differs(&active);
+        let dmx_pending_restart = values.dmx_differs(&active);
+
+        Self {
+            id: output.id.to_string(),
+            name: output.name.to_string(),
+            target_kind: values.target_kind.clone(),
+            monitor_by: values.monitor_by.clone(),
+            monitor_value: values.monitor_value.clone(),
+            fullscreen: values.fullscreen,
+            width: values.width,
+            height: values.height,
+            presentation: values.presentation.clone(),
+            frames_per_second: values.frames_per_second,
+            sound_output_kind: values.sound_output_kind.clone(),
+            sound_output_name: values.sound_output_name.clone(),
+            available_monitors: available_monitors
+                .into_iter()
+                .map(|monitor| AvailableMonitorView {
+                    index: monitor.index,
+                    name: monitor.name,
+                    width: monitor.width,
+                    height: monitor.height,
+                    refresh_millihertz: monitor.refresh_millihertz,
+                })
+                .collect(),
+            available_sound_outputs,
+            personality: values.personality.clone(),
+            protocol: values.protocol.clone(),
+            universe: values.universe,
+            start_address: values.start_address,
+            active,
+            picture_pending_restart,
+            sound_pending_restart,
+            dmx_pending_restart,
+            takes_effect_on_restart: true,
+        }
+    }
+}
+
+impl OutputConfigurationValuesView {
+    fn of(output: &OutputConfiguration) -> Self {
         let (target_kind, monitor_by, monitor_value, fullscreen) = match &output.target {
             OutputTarget::OffScreen => ("off-screen", None, None, false),
             OutputTarget::Monitor {
@@ -538,8 +662,6 @@ impl OutputConfigurationView {
         };
 
         Self {
-            id: output.id.to_string(),
-            name: output.name.to_string(),
             target_kind: target_kind.to_owned(),
             monitor_by,
             monitor_value,
@@ -570,8 +692,30 @@ impl OutputConfigurationView {
             .to_owned(),
             universe: output.universe,
             start_address: output.start_address,
-            takes_effect_on_restart: true,
         }
+    }
+
+    fn picture_differs(&self, active: &Self) -> bool {
+        self.target_kind != active.target_kind
+            || self.monitor_by != active.monitor_by
+            || self.monitor_value != active.monitor_value
+            || self.fullscreen != active.fullscreen
+            || self.width != active.width
+            || self.height != active.height
+            || self.presentation != active.presentation
+            || self.frames_per_second != active.frames_per_second
+    }
+
+    fn sound_differs(&self, active: &Self) -> bool {
+        self.sound_output_kind != active.sound_output_kind
+            || self.sound_output_name != active.sound_output_name
+    }
+
+    fn dmx_differs(&self, active: &Self) -> bool {
+        self.personality != active.personality
+            || self.protocol != active.protocol
+            || self.universe != active.universe
+            || self.start_address != active.start_address
     }
 }
 
@@ -579,7 +723,7 @@ impl OutputConfigurationView {
 ///
 /// Every field is optional except the retry identity. An edit to the DMX address therefore cannot
 /// silently move the output to another monitor or change its layer personality.
-#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, Eq, TS)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateOutputConfiguration {
     pub request_id: String,
@@ -598,7 +742,7 @@ pub struct UpdateOutputConfiguration {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub presentation: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub frames_per_second: Option<u16>,
+    pub frames_per_second: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sound_output_kind: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1077,6 +1221,36 @@ pub struct UpdateMaster {
     pub mask_folder: Option<u8>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mask_file: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scale_x: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scale_y: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scaling_mode: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub position_x: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub position_y: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rotation: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shaper_left: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shaper_right: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shaper_top: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shaper_bottom: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shaper_left_rotation: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shaper_right_rotation: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shaper_top_rotation: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shaper_bottom_rotation: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shaper_rotation: Option<f32>,
 }
 
 #[cfg(test)]
@@ -1118,6 +1292,32 @@ mod tests {
     }
 
     #[test]
+    fn u8_playback_fields_require_json_integers_inside_the_byte_range() {
+        let boundaries: UpdateLayer = serde_json::from_str(
+			r#"{"folder":0,"file":255,"playModeDmx":216,"speedMultiplierDmx":255,"playbackBpm":120,"effectSlot":3,"volume":0.375}"#,
+		)
+		.unwrap();
+        assert_eq!(boundaries.folder, Some(0));
+        assert_eq!(boundaries.file, Some(255));
+        assert_eq!(boundaries.play_mode_dmx, Some(216));
+        assert_eq!(boundaries.speed_multiplier_dmx, Some(255));
+        assert_eq!(boundaries.playback_bpm, Some(120));
+        assert_eq!(boundaries.effect_slot, Some(3));
+        assert_eq!(boundaries.volume, Some(0.375));
+
+        for body in [
+            r#"{"playbackBpm":120.1}"#,
+            r#"{"speedMultiplierDmx":-1}"#,
+            r#"{"folder":256}"#,
+        ] {
+            assert!(
+                serde_json::from_str::<UpdateLayer>(body).is_err(),
+                "{body} must not deserialize as a byte-backed update"
+            );
+        }
+    }
+
+    #[test]
     fn an_unknown_persisted_effect_reports_an_actionable_capability_error() {
         let effect = EffectSlot {
             effect_type: Some("future-effect".to_owned()),
@@ -1149,22 +1349,40 @@ mod tests {
             fullscreen: true,
         };
         output.presentation = PresentationMode::FixedFps {
-            frames_per_second: 50,
+            frames_per_second: 50.0,
         };
         output.sound_output = SoundOutput::Device {
             name: "Display 2".to_owned(),
         };
-        let view = OutputConfigurationView::of(&output);
+        let view = OutputConfigurationView::of(
+            &output,
+            &OutputConfiguration::new("Main"),
+            vec![crate::diagnostics::MonitorDevice {
+                index: 1,
+                name: "Stage Right".to_owned(),
+                width: 3840,
+                height: 2160,
+                refresh_millihertz: Some(59_940),
+            }],
+            vec!["Display 2".to_owned()],
+        );
 
         assert_eq!(view.target_kind, "monitor");
         assert_eq!(view.monitor_by.as_deref(), Some("name"));
         assert_eq!(view.monitor_value.as_deref(), Some("Stage Right"));
         assert!(view.fullscreen);
         assert_eq!(view.presentation, "fixed-fps");
-        assert_eq!(view.frames_per_second, Some(50));
+        assert_eq!(view.frames_per_second, Some(50.0));
+        assert_eq!(view.available_monitors[0].width, 3840);
+        assert_eq!(view.available_monitors[0].height, 2160);
         assert_eq!(view.sound_output_kind, "device");
         assert_eq!(view.sound_output_name.as_deref(), Some("Display 2"));
+        assert_eq!(view.available_monitors[0].name, "Stage Right");
+        assert_eq!(view.available_sound_outputs, vec!["Display 2"]);
         assert!(view.takes_effect_on_restart);
+        assert!(view.picture_pending_restart);
+        assert!(view.sound_pending_restart);
+        assert!(!view.dmx_pending_restart);
     }
 
     #[test]
@@ -1211,14 +1429,14 @@ mod tests {
     fn fixed_rate_edits_carry_the_rate_and_other_modes_refuse_it() {
         let current = OutputConfiguration::new("Main");
         let fixed = configuration_edit(
-            r#"{"requestId":"a","presentation":"fixed-fps","framesPerSecond":30}"#,
+            r#"{"requestId":"a","presentation":"fixed-fps","framesPerSecond":29.97}"#,
         )
         .applied(&current)
         .expect("accepted");
         assert_eq!(
             fixed.presentation,
             PresentationMode::FixedFps {
-                frames_per_second: 30
+                frames_per_second: 29.97
             }
         );
 

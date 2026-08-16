@@ -20,6 +20,7 @@ pub const MAX_LAYERS: usize = 8;
 pub const PROGRAM_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
 /// One layer to draw this frame.
+#[derive(Clone, Copy)]
 pub struct LayerDraw<'a> {
     pub state: &'a LayerState,
     pub source: &'a SourceTexture,
@@ -60,7 +61,7 @@ impl LayerUniform {
         layer: &LayerState,
         source: Size,
         output: Size,
-        has_mask: bool,
+        mask: Option<&SourceTexture>,
         output_id: OutputId,
         now: Timestamp,
     ) -> Self {
@@ -158,7 +159,7 @@ impl LayerUniform {
                 layer.mask.scale_x,
                 layer.mask.scale_y,
                 f32::from(u8::from(layer.mask.invert)),
-                if has_mask && layer.mask.is_active() {
+                if mask.is_some() && layer.mask.is_active() {
                     layer.mask.opacity
                 } else {
                     0.0
@@ -208,13 +209,17 @@ fn effect_seed(output: OutputId, seed: u32, slot: usize) -> f32 {
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct MasterUniform {
     tint: [f32; 4],
-    flip: [f32; 2],
-    mask: [f32; 2],
+    flip_mask: [f32; 4],
+    transform: [f32; 4],
+    rotation: [f32; 4],
+    shaper_edges: [f32; 4],
+    shaper_edge_tangents: [f32; 4],
 }
 
 impl MasterUniform {
-    fn new(master: &MasterState, mask: Option<&SourceTexture>) -> Self {
+    fn new(master: &MasterState, mask: Option<&SourceTexture>, preserve_alpha: bool) -> Self {
         let (horizontal, vertical) = geometry::flip_signs(master.flip_mirror);
+        let (scale_x, scale_y) = master.effective_scale();
         Self {
             tint: [
                 master.tint.red,
@@ -222,16 +227,34 @@ impl MasterUniform {
                 master.tint.blue,
                 master.dimmer,
             ],
-            flip: [horizontal, vertical],
-            // The output-level mask is a library mask, so it reads luminance: an operator paints
-            // one in white on black and expects white to pass.
-            mask: [
+            flip_mask: [
+                horizontal,
+                vertical,
                 if mask.is_some() && master.has_mask() {
                     1.0
                 } else {
                     0.0
                 },
-                0.0,
+                if preserve_alpha { -1.0 } else { 0.0 },
+            ],
+            transform: [master.position_x, master.position_y, scale_x, scale_y],
+            rotation: [
+                master.rotation.to_radians().cos(),
+                master.rotation.to_radians().sin(),
+                master.shaper.rotation.to_radians().cos(),
+                master.shaper.rotation.to_radians().sin(),
+            ],
+            shaper_edges: [
+                master.shaper.left,
+                master.shaper.right,
+                master.shaper.top,
+                master.shaper.bottom,
+            ],
+            shaper_edge_tangents: [
+                master.shaper.left_rotation.to_radians().tan(),
+                master.shaper.right_rotation.to_radians().tan(),
+                master.shaper.top_rotation.to_radians().tan(),
+                master.shaper.bottom_rotation.to_radians().tan(),
             ],
         }
     }
@@ -359,11 +382,57 @@ impl Compositor {
         output_id: OutputId,
         now: Timestamp,
     ) {
+        self.render_internal(
+            layers,
+            master,
+            master_mask,
+            target,
+            output_id,
+            now,
+            false,
+            true,
+        );
+    }
+
+    /// Renders one layer exactly as Program does, while retaining its transparency for a layer
+    /// preview instead of flattening it onto Program's black output background.
+    pub fn render_layer_preview(
+        &mut self,
+        layer: LayerDraw<'_>,
+        target: &wgpu::TextureView,
+        output_id: OutputId,
+        now: Timestamp,
+    ) {
+        self.render_internal(
+            &[layer],
+            &MasterState::default(),
+            None,
+            target,
+            output_id,
+            now,
+            true,
+            false,
+        );
+    }
+
+    fn render_internal(
+        &mut self,
+        layers: &[LayerDraw<'_>],
+        master: &MasterState,
+        master_mask: Option<&SourceTexture>,
+        target: &wgpu::TextureView,
+        output_id: OutputId,
+        now: Timestamp,
+        preserve_alpha: bool,
+        advance_feedback: bool,
+    ) {
         let device = &self.gpu.device;
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("media-frame"),
         });
-        self.feedback.advance(&mut encoder, layers, now);
+        if advance_feedback {
+            self.feedback.advance(&mut encoder, layers, now);
+        }
 
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -394,7 +463,7 @@ impl Compositor {
                     layer.state,
                     layer.source.size(),
                     self.size,
-                    layer.mask.is_some(),
+                    layer.mask,
                     output_id,
                     now,
                 );
@@ -420,7 +489,7 @@ impl Compositor {
             }
         }
 
-        self.master_pass(&mut encoder, master, master_mask, target);
+        self.master_pass(&mut encoder, master, master_mask, target, preserve_alpha);
         self.gpu.queue.submit([encoder.finish()]);
     }
 
@@ -441,7 +510,7 @@ impl Compositor {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("media-preview"),
             });
-        self.master_pass(&mut encoder, master, master_mask, target);
+        self.master_pass(&mut encoder, master, master_mask, target, false);
         self.gpu.queue.submit([encoder.finish()]);
     }
 
@@ -451,12 +520,13 @@ impl Compositor {
         master: &MasterState,
         master_mask: Option<&SourceTexture>,
         target: &wgpu::TextureView,
+        preserve_alpha: bool,
     ) {
         let device = &self.gpu.device;
         self.gpu.queue.write_buffer(
             &self.master_uniform,
             0,
-            bytemuck::bytes_of(&MasterUniform::new(master, master_mask)),
+            bytemuck::bytes_of(&MasterUniform::new(master, master_mask, preserve_alpha)),
         );
         let group = bind_group(
             device,
@@ -652,7 +722,7 @@ mod tests {
             &layer,
             source,
             output,
-            false,
+            None,
             OutputId::default(),
             Timestamp::ZERO,
         );
@@ -680,7 +750,7 @@ mod tests {
     #[test]
     fn the_uniforms_are_the_size_the_shaders_declare() {
         assert_eq!(std::mem::size_of::<LayerUniform>(), 1264);
-        assert_eq!(std::mem::size_of::<MasterUniform>(), 32);
+        assert_eq!(std::mem::size_of::<MasterUniform>(), 96);
     }
 
     #[test]
@@ -690,8 +760,47 @@ mod tests {
             dimmer: 0.75,
             ..Default::default()
         };
-        let uniform = MasterUniform::new(&master, None);
-        assert_eq!(uniform.flip, [-1.0, 1.0]);
+        let uniform = MasterUniform::new(&master, None, false);
+        assert_eq!(&uniform.flip_mask[..2], &[-1.0, 1.0]);
         assert_eq!(uniform.tint[3], 0.75);
+    }
+
+    #[test]
+    fn the_master_uniform_carries_geometry_and_all_shaper_edges() {
+        let master = MasterState {
+            position_x: 0.25,
+            position_y: -0.5,
+            scale_x: 1.5,
+            scale_y: 0.75,
+            scaling_mode: media_domain::ScalingMode::Stretch,
+            rotation: 90.0,
+            shaper: media_domain::MasterShaper {
+                left: 0.1,
+                right: 0.2,
+                top: 0.3,
+                bottom: 0.4,
+                left_rotation: 10.0,
+                right_rotation: -10.0,
+                top_rotation: 20.0,
+                bottom_rotation: -20.0,
+                rotation: 30.0,
+            },
+            ..Default::default()
+        };
+        let uniform = MasterUniform::new(&master, None, false);
+        assert_eq!(uniform.transform, [0.25, -0.5, 1.5, 0.75]);
+        assert_eq!(uniform.shaper_edges, [0.1, 0.2, 0.3, 0.4]);
+        assert!((uniform.rotation[0]).abs() < 1e-6);
+        assert!((uniform.rotation[1] - 1.0).abs() < 1e-6);
+        assert!((uniform.rotation[2] - 30_f32.to_radians().cos()).abs() < 1e-6);
+        assert!((uniform.shaper_edge_tangents[0] - 10_f32.to_radians().tan()).abs() < 1e-6);
+    }
+
+    #[test]
+    fn a_layer_preview_requests_alpha_preservation_from_the_master_shader() {
+        let uniform = MasterUniform::new(&MasterState::default(), None, true);
+        assert_eq!(uniform.flip_mask[3], -1.0);
+        let program = MasterUniform::new(&MasterState::default(), None, false);
+        assert_eq!(program.flip_mask[3], 0.0);
     }
 }

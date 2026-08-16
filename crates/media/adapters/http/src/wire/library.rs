@@ -8,6 +8,7 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+use crate::diagnostics::FolderPresentation;
 use crate::diagnostics::{ImportJob, ImportOutcome, PendingImport};
 use crate::wire::AddressView;
 
@@ -123,7 +124,58 @@ pub struct UpdateLibraryFolder {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub swap_with: Option<u16>,
+}
+
+/// Shared presentation for a media, text, or generated-visualizer folder.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct FolderPresentationView {
+    pub folder: u16,
+    pub name: Option<String>,
+    pub icon: Option<String>,
+    pub picture_url: Option<String>,
+}
+
+impl FolderPresentationView {
+    pub fn of(presentation: &FolderPresentation) -> Self {
+        Self {
+            folder: presentation.folder,
+            name: presentation.name.clone(),
+            icon: presentation.icon.clone(),
+            picture_url: presentation.picture_content_type.as_ref().map(|_| {
+                format!(
+                    "/api/v2/folder-presentations/{}/picture",
+                    presentation.folder
+                )
+            }),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct FolderPresentationsView {
+    pub folders: Vec<FolderPresentationView>,
+}
+
+/// Intent update. Empty strings clear name/icon; absent fields leave them unchanged.
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, Eq, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateFolderPresentation {
+    pub request_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoveFolderPicture {
+    pub request_id: String,
 }
 
 /// The immediate answer after a browser upload has been accepted and queued.

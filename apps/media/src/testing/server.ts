@@ -8,11 +8,14 @@ import type {
 	AudioPanelView,
 	CatalogView,
 	DmxMapView,
+	FolderPresentationsView,
 	Health,
 	ImportsView,
 	LogsView,
 	NetworkView,
+	OutputConfigurationView,
 	OutputView,
+	RunningServerView,
 	ServerLogLevelView,
 	TextSlotView,
 	VisualizerView,
@@ -21,7 +24,10 @@ import { resetResources } from "../shared/api/resource";
 
 export interface StubbedServer {
 	outputs: OutputView[];
+	outputConfigurations: Record<string, OutputConfigurationView>;
+	runtime: RunningServerView;
 	catalog: CatalogView;
+	folderPresentations: FolderPresentationsView;
 	health: Health;
 	visualizers: VisualizerView[];
 	network: NetworkView;
@@ -47,7 +53,21 @@ export function stubServer(
 ): StubbedServer {
 	const server: StubbedServer = {
 		outputs: [anOutput()],
+		outputConfigurations: {},
+		runtime: {
+			administrationIp: "192.0.2.10",
+			outputs: [
+				{
+					id: "11111111-1111-4111-8111-111111111111",
+					name: "Main",
+					protocol: "art-net",
+					universe: 1,
+					startAddress: 1,
+				},
+			],
+		},
 		catalog: aCatalog(),
+		folderPresentations: aFolderPresentations(),
 		visualizers: [aVisualizer()],
 		network: aNetwork(),
 		text: [aClock(), aCountdown()],
@@ -69,6 +89,26 @@ export function stubServer(
 		holdWrites: undefined,
 		...overrides,
 	};
+	if (!overrides.outputConfigurations) {
+		server.outputConfigurations = Object.fromEntries(
+			server.outputs.map((output) => [
+				output.id,
+				anOutputConfiguration(output.id, output.name),
+			]),
+		);
+	}
+	if (!overrides.runtime) {
+		server.runtime.outputs = server.outputs.map((output) => {
+			const configuration = server.outputConfigurations[output.id];
+			return {
+				id: output.id,
+				name: output.name,
+				protocol: configuration?.protocol ?? "art-net",
+				universe: configuration?.universe ?? 1,
+				startAddress: configuration?.startAddress ?? 1,
+			};
+		});
+	}
 
 	resetResources();
 	vi.stubGlobal(
@@ -96,14 +136,63 @@ export function stubServer(
 				}
 			}
 			if (path === "/health") return jsonResponse(server.health);
+			if (path === "/runtime") return jsonResponse(server.runtime);
 			if (path === "/catalog") return jsonResponse(server.catalog);
+			if (path === "/folder-presentations")
+				return jsonResponse(server.folderPresentations);
+			const folderPresentation = writeFolderPresentation(server, path, init);
+			if (folderPresentation) return folderPresentation;
 			if (path === "/visualizers") return jsonResponse(server.visualizers);
+			if (path === "/visualizers/create") {
+				const body = JSON.parse(String(init?.body ?? "{}"));
+				const source = server.visualizers.find(
+					(candidate) => candidate.typeId === body.typeId,
+				);
+				if (!source)
+					return jsonResponse(
+						{ code: "unknown-visualizer-kind", message: "no" },
+						400,
+					);
+				const address = {
+					folder: body.folder,
+					file: body.file,
+					class: "generated-visualizer",
+				};
+				if (
+					server.visualizers.some(
+						(candidate) =>
+							candidate.address.folder === address.folder &&
+							candidate.address.file === address.file,
+					)
+				)
+					return jsonResponse(
+						{ code: "visualizer-not-created", message: "address is occupied" },
+						400,
+					);
+				const created = {
+					...structuredClone(source),
+					address,
+					name: body.name?.trim() || source.kind,
+				};
+				server.visualizers.push(created);
+				return jsonResponse(created);
+			}
 			if (path === "/fixtures")
 				return jsonResponse([
 					"ToskLight Media Layer.gdtf",
 					"ToskLight Media Master.gdtf",
 				]);
 			if (path === "/outputs") return jsonResponse(server.outputs);
+			const outputConfiguration = path.match(
+				/^\/outputs\/([^/]+)\/configuration$/u,
+			);
+			if (outputConfiguration) {
+				const configuration =
+					server.outputConfigurations[outputConfiguration[1]];
+				return configuration
+					? jsonResponse(configuration)
+					: jsonResponse({ code: "unknown-output", message: "no" }, 404);
+			}
 			const dmxMap = path.match(/^\/outputs\/([^/]+)\/dmx-map$/u);
 			if (dmxMap) {
 				const output = server.outputs.find(
@@ -145,7 +234,11 @@ export function stubServer(
 				if (body.speedGroupEndpoint !== undefined) {
 					server.network.stored.speedGroupEndpoint = body.speedGroupEndpoint;
 				}
-				server.network.resolved = { ...server.network.stored };
+				server.network.pendingRestart =
+					server.network.sameComputerPreset !==
+						server.network.activeSameComputerPreset ||
+					JSON.stringify(server.network.stored) !==
+						JSON.stringify(server.network.activeStored);
 				return jsonResponse(server.network);
 			}
 
@@ -188,6 +281,20 @@ export function stubServer(
 				}
 				if (body.name !== undefined) found.name = body.name;
 				if (body.parameters !== undefined) found.parameters = body.parameters;
+				if (body.typeId !== undefined) {
+					const source = server.visualizers.find(
+						(candidate) => candidate.typeId === body.typeId,
+					);
+					if (!source)
+						return jsonResponse(
+							{ code: "unknown-visualizer-kind", message: "no" },
+							400,
+						);
+					found.typeId = source.typeId;
+					found.kind = source.kind;
+					found.uses = structuredClone(source.uses);
+					found.parameters = structuredClone(source.parameters);
+				}
 				return jsonResponse(found);
 			}
 
@@ -415,6 +522,21 @@ export function stubServer(
 					"tintGreen",
 					"tintBlue",
 					"flipMirror",
+					"scaleX",
+					"scaleY",
+					"scalingMode",
+					"positionX",
+					"positionY",
+					"rotation",
+					"shaperLeft",
+					"shaperRight",
+					"shaperTop",
+					"shaperBottom",
+					"shaperLeftRotation",
+					"shaperRightRotation",
+					"shaperTopRotation",
+					"shaperBottomRotation",
+					"shaperRotation",
 				])
 					if (body[key] !== undefined)
 						(output.master as unknown as Record<string, unknown>)[key] =
@@ -429,6 +551,42 @@ export function stubServer(
 		}),
 	);
 	return server;
+}
+
+function writeFolderPresentation(
+	server: StubbedServer,
+	path: string,
+	init?: RequestInit,
+): Response | undefined {
+	const matched = path.match(
+		/^\/folder-presentations\/(\d+)\/(update|picture\/upload\?.*|picture\/remove)$/u,
+	);
+	if (!matched) return undefined;
+	const folder = Number(matched[1]);
+	let presentation = server.folderPresentations.folders.find(
+		(candidate) => candidate.folder === folder,
+	);
+	if (!presentation) {
+		presentation = { folder, name: null, icon: null, pictureUrl: null };
+		server.folderPresentations.folders.push(presentation);
+	}
+	if (matched[2] === "update") {
+		const body = JSON.parse(String(init?.body ?? "{}"));
+		if (body.name !== undefined) presentation.name = body.name.trim() || null;
+		if (body.icon !== undefined) presentation.icon = body.icon.trim() || null;
+		const catalogFolder = server.catalog.folders.find(
+			(candidate) => candidate.folder === folder,
+		);
+		if (catalogFolder && body.name !== undefined)
+			catalogFolder.name = presentation.name;
+		if (catalogFolder && body.icon !== undefined)
+			catalogFolder.icon = presentation.icon ?? undefined;
+	} else if (matched[2] === "picture/remove") {
+		presentation.pictureUrl = null;
+	} else {
+		presentation.pictureUrl = `/api/v2/folder-presentations/${folder}/picture`;
+	}
+	return jsonResponse(presentation);
 }
 
 function writeLibrary(
@@ -503,8 +661,10 @@ function writeLibrary(
 			folder.folder = body.swapWith;
 			if (second) second.folder = Number(folderUpdate[1]);
 			server.catalog.folders.sort((left, right) => left.folder - right.folder);
-		} else {
+		} else if (body.name !== undefined) {
 			folder.name = body.name.trim() || null;
+		} else if (body.icon !== undefined) {
+			folder.icon = body.icon.trim() || null;
 		}
 		return jsonResponse(server.catalog);
 	}
@@ -582,6 +742,7 @@ function writeText(
 			durationSeconds: body.durationSeconds ?? null,
 			targetUnixMillis: body.targetUnixMillis ?? null,
 			style: body.style ?? aClock().style,
+			format: body.format ?? aTextFormat(),
 		};
 		server.text.push(created);
 		return jsonResponse(created);
@@ -610,6 +771,7 @@ function writeText(
 			slot.durationSeconds = body.durationSeconds;
 		}
 		if (body.style !== undefined) slot.style = body.style;
+		if (body.format !== undefined) slot.format = body.format;
 		return jsonResponse(slot);
 	}
 	return undefined;
@@ -637,8 +799,59 @@ export function anOutput(overrides: Partial<OutputView> = {}): OutputView {
 			tintBlue: 1,
 			flipMirror: "none",
 			mask: { folder: 0, file: 0, class: "blank" },
+			scaleX: 1,
+			scaleY: 1,
+			scalingMode: "fit",
+			positionX: 0,
+			positionY: 0,
+			rotation: 0,
+			shaperLeft: 0,
+			shaperRight: 0,
+			shaperTop: 0,
+			shaperBottom: 0,
+			shaperLeftRotation: 0,
+			shaperRightRotation: 0,
+			shaperTopRotation: 0,
+			shaperBottomRotation: 0,
+			shaperRotation: 0,
 		},
 		layers: [aLayer(0), aLayer(1)],
+		...overrides,
+	};
+}
+
+export function anOutputConfiguration(
+	id: string,
+	name = "Main",
+	overrides: Partial<OutputConfigurationView> = {},
+): OutputConfigurationView {
+	const active: OutputConfigurationView["active"] = {
+		targetKind: "off-screen",
+		monitorBy: null,
+		monitorValue: null,
+		fullscreen: false,
+		width: 1920,
+		height: 1080,
+		presentation: "fixed-fps",
+		framesPerSecond: 60,
+		soundOutputKind: "disabled",
+		soundOutputName: null,
+		personality: "two-layers",
+		protocol: "art-net",
+		universe: 1,
+		startAddress: 1,
+	};
+	return {
+		id,
+		name,
+		...active,
+		availableMonitors: [],
+		availableSoundOutputs: [],
+		active,
+		picturePendingRestart: false,
+		soundPendingRestart: false,
+		dmxPendingRestart: false,
+		takesEffectOnRestart: false,
 		...overrides,
 	};
 }
@@ -1021,6 +1234,7 @@ function beatFormFlashEffect(
 		],
 	};
 }
+
 function drawnImageEffect(
 	index: number,
 ): OutputView["layers"][number]["effects"][number] {
@@ -1127,6 +1341,7 @@ export function aCatalog(): CatalogView {
 			{
 				folder: 1,
 				name: "Looks",
+				icon: "▣",
 				items: [
 					{
 						id: "asset-a",
@@ -1150,6 +1365,16 @@ export function aCatalog(): CatalogView {
 					},
 				],
 			},
+		],
+	};
+}
+
+export function aFolderPresentations(): FolderPresentationsView {
+	return {
+		folders: [
+			{ folder: 1, name: "Looks", icon: "▣", pictureUrl: null },
+			{ folder: 200, name: "Text", icon: "T", pictureUrl: null },
+			{ folder: 250, name: "Visualizers", icon: "◈", pictureUrl: null },
 		],
 	};
 }
@@ -1189,9 +1414,12 @@ export function aNetwork(overrides: Partial<NetworkView> = {}): NetworkView {
 	return {
 		sameComputerPreset: false,
 		stored,
+		activeSameComputerPreset: false,
+		activeStored: { ...stored },
 		resolved: { ...stored },
 		citpAdvertisedPort: 4809,
 		takesEffectOnRestart: true,
+		pendingRestart: false,
 		...overrides,
 	};
 }
@@ -1209,6 +1437,17 @@ export function aTextStyle(): TextSlotView["style"] {
 	};
 }
 
+export function aTextFormat(): TextSlotView["format"] {
+	return {
+		clockPattern: "HH:MM:SS",
+		countdownPattern: "hh:mm:ss",
+		separator: ":",
+		utcOffsetMinutes: 0,
+		afterZero: "hold",
+		rollover: false,
+	};
+}
+
 export function aClock(overrides: Partial<TextSlotView> = {}): TextSlotView {
 	return {
 		address: { folder: 200, file: 1, class: "text-bank" },
@@ -1219,6 +1458,7 @@ export function aClock(overrides: Partial<TextSlotView> = {}): TextSlotView {
 		durationSeconds: null,
 		targetUnixMillis: null,
 		style: aTextStyle(),
+		format: aTextFormat(),
 		...overrides,
 	};
 }
@@ -1235,6 +1475,7 @@ export function aCountdown(
 		durationSeconds: 600,
 		targetUnixMillis: null,
 		style: aTextStyle(),
+		format: aTextFormat(),
 		...overrides,
 	};
 }

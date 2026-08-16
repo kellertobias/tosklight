@@ -80,6 +80,66 @@ describe("the transport", () => {
 		expect(init.body).toBe('{"dimmer":0.5}');
 	});
 
+	it("rounds and bounds every u8 layer field without changing fractional volume", async () => {
+		const fetchStub = vi.fn(
+			async () =>
+				new Response(JSON.stringify({}), {
+					status: 200,
+					headers: { "content-type": "application/json" },
+				}),
+		);
+		vi.stubGlobal("fetch", fetchStub);
+
+		await api.updateLayer("an-output", 2, {
+			folder: -3.2,
+			file: 999.8,
+			playModeDmx: 215.6,
+			speedMultiplierDmx: 127.5,
+			playbackBpm: 120.1,
+			effectSlot: 2.8,
+			volume: 0.375,
+		});
+
+		const [, init] = fetchStub.mock.calls[0] as unknown as [string, RequestInit];
+		expect(init.body).toBe(
+			'{"folder":0,"file":255,"playModeDmx":216,"speedMultiplierDmx":128,"playbackBpm":120,"effectSlot":3,"volume":0.375}',
+		);
+	});
+
+	it("refuses non-finite u8 values before fetch", async () => {
+		const fetchStub = vi.fn();
+		vi.stubGlobal("fetch", fetchStub);
+
+		let failure: unknown;
+		try {
+			api.updateLayer("an-output", 0, { playbackBpm: Number.NaN });
+		} catch (error) {
+			failure = error;
+		}
+
+		expect(failure).toBeInstanceOf(ApiFailure);
+		expect((failure as ApiFailure).code).toBe("invalid-u8-control");
+		expect(fetchStub).not.toHaveBeenCalled();
+	});
+
+	it("bounds u8 master mask addresses", async () => {
+		const fetchStub = vi.fn(
+			async () =>
+				new Response(JSON.stringify({}), {
+					status: 200,
+					headers: { "content-type": "application/json" },
+				}),
+		);
+		vi.stubGlobal("fetch", fetchStub);
+		await api.updateMaster("an-output", {
+			maskFolder: -1,
+			maskFile: 300,
+			volume: 0.42,
+		});
+		const [, init] = fetchStub.mock.calls[0] as unknown as [string, RequestInit];
+		expect(init.body).toBe('{"maskFolder":0,"maskFile":255,"volume":0.42}');
+	});
+
 	it("sends a typed Analog TV parameter without replacing the effect chain", async () => {
 		const fetchStub = vi.fn(
 			async () =>

@@ -20,6 +20,9 @@ pub const METADATA_DIRECTORY: &str = ".metadata";
 /// The file a folder's operator-given name lives in.
 pub const FOLDER_NAME_FILE: &str = ".info";
 
+/// The optional operator-uploaded folder picture. Its MIME type lives in `.info`.
+pub const FOLDER_PICTURE_FILE: &str = ".folder-picture";
+
 /// A folder's directory name: three digits, zero padded.
 pub fn folder_directory(folder: impl Into<u16>) -> String {
     let folder = folder.into();

@@ -7,14 +7,19 @@ surface, resolution, presentation rate, DMX personality, protocol, universe, and
 
 The administration interface is served by the Media Server itself. Open the address configured as
 **This interface**. Its left dock follows the Light Desk operator language: the Media Server mark
-and current time are followed by **Dashboard**, **Playback**, **Library**, **Audio**, and
+and current time are followed by **Playback**, **Library**, **Audio**, **DMX**, and
 **Settings**. The Audio destination shows the live bass, mid, treble, level, peak, waveform,
 spectrum, beat, and tempo analysis alongside the stored input tuning. Those
 are the only built-ins in this interface. The connection indicator changes
 if live telemetry is lost. While a Light Desk is connected, its active show name appears in that
-indicator and on the Dashboard. If the desk stops announcing itself, the name disappears instead
+indicator. If the desk stops announcing itself, the name disappears instead
 of leaving a stale show identity behind. The Light Desk's own dock continues to name the active
 show as usual.
+
+The administration interface opens directly on **Playback**. Its title shows the running server's
+usable IP address and the selected output's active DMX universe/start address on the first line,
+with the current library item count underneath. These are running-process facts: a saved output
+address that applies on restart is not presented as active before that restart happens.
 
 ## Start and configure the server
 
@@ -27,34 +32,54 @@ starting outputs:
 media-server --check-configuration
 ```
 
-The **Settings** page separates the values deliberately. Its tabs are **Libraries**, **Outputs**,
-**Network & Inputs**, and **Logs**, in that order:
+The **Settings** page separates the values deliberately. Its tabs are **Libraries**, **Picture**,
+**Sound**, **Network**, **DMX**, and **Logs**, in that order. Every edit saves automatically;
+there is no separate Save settings action:
 
 - **Libraries** identifies the process, reports the current library revision, and explains where
   the `library.root` setting lives. This path is changed in the configuration file rather than in
   the browser.
-- **Network & Inputs** uses the window title buttons **Network**, **DMX**, and **Audio**. **Network**
-  shows each configured listener beside the address actually in use. **Where this
+- **Network** shows each configured listener beside the address actually in use. **Where this
   server listens** contains Art-Net, sACN, CITP, and the administration interface. **Where this
   server sends** contains the optional Light Speed Group stream destination. **Light and Media are
   on this computer** temporarily resolves listeners to `127.0.0.1` without destroying the stored
-  installation addresses. **DMX** contains each output's personality, Art-Net or sACN protocol,
+  installation addresses. **DMX input** contains each output's personality, Art-Net or sACN protocol,
   universe, and start address. The page limits the start address so the complete personality
   remains in one 512-slot universe. **Audio** configures the input used by audio-reactive sources.
-- **Outputs** has one card per output. Choose a monitor or an off-screen surface, render size, and
-  display-synchronized, fixed-rate, or diagnostic presentation.
-- **Logs** uses the window title buttons **Logs** and **DMX Diagnostics**. **Logs** keeps the
-  visible-log filter and running server log level together. **DMX Diagnostics** contains detailed
-  receiver state, decoded channel values, and generated GDTF downloads.
+- **Picture** has one editor per output. The monitor list shows the operating-system name and
+  current pixel resolution. Render size can follow that monitor, use the 480p, 720p, or 1080p
+  preset, or use a manual width and height. Presentation can be display synchronized, unlocked,
+  or fixed to a listed broadcast-aware rate, including PAL and fractional NTSC rates. **Sound**
+  chooses the output device independently.
+- **Logs** keeps the visible-log filter and running server log level together.
 
 Saved network and output changes are stored immediately but do not replace sockets or output
-surfaces underneath a running show. Restart the Media Server, return to **Settings**, and confirm
-that **Configured** and **In use now** agree. A refused edit remains open with the reason displayed;
-it is never silently adjusted.
+surfaces underneath a running show. Their section header reads **Saved automatically · Applies on
+restart**. The explanatory notice and **Revert to current settings** action appear only while the
+stored next-start values differ from the values this process actually started with. Revert writes
+those active values back through the same settings API; restarting applies a kept change. A refused
+edit remains marked **Not saved** with the reason displayed; it is never silently adjusted.
 
 Use standard CITP port `4809` unless the installation has an explicit reason to use another TCP
 port. Bind show protocols only to the trusted lighting network. `0.0.0.0` is valid for a listener
 on every local interface; it is not a valid destination.
+
+The centred **Take over playback** switch remains available in the left dock on every Media Server
+screen. It controls the selected output, updates immediately, and remains at the requested value
+while the server confirms the change; a refusal restores the authoritative value and appears as a
+toast.
+
+Select **Master** in Playback to transform the completed program after all layers have composited.
+**Geometry** provides position, independent scale axes, rotation, and Fit, Fill, Native, or Stretch
+scale modes. **Shapers** move the left, right, top, and bottom edges, rotate each edge, or rotate the
+complete shaper module. The Master mask shapes the completed program; it does not select ordinary
+layer content. These final controls are part of the same compositor pass used for the display,
+browser live preview, and CITP Program preview.
+
+The Playback title shows a second **Media / VIS / Text** tab group while Content or Mask browsing
+is visible. It filters the pool to ordinary media folders, generated visualizers, or text sources
+without changing an address by itself. Master Content cards are disabled because Master has no
+content address; switch to **Mask** to select or clear its output-level mask.
 
 ## Prepare the media library
 
@@ -67,7 +92,8 @@ addresses are `1` through `254`. Media uses folders `1` through `199`, text uses
 - **Rename** changes a clip's operator-facing name without changing its stable identity.
 - **Move** chooses a new numbered address. An occupied address is refused unless **Swap** is chosen;
   the server never silently overwrites another clip.
-- A folder name can be changed or cleared. Its numbered folder remains the same.
+- Select a folder normally to open its inspector. Its name and built-in icon can be changed or
+  cleared, and media can be uploaded there without changing the numbered folder.
 - Drag one occupied file onto another to swap their slots, or onto an empty slot to move it there.
   Multi-select files and drag the selection onto another folder to fill that folder's first free
   slots. Allocation continues into the next folder only when the target is full.
@@ -75,12 +101,23 @@ addresses are `1` through `254`. Media uses folders `1` through `199`, text uses
   are parking storage: clips there stay in the library but have no CITP or DMX playback address.
   Move individual clips there, or exchange a full playable folder with a parking folder, when the
   on-air address space is full. Restore them by dragging them back.
-- **Upload** selects an explicit folder and file address, preserves the uploaded source, and starts
-  a visible HAP Alpha import job. Wait for the job to finish before expecting playback or its
-  thumbnail. A job can be cancelled, and a failure states what is missing or unreadable.
+- Select an empty media slot to name it and upload directly to that explicit folder/file address.
+  Select an occupied slot to replace its media at the same address; the currently playable clip
+  remains available until the complete replacement source has been accepted for import.
+- **Upload** preserves the uploaded source and starts a visible HAP Alpha import job. Wait for the
+  job to finish before expecting playback or its thumbnail. A job can be cancelled, and a failure
+  states what is missing or unreadable.
 - **Import all** converts every source in the library that does not yet have a playable clip. It is
   the replacement for the old H.264/ProRes re-encode action: the only playback format is HAP Alpha
   in a `.toskclip` container.
+- Visualizer cards use representative frames rendered by the actual built-in visualizers. Both
+  visualizer and text previews use the configured main output's aspect ratio, and content is fitted
+  inside that frame rather than cropped.
+- Select an empty visualizer slot and choose its built-in kind first; that exact numbered address is
+  then created. An occupied slot starts with the same kind chooser before its tuning controls.
+  **New visualizer** in the window title selects the next empty slot. Several instances of the same
+  kind can therefore keep independent names, sizes, and colours at stable addresses. Kind, name,
+  and tuning changes are live; there is no Save action.
 - **City Tunnel** travels continuously through an enclosed neon urban corridor. **Speed** sets the
   forward travel rate, **Count** changes the building/window density, **Size** changes the tunnel
   structure, **Amount** controls its light intensity, and the two colour controls tune the city
@@ -93,6 +130,8 @@ addresses are `1` through `254`. Media uses folders `1` through `199`, text uses
   central route. **Radius** sizes the softly fading horizon sun; **Speed**, **Count**, **Size**,
   **Amount**, and the two colours tune travel, grid, mountains, and light. **Left scenery** and
   **Right scenery** independently select **Off**, **Street lamps**, or **Palm trees**.
+- Selecting a text source opens **Edit text** immediately, and every content or appearance change
+  is live without a Save action. **New text source** remains in the window title.
 
 Thumbnail, source, metadata, and playable clip files follow a rename, move, folder reorder, or
 explicit swap together. A
@@ -118,10 +157,10 @@ the authored input.
 ## Patch and diagnose DMX
 
 Patch each Media output on the lighting desk with the same personality, protocol, universe, and
-start address shown under **Settings** > **Network & Inputs** > **DMX**. The 2-layer personality
-occupies 75 slots; the 8-layer personality occupies 279 slots. Open **Settings** > **Logs** >
-**DMX Diagnostics** to download an output's generated GDTF rather than recreating the channel map
-by hand.
+start address shown under **Settings** > **DMX**, in the **DMX input** section. The 2-layer personality occupies 75 slots;
+the 8-layer personality occupies 279 slots. Open **DMX** in the left dock for the dedicated
+**Diagnostics** page and generated GDTF downloads. Its **Configure DMX input** action returns to
+the corresponding Settings tab.
 
 The **DMX** page groups canonical channels under each layer and the master. It reports each
 channel's absolute address, name, raw value, decoded value, resolution, defaults, and implemented
@@ -143,9 +182,14 @@ If the output is not responding, check in this order:
 
 Use **Library** > **Text** to create and edit static text, clocks, and countdowns. Its folder pool
 covers `200` through `249`, allowing 12,700 addressable sources. Static text accepts multiple lines
-and preserves their line breaks. **Library** > **Visualizers** uses folders `250` through `255` and
+and preserves their line breaks. Existing sources update live without a Save action. Clock formats
+are `HH:MM`, `HH:MM:SS`, `hh:mm`, and `hh:mm:ss`; the fixed UTC offset makes the rendered server
+output independent of the browser's time zone. Countdown formats are seconds, minutes, `mm:ss`,
+`hh:mm:ss`, and `h:mm:ss`. A countdown can hold at zero, continue negative, or count upward after
+zero; `mm:ss` can optionally roll its minutes over at 60. The separator is configurable for both
+clock and countdown sources. **Library** > **Visualizers** uses folders `250` through `255` and
 the same pool-and-inspector layout with a screenshot-like preview. Selecting a visualizer is only
-for inspection and tuning; it does not put that source on an output. Use **Settings** > **Network & Inputs** to select and tune
+for inspection and tuning; it does not put that source on an output. Use **Audio** to select and tune
 the audio input that feeds audio-reactive sources; the meters prove the running input rather than
 only the stored device choice. Long-running and unavailable states remain visible in that tab.
 
@@ -161,7 +205,17 @@ For **Waveform Oscilloscope**, **Size** controls the trace's vertical expansion 
 (10% of the designed height) through the persisted default `0.05` to `0.1` (200%). The same Size
 value is available as **Slot 1 · Size** on an active Waveform layer and updates live.
 
-On **Playback**, take over the selected output before changing a layer. The **Effects** section has
+On **Playback**, take over the selected output with the switch in the left dock before changing a
+layer. Until takeover, folders, files, and playback controls remain read-only. The master picture
+is the same demand-driven composite frame advertised to CITP, at the configured output aspect
+ratio; it is not the thumbnail of the currently browsed file. Taking over also removes the startup
+connection message, so program output does not depend on receiving a DMX packet first. When the
+renderer is running, every layer tile is an isolated live renderer frame rather than a catalog
+thumbnail. A damaged or unsupported frame marks that layer failed and surfaces the operator-safe
+cause in Playback; the detailed decoder record remains available under **Settings** > **Logs**.
+When the
+full play-mode list is available, use its dropdown or the always-visible **Stop**, **Play**, and
+**Play looped** actions. The **Effects** section has
 four ordered slots. **Analog TV** starts with restrained CRT defaults: **TV curvature** 30%,
 **Distortion** 18%, **Image grain** 20%, and **Glitching** 8%. Curvature bends the picture into a
 rounded screen, Distortion controls continuous horizontal-sync and chroma instability, Image grain

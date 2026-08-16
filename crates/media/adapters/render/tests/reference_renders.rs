@@ -13,7 +13,7 @@ use media_domain::{
     AnalogTvParameters, BeatFormFlashParameters, BeatGridWaveOrigin, BeatGridWaveParameters,
     BeatScanEdge, BeatScanParameters, BlurParameters, DigitalTvParameters, EffectSlot,
     FeedbackMotion, FeedbackParameters, FlipMirror, KaleidoscopeParameters, LayerState, MaskSource,
-    MaskState, MasterState, MediaAddress, OutputId, PresentationMode, RasterizeMode,
+    MaskState, MasterShaper, MasterState, MediaAddress, OutputId, PresentationMode, RasterizeMode,
     RasterizeParameters, ScalingMode, SourceStatus, Timestamp, Tint,
 };
 use media_render::{Gpu, LayerDraw, OutputRenderer, SourceTexture};
@@ -177,6 +177,7 @@ fn rasterize_state(mode: RasterizeMode, dot_size: f32, enabled: bool) -> LayerSt
         ..Default::default()
     })
 }
+
 fn drawn_image_state(strength: f32, detail: f32, enabled: bool) -> LayerState {
     let mut effect = EffectSlot::drawn_image();
     effect.enabled = enabled;
@@ -457,6 +458,31 @@ fn rasterize_has_distinct_monochrome_and_cmyk_dots_live_with_exact_bypass() {
 }
 
 #[test]
+fn drawn_image_preserves_composition_with_distinct_strength_detail_and_exact_bypass() {
+    let mut bench = Bench::new();
+    let source = patterned_source(&bench.gpu);
+    let plain = ready(LayerState::default());
+    let mild = drawn_image_state(0.35, 0.25, true);
+    let strong = drawn_image_state(1.0, 0.25, true);
+    let detailed = drawn_image_state(1.0, 0.9, true);
+    let disabled = drawn_image_state(1.0, 0.9, false);
+    let draw = |state| LayerDraw {
+        state,
+        source: &source,
+        mask: None,
+    };
+    let plain = bench.render(&[draw(&plain)], &MasterState::default());
+    let mild = bench.render(&[draw(&mild)], &MasterState::default());
+    let strong = bench.render(&[draw(&strong)], &MasterState::default());
+    let detailed = bench.render(&[draw(&detailed)], &MasterState::default());
+    let disabled = bench.render(&[draw(&disabled)], &MasterState::default());
+    assert!(changed_pixels(&mild, &plain) > 500);
+    assert!(changed_pixels(&strong, &mild) > 500);
+    assert!(changed_pixels(&detailed, &strong) > 200);
+    assert_eq!(disabled.pixels, plain.pixels, "bypass restores the source");
+}
+
+#[test]
 fn beat_scan_draws_sharp_soft_and_multiple_live_lines_with_exact_bypass() {
     let mut bench = Bench::new();
     let source = patterned_source(&bench.gpu);
@@ -533,41 +559,18 @@ fn beat_form_flash_samples_the_source_and_renders_independent_shrinking_forms() 
         source: &source,
         mask: None,
     };
+
     let plain = bench.render(&[draw(&plain)], &MasterState::default());
     let waiting = bench.render(&[draw(&waiting)], &MasterState::default());
     let first = bench.render(&[draw(&first)], &MasterState::default());
     let progressed = bench.render(&[draw(&progressed)], &MasterState::default());
     let overlapping = bench.render(&[draw(&overlapping)], &MasterState::default());
     let disabled = bench.render(&[draw(&disabled)], &MasterState::default());
+
     assert!(changed_pixels(&waiting, &plain) > 1_000);
     assert!(changed_pixels(&first, &waiting) > 200);
     assert!(changed_pixels(&progressed, &first) > 200);
     assert!(changed_pixels(&overlapping, &first) > 200);
-    assert_eq!(disabled.pixels, plain.pixels, "bypass restores the source");
-}
-
-#[test]
-fn drawn_image_preserves_composition_with_distinct_strength_detail_and_exact_bypass() {
-    let mut bench = Bench::new();
-    let source = patterned_source(&bench.gpu);
-    let plain = ready(LayerState::default());
-    let mild = drawn_image_state(0.35, 0.25, true);
-    let strong = drawn_image_state(1.0, 0.25, true);
-    let detailed = drawn_image_state(1.0, 0.9, true);
-    let disabled = drawn_image_state(1.0, 0.9, false);
-    let draw = |state| LayerDraw {
-        state,
-        source: &source,
-        mask: None,
-    };
-    let plain = bench.render(&[draw(&plain)], &MasterState::default());
-    let mild = bench.render(&[draw(&mild)], &MasterState::default());
-    let strong = bench.render(&[draw(&strong)], &MasterState::default());
-    let detailed = bench.render(&[draw(&detailed)], &MasterState::default());
-    let disabled = bench.render(&[draw(&disabled)], &MasterState::default());
-    assert!(changed_pixels(&mild, &plain) > 500);
-    assert!(changed_pixels(&strong, &mild) > 500);
-    assert!(changed_pixels(&detailed, &strong) > 200);
     assert_eq!(disabled.pixels, plain.pixels, "bypass restores the source");
 }
 
@@ -1134,6 +1137,42 @@ fn the_master_tint_multiplies_the_finished_composite() {
 }
 
 #[test]
+fn master_geometry_and_shapers_affect_the_finished_composite() {
+    let mut bench = Bench::new();
+    let red = bench.solid(Size::new(4, 4), RED);
+    let state = ready(LayerState::default());
+    let draw = LayerDraw {
+        state: &state,
+        source: &red,
+        mask: None,
+    };
+
+    let moved = bench.render(
+        &[draw],
+        &MasterState {
+            scale_x: 0.5,
+            position_x: 0.5,
+            ..Default::default()
+        },
+    );
+    assert_eq!(moved.at(48, 32), RED, "inside the transformed master");
+    assert_eq!(moved.at(8, 32), BLACK, "outside the transformed master");
+
+    let shaped = bench.render(
+        &[draw],
+        &MasterState {
+            shaper: MasterShaper {
+                left: 0.5,
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+    );
+    assert_eq!(shaped.at(48, 32), RED, "the unshaped half remains");
+    assert_eq!(shaped.at(8, 32), BLACK, "the left shaper removes pixels");
+}
+
+#[test]
 fn scaling_and_position_place_the_layer_where_the_geometry_says() {
     let mut bench = Bench::new();
     let red = bench.solid(Size::new(4, 4), RED);
@@ -1430,6 +1469,32 @@ fn transparency_survives_all_the_way_to_the_composite() {
     assert!(
         blue > 96 && blue < 160,
         "and the half-transparent blue sits over it: {blue}"
+    );
+}
+
+#[test]
+fn a_live_layer_preview_retains_compositor_alpha_instead_of_flattening_to_black() {
+    let mut bench = Bench::new();
+    let source = bench.solid(Size::new(4, 4), [255, 64, 32, 128]);
+    let state = ready(LayerState::default());
+    let pixels = bench.renderer.capture_layer_preview(
+        OUTPUT,
+        LayerDraw {
+            state: &state,
+            source: &source,
+            mask: None,
+        },
+        Timestamp::ZERO,
+    );
+    let at = ((OUTPUT.height / 2 * OUTPUT.width + OUTPUT.width / 2) * 4) as usize;
+    let pixel = &pixels[at..at + 4];
+    assert!(
+        (126..=130).contains(&pixel[3]),
+        "the live layer preview retains 50% alpha: {pixel:?}"
+    );
+    assert!(
+        (126..=130).contains(&pixel[0]),
+        "the compositor readback is correctly premultiplied for publication: {pixel:?}"
     );
 }
 

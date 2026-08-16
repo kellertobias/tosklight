@@ -16,6 +16,7 @@ mod audio;
 pub(crate) mod bench;
 mod edit;
 mod fixtures;
+mod folder_presentations;
 mod health;
 mod library;
 mod logs;
@@ -34,6 +35,21 @@ use axum::routing::{get, post};
 use media_application::MediaConfiguration;
 use media_domain::catalog::CatalogSnapshot;
 use media_domain::{MediaState, Timestamp};
+
+#[derive(Clone, Debug)]
+pub struct OutputPreviewFrame {
+    pub sequence: u64,
+    pub width: u16,
+    pub height: u16,
+    pub content_type: &'static str,
+    pub bytes: Vec<u8>,
+}
+
+pub type RequestOutputPreview = Arc<
+    dyn Fn(media_domain::OutputId, Option<usize>, Option<(u16, u16)>) -> Option<OutputPreviewFrame>
+        + Send
+        + Sync,
+>;
 
 use crate::assets;
 use crate::diagnostics::Diagnostics;
@@ -57,12 +73,22 @@ pub type ApplyConfiguration = Arc<dyn Fn(&MediaConfiguration) + Send + Sync>;
 pub struct ApiState {
     /// The live configuration. Swapped when an edit is accepted, so a read after a write sees it.
     pub configuration: Arc<ArcSwap<MediaConfiguration>>,
+    /// The immutable configuration this process actually started with.
+    ///
+    /// Stored output/network edits are published through `configuration` immediately but do not
+    /// rebuild ingress or presentation until restart. Runtime-facing reads must therefore use
+    /// this snapshot instead of presenting next-start values as active facts.
+    pub active_configuration: Arc<MediaConfiguration>,
+    /// The literal, usable administration endpoint selected for this running process.
+    pub administration_endpoint: String,
     pub state: Arc<ArcSwap<MediaState>>,
     pub catalog: Arc<ArcSwap<CatalogSnapshot>>,
     /// Stamps commands. Injected so the API's behaviour is testable without real time passing.
     pub now: Arc<dyn Fn() -> Timestamp + Send + Sync>,
     pub persist: PersistConfiguration,
     pub apply: ApplyConfiguration,
+    /// Requests the renderer's existing CITP composite preview, when this process presents outputs.
+    pub preview: RequestOutputPreview,
     /// What the running process can tell the API about itself.
     pub diagnostics: Diagnostics,
     /// What recent edits produced, so a retry is answered rather than executed again.
@@ -90,12 +116,39 @@ pub fn router(state: ApiState) -> Router {
     let upload_body_limit = state.upload_body_limit;
     Router::new()
         .route("/api/v2/health", get(health::health))
+        .route("/api/v2/runtime", get(health::runtime))
         .route("/api/v2/catalog", get(health::catalog))
         .route("/api/v2/logs", get(logs::logs))
         .route("/api/v2/logs/level", get(logs::server_level))
         .route("/api/v2/logs/level/update", post(logs::update_server_level))
         .route("/api/v2/library/imports", get(library::imports))
         .route("/api/v2/library/import", post(library::start_import))
+        .route(
+            "/api/v2/folder-presentations",
+            get(folder_presentations::list),
+        )
+        .route(
+            "/api/v2/folder-presentations/{folder}",
+            get(folder_presentations::get),
+        )
+        .route(
+            "/api/v2/folder-presentations/{folder}/update",
+            post(folder_presentations::update),
+        )
+        .route(
+            "/api/v2/folder-presentations/{folder}/picture/upload",
+            post(folder_presentations::upload_picture).layer(DefaultBodyLimit::max(
+                folder_presentations::MAX_FOLDER_PICTURE_BYTES + 1024 * 1024,
+            )),
+        )
+        .route(
+            "/api/v2/folder-presentations/{folder}/picture/remove",
+            post(folder_presentations::remove_picture),
+        )
+        .route(
+            "/api/v2/folder-presentations/{folder}/picture",
+            get(folder_presentations::picture),
+        )
         .route(
             "/api/v2/library/items/{id}/update",
             post(library::update_item),
@@ -135,6 +188,10 @@ pub fn router(state: ApiState) -> Router {
         )
         .route("/api/v2/visualizers", get(visualizers::visualizers))
         .route(
+            "/api/v2/visualizers/create",
+            post(visualizers::create_visualizer),
+        )
+        .route(
             "/api/v2/visualizers/{folder}/{file}/update",
             post(visualizers::update_visualizer),
         )
@@ -148,6 +205,14 @@ pub fn router(state: ApiState) -> Router {
             post(outputs::update_output_configuration),
         )
         .route("/api/v2/outputs/{output}/state", get(outputs::output_state))
+        .route(
+            "/api/v2/outputs/{output}/preview",
+            get(outputs::output_preview),
+        )
+        .route(
+            "/api/v2/outputs/{output}/layers/{layer}/preview",
+            get(outputs::layer_preview),
+        )
         .route(
             "/api/v2/outputs/{output}/playback/{mode}",
             get(outputs::set_playback_takeover),

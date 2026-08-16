@@ -8,18 +8,23 @@ import type {
 	AudioSettingsView,
 	CatalogView,
 	CreateText,
+	CreateVisualizer,
 	DeleteText,
 	DmxMapView,
+	FolderPresentationView,
+	FolderPresentationsView,
 	Health,
 	ImportsView,
 	LogsView,
 	NetworkView,
 	OutputConfigurationView,
 	OutputView,
+	RunningServerView,
 	ServerLogLevelView,
 	StartImport,
 	TextSlotView,
 	UpdateAudio,
+	UpdateFolderPresentation,
 	UpdateLayer,
 	UpdateLibraryFolder,
 	UpdateLibraryItem,
@@ -52,7 +57,10 @@ export class ApiFailure extends Error {
 
 	/** A desk owns this output, so the web interface may not write to it right now. */
 	get deskOwnsIt(): boolean {
-		return this.code === "dmx-owns-this";
+		return (
+			this.code === "dmx-owns-this" ||
+			this.code === "playback-takeover-required"
+		);
 	}
 }
 
@@ -100,15 +108,107 @@ async function failureOf(response: Response): Promise<ApiFailure> {
 	);
 }
 
+const LAYER_U8_LIMITS = {
+	folder: 255,
+	file: 255,
+	playModeDmx: 255,
+	maskFolder: 255,
+	maskFile: 255,
+	speedMultiplierDmx: 255,
+	playbackBpm: 255,
+	effectSlot: 3,
+} as const;
+
+function boundedIntegerFields<T extends object>(
+	edit: T,
+	limits: Partial<Record<keyof T, number>>,
+): T {
+	const normalized = { ...edit } as unknown as Record<string, unknown>;
+	for (const key of Object.keys(limits) as Array<keyof T & string>) {
+		const value = normalized[key];
+		if (value === undefined) continue;
+		if (typeof value !== "number" || !Number.isFinite(value))
+			throw new ApiFailure(
+				"invalid-u8-control",
+				`${String(key)} must be a finite integer`,
+				400,
+			);
+		normalized[key] = Math.min(
+			limits[key] ?? 255,
+			Math.max(0, Math.round(value)),
+		);
+	}
+	return normalized as T;
+}
+
 export const api = {
 	health: () => request<Health>("/health"),
+	runtime: () => request<RunningServerView>("/runtime"),
 	catalog: () => request<CatalogView>("/catalog"),
+	folderPresentations: () =>
+		request<FolderPresentationsView>("/folder-presentations"),
+	updateFolderPresentation: (folder: number, edit: UpdateFolderPresentation) =>
+		request<FolderPresentationView>(`/folder-presentations/${folder}/update`, {
+			method: "POST",
+			body: JSON.stringify(edit),
+		}),
+	uploadFolderPicture: (folder: number, requestId: string, picture: File) => {
+		const body = new FormData();
+		body.set("file", picture);
+		return request<FolderPresentationView>(
+			`/folder-presentations/${folder}/picture/upload?${new URLSearchParams({ requestId })}`,
+			{ method: "POST", body },
+		);
+	},
+	removeFolderPicture: (folder: number, requestId: string) =>
+		request<FolderPresentationView>(
+			`/folder-presentations/${folder}/picture/remove`,
+			{ method: "POST", body: JSON.stringify({ requestId }) },
+		),
 	visualizers: () => request<VisualizerView[]>("/visualizers"),
+	createVisualizer: (edit: CreateVisualizer) =>
+		request<VisualizerView>("/visualizers/create", {
+			method: "POST",
+			body: JSON.stringify(edit),
+		}),
 	fixtures: () => request<string[]>("/fixtures"),
 	fixtureUrl: (name: string) => `${BASE}/fixtures/${encodeURIComponent(name)}`,
 	outputs: () => request<OutputView[]>("/outputs"),
 	outputState: (output: string) =>
 		request<OutputView>(`/outputs/${output}/state`),
+	outputPreviewUrl: (
+		output: string,
+		revision: number,
+		size?: { width: number; height: number },
+	) => {
+		const query = new URLSearchParams({ revision: String(revision) });
+		if (size) {
+			const width = 640;
+			query.set("width", String(width));
+			query.set(
+				"height",
+				String(Math.max(1, Math.round((width * size.height) / size.width))),
+			);
+		}
+		return `${BASE}/outputs/${output}/preview?${query.toString()}`;
+	},
+	outputLayerPreviewUrl: (
+		output: string,
+		layer: number,
+		revision: number,
+		size?: { width: number; height: number },
+	) => {
+		const query = new URLSearchParams({ revision: String(revision) });
+		if (size) {
+			const width = 320;
+			query.set("width", String(width));
+			query.set(
+				"height",
+				String(Math.max(1, Math.round((width * size.height) / size.width))),
+			);
+		}
+		return `${BASE}/outputs/${output}/layers/${layer}/preview?${query.toString()}`;
+	},
 	setPlaybackTakeover: (output: string, takeOver: boolean) =>
 		request<OutputView>(
 			`/outputs/${output}/playback/${takeOver ? "take-over" : "release"}`,
@@ -132,12 +232,14 @@ export const api = {
 	updateLayer: (output: string, layer: number, update: UpdateLayer) =>
 		request<OutputView>(`/outputs/${output}/layers/${layer}/update`, {
 			method: "POST",
-			body: JSON.stringify(update),
+			body: JSON.stringify(boundedIntegerFields(update, LAYER_U8_LIMITS)),
 		}),
 	updateMaster: (output: string, update: UpdateMaster) =>
 		request<OutputView>(`/outputs/${output}/master/update`, {
 			method: "POST",
-			body: JSON.stringify(update),
+			body: JSON.stringify(
+				boundedIntegerFields(update, { maskFolder: 255, maskFile: 255 }),
+			),
 		}),
 
 	/** An object-intent edit of stored configuration. Its request id makes a retry safe. */
@@ -179,8 +281,10 @@ export const api = {
 		requestId: string,
 		name: string,
 		media: File,
+		replace = false,
 	) => {
 		const query = new URLSearchParams({ requestId, name });
+		if (replace) query.set("replace", "true");
 		const body = new FormData();
 		body.set("file", media);
 		return request<UploadAcceptedView>(

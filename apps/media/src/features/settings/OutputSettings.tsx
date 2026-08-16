@@ -8,16 +8,17 @@ import {
 	CheckboxField,
 	NumberField,
 	SelectField,
-	TextField,
 } from "@tosklight/ui/controls";
 import type { Dispatch, SetStateAction } from "react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useFailureToast } from "../../app/ToastContext";
 import { ApiFailure, api } from "../../shared/api/client";
 import { requestId, useEditing } from "../../shared/api/editing";
 import type {
 	OutputConfigurationView,
 	UpdateOutputConfiguration,
 } from "../../shared/api/generated/media-wire";
+import { SettingsSaveState } from "./SettingsSaveState";
 
 interface ConfigurationResource {
 	data: OutputConfigurationView | undefined;
@@ -64,13 +65,16 @@ export function OutputSettings({
 	outputId,
 	outputName,
 	mode = "all",
+	direct = false,
 }: {
 	outputId: string;
 	outputName: string;
-	mode?: "all" | "picture" | "dmx";
+	mode?: "all" | "picture" | "sound" | "dmx";
+	direct?: boolean;
 }) {
 	const configuration = useOutputConfiguration(outputId);
 	const editing = useEditing(configuration.reload);
+	useFailureToast(editing.failure);
 
 	if (configuration.failure && !configuration.data) {
 		return (
@@ -100,27 +104,31 @@ export function OutputSettings({
 	}
 
 	const output = configuration.data;
+	const pendingRestart = outputPendingRestart(output, mode);
 	return (
 		<article
 			className="media-settings-section"
 			aria-label={`${output.name} ${mode === "dmx" ? "DMX input" : "output"} settings`}
 		>
-			<h3>{output.name} output</h3>
-			{editing.failure && (
-				<p className="media-state is-error" role="alert">
-					{editing.failure.message}{" "}
-					<Button size="compact" onClick={editing.dismiss}>
-						Dismiss
-					</Button>
-				</p>
-			)}
-
-			{editing.editing === output.id ? (
+			<div className="media-settings-section-heading">
+				<h3>{output.name} output</h3>
+				{direct && (
+					<SettingsSaveState
+						busy={editing.busy}
+						failed={editing.failure !== undefined}
+						restartBound
+					/>
+				)}
+			</div>
+			{direct || editing.editing === output.id ? (
 				<OutputEditor
+					key={outputEditorKey(output, mode)}
 					output={output}
 					mode={mode}
 					busy={editing.busy}
 					onCancel={editing.cancel}
+					showActions={!direct}
+					showCancel={!direct}
 					onSave={(edit) =>
 						void editing.save(() =>
 							api.updateOutputConfiguration(output.id, edit),
@@ -138,6 +146,25 @@ export function OutputSettings({
 					</div>
 				</>
 			)}
+			{direct && pendingRestart && (
+				<>
+					<RestartNotice />
+					<div className="media-settings-actions">
+						<Button
+							onClick={() =>
+								void editing.save(() =>
+									api.updateOutputConfiguration(
+										output.id,
+										revertOutputEdit(output, mode),
+									),
+								)
+							}
+						>
+							Revert to current settings
+						</Button>
+					</div>
+				</>
+			)}
 		</article>
 	);
 }
@@ -147,11 +174,11 @@ function OutputFacts({
 	mode,
 }: {
 	output: OutputConfigurationView;
-	mode: "all" | "picture" | "dmx";
+	mode: "all" | "picture" | "sound" | "dmx";
 }) {
 	return (
 		<dl className="media-facts">
-			{mode !== "dmx" && (
+			{mode !== "dmx" && mode !== "sound" && (
 				<>
 					<dt>Target</dt>
 					<dd>{describeTarget(output)}</dd>
@@ -165,7 +192,7 @@ function OutputFacts({
 					<dd>{describeSoundOutput(output)}</dd>
 				</>
 			)}
-			{mode !== "picture" && (
+			{mode !== "picture" && mode !== "sound" && (
 				<>
 					<dt>Personality</dt>
 					<dd>
@@ -215,7 +242,47 @@ function RestartNotice() {
 	);
 }
 
+type ResolutionMode = "monitor" | "720p" | "1080p" | "480p" | "manual";
+
+const FRAME_RATE_OPTIONS = [
+	{ value: "23.976", label: "23.976 fps · NTSC film" },
+	{ value: "24", label: "24 fps" },
+	{ value: "25", label: "25 fps · PAL" },
+	{ value: "29.97", label: "29.97 fps · NTSC" },
+	{ value: "30", label: "30 fps" },
+	{ value: "40", label: "40 fps" },
+	{ value: "44", label: "44 fps" },
+	{ value: "50", label: "50 fps · PAL" },
+	{ value: "59.94", label: "59.94 fps · NTSC" },
+	{ value: "60", label: "60 fps" },
+];
+
+function resolutionDimensions(
+	mode: ResolutionMode,
+	monitor: OutputConfigurationView["availableMonitors"][number] | undefined,
+): { width: number; height: number } | undefined {
+	if (mode === "monitor") return monitor;
+	if (mode === "720p") return { width: 1280, height: 720 };
+	if (mode === "1080p") return { width: 1920, height: 1080 };
+	if (mode === "480p") return { width: 720, height: 480 };
+	return undefined;
+}
+
+function resolutionModeFor(
+	width: number,
+	height: number,
+	monitor: OutputConfigurationView["availableMonitors"][number] | undefined,
+): ResolutionMode {
+	if (monitor?.width === width && monitor.height === height) return "monitor";
+	if (width === 1280 && height === 720) return "720p";
+	if (width === 1920 && height === 1080) return "1080p";
+	if (width === 720 && height === 480) return "480p";
+	return "manual";
+}
+
 function PictureFields({
+	resolutionMode,
+	canTakeFromMonitor,
 	width,
 	height,
 	presentation,
@@ -224,7 +291,10 @@ function PictureFields({
 	setHeight,
 	setPresentation,
 	setFramesPerSecond,
+	setResolutionMode,
 }: {
+	resolutionMode: ResolutionMode;
+	canTakeFromMonitor: boolean;
 	width: number;
 	height: number;
 	presentation: OutputConfigurationView["presentation"];
@@ -235,45 +305,63 @@ function PictureFields({
 		SetStateAction<OutputConfigurationView["presentation"]>
 	>;
 	setFramesPerSecond: Dispatch<SetStateAction<number>>;
+	setResolutionMode: (mode: ResolutionMode) => void;
 }) {
 	return (
 		<fieldset>
 			<legend>Picture</legend>
-			<NumberField
-				label="Width"
-				description="Pixels. This is the render width, including on a full-screen monitor."
-				min={1}
-				step={1}
-				value={String(width)}
-				onChange={(event) => setWidth(Number(event.target.value))}
-			/>
-			<NumberField
-				label="Height"
-				description="Pixels. This is the render height, including on a full-screen monitor."
-				min={1}
-				step={1}
-				value={String(height)}
-				onChange={(event) => setHeight(Number(event.target.value))}
-			/>
 			<SelectField
-				label="Presentation"
+				label="Resolution"
+				value={resolutionMode}
+				options={[
+					{
+						value: "monitor",
+						label: "Take from monitor",
+						disabled: !canTakeFromMonitor,
+					},
+					{ value: "720p", label: "720p · 1280 × 720" },
+					{ value: "1080p", label: "1080p · 1920 × 1080" },
+					{ value: "480p", label: "480p · 720 × 480" },
+					{ value: "manual", label: "Manual" },
+				]}
+				onChange={setResolutionMode}
+			/>
+			{resolutionMode === "manual" && (
+				<>
+					<NumberField
+						label="Width"
+						description="Pixels. This is the render width, including on a full-screen monitor."
+						min={1}
+						step={1}
+						value={String(width)}
+						onChange={(event) => setWidth(Number(event.target.value))}
+					/>
+					<NumberField
+						label="Height"
+						description="Pixels. This is the render height, including on a full-screen monitor."
+						min={1}
+						step={1}
+						value={String(height)}
+						onChange={(event) => setHeight(Number(event.target.value))}
+					/>
+				</>
+			)}
+			<SelectField
+				label="Frame rate"
 				value={presentation}
 				options={[
 					{ value: "display-synchronized", label: "Display synchronized" },
 					{ value: "fixed-fps", label: "Fixed frame rate" },
-					{ value: "unlocked", label: "Unlocked (diagnostic)" },
+					{ value: "unlocked", label: "Unlocked" },
 				]}
 				onChange={setPresentation}
 			/>
 			{presentation === "fixed-fps" && (
-				<NumberField
-					label="Frames per second"
-					description="1 to 65535. Display synchronization is preferable for a monitor."
-					min={1}
-					max={65_535}
-					step={1}
+				<SelectField
+					label="Fixed frame rate"
 					value={String(framesPerSecond)}
-					onChange={(event) => setFramesPerSecond(Number(event.target.value))}
+					options={FRAME_RATE_OPTIONS}
+					onChange={(value) => setFramesPerSecond(Number(value))}
 				/>
 			)}
 		</fieldset>
@@ -347,11 +435,13 @@ function DmxInputFields({
 function SoundOutputFields({
 	kind,
 	name,
+	availableDevices,
 	setKind,
 	setName,
 }: {
 	kind: OutputConfigurationView["soundOutputKind"];
 	name: string;
+	availableDevices: string[];
 	setKind: Dispatch<SetStateAction<OutputConfigurationView["soundOutputKind"]>>;
 	setName: Dispatch<SetStateAction<string>>;
 }) {
@@ -366,14 +456,19 @@ function SoundOutputFields({
 					{ value: "system-default", label: "System default" },
 					{ value: "device", label: "Named device" },
 				]}
-				onChange={setKind}
+				onChange={(next) => {
+					setKind(next);
+					if (next === "device" && !name && availableDevices[0]) {
+						setName(availableDevices[0]);
+					}
+				}}
 			/>
 			{kind === "device" && (
-				<TextField
-					label="Device name"
-					description="Use the exact output-device name reported by this machine."
+				<SelectField
+					label="Device"
 					value={name}
-					onChange={(event) => setName(event.target.value)}
+					options={deviceOptions(availableDevices, name)}
+					onChange={setName}
 				/>
 			)}
 		</fieldset>
@@ -386,12 +481,16 @@ export function OutputEditor({
 	onSave,
 	onCancel,
 	mode = "all",
+	showActions = true,
+	showCancel = true,
 }: {
 	output: OutputConfigurationView;
 	busy: boolean;
 	onSave: (edit: UpdateOutputConfiguration) => void;
 	onCancel: () => void;
-	mode?: "all" | "picture" | "dmx";
+	mode?: "all" | "picture" | "sound" | "dmx";
+	showActions?: boolean;
+	showCancel?: boolean;
 }) {
 	const [targetKind, setTargetKind] = useState(output.targetKind);
 	const [monitorBy, setMonitorBy] = useState(output.monitorBy ?? "index");
@@ -399,6 +498,10 @@ export function OutputEditor({
 	const [fullscreen, setFullscreen] = useState(output.fullscreen);
 	const [width, setWidth] = useState(output.width);
 	const [height, setHeight] = useState(output.height);
+	const selectedMonitor = resolveMonitor(output, monitorBy, monitorValue);
+	const [resolutionMode, setResolutionModeState] = useState<ResolutionMode>(
+		() => resolutionModeFor(output.width, output.height, selectedMonitor),
+	);
 	const [presentation, setPresentation] = useState(output.presentation);
 	const [framesPerSecond, setFramesPerSecond] = useState(
 		output.framesPerSecond ?? 60,
@@ -413,34 +516,82 @@ export function OutputEditor({
 	const [protocol, setProtocol] = useState(output.protocol);
 	const [universe, setUniverse] = useState(output.universe);
 	const [startAddress, setStartAddress] = useState(output.startAddress);
+	const setResolutionMode = (mode: ResolutionMode) => {
+		setResolutionModeState(mode);
+		const dimensions = resolutionDimensions(mode, selectedMonitor);
+		if (dimensions) {
+			setWidth(dimensions.width);
+			setHeight(dimensions.height);
+		}
+	};
+	const form = useRef<HTMLFormElement>(null);
+	const mounted = useRef(false);
+	useEffect(() => {
+		if (showActions) return;
+		if (!mounted.current) {
+			mounted.current = true;
+			return;
+		}
+		const timer = window.setTimeout(() => form.current?.requestSubmit(), 350);
+		return () => window.clearTimeout(timer);
+	}, [
+		showActions,
+		targetKind,
+		monitorBy,
+		monitorValue,
+		fullscreen,
+		width,
+		height,
+		presentation,
+		framesPerSecond,
+		soundOutputKind,
+		soundOutputName,
+		personality,
+		protocol,
+		universe,
+		startAddress,
+	]);
 
 	return (
 		<form
+			ref={form}
+			data-media-settings-form={mode}
 			className="media-settings-form"
 			onSubmit={(event) => {
 				event.preventDefault();
-				onSave({
-					requestId: requestId(),
-					targetKind,
-					...(targetKind === "monitor"
-						? { monitorBy, monitorValue: monitorValue.trim(), fullscreen }
-						: {}),
-					width,
-					height,
-					presentation,
-					...(presentation === "fixed-fps" ? { framesPerSecond } : {}),
-					soundOutputKind,
-					...(soundOutputKind === "device"
-						? { soundOutputName: soundOutputName.trim() }
-						: {}),
-					personality,
-					protocol,
-					universe,
-					startAddress,
-				});
+				const edit: UpdateOutputConfiguration = { requestId: requestId() };
+				if (mode === "all" || mode === "picture") {
+					Object.assign(edit, {
+						targetKind,
+						...(targetKind === "monitor"
+							? { monitorBy, monitorValue: monitorValue.trim(), fullscreen }
+							: {}),
+						width,
+						height,
+						presentation,
+						...(presentation === "fixed-fps" ? { framesPerSecond } : {}),
+					});
+				}
+				if (mode === "all" || mode === "sound") {
+					Object.assign(edit, {
+						soundOutputKind,
+						...(soundOutputKind === "device"
+							? { soundOutputName: soundOutputName.trim() }
+							: {}),
+					});
+				}
+				if (mode === "all" || mode === "dmx") {
+					Object.assign(edit, {
+						personality,
+						protocol,
+						universe,
+						startAddress,
+					});
+				}
+				onSave(edit);
 			}}
 		>
-			{mode !== "dmx" && (
+			{mode !== "dmx" && mode !== "sound" && (
 				<fieldset>
 					<legend>Output target</legend>
 					<SelectField
@@ -455,31 +606,23 @@ export function OutputEditor({
 					{targetKind === "monitor" && (
 						<>
 							<SelectField
-								label="Find monitor by"
-								value={monitorBy}
-								options={[
-									{ value: "index", label: "Monitor number" },
-									{ value: "name", label: "Monitor name" },
-								]}
-								onChange={setMonitorBy}
+								label="Monitor"
+								value={`${monitorBy}:${monitorValue}`}
+								options={monitorOptions(output, monitorBy, monitorValue)}
+								onChange={(selection) => {
+									const [by, ...value] = selection.split(":");
+									const nextValue = value.join(":");
+									setMonitorBy(by);
+									setMonitorValue(nextValue);
+									if (resolutionMode === "monitor") {
+										const monitor = resolveMonitor(output, by, nextValue);
+										if (monitor) {
+											setWidth(monitor.width);
+											setHeight(monitor.height);
+										}
+									}
+								}}
 							/>
-							{monitorBy === "index" ? (
-								<NumberField
-									label="Monitor number"
-									description="The zero-based number reported by this machine. An unavailable monitor is an error, never a fallback to another display."
-									min={0}
-									step={1}
-									value={monitorValue}
-									onChange={(event) => setMonitorValue(event.target.value)}
-								/>
-							) : (
-								<TextField
-									label="Monitor name"
-									description="Exactly as this machine reports it. An unavailable monitor is an error, never a fallback to another display."
-									value={monitorValue}
-									onChange={(event) => setMonitorValue(event.target.value)}
-								/>
-							)}
 							<CheckboxField
 								label="Full-screen"
 								stateLabel="Use the entire monitor"
@@ -491,30 +634,35 @@ export function OutputEditor({
 				</fieldset>
 			)}
 
-			{mode !== "dmx" && (
-				<>
-					<PictureFields
-						{...{
-							width,
-							height,
-							presentation,
-							framesPerSecond,
-							setWidth,
-							setHeight,
-							setPresentation,
-							setFramesPerSecond,
-						}}
-					/>
-					<SoundOutputFields
-						kind={soundOutputKind}
-						name={soundOutputName}
-						setKind={setSoundOutputKind}
-						setName={setSoundOutputName}
-					/>
-				</>
+			{mode !== "dmx" && mode !== "sound" && (
+				<PictureFields
+					{...{
+						resolutionMode,
+						canTakeFromMonitor: selectedMonitor !== undefined,
+						width,
+						height,
+						presentation,
+						framesPerSecond,
+						setWidth,
+						setHeight,
+						setPresentation,
+						setFramesPerSecond,
+						setResolutionMode,
+					}}
+				/>
 			)}
 
-			{mode !== "picture" && (
+			{(mode === "all" || mode === "sound") && (
+				<SoundOutputFields
+					kind={soundOutputKind}
+					name={soundOutputName}
+					availableDevices={output.availableSoundOutputs}
+					setKind={setSoundOutputKind}
+					setName={setSoundOutputName}
+				/>
+			)}
+
+			{mode !== "picture" && mode !== "sound" && (
 				<DmxInputFields
 					{...{
 						personality,
@@ -529,14 +677,124 @@ export function OutputEditor({
 				/>
 			)}
 
-			{output.takesEffectOnRestart && <RestartNotice />}
-
-			<div className="media-settings-actions">
-				<Button type="submit" variant="primary" loading={busy}>
-					{mode === "dmx" ? "Save DMX input" : "Save output settings"}
-				</Button>
-				<Button onClick={onCancel}>Cancel</Button>
-			</div>
+			{showActions && (
+				<div className="media-settings-actions">
+					<Button type="submit" variant="primary" loading={busy}>
+						{mode === "dmx"
+							? "Save DMX input"
+							: mode === "sound"
+								? "Save sound output"
+								: "Save picture output"}
+					</Button>
+					{showCancel && <Button onClick={onCancel}>Cancel</Button>}
+				</div>
+			)}
 		</form>
 	);
+}
+
+function outputPendingRestart(
+	output: OutputConfigurationView,
+	mode: "all" | "picture" | "sound" | "dmx",
+): boolean {
+	if (mode === "picture") return output.picturePendingRestart;
+	if (mode === "sound") return output.soundPendingRestart;
+	if (mode === "dmx") return output.dmxPendingRestart;
+	return (
+		output.picturePendingRestart ||
+		output.soundPendingRestart ||
+		output.dmxPendingRestart
+	);
+}
+
+function revertOutputEdit(
+	output: OutputConfigurationView,
+	mode: "all" | "picture" | "sound" | "dmx",
+): UpdateOutputConfiguration {
+	const active = output.active;
+	const edit: UpdateOutputConfiguration = { requestId: requestId() };
+	if (mode === "all" || mode === "picture") {
+		Object.assign(edit, {
+			targetKind: active.targetKind,
+			...(active.targetKind === "monitor"
+				? {
+						monitorBy: active.monitorBy,
+						monitorValue: active.monitorValue,
+						fullscreen: active.fullscreen,
+					}
+				: {}),
+			width: active.width,
+			height: active.height,
+			presentation: active.presentation,
+			...(active.presentation === "fixed-fps"
+				? { framesPerSecond: active.framesPerSecond }
+				: {}),
+		});
+	}
+	if (mode === "all" || mode === "sound") {
+		Object.assign(edit, {
+			soundOutputKind: active.soundOutputKind,
+			...(active.soundOutputKind === "device"
+				? { soundOutputName: active.soundOutputName }
+				: {}),
+		});
+	}
+	if (mode === "all" || mode === "dmx") {
+		Object.assign(edit, {
+			personality: active.personality,
+			protocol: active.protocol,
+			universe: active.universe,
+			startAddress: active.startAddress,
+		});
+	}
+	return edit;
+}
+
+function outputEditorKey(
+	output: OutputConfigurationView,
+	mode: "all" | "picture" | "sound" | "dmx",
+): string {
+	return `${mode}:${output.targetKind}:${output.monitorBy}:${output.monitorValue}:${output.fullscreen}:${output.width}:${output.height}:${output.presentation}:${output.framesPerSecond}:${output.soundOutputKind}:${output.soundOutputName}:${output.personality}:${output.protocol}:${output.universe}:${output.startAddress}`;
+}
+
+function monitorOptions(
+	output: OutputConfigurationView,
+	by: string,
+	value: string,
+) {
+	const configured = `${by}:${value}`;
+	const options = output.availableMonitors.map((monitor) => ({
+		value: `index:${monitor.index}`,
+		label: `Display ${monitor.index + 1} · ${monitor.name} · ${monitor.width} × ${monitor.height}`,
+	}));
+	if (!options.some((option) => option.value === configured)) {
+		options.unshift({
+			value: configured,
+			label: `Configured monitor · ${value}`,
+		});
+	}
+	return options;
+}
+
+function resolveMonitor(
+	output: OutputConfigurationView,
+	by: string,
+	value: string,
+) {
+	if (by === "index") {
+		const index = Number(value);
+		return output.availableMonitors.find((monitor) => monitor.index === index);
+	}
+	if (by === "name") {
+		return output.availableMonitors.find((monitor) => monitor.name === value);
+	}
+	return undefined;
+}
+
+function deviceOptions(devices: string[], selected: string) {
+	const options = devices.map((device) => ({ value: device, label: device }));
+	if (selected && !devices.includes(selected)) {
+		options.unshift({ value: selected, label: `${selected} · unavailable` });
+	}
+	return options;
 }

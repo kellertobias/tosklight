@@ -227,6 +227,34 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_clock_format_edit_is_published_and_persisted_atomically() {
+        let bench = bench();
+        let (status, body) = send(
+            &bench.router,
+            post(
+                "/api/v2/text/200/1/update".into(),
+                r#"{"requestId":"format","format":{"clockPattern":"hh:mm","countdownPattern":"mm:ss","separator":".","utcOffsetMinutes":60,"afterZero":"count-up","rollover":true}}"#,
+            ),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["format"]["clockPattern"], "hh:mm");
+        assert_eq!(body["format"]["separator"], ".");
+        assert_eq!(body["format"]["utcOffsetMinutes"], 60);
+
+        let stored = bench.stored.lock().unwrap();
+        let saved = stored[0]
+            .text
+            .resolve(media_domain::MediaAddress::new(200, 1))
+            .expect("still there");
+        assert_eq!(saved.entry.format.clock.separator, ".");
+        assert_eq!(saved.entry.format.clock.utc_offset_minutes, 60);
+        assert_eq!(saved.entry.format.countdown.separator, ".");
+        assert!(saved.entry.format.countdown.rollover);
+    }
+
+    #[tokio::test]
     async fn an_unusable_edit_is_refused_and_leaves_the_slot_alone() {
         let bench = bench();
         let (status, body) = send(

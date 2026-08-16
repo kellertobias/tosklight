@@ -21,6 +21,10 @@ use crate::text_sources::TextSources;
 
 /// Where the mask sessions keep the output-level mask, above every layer index.
 const MASTER_MASK_SLOT: usize = media_render::MAX_LAYERS;
+/// Generated mask targets live above every ordinary layer target. They cannot share an index with
+/// the content renderer: a Text/VIS mask on a Text/VIS layer is a second independently updating
+/// source, not permission to overwrite the layer's own texture.
+const GENERATED_MASK_SLOT_BASE: usize = MASTER_MASK_SLOT + 1;
 
 /// Which texture a prepared layer draws from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -147,11 +151,11 @@ impl LayerPipeline {
             prepared.layers.push(PreparedLayer {
                 index,
                 source,
-                mask: self.mask(index, layer, catalog, loader, now),
+                mask: self.mask(index, layer, frame, loader),
             });
         }
 
-        prepared.master_mask = self.master_mask(output, catalog, loader, now);
+        prepared.master_mask = self.master_mask(output, frame, loader);
         prepared
     }
 
@@ -207,12 +211,32 @@ impl LayerPipeline {
         prepared: &mut Prepared,
     ) -> Option<Slot> {
         let resolved = self.media.reconcile(index, layer, catalog, loader, now)?;
-        prepared.statuses.push((index, resolved.status));
-
-        let frame = resolved.frame?;
-        self.uploads
-            .prepare(index, resolved.asset, frame, loader.cache_mut())
-            .then_some(Slot::Media(index))
+        let Some(frame) = resolved.frame else {
+            prepared.statuses.push((index, resolved.status));
+            return None;
+        };
+        match self.uploads.prepare(
+            index,
+            resolved.asset,
+            frame,
+            Size::new(resolved.size.0, resolved.size.1),
+            loader.cache_mut(),
+        ) {
+            Ok(true) => {
+                prepared.statuses.push((index, resolved.status));
+                Some(Slot::Media(index))
+            }
+            Ok(false) => {
+                prepared.statuses.push((index, resolved.status));
+                None
+            }
+            Err(failure) => {
+                prepared
+                    .statuses
+                    .push((index, media_domain::SourceStatus::Failed { failure }));
+                None
+            }
+        }
     }
 
     fn generated(
@@ -293,34 +317,30 @@ impl LayerPipeline {
         &mut self,
         index: usize,
         layer: &LayerState,
-        catalog: &CatalogSnapshot,
+        frame: FrameContext<'_>,
         loader: &mut ClipLoader,
-        now: Timestamp,
     ) -> Option<Slot> {
         self.load_mask(
             index,
             layer.mask.address,
             layer.mask.is_active(),
-            catalog,
+            frame,
             loader,
-            now,
         )
     }
 
     fn master_mask(
         &mut self,
         output: &OutputState,
-        catalog: &CatalogSnapshot,
+        frame: FrameContext<'_>,
         loader: &mut ClipLoader,
-        now: Timestamp,
     ) -> Option<Slot> {
         self.load_mask(
             MASTER_MASK_SLOT,
             output.master.mask,
             output.master.has_mask(),
-            catalog,
+            frame,
             loader,
-            now,
         )
     }
 
@@ -333,12 +353,73 @@ impl LayerPipeline {
         slot: usize,
         address: MediaAddress,
         active: bool,
-        catalog: &CatalogSnapshot,
+        frame: FrameContext<'_>,
         loader: &mut ClipLoader,
-        now: Timestamp,
     ) -> Option<Slot> {
+        let class = address.classify();
+        if !active || !matches!(class, AddressClass::Library) {
+            let selection = LayerState::default();
+            self.masks
+                .reconcile(slot, &selection, frame.catalog, loader, frame.now);
+        }
+        if !active {
+            return None;
+        }
+
+        let generated_slot = GENERATED_MASK_SLOT_BASE + slot;
+        match class {
+            AddressClass::GeneratedVisualizer => {
+                let Some(visualizer) = frame.configuration.visualizers.resolve(address) else {
+                    tracing::warn!(
+                        %address,
+                        "a visualizer mask points to an unassigned generated address"
+                    );
+                    return None;
+                };
+                let visualizer_frame = VisualizerFrame {
+                    seconds: frame.seconds,
+                    analysis: frame.analysis,
+                    beat: frame.beat,
+                    bpm: frame.bpm,
+                    beat_phase: frame.beat_phase,
+                };
+                return self
+                    .visualizers
+                    .render(
+                        generated_slot,
+                        visualizer.kind,
+                        &visualizer.parameters,
+                        &visualizer_frame,
+                    )
+                    .map(|_| Slot::Generated(generated_slot))
+                    .map_err(|error| {
+                        tracing::warn!(%address, %error, "a visualizer mask could not be drawn");
+                    })
+                    .ok();
+            }
+            AddressClass::TextBank => {
+                let selection = LayerState {
+                    address,
+                    source_status: media_domain::SourceStatus::Ready,
+                    play_mode: PlayMode::Loop,
+                    ..Default::default()
+                };
+                return self
+                    .text
+                    .prepare(generated_slot, &selection, frame)
+                    .map(|drawn| drawn.then_some(Slot::Text(generated_slot)))
+                    .map_err(|failure| {
+                        tracing::warn!(%address, ?failure, "a text mask could not be drawn");
+                    })
+                    .ok()
+                    .flatten();
+            }
+            AddressClass::Blank => return None,
+            AddressClass::Library => {}
+        }
+
         let selection = LayerState {
-            address: if active { address } else { MediaAddress::BLANK },
+            address,
             // A mask is a still or a loop; it has no transport of its own to be stopped by the
             // layer's play mode.
             play_mode: PlayMode::Loop,
@@ -346,10 +427,17 @@ impl LayerPipeline {
         };
         let resolved = self
             .masks
-            .reconcile(slot, &selection, catalog, loader, now)?;
+            .reconcile(slot, &selection, frame.catalog, loader, frame.now)?;
         let frame = resolved.frame?;
         self.mask_uploads
-            .prepare(slot, resolved.asset, frame, loader.cache_mut())
+            .prepare(
+                slot,
+                resolved.asset,
+                frame,
+                Size::new(resolved.size.0, resolved.size.1),
+                loader.cache_mut(),
+            )
+            .unwrap_or(false)
             .then_some(Slot::Mask(slot))
     }
 }
@@ -366,6 +454,14 @@ fn visualizer_parameters<'a>(
 
 #[cfg(test)]
 mod tests {
+    use media_domain::audio::{Analysis, BANDS, WAVEFORM_POINTS};
+    use media_domain::personality::LayerPersonality;
+    use media_domain::{
+        AnalogTvParameters, EffectSlot, OutputId, OutputState, PresentationMode, ScalingMode,
+        SourceStatus, Tint,
+    };
+    use media_render::OutputRenderer;
+
     use super::*;
 
     // Masks and layers share one index space in the upload maps, so the output-level mask must sit
@@ -393,5 +489,253 @@ mod tests {
         assert_ne!(Slot::Media(0), Slot::Mask(0));
         assert_ne!(Slot::Media(0), Slot::Generated(0));
         assert_ne!(Slot::Mask(0), Slot::Generated(0));
+        assert_ne!(
+            Slot::Generated(0),
+            Slot::Generated(GENERATED_MASK_SLOT_BASE),
+            "a generated layer and its generated mask keep independent targets"
+        );
+    }
+
+    fn driven_analysis() -> Analysis {
+        Analysis {
+            waveform: (0..WAVEFORM_POINTS)
+                .map(|index| (index as f32 * 0.05).sin())
+                .collect(),
+            spectrum: (0..BANDS)
+                .map(|index| 0.9 - index as f32 / BANDS as f32 * 0.5)
+                .collect(),
+            bass: 0.9,
+            mid: 0.8,
+            treble: 0.7,
+            energy: 0.85,
+            peak: 1.0,
+        }
+    }
+
+    fn changed_pixels(first: &[u8], second: &[u8]) -> usize {
+        first
+            .chunks_exact(4)
+            .zip(second.chunks_exact(4))
+            .filter(|(left, right)| left != right)
+            .count()
+    }
+
+    fn assert_generated_controls(address: MediaAddress, label: &str) {
+        let size = Size::new(64, 64);
+        let gpu = Gpu::off_screen().expect("an adapter is available");
+        let output_id = OutputId::new();
+        let mut pipeline = LayerPipeline::new(
+            &gpu,
+            output_id,
+            media_library::LibraryStorage::new(std::path::PathBuf::from("unused")),
+            size,
+        );
+        let configuration = MediaConfiguration::default();
+        let catalog = CatalogSnapshot::default();
+        let analysis = driven_analysis();
+        let mut loader = ClipLoader::new(1024 * 1024);
+        let mut output = OutputState::new(output_id, LayerPersonality::TwoLayers);
+        output.layers[0] = LayerState {
+            address,
+            source_status: SourceStatus::Ready,
+            scaling_mode: ScalingMode::Stretch,
+            ..Default::default()
+        };
+        let context = FrameContext {
+            catalog: &catalog,
+            configuration: &configuration,
+            analysis: &analysis,
+            now_unix_millis: 1_700_000_000_000,
+            beat: 1.0,
+            bpm: 128.0,
+            beat_phase: 0.25,
+            seconds: 1.25,
+            now: Timestamp::from_millis(1_250),
+        };
+        let prepared = pipeline.prepare(&output, context, &mut loader);
+        let prepared_layer = prepared.layers.first().unwrap_or_else(|| {
+            panic!(
+                "{label} produced no compositor source: {:?}",
+                prepared.statuses
+            )
+        });
+        let source = pipeline
+            .texture(prepared_layer.source)
+            .unwrap_or_else(|| panic!("{label} produced no texture"));
+        let black_mask =
+            SourceTexture::solid(&gpu, Size::new(1, 1), [0, 0, 0, 255]).expect("a mask uploads");
+        let mut renderer = OutputRenderer::off_screen(
+            &gpu,
+            output_id,
+            size,
+            PresentationMode::DisplaySynchronized,
+        )
+        .expect("an output opens");
+        let mut render = |state: &LayerState, mask: Option<&SourceTexture>| {
+            renderer.present(
+                &[LayerDraw {
+                    state,
+                    source,
+                    mask,
+                }],
+                &media_domain::MasterState::default(),
+                None,
+                Timestamp::from_millis(1_250),
+            );
+            renderer.read_image()
+        };
+
+        let baseline = render(&output.layers[0], None);
+        assert!(
+            baseline
+                .chunks_exact(4)
+                .any(|pixel| pixel[..3] != [0, 0, 0]),
+            "{label} baseline is empty"
+        );
+
+        let framed = LayerState {
+            scale_x: 0.35,
+            position_x: 0.6,
+            ..output.layers[0].clone()
+        };
+        assert!(
+            changed_pixels(&baseline, &render(&framed, None)) > 100,
+            "Frame controls do not affect {label}"
+        );
+
+        let coloured = LayerState {
+            tint: Tint::new(0.0, 0.0, 0.0),
+            grayscale: 1.0,
+            ..output.layers[0].clone()
+        };
+        assert!(
+            changed_pixels(&baseline, &render(&coloured, None)) > 100,
+            "Colour controls do not affect {label}"
+        );
+
+        let dimmed = LayerState {
+            dimmer: 0.0,
+            ..output.layers[0].clone()
+        };
+        assert!(
+            changed_pixels(&baseline, &render(&dimmed, None)) > 100,
+            "Dimmer does not affect {label}"
+        );
+
+        let masked = LayerState {
+            mask: media_domain::MaskState {
+                address: MediaAddress::new(1, 1),
+                opacity: 1.0,
+                ..Default::default()
+            },
+            ..output.layers[0].clone()
+        };
+        assert!(
+            changed_pixels(&baseline, &render(&masked, Some(&black_mask))) > 100,
+            "Mask controls do not affect {label}"
+        );
+
+        let mut effect = EffectSlot::analog_tv();
+        effect.parameters = AnalogTvParameters {
+            curvature: 1.0,
+            distortion: 0.0,
+            image_grain: 0.0,
+            glitching: 0.0,
+        }
+        .as_array()
+        .to_vec();
+        let mut effects: [EffectSlot; 4] = Default::default();
+        effects[0] = effect;
+        let effected = LayerState {
+            effects,
+            ..output.layers[0].clone()
+        };
+        assert!(
+            changed_pixels(&baseline, &render(&effected, None)) > 100,
+            "Effects do not affect {label}"
+        );
+    }
+
+    #[test]
+    fn text_and_visualizers_share_the_complete_layer_compositor() {
+        assert_generated_controls(MediaAddress::new(200, 1), "Text");
+        assert_generated_controls(MediaAddress::new(250, 1), "Visualizer");
+    }
+
+    #[test]
+    fn text_and_visualizers_resolve_as_independent_layer_and_master_masks() {
+        let size = Size::new(64, 64);
+        let gpu = Gpu::off_screen().expect("an adapter is available");
+        let output_id = OutputId::new();
+        let mut pipeline = LayerPipeline::new(
+            &gpu,
+            output_id,
+            media_library::LibraryStorage::new(std::path::PathBuf::from("unused")),
+            size,
+        );
+        let configuration = MediaConfiguration::default();
+        let catalog = CatalogSnapshot::default();
+        let analysis = driven_analysis();
+        let mut loader = ClipLoader::new(1024 * 1024);
+        let context = FrameContext {
+            catalog: &catalog,
+            configuration: &configuration,
+            analysis: &analysis,
+            now_unix_millis: 1_700_000_000_000,
+            beat: 1.0,
+            bpm: 128.0,
+            beat_phase: 0.25,
+            seconds: 1.25,
+            now: Timestamp::from_millis(1_250),
+        };
+        let mut output = OutputState::new(output_id, LayerPersonality::TwoLayers);
+        output.layers[0] = LayerState {
+            address: MediaAddress::new(250, 1),
+            source_status: SourceStatus::Ready,
+            scaling_mode: ScalingMode::Stretch,
+            mask: media_domain::MaskState {
+                address: MediaAddress::new(200, 1),
+                opacity: 1.0,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let prepared = pipeline.prepare(&output, context, &mut loader);
+        let layer = &prepared.layers[0];
+        assert!(matches!(layer.source, Slot::Generated(0)));
+        assert!(matches!(layer.mask, Some(Slot::Text(index)) if index >= GENERATED_MASK_SLOT_BASE));
+        assert!(layer.mask.and_then(|slot| pipeline.texture(slot)).is_some());
+
+        output.layers[0].address = MediaAddress::new(200, 1);
+        output.layers[0].mask.address = MediaAddress::new(250, 1);
+        output.master.mask = MediaAddress::new(250, 1);
+        let prepared = pipeline.prepare(&output, context, &mut loader);
+        let layer = &prepared.layers[0];
+        assert!(matches!(layer.source, Slot::Text(0)));
+        assert!(
+            matches!(layer.mask, Some(Slot::Generated(index)) if index >= GENERATED_MASK_SLOT_BASE)
+        );
+        assert!(
+            matches!(prepared.master_mask, Some(Slot::Generated(index)) if index > GENERATED_MASK_SLOT_BASE)
+        );
+        assert!(
+            prepared
+                .master_mask
+                .and_then(|slot| pipeline.texture(slot))
+                .is_some()
+        );
+
+        output.master.mask = MediaAddress::new(200, 1);
+        let prepared = pipeline.prepare(&output, context, &mut loader);
+        assert!(
+            matches!(prepared.master_mask, Some(Slot::Text(index)) if index > GENERATED_MASK_SLOT_BASE)
+        );
+        assert!(
+            prepared
+                .master_mask
+                .and_then(|slot| pipeline.texture(slot))
+                .is_some()
+        );
     }
 }

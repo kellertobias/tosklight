@@ -2,11 +2,12 @@
 //!
 //! Selecting media and setting a dimmer are live control, not edits: they carry no request
 //! identity, because a caller that sent a selection twice meant it twice. What protects them is
-//! ownership — while a desk is driving an output, the web interface reads but does not write.
+//! ownership — the web interface reads but does not write until it explicitly takes over the
+//! selected output.
 
 use std::sync::Arc;
 
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use media_application::MediaConfiguration;
@@ -18,9 +19,9 @@ use media_domain::{
     BeatScaleTurnParameters, BeatScanEdge, BeatScanParameters, BlurParameters, Command,
     CommandKind, CommandSource, DIGITAL_TV_EFFECT, DRAWN_IMAGE_EFFECT, DrawnImageParameters,
     EffectSlot, FEEDBACK_EFFECT, FeedbackMotion, FeedbackParameters, FlipMirror,
-    KALEIDOSCOPE_EFFECT, KaleidoscopeParameters, LayerControls, MasterControls, MediaAddress,
-    MediaState, OPACITY_CYCLE_EFFECT, OpacityCycleInterval, OutputId, RASTERIZE_EFFECT,
-    RasterizeMode, RasterizeParameters, ScalingMode, Timestamp, Tint, apply,
+    KALEIDOSCOPE_EFFECT, KaleidoscopeParameters, LayerControls, MasterControls, MasterShaper,
+    MediaAddress, MediaState, OPACITY_CYCLE_EFFECT, OpacityCycleInterval, OutputId,
+    RASTERIZE_EFFECT, RasterizeMode, RasterizeParameters, ScalingMode, Timestamp, Tint, apply,
 };
 
 use crate::error::ApiError;
@@ -52,6 +53,85 @@ pub(super) async fn output_state(
     Ok(axum::Json(view_of(&state, found, (state.now)())).into_response())
 }
 
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct PreviewQuery {
+    width: Option<u16>,
+    height: Option<u16>,
+}
+
+/// Returns the latest composite frame from the same demand-driven source advertised over CITP.
+/// A renderer seeds a valid black frame before the first GPU readback. The route still owns a
+/// valid fallback for an API-only process, so an `<img>` can never receive an empty response.
+pub(super) async fn output_preview(
+    State(state): State<ApiState>,
+    Path(output): Path<String>,
+    Query(query): Query<PreviewQuery>,
+) -> Result<Response, ApiError> {
+    let id = parse_output(&output)?;
+    if state.state.load().output(id).is_none() {
+        return Err(unknown_output(id));
+    }
+    let requested_size = query.width.zip(query.height);
+    let frame = (state.preview)(id, None, requested_size)
+        .unwrap_or_else(|| fallback_preview(requested_size, false));
+
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CACHE_CONTROL, "no-store")
+        .header(header::CONTENT_TYPE, frame.content_type)
+        .header("x-tosklight-preview-sequence", frame.sequence)
+        .header("x-tosklight-preview-width", frame.width)
+        .header("x-tosklight-preview-height", frame.height)
+        .body(axum::body::Body::from(frame.bytes))
+        .expect("a preview response has valid static headers"))
+}
+
+/// Returns the latest isolated live frame for one layer.
+pub(super) async fn layer_preview(
+    State(state): State<ApiState>,
+    Path((output, layer)): Path<(String, usize)>,
+    Query(query): Query<PreviewQuery>,
+) -> Result<Response, ApiError> {
+    let id = parse_output(&output)?;
+    let media = state.state.load();
+    let found = media.output(id).ok_or_else(|| unknown_output(id))?;
+    if found.layer(layer).is_none() {
+        return Err(ApiError::not_found(
+            "layer-not-found",
+            format!("output {id} has no layer {}", layer + 1),
+        ));
+    }
+    let requested_size = query.width.zip(query.height);
+    let frame = (state.preview)(id, Some(layer), requested_size)
+        .unwrap_or_else(|| fallback_preview(requested_size, true));
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CACHE_CONTROL, "no-store")
+        .header(header::CONTENT_TYPE, frame.content_type)
+        .header("x-tosklight-preview-sequence", frame.sequence)
+        .header("x-tosklight-preview-width", frame.width)
+        .header("x-tosklight-preview-height", frame.height)
+        .body(axum::body::Body::from(frame.bytes))
+        .expect("a preview response has valid static headers"))
+}
+
+fn fallback_preview(size: Option<(u16, u16)>, transparent: bool) -> crate::OutputPreviewFrame {
+    let (width, height) = size.unwrap_or((320, 180));
+    let fill = if transparent { "none" } else { "black" };
+    let bytes = format!(
+        r#"<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}"><rect width="100%" height="100%" fill="{fill}"/></svg>"#
+    )
+    .into_bytes();
+    crate::OutputPreviewFrame {
+        sequence: 0,
+        width,
+        height,
+        content_type: "image/svg+xml",
+        bytes,
+    }
+}
+
 /// The stored settings that define one output.
 ///
 /// This is separate from `/state`: state is what the output is drawing now, while configuration
@@ -63,7 +143,14 @@ pub(super) async fn output_configuration(
     let id = parse_output(&output)?;
     let configuration = state.configuration.load();
     let found = configuration.output(id).ok_or_else(|| unknown_output(id))?;
-    Ok(axum::Json(OutputConfigurationView::of(found)).into_response())
+    let active = state.active_configuration.output(id).unwrap_or(found);
+    Ok(axum::Json(OutputConfigurationView::of(
+        found,
+        active,
+        (state.diagnostics.monitors)(),
+        (state.diagnostics.output_devices)(),
+    ))
+    .into_response())
 }
 
 /// The canonical, absolute DMX map for one configured output.
@@ -101,7 +188,12 @@ pub(super) async fn update_output_configuration(
     *found = body.applied(found).map_err(|error| {
         ApiError::bad_request("output-configuration-invalid", error.to_string())
     })?;
-    let view = OutputConfigurationView::of(found);
+    let view = OutputConfigurationView::of(
+        found,
+        state.active_configuration.output(id).unwrap_or(found),
+        (state.diagnostics.monitors)(),
+        (state.diagnostics.output_devices)(),
+    );
 
     // Loading what we would write exercises the one authoritative full-document validator. In
     // particular, this catches resolution and presentation errors, personality footprint bounds,
@@ -606,6 +698,34 @@ pub(super) async fn update_master(
     ] {
         validate_unit(name, value)?;
     }
+    for (name, value, minimum, maximum) in [
+        ("scaleX", body.scale_x, 0.0, 4.0),
+        ("scaleY", body.scale_y, 0.0, 4.0),
+        ("positionX", body.position_x, -2.0, 2.0),
+        ("positionY", body.position_y, -2.0, 2.0),
+        ("rotation", body.rotation, -180.0, 180.0),
+        ("shaperLeft", body.shaper_left, 0.0, 1.0),
+        ("shaperRight", body.shaper_right, 0.0, 1.0),
+        ("shaperTop", body.shaper_top, 0.0, 1.0),
+        ("shaperBottom", body.shaper_bottom, 0.0, 1.0),
+        ("shaperLeftRotation", body.shaper_left_rotation, -45.0, 45.0),
+        (
+            "shaperRightRotation",
+            body.shaper_right_rotation,
+            -45.0,
+            45.0,
+        ),
+        ("shaperTopRotation", body.shaper_top_rotation, -45.0, 45.0),
+        (
+            "shaperBottomRotation",
+            body.shaper_bottom_rotation,
+            -45.0,
+            45.0,
+        ),
+        ("shaperRotation", body.shaper_rotation, -180.0, 180.0),
+    ] {
+        validate_range(name, value, minimum, maximum)?;
+    }
     let tint = (body.tint_red.is_some() || body.tint_green.is_some() || body.tint_blue.is_some())
         .then(|| {
             Tint::new(
@@ -625,6 +745,39 @@ pub(super) async fn update_master(
             body.mask_file.unwrap_or(current.mask.file),
         )
     });
+    let scaling_mode = body
+        .scaling_mode
+        .as_deref()
+        .map(parse_scaling_mode)
+        .transpose()?;
+    let shaper_changed = body.shaper_left.is_some()
+        || body.shaper_right.is_some()
+        || body.shaper_top.is_some()
+        || body.shaper_bottom.is_some()
+        || body.shaper_left_rotation.is_some()
+        || body.shaper_right_rotation.is_some()
+        || body.shaper_top_rotation.is_some()
+        || body.shaper_bottom_rotation.is_some()
+        || body.shaper_rotation.is_some();
+    let shaper = shaper_changed.then(|| MasterShaper {
+        left: body.shaper_left.unwrap_or(current.shaper.left),
+        right: body.shaper_right.unwrap_or(current.shaper.right),
+        top: body.shaper_top.unwrap_or(current.shaper.top),
+        bottom: body.shaper_bottom.unwrap_or(current.shaper.bottom),
+        left_rotation: body
+            .shaper_left_rotation
+            .unwrap_or(current.shaper.left_rotation),
+        right_rotation: body
+            .shaper_right_rotation
+            .unwrap_or(current.shaper.right_rotation),
+        top_rotation: body
+            .shaper_top_rotation
+            .unwrap_or(current.shaper.top_rotation),
+        bottom_rotation: body
+            .shaper_bottom_rotation
+            .unwrap_or(current.shaper.bottom_rotation),
+        rotation: body.shaper_rotation.unwrap_or(current.shaper.rotation),
+    });
     submit(
         &state,
         vec![CommandKind::SetMasterControls {
@@ -635,6 +788,13 @@ pub(super) async fn update_master(
                 tint,
                 flip_mirror,
                 mask,
+                scale_x: body.scale_x,
+                scale_y: body.scale_y,
+                scaling_mode,
+                position_x: body.position_x,
+                position_y: body.position_y,
+                rotation: body.rotation,
+                shaper,
             }),
         }],
         now,
@@ -772,9 +932,8 @@ fn submit(state: &ApiState, commands: Vec<CommandKind>, now: Timestamp) -> Resul
             Applied::RejectedNotOwner => {
                 return Err(ApiError::new(
                     StatusCode::CONFLICT,
-                    "dmx-owns-this",
-                    "a lighting desk is currently driving this output; its values cannot be set \
-                     from here until it stops sending",
+                    "playback-takeover-required",
+                    "take over playback for this output before changing its live values",
                 ));
             }
             Applied::RejectedUnknownOutput => {
@@ -817,13 +976,26 @@ mod tests {
     use std::sync::Arc;
 
     use axum::http::{StatusCode, header};
+    use http_body_util::BodyExt as _;
     use media_application::configuration::{MediaConfiguration, OutputConfiguration};
     use media_domain::{
         CommandSource, LayerPersonality, MediaAddress, MediaState, OutputId, Timestamp,
     };
     use tower::ServiceExt as _;
 
-    use crate::routes::bench::{bench, get, post, send};
+    use crate::routes::bench::{Bench, bench, get, post, send};
+
+    async fn take_over(bench: &Bench) {
+        let (status, _) = send(
+            &bench.router,
+            get(format!(
+                "/api/v2/outputs/{}/playback/take-over",
+                bench.output
+            )),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+    }
 
     #[tokio::test]
     async fn an_output_returns_its_whole_state() {
@@ -925,12 +1097,17 @@ mod tests {
         assert_eq!(body["width"], 1280);
         assert_eq!(body["height"], 720);
         assert_eq!(body["presentation"], "fixed-fps");
-        assert_eq!(body["framesPerSecond"], 50);
+        assert_eq!(body["framesPerSecond"], 50.0);
         assert_eq!(body["personality"], "eight-layers");
         assert_eq!(body["protocol"], "sacn");
         assert_eq!(body["universe"], 7);
         assert_eq!(body["startAddress"], 10);
         assert_eq!(body["takesEffectOnRestart"], true);
+        assert_eq!(body["active"]["width"], 1920);
+        assert_eq!(body["active"]["protocol"], "art-net");
+        assert_eq!(body["picturePendingRestart"], true);
+        assert_eq!(body["soundPendingRestart"], false);
+        assert_eq!(body["dmxPendingRestart"], true);
 
         let stored = bench.stored.lock().unwrap();
         assert_eq!(
@@ -1048,6 +1225,7 @@ mod tests {
     #[tokio::test]
     async fn an_update_carries_only_what_it_changes() {
         let bench = bench();
+        take_over(&bench).await;
         let uri = format!("/api/v2/outputs/{}/layers/0/update", bench.output);
 
         let (status, body) =
@@ -1070,6 +1248,7 @@ mod tests {
     #[tokio::test]
     async fn a_layer_and_master_accept_the_network_equivalent_controls() {
         let bench = bench();
+        take_over(&bench).await;
         let (_, layer) = send(
             &bench.router,
             post(format!("/api/v2/outputs/{}/layers/0/update", bench.output),
@@ -1083,15 +1262,23 @@ mod tests {
         let (_, master) = send(
             &bench.router,
             post(format!("/api/v2/outputs/{}/master/update", bench.output),
-                r#"{"dimmer":0.4,"volume":0.5,"tintRed":0.6,"tintGreen":0.7,"tintBlue":0.8,"flipMirror":"both","maskFolder":4,"maskFile":5}"#),
+                r#"{"dimmer":0.4,"volume":0.5,"tintRed":0.6,"tintGreen":0.7,"tintBlue":0.8,"flipMirror":"both","maskFolder":4,"maskFile":5,"scaleX":1.5,"scaleY":0.75,"scalingMode":"fill","positionX":0.5,"positionY":-0.5,"rotation":30,"shaperLeft":0.1,"shaperRight":0.2,"shaperTop":0.3,"shaperBottom":0.4,"shaperLeftRotation":10,"shaperRightRotation":-10,"shaperTopRotation":20,"shaperBottomRotation":-20,"shaperRotation":15}"#),
         ).await;
         assert_eq!(master["master"]["flipMirror"], "both");
         assert_eq!(master["master"]["mask"]["file"], 5);
+        assert_eq!(master["master"]["scaleX"], 1.5);
+        assert_eq!(master["master"]["scalingMode"], "fill");
+        assert_eq!(master["master"]["positionY"], -0.5);
+        assert_eq!(master["master"]["rotation"], 30.0);
+        assert_eq!(master["master"]["shaperLeft"], 0.1);
+        assert_eq!(master["master"]["shaperBottomRotation"], -20.0);
+        assert_eq!(master["master"]["shaperRotation"], 15.0);
     }
 
     #[tokio::test]
     async fn analog_tv_is_a_typed_intent_shaped_effect_edit() {
         let bench = bench();
+        take_over(&bench).await;
         let uri = format!("/api/v2/outputs/{}/layers/0/update", bench.output);
         let (status, selected) = send(
             &bench.router,
@@ -1156,6 +1343,7 @@ mod tests {
     #[tokio::test]
     async fn blur_persists_its_live_amount_and_bypass() {
         let bench = bench();
+        take_over(&bench).await;
         let uri = format!("/api/v2/outputs/{}/layers/0/update", bench.output);
         let (status, selected) = send(
             &bench.router,
@@ -1182,6 +1370,7 @@ mod tests {
     #[tokio::test]
     async fn feedback_persists_all_motion_controls_and_bypass() {
         let bench = bench();
+        take_over(&bench).await;
         let uri = format!("/api/v2/outputs/{}/layers/0/update", bench.output);
         let (status, selected) = send(
             &bench.router,
@@ -1389,7 +1578,14 @@ mod tests {
         let bench = bench();
         take_over(&bench).await;
         let uri = format!("/api/v2/outputs/{}/layers/0/update", bench.output);
-        let (status, selected) = send(&bench.router, post(uri.clone(), r#"{"effectSlot":0,"effectType":"beat-form-flash","beatFormEnlargement":2.4,"beatFormLifetime":1.6,"beatFormDensity":3,"beatFormVariation":0.65}"#)).await;
+        let (status, selected) = send(
+            &bench.router,
+            post(
+                uri.clone(),
+                r#"{"effectSlot":0,"effectType":"beat-form-flash","beatFormEnlargement":2.4,"beatFormLifetime":1.6,"beatFormDensity":3,"beatFormVariation":0.65}"#,
+            ),
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         let effect = &selected["layers"][0]["effects"][0];
         assert_eq!(effect["effectType"], "beat-form-flash");
@@ -1398,6 +1594,7 @@ mod tests {
         assert_eq!(effect["parameters"][1]["value"], 1.6);
         assert_eq!(effect["parameters"][2]["value"], 3.0);
         assert_eq!(effect["parameters"][3]["value"], 0.65);
+
         let (_, bypassed) = send(
             &bench.router,
             post(uri, r#"{"effectSlot":0,"effectEnabled":false}"#),
@@ -1482,6 +1679,7 @@ mod tests {
     #[tokio::test]
     async fn digital_tv_is_a_five_parameter_typed_intent_shaped_effect_edit() {
         let bench = bench();
+        take_over(&bench).await;
         let uri = format!("/api/v2/outputs/{}/layers/0/update", bench.output);
         let (status, selected) = send(
             &bench.router,
@@ -1538,6 +1736,7 @@ mod tests {
     #[tokio::test]
     async fn unknown_fields_are_accepted_rather_than_rejected() {
         let bench = bench();
+        take_over(&bench).await;
         let (status, body) = send(
             &bench.router,
             post(
@@ -1631,7 +1830,100 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_live_desk_makes_the_web_ui_read_only_with_a_reason() {
+    async fn playback_changes_require_explicit_takeover_even_before_dmx() {
+        let bench = bench();
+        let (status, body) = send(
+            &bench.router,
+            post(
+                format!("/api/v2/outputs/{}/layers/0/update", bench.output),
+                r#"{"dimmer":0.5}"#,
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert_eq!(body["code"], "playback-takeover-required");
+    }
+
+    #[tokio::test]
+    async fn an_output_preview_returns_the_renderer_citp_frame_without_caching() {
+        let bench = bench();
+        *bench.preview_frame.lock().unwrap() = Some(crate::OutputPreviewFrame {
+            sequence: 7,
+            width: 320,
+            height: 180,
+            content_type: "image/jpeg",
+            bytes: vec![0xff, 0xd8, 0xff, 0xd9],
+        });
+        let response = bench
+            .router
+            .clone()
+            .oneshot(get(format!(
+                "/api/v2/outputs/{}/preview?width=320&height=180",
+                bench.output
+            )))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
+        assert_eq!(response.headers()[header::CONTENT_TYPE], "image/jpeg");
+        assert_eq!(response.headers()["x-tosklight-preview-sequence"], "7");
+        assert_eq!(
+            response.into_body().collect().await.unwrap().to_bytes(),
+            &[0xff, 0xd8, 0xff, 0xd9][..]
+        );
+    }
+
+    #[tokio::test]
+    async fn a_layer_preview_returns_an_isolated_live_renderer_frame() {
+        let bench = bench();
+        *bench.preview_frame.lock().unwrap() = Some(crate::OutputPreviewFrame {
+            sequence: 8,
+            width: 160,
+            height: 90,
+            content_type: "image/png",
+            bytes: vec![0x89, b'P', b'N', b'G'],
+        });
+        let response = bench
+            .router
+            .clone()
+            .oneshot(get(format!(
+                "/api/v2/outputs/{}/layers/0/preview?width=160&height=90",
+                bench.output
+            )))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
+        assert_eq!(response.headers()[header::CONTENT_TYPE], "image/png");
+        assert_eq!(response.headers()["x-tosklight-preview-sequence"], "8");
+    }
+
+    #[tokio::test]
+    async fn preview_routes_always_return_valid_image_payloads_before_the_renderer_captures() {
+        let bench = bench();
+        for (path, expected_fill) in [
+            (format!("/api/v2/outputs/{}/preview", bench.output), "black"),
+            (
+                format!("/api/v2/outputs/{}/layers/0/preview", bench.output),
+                "none",
+            ),
+        ] {
+            let response = bench.router.clone().oneshot(get(path)).await.unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            assert_eq!(response.headers()[header::CONTENT_TYPE], "image/svg+xml");
+            let body = response.into_body().collect().await.unwrap().to_bytes();
+            assert!(
+                std::str::from_utf8(&body)
+                    .unwrap()
+                    .contains(&format!("fill=\"{expected_fill}\""))
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn a_live_desk_keeps_the_web_ui_read_only_with_a_reason() {
         let bench = bench();
         // A desk starts sending.
         let mut next = MediaState::clone(&bench.state.load());
@@ -1649,7 +1941,7 @@ mod tests {
         )
         .await;
         assert_eq!(status, StatusCode::CONFLICT);
-        assert_eq!(body["code"], "dmx-owns-this");
+        assert_eq!(body["code"], "playback-takeover-required");
 
         // Reading still works, and reports why.
         let (status, body) = send(
@@ -1740,6 +2032,7 @@ mod tests {
     #[tokio::test]
     async fn selecting_a_blank_address_is_allowed_because_it_clears_a_layer() {
         let bench = bench();
+        take_over(&bench).await;
         let uri = format!("/api/v2/outputs/{}/layers/0/update", bench.output);
         send(&bench.router, post(uri.clone(), r#"{"folder":1,"file":1}"#)).await;
 

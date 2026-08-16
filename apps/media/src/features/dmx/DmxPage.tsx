@@ -4,6 +4,7 @@
 // and is it landing where I think it is. It reports; it does not control.
 
 import { useEffect, useState } from "react";
+import { WindowFrame } from "@tosklight/ui/window-kit";
 import { ResourceState } from "../../app/ResourceState";
 import { addressLabel } from "../../entities/catalog";
 import { percent, sourceBadge } from "../../entities/output";
@@ -24,8 +25,28 @@ export function DmxPage() {
 	const telemetry = useTelemetry();
 
 	return (
-		<section className="media-page">
-			<FixtureDownloads />
+			<WindowFrame
+				title="Diagnostics"
+				className="media-dmx-window"
+			info={{ primary: "DMX", secondary: "Input and channel diagnostics" }}
+			groups={[
+				{
+					id: "dmx-diagnostics-actions",
+					actions: [
+						{
+							id: "configure-dmx-input",
+							label: "Configure DMX input",
+							onPress: () => {
+								window.history.pushState(null, "", "/settings?section=dmx");
+								window.dispatchEvent(new PopStateEvent("popstate"));
+							},
+						},
+					],
+				},
+			]}
+		>
+				<section className="media-page media-dmx-content">
+				<FixtureDownloads />
 			<ResourceState
 				resource={outputs}
 				subject="outputs"
@@ -44,7 +65,8 @@ export function DmxPage() {
 					))
 				}
 			</ResourceState>
-		</section>
+			</section>
+		</WindowFrame>
 	);
 }
 

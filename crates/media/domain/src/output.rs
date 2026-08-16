@@ -108,7 +108,7 @@ impl MonitorSelector {
 /// The legacy application requested a fixed 60 fps. That is legacy behavior, not the timing
 /// contract: each output owns its clock so two outputs on displays with different refresh rates
 /// never share a global frame counter.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum PresentationMode {
     /// Follow the real refresh timing of the owning monitor. The renderer picks a supported
@@ -118,7 +118,7 @@ pub enum PresentationMode {
     DisplaySynchronized,
     /// Schedule against monotonic deadlines at a fixed rate. Serves off-screen, streaming, and
     /// test use.
-    FixedFps { frames_per_second: u16 },
+    FixedFps { frames_per_second: f64 },
     /// Present as fast as the surface allows. Diagnostic only.
     Unlocked,
 }
@@ -171,6 +171,20 @@ mod tests {
         assert_eq!(
             PresentationMode::default(),
             PresentationMode::DisplaySynchronized
+        );
+    }
+
+    #[test]
+    fn legacy_integer_fixed_frame_rates_still_deserialize() {
+        let mode: PresentationMode = serde_json::from_value(serde_json::json!({
+            "fixed-fps": { "frames_per_second": 60 }
+        }))
+        .expect("legacy integer frame rate");
+        assert_eq!(
+            mode,
+            PresentationMode::FixedFps {
+                frames_per_second: 60.0
+            }
         );
     }
 }

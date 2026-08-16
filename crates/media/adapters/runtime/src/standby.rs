@@ -12,8 +12,8 @@ pub struct Frame {
     pub pixels: Vec<u8>,
 }
 
-pub fn visible(status_overlay: bool, received_dmx: bool) -> bool {
-    status_overlay && !received_dmx
+pub fn visible(status_overlay: bool, received_dmx: bool, web_takeover: bool) -> bool {
+    status_overlay && !received_dmx && !web_takeover
 }
 
 pub fn render(size: Size, endpoint: &str) -> anyhow::Result<Frame> {
@@ -179,9 +179,14 @@ mod tests {
 
     #[test]
     fn standby_ends_permanently_after_the_first_valid_dmx() {
-        assert!(visible(true, false));
-        assert!(!visible(true, true));
-        assert!(!visible(false, false));
+        assert!(visible(true, false, false));
+        assert!(!visible(true, true, false));
+        assert!(!visible(false, false, false));
+    }
+
+    #[test]
+    fn browser_takeover_exposes_program_output_without_waiting_for_dmx() {
+        assert!(!visible(true, false, true));
     }
 
     #[test]

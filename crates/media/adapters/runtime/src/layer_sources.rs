@@ -4,10 +4,11 @@
 //! that frame still compressed, and this uploads it. Nothing here decides *what* to play — that is
 //! the reducer's and the session's business.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use media_codec::ClipCache;
 use media_domain::AssetId;
+use media_domain::SourceFailure;
 use media_domain::geometry::Size;
 use media_render::{Gpu, SourceTexture};
 
@@ -15,6 +16,7 @@ use media_render::{Gpu, SourceTexture};
 struct Uploaded {
     asset: AssetId,
     frame: usize,
+    size: Size,
     texture: SourceTexture,
 }
 
@@ -24,16 +26,16 @@ struct Uploaded {
 /// layer therefore costs nothing per frame, which is the common case on a running show.
 pub struct LayerSources {
     gpu: Gpu,
-    size: Size,
     uploaded: HashMap<usize, Uploaded>,
+    warned_decode: HashSet<(AssetId, u32, u32)>,
 }
 
 impl LayerSources {
-    pub fn new(gpu: &Gpu, size: Size) -> Self {
+    pub fn new(gpu: &Gpu, _output_size: Size) -> Self {
         Self {
             gpu: gpu.clone(),
-            size,
             uploaded: HashMap::new(),
+            warned_decode: HashSet::new(),
         }
     }
 
@@ -47,36 +49,50 @@ impl LayerSources {
         layer: usize,
         asset: AssetId,
         frame: usize,
+        source_size: Size,
         cache: &mut ClipCache,
-    ) -> bool {
-        if self
-            .uploaded
-            .get(&layer)
-            .is_some_and(|held| held.asset == asset && held.frame == frame)
-        {
-            return true;
+    ) -> Result<bool, SourceFailure> {
+        if self.uploaded.get(&layer).is_some_and(|held| {
+            held.asset == asset && held.frame == frame && held.size == source_size
+        }) {
+            return Ok(true);
         }
 
         let Some(payload) = cache.frame(asset, frame) else {
-            return self.uploaded.contains_key(&layer);
+            return Ok(self.uploaded.contains_key(&layer));
         };
-        let Ok(blocks) =
-            media_codec::decode_blocks(self.size.width, self.size.height, payload.as_ref())
-        else {
-            tracing::warn!(%asset, frame, "a resident frame did not decompress");
-            return false;
+        let blocks = match media_codec::decode_blocks(
+            source_size.width,
+            source_size.height,
+            payload.as_ref(),
+        ) {
+            Ok(blocks) => blocks,
+            Err(error) => {
+                if self
+                    .warned_decode
+                    .insert((asset, source_size.width, source_size.height))
+                {
+                    tracing::warn!(%asset, frame, width = source_size.width, height = source_size.height, %error, "a resident frame did not decode");
+                }
+                return Err(SourceFailure::DecodeFailed);
+            }
         };
 
-        let texture = if self.gpu.samples_block_compression() {
-            SourceTexture::from_bc3_blocks(&self.gpu, self.size, &blocks)
+        // WGPU can only create a BC3 texture when both physical dimensions end on a complete
+        // 4x4 block. Clips themselves may have any dimensions, so preserve an odd-sized clip's
+        // exact logical size by expanding its edge blocks before upload.
+        let block_aligned = source_size.width % 4 == 0 && source_size.height % 4 == 0;
+        let texture = if self.gpu.samples_block_compression() && block_aligned {
+            SourceTexture::from_bc3_blocks(&self.gpu, source_size, &blocks)
         } else {
-            // An adapter that cannot sample BC gets the blocks expanded on the way in. Slower, and
-            // still correct, so no platform loses the feature.
-            match media_codec::hap::expand_to_rgba(self.size.width, self.size.height, &blocks) {
-                Ok(rgba) => SourceTexture::from_rgba8(&self.gpu, self.size, &rgba),
+            // An adapter that cannot sample BC, or a source with partial edge blocks, gets the
+            // blocks expanded on the way in. Slower, and still correct, so no platform or source
+            // dimension loses the feature.
+            match media_codec::hap::expand_to_rgba(source_size.width, source_size.height, &blocks) {
+                Ok(rgba) => SourceTexture::from_rgba8(&self.gpu, source_size, &rgba),
                 Err(error) => {
                     tracing::warn!(%asset, frame, %error, "a frame could not be expanded");
-                    return false;
+                    return Err(SourceFailure::DecodeFailed);
                 }
             }
         };
@@ -88,14 +104,15 @@ impl LayerSources {
                     Uploaded {
                         asset,
                         frame,
+                        size: source_size,
                         texture,
                     },
                 );
-                true
+                Ok(true)
             }
             Err(error) => {
                 tracing::warn!(%asset, frame, %error, "a frame could not be uploaded");
-                false
+                Err(SourceFailure::GpuUploadFailed)
             }
         }
     }
@@ -112,10 +129,121 @@ impl LayerSources {
 
     /// Rebuilds for a new source resolution. Existing uploads are dropped rather than reused at
     /// the wrong size.
-    pub fn resize(&mut self, size: Size) {
-        if size != self.size {
-            self.size = size;
-            self.uploaded.clear();
+    pub fn resize(&mut self, _output_size: Size) {
+        // Source textures keep their intrinsic dimensions. Only the compositor target changes.
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use media_codec::{ClipCache, ResidentClip};
+    use media_domain::{
+        LayerState, MasterState, OutputId, PresentationMode, ScalingMode, Timestamp,
+    };
+    use media_render::{LayerDraw, OutputRenderer};
+
+    use super::*;
+
+    fn resident(size: Size, colour: [u8; 4]) -> ResidentClip {
+        let rgba = colour.repeat(size.width as usize * size.height as usize);
+        let frame = media_codec::encode(size.width, size.height, &rgba).expect("encodes");
+        ResidentClip::new(vec![Arc::from(frame.into_boxed_slice())])
+    }
+
+    #[test]
+    fn mixed_source_sizes_decode_independently_of_the_output() {
+        let gpu = Gpu::off_screen().expect("an adapter is available");
+        let mut sources = LayerSources::new(&gpu, Size::new(1280, 720));
+        let mut cache = ClipCache::new(16 * 1024 * 1024);
+        let portrait = Size::new(13, 29);
+        let landscape = Size::new(64, 36);
+        let portrait_asset = AssetId::new();
+        let landscape_asset = AssetId::new();
+        cache
+            .admit(portrait_asset, resident(portrait, [255, 0, 0, 255]))
+            .unwrap();
+        cache
+            .admit(landscape_asset, resident(landscape, [0, 255, 0, 255]))
+            .unwrap();
+
+        assert_eq!(
+            sources.prepare(0, portrait_asset, 0, portrait, &mut cache),
+            Ok(true)
+        );
+        assert_eq!(
+            sources.prepare(1, landscape_asset, 0, landscape, &mut cache),
+            Ok(true)
+        );
+        assert_eq!(sources.texture(0).unwrap().size(), portrait);
+        assert_eq!(sources.texture(1).unwrap().size(), landscape);
+    }
+
+    #[test]
+    fn an_odd_portrait_source_fits_a_landscape_output_without_damage() {
+        let gpu = Gpu::off_screen().expect("an adapter is available");
+        let output_size = Size::new(80, 40);
+        let source_size = Size::new(13, 29);
+        let asset = AssetId::new();
+        let mut sources = LayerSources::new(&gpu, output_size);
+        let mut cache = ClipCache::new(1024 * 1024);
+        cache
+            .admit(asset, resident(source_size, [255, 0, 0, 255]))
+            .unwrap();
+        assert_eq!(
+            sources.prepare(0, asset, 0, source_size, &mut cache),
+            Ok(true)
+        );
+
+        let state = LayerState {
+            address: media_domain::MediaAddress::new(1, 1),
+            source_status: media_domain::SourceStatus::Ready,
+            scaling_mode: ScalingMode::Fit,
+            ..Default::default()
+        };
+        let mut renderer = OutputRenderer::off_screen(
+            &gpu,
+            OutputId::new(),
+            output_size,
+            PresentationMode::DisplaySynchronized,
+        )
+        .expect("an output opens");
+        renderer.present(
+            &[LayerDraw {
+                state: &state,
+                source: sources.texture(0).unwrap(),
+                mask: None,
+            }],
+            &MasterState::default(),
+            None,
+            Timestamp::ZERO,
+        );
+        let image = renderer.read_image();
+        let pixel = |x: usize, y: usize| &image[(y * output_size.width as usize + x) * 4..][..4];
+
+        assert_eq!(pixel(40, 20), [255, 0, 0, 255], "source fills the centre");
+        assert_eq!(pixel(0, 20), [0, 0, 0, 255], "Fit keeps side bars");
+    }
+
+    #[test]
+    fn one_bad_asset_is_logged_once_instead_of_once_per_render_frame() {
+        let gpu = Gpu::off_screen().expect("an adapter is available");
+        let mut sources = LayerSources::new(&gpu, Size::new(1280, 720));
+        let mut cache = ClipCache::new(1024 * 1024);
+        let asset = AssetId::new();
+        let actual = Size::new(16, 16);
+        let wrong = Size::new(17, 16);
+        cache
+            .admit(asset, resident(actual, [255, 255, 255, 255]))
+            .unwrap();
+
+        for _ in 0..3 {
+            assert_eq!(
+                sources.prepare(0, asset, 0, wrong, &mut cache),
+                Err(SourceFailure::DecodeFailed)
+            );
         }
+        assert_eq!(sources.warned_decode.len(), 1);
     }
 }

@@ -9,26 +9,26 @@ describe("routing", () => {
 		}
 	});
 
-	it("sends an unknown path to the dashboard rather than to a blank page", () => {
+	it("sends an unknown path to Playback rather than to a blank page", () => {
 		expect(normalizePath("/not-a-page")).toBe("/");
 		expect(normalizePath("")).toBe("/");
 	});
 
 	it("keeps the retired page URLs reachable through the new information architecture", () => {
-		expect(normalizePath("/layers")).toBe("/media");
-		for (const path of ["/dmx", "/logs"]) {
-			expect(normalizePath(path)).toBe("/settings");
-		}
+		expect(normalizePath("/media")).toBe("/");
+		expect(normalizePath("/layers")).toBe("/");
+		expect(normalizePath("/dmx")).toBe("/dmx");
+		expect(normalizePath("/logs")).toBe("/settings");
 	});
 
 	it("exposes the production routes in operator order", () => {
 		expect(ROUTES.map((route) => route.label)).toEqual([
-			"Dashboard",
 			"Playback",
 			"Library",
 			"Visualizers",
 			"Text",
 			"Audio",
+			"Diagnostics",
 			"Settings",
 		]);
 	});

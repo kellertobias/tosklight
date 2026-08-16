@@ -77,7 +77,7 @@ pub struct CitpIdentity {
 }
 
 /// One logical output.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct OutputConfiguration {
     pub id: OutputId,

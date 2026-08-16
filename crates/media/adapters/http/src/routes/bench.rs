@@ -20,7 +20,7 @@ use std::sync::Arc;
 use tower::ServiceExt as _;
 
 use crate::diagnostics::Diagnostics;
-use crate::routes::{ApiState, router};
+use crate::routes::{ApiState, OutputPreviewFrame, router};
 
 pub(crate) struct Bench {
     /// What was written, so a test can prove an edit reached storage without a filesystem.
@@ -33,6 +33,7 @@ pub(crate) struct Bench {
     pub(crate) output: OutputId,
     pub(crate) state: Arc<ArcSwap<MediaState>>,
     pub(crate) configuration: Arc<ArcSwap<MediaConfiguration>>,
+    pub(crate) preview_frame: Arc<Mutex<Option<OutputPreviewFrame>>>,
 }
 
 pub(crate) fn bench() -> Bench {
@@ -43,10 +44,11 @@ pub(crate) fn bench_with(diagnostics: Diagnostics) -> Bench {
     let mut configured = OutputConfiguration::new("Main");
     configured.personality = LayerPersonality::TwoLayers;
     let output = configured.id;
-    let configuration = Arc::new(ArcSwap::from_pointee(MediaConfiguration {
+    let active_configuration = Arc::new(MediaConfiguration {
         outputs: vec![configured],
         ..Default::default()
-    }));
+    });
+    let configuration = Arc::new(ArcSwap::from(Arc::clone(&active_configuration)));
     let state = Arc::new(ArcSwap::from_pointee(MediaState::with_outputs(vec![
         OutputState::new(output, LayerPersonality::TwoLayers),
     ])));
@@ -57,9 +59,13 @@ pub(crate) fn bench_with(diagnostics: Diagnostics) -> Bench {
     let refusing = Arc::clone(&refuse);
     let applied = Arc::new(AtomicUsize::new(0));
     let applying = Arc::clone(&applied);
+    let preview_frame = Arc::new(Mutex::new(None));
+    let requested_preview = Arc::clone(&preview_frame);
 
     let api = ApiState {
         configuration: Arc::clone(&configuration),
+        active_configuration,
+        administration_endpoint: "127.0.0.1:18080".to_owned(),
         state: state.clone(),
         catalog: Arc::new(ArcSwap::from_pointee(CatalogSnapshot::default())),
         now: Arc::new(|| Timestamp::from_millis(0)),
@@ -73,6 +79,7 @@ pub(crate) fn bench_with(diagnostics: Diagnostics) -> Bench {
         apply: Arc::new(move |_| {
             applying.fetch_add(1, Ordering::SeqCst);
         }),
+        preview: Arc::new(move |_, _, _| requested_preview.lock().unwrap().clone()),
         diagnostics,
         replays: Arc::new(crate::replay::Replays::new()),
         upload_body_limit: 8 * 1024 * 1024 * 1024 + 1024 * 1024,
@@ -85,6 +92,7 @@ pub(crate) fn bench_with(diagnostics: Diagnostics) -> Bench {
         stored,
         refuse,
         applied,
+        preview_frame,
     }
 }
 

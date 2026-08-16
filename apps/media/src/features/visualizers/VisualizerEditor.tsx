@@ -3,8 +3,13 @@
 // Only the controls the kind actually reads are shown — the server publishes which those are, so
 // this never has to know what an Equalizer does with `smoothing` and a Starfield does not.
 
-import { Button, NumberField, TextField } from "@tosklight/ui/forms";
-import { useState } from "react";
+import {
+	CheckboxField,
+	ColorPickerField,
+	SwitchField,
+} from "@tosklight/ui/controls";
+import { NumberField } from "@tosklight/ui/forms";
+import { type ChangeEvent, useState } from "react";
 import type {
 	UpdateVisualizer,
 	VisualizerParametersView,
@@ -15,8 +20,7 @@ import { GridLandscapeSceneryFields } from "./GridLandscapeSceneryFields";
 export interface VisualizerEditorProps {
 	visualizer: VisualizerView;
 	busy: boolean;
-	onSave: (edit: UpdateVisualizer) => void;
-	onCancel: () => void;
+	onChange: (edit: UpdateVisualizer) => void;
 }
 
 /// Which fields each published control name writes, and how it is labelled.
@@ -54,32 +58,39 @@ const FLAGS: Record<
 export function VisualizerEditor({
 	visualizer,
 	busy,
-	onSave,
-	onCancel,
+	onChange,
 }: VisualizerEditorProps) {
-	const [name, setName] = useState(visualizer.name);
 	const [parameters, setParameters] = useState(visualizer.parameters);
 
+	const publish = (nextParameters: VisualizerParametersView) =>
+		onChange({
+			requestId: crypto.randomUUID(),
+			parameters: nextParameters,
+		});
 	const set = (
 		field: keyof VisualizerParametersView,
 		value: number | boolean,
-	) => setParameters((current) => ({ ...current, [field]: value }));
+	) =>
+		setParameters((current) => {
+			const next = { ...current, [field]: value };
+			publish(next);
+			return next;
+		});
+	const setColour = (prefix: "primary" | "secondary", hex: string) =>
+		setParameters((current) => {
+			const [red, green, blue] = fromHex(hex);
+			const next = {
+				...current,
+				[`${prefix}Red`]: red,
+				[`${prefix}Green`]: green,
+				[`${prefix}Blue`]: blue,
+			};
+			publish(next);
+			return next;
+		});
 
 	return (
-		<form
-			className="media-visualizer-editor"
-			onSubmit={(event) => {
-				event.preventDefault();
-				// The request id is what makes a retry safe: the same edit sent twice is one edit.
-				onSave({ requestId: crypto.randomUUID(), name, parameters });
-			}}
-		>
-			<TextField
-				label="Name"
-				value={name}
-				onChange={(event) => setName(event.target.value)}
-			/>
-
+		<div className="media-visualizer-editor" aria-busy={busy}>
 			{visualizer.uses.map((control) => {
 				if (
 					visualizer.kind === "Grid Landscape" &&
@@ -116,15 +127,17 @@ export function VisualizerEditor({
 				}
 				const flag = FLAGS[control];
 				if (flag) {
-					return (
-						<label key={control} className="media-visualizer-flag">
-							<input
-								type="checkbox"
-								checked={Boolean(parameters[flag.field])}
-								onChange={(event) => set(flag.field, event.target.checked)}
-							/>
-							{flag.label}
-						</label>
+					const props = {
+						key: control,
+						label: flag.label,
+						checked: Boolean(parameters[flag.field]),
+						onChange: (event: ChangeEvent<HTMLInputElement>) =>
+							set(flag.field, event.target.checked),
+					};
+					return control === "wireframe" ? (
+						<SwitchField {...props} />
+					) : (
+						<CheckboxField {...props} />
 					);
 				}
 				if (control === "primary" || control === "secondary") {
@@ -134,20 +147,16 @@ export function VisualizerEditor({
 							label={control === "primary" ? "Colour" : "Second colour"}
 							parameters={parameters}
 							prefix={control}
-							onChange={set}
+							onChange={setColour}
 						/>
 					);
 				}
 				return null;
 			})}
-
-			<div className="media-visualizer-actions">
-				<Button type="submit" variant="primary" loading={busy}>
-					Save
-				</Button>
-				<Button onClick={onCancel}>Cancel</Button>
-			</div>
-		</form>
+			<small className="media-live-save-state">
+				{busy ? "Saving changes…" : "Changes update live"}
+			</small>
+		</div>
 	);
 }
 
@@ -160,7 +169,7 @@ function Colour({
 	label: string;
 	parameters: VisualizerParametersView;
 	prefix: "primary" | "secondary";
-	onChange: (field: keyof VisualizerParametersView, value: number) => void;
+	onChange: (prefix: "primary" | "secondary", value: string) => void;
 }) {
 	const red = `${prefix}Red` as keyof VisualizerParametersView;
 	const green = `${prefix}Green` as keyof VisualizerParametersView;
@@ -172,19 +181,11 @@ function Colour({
 	);
 
 	return (
-		<label className="media-visualizer-colour">
-			{label}
-			<input
-				type="color"
-				value={value}
-				onChange={(event) => {
-					const [r, g, b] = fromHex(event.target.value);
-					onChange(red, r);
-					onChange(green, g);
-					onChange(blue, b);
-				}}
-			/>
-		</label>
+		<ColorPickerField
+			label={label}
+			value={value}
+			onChange={(next) => onChange(prefix, next)}
+		/>
 	);
 }
 

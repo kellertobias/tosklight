@@ -1,11 +1,16 @@
-import { MultiValueToggle } from "@tosklight/ui/controls";
+import type { TitleAction, TitleActionGroup } from "@tosklight/ui/controls";
 import {
 	DEFAULT_POOL_COLOR_PALETTE,
 	PoolCard,
 	PoolGrid,
 } from "@tosklight/ui/pools";
-import { WindowFrame, WindowScrollArea } from "@tosklight/ui/window-kit";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import {
+	ButtonGrid,
+	WindowFrame,
+	WindowScrollArea,
+} from "@tosklight/ui/window-kit";
+import { type ReactNode, useMemo, useState } from "react";
+import type { FolderPresentation } from "./FolderPresentationEditor";
 
 export type LibrarySourceType = "media" | "visualizers" | "text";
 
@@ -16,27 +21,34 @@ export interface GeneratedLibraryItem {
 	name: string;
 	detail: string;
 	preview?: ReactNode;
+	image?: { src: string; alt: string };
 }
 
-export function LibrarySourceToggle({
+export function librarySourceGroups({
 	value,
 	onChange,
+	actions = [],
 }: {
 	value: LibrarySourceType;
 	onChange?: (value: LibrarySourceType) => void;
-}) {
-	return (
-		<MultiValueToggle
-			ariaLabel="Library source type"
-			value={value}
-			options={[
-				{ value: "media", label: "Media" },
-				{ value: "visualizers", label: "Visualizers" },
-				{ value: "text", label: "Text" },
-			]}
-			onChange={(next) => onChange?.(next)}
-		/>
-	);
+	actions?: TitleAction[];
+}): TitleActionGroup[] {
+	return [
+		...(actions.length
+			? [{ id: "library-actions", actions } satisfies TitleActionGroup]
+			: []),
+		{
+			id: "library-source-type",
+			kind: "tabs",
+			activeId: value,
+			onActiveChange: (next) => onChange?.(next as LibrarySourceType),
+			actions: [
+				{ id: "media", label: "Media" },
+				{ id: "visualizers", label: "Visualizers" },
+				{ id: "text", label: "Text" },
+			],
+		},
+	];
 }
 
 export function GeneratedLibraryBrowserView({
@@ -44,9 +56,14 @@ export function GeneratedLibraryBrowserView({
 	items,
 	selectedId,
 	onSelect,
+	onSelectSlot,
 	onTypeChange,
 	detail,
-	headerAction,
+	headerActions,
+	folderPresentations = [],
+	inspectedFolder,
+	onInspectFolder,
+	renderFolderDetail,
 	emptyDetail,
 	showDetail = false,
 }: {
@@ -54,23 +71,32 @@ export function GeneratedLibraryBrowserView({
 	items: GeneratedLibraryItem[];
 	selectedId: string;
 	onSelect?: (id: string) => void;
+	onSelectSlot?: (slot: {
+		folder: number;
+		file: number;
+		itemId?: string;
+	}) => void;
 	onTypeChange?: (value: LibrarySourceType) => void;
 	detail: ReactNode;
-	headerAction?: ReactNode;
+	headerActions?: TitleAction[];
+	folderPresentations?: FolderPresentation[];
+	inspectedFolder?: number | null;
+	onInspectFolder?: (folder: number | null) => void;
+	renderFolderDetail?: (folder: number) => ReactNode;
 	emptyDetail: ReactNode;
 	showDetail?: boolean;
 }) {
 	const folders = type === "text" ? range(200, 249) : range(250, 255);
 	const selected = items.find((item) => item.id === selectedId);
 	const [folder, setFolder] = useState(selected?.folder ?? folders[0]);
-
-	useEffect(() => {
-		if (selected) setFolder(selected.folder);
-	}, [selected]);
+	const [inspectingFolder, setInspectingFolder] = useState<number | null>(null);
+	const activeFolder = inspectedFolder ?? folder;
+	const activeInspector =
+		inspectedFolder === undefined ? inspectingFolder : inspectedFolder;
 
 	const visible = useMemo(
-		() => items.filter((item) => item.folder === folder),
-		[folder, items],
+		() => items.filter((item) => item.folder === activeFolder),
+		[activeFolder, items],
 	);
 	const visibleSelected = visible.some((item) => item.id === selectedId);
 	const sourceColor =
@@ -88,12 +114,11 @@ export function GeneratedLibraryBrowserView({
 						? "Folders 200–249 · 12,700 addressable sources"
 						: "Folders 250–255 · 1,524 addressable sources",
 			}}
-			toolbar={
-				<div className="media-library-title-tools">
-					<LibrarySourceToggle value={type} onChange={onTypeChange} />
-					{headerAction}
-				</div>
-			}
+			groups={librarySourceGroups({
+				value: type,
+				onChange: onTypeChange,
+				actions: headerActions,
+			})}
 			className="media-library-window"
 		>
 			<div className="media-catalog-browser">
@@ -102,8 +127,11 @@ export function GeneratedLibraryBrowserView({
 						<span>Folders</span>
 						<small>{type === "text" ? "200–249" : "250–255"}</small>
 					</div>
-					<div className="media-library-folder-pool">
+					<ButtonGrid className="media-library-folder-pool" minimum={68}>
 						{folders.map((number) => {
+							const presentation = folderPresentations.find(
+								(candidate) => candidate.folder === number,
+							);
 							const count = items.filter(
 								(item) => item.folder === number,
 							).length;
@@ -112,33 +140,41 @@ export function GeneratedLibraryBrowserView({
 									key={number}
 									model={{
 										number: String(number).padStart(3, "0"),
-										primary: type === "text" ? "Text" : "Visualizers",
+										primary:
+											presentation?.name ??
+											(type === "text" ? "Text" : "Visualizers"),
 										secondary: `${count}/254`,
+										icon: presentation?.icon ?? undefined,
+										image: presentation?.pictureUrl
+											? {
+													src: presentation.pictureUrl,
+													alt: `${presentation.name ?? `Folder ${number}`} preview`,
+												}
+											: undefined,
 										color: DEFAULT_POOL_COLOR_PALETTE.group,
-										states: folder === number ? ["selected"] : [],
+										states: activeFolder === number ? ["selected"] : [],
 									}}
 									data-folder={number}
 									onClick={() => {
 										setFolder(number);
-										onSelect?.(
-											items.find((item) => item.folder === number)?.id ?? "",
-										);
+										setInspectingFolder(number);
+										onInspectFolder?.(number);
 									}}
 								/>
 							);
 						})}
-					</div>
+					</ButtonGrid>
 				</WindowScrollArea>
 
 				<WindowScrollArea className="media-library-pool">
 					<div className="media-library-pool-heading">
-						<span>Folder {String(folder).padStart(3, "0")}</span>
+						<span>Folder {String(activeFolder).padStart(3, "0")}</span>
 						<small>{visible.length} sources</small>
 					</div>
 					<PoolGrid
+						className="media-file-pool-grid media-library-file-pool-grid"
 						slotCount={254}
-						columns={5}
-						minimumCardWidth={92}
+						minimumCardWidth={112}
 						slots={visible.map((item) => ({
 							id: item.id,
 							position: item.file - 1,
@@ -146,12 +182,13 @@ export function GeneratedLibraryBrowserView({
 								number: item.file,
 								primary: item.name,
 								secondary: item.detail,
+								image: item.image,
 								color: sourceColor,
 								states: item.id === selectedId ? ["selected"] : [],
 							},
 						}))}
 						emptySlot={(index) => ({
-							id: `empty-${folder}-${index + 1}`,
+							id: `empty-${activeFolder}-${index + 1}`,
 							position: index,
 							card: { number: index + 1, primary: "", states: ["empty"] },
 						})}
@@ -162,15 +199,34 @@ export function GeneratedLibraryBrowserView({
 							return (
 								<PoolCard
 									model={slot.card}
-									onClick={item ? () => onSelect?.(item.id) : undefined}
+									onClick={() => {
+										setInspectingFolder(null);
+										onInspectFolder?.(null);
+										onSelectSlot?.({
+											folder: activeFolder,
+											file: slot.position + 1,
+											...(item ? { itemId: item.id } : {}),
+										});
+										if (item) onSelect?.(item.id);
+									}}
 								/>
 							);
 						}}
 					/>
+					{visible.length === 0 && (
+						<div className="media-library-empty-folder" role="status">
+							<strong>This folder is empty</strong>
+							<span>No source is assigned in this folder.</span>
+						</div>
+					)}
 				</WindowScrollArea>
 
 				<aside className="media-library-inspector">
-					{showDetail || visibleSelected ? detail : emptyDetail}
+					{activeInspector !== null
+						? (renderFolderDetail?.(activeInspector) ?? emptyDetail)
+						: showDetail || visibleSelected
+							? detail
+							: emptyDetail}
 				</aside>
 			</div>
 		</WindowFrame>

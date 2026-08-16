@@ -79,8 +79,17 @@ pub fn discover(root: &Path) -> Result<CatalogSnapshot, DiscoveryError> {
                  yet; import them into the library to convert them"
             );
         }
-        if let Some(name) = read_folder_name(&path) {
-            let _ = catalog.rename_folder(folder, Some(&name));
+        let metadata = read_folder_metadata(&path);
+        if let Some(name) = metadata.name.as_deref() {
+            let _ = catalog.rename_folder(folder, Some(name));
+        }
+        if let Some(icon) = metadata.icon.as_deref() {
+            let _ = catalog.set_folder_icon(folder, Some(icon));
+        }
+        if path.join(naming::FOLDER_PICTURE_FILE).is_file()
+            && let Some(content_type) = metadata.picture_content_type.as_deref()
+        {
+            let _ = catalog.set_folder_picture(folder, Some(content_type));
         }
     }
 
@@ -275,19 +284,44 @@ fn looks_like_media(filename: &str) -> bool {
 /// This build writes the name as the file's whole contents. The legacy application wrote a JSON
 /// object — `{"name": "Video Files"}` — so both are read: an existing library must not come up with
 /// a folder called `{ "name": ... }`.
-fn read_folder_name(path: &Path) -> Option<String> {
-    let contents = std::fs::read_to_string(path.join(naming::FOLDER_NAME_FILE)).ok()?;
-    let name = match serde_json::from_str::<serde_json::Value>(&contents) {
-        Ok(serde_json::Value::Object(document)) => document
-            .get("name")
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or_default()
-            .trim()
-            .to_owned(),
-        // Anything that is not a JSON object is this build's own format: the name itself.
-        _ => contents.trim().to_owned(),
+#[derive(Default)]
+struct FolderMetadata {
+    name: Option<String>,
+    icon: Option<String>,
+    picture_content_type: Option<String>,
+}
+
+fn read_folder_metadata(path: &Path) -> FolderMetadata {
+    let Ok(contents) = std::fs::read_to_string(path.join(naming::FOLDER_NAME_FILE)) else {
+        return FolderMetadata::default();
     };
-    (!name.is_empty()).then_some(name)
+    match serde_json::from_str::<serde_json::Value>(&contents) {
+        Ok(serde_json::Value::Object(document)) => FolderMetadata {
+            name: document
+                .get("name")
+                .and_then(serde_json::Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_owned),
+            icon: document
+                .get("icon")
+                .and_then(serde_json::Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_owned),
+            picture_content_type: document
+                .get("pictureContentType")
+                .and_then(serde_json::Value::as_str)
+                .filter(|value| value.starts_with("image/"))
+                .map(str::to_owned),
+        },
+        // Legacy and earlier ToskLight builds stored the name as the whole file.
+        _ => FolderMetadata {
+            name: Some(contents.trim().to_owned()).filter(|value| !value.is_empty()),
+            icon: None,
+            picture_content_type: None,
+        },
+    }
 }
 
 #[cfg(test)]
@@ -483,7 +517,10 @@ mod tests {
     fn a_legacy_folder_name_is_read_from_the_json_the_c_application_wrote() {
         let library = Library::new("legacy-named");
         library.put("001/001-Clip.toskclip", &clip(10, None));
-        library.put("001/.info", br#"{"name": "Video Files"}"#);
+        library.put(
+            "001/.info",
+            r#"{"name": "Video Files", "icon": "▶"}"#.as_bytes(),
+        );
         // An object with no name in it is not a name, and must not become one.
         library.put("002/001-Clip.toskclip", &clip(10, None));
         library.put("002/.info", br#"{"colour": "blue"}"#);
@@ -494,6 +531,7 @@ mod tests {
             Some("Video Files"),
             "an existing library must not come up with a folder called `{{ \"name\": ... }}`"
         );
+        assert_eq!(catalog.folder(1).unwrap().icon.as_deref(), Some("▶"));
         assert_eq!(catalog.folder(2).unwrap().name, None);
     }
 

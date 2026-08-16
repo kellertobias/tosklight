@@ -9,7 +9,7 @@
 // makes them differ on purpose.
 
 import { Button, CheckboxField, TextField } from "@tosklight/ui/controls";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { requestId } from "../../shared/api/editing";
 import type {
 	NetworkView,
@@ -17,10 +17,13 @@ import type {
 } from "../../shared/api/generated/media-wire";
 
 export interface NetworkEditorProps {
+	formId?: string;
 	network: NetworkView;
 	busy: boolean;
 	onSave: (edit: UpdateNetwork) => void;
-	onCancel: () => void;
+	onCancel?: () => void;
+	showActions?: boolean;
+	onChanged?: () => void;
 }
 
 /// Each listen address, with what it is for. The order is the order an operator meets them in.
@@ -51,10 +54,13 @@ const LISTENERS = [
 type ListenField = (typeof LISTENERS)[number]["field"];
 
 export function NetworkEditor({
+	formId,
 	network,
 	busy,
 	onSave,
 	onCancel,
+	showActions = true,
+	onChanged,
 }: NetworkEditorProps) {
 	const [preset, setPreset] = useState(network.sameComputerPreset);
 	const [listeners, setListeners] = useState<Record<ListenField, string>>({
@@ -66,9 +72,34 @@ export function NetworkEditor({
 	const [endpoint, setEndpoint] = useState(
 		network.stored.speedGroupEndpoint ?? "",
 	);
+	const form = useRef<HTMLFormElement>(null);
+	const mounted = useRef(false);
+	useEffect(() => {
+		mounted.current = false;
+		setPreset(network.sameComputerPreset);
+		setListeners({
+			artNetListen: network.stored.artNetListen,
+			sacnListen: network.stored.sacnListen,
+			citpListen: network.stored.citpListen,
+			httpListen: network.stored.httpListen,
+		});
+		setEndpoint(network.stored.speedGroupEndpoint ?? "");
+	}, [network]);
+	useEffect(() => {
+		if (showActions) return;
+		if (!mounted.current) {
+			mounted.current = true;
+			return;
+		}
+		onChanged?.();
+		const timer = window.setTimeout(() => form.current?.requestSubmit(), 350);
+		return () => window.clearTimeout(timer);
+	}, [preset, listeners, endpoint, onChanged, showActions]);
 
 	return (
 		<form
+			ref={form}
+			id={formId}
 			className="media-settings-form"
 			onSubmit={(event) => {
 				event.preventDefault();
@@ -122,12 +153,14 @@ export function NetworkEditor({
 				/>
 			</fieldset>
 
-			<div className="media-settings-actions">
-				<Button type="submit" variant="primary" loading={busy}>
-					Save network settings
-				</Button>
-				<Button onClick={onCancel}>Cancel</Button>
-			</div>
+			{showActions && (
+				<div className="media-settings-actions">
+					<Button type="submit" variant="primary" loading={busy}>
+						Save network settings
+					</Button>
+					{onCancel && <Button onClick={onCancel}>Cancel</Button>}
+				</div>
+			)}
 		</form>
 	);
 }

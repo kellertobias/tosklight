@@ -39,6 +39,7 @@ pub use startup::{
 
 use media_application::MediaConfiguration;
 use media_domain::{MediaState, OutputState, Timestamp};
+use std::sync::Arc;
 
 /// The argument that reads, migrates, and validates configuration, then exits.
 ///
@@ -105,6 +106,7 @@ fn run_inner() -> anyhow::Result<()> {
     let (audio, analysis) = start_audio(&configuration);
     let dmx_diagnostics = dmx::diagnostics();
     let console_identity = citp::ConsoleIdentity::default();
+    let available_monitors = std::sync::Arc::new(std::sync::RwLock::new(Vec::new()));
 
     // One configuration document, read by the outputs and written by the API. A second copy is a
     // second truth: an operator would edit one and watch the other.
@@ -118,6 +120,7 @@ fn run_inner() -> anyhow::Result<()> {
         &catalog,
         &dmx_diagnostics,
         &console_identity,
+        &available_monitors,
         started,
     );
     let apply = applies_to(audio.as_ref());
@@ -171,6 +174,7 @@ fn run_inner() -> anyhow::Result<()> {
         catalog: Some(catalog.clone()),
         diagnostics,
         apply,
+        previews: Some(previews.clone()),
     };
     if !presentation::needs_a_window(&configuration) {
         return runtime.block_on(serve_with(services));
@@ -191,6 +195,7 @@ fn run_inner() -> anyhow::Result<()> {
         },
         shutdown.clone(),
         diagnostics_arguments,
+        available_monitors,
         started,
         administration_endpoint(&configuration),
     );
@@ -382,11 +387,13 @@ fn diagnostics_of(
     catalog: &presentation::SharedCatalog,
     dmx_diagnostics: &dmx::SharedDiagnostics,
     console_identity: &citp::ConsoleIdentity,
+    available_monitors: &std::sync::Arc<std::sync::RwLock<Vec<media_http::MonitorDevice>>>,
     started: std::time::Instant,
 ) -> media_http::Diagnostics {
     let log = logging.window.clone();
     let dmx_diagnostics = dmx_diagnostics.clone();
     let console_identity = console_identity.clone();
+    let available_monitors = available_monitors.clone();
     media_http::Diagnostics {
         audio: match audio {
             Some(service) => {
@@ -416,6 +423,13 @@ fn diagnostics_of(
             None => std::sync::Arc::new(media_http::AudioTelemetry::default),
         },
         audio_devices: std::sync::Arc::new(media_audio::input_devices),
+        output_devices: std::sync::Arc::new(media_audio::output_devices),
+        monitors: std::sync::Arc::new(move || {
+            available_monitors
+                .read()
+                .map(|monitors| monitors.clone())
+                .unwrap_or_default()
+        }),
         logs: std::sync::Arc::new(move |query| log.page(query)),
         log_level: logging.control(),
         imports: imports_of(importer, library_root),
@@ -444,6 +458,16 @@ fn library_access(
     let published = catalog.clone();
     let edit_lock = std::sync::Arc::new(std::sync::Mutex::new(()));
     let upload_importer = importer.clone();
+    let folder_storage = storage.clone();
+    let folder_reading = storage.clone();
+    let folder_picture_reading = storage.clone();
+    let folder_bytes_reading = storage.clone();
+    let folder_edit_lock = edit_lock.clone();
+    let folder_picture_lock = edit_lock.clone();
+    let folder_remove_lock = edit_lock.clone();
+    let folder_published = catalog.clone();
+    let folder_picture_published = catalog.clone();
+    let folder_remove_published = catalog.clone();
 
     media_http::LibraryAccess {
         edit: std::sync::Arc::new(move |operation| {
@@ -475,6 +499,9 @@ fn library_access(
                 media_http::LibraryEdit::RenameFolder { folder, name } => {
                     editing.rename_folder(&mut next, folder, name.as_deref())
                 }
+                media_http::LibraryEdit::SetFolderIcon { folder, icon } => {
+                    editing.set_folder_icon(&mut next, folder, icon.as_deref())
+                }
                 media_http::LibraryEdit::SwapFolders { first, second } => {
                     editing.swap_folders(&mut next, first, second)
                 }
@@ -488,9 +515,13 @@ fn library_access(
             std::fs::read(&path)
                 .map_err(|error| format!("cannot read thumbnail {}: {error}", path.display()))
         }),
-        begin_upload: std::sync::Arc::new(move |address, name, filename| {
-            let upload = media_library::Upload::begin(&uploading_root, address, name, filename)
-                .map_err(|error| error.to_string())?;
+        begin_upload: std::sync::Arc::new(move |address, name, filename, replace| {
+            let upload = if replace {
+                media_library::Upload::begin_replacement(&uploading_root, address, name, filename)
+            } else {
+                media_library::Upload::begin(&uploading_root, address, name, filename)
+            }
+            .map_err(|error| error.to_string())?;
             Ok(Box::new(RuntimeUpload {
                 upload: Some(upload),
                 importer: upload_importer.clone(),
@@ -498,6 +529,95 @@ fn library_access(
                 name: name.to_owned(),
             }) as Box<dyn media_http::UploadStream>)
         }),
+        folder_presentations: std::sync::Arc::new(move || {
+            (1..=255)
+                .map(|folder| {
+                    folder_reading
+                        .folder_presentation(folder)
+                        .map(folder_presentation_of)
+                        .map_err(|error| error.to_string())
+                })
+                .collect()
+        }),
+        update_folder_presentation: std::sync::Arc::new(move |folder, name, icon| {
+            let _guard = folder_edit_lock
+                .lock()
+                .map_err(|_| "the folder presentation edit lock is unavailable".to_owned())?;
+            if media_domain::catalog::is_storage_folder(folder) {
+                let mut next = (*folder_published.load_full()).clone();
+                match (name, icon) {
+                    (Some(name), None) => {
+                        folder_storage.rename_folder(&mut next, folder, name.as_deref())
+                    }
+                    (None, Some(icon)) => {
+                        folder_storage.set_folder_icon(&mut next, folder, icon.as_deref())
+                    }
+                    _ => unreachable!("the HTTP route validates one presentation intent"),
+                }
+                .map_err(|error| error.to_string())?;
+                folder_published.store(std::sync::Arc::new(next));
+            } else {
+                folder_storage
+                    .update_generated_folder_presentation(
+                        folder,
+                        name.as_ref().map(|value| value.as_deref()),
+                        icon.as_ref().map(|value| value.as_deref()),
+                    )
+                    .map_err(|error| error.to_string())?;
+            }
+            folder_storage
+                .folder_presentation(folder)
+                .map(folder_presentation_of)
+                .map_err(|error| error.to_string())
+        }),
+        set_folder_picture: std::sync::Arc::new(move |folder, content_type, bytes| {
+            let _guard = folder_picture_lock
+                .lock()
+                .map_err(|_| "the folder picture edit lock is unavailable".to_owned())?;
+            let mut next = (*folder_picture_published.load_full()).clone();
+            folder_picture_reading
+                .write_folder_picture(&mut next, folder, content_type, bytes)
+                .map_err(|error| error.to_string())?;
+            if media_domain::catalog::is_storage_folder(folder) {
+                folder_picture_published.store(std::sync::Arc::new(next));
+            }
+            folder_picture_reading
+                .folder_presentation(folder)
+                .map(folder_presentation_of)
+                .map_err(|error| error.to_string())
+        }),
+        remove_folder_picture: std::sync::Arc::new(move |folder| {
+            let _guard = folder_remove_lock
+                .lock()
+                .map_err(|_| "the folder picture edit lock is unavailable".to_owned())?;
+            let mut next = (*folder_remove_published.load_full()).clone();
+            storage
+                .remove_folder_picture(&mut next, folder)
+                .map_err(|error| error.to_string())?;
+            if media_domain::catalog::is_storage_folder(folder) {
+                folder_remove_published.store(std::sync::Arc::new(next));
+            }
+            storage
+                .folder_presentation(folder)
+                .map(folder_presentation_of)
+                .map_err(|error| error.to_string())
+        }),
+        folder_picture: std::sync::Arc::new(move |folder| {
+            folder_bytes_reading
+                .read_folder_picture(folder)
+                .map_err(|error| error.to_string())
+        }),
+    }
+}
+
+fn folder_presentation_of(
+    presentation: media_library::FolderPresentation,
+) -> media_http::FolderPresentation {
+    media_http::FolderPresentation {
+        folder: presentation.folder,
+        name: presentation.name,
+        icon: presentation.icon,
+        picture_content_type: presentation.picture_content_type,
     }
 }
 
@@ -645,6 +765,7 @@ pub async fn serve(configuration: MediaConfiguration, shutdown: Shutdown) -> any
         catalog: None,
         diagnostics: media_http::Diagnostics::default(),
         apply: media_http::applies_nothing(),
+        previews: None,
     })
     .await
 }
@@ -665,6 +786,8 @@ pub struct Services {
     pub diagnostics: media_http::Diagnostics,
     /// What a running subsystem does when an edit is accepted.
     pub apply: media_http::ApplyConfiguration,
+    /// The compositor/CITP preview slots, when this process owns a renderer.
+    pub previews: Option<preview::SharedPreviews>,
 }
 
 /// Brings the API up, waits for shutdown, and takes it back down.
@@ -679,6 +802,7 @@ pub async fn serve_with(services: Services) -> anyhow::Result<()> {
         catalog,
         diagnostics,
         apply,
+        previews,
     } = services;
     let configuration = live.load_full();
     let resolved = configuration.network.resolved();
@@ -713,6 +837,8 @@ pub async fn serve_with(services: Services) -> anyhow::Result<()> {
     let configuration_path = ConfigurationSource::from_environment().path();
     let api = media_http::ApiState {
         configuration: live,
+        active_configuration: Arc::clone(&configuration),
+        administration_endpoint: administration_endpoint(&configuration),
         state,
         catalog,
         now: std::sync::Arc::new(move || {
@@ -723,6 +849,22 @@ pub async fn serve_with(services: Services) -> anyhow::Result<()> {
                 .map_err(|error| error.to_string())
         }),
         apply,
+        preview: std::sync::Arc::new(move |output, layer, size| {
+            let previews = previews.as_ref()?;
+            let preview = match layer {
+                Some(layer) => previews.for_layer(output, layer)?,
+                None => previews.for_output(output)?,
+            };
+            preview.requested_for_browser(size);
+            let (sequence, frame) = preview.latest_web()?;
+            Some(media_http::OutputPreviewFrame {
+                sequence,
+                width: frame.width,
+                height: frame.height,
+                content_type: frame.content_type,
+                bytes: frame.bytes.clone(),
+            })
+        }),
         diagnostics,
         replays: std::sync::Arc::new(media_http::Replays::new()),
         // Multipart framing adds a small amount around the library's authoritative payload bound.

@@ -129,10 +129,29 @@ impl VisualizerView {
 pub struct UpdateVisualizer {
     /// Client-generated. A resend with the same id returns the first outcome.
     pub request_id: String,
+    /// Changing kind resets the instance to that built-in's safe default parameters.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub type_id: Option<u16>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parameters: Option<VisualizerParametersView>,
+}
+
+/// Creates another independently tunable instance of one shipped visualizer kind.
+///
+/// The address is explicit because an empty pool slot is an operator-selected stable identity.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateVisualizer {
+    /// Client-generated. A resend with the same id returns the first outcome.
+    pub request_id: String,
+    pub folder: u8,
+    pub file: u8,
+    /// The stable built-in kind id published by [`VisualizerView::type_id`].
+    pub type_id: u16,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
 }
 
 impl VisualizerParametersView {

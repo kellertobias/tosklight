@@ -4,14 +4,12 @@
 // watching the meter. The meter arrives over the telemetry socket; the tuning is an edit like any
 // other, and the gains reach the running analysis as soon as it is stored.
 
-import {
-	Button,
-	NumberField,
-	SelectField,
-	TextField,
-} from "@tosklight/ui/controls";
-import { useState } from "react";
+import { HorizontalFaderField } from "@tosklight/ui";
+import { SelectField, TextField } from "@tosklight/ui/controls";
+import { WindowFrame } from "@tosklight/ui/window-kit";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ResourceState } from "../../app/ResourceState";
+import { MediaErrorToast } from "../../app/ToastContext";
 import { api } from "../../shared/api/client";
 import { requestId, useEditing } from "../../shared/api/editing";
 import type {
@@ -27,51 +25,76 @@ export function AudioPage() {
 	const telemetry = useTelemetry();
 	const editing = useEditing(audio.reload);
 
-	return (
-		<section className="media-page">
-			{editing.failure && (
-				<p className="media-state is-error" role="alert">
-					{editing.failure.message}{" "}
-					<Button size="compact" onClick={editing.dismiss}>
-						Dismiss
-					</Button>
-				</p>
-			)}
+	const editingAudio = editing.editing === "audio";
+	const saveAudioLive = useCallback(
+		(edit: UpdateAudio) => editing.saveLive(() => api.updateAudio(edit)),
+		[editing.saveLive],
+	);
 
-			<ResourceState resource={audio} subject="the audio monitor">
-				{(data) => (
-					<>
-						{/* The socket's frames when it is up, and the snapshot until it is. */}
-						<AudioMeters
-							audio={telemetry.frame?.audio ?? data.analysis}
-							live={telemetry.connected}
-						/>
-						{editing.editing === "audio" ? (
-							<AudioSettings
-								settings={data.settings}
-								busy={editing.busy}
-								onSave={(edit) =>
-									void editing.save(() => api.updateAudio(edit))
-								}
-								onCancel={editing.cancel}
+	return (
+		<WindowFrame
+			title="Audio"
+			info={{
+				primary: "Audio monitor",
+				secondary: "Live input analysis and sound-to-light tuning",
+			}}
+			className="media-audio-window"
+			groups={[
+				{
+					id: "audio-settings-actions",
+					actions: editingAudio
+						? [
+								{
+									id: "cancel-audio-settings",
+									label: "Done",
+									onPress: editing.cancel,
+								},
+							]
+						: [
+								{
+									id: "change-audio-settings",
+									label: "Change audio settings",
+									onPress: () => editing.begin("audio"),
+								},
+							],
+				},
+			]}
+			infoSection={
+				editingAudio && audio.data ? (
+					<AudioSettings
+						settings={audio.data.settings}
+						onChange={saveAudioLive}
+					/>
+				) : undefined
+			}
+		>
+			<section className="media-page media-audio-content">
+				{editing.failure && (
+					<MediaErrorToast
+						message={editing.failure.message}
+						onDismiss={editing.dismiss}
+					/>
+				)}
+
+				<ResourceState resource={audio} subject="the audio monitor">
+					{(data) => (
+						<>
+							{/* The socket's frames when it is up, and the snapshot until it is. */}
+							<AudioMeters
+								audio={telemetry.frame?.audio ?? data.analysis}
+								live={telemetry.connected}
 							/>
-						) : (
 							<article
 								className="media-settings-section"
 								aria-label="Audio settings"
 							>
 								<StoredSettings settings={data.settings} />
-								<div className="media-settings-actions">
-									<Button onClick={() => editing.begin("audio")}>
-										Change audio settings
-									</Button>
-								</div>
 							</article>
-						)}
-					</>
-				)}
-			</ResourceState>
-		</section>
+						</>
+					)}
+				</ResourceState>
+			</section>
+		</WindowFrame>
 	);
 }
 
@@ -122,15 +145,12 @@ type GainField = (typeof GAINS)[number]["field"];
 
 function AudioSettings({
 	settings,
-	busy,
-	onSave,
-	onCancel,
+	onChange,
 }: {
 	settings: AudioSettingsView;
-	busy: boolean;
-	onSave: (edit: UpdateAudio) => void;
-	onCancel: () => void;
+	onChange: (edit: UpdateAudio) => void;
 }) {
+	const mounted = useRef(false);
 	const [deviceBy, setDeviceBy] = useState(settings.deviceBy);
 	const [deviceValue, setDeviceValue] = useState(settings.deviceValue ?? "");
 	const [gains, setGains] = useState<Record<GainField, number>>({
@@ -155,20 +175,21 @@ function AudioSettings({
 		deviceBy === "name" && settings.availableDevices.includes(deviceValue)
 			? `name:${deviceValue}`
 			: deviceBy;
+	useEffect(() => {
+		if (!mounted.current) {
+			mounted.current = true;
+			return;
+		}
+		onChange({
+			requestId: requestId(),
+			deviceBy,
+			deviceValue: deviceBy === "system-default" ? undefined : deviceValue,
+			...gains,
+		});
+	}, [deviceBy, deviceValue, gains, onChange]);
 
 	return (
-		<form
-			className="media-settings-form"
-			onSubmit={(event) => {
-				event.preventDefault();
-				onSave({
-					requestId: requestId(),
-					deviceBy,
-					deviceValue: deviceBy === "system-default" ? undefined : deviceValue,
-					...gains,
-				});
-			}}
-		>
+		<form className="media-settings-form">
 			<SelectField
 				label="Input"
 				value={selection}
@@ -201,18 +222,19 @@ function AudioSettings({
 			)}
 
 			{GAINS.map((gain) => (
-				<NumberField
+				<HorizontalFaderField
 					key={gain.field}
 					label={gain.label}
 					description={gain.description}
-					min={0}
-					max={10}
+					minimum={0}
+					maximum={10}
 					step={0.05}
-					value={String(gains[gain.field])}
-					onChange={(event) =>
+					value={gains[gain.field]}
+					display={`${gains[gain.field].toFixed(2)}×`}
+					onChange={(value) =>
 						setGains((current) => ({
 							...current,
-							[gain.field]: Number(event.target.value),
+							[gain.field]: value,
 						}))
 					}
 				/>
@@ -220,18 +242,11 @@ function AudioSettings({
 
 			{settings.deviceTakesEffectOnRestart && (
 				<p className="media-state is-notice">
-					The gains take effect as you save them. Choosing a different input
+					The gains take effect as you adjust them. Choosing a different input
 					opens a different stream, which happens the next time this server
 					starts.
 				</p>
 			)}
-
-			<div className="media-settings-actions">
-				<Button type="submit" variant="primary" loading={busy}>
-					Save
-				</Button>
-				<Button onClick={onCancel}>Cancel</Button>
-			</div>
 		</form>
 	);
 }

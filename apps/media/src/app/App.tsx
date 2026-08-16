@@ -5,11 +5,15 @@
 import { WindowFrame } from "@tosklight/ui/window-kit";
 import { useEffect, useState } from "react";
 import { AudioPage } from "../features/audio/AudioPage";
-import { DashboardPage } from "../features/dashboard/DashboardPage";
+import { DmxPage } from "../features/dmx/DmxPage";
 import { MediaPanePage } from "../features/layers/MediaPanePage";
 import { LibraryPage } from "../features/media-library/LibraryPage";
 import { SettingsPage } from "../features/settings/SettingsPage";
 import { DeskIdentityProvider } from "../operator/DeskIdentityContext";
+import {
+	PlaybackTakeoverProvider,
+	PlaybackTakeoverToggle,
+} from "../operator/PlaybackTakeoverContext";
 import {
 	type MediaServerSection,
 	MediaServerShell,
@@ -18,32 +22,43 @@ import { useHealth } from "../shared/api/queries";
 import { useTelemetry } from "../shared/api/telemetry";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { ROUTES, type RoutePath } from "./routes";
+import { ToastProvider } from "./ToastContext";
 import { useRouter } from "./useRouter";
 
 // The connection indicator is the only thing on the shell that must stay live on every page.
 const HEALTH_POLL_MS = 5_000;
 
 const PAGES: Record<RoutePath, () => React.ReactElement> = {
-	"/": DashboardPage,
-	"/media": MediaPanePage,
+	"/": MediaPanePage,
 	"/library": () => <LibraryPage />,
 	"/visualizers": () => <LibraryPage mode="visualizers" />,
 	"/text": () => <LibraryPage mode="text" />,
 	"/audio": AudioPage,
+	"/dmx": DmxPage,
 	"/settings": SettingsPage,
 };
 
 const SECTION_BY_PATH: Record<RoutePath, MediaServerSection> = {
-	"/": "dashboard",
-	"/media": "media",
+	"/": "media",
 	"/library": "library",
 	"/visualizers": "library",
 	"/text": "library",
 	"/audio": "audio",
+	"/dmx": "dmx",
 	"/settings": "settings",
 };
 
 export function App() {
+	return (
+		<ToastProvider>
+			<PlaybackTakeoverProvider>
+				<AppSurface />
+			</PlaybackTakeoverProvider>
+		</ToastProvider>
+	);
+}
+
+function AppSurface() {
 	const { path, navigate, headingRef } = useRouter();
 	const health = useHealth(HEALTH_POLL_MS);
 	const telemetry = useTelemetry();
@@ -52,10 +67,12 @@ export function App() {
 	const route =
 		ROUTES.find((candidate) => candidate.path === path) ?? ROUTES[0];
 	const pageOwnsWindow =
-		path === "/media" ||
+		path === "/" ||
 		path === "/library" ||
 		path === "/visualizers" ||
 		path === "/text" ||
+		path === "/audio" ||
+		path === "/dmx" ||
 		path === "/settings";
 	const libraryMode =
 		path === "/visualizers"
@@ -76,6 +93,7 @@ export function App() {
 			instance={health.data?.instance}
 			showName={showName}
 			now={now}
+			playbackOwnership={<PlaybackTakeoverToggle />}
 			onNavigate={(section) => {
 				const route = ROUTES.find(
 					(candidate) => SECTION_BY_PATH[candidate.path] === section,

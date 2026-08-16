@@ -3,11 +3,16 @@
 struct Master {
     // Master tint in rgb; master dimmer in a.
     tint: vec4<f32>,
-    // Per-axis sign: -1 flips that axis, 1 leaves it alone.
-    flip: vec2<f32>,
-    // x: master mask opacity, zero when there is none. y: 1 when it reads alpha rather than
-    // luminance.
-    mask: vec2<f32>,
+    // xy: flip signs. z: master mask enabled. w: negative for an alpha-preserving layer preview.
+    flip_mask: vec4<f32>,
+    // xy: centre displacement in half-output units. zw: per-axis scale.
+    transform: vec4<f32>,
+    // xy: cosine/sine of master rotation. zw: cosine/sine of whole-shaper rotation.
+    rotation: vec4<f32>,
+    // Left, right, top and bottom inward edge positions, normalized to the master rectangle.
+    shaper_edges: vec4<f32>,
+    // Tangents of the corresponding edge rotations.
+    shaper_edge_tangents: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> master: Master;
@@ -34,13 +39,18 @@ fn vertex(@builtin(vertex_index) index: u32) -> VertexOutput {
     let corner = CORNERS[index];
 
     var out: VertexOutput;
-    out.clip_position = vec4<f32>(corner, 0.0, 1.0);
+    let scaled = corner * master.transform.zw;
+    let rotated = vec2<f32>(
+        scaled.x * master.rotation.x - scaled.y * master.rotation.y,
+        scaled.x * master.rotation.y + scaled.y * master.rotation.x,
+    );
+    out.clip_position = vec4<f32>(rotated + master.transform.xy, 0.0, 1.0);
     // Flipping the sampled coordinate rather than the geometry keeps the pass a single full-screen
     // triangle pair whichever way the operator has turned the output.
     let uv = vec2<f32>(corner.x * 0.5 + 0.5, 0.5 - corner.y * 0.5);
     out.uv = vec2<f32>(
-        select(uv.x, 1.0 - uv.x, master.flip.x < 0.0),
-        select(uv.y, 1.0 - uv.y, master.flip.y < 0.0),
+        select(uv.x, 1.0 - uv.x, master.flip_mask.x < 0.0),
+        select(uv.y, 1.0 - uv.y, master.flip_mask.y < 0.0),
     );
     return out;
 }
@@ -49,18 +59,32 @@ const LUMINANCE = vec3<f32>(0.299, 0.587, 0.114);
 
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
+    let centred = in.uv - vec2<f32>(0.5);
+    let shaped = vec2<f32>(
+        centred.x * master.rotation.z + centred.y * master.rotation.w,
+        -centred.x * master.rotation.w + centred.y * master.rotation.z,
+    ) + vec2<f32>(0.5);
+    let left = master.shaper_edges.x + master.shaper_edge_tangents.x * (shaped.y - 0.5);
+    let right = 1.0 - master.shaper_edges.y + master.shaper_edge_tangents.y * (shaped.y - 0.5);
+    let top = master.shaper_edges.z + master.shaper_edge_tangents.z * (shaped.x - 0.5);
+    let bottom = 1.0 - master.shaper_edges.w + master.shaper_edge_tangents.w * (shaped.x - 0.5);
+    if shaped.x < left || shaped.x > right || shaped.y < top || shaped.y > bottom {
+        discard;
+    }
     let sampled = textureSample(program, program_sampler, in.uv);
 
     // The output-level mask applies to the finished composite, after every layer has landed, so
     // it shapes the whole image rather than one layer's contribution to it.
     var strength = 1.0;
-    if master.mask.x > 0.0 {
+    if master.flip_mask.z > 0.0 {
         let read = textureSample(mask, program_sampler, in.uv);
-        let value = select(dot(read.rgb, LUMINANCE), read.a, master.mask.y > 0.5);
-        strength = mix(1.0, clamp(value, 0.0, 1.0), master.mask.x);
+        let value = dot(read.rgb, LUMINANCE);
+        strength = mix(1.0, clamp(value, 0.0, 1.0), master.flip_mask.z);
     }
 
     // Master dimmer is the final black overlay: scaling the composite is the same result with one
     // fewer pass.
-    return vec4<f32>(sampled.rgb * master.tint.rgb * master.tint.a * strength, 1.0);
+    let contribution = master.tint.a * strength;
+    let output_alpha = select(1.0, sampled.a * contribution, master.flip_mask.w < 0.0);
+    return vec4<f32>(sampled.rgb * master.tint.rgb * contribution, output_alpha);
 }

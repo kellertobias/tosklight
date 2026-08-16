@@ -28,6 +28,106 @@ pub enum TextKind {
     CountdownToTarget { target_unix_millis: i64 },
 }
 
+/// Operator-visible formatting, stored beside the kind so old unit variants remain compatible.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TextFormat {
+    #[serde(default)]
+    pub clock: ClockFormat,
+    #[serde(default)]
+    pub countdown: CountdownFormat,
+}
+
+impl Default for TextFormat {
+    fn default() -> Self {
+        Self {
+            clock: ClockFormat::default(),
+            countdown: CountdownFormat::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClockFormat {
+    #[serde(default)]
+    pub pattern: ClockPattern,
+    #[serde(default = "default_separator")]
+    pub separator: String,
+    /// A deterministic fixed offset from UTC. Zero preserves the previous renderer's meaning.
+    #[serde(default)]
+    pub utc_offset_minutes: i16,
+}
+
+impl Default for ClockFormat {
+    fn default() -> Self {
+        Self {
+            pattern: ClockPattern::default(),
+            separator: default_separator(),
+            utc_offset_minutes: 0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ClockPattern {
+    HoursMinutes24,
+    #[default]
+    HoursMinutesSeconds24,
+    HoursMinutes12,
+    HoursMinutesSeconds12,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CountdownFormat {
+    #[serde(default)]
+    pub pattern: CountdownPattern,
+    #[serde(default = "default_separator")]
+    pub separator: String,
+    #[serde(default)]
+    pub after_zero: CountdownAfterZero,
+    /// When true, minutes in a minutes/seconds display wrap at 60 instead of staying total.
+    #[serde(default)]
+    pub rollover: bool,
+}
+
+impl Default for CountdownFormat {
+    fn default() -> Self {
+        Self {
+            pattern: CountdownPattern::default(),
+            separator: default_separator(),
+            after_zero: CountdownAfterZero::default(),
+            rollover: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CountdownPattern {
+    Seconds,
+    Minutes,
+    MinutesSeconds,
+    #[default]
+    HoursMinutesSeconds,
+    CompactHoursMinutesSeconds,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CountdownAfterZero {
+    #[default]
+    Hold,
+    Negative,
+    CountUp,
+}
+
+fn default_separator() -> String {
+    ":".to_owned()
+}
+
 /// One addressable text entry.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -35,6 +135,9 @@ pub struct TextEntry {
     pub kind: TextKind,
     /// A disabled entry produces nothing, which is how an operator parks one without deleting it.
     pub enabled: bool,
+    /// Absent in old configuration files; the default reproduces their rendered meaning.
+    #[serde(default)]
+    pub format: TextFormat,
 }
 
 impl TextEntry {
@@ -42,6 +145,7 @@ impl TextEntry {
         Self {
             kind,
             enabled: true,
+            format: TextFormat::default(),
         }
     }
 }
@@ -186,37 +290,81 @@ pub fn render(
     }
     Some(match &entry.kind {
         TextKind::Static { text } => text.clone(),
-        TextKind::Clock => format_clock(now_unix_millis),
+        TextKind::Clock => format_clock(now_unix_millis, &entry.format.clock),
         TextKind::CountdownFromDuration { duration } => {
-            format_duration(countdown.remaining(*duration, now_millis))
+            let remaining =
+                duration.as_millis() as i128 - countdown.elapsed(now_millis).as_millis() as i128;
+            format_countdown(remaining, &entry.format.countdown)
         }
         TextKind::CountdownToTarget { target_unix_millis } => {
-            let remaining = target_unix_millis.saturating_sub(now_unix_millis).max(0);
-            format_duration(Duration::from_millis(remaining as u64))
+            let remaining = i128::from(*target_unix_millis) - i128::from(now_unix_millis);
+            format_countdown(remaining, &entry.format.countdown)
         }
     })
 }
 
 /// `HH:MM:SS` of the day, from a Unix millisecond stamp. No calendar library needed for a clock.
-fn format_clock(unix_millis: i64) -> String {
-    let seconds_of_day = unix_millis.div_euclid(1_000).rem_euclid(86_400);
-    format!(
-        "{:02}:{:02}:{:02}",
-        seconds_of_day / 3_600,
-        (seconds_of_day % 3_600) / 60,
-        seconds_of_day % 60
-    )
+fn format_clock(unix_millis: i64, format: &ClockFormat) -> String {
+    let shifted = unix_millis.saturating_add(i64::from(format.utc_offset_minutes) * 60_000);
+    let seconds_of_day = shifted.div_euclid(1_000).rem_euclid(86_400);
+    let hours24 = seconds_of_day / 3_600;
+    let minutes = (seconds_of_day % 3_600) / 60;
+    let seconds = seconds_of_day % 60;
+    let hours12 = match hours24 % 12 {
+        0 => 12,
+        hour => hour,
+    };
+    let separator = &format.separator;
+    match format.pattern {
+        ClockPattern::HoursMinutes24 => format!("{hours24:02}{separator}{minutes:02}"),
+        ClockPattern::HoursMinutesSeconds24 => {
+            format!("{hours24:02}{separator}{minutes:02}{separator}{seconds:02}")
+        }
+        ClockPattern::HoursMinutes12 => format!("{hours12:02}{separator}{minutes:02}"),
+        ClockPattern::HoursMinutesSeconds12 => {
+            format!("{hours12:02}{separator}{minutes:02}{separator}{seconds:02}")
+        }
+    }
 }
 
-/// `HH:MM:SS`, rounding up so a countdown shows `00:00:01` until the last second has truly gone.
-fn format_duration(remaining: Duration) -> String {
-    let seconds = remaining.as_millis().div_ceil(1_000) as u64;
-    format!(
-        "{:02}:{:02}:{:02}",
-        seconds / 3_600,
-        (seconds % 3_600) / 60,
-        seconds % 60
-    )
+/// Formats signed remaining milliseconds, rounding away from zero until a whole second passes.
+fn format_countdown(remaining_millis: i128, format: &CountdownFormat) -> String {
+    let (negative, millis) = if remaining_millis < 0 {
+        match format.after_zero {
+            CountdownAfterZero::Hold => (false, 0),
+            CountdownAfterZero::Negative => (true, remaining_millis.unsigned_abs()),
+            CountdownAfterZero::CountUp => (false, remaining_millis.unsigned_abs()),
+        }
+    } else {
+        (false, remaining_millis as u128)
+    };
+    let seconds = millis.div_ceil(1_000) as u64;
+    let sign = if negative { "-" } else { "" };
+    let separator = &format.separator;
+    match format.pattern {
+        CountdownPattern::Seconds => format!("{sign}{seconds:02}"),
+        CountdownPattern::Minutes => format!("{sign}{:02}", seconds.div_ceil(60)),
+        CountdownPattern::MinutesSeconds => {
+            let minutes = if format.rollover {
+                (seconds / 60) % 60
+            } else {
+                seconds / 60
+            };
+            format!("{sign}{minutes:02}{separator}{:02}", seconds % 60)
+        }
+        CountdownPattern::HoursMinutesSeconds => format!(
+            "{sign}{:02}{separator}{:02}{separator}{:02}",
+            seconds / 3_600,
+            (seconds % 3_600) / 60,
+            seconds % 60
+        ),
+        CountdownPattern::CompactHoursMinutesSeconds => format!(
+            "{sign}{}{separator}{:02}{separator}{:02}",
+            seconds / 3_600,
+            (seconds % 3_600) / 60,
+            seconds % 60
+        ),
+    }
 }
 
 #[cfg(test)]
@@ -272,6 +420,21 @@ mod tests {
         let entry = TextEntry::new(TextKind::Clock);
         let rendered = render(&entry, &Countdown::new(), -1_000, 0).unwrap();
         assert_eq!(rendered, "23:59:59");
+    }
+
+    #[test]
+    fn clocks_support_original_12_24_hour_formats_offsets_and_separators() {
+        let mut entry = TextEntry::new(TextKind::Clock);
+        entry.format.clock = ClockFormat {
+            pattern: ClockPattern::HoursMinutes12,
+            separator: ".".to_owned(),
+            utc_offset_minutes: 60,
+        };
+        let stamp = (13 * 3_600 + 45 * 60 + 30) * 1_000;
+        assert_eq!(
+            render(&entry, &Countdown::new(), stamp, 0).unwrap(),
+            "02.45"
+        );
     }
 
     #[test]
@@ -363,6 +526,37 @@ mod tests {
             duration: Duration::from_secs(3_661),
         });
         assert_eq!(render(&entry, &countdown, 0, 0).unwrap(), "01:01:01");
+    }
+
+    #[test]
+    fn countdowns_support_original_formats_rollover_and_after_zero_rules() {
+        let mut countdown = Countdown::new();
+        countdown.observe(visible(PlayMode::Loop), 0);
+        let mut entry = TextEntry::new(TextKind::CountdownFromDuration {
+            duration: Duration::from_secs(3_661),
+        });
+        entry.format.countdown.pattern = CountdownPattern::MinutesSeconds;
+        entry.format.countdown.separator = ".".to_owned();
+        assert_eq!(render(&entry, &countdown, 0, 0).unwrap(), "61.01");
+        entry.format.countdown.rollover = true;
+        assert_eq!(render(&entry, &countdown, 0, 0).unwrap(), "01.01");
+
+        entry.format.countdown.pattern = CountdownPattern::Seconds;
+        entry.format.countdown.after_zero = CountdownAfterZero::Negative;
+        assert_eq!(render(&entry, &countdown, 0, 3_662_000).unwrap(), "-01");
+        entry.format.countdown.after_zero = CountdownAfterZero::CountUp;
+        assert_eq!(render(&entry, &countdown, 0, 3_662_000).unwrap(), "01");
+    }
+
+    #[test]
+    fn old_persisted_entries_keep_the_previous_default_format() {
+        let entry: TextEntry = serde_json::from_str(r#"{"kind":{"kind":"clock"},"enabled":true}"#)
+            .expect("old text entry");
+        let stamp = (13 * 3_600 + 45 * 60 + 30) * 1_000;
+        assert_eq!(
+            render(&entry, &Countdown::new(), stamp, 0).unwrap(),
+            "13:45:30"
+        );
     }
 
     #[test]

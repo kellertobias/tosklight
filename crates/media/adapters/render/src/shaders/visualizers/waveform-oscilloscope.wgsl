@@ -2,7 +2,8 @@
 fn shade(p: vec2<f32>, uv: vec2<f32>) -> vec4<f32> {
     // Stabilizing anchors the trace to a rising zero crossing, so a steady tone stops sliding.
     let anchor = smoothing() * 0.25;
-    // Size is the waveform's vertical expansion. 0.05 preserves the original trace.
+    // Size is the waveform's vertical expansion. 0.05 is the persisted default and preserves the
+    // original full-size trace; the bounded 0.005..0.1 operator range spans 10%..200%.
     let expansion = clamp(size() / 0.05, 0.1, 2.0);
     let sample = wave_at(uv.x * (1.0 - anchor) + anchor) * amount() * expansion;
     let centre = 0.5 - sample * 0.45;

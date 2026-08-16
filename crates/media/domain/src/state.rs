@@ -206,6 +206,27 @@ pub fn apply(state: &mut MediaState, command: &Command) -> Applied {
             if let Some(value) = controls.mask {
                 next.mask = value;
             }
+            if let Some(value) = controls.scale_x {
+                next.scale_x = value;
+            }
+            if let Some(value) = controls.scale_y {
+                next.scale_y = value;
+            }
+            if let Some(value) = controls.scaling_mode {
+                next.scaling_mode = value;
+            }
+            if let Some(value) = controls.position_x {
+                next.position_x = value;
+            }
+            if let Some(value) = controls.position_y {
+                next.position_y = value;
+            }
+            if let Some(value) = controls.rotation {
+                next.rotation = value;
+            }
+            if let Some(value) = controls.shaper {
+                next.shaper = value;
+            }
             changed_or_not(replace(&mut output.master, next))
         }
         CommandKind::ResetLayer { layer, .. } => {
@@ -327,7 +348,7 @@ mod tests {
     }
 
     #[test]
-    fn the_web_ui_selects_media_until_a_desk_takes_over() {
+    fn the_web_ui_selects_media_only_during_explicit_takeover() {
         let (mut media, id) = state(LayerPersonality::TwoLayers);
         let select = |millis| {
             command(
@@ -341,6 +362,21 @@ mod tests {
             )
         };
 
+        assert_eq!(apply(&mut media, &select(0)), Applied::RejectedNotOwner);
+        assert_eq!(
+            apply(
+                &mut media,
+                &command(
+                    CommandKind::TakeOverPlayback {
+                        output: id,
+                        take_over: true,
+                    },
+                    CommandSource::Web,
+                    0,
+                ),
+            ),
+            Applied::Changed
+        );
         assert_eq!(apply(&mut media, &select(0)), Applied::Changed);
         assert_eq!(
             apply(&mut media, &select(1)),
@@ -363,6 +399,21 @@ mod tests {
             },
             CommandSource::ArtNet,
             1_000,
+        );
+        assert_eq!(apply(&mut media, &dmx), Applied::RejectedNotOwner);
+        assert_eq!(
+            apply(
+                &mut media,
+                &command(
+                    CommandKind::TakeOverPlayback {
+                        output: id,
+                        take_over: false,
+                    },
+                    CommandSource::Web,
+                    999,
+                ),
+            ),
+            Applied::Changed
         );
         assert_eq!(apply(&mut media, &dmx), Applied::Changed);
 
@@ -509,6 +560,17 @@ mod tests {
         apply(
             &mut media,
             &command(
+                CommandKind::TakeOverPlayback {
+                    output: id,
+                    take_over: true,
+                },
+                CommandSource::Web,
+                0,
+            ),
+        );
+        apply(
+            &mut media,
+            &command(
                 CommandKind::SelectMedia {
                     output: id,
                     layer: 0,
@@ -541,6 +603,17 @@ mod tests {
     #[test]
     fn dimmer_values_from_the_web_are_clamped() {
         let (mut media, id) = state(LayerPersonality::TwoLayers);
+        apply(
+            &mut media,
+            &command(
+                CommandKind::TakeOverPlayback {
+                    output: id,
+                    take_over: true,
+                },
+                CommandSource::Web,
+                0,
+            ),
+        );
         apply(
             &mut media,
             &command(
@@ -615,6 +688,17 @@ mod tests {
                 1_000,
             ),
         );
+        apply(
+            &mut media,
+            &command(
+                CommandKind::TakeOverPlayback {
+                    output: second,
+                    take_over: true,
+                },
+                CommandSource::Web,
+                1_000,
+            ),
+        );
 
         let web = command(
             CommandKind::SelectMedia {
@@ -628,7 +712,7 @@ mod tests {
         assert_eq!(
             apply(&mut media, &web),
             Applied::Changed,
-            "a desk on one output owns only it"
+            "takeover is scoped to the selected output"
         );
         assert_eq!(
             media.output(second).unwrap().layers[0].address,

@@ -13,7 +13,9 @@ use std::time::Duration;
 
 use media_domain::MediaAddress;
 use media_domain::color::Tint;
-use media_domain::text::{TextEntry, TextKind};
+use media_domain::text::{
+    ClockPattern, CountdownAfterZero, CountdownPattern, TextEntry, TextFormat, TextKind,
+};
 use media_domain::text_catalog::{Alignment, TextSlot, TextStyle};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -86,6 +88,108 @@ impl TextStyleView {
     }
 }
 
+/// Clock/countdown formatting as operator-facing strings from the original server contract.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct TextFormatView {
+    pub clock_pattern: String,
+    pub countdown_pattern: String,
+    pub separator: String,
+    pub utc_offset_minutes: i16,
+    pub after_zero: String,
+    pub rollover: bool,
+}
+
+impl TextFormatView {
+    pub fn of(format: &TextFormat) -> Self {
+        Self {
+            clock_pattern: match format.clock.pattern {
+                ClockPattern::HoursMinutes24 => "HH:MM",
+                ClockPattern::HoursMinutesSeconds24 => "HH:MM:SS",
+                ClockPattern::HoursMinutes12 => "hh:mm",
+                ClockPattern::HoursMinutesSeconds12 => "hh:mm:ss",
+            }
+            .to_owned(),
+            countdown_pattern: match format.countdown.pattern {
+                CountdownPattern::Seconds => "ss",
+                CountdownPattern::Minutes => "mm",
+                CountdownPattern::MinutesSeconds => "mm:ss",
+                CountdownPattern::HoursMinutesSeconds => "hh:mm:ss",
+                CountdownPattern::CompactHoursMinutesSeconds => "h:mm:ss",
+            }
+            .to_owned(),
+            separator: format.countdown.separator.clone(),
+            utc_offset_minutes: format.clock.utc_offset_minutes,
+            after_zero: match format.countdown.after_zero {
+                CountdownAfterZero::Hold => "hold",
+                CountdownAfterZero::Negative => "negative",
+                CountdownAfterZero::CountUp => "count-up",
+            }
+            .to_owned(),
+            rollover: format.countdown.rollover,
+        }
+    }
+
+    pub fn into_format(self) -> Result<TextFormat, TextEditError> {
+        let clock_pattern = match self.clock_pattern.as_str() {
+            "HH:MM" => ClockPattern::HoursMinutes24,
+            "HH:MM:SS" => ClockPattern::HoursMinutesSeconds24,
+            "hh:mm" => ClockPattern::HoursMinutes12,
+            "hh:mm:ss" => ClockPattern::HoursMinutesSeconds12,
+            other => {
+                return Err(TextEditError::UnknownFormat {
+                    format: other.to_owned(),
+                });
+            }
+        };
+        let countdown_pattern = match self.countdown_pattern.as_str() {
+            "ss" => CountdownPattern::Seconds,
+            "mm" => CountdownPattern::Minutes,
+            "mm:ss" => CountdownPattern::MinutesSeconds,
+            "hh:mm:ss" => CountdownPattern::HoursMinutesSeconds,
+            "h:mm:ss" => CountdownPattern::CompactHoursMinutesSeconds,
+            other => {
+                return Err(TextEditError::UnknownFormat {
+                    format: other.to_owned(),
+                });
+            }
+        };
+        let after_zero = match self.after_zero.as_str() {
+            "hold" => CountdownAfterZero::Hold,
+            "negative" => CountdownAfterZero::Negative,
+            "count-up" => CountdownAfterZero::CountUp,
+            other => {
+                return Err(TextEditError::UnknownAfterZero {
+                    behavior: other.to_owned(),
+                });
+            }
+        };
+        let separator = self.separator.trim();
+        if separator.is_empty()
+            || separator.chars().count() > 3
+            || separator.chars().any(char::is_control)
+        {
+            return Err(TextEditError::InvalidSeparator);
+        }
+        if !(-14 * 60..=14 * 60).contains(&self.utc_offset_minutes) {
+            return Err(TextEditError::InvalidUtcOffset);
+        }
+        Ok(TextFormat {
+            clock: media_domain::text::ClockFormat {
+                pattern: clock_pattern,
+                separator: separator.to_owned(),
+                utc_offset_minutes: self.utc_offset_minutes,
+            },
+            countdown: media_domain::text::CountdownFormat {
+                pattern: countdown_pattern,
+                separator: separator.to_owned(),
+                after_zero,
+                rollover: self.rollover,
+            },
+        })
+    }
+}
+
 /// One text slot, as the API reports it.
 ///
 /// Every kind's payload is reported in its own field and left absent for the kinds that do not
@@ -106,6 +210,7 @@ pub struct TextSlotView {
     #[ts(type = "number | null")]
     pub target_unix_millis: Option<i64>,
     pub style: TextStyleView,
+    pub format: TextFormatView,
 }
 
 impl TextSlotView {
@@ -132,6 +237,7 @@ impl TextSlotView {
             duration_seconds,
             target_unix_millis,
             style: TextStyleView::of(&slot.style),
+            format: TextFormatView::of(&slot.entry.format),
         }
     }
 }
@@ -152,6 +258,14 @@ pub enum TextEditError {
     NegativeDuration,
     #[error("a text source needs a name an operator can find it by")]
     EmptyName,
+    #[error("no text format is called {format}")]
+    UnknownFormat { format: String },
+    #[error("no countdown after-zero behavior is called {behavior}")]
+    UnknownAfterZero { behavior: String },
+    #[error("a text separator must contain one to three visible characters")]
+    InvalidSeparator,
+    #[error("a clock UTC offset must be between -840 and 840 minutes")]
+    InvalidUtcOffset,
 }
 
 /// The content half of a slot, shared by the create and update bodies.
@@ -223,6 +337,8 @@ pub struct CreateText {
     /// Absent means the shipped default appearance, which is what a new slot should look like.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub style: Option<TextStyleView>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub format: Option<TextFormatView>,
 }
 
 impl CreateText {
@@ -238,10 +354,14 @@ impl CreateText {
             Some(style) => style.into_style()?,
             None => TextStyle::default(),
         };
+        let mut entry = TextEntry::new(kind);
+        if let Some(format) = self.format.clone() {
+            entry.format = format.into_format()?;
+        }
         Ok(TextSlot {
             address: MediaAddress::new(self.folder, self.file),
             name: named(&self.name)?,
-            entry: TextEntry::new(kind),
+            entry,
             style,
         })
     }
@@ -268,6 +388,8 @@ pub struct UpdateText {
     pub target_unix_millis: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub style: Option<TextStyleView>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub format: Option<TextFormatView>,
 }
 
 impl UpdateText {
@@ -293,6 +415,10 @@ impl UpdateText {
             Some(style) => Some(style.into_style()?),
             None => None,
         };
+        let format = match self.format.clone() {
+            Some(format) => Some(format.into_format()?),
+            None => None,
+        };
 
         if let Some(kind) = kind {
             slot.entry.kind = kind;
@@ -305,6 +431,9 @@ impl UpdateText {
         }
         if let Some(style) = style {
             slot.style = style;
+        }
+        if let Some(format) = format {
+            slot.entry.format = format;
         }
         Ok(())
     }

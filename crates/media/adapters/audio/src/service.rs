@@ -260,6 +260,18 @@ pub fn input_devices() -> Vec<String> {
         .collect()
 }
 
+/// This machine's audio outputs, by name.
+pub fn output_devices() -> Vec<String> {
+    let host = cpal::default_host();
+    let Ok(devices) = host.output_devices() else {
+        return Vec::new();
+    };
+    devices
+        .filter_map(|device| device.name().ok())
+        .filter(|name| !name.trim().is_empty())
+        .collect()
+}
+
 impl Drop for AudioService {
     fn drop(&mut self) {
         if let Some(stop) = self.stop.take() {

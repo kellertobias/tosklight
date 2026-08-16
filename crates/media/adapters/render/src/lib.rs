@@ -22,7 +22,7 @@ pub use gpu::{Capabilities, Gpu, GpuError, PresentationSurface};
 pub use offscreen::OffScreenOutput;
 pub use texture::{SourceTexture, TextureError, block_bytes};
 pub use visualizer::{VisualizerError, VisualizerFrame, VisualizerRenderer};
-pub use window::{SurfaceLost, WindowSurface, WindowedOutput, select_monitor};
+pub use window::{SurfaceLost, WindowSurface, WindowedOutput, monitors, select_monitor};
 
 use media_domain::clock::{MeasuredCadence, RenderClock};
 use media_domain::geometry::Size;
@@ -31,9 +31,11 @@ use media_domain::{MasterState, OutputId, PresentationMode};
 /// One output instance: everything that belongs to one presented image.
 pub struct OutputRenderer {
     id: OutputId,
+    gpu: Gpu,
     clock: RenderClock,
     compositor: Compositor,
     target: OffScreenOutput,
+    preview: Option<OffScreenOutput>,
 }
 
 impl OutputRenderer {
@@ -50,9 +52,11 @@ impl OutputRenderer {
         }
         Ok(Self {
             id,
+            gpu: gpu.clone(),
             clock: RenderClock::new(presentation),
             compositor: Compositor::new(gpu, size, PROGRAM_FORMAT),
             target: OffScreenOutput::new(gpu, size),
+            preview: None,
         })
     }
 
@@ -97,6 +101,21 @@ impl OutputRenderer {
     /// asks for it only while a desk is subscribed.
     pub fn read_image(&self) -> Vec<u8> {
         self.target.read_image()
+    }
+
+    pub fn capture_layer_preview(
+        &mut self,
+        size: Size,
+        layer: LayerDraw<'_>,
+        now: media_domain::Timestamp,
+    ) -> Vec<u8> {
+        let target = self
+            .preview
+            .get_or_insert_with(|| OffScreenOutput::new(&self.gpu, size));
+        target.resize(size);
+        self.compositor
+            .render_layer_preview(layer, target.view(), self.id, now);
+        target.read_image()
     }
 
     /// Rebuilds this output for a new resolution.

@@ -1,4 +1,5 @@
 import { OperatorDestinationList } from "@tosklight/ui/application";
+import type { TitleActionGroup } from "@tosklight/ui/controls";
 import { Button } from "@tosklight/ui/controls";
 import {
 	SelectionList,
@@ -8,10 +9,10 @@ import {
 import type { ReactNode } from "react";
 
 export const MEDIA_SERVER_SECTIONS = [
-	{ id: "dashboard", label: "Dashboard", icon: "⌂" },
 	{ id: "media", label: "Playback", icon: "▣" },
 	{ id: "library", label: "Library", icon: "▦" },
 	{ id: "audio", label: "Audio", icon: "≋" },
+	{ id: "dmx", label: "DMX", icon: "↯" },
 	{ id: "settings", label: "Settings", icon: "⚙" },
 ] as const;
 
@@ -24,6 +25,7 @@ export function MediaServerShell({
 	showName,
 	now,
 	children,
+	playbackOwnership,
 	onNavigate,
 }: {
 	active: MediaServerSection;
@@ -32,6 +34,7 @@ export function MediaServerShell({
 	showName?: string;
 	now: Date;
 	children: ReactNode;
+	playbackOwnership?: ReactNode;
 	onNavigate?: (section: MediaServerSection) => void;
 }) {
 	return (
@@ -49,7 +52,15 @@ export function MediaServerShell({
 						role="img"
 						aria-hidden="true"
 					>
-						<span aria-hidden="true">M</span>
+						<img
+							src={
+								new URL(
+									"../../../../assets/branding/tosklight-media-icon.svg",
+									import.meta.url,
+								).href
+							}
+							alt=""
+						/>
 					</div>
 					<time dateTime={now.toISOString()}>
 						{now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
@@ -62,6 +73,12 @@ export function MediaServerShell({
 					activeId={active}
 					onSelect={(id) => onNavigate?.(id as MediaServerSection)}
 				/>
+				<section
+					id="media-playback-dock-action"
+					aria-label="Playback ownership"
+				>
+					{playbackOwnership}
+				</section>
 				<div
 					className={`media-operator-connection ${connected ? "is-connected" : "is-disconnected"}`}
 				>
@@ -184,25 +201,32 @@ export function MediaListDetail({
 
 export function MediaPreview({
 	title,
+	meta = "Preview",
 	variant = "aurora",
 	children,
+	aspectRatio,
 }: {
 	title: string;
+	meta?: string;
 	variant?: "aurora" | "particles" | "text" | "media";
 	children?: ReactNode;
+	aspectRatio?: number;
 }) {
 	return (
 		<figure
 			className={`media-preview is-${variant}`}
 			aria-label={`${title} preview`}
 		>
-			<div className="media-preview-picture">
+			<div
+				className="media-preview-picture"
+				style={aspectRatio ? { aspectRatio } : undefined}
+			>
 				<span className="media-preview-grid" aria-hidden="true" />
 				{children ?? <span className="media-preview-orb" aria-hidden="true" />}
 			</div>
 			<figcaption>
 				<strong>{title}</strong>
-				<span>Preview</span>
+				<span>{meta}</span>
 			</figcaption>
 		</figure>
 	);
@@ -210,8 +234,10 @@ export function MediaPreview({
 
 export const MEDIA_SETTINGS_SECTIONS = [
 	{ id: "libraries", label: "Libraries" },
-	{ id: "outputs", label: "Outputs" },
-	{ id: "network-inputs", label: "Network & Inputs" },
+	{ id: "picture-output", label: "Picture" },
+	{ id: "sound-output", label: "Sound" },
+	{ id: "network", label: "Network" },
+	{ id: "dmx", label: "DMX" },
 	{ id: "logs", label: "Logs" },
 ] as const;
 
@@ -221,12 +247,12 @@ export type MediaSettingsSection =
 export function MediaSettingsLayout({
 	active,
 	onSelect,
-	toolbar,
+	groups = [],
 	children,
 }: {
 	active: MediaSettingsSection;
 	onSelect?: (section: MediaSettingsSection) => void;
-	toolbar?: ReactNode;
+	groups?: TitleActionGroup[];
 	children: ReactNode;
 }) {
 	return (
@@ -237,19 +263,19 @@ export function MediaSettingsLayout({
 				secondary: "Output, network, and service configuration",
 			}}
 			className="media-settings-window"
-			toolbar={toolbar}
-			navigation={
-				<SelectionList
-					className="media-settings-navigation"
-					ariaLabel="Media Server settings"
-					value={active}
-					options={MEDIA_SETTINGS_SECTIONS.map((section) => ({
-						value: section.id,
+			groups={[
+				{
+					id: "settings-sections",
+					kind: "tabs",
+					activeId: active,
+					onActiveChange: (id) => onSelect?.(id as MediaSettingsSection),
+					actions: MEDIA_SETTINGS_SECTIONS.map((section) => ({
+						id: section.id,
 						label: section.label,
-					}))}
-					onChange={(id) => onSelect?.(id as MediaSettingsSection)}
-				/>
-			}
+					})),
+				},
+				...groups,
+			]}
 		>
 			<div className="media-settings-content">{children}</div>
 		</WindowFrame>

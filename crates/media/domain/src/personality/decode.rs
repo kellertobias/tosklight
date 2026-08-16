@@ -76,6 +76,7 @@ pub fn master_state(slots: &MasterSlots) -> MasterState {
         // The master mask selects an output-level library mask by file number within the
         // library's own mask folder, so folder zero here would mean "no mask" on every byte.
         mask: MediaAddress::new(1, slots[master::MASK]),
+        ..MasterState::default()
     }
 }
 

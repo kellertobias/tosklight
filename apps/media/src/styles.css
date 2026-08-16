@@ -479,7 +479,9 @@ body {
 
 .media-text-editor > fieldset,
 .media-text-editor > .media-settings-actions,
-.media-text-editor > .media-text-address {
+.media-text-editor > .media-text-address,
+.media-text-editor > .media-text-section-heading,
+.media-text-editor > .media-text-section-content {
 	grid-column: 1 / -1;
 }
 

@@ -17,7 +17,9 @@
 mod service;
 mod snapshot;
 
-pub use service::{AudioError, AudioService, SharedTuning, input_devices, tuning_of};
+pub use service::{
+    AudioError, AudioService, SharedTuning, input_devices, output_devices, tuning_of,
+};
 pub use snapshot::{AnalysisSnapshot, SharedAnalysis, Worker};
 
 /// How many samples the callback may run ahead of the worker.

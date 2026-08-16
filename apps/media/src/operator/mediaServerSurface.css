@@ -51,11 +51,18 @@
 	place-items: center;
 	border: 0;
 	border-radius: 8px;
-	background: #071c22;
+	background: transparent;
 	box-shadow: none;
 	color: var(--cyan);
 	font-size: 1.35rem;
 	font-weight: 900;
+}
+
+.media-operator-mark img {
+	width: 52px;
+	height: 52px;
+	display: block;
+	object-fit: contain;
 }
 
 .media-operator-dock .ui-operator-destination-list {
@@ -101,6 +108,12 @@
 	font-size: 0.75rem;
 }
 
+.media-playback-takeover-dock {
+	display: flex;
+	justify-content: center;
+	padding: 8px 4px;
+}
+
 .media-operator-connection > span {
 	width: 8px;
 	height: 8px;
@@ -128,6 +141,35 @@
 	overflow: hidden;
 }
 
+.media-toast-region {
+	position: fixed;
+	right: 18px;
+	bottom: 18px;
+	z-index: 2000;
+	display: grid;
+	gap: 10px;
+	width: min(440px, calc(100vw - 36px));
+	pointer-events: none;
+}
+
+.media-toast {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 14px;
+	padding: 12px 14px;
+	border: 1px solid var(--line);
+	border-radius: 9px;
+	background: var(--panel);
+	box-shadow: 0 12px 36px rgb(0 0 0 / 38%);
+	pointer-events: auto;
+}
+
+.media-toast.is-error {
+	border-color: var(--red);
+	color: var(--red);
+}
+
 .media-route-surface,
 .media-route-surface > .ui-window,
 .media-route-surface > .media-library-window,
@@ -150,27 +192,50 @@
 	box-sizing: border-box;
 }
 
+.media-dmx-window,
+.media-dmx-window > .ui-window-layout,
+.media-dmx-window > .ui-window-layout > .ui-window-center {
+	height: 100%;
+	min-height: 0;
+}
+
+.media-dmx-window > .ui-window-layout > .ui-window-center {
+	overflow: hidden;
+}
+
+.media-dmx-content {
+	height: 100%;
+	min-height: 0;
+	overflow: auto;
+	box-sizing: border-box;
+	padding: 10px;
+}
+
 /* The embedded production Media Pane is already scoped to this server. */
 .media-operator-shell .media-pane-server-select {
 	display: none;
 }
 
 .media-playback-takeover {
-	flex: none;
+	display: grid;
+	justify-items: center;
+	gap: 4px;
+	width: 100%;
+	background: transparent;
 }
 
 .media-playback-takeover > label {
-	position: absolute;
-	width: 1px;
-	height: 1px;
-	overflow: hidden;
-	clip-path: inset(50%);
+	font-size: 10px;
+	line-height: 1.15;
+	text-align: center;
 }
 
-.media-playback-takeover > .ui-form-control > .ui-switch-control {
+.media-playback-takeover > .ui-switch-control {
 	min-height: 30px;
 	padding: 2px 6px;
 	gap: 5px;
+	border: 0;
+	background: transparent;
 }
 
 .media-playback-takeover .ui-switch-track {
@@ -188,8 +253,7 @@
 }
 
 .media-playback-takeover .ui-switch-state {
-	padding: 3px 5px;
-	font-size: 12px;
+	display: none;
 }
 
 .media-screen-header {
@@ -248,6 +312,11 @@
 .media-dashboard-content {
 	height: 100%;
 	min-height: 0;
+}
+
+.media-dashboard-page {
+	padding: 10px;
+	box-sizing: border-box;
 }
 
 .media-dashboard-content {
@@ -382,10 +451,20 @@
 	height: 100%;
 	min-height: 0;
 	display: grid;
-	grid-template-columns: minmax(220px, 25%) minmax(430px, 1fr) minmax(
-			260px,
-			30%
+	grid-template-columns: minmax(312px, 26%) minmax(400px, 1fr) minmax(
+			320px,
+			32%
 		);
+}
+
+.media-library-window,
+.media-catalog-browser {
+	user-select: none;
+}
+
+.media-library-window input,
+.media-library-window textarea {
+	user-select: text;
 }
 
 .media-library-folders,
@@ -396,11 +475,18 @@
 	background: var(--panel);
 }
 
-.media-library-folder-pool {
-	display: grid;
-	grid-template-columns: repeat(2, minmax(0, 1fr));
-	gap: 6px;
+.media-library-folder-pool.ui-button-grid {
+	--button-grid-gap: 6px;
 	padding: 8px;
+}
+
+@media (max-width: 1120px) {
+	.media-catalog-browser {
+		grid-template-columns: minmax(232px, 25%) minmax(340px, 1fr) minmax(
+				280px,
+				32%
+			);
+	}
 }
 
 .media-library-folder {
@@ -429,17 +515,79 @@
 	background: var(--panel);
 }
 
-.media-library-pool-heading small {
-	color: var(--muted);
+.media-library-pool-heading > span {
+	font-size: 1rem;
+	font-weight: 700;
 }
 
-.media-library-pool .pool-window-grid {
-	grid-auto-rows: 104px;
+.media-library-pool-heading small {
+	color: var(--muted);
 }
 
 .media-library-pool .pool-card.selected {
 	outline: 2px solid var(--cyan);
 	outline-offset: -2px;
+}
+
+/* Library uses Playback's `media-file-pool-grid` card geometry directly. The
+ * dark checkerboard is presentation-only: transparent source pixels remain
+ * transparent, while every source is contained and centred without cropping. */
+.media-library-file-pool-grid .pool-card-media,
+.media-library-item-preview,
+.media-folder-picture {
+	background-color: #161b20;
+	background-image:
+		linear-gradient(45deg, #293139 25%, transparent 25%),
+		linear-gradient(-45deg, #293139 25%, transparent 25%),
+		linear-gradient(45deg, transparent 75%, #293139 75%),
+		linear-gradient(-45deg, transparent 75%, #293139 75%);
+	background-position:
+		0 0,
+		0 8px,
+		8px -8px,
+		-8px 0;
+	background-size: 16px 16px;
+}
+
+.media-folder-picture {
+	margin: 0;
+	width: 100%;
+	aspect-ratio: 16 / 9;
+	display: grid;
+	place-items: center;
+	overflow: hidden;
+	border: 1px solid var(--line);
+}
+
+.media-folder-picture > img {
+	width: 100%;
+	height: 100%;
+	object-fit: contain;
+	object-position: center;
+}
+
+.media-library-file-pool-grid .pool-card-image {
+	object-fit: contain;
+	object-position: center;
+}
+
+.media-library-empty-folder {
+	position: absolute;
+	inset: 44px 8px 8px;
+	display: grid;
+	place-content: center;
+	gap: 4px;
+	pointer-events: none;
+	color: var(--muted);
+	text-align: center;
+}
+
+.media-library-empty-folder strong {
+	color: var(--text);
+}
+
+.media-library-pool {
+	position: relative;
 }
 
 .media-library-inspector {
@@ -455,12 +603,19 @@
 	padding: 16px;
 }
 
-.media-library-editor > img {
+.media-library-item-preview {
 	width: 100%;
-	aspect-ratio: 16 / 9;
-	object-fit: contain;
-	background: #050608;
+	display: grid;
+	place-items: center;
+	overflow: hidden;
 	border: 1px solid var(--line);
+}
+
+.media-library-item-preview > img {
+	width: 100%;
+	height: 100%;
+	object-fit: contain;
+	object-position: center;
 }
 
 .media-library-editor h2,
@@ -517,7 +672,7 @@
 
 .media-preview-picture {
 	position: relative;
-	min-height: 280px;
+	aspect-ratio: 16 / 9;
 	display: grid;
 	place-items: center;
 	overflow: hidden;
@@ -601,8 +756,80 @@
 	margin: 0;
 }
 
+.media-generated-sticky-preview,
+.media-generated-sticky-region {
+	position: sticky;
+	top: 0;
+	z-index: 2;
+	padding-bottom: 16px;
+	background: var(--panel);
+}
+
+.media-generated-sticky-region {
+	margin: -16px -16px 0;
+	padding: 0 16px 16px;
+}
+
+.media-generated-sticky-region .media-text-editor {
+	margin-top: 14px;
+}
+
+.media-text-section-heading {
+	display: flex;
+	align-items: center;
+	justify-content: flex-start;
+	gap: 12px;
+	padding-bottom: 10px;
+	border-bottom: 1px solid var(--line);
+}
+
+.media-text-section-tabs {
+	display: flex;
+	gap: 4px;
+}
+
+.media-text-section-content {
+	display: grid;
+	gap: 0.7rem;
+}
+
+.media-source-address {
+	margin: 0 0 14px;
+	color: var(--muted);
+	font-size: 0.82rem;
+	font-variant-numeric: tabular-nums;
+}
+
+.media-source-identity-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 14px;
+	align-items: start;
+}
+
+.media-source-editor-separator {
+	width: 100%;
+	margin: 18px 0;
+	border: 0;
+	border-top: 1px solid var(--line);
+}
+
+@media (max-width: 760px) {
+	.media-source-identity-grid {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}
+
 .media-generated-library-detail .media-preview-picture {
-	min-height: 180px;
+	min-height: 0;
+}
+
+.media-preview-picture > img {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	object-fit: contain;
 }
 
 .media-settings-window,
@@ -631,6 +858,20 @@
 	overflow: auto;
 	padding: 10px;
 	box-sizing: border-box;
+}
+
+.media-audio-window,
+.media-audio-window > .ui-window-layout,
+.media-audio-window > .ui-window-layout > .ui-window-center {
+	height: 100%;
+	min-height: 0;
+}
+
+.media-audio-content {
+	height: 100%;
+	padding: 10px;
+	box-sizing: border-box;
+	overflow: auto;
 }
 
 .media-settings-content > h2 {
@@ -679,6 +920,12 @@
 .media-settings-section-heading p {
 	color: var(--muted);
 	font-size: 0.8rem;
+}
+
+.media-settings-save-state {
+	margin: 0;
+	color: var(--muted);
+	font-size: 0.78rem;
 }
 
 .media-audio-input-panel,

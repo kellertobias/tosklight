@@ -20,11 +20,14 @@ pub mod wire;
 
 pub use diagnostics::{
     AudioSource, AudioTelemetry, DeskIdentityTelemetry, DeviceLister, Diagnostics, DmxTelemetry,
-    ImportJob, ImportOutcome, Imports, LibraryAccess, LibraryEdit, LogEntry, LogLevelControl,
-    LogPage, LogQuery, LogSource, PendingImport, UploadStream,
+    FolderPresentation, ImportJob, ImportOutcome, Imports, LibraryAccess, LibraryEdit, LogEntry,
+    LogLevelControl, LogPage, LogQuery, LogSource, MonitorDevice, MonitorLister, PendingImport,
+    UploadStream,
 };
 pub use error::{ApiError, ApiErrorBody};
 pub use generation::{GeneratedArtifact, generated_artifacts, write_generated_artifacts};
 pub use replay::Replays;
-pub use routes::{ApiState, ApplyConfiguration, applies_nothing, router};
+pub use routes::{
+    ApiState, ApplyConfiguration, OutputPreviewFrame, RequestOutputPreview, applies_nothing, router,
+};
 pub use tolerant::TolerantJson;

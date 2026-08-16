@@ -23,11 +23,27 @@ const DEFAULT_PREVIEW: Size = Size::new(320, 180);
 pub struct Preview {
     /// How many connected consoles are currently subscribed. Zero means capture nothing.
     subscribers: AtomicUsize,
+    /// Browser snapshot requests renew this short lease instead of holding a streaming socket.
+    requested_until_unix_millis: AtomicU64,
     /// The size subscribers asked for, packed as two 16-bit halves so it is one atomic read.
     requested: AtomicU64,
     /// Increments with each captured frame, so a connection can tell a new one from the last.
     sequence: AtomicU64,
     frame: arc_swap::ArcSwapOption<Thumbnail>,
+    web_frame: arc_swap::ArcSwapOption<WebPreview>,
+}
+
+/// The browser representation of the same captured compositor frame.
+///
+/// Program is JPEG, byte-for-byte the image handed to CITP. Layers are PNG so transparent pixels
+/// survive and the operator UI can reveal them over its checkerboard instead of baking that
+/// checkerboard into the source.
+#[derive(Debug, Clone)]
+pub struct WebPreview {
+    pub width: u16,
+    pub height: u16,
+    pub content_type: &'static str,
+    pub bytes: Vec<u8>,
 }
 
 /// Shared between the outputs, which capture, and the connections, which send.
@@ -37,7 +53,13 @@ pub type SharedPreview = Arc<Preview>;
 /// their independently demand-driven latest-frame slots.
 #[derive(Clone, Default)]
 pub struct SharedPreviews {
-    by_output: Arc<std::collections::BTreeMap<OutputId, (u16, SharedPreview)>>,
+    by_output: Arc<std::collections::BTreeMap<OutputId, OutputPreviews>>,
+}
+
+#[derive(Clone)]
+struct OutputPreviews {
+    program: (u16, SharedPreview),
+    layers: Vec<(u16, SharedPreview)>,
 }
 
 impl SharedPreviews {
@@ -53,7 +75,38 @@ impl SharedPreviews {
                 while !used.insert(source) {
                     source = source.wrapping_add(1).max(1);
                 }
-                (output.id, (source, Arc::new(Preview::new())))
+                let preview_size = default_preview_size(Size::new(
+                    output.resolution.width,
+                    output.resolution.height,
+                ));
+                let program_preview = Arc::new(Preview::new());
+                program_preview.publish_pixels(
+                    &vec![0; preview_size.width as usize * preview_size.height as usize * 4],
+                    preview_size,
+                    preview_size,
+                    false,
+                );
+                let program = (source, program_preview);
+                let layers = (0..output.personality.layer_count())
+                    .map(|_| {
+                        source = source.wrapping_add(1).max(1);
+                        while !used.insert(source) {
+                            source = source.wrapping_add(1).max(1);
+                        }
+                        let preview = Arc::new(Preview::new());
+                        preview.publish_pixels(
+                            &vec![
+                                0;
+                                preview_size.width as usize * preview_size.height as usize * 4
+                            ],
+                            preview_size,
+                            preview_size,
+                            true,
+                        );
+                        (source, preview)
+                    })
+                    .collect();
+                (output.id, OutputPreviews { program, layers })
             })
             .collect();
         Self {
@@ -62,17 +115,44 @@ impl SharedPreviews {
     }
 
     pub fn for_output(&self, output: OutputId) -> Option<&SharedPreview> {
-        self.by_output.get(&output).map(|(_, preview)| preview)
+        self.by_output
+            .get(&output)
+            .map(|previews| &previews.program.1)
+    }
+
+    pub fn for_layer(&self, output: OutputId, layer: usize) -> Option<&SharedPreview> {
+        self.by_output
+            .get(&output)?
+            .layers
+            .get(layer)
+            .map(|(_, preview)| preview)
     }
 
     pub fn for_source(&self, source: u16) -> Option<&SharedPreview> {
-        self.by_output
-            .values()
-            .find_map(|(id, preview)| (*id == source).then_some(preview))
+        self.by_output.values().find_map(|previews| {
+            (previews.program.0 == source)
+                .then_some(&previews.program.1)
+                .or_else(|| {
+                    previews
+                        .layers
+                        .iter()
+                        .find_map(|(id, preview)| (*id == source).then_some(preview))
+                })
+        })
     }
 
     pub fn source_for_output(&self, output: OutputId) -> Option<u16> {
-        self.by_output.get(&output).map(|(source, _)| *source)
+        self.by_output
+            .get(&output)
+            .map(|previews| previews.program.0)
+    }
+
+    pub fn source_for_layer(&self, output: OutputId, layer: usize) -> Option<u16> {
+        self.by_output
+            .get(&output)?
+            .layers
+            .get(layer)
+            .map(|(source, _)| *source)
     }
 }
 
@@ -107,6 +187,14 @@ impl Preview {
     /// Whether an output should read its pixels back at all.
     pub fn wanted(&self) -> bool {
         self.subscribers.load(Ordering::SeqCst) > 0
+            || self.requested_until_unix_millis.load(Ordering::SeqCst) > unix_millis()
+    }
+
+    /// Requests demand-driven frames for a browser that polls the snapshot endpoint.
+    pub fn requested_for_browser(&self, size: Option<(u16, u16)>) {
+        self.requested_size_is(size);
+        self.requested_until_unix_millis
+            .store(unix_millis().saturating_add(2_000), Ordering::SeqCst);
     }
 
     /// The size to scale a capture to.
@@ -126,11 +214,51 @@ impl Preview {
         Some((self.sequence.load(Ordering::SeqCst), frame))
     }
 
+    /// The newest browser-safe representation of the same compositor frame.
+    pub fn latest_web(&self) -> Option<(u64, Arc<WebPreview>)> {
+        let frame = self.web_frame.load_full()?;
+        Some((self.sequence.load(Ordering::SeqCst), frame))
+    }
+
     /// Publishes a captured frame.
     pub fn publish(&self, frame: Thumbnail) {
+        let web = WebPreview {
+            width: frame.width,
+            height: frame.height,
+            content_type: "image/jpeg",
+            bytes: frame.jpeg.clone(),
+        };
         self.frame.store(Some(Arc::new(frame)));
+        self.web_frame.store(Some(Arc::new(web)));
         self.sequence.fetch_add(1, Ordering::SeqCst);
     }
+
+    /// Encodes and publishes one captured compositor frame for both CITP and the browser.
+    pub fn publish_pixels(&self, pixels: &[u8], from: Size, to: Size, layer: bool) {
+        match encode_publication(pixels, from, to, layer) {
+            Ok((citp, web)) => {
+                self.frame.store(Some(Arc::new(citp)));
+                self.web_frame.store(Some(Arc::new(web)));
+                self.sequence.fetch_add(1, Ordering::SeqCst);
+            }
+            Err(error) => tracing::warn!(%error, "a live preview could not be encoded"),
+        }
+    }
+}
+
+fn default_preview_size(output: Size) -> Size {
+    let width = DEFAULT_PREVIEW.width.min(output.width.max(1));
+    let height = ((u64::from(width) * u64::from(output.height.max(1)))
+        / u64::from(output.width.max(1)))
+    .max(1) as u32;
+    Size::new(width, height.min(output.height.max(1)))
+}
+
+fn unix_millis() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or_default()
 }
 
 /// Decides whether this instant should be captured, given when the last one was.
@@ -179,6 +307,90 @@ pub fn encode(
     })
 }
 
+/// Encodes one compositor frame into CITP JPEG and browser-safe bytes.
+fn encode_publication(
+    pixels: &[u8],
+    from: Size,
+    to: Size,
+    layer: bool,
+) -> anyhow::Result<(Thumbnail, WebPreview)> {
+    if !layer {
+        let citp = encode(pixels, from, to)?;
+        let web = WebPreview {
+            width: citp.width,
+            height: citp.height,
+            content_type: "image/jpeg",
+            bytes: citp.jpeg.clone(),
+        };
+        return Ok((citp, web));
+    }
+
+    let width = to.width.clamp(1, from.width.max(1));
+    let height = to.height.clamp(1, from.height.max(1));
+    let mut rgba = Vec::with_capacity(width as usize * height as usize * 4);
+    for row in 0..height {
+        let source_row = (row as u64 * u64::from(from.height) / u64::from(height)) as u32;
+        for column in 0..width {
+            let source_column = (column as u64 * u64::from(from.width) / u64::from(width)) as u32;
+            let at = (source_row as usize * from.width as usize + source_column as usize) * 4;
+            rgba.extend_from_slice(pixels.get(at..at + 4).unwrap_or(&[0, 0, 0, 0]));
+        }
+    }
+
+    // The compositor target stores premultiplied RGB, as every correct source-over blend target
+    // does. PNG/browser pixels are straight alpha; writing the premultiplied bytes directly makes
+    // semitransparent edges dark and displaying them over a checkerboard multiplies alpha twice.
+    for pixel in rgba.chunks_exact_mut(4) {
+        let alpha = u16::from(pixel[3]);
+        if alpha == 0 {
+            pixel[..3].fill(0);
+            continue;
+        }
+        for channel in 0..3 {
+            pixel[channel] = ((u16::from(pixel[channel]) * 255 + alpha / 2) / alpha).min(255) as u8;
+        }
+    }
+
+    let mut png_bytes = Vec::new();
+    {
+        let mut encoder = png::Encoder::new(&mut png_bytes, width, height);
+        encoder.set_color(png::ColorType::Rgba);
+        encoder.set_depth(png::BitDepth::Eight);
+        encoder.write_header()?.write_image_data(&rgba)?;
+    }
+
+    // CITP StFr is JPEG and cannot carry alpha. Composite its representation over the same
+    // checkerboard the web UI exposes behind the transparent PNG, so both operator surfaces show
+    // transparency rather than silently turning it black.
+    let mut checker = rgba.clone();
+    for (index, pixel) in checker.chunks_exact_mut(4).enumerate() {
+        let x = index as u32 % width;
+        let y = index as u32 / width;
+        let background = if (x / 8 + y / 8) % 2 == 0 {
+            [22_u8, 27, 32]
+        } else {
+            [41_u8, 49, 57]
+        };
+        let alpha = u16::from(pixel[3]);
+        for channel in 0..3 {
+            pixel[channel] = ((u16::from(pixel[channel]) * alpha
+                + u16::from(background[channel]) * (255 - alpha))
+                / 255) as u8;
+        }
+        pixel[3] = 255;
+    }
+    let citp = encode(&checker, Size::new(width, height), Size::new(width, height))?;
+    Ok((
+        citp,
+        WebPreview {
+            width: width as u16,
+            height: height as u16,
+            content_type: "image/png",
+            bytes: png_bytes,
+        },
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -197,19 +409,97 @@ mod tests {
         };
         let previews = SharedPreviews::configured(&configuration);
         let first_source = previews.source_for_output(first.id).unwrap();
+        let first_layer = previews.source_for_layer(first.id, 0).unwrap();
         let second_source = previews.source_for_output(second.id).unwrap();
         assert_ne!(first_source, second_source);
+        assert_ne!(first_source, first_layer);
         assert!(Arc::ptr_eq(
             previews.for_output(first.id).unwrap(),
             previews.for_source(first_source).unwrap()
         ));
         assert!(!previews.for_output(second.id).unwrap().wanted());
+        assert!(Arc::ptr_eq(
+            previews.for_layer(first.id, 0).unwrap(),
+            previews.for_source(first_layer).unwrap()
+        ));
         previews
             .for_source(first_source)
             .unwrap()
             .subscribed(true, Some((160, 90)));
         assert!(previews.for_output(first.id).unwrap().wanted());
         assert!(!previews.for_output(second.id).unwrap().wanted());
+    }
+
+    #[test]
+    fn configured_previews_start_with_valid_black_program_and_transparent_layer_frames() {
+        let output = media_application::configuration::OutputConfiguration::new("Main");
+        let configuration = media_application::MediaConfiguration {
+            outputs: vec![output.clone()],
+            ..Default::default()
+        };
+        let previews = SharedPreviews::configured(&configuration);
+        let (_, program_citp) = previews
+            .for_output(output.id)
+            .unwrap()
+            .latest()
+            .expect("Program has a black CITP fallback");
+        let (_, program_web) = previews
+            .for_output(output.id)
+            .unwrap()
+            .latest_web()
+            .expect("Program has a black browser fallback");
+        assert_eq!(program_web.content_type, "image/jpeg");
+        assert_eq!(program_web.bytes, program_citp.jpeg);
+
+        let (_, layer_web) = previews
+            .for_layer(output.id, 0)
+            .unwrap()
+            .latest_web()
+            .expect("Layer has a transparent browser fallback");
+        assert_eq!(layer_web.content_type, "image/png");
+        let decoder = png::Decoder::new(std::io::Cursor::new(&layer_web.bytes));
+        let mut reader = decoder.read_info().unwrap();
+        let mut pixels = vec![0; reader.output_buffer_size().unwrap()];
+        let info = reader.next_frame(&mut pixels).unwrap();
+        assert!(
+            pixels[..info.buffer_size()]
+                .chunks_exact(4)
+                .all(|pixel| pixel[3] == 0),
+            "empty layer pixels stay transparent"
+        );
+    }
+
+    #[test]
+    fn every_live_program_publication_is_byte_identical_for_web_and_citp() {
+        let preview = Preview::new();
+        let size = Size::new(32, 18);
+        preview.publish_pixels(&image(size, [220, 10, 40, 255]), size, size, false);
+        let (first_sequence, first_citp) = preview.latest().unwrap();
+        let (_, first_web) = preview.latest_web().unwrap();
+        assert_eq!(first_web.content_type, "image/jpeg");
+        assert_eq!(first_web.bytes, first_citp.jpeg);
+
+        preview.publish_pixels(&image(size, [10, 40, 220, 255]), size, size, false);
+        let (second_sequence, second_citp) = preview.latest().unwrap();
+        let (_, second_web) = preview.latest_web().unwrap();
+        assert!(second_sequence > first_sequence);
+        assert_ne!(
+            second_citp.jpeg, first_citp.jpeg,
+            "live video frames advance"
+        );
+        assert_eq!(second_web.bytes, second_citp.jpeg);
+    }
+
+    #[test]
+    fn a_layer_preview_converts_premultiplied_compositor_pixels_to_straight_png_alpha() {
+        let size = Size::new(1, 1);
+        let (_, web) = encode_publication(&[64, 32, 16, 128], size, size, true).unwrap();
+        assert_eq!(web.content_type, "image/png");
+        let decoder = png::Decoder::new(std::io::Cursor::new(&web.bytes));
+        let mut reader = decoder.read_info().unwrap();
+        let mut pixels = vec![0; reader.output_buffer_size().unwrap()];
+        let info = reader.next_frame(&mut pixels).unwrap();
+        assert_eq!(&pixels[..info.buffer_size()], &[128, 64, 32, 128]);
     }
 
     #[test]
@@ -226,6 +516,14 @@ mod tests {
 
         preview.subscribed(false, None);
         assert!(!preview.wanted());
+    }
+
+    #[test]
+    fn a_browser_snapshot_renews_a_bounded_capture_lease() {
+        let preview = Preview::new();
+        preview.requested_for_browser(Some((480, 270)));
+        assert!(preview.wanted());
+        assert_eq!(preview.requested_size(), Size::new(480, 270));
     }
 
     #[test]

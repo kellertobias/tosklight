@@ -17,6 +17,6 @@ pub mod uploads;
 pub use discovery::{DiscoveryError, Pending, discover, pending_imports};
 pub use importer::{Importer, Published};
 pub use jobs::{ImportQueue, Job, JobId, JobState};
-pub use storage::{LibraryStorage, StorageError};
+pub use storage::{FolderPresentation, LibraryStorage, StorageError};
 pub use thumbnails::ThumbnailError;
 pub use uploads::{MAX_UPLOAD_BYTES, Upload, UploadError};

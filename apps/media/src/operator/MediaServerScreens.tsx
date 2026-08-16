@@ -8,6 +8,7 @@ import {
 	TextAreaField,
 	TextField,
 } from "@tosklight/ui/controls";
+import type { TitleActionGroup } from "@tosklight/ui/controls";
 import { DataTable, WindowFrame } from "@tosklight/ui/window-kit";
 import { type ReactNode, useState } from "react";
 import {
@@ -412,16 +413,16 @@ export function TextScreen({
 export function SettingsScreen({
 	active,
 	onSelect,
-	toolbar,
+	groups,
 	children,
 }: {
 	active: MediaSettingsSection;
 	onSelect?: (section: MediaSettingsSection) => void;
-	toolbar?: ReactNode;
+	groups?: TitleActionGroup[];
 	children: ReactNode;
 }) {
 	return (
-		<MediaSettingsLayout active={active} onSelect={onSelect} toolbar={toolbar}>
+		<MediaSettingsLayout active={active} onSelect={onSelect} groups={groups}>
 			{children}
 		</MediaSettingsLayout>
 	);
@@ -657,7 +658,7 @@ export function LogsTabs({
 			onChange={onChange}
 			options={[
 				{ value: "logs", label: "Logs" },
-				{ value: "dmx-diagnostics", label: "DMX Diagnostics" },
+				{ value: "dmx-diagnostics", label: "Diagnostics" },
 			]}
 		/>
 	);
@@ -676,7 +677,7 @@ export function LogsSettings({
 		];
 		return (
 			<>
-				<h2>DMX Diagnostics</h2>
+				<h2>Diagnostics</h2>
 				<p>
 					Inspect live receiver state and download the generated personality.
 				</p>

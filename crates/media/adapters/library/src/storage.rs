@@ -15,6 +15,16 @@ use media_domain::{AssetId, CatalogLocation};
 
 use crate::naming;
 
+/// Presentation attached to any playable address-space folder, including generated text and
+/// visualizer banks that contain no filesystem media.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FolderPresentation {
+    pub folder: u16,
+    pub name: Option<String>,
+    pub icon: Option<String>,
+    pub picture_content_type: Option<String>,
+}
+
 /// Why a library edit could not be applied.
 #[derive(Debug, thiserror::Error)]
 pub enum StorageError {
@@ -27,6 +37,10 @@ pub enum StorageError {
         #[source]
         source: std::io::Error,
     },
+    #[error("folder {folder} is outside the media address space 1-255")]
+    InvalidPresentationFolder { folder: u16 },
+    #[error("folder pictures must use an image MIME type")]
+    InvalidPictureContentType,
 }
 
 /// The library's root on disk, and the operations that change it.
@@ -59,6 +73,119 @@ impl LibraryStorage {
             .join(naming::folder_directory(address.folder))
             .join(naming::THUMBNAIL_DIRECTORY)
             .join(naming::thumbnail_filename(address.file))
+    }
+
+    pub fn folder_picture_path(&self, folder: u16) -> Result<PathBuf, StorageError> {
+        validate_presentation_folder(folder)?;
+        Ok(self
+            .root
+            .join(naming::folder_directory(folder))
+            .join(naming::FOLDER_PICTURE_FILE))
+    }
+
+    /// Reads stored presentation without interpreting generated folders as physical media.
+    pub fn folder_presentation(&self, folder: u16) -> Result<FolderPresentation, StorageError> {
+        validate_presentation_folder(folder)?;
+        let directory = self.root.join(naming::folder_directory(folder));
+        let mut metadata = read_folder_metadata(&directory);
+        if !directory.join(naming::FOLDER_PICTURE_FILE).is_file() {
+            metadata.picture_content_type = None;
+        }
+        Ok(FolderPresentation {
+            folder,
+            name: metadata.name,
+            icon: metadata.icon,
+            picture_content_type: metadata.picture_content_type,
+        })
+    }
+
+    /// Updates name and icon for generated folders. Library folders continue through the catalog
+    /// mutation methods so their live snapshot changes at the same boundary.
+    pub fn update_generated_folder_presentation(
+        &self,
+        folder: u16,
+        name: Option<Option<&str>>,
+        icon: Option<Option<&str>>,
+    ) -> Result<FolderPresentation, StorageError> {
+        validate_presentation_folder(folder)?;
+        let mut metadata = read_folder_metadata(&self.root.join(naming::folder_directory(folder)));
+        if let Some(name) = name {
+            metadata.name = normalized(name);
+        }
+        if let Some(icon) = icon {
+            metadata.icon = normalized(icon);
+        }
+        self.write_raw_folder_metadata(folder, &metadata)?;
+        self.folder_presentation(folder)
+    }
+
+    pub fn write_folder_picture(
+        &self,
+        catalog: &mut CatalogSnapshot,
+        folder: u16,
+        content_type: &str,
+        bytes: &[u8],
+    ) -> Result<(), StorageError> {
+        validate_presentation_folder(folder)?;
+        if !content_type.starts_with("image/") {
+            return Err(StorageError::InvalidPictureContentType);
+        }
+        self.ensure_folder(folder)?;
+        let path = self.folder_picture_path(folder)?;
+        std::fs::write(&path, bytes).map_err(|source| StorageError::Filesystem {
+            operation: "write",
+            path,
+            source,
+        })?;
+        if media_domain::catalog::is_storage_folder(folder) {
+            catalog.set_folder_picture(folder, Some(content_type))?;
+            self.write_folder_metadata(catalog, folder)?;
+        } else {
+            let mut metadata =
+                read_folder_metadata(&self.root.join(naming::folder_directory(folder)));
+            metadata.picture_content_type = Some(content_type.to_owned());
+            self.write_raw_folder_metadata(folder, &metadata)?;
+        }
+        Ok(())
+    }
+
+    pub fn remove_folder_picture(
+        &self,
+        catalog: &mut CatalogSnapshot,
+        folder: u16,
+    ) -> Result<(), StorageError> {
+        let path = self.folder_picture_path(folder)?;
+        if path.exists() {
+            std::fs::remove_file(&path).map_err(|source| StorageError::Filesystem {
+                operation: "remove",
+                path,
+                source,
+            })?;
+        }
+        if media_domain::catalog::is_storage_folder(folder) {
+            catalog.set_folder_picture(folder, None)?;
+            self.write_folder_metadata(catalog, folder)?;
+        } else {
+            let mut metadata =
+                read_folder_metadata(&self.root.join(naming::folder_directory(folder)));
+            metadata.picture_content_type = None;
+            self.write_raw_folder_metadata(folder, &metadata)?;
+        }
+        Ok(())
+    }
+
+    pub fn read_folder_picture(&self, folder: u16) -> Result<(String, Vec<u8>), StorageError> {
+        let presentation = self.folder_presentation(folder)?;
+        let content_type = presentation
+            .picture_content_type
+            .ok_or(StorageError::InvalidPictureContentType)?;
+        let path = self.folder_picture_path(folder)?;
+        let bytes = std::fs::read(&path).map_err(|source| StorageError::Filesystem {
+            operation: "read",
+            path,
+            source,
+        })?;
+        Ok((content_type, bytes))
     }
 
     fn metadata_path(&self, address: impl Into<CatalogLocation>) -> PathBuf {
@@ -194,31 +321,78 @@ impl LibraryStorage {
         let mut proposed = catalog.clone();
         proposed.rename_folder(folder, name)?;
 
+        self.write_folder_metadata(&proposed, folder)?;
+        *catalog = proposed;
+        Ok(())
+    }
+
+    /// Sets or clears a folder icon while retaining the folder name.
+    pub fn set_folder_icon(
+        &self,
+        catalog: &mut CatalogSnapshot,
+        folder: u16,
+        icon: Option<&str>,
+    ) -> Result<(), StorageError> {
+        let mut proposed = catalog.clone();
+        proposed.set_folder_icon(folder, icon)?;
+        self.write_folder_metadata(&proposed, folder)?;
+        *catalog = proposed;
+        Ok(())
+    }
+
+    fn write_folder_metadata(
+        &self,
+        catalog: &CatalogSnapshot,
+        folder: u16,
+    ) -> Result<(), StorageError> {
+        let entry = catalog.folder(folder);
+        let metadata = StoredFolderMetadata {
+            name: entry.and_then(|entry| entry.name.clone()),
+            icon: entry.and_then(|entry| entry.icon.clone()),
+            picture_content_type: entry.and_then(|entry| entry.picture_content_type.clone()),
+        };
+        self.write_raw_folder_metadata(folder, &metadata)
+    }
+
+    fn write_raw_folder_metadata(
+        &self,
+        folder: u16,
+        metadata: &StoredFolderMetadata,
+    ) -> Result<(), StorageError> {
         let path = self
             .root
             .join(naming::folder_directory(folder))
             .join(naming::FOLDER_NAME_FILE);
-        match proposed.folder(folder).and_then(|entry| entry.name.clone()) {
-            Some(name) => {
-                self.ensure_folder(folder)?;
-                std::fs::write(&path, name).map_err(|source| StorageError::Filesystem {
-                    operation: "write",
+        if metadata.name.is_none()
+            && metadata.icon.is_none()
+            && metadata.picture_content_type.is_none()
+        {
+            if path.exists() {
+                std::fs::remove_file(&path).map_err(|source| StorageError::Filesystem {
+                    operation: "remove",
                     path,
                     source,
                 })?;
             }
-            None => {
-                if path.exists() {
-                    std::fs::remove_file(&path).map_err(|source| StorageError::Filesystem {
-                        operation: "remove",
-                        path,
-                        source,
-                    })?;
-                }
-            }
+            return Ok(());
         }
-        *catalog = proposed;
-        Ok(())
+        self.ensure_folder(folder)?;
+        // Preserve the legacy plain-text representation when a name is the only metadata.
+        let bytes = if metadata.icon.is_none() && metadata.picture_content_type.is_none() {
+            metadata.name.clone().unwrap_or_default().into_bytes()
+        } else {
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "name": metadata.name,
+                "icon": metadata.icon,
+                "pictureContentType": metadata.picture_content_type,
+            }))
+            .expect("folder metadata serializes")
+        };
+        std::fs::write(&path, bytes).map_err(|source| StorageError::Filesystem {
+            operation: "write",
+            path,
+            source,
+        })
     }
 
     /// Exchanges two complete physical folders, including names, originals, metadata and
@@ -481,6 +655,55 @@ impl LibraryStorage {
     }
 }
 
+#[derive(Default)]
+struct StoredFolderMetadata {
+    name: Option<String>,
+    icon: Option<String>,
+    picture_content_type: Option<String>,
+}
+
+fn validate_presentation_folder(folder: u16) -> Result<(), StorageError> {
+    if (1..=255).contains(&folder) {
+        Ok(())
+    } else {
+        Err(StorageError::InvalidPresentationFolder { folder })
+    }
+}
+
+fn normalized(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned)
+}
+
+fn read_folder_metadata(path: &Path) -> StoredFolderMetadata {
+    let Ok(contents) = std::fs::read_to_string(path.join(naming::FOLDER_NAME_FILE)) else {
+        return StoredFolderMetadata::default();
+    };
+    match serde_json::from_str::<serde_json::Value>(&contents) {
+        Ok(serde_json::Value::Object(document)) => StoredFolderMetadata {
+            name: document
+                .get("name")
+                .and_then(serde_json::Value::as_str)
+                .and_then(|value| normalized(Some(value))),
+            icon: document
+                .get("icon")
+                .and_then(serde_json::Value::as_str)
+                .and_then(|value| normalized(Some(value))),
+            picture_content_type: document
+                .get("pictureContentType")
+                .and_then(serde_json::Value::as_str)
+                .filter(|value| value.starts_with("image/"))
+                .map(str::to_owned),
+        },
+        _ => StoredFolderMetadata {
+            name: normalized(Some(&contents)),
+            ..StoredFolderMetadata::default()
+        },
+    }
+}
+
 fn staging(path: &Path) -> PathBuf {
     let mut name = path.file_name().unwrap_or_default().to_os_string();
     name.push(".swapping");
@@ -697,6 +920,141 @@ mod tests {
             .unwrap();
         assert!(!info.exists(), "clearing the name removes the file");
         assert_eq!(library.catalog.folder(2).unwrap().name, None);
+    }
+
+    #[test]
+    fn a_folder_icon_is_stored_with_and_does_not_erase_the_name() {
+        let mut library = Library::new("folder-icon");
+        library.add(2, 1, "Clip");
+        library
+            .storage
+            .rename_folder(&mut library.catalog, 2, Some("Stingers"))
+            .unwrap();
+        library
+            .storage
+            .set_folder_icon(&mut library.catalog, 2, Some("▶"))
+            .unwrap();
+
+        let info = library
+            .storage
+            .root()
+            .join("002")
+            .join(naming::FOLDER_NAME_FILE);
+        let document: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(info).unwrap()).unwrap();
+        assert_eq!(document["name"], "Stingers");
+        assert_eq!(document["icon"], "▶");
+        assert_eq!(
+            library.catalog.folder(2).unwrap().icon.as_deref(),
+            Some("▶")
+        );
+    }
+
+    #[test]
+    fn generated_folder_presentation_round_trips_without_becoming_catalog_media() {
+        let library = Library::new("generated-folder-presentation");
+        let updated = library
+            .storage
+            .update_generated_folder_presentation(
+                250,
+                Some(Some("Equalizers")),
+                Some(Some("waveform")),
+            )
+            .unwrap();
+
+        assert_eq!(updated.folder, 250);
+        assert_eq!(updated.name.as_deref(), Some("Equalizers"));
+        assert_eq!(updated.icon.as_deref(), Some("waveform"));
+        assert!(library.catalog.folder(250).is_none());
+
+        let cleared = library
+            .storage
+            .update_generated_folder_presentation(250, Some(Some("")), None)
+            .unwrap();
+        assert_eq!(cleared.name, None);
+        assert_eq!(cleared.icon.as_deref(), Some("waveform"));
+    }
+
+    #[test]
+    fn folder_picture_round_trips_for_media_and_generated_folders() {
+        let mut library = Library::new("folder-picture-round-trip");
+        let pixels = b"not decoded here; presentation preserves the uploaded image bytes";
+
+        library
+            .storage
+            .write_folder_picture(&mut library.catalog, 2, "image/png", pixels)
+            .unwrap();
+        assert_eq!(
+            library
+                .catalog
+                .folder(2)
+                .unwrap()
+                .picture_content_type
+                .as_deref(),
+            Some("image/png")
+        );
+        assert_eq!(
+            library.storage.read_folder_picture(2).unwrap(),
+            ("image/png".to_owned(), pixels.to_vec())
+        );
+
+        library
+            .storage
+            .write_folder_picture(&mut library.catalog, 200, "image/webp", pixels)
+            .unwrap();
+        assert_eq!(
+            library.storage.read_folder_picture(200).unwrap().0,
+            "image/webp"
+        );
+        library
+            .storage
+            .remove_folder_picture(&mut library.catalog, 200)
+            .unwrap();
+        assert!(library.storage.read_folder_picture(200).is_err());
+    }
+
+    #[test]
+    fn legacy_plain_folder_name_survives_new_presentation_reads() {
+        let library = Library::new("legacy-folder-presentation");
+        library.storage.ensure_folder(200_u16).unwrap();
+        std::fs::write(
+            library
+                .storage
+                .root
+                .join("200")
+                .join(naming::FOLDER_NAME_FILE),
+            "  Legacy Text  \n",
+        )
+        .unwrap();
+
+        let presentation = library.storage.folder_presentation(200).unwrap();
+        assert_eq!(presentation.name.as_deref(), Some("Legacy Text"));
+        assert_eq!(presentation.icon, None);
+        assert_eq!(presentation.picture_content_type, None);
+    }
+
+    #[test]
+    fn stale_picture_metadata_never_advertises_a_missing_image() {
+        let library = Library::new("missing-folder-picture");
+        library.storage.ensure_folder(250_u16).unwrap();
+        std::fs::write(
+            library
+                .storage
+                .root
+                .join("250")
+                .join(naming::FOLDER_NAME_FILE),
+            r#"{"pictureContentType":"image/png"}"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            library
+                .storage
+                .folder_presentation(250)
+                .unwrap()
+                .picture_content_type,
+            None
+        );
     }
 
     #[test]

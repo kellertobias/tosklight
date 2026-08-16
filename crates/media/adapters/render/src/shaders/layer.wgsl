@@ -24,7 +24,8 @@ struct Layer {
     // x: 1 when the mask reads its strength from alpha rather than luminance.
     mask_source: vec4<f32>,
     // 0: none/unsupported, 1: Analog TV, 2: Digital TV, 3: Blur, 4: Kaleidoscope,
-    // 5: Rasterized Print, 6: Beat Scan, 7: Beat Grid Wave, 8: Beat Form Flash, 9: Drawn Image.
+    // 5: Rasterized Print, 6: Beat Scan, 7: Beat Grid Wave, 8: Beat Form Flash,
+    // 9: Drawn Image.
     effect_types: vec4<u32>,
     effect_mixes: vec4<f32>,
     // Typed normalized parameters for slots 1..4. Analog TV is curvature, distortion, grain,
@@ -484,8 +485,16 @@ fn beat_grid_wave_source(
     return vec4<f32>(mix(original.rgb, scene, effect_mix), original.a);
 }
 
-fn beat_form_flash_source(original: vec4<f32>, uv: vec2<f32>, parameters: vec4<f32>, effect_mix: f32, slot: u32) -> vec4<f32> {
-    if effect_mix <= 0.0 { return original; }
+fn beat_form_flash_source(
+    original: vec4<f32>,
+    uv: vec2<f32>,
+    parameters: vec4<f32>,
+    effect_mix: f32,
+    slot: u32,
+) -> vec4<f32> {
+    if effect_mix <= 0.0 {
+        return original;
+    }
     var colour = vec3<f32>(0.0);
     var alpha = 0.0;
     for (var event = 0u; event < 16u; event += 1u) {
@@ -509,11 +518,21 @@ fn beat_form_flash_source(original: vec4<f32>, uv: vec2<f32>, parameters: vec4<f
 }
 
 fn drawn_image_source(uv: vec2<f32>, parameters: vec4<f32>, effect_mix: f32) -> vec4<f32> {
-    let original=textureSample(source,source_sampler,uv); if effect_mix<=0.0{return original;}
-    let dimensions=max(vec2<f32>(textureDimensions(source)),vec2<f32>(1.0)); let detail=clamp(parameters.y,0.0,1.0); let pixel=(1.0+(1.0-detail)*3.0)/dimensions;
-    let left=dot(textureSample(source,source_sampler,clamp(uv-vec2<f32>(pixel.x,0.0),vec2<f32>(0.0),vec2<f32>(1.0))).rgb,LUMINANCE); let right=dot(textureSample(source,source_sampler,clamp(uv+vec2<f32>(pixel.x,0.0),vec2<f32>(0.0),vec2<f32>(1.0))).rgb,LUMINANCE);
-    let top=dot(textureSample(source,source_sampler,clamp(uv-vec2<f32>(0.0,pixel.y),vec2<f32>(0.0),vec2<f32>(1.0))).rgb,LUMINANCE); let bottom=dot(textureSample(source,source_sampler,clamp(uv+vec2<f32>(0.0,pixel.y),vec2<f32>(0.0),vec2<f32>(1.0))).rgb,LUMINANCE);
-    let edge=smoothstep(mix(0.22,0.035,detail),mix(0.48,0.12,detail),length(vec2<f32>(right-left,bottom-top))); let levels=mix(4.0,10.0,detail); let illustrated=floor(original.rgb*levels+0.5)/levels; let paper=mix(vec3<f32>(0.96,0.94,0.88),illustrated,0.9)*(1.0-edge*0.82); let strength=clamp(parameters.x,0.0,1.0)*effect_mix; return vec4<f32>(mix(original.rgb,paper,strength),original.a);
+    let original = textureSample(source, source_sampler, uv);
+    if effect_mix <= 0.0 { return original; }
+    let dimensions = max(vec2<f32>(textureDimensions(source)), vec2<f32>(1.0));
+    let detail = clamp(parameters.y, 0.0, 1.0);
+    let pixel = (1.0 + (1.0 - detail) * 3.0) / dimensions;
+    let left = dot(textureSample(source, source_sampler, clamp(uv - vec2<f32>(pixel.x, 0.0), vec2<f32>(0.0), vec2<f32>(1.0))).rgb, LUMINANCE);
+    let right = dot(textureSample(source, source_sampler, clamp(uv + vec2<f32>(pixel.x, 0.0), vec2<f32>(0.0), vec2<f32>(1.0))).rgb, LUMINANCE);
+    let top = dot(textureSample(source, source_sampler, clamp(uv - vec2<f32>(0.0, pixel.y), vec2<f32>(0.0), vec2<f32>(1.0))).rgb, LUMINANCE);
+    let bottom = dot(textureSample(source, source_sampler, clamp(uv + vec2<f32>(0.0, pixel.y), vec2<f32>(0.0), vec2<f32>(1.0))).rgb, LUMINANCE);
+    let edge = smoothstep(mix(0.22, 0.035, detail), mix(0.48, 0.12, detail), length(vec2<f32>(right - left, bottom - top)));
+    let levels = mix(4.0, 10.0, detail);
+    let illustrated = floor(original.rgb * levels + 0.5) / levels;
+    let paper = mix(vec3<f32>(0.96, 0.94, 0.88), illustrated, 0.9) * (1.0 - edge * 0.82);
+    let strength = clamp(parameters.x, 0.0, 1.0) * effect_mix;
+    return vec4<f32>(mix(original.rgb, paper, strength), original.a);
 }
 
 @fragment
@@ -581,7 +600,13 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
                 slot,
             );
         } else if layer.effect_types[slot] == 8u {
-            sampled = beat_form_flash_source(sampled, coordinates.uv, layer.effect_parameters[slot], layer.effect_mixes[slot], slot);
+            sampled = beat_form_flash_source(
+                sampled,
+                coordinates.uv,
+                layer.effect_parameters[slot],
+                layer.effect_mixes[slot],
+                slot,
+            );
         } else if layer.effect_types[slot] == 9u {
             sampled = drawn_image_source(coordinates.uv, layer.effect_parameters[slot], layer.effect_mixes[slot]);
         }

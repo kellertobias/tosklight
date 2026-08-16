@@ -72,11 +72,13 @@ impl RenderClock {
 
     /// The interval a fixed-rate output targets. Display-synchronized and unlocked outputs have
     /// no target of their own: the surface paces one and nothing paces the other.
-    pub const fn target_interval(&self) -> Option<Duration> {
+    pub fn target_interval(&self) -> Option<Duration> {
         match self.mode {
-            PresentationMode::FixedFps { frames_per_second } if frames_per_second > 0 => Some(
-                Duration::from_nanos(1_000_000_000 / frames_per_second as u64),
-            ),
+            PresentationMode::FixedFps { frames_per_second }
+                if frames_per_second.is_finite() && frames_per_second > 0.0 =>
+            {
+                Some(Duration::from_secs_f64(1.0 / frames_per_second))
+            }
             _ => None,
         }
     }
@@ -155,7 +157,7 @@ mod tests {
     use super::*;
 
     const SIXTY: PresentationMode = PresentationMode::FixedFps {
-        frames_per_second: 60,
+        frames_per_second: 60.0,
     };
 
     fn micros(value: u64) -> Timestamp {
@@ -187,15 +189,30 @@ mod tests {
         let clock = RenderClock::new(SIXTY);
         assert_eq!(
             clock.target_interval(),
-            Some(Duration::from_nanos(16_666_666))
+            Some(Duration::from_nanos(16_666_667))
         );
 
         let thirty = RenderClock::new(PresentationMode::FixedFps {
-            frames_per_second: 30,
+            frames_per_second: 30.0,
         });
         assert_eq!(
             thirty.target_interval(),
             Some(Duration::from_nanos(33_333_333))
+        );
+    }
+
+    #[test]
+    fn a_fractional_ntsc_rate_targets_its_real_interval() {
+        let clock = RenderClock::new(PresentationMode::FixedFps {
+            frames_per_second: 59.94,
+        });
+        assert_eq!(
+            clock.target_interval(),
+            Some(Duration::from_secs_f64(1.0 / 59.94))
+        );
+        assert_ne!(
+            clock.target_interval(),
+            Some(Duration::from_secs_f64(1.0 / 60.0))
         );
     }
 
@@ -290,7 +307,7 @@ mod tests {
     #[test]
     fn a_zero_frame_rate_has_no_target_rather_than_dividing_by_zero() {
         let clock = RenderClock::new(PresentationMode::FixedFps {
-            frames_per_second: 0,
+            frames_per_second: 0.0,
         });
         assert_eq!(clock.target_interval(), None);
         assert!(clock.should_present(Timestamp::ZERO));

@@ -7,12 +7,15 @@
 import {
 	Button,
 	CheckboxField,
+	ColorPickerField,
 	NumberField,
 	SelectField,
 	TextAreaField,
 	TextField,
 } from "@tosklight/ui/controls";
+import { useState } from "react";
 import type {
+	TextFormatView,
 	TextSlotView,
 	TextStyleView,
 } from "../../shared/api/generated/media-wire";
@@ -31,6 +34,18 @@ const ALIGNMENTS = [
 	{ value: "right", label: "Right" },
 ] as const;
 
+const CLOCK_FORMATS = ["HH:MM", "HH:MM:SS", "hh:mm", "hh:mm:ss"].map(
+	(value) => ({ value, label: value }),
+);
+const COUNTDOWN_FORMATS = ["ss", "mm", "mm:ss", "hh:mm:ss", "h:mm:ss"].map(
+	(value) => ({ value, label: value }),
+);
+const AFTER_ZERO = [
+	{ value: "hold", label: "Hold at zero" },
+	{ value: "negative", label: "Continue with minus sign" },
+	{ value: "count-up", label: "Count up after zero" },
+];
+
 /// Everything an edit or a creation carries. One shape, because both write the same slot.
 export interface TextDraft {
 	name: string;
@@ -41,6 +56,7 @@ export interface TextDraft {
 	/** A local datetime as an `<input type="datetime-local">` gives it. */
 	target: string;
 	style: TextStyleView;
+	format: TextFormatView;
 }
 
 export function draftOf(slot: TextSlotView): TextDraft {
@@ -53,6 +69,7 @@ export function draftOf(slot: TextSlotView): TextDraft {
 		target:
 			slot.targetUnixMillis === null ? "" : localMoment(slot.targetUnixMillis),
 		style: slot.style,
+		format: slot.format,
 	};
 }
 
@@ -74,6 +91,14 @@ export function emptyDraft(): TextDraft {
 			green: 1,
 			blue: 1,
 		},
+		format: {
+			clockPattern: "HH:MM:SS",
+			countdownPattern: "hh:mm:ss",
+			separator: ":",
+			utcOffsetMinutes: 0,
+			afterZero: "hold",
+			rollover: false,
+		},
 	};
 }
 
@@ -82,18 +107,21 @@ export function payloadOf(draft: TextDraft): {
 	text?: string;
 	durationSeconds?: number;
 	targetUnixMillis?: number;
+	format: TextFormatView;
 } {
+	const format = draft.format;
 	switch (draft.kind) {
 		case "static":
-			return { text: draft.text };
+			return { text: draft.text, format };
 		case "countdown-duration":
-			return { durationSeconds: draft.durationSeconds };
+			return { durationSeconds: draft.durationSeconds, format };
 		case "countdown-target":
 			return {
 				targetUnixMillis: draft.target ? Date.parse(draft.target) : Date.now(),
+				format,
 			};
 		default:
-			return {};
+			return { format };
 	}
 }
 
@@ -104,9 +132,10 @@ export interface TextSourceEditorProps {
 	address?: { folder: number; file: number };
 	onAddress?: (address: { folder: number; file: number }) => void;
 	onChange: (draft: TextDraft) => void;
-	onSave: () => void;
-	onCancel: () => void;
-	submitLabel: string;
+	onSave?: () => void;
+	onCancel?: () => void;
+	submitLabel?: string;
+	part?: "all" | "identity" | "sections";
 }
 
 export function TextSourceEditor({
@@ -118,15 +147,19 @@ export function TextSourceEditor({
 	onSave,
 	onCancel,
 	submitLabel,
+	part = "all",
 }: TextSourceEditorProps) {
+	const [section, setSection] = useState<"content" | "appearance">("content");
 	const set = <K extends keyof TextDraft>(field: K, value: TextDraft[K]) =>
 		onChange({ ...draft, [field]: value });
+	const showIdentity = part !== "sections";
+	const showSections = part !== "identity";
 	return (
 		<form
 			className="media-text-editor"
 			onSubmit={(event) => {
 				event.preventDefault();
-				onSave();
+				onSave?.();
 			}}
 		>
 			{address && onAddress && (
@@ -154,68 +187,109 @@ export function TextSourceEditor({
 				</div>
 			)}
 
-			<TextField
-				label="Name"
-				value={draft.name}
-				onChange={(event) => set("name", event.target.value)}
-			/>
-			<SelectField
-				label="Shows"
-				value={draft.kind}
-				options={KINDS.map((kind) => ({
-					value: kind.value,
-					label: kind.label,
-				}))}
-				onChange={(next) => set("kind", next)}
-			/>
-
-			{draft.kind === "static" && (
-				<TextAreaField
-					label="Words"
-					description="Line breaks are kept in the rendered source."
-					value={draft.text}
-					onChange={(event) => set("text", event.target.value)}
-				/>
-			)}
-			{draft.kind === "countdown-duration" && (
-				<NumberField
-					label="Length in seconds"
-					description="Starts when the layer showing it becomes visible."
-					min={0}
-					step={1}
-					value={String(draft.durationSeconds)}
-					onChange={(event) =>
-						set("durationSeconds", Number(event.target.value))
-					}
-				/>
-			)}
-			{draft.kind === "countdown-target" && (
-				<label className="media-text-moment">
-					Counts down to
-					<input
-						type="datetime-local"
-						value={draft.target}
-						onChange={(event) => set("target", event.target.value)}
+			{showIdentity && (
+				<div className="media-source-identity-grid">
+					<SelectField
+						label="Text type"
+						ariaLabel="Text type"
+						value={draft.kind}
+						options={KINDS.map((kind) => ({
+							value: kind.value,
+							label: kind.label,
+						}))}
+						onChange={(next) => set("kind", next)}
 					/>
-				</label>
+					<TextField
+						label="Name"
+						value={draft.name}
+						onChange={(event) => set("name", event.target.value)}
+					/>
+				</div>
 			)}
 
-			<CheckboxField
-				label="Available to a desk"
-				stateLabel="Draw when a layer selects it"
-				description="A parked source keeps its words and draws nothing."
-				checked={draft.enabled}
-				onChange={(event) => set("enabled", event.target.checked)}
-			/>
+			{showSections && (
+				<div className="media-text-section-heading">
+					<div
+						className="media-text-section-tabs"
+						role="tablist"
+						aria-label="Text settings"
+					>
+						<Button
+							role="tab"
+							aria-selected={section === "content"}
+							variant={section === "content" ? "primary" : "secondary"}
+							onClick={() => setSection("content")}
+						>
+							Content
+						</Button>
+						<Button
+							role="tab"
+							aria-selected={section === "appearance"}
+							variant={section === "appearance" ? "primary" : "secondary"}
+							onClick={() => setSection("appearance")}
+						>
+							Appearance
+						</Button>
+					</div>
+				</div>
+			)}
 
-			<Appearance draft={draft} onChange={onChange} />
+			{showSections && (
+				<div
+					className="media-text-section-content"
+					role="tabpanel"
+					aria-label={section === "content" ? "Content" : "Appearance"}
+				>
+					{section === "content" && draft.kind === "static" && (
+						<TextAreaField
+							label="Content"
+							description="Line breaks are kept in the rendered source."
+							value={draft.text}
+							onChange={(event) => set("text", event.target.value)}
+						/>
+					)}
+					{section === "content" && draft.kind === "countdown-duration" && (
+						<NumberField
+							label="Length in seconds"
+							description="Starts when the layer showing it becomes visible."
+							min={0}
+							step={1}
+							value={String(draft.durationSeconds)}
+							onChange={(event) =>
+								set("durationSeconds", Number(event.target.value))
+							}
+						/>
+					)}
+					{section === "content" && draft.kind === "countdown-target" && (
+						<label className="media-text-moment">
+							Counts down to
+							<input
+								type="datetime-local"
+								value={draft.target}
+								onChange={(event) => set("target", event.target.value)}
+							/>
+						</label>
+					)}
+					{section === "content" && draft.kind === "clock" && (
+						<FormatSection draft={draft} onChange={onChange} clock />
+					)}
+					{section === "content" && draft.kind.startsWith("countdown") && (
+						<FormatSection draft={draft} onChange={onChange} />
+					)}
+					{section === "appearance" && (
+						<Appearance draft={draft} onChange={onChange} />
+					)}
+				</div>
+			)}
 
-			<div className="media-settings-actions">
-				<Button type="submit" variant="primary" loading={busy}>
-					{submitLabel}
-				</Button>
-				<Button onClick={onCancel}>Cancel</Button>
-			</div>
+			{onSave && submitLabel && (
+				<div className="media-settings-actions">
+					<Button type="submit" variant="primary" loading={busy}>
+						{submitLabel}
+					</Button>
+					{onCancel && <Button onClick={onCancel}>Cancel</Button>}
+				</div>
+			)}
 		</form>
 	);
 }
@@ -261,20 +335,17 @@ function Appearance({
 				}))}
 				onChange={(next) => setStyle("alignment", next)}
 			/>
-			<label className="media-text-colour">
-				Colour
-				<input
-					type="color"
-					value={toHex(draft.style.red, draft.style.green, draft.style.blue)}
-					onChange={(event) => {
-						const [red, green, blue] = fromHex(event.target.value);
-						onChange({
-							...draft,
-							style: { ...draft.style, red, green, blue },
-						});
-					}}
-				/>
-			</label>
+			<ColorPickerField
+				label="Colour"
+				value={toHex(draft.style.red, draft.style.green, draft.style.blue)}
+				onChange={(value) => {
+					const [red, green, blue] = fromHex(value);
+					onChange({
+						...draft,
+						style: { ...draft.style, red, green, blue },
+					});
+				}}
+			/>
 			<CheckboxField
 				label="Bold"
 				stateLabel="Draw in a heavier weight"
@@ -287,6 +358,73 @@ function Appearance({
 				checked={draft.style.italic}
 				onChange={(event) => setStyle("italic", event.target.checked)}
 			/>
+		</fieldset>
+	);
+}
+
+function FormatSection({
+	draft,
+	onChange,
+	clock = false,
+}: {
+	draft: TextDraft;
+	onChange: (draft: TextDraft) => void;
+	clock?: boolean;
+}) {
+	const set = <K extends keyof TextFormatView>(
+		field: K,
+		value: TextFormatView[K],
+	) => onChange({ ...draft, format: { ...draft.format, [field]: value } });
+	return (
+		<fieldset>
+			<legend>Format</legend>
+			<SelectField
+				label="Display format"
+				ariaLabel="Display format"
+				value={
+					clock ? draft.format.clockPattern : draft.format.countdownPattern
+				}
+				options={clock ? CLOCK_FORMATS : COUNTDOWN_FORMATS}
+				onChange={(value) =>
+					set(clock ? "clockPattern" : "countdownPattern", value)
+				}
+			/>
+			<TextField
+				label="Separator"
+				description="One to three visible characters."
+				value={draft.format.separator}
+				onChange={(event) => set("separator", event.target.value.slice(0, 3))}
+			/>
+			{clock ? (
+				<NumberField
+					label="UTC offset in minutes"
+					min={-840}
+					max={840}
+					step={15}
+					value={String(draft.format.utcOffsetMinutes)}
+					onChange={(event) =>
+						set("utcOffsetMinutes", Number(event.target.value))
+					}
+				/>
+			) : (
+				<>
+					<SelectField
+						label="After zero"
+						ariaLabel="After zero"
+						value={draft.format.afterZero}
+						options={AFTER_ZERO}
+						onChange={(value) => set("afterZero", value)}
+					/>
+					{draft.format.countdownPattern === "mm:ss" && (
+						<CheckboxField
+							label="Rollover minutes at 60"
+							stateLabel="Use clock-style minute rollover"
+							checked={draft.format.rollover}
+							onChange={(event) => set("rollover", event.target.checked)}
+						/>
+					)}
+				</>
+			)}
 		</fieldset>
 	);
 }

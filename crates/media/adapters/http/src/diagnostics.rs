@@ -123,6 +123,10 @@ pub enum LibraryEdit {
         folder: u16,
         name: Option<String>,
     },
+    SetFolderIcon {
+        folder: u16,
+        icon: Option<String>,
+    },
     SwapFolders {
         first: u16,
         second: u16,
@@ -138,8 +142,9 @@ pub trait UploadStream: Send {
     fn finish(self: Box<Self>) -> Result<String, String>;
 }
 
-pub type BeginUpload =
-    Arc<dyn Fn(MediaAddress, &str, &str) -> Result<Box<dyn UploadStream>, String> + Send + Sync>;
+pub type BeginUpload = Arc<
+    dyn Fn(MediaAddress, &str, &str, bool) -> Result<Box<dyn UploadStream>, String> + Send + Sync,
+>;
 
 /// Mutations and files the running library exposes to the API.
 #[derive(Clone)]
@@ -147,6 +152,29 @@ pub struct LibraryAccess {
     pub edit: Arc<dyn Fn(LibraryEdit) -> Result<(), String> + Send + Sync>,
     pub thumbnail: Arc<dyn Fn(CatalogLocation) -> Result<Vec<u8>, String> + Send + Sync>,
     pub begin_upload: BeginUpload,
+    pub folder_presentations:
+        Arc<dyn Fn() -> Result<Vec<FolderPresentation>, String> + Send + Sync>,
+    pub update_folder_presentation: Arc<
+        dyn Fn(
+                u16,
+                Option<Option<String>>,
+                Option<Option<String>>,
+            ) -> Result<FolderPresentation, String>
+            + Send
+            + Sync,
+    >,
+    pub set_folder_picture:
+        Arc<dyn Fn(u16, &str, &[u8]) -> Result<FolderPresentation, String> + Send + Sync>,
+    pub remove_folder_picture: Arc<dyn Fn(u16) -> Result<FolderPresentation, String> + Send + Sync>,
+    pub folder_picture: Arc<dyn Fn(u16) -> Result<(String, Vec<u8>), String> + Send + Sync>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FolderPresentation {
+    pub folder: u16,
+    pub name: Option<String>,
+    pub icon: Option<String>,
+    pub picture_content_type: Option<String>,
 }
 
 impl Default for LibraryAccess {
@@ -154,9 +182,20 @@ impl Default for LibraryAccess {
         Self {
             edit: Arc::new(|_| Err("library editing is unavailable in this process".to_owned())),
             thumbnail: Arc::new(|_| Err("no thumbnail exists at that address".to_owned())),
-            begin_upload: Arc::new(|_, _, _| {
+            begin_upload: Arc::new(|_, _, _, _| {
                 Err("library upload is unavailable in this process".to_owned())
             }),
+            folder_presentations: Arc::new(|| Ok(Vec::new())),
+            update_folder_presentation: Arc::new(|_, _, _| {
+                Err("folder presentation editing is unavailable in this process".to_owned())
+            }),
+            set_folder_picture: Arc::new(|_, _, _| {
+                Err("folder picture upload is unavailable in this process".to_owned())
+            }),
+            remove_folder_picture: Arc::new(|_| {
+                Err("folder picture removal is unavailable in this process".to_owned())
+            }),
+            folder_picture: Arc::new(|_| Err("folder picture is unavailable".to_owned())),
         }
     }
 }
@@ -254,6 +293,17 @@ pub struct LogPage {
 pub type AudioSource = Arc<dyn Fn() -> AudioTelemetry + Send + Sync>;
 /// The machine's audio inputs, by name. A platform capability, so the process owns it.
 pub type DeviceLister = Arc<dyn Fn() -> Vec<String> + Send + Sync>;
+/// One monitor the presentation event loop currently sees.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MonitorDevice {
+    pub index: u32,
+    pub name: String,
+    pub width: u32,
+    pub height: u32,
+    pub refresh_millihertz: Option<u32>,
+}
+/// The machine's monitors. The event-loop owner refreshes this snapshot.
+pub type MonitorLister = Arc<dyn Fn() -> Vec<MonitorDevice> + Send + Sync>;
 /// Recent log records.
 pub type LogSource = Arc<dyn Fn(&LogQuery) -> LogPage + Send + Sync>;
 
@@ -292,6 +342,8 @@ impl std::fmt::Debug for LogLevelControl {
 pub struct Diagnostics {
     pub audio: AudioSource,
     pub audio_devices: DeviceLister,
+    pub output_devices: DeviceLister,
+    pub monitors: MonitorLister,
     pub logs: LogSource,
     pub log_level: LogLevelControl,
     pub imports: Imports,
@@ -309,6 +361,8 @@ impl Default for Diagnostics {
         Self {
             audio: Arc::new(AudioTelemetry::default),
             audio_devices: Arc::new(Vec::new),
+            output_devices: Arc::new(Vec::new),
+            monitors: Arc::new(Vec::new),
             logs: Arc::new(|_| LogPage::default()),
             log_level: LogLevelControl::default(),
             imports: Imports::default(),

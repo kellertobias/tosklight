@@ -47,6 +47,7 @@ pub struct Upload {
     destination: PathBuf,
     written: u64,
     committed: bool,
+    replace: bool,
 }
 
 impl Upload {
@@ -56,6 +57,27 @@ impl Upload {
         address: MediaAddress,
         name: &str,
         original_filename: &str,
+    ) -> Result<Self, UploadError> {
+        Self::begin_with_policy(root, address, name, original_filename, false)
+    }
+
+    /// Stages an explicit replacement while leaving the currently playable clip in place until
+    /// the new source has been uploaded completely and the importer can publish atomically.
+    pub fn begin_replacement(
+        root: &Path,
+        address: MediaAddress,
+        name: &str,
+        original_filename: &str,
+    ) -> Result<Self, UploadError> {
+        Self::begin_with_policy(root, address, name, original_filename, true)
+    }
+
+    fn begin_with_policy(
+        root: &Path,
+        address: MediaAddress,
+        name: &str,
+        original_filename: &str,
+        replace: bool,
     ) -> Result<Self, UploadError> {
         if !(1..=199).contains(&address.folder) {
             return Err(UploadError::FolderOutOfRange {
@@ -70,7 +92,7 @@ impl Upload {
                 filename: original_filename.to_owned(),
             })?;
         let folder = root.join(naming::folder_directory(address.folder));
-        if address_is_taken(&folder, address.file) {
+        if !replace && address_is_taken(&folder, address.file) {
             return Err(UploadError::AddressTaken { address });
         }
         std::fs::create_dir_all(&folder).map_err(|source| UploadError::Filesystem {
@@ -99,6 +121,7 @@ impl Upload {
             destination,
             written: 0,
             committed: false,
+            replace,
         })
     }
 
@@ -132,6 +155,13 @@ impl Upload {
             source,
         })?;
         drop(file);
+        if self.replace && self.destination.exists() {
+            std::fs::remove_file(&self.destination).map_err(|source| UploadError::Filesystem {
+                operation: "replace source",
+                path: self.destination.clone(),
+                source,
+            })?;
+        }
         std::fs::rename(&self.staging, &self.destination).map_err(|source| {
             UploadError::Filesystem {
                 operation: "publish",
@@ -202,6 +232,32 @@ mod tests {
         let pending = crate::pending_imports(&root);
         assert_eq!(pending.len(), 1);
         assert_eq!(pending[0].destination, MediaAddress::new(3, 7));
+    }
+
+    #[test]
+    fn an_explicit_replacement_accepts_an_occupied_address_only_after_full_upload() {
+        let root = root("replacement");
+        let folder = root.join("001");
+        std::fs::create_dir_all(&folder).unwrap();
+        std::fs::write(folder.join("001-Loop.toskclip"), b"old clip").unwrap();
+        std::fs::write(folder.join("001-Loop.mov"), b"old source").unwrap();
+
+        assert!(Upload::begin(&root, MediaAddress::new(1, 1), "Loop", "new.mov").is_err());
+        let mut replacement =
+            Upload::begin_replacement(&root, MediaAddress::new(1, 1), "Loop", "new.mov").unwrap();
+        replacement.write(b"new source").unwrap();
+        assert_eq!(
+            std::fs::read(folder.join("001-Loop.mov")).unwrap(),
+            b"old source"
+        );
+        let source = replacement.finish().unwrap();
+
+        assert_eq!(std::fs::read(source).unwrap(), b"new source");
+        assert_eq!(
+            std::fs::read(folder.join("001-Loop.toskclip")).unwrap(),
+            b"old clip",
+            "the playable clip remains until import succeeds"
+        );
     }
 
     #[test]

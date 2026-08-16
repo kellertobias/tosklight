@@ -5,7 +5,11 @@ import {
 	PoolGrid,
 	type PoolSlotViewModel,
 } from "@tosklight/ui/pools";
-import { WindowFrame, WindowScrollArea } from "@tosklight/ui/window-kit";
+import {
+	ButtonGrid,
+	WindowFrame,
+	WindowScrollArea,
+} from "@tosklight/ui/window-kit";
 import {
 	type DragEvent,
 	type MouseEvent,
@@ -15,15 +19,21 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { MediaErrorToast } from "../../app/ToastContext";
 import { api } from "../../shared/api/client";
 import { requestId, useEditing } from "../../shared/api/editing";
 import type { CatalogView } from "../../shared/api/generated/media-wire";
-import { useCatalog } from "../../shared/api/queries";
+import { useCatalog, useFolderPresentations } from "../../shared/api/queries";
+import { useMainOutputAspectRatio } from "../../shared/output/useMainOutputAspectRatio";
 import { TextSourcesPage } from "../text-sources/TextSourcesPage";
 import { VisualizersPage } from "../visualizers/VisualizersPage";
 import {
-	LibrarySourceToggle,
+	type FolderPresentation,
+	FolderPresentationEditor,
+} from "./FolderPresentationEditor";
+import {
 	type LibrarySourceType,
+	librarySourceGroups,
 } from "./GeneratedLibraryBrowserView";
 import { ImportPanel } from "./ImportPanel";
 
@@ -56,7 +66,9 @@ function MediaLibraryPage({
 	onModeChange?: (mode: LibrarySourceType) => void;
 }) {
 	const catalog = useCatalog(CATALOG_POLL_MS);
+	const folderPresentations = useFolderPresentations();
 	const editing = useEditing(catalog.reload);
+	const previewAspectRatio = useMainOutputAspectRatio();
 
 	if (!catalog.data) {
 		return (
@@ -70,6 +82,8 @@ function MediaLibraryPage({
 
 	return (
 		<LibraryBrowserView
+			folderPresentations={folderPresentations.data?.folders}
+			previewAspectRatio={previewAspectRatio}
 			onModeChange={onModeChange}
 			catalog={catalog.data}
 			busy={editing.busy}
@@ -77,9 +91,34 @@ function MediaLibraryPage({
 			importPanel={<ImportPanel onImported={catalog.reload} />}
 			onDismissFailure={editing.dismiss}
 			onRenameFolder={(folder, name) =>
-				editing.save(() =>
-					api.updateLibraryFolder(folder, { requestId: requestId(), name }),
-				)
+				editing.save(async () => {
+					await api.updateFolderPresentation(folder, {
+						requestId: requestId(),
+						name,
+					});
+					folderPresentations.reload();
+				})
+			}
+			onSetFolderIcon={(folder, icon) =>
+				editing.save(async () => {
+					await api.updateFolderPresentation(folder, {
+						requestId: requestId(),
+						icon,
+					});
+					folderPresentations.reload();
+				})
+			}
+			onSetFolderPicture={(folder, picture) =>
+				editing.save(async () => {
+					await api.uploadFolderPicture(folder, requestId(), picture);
+					folderPresentations.reload();
+				})
+			}
+			onRemoveFolderPicture={(folder) =>
+				editing.save(async () => {
+					await api.removeFolderPicture(folder, requestId());
+					folderPresentations.reload();
+				})
 			}
 			onSwapFolders={(first, second) =>
 				editing.save(() =>
@@ -188,16 +227,32 @@ function MediaLibraryPage({
 					}
 				});
 			}}
+			onUploadAt={(file, destination, name, replace) =>
+				editing.save(() =>
+					api.uploadLibraryItem(
+						destination.folder,
+						destination.file,
+						requestId(),
+						name,
+						file,
+						replace,
+					),
+				)
+			}
 		/>
 	);
 }
 
 export interface LibraryBrowserViewProps {
 	catalog: CatalogView;
+	folderPresentations?: FolderPresentation[];
 	busy?: boolean;
 	failure?: string;
 	onDismissFailure?: () => void;
 	onRenameFolder?: (folder: number, name: string) => void;
+	onSetFolderIcon?: (folder: number, icon: string) => void;
+	onSetFolderPicture?: (folder: number, picture: File) => void;
+	onRemoveFolderPicture?: (folder: number) => void;
 	onSwapFolders?: (first: number, second: number) => void;
 	onUpdateItem?: (
 		item: CatalogItem,
@@ -209,7 +264,14 @@ export interface LibraryBrowserViewProps {
 		destination: { folder: number; file: number },
 	) => void;
 	onUpload?: (files: readonly File[], folder: number) => void;
+	onUploadAt?: (
+		file: File,
+		destination: { folder: number; file: number },
+		name: string,
+		replace: boolean,
+	) => void;
 	thumbnailUrl?: (folder: number, file: number) => string;
+	previewAspectRatio?: number;
 	importPanel?: ReactNode;
 	onModeChange?: (mode: LibrarySourceType) => void;
 }
@@ -217,22 +279,29 @@ export interface LibraryBrowserViewProps {
 /** The Media Server's address-first, three-pane CITP library editor. */
 export function LibraryBrowserView({
 	catalog,
+	folderPresentations = [],
 	busy = false,
 	failure,
 	onDismissFailure,
 	onRenameFolder,
+	onSetFolderIcon,
+	onSetFolderPicture,
+	onRemoveFolderPicture,
 	onSwapFolders,
 	onUpdateItem,
 	onMoveItems,
 	onReorderItem,
 	onUpload,
+	onUploadAt,
 	thumbnailUrl = api.thumbnailUrl,
+	previewAspectRatio = 16 / 9,
 	importPanel,
 	onModeChange,
 }: LibraryBrowserViewProps) {
 	const [folder, setFolder] = useState(1);
 	const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 	const [focusedId, setFocusedId] = useState<string | null>(null);
+	const [emptyFile, setEmptyFile] = useState<number | null>(null);
 	const [folderEditor, setFolderEditor] = useState<number | null>(null);
 	const [search, setSearch] = useState("");
 	const [dropFailure, setDropFailure] = useState<string | null>(null);
@@ -251,10 +320,12 @@ export function LibraryBrowserView({
 	useEffect(() => {
 		setSelectedIds(new Set());
 		setFocusedId(null);
+		setEmptyFile(null);
 	}, [folder]);
 
 	const choose = (item: CatalogItem, event: MouseEvent<HTMLButtonElement>) => {
 		setFocusedId(item.id);
+		setEmptyFile(null);
 		setFolderEditor(null);
 		setSelectedIds((current) => {
 			if (event.metaKey || event.ctrlKey) {
@@ -340,7 +411,32 @@ export function LibraryBrowserView({
 	return (
 		<WindowFrame
 			title="Library"
-			toolbar={<LibrarySourceToggle value="media" onChange={onModeChange} />}
+			groups={librarySourceGroups({
+				value: "media",
+				onChange: onModeChange,
+				actions: [
+					{
+						id: "new-media",
+						label: "New media",
+						onPress: () => {
+							const destination = allocateFreeAddresses(
+								catalog,
+								folder,
+								[],
+								1,
+							)[0];
+							if (!destination) {
+								setDropFailure("No free media address remains.");
+								return;
+							}
+							setFolder(destination.folder);
+							setFocusedId(null);
+							setFolderEditor(null);
+							setEmptyFile(destination.file);
+						},
+					},
+				],
+			})}
 			info={{
 				primary: "CITP media library",
 				secondary:
@@ -354,16 +450,13 @@ export function LibraryBrowserView({
 			}}
 		>
 			{(dropFailure ?? failure) && (
-				<button
-					type="button"
-					className="media-library-error"
-					onClick={() => {
+				<MediaErrorToast
+					message={dropFailure ?? failure ?? "Library operation failed"}
+					onDismiss={() => {
 						setDropFailure(null);
 						onDismissFailure?.();
 					}}
-				>
-					{dropFailure ?? failure} · Dismiss
-				</button>
+				/>
 			)}
 			<div className="media-catalog-browser">
 				<WindowScrollArea className="media-library-folders">
@@ -371,9 +464,12 @@ export function LibraryBrowserView({
 						<span>Folders</span>
 						<small>001–199 · Parking 900–999</small>
 					</div>
-					<div className="media-library-folder-pool">
+					<ButtonGrid className="media-library-folder-pool" minimum={68}>
 						{folders.map((number) => {
 							const entry = catalog.folders.find(
+								(candidate) => candidate.folder === number,
+							);
+							const presentation = folderPresentations.find(
 								(candidate) => candidate.folder === number,
 							);
 							const writable = isStorageFolder(number);
@@ -383,6 +479,7 @@ export function LibraryBrowserView({
 									model={{
 										number: String(number).padStart(3, "0"),
 										primary:
+											presentation?.name ||
 											entry?.name ||
 											(number >= FIRST_PARKING_FOLDER
 												? "Parking"
@@ -400,12 +497,19 @@ export function LibraryBrowserView({
 												: writable
 													? []
 													: ["disabled"],
+										icon: presentation?.icon || entry?.icon || "▣",
+										image: presentation?.pictureUrl
+											? {
+													src: presentation.pictureUrl,
+													alt: `${presentation.name ?? entry?.name ?? `Folder ${number}`} preview`,
+												}
+											: undefined,
 									}}
 									className={`media-library-folder ${number >= FIRST_PARKING_FOLDER ? "is-parking" : ""}`}
 									data-folder={number}
 									onClick={() => {
-										setFolderEditor(null);
 										setFolder(number);
+										setFolderEditor(writable ? number : null);
 									}}
 									onContextMenu={(event) => {
 										event.preventDefault();
@@ -429,7 +533,7 @@ export function LibraryBrowserView({
 								/>
 							);
 						})}
-					</div>
+					</ButtonGrid>
 				</WindowScrollArea>
 
 				<WindowScrollArea className="media-library-pool">
@@ -442,12 +546,12 @@ export function LibraryBrowserView({
 						</small>
 					</div>
 					<PoolGrid
+						className="media-file-pool-grid media-library-file-pool-grid"
 						slots={visibleItems.map((item) =>
 							itemSlot(item, folder, thumbnailUrl),
 						)}
 						slotCount={FILES_PER_FOLDER}
-						columns={5}
-						minimumCardWidth={92}
+						minimumCardWidth={112}
 						emptySlot={(index) => ({
 							id: `empty-${index + 1}`,
 							position: index,
@@ -461,6 +565,12 @@ export function LibraryBrowserView({
 								return (
 									<PoolCard
 										model={slot.card}
+										onClick={() => {
+											setFocusedId(null);
+											setSelectedIds(new Set());
+											setFolderEditor(null);
+											setEmptyFile(slot.position + 1);
+										}}
 										onDragOver={(event) => event.preventDefault()}
 										onDrop={(event) => dropOnFile(event, slot.position + 1)}
 									/>
@@ -495,6 +605,12 @@ export function LibraryBrowserView({
 							);
 						}}
 					/>
+					{visibleItems.length === 0 && (
+						<div className="media-library-empty-folder" role="status">
+							<strong>This folder is empty</strong>
+							<span>Drop media here or choose files to import.</span>
+						</div>
+					)}
 				</WindowScrollArea>
 
 				<aside className="media-library-inspector">
@@ -506,8 +622,21 @@ export function LibraryBrowserView({
 								catalog.folders.find((entry) => entry.folder === folderEditor)
 									?.name ?? ""
 							}
+							icon={
+								catalog.folders.find((entry) => entry.folder === folderEditor)
+									?.icon ?? ""
+							}
+							pictureUrl={
+								folderPresentations.find(
+									(candidate) => candidate.folder === folderEditor,
+								)?.pictureUrl ?? null
+							}
 							busy={busy}
 							onSave={onRenameFolder}
+							onSetIcon={onSetFolderIcon}
+							onSetPicture={onSetFolderPicture}
+							onRemovePicture={onRemoveFolderPicture}
+							onUpload={onUpload}
 						/>
 					) : focused ? (
 						<ItemEditor
@@ -515,7 +644,16 @@ export function LibraryBrowserView({
 							item={focused}
 							busy={busy}
 							onUpdate={onUpdateItem}
+							onReplace={onUploadAt}
 							thumbnailUrl={thumbnailUrl}
+							previewAspectRatio={previewAspectRatio}
+						/>
+					) : emptyFile !== null && isPlayableFolder(folder) ? (
+						<EmptySlotEditor
+							folder={folder}
+							file={emptyFile}
+							busy={busy}
+							onUpload={onUploadAt}
 						/>
 					) : isPlayableFolder(folder) ? (
 						<UploadEditor
@@ -567,16 +705,21 @@ function ItemEditor({
 	item,
 	busy,
 	onUpdate,
+	onReplace,
 	thumbnailUrl,
+	previewAspectRatio,
 }: {
 	folder: number;
 	item: CatalogItem;
 	busy: boolean;
 	onUpdate?: LibraryBrowserViewProps["onUpdateItem"];
+	onReplace?: LibraryBrowserViewProps["onUploadAt"];
 	thumbnailUrl: (folder: number, file: number) => string;
+	previewAspectRatio: number;
 }) {
 	const [name, setName] = useState(item.name);
 	const [bpm, setBpm] = useState(item.intrinsicBpm?.toString() ?? "");
+	const replacementPicker = useRef<HTMLInputElement>(null);
 	useEffect(() => {
 		setName(item.name);
 		setBpm(item.intrinsicBpm?.toString() ?? "");
@@ -594,7 +737,15 @@ function ItemEditor({
 			}}
 		>
 			<p className="media-library-eyebrow">Media</p>
-			<img src={thumbnailUrl(folder, item.file)} alt={`${item.name} preview`} />
+			<div
+				className="media-library-item-preview"
+				style={{ aspectRatio: previewAspectRatio }}
+			>
+				<img
+					src={thumbnailUrl(folder, item.file)}
+					alt={`${item.name} preview`}
+				/>
+			</div>
 			<p className="media-library-address">
 				{String(folder).padStart(3, "0")} / {String(item.file).padStart(3, "0")}
 			</p>
@@ -615,6 +766,41 @@ function ItemEditor({
 			<button type="submit" className="ui-button primary" disabled={busy}>
 				Save media
 			</button>
+			<FileDropField
+				label="Replacement media"
+				constraints={{ mimeTypes: ["video/*", "image/*"] }}
+				disabled={busy}
+				onFiles={(files) => {
+					const replacement = files[0];
+					if (replacement) {
+						void onReplace?.(
+							replacement,
+							{ folder, file: item.file },
+							name.trim() || item.name,
+							true,
+						);
+					}
+				}}
+				onOpenPicker={() => replacementPicker.current?.click()}
+			/>
+			<input
+				ref={replacementPicker}
+				hidden
+				type="file"
+				accept="video/*,image/*"
+				onChange={(event) => {
+					const replacement = event.currentTarget.files?.[0];
+					event.currentTarget.value = "";
+					if (replacement)
+						void onReplace?.(
+							replacement,
+							{ folder, file: item.file },
+							name.trim() || item.name,
+							true,
+						);
+				}}
+			/>
+			<p>Replacing keeps this exact folder and media number.</p>
 		</form>
 	);
 }
@@ -622,37 +808,117 @@ function ItemEditor({
 function FolderEditor({
 	folder,
 	name,
+	icon,
+	pictureUrl,
 	busy,
 	onSave,
+	onSetIcon,
+	onSetPicture,
+	onRemovePicture,
+	onUpload,
 }: {
 	folder: number;
 	name: string;
+	icon: string;
+	pictureUrl: string | null;
 	busy: boolean;
 	onSave?: LibraryBrowserViewProps["onRenameFolder"];
+	onSetIcon?: LibraryBrowserViewProps["onSetFolderIcon"];
+	onSetPicture?: LibraryBrowserViewProps["onSetFolderPicture"];
+	onRemovePicture?: LibraryBrowserViewProps["onRemoveFolderPicture"];
+	onUpload?: LibraryBrowserViewProps["onUpload"];
 }) {
-	const [next, setNext] = useState(name);
+	const folderPicker = useRef<HTMLInputElement>(null);
 	return (
-		<form
-			className="media-library-editor"
-			onSubmit={(event) => {
-				event.preventDefault();
-				void onSave?.(folder, next);
+		<FolderPresentationEditor
+			presentation={{
+				folder,
+				name: name || null,
+				icon: icon || null,
+				pictureUrl,
 			}}
+			busy={busy}
+			onName={(next) => onSave?.(folder, next)}
+			onIcon={(next) => onSetIcon?.(folder, next)}
+			onPicture={(picture) => onSetPicture?.(folder, picture)}
+			onRemovePicture={() => onRemovePicture?.(folder)}
 		>
-			<p className="media-library-eyebrow">
-				Folder {String(folder).padStart(3, "0")}
-			</p>
-			<h2>Configure folder</h2>
-			<TextField
-				label="Folder name"
-				value={next}
-				onChange={(event) => setNext(event.target.value)}
-				placeholder="Empty folder"
+			<FileDropField
+				label="Upload media to this folder"
+				constraints={{ mimeTypes: ["video/*", "image/*"], multiple: true }}
+				disabled={busy || !isPlayableFolder(folder)}
+				onFiles={(files) => void onUpload?.(files, folder)}
+				onOpenPicker={() => folderPicker.current?.click()}
 			/>
-			<button type="submit" className="ui-button primary" disabled={busy}>
-				Save folder
-			</button>
-		</form>
+			<input
+				ref={folderPicker}
+				hidden
+				type="file"
+				multiple
+				accept="video/*,image/*"
+				onChange={(event) => {
+					const files = [...(event.currentTarget.files ?? [])];
+					event.currentTarget.value = "";
+					if (files.length) void onUpload?.(files, folder);
+				}}
+			/>
+		</FolderPresentationEditor>
+	);
+}
+
+function EmptySlotEditor({
+	folder,
+	file,
+	busy,
+	onUpload,
+}: {
+	folder: number;
+	file: number;
+	busy: boolean;
+	onUpload?: LibraryBrowserViewProps["onUploadAt"];
+}) {
+	const [name, setName] = useState("");
+	const mediaPicker = useRef<HTMLInputElement>(null);
+	return (
+		<div className="media-library-editor">
+			<p className="media-library-eyebrow">Empty media slot</p>
+			<h2>Empty</h2>
+			<p className="media-library-address">
+				{String(folder).padStart(3, "0")} / {String(file).padStart(3, "0")}
+			</p>
+			<TextField
+				label="Media name"
+				value={name}
+				onChange={(event) => setName(event.target.value)}
+				placeholder="Name this media"
+				required
+			/>
+			<FileDropField
+				label="Media file"
+				constraints={{ mimeTypes: ["video/*", "image/*"] }}
+				disabled={busy || !name.trim()}
+				onFiles={(files) => {
+					const media = files[0];
+					if (media) {
+						void onUpload?.(media, { folder, file }, name.trim(), false);
+					}
+				}}
+				onOpenPicker={() => mediaPicker.current?.click()}
+			/>
+			<input
+				ref={mediaPicker}
+				hidden
+				type="file"
+				accept="video/*,image/*"
+				onChange={(event) => {
+					const media = event.currentTarget.files?.[0];
+					event.currentTarget.value = "";
+					if (media)
+						void onUpload?.(media, { folder, file }, name.trim(), false);
+				}}
+			/>
+			<p>The upload is assigned directly to this slot.</p>
+		</div>
 	);
 }
 

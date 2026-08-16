@@ -275,26 +275,44 @@ fn configured_preview_sources(
     configuration: &MediaConfiguration,
     previews: &crate::preview::SharedPreviews,
 ) -> Vec<media_citp::VideoSource> {
-    configuration
+    let mut sources = Vec::new();
+    for (physical_output, output) in configuration
         .outputs
         .iter()
         .filter(|output| output.enabled)
         .enumerate()
-        .filter_map(|(physical_output, output)| {
-            let id = previews.source_for_output(output.id)?;
-            Some(media_citp::VideoSource {
+    {
+        let Some(id) = previews.source_for_output(output.id) else {
+            continue;
+        };
+        let physical_output = physical_output.min(u8::MAX as usize) as u8;
+        sources.push(media_citp::VideoSource {
+            id,
+            name: output
+                .citp
+                .source_name
+                .clone()
+                .unwrap_or_else(|| format!("{} Program", output.name)),
+            physical_output,
+            layer: None,
+            width: output.resolution.width.min(u32::from(u16::MAX)) as u16,
+            height: output.resolution.height.min(u32::from(u16::MAX)) as u16,
+        });
+        for layer in 0..usize::from(output.personality.layer_count()) {
+            let Some(id) = previews.source_for_layer(output.id, layer) else {
+                continue;
+            };
+            sources.push(media_citp::VideoSource {
                 id,
-                name: output
-                    .citp
-                    .source_name
-                    .clone()
-                    .unwrap_or_else(|| format!("{} Program", output.name)),
-                physical_output: physical_output.min(u8::MAX as usize) as u8,
+                name: format!("{} Layer {}", output.name, layer + 1),
+                physical_output,
+                layer: Some(layer.min(u8::MAX as usize) as u8),
                 width: output.resolution.width.min(u32::from(u16::MAX)) as u16,
                 height: output.resolution.height.min(u32::from(u16::MAX)) as u16,
-            })
-        })
-        .collect()
+            });
+        }
+    }
+    sources
 }
 
 /// Announces this server, and answers a console that announced itself.
@@ -760,8 +778,14 @@ mod tests {
         };
         let previews = crate::preview::SharedPreviews::configured(&configuration);
         let sources = configured_preview_sources(&configuration, &previews);
-        assert_eq!(sources.len(), 2);
+        assert_eq!(
+            sources.len(),
+            2 + 2 * usize::from(main.personality.layer_count())
+        );
         assert_eq!(sources[0].name, "Program A");
+        assert_eq!(sources[0].layer, None);
+        assert_eq!(sources[1].name, "Main Layer 1");
+        assert_eq!(sources[1].layer, Some(0));
         assert_eq!((sources[0].width, sources[0].height), (1920, 1080));
         assert_eq!(sources[0].id, previews.source_for_output(main.id).unwrap());
         assert_ne!(sources[0].id, sources[1].id);

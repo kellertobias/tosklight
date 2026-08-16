@@ -1,154 +1,170 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ToastProvider } from "../../app/ToastContext";
 import { aNetwork, stubServer } from "../../testing/server";
 import { SettingsPage } from "./SettingsPage";
 
 afterEach(() => {
+	window.history.replaceState(null, "", "/");
 	vi.unstubAllGlobals();
 	vi.restoreAllMocks();
 });
 
 describe("the settings page", () => {
-	it("shows the stored output target, picture, DMX patch, and restart boundary", async () => {
+	it("uses dedicated title tabs and opens the network form by default", async () => {
+		stubSettingsServer();
+		renderSettings();
+
+		const tabs = screen.getByRole("tablist");
+		expect(tabs).toHaveTextContent("LibrariesPictureSoundNetworkDMXLogs");
+		expect(tabs).not.toHaveTextContent("Audio");
+		expect(await screen.findByLabelText("Art-Net")).toBeVisible();
+		expect(
+			screen.queryByRole("button", { name: "Change network settings" }),
+		).not.toBeInTheDocument();
+		expect(
+			screen.queryByRole("button", { name: /Save settings/ }),
+		).not.toBeInTheDocument();
+		expect(screen.getByRole("status")).toHaveTextContent("Saved automatically");
+	});
+
+	it("saves network settings automatically", async () => {
+		const server = stubSettingsServer();
+		renderSettings();
+		expect(
+			screen.queryByText(/used the next time this server starts/u),
+		).not.toBeInTheDocument();
+		const artNet = await screen.findByLabelText("Art-Net");
+		await userEvent.clear(artNet);
+		await userEvent.type(artNet, "192.168.1.40:6454");
+		await waitFor(() =>
+			expect(server.network.stored.artNetListen).toBe("192.168.1.40:6454"),
+		);
+		expect(
+			screen.getByText(/used the next time this server starts/u),
+		).toBeVisible();
+	});
+
+	it("renders the Libraries path explanation as regular information", async () => {
+		stubSettingsServer();
+		renderSettings();
+		await openSettings("Libraries");
+		const explanation = await screen.findByText(/library\.root/u);
+		expect(explanation).not.toHaveClass("media-state");
+		expect(explanation).not.toHaveClass("is-notice");
+	});
+
+	it("offers actual monitors on a direct picture-output form and saves only picture fields", async () => {
+		const output = stubOutputConfiguration();
+		renderSettings();
+		await openSettings("Picture");
+		await screen.findByRole("article", { name: "Main output settings" });
+		expect(
+			screen.queryByText(/Saved output changes take effect/u),
+		).not.toBeInTheDocument();
+		await choose("Off-screen (no window)", "Monitor");
+		await choose(
+			"Display 1 · Built-in Display · 2560 × 1600",
+			"Display 2 · Stage Projector · 3840 × 2160",
+		);
+		await choose("1080p · 1920 × 1080", "Take from monitor");
+
+		await waitFor(() => expect(output.writes).toHaveLength(1));
+		expect(output.writes[0]).toMatchObject({
+			targetKind: "monitor",
+			monitorBy: "index",
+			monitorValue: "1",
+			width: 3840,
+			height: 2160,
+		});
+		expect(output.writes[0]).not.toHaveProperty("soundOutputKind");
+		expect(output.writes[0]).not.toHaveProperty("personality");
+		expect(
+			await screen.findByText(/Saved output changes take effect/u),
+		).toBeVisible();
+	});
+
+	it("offers manual dimensions and broadcast fixed frame rates", async () => {
+		const output = stubOutputConfiguration();
+		renderSettings();
+		await openSettings("Picture");
+		await screen.findByRole("article", { name: "Main output settings" });
+
+		expect(screen.queryByLabelText("Width")).not.toBeInTheDocument();
+		await choose("1080p · 1920 × 1080", "Manual");
+		await replaceNumber("Width", "2048");
+		await replaceNumber("Height", "858");
+		await choose("Display synchronized", "Fixed frame rate");
+		await choose("60 fps", "59.94 fps · NTSC");
+
+		await waitFor(() => expect(output.writes).toHaveLength(1));
+		expect(output.writes[0]).toMatchObject({
+			width: 2048,
+			height: 858,
+			presentation: "fixed-fps",
+			framesPerSecond: 59.94,
+		});
+	});
+
+	it("keeps an unavailable configured monitor without offering its missing size", async () => {
 		stubOutputConfiguration({
 			targetKind: "monitor",
 			monitorBy: "name",
-			monitorValue: "Stage projector",
-			fullscreen: true,
-			width: 3840,
-			height: 2160,
-			presentation: "fixed-fps",
-			framesPerSecond: 50,
-			personality: "two-layers",
-			protocol: "sacn",
-			universe: 12,
-			startAddress: 101,
+			monitorValue: "Disconnected projector",
+			availableMonitors: [],
 		});
-		render(<SettingsPage />);
-		await openSettings("Outputs");
+		renderSettings();
+		await openSettings("Picture");
 
-		const settings = await screen.findByRole("article", {
-			name: "Main output settings",
-		});
-		expect(settings).toHaveTextContent(
-			"monitor named Stage projector, full-screen",
-		);
-		expect(settings).toHaveTextContent("3840 × 2160");
-		expect(settings).toHaveTextContent("Fixed at 50 frames per second");
-		expect(settings).toHaveTextContent("Muted");
-		expect(settings).toHaveTextContent(/next time this server starts/u);
-		expect(screen.queryByText(outputIdPattern)).not.toBeInTheDocument();
-
-		await openSettings("Network & Inputs");
-		await openSettingsTab("DMX");
-		const dmx = await screen.findByRole("article", {
-			name: "Main DMX input settings",
-		});
-		expect(dmx).toHaveTextContent("2 layers");
-		expect(dmx).toHaveTextContent("sACN, universe 12, address 101");
-	});
-
-	it("edits the complete output identity and makes the deferred effect explicit", async () => {
-		const output = stubOutputConfiguration();
-		render(<SettingsPage />);
-		await openSettings("Outputs");
-
+		expect(
+			await screen.findByRole("button", {
+				name: "Configured monitor · Disconnected projector",
+			}),
+		).toBeVisible();
 		await userEvent.click(
-			await screen.findByRole("button", { name: "Change output settings" }),
+			screen.getByRole("button", { name: "1080p · 1920 × 1080" }),
 		);
 		expect(
-			screen.getByText(/output running now\s+stays as it is/u),
-		).toBeInTheDocument();
+			screen.getByRole("option", { name: "Take from monitor" }),
+		).toBeDisabled();
+	});
 
-		await choose("Off-screen (no window)", "Monitor");
-		await choose("Monitor number", "Monitor name");
-		await userEvent.clear(screen.getByLabelText("Monitor name"));
-		await userEvent.type(
-			screen.getByLabelText("Monitor name"),
-			"Stage projector",
-		);
-		await userEvent.click(screen.getByLabelText("Full-screen"));
-
-		await replaceNumber("Width", "3840");
-		await replaceNumber("Height", "2160");
-		await choose("Display synchronized", "Fixed frame rate");
-		await replaceNumber("Frames per second", "50");
+	it("offers actual audio devices on a separate sound-output form", async () => {
+		const output = stubOutputConfiguration();
+		renderSettings();
+		await openSettings("Sound");
+		await screen.findByRole("article", { name: "Main output settings" });
+		expect(
+			screen.queryByText(/Saved output changes take effect/u),
+		).not.toBeInTheDocument();
 		await choose("Muted", "Named device");
-		await userEvent.type(screen.getByLabelText("Device name"), "Display 2");
-		await userEvent.click(
-			screen.getByRole("button", { name: "Save output settings" }),
-		);
+		await choose("Display 2", "USB Audio CODEC");
 
 		await waitFor(() => expect(output.writes).toHaveLength(1));
 		expect(output.writes[0]).toMatchObject({
-			targetKind: "monitor",
-			monitorBy: "name",
-			monitorValue: "Stage projector",
-			fullscreen: true,
-			width: 3840,
-			height: 2160,
-			presentation: "fixed-fps",
-			framesPerSecond: 50,
 			soundOutputKind: "device",
-			soundOutputName: "Display 2",
-			personality: "eight-layers",
-			protocol: "art-net",
-			universe: 0,
-			startAddress: 1,
+			soundOutputName: "USB Audio CODEC",
 		});
-		expect(output.writes[0]?.requestId).toEqual(expect.any(String));
+		expect(output.writes[0]).not.toHaveProperty("width");
+		expect(output.writes[0]).not.toHaveProperty("personality");
+		expect(
+			await screen.findByText(/Saved output changes take effect/u),
+		).toBeVisible();
 	});
 
-	it("omits monitor-only settings when an output becomes off-screen", async () => {
-		const output = stubOutputConfiguration({
-			targetKind: "monitor",
-			monitorBy: "index",
-			monitorValue: "2",
-			fullscreen: true,
-		});
-		render(<SettingsPage />);
-		await openSettings("Outputs");
-
-		await userEvent.click(
-			await screen.findByRole("button", { name: "Change output settings" }),
-		);
-		await choose("Monitor", "Off-screen (no window)");
-		await userEvent.click(
-			screen.getByRole("button", { name: "Save output settings" }),
-		);
-
-		await waitFor(() => expect(output.writes).toHaveLength(1));
-		expect(output.writes[0]).toMatchObject({
-			targetKind: "off-screen",
-		});
-		expect(output.writes[0]).not.toHaveProperty("monitorBy");
-		expect(output.writes[0]).not.toHaveProperty("monitorValue");
-		expect(output.writes[0]).not.toHaveProperty("fullscreen");
-		expect(output.writes[0]).not.toHaveProperty("framesPerSecond");
-	});
-
-	it("edits DMX personality and address under Network & Inputs without changing the picture", async () => {
-		const output = stubOutputConfiguration({
-			targetKind: "monitor",
-			monitorBy: "name",
-			monitorValue: "Stage projector",
-			fullscreen: true,
-		});
-		render(<SettingsPage />);
-		await openSettings("Network & Inputs");
-		await openSettingsTab("DMX");
-
-		await userEvent.click(
-			await screen.findByRole("button", { name: "Change DMX input" }),
-		);
+	it("opens DMX directly and saves only the DMX intent", async () => {
+		const output = stubOutputConfiguration();
+		renderSettings();
+		await openSettings("DMX");
+		await screen.findByRole("article", { name: "Main DMX input settings" });
+		expect(
+			screen.queryByText(/Saved output changes take effect/u),
+		).not.toBeInTheDocument();
 		await choose("8 layers (279 slots)", "2 layers (75 slots)");
 		await choose("Art-Net", "sACN");
 		await replaceNumber("Universe", "12");
 		await replaceNumber("Start address", "101");
-		await userEvent.click(
-			screen.getByRole("button", { name: "Save DMX input" }),
-		);
 
 		await waitFor(() => expect(output.writes).toHaveLength(1));
 		expect(output.writes[0]).toMatchObject({
@@ -156,123 +172,117 @@ describe("the settings page", () => {
 			protocol: "sacn",
 			universe: 12,
 			startAddress: 101,
-			targetKind: "monitor",
-			monitorBy: "name",
-			monitorValue: "Stage projector",
-			fullscreen: true,
 		});
+		expect(output.writes[0]).not.toHaveProperty("targetKind");
+		expect(
+			await screen.findByText(/Saved output changes take effect/u),
+		).toBeVisible();
 	});
 
-	it("separates Network, DMX, and Audio into window title tabs", async () => {
-		stubSettingsServer();
-		render(<SettingsPage />);
-		await openSettings("Network & Inputs");
+	it("opens DMX input from the diagnostics settings link", async () => {
+		window.history.replaceState(null, "", "/settings?section=dmx");
+		stubOutputConfiguration();
+		renderSettings();
 
-		const tabs = screen.getByRole("radiogroup", {
-			name: "Network and input settings",
-		});
-		expect(tabs).toHaveTextContent("NetworkDMXAudio");
+		expect(screen.getByRole("tab", { name: "DMX" })).toHaveAttribute(
+			"aria-selected",
+			"true",
+		);
 		expect(
-			await screen.findByRole("article", { name: "Network" }),
+			await screen.findByRole("heading", { name: "DMX input" }),
 		).toBeVisible();
-
-		await openSettingsTab("DMX");
-		expect(
-			await screen.findByRole("article", { name: "Main DMX input settings" }),
-		).toBeVisible();
-		expect(
-			screen.queryByRole("article", { name: "Network" }),
-		).not.toBeInTheDocument();
-
-		await openSettingsTab("Audio");
-		expect(
-			await screen.findByRole("article", { name: "Audio monitor" }),
-		).toBeVisible();
-		expect(
-			screen.queryByRole("article", { name: "Main DMX input settings" }),
-		).not.toBeInTheDocument();
 	});
 
-	it("puts DMX Diagnostics in its own Logs title tab", async () => {
+	it("keeps Logs as its own settings tab without DMX diagnostics", async () => {
 		stubSettingsServer();
-		render(<SettingsPage />);
+		renderSettings();
 		await openSettings("Logs");
 
-		const tabs = screen.getByRole("radiogroup", {
-			name: "Logs and diagnostics",
-		});
-		expect(tabs).toHaveTextContent("LogsDMX Diagnostics");
-		await openSettingsTab("DMX Diagnostics");
+		expect(await screen.findByText("Server log level")).toBeVisible();
 		expect(
-			await screen.findByRole("heading", { name: "GDTF fixtures" }),
-		).toBeVisible();
-		expect(screen.getByLabelText("Main DMX")).toBeVisible();
-		expect(screen.queryByText("Server log level")).not.toBeInTheDocument();
+			screen.queryByRole("tab", { name: "DMX Diagnostics" }),
+		).not.toBeInTheDocument();
 	});
 
-	it("shows what was configured beside what this run actually bound", async () => {
-		stubSettingsServer({
-			network: aNetwork({
-				sameComputerPreset: true,
-				resolved: {
-					artNetListen: "127.0.0.1:6454",
-					sacnListen: "127.0.0.1:5568",
-					citpListen: "127.0.0.1:4809",
-					httpListen: "127.0.0.1:8080",
-					speedGroupEndpoint: null,
-				},
-			}),
-		});
-		render(<SettingsPage />);
-		await openSettings("Network & Inputs");
-
-		const row = (
-			await screen.findByRole("rowheader", { name: "Art-Net" })
-		).closest("tr");
-		expect(row).not.toBeNull();
-		expect(row).toHaveTextContent("0.0.0.0:6454");
-		expect(row).toHaveTextContent("127.0.0.1:6454");
-	});
-
-	it("says a saved address is used on the next start rather than implying a rebind", async () => {
+	it("hides the network restart notice until an address changes", async () => {
 		stubSettingsServer();
-		render(<SettingsPage />);
-		await openSettings("Network & Inputs");
+		renderSettings();
 
 		expect(
-			await screen.findByText(/used the next time this server starts/u),
-		).toBeInTheDocument();
+			screen.queryByText(/used the next time this server starts/u),
+		).not.toBeInTheDocument();
 	});
 
-	it("edits a listen address through the write path, with a request id", async () => {
-		const server = stubSettingsServer();
-		render(<SettingsPage />);
-		await openSettings("Network & Inputs");
+	it("places restart-aware status beside the content heading", async () => {
+		stubSettingsServer();
+		renderSettings();
 
-		await userEvent.click(
-			await screen.findByRole("button", { name: "Change network settings" }),
+		const network = await screen.findByRole("article", { name: "Network" });
+		const heading = network.querySelector(".media-settings-section-heading");
+		expect(heading).toContainElement(
+			screen.getByRole("heading", { name: "Network" }),
 		);
-		const artNet = screen.getByLabelText("Art-Net");
+		expect(heading).toContainElement(screen.getByRole("status"));
+		expect(screen.getByRole("status")).toHaveTextContent(
+			"Saved automatically · Applies on restart",
+		);
+		expect(screen.getByRole("status").closest(".ui-window-header")).toBeNull();
+
+		await openSettings("Libraries");
+		expect(screen.getByRole("status")).toHaveTextContent("Saved automatically");
+	});
+
+	it("reverts stored network settings to the running values", async () => {
+		const server = stubSettingsServer();
+		renderSettings();
+		const artNet = await screen.findByLabelText("Art-Net");
 		await userEvent.clear(artNet);
 		await userEvent.type(artNet, "192.168.1.40:6454");
-		await userEvent.click(
-			screen.getByRole("button", { name: "Save network settings" }),
-		);
 
-		await waitFor(() =>
-			expect(server.network.stored.artNetListen).toBe("192.168.1.40:6454"),
+		await userEvent.click(
+			await screen.findByRole("button", { name: "Revert to current settings" }),
 		);
-		expect(server.writes).toContain("/network/update");
+		await waitFor(() => expect(server.network.pendingRestart).toBe(false));
+		await waitFor(() =>
+			expect(screen.getByLabelText("Art-Net")).toHaveValue("0.0.0.0:6454"),
+		);
+		expect(
+			screen.queryByRole("button", { name: "Revert to current settings" }),
+		).not.toBeInTheDocument();
+	});
+
+	it("reverts a changed picture section without touching sound or DMX", async () => {
+		const output = stubOutputConfiguration();
+		renderSettings();
+		await openSettings("Picture");
+		await choose("1080p · 1920 × 1080", "Manual");
+		await replaceNumber("Width", "3840");
+
+		await userEvent.click(
+			await screen.findByRole("button", { name: "Revert to current settings" }),
+		);
+		await waitFor(() => expect(output.writes).toHaveLength(2));
+		expect(output.writes[1]).toMatchObject({
+			width: 1920,
+			height: 1080,
+			targetKind: "off-screen",
+		});
+		expect(output.writes[1]).not.toHaveProperty("soundOutputKind");
+		expect(output.writes[1]).not.toHaveProperty("personality");
+		await waitFor(() =>
+			expect(
+				screen.getByRole("button", { name: "1080p · 1920 × 1080" }),
+			).toBeVisible(),
+		);
+		expect(
+			screen.queryByRole("button", { name: "Revert to current settings" }),
+		).not.toBeInTheDocument();
 	});
 
 	it("keeps a destination separate from every listen address", async () => {
 		const server = stubSettingsServer();
-		render(<SettingsPage />);
-		await openSettings("Network & Inputs");
-
-		await userEvent.click(
-			await screen.findByRole("button", { name: "Change network settings" }),
-		);
+		renderSettings();
+		await screen.findByLabelText("Speed Group stream");
 		// The destination lives under its own heading, not among the listeners.
 		const sends = screen.getByRole("group", {
 			name: "Where this server sends",
@@ -281,9 +291,6 @@ describe("the settings page", () => {
 		await userEvent.type(
 			screen.getByLabelText("Speed Group stream"),
 			"192.168.1.9:9000",
-		);
-		await userEvent.click(
-			screen.getByRole("button", { name: "Save network settings" }),
 		);
 
 		await waitFor(() =>
@@ -304,16 +311,9 @@ describe("the settings page", () => {
 				},
 			}),
 		});
-		render(<SettingsPage />);
-		await openSettings("Network & Inputs");
-
-		await userEvent.click(
-			await screen.findByRole("button", { name: "Change network settings" }),
-		);
+		renderSettings();
+		await screen.findByLabelText("Speed Group stream");
 		await userEvent.clear(screen.getByLabelText("Speed Group stream"));
-		await userEvent.click(
-			screen.getByRole("button", { name: "Save network settings" }),
-		);
 
 		await waitFor(() =>
 			expect(server.network.stored.speedGroupEndpoint).toBeNull(),
@@ -328,27 +328,28 @@ describe("the settings page", () => {
 				status: 400,
 			},
 		});
-		render(<SettingsPage />);
-		await openSettings("Network & Inputs");
+		renderSettings();
+		const artNet = await screen.findByLabelText("Art-Net");
+		await userEvent.clear(artNet);
+		await userEvent.type(artNet, "invalid");
 
-		await userEvent.click(
-			await screen.findByRole("button", { name: "Change network settings" }),
-		);
-		await userEvent.click(
-			screen.getByRole("button", { name: "Save network settings" }),
-		);
-
-		expect(await screen.findByRole("alert")).toHaveTextContent(
-			"citpListen is not an address",
-		);
+		const alert = await screen.findByRole("alert");
+		expect(alert).toHaveTextContent("citpListen is not an address");
+		expect(alert).toHaveClass("media-toast");
+		expect(alert.closest(".ui-window-header")).toBeNull();
+		expect(screen.getByRole("status")).toHaveTextContent("Not saved");
 	});
 });
 
-const outputIdPattern = /11111111-1111-4111-8111-111111111111/u;
+function renderSettings() {
+	return render(
+		<ToastProvider>
+			<SettingsPage />
+		</ToastProvider>,
+	);
+}
 
-type OutputConfiguration = {
-	id: string;
-	name: string;
+type OutputConfigurationValues = {
 	targetKind: "monitor" | "off-screen";
 	monitorBy: "index" | "name" | null;
 	monitorValue: string | null;
@@ -363,29 +364,55 @@ type OutputConfiguration = {
 	protocol: "art-net" | "sacn";
 	universe: number;
 	startAddress: number;
+};
+
+type OutputConfiguration = OutputConfigurationValues & {
+	id: string;
+	name: string;
+	availableMonitors: Array<{
+		index: number;
+		name: string;
+		width: number;
+		height: number;
+		refreshMillihertz: number | null;
+	}>;
+	availableSoundOutputs: string[];
 	takesEffectOnRestart: boolean;
+	active: OutputConfigurationValues;
+	picturePendingRestart: boolean;
+	soundPendingRestart: boolean;
+	dmxPendingRestart: boolean;
 };
 
 function stubOutputConfiguration(overrides: Partial<OutputConfiguration> = {}) {
 	stubServer();
+	const active = activeOutputConfiguration();
 	const configuration: OutputConfiguration = {
 		id: "11111111-1111-4111-8111-111111111111",
 		name: "Main",
-		targetKind: "off-screen",
-		monitorBy: null,
-		monitorValue: null,
-		fullscreen: false,
-		width: 1920,
-		height: 1080,
-		presentation: "display-synchronized",
-		framesPerSecond: null,
-		soundOutputKind: "disabled",
-		soundOutputName: null,
-		personality: "eight-layers",
-		protocol: "art-net",
-		universe: 0,
-		startAddress: 1,
+		...active,
+		availableMonitors: [
+			{
+				index: 0,
+				name: "Built-in Display",
+				width: 2560,
+				height: 1600,
+				refreshMillihertz: 60_000,
+			},
+			{
+				index: 1,
+				name: "Stage Projector",
+				width: 3840,
+				height: 2160,
+				refreshMillihertz: 59_940,
+			},
+		],
+		availableSoundOutputs: ["Display 2", "USB Audio CODEC"],
 		takesEffectOnRestart: true,
+		active,
+		picturePendingRestart: false,
+		soundPendingRestart: false,
+		dmxPendingRestart: false,
 		...overrides,
 	};
 	return installOutputConfiguration(configuration);
@@ -393,24 +420,33 @@ function stubOutputConfiguration(overrides: Partial<OutputConfiguration> = {}) {
 
 function stubSettingsServer(overrides: Parameters<typeof stubServer>[0] = {}) {
 	const server = stubServer(overrides);
+	const active = activeOutputConfiguration();
 	installOutputConfiguration({
 		id: "11111111-1111-4111-8111-111111111111",
 		name: "Main",
-		targetKind: "off-screen",
-		monitorBy: null,
-		monitorValue: null,
-		fullscreen: false,
-		width: 1920,
-		height: 1080,
-		presentation: "display-synchronized",
-		framesPerSecond: null,
-		soundOutputKind: "disabled",
-		soundOutputName: null,
-		personality: "eight-layers",
-		protocol: "art-net",
-		universe: 0,
-		startAddress: 1,
+		...active,
+		availableMonitors: [
+			{
+				index: 0,
+				name: "Built-in Display",
+				width: 2560,
+				height: 1600,
+				refreshMillihertz: 60_000,
+			},
+			{
+				index: 1,
+				name: "Stage Projector",
+				width: 3840,
+				height: 2160,
+				refreshMillihertz: 59_940,
+			},
+		],
+		availableSoundOutputs: ["Display 2", "USB Audio CODEC"],
 		takesEffectOnRestart: true,
+		active,
+		picturePendingRestart: false,
+		soundPendingRestart: false,
+		dmxPendingRestart: false,
 	});
 	return server;
 }
@@ -433,6 +469,20 @@ function installOutputConfiguration(configuration: OutputConfiguration) {
 				const body = JSON.parse(String(init?.body ?? "{}"));
 				writes.push(body);
 				Object.assign(configuration, body);
+				configuration.picturePendingRestart = pictureValuesDiffer(
+					configuration,
+					configuration.active,
+				);
+				configuration.soundPendingRestart =
+					configuration.soundOutputKind !==
+						configuration.active.soundOutputKind ||
+					configuration.soundOutputName !==
+						configuration.active.soundOutputName;
+				configuration.dmxPendingRestart =
+					configuration.personality !== configuration.active.personality ||
+					configuration.protocol !== configuration.active.protocol ||
+					configuration.universe !== configuration.active.universe ||
+					configuration.startAddress !== configuration.active.startAddress;
 				return new Response(JSON.stringify(configuration), {
 					status: 200,
 					headers: { "content-type": "application/json" },
@@ -443,6 +493,41 @@ function installOutputConfiguration(configuration: OutputConfiguration) {
 	);
 
 	return { configuration, writes };
+}
+
+function activeOutputConfiguration(): OutputConfigurationValues {
+	return {
+		targetKind: "off-screen",
+		monitorBy: null,
+		monitorValue: null,
+		fullscreen: false,
+		width: 1920,
+		height: 1080,
+		presentation: "display-synchronized",
+		framesPerSecond: null,
+		soundOutputKind: "disabled",
+		soundOutputName: null,
+		personality: "eight-layers",
+		protocol: "art-net",
+		universe: 0,
+		startAddress: 1,
+	};
+}
+
+function pictureValuesDiffer(
+	configuration: OutputConfigurationValues,
+	active: OutputConfigurationValues,
+) {
+	return (
+		configuration.targetKind !== active.targetKind ||
+		configuration.monitorBy !== active.monitorBy ||
+		configuration.monitorValue !== active.monitorValue ||
+		configuration.fullscreen !== active.fullscreen ||
+		configuration.width !== active.width ||
+		configuration.height !== active.height ||
+		configuration.presentation !== active.presentation ||
+		configuration.framesPerSecond !== active.framesPerSecond
+	);
 }
 
 async function choose(current: string, next: string) {
@@ -457,13 +542,7 @@ async function replaceNumber(label: string, value: string) {
 }
 
 async function openSettings(
-	name: "Libraries" | "Outputs" | "Network & Inputs" | "Logs",
+	name: "Libraries" | "Picture" | "Sound" | "Network" | "DMX" | "Logs",
 ) {
-	await userEvent.click(screen.getByRole("radio", { name }));
-}
-
-async function openSettingsTab(
-	name: "Network" | "DMX" | "Audio" | "Logs" | "DMX Diagnostics",
-) {
-	await userEvent.click(screen.getByRole("radio", { name }));
+	await userEvent.click(screen.getByRole("tab", { name }));
 }
