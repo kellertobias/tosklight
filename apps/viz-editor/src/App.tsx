@@ -12,8 +12,9 @@ import {
 import { Button } from "@tosklight/ui";
 import { OperatorDestinationList } from "@tosklight/ui/application";
 import { WindowHeader } from "@tosklight/ui/window-kit";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import appIcon from "../src-tauri/icons/icon.svg";
+import { cadSession } from "./cad/session";
 import type { DocumentSummary } from "./document/session";
 import { documentSession, sessionPatchLayers } from "./document/session";
 import { TauriPatchTransport } from "./document/transport";
@@ -22,7 +23,6 @@ import { MediaWorkspace } from "./MediaWorkspace";
 import { PreviewControls } from "./PreviewControls";
 import { RendererSettingsWorkspace } from "./RendererSettingsWorkspace";
 import { beginWindowDrag, WindowControls } from "./WindowChrome";
-import { cadSession } from "./cad/session";
 
 const DEFAULT_LAYER: PatchLayer = { id: "default", name: "Default", order: 0 };
 type ShowPage =
@@ -44,12 +44,15 @@ export function App() {
 	const [showPage, setShowPage] = useState<ShowPage>("show");
 	const [openingCad, setOpeningCad] = useState(false);
 	const [openingViz, setOpeningViz] = useState(false);
+	const [visualizerRunning, setVisualizerRunning] = useState(false);
 	// Bumped when something outside the sheet changed the document — an MVR import — so the sheet
 	// reads the new snapshot instead of showing the rig as it was before.
 	const [reload, setReload] = useState(0);
 	// What the patch sheet has selected, and what the preview controls therefore drive.
 	const [selected, setSelected] = useState<readonly string[]>([]);
 	const [selectionRevision, setSelectionRevision] = useState(0);
+	const selectionRevisionRef = useRef(0);
+	const selectionQueue = useRef<Promise<void>>(Promise.resolve());
 	// The rig itself, for the preview controls: the sheet owns the table, this owns the values.
 	const [fixtures, setFixtures] = useState<readonly PatchFixtureProjection[]>(
 		[],
@@ -59,6 +62,32 @@ export function App() {
 		readonly PatchProfileRevision[]
 	>([]);
 	const transport = useMemo(() => new TauriPatchTransport(), []);
+
+	useEffect(() => {
+		documentSession
+			.visualizerIsRunning()
+			.then(setVisualizerRunning)
+			.catch(() => undefined);
+		const refresh = () => {
+			documentSession
+				.visualizerIsRunning()
+				.then(setVisualizerRunning)
+				.catch(() => undefined);
+		};
+		window.addEventListener("focus", refresh);
+		return () => window.removeEventListener("focus", refresh);
+	}, []);
+
+	useEffect(() => {
+		if (!visualizerRunning) return;
+		const interval = window.setInterval(() => {
+			documentSession
+				.visualizerIsRunning()
+				.then(setVisualizerRunning)
+				.catch(() => undefined);
+		}, 500);
+		return () => window.clearInterval(interval);
+	}, [visualizerRunning]);
 
 	useEffect(() => {
 		documentSession
@@ -83,14 +112,22 @@ export function App() {
 		cadSession
 			.snapshot()
 			.then((snapshot) => {
-				setSelected(snapshot.selectedIds);
-				setSelectionRevision(snapshot.selectionRevision);
+				const ids = Array.isArray(snapshot.selectedIds)
+					? snapshot.selectedIds
+					: [];
+				const revision = Number.isFinite(snapshot.selectionRevision)
+					? snapshot.selectionRevision
+					: 0;
+				setSelected(ids);
+				setSelectionRevision(revision);
+				selectionRevisionRef.current = revision;
 			})
 			.catch(() => undefined);
 		cadSession
 			.onSelectionDelta((delta) => {
 				setSelected(delta.selectedIds);
 				setSelectionRevision(delta.revision);
+				selectionRevisionRef.current = delta.revision;
 				if (delta.selectedIds.length) setWorkspace("patch");
 			})
 			.then((unlisten) => {
@@ -109,23 +146,41 @@ export function App() {
 		};
 	}, []);
 
-	async function replaceSelection(ids: readonly string[]) {
+	function replaceSelection(ids: readonly string[]) {
 		setSelected(ids);
-		try {
-			const delta = await cadSession.replaceSelection(selectionRevision, ids);
-			setSelectionRevision(delta.revision);
-			setSelected(delta.selectedIds);
-		} catch (reason) {
-			report(reason);
-			cadSession
-				.snapshot()
-				.then((snapshot) => {
+		selectionQueue.current = selectionQueue.current.then(async () => {
+			try {
+				const delta = await cadSession.replaceSelection(
+					selectionRevisionRef.current,
+					ids,
+				);
+				selectionRevisionRef.current = delta.revision;
+				setSelectionRevision(delta.revision);
+				setSelected(delta.selectedIds);
+			} catch (reason) {
+				report(reason);
+				try {
+					const snapshot = await cadSession.snapshot();
+					selectionRevisionRef.current = snapshot.selectionRevision;
 					setSelectionRevision(snapshot.selectionRevision);
 					setSelected(snapshot.selectedIds);
-				})
-				.catch(report);
-		}
+				} catch (refreshReason) {
+					report(refreshReason);
+				}
+			}
+		});
 	}
+
+	useEffect(() => {
+		if (workspace !== "patch" || !selected.length) return;
+		const frame = window.requestAnimationFrame(() => {
+			const row = window.document.querySelector<HTMLElement>(
+				`[data-fixture-id="${selected[0]}"]`,
+			);
+			row?.scrollIntoView({ block: "nearest" });
+		});
+		return () => window.cancelAnimationFrame(frame);
+	}, [workspace, selected]);
 
 	/// The preview controls drive fixtures, so they need the rig the sheet is showing.
 	function loadFixtures() {
@@ -298,6 +353,7 @@ export function App() {
 							setOpeningViz(true);
 							documentSession
 								.openVisualizer()
+								.then(() => setVisualizerRunning(true))
 								.catch(report)
 								.finally(() => setOpeningViz(false));
 						}}
@@ -373,7 +429,10 @@ export function App() {
 									onDocument={setDocument}
 									onError={report}
 									onReloadProfiles={() =>
-										documentSession.fixtureProfiles().then(setProfiles).catch(report)
+										documentSession
+											.fixtureProfiles()
+											.then(setProfiles)
+											.catch(report)
 									}
 									onReloadDocument={() => undefined}
 								/>
@@ -400,12 +459,14 @@ export function App() {
 									scope={workspace === "patch" ? "dmx" : workspace}
 								/>
 							</PatchViewProvider>
-							<PreviewControls
-								fixtures={fixtures}
-								profileRevisions={profileRevisions}
-								selected={selected}
-								onError={report}
-							/>
+							{visualizerRunning ? (
+								<PreviewControls
+									fixtures={fixtures}
+									profileRevisions={profileRevisions}
+									selected={selected}
+									onError={report}
+								/>
+							) : null}
 						</PatchHostProvider>
 					) : null}
 					{document && workspace === "media" ? (

@@ -2,9 +2,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type {
 	CadEntity,
 	CadViewDirection,
+	SelectionChange,
 	TileCamera,
+	WorldAxis,
 } from "./types";
-import { planeDelta, projectPoint } from "./types";
+import { planeDelta, projectPoint, viewAxes } from "./types";
 
 interface CadViewportProps {
 	entities: readonly CadEntity[];
@@ -13,18 +15,29 @@ interface CadViewportProps {
 	camera: TileCamera;
 	snapToMounts: boolean;
 	onCamera(camera: TileCamera): void;
-	onSelection(ids: readonly string[]): void;
-	onMove(deltaMillimetres: [number, number, number], entityIds: readonly string[]): Promise<void>;
+	onSelection(change: SelectionChange): void;
+	onMove(
+		deltaMillimetres: [number, number, number],
+		entityIds: readonly string[],
+	): Promise<void>;
 }
 
 interface Drag {
-	type: "pan" | "move";
+	type: "pan" | "move" | "box";
 	start: [number, number];
 	last: [number, number];
 	axis: "plane" | "horizontal" | "vertical";
 	entityIds?: readonly string[];
 	startCamera?: TileCamera;
+	additive?: boolean;
 }
+
+interface SelectionBox {
+	start: [number, number];
+	end: [number, number];
+}
+
+type MoveAxis = "plane" | "horizontal" | "vertical";
 
 export function CadViewport({
 	entities,
@@ -39,6 +52,8 @@ export function CadViewport({
 	const renderer = useRef<LineRenderer | null>(null);
 	const drag = useRef<Drag | null>(null);
 	const [preview, setPreview] = useState<[number, number]>([0, 0]);
+	const [guide, setGuide] = useState<MoveAxis | null>(null);
+	const [selectionBox, setSelectionBox] = useState<SelectionBox | null>(null);
 	const selected = useMemo(() => new Set(selectedIds), [selectedIds]);
 
 	useEffect(() => {
@@ -53,8 +68,16 @@ export function CadViewport({
 	}, []);
 
 	useEffect(() => {
-		renderer.current?.draw(entities, selected, view, camera, preview);
-	}, [entities, selected, view, camera, preview]);
+		renderer.current?.draw(
+			entities,
+			selected,
+			view,
+			camera,
+			preview,
+			guide,
+			selectionBox,
+		);
+	}, [entities, selected, view, camera, preview, guide, selectionBox]);
 
 	function screenToPlane(clientX: number, clientY: number): [number, number] {
 		const bounds = canvas.current?.getBoundingClientRect();
@@ -70,8 +93,14 @@ export function CadViewport({
 		let best: { entity: CadEntity; distance: number } | null = null;
 		for (const entity of entities) {
 			const projected = projectPoint(entity.positionMillimetres, view);
-			const distance = Math.hypot(projected[0] - point[0], projected[1] - point[1]);
-			const threshold = Math.max(180, Math.min(800, entity.sizeMillimetres[0] / 2));
+			const distance = Math.hypot(
+				projected[0] - point[0],
+				projected[1] - point[1],
+			);
+			const threshold = Math.max(
+				180,
+				Math.min(800, entity.sizeMillimetres[0] / 2),
+			);
 			if (distance <= threshold && (!best || distance < best.distance)) {
 				best = { entity, distance };
 			}
@@ -82,7 +111,7 @@ export function CadViewport({
 	function pointerDown(event: React.PointerEvent<HTMLCanvasElement>) {
 		canvas.current?.setPointerCapture(event.pointerId);
 		const hit = pick(event.clientX, event.clientY);
-		if (event.button === 1 || event.altKey || !hit) {
+		if (event.button === 1 || event.altKey) {
 			drag.current = {
 				type: "pan",
 				start: [event.clientX, event.clientY],
@@ -90,35 +119,36 @@ export function CadViewport({
 				axis: "plane",
 				startCamera: camera,
 			};
-			if (!hit && event.button === 0 && !event.altKey) onSelection([]);
 			return;
 		}
-		const next = event.shiftKey
-			? selected.has(hit.id)
-				? selectedIds.filter((id) => id !== hit.id)
-				: [...selectedIds, hit.id]
-			: selected.has(hit.id)
-				? selectedIds
-				: [hit.id];
-		onSelection(next);
 		const point = screenToPlane(event.clientX, event.clientY);
-		const centre = projectPoint(hit.positionMillimetres, view);
-		const dx = Math.abs(point[0] - centre[0]);
-		const dy = Math.abs(point[1] - centre[1]);
-		const axis = Math.hypot(dx, dy) < 160
-			? "plane"
-			: Math.abs(dy) < 100 && dx < 800
-				? "horizontal"
-				: Math.abs(dx) < 100 && dy < 800
-					? "vertical"
-					: "plane";
+		const axis = pickGizmo(point, entities, selected, view, camera);
+		if (axis) {
+			drag.current = {
+				type: "move",
+				start: [event.clientX, event.clientY],
+				last: [event.clientX, event.clientY],
+				axis,
+				entityIds: selectedIds,
+			};
+			setGuide(axis);
+			return;
+		}
+		if (hit) {
+			onSelection({
+				type: event.shiftKey ? "toggle" : "replace",
+				ids: [hit.id],
+			});
+			return;
+		}
 		drag.current = {
-			type: "move",
+			type: "box",
 			start: [event.clientX, event.clientY],
 			last: [event.clientX, event.clientY],
-			axis,
-			entityIds: next,
+			axis: "plane",
+			additive: event.shiftKey,
 		};
+		setSelectionBox({ start: point, end: point });
 	}
 
 	function pointerMove(event: React.PointerEvent<HTMLCanvasElement>) {
@@ -135,6 +165,13 @@ export function CadViewport({
 			});
 			return;
 		}
+		if (active.type === "box") {
+			setSelectionBox({
+				start: screenToPlane(...active.start),
+				end: screenToPlane(event.clientX, event.clientY),
+			});
+			return;
+		}
 		setPreview([
 			active.axis === "vertical" ? 0 : dx / camera.zoom,
 			active.axis === "horizontal" ? 0 : -dy / camera.zoom,
@@ -145,9 +182,32 @@ export function CadViewport({
 		const active = drag.current;
 		drag.current = null;
 		canvas.current?.releasePointerCapture(event.pointerId);
+		if (active?.type === "box") {
+			const box = selectionBox;
+			setSelectionBox(null);
+			if (!box) return;
+			const moved = Math.hypot(
+				event.clientX - active.start[0],
+				event.clientY - active.start[1],
+			);
+			const ids =
+				moved < 3
+					? []
+					: entities
+							.filter((entity) =>
+								pointInside(
+									projectPoint(entity.positionMillimetres, view),
+									box,
+								),
+							)
+							.map((entity) => entity.id);
+			onSelection({ type: active.additive ? "add" : "replace", ids });
+			return;
+		}
 		if (active?.type !== "move") return;
 		const current = preview;
 		setPreview([0, 0]);
+		setGuide(null);
 		if (Math.hypot(current[0], current[1]) < 1) return;
 		await onMove(planeDelta(current, view), active.entityIds ?? selectedIds);
 	}
@@ -163,12 +223,17 @@ export function CadViewport({
 			onPointerCancel={() => {
 				drag.current = null;
 				setPreview([0, 0]);
+				setGuide(null);
+				setSelectionBox(null);
 			}}
 			onWheel={(event) => {
 				event.preventDefault();
 				onCamera({
 					...camera,
-					zoom: Math.min(2.5, Math.max(0.004, camera.zoom * Math.exp(-event.deltaY * 0.0015))),
+					zoom: Math.min(
+						2.5,
+						Math.max(0.004, camera.zoom * Math.exp(-event.deltaY * 0.0015)),
+					),
 				});
 			}}
 		/>
@@ -227,18 +292,26 @@ class LineRenderer {
 		view: CadViewDirection,
 		camera: TileCamera,
 		preview: readonly [number, number],
+		guide: MoveAxis | null,
+		selectionBox: SelectionBox | null,
 	) {
 		this.resize();
-		const { gl } = this;
+		const gl = this.gl;
 		gl.viewport(0, 0, this.canvas.width, this.canvas.height);
 		gl.clearColor(0.018, 0.024, 0.032, 1);
 		gl.clear(gl.COLOR_BUFFER_BIT);
 		const vertices: number[] = [];
-		const line = (a: [number, number], b: [number, number], color: [number, number, number]) => {
+		const line = (
+			a: [number, number],
+			b: [number, number],
+			color: [number, number, number],
+		) => {
 			for (const point of [a, b]) {
 				vertices.push(
-					(point[0] + camera.pan[0]) * camera.zoom * 2 / this.canvas.clientWidth,
-					(point[1] + camera.pan[1]) * camera.zoom * 2 / this.canvas.clientHeight,
+					((point[0] + camera.pan[0]) * camera.zoom * 2) /
+						this.canvas.clientWidth,
+					((point[1] + camera.pan[1]) * camera.zoom * 2) /
+						this.canvas.clientHeight,
 					...color,
 				);
 			}
@@ -254,7 +327,7 @@ class LineRenderer {
 			const halfX = Math.max(90, width / 2);
 			const halfY = Math.max(90, height / 2);
 			const color: [number, number, number] = active
-				? [1, 0.12, 0.12]
+				? [0.02, 0.82, 0.98]
 				: entity.kind === "venue"
 					? [0.56, 0.62, 0.68]
 					: [0.92, 0.94, 0.97];
@@ -264,15 +337,76 @@ class LineRenderer {
 				[centre[0] + halfX, centre[1] + halfY],
 				[centre[0] - halfX, centre[1] + halfY],
 			];
-			for (let index = 0; index < 4; index++) line(corners[index], corners[(index + 1) % 4], color);
+			for (let index = 0; index < 4; index++)
+				line(corners[index], corners[(index + 1) % 4], color);
 			if (entity.kind !== "venue") {
-				const direction = projectPoint(entity.outputDirection.map((value) => value * 420) as [number, number, number], view);
-				line(centre, [centre[0] + direction[0], centre[1] + direction[1]], color);
+				const direction = projectPoint(
+					entity.outputDirection.map((value) => value * 420) as [
+						number,
+						number,
+						number,
+					],
+					view,
+				);
+				line(
+					centre,
+					[centre[0] + direction[0], centre[1] + direction[1]],
+					color,
+				);
 			}
-			if (active) {
-				line(centre, [centre[0] + 650, centre[1]], [1, 0.18, 0.18]);
-				line(centre, [centre[0], centre[1] + 650], [1, 0.18, 0.18]);
-			}
+		}
+		const gizmo = gizmoGeometry(entities, selected, view, camera, preview);
+		if (gizmo) {
+			const axes = viewAxes(view);
+			const horizontal = axisColor(axes.horizontal.axis);
+			const vertical = axisColor(axes.vertical.axis);
+			const { origin, length, square } = gizmo;
+			line(
+				[origin[0] - square, origin[1] - square],
+				[origin[0] + square, origin[1] - square],
+				[0.75, 0.8, 0.84],
+			);
+			line(
+				[origin[0] + square, origin[1] - square],
+				[origin[0] + square, origin[1] + square],
+				[0.75, 0.8, 0.84],
+			);
+			line(
+				[origin[0] + square, origin[1] + square],
+				[origin[0] - square, origin[1] + square],
+				[0.75, 0.8, 0.84],
+			);
+			line(
+				[origin[0] - square, origin[1] + square],
+				[origin[0] - square, origin[1] - square],
+				[0.75, 0.8, 0.84],
+			);
+			drawArrow(
+				line,
+				origin,
+				[origin[0] + length, origin[1]],
+				horizontal,
+				square,
+			);
+			drawArrow(
+				line,
+				origin,
+				[origin[0], origin[1] + length],
+				vertical,
+				square,
+			);
+			if (guide === "horizontal")
+				dottedGuide(line, origin, true, horizontal, camera, this.canvas);
+			if (guide === "vertical")
+				dottedGuide(line, origin, false, vertical, camera, this.canvas);
+		}
+		if (selectionBox) {
+			const { start, end } = selectionBox;
+			const color: [number, number, number] = [0.02, 0.82, 0.98];
+			line([start[0], start[1]], [end[0], start[1]], color);
+			line([end[0], start[1]], [end[0], end[1]], color);
+			line([end[0], end[1]], [start[0], end[1]], color);
+			line([start[0], end[1]], [start[0], start[1]], color);
 		}
 		gl.useProgram(this.program);
 		gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
@@ -287,6 +421,130 @@ class LineRenderer {
 	}
 }
 
+function pointInside(point: [number, number], box: SelectionBox): boolean {
+	return (
+		point[0] >= Math.min(box.start[0], box.end[0]) &&
+		point[0] <= Math.max(box.start[0], box.end[0]) &&
+		point[1] >= Math.min(box.start[1], box.end[1]) &&
+		point[1] <= Math.max(box.start[1], box.end[1])
+	);
+}
+
+function gizmoGeometry(
+	entities: readonly CadEntity[],
+	selected: ReadonlySet<string>,
+	view: CadViewDirection,
+	camera: TileCamera,
+	preview: readonly [number, number] = [0, 0],
+) {
+	const points = entities
+		.filter((entity) => selected.has(entity.id))
+		.map((entity) => projectPoint(entity.positionMillimetres, view));
+	if (!points.length) return null;
+	const centre: [number, number] = [
+		points.reduce((sum, point) => sum + point[0], 0) / points.length +
+			preview[0],
+		points.reduce((sum, point) => sum + point[1], 0) / points.length +
+			preview[1],
+	];
+	return {
+		origin: [centre[0] + 36 / camera.zoom, centre[1] + 36 / camera.zoom] as [
+			number,
+			number,
+		],
+		length: 48 / camera.zoom,
+		square: 7 / camera.zoom,
+	};
+}
+
+function pickGizmo(
+	point: [number, number],
+	entities: readonly CadEntity[],
+	selected: ReadonlySet<string>,
+	view: CadViewDirection,
+	camera: TileCamera,
+): MoveAxis | null {
+	const gizmo = gizmoGeometry(entities, selected, view, camera);
+	if (!gizmo) return null;
+	const { origin, length } = gizmo;
+	const tolerance = 10 / camera.zoom;
+	if (Math.hypot(point[0] - origin[0], point[1] - origin[1]) <= tolerance)
+		return "plane";
+	if (
+		point[0] >= origin[0] &&
+		point[0] <= origin[0] + length &&
+		Math.abs(point[1] - origin[1]) <= tolerance
+	)
+		return "horizontal";
+	if (
+		point[1] >= origin[1] &&
+		point[1] <= origin[1] + length &&
+		Math.abs(point[0] - origin[0]) <= tolerance
+	)
+		return "vertical";
+	return null;
+}
+
+function axisColor(axis: WorldAxis): [number, number, number] {
+	if (axis === "x") return [0.95, 0.16, 0.18];
+	if (axis === "y") return [0.2, 0.78, 0.3];
+	return [0.18, 0.46, 1];
+}
+
+function drawArrow(
+	line: (
+		a: [number, number],
+		b: [number, number],
+		color: [number, number, number],
+	) => void,
+	origin: [number, number],
+	end: [number, number],
+	color: [number, number, number],
+	head: number,
+) {
+	line(origin, end, color);
+	if (end[1] === origin[1]) {
+		line(end, [end[0] - head * 1.8, end[1] - head], color);
+		line(end, [end[0] - head * 1.8, end[1] + head], color);
+	} else {
+		line(end, [end[0] - head, end[1] - head * 1.8], color);
+		line(end, [end[0] + head, end[1] - head * 1.8], color);
+	}
+}
+
+function dottedGuide(
+	line: (
+		a: [number, number],
+		b: [number, number],
+		color: [number, number, number],
+	) => void,
+	origin: [number, number],
+	horizontal: boolean,
+	color: [number, number, number],
+	camera: TileCamera,
+	canvas: HTMLCanvasElement,
+) {
+	const extent =
+		(horizontal ? canvas.clientWidth : canvas.clientHeight) / camera.zoom;
+	const start = (horizontal ? origin[0] : origin[1]) - extent;
+	const end = (horizontal ? origin[0] : origin[1]) + extent;
+	const dash = 8 / camera.zoom;
+	for (let cursor = start; cursor < end; cursor += dash * 2) {
+		if (horizontal)
+			line(
+				[cursor, origin[1]],
+				[Math.min(end, cursor + dash), origin[1]],
+				color,
+			);
+		else
+			line(
+				[origin[0], cursor],
+				[origin[0], Math.min(end, cursor + dash)],
+				color,
+			);
+	}
+}
+
 function shader(gl: WebGL2RenderingContext, type: number, source: string) {
 	const value = gl.createShader(type);
 	if (!value) return null;
@@ -295,13 +553,19 @@ function shader(gl: WebGL2RenderingContext, type: number, source: string) {
 	return gl.getShaderParameter(value, gl.COMPILE_STATUS) ? value : null;
 }
 
-function projectedSize(entity: CadEntity, view: CadViewDirection): [number, number] {
+function projectedSize(
+	entity: CadEntity,
+	view: CadViewDirection,
+): [number, number] {
 	const [width, depth, height] = entity.sizeMillimetres;
 	switch (view) {
-		case "top_down": return [width, depth];
+		case "top_down":
+			return [width, depth];
 		case "left_to_right":
-		case "right_to_left": return [depth, height];
+		case "right_to_left":
+			return [depth, height];
 		case "front_to_back":
-		case "back_to_front": return [width, height];
+		case "back_to_front":
+			return [width, height];
 	}
 }

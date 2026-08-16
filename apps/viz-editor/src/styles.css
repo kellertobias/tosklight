@@ -1226,6 +1226,9 @@ body {
 .cad-divider {
 	position: relative;
 	z-index: 20;
+	margin: 0;
+	padding: 0;
+	border: 0;
 	background: #11171d;
 	touch-action: none;
 }

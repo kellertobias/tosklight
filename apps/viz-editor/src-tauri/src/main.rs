@@ -198,6 +198,7 @@ fn main() {
             cad::cad_undo,
             cad::cad_redo,
             visualizer::open_visualizer,
+            visualizer::visualizer_is_running,
             visualizer::renderer_settings,
             visualizer::save_renderer_settings,
             demo::open_demo_show,

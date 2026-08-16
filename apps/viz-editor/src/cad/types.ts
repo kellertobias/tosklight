@@ -50,6 +50,11 @@ export interface SelectionDelta {
 	selectedIds: string[];
 }
 
+export type SelectionChange =
+	| { type: "replace"; ids: readonly string[] }
+	| { type: "add"; ids: readonly string[] }
+	| { type: "toggle"; ids: readonly string[] };
+
 export interface CadTransformOutcome {
 	sceneRevision: number;
 	transforms: EntityTransform[];
@@ -89,6 +94,56 @@ export const CAD_VIEW_LABELS: Record<CadViewDirection, string> = {
 	back_to_front: "Back to front",
 };
 
+export type WorldAxis = "x" | "y" | "z";
+
+export interface ViewAxes {
+	horizontal: { axis: WorldAxis; sign: 1 | -1 };
+	vertical: { axis: WorldAxis; sign: 1 | -1 };
+}
+
+export function viewAxes(view: CadViewDirection): ViewAxes {
+	switch (view) {
+		case "top_down":
+			return {
+				horizontal: { axis: "x", sign: 1 },
+				vertical: { axis: "y", sign: -1 },
+			};
+		case "left_to_right":
+			return {
+				horizontal: { axis: "y", sign: 1 },
+				vertical: { axis: "z", sign: 1 },
+			};
+		case "right_to_left":
+			return {
+				horizontal: { axis: "y", sign: -1 },
+				vertical: { axis: "z", sign: 1 },
+			};
+		case "front_to_back":
+			return {
+				horizontal: { axis: "x", sign: 1 },
+				vertical: { axis: "z", sign: 1 },
+			};
+		case "back_to_front":
+			return {
+				horizontal: { axis: "x", sign: -1 },
+				vertical: { axis: "z", sign: 1 },
+			};
+	}
+}
+
+export function applySelectionChange(
+	selectedIds: readonly string[],
+	change: SelectionChange,
+): string[] {
+	if (change.type === "replace") return [...new Set(change.ids)];
+	const next = new Set(selectedIds);
+	for (const id of change.ids) {
+		if (change.type === "toggle" && next.has(id)) next.delete(id);
+		else next.add(id);
+	}
+	return [...next];
+}
+
 export function projectPoint(
 	point: readonly [number, number, number],
 	view: CadViewDirection,
@@ -113,16 +168,20 @@ export function planeDelta(
 ): [number, number, number] {
 	switch (view) {
 		case "top_down":
-			return [delta[0], -delta[1], 0];
+			return [delta[0], negate(delta[1]), 0];
 		case "left_to_right":
 			return [0, delta[0], delta[1]];
 		case "right_to_left":
-			return [0, -delta[0], delta[1]];
+			return [0, negate(delta[0]), delta[1]];
 		case "front_to_back":
 			return [delta[0], 0, delta[1]];
 		case "back_to_front":
-			return [-delta[0], 0, delta[1]];
+			return [negate(delta[0]), 0, delta[1]];
 	}
+}
+
+function negate(value: number): number {
+	return value === 0 ? 0 : -value;
 }
 
 export function newTile(view: CadViewDirection = "top_down"): ViewportTile {
@@ -168,13 +227,14 @@ export function splitTileAtEdge(
 		const adjacent = newTile(tile.view);
 		const adjacentFirst = edge === "left" || edge === "top";
 		return {
-		type: "split",
-		id: crypto.randomUUID(),
-		direction: edge === "left" || edge === "right" ? "horizontal" : "vertical",
-		ratio: 0.5,
-		first: adjacentFirst ? adjacent : tile,
-		second: adjacentFirst ? tile : adjacent,
-	};
+			type: "split",
+			id: crypto.randomUUID(),
+			direction:
+				edge === "left" || edge === "right" ? "horizontal" : "vertical",
+			ratio: 0.5,
+			first: adjacentFirst ? adjacent : tile,
+			second: adjacentFirst ? tile : adjacent,
+		};
 	});
 }
 
@@ -184,7 +244,8 @@ export function setSplitRatio(
 	ratio: number,
 ): TileNode {
 	if (node.type === "tile") return node;
-	if (node.id === id) return { ...node, ratio: Math.max(0.15, Math.min(0.85, ratio)) };
+	if (node.id === id)
+		return { ...node, ratio: Math.max(0.15, Math.min(0.85, ratio)) };
 	return {
 		...node,
 		first: setSplitRatio(node.first, id, ratio),

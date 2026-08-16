@@ -100,6 +100,7 @@ function FixtureRow({ fixture }: { fixture: PatchedFixture }) {
 	const pending = controller.patch.pendingFixtureIds.has(fixture.fixture_id);
 	return (
 		<tr
+			data-fixture-id={fixture.fixture_id}
 			className={`${selected ? "selected" : ""} ${pending ? "pending" : ""}`.trim()}
 			aria-busy={pending || undefined}
 			onClick={(event) => selectPatchFixture(controller, fixture, event)}

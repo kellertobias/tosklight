@@ -5,14 +5,16 @@ import { beginWindowDrag, WindowControls } from "../WindowChrome";
 import { CadViewport } from "./CadViewport";
 import { cadSession } from "./session";
 import {
+	applySelectionChange,
 	CAD_VIEW_LABELS,
+	type CadSceneSnapshot,
+	type CadViewDirection,
 	mapTile,
 	newTile,
 	projectPoint,
+	type SelectionChange,
 	setSplitRatio,
 	splitTileAtEdge,
-	type CadSceneSnapshot,
-	type CadViewDirection,
 	type TileCamera,
 	type TileEdge,
 	type TileNode,
@@ -28,6 +30,13 @@ export function CadApp() {
 	const [settingsOpen, setSettingsOpen] = useState(false);
 	const [activeTileId, setActiveTileId] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
+	const sceneRef = useRef<CadSceneSnapshot | null>(null);
+	const selectionQueue = useRef<Promise<void>>(Promise.resolve());
+
+	function applyScene(next: CadSceneSnapshot | null) {
+		sceneRef.current = next;
+		setScene(next);
+	}
 
 	useEffect(() => {
 		let disposed = false;
@@ -35,21 +44,26 @@ export function CadApp() {
 		let selectionUnlisten: (() => void) | undefined;
 		cadSession
 			.snapshot()
-			.then((snapshot) => !disposed && setScene(snapshot))
+			.then((snapshot) => !disposed && applyScene(snapshot))
 			.catch((reason) => !disposed && setError(String(reason)));
 		cadSession
 			.onSceneDelta((delta) => {
 				setScene((current) => {
-					if (!current || delta.sceneRevision <= current.sceneRevision) return current;
-					const entities = new Map(current.entities.map((entity) => [entity.id, entity]));
+					if (!current || delta.sceneRevision <= current.sceneRevision)
+						return current;
+					const entities = new Map(
+						current.entities.map((entity) => [entity.id, entity]),
+					);
 					for (const id of delta.removedIds) entities.delete(id);
 					for (const entity of delta.upserted) entities.set(entity.id, entity);
-					return {
+					const next = {
 						...current,
 						sceneRevision: delta.sceneRevision,
 						entities: [...entities.values()],
 						attachments: delta.attachments,
 					};
+					sceneRef.current = next;
+					return next;
 				});
 			})
 			.then((unlisten) => {
@@ -58,15 +72,17 @@ export function CadApp() {
 			.catch(() => undefined);
 		cadSession
 			.onSelectionDelta((delta) => {
-				setScene((current) =>
-					!current || delta.revision < current.selectionRevision
-						? current
-						: {
-								...current,
-								selectionRevision: delta.revision,
-								selectedIds: delta.selectedIds,
-							},
-				);
+				setScene((current) => {
+					if (!current || delta.revision < current.selectionRevision)
+						return current;
+					const next = {
+						...current,
+						selectionRevision: delta.revision,
+						selectedIds: delta.selectedIds,
+					};
+					sceneRef.current = next;
+					return next;
+				});
 			})
 			.then((unlisten) => {
 				selectionUnlisten = unlisten;
@@ -83,19 +99,31 @@ export function CadApp() {
 		localStorage.setItem(WORKSPACE_KEY, JSON.stringify(layout));
 	}, [layout]);
 
-	async function select(ids: readonly string[]) {
-		if (!scene) return;
-		try {
-			const outcome = await cadSession.replaceSelection(scene.selectionRevision, ids);
-			setScene((current) => current && ({
-				...current,
-				selectionRevision: outcome.revision,
-				selectedIds: outcome.selectedIds,
-			}));
-		} catch (reason) {
-			setError(String(reason));
-			setScene(await cadSession.snapshot());
-		}
+	function select(change: SelectionChange) {
+		selectionQueue.current = selectionQueue.current.then(async () => {
+			const current = sceneRef.current;
+			if (!current) return;
+			const ids = applySelectionChange(current.selectedIds, change);
+			applyScene({ ...current, selectedIds: ids });
+			try {
+				const outcome = await cadSession.replaceSelection(
+					current.selectionRevision,
+					ids,
+				);
+				applyScene({
+					...(sceneRef.current ?? current),
+					selectionRevision: outcome.revision,
+					selectedIds: outcome.selectedIds,
+				});
+			} catch (reason) {
+				setError(String(reason));
+				try {
+					applyScene(await cadSession.snapshot());
+				} catch (refreshReason) {
+					setError(String(refreshReason));
+				}
+			}
+		});
 	}
 
 	async function move(
@@ -110,10 +138,10 @@ export function CadApp() {
 				deltaMillimetres.map(Math.round) as [number, number, number],
 				snapToMounts,
 			);
-			setScene(await cadSession.snapshot());
+			applyScene(await cadSession.snapshot());
 		} catch (reason) {
 			setError(String(reason));
-			setScene(await cadSession.snapshot());
+			applyScene(await cadSession.snapshot());
 		}
 	}
 
@@ -121,13 +149,16 @@ export function CadApp() {
 		if (!scene) return;
 		try {
 			await cadSession[direction](scene.sceneRevision);
-			setScene(await cadSession.snapshot());
+			applyScene(await cadSession.snapshot());
 		} catch (reason) {
 			setError(String(reason));
 		}
 	}
 
-	function updateTile(id: string, change: (tile: ViewportTile) => ViewportTile) {
+	function updateTile(
+		id: string,
+		change: (tile: ViewportTile) => ViewportTile,
+	) {
 		setLayout((current) => mapTile(current, id, change));
 	}
 
@@ -135,7 +166,9 @@ export function CadApp() {
 		if (!scene?.entities.length) return;
 		const tile = findTile(layout, id);
 		if (!tile) return;
-		const positions = scene.entities.map((entity) => projectPoint(entity.positionMillimetres, tile.view));
+		const positions = scene.entities.map((entity) =>
+			projectPoint(entity.positionMillimetres, tile.view),
+		);
 		const minX = Math.min(...positions.map((position) => position[0]));
 		const maxX = Math.max(...positions.map((position) => position[0]));
 		const minY = Math.min(...positions.map((position) => position[1]));
@@ -144,7 +177,10 @@ export function CadApp() {
 			...tile,
 			camera: {
 				pan: [-(minX + maxX) / 2, -(minY + maxY) / 2],
-				zoom: Math.max(0.008, Math.min(0.2, 900 / Math.max(5000, maxX - minX, maxY - minY))),
+				zoom: Math.max(
+					0.008,
+					Math.min(0.2, 900 / Math.max(5000, maxX - minX, maxY - minY)),
+				),
 			},
 		}));
 	}
@@ -158,22 +194,38 @@ export function CadApp() {
 					"data-tauri-drag-region": true,
 					onPointerDown: beginWindowDrag,
 				}}
-				groups={[{
-					id: "cad-actions",
-					actions: [
-						{ id: "settings", label: "Settings", onPress: () => setSettingsOpen(true) },
-						{ id: "undo", label: "Undo", disabled: !scene, onPress: () => void history("undo") },
-						{ id: "redo", label: "Redo", disabled: !scene, onPress: () => void history("redo") },
-						{
-							id: "fit",
-							label: "Fit",
-							disabled: !scene?.entities.length,
-							onPress: () => fit(activeTileId ?? firstTileId(layout)),
-						},
-					],
-				}]}
+				groups={[
+					{
+						id: "cad-actions",
+						actions: [
+							{
+								id: "settings",
+								label: "Settings",
+								onPress: () => setSettingsOpen(true),
+							},
+							{
+								id: "undo",
+								label: "Undo",
+								disabled: !scene,
+								onPress: () => void history("undo"),
+							},
+							{
+								id: "redo",
+								label: "Redo",
+								disabled: !scene,
+								onPress: () => void history("redo"),
+							},
+							{
+								id: "fit",
+								label: "Fit",
+								disabled: !scene?.entities.length,
+								onPress: () => fit(activeTileId ?? firstTileId(layout)),
+							},
+						],
+					},
+				]}
 			/>
-			{error ? <output className="cad-error" onClick={() => setError(null)}>{error}</output> : null}
+			{error ? <output className="cad-error">{error}</output> : null}
 			<section className="cad-workspace">
 				{scene ? (
 					<CadTile
@@ -183,7 +235,9 @@ export function CadApp() {
 						snapToMounts={snapToMounts}
 						onLayout={setLayout}
 						onTile={updateTile}
-						onSplitRatio={(id, ratio) => setLayout((current) => setSplitRatio(current, id, ratio))}
+						onSplitRatio={(id, ratio) =>
+							setLayout((current) => setSplitRatio(current, id, ratio))
+						}
 						activeTileId={activeTileId}
 						onActivate={setActiveTileId}
 						onSelection={select}
@@ -197,19 +251,23 @@ export function CadApp() {
 				<WindowSettings
 					title="CAD Settings"
 					onClose={() => setSettingsOpen(false)}
-					tabs={[{
-						id: "snapping",
-						label: "Snapping",
-						content: (
-							<SwitchField
-								label="Enable snapping"
-								offLabel={null}
-								onLabel={null}
-								checked={snapToMounts}
-								onChange={(event) => setSnapToMounts(event.currentTarget.checked)}
-							/>
-						),
-					}]}
+					tabs={[
+						{
+							id: "snapping",
+							label: "Snapping",
+							content: (
+								<SwitchField
+									label="Enable snapping"
+									offLabel={null}
+									onLabel={null}
+									checked={snapToMounts}
+									onChange={(event) =>
+										setSnapToMounts(event.currentTarget.checked)
+									}
+								/>
+							),
+						},
+					]}
 				/>
 			) : null}
 		</main>
@@ -235,8 +293,11 @@ interface CadTileProps {
 	onSplitRatio(id: string, ratio: number): void;
 	activeTileId: string | null;
 	onActivate(id: string): void;
-	onSelection(ids: readonly string[]): void;
-	onMove(delta: [number, number, number], entityIds: readonly string[]): Promise<void>;
+	onSelection(change: SelectionChange): void;
+	onMove(
+		delta: [number, number, number],
+		entityIds: readonly string[],
+	): Promise<void>;
 }
 
 function CadTile(props: CadTileProps) {
@@ -245,7 +306,9 @@ function CadTile(props: CadTileProps) {
 		return (
 			<div
 				className={`cad-split is-${node.direction}`}
-				style={{ "--cad-split-ratio": `${node.ratio * 100}%` } as React.CSSProperties}
+				style={
+					{ "--cad-split-ratio": `${node.ratio * 100}%` } as React.CSSProperties
+				}
 			>
 				<CadTile {...props} node={node.first} />
 				<CadDivider node={node} onRatio={props.onSplitRatio} />
@@ -262,12 +325,16 @@ function CadTile(props: CadTileProps) {
 				<select
 					aria-label="View direction"
 					value={node.view}
-					onChange={(event) => props.onTile(node.id, (tile) => ({
-						...tile,
-						view: event.currentTarget.value as ViewportTile["view"],
-					}))}
+					onChange={(event) => {
+						const view = event.currentTarget.value as ViewportTile["view"];
+						props.onTile(node.id, (tile) => ({ ...tile, view }));
+					}}
 				>
-					{Object.entries(CAD_VIEW_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+					{Object.entries(CAD_VIEW_LABELS).map(([value, label]) => (
+						<option key={value} value={value}>
+							{label}
+						</option>
+					))}
 				</select>
 			</div>
 			<CadOrientation view={node.view} />
@@ -278,7 +345,9 @@ function CadTile(props: CadTileProps) {
 					aria-label={`Add viewport ${edge}`}
 					title={`Add viewport ${edge}`}
 					onPointerDown={(event) => event.stopPropagation()}
-					onClick={() => props.onLayout(splitTileAtEdge(props.root, node.id, edge))}
+					onClick={() =>
+						props.onLayout(splitTileAtEdge(props.root, node.id, edge))
+					}
 				>
 					<span aria-hidden="true">+</span>
 				</Button>
@@ -289,7 +358,9 @@ function CadTile(props: CadTileProps) {
 				view={node.view}
 				camera={node.camera}
 				snapToMounts={props.snapToMounts}
-				onCamera={(camera: TileCamera) => props.onTile(node.id, (tile) => ({ ...tile, camera }))}
+				onCamera={(camera: TileCamera) =>
+					props.onTile(node.id, (tile) => ({ ...tile, camera }))
+				}
 				onSelection={props.onSelection}
 				onMove={props.onMove}
 			/>
@@ -306,11 +377,15 @@ function CadDivider({
 }) {
 	const dragging = useRef(false);
 	return (
-		<div
+		<hr
 			className="cad-divider"
-			role="separator"
-			aria-label={node.direction === "horizontal" ? "Resize columns" : "Resize rows"}
-			aria-orientation={node.direction === "horizontal" ? "vertical" : "horizontal"}
+			tabIndex={0}
+			aria-label={
+				node.direction === "horizontal" ? "Resize columns" : "Resize rows"
+			}
+			aria-orientation={
+				node.direction === "horizontal" ? "vertical" : "horizontal"
+			}
 			aria-valuemin={15}
 			aria-valuemax={85}
 			aria-valuenow={Math.round(node.ratio * 100)}
@@ -324,9 +399,10 @@ function CadDivider({
 				if (!dragging.current) return;
 				const rect = event.currentTarget.parentElement?.getBoundingClientRect();
 				if (!rect) return;
-				const ratio = node.direction === "horizontal"
-					? (event.clientX - rect.left) / rect.width
-					: (event.clientY - rect.top) / rect.height;
+				const ratio =
+					node.direction === "horizontal"
+						? (event.clientX - rect.left) / rect.width
+						: (event.clientY - rect.top) / rect.height;
 				onRatio(node.id, ratio);
 			}}
 			onPointerUp={(event) => {
@@ -340,7 +416,10 @@ function CadDivider({
 	);
 }
 
-const ORIENTATION: Record<CadViewDirection, { horizontal: string; vertical: string; depth: string }> = {
+const ORIENTATION: Record<
+	CadViewDirection,
+	{ horizontal: string; vertical: string; depth: string }
+> = {
 	top_down: { horizontal: "+X", vertical: "−Y", depth: "+Z" },
 	left_to_right: { horizontal: "+Y", vertical: "+Z", depth: "+X" },
 	right_to_left: { horizontal: "−Y", vertical: "+Z", depth: "−X" },
@@ -353,6 +432,7 @@ function CadOrientation({ view }: { view: CadViewDirection }) {
 	return (
 		<div
 			className="cad-orientation"
+			role="img"
 			aria-label={`Orientation: right ${axes.horizontal}, up ${axes.vertical}, depth ${axes.depth}`}
 		>
 			<span className="cad-axis-horizontal">{axes.horizontal}</span>

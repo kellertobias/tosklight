@@ -158,6 +158,8 @@ beforeEach(() => {
 				return Promise.resolve([]);
 			case "live_dmx_inputs":
 				return Promise.resolve(liveInputs);
+			case "visualizer_is_running":
+				return Promise.resolve(false);
 			case "patch_layers":
 				return Promise.resolve([
 					{ id: "house", name: "House", order: 0 },
@@ -235,13 +237,7 @@ describe("the Viz editor window", () => {
 		);
 		fireEvent.click(screen.getByRole("button", { name: "Close window" }));
 		await waitFor(() => expect(nativeWindow.close).toHaveBeenCalledOnce());
-		for (const label of [
-			"Show",
-			"Patch",
-			"Venue",
-			"Effects",
-			"Media",
-		])
+		for (const label of ["Show", "Patch", "Venue", "Effects", "Media"])
 			expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
 		const openCad = screen.getByRole("button", { name: "Open CAD" });
 		const openViz = screen.getByRole("button", { name: "Open Viz" });
@@ -574,16 +570,26 @@ describe("the Viz editor window", () => {
 	});
 
 	it("opens the separate visualizer output from the bottom dock", async () => {
+		let running = false;
 		invoke.mockImplementation((command: string) => {
-			if (command === "open_visualizer") return Promise.resolve();
+			if (command === "open_visualizer") {
+				running = true;
+				return Promise.resolve();
+			}
+			if (command === "visualizer_is_running") return Promise.resolve(running);
 			if (command === "document_summary") return Promise.resolve(document);
 			if (command === "patch_snapshot") return Promise.resolve(snapshot);
 			if (command === "live_dmx_inputs") return Promise.resolve(liveInputs);
 			return Promise.resolve([]);
 		});
 		renderApp();
+		fireEvent.click(await screen.findByRole("button", { name: "Patch" }));
+		expect(screen.queryByLabelText("Preview controls")).not.toBeInTheDocument();
 		fireEvent.click(await screen.findByRole("button", { name: "Open Viz" }));
 		await waitFor(() => expect(invoke).toHaveBeenCalledWith("open_visualizer"));
+		expect(
+			await screen.findByLabelText("Preview controls"),
+		).toBeInTheDocument();
 	});
 
 	it("opens the separate CAD planner immediately above the visualizer action", async () => {
@@ -644,9 +650,9 @@ describe("the Viz editor window", () => {
 			"Picture",
 			"Features",
 		]);
-		expect(within(sharedTitle).getByRole("tab", { name: "Rendering" })).toHaveClass(
-			"is-active",
-		);
+		expect(
+			within(sharedTitle).getByRole("tab", { name: "Rendering" }),
+		).toHaveClass("is-active");
 		await waitFor(() =>
 			expect(
 				document_root()?.querySelectorAll(
@@ -654,7 +660,9 @@ describe("the Viz editor window", () => {
 				),
 			).toHaveLength(1),
 		);
-		fireEvent.click(within(sharedTitle).getByRole("tab", { name: "Atmosphere" }));
+		fireEvent.click(
+			within(sharedTitle).getByRole("tab", { name: "Atmosphere" }),
+		);
 		fireEvent.input(await screen.findByRole("slider", { name: "Fog amount" }), {
 			target: { value: "0.08" },
 		});
@@ -673,10 +681,16 @@ describe("the Viz editor window", () => {
 			"ui-native-control",
 		);
 		fireEvent.click(within(sharedTitle).getByRole("tab", { name: "Picture" }));
-		expect(screen.getByRole("heading", { name: "Picture" })).toBeInTheDocument();
+		expect(
+			screen.getByRole("heading", { name: "Picture" }),
+		).toBeInTheDocument();
 		fireEvent.click(within(sharedTitle).getByRole("tab", { name: "Features" }));
-		expect(screen.getByRole("heading", { name: "Features" })).toBeInTheDocument();
-		fireEvent.click(within(sharedTitle).getByRole("tab", { name: "Rendering" }));
+		expect(
+			screen.getByRole("heading", { name: "Features" }),
+		).toBeInTheDocument();
+		fireEvent.click(
+			within(sharedTitle).getByRole("tab", { name: "Rendering" }),
+		);
 		expect(
 			screen.getByRole("slider", { name: "Environment brightness" }),
 		).toBeInTheDocument();
@@ -685,7 +699,9 @@ describe("the Viz editor window", () => {
 			screen.getByRole("heading", { name: "Live DMX Inputs" }),
 		).toBeInTheDocument();
 		fireEvent.click(within(sharedTitle).getByRole("tab", { name: "Show" }));
-		expect(screen.getByRole("button", { name: "Open Demo Show" })).toBeInTheDocument();
+		expect(
+			screen.getByRole("button", { name: "Open Demo Show" }),
+		).toBeInTheDocument();
 	});
 
 	it("reflects settings changed in the running Visualizer", async () => {
@@ -753,7 +769,10 @@ describe("the Viz editor window", () => {
 		);
 		if (!title) throw new Error("Media title row was not rendered");
 		expect(
-			Array.from(title.querySelectorAll("button"), (button) => button.textContent),
+			Array.from(
+				title.querySelectorAll("button"),
+				(button) => button.textContent,
+			),
 		).toEqual([
 			"Discover servers",
 			"Enumerate outputs",
@@ -765,7 +784,9 @@ describe("the Viz editor window", () => {
 			"Projectors",
 		]);
 		expect(
-			document_root()?.querySelectorAll(".viz-media-workspace > .ui-window-header"),
+			document_root()?.querySelectorAll(
+				".viz-media-workspace > .ui-window-header",
+			),
 		).toHaveLength(1);
 		expect(screen.queryAllByRole("columnheader")).toHaveLength(0);
 		expect(

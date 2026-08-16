@@ -301,6 +301,8 @@ export const documentSession = {
 	openCad: () => invoke<void>("open_cad"),
 	/** Open the separate visualizer output for the document currently being edited. */
 	openVisualizer: () => invoke<void>("open_visualizer"),
+	/** Whether the editor-owned Visualizer child is still running. */
+	visualizerIsRunning: () => invoke<boolean>("visualizer_is_running"),
 	rendererSettings: () => invoke<RendererSettings>("renderer_settings"),
 	saveRendererSettings: (settings: RendererSettings) =>
 		invoke<RendererSettings>("save_renderer_settings", { settings }),
