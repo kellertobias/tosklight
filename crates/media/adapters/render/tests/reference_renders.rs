@@ -10,10 +10,10 @@
 
 use media_domain::geometry::Size;
 use media_domain::{
-    AnalogTvParameters, BlurParameters, DigitalTvParameters, EffectSlot, FeedbackMotion,
-    FeedbackParameters, FlipMirror, KaleidoscopeParameters, LayerState, MaskSource, MaskState,
-    MasterState, MediaAddress, OutputId, PresentationMode, RasterizeMode, RasterizeParameters,
-    ScalingMode, SourceStatus, Timestamp, Tint,
+    AnalogTvParameters, BeatScanEdge, BeatScanParameters, BlurParameters, DigitalTvParameters,
+    EffectSlot, FeedbackMotion, FeedbackParameters, FlipMirror, KaleidoscopeParameters, LayerState,
+    MaskSource, MaskState, MasterState, MediaAddress, OutputId, PresentationMode, RasterizeMode,
+    RasterizeParameters, ScalingMode, SourceStatus, Timestamp, Tint,
 };
 use media_render::{Gpu, LayerDraw, OutputRenderer, SourceTexture};
 use std::path::Path;
@@ -169,6 +169,28 @@ fn rasterize_state(mode: RasterizeMode, dot_size: f32, enabled: bool) -> LayerSt
     let mut effect = EffectSlot::rasterize();
     effect.enabled = enabled;
     effect.parameters = RasterizeParameters { mode, dot_size }.as_array().to_vec();
+    let mut effects: [EffectSlot; 4] = Default::default();
+    effects[0] = effect;
+    ready(LayerState {
+        effects,
+        ..Default::default()
+    })
+}
+
+fn beat_scan_state(edge: BeatScanEdge, events: &[(f32, f32)], enabled: bool) -> LayerState {
+    let mut effect = EffectSlot::beat_scan();
+    effect.enabled = enabled;
+    effect.parameters = BeatScanParameters {
+        width: 0.12,
+        edge,
+        falloff: 0.8,
+        duration_seconds: 1.0,
+    }
+    .as_array()
+    .to_vec();
+    for (position, count) in events {
+        effect.parameters.extend([*position, *count]);
+    }
     let mut effects: [EffectSlot; 4] = Default::default();
     effects[0] = effect;
     ready(LayerState {
@@ -360,6 +382,33 @@ fn rasterize_has_distinct_monochrome_and_cmyk_dots_live_with_exact_bypass() {
     );
     assert!(changed_pixels(&black_and_white, &cmyk) > 1_000);
     assert!(changed_pixels(&large_dots, &cmyk) > 500);
+    assert_eq!(disabled.pixels, clear.pixels, "bypass restores the source");
+}
+
+#[test]
+fn beat_scan_draws_sharp_soft_and_multiple_live_lines_with_exact_bypass() {
+    let mut bench = Bench::new();
+    let source = patterned_source(&bench.gpu);
+    let plain = ready(LayerState::default());
+    let sharp = beat_scan_state(BeatScanEdge::Sharp, &[(0.45, 1.0)], true);
+    let soft = beat_scan_state(BeatScanEdge::Soft, &[(0.45, 1.0)], true);
+    let multiple = beat_scan_state(BeatScanEdge::Soft, &[(0.25, 3.0), (0.75, 2.0)], true);
+    let disabled = beat_scan_state(BeatScanEdge::Soft, &[(0.45, 3.0)], false);
+    let draw = |state| LayerDraw {
+        state,
+        source: &source,
+        mask: None,
+    };
+
+    let clear = bench.render(&[draw(&plain)], &MasterState::default());
+    let sharp = bench.render(&[draw(&sharp)], &MasterState::default());
+    let soft = bench.render(&[draw(&soft)], &MasterState::default());
+    let multiple = bench.render(&[draw(&multiple)], &MasterState::default());
+    let disabled = bench.render(&[draw(&disabled)], &MasterState::default());
+
+    assert!(changed_pixels(&sharp, &clear) > 200);
+    assert!(changed_pixels(&soft, &sharp) > 100);
+    assert!(changed_pixels(&multiple, &soft) > 500);
     assert_eq!(disabled.pixels, clear.pixels, "bypass restores the source");
 }
 

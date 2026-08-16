@@ -45,12 +45,12 @@ pub use command::{
 };
 pub use geometry::{LayerTransform, Point, Size};
 pub use layer::{
-    ANALOG_TV_EFFECT, AnalogTvParameters, BEAT_MOVE_EFFECT, BLUR_EFFECT, BeatMoveDirection,
-    BeatMoveParameters, BlurParameters, DIGITAL_TV_EFFECT, DigitalTvParameters, EffectSlot,
-    FEEDBACK_EFFECT, FeedbackMotion, FeedbackParameters, KALEIDOSCOPE_EFFECT,
-    KaleidoscopeParameters, LayerState, MaskSource, MaskState, OPACITY_CYCLE_EFFECT,
-    OpacityCycleInterval, RASTERIZE_EFFECT, RasterizeMode, RasterizeParameters, ScalingMode,
-    SourceFailure, SourceStatus,
+    ANALOG_TV_EFFECT, AnalogTvParameters, BEAT_MOVE_EFFECT, BEAT_SCAN_EFFECT, BLUR_EFFECT,
+    BeatMoveDirection, BeatMoveParameters, BeatScanEdge, BeatScanParameters, BlurParameters,
+    DIGITAL_TV_EFFECT, DigitalTvParameters, EffectSlot, FEEDBACK_EFFECT, FeedbackMotion,
+    FeedbackParameters, KALEIDOSCOPE_EFFECT, KaleidoscopeParameters, LayerState, MaskSource,
+    MaskState, OPACITY_CYCLE_EFFECT, OpacityCycleInterval, RASTERIZE_EFFECT, RasterizeMode,
+    RasterizeParameters, ScalingMode, SourceFailure, SourceStatus,
 };
 pub use master::MasterState;
 pub use output::{OutputId, OutputName, PresentationMode};

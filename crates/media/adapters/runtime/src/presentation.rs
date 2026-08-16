@@ -131,6 +131,7 @@ struct HostedOutput {
     pipeline: LayerPipeline,
     opacity_cycle: crate::opacity_cycle::OpacityCycle,
     beat_move: crate::beat_move::BeatMove,
+    beat_scan: crate::beat_scan::BeatScan,
     standby: Option<SourceTexture>,
 }
 
@@ -308,6 +309,7 @@ impl PresentationHost {
                     pipeline,
                     opacity_cycle: crate::opacity_cycle::OpacityCycle::default(),
                     beat_move: crate::beat_move::BeatMove::default(),
+                    beat_scan: crate::beat_scan::BeatScan::default(),
                     standby,
                 });
             }
@@ -418,6 +420,12 @@ impl PresentationHost {
             let effective_layers = hosted
                 .beat_move
                 .apply(&effective_layers, seconds, heard.beat);
+            let effective_layers = hosted.beat_scan.apply(
+                &effective_layers,
+                seconds,
+                heard.beat,
+                heard.analysis.peak.max(heard.analysis.energy * 4.0),
+            );
             let mut draws = hosted
                 .pipeline
                 .draws_from_layers(&effective_layers, &prepared);

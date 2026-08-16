@@ -47,6 +47,10 @@ struct LayerUniform {
     effect_seeds: [f32; 4],
     /// Authoritative playback seconds, output width/height, spare.
     effect_clock: [f32; 4],
+    /// Transient beat-scan event base positions and strength-derived line counts. Each vec4 maps
+    /// one event across effect slots 1..4; these never enter persisted layer state.
+    beat_scan_positions: [[f32; 4]; 16],
+    beat_scan_counts: [[f32; 4]; 16],
 }
 
 impl LayerUniform {
@@ -65,6 +69,8 @@ impl LayerUniform {
         let mut effect_parameters = [[0.0; 4]; 4];
         let mut effect_parameter_tail = [0.0; 4];
         let mut effect_seeds = [0.0; 4];
+        let mut beat_scan_positions = [[-2.0; 4]; 16];
+        let mut beat_scan_counts = [[0.0; 4]; 16];
         for (index, effect) in layer.effects.iter().enumerate() {
             if let Some(parameters) = effect.analog_tv_parameters() {
                 effect_types[index] = 1;
@@ -92,6 +98,14 @@ impl LayerUniform {
                 effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
                 effect_parameters[index][0] = parameters.mode.parameter();
                 effect_parameters[index][1] = parameters.dot_size;
+            } else if let Some(parameters) = effect.beat_scan_parameters() {
+                effect_types[index] = 6;
+                effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
+                effect_parameters[index] = parameters.as_array();
+                for (event, values) in effect.parameters[4..].chunks_exact(2).take(16).enumerate() {
+                    beat_scan_positions[event][index] = values[0];
+                    beat_scan_counts[event][index] = values[1];
+                }
             }
         }
         Self {
@@ -136,6 +150,8 @@ impl LayerUniform {
                 output.height as f32,
                 0.0,
             ],
+            beat_scan_positions,
+            beat_scan_counts,
         }
     }
 }

@@ -100,6 +100,99 @@ pub const FEEDBACK_EFFECT: &str = "feedback";
 pub const BEAT_MOVE_EFFECT: &str = "beat-move";
 pub const KALEIDOSCOPE_EFFECT: &str = "kaleidoscope";
 pub const RASTERIZE_EFFECT: &str = "rasterize";
+pub const BEAT_SCAN_EFFECT: &str = "beat-scan";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum BeatScanEdge {
+    #[default]
+    Sharp,
+    Soft,
+}
+
+impl BeatScanEdge {
+    pub const ALL: [Self; 2] = [Self::Sharp, Self::Soft];
+
+    pub const fn wire_name(self) -> &'static str {
+        match self {
+            Self::Sharp => "sharp",
+            Self::Soft => "soft",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|edge| edge.wire_name() == value)
+    }
+
+    pub const fn parameter(self) -> f32 {
+        match self {
+            Self::Sharp => 0.0,
+            Self::Soft => 1.0,
+        }
+    }
+
+    pub fn from_parameter(value: f32) -> Self {
+        if value.is_finite() && value >= 0.5 {
+            Self::Soft
+        } else {
+            Self::Sharp
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BeatScanParameters {
+    /// Line width as a fraction of the source height.
+    pub width: f32,
+    pub edge: BeatScanEdge,
+    /// Soft-edge falloff relative to the configured line width.
+    pub falloff: f32,
+    /// Seconds from spawning until every line in the beat cluster has left the image.
+    pub duration_seconds: f32,
+}
+
+impl BeatScanParameters {
+    pub const IDS: [&'static str; 4] = [
+        "beat-scan-width",
+        "beat-scan-edge",
+        "beat-scan-falloff",
+        "beat-scan-duration",
+    ];
+    pub const LABELS: [&'static str; 4] = ["Scan width", "Edge", "Edge falloff", "Travel time"];
+
+    pub fn from_parameters(values: &[f32]) -> Self {
+        let defaults = Self::default();
+        let bounded = |value: Option<f32>, fallback: f32, low: f32, high: f32| match value {
+            Some(value) if value.is_finite() => value.clamp(low, high),
+            _ => fallback,
+        };
+        Self {
+            width: bounded(values.first().copied(), defaults.width, 0.01, 0.25),
+            edge: BeatScanEdge::from_parameter(values.get(1).copied().unwrap_or_default()),
+            falloff: bounded(values.get(2).copied(), defaults.falloff, 0.0, 1.0),
+            duration_seconds: bounded(values.get(3).copied(), defaults.duration_seconds, 0.2, 3.0),
+        }
+    }
+
+    pub const fn as_array(self) -> [f32; 4] {
+        [
+            self.width,
+            self.edge.parameter(),
+            self.falloff,
+            self.duration_seconds,
+        ]
+    }
+}
+
+impl Default for BeatScanParameters {
+    fn default() -> Self {
+        Self {
+            width: 0.06,
+            edge: BeatScanEdge::Sharp,
+            falloff: 0.45,
+            duration_seconds: 1.0,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum RasterizeMode {
@@ -750,6 +843,22 @@ impl EffectSlot {
             .then(|| RasterizeParameters::from_parameters(&self.parameters))
     }
 
+    pub fn beat_scan() -> Self {
+        Self {
+            effect_type: Some(BEAT_SCAN_EFFECT.to_owned()),
+            enabled: true,
+            seed: 0,
+            mix: 1.0,
+            parameters: BeatScanParameters::default().as_array().to_vec(),
+            visualizer_parameters: None,
+        }
+    }
+
+    pub fn beat_scan_parameters(&self) -> Option<BeatScanParameters> {
+        (self.enabled && self.mix > 0.0 && self.effect_type.as_deref() == Some(BEAT_SCAN_EFFECT))
+            .then(|| BeatScanParameters::from_parameters(&self.parameters))
+    }
+
     pub fn normalize(&mut self) {
         self.mix = if self.mix.is_finite() {
             self.mix.clamp(0.0, 1.0)
@@ -786,6 +895,10 @@ impl EffectSlot {
                 .to_vec();
         } else if self.effect_type.as_deref() == Some(RASTERIZE_EFFECT) {
             self.parameters = RasterizeParameters::from_parameters(&self.parameters)
+                .as_array()
+                .to_vec();
+        } else if self.effect_type.as_deref() == Some(BEAT_SCAN_EFFECT) {
+            self.parameters = BeatScanParameters::from_parameters(&self.parameters)
                 .as_array()
                 .to_vec();
         }
@@ -1181,5 +1294,28 @@ mod tests {
 
         effect.enabled = false;
         assert_eq!(effect.rasterize_parameters(), None);
+    }
+
+    #[test]
+    fn beat_scan_has_typed_edges_bounded_timing_and_no_spawn_count() {
+        let mut effect = EffectSlot::beat_scan();
+        assert_eq!(
+            effect.beat_scan_parameters(),
+            Some(BeatScanParameters::default())
+        );
+        assert_eq!(BeatScanEdge::parse("sharp"), Some(BeatScanEdge::Sharp));
+        assert_eq!(BeatScanEdge::parse("soft"), Some(BeatScanEdge::Soft));
+        assert_eq!(BeatScanEdge::parse("blurred"), None);
+        assert!(
+            BeatScanParameters::IDS
+                .iter()
+                .all(|id| !id.contains("count"))
+        );
+
+        effect.parameters = vec![0.5, 1.0, 2.0, 9.0];
+        effect.normalize();
+        assert_eq!(effect.parameters, vec![0.25, 1.0, 1.0, 3.0]);
+        effect.enabled = false;
+        assert_eq!(effect.beat_scan_parameters(), None);
     }
 }

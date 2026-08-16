@@ -12,12 +12,13 @@ use axum::response::{IntoResponse, Response};
 use media_application::MediaConfiguration;
 use media_application::configuration::{load, save};
 use media_domain::{
-    ANALOG_TV_EFFECT, Applied, BEAT_MOVE_EFFECT, BLUR_EFFECT, BeatMoveDirection,
-    BeatMoveParameters, BlurParameters, Command, CommandKind, CommandSource, DIGITAL_TV_EFFECT,
-    EffectSlot, FEEDBACK_EFFECT, FeedbackMotion, FeedbackParameters, FlipMirror,
-    KALEIDOSCOPE_EFFECT, KaleidoscopeParameters, LayerControls, MasterControls, MediaAddress,
-    MediaState, OPACITY_CYCLE_EFFECT, OpacityCycleInterval, OutputId,
-    RASTERIZE_EFFECT, RasterizeMode, RasterizeParameters, ScalingMode, Timestamp, Tint, apply,
+    ANALOG_TV_EFFECT, Applied, BEAT_MOVE_EFFECT, BEAT_SCAN_EFFECT, BLUR_EFFECT, BeatMoveDirection,
+    BeatMoveParameters, BeatScanEdge, BeatScanParameters, BlurParameters, Command, CommandKind,
+    CommandSource, DIGITAL_TV_EFFECT, EffectSlot, FEEDBACK_EFFECT, FeedbackMotion,
+    FeedbackParameters, FlipMirror, KALEIDOSCOPE_EFFECT, KaleidoscopeParameters, LayerControls,
+    MasterControls, MediaAddress, MediaState, OPACITY_CYCLE_EFFECT,
+    OpacityCycleInterval, OutputId, RASTERIZE_EFFECT, RasterizeMode, RasterizeParameters,
+    ScalingMode, Timestamp, Tint, apply,
 };
 
 use crate::error::ApiError;
@@ -149,6 +150,7 @@ pub(super) async fn update_layer(
         ("feedbackAmount", body.feedback_amount),
         ("feedbackMotion", body.feedback_motion),
         ("beatMoveAmount", body.beat_move_amount),
+        ("beatScanFalloff", body.beat_scan_falloff),
     ] {
         validate_unit(name, value)?;
     }
@@ -163,6 +165,8 @@ pub(super) async fn update_layer(
         ("beatMoveDecay", body.beat_move_decay, 0.05, 5.0),
         ("kaleidoscopeAngle", body.kaleidoscope_angle, -180.0, 180.0),
         ("rasterizeDotSize", body.rasterize_dot_size, 2.0, 32.0),
+        ("beatScanWidth", body.beat_scan_width, 0.01, 0.25),
+        ("beatScanDuration", body.beat_scan_duration, 0.2, 3.0),
     ] {
         validate_range(name, value, minimum, maximum)?;
     }
@@ -206,6 +210,7 @@ pub(super) async fn update_layer(
                 BEAT_MOVE_EFFECT => EffectSlot::beat_move(),
                 KALEIDOSCOPE_EFFECT => EffectSlot::kaleidoscope(),
                 RASTERIZE_EFFECT => EffectSlot::rasterize(),
+                BEAT_SCAN_EFFECT => EffectSlot::beat_scan(),
                 "none" => EffectSlot::default(),
                 _ => {
                     return Err(ApiError::bad_request(
@@ -335,6 +340,33 @@ pub(super) async fn update_layer(
                 })?;
             }
             parameters.dot_size = body.rasterize_dot_size.unwrap_or(parameters.dot_size);
+            effect.parameters = parameters.as_array().to_vec();
+        }
+        if body.beat_scan_width.is_some()
+            || body.beat_scan_edge.is_some()
+            || body.beat_scan_falloff.is_some()
+            || body.beat_scan_duration.is_some()
+        {
+            if effect.effect_type.as_deref() != Some(BEAT_SCAN_EFFECT) {
+                return Err(ApiError::bad_request(
+                    "beat-scan-parameters-effect",
+                    "choose the Beat Scan effect before changing its controls",
+                ));
+            }
+            let mut parameters = BeatScanParameters::from_parameters(&effect.parameters);
+            parameters.width = body.beat_scan_width.unwrap_or(parameters.width);
+            parameters.falloff = body.beat_scan_falloff.unwrap_or(parameters.falloff);
+            parameters.duration_seconds = body
+                .beat_scan_duration
+                .unwrap_or(parameters.duration_seconds);
+            if let Some(edge) = body.beat_scan_edge.as_deref() {
+                parameters.edge = BeatScanEdge::parse(edge).ok_or_else(|| {
+                    ApiError::bad_request(
+                        "beat-scan-edge-invalid",
+                        "beatScanEdge must be sharp or soft",
+                    )
+                })?;
+            }
             effect.parameters = parameters.as_array().to_vec();
         }
         if body.feedback_amount.is_some()
@@ -1154,6 +1186,36 @@ mod tests {
         assert_eq!(effect["label"], "Rasterized Print");
         assert_eq!(effect["parameters"][0]["value"], 1.0);
         assert_eq!(effect["parameters"][1]["value"], 18.0);
+
+        let (_, bypassed) = send(
+            &bench.router,
+            post(uri, r#"{"effectSlot":0,"effectEnabled":false}"#),
+        )
+        .await;
+        assert_eq!(bypassed["layers"][0]["effects"][0]["enabled"], false);
+    }
+
+    #[tokio::test]
+    async fn beat_scan_persists_width_edge_falloff_duration_and_bypass() {
+        let bench = bench();
+        take_over(&bench).await;
+        let uri = format!("/api/v2/outputs/{}/layers/0/update", bench.output);
+        let (status, selected) = send(
+            &bench.router,
+            post(
+                uri.clone(),
+                r#"{"effectSlot":0,"effectType":"beat-scan","beatScanWidth":0.12,"beatScanEdge":"soft","beatScanFalloff":0.7,"beatScanDuration":2.25}"#,
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let effect = &selected["layers"][0]["effects"][0];
+        assert_eq!(effect["effectType"], "beat-scan");
+        assert_eq!(effect["label"], "Beat Scan");
+        assert_eq!(effect["parameters"][0]["value"], 0.12);
+        assert_eq!(effect["parameters"][1]["value"], 1.0);
+        assert_eq!(effect["parameters"][2]["value"], 0.7);
+        assert_eq!(effect["parameters"][3]["value"], 2.25);
 
         let (_, bypassed) = send(
             &bench.router,

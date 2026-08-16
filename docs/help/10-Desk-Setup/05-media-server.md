@@ -179,6 +179,10 @@ also restores that exact source immediately.
 **Rasterized Print** turns the live image into a dot-based print without changing its source asset.
 **Print mode** selects **Black and White** ink or a four-colour **CMYK** treatment, and **Dot size**
 sets the apparent print-cell size from 2 to 32 source pixels. Bypassing restores the exact source.
+**Beat Scan** sends one or more bright scan lines across the live image on each detected beat. The
+audio hit strength decides whether that beat spawns one, two, or three lines; there is deliberately
+no fixed spawn-count control. **Scan width**, **Sharp** or **Soft** edges, **Edge falloff**, and
+**Travel time** shape the lines. Consecutive beats keep earlier lines travelling until they leave.
 After configuring a slot, release takeover to return control to the desk. The matching **Effect 1**
 through **Effect 4** DMX channel then controls that slot's mix without erasing its selected effect or
 typed parameters.

@@ -262,6 +262,8 @@ export function stubServer(
 						);
 					} else if (body.effectType === "rasterize") {
 						layer.effects[body.effectSlot] = rasterizeEffect(body.effectSlot);
+					} else if (body.effectType === "beat-scan") {
+						layer.effects[body.effectSlot] = beatScanEffect(body.effectSlot);
 					}
 					const selectedEffect = layer.effects[body.effectSlot];
 					if (body.visualizerParameters !== undefined)
@@ -318,6 +320,15 @@ export function stubServer(
 							body.rasterizeMode === "cmyk" ? 1 : 0;
 					if (body.rasterizeDotSize !== undefined)
 						selectedEffect.parameters[1].value = body.rasterizeDotSize;
+					if (body.beatScanWidth !== undefined)
+						selectedEffect.parameters[0].value = body.beatScanWidth;
+					if (body.beatScanEdge !== undefined)
+						selectedEffect.parameters[1].value =
+							body.beatScanEdge === "soft" ? 1 : 0;
+					if (body.beatScanFalloff !== undefined)
+						selectedEffect.parameters[2].value = body.beatScanFalloff;
+					if (body.beatScanDuration !== undefined)
+						selectedEffect.parameters[3].value = body.beatScanDuration;
 					for (const [id, key] of [
 						["tv-curvature", "tvCurvature"],
 						["distortion", "effectDistortion"],
@@ -797,6 +808,44 @@ function rasterizeEffect(
 				label: "Dot size",
 				value: 8,
 				defaultValue: 8,
+			},
+		],
+	};
+}
+
+function beatScanEffect(
+	index: number,
+): OutputView["layers"][number]["effects"][number] {
+	return {
+		...emptyEffect(index),
+		effectType: "beat-scan",
+		label: "Beat Scan",
+		enabled: true,
+		mix: 1,
+		parameters: [
+			{
+				id: "beat-scan-width",
+				label: "Scan width",
+				value: 0.06,
+				defaultValue: 0.06,
+			},
+			{
+				id: "beat-scan-edge",
+				label: "Edge",
+				value: 0,
+				defaultValue: 0,
+			},
+			{
+				id: "beat-scan-falloff",
+				label: "Edge falloff",
+				value: 0.45,
+				defaultValue: 0.45,
+			},
+			{
+				id: "beat-scan-duration",
+				label: "Travel time",
+				value: 1,
+				defaultValue: 1,
 			},
 		],
 	};

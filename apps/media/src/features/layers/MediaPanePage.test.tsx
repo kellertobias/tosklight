@@ -447,6 +447,51 @@ describe("the production Media pane", () => {
 		);
 	});
 
+	it("configures live Beat Scan width, edge falloff, travel time, and bypass", async () => {
+		const server = stubServer();
+		render(<MediaPanePage />);
+		await userEvent.click(
+			await screen.findByRole("switch", { name: "Take over playback" }),
+		);
+		await userEvent.click(screen.getByRole("tab", { name: "Effects" }));
+		await chooseEffect(1, "Beat Scan");
+		await waitFor(() =>
+			expect(server.outputs[0].layers[0].effects[0].effectType).toBe(
+				"beat-scan",
+			),
+		);
+		expect(screen.queryByLabelText(/spawn count/i)).not.toBeInTheDocument();
+		fireEvent.input(screen.getByLabelText("Slot 1 · Scan width"), {
+			target: { value: "12" },
+		});
+		await userEvent.click(
+			within(
+				screen.getByRole("radiogroup", { name: "Slot 1 · Edge" }),
+			).getByRole("radio", { name: "Soft" }),
+		);
+		fireEvent.input(screen.getByLabelText("Slot 1 · Edge falloff"), {
+			target: { value: "70" },
+		});
+		fireEvent.input(screen.getByLabelText("Slot 1 · Travel time"), {
+			target: { value: "2.25" },
+		});
+		await waitFor(() => {
+			const parameters = server.outputs[0].layers[0].effects[0].parameters;
+			expect(parameters[0].value).toBeCloseTo(0.12);
+			expect(parameters[1].value).toBe(1);
+			expect(parameters[2].value).toBeCloseTo(0.7);
+			expect(parameters[3].value).toBeCloseTo(2.25);
+		});
+		await userEvent.click(
+			within(
+				screen.getByRole("radiogroup", { name: "Slot 1 state" }),
+			).getByRole("radio", { name: "Bypassed" }),
+		);
+		await waitFor(() =>
+			expect(server.outputs[0].layers[0].effects[0].enabled).toBe(false),
+		);
+	});
+
 	it("shows an actionable capability error for an effect this build cannot render", async () => {
 		const output = anOutput();
 		output.layers[0].effects[0] = {

@@ -660,7 +660,7 @@ function tintChange(value: string) {
 function layerChange(id: string, value: string | number): UpdateLayer {
 	const number = Number(value);
 	const effect =
-		/^effect-(\d+)-(type|enabled|mix|tv-curvature|distortion|image-grain|compression-damage|block-size|tile-displacement|chroma-damage|glitching|cycle-interval|blur-amount|feedback-amount|feedback-motion|feedback-direction|beat-move-amount|beat-move-direction|beat-move-decay|kaleidoscope-repetitions|kaleidoscope-angle|rasterize-mode|rasterize-dot-size)$/.exec(
+		/^effect-(\d+)-(type|enabled|mix|tv-curvature|distortion|image-grain|compression-damage|block-size|tile-displacement|chroma-damage|glitching|cycle-interval|blur-amount|feedback-amount|feedback-motion|feedback-direction|beat-move-amount|beat-move-direction|beat-move-decay|kaleidoscope-repetitions|kaleidoscope-angle|rasterize-mode|rasterize-dot-size|beat-scan-width|beat-scan-edge|beat-scan-falloff|beat-scan-duration)$/.exec(
 			id,
 		);
 	if (effect) {
@@ -712,6 +712,14 @@ function layerChange(id: string, value: string | number): UpdateLayer {
 				return { effectSlot, rasterizeMode: String(value) };
 			case "rasterize-dot-size":
 				return { effectSlot, rasterizeDotSize: number };
+			case "beat-scan-width":
+				return { effectSlot, beatScanWidth: number / 100 };
+			case "beat-scan-edge":
+				return { effectSlot, beatScanEdge: String(value) };
+			case "beat-scan-falloff":
+				return { effectSlot, beatScanFalloff: number / 100 };
+			case "beat-scan-duration":
+				return { effectSlot, beatScanDuration: number };
 		}
 	}
 	switch (id) {
@@ -780,6 +788,7 @@ function effectControls(
 					{ value: "beat-move", label: "Beat Move" },
 					{ value: "kaleidoscope", label: "Kaleidoscope" },
 					{ value: "rasterize", label: "Rasterized Print" },
+					{ value: "beat-scan", label: "Beat Scan" },
 				],
 				disabled,
 			},
@@ -1049,6 +1058,82 @@ function effectControls(
 					disabled,
 					" px",
 					1,
+				),
+			];
+		}
+		if (effect.effectType === "beat-scan") {
+			const width = effect.parameters.find(
+				(parameter) => parameter.id === "beat-scan-width",
+			);
+			const edge = effect.parameters.find(
+				(parameter) => parameter.id === "beat-scan-edge",
+			);
+			const falloff = effect.parameters.find(
+				(parameter) => parameter.id === "beat-scan-falloff",
+			);
+			const duration = effect.parameters.find(
+				(parameter) => parameter.id === "beat-scan-duration",
+			);
+			return [
+				...controls,
+				{
+					id: `${prefix}-enabled`,
+					kind: "choice" as const,
+					label: `${slot} state`,
+					value: String(effect.enabled),
+					options: [
+						{ value: "true", label: "Enabled" },
+						{ value: "false", label: "Bypassed" },
+					],
+					disabled,
+				},
+				valueControl(
+					`${prefix}-mix`,
+					`${slot} mix`,
+					effect.mix * 100,
+					0,
+					100,
+					disabled,
+					"%",
+				),
+				valueControl(
+					`${prefix}-beat-scan-width`,
+					`${slot} · Scan width`,
+					(width?.value ?? 0.06) * 100,
+					1,
+					25,
+					disabled,
+					"%",
+				),
+				{
+					id: `${prefix}-beat-scan-edge`,
+					kind: "choice" as const,
+					label: `${slot} · Edge`,
+					value: (edge?.value ?? 0) >= 0.5 ? "soft" : "sharp",
+					options: [
+						{ value: "sharp", label: "Sharp" },
+						{ value: "soft", label: "Soft" },
+					],
+					disabled,
+				},
+				valueControl(
+					`${prefix}-beat-scan-falloff`,
+					`${slot} · Edge falloff`,
+					(falloff?.value ?? 0.45) * 100,
+					0,
+					100,
+					disabled,
+					"%",
+				),
+				valueControl(
+					`${prefix}-beat-scan-duration`,
+					`${slot} · Travel time`,
+					duration?.value ?? 1,
+					0.2,
+					3,
+					disabled,
+					" s",
+					0.05,
 				),
 			];
 		}

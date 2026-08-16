@@ -8,6 +8,7 @@
 //! half a server up.
 
 mod beat_move;
+mod beat_scan;
 mod citp;
 mod dmx;
 mod layer_pipeline;

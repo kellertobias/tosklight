@@ -23,7 +23,8 @@ struct Layer {
     mask: vec4<f32>,
     // x: 1 when the mask reads its strength from alpha rather than luminance.
     mask_source: vec4<f32>,
-    // 0: none/unsupported, 1: Analog TV, 2: Digital TV. One type per ordered slot.
+    // 0: none/unsupported, 1: Analog TV, 2: Digital TV, 3: Blur, 4: Kaleidoscope,
+    // 5: Rasterized Print, 6: Beat Scan. One type per ordered slot.
     effect_types: vec4<u32>,
     effect_mixes: vec4<f32>,
     // Typed normalized parameters for slots 1..4. Analog TV is curvature, distortion, grain,
@@ -34,6 +35,8 @@ struct Layer {
     effect_seeds: vec4<f32>,
     // x: authoritative playback seconds. y/z: output dimensions.
     effect_clock: vec4<f32>,
+    beat_scan_positions: array<vec4<f32>, 16>,
+    beat_scan_counts: array<vec4<f32>, 16>,
 };
 
 @group(0) @binding(0) var<uniform> layer: Layer;
@@ -378,6 +381,44 @@ fn rasterized_source(
     return vec4<f32>(mix(original.rgb, printed, effect_mix), original.a);
 }
 
+fn beat_scan_source(
+    original: vec4<f32>,
+    uv: vec2<f32>,
+    parameters: vec4<f32>,
+    effect_mix: f32,
+    slot: u32,
+) -> vec4<f32> {
+    if effect_mix <= 0.0 {
+        return original;
+    }
+    let width = clamp(parameters.x, 0.01, 0.25);
+    let soft = parameters.y >= 0.5;
+    let falloff = width * clamp(parameters.z, 0.0, 1.0);
+    var line_strength = 0.0;
+    for (var event = 0u; event < 16u; event += 1u) {
+        let base = layer.beat_scan_positions[event][slot];
+        let count = u32(clamp(round(layer.beat_scan_counts[event][slot]), 0.0, 3.0));
+        for (var line = 0u; line < 3u; line += 1u) {
+            if line < count {
+                let centre = base + f32(line) * width * 1.4;
+                let distance = abs(uv.y - centre);
+                let half_width = width * 0.5;
+                var strength = select(0.0, 1.0, distance <= half_width);
+                if soft {
+                    strength = 1.0 - smoothstep(
+                        half_width,
+                        half_width + max(falloff, 0.0001),
+                        distance,
+                    );
+                }
+                line_strength = max(line_strength, strength);
+            }
+        }
+    }
+    let scanned = mix(original.rgb, vec3<f32>(1.0), line_strength * 0.72);
+    return vec4<f32>(mix(original.rgb, scanned, effect_mix), original.a);
+}
+
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     var coordinates: EffectCoordinates;
@@ -423,6 +464,14 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
                 layer.effect_parameters[slot].x,
                 layer.effect_parameters[slot].y,
                 layer.effect_mixes[slot],
+            );
+        } else if layer.effect_types[slot] == 6u {
+            sampled = beat_scan_source(
+                sampled,
+                coordinates.uv,
+                layer.effect_parameters[slot],
+                layer.effect_mixes[slot],
+                slot,
             );
         }
     }
