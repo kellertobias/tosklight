@@ -74,6 +74,14 @@ pub struct VisualizerViewSnapshot {
     pub views: Vec<VisualizerView>,
 }
 
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct SelectionSnapshot {
+    #[serde(default)]
+    pub revision: u64,
+    #[serde(default)]
+    pub selected_fixture_ids: Vec<uuid::Uuid>,
+}
+
 /// One target's view.
 ///
 /// The named mode and quality arrive as their wire spellings and are looked up rather than
@@ -137,6 +145,8 @@ pub struct PatchFixture {
     pub fixture_number: Option<u32>,
     #[serde(default)]
     pub name: String,
+    #[serde(default = "default_layer_id")]
+    pub layer_id: String,
     pub profile_id: Uuid,
     #[serde(default)]
     pub profile_revision: u64,
@@ -161,6 +171,10 @@ pub struct PatchFixture {
     pub shaper_angle: Option<f32>,
     #[serde(default)]
     pub installed_appearance: InstalledFixtureAppearance,
+}
+
+fn default_layer_id() -> String {
+    "default".to_owned()
 }
 
 #[derive(Debug, Deserialize)]

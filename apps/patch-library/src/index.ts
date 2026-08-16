@@ -8,19 +8,34 @@
  * conflicts, splits, placement, layers and multi-patch.
  */
 
+export * from "./contracts";
 export {
-	FixturePatchSetup,
-	FixtureAddFlow,
-	FixtureAddressFlow,
-	DmxAddressField,
+	noPatchDiagnostics,
+	type PatchDiagnostics,
+	type PatchMutationSample,
+} from "./diagnostics";
+export {
+	noPatchSelection,
+	type PatchHost,
+	PatchHostProvider,
+	type PatchLibraryHost,
+	type PatchSelectionHost,
+	type PatchSelectionIntent,
+	usePatchHost,
+} from "./host";
+export {
 	batchPatchError,
 	compareFixtureIds,
 	contiguousBatchPatches,
+	DmxAddressField,
 	definitionModeChannels,
 	definitionSplits,
 	dmxGridSegments,
 	draggedDmxStart,
 	effectiveSplitPatches,
+	FixtureAddFlow,
+	FixtureAddressFlow,
+	FixturePatchSetup,
 	fixtureDisplayId,
 	formatFixturePatch,
 	formatInstancePatch,
@@ -32,9 +47,9 @@ export {
 	reconcileSplitPatchOwner,
 	replaceSelectedSplitPatch,
 	splitPatchSetError,
-	unpatchFixtureChanges,
 	UniverseMap,
 	type UniverseMapProposal,
+	unpatchFixtureChanges,
 } from "./sheet/FixturePatchSetup";
 export type { FixturePatchSetupProps } from "./sheet/fixturePatch/controller";
 export {
@@ -44,46 +59,29 @@ export {
 } from "./sheet/fixturePatch/selection";
 export * from "./sheet/fixtureProfileModel";
 export * from "./sheet/patchUtils";
-
 export {
-	noPatchSelection,
-	PatchHostProvider,
-	usePatchHost,
-	type PatchHost,
-	type PatchLibraryHost,
-	type PatchSelectionHost,
-	type PatchSelectionIntent,
-} from "./host";
+	PATCH_OBJECT_CHANGED_EVENT,
+	publishPatchObjectChanged,
+} from "./state/externalRepair";
 export {
-	noPatchDiagnostics,
-	type PatchDiagnostics,
-	type PatchMutationSample,
-} from "./diagnostics";
-
+	createPatchDefinitionResolver,
+	projectionToPatchedFixture,
+} from "./state/model";
+export { patchMutation } from "./state/mutationSupport";
 export {
 	changedPatchFixtureCandidate,
 	newPatchFixtureCandidate,
-	patchedFixtureCandidate,
-	patchedFixtureResults,
-	PatchViewProvider,
-	usePatch,
-	useOptionalPatch,
-	usePatchStoreOrNull,
-	usePatchView,
 	type PatchContextValue,
 	type PatchedFixtureResult,
 	type PatchFixtureCandidate,
+	PatchViewProvider,
+	patchedFixtureCandidate,
+	patchedFixtureResults,
+	useOptionalPatch,
+	usePatch,
+	usePatchStoreOrNull,
+	usePatchView,
 } from "./state/PatchContext";
-export { PatchSession, type PatchSessionOptions } from "./state/session";
-export { PatchStore, type PatchStoreSnapshot } from "./state/store";
-export {
-	EMPTY_FIXTURES,
-	selectFixturesById,
-	selectFixturesForSelection,
-	selectPatchedFixtures,
-	selectPatchStatus,
-	type PatchStatus,
-} from "./state/selectors";
 export {
 	usePatchedFixtures,
 	usePatchedFixturesView,
@@ -94,15 +92,16 @@ export {
 	useSelectedPatchedFixtures,
 } from "./state/PatchState";
 export {
-	PATCH_OBJECT_CHANGED_EVENT,
-	publishPatchObjectChanged,
-} from "./state/externalRepair";
-export {
-	createPatchDefinitionResolver,
-	projectionToPatchedFixture,
-} from "./state/model";
-export { patchMutation } from "./state/mutationSupport";
-
+	EMPTY_FIXTURES,
+	type PatchStatus,
+	selectFixturesById,
+	selectFixturesForSelection,
+	selectPatchedFixtures,
+	selectPatchStatus,
+} from "./state/selectors";
+export { PatchSession, type PatchSessionOptions } from "./state/session";
+export { PatchStore, type PatchStoreSnapshot } from "./state/store";
+export * from "./transport";
 /**
  * Fixture and patch data types a host exchanges with the sheet.
  *
@@ -114,14 +113,13 @@ export type {
 	FixtureDefinition,
 	FixtureHead,
 	FixtureMode,
+	FixtureNote,
 	FixtureProfile,
 	FixtureSplit,
+	FixtureVisibility,
 	MultiPatchInstance,
 	PatchedFixture,
 	PatchLayer,
 	SplitPatch,
 	VersionedObject,
 } from "./wire";
-
-export * from "./contracts";
-export * from "./transport";

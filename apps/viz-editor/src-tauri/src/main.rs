@@ -6,6 +6,7 @@
 //! visualizer renders whatever this document describes, lit by whatever console is actually on
 //! the network.
 
+mod cad;
 mod contract;
 mod demo;
 mod discovery;
@@ -184,17 +185,27 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(session::Session::default())
+        .manage(cad::CadState::default())
         .manage(discovery::Discovery::default())
         .manage(Arc::new(verify::SurfaceReady::default()))
         .invoke_handler(tauri::generate_handler![
             session::create_document,
             session::open_document,
+            cad::open_cad,
+            cad::cad_scene_snapshot,
+            cad::cad_replace_selection,
+            cad::cad_transform,
+            cad::cad_undo,
+            cad::cad_redo,
+            cad::cad_export_pdf,
             visualizer::open_visualizer,
+            visualizer::visualizer_is_running,
             visualizer::renderer_settings,
             visualizer::save_renderer_settings,
             demo::open_demo_show,
             verify::surface_ready,
             session::document_summary,
+            session::save_document_paperwork,
             session::live_dmx_inputs,
             session::save_live_dmx_inputs,
             session::save_document_as,
@@ -212,6 +223,10 @@ fn main() {
             session::preview_is_active,
             session::patch_layers,
             session::save_patch_layer,
+            session::fixture_visibility,
+            session::save_fixture_visibility,
+            session::fixture_notes,
+            session::save_fixture_note,
             session::export_mvr,
             session::preview_mvr,
             session::import_mvr,

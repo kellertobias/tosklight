@@ -45,6 +45,21 @@ pub fn open_visualizer(launcher: tauri::State<'_, VisualizerLauncher>) -> Result
 }
 
 #[tauri::command]
+pub fn visualizer_is_running(
+    launcher: tauri::State<'_, VisualizerLauncher>,
+) -> Result<bool, String> {
+    let mut current = launcher.child.lock();
+    let Some(child) = current.as_mut() else {
+        return Ok(false);
+    };
+    if reuse_running_child(child.try_wait())? {
+        return Ok(true);
+    }
+    *current = None;
+    Ok(false)
+}
+
+#[tauri::command]
 pub fn renderer_settings(
     session: tauri::State<'_, crate::session::Session>,
 ) -> Result<RendererSettings, String> {

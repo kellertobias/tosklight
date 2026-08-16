@@ -9,6 +9,7 @@ authors.workspace = true
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+base64.workspace = true
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 light-application = { path = "../../../crates/light" }
@@ -24,8 +25,12 @@ serde_json.workspace = true
 uuid.workspace = true
 viz-document = { path = "../../../crates/viz/document" }
 viz-planning = { path = "../../../crates/viz/planning" }
+viz-project = { path = "../../../crates/viz/project" }
 viz-scene = { path = "../../../crates/viz/scene" }
 tokio.workspace = true
+
+[dev-dependencies]
+light-show = { path = "../../../crates/shared/show" }
 
 [features]
 # Tauri decides between a development build and a real one by this feature: without it the app

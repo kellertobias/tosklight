@@ -9,8 +9,14 @@ use light_application::{PatchProfileRevisionProjection, PatchSnapshot};
 use light_fixture::{
     InstalledFixtureAppearance, MultiPatchInstance, PatchedFixturePatch, SplitPatch,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct SelectionSnapshot {
+    pub revision: u64,
+    pub selected_fixture_ids: Vec<Uuid>,
+}
 
 #[derive(Debug, Serialize)]
 pub struct Readiness {
@@ -43,6 +49,7 @@ pub struct FixtureDto {
     pub fixture_id: Uuid,
     pub fixture_number: Option<u32>,
     pub name: String,
+    pub layer_id: String,
     pub profile_id: Uuid,
     pub profile_revision: u64,
     pub mode_id: Uuid,
@@ -142,6 +149,7 @@ fn fixture(
         fixture_id: patch.fixture_id.0,
         fixture_number: patch.fixture_number,
         name: patch.name.clone(),
+        layer_id: patch.layer_id.clone(),
         profile_id: profile.profile_id.0,
         profile_revision: profile.profile_revision,
         mode_id: profile.mode_id,

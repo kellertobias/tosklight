@@ -3,15 +3,15 @@
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use glam::{Quat, Vec2, Vec3};
 use light_fixture::{
-    FixtureProfile, ModelUnits, ProfileProjectionAsset, ProfileProjectionPose,
-    ProfileProjectionSet, ProfileProjectionView,
+    FixtureProfile, ProfileProjectionAsset, ProfileProjectionPose, ProfileProjectionSet,
+    ProfileProjectionView,
 };
 use sha2::{Digest, Sha256};
-use std::collections::HashMap;
+use uuid::Uuid;
 use viz_scene::{FixtureModel, ModelPartKind};
 
 pub const GENERATOR_ID: &str = "tosklight.fixture-projection";
-pub const GENERATOR_VERSION: &str = "16";
+pub const GENERATOR_VERSION: &str = "3";
 pub const POSE_CONTRACT_VERSION: u16 = 1;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -28,18 +28,29 @@ impl std::error::Error for ProjectionError {}
 #[derive(Clone)]
 struct Triangle {
     points: [Vec2; 3],
+    depth: f32,
     part: ModelPartKind,
-    source_part: usize,
-    /// Smaller values are closer to the named orthographic camera, one per projected vertex.
-    depths: [f32; 3],
+    fill: &'static str,
 }
 
-#[derive(Clone)]
-struct Edge {
-    from: Vec2,
-    to: Vec2,
-    part: ModelPartKind,
-    depths: Vec<f32>,
+/// The two deterministic model poses needed by the interactive orthographic CAD views.
+/// Top views point a moving head forwards; every elevation view points it down.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LiveProjectionPose {
+    Top,
+    Elevation,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct LiveProjectionTriangle {
+    pub points_millimetres: [[f32; 3]; 3],
+    pub colour: [f32; 3],
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct LiveProjectionMesh {
+    pub pose: LiveProjectionPose,
+    pub triangles: Vec<LiveProjectionTriangle>,
 }
 
 pub fn generate_profile_projections(
@@ -67,15 +78,104 @@ pub fn generate_profile_projections(
 }
 
 /// Produce one transient orthographic drawing for a renderer-owned default model.
-///
-/// Unlike [`generate_profile_projections`], this output is not a package asset: there is no
-/// profile-owned source hash to retain. It lets the plan renderer use the same physical SVG
-/// geometry for a fallback model as it does for a package model.
 pub fn generate_default_model_projection(
     model: &FixtureModel,
     view: ProfileProjectionView,
 ) -> Result<ProfileProjectionAsset, ProjectionError> {
     generate_view(model, view, 1.0)
+}
+
+/// Return simplified model-space triangles for live CAD projection. Unlike the portable SVG
+/// views, these retain depth so the client can apply the fixture's complete authored rotation
+/// before projecting and sorting the surfaces for each viewport.
+pub fn generate_live_projection_meshes(
+    profile: &FixtureProfile,
+) -> Result<Vec<LiveProjectionMesh>, ProjectionError> {
+    generate_live_projection_meshes_for_mode(profile, None)
+}
+
+/// Generate live CAD geometry for one patched personality. A profile GLB may contain complete,
+/// mutually exclusive node variants for several modes, so the selected mode's geometry bindings
+/// are authoritative when they are present.
+pub fn generate_live_projection_meshes_for_mode(
+    profile: &FixtureProfile,
+    mode_id: impl Into<Option<Uuid>>,
+) -> Result<Vec<LiveProjectionMesh>, ProjectionError> {
+    let source = profile
+        .model_asset
+        .as_deref()
+        .ok_or_else(|| ProjectionError("fixture profile has no 3D model asset".into()))?;
+    let bytes = decode_model(source)?;
+    let selected_nodes = mode_id
+        .into()
+        .and_then(|mode_id| profile.modes.iter().find(|mode| mode.id == mode_id))
+        .map(|mode| {
+            mode.geometry
+                .nodes
+                .iter()
+                .filter_map(|node| node.glb_node.as_deref())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let model = viz_scene::read_glb_nodes(&bytes, &selected_nodes)
+        .map_err(|error| ProjectionError(error.0))?;
+    let scale = physical_scale(profile, &model) * 1000.0;
+    [LiveProjectionPose::Top, LiveProjectionPose::Elevation]
+        .into_iter()
+        .map(|pose| live_projection_mesh(&model, pose, scale))
+        .collect()
+}
+
+fn live_projection_mesh(
+    model: &FixtureModel,
+    pose: LiveProjectionPose,
+    scale_millimetres: f32,
+) -> Result<LiveProjectionMesh, ProjectionError> {
+    let target_axis = model.has_head.then_some(match pose {
+        LiveProjectionPose::Top => Vec3::Z,
+        LiveProjectionPose::Elevation => Vec3::NEG_Y,
+    });
+    let head_rotation = head_rotation(model, target_axis);
+    let mut triangles = Vec::new();
+    for part in &model.parts {
+        if simplified_away(&part.name) {
+            continue;
+        }
+        let transform = |point: Vec3| {
+            (if part.kind == ModelPartKind::Head {
+                model.head_pivot + head_rotation * (point - model.head_pivot)
+            } else {
+                point
+            }) * scale_millimetres
+        };
+        for indices in part.indices.chunks_exact(3) {
+            let (Some(first), Some(second), Some(third)) = (
+                part.positions.get(indices[0] as usize).copied(),
+                part.positions.get(indices[1] as usize).copied(),
+                part.positions.get(indices[2] as usize).copied(),
+            ) else {
+                continue;
+            };
+            let points = [first, second, third].map(|point| transform(Vec3::from_array(point)));
+            if (points[1] - points[0])
+                .cross(points[2] - points[0])
+                .length_squared()
+                < 0.0001
+            {
+                continue;
+            }
+            triangles.push(LiveProjectionTriangle {
+                points_millimetres: points.map(|point| point.to_array()),
+                colour: fill_rgb(part.kind, part.colour),
+            });
+        }
+    }
+    if triangles.is_empty() {
+        return Err(ProjectionError(
+            "3D model contains no usable major geometry".into(),
+        ));
+    }
+    Ok(LiveProjectionMesh { pose, triangles })
 }
 
 pub fn projection_cache_is_current(profile: &FixtureProfile) -> bool {
@@ -120,9 +220,6 @@ fn sha256(bytes: &[u8]) -> String {
 }
 
 fn physical_scale(profile: &FixtureProfile, model: &FixtureModel) -> f32 {
-    if profile.model_units == ModelUnits::Metres {
-        return 1.0;
-    }
     let physical = &profile.physical;
     match (
         physical.width_millimetres,
@@ -146,15 +243,7 @@ fn generate_view(
         _ if model.has_head => Some(Vec3::NEG_Y),
         _ => None,
     };
-    let head_rotation = target_axis.map_or(Quat::IDENTITY, |target| {
-        Quat::from_rotation_arc(
-            model
-                .emitter_axis
-                .unwrap_or(Vec3::NEG_Y)
-                .normalize_or(Vec3::NEG_Y),
-            target,
-        )
-    });
+    let head_rotation = head_rotation(model, target_axis);
     let pose = if !model.has_head {
         ProfileProjectionPose::AuthoredHome
     } else if view == ProfileProjectionView::Top {
@@ -165,7 +254,7 @@ fn generate_view(
     let mut triangles = Vec::new();
     let mut min = Vec2::splat(f32::INFINITY);
     let mut max = Vec2::splat(f32::NEG_INFINITY);
-    for (source_part, part) in model.parts.iter().enumerate() {
+    for part in &model.parts {
         if simplified_away(&part.name) {
             continue;
         }
@@ -187,46 +276,38 @@ fn generate_view(
             let points = [first, second, third];
             let world = points.map(|point| transform(Vec3::from_array(point)));
             let page = world.map(|point| project(point, view) * 1000.0);
-            // An edge-on truss or pipe has no filled area in this view, but it still has a
-            // useful physical line. Keep every triangle with at least one visible edge.
-            let longest_edge = (page[1] - page[0])
-                .length()
-                .max((page[2] - page[1]).length())
-                .max((page[0] - page[2]).length());
-            if longest_edge < 0.01 {
-                continue;
-            }
             for point in page {
                 min = min.min(point);
                 max = max.max(point);
             }
+            let area = (page[1] - page[0]).perp_dot(page[2] - page[0]).abs() * 0.5;
+            if area < 0.04 {
+                continue;
+            }
             triangles.push(Triangle {
                 points: page,
+                depth: world
+                    .into_iter()
+                    .map(|point| depth(point, view))
+                    .sum::<f32>()
+                    / 3.0,
                 part: part.kind,
-                source_part,
-                depths: world.map(|point| depth(point, view)),
+                fill: fill(part.kind, part.colour),
             });
         }
     }
     if triangles.is_empty() {
-        return Err(ProjectionError(format!(
-            "{} projection contains no visible major geometry",
-            view.wire()
-        )));
+        triangles = end_on_bounds_fallback(min, max, view)?;
     }
-    let edges = feature_edges(&triangles, view);
-    if edges.is_empty() {
-        return Err(ProjectionError(format!(
-            "{} projection contains no visible feature edges",
-            view.wire()
-        )));
-    }
-    let line_width = ((max - min).max_element() * 0.006).clamp(0.8, 3.0);
-    let margin = line_width * 0.75;
-    min -= Vec2::splat(margin);
-    max += Vec2::splat(margin);
+    triangles.sort_by(|left, right| {
+        right
+            .depth
+            .total_cmp(&left.depth)
+            .then_with(|| part_order(left.part).cmp(&part_order(right.part)))
+            .then_with(|| point_key(left.points).cmp(&point_key(right.points)))
+    });
     let size = (max - min).max(Vec2::splat(0.01));
-    let svg = svg(view, pose, min, size, line_width, &edges);
+    let svg = svg(view, pose, min, size, &triangles);
     Ok(ProfileProjectionAsset {
         view,
         artwork_asset: format!("data:image/svg+xml;base64,{}", STANDARD.encode(svg)),
@@ -237,6 +318,48 @@ fn generate_view(
         orientation: view.orientation(),
         pose,
     })
+}
+
+fn head_rotation(model: &FixtureModel, target_axis: Option<Vec3>) -> Quat {
+    target_axis.map_or(Quat::IDENTITY, |target| {
+        Quat::from_rotation_arc(
+            model
+                .emitter_axis
+                .unwrap_or(Vec3::NEG_Y)
+                .normalize_or(Vec3::NEG_Y),
+            target,
+        )
+    })
+}
+
+fn end_on_bounds_fallback(
+    min: Vec2,
+    max: Vec2,
+    view: ProfileProjectionView,
+) -> Result<Vec<Triangle>, ProjectionError> {
+    if !min.is_finite() || !max.is_finite() || (max - min).min_element() <= 0.001 {
+        return Err(ProjectionError(format!(
+            "{} projection contains no visible major geometry",
+            view.wire()
+        )));
+    }
+    const SEGMENTS: usize = 16;
+    let centre = (min + max) / 2.0;
+    let radius = (max - min) / 2.0;
+    let ring = (0..SEGMENTS)
+        .map(|index| {
+            let angle = index as f32 / SEGMENTS as f32 * std::f32::consts::TAU;
+            centre + Vec2::new(angle.cos(), angle.sin()) * radius
+        })
+        .collect::<Vec<_>>();
+    Ok((0..SEGMENTS)
+        .map(|index| Triangle {
+            points: [centre, ring[index], ring[(index + 1) % SEGMENTS]],
+            depth: 0.0,
+            part: ModelPartKind::Base,
+            fill: "#555b64",
+        })
+        .collect())
 }
 
 fn simplified_away(name: &str) -> bool {
@@ -258,245 +381,50 @@ fn project(point: Vec3, view: ProfileProjectionView) -> Vec2 {
     }
 }
 
-fn view_axis(view: ProfileProjectionView) -> Vec3 {
-    match view {
-        ProfileProjectionView::Top => Vec3::Y,
-        ProfileProjectionView::Left => Vec3::X,
-        ProfileProjectionView::Right => Vec3::NEG_X,
-        ProfileProjectionView::Front => Vec3::Z,
-        ProfileProjectionView::Back => Vec3::NEG_Z,
-    }
-}
-
 fn depth(point: Vec3, view: ProfileProjectionView) -> f32 {
-    -point.dot(view_axis(view))
-}
-
-fn feature_edges(triangles: &[Triangle], view: ProfileProjectionView) -> Vec<Edge> {
-    // Fixed fixtures retain one outline per authored GLB component. Moving yokes and heads are
-    // merged by semantic part so cheeks, lens rings and body facets do not become separate nests
-    // of lines. This is geometry-driven and applies to every default model.
-    let mut groups = HashMap::<(ModelPartKind, usize), Vec<&Triangle>>::new();
-    for triangle in triangles {
-        let source = match triangle.part {
-            ModelPartKind::Base => triangle.source_part,
-            ModelPartKind::Yoke | ModelPartKind::Head => usize::MAX,
-        };
-        groups
-            .entry((triangle.part, source))
-            .or_default()
-            .push(triangle);
-    }
-    let overall_min = triangles
-        .iter()
-        .flat_map(|triangle| triangle.points)
-        .fold(Vec2::splat(f32::INFINITY), Vec2::min);
-    let overall_max = triangles
-        .iter()
-        .flat_map(|triangle| triangle.points)
-        .fold(Vec2::splat(f32::NEG_INFINITY), Vec2::max);
-    let overall_span = (overall_max - overall_min).max_element();
-    let minimum_component_span = (overall_span * 0.025).max(3.0);
-    let minimum_contour_length = (overall_span * 0.012).max(3.0);
-    let mut result = groups
-        .into_iter()
-        .filter_map(|((part, _), group)| component_silhouette(&group, part, minimum_component_span))
-        .flatten()
-        .flat_map(|edge| visible_edge_segments(&edge, triangles, view))
-        .filter(|edge| (edge.to - edge.from).length() >= minimum_contour_length)
-        .collect::<Vec<_>>();
-    result.sort_by(|left, right| {
-        let layering = if view == ProfileProjectionView::Top {
-            // A hung fixture's base is the foreground plan surface: its outline and brace must
-            // cover the yoke/head where they intersect.
-            part_order(right.part).cmp(&part_order(left.part))
-        } else {
-            part_order(left.part).cmp(&part_order(right.part))
-        };
-        layering.then_with(|| edge_key(left.from, left.to).cmp(&edge_key(right.from, right.to)))
-    });
-    result
-}
-
-/// Split a contour wherever a nearer face covers it. The face is an invisible mask: emitted SVG
-/// stays transparent apart from the pencil-like linework.
-fn visible_edge_segments(
-    edge: &Edge,
-    triangles: &[Triangle],
-    view: ProfileProjectionView,
-) -> Vec<Edge> {
-    const SAMPLES: usize = 64;
-    let edge_depth = edge.depths.iter().copied().fold(f32::INFINITY, f32::min);
-    let mut result = Vec::new();
-    let mut visible_start = None;
-    for sample in 0..SAMPLES {
-        let start = sample as f32 / SAMPLES as f32;
-        let end = (sample + 1) as f32 / SAMPLES as f32;
-        let midpoint = (start + end) * 0.5;
-        let point = edge.from.lerp(edge.to, midpoint);
-        // In the hanging top symbol the yoke runs behind the base. The head keeps physical
-        // depth testing: it may project beyond the base and must not disappear wholesale.
-        let covered_by_base = view == ProfileProjectionView::Top
-            && edge.part == ModelPartKind::Yoke
-            && triangles.iter().any(|triangle| {
-                triangle.part == ModelPartKind::Base && point_in_triangle(point, triangle.points)
-            });
-        let visible = !triangles.iter().any(|triangle| {
-            triangle_depth_at(point, triangle)
-                .is_some_and(|triangle_depth| triangle_depth + 0.25 < edge_depth)
-        }) && !covered_by_base;
-        match (visible_start, visible) {
-            (None, true) => visible_start = Some(start),
-            (Some(start), false) => {
-                result.push(edge_segment(edge, start, end - 1.0 / SAMPLES as f32));
-                visible_start = None;
-            }
-            _ => {}
-        }
-    }
-    if let Some(start) = visible_start {
-        result.push(edge_segment(edge, start, 1.0));
-    }
-    result
-}
-
-fn edge_segment(edge: &Edge, start: f32, end: f32) -> Edge {
-    Edge {
-        from: edge.from.lerp(edge.to, start),
-        to: edge.from.lerp(edge.to, end),
-        part: edge.part,
-        depths: edge.depths.clone(),
+    match view {
+        ProfileProjectionView::Top => -point.y,
+        ProfileProjectionView::Left => point.x,
+        ProfileProjectionView::Right => -point.x,
+        ProfileProjectionView::Front => -point.z,
+        ProfileProjectionView::Back => point.z,
     }
 }
 
-fn component_silhouette(
-    triangles: &[&Triangle],
-    part: ModelPartKind,
-    minimum_span: f32,
-) -> Option<Vec<Edge>> {
-    let mut points = triangles
-        .iter()
-        .flat_map(|triangle| triangle.points)
-        .collect::<Vec<_>>();
-    points.sort_by(|left, right| {
-        left.x
-            .total_cmp(&right.x)
-            .then_with(|| left.y.total_cmp(&right.y))
-    });
-    points.dedup_by(|left, right| (*left - *right).length_squared() < 0.01);
-    if points.len() < 3 {
-        return None;
-    }
-    let min = points
-        .iter()
-        .copied()
-        .fold(Vec2::splat(f32::INFINITY), Vec2::min);
-    let max = points
-        .iter()
-        .copied()
-        .fold(Vec2::splat(f32::NEG_INFINITY), Vec2::max);
-    if (max - min).max_element() < minimum_span {
-        return None;
-    }
-    let mut lower: Vec<Vec2> = Vec::new();
-    for point in &points {
-        while lower.len() >= 2
-            && (lower[lower.len() - 1] - lower[lower.len() - 2])
-                .perp_dot(*point - lower[lower.len() - 1])
-                <= 0.0
-        {
-            lower.pop();
-        }
-        lower.push(*point);
-    }
-    let mut upper: Vec<Vec2> = Vec::new();
-    for point in points.iter().rev() {
-        while upper.len() >= 2
-            && (upper[upper.len() - 1] - upper[upper.len() - 2])
-                .perp_dot(*point - upper[upper.len() - 1])
-                <= 0.0
-        {
-            upper.pop();
-        }
-        upper.push(*point);
-    }
-    lower.pop();
-    upper.pop();
-    lower.extend(upper);
-    simplify_polygon(&mut lower, 12);
-    let vertex_depth = |point: Vec2| {
-        triangles
-            .iter()
-            .flat_map(|triangle| triangle.points.into_iter().zip(triangle.depths))
-            .filter(|(candidate, _)| (*candidate - point).length_squared() < 0.01)
-            .map(|(_, depth)| depth)
-            .fold(f32::INFINITY, f32::min)
-    };
-    Some(
-        lower
-            .iter()
-            .copied()
-            .zip(lower.iter().copied().cycle().skip(1))
-            .take(lower.len())
-            .map(|(from, to)| Edge {
-                from,
-                to,
-                part,
-                depths: vec![vertex_depth(from), vertex_depth(to)],
-            })
-            .collect(),
-    )
-}
-
-fn simplify_polygon(points: &mut Vec<Vec2>, maximum_vertices: usize) {
-    while points.len() > maximum_vertices {
-        let remove = (0..points.len())
-            .min_by(|left, right| {
-                polygon_vertex_area(points, *left).total_cmp(&polygon_vertex_area(points, *right))
-            })
-            .expect("a non-empty polygon has a least-significant vertex");
-        points.remove(remove);
+fn fill(kind: ModelPartKind, colour: [f32; 3]) -> &'static str {
+    let light = colour.into_iter().sum::<f32>() / 3.0;
+    match (kind, light > 0.35) {
+        (ModelPartKind::Base, false) => "#34383f",
+        (ModelPartKind::Base, true) => "#555b64",
+        (ModelPartKind::Yoke, false) => "#454a53",
+        (ModelPartKind::Yoke, true) => "#676e78",
+        (ModelPartKind::Head, false) => "#565c66",
+        (ModelPartKind::Head, true) => "#7a828d",
     }
 }
 
-fn polygon_vertex_area(points: &[Vec2], index: usize) -> f32 {
-    let previous = points[(index + points.len() - 1) % points.len()];
-    let point = points[index];
-    let next = points[(index + 1) % points.len()];
-    (point - previous).perp_dot(next - point).abs()
+fn fill_rgb(kind: ModelPartKind, colour: [f32; 3]) -> [f32; 3] {
+    match fill(kind, colour) {
+        "#34383f" => [52.0 / 255.0, 56.0 / 255.0, 63.0 / 255.0],
+        "#555b64" => [85.0 / 255.0, 91.0 / 255.0, 100.0 / 255.0],
+        "#454a53" => [69.0 / 255.0, 74.0 / 255.0, 83.0 / 255.0],
+        "#676e78" => [103.0 / 255.0, 110.0 / 255.0, 120.0 / 255.0],
+        "#565c66" => [86.0 / 255.0, 92.0 / 255.0, 102.0 / 255.0],
+        "#7a828d" => [122.0 / 255.0, 130.0 / 255.0, 141.0 / 255.0],
+        _ => unreachable!("fixture projection fill palette is closed"),
+    }
 }
 
-fn point_in_triangle(point: Vec2, triangle: [Vec2; 3]) -> bool {
-    let sides = [
-        (triangle[1] - triangle[0]).perp_dot(point - triangle[0]),
-        (triangle[2] - triangle[1]).perp_dot(point - triangle[1]),
-        (triangle[0] - triangle[2]).perp_dot(point - triangle[2]),
-    ];
-    let tolerance = 0.01;
-    sides.iter().all(|side| *side >= -tolerance) || sides.iter().all(|side| *side <= tolerance)
-}
-
-fn triangle_depth_at(point: Vec2, triangle: &Triangle) -> Option<f32> {
-    if !point_in_triangle(point, triangle.points) {
-        return None;
-    }
-    let [first, second, third] = triangle.points;
-    let area = (second - first).perp_dot(third - first);
-    if area.abs() < 0.0001 {
-        return None;
-    }
-    let weights = [
-        (second - point).perp_dot(third - point) / area,
-        (third - point).perp_dot(first - point) / area,
-        (first - point).perp_dot(second - point) / area,
-    ];
-    Some(
-        weights
-            .into_iter()
-            .zip(triangle.depths)
-            .map(|(weight, depth)| weight * depth)
-            .sum(),
-    )
+fn inset_triangle(points: [Vec2; 3]) -> [Vec2; 3] {
+    const OUTLINE_WIDTH_MILLIMETRES: f32 = 1.25;
+    const MAX_INSET_FRACTION: f32 = 0.18;
+    let centre = points.into_iter().sum::<Vec2>() / 3.0;
+    points.map(|point| {
+        let toward_centre = centre - point;
+        let fraction =
+            (OUTLINE_WIDTH_MILLIMETRES / toward_centre.length().max(0.001)).min(MAX_INSET_FRACTION);
+        point + toward_centre * fraction
+    })
 }
 
 fn part_order(kind: ModelPartKind) -> u8 {
@@ -507,34 +435,15 @@ fn part_order(kind: ModelPartKind) -> u8 {
     }
 }
 
-fn edge_key(left: Vec2, right: Vec2) -> [i32; 4] {
-    // GLB exporters commonly duplicate a shared vertex with tiny floating-point differences.
-    // One millimetre is below a readable plan line, and coalesces those tessellation seams.
-    let left = [left.x.round() as i32, left.y.round() as i32];
-    let right = [right.x.round() as i32, right.y.round() as i32];
-    if left <= right {
-        [left[0], left[1], right[0], right[1]]
-    } else {
-        [right[0], right[1], left[0], left[1]]
-    }
-}
-
-fn outline_fill(kind: ModelPartKind) -> &'static str {
-    match kind {
-        ModelPartKind::Base => "#aeb7c4",
-        ModelPartKind::Yoke => "#c2cad5",
-        ModelPartKind::Head => "#d7dde5",
-    }
-}
-
-fn line_polygon(from: Vec2, to: Vec2, width: f32) -> Option<[Vec2; 4]> {
-    let direction = to - from;
-    let length = direction.length();
-    if length < 0.01 {
-        return None;
-    }
-    let offset = Vec2::new(-direction.y, direction.x) / length * (width * 0.5);
-    Some([from + offset, to + offset, to - offset, from - offset])
+fn point_key(points: [Vec2; 3]) -> [i32; 6] {
+    [
+        (points[0].x * 1000.0) as i32,
+        (points[0].y * 1000.0) as i32,
+        (points[1].x * 1000.0) as i32,
+        (points[1].y * 1000.0) as i32,
+        (points[2].x * 1000.0) as i32,
+        (points[2].y * 1000.0) as i32,
+    ]
 }
 
 fn svg(
@@ -542,8 +451,7 @@ fn svg(
     pose: ProfileProjectionPose,
     min: Vec2,
     size: Vec2,
-    line_width: f32,
-    edges: &[Edge],
+    triangles: &[Triangle],
 ) -> Vec<u8> {
     let mut output = format!(
         "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"{:.3} {:.3} {:.3} {:.3}\" width=\"{:.3}mm\" height=\"{:.3}mm\" data-tosklight-view=\"{}\" data-generator=\"{}\" data-generator-version=\"{}\" data-pose-contract-version=\"{}\">",
@@ -563,22 +471,32 @@ fn svg(
         ProfileProjectionPose::MovingDown => "moving-down",
         ProfileProjectionPose::MovingForward => "moving-forward",
     };
-    for edge in edges {
-        let Some(points) = line_polygon(edge.from, edge.to, line_width) else {
-            continue;
-        };
+    for triangle in triangles {
         output.push_str(&format!(
-            "<path d=\"M {:.3} {:.3} L {:.3} {:.3} L {:.3} {:.3} L {:.3} {:.3} Z\" fill=\"{}\" fill-rule=\"nonzero\" data-part=\"outline-{}-{pose}\"/>",
-            points[0].x,
-            points[0].y,
-            points[1].x,
-            points[1].y,
-            points[2].x,
-            points[2].y,
-            points[3].x,
-            points[3].y,
-            outline_fill(edge.part),
-            match edge.part {
+            "<path d=\"M {:.3} {:.3} L {:.3} {:.3} L {:.3} {:.3} Z\" fill=\"#171b20\" fill-rule=\"nonzero\" data-part=\"{}-{pose}-outline\"/>",
+            triangle.points[0].x,
+            triangle.points[0].y,
+            triangle.points[1].x,
+            triangle.points[1].y,
+            triangle.points[2].x,
+            triangle.points[2].y,
+            match triangle.part {
+                ModelPartKind::Base => "base",
+                ModelPartKind::Yoke => "yoke",
+                ModelPartKind::Head => "head",
+            },
+        ));
+        let inset = inset_triangle(triangle.points);
+        output.push_str(&format!(
+            "<path d=\"M {:.3} {:.3} L {:.3} {:.3} L {:.3} {:.3} Z\" fill=\"{}\" fill-rule=\"nonzero\" data-part=\"{}-{pose}\"/>",
+            inset[0].x,
+            inset[0].y,
+            inset[1].x,
+            inset[1].y,
+            inset[2].x,
+            inset[2].y,
+            triangle.fill,
+            match triangle.part {
                 ModelPartKind::Base => "base",
                 ModelPartKind::Yoke => "yoke",
                 ModelPartKind::Head => "head",
@@ -592,6 +510,7 @@ fn svg(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Path;
 
     #[test]
     fn named_views_keep_the_documented_page_axes() {
@@ -625,51 +544,31 @@ mod tests {
         assert!(!simplified_away("moving-head-body"));
     }
 
-    #[test]
-    fn contour_visibility_masks_an_edge_behind_a_nearer_face() {
-        let edge = Edge {
-            from: Vec2::new(0.0, 0.0),
-            to: Vec2::new(10.0, 0.0),
-            part: ModelPartKind::Head,
-            depths: vec![10.0],
-        };
-        let occluding_face = Triangle {
-            points: [
-                Vec2::new(-1.0, -1.0),
-                Vec2::new(11.0, -1.0),
-                Vec2::new(5.0, 10.0),
-            ],
-            part: ModelPartKind::Base,
-            source_part: 0,
-            depths: [0.0, 0.0, 0.0],
-        };
-        assert!(
-            visible_edge_segments(
-                &edge,
-                &[occluding_face.clone()],
-                ProfileProjectionView::Front
-            )
-            .is_empty()
-        );
+    fn shipped_profile(filename: &str) -> FixtureProfile {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../..")
+            .join("assets/fixture-library")
+            .join(filename);
+        light_fixture::read_fixture_package(&std::fs::read(path).unwrap()).unwrap()
+    }
 
-        let visible_face = Triangle {
-            depths: [11.0, 11.0, 11.0],
-            ..occluding_face
-        };
-        assert_eq!(
-            visible_edge_segments(&edge, &[visible_face], ProfileProjectionView::Front).len(),
-            1
-        );
+    fn with_default_model(
+        mut profile: FixtureProfile,
+        model: &crate::default_model::DefaultModel,
+    ) -> FixtureProfile {
+        profile.model_asset = Some(format!(
+            "data:model/gltf-binary;base64,{}",
+            STANDARD.encode(model.bytes)
+        ));
+        profile
     }
 
     #[test]
     fn generation_is_byte_repeatable_and_records_all_five_poses() {
-        let mut profile = FixtureProfile::blank();
-        profile.fixture_type = "profile moving head".into();
-        profile.model_asset = Some(format!(
-            "data:model/gltf-binary;base64,{}",
-            STANDARD.encode(crate::default_model::MOVING_PROFILE.bytes)
-        ));
+        let mut profile = with_default_model(
+            shipped_profile("robe--robin-dls-profile.toskfixture"),
+            &crate::default_model::MOVING_PROFILE,
+        );
         let first = generate_profile_projections(&profile).expect("projections generate");
         let second = generate_profile_projections(&profile).expect("regeneration is repeatable");
         assert_eq!(first, second);
@@ -688,6 +587,18 @@ mod tests {
                 .and_then(|bytes| String::from_utf8(bytes).ok())
                 .expect("generated SVG data URL");
             assert!(svg.contains(&format!("data-tosklight-view=\"{}\"", view.view.wire())));
+            assert!(svg.contains("-outline\""));
+            assert!(svg.contains("fill=\"#171b20\""));
+            let paths = svg
+                .split("<path")
+                .skip(1)
+                .map(|path| path.split_once("/>").expect("complete path").0)
+                .collect::<Vec<_>>();
+            assert_eq!(paths.len() % 2, 0, "outline/fill path pairs");
+            for pair in paths.chunks_exact(2) {
+                assert!(pair[0].contains("fill=\"#171b20\""));
+                assert!(!pair[1].contains("fill=\"#171b20\""));
+            }
             assert!(!svg.contains("<script"));
         }
         profile.projection_assets = Some(first);
@@ -708,36 +619,149 @@ mod tests {
     }
 
     #[test]
-    fn every_default_model_has_bounded_complete_orthographic_linework() {
-        for shipped in crate::default_model::all() {
-            let model = viz_scene::read_glb(shipped.bytes).expect("default model reads");
-            for view in ProfileProjectionView::ALL {
-                let projection = generate_default_model_projection(&model, view)
-                    .unwrap_or_else(|error| panic!("{} {}: {error}", shipped.name, view.wire()));
-                let svg = projection
-                    .artwork_asset
-                    .strip_prefix("data:image/svg+xml;base64,")
-                    .and_then(|encoded| STANDARD.decode(encoded).ok())
-                    .and_then(|bytes| String::from_utf8(bytes).ok())
-                    .expect("generated default SVG data URL");
-                let contours = svg.matches("<path ").count();
-                assert!(
-                    (4..=120).contains(&contours),
-                    "{} {} emitted {contours} contours",
-                    shipped.name,
-                    view.wire()
-                );
-                if model.has_head && view != ProfileProjectionView::Top {
-                    for part in ["base", "yoke", "head"] {
-                        assert!(
-                            svg.contains(&format!("data-part=\"outline-{part}-")),
-                            "{} {} omitted its {part}",
-                            shipped.name,
-                            view.wire()
-                        );
+    fn live_meshes_retain_three_dimensional_geometry_for_both_cad_poses() {
+        let profile = with_default_model(
+            shipped_profile("robe--robin-dls-profile.toskfixture"),
+            &crate::default_model::MOVING_PROFILE,
+        );
+        let first = generate_live_projection_meshes(&profile).expect("live meshes generate");
+        let second = generate_live_projection_meshes(&profile).expect("live meshes repeat");
+        assert_eq!(first, second);
+        assert_eq!(first.len(), 2);
+        assert_eq!(first[0].pose, LiveProjectionPose::Top);
+        assert_eq!(first[1].pose, LiveProjectionPose::Elevation);
+        assert!(first.iter().all(|mesh| mesh.triangles.len() > 10));
+        assert!(
+            first
+                .iter()
+                .flat_map(|mesh| &mesh.triangles)
+                .all(|triangle| {
+                    triangle
+                        .points_millimetres
+                        .iter()
+                        .flatten()
+                        .all(|coordinate| coordinate.is_finite())
+                })
+        );
+        assert_ne!(first[0].triangles, first[1].triangles);
+    }
+
+    #[test]
+    fn cad_models_respect_declared_fixture_and_demo_stage_scale() {
+        let fresnel = with_default_model(
+            shipped_profile("generic--dimmer-fresnel.toskfixture"),
+            &crate::default_model::FRESNEL,
+        );
+        let meshes = generate_live_projection_meshes(&fresnel).expect("Fresnel live mesh");
+        let bounds = meshes
+            .iter()
+            .flat_map(|mesh| &mesh.triangles)
+            .flat_map(|triangle| triangle.points_millimetres)
+            .fold(
+                ([f32::INFINITY; 3], [f32::NEG_INFINITY; 3]),
+                |(mut min, mut max), point| {
+                    for axis in 0..3 {
+                        min[axis] = min[axis].min(point[axis]);
+                        max[axis] = max[axis].max(point[axis]);
                     }
-                }
-            }
+                    (min, max)
+                },
+            );
+        let spans = [
+            bounds.1[0] - bounds.0[0],
+            bounds.1[1] - bounds.0[1],
+            bounds.1[2] - bounds.0[2],
+        ];
+        assert!(spans[0] <= 480.1, "Fresnel width was {} mm", spans[0]);
+        assert!(spans[1] <= 520.1, "Fresnel height was {} mm", spans[1]);
+        assert!(spans[2] <= 540.1, "Fresnel depth was {} mm", spans[2]);
+
+        let stage = shipped_profile("venue--stage-element-2-1-m.toskfixture");
+        let top = generate_profile_projections(&stage)
+            .expect("stage projection")
+            .views
+            .into_iter()
+            .find(|projection| projection.view == ProfileProjectionView::Top)
+            .expect("stage top view");
+        assert!((top.physical_width_millimetres - 2_000.0).abs() < 0.2);
+        assert!((top.physical_height_millimetres - 1_000.0).abs() < 0.2);
+        assert_eq!(top.physical_width_millimetres * 4.0, 8_000.0);
+        assert_eq!(top.physical_height_millimetres * 4.0, 4_000.0);
+    }
+
+    #[test]
+    fn stage_live_projection_uses_only_the_selected_height_mode() {
+        let stage = shipped_profile("venue--stage-element-2-1-m.toskfixture");
+        let mode_10 = stage
+            .modes
+            .iter()
+            .find(|mode| mode.name == "10 cm")
+            .expect("10 cm stage mode");
+        let mode_50 = stage
+            .modes
+            .iter()
+            .find(|mode| mode.name == "50 cm")
+            .expect("50 cm stage mode");
+        let all = generate_live_projection_meshes(&stage).expect("unfiltered profile mesh");
+        let short =
+            generate_live_projection_meshes_for_mode(&stage, mode_10.id).expect("10 cm mode mesh");
+        let demo =
+            generate_live_projection_meshes_for_mode(&stage, mode_50.id).expect("50 cm mode mesh");
+
+        assert_eq!(short.len(), 2);
+        assert_eq!(demo.len(), 2);
+        assert_eq!(short[0].triangles.len(), demo[0].triangles.len());
+        assert!(
+            all[0].triangles.len() >= demo[0].triangles.len() * 8,
+            "the unfiltered profile should contain the mutually exclusive height variants"
+        );
+        assert_ne!(short[0].triangles, demo[0].triangles);
+        assert!(
+            demo[0].triangles.len() > 12,
+            "one deck retains its top and supports"
+        );
+    }
+
+    #[test]
+    fn shipped_railing_projects_posts_rails_and_toe_board_in_every_view() {
+        let profile = shipped_profile("venue--stage-railing-2-m.toskfixture");
+        let projections = generate_profile_projections(&profile).expect("railing projections");
+        assert_eq!(projections.views.len(), 5);
+        for projection in projections.views {
+            let svg = projection
+                .artwork_asset
+                .strip_prefix("data:image/svg+xml;base64,")
+                .and_then(|encoded| STANDARD.decode(encoded).ok())
+                .and_then(|bytes| String::from_utf8(bytes).ok())
+                .expect("generated railing SVG");
+            assert!(
+                svg.matches("<path").count() > 20,
+                "{} railing projection collapsed to insufficient geometry",
+                projection.view.wire()
+            );
+            assert!(svg.contains("-outline\""));
+            assert!(projection.physical_width_millimetres > 0.0);
+            assert!(projection.physical_height_millimetres > 0.0);
+        }
+    }
+
+    #[test]
+    fn shipped_pipe_keeps_a_round_end_view_when_its_surface_mesh_is_edge_on() {
+        let profile = shipped_profile("venue--one-point-truss-pipe.toskfixture");
+        let projections = generate_profile_projections(&profile).expect("pipe projections");
+        for view in [ProfileProjectionView::Left, ProfileProjectionView::Right] {
+            let projection = projections
+                .views
+                .iter()
+                .find(|projection| projection.view == view)
+                .expect("end view");
+            let svg = projection
+                .artwork_asset
+                .strip_prefix("data:image/svg+xml;base64,")
+                .and_then(|encoded| STANDARD.decode(encoded).ok())
+                .and_then(|bytes| String::from_utf8(bytes).ok())
+                .expect("generated pipe SVG");
+            assert_eq!(svg.matches("-outline\"").count(), 16);
         }
     }
 }

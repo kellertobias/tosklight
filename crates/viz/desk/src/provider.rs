@@ -94,6 +94,8 @@ enum Message {
     /// What the planning window is driving the rig with, as read. Only a planning source ever
     /// sends this.
     Preview(Box<crate::wire::PreviewSnapshot>),
+    /// Identity-based editor/CAD selection from a planning source.
+    Selection(Box<crate::wire::SelectionSnapshot>),
     /// The desk's own output, for a renderer inside the desk's window.
     DeskOutput(Box<crate::wire::OutputDmxSnapshot>),
     /// The operator's preload, laid over the live picture while they are following it.
@@ -161,6 +163,7 @@ pub struct DeskProvider {
     ///
     /// Empty for a lighting desk, which never serves them.
     preview: crate::wire::PreviewSnapshot,
+    selection: crate::wire::SelectionSnapshot,
     /// The desk's own output, while a renderer in the desk's window is reading it.
     desk_output: Option<crate::wire::OutputDmxSnapshot>,
     /// The operator's preload, and whether they are following it.
@@ -206,6 +209,7 @@ impl DeskProvider {
             reported_input_micros: 0,
             value_frame: 0,
             preview: crate::wire::PreviewSnapshot::default(),
+            selection: crate::wire::SelectionSnapshot::default(),
             desk_output: None,
             preload_projection: crate::wire::PreloadProjection::default(),
             following_preload: false,
@@ -239,6 +243,7 @@ impl DeskProvider {
         self.mappings = mappings;
         self.values = SceneValues::default();
         self.values.resize(scene.emitters.len());
+        apply_selection(&mut self.values, &self.selection);
         decoder.initialize_motion(&scene, &mut self.values);
         self.decoder = Some(decoder);
         self.reported_input_micros = 0;
@@ -393,6 +398,15 @@ impl DeskProvider {
                 }
                 Ok(Message::Diagnostics(value)) => self.diagnostics = *value,
                 Ok(Message::Preview(value)) => self.preview = *value,
+                Ok(Message::Selection(value)) => {
+                    if value.revision >= self.selection.revision {
+                        self.selection = *value;
+                        apply_selection(&mut self.values, &self.selection);
+                        self.value_frame = self.value_frame.saturating_add(1);
+                        self.values.frame = self.value_frame;
+                        events.push(ProviderEvent::Values(Box::new(self.values.clone())));
+                    }
+                }
                 Ok(Message::DeskOutput(value)) => self.desk_output = Some(*value),
                 Ok(Message::Preload2(value)) => self.preload_projection = *value,
                 Ok(Message::View(view)) => {
@@ -763,6 +777,9 @@ async fn connect_once(
     if let Some(preview) = client.preview_values().await {
         let _ = outbox.send(Message::Preview(Box::new(preview)));
     }
+    if let Some(selection) = client.selection().await {
+        let _ = outbox.send(Message::Selection(Box::new(selection)));
+    }
     watch(&client, &endpoint, connection, outbox, orders, stop).await;
     client.close_session().await;
     Ok(())
@@ -837,6 +854,8 @@ async fn read_models(client: &DeskClient, endpoint: &str) -> Result<DeskReadMode
         .await
         .map(|collection| collection.objects)
         .unwrap_or_default();
+    let fixture_visibility = optional_objects(client, "fixture_visibility").await;
+    let patch_layers = optional_objects(client, "patch_layer").await;
     let media_servers = optional_objects(client, "media_server").await;
     let media_fallback_assets = optional_objects(client, "media_fallback_asset").await;
     let media_sources = optional_objects(client, "media_source").await;
@@ -849,6 +868,8 @@ async fn read_models(client: &DeskClient, endpoint: &str) -> Result<DeskReadMode
         patch,
         stage_layout,
         venue_objects,
+        fixture_visibility,
+        patch_layers,
         media_servers,
         media_fallback_assets,
         media_sources,
@@ -1009,6 +1030,12 @@ async fn watch(
             }
             continue;
         }
+        if frame.kind == "visualizer_selection_changed" {
+            if let Some(selection) = client.selection().await {
+                let _ = outbox.send(Message::Selection(Box::new(selection)));
+            }
+            continue;
+        }
         // The desk moving a camera is not a change of rig: nothing is re-read but the view.
         if view_affecting(&frame.kind) {
             if let Some(view) = read_view(client, connection).await {
@@ -1046,6 +1073,10 @@ fn stamp_desk_output_frame(values: &mut SceneValues, value_frame: &mut u64, now:
     *value_frame = value_frame.saturating_add(1);
     values.newest_input_micros = now;
     values.frame = *value_frame;
+}
+
+fn apply_selection(values: &mut SceneValues, selection: &crate::wire::SelectionSnapshot) {
+    values.selected_fixtures = selection.selected_fixture_ids.iter().copied().collect();
 }
 /// Which universes the planning window drives, given what the network has ever delivered.
 ///

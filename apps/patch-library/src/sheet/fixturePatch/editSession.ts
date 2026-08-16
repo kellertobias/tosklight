@@ -38,6 +38,10 @@ export function armEdit(
 		setText(String(fixtureDisplayId(fixture)));
 	} else if (kind === "name") {
 		setText(fixture.name || fixture.definition.name);
+	} else if (kind === "note") {
+		setText(
+			controller.library?.fixtureNotes?.get(fixture.fixture_id)?.note ?? "",
+		);
 	} else if (kind === "address") {
 		setText(
 			fixture.universe && fixture.address

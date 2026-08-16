@@ -87,6 +87,25 @@ pub struct PlanningDocument {
     ports: PlanningPorts,
 }
 
+const LIGHTING_DESIGNER_KEY: &str = "previs.lighting_designer";
+const SHOW_VERSION_KEY: &str = "previs.show_version";
+const VENUE_KEY: &str = "architect.venue";
+const CONTACT_EMAIL_KEY: &str = "architect.contact_email";
+const CONTACT_PHONE_KEY: &str = "architect.contact_phone";
+const PROJECT_KEY: &str = "architect.project";
+const SHOW_DATE_KEY: &str = "architect.show_date";
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PaperworkMetadata {
+    pub lighting_designer: String,
+    pub show_version: String,
+    pub venue: String,
+    pub contact_email: String,
+    pub contact_phone: String,
+    pub project: String,
+    pub show_date: String,
+}
+
 impl PlanningDocument {
     /// Creates a new show file and opens it.
     pub fn create(path: impl AsRef<Path>, name: &str) -> Result<Self, DocumentError> {
@@ -136,6 +155,37 @@ impl PlanningDocument {
         Ok(self.store()?.name()?)
     }
 
+    pub fn paperwork_metadata(&self) -> Result<PaperworkMetadata, DocumentError> {
+        let store = self.store()?;
+        Ok(PaperworkMetadata {
+            lighting_designer: store
+                .metadata_value(LIGHTING_DESIGNER_KEY)?
+                .unwrap_or_default(),
+            show_version: store.metadata_value(SHOW_VERSION_KEY)?.unwrap_or_default(),
+            venue: store.metadata_value(VENUE_KEY)?.unwrap_or_default(),
+            contact_email: store.metadata_value(CONTACT_EMAIL_KEY)?.unwrap_or_default(),
+            contact_phone: store.metadata_value(CONTACT_PHONE_KEY)?.unwrap_or_default(),
+            project: store.metadata_value(PROJECT_KEY)?.unwrap_or_default(),
+            show_date: store.metadata_value(SHOW_DATE_KEY)?.unwrap_or_default(),
+        })
+    }
+
+    pub fn save_paperwork_metadata(
+        &self,
+        metadata: &PaperworkMetadata,
+    ) -> Result<(), DocumentError> {
+        self.store()?.set_metadata_values(&[
+            (LIGHTING_DESIGNER_KEY, metadata.lighting_designer.trim()),
+            (SHOW_VERSION_KEY, metadata.show_version.trim()),
+            (VENUE_KEY, metadata.venue.trim()),
+            (CONTACT_EMAIL_KEY, metadata.contact_email.trim()),
+            (CONTACT_PHONE_KEY, metadata.contact_phone.trim()),
+            (PROJECT_KEY, metadata.project.trim()),
+            (SHOW_DATE_KEY, metadata.show_date.trim()),
+        ])?;
+        Ok(())
+    }
+
     pub(crate) fn store(&self) -> Result<ShowStore, DocumentError> {
         Ok(ShowStore::open(&self.path)?)
     }
@@ -163,6 +213,15 @@ impl PlanningDocument {
         command: PatchFixturesCommand,
     ) -> Result<PatchFixturesResult, DocumentError> {
         let expected = self.patch_revision()?;
+        self.patch_fixtures_at(command, expected)
+    }
+
+    /// Applies a Patch command only at the revision the editing surface actually read.
+    pub fn patch_fixtures_at(
+        &self,
+        command: PatchFixturesCommand,
+        expected: u64,
+    ) -> Result<PatchFixturesResult, DocumentError> {
         let context = self
             .context()
             .with_request_id(Uuid::new_v4().to_string())
@@ -196,6 +255,11 @@ impl PlanningDocument {
             .map_or(light_core::Revision::default(), |object| object.revision);
         store.put_object(kind, id, body, expected)?;
         Ok(())
+    }
+
+    /// Deletes one optional stored object. Missing objects are an idempotent no-op.
+    pub fn delete_object(&self, kind: &str, id: &str) -> Result<bool, DocumentError> {
+        Ok(self.store()?.delete_object(kind, id)?)
     }
 
     /// The portable media layout authored by the standalone Viz product.

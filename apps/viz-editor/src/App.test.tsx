@@ -1,5 +1,6 @@
 import * as dialog from "@tauri-apps/plugin-dialog";
 import {
+	act,
 	fireEvent,
 	render,
 	screen,
@@ -32,6 +33,23 @@ const snapshot = {
 	profileRevisions: [],
 };
 
+const cadEntity = {
+	id: PROFILE_ID,
+	name: "Planning Wash 1",
+	fixtureNumber: 1,
+	fixtureDisplayId: "1",
+	dmxAddress: "1.1",
+	kind: "wash",
+	fixtureType: "wash",
+	drawingId: "wash:1",
+	layerId: "house",
+	selectable: true,
+	positionMillimetres: [0, 0, 4000] as [number, number, number],
+	rotationDegrees: [0, 0, 0] as [number, number, number],
+	sizeMillimetres: [400, 500, 700] as [number, number, number],
+	outputDirection: [0, 1, 0] as [number, number, number],
+};
+
 const liveInputs = { schemaVersion: 1 as const, mappings: [] };
 const rendererSettings = {
 	source: "lighting_desk" as const,
@@ -60,6 +78,9 @@ const rendererSettings = {
 };
 
 const invoke = vi.hoisted(() => vi.fn());
+const eventHandlers = vi.hoisted(
+	() => new Map<string, (event: { payload: unknown }) => void>(),
+);
 const nativeWindow = vi.hoisted(() => ({
 	close: vi.fn().mockResolvedValue(undefined),
 	isFullscreen: vi.fn().mockResolvedValue(false),
@@ -67,6 +88,14 @@ const nativeWindow = vi.hoisted(() => ({
 	startDragging: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
+vi.mock("@tauri-apps/api/event", () => ({
+	listen: vi.fn(
+		(event: string, handler: (event: { payload: unknown }) => void) => {
+			eventHandlers.set(event, handler);
+			return Promise.resolve(() => eventHandlers.delete(event));
+		},
+	),
+}));
 vi.mock("@tauri-apps/api/window", () => ({
 	getCurrentWindow: () => nativeWindow,
 }));
@@ -145,6 +174,15 @@ function renderApp(children: ReactNode = <App />) {
 
 beforeEach(() => {
 	invoke.mockReset();
+	eventHandlers.clear();
+	vi.stubGlobal(
+		"ResizeObserver",
+		class {
+			observe() {}
+			disconnect() {}
+		},
+	);
+	vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
 	for (const action of Object.values(nativeWindow)) action.mockClear();
 	invoke.mockImplementation((command: string) => {
 		switch (command) {
@@ -158,11 +196,23 @@ beforeEach(() => {
 				return Promise.resolve([]);
 			case "live_dmx_inputs":
 				return Promise.resolve(liveInputs);
+			case "visualizer_is_running":
+				return Promise.resolve(false);
 			case "patch_layers":
 				return Promise.resolve([
 					{ id: "house", name: "House", order: 0 },
 					{ id: "floor", name: "Floor", order: 1 },
 				]);
+			case "cad_scene_snapshot":
+				return Promise.resolve({
+					showId: SHOW_ID,
+					sceneRevision: 1,
+					selectionRevision: 0,
+					entities: [cadEntity],
+					drawings: [],
+					selectedIds: [],
+					attachments: [],
+				});
 			default:
 				return Promise.reject(new Error(`unexpected command ${command}`));
 		}
@@ -170,6 +220,32 @@ beforeEach(() => {
 });
 
 describe("the Viz editor window", () => {
+	it("shows a live, read-only, left-rotated top plan with the show name", async () => {
+		renderApp();
+		const overview = await screen.findByRole("img", {
+			name: "Read-only rig overview for Planning show",
+		});
+		expect(overview).toHaveAttribute("data-view", "top_down");
+		expect(overview).toHaveAttribute("data-rotation-quarter-turns", "-1");
+		expect(overview).toHaveAttribute("data-entity-count", "1");
+		expect(
+			screen.getByText("Planning show", { selector: "strong" }),
+		).toBeVisible();
+
+		eventHandlers.get("cad-scene-delta")?.({
+			payload: {
+				sceneRevision: 2,
+				upserted: [cadEntity, { ...cadEntity, id: "fixture-two" }],
+				drawings: [],
+				removedIds: [],
+				attachments: [],
+			},
+		});
+		await waitFor(() =>
+			expect(overview).toHaveAttribute("data-entity-count", "2"),
+		);
+	});
+
 	it("shows the desk's patch sheet over the open document", async () => {
 		renderApp();
 		fireEvent.click(await screen.findByRole("button", { name: "Patch" }));
@@ -235,18 +311,12 @@ describe("the Viz editor window", () => {
 		);
 		fireEvent.click(screen.getByRole("button", { name: "Close window" }));
 		await waitFor(() => expect(nativeWindow.close).toHaveBeenCalledOnce());
-		for (const label of [
-			"Show",
-			"Patch",
-			"Venue",
-			"Effects",
-			"Media",
-			"CAD · Planned",
-		])
+		for (const label of ["Show", "Patch", "Venue", "Effects", "Media"])
 			expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
-		expect(
-			screen.getByRole("button", { name: "CAD · Planned" }),
-		).toBeDisabled();
+		const openCad = screen.getByRole("button", { name: "Open CAD" });
+		const openViz = screen.getByRole("button", { name: "Open Viz" });
+		expect(openCad).toBeEnabled();
+		expect(openCad.nextElementSibling).toBe(openViz);
 		fireEvent.click(screen.getByRole("button", { name: "Patch" }));
 		await screen.findByRole("columnheader", { name: "Fixture ID" });
 		expect(
@@ -293,6 +363,35 @@ describe("the Viz editor window", () => {
 		expect(
 			await screen.findByText("0 fixtures · 2 layers"),
 		).toBeInTheDocument();
+	});
+
+	it("returns to All fixtures before revealing a CAD-selected entity", async () => {
+		renderApp();
+		fireEvent.click(await screen.findByRole("button", { name: "Patch" }));
+		await screen.findByText("0 fixtures · 2 layers");
+		const layers = screen
+			.getByRole("heading", { name: "Layers" })
+			.closest("aside");
+		if (!layers) throw new Error("Layers sidebar was not rendered");
+		fireEvent.click(within(layers).getByRole("button", { name: /^House/ }));
+		expect(within(layers).getByRole("button", { name: /^House/ })).toHaveClass(
+			"active",
+		);
+
+		await waitFor(() =>
+			expect(eventHandlers.get("cad-selection-delta")).toBeDefined(),
+		);
+		await act(async () => {
+			eventHandlers.get("cad-selection-delta")?.({
+				payload: { revision: 1, selectedIds: [PROFILE_ID] },
+			});
+		});
+
+		await waitFor(() =>
+			expect(
+				within(layers).getByRole("button", { name: /^All fixtures/ }),
+			).toHaveClass("active"),
+		);
 	});
 
 	it("offers the desk it finds on the network, and opens what that desk sends", async () => {
@@ -574,16 +673,43 @@ describe("the Viz editor window", () => {
 	});
 
 	it("opens the separate visualizer output from the bottom dock", async () => {
+		let running = false;
 		invoke.mockImplementation((command: string) => {
-			if (command === "open_visualizer") return Promise.resolve();
+			if (command === "open_visualizer") {
+				running = true;
+				return Promise.resolve();
+			}
+			if (command === "visualizer_is_running") return Promise.resolve(running);
 			if (command === "document_summary") return Promise.resolve(document);
 			if (command === "patch_snapshot") return Promise.resolve(snapshot);
 			if (command === "live_dmx_inputs") return Promise.resolve(liveInputs);
 			return Promise.resolve([]);
 		});
 		renderApp();
+		fireEvent.click(await screen.findByRole("button", { name: "Patch" }));
+		expect(screen.queryByLabelText("Preview controls")).not.toBeInTheDocument();
 		fireEvent.click(await screen.findByRole("button", { name: "Open Viz" }));
 		await waitFor(() => expect(invoke).toHaveBeenCalledWith("open_visualizer"));
+		expect(
+			await screen.findByLabelText("Preview controls"),
+		).toBeInTheDocument();
+	});
+
+	it("opens the separate CAD planner immediately above the visualizer action", async () => {
+		invoke.mockImplementation((command: string) => {
+			if (command === "open_cad") return Promise.resolve();
+			if (command === "document_summary") return Promise.resolve(document);
+			if (command === "patch_snapshot") return Promise.resolve(snapshot);
+			if (command === "live_dmx_inputs") return Promise.resolve(liveInputs);
+			return Promise.resolve([]);
+		});
+		renderApp();
+		const openCad = await screen.findByRole("button", { name: "Open CAD" });
+		expect(openCad.nextElementSibling).toBe(
+			screen.getByRole("button", { name: "Open Viz" }),
+		);
+		fireEvent.click(openCad);
+		await waitFor(() => expect(invoke).toHaveBeenCalledWith("open_cad"));
 	});
 
 	it("applies renderer Settings directly above Open Viz", async () => {
@@ -627,9 +753,9 @@ describe("the Viz editor window", () => {
 			"Picture",
 			"Features",
 		]);
-		expect(within(sharedTitle).getByRole("tab", { name: "Rendering" })).toHaveClass(
-			"is-active",
-		);
+		expect(
+			within(sharedTitle).getByRole("tab", { name: "Rendering" }),
+		).toHaveClass("is-active");
 		await waitFor(() =>
 			expect(
 				document_root()?.querySelectorAll(
@@ -637,7 +763,9 @@ describe("the Viz editor window", () => {
 				),
 			).toHaveLength(1),
 		);
-		fireEvent.click(within(sharedTitle).getByRole("tab", { name: "Atmosphere" }));
+		fireEvent.click(
+			within(sharedTitle).getByRole("tab", { name: "Atmosphere" }),
+		);
 		fireEvent.input(await screen.findByRole("slider", { name: "Fog amount" }), {
 			target: { value: "0.08" },
 		});
@@ -656,10 +784,16 @@ describe("the Viz editor window", () => {
 			"ui-native-control",
 		);
 		fireEvent.click(within(sharedTitle).getByRole("tab", { name: "Picture" }));
-		expect(screen.getByRole("heading", { name: "Picture" })).toBeInTheDocument();
+		expect(
+			screen.getByRole("heading", { name: "Picture" }),
+		).toBeInTheDocument();
 		fireEvent.click(within(sharedTitle).getByRole("tab", { name: "Features" }));
-		expect(screen.getByRole("heading", { name: "Features" })).toBeInTheDocument();
-		fireEvent.click(within(sharedTitle).getByRole("tab", { name: "Rendering" }));
+		expect(
+			screen.getByRole("heading", { name: "Features" }),
+		).toBeInTheDocument();
+		fireEvent.click(
+			within(sharedTitle).getByRole("tab", { name: "Rendering" }),
+		);
 		expect(
 			screen.getByRole("slider", { name: "Environment brightness" }),
 		).toBeInTheDocument();
@@ -668,7 +802,9 @@ describe("the Viz editor window", () => {
 			screen.getByRole("heading", { name: "Live DMX Inputs" }),
 		).toBeInTheDocument();
 		fireEvent.click(within(sharedTitle).getByRole("tab", { name: "Show" }));
-		expect(screen.getByRole("button", { name: "Open Demo Show" })).toBeInTheDocument();
+		expect(
+			screen.getByRole("button", { name: "Open Demo Show" }),
+		).toBeInTheDocument();
 	});
 
 	it("reflects settings changed in the running Visualizer", async () => {
@@ -736,7 +872,10 @@ describe("the Viz editor window", () => {
 		);
 		if (!title) throw new Error("Media title row was not rendered");
 		expect(
-			Array.from(title.querySelectorAll("button"), (button) => button.textContent),
+			Array.from(
+				title.querySelectorAll("button"),
+				(button) => button.textContent,
+			),
 		).toEqual([
 			"Discover servers",
 			"Enumerate outputs",
@@ -748,7 +887,9 @@ describe("the Viz editor window", () => {
 			"Projectors",
 		]);
 		expect(
-			document_root()?.querySelectorAll(".viz-media-workspace > .ui-window-header"),
+			document_root()?.querySelectorAll(
+				".viz-media-workspace > .ui-window-header",
+			),
 		).toHaveLength(1);
 		expect(screen.queryAllByRole("columnheader")).toHaveLength(0);
 		expect(

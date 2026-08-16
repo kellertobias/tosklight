@@ -32,6 +32,8 @@ pub use plan::{
 };
 pub use projection::{
     GENERATOR_ID as FIXTURE_PROJECTION_GENERATOR,
-    GENERATOR_VERSION as FIXTURE_PROJECTION_GENERATOR_VERSION, ProjectionError,
-    generate_default_model_projection, generate_profile_projections, projection_cache_is_current,
+    GENERATOR_VERSION as FIXTURE_PROJECTION_GENERATOR_VERSION, LiveProjectionMesh,
+    LiveProjectionPose, LiveProjectionTriangle, ProjectionError, generate_default_model_projection,
+    generate_live_projection_meshes, generate_live_projection_meshes_for_mode,
+    generate_profile_projections, projection_cache_is_current,
 };

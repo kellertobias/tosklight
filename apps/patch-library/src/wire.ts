@@ -113,7 +113,10 @@ export interface FixtureProfile {
 	stage_icon_asset: string | null;
 	model_asset: string | null;
 	model_units?: "auto" | "metres";
-	effect?: { effect_script_asset?: string | null; result_version: number } | null;
+	effect?: {
+		effect_script_asset?: string | null;
+		result_version: number;
+	} | null;
 	physical: FixtureProfilePhysical;
 	modes: FixtureMode[];
 	hazardous: boolean;
@@ -437,6 +440,24 @@ export interface PatchLayer {
 	id: string;
 	name: string;
 	order: number;
+	/** Locked layers remain visible but cannot become an editing selection. */
+	locked?: boolean;
+	/** Whether fixtures in this layer are drawn in Rig Planner CAD. */
+	visible2d?: boolean;
+	/** Whether fixtures in this layer are drawn in the 3D Visualizer. */
+	visible3d?: boolean;
+}
+
+export interface FixtureVisibility {
+	fixtureId: string;
+	visible2d: boolean;
+	visible3d: boolean;
+}
+
+/** Operator note attached to one logical fixture and stored with the show. */
+export interface FixtureNote {
+	fixtureId: string;
+	note: string;
 }
 
 /**

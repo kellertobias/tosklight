@@ -51,6 +51,9 @@ const columns = [
 	"Bracket",
 	"Shaper",
 	"Layer",
+	"2D",
+	"3D",
+	"Note",
 ];
 
 export function PatchTable() {
@@ -103,6 +106,11 @@ function FixtureRows({ fixture }: { fixture: PatchedFixture }) {
 
 function FixtureRow({ fixture }: { fixture: PatchedFixture }) {
 	const controller = usePatchController();
+	const layerLocked = Boolean(
+		controller.data.layers.find(
+			(layer) => layer.id === (fixture.layer_id || "default"),
+		)?.locked,
+	);
 	const selectedFixtureIds = controller.selection.fixtureIds;
 	const selected =
 		selectedFixtureIds?.has(fixture.fixture_id) ||
@@ -113,7 +121,9 @@ function FixtureRow({ fixture }: { fixture: PatchedFixture }) {
 	const pending = controller.patch.pendingFixtureIds.has(fixture.fixture_id);
 	return (
 		<tr
-			className={`${selected ? "selected" : ""} ${pending ? "pending" : ""}`.trim()}
+			data-fixture-id={fixture.fixture_id}
+			className={`${selected ? "selected" : ""} ${pending ? "pending" : ""} ${layerLocked ? "is-layer-locked" : ""}`.trim()}
+			aria-disabled={layerLocked || undefined}
 			aria-busy={pending || undefined}
 			onMouseDown={(event) => {
 				if (!controller.host.desktopEditing || event.button !== 0) return;
@@ -147,7 +157,74 @@ function FixtureRow({ fixture }: { fixture: PatchedFixture }) {
 			<FixtureBehaviorCells fixture={fixture} />
 			<FixtureTransformCells fixture={fixture} />
 			<FixtureLayerCell fixture={fixture} />
+			<FixtureVisibilityCells fixture={fixture} />
+			<FixtureNoteCell fixture={fixture} />
 		</tr>
+	);
+}
+
+function FixtureNoteCell({ fixture }: { fixture: PatchedFixture }) {
+	const controller = usePatchController();
+	const note =
+		controller.library?.fixtureNotes?.get(fixture.fixture_id)?.note ?? "";
+	return (
+		<td className="patch-note-cell">
+			<Button
+				className="patch-value"
+				aria-label={`Note ${fixtureDisplayId(fixture)}`}
+				onClick={() => armEdit(controller, fixture, "note")}
+			>
+				{note || "—"}
+			</Button>
+		</td>
+	);
+}
+
+function EyeIcon({ visible }: { visible: boolean }) {
+	return visible ? (
+		<svg viewBox="0 0 24 24" aria-hidden="true">
+			<path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
+			<circle cx="12" cy="12" r="2.8" />
+		</svg>
+	) : (
+		<svg viewBox="0 0 24 24" aria-hidden="true">
+			<path d="m3 3 18 18M10.6 6.1A10 10 0 0 1 12 6c6 0 9.5 6 9.5 6a15 15 0 0 1-2.3 3M6.2 6.2C3.8 8 2.5 12 2.5 12s3.5 6 9.5 6c1.1 0 2.1-.2 3-.5M9.8 9.8a3 3 0 0 0 4.4 4.4" />
+		</svg>
+	);
+}
+
+function FixtureVisibilityCells({ fixture }: { fixture: PatchedFixture }) {
+	const controller = usePatchController();
+	const stored = controller.library?.fixtureVisibility?.get(fixture.fixture_id);
+	const visibility = stored ?? {
+		fixtureId: fixture.fixture_id,
+		visible2d: true,
+		visible3d: true,
+	};
+	return (
+		<>
+			{(["2d", "3d"] as const).map((surface) => {
+				const key = surface === "2d" ? "visible2d" : "visible3d";
+				const visible = visibility[key];
+				return (
+					<td className="patch-visibility-cell" key={surface}>
+						<Button
+							className="patch-visibility-toggle"
+							aria-label={`${visible ? "Hide" : "Show"} fixture ${fixtureDisplayId(fixture)} in ${surface.toUpperCase()}`}
+							onClick={(event) => {
+								event.stopPropagation();
+								void controller.library?.saveFixtureVisibility?.({
+									...visibility,
+									[key]: !visible,
+								});
+							}}
+						>
+							<EyeIcon visible={visible} />
+						</Button>
+					</td>
+				);
+			})}
+		</>
 	);
 }
 
@@ -726,6 +803,9 @@ function MultiPatchRow({
 						: `${Number(instance.shaper_angle.toFixed(1))}°`}
 				</Button>
 			</td>
+			<td />
+			<td />
+			<td />
 			<td />
 		</tr>
 	);

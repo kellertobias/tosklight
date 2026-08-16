@@ -11,7 +11,9 @@
 import { createContext, useContext } from "react";
 import type {
 	FixtureDefinition,
+	FixtureNote,
 	FixtureProfile,
+	FixtureVisibility,
 	PatchLayer,
 	VersionedObject,
 } from "./wire";
@@ -22,12 +24,16 @@ export interface PatchLibraryHost {
 	fixtureLibrary: readonly FixtureDefinition[];
 	fixtureProfiles: readonly FixtureProfile[];
 	patchLayers: readonly VersionedObject<PatchLayer>[];
+	fixtureVisibility?: ReadonlyMap<string, FixtureVisibility>;
+	fixtureNotes?: ReadonlyMap<string, FixtureNote>;
 	/**
 	 * MVR fixtures that could not be resolved to a profile. Reported in the header so an import
 	 * that silently dropped fixtures is visible; only the count is read.
 	 */
 	unresolvedMvrFixtures: readonly unknown[];
 	savePatchLayer(layer: PatchLayer): Promise<boolean>;
+	saveFixtureVisibility?(visibility: FixtureVisibility): Promise<boolean>;
+	saveFixtureNote?(note: FixtureNote): Promise<boolean>;
 }
 
 /** One selection replacement. The sheet never builds any other selection intent. */
@@ -65,7 +71,7 @@ export interface PatchHost {
 	 * address mid-show. A planning application has no `Set` key and passes `true`.
 	 */
 	editArmed: boolean;
-	/** Enables mouse-first inline cells and drag selection in a planning application. */
+	/** Planning editors are continuously editable but row clicks still publish shared selection. */
 	desktopEditing?: boolean;
 	/**
 	 * Called with `false` once an edit is committed or abandoned.

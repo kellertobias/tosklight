@@ -39,8 +39,17 @@ const programming = vi.hoisted(() => ({
 const server = {
 	patch: { fixtures: [] as PatchedFixture[] },
 	patchLayers: [] as Array<{
-		body: { id: string; name: string; order: number };
+		body: {
+			id: string;
+			name: string;
+			order: number;
+			locked?: boolean;
+			visible2d?: boolean;
+			visible3d?: boolean;
+		};
 	}>,
+	fixtureVisibility: new Map(),
+	fixtureNotes: new Map(),
 	fixtureProfiles: [] as ReturnType<typeof blankFixtureProfile>[],
 	fixtureLibrary: [],
 	unresolvedMvrFixtures: [],
@@ -48,6 +57,8 @@ const server = {
 	setSelection: vi.fn(),
 	refresh: vi.fn(),
 	savePatchLayer: vi.fn(),
+	saveFixtureVisibility: vi.fn(),
+	saveFixtureNote: vi.fn(),
 };
 const patchFeature = {
 	patchFixtures: vi.fn(),
@@ -294,6 +305,8 @@ beforeEach(() => {
 	server.patch.fixtures = [splitFixture()];
 	server.patchLayers = [];
 	server.fixtureProfiles = [];
+	server.patchLayers = [];
+	server.fixtureNotes = new Map();
 	server.selectedFixtures = [];
 	programming.ready = true;
 	programming.selection.selected = [];
@@ -315,6 +328,144 @@ beforeEach(() => {
 afterEach(() => {
 	cleanup();
 	vi.restoreAllMocks();
+});
+
+describe("patch layer locks", () => {
+	it("returns to All fixtures when an external selection requests a reveal", () => {
+		const floorFixture = splitFixture();
+		floorFixture.fixture_id = "fixture-floor";
+		floorFixture.fixture_number = 18;
+		floorFixture.name = "Floor Wash 18";
+		floorFixture.layer_id = "floor";
+		server.patch.fixtures = [splitFixture(), floorFixture];
+		server.patchLayers = [
+			{ body: { id: "default", name: "Stage", order: 0, locked: false } },
+			{ body: { id: "floor", name: "Floor", order: 1, locked: false } },
+		];
+		const { rerender } = render(<FixturePatchSetup showAllLayersRequest={0} />);
+		const layers = screen
+			.getByRole("heading", { name: "Layers" })
+			.closest("aside");
+		if (!layers) throw new Error("Layers sidebar was not rendered");
+
+		fireEvent.click(within(layers).getByRole("button", { name: /^Stage/ }));
+		expect(
+			screen.getByRole("row", { name: /Split Wash 17/ }),
+		).toBeInTheDocument();
+		expect(screen.queryByRole("row", { name: /Floor Wash 18/ })).toBeNull();
+
+		rerender(<FixturePatchSetup showAllLayersRequest={1} />);
+		expect(
+			screen.getByRole("row", { name: /Floor Wash 18/ }),
+		).toBeInTheDocument();
+		expect(
+			within(layers).getByRole("button", { name: /^All fixtures/ }),
+		).toHaveClass("active");
+	});
+
+	it("offers Lock Layer in the title only after selecting an unlocked layer", async () => {
+		server.patchLayers = [
+			{ body: { id: "default", name: "Stage", order: 0, locked: false } },
+		];
+		server.savePatchLayer.mockResolvedValue(true);
+		render(<FixturePatchSetup />);
+
+		expect(
+			screen.queryByRole("button", { name: "Lock Layer" }),
+		).not.toBeInTheDocument();
+		const layers = screen
+			.getByRole("heading", { name: "Layers" })
+			.closest("aside");
+		if (!layers) throw new Error("Layers sidebar was not rendered");
+		fireEvent.click(within(layers).getByRole("button", { name: /^Stage/ }));
+		fireEvent.click(screen.getByRole("button", { name: "Lock Layer" }));
+		await waitFor(() => expect(server.savePatchLayer).toHaveBeenCalledOnce());
+		expect(server.savePatchLayer).toHaveBeenCalledWith(
+			expect.objectContaining({ id: "default", locked: true }),
+		);
+	});
+
+	it("persists the lock and prevents selecting fixtures in that layer", async () => {
+		server.patchLayers = [
+			{ body: { id: "default", name: "Stage", order: 0, locked: true } },
+		];
+		server.savePatchLayer.mockResolvedValue(true);
+		render(<FixturePatchSetup />);
+
+		const row = screen.getByRole("row", { name: /Split Wash 17/ });
+		expect(row).toHaveAttribute("aria-disabled", "true");
+		expect(screen.getByText("Layer Locked")).toBeInTheDocument();
+		expect(screen.queryByText("🔒")).not.toBeInTheDocument();
+		expect(screen.queryByText("🔓")).not.toBeInTheDocument();
+		fireEvent.click(row);
+		expect(programming.actions.replace).not.toHaveBeenCalled();
+
+		expect(
+			screen.queryByRole("button", { name: "Unlock Layer" }),
+		).not.toBeInTheDocument();
+		fireEvent.click(
+			screen.getByRole("button", { name: /Stage.*Layer Locked/ }),
+		);
+		fireEvent.click(screen.getByRole("button", { name: "Unlock Layer" }));
+		await waitFor(() => expect(server.savePatchLayer).toHaveBeenCalledOnce());
+		expect(server.savePatchLayer).toHaveBeenCalledWith(
+			expect.objectContaining({ id: "default", locked: false }),
+		);
+	});
+
+	it("uses table eyes and title actions for independent 2D and 3D visibility", async () => {
+		server.patchLayers = [{ body: { id: "default", name: "Stage", order: 0 } }];
+		server.savePatchLayer.mockResolvedValue(true);
+		server.saveFixtureVisibility.mockResolvedValue(true);
+		render(<FixturePatchSetup />);
+
+		fireEvent.click(
+			screen.getByRole("button", { name: "Hide fixture 17 in 2D" }),
+		);
+		expect(server.saveFixtureVisibility).toHaveBeenCalledWith({
+			fixtureId: "fixture-split",
+			visible2d: false,
+			visible3d: true,
+		});
+
+		const layers = screen
+			.getByRole("heading", { name: "Layers" })
+			.closest("aside");
+		if (!layers) throw new Error("Layers sidebar was not rendered");
+		fireEvent.click(within(layers).getByRole("button", { name: /^Stage/ }));
+		fireEvent.click(screen.getByRole("button", { name: "Hide in 3D" }));
+		await waitFor(() => expect(server.savePatchLayer).toHaveBeenCalled());
+		expect(server.savePatchLayer).toHaveBeenLastCalledWith(
+			expect.objectContaining({ id: "default", visible3d: false }),
+		);
+	});
+});
+
+describe("fixture notes", () => {
+	it("shows and persists the canonical fixture note from the Patch table", async () => {
+		state.patchSetArmed = true;
+		server.fixtureNotes = new Map([
+			[
+				"fixture-split",
+				{ fixtureId: "fixture-split", note: "Original rigging note" },
+			],
+		]);
+		server.saveFixtureNote.mockResolvedValue(true);
+		render(<FixturePatchSetup />);
+
+		fireEvent.click(screen.getByRole("button", { name: "Note 17" }));
+		const input = screen.getByRole("textbox", { name: "Fixture note" });
+		expect(input).toHaveValue("Original rigging note");
+		fireEvent.change(input, { target: { value: "Add secondary safety" } });
+		fireEvent.click(screen.getByRole("button", { name: "Set" }));
+
+		await waitFor(() =>
+			expect(server.saveFixtureNote).toHaveBeenCalledWith({
+				fixtureId: "fixture-split",
+				note: "Add secondary safety",
+			}),
+		);
+	});
 });
 
 describe("fixture output policy cells", () => {

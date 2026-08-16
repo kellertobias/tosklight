@@ -73,6 +73,37 @@ impl FixtureModel {
             .map(|part| part.indices.len() / 3)
             .sum::<usize>()
     }
+
+    fn refresh_metadata(&mut self) {
+        let mut bounds_min = Vec3::splat(f32::INFINITY);
+        let mut bounds_max = Vec3::splat(f32::NEG_INFINITY);
+        for part in &self.parts {
+            for position in &part.positions {
+                let point = Vec3::from_array(*position);
+                bounds_min = bounds_min.min(point);
+                bounds_max = bounds_max.max(point);
+            }
+        }
+        if self.is_empty() {
+            self.extent = Vec3::splat(0.001);
+            self.head_pivot = Vec3::ZERO;
+            self.emitter_anchor = None;
+            self.emitter_axis = None;
+            self.emitter_size = None;
+            self.has_head = false;
+            return;
+        }
+        self.extent = ((bounds_max - bounds_min) * 0.5).max(Vec3::splat(0.001));
+        self.head_pivot = head_pivot(self);
+        self.has_head = self
+            .parts
+            .iter()
+            .any(|part| part.kind == ModelPartKind::Head);
+        let face = emitter_face(self, bounds_min, bounds_max);
+        self.emitter_anchor = face.map(|face| face.anchor);
+        self.emitter_axis = face.map(|face| face.axis);
+        self.emitter_size = face.map(|face| face.size);
+    }
 }
 
 /// Which moving part of a fixture a piece of geometry belongs to.
@@ -150,6 +181,13 @@ const MAX_TRIANGLES: usize = 120_000;
 
 /// Read a self-contained GLB 2.0 file.
 pub fn read_glb(bytes: &[u8]) -> Result<FixtureModel, ModelError> {
+    read_glb_nodes(bytes, &[])
+}
+
+/// Read only the named GLB node subtrees selected by a fixture mode. An empty selection reads the
+/// authored scene as normal. This keeps mutually exclusive model variants portable in one GLB
+/// without flattening them into one impossible body.
+pub fn read_glb_nodes(bytes: &[u8], selected_roots: &[&str]) -> Result<FixtureModel, ModelError> {
     let (json, binary) = split_chunks(bytes)?;
     let document: serde_json::Value =
         serde_json::from_slice(json).map_err(|error| fail(format!("model JSON: {error}")))?;
@@ -159,7 +197,20 @@ pub fn read_glb(bytes: &[u8]) -> Result<FixtureModel, ModelError> {
 
     let nodes = array(&document, "nodes");
     let meshes = array(&document, "meshes");
-    let roots = scene_roots(&document, nodes.len());
+    let roots = if selected_roots.is_empty() {
+        scene_roots(&document, nodes.len())
+    } else {
+        nodes
+            .iter()
+            .enumerate()
+            .filter(|(_, node)| {
+                node.get("name")
+                    .and_then(serde_json::Value::as_str)
+                    .is_some_and(|name| selected_roots.contains(&name))
+            })
+            .map(|(index, _)| index)
+            .collect()
+    };
 
     let mut stack: Vec<(usize, Mat4, ModelPartKind)> = roots
         .into_iter()
@@ -228,16 +279,7 @@ pub fn read_glb(bytes: &[u8]) -> Result<FixtureModel, ModelError> {
             model.triangle_count()
         )));
     }
-    model.extent = ((bounds_max - bounds_min) * 0.5).max(Vec3::splat(0.001));
-    model.head_pivot = head_pivot(&model);
-    model.has_head = model
-        .parts
-        .iter()
-        .any(|part| part.kind == ModelPartKind::Head);
-    let face = emitter_face(&model, bounds_min, bounds_max);
-    model.emitter_anchor = face.map(|face| face.anchor);
-    model.emitter_axis = face.map(|face| face.axis);
-    model.emitter_size = face.map(|face| face.size);
+    model.refresh_metadata();
     Ok(model)
 }
 

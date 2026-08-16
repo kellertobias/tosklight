@@ -111,6 +111,13 @@ impl DeskClient {
             .ok()
     }
 
+    /// Identity-based editor/CAD selection, served only by a planning source.
+    pub async fn selection(&self) -> Option<crate::wire::SelectionSnapshot> {
+        self.get_json::<crate::wire::SelectionSnapshot>("/api/v2/selection", "selection")
+            .await
+            .ok()
+    }
+
     pub async fn renderer_settings(&self) -> Option<viz_scene::RendererSettingsUpdate> {
         self.get_json::<viz_scene::RendererSettingsUpdate>(
             "/api/v2/renderer-settings",

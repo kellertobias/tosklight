@@ -16,8 +16,8 @@ import { createPortal } from "react-dom";
 import {
 	Button,
 	ModalTitleBar,
-	TitleChrome,
 	type TitleActionGroup,
+	TitleChrome,
 	type TitleSearch,
 } from "../common";
 import { ModalLayer } from "../modals/ModalStack";
@@ -128,7 +128,6 @@ type WindowHeaderProps = {
 	info?: WindowInfo;
 	toolbar?: ReactNode;
 	groups?: TitleActionGroup[];
-	/** Show the Settings action. It remains disabled until onSettings is provided. */
 	settings?: boolean;
 	onSettings?: (anchor: HTMLElement) => void;
 	dragHandleProps?: React.HTMLAttributes<HTMLElement> & {
@@ -203,12 +202,14 @@ export function WindowHeader({
 						? [
 								{
 									id: "settings",
-									label: "Settings",
 									icon: <span aria-hidden="true">⚙</span>,
 									ariaLabel: "Settings",
 									disabled: !onSettings,
 									className: "ui-window-settings-action",
-									onPress: (anchor) => onSettings?.(anchor),
+									onPress: () => {
+										const anchor = document.activeElement;
+										if (anchor instanceof HTMLElement) onSettings?.(anchor);
+									},
 								},
 							]
 						: []

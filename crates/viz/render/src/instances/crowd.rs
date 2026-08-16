@@ -63,16 +63,19 @@ fn push_people(frame: &mut FrameInstances, crowd: &CrowdArea, count: usize) {
             } else {
                 0.0
             };
-        let shade = 0.035 + (index % 7) as f32 * 0.006;
+        let height = person_height(index);
         push_person(
             frame,
             crowd.position + orientation * local,
             orientation * Quat::from_rotation_y(yaw),
             crowd.posture,
-            Vec3::splat(shade),
-            &mut random,
+            height,
         );
     }
+}
+
+fn person_height(index: usize) -> f32 {
+    1.60 + ((index.saturating_mul(73).saturating_add(41) % 251) as f32 / 1000.0)
 }
 
 fn population_seed(crowd: &CrowdArea) -> u64 {
@@ -98,88 +101,37 @@ fn push_person(
     floor: Vec3,
     orientation: Quat,
     posture: CrowdPosture,
-    colour: Vec3,
-    random: &mut SplitMix64,
+    height: f32,
 ) {
-    let (body_height, body_y, head_y, leg_height) = match posture {
-        CrowdPosture::Sitting => (0.54, 0.72, 1.12, 0.42),
-        CrowdPosture::StandingStill | CrowdPosture::Dancing => (0.78, 1.02, 1.57, 0.76),
+    let posture_scale = match posture {
+        CrowdPosture::Sitting => 0.72,
+        CrowdPosture::StandingStill | CrowdPosture::Dancing => 1.0,
     };
-    push_part(
-        frame,
-        MeshKind::Cylinder,
-        Vec3::new(0.32, body_height, 0.22),
-        orientation,
-        floor + Vec3::Y * body_y,
-        colour,
-    );
-    push_part(
-        frame,
-        MeshKind::Sphere,
-        Vec3::splat(0.28),
-        orientation,
-        floor + Vec3::Y * head_y,
-        colour * 1.08,
-    );
-
-    let dance = posture == CrowdPosture::Dancing;
-    for side in [-1.0_f32, 1.0] {
-        let leg_origin = if posture == CrowdPosture::Sitting {
-            floor + orientation * Vec3::new(side * 0.10, 0.30, 0.16)
-        } else {
-            floor + orientation * Vec3::new(side * 0.09, leg_height * 0.5, 0.0)
-        };
-        let leg_tilt = if posture == CrowdPosture::Sitting {
-            Quat::from_rotation_x(-0.48)
-        } else {
-            Quat::IDENTITY
-        };
-        push_part(
-            frame,
-            MeshKind::Cylinder,
-            Vec3::new(0.11, leg_height, 0.11),
-            orientation * leg_tilt,
-            leg_origin,
-            colour,
-        );
-
-        let arm_angle = if dance {
-            random.range(-1.15, 1.15)
-        } else if posture == CrowdPosture::Sitting {
-            side * 0.18
-        } else {
-            side * 0.08
-        };
-        let arm_orientation = orientation * Quat::from_rotation_z(arm_angle);
-        push_part(
-            frame,
-            MeshKind::Cylinder,
-            Vec3::new(0.09, 0.58, 0.09),
-            arm_orientation,
-            floor
-                + Vec3::Y * (body_y + 0.08)
-                + arm_orientation * Vec3::Y * -0.18
-                + orientation * Vec3::X * side * 0.20,
-            colour,
-        );
-    }
-}
-
-fn push_part(
-    frame: &mut FrameInstances,
-    kind: MeshKind,
-    size: Vec3,
-    orientation: Quat,
-    centre: Vec3,
-    colour: Vec3,
-) {
-    frame.mesh(kind).push(MeshInstance::new(
-        Mat4::from_scale_rotation_translation(size, orientation, centre),
-        colour,
+    let rendered_height = height * posture_scale;
+    frame.mesh(MeshKind::CrowdPerson).push(MeshInstance::new(
+        Mat4::from_scale_rotation_translation(
+            Vec3::new(rendered_height, rendered_height, 1.0),
+            orientation,
+            floor,
+        ),
+        Vec3::splat(0.008),
         0.92,
         Vec3::ZERO,
         0.0,
     ));
+    frame
+        .mesh(MeshKind::CrowdPersonOutline)
+        .push(MeshInstance::new(
+            Mat4::from_scale_rotation_translation(
+                Vec3::new(rendered_height, rendered_height, 1.0),
+                orientation,
+                floor,
+            ),
+            Vec3::splat(0.42),
+            0.9,
+            Vec3::ZERO,
+            0.0,
+        ));
 }
 
 /// Small deterministic generator with stable output across platforms and renderer restarts.
@@ -296,28 +248,16 @@ mod tests {
                 ..FrameStyle::default()
             },
         );
+        let silhouette = crate::mesh::unit_crowd_person();
         for (_, instances) in frame.meshes {
             for instance in instances {
-                let x = instance.model[3][0];
-                let y = instance.model[3][1];
-                let z = instance.model[3][2];
-                let half_x = 0.5
-                    * (instance.model[0][0].abs()
-                        + instance.model[1][0].abs()
-                        + instance.model[2][0].abs());
-                let half_z = 0.5
-                    * (instance.model[0][2].abs()
-                        + instance.model[1][2].abs()
-                        + instance.model[2][2].abs());
-                assert!(
-                    x - half_x >= -1.0 && x + half_x <= 1.0,
-                    "x={x} half={half_x}"
-                );
-                assert!((0.0..=1.8).contains(&y), "y={y}");
-                assert!(
-                    z - half_z >= -0.5 && z + half_z <= 0.5,
-                    "z={z} half={half_z}"
-                );
+                let model = Mat4::from_cols_array_2d(&instance.model);
+                for vertex in &silhouette.vertices {
+                    let world = model.transform_point3(Vec3::from_array(vertex.position));
+                    assert!((-1.0..=1.0).contains(&world.x), "x={}", world.x);
+                    assert!((0.0..=1.85).contains(&world.y), "y={}", world.y);
+                    assert!((-0.5..=0.5).contains(&world.z), "z={}", world.z);
+                }
             }
         }
     }
@@ -360,5 +300,56 @@ mod tests {
         });
         assert_ne!(first.meshes[0].1[0].model, sitting.meshes[0].1[0].model);
         assert!(sitting.meshes[0].1[0].model[1][1] < first.meshes[0].1[0].model[1][1]);
+    }
+
+    #[test]
+    fn every_drawn_person_is_one_black_flat_silhouette_with_authored_outlines() {
+        let scene = Scene {
+            crowds: vec![area()],
+            ..Scene::default()
+        };
+        let frame = super::super::build(
+            &scene,
+            &viz_scene::SceneValues::default(),
+            &FrameStyle {
+                quality: RenderQuality::High,
+                crowd_amount: 0.1,
+                ..FrameStyle::default()
+            },
+        );
+        let silhouettes = frame
+            .meshes
+            .iter()
+            .find(|(kind, _)| *kind == MeshKind::CrowdPerson)
+            .expect("crowd silhouette mesh");
+        assert_eq!(silhouettes.1.len(), frame.crowd_drawn as usize);
+        let outlines = frame
+            .meshes
+            .iter()
+            .find(|(kind, _)| *kind == MeshKind::CrowdPersonOutline)
+            .expect("crowd outline mesh");
+        assert_eq!(outlines.1.len(), frame.crowd_drawn as usize);
+        assert!(
+            silhouettes
+                .1
+                .iter()
+                .all(|person| person.base_colour[..3] == [0.008; 3])
+        );
+        assert!(
+            outlines
+                .1
+                .iter()
+                .all(|person| person.base_colour[..3] == [0.42; 3])
+        );
+        assert!(
+            frame
+                .meshes
+                .iter()
+                .all(|(kind, _)| !matches!(kind, MeshKind::Sphere | MeshKind::Cylinder))
+        );
+        for person in &silhouettes.1 {
+            let height = person.model[1][1].abs();
+            assert!((1.60..=1.85).contains(&height), "height={height}");
+        }
     }
 }

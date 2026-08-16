@@ -376,12 +376,12 @@ function interpolate([first, last]: number[], count: number) {
 function FixtureEditFields() {
 	const controller = usePatchController();
 	const { edit, editText } = controller.ui;
-	if (edit === "name")
+	if (edit === "name" || edit === "note")
 		return (
 			<TextInput
 				clearable
 				autoFocus
-				aria-label="Fixture name"
+				aria-label={edit === "note" ? "Fixture note" : "Fixture name"}
 				value={editText}
 				onChange={(event) => controller.ui.setEditText(event.target.value)}
 				onKeyboardCommit={(value) => saveEdit(controller, value)}
@@ -627,5 +627,6 @@ function editTitle(
 	if (edit === "invert_tilt") return "Invert Tilt";
 	if (edit === "bracket_angle") return "Bracket angle";
 	if (edit === "shaper_angle") return "Shaper angle";
+	if (edit === "note") return "note";
 	return edit;
 }

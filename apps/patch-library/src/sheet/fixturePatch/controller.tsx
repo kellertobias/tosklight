@@ -28,6 +28,7 @@ import { usePatchSelection } from "./selection";
 export type EditKind =
 	| "number"
 	| "name"
+	| "note"
 	| "address"
 	| "location"
 	| "rotation"
@@ -76,6 +77,8 @@ export type FixturePatchSetupProps = {
 	onStagePreview?: () => void;
 	onOpenStageWindow?: () => void;
 	addRequest?: number;
+	/** External selection revisions use this to reveal entities hidden by a layer filter. */
+	showAllLayersRequest?: number;
 	initialTypeFilter?: string;
 	onFixturesAdded?: (
 		fixtures: readonly { fixtureId: string; name: string }[],
@@ -389,12 +392,20 @@ function useFixturePatchController(props: FixturePatchSetupProps) {
 	const selection = usePatchSelection();
 	const ui = usePatchUiState();
 	const handledAddRequest = useRef(0);
+	const handledShowAllLayersRequest = useRef(0);
 	const data = usePatchDerivedState(
 		host.library,
 		patch,
 		ui,
 		props.scope ?? "all",
 	);
+	useEffect(() => {
+		const request = props.showAllLayersRequest ?? 0;
+		if (!request || request === handledShowAllLayersRequest.current) return;
+		handledShowAllLayersRequest.current = request;
+		ui.setShowAllLayers(true);
+		ui.setActiveLayer("all");
+	}, [props.showAllLayersRequest, ui.setActiveLayer, ui.setShowAllLayers]);
 	useEffect(() => {
 		const request = props.addRequest ?? 0;
 		if (!request || request === handledAddRequest.current) return;

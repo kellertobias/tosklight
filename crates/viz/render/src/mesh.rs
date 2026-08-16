@@ -6,6 +6,7 @@
 use crate::instances::MeshKind;
 use bytemuck::{Pod, Zeroable};
 use glam::{Vec2, Vec3};
+use serde::Deserialize;
 use std::f32::consts::TAU;
 
 #[repr(C)]
@@ -278,6 +279,165 @@ pub fn unit_plane() -> MeshData {
     mesh
 }
 
+#[derive(Deserialize)]
+struct AudienceOutlineArtwork {
+    front: Vec<[f32; 2]>,
+    front_strokes: Vec<Vec<[f32; 2]>>,
+}
+
+/// Operator-supplied front/back audience outline, normalized to one metre of authored stature.
+///
+/// Both windings are present because the crowd is intentionally a flat silhouette which must
+/// remain visible from the front and the back with the normal opaque back-face-culling pipeline.
+pub fn unit_crowd_person() -> MeshData {
+    let source = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../../assets/viz/crowd/audience-outline.json"
+    ));
+    let artwork: AudienceOutlineArtwork =
+        serde_json::from_str(source).expect("the shipped audience outline is valid JSON");
+    let mut points = artwork.front;
+    if points.len() > 1 && points.first() == points.last() {
+        points.pop();
+    }
+    assert!(points.len() >= 3, "the audience outline is a polygon");
+    let triangles = triangulate_polygon(&points);
+    assert!(!triangles.is_empty(), "the audience outline triangulates");
+
+    let mut mesh = MeshData::default();
+    let front = points
+        .iter()
+        .map(|[x, y]| mesh.push(Vec3::new(*x, *y, 0.0), Vec3::Z, Vec2::new(*x, *y)))
+        .collect::<Vec<_>>();
+    let back = points
+        .iter()
+        .map(|[x, y]| mesh.push(Vec3::new(*x, *y, 0.0), Vec3::NEG_Z, Vec2::new(*x, *y)))
+        .collect::<Vec<_>>();
+    for [first, second, third] in triangles {
+        mesh.indices.extend_from_slice(&[
+            front[first],
+            front[second],
+            front[third],
+            back[first],
+            back[third],
+            back[second],
+        ]);
+    }
+    mesh
+}
+
+/// Every authored front/back audience contour as thin, double-sided strips.
+///
+/// The fill mesh deliberately remains a single silhouette for inexpensive crowd drawing. These
+/// strips preserve the source artwork's separate body, waist, neck, head, and arm boundaries so
+/// overlapping anatomy remains legible from either side.
+pub fn unit_crowd_person_outline() -> MeshData {
+    const HALF_LINE_WIDTH: f32 = 0.003;
+    const SURFACE_OFFSET: f32 = 0.0015;
+
+    let source = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../../assets/viz/crowd/audience-outline.json"
+    ));
+    let artwork: AudienceOutlineArtwork =
+        serde_json::from_str(source).expect("the shipped audience outline is valid JSON");
+    let mut mesh = MeshData::default();
+    for stroke in artwork.front_strokes {
+        for segment in stroke.windows(2) {
+            let from = Vec2::from_array(segment[0]);
+            let to = Vec2::from_array(segment[1]);
+            let direction = to - from;
+            if direction.length_squared() <= f32::EPSILON {
+                continue;
+            }
+            let offset = Vec2::new(-direction.y, direction.x).normalize() * HALF_LINE_WIDTH;
+            let front = |point: Vec2| Vec3::new(point.x, point.y, SURFACE_OFFSET);
+            let back = |point: Vec2| Vec3::new(point.x, point.y, -SURFACE_OFFSET);
+            mesh.quad(
+                [
+                    front(from + offset),
+                    front(from - offset),
+                    front(to - offset),
+                    front(to + offset),
+                ],
+                Vec3::Z,
+            );
+            mesh.quad(
+                [
+                    back(from + offset),
+                    back(to + offset),
+                    back(to - offset),
+                    back(from - offset),
+                ],
+                Vec3::NEG_Z,
+            );
+        }
+    }
+    mesh
+}
+
+fn triangulate_polygon(points: &[[f32; 2]]) -> Vec<[usize; 3]> {
+    let signed_area = points
+        .iter()
+        .zip(points.iter().cycle().skip(1))
+        .map(|([ax, ay], [bx, by])| ax * by - bx * ay)
+        .sum::<f32>();
+    let mut remaining = if signed_area >= 0.0 {
+        (0..points.len()).collect::<Vec<_>>()
+    } else {
+        (0..points.len()).rev().collect::<Vec<_>>()
+    };
+    let mut triangles = Vec::with_capacity(points.len().saturating_sub(2));
+    let mut guard = points.len() * points.len();
+    while remaining.len() > 3 && guard > 0 {
+        guard -= 1;
+        let mut clipped = false;
+        for cursor in 0..remaining.len() {
+            let previous = remaining[(cursor + remaining.len() - 1) % remaining.len()];
+            let current = remaining[cursor];
+            let next = remaining[(cursor + 1) % remaining.len()];
+            if cross(points[previous], points[current], points[next]) <= 1e-7 {
+                continue;
+            }
+            if remaining.iter().copied().any(|candidate| {
+                candidate != previous
+                    && candidate != current
+                    && candidate != next
+                    && point_in_triangle(
+                        points[candidate],
+                        points[previous],
+                        points[current],
+                        points[next],
+                    )
+            }) {
+                continue;
+            }
+            triangles.push([previous, current, next]);
+            remaining.remove(cursor);
+            clipped = true;
+            break;
+        }
+        if !clipped {
+            break;
+        }
+    }
+    if remaining.len() == 3 {
+        triangles.push([remaining[0], remaining[1], remaining[2]]);
+    }
+    triangles
+}
+
+fn cross([ax, ay]: [f32; 2], [bx, by]: [f32; 2], [cx, cy]: [f32; 2]) -> f32 {
+    (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
+}
+
+fn point_in_triangle(point: [f32; 2], first: [f32; 2], second: [f32; 2], third: [f32; 2]) -> bool {
+    let first_cross = cross(first, second, point);
+    let second_cross = cross(second, third, point);
+    let third_cross = cross(third, first, point);
+    first_cross > 1e-7 && second_cross > 1e-7 && third_cross > 1e-7
+}
+
 /// The proxy one procedural [`MeshKind`] draws, and the name it goes by.
 ///
 /// One definition, so the geometry the device uploads and the geometry an export hands to another
@@ -290,6 +450,8 @@ pub fn procedural(kind: MeshKind) -> Option<(&'static str, MeshData)> {
         MeshKind::Sphere => Some(("sphere", unit_sphere(8, 14))),
         MeshKind::Lens => Some(("lens", unit_lens(24, 3))),
         MeshKind::Plane => Some(("plane", unit_plane())),
+        MeshKind::CrowdPerson => Some(("crowd-person", unit_crowd_person())),
+        MeshKind::CrowdPersonOutline => Some(("crowd-person-outline", unit_crowd_person_outline())),
         MeshKind::ModelPart(..) | MeshKind::PlanArtwork(..) => None,
     }
 }
@@ -318,6 +480,8 @@ mod tests {
             unit_lens(16, 3),
             unit_cone(24),
             unit_plane(),
+            unit_crowd_person(),
+            unit_crowd_person_outline(),
         ] {
             assert!(!mesh.vertices.is_empty());
             assert!(mesh.indices.len() % 3 == 0);
@@ -327,5 +491,60 @@ mod tests {
                     .all(|index| (*index as usize) < mesh.vertices.len())
             );
         }
+    }
+
+    #[test]
+    fn crowd_person_is_a_double_sided_floor_aligned_supplied_silhouette() {
+        let mesh = unit_crowd_person();
+        let minimum_y = mesh
+            .vertices
+            .iter()
+            .map(|vertex| vertex.position[1])
+            .fold(f32::INFINITY, f32::min);
+        let maximum_y = mesh
+            .vertices
+            .iter()
+            .map(|vertex| vertex.position[1])
+            .fold(f32::NEG_INFINITY, f32::max);
+        assert!(minimum_y.abs() < 0.001);
+        assert!((maximum_y - 1.0).abs() < 0.001);
+        assert!(mesh.vertices.iter().all(|vertex| vertex.position[2] == 0.0));
+        assert!(
+            mesh.vertices
+                .iter()
+                .any(|vertex| vertex.normal == Vec3::Z.to_array())
+        );
+        assert!(
+            mesh.vertices
+                .iter()
+                .any(|vertex| vertex.normal == Vec3::NEG_Z.to_array())
+        );
+        let outline_points = mesh.vertices.len() / 2;
+        assert_eq!(mesh.indices.len(), (outline_points - 2) * 6);
+    }
+
+    #[test]
+    fn crowd_person_outline_preserves_every_authored_front_stroke() {
+        let mesh = unit_crowd_person_outline();
+        let source = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../../assets/viz/crowd/audience-outline.json"
+        ));
+        let artwork: AudienceOutlineArtwork = serde_json::from_str(source).unwrap();
+        assert_eq!(artwork.front_strokes.len(), 4);
+        let segment_count = artwork
+            .front_strokes
+            .iter()
+            .flat_map(|stroke| stroke.windows(2))
+            .filter(|segment| {
+                let from = Vec2::from_array(segment[0]);
+                let to = Vec2::from_array(segment[1]);
+                (to - from).length_squared() > f32::EPSILON
+            })
+            .count();
+        assert_eq!(mesh.vertices.len(), segment_count * 8);
+        assert_eq!(mesh.indices.len(), segment_count * 12);
+        assert!(mesh.vertices.iter().any(|vertex| vertex.position[2] > 0.0));
+        assert!(mesh.vertices.iter().any(|vertex| vertex.position[2] < 0.0));
     }
 }

@@ -6,7 +6,8 @@ Dancing, each at Sparse, Medium, or Dense authored density.
 
 In **Show Patch**, set **Footprint width** and **Footprint depth** independently. These values are
 stored with the Stage layout in metres and draw the same rectangular footprint in plan views that
-the 3D Visualizer populates. Height is never scaled with the footprint: Sitting uses seated human
+the 3D Visualizer populates with flat, double-sided black people and contrasting outlines from the
+shipped audience artwork. Height is never scaled with the footprint: Sitting uses seated human
 height, while Standing still and Dancing use standing human height.
 
 Population is deterministic. The fixture's stable show identity, selected mode, authored

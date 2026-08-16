@@ -29,7 +29,7 @@ pub use diagnostics::{
     SourceProtocol, UniverseGrade, UniverseHealth,
 };
 pub use glam;
-pub use model::{FixtureModel, ModelError, ModelPart, ModelPartKind, read_glb};
+pub use model::{FixtureModel, ModelError, ModelPart, ModelPartKind, read_glb, read_glb_nodes};
 pub use persistence::{
     DEFAULT_DECAY_SECONDS, DEFAULT_FALLOFF, DEFAULT_THRESHOLD, PersistencePreference,
 };

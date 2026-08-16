@@ -21,6 +21,7 @@ export function saveEdit(
 	if (edit === "number") saveFixtureNumber(controller, value);
 	if (edit === "name")
 		void applyEdit(controller, { name: value.trim() || selected.name });
+	if (edit === "note") void saveFixtureNote(controller, value);
 	if (edit === "address") saveSingleAddress(controller, value);
 	if (edit === "mib")
 		void applyEdit(controller, { move_in_black_enabled: value === "true" });
@@ -101,6 +102,18 @@ export function saveEdit(
 		});
 	}
 	void all;
+}
+
+async function saveFixtureNote(controller: PatchController, value: string) {
+	const selected = controller.data.selected;
+	if (!selected) return;
+	if (
+		await controller.library?.saveFixtureNote?.({
+			fixtureId: selected.fixture_id,
+			note: value.trim(),
+		})
+	)
+		completeEdit(controller);
 }
 
 async function savePolicy(

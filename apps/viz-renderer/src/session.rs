@@ -149,6 +149,7 @@ impl Session {
                     self.pending_renderer_settings = Some(settings);
                 }
                 ProviderEvent::Diagnostics(diagnostics) => self.diagnostics = *diagnostics,
+                ProviderEvent::RendererSettings(_) => {}
                 ProviderEvent::ResyncRequired { reason } => {
                     self.awaiting_snapshot = true;
                     self.connection = ConnectionState::Stale {

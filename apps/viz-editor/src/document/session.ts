@@ -1,6 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+	FixtureNote,
 	FixtureProfile,
+	FixtureVisibility,
 	PatchLayer,
 	PatchSnapshot,
 	VersionedObject,
@@ -11,6 +13,16 @@ export interface DocumentSummary {
 	name: string;
 	path: string;
 	fixtureCount: number;
+	fileName: string;
+	lightingDesigner: string;
+	showVersion: string;
+	venue: string;
+	contactEmail: string;
+	contactPhone: string;
+	project: string;
+	showDate: string;
+	lastSavedAt: number;
+	universeCount: number;
 }
 
 export interface MvrImportReport {
@@ -297,8 +309,12 @@ export const documentSession = {
 	 * folder and opens that one, so nothing an operator does to a demo reaches the next one.
 	 */
 	openDemoShow: () => invoke<DocumentSummary>("open_demo_show"),
+	/** Open the synchronized orthographic CAD planning window. */
+	openCad: () => invoke<void>("open_cad"),
 	/** Open the separate visualizer output for the document currently being edited. */
 	openVisualizer: () => invoke<void>("open_visualizer"),
+	/** Whether the editor-owned Visualizer child is still running. */
+	visualizerIsRunning: () => invoke<boolean>("visualizer_is_running"),
 	rendererSettings: () => invoke<RendererSettings>("renderer_settings"),
 	saveRendererSettings: (settings: RendererSettings) =>
 		invoke<RendererSettings>("save_renderer_settings", { settings }),
@@ -321,6 +337,15 @@ export const documentSession = {
 	 */
 	surfaceReady: () => invoke<void>("surface_ready"),
 	current: () => invoke<DocumentSummary | null>("document_summary"),
+	savePaperwork: (paperwork: {
+		lightingDesigner: string;
+		showVersion: string;
+		venue: string;
+		contactEmail: string;
+		contactPhone: string;
+		project: string;
+		showDate: string;
+	}) => invoke<DocumentSummary>("save_document_paperwork", { paperwork }),
 	saveAs: (path: string) => invoke<void>("save_document_as", { path }),
 	rename: (name: string) => invoke<void>("rename_document", { name }),
 	exportMvr: (path: string) => invoke<number>("export_mvr", { path }),
@@ -366,6 +391,12 @@ export const documentSession = {
 	patchLayers: () => invoke<PatchLayer[]>("patch_layers"),
 	savePatchLayer: (layer: PatchLayer) =>
 		invoke<PatchLayer>("save_patch_layer", { layer }),
+	fixtureVisibility: () => invoke<FixtureVisibility[]>("fixture_visibility"),
+	saveFixtureVisibility: (visibility: FixtureVisibility) =>
+		invoke<FixtureVisibility>("save_fixture_visibility", { visibility }),
+	fixtureNotes: () => invoke<FixtureNote[]>("fixture_notes"),
+	saveFixtureNote: (note: FixtureNote) =>
+		invoke<FixtureNote>("save_fixture_note", { note }),
 	async fixtureProfiles(): Promise<FixtureProfile[]> {
 		const profiles = await invoke<LibraryProfile[]>("library_profiles");
 		return profiles.map((entry) => entry.profile);

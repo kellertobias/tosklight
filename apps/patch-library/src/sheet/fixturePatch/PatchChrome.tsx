@@ -1,13 +1,19 @@
 import { Button, SwitchField } from "@tosklight/ui";
 import { WindowHeader } from "@tosklight/ui/window-kit";
 import { usePatchController } from "./controller";
-import { selectLayer, setFixtureNumber } from "./fixtureActions";
+import {
+	selectLayer,
+	setFixtureNumber,
+	toggleLayerLock,
+	toggleLayerVisibility,
+} from "./fixtureActions";
 import { addMultipatch } from "./multipatchActions";
 
 export function PatchHeader() {
 	const controller = usePatchController();
 	const { data, ui, library, editArmed, props } = controller;
 	const selected = data.selected;
+	const activeLayer = data.layers.find((layer) => layer.id === ui.activeLayer);
 	return (
 		<WindowHeader
 			title={props.title}
@@ -80,6 +86,42 @@ export function PatchHeader() {
 				{
 					id: "patch-edit",
 					actions: [
+						...(activeLayer && ui.layerModal !== "select"
+							? [
+									{
+										id: "layer-visible-2d",
+										label: (activeLayer.visible2d ?? true)
+											? "Hide in 2D"
+											: "Show in 2D",
+										onPress: () =>
+											void toggleLayerVisibility(
+												controller,
+												activeLayer.id,
+												"2d",
+											),
+									},
+									{
+										id: "layer-visible-3d",
+										label: (activeLayer.visible3d ?? true)
+											? "Hide in 3D"
+											: "Show in 3D",
+										onPress: () =>
+											void toggleLayerVisibility(
+												controller,
+												activeLayer.id,
+												"3d",
+											),
+									},
+									{
+										id: "layer-lock",
+										label: activeLayer.locked
+											? "Unlock Layer"
+											: "Lock Layer",
+										onPress: () =>
+											void toggleLayerLock(controller, activeLayer.id),
+									},
+								]
+							: []),
 						...(selected && editArmed
 							? [
 									{
@@ -138,7 +180,10 @@ export function PatchLayers() {
 							: ui.setActiveLayer(layer.id)
 					}
 				>
-					<b>{layer.name}</b>
+					<span className="patch-layer-copy">
+						<b>{layer.name}</b>
+						{layer.locked ? <small>Layer Locked</small> : null}
+					</span>
 					<span>
 						{
 							data.scoped.filter(

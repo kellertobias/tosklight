@@ -10,14 +10,14 @@ use light_application::MvrImportResolution;
 use light_fixture::FixtureLibrary;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
-use viz_document::PlanningDocument;
 use viz_document::{
     LiveDmxInputs, ManagedFallbackReference, MediaLayoutOutcome, MediaLayoutSnapshot,
     MediaObjectIntent,
 };
+use viz_document::{PaperworkMetadata, PlanningDocument};
 use viz_planning::SceneSource;
 
 /// The open document, shared with the visualizer.
@@ -39,6 +39,28 @@ pub struct DocumentSummary {
     pub name: String,
     pub path: String,
     pub fixture_count: usize,
+    pub file_name: String,
+    pub lighting_designer: String,
+    pub show_version: String,
+    pub venue: String,
+    pub contact_email: String,
+    pub contact_phone: String,
+    pub project: String,
+    pub show_date: String,
+    pub last_saved_at: u64,
+    pub universe_count: usize,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaperworkInput {
+    pub lighting_designer: String,
+    pub show_version: String,
+    pub venue: String,
+    pub contact_email: String,
+    pub contact_phone: String,
+    pub project: String,
+    pub show_date: String,
 }
 
 /// One fixture profile the operator can patch from.
@@ -118,7 +140,7 @@ impl Session {
         Ok(summary)
     }
 
-    fn with<T>(&self, action: impl FnOnce(&PlanningDocument) -> Answer<T>) -> Answer<T> {
+    pub(crate) fn with<T>(&self, action: impl FnOnce(&PlanningDocument) -> Answer<T>) -> Answer<T> {
         self.source
             .with(action)
             .unwrap_or_else(|| Err("no document is open".to_owned()))
@@ -128,7 +150,10 @@ impl Session {
     ///
     /// A rig the operator just patched has to appear in the picture now, not on whatever the
     /// renderer's next reconnection would have been.
-    fn change<T>(&self, action: impl FnOnce(&PlanningDocument) -> Answer<T>) -> Answer<T> {
+    pub(crate) fn change<T>(
+        &self,
+        action: impl FnOnce(&PlanningDocument) -> Answer<T>,
+    ) -> Answer<T> {
         let outcome = self.with(action);
         if outcome.is_ok() {
             self.source.mark_changed();
@@ -141,11 +166,43 @@ fn summarize(document: &PlanningDocument) -> Answer<DocumentSummary> {
     let snapshot = document
         .patch_snapshot()
         .map_err(|error| error.to_string())?;
+    let paperwork = document
+        .paperwork_metadata()
+        .map_err(|error| error.to_string())?;
+    let universes: HashSet<u16> = snapshot
+        .fixtures
+        .iter()
+        .flat_map(|fixture| fixture.patch.split_patches.iter())
+        .filter_map(|split| split.universe)
+        .collect();
+    let last_saved_at = std::fs::metadata(document.path())
+        .and_then(|metadata| metadata.modified())
+        .and_then(|time| {
+            time.duration_since(std::time::UNIX_EPOCH)
+                .map_err(std::io::Error::other)
+        })
+        .map(|duration| duration.as_secs())
+        .unwrap_or_default();
     Ok(DocumentSummary {
         show_id: document.show_id().0.to_string(),
         name: document.name().map_err(|error| error.to_string())?,
         path: document.path().display().to_string(),
         fixture_count: snapshot.fixtures.len(),
+        file_name: document
+            .path()
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or_default()
+            .to_owned(),
+        lighting_designer: paperwork.lighting_designer,
+        show_version: paperwork.show_version,
+        venue: paperwork.venue,
+        contact_email: paperwork.contact_email,
+        contact_phone: paperwork.contact_phone,
+        project: paperwork.project,
+        show_date: paperwork.show_date,
+        last_saved_at,
+        universe_count: universes.len(),
     })
 }
 
@@ -175,6 +232,27 @@ pub fn open_document(
 #[tauri::command]
 pub fn document_summary(session: tauri::State<'_, Session>) -> Answer<Option<DocumentSummary>> {
     session.source.with(summarize).transpose()
+}
+
+#[tauri::command]
+pub fn save_document_paperwork(
+    session: tauri::State<'_, Session>,
+    paperwork: PaperworkInput,
+) -> Answer<DocumentSummary> {
+    session.change(|document| {
+        document
+            .save_paperwork_metadata(&PaperworkMetadata {
+                lighting_designer: paperwork.lighting_designer,
+                show_version: paperwork.show_version,
+                venue: paperwork.venue,
+                contact_email: paperwork.contact_email,
+                contact_phone: paperwork.contact_phone,
+                project: paperwork.project,
+                show_date: paperwork.show_date,
+            })
+            .map_err(|error| error.to_string())?;
+        summarize(document)
+    })
 }
 
 /// Portable Art-Net and sACN receiver intent for the current planning document.
@@ -345,6 +423,21 @@ pub fn patch_layers(session: tauri::State<'_, Session>) -> Answer<Vec<PatchLayer
                     id: object.id.clone(),
                     name: object.body.get("name")?.as_str()?.to_owned(),
                     order: object.body.get("order").and_then(|order| order.as_i64())? as i32,
+                    locked: object
+                        .body
+                        .get("locked")
+                        .and_then(serde_json::Value::as_bool)
+                        .unwrap_or(false),
+                    visible_2d: object
+                        .body
+                        .get("visible2d")
+                        .and_then(serde_json::Value::as_bool)
+                        .unwrap_or(true),
+                    visible_3d: object
+                        .body
+                        .get("visible3d")
+                        .and_then(serde_json::Value::as_bool)
+                        .unwrap_or(true),
                 })
             })
             .collect())
@@ -354,13 +447,15 @@ pub fn patch_layers(session: tauri::State<'_, Session>) -> Answer<Vec<PatchLayer
 /// Store one patch layer in the document, as the desk stores it.
 #[tauri::command]
 pub fn save_patch_layer(
+    app: tauri::AppHandle,
     session: tauri::State<'_, Session>,
+    cad: tauri::State<'_, crate::cad::CadState>,
     layer: PatchLayerDto,
 ) -> Answer<PatchLayerDto> {
     if layer.name.trim().is_empty() {
         return Err("a patch layer needs a name".to_owned());
     }
-    session.change(|document| {
+    let saved = session.change(|document| {
         document
             .put_object(
                 "patch_layer",
@@ -369,11 +464,18 @@ pub fn save_patch_layer(
                     "id": layer.id,
                     "name": layer.name,
                     "order": layer.order,
+                    "locked": layer.locked,
+                    "visible2d": layer.visible_2d,
+                    "visible3d": layer.visible_3d,
                 }),
             )
             .map_err(|error| error.to_string())?;
         Ok(layer.clone())
-    })
+    })?;
+    let revision =
+        session.with(|document| document.patch_revision().map_err(|error| error.to_string()))?;
+    crate::cad::emit_scene_state_delta(&app, &session, &cad, revision)?;
+    Ok(saved)
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -381,6 +483,104 @@ pub struct PatchLayerDto {
     pub id: String,
     pub name: String,
     pub order: i32,
+    #[serde(default)]
+    pub locked: bool,
+    #[serde(default = "default_true", rename = "visible2d")]
+    pub visible_2d: bool,
+    #[serde(default = "default_true", rename = "visible3d")]
+    pub visible_3d: bool,
+}
+
+const fn default_true() -> bool {
+    true
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FixtureVisibilityDto {
+    pub fixture_id: Uuid,
+    #[serde(default = "default_true")]
+    pub visible_2d: bool,
+    #[serde(default = "default_true")]
+    pub visible_3d: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FixtureNoteDto {
+    pub fixture_id: Uuid,
+    #[serde(default)]
+    pub note: String,
+}
+
+#[tauri::command]
+pub fn fixture_notes(session: tauri::State<'_, Session>) -> Answer<Vec<FixtureNoteDto>> {
+    session.with(|document| {
+        document
+            .objects("fixture_note")
+            .map_err(|error| error.to_string())?
+            .into_iter()
+            .map(|object| serde_json::from_value(object.body).map_err(|error| error.to_string()))
+            .collect()
+    })
+}
+
+#[tauri::command]
+pub fn save_fixture_note(
+    app: tauri::AppHandle,
+    session: tauri::State<'_, Session>,
+    cad: tauri::State<'_, crate::cad::CadState>,
+    note: FixtureNoteDto,
+) -> Answer<FixtureNoteDto> {
+    let saved = session.change(|document| {
+        document
+            .put_object(
+                "fixture_note",
+                &note.fixture_id.to_string(),
+                &serde_json::to_value(&note).map_err(|error| error.to_string())?,
+            )
+            .map_err(|error| error.to_string())?;
+        Ok(note.clone())
+    })?;
+    let revision =
+        session.with(|document| document.patch_revision().map_err(|error| error.to_string()))?;
+    crate::cad::emit_scene_state_delta(&app, &session, &cad, revision)?;
+    Ok(saved)
+}
+
+#[tauri::command]
+pub fn fixture_visibility(session: tauri::State<'_, Session>) -> Answer<Vec<FixtureVisibilityDto>> {
+    session.with(|document| {
+        document
+            .objects("fixture_visibility")
+            .map_err(|error| error.to_string())?
+            .into_iter()
+            .map(|object| serde_json::from_value(object.body).map_err(|error| error.to_string()))
+            .collect()
+    })
+}
+
+#[tauri::command]
+pub fn save_fixture_visibility(
+    app: tauri::AppHandle,
+    session: tauri::State<'_, Session>,
+    cad: tauri::State<'_, crate::cad::CadState>,
+    visibility: FixtureVisibilityDto,
+) -> Answer<FixtureVisibilityDto> {
+    let saved = session.change(|document| {
+        document
+            .put_object(
+                "fixture_visibility",
+                &visibility.fixture_id.to_string(),
+                &serde_json::to_value(&visibility).map_err(|error| error.to_string())?,
+            )
+            .map_err(|error| error.to_string())?;
+        Ok(visibility.clone())
+    })?;
+    let revision =
+        session.with(|document| document.patch_revision().map_err(|error| error.to_string()))?;
+    crate::cad::emit_scene_state_delta(&app, &session, &cad, revision)?;
+    Ok(saved)
 }
 
 /// Set one preview value: a Simple-mode parameter, or a raw slot from Full DMX mode.

@@ -73,6 +73,30 @@ impl ShowStore {
             .map_err(Into::into)
     }
 
+    /// Reads optional, namespaced portable-show metadata without changing legacy files.
+    pub fn metadata_value(&self, key: &str) -> Result<Option<String>, StoreError> {
+        self.conn
+            .query_row("SELECT value FROM metadata WHERE key=?1", [key], |row| {
+                row.get(0)
+            })
+            .optional()
+            .map_err(Into::into)
+    }
+
+    /// Atomically writes operator-authored portable-show metadata and advances the show revision.
+    pub fn set_metadata_values(&self, values: &[(&str, &str)]) -> Result<(), StoreError> {
+        let transaction = self.conn.unchecked_transaction()?;
+        for (key, value) in values {
+            transaction.execute(
+                "INSERT INTO metadata(key,value) VALUES(?1,?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                params![key, value],
+            )?;
+        }
+        portable::bump_revision(&transaction)?;
+        transaction.commit()?;
+        Ok(())
+    }
+
     pub fn set_identity(
         &self,
         id: ShowId,
