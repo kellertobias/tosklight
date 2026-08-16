@@ -1,99 +1,307 @@
-# Command Line Reference
+# Command Line Reference & Programming your Show
 
-You can program the entire desk from the command line.
+## Intro
+You can program the entire desk from the command line or mixed with touch commands in the UI, encoder changes and inputs from the command line.
 
-With no active command, the command line contains the full editable default `FIXTURE` or `GROUP`. As soon as a selection is entered, those targets shorten to `F` and `G`: Fixture mode displays `F7 + F8`, while Group mode displays `G7 + G8`. Press `[GRP] [ENT]` by itself to change the persistent default; `[CLR]` and `[ESC]` restore its full word. After Plus, `[GRP]` selects the opposite target for that term, so Fixture mode can display `F7 + G8` and Group mode can display `G7 + F8`. Record operations are the exception: `[REC] [+] [GRP] 3` remains `RECORD + GROUP 3` because `[+]` selects the Merge operation and `GROUP` is the storage target.
+### Command Types
+Commands can be of the following types:
 
-## Inspect recent commands
+- Selecting Fixtures (many commands start with selecting fixtures, in the following sections we often abbreviate this with `<selection>`)
+- Programmer Actions (setting values or presets. If the value isn't relevant for explaination, we show `<value>` here in the manual.)
+- Altering Show Stage (e.g. recording, updating, deleting presets, cues and other things)
+- Altering Playback State
 
-Click or tap the Command Line to fold **Command Line History** upward from the command-line field. It lists this desk's 50 most recent completed commands newest-first, including whether each command was accepted or rejected, its result or error, execution time, and whether it came from the desk UI or attached OSC hardware. A current command error opens in this same surface, where it can be acknowledged without hiding the command that caused it. Software, keyboard, and attached-hardware input that shares the authoritative command line creates one entry when Enter is pressed.
+### Notation & Multiple Button Roles
+In the following, we indicate hardware buttons with `[BTN]`, touch commands with `{TOUCH}` and the text that then is shown on the command line `#> FIXTURE`. Defined blocks that usually represent multiple commands are denoted as `<section>`. Values are shown as regular text for simplicity. `12.34` means `[1][2][.][3][4]`. Computer-Keyboard keys are marked by `[KBD:KEY]`.
 
-Opening, closing, or inspecting history does not change the unfinished command in the normal command-line field. Choose **Reuse** to copy an earlier command into that field; it is not executed until you press `[ENT]`. Escape, the close button, and a pointer press outside the panel close it while preserving the current input.
+Another important concept to understand is that every button can have multiple functions depending on how often and long they are pressed and wether they are pressed together with shift.
+- Regular Press: You hold down and release a button in a regular typing speed, e.g. `[GRP]`. Once you held down the button the action is shown in the command line `#> GROUP`
+- Double-Press: If a button is pressed twice, it's indicated twice in this manual, e.g. `[GRP][GRP]`. The command line indicates the actual intention. When you press `[GRP]` the first time, it shows `#> GROUP`, once you pressed it the second time, it shows `#> DEGROUP`
+- Shift-Press: If a button is to be pressed with shift, we access the second function on that button. These are indicated with `[^GRP]`. You hold down shift, then press the desired button, then let go shift. The action is performed, once you click the actual button. If you need to press multiple buttons with shift directly after each other, you do not need to release shift in between. e.g. `[^GRP][^GRP]` can be either entered by holding down shift, then pressing `[GRP]`, then releasing shift, then holding down shift again, pressing `[GRP]` again, then releasing shift again; or you can hold down shift, press `[GRP]` twice and then release shift; the outcome is the same. The command line again indicates the intention, e.g. for `[^GRP]` it's `#> FIXTURE`, while `[^GRP][^GRP]`
+- Long-Press/ Hold: If a button is pressed long, it's indicated with a plus, e.g. `[PRELOAD+]` (which resets the preload store). Long presses do not need to be confirmed and directly trigger an action, such as opening a modal or resetting a value.
+
+
+### Command Line Abbreviations
+Entries in the command line are also sometimes abbreviated especially for `#> FIXTURE`, `#> GROUP`, `#> DEGROUP`, `#> DMX` (`#> F7`, `#> G1`, `#> g4`, `#> D2.4`). They abbreviate once the number gets typed.
+
+### Empty the command line
+To remove the last typed command, press the `[<--]` key (backspace). If the command line is already empty (only shows `#> FIXTURE` or `#> GROUP` this is a no-op)
+
+To empty the command line, press `[ESC]` once. This removes all typed commands from the command line, but keeps an eventual confirmed selection in tact.
+
+
+### Inspect recent commands
+
+The desk keeps track of all confirmed commands. To show that history, simply click or typ the command line to unfold **Command Line History** upward. It lists this desk's 50 most recent completed commands newest-first with the time it was executed and the user that executed it, as well as the amount of targets it was applied to.
+
+It also shows errors for the current command (and the current command only, since it will not be accepted if it has an error). There errors can be ackgnowledged. This window opens automatically when a command error occures.
+
+Opening, closing, or inspecting history does not change the unfinished command in the normal command-line field. Choose **Reuse** to copy an earlier command into that field; it is not executed until you press `[ENT]`. `[ESC]`, the close button, and a pointer press outside the panel close it while preserving the current input.
 
 History is transient desk state. Reconnecting to the same running desk restores its recent entries, while restarting the server starts a fresh history. Authentication-like command text containing password, passcode, token, secret, authorization, or API-key terms is retained only as a redacted entry.
 
-## Syntax in this document
-
-The examples below use the following notation:
-
-| Notation | Meaning |
-| --- | --- |
-| `<part>` | A part of a command that usually consists of multiple button presses. |
-| `<part*>` | A part entered on the touchscreen by selecting an element in the UI. |
-| `<part+>` | A software element or physical control, such as a playback button. |
-| `[KEY]` | Press a desk, console, or software-keypad button once. These use dark console keycaps. |
-| `[KEY][KEY]` | Press the same desk button twice. |
-| `[KEY+]` | Hold a desk button until its action occurs. |
-| `[KEY*]` | An optional desk-button press. It is accepted, but not required. |
-| `[KBD:KEY]` | Press a key on the computer keyboard. These use light keycaps marked **keyboard**. |
-| `1.3` | A specific value; in this example, the same as `[1][ . ][3]`. |
-| `\|` | Separates alternative command forms. |
-
 ## Available buttons and computer shortcuts
 
-The **Desk key** is the button shown on the touchscreen keypad or console. The **Computer keyboard** column is a shortcut, not another console command. Keyboard positions describe a German keyboard; the physical key position remains stable if the browser reports a shifted glyph.
+The **Desk key** is the button shown on the touchscreen keypad or console.
+The **Computer keyboard** column is a computer keyboard shortcut, not another console command.
+Keyboard positions describe the position of the key on a German keyboard. The software shortcuts are disabled while hardware is connected.
 
-| Desk key | Button | Computer keyboard | What it does |
-| --- | --- | --- | --- |
-| `[0-9]` | Numbers | `[KBD:NUMPAD 0-9]`, optionally `[KBD:0-9]` | Enter numeric values. Regular number-row shortcuts can be disabled in settings. |
-| `[TRU]` | Thru | `[KBD:ß]` | Define a range. |
-| `[+]` | Plus | `[KBD:NUMPAD +]` or `[KBD:+]` | Add to a range or offset a subset. |
-| `[-]` | Minus | `[KBD:NUMPAD -]` | Remove fixtures from a selection; after `[AT]`, subtract a value. |
-| `[AT]` | At | `[KBD:#]` | Separate the selection from the value. Press twice quickly for `[AT] 100 [ENT]`. |
-| `[TIME]` | Time | - | Give a value or recorded Cue an explicit fade time; press twice for `DELAY`. |
-| `[SHIFT]` | Shift | - | Toggle the persistent shifted keypad layer. Press Shift again to return to normal labels. |
-| `[.]` | Dot | `[KBD:.]` | Separate address/value parts or enter a decimal point. With a selection, press twice quickly for `[AT] 0 [ENT]`. |
-| `[HIGH]` | Highlight | `[KBD:ALT]` + `[KBD:H]` | Toggle Highlight and capture the current ordered selection as its frozen original set. |
-| `[PREV]` | Previous Highlight item | `[KBD:ALT]` + `[KBD:LEFT]` | While HIGH is active, single the previous original member and wrap at the start. |
-| `[NEXT]` | Next Highlight item | `[KBD:ALT]` + `[KBD:RIGHT]` | While HIGH is active, single the next original member and wrap at the end. |
-| `[ALL]` | Highlight all | `[KBD:ALT]` + `[KBD:A]` | Restore the frozen original set as the actual selection and put every member in Highlight. |
-| `[DIV]` | Division | `[KBD:´]` | Edit a selection or separate multiple values; press twice quickly for `OFFSET`. |
-| `[GRP]` | Group | `[KBD:SHIFT]` + `[KBD:^]` | Select a group; press twice to reference its fixtures instead. |
-| `[CUE]` | Cue | `[KBD:SHIFT]` + `[KBD:?]` | Separate a playback address from its cue number; press twice quickly for Cuelists. |
-| `[PLAYBACK]` | Playback | - | Enter a Playback command; press twice quickly for the Playback Page menu. |
-| `[OFF]` | Off | - | Enter Off; press twice quickly for Running & Output. |
-| `[SET]` | Set | `[KBD:HOME]` | Set a value, assign a control, or open configuration. |
-| `[REC]` | Record | `[KBD:END]` | Store cues, presets, and groups. Hold for record options. |
-| `[DEL]` | Delete | `[KBD:SHIFT]` + `[KBD:´]` | Delete a cue, preset, or other supported element. With attached hardware, press `[DEL]` and then an assigned encoder to release that encoder's scoped programmer value. |
-| `[MOV]` | Move | `[KBD:SHIFT]` + `[KBD:#]` | Move a cue or preset. |
-| `[CPY]` | Copy | `[KBD:SHIFT]` + `[KBD:+]` | Copy a cue or preset. |
-| `[ENT]` | Enter | `[KBD:ENTER]` | Confirm the command. |
-| `[PRE]` | Preload | `[KBD:^]` | Run Preload or Preload GO. Hold to clear Preload. |
-| `[CLR]` | Clear | `[KBD:DELETE]` | Clear the selection first, then the programmer. |
-| `[ESC]` | Escape | `[KBD:ESC]` | Close menus; with all menus closed, clear the command line. |
-| `[BACKSPACE]` | Backspace | `[KBD:BACKSPACE]` | Remove the last command token. |
-| `[SELECT]` | Select | `[KBD:SHIFT]` + `[KBD:Z]` | Enter the operator selection command. |
-| `[UND]` | Undo | - | Undo the latest programming change; playback execution and fader changes are unaffected. |
+| Desk key | Button     | Computer keyboard | What it does |
+| ---      | ---        | ---               | ---          |
+| `[^]`    | Shift      | `[KBD:SHIFT]`     | Shift into the second key command layer. On Touch, it toggles. |
+| `[0-9]`  | Numbers    | `[KBD:NUMPAD 0-9]`| Enter numeric values. Regular number-row shortcuts can be disabled in settings. |
+| `[ENT]`  | Enter      | `[KBD:ENTER]`     | Confirm the command. |
+| `[ESC]`  | Escape     | `[KBD:ESC]`       | Close menus; with all menus closed, clear the command line. |
+| `[UND]`  | Undo       | `[KBD:CTRL+Z]`    | Undo the latest programming change; playback execution and fader changes are unaffected. Not all desks have this as a dedicated button. |
+| `[<--]`  | Backspace  | `[KBD:BACKSPACE]` | Remove the last command token. |
+| `[AT]`   | At         | `[KBD:#]`         | Separate the selection from the value. Press twice for `[AT] 100 [ENT]`. |
+| `[.]`    | Dot        | `[KBD:.]`         | Separate address/value parts or enter a decimal point. Press twice for `[AT] 0 [ENT]`. |
+| `[+]`    | Plus       | `[KBD:NUMPAD +]`  | Add to a selection; increase a value |
+| `[-]`    | Minus      | `[KBD:NUMPAD -]`  | Remove from a selection; subtract a value. |
+| `[THRU]` | Thru       | `[KBD:ß]`         | Define a range or spread. |
+| `[DIV]`  | Division   | `[KBD:´]`         | Modulo operator on a selection (e.g. select every second). Divide value parts for direct value entry.  Press twice for `#> OFFSET` |
+| `[TIME]` | Time       | -                 | Give a value or recorded Cue an explicit fade time.  Press twice for `#> DELAY` |
 
-Playback shortcuts are `[KBD:PAGEUP]` and `[KBD:PAGEDOWN]` for playback pages. Hold both together to open the Playback Page menu without stepping. `[KBD:F1]` through `[KBD:F8]` operate paged Playbacks 1 through 8, and `[KBD:F9]` through `[KBD:F13]` operate Speed Groups A through E.
+| `[GRP]`  | Group      | `[KBD:SHIFT + ^]` | Select a group. Hold for showing the group built-in. Press twice for `#> DEGROUP`|
+| `[CUE]`  | Cue        | `[KBD:SHIFT + ?]` | Select or Target a particular cue. Press twice for `#> CUELIST` |
+| `[PBK]`  | Playback   | -                 | Select or Target a particular playback. Press twice for `#> PBKPAGE` |
 
-## Typical layout on the software desk
+| `[REC]`  | Record     | `[KBD:END]`       | Store cues, presets, and groups. Hold for record options. |
+| `[PRELD]`| Preload    | `[KBD:^]`         | Run Preload or Preload GO. Hold to clear Preload. |
+| `[CLR]`  | Clear      | `[KBD:DELETE]`    | First Click: Clear Selection, Second Click: Clear Programmer |
 
-![The real software keypad, command controls, and key arrangement](../assets/screenshots/software-keypad.png)
+| `[DEL]`  | Delete     | `[KBD:SHIFT + ´]` | Delete a cue, preset, or other supported element.  |
+| `[MOV]`  | Move       | `[KBD:SHIFT + #]` | Move a cue or preset. |
+| `[CPY]`  | Copy       | `[KBD:SHIFT + +]` | Copy a cue or preset. Not available on touch only, reach with `[^MOV]` |
+| `[SET]`  | Set        | `[KBD:HOME]`      | Set a non-output value, or open configuration.  Press twice for `#> ASSIGN` |
+| `[OFF]`  | Off        | -                 | Turn off the target; Press twice for opening "Running & Output" |
 
-The attached surface provides `[PROGRAMMER / PLAYBACK]`, `[ALIGN]`, `[HIGH]`, `[PREV]`, `[NEXT]`, `[ALL]`, `[PAGE UP]`, `[PAGE DOWN]`, `[GRP]`, `[CUE]`, `[PLAYBACK]`, `[OFF]`, `[TIME]`, `[DIFF]`, `[DIV]`, `[-]`, `[+]`, `[BACKSPACE]`, `[.]`, `[ENT]`, `[TRU]`, `[AT]`, `[0]`–`[9]`, `[DEL]`, `[CPY]`, `[MOV]`, `[SET]`, `[REC]`, `[PRE]`, `[CLR]`, `[ESC]`, and `[SHIFT]`. `[DIFF]` and `[DIV]` are separate physical controls.
 
-Only `[REC]` has a long-press action: hold `[REC]` for about 2.5 seconds for Record Settings, or hold `[SHIFT] [REC]` for Update Settings. No long-press action is assigned to `[PROGRAMMER / PLAYBACK]`, `[ALIGN]`, `[HIGH]`, `[PREV]`, `[NEXT]`, `[ALL]`, `[PAGE UP]`, `[PAGE DOWN]`, `[GRP]`, `[CUE]`, `[PLAYBACK]`, `[OFF]`, `[TIME]`, `[DIFF]`, `[DIV]`, `[-]`, `[+]`, `[BACKSPACE]`, `[.]`, `[ENT]`, `[TRU]`, `[AT]`, `[0]`–`[9]`, `[DEL]`, `[CPY]`, `[MOV]`, `[SET]`, `[PRE]`, `[CLR]`, `[ESC]`, or `[SHIFT]`.
+| `[HIGH]` | Highlight  | `[KBD:ALT + H]`   | Toggle Highlight and capture the current ordered selection as its frozen original set. |
+| `[PREV]` | Prev item  | `[KBD:ALT + <-]`  | While HIGH is active, single the previous original member and wrap at the start. |
+| `[NEXT]` | Next item  | `[KBD:ALT + ->]`  | While HIGH is active, single the next original member and wrap at the end. |
+| `[ALL]`  | All        | `[KBD:ALT + A]`   | Restore the frozen original set as the actual selection. |
 
-No shifted action is assigned to `[PROGRAMMER / PLAYBACK]`, `[HIGH]`, `[PREV]`, `[NEXT]`, `[ALL]`, `[PAGE UP]`, `[PAGE DOWN]`, `[GRP]`, `[OFF]`, `[TIME]`, `[DIFF]`, `[DIV]`, `[-]`, `[+]`, `[BACKSPACE]`, `[.]`, `[TRU]`, `[AT]`, `[DEL]`, `[CPY]`, `[MOV]`, or `[SET]`; those controls keep their primary action while Shift is active. Touch-only `[SHIFT] [MOV]` is the documented software-layout exception and performs Copy.
+| `[ENC]`  | Enc/Playbk | -                 | Toggle the screen between programmer/encoder and playbacks |
+| `[PGUP]` | Page Up    | `[KBD:PAGEUP]`    | Open Next Playback Page |
+| `[PGDN]` | Page Down  | `[KBD:PAGEDOWN]`  | Open Previous Playback Page. Hold `[PGUP]` and `[PGDN]` together to open the Playback Page menu |
+| `[ALIGN]`| Align      | -                 | Toggles between different alignment/ fan modes |
+| `[FADE]` | Prog. Fade | -                 | Enables/ Disables Programmer & Preload Fade time (only on hardware/ osc) |
 
-The remaining `[PRE]` and `[ESC]` buttons are in or next to the command-line display. Shortcuts are disabled while console hardware is connected. They also pause while an ordinary text input is focused; command inputs still receive command shortcuts, `[ENT]` confirms them, and `[ESC]` closes the active input or dialog.
+Hardware is also expected provide at least 4 attribute encoders and one navigational encoder with push.
 
-The num block places `[HIGH]`, `[PREV]`, `[NEXT]`, and `[ALL]` across the top. Below it the central rows are `TIME DIV − +`, `7 8 9 AT`, `4 5 6 THRU`, `1 2 3 CLEAR`, and `BACKSPACE 0 . ENTER`. The left column is `GROUP CUE PBK OFF`; `PBK` is the compact software label for `[PLAYBACK]`. A software desk with a keyboard uses `DELETE MOVE COPY SET` on the right and shows no virtual Shift; a touch-only desk uses `DELETE MOVE SET SHIFT`, where shifted Move is Copy. HIGH contains only the centered text `HIGH`: it uses the ordinary neutral key treatment while inactive and the same visibly lit armed/active treatment as SHIFT or SET while Highlight is active, including with an empty selection or safety-suppressed output. There is no Capture key and `Alt+C` has no Highlight action.
 
-The command-bar space between the command line and the REC/Preload controls contains no separate Highlight menu, selection summary, or suppression panel. While Highlight is active, its existing output-rate field replaces `DMX 44Hz` with a blue, blinking `Highlight` label; HIGH remains lit and the Fixture Sheet retains its complete-versus-stepped selection treatment. An actionable Highlight error opens a dedicated dismissible alert above panes and modal surfaces without changing the num-block grid or the HIGH key's size.
+### Second Layer Assignment
 
-The shifted Highlight-row combinations `[SHIFT] [ALL]`, `[SHIFT] [PREV]`, and `[SHIFT] [NEXT]`
-are unassigned. They do not change selection order or open configuration. Unshifted ALL, PREV, and
-NEXT retain their Highlight stepping behavior.
+The following table shows the second layer assignment, the user can reach with holding down `[^]`
 
-On the software desk, **Programmer Fade** occupies exactly two button columns by two complete button rows. Its label, current value, unit, and touch/value interaction remain visible, and the next command row follows after the ordinary num-block grid gap.
+| Desk key  | Button        | What it does |
+| ---       | ---           | ---          |
+| `[^0]`    | Preset All    | Open "All" preset built in or select an All preset |
+| `[^1]`    | Preset Int.   | Open "Intensity" preset built in or select an Intensity preset |
+| `[^2]`    | Preset Color  | Open "Color" preset built in, select a Color preset or set a Color value |
+| `[^3]`    | Preset Pos.   | Open "Position" preset built in, select a Position preset or set a Position value |
+| `[^4]`    | Preset Beam   | Open "Beam" preset built in, select a Beam preset or set a Beam value |
+| `[^5]`    | Dynamics      | Open "Dynamics" built in or select a dynamic preset |
+| `[^6]`    | Preset Shaprs | Open "Shapers" preset built in, select a Shapers preset or set a Shapers value |
+| `[^7]`    | Preset Focus  | Open "Focus" preset built in, select a Focus preset or set a Focus value |
+| `[^8]`    | Preset Ctrl   | Open "Control" preset built in, select a Control preset or set a Control value |
+| `[^9]`    | Preset Media  | Open "Media" preset built in, select a Media preset or set a Media value |
+| `[^AT]`   | FixAT         | Enters a Fixed AT value or preset |
+| `[^ENT]`  | Lock          | Lock or Unlock the Desk |
+| `[^ESC]`  | Undo          | Undo the last action |
+| `[^CLR]`  | Freeze        | Freeze (or when pressed twice Unfreeze) a fixture or selection |
+| `[^GRP]`  | Fixture       | Select a fixture in group mode. Hold for showing the fixture built-in.  Press twice for `#> DMX` |
+| `[^CUE]`  | Timecode      | Select or Target a particular timecode |
+| `[^PBK]`  | Macro         | Select or Target a particular macro |
+| `[^MOV]`  | Copy          | Copy a cue or preset. Same as the `[CPY]` button if it is available. |
+| `[^REC]`  | Update        | Updates cues, presets, and groups. Hold for update options. |
+| `[^PRELD]`| Clear Preload | Clear Preload. |
+| `[^ALIGN]`| Align Off     | Turns off Align mode |
 
-The hardware simulator keeps the same HIGH/PREV/NEXT/ALL column alignment but uses the two-column-by-two-row command area for **RECORD** and **PRELOAD GO**: each button occupies one column and both rows. Its fader area shows equal full-height **Programmer Fade** and **Cue Fade** faders directly beside each other. The simulator has no separate Highlight display or status panel; authoritative selection and step details remain on the main desk's Fixture Sheet and in protocol feedback.
+### Software (Touch) and suggested Hardware layout
 
-Except for `[KBD:SHIFT]` + `[KBD:Z]`, letter keys remain free for typing and future custom shortcuts.
+> [!danger] Content Missing
+> We are missing screenshots here
 
-The software shortcuts are disabled while hardware is connected.
+
+## Selecting fixtures and Groups
+
+Lamps are arranged in fixtures, heads and groups. Selections are always in the order you enter them; The earlier a lamp comes in the input, the earlier it comes in the selection.
+
+You can select lamps either by clicking in the fixture sheet to select individual lamps (and multiple, since the selection does not clear automatically), select ranges (by holding down shift after selecting the first lamp, then selecting the last lamp), or by selecting groups.
+Important: You cannot mix touch and hardware selection. Once you change from touch to hardware, a new selection is started.
+
+After you have selected your fixtures and groups with touch, you can directly select a preset with touch or hardware commands. If you want to assign a preset with touch to a hardware selection, you must either press `[ENT]` to finalize the selection or press `[AT]`. Pressing `[ENT]` allows you to directly manipulate the values via encoders, while pressing `[AT]` expects you to enter a value via the command line.
+
+### Selecting Ranges, Adding, Subtracting
+
+You can select either single fixtures `[1][ENT]`, multiple explicit fixtures `[1][+][3]`, ranges `[1][THRU][5]` or a combination of them.
+A `THRU` always has the highest specifitiy, meaning values always assume they belong to the `THRU` first:  `[1][THRU][3][+][11][THRU][13]` selects fixtures 1,2,3,11,12 and 13 in that order. `[5][THRU][1]` selects them in the descending order: 5,4,3,2,1.
+
+You can also subtract from a selection: `[1][THRU][5][-][2]` selects fixtures 1,3,4,5 and `[1][THRU][9]-[3][THRU][7]` selects 1,2,8,9. You can also add back to a selection: `[1][THRU][9]-[3][THRU][7][+][5]` selects 1,2,8,9,5 or subtract multiple ranges: `[1][THRU][9]-[3][THRU][4][-][6][-][7]` selects 1,2,5,8,9.
+
+Helpful to know: If a fixture does not exist, it is simply skipped when selecting a range. This includes the start and end fixture. So even if we only have fixtures 3,4,6 and 7, the following selection is a valid selection: `#> 1 THRU 9`
+
+### Selecting Heads
+
+Some fixtures contain multiple outputs, so called heads. they can either be addressed by their fixture ID (e.g. `#> FIXTURE 100`) which selects all heads or by only selecting their master head (usually e.g. the common pan or dimmer or the master layer for a media server) `#> FIXTURE 100.0`.
+
+If you want to select sub-heads, you address the individual heads with `#> FIXTURE 100.1` or ranges `#> FIXTURE 100.1 THRU 100.10`.
+
+If a range contains a sub-head, we automatically only select sub-heads (and fixtures without any sub-heads), but not master heads: `#> FIXTURE 100.1 THRU 109` selects all sub heads of fixtures 100 thru 109 but not their master heads. This helps quickly selecting heads for e.g. pixel effects.
+
+### Storing Groups
+
+To be able to reuse selections over and over, you can store groups. For that, you select the fixtures first, then press `[REC]` and then either a group tile in the group pool or stay fully in the command line: `[REC][GRP][22][ENT]`. This stores the fixtures including their selection order in that group.
+
+When the group is already occupied, you get asked if you want to overwrite the group (if recording via touch) or you can explicitly merge with the existing group: `[REC][+][GRP][22][ENT]`
+
+You can also remove a selection from a stored group. That only works via command line: `[REC][-][GRP][22][ENT]` removes the current selection from group 22.
+
+A full command line would be for example: `#> F1 THRU F12 + F15 + F17 RECORD GROUP 21` and then confirmed with `[ENT]`
+
+### Selecting Groups
+
+Selecting group works exactly like selecting fixtures.
+
+`[GRP][1][THRU][5][+][GRP][22]` selects groups 1,2,3,4,5 and group 22.
+You can also add fixtures to a group selection: `[GRP][22][+][42]` selects group 22 and fixture 42.
+You can but do not have to add the group keyword directly after a `THRU`, however, if you add groups together, the second selection needs the group keyword again, otherwise you select a fixture.
+
+You can also remove fixtures from a group selection `[GRP][21][-][15]` selects the group, but explicitly excludes fixture 15. You cannot subtract a group from another group though.
+
+### Dereferencing Groups
+Whenever you use groups for programming, the cues and presets you store reference the actual group. When the group is updated, all cues referencing that group update as well. If you do not want this behavior for a particular cue, you can dereference a group. That works by pressing `[GRP]` twice which then expands the given group into its individual fixtures (not visibly in the command line) and then everything is programmed directly on the fixtures. Changing the group afterwards then has no effect on these cues.
+
+A dereferenced group is shown with `#> DEGROUP` or `#> g` in the command line.
+
+### Division and Offsetting
+
+Now that we can selecting, store and referencing groups, understanding divisions and offsetting is helpful.
+You subset a selection by selecting only every n-th item with a custom offset. The keywords here are `DIV` and `OFFSET`. You can divide and offset any selection, not only groups.
+
+Imagine a group with 12 fixtures, `#> F1 THRU F12 RECORD GROUP 30`. We can now take that group and take every second lamp from the group: `[GRP] 30 [DIV] 2 [ENT]` we now have selected lamp 1,3,5,7,9 and 11. If we want the other selection, we add an offset `[GRP] 30 [DIV] 2 [DIV][DIV] 1 [ENT]`. This expands to `#> G30 DIV 2 OFFSET 1` in the command line and selects every 2nd +1 lamp, namely 2,4,6,8,10 and 12.
+
+This also works with fixture ranges: `#> F1 THRU 12 DIV 2` selects every second lamp from fixture 1 thru 12.
+
+Since dividing by 2 is the most common usecase and offsetting by one as well, we can omit the 2 and 1: `#> G30 DIV OFFSET` is the same as `#> G30 DIV 2 OFFSET 1`. We however also can divide by larger values then 2, e.g. `#> G30 DIV 3 OFFSET 1` which would select 2,5,8 and 11. Its important that the OFFSET value must always be byat least 1 smaller than the DIV value, otherwise the command is erroneous.
+
+When storing a division or offset as a group again, this usually references the group. So if you update the original group, this updates the referenced group.
+
+### Selection Shortcuts
+
+For speed, there are shortcuts for selecting large ranges:
+- `#> THRU ` selects all fixtures
+- `#> 10 THRU ` selects all fixtures with IDs larger or equal than 10
+- `#> THRU 99 ` selects all fixtures with IDs smaller or equal than 99
+
+### Command Line Default Mode
+The command line can be in two default modes. Fixture selection and Group selection. In Fixture mode, the user does not need to (but may) enter the `FIXTURE` keyword manually, while in group mode, the user does not need to enter the `GROUP` keyword manually.
+
+In fixture mode `[1] + [4]` automatically becomes `#> F1 + F4`, while in group mode the same input becomes `#> G1 + G4`.
+
+To toggle between the modes, press `[GRP][GRP][ENT]`. You can see in which mode you are by checking the keyword that is shown in an empty command line. In fixture mode it shows `#> FIXTURE` and vice versa.
+
+### Clearing a Selection
+
+Press `[CLR]` once to clear the current selection explicitly without clearing its programmed values. If programmer values remain, the Clear button blinks; press `[CLR]` again to clear those programmer values.
+
+
+## Setting Values and Recording Presets
+
+Now that you understand how we can make a selection and record groups, we use `<selection>` for all the different types we can make a selection and can start assigning values to the lamps. The easiest way is assinging intensity (dimmer) values: `#> <selection> AT <intensity>`, e.g. `[1][AT][100][ENT]` this sets fixture 1 to 100% dimmer value. You can also set fractal values, e.g. `#> <selection> At 12.34` which sets the intensity to 12.34%
+
+Alternatively, you can also select the fixtures or groups and then turn the intensity encoder. This sets the value as well. Encoders work incrementally/ decrementally; They do not set the absolute value of all fixtures, but usually increase the value the fixture currently has by 1 per ratchet. If you want to do finer adjustments, hold `[^]` while turning the encoder. Increasing / Decreasing intensity also works via command line: `<selection>[AT][+] 10` adds 10% to the current values of intensity of the selected fixtures, while `<selection>[AT][-] 10` removes 10%.
+
+You can set more than just dimmer values. If you switch the encoder to the encoder attribute group of e.g. "color", the first encoder is usually the value for "red", the second the value for "green", then "blue", and so on. Clicking the encoder attribute group again sometimes reveals more pages. For color this for example could be a color wheel.
+
+You can also access other encoder attribute groups by pressing and holding `[^0]` through `[^9]`. The fastest way however is still the touch buttons.
+
+Whenever you changed a value, the selection phase of the command is over and when you now select a group or fixture via either UI or command line, this starts a new selection.
+
+### Setting Non-Intensity values
+
+The default after `[AT]` is the intensity value. You however also can set other values directly. This works by typing `<selection> [AT][^2] <red>[DIV]<green>[DIV]<blue>`. The order is always the same as the encoders. Values you do not want to change can be left empty (e.g. `<selection> [AT][^2] [DIV][DIV]100` only sets blue to 100%) Which number is which encoder group can be taken from [[Second Layer Assignment]].
+
+Here you can also increase/ decrease: `<selection> [AT][^2] [+] 10 [DIV][+] 0 [DIV][-] 10` adds 10 to red, does not change green and subtracts 10 from blue.
+
+### Value Ranges
+
+If you want to spread values across multiple selected fixtures, you can use the `[THRU]` keyword: `<selection> [AT] 10 [THRU] 40` sets the first fixture in the selection to 10% and the last to 40% and the fixtures in between to levels between. You can also chain multiple `THRU` blocks, e.g. `<selection> [AT] 10 [THRU] 100 [THRU] 10`. This sets the outermost selected fixtures to 10% and the innermost to 100%.
+
+
+What's important is that every value you provide in a spread range always is taken by at least one lamp. This means that you cannot provide more values than lamps.
+
+You can also use spread ranges for other values, e.g. `<selection>[AT][^2] 100 [DIV] 0 [DIV] 0 [THRU] 0 [DIV] 100 [DIV] 0`. This lets the lamps range from red via yellow to green.
+
+
+### Recording a Preset
+
+Now that we have created a look, we might want to be able to recall this look later. For this, we can use presets.
+
+There are two different types of presets:
+- "All Presets" store all attribute types that are currently in the programmer. This can be used to store full looks.
+- "Attribute Group Presets" (e.g. a Color Preset or Intensity Preset) only store attributes of the given attribute group. That means that e.g. a color preset only stores color values, but never intensity values.
+
+After you have set the fixtures onto the values you want to store, you can record your preset with `[REC]` and then touching a preset tile in one of the preset pools. Alternatively you can use `[REC][^2] 22` for e.g. storing the color preset 22. When the preset is already recorded, the touch version asks you if you want to overwrite the existing preset, while the command line version directly overwrites it. If you wan to merge/ append, use `[REC][+][^2] 22` this adds.
+
+You can also remove the current values from a preset. `[REC][-][^2] 22` this removes the active attribues from the given preset.
+
+More about the preset pool can be found in the chapter about the preset pane.
+
+### Recalling a Preset
+
+Once you have stored your look into a preset, you can recall that preset.
+
+You can recall a preset for only your current selection by pressing the preset after you have a selection. This applies the preset to all fixtures from your selection for which you have recorded that preset. This also works from the command line by pressing the corresponding attribute group button twice: `[^2][^2]` shows then `#> COLOR PRESET` you now can enter the number of the preset you want, e.g. `#> <selection> AT COLOR PRESET 22` followed by `[ENT]`. The list of attribute group button mappings can be found in [[Second Layer Assignment]].
+
+You can also spread preset ranges: `#> <selection> AT COLOR PRESET 22 THRU 24 [ENT]` if e.g. color preset 22 is red and 24 is green, the selected fixtures now produces a stable gradient from red to green. The command means: take values from 22 and 24 and interpolate a gradient. It does not mean trigger preset 22, 23 and 24. This also works with touch: once you have your selection, touch the first preset, then press the `[THRU]` button, then the next preset. You can chain multiple of these and they are applied immediately and do not require `[ENT]`.
+
+If the selected presets from a spread range do not have an overlap, the fixtures that are missing in one of the presets participating at that spread range section do not have a gradient, but only the single value from the preset they are included in.
+
+There is also a second way to recall a preset, a full preset recall. This works by having no selection and an empty command line and then directly start with the preset recall command: `[^2][^2] 22 [ENT]`. This loads the selection of all fixtures in that preset and applies the preset. It also works in the preset pane via touch: if you have no selection, the first touch on a preset tile activates the selection, the second one applies the preset. For full recall, spreading is not possible.
+
+### Programmer Fade Time
+
+When recalling a preset, the programmer fade time applies. This is the time from triggering the preset until the last lamp has fully faded to the selected value. The button below the fade time slider can toggle between off and on. Long pressing it opens a modal where you can select to which additional changes this fade time applies. By default, it only applies to preset selections and Preload GO, but you can also enable/ disable:
+- Preload Go
+- Virtual Playback GO/Toggle
+- Physical Playback Go/Toggle (for playbacks with fader)
+- Physical Playback Go/Toggle (for playbacks with only buttons)
+
+You can also configure the maximum value of that fader and wether the fade is linear or exponential (e.g. lower half 0s-1s upper half 1s-10s)
+
+If you have stored individual fade or delay time spreads and this active for the given category, the fade time decides the maximum time of fade + delay for the longest fade in the given transition. All other times are then scaled accoding to the ratio.
+
+### Recording Fade and Delay Times
+
+You can also store fixed fade and delay time in your presets (and also cues). This works directly from the programmer:
+
+`<slection> [AT] <values> [TIME] 3` which shows `#> <slection> AT <values> FADE 3s` in the command line makes the values fade with 3 seconds. Pressing `[TIME]` a second time, makes it `#> …DELAY`. A delay is the wait time from the start of the preset/ cue until the fade or value change happens.
+
+You can either have multiple individual commands after one another with different values and then store this as a preset (e.g. Fixture 1 goes to 100% with a 10s fade, then fixture 2 has a 5s delay and a 5s fade until it goes to 0%) but you can also use spread operators in fade and delay times: `#> G1 AT 100% FADE 0s THRU 5s DELAY 5s THRU 0s`. This lets the first fixture in the group wait 5s and then snap (0s) to 100%, while the last fixture in the group does not wait and immediately fades over 5s. The fixture in between interpolate their delay and fade time.
+
+You can now store this onto a preset or cue.
+
+Hint: As you have read in the earlier section - if programmer fade time is enabled, recalling a preset scales the selected fade times. This also applies if the programmer fade time slider is at 0s; In that case changes are immediate.
+
+## Recording Cues
+
+We finally arrived at the point where we are able to
+
+### Inserting Cues
+
+### Updating Cues
+
+### Moving and Copying Cues
+
+## Blind Programming & Preload GO
+
+## Dynamics and FixAT
+
+
+## Freezing
 
 `[SHIFT] [CLR]` enters **FREEZE** on the shared command line. Enter a Fixture or Group selection and
 press `[ENT]` to capture a full Freeze. A Group resolves to its current fixtures before the action;
@@ -102,13 +310,6 @@ Freeze ignores later Programmer, Cue, Dynamic, direct-control, Group Master, Gra
 Blackout changes. Removing it immediately reveals the current underlying state; Freeze does not
 rewrite that state.
 
-For a partial Freeze, enter **FREEZE**, the selection, and one or more family keys before `[ENT]`:
-`[SHIFT] [1]` Intensity, `[SHIFT] [2]` Color, `[SHIFT] [3]` Position, and `[SHIFT] [4]` Beam.
-These mappings apply while FREEZE or UNFREEZE is pending. Otherwise, with a current selection,
-Shift+1 through Shift+4 begin the Intensity, Color, Position, or Beam Preset category. Without a
-selection, Shift+1 through Shift+9 select the Intensity, Color, Position, Beam, Dynamics, Shapers,
-Focus, Control, or Media encoder page. Shift+5 through Shift+9 deliberately do not create a Preset
-command when a selection exists.
 
 To remove Freeze, keep `[SHIFT]` held and press `[CLR]` twice, then release `[SHIFT]`. The command
 line shows **UNFREEZE**. Enter a selection and `[ENT]` to remove the complete Freeze state, or add
@@ -121,10 +322,14 @@ the frozen family names: Intensity, Color, Position, and Beam. Partial families 
 Master, Grand Master, and Blackout behavior. Setting a full Freeze replaces partial-family metadata;
 removing the full Freeze therefore removes every family Freeze on that target.
 
-`5` remains Dynamics. Freeze does not change dotted `AT` Preset addresses, decimal/comma literal
-entry, or direct attribute entry.
-
-The touch `[SHIFT]` button remains active until it is tapped again. A physical computer keyboard Shift key is momentary: the Shift layer is active only while the key is held, matching the attached hardware button. While Shift is active, every affected software button keeps its ordinary label and adds the shifted action beneath it at half size: Align adds Off, Cue adds Timecode, PBK adds Macro, Escape adds Undo, Enter adds Lock or Unlock, Clear adds Freeze or Unfreeze, Preload Go adds Preload Go Clear, Record adds Update, and touch Move adds Copy. Shifted Clear is a stable Freeze or Unfreeze action and does not use Clear's blinking programmer-value warning. Actions without a shifted assignment keep their ordinary label and behavior.
+### Freezing individual attribues only
+For a partial Freeze, enter **FREEZE**, the selection, and one or more family keys before `[ENT]`:
+`[SHIFT] [1]` Intensity, `[SHIFT] [2]` Color, `[SHIFT] [3]` Position, and `[SHIFT] [4]` Beam.
+These mappings apply while FREEZE or UNFREEZE is pending. Otherwise, with a current selection,
+Shift+1 through Shift+4 begin the Intensity, Color, Position, or Beam Preset category. Without a
+selection, Shift+1 through Shift+9 select the Intensity, Color, Position, Beam, Dynamics, Shapers,
+Focus, Control, or Media encoder page. Shift+5 through Shift+9 deliberately do not create a Preset
+command when a selection exists.
 
 ## Moving and copying Cues
 
@@ -136,116 +341,6 @@ Address a Cue through its pool playback number: `[CPY] [SET] 1 [CUE] 2 [AT] [SET
 
 Copy retains the source Cue. Move removes it and recalculates tracking from the remaining stored Cues. The Plain/Status choice independently controls the destination contents.
 
-
-## Selecting fixtures
-
-A number without `[GRP]` always identifies a fixture. `[ENTER]` completes the selection. Fixture IDs that do not exist are ignored; they do not make the command fail.
-
-### Building a selection across the desk
-
-Selection is additive until you replace or clear it. You can select one fixture, then another fixture, then a group, and all of them remain selected. This works the same way with Stage clicks, a Stage marquee, Fixture Sheet rows, the Groups pool, and command-line selections. You do not need to hold a modifier key when moving between those surfaces.
-
-Each additional selection behaves like adding another range with `[+]`. Fixtures and groups can be combined, and overlapping fixtures appear only once in the resolved selection. Group selections remain identifiable as group references.
-
-This open selection gesture belongs to the desk, not to the logged-in user globally. Two sessions attached to the same desk share the same consecutive clicks, ordered source references, and partial command exactly as if every button had been pressed on one physical console. A different desk used by the same operator may build a different selection. Once a value is confirmed, that fixture- or Group-scoped value lands in the operator's shared programmer and is visible from all of that user's sessions; it does not copy the originating desk's partial button or selection gesture to another desk.
-
-The selection stays current after you add or change a programmer value, move an encoder, or recall a preset. That lets you continue directly: `1 [+] 2 [AT] 75 [ENTER]`, then `[AT] 50 [ENTER]`, changes the same two fixtures from 75% to 50%.
-
-The next fixture or group selection replaces the current targets unless it begins with `[+]`. For example, after `1 [+] 2 [AT] 75 [ENTER]`, entering `3 [AT] 80 [ENTER]` leaves fixtures 1 and 2 at 75% and sets only fixture 3 to 80%. Entering `[+] 3 [AT] <value-or-preset> [ENTER]` instead continues the selection, so fixtures 1, 2, and 3 receive the new value or preset.
-
-Press `[CLR]` once to clear the current selection explicitly without clearing its programmed values. If programmer values remain, the Clear button blinks; press `[CLR]` again to clear those programmer values.
-
-| Selection | Command | Result |
-| --- | --- | --- |
-| One fixture | `1 [ENTER]` | Select fixture 1. |
-| Every fixture | `[FIXTURE] [THRU] [ENTER]` | Select every existing fixture in fixture-number order, including unpatched fixtures. |
-| Complete multi-head fixture | `100 [ENTER]` | Select master 100.0 followed by every child head. |
-| Multi-head masters | `100.0 [THRU] 110.0 [ENTER]` | Select only the masters of fixtures 100 through 110. |
-| Multi-head children | `100 [THRU] 110 [ENTER]` | Select every child head in the range, excluding the masters. |
-| One child head | `100.2 [ENTER]` | Select only child head 2 of fixture 100. |
-| Fixture range | `1 [THRU] 10 [ENTER]` | Select every existing fixture with an ID from 1 through 10. |
-| Combined ranges | `1 [THRU] 10 [+] 20 [THRU] 30 [ENTER]` | Select every existing fixture from 1 through 10 and from 20 through 30. |
-| Remove from a range | `1 [THRU] 10 [−] 5 [ENTER]` | Select fixtures 1 through 10 except fixture 5. |
-
-`[+]` extends the current selection. All parts joined with `[+]` form one ordered selection for any subsequent subsetting operation.
-
-`[−]` removes the fixtures or ranges that follow it from the selection built on its left. It can be repeated, and the remaining ordered selection is then passed to `[DIV]`.
-
-Child heads use one-based sub-addresses, while `.0` identifies the shared master. A standalone multi-head fixture ID expands to its master and children. A bare range expands multi-head fixtures to their children so effects run across their individually controllable light sources; a `.0` range selects the masters instead.
-
-### Subsetting a selection
-
-`[DIV]` selects fixtures by their position in the full ordered selection, not by their fixture ID. A missing divisor defaults to 2.
-
-| Subset | Command | Result |
-| --- | --- | --- |
-| Every second fixture | `<selection> [DIV] 2 [ENTER]` | Select positions 1, 3, 5, and so on. `<selection> [DIV] [ENTER]` is equivalent. |
-| Every third fixture | `<selection> [DIV] 3 [ENTER]` | Select positions 1, 4, 7, and so on. |
-| Offset a subset | `<selection> [DIV] 2 [+] 1 [ENTER]` | Select positions 2, 4, 6, and so on. |
-| Other offsets | `<selection> [DIV] 3 [+] 1 [ENTER]`<br>`<selection> [DIV] 3 [+] 2 [ENTER]` | Shift the starting position of every-third-fixture selection by one or two positions. |
-| Even-selection shortcut | `<selection> [DIV][DIV] [ENTER]` | Shortcut for `<selection> [DIV] 2 [+] 1 [ENTER]`. |
-
-For example, when `<selection>` is `1 [THRU] 10 [+] 20 [THRU] 30`, `[DIV]` continues through that entire combined selection rather than restarting at fixture 20.
-
-### Groups and group references
-
-`[GRP] <group-number>` selects a group by reference. The reference remains connected to the source group: if the fixtures in the source group change later, programming and derived groups that retain this reference change with it.
-
-| Group selection | Command | Result |
-| --- | --- | --- |
-| Reference a group | `[GRP] 1 [ENTER]` | Select group 1 as a live reference. |
-| Reference a subset | `[GRP] 1 [DIV] 2 [ENTER]` | Select every second fixture in group 1 while retaining the group reference. |
-| Dereference a group | `[GRP][GRP] 1 [ENTER]` | Select the fixtures currently in group 1 as individual fixtures. Later changes to group 1 do not affect this selection. |
-
-Double-pressing a group in the Groups pool also dereferences it. A group recorded from a referenced or subdivided group retains that relationship; a group recorded from a dereferenced selection stores the individual fixtures instead.
-
-## Setting values
-
-`<selection> [AT] <value> [ENTER]` assigns a value to the selection. A plain number is an intensity value from 0 through 100. A value containing `[ . ]` references a preset.
-
-Pressing a physical encoder normally opens its **Set Value** modal. When that parameter has a
-programmer value for the current selection, **Release** in the modal removes that programmer
-ownership; it does not set the value to zero. On attached hardware, `[DEL]` followed by that
-encoder's push performs the same release directly and then clears `[DEL]`. If the encoder has no
-scoped programmer value, the push does not create or release a value and `[DEL]` remains armed.
-
-| Value | Example | Result |
-| --- | --- | --- |
-| Intensity | `<selection> [AT] 75 [ENTER]` | Set the selected fixtures to 75% intensity. |
-| Intensity spread | `<selection> [AT] 0 [THRU] 50 [ENTER]` | Set the first selected fixture to 0%, the last to 50%, and interpolate equal steps over the ordered selection. |
-| Relative increase | `<selection> [AT] [+] 5 [ENTER]` | Add five percentage points to each selected fixture's current intensity. |
-| Relative decrease | `<selection> [AT] [−] 5 [ENTER]` | Subtract five percentage points from each selected fixture's current intensity. |
-| Mixed preset | `<selection> [AT] 0.1 [ENTER]` | Apply Mixed preset 1. |
-| Intensity preset | `<selection> [AT] 1.1 [ENTER]` | Apply Intensity preset 1. |
-| Color preset | `<selection> [AT] 2.1 [ENTER]` | Apply Color preset 1. |
-| Position preset | `<selection> [AT] 3.1 [ENTER]` | Apply Position preset 1. |
-| Beam preset | `<selection> [AT] 4.1 [ENTER]` | Apply Beam preset 1. |
-
-The dotted value is a preset address, not one global decimal or object ID: the part before the dot is the preset type and the part after it is that pool's local preset number. Every family has its own numbering, so Color preset `2.1` and Position preset `3.1` are both preset 1 in their respective pools and can coexist.
-
-Relative values are calculated independently for every selected fixture and clamped to the attribute's valid range. A live Group reference must be dereferenced with `[GRP][GRP]` before using a relative value so the per-fixture results can be retained.
-
-A spread follows the authoritative selection order, including a separately completed selection followed by `[AT] 0 [THRU] 50 [ENTER]`. Two endpoints create equal intervals from the first selected fixture to the last; additional `[THRU]` levels create evenly distributed control points. A single selected fixture takes the first level. A live Group retains the spread relative to its ordered membership, while a fixture or dereferenced selection stores the resulting fixture-scoped values.
-
-An attribute touch encoder is a relative control, not a fader. Its card contains `+10`, `+1`, **Set Value**, `−1`, and `−10` from top to bottom. A step tap changes every selected fixture by that many percentage points while preserving mixed-value offsets and clamping at the attribute bounds. Holding and dragging above or below the start point changes continuously; greater displacement increases the rate. Mouse wheel and trackpad scrolling use one-point steps, with Shift selecting ten-point steps. Indexed values that do not have a safe relative mapping are visibly constrained instead of being guessed.
-
-The center **Set Value** zone opens deliberate absolute entry. Its title bar keeps **Direct input**
-and **Indexed Presets** under the selected attribute. Direct input contains the absolute fader,
-number block, numeric entry, and `THRU` spread. Indexed Presets lists fixed, indexed, and typed
-control functions authored by the selected fixtures' embedded profile revisions. A compatible
-same-named choice is shown once for all supported fixtures; a partial or incompatible choice
-identifies its exact fixture scope. These are fixture functions, not numbered show Presets.
-
-With multiple fixtures selected, Direct input accepts `0 [THRU] 50 [ENTER]` and spreads that
-attribute over the ordered selection exactly like the command line. Relative steps, continuous
-encoder movement, fixed/indexed choices, attached hardware/OSC encoder turns, and channel faders
-update the encoder target, Fixture Sheet, Stage, and physical output immediately even when
-Programmer Fade is non-zero. **Direct entry uses Programmer Fade** controls deliberate absolute
-values entered through encoder Set Value or command-line `AT`; disabling it makes those entries
-immediate too. Immediate operations store no explicit zero-second timing override, so a later Cue
-still uses its normal Cue or playback timing fallback. Momentary,
-timed, latched, multi-channel, and hazardous control functions retain their authored action and
-safety behavior. Preset recall and **PRELOAD GO** retain Programmer Fade where documented.
 
 ### Dynamics and Fixed At
 
