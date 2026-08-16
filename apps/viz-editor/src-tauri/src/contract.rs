@@ -36,7 +36,7 @@ pub struct SnapshotDto {
 pub struct ChangeDto {
     pub show_id: Uuid,
     pub show_revision: u64,
-    pub patch_revision: u64,
+    pub(crate) patch_revision: u64,
     pub event_sequence: Option<u64>,
     pub fixtures: Vec<FixtureDto>,
     pub removed_fixture_ids: Vec<Uuid>,
@@ -278,11 +278,11 @@ pub struct ProfileRevisionDto {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MutationDto {
-    pub request_id: String,
+    pub(crate) request_id: String,
     #[serde(default)]
-    pub fixtures: Vec<FixtureDto>,
+    pub(crate) fixtures: Vec<FixtureDto>,
     #[serde(default)]
-    pub remove_fixture_ids: Vec<Uuid>,
+    pub(crate) remove_fixture_ids: Vec<Uuid>,
 }
 
 impl From<PatchSnapshot> for SnapshotDto {

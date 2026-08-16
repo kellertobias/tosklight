@@ -74,6 +74,14 @@ pub struct VisualizerViewSnapshot {
     pub views: Vec<VisualizerView>,
 }
 
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct SelectionSnapshot {
+    #[serde(default)]
+    pub revision: u64,
+    #[serde(default)]
+    pub selected_fixture_ids: Vec<uuid::Uuid>,
+}
+
 /// One target's view.
 ///
 /// The named mode and quality arrive as their wire spellings and are looked up rather than

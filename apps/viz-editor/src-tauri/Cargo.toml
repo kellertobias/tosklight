@@ -28,6 +28,7 @@ tokio.workspace = true
 
 [dev-dependencies]
 # The demo tests open the real generated demo show rather than a stand-in, so they build one.
+light-show = { path = "../../../crates/shared/show" }
 viz-demo = { path = "../../../crates/viz/demo" }
 
 [features]

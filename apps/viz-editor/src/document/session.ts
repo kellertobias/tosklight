@@ -251,6 +251,8 @@ export const documentSession = {
 	clearPreview: (fixtures: readonly string[] = []) =>
 		invoke<void>("clear_preview", { fixtures }),
 	previewIsActive: () => invoke<boolean>("preview_is_active"),
+	openCad: () => invoke<void>("open_cad"),
+	openVisualizer: () => invoke<void>("open_visualizer"),
 	/**
 	 * Report that the document surface is on screen.
 	 *

@@ -98,6 +98,37 @@ machine, so a rig with two editors is two entries an operator can tell apart.
 The document served to the network is read-only, and it is the same read-only document the
 Visualizer itself reads. There is no route into the editor that changes anything from outside it.
 
+## Open CAD: the first Rig Planner slice
+
+With a show open, **Open CAD** sits immediately above **Open Viz** in the Viz Editor. It opens a
+second window of the same PreViz application and draws the canonical rig as a fast 2D plan. This
+is the first operator-facing slice of the broader Rig Planner described by TL-60; it is not the
+complete Rig Planner and does not yet provide paperwork, cable planning, structural calculations,
+MVR/CAD exchange, or high-quality rendering.
+
+Each CAD tile has a dark background. Ordinary fixture and venue drawings are white or grey, and
+the shared selection is red. Choose **Top down**, **Left to right**, **Right to left**, **Front to
+back**, or **Back to front** independently for each tile. **Fit**, pan, and zoom also belong to the
+individual tile. **Split H** and **Split V** split any tile again, so one side can remain whole
+while the other is divided into additional views. The layout and tile cameras are restored as an
+editor-workspace preference and never become fixture coordinates in the show.
+
+Selection is shared by stable fixture identity. Selecting in Patch & Venue highlights the same
+object in every CAD tile; selecting in CAD brings it back to Patch & Venue. A light drawing always
+includes a short output-direction line, but CAD deliberately draws no beams, fog, shadows, media,
+or photorealistic lighting.
+
+The red two-axis gizmo moves the shared selection in the visible plane. Drag an arrow for one
+axis, or drag its centre/body for both axes. Multiple selected fixtures and venue objects retain
+their spacing. The drag is previewed in the tile and committed once through the show's
+revision-checked Patch boundary; one drag is one undo step. If the rig changed first, the drag is
+rejected and the authoritative positions are restored instead of overwriting newer work.
+
+**Snap to declared truss mounts** is deliberately basic in this slice. When a moved fixture enters
+the conservative attraction range of a truss or pipe member, it snaps to that member and stores an
+explicit fixture, member, mounting-point, and fixture-local-transform relationship. Advanced
+spacing and distribution tools remain later Rig Planner work.
+
 ## When there is nothing to offer
 
 Discovery is a convenience and never a requirement. A network with no discovery, a firewall that

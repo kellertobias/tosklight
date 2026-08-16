@@ -161,6 +161,15 @@ impl PlanningDocument {
         command: PatchFixturesCommand,
     ) -> Result<PatchFixturesResult, DocumentError> {
         let expected = self.patch_revision()?;
+        self.patch_fixtures_at(command, expected)
+    }
+
+    /// Applies a Patch command only at the revision the editing surface actually read.
+    pub fn patch_fixtures_at(
+        &self,
+        command: PatchFixturesCommand,
+        expected: u64,
+    ) -> Result<PatchFixturesResult, DocumentError> {
         let context = self
             .context()
             .with_request_id(Uuid::new_v4().to_string())
@@ -194,6 +203,11 @@ impl PlanningDocument {
             .map_or(light_core::Revision::default(), |object| object.revision);
         store.put_object(kind, id, body, expected)?;
         Ok(())
+    }
+
+    /// Deletes one optional stored object. Missing objects are an idempotent no-op.
+    pub fn delete_object(&self, kind: &str, id: &str) -> Result<bool, DocumentError> {
+        Ok(self.store()?.delete_object(kind, id)?)
     }
 
     /// The portable media layout authored by the standalone Viz product.

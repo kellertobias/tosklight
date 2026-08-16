@@ -741,6 +741,25 @@ fn every_preview_change_moves_the_revision() {
     assert!(after_clear > after_set, "clearing moved it again");
 }
 
+#[tokio::test]
+async fn editor_selection_is_identity_based_live_state_for_the_renderer() {
+    let (document, path, fixture_id) = preview_document("selection-live");
+    let source = SceneSource::new(document);
+    let before = std::fs::read(&path).expect("show bytes");
+    let start = source.selection_snapshot().revision;
+
+    source.set_selection(vec![fixture_id]);
+
+    let snapshot: crate::wire::SelectionSnapshot = get(&source, "/api/v2/selection").await;
+    assert!(snapshot.revision > start);
+    assert_eq!(snapshot.selected_fixture_ids, [fixture_id]);
+    assert_eq!(
+        std::fs::read(path).expect("show bytes"),
+        before,
+        "selection became portable show data"
+    );
+}
+
 /// The show file is what the operator saves. A preview look must never reach it.
 #[tokio::test]
 async fn preview_values_never_enter_the_document() {

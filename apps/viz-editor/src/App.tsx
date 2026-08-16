@@ -17,6 +17,7 @@ import { PreviewControls } from "./PreviewControls";
 import { documentSession, sessionPatchLayers } from "./document/session";
 import type { DocumentSummary } from "./document/session";
 import { TauriPatchTransport } from "./document/transport";
+import { cadSession } from "./cad/session";
 
 const DEFAULT_LAYER: PatchLayer = { id: "default", name: "Default", order: 0 };
 
@@ -31,6 +32,9 @@ export function App() {
 	const [reload, setReload] = useState(0);
 	// What the patch sheet has selected, and what the preview controls therefore drive.
 	const [selected, setSelected] = useState<readonly string[]>([]);
+	const [selectionRevision, setSelectionRevision] = useState(0);
+	const [openingCad, setOpeningCad] = useState(false);
+	const [openingViz, setOpeningViz] = useState(false);
 	// The rig itself, for the preview controls: the sheet owns the table, this owns the values.
 	const [fixtures, setFixtures] = useState<readonly PatchFixtureProjection[]>([]);
 	// The profile revisions the show embedded, which are what Full DMX reads its slots from.
@@ -48,6 +52,42 @@ export function App() {
 		// a window that opens white reports nothing, which is exactly the failure to catch.
 		documentSession.surfaceReady().catch(() => undefined);
 	}, []);
+
+	useEffect(() => {
+		let unlisten: (() => void) | undefined;
+		cadSession.snapshot().then((snapshot) => {
+			setSelected(snapshot.selectedIds);
+			setSelectionRevision(snapshot.selectionRevision);
+		}).catch(() => undefined);
+		cadSession.onSelectionDelta((delta) => {
+			setSelected(delta.selectedIds);
+			setSelectionRevision(delta.revision);
+			if (delta.selectedIds.length) setWorkspace("patch");
+		}).then((stop) => { unlisten = stop; }).catch(() => undefined);
+		let sceneUnlisten: (() => void) | undefined;
+		cadSession.onSceneDelta(() => loadFixtures()).then((stop) => {
+			sceneUnlisten = stop;
+		}).catch(() => undefined);
+		return () => {
+			unlisten?.();
+			sceneUnlisten?.();
+		};
+	}, []);
+
+	async function replaceSelection(ids: readonly string[]) {
+		setSelected(ids);
+		try {
+			const delta = await cadSession.replaceSelection(selectionRevision, ids);
+			setSelectionRevision(delta.revision);
+			setSelected(delta.selectedIds);
+		} catch (reason) {
+			report(reason);
+			cadSession.snapshot().then((snapshot) => {
+				setSelectionRevision(snapshot.selectionRevision);
+				setSelected(snapshot.selectedIds);
+			}).catch(report);
+		}
+	}
 
 	/// The preview controls drive fixtures, so they need the rig the sheet is showing.
 	function loadFixtures() {
@@ -105,13 +145,13 @@ export function App() {
 			selection: {
 				fixtureIds: new Set(selected),
 				orderedFixtureIds: selected,
-				replace: (intent) => setSelected(intent.resolvedFixtures),
+				replace: (intent) => void replaceSelection(intent.resolvedFixtures),
 			},
 			// No `Set` key either, so editing a cell is always allowed.
 			editArmed: true,
 			setEditArmed: () => undefined,
 		}),
-		[profiles, layers, selected],
+		[profiles, layers, selected, selectionRevision],
 	);
 
 	const definitions = useMemo(
@@ -172,6 +212,18 @@ export function App() {
 					</p>
 				</section>
 			)}
+			{document ? <nav className="viz-editor-launch-actions" aria-label="Planning applications">
+				<Button onClick={async () => {
+					setOpeningCad(true);
+					try { await documentSession.openCad(); } catch (reason) { report(reason); }
+					finally { setOpeningCad(false); }
+				}}>{openingCad ? "Opening CAD…" : "Open CAD"}</Button>
+				<Button onClick={async () => {
+					setOpeningViz(true);
+					try { await documentSession.openVisualizer(); } catch (reason) { report(reason); }
+					finally { setOpeningViz(false); }
+				}}>{openingViz ? "Opening Viz…" : "Open Viz"}</Button>
+			</nav> : null}
 		</div>
 	);
 }

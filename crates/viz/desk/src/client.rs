@@ -110,6 +110,13 @@ impl DeskClient {
             .ok()
     }
 
+    /// Identity-based editor/CAD selection, served only by a planning source.
+    pub async fn selection(&self) -> Option<crate::wire::SelectionSnapshot> {
+        self.get_json::<crate::wire::SelectionSnapshot>("/api/v2/selection", "selection")
+            .await
+            .ok()
+    }
+
     /// The desk's own live output universes.
     ///
     /// For a renderer drawing the desk's Stage inside the desk's own window. It is the same

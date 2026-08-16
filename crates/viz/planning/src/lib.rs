@@ -64,6 +64,10 @@ pub struct SceneSource {
     preview: Arc<Mutex<preview::PreviewState>>,
     preview_revision: Arc<AtomicU64>,
     preview_changes: Arc<tokio::sync::watch::Sender<u64>>,
+    /// Shared editor/CAD selection, kept out of the portable show but sent live to the renderer.
+    selection: Arc<Mutex<Vec<Uuid>>>,
+    selection_revision: Arc<AtomicU64>,
+    selection_changes: Arc<tokio::sync::watch::Sender<u64>>,
 }
 
 impl Default for SceneSource {
@@ -75,6 +79,9 @@ impl Default for SceneSource {
             preview: Arc::new(Mutex::new(preview::PreviewState::default())),
             preview_revision: Arc::new(AtomicU64::new(0)),
             preview_changes: Arc::new(tokio::sync::watch::Sender::new(0)),
+            selection: Arc::new(Mutex::new(Vec::new())),
+            selection_revision: Arc::new(AtomicU64::new(0)),
+            selection_changes: Arc::new(tokio::sync::watch::Sender::new(0)),
         }
     }
 }
@@ -91,6 +98,7 @@ impl SceneSource {
         // Preview values belong to the document that was open. Another show's fixtures are not
         // this show's, and carrying a look across would light the wrong rig.
         self.clear_preview();
+        self.set_selection(Vec::new());
         self.mark_changed();
     }
 
@@ -118,6 +126,20 @@ impl SceneSource {
     /// Whether the window is currently driving anything.
     pub fn preview_is_active(&self) -> bool {
         !self.preview.lock().is_empty()
+    }
+
+    /// Replace the identity-based selection shared by Patch, CAD and the running Visualizer.
+    pub fn set_selection(&self, selected: Vec<Uuid>) {
+        *self.selection.lock() = selected;
+        let revision = self.selection_revision.fetch_add(1, Ordering::Relaxed) + 1;
+        let _ = self.selection_changes.send(revision);
+    }
+
+    pub fn selection_snapshot(&self) -> wire::SelectionSnapshot {
+        wire::SelectionSnapshot {
+            revision: self.selection_revision.load(Ordering::Relaxed),
+            selected_fixture_ids: self.selection.lock().clone(),
+        }
     }
 
     /// The preview values projected onto universes, as the renderer reads them.
@@ -169,6 +191,7 @@ pub fn router(source: SceneSource) -> Router {
         .route("/api/v2/sessions/{id}", delete(close_session))
         .route("/api/v2/patch", get(patch))
         .route("/api/v2/preview-values", get(preview_values))
+        .route("/api/v2/selection", get(selection))
         .route("/api/v2/objects/{kind}", get(objects))
         .route("/api/v2/document/download", get(download_document))
         .route("/api/v2/events", get(events))
@@ -315,6 +338,10 @@ async fn preview_values(State(source): State<SceneSource>) -> Json<preview::Prev
     Json(source.preview_snapshot())
 }
 
+async fn selection(State(source): State<SceneSource>) -> Json<wire::SelectionSnapshot> {
+    Json(source.selection_snapshot())
+}
+
 /// The configuration event stream.
 ///
 /// Without it the renderer's desk provider has nothing to wait on: it would finish reading and
@@ -330,9 +357,11 @@ async fn events(State(source): State<SceneSource>, upgrade: WebSocketUpgrade) ->
 async fn stream_events(mut socket: WebSocket, source: SceneSource) {
     let mut changes = source.changes.subscribe();
     let mut preview_changes = source.preview_changes.subscribe();
+    let mut selection_changes = source.selection_changes.subscribe();
     // Only changes from here on are news: the renderer has just read the document.
     let _ = changes.borrow_and_update();
     let _ = preview_changes.borrow_and_update();
+    let _ = selection_changes.borrow_and_update();
     let mut sequence = 0_u64;
     let mut revision = source
         .with(|document| document.patch_revision().ok())
@@ -353,6 +382,12 @@ async fn stream_events(mut socket: WebSocket, source: SceneSource) {
                     return;
                 }
                 Some("preview_values_changed")
+            }
+            changed = selection_changes.changed() => {
+                if changed.is_err() {
+                    return;
+                }
+                Some("visualizer_selection_changed")
             }
             // A renderer that has gone is noticed when it goes, not when the document next
             // changes: this stream outlives nothing.
