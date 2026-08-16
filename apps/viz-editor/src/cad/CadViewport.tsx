@@ -621,8 +621,8 @@ class LineRenderer {
 			gl,
 			gl.VERTEX_SHADER,
 			`#version 300 es
-			in vec2 position; in vec3 color; out vec3 lineColor;
-			void main(){ gl_Position=vec4(position,0.0,1.0); lineColor=color; }`,
+			in vec3 position; in vec3 color; out vec3 lineColor;
+			void main(){ gl_Position=vec4(position,1.0); lineColor=color; }`,
 		);
 		const fragment = shader(
 			gl,
@@ -669,19 +669,22 @@ class LineRenderer {
 		const gl = this.gl;
 		gl.viewport(0, 0, this.canvas.width, this.canvas.height);
 		gl.clearColor(0.018, 0.024, 0.032, 1);
-		gl.clear(gl.COLOR_BUFFER_BIT);
+		gl.clearDepth(1);
+		gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 		const fillVertices: number[] = [];
 		const lineVertices: number[] = [];
 		const vertex = (
 			vertices: number[],
 			point: PlanPoint,
 			color: [number, number, number],
+			depth = 0,
 		) => {
 			vertices.push(
 				((point[0] + camera.pan[0]) * camera.zoom * 2) /
 					this.canvas.clientWidth,
 				((point[1] + camera.pan[1]) * camera.zoom * 2) /
 					this.canvas.clientHeight,
+				Math.max(-0.999, Math.min(0.999, depth / 100_000)),
 				...color,
 			);
 		};
@@ -745,9 +748,20 @@ class LineRenderer {
 				rotationQuarterTurns,
 				entityPreview,
 			);
+			const baseDepth =
+				viewPositionDepth(entity.positionMillimetres, view) +
+				(preview?.entityIds.includes(entity.id)
+					? viewPositionDepth(preview.deltaMillimetres, view)
+					: 0);
 			for (const triangle of projected.triangles) {
 				const color = active ? selectedColor(triangle.color) : triangle.color;
-				for (const point of triangle.points) vertex(fillVertices, point, color);
+				for (let index = 0; index < triangle.points.length; index++)
+					vertex(
+						fillVertices,
+						triangle.points[index],
+						color,
+						baseDepth + (triangle.depths?.[index] ?? 0),
+					);
 			}
 			const outlineColor: [number, number, number] = active
 				? [0.02, 0.82, 0.98]
@@ -856,21 +870,24 @@ class LineRenderer {
 		const position = gl.getAttribLocation(this.program, "position");
 		const color = gl.getAttribLocation(this.program, "color");
 		gl.enableVertexAttribArray(position);
-		gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 20, 0);
+		gl.vertexAttribPointer(position, 3, gl.FLOAT, false, 24, 0);
 		gl.enableVertexAttribArray(color);
-		gl.vertexAttribPointer(color, 3, gl.FLOAT, false, 20, 8);
+		gl.vertexAttribPointer(color, 3, gl.FLOAT, false, 24, 12);
+		gl.enable(gl.DEPTH_TEST);
+		gl.depthFunc(gl.LEQUAL);
 		gl.bufferData(
 			gl.ARRAY_BUFFER,
 			new Float32Array(fillVertices),
 			gl.DYNAMIC_DRAW,
 		);
-		gl.drawArrays(gl.TRIANGLES, 0, fillVertices.length / 5);
+		gl.drawArrays(gl.TRIANGLES, 0, fillVertices.length / 6);
+		gl.disable(gl.DEPTH_TEST);
 		gl.bufferData(
 			gl.ARRAY_BUFFER,
 			new Float32Array(lineVertices),
 			gl.DYNAMIC_DRAW,
 		);
-		gl.drawArrays(gl.LINES, 0, lineVertices.length / 5);
+		gl.drawArrays(gl.LINES, 0, lineVertices.length / 6);
 	}
 }
 
@@ -1004,6 +1021,26 @@ function viewDepth(entity: CadEntity, view: CadViewDirection): number {
 			return -entity.positionMillimetres[1];
 		case "back_to_front":
 			return entity.positionMillimetres[1];
+	}
+}
+
+function viewPositionDepth(
+	position: readonly [number, number, number],
+	view: CadViewDirection,
+): number {
+	// Matches the renderer-world depth convention used by live model triangles. Smaller values
+	// are closer to the orthographic camera and therefore win the WebGL depth test.
+	switch (view) {
+		case "top_down":
+			return -position[2];
+		case "left_to_right":
+			return position[0];
+		case "right_to_left":
+			return -position[0];
+		case "front_to_back":
+			return position[1];
+		case "back_to_front":
+			return -position[1];
 	}
 }
 

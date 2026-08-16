@@ -91,6 +91,13 @@ describe("CAD plan projections", () => {
 		expect(geometries.every(({ triangles }) => triangles.length === 4)).toBe(
 			true,
 		);
+		expect(
+			geometries.every(({ triangles }) =>
+				triangles.every(
+					({ depths }) => depths?.length === 3 && depths.every(Number.isFinite),
+				),
+			),
+		).toBe(true);
 		const bounds = geometries.map(({ triangles }) => {
 			const points = triangles.flatMap(({ points }) => points);
 			return [

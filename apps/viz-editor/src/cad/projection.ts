@@ -10,6 +10,7 @@ export type PlanPoint = [number, number];
 export interface PlanTriangle {
 	points: [PlanPoint, PlanPoint, PlanPoint];
 	color: [number, number, number];
+	depths?: [number, number, number];
 }
 
 export interface PlanGeometry {
@@ -101,6 +102,11 @@ function liveModelGeometry(
 				index,
 				points,
 				color: triangle.colour,
+				depths: world.map((point) => modelDepth(point, view)) as [
+					number,
+					number,
+					number,
+				],
 				depth:
 					world.reduce((sum, point) => sum + modelDepth(point, view), 0) / 3,
 				area,
@@ -112,12 +118,33 @@ function liveModelGeometry(
 		);
 	const triangles: PlanTriangle[] = [];
 	for (const face of faces) {
-		triangles.push({ points: face.points, color: DARK });
-		triangles.push({ points: insetTriangle(face.points), color: face.color });
+		triangles.push({
+			points: face.points,
+			color: DARK,
+			depths: face.depths,
+		});
+		triangles.push({
+			points: insetTriangle(face.points),
+			color: shadeSurface(face.color, face.depths),
+			depths: face.depths,
+		});
 	}
 	return triangles.length
 		? { source: "live_model", triangles, outlines: [] }
 		: null;
+}
+
+function shadeSurface(
+	color: [number, number, number],
+	depths: [number, number, number],
+): [number, number, number] {
+	const span = Math.max(...depths) - Math.min(...depths);
+	const factor = Math.max(0.68, 1 - span / 1800);
+	return color.map((channel) => Math.min(1, channel * factor)) as [
+		number,
+		number,
+		number,
+	];
 }
 
 function rotateModelPoint(
