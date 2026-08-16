@@ -1,5 +1,7 @@
-import { Button } from "@tosklight/ui";
-import { useEffect, useMemo, useState } from "react";
+import { Button, SwitchField } from "@tosklight/ui";
+import { WindowHeader, WindowSettings } from "@tosklight/ui/window-kit";
+import { useEffect, useRef, useState } from "react";
+import { beginWindowDrag, WindowControls } from "../WindowChrome";
 import { CadViewport } from "./CadViewport";
 import { cadSession } from "./session";
 import {
@@ -7,9 +9,12 @@ import {
 	mapTile,
 	newTile,
 	projectPoint,
-	splitTile,
+	setSplitRatio,
+	splitTileAtEdge,
 	type CadSceneSnapshot,
+	type CadViewDirection,
 	type TileCamera,
+	type TileEdge,
 	type TileNode,
 	type ViewportTile,
 } from "./types";
@@ -20,6 +25,8 @@ export function CadApp() {
 	const [scene, setScene] = useState<CadSceneSnapshot | null>(null);
 	const [layout, setLayout] = useState<TileNode>(restoreLayout);
 	const [snapToMounts, setSnapToMounts] = useState(true);
+	const [settingsOpen, setSettingsOpen] = useState(false);
+	const [activeTileId, setActiveTileId] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
 
 	useEffect(() => {
@@ -75,12 +82,6 @@ export function CadApp() {
 	useEffect(() => {
 		localStorage.setItem(WORKSPACE_KEY, JSON.stringify(layout));
 	}, [layout]);
-
-	const selectedNames = useMemo(() => {
-		if (!scene?.selectedIds.length) return "Nothing selected";
-		const entities = new Map(scene.entities.map((entity) => [entity.id, entity.name]));
-		return scene.selectedIds.map((id) => entities.get(id) ?? id).join(", ");
-	}, [scene]);
 
 	async function select(ids: readonly string[]) {
 		if (!scene) return;
@@ -150,24 +151,28 @@ export function CadApp() {
 
 	return (
 		<main className="cad-app">
-			<header className="cad-titlebar">
-				<div>
-					<h1>Rig Planner · CAD</h1>
-					<p>First synchronized 2D planning slice of TL-60</p>
-				</div>
-				<div className="cad-title-actions">
-					<Button onClick={() => history("undo")}>Undo</Button>
-					<Button onClick={() => history("redo")}>Redo</Button>
-					<label className="cad-snap">
-						<input
-							type="checkbox"
-							checked={snapToMounts}
-							onChange={(event) => setSnapToMounts(event.currentTarget.checked)}
-						/>
-						Snap to declared truss mounts
-					</label>
-				</div>
-			</header>
+			<WindowControls />
+			<WindowHeader
+				title="Rig Planner · CAD"
+				dragHandleProps={{
+					"data-tauri-drag-region": true,
+					onPointerDown: beginWindowDrag,
+				}}
+				groups={[{
+					id: "cad-actions",
+					actions: [
+						{ id: "settings", label: "Settings", onPress: () => setSettingsOpen(true) },
+						{ id: "undo", label: "Undo", disabled: !scene, onPress: () => void history("undo") },
+						{ id: "redo", label: "Redo", disabled: !scene, onPress: () => void history("redo") },
+						{
+							id: "fit",
+							label: "Fit",
+							disabled: !scene?.entities.length,
+							onPress: () => fit(activeTileId ?? firstTileId(layout)),
+						},
+					],
+				}]}
+			/>
 			{error ? <output className="cad-error" onClick={() => setError(null)}>{error}</output> : null}
 			<section className="cad-workspace">
 				{scene ? (
@@ -178,7 +183,9 @@ export function CadApp() {
 						snapToMounts={snapToMounts}
 						onLayout={setLayout}
 						onTile={updateTile}
-						onFit={fit}
+						onSplitRatio={(id, ratio) => setLayout((current) => setSplitRatio(current, id, ratio))}
+						activeTileId={activeTileId}
+						onActivate={setActiveTileId}
 						onSelection={select}
 						onMove={move}
 					/>
@@ -186,13 +193,31 @@ export function CadApp() {
 					<div className="cad-loading">Loading the canonical rig…</div>
 				)}
 			</section>
-			<footer className="cad-status">
-				<span>{selectedNames}</span>
-				<span>{scene ? `Scene r${scene.sceneRevision} · Selection r${scene.selectionRevision}` : "Connecting…"}</span>
-				<span>{scene?.attachments.length ?? 0} mounted</span>
-			</footer>
+			{settingsOpen ? (
+				<WindowSettings
+					title="CAD Settings"
+					onClose={() => setSettingsOpen(false)}
+					tabs={[{
+						id: "snapping",
+						label: "Snapping",
+						content: (
+							<SwitchField
+								label="Enable snapping"
+								offLabel={null}
+								onLabel={null}
+								checked={snapToMounts}
+								onChange={(event) => setSnapToMounts(event.currentTarget.checked)}
+							/>
+						),
+					}]}
+				/>
+			) : null}
 		</main>
 	);
+}
+
+function firstTileId(node: TileNode): string {
+	return node.type === "tile" ? node.id : firstTileId(node.first);
 }
 
 function findTile(node: TileNode, id: string): ViewportTile | null {
@@ -207,7 +232,9 @@ interface CadTileProps {
 	snapToMounts: boolean;
 	onLayout(layout: TileNode): void;
 	onTile(id: string, change: (tile: ViewportTile) => ViewportTile): void;
-	onFit(id: string): void;
+	onSplitRatio(id: string, ratio: number): void;
+	activeTileId: string | null;
+	onActivate(id: string): void;
 	onSelection(ids: readonly string[]): void;
 	onMove(delta: [number, number, number], entityIds: readonly string[]): Promise<void>;
 }
@@ -221,14 +248,17 @@ function CadTile(props: CadTileProps) {
 				style={{ "--cad-split-ratio": `${node.ratio * 100}%` } as React.CSSProperties}
 			>
 				<CadTile {...props} node={node.first} />
-				<div className="cad-divider" />
+				<CadDivider node={node} onRatio={props.onSplitRatio} />
 				<CadTile {...props} node={node.second} />
 			</div>
 		);
 	}
 	return (
-		<section className="cad-tile">
-			<header className="cad-tile-tools">
+		<section
+			className={`cad-tile ${props.activeTileId === node.id ? "is-active" : ""}`}
+			onPointerDown={() => props.onActivate(node.id)}
+		>
+			<div className="cad-view-control">
 				<select
 					aria-label="View direction"
 					value={node.view}
@@ -239,10 +269,20 @@ function CadTile(props: CadTileProps) {
 				>
 					{Object.entries(CAD_VIEW_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
 				</select>
-				<Button onClick={() => props.onFit(node.id)}>Fit</Button>
-				<Button aria-label="Split horizontally" onClick={() => props.onLayout(splitTile(props.root, node.id, "horizontal"))}>Split H</Button>
-				<Button aria-label="Split vertically" onClick={() => props.onLayout(splitTile(props.root, node.id, "vertical"))}>Split V</Button>
-			</header>
+			</div>
+			<CadOrientation view={node.view} />
+			{(["left", "right", "top", "bottom"] as TileEdge[]).map((edge) => (
+				<Button
+					key={edge}
+					className={`cad-add-viewport is-${edge}`}
+					aria-label={`Add viewport ${edge}`}
+					title={`Add viewport ${edge}`}
+					onPointerDown={(event) => event.stopPropagation()}
+					onClick={() => props.onLayout(splitTileAtEdge(props.root, node.id, edge))}
+				>
+					<span aria-hidden="true">+</span>
+				</Button>
+			))}
 			<CadViewport
 				entities={props.scene.entities}
 				selectedIds={props.scene.selectedIds}
@@ -254,6 +294,71 @@ function CadTile(props: CadTileProps) {
 				onMove={props.onMove}
 			/>
 		</section>
+	);
+}
+
+function CadDivider({
+	node,
+	onRatio,
+}: {
+	node: Extract<TileNode, { type: "split" }>;
+	onRatio(id: string, ratio: number): void;
+}) {
+	const dragging = useRef(false);
+	return (
+		<div
+			className="cad-divider"
+			role="separator"
+			aria-label={node.direction === "horizontal" ? "Resize columns" : "Resize rows"}
+			aria-orientation={node.direction === "horizontal" ? "vertical" : "horizontal"}
+			aria-valuemin={15}
+			aria-valuemax={85}
+			aria-valuenow={Math.round(node.ratio * 100)}
+			onPointerDown={(event) => {
+				event.preventDefault();
+				event.stopPropagation();
+				dragging.current = true;
+				event.currentTarget.setPointerCapture?.(event.pointerId);
+			}}
+			onPointerMove={(event) => {
+				if (!dragging.current) return;
+				const rect = event.currentTarget.parentElement?.getBoundingClientRect();
+				if (!rect) return;
+				const ratio = node.direction === "horizontal"
+					? (event.clientX - rect.left) / rect.width
+					: (event.clientY - rect.top) / rect.height;
+				onRatio(node.id, ratio);
+			}}
+			onPointerUp={(event) => {
+				dragging.current = false;
+				event.currentTarget.releasePointerCapture?.(event.pointerId);
+			}}
+			onPointerCancel={() => {
+				dragging.current = false;
+			}}
+		/>
+	);
+}
+
+const ORIENTATION: Record<CadViewDirection, { horizontal: string; vertical: string; depth: string }> = {
+	top_down: { horizontal: "+X", vertical: "−Y", depth: "+Z" },
+	left_to_right: { horizontal: "+Y", vertical: "+Z", depth: "+X" },
+	right_to_left: { horizontal: "−Y", vertical: "+Z", depth: "−X" },
+	front_to_back: { horizontal: "+X", vertical: "+Z", depth: "+Y" },
+	back_to_front: { horizontal: "−X", vertical: "+Z", depth: "−Y" },
+};
+
+function CadOrientation({ view }: { view: CadViewDirection }) {
+	const axes = ORIENTATION[view];
+	return (
+		<div
+			className="cad-orientation"
+			aria-label={`Orientation: right ${axes.horizontal}, up ${axes.vertical}, depth ${axes.depth}`}
+		>
+			<span className="cad-axis-horizontal">{axes.horizontal}</span>
+			<span className="cad-axis-vertical">{axes.vertical}</span>
+			<span className="cad-axis-depth">{axes.depth}</span>
+		</div>
 	);
 }
 

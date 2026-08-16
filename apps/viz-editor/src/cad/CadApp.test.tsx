@@ -31,9 +31,18 @@ const mocks = vi.hoisted(() => ({
 	onSceneDelta: vi.fn(),
 	onSelectionDelta: vi.fn(),
 }));
+const nativeWindow = vi.hoisted(() => ({
+	close: vi.fn().mockResolvedValue(undefined),
+	isFullscreen: vi.fn().mockResolvedValue(false),
+	setFullscreen: vi.fn().mockResolvedValue(undefined),
+	startDragging: vi.fn().mockResolvedValue(undefined),
+}));
 const workspace = new Map<string, string>();
 
 vi.mock("./session", () => ({ cadSession: mocks }));
+vi.mock("@tauri-apps/api/window", () => ({
+	getCurrentWindow: () => nativeWindow,
+}));
 vi.mock("./CadViewport", () => ({
 	CadViewport: ({ view }: { view: string }) => <div data-testid="cad-canvas">{view}</div>,
 }));
@@ -53,14 +62,20 @@ beforeEach(() => {
 	mocks.redo.mockReset();
 	mocks.onSceneDelta.mockReset().mockResolvedValue(() => undefined);
 	mocks.onSelectionDelta.mockReset().mockResolvedValue(() => undefined);
+	for (const action of Object.values(nativeWindow)) action.mockClear();
 });
 
 describe("the CAD planning window", () => {
-	it("identifies itself as the first TL-60 slice and exposes every view", async () => {
+	it("uses the shared native chrome and exposes every view from the viewport corner", async () => {
 		render(<ModalProvider><CadApp /></ModalProvider>);
-		expect(screen.getByRole("heading", { name: "Rig Planner · CAD" })).toBeInTheDocument();
-		expect(screen.getByText("First synchronized 2D planning slice of TL-60")).toBeInTheDocument();
+		const title = screen.getByText("Rig Planner · CAD");
+		expect(title.closest(".ui-window-header")).toBeInTheDocument();
+		expect(screen.queryByText(/First synchronized 2D planning slice/i)).not.toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "Close window" })).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "Enter fullscreen" })).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "Move window" })).toBeInTheDocument();
 		const direction = await screen.findByRole("combobox", { name: "View direction" });
+		expect(direction.parentElement).toHaveClass("cad-view-control");
 		expect(within(direction).getAllByRole("option").map((option) => option.textContent)).toEqual([
 			"Top down",
 			"Left to right",
@@ -68,17 +83,53 @@ describe("the CAD planning window", () => {
 			"Front to back",
 			"Back to front",
 		]);
-		expect(screen.getByText("Profile Stage 1")).toBeInTheDocument();
-		expect(screen.getByText("Scene r9 · Selection r4")).toBeInTheDocument();
+		expect(screen.getByLabelText("Orientation: right +X, up −Y, depth +Z")).toBeInTheDocument();
+		expect(screen.queryByText("Scene r9 · Selection r4")).not.toBeInTheDocument();
+		const header = title.closest(".ui-window-header");
+		if (!header) throw new Error("CAD title was not rendered in a window header");
+		expect(within(header as HTMLElement).getAllByRole("button").map((button) => button.textContent)).toEqual([
+			"Settings",
+			"Undo",
+			"Redo",
+			"Fit",
+		]);
 	});
 
-	it("recursively splits an individual tile into an asymmetric workspace", async () => {
+	it("keeps snapping inside the Settings modal", async () => {
 		render(<ModalProvider><CadApp /></ModalProvider>);
-		await screen.findByText("Profile Stage 1");
-		fireEvent.click(screen.getByRole("button", { name: "Split horizontally" }));
+		fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+		const settings = screen.getByRole("dialog", { name: "CAD Settings" });
+		const snapping = within(settings).getByRole("switch", { name: "Enable snapping" });
+		expect(snapping).toBeChecked();
+		fireEvent.click(snapping);
+		expect(snapping).not.toBeChecked();
+		expect(screen.queryByText("Snap to declared truss mounts")).not.toBeInTheDocument();
+	});
+
+	it("recursively adds adjacent viewports from all four tile edges", async () => {
+		render(<ModalProvider><CadApp /></ModalProvider>);
+		await screen.findByTestId("cad-canvas");
+		expect(screen.getAllByRole("button", { name: /Add viewport/ })).toHaveLength(4);
+		fireEvent.click(screen.getByRole("button", { name: "Add viewport right" }));
 		await waitFor(() => expect(screen.getAllByTestId("cad-canvas")).toHaveLength(2));
-		fireEvent.click(screen.getAllByRole("button", { name: "Split vertically" })[0]);
+		expect(screen.getAllByRole("button", { name: /Add viewport/ })).toHaveLength(8);
+		fireEvent.click(screen.getAllByRole("button", { name: "Add viewport bottom" })[0]);
 		await waitFor(() => expect(screen.getAllByTestId("cad-canvas")).toHaveLength(3));
 		expect(localStorage.getItem("tosklight:viz-editor:cad-workspace:v1")).toContain("split");
+	});
+
+	it("resizes neighboring viewports by dragging their divider", async () => {
+		render(<ModalProvider><CadApp /></ModalProvider>);
+		fireEvent.click(await screen.findByRole("button", { name: "Add viewport right" }));
+		const divider = await screen.findByRole("separator", { name: "Resize columns" });
+		Object.defineProperty(divider.parentElement, "getBoundingClientRect", {
+			value: () => ({ left: 0, top: 0, width: 1000, height: 500, right: 1000, bottom: 500 }),
+		});
+		fireEvent.pointerDown(divider, { pointerId: 1, clientX: 500 });
+		fireEvent.pointerMove(divider, { pointerId: 1, clientX: 700 });
+		fireEvent.pointerUp(divider, { pointerId: 1, clientX: 700 });
+		await waitFor(() =>
+			expect(localStorage.getItem("tosklight:viz-editor:cad-workspace:v1")).toContain('"ratio":0.7'),
+		);
 	});
 });

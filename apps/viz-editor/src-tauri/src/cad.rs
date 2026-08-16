@@ -137,6 +137,7 @@ pub fn open_cad(app: tauri::AppHandle) -> Result<(), String> {
         tauri::WebviewUrl::App("index.html?surface=cad".into()),
     )
     .title("Rig Planner · CAD")
+    .decorations(false)
     .inner_size(1280.0, 820.0)
     .min_inner_size(760.0, 520.0)
     .build()

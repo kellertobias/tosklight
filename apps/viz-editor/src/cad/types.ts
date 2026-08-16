@@ -79,6 +79,8 @@ export interface SplitTile {
 
 export type TileNode = ViewportTile | SplitTile;
 
+export type TileEdge = "left" | "right" | "top" | "bottom";
+
 export const CAD_VIEW_LABELS: Record<CadViewDirection, string> = {
 	top_down: "Top down",
 	left_to_right: "Left to right",
@@ -150,12 +152,42 @@ export function splitTile(
 	id: string,
 	direction: "horizontal" | "vertical",
 ): TileNode {
-	return mapTile(node, id, (tile) => ({
+	return splitTileAtEdge(
+		node,
+		id,
+		direction === "horizontal" ? "right" : "bottom",
+	);
+}
+
+export function splitTileAtEdge(
+	node: TileNode,
+	id: string,
+	edge: TileEdge,
+): TileNode {
+	return mapTile(node, id, (tile) => {
+		const adjacent = newTile(tile.view);
+		const adjacentFirst = edge === "left" || edge === "top";
+		return {
 		type: "split",
 		id: crypto.randomUUID(),
-		direction,
+		direction: edge === "left" || edge === "right" ? "horizontal" : "vertical",
 		ratio: 0.5,
-		first: tile,
-		second: newTile(tile.view),
-	}));
+		first: adjacentFirst ? adjacent : tile,
+		second: adjacentFirst ? tile : adjacent,
+	};
+	});
+}
+
+export function setSplitRatio(
+	node: TileNode,
+	id: string,
+	ratio: number,
+): TileNode {
+	if (node.type === "tile") return node;
+	if (node.id === id) return { ...node, ratio: Math.max(0.15, Math.min(0.85, ratio)) };
+	return {
+		...node,
+		first: setSplitRatio(node.first, id, ratio),
+		second: setSplitRatio(node.second, id, ratio),
+	};
 }
