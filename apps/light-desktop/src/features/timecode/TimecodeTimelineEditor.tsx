@@ -38,6 +38,7 @@ interface Props {
 	cueLists: readonly TimecodeCueListOption[];
 	audioPlayers: readonly TimecodeAudioPlayerOption[];
 	waveformPeaks?: readonly number[];
+	markersLocked?: boolean;
 	onScrub(frame: number): void;
 	onCommit(definition: TimecodeDefinition): void;
 	onPreview(definition: TimecodeDefinition): void;
@@ -89,6 +90,7 @@ function TimelineCanvas(props: {
 	fps: number;
 	cueLists: readonly TimecodeCueListOption[];
 	waveformPeaks?: readonly number[];
+	markersLocked?: boolean;
 	duration: number;
 	width: number;
 	pixelsPerFrame: number;
@@ -163,6 +165,7 @@ function TimelineCanvas(props: {
 							selection={props.selection}
 							fps={props.fps}
 							pixelsPerFrame={props.pixelsPerFrame}
+							markersLocked={props.markersLocked}
 							startDrag={props.startDrag}
 						/>
 					))}
@@ -306,6 +309,7 @@ function TimelineItemButton({
 	pixelsPerFrame,
 	startDrag,
 	startVolume,
+	markersLocked = false,
 }: {
 	item: TimelineItem;
 	marker?: boolean;
@@ -320,6 +324,7 @@ function TimelineItemButton({
 		startVolume?: number,
 	): void;
 	startVolume?: number;
+	markersLocked?: boolean;
 }) {
 	const width = item.endFrame
 		? Math.max(44, (item.endFrame - item.frame) * pixelsPerFrame)
@@ -329,12 +334,18 @@ function TimelineItemButton({
 			className={`${marker ? "timecode-timeline-marker" : `timecode-timeline-item item-${item.kind}`} ${sameSelection(selection, item.selection) ? "selected" : ""}`}
 			style={{
 				left: timelineFrameX(item.frame, pixelsPerFrame),
+				...(marker ? { color: item.color } : {}),
 				...(marker ? { width: 44, transform: "translateX(-22px)" } : {}),
 				...(width ? { width } : {}),
 			}}
-			onPointerDown={(event) =>
-				startDrag(event, item.selection, item.frame, undefined, startVolume)
-			}
+			onPointerDown={(event) => {
+				if (marker && markersLocked) {
+					event.preventDefault();
+					return;
+				}
+				startDrag(event, item.selection, item.frame, undefined, startVolume);
+			}}
+			aria-disabled={marker && markersLocked ? true : undefined}
 			title={`${item.label} · ${formatFrame(item.frame, fps)}`}
 		>
 			{item.kind === "clip" && item.endFrame !== undefined && (
@@ -419,6 +430,7 @@ export const TimecodeTimelineEditor = forwardRef<
 		cueLists,
 		audioPlayers,
 		waveformPeaks,
+		markersLocked = false,
 		onScrub,
 		onCommit,
 		onPreview,
@@ -525,6 +537,7 @@ export const TimecodeTimelineEditor = forwardRef<
 					fps,
 					cueLists,
 					waveformPeaks,
+					markersLocked,
 					duration,
 					width,
 					pixelsPerFrame,

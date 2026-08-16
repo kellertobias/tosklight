@@ -303,7 +303,7 @@
 	border: 0;
 	border-radius: 0;
 	background: transparent;
-	color: #fff;
+	color: #ff6a62;
 	cursor: ew-resize;
 	touch-action: none;
 }
@@ -313,7 +313,7 @@
 	bottom: 0;
 	left: 50%;
 	width: 1px;
-	background: #ff6a62;
+	background: currentColor;
 	pointer-events: none;
 }
 .timecode-timeline-marker-label {
@@ -324,7 +324,9 @@
 	width: max-content;
 	padding: 0.12rem 0.25rem;
 	transform: translateX(2px);
-	background: #9c343e;
+	border: 1px solid currentColor;
+	background: #11121a;
+	color: currentColor;
 	font-size: 0.65rem;
 }
 .timecode-timeline-marker.selected {

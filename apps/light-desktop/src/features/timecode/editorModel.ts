@@ -15,6 +15,7 @@ export interface TimelineItem {
 	laneId?: string;
 	laneName?: string;
 	kind: TimecodeEditorSelection["kind"];
+	color?: string;
 }
 
 export function timelineItems(definition: TimecodeDefinition): TimelineItem[] {
@@ -23,6 +24,7 @@ export function timelineItems(definition: TimecodeDefinition): TimelineItem[] {
 		frame: marker.frame,
 		label: marker.name,
 		kind: "marker",
+		color: marker.color ?? "#ff6a62",
 	}));
 	for (const lane of definition.lanes) {
 		switch (lane.content.kind) {

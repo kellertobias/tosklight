@@ -20,6 +20,7 @@ describe("Timecode Settings", () => {
 		const setDraft = vi.fn();
 		const importAudio = vi.fn(async () => undefined);
 		const importCsv = vi.fn(async () => undefined);
+		const setMarkersLocked = vi.fn();
 		render(
 			<TimecodeSettings
 				draft={draft}
@@ -32,6 +33,8 @@ describe("Timecode Settings", () => {
 				setCsvMode={vi.fn()}
 				csvError={null}
 				importCsv={importCsv}
+				markersLocked={false}
+				setMarkersLocked={setMarkersLocked}
 			/>,
 		);
 
@@ -42,6 +45,9 @@ describe("Timecode Settings", () => {
 			"00:00:00.00",
 		);
 		expect(screen.queryByRole("textbox", { name: "Marker CSV" })).toBeNull();
+		expect(screen.getByLabelText("Lock markers")).not.toBeChecked();
+		fireEvent.click(screen.getByLabelText("Lock markers"));
+		expect(setMarkersLocked).toHaveBeenCalledWith(true);
 
 		fireEvent.change(screen.getByLabelText("Duration"), {
 			target: { value: "00:00:20.00" },

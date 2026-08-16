@@ -28,6 +28,7 @@ const definition: TimecodeDefinition = {
 			id: "00000000-0000-0000-0000-000000000003",
 			frame: 88,
 			name: "Verse",
+			color: "#33aa77",
 		},
 	],
 	lanes: [],
@@ -59,6 +60,7 @@ describe("TimecodeTimelineEditor", () => {
 				]}
 				audioPlayers={[]}
 				waveformPeaks={[0.2, 1, 0.4]}
+				markersLocked
 				onScrub={onScrub}
 				onCommit={onCommit}
 				onPreview={vi.fn()}
@@ -97,6 +99,8 @@ describe("TimecodeTimelineEditor", () => {
 		expect(screen.queryByLabelText("Cuelist")).toBeNull();
 		const marker = screen.getByTitle("Verse · 00:00:02.00");
 		expect(marker).toHaveClass("timecode-timeline-marker");
+		expect(marker).toHaveAttribute("aria-disabled", "true");
+		expect(marker).toHaveStyle({ color: "#33aa77" });
 		expect(marker).toHaveStyle({
 			left: `${timelineFrameX(88, 17.5)}px`,
 			width: "44px",

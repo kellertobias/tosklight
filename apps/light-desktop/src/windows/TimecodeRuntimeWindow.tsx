@@ -328,6 +328,7 @@ export function TimecodeEditor({
 	const [audioImporting, setAudioImporting] = useState(false);
 	const [settingsAnchor, setSettingsAnchor] = useState<DOMRect | null>(null);
 	const [settingsOpen, setSettingsOpen] = useState(false);
+	const [markersLocked, setMarkersLocked] = useState(false);
 	const [csvMode, setCsvMode] = useState<"append" | "replace">("append");
 	const [csvError, setCsvError] = useState<string | null>(null);
 	const timelineRef = useRef<TimecodeTimelineEditorHandle>(null);
@@ -441,8 +442,11 @@ export function TimecodeEditor({
 					<span className="timecode-reversed-play">▶</span>
 				</span>
 			),
-			ariaLabel: "Rewind",
-			onPress: () => void act({ type: "rewind" }),
+			ariaLabel: "Revert to beginning",
+			onPress: () => {
+				setEditorFrame(0);
+				void act({ type: "seek", frame: 0 });
+			},
 			disabled: isNew || busy,
 			className: "timecode-transport-action",
 		},
@@ -549,6 +553,8 @@ export function TimecodeEditor({
 										setCsvMode,
 										csvError,
 										importCsv,
+										markersLocked,
+										setMarkersLocked,
 									}}
 								/>
 							),
@@ -569,6 +575,7 @@ export function TimecodeEditor({
 				cueLists={cueLists}
 				audioPlayers={audioPlayers}
 				waveformPeaks={waveformPeaks}
+				markersLocked={markersLocked}
 				onScrub={setEditorFrame}
 				onCommit={setDraft}
 				onPreview={previewDraft}
@@ -590,6 +597,8 @@ export function TimecodeSettings({
 	setCsvMode,
 	csvError,
 	importCsv,
+	markersLocked,
+	setMarkersLocked,
 }: {
 	draft: TimecodeDefinition;
 	setDraft(value: TimecodeDefinition): void;
@@ -601,6 +610,8 @@ export function TimecodeSettings({
 	setCsvMode(value: "append" | "replace"): void;
 	csvError: string | null;
 	importCsv(file: File): Promise<void>;
+	markersLocked: boolean;
+	setMarkersLocked(value: boolean): void;
 }) {
 	const changeFrameField = (
 		field: "duration_frame" | "transport_offset_frame",
@@ -648,6 +659,13 @@ export function TimecodeSettings({
 				onChange={(event) =>
 					setDraft({ ...draft, auto_start: event.currentTarget.checked })
 				}
+			/>
+			<CheckboxField
+				className="timecode-checkbox"
+				label="Lock markers"
+				stateLabel="Prevent marker movement"
+				checked={markersLocked}
+				onChange={(event) => setMarkersLocked(event.currentTarget.checked)}
 			/>
 			<div className="timecode-audio-import">
 				<span>Audio file</span>
