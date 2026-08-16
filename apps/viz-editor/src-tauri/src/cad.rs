@@ -436,6 +436,68 @@ pub fn emit_scene_delta(
     scene_revision: u64,
     removed_ids: Vec<Uuid>,
 ) -> Result<(), String> {
+    prune_selection(app, session, cad)?;
+    let current = snapshot(session, cad)?;
+    app.emit(
+        SCENE_DELTA_EVENT,
+        CadSceneDelta {
+            scene_revision,
+            upserted: current.entities,
+            drawings: current.drawings,
+            removed_ids,
+            attachments: current.attachments,
+        },
+    )
+    .map_err(|error| error.to_string())
+}
+
+/// Emit only document-owned CAD state. Layer locks and visibility do not change drawings, so this
+/// deliberately avoids rebuilding every model projection on the UI action's critical path.
+pub fn emit_scene_state_delta(
+    app: &tauri::AppHandle,
+    session: &Session,
+    cad: &CadState,
+    scene_revision: u64,
+) -> Result<(), String> {
+    prune_selection(app, session, cad)?;
+    let patch =
+        session.with(|document| document.patch_snapshot().map_err(|error| error.to_string()))?;
+    let locked = locked_layers(session)?;
+    let hidden_fixtures = hidden_fixture_ids(session, "visible2d")?;
+    let hidden_layers = hidden_layers(session, "visible2d")?;
+    let all_entities = entities(&patch, &locked);
+    let removed_ids = all_entities
+        .iter()
+        .filter(|entity| {
+            hidden_fixtures.contains(&entity.logical_fixture_id)
+                || hidden_layers.contains(&entity.layer_id)
+        })
+        .map(|entity| entity.id)
+        .collect();
+    app.emit(
+        SCENE_DELTA_EVENT,
+        CadSceneDelta {
+            scene_revision,
+            upserted: all_entities
+                .into_iter()
+                .filter(|entity| {
+                    !hidden_fixtures.contains(&entity.logical_fixture_id)
+                        && !hidden_layers.contains(&entity.layer_id)
+                })
+                .collect(),
+            drawings: Vec::new(),
+            removed_ids,
+            attachments: attachments(session)?,
+        },
+    )
+    .map_err(|error| error.to_string())
+}
+
+fn prune_selection(
+    app: &tauri::AppHandle,
+    session: &Session,
+    cad: &CadState,
+) -> Result<(), String> {
     let known = selectable_ids(session)?;
     let mut selection = cad.selection.lock();
     let previous = selection.ids.len();
@@ -452,19 +514,7 @@ pub fn emit_scene_delta(
         app.emit(SELECTION_DELTA_EVENT, delta)
             .map_err(|error| error.to_string())?;
     }
-    drop(selection);
-    let current = snapshot(session, cad)?;
-    app.emit(
-        SCENE_DELTA_EVENT,
-        CadSceneDelta {
-            scene_revision,
-            upserted: current.entities,
-            drawings: current.drawings,
-            removed_ids,
-            attachments: current.attachments,
-        },
-    )
-    .map_err(|error| error.to_string())
+    Ok(())
 }
 
 fn snapshot(session: &Session, cad: &CadState) -> Result<CadSceneSnapshot, String> {
@@ -472,15 +522,32 @@ fn snapshot(session: &Session, cad: &CadState) -> Result<CadSceneSnapshot, Strin
         session.with(|document| document.patch_snapshot().map_err(|error| error.to_string()))?;
     let selection = cad.selection.lock();
     let locked = locked_layers(session)?;
+    let hidden_fixtures = hidden_fixture_ids(session, "visible2d")?;
+    let hidden_layers = hidden_layers(session, "visible2d")?;
     Ok(CadSceneSnapshot {
         show_id: patch.show_id.0,
         scene_revision: patch.patch_revision.value(),
         selection_revision: selection.revision,
-        entities: entities(&patch, &locked),
+        entities: visible_entities(&patch, &locked, &hidden_fixtures, &hidden_layers),
         drawings: drawings(&patch, cad),
         selected_ids: selection.ids.clone(),
         attachments: attachments(session)?,
     })
+}
+
+fn visible_entities(
+    snapshot: &PatchSnapshot,
+    locked_layers: &BTreeSet<String>,
+    hidden_fixtures: &BTreeSet<Uuid>,
+    hidden_layers: &BTreeSet<String>,
+) -> Vec<CadEntity> {
+    entities(snapshot, locked_layers)
+        .into_iter()
+        .filter(|entity| {
+            !hidden_fixtures.contains(&entity.logical_fixture_id)
+                && !hidden_layers.contains(&entity.layer_id)
+        })
+        .collect()
 }
 
 fn entities(snapshot: &PatchSnapshot, locked_layers: &BTreeSet<String>) -> Vec<CadEntity> {
@@ -603,8 +670,58 @@ fn locked_layers(session: &Session) -> Result<BTreeSet<String>, String> {
     })
 }
 
+fn hidden_layers(session: &Session, property: &str) -> Result<BTreeSet<String>, String> {
+    session.with(|document| {
+        document
+            .objects("patch_layer")
+            .map(|objects| {
+                objects
+                    .into_iter()
+                    .filter(|object| {
+                        !object
+                            .body
+                            .get(property)
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(true)
+                    })
+                    .map(|object| object.id)
+                    .collect()
+            })
+            .map_err(|error| error.to_string())
+    })
+}
+
+fn hidden_fixture_ids(session: &Session, property: &str) -> Result<BTreeSet<Uuid>, String> {
+    session.with(|document| {
+        document
+            .objects("fixture_visibility")
+            .map(|objects| {
+                objects
+                    .into_iter()
+                    .filter(|object| {
+                        !object
+                            .body
+                            .get(property)
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(true)
+                    })
+                    .filter_map(|object| {
+                        object
+                            .body
+                            .get("fixtureId")
+                            .and_then(serde_json::Value::as_str)
+                            .and_then(|id| Uuid::parse_str(id).ok())
+                    })
+                    .collect()
+            })
+            .map_err(|error| error.to_string())
+    })
+}
+
 fn selectable_ids(session: &Session) -> Result<BTreeSet<Uuid>, String> {
     let locked = locked_layers(session)?;
+    let hidden_fixtures = hidden_fixture_ids(session, "visible2d")?;
+    let hidden_layers = hidden_layers(session, "visible2d")?;
     session.with(|document| {
         document
             .patch_snapshot()
@@ -612,7 +729,11 @@ fn selectable_ids(session: &Session) -> Result<BTreeSet<Uuid>, String> {
                 snapshot
                     .fixtures
                     .into_iter()
-                    .filter(|fixture| !locked.contains(&fixture.patch.layer_id))
+                    .filter(|fixture| {
+                        !locked.contains(&fixture.patch.layer_id)
+                            && !hidden_layers.contains(&fixture.patch.layer_id)
+                            && !hidden_fixtures.contains(&fixture.patch.fixture_id.0)
+                    })
                     .map(|fixture| fixture.patch.fixture_id.0)
                     .collect()
             })
@@ -1293,6 +1414,50 @@ mod tests {
         assert!(ids.iter().all(|id| !selectable.contains(id)));
         let locks = locked_layers(&session).unwrap();
         assert_eq!(locks, BTreeSet::from(["default".to_owned()]));
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn fixture_and_layer_visibility_remove_entities_from_2d_selection() {
+        let (session, path, ids) = transform_session();
+        session
+            .change(|document| {
+                document
+                    .put_object(
+                        "fixture_visibility",
+                        &ids[0].to_string(),
+                        &serde_json::json!({
+                            "fixtureId": ids[0],
+                            "visible2d": false,
+                            "visible3d": true,
+                        }),
+                    )
+                    .map_err(|error| error.to_string())?;
+                Ok(())
+            })
+            .unwrap();
+        let selectable = selectable_ids(&session).unwrap();
+        assert!(!selectable.contains(&ids[0]));
+        assert!(selectable.contains(&ids[1]));
+
+        session
+            .change(|document| {
+                document
+                    .put_object(
+                        "patch_layer",
+                        "default",
+                        &serde_json::json!({
+                            "id": "default",
+                            "name": "Stage",
+                            "order": 0,
+                            "visible2d": false,
+                        }),
+                    )
+                    .map_err(|error| error.to_string())?;
+                Ok(())
+            })
+            .unwrap();
+        assert!(selectable_ids(&session).unwrap().is_empty());
         let _ = std::fs::remove_file(path);
     }
 }

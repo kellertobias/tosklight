@@ -223,6 +223,8 @@ fn scene_from(path: &Path) -> Result<Capture, String> {
         patch,
         stage_layout: viz_desk::wire::StageLayoutBody::default(),
         venue_objects: Vec::new(),
+        fixture_visibility: Vec::new(),
+        patch_layers: Vec::new(),
         media_servers: Vec::new(),
         media_fallback_assets: Vec::new(),
         media_sources: Vec::new(),

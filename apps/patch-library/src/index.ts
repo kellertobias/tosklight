@@ -115,6 +115,7 @@ export type {
 	FixtureMode,
 	FixtureProfile,
 	FixtureSplit,
+	FixtureVisibility,
 	MultiPatchInstance,
 	PatchedFixture,
 	PatchLayer,

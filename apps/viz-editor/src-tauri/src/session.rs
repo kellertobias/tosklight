@@ -408,6 +408,16 @@ pub fn patch_layers(session: tauri::State<'_, Session>) -> Answer<Vec<PatchLayer
                         .get("locked")
                         .and_then(serde_json::Value::as_bool)
                         .unwrap_or(false),
+                    visible_2d: object
+                        .body
+                        .get("visible2d")
+                        .and_then(serde_json::Value::as_bool)
+                        .unwrap_or(true),
+                    visible_3d: object
+                        .body
+                        .get("visible3d")
+                        .and_then(serde_json::Value::as_bool)
+                        .unwrap_or(true),
                 })
             })
             .collect())
@@ -435,6 +445,8 @@ pub fn save_patch_layer(
                     "name": layer.name,
                     "order": layer.order,
                     "locked": layer.locked,
+                    "visible2d": layer.visible_2d,
+                    "visible3d": layer.visible_3d,
                 }),
             )
             .map_err(|error| error.to_string())?;
@@ -442,7 +454,7 @@ pub fn save_patch_layer(
     })?;
     let revision =
         session.with(|document| document.patch_revision().map_err(|error| error.to_string()))?;
-    crate::cad::emit_scene_delta(&app, &session, &cad, revision, Vec::new())?;
+    crate::cad::emit_scene_state_delta(&app, &session, &cad, revision)?;
     Ok(saved)
 }
 
@@ -453,6 +465,59 @@ pub struct PatchLayerDto {
     pub order: i32,
     #[serde(default)]
     pub locked: bool,
+    #[serde(default = "default_true", rename = "visible2d")]
+    pub visible_2d: bool,
+    #[serde(default = "default_true", rename = "visible3d")]
+    pub visible_3d: bool,
+}
+
+const fn default_true() -> bool {
+    true
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FixtureVisibilityDto {
+    pub fixture_id: Uuid,
+    #[serde(default = "default_true")]
+    pub visible_2d: bool,
+    #[serde(default = "default_true")]
+    pub visible_3d: bool,
+}
+
+#[tauri::command]
+pub fn fixture_visibility(session: tauri::State<'_, Session>) -> Answer<Vec<FixtureVisibilityDto>> {
+    session.with(|document| {
+        document
+            .objects("fixture_visibility")
+            .map_err(|error| error.to_string())?
+            .into_iter()
+            .map(|object| serde_json::from_value(object.body).map_err(|error| error.to_string()))
+            .collect()
+    })
+}
+
+#[tauri::command]
+pub fn save_fixture_visibility(
+    app: tauri::AppHandle,
+    session: tauri::State<'_, Session>,
+    cad: tauri::State<'_, crate::cad::CadState>,
+    visibility: FixtureVisibilityDto,
+) -> Answer<FixtureVisibilityDto> {
+    let saved = session.change(|document| {
+        document
+            .put_object(
+                "fixture_visibility",
+                &visibility.fixture_id.to_string(),
+                &serde_json::to_value(&visibility).map_err(|error| error.to_string())?,
+            )
+            .map_err(|error| error.to_string())?;
+        Ok(visibility.clone())
+    })?;
+    let revision =
+        session.with(|document| document.patch_revision().map_err(|error| error.to_string()))?;
+    crate::cad::emit_scene_state_delta(&app, &session, &cad, revision)?;
+    Ok(saved)
 }
 
 /// Set one preview value: a Simple-mode parameter, or a raw slot from Full DMX mode.

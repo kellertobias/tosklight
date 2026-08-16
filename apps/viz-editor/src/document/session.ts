@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
 	FixtureProfile,
+	FixtureVisibility,
 	PatchLayer,
 	PatchSnapshot,
 	VersionedObject,
@@ -379,6 +380,9 @@ export const documentSession = {
 	patchLayers: () => invoke<PatchLayer[]>("patch_layers"),
 	savePatchLayer: (layer: PatchLayer) =>
 		invoke<PatchLayer>("save_patch_layer", { layer }),
+	fixtureVisibility: () => invoke<FixtureVisibility[]>("fixture_visibility"),
+	saveFixtureVisibility: (visibility: FixtureVisibility) =>
+		invoke<FixtureVisibility>("save_fixture_visibility", { visibility }),
 	async fixtureProfiles(): Promise<FixtureProfile[]> {
 		const profiles = await invoke<LibraryProfile[]>("library_profiles");
 		return profiles.map((entry) => entry.profile);

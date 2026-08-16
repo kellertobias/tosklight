@@ -441,6 +441,16 @@ export interface PatchLayer {
 	order: number;
 	/** Locked layers remain visible but cannot become an editing selection. */
 	locked?: boolean;
+	/** Whether fixtures in this layer are drawn in Rig Planner CAD. */
+	visible2d?: boolean;
+	/** Whether fixtures in this layer are drawn in the 3D Visualizer. */
+	visible3d?: boolean;
+}
+
+export interface FixtureVisibility {
+	fixtureId: string;
+	visible2d: boolean;
+	visible3d: boolean;
 }
 
 /**

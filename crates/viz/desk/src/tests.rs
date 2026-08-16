@@ -109,6 +109,8 @@ fn models(profile: serde_json::Value, layout: StageLayoutBody) -> DeskReadModels
         patch,
         stage_layout: layout,
         venue_objects: Vec::new(),
+        fixture_visibility: Vec::new(),
+        patch_layers: Vec::new(),
         media_servers: Vec::new(),
         media_fallback_assets: Vec::new(),
         media_sources: Vec::new(),
@@ -143,6 +145,35 @@ fn a_shipped_moving_head_becomes_a_beam_emitter_with_real_pan_and_tilt_travel() 
     assert!((fixture.position.x - 1.0).abs() < 1e-4);
     assert!((fixture.position.y - 6.0).abs() < 1e-4);
     assert!((fixture.position.z + 4.0).abs() < 1e-4);
+}
+
+#[test]
+fn fixture_and_layer_visibility_filter_the_3d_scene() {
+    let profile = shipped_profile("claypaky--sharpy");
+    let mut hidden_fixture = models(profile.clone(), StageLayoutBody::default());
+    hidden_fixture.fixture_visibility.push(ObjectRecord {
+        id: "11111111-1111-4111-8111-111111111111".into(),
+        revision: 1,
+        body: json!({
+            "fixtureId": "11111111-1111-4111-8111-111111111111",
+            "visible2d": true,
+            "visible3d": false,
+        }),
+    });
+    assert!(
+        scene_build::build(&hidden_fixture)
+            .scene
+            .fixtures
+            .is_empty()
+    );
+
+    let mut hidden_layer = models(profile, StageLayoutBody::default());
+    hidden_layer.patch_layers.push(ObjectRecord {
+        id: "default".into(),
+        revision: 1,
+        body: json!({ "visible3d": false }),
+    });
+    assert!(scene_build::build(&hidden_layer).scene.fixtures.is_empty());
 }
 
 #[test]

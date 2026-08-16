@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	CadRigOverview,
 	CadViewport,
+	cadEntityOutlineColor,
 	fitCadOverview,
 	observeViewportResize,
 	renderDepthMaskedLinework,
@@ -29,6 +30,15 @@ const fixture: CadEntity = {
 };
 
 const camera = { pan: [0, 0] as [number, number], zoom: 0.1 };
+
+it("draws locked CAD entities darker while retaining cyan selection", () => {
+	expect(
+		cadEntityOutlineColor({ kind: "venue", selectable: false }, false),
+	).toEqual([0.24, 0.27, 0.3]);
+	expect(
+		cadEntityOutlineColor({ kind: "venue", selectable: false }, true),
+	).toEqual([0.02, 0.82, 0.98]);
+});
 
 beforeEach(() => {
 	vi.stubGlobal(

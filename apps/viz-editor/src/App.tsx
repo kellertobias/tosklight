@@ -1,6 +1,7 @@
 import {
 	FixturePatchSetup,
 	type FixtureProfile,
+	type FixtureVisibility,
 	mergeFixtureDefinitions,
 	type PatchFixtureProjection,
 	type PatchHost,
@@ -26,7 +27,14 @@ import { PreviewControls } from "./PreviewControls";
 import { RendererSettingsWorkspace } from "./RendererSettingsWorkspace";
 import { beginWindowDrag, WindowControls } from "./WindowChrome";
 
-const DEFAULT_LAYER: PatchLayer = { id: "default", name: "Default", order: 0 };
+const DEFAULT_LAYER: PatchLayer = {
+	id: "default",
+	name: "Default",
+	order: 0,
+	locked: false,
+	visible2d: true,
+	visible3d: true,
+};
 type ShowPage =
 	| "show"
 	| "dmx"
@@ -39,6 +47,9 @@ export function App() {
 	const [document, setDocument] = useState<DocumentSummary | null>(null);
 	const [profiles, setProfiles] = useState<readonly FixtureProfile[]>([]);
 	const [layers, setLayers] = useState<readonly PatchLayer[]>([DEFAULT_LAYER]);
+	const [fixtureVisibility, setFixtureVisibility] = useState<
+		ReadonlyMap<string, FixtureVisibility>
+	>(new Map());
 	const [error, setError] = useState<string | null>(null);
 	const [workspace, setWorkspace] = useState<
 		"show" | "patch" | "venue" | "effects" | "media" | "settings"
@@ -100,6 +111,7 @@ export function App() {
 				setDocument(summary);
 				if (summary) {
 					loadLayers();
+					loadFixtureVisibility();
 					loadFixtures();
 				}
 			})
@@ -168,7 +180,9 @@ export function App() {
 								...current,
 								sceneRevision: delta.sceneRevision,
 								entities: [...next.values()],
-								drawings: delta.drawings,
+								drawings: delta.drawings.length
+									? delta.drawings
+									: current.drawings,
 								attachments: delta.attachments,
 							}
 						: current,
@@ -242,6 +256,19 @@ export function App() {
 			.catch(report);
 	}
 
+	function loadFixtureVisibility() {
+		documentSession
+			.fixtureVisibility()
+			.then((stored) =>
+				setFixtureVisibility(
+					new Map(
+						stored.map((visibility) => [visibility.fixtureId, visibility]),
+					),
+				),
+			)
+			.catch(report);
+	}
+
 	const report = useCallback((reason: unknown) => {
 		setError(String(reason));
 	}, []);
@@ -259,16 +286,10 @@ export function App() {
 				// definitions exist for shows recorded before profiles did.
 				fixtureLibrary: [],
 				patchLayers: sessionPatchLayers(layers),
+				fixtureVisibility,
 				unresolvedMvrFixtures: [],
 				savePatchLayer: async (layer) => {
-					// The document is the authority, as it is on the desk: the sheet shows the
-					// layer once the show actually has it.
-					try {
-						await documentSession.savePatchLayer(layer);
-					} catch (reason) {
-						report(reason);
-						return false;
-					}
+					const previous = layers;
 					setLayers((current) =>
 						current.some((existing) => existing.id === layer.id)
 							? current.map((existing) =>
@@ -276,7 +297,30 @@ export function App() {
 								)
 							: [...current, layer],
 					);
+					try {
+						await documentSession.savePatchLayer(layer);
+					} catch (reason) {
+						setLayers(previous);
+						report(reason);
+						return false;
+					}
 					return true;
+				},
+				saveFixtureVisibility: async (visibility) => {
+					const previous = fixtureVisibility;
+					setFixtureVisibility((current) => {
+						const next = new Map(current);
+						next.set(visibility.fixtureId, visibility);
+						return next;
+					});
+					try {
+						await documentSession.saveFixtureVisibility(visibility);
+						return true;
+					} catch (reason) {
+						setFixtureVisibility(previous);
+						report(reason);
+						return false;
+					}
 				},
 			},
 			// There is still no programmer here. What the sheet's selection drives is the preview
@@ -291,7 +335,7 @@ export function App() {
 			desktopEditing: true,
 			setEditArmed: () => undefined,
 		}),
-		[profiles, layers, selected, selectionRevision],
+		[profiles, layers, fixtureVisibility, selected, selectionRevision],
 	);
 
 	const definitions = useMemo(
@@ -460,6 +504,7 @@ export function App() {
 										setReload((current) => current + 1);
 										documentSession.current().then(setDocument).catch(report);
 										loadLayers();
+										loadFixtureVisibility();
 										loadFixtures();
 									}}
 								>
@@ -512,7 +557,7 @@ export function App() {
 								<FixturePatchSetup
 									title={workspaceTitle}
 									scope={workspace === "patch" ? "dmx" : workspace}
-									showAllLayersRequest={selectionRevision}
+									showAllLayersRequest={selected.length ? selectionRevision : 0}
 								/>
 							</PatchViewProvider>
 							{visualizerRunning ? (

@@ -38,6 +38,8 @@ const columns = [
 	"Bracket",
 	"Shaper",
 	"Layer",
+	"2D",
+	"3D",
 ];
 
 export function PatchTable() {
@@ -117,7 +119,56 @@ function FixtureRow({ fixture }: { fixture: PatchedFixture }) {
 			<FixtureBehaviorCells fixture={fixture} />
 			<FixtureTransformCells fixture={fixture} />
 			<FixtureLayerCell fixture={fixture} />
+			<FixtureVisibilityCells fixture={fixture} />
 		</tr>
+	);
+}
+
+function EyeIcon({ visible }: { visible: boolean }) {
+	return visible ? (
+		<svg viewBox="0 0 24 24" aria-hidden="true">
+			<path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
+			<circle cx="12" cy="12" r="2.8" />
+		</svg>
+	) : (
+		<svg viewBox="0 0 24 24" aria-hidden="true">
+			<path d="m3 3 18 18M10.6 6.1A10 10 0 0 1 12 6c6 0 9.5 6 9.5 6a15 15 0 0 1-2.3 3M6.2 6.2C3.8 8 2.5 12 2.5 12s3.5 6 9.5 6c1.1 0 2.1-.2 3-.5M9.8 9.8a3 3 0 0 0 4.4 4.4" />
+		</svg>
+	);
+}
+
+function FixtureVisibilityCells({ fixture }: { fixture: PatchedFixture }) {
+	const controller = usePatchController();
+	const stored = controller.library?.fixtureVisibility?.get(fixture.fixture_id);
+	const visibility = stored ?? {
+		fixtureId: fixture.fixture_id,
+		visible2d: true,
+		visible3d: true,
+	};
+	return (
+		<>
+			{(["2d", "3d"] as const).map((surface) => {
+				const key = surface === "2d" ? "visible2d" : "visible3d";
+				const visible = visibility[key];
+				return (
+					<td className="patch-visibility-cell" key={surface}>
+						<Button
+							className="patch-visibility-toggle"
+							aria-label={`${visible ? "Hide" : "Show"} fixture ${fixtureDisplayId(fixture)} in ${surface.toUpperCase()}`}
+							onClick={(event) => {
+								event.stopPropagation();
+								void controller.library?.saveFixtureVisibility?.({
+									...visibility,
+									[key]: !visible,
+								});
+							}}
+						>
+							<EyeIcon visible={visible} />
+						</Button>
+					</td>
+				);
+			})}
+		</>
 	);
 }
 
@@ -494,6 +545,8 @@ function MultiPatchRow({
 						: `${Number(instance.shaper_angle.toFixed(1))}°`}
 				</Button>
 			</td>
+			<td />
+			<td />
 			<td />
 		</tr>
 	);

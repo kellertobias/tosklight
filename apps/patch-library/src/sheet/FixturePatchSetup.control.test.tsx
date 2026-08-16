@@ -38,8 +38,16 @@ const programming = vi.hoisted(() => ({
 const server = {
 	patch: { fixtures: [] as PatchedFixture[] },
 	patchLayers: [] as Array<{
-		body: { id: string; name: string; order: number; locked?: boolean };
+		body: {
+			id: string;
+			name: string;
+			order: number;
+			locked?: boolean;
+			visible2d?: boolean;
+			visible3d?: boolean;
+		};
 	}>,
+	fixtureVisibility: new Map(),
 	fixtureProfiles: [] as ReturnType<typeof blankFixtureProfile>[],
 	fixtureLibrary: [],
 	unresolvedMvrFixtures: [],
@@ -47,6 +55,7 @@ const server = {
 	setSelection: vi.fn(),
 	refresh: vi.fn(),
 	savePatchLayer: vi.fn(),
+	saveFixtureVisibility: vi.fn(),
 };
 const patchFeature = {
 	patchFixtures: vi.fn(),
@@ -394,6 +403,33 @@ describe("patch layer locks", () => {
 		await waitFor(() => expect(server.savePatchLayer).toHaveBeenCalledOnce());
 		expect(server.savePatchLayer).toHaveBeenCalledWith(
 			expect.objectContaining({ id: "default", locked: false }),
+		);
+	});
+
+	it("uses table eyes and title actions for independent 2D and 3D visibility", async () => {
+		server.patchLayers = [{ body: { id: "default", name: "Stage", order: 0 } }];
+		server.savePatchLayer.mockResolvedValue(true);
+		server.saveFixtureVisibility.mockResolvedValue(true);
+		render(<FixturePatchSetup />);
+
+		fireEvent.click(
+			screen.getByRole("button", { name: "Hide fixture 17 in 2D" }),
+		);
+		expect(server.saveFixtureVisibility).toHaveBeenCalledWith({
+			fixtureId: "fixture-split",
+			visible2d: false,
+			visible3d: true,
+		});
+
+		const layers = screen
+			.getByRole("heading", { name: "Layers" })
+			.closest("aside");
+		if (!layers) throw new Error("Layers sidebar was not rendered");
+		fireEvent.click(within(layers).getByRole("button", { name: /^Stage/ }));
+		fireEvent.click(screen.getByRole("button", { name: "Hide in 3D" }));
+		await waitFor(() => expect(server.savePatchLayer).toHaveBeenCalled());
+		expect(server.savePatchLayer).toHaveBeenLastCalledWith(
+			expect.objectContaining({ id: "default", visible3d: false }),
 		);
 	});
 });

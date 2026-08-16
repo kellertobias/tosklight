@@ -145,6 +145,8 @@ pub struct PatchFixture {
     pub fixture_number: Option<u32>,
     #[serde(default)]
     pub name: String,
+    #[serde(default = "default_layer_id")]
+    pub layer_id: String,
     pub profile_id: Uuid,
     #[serde(default)]
     pub profile_revision: u64,
@@ -169,6 +171,10 @@ pub struct PatchFixture {
     pub shaper_angle: Option<f32>,
     #[serde(default)]
     pub installed_appearance: InstalledFixtureAppearance,
+}
+
+fn default_layer_id() -> String {
+    "default".to_owned()
 }
 
 #[derive(Debug, Deserialize)]

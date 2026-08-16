@@ -28,12 +28,30 @@ export async function createLayer(
 			name,
 			order: controller.data.layers.length,
 			locked: false,
+			visible2d: true,
+			visible3d: true,
 		})
 	) {
 		controller.ui.setActiveLayer(id);
 		controller.ui.setLayerName("");
 		controller.ui.setLayerModal(null);
 	}
+}
+
+export async function toggleLayerVisibility(
+	controller: PatchController,
+	layerId: string,
+	surface: "2d" | "3d",
+) {
+	const layer = controller.data.layers.find(
+		(candidate) => candidate.id === layerId,
+	);
+	if (!layer) return;
+	const key = surface === "2d" ? "visible2d" : "visible3d";
+	await controller.library?.savePatchLayer({
+		...layer,
+		[key]: !(layer[key] ?? true),
+	});
 }
 
 export async function toggleLayerLock(

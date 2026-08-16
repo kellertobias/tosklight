@@ -18,6 +18,8 @@ pub struct DeskReadModels {
     pub patch: PatchSnapshot,
     pub stage_layout: StageLayoutBody,
     pub venue_objects: Vec<ObjectRecord>,
+    pub fixture_visibility: Vec<ObjectRecord>,
+    pub patch_layers: Vec<ObjectRecord>,
     pub media_servers: Vec<ObjectRecord>,
     pub media_fallback_assets: Vec<ObjectRecord>,
     pub media_sources: Vec<ObjectRecord>,
@@ -37,8 +39,15 @@ pub fn build(models: &DeskReadModels) -> ScenePlan {
     // first of all a question of which of the four sources placed it, so the diagnostics say.
     let mut placements = Vec::with_capacity(models.patch.fixtures.len());
     let mut grid_index = 0_usize;
+    let hidden_fixtures = hidden_fixture_ids(&models.fixture_visibility, "visible3d");
+    let hidden_layers = hidden_object_ids(&models.patch_layers, "visible3d");
 
     for fixture in &models.patch.fixtures {
+        if hidden_fixtures.contains(&fixture.fixture_id)
+            || hidden_layers.contains(&fixture.layer_id)
+        {
+            continue;
+        }
         let Some(profile) = profiles.get(&(fixture.profile_id, fixture.profile_revision)) else {
             warnings.push(format!(
                 "{}: profile revision {} has no snapshot; the fixture is shown as a generic body",
@@ -130,6 +139,43 @@ pub fn build(models: &DeskReadModels) -> ScenePlan {
     build_media(&mut plan.scene, models, &mut plan.warnings);
     plan.scene.recompute_bounds();
     plan
+}
+
+fn hidden_object_ids(
+    objects: &[ObjectRecord],
+    property: &str,
+) -> std::collections::HashSet<String> {
+    objects
+        .iter()
+        .filter(|object| {
+            !object
+                .body
+                .get(property)
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(true)
+        })
+        .map(|object| object.id.clone())
+        .collect()
+}
+
+fn hidden_fixture_ids(objects: &[ObjectRecord], property: &str) -> std::collections::HashSet<Uuid> {
+    objects
+        .iter()
+        .filter(|object| {
+            !object
+                .body
+                .get(property)
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(true)
+        })
+        .filter_map(|object| {
+            object
+                .body
+                .get("fixtureId")
+                .and_then(serde_json::Value::as_str)
+        })
+        .filter_map(|id| Uuid::parse_str(id).ok())
+        .collect()
 }
 
 fn build_crowds(

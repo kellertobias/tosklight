@@ -854,6 +854,8 @@ async fn read_models(client: &DeskClient, endpoint: &str) -> Result<DeskReadMode
         .await
         .map(|collection| collection.objects)
         .unwrap_or_default();
+    let fixture_visibility = optional_objects(client, "fixture_visibility").await;
+    let patch_layers = optional_objects(client, "patch_layer").await;
     let media_servers = optional_objects(client, "media_server").await;
     let media_fallback_assets = optional_objects(client, "media_fallback_asset").await;
     let media_sources = optional_objects(client, "media_source").await;
@@ -866,6 +868,8 @@ async fn read_models(client: &DeskClient, endpoint: &str) -> Result<DeskReadMode
         patch,
         stage_layout,
         venue_objects,
+        fixture_visibility,
+        patch_layers,
         media_servers,
         media_fallback_assets,
         media_sources,

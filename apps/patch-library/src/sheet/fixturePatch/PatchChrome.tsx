@@ -5,6 +5,7 @@ import {
 	selectLayer,
 	setFixtureNumber,
 	toggleLayerLock,
+	toggleLayerVisibility,
 } from "./fixtureActions";
 import { addMultipatch } from "./multipatchActions";
 
@@ -87,6 +88,32 @@ export function PatchHeader() {
 					actions: [
 						...(activeLayer && ui.layerModal !== "select"
 							? [
+									{
+										id: "layer-visible-2d",
+										label:
+											(activeLayer.visible2d ?? true)
+												? "Hide in 2D"
+												: "Show in 2D",
+										onPress: () =>
+											void toggleLayerVisibility(
+												controller,
+												activeLayer.id,
+												"2d",
+											),
+									},
+									{
+										id: "layer-visible-3d",
+										label:
+											(activeLayer.visible3d ?? true)
+												? "Hide in 3D"
+												: "Show in 3D",
+										onPress: () =>
+											void toggleLayerVisibility(
+												controller,
+												activeLayer.id,
+												"3d",
+											),
+									},
 									{
 										id: "layer-lock",
 										label: activeLayer.locked ? "Unlock Layer" : "Lock Layer",

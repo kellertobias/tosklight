@@ -508,6 +508,15 @@ export function CadViewport({
 	);
 }
 
+export function cadEntityOutlineColor(
+	entity: Pick<CadEntity, "kind" | "selectable">,
+	active: boolean,
+): [number, number, number] {
+	if (active) return [0.02, 0.82, 0.98];
+	if (!entity.selectable) return [0.24, 0.27, 0.3];
+	return entity.kind === "venue" ? [0.56, 0.62, 0.68] : [0.8, 0.84, 0.88];
+}
+
 function PrintFrame({
 	page,
 	camera,
@@ -858,11 +867,7 @@ class LineRenderer {
 						baseDepth + (triangle.depths?.[index] ?? 0),
 					);
 			}
-			const outlineColor: [number, number, number] = active
-				? [0.02, 0.82, 0.98]
-				: entity.kind === "venue"
-					? [0.56, 0.62, 0.68]
-					: [0.8, 0.84, 0.88];
+			const outlineColor = cadEntityOutlineColor(entity, active);
 			for (const outline of projected.outlines) {
 				for (let index = 0; index < outline.length; index++) {
 					depthLine(

@@ -12,6 +12,7 @@ import { createContext, useContext } from "react";
 import type {
 	FixtureDefinition,
 	FixtureProfile,
+	FixtureVisibility,
 	PatchLayer,
 	VersionedObject,
 } from "./wire";
@@ -22,12 +23,14 @@ export interface PatchLibraryHost {
 	fixtureLibrary: readonly FixtureDefinition[];
 	fixtureProfiles: readonly FixtureProfile[];
 	patchLayers: readonly VersionedObject<PatchLayer>[];
+	fixtureVisibility?: ReadonlyMap<string, FixtureVisibility>;
 	/**
 	 * MVR fixtures that could not be resolved to a profile. Reported in the header so an import
 	 * that silently dropped fixtures is visible; only the count is read.
 	 */
 	unresolvedMvrFixtures: readonly unknown[];
 	savePatchLayer(layer: PatchLayer): Promise<boolean>;
+	saveFixtureVisibility?(visibility: FixtureVisibility): Promise<boolean>;
 }
 
 /** One selection replacement. The sheet never builds any other selection intent. */
