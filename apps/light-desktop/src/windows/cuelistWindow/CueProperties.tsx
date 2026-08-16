@@ -1,13 +1,9 @@
 import {
-	Button,
-	ModalPortal,
-	ModalTitleBar,
-	NumberField,
-	SelectField,
-	TextAreaField,
-	TextField,
+	GroupedSelectionModal,
+	InputModal,
+	ModalNumberEditor,
 } from "@tosklight/ui";
-import { type Dispatch, type SetStateAction, useState } from "react";
+import { useState } from "react";
 import type { Cue } from "../../api/types";
 import type { CueEditableProperty } from "./CueTable";
 import {
@@ -37,241 +33,65 @@ const timingKeys = {
 	outFade: "out_fade_millis",
 } as const;
 
-type TimingProperty = "inDelay" | "inFade" | "outDelay" | "outFade";
+type TimingProperty = keyof typeof timingKeys;
+type NumberProperty = "jumpCount" | "triggerTime" | TimingProperty;
+type TriggerKind = "go" | "follow" | "time" | "timecode" | "link";
+type TriggerChoice = Exclude<TriggerKind, "link"> | `link:${string}`;
 
 function timingValue(cue: Cue, property: TimingProperty) {
 	const fallback = property === "outFade" ? cue.fade_millis : cue.delay_millis;
 	return Number(cue[timingKeys[property]] ?? fallback) / 1000;
 }
 
-function validCueDraft(cue: Cue, property: CueEditableProperty) {
-	const triggerMillis = Number(cue.trigger.delay_millis ?? 0);
-	const jump = cueJump(cue);
-	if (jump && (!Number.isSafeInteger(jump.count) || jump.count < 1))
-		return false;
-	return [
-		cue.fade_millis,
-		cue.delay_millis,
-		cue.out_fade_millis ?? 0,
-		cue.out_delay_millis ?? 0,
-		property === "triggerTime" ? triggerMillis : 0,
-	].every((value) => Number.isSafeInteger(value) && value >= 0);
+function numberValue(cue: Cue, property: NumberProperty): string {
+	if (property === "jumpCount") return String(cueJump(cue)?.count ?? 1);
+	if (property === "triggerTime")
+		return String(Number(cue.trigger.delay_millis ?? 0) / 1000);
+	return String(timingValue(cue, property));
 }
 
-function CueJumpPropertyField({
-	draft,
-	setDraft,
-	cues,
-	property,
-}: {
-	draft: Cue;
-	setDraft: Dispatch<SetStateAction<Cue>>;
-	cues: Cue[];
-	property: "jump" | "jumpCount";
-}) {
-	const jump = cueJump(draft);
+function cueWithNumber(
+	cue: Cue,
+	property: NumberProperty,
+	value: string,
+): Cue | null {
+	const parsed = Number(value);
+	if (!Number.isFinite(parsed) || parsed < 0) return null;
 	if (property === "jumpCount") {
-		return (
-			<NumberField
-				autoFocus
-				label="Jump Count"
-				min="1"
-				step="1"
-				disabled={!jump}
-				value={jump?.count ?? 1}
-				onChange={(event) => {
-					if (!jump) return;
-					setDraft(
-						withCueJump(draft, {
-							...jump,
-							count: Math.round(Number(event.target.value)),
-						}),
-					);
-				}}
-			/>
-		);
+		const jump = cueJump(cue);
+		if (!jump || !Number.isSafeInteger(parsed) || parsed < 1) return null;
+		return withCueJump(cue, { ...jump, count: parsed });
 	}
-	return (
-		<SelectField
-			label="Jump"
-			value={jump?.cue_id ?? ""}
-			onChange={(cueId) =>
-				setDraft(
-					withCueJump(
-						draft,
-						cueId
-							? { type: "jump", cue_id: cueId, count: jump?.count ?? 1 }
-							: null,
-					),
-				)
-			}
-			options={[
-				{ value: "", label: "No Jump" },
-				...cues
-					.filter((candidate) => candidate.id)
-					.map((candidate) => ({
-						value: candidate.id as string,
-						label: `Cue ${candidate.number}${candidate.name ? ` · ${candidate.name}` : ""}`,
-					})),
-			]}
-		/>
-	);
+	const millis = Math.round(parsed * 1000);
+	if (!Number.isSafeInteger(millis)) return null;
+	if (property === "triggerTime") {
+		const kind = cueTriggerKind(cue);
+		return {
+			...cue,
+			trigger:
+				kind === "link"
+					? cueTrigger("link", millis, String(cue.trigger.cue_id ?? ""))
+					: cueTrigger("time", millis),
+		};
+	}
+	return { ...cue, [timingKeys[property]]: millis };
 }
 
-function CueTriggerPropertyField({
-	draft,
-	setDraft,
-	cues,
-}: {
-	draft: Cue;
-	setDraft: Dispatch<SetStateAction<Cue>>;
-	cues: Cue[];
-}) {
-	const kind = cueTriggerKind(draft);
-	const linkCandidates = cues.filter(
-		(candidate) => candidate.id && candidate.id !== draft.id,
-	);
-	const linkedCueId = String(
-		draft.trigger.cue_id ?? linkCandidates[0]?.id ?? "",
-	);
-	const triggerMillis = Number(draft.trigger.delay_millis ?? 0);
-	return (
-		<>
-			<SelectField
-				label="Trigger"
-				value={kind}
-				onChange={(value) =>
-					setDraft({
-						...draft,
-						trigger: cueTrigger(
-							value,
-							triggerMillis,
-							linkedCueId,
-							Number(draft.trigger.frame ?? 0),
-						),
-					})
-				}
-				options={[
-					{ value: "go", label: "GO" },
-					{ value: "follow", label: "FOLLOW" },
-					{ value: "time", label: "TIME" },
-					{ value: "timecode", label: "TIMECODE" },
-					...(linkCandidates.length
-						? [{ value: "link" as const, label: "LINK" }]
-						: []),
-				]}
-			/>
-			{kind === "link" && (
-				<SelectField
-					label="Link Cue"
-					value={linkedCueId}
-					onChange={(cueId) =>
-						setDraft({
-							...draft,
-							trigger: cueTrigger("link", triggerMillis, cueId),
-						})
-					}
-					options={linkCandidates.map((candidate) => ({
-						value: candidate.id as string,
-						label: `Cue ${candidate.number}${candidate.name ? ` · ${candidate.name}` : ""}`,
-					}))}
-				/>
-			)}
-			{kind === "timecode" && (
-				<NumberField
-					label="Timecode frame"
-					min="0"
-					value={Number(draft.trigger.frame ?? 0)}
-					onChange={(event) =>
-						setDraft({
-							...draft,
-							trigger: cueTrigger(
-								"timecode",
-								0,
-								undefined,
-								Math.max(0, Math.round(Number(event.target.value))),
-							),
-						})
-					}
-				/>
-			)}
-		</>
-	);
-}
-
-function CueTimingPropertyField({
-	draft,
-	setDraft,
-	property,
-	label,
-	onEnter,
-}: {
-	draft: Cue;
-	setDraft: Dispatch<SetStateAction<Cue>>;
-	property: "triggerTime" | TimingProperty;
-	label: string;
-	onEnter: () => void;
-}) {
-	const kind = cueTriggerKind(draft);
-	const linkedCueId = String(draft.trigger.cue_id ?? "");
-	const triggerMillis = Number(draft.trigger.delay_millis ?? 0);
-	return (
-		<NumberField
-			autoFocus
-			label={label}
-			unit="s"
-			allowDecimal
-			min="0"
-			value={
-				property === "triggerTime"
-					? triggerMillis / 1000
-					: timingValue(draft, property)
-			}
-			onChange={(event) => {
-				const millis = Math.round(Number(event.target.value) * 1000);
-				if (property === "triggerTime") {
-					setDraft({
-						...draft,
-						trigger:
-							kind === "link"
-								? cueTrigger("link", millis, linkedCueId)
-								: cueTrigger("time", millis),
-					});
-				} else setDraft({ ...draft, [timingKeys[property]]: millis });
-			}}
-			onKeyDown={(event) => event.key === "Enter" && onEnter()}
-		/>
-	);
-}
-
-function CueTextPropertyField({
-	draft,
-	setDraft,
-	property,
-}: {
-	draft: Cue;
-	setDraft: Dispatch<SetStateAction<Cue>>;
-	property: "name" | "information";
-}) {
-	if (property === "information")
-		return (
-			<TextAreaField
-				autoFocus
-				label="Cue Information"
-				value={draft.information ?? ""}
-				onChange={(event) =>
-					setDraft({ ...draft, information: event.target.value })
-				}
-			/>
-		);
-	return (
-		<TextField
-			autoFocus
-			label="Cue Name"
-			value={draft.name}
-			onChange={(event) => setDraft({ ...draft, name: event.target.value })}
-		/>
-	);
+function cueWithTrigger(
+	cue: Cue,
+	kind: TriggerKind,
+	linkedCueId?: string,
+): Cue {
+	const triggerMillis = Number(cue.trigger.delay_millis ?? 0);
+	return {
+		...cue,
+		trigger: cueTrigger(
+			kind,
+			triggerMillis,
+			kind === "link" ? linkedCueId : undefined,
+			Number(cue.trigger.frame ?? 0),
+		),
+	};
 }
 
 export function CuePropertyModal({
@@ -289,91 +109,186 @@ export function CuePropertyModal({
 	onCancel: () => void;
 	onSave: (cue: Cue) => Promise<boolean>;
 }) {
-	const [draft, setDraft] = useState(cue);
-	const [busy, setBusy] = useState(false);
 	const label = propertyLabels[property];
-	const valid = validCueDraft(draft, property);
-	const save = async () => {
-		if (!valid || busy) return;
+	const [numberDraft, setNumberDraft] = useState(() =>
+		property === "name" ||
+		property === "information" ||
+		property === "jump" ||
+		property === "trigger"
+			? ""
+			: numberValue(cue, property),
+	);
+	const [localError, setLocalError] = useState("");
+	const [busy, setBusy] = useState(false);
+	const error = localError || editError;
+	const save = async (next: Cue) => {
+		if (busy) return;
 		setBusy(true);
+		setLocalError("");
 		try {
-			if (await onSave(draft)) onCancel();
+			if (await onSave(next)) onCancel();
 		} finally {
 			setBusy(false);
 		}
 	};
-	return (
-		<ModalPortal onClose={onCancel}>
-			<div
-				className="stacked-modal-layer"
-				onPointerDown={(event) =>
-					event.target === event.currentTarget && onCancel()
+
+	if (property === "name" || property === "information") {
+		const value = property === "name" ? cue.name : (cue.information ?? "");
+		return (
+			<InputModal
+				kind={property === "information" ? "multiline" : "text"}
+				label={label}
+				value={value}
+				initialCaret={value.length}
+				error={error}
+				onCommit={(next) =>
+					void save(
+						property === "name"
+							? { ...cue, name: next }
+							: { ...cue, information: next },
+					)
 				}
-			>
-				<section
-					className="nested-modal cue-property-modal"
-					role="dialog"
-					aria-modal="true"
-					aria-label={label}
-				>
-					<ModalTitleBar
-						title={`${label} · Cue ${cue.number}`}
-						accept={{
-							id: "save",
-							label: "Save",
-							variant: "primary",
-							disabled: !valid || busy,
-							onPress: () => void save(),
-						}}
-						closeLabel={`Cancel ${label}`}
-						onClose={onCancel}
-					/>
-					<div className="cue-property-modal-body">
-						{property === "name" || property === "information" ? (
-							<CueTextPropertyField
-								draft={draft}
-								setDraft={setDraft}
-								property={property}
-							/>
-						) : property === "jump" || property === "jumpCount" ? (
-							<CueJumpPropertyField
-								draft={draft}
-								setDraft={setDraft}
-								cues={cues}
-								property={property}
-							/>
-						) : property === "trigger" ? (
-							<CueTriggerPropertyField
-								draft={draft}
-								setDraft={setDraft}
-								cues={cues}
-							/>
-						) : (
-							<CueTimingPropertyField
-								draft={draft}
-								setDraft={setDraft}
-								property={property}
-								label={label}
-								onEnter={() => void save()}
-							/>
-						)}
-						<div className="cue-property-modal-feedback">
-							{!valid && (
-								<p className="ui-field-error" role="alert">
-									{property === "jumpCount"
-										? "Enter a whole Jump Count of one or greater."
-										: "Enter a time of zero or greater."}
-								</p>
-							)}
-							{editError && (
-								<p className="ui-field-error" role="alert">
-									{editError}
-								</p>
-							)}
-						</div>
-					</div>
-				</section>
-			</div>
-		</ModalPortal>
+				onCancel={onCancel}
+			/>
+		);
+	}
+
+	if (property === "jump") {
+		const jump = cueJump(cue);
+		return (
+			<GroupedSelectionModal
+				ariaLabel={label}
+				title={`${label} · Cue ${cue.number}`}
+				closeLabel={`Close ${label}`}
+				value={jump?.cue_id ?? ""}
+				groups={[
+					{
+						label: "Cue",
+						options: cues
+							.filter((candidate) => candidate.id)
+							.map((candidate) => ({
+								value: candidate.id as string,
+								label: `Cue ${candidate.number}${candidate.name ? ` · ${candidate.name}` : ""}`,
+								description: "Jump to this Cue when the current Cue completes.",
+							})),
+					},
+				]}
+				error={error}
+				clearAction={{ label: "No Jump", value: "" }}
+				onChange={(cueId) =>
+					void save(
+						withCueJump(
+							cue,
+							cueId
+								? {
+										type: "jump",
+										cue_id: cueId,
+										count: jump?.count ?? 1,
+									}
+								: null,
+						),
+					)
+				}
+				onClose={onCancel}
+			/>
+		);
+	}
+
+	if (property === "trigger") {
+		const linkCandidates = cues.filter(
+			(candidate) => candidate.id && candidate.id !== cue.id,
+		);
+		const options: Array<{
+			value: TriggerChoice;
+			label: string;
+			description: string;
+		}> = [
+			{ value: "go", label: "GO", description: "Wait for an explicit GO." },
+			{
+				value: "follow",
+				label: "FOLLOW",
+				description: "Continue after the Cue fade completes.",
+			},
+			{
+				value: "time",
+				label: "TIME",
+				description: "Continue after the stored Trigger Time.",
+			},
+			{
+				value: "timecode",
+				label: "TIMECODE",
+				description: "Run at the stored Timecode frame.",
+			},
+		];
+		const linkOptions = linkCandidates.map((candidate) => ({
+			value: `link:${candidate.id}` as const,
+			label: `LINK → Cue ${candidate.number}${candidate.name ? ` · ${candidate.name}` : ""}`,
+			description: "Follow this Cue by its stable identity.",
+		}));
+		const selectedTrigger =
+			cueTriggerKind(cue) === "link"
+				? (`link:${String(cue.trigger.cue_id ?? "")}` as const)
+				: (cueTriggerKind(cue) as TriggerChoice);
+		return (
+			<GroupedSelectionModal
+				ariaLabel={label}
+				title={`${label} · Cue ${cue.number}`}
+				closeLabel={`Close ${label}`}
+				value={selectedTrigger}
+				groups={[
+					{ label: "Trigger type", options },
+					...(linkOptions.length
+						? [{ label: "Link destination", options: linkOptions }]
+						: []),
+				]}
+				error={error}
+				onChange={(choice) => {
+					const linkedCueId = choice.startsWith("link:")
+						? choice.slice("link:".length)
+						: undefined;
+					const kind: TriggerKind = linkedCueId
+						? "link"
+						: (choice as Exclude<TriggerKind, "link">);
+					void save(
+						cueWithTrigger(cue, kind, linkedCueId),
+					);
+				}}
+				onClose={onCancel}
+			/>
+		);
+	}
+
+	const invalidMessage =
+		property === "jumpCount"
+			? "Enter a whole Jump Count of one or greater."
+			: "Enter a time of zero or greater.";
+	return (
+		<ModalNumberEditor
+			ariaLabel={label}
+			title={`${label} · Cue ${cue.number}`}
+			value={numberDraft}
+			onChange={(value) => {
+				setNumberDraft(value);
+				setLocalError("");
+			}}
+			onSubmit={(value = numberDraft) => {
+				const next = cueWithNumber(cue, property, value);
+				if (!next) {
+					setLocalError(invalidMessage);
+					return;
+				}
+				void save(next);
+			}}
+			onClose={onCancel}
+			allowDecimal={property !== "jumpCount"}
+			unit={property === "jumpCount" ? undefined : "s"}
+			beforeTitle={
+				error ? (
+					<span className="ui-field-error" role="alert">
+						{error}
+					</span>
+				) : undefined
+			}
+		/>
 	);
 }

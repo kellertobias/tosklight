@@ -58,6 +58,88 @@ export interface GroupedSelectionFieldProps<T extends string> {
 	labelPlacement?: LabelPlacement;
 }
 
+export interface GroupedSelectionModalProps<T extends string> {
+	ariaLabel: string;
+	title: ReactNode;
+	closeLabel: string;
+	value: T;
+	groups: readonly GroupedSelectionGroup<T>[];
+	onChange: (value: T) => void;
+	onClose: () => void;
+	clearAction?: GroupedSelectionClearAction<T>;
+	error?: ReactNode;
+}
+
+export function GroupedSelectionModal<T extends string>({
+	ariaLabel,
+	title,
+	closeLabel,
+	value,
+	groups,
+	onChange,
+	onClose,
+	clearAction,
+	error,
+}: GroupedSelectionModalProps<T>) {
+	return (
+		<ModalLayer
+			ariaLabel={ariaLabel}
+			className="ui-grouped-selection-layer"
+			dialogClassName="ui-grouped-selection-modal"
+			onClose={onClose}
+		>
+			<ModalTitleBar
+				title={title}
+				groups={
+					clearAction
+						? [
+								{
+									id: "clear",
+									actions: [
+										{
+											id: "clear",
+											label: clearAction.label,
+											variant: "danger",
+											onPress: () => onChange(clearAction.value),
+										},
+									],
+								},
+							]
+						: undefined
+				}
+				closeLabel={closeLabel}
+				onClose={onClose}
+			/>
+			<div className="ui-grouped-selection-groups">
+				{groups.map((group) => (
+					<section key={group.label}>
+						<h3>{group.label}</h3>
+						<div className="ui-grouped-selection-options">
+							{group.options.map((option) => (
+								<Button
+									key={option.value}
+									active={option.value === value}
+									aria-pressed={option.value === value}
+									disabled={option.disabled}
+									contentAlign="left"
+									onClick={() => onChange(option.value)}
+								>
+									<SelectionCardContent {...option} />
+								</Button>
+							))}
+						</div>
+					</section>
+				))}
+				{error && (
+					<p className="ui-field-error" role="alert">
+						{error}
+					</p>
+				)}
+			</div>
+		</ModalLayer>
+	);
+}
+
 export function GroupedSelectionField<T extends string>({
 	label,
 	ariaLabel,
@@ -114,56 +196,16 @@ export function GroupedSelectionField<T extends string>({
 				</span>
 			</Button>
 			{open && (
-				<ModalLayer
+				<GroupedSelectionModal
 					ariaLabel={title}
-					className="ui-grouped-selection-layer"
-					dialogClassName="ui-grouped-selection-modal"
+					title={title}
+					closeLabel={closeLabel ?? `Close ${title}`}
+					value={value}
+					groups={groups}
+					onChange={choose}
 					onClose={() => setOpen(false)}
-				>
-					<ModalTitleBar
-						title={title}
-						groups={
-							clearAction
-								? [
-										{
-											id: "clear",
-											actions: [
-												{
-													id: "clear",
-													label: clearAction.label,
-													variant: "danger",
-													onPress: () => choose(clearAction.value),
-												},
-											],
-										},
-									]
-								: undefined
-						}
-						closeLabel={closeLabel ?? `Close ${title}`}
-						onClose={() => setOpen(false)}
-					/>
-					<div className="ui-grouped-selection-groups">
-						{groups.map((group) => (
-							<section key={group.label}>
-								<h3>{group.label}</h3>
-								<div className="ui-grouped-selection-options">
-									{group.options.map((option) => (
-										<Button
-											key={option.value}
-											active={option.value === value}
-											aria-pressed={option.value === value}
-											disabled={option.disabled}
-											contentAlign="left"
-											onClick={() => choose(option.value)}
-										>
-											<SelectionCardContent {...option} />
-										</Button>
-									))}
-								</div>
-							</section>
-						))}
-					</div>
-				</ModalLayer>
+					clearAction={clearAction}
+				/>
 			)}
 		</FormField>
 	);

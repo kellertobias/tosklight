@@ -755,6 +755,9 @@
 	text-align: left;
 	cursor: pointer;
 }
+.cue-table .cue-name-column > button {
+	justify-content: flex-start;
+}
 .cue-table td > button:disabled {
 	cursor: default;
 	opacity: 1;

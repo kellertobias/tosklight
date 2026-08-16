@@ -233,6 +233,10 @@ function showEditableCueList(cueList = editableCueList()) {
 	return cueList;
 }
 
+function appendDirectKeyboardValue(next: string) {
+	for (const key of next) fireEvent.keyDown(window, { key });
+}
+
 function savedCueListOutcome(
 	objectId: string,
 	objectRevision: number,
@@ -278,11 +282,15 @@ describe("CuelistWindow Cue settings", () => {
 				looped: false,
 				cues: [
 					{
+						id: "cue-opening",
 						number: 1,
 						name: "Opening",
 						fade_millis: 1000,
 						delay_millis: 0,
 						trigger: { type: "manual" },
+						actions: [
+							{ type: "jump", cue_id: "cue-opening", count: 2 },
+						],
 						changes: [],
 					},
 				],
@@ -314,6 +322,7 @@ describe("CuelistWindow Cue settings", () => {
 			"Cue Name",
 			"Cue Information",
 			"Jump",
+			"Jump Count",
 			"Trigger",
 			"Trigger Time",
 			"In Delay",
@@ -321,9 +330,23 @@ describe("CuelistWindow Cue settings", () => {
 			"Out Delay",
 			"Out Fade",
 		]) {
-			fireEvent.click(screen.getByRole("button", { name }));
-			expect(screen.getByRole("dialog", { name })).toBeInTheDocument();
-			fireEvent.click(screen.getByRole("button", { name: `Cancel ${name}` }));
+			fireEvent.click(screen.getAllByRole("button", { name })[0]);
+			const dialog = screen.getByRole("dialog", { name });
+			expect(dialog).toHaveClass(
+				name === "Cue Name" || name === "Cue Information"
+					? "keyboard-modal"
+					: name === "Jump" || name === "Trigger"
+						? "ui-grouped-selection-modal"
+						: "direct-value-modal",
+			);
+			fireEvent.click(
+				within(dialog).getByRole("button", {
+					name:
+						name === "Cue Name" || name === "Cue Information"
+							? "Close input"
+							: `Close ${name}`,
+				}),
+			);
 		}
 	});
 
@@ -354,9 +377,10 @@ describe("CuelistWindow Cue settings", () => {
 			ui.getByText("LINK → Cue 12 · Blackout").closest("button")!,
 		);
 		const modal = screen.getByRole("dialog", { name: "Trigger" });
-		expect(within(modal).getByText("Link Cue")).toBeInTheDocument();
 		expect(
-			within(modal).getByRole("button", { name: "Cue 12 · Blackout" }),
+			within(modal).getByRole("button", {
+				name: /LINK → Cue 12 · Blackout/,
+			}),
 		).toBeInTheDocument();
 	});
 });
@@ -913,20 +937,15 @@ describe("CuelistWindow Cue property transactions", () => {
 
 		fireEvent.click(ui.getByRole("button", { name: "In Fade" }));
 		let modal = screen.getByRole("dialog", { name: "In Fade" });
-		fireEvent.change(within(modal).getByRole("textbox", { name: "In Fade" }), {
-			target: { value: "9" },
-		});
 		fireEvent.click(
-			within(modal).getByRole("button", { name: "Cancel In Fade" }),
+			within(modal).getByRole("button", { name: "Close In Fade" }),
 		);
 		expect(mocks.saveTopologyCueList).not.toHaveBeenCalled();
 
 		fireEvent.click(ui.getByRole("button", { name: "In Fade" }));
 		modal = screen.getByRole("dialog", { name: "In Fade" });
-		fireEvent.change(within(modal).getByRole("textbox", { name: "In Fade" }), {
-			target: { value: "3" },
-		});
-		fireEvent.click(within(modal).getByRole("button", { name: "Save" }));
+		fireEvent.click(within(modal).getByRole("button", { name: "3" }));
+		fireEvent.click(within(modal).getByRole("button", { name: "ENTER" }));
 
 		await waitFor(() =>
 			expect(mocks.saveTopologyCueList).toHaveBeenCalledOnce(),
@@ -949,10 +968,8 @@ describe("CuelistWindow Cue property transactions", () => {
 		fireEvent.click(ui.getByText("Main").closest("button")!);
 		fireEvent.click(ui.getByRole("button", { name: "In Fade" }));
 		const modal = screen.getByRole("dialog", { name: "In Fade" });
-		fireEvent.change(within(modal).getByRole("textbox", { name: "In Fade" }), {
-			target: { value: "3" },
-		});
-		fireEvent.click(within(modal).getByRole("button", { name: "Save" }));
+		fireEvent.click(within(modal).getByRole("button", { name: "3" }));
+		fireEvent.click(within(modal).getByRole("button", { name: "ENTER" }));
 
 		expect(await within(modal).findByRole("alert")).toHaveTextContent(
 			"Cue edit was not saved",
@@ -967,28 +984,21 @@ describe("CuelistWindow Cue property transactions", () => {
 		fireEvent.click(ui.getByText("Main").closest("button")!);
 
 		fireEvent.click(ui.getByRole("button", { name: "Cue Name" }));
-		let modal = screen.getByRole("dialog", { name: "Cue Name" });
-		fireEvent.change(within(modal).getByRole("textbox", { name: "Cue Name" }), {
-			target: { value: "Reprise" },
-		});
-		fireEvent.click(within(modal).getByRole("button", { name: "Save" }));
+		appendDirectKeyboardValue(" Reprise");
+		fireEvent.keyDown(window, { key: "Enter" });
 		await waitFor(() => expect(mocks.saveTopologyCueList).toHaveBeenCalledOnce());
 		expect(mocks.saveTopologyCueList).toHaveBeenLastCalledWith(
 			cueList.id,
 			3,
 			"legacy-main",
 			expect.objectContaining({
-				cues: [expect.objectContaining({ name: "Reprise" })],
+				cues: [expect.objectContaining({ name: "Opening Reprise" })],
 			}),
 		);
 
 		fireEvent.click(ui.getByRole("button", { name: "Cue Information" }));
-		modal = screen.getByRole("dialog", { name: "Cue Information" });
-		fireEvent.change(
-			within(modal).getByRole("textbox", { name: "Cue Information" }),
-			{ target: { value: "Stand by follow spot" } },
-		);
-		fireEvent.click(within(modal).getByRole("button", { name: "Save" }));
+		appendDirectKeyboardValue(" · Stand by follow spot");
+		fireEvent.click(screen.getByRole("button", { name: "Done" }));
 		await waitFor(() =>
 			expect(mocks.saveTopologyCueList).toHaveBeenCalledTimes(2),
 		);
@@ -998,7 +1008,9 @@ describe("CuelistWindow Cue property transactions", () => {
 			"legacy-main",
 			expect.objectContaining({
 				cues: [
-					expect.objectContaining({ information: "Stand by follow spot" }),
+					expect.objectContaining({
+						information: "House opens · Stand by follow spot",
+					}),
 				],
 			}),
 		);

@@ -1,13 +1,7 @@
-import {
-	cleanup,
-	fireEvent,
-	render,
-	screen,
-	waitFor,
-	within,
-} from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Cue } from "../../api/types";
+import type { CueEditableProperty } from "./CueTable";
 import { CuePropertyModal } from "./CueProperties";
 
 const cue: Cue = {
@@ -24,150 +18,91 @@ const cue: Cue = {
 
 afterEach(cleanup);
 
-describe("CuePropertyModal", () => {
+function renderProperty(
+	property: CueEditableProperty,
+	overrides: Partial<Parameters<typeof CuePropertyModal>[0]> = {},
+) {
+	const onSave = vi.fn(async (_cue: Cue) => true);
+	const onCancel = vi.fn();
+	render(
+		<CuePropertyModal
+			cue={cue}
+			cues={[cue]}
+			property={property}
+			editError=""
+			onCancel={onCancel}
+			onSave={onSave}
+			{...overrides}
+		/>,
+	);
+	return { onSave, onCancel };
+}
+
+function appendKeyboardValue(next: string) {
+	for (const key of next) fireEvent.keyDown(window, { key });
+}
+
+describe("CuePropertyModal direct editors", () => {
 	it.each([
-		["name", "Cue Name", "Reprise", { name: "Reprise" }],
-		[
-			"information",
-			"Cue Information",
-			"Stand by follow spot",
-			{ information: "Stand by follow spot" },
-		],
+		["name", "Cue Name", "keyboard-modal"],
+		["information", "Cue Information", "keyboard-modal"],
+		["jump", "Jump", "ui-grouped-selection-modal"],
+		["trigger", "Trigger", "ui-grouped-selection-modal"],
+		["triggerTime", "Trigger Time", "direct-value-modal"],
+		["inDelay", "In Delay", "direct-value-modal"],
+		["inFade", "In Fade", "direct-value-modal"],
+		["outDelay", "Out Delay", "direct-value-modal"],
+		["outFade", "Out Fade", "direct-value-modal"],
 	] as const)(
-		"saves persistent Cue %s text",
-		async (property, label, value, expected) => {
-			const onSave = vi.fn(async (_cue: Cue) => true);
-			render(
-				<CuePropertyModal
-					cue={cue}
-					cues={[cue]}
-					property={property}
-					editError=""
-					onCancel={vi.fn()}
-					onSave={onSave}
-				/>,
-			);
-			fireEvent.change(screen.getByRole("textbox", { name: label }), {
-				target: { value },
-			});
-			fireEvent.click(screen.getByRole("button", { name: "Save" }));
-			await waitFor(() => expect(onSave).toHaveBeenCalledOnce());
-			expect(onSave.mock.calls[0]?.[0]).toMatchObject(expected);
+		"opens the %s direct surface without an intermediate form",
+		(property, label, className) => {
+			renderProperty(property);
+			const dialog = screen.getByRole("dialog", { name: label });
+			expect(dialog).toHaveClass(className);
+			expect(dialog.querySelector(".cue-property-modal-body")).toBeNull();
 		},
 	);
 
-	it("saves only the exact timing draft through the authoritative callback", async () => {
-		const onSave = vi.fn(async (_cue: Cue) => true);
-		const onCancel = vi.fn();
-		render(
-			<CuePropertyModal
-				cue={cue}
-				cues={[cue]}
-				property="inFade"
-				editError=""
-				onCancel={onCancel}
-				onSave={onSave}
-			/>,
-		);
+	it("commits Cue Name from the direct keyboard", async () => {
+		const { onSave } = renderProperty("name");
+		appendKeyboardValue(" Reprise");
+		fireEvent.keyDown(window, { key: "Enter" });
 
-		const dialog = screen.getByRole("dialog", { name: "In Fade" });
-		expect(dialog).toBeInTheDocument();
-		fireEvent.change(within(dialog).getByRole("textbox", { name: "In Fade" }), {
-			target: { value: "4.5" },
+		await waitFor(() => expect(onSave).toHaveBeenCalledOnce());
+		expect(onSave.mock.calls[0]?.[0]).toMatchObject({
+			name: "Opening Reprise",
 		});
-		fireEvent.click(screen.getByRole("button", { name: "Save" }));
+	});
+
+	it("commits Cue Information from the direct multiline keyboard", async () => {
+		const { onSave } = renderProperty("information");
+		appendKeyboardValue("Stand by follow spot");
+		fireEvent.click(screen.getByRole("button", { name: "Done" }));
+
+		await waitFor(() => expect(onSave).toHaveBeenCalledOnce());
+		expect(onSave.mock.calls[0]?.[0]).toMatchObject({
+			information: "Stand by follow spot",
+		});
+	});
+
+	it("commits exact timing from the direct number model", async () => {
+		const { onSave } = renderProperty("inFade");
+		fireEvent.click(screen.getByRole("button", { name: "4" }));
+		fireEvent.click(screen.getByRole("button", { name: "." }));
+		fireEvent.click(screen.getByRole("button", { name: "5" }));
+		fireEvent.click(screen.getByRole("button", { name: "ENTER" }));
 
 		await waitFor(() => expect(onSave).toHaveBeenCalledOnce());
 		expect(onSave.mock.calls[0]?.[0]).toMatchObject({
 			fade_millis: 4_500,
 			delay_millis: 500,
-			trigger: { type: "manual" },
 		});
-		expect(onCancel).toHaveBeenCalledOnce();
 	});
 
-	it("cancels without mutating the Cue", () => {
-		const onSave = vi.fn(async (_cue: Cue) => true);
-		const onCancel = vi.fn();
-		render(
-			<CuePropertyModal
-				cue={cue}
-				cues={[cue]}
-				property="outDelay"
-				editError=""
-				onCancel={onCancel}
-				onSave={onSave}
-			/>,
-		);
+	it("commits Trigger directly from the grouped chooser", async () => {
+		const { onSave } = renderProperty("trigger");
+		fireEvent.click(screen.getByRole("button", { name: /FOLLOW/ }));
 
-		fireEvent.change(
-			within(screen.getByRole("dialog", { name: "Out Delay" })).getByRole(
-				"textbox",
-				{ name: "Out Delay" },
-			),
-			{ target: { value: "9" } },
-		);
-		expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
-		fireEvent.click(screen.getByRole("button", { name: "Cancel Out Delay" }));
-		expect(onCancel).toHaveBeenCalledOnce();
-		expect(onSave).not.toHaveBeenCalled();
-	});
-
-	it.each(["trigger", "triggerTime", "inDelay", "outDelay"] as const)(
-		"places the %s Save action in the modal title",
-		(property) => {
-			render(
-				<CuePropertyModal
-					cue={cue}
-					cues={[cue]}
-					property={property}
-					editError=""
-					onCancel={vi.fn()}
-					onSave={vi.fn(async (_cue: Cue) => true)}
-				/>,
-			);
-
-			const dialog = screen.getByRole("dialog", {
-				name:
-					property === "trigger"
-						? "Trigger"
-						: property === "triggerTime"
-							? "Trigger Time"
-							: property === "inDelay"
-								? "In Delay"
-								: "Out Delay",
-			});
-			expect(
-				within(dialog)
-					.getByRole("button", { name: "Save" })
-					.closest(".ui-title-chrome-terminals"),
-			).toHaveClass("ui-title-chrome-terminals");
-			expect(within(dialog).queryByRole("button", { name: "Cancel" })).toBeNull();
-		},
-	);
-
-	it("keeps trigger-kind changes transactional until Save", async () => {
-		const onSave = vi.fn(async (_cue: Cue) => true);
-		render(
-			<CuePropertyModal
-				cue={cue}
-				cues={[cue]}
-				property="trigger"
-				editError=""
-				onCancel={vi.fn()}
-				onSave={onSave}
-			/>,
-		);
-
-		fireEvent.click(
-			within(screen.getByRole("dialog", { name: "Trigger" })).getByRole(
-				"button",
-				{ name: "GO" },
-			),
-		);
-		fireEvent.click(screen.getByRole("option", { name: "FOLLOW" }));
-		expect(onSave).not.toHaveBeenCalled();
-		fireEvent.click(screen.getByRole("button", { name: "Save" }));
 		await waitFor(() => expect(onSave).toHaveBeenCalledOnce());
 		expect(onSave.mock.calls[0]?.[0].trigger).toEqual({
 			type: "follow",
@@ -175,32 +110,22 @@ describe("CuePropertyModal", () => {
 		});
 	});
 
-	it("stores a Jump by stable Cue identity without replacing other Cue actions", async () => {
-		const onSave = vi.fn(async (_cue: Cue) => true);
-		const source: Cue = {
-			...cue,
-			actions: [{ type: "timecode_stop", timecode_id: "timecode-1" }],
-		};
+	it("stores a Jump by stable Cue identity through the grouped chooser", async () => {
 		const destination: Cue = {
 			...cue,
 			id: "cue-2",
 			number: 2,
 			name: "Second",
 		};
-		render(
-			<CuePropertyModal
-				cue={source}
-				cues={[source, destination]}
-				property="jump"
-				editError=""
-				onCancel={vi.fn()}
-				onSave={onSave}
-			/>,
-		);
+		const { onSave } = renderProperty("jump", {
+			cue: {
+				...cue,
+				actions: [{ type: "timecode_stop", timecode_id: "timecode-1" }],
+			},
+			cues: [cue, destination],
+		});
+		fireEvent.click(screen.getByRole("button", { name: /Cue 2 · Second/ }));
 
-		fireEvent.click(screen.getByRole("button", { name: "No Jump" }));
-		fireEvent.click(screen.getByRole("option", { name: "Cue 2 · Second" }));
-		fireEvent.click(screen.getByRole("button", { name: "Save" }));
 		await waitFor(() => expect(onSave).toHaveBeenCalledOnce());
 		expect(onSave.mock.calls[0]?.[0].actions).toEqual([
 			{ type: "timecode_stop", timecode_id: "timecode-1" },
@@ -208,74 +133,30 @@ describe("CuePropertyModal", () => {
 		]);
 	});
 
-	it("requires Jump Count to be a positive whole number", () => {
-		const onSave = vi.fn(async (_cue: Cue) => true);
-		render(
-			<CuePropertyModal
-				cue={{
-					...cue,
-					actions: [{ type: "jump", cue_id: "cue-1", count: 2 }],
-				}}
-				cues={[cue]}
-				property="jumpCount"
-				editError=""
-				onCancel={vi.fn()}
-				onSave={onSave}
-			/>,
-		);
-		fireEvent.change(screen.getByRole("textbox", { name: "Jump Count" }), {
-			target: { value: "0" },
-		});
-		expect(screen.getByRole("alert")).toHaveTextContent(
-			"whole Jump Count of one or greater",
-		);
-		expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
-	});
+	it("keeps invalid timing open with an actionable error", () => {
+		const { onSave } = renderProperty("inFade");
+		fireEvent.click(screen.getByRole("button", { name: "−" }));
+		fireEvent.click(screen.getByRole("button", { name: "1" }));
+		fireEvent.click(screen.getByRole("button", { name: "ENTER" }));
 
-	it("keeps the modal open with the actionable error when authority rejects Save", async () => {
-		const onSave = vi.fn(async (_cue: Cue) => false);
-		const onCancel = vi.fn();
-		render(
-			<CuePropertyModal
-				cue={cue}
-				cues={[cue]}
-				property="inFade"
-				editError="Cue edit was not saved. Review the draft and try again after the revision conflict."
-				onCancel={onCancel}
-				onSave={onSave}
-			/>,
-		);
-
-		fireEvent.click(screen.getByRole("button", { name: "Save" }));
-		await waitFor(() => expect(onSave).toHaveBeenCalledOnce());
 		expect(screen.getByRole("dialog", { name: "In Fade" })).toBeInTheDocument();
 		expect(screen.getByRole("alert")).toHaveTextContent(
-			"Cue edit was not saved",
-		);
-		expect(onCancel).not.toHaveBeenCalled();
-	});
-
-	it("keeps an invalid timing draft open and does not call authority", () => {
-		const onSave = vi.fn(async (_cue: Cue) => true);
-		render(
-			<CuePropertyModal
-				cue={cue}
-				cues={[cue]}
-				property="inFade"
-				editError=""
-				onCancel={vi.fn()}
-				onSave={onSave}
-			/>,
-		);
-		const dialog = screen.getByRole("dialog", { name: "In Fade" });
-		fireEvent.change(within(dialog).getByRole("textbox", { name: "In Fade" }), {
-			target: { value: "-1" },
-		});
-
-		expect(within(dialog).getByRole("alert")).toHaveTextContent(
 			"Enter a time of zero or greater",
 		);
-		expect(within(dialog).getByRole("button", { name: "Save" })).toBeDisabled();
 		expect(onSave).not.toHaveBeenCalled();
+	});
+
+	it("keeps the direct editor open when authority rejects the commit", async () => {
+		const onSave = vi.fn(async (_cue: Cue) => false);
+		renderProperty("inFade", {
+			onSave,
+			editError: "Cue edit was not saved. Review the draft and try again.",
+		});
+		fireEvent.click(screen.getByRole("button", { name: "3" }));
+		fireEvent.click(screen.getByRole("button", { name: "ENTER" }));
+
+		await waitFor(() => expect(onSave).toHaveBeenCalledOnce());
+		expect(screen.getByRole("dialog", { name: "In Fade" })).toBeInTheDocument();
+		expect(screen.getByRole("alert")).toHaveTextContent("Cue edit was not saved");
 	});
 });

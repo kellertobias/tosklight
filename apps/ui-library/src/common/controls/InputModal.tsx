@@ -20,6 +20,7 @@ export interface InputModalProps {
 	label?: string;
 	placeholder?: string;
 	unit?: ReactNode;
+	error?: ReactNode;
 	onCommit: (value: string) => void;
 	onDraftChange?: (value: string) => void;
 	onCancel: () => void;
@@ -86,6 +87,7 @@ export function InputModal({
 	leadingIcon,
 	placeholder,
 	unit,
+	error,
 	onCommit,
 	onDraftChange,
 	onCancel,
@@ -155,6 +157,11 @@ export function InputModal({
 					value={draft}
 					onCaretChange={setCaret}
 				/>
+				{error && (
+					<p className="ui-field-error" role="alert">
+						{error}
+					</p>
+				)}
 				{kind !== "number" ? (
 					<ModalTextKeyboard
 						value={draft}
