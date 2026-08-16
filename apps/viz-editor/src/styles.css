@@ -823,7 +823,12 @@ body {
 
 /* A fixed column no longer widens to fit a long layer name, so the name gives way instead of
    pushing the fixture count out of the button. */
-.viz-editor-workspace > .show-patch-layout > .patch-layers button > b {
+.viz-editor-workspace > .show-patch-layout > .patch-layers button > b,
+.viz-editor-workspace
+	> .show-patch-layout
+	> .patch-layers
+	.patch-layer-copy
+	> b {
 	/* A flex item refuses to be narrower than its text without this. */
 	min-width: 0;
 	overflow: hidden;
@@ -833,6 +838,14 @@ body {
 
 .viz-editor-workspace > .show-patch-layout > .patch-layers button > span {
 	flex: none;
+}
+
+.viz-editor-workspace
+	> .show-patch-layout
+	> .patch-layers
+	button
+	> .patch-layer-copy {
+	flex: 1 1 auto;
 }
 
 .viz-editor-workspace > .viz-editor-file-bar {

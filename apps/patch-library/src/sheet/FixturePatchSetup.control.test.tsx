@@ -315,6 +315,28 @@ afterEach(() => {
 });
 
 describe("patch layer locks", () => {
+	it("offers Lock Layer in the title only after selecting an unlocked layer", async () => {
+		server.patchLayers = [
+			{ body: { id: "default", name: "Stage", order: 0, locked: false } },
+		];
+		server.savePatchLayer.mockResolvedValue(true);
+		render(<FixturePatchSetup />);
+
+		expect(
+			screen.queryByRole("button", { name: "Lock Layer" }),
+		).not.toBeInTheDocument();
+		const layers = screen
+			.getByRole("heading", { name: "Layers" })
+			.closest("aside");
+		if (!layers) throw new Error("Layers sidebar was not rendered");
+		fireEvent.click(within(layers).getByRole("button", { name: /^Stage/ }));
+		fireEvent.click(screen.getByRole("button", { name: "Lock Layer" }));
+		await waitFor(() => expect(server.savePatchLayer).toHaveBeenCalledOnce());
+		expect(server.savePatchLayer).toHaveBeenCalledWith(
+			expect.objectContaining({ id: "default", locked: true }),
+		);
+	});
+
 	it("persists the lock and prevents selecting fixtures in that layer", async () => {
 		server.patchLayers = [
 			{ body: { id: "default", name: "Stage", order: 0, locked: true } },
@@ -324,10 +346,19 @@ describe("patch layer locks", () => {
 
 		const row = screen.getByRole("row", { name: /Split Wash 17/ });
 		expect(row).toHaveAttribute("aria-disabled", "true");
+		expect(screen.getByText("Layer Locked")).toBeInTheDocument();
+		expect(screen.queryByText("🔒")).not.toBeInTheDocument();
+		expect(screen.queryByText("🔓")).not.toBeInTheDocument();
 		fireEvent.click(row);
 		expect(programming.actions.replace).not.toHaveBeenCalled();
 
-		fireEvent.click(screen.getByRole("button", { name: "Unlock Stage layer" }));
+		expect(
+			screen.queryByRole("button", { name: "Unlock Layer" }),
+		).not.toBeInTheDocument();
+		fireEvent.click(
+			screen.getByRole("button", { name: /Stage.*Layer Locked/ }),
+		);
+		fireEvent.click(screen.getByRole("button", { name: "Unlock Layer" }));
 		await waitFor(() => expect(server.savePatchLayer).toHaveBeenCalledOnce());
 		expect(server.savePatchLayer).toHaveBeenCalledWith(
 			expect.objectContaining({ id: "default", locked: false }),

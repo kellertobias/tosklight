@@ -12,6 +12,7 @@ export function PatchHeader() {
 	const controller = usePatchController();
 	const { data, ui, library, editArmed, props } = controller;
 	const selected = data.selected;
+	const activeLayer = data.layers.find((layer) => layer.id === ui.activeLayer);
 	return (
 		<WindowHeader
 			title={props.title}
@@ -84,6 +85,16 @@ export function PatchHeader() {
 				{
 					id: "patch-edit",
 					actions: [
+						...(activeLayer && ui.layerModal !== "select"
+							? [
+									{
+										id: "layer-lock",
+										label: activeLayer.locked ? "Unlock Layer" : "Lock Layer",
+										onPress: () =>
+											void toggleLayerLock(controller, activeLayer.id),
+									},
+								]
+							: []),
 						...(selected && editArmed
 							? [
 									{
@@ -123,34 +134,27 @@ export function PatchLayers() {
 				<span>{data.all.length}</span>
 			</Button>
 			{data.layers.map((layer) => (
-				<div className="patch-layer-row" key={layer.id}>
-					<Button
-						className={ui.activeLayer === layer.id ? "active" : ""}
-						onClick={() =>
-							ui.layerModal === "select"
-								? void selectLayer(controller, layer.id)
-								: ui.setActiveLayer(layer.id)
-						}
-					>
+				<Button
+					key={layer.id}
+					className={ui.activeLayer === layer.id ? "active" : ""}
+					onClick={() =>
+						ui.layerModal === "select"
+							? void selectLayer(controller, layer.id)
+							: ui.setActiveLayer(layer.id)
+					}
+				>
+					<span className="patch-layer-copy">
 						<b>{layer.name}</b>
-						<span>
-							{
-								data.all.filter(
-									(fixture) => (fixture.layer_id || "default") === layer.id,
-								).length
-							}
-						</span>
-					</Button>
-					<Button
-						className="patch-layer-lock"
-						iconOnly
-						icon={layer.locked ? "🔒" : "🔓"}
-						aria-label={`${layer.locked ? "Unlock" : "Lock"} ${layer.name} layer`}
-						title={`${layer.locked ? "Unlock" : "Lock"} ${layer.name}`}
-						disabled={ui.layerModal === "select"}
-						onClick={() => void toggleLayerLock(controller, layer.id)}
-					/>
-				</div>
+						{layer.locked ? <small>Layer Locked</small> : null}
+					</span>
+					<span>
+						{
+							data.all.filter(
+								(fixture) => (fixture.layer_id || "default") === layer.id,
+							).length
+						}
+					</span>
+				</Button>
 			))}
 		</aside>
 	);

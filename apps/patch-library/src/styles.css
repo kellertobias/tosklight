@@ -333,21 +333,27 @@
 	color: var(--cyan);
 }
 
-.patch-layer-row {
-	display: grid;
-	grid-template-columns: minmax(0, 1fr) 34px;
-}
-
-.patch-layer-row > .ui-button:first-child {
+.patch-layer-copy {
+	display: flex;
 	min-width: 0;
+	flex: 1 1 auto;
+	flex-direction: column;
+	align-items: flex-start;
 }
 
-.patch-layer-lock.ui-button {
-	min-width: 34px;
-	padding: 0;
-	border-left: 0;
-	border-radius: 0;
-	font-size: 12px;
+.patch-layer-copy b {
+	min-width: 0;
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.patch-layer-copy small {
+	margin-top: 2px;
+	color: var(--muted);
+	font-size: 10px;
+	line-height: 1;
 }
 
 .patch-table tr.is-layer-locked > td {
