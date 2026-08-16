@@ -13,10 +13,16 @@ export interface PlanTriangle {
 	depths?: [number, number, number];
 }
 
+export interface PlanLine {
+	points: [PlanPoint, PlanPoint];
+	depths?: [number, number];
+}
+
 export interface PlanGeometry {
 	source: "live_model" | "model" | "typed" | "unknown";
 	triangles: PlanTriangle[];
 	outlines: PlanPoint[][];
+	lines: PlanLine[];
 }
 
 interface Polygon {
@@ -100,8 +106,8 @@ function liveModelGeometry(
 			);
 			return {
 				index,
+				world,
 				points,
-				color: triangle.colour,
 				depths: world.map((point) => modelDepth(point, view)) as [
 					number,
 					number,
@@ -116,35 +122,130 @@ function liveModelGeometry(
 		.sort(
 			(left, right) => right.depth - left.depth || left.index - right.index,
 		);
-	const triangles: PlanTriangle[] = [];
-	for (const face of faces) {
-		triangles.push({
-			points: face.points,
-			color: DARK,
-			depths: face.depths,
-		});
-		triangles.push({
-			points: insetTriangle(face.points),
-			color: shadeSurface(face.color, face.depths),
-			depths: face.depths,
-		});
-	}
+	const triangles = faces.map((face) => ({
+		points: face.points,
+		color: DARK,
+		depths: face.depths,
+	}));
 	return triangles.length
-		? { source: "live_model", triangles, outlines: [] }
+		? {
+				source: "live_model",
+				triangles,
+				outlines: [],
+				lines: modelFeatureLines(faces, view),
+			}
 		: null;
 }
 
-function shadeSurface(
-	color: [number, number, number],
-	depths: [number, number, number],
+function modelFeatureLines(
+	faces: readonly {
+		world: [
+			[number, number, number],
+			[number, number, number],
+			[number, number, number],
+		];
+		points: [PlanPoint, PlanPoint, PlanPoint];
+		depths: [number, number, number];
+	}[],
+	view: CadViewDirection,
+): PlanLine[] {
+	const camera = cameraVector(view);
+	type Edge = {
+		points: [PlanPoint, PlanPoint];
+		depths: [number, number];
+		faces: { normal: [number, number, number]; front: boolean }[];
+	};
+	const edges = new Map<string, Edge>();
+	for (const face of faces) {
+		const normal = normalOf(face.world);
+		const front = dot3(normal, camera) > 0.0001;
+		for (const [first, second] of [
+			[0, 1],
+			[1, 2],
+			[2, 0],
+		] as const) {
+			const firstKey = point3Key(face.world[first]);
+			const secondKey = point3Key(face.world[second]);
+			const forward = firstKey < secondKey;
+			const key = forward
+				? `${firstKey}|${secondKey}`
+				: `${secondKey}|${firstKey}`;
+			const edge = edges.get(key);
+			if (edge) {
+				edge.faces.push({ normal, front });
+			} else {
+				edges.set(key, {
+					points: forward
+						? [face.points[first], face.points[second]]
+						: [face.points[second], face.points[first]],
+					depths: forward
+						? [face.depths[first], face.depths[second]]
+						: [face.depths[second], face.depths[first]],
+					faces: [{ normal, front }],
+				});
+			}
+		}
+	}
+	const visible = [...edges.values()].filter((edge) => {
+		const front = edge.faces.filter((face) => face.front);
+		if (!front.length) return false;
+		if (edge.faces.length === 1 || front.length !== edge.faces.length)
+			return true;
+		return front.some((face, index) =>
+			front
+				.slice(index + 1)
+				.some((other) => dot3(face.normal, other.normal) < 0.82),
+		);
+	});
+	if (visible.length)
+		return visible.map(({ points, depths }) => ({ points, depths }));
+	return [...edges.values()]
+		.filter((edge) => edge.faces.length === 1)
+		.map(({ points, depths }) => ({ points, depths }));
+}
+
+function normalOf(
+	points: [
+		[number, number, number],
+		[number, number, number],
+		[number, number, number],
+	],
 ): [number, number, number] {
-	const span = Math.max(...depths) - Math.min(...depths);
-	const factor = Math.max(0.68, 1 - span / 1800);
-	return color.map((channel) => Math.min(1, channel * factor)) as [
-		number,
-		number,
-		number,
+	const first = points[1].map((value, index) => value - points[0][index]);
+	const second = points[2].map((value, index) => value - points[0][index]);
+	const cross: [number, number, number] = [
+		first[1] * second[2] - first[2] * second[1],
+		first[2] * second[0] - first[0] * second[2],
+		first[0] * second[1] - first[1] * second[0],
 	];
+	const length = Math.hypot(...cross) || 1;
+	return cross.map((value) => value / length) as [number, number, number];
+}
+
+function dot3(
+	first: readonly [number, number, number],
+	second: readonly [number, number, number],
+) {
+	return first[0] * second[0] + first[1] * second[1] + first[2] * second[2];
+}
+
+function cameraVector(view: CadViewDirection): [number, number, number] {
+	switch (view) {
+		case "top_down":
+			return [0, 1, 0];
+		case "left_to_right":
+			return [-1, 0, 0];
+		case "right_to_left":
+			return [1, 0, 0];
+		case "front_to_back":
+			return [0, 0, 1];
+		case "back_to_front":
+			return [0, 0, -1];
+	}
+}
+
+function point3Key(point: readonly [number, number, number]) {
+	return point.map((value) => Math.round(value * 20)).join(",");
 }
 
 function rotateModelPoint(
@@ -215,21 +316,6 @@ function modelDepth(
 	}
 }
 
-function insetTriangle(
-	points: [PlanPoint, PlanPoint, PlanPoint],
-): [PlanPoint, PlanPoint, PlanPoint] {
-	const centre: PlanPoint = [
-		(points[0][0] + points[1][0] + points[2][0]) / 3,
-		(points[0][1] + points[1][1] + points[2][1]) / 3,
-	];
-	return points.map((point) => {
-		const dx = centre[0] - point[0];
-		const dy = centre[1] - point[1];
-		const fraction = Math.min(0.18, 1.25 / Math.max(0.001, Math.hypot(dx, dy)));
-		return [point[0] + dx * fraction, point[1] + dy * fraction];
-	}) as [PlanPoint, PlanPoint, PlanPoint];
-}
-
 function entityType(entity: CadEntity): string {
 	return `${entity.fixtureType} ${entity.kind} ${entity.name}`.toLowerCase();
 }
@@ -242,7 +328,11 @@ export function parseProjection(
 	svg: string,
 	origin: readonly [number, number] = [0, 0],
 ): PlanGeometry {
-	const triangles: PlanTriangle[] = [];
+	const polygons: {
+		points: PlanPoint[];
+		color: [number, number, number];
+		outline: boolean;
+	}[] = [];
 	const pathPattern = /<path\b([^>]*)\/?\s*>/g;
 	for (const match of svg.matchAll(pathPattern)) {
 		const attributes = match[1];
@@ -257,15 +347,65 @@ export function parseProjection(
 				-(Number(numbers[index + 1]) - origin[1]),
 			]);
 		}
-		const color = parseHex(attribute(attributes, "fill") ?? "#66707a");
-		for (let index = 1; index < points.length - 1; index++) {
+		polygons.push({
+			points,
+			color: parseHex(attribute(attributes, "fill") ?? "#66707a"),
+			outline: (attribute(attributes, "data-part") ?? "").endsWith("-outline"),
+		});
+	}
+	const selected = polygons.some((polygon) => polygon.outline)
+		? polygons.filter((polygon) => polygon.outline)
+		: polygons;
+	const triangles: PlanTriangle[] = [];
+	for (const polygon of selected)
+		for (let index = 1; index < polygon.points.length - 1; index++)
 			triangles.push({
-				points: [points[0], points[index], points[index + 1]],
-				color,
+				points: [
+					polygon.points[0],
+					polygon.points[index],
+					polygon.points[index + 1],
+				],
+				color: polygon.color,
 			});
+	return {
+		source: "model",
+		triangles,
+		outlines: [],
+		lines: planarBoundaryLines(selected.map((polygon) => polygon.points)),
+	};
+}
+
+function planarBoundaryLines(polygons: readonly PlanPoint[][]): PlanLine[] {
+	const edges = new Map<
+		string,
+		{ points: [PlanPoint, PlanPoint]; count: number }
+	>();
+	for (const polygon of polygons) {
+		for (let index = 0; index < polygon.length; index++) {
+			const first = polygon[index];
+			const second = polygon[(index + 1) % polygon.length];
+			const firstKey = point2Key(first);
+			const secondKey = point2Key(second);
+			const forward = firstKey < secondKey;
+			const key = forward
+				? `${firstKey}|${secondKey}`
+				: `${secondKey}|${firstKey}`;
+			const existing = edges.get(key);
+			if (existing) existing.count += 1;
+			else
+				edges.set(key, {
+					points: forward ? [first, second] : [second, first],
+					count: 1,
+				});
 		}
 	}
-	return { source: "model", triangles, outlines: [] };
+	return [...edges.values()]
+		.filter((edge) => edge.count === 1)
+		.map((edge) => ({ points: edge.points }));
+}
+
+function point2Key(point: PlanPoint) {
+	return point.map((value) => Math.round(value * 20)).join(",");
 }
 
 function attribute(source: string, name: string): string | null {
@@ -346,6 +486,7 @@ function fromPolygons(
 		source,
 		triangles,
 		outlines: polygons.map((polygon) => polygon.points),
+		lines: [],
 	};
 }
 

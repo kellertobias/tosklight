@@ -88,9 +88,10 @@ describe("CAD plan projections", () => {
 		expect(geometries.every(({ source }) => source === "live_model")).toBe(
 			true,
 		);
-		expect(geometries.every(({ triangles }) => triangles.length === 4)).toBe(
+		expect(geometries.every(({ triangles }) => triangles.length === 2)).toBe(
 			true,
 		);
+		expect(geometries.every(({ lines }) => lines.length > 0)).toBe(true);
 		expect(
 			geometries.every(({ triangles }) =>
 				triangles.every(
@@ -108,13 +109,67 @@ describe("CAD plan projections", () => {
 			].map((value) => Math.round(value));
 		});
 		expect(new Set(bounds.map((value) => value.join(","))).size).toBe(3);
-		const fillOrders = geometries.map(({ triangles }) =>
-			triangles
-				.filter((_, index) => index % 2 === 1)
-				.map(({ color }) => color.join(","))
-				.join("|"),
+		expect(
+			geometries.every(({ triangles }) =>
+				triangles.every(({ color }) => color.join(",") === "0.13,0.15,0.18"),
+			),
+		).toBe(true);
+	});
+
+	it("reduces a live 3D box to technical outline edges without face diagonals", () => {
+		const p = {
+			lbf: [-100, -100, 100],
+			rbf: [100, -100, 100],
+			rtf: [100, 100, 100],
+			ltf: [-100, 100, 100],
+			lbb: [-100, -100, -100],
+			rbb: [100, -100, -100],
+			rtb: [100, 100, -100],
+			ltb: [-100, 100, -100],
+		} as const;
+		const face = (
+			first: (typeof p)[keyof typeof p],
+			second: (typeof p)[keyof typeof p],
+			third: (typeof p)[keyof typeof p],
+		) => ({
+			pointsMillimetres: [first, second, third] as [
+				[number, number, number],
+				[number, number, number],
+				[number, number, number],
+			],
+			colour: [0.8, 0.2, 0.2] as [number, number, number],
+		});
+		const triangles = [
+			face(p.lbf, p.rbf, p.rtf),
+			face(p.lbf, p.rtf, p.ltf),
+			face(p.rbb, p.lbb, p.ltb),
+			face(p.rbb, p.ltb, p.rtb),
+			face(p.lbb, p.lbf, p.ltf),
+			face(p.lbb, p.ltf, p.ltb),
+			face(p.rbf, p.rbb, p.rtb),
+			face(p.rbf, p.rtb, p.rtf),
+			face(p.ltf, p.rtf, p.rtb),
+			face(p.ltf, p.rtb, p.ltb),
+			face(p.lbb, p.rbb, p.rbf),
+			face(p.lbb, p.rbf, p.lbf),
+		];
+		const geometry = entityPlanGeometry(
+			{ ...movingLight, rotationDegrees: [0, 0, 0] },
+			{
+				id: "technical-box",
+				projections: [],
+				liveMeshes: [
+					{ pose: "top", triangles },
+					{ pose: "elevation", triangles },
+				],
+			},
+			"front_to_back",
 		);
-		expect(new Set(fillOrders).size).toBeGreaterThan(1);
+
+		expect(geometry.source).toBe("live_model");
+		expect(geometry.triangles).toHaveLength(4);
+		expect(geometry.lines).toHaveLength(4);
+		expect(geometry.outlines).toHaveLength(0);
 	});
 
 	it("draws a representative moving-light side view when no model is available", () => {
@@ -195,6 +250,7 @@ describe("CAD plan projections", () => {
 		);
 
 		expect(geometry.source).toBe("model");
+		expect(geometry.lines.length).toBeGreaterThan(0);
 		expect(geometry.triangles.map(({ color }) => color)).toEqual([
 			[23 / 255, 27 / 255, 32 / 255],
 			[122 / 255, 130 / 255, 141 / 255],

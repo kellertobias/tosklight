@@ -3,14 +3,14 @@
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use glam::{Quat, Vec2, Vec3};
 use light_fixture::{
-    FixtureProfile, ModelUnits, ProfileProjectionAsset, ProfileProjectionPose,
-    ProfileProjectionSet, ProfileProjectionView,
+    FixtureProfile, ProfileProjectionAsset, ProfileProjectionPose, ProfileProjectionSet,
+    ProfileProjectionView,
 };
 use sha2::{Digest, Sha256};
 use viz_scene::{FixtureModel, ModelPartKind};
 
 pub const GENERATOR_ID: &str = "tosklight.fixture-projection";
-pub const GENERATOR_VERSION: &str = "2";
+pub const GENERATOR_VERSION: &str = "3";
 pub const POSE_CONTRACT_VERSION: u16 = 1;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -189,9 +189,6 @@ fn sha256(bytes: &[u8]) -> String {
 }
 
 fn physical_scale(profile: &FixtureProfile, model: &FixtureModel) -> f32 {
-    if profile.model_units == ModelUnits::Metres {
-        return 1.0;
-    }
     let physical = &profile.physical;
     match (
         physical.width_millimetres,
@@ -599,6 +596,46 @@ mod tests {
                 })
         );
         assert_ne!(first[0].triangles, first[1].triangles);
+    }
+
+    #[test]
+    fn cad_models_respect_declared_fixture_and_demo_stage_scale() {
+        let fresnel = shipped_profile("generic--dimmer-fresnel.toskfixture");
+        let meshes = generate_live_projection_meshes(&fresnel).expect("Fresnel live mesh");
+        let bounds = meshes
+            .iter()
+            .flat_map(|mesh| &mesh.triangles)
+            .flat_map(|triangle| triangle.points_millimetres)
+            .fold(
+                ([f32::INFINITY; 3], [f32::NEG_INFINITY; 3]),
+                |(mut min, mut max), point| {
+                    for axis in 0..3 {
+                        min[axis] = min[axis].min(point[axis]);
+                        max[axis] = max[axis].max(point[axis]);
+                    }
+                    (min, max)
+                },
+            );
+        let spans = [
+            bounds.1[0] - bounds.0[0],
+            bounds.1[1] - bounds.0[1],
+            bounds.1[2] - bounds.0[2],
+        ];
+        assert!(spans[0] <= 480.1, "Fresnel width was {} mm", spans[0]);
+        assert!(spans[1] <= 520.1, "Fresnel height was {} mm", spans[1]);
+        assert!(spans[2] <= 540.1, "Fresnel depth was {} mm", spans[2]);
+
+        let stage = shipped_profile("venue--stage-element-2-1-m.toskfixture");
+        let top = generate_profile_projections(&stage)
+            .expect("stage projection")
+            .views
+            .into_iter()
+            .find(|projection| projection.view == ProfileProjectionView::Top)
+            .expect("stage top view");
+        assert!((top.physical_width_millimetres - 2_000.0).abs() < 0.2);
+        assert!((top.physical_height_millimetres - 1_000.0).abs() < 0.2);
+        assert_eq!(top.physical_width_millimetres * 4.0, 8_000.0);
+        assert_eq!(top.physical_height_millimetres * 4.0, 4_000.0);
     }
 
     #[test]

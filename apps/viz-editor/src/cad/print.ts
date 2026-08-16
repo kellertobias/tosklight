@@ -140,19 +140,19 @@ export function buildCadPdf(
 						centre[1] + local[0] * Math.sin(angle) + local[1] * Math.cos(angle),
 					];
 				};
-				commands.push(entity.kind === "venue" ? "0.82 g" : "0.68 g");
-				for (const triangle of geometry.triangles)
-					commands.push(
-						path(
-							triangle.points.map((p) => point(transform(p))),
-							true,
-						),
-					);
 				commands.push(entity.kind === "venue" ? "0.38 G" : "0.12 G", "0.65 w");
 				for (const outline of geometry.outlines)
 					commands.push(
 						path(
 							outline.map((p) => point(transform(p))),
+							false,
+						),
+					);
+				for (const modelLine of geometry.lines)
+					commands.push(
+						path(
+							modelLine.points.map((p) => point(transform(p))),
+							false,
 							false,
 						),
 					);

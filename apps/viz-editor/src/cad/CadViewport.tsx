@@ -717,6 +717,7 @@ class LineRenderer {
 		gl.clearDepth(1);
 		gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 		const fillVertices: number[] = [];
+		const depthLineVertices: number[] = [];
 		const lineVertices: number[] = [];
 		const vertex = (
 			vertices: number[],
@@ -740,6 +741,16 @@ class LineRenderer {
 		) => {
 			vertex(lineVertices, a, color);
 			vertex(lineVertices, b, color);
+		};
+		const depthLine = (
+			a: PlanPoint,
+			b: PlanPoint,
+			color: [number, number, number],
+			firstDepth: number,
+			secondDepth: number,
+		) => {
+			vertex(depthLineVertices, a, color, firstDepth - 1);
+			vertex(depthLineVertices, b, color, secondDepth - 1);
 		};
 		const worldOrigin = projectPoint([0, 0, 0], view, rotationQuarterTurns);
 		if (view !== "top_down") {
@@ -800,12 +811,11 @@ class LineRenderer {
 				viewPositionDepth(entity.positionMillimetres, view) +
 				viewPositionDepth(entityWorldPreview, view);
 			for (const triangle of projected.triangles) {
-				const color = active ? selectedColor(triangle.color) : triangle.color;
 				for (let index = 0; index < triangle.points.length; index++)
 					vertex(
 						fillVertices,
 						triangle.points[index],
-						color,
+						[0.018, 0.024, 0.032],
 						baseDepth + (triangle.depths?.[index] ?? 0),
 					);
 			}
@@ -816,13 +826,23 @@ class LineRenderer {
 					: [0.8, 0.84, 0.88];
 			for (const outline of projected.outlines) {
 				for (let index = 0; index < outline.length; index++) {
-					line(
+					depthLine(
 						outline[index],
 						outline[(index + 1) % outline.length],
 						outlineColor,
+						baseDepth,
+						baseDepth,
 					);
 				}
 			}
+			for (const modelLine of projected.lines)
+				depthLine(
+					modelLine.points[0],
+					modelLine.points[1],
+					outlineColor,
+					baseDepth + (modelLine.depths?.[0] ?? 0),
+					baseDepth + (modelLine.depths?.[1] ?? 0),
+				);
 			const centre = projectPoint(
 				entity.positionMillimetres,
 				view,
@@ -927,6 +947,12 @@ class LineRenderer {
 			gl.DYNAMIC_DRAW,
 		);
 		gl.drawArrays(gl.TRIANGLES, 0, fillVertices.length / 6);
+		gl.bufferData(
+			gl.ARRAY_BUFFER,
+			new Float32Array(depthLineVertices),
+			gl.DYNAMIC_DRAW,
+		);
+		gl.drawArrays(gl.LINES, 0, depthLineVertices.length / 6);
 		gl.disable(gl.DEPTH_TEST);
 		gl.bufferData(
 			gl.ARRAY_BUFFER,
@@ -964,6 +990,7 @@ export function fitCadOverview(
 		);
 		for (const triangle of geometry.triangles) points.push(...triangle.points);
 		for (const outline of geometry.outlines) points.push(...outline);
+		for (const line of geometry.lines) points.push(...line.points);
 	}
 	if (!points.length) {
 		points.push(
@@ -1029,6 +1056,10 @@ function worldGeometry(
 			],
 		})),
 		outlines: geometry.outlines.map((outline) => outline.map(transform)),
+		lines: geometry.lines.map((line) => ({
+			...line,
+			points: line.points.map(transform) as [PlanPoint, PlanPoint],
+		})),
 	};
 }
 
@@ -1046,13 +1077,6 @@ function pointInTriangle(
 	const second = area(a, point, c) / total;
 	const third = 1 - first - second;
 	return first >= 0 && second >= 0 && third >= 0;
-}
-
-function selectedColor(
-	color: readonly [number, number, number],
-): [number, number, number] {
-	const lightness = (color[0] + color[1] + color[2]) / 3;
-	return [0.01, 0.45 + lightness * 0.42, 0.58 + lightness * 0.36];
 }
 
 function viewDepth(entity: CadEntity, view: CadViewDirection): number {
