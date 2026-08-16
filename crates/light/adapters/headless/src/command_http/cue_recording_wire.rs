@@ -209,6 +209,12 @@ fn target(value: wire::CueRecordTarget) -> Result<application::ProgrammingCueRec
         wire::CueRecordTarget::CueList { .. } => {
             return Err("cue_list_id must not be nil".into());
         }
+        wire::CueRecordTarget::Virtual {
+            page,
+            playback_number,
+        } => application::ProgrammingCueRecordTarget::Virtual {
+            address: light_playback::VirtualPlaybackAddress::new(page, playback_number)?,
+        },
     })
 }
 
@@ -275,6 +281,23 @@ mod tests {
                 cue_list_id: uuid::Uuid::nil()
             })
             .is_err()
+        );
+        assert!(
+            target(wire::CueRecordTarget::Virtual {
+                page: 1,
+                playback_number: 1301,
+            })
+            .is_err()
+        );
+        assert_eq!(
+            target(wire::CueRecordTarget::Virtual {
+                page: 1,
+                playback_number: 1001,
+            }),
+            Ok(application::ProgrammingCueRecordTarget::Virtual {
+                address: light_playback::VirtualPlaybackAddress::new(1, 1001)
+                    .expect("valid virtual address"),
+            })
         );
     }
 

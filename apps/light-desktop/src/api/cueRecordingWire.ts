@@ -168,12 +168,13 @@ function decodeProjections(
 		);
 	if (request.target.kind === "cue_list" && cueList.id !== request.target.cueListId)
 		invalid("$.projections.cue_list.id", request.target.cueListId, cueList.id);
-	validateTargetTopology(request.target, playback, page);
+	validateTargetTopology(request.target, cueList.id, playback, page);
 	return { cueList, playback, page };
 }
 
 function validateTargetTopology(
 	target: CueRecordTarget,
+	cueListId: string,
 	playback: CueRecordProjections["playback"],
 	page: CueRecordProjections["page"],
 ) {
@@ -183,6 +184,26 @@ function validateTargetTopology(
 				playback,
 				page,
 			});
+		return;
+	}
+	if (target.kind === "virtual") {
+		if (playback)
+			invalid("$.projections.playback", "no standalone Virtual Playback", playback);
+		if (!page) invalid("$.projections.page", "Virtual Playback page", page);
+		if (page.body.number !== target.page)
+			invalid("$.projections.page.body.number", String(target.page), page.body.number);
+		const virtual = page.body.virtual_playbacks[String(target.playbackNumber)];
+		if (
+			!virtual ||
+			virtual.number !== target.playbackNumber ||
+			virtual.target.type !== "cue_list" ||
+			virtual.target.cue_list_id !== cueListId
+		)
+			invalid(
+				`$.projections.page.body.virtual_playbacks.${target.playbackNumber}`,
+				`Virtual Playback assigned to Cuelist ${cueListId}`,
+				virtual,
+			);
 		return;
 	}
 	if (!playback)
@@ -318,6 +339,12 @@ function encodeTarget(target: CueRecordTarget) {
 		return { kind: target.kind, page: target.page, slot: target.slot };
 	if (target.kind === "cue_list")
 		return { kind: target.kind, cue_list_id: target.cueListId };
+	if (target.kind === "virtual")
+		return {
+			kind: target.kind,
+			page: target.page,
+			playback_number: target.playbackNumber,
+		};
 	return { kind: target.kind };
 }
 
@@ -330,6 +357,12 @@ function validateRequest(request: CueRecordingRequest) {
 		boundedPositiveInteger(request.target.slot, "$.target.slot", 127);
 	}
 	if (request.target.kind === "cue_list") uuidAt(request.target.cueListId, "$.target.cueListId");
+	if (request.target.kind === "virtual") {
+		boundedPositiveInteger(request.target.page, "$.target.page", 127);
+		const number = request.target.playbackNumber;
+		if (!Number.isInteger(number) || number < 1001 || number > 39100)
+			invalid("$.target.playbackNumber", "integer within 1001-39100", number);
+	}
 	if (request.cueNumber != null) cueNumberAt(request.cueNumber, "$.cueNumber");
 	if (request.name != null) printableAt(request.name, "$.name", 256);
 	if (request.timing.fadeMillis != null)

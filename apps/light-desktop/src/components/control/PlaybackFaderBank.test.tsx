@@ -1017,12 +1017,9 @@ describe("PlaybackFaderBank selection and Record targets", () => {
 describe("PlaybackFaderBank Record targets", () => {
 	beforeEach(resetPlaybackFaderMocks);
 
-	it.each([
-		["touch", false],
-		["hardware-connected", true],
-	] as const)("makes the entire %s playback area one explicit-page Record target", async (_surface, hardware) => {
+	it("makes the entire touch playback area one explicit-page Record target", async () => {
 		assignPlayback();
-		mocks.hardwareConnected = hardware;
+		mocks.hardwareConnected = false;
 		mocks.state.storeArmed = true;
 		mocks.playbacks.pages.push({
 			number: 3,
@@ -1039,15 +1036,7 @@ describe("PlaybackFaderBank Record targets", () => {
 			"command-target-record",
 		);
 		expect(screen.getByText("RECORD TARGET")).toBeInTheDocument();
-		const surfaces = hardware
-			? [
-					card.querySelector("header")!,
-					screen.getByRole("button", { name: "GO +" }),
-					screen.getByRole("button", { name: "GO −" }),
-					screen.getByRole("button", { name: "FLASH" }),
-					screen.getByRole("slider", { name: "Page 3 playback 1 fader" }),
-				]
-			: [
+		const surfaces = [
 					screen.getByRole("button", {
 						name: "Playback representation page 3 playback 1",
 					}),
@@ -1083,6 +1072,81 @@ describe("PlaybackFaderBank Record targets", () => {
 		mocks.playbacks.pages.pop();
 	});
 
+	it("intercepts only the attached hardware top button and never its fader", async () => {
+		assignPlayback();
+		mocks.hardwareConnected = true;
+		mocks.state.storeArmed = true;
+		mocks.playbacks.pages.push({
+			number: 3,
+			name: "Page 3",
+			slots: { "1": 7 },
+		});
+		render(<PlaybackFaderBank pageNumber={3} count={1} />);
+
+		fireEvent.click(screen.getByRole("button", { name: "GO −" }));
+		fireEvent.click(screen.getByRole("button", { name: "FLASH" }));
+		fireEvent.input(screen.getByRole("slider", { name: "Page 3 playback 1 fader" }), {
+			target: { value: "42" },
+		});
+		expect(mocks.recordCue).not.toHaveBeenCalled();
+
+		fireEvent.click(screen.getByRole("button", { name: "GO +" }));
+		await waitFor(() => expect(mocks.recordCue).toHaveBeenCalledOnce());
+		expect(mocks.recordCue).toHaveBeenCalledWith({
+			target: { kind: "page_slot", page: 3, slot: 1 },
+			operation: "overwrite",
+			timing: {},
+			cueOnly: false,
+			capturePolicy: "current_capture",
+			activationPolicy: "go_to_if_normal",
+		});
+		expect(mocks.poolPlaybackAction).toHaveBeenCalled();
+		mocks.playbacks.pages.pop();
+	});
+
+	it.each([
+		["Add Cue", "overwrite", false],
+		["Merge Cue", "merge", true],
+		["Overwrite Cue", "overwrite", true],
+	] as const)(
+		"asks for %s when the target contains exactly one Cue",
+		async (label, operation, exactCue) => {
+			assignPlayback();
+			mocks.state.storeArmed = true;
+			mocks.scopedCueLists[0].cues = [
+				{
+					id: "cue-2-0",
+					number: "2.0",
+					name: "Look",
+					fade_millis: 0,
+					delay_millis: 0,
+					trigger: { type: "manual" },
+					changes: [],
+				},
+			];
+			render(<PlaybackFaderBank count={1} />);
+			fireEvent.click(
+				screen.getByRole("button", {
+					name: "Playback representation page 1 playback 1",
+				}),
+			);
+			expect(
+				screen.getByRole("dialog", { name: "Record Cue choice" }),
+			).toBeInTheDocument();
+			fireEvent.click(screen.getByRole("button", { name: label }));
+			await waitFor(() => expect(mocks.recordCue).toHaveBeenCalledOnce());
+			expect(mocks.recordCue).toHaveBeenCalledWith({
+				target: { kind: "page_slot", page: 1, slot: 1 },
+				operation,
+				...(exactCue ? { cueNumber: "2.0" } : {}),
+				timing: {},
+				cueOnly: false,
+				capturePolicy: "current_capture",
+				activationPolicy: "go_to_if_normal",
+			});
+		},
+	);
+
 	it.each([
 		["touch", false],
 		["hardware-connected", true],
@@ -1096,7 +1160,11 @@ describe("PlaybackFaderBank Record targets", () => {
 		const { container } = render(
 			<PlaybackFaderBank pageNumber={4} count={1} />,
 		);
-		fireEvent.click(container.querySelector("article")!);
+		fireEvent.click(
+			hardware
+				? screen.getAllByRole("button", { name: "DISABLED" })[0]
+				: container.querySelector("article")!,
+		);
 		await waitFor(() =>
 			expect(mocks.recordCue).toHaveBeenCalledWith({
 				target: { kind: "page_slot", page: 4, slot: 1 },

@@ -82,6 +82,10 @@ pub(super) fn validate_environment(
             },
         ) => true,
         (
+            ProgrammingCueRecordTarget::SelectedPlayback,
+            ProgrammingCueResolvedTarget::Virtual { .. },
+        ) => true,
+        (
             ProgrammingCueRecordTarget::PageSlot { page, slot },
             ProgrammingCueResolvedTarget::Playback {
                 page_slot: Some(resolved),
@@ -95,6 +99,10 @@ pub(super) fn validate_environment(
                 cue_list_id: resolved,
             },
         ) => cue_list_id == resolved,
+        (
+            ProgrammingCueRecordTarget::Virtual { address },
+            ProgrammingCueResolvedTarget::Virtual { address: resolved },
+        ) => address == resolved,
         _ => false,
     };
     if target_matches {
@@ -125,7 +133,8 @@ pub(super) fn validate_completion(
     let creation_matches = completion.created_topology
         == (completion.changed
             && completion.projections.cue_list.object_revision == 1
-            && completion.projections.playback.is_some());
+            && (completion.projections.playback.is_some()
+                || matches!(request.target, ProgrammingCueRecordTarget::Virtual { .. })));
     if event_matches
         && revision_matches
         && creation_matches
@@ -190,7 +199,30 @@ fn topology_matches(commit: &ProgrammingCueCommit, result: &ProgrammingCueCommit
             playback_matches(projections.playback.as_ref(), playback_number, cue_list.id)
                 && page_slot_matches(projections.page.as_ref(), Some(page_slot), playback_number)
         }
+        ProgrammingCueResolvedTarget::Virtual { address } => {
+            result.concrete_playback_number == Some(address.number().get())
+                && projections.playback.is_none()
+                && virtual_playback_matches(projections.page.as_ref(), address, cue_list.id)
+        }
     }
+}
+
+fn virtual_playback_matches(
+    projection: Option<&ProgrammingCueObjectProjection>,
+    address: light_playback::VirtualPlaybackAddress,
+    cue_list_id: light_core::CueListId,
+) -> bool {
+    let Some(projection) = projection else {
+        return false;
+    };
+    serde_json::from_value::<light_playback::PlaybackPage>(projection.raw_body.as_ref().clone())
+        .ok()
+        .filter(|page| page.number == address.page())
+        .and_then(|page| page.virtual_playbacks.get(&address.number().get()).cloned())
+        .is_some_and(|playback| {
+            playback.number == address.number().get()
+                && playback.target == light_playback::PlaybackTarget::CueList { cue_list_id }
+        })
 }
 
 fn playback_matches(

@@ -38,9 +38,10 @@ impl ServerProgrammingPorts<'_> {
         raw_command: &str,
     ) -> Result<(Option<String>, bool), String> {
         let context = recording_context(context, "cue-record");
+        let target = resolve_command_target(self, parsed.target)?;
         let command = light_application::ProgrammingCueRecordRequest {
             show_id: self.active_show_id()?,
-            target: parsed.target,
+            target,
             operation: parsed.operation,
             cue_number: parsed.cue_number,
             timing: parsed.timing,
@@ -134,6 +135,46 @@ impl ServerProgrammingPorts<'_> {
         }
         Ok(result)
     }
+}
+
+fn resolve_command_target(
+    ports: &ServerProgrammingPorts<'_>,
+    target: super::cue_recording_command::CueRecordCommandTarget,
+) -> Result<light_application::ProgrammingCueRecordTarget, String> {
+    use super::{
+        cue_recording_command::CueRecordCommandTarget,
+        playback_address_command::CommandPlaybackTarget,
+    };
+    Ok(match target {
+        CueRecordCommandTarget::SelectedCuelist => {
+            light_application::ProgrammingCueRecordTarget::SelectedPlayback
+        }
+        CueRecordCommandTarget::Cuelist { number } => {
+            light_application::ProgrammingCueRecordTarget::Pool {
+                playback_number: number,
+            }
+        }
+        CueRecordCommandTarget::Playback(CommandPlaybackTarget::CurrentPage { slot }) => {
+            let show = ports
+                .state()
+                .active_show
+                .current()
+                .clone()
+                .ok_or("no show is open")?;
+            let page = ports
+                .state()
+                .installation
+                .desk_page(ports.session().desk.id, show.id)
+                .map_err(|error| error.to_string())?;
+            light_application::ProgrammingCueRecordTarget::PageSlot { page, slot }
+        }
+        CueRecordCommandTarget::Playback(CommandPlaybackTarget::ExplicitPage { page, slot }) => {
+            light_application::ProgrammingCueRecordTarget::PageSlot { page, slot }
+        }
+        CueRecordCommandTarget::Playback(CommandPlaybackTarget::Virtual(address)) => {
+            light_application::ProgrammingCueRecordTarget::Virtual { address }
+        }
+    })
 }
 
 impl ProgrammingCueRecordingPorts for ServerProgrammingPorts<'_> {

@@ -237,7 +237,7 @@ fn preset_recall_of_live_group_spread_re_resolves_after_membership_edit() {
 fn cue_recall_of_live_group_spread_re_resolves_after_membership_edit() {
     let rig = SpreadRecallRig::new("cue-group-spread");
     assert_eq!(rig.command("GROUP 1 AT 100 THRU 0 THRU 100"), 5);
-    rig.command("RECORD SET 25");
+    rig.command("RECORD CUELIST 25");
     // The recorded cue stores the control points, not frozen per-fixture values.
     let store = ActiveShowRepository::open(&rig.entry.path).unwrap();
     let (_, _, cue_list) =

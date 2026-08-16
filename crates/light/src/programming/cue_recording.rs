@@ -32,10 +32,20 @@ pub struct ProgrammingCueRecordRequest {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ProgrammingCueRecordTarget {
-    Pool { playback_number: u16 },
+    Pool {
+        playback_number: u16,
+    },
     SelectedPlayback,
-    PageSlot { page: u8, slot: u8 },
-    CueList { cue_list_id: CueListId },
+    PageSlot {
+        page: u8,
+        slot: u8,
+    },
+    CueList {
+        cue_list_id: CueListId,
+    },
+    Virtual {
+        address: light_playback::VirtualPlaybackAddress,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -86,6 +96,9 @@ pub enum ProgrammingCueResolvedTarget {
         page_slot: Option<ProgrammingCuePageSlot>,
     },
     EmptyPageSlot(ProgrammingCuePageSlot),
+    Virtual {
+        address: light_playback::VirtualPlaybackAddress,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

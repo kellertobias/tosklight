@@ -412,6 +412,13 @@ pub(super) fn handle_playback_osc(
     else {
         return false;
     };
+    let record_target = is_physical_record_target(
+        state,
+        &playback_address,
+        parts[action_index],
+        button,
+        action_desk.as_ref(),
+    );
     let mut action = if parts[action_index] == "fader" {
         "master"
     } else {
@@ -468,7 +475,8 @@ pub(super) fn handle_playback_osc(
             state,
             session,
             playback_address.clone(),
-            action == "master" || pressed,
+            record_target,
+            pressed,
         ) {
             command_http::PlaybackTargetInterception::NotArmed => {}
             command_http::PlaybackTargetInterception::Consumed => {
@@ -520,6 +528,65 @@ pub(super) fn handle_playback_osc(
         );
     }
     true
+}
+
+fn is_physical_record_target(
+    state: &AppState,
+    address: &PlaybackAddress,
+    control: &str,
+    button: Option<u8>,
+    desk: Option<&ControlDesk>,
+) -> bool {
+    if control == "button" {
+        return button == Some(1);
+    }
+    if control != "label" {
+        return false;
+    }
+    let snapshot = state.output.snapshot();
+    let playback = match address {
+        PlaybackAddress::Pool(number) => snapshot
+            .playbacks
+            .iter()
+            .find(|playback| playback.number == *number),
+        PlaybackAddress::ExplicitPage { page, slot } => snapshot
+            .playback_pages
+            .iter()
+            .find(|candidate| candidate.number == *page)
+            .and_then(|page| page.slots.get(slot))
+            .and_then(|number| {
+                snapshot
+                    .playbacks
+                    .iter()
+                    .find(|playback| playback.number == *number)
+            }),
+        PlaybackAddress::CurrentPage { slot } => state
+            .active_show
+            .current()
+            .as_ref()
+            .zip(desk)
+            .and_then(|(show, desk)| state.installation.desk_page(desk.id, show.id).ok())
+            .and_then(|page_number| {
+                snapshot
+                    .playback_pages
+                    .iter()
+                    .find(|page| page.number == page_number)
+            })
+            .and_then(|page| page.slots.get(slot))
+            .and_then(|number| {
+                snapshot
+                    .playbacks
+                    .iter()
+                    .find(|playback| playback.number == *number)
+            }),
+        PlaybackAddress::Virtual(address) => snapshot
+            .playback_pages
+            .iter()
+            .find(|page| page.number == address.page())
+            .and_then(|page| page.virtual_playbacks.get(&address.number().get())),
+        PlaybackAddress::CueList(_) | PlaybackAddress::Group(_) => None,
+    };
+    playback.is_none_or(|playback| playback.button_count == 0)
 }
 
 #[cfg(test)]

@@ -421,15 +421,7 @@ fn route_programmer_osc_action(
         true
     } else if matches!(
         action,
-        "align"
-            | "escape"
-            | "menu"
-            | "prog-playback"
-            | "playback"
-            | "off"
-            | "page-up"
-            | "page-down"
-            | "diff"
+        "align" | "escape" | "menu" | "prog-playback" | "off" | "page-up" | "page-down" | "diff"
     ) {
         emit(
             state,

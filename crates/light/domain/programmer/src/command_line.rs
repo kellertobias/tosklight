@@ -197,7 +197,7 @@ pub fn command_gesture_intent(
             let replacement = match key {
                 CommandKey::Group => Some(("DEGROUP", &["GROUP", "FIXTURE"][..])),
                 CommandKey::Cue => Some(("CUELIST", &["CUE"][..])),
-                CommandKey::Playback => Some(("VPBK", &["PLAYBACK"][..])),
+                CommandKey::Playback => Some(("VPBK", &["PBK"][..])),
                 _ => None,
             };
             if let Some((text, roots)) = replacement {
@@ -427,7 +427,7 @@ fn edit_text(state: &CommandLineState, key: CommandKey) -> CommandLineEdit {
     if key == CommandKey::Cue && last_word_is_any(command, &["CUE"]) {
         return edited(replace_last_word(command, "CUELIST"), state.target);
     }
-    if key == CommandKey::Playback && last_word_is_any(command, &["PLAYBACK"]) {
+    if key == CommandKey::Playback && last_word_is_any(command, &["PBK"]) {
         return edited(replace_last_word(command, "VPBK"), state.target);
     }
     if key == CommandKey::At && last_word_is_any(command, &["AT"]) {
@@ -463,6 +463,7 @@ fn edit_text(state: &CommandLineState, key: CommandKey) -> CommandLineEdit {
         key,
         CommandKey::Group
             | CommandKey::Cue
+            | CommandKey::Playback
             | CommandKey::Delete
             | CommandKey::Move
             | CommandKey::Copy
@@ -533,7 +534,7 @@ fn edited(text: String, target: CommandTarget) -> CommandLineEdit {
 fn root_token(key: CommandKey) -> Option<&'static str> {
     match key {
         CommandKey::Cue => Some("CUE"),
-        CommandKey::Playback => Some("PLAYBACK"),
+        CommandKey::Playback => Some("PBK"),
         CommandKey::Off => Some("OFF"),
         CommandKey::Delete => Some("DELETE"),
         CommandKey::Move => Some("MOVE"),
@@ -554,7 +555,7 @@ fn command_token(key: CommandKey) -> String {
     match key {
         CommandKey::Group => "GROUP".into(),
         CommandKey::Cue => "CUE".into(),
-        CommandKey::Playback => "PLAYBACK".into(),
+        CommandKey::Playback => "PBK".into(),
         CommandKey::Off => "OFF".into(),
         CommandKey::Delete => "DELETE".into(),
         CommandKey::Move => "MOVE".into(),

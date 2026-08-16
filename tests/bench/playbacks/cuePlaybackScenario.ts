@@ -608,7 +608,7 @@ export class BrowserRecording {
 
 	private async address(playback: number) {
 		const location = await playbackLocation(this.api, this.showId(), playback);
-		return `SET ${location.page} . ${location.slot}`;
+		return `PBK ${location.page} . ${location.slot}`;
 	}
 
 	private cueListForPlayback(playback: number) {

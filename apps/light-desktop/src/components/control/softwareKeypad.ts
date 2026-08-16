@@ -26,7 +26,7 @@ export interface TargetedCommandEdit {
 const pristineRootTokens: Partial<Record<SoftwareKey, string>> = {
 	GRP: "GROUP",
 	CUE: "CUE",
-	PLAYBACK: "PLAYBACK",
+	PLAYBACK: "PBK",
 	OFF: "OFF",
 	DEL: "DELETE",
 	MOV: "MOVE",
@@ -203,7 +203,7 @@ export function editTargetedCommandWithSoftwareKey(
 			{
 				GRP: "GROUP",
 				CUE: "CUE",
-				PLAYBACK: "PLAYBACK",
+				PLAYBACK: "PBK",
 				OFF: "OFF",
 				DEL: "DELETE",
 				MOV: "MOVE",
@@ -223,6 +223,7 @@ export function editTargetedCommandWithSoftwareKey(
 	const spaced = [
 		"GROUP",
 		"CUE",
+		"PBK",
 		"DELETE",
 		"MOVE",
 		"COPY",

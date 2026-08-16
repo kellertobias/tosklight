@@ -93,11 +93,45 @@ describe("command scenario primitives", () => {
 		expect(commandKeys("SPD GRP 1 AT SPD GRP 3", "FIXTURE")).toEqual([
 			"SHIFT",
 			"TIME",
+			"SHIFT",
 			"1",
 			"AT",
 			"SHIFT",
 			"TIME",
+			"SHIFT",
 			"3",
+		]);
+		expect(commandKeys("GO TO PBK 2 . 6 CUE 2.1", "FIXTURE")).toEqual([
+			"SHIFT",
+			"DIV",
+			"SHIFT",
+			"PLAYBACK",
+			"2",
+			".",
+			"6",
+			"CUE",
+			"2",
+			".",
+			"1",
+		]);
+		expect(commandKeys("LOAD VPBK 1001 CUE 2.0.15", "FIXTURE")).toEqual([
+			"SHIFT",
+			"DIV",
+			"DIV",
+			"SHIFT",
+			"PLAYBACK",
+			"PLAYBACK",
+			"1",
+			"0",
+			"0",
+			"1",
+			"CUE",
+			"2",
+			".",
+			"0",
+			".",
+			"1",
+			"5",
 		]);
 	});
 

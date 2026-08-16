@@ -52,6 +52,9 @@ fn resolve_target(
         ProgrammingCueRecordTarget::CueList { cue_list_id } => {
             Ok(ProgrammingCueResolvedTarget::CueList { cue_list_id })
         }
+        ProgrammingCueRecordTarget::Virtual { address } => {
+            Ok(ProgrammingCueResolvedTarget::Virtual { address })
+        }
     }
 }
 
@@ -69,6 +72,9 @@ fn selected_playback(
         .selected_playback(context.desk_id, show.id)
         .map_err(|error| invalid(error.to_string()))?
         .ok_or_else(|| not_found("no playback is selected"))?;
+    if let Ok(address) = light_playback::VirtualPlaybackAddress::from_number(playback_number) {
+        return Ok(ProgrammingCueResolvedTarget::Virtual { address });
+    }
     Ok(ProgrammingCueResolvedTarget::Playback {
         playback_number,
         page_slot: None,
@@ -117,6 +123,10 @@ fn active_cue(
             status.playback.cue_list_id == cue_list_id
         }
         ProgrammingCueResolvedTarget::EmptyPageSlot(_) => false,
+        ProgrammingCueResolvedTarget::Virtual { address } => {
+            status.playback.playback_identity
+                == Some(light_playback::PlaybackIdentity::Virtual(address))
+        }
     });
     let first = candidates.find_map(runtime_current_cue);
     if candidates

@@ -27,6 +27,28 @@ impl CommandLineProgrammer for ProgrammingResource {
     }
 }
 
+struct PreserveCommandLine;
+
+impl CommandLineProgrammer for PreserveCommandLine {
+    fn clear_command_line(&self, _session_id: light_core::SessionId) -> bool {
+        true
+    }
+}
+
+pub(crate) fn execute_manual_command_without_line_cleanup(
+    state: &AppState,
+    session: &Session,
+    context: &ActionContext,
+    command: &str,
+) -> Option<ProgrammingExecution> {
+    ServerProgrammingPorts::new(state, session, "programmer_command", true).record_typed_command(
+        &PreserveCommandLine,
+        context,
+        command,
+        ExecutionPolicy::AtomicProgrammer,
+    )
+}
+
 pub(crate) struct ServerProgrammingPorts<'a> {
     state: &'a AppState,
     session: &'a Session,
@@ -72,6 +94,7 @@ impl<'a> ServerProgrammingPorts<'a> {
             .or_else(|| self.link_cue_command(programmers, context, command))
             .or_else(|| self.record_group_command(programmers, context, command))
             .or_else(|| self.record_preset_command(programmers, context, command))
+            .or_else(|| self.select_playback_command(programmers, context, command, policy))
             .or_else(|| self.record_cue_command(programmers, context, command))
             .or_else(|| self.delete_cue_command(programmers, context, command, policy))
             .or_else(|| self.transfer_cue_command(programmers, context, command))

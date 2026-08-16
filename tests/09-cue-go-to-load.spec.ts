@@ -24,24 +24,24 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
 			);
 			const cueListId = await installTwinPlaybacks(api);
 			await api.playbackNumberAction(2, "select", {});
-			await api.executeCommandLine("CUE SET 1 CUE 3");
-			await api.executeCommandLine("CUE CUE SET 1 . 2 CUE 2");
+			await api.executeCommandLine("GO TO PBK 1 CUE 3");
+			await api.executeCommandLine("LOAD PBK 1 . 2 CUE 2");
 			expect(await runtime(api, 1)).toMatchObject({
-				current_cue_number: 3,
+				current_cue_number: "3",
 				master: 1,
 				enabled: true,
 			});
 			expect(await runtime(api, 2)).toMatchObject({
 				enabled: false,
-				loaded_cue_number: 2,
+				loaded_cue_number: "2",
 				effective_next_is_loaded: true,
 			});
 
 			const before = await playbackState(api);
-			await expect(api.executeCommandLine("CUE 99")).rejects.toThrow(
+			await expect(api.executeCommandLine("GO TO PBK 2 CUE 99")).rejects.toThrow(
 				/cue does not exist/i,
 			);
-			await expect(api.executeCommandLine("CUE SET 99 CUE 1")).rejects.toThrow(
+			await expect(api.executeCommandLine("GO TO PBK 99 CUE 1")).rejects.toThrow(
 				/playback 99 does not exist/i,
 			);
 			await expect(
@@ -55,10 +55,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
 			const otherDesk = new ApiDriver(api.baseUrl);
 			await otherDesk.login("Operator");
 			expect((await playbackState(otherDesk)).selected_playback).toBeNull();
-			await expect(otherDesk.executeCommandLine("CUE 2")).rejects.toThrow(
-				/no playback is selected/i,
-			);
-			await otherDesk.playbackNumberAction(1, "select", {});
+			await otherDesk.executeCommandLine("PBK 1");
 			expect((await playbackState(otherDesk)).selected_playback).toBe(1);
 			expect((await playbackState(api)).selected_playback).toBe(2);
 
@@ -76,7 +73,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
 				"/api/v2/output-runtime/global-master/actions",
 				{ grand_master: 0.5, blackout: false },
 			);
-			await api.executeCommandLine("CUE SET 1 CUE 3");
+			await api.executeCommandLine("GO TO PBK 1 CUE 3");
 			const masterFrame = await bench.tick(3_000);
 			const visualization = await api.request<any>(
 				"GET",
@@ -113,18 +110,18 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
 				{ grand_master: 1, blackout: false },
 			);
 
-			await api.executeCommandLine("CUE CUE SET 1 CUE 2");
-			expect((await runtime(api, 1)).loaded_cue_number).toBe(2);
-			await api.executeCommandLine("CUE CUE SET 1 CUE 1");
+			await api.executeCommandLine("LOAD PBK 1 CUE 2");
+			expect((await runtime(api, 1)).loaded_cue_number).toBe("2");
+			await api.executeCommandLine("LOAD PBK 1 CUE 1");
 			expect(await runtime(api, 1)).toMatchObject({
-				loaded_cue_number: 1,
+				loaded_cue_number: "1",
 				effective_next_is_loaded: true,
 			});
-			await api.executeCommandLine("CUE CUE SET 1 CUE 2");
+			await api.executeCommandLine("LOAD PBK 1 CUE 2");
 
 			const beforeRenumber = await object<any>(api, "cue_list", cueListId);
 			const loadedCueId = beforeRenumber.body.cues.find(
-				(cue: any) => cue.number === 2,
+				(cue: any) => cue.number === "2",
 			).id;
 			await putObject(
 				api,
@@ -134,7 +131,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
 					...beforeRenumber.body,
 					cues: beforeRenumber.body.cues.map((cue: any) => ({
 						...cue,
-						number: cue.number * 10,
+						number: String(Number(cue.number) * 10),
 					})),
 				},
 				beforeRenumber.revision,
@@ -143,8 +140,8 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
 				.poll(async () => runtime(api, 1))
 				.toMatchObject({
 					loaded_cue_id: loadedCueId,
-					loaded_cue_number: 20,
-					effective_next_cue_number: 20,
+					loaded_cue_number: "20",
+					effective_next_cue_number: "20",
 					effective_next_is_loaded: true,
 				});
 
@@ -167,7 +164,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
 			expect((await runtime(api, 1)).loaded_cue_id).toBeUndefined();
 			expect((await runtime(api, 1)).loaded_cue_number).toBeUndefined();
 
-			await api.executeCommandLine("CUE CUE SET 1 CUE 10");
+			await api.executeCommandLine("LOAD PBK 1 CUE 10");
 			expect((await runtime(api, 1)).effective_next_is_loaded).toBe(true);
 			await api.openShow(show.id, { transition: "hold_current" });
 			expect((await playbackState(api)).active).toHaveLength(0);
@@ -190,18 +187,25 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
 			await expect
 				.poll(async () => (await playbackState(api)).selected_playback)
 				.toBe(2);
-			for (const key of ["cue", "digit-3", "enter"])
+			await hardware.send(`/light/${alias}/programmer/shift`, [true]);
+			await hardware.send(`/light/${alias}/programmer/div`, [true]);
+			await hardware.send(`/light/${alias}/programmer/shift`, [false]);
+			for (const key of ["playback", "digit-2", "cue", "digit-3", "enter"])
 				await hardware.send(`/light/${alias}/programmer/${key}`, [true]);
 			await expect
 				.poll(async () => runtime(api, 2))
-				.toMatchObject({ current_cue_number: 3, enabled: true });
-			for (const key of ["cue", "cue", "digit-2", "enter"])
+				.toMatchObject({ current_cue_number: "3", enabled: true });
+			await hardware.send(`/light/${alias}/programmer/shift`, [true]);
+			await hardware.send(`/light/${alias}/programmer/div`, [true]);
+			await hardware.send(`/light/${alias}/programmer/div`, [true]);
+			await hardware.send(`/light/${alias}/programmer/shift`, [false]);
+			for (const key of ["playback", "digit-2", "cue", "digit-2", "enter"])
 				await hardware.send(`/light/${alias}/programmer/${key}`, [true]);
 			await expect
 				.poll(async () => runtime(api, 2))
 				.toMatchObject({
-					current_cue_number: 3,
-					effective_next_cue_number: 2,
+					current_cue_number: "3",
+					effective_next_cue_number: "2",
 					effective_next_is_loaded: true,
 				});
 			const mark = hardware.mark();
@@ -272,7 +276,7 @@ async function installTwinPlaybacks(api: ApiDriver): Promise<string> {
 function cue(number: number, id: string, fixture: string, level: number) {
 	return {
 		id,
-		number,
+		number: String(number),
 		name: `Cue ${number}`,
 		fade_millis: 3_000,
 		delay_millis: 0,

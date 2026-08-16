@@ -14,13 +14,68 @@ import {
 import { VirtualPlaybackConfigurationModal } from "../components/control/VirtualPlaybackConfigurationModal";
 import { useVirtualPlaybackController } from "../components/control/virtualPlayback/useVirtualPlaybackController";
 import { VirtualPlaybackGrid } from "../components/control/virtualPlayback/VirtualPlaybackGrid";
+import { useCommandLineSurface } from "../components/control/commandLine/useCommandLineSurface";
+import { loadRecordSettings } from "../components/setup/ProgrammerDefaults";
 import { usePaneChromeTargets } from "../components/shell/PaneChromeContext";
 import { useControlSurfaceTarget } from "../features/controlSurfaceInteraction/useControlSurfaceTarget";
+import { useCueRecording } from "../features/cueRecording/CueRecordingProvider";
 import type { WindowProps } from "./windowTypes";
 
 export function VirtualPlaybacksWindow({ paneId, active = true }: WindowProps) {
 	const controller = useVirtualPlaybackController(paneId, active);
+	const cueRecording = useCueRecording();
+	const command = useCommandLineSurface({ enabled: active, observeCommand: false });
+	const [recordChoice, setRecordChoice] = useState<{
+		slot: number;
+		cueNumber: string;
+	} | null>(null);
 	const paneChrome = usePaneChromeTargets();
+	const recordVirtual = async (
+		slot: number,
+		choice: "add" | "merge" | "overwrite",
+	) => {
+		if (controller.pageNumber == null) return;
+		const playbackNumber = virtualPlaybackNumber(controller.pageNumber, slot);
+		const playback =
+			controller.page?.virtual_playbacks?.[String(playbackNumber)] ?? null;
+		const cueList =
+			playback?.target.type === "cue_list"
+				? controller.cueLists.get(playback.target.cue_list_id)
+				: undefined;
+		const cueNumber = choice === "add" ? undefined : cueList?.cues[0]?.number;
+		const settings = loadRecordSettings();
+		const outcome = await cueRecording?.record({
+			target: {
+				kind: "virtual",
+				page: controller.pageNumber,
+				playbackNumber,
+			},
+			operation: choice === "merge" ? "merge" : "overwrite",
+			...(cueNumber ? { cueNumber } : {}),
+			timing: {},
+			cueOnly: settings.cueOnly,
+			capturePolicy: "current_capture",
+			activationPolicy: "hold",
+		});
+		if (!outcome) return;
+		controller.dispatch({ type: "SET_STORE_ARMED", value: false });
+		await command.reset();
+	};
+	const requestVirtualRecord = (slot: number) => {
+		if (controller.pageNumber == null) return;
+		const playbackNumber = virtualPlaybackNumber(controller.pageNumber, slot);
+		const playback =
+			controller.page?.virtual_playbacks?.[String(playbackNumber)] ?? null;
+		const cueList =
+			playback?.target.type === "cue_list"
+				? controller.cueLists.get(playback.target.cue_list_id)
+				: undefined;
+		if (cueList?.cues.length === 1) {
+			setRecordChoice({ slot, cueNumber: cueList.cues[0].number });
+			return;
+		}
+		void recordVirtual(slot, "add");
+	};
 	useControlSurfaceTarget({
 		id: `virtual-playback-settings:${paneId ?? "builtin"}`,
 		priority: 100,
@@ -98,12 +153,25 @@ export function VirtualPlaybacksWindow({ paneId, active = true }: WindowProps) {
 				zones={controller.zones.zones}
 				selectedSlots={controller.selectedSlots}
 				configurationArmed={controller.configurationArmed}
+				storeArmed={controller.state.storeArmed}
 				updateArmed={controller.state.updateArmed}
 				shiftArmed={controller.state.shiftArmed}
 				onConfigure={controller.openConfiguration}
+				onRecord={requestVirtualRecord}
 				onToggleZone={controller.toggleZoneSlot}
 				paneId={paneId}
 			/>
+			{recordChoice && (
+				<VirtualCueRecordChoiceModal
+					cueNumber={recordChoice.cueNumber}
+					onClose={() => setRecordChoice(null)}
+					onChoice={(choice) => {
+						const slot = recordChoice.slot;
+						setRecordChoice(null);
+						void recordVirtual(slot, choice);
+					}}
+				/>
+			)}
 			{controller.zones.error && (
 				<p className="virtual-playback-pane-error" role="alert">
 					{controller.zones.error}
@@ -145,6 +213,39 @@ export function VirtualPlaybacksWindow({ paneId, active = true }: WindowProps) {
 				/>
 			)}
 		</section>
+	);
+}
+
+function VirtualCueRecordChoiceModal(props: {
+	cueNumber: string;
+	onClose(): void;
+	onChoice(choice: "add" | "merge" | "overwrite"): void;
+}) {
+	return createPortal(
+		<ModalRegistration onClose={props.onClose}>
+			<div className="stacked-modal-layer cue-record-choice-layer">
+				<section
+					className="nested-modal cue-record-choice-modal"
+					role="dialog"
+					aria-modal="true"
+					aria-label="Record Cue choice"
+				>
+					<ModalTitleBar title={`Record Cue ${props.cueNumber}`} />
+					<p>This Cuelist contains one Cue. Choose how to record it.</p>
+					<div className="command-choice-actions">
+						<Button variant="primary" onClick={() => props.onChoice("add")}>
+							Add Cue
+						</Button>
+						<Button onClick={() => props.onChoice("merge")}>Merge Cue</Button>
+						<Button onClick={() => props.onChoice("overwrite")}>
+							Overwrite Cue
+						</Button>
+						<Button onClick={props.onClose}>Cancel</Button>
+					</div>
+				</section>
+			</div>
+		</ModalRegistration>,
+		document.body,
 	);
 }
 

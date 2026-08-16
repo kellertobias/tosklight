@@ -1,4 +1,4 @@
-import { Button } from "@tosklight/ui";
+import { Button, ModalRegistration, ModalTitleBar } from "@tosklight/ui";
 import { ModalFrame } from "@tosklight/ui/modals";
 import {
 	DEFAULT_POOL_CARD_MINIMUM_WIDTH,
@@ -13,6 +13,7 @@ import {
 	WindowSettings,
 } from "@tosklight/ui/window-kit";
 import { useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type {
 	PlaybackDefinition,
 	PlaybackPage,
@@ -34,7 +35,10 @@ import {
 	resolveConfiguredPoolPresentation,
 	usePoolPresentationConfiguration,
 } from "../../features/poolPresentation/poolPresentation";
-import { usePlaybackPages } from "../../features/showObjects/ShowObjectsState";
+import {
+	useCueLists,
+	usePlaybackPages,
+} from "../../features/showObjects/ShowObjectsState";
 import { useShowObjectKindsView } from "../../features/showObjects/ShowObjectsView";
 import { useApp } from "../../state/AppContext";
 import { useCuelistPool } from "./useCuelistSelection";
@@ -150,7 +154,13 @@ function useCuelistPoolActions(props: CuelistPoolProps) {
 		observeCommand: false,
 	});
 	const cueRecording = useCueRecording();
+	const cueLists = useCueLists();
 	const { state, dispatch } = useApp();
+	const [recordChoice, setRecordChoice] = useState<{
+		number: number;
+		playback: PlaybackDefinition;
+		cueNumber: string;
+	} | null>(null);
 	const holdTimer = useRef<number | null>(null);
 	const held = useRef(false);
 	const clearHold = () => {
@@ -192,6 +202,40 @@ function useCuelistPoolActions(props: CuelistPoolProps) {
 		props.onMessage("");
 		props.onOpenSettings(number);
 	};
+	const record = (
+		number: number,
+		playback: PlaybackDefinition | null,
+		choice: "add" | "merge" | "overwrite",
+	) => {
+		const settings = loadRecordSettings();
+		const cueListId =
+			playback?.target.type === "cue_list"
+				? playback.target.cue_list_id
+				: null;
+		const cueList =
+			cueListId !== null
+				? cueLists.find((item) => item.body.id === cueListId)?.body
+				: undefined;
+		const cueNumber = choice === "add" ? undefined : cueList?.cues[0]?.number;
+		void cueRecording
+			?.record({
+				target:
+					cueListId !== null
+						? { kind: "cue_list", cueListId }
+						: { kind: "pool", playbackNumber: number },
+				operation: choice === "merge" ? "merge" : "overwrite",
+				...(cueNumber ? { cueNumber } : {}),
+				timing: {},
+				cueOnly: settings.cueOnly,
+				capturePolicy: "current_capture",
+				activationPolicy: "hold",
+			})
+			.then(async (outcome) => {
+				if (!outcome) return;
+				dispatch({ type: "SET_STORE_ARMED", value: false });
+				await command.reset();
+			});
+	};
 	const click = (number: number, playback: PlaybackDefinition | null) => {
 		if (held.current) {
 			held.current = false;
@@ -206,21 +250,23 @@ function useCuelistPoolActions(props: CuelistPoolProps) {
 			return;
 		}
 		if (state.storeArmed) {
-			const settings = loadRecordSettings();
-			void cueRecording
-				?.record({
-					target: { kind: "pool", playbackNumber: number },
-					operation: "overwrite",
-					timing: {},
-					cueOnly: settings.cueOnly,
-					capturePolicy: "current_capture",
-					activationPolicy: "hold",
-				})
-				.then(async (outcome) => {
-					if (!outcome) return;
-					dispatch({ type: "SET_STORE_ARMED", value: false });
-					await command.reset();
+			const cueListId =
+				playback?.target.type === "cue_list"
+					? playback.target.cue_list_id
+					: null;
+			const cueList =
+				cueListId !== null
+					? cueLists.find((item) => item.body.id === cueListId)?.body
+					: undefined;
+			if (playback && cueList?.cues.length === 1) {
+				setRecordChoice({
+					number,
+					playback,
+					cueNumber: cueList.cues[0].number,
 				});
+				return;
+			}
+			record(number, playback, "add");
 			return;
 		}
 		if (state.cueListSetArmed) {
@@ -237,6 +283,12 @@ function useCuelistPoolActions(props: CuelistPoolProps) {
 		startHold,
 		click,
 		openContextSettings,
+		recordChoice,
+		resolveRecordChoice: (choice: "add" | "merge" | "overwrite" | null) => {
+			const pending = recordChoice;
+			setRecordChoice(null);
+			if (pending && choice) record(pending.number, pending.playback, choice);
+		},
 	};
 }
 
@@ -499,7 +551,15 @@ function CuelistPoolSettings({
 }
 
 export function CuelistPool(props: CuelistPoolProps) {
-	const { state, clearHold, startHold, click, openContextSettings } =
+	const {
+		state,
+		clearHold,
+		startHold,
+		click,
+		openContextSettings,
+		recordChoice,
+		resolveRecordChoice,
+	} =
 		useCuelistPoolActions(props);
 	const [search, setSearch] = useState("");
 	const [preview, setPreview] = useState<{
@@ -571,6 +631,31 @@ export function CuelistPool(props: CuelistPoolProps) {
 				}}
 			/>
 			{props.settings}
+			{recordChoice &&
+				createPortal(
+					<ModalRegistration onClose={() => resolveRecordChoice(null)}>
+						<div className="stacked-modal-layer cue-record-choice-layer">
+							<section
+								className="nested-modal cue-record-choice-modal"
+								role="dialog"
+								aria-modal="true"
+								aria-label="Record Cue choice"
+							>
+								<ModalTitleBar title={`Record Cue ${recordChoice.cueNumber}`} />
+								<p>This Cuelist contains one Cue. Choose how to record it.</p>
+								<div className="command-choice-actions">
+									<Button onClick={() => resolveRecordChoice("add")}>Add Cue</Button>
+									<Button onClick={() => resolveRecordChoice("merge")}>Merge Cue</Button>
+									<Button onClick={() => resolveRecordChoice("overwrite")}>
+										Overwrite Cue
+									</Button>
+									<Button onClick={() => resolveRecordChoice(null)}>Cancel</Button>
+								</div>
+							</section>
+						</div>
+					</ModalRegistration>,
+					document.body,
+				)}
 			{preview && (
 				<CuelistPreviewModal
 					preview={preview}

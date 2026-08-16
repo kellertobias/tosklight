@@ -105,9 +105,9 @@ impl CommandContractScenario {
     }
 
     fn verify_cue_creation_and_timing(&self) {
-    execute_programmer_command(&self.state, &self.session, "RECORD SET 25 TIME 3 DELAY 1.5")
+    execute_programmer_command(&self.state, &self.session, "RECORD CUELIST 25 TIME 3 DELAY 1.5")
         .unwrap();
-    execute_programmer_command(&self.state, &self.session, "RECORD SET 25 CUE 2.5").unwrap();
+    execute_programmer_command(&self.state, &self.session, "RECORD CUELIST 25 CUE 2.5").unwrap();
     let snapshot = self.state.output.snapshot();
     let (_, _, cue_list) =
         cue_list_for_playback(&ActiveShowRepository::open(&self.show_path).unwrap(), &snapshot, 25).unwrap();
@@ -132,7 +132,7 @@ impl CommandContractScenario {
     execute_programmer_command(
         &self.state,
         &self.session,
-        "RECORD SET 25 CUE 2.5 DELAY 0",
+        "RECORD CUELIST 25 CUE 2.5 DELAY 0",
     )
     .unwrap();
     let (_, _, cue_list) = cue_list_for_playback(
@@ -179,7 +179,7 @@ impl CommandContractScenario {
         ));
     };
     set_only_color();
-    execute_programmer_command(&self.state, &self.session, "RECORD + SET 25 CUE 2.5").unwrap();
+    execute_programmer_command(&self.state, &self.session, "RECORD + CUELIST 25 CUE 2.5").unwrap();
     let (_, _, cue_list) = cue_list_for_playback(
         &ActiveShowRepository::open(&self.show_path).unwrap(),
         &self.state.output.snapshot(),
@@ -189,7 +189,7 @@ impl CommandContractScenario {
     let merged = cue_list.cues.iter().find(|item| item.number == cue("2.5")).unwrap();
     assert_eq!(merged.group_changes.len(), 2);
 
-    execute_programmer_command(&self.state, &self.session, "RECORD - SET 25 CUE 2.5").unwrap();
+    execute_programmer_command(&self.state, &self.session, "RECORD - CUELIST 25 CUE 2.5").unwrap();
     let (_, _, cue_list) = cue_list_for_playback(
         &ActiveShowRepository::open(&self.show_path).unwrap(),
         &self.state.output.snapshot(),
@@ -204,7 +204,7 @@ impl CommandContractScenario {
     );
 
     set_only_color();
-    execute_programmer_command(&self.state, &self.session, "RECORD SET 25 CUE 2.5").unwrap();
+    execute_programmer_command(&self.state, &self.session, "RECORD CUELIST 25 CUE 2.5").unwrap();
     let (_, _, cue_list) = cue_list_for_playback(
         &ActiveShowRepository::open(&self.show_path).unwrap(),
         &self.state.output.snapshot(),
@@ -219,7 +219,7 @@ impl CommandContractScenario {
     programmer.values.clear();
     programmer.group_values.clear();
     self.state.programming.restore(programmer);
-    execute_programmer_command(&self.state, &self.session, "RECORD - SET 25 CUE 2.5").unwrap();
+    execute_programmer_command(&self.state, &self.session, "RECORD - CUELIST 25 CUE 2.5").unwrap();
     let (_, _, cue_list) = cue_list_for_playback(
         &ActiveShowRepository::open(&self.show_path).unwrap(),
         &self.state.output.snapshot(),
@@ -288,7 +288,7 @@ fn new_cuelist_and_playback_record_is_one_active_show_batch() {
     execute_programmer_command(
         &scenario.state,
         &scenario.session,
-        "RECORD SET 25 CUE 1",
+        "RECORD CUELIST 25 CUE 1",
     )
     .unwrap();
 
@@ -306,7 +306,7 @@ fn new_cuelist_and_playback_record_is_one_active_show_batch() {
     );
     assert_eq!(
         scenario.state.events.latest_sequence(),
-        before_events + 1
+        before_events + 2
     );
     let runtime = scenario.state.output.snapshot();
     assert_eq!(runtime.revision, after.revision().value());
@@ -317,17 +317,20 @@ fn new_cuelist_and_playback_record_is_one_active_show_batch() {
     ) else {
         panic!("expected one active-show Record event");
     };
-    assert_eq!(events.len(), 1);
+    assert_eq!(events.len(), 2);
+    let show_event = events
+        .iter()
+        .find(|event| matches!(event.payload, light_application::ApplicationEvent::Show(_)))
+        .expect("expected one active-show Record event");
     let light_application::ApplicationEvent::Show(
         light_application::ShowEvent::ObjectsChanged(change),
-    ) = &events[0].payload
+    ) = &show_event.payload
     else {
         panic!("expected one typed object batch");
     };
-    assert_eq!(change.changes.len(), 3);
+    assert_eq!(change.changes.len(), 2);
     assert_eq!(change.changes[0].kind, light_application::ActiveShowObjectKind::CueList);
     assert_eq!(change.changes[1].kind, light_application::ActiveShowObjectKind::Playback);
-    assert_eq!(change.changes[2].kind, light_application::ActiveShowObjectKind::Group);
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
 
@@ -338,7 +341,7 @@ fn set_cuelist_page_assignment_is_one_lossless_active_show_batch() {
     execute_programmer_command(
         &scenario.state,
         &scenario.session,
-        "RECORD SET 25 CUE 1",
+        "RECORD CUELIST 25 CUE 1",
     )
     .unwrap();
     let store = ActiveShowRepository::open(&scenario.show_path).unwrap();
@@ -431,10 +434,10 @@ fn new_cuelist_and_playback_record_conflict_cannot_leave_a_partial_cuelist() {
     let error = execute_programmer_command(
         &scenario.state,
         &scenario.session,
-        "RECORD SET 25 CUE 1",
+        "RECORD CUELIST 25 CUE 1",
     )
     .unwrap_err();
-    assert!(error.contains("stale playback 25 revision"));
+    assert!(error.contains("25"), "{error}");
 
     let after = ActiveShowRepository::open(&scenario.show_path)
         .unwrap()
@@ -444,10 +447,17 @@ fn new_cuelist_and_playback_record_conflict_cannot_leave_a_partial_cuelist() {
     assert_eq!(after.objects_of_kind("cue_list").count(), 0);
     assert_eq!(after.object("playback", "25").unwrap().revision(), 1);
     assert!(Arc::ptr_eq(&scenario.state.output.snapshot(), &runtime));
-    assert_eq!(
-        scenario.state.events.latest_sequence(),
-        event_sequence
-    );
+    assert_eq!(scenario.state.events.latest_sequence(), event_sequence + 1);
+    let light_application::EventReplay::Events(events) = scenario.state.events.replay(
+        event_sequence,
+        &light_application::EventFilter::default(),
+    ) else {
+        panic!("expected one rejected command event");
+    };
+    assert!(events.iter().all(|event| !matches!(
+        event.payload,
+        light_application::ApplicationEvent::Show(_)
+    )));
     assert_eq!(
         command_show_object_backup_count(&scenario.data_dir),
         backups

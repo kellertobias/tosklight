@@ -52,7 +52,7 @@ const shiftedRoots: Partial<Record<SoftwareKey, string>> = {
 const doubleRoots: Partial<Record<SoftwareKey, { text: string; replace: readonly string[] }>> = {
 	GRP: { text: "DEGROUP", replace: ["GROUP", "FIXTURE"] },
 	CUE: { text: "CUELIST", replace: ["CUE"] },
-	PLAYBACK: { text: "VPBK", replace: ["PLAYBACK"] },
+	PLAYBACK: { text: "VPBK", replace: ["PBK"] },
 };
 
 export function resolveCommandKeyGesture(

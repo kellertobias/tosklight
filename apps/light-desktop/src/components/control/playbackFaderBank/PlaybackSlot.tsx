@@ -106,8 +106,10 @@ export function PlaybackSlot({
 	const { interceptPointer, interceptClick } = createSlotInterceptors(
 		controller,
 		playback,
+		cue,
 		slot,
 		currentCue,
+		buttonCount,
 	);
 	const commandTarget = playbackCommandTarget(controller);
 	const representedType =

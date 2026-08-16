@@ -8,6 +8,7 @@ import {
 	usePlaybackBankController,
 } from "./playbackFaderBank/controller";
 import { PlaybackSlot } from "./playbackFaderBank/PlaybackSlot";
+import { CueRecordChoiceModal } from "./playbackFaderBank/CueRecordChoiceModal";
 
 export const PlaybackFaderBank = memo<PlaybackFaderBankProps>(
 	function PlaybackFaderBank(props: PlaybackFaderBankProps = {}) {
@@ -123,6 +124,7 @@ export const PlaybackFaderBank = memo<PlaybackFaderBankProps>(
 						onClose={() => controller.setConfiguration(null)}
 					/>
 				)}
+				<CueRecordChoiceModal controller={controller} />
 			</>
 		);
 	},

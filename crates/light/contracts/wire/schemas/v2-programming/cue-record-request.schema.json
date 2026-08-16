@@ -90,7 +90,6 @@
               "minimum": 1
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "playback_number"
@@ -104,7 +103,6 @@
               "const": "selected_playback"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind"
           ]
@@ -129,7 +127,6 @@
               "minimum": 1
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "page",
@@ -148,10 +145,35 @@
               "const": "cue_list"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "cue_list_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "virtual"
+            },
+            "page": {
+              "type": "integer",
+              "format": "uint8",
+              "maximum": 127,
+              "minimum": 1
+            },
+            "playback_number": {
+              "type": "integer",
+              "format": "uint16",
+              "maximum": 39100,
+              "minimum": 1001
+            }
+          },
+          "required": [
+            "kind",
+            "page",
+            "playback_number"
           ]
         }
       ]

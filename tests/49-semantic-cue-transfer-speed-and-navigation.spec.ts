@@ -107,38 +107,38 @@ scenario(
 		await t.command.clear();
 		await t.playback.select(second);
 		await t.playback.go(first);
-		await t.playback.expect(first).runtime({ current_cue_number: 1 });
+		await t.playback.expect(first).runtime({ current_cue_number: "1" });
 		await t.playback.expect(second).selected();
 
-		await t.command.execute("CUE 3");
+		await t.command.execute("GO TO PBK 2 CUE 3");
 		await t.playback.expect(second).runtime({
-			current_cue_number: 3,
+			current_cue_number: "3",
 			master: 1,
 			enabled: true,
 		});
 		await t.clock.advanceBy("3s");
 		await t.expectFixtureDMX(fixture(1), { Intensity: 204 });
 
-		await t.command.execute("CUE CUE 2");
+		await t.command.execute("LOAD PBK 2 CUE 2");
 		await t.playback.expect(second).runtime({
-			current_cue_number: 3,
-			effective_next_cue_number: 2,
+			current_cue_number: "3",
+			effective_next_cue_number: "2",
 			effective_next_is_loaded: true,
 		});
 		await t.playback.go(second);
 		await t.clock.advanceBy("3s");
 		await t.playback.expect(second).runtime({
-			current_cue_number: 2,
-			effective_next_cue_number: 3,
+			current_cue_number: "2",
+			effective_next_cue_number: "3",
 			effective_next_is_loaded: false,
 		});
 		await t.expectFixtureDMX(fixture(1), { Intensity: 128 });
 
-		await t.command.execute("CUE CUE 3");
+		await t.command.execute("LOAD PBK 2 CUE 3");
 		await t.playback.goBack(second);
 		await t.playback.expect(second).runtime({
-			current_cue_number: 1,
-			loaded_cue_number: 3,
+			current_cue_number: "1",
+			loaded_cue_number: "3",
 			effective_next_is_loaded: true,
 		});
 		await t.playback.via.api.off(second);

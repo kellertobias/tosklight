@@ -45,9 +45,11 @@ interface VirtualPlaybackGridProps {
 	zones: readonly VirtualPlaybackZone[];
 	selectedSlots: readonly number[];
 	configurationArmed: boolean;
+	storeArmed?: boolean;
 	updateArmed: boolean;
 	shiftArmed: boolean;
 	onConfigure(playback: PlaybackDefinition | null, slot: number): void;
+	onRecord?(slot: number): void;
 	onToggleZone(slot: number): void;
 	paneId?: string;
 }
@@ -101,6 +103,10 @@ export function VirtualPlaybackGrid(props: VirtualPlaybackGridProps) {
 			}
 			callbacks={{
 				onClick: (slot, _position, interaction) => {
+					if (props.storeArmed) {
+						props.onRecord?.(slot);
+						return true;
+					}
 					if (!props.shiftArmed && !interaction.shiftKey) return false;
 					props.onToggleZone(slot);
 					return true;
@@ -221,6 +227,7 @@ function boxViewModel(
 				? undefined
 				: `Cue ${currentCue?.number ?? runtime.cue_index + 1}`,
 		configurationTarget: setTargetArmed && available,
+		assignmentTarget: props.storeArmed && available,
 		updateTarget: props.updateArmed,
 		exclusionMember: containingZones.length > 0,
 		exclusionZones: containingZones.map((zone) => zone.name),

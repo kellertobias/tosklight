@@ -158,6 +158,10 @@ describe("Cue recording v2 wire", () => {
 				{ kind: "cue_list", cueListId: CUE_LIST_ID },
 				{ kind: "cue_list", cue_list_id: CUE_LIST_ID },
 			],
+			[
+				{ kind: "virtual", page: 1, playbackNumber: 1001 },
+				{ kind: "virtual", page: 1, playback_number: 1001 },
+			],
 		];
 
 		for (const [target, encodedTarget] of targets) {

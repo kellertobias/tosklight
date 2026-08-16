@@ -161,6 +161,16 @@ export class CueRecordingWriter implements CueRecordingActions {
 			String(target.page),
 			generation,
 		);
+		if (target.kind === "virtual") {
+			const virtual = page?.body.virtual_playbacks[String(target.playbackNumber)];
+			if (virtual?.target.type === "cue_list")
+				await this.repairObject(
+					"cue_list",
+					virtual.target.cue_list_id,
+					generation,
+				);
+			return;
+		}
 		const playback = page?.body.slots[String(target.slot)];
 		if (playback != null) await this.repairPlayback(playback, generation);
 	}

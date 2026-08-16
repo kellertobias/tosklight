@@ -103,6 +103,49 @@ fn empty_page_slot_creates_one_lossless_three_object_transaction_and_event() {
 }
 
 #[test]
+fn empty_virtual_playback_creates_cuelist_and_embedded_assignment_atomically() {
+    let rig = TestRig::new();
+    rig.seed(
+        "playback_page",
+        "1",
+        json!({
+            "number":1,
+            "name":"Main",
+            "slots":{},
+            "virtual_playbacks":{},
+            "future":{"columns":10}
+        }),
+    );
+    let address = light_playback::VirtualPlaybackAddress::from_number(1_001).unwrap();
+    let commit = rig.commit(
+        ProgrammingCueRecordTarget::Virtual { address },
+        ProgrammingCueResolvedTarget::Virtual { address },
+        ProgrammingCueRecordOperation::Overwrite,
+        None,
+        capture(0.5),
+    );
+
+    let result = rig
+        .service
+        .commit_programming_cue(&rig.context(), &commit, &rig.ports)
+        .unwrap();
+
+    assert!(result.changed);
+    assert!(result.created_topology);
+    assert_eq!(result.concrete_playback_number, Some(1_001));
+    assert!(result.projections.playback.is_none());
+    let page = result.projections.page.as_ref().unwrap();
+    assert_eq!(page.raw_body["future"]["columns"], 10);
+    assert_eq!(page.raw_body["virtual_playbacks"]["1001"]["number"], 1_001);
+    assert_eq!(
+        page.raw_body["virtual_playbacks"]["1001"]["target"]["type"],
+        "cue_list"
+    );
+    assert_eq!(rig.document().objects_of_kind("playback").count(), 0);
+    assert_eq!(rig.document().objects_of_kind("cue_list").count(), 1);
+}
+
+#[test]
 fn merge_active_without_existing_topology_creates_the_first_pool_cue() {
     let rig = TestRig::new();
     let commit = rig.commit(

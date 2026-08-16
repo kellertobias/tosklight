@@ -7,7 +7,7 @@ import {
 } from "@testing-library/react";
 import { ModalProvider } from "@tosklight/ui/modals";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { PlaybackDefinition } from "../api/types";
+import type { CueList, PlaybackDefinition } from "../api/types";
 import { exclusionFenceForSlot } from "../components/control/virtualPlayback/VirtualPlaybackGrid";
 import { PaneSettingsModal } from "../components/modals/PaneSettingsModal";
 import { PaneChromeProvider } from "../components/shell/PaneChromeContext";
@@ -115,7 +115,7 @@ const mocks = vi.hoisted(() => {
 			"1001": virtualPlayback,
 		} as Record<string, PlaybackDefinition>,
 	};
-	const cueList = {
+	const cueList: CueList = {
 		id: "cue-1",
 		name: "Front sequence",
 		cues: [],
@@ -125,6 +125,8 @@ const mocks = vi.hoisted(() => {
 	};
 	return {
 		dispatch: vi.fn(),
+		recordCue: vi.fn(),
+		resetCommand: vi.fn(),
 		useServer: vi.fn(() => ({ playbacks: { pool: [] } })),
 		configureSlot: vi.fn(),
 		configureVirtual: vi.fn(),
@@ -210,6 +212,7 @@ const mocks = vi.hoisted(() => {
 			cueListSetArmed: false,
 			cueListSetTarget: null as number | null,
 			shiftArmed: false,
+			storeArmed: false,
 			updateArmed: false,
 			presetFamily: "Mixed" as const,
 			desks: [
@@ -243,6 +246,12 @@ const mocks = vi.hoisted(() => {
 
 vi.mock("../state/AppContext", () => ({
 	useApp: () => ({ state: mocks.state, dispatch: mocks.dispatch }),
+}));
+vi.mock("../features/cueRecording/CueRecordingProvider", () => ({
+	useCueRecording: () => ({ record: mocks.recordCue }),
+}));
+vi.mock("../components/control/commandLine/useCommandLineSurface", () => ({
+	useCommandLineSurface: () => ({ reset: mocks.resetCommand }),
 }));
 vi.mock("../api/ServerContext", () => ({ useServer: mocks.useServer }));
 vi.mock("../features/playbackTopology/PlaybackTopologyView", () => ({
@@ -314,6 +323,8 @@ function deferred<T>() {
 
 beforeEach(() => {
 	mocks.dispatch.mockReset();
+	mocks.recordCue.mockReset().mockResolvedValue({ status: "changed" });
+	mocks.resetCommand.mockReset().mockResolvedValue(true);
 	mocks.useServer.mockClear();
 	mocks.configureSlot.mockReset().mockResolvedValue({ status: "changed" });
 	mocks.configureVirtual.mockReset().mockResolvedValue({ status: "changed" });
@@ -355,6 +366,7 @@ beforeEach(() => {
 	mocks.runtimeStatus.status = "ready";
 	mocks.runtimeStatus.error = null;
 	mocks.page.slots = { "1": 7 };
+	mocks.cueList.cues = [];
 	mocks.virtualPlayback.buttons = ["toggle", "none", "none"];
 	mocks.page.virtual_playbacks = { "1001": mocks.virtualPlayback };
 	mocks.runtimes.clear();
@@ -369,6 +381,7 @@ beforeEach(() => {
 		cueListSetArmed: false,
 		cueListSetTarget: null,
 		shiftArmed: false,
+		storeArmed: false,
 		updateArmed: false,
 	});
 	const pane = mocks.state.desks[0].panes[0];
@@ -428,6 +441,71 @@ describe("VirtualPlaybacksWindow", () => {
 			}),
 		).toBeInTheDocument();
 		expect(mocks.desk?.active_page).toBe(1);
+	});
+
+	it("records the touched empty Virtual Playback while Record is armed", async () => {
+		mocks.state.storeArmed = true;
+		render(<VirtualPlaybacksWindow paneId="virtual-1" />);
+
+		fireEvent.click(
+			screen.getByRole("button", {
+				name: "Virtual playback 1002 page 1 cell 2 empty",
+			}),
+		);
+
+		await waitFor(() =>
+			expect(mocks.recordCue).toHaveBeenCalledWith({
+				target: { kind: "virtual", page: 1, playbackNumber: 1002 },
+				operation: "overwrite",
+				timing: {},
+				cueOnly: false,
+				capturePolicy: "current_capture",
+				activationPolicy: "hold",
+			}),
+		);
+		expect(mocks.poolPlaybackAction).not.toHaveBeenCalled();
+		expect(mocks.dispatch).toHaveBeenCalledWith({
+			type: "SET_STORE_ARMED",
+			value: false,
+		});
+	});
+
+	it("offers Add, Merge, and Overwrite for a one-Cue Virtual Playback", async () => {
+		mocks.state.storeArmed = true;
+		mocks.cueList.cues = [
+			{
+				id: "cue-2-0",
+				number: "2.0",
+				name: "Only cue",
+				fade_millis: 0,
+				delay_millis: 0,
+				trigger: { type: "manual" },
+				changes: [],
+			},
+		];
+		render(<VirtualPlaybacksWindow paneId="virtual-1" />);
+
+		fireEvent.click(
+			screen.getByRole("button", {
+				name: "Virtual playback 1001 page 1 cell 1 Front Wash",
+			}),
+		);
+		expect(screen.getByRole("dialog", { name: "Record Cue choice" })).toHaveTextContent(
+			"Add CueMerge CueOverwrite Cue",
+		);
+		fireEvent.click(screen.getByRole("button", { name: "Merge Cue" }));
+
+		await waitFor(() =>
+			expect(mocks.recordCue).toHaveBeenCalledWith({
+				target: { kind: "virtual", page: 1, playbackNumber: 1001 },
+				operation: "merge",
+				cueNumber: "2.0",
+				timing: {},
+				cueOnly: false,
+				capturePolicy: "current_capture",
+				activationPolicy: "hold",
+			}),
+		);
 	});
 
 	it("renders authoritative runtime without a legacy active-playback fallback", () => {

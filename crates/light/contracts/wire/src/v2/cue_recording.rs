@@ -9,7 +9,7 @@ use ts_rs::TS;
 use uuid::Uuid;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(tag = "kind", rename_all = "snake_case")]
 pub enum CueRecordTarget {
     Pool {
         #[schemars(range(min = 1, max = 1000))]
@@ -24,6 +24,12 @@ pub enum CueRecordTarget {
     },
     CueList {
         cue_list_id: Uuid,
+    },
+    Virtual {
+        #[schemars(range(min = 1, max = 127))]
+        page: u8,
+        #[schemars(range(min = 1001, max = 39100))]
+        playback_number: u16,
     },
 }
 
@@ -276,7 +282,7 @@ mod tests {
             show_revision: 8,
             recorded_cue: RecordedCueProjection {
                 id: Uuid::from_u128(3),
-                number: 2.5,
+                number: "2.5".into(),
                 deleted: false,
             },
             projections: CueRecordProjections {

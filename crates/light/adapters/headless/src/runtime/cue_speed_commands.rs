@@ -58,21 +58,6 @@ pub(super) fn parse_command_cue_number(
     Ok(number)
 }
 
-/// Direct compatibility entry point for the CUE navigation family.
-///
-/// The grammar, address resolution, typed Playback action, command-line reset, and the temporary
-/// v1 `playback_changed` notification are owned by the feature module under `command_http`. This
-/// wrapper only keeps the generic legacy executor's dispatch table working for callers that have
-/// not moved to the Programming interaction boundary yet.
-pub(super) fn execute_cue_operation(
-    state: &AppState,
-    session: &Session,
-    context: &light_application::ActionContext,
-    command: &str,
-) -> Result<usize, String> {
-    command_http::execute_compatibility_cue_navigation(state, session, context, command)
-}
-
 /// Compatibility dispatch entry. Grammar, ordering, persistence, and events are owned by the
 /// typed Speed Group feature under `command_http`.
 pub(super) fn execute_speed_group_operation(

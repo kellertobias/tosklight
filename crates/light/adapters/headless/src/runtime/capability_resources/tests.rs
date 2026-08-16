@@ -226,7 +226,9 @@ mod tests {
             session_id
         );
         integrations.set_shift(source, true);
-        assert!(integrations.osc_subscriber("standalone").unwrap().shifted);
+        let subscriber = integrations.osc_subscriber("standalone").unwrap();
+        assert!(subscriber.shift_held);
+        assert!(!subscriber.shifted);
         assert_eq!(
             integrations
                 .unregister_osc_subscriber("standalone")

@@ -3,7 +3,7 @@
 // Go To and Load reach the Playback application service through the v2 command-line HTTP contract.
 // These tests assert the operator-visible contract: authoritative runtime state, exactly one typed
 // Playback event per real transition, command-line reset only after success, desk-local selection,
-// and convergence with the retained compatibility surfaces.
+// and convergence across command-line, WebSocket, and OSC surfaces.
 
 const CUE_LIST_ID: &str = "5f2b9d64-3f4a-4c21-9b8f-2f8f4b6d1a01";
 
@@ -22,7 +22,7 @@ async fn install_cue_navigation_show(
 ) -> (CommandHttpScenario, String) {
     let show_id = scenario.create_and_open_show("Cue navigation").await;
     let fixture = scenario.install_direct_fixture();
-    let cue = |number: f64, level: f64| {
+    let cue = |number: &str, level: f64| {
         serde_json::json!({
             "id": Uuid::new_v4(),
             "number": number,
@@ -53,7 +53,7 @@ async fn install_cue_navigation_show(
                 "looped": false,
                 "wrap_mode": "off",
                 "restart_mode": "first_cue",
-                "cues": [cue(1.0, 0.2), cue(2.0, 0.5), cue(2.5, 0.4), cue(3.0, 0.8)]
+                "cues": [cue("1", 0.2), cue("2", 0.5), cue("2.5", 0.4), cue("3", 0.8)]
             }),
         )
         .await;
@@ -158,14 +158,52 @@ fn playback_events(scenario: &CommandHttpScenario, baseline: u64) -> usize {
         .count()
 }
 
-/// Counts the temporary v1 `playback_changed` notification.
-fn compatibility_notifications(scenario: &CommandHttpScenario) -> usize {
+/// Counts the `playback_changed` operator notification.
+fn playback_changed_notifications(scenario: &CommandHttpScenario) -> usize {
     scenario
         .state
         .events.audit_events()
         .iter()
         .filter(|event| event.kind == "playback_changed")
         .count()
+}
+
+#[tokio::test]
+async fn pbk_and_cuelist_selection_are_distinct_authoritative_commands() {
+    let (scenario, show_id) = cue_navigation_scenario().await;
+    let show_id = light_core::ShowId(Uuid::parse_str(&show_id).unwrap());
+
+    let response = scenario.execute("select-pbk", Some("PBK 2")).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        scenario
+            .state
+            .installation
+            .selected_playback(scenario.session.desk.id, show_id)
+            .unwrap(),
+        Some(2)
+    );
+
+    let response = scenario.execute("select-cuelist", Some("CUELIST 1")).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        scenario
+            .state
+            .installation
+            .selected_playback(scenario.session.desk.id, show_id)
+            .unwrap(),
+        Some(1)
+    );
+
+    let response = scenario
+        .execute("reject-playback-alias", Some("PLAYBACK 2"))
+        .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = json(response).await;
+    assert_eq!(body["outcome"], "rejected");
+    assert!(body["error"].as_str().unwrap_or_default().contains("PBK"));
+    assert_eq!(command_line_text(&scenario).await, "PLAYBACK 2");
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
 
 /// A reset command line returns to the full editable default target and is pristine again.
@@ -199,9 +237,11 @@ async fn selected_and_explicit_go_to_and_load_use_the_typed_playback_action() {
     let (scenario, _show_id) = cue_navigation_scenario().await;
     select_playback(&scenario, scenario.session.desk.id, Some(2));
 
-    // Go To on the desk-selected Playback.
+    // Go To on Playback 2 of the current page.
     let baseline = scenario.state.events.latest_sequence();
-    let response = scenario.execute("go-to-selected", Some("CUE 3")).await;
+    let response = scenario
+        .execute("go-to-selected", Some("GO TO PBK 2 CUE 3"))
+        .await;
     assert_eq!(response.status(), StatusCode::OK);
     let body = json(response).await;
     assert_eq!(body["outcome"], "accepted");
@@ -211,11 +251,13 @@ async fn selected_and_explicit_go_to_and_load_use_the_typed_playback_action() {
     assert_eq!(body["command_line"]["text"], "FIXTURE");
     assert_command_line_reset(&scenario).await;
     // The v2 path must not fabricate the v1 compatibility notification.
-    assert_eq!(compatibility_notifications(&scenario), 0);
+    assert_eq!(playback_changed_notifications(&scenario), 0);
 
-    // Load on the desk-selected Playback leaves the current Cue and output untouched.
+    // Load on that Playback leaves the current Cue and output untouched.
     let baseline = scenario.state.events.latest_sequence();
-    let response = scenario.execute("load-selected", Some("CUE CUE 2")).await;
+    let response = scenario
+        .execute("load-selected", Some("LOAD PBK 2 CUE 2"))
+        .await;
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(json(response).await["outcome"], "accepted");
     assert_eq!(current_cue(&scenario, 2), Some("3".into()));
@@ -224,7 +266,7 @@ async fn selected_and_explicit_go_to_and_load_use_the_typed_playback_action() {
 
     // Explicit pool Go To addresses the other Playback without changing the selection.
     let response = scenario
-        .execute("go-to-explicit", Some("CUE SET 1 CUE 3"))
+        .execute("go-to-explicit", Some("GO TO PBK 1 CUE 3"))
         .await;
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(json(response).await["outcome"], "accepted");
@@ -240,12 +282,12 @@ async fn selected_and_explicit_go_to_and_load_use_the_typed_playback_action() {
 
     // Explicit Load through an explicit-page address, with a decimal Cue number.
     let response = scenario
-        .execute("load-explicit-page", Some("CUE CUE SET 1 . 2 CUE 2.5"))
+        .execute("load-explicit-page", Some("LOAD PBK 1 . 2 CUE 2.5"))
         .await;
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(json(response).await["outcome"], "accepted");
     assert_eq!(loaded_cue(&scenario, 2), Some("2.5".into()));
-    assert_eq!(compatibility_notifications(&scenario), 0);
+    assert_eq!(playback_changed_notifications(&scenario), 0);
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
 
@@ -253,7 +295,7 @@ async fn selected_and_explicit_go_to_and_load_use_the_typed_playback_action() {
 async fn rejected_navigation_retains_the_command_line_and_mutates_no_runtime() {
     let (scenario, _show_id) = cue_navigation_scenario().await;
 
-    // A missing selection is rejected before any Playback is addressed.
+    // The superseded leading-CUE execution form is rejected without mutation.
     let revision = json(scenario.get().await).await["revision"]
         .as_u64()
         .unwrap();
@@ -266,13 +308,6 @@ async fn rejected_navigation_retains_the_command_line_and_mutates_no_runtime() {
     assert_eq!(response.status(), StatusCode::OK);
     let body = json(response).await;
     assert_eq!(body["outcome"], "rejected");
-    assert!(
-        body["error"]
-            .as_str()
-            .unwrap()
-            .contains("no playback is selected"),
-        "{body}"
-    );
     // The rejected command line is retained for correction, not reset.
     assert_eq!(command_line_text(&scenario).await, "CUE 2");
     assert_eq!(playback_events(&scenario, baseline), 0);
@@ -283,14 +318,14 @@ async fn rejected_navigation_retains_the_command_line_and_mutates_no_runtime() {
     for (request_id, command, expected) in [
         (
             "missing-playback",
-            "CUE SET 99 CUE 1",
-            "playback 99 does not exist",
+            "GO TO PBK 99 CUE 1",
+            "paged playback not found",
         ),
-        ("missing-cue", "CUE 99", "cue does not exist"),
+        ("missing-cue", "GO TO PBK 2 CUE 99", "cue does not exist"),
         (
             "unassigned-slot",
-            "CUE SET 9 . 9 CUE 1",
-            "page 9 slot 9 is not assigned",
+            "GO TO PBK 9 . 9 CUE 1",
+            "paged playback not found",
         ),
     ] {
         let baseline = scenario.state.events.latest_sequence();
@@ -309,7 +344,7 @@ async fn rejected_navigation_retains_the_command_line_and_mutates_no_runtime() {
         assert_eq!(playback_events(&scenario, baseline), 0, "{command}");
         assert_eq!(current_cue(&scenario, 2), None, "{command}");
     }
-    assert_eq!(compatibility_notifications(&scenario), 0);
+    assert_eq!(playback_changed_notifications(&scenario), 0);
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
 
@@ -320,7 +355,9 @@ async fn replay_and_semantic_no_change_publish_no_second_transition() {
 
     let baseline = scenario.state.events.latest_sequence();
     let history = history_len(&scenario);
-    let response = scenario.execute("go-to-once", Some("CUE 3")).await;
+    let response = scenario
+        .execute("go-to-once", Some("GO TO PBK 2 CUE 3"))
+        .await;
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(json(response).await["outcome"], "accepted");
     assert_eq!(playback_events(&scenario, baseline), 2);
@@ -329,7 +366,9 @@ async fn replay_and_semantic_no_change_publish_no_second_transition() {
     assert_eq!(history_after_first, history + 1);
 
     // Repeating the same request ID must not repeat the runtime transition or the history entry.
-    let response = scenario.execute("go-to-once", Some("CUE 3")).await;
+    let response = scenario
+        .execute("go-to-once", Some("GO TO PBK 2 CUE 3"))
+        .await;
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(json(response).await["outcome"], "accepted");
     assert_eq!(playback_events(&scenario, after_first), 0);
@@ -339,7 +378,9 @@ async fn replay_and_semantic_no_change_publish_no_second_transition() {
     // A distinct request that resolves to the same runtime instant is a semantic no-change: the
     // frozen clock keeps `activated_at` identical, so nothing about the runtime actually moves.
     let baseline = scenario.state.events.latest_sequence();
-    let response = scenario.execute("go-to-again", Some("CUE 3")).await;
+    let response = scenario
+        .execute("go-to-again", Some("GO TO PBK 2 CUE 3"))
+        .await;
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(json(response).await["outcome"], "accepted");
     assert_eq!(playback_events(&scenario, baseline), 0);
@@ -372,7 +413,9 @@ async fn selection_is_desk_local_and_foreign_or_locked_desks_are_rejected() {
     assert_eq!(response.status(), StatusCode::OK);
     let second_token = json(response).await["token"].as_str().unwrap().to_owned();
 
-    let response = scenario.execute("desk-one-go-to", Some("CUE 3")).await;
+    let response = scenario
+        .execute("desk-one-go-to", Some("GO TO PBK 2 CUE 3"))
+        .await;
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(json(response).await["outcome"], "accepted");
     assert_eq!(current_cue(&scenario, 2), Some("3".into()));
@@ -387,7 +430,7 @@ async fn selection_is_desk_local_and_foreign_or_locked_desks_are_rejected() {
                 .header("x-tosk-desk", second_desk.id.to_string())
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
-                    serde_json::json!({"request_id":"desk-two-go-to","command":"CUE 2"})
+                    serde_json::json!({"request_id":"desk-two-go-to","command":"GO TO PBK 1 CUE 2"})
                         .to_string(),
                 ))
                 .unwrap(),
@@ -409,7 +452,7 @@ async fn selection_is_desk_local_and_foreign_or_locked_desks_are_rejected() {
                 .header("x-tosk-desk", second_desk.id.to_string())
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
-                    serde_json::json!({"request_id":"foreign-desk","command":"CUE 1"}).to_string(),
+                    serde_json::json!({"request_id":"foreign-desk","command":"GO TO PBK 1 CUE 1"}).to_string(),
                 ))
                 .unwrap(),
         )
@@ -425,7 +468,7 @@ async fn selection_is_desk_local_and_foreign_or_locked_desks_are_rejected() {
             Request::post(format!("{}/execute", scenario.path))
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
-                    serde_json::json!({"request_id":"anonymous","command":"CUE 1"}).to_string(),
+                    serde_json::json!({"request_id":"anonymous","command":"GO TO PBK 1 CUE 1"}).to_string(),
                 ))
                 .unwrap(),
         )
@@ -444,7 +487,9 @@ async fn selection_is_desk_local_and_foreign_or_locked_desks_are_rejected() {
         },
     )
     .unwrap();
-    let response = scenario.execute("locked-desk", Some("CUE 1")).await;
+    let response = scenario
+        .execute("locked-desk", Some("GO TO PBK 2 CUE 1"))
+        .await;
     assert_eq!(response.status(), StatusCode::CONFLICT);
     assert_eq!(playback_events(&scenario, baseline), 0);
     assert_eq!(current_cue(&scenario, 2), Some("2".into()));
@@ -463,7 +508,7 @@ async fn command_line_websocket_and_osc_navigation_share_the_typed_action() {
             "cue-ws-go-to",
             light_wire::v2::live_action::LiveAction::CommandLineExecute(
                 light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
-                    value: "CUE 3".into(),
+                    value: "GO TO PBK 2 CUE 3".into(),
                 },
             ),
         )
@@ -473,7 +518,7 @@ async fn command_line_websocket_and_osc_navigation_share_the_typed_action() {
     assert!(ws.ok, "{:?}", ws.error);
     assert_eq!(current_cue(&scenario, 2), Some("3".into()));
     assert_eq!(playback_events(&scenario, baseline), 2);
-    assert_eq!(compatibility_notifications(&scenario), 1);
+    assert_eq!(playback_changed_notifications(&scenario), 1);
 
     // A delayed replay must not erase a newer command the operator has already started.
     scenario
@@ -490,7 +535,7 @@ async fn command_line_websocket_and_osc_navigation_share_the_typed_action() {
     let replay = dispatch_live_action(&scenario.state, &scenario.session, ws_command());
     assert!(replay.ok, "{:?}", replay.error);
     assert_eq!(playback_events(&scenario, after), 0);
-    assert_eq!(compatibility_notifications(&scenario), 1);
+    assert_eq!(playback_changed_notifications(&scenario), 1);
     assert_eq!(history_len(&scenario), history);
     assert_eq!(command_line_text(&scenario).await, "GROUP 7 +");
     scenario
@@ -518,11 +563,21 @@ async fn command_line_websocket_and_osc_navigation_share_the_typed_action() {
         },
     );
     let baseline = scenario.state.events.latest_sequence();
-    for action in ["cue", "cue", "digit-2", "enter"] {
+    for (action, pressed) in [
+        ("shift", true),
+        ("div", true),
+        ("div", true),
+        ("shift", false),
+        ("playback", true),
+        ("digit-2", true),
+        ("cue", true),
+        ("digit-2", true),
+        ("enter", true),
+    ] {
         handle_programmer_osc(
             &scenario.state,
             &format!("/light/{osc_alias}/programmer/{action}"),
-            &[OscArgument::Bool(true)],
+            &[OscArgument::Bool(pressed)],
             Some("127.0.0.1:9031"),
         );
     }

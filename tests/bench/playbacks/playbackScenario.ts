@@ -4,6 +4,7 @@ import type {
 	PlaybackDefinition,
 	PlaybackSnapshot,
 } from "../../../apps/light-desktop/src/api/types/playback";
+import { commandKeys } from "../command-selection/commandScenario";
 import type { ApiDriver } from "../core/api";
 import type { DeskDriver } from "../core/desk";
 import type { SimulatedHardware } from "../hardware/hardwareScenario";
@@ -368,18 +369,27 @@ export class BrowserPlaybacks {
 	async selectVia(route: RuntimeRoute, number: number) {
 		if (route === "api") await this.api.playbackNumberAction(number, "select");
 		else {
+			const location = await playbackLocation(this.api, this.showId(), number);
 			await this.desk.recordStep(
 				"PLAYBACK SELECT",
-				`Select Playback ${number} with the documented Shift+Z shortcut and visible representation.`,
+				`Select Playback ${number} through its canonical PBK address on the visible keypad.`,
 			);
-			await this.open();
-			await this.page.keyboard.press("Shift+KeyZ");
-			await expect(this.page.getByLabel("Command line")).toHaveValue("SELECT");
+			const keypad = (key: string) =>
+				this.page.locator(`[data-keypad-key="${key}"]:visible`).first();
+			const groupKey = keypad("GRP");
+			if (!(await groupKey.isVisible())) {
+				await this.desk.click(this.page.locator(".mode-toggle"));
+				await expect(groupKey).toBeVisible();
+			}
 			await this.desk.click(
-				(await this.visibleCard(number)).getByRole("button", {
-					name: /Playback representation/,
-				}),
+				this.page.locator(".command-escape:visible").first(),
 			);
+			for (const key of commandKeys(
+				`PBK ${location.page} . ${location.slot}`,
+				"FIXTURE",
+			))
+				await this.desk.click(keypad(key));
+			await this.desk.click(keypad("ENT"));
 		}
 		await this.expect(number).selected();
 	}

@@ -5,7 +5,8 @@ export type CueRecordTarget =
 	| { kind: "pool"; playbackNumber: number }
 	| { kind: "selected_playback" }
 	| { kind: "page_slot"; page: number; slot: number }
-	| { kind: "cue_list"; cueListId: string };
+	| { kind: "cue_list"; cueListId: string }
+	| { kind: "virtual"; page: number; playbackNumber: number };
 
 export type CueRecordOperation = "overwrite" | "merge" | "subtract";
 export type CueRecordCapturePolicy =

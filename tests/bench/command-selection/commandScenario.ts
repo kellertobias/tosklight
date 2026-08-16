@@ -259,8 +259,21 @@ export class CommandAdapter {
 			}
 			await this.desk.click(keypadLocator(page, "ESC"));
 			const target = await this.commandLine().inputValue();
-			for (const key of commandKeys(text, target))
-				await this.desk.click(keypadLocator(page, key));
+			let keyboardShiftHeld = false;
+			try {
+				for (const key of commandKeys(text, target)) {
+					const locator = keypadLocator(page, key);
+					if (key === "SHIFT" && !(await locator.isVisible())) {
+						if (keyboardShiftHeld) await page.keyboard.up("Shift");
+						else await page.keyboard.down("Shift");
+						keyboardShiftHeld = !keyboardShiftHeld;
+						continue;
+					}
+					await this.desk.click(locator);
+				}
+			} finally {
+				if (keyboardShiftHeld) await page.keyboard.up("Shift");
+			}
 		}
 	}
 
@@ -283,9 +296,7 @@ function keypadLocator(page: Page, key: KeypadKey | SoftwareKey): Locator {
 		return page.locator(".global-store-button:visible").first();
 	if (key === "ESC") return page.locator(".command-escape:visible").first();
 	if (key === "PRE") return page.locator(".preload-button:visible").first();
-	return page
-		.locator(`.programmer-number-block [data-keypad-key="${key}"]:visible`)
-		.first();
+	return page.locator(`[data-keypad-key="${key}"]:visible`).first();
 }
 
 function requiredCommand(text: string): string {
@@ -298,6 +309,12 @@ const TOKEN_ALIASES: Readonly<Record<string, readonly SoftwareKey[]>> = {
 	GROUP: ["GRP"],
 	THRU: ["TRU"],
 	RECORD: ["REC"],
+	PBK: ["PLAYBACK"],
+	VPBK: ["PLAYBACK", "PLAYBACK"],
+	CUELIST: ["CUE", "CUE"],
+	GO: ["SHIFT", "DIV", "SHIFT"],
+	TO: [],
+	LOAD: ["SHIFT", "DIV", "DIV", "SHIFT"],
 	DELETE: ["DEL"],
 	MOVE: ["MOV"],
 	COPY: ["CPY"],
@@ -350,7 +367,7 @@ export function commandKeys(
 			token.toUpperCase() === "SPD" &&
 			tokens[index + 1]?.toUpperCase() === "GRP"
 		) {
-			keys.push("SHIFT", "TIME");
+			keys.push("SHIFT", "TIME", "SHIFT");
 			index += 1;
 			continue;
 		}
@@ -363,7 +380,7 @@ function keysForToken(token: string): SoftwareKey[] {
 	const normalized = token.toUpperCase();
 	const alias = TOKEN_ALIASES[normalized];
 	if (alias) return [...alias];
-	if (/^\d+(?:[.,]\d+)?$/.test(normalized))
+	if (/^(?:0|[1-9]\d*)(?:[.,](?:0|[1-9]\d*))*$/.test(normalized))
 		return [...normalized.replace(",", ".")] as SoftwareKey[];
 	if (NAMED_COMMAND_KEYS.has(normalized as SoftwareKey))
 		return [normalized as SoftwareKey];

@@ -1,5 +1,5 @@
 import type { MouseEvent as ReactMouseEvent } from "react";
-import type { Cue, PlaybackDefinition } from "../../../api/types";
+import type { Cue, CueList, PlaybackDefinition } from "../../../api/types";
 import { loadRecordSettings } from "../../setup/ProgrammerDefaults";
 import {
 	normalizePlaybackTopology,
@@ -182,6 +182,7 @@ export async function recordPlayback(
 	controller: PlaybackBankController,
 	event: ReactMouseEvent,
 	_playback: PlaybackDefinition | null,
+	cueList: CueList | null | undefined,
 	slot: number,
 ) {
 	if (!controller.state.storeArmed || controller.activePageNumber == null)
@@ -189,13 +190,19 @@ export async function recordPlayback(
 	event.preventDefault();
 	event.stopPropagation();
 	const settings = loadRecordSettings();
+	const choice = await controller.chooseCueRecordOperation(
+		cueList?.cues.map((cue) => cue.number) ?? [],
+	);
+	if (!choice) return;
+	const cueNumber = choice === "add" ? undefined : cueList?.cues[0]?.number;
 	const outcome = await controller.cueRecording?.record({
 		target: {
 			kind: "page_slot",
 			page: controller.activePageNumber,
 			slot,
 		},
-		operation: settings.mergeActiveCue ? "merge" : "overwrite",
+		operation: choice === "merge" ? "merge" : "overwrite",
+		...(cueNumber ? { cueNumber } : {}),
 		timing: {},
 		cueOnly: settings.cueOnly,
 		capturePolicy: "current_capture",

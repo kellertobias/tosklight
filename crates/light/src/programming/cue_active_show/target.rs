@@ -21,6 +21,7 @@ pub(super) struct ResolvedCueTarget {
     pub page: Option<Stored<PlaybackPage>>,
     pub concrete_playback_number: Option<u16>,
     pub page_slot: Option<ProgrammingCuePageSlot>,
+    pub virtual_address: Option<light_playback::VirtualPlaybackAddress>,
 }
 
 impl ResolvedCueTarget {
@@ -40,6 +41,7 @@ pub(super) fn resolve_target(
             page: None,
             concrete_playback_number: None,
             page_slot: None,
+            virtual_address: None,
         }),
         ProgrammingCueResolvedTarget::Playback {
             playback_number,
@@ -48,6 +50,7 @@ pub(super) fn resolve_target(
         ProgrammingCueResolvedTarget::EmptyPageSlot(page_slot) => {
             resolve_empty_page_slot(document, page_slot)
         }
+        ProgrammingCueResolvedTarget::Virtual { address } => resolve_virtual(document, address),
     }
 }
 
@@ -82,6 +85,7 @@ fn resolve_playback(
         page,
         concrete_playback_number: Some(playback_number),
         page_slot,
+        virtual_address: None,
     })
 }
 
@@ -106,6 +110,36 @@ fn resolve_empty_page_slot(
         page,
         concrete_playback_number: Some(playback_number),
         page_slot: Some(page_slot),
+        virtual_address: None,
+    })
+}
+
+fn resolve_virtual(
+    document: &PortableShowDocument,
+    address: light_playback::VirtualPlaybackAddress,
+) -> Result<ResolvedCueTarget, ActionError> {
+    let page = find_page(document, address.page())?;
+    let definition = page
+        .as_ref()
+        .and_then(|page| page.typed.virtual_playbacks.get(&address.number().get()));
+    let cue_list = definition
+        .map(|playback| {
+            let PlaybackTarget::CueList { cue_list_id } = playback.target else {
+                return Err(invalid(format!(
+                    "Virtual Playback {} does not target a Cuelist",
+                    address.number().get()
+                )));
+            };
+            required_cue_list(document, cue_list_id)
+        })
+        .transpose()?;
+    Ok(ResolvedCueTarget {
+        cue_list,
+        playback: None,
+        page,
+        concrete_playback_number: Some(address.number().get()),
+        page_slot: None,
+        virtual_address: Some(address),
     })
 }
 

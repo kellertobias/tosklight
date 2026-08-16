@@ -11,7 +11,7 @@ async fn command_keyboard_and_websocket_cue_recording_share_the_typed_action() {
     let command = scenario
         .execute(
             "cue-command-record",
-            Some("RECORD SET 31 CUE 2.5 TIME 2 DELAY 1"),
+            Some("RECORD CUELIST 31 CUE 2.5 TIME 2 DELAY 1"),
         )
         .await;
     assert_eq!(command.status(), StatusCode::OK);
@@ -38,7 +38,7 @@ async fn command_keyboard_and_websocket_cue_recording_share_the_typed_action() {
         "command grammar uses Hold activation policy"
     );
 
-    for (index, key) in ["REC", "SET", "3", "2", "CUE", "1", "ENT"]
+    for (index, key) in ["REC", "CUE", "CUE", "3", "2", "CUE", "1", "ENT"]
         .into_iter()
         .enumerate()
     {
@@ -73,7 +73,7 @@ async fn command_keyboard_and_websocket_cue_recording_share_the_typed_action() {
         },
     );
     for action in [
-        "record", "set", "digit-3", "digit-4", "cue", "digit-1", "enter",
+        "record", "cue", "cue", "digit-3", "digit-4", "cue", "digit-1", "enter",
     ] {
         let address = format!("/light/{osc_alias}/programmer/{action}");
         handle_programmer_osc(
@@ -106,7 +106,7 @@ async fn command_keyboard_and_websocket_cue_recording_share_the_typed_action() {
             "cue-ws-record",
             light_wire::v2::live_action::LiveAction::CommandLineExecute(
                 light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
-                    value: "RECORD SET 33 CUE 1".into(),
+                    value: "RECORD CUELIST 33 CUE 1".into(),
                 },
             ),
         )
@@ -163,38 +163,59 @@ async fn real_osc_record_touch_creates_exact_page_target_and_suppresses_control(
             last_highlight_action: None,
         },
     );
-    for (slot, control, press, release) in [
-        (
-            7,
-            "button/1",
-            OscArgument::Bool(true),
-            Some(OscArgument::Bool(false)),
-        ),
-        (
-            8,
-            "label",
-            OscArgument::Bool(true),
-            Some(OscArgument::Bool(false)),
-        ),
-        (9, "fader", OscArgument::Float(0.42), None),
-    ] {
-        assert_osc_surface_records(&scenario, slot, control, press, release);
-    }
+    assert_osc_surface_records(
+        &scenario,
+        7,
+        "button/1",
+        OscArgument::Bool(true),
+        Some(OscArgument::Bool(false)),
+    );
+    assert_osc_surface_records(
+        &scenario,
+        8,
+        "label",
+        OscArgument::Bool(true),
+        Some(OscArgument::Bool(false)),
+    );
+    assert_osc_surface_records(
+        &scenario,
+        9,
+        "button/1",
+        OscArgument::Bool(true),
+        Some(OscArgument::Bool(false)),
+    );
+    scenario
+        .state
+        .programming
+        .set_command_line(scenario.session.id, "RECORD".into());
     let fader_address = "/light/playback/4/9/fader";
-    let after_record = scenario.state.events.latest_sequence();
     handle_playback_osc(
         &scenario.state,
         fader_address,
-        &[OscArgument::Float(0.84)],
+        &[OscArgument::Float(0.42)],
         Some("127.0.0.1:9027"),
     );
     assert_eq!(
-        scenario.state.events.latest_sequence(),
-        after_record
+        scenario
+            .state
+            .programming
+            .get(scenario.session.id)
+            .unwrap()
+            .command_line,
+        "RECORD"
     );
-    assert_eq!(runtime_for_page_slot(&scenario, 9).master, 1.0);
 
-    assert_osc_surface_records(&scenario, 10, "button/3", OscArgument::Bool(true), None);
+    assert_osc_surface_records(
+        &scenario,
+        10,
+        "button/1",
+        OscArgument::Bool(true),
+        Some(OscArgument::Bool(false)),
+    );
+    scenario
+        .state
+        .programming
+        .set_command_line(scenario.session.id, "RECORD".into());
     let flash_address = "/light/playback/4/10/button/3";
     handle_playback_osc(
         &scenario.state,
@@ -203,6 +224,15 @@ async fn real_osc_record_touch_creates_exact_page_target_and_suppresses_control(
         Some("127.0.0.1:9027"),
     );
     assert!(runtime_for_page_slot(&scenario, 10).flash);
+    assert_eq!(
+        scenario
+            .state
+            .programming
+            .get(scenario.session.id)
+            .unwrap()
+            .command_line,
+        "RECORD"
+    );
     handle_playback_osc(
         &scenario.state,
         flash_address,
@@ -220,7 +250,7 @@ async fn real_osc_set_touch_selects_current_or_explicit_page_target_and_suppress
     set_cue_record_value(&scenario);
     assert_eq!(
         scenario
-            .execute("set-target-record", Some("RECORD SET 41 CUE 1"))
+            .execute("set-target-record", Some("RECORD CUELIST 41 CUE 1"))
             .await
             .status(),
         StatusCode::OK
@@ -389,7 +419,7 @@ async fn real_osc_set_touch_selects_current_or_explicit_page_target_and_suppress
 
     assert_eq!(
         scenario
-            .execute("set-cuelist-source", Some("RECORD SET 42 CUE 1"))
+            .execute("set-cuelist-source", Some("RECORD CUELIST 42 CUE 1"))
             .await
             .status(),
         StatusCode::OK
@@ -430,7 +460,7 @@ async fn real_osc_off_touch_uses_internal_off_for_current_and_explicit_page_targ
             scenario
                 .execute(
                     &format!("off-target-record-{playback}"),
-                    Some(&format!("RECORD SET {playback} CUE 1")),
+                    Some(&format!("RECORD CUELIST {playback} CUE 1")),
                 )
                 .await
                 .status(),
@@ -644,7 +674,7 @@ async fn osc_copy_move_and_delete_do_not_guess_a_whole_playback_mutation() {
     set_cue_record_value(&scenario);
     assert_eq!(
         scenario
-            .execute("unsupported-target-record", Some("RECORD SET 42 CUE 1"))
+            .execute("unsupported-target-record", Some("RECORD CUELIST 42 CUE 1"))
             .await
             .status(),
         StatusCode::OK

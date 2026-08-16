@@ -221,7 +221,7 @@ fn resolves_double_gestures_to_one_final_visible_intent() {
     let cases = [
         ("GROUP", CommandKey::Group, false, "DEGROUP"),
         ("CUE", CommandKey::Cue, false, "CUELIST"),
-        ("PLAYBACK", CommandKey::Playback, false, "VPBK"),
+        ("PBK", CommandKey::Playback, false, "VPBK"),
         ("FIXTURE", CommandKey::Group, true, "DMX"),
         ("GO TO", CommandKey::Divide, true, "LOAD"),
         ("FREEZE", CommandKey::Clear, true, "UNFREEZE"),

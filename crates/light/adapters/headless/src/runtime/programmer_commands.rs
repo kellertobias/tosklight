@@ -175,8 +175,67 @@ pub(super) fn execute_programmer_command_effect_from(
     command_line: &str,
     context: &light_application::ActionContext,
 ) -> Result<ProgrammerCommandExecution, String> {
+    let raw_tokens = command_line.split_whitespace().collect::<Vec<_>>();
+    if raw_tokens
+        .first()
+        .is_some_and(|token| token.eq_ignore_ascii_case("PLAYBACK"))
+    {
+        return Err("PLAYBACK is not a command root; use PBK".into());
+    }
+    let manual_playback_command = raw_tokens.first().is_some_and(|root| {
+        root.eq_ignore_ascii_case("GO")
+            || root.eq_ignore_ascii_case("LOAD")
+            || root.eq_ignore_ascii_case("PBK")
+            || root.eq_ignore_ascii_case("VPBK")
+            || root.eq_ignore_ascii_case("CUELIST")
+            || (matches!(root.to_ascii_uppercase().as_str(), "RECORD" | "REC")
+                && raw_tokens.iter().skip(1).any(|token| {
+                    matches!(
+                        token.to_ascii_uppercase().as_str(),
+                        "CUE" | "CUELIST" | "PBK" | "VPBK"
+                    )
+                }))
+    });
+    if manual_playback_command {
+        if let Some(execution) = command_http::execute_manual_command_without_line_cleanup(
+            state,
+            session,
+            context,
+            command_line,
+        ) {
+            return match execution {
+                light_application::ProgrammingExecution::Accepted { applied, .. } => {
+                    Ok(ProgrammerCommandExecution::Applied(applied))
+                }
+                light_application::ProgrammingExecution::Rejected { error } => Err(error),
+                light_application::ProgrammingExecution::ChoiceRequired { pending_choice } => {
+                    match pending_choice {
+                        light_application::PendingCommandChoice::DynamicInstance(choice) => {
+                            Ok(ProgrammerCommandExecution::ChoiceRequired(choice))
+                        }
+                        light_application::PendingCommandChoice::CueMoveCopy(_) => {
+                            Err("the command requires an explicit Move/Copy choice".into())
+                        }
+                    }
+                }
+            };
+        }
+    }
     let (tokens, timing) = tokenize_programmer_command(command_line)?;
     let first = tokens.first().ok_or("the command line is empty")?;
+    if first == "CUE" {
+        return Err(
+            "CUE selects a Cue; use GO TO PBK <playback> CUE <cue> or LOAD PBK <playback> CUE <cue> to navigate"
+                .into(),
+        );
+    }
+    if matches!(first.as_str(), "RECORD" | "REC")
+        && tokens.iter().skip(1).any(|token| token == "SET")
+    {
+        return Err(
+            "SET is not a recording address; use RECORD CUELIST, RECORD PBK, or RECORD VPBK".into(),
+        );
+    }
     if tokens.iter().any(|token| token == "RELEASE") {
         return execute_release_command(state, session, &tokens, context)
             .map(ProgrammerCommandExecution::Applied);
@@ -201,7 +260,6 @@ pub(super) fn execute_programmer_command_effect_from(
         );
     }
     let applied = match first.as_str() {
-        "CUE" => execute_cue_operation(state, session, context, command_line),
         "AT" => apply_current_selection_value(
             state,
             session,

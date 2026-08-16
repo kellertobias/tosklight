@@ -918,7 +918,7 @@ async fn v2_merge_no_change_and_empty_subtract_use_one_authoritative_action_each
     assert_eq!(response.status(), StatusCode::OK);
     let outcome = json(response).await;
     assert_eq!(outcome["status"], "changed");
-    assert_eq!(outcome["recorded_cue"]["number"], 2.0);
+    assert_eq!(outcome["recorded_cue"]["number"], "2");
     assert_eq!(outcome["recorded_cue"]["deleted"], true);
     assert_eq!(outcome["show_revision"], revision + 2);
     assert_eq!(outcome["show_event_sequence"], baseline + 1);

@@ -73,6 +73,12 @@ mod interaction_wire;
 mod lifecycle_routes;
 #[path = "command_http/lifecycle_wire.rs"]
 mod lifecycle_wire;
+#[path = "command_http/playback_address_command.rs"]
+mod playback_address_command;
+#[path = "command_http/playback_selection_command.rs"]
+mod playback_selection_command;
+#[path = "command_http/playback_selection_programming_ports.rs"]
+mod playback_selection_programming_ports;
 #[path = "command_http/preload_lifecycle_ports.rs"]
 mod preload_lifecycle_ports;
 #[path = "command_http/preload_lifecycle_routes.rs"]
@@ -137,7 +143,6 @@ pub(super) use adapter::{
 };
 pub(super) use color_attributes::color_attribute_index;
 pub(crate) use cue_deletion_ports::ServerProgrammingCueDeletionPorts;
-pub(super) use cue_navigation_action::execute_compatibility as execute_compatibility_cue_navigation;
 pub(crate) use cue_recording_osc::{
     PlaybackTargetInterception, complete_off_target,
     intercept_armed_playback as intercept_armed_cue_playback,
@@ -159,6 +164,7 @@ pub(crate) use preset_recording_wire::address as preset_address;
 pub(super) use programmer_priority_wire::change as priority_change;
 pub(crate) use programmer_priority_wire::outcome as programmer_priority_outcome;
 pub(crate) use programming_ports::ServerProgrammingPorts;
+pub(crate) use programming_ports::execute_manual_command_without_line_cleanup;
 pub(crate) use routes::validate_command;
 pub(super) use routes::{authenticate_desk_mutation, router};
 pub(crate) use selection_routes::validate_request as validate_selection_request;

@@ -25,7 +25,7 @@ pub(super) fn prepare_candidate(
     }
     let cue_list = cue_list_body(&target, &plan)?;
     let playback = playback_body(&target, cue_list_id)?;
-    let page = page_body(&mut target)?;
+    let page = page_body(&mut target, cue_list_id)?;
     let mut transaction = document.transaction();
     transaction.put("cue_list", cue_list.object_id.clone(), cue_list.raw_body);
     if let Some(playback) = &playback {
@@ -125,7 +125,7 @@ fn playback_body(
     target: &ResolvedCueTarget,
     cue_list_id: CueListId,
 ) -> Result<Option<PendingBody>, ActionError> {
-    if target.playback.is_some() {
+    if target.playback.is_some() || target.virtual_address.is_some() {
         return Ok(None);
     }
     let Some(number) = target.concrete_playback_number else {
@@ -139,16 +139,47 @@ fn playback_body(
     }))
 }
 
-fn page_body(target: &mut ResolvedCueTarget) -> Result<Option<PendingBody>, ActionError> {
+fn page_body(
+    target: &mut ResolvedCueTarget,
+    cue_list_id: CueListId,
+) -> Result<Option<PendingBody>, ActionError> {
     if !target.creates_topology() {
         return Ok(None);
+    }
+    let playback = target
+        .concrete_playback_number
+        .ok_or_else(invalid_topology)?;
+    if let Some(address) = target.virtual_address {
+        let definition =
+            PlaybackDefinition::new_cue_list(playback, format!("Cuelist {playback}"), cue_list_id);
+        return match &target.page {
+            Some(stored) => {
+                let mut page = stored.typed.clone();
+                page.virtual_playbacks
+                    .insert(address.number().get(), definition);
+                Ok(Some(PendingBody {
+                    object_id: stored.object_id.clone(),
+                    raw_body: lossless_json::merge_typed(&stored.raw_body, &stored.typed, &page)
+                        .map_err(invalid)?,
+                }))
+            }
+            None => {
+                let page = PlaybackPage {
+                    number: address.page(),
+                    name: format!("Page {}", address.page()),
+                    slots: HashMap::new(),
+                    virtual_playbacks: HashMap::from([(address.number().get(), definition)]),
+                };
+                Ok(Some(PendingBody {
+                    object_id: address.page().to_string(),
+                    raw_body: serde_json::to_value(page).map_err(invalid)?,
+                }))
+            }
+        };
     }
     let Some(slot) = target.page_slot else {
         return Ok(None);
     };
-    let playback = target
-        .concrete_playback_number
-        .ok_or_else(invalid_topology)?;
     match &target.page {
         Some(stored) => {
             let mut page = stored.typed.clone();

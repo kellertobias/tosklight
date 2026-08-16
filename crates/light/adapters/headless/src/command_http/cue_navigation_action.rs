@@ -5,7 +5,9 @@
 //! through the same application service. Only the temporary v1 `playback_changed` notification is
 //! surface-specific, and it stays out of the v2 path.
 
-use super::cue_navigation_command::{CueNavigationCommand, CueNavigationTarget};
+use super::{
+    cue_navigation_command::CueNavigationCommand, playback_address_command::CommandPlaybackTarget,
+};
 use light_application::{
     ActionContext, ActionSource, PlaybackAction, PlaybackAddress, PlaybackCommand, PlaybackOutcome,
     PlaybackSurface,
@@ -26,7 +28,7 @@ pub(super) fn execute(
     context: &ActionContext,
     parsed: CueNavigationCommand,
 ) -> Result<CueNavigationTransition, String> {
-    let address = resolve_address(state, session, parsed.target)?;
+    let address = resolve_address(parsed.target);
     let result = super::super::playback_service::execute(
         state,
         Some(session),
@@ -51,50 +53,14 @@ pub(super) fn execute(
 }
 
 /// Resolves desk selection and page topology; the Cue itself is resolved by the Playback service.
-fn resolve_address(
-    state: &AppState,
-    session: &Session,
-    target: CueNavigationTarget,
-) -> Result<PlaybackAddress, String> {
-    let snapshot = state.output.snapshot();
-    let (address, playback) = match target {
-        CueNavigationTarget::SelectedPlayback => {
-            let selected = selected_playback(state, session)?;
-            (PlaybackAddress::Pool(selected), selected)
+fn resolve_address(target: CommandPlaybackTarget) -> PlaybackAddress {
+    match target {
+        CommandPlaybackTarget::CurrentPage { slot } => PlaybackAddress::CurrentPage { slot },
+        CommandPlaybackTarget::ExplicitPage { page, slot } => {
+            PlaybackAddress::ExplicitPage { page, slot }
         }
-        CueNavigationTarget::Pool { playback_number } => {
-            (PlaybackAddress::Pool(playback_number), playback_number)
-        }
-        CueNavigationTarget::ExplicitPage { page, slot } => (
-            PlaybackAddress::ExplicitPage { page, slot },
-            super::super::page_playback(&snapshot, page, slot)?,
-        ),
-    };
-    if !snapshot
-        .playbacks
-        .iter()
-        .any(|item| item.number == playback)
-    {
-        return Err(format!("playback {playback} does not exist"));
+        CommandPlaybackTarget::Virtual(address) => PlaybackAddress::Virtual(address),
     }
-    Ok(address)
-}
-
-/// Selection is desk-local, so another desk keeps its own selected Playback.
-fn selected_playback(state: &AppState, session: &Session) -> Result<u16, String> {
-    let show = state
-        .active_show
-        .current()
-        .clone()
-        .ok_or("no show is open")?;
-    state
-        .installation
-        .selected_playback(session.desk.id, show.id)
-        .map_err(|error| error.to_string())?
-        .ok_or_else(|| {
-            "no playback is selected; select a playback or use CUE SET <playback> CUE <cue>"
-                .to_owned()
-        })
 }
 
 /// Temporary per-object facade notification, isolated to compatibility consumers.
@@ -114,25 +80,6 @@ pub(super) fn emit_compatibility_change(
             "session_id":session.id,
         }),
     );
-}
-
-/// Entry point for the generic legacy executor's dispatch table.
-///
-/// The command line and history belong to the caller here, exactly as before: only callers that
-/// enter through the Programming interaction boundary get the shared reset.
-pub(crate) fn execute_compatibility(
-    state: &AppState,
-    session: &Session,
-    context: &ActionContext,
-    command: &str,
-) -> Result<usize, String> {
-    let parsed = super::cue_navigation_command::parse(command)?
-        .ok_or("expected a CUE navigation command")?;
-    let transition = execute(state, session, context, parsed.clone())?;
-    if transition.applied && !transition.replayed {
-        emit_compatibility_change(state, session, transition.playback, parsed);
-    }
-    Ok(1)
 }
 
 fn action(parsed: CueNavigationCommand) -> PlaybackAction {

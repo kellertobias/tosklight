@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
 	PlaybackDefinition,
 	PlaybackRuntimeProjection,
@@ -92,6 +92,34 @@ export function usePlaybackBankController({
 		projectionAuthority.matches;
 	const [configuration, setConfiguration] =
 		useState<PlaybackConfigurationState | null>(null);
+	const [cueRecordChoice, setCueRecordChoice] = useState<{
+		cueNumber: string;
+	} | null>(null);
+	const cueRecordChoiceResolver = useRef<
+		((choice: "add" | "merge" | "overwrite" | null) => void) | null
+	>(null);
+	const chooseCueRecordOperation = useCallback((cueNumbers: string[]) => {
+		if (cueNumbers.length !== 1)
+			return Promise.resolve<"add" | "merge" | "overwrite" | null>("add");
+		setCueRecordChoice({ cueNumber: cueNumbers[0] });
+		return new Promise<"add" | "merge" | "overwrite" | null>((resolve) => {
+			cueRecordChoiceResolver.current = resolve;
+		});
+	}, []);
+	const resolveCueRecordChoice = useCallback(
+		(choice: "add" | "merge" | "overwrite" | null) => {
+			cueRecordChoiceResolver.current?.(choice);
+			cueRecordChoiceResolver.current = null;
+			setCueRecordChoice(null);
+		},
+		[],
+	);
+	useEffect(
+		() => () => {
+			cueRecordChoiceResolver.current?.(null);
+		},
+		[],
+	);
 	useEffect(() => setConfiguration(null), [activePageNumber, topology.ready]);
 	const heldActions = useMemo(
 		() => new HeldPlaybackActions(runtimeActions),
@@ -124,6 +152,9 @@ export function usePlaybackBankController({
 		pageObject,
 		configuration,
 		setConfiguration,
+		cueRecordChoice,
+		chooseCueRecordOperation,
+		resolveCueRecordChoice,
 		assignmentPending: state.cueListSetTarget != null,
 		selectionPending: /^SELECT\s*$/i.test(commandLine?.text ?? ""),
 		offPending: /^OFF\s*$/i.test(commandLine?.text ?? ""),

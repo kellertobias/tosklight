@@ -25,12 +25,16 @@ pub(crate) fn intercept_armed_playback(
     state: &AppState,
     session: &Session,
     address: PlaybackAddress,
-    touched: bool,
+    is_record_target: bool,
+    activated: bool,
 ) -> PlaybackTargetInterception {
     let Some(operation) = active_playback_target_operation(state, session) else {
         return PlaybackTargetInterception::NotArmed;
     };
-    if !touched {
+    if operation == PlaybackTargetOperation::Record && !is_record_target {
+        return PlaybackTargetInterception::NotArmed;
+    }
+    if !activated {
         return PlaybackTargetInterception::Consumed;
     }
     if operation == PlaybackTargetOperation::Off {
@@ -208,38 +212,10 @@ fn target(
 }
 
 fn virtual_cue_target(
-    state: &AppState,
+    _state: &AppState,
     address: light_playback::VirtualPlaybackAddress,
 ) -> Result<ProgrammingCueRecordTarget, ActionError> {
-    let snapshot = state.output.snapshot();
-    let definition = snapshot
-        .playback_pages
-        .iter()
-        .find(|page| page.number == address.page())
-        .and_then(|page| page.virtual_playbacks.get(&address.number().get()))
-        .ok_or_else(|| {
-            ActionError::new(
-                ActionErrorKind::NotFound,
-                format!(
-                    "Virtual {}.{} is not assigned",
-                    address.page(),
-                    address.number().get()
-                ),
-            )
-        })?;
-    let light_playback::PlaybackTarget::CueList { cue_list_id } = &definition.target else {
-        return Err(ActionError::new(
-            ActionErrorKind::Invalid,
-            format!(
-                "Virtual {}.{} is not assigned to a Cuelist",
-                address.page(),
-                address.number().get()
-            ),
-        ));
-    };
-    Ok(ProgrammingCueRecordTarget::CueList {
-        cue_list_id: *cue_list_id,
-    })
+    Ok(ProgrammingCueRecordTarget::Virtual { address })
 }
 
 fn current_page(state: &AppState, session: &Session) -> Result<u8, ActionError> {

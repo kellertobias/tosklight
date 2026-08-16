@@ -101,7 +101,7 @@ fn cue_delete_compatibility_events(scenario: &CommandHttpScenario) -> Vec<Event>
 async fn atomic_command_deletes_once_preserves_runtime_hold_and_replays_without_v1_event() {
     let (scenario, _) = cue_navigation_scenario().await;
     let active = scenario
-        .execute("activate-before-delete", Some("CUE SET 1 CUE 2"))
+        .execute("activate-before-delete", Some("GO TO PBK 1 CUE 2"))
         .await;
     assert_eq!(active.status(), StatusCode::OK);
     assert_eq!(current_cue(&scenario, 1), Some("2".into()));

@@ -4,7 +4,7 @@ import type {
 	MouseEvent as ReactMouseEvent,
 	PointerEvent as ReactPointerEvent,
 } from "react";
-import type { Cue, PlaybackDefinition } from "../../../api/types";
+import type { Cue, CueList, PlaybackDefinition } from "../../../api/types";
 import {
 	assignDynamicPlayback,
 	assignGroupPlayback,
@@ -48,6 +48,8 @@ export function buildPlaybackActions({
 	);
 	const faderActions: VerticalTouchFaderAction[] = actions.map(
 		(action, button) => {
+			const emptyRecordTarget =
+				controller.state.storeArmed && !playback && button === 0;
 			const releaseHeldAction = () =>
 				controller.heldActions.releaseButton(slot, button + 1);
 			return {
@@ -59,8 +61,8 @@ export function buildPlaybackActions({
 				disabled:
 					controller.assignmentPending ||
 					!controller.runtimeActions ||
-					!playback ||
-					action === "none",
+					(!playback && !emptyRecordTarget) ||
+					(action === "none" && !emptyRecordTarget),
 				className: buttonFeedbackClass(
 					action,
 					active,
@@ -156,9 +158,13 @@ function runtimeBlackout(
 export function createSlotInterceptors(
 	controller: PlaybackBankController,
 	playback: PlaybackDefinition | null,
+	cueList: CueList | null | undefined,
 	slot: number,
 	currentCue: Cue | null | undefined,
+	buttonCount: number,
 ) {
+	const isRecordTarget = (target: EventTarget | null) =>
+		!controller.hardware || hardwareRecordTarget(target, buttonCount);
 	const interceptPointer = (event: ReactPointerEvent<HTMLElement>) => {
 		if (controller.state.updateArmed) {
 			event.preventDefault();
@@ -166,6 +172,7 @@ export function createSlotInterceptors(
 			return;
 		}
 		if (controller.state.storeArmed) {
+			if (!isRecordTarget(event.target)) return;
 			// Recording is committed by the click interceptor. Cancelling pointer-down
 			// can suppress that compatibility click in the desktop webview, forcing a
 			// second press before the Record target sees it.
@@ -196,7 +203,8 @@ export function createSlotInterceptors(
 			return;
 		}
 		if (controller.state.storeArmed) {
-			void recordPlayback(controller, event, playback, slot);
+			if (!isRecordTarget(event.target)) return;
+			void recordPlayback(controller, event, playback, cueList, slot);
 			return;
 		}
 		if (controller.dynamicAssignmentPending && playback) {
@@ -245,4 +253,11 @@ export function createSlotInterceptors(
 		}
 	};
 	return { interceptPointer, interceptClick };
+}
+
+function hardwareRecordTarget(target: EventTarget | null, buttonCount: number) {
+	if (!(target instanceof Element)) return false;
+	if (buttonCount > 0)
+		return Boolean(target.closest('[data-playback-button-index="1"]'));
+	return !target.closest("button, input, .hardware-playback-controls");
 }

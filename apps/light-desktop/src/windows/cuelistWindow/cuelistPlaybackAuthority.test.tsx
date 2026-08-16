@@ -1,4 +1,11 @@
-import { act, cleanup, render, waitFor, within } from "@testing-library/react";
+import {
+	act,
+	cleanup,
+	render,
+	screen,
+	waitFor,
+	within,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CueList, PlaybackDefinition } from "../../api/types";
 import type {
@@ -607,6 +614,34 @@ describe("Cuelist Pool master authority", () => {
 });
 
 describe("Cuelist Pool workflows over scoped authority", () => {
+	it("offers exact one-Cue recording choices for a Cuelist tile", async () => {
+		mocks.state.storeArmed = true;
+		const view = renderCuelistWindow(
+			<CuelistWindow compact cueListTab="pool" />,
+		);
+		await settle();
+		const ui = within(view.container);
+		const { fireEvent } = await import("@testing-library/react");
+
+		fireEvent.click(ui.getByText("Encore").closest("button")!);
+		expect(
+			screen.getByRole("dialog", { name: "Record Cue choice" }),
+		).toHaveTextContent("Add CueMerge CueOverwrite Cue");
+		fireEvent.click(screen.getByRole("button", { name: "Overwrite Cue" }));
+
+		await waitFor(() =>
+			expect(mocks.recordCue).toHaveBeenCalledWith({
+				target: { kind: "cue_list", cueListId: ENCORE_CUE_LIST },
+				operation: "overwrite",
+				cueNumber: "1",
+				timing: {},
+				cueOnly: false,
+				capturePolicy: "current_capture",
+				activationPolicy: "hold",
+			}),
+		);
+	});
+
 	it("keeps Store, Set, and long-press settings behavior intact", async () => {
 		mocks.state.storeArmed = true;
 		const view = renderCuelistWindow(
@@ -619,7 +654,7 @@ describe("Cuelist Pool workflows over scoped authority", () => {
 		fireEvent.click(ui.getByText("Main").closest("button")!);
 		await waitFor(() =>
 			expect(mocks.recordCue).toHaveBeenCalledWith({
-				target: { kind: "pool", playbackNumber: 1 },
+				target: { kind: "cue_list", cueListId: MAIN_CUE_LIST },
 				operation: "overwrite",
 				timing: {},
 				cueOnly: false,
