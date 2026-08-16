@@ -4,7 +4,7 @@
 //! then treats it exactly like a decoded video frame. Nothing downstream knows the difference,
 //! which is what makes a visualizer maskable, tintable, and transformable for free.
 //!
-//! Every visualizer is its own shader module. That costs twenty compilations at startup and buys
+//! Every visualizer is its own shader module. That costs one compilation per shipped kind and buys
 //! the thing the contract asks for: when a backend cannot compile one effect, that effect is
 //! reported by name instead of taking the other nineteen down with it.
 
@@ -51,6 +51,9 @@ const fn body(kind: VisualizerKind) -> &'static str {
         VisualizerKind::CrossingLines => include_str!("shaders/visualizers/crossing-lines.wgsl"),
         VisualizerKind::DigitalGlitch => include_str!("shaders/visualizers/digital-glitch.wgsl"),
         VisualizerKind::CrtScanline => include_str!("shaders/visualizers/crt-scanline.wgsl"),
+        VisualizerKind::MatrixDigitalRain => {
+            include_str!("shaders/visualizers/matrix-digital-rain.wgsl")
+        }
         VisualizerKind::RotatingShape => include_str!("shaders/visualizers/rotating-shape.wgsl"),
         VisualizerKind::FractalMorph => include_str!("shaders/visualizers/fractal-morph.wgsl"),
         VisualizerKind::CityTunnel => include_str!("shaders/visualizers/city-tunnel.wgsl"),

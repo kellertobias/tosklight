@@ -184,6 +184,7 @@ fn a_visualizer_animates_without_audio() {
         VisualizerKind::RotatingShape,
         VisualizerKind::CityTunnel,
         VisualizerKind::GridLandscape,
+        VisualizerKind::MatrixDigitalRain,
     ] {
         let early = draw(
             &gpu,

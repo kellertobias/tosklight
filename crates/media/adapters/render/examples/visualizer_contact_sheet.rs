@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 use media_domain::audio::{Analysis, BANDS, WAVEFORM_POINTS};
 use media_domain::geometry::Size;
-use media_domain::visualizer::{ALL_KINDS, VisualizerParameters};
+use media_domain::visualizer::{ALL_KINDS, VisualizerConfiguration};
 use media_render::{Gpu, VisualizerFrame, VisualizerRenderer};
 
 fn main() -> anyhow::Result<()> {
@@ -48,8 +48,9 @@ fn main() -> anyhow::Result<()> {
     };
 
     for kind in ALL_KINDS {
+        let parameters = VisualizerConfiguration::new(kind).parameters;
         let texture = renderer
-            .render(0, kind, &VisualizerParameters::default(), &frame)
+            .render(0, kind, &parameters, &frame)
             .map_err(|error| anyhow::anyhow!("{error}"))?;
         let pixels = texture
             .read_rgba8(&gpu)

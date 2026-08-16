@@ -48,6 +48,7 @@ pub enum VisualizerKind {
     CrossingLines = 33,
     DigitalGlitch = 40,
     CrtScanline = 41,
+    MatrixDigitalRain = 42,
     RotatingShape = 50,
     FractalMorph = 51,
     CityTunnel = 52,
@@ -55,7 +56,7 @@ pub enum VisualizerKind {
 }
 
 /// Every kind, in the order the shipped catalog assigns them.
-pub const ALL_KINDS: [VisualizerKind; 22] = [
+pub const ALL_KINDS: [VisualizerKind; 23] = [
     VisualizerKind::EqualizerBars,
     VisualizerKind::WaveformOscilloscope,
     VisualizerKind::CircularSpectrum,
@@ -74,6 +75,7 @@ pub const ALL_KINDS: [VisualizerKind; 22] = [
     VisualizerKind::CrossingLines,
     VisualizerKind::DigitalGlitch,
     VisualizerKind::CrtScanline,
+    VisualizerKind::MatrixDigitalRain,
     VisualizerKind::RotatingShape,
     VisualizerKind::FractalMorph,
     VisualizerKind::CityTunnel,
@@ -110,6 +112,7 @@ impl VisualizerKind {
             Self::CrossingLines => "Crossing Lines",
             Self::DigitalGlitch => "Digital Glitch",
             Self::CrtScanline => "CRT Scanline",
+            Self::MatrixDigitalRain => "Matrix Digital Rain",
             Self::RotatingShape => "Rotating 3D Shape",
             Self::FractalMorph => "Fractal Morph",
             Self::CityTunnel => "City Tunnel",
@@ -146,6 +149,7 @@ impl VisualizerKind {
             Self::CrossingLines => &[Count, Speed, Primary, Secondary, Mode],
             Self::DigitalGlitch => &[Amount, Speed],
             Self::CrtScanline => &[Count, Curvature],
+            Self::MatrixDigitalRain => &[Count, Speed, Amount, Primary, Secondary],
             Self::RotatingShape => &[Mode, Speed, Size, Primary, Wireframe],
             Self::FractalMorph => &[Zoom, Iterations],
             Self::CityTunnel => &[Speed, Count, Size, Amount, Primary, Secondary],
@@ -306,6 +310,12 @@ impl VisualizerConfiguration {
             parameters.radius = 0.5;
             parameters.mode = 1;
             parameters.iterations = 2;
+        } else if kind == VisualizerKind::MatrixDigitalRain {
+            parameters.count = 48;
+            parameters.speed = 1.0;
+            parameters.amount = 0.9;
+            parameters.primary = Tint::new(0.25, 1.0, 0.42);
+            parameters.secondary = Tint::new(0.01, 0.16, 0.04);
         }
         Self {
             kind,
@@ -459,6 +469,7 @@ mod tests {
         assert_eq!(VisualizerKind::BeatExplosions.type_id(), 20);
         assert_eq!(VisualizerKind::RadiatingRays.type_id(), 30);
         assert_eq!(VisualizerKind::DigitalGlitch.type_id(), 40);
+        assert_eq!(VisualizerKind::MatrixDigitalRain.type_id(), 42);
         assert_eq!(VisualizerKind::FractalMorph.type_id(), 51);
         assert_eq!(VisualizerKind::CityTunnel.type_id(), 52);
         assert_eq!(VisualizerKind::GridLandscape.type_id(), 53);
@@ -477,6 +488,24 @@ mod tests {
                 .parameters()
                 .contains(&Parameter::Iterations)
         );
+    }
+
+    #[test]
+    fn matrix_digital_rain_has_green_standalone_defaults_and_operator_controls() {
+        let configuration = VisualizerConfiguration::new(VisualizerKind::MatrixDigitalRain);
+        assert_eq!(configuration.name, "Matrix Digital Rain");
+        assert_eq!(configuration.parameters.count, 48);
+        assert!(configuration.parameters.primary.green > configuration.parameters.primary.red);
+        assert!(configuration.parameters.primary.green > configuration.parameters.primary.blue);
+        for parameter in [
+            Parameter::Count,
+            Parameter::Speed,
+            Parameter::Amount,
+            Parameter::Primary,
+            Parameter::Secondary,
+        ] {
+            assert!(configuration.kind.parameters().contains(&parameter));
+        }
     }
 
     #[test]
