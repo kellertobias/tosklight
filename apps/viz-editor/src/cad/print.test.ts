@@ -16,6 +16,7 @@ const scene: CadSceneSnapshot = {
 	entities: [
 		{
 			id: "fixture",
+			logicalFixtureId: "fixture",
 			name: "Moving Light",
 			fixtureNumber: 1,
 			fixtureDisplayId: "1",

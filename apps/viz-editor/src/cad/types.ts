@@ -7,6 +7,7 @@ export type CadViewDirection =
 
 export interface CadEntity {
 	id: string;
+	logicalFixtureId: string;
 	name: string;
 	fixtureNumber: number | null;
 	fixtureDisplayId: string;

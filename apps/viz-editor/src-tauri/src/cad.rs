@@ -69,7 +69,10 @@ pub struct EntityTransform {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CadEntity {
+    /// Unique physical placement: the root fixture ID or one multi-patch instance ID.
     pub id: Uuid,
+    /// Shared programming/selection identity for the root and every multi-patch instance.
+    pub logical_fixture_id: Uuid,
     pub name: String,
     pub fixture_number: Option<u32>,
     pub fixture_display_id: String,
@@ -489,7 +492,7 @@ fn entities(snapshot: &PatchSnapshot, locked_layers: &BTreeSet<String>) -> Vec<C
     snapshot
         .fixtures
         .iter()
-        .map(|fixture| {
+        .flat_map(|fixture| {
             let profile = profiles.get(&(
                 fixture.profile.profile_id.0,
                 fixture.profile.profile_revision,
@@ -507,9 +510,15 @@ fn entities(snapshot: &PatchSnapshot, locked_layers: &BTreeSet<String>) -> Vec<C
                 })
                 .unwrap_or(fixture_type)
                 .to_owned();
-            CadEntity {
-                id: fixture.patch.fixture_id.0,
-                name: fixture.patch.name.clone(),
+            let logical_fixture_id = fixture.patch.fixture_id.0;
+            let common = |id: Uuid,
+                          name: String,
+                          location: &light_fixture::FixtureLocation,
+                          rotation: &light_fixture::FixtureVector,
+                          dmx_address: String| CadEntity {
+                id,
+                logical_fixture_id,
+                name,
                 fixture_number: fixture.patch.fixture_number,
                 fixture_display_id: fixture
                     .patch
@@ -522,18 +531,8 @@ fn entities(snapshot: &PatchSnapshot, locked_layers: &BTreeSet<String>) -> Vec<C
                             .map(|number| format!("0.{number}"))
                     })
                     .unwrap_or_else(|| "—".to_owned()),
-                dmx_address: if profile.is_some_and(|profile| {
-                    profile.patch_policy == light_fixture::PatchPolicy::VisualOnly
-                }) {
-                    "Visual only".to_owned()
-                } else if let (Some(universe), Some(address)) =
-                    (fixture.patch.universe, fixture.patch.address)
-                {
-                    format!("{universe}.{address}")
-                } else {
-                    "Unpatched".to_owned()
-                },
-                kind,
+                dmx_address,
+                kind: kind.clone(),
                 fixture_type: fixture_type.to_owned(),
                 drawing_id: profile.map_or_else(
                     || format!("unknown:{}", fixture.patch.fixture_id.0),
@@ -541,19 +540,44 @@ fn entities(snapshot: &PatchSnapshot, locked_layers: &BTreeSet<String>) -> Vec<C
                 ),
                 layer_id: fixture.patch.layer_id.clone(),
                 selectable: !locked_layers.contains(&fixture.patch.layer_id),
-                position_millimetres: [
-                    fixture.patch.location.x,
-                    fixture.patch.location.y,
-                    fixture.patch.location.z,
-                ],
-                rotation_degrees: [
-                    fixture.patch.rotation.x,
-                    fixture.patch.rotation.y,
-                    fixture.patch.rotation.z,
-                ],
+                position_millimetres: [location.x, location.y, location.z],
+                rotation_degrees: [rotation.x, rotation.y, rotation.z],
                 size_millimetres: dimensions,
-                output_direction: output_direction(&fixture.patch.rotation),
-            }
+                output_direction: output_direction(rotation),
+            };
+            let visual_only = profile.is_some_and(|profile| {
+                profile.patch_policy == light_fixture::PatchPolicy::VisualOnly
+            });
+            let address = |universe: Option<u16>, address: Option<u16>| {
+                if visual_only {
+                    "Visual only".to_owned()
+                } else if let (Some(universe), Some(address)) = (universe, address) {
+                    format!("{universe}.{address}")
+                } else {
+                    "Unpatched".to_owned()
+                }
+            };
+            std::iter::once(common(
+                logical_fixture_id,
+                fixture.patch.name.clone(),
+                &fixture.patch.location,
+                &fixture.patch.rotation,
+                address(fixture.patch.universe, fixture.patch.address),
+            ))
+            .chain(fixture.patch.multipatch.iter().map(|instance| {
+                common(
+                    instance.id,
+                    if instance.name.trim().is_empty() {
+                        fixture.patch.name.clone()
+                    } else {
+                        instance.name.clone()
+                    },
+                    &instance.location,
+                    &instance.rotation,
+                    address(instance.universe, instance.address),
+                )
+            }))
+            .collect::<Vec<_>>()
         })
         .collect()
 }
@@ -760,12 +784,22 @@ fn apply_transforms(
             .filter_map(|fixture| {
                 let transform = desired.get(&fixture.patch.fixture_id.0)?;
                 let mut fixture = FixtureDto::from(fixture);
+                let delta = [
+                    transform.position_millimetres[0] - fixture.location.x,
+                    transform.position_millimetres[1] - fixture.location.y,
+                    transform.position_millimetres[2] - fixture.location.z,
+                ];
                 fixture.location.x = transform.position_millimetres[0];
                 fixture.location.y = transform.position_millimetres[1];
                 fixture.location.z = transform.position_millimetres[2];
                 fixture.rotation.x = transform.rotation_degrees[0];
                 fixture.rotation.y = transform.rotation_degrees[1];
                 fixture.rotation.z = transform.rotation_degrees[2];
+                for instance in &mut fixture.multipatch {
+                    instance.location.x = instance.location.x.saturating_add(delta[0]);
+                    instance.location.y = instance.location.y.saturating_add(delta[1]);
+                    instance.location.z = instance.location.z.saturating_add(delta[2]);
+                }
                 Some(fixture)
             })
             .collect::<Vec<_>>();
@@ -916,7 +950,10 @@ fn snap_transforms(session: &Session, moved: &mut [EntityTransform]) -> Result<(
         })
         .collect::<Vec<_>>();
     for fixture in moved {
-        if trusses.iter().any(|truss| truss.id == fixture.id) {
+        if trusses
+            .iter()
+            .any(|truss| truss.logical_fixture_id == fixture.id)
+        {
             continue;
         }
         let Some(truss) = trusses.iter().min_by_key(|truss| {
@@ -942,14 +979,14 @@ fn snap_transforms(session: &Session, moved: &mut [EntityTransform]) -> Result<(
 #[cfg(test)]
 mod tests {
     use super::{
-        EntityTransform, apply_transforms, drawing, locked_layers, moved_transforms,
+        EntityTransform, apply_transforms, drawing, entities, locked_layers, moved_transforms,
         output_direction, selectable_ids,
     };
     use crate::session::Session;
     use light_application::{PatchFixtureCandidate, PatchFixturesCommand};
     use light_core::{FixtureId, Revision};
     use light_fixture::{
-        FixtureLocation, FixtureProfile, FixtureVector, PatchedFixturePatch,
+        FixtureLocation, FixtureProfile, FixtureVector, MultiPatchInstance, PatchedFixturePatch,
         PatchedFixtureProfileReference, SplitPatch,
     };
     use light_show::{FixtureProfileRevision, ShowStore};
@@ -1023,47 +1060,77 @@ mod tests {
         let fixtures = ids
             .iter()
             .enumerate()
-            .map(|(index, id)| PatchFixtureCandidate {
-                profile: PatchedFixtureProfileReference {
-                    profile_id,
-                    profile_revision: Revision::from(1_u64),
-                    mode_id,
-                },
-                patch: PatchedFixturePatch {
-                    fixture_id: FixtureId(*id),
-                    fixture_number: Some(index as u32 + 1),
-                    virtual_fixture_number: None,
-                    name: format!("CAD light {}", index + 1),
-                    universe: Some(1),
-                    address: Some(index as u16 + 1),
-                    split_patches: vec![SplitPatch {
-                        split: 1,
+            .map(|(index, id)| {
+                let multipatch = if index == 0 {
+                    (1..=3)
+                        .map(|copy| MultiPatchInstance {
+                            id: Uuid::new_v4(),
+                            name: format!("CAD light 1 segment {copy}"),
+                            universe: None,
+                            address: None,
+                            split_patches: vec![SplitPatch {
+                                split: 1,
+                                universe: None,
+                                address: None,
+                            }],
+                            location: FixtureLocation {
+                                x: copy * 1_000,
+                                y: 2_000,
+                                z: 3_000,
+                            },
+                            rotation: FixtureVector::default(),
+                            invert_pan: false,
+                            invert_tilt: false,
+                            bracket_angle: 0.0,
+                            shaper_angle: None,
+                            installed_appearance: Default::default(),
+                        })
+                        .collect()
+                } else {
+                    Vec::new()
+                };
+                PatchFixtureCandidate {
+                    profile: PatchedFixtureProfileReference {
+                        profile_id,
+                        profile_revision: Revision::from(1_u64),
+                        mode_id,
+                    },
+                    patch: PatchedFixturePatch {
+                        fixture_id: FixtureId(*id),
+                        fixture_number: Some(index as u32 + 1),
+                        virtual_fixture_number: None,
+                        name: format!("CAD light {}", index + 1),
                         universe: Some(1),
                         address: Some(index as u16 + 1),
-                    }],
-                    layer_id: "default".into(),
-                    direct_control: None,
-                    internal_bindings: Default::default(),
-                    location: FixtureLocation {
-                        x: index as i32 * 1_000,
-                        y: 2_000,
-                        z: 3_000,
+                        split_patches: vec![SplitPatch {
+                            split: 1,
+                            universe: Some(1),
+                            address: Some(index as u16 + 1),
+                        }],
+                        layer_id: "default".into(),
+                        direct_control: None,
+                        internal_bindings: Default::default(),
+                        location: FixtureLocation {
+                            x: index as i32 * 1_000,
+                            y: 2_000,
+                            z: 3_000,
+                        },
+                        rotation: FixtureVector::default(),
+                        logical_heads: Vec::new(),
+                        multipatch,
+                        group_masters_enabled: true,
+                        grand_master_enabled: true,
+                        invert_pan: false,
+                        invert_tilt: false,
+                        bracket_angle: 0.0,
+                        shaper_angle: None,
+                        installed_appearance: Default::default(),
+                        move_in_black_enabled: true,
+                        move_in_black_delay_millis: 0,
+                        highlight_overrides: BTreeMap::new(),
+                        freeze: Default::default(),
                     },
-                    rotation: FixtureVector::default(),
-                    logical_heads: Vec::new(),
-                    multipatch: Vec::new(),
-                    group_masters_enabled: true,
-                    grand_master_enabled: true,
-                    invert_pan: false,
-                    invert_tilt: false,
-                    bracket_angle: 0.0,
-                    shaper_angle: None,
-                    installed_appearance: Default::default(),
-                    move_in_black_enabled: true,
-                    move_in_black_delay_millis: 0,
-                    highlight_overrides: BTreeMap::new(),
-                    freeze: Default::default(),
-                },
+                }
             })
             .collect();
         document
@@ -1105,6 +1172,25 @@ mod tests {
         let snapshot = session
             .with(|document| document.patch_snapshot().map_err(|error| error.to_string()))
             .unwrap();
+        let cad_entities = entities(&snapshot, &BTreeSet::new());
+        let first_instances = cad_entities
+            .iter()
+            .filter(|entity| entity.logical_fixture_id == ids[0])
+            .collect::<Vec<_>>();
+        assert_eq!(
+            first_instances.len(),
+            4,
+            "root and all three copies are drawn"
+        );
+        assert_eq!(
+            first_instances
+                .iter()
+                .map(|entity| entity.id)
+                .collect::<BTreeSet<_>>()
+                .len(),
+            4,
+            "every physical placement remains independently hittable"
+        );
         let x = |id| {
             snapshot
                 .fixtures
@@ -1119,6 +1205,21 @@ mod tests {
             x(ids[1]) - x(ids[0]),
             1_000,
             "relative spacing survives the group move"
+        );
+        let moved_fixture = snapshot
+            .fixtures
+            .iter()
+            .find(|fixture| fixture.patch.fixture_id.0 == ids[0])
+            .unwrap();
+        assert_eq!(
+            moved_fixture
+                .patch
+                .multipatch
+                .iter()
+                .map(|copy| copy.location.x)
+                .collect::<Vec<_>>(),
+            vec![1_500, 2_500, 3_500],
+            "one logical move translates every physical copy by the same delta"
         );
         assert!(
             apply_transforms(&session, before, &moved)

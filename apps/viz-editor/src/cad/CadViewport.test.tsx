@@ -12,6 +12,7 @@ import type { CadEntity } from "./types";
 
 const fixture: CadEntity = {
 	id: "11111111-1111-4111-8111-111111111111",
+	logicalFixtureId: "11111111-1111-4111-8111-111111111111",
 	name: "Profile Stage 1",
 	fixtureNumber: 101,
 	fixtureDisplayId: "101",
@@ -300,6 +301,7 @@ describe("CAD fixture interaction", () => {
 		const second = {
 			...fixture,
 			id: "22222222-2222-4222-8222-222222222222",
+			logicalFixtureId: "22222222-2222-4222-8222-222222222222",
 			positionMillimetres: [600, 0, 4000] as [number, number, number],
 		};
 		const { canvas, onSelection } = setup([], [fixture, second]);
@@ -330,10 +332,40 @@ describe("CAD fixture interaction", () => {
 		});
 	});
 
+	it("selects a multi-patch placement through its shared logical fixture", () => {
+		const copy = {
+			...fixture,
+			id: "22222222-2222-4222-8222-222222222222",
+			logicalFixtureId: fixture.id,
+			name: "Profile Stage 1 copy",
+			positionMillimetres: [1_000, 0, 4_000] as [number, number, number],
+		};
+		const { canvas, onSelection } = setup([], [fixture, copy]);
+
+		fireEvent.pointerDown(canvas, {
+			pointerId: 17,
+			button: 0,
+			clientX: 600,
+			clientY: 400,
+		});
+		fireEvent.pointerUp(canvas, {
+			pointerId: 17,
+			button: 0,
+			clientX: 600,
+			clientY: 400,
+		});
+
+		expect(onSelection).toHaveBeenCalledWith({
+			type: "replace",
+			ids: [fixture.id],
+		});
+	});
+
 	it("adds a marquee begun inside a fixture while Shift is held", () => {
 		const second = {
 			...fixture,
 			id: "22222222-2222-4222-8222-222222222222",
+			logicalFixtureId: "22222222-2222-4222-8222-222222222222",
 			positionMillimetres: [600, 0, 4000] as [number, number, number],
 		};
 		const { canvas, onSelection } = setup([fixture.id], [fixture, second]);
@@ -417,11 +449,13 @@ describe("CAD fixture interaction", () => {
 		const second = {
 			...fixture,
 			id: "22222222-2222-4222-8222-222222222222",
+			logicalFixtureId: "22222222-2222-4222-8222-222222222222",
 			name: "Profile Stage 2",
 		};
 		const third = {
 			...fixture,
 			id: "33333333-3333-4333-8333-333333333333",
+			logicalFixtureId: "33333333-3333-4333-8333-333333333333",
 			name: "Profile Stage 3",
 		};
 		const orderedSelection = [third.id, fixture.id, second.id];

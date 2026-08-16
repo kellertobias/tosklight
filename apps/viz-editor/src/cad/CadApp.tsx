@@ -85,20 +85,17 @@ export function CadApp() {
 				setScene((current) => {
 					if (!current || delta.sceneRevision < current.sceneRevision)
 						return current;
-					const entities = new Map(
-						current.entities.map((entity) => [entity.id, entity]),
-					);
 					const drawings = new Map(
 						current.drawings.map((drawing) => [drawing.id, drawing]),
 					);
-					for (const id of delta.removedIds) entities.delete(id);
-					for (const entity of delta.upserted) entities.set(entity.id, entity);
 					for (const drawing of delta.drawings)
 						drawings.set(drawing.id, drawing);
 					const next = {
 						...current,
 						sceneRevision: delta.sceneRevision,
-						entities: [...entities.values()],
+						// Native CAD deltas carry the complete physical-instance snapshot. Replacing
+						// it also removes deleted multi-patches whose instance IDs are not root IDs.
+						entities: delta.upserted,
 						drawings: [...drawings.values()],
 						attachments: delta.attachments,
 					};

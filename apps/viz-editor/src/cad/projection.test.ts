@@ -10,6 +10,7 @@ import type { CadDrawing, CadEntity } from "./types";
 
 const movingLight: CadEntity = {
 	id: "11111111-1111-4111-8111-111111111111",
+	logicalFixtureId: "11111111-1111-4111-8111-111111111111",
 	name: "Moving Head Profile",
 	fixtureNumber: 101,
 	fixtureDisplayId: "101",

@@ -307,7 +307,7 @@ export function CadViewport({
 			const selectable = new Set(
 				entities
 					.filter((entity) => entity.selectable)
-					.map((entity) => entity.id),
+					.map((entity) => entity.logicalFixtureId),
 			);
 			drag.current = {
 				type: "move",
@@ -326,7 +326,7 @@ export function CadViewport({
 			last: [event.clientX, event.clientY],
 			axis: "plane",
 			additive: event.shiftKey,
-			hitId: hit?.id,
+			hitId: hit?.logicalFixtureId,
 			marquee: false,
 		};
 	}
@@ -408,8 +408,12 @@ export function CadViewport({
 						box,
 					),
 				)
-				.map((entity) => entity.id);
-			onSelection({ type: active.additive ? "add" : "replace", ids });
+				.map((entity) => entity.logicalFixtureId);
+			const uniqueIds = [...new Set(ids)];
+			onSelection({
+				type: active.additive ? "add" : "replace",
+				ids: uniqueIds,
+			});
 			return;
 		}
 		if (active?.type !== "move") return;
@@ -456,7 +460,10 @@ export function CadViewport({
 			{showFixtureIds || showDmxAddresses ? (
 				<div className="cad-entity-labels" aria-hidden="true">
 					{entities.map((entity) => {
-						const worldDelta = previewDeltaForEntity(preview, entity.id);
+						const worldDelta = previewDeltaForEntity(
+							preview,
+							entity.logicalFixtureId,
+						);
 						const point = projectPoint(
 							entity.positionMillimetres.map(
 								(value, index) => value + worldDelta[index],
@@ -815,8 +822,11 @@ class LineRenderer {
 			(left, right) => viewDepth(left, view) - viewDepth(right, view),
 		);
 		for (const entity of ordered) {
-			const active = selected.has(entity.id);
-			const entityWorldPreview = previewDeltaForEntity(preview, entity.id);
+			const active = selected.has(entity.logicalFixtureId);
+			const entityWorldPreview = previewDeltaForEntity(
+				preview,
+				entity.logicalFixtureId,
+			);
 			const entityPreview = projectPoint(
 				entityWorldPreview,
 				view,
@@ -1188,7 +1198,9 @@ function gizmoGeometry(
 	preview: readonly [number, number] = [0, 0],
 ) {
 	const points = entities
-		.filter((entity) => entity.selectable && selected.has(entity.id))
+		.filter(
+			(entity) => entity.selectable && selected.has(entity.logicalFixtureId),
+		)
 		.map((entity) =>
 			projectPoint(entity.positionMillimetres, view, rotationQuarterTurns),
 		);
