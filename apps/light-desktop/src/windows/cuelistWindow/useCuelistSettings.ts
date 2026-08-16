@@ -54,6 +54,27 @@ function initialSettingsDraft(object: CueList, speedGroupsBpm: number[]) {
 	} satisfies CueList;
 }
 
+function settingsFingerprint(draft: CueList, priorityText: string): string {
+	const trimmedPriority = priorityText.trim();
+	const parsedPriority =
+		trimmedPriority === "" ? trimmedPriority : Number(trimmedPriority);
+	const priority = Number.isFinite(parsedPriority)
+		? parsedPriority
+		: trimmedPriority;
+	if (draft.mode === "sequence") {
+		const {
+			speed_group: _speedGroup,
+			speed_multiplier: _speedMultiplier,
+			chaser_step_millis: _chaserStepMillis,
+			chaser_xfade_millis: _chaserXfadeMillis,
+			chaser_xfade_percent: _chaserXfadePercent,
+			...sequenceSettings
+		} = draft;
+		return JSON.stringify({ ...sequenceSettings, priority });
+	}
+	return JSON.stringify({ ...draft, priority });
+}
+
 export function useCuelistSettings({
 	object,
 	speedGroupsBpm,
@@ -72,7 +93,9 @@ export function useCuelistSettings({
 	const [renumberError, setRenumberError] = useState("");
 	const [closeConfirm, setCloseConfirm] = useState(false);
 	const [modeMenuOpen, setModeMenuOpen] = useState(false);
-	const initialDraft = useRef(JSON.stringify(draft));
+	const initialDraft = useRef(
+		settingsFingerprint(draft, String(object.body.priority)),
+	);
 	const replaceDraft = (next: CueList) => {
 		draftRef.current = next;
 		setDraft(next);
@@ -81,9 +104,10 @@ export function useCuelistSettings({
 		replaceDraft({ ...draftRef.current, [key]: value });
 	const requestClose = () => {
 		const changed =
-			JSON.stringify(draftRef.current) !== initialDraft.current ||
-			String(priorityInputRef.current?.value ?? object.body.priority) !==
-				String(object.body.priority);
+			settingsFingerprint(
+				draftRef.current,
+				String(priorityInputRef.current?.value ?? object.body.priority),
+			) !== initialDraft.current;
 		if (changed) setCloseConfirm(true);
 		else close();
 	};

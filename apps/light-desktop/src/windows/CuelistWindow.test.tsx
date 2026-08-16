@@ -731,6 +731,68 @@ describe("CuelistWindow pane and Cuelist settings", () => {
 		});
 	});
 
+	it("closes untouched Cuelist Settings without a discard prompt", () => {
+		showEditableCueList();
+		const { container } = render(<CuelistWindow />);
+		const ui = within(container);
+		fireEvent.click(ui.getByText("Main").closest("button")!);
+		fireEvent.click(ui.getByRole("button", { name: "Cuelist Settings" }));
+
+		const settings = screen.getByRole("dialog", { name: "Cuelist Settings" });
+		fireEvent.click(
+			within(settings).getByRole("button", {
+				name: "Close Cuelist Settings",
+			}),
+		);
+
+		expect(
+			screen.queryByRole("dialog", { name: "Unsaved Cuelist Settings" }),
+		).not.toBeInTheDocument();
+		expect(
+			screen.queryByRole("dialog", { name: "Cuelist Settings" }),
+		).not.toBeInTheDocument();
+	});
+
+	it("closes restored normalized Cuelist Settings without a discard prompt", () => {
+		showEditableCueList();
+		const { container } = render(<CuelistWindow />);
+		const ui = within(container);
+		fireEvent.click(ui.getByText("Main").closest("button")!);
+		fireEvent.click(ui.getByRole("button", { name: "Cuelist Settings" }));
+
+		const settings = screen.getByRole("dialog", { name: "Cuelist Settings" });
+		fireEvent.click(
+			within(settings).getByRole("button", { name: /Mode\s*\(Sequence\)/ }),
+		);
+		fireEvent.click(
+			within(settings).getByRole("menuitemradio", { name: "Chaser" }),
+		);
+		fireEvent.click(
+			within(settings).getByRole("button", { name: /Mode\s*\(Chaser\)/ }),
+		);
+		fireEvent.click(
+			within(settings).getByRole("menuitemradio", { name: "Sequence" }),
+		);
+		fireEvent.change(within(settings).getByLabelText("Numeric priority"), {
+			target: { value: "11" },
+		});
+		fireEvent.change(within(settings).getByLabelText("Numeric priority"), {
+			target: { value: "10" },
+		});
+		fireEvent.click(
+			within(settings).getByRole("button", {
+				name: "Close Cuelist Settings",
+			}),
+		);
+
+		expect(
+			screen.queryByRole("dialog", { name: "Unsaved Cuelist Settings" }),
+		).not.toBeInTheDocument();
+		expect(
+			screen.queryByRole("dialog", { name: "Cuelist Settings" }),
+		).not.toBeInTheDocument();
+	});
+
 	it("opens Cuelist Settings as a title-controlled modal and confirms dirty close", () => {
 		mocks.state.storeArmed = false;
 		const cueList: CueList = {
