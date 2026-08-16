@@ -80,6 +80,7 @@ export function CadViewport({
 }: CadViewportProps) {
 	const canvas = useRef<HTMLCanvasElement>(null);
 	const renderer = useRef<LineRenderer | null>(null);
+	const redraw = useRef<() => void>(() => undefined);
 	const drag = useRef<Drag | null>(null);
 	const [guide, setGuide] = useState<MoveAxis | null>(null);
 	const [selectionBox, setSelectionBox] = useState<SelectionBox | null>(null);
@@ -92,27 +93,24 @@ export function CadViewport({
 	useEffect(() => {
 		if (!canvas.current) return;
 		renderer.current ??= LineRenderer.create(canvas.current);
-		const active = renderer.current;
-		const resize = () => active?.resize();
-		resize();
-		const observer = new ResizeObserver(resize);
-		observer.observe(canvas.current);
-		return () => observer.disconnect();
+		return observeViewportResize(canvas.current, () => redraw.current());
 	}, []);
 
 	useEffect(() => {
-		renderer.current?.draw(
-			entities,
-			drawingById,
-			selected,
-			view,
-			rotationQuarterTurns,
-			camera,
-			preview,
-			editEnabled,
-			guide,
-			selectionBox,
-		);
+		redraw.current = () =>
+			renderer.current?.draw(
+				entities,
+				drawingById,
+				selected,
+				view,
+				rotationQuarterTurns,
+				camera,
+				preview,
+				editEnabled,
+				guide,
+				selectionBox,
+			);
+		redraw.current();
 	}, [
 		entities,
 		drawingById,
@@ -707,6 +705,16 @@ class LineRenderer {
 		);
 		gl.drawArrays(gl.LINES, 0, lineVertices.length / 5);
 	}
+}
+
+export function observeViewportResize(
+	element: Element,
+	redraw: () => void,
+): () => void {
+	redraw();
+	const observer = new ResizeObserver(() => redraw());
+	observer.observe(element);
+	return () => observer.disconnect();
 }
 
 function worldGeometry(

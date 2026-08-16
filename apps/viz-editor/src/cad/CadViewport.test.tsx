@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { CadViewport } from "./CadViewport";
+import { CadViewport, observeViewportResize } from "./CadViewport";
 import type { CadEntity } from "./types";
 
 const fixture: CadEntity = {
@@ -79,6 +79,35 @@ function setup(
 }
 
 describe("CAD fixture interaction", () => {
+	it("redraws the viewport whenever its rendered size changes", () => {
+		let notifyResize: ResizeObserverCallback | undefined;
+		const disconnect = vi.fn();
+		vi.stubGlobal(
+			"ResizeObserver",
+			class {
+				constructor(callback: ResizeObserverCallback) {
+					notifyResize = callback;
+				}
+				observe() {}
+				disconnect() {
+					disconnect();
+				}
+			},
+		);
+		const redraw = vi.fn();
+		const stop = observeViewportResize(
+			document.createElement("canvas"),
+			redraw,
+		);
+
+		expect(redraw).toHaveBeenCalledTimes(1);
+		notifyResize?.([], {} as ResizeObserver);
+		expect(redraw).toHaveBeenCalledTimes(2);
+
+		stop();
+		expect(disconnect).toHaveBeenCalledTimes(1);
+	});
+
 	it("selects fixture geometry without starting a transform drag", () => {
 		const { canvas, onSelection, onMove } = setup();
 		fireEvent.pointerDown(canvas, {
