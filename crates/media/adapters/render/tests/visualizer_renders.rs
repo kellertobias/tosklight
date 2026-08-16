@@ -182,6 +182,7 @@ fn a_visualizer_animates_without_audio() {
         VisualizerKind::ColorCycling,
         VisualizerKind::CrossingLines,
         VisualizerKind::RotatingShape,
+        VisualizerKind::CityTunnel,
     ] {
         let early = draw(
             &gpu,

@@ -81,6 +81,10 @@ addresses are `1` through `254`. Media uses folders `1` through `199`, text uses
 - **Import all** converts every source in the library that does not yet have a playable clip. It is
   the replacement for the old H.264/ProRes re-encode action: the only playback format is HAP Alpha
   in a `.toskclip` container.
+- **City Tunnel** travels continuously through an enclosed neon urban corridor. **Speed** sets the
+  forward travel rate, **Count** changes the building/window density, **Size** changes the tunnel
+  structure, **Amount** controls its light intensity, and the two colour controls tune the city
+  frame and window appearance.
 
 Thumbnail, source, metadata, and playable clip files follow a rename, move, folder reorder, or
 explicit swap together. A

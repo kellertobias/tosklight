@@ -78,7 +78,7 @@ mod tests {
 
         assert_eq!(status, StatusCode::OK);
         let entries = body.as_array().expect("a list");
-        assert_eq!(entries.len(), 20);
+        assert_eq!(entries.len(), 21);
 
         let first = &entries[0];
         assert_eq!(first["address"]["folder"], 250);
@@ -94,6 +94,20 @@ mod tests {
             "an editor is told which controls do something"
         );
         assert_eq!(first["parameters"]["count"], 32);
+
+        let city = entries
+            .iter()
+            .find(|entry| entry["typeId"] == 52)
+            .expect("City Tunnel is a shipped built-in");
+        assert_eq!(city["kind"], "City Tunnel");
+        assert_eq!(city["address"]["folder"], 250);
+        assert!(
+            city["uses"]
+                .as_array()
+                .expect("a list")
+                .contains(&serde_json::json!("speed")),
+            "the operator can tune tunnel travel speed"
+        );
     }
 
     #[tokio::test]

@@ -50,10 +50,11 @@ pub enum VisualizerKind {
     CrtScanline = 41,
     RotatingShape = 50,
     FractalMorph = 51,
+    CityTunnel = 52,
 }
 
 /// Every kind, in the order the shipped catalog assigns them.
-pub const ALL_KINDS: [VisualizerKind; 20] = [
+pub const ALL_KINDS: [VisualizerKind; 21] = [
     VisualizerKind::EqualizerBars,
     VisualizerKind::WaveformOscilloscope,
     VisualizerKind::CircularSpectrum,
@@ -74,6 +75,7 @@ pub const ALL_KINDS: [VisualizerKind; 20] = [
     VisualizerKind::CrtScanline,
     VisualizerKind::RotatingShape,
     VisualizerKind::FractalMorph,
+    VisualizerKind::CityTunnel,
 ];
 
 impl VisualizerKind {
@@ -108,6 +110,7 @@ impl VisualizerKind {
             Self::CrtScanline => "CRT Scanline",
             Self::RotatingShape => "Rotating 3D Shape",
             Self::FractalMorph => "Fractal Morph",
+            Self::CityTunnel => "City Tunnel",
         }
     }
 
@@ -142,6 +145,7 @@ impl VisualizerKind {
             Self::CrtScanline => &[Count, Curvature],
             Self::RotatingShape => &[Mode, Speed, Size, Primary, Wireframe],
             Self::FractalMorph => &[Zoom, Iterations],
+            Self::CityTunnel => &[Speed, Count, Size, Amount, Primary, Secondary],
         }
     }
 }
@@ -442,6 +446,7 @@ mod tests {
         assert_eq!(VisualizerKind::RadiatingRays.type_id(), 30);
         assert_eq!(VisualizerKind::DigitalGlitch.type_id(), 40);
         assert_eq!(VisualizerKind::FractalMorph.type_id(), 51);
+        assert_eq!(VisualizerKind::CityTunnel.type_id(), 52);
         assert_eq!(VisualizerKind::from_type_id(999), None);
     }
 
