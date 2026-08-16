@@ -254,6 +254,8 @@ export function stubServer(
 						layer.effects[body.effectSlot] = blurEffect(body.effectSlot);
 					} else if (body.effectType === "feedback") {
 						layer.effects[body.effectSlot] = feedbackEffect(body.effectSlot);
+					} else if (body.effectType === "beat-move") {
+						layer.effects[body.effectSlot] = beatMoveEffect(body.effectSlot);
 					}
 					const selectedEffect = layer.effects[body.effectSlot];
 					if (body.visualizerParameters !== undefined)
@@ -289,6 +291,18 @@ export function stubServer(
 							body.feedbackDirection,
 						);
 					}
+					if (body.beatMoveAmount !== undefined)
+						selectedEffect.parameters[0].value = body.beatMoveAmount;
+					if (body.beatMoveDirection !== undefined) {
+						selectedEffect.parameters[1].value = [
+							"up",
+							"down",
+							"left",
+							"right",
+						].indexOf(body.beatMoveDirection);
+					}
+					if (body.beatMoveDecay !== undefined)
+						selectedEffect.parameters[2].value = body.beatMoveDecay;
 					for (const [id, key] of [
 						["tv-curvature", "tvCurvature"],
 						["distortion", "effectDistortion"],
@@ -684,6 +698,38 @@ function feedbackEffect(
 				label: "Motion direction",
 				value: 0,
 				defaultValue: 0,
+			},
+		],
+	};
+}
+
+function beatMoveEffect(
+	index: number,
+): OutputView["layers"][number]["effects"][number] {
+	return {
+		...emptyEffect(index),
+		effectType: "beat-move",
+		label: "Beat Move",
+		enabled: true,
+		mix: 1,
+		parameters: [
+			{
+				id: "beat-move-amount",
+				label: "Movement amount",
+				value: 0.15,
+				defaultValue: 0.15,
+			},
+			{
+				id: "beat-move-direction",
+				label: "Direction",
+				value: 0,
+				defaultValue: 0,
+			},
+			{
+				id: "beat-move-decay",
+				label: "Return time",
+				value: 0.35,
+				defaultValue: 0.35,
 			},
 		],
 	};

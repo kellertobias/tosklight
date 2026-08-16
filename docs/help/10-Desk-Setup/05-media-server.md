@@ -168,6 +168,10 @@ the trail remains, **Motion speed** controls how quickly retained frames travel,
 direction** selects **Top**, **Bottom**, **Left**, **Right**, **Rotate Left**, or **Rotate Right**.
 Bypassing Feedback clears its retained-frame history and immediately restores the unmodified live
 source; enabling it again starts a new trail from the current frame.
+**Beat Move** temporarily offsets a layer whenever the audio detector reports a new beat, then
+returns it to the saved resting position. **Movement amount** sets the maximum offset,
+**Direction** selects Up, Down, Left, or Right, and **Return time** sets the smooth decay duration.
+Bypassing the effect immediately restores the exact configured layer position.
 After configuring a slot, release takeover to return control to the desk. The matching **Effect 1**
 through **Effect 4** DMX channel then controls that slot's mix without erasing its selected effect or
 typed parameters.

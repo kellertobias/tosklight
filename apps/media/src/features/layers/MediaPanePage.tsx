@@ -660,7 +660,7 @@ function tintChange(value: string) {
 function layerChange(id: string, value: string | number): UpdateLayer {
 	const number = Number(value);
 	const effect =
-		/^effect-(\d+)-(type|enabled|mix|tv-curvature|distortion|image-grain|compression-damage|block-size|tile-displacement|chroma-damage|glitching|cycle-interval|blur-amount|feedback-amount|feedback-motion|feedback-direction)$/.exec(
+		/^effect-(\d+)-(type|enabled|mix|tv-curvature|distortion|image-grain|compression-damage|block-size|tile-displacement|chroma-damage|glitching|cycle-interval|blur-amount|feedback-amount|feedback-motion|feedback-direction|beat-move-amount|beat-move-direction|beat-move-decay)$/.exec(
 			id,
 		);
 	if (effect) {
@@ -698,6 +698,12 @@ function layerChange(id: string, value: string | number): UpdateLayer {
 				return { effectSlot, feedbackMotion: number / 100 };
 			case "feedback-direction":
 				return { effectSlot, feedbackDirection: String(value) };
+			case "beat-move-amount":
+				return { effectSlot, beatMoveAmount: number / 100 };
+			case "beat-move-direction":
+				return { effectSlot, beatMoveDirection: String(value) };
+			case "beat-move-decay":
+				return { effectSlot, beatMoveDecay: number };
 		}
 	}
 	switch (id) {
@@ -763,6 +769,7 @@ function effectControls(
 					{ value: "opacity-cycle", label: "Layer opacity cycle" },
 					{ value: "blur", label: "Blur" },
 					{ value: "feedback", label: "Feedback" },
+					{ value: "beat-move", label: "Beat Move" },
 				],
 				disabled,
 			},
@@ -862,6 +869,73 @@ function effectControls(
 					options: directions,
 					disabled,
 				},
+			];
+		}
+		if (effect.effectType === "beat-move") {
+			const amount = effect.parameters.find(
+				(parameter) => parameter.id === "beat-move-amount",
+			);
+			const direction = effect.parameters.find(
+				(parameter) => parameter.id === "beat-move-direction",
+			);
+			const decay = effect.parameters.find(
+				(parameter) => parameter.id === "beat-move-decay",
+			);
+			const directions = [
+				{ value: "up", label: "Up" },
+				{ value: "down", label: "Down" },
+				{ value: "left", label: "Left" },
+				{ value: "right", label: "Right" },
+			];
+			return [
+				...controls,
+				{
+					id: `${prefix}-enabled`,
+					kind: "choice" as const,
+					label: `${slot} state`,
+					value: String(effect.enabled),
+					options: [
+						{ value: "true", label: "Enabled" },
+						{ value: "false", label: "Bypassed" },
+					],
+					disabled,
+				},
+				valueControl(
+					`${prefix}-mix`,
+					`${slot} mix`,
+					effect.mix * 100,
+					0,
+					100,
+					disabled,
+					"%",
+				),
+				valueControl(
+					`${prefix}-beat-move-amount`,
+					`${slot} · Movement amount`,
+					(amount?.value ?? 0.15) * 100,
+					0,
+					100,
+					disabled,
+					"%",
+				),
+				{
+					id: `${prefix}-beat-move-direction`,
+					kind: "choice" as const,
+					label: `${slot} · Direction`,
+					value: directions[Math.round(direction?.value ?? 0)]?.value ?? "up",
+					options: directions,
+					disabled,
+				},
+				valueControl(
+					`${prefix}-beat-move-decay`,
+					`${slot} · Return time`,
+					decay?.value ?? 0.35,
+					0.05,
+					5,
+					disabled,
+					" s",
+					0.05,
+				),
 			];
 		}
 		if (

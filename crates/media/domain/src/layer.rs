@@ -97,6 +97,99 @@ pub const DIGITAL_TV_EFFECT: &str = "digital-tv";
 pub const OPACITY_CYCLE_EFFECT: &str = "opacity-cycle";
 pub const BLUR_EFFECT: &str = "blur";
 pub const FEEDBACK_EFFECT: &str = "feedback";
+pub const BEAT_MOVE_EFFECT: &str = "beat-move";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum BeatMoveDirection {
+    #[default]
+    Up,
+    Down,
+    Left,
+    Right,
+}
+
+impl BeatMoveDirection {
+    pub const ALL: [Self; 4] = [Self::Up, Self::Down, Self::Left, Self::Right];
+
+    pub const fn wire_name(self) -> &'static str {
+        match self {
+            Self::Up => "up",
+            Self::Down => "down",
+            Self::Left => "left",
+            Self::Right => "right",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|direction| direction.wire_name() == value)
+    }
+
+    pub const fn parameter(self) -> f32 {
+        match self {
+            Self::Up => 0.0,
+            Self::Down => 1.0,
+            Self::Left => 2.0,
+            Self::Right => 3.0,
+        }
+    }
+
+    pub fn from_parameter(value: f32) -> Self {
+        Self::ALL
+            .get(if value.is_finite() {
+                value.round().clamp(0.0, 3.0) as usize
+            } else {
+                0
+            })
+            .copied()
+            .unwrap_or_default()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BeatMoveParameters {
+    /// Offset in output half-widths at the instant a beat lands.
+    pub amount: f32,
+    pub direction: BeatMoveDirection,
+    /// Seconds until the temporary offset returns fully to rest.
+    pub decay_seconds: f32,
+}
+
+impl BeatMoveParameters {
+    pub const IDS: [&'static str; 3] =
+        ["beat-move-amount", "beat-move-direction", "beat-move-decay"];
+    pub const LABELS: [&'static str; 3] = ["Movement amount", "Direction", "Return time"];
+
+    pub fn from_parameters(values: &[f32]) -> Self {
+        let defaults = Self::default();
+        let finite = |value: Option<f32>, fallback: f32, low: f32, high: f32| match value {
+            Some(value) if value.is_finite() => value.clamp(low, high),
+            _ => fallback,
+        };
+        Self {
+            amount: finite(values.first().copied(), defaults.amount, 0.0, 1.0),
+            direction: BeatMoveDirection::from_parameter(
+                values.get(1).copied().unwrap_or_default(),
+            ),
+            decay_seconds: finite(values.get(2).copied(), defaults.decay_seconds, 0.05, 5.0),
+        }
+    }
+
+    pub const fn as_array(self) -> [f32; 3] {
+        [self.amount, self.direction.parameter(), self.decay_seconds]
+    }
+}
+
+impl Default for BeatMoveParameters {
+    fn default() -> Self {
+        Self {
+            amount: 0.15,
+            direction: BeatMoveDirection::Up,
+            decay_seconds: 0.35,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum FeedbackMotion {
@@ -486,6 +579,22 @@ impl EffectSlot {
             .then(|| FeedbackParameters::from_normalized(&self.parameters))
     }
 
+    pub fn beat_move() -> Self {
+        Self {
+            effect_type: Some(BEAT_MOVE_EFFECT.to_owned()),
+            enabled: true,
+            seed: 0,
+            mix: 1.0,
+            parameters: BeatMoveParameters::default().as_array().to_vec(),
+            visualizer_parameters: None,
+        }
+    }
+
+    pub fn beat_move_parameters(&self) -> Option<BeatMoveParameters> {
+        (self.enabled && self.mix > 0.0 && self.effect_type.as_deref() == Some(BEAT_MOVE_EFFECT))
+            .then(|| BeatMoveParameters::from_parameters(&self.parameters))
+    }
+
     pub fn normalize(&mut self) {
         self.mix = if self.mix.is_finite() {
             self.mix.clamp(0.0, 1.0)
@@ -510,6 +619,10 @@ impl EffectSlot {
                 .to_vec();
         } else if self.effect_type.as_deref() == Some(FEEDBACK_EFFECT) {
             self.parameters = FeedbackParameters::from_normalized(&self.parameters)
+                .as_array()
+                .to_vec();
+        } else if self.effect_type.as_deref() == Some(BEAT_MOVE_EFFECT) {
+            self.parameters = BeatMoveParameters::from_parameters(&self.parameters)
                 .as_array()
                 .to_vec();
         }
@@ -835,5 +948,30 @@ mod tests {
             None,
             "disabled clears the temporal path"
         );
+    }
+
+    #[test]
+    fn beat_move_has_bounded_persisted_controls_and_safe_bypass() {
+        let mut effect = EffectSlot::beat_move();
+        let defaults = effect.beat_move_parameters().expect("enabled");
+        assert_eq!(defaults, BeatMoveParameters::default());
+        for direction in BeatMoveDirection::ALL {
+            assert_eq!(
+                BeatMoveDirection::parse(direction.wire_name()),
+                Some(direction)
+            );
+            assert_eq!(
+                BeatMoveDirection::from_parameter(direction.parameter()),
+                direction
+            );
+        }
+        effect.parameters = vec![f32::INFINITY, 99.0, -2.0];
+        effect.normalize();
+        assert_eq!(
+            effect.parameters,
+            vec![0.15, BeatMoveDirection::Right.parameter(), 0.05]
+        );
+        effect.enabled = false;
+        assert_eq!(effect.beat_move_parameters(), None);
     }
 }

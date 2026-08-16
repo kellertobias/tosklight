@@ -335,6 +335,48 @@ describe("the production Media pane", () => {
 		);
 	});
 
+	it("configures live Beat Move amount, direction, return time, and bypass", async () => {
+		const server = stubServer();
+		render(<MediaPanePage />);
+		await userEvent.click(
+			await screen.findByRole("switch", { name: "Take over playback" }),
+		);
+		await userEvent.click(screen.getByRole("tab", { name: "Effects" }));
+		await chooseEffect(1, "Beat Move");
+		await waitFor(() =>
+			expect(server.outputs[0].layers[0].effects[0].effectType).toBe(
+				"beat-move",
+			),
+		);
+		expect(screen.getByLabelText("Slot 1 · Movement amount")).toHaveValue("15");
+		expect(screen.getByLabelText("Slot 1 · Return time")).toHaveValue("0.35");
+		fireEvent.input(screen.getByLabelText("Slot 1 · Movement amount"), {
+			target: { value: "30" },
+		});
+		fireEvent.input(screen.getByLabelText("Slot 1 · Return time"), {
+			target: { value: "0.8" },
+		});
+		await userEvent.click(
+			within(
+				screen.getByRole("radiogroup", { name: "Slot 1 · Direction" }),
+			).getByRole("radio", { name: "Right" }),
+		);
+		await waitFor(() => {
+			const parameters = server.outputs[0].layers[0].effects[0].parameters;
+			expect(parameters[0].value).toBeCloseTo(0.3);
+			expect(parameters[1].value).toBe(3);
+			expect(parameters[2].value).toBeCloseTo(0.8);
+		});
+		await userEvent.click(
+			within(
+				screen.getByRole("radiogroup", { name: "Slot 1 state" }),
+			).getByRole("radio", { name: "Bypassed" }),
+		);
+		await waitFor(() =>
+			expect(server.outputs[0].layers[0].effects[0].enabled).toBe(false),
+		);
+	});
+
 	it("shows an actionable capability error for an effect this build cannot render", async () => {
 		const output = anOutput();
 		output.layers[0].effects[0] = {

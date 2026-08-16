@@ -4,9 +4,10 @@ use media_application::configuration::{
     DmxProtocol, MonitorSelector, OutputConfiguration, OutputTarget, Resolution, SoundOutput,
 };
 use media_domain::{
-    ANALOG_TV_EFFECT, AnalogTvParameters, BLUR_EFFECT, BlurParameters, DIGITAL_TV_EFFECT,
-    DigitalTvParameters, EffectSlot, FEEDBACK_EFFECT, FeedbackParameters, LayerState, MaskSource,
-    MaskState, MasterState, MediaAddress, OPACITY_CYCLE_EFFECT, OpacityCycleInterval, OutputState,
+    ANALOG_TV_EFFECT, AnalogTvParameters, BEAT_MOVE_EFFECT, BLUR_EFFECT, BeatMoveParameters,
+    BlurParameters, DIGITAL_TV_EFFECT, DigitalTvParameters, EffectSlot, FEEDBACK_EFFECT,
+    FeedbackParameters, LayerState, MaskSource, MaskState, MasterState, MediaAddress,
+    OPACITY_CYCLE_EFFECT, OpacityCycleInterval, OutputState,
 };
 use media_domain::{LayerPersonality, PresentationMode};
 use serde::{Deserialize, Serialize};
@@ -81,6 +82,7 @@ impl EffectSlotView {
         let opacity_cycle = effect.effect_type.as_deref() == Some(OPACITY_CYCLE_EFFECT);
         let blur = effect.effect_type.as_deref() == Some(BLUR_EFFECT);
         let feedback = effect.effect_type.as_deref() == Some(FEEDBACK_EFFECT);
+        let beat_move = effect.effect_type.as_deref() == Some(BEAT_MOVE_EFFECT);
         let parameters = if analog {
             let defaults = AnalogTvParameters::default().as_array();
             let values = AnalogTvParameters::from_normalized(&effect.parameters).as_array();
@@ -140,13 +142,22 @@ impl EffectSlotView {
                     default_value: defaults.direction.parameter(),
                 },
             ]
+        } else if beat_move {
+            let defaults = BeatMoveParameters::default().as_array();
+            let values = BeatMoveParameters::from_parameters(&effect.parameters).as_array();
+            parameter_views(
+                &BeatMoveParameters::IDS,
+                &BeatMoveParameters::LABELS,
+                &values,
+                &defaults,
+            )
         } else {
             Vec::new()
         };
         Self {
             index,
             effect_type: effect.effect_type.clone(),
-            label: if analog || digital || opacity_cycle || blur || feedback {
+            label: if analog || digital || opacity_cycle || blur || feedback || beat_move {
                 if analog {
                     "Analog TV"
                 } else if digital {
@@ -155,8 +166,10 @@ impl EffectSlotView {
                     "Layer opacity cycle"
                 } else if blur {
                     "Blur"
-                } else {
+                } else if feedback {
                     "Feedback"
+                } else {
+                    "Beat Move"
                 }
                 .to_owned()
             } else {
@@ -169,12 +182,14 @@ impl EffectSlotView {
                 || digital
                 || opacity_cycle
                 || blur
-                || feedback,
+                || feedback
+                || beat_move,
             capability_detail: (!analog
                 && !digital
                 && !opacity_cycle
                 && !blur
                 && !feedback
+                && !beat_move
                 && effect.effect_type.is_some())
             .then(|| "This Media Server build cannot render the selected effect.".to_owned()),
             parameters,
@@ -800,6 +815,12 @@ pub struct UpdateLayer {
     pub feedback_motion: Option<f32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub feedback_direction: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub beat_move_amount: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub beat_move_direction: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub beat_move_decay: Option<f32>,
     /// Complete per-layer visualizer settings routed through effect slot one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub visualizer_parameters: Option<VisualizerParametersView>,
@@ -844,6 +865,9 @@ impl UpdateLayer {
             || self.feedback_amount.is_some()
             || self.feedback_motion.is_some()
             || self.feedback_direction.is_some()
+            || self.beat_move_amount.is_some()
+            || self.beat_move_direction.is_some()
+            || self.beat_move_decay.is_some()
             || self.visualizer_parameters.is_some()
     }
 }

@@ -12,9 +12,10 @@ use axum::response::{IntoResponse, Response};
 use media_application::MediaConfiguration;
 use media_application::configuration::{load, save};
 use media_domain::{
-    ANALOG_TV_EFFECT, Applied, BLUR_EFFECT, BlurParameters, Command, CommandKind, CommandSource,
-    DIGITAL_TV_EFFECT, EffectSlot, FEEDBACK_EFFECT, FeedbackMotion, FeedbackParameters, FlipMirror,
-    LayerControls, MasterControls, MediaAddress, MediaState, OPACITY_CYCLE_EFFECT,
+    ANALOG_TV_EFFECT, Applied, BEAT_MOVE_EFFECT, BLUR_EFFECT, BeatMoveDirection,
+    BeatMoveParameters, BlurParameters, Command, CommandKind, CommandSource, DIGITAL_TV_EFFECT,
+    EffectSlot, FEEDBACK_EFFECT, FeedbackMotion, FeedbackParameters, FlipMirror, LayerControls,
+    MasterControls, MediaAddress, MediaState, OPACITY_CYCLE_EFFECT,
     OpacityCycleInterval, OutputId, ScalingMode, Timestamp, Tint, apply,
 };
 
@@ -146,6 +147,7 @@ pub(super) async fn update_layer(
         ("blurAmount", body.blur_amount),
         ("feedbackAmount", body.feedback_amount),
         ("feedbackMotion", body.feedback_motion),
+        ("beatMoveAmount", body.beat_move_amount),
     ] {
         validate_unit(name, value)?;
     }
@@ -157,6 +159,7 @@ pub(super) async fn update_layer(
         ("rotation", body.rotation, -360.0, 360.0),
         ("maskScaleX", body.mask_scale_x, 0.0, 2.0),
         ("maskScaleY", body.mask_scale_y, 0.0, 2.0),
+        ("beatMoveDecay", body.beat_move_decay, 0.05, 5.0),
     ] {
         validate_range(name, value, minimum, maximum)?;
     }
@@ -197,6 +200,7 @@ pub(super) async fn update_layer(
                 OPACITY_CYCLE_EFFECT => EffectSlot::opacity_cycle(),
                 BLUR_EFFECT => EffectSlot::blur(),
                 FEEDBACK_EFFECT => EffectSlot::feedback(),
+                BEAT_MOVE_EFFECT => EffectSlot::beat_move(),
                 "none" => EffectSlot::default(),
                 _ => {
                     return Err(ApiError::bad_request(
@@ -264,6 +268,29 @@ pub(super) async fn update_layer(
             }
             let mut parameters = BlurParameters::from_normalized(&effect.parameters);
             parameters.amount = amount;
+            effect.parameters = parameters.as_array().to_vec();
+        }
+        if body.beat_move_amount.is_some()
+            || body.beat_move_direction.is_some()
+            || body.beat_move_decay.is_some()
+        {
+            if effect.effect_type.as_deref() != Some(BEAT_MOVE_EFFECT) {
+                return Err(ApiError::bad_request(
+                    "beat-move-parameters-effect",
+                    "choose the Beat Move effect before changing its controls",
+                ));
+            }
+            let mut parameters = BeatMoveParameters::from_parameters(&effect.parameters);
+            parameters.amount = body.beat_move_amount.unwrap_or(parameters.amount);
+            parameters.decay_seconds = body.beat_move_decay.unwrap_or(parameters.decay_seconds);
+            if let Some(direction) = body.beat_move_direction.as_deref() {
+                parameters.direction = BeatMoveDirection::parse(direction).ok_or_else(|| {
+                    ApiError::bad_request(
+                        "beat-move-direction-invalid",
+                        "beatMoveDirection must be up, down, left, or right",
+                    )
+                })?;
+            }
             effect.parameters = parameters.as_array().to_vec();
         }
         if body.feedback_amount.is_some()
@@ -998,6 +1025,35 @@ mod tests {
         assert_eq!(effect["parameters"][0]["value"], 0.7);
         assert_eq!(effect["parameters"][1]["value"], 0.4);
         assert_eq!(effect["parameters"][2]["value"], 5.0);
+
+        let (_, bypassed) = send(
+            &bench.router,
+            post(uri, r#"{"effectSlot":0,"effectEnabled":false}"#),
+        )
+        .await;
+        assert_eq!(bypassed["layers"][0]["effects"][0]["enabled"], false);
+    }
+
+    #[tokio::test]
+    async fn beat_move_persists_amount_direction_return_time_and_bypass() {
+        let bench = bench();
+        take_over(&bench).await;
+        let uri = format!("/api/v2/outputs/{}/layers/0/update", bench.output);
+        let (status, selected) = send(
+            &bench.router,
+            post(
+                uri.clone(),
+                r#"{"effectSlot":0,"effectType":"beat-move","beatMoveAmount":0.3,"beatMoveDirection":"right","beatMoveDecay":0.8}"#,
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let effect = &selected["layers"][0]["effects"][0];
+        assert_eq!(effect["effectType"], "beat-move");
+        assert_eq!(effect["label"], "Beat Move");
+        assert_eq!(effect["parameters"][0]["value"], 0.3);
+        assert_eq!(effect["parameters"][1]["value"], 3.0);
+        assert_eq!(effect["parameters"][2]["value"], 0.8);
 
         let (_, bypassed) = send(
             &bench.router,

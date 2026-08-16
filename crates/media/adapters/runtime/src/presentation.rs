@@ -130,6 +130,7 @@ struct HostedOutput {
     /// This output's path from addresses to textures.
     pipeline: LayerPipeline,
     opacity_cycle: crate::opacity_cycle::OpacityCycle,
+    beat_move: crate::beat_move::BeatMove,
     standby: Option<SourceTexture>,
 }
 
@@ -306,6 +307,7 @@ impl PresentationHost {
                     sources,
                     pipeline,
                     opacity_cycle: crate::opacity_cycle::OpacityCycle::default(),
+                    beat_move: crate::beat_move::BeatMove::default(),
                     standby,
                 });
             }
@@ -413,6 +415,9 @@ impl PresentationHost {
                 heard.bpm,
                 heard.beat_phase,
             );
+            let effective_layers = hosted
+                .beat_move
+                .apply(&effective_layers, seconds, heard.beat);
             let mut draws = hosted
                 .pipeline
                 .draws_from_layers(&effective_layers, &prepared);
