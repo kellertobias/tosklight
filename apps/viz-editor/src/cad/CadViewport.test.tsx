@@ -1,6 +1,11 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { CadViewport, observeViewportResize } from "./CadViewport";
+import {
+	CadRigOverview,
+	CadViewport,
+	fitCadOverview,
+	observeViewportResize,
+} from "./CadViewport";
 import type { CadEntity } from "./types";
 
 const fixture: CadEntity = {
@@ -79,6 +84,30 @@ function setup(
 }
 
 describe("CAD fixture interaction", () => {
+	it("renders the Show overview in one fixed non-interactive orientation", () => {
+		render(
+			<CadRigOverview
+				entities={[fixture]}
+				drawings={[]}
+				showName="Summer Tour"
+			/>,
+		);
+		const overview = screen.getByRole("img", {
+			name: "Read-only rig overview for Summer Tour",
+		});
+		expect(overview).toHaveAttribute("data-view", "top_down");
+		expect(overview).toHaveAttribute("data-rotation-quarter-turns", "-1");
+		expect(overview).toHaveAttribute("data-entity-count", "1");
+		expect(overview).not.toHaveAttribute("tabindex");
+	});
+
+	it("refits the fixed overview camera to the rendered aspect ratio", () => {
+		const wide = fitCadOverview([fixture], new Map(), 1200, 300);
+		const tall = fitCadOverview([fixture], new Map(), 300, 1200);
+		expect(wide.pan).toEqual(tall.pan);
+		expect(wide.zoom).not.toBe(tall.zoom);
+	});
+
 	it("redraws the viewport whenever its rendered size changes", () => {
 		let notifyResize: ResizeObserverCallback | undefined;
 		const disconnect = vi.fn();

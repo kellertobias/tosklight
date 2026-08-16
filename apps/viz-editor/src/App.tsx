@@ -14,8 +14,9 @@ import { OperatorDestinationList } from "@tosklight/ui/application";
 import { WindowHeader } from "@tosklight/ui/window-kit";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import appIcon from "../src-tauri/icons/icon.svg";
+import { CadRigOverview } from "./cad/CadViewport";
 import { cadSession } from "./cad/session";
-import type { CadEntity } from "./cad/types";
+import type { CadEntity, CadSceneSnapshot } from "./cad/types";
 import type { DocumentSummary } from "./document/session";
 import { documentSession, sessionPatchLayers } from "./document/session";
 import { TauriPatchTransport } from "./document/transport";
@@ -55,6 +56,7 @@ export function App() {
 	const selectionRevisionRef = useRef(0);
 	const selectionQueue = useRef<Promise<void>>(Promise.resolve());
 	const cadEntitiesRef = useRef(new Map<string, CadEntity>());
+	const [cadScene, setCadScene] = useState<CadSceneSnapshot | null>(null);
 	// The rig itself, for the preview controls: the sheet owns the table, this owns the values.
 	const [fixtures, setFixtures] = useState<readonly PatchFixtureProjection[]>(
 		[],
@@ -114,6 +116,7 @@ export function App() {
 		cadSession
 			.snapshot()
 			.then((snapshot) => {
+				setCadScene(snapshot);
 				cadEntitiesRef.current = new Map(
 					snapshot.entities.map((entity) => [entity.id, entity]),
 				);
@@ -130,6 +133,15 @@ export function App() {
 			.catch(() => undefined);
 		cadSession
 			.onSelectionDelta((delta) => {
+				setCadScene((current) =>
+					current
+						? {
+								...current,
+								selectionRevision: delta.revision,
+								selectedIds: delta.selectedIds,
+							}
+						: current,
+				);
 				setSelected(delta.selectedIds);
 				setSelectionRevision(delta.revision);
 				selectionRevisionRef.current = delta.revision;
@@ -150,6 +162,17 @@ export function App() {
 				for (const id of delta.removedIds) next.delete(id);
 				for (const entity of delta.upserted) next.set(entity.id, entity);
 				cadEntitiesRef.current = next;
+				setCadScene((current) =>
+					current
+						? {
+								...current,
+								sceneRevision: delta.sceneRevision,
+								entities: [...next.values()],
+								drawings: delta.drawings,
+								attachments: delta.attachments,
+							}
+						: current,
+				);
 				loadFixtures();
 				setReload((current) => current + 1);
 			})
@@ -438,7 +461,21 @@ export function App() {
 										loadLayers();
 										loadFixtures();
 									}}
-								/>
+								>
+									{document && cadScene?.showId === document.showId ? (
+										<figure className="viz-show-rig-overview">
+											<figcaption>
+												<span>Rig overview</span>
+												<strong>{document.name}</strong>
+											</figcaption>
+											<CadRigOverview
+												entities={cadScene.entities}
+												drawings={cadScene.drawings}
+												showName={document.name}
+											/>
+										</figure>
+									) : null}
+								</FileBar>
 							) : showPage === "dmx" ? (
 								<FileBar
 									page="dmx"

@@ -40,6 +40,74 @@ interface CadViewportProps {
 	): Promise<void>;
 }
 
+interface CadRigOverviewProps {
+	entities: readonly CadEntity[];
+	drawings: readonly CadDrawing[];
+	showName: string;
+}
+
+const OVERVIEW_VIEW: CadViewDirection = "top_down";
+const OVERVIEW_ROTATION_QUARTER_TURNS = -1;
+
+/** A fixed, read-only Show-screen plan rendered by the canonical CAD drawing pipeline. */
+export function CadRigOverview({
+	entities,
+	drawings,
+	showName,
+}: CadRigOverviewProps) {
+	const canvas = useRef<HTMLCanvasElement>(null);
+	const renderer = useRef<LineRenderer | null>(null);
+	const redraw = useRef<() => void>(() => undefined);
+	const drawingById = useMemo(
+		() => new Map(drawings.map((drawing) => [drawing.id, drawing])),
+		[drawings],
+	);
+
+	useEffect(() => {
+		if (!canvas.current) return;
+		renderer.current ??= LineRenderer.create(canvas.current);
+		return observeViewportResize(canvas.current, () => redraw.current());
+	}, []);
+
+	useEffect(() => {
+		redraw.current = () => {
+			const target = canvas.current;
+			if (!target) return;
+			const camera = fitCadOverview(
+				entities,
+				drawingById,
+				target.clientWidth,
+				target.clientHeight,
+			);
+			renderer.current?.draw(
+				entities,
+				drawingById,
+				new Set(),
+				OVERVIEW_VIEW,
+				OVERVIEW_ROTATION_QUARTER_TURNS,
+				camera,
+				null,
+				false,
+				null,
+				null,
+			);
+		};
+		redraw.current();
+	}, [entities, drawingById]);
+
+	return (
+		<canvas
+			ref={canvas}
+			className="cad-canvas viz-show-rig-canvas"
+			role="img"
+			aria-label={`Read-only rig overview for ${showName}`}
+			data-view={OVERVIEW_VIEW}
+			data-rotation-quarter-turns={OVERVIEW_ROTATION_QUARTER_TURNS}
+			data-entity-count={entities.length}
+		/>
+	);
+}
+
 interface Drag {
 	type: "pan" | "move" | "box";
 	start: [number, number];
@@ -715,6 +783,54 @@ export function observeViewportResize(
 	const observer = new ResizeObserver(() => redraw());
 	observer.observe(element);
 	return () => observer.disconnect();
+}
+
+export function fitCadOverview(
+	entities: readonly CadEntity[],
+	drawings: ReadonlyMap<string, CadDrawing>,
+	viewportWidth: number,
+	viewportHeight: number,
+): TileCamera {
+	if (!entities.length) return { pan: [0, 0], zoom: 0.08 };
+	const points: PlanPoint[] = [];
+	for (const entity of entities) {
+		const geometry = worldGeometry(
+			entity,
+			entityPlanGeometry(entity, drawings.get(entity.drawingId), OVERVIEW_VIEW),
+			OVERVIEW_VIEW,
+			OVERVIEW_ROTATION_QUARTER_TURNS,
+		);
+		for (const triangle of geometry.triangles) points.push(...triangle.points);
+		for (const outline of geometry.outlines) points.push(...outline);
+	}
+	if (!points.length) {
+		points.push(
+			...entities.map((entity) =>
+				projectPoint(
+					entity.positionMillimetres,
+					OVERVIEW_VIEW,
+					OVERVIEW_ROTATION_QUARTER_TURNS,
+				),
+			),
+		);
+	}
+	const minX = Math.min(...points.map((point) => point[0]));
+	const maxX = Math.max(...points.map((point) => point[0]));
+	const minY = Math.min(...points.map((point) => point[1]));
+	const maxY = Math.max(...points.map((point) => point[1]));
+	const width = Math.max(500, maxX - minX);
+	const height = Math.max(500, maxY - minY);
+	return {
+		pan: [-(minX + maxX) / 2, -(minY + maxY) / 2],
+		zoom: Math.max(
+			0.001,
+			Math.min(
+				2.5,
+				(Math.max(1, viewportWidth) * 0.88) / width,
+				(Math.max(1, viewportHeight) * 0.82) / height,
+			),
+		),
+	};
 }
 
 function worldGeometry(

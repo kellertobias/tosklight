@@ -32,6 +32,23 @@ const snapshot = {
 	profileRevisions: [],
 };
 
+const cadEntity = {
+	id: PROFILE_ID,
+	name: "Planning Wash 1",
+	fixtureNumber: 1,
+	fixtureDisplayId: "1",
+	dmxAddress: "1.1",
+	kind: "wash",
+	fixtureType: "wash",
+	drawingId: "wash:1",
+	layerId: "house",
+	selectable: true,
+	positionMillimetres: [0, 0, 4000] as [number, number, number],
+	rotationDegrees: [0, 0, 0] as [number, number, number],
+	sizeMillimetres: [400, 500, 700] as [number, number, number],
+	outputDirection: [0, 1, 0] as [number, number, number],
+};
+
 const liveInputs = { schemaVersion: 1 as const, mappings: [] };
 const rendererSettings = {
 	source: "lighting_desk" as const,
@@ -60,6 +77,9 @@ const rendererSettings = {
 };
 
 const invoke = vi.hoisted(() => vi.fn());
+const eventHandlers = vi.hoisted(
+	() => new Map<string, (event: { payload: unknown }) => void>(),
+);
 const nativeWindow = vi.hoisted(() => ({
 	close: vi.fn().mockResolvedValue(undefined),
 	isFullscreen: vi.fn().mockResolvedValue(false),
@@ -67,6 +87,14 @@ const nativeWindow = vi.hoisted(() => ({
 	startDragging: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
+vi.mock("@tauri-apps/api/event", () => ({
+	listen: vi.fn(
+		(event: string, handler: (event: { payload: unknown }) => void) => {
+			eventHandlers.set(event, handler);
+			return Promise.resolve(() => eventHandlers.delete(event));
+		},
+	),
+}));
 vi.mock("@tauri-apps/api/window", () => ({
 	getCurrentWindow: () => nativeWindow,
 }));
@@ -145,6 +173,15 @@ function renderApp(children: ReactNode = <App />) {
 
 beforeEach(() => {
 	invoke.mockReset();
+	eventHandlers.clear();
+	vi.stubGlobal(
+		"ResizeObserver",
+		class {
+			observe() {}
+			disconnect() {}
+		},
+	);
+	vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
 	for (const action of Object.values(nativeWindow)) action.mockClear();
 	invoke.mockImplementation((command: string) => {
 		switch (command) {
@@ -165,6 +202,16 @@ beforeEach(() => {
 					{ id: "house", name: "House", order: 0 },
 					{ id: "floor", name: "Floor", order: 1 },
 				]);
+			case "cad_scene_snapshot":
+				return Promise.resolve({
+					showId: SHOW_ID,
+					sceneRevision: 1,
+					selectionRevision: 0,
+					entities: [cadEntity],
+					drawings: [],
+					selectedIds: [],
+					attachments: [],
+				});
 			default:
 				return Promise.reject(new Error(`unexpected command ${command}`));
 		}
@@ -172,6 +219,32 @@ beforeEach(() => {
 });
 
 describe("the Viz editor window", () => {
+	it("shows a live, read-only, left-rotated top plan with the show name", async () => {
+		renderApp();
+		const overview = await screen.findByRole("img", {
+			name: "Read-only rig overview for Planning show",
+		});
+		expect(overview).toHaveAttribute("data-view", "top_down");
+		expect(overview).toHaveAttribute("data-rotation-quarter-turns", "-1");
+		expect(overview).toHaveAttribute("data-entity-count", "1");
+		expect(
+			screen.getByText("Planning show", { selector: "strong" }),
+		).toBeVisible();
+
+		eventHandlers.get("cad-scene-delta")?.({
+			payload: {
+				sceneRevision: 2,
+				upserted: [cadEntity, { ...cadEntity, id: "fixture-two" }],
+				drawings: [],
+				removedIds: [],
+				attachments: [],
+			},
+		});
+		await waitFor(() =>
+			expect(overview).toHaveAttribute("data-entity-count", "2"),
+		);
+	});
+
 	it("shows the desk's patch sheet over the open document", async () => {
 		renderApp();
 		fireEvent.click(await screen.findByRole("button", { name: "Patch" }));

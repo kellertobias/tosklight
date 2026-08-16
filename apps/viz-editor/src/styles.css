@@ -252,6 +252,12 @@ body {
 	scrollbar-gutter: stable;
 }
 
+.viz-editor-file-bar.is-show {
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+
 .viz-editor-file-bar > h1 {
 	margin: 0;
 }
@@ -261,6 +267,51 @@ body {
 	grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
 	gap: 0;
 	margin-top: 0;
+}
+
+.viz-show-rig-overview {
+	position: relative;
+	flex: 1;
+	min-height: 240px;
+	margin: 0;
+	overflow: hidden;
+	background: #05080c;
+	border-top: 1px solid var(--border-subtle, #1d2530);
+	pointer-events: none;
+	user-select: none;
+}
+
+.viz-show-rig-overview figcaption {
+	position: absolute;
+	z-index: 1;
+	top: 18px;
+	left: 20px;
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	color: #d9e0e7;
+	pointer-events: none;
+}
+
+.viz-show-rig-overview figcaption span {
+	color: #7f8b97;
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
+.viz-show-rig-overview figcaption strong {
+	font-size: 18px;
+	font-weight: 650;
+}
+
+.viz-show-rig-canvas {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	pointer-events: none;
 }
 
 .viz-show-actions > section {
