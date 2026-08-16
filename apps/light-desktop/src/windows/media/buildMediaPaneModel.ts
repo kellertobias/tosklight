@@ -1,5 +1,5 @@
-import type { MediaServerInspection } from "../../api/client/mediaOutput";
 import type { ReactNode } from "react";
+import type { MediaServerInspection } from "../../api/client/mediaOutput";
 import type { MediaServerFixture } from "../../api/types";
 import type { ProgrammerFixtureValue } from "../../features/programmerValues/contracts";
 import type {
@@ -7,6 +7,7 @@ import type {
 	MediaPaneLayer,
 	MediaPaneModel,
 	MediaPreviewState,
+	MediaSourceFilter,
 } from "./mediaPaneModel";
 
 export interface BuildMediaPaneModelInput {
@@ -17,6 +18,7 @@ export interface BuildMediaPaneModelInput {
 	selectedServerId: string;
 	selectedLayerId: string;
 	browserMode: MediaPaneModel["browserMode"];
+	sourceFilter?: MediaSourceFilter;
 	mainSectionId: string;
 	rightPaneVisible: boolean;
 	draftFolderId: string;
@@ -50,12 +52,15 @@ export function buildMediaPaneModel(
 		normalizedAttribute(input.liveProgrammer, "media.file") ??
 		selectedStatus?.file;
 	return {
+		hasPatchedServer: input.servers.length > 0,
+		hasCitpEndpoint: Boolean(input.selectedServer?.endpoint),
 		servers: serverChoices(input),
 		selectedServerId: input.selectedServerId,
 		selectedLayerId: input.selectedLayerId,
 		preview: previewState(input),
 		layers: layerModels(input),
 		browserMode: input.browserMode,
+		sourceFilter: input.sourceFilter ?? "media",
 		maskBrowser: "supported",
 		...libraryModel(input),
 		...selectionModel(input, liveFolder, liveFile),
@@ -76,8 +81,8 @@ function serverChoices(input: BuildMediaPaneModelInput) {
 		return [
 			{
 				id: "",
-				name: "No CITP Media Server available",
-				statusLabel: "Not configured",
+				name: "No media server is patched",
+				statusLabel: "Missing patch",
 				disabled: true,
 			},
 		];
@@ -108,8 +113,7 @@ function previewState(input: BuildMediaPaneModelInput): MediaPreviewState {
 	if (!input.selectedServer)
 		return {
 			kind: "missing_patch",
-			detail:
-				"No CITP Media Server is available. Configure one in Show Patch > Media Servers.",
+			detail: "No media server is patched.",
 		};
 	if (!input.selectedServer.endpoint)
 		return {
@@ -131,6 +135,7 @@ function previewState(input: BuildMediaPaneModelInput): MediaPreviewState {
 	return source
 		? {
 				kind: "ready",
+				outputSize: { width: source.width, height: source.height },
 				imageSrc:
 					input.previewUrls[`${input.selectedServer.fixture_id}:${source.id}`],
 			}
@@ -166,9 +171,16 @@ function layerModels(input: BuildMediaPaneModelInput): MediaPaneLayer[] {
 						? "Failed"
 						: "Online"
 				: "No advertised mapping",
-			thumbnailSrc: source
-				? input.previewUrls[`${input.selectedServer?.fixture_id}:${source.id}`]
-				: undefined,
+			errorDetail:
+				status?.flags && status.flags & 0x8
+					? "The Media Server could not render this layer. Check its Media Server logs."
+					: undefined,
+			thumbnailSrc:
+				source && status && (status.folder !== 0 || status.file !== 0)
+					? input.previewUrls[
+							`${input.selectedServer?.fixture_id}:${source.id}`
+						]
+					: undefined,
 			liveSourceLabel: status
 				? `Folder ${status.folder} · File ${status.file}`
 				: undefined,
@@ -177,6 +189,7 @@ function layerModels(input: BuildMediaPaneModelInput): MediaPaneLayer[] {
 }
 
 function libraryModel(input: BuildMediaPaneModelInput) {
+	const sourceFilter = input.sourceFilter ?? "media";
 	const draftFolder = Number(input.draftFolderId);
 	const advertisedFolders = new Map(
 		input.inspection.folders.map((folder) => [folder.id, folder]),
@@ -186,18 +199,28 @@ function libraryModel(input: BuildMediaPaneModelInput) {
 			.filter((file) => file.folder_id === draftFolder)
 			.map((file) => [file.id, file]),
 	);
+	const [firstFolder, lastFolder] =
+		sourceFilter === "media"
+			? [1, 199]
+			: sourceFilter === "text"
+				? [200, 249]
+				: [250, 255];
 	return {
-		libraryFolders: Array.from({ length: 256 }, (_, id) => {
-			const folder = advertisedFolders.get(id);
-			return {
-				id: String(id),
-				kind: "folder" as const,
-				name: folder?.name || `Folder ${id}`,
-				detail: folder
-					? `${folder.element_count} files`
-					: "Configurable slot · not advertised",
-			};
-		}),
+		libraryFolders: Array.from(
+			{ length: lastFolder - firstFolder + 1 },
+			(_, index) => {
+				const id = firstFolder + index;
+				const folder = advertisedFolders.get(id);
+				return {
+					id: String(id),
+					kind: "folder" as const,
+					name: folder?.name || `Folder ${id}`,
+					detail: folder
+						? `${folder.element_count} files`
+						: "Configurable slot · not advertised",
+				};
+			},
+		),
 		libraryFiles: Array.from({ length: 256 }, (_, id) => {
 			const file = advertisedFiles.get(id);
 			return {

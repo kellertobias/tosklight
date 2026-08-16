@@ -5,16 +5,17 @@ import {
 	useProgrammerValuesView,
 } from "../features/programmerValues/ProgrammerValuesView";
 import { useProgrammingSelectionActions } from "../features/programmingInteraction/ProgrammingInteractionView";
-import { useApp } from "../state/AppContext";
 import { buildMediaPaneModel } from "./media/buildMediaPaneModel";
+import { useApp } from "../state/AppContext";
 import {
 	type MediaBrowserMode,
 	MediaPaneSurface,
+	type MediaSourceFilter,
 } from "./media/MediaPaneSurface";
-import { useMediaPaneActions } from "./media/useMediaPaneActions";
-import { useMediaPaneData } from "./media/useMediaPaneData";
 import { NativeMediaControls } from "./media/NativeMediaControls";
 import { OPEN_MEDIA_PATCH_ACTION } from "./media/openMediaPatch";
+import { useMediaPaneActions } from "./media/useMediaPaneActions";
+import { useMediaPaneData } from "./media/useMediaPaneData";
 
 export {
 	mediaCapabilitiesForLayer,
@@ -29,6 +30,7 @@ export interface PersistedMediaPaneState {
 	serverId?: string;
 	layerId?: string;
 	browserMode?: MediaBrowserMode;
+	sourceFilter?: MediaSourceFilter;
 	mainSectionId?: string;
 	rightPaneVisible?: boolean;
 }
@@ -36,6 +38,27 @@ export interface PersistedMediaPaneState {
 export interface MediaPaneWindowProps extends WindowProps {
 	mediaPaneState?: PersistedMediaPaneState;
 	onMediaPaneStateChange?: (state: PersistedMediaPaneState) => void;
+}
+
+export function mediaRightPaneIsVisible(
+	state: PersistedMediaPaneState | undefined,
+): boolean {
+	return state?.rightPaneVisible ?? true;
+}
+
+export function reconcileMediaPaneSelection(
+	servers: Array<{ fixture_id: string; layers: Array<{ fixture_id: string }> }>,
+	selectedServerId: string,
+) {
+	const server =
+		servers.find((candidate) => candidate.fixture_id === selectedServerId) ??
+		servers[0];
+	return server
+		? {
+				serverId: server.fixture_id,
+				layerId: server.layers[0]?.fixture_id ?? "master",
+			}
+		: { serverId: "", layerId: "master" };
 }
 
 export function MediaPaneWindow({
@@ -71,11 +94,14 @@ export function MediaPaneWindow({
 	const [browserMode, setBrowserMode] = useState<MediaBrowserMode>(
 		mediaPaneState?.browserMode ?? "media",
 	);
+	const [sourceFilter, setSourceFilter] = useState<MediaSourceFilter>(
+		mediaPaneState?.sourceFilter ?? "media",
+	);
 	const [mainSectionId, setMainSectionId] = useState(
 		mediaPaneState?.mainSectionId ?? "content",
 	);
 	const [rightPaneVisible, setRightPaneVisible] = useState(
-		mediaPaneState?.rightPaneVisible ?? false,
+		mediaRightPaneIsVisible(mediaPaneState),
 	);
 	const {
 		inspection,
@@ -100,10 +126,34 @@ export function MediaPaneWindow({
 	});
 
 	useEffect(() => {
-		if (!selectedServerId && eligibleServers[0]) {
-			setSelectedServerId(eligibleServers[0].fixture_id);
+		const nextSelection = reconcileMediaPaneSelection(
+			eligibleServers,
+			selectedServerId,
+		);
+		if (!nextSelection.serverId) {
+			if (selectedServerId) {
+				setSelectedServerId("");
+				setSelectedLayerId("master");
+				resetMediaData();
+			}
+			return;
 		}
-	}, [eligibleServers, selectedServerId]);
+		if (nextSelection.serverId === selectedServerId) return;
+		setSelectedServerId(nextSelection.serverId);
+		setSelectedLayerId(nextSelection.layerId);
+		resetMediaData();
+		onMediaPaneStateChange?.({
+			...mediaPaneState,
+			serverId: nextSelection.serverId,
+			layerId: nextSelection.layerId,
+		});
+	}, [
+		eligibleServers,
+		mediaPaneState,
+		onMediaPaneStateChange,
+		resetMediaData,
+		selectedServerId,
+	]);
 
 	const selectedLayer = selectedServer?.layers.find(
 		(layer) => layer.fixture_id === selectedLayerId,
@@ -113,10 +163,12 @@ export function MediaPaneWindow({
 	);
 
 	const actions = useMediaPaneActions({
+		servers: eligibleServers,
 		selectedServer,
 		selectedLayer,
 		selectedLayerId,
 		browserMode,
+		sourceFilter,
 		mainSectionId,
 		rightPaneVisible,
 		inspection,
@@ -127,6 +179,7 @@ export function MediaPaneWindow({
 		setSelectedServerId,
 		setSelectedLayerId,
 		setBrowserMode,
+		setSourceFilter,
 		setMainSectionId,
 		setRightPaneVisible,
 		setDraftFolderId,
@@ -147,6 +200,7 @@ export function MediaPaneWindow({
 				selectedServerId,
 				selectedLayerId,
 				browserMode,
+				sourceFilter,
 				mainSectionId,
 				rightPaneVisible,
 				draftFolderId,
@@ -155,7 +209,9 @@ export function MediaPaneWindow({
 				previewUrls: media?.mediaPreviewUrls ?? {},
 				liveProgrammer,
 				nativeControls:
-					selectedServer?.native_action && nativeMedia && updateNativeMediaText ? (
+					selectedServer?.native_action &&
+					nativeMedia &&
+					updateNativeMediaText ? (
 						<NativeMediaControls
 							fixtureId={selectedServer.fixture_id}
 							load={nativeMedia}
@@ -165,6 +221,7 @@ export function MediaPaneWindow({
 			}),
 		[
 			browserMode,
+			sourceFilter,
 			draftFileId,
 			draftFolderId,
 			eligibleServers,

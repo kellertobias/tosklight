@@ -28,25 +28,27 @@ function input(
 }
 
 describe("Media pane disconnected configuration", () => {
-	it("keeps all Content and Mask slots visible without a CITP server", () => {
+	it("projects a truthful no-patch state without inventing a CITP problem", () => {
 		const model = buildMediaPaneModel(input());
 		expect(model.servers).toEqual([
-			expect.objectContaining({ name: "No CITP Media Server available" }),
+			expect.objectContaining({ name: "No media server is patched" }),
 		]);
+		expect(model.hasPatchedServer).toBe(false);
+		expect(model.hasCitpEndpoint).toBe(false);
 		expect(model.preview).toMatchObject({
 			kind: "missing_patch",
-			detail: expect.stringContaining("No CITP Media Server is available"),
+			detail: "No media server is patched.",
 		});
 		expect(model.maskBrowser).toBe("supported");
-		expect(model.libraryFolders).toHaveLength(256);
+		expect(model.libraryFolders).toHaveLength(199);
 		expect(model.libraryFiles).toHaveLength(256);
 		expect(model.libraryFolders[0]).toMatchObject({
-			id: "0",
-			name: "Folder 0",
+			id: "1",
+			name: "Folder 1",
 		});
-		expect(model.libraryFolders[255]).toMatchObject({
-			id: "255",
-			name: "Folder 255",
+		expect(model.libraryFolders[198]).toMatchObject({
+			id: "199",
+			name: "Folder 199",
 		});
 	});
 
@@ -70,6 +72,8 @@ describe("Media pane disconnected configuration", () => {
 			id: "server-1",
 			statusLabel: "Not configured",
 		});
+		expect(model.hasPatchedServer).toBe(true);
+		expect(model.hasCitpEndpoint).toBe(false);
 		expect(model.layers).toHaveLength(1);
 		expect(model.preview).toMatchObject({
 			kind: "offline",
@@ -97,12 +101,12 @@ describe("Media pane disconnected configuration", () => {
 		const model = buildMediaPaneModel(
 			input({ inspection, draftFolderId: "7" }),
 		);
-		expect(model.libraryFolders).toHaveLength(256);
-		expect(model.libraryFolders[7]).toMatchObject({
+		expect(model.libraryFolders).toHaveLength(199);
+		expect(model.libraryFolders[6]).toMatchObject({
 			id: "7",
 			name: "Tour package",
 		});
-		expect(model.libraryFolders[8]).toMatchObject({
+		expect(model.libraryFolders[7]).toMatchObject({
 			id: "8",
 			name: "Folder 8",
 		});
@@ -111,5 +115,122 @@ describe("Media pane disconnected configuration", () => {
 			name: "Opening loop",
 		});
 		expect(model.libraryFiles[20]).toMatchObject({ id: "20", name: "File 20" });
+	});
+
+	it("projects stable visualizer and text address ranges independently", () => {
+		const visualizers = buildMediaPaneModel(
+			input({ sourceFilter: "visualizers" }),
+		);
+		expect(visualizers.libraryFolders).toHaveLength(6);
+		expect(visualizers.libraryFolders.map((folder) => folder.id)).toEqual([
+			"250",
+			"251",
+			"252",
+			"253",
+			"254",
+			"255",
+		]);
+		const text = buildMediaPaneModel(input({ sourceFilter: "text" }));
+		expect(text.libraryFolders).toHaveLength(50);
+		expect(text.libraryFolders[0].id).toBe("200");
+		expect(text.libraryFolders[49].id).toBe("249");
+	});
+
+	it("projects the advertised composite dimensions into the master output", () => {
+		const server = {
+			fixture_id: "server-1",
+			name: "Media master",
+			endpoint: {
+				protocol: "citp" as const,
+				ip_address: "127.0.0.1",
+				port: 4809,
+			},
+			layers: [],
+			status: { online: true, last_success: null, last_error: null },
+		};
+		const inspection = {
+			...EMPTY_MEDIA_INSPECTION,
+			preview_sources: [
+				{
+					id: 3,
+					name: "Program",
+					physical_output: 0,
+					layer: null,
+					width: 1024,
+					height: 768,
+				},
+			],
+		};
+		const model = buildMediaPaneModel(
+			input({
+				inspection,
+				servers: [server],
+				selectedServer: server,
+				selectedServerId: server.fixture_id,
+			}),
+		);
+
+		expect(model.preview).toMatchObject({
+			kind: "ready",
+			outputSize: { width: 1024, height: 768 },
+		});
+		expect(model.hasPatchedServer).toBe(true);
+		expect(model.hasCitpEndpoint).toBe(true);
+	});
+
+	it("maps advertised isolated layer frames and failure state into the layer tile", () => {
+		const server = {
+			fixture_id: "server-1",
+			name: "Media master",
+			endpoint: {
+				protocol: "citp" as const,
+				ip_address: "127.0.0.1",
+				port: 4809,
+			},
+			layers: [{ fixture_id: "layer-1", head_index: 0 }],
+			status: { online: true, last_success: null, last_error: null },
+		};
+		const inspection = {
+			...EMPTY_MEDIA_INSPECTION,
+			layers: [
+				{
+					layer: 0,
+					physical_output: 0,
+					folder: 1,
+					file: 2,
+					name: "Damaged",
+					position_frames: 0,
+					length_frames: 1,
+					fps: 25,
+					flags: 0x8,
+				},
+			],
+			preview_sources: [
+				{
+					id: 4,
+					name: "Layer 1",
+					physical_output: 0,
+					layer: 0,
+					width: 320,
+					height: 180,
+				},
+			],
+		};
+		const model = buildMediaPaneModel(
+			input({
+				inspection,
+				servers: [server],
+				selectedServer: server,
+				selectedServerId: server.fixture_id,
+				selectedLayerId: "layer-1",
+				previewUrls: { "server-1:4": "blob:live-layer" },
+			}),
+		);
+
+		expect(model.layers[0]).toMatchObject({
+			thumbnailSrc: "blob:live-layer",
+			status: "failed",
+			errorDetail: expect.stringContaining("could not render"),
+		});
 	});
 });

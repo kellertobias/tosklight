@@ -16,10 +16,12 @@ function setup() {
 	const batch = vi.fn().mockResolvedValue(null);
 	const applySelection = vi.fn().mockResolvedValue(null);
 	const input = {
+		servers: [server],
 		selectedServer: server,
 		selectedLayer: server.layers[0],
 		selectedLayerId: "layer-1",
 		browserMode: "media" as const,
+		sourceFilter: "media" as const,
 		mainSectionId: "content",
 		rightPaneVisible: false,
 		inspection: EMPTY_MEDIA_INSPECTION,
@@ -30,6 +32,7 @@ function setup() {
 		setSelectedServerId: vi.fn(),
 		setSelectedLayerId: vi.fn(),
 		setBrowserMode: vi.fn(),
+		setSourceFilter: vi.fn(),
 		setMainSectionId: vi.fn(),
 		setRightPaneVisible: vi.fn(),
 		setDraftFolderId: vi.fn(),
@@ -37,9 +40,10 @@ function setup() {
 		setInspectionError: vi.fn(),
 		initializeLayer: vi.fn(),
 		resetMediaData: vi.fn(),
+		onPersist: vi.fn(),
 	};
 	const hook = renderHook(() => useMediaPaneActions(input as never));
-	return { ...hook, batch, applySelection };
+	return { ...hook, batch, applySelection, input };
 }
 
 describe("Media pane offline actions", () => {
@@ -65,6 +69,67 @@ describe("Media pane offline actions", () => {
 						attribute: "media.file",
 					}),
 				],
+			}),
+		);
+	});
+
+	it("programs file zero to clear content while retaining the draft folder", () => {
+		const { result, batch, input } = setup();
+		act(() =>
+			result.current.onBrowseItem("media", {
+				id: "0",
+				kind: "file",
+				name: "No file selected",
+			}),
+		);
+		expect(input.setDraftFileId).toHaveBeenCalledWith("0");
+		expect(batch).toHaveBeenCalledWith(
+			expect.objectContaining({
+				mutations: [
+					expect.objectContaining({
+						attribute: "media.folder",
+						value: expect.objectContaining({ value: 2 / 255 }),
+					}),
+					expect.objectContaining({
+						attribute: "media.file",
+						value: expect.objectContaining({ value: 0 }),
+					}),
+				],
+			}),
+		);
+	});
+
+	it("changes source filter locally without programming a fixture", () => {
+		const { result, batch, applySelection, input } = setup();
+		act(() => result.current.onSelectSourceFilter("text"));
+		expect(input.setSourceFilter).toHaveBeenCalledWith("text");
+		expect(input.setDraftFolderId).toHaveBeenCalledWith("200");
+		expect(input.setDraftFileId).toHaveBeenCalledWith(null);
+		expect(input.onPersist).toHaveBeenCalledWith(
+			expect.objectContaining({ sourceFilter: "text" }),
+		);
+		expect(batch).not.toHaveBeenCalled();
+		expect(applySelection).not.toHaveBeenCalled();
+	});
+
+	it("switches the complete context to the selected server's first logical head", () => {
+		const { result, input } = setup();
+		const nextServer = {
+			...server,
+			fixture_id: "server-2",
+			layers: [{ fixture_id: "server-2-layer-1", head_index: 0 }],
+		};
+		input.servers.push(nextServer);
+		act(() => result.current.onSelectServer("server-2"));
+		expect(input.setSelectedServerId).toHaveBeenCalledWith("server-2");
+		expect(input.setSelectedLayerId).toHaveBeenCalledWith(
+			"server-2-layer-1",
+		);
+		expect(input.resetMediaData).toHaveBeenCalledOnce();
+		expect(input.onPersist).toHaveBeenCalledWith(
+			expect.objectContaining({
+				serverId: "server-2",
+				layerId: "server-2-layer-1",
 			}),
 		);
 	});

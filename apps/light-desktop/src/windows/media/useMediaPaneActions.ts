@@ -7,13 +7,19 @@ import type { useProgrammerValuesActions } from "../../features/programmerValues
 import type { useProgrammingSelectionActions } from "../../features/programmingInteraction/ProgrammingInteractionView";
 import type { PersistedMediaPaneState } from "../MediaPaneWindow";
 import { mediaLibraryMutations } from "../MediaPaneWindow.helpers";
-import type { MediaBrowserMode, MediaLibraryItem } from "./mediaPaneModel";
+import type {
+	MediaBrowserMode,
+	MediaLibraryItem,
+	MediaSourceFilter,
+} from "./mediaPaneModel";
 
 interface MediaPaneActionsInput {
+	servers: MediaServerFixture[];
 	selectedServer: MediaServerFixture | undefined;
 	selectedLayer: MediaServerFixture["layers"][number] | undefined;
 	selectedLayerId: string;
 	browserMode: MediaBrowserMode;
+	sourceFilter: MediaSourceFilter;
 	mainSectionId: string;
 	rightPaneVisible: boolean;
 	inspection: MediaServerInspection;
@@ -24,6 +30,7 @@ interface MediaPaneActionsInput {
 	setSelectedServerId: Dispatch<SetStateAction<string>>;
 	setSelectedLayerId: Dispatch<SetStateAction<string>>;
 	setBrowserMode: Dispatch<SetStateAction<MediaBrowserMode>>;
+	setSourceFilter: Dispatch<SetStateAction<MediaSourceFilter>>;
 	setMainSectionId: Dispatch<SetStateAction<string>>;
 	setRightPaneVisible: Dispatch<SetStateAction<boolean>>;
 	setDraftFolderId: Dispatch<SetStateAction<string>>;
@@ -41,6 +48,7 @@ export function useMediaPaneActions(input: MediaPaneActionsInput) {
 				serverId: input.selectedServer?.fixture_id,
 				layerId: input.selectedLayerId,
 				browserMode: input.browserMode,
+				sourceFilter: input.sourceFilter,
 				mainSectionId: input.mainSectionId,
 				rightPaneVisible: input.rightPaneVisible,
 				...next,
@@ -115,10 +123,14 @@ export function useMediaPaneActions(input: MediaPaneActionsInput) {
 		onSelectLayer,
 		onBrowseItem,
 		onSelectServer: (serverId: string) => {
+			const server = input.servers.find(
+				(candidate) => candidate.fixture_id === serverId,
+			);
+			const layerId = server?.layers[0]?.fixture_id ?? "master";
 			input.setSelectedServerId(serverId);
-			input.setSelectedLayerId("master");
+			input.setSelectedLayerId(layerId);
 			input.resetMediaData();
-			persist({ serverId, layerId: "master" });
+			persist({ serverId, layerId });
 		},
 		onSelectBrowserMode: (mode: MediaBrowserMode) => {
 			input.setBrowserMode(mode);
@@ -127,6 +139,14 @@ export function useMediaPaneActions(input: MediaPaneActionsInput) {
 				browserMode: mode,
 				mainSectionId: mode === "media" ? "content" : "mask",
 			});
+		},
+		onSelectSourceFilter: (filter: MediaSourceFilter) => {
+			input.setSourceFilter(filter);
+			input.setDraftFolderId(
+				String(filter === "media" ? 1 : filter === "text" ? 200 : 250),
+			);
+			input.setDraftFileId(null);
+			persist({ sourceFilter: filter });
 		},
 		onSelectControlSection: (sectionId: string) => {
 			input.setMainSectionId(sectionId);

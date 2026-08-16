@@ -18,6 +18,7 @@ import type {
 	MediaPaneSurfaceProps,
 	MediaPreviewState,
 	MediaSecondaryControl,
+	MediaSourceFilter,
 } from "./mediaPaneModel";
 import "./MediaPaneSurface.css";
 
@@ -33,98 +34,152 @@ export type {
 	MediaPaneUiCallbacks,
 	MediaPreviewState,
 	MediaSecondaryControl,
+	MediaSourceFilter,
 } from "./mediaPaneModel";
 
 export function MediaPaneSurface({
 	model,
 	compact = false,
 	title = "Media",
+	info,
 	headerAction,
 	onOpenPatch,
 	onSelectServer,
 	onSelectLayer,
 	onSelectBrowserMode,
+	onSelectSourceFilter,
 	onBrowseItem,
 	onSelectControlSection,
 	onChangeControl,
 	onSetRightPaneVisible,
 }: MediaPaneSurfaceProps) {
-	const server = model.servers.find(
-		(candidate) => candidate.id === model.selectedServerId,
+	const hasPatchedServer = model.servers.some((server) => server.id.trim() !== "");
+	const patchedServers = model.servers.filter(
+		(server) => server.id.trim() !== "" && !server.disabled,
 	);
-	const hasPatchedServer = model.servers.some((candidate) => candidate.id.trim() !== "");
 	const mainShowsBrowser =
 		model.rightPaneVisible ||
 		model.mainSectionId === "content" ||
 		model.mainSectionId === "mask";
+	const controlSectionId = validActiveId(
+		model.selectedControlSectionId,
+		model.controlSections.map((section) => section.id),
+	);
+	const mainSectionId = validActiveId(
+		model.mainSectionId,
+		mainSectionOptions(model).map((option) => option.value),
+	);
+	const sourceFilterGroup =
+		model.sourceFilter && onSelectSourceFilter
+			? {
+					id: "media-source-filter",
+					kind: "tabs" as const,
+					activeId: model.sourceFilter,
+					onActiveChange: (id: string) =>
+						onSelectSourceFilter(id as MediaSourceFilter),
+					actions: [
+						{ id: "media", label: "Media" },
+						{ id: "visualizers", label: "VIS" },
+						{ id: "text", label: "Text" },
+					],
+				}
+			: undefined;
+	const titleGroups = !hasPatchedServer
+		? []
+		: model.rightPaneVisible
+			? [
+					...(sourceFilterGroup ? [sourceFilterGroup] : []),
+					{
+						id: "media-browser-mode",
+						kind: "tabs" as const,
+						activeId: model.browserMode,
+						onActiveChange: (id: string) =>
+							onSelectBrowserMode(id as MediaBrowserMode),
+						actions: browserOptions(model.maskBrowser).map((option) => ({
+							id: option.value,
+							label: option.label,
+							disabled: option.disabled,
+						})),
+					},
+					{
+						id: "media-control-section",
+						kind: "tabs" as const,
+						activeId: controlSectionId,
+						onActiveChange: onSelectControlSection,
+						actions: model.controlSections.map((section) => ({
+							id: section.id,
+							label: section.label,
+						})),
+					},
+				]
+			: [
+					...(sourceFilterGroup && ["content", "mask"].includes(mainSectionId)
+						? [sourceFilterGroup]
+						: []),
+					{
+						id: "media-window-section",
+						kind: "tabs" as const,
+						activeId: mainSectionId,
+						onActiveChange: (sectionId: string) => {
+							if (sectionId === "content") onSelectBrowserMode("media");
+							else if (sectionId === "mask") onSelectBrowserMode("mask");
+							else onSelectControlSection(sectionId);
+						},
+						actions: mainSectionOptions(model).map((option) => ({
+							id: option.value,
+							label: option.label,
+							disabled: option.disabled,
+						})),
+					},
+				];
 	return (
 		<WindowFrame
 			className={`media-pane-surface ${compact ? "compact" : ""}`}
 			title={title}
+			info={info}
+			groups={titleGroups}
 			toolbar={
-				<div className="media-pane-header-tools">
-					{model.rightPaneVisible ? (
-						<>
-							<MultiValueToggle
-								ariaLabel="Content or Mask browser"
-								value={model.browserMode}
-								options={browserOptions(model.maskBrowser)}
-								onChange={onSelectBrowserMode}
-							/>
-							<MultiValueToggle
-								ariaLabel="Media control section"
-								value={model.selectedControlSectionId}
-								options={model.controlSections.map((section) => ({
-									value: section.id,
-									label: section.label,
-								}))}
-								onChange={onSelectControlSection}
-							/>
-						</>
-					) : (
-						<MultiValueToggle
-							ariaLabel="Media window section"
-							value={model.mainSectionId}
-							options={mainSectionOptions(model)}
-							onChange={(sectionId) => {
-								if (sectionId === "content") onSelectBrowserMode("media");
-								else if (sectionId === "mask") onSelectBrowserMode("mask");
-								else onSelectControlSection(sectionId);
-							}}
+				hasPatchedServer ? (
+					<div className="media-pane-header-tools">
+						<SelectField
+							className="media-pane-server-select"
+							label="Server"
+							ariaLabel="Media server"
+							size="compact"
+							value={model.selectedServerId}
+							options={model.servers.map((candidate) => ({
+								value: candidate.id,
+								label: candidate.name,
+								disabled: candidate.disabled,
+							}))}
+							onChange={onSelectServer}
 						/>
-					)}
-					<SelectField
-						className="media-pane-server-select"
-						label="Server"
-						ariaLabel="Media server"
-						size="compact"
-						value={model.selectedServerId}
-						options={model.servers.map((candidate) => ({
-							value: candidate.id,
-							label: candidate.name,
-							disabled: candidate.disabled,
-						}))}
-						onChange={onSelectServer}
-					/>
-					{headerAction}
-				</div>
+						{headerAction}
+					</div>
+				) : undefined
 			}
 			settingsTitle="Media pane settings"
-			settingsTabs={[
-				{
-					id: "pane",
-					label: "Pane",
-					content: (
-						<SwitchField
-							label="Right pane"
-							offLabel="Hidden"
-							onLabel="Visible"
-							checked={model.rightPaneVisible}
-							onChange={(event) => onSetRightPaneVisible(event.target.checked)}
-						/>
-					),
-				},
-			]}
+			settingsTabs={
+				hasPatchedServer
+					? [
+							{
+								id: "pane",
+								label: "Pane",
+								content: (
+									<SwitchField
+										label="Right pane"
+										offLabel="Hidden"
+										onLabel="Visible"
+										checked={model.rightPaneVisible}
+										onChange={(event) =>
+											onSetRightPaneVisible(event.target.checked)
+										}
+									/>
+								),
+							},
+						]
+					: []
+			}
 		>
 			{!hasPatchedServer ? (
 				<div className="media-pane-empty" role="status">
@@ -136,48 +191,89 @@ export function MediaPaneSurface({
 					) : null}
 				</div>
 			) : (
-				<div className="media-pane-body">
-				<section className="media-pane-overview" aria-label="Media output">
-					<MediaCompositePreview
-						preview={model.preview}
-						selected={model.selectedLayerId === "master"}
-						onSelect={() => onSelectLayer("master")}
-						serverLabel={server?.name ?? "No patched media server"}
-						statusLabel={server?.statusLabel ?? "Missing patch"}
-					/>
-					<MediaLayerStrip
-						layers={model.layers}
-						selectedLayerId={model.selectedLayerId}
-						onSelectLayer={onSelectLayer}
-					/>
-				</section>
-				<section className="media-pane-workspace">
-					{mainShowsBrowser && (
-						<MediaLibraryBrowser
-							mode={model.browserMode}
-							folders={model.libraryFolders}
-							files={model.libraryFiles}
-							draftFolderId={model.draftFolderId}
-							draftFileId={model.draftFileId}
-							onBrowseItem={onBrowseItem}
+				<div
+					className={`media-pane-body ${patchedServers.length > 1 ? "has-server-shortcuts" : ""}`}
+				>
+					{patchedServers.length > 1 ? (
+						<section
+							className="media-server-shortcuts"
+							aria-label="Media server shortcuts"
+						>
+							{patchedServers.map((server) => (
+								<Button
+									key={server.id}
+									className={
+										server.id === model.selectedServerId ? "selected" : undefined
+									}
+									aria-pressed={server.id === model.selectedServerId}
+									onClick={() => onSelectServer(server.id)}
+								>
+									<strong>{server.name}</strong>
+									<small>{server.statusLabel}</small>
+								</Button>
+							))}
+						</section>
+					) : null}
+					<section className="media-pane-overview" aria-label="Media output">
+						{!model.hasCitpEndpoint && (
+							<p className="media-pane-citp-note" role="status">
+								CITP is not configured. Layers and manual folder/file values
+								remain available; previews and advertised library names are
+								unavailable.
+							</p>
+						)}
+						<MediaCompositePreview
+							preview={model.preview}
+							selected={model.selectedLayerId === "master"}
+							onSelect={() => onSelectLayer("master")}
 						/>
-					)}
-					{(model.rightPaneVisible || !mainShowsBrowser) && (
-						<MediaSecondaryControls
-							sections={model.controlSections}
-							selectedSectionId={
-								model.rightPaneVisible
-									? model.selectedControlSectionId
-									: model.mainSectionId
-							}
-							onChange={onChangeControl}
+						<MediaLayerStrip
+							layers={model.layers}
+							selectedLayerId={model.selectedLayerId}
+							onSelectLayer={onSelectLayer}
 						/>
-					)}
-				</section>
+					</section>
+					<section className="media-pane-workspace">
+						{mainShowsBrowser && (
+							<MediaLibraryBrowser
+								mode={model.browserMode}
+								folders={model.libraryFolders.map((item) => ({
+									...item,
+									disabled:
+										item.disabled ||
+										(model.selectedLayerId === "master" &&
+											model.browserMode === "media"),
+								}))}
+								files={model.libraryFiles.map((item) => ({
+									...item,
+									disabled:
+										item.disabled ||
+										(model.selectedLayerId === "master" &&
+											model.browserMode === "media"),
+								}))}
+								draftFolderId={model.draftFolderId}
+								draftFileId={model.draftFileId}
+								onBrowseItem={onBrowseItem}
+							/>
+						)}
+						{(model.rightPaneVisible || !mainShowsBrowser) && (
+							<MediaSecondaryControls
+								sections={model.controlSections}
+								selectedSectionId={
+									model.rightPaneVisible ? controlSectionId : mainSectionId
+								}
+								onChange={onChangeControl}
+							/>
+						)}
+					</section>
 				</div>
 			)}
 		</WindowFrame>
 	);
+}
+
+function validActiveId(activeId: string, ids: string[]) {
+	return ids.includes(activeId) ? activeId : (ids[0] ?? "");
 }
 
 function mainSectionOptions(model: MediaPaneModel) {
@@ -222,44 +318,119 @@ function MediaCompositePreview({
 	preview,
 	selected,
 	onSelect,
-	serverLabel,
-	statusLabel,
 }: {
 	preview: MediaPreviewState;
 	selected: boolean;
 	onSelect(): void;
-	serverLabel: string;
-	statusLabel: string;
 }) {
 	const imageSrc = "imageSrc" in preview ? preview.imageSrc : undefined;
+	const [imageFailed, setImageFailed] = useState(false);
+	useEffect(() => setImageFailed(false), [imageSrc]);
+	const outputAspectRatio = preview.outputSize
+		? `${preview.outputSize.width} / ${preview.outputSize.height}`
+		: "16 / 9";
 	return (
 		<Button
 			type="button"
+			fullWidth
 			className={`media-composite-frame state-${preview.kind} ${selected ? "selected" : ""}`}
 			data-preview-state={preview.kind}
 			aria-label={`Master output ${selected ? "selected" : ""}`.trim()}
 			aria-pressed={selected}
 			onClick={onSelect}
 		>
-			{imageSrc && <img src={imageSrc} alt="Mock program composite" />}
-			<div className="media-composite-safe-area" aria-hidden="true" />
-			<span className="media-composite-caption">
-				<strong>MASTER OUTPUT</strong>
-				<small>
-					{serverLabel} · {statusLabel}
-				</small>
+			<span
+				className={`media-composite-picture ${imageSrc ? "has-image" : "is-empty"}`}
+				data-testid="master-output-picture"
+				style={{ aspectRatio: outputAspectRatio }}
+			>
+				{imageSrc && (
+					<SafePreviewImage
+						src={imageSrc}
+						alt="Master output preview"
+						onFailure={() => setImageFailed(true)}
+					/>
+				)}
+				<span className="media-composite-safe-area" aria-hidden="true" />
+			</span>
+			<span className="media-composite-info">
+				<strong>Master output live preview</strong>
+				{imageFailed ? (
+					<span className="danger" role="alert">
+						Live preview could not be loaded.
+					</span>
+				) : null}
 				<PreviewStateMessage preview={preview} />
 			</span>
 		</Button>
 	);
 }
 
+export function SafePreviewImage({
+	src,
+	alt,
+	onFailure,
+}: {
+	src: string;
+	alt: string;
+	onFailure(): void;
+}) {
+	const [loadedFrames, setLoadedFrames] = useState<string[]>([]);
+	const currentSrc = loadedFrames.at(-1);
+	const desiredSrc = useRef(src);
+	desiredSrc.current = src;
+	const [pendingSrc, setPendingSrc] = useState<string | null>(src);
+	useEffect(() => {
+		if (currentSrc !== src && pendingSrc === null) setPendingSrc(src);
+	}, [currentSrc, pendingSrc, src]);
+	const finishPending = (loaded: boolean) => {
+		if (pendingSrc === null) return;
+		const completed = pendingSrc;
+		if (loaded)
+			setLoadedFrames((frames) =>
+				frames.at(-1) === completed ? frames : [...frames.slice(-1), completed],
+			);
+		else onFailure();
+		setPendingSrc(desiredSrc.current === completed ? null : desiredSrc.current);
+	};
+	return (
+		<>
+			{loadedFrames.map((frame, index) => {
+				const current = index === loadedFrames.length - 1;
+				return (
+					<img
+						key={frame}
+						className={current ? "is-current" : "is-previous"}
+						aria-hidden={current ? undefined : true}
+						alt={current ? alt : ""}
+						src={frame}
+						onError={onFailure}
+					/>
+				);
+			})}
+			{pendingSrc && (
+				<img
+					key={pendingSrc}
+					hidden
+					className="is-pending"
+					aria-hidden="true"
+					alt=""
+					src={pendingSrc}
+					onLoad={() => finishPending(true)}
+					onError={() => finishPending(false)}
+				/>
+			)}
+		</>
+	);
+}
+
 function PreviewStateMessage({ preview }: { preview: MediaPreviewState }) {
 	switch (preview.kind) {
 		case "ready":
+			if (preview.imageSrc) return null;
 			return (
 				<span>
-					Mock preview
+					No output · black
 					{preview.capturedAt ? ` · ${preview.capturedAt}` : ""}
 				</span>
 			);
@@ -274,7 +445,7 @@ function PreviewStateMessage({ preview }: { preview: MediaPreviewState }) {
 			return (
 				<span className="danger">
 					Offline
-					{preview.imageSrc ? " · showing mock last preview" : ""} ·{" "}
+					{preview.imageSrc ? " · showing last preview" : " · black output"} ·{" "}
 					{preview.detail}
 				</span>
 			);
@@ -304,10 +475,18 @@ function MediaLayerStrip({
 	selectedLayerId: string | null;
 	onSelectLayer(layerId: string): void;
 }) {
+	const [failedPreviews, setFailedPreviews] = useState<Map<string, string>>(
+		new Map(),
+	);
+	const previewFailed = (id: string, src: string) =>
+		setFailedPreviews((current) => new Map(current).set(id, src));
 	return (
 		<div className="media-layer-region">
 			<ul className="media-layer-strip" aria-label="Media layers">
 				{layers.map((layer) => {
+					const currentPreviewFailed =
+						layer.thumbnailSrc !== undefined &&
+						failedPreviews.get(layer.id) === layer.thumbnailSrc;
 					const opacity = Math.max(
 						0,
 						Math.min(100, layer.opacityPercent ?? 100),
@@ -321,9 +500,17 @@ function MediaLayerStrip({
 								aria-label={`Layer ${layer.number} ${layer.name} · ${layer.statusLabel ?? layer.status}`}
 								onClick={() => onSelectLayer(layer.id)}
 							>
-								<span className="media-layer-thumbnail">
+								<span
+									className={`media-layer-thumbnail ${layer.thumbnailSrc ? "has-image" : "is-empty"}`}
+								>
 									{layer.thumbnailSrc && (
-										<img src={layer.thumbnailSrc} alt="" />
+										<SafePreviewImage
+											src={layer.thumbnailSrc}
+											alt=""
+											onFailure={() =>
+												previewFailed(layer.id, layer.thumbnailSrc ?? "")
+											}
+										/>
 									)}
 								</span>
 								<span className="media-layer-copy">
@@ -334,6 +521,12 @@ function MediaLayerStrip({
 									<small className="media-layer-source">
 										{layer.liveSourceLabel ?? layer.name}
 									</small>
+									{layer.errorDetail || currentPreviewFailed ? (
+										<small className="media-layer-error" role="alert">
+											{layer.errorDetail ??
+												"Live layer preview could not be loaded."}
+										</small>
+									) : null}
 									<span
 										className="media-layer-opacity"
 										role="img"
@@ -382,14 +575,26 @@ function MediaLibraryBrowser({
 	onBrowseItem(mode: MediaBrowserMode, item: MediaLibraryItem): void;
 }) {
 	const folderSlots = mediaPoolSlots(folders, draftFolderId, false);
+	const clearFile: MediaLibraryItem = {
+		id: "0",
+		kind: "file",
+		name: "No file selected",
+		detail: "Clear the current file",
+		disabled:
+			files.length > 0
+				? files.every((item) => item.disabled)
+				: folders.length > 0 && folders.every((item) => item.disabled),
+	};
+	const displayedFiles = [clearFile, ...files];
 	const fileSlots = withMediaFilePlaceholders(
-		mediaPoolSlots(files, draftFileId, true),
+		mediaPoolSlots(displayedFiles, draftFileId, true),
 		40,
 	);
 	return (
 		<section
-			className="media-library-browser"
+			className={`media-library-browser ${mode === "mask" ? "is-mask" : "is-content"}`}
 			aria-label="Media library browser"
+			data-browser-mode={mode}
 		>
 			<HorizontalMediaPool
 				label={`${mode === "mask" ? "Mask" : "Media"} folders`}
@@ -403,7 +608,7 @@ function MediaLibraryBrowser({
 					minimumCardWidth={104}
 					onSlotClick={(id) => {
 						const item = folders.find((candidate) => candidate.id === id);
-						if (item) onBrowseItem(mode, item);
+						if (item && !item.disabled) onBrowseItem(mode, item);
 					}}
 				/>
 			</HorizontalMediaPool>
@@ -414,26 +619,19 @@ function MediaLibraryBrowser({
 				className="media-file-pool"
 				aria-label={`${mode === "mask" ? "Mask" : "Media"} files`}
 			>
-				{files.length === 0 ? (
-					<div className="media-file-empty">
-						<strong>This folder is empty</strong>
-						<span>
-							The live selection stays unchanged until a file is chosen.
-						</span>
-					</div>
-				) : (
-					<PoolGrid
-						className="media-file-pool-grid"
-						slots={fileSlots}
-						fillEmptySlots={false}
-						emptySlot={emptyMediaPoolSlot}
-						minimumCardWidth={112}
-						onSlotClick={(id) => {
-							const item = files.find((candidate) => candidate.id === id);
-							if (item) onBrowseItem(mode, item);
-						}}
-					/>
-				)}
+				<PoolGrid
+					className="media-file-pool-grid"
+					slots={fileSlots}
+					fillEmptySlots={false}
+					emptySlot={emptyMediaPoolSlot}
+					minimumCardWidth={112}
+					onSlotClick={(id) => {
+						const item = displayedFiles.find(
+							(candidate) => candidate.id === id,
+						);
+						if (item && !item.disabled) onBrowseItem(mode, item);
+					}}
+				/>
 			</section>
 		</section>
 	);
@@ -606,6 +804,37 @@ function MediaControl({
 	onChange(controlId: string, value: string | number): void;
 }) {
 	const disabled = sectionDisabled || control.disabled;
+	if (control.kind === "choice" && control.options.length > 4)
+		return (
+			<div className={`media-choice-control ${disabled ? "disabled" : ""}`}>
+				{control.quickActions?.length ? (
+					<div
+						className="media-choice-quick-actions"
+						role="toolbar"
+						aria-label="Play mode quick actions"
+					>
+						{control.quickActions.map((action) => (
+							<Button
+								key={action.value}
+								disabled={disabled}
+								active={control.value === action.value}
+								onClick={() => onChange(control.id, action.value)}
+							>
+								{action.label}
+							</Button>
+						))}
+					</div>
+				) : null}
+				<SelectField
+					label={control.label}
+					value={control.value}
+					options={control.options}
+					disabled={disabled}
+					onChange={(value) => onChange(control.id, value)}
+				/>
+				{control.description && <small>{control.description}</small>}
+			</div>
+		);
 	if (control.kind === "choice")
 		return (
 			<div className={`media-choice-control ${disabled ? "disabled" : ""}`}>

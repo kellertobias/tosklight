@@ -49,13 +49,7 @@ pub(super) async fn media_servers(
         .snapshot()
         .fixtures
         .iter()
-        .filter(|fixture| {
-            !fixture.logical_heads.is_empty()
-                && fixture
-                    .definition
-                    .direct_control_protocols
-                    .contains(&light_fixture::DirectControlProtocol::Citp)
-        })
+        .filter(|fixture| is_media_server_fixture(fixture))
         .map(|fixture| {
             let endpoint = fixture
                 .direct_control
@@ -73,6 +67,73 @@ pub(super) async fn media_servers(
         })
         .collect::<Vec<_>>();
     Ok(Json(serde_json::json!({ "fixtures": fixtures })))
+}
+
+fn is_media_server_fixture(fixture: &light_fixture::PatchedFixture) -> bool {
+    fixture.definition.device_type.trim() == "media_server"
+}
+
+#[cfg(test)]
+mod media_server_fixture_tests {
+    use super::is_media_server_fixture;
+
+    fn fixture(
+        fixture_type: &str,
+        patch_policy: light_fixture::PatchPolicy,
+        citp: bool,
+    ) -> light_fixture::PatchedFixture {
+        let mut profile = light_fixture::FixtureProfile::blank();
+        profile.manufacturer = "Test".into();
+        profile.name = "Media role".into();
+        profile.fixture_type = fixture_type.into();
+        profile.patch_policy = patch_policy;
+        if patch_policy == light_fixture::PatchPolicy::Internal {
+            profile.modes[0].splits[0].footprint = 0;
+        }
+        if citp {
+            profile.direct_control_protocols = vec![light_fixture::DirectControlProtocol::Citp];
+        }
+        let definition = profile.resolved_definition(profile.modes[0].id).unwrap();
+        serde_json::from_value(serde_json::json!({
+            "fixture_id": light_core::FixtureId::new(),
+            "definition": definition
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn eligibility_is_fixture_type_driven_for_zero_one_and_multiple_servers() {
+        let ordinary = fixture("wash", light_fixture::PatchPolicy::Dmx, true);
+        let external = fixture("media_server", light_fixture::PatchPolicy::Dmx, false);
+        let citp = fixture("media_server", light_fixture::PatchPolicy::Dmx, true);
+        let internal = fixture("media_server", light_fixture::PatchPolicy::Internal, false);
+
+        assert!(!is_media_server_fixture(&ordinary));
+        assert!(is_media_server_fixture(&external));
+        assert!(is_media_server_fixture(&citp));
+        assert!(is_media_server_fixture(&internal));
+        assert_eq!(
+            [ordinary.clone()]
+                .iter()
+                .filter(|candidate| is_media_server_fixture(candidate))
+                .count(),
+            0
+        );
+        assert_eq!(
+            [external.clone()]
+                .iter()
+                .filter(|candidate| is_media_server_fixture(candidate))
+                .count(),
+            1
+        );
+        assert_eq!(
+            [external, citp, internal]
+                .iter()
+                .filter(|candidate| is_media_server_fixture(candidate))
+                .count(),
+            3
+        );
+    }
 }
 
 pub(super) async fn inspect_media_server(

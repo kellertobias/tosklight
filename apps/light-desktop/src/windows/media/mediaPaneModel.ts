@@ -1,8 +1,11 @@
 import type { ReactNode } from "react";
 
 export type MediaBrowserMode = "media" | "mask";
+export type MediaSourceFilter = "media" | "visualizers" | "text";
 
-export type MediaPreviewState =
+export type MediaPreviewState = {
+	outputSize?: { width: number; height: number };
+} & (
 	| {
 			kind: "ready";
 			imageSrc?: string;
@@ -35,7 +38,8 @@ export type MediaPreviewState =
 			kind: "unsupported";
 			capability: string;
 			detail: string;
-	  };
+	  }
+);
 
 export type MediaLayerStatus = "online" | "stale" | "failed" | "unsupported";
 
@@ -53,6 +57,7 @@ export interface MediaPaneLayer {
 	name: string;
 	status: MediaLayerStatus;
 	statusLabel?: string;
+	errorDetail?: string;
 	thumbnailSrc?: string;
 	liveSourceLabel?: string;
 	opacityPercent?: number;
@@ -90,6 +95,7 @@ export interface MediaChoiceControl extends MediaControlBase {
 	kind: "choice";
 	value: string;
 	options: Array<{ value: string; label: string; disabled?: boolean }>;
+	quickActions?: Array<{ value: string; label: string }>;
 }
 
 export interface MediaValueControl extends MediaControlBase {
@@ -127,12 +133,15 @@ export interface MediaControlSection {
 }
 
 export interface MediaPaneModel {
+	hasPatchedServer: boolean;
+	hasCitpEndpoint: boolean;
 	servers: MediaPaneServer[];
 	selectedServerId: string;
 	selectedLayerId: string | null;
 	preview: MediaPreviewState;
 	layers: MediaPaneLayer[];
 	browserMode: MediaBrowserMode;
+	sourceFilter?: MediaSourceFilter;
 	maskBrowser: "supported" | "unsupported" | "hidden";
 	libraryFolders: MediaLibraryItem[];
 	libraryFiles: MediaLibraryItem[];
@@ -153,6 +162,7 @@ export interface MediaPaneUiCallbacks {
 	onSelectServer(serverId: string): void;
 	onSelectLayer(layerId: string): void;
 	onSelectBrowserMode(mode: MediaBrowserMode): void;
+	onSelectSourceFilter?(filter: MediaSourceFilter): void;
 	onBrowseItem(mode: MediaBrowserMode, item: MediaLibraryItem): void;
 	onSelectControlSection(sectionId: string): void;
 	onChangeControl(controlId: string, value: string | number): void;
@@ -163,5 +173,6 @@ export interface MediaPaneSurfaceProps extends MediaPaneUiCallbacks {
 	model: MediaPaneModel;
 	compact?: boolean;
 	title?: ReactNode;
+	info?: { primary: ReactNode; secondary?: ReactNode };
 	headerAction?: ReactNode;
 }

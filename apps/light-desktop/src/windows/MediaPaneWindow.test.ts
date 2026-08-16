@@ -4,9 +4,39 @@ import {
 	mediaDraftForLayer,
 	mediaFileMutations,
 	mediaLibraryMutations,
+	mediaRightPaneIsVisible,
+	reconcileMediaPaneSelection,
 } from "./MediaPaneWindow";
 
 describe("Media pane programmer transaction", () => {
+	it("reconciles zero, one, and stale multi-server pane selections", () => {
+		expect(reconcileMediaPaneSelection([], "missing")).toEqual({
+			serverId: "",
+			layerId: "master",
+		});
+		expect(
+			reconcileMediaPaneSelection(
+				[{ fixture_id: "internal", layers: [{ fixture_id: "audio" }] }],
+				"",
+			),
+		).toEqual({ serverId: "internal", layerId: "audio" });
+		expect(
+			reconcileMediaPaneSelection(
+				[
+					{ fixture_id: "video", layers: [{ fixture_id: "video-1" }] },
+					{ fixture_id: "backup", layers: [{ fixture_id: "backup-1" }] },
+				],
+				"removed",
+			),
+		).toEqual({ serverId: "video", layerId: "video-1" });
+	});
+
+	it("opens a new Media pane with its right pane visible", () => {
+		expect(mediaRightPaneIsVisible(undefined)).toBe(true);
+		expect(mediaRightPaneIsVisible({})).toBe(true);
+		expect(mediaRightPaneIsVisible({ rightPaneVisible: false })).toBe(false);
+	});
+
 	it("commits folder and file together for the exact logical layer", () => {
 		expect(mediaFileMutations("layer-7", 2, 19)).toEqual([
 			{
