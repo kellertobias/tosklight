@@ -253,8 +253,11 @@ body {
 }
 
 .viz-editor-file-bar.is-show {
+	position: relative;
 	display: flex;
+	flex: 1;
 	flex-direction: column;
+	min-height: 0;
 	overflow: hidden;
 }
 
@@ -264,6 +267,7 @@ body {
 
 .viz-show-actions {
 	display: grid;
+	flex: none;
 	grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
 	gap: 0;
 	margin-top: 0;
@@ -271,8 +275,9 @@ body {
 
 .viz-show-rig-overview {
 	position: relative;
-	flex: 1;
-	min-height: 240px;
+	flex: 1 1 0;
+	width: 100%;
+	min-height: 0;
 	margin: 0;
 	overflow: hidden;
 	background: #05080c;
@@ -976,6 +981,16 @@ body {
 	font-size: 12px;
 	opacity: 0.75;
 	min-height: 16px;
+}
+
+.viz-editor-file-bar.is-show > .viz-editor-status {
+	position: absolute;
+	z-index: 2;
+	right: 16px;
+	bottom: 12px;
+	left: 16px;
+	margin: 0;
+	pointer-events: none;
 }
 
 .viz-editor-toast {

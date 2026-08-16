@@ -820,15 +820,13 @@ export function fitCadOverview(
 	const maxY = Math.max(...points.map((point) => point[1]));
 	const width = Math.max(500, maxX - minX);
 	const height = Math.max(500, maxY - minY);
+	const availableWidth = Math.max(1, viewportWidth - 64);
+	const availableHeight = Math.max(1, viewportHeight - 64);
 	return {
 		pan: [-(minX + maxX) / 2, -(minY + maxY) / 2],
 		zoom: Math.max(
 			0.001,
-			Math.min(
-				2.5,
-				(Math.max(1, viewportWidth) * 0.88) / width,
-				(Math.max(1, viewportHeight) * 0.82) / height,
-			),
+			Math.min(2.5, availableWidth / width, availableHeight / height),
 		),
 	};
 }

@@ -102,10 +102,10 @@ describe("CAD fixture interaction", () => {
 	});
 
 	it("refits the fixed overview camera to the rendered aspect ratio", () => {
-		const wide = fitCadOverview([fixture], new Map(), 1200, 300);
-		const tall = fitCadOverview([fixture], new Map(), 300, 1200);
-		expect(wide.pan).toEqual(tall.pan);
-		expect(wide.zoom).not.toBe(tall.zoom);
+		const large = fitCadOverview([fixture], new Map(), 1200, 600);
+		const small = fitCadOverview([fixture], new Map(), 600, 300);
+		expect(large.pan).toEqual(small.pan);
+		expect(large.zoom).toBeGreaterThan(small.zoom);
 	});
 
 	it("redraws the viewport whenever its rendered size changes", () => {
