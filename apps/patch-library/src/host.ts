@@ -11,6 +11,7 @@
 import { createContext, useContext } from "react";
 import type {
 	FixtureDefinition,
+	FixtureNote,
 	FixtureProfile,
 	FixtureVisibility,
 	PatchLayer,
@@ -24,6 +25,7 @@ export interface PatchLibraryHost {
 	fixtureProfiles: readonly FixtureProfile[];
 	patchLayers: readonly VersionedObject<PatchLayer>[];
 	fixtureVisibility?: ReadonlyMap<string, FixtureVisibility>;
+	fixtureNotes?: ReadonlyMap<string, FixtureNote>;
 	/**
 	 * MVR fixtures that could not be resolved to a profile. Reported in the header so an import
 	 * that silently dropped fixtures is visible; only the count is read.
@@ -31,6 +33,7 @@ export interface PatchLibraryHost {
 	unresolvedMvrFixtures: readonly unknown[];
 	savePatchLayer(layer: PatchLayer): Promise<boolean>;
 	saveFixtureVisibility?(visibility: FixtureVisibility): Promise<boolean>;
+	saveFixtureNote?(note: FixtureNote): Promise<boolean>;
 }
 
 /** One selection replacement. The sheet never builds any other selection intent. */

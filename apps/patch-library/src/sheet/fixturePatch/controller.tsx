@@ -28,6 +28,7 @@ import { usePatchSelection } from "./selection";
 export type EditKind =
 	| "number"
 	| "name"
+	| "note"
 	| "address"
 	| "location"
 	| "rotation"

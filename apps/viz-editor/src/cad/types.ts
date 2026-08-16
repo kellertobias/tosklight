@@ -12,6 +12,9 @@ export interface CadEntity {
 	fixtureNumber: number | null;
 	fixtureDisplayId: string;
 	dmxAddress: string;
+	fixtureProfile?: string;
+	mode?: string;
+	note?: string;
 	kind: string;
 	fixtureType: string;
 	drawingId: string;
@@ -136,6 +139,7 @@ export interface ViewportTile {
 }
 
 export interface CadPrintPage {
+	kind?: "plan" | "fixture_list";
 	id: string;
 	tileId: string;
 	name: string;

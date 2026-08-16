@@ -225,6 +225,8 @@ fn main() {
             session::save_patch_layer,
             session::fixture_visibility,
             session::save_fixture_visibility,
+            session::fixture_notes,
+            session::save_fixture_note,
             session::export_mvr,
             session::preview_mvr,
             session::import_mvr,

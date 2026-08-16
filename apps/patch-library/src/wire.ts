@@ -453,6 +453,12 @@ export interface FixtureVisibility {
 	visible3d: boolean;
 }
 
+/** Operator note attached to one logical fixture and stored with the show. */
+export interface FixtureNote {
+	fixtureId: string;
+	note: string;
+}
+
 /**
  * One stored show object with its optimistic-concurrency revision.
  *

@@ -48,6 +48,7 @@ const server = {
 		};
 	}>,
 	fixtureVisibility: new Map(),
+	fixtureNotes: new Map(),
 	fixtureProfiles: [] as ReturnType<typeof blankFixtureProfile>[],
 	fixtureLibrary: [],
 	unresolvedMvrFixtures: [],
@@ -56,6 +57,7 @@ const server = {
 	refresh: vi.fn(),
 	savePatchLayer: vi.fn(),
 	saveFixtureVisibility: vi.fn(),
+	saveFixtureNote: vi.fn(),
 };
 const patchFeature = {
 	patchFixtures: vi.fn(),
@@ -300,6 +302,7 @@ beforeEach(() => {
 	server.patch.fixtures = [splitFixture()];
 	server.fixtureProfiles = [];
 	server.patchLayers = [];
+	server.fixtureNotes = new Map();
 	server.selectedFixtures = [];
 	programming.ready = true;
 	programming.selection.selected = [];
@@ -430,6 +433,33 @@ describe("patch layer locks", () => {
 		await waitFor(() => expect(server.savePatchLayer).toHaveBeenCalled());
 		expect(server.savePatchLayer).toHaveBeenLastCalledWith(
 			expect.objectContaining({ id: "default", visible3d: false }),
+		);
+	});
+});
+
+describe("fixture notes", () => {
+	it("shows and persists the canonical fixture note from the Patch table", async () => {
+		state.patchSetArmed = true;
+		server.fixtureNotes = new Map([
+			[
+				"fixture-split",
+				{ fixtureId: "fixture-split", note: "Original rigging note" },
+			],
+		]);
+		server.saveFixtureNote.mockResolvedValue(true);
+		render(<FixturePatchSetup />);
+
+		fireEvent.click(screen.getByRole("button", { name: "Note 17" }));
+		const input = screen.getByRole("textbox", { name: "Fixture note" });
+		expect(input).toHaveValue("Original rigging note");
+		fireEvent.change(input, { target: { value: "Add secondary safety" } });
+		fireEvent.click(screen.getByRole("button", { name: "Set" }));
+
+		await waitFor(() =>
+			expect(server.saveFixtureNote).toHaveBeenCalledWith({
+				fixtureId: "fixture-split",
+				note: "Add secondary safety",
+			}),
 		);
 	});
 });

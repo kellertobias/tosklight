@@ -113,6 +113,7 @@ export type {
 	FixtureDefinition,
 	FixtureHead,
 	FixtureMode,
+	FixtureNote,
 	FixtureProfile,
 	FixtureSplit,
 	FixtureVisibility,

@@ -229,6 +229,7 @@ export function CadApp() {
 	function addPrintPage(tile: ViewportTile) {
 		const pageNumber = printPages.length + 1;
 		const page: CadPrintPage = {
+			kind: "plan",
 			id:
 				globalThis.crypto?.randomUUID?.() ?? `page-${Date.now()}-${pageNumber}`,
 			tileId: tile.id,
@@ -241,6 +242,28 @@ export function CadApp() {
 			orientation: "landscape",
 			showFixtureIds: false,
 			showDmxAddresses: false,
+		};
+		setPrintPages((current) => [...current, page]);
+		setSelectedPrintPageId(page.id);
+	}
+
+	function addFixtureList() {
+		const pageNumber = printPages.length + 1;
+		const page: CadPrintPage = {
+			kind: "fixture_list",
+			id:
+				globalThis.crypto?.randomUUID?.() ??
+				`fixture-list-${Date.now()}-${pageNumber}`,
+			tileId: "fixture-list",
+			name: "Fixture List",
+			view: "top_down",
+			rotationQuarterTurns: 0,
+			centreMillimetres: [0, 0],
+			widthMillimetres: 2970,
+			included: true,
+			orientation: "landscape",
+			showFixtureIds: true,
+			showDmxAddresses: true,
 		};
 		setPrintPages((current) => [...current, page]);
 		setSelectedPrintPageId(page.id);
@@ -544,7 +567,11 @@ export function CadApp() {
 											<strong>
 												{index + 1}. {page.name}
 											</strong>
-											<small>{CAD_VIEW_LABELS[page.view]}</small>
+											<small>
+												{page.kind === "fixture_list"
+													? "Fixture table"
+													: CAD_VIEW_LABELS[page.view]}
+											</small>
 											<small>A4 {page.orientation}</small>
 										</button>
 									</div>
@@ -553,12 +580,16 @@ export function CadApp() {
 								<p>Add a page from any view.</p>
 							)}
 						</div>
+						<Button className="cad-add-fixture-list" onClick={addFixtureList}>
+							Add Fixture List
+						</Button>
 						{selectedPrintPageId
 							? (() => {
 									const page = printPages.find(
 										(candidate) => candidate.id === selectedPrintPageId,
 									);
 									if (!page) return null;
+									if (page.kind === "fixture_list") return null;
 									return (
 										<section
 											className="cad-print-page-settings"
@@ -850,6 +881,7 @@ function CadTile(props: CadTileProps) {
 				editEnabled={!props.printMode}
 				printPages={props.printPages.filter(
 					(page) =>
+						page.kind !== "fixture_list" &&
 						page.tileId === node.id &&
 						page.view === node.view &&
 						page.rotationQuarterTurns === node.rotationQuarterTurns,
@@ -929,6 +961,7 @@ function restorePrintPages(): CadPrintPage[] {
 			)
 			.map((page) => ({
 				...page,
+				kind: page.kind === "fixture_list" ? "fixture_list" : "plan",
 				orientation: page.orientation === "portrait" ? "portrait" : "landscape",
 				showFixtureIds: page.showFixtureIds === true,
 				showDmxAddresses: page.showDmxAddresses === true,

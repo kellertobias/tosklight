@@ -1,4 +1,5 @@
 import {
+	type FixtureNote,
 	FixturePatchSetup,
 	type FixtureProfile,
 	type FixtureVisibility,
@@ -49,6 +50,9 @@ export function App() {
 	const [layers, setLayers] = useState<readonly PatchLayer[]>([DEFAULT_LAYER]);
 	const [fixtureVisibility, setFixtureVisibility] = useState<
 		ReadonlyMap<string, FixtureVisibility>
+	>(new Map());
+	const [fixtureNotes, setFixtureNotes] = useState<
+		ReadonlyMap<string, FixtureNote>
 	>(new Map());
 	const [error, setError] = useState<string | null>(null);
 	const [workspace, setWorkspace] = useState<
@@ -112,6 +116,7 @@ export function App() {
 				if (summary) {
 					loadLayers();
 					loadFixtureVisibility();
+					loadFixtureNotes();
 					loadFixtures();
 				}
 			})
@@ -269,6 +274,15 @@ export function App() {
 			.catch(report);
 	}
 
+	function loadFixtureNotes() {
+		documentSession
+			.fixtureNotes()
+			.then((stored) =>
+				setFixtureNotes(new Map(stored.map((note) => [note.fixtureId, note]))),
+			)
+			.catch(report);
+	}
+
 	const report = useCallback((reason: unknown) => {
 		setError(String(reason));
 	}, []);
@@ -287,6 +301,7 @@ export function App() {
 				fixtureLibrary: [],
 				patchLayers: sessionPatchLayers(layers),
 				fixtureVisibility,
+				fixtureNotes,
 				unresolvedMvrFixtures: [],
 				savePatchLayer: async (layer) => {
 					const previous = layers;
@@ -322,6 +337,22 @@ export function App() {
 						return false;
 					}
 				},
+				saveFixtureNote: async (note) => {
+					const previous = fixtureNotes;
+					setFixtureNotes((current) => {
+						const next = new Map(current);
+						next.set(note.fixtureId, note);
+						return next;
+					});
+					try {
+						await documentSession.saveFixtureNote(note);
+						return true;
+					} catch (reason) {
+						setFixtureNotes(previous);
+						report(reason);
+						return false;
+					}
+				},
 			},
 			// There is still no programmer here. What the sheet's selection drives is the preview
 			// controls and nothing else: no cues, no tracking, no arbitration.
@@ -335,7 +366,14 @@ export function App() {
 			desktopEditing: true,
 			setEditArmed: () => undefined,
 		}),
-		[profiles, layers, fixtureVisibility, selected, selectionRevision],
+		[
+			profiles,
+			layers,
+			fixtureVisibility,
+			fixtureNotes,
+			selected,
+			selectionRevision,
+		],
 	);
 
 	const definitions = useMemo(

@@ -77,6 +77,9 @@ pub struct CadEntity {
     pub fixture_number: Option<u32>,
     pub fixture_display_id: String,
     pub dmx_address: String,
+    pub fixture_profile: String,
+    pub mode: String,
+    pub note: String,
     pub kind: String,
     pub fixture_type: String,
     pub drawing_id: String,
@@ -465,7 +468,8 @@ pub fn emit_scene_state_delta(
     let locked = locked_layers(session)?;
     let hidden_fixtures = hidden_fixture_ids(session, "visible2d")?;
     let hidden_layers = hidden_layers(session, "visible2d")?;
-    let all_entities = entities(&patch, &locked);
+    let notes = fixture_notes(session)?;
+    let all_entities = entities(&patch, &locked, &notes);
     let removed_ids = all_entities
         .iter()
         .filter(|entity| {
@@ -528,7 +532,13 @@ fn snapshot(session: &Session, cad: &CadState) -> Result<CadSceneSnapshot, Strin
         show_id: patch.show_id.0,
         scene_revision: patch.patch_revision.value(),
         selection_revision: selection.revision,
-        entities: visible_entities(&patch, &locked, &hidden_fixtures, &hidden_layers),
+        entities: visible_entities(
+            &patch,
+            &locked,
+            &hidden_fixtures,
+            &hidden_layers,
+            &fixture_notes(session)?,
+        ),
         drawings: drawings(&patch, cad),
         selected_ids: selection.ids.clone(),
         attachments: attachments(session)?,
@@ -540,8 +550,9 @@ fn visible_entities(
     locked_layers: &BTreeSet<String>,
     hidden_fixtures: &BTreeSet<Uuid>,
     hidden_layers: &BTreeSet<String>,
+    notes: &HashMap<Uuid, String>,
 ) -> Vec<CadEntity> {
-    entities(snapshot, locked_layers)
+    entities(snapshot, locked_layers, notes)
         .into_iter()
         .filter(|entity| {
             !hidden_fixtures.contains(&entity.logical_fixture_id)
@@ -550,7 +561,11 @@ fn visible_entities(
         .collect()
 }
 
-fn entities(snapshot: &PatchSnapshot, locked_layers: &BTreeSet<String>) -> Vec<CadEntity> {
+fn entities(
+    snapshot: &PatchSnapshot,
+    locked_layers: &BTreeSet<String>,
+    notes: &HashMap<Uuid, String>,
+) -> Vec<CadEntity> {
     let profiles = snapshot
         .profile_revisions
         .iter()
@@ -578,6 +593,39 @@ fn entities(snapshot: &PatchSnapshot, locked_layers: &BTreeSet<String>) -> Vec<C
                 .unwrap_or(fixture_type)
                 .to_owned();
             let logical_fixture_id = fixture.patch.fixture_id.0;
+            let fixture_profile = profile
+                .map(|profile| {
+                    let manufacturer = profile
+                        .profile_snapshot
+                        .get("manufacturer")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or_default();
+                    let name = profile
+                        .profile_snapshot
+                        .get("name")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or("Unknown fixture");
+                    format!("{manufacturer} {name}").trim().to_owned()
+                })
+                .unwrap_or_else(|| "Unknown fixture".to_owned());
+            let mode_id = fixture.profile.mode_id.to_string();
+            let mode = profile
+                .and_then(|profile| {
+                    profile
+                        .profile_snapshot
+                        .get("modes")?
+                        .as_array()?
+                        .iter()
+                        .find(|mode| {
+                            mode.get("id").and_then(serde_json::Value::as_str)
+                                == Some(mode_id.as_str())
+                        })
+                })
+                .and_then(|mode| mode.get("name"))
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("Unknown mode")
+                .to_owned();
+            let note = notes.get(&logical_fixture_id).cloned().unwrap_or_default();
             let common = |id: Uuid,
                           name: String,
                           location: &light_fixture::FixtureLocation,
@@ -599,6 +647,9 @@ fn entities(snapshot: &PatchSnapshot, locked_layers: &BTreeSet<String>) -> Vec<C
                     })
                     .unwrap_or_else(|| "—".to_owned()),
                 dmx_address,
+                fixture_profile: fixture_profile.clone(),
+                mode: mode.clone(),
+                note: note.clone(),
                 kind: kind.clone(),
                 fixture_type: fixture_type.to_owned(),
                 drawing_id: profile.map_or_else(
@@ -624,12 +675,29 @@ fn entities(snapshot: &PatchSnapshot, locked_layers: &BTreeSet<String>) -> Vec<C
                     "Unpatched".to_owned()
                 }
             };
+            let root_address = if fixture.patch.split_patches.len() > 1 {
+                fixture
+                    .patch
+                    .split_patches
+                    .iter()
+                    .map(|patch| {
+                        format!(
+                            "S{} {}",
+                            patch.split,
+                            address(patch.universe, patch.address)
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" / ")
+            } else {
+                address(fixture.patch.universe, fixture.patch.address)
+            };
             std::iter::once(common(
                 logical_fixture_id,
                 fixture.patch.name.clone(),
                 &fixture.patch.location,
                 &fixture.patch.rotation,
-                address(fixture.patch.universe, fixture.patch.address),
+                root_address,
             ))
             .chain(fixture.patch.multipatch.iter().map(|instance| {
                 common(
@@ -711,6 +779,33 @@ fn hidden_fixture_ids(session: &Session, property: &str) -> Result<BTreeSet<Uuid
                             .get("fixtureId")
                             .and_then(serde_json::Value::as_str)
                             .and_then(|id| Uuid::parse_str(id).ok())
+                    })
+                    .collect()
+            })
+            .map_err(|error| error.to_string())
+    })
+}
+
+fn fixture_notes(session: &Session) -> Result<HashMap<Uuid, String>, String> {
+    session.with(|document| {
+        document
+            .objects("fixture_note")
+            .map(|objects| {
+                objects
+                    .into_iter()
+                    .filter_map(|object| {
+                        let fixture_id = object
+                            .body
+                            .get("fixtureId")
+                            .and_then(serde_json::Value::as_str)
+                            .and_then(|id| Uuid::parse_str(id).ok())?;
+                        let note = object
+                            .body
+                            .get("note")
+                            .and_then(serde_json::Value::as_str)
+                            .unwrap_or_default()
+                            .to_owned();
+                        Some((fixture_id, note))
                     })
                     .collect()
             })
@@ -958,7 +1053,7 @@ fn snap_attachments(
 ) -> Result<Vec<RigAttachment>, String> {
     let scene =
         session.with(|document| document.patch_snapshot().map_err(|error| error.to_string()))?;
-    let entities = entities(&scene, &BTreeSet::new());
+    let entities = entities(&scene, &BTreeSet::new(), &fixture_notes(session)?);
     let trusses = entities
         .iter()
         .filter(|entity| {
@@ -1061,7 +1156,7 @@ fn restore_attachments(
 fn snap_transforms(session: &Session, moved: &mut [EntityTransform]) -> Result<(), String> {
     let scene =
         session.with(|document| document.patch_snapshot().map_err(|error| error.to_string()))?;
-    let entities = entities(&scene, &BTreeSet::new());
+    let entities = entities(&scene, &BTreeSet::new(), &fixture_notes(session)?);
     let trusses = entities
         .iter()
         .filter(|entity| {
@@ -1100,8 +1195,8 @@ fn snap_transforms(session: &Session, moved: &mut [EntityTransform]) -> Result<(
 #[cfg(test)]
 mod tests {
     use super::{
-        EntityTransform, apply_transforms, drawing, entities, locked_layers, moved_transforms,
-        output_direction, selectable_ids,
+        EntityTransform, apply_transforms, drawing, entities, fixture_notes, locked_layers,
+        moved_transforms, output_direction, selectable_ids,
     };
     use crate::session::Session;
     use light_application::{PatchFixtureCandidate, PatchFixturesCommand};
@@ -1293,7 +1388,11 @@ mod tests {
         let snapshot = session
             .with(|document| document.patch_snapshot().map_err(|error| error.to_string()))
             .unwrap();
-        let cad_entities = entities(&snapshot, &BTreeSet::new());
+        let cad_entities = entities(
+            &snapshot,
+            &BTreeSet::new(),
+            &std::collections::HashMap::new(),
+        );
         let first_instances = cad_entities
             .iter()
             .filter(|entity| entity.logical_fixture_id == ids[0])
@@ -1414,6 +1513,45 @@ mod tests {
         assert!(ids.iter().all(|id| !selectable.contains(id)));
         let locks = locked_layers(&session).unwrap();
         assert_eq!(locks, BTreeSet::from(["default".to_owned()]));
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn fixture_notes_default_blank_and_project_into_every_physical_instance() {
+        let (session, path, ids) = transform_session();
+        assert!(fixture_notes(&session).unwrap().is_empty());
+        session
+            .change(|document| {
+                document
+                    .put_object(
+                        "fixture_note",
+                        &ids[0].to_string(),
+                        &serde_json::json!({
+                            "fixtureId": ids[0],
+                            "note": "Use secondary safety",
+                        }),
+                    )
+                    .map_err(|error| error.to_string())?;
+                Ok(())
+            })
+            .unwrap();
+        let snapshot = session
+            .with(|document| document.patch_snapshot().map_err(|error| error.to_string()))
+            .unwrap();
+        let notes = fixture_notes(&session).unwrap();
+        let projected = entities(&snapshot, &BTreeSet::new(), &notes);
+        assert!(
+            projected
+                .iter()
+                .filter(|entity| entity.logical_fixture_id == ids[0])
+                .all(|entity| entity.note == "Use secondary safety")
+        );
+        assert!(
+            projected
+                .iter()
+                .filter(|entity| entity.logical_fixture_id == ids[1])
+                .all(|entity| entity.note.is_empty())
+        );
         let _ = std::fs::remove_file(path);
     }
 

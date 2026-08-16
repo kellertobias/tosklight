@@ -1423,6 +1423,11 @@ body {
 	min-height: 38px;
 }
 
+.cad-add-fixture-list.ui-button {
+	margin: 0 10px;
+	min-height: 34px;
+}
+
 .cad-add-print-page.ui-button {
 	position: absolute;
 	z-index: 15;

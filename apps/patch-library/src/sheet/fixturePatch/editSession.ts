@@ -22,6 +22,10 @@ export function armEdit(
 	if (kind === "number") ui.setEditText(String(fixtureDisplayId(fixture)));
 	else if (kind === "name")
 		ui.setEditText(fixture.name || fixture.definition.name);
+	else if (kind === "note")
+		ui.setEditText(
+			controller.library?.fixtureNotes?.get(fixture.fixture_id)?.note ?? "",
+		);
 	else if (kind === "address") {
 		ui.setEditText(
 			fixture.universe && fixture.address

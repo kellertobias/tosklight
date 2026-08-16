@@ -505,6 +505,49 @@ pub struct FixtureVisibilityDto {
     pub visible_3d: bool,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FixtureNoteDto {
+    pub fixture_id: Uuid,
+    #[serde(default)]
+    pub note: String,
+}
+
+#[tauri::command]
+pub fn fixture_notes(session: tauri::State<'_, Session>) -> Answer<Vec<FixtureNoteDto>> {
+    session.with(|document| {
+        document
+            .objects("fixture_note")
+            .map_err(|error| error.to_string())?
+            .into_iter()
+            .map(|object| serde_json::from_value(object.body).map_err(|error| error.to_string()))
+            .collect()
+    })
+}
+
+#[tauri::command]
+pub fn save_fixture_note(
+    app: tauri::AppHandle,
+    session: tauri::State<'_, Session>,
+    cad: tauri::State<'_, crate::cad::CadState>,
+    note: FixtureNoteDto,
+) -> Answer<FixtureNoteDto> {
+    let saved = session.change(|document| {
+        document
+            .put_object(
+                "fixture_note",
+                &note.fixture_id.to_string(),
+                &serde_json::to_value(&note).map_err(|error| error.to_string())?,
+            )
+            .map_err(|error| error.to_string())?;
+        Ok(note.clone())
+    })?;
+    let revision =
+        session.with(|document| document.patch_revision().map_err(|error| error.to_string()))?;
+    crate::cad::emit_scene_state_delta(&app, &session, &cad, revision)?;
+    Ok(saved)
+}
+
 #[tauri::command]
 pub fn fixture_visibility(session: tauri::State<'_, Session>) -> Answer<Vec<FixtureVisibilityDto>> {
     session.with(|document| {

@@ -21,10 +21,14 @@ const snapshot = {
 	entities: [
 		{
 			id: fixtureId,
+			logicalFixtureId: fixtureId,
 			name: "Profile Stage 1",
 			fixtureNumber: 101,
 			fixtureDisplayId: "101",
 			dmxAddress: "1.1",
+			fixtureProfile: "Robe Robin DLS Profile",
+			mode: "Mode 3",
+			note: "Use secondary safety",
 			kind: "profile",
 			fixtureType: "moving_head_profile",
 			drawingId: "profile:1",
@@ -249,10 +253,15 @@ describe("the CAD planning window", () => {
 		).not.toBeInTheDocument();
 		fireEvent.click(screen.getByRole("button", { name: "Print" }));
 		fireEvent.click(screen.getByRole("button", { name: "Add New Page" }));
+		fireEvent.click(screen.getByRole("button", { name: "Add Fixture List" }));
 		expect(
 			screen.getByRole("complementary", { name: "Print pages" }),
 		).toHaveTextContent("1. Page 1");
-		expect(screen.getByText("A4 landscape")).toBeInTheDocument();
+		expect(
+			screen.getByRole("complementary", { name: "Print pages" }),
+		).toHaveTextContent("2. Fixture List");
+		expect(screen.getByText("Fixture table")).toBeInTheDocument();
+		expect(screen.getAllByText("A4 landscape")).toHaveLength(2);
 
 		fireEvent.pointerMove(screen.getByTestId("cad-canvas"));
 		fireEvent.pointerUp(screen.getByTestId("cad-canvas"));
@@ -261,7 +270,11 @@ describe("the CAD planning window", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Export to PDF" }));
 		await waitFor(() => expect(mocks.exportPdf).toHaveBeenCalledTimes(1));
 		const bytes = mocks.exportPdf.mock.calls[0][1] as Uint8Array;
-		expect(new TextDecoder().decode(bytes)).toContain("/Count 1");
+		const pdf = new TextDecoder().decode(bytes);
+		expect(pdf).toContain("/Count 2");
+		expect(pdf).toContain("Fixture ID");
+		expect(pdf).toContain("Robe Robin DLS Profile");
+		expect(pdf).toContain("Use secondary safety");
 		expect(workspace.get("tosklight:viz-editor:cad-print-pages:v1")).toContain(
 			"Page 1",
 		);

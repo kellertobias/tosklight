@@ -23,6 +23,9 @@ const scene: CadSceneSnapshot = {
 			fixtureNumber: 1,
 			fixtureDisplayId: "1",
 			dmxAddress: "1.1",
+			fixtureProfile: "ToskLight Moving Light",
+			mode: "Standard 24ch",
+			note: "Hang on downstage truss",
 			kind: "fixture",
 			fixtureType: "moving_head",
 			drawingId: "drawing",
@@ -124,5 +127,36 @@ describe("CAD PDF export", () => {
 	it("derives a stable drawing scale and useful grid from each outline", () => {
 		expect(printScaleDenominator(page("Scale"))).toBeGreaterThan(1);
 		expect(printGridMillimetres(page("Grid"))).toBe(500);
+	});
+
+	it("adds deterministic fixture-list pages with repeated headers and notes", () => {
+		const entities = Array.from({ length: 35 }, (_, index) => ({
+			...scene.entities[0],
+			id: `fixture-${index + 1}`,
+			logicalFixtureId: `fixture-${index + 1}`,
+			fixtureDisplayId: String(index + 1),
+			dmxAddress: index === 1 ? "Unpatched" : `1.${index + 1}`,
+			note: index === 0 ? "Use frost and safety bond" : "",
+		}));
+		entities.push({
+			...entities[0],
+			id: "fixture-1-copy",
+			dmxAddress: "2.101",
+		});
+		const fixtureList = {
+			...page("Fixture List"),
+			kind: "fixture_list" as const,
+		};
+		const pdf = new TextDecoder().decode(
+			buildCadPdf({ ...scene, entities }, [fixtureList]),
+		);
+		expect(pdf).toContain("/Count 2");
+		expect(pdf.match(/Fixture ID/g)).toHaveLength(2);
+		expect(pdf.match(/DMX Patch/g)).toHaveLength(2);
+		expect(pdf).toContain("ToskLight Moving Light");
+		expect(pdf).toContain("Standard 24ch");
+		expect(pdf).toContain("Use frost and safety bond");
+		expect(pdf).toContain("1.1 / 2.101");
+		expect(pdf).toContain("Unpatched");
 	});
 });

@@ -569,6 +569,15 @@
 	background: transparent;
 }
 
+.patch-note-cell .patch-value {
+	min-width: 180px;
+	max-width: 320px;
+	overflow: hidden;
+	text-align: left;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
 .patch-toolbar .lamp-cycle {
 	display: flex;
 	align-items: center;

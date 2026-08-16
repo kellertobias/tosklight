@@ -40,6 +40,7 @@ const columns = [
 	"Layer",
 	"2D",
 	"3D",
+	"Note",
 ];
 
 export function PatchTable() {
@@ -120,7 +121,25 @@ function FixtureRow({ fixture }: { fixture: PatchedFixture }) {
 			<FixtureTransformCells fixture={fixture} />
 			<FixtureLayerCell fixture={fixture} />
 			<FixtureVisibilityCells fixture={fixture} />
+			<FixtureNoteCell fixture={fixture} />
 		</tr>
+	);
+}
+
+function FixtureNoteCell({ fixture }: { fixture: PatchedFixture }) {
+	const controller = usePatchController();
+	const note =
+		controller.library?.fixtureNotes?.get(fixture.fixture_id)?.note ?? "";
+	return (
+		<td className="patch-note-cell">
+			<Button
+				className="patch-value"
+				aria-label={`Note ${fixtureDisplayId(fixture)}`}
+				onClick={() => armEdit(controller, fixture, "note")}
+			>
+				{note || "—"}
+			</Button>
+		</td>
 	);
 }
 
@@ -545,6 +564,7 @@ function MultiPatchRow({
 						: `${Number(instance.shaper_angle.toFixed(1))}°`}
 				</Button>
 			</td>
+			<td />
 			<td />
 			<td />
 			<td />
