@@ -89,6 +89,16 @@ test("DEMO-GENERATOR-001 @api › installs the one overall Desk and PreViz demo 
 		"Media Server 1",
 		"Media Server 2",
 	]);
+	expect(
+		demoFixtures(1001, 1002).map((fixture) => fixture.direct_control),
+	).toEqual([
+		{
+			protocol: "citp",
+			ip_address: "127.0.0.1",
+			port: 4809,
+		},
+		null,
+	]);
 	expect(demoFixtures(1101, 1103).map((fixture) => fixture.name)).toEqual([
 		"Laser Left",
 		"Laser Center",

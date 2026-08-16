@@ -415,6 +415,7 @@ export function StatefulMediaStory({
 	const model: MediaPaneModel = {
 		hasPatchedServer: true,
 		hasCitpEndpoint: true,
+		showSourceFilters: true,
 		servers: servers.map((candidate) => ({
 			id: candidate.id,
 			name: candidate.name,

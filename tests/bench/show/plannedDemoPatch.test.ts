@@ -97,6 +97,22 @@ describe("overall demo show patch builder", () => {
 		expect(occupied.size).toBe(3_378);
 	});
 
+	it("configures exactly one local CITP media server", () => {
+		const built = createPlannedDemoPatchInputs(profiles, layers);
+		expect(
+			built.fixtures.find((fixture) => fixture.fixture_number === 1001)
+				?.direct_control,
+		).toEqual({
+			protocol: "citp",
+			ip_address: "127.0.0.1",
+			port: 4809,
+		});
+		expect(
+			built.fixtures.find((fixture) => fixture.fixture_number === 1002)
+				?.direct_control,
+		).toBeNull();
+	});
+
 	it("keeps Conventional, Stage, Audience, and Auxiliary bands separate", () => {
 		const built = createPlannedDemoPatchInputs(profiles, layers);
 		const fresnels = built.fixtures.filter(

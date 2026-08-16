@@ -46,6 +46,7 @@ export type MediaLayerStatus = "online" | "stale" | "failed" | "unsupported";
 export interface MediaPaneServer {
 	id: string;
 	name: string;
+	fixtureLabel?: string;
 	detail?: string;
 	statusLabel: string;
 	disabled?: boolean;
@@ -142,6 +143,7 @@ export interface MediaPaneModel {
 	layers: MediaPaneLayer[];
 	browserMode: MediaBrowserMode;
 	sourceFilter?: MediaSourceFilter;
+	showSourceFilters: boolean;
 	maskBrowser: "supported" | "unsupported" | "hidden";
 	libraryFolders: MediaLibraryItem[];
 	libraryFiles: MediaLibraryItem[];

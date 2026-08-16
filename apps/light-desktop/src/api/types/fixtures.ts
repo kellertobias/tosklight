@@ -501,6 +501,7 @@ export interface FixtureDefinition {
 
 export interface MediaServerFixture {
 	fixture_id: string;
+	fixture_number?: number | null;
 	name: string;
 	endpoint: { protocol: "citp"; ip_address: string; port: number } | null;
 	native_action?: string | null;

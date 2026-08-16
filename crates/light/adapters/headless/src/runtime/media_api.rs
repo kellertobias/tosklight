@@ -58,6 +58,7 @@ pub(super) async fn media_servers(
             let status = state.media.status(fixture.fixture_id);
             serde_json::json!({
                 "fixture_id": fixture.fixture_id,
+                "fixture_number": fixture.fixture_number,
                 "name": format!("{} {}", fixture.definition.manufacturer, fixture.definition.model),
                 "endpoint": endpoint,
                 "native_action": native_media_action(fixture),

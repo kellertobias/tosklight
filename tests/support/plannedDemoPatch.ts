@@ -33,6 +33,9 @@ type PatchBand =
 	| "hazer"
 	| "other";
 
+const DEMO_MEDIA_SERVER_FIXTURE_NUMBER = 1001;
+const DEMO_MEDIA_SERVER_CITP_PORT = 4809;
+
 export interface PlannedDemoPatchConfiguration {
 	addressBands?: {
 		dimmers: string;
@@ -267,7 +270,14 @@ export function createPlannedDemoPatchInputs(
 				mode_id: mode.id,
 				split_patches: primaryPatches,
 				layer_id: layerFor(entry, layers),
-				direct_control: null,
+				direct_control:
+					entry.number === DEMO_MEDIA_SERVER_FIXTURE_NUMBER
+						? {
+								protocol: "citp",
+								ip_address: "127.0.0.1",
+								port: DEMO_MEDIA_SERVER_CITP_PORT,
+							}
+						: null,
 				location: millimetres(placement.primary.location),
 				rotation: placement.primary.rotation,
 				multipatch,

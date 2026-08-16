@@ -61,6 +61,7 @@ export function buildMediaPaneModel(
 		layers: layerModels(input),
 		browserMode: input.browserMode,
 		sourceFilter: input.sourceFilter ?? "media",
+		showSourceFilters: Boolean(input.selectedServer?.native_action),
 		maskBrowser: "supported",
 		...libraryModel(input),
 		...selectionModel(input, liveFolder, liveFile),
@@ -100,6 +101,10 @@ function serverChoices(input: BuildMediaPaneModelInput) {
 		...input.servers.map((server) => ({
 			id: server.fixture_id,
 			name: server.name,
+			fixtureLabel:
+				server.fixture_number == null
+					? server.fixture_id
+					: String(server.fixture_number),
 			statusLabel: !server.endpoint
 				? "Not configured"
 				: server.status.online

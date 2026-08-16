@@ -53,7 +53,9 @@ export function MediaPaneSurface({
 	onChangeControl,
 	onSetRightPaneVisible,
 }: MediaPaneSurfaceProps) {
-	const hasPatchedServer = model.servers.some((server) => server.id.trim() !== "");
+	const hasPatchedServer = model.servers.some(
+		(server) => server.id.trim() !== "",
+	);
 	const patchedServers = model.servers.filter(
 		(server) => server.id.trim() !== "" && !server.disabled,
 	);
@@ -70,7 +72,7 @@ export function MediaPaneSurface({
 		mainSectionOptions(model).map((option) => option.value),
 	);
 	const sourceFilterGroup =
-		model.sourceFilter && onSelectSourceFilter
+		model.showSourceFilters && model.sourceFilter && onSelectSourceFilter
 			? {
 					id: "media-source-filter",
 					kind: "tabs" as const,
@@ -138,26 +140,7 @@ export function MediaPaneSurface({
 			title={title}
 			info={info}
 			groups={titleGroups}
-			toolbar={
-				hasPatchedServer ? (
-					<div className="media-pane-header-tools">
-						<SelectField
-							className="media-pane-server-select"
-							label="Server"
-							ariaLabel="Media server"
-							size="compact"
-							value={model.selectedServerId}
-							options={model.servers.map((candidate) => ({
-								value: candidate.id,
-								label: candidate.name,
-								disabled: candidate.disabled,
-							}))}
-							onChange={onSelectServer}
-						/>
-						{headerAction}
-					</div>
-				) : undefined
-			}
+			toolbar={headerAction}
 			settingsTitle="Media pane settings"
 			settingsTabs={
 				hasPatchedServer
@@ -192,23 +175,28 @@ export function MediaPaneSurface({
 				</div>
 			) : (
 				<div
-					className={`media-pane-body ${patchedServers.length > 1 ? "has-server-shortcuts" : ""}`}
+					className={`media-pane-body ${patchedServers.length ? "has-server-shortcuts" : ""}`}
 				>
-					{patchedServers.length > 1 ? (
+					{patchedServers.length ? (
 						<section
 							className="media-server-shortcuts"
-							aria-label="Media server shortcuts"
+							aria-label="Media servers"
 						>
 							{patchedServers.map((server) => (
 								<Button
 									key={server.id}
 									className={
-										server.id === model.selectedServerId ? "selected" : undefined
+										server.id === model.selectedServerId
+											? "selected"
+											: undefined
 									}
 									aria-pressed={server.id === model.selectedServerId}
 									onClick={() => onSelectServer(server.id)}
 								>
-									<strong>{server.name}</strong>
+									<span className="media-server-card-heading">
+										<strong>{server.name}</strong>
+										<b>{server.fixtureLabel}</b>
+									</span>
 									<small>{server.statusLabel}</small>
 								</Button>
 							))}

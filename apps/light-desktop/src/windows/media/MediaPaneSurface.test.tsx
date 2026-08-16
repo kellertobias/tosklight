@@ -278,17 +278,23 @@ describe("MediaPaneSurface control state", () => {
 		expect(onSelectLayer).toHaveBeenCalledWith("layer-1");
 	});
 
-	it("shows touch server shortcuts only for multiple patched media servers", async () => {
+	it("shows every patched server in the left selector with its fixture number", async () => {
 		const onSelectServer = vi.fn();
 		const view = renderSurface(
 			{ kind: "unsupported", capability: "preview", detail: "No preview" },
 			[],
 			{
 				servers: [
-					{ id: "video", name: "Video Server", statusLabel: "Online" },
+					{
+						id: "video",
+						name: "Video Server",
+						fixtureLabel: "1001",
+						statusLabel: "Online",
+					},
 					{
 						id: "internal",
 						name: "Internal Audio",
+						fixtureLabel: "1002",
 						statusLabel: "Not configured",
 					},
 				],
@@ -299,19 +305,38 @@ describe("MediaPaneSurface control state", () => {
 			undefined,
 			{ onSelectServer },
 		);
-		const shortcuts = within(view.container).getByLabelText(
-			"Media server shortcuts",
-		);
+		const shortcuts = within(view.container).getByLabelText("Media servers");
 		expect(shortcuts).toBeInTheDocument();
 		expect(
-			within(shortcuts).getByRole("button", { name: /Video Server\s*Online/ }),
+			within(shortcuts).getByRole("button", {
+				name: /Video Server\s*1001\s*Online/,
+			}),
 		).toHaveAttribute("aria-pressed", "true");
 		await userEvent.click(
 			within(shortcuts).getByRole("button", {
-				name: /Internal Audio\s*Not configured/,
+				name: /Internal Audio\s*1002\s*Not configured/,
 			}),
 		);
 		expect(onSelectServer).toHaveBeenCalledWith("internal");
+	});
+
+	it("keeps a single server in the left selector and removes the title dropdown", () => {
+		const view = renderSurface({ kind: "ready" }, [], {
+			servers: [
+				{
+					id: "server",
+					name: "ToskLight Media Server",
+					fixtureLabel: "1001",
+					statusLabel: "Online",
+				},
+			],
+		});
+		const selector = within(view.container).getByLabelText("Media servers");
+		expect(selector).toHaveTextContent("ToskLight Media Server");
+		expect(selector).toHaveTextContent("1001");
+		expect(
+			within(view.container).queryByRole("button", { name: "Media server" }),
+		).toBeNull();
 	});
 
 	it("does not invoke a disabled choice control", async () => {
@@ -325,6 +350,7 @@ describe("MediaPaneSurface control state", () => {
 			preview: { kind: "unsupported", capability: "preview", detail: "None" },
 			layers: [],
 			browserMode: "media",
+			showSourceFilters: false,
 			maskBrowser: "hidden",
 			libraryFolders: [],
 			libraryFiles: [],
@@ -429,7 +455,7 @@ describe("MediaPaneSurface control state", () => {
 		expect(onChangeControl).toHaveBeenCalledWith("play-mode", "stop");
 	});
 
-	it("shows source filters and prevents Master content browsing", async () => {
+	it("shows native source filters and prevents Master content browsing", async () => {
 		const onSelectSourceFilter = vi.fn();
 		const onBrowseItem = vi.fn();
 		renderSurface(
@@ -438,6 +464,7 @@ describe("MediaPaneSurface control state", () => {
 			{
 				selectedLayerId: "master",
 				sourceFilter: "media",
+				showSourceFilters: true,
 				maskBrowser: "supported",
 				rightPaneVisible: true,
 				libraryFolders: [{ id: "1", kind: "folder", name: "Looks" }],
@@ -458,6 +485,21 @@ describe("MediaPaneSurface control state", () => {
 		expect(onBrowseItem).not.toHaveBeenCalled();
 	});
 
+	it("hides Media, VIS and Text for a non-native media server", () => {
+		const view = renderSurface(
+			{ kind: "ready" },
+			[],
+			{ sourceFilter: "media", showSourceFilters: false },
+			vi.fn(),
+			vi.fn(),
+			undefined,
+			{ onSelectSourceFilter: vi.fn() },
+		);
+		const surface = within(view.container);
+		for (const label of ["Media", "VIS", "Text"])
+			expect(surface.queryByRole("tab", { name: label })).toBeNull();
+	});
+
 	it("places source filters before Content and Mask at both pane widths", () => {
 		for (const rightPaneVisible of [false, true]) {
 			const view = renderSurface(
@@ -465,6 +507,7 @@ describe("MediaPaneSurface control state", () => {
 				[],
 				{
 					sourceFilter: "media",
+					showSourceFilters: true,
 					maskBrowser: "supported",
 					rightPaneVisible,
 					controlSections: [
@@ -565,6 +608,7 @@ function renderSurface(
 		preview,
 		layers,
 		browserMode: "media",
+		showSourceFilters: false,
 		maskBrowser: "hidden",
 		libraryFolders: [],
 		libraryFiles: [],

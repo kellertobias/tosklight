@@ -20,6 +20,7 @@ const model = {
 	preview: { kind: "unsupported", capability: "preview", detail: "None" },
 	layers: [],
 	browserMode: "media",
+	showSourceFilters: false,
 	maskBrowser: "hidden",
 	libraryFolders: [],
 	libraryFiles: [],

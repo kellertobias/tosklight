@@ -205,6 +205,7 @@ function MediaPanePageContent() {
 	const model: MediaPaneModel = {
 		hasPatchedServer: true,
 		hasCitpEndpoint: true,
+		showSourceFilters: true,
 		servers: [
 			{
 				id: "this-media-server",

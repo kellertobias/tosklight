@@ -160,7 +160,7 @@ async fn citp_thumbnail_api_uses_patched_parent_endpoint_and_cache() {
                 name: "Media Server".into(),
                 layer_id: "default".into(),
                 fixture_id,
-                fixture_number: None,
+                fixture_number: Some(1001),
                 virtual_fixture_number: None,
                 definition: light_fixture::FixtureDefinition {
                     schema_version: 1,
@@ -309,6 +309,7 @@ async fn citp_thumbnail_api_uses_patched_parent_endpoint_and_cache() {
         .await
         .unwrap();
     let status = json(status).await;
+    assert_eq!(status["fixtures"][0]["fixture_number"], 1001);
     assert_eq!(status["fixtures"][0]["status"]["online"], true);
     assert_eq!(status["fixtures"][0]["layers"].as_array().unwrap().len(), 1);
     let mut snapshot = (*state.output.snapshot()).clone();

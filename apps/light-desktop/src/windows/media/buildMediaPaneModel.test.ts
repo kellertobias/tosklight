@@ -35,6 +35,7 @@ describe("Media pane disconnected configuration", () => {
 		]);
 		expect(model.hasPatchedServer).toBe(false);
 		expect(model.hasCitpEndpoint).toBe(false);
+		expect(model.showSourceFilters).toBe(false);
 		expect(model.preview).toMatchObject({
 			kind: "missing_patch",
 			detail: "No media server is patched.",
@@ -55,6 +56,7 @@ describe("Media pane disconnected configuration", () => {
 	it("keeps an unconfigured patched server and its logical layers selectable", () => {
 		const server = {
 			fixture_id: "server-1",
+			fixture_number: 1001,
 			name: "Media master",
 			endpoint: null,
 			layers: [{ fixture_id: "layer-1", head_index: 0 }],
@@ -70,10 +72,12 @@ describe("Media pane disconnected configuration", () => {
 		);
 		expect(model.servers[0]).toMatchObject({
 			id: "server-1",
+			fixtureLabel: "1001",
 			statusLabel: "Not configured",
 		});
 		expect(model.hasPatchedServer).toBe(true);
 		expect(model.hasCitpEndpoint).toBe(false);
+		expect(model.showSourceFilters).toBe(false);
 		expect(model.layers).toHaveLength(1);
 		expect(model.preview).toMatchObject({
 			kind: "offline",
@@ -134,6 +138,39 @@ describe("Media pane disconnected configuration", () => {
 		expect(text.libraryFolders).toHaveLength(50);
 		expect(text.libraryFolders[0].id).toBe("200");
 		expect(text.libraryFolders[49].id).toBe("249");
+	});
+
+	it("shows native source filters only for a native ToskLight server", () => {
+		const baseServer = {
+			fixture_id: "server-1",
+			name: "Media master",
+			endpoint: null,
+			layers: [],
+			status: { online: false, last_success: null, last_error: null },
+		};
+		expect(
+			buildMediaPaneModel(
+				input({
+					servers: [baseServer],
+					selectedServer: baseServer,
+					selectedServerId: baseServer.fixture_id,
+				}),
+			).showSourceFilters,
+		).toBe(false);
+
+		const nativeServer = {
+			...baseServer,
+			native_action: "tosklight_media_v2",
+		};
+		expect(
+			buildMediaPaneModel(
+				input({
+					servers: [nativeServer],
+					selectedServer: nativeServer,
+					selectedServerId: nativeServer.fixture_id,
+				}),
+			).showSourceFilters,
+		).toBe(true);
 	});
 
 	it("projects the advertised composite dimensions into the master output", () => {
