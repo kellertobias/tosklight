@@ -1,4 +1,4 @@
-import artwork from "./assets/audience-outline.json";
+import artwork from "../../../../assets/viz/crowd/audience-outline.json";
 
 export type AudienceOutlineView = "top" | "front" | "side";
 

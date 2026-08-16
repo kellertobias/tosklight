@@ -8239,6 +8239,8 @@ dependencies = [
  "light-fixture",
  "naga",
  "pollster",
+ "serde",
+ "serde_json",
  "uuid",
  "viz-project",
  "viz-scene",
