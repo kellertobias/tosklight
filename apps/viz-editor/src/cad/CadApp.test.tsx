@@ -72,6 +72,7 @@ vi.mock("./CadViewport", () => ({
 		preview,
 		onPreview,
 		onMove,
+		showCoordinateOrigins,
 	}: {
 		view: string;
 		rotationQuarterTurns: number;
@@ -80,6 +81,7 @@ vi.mock("./CadViewport", () => ({
 		preview: { deltaMillimetres: [number, number, number] } | null;
 		onPreview(preview: unknown): void;
 		onMove(delta: [number, number, number], ids: readonly string[]): void;
+		showCoordinateOrigins: boolean;
 	}) => (
 		<button
 			type="button"
@@ -88,6 +90,7 @@ vi.mock("./CadViewport", () => ({
 			data-pan={camera.pan.join(",")}
 			data-zoom={camera.zoom}
 			data-preview={preview?.deltaMillimetres.join(",") ?? "none"}
+			data-coordinate-origins={showCoordinateOrigins ? "visible" : "hidden"}
 			onPointerMove={() =>
 				onPreview({
 					entityIds: [fixtureId],
@@ -276,6 +279,7 @@ describe("the CAD planning window", () => {
 				<CadApp />
 			</ModalProvider>,
 		);
+		await screen.findByTestId("cad-canvas");
 		fireEvent.click(screen.getByRole("button", { name: "Settings" }));
 		const settings = screen.getByRole("dialog", { name: "CAD Settings" });
 		const snapping = within(settings).getByRole("switch", {
@@ -290,6 +294,21 @@ describe("the CAD planning window", () => {
 		expect(
 			within(settings).getByRole("switch", { name: "Show DMX addresses" }),
 		).not.toBeChecked();
+		const origins = within(settings).getByRole("switch", {
+			name: "Show coordinate origins",
+		});
+		expect(origins).not.toBeChecked();
+		fireEvent.click(origins);
+		expect(origins).toBeChecked();
+		expect(screen.getByTestId("cad-canvas")).toHaveAttribute(
+			"data-coordinate-origins",
+			"visible",
+		);
+		expect(
+			JSON.parse(
+				localStorage.getItem("tosklight:viz-editor:cad-settings:v1") ?? "{}",
+			).showCoordinateOrigins,
+		).toBe(true);
 		expect(
 			screen.queryByText("Snap to declared truss mounts"),
 		).not.toBeInTheDocument();

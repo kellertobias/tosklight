@@ -85,6 +85,52 @@ function setup(
 }
 
 describe("CAD fixture interaction", () => {
+	it("shows the floor datum only in elevation views and exposes the origin setting", () => {
+		const { rerender } = render(
+			<CadViewport
+				entities={[fixture]}
+				drawings={[]}
+				selectedIds={[]}
+				view="left_to_right"
+				rotationQuarterTurns={0}
+				camera={camera}
+				preview={null}
+				showFixtureIds={false}
+				showDmxAddresses={false}
+				showCoordinateOrigins
+				onCamera={vi.fn()}
+				onSelection={vi.fn()}
+				onPreview={vi.fn()}
+				onMove={vi.fn()}
+			/>,
+		);
+		let canvas = screen.getByLabelText("CAD left to right viewport");
+		expect(canvas).toHaveAttribute("data-floor-datum", "visible");
+		expect(canvas).toHaveAttribute("data-coordinate-origins", "visible");
+
+		rerender(
+			<CadViewport
+				entities={[fixture]}
+				drawings={[]}
+				selectedIds={[]}
+				view="top_down"
+				rotationQuarterTurns={0}
+				camera={camera}
+				preview={null}
+				showFixtureIds={false}
+				showDmxAddresses={false}
+				showCoordinateOrigins={false}
+				onCamera={vi.fn()}
+				onSelection={vi.fn()}
+				onPreview={vi.fn()}
+				onMove={vi.fn()}
+			/>,
+		);
+		canvas = screen.getByLabelText("CAD top down viewport");
+		expect(canvas).toHaveAttribute("data-floor-datum", "hidden");
+		expect(canvas).toHaveAttribute("data-coordinate-origins", "hidden");
+	});
+
 	it("renders the Show overview in one fixed non-interactive orientation", () => {
 		render(
 			<CadRigOverview

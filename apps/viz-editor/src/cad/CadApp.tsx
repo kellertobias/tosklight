@@ -38,6 +38,7 @@ interface CadSettings {
 	snapToMounts: boolean;
 	showFixtureIds: boolean;
 	showDmxAddresses: boolean;
+	showCoordinateOrigins: boolean;
 }
 
 export function CadApp() {
@@ -527,6 +528,19 @@ export function CadApp() {
 											}))
 										}
 									/>
+									<SwitchField
+										label="Show coordinate origins"
+										offLabel={null}
+										onLabel={null}
+										checked={settings.showCoordinateOrigins}
+										onChange={(event) => {
+											const checked = event.currentTarget.checked;
+											setSettings((current) => ({
+												...current,
+												showCoordinateOrigins: checked,
+											}));
+										}}
+									/>
 								</div>
 							),
 						},
@@ -693,6 +707,7 @@ function CadTile(props: CadTileProps) {
 				camera={node.camera}
 				showFixtureIds={props.settings.showFixtureIds}
 				showDmxAddresses={props.settings.showDmxAddresses}
+				showCoordinateOrigins={props.settings.showCoordinateOrigins}
 				printMode={props.printMode}
 				onCamera={(camera: TileCamera) =>
 					props.onTile(node.id, (tile) => ({ ...tile, camera }))
@@ -741,12 +756,14 @@ function restoreSettings(): CadSettings {
 			snapToMounts: stored?.snapToMounts !== false,
 			showFixtureIds: stored?.showFixtureIds === true,
 			showDmxAddresses: stored?.showDmxAddresses === true,
+			showCoordinateOrigins: stored?.showCoordinateOrigins === true,
 		};
 	} catch {
 		return {
 			snapToMounts: true,
 			showFixtureIds: false,
 			showDmxAddresses: false,
+			showCoordinateOrigins: false,
 		};
 	}
 }

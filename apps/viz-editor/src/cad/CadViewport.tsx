@@ -31,6 +31,7 @@ interface CadViewportProps {
 	preview: CadTransformPreview | null;
 	showFixtureIds: boolean;
 	showDmxAddresses: boolean;
+	showCoordinateOrigins?: boolean;
 	editEnabled?: boolean;
 	printMode?: boolean;
 	printPages?: readonly CadPrintPage[];
@@ -143,6 +144,7 @@ export function CadViewport({
 	preview,
 	showFixtureIds,
 	showDmxAddresses,
+	showCoordinateOrigins = false,
 	editEnabled = true,
 	printMode = false,
 	printPages = [],
@@ -186,6 +188,7 @@ export function CadViewport({
 				editEnabled,
 				guide,
 				selectionBox,
+				showCoordinateOrigins,
 			);
 		redraw.current();
 	}, [
@@ -199,6 +202,7 @@ export function CadViewport({
 		editEnabled,
 		guide,
 		selectionBox,
+		showCoordinateOrigins,
 	]);
 
 	function screenToPlane(clientX: number, clientY: number): [number, number] {
@@ -378,6 +382,8 @@ export function CadViewport({
 				ref={canvas}
 				className="cad-canvas"
 				aria-label={`CAD ${view.replaceAll("_", " ")} viewport`}
+				data-floor-datum={view === "top_down" ? "hidden" : "visible"}
+				data-coordinate-origins={showCoordinateOrigins ? "visible" : "hidden"}
 				onPointerDown={pointerDown}
 				onPointerMove={pointerMove}
 				onPointerUp={pointerUp}
@@ -657,6 +663,7 @@ class LineRenderer {
 		editEnabled: boolean,
 		guide: MoveAxis | null,
 		selectionBox: SelectionBox | null,
+		showCoordinateOrigins = false,
 	) {
 		this.resize();
 		const gl = this.gl;
@@ -686,6 +693,36 @@ class LineRenderer {
 			vertex(lineVertices, a, color);
 			vertex(lineVertices, b, color);
 		};
+		const worldOrigin = projectPoint([0, 0, 0], view, rotationQuarterTurns);
+		if (view !== "top_down") {
+			dottedGuide(
+				line,
+				worldOrigin,
+				true,
+				[0.22, 0.25, 0.28],
+				camera,
+				this.canvas,
+			);
+		}
+		if (showCoordinateOrigins) {
+			const axes = viewAxes(view, rotationQuarterTurns);
+			const length = 54 / camera.zoom;
+			const head = 5 / camera.zoom;
+			drawArrow(
+				line,
+				worldOrigin,
+				[worldOrigin[0] + length * axes.horizontal.sign, worldOrigin[1]],
+				axisColor(axes.horizontal.axis),
+				head,
+			);
+			drawArrow(
+				line,
+				worldOrigin,
+				[worldOrigin[0], worldOrigin[1] + length * axes.vertical.sign],
+				axisColor(axes.vertical.axis),
+				head,
+			);
+		}
 		const ordered = [...entities].sort(
 			(left, right) => viewDepth(left, view) - viewDepth(right, view),
 		);
@@ -1060,13 +1097,17 @@ function drawArrow(
 	head: number,
 ) {
 	line(origin, end, color);
-	if (end[1] === origin[1]) {
-		line(end, [end[0] - head * 1.8, end[1] - head], color);
-		line(end, [end[0] - head * 1.8, end[1] + head], color);
-	} else {
-		line(end, [end[0] - head, end[1] - head * 1.8], color);
-		line(end, [end[0] + head, end[1] - head * 1.8], color);
-	}
+	const dx = end[0] - origin[0];
+	const dy = end[1] - origin[1];
+	const length = Math.max(0.0001, Math.hypot(dx, dy));
+	const unitX = dx / length;
+	const unitY = dy / length;
+	const back: [number, number] = [
+		end[0] - unitX * head * 1.8,
+		end[1] - unitY * head * 1.8,
+	];
+	line(end, [back[0] - unitY * head, back[1] + unitX * head], color);
+	line(end, [back[0] + unitY * head, back[1] - unitX * head], color);
 }
 
 function dottedGuide(
