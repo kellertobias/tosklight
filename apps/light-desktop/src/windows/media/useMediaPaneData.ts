@@ -27,9 +27,14 @@ interface MediaPaneDataInput {
 
 interface InspectionPollingInput {
 	active: boolean;
-	server: MediaServerFixture | undefined;
+	fixtureId: string | undefined;
+	endpointKey: string;
+	serverLayers: MutableRefObject<MediaServerFixture["layers"]>;
 	layerId: string;
-	inspect: MediaServersState["inspectMediaServer"] | undefined;
+	inspect: MutableRefObject<
+		MediaServersState["inspectMediaServer"] | undefined
+	>;
+	hasInspect: boolean;
 	reset(): void;
 	setInspection: Dispatch<SetStateAction<MediaServerInspection>>;
 	setInspectionError: Dispatch<SetStateAction<string | null>>;
@@ -40,9 +45,12 @@ interface InspectionPollingInput {
 
 function useInspectionPolling({
 	active,
-	server,
+	fixtureId,
+	endpointKey,
+	serverLayers,
 	layerId,
 	inspect,
+	hasInspect,
 	reset,
 	setInspection,
 	setInspectionError,
@@ -51,7 +59,7 @@ function useInspectionPolling({
 	initializedDraftScope,
 }: InspectionPollingInput) {
 	useEffect(() => {
-		if (!active || !inspect || !server?.endpoint) {
+		if (!active || !hasInspect || !fixtureId || !endpointKey) {
 			reset();
 			return;
 		}
@@ -61,13 +69,18 @@ function useInspectionPolling({
 			if (running) return;
 			running = true;
 			try {
-				const next = await inspect(server.fixture_id);
+				const next = await inspect.current?.(fixtureId);
+				if (!next) return;
 				if (!disposed) {
 					setInspection(next);
 					setInspectionError(null);
-					const scope = `${server.fixture_id}:${layerId}`;
+					const scope = `${fixtureId}:${layerId}`;
 					if (initializedDraftScope.current !== scope) {
-						const draft = mediaDraftForLayer(next, server.layers, layerId);
+						const draft = mediaDraftForLayer(
+							next,
+							serverLayers.current,
+							layerId,
+						);
 						setDraftFolderId(draft?.folderId ?? "");
 						setDraftFileId(draft?.fileId ?? null);
 						initializedDraftScope.current = scope;
@@ -92,11 +105,14 @@ function useInspectionPolling({
 		};
 	}, [
 		active,
+		endpointKey,
+		fixtureId,
+		hasInspect,
 		initializedDraftScope,
 		inspect,
 		layerId,
 		reset,
-		server,
+		serverLayers,
 		setDraftFileId,
 		setDraftFolderId,
 		setInspection,
@@ -113,6 +129,23 @@ export function useMediaPaneData({
 	refreshThumbnails,
 	loadThumbnail,
 }: MediaPaneDataInput) {
+	const fixtureId = server?.fixture_id;
+	const endpointKey = server?.endpoint
+		? `${server.endpoint.ip_address}:${server.endpoint.port}`
+		: "";
+	const serverLayers = useRef(server?.layers ?? []);
+	serverLayers.current = server?.layers ?? [];
+	const inspectRef = useRef(inspect);
+	inspectRef.current = inspect;
+	const refreshPreviewRef = useRef(refreshPreview);
+	refreshPreviewRef.current = refreshPreview;
+	const refreshThumbnailsRef = useRef(refreshThumbnails);
+	refreshThumbnailsRef.current = refreshThumbnails;
+	const loadThumbnailRef = useRef(loadThumbnail);
+	loadThumbnailRef.current = loadThumbnail;
+	const hasRefreshPreview = Boolean(refreshPreview);
+	const hasRefreshThumbnails = Boolean(refreshThumbnails);
+	const hasLoadThumbnail = Boolean(loadThumbnail);
 	const [inspection, setInspection] = useState(EMPTY_MEDIA_INSPECTION);
 	const [inspectionError, setInspectionError] = useState<string | null>(null);
 	const [draftFolderId, setDraftFolderId] = useState("");
@@ -136,23 +169,26 @@ export function useMediaPaneData({
 		(nextLayerId: string) => {
 			const draft = mediaDraftForLayer(
 				inspection,
-				server?.layers ?? [],
+				serverLayers.current,
 				nextLayerId,
 			);
 			setDraftFolderId(draft?.folderId ?? "");
 			setDraftFileId(draft?.fileId ?? null);
 			initializedDraftScope.current = draft
-				? `${server?.fixture_id}:${nextLayerId}`
+				? `${fixtureId}:${nextLayerId}`
 				: null;
 		},
-		[inspection, server],
+		[fixtureId, inspection],
 	);
 
 	useInspectionPolling({
 		active,
-		server,
+		fixtureId,
+		endpointKey,
+		serverLayers,
 		layerId,
-		inspect,
+		inspect: inspectRef,
+		hasInspect: Boolean(inspect),
 		reset,
 		setInspection,
 		setInspectionError,
@@ -161,18 +197,42 @@ export function useMediaPaneData({
 		initializedDraftScope,
 	});
 
+	const previewSourceIds = inspection.preview_sources
+		.map((source) => source.id)
+		.join(",");
 	useEffect(() => {
-		if (!active || !refreshPreview || !server?.endpoint) return;
-		const sources = inspection.preview_sources;
+		if (!active || !hasRefreshPreview || !fixtureId || !endpointKey) return;
+		const sources = previewSourceIds.split(",").filter(Boolean).map(Number);
 		if (sources.length === 0) return;
-		const refresh = () => {
-			for (const source of sources)
-				void refreshPreview(server.fixture_id, source.id);
+		let disposed = false;
+		let running = false;
+		const refresh = async () => {
+			if (running || disposed) return;
+			running = true;
+			try {
+				await Promise.all(
+					sources.map((source) =>
+						refreshPreviewRef.current?.(fixtureId, source),
+					),
+				);
+			} finally {
+				running = false;
+			}
 		};
-		refresh();
-		const timer = window.setInterval(refresh, 1_000);
-		return () => window.clearInterval(timer);
-	}, [active, inspection.preview_sources, refreshPreview, server]);
+		void refresh();
+		const timer = window.setInterval(() => void refresh(), 1_000);
+		return () => {
+			disposed = true;
+			window.clearInterval(timer);
+		};
+	}, [
+		active,
+		endpointKey,
+		fixtureId,
+		hasRefreshPreview,
+		previewSourceIds,
+		refreshPreviewRef,
+	]);
 
 	const draftFolder = Number(draftFolderId);
 	const visibleFiles = useMemo(
@@ -182,26 +242,28 @@ export function useMediaPaneData({
 	useEffect(() => {
 		if (
 			!active ||
-			!refreshThumbnails ||
-			!loadThumbnail ||
-			!server?.endpoint ||
+			!hasRefreshThumbnails ||
+			!hasLoadThumbnail ||
+			!fixtureId ||
+			!endpointKey ||
 			visibleFiles.length === 0
 		)
 			return;
 		let disposed = false;
 		void (async () => {
-			await refreshThumbnails(
-				server.fixture_id,
+			await refreshThumbnailsRef.current?.(
+				fixtureId,
 				draftFolder,
 				visibleFiles.map((file) => file.id),
 			);
 			const entries = await Promise.all(
 				visibleFiles.map(async (file) => {
-					const blob = await loadThumbnail(
-						server.fixture_id,
+					const blob = await loadThumbnailRef.current?.(
+						fixtureId,
 						file.folder_id,
 						file.id,
 					);
+					if (!blob) throw new Error("Media thumbnail loading is unavailable");
 					return [String(file.id), URL.createObjectURL(blob)] as const;
 				}),
 			);
@@ -220,9 +282,12 @@ export function useMediaPaneData({
 	}, [
 		active,
 		draftFolder,
-		loadThumbnail,
-		refreshThumbnails,
-		server,
+		endpointKey,
+		fixtureId,
+		hasLoadThumbnail,
+		hasRefreshThumbnails,
+		loadThumbnailRef,
+		refreshThumbnailsRef,
 		visibleFiles,
 	]);
 

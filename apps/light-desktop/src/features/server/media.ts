@@ -16,14 +16,54 @@ export function createMediaActions(
 	const {
 		api,
 		setError,
-		mediaServers,
 		setMediaServers,
 		setMediaPreviewUrls,
 		mediaPreviewUrlsRef,
 	} = model;
+	const recordStatus = (
+		fixtureId: string,
+		online: boolean,
+		lastError: string | null,
+	) => {
+		setMediaServers((current) => {
+			let changed = false;
+			const next = current.map((fixture) => {
+				if (
+					fixture.fixture_id !== fixtureId ||
+					(fixture.status.online === online &&
+						fixture.status.last_error === lastError)
+				)
+					return fixture;
+				changed = true;
+				return {
+					...fixture,
+					status: {
+						online,
+						last_success: online
+							? new Date().toISOString()
+							: fixture.status.last_success,
+						last_error: lastError,
+					},
+				};
+			});
+			return changed ? next : current;
+		});
+	};
 	return {
-		inspectMediaServer: (fixtureId) =>
-			api.mediaOutput.inspectMediaServer(fixtureId),
+		inspectMediaServer: async (fixtureId) => {
+			try {
+				const inspection = await api.mediaOutput.inspectMediaServer(fixtureId);
+				recordStatus(fixtureId, true, null);
+				return inspection;
+			} catch (reason) {
+				recordStatus(
+					fixtureId,
+					false,
+					reason instanceof Error ? reason.message : String(reason),
+				);
+				throw reason;
+			}
+		},
 		nativeMedia: (fixtureId) => api.mediaOutput.nativeMedia(fixtureId),
 		updateNativeMediaText: (fixtureId, folder, file, text) =>
 			api.mediaOutput.updateNativeMediaText(fixtureId, folder, file, text),
@@ -48,18 +88,14 @@ export function createMediaActions(
 					mediaPreviewUrlsRef.current = next;
 					return next;
 				});
-				setMediaServers((await api.mediaOutput.mediaServers()).fixtures);
+				recordStatus(fixtureId, true, null);
 				setError(null);
 				return true;
 			} catch (reason) {
-				setMediaServers(
-					(
-						await api.mediaOutput
-							.mediaServers()
-							.catch(() => ({ fixtures: mediaServers }))
-					).fixtures,
-				);
-				setError(reason instanceof Error ? reason.message : String(reason));
+				const message =
+					reason instanceof Error ? reason.message : String(reason);
+				recordStatus(fixtureId, false, message);
+				setError(message);
 				return false;
 			}
 		},
@@ -70,17 +106,13 @@ export function createMediaActions(
 					folder,
 					elements,
 				);
-				setMediaServers((await api.mediaOutput.mediaServers()).fixtures);
+				recordStatus(fixtureId, true, null);
 				setError(null);
 			} catch (reason) {
-				setMediaServers(
-					(
-						await api.mediaOutput
-							.mediaServers()
-							.catch(() => ({ fixtures: mediaServers }))
-					).fixtures,
-				);
-				setError(reason instanceof Error ? reason.message : String(reason));
+				const message =
+					reason instanceof Error ? reason.message : String(reason);
+				recordStatus(fixtureId, false, message);
+				setError(message);
 			}
 		},
 	};

@@ -684,7 +684,10 @@ seed_media_configuration() {
         "target": { "kind": "monitor", "monitor": { "by": "index", "value": 0 }, "fullscreen": false },
         "resolution": { "width": 1280, "height": 720 },
         "presentation": "display-synchronized",
-        "personality": "eight-layers"
+        "personality": "two-layers",
+        "protocol": "art-net",
+        "universe": 9,
+        "startAddress": 177
       }
     ]
   }
