@@ -10,6 +10,7 @@ import { type ReactNode, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MultiPatchInstance, PatchedFixture } from "../wire";
 import {
+	FixtureAddFlow,
 	FixturePatchSetup,
 	fixtureDisplayId,
 	parseVirtualFixtureNumber,
@@ -18,7 +19,7 @@ import {
 import { dmxGridColumnCount } from "./fixturePatch/UniverseMap";
 import { blankFixtureProfile } from "./fixtureProfileModel";
 
-const state = { patchSetArmed: false };
+const state = { patchSetArmed: false, desktopEditing: false };
 const setEditArmed = vi.fn();
 const programming = vi.hoisted(() => ({
 	ready: true,
@@ -69,12 +70,12 @@ vi.mock("../host", async (importOriginal) => ({
 			replace: programming.actions.replace,
 		},
 		editArmed: state.patchSetArmed,
+		desktopEditing: state.desktopEditing,
 		setEditArmed,
 	}),
 }));
 vi.mock("../state/PatchContext", async (importOriginal) => {
-	const actual =
-		await importOriginal<typeof import("../state/PatchContext")>();
+	const actual = await importOriginal<typeof import("../state/PatchContext")>();
 	return {
 		...actual,
 		PatchViewProvider: ({ children }: { children: ReactNode }) => children,
@@ -289,7 +290,9 @@ async function requestConflictingSplitPatch() {
 
 beforeEach(() => {
 	state.patchSetArmed = false;
+	state.desktopEditing = false;
 	server.patch.fixtures = [splitFixture()];
+	server.patchLayers = [];
 	server.fixtureProfiles = [];
 	server.selectedFixtures = [];
 	programming.ready = true;
@@ -421,6 +424,301 @@ describe("fixture output policy cells", () => {
 });
 
 describe("selected split selection and SET editing", () => {
+	it("can reveal cross-scope and empty layers without changing fixture scope", () => {
+		const light = splitFixture();
+		light.layer_id = "lights";
+		const venue = splitFixture();
+		venue.fixture_id = "venue-model";
+		venue.fixture_number = null;
+		venue.virtual_fixture_number = 1;
+		venue.name = "Stage deck";
+		venue.layer_id = "stage";
+		venue.definition = {
+			...venue.definition,
+			device_type: "venue",
+			footprint: 0,
+		};
+		if (venue.definition.profile_snapshot)
+			venue.definition.profile_snapshot.patch_policy = "visual_only";
+		server.patch.fixtures = [light, venue];
+		server.patchLayers = [
+			{ body: { id: "lights", name: "Lights", order: 0 } },
+			{ body: { id: "stage", name: "Stage", order: 1 } },
+			{ body: { id: "empty", name: "Empty", order: 2 } },
+		];
+
+		render(<FixturePatchSetup scope="dmx" />);
+		expect(screen.getByRole("button", { name: "Lights1" })).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "Empty0" })).toBeInTheDocument();
+		expect(
+			screen.queryByRole("button", { name: "Stage0" }),
+		).not.toBeInTheDocument();
+
+		fireEvent.click(screen.getByRole("switch", { name: "Show all layers" }));
+		expect(screen.getByRole("button", { name: "Stage0" })).toBeInTheDocument();
+		expect(screen.queryByText("Stage deck")).not.toBeInTheDocument();
+	});
+
+	it("provides desktop inline edit apply, cancel, and keyboard behavior", async () => {
+		state.patchSetArmed = true;
+		state.desktopEditing = true;
+		render(<FixturePatchSetup />);
+
+		fireEvent.click(screen.getByRole("button", { name: "Edit Name 17" }));
+		const input = screen.getByRole("textbox", { name: "Edit Name 17" });
+		expect(input).toHaveFocus();
+		fireEvent.change(input, { target: { value: "Front Wash" } });
+		fireEvent.keyDown(input, { key: "Escape" });
+		expect(patchFeature.updateFixture).not.toHaveBeenCalled();
+
+		fireEvent.click(screen.getByRole("button", { name: "Edit Name 17" }));
+		const applied = screen.getByRole("textbox", { name: "Edit Name 17" });
+		fireEvent.change(applied, { target: { value: "Front Wash" } });
+		fireEvent.keyDown(applied, { key: "Enter" });
+		await waitFor(() =>
+			expect(patchFeature.updateFixture).toHaveBeenCalledWith("fixture-split", {
+				name: "Front Wash",
+			}),
+		);
+	});
+
+	it("keeps inline text fixed and guards only dirty outside-click closes", async () => {
+		state.patchSetArmed = true;
+		state.desktopEditing = true;
+		render(<FixturePatchSetup />);
+
+		const value = screen.getByRole("textbox", { name: "Name 17" });
+		const valueShell = value.closest(".patch-inline-value");
+		const idleWidth = valueShell?.getAttribute("style");
+		const idleSize = value.getAttribute("size");
+		expect(valueShell?.firstElementChild).toBe(
+			screen.getByRole("button", { name: "Edit Name 17" }),
+		);
+		expect(valueShell?.lastElementChild).toBe(value);
+
+		fireEvent.click(screen.getByRole("button", { name: "Edit Name 17" }));
+		let input = screen.getByRole("textbox", { name: "Edit Name 17" });
+		const editor = input.closest(".patch-inline-editor");
+		expect(editor?.getAttribute("style")).toBe(idleWidth);
+		expect(input.getAttribute("size")).toBe(idleSize);
+		expect(editor?.lastElementChild).toBe(input);
+		expect(editor?.childElementCount).toBe(2);
+		fireEvent.pointerDown(screen.getByRole("heading", { name: "Layers" }));
+		expect(
+			screen.queryByRole("textbox", { name: "Edit Name 17" }),
+		).not.toBeInTheDocument();
+		expect(screen.queryByText("Discard changes?")).not.toBeInTheDocument();
+
+		fireEvent.click(screen.getByRole("button", { name: "Edit Name 17" }));
+		input = screen.getByRole("textbox", { name: "Edit Name 17" });
+		fireEvent.change(input, { target: { value: "Front Wash" } });
+		fireEvent.pointerDown(screen.getByRole("heading", { name: "Layers" }));
+		expect(await screen.findByText("Discard changes?")).toBeInTheDocument();
+		expect(input).toBeInTheDocument();
+
+		fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
+		expect(screen.getByRole("textbox", { name: "Edit Name 17" })).toHaveValue(
+			"Front Wash",
+		);
+		fireEvent.pointerDown(screen.getByRole("heading", { name: "Layers" }));
+		fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
+		expect(
+			screen.queryByRole("textbox", { name: "Edit Name 17" }),
+		).not.toBeInTheDocument();
+		expect(patchFeature.updateFixture).not.toHaveBeenCalled();
+	});
+
+	it("overlays configure before the patch pencil without changing field geometry", () => {
+		state.patchSetArmed = true;
+		state.desktopEditing = true;
+		const fixture = splitFixture();
+		const mode = fixture.definition.profile_snapshot?.modes[0];
+		if (!mode) throw new Error("fixture mode is missing");
+		mode.splits = [{ number: 1, footprint: 4 }];
+		fixture.split_patches = [{ split: 1, universe: 1, address: 101 }];
+		server.patch.fixtures = [fixture];
+		render(<FixturePatchSetup />);
+
+		const patch = screen.getByRole("textbox", { name: "Patch 17" });
+		const shell = patch.closest(".patch-inline-value");
+		const actions = shell?.querySelectorAll("button");
+		expect(actions).toHaveLength(2);
+		expect(actions?.[0]).toHaveAccessibleName(
+			"Open patch settings for fixture 17",
+		);
+		expect(actions?.[1]).toHaveAccessibleName("Edit Patch 17");
+		expect(shell?.lastElementChild).toBe(patch);
+	});
+
+	it("opens advanced modal editing from context click and a patch settings action", async () => {
+		state.patchSetArmed = true;
+		state.desktopEditing = true;
+		render(<FixturePatchSetup />);
+
+		fireEvent.contextMenu(screen.getByRole("textbox", { name: "Name 17" }));
+		expect(await screen.findByText("Set fixture name")).toBeInTheDocument();
+		fireEvent.click(
+			screen.getByRole("button", { name: "Cancel fixture name" }),
+		);
+
+		fireEvent.click(
+			screen.getByRole("button", {
+				name: "Open patch settings for fixture 17",
+			}),
+		);
+		expect(
+			await screen.findByRole("dialog", { name: "Fixture Address" }),
+		).toBeInTheDocument();
+	});
+
+	it("keeps THRU spreading available for a contextual multi-selection", async () => {
+		state.patchSetArmed = true;
+		state.desktopEditing = true;
+		const second = splitFixture();
+		second.fixture_id = "fixture-18";
+		second.fixture_number = 18;
+		second.name = "Split Wash 18";
+		const third = splitFixture();
+		third.fixture_id = "fixture-19";
+		third.fixture_number = 19;
+		third.name = "Split Wash 19";
+		server.patch.fixtures = [splitFixture(), second, third];
+		programming.selection.selected = [
+			"fixture-19",
+			"fixture-split",
+			"fixture-18",
+		];
+		render(<FixturePatchSetup />);
+
+		fireEvent.contextMenu(
+			screen.getByRole("textbox", { name: "Fixture ID 17" }),
+		);
+		expect(
+			await screen.findByRole("dialog", { name: "Fixture ID" }),
+		).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "THRU" })).toBeInTheDocument();
+		for (const key of ["2", "0", "THRU", "2", "2", "ENTER"])
+			fireEvent.click(screen.getByRole("button", { name: key }));
+
+		await waitFor(() => {
+			expect(patchFeature.updateFixture).toHaveBeenNthCalledWith(
+				1,
+				"fixture-19",
+				{
+					fixture_number: 20,
+					virtual_fixture_number: null,
+				},
+			);
+			expect(patchFeature.updateFixture).toHaveBeenNthCalledWith(
+				2,
+				"fixture-split",
+				{
+					fixture_number: 21,
+					virtual_fixture_number: null,
+				},
+			);
+			expect(patchFeature.updateFixture).toHaveBeenNthCalledWith(
+				3,
+				"fixture-18",
+				{
+					fixture_number: 22,
+					virtual_fixture_number: null,
+				},
+			);
+		});
+	});
+
+	it("shows the selected location spread and preserves it when submitted unchanged", async () => {
+		state.patchSetArmed = true;
+		state.desktopEditing = true;
+		const fixtures = [-3800, -3150, -2500, 2500].map((x, index) => {
+			const fixture = splitFixture();
+			fixture.fixture_id = `fixture-${index + 1}`;
+			fixture.fixture_number = index + 1;
+			fixture.name = `Fixture ${index + 1}`;
+			fixture.location = { x, y: 0, z: 0 };
+			return fixture;
+		});
+		server.patch.fixtures = fixtures;
+		programming.selection.selected = fixtures.map(
+			(fixture) => fixture.fixture_id,
+		);
+		render(<FixturePatchSetup />);
+
+		fireEvent.contextMenu(screen.getByRole("button", { name: "-3.800 m" }));
+		expect(
+			screen.getByRole("textbox", { name: "Location X · 4 fixtures value" }),
+		).toHaveValue("-3.8 THRU 2.5");
+		fireEvent.click(screen.getByRole("button", { name: "ENTER" }));
+		await waitFor(() =>
+			expect(
+				screen.queryByRole("dialog", { name: "Location X" }),
+			).not.toBeInTheDocument(),
+		);
+		expect(patchFeature.updateFixture).not.toHaveBeenCalled();
+
+		fireEvent.contextMenu(screen.getByRole("button", { name: "-3.800 m" }));
+		for (const key of ["0", "THRU", "3", "ENTER"])
+			fireEvent.click(screen.getByRole("button", { name: key }));
+		await waitFor(() =>
+			expect(patchFeature.updateFixture).toHaveBeenCalledTimes(4),
+		);
+		expect(
+			patchFeature.updateFixture.mock.calls.map(
+				([, changes]) => (changes as PatchedFixture).location?.x,
+			),
+		).toEqual([0, 1000, 2000, 3000]);
+	});
+
+	it("offers discard only after a contextual number value actually changes", async () => {
+		state.patchSetArmed = true;
+		state.desktopEditing = true;
+		render(<FixturePatchSetup />);
+
+		const value = screen.getByRole("textbox", { name: "Fixture ID 17" });
+		fireEvent.contextMenu(value);
+		fireEvent.click(screen.getByRole("button", { name: "Close Fixture ID" }));
+		expect(
+			screen.queryByRole("button", { name: "Discard changes" }),
+		).not.toBeInTheDocument();
+
+		fireEvent.contextMenu(value);
+		fireEvent.click(screen.getByRole("button", { name: "2" }));
+		fireEvent.click(screen.getByRole("button", { name: "Close Fixture ID" }));
+		expect(
+			screen.getByRole("button", { name: "Discard changes" }),
+		).toBeInTheDocument();
+	});
+
+	it("selects an inclusive desktop row range by dragging", () => {
+		state.patchSetArmed = true;
+		state.desktopEditing = true;
+		const second = splitFixture();
+		second.fixture_id = "fixture-18";
+		second.fixture_number = 18;
+		second.name = "Split Wash 18";
+		const third = splitFixture();
+		third.fixture_id = "fixture-19";
+		third.fixture_number = 19;
+		third.name = "Split Wash 19";
+		server.patch.fixtures = [splitFixture(), second, third];
+		render(<FixturePatchSetup />);
+
+		fireEvent.mouseDown(screen.getByRole("row", { name: /17 Split Wash 17/ }), {
+			button: 0,
+			buttons: 1,
+		});
+		fireEvent.mouseEnter(
+			screen.getByRole("row", { name: /19 Split Wash 19/ }),
+			{
+				buttons: 1,
+			},
+		);
+		expect(programming.actions.replace).toHaveBeenLastCalledWith({
+			resolvedFixtures: ["fixture-split", "fixture-18", "fixture-19"],
+		});
+	});
+
 	it("places Preview Stage before existing title actions and supports additive and range selection", () => {
 		const second = splitFixture();
 		second.fixture_id = "fixture-18";
@@ -710,7 +1008,7 @@ describe("fixture batch DMX placement", () => {
 	it("opens the Universe menu above the placement modal and switches universes", () => {
 		const placement = openDimmerPlacement();
 		const modal = placement.closest(
-			'.stacked-modal-layer[data-modal-top="true"]',
+			'.ui-modal-stack-layer[data-modal-top="true"]',
 		);
 		fireEvent.click(
 			within(placement).getByRole("button", { name: "Universe" }),
@@ -990,6 +1288,45 @@ describe("fixture batch DMX placement", () => {
 });
 
 describe("fixture browser filtering", () => {
+	it("patches a Media Server through the shared add flow and reports its fixture", async () => {
+		const mediaServer = blankFixtureProfile();
+		mediaServer.id = "media-server-profile";
+		mediaServer.manufacturer = "ToskLight";
+		mediaServer.name = "Media Server";
+		mediaServer.short_name = "Media Server";
+		mediaServer.fixture_type = "media_server";
+		server.fixtureProfiles = [mediaServer];
+		server.patch.fixtures = [];
+		const onFixturesAdded = vi.fn();
+
+		render(
+			<FixtureAddFlow
+				addRequest={1}
+				scope="media"
+				initialTypeFilter="media_server"
+				onFixturesAdded={onFixturesAdded}
+			/>,
+		);
+		fireEvent.click(
+			await screen.findByRole("button", { name: /^Add fixture$/ }),
+		);
+		const placement = screen
+			.getByRole("heading", { name: "Patch Media Server" })
+			.closest("section") as HTMLElement;
+		fireEvent.click(
+			within(placement).getByRole("button", { name: "Add 1 fixtures" }),
+		);
+
+		await waitFor(() =>
+			expect(patchFeature.patchFixtures).toHaveBeenCalledOnce(),
+		);
+		const fixture = patchFeature.patchFixtures.mock.calls[0][0][0].fixture;
+		expect(fixture.definition.device_type).toBe("media_server");
+		expect(onFixturesAdded).toHaveBeenCalledWith([
+			{ fixtureId: fixture.fixture_id, name: fixture.name },
+		]);
+	});
+
 	it("filters the Add Fixture browser while typing and clears the active search", () => {
 		const dimmer = blankFixtureProfile();
 		dimmer.manufacturer = "Generic";

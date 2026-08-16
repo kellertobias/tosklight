@@ -11,6 +11,7 @@ mod model;
 mod profile_ops;
 mod resolution;
 mod resolution_plan;
+mod runtime_compatibility;
 mod validation;
 
 pub use channel_model::*;
@@ -20,6 +21,7 @@ pub use error::*;
 pub use geometry_model::*;
 pub use model::*;
 pub use resolution_plan::*;
+pub use runtime_compatibility::*;
 
 #[cfg(test)]
 mod tests;

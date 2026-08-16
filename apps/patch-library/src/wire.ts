@@ -88,6 +88,7 @@ export type GelAssignment =
 export interface InstalledFixtureAppearance {
 	light_source: InstalledLightSource;
 	color_temperature_kelvin: number | null;
+	luminous_output_lumens: number | null;
 	gel: GelAssignment;
 	shaper_angles_degrees: [number, number, number, number];
 }

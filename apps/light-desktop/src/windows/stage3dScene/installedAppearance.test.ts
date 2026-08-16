@@ -45,6 +45,7 @@ describe("installed Stage appearance", () => {
 			fixture,
 			{
 				light_source: { type: "tungsten" },
+				luminous_output_lumens: null,
 				color_temperature_kelvin: 3_200,
 				gel: { type: "custom", name: "Red", color_srgb: "#C01020", note: null },
 				shaper_angles_degrees: [0, 0, 0, 0],
@@ -72,6 +73,7 @@ describe("installed Stage appearance", () => {
 		};
 		const open = {
 			light_source: { type: "profile_default" as const },
+			luminous_output_lumens: null,
 			color_temperature_kelvin: null,
 			gel: { type: "open_white" as const },
 			shaper_angles_degrees: [0, 0, 0, 0] as [number, number, number, number],

@@ -1,4 +1,4 @@
-import { Button, ModalRegistration, ModalTitleBar, Select } from "@tosklight/ui";
+import { Button, ModalFrame, Select } from "@tosklight/ui";
 import { fixtureDefinitionKey } from "../fixtureProfileModel";
 import { isDmxPatchable } from "../patchUtils";
 import { usePatchController } from "./controller";
@@ -10,42 +10,43 @@ export function FixtureBrowser() {
 	if (!controller.ui.browserOpen) return null;
 	const close = () => controller.ui.setBrowserOpen(false);
 	return (
-		<ModalRegistration onClose={close}>
-			<div className="stacked-modal-layer">
-			<section className="nested-modal fixture-browser-modal">
-				<ModalTitleBar
-					className="fixture-browser-header"
-					title="Add fixture"
-					search={{
-						value: controller.ui.query,
-						onSearch: controller.ui.setQuery,
-						ariaLabel: "Search",
-						placeholder: "Search manufacturer, fixture, mode, or type",
-						settingsConfiguration: [{
-							kind: "select",
-							id: "type",
-							label: "Fixture type",
-							value: controller.ui.typeFilter,
-							options: [
-								{ value: "", label: "All" },
-								...controller.data.types.map((type) => ({ value: type, label: type })),
-							],
-						}],
-						onSettingChange: (_, value) =>
-							controller.ui.setTypeFilter(String(value)),
-						onClearSettings: () => controller.ui.setTypeFilter(""),
-					}}
-					closeLabel="Close Add fixture"
-					onClose={close}
-				/>
-				<div className="fixture-picker-columns">
-					<ManufacturerColumn />
-					<FamilyColumn />
-					<ModeColumn />
-				</div>
-			</section>
+		<ModalFrame
+			ariaLabel="Add fixture"
+			dialogClassName="fixture-browser-modal"
+			title="Add fixture"
+			search={{
+				value: controller.ui.query,
+				onSearch: controller.ui.setQuery,
+				ariaLabel: "Search",
+				placeholder: "Search manufacturer, fixture, mode, or type",
+				settingsConfiguration: [
+					{
+						kind: "select",
+						id: "type",
+						label: "Fixture type",
+						value: controller.ui.typeFilter,
+						options: [
+							{ value: "", label: "All" },
+							...controller.data.types.map((type) => ({
+								value: type,
+								label: type,
+							})),
+						],
+					},
+				],
+				onSettingChange: (_, value) =>
+					controller.ui.setTypeFilter(String(value)),
+				onClearSettings: () => controller.ui.setTypeFilter(""),
+			}}
+			closeLabel="Close Add fixture"
+			onClose={close}
+		>
+			<div className="fixture-picker-columns">
+				<ManufacturerColumn />
+				<FamilyColumn />
+				<ModeColumn />
 			</div>
-		</ModalRegistration>
+		</ModalFrame>
 	);
 }
 

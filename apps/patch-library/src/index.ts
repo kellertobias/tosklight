@@ -7,8 +7,12 @@
  * Viz planning application differ in all three and share this one implementation of addressing,
  * conflicts, splits, placement, layers and multi-patch.
  */
+
 export {
 	FixturePatchSetup,
+	FixtureAddFlow,
+	FixtureAddressFlow,
+	DmxAddressField,
 	batchPatchError,
 	compareFixtureIds,
 	contiguousBatchPatches,

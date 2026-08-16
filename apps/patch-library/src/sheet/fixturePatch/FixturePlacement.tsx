@@ -1,4 +1,4 @@
-import { Button, ModalRegistration, Select } from "@tosklight/ui";
+import { Button, ModalFrame, Select } from "@tosklight/ui";
 import { Fragment } from "react";
 import {
 	ConsoleNumberField,
@@ -31,49 +31,39 @@ export function FixturePlacement() {
 	const definition = controller.data.definition;
 	if (!controller.ui.placementOpen || !definition) return null;
 	const close = () => requestPlacementClose(controller);
+	const title = `${isDmxPatchable(definition) ? "Patch" : "Add"} ${controller.data.family?.name ?? "fixture"}`;
 	return (
-		<ModalRegistration onClose={close}>
-			<div className="stacked-modal-layer">
-				<section className="nested-modal fixture-placement-modal">
-					<PlacementHeader controller={controller} />
-					<div className="placement-grid">
-						<PlacementFields controller={controller} />
-						{isDmxPatchable(definition) && !controller.ui.placementEmpty && (
-							<PlacementUniverseMap controller={controller} />
-						)}
-					</div>
-				</section>
+		<ModalFrame
+			ariaLabel="Add Fixture"
+			dialogClassName="fixture-placement-modal"
+			title={title}
+			groups={[
+				{
+					id: "placement-actions",
+					actions: [
+						{ id: "cancel", label: "Cancel", onPress: close },
+						{
+							id: "add",
+							label: controller.ui.busy
+								? "Adding…"
+								: `Add ${controller.ui.draft.count || 1} fixtures`,
+							variant: "primary",
+							disabled: placementIsDisabled(controller),
+							onPress: () => void addPlacementBatch(controller),
+						},
+					],
+				},
+			]}
+			closeLabel="Close Add Fixture"
+			onClose={close}
+		>
+			<div className="placement-grid">
+				<PlacementFields controller={controller} />
+				{isDmxPatchable(definition) && !controller.ui.placementEmpty && (
+					<PlacementUniverseMap controller={controller} />
+				)}
 			</div>
-		</ModalRegistration>
-	);
-}
-
-function PlacementHeader({ controller }: { controller: PatchController }) {
-	const { definition, family } = controller.data;
-	if (!definition) return null;
-	return (
-		<header>
-			<h2>
-				{isDmxPatchable(definition) ? "Patch" : "Add"} {family?.name}
-			</h2>
-			<Button onClick={() => requestPlacementClose(controller)}>Cancel</Button>
-			<Button
-				className="primary"
-				disabled={placementIsDisabled(controller)}
-				onClick={() => void addPlacementBatch(controller)}
-			>
-				{controller.ui.busy
-					? "Adding…"
-					: `Add ${controller.ui.draft.count || 1} fixtures`}
-			</Button>
-			<Button
-				className="modal-close"
-				aria-label="Close Add Fixture"
-				onClick={() => requestPlacementClose(controller)}
-			>
-				×
-			</Button>
-		</header>
+		</ModalFrame>
 	);
 }
 

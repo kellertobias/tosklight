@@ -79,6 +79,7 @@ fn installed_appearance_round_trips_stable_catalog_identity_and_fallback() {
     fixture.installed_appearance = PatchInstalledFixtureAppearance {
         light_source: PatchInstalledLightSource::Tungsten,
         color_temperature_kelvin: Some(3_200),
+        luminous_output_lumens: Some(18_000.0),
         gel: PatchGelAssignment::BuiltIn {
             catalog_id: "touring-gels".into(),
             entry_id: "deep-red".into(),

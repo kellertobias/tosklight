@@ -1,10 +1,23 @@
 import { Button } from "@tosklight/ui";
-import { Fragment } from "react";
+import {
+	type CSSProperties,
+	Fragment,
+	type KeyboardEvent,
+	type MouseEvent as ReactMouseEvent,
+	useEffect,
+	useRef,
+} from "react";
 import type { MultiPatchInstance, PatchedFixture } from "../../wire";
 import { isDmxPatchable } from "../patchUtils";
 import { usePatchController } from "./controller";
-import { armEdit, selectSplitAddress } from "./editSession";
-import { selectPatchFixture } from "./fixtureActions";
+import { saveEdit } from "./editSave";
+import {
+	armEdit,
+	cancelEdit,
+	requestFixtureEditClose,
+	selectSplitAddress,
+} from "./editSession";
+import { selectFixtureRange, selectPatchFixture } from "./fixtureActions";
 import { FixtureTypeIcon, MultiPatchBranch } from "./fixtureDisplay";
 import { fixtureDisplayId } from "./fixtureIds";
 import { beginMultipatchEdit } from "./multipatchActions";
@@ -102,7 +115,31 @@ function FixtureRow({ fixture }: { fixture: PatchedFixture }) {
 		<tr
 			className={`${selected ? "selected" : ""} ${pending ? "pending" : ""}`.trim()}
 			aria-busy={pending || undefined}
-			onClick={(event) => selectPatchFixture(controller, fixture, event)}
+			onMouseDown={(event) => {
+				if (!controller.host.desktopEditing || event.button !== 0) return;
+				controller.ui.dragSelection.current = fixture.fixture_id;
+				selectPatchFixture(controller, fixture, event);
+			}}
+			onMouseEnter={(event) => {
+				if (
+					!controller.host.desktopEditing ||
+					(event.buttons & 1) === 0 ||
+					!controller.ui.dragSelection.current
+				)
+					return;
+				selectFixtureRange(
+					controller,
+					controller.data.visible,
+					fixture.fixture_id,
+				);
+			}}
+			onMouseUp={() => {
+				controller.ui.dragSelection.current = null;
+			}}
+			onClick={(event) => {
+				if (!controller.host.desktopEditing)
+					selectPatchFixture(controller, fixture, event);
+			}}
 		>
 			<FixtureIdentityCells fixture={fixture} />
 			<FixturePatchCell fixture={fixture} />
@@ -131,6 +168,9 @@ function FixturePolicyCells({ fixture }: { fixture: PatchedFixture }) {
 					className="patch-value"
 					aria-label={`${label} ${fixtureDisplayId(fixture)}`}
 					onClick={() => armEdit(controller, fixture, kind)}
+					onContextMenu={(event) =>
+						openModalOnContext(event, controller, fixture, kind)
+					}
 				>
 					{value ? trueLabel : falseLabel}
 				</Button>
@@ -186,20 +226,30 @@ function FixtureIdentityCells({ fixture }: { fixture: PatchedFixture }) {
 			<td className="patch-type-cell">
 				<FixtureTypeIcon type={fixture.definition.device_type} />
 			</td>
-			<td>{fixtureDisplayId(fixture)}</td>
 			<td>
-				<Button
-					className="patch-value"
-					onClick={() => armEdit(controller, fixture, "name")}
-				>
-					{fixture.name || fixture.definition.name}
-				</Button>
+				<DesktopEditableValue
+					fixture={fixture}
+					kind="number"
+					label={`Fixture ID ${fixtureDisplayId(fixture)}`}
+					value={String(fixtureDisplayId(fixture))}
+				/>
+			</td>
+			<td>
+				<DesktopEditableValue
+					fixture={fixture}
+					kind="name"
+					label={`Name ${fixtureDisplayId(fixture)}`}
+					value={fixture.name || fixture.definition.name}
+				/>
 			</td>
 			<td>{fixture.definition.manufacturer}</td>
 			<td>
 				<Button
 					className="patch-value"
 					onClick={() => armEdit(controller, fixture, "mode")}
+					onContextMenu={(event) =>
+						openModalOnContext(event, controller, fixture, "mode")
+					}
 				>
 					{fixture.definition.model} · {fixture.definition.mode}
 				</Button>
@@ -219,12 +269,15 @@ function FixturePatchCell({ fixture }: { fixture: PatchedFixture }) {
 	if (definitionSplits(fixture.definition).length === 1)
 		return (
 			<td>
-				<Button
-					className="patch-address split-patch-summary"
-					onClick={() => armEdit(controller, fixture, "address")}
-				>
-					{formatFixturePatch(fixture)}
-				</Button>
+				<DesktopEditableValue
+					fixture={fixture}
+					kind="address"
+					label={`Patch ${fixtureDisplayId(fixture)}`}
+					value={formatFixturePatch(fixture)}
+					onConfigure={() =>
+						armEdit(controller, fixture, "address", undefined, "modal")
+					}
+				/>
 			</td>
 		);
 	return (
@@ -260,8 +313,143 @@ function FixturePatchCell({ fixture }: { fixture: PatchedFixture }) {
 							: "—"}
 					</Button>
 				))}
+				{controller.host.desktopEditing ? (
+					<Button
+						className="patch-universe-action"
+						aria-label={`Open patch settings for fixture ${fixtureDisplayId(fixture)}`}
+						onClick={(event) => {
+							event.stopPropagation();
+							armEdit(controller, fixture, "address", undefined, "modal");
+						}}
+					>
+						<SettingsSlidersIcon />
+					</Button>
+				) : null}
 			</div>
 		</td>
+	);
+}
+
+function SettingsSlidersIcon() {
+	return (
+		<svg aria-hidden="true" viewBox="0 0 24 24">
+			<path d="M4 7h6m4 0h6M10 4v6M4 17h10m4 0h2m-6-3v6" />
+		</svg>
+	);
+}
+
+function DesktopEditableValue({
+	fixture,
+	kind,
+	label,
+	value,
+	onConfigure,
+}: {
+	fixture: PatchedFixture;
+	kind: "number" | "name" | "address";
+	label: string;
+	value: string;
+	onConfigure?: () => void;
+}) {
+	const controller = usePatchController();
+	const editing =
+		controller.host.desktopEditing &&
+		controller.ui.editPresentation === "inline" &&
+		controller.ui.edit === kind &&
+		controller.ui.selectedFixture === fixture.fixture_id;
+	const editor = useRef<HTMLSpanElement>(null);
+	const input = useRef<HTMLInputElement>(null);
+	useEffect(() => {
+		if (!editing) return;
+		input.current?.focus();
+		const outside = (event: PointerEvent) => {
+			if (editor.current?.contains(event.target as Node)) return;
+			requestFixtureEditClose(controller);
+		};
+		document.addEventListener("pointerdown", outside, true);
+		return () => document.removeEventListener("pointerdown", outside, true);
+	}, [controller, editing]);
+	if (!controller.host.desktopEditing)
+		return (
+			<Button
+				className={
+					kind === "address"
+						? "patch-address split-patch-summary"
+						: "patch-value"
+				}
+				onClick={() => armEdit(controller, fixture, kind)}
+			>
+				{value}
+			</Button>
+		);
+	const cancel = () => cancelEdit(controller);
+	const keyboard = (event: KeyboardEvent<HTMLInputElement>) => {
+		if (event.key === "Enter") saveEdit(controller);
+		if (event.key === "Escape") cancel();
+	};
+	const inputWidth = Math.max(5, Math.min(24, value.length + 1));
+	return (
+		// biome-ignore lint/a11y/noStaticElementInteractions: The wrapper owns the contextual edit gesture for both child actions.
+		<span
+			ref={editor}
+			className={editing ? "patch-inline-editor" : "patch-inline-value"}
+			style={
+				{ "--patch-inline-width": `${inputWidth}ch` } as CSSProperties
+			}
+			onContextMenu={(event) => {
+				event.preventDefault();
+				event.stopPropagation();
+				armEdit(
+					controller,
+					fixture,
+					kind,
+					undefined,
+					kind === "number" || kind === "address" ? "value_entry" : "modal",
+				);
+			}}
+		>
+			{onConfigure ? (
+				<Button
+					className="patch-inline-configure"
+					aria-label={`Open patch settings for fixture ${fixtureDisplayId(fixture)}`}
+					onClick={(event) => {
+						event.stopPropagation();
+						onConfigure();
+					}}
+				>
+					<SettingsSlidersIcon />
+				</Button>
+			) : null}
+			<Button
+				className="patch-inline-pencil"
+				aria-label={`Edit ${label}`}
+				onClick={(event) => {
+					event.stopPropagation();
+					armEdit(controller, fixture, kind, undefined, "inline");
+				}}
+			>
+				<span aria-hidden="true">✎</span>
+			</Button>
+			<input
+				ref={input}
+				className={
+					kind === "address"
+						? "patch-address split-patch-summary"
+						: "patch-value"
+				}
+				aria-label={editing ? `Edit ${label}` : label}
+				readOnly={!editing}
+				size={inputWidth}
+				value={editing ? controller.ui.editText : value}
+				onDoubleClick={(event) => {
+					if (editing) return;
+					event.stopPropagation();
+					armEdit(controller, fixture, kind, undefined, "inline");
+				}}
+				onChange={(event) => controller.ui.setEditText(event.target.value)}
+				onKeyDown={editing ? keyboard : undefined}
+			/>
+		</span>
 	);
 }
 
@@ -281,6 +469,9 @@ function FixtureBehaviorCells({ fixture }: { fixture: PatchedFixture }) {
 					className="patch-value"
 					aria-label={`Move in Black ${fixtureDisplayId(fixture)}`}
 					onClick={() => armEdit(controller, fixture, "mib")}
+					onContextMenu={(event) =>
+						openModalOnContext(event, controller, fixture, "mib")
+					}
 				>
 					{(fixture.move_in_black_enabled ?? true) ? "On" : "Off"}
 				</Button>
@@ -290,6 +481,9 @@ function FixtureBehaviorCells({ fixture }: { fixture: PatchedFixture }) {
 					className="patch-value"
 					aria-label={`MIB Delay ${fixtureDisplayId(fixture)}`}
 					onClick={() => armEdit(controller, fixture, "mib_delay")}
+					onContextMenu={(event) =>
+						openModalOnContext(event, controller, fixture, "mib_delay")
+					}
 				>
 					{(fixture.move_in_black_delay_millis ?? 0) / 1000} s
 				</Button>
@@ -307,6 +501,9 @@ function FixtureTransformCells({ fixture }: { fixture: PatchedFixture }) {
 					<Button
 						className="patch-value"
 						onClick={() => armEdit(controller, fixture, "location", axis)}
+						onContextMenu={(event) =>
+							openModalOnContext(event, controller, fixture, "location", axis)
+						}
 					>
 						{((fixture.location?.[axis] ?? 0) / 1000).toFixed(3)} m
 					</Button>
@@ -317,6 +514,9 @@ function FixtureTransformCells({ fixture }: { fixture: PatchedFixture }) {
 					<Button
 						className="patch-value"
 						onClick={() => armEdit(controller, fixture, "rotation", axis)}
+						onContextMenu={(event) =>
+							openModalOnContext(event, controller, fixture, "rotation", axis)
+						}
 					>
 						{Number((fixture.rotation?.[axis] ?? 0).toFixed(3))}°
 					</Button>
@@ -326,6 +526,9 @@ function FixtureTransformCells({ fixture }: { fixture: PatchedFixture }) {
 				<Button
 					className="patch-value"
 					onClick={() => armEdit(controller, fixture, "bracket_angle")}
+					onContextMenu={(event) =>
+						openModalOnContext(event, controller, fixture, "bracket_angle")
+					}
 				>
 					{Number((fixture.bracket_angle ?? 0).toFixed(1))}°
 				</Button>
@@ -334,6 +537,9 @@ function FixtureTransformCells({ fixture }: { fixture: PatchedFixture }) {
 				<Button
 					className="patch-value"
 					onClick={() => armEdit(controller, fixture, "shaper_angle")}
+					onContextMenu={(event) =>
+						openModalOnContext(event, controller, fixture, "shaper_angle")
+					}
 				>
 					{fixture.shaper_angle === undefined || fixture.shaper_angle === null
 						? "\u2014"
@@ -341,6 +547,39 @@ function FixtureTransformCells({ fixture }: { fixture: PatchedFixture }) {
 				</Button>
 			</td>
 		</>
+	);
+}
+
+function openModalOnContext(
+	event: ReactMouseEvent<HTMLElement>,
+	controller: ReturnType<typeof usePatchController>,
+	fixture: PatchedFixture,
+	kind: Parameters<typeof armEdit>[2],
+	axis?: Parameters<typeof armEdit>[3],
+) {
+	if (!controller.host.desktopEditing) return;
+	event.preventDefault();
+	event.stopPropagation();
+	armEdit(
+		controller,
+		fixture,
+		kind,
+		axis,
+		isContextualNumericEdit(kind, axis) ? "value_entry" : "modal",
+	);
+}
+
+function isContextualNumericEdit(
+	kind: Parameters<typeof armEdit>[2],
+	axis?: Parameters<typeof armEdit>[3],
+) {
+	return (
+		kind === "number" ||
+		kind === "address" ||
+		kind === "mib_delay" ||
+		kind === "bracket_angle" ||
+		kind === "shaper_angle" ||
+		((kind === "location" || kind === "rotation") && Boolean(axis))
 	);
 }
 

@@ -51,6 +51,10 @@ impl FixtureProfile {
     fn snapshot_for(&self, mode: &FixtureMode, scope: SnapshotScope) -> FixtureProfile {
         let modes = match scope {
             SnapshotScope::Full => self.modes.clone(),
+            // A crowd's nine modes are one semantic declaration: posture and density are carried
+            // by the complete matrix. Keeping only the selected mode would create an invalid
+            // embedded profile that no longer describes the authored crowd.
+            SnapshotScope::SelectedMode if self.crowd.is_some() => self.modes.clone(),
             SnapshotScope::SelectedMode => vec![mode.clone()],
         };
         self.snapshot_with_modes(modes)

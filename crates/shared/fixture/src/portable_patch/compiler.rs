@@ -2,7 +2,9 @@ use super::{
     PatchedFixturePatch, PatchedFixtureProfileReference, PortablePatchError,
     PortablePatchedFixtureRecord, fixture_profile_content_digest,
 };
-use crate::{FixtureDefinition, FixtureProfile, PatchedFixture};
+use crate::{
+    FixtureDefinition, FixtureProfile, PatchedFixture, apply_runtime_profile_compatibility,
+};
 use light_core::{FixtureId, Revision};
 use serde_json::Value;
 use std::collections::{HashMap, hash_map::Entry};
@@ -216,8 +218,9 @@ fn validate_resolved_profile(
     ensure_resolved_identity(expected, &resolved)?;
     ensure_resolved_digest(expected, &resolved)?;
     let content_digest = resolved.content_digest.clone();
-    let profile = decode_profile(expected, resolved.profile)?;
+    let mut profile = decode_profile(expected, resolved.profile)?;
     ensure_profile_identity(expected, &profile)?;
+    apply_runtime_profile_compatibility(&mut profile);
     profile
         .validate()
         .map_err(|error| invalid_profile(expected, error))?;

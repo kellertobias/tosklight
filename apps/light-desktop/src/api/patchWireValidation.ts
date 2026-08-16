@@ -215,6 +215,16 @@ function installedAppearanceAt(value: unknown, path: string): void {
 				cct,
 			);
 	}
+	const lumens = appearance.luminous_output_lumens;
+	if (lumens !== null && lumens !== undefined) {
+		finiteNumberAt(lumens, path + ".luminous_output_lumens");
+		if ((lumens as number) <= 0)
+			invalid(
+				path + ".luminous_output_lumens",
+				"a positive finite lumen value",
+				lumens,
+			);
+	}
 	const gel = objectAt(appearance.gel, path + ".gel");
 	enumAt(
 		gel.type,

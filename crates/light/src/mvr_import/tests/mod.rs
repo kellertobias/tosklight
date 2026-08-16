@@ -190,6 +190,7 @@ fn replace_and_reimport_preserve_reference_only_patch_settings_and_physical_copi
     retained_fixture.shaper_angle = Some(15.0);
     retained_fixture.installed_appearance = InstalledFixtureAppearance {
         light_source: InstalledLightSource::Tungsten,
+        luminous_output_lumens: None,
         color_temperature_kelvin: Some(3_200),
         gel: GelAssignment::Custom {
             name: "MVR retained amber".into(),

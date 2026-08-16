@@ -44,6 +44,7 @@ describe("typed Stage shaper roles", () => {
 			shaper_angles_degrees: [number, number, number, number],
 		) => ({
 			light_source: { type: "profile_default" as const },
+			luminous_output_lumens: null,
 			color_temperature_kelvin: null,
 			gel: { type: "open_white" as const },
 			shaper_angles_degrees,
@@ -192,6 +193,7 @@ describe("typed Stage shaper roles", () => {
 					fixture,
 					installedAppearance: {
 						light_source: { type: "profile_default" },
+						luminous_output_lumens: null,
 						color_temperature_kelvin: null,
 						gel: { type: "open_white" },
 						shaper_angles_degrees: [10, 20, 30, 40],

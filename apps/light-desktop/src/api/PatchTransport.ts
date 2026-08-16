@@ -411,12 +411,14 @@ function toWireInstalledAppearance(
 	const resolved = appearance ?? {
 		lightSource: { type: "profile_default" as const },
 		colorTemperatureKelvin: null,
+		luminousOutputLumens: null,
 		gel: { type: "open_white" as const },
 		shaperAnglesDegrees: [0, 0, 0, 0] as [number, number, number, number],
 	};
 	return {
 		light_source: { ...resolved.lightSource },
 		color_temperature_kelvin: resolved.colorTemperatureKelvin,
+		luminous_output_lumens: resolved.luminousOutputLumens,
 		gel:
 			resolved.gel.type === "built_in"
 				? {

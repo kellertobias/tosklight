@@ -65,6 +65,8 @@ export interface PatchHost {
 	 * address mid-show. A planning application has no `Set` key and passes `true`.
 	 */
 	editArmed: boolean;
+	/** Enables mouse-first inline cells and drag selection in a planning application. */
+	desktopEditing?: boolean;
 	/**
 	 * Called with `false` once an edit is committed or abandoned.
 	 *

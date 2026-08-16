@@ -23,6 +23,33 @@ fn compact_projection_clones_only_the_selected_mode_from_a_large_validated_profi
 }
 
 #[test]
+fn compact_crowd_projection_keeps_the_complete_posture_and_density_matrix() {
+    let profile = crate::read_fixture_package(
+        &std::fs::read(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../../assets/fixture-library/venue--crowd-area.toskfixture"),
+        )
+        .expect("shipped crowd package"),
+    )
+    .expect("valid crowd profile");
+    let selected = profile.modes[7].id;
+
+    let definition = profile
+        .compact_resolved_definition_from_validated_profile(selected)
+        .expect("compact crowd definition");
+    let snapshot = definition.profile_snapshot.as_deref().expect("snapshot");
+
+    assert_eq!(snapshot.modes.len(), 9);
+    assert_eq!(
+        snapshot.crowd.as_ref().expect("crowd matrix").modes.len(),
+        9
+    );
+    definition
+        .validate()
+        .expect("embedded crowd definition remains valid");
+}
+
+#[test]
 fn public_projection_keeps_the_complete_profile_snapshot() {
     let profile = large_profile();
     let selected_mode_id = profile.modes[SELECTED_MODE_INDEX].id;

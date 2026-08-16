@@ -1,62 +1,113 @@
 import type { PatchedFixture } from "../../wire";
 import { fixtureDefinitionKey } from "../fixtureProfileModel";
 import { fixtureRanges, groupFixtureFamilies } from "../patchUtils";
-import type { EditKind, PatchController, VectorAxis } from "./controller";
+import type {
+	EditKind,
+	EditPresentation,
+	PatchController,
+	VectorAxis,
+} from "./controller";
 import {
 	definitionSplits,
 	effectiveSplitPatches,
 	splitPatchSetError,
 } from "./patchModel";
-import { fixtureSelectionIds } from "./selection";
+import {
+	fixtureSelectionIds,
+	selectedFixturesInOperatorOrder,
+} from "./selection";
 
 export function armEdit(
 	controller: PatchController,
 	fixture: PatchedFixture,
 	kind: Exclude<EditKind, null>,
 	axis?: VectorAxis,
+	presentation: EditPresentation = "modal",
 ) {
 	const { ui, editArmed } = controller;
 	if (!editArmed) return;
+	let baseline = "";
+	const setText = (value: string) => {
+		baseline = value;
+		ui.setEditText(value);
+	};
 	ui.setEditError("");
+	ui.setEditPresentation(presentation);
 	ui.setSelectedFixture(fixture.fixture_id);
-	if (kind === "number") ui.setEditText(String(fixtureDisplayId(fixture)));
-	else if (kind === "name")
-		ui.setEditText(fixture.name || fixture.definition.name);
-	else if (kind === "address") {
-		ui.setEditText(
+	if (kind === "number") {
+		setText(String(fixtureDisplayId(fixture)));
+	} else if (kind === "name") {
+		setText(fixture.name || fixture.definition.name);
+	} else if (kind === "address") {
+		setText(
 			fixture.universe && fixture.address
 				? `${fixture.universe}.${fixture.address}`
 				: "",
 		);
 		ui.setEditSplitDrafts(splitDraftValues(fixture));
 	} else if (kind === "mib")
-		ui.setEditText(String(fixture.move_in_black_enabled ?? true));
+		setText(String(fixture.move_in_black_enabled ?? true));
 	else if (kind === "mib_delay")
-		ui.setEditText(String((fixture.move_in_black_delay_millis ?? 0) / 1000));
+		setText(String((fixture.move_in_black_delay_millis ?? 0) / 1000));
 	else if (kind === "group_masters")
-		ui.setEditText(String(fixture.group_masters_enabled ?? true));
+		setText(String(fixture.group_masters_enabled ?? true));
 	else if (kind === "grand_master")
-		ui.setEditText(String(fixture.grand_master_enabled ?? true));
-	else if (kind === "invert_pan")
-		ui.setEditText(String(fixture.invert_pan ?? false));
+		setText(String(fixture.grand_master_enabled ?? true));
+	else if (kind === "invert_pan") setText(String(fixture.invert_pan ?? false));
 	else if (kind === "invert_tilt")
-		ui.setEditText(String(fixture.invert_tilt ?? false));
+		setText(String(fixture.invert_tilt ?? false));
 	else if (kind === "bracket_angle")
-		ui.setEditText(String(fixture.bracket_angle ?? 0));
+		setText(String(fixture.bracket_angle ?? 0));
 	// An empty field is a fixture with no shaper or barn door fitted, which is most of them.
 	else if (kind === "shaper_angle")
-		ui.setEditText(
+		setText(
 			fixture.shaper_angle === undefined || fixture.shaper_angle === null
 				? ""
 				: String(fixture.shaper_angle),
 		);
-	else if (kind === "location" || kind === "rotation")
+	else if (kind === "location" || kind === "rotation") {
 		ui.setVector(fixture[kind] ?? { x: 0, y: 0, z: 0 });
-	else if (kind === "mode") selectFixtureFamily(controller, fixture);
+		if (axis) {
+			const stored = fixture[kind]?.[axis] ?? 0;
+			setText(String(kind === "location" ? stored / 1000 : stored));
+		}
+	} else if (kind === "mode") selectFixtureFamily(controller, fixture);
+	if (presentation === "value_entry") {
+		const selected = selectedFixturesInOperatorOrder(controller);
+		if (selected.length > 1) {
+			const first = numericEditValue(selected[0], kind, axis);
+			const last = numericEditValue(selected[selected.length - 1], kind, axis);
+			if (first != null && last != null)
+				setText(first === last ? first : `${first} THRU ${last}`);
+		}
+	}
+	ui.setEditBaseline(baseline);
 	ui.setEditAxis(
 		kind === "location" || kind === "rotation" ? (axis ?? null) : null,
 	);
 	ui.setEdit(kind);
+}
+
+function numericEditValue(
+	fixture: PatchedFixture,
+	kind: Exclude<EditKind, null>,
+	axis?: VectorAxis,
+): string | null {
+	if (kind === "number") return String(fixtureDisplayId(fixture));
+	if (kind === "address")
+		return fixture.universe != null && fixture.address != null
+			? `${fixture.universe}.${fixture.address}`
+			: null;
+	if (kind === "mib_delay")
+		return String((fixture.move_in_black_delay_millis ?? 0) / 1000);
+	if (kind === "bracket_angle") return String(fixture.bracket_angle ?? 0);
+	if (kind === "shaper_angle")
+		return fixture.shaper_angle == null ? null : String(fixture.shaper_angle);
+	if ((kind === "location" || kind === "rotation") && axis) {
+		const stored = fixture[kind]?.[axis] ?? 0;
+		return String(kind === "location" ? stored / 1000 : stored);
+	}
+	return null;
 }
 
 export function selectSplitAddress(
@@ -104,6 +155,27 @@ export async function applyEdit(
 	const { ui } = controller;
 	if (!selected) return;
 	ui.setEditError("");
+	if (
+		controller.host.desktopEditing &&
+		ui.editPresentation === "modal" &&
+		!changesPhysicalPatch(changes)
+	) {
+		const selectedIds = controller.selection.fixtureIds;
+		const targets = selectedIds
+			? all.filter((fixture) =>
+					fixtureSelectionIds(fixture).some((id) => selectedIds.has(id)),
+				)
+			: [];
+		if (targets.length > 1) {
+			for (const fixture of targets)
+				if (
+					!(await controller.patch.updateFixture(fixture.fixture_id, changes))
+				)
+					return;
+			completeEdit(controller);
+			return;
+		}
+	}
 	if (!changesPhysicalPatch(changes)) {
 		await finishEdit(controller, changes);
 		return;
@@ -148,7 +220,34 @@ export function cancelEdit(controller: PatchController) {
 	controller.ui.setEditError("");
 	controller.ui.setPending(null);
 	controller.ui.setBlockedBy([]);
+	controller.ui.setEditPresentation("modal");
 	controller.host.setEditArmed(false);
+}
+
+export function fixtureEditIsDirty(controller: PatchController) {
+	if (fixtureVectorIsDirty(controller)) return true;
+	if (fixtureAddressIsDirty(controller)) return true;
+	if (fixtureModeIsDirty(controller)) return true;
+	const { edit, editText, editBaseline } = controller.ui;
+	return Boolean(edit) && editText !== editBaseline;
+}
+
+function fixtureAddressIsDirty(controller: PatchController) {
+	const { selected } = controller.data;
+	if (!selected || controller.ui.edit !== "address") return false;
+	return (
+		JSON.stringify(controller.ui.editSplitDrafts) !==
+		JSON.stringify(splitDraftValues(selected))
+	);
+}
+
+function fixtureModeIsDirty(controller: PatchController) {
+	const { selected } = controller.data;
+	return Boolean(
+		selected &&
+			controller.ui.edit === "mode" &&
+			controller.ui.definitionKey !== fixtureDefinitionKey(selected.definition),
+	);
 }
 
 export function fixtureVectorIsDirty(controller: PatchController) {
@@ -161,7 +260,7 @@ export function fixtureVectorIsDirty(controller: PatchController) {
 }
 
 export function requestFixtureEditClose(controller: PatchController) {
-	if (fixtureVectorIsDirty(controller))
+	if (fixtureEditIsDirty(controller))
 		controller.ui.setEditCloseConfirm("fixture");
 	else cancelEdit(controller);
 }

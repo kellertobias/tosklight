@@ -65,16 +65,19 @@ const patchFeature = {
 	deleteFixture: vi.fn().mockResolvedValue(true),
 };
 const stage = vi.hoisted(() => ({
-	positions3d: {} as Record<string, {
-		x: number;
-		y: number;
-		z: number;
-		rotationX: number;
-		rotationY: number;
-		rotationZ: number;
-		crowdWidthMetres?: number;
-		crowdDepthMetres?: number;
-	}>,
+	positions3d: {} as Record<
+		string,
+		{
+			x: number;
+			y: number;
+			z: number;
+			rotationX: number;
+			rotationY: number;
+			rotationZ: number;
+			crowdWidthMetres?: number;
+			crowdDepthMetres?: number;
+		}
+	>,
 	setCrowdFootprint: vi.fn(),
 }));
 
@@ -257,6 +260,7 @@ function appearanceFixture(): PatchedFixture {
 	profile.physical.color_temperature_kelvin = 3_200;
 	fixture.installed_appearance = {
 		light_source: { type: "profile_default" },
+		luminous_output_lumens: null,
 		color_temperature_kelvin: null,
 		gel: { type: "open_white" },
 		shaper_angles_degrees: [1, 2, 3, 4],
@@ -265,6 +269,7 @@ function appearanceFixture(): PatchedFixture {
 	if (!copy) throw new Error("appearance fixture copy is missing");
 	copy.installed_appearance = {
 		light_source: { type: "led" },
+		luminous_output_lumens: null,
 		color_temperature_kelvin: 5_600,
 		gel: {
 			type: "custom",
@@ -421,7 +426,10 @@ describe("Patch right-click SET parity", () => {
 		{ label: "masters", cell: 5, heading: "Set fixture Masters" },
 		{ label: "pan and tilt", cell: 6, heading: "Set fixture Pan / Tilt" },
 		{ label: "MIB", cell: 7, heading: "Set fixture MIB" },
-	])("opens the $label editor directly without arming SET", ({ cell, heading }) => {
+	])("opens the $label editor directly without arming SET", ({
+		cell,
+		heading,
+	}) => {
 		server.patch.fixtures = [policyFixture()];
 		render(<FixturePatchSetup />);
 		const row = screen.getByRole("row", {
@@ -490,9 +498,7 @@ describe("Patch right-click SET parity", () => {
 	it("opens primary and multi-patch light-source editors without arming SET", () => {
 		server.patch.fixtures = [appearanceFixture()];
 		render(<FixturePatchSetup />);
-		rightClick(
-			screen.getByRole("button", { name: /Light source 17:/ }),
-		);
+		rightClick(screen.getByRole("button", { name: /Light source 17:/ }));
 		expect(
 			screen.getByRole("dialog", { name: "Set light source 17" }),
 		).toBeInTheDocument();
@@ -588,9 +594,9 @@ describe("fixture output policy cells", () => {
 		expect(screen.getByRole("button", { name: "Masters 17" })).toHaveClass(
 			"patch-value",
 		);
-		expect(screen.getByRole("row", { name: /17 Split Wash 17/ })).not.toHaveClass(
-			"set-target",
-		);
+		expect(
+			screen.getByRole("row", { name: /17 Split Wash 17/ }),
+		).not.toHaveClass("set-target");
 	});
 
 	it("does not expose per-fixture raw Highlight Look editing", () => {
@@ -735,6 +741,7 @@ describe("installed light-source appearance", () => {
 		const fixture = appearanceFixture();
 		fixture.installed_appearance = {
 			light_source: { type: "profile_default" },
+			luminous_output_lumens: null,
 			color_temperature_kelvin: null,
 			gel: {
 				type: "built_in",
@@ -771,21 +778,32 @@ describe("installed light-source appearance", () => {
 
 		fireEvent.click(screen.getByRole("button", { name: /Light source 17:/ }));
 		const dialog = screen.getByRole("dialog", { name: "Set light source 17" });
-		expect(await within(dialog).findByRole("alert")).toHaveTextContent(
+		fireEvent.click(
+			within(dialog).getByRole("button", { name: /Selected gel/ }),
+		);
+		const gelDialog = screen.getByRole("dialog", { name: "Select gel" });
+		expect(await within(gelDialog).findByRole("alert")).toHaveTextContent(
 			"Catalog unavailable",
 		);
-		expect(within(dialog).getByLabelText("Unavailable gel")).toHaveTextContent(
-			"Stored reference: missing-catalog / missing-entry",
-		);
-		expect(within(dialog).getByLabelText("Unavailable gel")).toHaveTextContent(
+		expect(
+			within(gelDialog).getByLabelText("Unavailable gel"),
+		).toHaveTextContent("Stored reference: missing-catalog / missing-entry");
+		expect(
+			within(gelDialog).getByLabelText("Unavailable gel"),
+		).toHaveTextContent(
 			"Fallback: G12 · Deep Violet · display #552288 · visualizer #32105F",
 		);
-		expect(within(dialog).getByLabelText("Unavailable gel")).toHaveTextContent(
+		expect(
+			within(gelDialog).getByLabelText("Unavailable gel"),
+		).toHaveTextContent(
 			"Selecting a result explicitly reconciles this fixture",
 		);
 		expect(
-			within(dialog).getByText("Import gel catalog CSV"),
+			within(gelDialog).getByText("Import gel catalog CSV"),
 		).toBeInTheDocument();
+		fireEvent.click(
+			within(gelDialog).getByRole("button", { name: "Close gel selection" }),
+		);
 
 		fireEvent.click(
 			within(dialog).getByRole("button", { name: "Profile default" }),
@@ -801,6 +819,7 @@ describe("installed light-source appearance", () => {
 					type: "set_installed_appearance",
 					appearance: {
 						lightSource: { type: "halogen" },
+						luminousOutputLumens: null,
 						colorTemperatureKelvin: null,
 						gel: {
 							type: "built_in",
@@ -824,6 +843,7 @@ describe("installed light-source appearance", () => {
 		const fixture = appearanceFixture();
 		fixture.installed_appearance = {
 			light_source: { type: "profile_default" },
+			luminous_output_lumens: null,
 			color_temperature_kelvin: null,
 			gel: {
 				type: "built_in",
@@ -860,22 +880,31 @@ describe("installed light-source appearance", () => {
 
 		fireEvent.click(screen.getByRole("button", { name: /Light source 17:/ }));
 		const dialog = screen.getByRole("dialog", { name: "Set light source 17" });
-		expect(await within(dialog).findByRole("alert")).toHaveTextContent(
+		fireEvent.click(
+			within(dialog).getByRole("button", { name: /Selected gel/ }),
+		);
+		const gelDialog = screen.getByRole("dialog", { name: "Select gel" });
+		expect(await within(gelDialog).findByRole("alert")).toHaveTextContent(
 			"Catalog entry unavailable",
 		);
-		expect(within(dialog).getByLabelText("Unavailable gel")).toHaveTextContent(
-			"retired-entry in Touring filters",
-		);
+		expect(
+			within(gelDialog).getByLabelText("Unavailable gel"),
+		).toHaveTextContent("retired-entry in Touring filters");
 		expect(
 			within(dialog).getByRole("button", { name: "Apply" }),
 		).toBeDisabled();
 
 		fireEvent.click(
-			within(dialog).getByRole("button", {
-				name: /Touring filters · B2 · Current Blue/,
+			within(gelDialog).getByRole("button", {
+				name: /Select Touring filters B2 Current Blue/,
 			}),
 		);
-		expect(within(dialog).queryByRole("alert")).not.toBeInTheDocument();
+		expect(
+			screen.queryByRole("dialog", { name: "Select gel" }),
+		).not.toBeInTheDocument();
+		expect(
+			screen.getByRole("dialog", { name: "Set light source 17" }),
+		).toBeInTheDocument();
 		fireEvent.click(within(dialog).getByRole("button", { name: "Apply" }));
 
 		await waitFor(() =>
@@ -925,20 +954,30 @@ describe("installed light-source appearance", () => {
 
 		fireEvent.click(screen.getByRole("button", { name: /Light source 17:/ }));
 		const dialog = screen.getByRole("dialog", { name: "Set light source 17" });
+		fireEvent.change(within(dialog).getByLabelText("Luminous output (lm)"), {
+			target: { value: "18000" },
+		});
 		fireEvent.click(within(dialog).getByRole("button", { name: "Open white" }));
 		fireEvent.click(screen.getByRole("option", { name: "Catalog gel" }));
+		const gelDialog = screen.getByRole("dialog", { name: "Select gel" });
 		fireEvent.change(
-			within(dialog).getByLabelText("Search catalog, number, or name"),
+			within(gelDialog).getByLabelText("Search catalog, number, or name"),
 			{ target: { value: "primary" } },
 		);
 		await waitFor(() =>
 			expect(server.gelCatalogs).toHaveBeenLastCalledWith("primary"),
 		);
 		fireEvent.click(
-			await within(dialog).findByRole("button", {
-				name: /Touring filters · R80 · Primary Blue/,
+			await within(gelDialog).findByRole("button", {
+				name: /Select Touring filters R80 Primary Blue/,
 			}),
 		);
+		expect(
+			screen.queryByRole("dialog", { name: "Select gel" }),
+		).not.toBeInTheDocument();
+		expect(
+			screen.getByRole("dialog", { name: "Set light source 17" }),
+		).toBeInTheDocument();
 		fireEvent.click(within(dialog).getByRole("button", { name: "Apply" }));
 
 		await waitFor(() =>
@@ -949,6 +988,7 @@ describe("installed light-source appearance", () => {
 					type: "set_installed_appearance",
 					appearance: {
 						lightSource: { type: "profile_default" },
+						luminousOutputLumens: 18_000,
 						colorTemperatureKelvin: null,
 						gel: {
 							type: "built_in",
@@ -1004,8 +1044,9 @@ describe("installed light-source appearance", () => {
 		const dialog = screen.getByRole("dialog", { name: "Set light source 17" });
 		fireEvent.click(within(dialog).getByRole("button", { name: "Open white" }));
 		fireEvent.click(screen.getByRole("option", { name: "Catalog gel" }));
-		fireEvent.click(within(dialog).getByText("Import gel catalog CSV"));
-		fireEvent.change(within(dialog).getByLabelText("Catalog name"), {
+		const gelDialog = screen.getByRole("dialog", { name: "Select gel" });
+		fireEvent.click(within(gelDialog).getByText("Import gel catalog CSV"));
+		fireEvent.change(within(gelDialog).getByLabelText("Catalog name"), {
 			target: { value: "Imported filters" },
 		});
 		const file = new File(
@@ -1019,30 +1060,30 @@ describe("installed light-source appearance", () => {
 					"number,name,display_rgb,visualizer_rgb\n1,Blue,#0000FF,#0000EE\n",
 				).buffer,
 		});
-		fireEvent.change(within(dialog).getByLabelText("Catalog CSV"), {
+		fireEvent.change(within(gelDialog).getByLabelText("Catalog CSV"), {
 			target: { files: [file] },
 		});
 		await waitFor(() =>
 			expect(
-				within(dialog).getByRole("button", { name: "Preview import" }),
+				within(gelDialog).getByRole("button", { name: "Preview import" }),
 			).toBeEnabled(),
 		);
 		fireEvent.click(
-			within(dialog).getByRole("button", { name: "Preview import" }),
+			within(gelDialog).getByRole("button", { name: "Preview import" }),
 		);
 		expect(
-			await within(dialog).findByText(
+			await within(gelDialog).findByText(
 				"1 additions · 0 replacements · 0 unchanged",
 			),
 		).toBeInTheDocument();
 		expect(server.confirmGelCatalogCsvImport).not.toHaveBeenCalled();
 		fireEvent.click(
-			within(dialog).getByRole("button", { name: "Confirm import" }),
+			within(gelDialog).getByRole("button", { name: "Confirm import" }),
 		);
 		await waitFor(() =>
 			expect(server.confirmGelCatalogCsvImport).toHaveBeenCalledOnce(),
 		);
-		expect(await within(dialog).findByRole("status")).toHaveTextContent(
+		expect(await within(gelDialog).findByRole("status")).toHaveTextContent(
 			"Imported Imported filters revision 1.",
 		);
 	});
@@ -1067,6 +1108,7 @@ describe("installed light-source appearance", () => {
 		const fixture = appearanceFixture();
 		fixture.installed_appearance = {
 			light_source: { type: "profile_default" },
+			luminous_output_lumens: null,
 			color_temperature_kelvin: null,
 			gel: {
 				type: "built_in",
@@ -1222,6 +1264,7 @@ describe("installed light-source appearance", () => {
 					type: "set_installed_appearance",
 					appearance: {
 						lightSource: { type: "tungsten" },
+						luminousOutputLumens: null,
 						colorTemperatureKelvin: 3_200,
 						gel: {
 							type: "custom",
@@ -1288,6 +1331,7 @@ describe("installed light-source appearance", () => {
 					type: "set_installed_appearance",
 					appearance: {
 						lightSource: { type: "discharge" },
+						luminousOutputLumens: null,
 						colorTemperatureKelvin: 4_200,
 						gel: { type: "open_white" },
 						shaperAnglesDegrees: [1, 2, 3, 4],
@@ -1395,12 +1439,11 @@ describe("selected split selection and SET editing", () => {
 		third.fixture_number = 19;
 		third.name = "Split Wash 19";
 		server.patch.fixtures = [splitFixture(), second, third];
-		const onStagePreview = vi.fn();
+		const onOpenStageWindow = vi.fn();
 		const rendered = render(
 			<FixturePatchSetup
 				onMedia={vi.fn()}
-				stagePreviewOpen
-				onStagePreview={onStagePreview}
+				onOpenStageWindow={onOpenStageWindow}
 			/>,
 		);
 
@@ -1413,44 +1456,45 @@ describe("selected split selection and SET editing", () => {
 				.slice(0, 7)
 				.map((button) => button.textContent),
 		).toEqual([
-			"Preview Stage",
-			"Fixtures",
-			"Media Servers",
+			"Open Stage Renderer",
 			"+ Add layer",
 			"+ Add fixture",
 			"+ Add multi-patch",
 			"Delete",
+			"Fixtures",
+			"Media Servers",
 		]);
 		expect(
-			[...actions.querySelectorAll(".ui-title-chrome-groups > .ui-window-action-group")].map((group) =>
+			[
+				...actions.querySelectorAll(
+					".ui-title-chrome-groups > .ui-window-action-group",
+				),
+			].map((group) =>
 				[...group.querySelectorAll("button")].map(
 					(button) => button.textContent,
 				),
 			),
 		).toEqual([
-			["Preview Stage"],
-			["Fixtures", "Media Servers"],
+			["Open Stage Renderer"],
 			["+ Add layer", "+ Add fixture", "+ Add multi-patch"],
 			["Delete"],
+			["Fixtures", "Media Servers"],
 		]);
-		expect(screen.getByRole("button", { name: "Preview Stage" })).toHaveClass(
-			"is-active",
-		);
-		fireEvent.click(screen.getByRole("button", { name: "Preview Stage" }));
-		expect(onStagePreview).toHaveBeenCalledOnce();
+		fireEvent.click(screen.getByRole("button", { name: "Open Stage Renderer" }));
+		expect(onOpenStageWindow).toHaveBeenCalledOnce();
 		expect(
 			within(actions)
 				.getAllByRole("button")
 				.slice(0, 7)
 				.map((button) => button.textContent),
 		).toEqual([
-			"Preview Stage",
-			"Fixtures",
-			"Media Servers",
+			"Open Stage Renderer",
 			"+ Add layer",
 			"+ Add fixture",
 			"+ Add multi-patch",
 			"Delete",
+			"Fixtures",
+			"Media Servers",
 		]);
 
 		fireEvent.click(screen.getByRole("row", { name: /17 Split Wash 17/ }));
@@ -1461,8 +1505,7 @@ describe("selected split selection and SET editing", () => {
 		rendered.rerender(
 			<FixturePatchSetup
 				onMedia={vi.fn()}
-				stagePreviewOpen
-				onStagePreview={onStagePreview}
+				onOpenStageWindow={onOpenStageWindow}
 			/>,
 		);
 		fireEvent.click(screen.getByRole("row", { name: /18 Split Wash 18/ }), {
@@ -1477,9 +1520,6 @@ describe("selected split selection and SET editing", () => {
 		expect(programming.actions.replace).toHaveBeenLastCalledWith({
 			resolvedFixtures: ["fixture-18", "fixture-19"],
 		});
-		expect(
-			document.querySelector(".patch-stage-scroll-clearance"),
-		).toBeInTheDocument();
 	});
 
 	it("uses the selected split for an armed touch, keyboard, or attached-hardware SET action", async () => {
@@ -2121,13 +2161,15 @@ describe("Crowd Area footprint editing", () => {
 		server.patch.fixtures = [fixture];
 		render(<FixturePatchSetup />);
 
-		expect(screen.getByRole("button", { name: "Crowd width 17" })).toHaveTextContent(
-			"9.00 m",
+		expect(
+			screen.getByRole("button", { name: "Crowd width 17" }),
+		).toHaveTextContent("9.00 m");
+		expect(
+			screen.getByRole("button", { name: "Crowd depth 17" }),
+		).toHaveTextContent("4.50 m");
+		fireEvent.contextMenu(
+			screen.getByRole("button", { name: "Crowd width 17" }),
 		);
-		expect(screen.getByRole("button", { name: "Crowd depth 17" })).toHaveTextContent(
-			"4.50 m",
-		);
-		fireEvent.contextMenu(screen.getByRole("button", { name: "Crowd width 17" }));
 		const modal = screen.getByRole("dialog", { name: "Crowd width (metre)" });
 		for (const key of ["1", "2", ".", "5"])
 			fireEvent.click(within(modal).getByRole("button", { name: key }));

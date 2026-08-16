@@ -61,6 +61,7 @@ export function GelCatalogPanel({
 						<Button
 							key={`${catalog.id}:${entry.id}`}
 							className="gel-catalog-entry"
+							aria-label={`Select ${catalog.name} ${entry.number} ${entry.name}`}
 							onClick={() => onSelect(toCatalogGel(catalog, entry))}
 						>
 							<span
@@ -69,8 +70,9 @@ export function GelCatalogPanel({
 								role="img"
 								aria-label={`Display color ${entry.display_srgb}`}
 							/>
-							{catalog.name} · {entry.number} · {entry.name} ·{" "}
-							{entry.display_srgb}
+							<span className="gel-catalog-number">{entry.number}</span>
+							<span className="gel-catalog-name">{entry.name}</span>
+							<span className="gel-catalog-maker">{catalog.name}</span>
 						</Button>
 					)),
 				)}
@@ -171,9 +173,10 @@ function GelCatalogImport({ model }: { model: GelCatalogModel }) {
 				value={model.importCatalogName}
 				onChange={(event) => model.setImportName(event.target.value)}
 			/>
-			<label>
+			<label htmlFor="gel-catalog-csv">
 				Catalog CSV
 				<Input
+					id="gel-catalog-csv"
 					type="file"
 					accept=".csv,text/csv"
 					onChange={(event) => model.selectFile(event.target.files?.[0])}

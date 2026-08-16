@@ -1,5 +1,5 @@
-import type { PatchedFixture } from "../../wire";
 import { changedPatchFixtureCandidate } from "../../state/PatchContext";
+import type { PatchedFixture } from "../../wire";
 import { isDmxPatchable } from "../patchUtils";
 import type { PatchController, PatchRowMouseEvent } from "./controller";
 import { cancelEdit, completeEdit } from "./editSession";
@@ -112,10 +112,7 @@ export async function unpatchConflictsAndApply(controller: PatchController) {
 		return;
 	const candidates = [
 		...blockedBy.map((fixture) =>
-			changedPatchFixtureCandidate(
-				fixture,
-				unpatchFixtureChanges(fixture),
-			),
+			changedPatchFixtureCandidate(fixture, unpatchFixtureChanges(fixture)),
 		),
 		changedPatchFixtureCandidate(selected, pending),
 	];
@@ -203,7 +200,7 @@ export function selectPatchFixture(
 		return;
 	}
 	ui.setSelectedFixture(fixture.fixture_id);
-	if (editArmed) return;
+	if (editArmed && !controller.host.desktopEditing) return;
 	const ordered = controller.data.visible;
 	if (event.shiftKey && ui.selectionAnchor.current) {
 		selectFixtureRange(controller, ordered, fixture.fixture_id);
@@ -217,7 +214,7 @@ export function selectPatchFixture(
 	ui.selectionAnchor.current = fixture.fixture_id;
 }
 
-function selectFixtureRange(
+export function selectFixtureRange(
 	controller: PatchController,
 	ordered: readonly PatchedFixture[],
 	fixtureId: string,

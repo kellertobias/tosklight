@@ -20,32 +20,13 @@ export function PatchHeader() {
 						: undefined),
 			}}
 			groups={[
-				{ id: "stage-preview", actions: [
-					...(props.onStagePreview
+				{ id: "stage-renderer", actions: [
+					...(props.onOpenStageWindow
 						? [
 								{
-									id: "preview-stage",
-									label: "Preview Stage",
-									active: props.stagePreviewOpen,
-									onPress: props.onStagePreview,
-									onLongPress: props.onOpenStageWindow,
-								},
-							]
-						: []),
-				] },
-				{ id: "patch-kind", actions: [
-					...(props.onMedia
-						? [
-								{
-									id: "fixtures",
-									label: "Fixtures",
-									active: true,
-									onPress: () => undefined,
-								},
-								{
-									id: "media",
-									label: "Media Servers",
-									onPress: props.onMedia,
+									id: "open-stage-renderer",
+									label: "Open Stage Renderer",
+									onPress: props.onOpenStageWindow,
 								},
 							]
 						: []),
@@ -82,6 +63,23 @@ export function PatchHeader() {
 									id: "fixture-number",
 									label: "Set fixture ID",
 									onPress: () => void setFixtureNumber(controller, selected),
+								},
+							]
+						: []),
+				] },
+				{ id: "patch-kind", actions: [
+					...(props.onMedia
+						? [
+								{
+									id: "fixtures",
+									label: "Fixtures",
+									active: true,
+									onPress: () => undefined,
+								},
+								{
+									id: "media",
+									label: "Media Servers",
+									onPress: props.onMedia,
 								},
 							]
 						: []),

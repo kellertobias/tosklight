@@ -1,4 +1,4 @@
-import { Button } from "@tosklight/ui";
+import { Button, SwitchField } from "@tosklight/ui";
 import { WindowHeader } from "@tosklight/ui/window-kit";
 import { usePatchController } from "./controller";
 import { selectLayer, setFixtureNumber } from "./fixtureActions";
@@ -10,9 +10,9 @@ export function PatchHeader() {
 	const selected = data.selected;
 	return (
 		<WindowHeader
-			title="Show Patch"
+			title={props.title}
 			info={{
-				primary: `${data.all.length} fixtures · ${data.layers.length} layers`,
+				primary: `${data.scoped.length} fixtures · ${data.layers.length} layers`,
 				secondary:
 					controller.patch.error ??
 					(library?.unresolvedMvrFixtures.length
@@ -20,72 +20,84 @@ export function PatchHeader() {
 						: undefined),
 			}}
 			groups={[
-				{ id: "stage-preview", actions: [
-					...(props.onStagePreview
-						? [
-								{
-									id: "preview-stage",
-									label: "Preview Stage",
-									active: props.stagePreviewOpen,
-								onPress: props.onStagePreview,
-									onLongPress: props.onOpenStageWindow,
-								},
-							]
-						: []),
-				] },
-				{ id: "patch-kind", actions: [
-					...(props.onMedia
-						? [
-								{
-									id: "fixtures",
-									label: "Fixtures",
-									active: true,
-								onPress: () => undefined,
-								},
-								{
-									id: "media",
-									label: "Media Servers",
-								onPress: props.onMedia,
-								},
-							]
-						: []),
-				] },
-				{ id: "patch-create", actions: [
-					{
-						id: "layer",
-						label: "+ Add layer",
-						onPress: () => ui.setLayerModal("add"),
-					},
-					{
-						id: "fixture",
-						label: "+ Add fixture",
-						onPress: () => ui.setBrowserOpen(true),
-					},
-					{
-						id: "multipatch",
-						label: "+ Add multi-patch",
-						disabled: !data.selected,
-						onPress: () => void addMultipatch(controller),
-					},
-				] },
-				{ id: "patch-edit", actions: [
-					...(selected && editArmed
-						? [
-								{
-									id: "fixture-number",
-									label: "Set fixture ID",
-								onPress: () => void setFixtureNumber(controller, selected),
-								},
-							]
-						: []),
-					{
-						id: "delete",
-						label: "Delete",
-						active: ui.deleteArmed,
-						disabled: data.visible.length === 0,
-						onPress: () => ui.setDeleteArmed((armed) => !armed),
-					},
-				] },
+				{
+					id: "stage-preview",
+					actions: [
+						...(props.onStagePreview
+							? [
+									{
+										id: "preview-stage",
+										label: "Preview Stage",
+										active: props.stagePreviewOpen,
+										onPress: props.onStagePreview,
+										onLongPress: props.onOpenStageWindow,
+									},
+								]
+							: []),
+					],
+				},
+				{
+					id: "patch-kind",
+					actions: [
+						...(props.onMedia
+							? [
+									{
+										id: "fixtures",
+										label: "Fixtures",
+										active: true,
+										onPress: () => undefined,
+									},
+									{
+										id: "media",
+										label: "Media Servers",
+										onPress: props.onMedia,
+									},
+								]
+							: []),
+					],
+				},
+				{
+					id: "patch-create",
+					actions: [
+						{
+							id: "layer",
+							label: "+ Add layer",
+							onPress: () => ui.setLayerModal("add"),
+						},
+						{
+							id: "fixture",
+							label: "+ Add fixture",
+							onPress: () => ui.setBrowserOpen(true),
+						},
+						{
+							id: "multipatch",
+							label: "+ Add multi-patch",
+							disabled: !data.selected,
+							onPress: () => void addMultipatch(controller),
+						},
+					],
+				},
+				{
+					id: "patch-edit",
+					actions: [
+						...(selected && editArmed
+							? [
+									{
+										id: "fixture-number",
+										label: "Set fixture ID",
+										onPress: () => void setFixtureNumber(controller, selected),
+									},
+								]
+							: []),
+						{
+							id: "delete",
+							label: "Delete",
+							active: ui.deleteArmed,
+							disabled: data.visible.length === 0,
+							onPress: () => ui.setDeleteArmed((armed) => !armed),
+						},
+					],
+				},
 			]}
 		/>
 	);
@@ -96,7 +108,17 @@ export function PatchLayers() {
 	const { data, ui } = controller;
 	return (
 		<aside className="patch-layers">
-			<h3>{ui.layerModal === "select" ? "Select layer" : "Layers"}</h3>
+			<div className="patch-layers-title">
+				<h3>{ui.layerModal === "select" ? "Select layer" : "Layers"}</h3>
+				<SwitchField
+					label="Show all"
+					aria-label="Show all layers"
+					offLabel=""
+					onLabel=""
+					checked={ui.showAllLayers}
+					onChange={(event) => ui.setShowAllLayers(event.target.checked)}
+				/>
+			</div>
 			<Button
 				className={ui.activeLayer === "all" ? "active" : ""}
 				onClick={() =>
@@ -104,7 +126,7 @@ export function PatchLayers() {
 				}
 			>
 				<b>All fixtures</b>
-				<span>{data.all.length}</span>
+				<span>{data.scoped.length}</span>
 			</Button>
 			{data.layers.map((layer) => (
 				<Button
@@ -119,7 +141,7 @@ export function PatchLayers() {
 					<b>{layer.name}</b>
 					<span>
 						{
-							data.all.filter(
+							data.scoped.filter(
 								(fixture) => (fixture.layer_id || "default") === layer.id,
 							).length
 						}

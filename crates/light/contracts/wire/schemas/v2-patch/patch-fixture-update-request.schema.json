@@ -336,6 +336,14 @@
             "type": "profile_default"
           }
         },
+        "luminous_output_lumens": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
         "shaper_angles_degrees": {
           "type": "array",
           "default": [

@@ -315,6 +315,7 @@ describe("Patch v2 wire boundary", () => {
 		const decoded = decodePatchSnapshot(value);
 		expect(decoded.fixtures[0].installedAppearance).toEqual({
 			lightSource: { type: "tungsten" },
+			luminousOutputLumens: null,
 			colorTemperatureKelvin: 3200,
 			gel: {
 				type: "built_in",
@@ -526,6 +527,7 @@ describe("Patch v2 network boundary", () => {
 				type: "set_installed_appearance",
 				appearance: {
 					lightSource: { type: "tungsten" },
+					luminousOutputLumens: null,
 					colorTemperatureKelvin: 3200,
 					gel: {
 						type: "custom",
@@ -540,6 +542,7 @@ describe("Patch v2 network boundary", () => {
 				action: "set_installed_appearance",
 				appearance: {
 					light_source: { type: "tungsten" },
+					luminous_output_lumens: null,
 					color_temperature_kelvin: 3200,
 					gel: {
 						type: "custom",

@@ -1,26 +1,30 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import type { PatchedFixture } from "../api/types";
 import { PatchWindow } from "./PatchWindow";
+
+const desktop = vi.hoisted(() => ({
+	available: true,
+	openVisualizer: vi.fn(),
+}));
 
 vi.mock("../components/setup/FixturePatchSetup", () => ({
 	FixturePatchSetupContent: ({
 		active,
-		onStagePreview,
+		onOpenStageWindow,
 		onMedia,
 	}: {
 		active?: boolean;
-		onStagePreview?: () => void;
+		onOpenStageWindow?: () => void;
 		onMedia?: () => void;
 	}) => (
 		<div data-testid="patch-content" data-active={String(active)}>
-			<div role="button" tabIndex={0} onClick={onStagePreview}>
-				Preview Stage
-			</div>
-			<div role="button" tabIndex={0} onClick={onMedia}>
+			<button type="button" onClick={onOpenStageWindow}>
+				Open Stage Renderer
+			</button>
+			<button type="button" onClick={onMedia}>
 				Media Servers
-			</div>
+			</button>
 		</div>
 	),
 }));
@@ -35,33 +39,8 @@ vi.mock("../components/setup/MediaServerSetup", () => ({
 	MediaServerSetup: () => <div>Media setup</div>,
 }));
 
-vi.mock("../features/patch/PatchContext", () => ({
-	usePatch: () => ({ fixtures: [{ fixture_id: "projected-fixture" }] }),
-}));
-
-vi.mock("../features/highlight/HighlightState", async (importOriginal) => ({
-	...(await importOriginal<object>()),
-	useHighlightActions: () => ({
-		highlightAction: vi.fn(),
-		dismissHighlightError: vi.fn(),
-		setPatchPreviewHighlight: vi.fn(),
-	}),
-}));
-
 vi.mock("../platform/desktop", () => ({
-	useDesktopBridge: () => ({ available: false }),
-}));
-
-vi.mock("./StageWindow", () => ({
-	StageWindow: ({
-		patchedFixtures,
-	}: {
-		patchedFixtures?: PatchedFixture[];
-	}) => (
-		<div data-testid="stage-fixtures">
-			{patchedFixtures?.map((fixture) => fixture.fixture_id).join(",")}
-		</div>
-	),
+	useDesktopBridge: () => desktop,
 }));
 
 beforeAll(() => {
@@ -76,14 +55,14 @@ beforeAll(() => {
 
 afterEach(cleanup);
 
-describe("Patch window Stage preview", () => {
-	it("renders from the active Patch projection", () => {
+describe("Patch window Stage renderer", () => {
+	it("opens the dedicated Stage renderer", () => {
 		render(<PatchWindow />);
-		fireEvent.click(screen.getByRole("button", { name: "Preview Stage" }));
-
-		expect(screen.getByTestId("stage-fixtures")).toHaveTextContent(
-			"projected-fixture",
+		fireEvent.click(
+			screen.getByRole("button", { name: "Open Stage Renderer" }),
 		);
+		expect(desktop.openVisualizer).toHaveBeenCalledOnce();
+		expect(screen.queryByText("Preview Stage")).toBeNull();
 	});
 
 	it("keeps one Patch boundary across fixture and media views", () => {

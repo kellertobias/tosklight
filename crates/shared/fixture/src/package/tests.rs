@@ -132,6 +132,7 @@ fn requested_generic_and_venue_packages_have_exact_portable_contracts() {
         ("venue--curtain-3-m.toskfixture", 10),
         ("venue--curtain-5-m.toskfixture", 10),
         ("venue--curtain-6-m.toskfixture", 10),
+        ("venue--disco-ball-50-cm.toskfixture", 1),
     ];
     for (filename, mode_count) in venue {
         let profile = shipped_profile(filename);
@@ -167,7 +168,7 @@ fn requested_generic_and_venue_packages_have_exact_portable_contracts() {
 }
 
 #[test]
-fn stage_lamp_packages_bind_models_motion_and_emitters() {
+fn stage_lamp_packages_leave_body_models_to_visualizer_defaults() {
     let acl = shipped_profile("generic--acl.toskfixture");
     assert_eq!(acl.manufacturer, "Generic");
     assert_eq!(acl.name, "ACL");
@@ -175,11 +176,8 @@ fn stage_lamp_packages_bind_models_motion_and_emitters() {
     assert_eq!(acl.physical.width_millimetres, Some(80.0));
     assert_eq!(acl.physical.height_millimetres, Some(80.0));
     assert_eq!(acl.physical.depth_millimetres, Some(200.0));
-    assert!(
-        acl.model_asset
-            .as_deref()
-            .is_some_and(|asset| { asset.starts_with("data:model/gltf-binary;base64,") })
-    );
+    assert!(acl.model_asset.is_none());
+    assert!(acl.projection_assets.is_none());
     assert!(acl.modes.iter().all(|mode| {
         mode.geometry.nodes.len() == 1
             && mode.geometry.nodes[0].glb_node.as_deref() == Some("acl-body")
@@ -202,6 +200,40 @@ fn stage_lamp_packages_bind_models_motion_and_emitters() {
         "jb-lighting--jbled-a7.toskfixture",
     ] {
         assert_moving_lamp_geometry(filename);
+    }
+}
+
+#[test]
+fn shipped_jbled_a7_uses_the_documented_safe_shutter_table_in_every_mode() {
+    let profile = shipped_profile("jb-lighting--jbled-a7.toskfixture");
+    assert_eq!(profile.revision, 2);
+    assert!(profile.notes.contains("JBLED_A7_DMX_Protocol.pdf"));
+    assert_eq!(profile.modes.len(), 4);
+    for mode in &profile.modes {
+        let shutter = mode
+            .channels
+            .iter()
+            .find(|channel| channel.attribute.0 == "shutter")
+            .unwrap();
+        assert_eq!(shutter.default_raw, 16, "{} shutter home", mode.name);
+        assert_eq!(shutter.highlight_raw, 255, "{} Highlight", mode.name);
+        assert_eq!(shutter.functions.len(), 23, "{} function bands", mode.name);
+        assert_eq!(
+            (shutter.functions[0].dmx_from, shutter.functions[0].dmx_to),
+            (0, 15)
+        );
+        assert_eq!(
+            (shutter.functions[1].dmx_from, shutter.functions[1].dmx_to),
+            (16, 95)
+        );
+        assert_eq!(shutter.functions[1].name, "Shutter open");
+        assert_eq!(
+            (shutter.functions[22].dmx_from, shutter.functions[22].dmx_to),
+            (255, 255)
+        );
+        for pair in shutter.functions.windows(2) {
+            assert_eq!(pair[0].dmx_to + 1, pair[1].dmx_from);
+        }
     }
 }
 
@@ -293,12 +325,8 @@ fn shipped_crowd_area_has_every_visual_only_mode() {
 fn assert_moving_lamp_geometry(filename: &str) {
     let mover = shipped_profile(filename);
     assert_eq!(mover.model_units, ModelUnits::Metres);
-    assert!(
-        mover
-            .model_asset
-            .as_deref()
-            .is_some_and(|asset| { asset.starts_with("data:model/gltf-binary;base64,") })
-    );
+    assert!(mover.model_asset.is_none());
+    assert!(mover.projection_assets.is_none());
     assert!(mover.modes.iter().all(|mode| {
         mode.geometry.nodes.len() == 3
             && mode.geometry.nodes[0].glb_node.as_deref() == Some("moving-base")
@@ -521,6 +549,53 @@ fn generic_led_packages_keep_only_operator_useful_channel_orders() {
                 assert_eq!(intensity, Some(mode.channels.len() - 1));
             }
         }
+    }
+}
+
+#[test]
+fn showtec_sunstrip_thirty_channel_mode_projects_one_virtual_dimmer_per_pixel() {
+    let profile = shipped_profile("showtec--sunstrip-led-rgb-42206.toskfixture");
+    let mode = profile
+        .modes
+        .iter()
+        .find(|mode| mode.name == "30 Channel")
+        .expect("shipped 30-channel mode");
+    assert_eq!(mode.splits[0].footprint, 30);
+
+    let pixels = mode
+        .heads
+        .iter()
+        .filter(|head| !head.master_shared)
+        .collect::<Vec<_>>();
+    assert_eq!(pixels.len(), 10);
+    for head in &pixels {
+        let channels = mode
+            .channels
+            .iter()
+            .filter(|channel| channel.head_id == head.id)
+            .collect::<Vec<_>>();
+        assert_eq!(channels.len(), 3, "{} keeps exactly RGB on DMX", head.name);
+        assert!(
+            channels
+                .iter()
+                .all(|channel| channel.reacts_to_virtual_intensity),
+            "{} RGB must be scaled by its virtual dimmer",
+            head.name
+        );
+    }
+
+    let definition = profile
+        .resolved_definition(mode.id)
+        .expect("Sunstrip definition");
+    for pixel in definition.heads.iter().filter(|head| !head.shared) {
+        let intensities = pixel
+            .parameters
+            .iter()
+            .filter(|parameter| parameter.attribute.is_intensity())
+            .collect::<Vec<_>>();
+        assert_eq!(intensities.len(), 1, "{} has one intensity", pixel.name);
+        assert!(intensities[0].virtual_dimmer);
+        assert!(intensities[0].components.is_empty());
     }
 }
 
@@ -1644,6 +1719,7 @@ fn round_trips_a_versioned_effect_script() {
 fn shipped_effect_fixtures_keep_their_programs_and_exact_dmx_footprints() {
     for (filename, name, footprint) in [
         ("generic--cold-spark.toskfixture", "Cold Spark Fountain", 3),
+        ("generic--flame-jet.toskfixture", "Flame Jet", 3),
         (
             "generic--five-nozzle-flame.toskfixture",
             "Five-nozzle Flame Unit",
@@ -1668,6 +1744,41 @@ fn shipped_effect_fixtures_keep_their_programs_and_exact_dmx_footprints() {
             serde_json::to_value(profile).unwrap()
         );
     }
+}
+
+#[test]
+fn shipped_flame_jet_and_kabuki_keep_highlight_operator_safe() {
+    let flame = shipped_profile("generic--flame-jet.toskfixture");
+    let flame_intensity = &flame.modes[0].channels[0];
+    assert_eq!(flame_intensity.default_raw, 0);
+    assert_eq!(flame_intensity.highlight_raw, 0);
+    assert!(flame.notes.contains("not a manufacturer hardware profile"));
+
+    let kabuki = shipped_profile("generic--kabuki-curtain.toskfixture");
+    let release = &kabuki.modes[0].channels[0];
+    assert_eq!(release.default_raw, 0);
+    assert_eq!(release.highlight_raw, 0);
+}
+
+#[test]
+fn shipped_disco_ball_is_visual_only_geometry_with_no_dmx_channels() {
+    let profile = shipped_profile("venue--disco-ball-50-cm.toskfixture");
+    assert_eq!(profile.name, "Disco Ball 50 cm");
+    assert_eq!(profile.patch_policy, PatchPolicy::VisualOnly);
+    assert_eq!(profile.model_units, ModelUnits::Metres);
+    assert_eq!(profile.modes.len(), 1);
+    let mode = &profile.modes[0];
+    assert_eq!(mode.name, "50 cm");
+    assert_eq!(mode.splits[0].footprint, 0);
+    assert!(mode.channels.is_empty());
+    assert_eq!(
+        mode.geometry
+            .nodes
+            .iter()
+            .filter_map(|node| node.glb_node.as_deref())
+            .collect::<Vec<_>>(),
+        ["truss-coupler", "ball-core", "ball-tiles"]
+    );
 }
 
 #[test]

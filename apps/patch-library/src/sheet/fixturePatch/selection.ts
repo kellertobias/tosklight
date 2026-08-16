@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { type PatchSelectionHost, usePatchHost } from "../../host";
 import type { PatchedFixture } from "../../wire";
+import type { PatchController } from "./controller";
 
 /**
  * The host's fixture selection.
@@ -38,6 +39,25 @@ export function orderedFixtureSelectionIds(fixtures: readonly PatchedFixture[]) 
 			return true;
 		}),
 	);
+}
+
+/** The selected parent fixtures in the host's explicit operator order. */
+export function selectedFixturesInOperatorOrder(controller: PatchController) {
+	const orderedIds = controller.selection.orderedFixtureIds ?? [];
+	const order = new Map(orderedIds.map((id, index) => [id, index]));
+	return controller.data.all
+		.filter((fixture) =>
+			fixtureSelectionIds(fixture).some((id) => order.has(id)),
+		)
+		.sort((left, right) => {
+			const leftIndex = Math.min(
+				...fixtureSelectionIds(left).map((id) => order.get(id) ?? Infinity),
+			);
+			const rightIndex = Math.min(
+				...fixtureSelectionIds(right).map((id) => order.get(id) ?? Infinity),
+			);
+			return leftIndex - rightIndex;
+		});
 }
 
 export function toggledFixtureSelection(

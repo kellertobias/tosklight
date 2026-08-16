@@ -281,6 +281,7 @@ export function defaultInstalledFixtureAppearance(): InstalledFixtureAppearance 
 	return {
 		light_source: { type: "profile_default" },
 		color_temperature_kelvin: null,
+		luminous_output_lumens: null,
 		gel: { type: "open_white" },
 		shaper_angles_degrees: [0, 0, 0, 0],
 	};
@@ -293,6 +294,7 @@ function patchAppearance(
 	return {
 		lightSource: { ...resolved.light_source },
 		colorTemperatureKelvin: resolved.color_temperature_kelvin,
+		luminousOutputLumens: resolved.luminous_output_lumens,
 		gel:
 			resolved.gel.type === "built_in"
 				? {
@@ -325,6 +327,7 @@ function fixtureAppearance(
 	return {
 		light_source: { ...resolved.lightSource },
 		color_temperature_kelvin: resolved.colorTemperatureKelvin,
+		luminous_output_lumens: resolved.luminousOutputLumens,
 		gel:
 			resolved.gel.type === "built_in"
 				? {

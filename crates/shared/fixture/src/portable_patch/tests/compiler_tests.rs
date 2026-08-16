@@ -1,10 +1,10 @@
 use super::support::{fixture, profile, source};
 use crate::{
-    FixtureProfileRevisionResolver, PatchPolicy, PatchedFixtureCompiler, PatchedFixturePatch,
-    PatchedFixtureProfileReference, PortablePatchError, PortablePatchedFixtureRecord,
-    ResolvedFixtureProfileRevision, fixture_profile_content_digest,
+    ChannelFunction, FixtureProfileRevisionResolver, PatchPolicy, PatchedFixtureCompiler,
+    PatchedFixturePatch, PatchedFixtureProfileReference, PortablePatchError,
+    PortablePatchedFixtureRecord, ResolvedFixtureProfileRevision, fixture_profile_content_digest,
 };
-use light_core::FixtureId;
+use light_core::{AttributeKey, FixtureId};
 use serde_json::json;
 use std::{cell::Cell, cell::RefCell, rc::Rc};
 use uuid::Uuid;
@@ -47,6 +47,64 @@ fn one_profile_revision_is_resolved_once_for_many_fixture_records() {
     assert_eq!(compiler.into_resolver().calls, 1);
     assert_eq!(json!(compiled[0]), json!(first));
     assert_eq!(json!(compiled[1]), json!(second));
+}
+
+#[test]
+fn embedded_jbled_a7_revision_one_uses_safe_open_shutter_runtime_compatibility() {
+    let package = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../..")
+        .join("assets/fixture-library/jb-lighting--jbled-a7.toskfixture");
+    let mut profile = crate::read_fixture_package(&std::fs::read(package).unwrap()).unwrap();
+    profile.revision = 1;
+    let mode = profile
+        .modes
+        .iter_mut()
+        .find(|mode| mode.name == "Standard RGB 16 Bit (S16)")
+        .unwrap();
+    let shutter = mode
+        .channels
+        .iter_mut()
+        .find(|channel| channel.attribute.0 == "shutter")
+        .unwrap();
+    shutter.default_raw = 0;
+    shutter.functions = vec![ChannelFunction::continuous(
+        "Shutter / Strobe",
+        AttributeKey("shutter".into()),
+        255,
+    )];
+    let mode_id = mode.id;
+    let fixture = fixture(&profile);
+    let reference = PatchedFixtureProfileReference {
+        profile_id: profile.id,
+        profile_revision: profile.revision.into(),
+        mode_id,
+    };
+    let record = PortablePatchedFixtureRecord::from_profile_reference(
+        reference,
+        PatchedFixturePatch::from_fixture(&fixture),
+    )
+    .unwrap();
+    let compiled = PatchedFixtureCompiler::new(CountingResolver {
+        source: Some(source(&profile)),
+        calls: 0,
+    })
+    .compile(&record)
+    .unwrap();
+
+    let snapshot = compiled.definition.profile_snapshot.unwrap();
+    let shutter = snapshot.modes[0]
+        .channels
+        .iter()
+        .find(|channel| channel.attribute.0 == "shutter")
+        .unwrap();
+    assert_eq!(shutter.default_raw, 16);
+    assert_eq!(shutter.functions.len(), 23);
+    assert_eq!(shutter.functions[0].name, "Shutter closed");
+    assert_eq!(shutter.functions[1].name, "Shutter open");
+    assert_eq!(
+        (shutter.functions[1].dmx_from, shutter.functions[1].dmx_to),
+        (16, 95)
+    );
 }
 
 #[test]

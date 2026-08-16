@@ -464,6 +464,14 @@
             "type": "profile_default"
           }
         },
+        "luminous_output_lumens": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
         "shaper_angles_degrees": {
           "type": "array",
           "default": [
@@ -483,6 +491,7 @@
       "required": [
         "light_source",
         "color_temperature_kelvin",
+        "luminous_output_lumens",
         "gel",
         "shaper_angles_degrees"
       ]

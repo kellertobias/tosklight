@@ -21,6 +21,9 @@ pub struct InstalledFixtureAppearance {
     /// An explicit installed colour temperature. `None` inherits the selected profile revision.
     #[serde(default)]
     pub color_temperature_kelvin: Option<u32>,
+    /// Actual output of this installed source in lumens. `None` inherits the profile revision.
+    #[serde(default)]
+    pub luminous_output_lumens: Option<f32>,
     #[serde(default)]
     pub gel: GelAssignment,
     /// Installed static shutter or barn-door element angles, in element order one through four.
@@ -33,6 +36,7 @@ impl Default for InstalledFixtureAppearance {
         Self {
             light_source: InstalledLightSource::ProfileDefault,
             color_temperature_kelvin: None,
+            luminous_output_lumens: None,
             gel: GelAssignment::OpenWhite,
             shaper_angles_degrees: [0.0; 4],
         }
@@ -47,6 +51,12 @@ impl InstalledFixtureAppearance {
             .is_some_and(|kelvin| !(1_000..=25_000).contains(&kelvin))
         {
             return Err("installed color temperature must be within 1000-25000 K".into());
+        }
+        if self
+            .luminous_output_lumens
+            .is_some_and(|lumens| !lumens.is_finite() || lumens <= 0.0)
+        {
+            return Err("installed luminous output must be a positive finite lumen value".into());
         }
         self.gel.validate()?;
         if self

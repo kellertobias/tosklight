@@ -5,17 +5,22 @@ import {
 	Select,
 	TextInput,
 } from "@tosklight/ui";
+import { ModalNumberEditor } from "@tosklight/ui/input";
+import { parsePatchAddress } from "../fields";
 import { fixtureDefinitionKey } from "../fixtureProfileModel";
+import { isDmxPatchable } from "../patchUtils";
 import { usePatchController } from "./controller";
 import { saveEdit, saveSplitEdit } from "./editSave";
 import { cancelEdit, requestFixtureEditClose } from "./editSession";
 import { FixtureAddressScreen } from "./FixtureAddressScreen";
+import { parseFixtureNumber, parseVirtualFixtureNumber } from "./fixtureIds";
 import {
 	closeMultipatchEdit,
 	requestMultipatchEditClose,
 	saveMultipatchEdit,
 } from "./multipatchActions";
-import { definitionSplits } from "./patchModel";
+import { definitionSplits, replaceSelectedSplitPatch } from "./patchModel";
+import { selectedFixturesInOperatorOrder } from "./selection";
 
 export function MultipatchVectorDialog() {
 	const controller = usePatchController();
@@ -101,7 +106,13 @@ export function MultipatchAddressDialog() {
 export function FixtureEditDialog() {
 	const controller = usePatchController();
 	const { edit } = controller.ui;
-	if (!edit || !controller.data.selected || edit === "address") return null;
+	if (
+		!edit ||
+		controller.ui.editPresentation !== "modal" ||
+		!controller.data.selected ||
+		edit === "address"
+	)
+		return null;
 	const close = () => requestFixtureEditClose(controller);
 	return (
 		<ModalRegistration onClose={close}>
@@ -131,6 +142,234 @@ export function FixtureEditDialog() {
 				</section>
 			</div>
 		</ModalRegistration>
+	);
+}
+
+export function DesktopValueEntryDialog() {
+	const controller = usePatchController();
+	const edit = controller.ui.edit;
+	const selected = controller.data.selected;
+	if (
+		controller.ui.editPresentation !== "value_entry" ||
+		!isDesktopNumericEdit(edit) ||
+		!selected
+	)
+		return null;
+	const fixtures = selectedFixturesInOperatorOrder(controller);
+	const targets = fixtures.length ? fixtures : [selected];
+	const label = desktopNumericEditLabel(edit, controller.ui.editAxis);
+	return (
+		<ModalNumberEditor
+			ariaLabel={label}
+			title={`${label} · ${targets.length} fixture${targets.length === 1 ? "" : "s"}`}
+			beforeTitle={
+				controller.ui.editError ? (
+					<output className="patch-status" role="alert">
+						{controller.ui.editError}
+					</output>
+				) : undefined
+			}
+			value={controller.ui.editText}
+			onChange={controller.ui.setEditText}
+			onSubmit={(value) =>
+				void applyDesktopValueEntry(controller, targets, edit, value ?? "")
+			}
+			onClose={() => cancelEdit(controller)}
+			allowThrough={targets.length > 1}
+			unit={desktopNumericEditUnit(edit)}
+		/>
+	);
+}
+
+async function applyDesktopValueEntry(
+	controller: ReturnType<typeof usePatchController>,
+	fixtures: ReturnType<typeof usePatchController>["data"]["visible"],
+	edit: Exclude<ReturnType<typeof usePatchController>["ui"]["edit"], null>,
+	value: string,
+) {
+	controller.ui.setEditError("");
+	if (value.trim() === controller.ui.editBaseline.trim()) {
+		cancelEdit(controller);
+		return;
+	}
+	const values = spreadInput(value, fixtures.length);
+	if (!values) {
+		controller.ui.setEditError(
+			"Enter one value, or two endpoints separated by THRU for a selection.",
+		);
+		return;
+	}
+	for (const [index, fixture] of fixtures.entries()) {
+		const raw = values[index];
+		let changes: Partial<(typeof fixtures)[number]> | null = null;
+		if (edit === "number") {
+			if (isDmxPatchable(fixture.definition)) {
+				const fixtureNumber = parseFixtureNumber(raw);
+				if (fixtureNumber != null)
+					changes = {
+						fixture_number: fixtureNumber,
+						virtual_fixture_number: null,
+					};
+			} else {
+				const virtualNumber = parseVirtualFixtureNumber(raw);
+				if (virtualNumber != null)
+					changes = {
+						fixture_number: null,
+						virtual_fixture_number: virtualNumber,
+					};
+			}
+		} else if (edit === "address") {
+			const address = parsePatchAddress(raw);
+			if (address)
+				changes =
+					fixture.definition.schema_version >= 2
+						? replaceSelectedSplitPatch(
+								fixture.definition,
+								fixture.split_patches,
+								fixture.universe,
+								fixture.address,
+								definitionSplits(fixture.definition)[0]?.number ?? 1,
+								address,
+							)
+						: address;
+		} else
+			changes = numericFixtureChanges(
+				fixture,
+				edit,
+				controller.ui.editAxis,
+				raw,
+			);
+		if (!changes) {
+			controller.ui.setEditError(
+				`“${raw}” is not a valid ${desktopNumericEditLabel(edit, controller.ui.editAxis).toLowerCase()}.`,
+			);
+			return;
+		}
+		if (!(await controller.patch.updateFixture(fixture.fixture_id, changes))) {
+			controller.ui.setEditError(
+				`Could not update ${fixture.name || fixture.fixture_id}.`,
+			);
+			return;
+		}
+	}
+	cancelEdit(controller);
+}
+
+function isDesktopNumericEdit(
+	edit: ReturnType<typeof usePatchController>["ui"]["edit"],
+): edit is
+	| "number"
+	| "address"
+	| "mib_delay"
+	| "location"
+	| "rotation"
+	| "bracket_angle"
+	| "shaper_angle" {
+	return (
+		edit === "number" ||
+		edit === "address" ||
+		edit === "mib_delay" ||
+		edit === "location" ||
+		edit === "rotation" ||
+		edit === "bracket_angle" ||
+		edit === "shaper_angle"
+	);
+}
+
+function desktopNumericEditLabel(
+	edit: Exclude<ReturnType<typeof usePatchController>["ui"]["edit"], null>,
+	axis: ReturnType<typeof usePatchController>["ui"]["editAxis"],
+) {
+	if (edit === "number") return "Fixture ID";
+	if (edit === "address") return "Patch";
+	if (edit === "mib_delay") return "MIB Delay";
+	if (edit === "bracket_angle") return "Bracket angle";
+	if (edit === "shaper_angle") return "Shaper angle";
+	if (edit === "location" || edit === "rotation")
+		return `${edit === "location" ? "Location" : "Rotation"} ${axis?.toUpperCase() ?? "value"}`;
+	return "Value";
+}
+
+function desktopNumericEditUnit(
+	edit: Exclude<ReturnType<typeof usePatchController>["ui"]["edit"], null>,
+) {
+	if (edit === "location") return "meter";
+	if (
+		edit === "rotation" ||
+		edit === "bracket_angle" ||
+		edit === "shaper_angle"
+	)
+		return "degree";
+	if (edit === "mib_delay") return "second";
+	return undefined;
+}
+
+function numericFixtureChanges(
+	fixture: ReturnType<typeof usePatchController>["data"]["visible"][number],
+	edit: Exclude<ReturnType<typeof usePatchController>["ui"]["edit"], null>,
+	axis: ReturnType<typeof usePatchController>["ui"]["editAxis"],
+	raw: string,
+) {
+	const value = Number(raw);
+	if (!Number.isFinite(value)) return null;
+	if (edit === "mib_delay")
+		return {
+			move_in_black_delay_millis: Math.max(0, Math.round(value * 1000)),
+		};
+	if (edit === "bracket_angle") return { bracket_angle: value };
+	if (edit === "shaper_angle") return { shaper_angle: value };
+	if ((edit === "location" || edit === "rotation") && axis)
+		return {
+			[edit]: {
+				...(fixture[edit] ?? { x: 0, y: 0, z: 0 }),
+				[axis]: edit === "location" ? Math.round(value * 1000) : value,
+			},
+		};
+	return null;
+}
+
+function spreadInput(value: string, count: number): string[] | null {
+	const points = value
+		.trim()
+		.split(/\s+THRU\s+/iu)
+		.map((point) => point.trim())
+		.filter(Boolean);
+	if (points.length === 1)
+		return Array.from({ length: count }, () => points[0]);
+	if (points.length !== 2 || count < 2) return null;
+	const addresses = points.map(parsePatchAddress);
+	if (addresses.every((address) => address != null)) {
+		const [first, last] = addresses as Array<{
+			universe: number;
+			address: number;
+		}>;
+		const start = (first.universe - 1) * 512 + first.address - 1;
+		const end = (last.universe - 1) * 512 + last.address - 1;
+		return Array.from({ length: count }, (_, index) => {
+			const slot = Math.round(start + ((end - start) * index) / (count - 1));
+			return `${Math.floor(slot / 512) + 1}.${(slot % 512) + 1}`;
+		});
+	}
+	const virtual = points.map(parseVirtualFixtureNumber);
+	if (virtual.every((number) => number != null))
+		return interpolate(virtual as number[], count).map(
+			(number) => `0.${number}`,
+		);
+	const fixtureNumbers = points.map(parseFixtureNumber);
+	if (fixtureNumbers.every((number) => number != null))
+		return interpolate(fixtureNumbers as number[], count).map(String);
+	const numeric = points.map(Number);
+	if (numeric.every(Number.isFinite))
+		return interpolate(numeric, count).map((number) =>
+			String(Number(number.toFixed(6))),
+		);
+	return null;
+}
+
+function interpolate([first, last]: number[], count: number) {
+	return Array.from(
+		{ length: count },
+		(_, index) => first + ((last - first) * index) / (count - 1),
 	);
 }
 
@@ -336,7 +575,12 @@ function ModeField() {
 export function FixtureAddressDialog() {
 	const controller = usePatchController();
 	const selected = controller.data.selected;
-	if (controller.ui.edit !== "address" || controller.ui.pending || !selected)
+	if (
+		controller.ui.edit !== "address" ||
+		controller.ui.editPresentation !== "modal" ||
+		controller.ui.pending ||
+		!selected
+	)
 		return null;
 	const close = () => cancelEdit(controller);
 	return (

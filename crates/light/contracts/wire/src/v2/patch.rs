@@ -156,6 +156,8 @@ pub struct PatchInstalledFixtureAppearance {
     #[serde(default)]
     pub color_temperature_kelvin: Option<u32>,
     #[serde(default)]
+    pub luminous_output_lumens: Option<f32>,
+    #[serde(default)]
     pub gel: PatchGelAssignment,
     #[serde(default)]
     #[ts(type = "[number, number, number, number]")]
@@ -167,6 +169,7 @@ impl Default for PatchInstalledFixtureAppearance {
         Self {
             light_source: PatchInstalledLightSource::ProfileDefault,
             color_temperature_kelvin: None,
+            luminous_output_lumens: None,
             gel: PatchGelAssignment::OpenWhite,
             shaper_angles_degrees: [0.0; 4],
         }

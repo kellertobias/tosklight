@@ -169,6 +169,7 @@ function mapInstalledAppearance(
 	return {
 		lightSource: { ...appearance.light_source },
 		colorTemperatureKelvin: appearance.color_temperature_kelvin ?? null,
+		luminousOutputLumens: appearance.luminous_output_lumens ?? null,
 		gel:
 			appearance.gel.type === "built_in"
 				? {

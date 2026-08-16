@@ -621,7 +621,7 @@ export type PatchFixtureRotation = { x: number, y: number, z: number, };
 export type PatchInstalledLightSource = { "type": "profile_default" } | { "type": "tungsten" } | { "type": "halogen" } | { "type": "discharge" } | { "type": "led" } | { "type": "fluorescent" } | { "type": "arc" } | { "type": "other", label: string, };
 export type PatchGelDefinitionSnapshot = { number: string, name: string, display_srgb: string, visualizer_srgb: string, };
 export type PatchGelAssignment = { "type": "open_white" } | { "type": "built_in", catalog_id: string, entry_id: string, embedded_fallback: PatchGelDefinitionSnapshot, } | { "type": "custom", name: string, color_srgb: string, note: string | null, };
-export type PatchInstalledFixtureAppearance = { light_source: PatchInstalledLightSource, color_temperature_kelvin: number | null, gel: PatchGelAssignment, shaper_angles_degrees: [number, number, number, number], };
+export type PatchInstalledFixtureAppearance = { light_source: PatchInstalledLightSource, color_temperature_kelvin: number | null, luminous_output_lumens: number | null, gel: PatchGelAssignment, shaper_angles_degrees: [number, number, number, number], };
 export type PatchMultiPatchInput = { id: string, name: string, split_patches: Array<PatchSplitAssignment>, location: PatchFixtureLocation, rotation: PatchFixtureRotation, invert_pan: boolean, invert_tilt: boolean, bracket_angle: number, shaper_angle: number | null, installed_appearance: PatchInstalledFixtureAppearance, };
 export type PatchHighlightOverrideInput = { channel_id: string, raw_value: number, };
 export type PatchFixtureInput = {
@@ -935,7 +935,7 @@ export type VisualizationLaneSnapshot = { scope: VisualizationScope, revision: n
 export type VisualizationLaneDelta = { scope: VisualizationScope, revision: number, generated_at: string, grand_master: number, blackout: boolean, preload: boolean, values: Array<VisualizationValue>, removed_values: Array<VisualizationValueKey>, dynamic_stack?: Array<VisualizationDynamicStackEntry> | null, profile_output_values: Array<VisualizationValue>, removed_profile_output_values: Array<VisualizationValueKey>, };
 export type VisualizationServerMessage = { "type": "hello", protocol_version: number, max_rate_hz: number, lanes: Array<VisualizationLane>, scope: VisualizationScope, } | { "type": "snapshot", lane: VisualizationLane, scope: VisualizationScope, sequence: number, source_frame: number, source_timestamp: string, published_at: string, snapshot: VisualizationLaneSnapshot, } | { "type": "delta", lane: VisualizationLane, scope: VisualizationScope, sequence: number, source_frame: number, source_timestamp: string, published_at: string, delta: VisualizationLaneDelta, } | { "type": "heartbeat", scope: VisualizationScope, sequence: number, published_at: string, } | { "type": "structural_invalidation", scope: VisualizationScope, revision: number, } | { "type": "error", code: string, message: string, };
 export type VisualizerViewMode = "top_down" | "left_to_right" | "right_to_left" | "front_to_back" | "back_to_front" | "lines_3d" | "simple_3d" | "full_3d";
-export type VisualizerRenderQuality = "draft" | "standard" | "high" | "ultra" | "extreme";
+export type VisualizerRenderQuality = "draft" | "standard" | "high" | "ultra";
 export type VisualizerCamera = { position: [number, number, number], target: [number, number, number], up: [number, number, number],
 /**
  * Vertical field of view in degrees, for the perspective modes.

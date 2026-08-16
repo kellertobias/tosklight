@@ -8,9 +8,9 @@ import {
 	useRef,
 	useState,
 } from "react";
-import type { PatchedFixture } from "../../wire";
-import { usePatch, usePatchView } from "../../state/PatchContext";
 import { type PatchHost, usePatchHost } from "../../host";
+import { usePatch, usePatchView } from "../../state/PatchContext";
+import type { PatchedFixture } from "../../wire";
 import { parsePatchAddress } from "../fields";
 import {
 	fixtureDefinitionKey,
@@ -19,6 +19,7 @@ import {
 import {
 	compareFixtureManufacturers,
 	groupFixtureFamilies,
+	isDmxPatchable,
 } from "../patchUtils";
 import { compareFixtureIds } from "./fixtureIds";
 import { definitionSplits } from "./patchModel";
@@ -42,6 +43,7 @@ export type EditKind =
 	| null;
 
 export type VectorAxis = "x" | "y" | "z";
+export type EditPresentation = "modal" | "inline" | "value_entry";
 
 export type MultiPatchEdit = {
 	fixtureId: string;
@@ -66,15 +68,25 @@ export type PlacementBaseline = {
 
 export type FixturePatchSetupProps = {
 	active?: boolean;
+	title?: string;
+	scope?: PatchFixtureScope;
 	onMedia?: () => void;
 	stagePreviewOpen?: boolean;
 	stagePreviewClearance?: number;
 	onStagePreview?: () => void;
 	onOpenStageWindow?: () => void;
+	addRequest?: number;
+	initialTypeFilter?: string;
+	onFixturesAdded?: (
+		fixtures: readonly { fixtureId: string; name: string }[],
+	) => void | Promise<void>;
 };
+
+export type PatchFixtureScope = "all" | "dmx" | "venue" | "effects" | "media";
 
 function usePatchUiState() {
 	const [activeLayer, setActiveLayer] = useState("all");
+	const [showAllLayers, setShowAllLayers] = useState(false);
 	const [selectedFixture, setSelectedFixture] = useState<string | null>(null);
 	const [browserOpen, setBrowserOpen] = useState(false);
 	const [placementOpen, setPlacementOpen] = useState(false);
@@ -104,7 +116,10 @@ function usePatchUiState() {
 		useState<PlacementBaseline | null>(null);
 	const [placementCloseConfirm, setPlacementCloseConfirm] = useState(false);
 	const [edit, setEdit] = useState<EditKind>(null);
+	const [editPresentation, setEditPresentation] =
+		useState<EditPresentation>("modal");
 	const [editText, setEditText] = useState("");
+	const [editBaseline, setEditBaseline] = useState("");
 	const [editSplitDrafts, setEditSplitDrafts] = useState<
 		Record<number, string>
 	>({});
@@ -123,9 +138,12 @@ function usePatchUiState() {
 	);
 	const [editingSplit, setEditingSplit] = useState<number | null>(null);
 	const selectionAnchor = useRef<string | null>(null);
+	const dragSelection = useRef<string | null>(null);
 	return {
 		activeLayer,
 		setActiveLayer,
+		showAllLayers,
+		setShowAllLayers,
 		selectedFixture,
 		setSelectedFixture,
 		browserOpen,
@@ -168,8 +186,12 @@ function usePatchUiState() {
 		setPlacementCloseConfirm,
 		edit,
 		setEdit,
+		editPresentation,
+		setEditPresentation,
 		editText,
 		setEditText,
+		editBaseline,
+		setEditBaseline,
 		editSplitDrafts,
 		setEditSplitDrafts,
 		editError,
@@ -193,6 +215,7 @@ function usePatchUiState() {
 		editingSplit,
 		setEditingSplit,
 		selectionAnchor,
+		dragSelection,
 	};
 }
 
@@ -200,12 +223,19 @@ function usePatchDerivedState(
 	library: PatchHost["library"],
 	patch: ReturnType<typeof usePatch>,
 	ui: ReturnType<typeof usePatchUiState>,
+	scope: PatchFixtureScope,
 ) {
+	const all = [...patch.fixtures];
+	const scoped = all.filter((fixture) =>
+		definitionMatchesScope(fixture.definition, scope),
+	);
 	const layers = [...(library?.patchLayers ?? [])]
 		.sort((a, b) => a.body.order - b.body.order)
-		.map((item) => item.body);
-	const all = [...patch.fixtures];
-	const visible = all
+		.map((item) => item.body)
+		.filter(
+			(layer) => ui.showAllLayers || patchLayerIsVisible(layer.id, all, scope),
+		);
+	const visible = scoped
 		.filter(
 			(fixture) =>
 				ui.activeLayer === "all" ||
@@ -217,8 +247,8 @@ function usePatchDerivedState(
 			mergeFixtureDefinitions(
 				library?.fixtureProfiles ?? [],
 				library?.fixtureLibrary ?? [],
-			),
-		[library?.fixtureProfiles, library?.fixtureLibrary],
+			).filter((definition) => definitionMatchesScope(definition, scope)),
+		[library?.fixtureProfiles, library?.fixtureLibrary, scope],
 	);
 	const selected =
 		all.find((fixture) => fixture.fixture_id === ui.selectedFixture) ?? null;
@@ -243,7 +273,12 @@ function usePatchDerivedState(
 		[availableDefinitions],
 	);
 	const filtered = useMemo(
-		() => filterDefinitions(availableDefinitions, ui),
+		() =>
+			filterDefinitions(availableDefinitions, {
+				query: ui.query,
+				typeFilter: ui.typeFilter,
+				manufacturer: ui.manufacturer,
+			}),
 		[availableDefinitions, ui.query, ui.typeFilter, ui.manufacturer],
 	);
 	const families = useMemo(() => groupFixtureFamilies(filtered), [filtered]);
@@ -278,6 +313,7 @@ function usePatchDerivedState(
 	return {
 		layers,
 		all,
+		scoped,
 		visible,
 		availableDefinitions,
 		selected,
@@ -293,6 +329,38 @@ function usePatchDerivedState(
 		shownUniverse: parsePatchAddress(previewPatch)?.universe ?? 1,
 		shownAddress: parsePatchAddress(previewPatch)?.address ?? 0,
 	};
+}
+
+const EFFECT_FIXTURE_TYPES = new Set(["effect", "fogger", "laser", "scenery"]);
+
+export function definitionMatchesScope(
+	definition: PatchedFixture["definition"],
+	scope: PatchFixtureScope,
+) {
+	if (scope === "all") return true;
+	if (scope === "media")
+		return definition.device_type.trim().toLowerCase() === "media_server";
+	const dmx = isDmxPatchable(definition);
+	const effect = EFFECT_FIXTURE_TYPES.has(
+		definition.device_type.trim().toLowerCase(),
+	);
+	if (scope === "venue") return !dmx;
+	if (scope === "effects") return dmx && effect;
+	return dmx && !effect;
+}
+
+export function patchLayerIsVisible(
+	layerId: string,
+	fixtures: readonly Pick<PatchedFixture, "layer_id" | "definition">[],
+	scope: PatchFixtureScope,
+) {
+	const members = fixtures.filter(
+		(fixture) => (fixture.layer_id || "default") === layerId,
+	);
+	return (
+		members.length === 0 ||
+		members.some((fixture) => definitionMatchesScope(fixture.definition, scope))
+	);
 }
 
 function filterDefinitions(
@@ -320,7 +388,40 @@ function useFixturePatchController(props: FixturePatchSetupProps) {
 	usePatchView(props.active ?? true);
 	const selection = usePatchSelection();
 	const ui = usePatchUiState();
-	const data = usePatchDerivedState(host.library, patch, ui);
+	const handledAddRequest = useRef(0);
+	const data = usePatchDerivedState(
+		host.library,
+		patch,
+		ui,
+		props.scope ?? "all",
+	);
+	useEffect(() => {
+		const request = props.addRequest ?? 0;
+		if (!request || request === handledAddRequest.current) return;
+		handledAddRequest.current = request;
+		ui.setQuery("");
+		ui.setManufacturer("");
+		ui.setFamilyKey("");
+		ui.setDefinitionKey("");
+		ui.setTypeFilter(props.initialTypeFilter ?? "");
+		ui.setBrowserOpen(true);
+	}, [
+		props.addRequest,
+		props.initialTypeFilter,
+		ui.setBrowserOpen,
+		ui.setDefinitionKey,
+		ui.setFamilyKey,
+		ui.setManufacturer,
+		ui.setQuery,
+		ui.setTypeFilter,
+	]);
+	useEffect(() => {
+		if (
+			ui.activeLayer !== "all" &&
+			!data.layers.some((layer) => layer.id === ui.activeLayer)
+		)
+			ui.setActiveLayer("all");
+	}, [data.layers, ui.activeLayer, ui.setActiveLayer]);
 	useEffect(() => {
 		if (!data.family) return;
 		if (
@@ -329,7 +430,7 @@ function useFixturePatchController(props: FixturePatchSetupProps) {
 			)
 		)
 			ui.setDefinitionKey(fixtureDefinitionKey(data.family.modes[0]));
-	}, [data.family, ui.definitionKey]);
+	}, [data.family, ui.definitionKey, ui.setDefinitionKey]);
 	return {
 		host,
 		library: host.library,
@@ -339,11 +440,14 @@ function useFixturePatchController(props: FixturePatchSetupProps) {
 		ui,
 		data,
 		props: {
+			title: props.title ?? "Show Patch",
+			scope: props.scope ?? "all",
 			onMedia: props.onMedia,
 			stagePreviewOpen: props.stagePreviewOpen ?? false,
 			stagePreviewClearance: props.stagePreviewClearance ?? 0,
 			onStagePreview: props.onStagePreview,
 			onOpenStageWindow: props.onOpenStageWindow,
+			onFixturesAdded: props.onFixturesAdded,
 		},
 	};
 }

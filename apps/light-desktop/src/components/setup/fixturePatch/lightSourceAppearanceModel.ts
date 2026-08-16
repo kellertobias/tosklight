@@ -31,6 +31,7 @@ export const SOURCE_OPTIONS: ReadonlyArray<{
 export const DEFAULT_APPEARANCE: InstalledFixtureAppearance = {
 	light_source: { type: "profile_default" },
 	color_temperature_kelvin: null,
+	luminous_output_lumens: null,
 	gel: { type: "open_white" },
 	shaper_angles_degrees: [0, 0, 0, 0],
 };
@@ -39,6 +40,7 @@ export type AppearanceDraft = {
 	sourceType: InstalledLightSource["type"];
 	otherLabel: string;
 	colorTemperature: string;
+	luminousOutputLumens: string;
 	gelType: GelAssignment["type"];
 	customName: string;
 	customColor: string;
@@ -59,6 +61,10 @@ export function appearanceDraft(
 			appearance.color_temperature_kelvin == null
 				? ""
 				: String(appearance.color_temperature_kelvin),
+		luminousOutputLumens:
+			appearance.luminous_output_lumens == null
+				? ""
+				: String(appearance.luminous_output_lumens),
 		gelType: appearance.gel.type,
 		customName:
 			appearance.gel.type === "custom" ? appearance.gel.name : "Custom",
@@ -96,6 +102,13 @@ export function normalizeAppearanceDraft(
 		if (error) return { error };
 		lightSource = { type: "other", label };
 	} else lightSource = { type: draft.sourceType };
+	let luminousOutputLumens: number | null = null;
+	const output = draft.luminousOutputLumens.trim();
+	if (output) {
+		luminousOutputLumens = Number(output);
+		if (!Number.isFinite(luminousOutputLumens) || luminousOutputLumens <= 0)
+			return { error: "Luminous output must be a positive lumen value." };
+	}
 	if (
 		draft.sourceType !== "profile_default" &&
 		colorTemperatureKelvin === null &&
@@ -112,6 +125,7 @@ export function normalizeAppearanceDraft(
 		appearance: {
 			lightSource,
 			colorTemperatureKelvin,
+			luminousOutputLumens,
 			gel: gelResult.gel,
 			shaperAnglesDegrees: [...baseline.shaper_angles_degrees] as [
 				number,
@@ -189,6 +203,7 @@ export function toPatchAppearance(
 	return {
 		lightSource,
 		colorTemperatureKelvin: appearance.color_temperature_kelvin,
+		luminousOutputLumens: appearance.luminous_output_lumens,
 		gel,
 		shaperAnglesDegrees: [...appearance.shaper_angles_degrees] as [
 			number,
@@ -212,9 +227,19 @@ export function sourceSummary(
 			: (option?.label ?? "Profile default");
 	const effectiveCct =
 		appearance.color_temperature_kelvin ?? profileCct(fixture);
-	return effectiveCct === null
-		? source
-		: `${source} · ${effectiveCct.toLocaleString("en-US")} K`;
+	const effectiveLumens =
+		appearance.luminous_output_lumens ??
+		fixture.definition.profile_snapshot?.physical.luminous_output_lumens ??
+		null;
+	return [
+		source,
+		effectiveCct === null ? null : `${effectiveCct.toLocaleString("en-US")} K`,
+		effectiveLumens === null
+			? null
+			: `${effectiveLumens.toLocaleString("en-US")} lm`,
+	]
+		.filter(Boolean)
+		.join(" · ");
 }
 
 export function gelSummary(gel: GelAssignment) {
@@ -235,6 +260,14 @@ export function profileTemperatureDescription(fixture: PatchedFixture) {
 	return cct === null
 		? "No profile CCT is available. Explicit sources require a value."
 		: `Leave empty to inherit ${cct.toLocaleString("en-US")} K from the embedded profile revision.`;
+}
+
+export function profileOutputDescription(fixture: PatchedFixture) {
+	const lumens =
+		fixture.definition.profile_snapshot?.physical.luminous_output_lumens;
+	return lumens == null
+		? "No profile output is available. Enter the installed source's measured or rated lumens."
+		: `Leave empty to inherit ${lumens.toLocaleString("en-US")} lm from the embedded profile revision.`;
 }
 
 export function gelImportTarget(

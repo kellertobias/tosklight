@@ -134,6 +134,7 @@
             "light_source": {
               "type": "profile_default"
             },
+            "luminous_output_lumens": null,
             "shaper_angles_degrees": [
               0.0,
               0.0,
@@ -416,6 +417,14 @@
             "type": "profile_default"
           }
         },
+        "luminous_output_lumens": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
         "shaper_angles_degrees": {
           "type": "array",
           "default": [
@@ -577,6 +586,7 @@
             "light_source": {
               "type": "profile_default"
             },
+            "luminous_output_lumens": null,
             "shaper_angles_degrees": [
               0.0,
               0.0,

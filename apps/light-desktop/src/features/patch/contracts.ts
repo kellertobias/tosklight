@@ -65,6 +65,7 @@ export type PatchGelAssignment =
 export interface PatchInstalledFixtureAppearance {
 	lightSource: PatchInstalledLightSource;
 	colorTemperatureKelvin: number | null;
+	luminousOutputLumens: number | null;
 	gel: PatchGelAssignment;
 	shaperAnglesDegrees: [number, number, number, number];
 }

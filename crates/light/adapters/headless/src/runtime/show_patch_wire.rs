@@ -443,6 +443,7 @@ fn application_installed_appearance(
             }
         },
         color_temperature_kelvin: input.color_temperature_kelvin,
+        luminous_output_lumens: input.luminous_output_lumens,
         gel: match input.gel {
             wire::PatchGelAssignment::OpenWhite => fixture::GelAssignment::OpenWhite,
             wire::PatchGelAssignment::BuiltIn {
@@ -639,6 +640,7 @@ fn wire_installed_appearance(
             }
         },
         color_temperature_kelvin: input.color_temperature_kelvin,
+        luminous_output_lumens: input.luminous_output_lumens,
         gel: match &input.gel {
             fixture::GelAssignment::OpenWhite => wire::PatchGelAssignment::OpenWhite,
             fixture::GelAssignment::BuiltIn {

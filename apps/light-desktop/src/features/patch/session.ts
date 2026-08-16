@@ -756,6 +756,7 @@ function toFixtureAppearance(
 	return {
 		light_source: { ...appearance.lightSource },
 		color_temperature_kelvin: appearance.colorTemperatureKelvin,
+		luminous_output_lumens: appearance.luminousOutputLumens,
 		gel:
 			appearance.gel.type === "built_in"
 				? {
