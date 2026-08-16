@@ -96,6 +96,111 @@ pub const ANALOG_TV_EFFECT: &str = "analog-tv";
 pub const DIGITAL_TV_EFFECT: &str = "digital-tv";
 pub const OPACITY_CYCLE_EFFECT: &str = "opacity-cycle";
 pub const BLUR_EFFECT: &str = "blur";
+pub const FEEDBACK_EFFECT: &str = "feedback";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FeedbackMotion {
+    #[default]
+    Top,
+    Bottom,
+    Left,
+    Right,
+    RotateLeft,
+    RotateRight,
+}
+
+impl FeedbackMotion {
+    pub const ALL: [Self; 6] = [
+        Self::Top,
+        Self::Bottom,
+        Self::Left,
+        Self::Right,
+        Self::RotateLeft,
+        Self::RotateRight,
+    ];
+
+    pub const fn wire_name(self) -> &'static str {
+        match self {
+            Self::Top => "top",
+            Self::Bottom => "bottom",
+            Self::Left => "left",
+            Self::Right => "right",
+            Self::RotateLeft => "rotate-left",
+            Self::RotateRight => "rotate-right",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|motion| motion.wire_name() == value)
+    }
+
+    pub const fn parameter(self) -> f32 {
+        match self {
+            Self::Top => 0.0,
+            Self::Bottom => 1.0,
+            Self::Left => 2.0,
+            Self::Right => 3.0,
+            Self::RotateLeft => 4.0,
+            Self::RotateRight => 5.0,
+        }
+    }
+
+    pub fn from_parameter(value: f32) -> Self {
+        Self::ALL
+            .get(if value.is_finite() {
+                value.round().clamp(0.0, 5.0) as usize
+            } else {
+                0
+            })
+            .copied()
+            .unwrap_or_default()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FeedbackParameters {
+    /// Weight of the retained frame. High values create longer trails.
+    pub amount: f32,
+    /// Per-second translation or rotation speed, normalized for the operator control.
+    pub motion: f32,
+    pub direction: FeedbackMotion,
+}
+
+impl Default for FeedbackParameters {
+    fn default() -> Self {
+        Self {
+            amount: 0.82,
+            motion: 0.25,
+            direction: FeedbackMotion::Top,
+        }
+    }
+}
+
+impl FeedbackParameters {
+    pub fn from_normalized(values: &[f32]) -> Self {
+        let defaults = Self::default();
+        let bounded = |value: Option<f32>, fallback: f32| match value {
+            Some(value) if value.is_finite() => value.clamp(0.0, 1.0),
+            _ => fallback,
+        };
+        Self {
+            amount: bounded(values.first().copied(), defaults.amount),
+            motion: bounded(values.get(1).copied(), defaults.motion),
+            direction: FeedbackMotion::from_parameter(
+                values
+                    .get(2)
+                    .copied()
+                    .unwrap_or(defaults.direction.parameter()),
+            ),
+        }
+    }
+
+    pub const fn as_array(self) -> [f32; 3] {
+        [self.amount, self.motion, self.direction.parameter()]
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct BlurParameters {
@@ -365,6 +470,22 @@ impl EffectSlot {
             .then(|| BlurParameters::from_normalized(&self.parameters))
     }
 
+    pub fn feedback() -> Self {
+        Self {
+            effect_type: Some(FEEDBACK_EFFECT.to_owned()),
+            enabled: true,
+            seed: 0,
+            mix: 1.0,
+            parameters: FeedbackParameters::default().as_array().to_vec(),
+            visualizer_parameters: None,
+        }
+    }
+
+    pub fn feedback_parameters(&self) -> Option<FeedbackParameters> {
+        (self.enabled && self.mix > 0.0 && self.effect_type.as_deref() == Some(FEEDBACK_EFFECT))
+            .then(|| FeedbackParameters::from_normalized(&self.parameters))
+    }
+
     pub fn normalize(&mut self) {
         self.mix = if self.mix.is_finite() {
             self.mix.clamp(0.0, 1.0)
@@ -385,6 +506,10 @@ impl EffectSlot {
             ];
         } else if self.effect_type.as_deref() == Some(BLUR_EFFECT) {
             self.parameters = BlurParameters::from_normalized(&self.parameters)
+                .as_array()
+                .to_vec();
+        } else if self.effect_type.as_deref() == Some(FEEDBACK_EFFECT) {
+            self.parameters = FeedbackParameters::from_normalized(&self.parameters)
                 .as_array()
                 .to_vec();
         }
@@ -678,5 +803,37 @@ mod tests {
         effect.parameters = vec![-1.0, 0.25, 0.5, 1.5, f32::NAN];
         effect.normalize();
         assert_eq!(effect.parameters, vec![0.0, 0.25, 0.5, 1.0, 0.15]);
+    }
+
+    #[test]
+    fn feedback_has_stable_defaults_directions_and_safe_normalization() {
+        let mut effect = EffectSlot::feedback();
+        assert_eq!(effect.effect_type.as_deref(), Some(FEEDBACK_EFFECT));
+        assert_eq!(
+            effect.feedback_parameters(),
+            Some(FeedbackParameters::default())
+        );
+        assert_eq!(
+            FeedbackMotion::parse("rotate-right"),
+            Some(FeedbackMotion::RotateRight)
+        );
+        assert_eq!(FeedbackMotion::parse("diagonal"), None);
+
+        effect.parameters = vec![2.0, -1.0, 5.0];
+        effect.normalize();
+        assert_eq!(
+            effect.feedback_parameters(),
+            Some(FeedbackParameters {
+                amount: 1.0,
+                motion: 0.0,
+                direction: FeedbackMotion::RotateRight,
+            })
+        );
+        effect.enabled = false;
+        assert_eq!(
+            effect.feedback_parameters(),
+            None,
+            "disabled clears the temporal path"
+        );
     }
 }

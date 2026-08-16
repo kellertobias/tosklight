@@ -5,8 +5,8 @@ use media_application::configuration::{
 };
 use media_domain::{
     ANALOG_TV_EFFECT, AnalogTvParameters, BLUR_EFFECT, BlurParameters, DIGITAL_TV_EFFECT,
-    DigitalTvParameters, EffectSlot, LayerState, MaskSource, MaskState, MasterState, MediaAddress,
-    OPACITY_CYCLE_EFFECT, OpacityCycleInterval, OutputState,
+    DigitalTvParameters, EffectSlot, FEEDBACK_EFFECT, FeedbackParameters, LayerState, MaskSource,
+    MaskState, MasterState, MediaAddress, OPACITY_CYCLE_EFFECT, OpacityCycleInterval, OutputState,
 };
 use media_domain::{LayerPersonality, PresentationMode};
 use serde::{Deserialize, Serialize};
@@ -80,6 +80,7 @@ impl EffectSlotView {
         let digital = effect.effect_type.as_deref() == Some(DIGITAL_TV_EFFECT);
         let opacity_cycle = effect.effect_type.as_deref() == Some(OPACITY_CYCLE_EFFECT);
         let blur = effect.effect_type.as_deref() == Some(BLUR_EFFECT);
+        let feedback = effect.effect_type.as_deref() == Some(FEEDBACK_EFFECT);
         let parameters = if analog {
             let defaults = AnalogTvParameters::default().as_array();
             let values = AnalogTvParameters::from_normalized(&effect.parameters).as_array();
@@ -116,21 +117,46 @@ impl EffectSlotView {
                 value,
                 default_value: BlurParameters::default().amount,
             }]
+        } else if feedback {
+            let defaults = FeedbackParameters::default();
+            let values = effect.feedback_parameters().unwrap_or(defaults);
+            vec![
+                EffectParameterView {
+                    id: "feedback-amount".to_owned(),
+                    label: "Feedback amount".to_owned(),
+                    value: values.amount,
+                    default_value: defaults.amount,
+                },
+                EffectParameterView {
+                    id: "feedback-motion".to_owned(),
+                    label: "Motion speed".to_owned(),
+                    value: values.motion,
+                    default_value: defaults.motion,
+                },
+                EffectParameterView {
+                    id: "feedback-direction".to_owned(),
+                    label: "Motion direction".to_owned(),
+                    value: values.direction.parameter(),
+                    default_value: defaults.direction.parameter(),
+                },
+            ]
         } else {
             Vec::new()
         };
         Self {
             index,
             effect_type: effect.effect_type.clone(),
-            label: if analog || digital || opacity_cycle || blur {
+            label: if analog || digital || opacity_cycle || blur || feedback {
                 if analog {
                     "Analog TV"
                 } else if digital {
                     "Digital TV"
                 } else if opacity_cycle {
                     "Layer opacity cycle"
-                } else {
+                } else if blur {
                     "Blur"
+                } else {
+                    "Feedback"
                 }
                 .to_owned()
             } else {
@@ -138,11 +164,17 @@ impl EffectSlotView {
             },
             enabled: effect.enabled,
             mix: effect.mix,
-            supported: effect.effect_type.is_none() || analog || digital || opacity_cycle || blur,
+            supported: effect.effect_type.is_none()
+                || analog
+                || digital
+                || opacity_cycle
+                || blur
+                || feedback,
             capability_detail: (!analog
                 && !digital
                 && !opacity_cycle
                 && !blur
+                && !feedback
                 && effect.effect_type.is_some())
             .then(|| "This Media Server build cannot render the selected effect.".to_owned()),
             parameters,
@@ -762,6 +794,12 @@ pub struct UpdateLayer {
     pub cycle_interval: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub blur_amount: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub feedback_amount: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub feedback_motion: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub feedback_direction: Option<String>,
     /// Complete per-layer visualizer settings routed through effect slot one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub visualizer_parameters: Option<VisualizerParametersView>,
@@ -803,6 +841,9 @@ impl UpdateLayer {
             || self.effect_glitching.is_some()
             || self.cycle_interval.is_some()
             || self.blur_amount.is_some()
+            || self.feedback_amount.is_some()
+            || self.feedback_motion.is_some()
+            || self.feedback_direction.is_some()
             || self.visualizer_parameters.is_some()
     }
 }

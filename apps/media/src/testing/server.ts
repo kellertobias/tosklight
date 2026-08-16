@@ -252,6 +252,8 @@ export function stubServer(
 						);
 					} else if (body.effectType === "blur") {
 						layer.effects[body.effectSlot] = blurEffect(body.effectSlot);
+					} else if (body.effectType === "feedback") {
+						layer.effects[body.effectSlot] = feedbackEffect(body.effectSlot);
 					}
 					const selectedEffect = layer.effects[body.effectSlot];
 					if (body.visualizerParameters !== undefined)
@@ -270,6 +272,23 @@ export function stubServer(
 					}
 					if (body.blurAmount !== undefined)
 						selectedEffect.parameters[0].value = body.blurAmount;
+					if (body.feedbackAmount !== undefined)
+						selectedEffect.parameters[0].value = body.feedbackAmount;
+					if (body.feedbackMotion !== undefined)
+						selectedEffect.parameters[1].value = body.feedbackMotion;
+					if (body.feedbackDirection !== undefined) {
+						const directions = [
+							"top",
+							"bottom",
+							"left",
+							"right",
+							"rotate-left",
+							"rotate-right",
+						];
+						selectedEffect.parameters[2].value = directions.indexOf(
+							body.feedbackDirection,
+						);
+					}
 					for (const [id, key] of [
 						["tv-curvature", "tvCurvature"],
 						["distortion", "effectDistortion"],
@@ -633,6 +652,38 @@ function blurEffect(
 				label: "Blur amount",
 				value: 0.35,
 				defaultValue: 0.35,
+			},
+		],
+	};
+}
+
+function feedbackEffect(
+	index: number,
+): OutputView["layers"][number]["effects"][number] {
+	return {
+		...emptyEffect(index),
+		effectType: "feedback",
+		label: "Feedback",
+		enabled: true,
+		mix: 1,
+		parameters: [
+			{
+				id: "feedback-amount",
+				label: "Feedback amount",
+				value: 0.82,
+				defaultValue: 0.82,
+			},
+			{
+				id: "feedback-motion",
+				label: "Motion speed",
+				value: 0.25,
+				defaultValue: 0.25,
+			},
+			{
+				id: "feedback-direction",
+				label: "Motion direction",
+				value: 0,
+				defaultValue: 0,
 			},
 		],
 	};

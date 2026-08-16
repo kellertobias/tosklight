@@ -10,9 +10,9 @@
 
 use media_domain::geometry::Size;
 use media_domain::{
-    AnalogTvParameters, BlurParameters, DigitalTvParameters, EffectSlot, FlipMirror, LayerState,
-    MaskSource, MaskState, MasterState, MediaAddress, OutputId, PresentationMode,
-    ScalingMode, SourceStatus, Timestamp, Tint,
+    AnalogTvParameters, BlurParameters, DigitalTvParameters, EffectSlot, FeedbackMotion,
+    FeedbackParameters, FlipMirror, LayerState, MaskSource, MaskState, MasterState,
+    MediaAddress, OutputId, PresentationMode, ScalingMode, SourceStatus, Timestamp, Tint,
 };
 use media_render::{Gpu, LayerDraw, OutputRenderer, SourceTexture};
 use std::path::Path;
@@ -147,6 +147,25 @@ fn blur_state(amount: f32, enabled: bool) -> LayerState {
     })
 }
 
+fn feedback_state(direction: FeedbackMotion, enabled: bool) -> LayerState {
+    let mut effect = EffectSlot::feedback();
+    effect.enabled = enabled;
+    effect.seed = 0x310;
+    effect.parameters = FeedbackParameters {
+        amount: 0.9,
+        motion: 1.0,
+        direction,
+    }
+    .as_array()
+    .to_vec();
+    let mut effects: [EffectSlot; 4] = Default::default();
+    effects[0] = effect;
+    ready(LayerState {
+        effects,
+        ..Default::default()
+    })
+}
+
 fn changed_pixels(left: &Image, right: &Image) -> usize {
     left.pixels
         .chunks_exact(4)
@@ -243,6 +262,60 @@ fn blur_changes_live_pixels_and_disabled_is_an_exact_bypass() {
     assert!(changed_pixels(&mild, &clear) > 500);
     assert!(changed_pixels(&strong, &mild) > 500);
     assert_eq!(disabled.pixels, clear.pixels);
+}
+
+#[test]
+fn feedback_retains_prior_frames_moves_them_and_clears_on_bypass() {
+    let mut bench = Bench::new();
+    let first = patterned_source(&bench.gpu);
+    let next = bench.solid(OUTPUT, BLACK);
+    let top = feedback_state(FeedbackMotion::Top, true);
+    let rotate = feedback_state(FeedbackMotion::RotateRight, true);
+    let bypassed = feedback_state(FeedbackMotion::Top, false);
+    let plain = ready(LayerState::default());
+    let draw = |state, source| LayerDraw {
+        state,
+        source,
+        mask: None,
+    };
+
+    bench.render_at(
+        &[draw(&top, &first)],
+        &MasterState::default(),
+        Timestamp::ZERO,
+    );
+    let top_trail = bench.render_at(
+        &[draw(&top, &next)],
+        &MasterState::default(),
+        Timestamp::from_millis(100),
+    );
+    let clear = bench.render_at(
+        &[draw(&bypassed, &next)],
+        &MasterState::default(),
+        Timestamp::from_millis(200),
+    );
+    let plain = bench.render_at(
+        &[draw(&plain, &next)],
+        &MasterState::default(),
+        Timestamp::from_millis(300),
+    );
+    assert!(changed_pixels(&top_trail, &plain) > 1_000);
+    assert_eq!(
+        clear.pixels, plain.pixels,
+        "bypass is the exact live source"
+    );
+
+    bench.render_at(
+        &[draw(&rotate, &first)],
+        &MasterState::default(),
+        Timestamp::from_millis(400),
+    );
+    let rotated_trail = bench.render_at(
+        &[draw(&rotate, &next)],
+        &MasterState::default(),
+        Timestamp::from_millis(500),
+    );
+    assert!(changed_pixels(&rotated_trail, &top_trail) > 500);
 }
 
 #[test]

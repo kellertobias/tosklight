@@ -660,7 +660,7 @@ function tintChange(value: string) {
 function layerChange(id: string, value: string | number): UpdateLayer {
 	const number = Number(value);
 	const effect =
-		/^effect-(\d+)-(type|enabled|mix|tv-curvature|distortion|image-grain|compression-damage|block-size|tile-displacement|chroma-damage|glitching|cycle-interval|blur-amount)$/.exec(
+		/^effect-(\d+)-(type|enabled|mix|tv-curvature|distortion|image-grain|compression-damage|block-size|tile-displacement|chroma-damage|glitching|cycle-interval|blur-amount|feedback-amount|feedback-motion|feedback-direction)$/.exec(
 			id,
 		);
 	if (effect) {
@@ -692,6 +692,12 @@ function layerChange(id: string, value: string | number): UpdateLayer {
 				return { effectSlot, cycleInterval: String(value) };
 			case "blur-amount":
 				return { effectSlot, blurAmount: number / 100 };
+			case "feedback-amount":
+				return { effectSlot, feedbackAmount: number / 100 };
+			case "feedback-motion":
+				return { effectSlot, feedbackMotion: number / 100 };
+			case "feedback-direction":
+				return { effectSlot, feedbackDirection: String(value) };
 		}
 	}
 	switch (id) {
@@ -756,6 +762,7 @@ function effectControls(
 					{ value: "digital-tv", label: "Digital TV" },
 					{ value: "opacity-cycle", label: "Layer opacity cycle" },
 					{ value: "blur", label: "Blur" },
+					{ value: "feedback", label: "Feedback" },
 				],
 				disabled,
 			},
@@ -789,6 +796,74 @@ function effectControls(
 					disabled,
 				},
 			];
+		if (effect.effectType === "feedback") {
+			const amount = effect.parameters.find(
+				(parameter) => parameter.id === "feedback-amount",
+			);
+			const motion = effect.parameters.find(
+				(parameter) => parameter.id === "feedback-motion",
+			);
+			const direction = effect.parameters.find(
+				(parameter) => parameter.id === "feedback-direction",
+			);
+			const directions = [
+				{ value: "top", label: "Top" },
+				{ value: "bottom", label: "Bottom" },
+				{ value: "left", label: "Left" },
+				{ value: "right", label: "Right" },
+				{ value: "rotate-left", label: "Rotate Left" },
+				{ value: "rotate-right", label: "Rotate Right" },
+			];
+			return [
+				...controls,
+				{
+					id: `${prefix}-enabled`,
+					kind: "choice" as const,
+					label: `${slot} state`,
+					value: String(effect.enabled),
+					options: [
+						{ value: "true", label: "Enabled" },
+						{ value: "false", label: "Bypassed" },
+					],
+					disabled,
+				},
+				valueControl(
+					`${prefix}-mix`,
+					`${slot} mix`,
+					effect.mix * 100,
+					0,
+					100,
+					disabled,
+					"%",
+				),
+				valueControl(
+					`${prefix}-feedback-amount`,
+					`${slot} · Feedback amount`,
+					(amount?.value ?? 0.82) * 100,
+					0,
+					100,
+					disabled,
+					"%",
+				),
+				valueControl(
+					`${prefix}-feedback-motion`,
+					`${slot} · Motion speed`,
+					(motion?.value ?? 0.25) * 100,
+					0,
+					100,
+					disabled,
+					"%",
+				),
+				{
+					id: `${prefix}-feedback-direction`,
+					kind: "choice" as const,
+					label: `${slot} · Motion direction`,
+					value: directions[Math.round(direction?.value ?? 0)]?.value ?? "top",
+					options: directions,
+					disabled,
+				},
+			];
+		}
 		if (
 			effect.effectType !== "analog-tv" &&
 			effect.effectType !== "digital-tv" &&

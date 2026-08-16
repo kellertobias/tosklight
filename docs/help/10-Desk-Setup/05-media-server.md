@@ -155,6 +155,11 @@ Compression damage adds quantization and damaged transform blocks, Block size ch
 rectangular grid, Tile displacement moves selected blocks to the wrong source region, Chroma
 damage breaks color more strongly than luma, and Glitching controls held intermittent stream
 failures. It deliberately does not add Analog TV's snow, scanlines, curvature, or sync roll.
+**Feedback** retains earlier live frames as a temporal trail. **Feedback amount** controls how long
+the trail remains, **Motion speed** controls how quickly retained frames travel, and **Motion
+direction** selects **Top**, **Bottom**, **Left**, **Right**, **Rotate Left**, or **Rotate Right**.
+Bypassing Feedback clears its retained-frame history and immediately restores the unmodified live
+source; enabling it again starts a new trail from the current frame.
 After configuring a slot, release takeover to return control to the desk. The matching **Effect 1**
 through **Effect 4** DMX channel then controls that slot's mix without erasing its selected effect or
 typed parameters.

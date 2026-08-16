@@ -13,9 +13,9 @@ use media_application::MediaConfiguration;
 use media_application::configuration::{load, save};
 use media_domain::{
     ANALOG_TV_EFFECT, Applied, BLUR_EFFECT, BlurParameters, Command, CommandKind, CommandSource,
-    DIGITAL_TV_EFFECT, EffectSlot, FlipMirror, LayerControls, MasterControls, MediaAddress,
-    MediaState, OPACITY_CYCLE_EFFECT, OpacityCycleInterval, OutputId, ScalingMode, Timestamp, Tint,
-    apply,
+    DIGITAL_TV_EFFECT, EffectSlot, FEEDBACK_EFFECT, FeedbackMotion, FeedbackParameters, FlipMirror,
+    LayerControls, MasterControls, MediaAddress, MediaState, OPACITY_CYCLE_EFFECT,
+    OpacityCycleInterval, OutputId, ScalingMode, Timestamp, Tint, apply,
 };
 
 use crate::error::ApiError;
@@ -144,6 +144,8 @@ pub(super) async fn update_layer(
         ("chromaDamage", body.chroma_damage),
         ("effectGlitching", body.effect_glitching),
         ("blurAmount", body.blur_amount),
+        ("feedbackAmount", body.feedback_amount),
+        ("feedbackMotion", body.feedback_motion),
     ] {
         validate_unit(name, value)?;
     }
@@ -194,6 +196,7 @@ pub(super) async fn update_layer(
                 DIGITAL_TV_EFFECT => EffectSlot::digital_tv(),
                 OPACITY_CYCLE_EFFECT => EffectSlot::opacity_cycle(),
                 BLUR_EFFECT => EffectSlot::blur(),
+                FEEDBACK_EFFECT => EffectSlot::feedback(),
                 "none" => EffectSlot::default(),
                 _ => {
                     return Err(ApiError::bad_request(
@@ -261,6 +264,29 @@ pub(super) async fn update_layer(
             }
             let mut parameters = BlurParameters::from_normalized(&effect.parameters);
             parameters.amount = amount;
+            effect.parameters = parameters.as_array().to_vec();
+        }
+        if body.feedback_amount.is_some()
+            || body.feedback_motion.is_some()
+            || body.feedback_direction.is_some()
+        {
+            if effect.effect_type.as_deref() != Some(FEEDBACK_EFFECT) {
+                return Err(ApiError::bad_request(
+                    "feedback-parameters-effect",
+                    "choose the Feedback effect before changing its controls",
+                ));
+            }
+            let mut parameters = FeedbackParameters::from_normalized(&effect.parameters);
+            parameters.amount = body.feedback_amount.unwrap_or(parameters.amount);
+            parameters.motion = body.feedback_motion.unwrap_or(parameters.motion);
+            if let Some(direction) = body.feedback_direction.as_deref() {
+                parameters.direction = FeedbackMotion::parse(direction).ok_or_else(|| {
+                    ApiError::bad_request(
+                        "feedback-direction-invalid",
+                        "feedbackDirection must be top, bottom, left, right, rotate-left, or rotate-right",
+                    )
+                })?;
+            }
             effect.parameters = parameters.as_array().to_vec();
         }
         let changes_parameters = body.tv_curvature.is_some()
@@ -944,6 +970,34 @@ mod tests {
         assert_eq!(effect["effectType"], "blur");
         assert_eq!(effect["parameters"][0]["id"], "blur-amount");
         assert_eq!(effect["parameters"][0]["value"], 0.8);
+
+        let (_, bypassed) = send(
+            &bench.router,
+            post(uri, r#"{"effectSlot":0,"effectEnabled":false}"#),
+        )
+        .await;
+        assert_eq!(bypassed["layers"][0]["effects"][0]["enabled"], false);
+    }
+
+    #[tokio::test]
+    async fn feedback_persists_all_motion_controls_and_bypass() {
+        let bench = bench();
+        let uri = format!("/api/v2/outputs/{}/layers/0/update", bench.output);
+        let (status, selected) = send(
+            &bench.router,
+            post(
+                uri.clone(),
+                r#"{"effectSlot":0,"effectType":"feedback","feedbackAmount":0.7,"feedbackMotion":0.4,"feedbackDirection":"rotate-right"}"#,
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let effect = &selected["layers"][0]["effects"][0];
+        assert_eq!(effect["effectType"], "feedback");
+        assert_eq!(effect["label"], "Feedback");
+        assert_eq!(effect["parameters"][0]["value"], 0.7);
+        assert_eq!(effect["parameters"][1]["value"], 0.4);
+        assert_eq!(effect["parameters"][2]["value"], 5.0);
 
         let (_, bypassed) = send(
             &bench.router,

@@ -297,6 +297,44 @@ describe("the production Media pane", () => {
 		);
 	});
 
+	it("configures live Feedback persistence, motion, direction, and bypass", async () => {
+		const server = stubServer();
+		render(<MediaPanePage />);
+		await userEvent.click(
+			await screen.findByRole("switch", { name: "Take over playback" }),
+		);
+		await userEvent.click(screen.getByRole("tab", { name: "Effects" }));
+		await chooseEffect(1, "Feedback");
+		await waitFor(() =>
+			expect(server.outputs[0].layers[0].effects[0].effectType).toBe(
+				"feedback",
+			),
+		);
+		expect(screen.getByLabelText("Slot 1 · Feedback amount")).toHaveValue("82");
+		expect(screen.getByLabelText("Slot 1 · Motion speed")).toHaveValue("25");
+		fireEvent.input(screen.getByLabelText("Slot 1 · Feedback amount"), {
+			target: { value: "70" },
+		});
+		fireEvent.input(screen.getByLabelText("Slot 1 · Motion speed"), {
+			target: { value: "40" },
+		});
+		await chooseNamedChoice("Slot 1 · Motion direction", "Rotate Right");
+		await waitFor(() => {
+			const parameters = server.outputs[0].layers[0].effects[0].parameters;
+			expect(parameters[0].value).toBeCloseTo(0.7);
+			expect(parameters[1].value).toBeCloseTo(0.4);
+			expect(parameters[2].value).toBe(5);
+		});
+		await userEvent.click(
+			within(
+				screen.getByRole("radiogroup", { name: "Slot 1 state" }),
+			).getByRole("radio", { name: "Bypassed" }),
+		);
+		await waitFor(() =>
+			expect(server.outputs[0].layers[0].effects[0].enabled).toBe(false),
+		);
+	});
+
 	it("shows an actionable capability error for an effect this build cannot render", async () => {
 		const output = anOutput();
 		output.layers[0].effects[0] = {
@@ -411,7 +449,11 @@ function deferred() {
 }
 
 async function chooseEffect(slot: number, name: string) {
-	const label = screen.getByText(`Slot ${slot} effect`, { selector: "label" });
+	await chooseNamedChoice(`Slot ${slot} effect`, name);
+}
+
+async function chooseNamedChoice(labelText: string, name: string) {
+	const label = screen.getByText(labelText, { selector: "label" });
 	const trigger = label.parentElement?.querySelector<HTMLButtonElement>(
 		'button[aria-haspopup="listbox"]',
 	);
