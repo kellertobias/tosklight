@@ -5,6 +5,7 @@ import type {
 	UpdateTargetRequest,
 	UpdateWorkflowNotification,
 } from "../../api/types";
+import { publishObjectEditorRequest } from "../controlSurfaceInteraction/objectEditorRequest";
 import { routeControlSurfaceIntentWithFeedback } from "../controlSurfaceInteraction/registry";
 import type { ServerState } from "./useServerState";
 
@@ -75,6 +76,21 @@ function routeDeskAction(
 			return;
 		} else if (payload.action === "record-settings") {
 			window.dispatchEvent(new Event("light:record-settings"));
+			return;
+		} else if (
+			payload.action === "open-object-editor" &&
+			(payload.control === "macro" || payload.control === "timecode") &&
+			payload.value
+		) {
+			routeControlSurfaceIntentWithFeedback({
+				type: "desk_command",
+				source: "server",
+				command: payload.control === "macro" ? "macros" : "timecodes",
+			});
+			publishObjectEditorRequest({
+				kind: payload.control,
+				objectId: payload.value,
+			});
 			return;
 		} else if (
 			payload.action === "playback" ||

@@ -165,6 +165,37 @@ async fn macro_playback_http_and_ui_ws_actions_converge_on_one_execution_service
         execution.macro_id == macro_id
             && execution.trigger == light_application::CommandMacroTrigger::CommandLine
     }));
+    let edit = app
+        .clone()
+        .oneshot(
+            Request::post("/api/v2/command-line/execute")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header("x-tosk-desk", session.desk.id.to_string())
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "request_id": "command-line-macro-edit",
+                        "command": "SET MACRO 71"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(edit.status(), StatusCode::OK, "{}", json(edit).await);
+    assert!(state.events.audit_events().iter().any(|event| {
+        event.kind == "desk_action"
+            && event.payload["action"] == "open-object-editor"
+            && event.payload["value"] == macro_id.to_string()
+    }));
+    assert_eq!(
+        wait_for_macro_executions(&state, session.desk.id, 4)
+            .await
+            .len(),
+        4,
+        "SET opens the editor without starting another execution"
+    );
     wait_for_terminal_macro_events(&state, 4).await;
     let _ = std::fs::remove_dir_all(data_dir);
 }

@@ -36,6 +36,8 @@ const normalDeskCommandWindows: Partial<Record<DeskCommand, BuiltInWindow>> = {
 	presets: "presets",
 	cues: "cuelists",
 	dynamics: "dynamics",
+	timecodes: "timecode",
+	macros: "macros",
 	channels: "channels",
 	help: "help",
 };

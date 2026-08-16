@@ -84,6 +84,8 @@ export type DeskCommand =
 	| "presets"
 	| "cues"
 	| "dynamics"
+	| "timecodes"
+	| "macros"
 	| "playbacks"
 	| "setup"
 	| "help"

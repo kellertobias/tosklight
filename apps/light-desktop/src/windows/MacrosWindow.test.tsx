@@ -1,5 +1,15 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+	publishObjectEditorRequest,
+	resetObjectEditorRequestsForTests,
+} from "../features/controlSurfaceInteraction/objectEditorRequest";
 
 const mocks = vi.hoisted(() => ({
 	command: {
@@ -30,6 +40,11 @@ vi.mock("../features/macros/MacroActionsContext", () => ({
 		events: { onEvent: vi.fn(() => vi.fn()) },
 	}),
 }));
+vi.mock("../features/macros/MacroEditor", () => ({
+	MacroEditor: ({ macro }: { macro: { id: string } }) => (
+		<div>Editing Macro {macro.id}</div>
+	),
+}));
 
 const { MacrosWindow } = await import("./MacrosWindow");
 
@@ -56,7 +71,10 @@ beforeEach(() => {
 	mocks.copy.mockResolvedValue({});
 });
 
-afterEach(cleanup);
+afterEach(() => {
+	cleanup();
+	resetObjectEditorRequestsForTests();
+});
 
 describe("MacrosWindow external Copy command", () => {
 	it("addresses an occupied source card without opening the editor", async () => {
@@ -88,5 +106,17 @@ describe("MacrosWindow external Copy command", () => {
 			2,
 		);
 		expect(mocks.command.reset).toHaveBeenCalledOnce();
+	});
+
+	it("opens the exact Macro requested by the shared command surface", async () => {
+		render(<MacrosWindow />);
+		await screen.findByRole("button", { name: "Macro 1 Front wash" });
+
+		publishObjectEditorRequest({ kind: "macro", objectId: existing.id });
+
+		expect(
+			await screen.findByText(`Editing Macro ${existing.id}`),
+		).toBeVisible();
+		expect(mocks.command.reset).not.toHaveBeenCalled();
 	});
 });

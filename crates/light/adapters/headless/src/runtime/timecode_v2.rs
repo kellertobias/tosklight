@@ -836,6 +836,112 @@ async fn runtime_snapshot(
         .map_err(|error| ApiError::not_found(error.message))
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum CommandLineTimecodeAction {
+    Run,
+    Arm,
+    Disarm,
+    Edit,
+}
+
+#[allow(private_interfaces)]
+pub(crate) fn timecode_command(
+    state: &AppState,
+    session: &Session,
+    number: u32,
+    action: CommandLineTimecodeAction,
+    context: &light_application::ActionContext,
+) -> Result<String, ApiError> {
+    let show_id = state
+        .active_show
+        .current()
+        .as_ref()
+        .map(|show| show.id)
+        .ok_or_else(|| ApiError::bad_request("no show is open"))?;
+    let entry = active_entry(state, show_id)?;
+    let store = ActiveShowRepository::open(&entry.path).map_err(ApiError::store)?;
+    let (_, objects) = store
+        .objects_with_portable_revision("timecode")
+        .map_err(ApiError::store)?;
+    let object = objects
+        .into_iter()
+        .find(|object| {
+            serde_json::from_value::<light_playback::TimecodeDefinition>(object.body.clone())
+                .is_ok_and(|definition| definition.number == number)
+        })
+        .ok_or_else(|| ApiError::not_found(format!("Timecode {number} does not exist")))?;
+    let mut definition =
+        serde_json::from_value::<light_playback::TimecodeDefinition>(object.body.clone())
+            .map_err(|error| ApiError::internal(format!("stored Timecode is invalid: {error}")))?;
+    match action {
+        CommandLineTimecodeAction::Run => {
+            ensure_installed(state, show_id, definition.id)?;
+            apply_transport_action(
+                state,
+                definition.id,
+                light_playback::TimecodeTransportAction::Go,
+            )?;
+            Ok(format!("Started Timecode {number}"))
+        }
+        CommandLineTimecodeAction::Edit => {
+            emit(
+                state,
+                "desk_action",
+                serde_json::json!({
+                    "action": "open-object-editor",
+                    "control": "timecode",
+                    "value": object.id,
+                    "desk_id": session.desk.id,
+                }),
+            );
+            Ok(format!("Opened Timecode {number} editor"))
+        }
+        CommandLineTimecodeAction::Arm | CommandLineTimecodeAction::Disarm => {
+            let armed = matches!(action, CommandLineTimecodeAction::Arm);
+            if definition.auto_start != armed {
+                definition.auto_start = armed;
+                definition
+                    .validate()
+                    .map_err(|error| ApiError::bad_request(error.message))?;
+                let mutation = put_active_show_object(
+                    light_application::ActiveShowObjectKind::Timecode,
+                    object.id.clone(),
+                    object.revision,
+                    serde_json::to_value(definition)
+                        .map_err(|error| ApiError::internal(error.to_string()))?,
+                )?;
+                let action = active_show_object_action(context.clone(), show_id, vec![mutation]);
+                let result =
+                    run_active_show_object_action_in_programming_interaction(state, action)?;
+                let change = result.changes.first().ok_or_else(|| {
+                    ApiError::internal("Timecode autoplay mutation returned no object change")
+                })?;
+                let stored = ActiveShowRepository::open(&entry.path)
+                    .map_err(ApiError::store)?
+                    .object_with_portable_revision("timecode", &change.object_id)
+                    .map_err(ApiError::store)?
+                    .1
+                    .ok_or_else(|| ApiError::internal("committed Timecode is missing"))?;
+                install_object_if_runnable(state, stored)?;
+                emit(
+                    state,
+                    "timecode_object_changed",
+                    serde_json::json!({
+                        "show_id": show_id,
+                        "timecode_id": change.object_id,
+                        "object_revision": change.object_revision,
+                        "deleted": false,
+                    }),
+                );
+            }
+            Ok(format!(
+                "{} Timecode {number} autoplay",
+                if armed { "Armed" } else { "Disarmed" }
+            ))
+        }
+    }
+}
+
 async fn transport_action(
     State(state): State<AppState>,
     Path(timecode_id): Path<Uuid>,

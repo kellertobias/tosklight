@@ -5,6 +5,10 @@ import type {
 	SessionResponse,
 	VersionedObject,
 } from "../../api/types";
+import {
+	currentObjectEditorRequest,
+	resetObjectEditorRequestsForTests,
+} from "../controlSurfaceInteraction/objectEditorRequest";
 import { registerControlSurfaceTarget } from "../controlSurfaceInteraction/registry";
 import { routeOperatorEvent } from "./operatorEventRouting";
 import { createServerEventRouter } from "./serverEventRouter";
@@ -310,7 +314,10 @@ function createHarness(showId = "show-a") {
 	};
 }
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+	vi.restoreAllMocks();
+	resetObjectEditorRequestsForTests();
+});
 
 describe("server event routing", () => {
 	it("routes attached keypad actions to the owning focused Macro Editor", () => {
@@ -463,6 +470,40 @@ describe("server event routing", () => {
 		} finally {
 			release();
 			window.removeEventListener("light:playback-page-step", listener);
+		}
+	});
+
+	it.each([
+		["macro", "macros"],
+		["timecode", "timecodes"],
+	] as const)("opens the exact %s editor requested by a desk-scoped command", (control, command) => {
+		const commands: unknown[] = [];
+		const release = registerControlSurfaceTarget({
+			id: "object-editor-desk-command-test",
+			priority: 1,
+			accepts: ({ type }) => type === "desk_command",
+			handle: (intent) => commands.push(intent),
+		});
+		try {
+			routeOperatorEvent(
+				event("desk_action", {
+					action: "open-object-editor",
+					control,
+					value: `${control}-id-71`,
+					desk_id: session.desk.id,
+				}),
+				session,
+				{} as ServerState,
+			);
+			expect(commands).toEqual([
+				{ type: "desk_command", source: "server", command },
+			]);
+			expect(currentObjectEditorRequest()).toEqual({
+				kind: control,
+				objectId: `${control}-id-71`,
+			});
+		} finally {
+			release();
 		}
 	});
 

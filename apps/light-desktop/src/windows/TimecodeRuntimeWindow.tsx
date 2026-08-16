@@ -31,6 +31,11 @@ import {
 	type TimecodeTransportSnapshot,
 } from "../api/client/timecodes";
 import { RootConfinedFilePickerButton } from "../components/files/RootConfinedFilePickerButton";
+import {
+	consumeObjectEditorRequest,
+	currentObjectEditorRequest,
+	subscribeObjectEditorRequest,
+} from "../features/controlSurfaceInteraction/objectEditorRequest";
 import { useActiveShowId } from "../features/deskSnapshot/DeskSnapshotState";
 import { usePatchedFixturesView } from "../features/patch/PatchState";
 import { useCueLists } from "../features/showObjects/ShowObjectsState";
@@ -138,6 +143,25 @@ export function TimecodeRuntimeWindow({
 			unsubscribe?.();
 		};
 	}, [active, configured?.events, refresh, showId]);
+
+	useEffect(() => {
+		if (!active) return;
+		const openRequested = (request: {
+			kind: "macro" | "timecode";
+			objectId: string;
+		}) => {
+			if (request.kind !== "timecode") return;
+			const timecode = objects.find(
+				(candidate) => candidate.definition.id === request.objectId,
+			);
+			if (!timecode) return;
+			setEditing(timecode);
+			consumeObjectEditorRequest(request);
+		};
+		const current = currentObjectEditorRequest();
+		if (current) openRequested(current);
+		return subscribeObjectEditorRequest(openRequested);
+	}, [active, objects]);
 
 	if (editing) {
 		return (

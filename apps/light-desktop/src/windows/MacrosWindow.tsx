@@ -11,6 +11,11 @@ import type { MacroExecution } from "../api/runtimeModels";
 import type { VersionedObject } from "../api/types";
 import { useCommandLineSurface } from "../components/control/commandLine/useCommandLineSurface";
 import {
+	consumeObjectEditorRequest,
+	currentObjectEditorRequest,
+	subscribeObjectEditorRequest,
+} from "../features/controlSurfaceInteraction/objectEditorRequest";
+import {
 	poolMutationTarget,
 	poolMutationTargetState,
 } from "../features/controlSurfaceInteraction/poolCommandTarget";
@@ -81,6 +86,25 @@ export function MacrosWindow({ active = true, compact = false }: WindowProps) {
 			unsubscribe?.();
 		};
 	}, [actions.events, active, refresh, showId]);
+
+	useEffect(() => {
+		if (!active) return;
+		const openRequested = (request: {
+			kind: "macro" | "timecode";
+			objectId: string;
+		}) => {
+			if (request.kind !== "macro") return;
+			const macro = macros.find(
+				(candidate) => candidate.id === request.objectId,
+			);
+			if (!macro) return;
+			setEditing(macro);
+			consumeObjectEditorRequest(request);
+		};
+		const current = currentObjectEditorRequest();
+		if (current) openRequested(current);
+		return subscribeObjectEditorRequest(openRequested);
+	}, [active, macros]);
 
 	const run = async (macro: MacroObject) => {
 		if (!showId || busy) return;

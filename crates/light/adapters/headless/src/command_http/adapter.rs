@@ -26,10 +26,21 @@ pub(crate) fn prevalidate_typed_command(
     state: &AppState,
     _session: &Session,
     command: &str,
-    _context: &ActionContext,
+    context: &ActionContext,
 ) -> Result<bool, String> {
     let show_id = state.active_show.current().map(|entry| entry.id);
-    let parsed = super::programming_ports::is_fixture_freeze_command(command)?
+    let object = object_command(command)?;
+    if object.is_some_and(|command| {
+        matches!(
+            command,
+            ObjectCommand::RunMacro(_) | ObjectCommand::EditMacro(_)
+        )
+    }) && matches!(context.source, ActionSource::Macro)
+    {
+        return Err("Macros cannot run or edit another Macro".into());
+    }
+    let parsed = object.is_some()
+        || super::programming_ports::is_fixture_freeze_command(command)?
         || group_record_command(command)?.is_some()
         || preset_record_address(command)?.is_some()
         || super::cue_recording_command::parse(command)?.is_some()
@@ -56,11 +67,21 @@ pub(crate) fn prevalidate_external_command(
     state: &AppState,
     _session: &Session,
     command: &str,
-    _context: &ActionContext,
+    context: &ActionContext,
 ) -> Result<(), String> {
     let (tokens, _) = super::super::tokenize_programmer_command(command)?;
     if state.active_show.current().is_none() {
         return Err("no show is open".into());
+    }
+    if let Some(command) = object_command(command)? {
+        if matches!(
+            command,
+            ObjectCommand::RunMacro(_) | ObjectCommand::EditMacro(_)
+        ) && matches!(context.source, ActionSource::Macro)
+        {
+            return Err("Macros cannot run or edit another Macro".into());
+        }
+        return Ok(());
     }
     match tokens.first().map(String::as_str) {
         Some("CUE") => super::cue_navigation_command::parse(command)?
@@ -110,18 +131,15 @@ pub(crate) fn execute_existing_command(
     policy: ExistingCommandPolicy,
 ) -> ExistingCommandOutcome {
     let request_id = context.request_id.as_deref();
-    match macro_command_number(command) {
-        Ok(Some(number)) => {
-            return match crate::runtime::macros_v2::start_macro_from_command_line(
-                state, session, number,
-            ) {
-                Ok(execution_id) => {
-                    let feedback = format!("Started Macro {number} as execution {execution_id}");
+    match object_command(command) {
+        Ok(Some(object_command)) => {
+            return match execute_object_command(state, session, object_command, context) {
+                Ok((applied, feedback)) => {
                     super::super::record_command_history(
                         state, session, command, "accepted", &feedback, source, request_id,
                     );
                     ExistingCommandOutcome::Accepted {
-                        applied: 1,
+                        applied,
                         persistence_warning: None,
                         replayed: false,
                     }
@@ -160,24 +178,118 @@ pub(crate) fn execute_existing_command(
     finish_existing_command(state, session, command, source, request_id, result)
 }
 
-fn macro_command_number(command: &str) -> Result<Option<u16>, String> {
-    let tokens = command.split_whitespace().collect::<Vec<_>>();
-    if !tokens
-        .first()
-        .is_some_and(|token| token.eq_ignore_ascii_case("MACRO"))
-    {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ObjectCommand {
+    RunMacro(u16),
+    EditMacro(u16),
+    RunTimecode(u32),
+    ArmTimecode(u32),
+    DisarmTimecode(u32),
+    EditTimecode(u32),
+}
+
+fn object_command(command: &str) -> Result<Option<ObjectCommand>, String> {
+    let tokens = command
+        .split_whitespace()
+        .map(|token| token.to_ascii_uppercase())
+        .collect::<Vec<_>>();
+    let (family, number, suffix, edit) = match tokens.as_slice() {
+        [family, number] => (family.as_str(), number.as_str(), None, false),
+        [family, number, suffix] if family == "TIMECODE" => (
+            family.as_str(),
+            number.as_str(),
+            Some(suffix.as_str()),
+            false,
+        ),
+        [set, family, number] if set == "SET" => (family.as_str(), number.as_str(), None, true),
+        _ if matches!(
+            tokens.first().map(String::as_str),
+            Some("MACRO" | "TIMECODE")
+        ) || matches!(tokens.as_slice(), [set, family, ..] if set == "SET" && matches!(family.as_str(), "MACRO" | "TIMECODE")) =>
+        {
+            return Err("expected [SET] MACRO|TIMECODE <positive pool number> [+|-]".into());
+        }
+        _ => return Ok(None),
+    };
+    if !matches!(family, "MACRO" | "TIMECODE") {
         return Ok(None);
     }
-    let [_, number] = tokens.as_slice() else {
-        return Err("MACRO requires exactly one pool number".into());
-    };
     let number = number
-        .parse::<u16>()
-        .map_err(|_| "MACRO pool number must be a whole number".to_owned())?;
-    if number == 0 {
-        return Err("MACRO pool number must be positive".into());
+        .parse::<u32>()
+        .ok()
+        .filter(|number| *number > 0)
+        .ok_or_else(|| format!("{family} pool number must be a positive whole number"))?;
+    let macro_number =
+        || u16::try_from(number).map_err(|_| "MACRO pool number cannot exceed 65535".to_owned());
+    match (family, edit, suffix) {
+        ("MACRO", false, None) => Ok(Some(ObjectCommand::RunMacro(macro_number()?))),
+        ("MACRO", true, None) => Ok(Some(ObjectCommand::EditMacro(macro_number()?))),
+        ("TIMECODE", false, None) => Ok(Some(ObjectCommand::RunTimecode(number))),
+        ("TIMECODE", false, Some("+")) => Ok(Some(ObjectCommand::ArmTimecode(number))),
+        ("TIMECODE", false, Some("-")) => Ok(Some(ObjectCommand::DisarmTimecode(number))),
+        ("TIMECODE", true, None) => Ok(Some(ObjectCommand::EditTimecode(number))),
+        ("MACRO", _, Some(_)) => Err("MACRO does not accept + or -".into()),
+        ("TIMECODE", true, Some(_)) => Err("SET TIMECODE does not accept + or -".into()),
+        ("TIMECODE", false, Some(_)) => Err("TIMECODE accepts only + or - after its number".into()),
+        _ => Err("object command is invalid".into()),
     }
-    Ok(Some(number))
+}
+
+fn execute_object_command(
+    state: &AppState,
+    session: &Session,
+    command: ObjectCommand,
+    context: &ActionContext,
+) -> Result<(usize, String), ApiError> {
+    use crate::runtime::timecode_v2::CommandLineTimecodeAction as Timecode;
+    match command {
+        ObjectCommand::RunMacro(number) => {
+            let execution_id =
+                crate::runtime::macros_v2::start_macro_from_command_line(state, session, number)?;
+            Ok((
+                1,
+                format!("Started Macro {number} as execution {execution_id}"),
+            ))
+        }
+        ObjectCommand::EditMacro(number) => {
+            crate::runtime::macros_v2::request_macro_editor_from_command_line(
+                state, session, number,
+            )?;
+            Ok((0, format!("Opened Macro {number} editor")))
+        }
+        ObjectCommand::RunTimecode(number) => crate::runtime::timecode_v2::timecode_command(
+            state,
+            session,
+            number,
+            Timecode::Run,
+            context,
+        )
+        .map(|feedback| (1, feedback)),
+        ObjectCommand::ArmTimecode(number) => crate::runtime::timecode_v2::timecode_command(
+            state,
+            session,
+            number,
+            Timecode::Arm,
+            context,
+        )
+        .map(|feedback| (1, feedback)),
+        ObjectCommand::DisarmTimecode(number) => crate::runtime::timecode_v2::timecode_command(
+            state,
+            session,
+            number,
+            Timecode::Disarm,
+            context,
+        )
+        .map(|feedback| (1, feedback)),
+        ObjectCommand::EditTimecode(number) => crate::runtime::timecode_v2::timecode_command(
+            state,
+            session,
+            number,
+            Timecode::Edit,
+            context,
+        )
+        .map(|feedback| (0, feedback)),
+    }
 }
 
 fn atomic_policy_error(command: &str, policy: ExistingCommandPolicy) -> Option<String> {
@@ -566,16 +678,43 @@ fn action_error(error: ActionError) -> ApiError {
 }
 
 #[cfg(test)]
-mod macro_command_tests {
-    use super::macro_command_number;
+mod object_command_tests {
+    use super::{ObjectCommand, object_command};
 
     #[test]
-    fn macro_command_is_one_positive_pool_number() {
-        assert_eq!(macro_command_number("MACRO 17").unwrap(), Some(17));
-        assert_eq!(macro_command_number("macro 2").unwrap(), Some(2));
-        assert_eq!(macro_command_number("GROUP 17").unwrap(), None);
-        assert!(macro_command_number("MACRO").is_err());
-        assert!(macro_command_number("MACRO 0").is_err());
-        assert!(macro_command_number("MACRO 1 GO").is_err());
+    fn object_commands_require_one_positive_pool_number() {
+        assert_eq!(
+            object_command("MACRO 17").unwrap(),
+            Some(ObjectCommand::RunMacro(17))
+        );
+        assert_eq!(
+            object_command("SET MACRO 17").unwrap(),
+            Some(ObjectCommand::EditMacro(17))
+        );
+        assert_eq!(
+            object_command("TIMECODE 9").unwrap(),
+            Some(ObjectCommand::RunTimecode(9))
+        );
+        assert_eq!(
+            object_command("TIMECODE 9 +").unwrap(),
+            Some(ObjectCommand::ArmTimecode(9))
+        );
+        assert_eq!(
+            object_command("TIMECODE 9 -").unwrap(),
+            Some(ObjectCommand::DisarmTimecode(9))
+        );
+        assert_eq!(
+            object_command("SET TIMECODE 9").unwrap(),
+            Some(ObjectCommand::EditTimecode(9))
+        );
+        assert_eq!(
+            object_command("TIMECODE 70000").unwrap(),
+            Some(ObjectCommand::RunTimecode(70000))
+        );
+        assert_eq!(object_command("GROUP 17").unwrap(), None);
+        assert!(object_command("MACRO").is_err());
+        assert!(object_command("MACRO 0").is_err());
+        assert!(object_command("MACRO 1 GO").is_err());
+        assert!(object_command("MACRO 70000").is_err());
     }
 }

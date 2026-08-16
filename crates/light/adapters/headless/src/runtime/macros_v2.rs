@@ -286,13 +286,7 @@ pub(crate) fn start_macro_from_command_line(
         .map_err(ApiError::store)?
         .objects_with_portable_revision("macro")
         .map_err(ApiError::store)?;
-    let object = objects
-        .into_iter()
-        .find(|object| {
-            serde_json::from_value::<light_application::CommandMacroDefinition>(object.body.clone())
-                .is_ok_and(|definition| definition.number == macro_number)
-        })
-        .ok_or_else(|| ApiError::not_found(format!("Macro {macro_number} does not exist")))?;
+    let object = macro_object_by_number(objects, macro_number)?;
     let definition = serde_json::from_value(object.body)
         .map_err(|error| ApiError::internal(format!("stored Macro is invalid: {error}")))?;
     let started = start_execution(
@@ -305,6 +299,50 @@ pub(crate) fn start_macro_from_command_line(
         show_id,
     )?;
     Ok(started.0.execution_id)
+}
+
+#[allow(private_interfaces)]
+pub(crate) fn request_macro_editor_from_command_line(
+    state: &AppState,
+    session: &Session,
+    macro_number: u16,
+) -> Result<(), ApiError> {
+    let show_id = state
+        .active_show
+        .current()
+        .as_ref()
+        .map(|show| show.id)
+        .ok_or_else(|| ApiError::bad_request("no show is open"))?;
+    let entry = active_entry(state, show_id)?;
+    let (_, objects) = ActiveShowRepository::open(&entry.path)
+        .map_err(ApiError::store)?
+        .objects_with_portable_revision("macro")
+        .map_err(ApiError::store)?;
+    let object = macro_object_by_number(objects, macro_number)?;
+    emit(
+        state,
+        "desk_action",
+        serde_json::json!({
+            "action": "open-object-editor",
+            "control": "macro",
+            "value": object.id,
+            "desk_id": session.desk.id,
+        }),
+    );
+    Ok(())
+}
+
+fn macro_object_by_number(
+    objects: Vec<light_show::VersionedObject>,
+    macro_number: u16,
+) -> Result<light_show::VersionedObject, ApiError> {
+    objects
+        .into_iter()
+        .find(|object| {
+            serde_json::from_value::<light_application::CommandMacroDefinition>(object.body.clone())
+                .is_ok_and(|definition| definition.number == macro_number)
+        })
+        .ok_or_else(|| ApiError::not_found(format!("Macro {macro_number} does not exist")))
 }
 
 async fn runtime_snapshot(

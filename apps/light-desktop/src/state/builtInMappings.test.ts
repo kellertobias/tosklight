@@ -31,6 +31,13 @@ describe("Shift-held Built-ins", () => {
 		expect(builtInsForShift(false)).toBe(builtIns);
 	});
 
+	it("opens exact object-editor families without depending on Shift state", () => {
+		expect(builtInForDeskCommand("timecodes", false)).toBe("timecode");
+		expect(builtInForDeskCommand("timecodes", true)).toBe("timecode");
+		expect(builtInForDeskCommand("macros", false)).toBe("macros");
+		expect(builtInForDeskCommand("macros", true)).toBe("macros");
+	});
+
 	it.each([
 		["stage", "stage", "dmx"],
 		["fixtures", "fixtures", "media"],

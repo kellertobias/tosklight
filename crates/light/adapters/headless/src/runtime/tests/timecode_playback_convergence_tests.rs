@@ -53,6 +53,73 @@ async fn physical_http_and_virtual_ui_ws_playbacks_control_one_timecode_runtime(
         .unwrap();
     let created_status = created.status();
     assert_eq!(created_status, StatusCode::OK, "{}", json(created).await);
+
+    for (request_id, command) in [
+        ("command-timecode-arm", "TIMECODE 70 +"),
+        ("command-timecode-disarm", "TIMECODE 70 -"),
+        ("command-timecode-edit", "SET TIMECODE 70"),
+        ("command-timecode-run", "TIMECODE 70"),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(command_line_object_request(
+                &token,
+                session.desk.id,
+                request_id,
+                command,
+            ))
+            .await
+            .unwrap();
+        let status = response.status();
+        let body = json(response).await;
+        assert_eq!(status, StatusCode::OK, "{command}: {body}");
+    }
+    let stored = ActiveShowRepository::open(&state.active_show.current().unwrap().path)
+        .unwrap()
+        .object_with_portable_revision("timecode", &timecode_id.0.to_string())
+        .unwrap()
+        .1
+        .unwrap();
+    let stored: light_playback::TimecodeDefinition = serde_json::from_value(stored.body).unwrap();
+    assert!(
+        !stored.auto_start,
+        "the disarm command persists autoplay off"
+    );
+    assert!(state.events.audit_events().iter().any(|event| {
+        event.kind == "desk_action"
+            && event.payload["action"] == "open-object-editor"
+            && event.payload["value"] == timecode_id.0.to_string()
+    }));
+    assert_eq!(
+        state.timecodes.snapshot(timecode_id).unwrap().transport,
+        light_playback::TimecodeTransportState::Playing
+    );
+    let missing = app
+        .clone()
+        .oneshot(command_line_object_request(
+            &token,
+            session.desk.id,
+            "command-timecode-missing",
+            "TIMECODE 999",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        missing.status(),
+        StatusCode::OK,
+        "command execution reports semantic rejection in its typed response"
+    );
+    let history = state.programming.command_history(session.desk.id);
+    assert!(history.iter().any(|entry| {
+        entry.command == "TIMECODE 70 +"
+            && entry.status == "accepted"
+            && entry.feedback.contains("Armed")
+    }));
+    assert!(history.iter().any(|entry| {
+        entry.command == "TIMECODE 999"
+            && entry.status == "rejected"
+            && entry.feedback.contains("does not exist")
+    }));
     install_timecode_playbacks(&state, timecode_id);
 
     let http = app
@@ -172,6 +239,22 @@ async fn physical_http_and_virtual_ui_ws_playbacks_control_one_timecode_runtime(
         expected_completion
     );
     let _ = std::fs::remove_dir_all(data_dir);
+}
+
+fn command_line_object_request(
+    token: &str,
+    desk_id: Uuid,
+    request_id: &str,
+    command: &str,
+) -> Request<Body> {
+    Request::post("/api/v2/command-line/execute")
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .header("x-tosk-desk", desk_id.to_string())
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            serde_json::json!({"request_id": request_id, "command": command}).to_string(),
+        ))
+        .unwrap()
 }
 
 fn install_timecode_playbacks(state: &AppState, timecode_id: light_playback::TimecodeId) {
