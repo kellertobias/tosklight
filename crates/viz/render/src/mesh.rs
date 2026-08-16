@@ -282,6 +282,7 @@ pub fn unit_plane() -> MeshData {
 #[derive(Deserialize)]
 struct AudienceOutlineArtwork {
     front: Vec<[f32; 2]>,
+    front_strokes: Vec<Vec<[f32; 2]>>,
 }
 
 /// Operator-supplied front/back audience outline, normalized to one metre of authored stature.
@@ -321,6 +322,56 @@ pub fn unit_crowd_person() -> MeshData {
             back[third],
             back[second],
         ]);
+    }
+    mesh
+}
+
+/// Every authored front/back audience contour as thin, double-sided strips.
+///
+/// The fill mesh deliberately remains a single silhouette for inexpensive crowd drawing. These
+/// strips preserve the source artwork's separate body, waist, neck, head, and arm boundaries so
+/// overlapping anatomy remains legible from either side.
+pub fn unit_crowd_person_outline() -> MeshData {
+    const HALF_LINE_WIDTH: f32 = 0.003;
+    const SURFACE_OFFSET: f32 = 0.0015;
+
+    let source = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../../assets/viz/crowd/audience-outline.json"
+    ));
+    let artwork: AudienceOutlineArtwork =
+        serde_json::from_str(source).expect("the shipped audience outline is valid JSON");
+    let mut mesh = MeshData::default();
+    for stroke in artwork.front_strokes {
+        for segment in stroke.windows(2) {
+            let from = Vec2::from_array(segment[0]);
+            let to = Vec2::from_array(segment[1]);
+            let direction = to - from;
+            if direction.length_squared() <= f32::EPSILON {
+                continue;
+            }
+            let offset = Vec2::new(-direction.y, direction.x).normalize() * HALF_LINE_WIDTH;
+            let front = |point: Vec2| Vec3::new(point.x, point.y, SURFACE_OFFSET);
+            let back = |point: Vec2| Vec3::new(point.x, point.y, -SURFACE_OFFSET);
+            mesh.quad(
+                [
+                    front(from + offset),
+                    front(from - offset),
+                    front(to - offset),
+                    front(to + offset),
+                ],
+                Vec3::Z,
+            );
+            mesh.quad(
+                [
+                    back(from + offset),
+                    back(to + offset),
+                    back(to - offset),
+                    back(from - offset),
+                ],
+                Vec3::NEG_Z,
+            );
+        }
     }
     mesh
 }
@@ -400,6 +451,7 @@ pub fn procedural(kind: MeshKind) -> Option<(&'static str, MeshData)> {
         MeshKind::Lens => Some(("lens", unit_lens(24, 3))),
         MeshKind::Plane => Some(("plane", unit_plane())),
         MeshKind::CrowdPerson => Some(("crowd-person", unit_crowd_person())),
+        MeshKind::CrowdPersonOutline => Some(("crowd-person-outline", unit_crowd_person_outline())),
         MeshKind::ModelPart(..) | MeshKind::PlanArtwork(..) => None,
     }
 }
@@ -429,6 +481,7 @@ mod tests {
             unit_cone(24),
             unit_plane(),
             unit_crowd_person(),
+            unit_crowd_person_outline(),
         ] {
             assert!(!mesh.vertices.is_empty());
             assert!(mesh.indices.len() % 3 == 0);
@@ -468,5 +521,30 @@ mod tests {
         );
         let outline_points = mesh.vertices.len() / 2;
         assert_eq!(mesh.indices.len(), (outline_points - 2) * 6);
+    }
+
+    #[test]
+    fn crowd_person_outline_preserves_every_authored_front_stroke() {
+        let mesh = unit_crowd_person_outline();
+        let source = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../../assets/viz/crowd/audience-outline.json"
+        ));
+        let artwork: AudienceOutlineArtwork = serde_json::from_str(source).unwrap();
+        assert_eq!(artwork.front_strokes.len(), 4);
+        let segment_count = artwork
+            .front_strokes
+            .iter()
+            .flat_map(|stroke| stroke.windows(2))
+            .filter(|segment| {
+                let from = Vec2::from_array(segment[0]);
+                let to = Vec2::from_array(segment[1]);
+                (to - from).length_squared() > f32::EPSILON
+            })
+            .count();
+        assert_eq!(mesh.vertices.len(), segment_count * 8);
+        assert_eq!(mesh.indices.len(), segment_count * 12);
+        assert!(mesh.vertices.iter().any(|vertex| vertex.position[2] > 0.0));
+        assert!(mesh.vertices.iter().any(|vertex| vertex.position[2] < 0.0));
     }
 }

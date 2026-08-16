@@ -121,6 +121,19 @@ fn push_person(
         Vec3::ZERO,
         0.0,
     ));
+    frame
+        .mesh(MeshKind::CrowdPersonOutline)
+        .push(MeshInstance::new(
+            Mat4::from_scale_rotation_translation(
+                Vec3::new(rendered_height, rendered_height, 1.0),
+                orientation,
+                floor,
+            ),
+            Vec3::splat(0.42),
+            0.9,
+            Vec3::ZERO,
+            0.0,
+        ));
 }
 
 /// Small deterministic generator with stable output across platforms and renderer restarts.
@@ -292,7 +305,7 @@ mod tests {
     }
 
     #[test]
-    fn every_drawn_person_is_one_black_flat_silhouette() {
+    fn every_drawn_person_is_one_black_flat_silhouette_with_authored_outlines() {
         let scene = Scene {
             crowds: vec![area()],
             ..Scene::default()
@@ -312,11 +325,23 @@ mod tests {
             .find(|(kind, _)| *kind == MeshKind::CrowdPerson)
             .expect("crowd silhouette mesh");
         assert_eq!(silhouettes.1.len(), frame.crowd_drawn as usize);
+        let outlines = frame
+            .meshes
+            .iter()
+            .find(|(kind, _)| *kind == MeshKind::CrowdPersonOutline)
+            .expect("crowd outline mesh");
+        assert_eq!(outlines.1.len(), frame.crowd_drawn as usize);
         assert!(
             silhouettes
                 .1
                 .iter()
                 .all(|person| person.base_colour[..3] == [0.008; 3])
+        );
+        assert!(
+            outlines
+                .1
+                .iter()
+                .all(|person| person.base_colour[..3] == [0.42; 3])
         );
         assert!(
             frame

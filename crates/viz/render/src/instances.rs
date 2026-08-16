@@ -24,6 +24,8 @@ pub enum MeshKind {
     Plane,
     /// A flat, double-sided person silhouette shared by every authored Crowd Area.
     CrowdPerson,
+    /// Contrasting authored contours drawn just in front of and behind the crowd silhouette.
+    CrowdPersonOutline,
     /// One part of a fixture model read from the library: `(model index, part index)`.
     ///
     /// A part is its own mesh because pan and tilt move the yoke and the head but not the base,
@@ -34,13 +36,14 @@ pub enum MeshKind {
 }
 
 impl MeshKind {
-    pub const PROCEDURAL: [Self; 6] = [
+    pub const PROCEDURAL: [Self; 7] = [
         Self::Cube,
         Self::Cylinder,
         Self::Sphere,
         Self::Lens,
         Self::Plane,
         Self::CrowdPerson,
+        Self::CrowdPersonOutline,
     ];
 }
 
