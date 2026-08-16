@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+	audiencePersonHeight,
 	entityPlanGeometry,
 	parseProjection,
 	projectionViewForCad,
@@ -288,13 +289,24 @@ describe("CAD plan projections", () => {
 
 		expect(top.source).toBe("typed");
 		expect(top.outlines).toHaveLength(96);
-		expect(side.outlines).toHaveLength(144);
-		expect(oppositeSide.outlines).toHaveLength(144);
-		expect(back.outlines).toHaveLength(144);
-		expect(front.outlines).toHaveLength(144);
+		expect(side.outlines).toHaveLength(48);
+		expect(oppositeSide.outlines).toHaveLength(48);
+		expect(back.outlines).toHaveLength(84);
+		expect(front.outlines).toHaveLength(84);
 		expect(top.triangles.length).toBeGreaterThan(300);
 		expect(side.outlines).not.toEqual(oppositeSide.outlines);
 		expect(side.outlines).not.toEqual(back.outlines);
 		expect(back.outlines).toEqual(front.outlines);
+		const sideY = side.outlines.flat().map((point) => point[1]);
+		expect(Math.min(...sideY)).toBeGreaterThan(-30);
+		expect(Math.max(...sideY)).toBeGreaterThanOrEqual(1600);
+		expect(Math.max(...sideY)).toBeLessThanOrEqual(1850);
+		const heights = Array.from({ length: 24 }, (_, index) =>
+			audiencePersonHeight(index),
+		);
+		expect(new Set(heights).size).toBeGreaterThan(12);
+		expect(heights.every((height) => height >= 1600 && height <= 1850)).toBe(
+			true,
+		);
 	});
 });

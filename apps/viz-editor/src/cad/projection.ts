@@ -723,6 +723,8 @@ function crowd(
 	view: CadViewDirection,
 ): Polygon[] {
 	const w = Math.max(600, width);
+	if (view !== "top_down") return elevationCrowd(w, view);
+
 	const h = Math.max(500, height);
 	const polygons: Polygon[] = [];
 	for (let row = 0; row < 4; row++) {
@@ -730,117 +732,104 @@ function crowd(
 			const x = -w * 0.4 + (column / 5) * w * 0.8 + (row % 2 ? w * 0.04 : 0);
 			const y = -h * 0.38 + (row / 3) * h * 0.76;
 			const personWidth = Math.min(w * 0.07, h * 0.1);
-			const personHeight = Math.min(h * 0.14, w * 0.1);
-			if (view === "top_down") {
-				const headRadius = personWidth * 0.22;
-				const bodyWidth = personWidth;
-				const bodyHeight = personHeight * 0.5;
-				polygons.push(
-					ellipse(x, y - bodyHeight * 0.72, headRadius, headRadius, DETAIL, 10),
-					roundedRect(
-						x,
-						y + bodyHeight * 0.08,
-						bodyWidth,
-						bodyHeight,
-						Math.min(bodyWidth, bodyHeight) * 0.28,
-						BODY,
-					),
-					segment(
-						[x - bodyWidth * 0.22, y + bodyHeight * 0.28],
-						[x - bodyWidth * 0.42, y + bodyHeight * 0.62],
-						personWidth * 0.12,
-						BODY,
-					),
-					segment(
-						[x + bodyWidth * 0.22, y + bodyHeight * 0.28],
-						[x + bodyWidth * 0.42, y + bodyHeight * 0.62],
-						personWidth * 0.12,
-						BODY,
-					),
-				);
-			} else if (view === "left_to_right" || view === "right_to_left") {
-				const direction = view === "left_to_right" ? 1 : -1;
-				const thickness = personWidth * 0.12;
-				const shoulder: PlanPoint = [x, y - personHeight * 0.08];
-				const hip: PlanPoint = [x, y + personHeight * 0.22];
-				polygons.push(
-					ellipse(
-						x,
-						y - personHeight * 0.34,
-						personWidth * 0.22,
-						personWidth * 0.22,
-						DETAIL,
-						10,
-					),
-					segment(shoulder, hip, thickness, BODY),
-					segment(
-						shoulder,
-						[x + direction * personWidth * 0.62, y + personHeight * 0.02],
-						thickness,
-						BODY,
-					),
-					segment(
-						[x, y],
-						[x + direction * personWidth * 0.58, y + personHeight * 0.12],
-						thickness,
-						BODY,
-					),
-					segment(
-						hip,
-						[x - personWidth * 0.08, y + personHeight * 0.48],
-						thickness,
-						BODY,
-					),
-					segment(
-						hip,
-						[x + personWidth * 0.08, y + personHeight * 0.48],
-						thickness,
-						BODY,
-					),
-				);
-			} else {
-				const thickness = personWidth * 0.11;
-				const shoulder: PlanPoint = [x, y - personHeight * 0.08];
-				const hip: PlanPoint = [x, y + personHeight * 0.2];
-				polygons.push(
-					ellipse(
-						x,
-						y - personHeight * 0.34,
-						personWidth * 0.22,
-						personWidth * 0.22,
-						DETAIL,
-						10,
-					),
-					segment(shoulder, hip, thickness, BODY),
-					segment(
-						shoulder,
-						[x - personWidth * 0.58, y + personHeight * 0.08],
-						thickness,
-						BODY,
-					),
-					segment(
-						shoulder,
-						[x + personWidth * 0.58, y + personHeight * 0.08],
-						thickness,
-						BODY,
-					),
-					segment(
-						hip,
-						[x - personWidth * 0.32, y + personHeight * 0.48],
-						thickness,
-						BODY,
-					),
-					segment(
-						hip,
-						[x + personWidth * 0.32, y + personHeight * 0.48],
-						thickness,
-						BODY,
-					),
-				);
-			}
+			const bodyHeight = Math.min(h * 0.07, w * 0.05);
+			const headRadius = personWidth * 0.22;
+			polygons.push(
+				ellipse(x, y - bodyHeight * 0.72, headRadius, headRadius, DETAIL, 10),
+				roundedRect(
+					x,
+					y + bodyHeight * 0.08,
+					personWidth,
+					bodyHeight,
+					Math.min(personWidth, bodyHeight) * 0.28,
+					BODY,
+				),
+				segment(
+					[x - personWidth * 0.22, y + bodyHeight * 0.28],
+					[x - personWidth * 0.42, y + bodyHeight * 0.62],
+					personWidth * 0.12,
+					BODY,
+				),
+				segment(
+					[x + personWidth * 0.22, y + bodyHeight * 0.28],
+					[x + personWidth * 0.42, y + bodyHeight * 0.62],
+					personWidth * 0.12,
+					BODY,
+				),
+			);
 		}
 	}
 	return polygons;
+}
+
+function elevationCrowd(width: number, view: CadViewDirection): Polygon[] {
+	const count = Math.max(6, Math.min(14, Math.round(width / 500)));
+	const spacing = width / count;
+	const side = view === "left_to_right" || view === "right_to_left";
+	const direction = view === "right_to_left" ? -1 : 1;
+	const polygons: Polygon[] = [];
+	for (let index = 0; index < count; index++) {
+		const height = audiencePersonHeight(index);
+		const x = -width / 2 + spacing * (index + 0.5);
+		const personWidth = Math.min(height * 0.22, spacing * 0.64);
+		const thickness = Math.max(24, personWidth * 0.08);
+		const headRadius = height * 0.055;
+		const shoulder: PlanPoint = [x, height * 0.72];
+		const hip: PlanPoint = [x, height * 0.42];
+		polygons.push(
+			ellipse(x, height - headRadius, headRadius, headRadius, DETAIL, 10),
+			segment(shoulder, hip, thickness, BODY),
+			segment(
+				hip,
+				[x - personWidth * (side ? 0.08 : 0.34), 0],
+				thickness,
+				BODY,
+			),
+			segment(
+				hip,
+				[x + personWidth * (side ? 0.08 : 0.34), 0],
+				thickness,
+				BODY,
+			),
+		);
+		if (side) {
+			polygons.push(
+				segment(
+					shoulder,
+					[x + direction * personWidth * 0.7, height * 0.61],
+					thickness,
+					BODY,
+				),
+				segment(
+					[x, height * 0.64],
+					[x + direction * personWidth * 0.66, height * 0.53],
+					thickness,
+					BODY,
+				),
+			);
+		} else {
+			polygons.push(
+				segment(
+					shoulder,
+					[x - personWidth * 0.62, height * 0.57],
+					thickness,
+					BODY,
+				),
+				segment(
+					shoulder,
+					[x + personWidth * 0.62, height * 0.57],
+					thickness,
+					BODY,
+				),
+			);
+		}
+	}
+	return polygons;
+}
+
+/** Stable pseudo-random audience stature in millimetres for repeatable technical drawings. */
+export function audiencePersonHeight(index: number): number {
+	return 1600 + ((Math.max(0, Math.trunc(index)) * 73 + 41) % 251);
 }
 
 function segment(
