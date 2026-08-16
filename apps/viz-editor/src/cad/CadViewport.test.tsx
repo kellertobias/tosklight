@@ -46,6 +46,7 @@ function setup(
 	const onSelection = vi.fn();
 	const onPreview = vi.fn();
 	const onMove = vi.fn().mockResolvedValue(undefined);
+	const onCamera = vi.fn();
 	render(
 		<CadViewport
 			entities={[entity]}
@@ -57,7 +58,7 @@ function setup(
 			preview={null}
 			showFixtureIds={labels.fixtureIds}
 			showDmxAddresses={labels.dmxAddresses}
-			onCamera={() => undefined}
+			onCamera={onCamera}
 			onSelection={onSelection}
 			onPreview={onPreview}
 			onMove={onMove}
@@ -80,7 +81,7 @@ function setup(
 	Object.defineProperty(canvas, "clientHeight", { value: 800 });
 	Object.defineProperty(canvas, "setPointerCapture", { value: vi.fn() });
 	Object.defineProperty(canvas, "releasePointerCapture", { value: vi.fn() });
-	return { canvas, onSelection, onPreview, onMove };
+	return { canvas, onCamera, onSelection, onPreview, onMove };
 }
 
 describe("CAD fixture interaction", () => {
@@ -190,6 +191,27 @@ describe("CAD fixture interaction", () => {
 		});
 	});
 
+	it("always pans the whole view with a middle-button drag", () => {
+		const { canvas, onCamera, onSelection } = setup();
+		fireEvent.pointerDown(canvas, {
+			pointerId: 4,
+			button: 1,
+			clientX: 500,
+			clientY: 400,
+		});
+		fireEvent.pointerMove(canvas, {
+			pointerId: 4,
+			buttons: 4,
+			clientX: 530,
+			clientY: 420,
+		});
+		expect(onCamera).toHaveBeenLastCalledWith({
+			pan: [300, -200],
+			zoom: 0.1,
+		});
+		expect(onSelection).not.toHaveBeenCalled();
+	});
+
 	it("moves only from the gizmo and constrains an axis-arrow drag", async () => {
 		const { canvas, onMove, onPreview } = setup([fixture.id]);
 		// The right arrow starts at the gizmo origin, 36 screen pixels right and above the fixture.
@@ -240,6 +262,7 @@ describe("CAD fixture interaction", () => {
 	it("moves and uniformly scales print frames while rig editing is disabled", () => {
 		const onSelection = vi.fn();
 		const onChangePrintPage = vi.fn();
+		const onCamera = vi.fn();
 		render(
 			<CadViewport
 				entities={[fixture]}
@@ -252,6 +275,7 @@ describe("CAD fixture interaction", () => {
 				showFixtureIds={false}
 				showDmxAddresses={false}
 				editEnabled={false}
+				printMode
 				printPages={[
 					{
 						id: "page-1",
@@ -265,7 +289,7 @@ describe("CAD fixture interaction", () => {
 					},
 				]}
 				selectedPrintPageId="page-1"
-				onCamera={() => undefined}
+				onCamera={onCamera}
 				onSelection={onSelection}
 				onPreview={() => undefined}
 				onMove={vi.fn()}
@@ -288,5 +312,58 @@ describe("CAD fixture interaction", () => {
 		});
 		const width = onChangePrintPage.mock.calls.at(-1)?.[1].widthMillimetres;
 		expect(width).toBeGreaterThan(5000);
+
+		onChangePrintPage.mockClear();
+		fireEvent.pointerDown(frame, {
+			pointerId: 3,
+			button: 1,
+			clientX: 100,
+			clientY: 100,
+		});
+		fireEvent.pointerMove(frame, {
+			pointerId: 3,
+			buttons: 4,
+			clientX: 120,
+			clientY: 110,
+		});
+		expect(onCamera).toHaveBeenLastCalledWith({ pan: [200, -100], zoom: 0.1 });
+		expect(onChangePrintPage).not.toHaveBeenCalled();
+	});
+
+	it("does not render persisted print pages outside Print mode", () => {
+		render(
+			<CadViewport
+				entities={[fixture]}
+				drawings={[]}
+				selectedIds={[]}
+				view="top_down"
+				rotationQuarterTurns={0}
+				camera={camera}
+				preview={null}
+				showFixtureIds={false}
+				showDmxAddresses={false}
+				printMode={false}
+				printPages={[
+					{
+						id: "page-hidden",
+						tileId: "tile",
+						name: "Hidden Page",
+						view: "top_down",
+						rotationQuarterTurns: 0,
+						centreMillimetres: [0, 0],
+						widthMillimetres: 5000,
+						included: true,
+					},
+				]}
+				onCamera={() => undefined}
+				onSelection={() => undefined}
+				onPreview={() => undefined}
+				onMove={vi.fn()}
+			/>,
+		);
+		expect(screen.queryByText("Hidden Page")).not.toBeInTheDocument();
+		expect(
+			screen.queryByRole("button", { name: "Scale Hidden Page" }),
+		).not.toBeInTheDocument();
 	});
 });

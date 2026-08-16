@@ -595,6 +595,7 @@ function CadTile(props: CadTileProps) {
 				camera={node.camera}
 				showFixtureIds={props.settings.showFixtureIds}
 				showDmxAddresses={props.settings.showDmxAddresses}
+				printMode={props.printMode}
 				onCamera={(camera: TileCamera) =>
 					props.onTile(node.id, (tile) => ({ ...tile, camera }))
 				}

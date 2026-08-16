@@ -27,6 +27,7 @@ interface CadViewportProps {
 	showFixtureIds: boolean;
 	showDmxAddresses: boolean;
 	editEnabled?: boolean;
+	printMode?: boolean;
 	printPages?: readonly CadPrintPage[];
 	selectedPrintPageId?: string | null;
 	onSelectPrintPage?(id: string): void;
@@ -137,6 +138,7 @@ export function CadViewport({
 	showFixtureIds,
 	showDmxAddresses,
 	editEnabled = true,
+	printMode = false,
 	printPages = [],
 	selectedPrintPageId = null,
 	onSelectPrintPage,
@@ -419,7 +421,7 @@ export function CadViewport({
 					})}
 				</div>
 			) : null}
-			{printPages.length ? (
+			{printMode && printPages.length ? (
 				<div className="cad-print-frames">
 					{printPages.map((page) => (
 						<PrintFrame
@@ -429,6 +431,7 @@ export function CadViewport({
 							selected={page.id === selectedPrintPageId}
 							onSelect={() => onSelectPrintPage?.(page.id)}
 							onChange={(change) => onChangePrintPage?.(page.id, change)}
+							onCamera={onCamera}
 						/>
 					))}
 				</div>
@@ -443,18 +446,21 @@ function PrintFrame({
 	selected,
 	onSelect,
 	onChange,
+	onCamera,
 }: {
 	page: CadPrintPage;
 	camera: TileCamera;
 	selected: boolean;
 	onSelect(): void;
 	onChange(change: Partial<CadPrintPage>): void;
+	onCamera(camera: TileCamera): void;
 }) {
 	const interaction = useRef<{
-		type: "move" | "scale";
+		type: "move" | "scale" | "pan";
 		start: [number, number];
 		centre: [number, number];
 		width: number;
+		camera: TileCamera;
 	} | null>(null);
 	const height = printPageHeight(page);
 	function move(event: React.PointerEvent<HTMLElement>) {
@@ -462,7 +468,15 @@ function PrintFrame({
 		if (!active) return;
 		const dx = event.clientX - active.start[0];
 		const dy = event.clientY - active.start[1];
-		if (active.type === "move") {
+		if (active.type === "pan") {
+			onCamera({
+				...active.camera,
+				pan: [
+					active.camera.pan[0] + dx / active.camera.zoom,
+					active.camera.pan[1] - dy / active.camera.zoom,
+				],
+			});
+		} else if (active.type === "move") {
 			onChange({
 				centreMillimetres: [
 					active.centre[0] + dx / camera.zoom,
@@ -496,14 +510,16 @@ function PrintFrame({
 				height: `${height * camera.zoom}px`,
 			}}
 			onPointerDown={(event) => {
+				if (event.button !== 0 && event.button !== 1) return;
 				event.preventDefault();
 				event.stopPropagation();
-				onSelect();
+				if (event.button === 0) onSelect();
 				interaction.current = {
-					type: "move",
+					type: event.button === 1 ? "pan" : "move",
 					start: [event.clientX, event.clientY],
 					centre: page.centreMillimetres,
 					width: page.widthMillimetres,
+					camera,
 				};
 				event.currentTarget.setPointerCapture?.(event.pointerId);
 			}}
@@ -517,14 +533,16 @@ function PrintFrame({
 				className="cad-print-scale"
 				aria-label={`Scale ${page.name}`}
 				onPointerDown={(event) => {
+					if (event.button !== 0 && event.button !== 1) return;
 					event.preventDefault();
 					event.stopPropagation();
-					onSelect();
+					if (event.button === 0) onSelect();
 					interaction.current = {
-						type: "scale",
+						type: event.button === 1 ? "pan" : "scale",
 						start: [event.clientX, event.clientY],
 						centre: page.centreMillimetres,
 						width: page.widthMillimetres,
+						camera,
 					};
 					event.currentTarget.setPointerCapture?.(event.pointerId);
 				}}
