@@ -48,6 +48,10 @@ const mocks = vi.hoisted(() => ({
 	onSceneDelta: vi.fn(),
 	onSelectionDelta: vi.fn(),
 }));
+const documentMocks = vi.hoisted(() => ({
+	current: vi.fn(),
+	savePaperwork: vi.fn(),
+}));
 const nativeWindow = vi.hoisted(() => ({
 	close: vi.fn().mockResolvedValue(undefined),
 	isFullscreen: vi.fn().mockResolvedValue(false),
@@ -57,6 +61,7 @@ const nativeWindow = vi.hoisted(() => ({
 const workspace = new Map<string, string>();
 
 vi.mock("./session", () => ({ cadSession: mocks }));
+vi.mock("../document/session", () => ({ documentSession: documentMocks }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({
 	save: vi.fn().mockResolvedValue("/tmp/rig-plan.pdf"),
 }));
@@ -134,6 +139,29 @@ beforeEach(() => {
 	mocks.exportPdf.mockReset().mockResolvedValue(undefined);
 	mocks.onSceneDelta.mockReset().mockResolvedValue(() => undefined);
 	mocks.onSelectionDelta.mockReset().mockResolvedValue(() => undefined);
+	documentMocks.current.mockReset().mockResolvedValue({
+		showId: snapshot.showId,
+		name: "Demo Show",
+		path: "/tmp/demo.show",
+		fixtureCount: 1,
+		fileName: "demo.show",
+		lightingDesigner: "",
+		showVersion: "",
+		lastSavedAt: 1_787_000_000,
+		universeCount: 1,
+	});
+	documentMocks.savePaperwork.mockReset().mockImplementation((paperwork) =>
+		Promise.resolve({
+			showId: snapshot.showId,
+			name: "Demo Show",
+			path: "/tmp/demo.show",
+			fixtureCount: 1,
+			fileName: "demo.show",
+			...paperwork,
+			lastSavedAt: 1_787_000_001,
+			universeCount: 1,
+		}),
+	);
 	for (const action of Object.values(nativeWindow)) action.mockClear();
 });
 
@@ -232,6 +260,44 @@ describe("the CAD planning window", () => {
 		expect(workspace.get("tosklight:viz-editor:cad-print-pages:v1")).toContain(
 			"Page 1",
 		);
+	});
+
+	it("keeps the CAD window mounted while editing and saving project information", async () => {
+		render(
+			<ModalProvider>
+				<CadApp />
+			</ModalProvider>,
+		);
+		await screen.findByTestId("cad-canvas");
+		fireEvent.click(screen.getByRole("button", { name: "Print" }));
+
+		const lightingDesigner = screen.getByRole("textbox", {
+			name: "Lighting designer",
+		});
+		const showVersion = screen.getByRole("textbox", { name: "Show version" });
+		fireEvent.change(lightingDesigner, { target: { value: "T" } });
+		fireEvent.change(showVersion, { target: { value: "v" } });
+
+		expect(lightingDesigner).toHaveValue("T");
+		expect(showVersion).toHaveValue("v");
+		expect(screen.getByTestId("cad-canvas")).toBeInTheDocument();
+		expect(
+			screen.getByRole("complementary", { name: "Print pages" }),
+		).toBeInTheDocument();
+
+		fireEvent.change(lightingDesigner, {
+			target: { value: "Tobias Keller" },
+		});
+		fireEvent.change(showVersion, { target: { value: "1.2" } });
+		fireEvent.click(screen.getByRole("button", { name: "Save project info" }));
+
+		await waitFor(() =>
+			expect(documentMocks.savePaperwork).toHaveBeenCalledWith({
+				lightingDesigner: "Tobias Keller",
+				showVersion: "1.2",
+			}),
+		);
+		expect(screen.getByTestId("cad-canvas")).toBeInTheDocument();
 	});
 
 	it("fits automatically when the view changes and rotates only top down", async () => {

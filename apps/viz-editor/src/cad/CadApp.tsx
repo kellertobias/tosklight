@@ -278,6 +278,13 @@ export function CadApp() {
 		}
 	}
 
+	function changePaperwork(
+		field: "lightingDesigner" | "showVersion",
+		value: string,
+	) {
+		setPaperwork((current) => ({ ...current, [field]: value }));
+	}
+
 	async function history(direction: "undo" | "redo") {
 		if (!scene) return;
 		try {
@@ -396,10 +403,10 @@ export function CadApp() {
 								<input
 									value={paperwork.lightingDesigner}
 									onChange={(event) =>
-										setPaperwork((current) => ({
-											...current,
-											lightingDesigner: event.currentTarget.value,
-										}))
+										changePaperwork(
+											"lightingDesigner",
+											event.currentTarget.value,
+										)
 									}
 								/>
 							</label>
@@ -408,10 +415,7 @@ export function CadApp() {
 								<input
 									value={paperwork.showVersion}
 									onChange={(event) =>
-										setPaperwork((current) => ({
-											...current,
-											showVersion: event.currentTarget.value,
-										}))
+										changePaperwork("showVersion", event.currentTarget.value)
 									}
 								/>
 							</label>
