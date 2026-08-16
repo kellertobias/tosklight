@@ -112,7 +112,10 @@ export interface FixtureProfile {
 	stage_icon_asset: string | null;
 	model_asset: string | null;
 	model_units?: "auto" | "metres";
-	effect?: { effect_script_asset?: string | null; result_version: number } | null;
+	effect?: {
+		effect_script_asset?: string | null;
+		result_version: number;
+	} | null;
 	physical: FixtureProfilePhysical;
 	modes: FixtureMode[];
 	hazardous: boolean;
@@ -436,6 +439,8 @@ export interface PatchLayer {
 	id: string;
 	name: string;
 	order: number;
+	/** Locked layers remain visible but cannot become an editing selection. */
+	locked?: boolean;
 }
 
 /**

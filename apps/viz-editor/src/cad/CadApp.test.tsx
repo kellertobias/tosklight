@@ -23,9 +23,13 @@ const snapshot = {
 			id: fixtureId,
 			name: "Profile Stage 1",
 			fixtureNumber: 101,
+			fixtureDisplayId: "101",
+			dmxAddress: "1.1",
 			kind: "profile",
 			fixtureType: "moving_head_profile",
 			drawingId: "profile:1",
+			layerId: "default",
+			selectable: true,
 			positionMillimetres: [0, 0, 4000],
 			rotationDegrees: [0, 0, 0],
 			sizeMillimetres: [400, 500, 700],
@@ -61,11 +65,17 @@ vi.mock("./CadViewport", () => ({
 		rotationQuarterTurns,
 		camera,
 		onSelection,
+		preview,
+		onPreview,
+		onMove,
 	}: {
 		view: string;
 		rotationQuarterTurns: number;
 		camera: { pan: [number, number]; zoom: number };
 		onSelection(change: unknown): void;
+		preview: { deltaMillimetres: [number, number, number] } | null;
+		onPreview(preview: unknown): void;
+		onMove(delta: [number, number, number], ids: readonly string[]): void;
 	}) => (
 		<button
 			type="button"
@@ -73,6 +83,17 @@ vi.mock("./CadViewport", () => ({
 			data-rotation={rotationQuarterTurns}
 			data-pan={camera.pan.join(",")}
 			data-zoom={camera.zoom}
+			data-preview={preview?.deltaMillimetres.join(",") ?? "none"}
+			onPointerMove={() =>
+				onPreview({
+					entityIds: [fixtureId],
+					deltaMillimetres: [250, 0, 0],
+				})
+			}
+			onPointerUp={() => {
+				onPreview(null);
+				onMove([250, 0, 0], [fixtureId]);
+			}}
 			onClick={() =>
 				onSelection({
 					type: "replace",
@@ -157,7 +178,7 @@ describe("the CAD planning window", () => {
 			within(header as HTMLElement)
 				.getAllByRole("button")
 				.map((button) => button.textContent),
-		).toEqual(["Settings", "Undo", "Redo"]);
+		).toEqual(["Undo", "Redo", "⚙"]);
 		expect(
 			screen.getByRole("button", {
 				name: "Rotate top-down view 90 degrees counterclockwise",
@@ -219,6 +240,12 @@ describe("the CAD planning window", () => {
 		expect(snapping).toBeChecked();
 		fireEvent.click(snapping);
 		expect(snapping).not.toBeChecked();
+		expect(
+			within(settings).getByRole("switch", { name: "Show fixture IDs" }),
+		).not.toBeChecked();
+		expect(
+			within(settings).getByRole("switch", { name: "Show DMX addresses" }),
+		).not.toBeChecked();
 		expect(
 			screen.queryByText("Snap to declared truss mounts"),
 		).not.toBeInTheDocument();
@@ -316,5 +343,35 @@ describe("the CAD planning window", () => {
 		expect(
 			screen.queryByText(/refresh before replacing/i),
 		).not.toBeInTheDocument();
+	});
+
+	it("shares a live world transform across tiles and commits once on release", async () => {
+		mocks.transform.mockResolvedValue({ sceneRevision: 10 });
+		render(
+			<ModalProvider>
+				<CadApp />
+			</ModalProvider>,
+		);
+		fireEvent.click(
+			await screen.findByRole("button", { name: "Add viewport right" }),
+		);
+		const viewports = screen.getAllByTestId("cad-canvas");
+		fireEvent.pointerMove(viewports[0]);
+		expect(viewports[0]).toHaveAttribute("data-preview", "250,0,0");
+		expect(viewports[1]).toHaveAttribute("data-preview", "250,0,0");
+		expect(mocks.transform).not.toHaveBeenCalled();
+
+		fireEvent.pointerUp(viewports[0]);
+		await waitFor(() => expect(mocks.transform).toHaveBeenCalledOnce());
+		expect(mocks.transform).toHaveBeenCalledWith(
+			9,
+			[fixtureId],
+			[250, 0, 0],
+			true,
+		);
+		expect(screen.getAllByTestId("cad-canvas")[1]).toHaveAttribute(
+			"data-preview",
+			"none",
+		);
 	});
 });

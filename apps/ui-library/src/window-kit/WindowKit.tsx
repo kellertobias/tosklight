@@ -16,8 +16,8 @@ import { createPortal } from "react-dom";
 import {
 	Button,
 	ModalTitleBar,
-	TitleChrome,
 	type TitleActionGroup,
+	TitleChrome,
 	type TitleSearch,
 } from "../common";
 import { ModalLayer } from "../modals/ModalStack";
@@ -130,7 +130,9 @@ type WindowHeaderProps = {
 	groups?: TitleActionGroup[];
 	settings?: boolean;
 	onSettings?: (anchor: HTMLElement) => void;
-	dragHandleProps?: React.HTMLAttributes<HTMLElement>;
+	dragHandleProps?: React.HTMLAttributes<HTMLElement> & {
+		"data-tauri-drag-region"?: boolean | "";
+	};
 	onTitleClick?: () => void;
 	titleActionLabel?: string;
 	search?: TitleSearch;
@@ -195,20 +197,23 @@ export function WindowHeader({
 			<TitleChrome
 				groups={groups}
 				search={resolvedSearch}
-				terminalActions={[
-					{
-						id: "settings",
-						label: "Settings",
-						icon: <span aria-hidden="true">⚙</span>,
-						ariaLabel: "Settings",
-						disabled: !onSettings,
-						className: "ui-window-settings-action",
-						onPress: () => {
-							const anchor = document.activeElement;
-							if (anchor instanceof HTMLElement) onSettings?.(anchor);
-						},
-					},
-				]}
+				terminalActions={
+					settings
+						? [
+								{
+									id: "settings",
+									icon: <span aria-hidden="true">⚙</span>,
+									ariaLabel: "Settings",
+									disabled: !onSettings,
+									className: "ui-window-settings-action",
+									onPress: () => {
+										const anchor = document.activeElement;
+										if (anchor instanceof HTMLElement) onSettings?.(anchor);
+									},
+								},
+							]
+						: []
+				}
 				className="ui-window-action-groups"
 				groupClassName="ui-window-action-group"
 				searchClassName="ui-window-header-search"

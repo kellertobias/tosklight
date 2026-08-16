@@ -348,6 +348,11 @@ pub fn patch_layers(session: tauri::State<'_, Session>) -> Answer<Vec<PatchLayer
                     id: object.id.clone(),
                     name: object.body.get("name")?.as_str()?.to_owned(),
                     order: object.body.get("order").and_then(|order| order.as_i64())? as i32,
+                    locked: object
+                        .body
+                        .get("locked")
+                        .and_then(serde_json::Value::as_bool)
+                        .unwrap_or(false),
                 })
             })
             .collect())
@@ -357,13 +362,15 @@ pub fn patch_layers(session: tauri::State<'_, Session>) -> Answer<Vec<PatchLayer
 /// Store one patch layer in the document, as the desk stores it.
 #[tauri::command]
 pub fn save_patch_layer(
+    app: tauri::AppHandle,
     session: tauri::State<'_, Session>,
+    cad: tauri::State<'_, crate::cad::CadState>,
     layer: PatchLayerDto,
 ) -> Answer<PatchLayerDto> {
     if layer.name.trim().is_empty() {
         return Err("a patch layer needs a name".to_owned());
     }
-    session.change(|document| {
+    let saved = session.change(|document| {
         document
             .put_object(
                 "patch_layer",
@@ -372,11 +379,16 @@ pub fn save_patch_layer(
                     "id": layer.id,
                     "name": layer.name,
                     "order": layer.order,
+                    "locked": layer.locked,
                 }),
             )
             .map_err(|error| error.to_string())?;
         Ok(layer.clone())
-    })
+    })?;
+    let revision =
+        session.with(|document| document.patch_revision().map_err(|error| error.to_string()))?;
+    crate::cad::emit_scene_delta(&app, &session, &cad, revision, Vec::new())?;
+    Ok(saved)
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -384,6 +396,8 @@ pub struct PatchLayerDto {
     pub id: String,
     pub name: String,
     pub order: i32,
+    #[serde(default)]
+    pub locked: bool,
 }
 
 /// Set one preview value: a Simple-mode parameter, or a raw slot from Full DMX mode.

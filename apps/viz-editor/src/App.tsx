@@ -15,6 +15,7 @@ import { WindowHeader } from "@tosklight/ui/window-kit";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import appIcon from "../src-tauri/icons/icon.svg";
 import { cadSession } from "./cad/session";
+import type { CadEntity } from "./cad/types";
 import type { DocumentSummary } from "./document/session";
 import { documentSession, sessionPatchLayers } from "./document/session";
 import { TauriPatchTransport } from "./document/transport";
@@ -53,6 +54,7 @@ export function App() {
 	const [selectionRevision, setSelectionRevision] = useState(0);
 	const selectionRevisionRef = useRef(0);
 	const selectionQueue = useRef<Promise<void>>(Promise.resolve());
+	const cadEntitiesRef = useRef(new Map<string, CadEntity>());
 	// The rig itself, for the preview controls: the sheet owns the table, this owns the values.
 	const [fixtures, setFixtures] = useState<readonly PatchFixtureProjection[]>(
 		[],
@@ -112,6 +114,9 @@ export function App() {
 		cadSession
 			.snapshot()
 			.then((snapshot) => {
+				cadEntitiesRef.current = new Map(
+					snapshot.entities.map((entity) => [entity.id, entity]),
+				);
 				const ids = Array.isArray(snapshot.selectedIds)
 					? snapshot.selectedIds
 					: [];
@@ -128,14 +133,26 @@ export function App() {
 				setSelected(delta.selectedIds);
 				setSelectionRevision(delta.revision);
 				selectionRevisionRef.current = delta.revision;
-				if (delta.selectedIds.length) setWorkspace("patch");
+				if (delta.selectedIds.length) {
+					const selectedEntity = cadEntitiesRef.current.get(
+						delta.selectedIds[0],
+					);
+					setWorkspace(selectedEntity?.kind === "venue" ? "venue" : "patch");
+				}
 			})
 			.then((unlisten) => {
 				selectionUnlisten = unlisten;
 			})
 			.catch(() => undefined);
 		cadSession
-			.onSceneDelta(() => loadFixtures())
+			.onSceneDelta((delta) => {
+				const next = new Map(cadEntitiesRef.current);
+				for (const id of delta.removedIds) next.delete(id);
+				for (const entity of delta.upserted) next.set(entity.id, entity);
+				cadEntitiesRef.current = next;
+				loadFixtures();
+				setReload((current) => current + 1);
+			})
 			.then((unlisten) => {
 				sceneUnlisten = unlisten;
 			})

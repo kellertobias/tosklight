@@ -7,9 +7,13 @@ const fixture: CadEntity = {
 	id: "11111111-1111-4111-8111-111111111111",
 	name: "Profile Stage 1",
 	fixtureNumber: 101,
+	fixtureDisplayId: "101",
+	dmxAddress: "1.1",
 	kind: "profile",
 	fixtureType: "moving_head_profile",
 	drawingId: "profile:1",
+	layerId: "default",
+	selectable: true,
 	positionMillimetres: [0, 0, 4000],
 	rotationDegrees: [0, 0, 0],
 	sizeMillimetres: [400, 500, 700],
@@ -29,20 +33,28 @@ beforeEach(() => {
 	vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
 });
 
-function setup(selectedIds: readonly string[] = []) {
+function setup(
+	selectedIds: readonly string[] = [],
+	entity: CadEntity = fixture,
+	labels = { fixtureIds: false, dmxAddresses: false },
+) {
 	const onSelection = vi.fn();
+	const onPreview = vi.fn();
 	const onMove = vi.fn().mockResolvedValue(undefined);
 	render(
 		<CadViewport
-			entities={[fixture]}
+			entities={[entity]}
 			drawings={[]}
 			selectedIds={selectedIds}
 			view="top_down"
 			rotationQuarterTurns={0}
 			camera={camera}
-			snapToMounts
+			preview={null}
+			showFixtureIds={labels.fixtureIds}
+			showDmxAddresses={labels.dmxAddresses}
 			onCamera={() => undefined}
 			onSelection={onSelection}
+			onPreview={onPreview}
 			onMove={onMove}
 		/>,
 	);
@@ -63,7 +75,7 @@ function setup(selectedIds: readonly string[] = []) {
 	Object.defineProperty(canvas, "clientHeight", { value: 800 });
 	Object.defineProperty(canvas, "setPointerCapture", { value: vi.fn() });
 	Object.defineProperty(canvas, "releasePointerCapture", { value: vi.fn() });
-	return { canvas, onSelection, onMove };
+	return { canvas, onSelection, onPreview, onMove };
 }
 
 describe("CAD fixture interaction", () => {
@@ -121,7 +133,7 @@ describe("CAD fixture interaction", () => {
 	});
 
 	it("moves only from the gizmo and constrains an axis-arrow drag", async () => {
-		const { canvas, onMove } = setup([fixture.id]);
+		const { canvas, onMove, onPreview } = setup([fixture.id]);
 		// The right arrow starts at the gizmo origin, 36 screen pixels right and above the fixture.
 		fireEvent.pointerDown(canvas, {
 			pointerId: 1,
@@ -130,6 +142,10 @@ describe("CAD fixture interaction", () => {
 			clientY: 364,
 		});
 		fireEvent.pointerMove(canvas, { pointerId: 1, clientX: 598, clientY: 390 });
+		expect(onPreview).toHaveBeenCalledWith({
+			entityIds: [fixture.id],
+			deltaMillimetres: [400, 0, 0],
+		});
 		fireEvent.pointerUp(canvas, {
 			pointerId: 1,
 			button: 0,
@@ -139,5 +155,27 @@ describe("CAD fixture interaction", () => {
 		await waitFor(() =>
 			expect(onMove).toHaveBeenCalledWith([400, 0, 0], [fixture.id]),
 		);
+	});
+
+	it("does not select locked entities and renders optional operator labels", () => {
+		const locked = { ...fixture, selectable: false };
+		const { canvas, onSelection } = setup([], locked, {
+			fixtureIds: true,
+			dmxAddresses: true,
+		});
+		expect(screen.getByText("ID 101 · DMX 1.1")).toBeInTheDocument();
+		fireEvent.pointerDown(canvas, {
+			pointerId: 1,
+			button: 0,
+			clientX: 500,
+			clientY: 400,
+		});
+		fireEvent.pointerUp(canvas, {
+			pointerId: 1,
+			button: 0,
+			clientX: 500,
+			clientY: 400,
+		});
+		expect(onSelection).toHaveBeenCalledWith({ type: "replace", ids: [] });
 	});
 });

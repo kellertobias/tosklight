@@ -1500,12 +1500,46 @@ body {
 	bottom: 12px;
 }
 
+.cad-viewport {
+	position: relative;
+	width: 100%;
+	height: 100%;
+	overflow: hidden;
+}
+
 .cad-canvas {
+	position: absolute;
+	inset: 0;
 	display: block;
 	width: 100%;
 	height: 100%;
 	touch-action: none;
 	cursor: crosshair;
+}
+
+.cad-entity-labels {
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+	overflow: hidden;
+}
+
+.cad-entity-label {
+	position: absolute;
+	translate: 8px -50%;
+	padding: 2px 5px;
+	border: 1px solid rgb(135 151 165 / 35%);
+	border-radius: 3px;
+	background: rgb(3 8 12 / 78%);
+	color: #cbd5dd;
+	font: 600 10px / 1.2 var(--ui-font-mono, monospace);
+	white-space: nowrap;
+}
+
+.cad-settings-fields {
+	display: grid;
+	gap: 12px;
+	max-width: 480px;
 }
 
 .cad-loading {

@@ -8,6 +8,7 @@ import {
 	applySelectionChange,
 	CAD_VIEW_LABELS,
 	type CadSceneSnapshot,
+	type CadTransformPreview,
 	type CadViewDirection,
 	mapTile,
 	newTile,
@@ -25,12 +26,20 @@ import {
 } from "./types";
 
 const WORKSPACE_KEY = "tosklight:viz-editor:cad-workspace:v1";
+const SETTINGS_KEY = "tosklight:viz-editor:cad-settings:v1";
+
+interface CadSettings {
+	snapToMounts: boolean;
+	showFixtureIds: boolean;
+	showDmxAddresses: boolean;
+}
 
 export function CadApp() {
 	const [scene, setScene] = useState<CadSceneSnapshot | null>(null);
 	const [layout, setLayout] = useState<TileNode>(restoreLayout);
-	const [snapToMounts, setSnapToMounts] = useState(true);
+	const [settings, setSettings] = useState<CadSettings>(restoreSettings);
 	const [settingsOpen, setSettingsOpen] = useState(false);
+	const [preview, setPreview] = useState<CadTransformPreview | null>(null);
 	const [activeTileId, setActiveTileId] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const sceneRef = useRef<CadSceneSnapshot | null>(null);
@@ -52,7 +61,7 @@ export function CadApp() {
 		cadSession
 			.onSceneDelta((delta) => {
 				setScene((current) => {
-					if (!current || delta.sceneRevision <= current.sceneRevision)
+					if (!current || delta.sceneRevision < current.sceneRevision)
 						return current;
 					const entities = new Map(
 						current.entities.map((entity) => [entity.id, entity]),
@@ -108,6 +117,10 @@ export function CadApp() {
 		localStorage.setItem(WORKSPACE_KEY, JSON.stringify(layout));
 	}, [layout]);
 
+	useEffect(() => {
+		localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+	}, [settings]);
+
 	function select(change: SelectionChange) {
 		selectionQueue.current = selectionQueue.current.then(async () => {
 			const current = sceneRef.current;
@@ -140,12 +153,13 @@ export function CadApp() {
 		entityIds: readonly string[],
 	) {
 		if (!scene || !entityIds.length) return;
+		setPreview(null);
 		try {
 			await cadSession.transform(
 				scene.sceneRevision,
 				entityIds,
 				deltaMillimetres.map(Math.round) as [number, number, number],
-				snapToMounts,
+				settings.snapToMounts,
 			);
 			applyScene(await cadSession.snapshot());
 		} catch (reason) {
@@ -199,11 +213,6 @@ export function CadApp() {
 						id: "cad-actions",
 						actions: [
 							{
-								id: "settings",
-								label: "Settings",
-								onPress: () => setSettingsOpen(true),
-							},
-							{
 								id: "undo",
 								label: "Undo",
 								disabled: !scene,
@@ -218,6 +227,8 @@ export function CadApp() {
 						],
 					},
 				]}
+				settings
+				onSettings={() => setSettingsOpen(true)}
 			/>
 			{error ? <output className="cad-error">{error}</output> : null}
 			<section className="cad-workspace">
@@ -226,7 +237,8 @@ export function CadApp() {
 						node={layout}
 						root={layout}
 						scene={scene}
-						snapToMounts={snapToMounts}
+						settings={settings}
+						preview={preview}
 						onLayout={setLayout}
 						onTile={updateTile}
 						onSplitRatio={(id, ratio) =>
@@ -235,6 +247,7 @@ export function CadApp() {
 						activeTileId={activeTileId}
 						onActivate={setActiveTileId}
 						onSelection={select}
+						onPreview={setPreview}
 						onMove={move}
 						onFit={fit}
 					/>
@@ -248,18 +261,47 @@ export function CadApp() {
 					onClose={() => setSettingsOpen(false)}
 					tabs={[
 						{
-							id: "snapping",
-							label: "Snapping",
+							id: "general",
+							label: "General",
 							content: (
-								<SwitchField
-									label="Enable snapping"
-									offLabel={null}
-									onLabel={null}
-									checked={snapToMounts}
-									onChange={(event) =>
-										setSnapToMounts(event.currentTarget.checked)
-									}
-								/>
+								<div className="cad-settings-fields">
+									<SwitchField
+										label="Enable snapping"
+										offLabel={null}
+										onLabel={null}
+										checked={settings.snapToMounts}
+										onChange={(event) =>
+											setSettings((current) => ({
+												...current,
+												snapToMounts: event.currentTarget.checked,
+											}))
+										}
+									/>
+									<SwitchField
+										label="Show fixture IDs"
+										offLabel={null}
+										onLabel={null}
+										checked={settings.showFixtureIds}
+										onChange={(event) =>
+											setSettings((current) => ({
+												...current,
+												showFixtureIds: event.currentTarget.checked,
+											}))
+										}
+									/>
+									<SwitchField
+										label="Show DMX addresses"
+										offLabel={null}
+										onLabel={null}
+										checked={settings.showDmxAddresses}
+										onChange={(event) =>
+											setSettings((current) => ({
+												...current,
+												showDmxAddresses: event.currentTarget.checked,
+											}))
+										}
+									/>
+								</div>
 							),
 						},
 					]}
@@ -278,13 +320,15 @@ interface CadTileProps {
 	node: TileNode;
 	root: TileNode;
 	scene: CadSceneSnapshot;
-	snapToMounts: boolean;
+	settings: CadSettings;
+	preview: CadTransformPreview | null;
 	onLayout(layout: TileNode): void;
 	onTile(id: string, change: (tile: ViewportTile) => ViewportTile): void;
 	onSplitRatio(id: string, ratio: number): void;
 	activeTileId: string | null;
 	onActivate(id: string): void;
 	onSelection(change: SelectionChange): void;
+	onPreview(preview: CadTransformPreview | null): void;
 	onMove(
 		delta: [number, number, number],
 		entityIds: readonly string[],
@@ -375,18 +419,38 @@ function CadTile(props: CadTileProps) {
 				entities={props.scene.entities}
 				drawings={props.scene.drawings}
 				selectedIds={props.scene.selectedIds}
+				preview={props.preview}
 				view={node.view}
 				rotationQuarterTurns={node.rotationQuarterTurns}
 				camera={node.camera}
-				snapToMounts={props.snapToMounts}
+				showFixtureIds={props.settings.showFixtureIds}
+				showDmxAddresses={props.settings.showDmxAddresses}
 				onCamera={(camera: TileCamera) =>
 					props.onTile(node.id, (tile) => ({ ...tile, camera }))
 				}
 				onSelection={props.onSelection}
+				onPreview={props.onPreview}
 				onMove={props.onMove}
 			/>
 		</section>
 	);
+}
+
+function restoreSettings(): CadSettings {
+	try {
+		const stored = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "null");
+		return {
+			snapToMounts: stored?.snapToMounts !== false,
+			showFixtureIds: stored?.showFixtureIds === true,
+			showDmxAddresses: stored?.showDmxAddresses === true,
+		};
+	} catch {
+		return {
+			snapToMounts: true,
+			showFixtureIds: false,
+			showDmxAddresses: false,
+		};
+	}
 }
 
 function rotateTile(props: CadTileProps, tile: ViewportTile, delta: -1 | 1) {

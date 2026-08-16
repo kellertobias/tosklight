@@ -1,10 +1,10 @@
-import type { SplitPatch } from "../../wire";
 import type { PatchPlacement } from "../../contracts";
 import {
 	newPatchFixtureCandidate,
-	type PatchFixtureCandidate,
 	type PatchedFixtureResult,
+	type PatchFixtureCandidate,
 } from "../../state/PatchContext";
+import type { SplitPatch } from "../../wire";
 import { parsePatchAddress } from "../fields";
 import { conflicts, incrementFixtureName, isDmxPatchable } from "../patchUtils";
 import type { PatchController } from "./controller";
@@ -95,7 +95,7 @@ async function addVirtualBatch(controller: PatchController) {
 			fixture.virtual_fixture_number == null
 				? []
 				: [fixture.virtual_fixture_number],
-			),
+		),
 	);
 	while (candidates.length < requested) {
 		const nextFixtureNumber = nextAvailableFixtureNumber(
@@ -431,6 +431,13 @@ async function commitPlacementBatch(
 		if (!ids)
 			controller.ui.setStatus(
 				"Fixtures could not be added. Review the Patch status and try again.",
+			);
+		if (ids && controller.props.onFixturesAdded)
+			await controller.props.onFixturesAdded(
+				ids.map((result, index) => ({
+					fixtureId: result.fixtureId,
+					name: candidates[index]?.fixture.name ?? "Media Server",
+				})),
 			);
 		return ids;
 	} catch {

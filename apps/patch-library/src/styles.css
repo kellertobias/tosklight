@@ -158,7 +158,6 @@
 }
 
 @media (max-width: 900px) {
-
 	.fixture-address-summary {
 		grid-template-columns: 1fr 1fr;
 	}
@@ -247,7 +246,6 @@
 }
 
 @media (max-width: 900px) {
-
 	.fixture-patch-setup,
 	.fixture-library-setup {
 		grid-template-columns: 1fr;
@@ -333,6 +331,31 @@
 	border-color: var(--cyan);
 	background: #0a252b;
 	color: var(--cyan);
+}
+
+.patch-layer-row {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 34px;
+}
+
+.patch-layer-row > .ui-button:first-child {
+	min-width: 0;
+}
+
+.patch-layer-lock.ui-button {
+	min-width: 34px;
+	padding: 0;
+	border-left: 0;
+	border-radius: 0;
+	font-size: 12px;
+}
+
+.patch-table tr.is-layer-locked > td {
+	opacity: 0.42;
+}
+
+.patch-table tr.is-layer-locked > td * {
+	pointer-events: none;
 }
 
 .patch-table-wrap {
@@ -484,7 +507,6 @@
 }
 
 @media (max-width: 900px) {
-
 	.fixture-patch-form {
 		grid-template-columns: 1fr 220px;
 	}

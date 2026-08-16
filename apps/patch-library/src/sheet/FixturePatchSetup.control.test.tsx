@@ -38,7 +38,7 @@ const programming = vi.hoisted(() => ({
 const server = {
 	patch: { fixtures: [] as PatchedFixture[] },
 	patchLayers: [] as Array<{
-		body: { id: string; name: string; order: number };
+		body: { id: string; name: string; order: number; locked?: boolean };
 	}>,
 	fixtureProfiles: [] as ReturnType<typeof blankFixtureProfile>[],
 	fixtureLibrary: [],
@@ -73,8 +73,7 @@ vi.mock("../host", async (importOriginal) => ({
 	}),
 }));
 vi.mock("../state/PatchContext", async (importOriginal) => {
-	const actual =
-		await importOriginal<typeof import("../state/PatchContext")>();
+	const actual = await importOriginal<typeof import("../state/PatchContext")>();
 	return {
 		...actual,
 		PatchViewProvider: ({ children }: { children: ReactNode }) => children,
@@ -291,6 +290,7 @@ beforeEach(() => {
 	state.patchSetArmed = false;
 	server.patch.fixtures = [splitFixture()];
 	server.fixtureProfiles = [];
+	server.patchLayers = [];
 	server.selectedFixtures = [];
 	programming.ready = true;
 	programming.selection.selected = [];
@@ -312,6 +312,27 @@ beforeEach(() => {
 afterEach(() => {
 	cleanup();
 	vi.restoreAllMocks();
+});
+
+describe("patch layer locks", () => {
+	it("persists the lock and prevents selecting fixtures in that layer", async () => {
+		server.patchLayers = [
+			{ body: { id: "default", name: "Stage", order: 0, locked: true } },
+		];
+		server.savePatchLayer.mockResolvedValue(true);
+		render(<FixturePatchSetup />);
+
+		const row = screen.getByRole("row", { name: /Split Wash 17/ });
+		expect(row).toHaveAttribute("aria-disabled", "true");
+		fireEvent.click(row);
+		expect(programming.actions.replace).not.toHaveBeenCalled();
+
+		fireEvent.click(screen.getByRole("button", { name: "Unlock Stage layer" }));
+		await waitFor(() => expect(server.savePatchLayer).toHaveBeenCalledOnce());
+		expect(server.savePatchLayer).toHaveBeenCalledWith(
+			expect.objectContaining({ id: "default", locked: false }),
+		);
+	});
 });
 
 describe("fixture output policy cells", () => {

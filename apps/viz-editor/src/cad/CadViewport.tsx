@@ -7,6 +7,7 @@ import {
 import type {
 	CadDrawing,
 	CadEntity,
+	CadTransformPreview,
 	CadViewDirection,
 	SelectionChange,
 	TileCamera,
@@ -21,9 +22,12 @@ interface CadViewportProps {
 	view: CadViewDirection;
 	rotationQuarterTurns: number;
 	camera: TileCamera;
-	snapToMounts: boolean;
+	preview: CadTransformPreview | null;
+	showFixtureIds: boolean;
+	showDmxAddresses: boolean;
 	onCamera(camera: TileCamera): void;
 	onSelection(change: SelectionChange): void;
+	onPreview(preview: CadTransformPreview | null): void;
 	onMove(
 		deltaMillimetres: [number, number, number],
 		entityIds: readonly string[],
@@ -38,6 +42,7 @@ interface Drag {
 	entityIds?: readonly string[];
 	startCamera?: TileCamera;
 	additive?: boolean;
+	deltaMillimetres?: [number, number, number];
 }
 
 interface SelectionBox {
@@ -54,14 +59,17 @@ export function CadViewport({
 	view,
 	rotationQuarterTurns,
 	camera,
+	preview,
+	showFixtureIds,
+	showDmxAddresses,
 	onCamera,
 	onSelection,
+	onPreview,
 	onMove,
 }: CadViewportProps) {
 	const canvas = useRef<HTMLCanvasElement>(null);
 	const renderer = useRef<LineRenderer | null>(null);
 	const drag = useRef<Drag | null>(null);
-	const [preview, setPreview] = useState<[number, number]>([0, 0]);
 	const [guide, setGuide] = useState<MoveAxis | null>(null);
 	const [selectionBox, setSelectionBox] = useState<SelectionBox | null>(null);
 	const selected = useMemo(() => new Set(selectedIds), [selectedIds]);
@@ -121,6 +129,7 @@ export function CadViewport({
 		);
 		let best: { entity: CadEntity; distance: number } | null = null;
 		for (const entity of ordered) {
+			if (!entity.selectable) continue;
 			const projected = projectPoint(
 				entity.positionMillimetres,
 				view,
@@ -178,7 +187,9 @@ export function CadViewport({
 				start: [event.clientX, event.clientY],
 				last: [event.clientX, event.clientY],
 				axis,
-				entityIds: selectedIds,
+				entityIds: entities
+					.filter((entity) => entity.selectable && selected.has(entity.id))
+					.map((entity) => entity.id),
 			};
 			setGuide(axis);
 			return;
@@ -221,10 +232,16 @@ export function CadViewport({
 			});
 			return;
 		}
-		setPreview([
+		const localDelta: [number, number] = [
 			active.axis === "vertical" ? 0 : dx / camera.zoom,
 			active.axis === "horizontal" ? 0 : -dy / camera.zoom,
-		]);
+		];
+		const deltaMillimetres = planeDelta(localDelta, view, rotationQuarterTurns);
+		active.deltaMillimetres = deltaMillimetres;
+		onPreview({
+			entityIds: active.entityIds ?? selectedIds,
+			deltaMillimetres,
+		});
 	}
 
 	async function pointerUp(event: React.PointerEvent<HTMLCanvasElement>) {
@@ -243,6 +260,7 @@ export function CadViewport({
 				moved < 3
 					? []
 					: entities
+							.filter((entity) => entity.selectable)
 							.filter((entity) =>
 								pointInside(
 									projectPoint(
@@ -258,41 +276,70 @@ export function CadViewport({
 			return;
 		}
 		if (active?.type !== "move") return;
-		const current = preview;
-		setPreview([0, 0]);
+		const current = active.deltaMillimetres ?? [0, 0, 0];
+		onPreview(null);
 		setGuide(null);
-		if (Math.hypot(current[0], current[1]) < 1) return;
-		await onMove(
-			planeDelta(current, view, rotationQuarterTurns),
-			active.entityIds ?? selectedIds,
-		);
+		if (Math.hypot(...current) < 1) return;
+		await onMove(current, active.entityIds ?? selectedIds);
 	}
 
 	return (
-		<canvas
-			ref={canvas}
-			className="cad-canvas"
-			aria-label={`CAD ${view.replaceAll("_", " ")} viewport`}
-			onPointerDown={pointerDown}
-			onPointerMove={pointerMove}
-			onPointerUp={pointerUp}
-			onPointerCancel={() => {
-				drag.current = null;
-				setPreview([0, 0]);
-				setGuide(null);
-				setSelectionBox(null);
-			}}
-			onWheel={(event) => {
-				event.preventDefault();
-				onCamera({
-					...camera,
-					zoom: Math.min(
-						2.5,
-						Math.max(0.004, camera.zoom * Math.exp(-event.deltaY * 0.0015)),
-					),
-				});
-			}}
-		/>
+		<div className="cad-viewport">
+			<canvas
+				ref={canvas}
+				className="cad-canvas"
+				aria-label={`CAD ${view.replaceAll("_", " ")} viewport`}
+				onPointerDown={pointerDown}
+				onPointerMove={pointerMove}
+				onPointerUp={pointerUp}
+				onPointerCancel={() => {
+					drag.current = null;
+					onPreview(null);
+					setGuide(null);
+					setSelectionBox(null);
+				}}
+				onWheel={(event) => {
+					event.preventDefault();
+					onCamera({
+						...camera,
+						zoom: Math.min(
+							2.5,
+							Math.max(0.004, camera.zoom * Math.exp(-event.deltaY * 0.0015)),
+						),
+					});
+				}}
+			/>
+			{showFixtureIds || showDmxAddresses ? (
+				<div className="cad-entity-labels" aria-hidden="true">
+					{entities.map((entity) => {
+						const worldDelta = preview?.entityIds.includes(entity.id)
+							? preview.deltaMillimetres
+							: ([0, 0, 0] as const);
+						const point = projectPoint(
+							entity.positionMillimetres.map(
+								(value, index) => value + worldDelta[index],
+							) as [number, number, number],
+							view,
+							rotationQuarterTurns,
+						);
+						return (
+							<span
+								key={entity.id}
+								className="cad-entity-label"
+								style={{
+									left: `calc(50% + ${(point[0] + camera.pan[0]) * camera.zoom}px)`,
+									top: `calc(50% - ${(point[1] + camera.pan[1]) * camera.zoom}px)`,
+								}}
+							>
+								{showFixtureIds ? `ID ${entity.fixtureDisplayId}` : null}
+								{showFixtureIds && showDmxAddresses ? " · " : null}
+								{showDmxAddresses ? `DMX ${entity.dmxAddress}` : null}
+							</span>
+						);
+					})}
+				</div>
+			) : null}
+		</div>
 	);
 }
 
@@ -351,7 +398,7 @@ class LineRenderer {
 		view: CadViewDirection,
 		rotationQuarterTurns: number,
 		camera: TileCamera,
-		preview: readonly [number, number],
+		preview: CadTransformPreview | null,
 		guide: MoveAxis | null,
 		selectionBox: SelectionBox | null,
 	) {
@@ -388,6 +435,9 @@ class LineRenderer {
 		);
 		for (const entity of ordered) {
 			const active = selected.has(entity.id);
+			const entityPreview = preview?.entityIds.includes(entity.id)
+				? projectPoint(preview.deltaMillimetres, view, rotationQuarterTurns)
+				: ([0, 0] as const);
 			const drawing = drawings.get(entity.drawingId);
 			const key = `${entity.drawingId}:${view}:${entity.sizeMillimetres.join(",")}`;
 			let geometry = this.geometryCache.get(key);
@@ -400,7 +450,7 @@ class LineRenderer {
 				geometry,
 				view,
 				rotationQuarterTurns,
-				active ? preview : [0, 0],
+				entityPreview,
 			);
 			for (const triangle of projected.triangles) {
 				const color = active ? selectedColor(triangle.color) : triangle.color;
@@ -425,10 +475,8 @@ class LineRenderer {
 				view,
 				rotationQuarterTurns,
 			);
-			if (active) {
-				centre[0] += preview[0];
-				centre[1] += preview[1];
-			}
+			centre[0] += entityPreview[0];
+			centre[1] += entityPreview[1];
 			if (entity.kind !== "venue") {
 				const direction = projectPoint(
 					entity.outputDirection.map((value) => value * 420) as [
@@ -452,7 +500,9 @@ class LineRenderer {
 			view,
 			rotationQuarterTurns,
 			camera,
-			preview,
+			preview
+				? projectPoint(preview.deltaMillimetres, view, rotationQuarterTurns)
+				: [0, 0],
 		);
 		if (gizmo) {
 			const axes = viewAxes(view, rotationQuarterTurns);
@@ -622,7 +672,7 @@ function gizmoGeometry(
 	preview: readonly [number, number] = [0, 0],
 ) {
 	const points = entities
-		.filter((entity) => selected.has(entity.id))
+		.filter((entity) => entity.selectable && selected.has(entity.id))
 		.map((entity) =>
 			projectPoint(entity.positionMillimetres, view, rotationQuarterTurns),
 		);

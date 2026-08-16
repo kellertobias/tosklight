@@ -1,8 +1,10 @@
+import { useEffect, useRef } from "react";
 import type { FixturePatchSetupProps } from "./fixturePatch/controller";
 import {
 	PatchControllerProvider,
 	usePatchController,
 } from "./fixturePatch/controller";
+import { armEdit } from "./fixturePatch/editSession";
 import { FixtureBrowser } from "./fixturePatch/FixtureBrowser";
 import { FixturePlacement } from "./fixturePatch/FixturePlacement";
 import { PatchHeader, PatchLayers } from "./fixturePatch/PatchChrome";
@@ -22,6 +24,8 @@ import {
 import { PatchEffects } from "./fixturePatch/PatchEffects";
 import { PatchTable } from "./fixturePatch/PatchTable";
 
+export { DmxAddressField } from "./fixturePatch/DmxAddressField";
+
 /**
  * The patch sheet.
  *
@@ -34,6 +38,60 @@ export function FixturePatchSetup(props: FixturePatchSetupProps = {}) {
 		<PatchControllerProvider {...props}>
 			<FixturePatchLayout />
 		</PatchControllerProvider>
+	);
+}
+
+export function FixtureAddFlow(props: FixturePatchSetupProps = {}) {
+	return (
+		<PatchControllerProvider {...props}>
+			<PatchEffects />
+			<FixtureBrowser />
+			<FixturePlacement />
+			<PlacementCloseConfirm />
+			<PatchConflictDialog />
+		</PatchControllerProvider>
+	);
+}
+
+export function FixtureAddressFlow({
+	fixtureId,
+	openRequest,
+}: {
+	fixtureId: string | null;
+	openRequest: number;
+}) {
+	return (
+		<PatchControllerProvider>
+			<LinkedFixtureAddress fixtureId={fixtureId} openRequest={openRequest} />
+		</PatchControllerProvider>
+	);
+}
+
+function LinkedFixtureAddress({
+	fixtureId,
+	openRequest,
+}: {
+	fixtureId: string | null;
+	openRequest: number;
+}) {
+	const controller = usePatchController();
+	const handledRequest = useRef(0);
+	useEffect(() => {
+		if (!fixtureId || !openRequest || handledRequest.current === openRequest)
+			return;
+		const fixture = controller.data.all.find(
+			(candidate) => candidate.fixture_id === fixtureId,
+		);
+		if (!fixture) return;
+		handledRequest.current = openRequest;
+		armEdit(controller, fixture, "address");
+	}, [controller, fixtureId, openRequest]);
+	return (
+		<>
+			<PatchEffects />
+			<FixtureAddressDialog />
+			<PatchConflictDialog />
+		</>
 	);
 }
 

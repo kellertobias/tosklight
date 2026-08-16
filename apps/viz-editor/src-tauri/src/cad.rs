@@ -58,9 +58,13 @@ pub struct CadEntity {
     pub id: Uuid,
     pub name: String,
     pub fixture_number: Option<u32>,
+    pub fixture_display_id: String,
+    pub dmx_address: String,
     pub kind: String,
     pub fixture_type: String,
     pub drawing_id: String,
+    pub layer_id: String,
+    pub selectable: bool,
     pub position_millimetres: [i32; 3],
     pub rotation_degrees: [f32; 3],
     pub size_millimetres: [f32; 3],
@@ -182,18 +186,7 @@ pub fn cad_replace_selection(
     cad: tauri::State<'_, CadState>,
     intent: SelectionIntent,
 ) -> Result<SelectionDelta, String> {
-    let known: BTreeSet<Uuid> = session.with(|document| {
-        document
-            .patch_snapshot()
-            .map(|value| {
-                value
-                    .fixtures
-                    .into_iter()
-                    .map(|value| value.patch.fixture_id.0)
-                    .collect()
-            })
-            .map_err(|error| error.to_string())
-    })?;
+    let known = selectable_ids(&session)?;
     let mut selection = cad.selection.lock();
     if selection.revision != intent.expected_revision {
         return Err(format!(
@@ -232,6 +225,9 @@ pub fn cad_transform(
         return Err("Select at least one fixture or venue object to move".to_owned());
     }
     let ids: BTreeSet<Uuid> = intent.entity_ids.into_iter().collect();
+    if !ids.is_subset(&selectable_ids(&session)?) {
+        return Err("One or more selected CAD entities belong to a locked layer".to_owned());
+    }
     let before = session.with(|document| {
         let patch = document
             .patch_snapshot()
@@ -363,18 +359,7 @@ pub fn emit_scene_delta(
     scene_revision: u64,
     removed_ids: Vec<Uuid>,
 ) -> Result<(), String> {
-    let known = session.with(|document| {
-        document
-            .patch_snapshot()
-            .map(|snapshot| {
-                snapshot
-                    .fixtures
-                    .into_iter()
-                    .map(|fixture| fixture.patch.fixture_id.0)
-                    .collect::<BTreeSet<_>>()
-            })
-            .map_err(|error| error.to_string())
-    })?;
+    let known = selectable_ids(session)?;
     let mut selection = cad.selection.lock();
     let previous = selection.ids.len();
     selection.ids.retain(|id| known.contains(id));
@@ -409,18 +394,19 @@ fn snapshot(session: &Session, cad: &CadState) -> Result<CadSceneSnapshot, Strin
     let patch =
         session.with(|document| document.patch_snapshot().map_err(|error| error.to_string()))?;
     let selection = cad.selection.lock();
+    let locked = locked_layers(session)?;
     Ok(CadSceneSnapshot {
         show_id: patch.show_id.0,
         scene_revision: patch.patch_revision.value(),
         selection_revision: selection.revision,
-        entities: entities(&patch),
+        entities: entities(&patch, &locked),
         drawings: drawings(&patch, cad),
         selected_ids: selection.ids.clone(),
         attachments: attachments(session)?,
     })
 }
 
-fn entities(snapshot: &PatchSnapshot) -> Vec<CadEntity> {
+fn entities(snapshot: &PatchSnapshot, locked_layers: &BTreeSet<String>) -> Vec<CadEntity> {
     let profiles = snapshot
         .profile_revisions
         .iter()
@@ -451,12 +437,36 @@ fn entities(snapshot: &PatchSnapshot) -> Vec<CadEntity> {
                 id: fixture.patch.fixture_id.0,
                 name: fixture.patch.name.clone(),
                 fixture_number: fixture.patch.fixture_number,
+                fixture_display_id: fixture
+                    .patch
+                    .fixture_number
+                    .map(|number| number.to_string())
+                    .or_else(|| {
+                        fixture
+                            .patch
+                            .virtual_fixture_number
+                            .map(|number| format!("0.{number}"))
+                    })
+                    .unwrap_or_else(|| "—".to_owned()),
+                dmx_address: if profile.is_some_and(|profile| {
+                    profile.patch_policy == light_fixture::PatchPolicy::VisualOnly
+                }) {
+                    "Visual only".to_owned()
+                } else if let (Some(universe), Some(address)) =
+                    (fixture.patch.universe, fixture.patch.address)
+                {
+                    format!("{universe}.{address}")
+                } else {
+                    "Unpatched".to_owned()
+                },
                 kind,
                 fixture_type: fixture_type.to_owned(),
                 drawing_id: profile.map_or_else(
                     || format!("unknown:{}", fixture.patch.fixture_id.0),
                     |profile| drawing_id(profile),
                 ),
+                layer_id: fixture.patch.layer_id.clone(),
+                selectable: !locked_layers.contains(&fixture.patch.layer_id),
                 position_millimetres: [
                     fixture.patch.location.x,
                     fixture.patch.location.y,
@@ -472,6 +482,44 @@ fn entities(snapshot: &PatchSnapshot) -> Vec<CadEntity> {
             }
         })
         .collect()
+}
+
+fn locked_layers(session: &Session) -> Result<BTreeSet<String>, String> {
+    session.with(|document| {
+        document
+            .objects("patch_layer")
+            .map(|objects| {
+                objects
+                    .into_iter()
+                    .filter(|object| {
+                        object
+                            .body
+                            .get("locked")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(false)
+                    })
+                    .map(|object| object.id)
+                    .collect()
+            })
+            .map_err(|error| error.to_string())
+    })
+}
+
+fn selectable_ids(session: &Session) -> Result<BTreeSet<Uuid>, String> {
+    let locked = locked_layers(session)?;
+    session.with(|document| {
+        document
+            .patch_snapshot()
+            .map(|snapshot| {
+                snapshot
+                    .fixtures
+                    .into_iter()
+                    .filter(|fixture| !locked.contains(&fixture.patch.layer_id))
+                    .map(|fixture| fixture.patch.fixture_id.0)
+                    .collect()
+            })
+            .map_err(|error| error.to_string())
+    })
 }
 
 fn drawing_id(profile: &light_application::PatchProfileRevisionProjection) -> String {
@@ -647,7 +695,7 @@ fn snap_attachments(
 ) -> Result<Vec<RigAttachment>, String> {
     let scene =
         session.with(|document| document.patch_snapshot().map_err(|error| error.to_string()))?;
-    let entities = entities(&scene);
+    let entities = entities(&scene, &BTreeSet::new());
     let trusses = entities
         .iter()
         .filter(|entity| {
@@ -750,7 +798,7 @@ fn restore_attachments(
 fn snap_transforms(session: &Session, moved: &mut [EntityTransform]) -> Result<(), String> {
     let scene =
         session.with(|document| document.patch_snapshot().map_err(|error| error.to_string()))?;
-    let entities = entities(&scene);
+    let entities = entities(&scene, &BTreeSet::new());
     let trusses = entities
         .iter()
         .filter(|entity| {
@@ -785,7 +833,9 @@ fn snap_transforms(session: &Session, moved: &mut [EntityTransform]) -> Result<(
 
 #[cfg(test)]
 mod tests {
-    use super::{EntityTransform, apply_transforms, drawing, output_direction};
+    use super::{
+        EntityTransform, apply_transforms, drawing, locked_layers, output_direction, selectable_ids,
+    };
     use crate::session::Session;
     use light_application::{PatchFixtureCandidate, PatchFixturesCommand};
     use light_core::{FixtureId, Revision};
@@ -794,7 +844,7 @@ mod tests {
         PatchedFixtureProfileReference, SplitPatch,
     };
     use light_show::{FixtureProfileRevision, ShowStore};
-    use std::collections::BTreeMap;
+    use std::collections::{BTreeMap, BTreeSet};
     use std::path::PathBuf;
     use uuid::Uuid;
     use viz_document::PlanningDocument;
@@ -954,6 +1004,34 @@ mod tests {
                 .contains("rig changed"),
             "the old revision cannot overwrite the committed move"
         );
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn locked_layers_are_not_selectable_by_native_cad_commands() {
+        let (session, path, ids) = transform_session();
+        session
+            .change(|document| {
+                document
+                    .put_object(
+                        "patch_layer",
+                        "default",
+                        &serde_json::json!({
+                            "id": "default",
+                            "name": "Stage",
+                            "order": 0,
+                            "locked": true,
+                        }),
+                    )
+                    .map_err(|error| error.to_string())?;
+                Ok(())
+            })
+            .unwrap();
+
+        let selectable = selectable_ids(&session).unwrap();
+        assert!(ids.iter().all(|id| !selectable.contains(id)));
+        let locks = locked_layers(&session).unwrap();
+        assert_eq!(locks, BTreeSet::from(["default".to_owned()]));
         let _ = std::fs::remove_file(path);
     }
 }

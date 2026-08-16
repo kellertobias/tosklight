@@ -1,5 +1,5 @@
-import type { PatchedFixture } from "../../wire";
 import { changedPatchFixtureCandidate } from "../../state/PatchContext";
+import type { PatchedFixture } from "../../wire";
 import { isDmxPatchable } from "../patchUtils";
 import type { PatchController, PatchRowMouseEvent } from "./controller";
 import { cancelEdit, completeEdit } from "./editSession";
@@ -27,12 +27,31 @@ export async function createLayer(
 			id,
 			name,
 			order: controller.data.layers.length,
+			locked: false,
 		})
 	) {
 		controller.ui.setActiveLayer(id);
 		controller.ui.setLayerName("");
 		controller.ui.setLayerModal(null);
 	}
+}
+
+export async function toggleLayerLock(
+	controller: PatchController,
+	layerId: string,
+) {
+	const layer = controller.data.layers.find(
+		(candidate) => candidate.id === layerId,
+	);
+	if (!layer) return;
+	const locked = !layer.locked;
+	if (!(await controller.library?.savePatchLayer({ ...layer, locked }))) return;
+	if (
+		locked &&
+		controller.data.selected &&
+		(controller.data.selected.layer_id || "default") === layerId
+	)
+		controller.ui.setSelectedFixture(null);
 }
 
 export async function selectLayer(
@@ -112,10 +131,7 @@ export async function unpatchConflictsAndApply(controller: PatchController) {
 		return;
 	const candidates = [
 		...blockedBy.map((fixture) =>
-			changedPatchFixtureCandidate(
-				fixture,
-				unpatchFixtureChanges(fixture),
-			),
+			changedPatchFixtureCandidate(fixture, unpatchFixtureChanges(fixture)),
 		),
 		changedPatchFixtureCandidate(selected, pending),
 	];
@@ -198,12 +214,18 @@ export function selectPatchFixture(
 	event: PatchRowMouseEvent,
 ) {
 	const { ui, editArmed } = controller;
+	if (
+		controller.data.layers.find(
+			(layer) => layer.id === (fixture.layer_id || "default"),
+		)?.locked
+	)
+		return;
 	if (ui.deleteArmed) {
 		requestFixtureDelete(controller, fixture);
 		return;
 	}
 	ui.setSelectedFixture(fixture.fixture_id);
-	if (editArmed) return;
+	if (editArmed && !controller.host.desktopEditing) return;
 	const ordered = controller.data.visible;
 	if (event.shiftKey && ui.selectionAnchor.current) {
 		selectFixtureRange(controller, ordered, fixture.fixture_id);

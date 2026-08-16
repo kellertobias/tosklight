@@ -90,6 +90,11 @@ function FixtureRows({ fixture }: { fixture: PatchedFixture }) {
 
 function FixtureRow({ fixture }: { fixture: PatchedFixture }) {
 	const controller = usePatchController();
+	const layerLocked = Boolean(
+		controller.data.layers.find(
+			(layer) => layer.id === (fixture.layer_id || "default"),
+		)?.locked,
+	);
 	const selectedFixtureIds = controller.selection.fixtureIds;
 	const selected =
 		selectedFixtureIds?.has(fixture.fixture_id) ||
@@ -101,7 +106,8 @@ function FixtureRow({ fixture }: { fixture: PatchedFixture }) {
 	return (
 		<tr
 			data-fixture-id={fixture.fixture_id}
-			className={`${selected ? "selected" : ""} ${pending ? "pending" : ""}`.trim()}
+			className={`${selected ? "selected" : ""} ${pending ? "pending" : ""} ${layerLocked ? "is-layer-locked" : ""}`.trim()}
+			aria-disabled={layerLocked || undefined}
 			aria-busy={pending || undefined}
 			onClick={(event) => selectPatchFixture(controller, fixture, event)}
 		>

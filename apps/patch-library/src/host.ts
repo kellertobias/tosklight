@@ -65,6 +65,8 @@ export interface PatchHost {
 	 * address mid-show. A planning application has no `Set` key and passes `true`.
 	 */
 	editArmed: boolean;
+	/** Planning editors are continuously editable but row clicks still publish shared selection. */
+	desktopEditing?: boolean;
 	/**
 	 * Called with `false` once an edit is committed or abandoned.
 	 *

@@ -9,13 +9,22 @@ export interface CadEntity {
 	id: string;
 	name: string;
 	fixtureNumber: number | null;
+	fixtureDisplayId: string;
+	dmxAddress: string;
 	kind: string;
 	fixtureType: string;
 	drawingId: string;
+	layerId: string;
+	selectable: boolean;
 	positionMillimetres: [number, number, number];
 	rotationDegrees: [number, number, number];
 	sizeMillimetres: [number, number, number];
 	outputDirection: [number, number, number];
+}
+
+export interface CadTransformPreview {
+	entityIds: readonly string[];
+	deltaMillimetres: [number, number, number];
 }
 
 export type CadProjectionView = "top" | "left" | "right" | "front" | "back";
