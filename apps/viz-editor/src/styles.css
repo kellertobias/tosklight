@@ -1903,6 +1903,70 @@ body {
 	cursor: crosshair;
 }
 
+.cad-viewport-scale {
+	position: absolute;
+	z-index: 8;
+	right: 16px;
+	bottom: 14px;
+	min-width: 48px;
+	max-width: 190px;
+	pointer-events: none;
+	color: #929da6;
+	font: 600 10px / 1 var(--ui-font-mono, monospace);
+	filter: drop-shadow(0 1px 1px #000);
+}
+
+.cad-viewport-scale-label {
+	display: block;
+	margin-bottom: 3px;
+	text-align: center;
+}
+
+.cad-viewport-scale.is-print-mode {
+	bottom: 56px;
+}
+
+.cad-viewport-scale-rule {
+	position: relative;
+	display: block;
+	height: 10px;
+	border-bottom: 1px solid currentcolor;
+}
+
+.cad-viewport-scale-tick {
+	position: absolute;
+	bottom: -1px;
+	width: 1px;
+	height: 4px;
+	background: currentcolor;
+}
+
+.cad-viewport-scale-tick.is-start,
+.cad-viewport-scale-tick.is-end {
+	height: 10px;
+}
+
+.cad-viewport-scale-tick.is-start {
+	left: 0;
+}
+
+.cad-viewport-scale-tick.is-quarter {
+	left: 25%;
+}
+
+.cad-viewport-scale-tick.is-middle {
+	left: 50%;
+	height: 7px;
+}
+
+.cad-viewport-scale-tick.is-three-quarter {
+	left: 75%;
+}
+
+.cad-viewport-scale-tick.is-end {
+	right: 0;
+}
+
 .cad-entity-labels {
 	position: absolute;
 	inset: 0;

@@ -433,6 +433,7 @@ export function CadViewport({
 			active.spread ?? false,
 		);
 	}
+	const scale = cadScaleForZoom(camera.zoom);
 
 	return (
 		<div className="cad-viewport">
@@ -462,6 +463,20 @@ export function CadViewport({
 					});
 				}}
 			/>
+			<div
+				className={`cad-viewport-scale ${printMode ? "is-print-mode" : ""}`.trim()}
+				aria-label={`Scale ${scale.label}`}
+				style={{ width: `${scale.pixelWidth}px` }}
+			>
+				<span className="cad-viewport-scale-label">{scale.label}</span>
+				<span className="cad-viewport-scale-rule" aria-hidden="true">
+					<span className="cad-viewport-scale-tick is-start" />
+					<span className="cad-viewport-scale-tick is-quarter" />
+					<span className="cad-viewport-scale-tick is-middle" />
+					<span className="cad-viewport-scale-tick is-three-quarter" />
+					<span className="cad-viewport-scale-tick is-end" />
+				</span>
+			</div>
 			{showFixtureIds || showDmxAddresses ? (
 				<div className="cad-entity-labels" aria-hidden="true">
 					{entities.map((entity) => {
@@ -512,6 +527,48 @@ export function CadViewport({
 			) : null}
 		</div>
 	);
+}
+
+export interface CadViewportScale {
+	distanceMillimetres: number;
+	pixelWidth: number;
+	label: string;
+}
+
+/** Select the nearest useful real-world length from the repeating metric 1-2-5 sequence. */
+export function cadScaleForZoom(
+	zoom: number,
+	targetPixelWidth = 120,
+): CadViewportScale {
+	const safeZoom = Number.isFinite(zoom) && zoom > 0 ? zoom : 0.1;
+	const desiredMillimetres = targetPixelWidth / safeZoom;
+	const exponent = Math.floor(Math.log10(desiredMillimetres));
+	const candidates = [exponent - 1, exponent, exponent + 1].flatMap((power) =>
+		[1, 2, 5].map((step) => step * 10 ** power),
+	);
+	const distanceMillimetres = candidates.reduce((best, candidate) =>
+		Math.abs(Math.log(candidate / desiredMillimetres)) <
+		Math.abs(Math.log(best / desiredMillimetres))
+			? candidate
+			: best,
+	);
+	return {
+		distanceMillimetres,
+		pixelWidth: distanceMillimetres * safeZoom,
+		label: formatCadScale(distanceMillimetres),
+	};
+}
+
+export function formatCadScale(distanceMillimetres: number) {
+	if (distanceMillimetres >= 1000)
+		return `${formatMetricNumber(distanceMillimetres / 1000)} m`;
+	return `${formatMetricNumber(distanceMillimetres / 10)} cm`;
+}
+
+function formatMetricNumber(value: number) {
+	return Number.isInteger(value)
+		? String(value)
+		: value.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
 }
 
 export function cadEntityOutlineColor(

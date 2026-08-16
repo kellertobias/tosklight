@@ -3,8 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	CadRigOverview,
 	CadViewport,
+	cadScaleForZoom,
 	cadEntityOutlineColor,
 	fitCadOverview,
+	formatCadScale,
 	observeViewportResize,
 	renderDepthMaskedLinework,
 	viewportGuideRange,
@@ -30,6 +32,62 @@ const fixture: CadEntity = {
 };
 
 const camera = { pan: [0, 0] as [number, number], zoom: 0.1 };
+
+describe("CAD viewport scale", () => {
+	it("selects and formats the nearest distance from the metric 1-2-5 sequence", () => {
+		expect(cadScaleForZoom(0.5)).toEqual({
+			distanceMillimetres: 200,
+			pixelWidth: 100,
+			label: "20 cm",
+		});
+		expect(cadScaleForZoom(0.1)).toEqual({
+			distanceMillimetres: 1000,
+			pixelWidth: 100,
+			label: "1 m",
+		});
+		expect(cadScaleForZoom(0.02)).toEqual({
+			distanceMillimetres: 5000,
+			pixelWidth: 100,
+			label: "5 m",
+		});
+		expect(formatCadScale(10)).toBe("1 cm");
+		expect(formatCadScale(500)).toBe("50 cm");
+		expect(formatCadScale(10_000)).toBe("10 m");
+	});
+
+	it("rerenders its label and five graduated ticks with the viewport zoom", () => {
+		const props = {
+			entities: [fixture],
+			drawings: [],
+			selectedIds: [],
+			view: "top_down" as const,
+			rotationQuarterTurns: 0,
+			preview: null,
+			showFixtureIds: false,
+			showDmxAddresses: false,
+			onCamera: vi.fn(),
+			onSelection: vi.fn(),
+			onPreview: vi.fn(),
+			onMove: vi.fn().mockResolvedValue(undefined),
+		};
+		const { container, rerender } = render(
+			<CadViewport {...props} camera={{ pan: [0, 0], zoom: 0.12 }} />,
+		);
+		const scale = screen.getByLabelText("Scale 1 m");
+		expect(scale).toHaveStyle({ width: "120px" });
+		expect(container.querySelectorAll(".cad-viewport-scale-tick")).toHaveLength(
+			5,
+		);
+		expect(container.querySelector(".is-start")).toBeInTheDocument();
+		expect(container.querySelector(".is-quarter")).toBeInTheDocument();
+		expect(container.querySelector(".is-middle")).toBeInTheDocument();
+		expect(container.querySelector(".is-three-quarter")).toBeInTheDocument();
+		expect(container.querySelector(".is-end")).toBeInTheDocument();
+
+		rerender(<CadViewport {...props} camera={{ pan: [0, 0], zoom: 0.08 }} />);
+		expect(screen.getByLabelText("Scale 2 m")).toHaveStyle({ width: "160px" });
+	});
+});
 
 it("draws locked CAD entities darker while retaining cyan selection", () => {
 	expect(
