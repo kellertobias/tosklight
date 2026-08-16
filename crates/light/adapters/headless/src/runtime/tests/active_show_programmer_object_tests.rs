@@ -1088,7 +1088,8 @@ fn group_and_preset_updates_each_install_the_exact_committed_revision() {
 
     let before_group = scenario.boundary();
     assert_eq!(
-        execute_programmer_command(&scenario.state, &scenario.session, "UPDATE GROUP 81").unwrap(),
+        execute_programmer_command(&scenario.state, &scenario.session, "UPDATE ALL GROUP 81")
+            .unwrap(),
         1
     );
     scenario.assert_one_commit(&before_group);
@@ -1104,7 +1105,12 @@ fn group_and_preset_updates_each_install_the_exact_committed_revision() {
     );
     let before_preset = scenario.boundary();
     assert_eq!(
-        execute_programmer_command(&scenario.state, &scenario.session, "UPDATE 2.9").unwrap(),
+        execute_programmer_command(
+            &scenario.state,
+            &scenario.session,
+            "UPDATE ALL COLOR PRESET 9",
+        )
+        .unwrap(),
         1
     );
     scenario.assert_one_commit(&before_preset);

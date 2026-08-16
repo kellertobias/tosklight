@@ -146,7 +146,7 @@ async fn update_settings_endpoint_persists_and_reloads_per_desk() {
     assert_eq!(
         json(isolated).await["settings"],
         serde_json::json!({
-            "cue_mode":"add_to_current_cue",
+            "cue_mode":"existing_in_current_cue",
             "preset_mode":"update_existing",
             "group_mode":"update_existing",
             "show_update_modal_on_touch":true

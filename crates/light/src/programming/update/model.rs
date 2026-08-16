@@ -58,7 +58,7 @@ pub struct UpdateSettings {
 impl Default for UpdateSettings {
     fn default() -> Self {
         Self {
-            cue_mode: CueUpdateMode::AddToCurrentCue,
+            cue_mode: CueUpdateMode::ExistingInCurrentCue,
             preset_mode: ExistingContentMode::UpdateExisting,
             group_mode: ExistingContentMode::UpdateExisting,
             other_target_modes: HashMap::new(),

@@ -113,10 +113,10 @@ describe("Update workflow integration", () => {
 		const modeTrigger = modeLabel
 			.closest(".ui-form-field")
 			?.querySelector(".ui-select-trigger") as HTMLButtonElement;
-		expect(modeTrigger).toHaveTextContent("Existing Only");
+		expect(modeTrigger).toHaveTextContent("Tracked");
 
 		fireEvent.click(modeTrigger);
-		fireEvent.click(screen.getByRole("option", { name: "Add New" }));
+		fireEvent.click(screen.getByRole("option", { name: "All" }));
 		fireEvent.click(within(dialog).getByRole("button", { name: "Update" }));
 
 		await waitFor(() =>
@@ -125,7 +125,7 @@ describe("Update workflow integration", () => {
 		expect(addNewAuthority.requestTarget).toMatchObject({
 			type: "cue",
 			cue_id: "cue-2",
-			cue_number: 2,
+			cue_number: "2",
 			validate_active_context: true,
 		});
 		expect(addNewAuthority.object).toEqual({
@@ -241,7 +241,7 @@ describe("Update workflow integration", () => {
 		);
 		expect(existingAuthority.requestTarget).toMatchObject({
 			cue_id: "cue-2",
-			cue_number: 2,
+			cue_number: "2",
 		});
 	});
 

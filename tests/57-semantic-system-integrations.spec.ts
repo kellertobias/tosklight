@@ -1,7 +1,6 @@
 // @bench-semantic-world
 
 import { scenario } from "./bench/core/scenario";
-import { StoreMode } from "./bench/groups-presets/groupScenario";
 import { Show } from "./bench/show/showScenario";
 
 scenario(
@@ -12,7 +11,7 @@ scenario(
 		await t.app.open();
 		await t.app.expect.ready();
 		await t.selection.fixtures.via.api.item(5);
-		await t.group.via.keypad.store(3, { mode: StoreMode.Merge });
+		await t.command.via.api.execute("UPDATE ALL GROUP 3");
 		await t.group.expect(3).fixtures(1, 2, 3, 4, 5);
 	},
 );

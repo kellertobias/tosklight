@@ -303,6 +303,7 @@ fn atomic_policy_error(command: &str, policy: ExistingCommandPolicy) -> Option<S
     }
     match compatibility_only_family(command) {
         Err(error) => Some(error),
+        Ok(Some("UPDATE")) => None,
         Ok(Some(family)) => Some(format!(
             "{family} commands are not yet available through the atomic command-line HTTP API"
         )),
@@ -369,6 +370,16 @@ fn execute_with_policy(
     context: &ActionContext,
     policy: ExistingCommandPolicy,
 ) -> Result<super::super::ProgrammerCommandExecution, String> {
+    let policy = if matches!(policy, ExistingCommandPolicy::AtomicProgrammer)
+        && matches!(compatibility_only_family(command)?, Some("UPDATE"))
+    {
+        // Update owns an atomic show-object transaction and must read the authoritative live
+        // Programmer. A staged Programmer clone would make the show mutation external to the
+        // staging commit and could replace newer live Programmer state afterwards.
+        ExistingCommandPolicy::Compatibility
+    } else {
+        policy
+    };
     match policy {
         ExistingCommandPolicy::Compatibility => {
             // Cross-user reconciliation must not run while one user's mutation gate is held.
@@ -668,6 +679,13 @@ mod tests {
             ordered_ui_command_policy("FIXTURE 1 DYNAMIC SINE"),
             ExistingCommandPolicy::Compatibility
         ));
+        assert!(
+            atomic_policy_error(
+                "UPDATE ALL GROUP 3",
+                ExistingCommandPolicy::AtomicProgrammer
+            )
+            .is_none()
+        );
     }
 }
 

@@ -190,10 +190,6 @@ pub(super) fn command_preset_address(
     light_programmer::PresetAddress::parse(&format!("{}.{}", tokens[0], tokens[2]))
 }
 
-pub(super) fn command_preset_id(tokens: &[String]) -> Result<String, String> {
-    Ok(command_preset_address(tokens)?.storage_key())
-}
-
 pub(super) fn command_preset_family(id: &str) -> Result<light_programmer::PresetFamily, String> {
     Ok(light_programmer::PresetAddress::parse(id)?.family)
 }

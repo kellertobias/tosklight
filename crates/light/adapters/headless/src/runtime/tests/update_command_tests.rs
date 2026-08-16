@@ -67,7 +67,7 @@ fn update_undo_snapshot(
 }
 
 #[test]
-fn command_line_update_enter_applies_the_configured_group_default_directly() {
+fn command_line_update_all_adds_new_group_content_without_using_a_desk_default() {
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
@@ -96,17 +96,6 @@ fn command_line_update_enter_applies_the_configured_group_default_directly() {
         })
         .unwrap();
     state.programming.select(session.id, [first, added]);
-    state.installation.update_configuration(|configuration| {
-        configuration.update_settings_by_desk.insert(
-            session.desk.id,
-            update::UpdateSettings {
-                group_mode: update::ExistingContentMode::AddNew,
-                show_update_modal_on_touch: true,
-                ..Default::default()
-            },
-        );
-    });
-
     let show_path = data_dir.join("shows/update-enter-default.show");
     let show_id = initialise_show(&show_path, "Update Enter default").unwrap();
     let entry = ShowEntry {
@@ -124,7 +113,7 @@ fn command_line_update_enter_applies_the_configured_group_default_directly() {
         .unwrap();
 
     assert_eq!(
-        execute_programmer_command(&state, &session, "UPDATE GROUP 981").unwrap(),
+        execute_programmer_command(&state, &session, "UPDATE ALL GROUP 981").unwrap(),
         1
     );
     let updated = serde_json::from_value::<light_programmer::GroupDefinition>(
@@ -136,6 +125,114 @@ fn command_line_update_enter_applies_the_configured_group_default_directly() {
         state.programming.get(session.id).unwrap().selected,
         vec![first, added]
     );
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
+fn manual_update_grammar_resolves_selected_explicit_physical_virtual_and_preset_targets() {
+    let (state, data_dir) = test_state();
+    let user = state.installation.users().unwrap().remove(0);
+    let desk = state
+        .installation
+        .add_desk("Manual Update", "manual-update")
+        .unwrap();
+    let session = Session {
+        id: SessionId::new(),
+        user: user.clone(),
+        token: "manual-update-grammar".into(),
+        connected: true,
+        desk,
+    };
+    state.programming.start(session.id, user.id);
+    attach_session_command_context(&state, &session);
+    state.sessions.insert_session(session.clone());
+
+    let fixture = light_core::FixtureId::new();
+    let (cue_list, mut snapshot) = update_undo_snapshot(fixture);
+    let mut virtual_playback = snapshot.playbacks[0].clone();
+    virtual_playback.number = 1001;
+    let mut page = snapshot.playback_pages[0].clone();
+    page.virtual_playbacks.insert(1001, virtual_playback);
+    snapshot.playback_pages = vec![page].into();
+
+    let show_path = data_dir.join("shows/manual-update-grammar.show");
+    let show = state
+        .installation
+        .upsert_show(
+            "Manual Update grammar",
+            &show_path.display().to_string(),
+            false,
+        )
+        .unwrap();
+    let show_id = show.id;
+    state.active_show.replace_current(Some(show));
+    state
+        .installation
+        .set_selected_playback(session.desk.id, show_id, Some(7))
+        .unwrap();
+
+    let request = |command: &str| {
+        let (tokens, _) = tokenize_programmer_command(command).unwrap();
+        update_request(&state, &session, &tokens[1..], &snapshot)
+    };
+
+    let selected = request("UPDATE CUE 3").unwrap();
+    assert_eq!(
+        selected.mode,
+        update::UpdateMode::Cue(update::CueUpdateMode::ExistingInCurrentCue)
+    );
+    assert_eq!(selected.target.playback_number, Some(7));
+    assert_eq!(selected.target.cue_number.as_deref(), Some("3"));
+
+    let explicit = request("UPDATE TRACKED CUELIST 7 CUE 2").unwrap();
+    assert_eq!(
+        explicit.mode,
+        update::UpdateMode::Cue(update::CueUpdateMode::ExistingOnly)
+    );
+    assert_eq!(explicit.target.cue_id, Some(cue_list.cues[1].id));
+
+    let physical = request("UPDATE KNOWN PBK 7").unwrap();
+    assert_eq!(
+        physical.mode,
+        update::UpdateMode::Cue(update::CueUpdateMode::AddToCurrentCue)
+    );
+    assert_eq!(physical.target.playback_number, Some(7));
+    assert_eq!(physical.target.cue_id, None);
+
+    let virtual_target = request("UPDATE ALL VPBK 1001").unwrap();
+    assert_eq!(
+        virtual_target.mode,
+        update::UpdateMode::Cue(update::CueUpdateMode::AddNew)
+    );
+    assert_eq!(virtual_target.target.playback_number, Some(1001));
+
+    let preset = request("UPDATE COLOR PRESET 22").unwrap();
+    assert_eq!(preset.target.family, UpdateApiTargetFamily::Preset);
+    assert_eq!(preset.target.object_id.as_deref(), Some("2.22"));
+    assert_eq!(
+        preset.mode,
+        update::UpdateMode::ExistingContent(update::ExistingContentMode::UpdateExisting)
+    );
+    assert_eq!(
+        request("UPDATE ALL COLOR PRESET 22").unwrap().mode,
+        update::UpdateMode::ExistingContent(update::ExistingContentMode::AddNew)
+    );
+    assert_eq!(
+        request("UPDATE ALL PRESET 3")
+            .unwrap()
+            .target
+            .object_id
+            .as_deref(),
+        Some("0.3")
+    );
+    assert_eq!(
+        request("UPDATE ALL ALL PRESET 3").unwrap().mode,
+        update::UpdateMode::ExistingContent(update::ExistingContentMode::AddNew)
+    );
+
+    for obsolete in ["UPDATE SET 1 CUE 2", "UPDATE 2 . 22"] {
+        assert!(request(obsolete).is_err(), "{obsolete}");
+    }
     let _ = std::fs::remove_dir_all(data_dir);
 }
 

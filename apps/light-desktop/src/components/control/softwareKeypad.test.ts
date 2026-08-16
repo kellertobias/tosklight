@@ -15,12 +15,24 @@ import {
 describe("software keypad", () => {
 	it("shares the current physical number-block layout and OSC actions with hardware surfaces", () => {
 		expect(
-			numericPadLayout.filter(({ section }) => section === "commands").map(({ key }) => key),
+			numericPadLayout
+				.filter(({ section }) => section === "commands")
+				.map(({ key }) => key),
 		).toEqual([
-			"DEL", "CLR", "PLAYBACK", "OFF",
-			"MOV", "BACKSPACE", "DIFF", "ESC",
-			"CPY", "UND", "PAGE_UP", "PAGE_DOWN",
-			"SET", "SHIFT",
+			"DEL",
+			"CLR",
+			"PLAYBACK",
+			"OFF",
+			"MOV",
+			"BACKSPACE",
+			"DIFF",
+			"ESC",
+			"CPY",
+			"UND",
+			"PAGE_UP",
+			"PAGE_DOWN",
+			"SET",
+			"SHIFT",
 		]);
 		expect(numericPadLayout.find(({ key }) => key === "ENT")).toMatchObject({
 			section: "numbers",
@@ -101,6 +113,21 @@ describe("software keypad", () => {
 		});
 		expect(editCommandWithSoftwareKey("1 AT 100 ", "-")).toEqual({
 			command: "1 AT 100 -",
+			execute: false,
+		});
+	});
+
+	it("normalizes the documented Update mode shorthands", () => {
+		expect(editCommandWithSoftwareKey("UPDATE", "-")).toEqual({
+			command: "UPDATE TRACKED",
+			execute: false,
+		});
+		expect(editCommandWithSoftwareKey("UPDATE", "+")).toEqual({
+			command: "UPDATE ALL",
+			execute: false,
+		});
+		expect(editCommandWithSoftwareKey("UPDATE ALL", "+")).toEqual({
+			command: "UPDATE KNOWN",
 			execute: false,
 		});
 	});
@@ -330,12 +357,7 @@ describe("software keypad", () => {
 		expect(commandTargetAfterEnter("GROUP", "FIXTURE", false)).toBeNull();
 		expect(commandTargetAfterEnter("DEGROUP 7", "FIXTURE", false)).toBeNull();
 		expect(
-			editTargetedCommandWithSoftwareKey(
-				"DEGROUP",
-				"7",
-				"FIXTURE",
-				false,
-			),
+			editTargetedCommandWithSoftwareKey("DEGROUP", "7", "FIXTURE", false),
 		).toEqual({ command: "DEGROUP 7", execute: false, pristine: false });
 	});
 

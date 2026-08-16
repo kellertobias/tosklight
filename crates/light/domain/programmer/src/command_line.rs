@@ -458,6 +458,17 @@ fn edit_text(state: &CommandLineState, key: CommandKey) -> CommandLineEdit {
         return edited(replace_last_word(command, "OFFSET"), state.target);
     }
 
+    let update = command.trim();
+    if key == CommandKey::Minus && update.eq_ignore_ascii_case("UPDATE") {
+        return edited("UPDATE TRACKED".into(), state.target);
+    }
+    if key == CommandKey::Plus && update.eq_ignore_ascii_case("UPDATE") {
+        return edited("UPDATE ALL".into(), state.target);
+    }
+    if key == CommandKey::Plus && update.eq_ignore_ascii_case("UPDATE ALL") {
+        return edited("UPDATE KNOWN".into(), state.target);
+    }
+
     let token = command_token(key);
     let spaced = matches!(
         key,

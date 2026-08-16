@@ -83,12 +83,7 @@ describe("Update workflow", () => {
 		expect(
 			within(dialog).getByText("Cuelist · Playback 7 · Current Cue 2"),
 		).toBeInTheDocument();
-		for (const label of [
-			"Existing Only",
-			"Existing in Current Cue",
-			"Add to Current Cue",
-			"Add New",
-		])
+		for (const label of ["Update", "Tracked", "Known", "All"])
 			expect(
 				within(dialog).getByRole("button", { name: label }),
 			).toBeInTheDocument();
@@ -105,9 +100,7 @@ describe("Update workflow", () => {
 			source: 1,
 		});
 
-		fireEvent.click(
-			within(dialog).getByRole("button", { name: "Add to Current Cue" }),
-		);
+		fireEvent.click(within(dialog).getByRole("button", { name: "Known" }));
 		expect(onMode).toHaveBeenCalledWith({
 			target_type: "cue",
 			mode: "add_to_current_cue",
@@ -142,7 +135,7 @@ describe("Update workflow", () => {
 			),
 		).toBeInTheDocument();
 		expect(
-			within(dialog).getByRole("button", { name: /Add to Current Cue/ }),
+			within(dialog).getByRole("button", { name: "Update" }),
 		).toBeInTheDocument();
 		expect(
 			within(dialog).getAllByRole("button", { name: /Update Existing/ }),

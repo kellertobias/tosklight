@@ -9,10 +9,10 @@ import type {
 import { routeControlSurfaceIntentWithFeedback } from "../../features/controlSurfaceInteraction/registry";
 
 export const cueUpdateModes: Array<{ value: CueUpdateMode; label: string }> = [
-	{ value: "existing_only", label: "Existing Only" },
-	{ value: "existing_in_current_cue", label: "Existing in Current Cue" },
-	{ value: "add_to_current_cue", label: "Add to Current Cue" },
-	{ value: "add_new", label: "Add New" },
+	{ value: "existing_in_current_cue", label: "Update" },
+	{ value: "existing_only", label: "Tracked" },
+	{ value: "add_to_current_cue", label: "Known" },
+	{ value: "add_new", label: "All" },
 ];
 
 export const existingContentModes: Array<{
@@ -24,7 +24,7 @@ export const existingContentModes: Array<{
 ];
 
 export const defaultUpdateSettings: UpdateSettings = {
-	cue_mode: "add_to_current_cue",
+	cue_mode: "existing_in_current_cue",
 	preset_mode: "update_existing",
 	group_mode: "update_existing",
 	show_update_modal_on_touch: true,

@@ -37,9 +37,9 @@ fn pool_cuelist_requires_one_concrete_active_playback_context() {
 }
 
 #[test]
-fn old_settings_receive_documented_defaults_and_confirmation_paths_are_distinct() {
+fn missing_settings_receive_documented_defaults_and_confirmation_paths_are_distinct() {
     let settings: UpdateSettings = serde_json::from_str("{}").unwrap();
-    assert_eq!(settings.cue_mode, CueUpdateMode::AddToCurrentCue);
+    assert_eq!(settings.cue_mode, CueUpdateMode::ExistingInCurrentCue);
     assert_eq!(settings.preset_mode, ExistingContentMode::UpdateExisting);
     assert!(settings.show_update_modal_on_touch);
     assert_eq!(
@@ -48,7 +48,9 @@ fn old_settings_receive_documented_defaults_and_confirmation_paths_are_distinct(
     );
     assert_eq!(
         settings.confirmation_behavior(&UpdateTargetFamily::Cue, UpdateConfirmationPath::Enter),
-        UpdateConfirmationBehavior::ApplyDefault(UpdateMode::Cue(CueUpdateMode::AddToCurrentCue))
+        UpdateConfirmationBehavior::ApplyDefault(UpdateMode::Cue(
+            CueUpdateMode::ExistingInCurrentCue
+        ))
     );
 
     let settings = UpdateSettings {

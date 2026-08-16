@@ -709,7 +709,7 @@ mod event_publication_tests {
     }
 
     #[test]
-    fn decimal_update_target_is_preserved_in_the_typed_operator_event() {
+    fn dotted_update_target_is_preserved_in_the_typed_operator_event() {
         let draft = typed_capability_event(
             8,
             "update_target_requested",
@@ -720,7 +720,7 @@ mod event_publication_tests {
                     "object_id": "cue-list",
                     "playback_number": 1,
                     "cue_id": "cue",
-                    "cue_number": 2.5,
+                    "cue_number": "2.5",
                     "validate_active_context": true
                 }
             }),

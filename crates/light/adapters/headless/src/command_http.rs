@@ -74,7 +74,7 @@ mod lifecycle_routes;
 #[path = "command_http/lifecycle_wire.rs"]
 mod lifecycle_wire;
 #[path = "command_http/playback_address_command.rs"]
-mod playback_address_command;
+pub(crate) mod playback_address_command;
 #[path = "command_http/playback_selection_command.rs"]
 mod playback_selection_command;
 #[path = "command_http/playback_selection_programming_ports.rs"]

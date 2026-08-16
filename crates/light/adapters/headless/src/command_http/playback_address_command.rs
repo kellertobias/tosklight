@@ -3,13 +3,13 @@
 use light_playback::VirtualPlaybackAddress;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) enum CommandPlaybackTarget {
+pub(crate) enum CommandPlaybackTarget {
     CurrentPage { slot: u8 },
     ExplicitPage { page: u8, slot: u8 },
     Virtual(VirtualPlaybackAddress),
 }
 
-pub(super) fn parse(tokens: &[String]) -> Result<(CommandPlaybackTarget, &[String]), String> {
+pub(crate) fn parse(tokens: &[String]) -> Result<(CommandPlaybackTarget, &[String]), String> {
     match tokens.first().map(String::as_str) {
         Some("PBK") => physical(&tokens[1..]),
         Some("VPBK") => virtual_playback(&tokens[1..]),

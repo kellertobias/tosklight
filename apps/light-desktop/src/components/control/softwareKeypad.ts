@@ -126,13 +126,11 @@ export function editTargetedCommandWithSoftwareKey(
 		const selection = freeze[2].trim();
 		const family = selection.match(
 			/(?:^|\s)(INTENSITY|COL(?:OR|OUR)|POSITION|BEAM)(?:\s|$)/i,
-	);
+		);
 		const selectionText = family
 			? selection.slice(0, family.index).trim()
 			: selection;
-		const familyText = family
-			? selection.slice(family.index).trim()
-			: "";
+		const familyText = family ? selection.slice(family.index).trim() : "";
 		const edited = editTargetedCommandWithSoftwareKey(
 			selectionText || target,
 			key,
@@ -141,7 +139,8 @@ export function editTargetedCommandWithSoftwareKey(
 		);
 		return {
 			...edited,
-			command: `${prefix} ${edited.command}${familyText ? ` ${familyText}` : ""}`.trim(),
+			command:
+				`${prefix} ${edited.command}${familyText ? ` ${familyText}` : ""}`.trim(),
 		};
 	}
 
@@ -160,7 +159,11 @@ export function editTargetedCommandWithSoftwareKey(
 			pristine: false,
 		};
 	}
-	if (repeated !== false && key === "GRP" && /(?:^|\s)(?:GROUP|G|F)\s*$/i.test(command)) {
+	if (
+		repeated !== false &&
+		key === "GRP" &&
+		/(?:^|\s)(?:GROUP|G|F)\s*$/i.test(command)
+	) {
 		return {
 			command: command.replace(/(?:GROUP|G|F)\s*$/i, "DEGROUP"),
 			execute: false,
@@ -184,7 +187,11 @@ export function editTargetedCommandWithSoftwareKey(
 			pristine: false,
 		};
 	}
-	if (repeated !== false && key === "TIME" && /(?:^|\s)TIME\s*$/i.test(command)) {
+	if (
+		repeated !== false &&
+		key === "TIME" &&
+		/(?:^|\s)TIME\s*$/i.test(command)
+	) {
 		return {
 			command: command.replace(/TIME\s*$/i, "DELAY"),
 			execute: false,
@@ -198,6 +205,13 @@ export function editTargetedCommandWithSoftwareKey(
 			pristine: false,
 		};
 	}
+	const update = command.trim();
+	if (key === "-" && /^UPDATE$/i.test(update))
+		return { command: "UPDATE TRACKED", execute: false, pristine: false };
+	if (key === "+" && /^UPDATE$/i.test(update))
+		return { command: "UPDATE ALL", execute: false, pristine: false };
+	if (key === "+" && /^UPDATE ALL$/i.test(update))
+		return { command: "UPDATE KNOWN", execute: false, pristine: false };
 	const token =
 		(
 			{

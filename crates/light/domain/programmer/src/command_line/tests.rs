@@ -53,6 +53,20 @@ fn edits_documented_shortcuts_and_timing_tokens() {
 }
 
 #[test]
+fn normalizes_documented_update_mode_shorthands() {
+    assert_eq!(
+        press("UPDATE", CommandTarget::Fixture, false, "-").text,
+        "UPDATE TRACKED"
+    );
+    let all = press("UPDATE", CommandTarget::Fixture, false, "+");
+    assert_eq!(all.text, "UPDATE ALL");
+    assert_eq!(
+        press(&all.text, CommandTarget::Fixture, false, "+").text,
+        "UPDATE KNOWN"
+    );
+}
+
+#[test]
 fn keeps_target_scoping_and_group_dereference_rules() {
     assert_eq!(
         press("FIXTURE", CommandTarget::Fixture, true, "7").text,
