@@ -136,8 +136,8 @@ export function DynamicsWindow({
 				run={run}
 				onMutate={mutate}
 				onBack={() => {
-					closeEditor(selected.id);
 					setSelectedId(null);
+					closeEditor(selected.id);
 				}}
 				onDeleted={() => {
 					closeEditor(selected.id);

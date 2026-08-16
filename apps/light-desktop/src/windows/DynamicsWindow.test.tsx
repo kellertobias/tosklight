@@ -303,6 +303,21 @@ describe("DynamicsWindow", () => {
 		).toBeInTheDocument();
 	});
 
+	it("returns from the Dynamic editor directly to the Dynamic pool", () => {
+		dynamics = [dynamicObject()];
+		renderWindow();
+		fireEvent.click(screen.getByRole("button", { name: /Pulse/i }), {
+			shiftKey: true,
+		});
+
+		fireEvent.click(screen.getByRole("button", { name: "← Dynamics" }));
+
+		expect(screen.queryByRole("button", { name: "← Dynamics" })).toBeNull();
+		expect(screen.getByText("Dynamics")).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: /Pulse/i })).toBeInTheDocument();
+		expect(screen.queryByRole("list", { name: "Dynamic lanes" })).toBeNull();
+	});
+
 	it("can take a selected Group even when no fixture selection is expanded", async () => {
 		dynamics = [dynamicObject()];
 		selectedGroupId = "front";

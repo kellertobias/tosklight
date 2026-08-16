@@ -170,7 +170,9 @@ function DynamicEditorHeader({
 				},
 				{
 					id: "back",
-					actions: [{ id: "back", label: "← Dynamics", onPress: onBack }],
+					actions: [
+						{ id: "back", label: "← Dynamics", onPress: () => onBack() },
+					],
 				},
 			]}
 			settings
