@@ -7,6 +7,7 @@ use bytemuck::{Pod, Zeroable};
 use media_domain::geometry::{Size, layer_transform};
 use media_domain::{LayerState, MaskSource, MasterState, OutputId, Timestamp, geometry};
 
+use crate::feedback::FeedbackProcessor;
 use crate::gpu::Gpu;
 use crate::texture::SourceTexture;
 
@@ -272,6 +273,7 @@ pub struct Compositor {
     master_pipeline: wgpu::RenderPipeline,
     master_layout: wgpu::BindGroupLayout,
     master_uniform: wgpu::Buffer,
+    feedback: FeedbackProcessor,
     /// Stands in wherever a mask is not selected. Opaque white: read as luminance or as alpha it
     /// says "let everything through", so a shader needs no branch for the common case.
     no_mask: SourceTexture,
@@ -343,6 +345,7 @@ impl Compositor {
             master_pipeline,
             master_layout,
             master_uniform,
+            feedback: FeedbackProcessor::new(gpu),
             no_mask,
         }
     }
@@ -421,12 +424,15 @@ impl Compositor {
         output_id: OutputId,
         now: Timestamp,
         preserve_alpha: bool,
-        _advance_feedback: bool,
+        advance_feedback: bool,
     ) {
         let device = &self.gpu.device;
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("media-frame"),
         });
+        if advance_feedback {
+            self.feedback.advance(&mut encoder, layers, now);
+        }
 
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -474,7 +480,7 @@ impl Compositor {
                     device,
                     &self.layer_layout,
                     &self.layer_uniforms[index],
-                    &layer.source.view,
+                    self.feedback.source(layer),
                     &self.sampler,
                     &layer.mask.unwrap_or(&self.no_mask).view,
                 );

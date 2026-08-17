@@ -321,7 +321,6 @@ pub(super) async fn media_servers(
     Ok(Json(serde_json::json!({ "fixtures": fixtures })))
 }
 
-
 pub(super) async fn inspect_media_server(
     State(state): State<AppState>,
     Path(fixture_id): Path<light_core::FixtureId>,

@@ -3,8 +3,9 @@ struct Feedback {
     motion: f32,
     direction: f32,
     reset: f32,
+    // A uniform struct is padded to 16 bytes on its own. Naming the tail as a vec3 instead would
+    // align it to 16 first and push the struct to 48, which no longer matches the value written.
     delta_seconds: f32,
-    _padding: vec3<f32>,
 };
 
 @group(0) @binding(0) var<uniform> feedback: Feedback;
