@@ -964,13 +964,13 @@ export class BrowserCues {
 
 	async gotoVia(route: CommandRoute, playback: number, cue: number) {
 		return this.commands.via[route].execute(
-			`CUE ${await this.address(playback)} CUE ${formatCueNumber(cue)}`,
+			`GO TO ${await this.address(playback)} CUE ${formatCueNumber(cue)}`,
 		);
 	}
 
 	async loadVia(route: CommandRoute, playback: number, cue: number) {
 		return this.commands.via[route].execute(
-			`CUE CUE ${await this.address(playback)} CUE ${formatCueNumber(cue)}`,
+			`LOAD ${await this.address(playback)} CUE ${formatCueNumber(cue)}`,
 		);
 	}
 
@@ -982,7 +982,9 @@ export class BrowserCues {
 
 	async cue(playback: number, cue: number) {
 		const list = await cueListForPlayback(this.api, this.showId(), playback);
-		return list.body.cues.find((candidate) => candidate.number === cue);
+		// A stored Cue carries its dotted path, so the desk's "3" never equals the operator's 3.
+		const number = formatCueNumber(cue);
+		return list.body.cues.find((candidate) => candidate.number === number);
 	}
 
 	async cueList(playback: number) {
@@ -1004,7 +1006,7 @@ export class BrowserCues {
 
 	private async address(playback: number) {
 		const location = await playbackLocation(this.api, this.showId(), playback);
-		return `SET ${location.page} . ${location.slot}`;
+		return `PBK ${location.page} . ${location.slot}`;
 	}
 
 	private async ensureCommandSurface() {
