@@ -7,7 +7,13 @@ import { artifactPaths } from "../../tools/artifact-paths.mjs";
 export default defineConfig({
 	cacheDir: `${artifactPaths.viteCache}/media`,
 	plugins: [react()],
-	build: { outDir: artifactPaths.mediaFrontend, emptyOutDir: true },
+	build: {
+		outDir: artifactPaths.mediaFrontend,
+		emptyOutDir: true,
+		// The embedded Rust asset server receives URI paths verbatim. Hash-only asset names avoid
+		// percent-encoded spaces from human-readable branding filenames such as "ToskLight Pixel".
+		rollupOptions: { output: { assetFileNames: "assets/[hash][extname]" } },
+	},
 	resolve: { dedupe: ["react", "react-dom"] },
 	server: {
 		port: 4178,

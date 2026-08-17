@@ -5,7 +5,7 @@ use media_domain::{Alignment, Size, TextStyle, Tint};
 const BACKGROUND: [u8; 4] = [1, 5, 15, 255];
 const GUIDE: [u8; 4] = [255, 255, 255, 255];
 const GUIDE_LENGTH: u32 = 20;
-const LOGO_PNG: &[u8] = include_bytes!("../../../../../assets/branding/tosklight-media-icon.png");
+const LOGO_PNG: &[u8] = include_bytes!("../../../../../assets/branding/ToskLight Pixel.png");
 
 pub struct Frame {
     pub size: Size,

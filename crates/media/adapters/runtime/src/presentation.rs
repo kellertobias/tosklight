@@ -20,9 +20,28 @@ use media_render::{LayerDraw, SourceTexture, SurfaceLost, WindowedOutput, select
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
-use winit::window::{Window, WindowId};
+use winit::window::{Icon, Window, WindowId};
 
 use crate::shutdown::{Shutdown, ShutdownReason};
+
+const APPLICATION_ICON_PNG: &[u8] =
+    include_bytes!("../../../../../assets/branding/ToskLight Pixel.png");
+
+fn application_icon() -> Option<Icon> {
+    let decoder = png::Decoder::new(std::io::Cursor::new(APPLICATION_ICON_PNG));
+    let mut reader = decoder.read_info().ok()?;
+    let mut buffer = vec![0; reader.output_buffer_size()?];
+    let info = reader.next_frame(&mut buffer).ok()?;
+    if info.color_type != png::ColorType::Rgba || info.bit_depth != png::BitDepth::Eight {
+        return None;
+    }
+    Icon::from_rgba(
+        buffer[..info.buffer_size()].to_vec(),
+        info.width,
+        info.height,
+    )
+    .ok()
+}
 
 /// Whether this configuration needs a window at all.
 pub fn needs_a_window(configuration: &MediaConfiguration) -> bool {
@@ -284,6 +303,7 @@ impl PresentationHost {
 
         let mut attributes = Window::default_attributes()
             .with_title(format!("ToskLight Media — {}", configuration.name))
+            .with_window_icon(application_icon())
             .with_inner_size(winit::dpi::PhysicalSize::new(
                 configuration.resolution.width,
                 configuration.resolution.height,
@@ -458,6 +478,7 @@ impl RenderWorkerState {
                     &self.previews,
                     &mut hosted.output,
                     output_state,
+                    &[],
                     &draws,
                     &MasterState::default(),
                     None,
@@ -491,6 +512,7 @@ impl RenderWorkerState {
                         &self.previews,
                         &mut hosted.output,
                         output_state,
+                        std::slice::from_ref(&direct.layer),
                         &draws,
                         &master,
                         None,
@@ -578,6 +600,7 @@ impl RenderWorkerState {
                 &self.previews,
                 &mut hosted.output,
                 output_state,
+                &effective_layers,
                 &draws,
                 &master,
                 master_mask,
@@ -730,6 +753,7 @@ fn capture_previews(
     previews: &crate::preview::SharedPreviews,
     output: &mut WindowedOutput,
     state: &media_domain::OutputState,
+    preview_layers: &[media_domain::LayerState],
     draws: &[LayerDraw<'_>],
     master: &MasterState,
     master_mask: Option<&SourceTexture>,
@@ -761,7 +785,7 @@ fn capture_previews(
         let captured = output.capture_preview(size, master, master_mask);
         preview.publish_pixels(&captured, size, size, false);
     }
-    for (layer_index, layer_state) in state.layers.iter().enumerate() {
+    for (layer_index, _) in state.layers.iter().enumerate() {
         let Some(preview) = previews
             .for_layer(output_id, layer_index)
             .filter(|preview| preview.wanted())
@@ -769,11 +793,13 @@ fn capture_previews(
             continue;
         };
         let size = preview.requested_size();
-        if let Some(draw) = draws
-            .iter()
-            .find(|draw| std::ptr::eq(draw.state, layer_state))
-            .copied()
-        {
+        let effective_layer = preview_layers.get(layer_index);
+        if let Some(draw) = effective_layer.and_then(|effective_layer| {
+            draws
+                .iter()
+                .find(|draw| std::ptr::eq(draw.state, effective_layer))
+                .copied()
+        }) {
             let captured = output.capture_layer_preview(size, draw, output_id, now);
             preview.publish_pixels(&captured, size, size, true);
         } else {
@@ -921,6 +947,11 @@ mod tests {
             ..Default::default()
         };
         assert!(needs_a_window(&configuration));
+    }
+
+    #[test]
+    fn the_output_window_has_the_pixel_application_icon() {
+        assert!(application_icon().is_some());
     }
 
     #[test]

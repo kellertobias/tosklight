@@ -55,7 +55,7 @@ export function MediaServerShell({
 						<img
 							src={
 								new URL(
-									"../../../../assets/branding/tosklight-media-icon.svg",
+									"../../../../assets/branding/ToskLight Pixel.svg",
 									import.meta.url,
 								).href
 							}

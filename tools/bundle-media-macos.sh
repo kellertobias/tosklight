@@ -13,7 +13,7 @@ OUTPUT_DIR="$2"
 VERSION="${3:-${LIGHT_RELEASE_VERSION:-0.1.0}}"
 PRODUCT_NAME="ToskLight Media"
 APP="$OUTPUT_DIR/$PRODUCT_NAME.app"
-SOURCE_ICON="$ROOT/assets/branding/tosklight-media-icon.png"
+SOURCE_ICON="$ROOT/assets/branding/ToskLight Pixel.png"
 
 [[ "$(uname -s)" == "Darwin" ]] || { echo "error: Media.app can only be built on macOS" >&2; exit 1; }
 [[ -f "$BINARY" ]] || { echo "error: no Media binary at $BINARY" >&2; exit 1; }
