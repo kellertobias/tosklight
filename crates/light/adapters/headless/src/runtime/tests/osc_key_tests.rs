@@ -65,6 +65,69 @@ fn focused_macro_editor_routes_attached_keypad_input_without_mutating_command_li
 }
 
 #[test]
+fn osc_shifted_group_dmx_command_executes_the_same_physical_address_selection() {
+    let (state, data_dir) = test_state();
+    let user = state.installation.users().unwrap().remove(0);
+    let session = Session {
+        id: SessionId::new(),
+        user: user.clone(),
+        token: "osc-dmx-test".into(),
+        connected: true,
+        desk: test_control_desk(),
+    };
+    state.programming.start(session.id, user.id);
+    state.sessions.insert_session(session.clone());
+    let source: SocketAddr = "127.0.0.1:9019".parse().unwrap();
+    state.integrations.register_osc_subscriber(
+        "dmx-test".into(),
+        OscSubscriber {
+            desk_alias: "main".into(),
+            target: source,
+            command_source: source,
+            session_id: session.id,
+            last_seen: Instant::now(),
+            shifted: false,
+            shift_held: false,
+            update_record_started: None,
+            update_first_release: None,
+            last_highlight_action: None,
+        },
+    );
+    let mut fixture = schema_v2_direct_fixture().0;
+    fixture.universe = Some(2);
+    fixture.address = Some(100);
+    let fixture_id = fixture.fixture_id;
+    state.output.replace_snapshot(EngineSnapshot {
+        fixtures: vec![fixture].into(),
+        revision: 1,
+        ..EngineSnapshot::default()
+    }).unwrap();
+    let pressed = [OscArgument::Bool(true)];
+    let released = [OscArgument::Bool(false)];
+    let send = |action: &str, arguments: &[OscArgument]| {
+        handle_programmer_osc(
+            &state,
+            &format!("/light/main/programmer/{action}"),
+            arguments,
+            Some("127.0.0.1:9019"),
+        )
+    };
+
+    send("shift", &pressed);
+    send("group", &pressed);
+    send("group", &pressed);
+    assert_eq!(state.programming.get(session.id).unwrap().command_line, "DMX");
+    send("shift", &released);
+    for action in ["digit-2", "dot", "digit-1", "digit-0", "digit-1"] {
+        send(action, &pressed);
+    }
+    assert_eq!(state.programming.get(session.id).unwrap().command_line, "DMX 2.101");
+    send("enter", &pressed);
+    assert_eq!(state.programming.selection(session.id).unwrap().selected, vec![fixture_id]);
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
 fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);

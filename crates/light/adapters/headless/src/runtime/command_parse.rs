@@ -86,6 +86,112 @@ pub(super) fn push_unique(
     }
 }
 
+pub(super) fn parse_dmx_address(tokens: &[String]) -> Result<(u16, u16), String> {
+    let [root, universe, dot, address] = tokens else {
+        return Err("DMX requires one universe.address".into());
+    };
+    if root != "DMX" || dot != "." {
+        return Err("DMX requires one universe.address".into());
+    }
+    if (universe.len() > 1 && universe.starts_with('0'))
+        || (address.len() > 1 && address.starts_with('0'))
+    {
+        return Err("DMX universe.address integers must not contain leading zeros".into());
+    }
+    let universe = universe
+        .parse::<u16>()
+        .map_err(|_| "DMX universe must be within 1-65535")?;
+    if universe == 0 {
+        return Err("DMX universe must be within 1-65535".into());
+    }
+    let address = address
+        .parse::<u16>()
+        .map_err(|_| "DMX address must be within 1-512")?;
+    if !(1..=512).contains(&address) {
+        return Err("DMX address must be within 1-512".into());
+    }
+    Ok((universe, address))
+}
+
+/// Resolves any occupied slot in a root, split, or multipatch footprint to the fixture's normal
+/// selectable identities. A multi-head fixture therefore selects all of its logical heads, just
+/// like entering its fixture number; every physical multipatch remains one logical fixture.
+pub(super) fn resolve_dmx_fixture_selection(
+    fixtures: &[light_fixture::PatchedFixture],
+    universe: u16,
+    address: u16,
+) -> Result<Vec<light_core::FixtureId>, String> {
+    let owners = fixtures
+        .iter()
+        .filter(|fixture| fixture.definition.patch_policy() == light_fixture::PatchPolicy::Dmx)
+        .filter(|fixture| fixture_owns_dmx_slot(fixture, universe, address))
+        .collect::<Vec<_>>();
+    match owners.as_slice() {
+        [] => Ok(Vec::new()),
+        [fixture] => Ok(selectable_fixture_ids(fixture)),
+        _ => Err(format!(
+            "More than one fixture owns DMX {universe}.{address}; repair the Show Patch overlap"
+        )),
+    }
+}
+
+fn fixture_owns_dmx_slot(
+    fixture: &light_fixture::PatchedFixture,
+    universe: u16,
+    address: u16,
+) -> bool {
+    let footprints = fixture.definition.split_footprints();
+    binding_owns_dmx_slot(
+        fixture.universe,
+        fixture.address,
+        &fixture.split_patches,
+        &footprints,
+        universe,
+        address,
+    ) || fixture.multipatch.iter().any(|instance| {
+        binding_owns_dmx_slot(
+            instance.universe,
+            instance.address,
+            &instance.split_patches,
+            &footprints,
+            universe,
+            address,
+        )
+    })
+}
+
+fn binding_owns_dmx_slot(
+    legacy_universe: Option<u16>,
+    legacy_address: Option<u16>,
+    splits: &[light_fixture::SplitPatch],
+    footprints: &std::collections::BTreeMap<u16, u16>,
+    universe: u16,
+    address: u16,
+) -> bool {
+    if splits.is_empty() {
+        return legacy_universe == Some(universe)
+            && legacy_address.is_some_and(|start| {
+                footprint_contains(start, footprints.get(&1).copied().unwrap_or(0), address)
+            });
+    }
+    splits.iter().any(|split| {
+        split.universe == Some(universe)
+            && split.address.is_some_and(|start| {
+                footprint_contains(
+                    start,
+                    footprints.get(&split.split).copied().unwrap_or(0),
+                    address,
+                )
+            })
+    })
+}
+
+fn footprint_contains(start: u16, footprint: u16, address: u16) -> bool {
+    footprint > 0
+        && u32::from(address) >= u32::from(start)
+        && u32::from(address) < u32::from(start) + u32::from(footprint)
+}
+
 #[derive(Clone, Copy)]
 pub(super) struct FixtureReference {
     pub(super) number: u32,

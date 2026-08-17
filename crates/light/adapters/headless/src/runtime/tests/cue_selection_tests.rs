@@ -236,6 +236,94 @@ fn fixture_selection_accepts_minus_before_subsetting() {
 }
 
 #[test]
+fn dmx_address_parser_requires_one_physical_universe_and_slot() {
+    assert_eq!(
+        parse_dmx_address(&["DMX".into(), "2".into(), ".".into(), "511".into()]).unwrap(),
+        (2, 511)
+    );
+    for tokens in [
+        vec!["DMX".into(), "0".into(), ".".into(), "1".into()],
+        vec!["DMX".into(), "1".into(), ".".into(), "0".into()],
+        vec!["DMX".into(), "1".into(), ".".into(), "513".into()],
+        vec!["DMX".into(), "1".into()],
+        vec!["DMX".into(), "01".into(), ".".into(), "1".into()],
+        vec!["DMX".into(), "1".into(), ".".into(), "001".into()],
+        vec!["DMX".into(), "1".into(), ".".into(), "2".into(), "+".into()],
+    ] {
+        assert!(parse_dmx_address(&tokens).is_err(), "{tokens:?}");
+    }
+}
+
+#[test]
+fn dmx_lookup_resolves_footprints_splits_multipatches_and_all_logical_heads() {
+    let mut fixture = schema_v2_direct_fixture().0;
+    fixture.universe = None;
+    fixture.address = None;
+    fixture.definition.profile_snapshot.as_mut().unwrap().modes[0].splits = vec![
+        light_fixture::FixtureSplit { number: 1, footprint: 4 },
+        light_fixture::FixtureSplit { number: 2, footprint: 2 },
+    ];
+    fixture.split_patches = vec![
+        light_fixture::SplitPatch { split: 1, universe: Some(2), address: Some(100) },
+        light_fixture::SplitPatch { split: 2, universe: Some(7), address: Some(300) },
+    ];
+    fixture.multipatch = vec![light_fixture::MultiPatchInstance {
+        id: Uuid::new_v4(),
+        name: "Mirror".into(),
+        universe: Some(9),
+        address: Some(400),
+        split_patches: Vec::new(),
+        location: Default::default(),
+        rotation: Default::default(),
+        invert_pan: false,
+        invert_tilt: false,
+        bracket_angle: 0.0,
+        shaper_angle: None,
+        installed_appearance: Default::default(),
+    }];
+    let first_head = light_core::FixtureId::new();
+    let second_head = light_core::FixtureId::new();
+    fixture.definition.heads = vec![
+        light_fixture::LogicalHead { index: 1, name: "Cell 1".into(), shared: false, parameters: Vec::new() },
+        light_fixture::LogicalHead { index: 2, name: "Cell 2".into(), shared: false, parameters: Vec::new() },
+    ];
+    fixture.logical_heads = vec![
+        light_fixture::PatchedHead { profile_head_id: None, head_index: 1, fixture_id: first_head },
+        light_fixture::PatchedHead { profile_head_id: None, head_index: 2, fixture_id: second_head },
+    ];
+    let expected = vec![first_head, second_head];
+
+    for (universe, address) in [(2, 100), (2, 103), (7, 301), (9, 400), (9, 403)] {
+        assert_eq!(
+            resolve_dmx_fixture_selection(&[fixture.clone()], universe, address).unwrap(),
+            expected,
+            "DMX {universe}.{address}"
+        );
+    }
+    assert!(resolve_dmx_fixture_selection(&[fixture.clone()], 2, 104).unwrap().is_empty());
+    assert!(resolve_dmx_fixture_selection(&[fixture], 7, 302).unwrap().is_empty());
+}
+
+#[test]
+fn dmx_lookup_ignores_unpatched_visual_only_and_internal_fixtures() {
+    let mut unpatched = schema_v2_direct_fixture().0;
+    unpatched.universe = None;
+    unpatched.address = None;
+    let mut visual = schema_v2_direct_fixture().0;
+    visual.fixture_id = light_core::FixtureId::new();
+    visual.definition.profile_snapshot.as_mut().unwrap().patch_policy = light_fixture::PatchPolicy::VisualOnly;
+    let mut internal = schema_v2_direct_fixture().0;
+    internal.fixture_id = light_core::FixtureId::new();
+    internal.definition.profile_snapshot.as_mut().unwrap().patch_policy = light_fixture::PatchPolicy::Internal;
+
+    assert!(
+        resolve_dmx_fixture_selection(&[unpatched, visual, internal], 1, 1)
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
 fn fixture_selection_skips_missing_positive_numbers_and_supports_fixture_thru() {
     let base = schema_v2_direct_fixture().0;
     let fixtures = [10_u32, 11, 12]

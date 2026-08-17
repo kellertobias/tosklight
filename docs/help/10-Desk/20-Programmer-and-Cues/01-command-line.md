@@ -17,7 +17,7 @@ In the following, we indicate hardware buttons with `[BTN]`, touch commands with
 Another important concept to understand is that every button can have multiple functions depending on how often and long they are pressed and wether they are pressed together with shift.
 - Regular Press: You hold down and release a button in a regular typing speed, e.g. `[GRP]`. Once you held down the button the action is shown in the command line `#> GROUP`
 - Double-Press: If a button is pressed twice, it's indicated twice in this manual, e.g. `[GRP][GRP]`. The command line indicates the actual intention. When you press `[GRP]` the first time, it shows `#> GROUP`, once you pressed it the second time, it shows `#> DEGROUP`
-- Shift-Press: If a button is to be pressed with shift, we access the second function on that button. These are indicated with `[^GRP]`. You hold down shift, then press the desired button, then let go shift. The action is performed, once you click the actual button. If you need to press multiple buttons with shift directly after each other, you do not need to release shift in between. e.g. `[^GRP][^GRP]` can be either entered by holding down shift, then pressing `[GRP]`, then releasing shift, then holding down shift again, pressing `[GRP]` again, then releasing shift again; or you can hold down shift, press `[GRP]` twice and then release shift; the outcome is the same. The command line again indicates the intention, e.g. for `[^GRP]` it's `#> FIXTURE`, while `[^GRP][^GRP]`
+- Shift-Press: If a button is to be pressed with shift, we access the second function on that button. These are indicated with `[^GRP]`. You hold down shift, then press the desired button, then let go shift. The action is performed, once you click the actual button. If you need to press multiple buttons with shift directly after each other, you do not need to release shift in between. e.g. `[^GRP][^GRP]` can be either entered by holding down shift, then pressing `[GRP]`, then releasing shift, then holding down shift again, pressing `[GRP]` again, then releasing shift again; or you can hold down shift, press `[GRP]` twice and then release shift; the outcome is the same. The command line again indicates the intention: `[^GRP]` is `#> FIXTURE`, while `[^GRP][^GRP]` is `#> DMX`. Use the DMX form to address the fixture at a physical `universe.address`—a fast way to find it while quick-patching.
 - Long-Press/ Hold: If a button is pressed long, it's indicated with a plus, e.g. `[PRELOAD+]` (which opens the pending Preload for inspection and editing). Long presses do not need to be confirmed and directly trigger an action, such as opening a modal or resetting a value.
 
 
@@ -154,6 +154,14 @@ Some fixtures contain multiple outputs, so called heads. they can either be addr
 If you want to select sub-heads, you address the individual heads with `#> FIXTURE 100.1` or ranges `#> FIXTURE 100.1 THRU 100.10`.
 
 If a range contains a sub-head, we automatically only select sub-heads (and fixtures without any sub-heads), but not master heads: `#> FIXTURE 100.1 THRU 109` selects all sub heads of fixtures 100 thru 109 but not their master heads. This helps quickly selecting heads for e.g. pixel effects.
+
+### Selecting by DMX Address
+
+Press `[^GRP][^GRP]` to enter `DMX`, then enter one physical `universe.address` and confirm with `[ENT]`. For example, `[^GRP][^GRP] 2 [.] 101 [ENT]` displays `#> DMX 2.101` and selects the fixture that owns that slot. Universes are `1` through `65535`; addresses are `1` through `512`.
+
+The address may be the start slot or any slot inside the fixture's occupied footprint. Secondary split patches and every physical multipatch instance are searched too. A multipatch still selects its one logical fixture. For a multi-head fixture, DMX lookup selects all logical heads, exactly like entering the fixture number without a `.head` suffix.
+
+An unpatched, visual-only, or internal fixture never owns a DMX address. If no fixture owns the entered slot, or the address is invalid, the command is rejected and the current selection remains unchanged.
 
 ### Storing Groups
 

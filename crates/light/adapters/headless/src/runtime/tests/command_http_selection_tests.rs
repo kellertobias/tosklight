@@ -103,6 +103,50 @@ async fn programming_selection_gestures_return_the_complete_authoritative_contex
 }
 
 #[tokio::test]
+async fn dmx_command_selects_an_owning_footprint_and_rejections_preserve_selection() {
+    let scenario = CommandHttpScenario::new().await;
+    let mut fixture = schema_v2_direct_fixture().0;
+    fixture.fixture_number = Some(41);
+    fixture.universe = Some(2);
+    fixture.address = Some(100);
+    let fixture_id = fixture.fixture_id;
+    scenario
+        .state
+        .output
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![fixture].into(),
+            revision: 1,
+            ..EngineSnapshot::default()
+        })
+        .unwrap();
+
+    let selected = scenario.execute("dmx-footprint", Some("DMX 2.101")).await;
+    assert_eq!(selected.status(), StatusCode::OK, "{}", json(selected).await);
+    assert_eq!(
+        scenario.state.programming.selection(scenario.session.id).unwrap().selected,
+        vec![fixture_id]
+    );
+
+    for (request_id, command, expected) in [
+        ("dmx-zero-universe", "DMX 0.1", "universe"),
+        ("dmx-address-overflow", "DMX 2.513", "1-512"),
+        ("dmx-empty-slot", "DMX 2.102", "No fixture is patched"),
+    ] {
+        let rejected = scenario.execute(request_id, Some(command)).await;
+        assert_eq!(rejected.status(), StatusCode::OK, "{command}");
+        let rejected = json(rejected).await;
+        assert_eq!(rejected["outcome"], "rejected", "{rejected}");
+        assert!(rejected["error"].as_str().unwrap().contains(expected), "{rejected}");
+        assert_eq!(
+            scenario.state.programming.selection(scenario.session.id).unwrap().selected,
+            vec![fixture_id],
+            "{command} changed the selection"
+        );
+    }
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}
+
+#[tokio::test]
 async fn canonical_multi_reference_group_selects_and_rank_spreads_through_http() {
     let scenario = CommandHttpScenario::new().await;
     let template = schema_v2_direct_fixture().0;

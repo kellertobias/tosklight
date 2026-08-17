@@ -66,6 +66,35 @@ fn fixture_selection(
     ))
 }
 
+pub(super) fn execute_dmx_selection_command(
+    state: &AppState,
+    session: &Session,
+    command_line: &str,
+    tokens: &[String],
+) -> Result<usize, String> {
+    let (universe, address) = parse_dmx_address(tokens)?;
+    let snapshot = state.output.snapshot();
+    let fixtures = resolve_dmx_fixture_selection(&snapshot.fixtures, universe, address)?;
+    if fixtures.is_empty() {
+        return Err(format!("No fixture is patched at DMX {universe}.{address}"));
+    }
+    let expression = light_programmer::SelectionExpression::Sources {
+        items: fixtures
+            .iter()
+            .map(|fixture_id| light_programmer::SelectionReference::Fixture {
+                fixture_id: *fixture_id,
+            })
+            .collect(),
+    };
+    state
+        .programming
+        .select_expression(session.id, fixtures.clone(), expression);
+    state
+        .programming
+        .set_command_line(session.id, command_line.to_owned());
+    Ok(fixtures.len())
+}
+
 fn fixture_level_values(
     state: &AppState,
     fixtures: &[light_core::FixtureId],
