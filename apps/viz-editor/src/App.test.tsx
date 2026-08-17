@@ -443,20 +443,41 @@ describe("the Viz editor window", () => {
 	});
 
 	it("opens the packaged demo without asking the operator to find a file", async () => {
+		const demoShowId = "44444444-4444-4444-8444-444444444444";
 		const copy = {
 			...document,
+			showId: demoShowId,
 			name: "Demo Show 2",
 			path: "/data/shows/demo-show-2.show",
 			fixtureCount: 59,
 		};
+		let cadReads = 0;
+		let demoOpened = false;
 		invoke.mockImplementation((command: string) => {
 			switch (command) {
 				case "open_demo_show":
+					demoOpened = true;
 					return Promise.resolve(copy);
 				case "document_summary":
-					return Promise.resolve(document);
+					return Promise.resolve(demoOpened ? copy : document);
 				case "patch_snapshot":
 					return Promise.resolve(snapshot);
+				case "cad_scene_snapshot":
+					cadReads += 1;
+					return Promise.resolve({
+						showId: cadReads === 1 ? SHOW_ID : demoShowId,
+						sceneRevision: cadReads,
+						selectionRevision: 0,
+						entities: [
+							{
+								...cadEntity,
+								name: cadReads === 1 ? cadEntity.name : "Demo Wash 1",
+							},
+						],
+						drawings: [],
+						selectedIds: [],
+						attachments: [],
+					});
 				case "live_dmx_inputs":
 					return Promise.resolve(liveInputs);
 				default:
@@ -478,6 +499,8 @@ describe("the Viz editor window", () => {
 				"Opened Demo Show 2, a copy of the packaged Demo Show, at /data/shows/demo-show-2.show",
 			),
 		).toBeInTheDocument();
+		expect(await screen.findByText("Demo Show 2")).toBeInTheDocument();
+		expect(cadReads).toBeGreaterThanOrEqual(2);
 	});
 
 	it("offers no desk when there is none on the network", async () => {

@@ -82,6 +82,24 @@ export function App() {
 	>([]);
 	const transport = useMemo(() => new TauriPatchTransport(), []);
 
+	function applyCadSnapshot(snapshot: CadSceneSnapshot) {
+		setCadScene(snapshot);
+		cadEntitiesRef.current = new Map(
+			snapshot.entities.map((entity) => [entity.id, entity]),
+		);
+		const ids = Array.isArray(snapshot.selectedIds) ? snapshot.selectedIds : [];
+		const revision = Number.isFinite(snapshot.selectionRevision)
+			? snapshot.selectionRevision
+			: 0;
+		setSelected(ids);
+		setSelectionRevision(revision);
+		selectionRevisionRef.current = revision;
+	}
+
+	function loadCadScene() {
+		return cadSession.snapshot().then(applyCadSnapshot);
+	}
+
 	useEffect(() => {
 		documentSession
 			.visualizerIsRunning()
@@ -130,24 +148,7 @@ export function App() {
 	useEffect(() => {
 		let selectionUnlisten: (() => void) | undefined;
 		let sceneUnlisten: (() => void) | undefined;
-		cadSession
-			.snapshot()
-			.then((snapshot) => {
-				setCadScene(snapshot);
-				cadEntitiesRef.current = new Map(
-					snapshot.entities.map((entity) => [entity.id, entity]),
-				);
-				const ids = Array.isArray(snapshot.selectedIds)
-					? snapshot.selectedIds
-					: [];
-				const revision = Number.isFinite(snapshot.selectionRevision)
-					? snapshot.selectionRevision
-					: 0;
-				setSelected(ids);
-				setSelectionRevision(revision);
-				selectionRevisionRef.current = revision;
-			})
-			.catch(() => undefined);
+		loadCadScene().catch(() => undefined);
 		cadSession
 			.onSelectionDelta((delta) => {
 				setCadScene((current) =>
@@ -544,6 +545,7 @@ export function App() {
 										loadLayers();
 										loadFixtureVisibility();
 										loadFixtures();
+										loadCadScene().catch(report);
 									}}
 								>
 									{document && cadScene?.showId === document.showId ? (

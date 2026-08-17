@@ -15,9 +15,9 @@ const requiredIcons = [
 ];
 
 const applications = {
-  ToskLight: path.join(repositoryRoot, "apps/light-desktop/src-tauri"),
+  "ToskLight Control": path.join(repositoryRoot, "apps/light-desktop/src-tauri"),
   "Hardware Controls": path.join(repositoryRoot, "apps/light-hardware-controls/src-tauri"),
-  "Viz Editor": path.join(repositoryRoot, "apps/viz-editor/src-tauri"),
+  "ToskLight Architect": path.join(repositoryRoot, "apps/viz-editor/src-tauri"),
 };
 
 for (const application of Object.values(applications)) {
@@ -32,6 +32,16 @@ for (const application of Object.values(applications)) {
 // Every application an operator can see at once needs its own icon. The Viz Editor shipped with a
 // copy of the Hardware Controls artwork until it was badged, so this compares all three.
 const digest = (file) => crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
+assert.equal(
+  digest(path.join(applications["ToskLight Control"], "icons/icon.svg")),
+  digest(path.join(repositoryRoot, "assets/branding/ToskLight Control.svg")),
+  "Control's in-application vector icon must be the approved Control artwork",
+);
+assert.equal(
+  digest(path.join(applications["ToskLight Architect"], "icons/icon.svg")),
+  digest(path.join(repositoryRoot, "assets/branding/ToskLight Architect.svg")),
+  "Architect's in-application vector icon must be the approved Architect artwork",
+);
 const names = Object.keys(applications);
 for (let first = 0; first < names.length; first += 1) {
   for (let second = first + 1; second < names.length; second += 1) {
@@ -53,13 +63,39 @@ assert.ok(
 const visualizerBundler = fs.readFileSync(path.join(repositoryRoot, "tools/bundle-visualizer-macos.sh"), "utf8");
 assert.ok(
   visualizerBundler.includes("apps/viz-editor/src-tauri/icons/icon.icns"),
-  "the visualizer's macOS bundle must carry the Viz icon",
+  "the visualizer's macOS bundle must carry the Architect icon",
 );
 
-for (const renderer of ["tools/build_html_manual.py", "tools/manual/build_pdf.py"]) {
-  const source = fs.readFileSync(path.join(repositoryRoot, renderer), "utf8");
-  assert.ok(source.includes('ROOT / "apps" / "light-desktop"'), `${renderer} must use the current ToskLight application icon`);
-  assert.ok(!source.includes('ROOT / "apps" / "control-ui"'), `${renderer} must not use the retired control-ui path`);
+const pixelReferences = [
+  ["apps/media/index.html", "assets/branding/ToskLight Pixel.svg"],
+  ["apps/media/src/operator/MediaServerSurface.tsx", "assets/branding/ToskLight Pixel.svg"],
+  ["crates/media/adapters/runtime/src/presentation.rs", "assets/branding/ToskLight Pixel.png"],
+  ["crates/media/adapters/runtime/src/standby.rs", "assets/branding/ToskLight Pixel.png"],
+  ["tools/bundle-media-macos.sh", "assets/branding/ToskLight Pixel.png"],
+];
+for (const [file, reference] of pixelReferences) {
+  const source = fs.readFileSync(path.join(repositoryRoot, file), "utf8");
+  assert.ok(source.includes(reference), `${file} must use the approved Pixel application icon`);
 }
+
+const landingRenderer = fs.readFileSync(
+  path.join(repositoryRoot, "tools/render-landing-page.mjs"),
+  "utf8",
+);
+for (const application of ["Control", "Architect", "Pixel"]) {
+  assert.ok(
+    landingRenderer.includes(`assets/branding/ToskLight ${application}.png`),
+    `the public product card must use the approved ${application} icon`,
+  );
+}
+
+const manualConfig = JSON.parse(
+  fs.readFileSync(path.join(repositoryRoot, "docs/help/manual.config.json"), "utf8"),
+);
+assert.equal(
+  manualConfig.logo,
+  "../../apps/light-desktop/src-tauri/icons/icon.png",
+  "the configured HTML and PDF manual must use the current ToskLight application icon",
+);
 
 console.log("ToskLight desktop icon configuration is complete and application-specific.");

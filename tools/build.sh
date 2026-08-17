@@ -189,11 +189,13 @@ build_pages() {
   cp -R "$LIGHT_STORYBOOK_UI_DIR/." "$LIGHT_PAGES_DIR/storybook"
   cp -R "$LIGHT_SAFARI_DIR/." "$LIGHT_PAGES_DIR/safari"
   cp "$LIGHT_MANUAL_PDF" "$LIGHT_PAGES_DIR/tosklight-manual.pdf"
+  cp "$ROOT/LICENSE" "$LIGHT_PAGES_DIR/license.txt"
+  node "$ROOT/tools/generate-third-party-licenses.mjs" "$LIGHT_PAGES_DIR/third-party-licenses.html"
   cp -R "$ROOT/docs/site/." "$LIGHT_PAGES_DIR/"
   node "$ROOT/tools/semantic-test-docs/cli.mjs" --write \
     --output-dir "$LIGHT_PAGES_DIR/semantic-tests"
   # Publish the full-resolution application artwork, including the approved Apple-style effects.
-  cp "$ROOT/assets/branding/tosklight-app-icon.png" "$LIGHT_PAGES_DIR/icon.png"
+  cp "$ROOT/assets/branding/ToskLight Control.png" "$LIGHT_PAGES_DIR/icon.png"
   # GitHub Pages otherwise runs the output through Jekyll and drops _-prefixed assets.
   touch "$LIGHT_PAGES_DIR/.nojekyll"
 
@@ -207,7 +209,9 @@ build_pages() {
     performance/status.json \
     performance/index.html \
     semantic-tests/semantic-test-catalog.html \
-    semantic-tests/semantic-test-catalog.v1.json
+    semantic-tests/semantic-test-catalog.v1.json \
+    license.txt \
+    third-party-licenses.html
   do
     [[ -f "$LIGHT_PAGES_DIR/$required" ]] || {
       echo "error: assembled site is missing $required" >&2

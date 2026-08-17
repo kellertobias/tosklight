@@ -67,10 +67,10 @@ existing show can still be edited, because a saved show carries the profile revi
 
 ## The icon
 
-The Viz products share one icon: the ToskLight application icon with a glowing "3D" in the
-bottom-right corner. This application owns the generated set under `src-tauri/icons`; the
-visualizer has no generator of its own and takes both its window mark and its macOS bundle icon
-from here. See [`assets/branding/README.md`](../../assets/branding/README.md) to change it.
+ToskLight Architect uses the approved `assets/branding/ToskLight Architect.svg` and `.png`
+artwork. This application owns the generated platform set under `src-tauri/icons`; the visualizer
+has no generator of its own and takes both its window mark and its macOS bundle icon from here.
+See [`assets/branding/README.md`](../../assets/branding/README.md) to regenerate it.
 
 ## Serving the visualizer
 

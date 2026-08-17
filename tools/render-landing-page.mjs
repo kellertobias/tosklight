@@ -19,9 +19,9 @@ const SCREENSHOTS = resolve(
 );
 const MARKETING_MANIFEST = resolve(ROOT, "docs/marketing/screenshot-manifest.json");
 const PRODUCT_ICONS = [
-  ["assets/branding/tosklight-app-icon.png", "tosklight-desk.png"],
-  ["assets/branding/tosklight-viz-icon.png", "tosklight-previs.png"],
-  ["assets/branding/tosklight-media-icon.png", "tosklight-media.png"],
+  ["assets/branding/ToskLight Control.png", "tosklight-control.png"],
+  ["assets/branding/ToskLight Architect.png", "tosklight-architect.png"],
+  ["assets/branding/ToskLight Pixel.png", "tosklight-pixel.png"],
 ];
 const DEMO_DIRECTORY = resolve(artifactPaths.visual, "product-demo");
 const PERFORMANCE_STATUS_FILE = process.env.LIGHT_PERFORMANCE_STATUS_FILE;

@@ -142,22 +142,33 @@ export function CadApp() {
 	}, []);
 
 	useEffect(() => {
-		documentSession
-			.current()
-			.then((summary) => {
-				setDocumentInfo(summary);
-				if (summary)
-					setPaperwork({
-						lightingDesigner: summary.lightingDesigner,
-						showVersion: summary.showVersion,
-						venue: summary.venue,
-						contactEmail: summary.contactEmail,
-						contactPhone: summary.contactPhone,
-						project: summary.project,
-						showDate: summary.showDate,
-					});
-			})
-			.catch((reason) => setError(String(reason)));
+		const refreshDocument = () =>
+			documentSession
+				.current()
+				.then((summary) => {
+					setDocumentInfo(summary);
+					if (summary)
+						setPaperwork({
+							lightingDesigner: summary.lightingDesigner,
+							showVersion: summary.showVersion,
+							venue: summary.venue,
+							contactEmail: summary.contactEmail,
+							contactPhone: summary.contactPhone,
+							project: summary.project,
+							showDate: summary.showDate,
+						});
+				})
+				.catch((reason) => setError(String(reason)));
+		const refreshFocusedWindow = () => {
+			refreshDocument();
+			cadSession
+				.snapshot()
+				.then(applyScene)
+				.catch((reason) => setError(String(reason)));
+		};
+		refreshDocument();
+		window.addEventListener("focus", refreshFocusedWindow);
+		return () => window.removeEventListener("focus", refreshFocusedWindow);
 	}, []);
 
 	useEffect(() => {
@@ -370,6 +381,11 @@ export function CadApp() {
 			<WindowControls />
 			<WindowHeader
 				title="Tasklight Architect"
+				info={
+					documentInfo?.fileName
+						? { primary: documentInfo.fileName }
+						: undefined
+				}
 				dragHandleProps={{
 					"data-tauri-drag-region": true,
 					onPointerDown: beginWindowDrag,

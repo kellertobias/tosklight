@@ -183,6 +183,7 @@ describe("the CAD planning window", () => {
 		);
 		const title = screen.getByText("Tasklight Architect");
 		expect(title.closest(".ui-window-header")).toBeInTheDocument();
+		expect(await screen.findByText("demo.show")).toBeInTheDocument();
 		expect(
 			screen.queryByText(/First synchronized 2D planning slice/i),
 		).not.toBeInTheDocument();

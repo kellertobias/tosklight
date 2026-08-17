@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/branding/tosklight-app-icon.png" alt="ToskLight application icon" width="128" height="128">
+  <img src="assets/branding/ToskLight%20Control.png" alt="ToskLight Control application icon" width="128" height="128">
 </p>
 
 <h1 align="center">ToskLight</h1>
@@ -36,6 +36,16 @@ The screenshots above are generated from the current application stories and pub
 [ToskLight GitHub Pages site](https://kellertobias.github.io/tosklight/). The site also hosts the
 [operator manual](https://kellertobias.github.io/tosklight/manual/), the generated product demo,
 and current release downloads.
+
+## Product family
+
+| Icon | Application | Role |
+| --- | --- | --- |
+| <img src="assets/branding/ToskLight%20Control.png" alt="ToskLight Control application icon" width="72" height="72"> | **ToskLight Control** | Lighting-control software and operator interface. |
+| <img src="assets/branding/ToskLight%20Architect.png" alt="ToskLight Architect application icon" width="72" height="72"> | **ToskLight Architect** | CAD-based venue and rig planning with live 3D visualization. |
+| <img src="assets/branding/ToskLight%20Pixel.png" alt="ToskLight Pixel application icon" width="72" height="72"> | **ToskLight Pixel** | Media server for video, images, text, generated visuals, and effects. |
+
+**ToskLight Desk** is reserved for the future physical hardware desk.
 
 ## Features
 
@@ -86,7 +96,8 @@ for the documentation workflow.
 The macOS testing applications are ad-hoc signed so Gatekeeper can verify that each completed app
 bundle is intact, but they are not yet Apple Developer-ID signed or notarized. The macOS bundle
 includes `sign-macos-apps-locally.sh` to apply and verify a fresh ad-hoc signature on the Mac that
-will run Desk, PreVIZ, or Media; no Apple identity is needed. The other release builds are unsigned.
+will run Control, Architect, or Pixel; no Apple identity is needed. The other release builds are
+unsigned.
 Cross-compiling the non-macOS server archives requires the Rust targets used
 by the build script, `zig`, and `cargo-zigbuild`. Native device and protocol integrations run as
 separately approved extension packages; OSC and network output remain built in.
@@ -102,7 +113,7 @@ or visualization work.
 - `crates/light/domain/` owns Programmer, Playback, engine, and output semantics.
 - `crates/light/adapters/headless/` owns REST, WebSocket, OSC, sessions, persistence, and server
   orchestration.
-- `apps/light-desktop/` is the main operator application.
+- `apps/light-desktop/` is the ToskLight Control operator application.
 - `apps/light-hardware-controls/` is the sibling application for attached controls.
 - `apps/ui-library/` contains shared operator components and deterministic Storybook surfaces.
 - `tests/` contains the semantic Playwright acceptance suite and shared test bench.
