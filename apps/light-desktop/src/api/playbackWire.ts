@@ -62,40 +62,37 @@ function eventRoutes(event: Record<string, unknown>) {
 	return routes;
 }
 
-/// A Virtual Playback is addressed by its page and number and carries its own route, so it is
-/// never announced under the flat Playback number the desk also knows it by.
-function runtimeIdentityRoute(
-	projection: ReturnType<typeof decodePlaybackProjection>,
-): string | null {
-	if (projection.requested.kind === "virtual")
-		return `virtual-playback:${projection.requested.page}.${projection.requested.playback_number}`;
-	return projection.playback_number == null
-		? null
-		: `playback:${projection.playback_number}`;
-}
-
 function assertRuntimeRoute(
 	routes: Array<{ capability: string; id: string }>,
 	projection: ReturnType<typeof decodePlaybackProjection>,
 ) {
-	const identity = runtimeIdentityRoute(projection);
-	if (projection.target === "group") {
-		assertPlaybackRoute(routes, `group:${projection.group_id}`);
-		if (identity) assertPlaybackRoute(routes, identity);
+	// A Virtual Playback is addressed by its page and number and carries its own route, so it is
+	// never announced under the flat Playback number the desk also knows it by.
+	if (projection.requested.kind === "virtual") {
+		if (projection.target === "group")
+			assertPlaybackRoute(routes, `group:${projection.group_id}`);
+		assertPlaybackRoute(
+			routes,
+			`virtual-playback:${projection.requested.page}.${projection.requested.playback_number}`,
+		);
 		return;
 	}
-	if (identity) {
-		assertPlaybackRoute(routes, identity);
+	if (projection.target === "group") {
+		assertPlaybackRoute(routes, `group:${projection.group_id}`);
+		if (projection.playback_number != null)
+			assertPlaybackRoute(routes, `playback:${projection.playback_number}`);
 		return;
 	}
 	const expected =
-		projection.target === "cue_list"
-			? `cuelist:${projection.cue_list_id}`
-			: projection.requested.kind === "cue_list"
-				? `cuelist:${projection.requested.cue_list_id}`
-				: projection.requested.kind === "playback"
-					? `playback:${projection.requested.playback_number}`
-					: `group:${projection.requested.group_id}`;
+		projection.playback_number == null
+			? projection.target === "cue_list"
+				? `cuelist:${projection.cue_list_id}`
+				: projection.requested.kind === "cue_list"
+					? `cuelist:${projection.requested.cue_list_id}`
+					: projection.requested.kind === "playback"
+						? `playback:${projection.requested.playback_number}`
+						: `group:${projection.requested.group_id}`
+			: `playback:${projection.playback_number}`;
 	assertPlaybackRoute(routes, expected);
 }
 
