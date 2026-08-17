@@ -302,6 +302,11 @@ export class BrowserNetworkOutput {
 				.locator(".setup-window nav")
 				.getByRole("button", { name: "Outputs", exact: true }),
 		);
+		// Outputs is a tabbed section: the Output Engine opens first and the routes live behind
+		// their own tab.
+		await this.desk.click(
+			this.page.getByRole("tab", { name: "Routes", exact: true }),
+		);
 		const region = this.page.getByRole("region", { name: "Output routes" });
 		await expect(region).toBeVisible();
 		return region;
@@ -381,7 +386,7 @@ function normalizedIntent(
 function routeDescription(
 	intent: Required<Omit<NetworkRouteIntent, "capture">>,
 ) {
-	return `Logical ${intent.logicalUniverse} → ${protocolLabel(intent.protocol)} ${intent.destinationUniverse}`;
+	return `Logical ${intent.logicalUniverse} · ${protocolLabel(intent.protocol)} ${intent.destinationUniverse}`;
 }
 
 function protocolLabel(protocol: NetworkProtocol) {

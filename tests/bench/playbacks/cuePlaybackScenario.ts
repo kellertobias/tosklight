@@ -184,6 +184,9 @@ class CueEditorExpectation {
 			"Preview",
 			"No.",
 			"Name",
+			"Info",
+			"Jump",
+			"Jump Count",
 			"Trigger",
 			"Trigger Time",
 			"In Delay",
@@ -825,19 +828,22 @@ export class BrowserCues {
 		);
 		if (!playbackObject) throw new Error(`Playback ${playback} is absent`);
 		await this.page.setViewportSize({ width: 1280, height: 1100 });
-		const shift = this.page.getByRole("button", {
-			name: "SHIFT",
+		// The Cuelist Pool is a dock Built-in. SHIFT lives on the playback face of the programmer
+		// surface and the digits on the other, so no single face offers the old SHIFT + 4 shortcut.
+		const dock = this.page.getByRole("button", {
+			name: "Desktops / Built-ins",
 			exact: true,
 		});
-		if (!(await shift.isVisible().catch(() => false)))
-			await this.desk.click(this.page.locator(".mode-toggle"));
+		if ((await dock.getAttribute("data-dock-mode")) !== "builtins")
+			await this.desk.click(dock);
 		await this.desk.recordStep(
 			`OPEN ${cueList.body.name} IN CUELIST VIEW`,
 			"Open the assigned Cuelist from the visible Cuelist Pool.",
 		);
-		await this.desk.click(shift);
 		await this.desk.click(
-			this.page.getByRole("button", { name: "4", exact: true }),
+			this.page
+				.locator("[aria-label='Built-ins']")
+				.getByRole("button", { name: "Cue Lists", exact: true }),
 		);
 		await expect(this.page.locator(".cuelist-pool-window")).toBeVisible();
 		await this.desk.click(

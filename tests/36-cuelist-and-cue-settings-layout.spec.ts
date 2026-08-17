@@ -56,11 +56,7 @@ test("CUELIST-LAYOUT-001 @ui › Cue timing and trigger cells use exact-property
 
 	await desk.open(api.baseUrl);
 	await page.setViewportSize({ width: 1280, height: 720 });
-	const shift = page.getByRole("button", { name: "SHIFT", exact: true });
-	if (!(await shift.isVisible().catch(() => false)))
-		await page.locator(".mode-toggle").click();
-	await shift.click();
-	await page.getByRole("button", { name: "4", exact: true }).click();
+	await openCuelistPoolFromDock(page);
 	await page
 		.locator(".cuelist-card")
 		.filter({ hasText: "Layout Sequence" })
@@ -70,6 +66,9 @@ test("CUELIST-LAYOUT-001 @ui › Cue timing and trigger cells use exact-property
 		"Preview",
 		"No.",
 		"Name",
+		"Info",
+		"Jump",
+		"Jump Count",
 		"Trigger",
 		"Trigger Time",
 		"In Delay",
@@ -148,3 +147,18 @@ test("CUELIST-LAYOUT-001 @ui › Cue timing and trigger cells use exact-property
 		"Timing",
 	]);
 });
+
+async function openCuelistPoolFromDock(page: Page): Promise<void> {
+	// The Cuelist Pool is a dock Built-in. SHIFT lives on the playback face of the programmer
+	// surface and the digits on the other, so no single face offers the old SHIFT + 4 shortcut.
+	const toggle = page.getByRole("button", {
+		name: "Desktops / Built-ins",
+		exact: true,
+	});
+	if ((await toggle.getAttribute("data-dock-mode")) !== "builtins")
+		await toggle.click();
+	await page
+		.locator("[aria-label='Built-ins']")
+		.getByRole("button", { name: "Cue Lists", exact: true })
+		.click();
+}

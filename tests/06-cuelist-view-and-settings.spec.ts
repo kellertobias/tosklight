@@ -147,6 +147,9 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
         "Preview",
         "No.",
         "Name",
+        "Info",
+        "Jump",
+        "Jump Count",
         "Trigger",
         "Trigger Time",
         "In Delay",
@@ -890,10 +893,12 @@ async function openCuelistFromCurrentDesk(page: Page, name: string): Promise<voi
 }
 
 async function openCuelistPoolFromCurrentDesk(page: Page): Promise<void> {
-  const shift = page.getByRole("button", { name: "SHIFT", exact: true });
-  if (!(await shift.isVisible().catch(() => false))) await page.locator(".mode-toggle").click();
-  await shift.click();
-  await page.getByRole("button", { name: "4", exact: true }).click();
+  const toggle = page.getByRole("button", { name: "Desktops / Built-ins", exact: true });
+  if ((await toggle.getAttribute("data-dock-mode")) !== "builtins") await toggle.click();
+  await page
+    .locator("[aria-label='Built-ins']")
+    .getByRole("button", { name: "Cue Lists", exact: true })
+    .click();
   await expect(page.locator(".cuelist-pool-window")).toBeVisible();
 }
 
