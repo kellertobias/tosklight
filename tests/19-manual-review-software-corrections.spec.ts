@@ -13,7 +13,7 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
     const gridBox = await grid.boundingBox();
     expect(gridBox).not.toBeNull();
     await page.mouse.click(gridBox!.x + gridBox!.width * 0.15, gridBox!.y + gridBox!.height * 0.15);
-    await page.locator(".window-picker").getByRole("button", { name: "Group pool", exact: true }).click();
+    await openCatalogCard(page, "Group pool");
 
     const pane = page.locator(".desk-pane").filter({ has: page.locator(".group-pool-window") });
     await expect(pane).toBeVisible();
@@ -433,4 +433,20 @@ async function expectPickerConstraint(page: Page, invalidName: string, allowedNa
   await expect(select).toBeEnabled();
   await picker.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(picker).toHaveCount(0);
+}
+
+/** The Open Window catalog groups its cards into tabs, so the bench searches the tabs. */
+async function openCatalogCard(page: Page, title: string): Promise<void> {
+	const dialog = page.getByRole("dialog", { name: "Open Window" });
+	const card = dialog
+		.getByRole("button")
+		.filter({ has: page.getByText(title, { exact: true }) });
+	for (const tab of await dialog.getByRole("tab").all()) {
+		await tab.click();
+		if (await card.count()) {
+			await card.first().click();
+			return;
+		}
+	}
+	throw new Error(`The Open Window catalog offers no "${title}" window`);
 }

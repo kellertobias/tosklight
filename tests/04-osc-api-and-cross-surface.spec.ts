@@ -1024,9 +1024,7 @@ async function openCrossSurfaceLayout(page: Page): Promise<void> {
   const box = await grid.boundingBox();
   expect(box).not.toBeNull();
   await page.mouse.click(box!.x + box!.width * 0.1, box!.y + box!.height * 0.1);
-  const picker = page.locator(".window-picker");
-  await expect(picker).toBeVisible();
-  await picker.getByRole("button", { name: "Group pool", exact: true }).click();
+  await openCatalogCard(page, "Group pool");
   await expect(groupPool).toBeVisible();
   await expect(fixtureSheet).toBeVisible();
 }
@@ -1162,4 +1160,20 @@ async function selectPlaybackPage(page: Page, name: string): Promise<void> {
 
 function normalizeCommand(value: string | null | undefined): string {
   return (value ?? "").trim().replace(/^G(\d+)/, "GROUP $1");
+}
+
+/** The Open Window catalog groups its cards into tabs, so the bench searches the tabs. */
+async function openCatalogCard(page: Page, title: string): Promise<void> {
+	const dialog = page.getByRole("dialog", { name: "Open Window" });
+	const card = dialog
+		.getByRole("button")
+		.filter({ has: page.getByText(title, { exact: true }) });
+	for (const tab of await dialog.getByRole("tab").all()) {
+		await tab.click();
+		if (await card.count()) {
+			await card.first().click();
+			return;
+		}
+	}
+	throw new Error(`The Open Window catalog offers no "${title}" window`);
 }

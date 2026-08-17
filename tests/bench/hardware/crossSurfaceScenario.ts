@@ -915,10 +915,16 @@ export class BrowserCrossSurface {
 			box.x + box.width * 0.1,
 			box.y + box.height * 0.1,
 		);
-		await this.page
-			.locator(".window-picker")
-			.getByRole("button", { name: "Group pool" })
-			.click();
+		// The Open Window catalog groups its cards into tabs, so the bench searches the tabs.
+		const dialog = this.page.getByRole("dialog", { name: "Open Window" });
+		const card = dialog
+			.getByRole("button")
+			.filter({ has: this.page.getByText("Group pool", { exact: true }) });
+		for (const tab of await dialog.getByRole("tab").all()) {
+			await tab.click();
+			if (await card.count()) break;
+		}
+		await card.first().click();
 		await expect(groupPool).toBeVisible();
 	}
 

@@ -131,10 +131,7 @@ test.describe("docs/testing/15-macros-and-timecode.md", () => {
 		await desk.open(api.baseUrl);
 		await expect(page.locator(".connection-cover")).toBeHidden();
 		await openBuiltIns(page);
-		await page
-			.locator("[aria-label='Built-ins']")
-			.getByRole("button", { name: "Macros", exact: true })
-			.click();
+		await openShiftedBuiltIn(page, "Macro");
 		await page
 			.getByRole("button", { name: "Macro 160 Front wash" })
 			.click({ button: "right" });
@@ -266,10 +263,7 @@ test.describe("docs/testing/15-macros-and-timecode.md", () => {
 		await desk.open(api.baseUrl);
 		await expect(page.locator(".connection-cover")).toBeHidden();
 		await openBuiltIns(page);
-		await page
-			.locator("[aria-label='Built-ins']")
-			.getByRole("button", { name: "Timecode", exact: true })
-			.click();
+		await openShiftedBuiltIn(page, "Timecode");
 		await page
 			.getByRole("button", { name: "Timecode 7 Opening track" })
 			.click({ button: "right" });
@@ -431,4 +425,16 @@ function editableTimecode() {
 			},
 		],
 	};
+}
+
+/** Macro and Timecode are Shift Built-ins, which the dock only shows while Shift is armed. */
+async function openShiftedBuiltIn(page: Page, name: string): Promise<void> {
+	const shift = page.locator('[data-keypad-key="SHIFT"]:visible').first();
+	if (!(await shift.isVisible().catch(() => false)))
+		await page.locator(".mode-toggle").click();
+	await shift.click();
+	await page
+		.locator("[aria-label='Shift Built-ins']")
+		.getByRole("button", { name, exact: true })
+		.click();
 }
