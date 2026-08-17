@@ -51,7 +51,8 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
 		const bladeFourAngleSlot = registry.getByLabel("shapers page 2 encoder 4");
 		await expect(bladeFourAngleSlot).toContainText("Blade 4 Angle");
 
-		await page.getByRole("button", { name: "Attributes", exact: true }).click();
+		// Attributes & encoders is a tabbed section, and Attributes is one of its tabs.
+		await page.getByRole("tab", { name: "Attributes", exact: true }).click();
 		await registry
 			.getByLabel("New custom attribute")
 			.fill("Test aperture mode");
