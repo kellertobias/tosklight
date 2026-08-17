@@ -576,7 +576,9 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         }
     }
 
-    var sampled = textureSample(source, source_sampler, coordinates.uv);
+    // Blur belongs to the source, not after the effects: it re-reads the texture, so applying it
+    // later discarded whatever the slots below had just produced. Zero amount is an exact bypass.
+    var sampled = blurred_source(coordinates.uv, layer.blur.x, 1.0);
     for (var slot = 0u; slot < 4u; slot += 1u) {
         if layer.effect_types[slot] == 5u {
             sampled = rasterized_source(
@@ -615,7 +617,6 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
             sampled = drawn_image_source(coordinates.uv, layer.effect_parameters[slot], layer.effect_mixes[slot]);
         }
     }
-    sampled = blurred_source(coordinates.uv, layer.blur.x, 1.0);
     for (var slot = 0u; slot < 4u; slot += 1u) {
         if layer.effect_types[slot] == 1u {
             sampled = analog_colour(

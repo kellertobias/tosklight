@@ -137,14 +137,11 @@ fn digital_state(parameters: DigitalTvParameters) -> LayerState {
     })
 }
 
+/// Blur is a layer control on its own DMX channel rather than an effect slot, so a disabled
+/// blur is simply no blur at all.
 fn blur_state(amount: f32, enabled: bool) -> LayerState {
-    let mut effect = EffectSlot::blur();
-    effect.enabled = enabled;
-    effect.parameters = BlurParameters { amount }.as_array().to_vec();
-    let mut effects: [EffectSlot; 4] = Default::default();
-    effects[0] = effect;
     ready(LayerState {
-        effects,
+        blur: if enabled { amount } else { 0.0 },
         ..Default::default()
     })
 }
