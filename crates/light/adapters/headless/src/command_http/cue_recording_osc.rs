@@ -95,9 +95,11 @@ fn playback_target_operation(command: &str) -> Option<PlaybackTargetOperation> {
 
 fn supported_pending_set(command: &str) -> bool {
     match command.split_whitespace().collect::<Vec<_>>().as_slice() {
-        ["SET"] => true,
-        ["SET", number] => number.parse::<u16>().is_ok(),
-        ["SET", "GROUP", group_id] => !group_id.is_empty(),
+        ["ASSIGN", source, identifier, "AT"] => match *source {
+            "GROUP" => !identifier.is_empty(),
+            "CUELIST" | "DYNAMIC" | "MACRO" | "TIMECODE" => identifier.parse::<u16>().is_ok(),
+            _ => false,
+        },
         _ => false,
     }
 }
@@ -125,21 +127,23 @@ fn set_target(
         .get(session.id)
         .map(|programmer| programmer.command_line.trim().to_ascii_uppercase())
         .filter(|command| supported_pending_set(command))
-        .ok_or_else(|| ActionError::new(ActionErrorKind::Invalid, "SET target is not pending"))?;
+        .ok_or_else(|| {
+            ActionError::new(ActionErrorKind::Invalid, "ASSIGN target is not pending")
+        })?;
     let (page, slot) = match address {
         PlaybackAddress::ExplicitPage { page, slot } => (page, slot),
         PlaybackAddress::CurrentPage { slot } => (current_page(state, session)?, slot),
         PlaybackAddress::Pool(_) => {
             return Err(ActionError::new(
                 ActionErrorKind::Invalid,
-                "a SET source requires a physical page Playback destination",
+                "an ASSIGN source requires a physical page Playback destination",
             ));
         }
         PlaybackAddress::Virtual(address) => {
             return Err(ActionError::new(
                 ActionErrorKind::Invalid,
                 format!(
-                    "Virtual {}.{} has no authoritative typed SET Playback target",
+                    "Virtual {}.{} has no authoritative typed ASSIGN Playback target",
                     address.page(),
                     address.number().get()
                 ),
@@ -152,11 +156,7 @@ fn set_target(
             ));
         }
     };
-    let command = if pending == "SET" {
-        format!("SET {page} . {slot}")
-    } else {
-        format!("{pending} AT {page} . {slot}")
-    };
+    let command = format!("{pending} PBK {page} . {slot}");
     let context = ActionContext::operator(
         session.desk.id,
         session.user.id.0,
@@ -177,7 +177,7 @@ fn set_target(
         }
         ExistingCommandOutcome::ChoiceRequired { .. } => Err(ActionError::new(
             ActionErrorKind::Invalid,
-            "SET Playback targeting cannot require a command choice",
+            "ASSIGN Playback targeting cannot require a command choice",
         )),
     }
 }
@@ -296,7 +296,11 @@ mod tests {
                 Some(PlaybackTargetOperation::Record)
             );
         }
-        for command in ["SET", "set 41", " SET GROUP front "] {
+        for command in [
+            "ASSIGN CUELIST 41 AT",
+            "assign dynamic 2 at",
+            " ASSIGN GROUP front AT ",
+        ] {
             assert!(supported_pending_set(&command.trim().to_ascii_uppercase()));
             assert_eq!(
                 playback_target_operation(command),
@@ -311,8 +315,9 @@ mod tests {
         }
         for unsupported in [
             "RECORD CUE 2",
-            "SET GROUP",
-            "SET DYNAMIC 1",
+            "SET",
+            "SET GROUP front",
+            "ASSIGN DYNAMIC 1",
             "COPY",
             "MOVE",
             "DELETE",

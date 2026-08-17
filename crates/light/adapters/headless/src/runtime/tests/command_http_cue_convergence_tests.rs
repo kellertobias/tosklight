@@ -244,7 +244,7 @@ async fn real_osc_record_touch_creates_exact_page_target_and_suppresses_control(
 }
 
 #[tokio::test]
-async fn real_osc_set_touch_selects_current_or_explicit_page_target_and_suppresses_control() {
+async fn real_osc_assign_touch_selects_current_or_explicit_page_target_and_suppresses_control() {
     let scenario = CommandHttpScenario::new().await;
     let show_id = scenario.create_and_open_show("OSC SET Playback target").await;
     set_cue_record_value(&scenario);
@@ -263,7 +263,7 @@ async fn real_osc_set_touch_selects_current_or_explicit_page_target_and_suppress
             "set-target-map",
             light_wire::v2::live_action::LiveAction::CommandLineExecute(
                 light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
-                    value: "SET 41 AT 4 . 7".into(),
+                    value: "ASSIGN CUELIST 41 AT PBK 4 . 7".into(),
                 },
             ),
         ),
@@ -298,7 +298,7 @@ async fn real_osc_set_touch_selects_current_or_explicit_page_target_and_suppress
     scenario
         .state
         .programming
-        .set_command_line(scenario.session.id, "SET".into());
+        .set_command_line(scenario.session.id, "ASSIGN CUELIST 41 AT".into());
     let current_address = format!(
         "/light/{}/page-playback/7/button/1",
         scenario.session.desk.osc_alias
@@ -354,7 +354,7 @@ async fn real_osc_set_touch_selects_current_or_explicit_page_target_and_suppress
     scenario
         .state
         .programming
-        .set_command_line(scenario.session.id, "SET".into());
+        .set_command_line(scenario.session.id, "ASSIGN CUELIST 41 AT".into());
     let explicit_address = "/light/playback/4/7/fader";
     handle_playback_osc(
         &scenario.state,
@@ -395,7 +395,7 @@ async fn real_osc_set_touch_selects_current_or_explicit_page_target_and_suppress
     scenario
         .state
         .programming
-        .set_command_line(scenario.session.id, "SET GROUP 4".into());
+        .set_command_line(scenario.session.id, "ASSIGN GROUP 4 AT".into());
     handle_playback_osc(
         &scenario.state,
         "/light/playback/4/7/label",
@@ -427,25 +427,27 @@ async fn real_osc_set_touch_selects_current_or_explicit_page_target_and_suppress
     scenario
         .state
         .programming
-        .set_command_line(scenario.session.id, "SET 42".into());
+        .set_command_line(scenario.session.id, "ASSIGN CUELIST 42 AT".into());
     handle_playback_osc(
         &scenario.state,
         "/light/playback/4/8/label",
         &[OscArgument::Bool(true)],
         Some("127.0.0.1:9028"),
     );
-    assert_eq!(
-        scenario
-            .state
-            .output
-            .snapshot()
-            .playback_pages
-            .iter()
-            .find(|page| page.number == 4)
-            .unwrap()
-            .slots[&8],
-        42
-    );
+    let snapshot = scenario.state.output.snapshot();
+    let assigned_playback = snapshot
+        .playback_pages
+        .iter()
+        .find(|page| page.number == 4)
+        .unwrap()
+        .slots[&8];
+    assert!(snapshot.playbacks.iter().any(|playback| {
+        playback.number == assigned_playback
+            && matches!(
+                playback.target,
+                light_playback::PlaybackTarget::CueList { .. }
+            )
+    }));
 
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
@@ -687,7 +689,7 @@ async fn osc_copy_move_and_delete_do_not_guess_a_whole_playback_mutation() {
             "unsupported-target-map",
             light_wire::v2::live_action::LiveAction::CommandLineExecute(
                 light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
-                    value: "SET 42 AT 4 . 8".into(),
+                    value: "ASSIGN CUELIST 42 AT PBK 4 . 8".into(),
                 },
             ),
         ),

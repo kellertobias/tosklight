@@ -350,7 +350,7 @@ fn new_cuelist_and_playback_record_is_one_active_show_batch() {
 }
 
 #[test]
-fn set_cuelist_page_assignment_is_one_lossless_active_show_batch() {
+fn assign_cuelist_page_assignment_is_one_lossless_active_show_batch() {
     let scenario = CommandContractScenario::new();
     execute_programmer_command(&scenario.state, &scenario.session, "GROUP 1 AT 50").unwrap();
     execute_programmer_command(
@@ -380,7 +380,12 @@ fn set_cuelist_page_assignment_is_one_lossless_active_show_batch() {
     let before_backups = command_show_object_backup_count(&scenario.data_dir);
 
     assert_eq!(
-        execute_programmer_command(&scenario.state, &scenario.session, "SET 25 AT 1.1").unwrap(),
+        execute_programmer_command(
+            &scenario.state,
+            &scenario.session,
+            "ASSIGN CUELIST 25 AT PBK 1.1",
+        )
+        .unwrap(),
         1
     );
 
@@ -390,7 +395,7 @@ fn set_cuelist_page_assignment_is_one_lossless_active_show_batch() {
         .unwrap();
     let page = after.object("playback_page", "1").unwrap();
     assert_eq!(after.revision().value(), before.revision().value() + 1);
-    assert_eq!(page.body()["slots"]["1"], 25);
+    assert_eq!(page.body()["slots"]["1"], 1);
     assert_eq!(page.body()["future_layout"]["columns"], 10);
     assert_eq!(
         command_show_object_backup_count(&scenario.data_dir),

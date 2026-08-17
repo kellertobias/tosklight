@@ -33,6 +33,9 @@ pub(crate) fn parse(command: &str) -> Result<Option<SpeedGroupBindingCommand>, S
     if at == 0 {
         return Err("Speed Group binding requires a source before AT".into());
     }
+    if tokens.get(at + 1).map(String::as_str) != Some("SPD") {
+        return Ok(None);
+    }
     if tokens[at + 1..].len() != 3 || tokens[at + 1] != "SPD" || tokens[at + 2] != "GRP" {
         return Err("Speed Group binding target must be SPD GRP <1-5>".into());
     }
@@ -111,6 +114,7 @@ mod tests {
     fn rejects_invalid_binding_without_stealing_plain_selection() {
         assert!(parse("PBK 6").unwrap().is_none());
         assert!(parse("SPD GRP 1 AT 120").unwrap().is_none());
+        assert!(parse("DYNAMIC 29 SIZE AT 50").unwrap().is_none());
         assert!(parse("CUELIST 4 AT SPD GRP 0").unwrap_err().contains("1-5"));
         assert!(
             parse("DYNAMIC 29 AT SPD GRP 6")
