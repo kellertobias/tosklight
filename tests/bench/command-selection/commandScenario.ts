@@ -318,7 +318,9 @@ const TOKEN_ALIASES: Readonly<Record<string, readonly SoftwareKey[]>> = {
 	DELETE: ["DEL"],
 	MOVE: ["MOV"],
 	COPY: ["CPY"],
-	UNDO: ["UND"],
+	// Undo is the shifted Escape the command line offers, not a dedicated key: not every desk
+	// carries one, and the software surface does not.
+	UNDO: ["SHIFT", "ESC", "SHIFT"],
 	PRELOAD: ["PRE"],
 	DEGRP: ["GRP", "GRP"],
 	DEGROUP: ["GRP", "GRP"],
