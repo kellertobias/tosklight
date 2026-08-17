@@ -1,24 +1,24 @@
 import { decodePlaybackSnapshot } from "../../../apps/light-desktop/src/api/playbackWire";
 import {
 	booleanAt,
+	cueNumberAt,
 	enumAt,
 	exactRecordAt,
 	integerAt,
-	numberAt,
 	opaqueStringAt,
 	positiveIntegerAt,
 	stringAt,
 } from "../../../apps/light-desktop/src/api/playbackWirePrimitives";
 import { programmingUuidAt } from "../../../apps/light-desktop/src/api/programmingWireProjection";
-import { decodeShowObjectBody } from "../../../apps/light-desktop/src/api/showObjectBodyWire";
 import { HttpShowObjectSnapshotTransport } from "../../../apps/light-desktop/src/api/ShowObjectSnapshotTransport";
-import type { ShowObject } from "../../../apps/light-desktop/src/features/showObjects/contracts";
+import { decodeShowObjectBody } from "../../../apps/light-desktop/src/api/showObjectBodyWire";
 import { WireValidationError } from "../../../apps/light-desktop/src/api/wireValidation";
+import type { ShowObject } from "../../../apps/light-desktop/src/features/showObjects/contracts";
 import type { ApiDriver, Session } from "../core/api";
 import {
 	type IntentHttpDependencies,
-	intentFetch,
 	intentContextHeaders,
+	intentFetch,
 	intentRequestId,
 	intentSession,
 	intentUrl,
@@ -32,7 +32,7 @@ export type CueDeletionAddress =
 export interface DeleteCueIntent {
 	surface: "api";
 	address: CueDeletionAddress;
-	cueNumber: number;
+	cueNumber: string;
 }
 
 interface CueDeletionProjection {
@@ -49,7 +49,7 @@ interface CueDeletionOutcomeBase {
 	showId: string;
 	showRevision: number;
 	cueList: CueDeletionProjection;
-	deletedCue: { id: string; number: number };
+	deletedCue: { id: string; number: string };
 	persistenceWarning: string | null;
 }
 
@@ -101,7 +101,7 @@ interface ResolvedCueAuthority {
 	address: Record<string, string | number>;
 	playbackNumber: number;
 	cueList: ShowObject<"cue_list">;
-	cue: { id: string; number: number };
+	cue: { id: string; number: string };
 }
 
 export async function deleteCue(
@@ -116,7 +116,7 @@ export async function deleteCue(
 	const authority = await resolveAuthority(api, session, fetch, active, intent);
 	assertCurrentSession(api, session, "before mutation");
 	const requestId = validRequestId(intentRequestId(dependencies));
-	const response = await fetch(actionUrl(api, session, active), {
+	const response = await fetch(actionUrl(api), {
 		method: "POST",
 		headers: actionHeaders(session, active.showId, active.showRevision),
 		body: JSON.stringify(actionRequest(requestId, intent, authority)),
@@ -138,19 +138,27 @@ async function loadActiveShow(
 	const path = "/api/v2/playback-runtime/snapshot";
 	const response = await fetch(intentUrl(api, path), {
 		method: "POST",
-		headers: { ...intentContextHeaders(session), "content-type": "application/json" },
+		headers: {
+			...intentContextHeaders(session),
+			"content-type": "application/json",
+		},
 		body: JSON.stringify({ identities: [] }),
 	});
 	const value = await readJson(response, "Playback runtime");
 	if (!response.ok)
-		throw new Error(`Playback runtime snapshot returned HTTP ${response.status}`);
+		throw new Error(
+			`Playback runtime snapshot returned HTTP ${response.status}`,
+		);
 	const snapshot = decodePlaybackSnapshot(value);
 	const deskId = programmingUuidAt(snapshot.desk.desk_id, "$.desk.desk_id");
 	if (!sameId(deskId, session.desk.id))
 		throw new Error(`Playback snapshot belongs to foreign desk ${deskId}`);
 	return {
 		deskId,
-		showId: programmingUuidAt(snapshot.desk.scope.show_id, "$.desk.scope.show_id"),
+		showId: programmingUuidAt(
+			snapshot.desk.scope.show_id,
+			"$.desk.scope.show_id",
+		),
 		showRevision: snapshot.desk.scope.show_revision,
 		activePage: snapshot.desk.active_page,
 	};
@@ -182,14 +190,20 @@ async function resolveAuthority(
 	])
 		if (revision != null && revision !== active.showRevision)
 			throw new Error("Show authority changed while resolving Cue deletion");
-	const resolved = resolveAddress(intent.address, active, pageSnapshot?.objects ?? []);
+	const resolved = resolveAddress(
+		intent.address,
+		active,
+		pageSnapshot?.objects ?? [],
+	);
 	const playback = unique(
 		playbacks.objects,
 		(item) => item.body.number === resolved.playbackNumber,
 		`Playback ${resolved.playbackNumber}`,
 	);
 	if (playback.body.target.type !== "cue_list")
-		throw new Error(`Playback ${resolved.playbackNumber} does not contain Cues`);
+		throw new Error(
+			`Playback ${resolved.playbackNumber} does not contain Cues`,
+		);
 	const cueListId = programmingUuidAt(
 		playback.body.target.cue_list_id,
 		"$.playback.target.cue_list_id",
@@ -219,7 +233,8 @@ function resolveAddress(
 			address: { type: "pool", playback_number: address.playbackNumber },
 			playbackNumber: address.playbackNumber,
 		};
-	const pageNumber = address.type === "current_page" ? active.activePage : address.page;
+	const pageNumber =
+		address.type === "current_page" ? active.activePage : address.page;
 	const page = unique(
 		pages,
 		(item) => item.body.number === pageNumber,
@@ -227,11 +242,17 @@ function resolveAddress(
 	);
 	const playbackNumber = page.body.slots[String(address.slot)];
 	if (playbackNumber == null)
-		throw new Error(`Playback Page ${pageNumber} slot ${address.slot} is not assigned`);
+		throw new Error(
+			`Playback Page ${pageNumber} slot ${address.slot} is not assigned`,
+		);
 	return {
 		address:
 			address.type === "current_page"
-				? { type: "current_page", expected_page: pageNumber, slot: address.slot }
+				? {
+						type: "current_page",
+						expected_page: pageNumber,
+						slot: address.slot,
+					}
 				: { type: "page_slot", page: pageNumber, slot: address.slot },
 		playbackNumber,
 	};
@@ -266,13 +287,19 @@ function decodeOutcome(
 	const tagged = exactRecordAt(value, "$", keys);
 	requireFields(tagged, keys, "$");
 	const status = enumAt(tagged.status, "$.status", ["changed", "no_change"]);
-	const decodedRequestId = opaqueStringAt(tagged.request_id, "$.request_id", 128);
+	const decodedRequestId = opaqueStringAt(
+		tagged.request_id,
+		"$.request_id",
+		128,
+	);
 	if (decodedRequestId !== requestId)
 		invalid("$.request_id", `request ${requestId}`, decodedRequestId);
 	const showId = programmingUuidAt(tagged.show_id, "$.show_id");
-	if (!sameId(showId, active.showId)) invalid("$.show_id", active.showId, showId);
+	if (!sameId(showId, active.showId))
+		invalid("$.show_id", active.showId, showId);
 	const showRevision = integerAt(tagged.show_revision, "$.show_revision");
-	const expectedShowRevision = active.showRevision + (status === "changed" ? 1 : 0);
+	const expectedShowRevision =
+		active.showRevision + (status === "changed" ? 1 : 0);
 	if (showRevision !== expectedShowRevision)
 		invalid("$.show_revision", String(expectedShowRevision), showRevision);
 	const cueList = decodeProjection(tagged.cue_list, authority, status);
@@ -300,16 +327,44 @@ function decodeOutcome(
 function outcomeKeys(value: unknown) {
 	const status = enumAt(
 		exactRecordAt(value, "$", [
-			"status", "request_id", "correlation_id", "replayed", "show_id",
-			"show_revision", "cue_list", "deleted_cue", "show_event_sequence",
+			"status",
+			"request_id",
+			"correlation_id",
+			"replayed",
+			"show_id",
+			"show_revision",
+			"cue_list",
+			"deleted_cue",
+			"show_event_sequence",
 			"persistence_warning",
 		]).status,
 		"$.status",
 		["changed", "no_change"],
 	);
 	return status === "changed"
-		? ["status", "request_id", "correlation_id", "replayed", "show_id", "show_revision", "cue_list", "deleted_cue", "show_event_sequence", "persistence_warning"]
-		: ["status", "request_id", "correlation_id", "replayed", "show_id", "show_revision", "cue_list", "deleted_cue", "persistence_warning"];
+		? [
+				"status",
+				"request_id",
+				"correlation_id",
+				"replayed",
+				"show_id",
+				"show_revision",
+				"cue_list",
+				"deleted_cue",
+				"show_event_sequence",
+				"persistence_warning",
+			]
+		: [
+				"status",
+				"request_id",
+				"correlation_id",
+				"replayed",
+				"show_id",
+				"show_revision",
+				"cue_list",
+				"deleted_cue",
+				"persistence_warning",
+			];
 }
 
 function decodeProjection(
@@ -317,29 +372,57 @@ function decodeProjection(
 	authority: ResolvedCueAuthority,
 	status: CueDeletionOutcome["status"],
 ): CueDeletionProjection {
-	const keys = [
-		"cue_list_id", "object_id", "object_revision", "body",
-	];
+	const keys = ["cue_list_id", "object_id", "object_revision", "body"];
 	const projection = exactRecordAt(value, "$.cue_list", keys);
 	requireFields(projection, keys, "$.cue_list");
-	const cueListId = programmingUuidAt(projection.cue_list_id, "$.cue_list.cue_list_id");
-	const objectId = opaqueStringAt(projection.object_id, "$.cue_list.object_id", 256);
+	const cueListId = programmingUuidAt(
+		projection.cue_list_id,
+		"$.cue_list.cue_list_id",
+	);
+	const objectId = opaqueStringAt(
+		projection.object_id,
+		"$.cue_list.object_id",
+		256,
+	);
 	if (!sameId(cueListId, authority.cueList.body.id))
 		invalid("$.cue_list.cue_list_id", authority.cueList.body.id, cueListId);
 	if (objectId !== authority.cueList.id)
 		invalid("$.cue_list.object_id", authority.cueList.id, objectId);
-	const objectRevision = integerAt(projection.object_revision, "$.cue_list.object_revision");
-	const expectedRevision = authority.cueList.revision + (status === "changed" ? 1 : 0);
+	const objectRevision = integerAt(
+		projection.object_revision,
+		"$.cue_list.object_revision",
+	);
+	const expectedRevision =
+		authority.cueList.revision + (status === "changed" ? 1 : 0);
 	if (objectRevision !== expectedRevision)
-		invalid("$.cue_list.object_revision", String(expectedRevision), objectRevision);
-	const body = decodeShowObjectBody("cue_list", projection.body, "$.cue_list.body", objectId);
-	if (!sameId(body.id, cueListId)) invalid("$.cue_list.body.id", cueListId, body.id);
+		invalid(
+			"$.cue_list.object_revision",
+			String(expectedRevision),
+			objectRevision,
+		);
+	const body = decodeShowObjectBody(
+		"cue_list",
+		projection.body,
+		"$.cue_list.body",
+		objectId,
+	);
+	if (!sameId(body.id, cueListId))
+		invalid("$.cue_list.body.id", cueListId, body.id);
 	const targetPresent = body.cues.some((cue, index) => {
-		const cueId = programmingUuidAt(cue.id, `$.cue_list.body.cues[${index}].id`);
-		return sameId(cueId, authority.cue.id) || cue.number === authority.cue.number;
+		const cueId = programmingUuidAt(
+			cue.id,
+			`$.cue_list.body.cues[${index}].id`,
+		);
+		return (
+			sameId(cueId, authority.cue.id) || cue.number === authority.cue.number
+		);
 	});
 	if (targetPresent === (status === "changed"))
-		invalid("$.cue_list.body.cues", status === "changed" ? "deleted Cue absent" : "unchanged Cue present", body.cues);
+		invalid(
+			"$.cue_list.body.cues",
+			status === "changed" ? "deleted Cue absent" : "unchanged Cue present",
+			body.cues,
+		);
 	return { cueListId, objectId, objectRevision, body };
 }
 
@@ -348,8 +431,9 @@ function decodeDeletedCue(value: unknown, authority: ResolvedCueAuthority) {
 	const cue = exactRecordAt(value, "$.deleted_cue", keys);
 	requireFields(cue, keys, "$.deleted_cue");
 	const id = programmingUuidAt(cue.id, "$.deleted_cue.id");
-	const number = numberAt(cue.number, "$.deleted_cue.number");
-	if (!sameId(id, authority.cue.id)) invalid("$.deleted_cue.id", authority.cue.id, id);
+	const number = cueNumberAt(cue.number, "$.deleted_cue.number");
+	if (!sameId(id, authority.cue.id))
+		invalid("$.deleted_cue.id", authority.cue.id, id);
 	if (number !== authority.cue.number)
 		invalid("$.deleted_cue.number", String(authority.cue.number), number);
 	return { id, number };
@@ -357,19 +441,30 @@ function decodeDeletedCue(value: unknown, authority: ResolvedCueAuthority) {
 
 function decodeActionError(response: Response, value: unknown) {
 	const keys = [
-		"kind", "error", "current_revision", "current_related_revision", "retryable",
+		"kind",
+		"error",
+		"current_revision",
+		"current_related_revision",
+		"retryable",
 	];
 	const error = exactRecordAt(value, "$", keys);
 	requireFields(error, keys, "$");
 	const kind = enumAt(error.kind, "$.kind", ERROR_KINDS);
-	const currentRevision = nullableInteger(error.current_revision, "$.current_revision");
+	const currentRevision = nullableInteger(
+		error.current_revision,
+		"$.current_revision",
+	);
 	const currentRelatedRevision = nullableInteger(
 		error.current_related_revision,
 		"$.current_related_revision",
 	);
 	const expectedStatus = statusForKind(kind);
 	if (response.status !== expectedStatus)
-		invalid("$.kind", `${kind} error for HTTP ${expectedStatus}`, response.status);
+		invalid(
+			"$.kind",
+			`${kind} error for HTTP ${expectedStatus}`,
+			response.status,
+		);
 	verifyErrorEtag(response, currentRevision);
 	return new CueDeletionActionError(
 		stringAt(error.error, "$.error"),
@@ -384,21 +479,18 @@ function decodeActionError(response: Response, value: unknown) {
 function validateIntent(intent: DeleteCueIntent) {
 	if (intent.surface !== "api")
 		throw new Error("Cue deletion helper supports only the API surface");
-	const cueNumber = numberAt(intent.cueNumber, "$.cueNumber");
-	if (cueNumber <= 0) invalid("$.cueNumber", "positive finite number", cueNumber);
+	cueNumberAt(intent.cueNumber, "$.cueNumber");
 	if (intent.address.type === "pool")
 		bounded(intent.address.playbackNumber, 1_000, "Playback");
 	else {
 		bounded(intent.address.slot, 127, "slot");
-		if (intent.address.type === "page_slot") bounded(intent.address.page, 127, "Page");
+		if (intent.address.type === "page_slot")
+			bounded(intent.address.page, 127, "Page");
 	}
 }
 
-function actionUrl(api: ApiDriver, session: Session, active: ActiveShowAuthority) {
-	return intentUrl(
-		api,
-		"/api/v2/cues/delete",
-	);
+function actionUrl(api: ApiDriver) {
+	return intentUrl(api, "/api/v2/cues/delete");
 }
 
 function actionHeaders(session: Session, showId: string, revision: number) {
@@ -413,17 +505,28 @@ function captureSession(session: Session): Session {
 	return { ...session, user: { ...session.user }, desk: { ...session.desk } };
 }
 
-function assertCurrentSession(api: ApiDriver, expected: Session, phase: string) {
+function assertCurrentSession(
+	api: ApiDriver,
+	expected: Session,
+	phase: string,
+) {
 	const current = api.session;
 	if (
-		!current || current.session_id !== expected.session_id ||
-		current.client_id !== expected.client_id || current.token !== expected.token ||
-		!sameId(current.user.id, expected.user.id) || !sameId(current.desk.id, expected.desk.id)
+		!current ||
+		current.session_id !== expected.session_id ||
+		current.client_id !== expected.client_id ||
+		current.token !== expected.token ||
+		!sameId(current.user.id, expected.user.id) ||
+		!sameId(current.desk.id, expected.desk.id)
 	)
 		throw new Error(`Cue deletion session changed ${phase}`);
 }
 
-function unique<T>(items: readonly T[], matches: (item: T) => boolean, label: string) {
+function unique<T>(
+	items: readonly T[],
+	matches: (item: T) => boolean,
+	label: string,
+) {
 	const found = items.filter(matches);
 	if (found.length !== 1)
 		throw new Error(`${label} resolved to ${found.length} stored objects`);

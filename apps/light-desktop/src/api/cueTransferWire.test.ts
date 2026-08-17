@@ -31,9 +31,9 @@ function wireOutcome() {
 			operation: "copy",
 			mode: "status",
 			source_cue_id: SOURCE_CUE_ID,
-			source_cue_number: 1,
+			source_cue_number: "1",
 			destination_cue_id: DESTINATION_CUE_ID,
-			destination_cue_number: 2,
+			destination_cue_number: "2",
 		},
 		show_revision: 8,
 		projections: [
@@ -51,7 +51,7 @@ function wireOutcome() {
 					cues: [
 						{
 							id: DESTINATION_CUE_ID,
-							number: 2,
+							number: "2",
 							name: "Transferred",
 							fade_millis: 0,
 							delay_millis: 0,

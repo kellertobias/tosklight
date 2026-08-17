@@ -1,236 +1,347 @@
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import {
+	act,
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+	within,
+} from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { HelpCatalogEntry } from "../api/types";
 import {
-  filterHelpEntries,
-  HelpMarkdown,
-  HelpNavigation,
-  HelpWindow,
-  HelpWindowView,
+	filterHelpEntries,
+	HelpMarkdown,
+	HelpNavigation,
+	HelpWindow,
+	HelpWindowView,
 } from "./HelpWindow";
 
 const helpClient = vi.hoisted(() => ({
-  helpCatalog: vi.fn(),
-  helpTopic: vi.fn(),
+	helpCatalog: vi.fn(),
+	helpTopic: vi.fn(),
 }));
 vi.mock("../api/client/api", () => ({
-  createLightApi: () => ({ help: helpClient }),
+	createLightApi: () => ({ help: helpClient }),
 }));
 
 afterEach(() => {
-  cleanup();
-  vi.useRealTimers();
-  vi.clearAllMocks();
+	cleanup();
+	vi.useRealTimers();
+	vi.clearAllMocks();
 });
 
 describe("help key rendering", () => {
-  it("resolves screenshots relative to the selected help topic", () => {
-    render(
-      <HelpMarkdown
-        markdown="![Stage](../../assets/screenshots/stage.png)"
-        topicId="30-Programmer/02-stage/details.md"
-      />,
-    );
-    expect(screen.getByRole("img", { name: "Stage" })).toHaveAttribute(
-      "src",
-      "/api/v2/help/assets/assets/screenshots/stage.png",
-    );
-  });
+	it("resolves screenshots relative to the selected help topic", () => {
+		render(
+			<HelpMarkdown
+				markdown="![Stage](../../assets/screenshots/stage.png)"
+				topicId="30-Programmer/02-stage/details.md"
+			/>,
+		);
+		expect(screen.getByRole("img", { name: "Stage" })).toHaveAttribute(
+			"src",
+			"/api/v2/help/assets/assets/screenshots/stage.png",
+		);
+	});
 
-  it("opens relative Help links through the topic navigator", () => {
-    const onSelectTopic = vi.fn();
-    render(<HelpMarkdown
-      markdown="[Command Line](../20-Programmer-and-Cues/01-command-line.md)"
-      topicId="10-Desk/30-Windows/index.md"
-      onSelectTopic={onSelectTopic}
-    />);
-    fireEvent.click(screen.getByRole("link", { name: "Command Line" }));
-    expect(onSelectTopic).toHaveBeenCalledWith("10-Desk/20-Programmer-and-Cues/01-command-line.md");
-  });
+	it("opens relative Help links through the topic navigator", () => {
+		const onSelectTopic = vi.fn();
+		render(
+			<HelpMarkdown
+				markdown="[Command Line](../20-Programmer-and-Cues/01-command-line.md)"
+				topicId="10-Desk/30-Windows/index.md"
+				onSelectTopic={onSelectTopic}
+			/>,
+		);
+		fireEvent.click(screen.getByRole("link", { name: "Command Line" }));
+		expect(onSelectTopic).toHaveBeenCalledWith(
+			"10-Desk/20-Programmer-and-Cues/01-command-line.md",
+		);
+	});
 
-  it("renders normal and numeric-range keys as keycaps", () => {
-    const { container } = render(<HelpMarkdown markdown={"[AT] [+] [0-9] [.] [CLR] [REC] [PRELD] [^GRP]"}/>);
-    expect(screen.getByText("AT", { selector: "kbd" })).toBeInTheDocument();
-    expect(screen.getByText("+", { selector: "kbd" })).toBeInTheDocument();
-    expect(screen.getByText("0-9", { selector: "kbd" })).toBeInTheDocument();
-    expect(container.querySelectorAll(".desk-key-number")).toHaveLength(2);
-    expect(container.querySelector(".desk-key-clear kbd")).toHaveTextContent("CLR");
-    expect(container.querySelector(".desk-key-record kbd")).toHaveTextContent("REC");
-    expect(container.querySelector(".desk-key-preload kbd")).toHaveTextContent("PRELD");
-    expect(container.querySelector(".desk-key-shift kbd")).toHaveTextContent("Shift");
-    expect(container.querySelector(".help-key-sequence")).toHaveTextContent("Shift+GRP");
-    expect(container.querySelector(".desk-key-command kbd")).toHaveTextContent("AT");
-  });
+	it("renders normal and numeric-range keys as keycaps", () => {
+		const { container } = render(
+			<HelpMarkdown
+				markdown={"[AT] [+] [0-9] [.] [CLR] [REC] [PRELD] [^GRP]"}
+			/>,
+		);
+		expect(screen.getByText("AT", { selector: "kbd" })).toBeInTheDocument();
+		expect(screen.getByText("+", { selector: "kbd" })).toBeInTheDocument();
+		expect(screen.getByText("0-9", { selector: "kbd" })).toBeInTheDocument();
+		expect(container.querySelectorAll(".desk-key-number")).toHaveLength(2);
+		expect(container.querySelector(".desk-key-clear kbd")).toHaveTextContent(
+			"CLR",
+		);
+		expect(container.querySelector(".desk-key-record kbd")).toHaveTextContent(
+			"REC",
+		);
+		expect(container.querySelector(".desk-key-preload kbd")).toHaveTextContent(
+			"PRELD",
+		);
+		expect(container.querySelector(".desk-key-shift kbd")).toHaveTextContent(
+			"Shift",
+		);
+		expect(container.querySelector(".help-key-sequence")).toHaveTextContent(
+			"Shift+GRP",
+		);
+		expect(container.querySelector(".desk-key-command kbd")).toHaveTextContent(
+			"AT",
+		);
+	});
 
-  it("labels held and optional keycaps", () => {
-    const { container } = render(<HelpMarkdown markdown={"[CLR+] [GRP*]"}/>);
-    const held = container.querySelector(".help-key.held") as HTMLElement;
-    const optional = container.querySelector(".help-key.optional") as HTMLElement;
-    expect(within(held).getByText("CLR", { selector: "kbd" })).toBeInTheDocument();
-    expect(within(held).getByText("hold")).toBeInTheDocument();
-    expect(within(optional).getByText("GRP", { selector: "kbd" })).toBeInTheDocument();
-    expect(within(optional).getByText("optional")).toBeInTheDocument();
-  });
+	it("labels held and optional keycaps", () => {
+		const { container } = render(<HelpMarkdown markdown={"[CLR+] [GRP*]"} />);
+		const held = container.querySelector(".help-key.held") as HTMLElement;
+		const optional = container.querySelector(
+			".help-key.optional",
+		) as HTMLElement;
+		expect(
+			within(held).getByText("CLR", { selector: "kbd" }),
+		).toBeInTheDocument();
+		expect(within(held).getByText("hold")).toBeInTheDocument();
+		expect(
+			within(optional).getByText("GRP", { selector: "kbd" }),
+		).toBeInTheDocument();
+		expect(within(optional).getByText("optional")).toBeInTheDocument();
+	});
 
-  it("visually distinguishes computer keyboard keys", () => {
-    const { container } = render(<HelpMarkdown markdown={"[KBD:ENTER] presses [ENT]"}/>);
-    const keyboard = container.querySelector(".help-key.keyboard-key") as HTMLElement;
-    expect(within(keyboard).getByText("keyboard")).toBeInTheDocument();
-    expect(within(keyboard).getByText("ENTER", { selector: "kbd" })).toBeInTheDocument();
-    expect(screen.getByText("ENT", { selector: "kbd" })).toBeInTheDocument();
-  });
+	it("visually distinguishes computer keyboard keys", () => {
+		const { container } = render(
+			<HelpMarkdown markdown={"[KBD:ENTER] presses [ENT]"} />,
+		);
+		const keyboard = container.querySelector(
+			".help-key.keyboard-key",
+		) as HTMLElement;
+		expect(within(keyboard).getByText("keyboard")).toBeInTheDocument();
+		expect(
+			within(keyboard).getByText("ENTER", { selector: "kbd" }),
+		).toBeInTheDocument();
+		expect(screen.getByText("ENT", { selector: "kbd" })).toBeInTheDocument();
+	});
 
-  it("renders Obsidian danger blocks as labelled callouts", () => {
-    const { container } = render(<HelpMarkdown markdown={"> [!warning] Missing graphic\n> Add an ownership diagram with **labels**."}/>);
-    const callout = container.querySelector("aside.help-callout-danger") as HTMLElement;
-    expect(callout).toHaveAttribute("data-callout", "danger");
-    expect(within(callout).getByText("Missing graphic", { selector: "strong" })).toBeInTheDocument();
-    expect(within(callout).getByText(/Add an ownership diagram with/)).toBeInTheDocument();
-    expect(callout).not.toHaveTextContent("[!danger]");
-  });
+	it("renders Obsidian warning blocks as labelled callouts", () => {
+		const { container } = render(
+			<HelpMarkdown
+				markdown={
+					"> [!warning] Missing graphic\n> Add an ownership diagram with **labels**."
+				}
+			/>,
+		);
+		const callout = container.querySelector(
+			"aside.help-callout-warning",
+		) as HTMLElement;
+		expect(callout).toHaveAttribute("data-callout", "warning");
+		expect(
+			within(callout).getByText("Missing graphic", { selector: "strong" }),
+		).toBeInTheDocument();
+		expect(
+			within(callout).getByText(/Add an ownership diagram with/),
+		).toBeInTheDocument();
+		expect(callout).not.toHaveTextContent("[!warning]");
+	});
 });
 
 describe("help navigation", () => {
-  const entries: HelpCatalogEntry[] = [{
-    id: "00-quickstart.markdown",
-    title: "Quickstart",
-    kind: "topic",
-    children: [],
-  }, {
-    id: "01-Show-Setup/index.md",
-    title: "Show Setup",
-    kind: "folder",
-    children: [{
-      id: "01-Show-Setup/01-fixtures-patch.md",
-      title: "Fixtures & Patch",
-      kind: "topic",
-      children: [],
-    }],
-  }];
+	const entries: HelpCatalogEntry[] = [
+		{
+			id: "00-quickstart.markdown",
+			title: "Quickstart",
+			kind: "topic",
+			children: [],
+		},
+		{
+			id: "01-Show-Setup/index.md",
+			title: "Show Setup",
+			kind: "folder",
+			children: [
+				{
+					id: "01-Show-Setup/01-fixtures-patch.md",
+					title: "Fixtures & Patch",
+					kind: "topic",
+					children: [],
+				},
+			],
+		},
+	];
 
-  it("opens a folder index from its title and expands only from its chevron", () => {
-    const onSelect = vi.fn();
-    const { rerender } = render(<nav><HelpNavigation entries={entries} expanded={new Set()} selected={null} onSelect={onSelect} onToggle={vi.fn()}/></nav>);
+	it("opens a folder index from its title and expands only from its chevron", () => {
+		const onSelect = vi.fn();
+		const { rerender } = render(
+			<nav>
+				<HelpNavigation
+					entries={entries}
+					expanded={new Set()}
+					selected={null}
+					onSelect={onSelect}
+					onToggle={vi.fn()}
+				/>
+			</nav>,
+		);
 
-    expect(screen.queryByRole("button", { name: "Expand Quickstart" })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Show Setup" }));
-    expect(onSelect).toHaveBeenCalledWith("01-Show-Setup/index.md");
-    expect(screen.queryByRole("button", { name: "Fixtures & Patch" })).not.toBeInTheDocument();
+		expect(
+			screen.queryByRole("button", { name: "Expand Quickstart" }),
+		).not.toBeInTheDocument();
+		fireEvent.click(screen.getByRole("button", { name: "Show Setup" }));
+		expect(onSelect).toHaveBeenCalledWith("01-Show-Setup/index.md");
+		expect(
+			screen.queryByRole("button", { name: "Fixtures & Patch" }),
+		).not.toBeInTheDocument();
 
-    const onToggle = vi.fn();
-    fireEvent.click(screen.getByRole("button", { name: "Expand Show Setup" }));
-    rerender(<nav><HelpNavigation entries={entries} expanded={new Set(["01-Show-Setup/index.md"])} selected={null} onSelect={onSelect} onToggle={onToggle}/></nav>);
+		const onToggle = vi.fn();
+		fireEvent.click(screen.getByRole("button", { name: "Expand Show Setup" }));
+		rerender(
+			<nav>
+				<HelpNavigation
+					entries={entries}
+					expanded={new Set(["01-Show-Setup/index.md"])}
+					selected={null}
+					onSelect={onSelect}
+					onToggle={onToggle}
+				/>
+			</nav>,
+		);
 
-    expect(screen.getByRole("button", { name: "Collapse Show Setup" })).toHaveAttribute("aria-expanded", "true");
-    const child = screen.getByRole("button", { name: "Fixtures & Patch" });
-    expect(child.closest(".help-nav-row")).toHaveStyle({ paddingLeft: "28px" });
-  });
+		expect(
+			screen.getByRole("button", { name: "Collapse Show Setup" }),
+		).toHaveAttribute("aria-expanded", "true");
+		const child = screen.getByRole("button", { name: "Fixtures & Patch" });
+		expect(child.closest(".help-nav-row")).toHaveStyle({ paddingLeft: "28px" });
+	});
 
-  it("filters nested topics while retaining their real folder hierarchy", () => {
-    expect(filterHelpEntries(entries, "fixtures")).toEqual([{
-      ...entries[1],
-      children: [entries[1].children[0]],
-    }]);
-    expect(filterHelpEntries(entries, "show setup")).toEqual([entries[1]]);
-    expect(filterHelpEntries(entries, "missing")).toEqual([]);
-  });
+	it("filters nested topics while retaining their real folder hierarchy", () => {
+		expect(filterHelpEntries(entries, "fixtures")).toEqual([
+			{
+				...entries[1],
+				children: [entries[1].children[0]],
+			},
+		]);
+		expect(filterHelpEntries(entries, "show setup")).toEqual([entries[1]]);
+		expect(filterHelpEntries(entries, "missing")).toEqual([]);
+	});
 
-  it("uses typed window search and preserves a clear empty-result state", () => {
-    function SearchableHelp() {
-      const [query, setQuery] = useState("");
-      return <HelpWindowView
-        catalog={{ topics: entries, errors: [], live: true }}
-        onQueryChange={setQuery}
-        onSelect={vi.fn()}
-        query={query}
-        selected={null}
-        topic={null}
-      />;
-    }
-    render(<SearchableHelp />);
-    expect(screen.getByText("Live documentation")).toBeInTheDocument();
-    fireEvent.change(screen.getByRole("textbox", { name: "Search Help" }), { target: { value: "Fixtures" } });
-    expect(screen.queryByRole("button", { name: "Quickstart" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Show Setup" })).toBeInTheDocument();
-    fireEvent.change(screen.getByRole("textbox", { name: "Search Help" }), { target: { value: "No such topic" } });
-    expect(screen.getByText("No matching help topics.")).toBeInTheDocument();
-  });
+	it("uses typed window search and preserves a clear empty-result state", () => {
+		function SearchableHelp() {
+			const [query, setQuery] = useState("");
+			return (
+				<HelpWindowView
+					catalog={{ topics: entries, errors: [], live: true }}
+					onQueryChange={setQuery}
+					onSelect={vi.fn()}
+					query={query}
+					selected={null}
+					topic={null}
+				/>
+			);
+		}
+		render(<SearchableHelp />);
+		expect(screen.getByText("Live documentation")).toBeInTheDocument();
+		fireEvent.change(screen.getByRole("textbox", { name: "Search Help" }), {
+			target: { value: "Fixtures" },
+		});
+		expect(
+			screen.queryByRole("button", { name: "Quickstart" }),
+		).not.toBeInTheDocument();
+		expect(
+			screen.getByRole("button", { name: "Show Setup" }),
+		).toBeInTheDocument();
+		fireEvent.change(screen.getByRole("textbox", { name: "Search Help" }), {
+			target: { value: "No such topic" },
+		});
+		expect(screen.getByText("No matching help topics.")).toBeInTheDocument();
+	});
 
-  it("centers illustrated loading and empty states in the topic pane", () => {
-    const props = {
-      onQueryChange: vi.fn(),
-      onSelect: vi.fn(),
-      query: "",
-      selected: null,
-      topic: null,
-    };
-    const { container, rerender } = render(
-      <HelpWindowView {...props} catalog={null} loading />,
-    );
-    expect(screen.getByRole("status")).toHaveTextContent("Loading help");
-    expect(container.querySelector(".help-state-icon")).toBeInTheDocument();
-    expect(container.querySelector(".help-topic-pane.empty")).toBeInTheDocument();
+	it("centers illustrated loading and empty states in the topic pane", () => {
+		const props = {
+			onQueryChange: vi.fn(),
+			onSelect: vi.fn(),
+			query: "",
+			selected: null,
+			topic: null,
+		};
+		const { container, rerender } = render(
+			<HelpWindowView {...props} catalog={null} loading />,
+		);
+		expect(screen.getByRole("status")).toHaveTextContent("Loading help");
+		expect(container.querySelector(".help-state-icon")).toBeInTheDocument();
+		expect(
+			container.querySelector(".help-topic-pane.empty"),
+		).toBeInTheDocument();
 
-    rerender(
-      <HelpWindowView
-        {...props}
-        catalog={{ topics: [], errors: [], live: false }}
-      />,
-    );
-    expect(screen.getByRole("status")).toHaveTextContent("No help topics found");
-    expect(container.querySelector(".help-state-icon")).toBeInTheDocument();
-  });
+		rerender(
+			<HelpWindowView
+				{...props}
+				catalog={{ topics: [], errors: [], live: false }}
+			/>,
+		);
+		expect(screen.getByRole("status")).toHaveTextContent(
+			"No help topics found",
+		);
+		expect(container.querySelector(".help-state-icon")).toBeInTheDocument();
+	});
 
-  it("renders catalog warnings as illustrated warning cards", () => {
-    const { container } = render(
-      <HelpWindowView
-        catalog={{
-          topics: entries,
-          errors: ["One optional topic could not be indexed."],
-          live: false,
-        }}
-        onQueryChange={vi.fn()}
-        onSelect={vi.fn()}
-        query=""
-        selected={null}
-        topic={null}
-      />,
-    );
-    const warning = screen.getByRole("status");
-    expect(warning).toHaveClass("help-catalog-warning");
-    expect(warning).toHaveTextContent("Help catalog warning");
-    expect(warning).toHaveTextContent("One optional topic could not be indexed.");
-    expect(container.querySelector(".help-catalog-warning > svg")).toBeInTheDocument();
-  });
+	it("renders catalog warnings as illustrated warning cards", () => {
+		const { container } = render(
+			<HelpWindowView
+				catalog={{
+					topics: entries,
+					errors: ["One optional topic could not be indexed."],
+					live: false,
+				}}
+				onQueryChange={vi.fn()}
+				onSelect={vi.fn()}
+				query=""
+				selected={null}
+				topic={null}
+			/>,
+		);
+		const warning = screen.getByRole("status");
+		expect(warning).toHaveClass("help-catalog-warning");
+		expect(warning).toHaveTextContent("Help catalog warning");
+		expect(warning).toHaveTextContent(
+			"One optional topic could not be indexed.",
+		);
+		expect(
+			container.querySelector(".help-catalog-warning > svg"),
+		).toBeInTheDocument();
+	});
 });
 
 describe("live Help adapter", () => {
-  it("loads the catalog and selected topic, then refreshes live documentation", async () => {
-    vi.useFakeTimers();
-    const catalog = {
-      topics: [{ id: "00-quickstart.md", title: "Quickstart", kind: "topic" as const, children: [] }],
-      errors: [],
-      live: true,
-    };
-    helpClient.helpCatalog.mockResolvedValue(catalog);
-    helpClient.helpTopic.mockResolvedValue({
-      id: "00-quickstart.md",
-      title: "Quickstart",
-      markdown: "# Quickstart",
-      live: true,
-    });
+	it("loads the catalog and selected topic, then refreshes live documentation", async () => {
+		vi.useFakeTimers();
+		const catalog = {
+			topics: [
+				{
+					id: "00-quickstart.md",
+					title: "Quickstart",
+					kind: "topic" as const,
+					children: [],
+				},
+			],
+			errors: [],
+			live: true,
+		};
+		helpClient.helpCatalog.mockResolvedValue(catalog);
+		helpClient.helpTopic.mockResolvedValue({
+			id: "00-quickstart.md",
+			title: "Quickstart",
+			markdown: "# Quickstart",
+			live: true,
+		});
 
-    render(<HelpWindow />);
-    await act(async () => undefined);
-    await act(async () => undefined);
-    expect(helpClient.helpCatalog).toHaveBeenCalledOnce();
-    expect(helpClient.helpTopic).toHaveBeenCalledWith("00-quickstart.md");
-    expect(screen.getByRole("heading", { name: "Quickstart" })).toBeInTheDocument();
+		render(<HelpWindow />);
+		await act(async () => undefined);
+		await act(async () => undefined);
+		expect(helpClient.helpCatalog).toHaveBeenCalledOnce();
+		expect(helpClient.helpTopic).toHaveBeenCalledWith("00-quickstart.md");
+		expect(
+			screen.getByRole("heading", { name: "Quickstart" }),
+		).toBeInTheDocument();
 
-    await act(() => vi.advanceTimersByTimeAsync(1_000));
-    await act(async () => undefined);
-    expect(helpClient.helpCatalog).toHaveBeenCalledTimes(2);
-    expect(helpClient.helpTopic).toHaveBeenCalledTimes(2);
-  });
+		await act(() => vi.advanceTimersByTimeAsync(1_000));
+		await act(async () => undefined);
+		expect(helpClient.helpCatalog).toHaveBeenCalledTimes(2);
+		expect(helpClient.helpTopic).toHaveBeenCalledTimes(2);
+	});
 });

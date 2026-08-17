@@ -73,8 +73,6 @@ describe("Programmer defaults", () => {
 			...defaultUpdateSettings,
 			show_update_modal_on_touch: false,
 		});
-		expect(
-			screen.getByRole("button", { name: /Add to Current Cue/ }),
-		).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "Update" })).toBeInTheDocument();
 	});
 });

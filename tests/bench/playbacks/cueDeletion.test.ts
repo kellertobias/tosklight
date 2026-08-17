@@ -35,7 +35,7 @@ describe("Cue deletion acceptance intent", () => {
 				objectId: "stored-cuelist",
 				objectRevision: 5,
 			},
-			deletedCue: { id: CUE_TWO_ID, number: 2 },
+			deletedCue: { id: CUE_TWO_ID, number: "2" },
 			showEventSequence: 21,
 			replayed: false,
 			persistenceWarning: null,
@@ -49,7 +49,7 @@ describe("Cue deletion acceptance intent", () => {
 		expect(JSON.parse(String(init?.body))).toEqual({
 			request_id: REQUEST_ID,
 			address: { type: "pool", playback_number: 1 },
-			cue_number: 2,
+			cue_number: "2",
 			authority: {
 				playback_number: 1,
 				cue_list_id: CUE_LIST_ID,
@@ -66,7 +66,7 @@ describe("Cue deletion acceptance intent", () => {
 			{
 				surface: "api",
 				address: { type: "current_page", slot: 3 },
-				cueNumber: 2,
+				cueNumber: "2",
 			},
 			{ type: "current_page", expected_page: 1, slot: 3 },
 		],
@@ -75,7 +75,7 @@ describe("Cue deletion acceptance intent", () => {
 			{
 				surface: "api",
 				address: { type: "page_slot", page: 1, slot: 3 },
-				cueNumber: 2,
+				cueNumber: "2",
 			},
 			{ type: "page_slot", page: 1, slot: 3 },
 		],
@@ -176,7 +176,7 @@ describe("Cue deletion acceptance intent", () => {
 				...changedOutcome(),
 				cue_list: { ...projection(), cue_list_id: crypto.randomUUID() },
 			},
-			{ ...changedOutcome(), deleted_cue: { id: CUE_ONE_ID, number: 2 } },
+			{ ...changedOutcome(), deleted_cue: { id: CUE_ONE_ID, number: "2" } },
 			without(changedOutcome(), "show_event_sequence"),
 			{ ...changedOutcome(), persistence_warning: { message: "bad" } },
 			{ ...changedOutcome(), legacy_payload: {} },
@@ -247,7 +247,7 @@ function poolIntent(): DeleteCueIntent {
 	return {
 		surface: "api",
 		address: { type: "pool", playbackNumber: 1 },
-		cueNumber: 2,
+		cueNumber: "2",
 	};
 }
 
@@ -392,14 +392,14 @@ function cueListBody(withDeletedCue: boolean) {
 		mode: "sequence",
 		looped: false,
 		cues: [
-			cue(CUE_ONE_ID, 1),
-			...(withDeletedCue ? [cue(CUE_TWO_ID, 2)] : []),
-			cue(CUE_THREE_ID, 3),
+			cue(CUE_ONE_ID, "1"),
+			...(withDeletedCue ? [cue(CUE_TWO_ID, "2")] : []),
+			cue(CUE_THREE_ID, "3"),
 		],
 	};
 }
 
-function cue(id: string, number: number) {
+function cue(id: string, number: string) {
 	return {
 		id,
 		number,
@@ -421,7 +421,7 @@ function changedOutcome() {
 		show_id: SHOW_ID,
 		show_revision: 8,
 		cue_list: projection(),
-		deleted_cue: { id: CUE_TWO_ID, number: 2 },
+		deleted_cue: { id: CUE_TWO_ID, number: "2" },
 		show_event_sequence: 21,
 		persistence_warning: null,
 	};
@@ -436,7 +436,7 @@ function noChangeOutcome() {
 		show_id: SHOW_ID,
 		show_revision: 7,
 		cue_list: projection(4, true),
-		deleted_cue: { id: CUE_TWO_ID, number: 2 },
+		deleted_cue: { id: CUE_TWO_ID, number: "2" },
 		persistence_warning: "persistence retry queued",
 	};
 }

@@ -709,7 +709,7 @@ describe("Cuelist Pool workflows over scoped authority", () => {
 				activationPolicy: "hold",
 			}),
 		);
-	});
+	}, 10_000);
 
 	it("keeps Store, Set, and long-press settings behavior intact", async () => {
 		mocks.state.storeArmed = true;

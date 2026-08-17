@@ -99,7 +99,7 @@ describe("buildRunningRows", () => {
 			kind: "cue_list",
 			number: 4,
 			name: "Act One",
-			cueNumber: 5,
+			cueNumber: "5",
 		});
 		rows[0]?.off();
 		expect(release).toHaveBeenCalledTimes(1);

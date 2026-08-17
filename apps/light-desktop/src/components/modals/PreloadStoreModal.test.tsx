@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PreloadStoreModal } from "./PreloadStoreModal";
 
@@ -90,7 +96,7 @@ describe("PreloadStoreModal", () => {
 		expect(mocks.recordCue).toHaveBeenCalledWith({
 			target: { kind: "cue_list", cueListId: CUE_LIST_ID },
 			operation: "overwrite",
-			cueNumber: 2.5,
+			cueNumber: "2.5",
 			timing: {},
 			cueOnly: false,
 			name: "Look",

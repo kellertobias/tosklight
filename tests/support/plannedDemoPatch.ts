@@ -470,7 +470,9 @@ function layerFor(
 							? "Sparklers"
 							: entry.roles.includes("Flame Jets")
 								? "Flame Jets"
-								: entry.family === "profile"
+								: entry.roles.includes("Kabuki Curtains")
+									? "Kabuki Curtain"
+									: entry.family === "profile"
 										? `Profile ${location}`
 										: entry.family === "wash"
 											? `Wash ${location}`

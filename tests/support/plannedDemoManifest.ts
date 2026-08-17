@@ -1,5 +1,5 @@
-export const PLANNED_DEMO_CONTROL_FIXTURES = 253;
-export const PLANNED_DEMO_PHYSICAL_INSTANCES = 286;
+export const PLANNED_DEMO_CONTROL_FIXTURES = 254;
+export const PLANNED_DEMO_PHYSICAL_INSTANCES = 287;
 
 export type DemoLocation = "stage" | "audience" | "aux";
 export type DemoFamily = "profile" | "wash" | "led";
@@ -104,6 +104,12 @@ const PROFILES = {
 		"Flame Jet",
 		"Intensity, Height, Colour",
 		"generic--flame-jet.toskfixture",
+	),
+	kabuki: profile(
+		"Generic",
+		"Kabuki Curtain",
+		"1-channel Release / Reset",
+		"generic--kabuki-curtain.toskfixture",
 	),
 } as const;
 
@@ -253,6 +259,7 @@ export const PLANNED_DEMO_FIXTURES: readonly DemoFixtureManifestEntry[] = [
 	),
 	...namedRange(1201, 6, "Sparkler", PROFILES.sparkler, ["Sparklers"]),
 	...namedRange(1301, 3, "Flame Jet", PROFILES.flameJet, ["Flame Jets"]),
+	fixture(1401, "Kabuki Curtain", PROFILES.kabuki, ["Kabuki Curtains"]),
 ];
 
 export const PLANNED_DEMO_FIRST_LEVEL_GROUPS = [

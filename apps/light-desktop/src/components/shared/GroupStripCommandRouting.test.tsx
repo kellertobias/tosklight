@@ -191,7 +191,7 @@ describe("GroupStrip action routing", () => {
 		view.rerender(<GroupStrip />);
 		shortcut = screen.getByText("Shortcut Group").closest("button")!;
 		expect(shortcut).toHaveClass("delete-target");
-		expect(shortcut).toHaveTextContent("Delete");
+		expect(shortcut).toHaveTextContent("DELETE");
 		fireEvent.click(shortcut);
 		await waitFor(() =>
 			expect(mocks.executeCommand).toHaveBeenCalledWith("DELETE GROUP 1"),

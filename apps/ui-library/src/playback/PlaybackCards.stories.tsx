@@ -250,13 +250,13 @@ function ConfigurablePlaybackExample(args: ConfigurablePlaybackStoryProps) {
 						cueRows:
 							args.mode === "hardware" && args.kind === "cue-list" ? (
 								<HardwareCueRowsView
-									previous={{ number: 3, name: "Previous" }}
+									previous={{ number: "3", name: "Previous" }}
 									current={{
-										number: 4,
+										number: "4",
 										name: args.summaryLabel,
 										fadeMillis: 3200,
 									}}
-									next={{ number: 5, name: "Next" }}
+									next={{ number: "5", name: "Next" }}
 									progress={args.progress}
 								/>
 							) : undefined,
@@ -347,17 +347,18 @@ function bankModel({
 				: mode === "hardware" && faderRow && exampleIndex === 2
 					? { physicalPosition: 0.5, pickupTarget: 0.75 }
 					: undefined,
-		actions: assigned && !labelOnly
-			? actionModels(
-					buttonCount,
-					[
-						exampleIndex === 2 ? "PAUSE" : "GO −",
-						exampleIndex === 2 ? "TAP" : "GO +",
-						"FLASH",
-					],
-					activeButton,
-				)
-			: [],
+		actions:
+			assigned && !labelOnly
+				? actionModels(
+						buttonCount,
+						[
+							exampleIndex === 2 ? "PAUSE" : "GO −",
+							exampleIndex === 2 ? "TAP" : "GO +",
+							"FLASH",
+						],
+						activeButton,
+					)
+				: [],
 	};
 }
 
@@ -405,13 +406,13 @@ function PlaybackGroupExample({
 			cueRows:
 				mode === "hardware" && model.kind === "cue-list" ? (
 					<HardwareCueRowsView
-						previous={{ number: 3, name: "House Open" }}
+						previous={{ number: "3", name: "House Open" }}
 						current={{
-							number: 4,
+							number: "4",
 							name: "Mephisto Stage Center",
 							fadeMillis: 2500,
 						}}
-						next={{ number: 5, name: "Stage Blackout" }}
+						next={{ number: "5", name: "Stage Blackout" }}
 						nextLoaded={loaded}
 						progress={0.46}
 					/>

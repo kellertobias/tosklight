@@ -527,7 +527,7 @@ describe("scoped Group activation", () => {
 		);
 	});
 
-	it("arms a Group Master assignment when SET is followed by a Group Pool card", async () => {
+	it("arms a Group Master assignment when Assign is followed by a Group Pool card", async () => {
 		mocks.state.controlMode = "playbacks";
 		mocks.state.playbackSetArmed = true;
 		const context = harness();
@@ -544,7 +544,7 @@ describe("scoped Group activation", () => {
 		await waitFor(() =>
 			expect(mocks.replaceCommandLine).toHaveBeenCalledWith(
 				DESK_ID,
-				"SET GROUP 21",
+				"ASSIGN GROUP 21",
 				expect.any(Number),
 			),
 		);

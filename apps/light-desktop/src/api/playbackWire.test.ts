@@ -49,7 +49,7 @@ describe("Playback wire validation", () => {
 			active_trigger: {
 				cue: {
 					id: "55555555-5555-4555-8555-555555555555",
-					number: 2,
+					number: "2",
 				},
 				kind: "wait",
 				started_at: "2026-08-08T12:00:02Z",
@@ -256,8 +256,8 @@ describe("Playback wire validation", () => {
 						transition: {
 							playback_number: 1,
 							cue_list_id: CUE_LIST_ID,
-							previous: { id: "cue-source", number: 1 },
-							current: { id: "cue-destination", number: 12 },
+							previous: { id: "cue-source", number: "1" },
+							current: { id: "cue-destination", number: "12" },
 							cause: "link",
 							transition_ordinal: 9,
 							advanced_steps: 1,
@@ -272,8 +272,8 @@ describe("Playback wire validation", () => {
 				type: "runtime",
 				transition: {
 					cause: "link",
-					previous: { id: "cue-source", number: 1 },
-					current: { id: "cue-destination", number: 12 },
+					previous: { id: "cue-source", number: "1" },
+					current: { id: "cue-destination", number: "12" },
 				},
 			},
 		});

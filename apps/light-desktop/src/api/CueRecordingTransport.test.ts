@@ -32,7 +32,7 @@ function changedOutcome() {
 		replayed: false,
 		captured_source: "normal",
 		show_revision: 8,
-		recorded_cue: { id: CUE_ID, number: 1, deleted: false },
+		recorded_cue: { id: CUE_ID, number: "1", deleted: false },
 		projections: {
 			cue_list: {
 				id: CUE_LIST_ID,
@@ -46,7 +46,7 @@ function changedOutcome() {
 					cues: [
 						{
 							id: CUE_ID,
-							number: 1,
+							number: "1",
 							name: "Opening",
 							fade_millis: 1000,
 							delay_millis: 0,
@@ -66,11 +66,7 @@ function changedOutcome() {
 	};
 }
 
-function jsonResponse(
-	value: unknown,
-	status: number,
-	etag?: string,
-) {
+function jsonResponse(value: unknown, status: number, etag?: string) {
 	return new Response(JSON.stringify(value), {
 		status,
 		headers: {
@@ -94,16 +90,16 @@ describe("Cue recording v2 HTTP adapter", () => {
 		});
 		expect(fetchMock).not.toHaveBeenCalled();
 
-		await expect(transport.record(SHOW_ID, 7, request())).resolves.toMatchObject({
+		await expect(
+			transport.record(SHOW_ID, 7, request()),
+		).resolves.toMatchObject({
 			status: "changed",
 			showRevision: 8,
 		});
 
 		expect(fetchMock).toHaveBeenCalledOnce();
 		const [url, init] = fetchMock.mock.calls[0];
-		expect(String(url)).toBe(
-			"http://desk.local/api/v2/cues/record",
-		);
+		expect(String(url)).toBe("http://desk.local/api/v2/cues/record");
 		expect(init?.method).toBe("POST");
 		const headers = init?.headers as Headers;
 		expect(headers.get("authorization")).toBe("Bearer session-token");
@@ -115,7 +111,7 @@ describe("Cue recording v2 HTTP adapter", () => {
 			request_id: REQUEST_ID,
 			target: { kind: "cue_list", cue_list_id: CUE_LIST_ID },
 			operation: "merge",
-			cue_number: 1,
+			cue_number: "1",
 			timing: { fade_millis: 1000 },
 			cue_only: true,
 			name: null,
@@ -160,13 +156,15 @@ describe("Cue recording v2 HTTP adapter", () => {
 			) as typeof fetch,
 		});
 
-		await expect(transport.record(SHOW_ID, 7, request())).rejects.toMatchObject({
-			name: "CueRecordingActionError",
-			kind: "conflict",
-			status: 409,
-			currentRevision: 9,
-			retryable: false,
-		});
+		await expect(transport.record(SHOW_ID, 7, request())).rejects.toMatchObject(
+			{
+				name: "CueRecordingActionError",
+				kind: "conflict",
+				status: 409,
+				currentRevision: 9,
+				retryable: false,
+			},
+		);
 	});
 
 	it("rejects missing or mismatched success and conflict ETags", async () => {
@@ -189,9 +187,9 @@ describe("Cue recording v2 HTTP adapter", () => {
 				sessionToken: "session-token",
 				fetch: vi.fn(async () => response) as typeof fetch,
 			});
-			await expect(transport.record(SHOW_ID, 7, request())).rejects.toBeInstanceOf(
-				WireValidationError,
-			);
+			await expect(
+				transport.record(SHOW_ID, 7, request()),
+			).rejects.toBeInstanceOf(WireValidationError);
 		}
 	});
 
@@ -216,8 +214,9 @@ describe("Cue recording v2 HTTP adapter", () => {
 		const malformed = new HttpCueRecordingTransport({
 			baseUrl: "http://desk.local",
 			sessionToken: "session-token",
-			fetch: vi.fn(async () => new Response("gateway broke", { status: 502 })) as
-				typeof fetch,
+			fetch: vi.fn(
+				async () => new Response("gateway broke", { status: 502 }),
+			) as typeof fetch,
 		});
 		await expect(malformed.record(SHOW_ID, 7, request())).rejects.toEqual(
 			expect.objectContaining({

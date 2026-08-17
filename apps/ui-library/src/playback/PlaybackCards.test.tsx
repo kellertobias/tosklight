@@ -6,8 +6,8 @@ import {
 	hardwarePickupGeometry,
 	PLAYBACK_CARD_DEFAULT_COLORS,
 	PlaybackBankView,
-	playbackCardColor,
 	type PlaybackCardViewModel,
+	playbackCardColor,
 	TouchPlaybackCardView,
 } from "./PlaybackCards";
 
@@ -72,9 +72,9 @@ describe("playback card views", () => {
 				model={model}
 				cueRows={
 					<HardwareCueRowsView
-						previous={{ number: 3, name: "Look" }}
-						current={{ number: 4, name: "Solo", fadeMillis: 2500 }}
-						next={{ number: 5, name: "Blackout" }}
+						previous={{ number: "3", name: "Look" }}
+						current={{ number: "4", name: "Solo", fadeMillis: 2500 }}
+						next={{ number: "5", name: "Blackout" }}
 						progress={0.5}
 					/>
 				}
@@ -249,7 +249,9 @@ describe("playback card views", () => {
 				}}
 			/>,
 		);
-		const card = document.querySelector('[data-ui-component="touch-playback-card"]');
+		const card = document.querySelector(
+			'[data-ui-component="touch-playback-card"]',
+		);
 		expect(card).toHaveAttribute("data-playback-kind", "dynamic");
 		expect(card).toHaveAttribute("data-button-count", "2");
 		expect(card).toHaveAttribute("data-has-fader", "true");
@@ -262,7 +264,9 @@ describe("playback card views", () => {
 		expect(screen.getByText("2.3")).toBeInTheDocument();
 		expect(screen.getByText("120 BPM")).toBeInTheDocument();
 		expect(screen.getByLabelText("Beat 3 of 4")).toBeInTheDocument();
-		expect(document.querySelectorAll(".playback-beat-track > b")).toHaveLength(4);
+		expect(document.querySelectorAll(".playback-beat-track > b")).toHaveLength(
+			4,
+		);
 		expect(
 			document.querySelectorAll('.playback-beat-track > b[data-active="true"]'),
 		).toHaveLength(1);
@@ -279,7 +283,9 @@ describe("playback card views", () => {
 				}}
 			/>,
 		);
-		const card = document.querySelector('[data-ui-component="touch-playback-card"]');
+		const card = document.querySelector(
+			'[data-ui-component="touch-playback-card"]',
+		);
 		expect(card).toHaveAttribute("data-has-fader", "false");
 		expect(screen.queryByRole("slider")).not.toBeInTheDocument();
 		expect(document.querySelector(".playback-empty-body")).toBeInTheDocument();
@@ -370,9 +376,9 @@ describe("playback card views", () => {
 			/>,
 		);
 		expect(screen.getByRole("status")).toHaveTextContent("LOADED");
-		expect(document.querySelector(".playback-summary-loaded")).toHaveTextContent(
-			"LOADED",
-		);
+		expect(
+			document.querySelector(".playback-summary-loaded"),
+		).toHaveTextContent("LOADED");
 		expect(screen.queryByText("3.2s")).not.toBeInTheDocument();
 		expect(document.querySelector(".playback-status-loaded")).toBeNull();
 		rendered.rerender(

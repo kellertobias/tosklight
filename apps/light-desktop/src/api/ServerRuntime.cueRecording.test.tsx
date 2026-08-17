@@ -8,6 +8,7 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useCueRecording } from "../features/cueRecording/CueRecordingProvider";
 import type { CueRecordingRequest } from "../features/cueRecording/contracts";
+import { useBootstrapSnapshot } from "../features/deskSnapshot/DeskSnapshotState";
 import type {
 	ShowObject,
 	ShowObjectKind,
@@ -21,7 +22,6 @@ import { useShowObjectKindsView } from "../features/showObjects/ShowObjectsView"
 import type { ShowObjectsEventObserver } from "../features/showObjects/transport";
 import { PlaybackApiClient } from "./client/playback";
 import { LightClientRuntime } from "./client/runtime";
-import { useBootstrapSnapshot } from "../features/deskSnapshot/DeskSnapshotState";
 import { ServerRuntime } from "./ServerRuntime";
 
 const SHOW_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -318,7 +318,7 @@ describe("ServerRuntime Cue recording boundary", () => {
 				capturedSource: "normal" as const,
 				status: "changed" as const,
 				showRevision: 8,
-				recordedCue: { id: CUE_ID, number: 1, deleted: false },
+				recordedCue: { id: CUE_ID, number: "1", deleted: false },
 				projections: {
 					cueList: cueList(2, "Outcome"),
 					playback: playback(2, "Outcome"),
