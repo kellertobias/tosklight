@@ -119,9 +119,16 @@ export async function addVirtualPlaybackPane(page: Page): Promise<Locator> {
 	await expect(
 		page.getByRole("heading", { name: "Open Window" }),
 	).toBeVisible();
-	await page
-		.getByRole("button", { name: "Virtual Playbacks", exact: true })
-		.click();
+	// The Open Window catalog groups its cards into tabs, so the bench searches the tabs.
+	const dialog = page.getByRole("dialog", { name: "Open Window" });
+	const card = dialog
+		.getByRole("button")
+		.filter({ has: page.getByText("Virtual Playbacks", { exact: true }) });
+	for (const tab of await dialog.getByRole("tab").all()) {
+		await tab.click();
+		if (await card.count()) break;
+	}
+	await card.first().click();
 	const pane = page
 		.locator(".desk-pane")
 		.filter({ hasText: "Virtual Playbacks" });

@@ -3413,9 +3413,16 @@ async function createVirtualPlaybackDesktop(desk: DeskDriver, page: Page) {
 		page,
 		PRODUCT_DEMO_SCRIPT.pacing.virtualPlaybackSurfaceHoldFrames,
 	);
-	await desk.click(
-		page.getByRole("button", { name: "Virtual Playbacks", exact: true }),
-	);
+	// The Open Window catalog groups its cards into tabs, so the bench searches the tabs.
+	const catalog = page.getByRole("dialog", { name: "Open Window" });
+	const card = catalog
+		.getByRole("button")
+		.filter({ has: page.getByText("Virtual Playbacks", { exact: true }) });
+	for (const tab of await catalog.getByRole("tab").all()) {
+		await desk.click(tab);
+		if (await card.count()) break;
+	}
+	await desk.click(card.first());
 	const pane = page
 		.locator(".desk-pane")
 		.filter({ hasText: "Virtual Playbacks" });
