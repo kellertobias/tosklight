@@ -2,6 +2,9 @@
 
 ToskLight resolves several active sources into one output value per fixture attribute.
 
+> [!danger] Missing graphic
+> Add an output-ownership diagram showing HTP comparison, LTP recency, priorities, Programmer ownership, masters, Release, and the final DMX value.
+
 ## HTP
 
 Highest Takes Precedence is normally used for intensity. The highest contributing level wins, so bringing up another intensity master cannot reduce a higher active source. Releasing the winning source reveals the next-highest contribution.

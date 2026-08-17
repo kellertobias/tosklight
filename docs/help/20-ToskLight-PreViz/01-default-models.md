@@ -59,7 +59,7 @@ any of them.
 Sizes are real. Each model is authored in metres at the size of the product it represents,
 and a fixture profile that declares its own physical dimensions is drawn at those instead —
 so a profile whose dimensions disagree with its model is drawn smaller than the rig around
-it. Copy the size from the [Model Catalogue](02-model-catalogue.md) into the profile if you
+it. Copy the size from the [Model Catalogue](../99-Appendix/01-model-catalogue.md) into the profile if you
 want them to agree exactly.
 
 Every model that flies carries its rigging as one switchable part: a half-coupler at the

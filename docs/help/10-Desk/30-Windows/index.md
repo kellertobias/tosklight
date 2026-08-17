@@ -1,6 +1,6 @@
 # Windows and Panes
 
-ToskLight Desk uses reusable panes, temporary full built-ins, dedicated setup workflows, object editors, and sibling applications. [Desk Interface and Windows](01-desk-interface-and-windows.md) explains the shared window chrome and saved Desktop.
+ToskLight Control uses reusable panes, temporary full built-ins, dedicated setup workflows, object editors, and sibling applications. [Desk Interface and Windows](01-desk-interface-and-windows.md) explains the shared window chrome and saved Desktop.
 
 Panes are the building blocks of a saved Desktop. Open a pane from an empty grid cell, move it by its header, and use **Settings** in that header to configure only that pane. The same pane type may appear more than once with different settings.
 
@@ -15,8 +15,7 @@ visual-review checkpoint.
 
 - [Programming and visualization windows](02-programming-and-visualization.md)
 - [Cue and playback windows](03-cues-and-playbacks.md)
-- [Utility and diagnostic windows](04-utility-and-diagnostics.md)
-- [Icon Reference](05-icon-reference.md)
+- [Output and Help windows](04-utility-and-diagnostics.md)
 - [Programming Windows](06-programming-windows.md)
 - [Channel Faders](07-channel-faders.md)
 
@@ -24,6 +23,7 @@ Use a full built-in window for temporary focused work. Use a pane when the surfa
 
 ## Function map
 
+<!-- table: rows-per-page=12; row-weight=3.7; continue-after-table -->
 | Function | Normal surface | Purpose |
 | --- | --- | --- |
 | Fixtures | Fixture Sheet pane | Select fixtures, inspect values and ownership, and work by attribute columns. |
@@ -37,7 +37,6 @@ Use a full built-in window for temporary focused work. Use a pane when the surfa
 | Running & Output | Built-in diagnostic window | Inspect running objects, desk state, active programmers, and connected PreViz control. |
 | Media | Media pane | Select Media layers and content; CITP enriches names and previews but is optional. |
 | DMX | DMX pane | Inspect complete logical universes and final rendered channel values. |
-| File Manager and Text Editor | Utility panes | Browse confined files and edit supported text resources. |
 | Help | Help pane | Read this same nested operator manual inside the Desk. |
 
-Show Patch, Fixture Library, and Desk Setup are focused built-in workflows. The PreViz Renderer, PreViz Rig Editor, and Media Server are separate applications rather than embeddable Desk panes.
+Show Patch, Fixture Library, and Desk Setup are focused built-in workflows. ToskLight Architect's renderer and Rig Editor, and ToskLight Pixel's media-server surfaces, are separate applications rather than embeddable Control panes.

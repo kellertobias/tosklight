@@ -56,31 +56,22 @@ Add Running to a Desktop with **Open Window**. It is a pane-only window and does
 
 ## Macros
 
-The Macro Pool stores portable, show-owned sequences of ordinary command-line commands. A normal tap runs the complete Macro immediately. Right-click, or press **SET** and then tap the Macro, to open its editor without running it. Pool **Copy** remains the external command-line action: enter **COPY**, tap the source Macro, then tap an empty destination. Move, Delete, pool numbering, naming, presentation, show export/import, and selective import follow the same show-object rules as the other pools.
-
-The editor title is **Macro**; **Macro Settings** owns its name, icon, and Delete action. **← Macros** returns to the pool. The editor numbers every command line and validates the complete document through the desk's authoritative command grammar while you type. IntelliCode suggestions insert canonical command text at the cursor. A full blue outline marks source focus, alternating source-line shading keeps long Macros readable, and hovering a defined identifier shows its expansion. **Run Macro** runs the saved revision; **Run line** executes every complete statement on the selected physical line. **Undo last run** remains available only while that execution is still newest and safe for the same operator, show, and object revision. For a physical line containing several semicolon statements, it undoes only the final compatible statement; put separately undoable changes on separate physical lines. The editor has no separate Copy or save-Undo controls.
-
-Newlines and semicolons terminate Macro statements; a semicolon at the end of a physical line is optional. Blank statements, blank lines, and comments are ignored. `DEFINE _name <expansion>` creates a Macro-local, underscore-prefixed identifier with no spaces in its name; its arbitrary command-text expansion is validated by the same grammar wherever the identifier is used. `RESTORE SELECTION` restores the concrete ordered fixture selection captured when this Macro run began. It is per execution and does not create, change, or depend on a Group. A command which needs another pool click, modal choice, hardware destination, or other interaction is invalid in a Macro.
-
-A full run executes validated lines in source order with the initiating user's ordinary desk authority. It stops at the first runtime error; already accepted commands remain applied. **Cancel** is observed between lines. Another Macro or a manual command cannot interleave a partial command interaction. A Macro assigned to a physical or Virtual Playback starts on the Playback's press action and has no Cue, Pause, fader, or tracking state.
+The Macro Pool stores portable, show-owned command sequences. Tap to run; right-click or use
+**SET** to open the editor. The editor validates command text, numbers lines, and provides
+**Run Macro**, **Run line**, and the available safe **Undo last run** action. Use the
+[Command Line Reference](../20-Programmer-and-Cues/01-command-line.md) for the grammar and
+[Triggers, Chasers, and Speed Groups](../20-Programmer-and-Cues/13-triggers-chasers-and-speed.md)
+for playback use.
 
 ## Timecode
 
-The Timecode Pool stores portable numbered timelines. Tap a Timecode to open its live editor. The title groups **GO**, **Pause**, **Stop**, and **Rewind** transport against the server-owned clock; frame seek remains beside the timeline. Reopening the window reconstructs the authoritative position. A duration-only timeline requires no audio. When a managed audio asset is linked, transport, seek, loop, and volume follow the same clock and the configured server audio output.
-
-The editor timeline scrolls and zooms without changing live output. At **1×** the complete Timecode fits the viewport; maximum zoom shows approximately 15–20 CSS pixels per frame. Touch or click the ruler to scrub the editor playhead. Use **Seek runtime to playhead** when the running Timecode should move to that exact frame. The title **Add** menu provides exactly **Add Marker**, **Add Audio Lane**, **Add Speed Lane**, and **Add Cuelist Lane**. Speed and Cuelist lanes use the current selectors in the editor; the Cuelist lane creates clips from that Cuelist's real Cue identities. Clips, Speed Group keyframes, audio-volume keyframes, and markers show their target and trigger time directly on the lane. Drag an item horizontally for frame-accurate movement; it snaps to zero, the end, and nearby markers. The selection inspector edits BPM/phase, volume/fade/curve, marker name/color, and clip Cue range plus State/Cue Start and Release/Hold behavior. Touch-visible **Copy** and **Delete** actions apply to the exact selection. **Undo** and **Redo** cover the current editor history.
-
-**Add Marker** creates a non-executing marker at the editor playhead. **Timecode Settings** owns the name, duration and frame count, transport offset, auto-start, audio file, and marker CSV. Changes save immediately; there is no Save button. Marker CSV accepts `position,name,color`, where position is a frame number or `HH:MM:SS:FF`; name and color are optional. Choose **Append** or **Replace** explicitly before applying it. Importing WAV or MP3 stores managed portable audio, normalizes MP3 to WAV, updates the duration, and displays decoded waveform peaks. The original file path is not needed after import.
-
-The editor shows duration, transport offset, auto-start, markers, and ordered lanes. Markers label and snap positions but do not execute output. Cuelist clips, Speed Group keyframes, and audio-volume lanes reconstruct deterministically at any frame, so continuous play, seek, and loop reach the same state. Missing referenced show objects remain visible errors and are skipped rather than silently retargeted.
-
-For separately controlled Cue and Timecode audio, patch one **ToskLight Audio Player** for each concurrent voice. It is an Internal fixture: it has a normal fixture number, head, attributes, Cue tracking, and LTP ownership, but no universe or DMX address. Program **Audio Folder**, **Audio File**, **Transport**, **Repeat**, and **Volume** exactly like other fixture attributes. A Timecode Audio Player lane binds its clips to one patched player, so Cue playback, Timecode, Programmer, macros, OSC, WebSocket, and HTTP all converge on that same fixture state. Stop and a non-repeating end reset to the start; Pause retains the cursor; Play resumes; entering Restart Play again restarts from the beginning.
-
-The show stores only the player's logical library and output binding names. In Desk Setup, map each library name to a local confined root and each output name to a local output device (`$system_default` selects the current system default). Under a library root, immediate folders and files use leading `000`–`255` addresses. Duplicate claims use the first supported relative name in deterministic order and appear in Internal Audio diagnostics. WAV is supported directly; accepted MP3 files are normalized for playback. Missing local mappings or files keep the fixture programmable and show an actionable unavailable status.
-
-Choose the single desk Timecode source, frame rate, external-loss behavior, audio device, and latency trim in Desk Setup. Several software, physical, Virtual Playback, OSC, WebSocket, or HTTP controls addressing the same Timecode operate one shared runtime, not independent copies.
-
-For Art-Net ArtTimeCode, configure **ArtTimeCode UDP bind** in Desk Setup and select the exact normalized external source identity reported by that input. ArtTimeCode is a Timecode source; CITP/MSEX remains the separate media-server preview and library protocol.
+The Timecode Pool stores portable timelines. The editor has transport, seek, a complete overview,
+markers, and Cuelist, Speed, and Audio lanes; select an item to edit its timing and properties.
+Markers label positions but do not execute output. The timeline and its optional audio run from one
+authoritative clock, so reopening the editor restores the live position. Configure the source,
+frame rate, loss behavior, audio device, and latency trim in Desk Setup. See
+[Triggers, Chasers, and Speed Groups](../20-Programmer-and-Cues/13-triggers-chasers-and-speed.md)
+for timing and trigger behavior.
 
 ## Virtual Playbacks
 

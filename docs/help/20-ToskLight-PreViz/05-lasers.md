@@ -57,6 +57,9 @@ the patch is what aims it — the same thing that aims a lantern in a clamp. Its
 are *not* a yoke: on almost every show laser they move the figure inside the scan field, the scan
 engine already applies them, and the Visualizer leaves the projector where it is hung.
 
+> [!danger] Missing graphic
+> Add a laser scan-path diagram distinguishing lit movement, blanked travel, the visible figure, the beam through haze, scan speed, and persistence of vision.
+
 ## Laser brightness
 
 **Laser brightness** in Quick Settings sets how strongly every laser in the rig is drawn, from

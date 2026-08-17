@@ -10,6 +10,9 @@ An upload is not playable merely because the source transfer finished. Wait for 
 
 Replacing an occupied slot keeps the old playable clip available until the replacement has been accepted and converted. A failed replacement therefore does not silently destroy the content currently used by the show.
 
+> [!danger] Missing graphic
+> Add a Media Library screenshot showing addressed folder and file slots together with queued, running, completed, and failed conversion states.
+
 ## Import files already on the server
 
 **Import all** scans supported files copied into the configured library and creates the required conversion jobs. Address-leading folder and file names keep library allocation deterministic. Duplicate address claims use the first supported relative name in deterministic order and appear in diagnostics instead of changing on each scan.

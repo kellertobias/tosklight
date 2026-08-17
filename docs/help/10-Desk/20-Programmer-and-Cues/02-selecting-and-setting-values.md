@@ -2,6 +2,9 @@
 
 The programmer holds temporary selection and attribute values for the current user. Nothing becomes show programming until it is recorded.
 
+> [!danger] Missing graphic
+> Add a Programmer-state diagram separating the ordered selection, stored Programmer values, temporary Highlight or Low Light, playback values, and resolved output.
+
 ## Select fixtures
 
 Select from Stage, Fixtures, a Group pool, or the command line. Selection is additive across touch surfaces until replaced or explicitly cleared. Use Thru, Plus, Minus, and Division for ordered ranges and subsets. Multi-head fixture IDs expand according to the rules in [Fixtures and Patch](../10-Show-Setup/12-patch-fixtures-and-scenery.md).

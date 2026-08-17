@@ -18,6 +18,9 @@ Physical capture retains only **Toggle**, **GO**, **GO minus**, **Off**, **On**,
 4. Press **Preload GO** to apply the captured work atomically.
 5. Use Shift Preload to clear the pending Preload without applying it.
 
+> [!danger] Missing graphic
+> Add a Preload sequence diagram showing live output, captured Programmer and playback changes, Preload GO, the temporary transition queue, and the emptied Programmer.
+
 The Preload programmer, physical action queue, and virtual action queue are distinct. A combined GO uses one commit point so the prepared change does not tear across frames. At that point the prepared values leave the programmer and enter a temporary transition queue, so the programmer is empty while the transition continues. **Preload GO** captures the current Programmer Fade once and applies that transition time to every pending programmer value, regardless of when or from which programming surface the value was prepared. Changing Programmer Fade after GO does not alter the running transition. Captured playback actions retain their own explicit Cue timing; when they have no explicit timing, the same GO-time Programmer Fade supplies their fallback. Cue Fade is not substituted.
 
 Hold Preload to open a modal listing every pending programmer change and captured playback action. Individual entries can be removed before GO. Shift Preload clears all pending work. Neither operation rewinds playback actions that have already been committed by Preload GO.

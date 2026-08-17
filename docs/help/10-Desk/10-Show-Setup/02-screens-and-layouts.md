@@ -61,6 +61,9 @@ tracks the primary page. Choose **Dedicated Page** for an independent operator s
 Browser-only operation displays the default-screen controls but cannot create or claim support for
 native optional-screen windows.
 
+> [!danger] Missing graphic
+> Add a screen-ownership diagram showing the default screen, additional screens, connected clients, Desktop or fixed-pane content, encoder placement, playback placement, and Follow Main versus Dedicated Page.
+
 Pressing **X** in an optional screen window closes that window and marks the screen closed, so it
 stays closed until you open it again from **Setup → Screens** or with its **Open Screen** action.
 The rest of the desk keeps running. Pressing **X** on the main window quits ToskLight.

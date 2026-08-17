@@ -5,17 +5,17 @@ ToskLight ships as a desktop application with its own Light server, and as stand
 ## Desktop application
 
 1. Download `tosklight-bundle-macos_arm64.zip` from the matching GitHub release.
-2. Expand the ZIP. In Terminal, change into the expanded bundle and run `bash sign-macos-apps-locally.sh`. This applies and verifies fresh local ad-hoc signatures for Desk, PreVIZ, and Media without an Apple Developer identity.
+2. Expand the ZIP. In Terminal, change into the expanded bundle and run `bash sign-macos-apps-locally.sh`. This applies and verifies fresh local ad-hoc signatures for ToskLight Control, ToskLight Architect, and ToskLight Pixel without an Apple Developer identity.
 3. Move the application you want to use to Applications.
 4. The testing build is not Developer-ID signed or notarized. Verify that the archive came from the expected GitHub release, then Control-click the application in Finder, choose **Open**, and confirm **Open**. If directed to System Settings, use **Privacy & Security > Open Anyway** for ToskLight.
-5. Desk's bundled server uses `127.0.0.1:5000`; open **Desk Setup > Network & Inputs** and confirm the active server URL.
+5. Control's bundled server uses `127.0.0.1:5000`; open **Desk Setup > Network & Inputs** and confirm the active server URL.
 
 The signing script does not remove quarantine or disable Gatekeeper. If it fails, verify the ZIP
 against `report-checksums.txt` and use the newest release instead of overriding macOS security
 checks. The archive also includes `macos-first-start.txt` beside the applications for offline
 reference.
 
-Double-click **tosklight-media-macos_arm64.app** to start Media on the first display. Before the
+Double-click **tosklight-media-macos_arm64.app** to start ToskLight Pixel on the first display. Before the
 first valid DMX frame it shows the browser address and projector-alignment marks; its persistent
 configuration and library live under Application Support.
 

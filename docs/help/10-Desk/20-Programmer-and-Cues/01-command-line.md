@@ -20,6 +20,9 @@ Another important concept to understand is that every button can have multiple f
 - Shift-Press: If a button is to be pressed with shift, we access the second function on that button. These are indicated with `[^GRP]`. You hold down shift, then press the desired button, then let go shift. The action is performed, once you click the actual button. If you need to press multiple buttons with shift directly after each other, you do not need to release shift in between. e.g. `[^GRP][^GRP]` can be either entered by holding down shift, then pressing `[GRP]`, then releasing shift, then holding down shift again, pressing `[GRP]` again, then releasing shift again; or you can hold down shift, press `[GRP]` twice and then release shift; the outcome is the same. The command line again indicates the intention: `[^GRP]` is `#> FIXTURE`, while `[^GRP][^GRP]` is `#> DMX`. Use the DMX form to address the fixture at a physical `universe.address`—a fast way to find it while quick-patching.
 - Long-Press/ Hold: If a button is pressed long, it's indicated with a plus, e.g. `[PRELOAD+]` (which opens the pending Preload for inspection and editing). Long presses do not need to be confirmed and directly trigger an action, such as opening a modal or resetting a value.
 
+> [!danger] Missing graphic
+> Add a command-grammar diagram showing selection or source, action, target or value, confirmation, and the press, double-press, Shift-press, and hold notations.
+
 
 ### Command Line Abbreviations
 Entries in the command line are also sometimes abbreviated especially for `#> FIXTURE`, `#> GROUP`, `#> DEGROUP`, `#> DMX` (`#> F7`, `#> G1`, `#> g4`, `#> D2.4`). They abbreviate once the number gets typed.
@@ -46,6 +49,7 @@ The **Desk key** is the button shown on the touchscreen keypad or console.
 The **Computer keyboard** column is a computer keyboard shortcut, not another console command.
 Keyboard positions describe the position of the key on a German keyboard. The software shortcuts are disabled while hardware is connected.
 
+<!-- table: columns=12,15,18,55; rows-per-page=17; row-weight=1.5; continue-after-table -->
 | Desk key | Button     | Computer keyboard | What it does |
 | ---      | ---        | ---               | ---          |
 | `[^]`    | Shift      | `[KBD:SHIFT]`     | Shift into the second key command layer. On Touch, it toggles. |
@@ -61,27 +65,21 @@ Keyboard positions describe the position of the key on a German keyboard. The so
 | `[THRU]` | Thru       | `[KBD:ß]`         | Define a range or spread. |
 | `[DIV]`  | Division   | `[KBD:´]`         | Modulo operator on a selection (e.g. select every second). Divide value parts for direct value entry.  Press twice for `#> OFFSET` |
 | `[TIME]` | Time       | -                 | Give a value or recorded Cue an explicit fade time.  Press twice for `#> DELAY` |
-
 | `[GRP]`  | Group      | -                 | Select a group. Hold for showing the group built-in. Press twice for `#> DEGROUP`|
 | `[CUE]`  | Cue        | -                 | Select or Target a particular cue. Press twice for `#> CUELIST` |
 | `[PBK]`  | Playback   | -                 | Select or Target a particular playback. Press twice for `#> VPBK` (virtual playback) |
-
 | `[REC]`  | Record     | `[KBD:END]`       | Store cues, presets, and groups. Hold for record options. |
 | `[PRELD]`| Preload    | `[KBD:^]`         | Run Preload or Preload GO. Hold to inspect and edit the pending Preload. |
 | `[CLR]`  | Clear      | `[KBD:DELETE]`    | First Click: Clear Selection, Second Click: Clear Programmer |
-
 | `[DEL]`  | Delete     | -                 | Delete a cue, preset, or other supported element.  |
 | `[MOV]`  | Move       | -                 | Move a cue or preset. |
 | `[CPY]`  | Copy       | -                 | Copy a cue or preset. Not available on touch only, reach with `[^MOV]` |
 | `[SET]`  | Set        | `[KBD:HOME]`      | Edit a value or open the selected object's configuration. |
 | `[OFF]`  | Off        | -                 | Turn off the target; Press twice for opening "Running & Output" |
-
-
 | `[HIGH]` | Highlight  | `[KBD:ALT + H]`   | Toggle Highlight and capture the current ordered selection as its frozen original set. |
 | `[PREV]` | Prev item  | `[KBD:ALT + <-]`  | While HIGH is active, single the previous original member and wrap at the start. |
 | `[NEXT]` | Next item  | `[KBD:ALT + ->]`  | While HIGH is active, single the next original member and wrap at the end. |
 | `[ALL]`  | All        | `[KBD:ALT + A]`   | Restore the frozen original set as the actual selection. |
-
 | `[ENC]`  | Enc/Playbk | -                 | Toggle the screen between programmer/encoder and playbacks |
 | `[PGUP]` | Page Up    | `[KBD:PAGEUP]`    | Open Next Playback Page |
 | `[PGDN]` | Page Down  | `[KBD:PAGEDOWN]`  | Open Previous Playback Page. Hold `[PGUP]` and `[PGDN]` together to open the Playback Page menu |
@@ -95,6 +93,7 @@ Hardware is also expected provide at least 4 attribute encoders and one navigati
 
 The following table shows the second layer assignment, the user can reach with holding down `[^]`
 
+<!-- table: columns=18,22,60; rows-per-page=13; row-weight=1.5; continue-after-table -->
 | Desk key  | Button        | What it does |
 | ---       | ---           | ---          |
 | `[^0]`    | Preset All    | Open "All" preset built in or select an All preset |
@@ -125,8 +124,8 @@ The following table shows the second layer assignment, the user can reach with h
 
 ### Software (Touch) and suggested Hardware layout
 
-> [!danger] Content Missing
-> We are missing screenshots here
+> [!danger] Missing graphic
+> Add labelled software-keypad and suggested hardware-layout diagrams showing every primary and Shift-layer button assignment.
 
 
 ## Selecting fixtures and Groups
@@ -327,6 +326,9 @@ If the Cuelist contains exactly one Cue, the desk asks what you want to do:
 - **Overwrite Cue** replaces the contents of the existing Cue with the programmer.
 
 The same choice appears when recording onto a playback whose assigned Cuelist contains exactly one Cue. Once the Cuelist contains two or more Cues, recording onto the Cuelist or playback always chooses **Add Cue** and appends at the end.
+
+> [!danger] Missing graphic
+> Add a Record-target diagram comparing the touch playback area, the attached desk's topmost playback button, a buttonless playback's visible screen area, and the excluded fader.
 
 ### Recording a Cue from the Command Line
 

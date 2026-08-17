@@ -16,6 +16,9 @@ Because autosave already protects the active copy, **Save** asks where the copy 
 
 For an established, named show, **Save As** can create another named show or select the original or another existing show as a destination. Choosing an existing destination opens a separate destructive confirmation; cancel is the safe default. A confirmed overwrite first creates an internal recovery backup, replaces only the destination's Latest Autosave, and preserves the destination identity and all of its named revisions. The revision copy and immutable source revision are retained until explicitly deleted.
 
+> [!danger] Missing graphic
+> Add a show-history diagram distinguishing Latest Autosave, named revisions, Load Revision as Copy, Save As, and Overwrite Original Show.
+
 ![Show menu and its primary show-management actions](../../assets/screenshots/workflows/show-menu.png)
 
 ![Load the latest autosave or a named revision](../../assets/screenshots/workflows/show-load-revisions.png)

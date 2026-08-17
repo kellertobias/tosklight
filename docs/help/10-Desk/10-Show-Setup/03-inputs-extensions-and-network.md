@@ -34,7 +34,7 @@ Timecode source priority and fallback remain server-owned and are reported separ
 
 For package authors, the complete package, manifest, private IPC, input, feedback-output, telemetry,
 timecode, lifecycle, and conformance contract is in
-[Developing Native Hardware Extensions](../../99-Development/05-native-extension-development.md).
+[the native-extension SDK and conformance guide](../../../engineering/native-extension-sdk.md).
 
 ## Sound-to-Light audio input
 

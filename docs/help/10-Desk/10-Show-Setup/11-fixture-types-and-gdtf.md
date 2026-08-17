@@ -4,7 +4,7 @@ The fixture library is desk-wide and persists independently of show files. Open 
 
 ![Fixture-library manufacturers, modes, footprint, heads, and revision](../../assets/screenshots/workflows/fixture-library.png)
 
-The shipped library includes separate conventional **Dimmer PAR Can**, **Dimmer Profile**, and **Dimmer Fresnel** fixture profiles, each with 8-bit and 16-bit dimmer modes. Their transferred GLB models use a PAR housing with a square gel frame, an elongated ellipsoidal-profile housing, and a Fresnel housing with four external barn doors respectively. Choose the fixture profile for the physical lantern rather than treating these appearances as modes of one Dimmer profile.
+The shipped library includes separate conventional **Dimmer PAR Can**, **Dimmer Profile**, and **Dimmer Fresnel** fixture profiles, each with 8-bit and 16-bit dimmer modes. Shipped control fixtures leave body geometry to the renderer-owned default models, so the desk, demo show, Visualizer, and CAD all choose the same PAR, elongated profile, Fresnel with barn doors, moving-head, strip, laser, or effect body from fixture semantics. Portable visual-only Venue and Rigging objects keep their exact GLB geometry because a truss, stage deck, curtain, railing, or mirror ball cannot be represented by a generic lamp body. Choose the fixture profile for the physical lantern rather than treating these appearances as modes of one Dimmer profile.
 
 ## Transferable fixture packages
 
@@ -17,8 +17,8 @@ The shipped package directory currently provides an operator-focused Generic fam
 - **Generic ACL** — a compact 200 mm-long, 80 mm-diameter conventional ACL lamp with aligned lens and beam geometry. **Blinder** provides the seven requested two-, four-, and eight-lamp one-, two-, and four-channel groupings. Each dimmer channel owns a non-master logical head and the corresponding physical emitters. **Fogger** provides Fog, Fan/Fog, and Fog/Fan modes; **Hazer** provides both two-channel orderings.
 - **Generic RGBW, RGBWA, and RGBWAUV LED** — one canonical RGB-first emitter order with an 8-bit dimmer first, an 8-bit dimmer last, or a virtual dimmer. **Generic RGBCCT LED** provides the six useful placements of the RGB block, cold white, and warm white (`RGBCW`, `RGBWC`, `CRGBW`, `CWRGB`, `WRGBC`, and `WCRGB`), each with those same three dimmer choices. The library deliberately avoids factorial permutations of individual RGB emitters that do not represent normal fixture personalities.
 - **Generic rare-capability references** — **Endless Pan Tilt** retains endless 16-bit axis representation on the canonical Pan and Tilt controls; **Beam Size and Edge** keeps Zoom independent from Softness; **Media Positioning** provides independent media-layer X and Y axes; **Flame Jet** supplies a ToskLight-authored single-nozzle demonstration; and **Kabuki Curtain** maps one raw slot to Reset, Hold, and a latched Release through its portable physics script. These are explicit transferable reference personalities: match their documented channel order to the device rather than treating them as manufacturer profiles.
-- **Venue** visual-only profiles — 1 × 1 m, 2 × 1 m, and 1 × 0.5 m stage elements; correctly rising stage stairs; one-, two-, three-, and four-point truss; 1 m, 2 m, 3 m, 5 m, and 6 m curtains; **Disco Ball 50 cm**; and **Crowd Area**. Crowd Area supplies all nine Sitting, Standing still, and Dancing × Sparse, Medium, and Dense modes and stores independent width and depth with the show. The conventional scenery archives include portable icon, photograph, and metre-authored GLB geometry; Crowd Area is rendered procedurally from its portable crowd contract.
-- **ToskLight** product and Visualizer profiles — **Audio Player** is an Internal fixture: one independently programmable Audio service voice with Audio Folder/File, Transport, Repeat, and Volume, a regular fixture ID, and no DMX address. **Media Server** provides two complete personalities: 75 slots for two layers and 279 slots for eight layers. Each 34-slot layer is an independently programmable logical head; the trailing 7-slot output block belongs to the shared master head. Existing shows retain embedded snapshots of the former separate Layer and Master profiles, and desks that previously installed those profiles keep them for compatibility, but new patches use this combined fixture. **Visualizer Camera** keeps the stable 17-slot X/Y/Z, Yaw/Pitch/Roll, and Zoom wire contract, while **Visualizer Laser** provides the packaged demo laser and its scan program. This manufacturer is reserved for implemented ToskLight-owned product fixtures; planned further Visualizer fixtures do not appear until their capabilities exist.
+- **Venue** visual-only profiles — 1 × 1 m, 2 × 1 m, and 1 × 0.5 m stage elements; correctly rising stage stairs; 1 m, 2 m, 3 m, 5 m, and 6 m curtains; **Disco Ball 50 cm**; and **Crowd Area**. One-, two-, three-, and four-point truss and pipe profiles use the separate **Rigging** type. Crowd Area supplies all nine Sitting, Standing still, and Dancing × Sparse, Medium, and Dense modes and stores independent width and depth with the show. The conventional scenery archives include portable photographs and metre-authored GLB geometry; the desk displays its built-in Venue or Rigging type icon. Crowd Area is rendered procedurally from its portable crowd contract.
+- **ToskLight** product and Visualizer profiles — **Audio Player** is an Internal fixture: one independently programmable Audio service voice with Audio Folder/File, Transport, Repeat, and Volume, a regular fixture ID, and no DMX address. **Media Server** provides two complete personalities: 118 slots for two layers and 352 slots for eight layers. Each 39-slot layer is an independently programmable logical head; the trailing 40-slot output block belongs to the shared master head and exposes Output, Geometry, Mask position, Shapers, and Colour. Existing shows retain their embedded 75-slot legacy or 89/323-slot mask-position snapshots, while new patches use the complete master personality. **Visualizer Camera** keeps the stable 17-slot X/Y/Z, Yaw/Pitch/Roll, and Zoom wire contract, while **Visualizer Laser** provides the packaged demo laser and its scan program. This manufacturer is reserved for implemented ToskLight-owned product fixtures; planned further Visualizer fixtures do not appear until their capabilities exist.
 
 - **JB-Lighting JBLED A7** — Standard and Compressed RGB personalities in 8-bit and 16-bit color,
   with the complete shutter-effect table and a documented open shutter as the safe home and
@@ -34,104 +34,12 @@ The Source Four LED Series 2 configuration can independently enable Strobe, Fan 
 
 Channel order, footprints, fine-byte slots, safe defaults, and physical ranges come from the corresponding manufacturer DMX charts. Shipped packages are not privileged or reserved: after loading, they are normal desk-library profiles. When a newer shipped package is installed, ToskLight updates it only if its last package-installed revision is still current. An operator-created later revision is preserved and reported instead of being overwritten.
 
-### Package layout
-
-A `.toskfixture` file is a ZIP archive with this portable layout:
-
-```text
-fixture.json
-assets/photograph.png    optional PNG, JPEG, or WebP
-assets/icon.png          optional PNG, JPEG, or WebP stage icon
-assets/model.glb         optional self-contained glTF Binary 2.0 model
-assets/projections/top.svg    optional generated physical-scale vector views
-assets/projections/left.svg
-assets/projections/right.svg
-assets/projections/front.svg
-assets/projections/back.svg
-assets/gobo-3.png        optional artwork for gobo slot 3, and one file per further slot
-assets/scan.js           a laser's scan engine, and only a laser's
-```
-
-### The gobo wheel
-
-A gobo channel says which slot is in the beam. Nothing else in a profile can say what is etched on
-the glass, so a fixture with a wheel declares it:
-
-```json
-"gobos": [
-  { "slot": 1, "name": "Breakup", "artwork_asset": "assets/gobo-1.png" },
-  { "slot": 2, "name": "Rings",   "artwork_asset": "assets/gobo-2.png" }
-]
-```
-
-Slot zero is the open slot and is never declared. The artwork is a mask — light passes where the
-image is white — and its colour is ignored, because a gobo takes the colour of whatever the
-fixture puts through it. A slot may be named without carrying artwork.
-
-Declaring the wheel is worth doing even with no artwork to hand: it tells the Visualizer how many
-slots the channel is divided into, which is otherwise a guess. A profile that declares no wheel is
-drawn with the Visualizer's own patterns, as the whole library was before packages could carry
-glass.
-
-`fixture.json` is UTF-8 JSON. The outer document is deliberately small and can be produced with a normal text editor or an AI fixture-building workflow:
-
-```json
-{
-  "$schema": "https://tosklight.app/schemas/fixture-package-v1.json",
-  "format": "tosklight.fixture",
-  "format_version": 1,
-  "profile": {
-    "schema_version": 3,
-    "id": "a-stable-uuid",
-    "revision": 1,
-    "manufacturer": "Example",
-    "name": "Example Profile",
-    "patch_policy": "dmx",
-    "photograph_asset": "assets/photograph.png",
-    "stage_icon_asset": "assets/icon.png",
-    "model_asset": "assets/model.glb",
-    "model_units": "metres",
-    "modes": []
-  }
-}
-```
-
-The `profile` is the same schema-v3 fixture profile edited by the Fixture Library and embedded in patched shows. Schema-v2 profiles normally load through an explicit identity-mapping migration; the unambiguous legacy aliases in the [Attribute Reference](14-attribute-reference-and-activation.md) instead project to their documented canonical identity. A DMX profile uses `"patch_policy": "dmx"`, a 1–512 slot split footprint, and its channels. A scenic object uses `"patch_policy": "visual_only"`, a zero-footprint split, no channels/color/control actions, and geometry; the desk then guarantees that it cannot receive a universe, address, or direct-control endpoint. An application-owned virtual device uses `"patch_policy": "internal"`, zero-footprint splits, and semantic channels without DMX component slots. Internal fixtures use normal positive fixture IDs, cannot receive DMX/direct-control/multipatch assignments, and remain programmable when their desk-local service binding is unavailable. `"model_units": "metres"` preserves authored GLB dimensions exactly, while the backward-compatible `"auto"` value normalizes a conventional lamp model to its profile dimensions. Use an exported package as the safest complete template. Asset fields are either `null` or relative paths under `assets/`. Do not use absolute paths, parent paths, data URLs, external GLB textures, or network URLs inside a package. The package must contain exactly the referenced files and no unreferenced extras.
-
-### Generated plan projections
-
-A package with a 3D model may also carry exactly five generated SVG drawings: top, left, right,
-front, and back. Generate them without changing the installed library revision:
-
-```sh
-cargo run -p viz-project --bin fixture-projection -- generate source.toskfixture --output projected.toskfixture
-```
-
-The command refuses to overwrite its input. Importing the new package follows the normal immutable
-revision flow. Each SVG uses millimetres, records its physical `viewBox`, fixture origin, page
-orientation, named view, deterministic pose, source-model SHA-256, generator version, and pose
-contract version. Front and side drawings pose a moving head down; top poses it toward the front;
-fixed fixtures retain their authored home pose.
-
-SVG is the canonical artwork. Printed or bitmap output is rasterized from that SVG and is never a
-second authored package asset. The package accepts only opaque move/line paths: no script, event
-handler, CSS, font, image, external resource, link, transform, animation, filter, or
-environment-dependent reference is allowed. A changed source-model hash or generator/pose version
-makes the stored projection cache stale. Regeneration produces a new package; it never rewrites an
-operator's installed revision.
-
-To author one manually, export a similar fixture, rename `.toskfixture` to `.zip`, unpack it, edit `fixture.json`, add or replace assets, ZIP `fixture.json` and `assets/` at the archive root, then restore the `.toskfixture` extension. Keep existing UUIDs when correcting the same fixture; generate new UUIDs for a genuinely different fixture, mode, head, channel, or function. Never derive identity from display text or DMX row position.
-
-For safety, import rejects unsafe or duplicate paths, symbolic links, unsupported compression, undeclared files, invalid raster data, unsafe or metadata-mismatched SVGs, stale projection hashes, non-self-contained GLBs, archives over 64 MiB compressed or 128 MiB expanded, more than 32 entries, and manifests over 64 MiB. The supported MIME type is `application/vnd.tosklight.fixture+zip`.
-
-If a new package uses a canonical attribute ID that the active show does not know, import pauses
-without storing the profile. The import dialog names every unknown ID and lets you map each one to
-an active configured descriptor with the same value type. The fixture-facing ID remains in the
-package revision while the chosen descriptor becomes its canonical Programmer identity. To retain
-a new identity instead, create a custom descriptor with a unique encoder position and activation
-group under **Show → Desk Setup → Programmer → Attributes**, then choose the unchanged source file
-again. Existing profile revisions with preserved unknown IDs remain readable and exportable; this
-preflight applies when new fixture data enters the library.
+Package format, asset restrictions, JSON structure, generated projections, and archive validation
+are fixture-author documentation. For an operator, the important rule is simple: export a working
+fixture as the safest template, keep its identity when correcting that fixture, and import the
+result as a new immutable revision. If an import contains an unknown attribute, map it to a
+compatible desk attribute or create a custom one before importing; existing revisions remain
+readable and exportable.
 
 ## Import GDTF
 
@@ -158,28 +66,9 @@ Generic information includes manufacturer, full and short names, fixture type, n
 
 ### Optics
 
-Optics decide what light out of this fixture looks like in the visualizer, as against how the
-fixture is built. Two lanterns at the same angle, at the same level, do not look alike: a profile
-lays down a flat disc with a rim you could cut paper on, a PAR is hot in the middle inside a soft
-halo, a flood has no rim at all.
-
-- **Relative output** is how much light the engine makes, `1` being an ordinary fixture of its
-  type. A 400 W head against a 100 W one, before anyone touches a dimmer.
-- **Sharpness** is how hard the rim of the field is. 100% cuts; 0% has no edge to speak of. A focus
-  or frost channel softens whatever is set here, so a profile out of focus still reads as a
-  profile.
-- **Uniformity** is how evenly the field is filled: 100% is flat to the rim, 0% a bright centre
-  that falls away quickly. It is separate from sharpness — a good LED wash has no rim at all and is
-  still even across the middle.
-- **Light source** is the lit surface itself: its shape, and its width and height in millimetres.
-  It belongs to the fixture rather than to one patched lamp, because every lantern of this type has
-  the same lens. A shaft leaves it at that width instead of springing from a point. A lens needs
-  both dimensions; clearing either one hands the fixture back to its type.
-
-Every field is optional, and an empty field means *whatever this fixture type normally does*. The
-shipped library leaves them empty, so a profile is treated as a profile, a Fresnel as a Fresnel,
-and a cyc flood as a flood, from the fixture type alone. Fill them in when the type's answer is not
-right for the lantern in front of you.
+Optics optionally refine the Stage appearance. Leave them empty to use the normal appearance for
+the fixture type; set relative output, edge, field uniformity, and light-source dimensions only
+when the fixture needs a different result.
 
 ### Modes and heads
 
@@ -193,33 +82,21 @@ A split is an independently patchable address block configured in Channels. Give
 
 ### Channels
 
-For multi-split modes, Channels shows one accordion per split and keeps exactly one open. A single-split mode shows its table directly. The table uses large touch-sized summary cells; selecting a cell opens the labeled channel editor. Channel role is selected from the desk's supported attribute registry, with Static output as an explicit role, rather than entered as free text. Channel functions open in their own nested modal. Rows support touch drag-and-drop and explicit keyboard/accessibility move controls.
-
-The primary DMX slot is derived from row order. Fine, Third byte, and Fourth byte contain explicit component slots for 16-, 24-, and 32-bit channels; reserved component slots are skipped when later primary slots are calculated. Default, Highlight, function ranges, and fixed values are exact raw integers at the selected resolution. Saving is blocked when slots overlap, exceed 512, do not fit the resolution, or lie outside the split footprint.
-
-**Default raw** is the home value a channel holds while no Programmer value, Cue, or function drives it. Across the shipped library that home look is deliberate rather than arbitrary: colour rests at physical white and absolute Pan and Tilt rest at their mechanical centre. Direct Red, Green, Blue, White, Cold White, and Warm White emitters sit at their full endpoint; subtractive Cyan, Magenta, and Yellow sit at zero filtration, which is canonical white after the inverse mapping; a discrete wheel sits on its Open/White slot. Amber, UV, and other tinting emitters stay off so the home look is neutral, endless Pan and Tilt stay stopped, and hazardous or unrelated functions keep their safe value. Because it is a raw wire value, a channel's own inversion and its canonical mapping are both read back before the desk shows a home value, so an unprogrammed CMY lantern reports white rather than black. A home colour is not extra output: intensity still homes to zero, and a head with a derived virtual dimmer stays dark until that dimmer is raised.
-
-**Highlight raw** defines the profile-level identification look used while that channel's fixture or logical head is highlighted. A newly derived default uses full conventional intensity and physical white: direct RGB/RGBW white endpoints, calibrated additive or subtractive D65 white, zero CMY filtration, and the midpoint of a discrete wheel slot explicitly named Open, White, Clear, or No Color. Inversion is included when choosing a raw endpoint. If no white wheel slot can be identified, that channel keeps its safe default instead of using an arbitrary maximum. Set any required shutter-open channel deliberately, and leave Position and unrelated or hazardous functions at an appropriate safe/default raw value. Validate the complete look on the real fixture; Highlight raw is physical output configuration, not a normalized programmer value.
-
-Changing a newly added channel's attribute, additive/subtractive calibration, or discrete-wheel Open/White slot recalculates its semantic Highlight default only while the field still contains the previous automatic value. This lets an untouched wheel channel move from its safe default to the Open/White midpoint when that slot is defined. Once an operator enters an exact Highlight raw value, later channel or Color-tab edits preserve it. Existing schema-v2 revisions are likewise never renormalized on load or save.
-
-Each channel retains its fixture-facing attribute identity and explicitly maps it to one canonical Programmer attribute. The mapping is normally identity; subtractive Cyan, Magenta, and Yellow filtration map inversely to canonical Red, Green, and Blue. It also configures physical range/unit, fixture-channel inversion, snap, virtual-intensity reaction, sequence/group/grand-master reactions, and prioritized functions. Exact raw and typed control values are never reinterpreted by the canonical normalized mapping. **Static** channels normally output their default and use their Highlight value only while identified. Snap channels bypass programmer, Cue, Move in Black, and safety transitions.
-
-A physical channel may contain ordered continuous, fixed, indexed-color/gobo, or control functions. Each function keeps its stable ID, semantic attribute, name, exact raw range/value, priority, and action behavior in the portable profile. Fixed, indexed, and control are behaviors inside that semantic attribute, not separate Programmer attributes or encoder families. The encoder's **Set Value → Indexed Presets** tab projects those functions from the exact profile revision embedded in the active show.
-
-Only an explicitly programmed function claims its channel; the highest configured priority wins, and releasing it reveals the next claim or channel default. Typed control actions can atomically set several channels and be latched, momentary, or timed. Assign their operator meaning explicitly as Lamp On, Lamp Off, Reset, Fan Auto, Fan Low, Fan High, Fan Max, or Custom. Lamp On is the fixture manufacturer's discharge-lamp ignition/strike command; it does not set intensity or color and fixtures without that authored action are skipped. Lamp On, Lamp Off, and Reset are normally momentary or timed runtime overrides and are never recorded or persisted as programmer values. Releasing them reveals the latest underlying value on a shared control channel, so a latched fan mode remains in force. Fan modes are normally latched. Highlight is a separate transient identification look and is toggled off with Highlight itself; it is not a control action or programmer value. All authored control actions appear by name in **Control → Special Dialog** and under their semantic encoder's **Indexed Presets** tab.
+Channels are arranged by split and use the selected attribute registry. Set the physical resolution,
+default and Highlight values, and any continuous, indexed, or control functions. The editor blocks
+invalid footprints and overlapping component slots. Choose a safe home and Highlight look, then
+verify them on the real fixture. Detailed raw-value, color-system, and control-action authoring is
+fixture-developer documentation.
 
 ### Color
 
-Color remains an abstract XYZ request across fixtures. Additive systems bind measured XYZ or xyY emitters, maximum level, response curve, and visible-color participation. Subtractive systems bind CMY channels. Discrete wheels store portable semantic color IDs, local labels, DMX ranges, and optional measured color. The engine uses bounded non-negative mixing and deterministic gamut clipping, with direct RGB or CMY fallback when calibration is unavailable. UV and other non-visible emitters participate only when explicitly programmed.
-
-Portable presets are never created merely by patching. Use **Generate portable presets** in **Control → Special Dialog** for the selected fixtures to add stable fixed/indexed semantic choices to the show.
+Configure the fixture's additive, subtractive, or wheel color system, then use **Generate portable
+presets** in **Control → Special Dialog** when fixed or indexed choices should be added to the show.
 
 ### Geometry
 
-Start with **Fixed fixture**, **Moving head**, **Bar**, **Matrix**, or **Shared-pan multi-head**, then edit the generated hierarchy. Parts have parents, transforms, pivots, optional GLB-node bindings, and attribute-driven rotation or translation. Emitters attach to any part and define logical head, origin, orientation, beam and field angles, feather, focus, point/matrix/ring/strip/explicit-pixel layout, and whether the source projects a directional beam. Disable **Projects a directional beam** for broad sources such as strobes and Sunstrip-style emitters; their inactive lens remains visible in Stage without receiving an aim guide.
-
-The editor preview and Stage visualizer use the configured graph, multiple emitters, resolved motion attributes, and the same resolved color used for output. This supports a shared pan ancestor with independent tilt children and multiple offset beam sources instead of assuming one hard-coded beam.
+Choose a suitable fixture geometry and use the preview to confirm the Stage appearance. Detailed
+model hierarchy, emitter, pivot, and projection authoring is fixture-developer documentation.
 
 ## Revisions and compatibility
 

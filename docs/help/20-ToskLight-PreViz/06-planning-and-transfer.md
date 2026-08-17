@@ -4,6 +4,9 @@ The PreViz Rig Editor is a rig-planning window: the same patch sheet the desk us
 show file rather than over a running desk. A rig planned there and a show running on a desk are
 the same rig, and neither side should have to go looking for a file to get from one to the other.
 
+> [!danger] Missing graphic
+> Add an authority and transfer diagram showing copied `.show` documents between Control and the Rig Editor, renderer-local overrides, configured show DMX inputs, derived Desk routes, and live Art-Net or sACN values.
+
 ## Open Demo Show
 
 The editor's file bar has an **Open Demo Show** button, and it needs nothing else: no file to find,

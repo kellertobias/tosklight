@@ -1,6 +1,8 @@
-# ToskLight Desk
+# ToskLight Control
 
-ToskLight Desk is the lighting-control application. It owns the active Desk session, Programmer, show library, fixture patch, Groups, Presets, Cuelists, Cues, Dynamics, Playbacks, output routes, and operator Desktops.
+![ToskLight Control application icon](../assets/branding/tosklight-control.png)
+
+ToskLight Control is the lighting-control application. It owns the active Desk session, Programmer, show library, fixture patch, Groups, Presets, Cuelists, Cues, Dynamics, Playbacks, output routes, and operator Desktops. The name **ToskLight Desk** is reserved for the future physical hardware desk.
 
 Work through the Desk manual in this order:
 

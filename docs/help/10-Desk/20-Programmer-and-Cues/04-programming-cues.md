@@ -9,6 +9,9 @@ A Cue stores what is currently in the programmer. Values that are merely visible
 3. Name the Cue and set fade, delay, and trigger behavior in Cuelist View.
 4. Clear the programmer and run the Cue to prove that the stored data is sufficient.
 
+> [!danger] Missing graphic
+> Add a Cue lifecycle diagram showing Programmer values being recorded into a Cue, the Cue inside a Cuelist, assignment to a playback, and playback output after the Programmer is cleared.
+
 Recording onto an empty Cuelist creates its first Cue without assigning it to a playback. Recording onto an empty playback creates a Cuelist, records its first Cue, and assigns it. On touch, the whole visible playback is the Record target. On an attached desk, only its topmost playback button is the target; if no button is assigned, use the visible on-screen section. The fader is never a Record target, so it remains usable while programming.
 
 When a target Cuelist contains exactly one Cue, the desk asks whether to **Add Cue**, **Merge Cue**, or **Overwrite Cue**. Once it contains two or more Cues, recording onto the Cuelist or its playback always appends a new Cue.

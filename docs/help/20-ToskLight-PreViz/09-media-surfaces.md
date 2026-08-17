@@ -15,7 +15,7 @@ resolution, and aspect ratio in the show. A manually entered output remains avai
 that cannot be reached while planning. The standalone Visualizer reconnects and renews its preview
 subscription automatically; it never silently changes a missing numeric output to another one.
 
-ToskLight Media publishes each enabled logical output as its own stable CITP preview source. More
+ToskLight Pixel publishes each enabled logical output as its own stable CITP preview source. More
 than one authored surface can use the same source without decoding or uploading the same frame more
 than once.
 

@@ -107,44 +107,11 @@ The Stage is the spatial selection and visualization surface. In 2D it shows fix
 - **Show group shortcuts** adds the Group strip.
 - The common size and removal controls apply per pane.
 
-### The renderer draws every Stage
-
-Every Stage is drawn by the ToskLight renderer, in a separate process, into the pane where the
-Stage sits. It runs beside the desk rather than inside it, so a graphics driver that takes the
-renderer down takes only the picture with it — the Programmer, playback and DMX output are
-untouched, and the Stage returns on its own.
-
-Where that is not possible the pane says so. That is what happens in a browser, on an installation
-whose renderer is missing, and wherever the two processes have no way to move a picture between
-them. The desk draws no Stage of its own, so what an operator sees there is a stated "no Stage on
-this screen" rather than a second, quietly different picture of the same rig.
-
-Drag over the pane to orbit and scroll to zoom. The middle button walks the camera across its own
-axes and the secondary button slides the view without turning it.
-
-**Follow Preload** draws the preload over the rig rather than instead of it. A fixture with nothing
-preloaded goes on showing what it is doing now; one that is preloaded shows what it is about to do,
-in every attribute the preload names — where it will point, what colour it will be, what it will
-point through. A preloaded **Dynamic** shows its fixture's live state instead: a Dynamic is a
-running function rather than a value, and the Stage does not reproduce one to guess at it.
-
-### The three views
-
-- **2D** is the renderer's plan of the rig, projected from where the operator chooses to stand:
-  above it, from the house, from upstage, or from either wing. It is drawn from the fixtures' own
-  positions, so changing the side changes the picture and nothing in the show. A fixture package's
-  physical-scale SVG for that named view is preferred. Without one, the renderer uses its own
-  vector convention for the declared fixture type; an unknown type remains a simple box. Opaque
-  filled regions participate in plan depth, so a foreground fixture hides the truss or scenery it
-  actually covers while deliberate empty regions remain open.
-- **3D** is a model-and-lines diagram. Each fixture uses the 3D model carried by its fixture
-  package; a package without one uses the audited built-in model for that fixture class, while an
-  invalid model is reported and falls back to a deliberate procedural body. Stages, platforms and
-  walls remain box outlines, and every directional emitter carries a dotted aim guideline whether
-  or not it is lit — a lit one adds its own line in its live colour over the guideline. Truss and
-  soft goods are not drawn. Nothing here is lit, which keeps it inexpensive and is why it offers
-  no render style or environment brightness.
-- **3D Viz** is the full picture, with the fixture models and light cones.
+Drag to orbit, scroll to zoom, use the middle button to pan, and use the secondary button to slide
+the view. **Follow Preload** shows the pending values where present; a preloaded Dynamic remains
+live because it is a running function. **2D** is the rig plan, **3D** is the model-and-aim view,
+and **3D Viz** adds the rendered light picture. A clearly reported unavailable Stage never affects
+programming, playback, or DMX output.
 
 ### Stage is a selection and viewing surface
 
@@ -197,13 +164,10 @@ Stage receives authoritative Live and Preload output from the engine. A disconne
 
 ## Visualization
 
-The Visualization pane monitors live desk values without changing Programmer or playback state. Add rows in **Pane Settings → Visualization**, then place one or more widgets in each row. Rows stack vertically; widgets in the same row share the available width side by side. The complete layout and its widget settings are stored with the show layout.
-
-Each widget reads either one raw DMX universe/address or one resolved fixture attribute. A multiply or divide factor can be applied before the result is constrained to the configured minimum and maximum. Display the result on a 0–100% or 0–255 scale.
-
-Widgets can show concise text, a large numeric readout, a horizontal or vertical bar, or a sampled graph. Numeric widgets configure decimal places, a unit suffix, and low-to-high value colours. Graphs configure their time window, linear or logarithmic Y scale, Y-axis name, optional area fill, and independent low-to-high colour ranges for the line and fill. Sampling occurs only while the pane is visible; unavailable sources are identified instead of retaining an apparently live value.
-
-The source picker is designed to gain further desk and plugin sources without changing saved widget layouts. Raw DMX and resolved fixture attributes are the built-in sources.
+The Visualization pane monitors raw DMX or resolved fixture attributes without changing output.
+Add rows and text, number, bar, or graph widgets in **Pane Settings → Visualization**. Configure the
+source, range, scale, and display style; unavailable sources are identified rather than shown as
+live values.
 
 ## Channels
 
@@ -219,37 +183,13 @@ The full Channels window has previous/next controls and a page picker with at le
 
 ## Dynamics
 
-The Dynamics pane is the numbered pool for animated values. Tap a populated tile to toggle that
-Dynamic on the current ordered selection. A target-bound Dynamic always uses its stored target
-scope, even while another selection is active. Shift-click a populated tile to open
-the production editor. With Set armed, touching a Dynamic and then a Playback assigns that Dynamic
-to the Playback instead of starting it.
+The Dynamics pool holds numbered animated values. Tap a tile to toggle it for the current ordered
+selection, or Shift-click to edit it; use **SET** followed by a Playback to assign it. The editor
+shows **Lanes**, **Phase**, and **Speed** for attribute curves, target spreading, and BPM/Speed
+Group control. **Take Selection** stores a target (a single Group stays live; other selections are
+frozen); a stored target takes precedence over any active selection. **Clear Selection** removes
+it. Use a Stage pane for Live or Follow Preload visualization.
 
-The pool uses the same square tile surface and sizing controls as the Preset and Group pools.
-Empty positions remain available for future Dynamics without renumbering existing show data. A
-populated tile reports its name and number; its running state comes from the authoritative runtime
-rather than a browser-side animation. Press **Delete**, then a populated tile, to delete it.
-
-The editor separates **Lanes**, **Phase**, and **Speed**. Lanes contain scalar curves for
-fixture attributes. Click one lane to edit it, or Shift-click additional lanes for a shared edit.
-The lane cog opens actions over that lane to change its attribute or delete it. The bottom composer switches between
-Keyframes, Max/Min, and Middle/Amplitude while the normal Programmer encoder surface becomes the
-Dynamics encoder surface; pressing an encoder-group tab advances its additional pages when present.
-Phase controls ordered target projection, Offset/Span, Blocks, Repeats, Wings, and spatial
-ordering. Choose **Uniform** to use one spread for every lane, or **Per lane** to select a lane and
-give it its own spread. Switching to Per lane starts each lane with the current Uniform settings;
-switching back to Uniform keeps the lane settings available for a later return. Speed uses either
-fixed BPM or one authoritative Speed Group, with multiplier, run mode, activation, and boundary
-controls. **One-shot** runs one complete effective cycle and then stops.
-The editor contains no private fixture preview or browser-side evaluator: open a Stage pane and
-choose Live or **Follow Preload** for authoritative visualization.
-
-**Take Selection** stores the current target scope. One selected live Group remains a live Group
-binding; any other selection becomes an exact frozen ordered target list. **Clear Selection**
-returns the Dynamic to targetless operation. Both actions are disabled while any instance of that
-Dynamic is running, so an active definition cannot silently retarget. These controls are available
-in Dynamic Settings and in the Phase workspace.
-
-**Pane configuration:** only the common size and removal controls.
+**Pane configuration:** only common size and removal controls.
 
 ![Dynamics editor](../../assets/screenshots/panes/dynamics.png)

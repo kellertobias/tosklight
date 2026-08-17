@@ -8,13 +8,16 @@ Choose either a physical monitor or an off-screen output. A monitor output store
 
 Use the test pattern after every monitor, cable, resolution, refresh-rate, or fullscreen change. A browser preview proves that the engine rendered a frame; only the physical test pattern proves that the intended display received it.
 
+> [!danger] Missing graphic
+> Add an output-configuration screenshot showing physical versus off-screen destination, monitor selection, fullscreen, render resolution, presentation rate, and test pattern.
+
 ## Audio
 
 Choose the output's sound device explicitly when content carries audio. The system default is useful for a portable workstation but may change when an interface is connected or disconnected. Rehearse the actual device and latency path used in production.
 
 ## Control personality and DMX
 
-Choose the Media personality and configure its Art-Net or sACN universe and start address. The master and layer profiles patched in ToskLight Desk must match that personality and address layout. Art-Net normally listens on UDP `6454`, sACN on UDP `5568`, and CITP/MSEX on the configured TCP/UDP port, normally `4809`.
+Choose the Media personality and configure its Art-Net or sACN universe and start address. The master and layer profiles patched in ToskLight Control must match that personality and address layout. Art-Net normally listens on UDP `6454`, sACN on UDP `5568`, and CITP/MSEX on the configured TCP/UDP port, normally `4809`.
 
 The configuration supports one or more outputs; the shipped and certified baseline is one Main output. Treat additional outputs as an explicit production configuration and verify each monitor, GPU load, audio path, control footprint, and preview identity.
 

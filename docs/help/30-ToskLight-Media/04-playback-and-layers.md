@@ -2,6 +2,9 @@
 
 The operator surface separates the selected output's Master from its ordered layers. DMX remains the normal show-control owner; browser takeover is a deliberate temporary override for setup and diagnosis.
 
+> [!danger] Missing graphic
+> Add an annotated Pixel playback screenshot showing Master, ordered layers, takeover ownership, isolated layer preview, composite preview, and physical output.
+
 ## Take control
 
 Take over the output or exact layer before changing it from the browser. The surface identifies browser ownership so a technician does not mistake a local preview action for a Desk command. Release takeover when the Desk should become authoritative again.

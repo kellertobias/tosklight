@@ -11,8 +11,8 @@ This document is the current routing map. For what each command runs — and wha
 ## Sources of truth
 
 - `docs/help/` defines operator terminology and behavior.
-- [`docs/help/99-Development/02-test-bench-coverage.md`](../help/99-Development/02-test-bench-coverage.md)
-  defines the human-readable acceptance catalog and stable IDs.
+- The generated Test Bench coverage report defines the human-readable acceptance catalog and stable
+  IDs.
 - `tests/` implements process-level Playwright acceptance coverage.
 - Feature-local Rust and Vitest tests prove pure rules, application services, adapters, stores, and
   presentation details without replacing the public acceptance path.
