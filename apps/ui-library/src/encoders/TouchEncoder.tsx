@@ -278,7 +278,9 @@ function useTouchEncoderInteraction({
 	const [motion, setMotion] = useState<EncoderMotion | null>(null);
 	const drag = useRef<DragState | null>(null);
 	const interval = useRef<number | null>(null);
+	const onStepRef = useRef(onStep);
 	const suppressClick = useRef(false);
+	onStepRef.current = onStep;
 	const stopContinuous = () => {
 		if (interval.current !== null) window.clearInterval(interval.current);
 		interval.current = null;
@@ -291,10 +293,12 @@ function useTouchEncoderInteraction({
 	);
 	const beginContinuous = () => {
 		if (interval.current !== null || !drag.current?.delta) return;
+		onStepRef.current(drag.current.delta, drag.current.undoGroup);
 		interval.current = window.setInterval(
 			() => {
 				const current = drag.current;
-				if (current?.delta) onStep(current.delta, current.undoGroup);
+				if (current?.delta)
+					onStepRef.current(current.delta, current.undoGroup);
 			},
 			Math.max(1, repeatSeconds * 1000),
 		);

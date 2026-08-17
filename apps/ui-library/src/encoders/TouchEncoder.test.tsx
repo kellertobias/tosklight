@@ -1,11 +1,12 @@
 import {
+	act,
 	cleanup,
 	fireEvent,
 	render as rtlRender,
 	screen,
 	within,
 } from "@testing-library/react";
-import type { ReactElement } from "react";
+import { type ReactElement, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ModalProvider } from "../modals/ModalStack";
 import {
@@ -117,11 +118,12 @@ describe("TouchEncoder", () => {
 		fireEvent.pointerUp(encoder, { pointerId: 7, clientY: 140 });
 
 		const deltas = onStep.mock.calls.map(([delta]) => delta as number);
-		expect(deltas).toHaveLength(4);
+		expect(deltas).toHaveLength(5);
 		expect(deltas[0]).toBeGreaterThanOrEqual(0.001);
-		expect(deltas[1]).toBeGreaterThan(deltas[0] ?? Number.POSITIVE_INFINITY);
-		expect(deltas[2]).toBeCloseTo(deltas[0] ?? 0, 8);
-		expect(deltas[3]).toBeCloseTo(-(deltas[0] ?? 0), 8);
+		expect(deltas[1]).toBeCloseTo(deltas[0] ?? 0, 8);
+		expect(deltas[2]).toBeGreaterThan(deltas[1] ?? Number.POSITIVE_INFINITY);
+		expect(deltas[3]).toBeCloseTo(deltas[0] ?? 0, 8);
+		expect(deltas[4]).toBeCloseTo(-(deltas[0] ?? 0), 8);
 		const groups = new Set(onStep.mock.calls.map((call) => call[1]));
 		expect(groups.size).toBe(1);
 		expect([...groups][0]).toEqual(expect.any(String));
@@ -183,9 +185,47 @@ describe("TouchEncoder", () => {
 		});
 		const callsAfterCancel = onStep.mock.calls.length;
 		vi.advanceTimersByTime(TOUCH_ENCODER_CONTINUOUS_INTERVAL_MILLIS * 3);
-		expect(callsAfterCancel).toBe(3);
+		expect(callsAfterCancel).toBe(6);
 		expect(onStep).toHaveBeenCalledTimes(callsAfterCancel);
 		expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+	});
+
+	it("uses the latest step callback while a continuous turn is active", () => {
+		vi.useFakeTimers();
+		function Harness() {
+			const [value, setValue] = useState(0);
+			return (
+				<TouchEncoder
+					label="Accumulating encoder"
+					value={value}
+					display={String(value)}
+					slowStep={1}
+					fastStep={1}
+					onStep={(delta) => setValue(value + delta)}
+					onSet={setValue}
+				/>
+			);
+		}
+		render(<Harness />);
+		const encoder = screen.getByRole("group", {
+			name: "Accumulating encoder",
+		});
+		fireEvent.pointerDown(encoder, {
+			pointerId: 12,
+			button: 0,
+			clientY: 100,
+		});
+		fireEvent.pointerMove(encoder, { pointerId: 12, clientY: 70 });
+		expect(screen.getByText("1")).toBeInTheDocument();
+		act(() =>
+			vi.advanceTimersByTime(TOUCH_ENCODER_CONTINUOUS_INTERVAL_MILLIS),
+		);
+		expect(screen.getByText("2")).toBeInTheDocument();
+		act(() =>
+			vi.advanceTimersByTime(TOUCH_ENCODER_CONTINUOUS_INTERVAL_MILLIS),
+		);
+		expect(screen.getByText("3")).toBeInTheDocument();
+		fireEvent.pointerUp(encoder, { pointerId: 12, clientY: 70 });
 	});
 
 	it("maps wheel direction to fine steps and Shift to coarse steps", () => {
