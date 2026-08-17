@@ -72,8 +72,25 @@ async function storeGroupFromPool(
 
 async function ensureGroupPool(page: Page): Promise<void> {
 	if (await page.locator(".group-pool-window").isVisible()) return;
-	await page.getByRole("button", { name: "SHIFT", exact: true }).click();
-	await page.getByRole("button", { name: "1", exact: true }).click();
+	// Groups is a Shift Built-in. SHIFT sits on the playback face of the programmer surface and
+	// the digits on the other, so the old SHIFT + digit shortcut cannot be clicked at all.
+	const dock = page.getByRole("button", {
+		name: "Desktops / Built-ins",
+		exact: true,
+	});
+	if ((await dock.getAttribute("data-dock-mode")) !== "builtins") await dock.click();
+	const shift = page.locator('[data-keypad-key="SHIFT"]:visible').first();
+	const flipped = !(await shift.isVisible().catch(() => false));
+	if (flipped) await page.locator(".mode-toggle").click();
+	await shift.click();
+	await page
+		.locator("[aria-label='Shift Built-ins']")
+		.getByRole("button", { name: "Groups", exact: true })
+		.click();
+	// Release Shift and leave the surface showing the face it had: an armed Shift renames every
+	// key after its shifted meaning, and the next step addresses them by their own names.
+	await shift.click();
+	if (flipped) await page.locator(".mode-toggle").click();
 	await expect(page.locator(".group-pool-window")).toBeVisible();
 }
 
