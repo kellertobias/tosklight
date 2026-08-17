@@ -22,6 +22,10 @@ import {
 } from "react";
 import type { TimecodeDefinition } from "../../api/types/timecode";
 import {
+	SPEED_GROUP_MAX_BPM,
+	SPEED_GROUP_MIN_BPM,
+} from "../speedGroupRuntime/contracts";
+import {
 	deleteTimelineItem,
 	moveTimelineItem,
 	reorderTimelineLane,
@@ -222,6 +226,9 @@ function TimelineOverview({
 	totalWidth,
 	scrollRef,
 	viewportId,
+	minimumVisibleFraction,
+	onScrollLeftChange,
+	onVisibleRangeChange,
 }: {
 	definition: TimecodeDefinition;
 	items: readonly TimelineItem[];
@@ -231,6 +238,9 @@ function TimelineOverview({
 	totalWidth: number;
 	scrollRef: RefObject<HTMLDivElement | null>;
 	viewportId: string;
+	minimumVisibleFraction: number;
+	onScrollLeftChange(scrollLeft: number): void;
+	onVisibleRangeChange(startFraction: number, endFraction: number): void;
 }) {
 	const maximumScroll = Math.max(0, totalWidth - viewportWidth);
 	const visibleWidth = Math.min(100, (viewportWidth / totalWidth) * 100);
@@ -238,17 +248,74 @@ function TimelineOverview({
 		100 - visibleWidth,
 		Math.max(0, (scrollLeft / totalWidth) * 100),
 	);
-	const seek = (clientX: number, overview: HTMLElement) => {
+	const visibleStart = visibleLeft / 100;
+	const visibleEnd = (visibleLeft + visibleWidth) / 100;
+	const drag = useRef<{
+		pointerId: number;
+		mode: "start" | "end" | "pan";
+		grabOffset: number;
+	} | null>(null);
+	const fractionAt = (clientX: number, overview: HTMLElement) => {
 		const bounds = overview.getBoundingClientRect();
-		const fraction = Math.max(
+		return Math.max(
 			0,
 			Math.min(1, (clientX - bounds.left) / Math.max(1, bounds.width)),
 		);
+	};
+	const panTo = (leftFraction: number) => {
 		const next = Math.max(
 			0,
-			Math.min(maximumScroll, fraction * totalWidth - viewportWidth / 2),
+			Math.min(maximumScroll, leftFraction * totalWidth),
 		);
 		if (scrollRef.current) scrollRef.current.scrollLeft = next;
+		onScrollLeftChange(next);
+	};
+	const beginDrag = (
+		event: ReactPointerEvent<HTMLDivElement>,
+		overview: HTMLElement,
+	) => {
+		const fraction = fractionAt(event.clientX, overview);
+		const edge =
+			event.target instanceof Element
+				? event.target.closest<HTMLElement>("[data-overview-edge]")?.dataset
+						.overviewEdge
+				: undefined;
+		if (edge === "start" || edge === "end") {
+			drag.current = {
+				pointerId: event.pointerId,
+				mode: edge,
+				grabOffset: 0,
+			};
+			return;
+		}
+		const inside = fraction >= visibleStart && fraction <= visibleEnd;
+		const grabOffset = inside ? fraction - visibleStart : visibleWidth / 200;
+		drag.current = {
+			pointerId: event.pointerId,
+			mode: "pan",
+			grabOffset,
+		};
+		panTo(fraction - grabOffset);
+	};
+	const moveDrag = (clientX: number, overview: HTMLElement) => {
+		const current = drag.current;
+		if (!current) return;
+		const fraction = fractionAt(clientX, overview);
+		if (current.mode === "start") {
+			onVisibleRangeChange(
+				Math.max(0, Math.min(visibleEnd - minimumVisibleFraction, fraction)),
+				visibleEnd,
+			);
+			return;
+		}
+		if (current.mode === "end") {
+			onVisibleRangeChange(
+				visibleStart,
+				Math.min(1, Math.max(visibleStart + minimumVisibleFraction, fraction)),
+			);
+			return;
+		}
+		panTo(fraction - current.grabOffset);
 	};
 	const lanes = [
 		...(definition.audio ? [{ id: "main-audio", kind: "audio" }] : []),
@@ -273,23 +340,26 @@ function TimelineOverview({
 			tabIndex={0}
 			onPointerDown={(event) => {
 				event.currentTarget.setPointerCapture(event.pointerId);
-				seek(event.clientX, event.currentTarget);
+				beginDrag(event, event.currentTarget);
 			}}
 			onPointerMove={(event) => {
 				if (event.currentTarget.hasPointerCapture(event.pointerId))
-					seek(event.clientX, event.currentTarget);
+					moveDrag(event.clientX, event.currentTarget);
+			}}
+			onPointerUp={(event) => {
+				if (drag.current?.pointerId === event.pointerId) drag.current = null;
+			}}
+			onPointerCancel={(event) => {
+				if (drag.current?.pointerId === event.pointerId) drag.current = null;
 			}}
 			onKeyDown={(event) => {
 				if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
 				event.preventDefault();
 				const direction = event.key === "ArrowRight" ? 1 : -1;
 				if (scrollRef.current)
-					scrollRef.current.scrollLeft = Math.max(
-						0,
-						Math.min(
-							maximumScroll,
-							scrollRef.current.scrollLeft + direction * viewportWidth * 0.1,
-						),
+					panTo(
+						(scrollRef.current.scrollLeft + direction * viewportWidth * 0.1) /
+							totalWidth,
 					);
 			}}
 		>
@@ -339,8 +409,22 @@ function TimelineOverview({
 			<span
 				className="timecode-timeline-overview-visible"
 				style={{ left: `${visibleLeft}%`, width: `${visibleWidth}%` }}
-				aria-hidden="true"
-			/>
+			>
+				<i
+					className="timecode-timeline-overview-handle handle-start"
+					data-overview-edge="start"
+					role="separator"
+					aria-label="Resize timeline overview from start"
+					aria-orientation="vertical"
+				/>
+				<i
+					className="timecode-timeline-overview-handle handle-end"
+					data-overview-edge="end"
+					role="separator"
+					aria-label="Resize timeline overview from end"
+					aria-orientation="vertical"
+				/>
+			</span>
 		</div>
 	);
 }
@@ -772,6 +856,11 @@ export const TimecodeTimelineEditor = forwardRef<
 	const [cueListChooserOpen, setCueListChooserOpen] = useState(false);
 	const [cueListId, setCueListId] = useState(cueLists[0]?.id ?? "");
 	const [scrollLeft, setScrollLeft] = useState(0);
+	const [overviewResize, setOverviewResize] = useState<{
+		zoom: number;
+		startFraction: number;
+		revision: number;
+	} | null>(null);
 	const viewportId = useId();
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const viewportWidth = useTimelineViewportWidth(scrollRef);
@@ -880,10 +969,40 @@ export const TimecodeTimelineEditor = forwardRef<
 		const viewport = scrollRef.current;
 		if (!viewport) return;
 		const maximumScroll = Math.max(0, totalTimelineWidth - viewportWidth);
+		if (overviewResize) {
+			const next = Math.max(
+				0,
+				Math.min(maximumScroll, overviewResize.startFraction * width),
+			);
+			viewport.scrollLeft = next;
+			setScrollLeft(next);
+			setOverviewResize(null);
+			return;
+		}
 		if (viewport.scrollLeft > maximumScroll)
 			viewport.scrollLeft = maximumScroll;
 		setScrollLeft(viewport.scrollLeft);
-	}, [totalTimelineWidth, viewportWidth]);
+	}, [overviewResize, totalTimelineWidth, viewportWidth, width]);
+	const resizeOverviewWindow = (startFraction: number, endFraction: number) => {
+		const requestedFraction = Math.max(0.0001, endFraction - startFraction);
+		const requestedPixelsPerFrame = Math.min(
+			TARGET_MAX_PIXELS_PER_FRAME,
+			timelineViewportWidth / requestedFraction / duration,
+		);
+		const nextZoom = Math.max(
+			1,
+			Math.min(
+				maximumZoom,
+				requestedPixelsPerFrame / geometry.fitPixelsPerFrame,
+			),
+		);
+		setOverviewResize((current) => ({
+			zoom: nextZoom,
+			startFraction,
+			revision: (current?.revision ?? 0) + 1,
+		}));
+		setZoom(nextZoom);
+	};
 	useEffect(() => {
 		if (!cueLists.some((cueList) => cueList.id === cueListId))
 			setCueListId(cueLists[0]?.id ?? "");
@@ -957,7 +1076,13 @@ export const TimecodeTimelineEditor = forwardRef<
 								keyframes: lane.content.keyframes.map((keyframe) =>
 									keyframe.id !== selection.itemId
 										? keyframe
-										: { ...keyframe, bpm: Math.max(1, Math.min(999, value)) },
+										: {
+												...keyframe,
+												bpm: Math.max(
+													SPEED_GROUP_MIN_BPM,
+													Math.min(SPEED_GROUP_MAX_BPM, value),
+												),
+											},
 								),
 							},
 						};
@@ -1093,9 +1218,9 @@ export const TimecodeTimelineEditor = forwardRef<
 									? `${Math.round(selectedValue)}%`
 									: "—",
 							value: selectedValue,
-							minimum: speedKeyframe ? 1 : 0,
-							maximum: speedKeyframe ? 999 : 100,
-							fineStep: 1,
+							minimum: speedKeyframe ? SPEED_GROUP_MIN_BPM : 0,
+							maximum: speedKeyframe ? SPEED_GROUP_MAX_BPM : 100,
+							fineStep: speedKeyframe ? 0.1 : 1,
 							coarseStep: speedKeyframe ? 5 : 10,
 							disabled: !activeKeyframe,
 							set: updateSelectedValue,
@@ -1118,10 +1243,16 @@ export const TimecodeTimelineEditor = forwardRef<
 				items={items}
 				duration={duration}
 				scrollLeft={scrollLeft}
-				viewportWidth={viewportWidth}
-				totalWidth={totalTimelineWidth}
+				viewportWidth={timelineViewportWidth}
+				totalWidth={width}
 				scrollRef={scrollRef}
 				viewportId={viewportId}
+				minimumVisibleFraction={Math.min(
+					1,
+					timelineViewportWidth / (duration * TARGET_MAX_PIXELS_PER_FRAME),
+				)}
+				onScrollLeftChange={setScrollLeft}
+				onVisibleRangeChange={resizeOverviewWindow}
 			/>
 			<TimelineCanvas
 				{...{
@@ -1302,7 +1433,13 @@ function KeyframeActionStrip({
 							...candidate.content,
 							keyframes: candidate.content.keyframes.map((keyframe) =>
 								keyframe.id === selection.itemId
-									? { ...keyframe, bpm: Math.max(1, Math.min(999, value)) }
+									? {
+											...keyframe,
+											bpm: Math.max(
+												SPEED_GROUP_MIN_BPM,
+												Math.min(SPEED_GROUP_MAX_BPM, value),
+											),
+										}
 									: keyframe,
 							),
 						},
@@ -1404,8 +1541,9 @@ function KeyframeActionStrip({
 				<KeyframeValueSlider
 					label="BPM"
 					value={selectedSpeed.bpm}
-					minimum={1}
-					maximum={999}
+					minimum={SPEED_GROUP_MIN_BPM}
+					maximum={SPEED_GROUP_MAX_BPM}
+					step={0.1}
 					unit=" BPM"
 					onChange={updateValue}
 				/>
@@ -1450,6 +1588,7 @@ function KeyframeValueSlider({
 	value,
 	minimum,
 	maximum,
+	step = 1,
 	unit,
 	onChange,
 }: {
@@ -1457,6 +1596,7 @@ function KeyframeValueSlider({
 	value: number;
 	minimum: number;
 	maximum: number;
+	step?: number;
 	unit: string;
 	onChange(value: number): void;
 }) {
@@ -1468,11 +1608,11 @@ function KeyframeValueSlider({
 				aria-label={`${label} value`}
 				min={minimum}
 				max={maximum}
-				step={1}
+				step={step}
 				value={value}
 				onChange={(event) => onChange(Number(event.currentTarget.value))}
 			/>
-			<output>{`${Math.round(value)}${unit}`}</output>
+			<output>{`${Number.isInteger(value) ? value : value.toFixed(1)}${unit}`}</output>
 		</label>
 	);
 }
@@ -2065,8 +2205,9 @@ function SpeedInspector({
 			<InspectorNumber
 				label="BPM"
 				value={bpm}
-				min={1}
-				max={999}
+				min={SPEED_GROUP_MIN_BPM}
+				max={SPEED_GROUP_MAX_BPM}
+				step={0.1}
 				onValue={onBpm}
 			/>
 			<InspectorNumber

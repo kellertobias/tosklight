@@ -144,6 +144,7 @@ describe("TimecodeTimelineEditor", () => {
 			overview.querySelector(".timecode-timeline-overview-lanes"),
 		).toHaveAttribute("data-lane-height", "3");
 		overview.setPointerCapture = vi.fn();
+		overview.hasPointerCapture = vi.fn(() => true);
 		vi.spyOn(overview, "getBoundingClientRect").mockReturnValue({
 			x: 0,
 			y: 0,
@@ -159,6 +160,29 @@ describe("TimecodeTimelineEditor", () => {
 		expect(screen.getByLabelText("Timecode timeline viewport").scrollLeft).toBe(
 			560,
 		);
+		fireEvent.pointerUp(overview, { pointerId: 9 });
+
+		const endHandle = screen.getByRole("separator", {
+			name: "Resize timeline overview from end",
+		});
+		fireEvent.pointerDown(endHandle, { pointerId: 10, clientX: 720 });
+		fireEvent.pointerMove(overview, { pointerId: 10, clientX: 648 });
+		expect(Number(canvas?.dataset.pixelsPerFrame)).toBeCloseTo(
+			(560 / 440) * 2.5,
+		);
+		fireEvent.pointerUp(overview, { pointerId: 10 });
+		const startHandle = screen.getByRole("separator", {
+			name: "Resize timeline overview from start",
+		});
+		fireEvent.pointerDown(startHandle, { pointerId: 11, clientX: 360 });
+		fireEvent.pointerMove(overview, { pointerId: 11, clientX: 432 });
+		expect(Number(canvas?.dataset.pixelsPerFrame)).toBeCloseTo(
+			(560 / 440) * (10 / 3),
+		);
+		expect(
+			screen.getByLabelText("Timecode timeline viewport").scrollLeft,
+		).toBeGreaterThan(0);
+		fireEvent.pointerUp(overview, { pointerId: 11 });
 
 		fireEvent.click(screen.getByRole("button", { name: "Set playhead" }));
 		expect(onScrub).toHaveBeenCalledWith(132);
@@ -406,6 +430,10 @@ describe("TimecodeTimelineEditor", () => {
 				name: /Speed Group A.*Drag to reorder lane/,
 			}),
 		);
+		const bpmSlider = screen.getByLabelText("BPM value");
+		expect(bpmSlider).toHaveAttribute("min", "0.1");
+		expect(bpmSlider).toHaveAttribute("max", "999");
+		expect(bpmSlider).toHaveAttribute("step", "0.1");
 		fireEvent.change(screen.getByLabelText("BPM value"), {
 			target: { value: "180" },
 		});

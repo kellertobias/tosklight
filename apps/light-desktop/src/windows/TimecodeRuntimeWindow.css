@@ -283,7 +283,37 @@
 	border: 1px solid #58d4ef;
 	background: rgb(88 212 239 / 16%);
 	box-shadow: inset 0 0 0 1px rgb(0 0 0 / 45%);
-	pointer-events: none;
+	pointer-events: auto;
+}
+.timecode-timeline-overview-handle {
+	position: absolute;
+	top: -1px;
+	bottom: -1px;
+	width: 16px;
+	cursor: ew-resize;
+	touch-action: none;
+}
+.timecode-timeline-overview-handle::after {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	left: 7px;
+	width: 2px;
+	background: #58d4ef;
+	content: "";
+}
+.timecode-timeline-overview-handle.handle-start {
+	left: -1px;
+}
+.timecode-timeline-overview-handle.handle-start::after {
+	left: 0;
+}
+.timecode-timeline-overview-handle.handle-end {
+	right: -1px;
+}
+.timecode-timeline-overview-handle.handle-end::after {
+	right: 0;
+	left: auto;
 }
 .timecode-timeline-scroll {
 	flex: 1 1 12rem;
@@ -501,7 +531,7 @@
 	justify-content: start;
 	justify-items: start;
 	margin: 0;
-	padding: 0.35rem 0;
+	padding: 0.35rem 0.5rem;
 	border: 0;
 	border-radius: 0;
 	background: transparent;
@@ -549,11 +579,11 @@
 	font-variant-numeric: tabular-nums;
 }
 .timecode-timeline-item.item-clip {
-	top: 0;
-	height: 100%;
+	top: 3px;
+	height: calc(100% - 6px);
 	min-height: 0;
 	max-width: none;
-	border-radius: 0;
+	border-radius: 0.2rem;
 	border-color: #618d51;
 	background: #1f4027;
 }
@@ -635,7 +665,7 @@
 /* The playhead is the shared Button primitive reshaped into a scrub line. */
 .ui-button.timecode-editor-playhead {
 	position: absolute;
-	z-index: 5;
+	z-index: 3;
 	top: 0;
 	bottom: 0;
 	display: block;

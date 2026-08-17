@@ -1,4 +1,6 @@
 export const speedGroupIds = ["A", "B", "C", "D", "E"] as const;
+export const SPEED_GROUP_MIN_BPM = 0.1;
+export const SPEED_GROUP_MAX_BPM = 999;
 
 export type SpeedGroupId = (typeof speedGroupIds)[number];
 

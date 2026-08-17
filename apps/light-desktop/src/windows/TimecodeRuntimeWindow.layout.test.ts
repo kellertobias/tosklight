@@ -33,7 +33,7 @@ describe("Timecode timeline layout", () => {
 			/\.timecode-editor-lane\s*\{[\s\S]*?height:\s*var\(--timecode-lane-height\);[\s\S]*?min-height:\s*var\(--timecode-lane-height\);[\s\S]*?max-height:\s*var\(--timecode-lane-height\);/,
 		);
 		expect(css).toMatch(
-			/\.timecode-timeline-item\.item-clip\s*\{[\s\S]*?top:\s*0;[\s\S]*?height:\s*100%;[\s\S]*?min-height:\s*0;/,
+			/\.timecode-timeline-item\.item-clip\s*\{[\s\S]*?top:\s*3px;[\s\S]*?height:\s*calc\(100% - 6px\);[\s\S]*?min-height:\s*0;/,
 		);
 	});
 
@@ -71,6 +71,9 @@ describe("Timecode timeline layout", () => {
 		expect(css).toMatch(
 			/\.timecode-timeline-overview-visible\s*\{[\s\S]*?border:\s*1px solid #58d4ef;/,
 		);
+		expect(css).toMatch(
+			/\.timecode-timeline-overview-handle\s*\{[\s\S]*?width:\s*16px;[\s\S]*?cursor:\s*ew-resize;/,
+		);
 	});
 
 	it("keeps the Cue List chooser pool scrollable with left-aligned titles", () => {
@@ -81,7 +84,7 @@ describe("Timecode timeline layout", () => {
 			/\.timecode-cuelist-chooser-grid \.pool-card-name\s*\{[\s\S]*?text-align:\s*left;/,
 		);
 		expect(css).toMatch(
-			/\.timecode-lane-select\.ui-button\s*\{[\s\S]*?justify-content:\s*start;[\s\S]*?padding:\s*0\.35rem 0;[\s\S]*?text-align:\s*left;/,
+			/\.timecode-lane-select\.ui-button\s*\{[\s\S]*?justify-content:\s*start;[\s\S]*?padding:\s*0\.35rem 0\.5rem;[\s\S]*?text-align:\s*left;/,
 		);
 		expect(css).toMatch(
 			/\.timecode-editor-lane\.lane-cue_list \.timecode-lane-select\.ui-button\s*\{[\s\S]*?justify-items:\s*start;[\s\S]*?text-align:\s*left;/,
@@ -103,6 +106,9 @@ describe("Timecode timeline layout", () => {
 	});
 
 	it("keeps the playhead label at its top and has only the exact ruler grid", () => {
+		expect(css).toMatch(
+			/\.ui-button\.timecode-editor-playhead\s*\{[\s\S]*?z-index:\s*3;/,
+		);
 		expect(css).toMatch(
 			/\.timecode-editor-playhead span\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?top:\s*0;/,
 		);

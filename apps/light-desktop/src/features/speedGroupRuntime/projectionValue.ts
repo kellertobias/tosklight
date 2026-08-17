@@ -4,6 +4,8 @@ import {
 	type SpeedGroupId,
 	type SpeedGroupProjection,
 	type SpeedGroupSnapshot,
+	SPEED_GROUP_MAX_BPM,
+	SPEED_GROUP_MIN_BPM,
 	speedGroupIds,
 } from "./contracts";
 import { SpeedGroupProtocolError } from "./transport";
@@ -132,7 +134,11 @@ export function assertAction(action: SpeedGroupAction) {
 }
 
 export function assertBpm(value: number) {
-	if (!Number.isFinite(value) || value < 0.1 || value > 999)
+	if (
+		!Number.isFinite(value) ||
+		value < SPEED_GROUP_MIN_BPM ||
+		value > SPEED_GROUP_MAX_BPM
+	)
 		throw protocolError("BPM must be from 0.1 through 999");
 }
 
