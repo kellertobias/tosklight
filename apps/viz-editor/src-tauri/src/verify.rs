@@ -17,8 +17,9 @@ use std::time::Duration;
 /// How long the interface gets to mount before this is called a failure.
 ///
 /// Generous on purpose: a cold start on a loaded build machine is slow, and a flaky check that
-/// fails a good build teaches people to ignore it.
-const MOUNT_TIMEOUT: Duration = Duration::from_secs(30);
+/// fails a good build teaches people to ignore it. Windows CI creates the WebView2 user data
+/// folder on first launch behind a virus scanner, which is minutes slower than a warm desktop.
+const MOUNT_TIMEOUT: Duration = Duration::from_secs(120);
 
 /// Whether this launch is only checking that the window draws.
 pub fn requested() -> bool {
@@ -78,7 +79,7 @@ pub fn surface_ready(ready: tauri::State<'_, Arc<SurfaceReady>>) {
 ///
 /// Exits rather than returning, because there is nothing else this launch was for. The message
 /// says which of the two happened in the words someone reading CI output needs.
-pub fn watch(ready: Arc<SurfaceReady>) {
+pub fn watch(ready: Arc<SurfaceReady>, loaded: impl Fn() -> String + Send + 'static) {
     std::thread::Builder::new()
         .name("viz-editor-verify".into())
         .spawn(move || {
@@ -93,8 +94,10 @@ pub fn watch(ready: Arc<SurfaceReady>) {
             eprintln!(
                 "The Viz editor opened but drew nothing within {} seconds. The window is white: \
                  either the binary embedded no frontend — a build without the `custom-protocol` \
-                 feature falls back to the dev-server URL — or the interface failed to mount.",
-                MOUNT_TIMEOUT.as_secs()
+                 feature falls back to the dev-server URL — or the interface failed to mount. \
+                 The window is showing {}.",
+                MOUNT_TIMEOUT.as_secs(),
+                loaded()
             );
             std::process::exit(1);
         })

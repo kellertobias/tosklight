@@ -284,7 +284,15 @@ fn main() {
             // `--verify` opens the window, waits for the interface to report itself, and exits
             // with the verdict. Nothing in the build catches a window that opens white.
             if verify::requested() {
-                verify::watch(app.state::<Arc<verify::SurfaceReady>>().inner().clone());
+                let window = app.get_webview_window("main");
+                verify::watch(
+                    app.state::<Arc<verify::SurfaceReady>>().inner().clone(),
+                    move || match window.as_ref().map(tauri::WebviewWindow::url) {
+                        Some(Ok(url)) => url.to_string(),
+                        Some(Err(error)) => format!("no readable URL: {error}"),
+                        None => "no main window".into(),
+                    },
+                );
             }
             Ok(())
         })
