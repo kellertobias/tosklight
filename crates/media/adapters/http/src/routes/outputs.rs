@@ -14,13 +14,14 @@ use media_application::MediaConfiguration;
 use media_application::configuration::{load, save};
 use media_domain::{
     ANALOG_TV_EFFECT, Applied, BEAT_FORM_FLASH_EFFECT, BEAT_GRID_WAVE_EFFECT, BEAT_MOVE_EFFECT,
-    BEAT_SCALE_TURN_EFFECT, BEAT_SCAN_EFFECT, BeatFormFlashParameters, BeatGridWaveOrigin,
-    BeatGridWaveParameters, BeatMoveDirection, BeatMoveParameters, BeatScaleTurnParameters,
-    BeatScanEdge, BeatScanParameters, Command, CommandKind, CommandSource, DIGITAL_TV_EFFECT,
-    DRAWN_IMAGE_EFFECT, DrawnImageParameters, EffectSlot, FlipMirror, KALEIDOSCOPE_EFFECT,
-    KaleidoscopeParameters, LayerControls, MasterControls, MasterShaper, MediaAddress, MediaState,
-    OPACITY_CYCLE_EFFECT, OpacityCycleInterval, OutputId, RASTERIZE_EFFECT, RasterizeMode,
-    RasterizeParameters, ScalingMode, Timestamp, Tint, apply,
+    BEAT_SCALE_TURN_EFFECT, BEAT_SCAN_EFFECT, BLUR_EFFECT, BeatFormFlashParameters,
+    BeatGridWaveOrigin, BeatGridWaveParameters, BeatMoveDirection, BeatMoveParameters,
+    BeatScaleTurnParameters, BeatScanEdge, BeatScanParameters, BlurParameters, Command,
+    CommandKind, CommandSource, DIGITAL_TV_EFFECT, DRAWN_IMAGE_EFFECT, DrawnImageParameters,
+    EffectSlot, FEEDBACK_EFFECT, FeedbackMotion, FeedbackParameters, FlipMirror,
+    KALEIDOSCOPE_EFFECT, KaleidoscopeParameters, LayerControls, MasterControls, MasterShaper,
+    MediaAddress, MediaState, OPACITY_CYCLE_EFFECT, OpacityCycleInterval, OutputId,
+    RASTERIZE_EFFECT, RasterizeMode, RasterizeParameters, ScalingMode, Timestamp, Tint, apply,
 };
 
 use crate::error::ApiError;
@@ -263,6 +264,9 @@ async fn update_layer_inner(
         ("tileDisplacement", body.tile_displacement),
         ("chromaDamage", body.chroma_damage),
         ("effectGlitching", body.effect_glitching),
+        ("blurAmount", body.blur_amount),
+        ("feedbackAmount", body.feedback_amount),
+        ("feedbackMotion", body.feedback_motion),
         ("blur", body.blur),
         ("beatMoveAmount", body.beat_move_amount),
         ("beatScanFalloff", body.beat_scan_falloff),
@@ -329,6 +333,8 @@ async fn update_layer_inner(
             effects[slot] = match effect_type {
                 ANALOG_TV_EFFECT => EffectSlot::analog_tv(),
                 DIGITAL_TV_EFFECT => EffectSlot::digital_tv(),
+                BLUR_EFFECT => EffectSlot::blur(),
+                FEEDBACK_EFFECT => EffectSlot::feedback(),
                 OPACITY_CYCLE_EFFECT => EffectSlot::opacity_cycle(),
                 BEAT_MOVE_EFFECT => EffectSlot::beat_move(),
                 KALEIDOSCOPE_EFFECT => EffectSlot::kaleidoscope(),
@@ -375,6 +381,38 @@ async fn update_layer_inner(
         }
         if let Some(mix) = body.effect_mix {
             effect.mix = mix;
+        }
+        if let Some(amount) = body.blur_amount {
+            if effect.effect_type.as_deref() != Some(BLUR_EFFECT) {
+                return Err(ApiError::bad_request(
+                    "blur-parameters-effect",
+                    "choose the Blur effect before changing its controls",
+                ));
+            }
+            effect.parameters = BlurParameters { amount }.as_array().to_vec();
+        }
+        if body.feedback_amount.is_some()
+            || body.feedback_motion.is_some()
+            || body.feedback_direction.is_some()
+        {
+            if effect.effect_type.as_deref() != Some(FEEDBACK_EFFECT) {
+                return Err(ApiError::bad_request(
+                    "feedback-parameters-effect",
+                    "choose the Feedback effect before changing its controls",
+                ));
+            }
+            let mut parameters = FeedbackParameters::from_normalized(&effect.parameters);
+            parameters.amount = body.feedback_amount.unwrap_or(parameters.amount);
+            parameters.motion = body.feedback_motion.unwrap_or(parameters.motion);
+            if let Some(direction) = body.feedback_direction.as_deref() {
+                parameters.direction = FeedbackMotion::parse(direction).ok_or_else(|| {
+                    ApiError::bad_request(
+                        "feedback-direction-invalid",
+                        "feedbackDirection is not a supported motion direction",
+                    )
+                })?;
+            }
+            effect.parameters = parameters.as_array().to_vec();
         }
         if let Some(interval) = body.cycle_interval.as_deref() {
             if effect.effect_type.as_deref() != Some(OPACITY_CYCLE_EFFECT) {

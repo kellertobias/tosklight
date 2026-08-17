@@ -338,7 +338,7 @@ effectSlot?: number | null,
 /**
  * `analog-tv` or `digital-tv` selects the effect; `none` clears the slot.
  */
-effectType?: string | null, effectEnabled?: boolean | null, effectMix?: number | null, tvCurvature?: number | null, effectDistortion?: number | null, imageGrain?: number | null, compressionDamage?: number | null, blockSize?: number | null, tileDisplacement?: number | null, chromaDamage?: number | null, effectGlitching?: number | null,
+effectType?: string | null, effectEnabled?: boolean | null, effectMix?: number | null, tvCurvature?: number | null, effectDistortion?: number | null, imageGrain?: number | null, compressionDamage?: number | null, blockSize?: number | null, tileDisplacement?: number | null, chromaDamage?: number | null, effectGlitching?: number | null, blurAmount?: number | null, feedbackAmount?: number | null, feedbackMotion?: number | null, feedbackDirection?: string | null,
 /**
  * `every-beat`, `every-half-beat`, or `every-second` for the opacity cycle effect.
  */

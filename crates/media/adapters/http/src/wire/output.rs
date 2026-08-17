@@ -5,12 +5,12 @@ use media_application::configuration::{
 };
 use media_domain::{
     ANALOG_TV_EFFECT, AnalogTvParameters, BEAT_FORM_FLASH_EFFECT, BEAT_GRID_WAVE_EFFECT,
-    BEAT_MOVE_EFFECT, BEAT_SCALE_TURN_EFFECT, BEAT_SCAN_EFFECT, BeatFormFlashParameters,
-    BeatGridWaveParameters, BeatMoveParameters, BeatScaleTurnParameters, BeatScanParameters,
-    DIGITAL_TV_EFFECT, DRAWN_IMAGE_EFFECT, DigitalTvParameters, DrawnImageParameters, EffectSlot,
-    KALEIDOSCOPE_EFFECT, KaleidoscopeParameters, LayerState, MaskSource, MaskState, MasterState,
-    MediaAddress, OPACITY_CYCLE_EFFECT, OpacityCycleInterval, OutputState, RASTERIZE_EFFECT,
-    RasterizeParameters,
+    BEAT_MOVE_EFFECT, BEAT_SCALE_TURN_EFFECT, BEAT_SCAN_EFFECT, BLUR_EFFECT,
+    BeatFormFlashParameters, BeatGridWaveParameters, BeatMoveParameters, BeatScaleTurnParameters,
+    BeatScanParameters, BlurParameters, DIGITAL_TV_EFFECT, DRAWN_IMAGE_EFFECT, DigitalTvParameters,
+    DrawnImageParameters, EffectSlot, FEEDBACK_EFFECT, FeedbackParameters, KALEIDOSCOPE_EFFECT,
+    KaleidoscopeParameters, LayerState, MaskSource, MaskState, MasterState, MediaAddress,
+    OPACITY_CYCLE_EFFECT, OpacityCycleInterval, OutputState, RASTERIZE_EFFECT, RasterizeParameters,
 };
 use media_domain::{LayerPersonality, PresentationMode};
 use serde::{Deserialize, Serialize};
@@ -86,6 +86,8 @@ impl EffectSlotView {
     fn of(index: usize, effect: &EffectSlot) -> Self {
         let analog = effect.effect_type.as_deref() == Some(ANALOG_TV_EFFECT);
         let digital = effect.effect_type.as_deref() == Some(DIGITAL_TV_EFFECT);
+        let blur = effect.effect_type.as_deref() == Some(BLUR_EFFECT);
+        let feedback = effect.effect_type.as_deref() == Some(FEEDBACK_EFFECT);
         let opacity_cycle = effect.effect_type.as_deref() == Some(OPACITY_CYCLE_EFFECT);
         let beat_move = effect.effect_type.as_deref() == Some(BEAT_MOVE_EFFECT);
         let kaleidoscope = effect.effect_type.as_deref() == Some(KALEIDOSCOPE_EFFECT);
@@ -110,6 +112,19 @@ impl EffectSlotView {
             parameter_views(
                 &DigitalTvParameters::IDS,
                 &DigitalTvParameters::LABELS,
+                &values,
+                &defaults,
+            )
+        } else if blur {
+            let defaults = BlurParameters::default().as_array();
+            let values = BlurParameters::from_normalized(&effect.parameters).as_array();
+            parameter_views(&["blur-amount"], &["Blur amount"], &values, &defaults)
+        } else if feedback {
+            let defaults = FeedbackParameters::default().as_array();
+            let values = FeedbackParameters::from_normalized(&effect.parameters).as_array();
+            parameter_views(
+                &["feedback-amount", "feedback-motion", "feedback-direction"],
+                &["Feedback amount", "Motion speed", "Motion direction"],
                 &values,
                 &defaults,
             )
@@ -203,6 +218,8 @@ impl EffectSlotView {
             effect_type: effect.effect_type.clone(),
             label: if analog
                 || digital
+                || blur
+                || feedback
                 || opacity_cycle
                 || beat_move
                 || kaleidoscope
@@ -217,6 +234,10 @@ impl EffectSlotView {
                     "Analog TV"
                 } else if digital {
                     "Digital TV"
+                } else if blur {
+                    "Blur"
+                } else if feedback {
+                    "Feedback"
                 } else if opacity_cycle {
                     "Layer opacity cycle"
                 } else if beat_move {
@@ -245,6 +266,8 @@ impl EffectSlotView {
             supported: effect.effect_type.is_none()
                 || analog
                 || digital
+                || blur
+                || feedback
                 || opacity_cycle
                 || beat_move
                 || kaleidoscope
@@ -256,6 +279,8 @@ impl EffectSlotView {
                 || drawn_image,
             capability_detail: (!analog
                 && !digital
+                && !blur
+                && !feedback
                 && !opacity_cycle
                 && !beat_move
                 && !kaleidoscope
@@ -1054,6 +1079,14 @@ pub struct UpdateLayer {
     pub chroma_damage: Option<f32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effect_glitching: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blur_amount: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub feedback_amount: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub feedback_motion: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub feedback_direction: Option<String>,
     /// `every-beat`, `every-half-beat`, or `every-second` for the opacity cycle effect.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cycle_interval: Option<String>,
@@ -1150,6 +1183,10 @@ impl UpdateLayer {
             || self.tile_displacement.is_some()
             || self.chroma_damage.is_some()
             || self.effect_glitching.is_some()
+            || self.blur_amount.is_some()
+            || self.feedback_amount.is_some()
+            || self.feedback_motion.is_some()
+            || self.feedback_direction.is_some()
             || self.cycle_interval.is_some()
             || self.beat_move_amount.is_some()
             || self.beat_move_direction.is_some()

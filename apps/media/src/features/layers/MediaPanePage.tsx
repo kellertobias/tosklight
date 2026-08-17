@@ -764,7 +764,7 @@ function tintChange(value: string) {
 function layerChange(id: string, value: string | number): UpdateLayer {
 	const number = Number(value);
 	const effect =
-		/^effect-(\d+)-(type|enabled|mix|tv-curvature|distortion|image-grain|compression-damage|block-size|tile-displacement|chroma-damage|glitching|cycle-interval|beat-move-amount|beat-move-direction|beat-move-decay|kaleidoscope-repetitions|kaleidoscope-angle|rasterize-mode|rasterize-dot-size|beat-scan-width|beat-scan-edge|beat-scan-falloff|beat-scan-duration|beat-scale-amount|beat-turn-enabled|beat-turn-rotation|beat-scale-decay|beat-grid-density|beat-grid-height|beat-grid-duration|beat-grid-origin|beat-grid-hue|beat-grid-brightness|beat-form-enlargement|beat-form-lifetime|beat-form-density|beat-form-variation|drawn-strength|drawn-line-detail)$/.exec(
+		/^effect-(\d+)-(type|enabled|mix|tv-curvature|distortion|image-grain|compression-damage|block-size|tile-displacement|chroma-damage|glitching|blur-amount|feedback-amount|feedback-motion|feedback-direction|cycle-interval|beat-move-amount|beat-move-direction|beat-move-decay|kaleidoscope-repetitions|kaleidoscope-angle|rasterize-mode|rasterize-dot-size|beat-scan-width|beat-scan-edge|beat-scan-falloff|beat-scan-duration|beat-scale-amount|beat-turn-enabled|beat-turn-rotation|beat-scale-decay|beat-grid-density|beat-grid-height|beat-grid-duration|beat-grid-origin|beat-grid-hue|beat-grid-brightness|beat-form-enlargement|beat-form-lifetime|beat-form-density|beat-form-variation|drawn-strength|drawn-line-detail)$/.exec(
 			id,
 		);
 	if (effect) {
@@ -792,6 +792,14 @@ function layerChange(id: string, value: string | number): UpdateLayer {
 				return { effectSlot, chromaDamage: number / 100 };
 			case "glitching":
 				return { effectSlot, effectGlitching: number / 100 };
+			case "blur-amount":
+				return { effectSlot, blurAmount: number / 100 };
+			case "feedback-amount":
+				return { effectSlot, feedbackAmount: number / 100 };
+			case "feedback-motion":
+				return { effectSlot, feedbackMotion: number / 100 };
+			case "feedback-direction":
+				return { effectSlot, feedbackDirection: String(value) };
 			case "cycle-interval":
 				return { effectSlot, cycleInterval: String(value) };
 			case "beat-move-amount":
@@ -916,6 +924,8 @@ function effectControls(
 					{ value: "none", label: "None" },
 					{ value: "analog-tv", label: "Analog TV" },
 					{ value: "digital-tv", label: "Digital TV" },
+					{ value: "blur", label: "Blur" },
+					{ value: "feedback", label: "Feedback" },
 					{ value: "opacity-cycle", label: "Layer opacity cycle" },
 					{ value: "beat-move", label: "Beat Move" },
 					{ value: "kaleidoscope", label: "Kaleidoscope" },
