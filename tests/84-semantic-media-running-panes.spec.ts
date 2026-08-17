@@ -87,12 +87,14 @@ async function openRunningPane(page: Page): Promise<void> {
 	await page.mouse.click(box!.x + box!.width * 0.2, box!.y + box!.height * 0.2);
 	const picker = page.getByRole("dialog", { name: "Open Window", exact: true });
 	await expect(picker).toBeVisible();
-	const playbackTab = picker.getByRole("tab", {
-		name: "Playback & Automation",
-		exact: true,
-	});
-	if (await playbackTab.count()) await playbackTab.click();
-	await picker.getByRole("button", { name: /^Running/ }).click();
+	// The catalog groups its cards into tabs and Running sits under Miscellaneous, so the bench
+	// searches the tabs rather than assuming which one carries it.
+	const card = picker.getByRole("button").filter({ hasText: /^Running/ });
+	for (const tab of await picker.getByRole("tab").all()) {
+		await tab.click();
+		if (await card.count()) break;
+	}
+	await card.first().click();
 }
 
 async function fulfillJson(route: Route, body: unknown): Promise<void> {
