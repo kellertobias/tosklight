@@ -46,7 +46,10 @@ impl Fonts {
         if database.is_empty() {
             return Err(FontError::NoFonts);
         }
-        let fallback = pick(&database, &["sans-serif"]);
+        // A generic family resolves through names this machine may not carry, so a rack with
+        // fonts installed can still answer "no sans-serif". Any real face beats drawing nothing.
+        let fallback = pick(&database, &["sans-serif"])
+            .or_else(|| database.faces().next().map(|face| face.id));
         Ok(Self {
             database,
             parsed: HashMap::new(),
