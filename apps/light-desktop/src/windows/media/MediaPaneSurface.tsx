@@ -272,7 +272,7 @@ export function MediaPaneSurface({
 						</section>
 					) : null}
 					<section className="media-pane-overview" aria-label="Media output">
-						{!model.hasCitpEndpoint && (
+						{!model.hasCitpEndpoint && model.preview.kind !== "audio" && (
 							<p className="media-pane-citp-note" role="status">
 								CITP is not configured. Layers and manual folder/file values
 								remain available; previews and advertised library names are
@@ -409,10 +409,17 @@ function MediaCompositePreview({
 						onFailure={() => setImageFailed(true)}
 					/>
 				)}
-				<span className="media-composite-safe-area" aria-hidden="true" />
+					{preview.kind === "audio" && (
+						<MusicNote className="media-composite-note" label="Audio output" />
+					)}
+					<span className="media-composite-safe-area" aria-hidden="true" />
 			</span>
 			<span className="media-composite-info">
-				<strong>Master output live preview</strong>
+				<strong>
+						{preview.kind === "audio"
+							? "Master audio output"
+							: "Master output live preview"}
+					</strong>
 				{imageFailed ? (
 					<span className="danger" role="alert">
 						Live preview could not be loaded.
@@ -421,6 +428,26 @@ function MediaCompositePreview({
 				<PreviewStateMessage preview={preview} />
 			</span>
 		</Button>
+	);
+}
+
+/** Stand-in artwork for an audio-only media source, which has no rendered frame. */
+function MusicNote({ className, label }: { className: string; label: string }) {
+	return (
+		<span className={className} role="img" aria-label={label} title={label}>
+			<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+				<path
+					d="M9 17.5V6.2l9-1.8v9.6"
+					fill="none"
+					stroke="currentColor"
+					strokeWidth="1.6"
+					strokeLinecap="round"
+					strokeLinejoin="round"
+				/>
+				<circle cx="6.5" cy="17.5" r="2.5" fill="currentColor" />
+				<circle cx="15.5" cy="14" r="2.5" fill="currentColor" />
+			</svg>
+		</span>
 	);
 }
 
@@ -513,6 +540,8 @@ function PreviewStateMessage({ preview }: { preview: MediaPreviewState }) {
 					Source {preview.source} failed · {preview.detail}
 				</span>
 			);
+		case "audio":
+			return <span>{preview.detail}</span>;
 		case "missing_patch":
 			return <span className="danger">Missing patch · {preview.detail}</span>;
 		case "unsupported":
@@ -559,8 +588,19 @@ function MediaLayerStrip({
 								onClick={() => onSelectLayer(layer.id)}
 							>
 								<span
-									className={`media-layer-thumbnail ${layer.thumbnailSrc ? "has-image" : "is-empty"}`}
+									className={`media-layer-thumbnail ${layer.thumbnailSrc ? "has-image" : "is-empty"} ${layer.audio ? "is-audio" : ""}`}
 								>
+									{layer.audio && (
+										<span className="media-layer-audio">
+											<small className="media-layer-audio-values">
+												{layer.audio.volumeLabel} · {layer.audio.sourceLabel}
+											</small>
+											<MusicNote
+												className="media-layer-note"
+												label={`Audio ${layer.audio.volumeLabel} · ${layer.audio.sourceLabel}`}
+											/>
+										</span>
+									)}
 									{layer.thumbnailSrc && (
 										<SafePreviewImage
 											src={layer.thumbnailSrc}

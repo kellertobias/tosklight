@@ -16,6 +16,7 @@ import { useMediaPaneActions } from "./media/useMediaPaneActions";
 import { useMediaPaneData } from "./media/useMediaPaneData";
 
 export {
+	audioLibraryMutations,
 	mediaCapabilitiesForLayer,
 	mediaDraftForLayer,
 	mediaFileMutations,

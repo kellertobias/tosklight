@@ -20,6 +20,13 @@ impl InternalAudioResource {
         self.runtime.lock().status()
     }
 
+    pub(in crate::runtime) fn player(
+        &self,
+        fixture: &light_fixture::PatchedFixture,
+    ) -> crate::runtime::internal_audio::PlayerSnapshot {
+        self.runtime.lock().player(fixture)
+    }
+
     pub(in crate::runtime) fn replace_library_roots(
         &self,
         roots: &std::collections::BTreeMap<String, String>,

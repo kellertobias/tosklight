@@ -9,7 +9,10 @@ import {
 } from "../../features/programmerValues/useProgrammerValuesMutationQueue";
 import type { useProgrammingSelectionActions } from "../../features/programmingInteraction/ProgrammingInteractionView";
 import type { PersistedMediaPaneState } from "../MediaPaneWindow";
-import { mediaLibraryMutations } from "../MediaPaneWindow.helpers";
+import {
+	audioLibraryMutations,
+	mediaLibraryMutations,
+} from "../MediaPaneWindow.helpers";
 import {
 	mediaCmyFromRgb,
 	mediaControlNormalizedValue,
@@ -53,6 +56,16 @@ interface MediaPaneActionsInput {
 	initializeLayer(layerId: string): void;
 	resetMediaData(): void;
 	onPersist?: (state: PersistedMediaPaneState) => void;
+}
+
+function usesLegacyAudioAddressing(
+	layer: MediaServerFixture["layers"][number] | undefined,
+) {
+	const attributes = layer?.attributes;
+	if (!attributes?.length) return false;
+	return (
+		!attributes.includes("media.folder") && attributes.includes("audio.folder")
+	);
 }
 
 export function useMediaPaneActions(input: MediaPaneActionsInput) {
@@ -112,6 +125,24 @@ export function useMediaPaneActions(input: MediaPaneActionsInput) {
 			if (!input.selectedFixtureId || !Number.isFinite(input.draftFolder))
 				return;
 			const file = Number(item.id);
+			if (usesLegacyAudioAddressing(input.selectedLayer)) {
+				// An Audio Player patched before TL-367 keeps its own folder/file attributes and
+				// advertises no CITP library to select from.
+				if (!input.selectedLayer) return;
+				const operation = input.valuesQueue.submitBarrier(
+					audioLibraryMutations(
+						input.selectedLayer.fixture_id,
+						input.draftFolder,
+						file,
+					),
+				);
+				void operation?.catch((cause) =>
+					input.setInspectionError(
+						cause instanceof Error ? cause.message : String(cause),
+					),
+				);
+				return;
+			}
 			if (input.selectedLayerId === "master") {
 				if (mode !== "mask") return;
 				const operation = input.valuesQueue.submitBarrier([

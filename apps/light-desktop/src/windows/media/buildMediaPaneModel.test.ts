@@ -235,6 +235,174 @@ describe("Media pane disconnected configuration", () => {
 		).toBe(true);
 	});
 
+	it("lists every patched Internal Audio Player and previews it as audio", () => {
+		const player = (suffix: string, folder: number, file: number) => ({
+			fixture_id: `player-${suffix}`,
+			fixture_number: Number(suffix),
+			name: "ToskLight Audio Player",
+			kind: "audio_player" as const,
+			endpoint: null,
+			layers: [{ fixture_id: `player-${suffix}-head`, head_index: 0 }],
+			status: { online: true, last_success: null, last_error: null },
+			audio: {
+				folder,
+				file,
+				volume_percent: 42,
+				transport: "play" as const,
+				repeat: false,
+				source: `${String(folder).padStart(3, "0")}/${String(file).padStart(3, "0")}.wav`,
+			},
+		});
+		const first = player("1", 3, 12);
+		const second = player("2", 1, 1);
+		const model = buildMediaPaneModel(
+			input({
+				servers: [first, second],
+				selectedServer: first,
+				selectedServerId: first.fixture_id,
+			}),
+		);
+		expect(model.servers.map((server) => server.id)).toEqual([
+			"player-1",
+			"player-2",
+		]);
+		expect(model.servers[0]).toMatchObject({ statusLabel: "Internal" });
+		expect(model.preview).toEqual({
+			kind: "audio",
+			detail: "003/012.wav",
+		});
+		expect(model.layers).toEqual([
+			expect.objectContaining({
+				id: "player-1-head",
+				status: "online",
+				statusLabel: "Playing",
+				audio: { volumeLabel: "42%", sourceLabel: "003 / 012" },
+			}),
+		]);
+	});
+
+	it("greys out controls the addressed head does not carry", () => {
+		const player = {
+			fixture_id: "player-1",
+			name: "ToskLight Audio Player",
+			kind: "audio_player" as const,
+			endpoint: null,
+			layers: [
+				{
+					fixture_id: "player-1-head",
+					head_index: 0,
+					attributes: [
+						"media.file",
+						"media.folder",
+						"media.play_mode",
+						"volume",
+					],
+				},
+			],
+			master_attributes: ["media.file", "media.folder"],
+			status: { online: true, last_success: null, last_error: null },
+			audio: {
+				folder: 1,
+				file: 1,
+				volume_percent: 100,
+				transport: "play" as const,
+				repeat: true,
+				source: "001/001.wav",
+			},
+		};
+		const model = buildMediaPaneModel(
+			input({
+				servers: [player],
+				selectedServer: player,
+				selectedServerId: player.fixture_id,
+				selectedLayerId: "player-1-head",
+			}),
+		);
+		const playback = model.controlSections.find(
+			(section) => section.id === "playback",
+		);
+		expect(playback?.controls.map((control) => control.id)).toEqual([
+			"media.play_mode",
+			"intensity",
+			"volume",
+			"media.playback_speed",
+			"media.playback_bpm",
+			"media.playback.blur",
+		]);
+		expect(
+			playback?.controls.map((control) => Boolean(control.disabled)),
+		).toEqual([false, true, false, true, true, true]);
+		expect(
+			model.controlSections
+				.find((section) => section.id === "frame")
+				?.controls.every((control) => control.disabled),
+		).toBe(true);
+	});
+
+	it("keeps every control enabled when a server reports no attribute set", () => {
+		const server = {
+			fixture_id: "server-1",
+			name: "Media master",
+			endpoint: { protocol: "citp" as const, ip_address: "127.0.0.1", port: 4809 },
+			layers: [{ fixture_id: "layer-1", head_index: 0 }],
+			status: { online: true, last_success: null, last_error: null },
+		};
+		const model = buildMediaPaneModel(
+			input({
+				servers: [server],
+				selectedServer: server,
+				selectedServerId: server.fixture_id,
+				selectedLayerId: "layer-1",
+			}),
+		);
+		expect(
+			model.controlSections.every((section) =>
+				section.controls.every((control) => !control.disabled),
+			),
+		).toBe(true);
+	});
+
+	it("keeps an unavailable Internal Audio Player truthful", () => {
+		const player = {
+			fixture_id: "player-1",
+			name: "ToskLight Audio Player",
+			kind: "audio_player" as const,
+			endpoint: null,
+			layers: [{ fixture_id: "player-1-head", head_index: 0 }],
+			status: {
+				online: false,
+				last_success: null,
+				last_error: "Audio Player output binding default is not mapped",
+			},
+			audio: {
+				folder: 0,
+				file: 0,
+				volume_percent: 0,
+				transport: "stop" as const,
+				repeat: false,
+				source: null,
+			},
+		};
+		const model = buildMediaPaneModel(
+			input({
+				servers: [player],
+				selectedServer: player,
+				selectedServerId: player.fixture_id,
+			}),
+		);
+		expect(model.servers[0]).toMatchObject({ statusLabel: "Unavailable" });
+		expect(model.preview).toEqual({
+			kind: "audio",
+			detail: "Audio Player output binding default is not mapped",
+		});
+		expect(model.layers[0]).toMatchObject({
+			status: "failed",
+			statusLabel: "Failed",
+			audio: { volumeLabel: "0%", sourceLabel: "000 / 000" },
+			liveSourceLabel: "No audio source selected",
+		});
+	});
+
 	it("projects the advertised composite dimensions into the master output", () => {
 		const server = {
 			fixture_id: "server-1",

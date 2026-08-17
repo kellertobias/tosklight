@@ -89,6 +89,35 @@ describe("Media pane offline actions", () => {
 		]);
 	});
 
+	it("addresses a legacy Audio Player through its own folder and file", () => {
+		const { result, submitBarrier, applySelection, input } = setup();
+		input.selectedLayer = {
+			fixture_id: "layer-1",
+			head_index: 0,
+			attributes: ["audio.file", "audio.folder", "audio.volume"],
+		} as never;
+		act(() =>
+			result.current.onBrowseItem("media", {
+				id: "12",
+				kind: "file",
+				name: "File 12",
+			}),
+		);
+		expect(applySelection).not.toHaveBeenCalled();
+		expect(submitBarrier).toHaveBeenCalledWith([
+			expect.objectContaining({
+				fixtureId: "layer-1",
+				attribute: "audio.folder",
+				value: expect.objectContaining({ value: 2 / 255 }),
+			}),
+			expect.objectContaining({
+				fixtureId: "layer-1",
+				attribute: "audio.file",
+				value: expect.objectContaining({ value: 12 / 255 }),
+			}),
+		]);
+	});
+
 	it("programs file zero to clear content while retaining the draft folder", () => {
 		const { result, submitBarrier, input } = setup();
 		act(() =>

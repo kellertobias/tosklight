@@ -37,6 +37,47 @@ describe("MediaPaneSurface control state", () => {
 		).toContainElement(feedback);
 	});
 
+	it("shows a music note for the Internal Audio Player master and its layers", () => {
+		const view = renderSurface(
+			{ kind: "audio", detail: "003/012.wav" },
+			[
+				{
+					id: "player-head",
+					number: "1",
+					name: "Player",
+					status: "online",
+					statusLabel: "Playing",
+					audio: { volumeLabel: "42%", sourceLabel: "003 / 012" },
+					liveSourceLabel: "003/012.wav",
+				},
+			],
+			{ hasCitpEndpoint: false },
+		);
+		const surface = within(view.container);
+		const picture = surface.getByTestId("master-output-picture");
+		expect(
+			within(picture).getByRole("img", { name: "Audio output" }),
+		).toBeInTheDocument();
+		expect(
+			within(
+				view.container.querySelector(".media-composite-info") as HTMLElement,
+			).getByText("003/012.wav"),
+		).toBeInTheDocument();
+		expect(surface.getByText("Master audio output")).toBeInTheDocument();
+		expect(surface.queryByText(/CITP is not configured/)).toBeNull();
+
+		const thumbnail = view.container.querySelector(".media-layer-thumbnail");
+		expect(thumbnail).toHaveClass("is-audio");
+		const values = within(thumbnail as HTMLElement).getByText("42% · 003 / 012");
+		const note = within(thumbnail as HTMLElement).getByRole("img", {
+			name: "Audio 42% · 003 / 012",
+		});
+		expect(values.compareDocumentPosition(note)).toBe(
+			Node.DOCUMENT_POSITION_FOLLOWING,
+		);
+		view.unmount();
+	});
+
 	it("projects optional authoritative output facts into the window title", () => {
 		const view = renderSurface({ kind: "ready" }, [], {}, vi.fn(), vi.fn(), {
 			primary: "192.0.2.10 · DMX U1 A1",

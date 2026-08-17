@@ -268,8 +268,38 @@ pub(super) async fn media_servers(
         .snapshot()
         .fixtures
         .iter()
-        .filter(|fixture| is_media_server_fixture(fixture))
+        .filter(|fixture| is_media_server_fixture(fixture) || is_audio_player_fixture(fixture))
         .map(|fixture| {
+            let name = format!(
+                "{} {}",
+                fixture.definition.manufacturer, fixture.definition.model
+            );
+            if is_audio_player_fixture(fixture) {
+                let player = state.internal_audio.player(fixture);
+                return serde_json::json!({
+                    "fixture_id": fixture.fixture_id,
+                    "fixture_number": fixture.fixture_number,
+                    "name": name,
+                    "kind": "audio_player",
+                    "endpoint": serde_json::Value::Null,
+                    "native_action": serde_json::Value::Null,
+                    "layers": media_layers(fixture),
+                    "master_attributes": master_head_attributes(fixture),
+                    "status": {
+                        "online": player.diagnostic.is_none(),
+                        "last_success": serde_json::Value::Null,
+                        "last_error": player.diagnostic,
+                    },
+                    "audio": {
+                        "folder": player.folder,
+                        "file": player.file,
+                        "volume_percent": player.volume_percent,
+                        "transport": player.transport,
+                        "repeat": player.repeat,
+                        "source": player.source,
+                    },
+                });
+            }
             let endpoint = fixture
                 .direct_control
                 .as_ref()
@@ -278,10 +308,12 @@ pub(super) async fn media_servers(
             serde_json::json!({
                 "fixture_id": fixture.fixture_id,
                 "fixture_number": fixture.fixture_number,
-                "name": format!("{} {}", fixture.definition.manufacturer, fixture.definition.model),
+                "name": name,
+                "kind": "media_server",
                 "endpoint": endpoint,
                 "native_action": native_media_action(fixture),
-                "layers": fixture.logical_heads,
+                "layers": media_layers(fixture),
+                "master_attributes": master_head_attributes(fixture),
                 "status": status,
             })
         })
@@ -289,13 +321,61 @@ pub(super) async fn media_servers(
     Ok(Json(serde_json::json!({ "fixtures": fixtures })))
 }
 
+/// Each patched logical head with the attributes it actually owns, so a surface can grey out
+/// controls this personality does not carry instead of inventing them.
+fn media_layers(fixture: &light_fixture::PatchedFixture) -> Vec<serde_json::Value> {
+    fixture
+        .logical_heads
+        .iter()
+        .map(|patched| {
+            serde_json::json!({
+                "fixture_id": patched.fixture_id,
+                "head_index": patched.head_index,
+                "attributes": head_attributes(fixture, |head| head.index == patched.head_index),
+            })
+        })
+        .collect()
+}
+
+/// Attributes of the shared master head, which the desk addresses through the parent fixture.
+fn master_head_attributes(fixture: &light_fixture::PatchedFixture) -> Vec<String> {
+    let shared = head_attributes(fixture, |head| head.shared);
+    if shared.is_empty() {
+        head_attributes(fixture, |_| true)
+    } else {
+        shared
+    }
+}
+
+fn head_attributes(
+    fixture: &light_fixture::PatchedFixture,
+    keep: impl Fn(&light_fixture::LogicalHead) -> bool,
+) -> Vec<String> {
+    let mut attributes = fixture
+        .definition
+        .heads
+        .iter()
+        .filter(|head| keep(head))
+        .flat_map(|head| head.parameters.iter())
+        .map(|parameter| parameter.attribute.0.clone())
+        .collect::<Vec<_>>();
+    attributes.sort();
+    attributes.dedup();
+    attributes
+}
+
 fn is_media_server_fixture(fixture: &light_fixture::PatchedFixture) -> bool {
     fixture.definition.device_type.trim() == "media_server"
 }
 
+/// The desk-local Internal Audio Player is a media source without DMX address or CITP endpoint.
+fn is_audio_player_fixture(fixture: &light_fixture::PatchedFixture) -> bool {
+    fixture.definition.device_type.trim() == "audio_player"
+}
+
 #[cfg(test)]
 mod media_server_fixture_tests {
-    use super::is_media_server_fixture;
+    use super::{is_audio_player_fixture, is_media_server_fixture};
 
     fn fixture(
         fixture_type: &str,
@@ -352,6 +432,23 @@ mod media_server_fixture_tests {
                 .filter(|candidate| is_media_server_fixture(candidate))
                 .count(),
             3
+        );
+    }
+
+    #[test]
+    fn every_patched_audio_player_is_a_media_pane_source() {
+        let player = fixture("audio_player", light_fixture::PatchPolicy::Internal, false);
+        let second = fixture("audio_player", light_fixture::PatchPolicy::Internal, false);
+        let ordinary = fixture("wash", light_fixture::PatchPolicy::Dmx, true);
+        assert!(is_audio_player_fixture(&player));
+        assert!(!is_media_server_fixture(&player));
+        assert!(!is_audio_player_fixture(&ordinary));
+        assert_eq!(
+            [player, second, ordinary]
+                .iter()
+                .filter(|candidate| is_audio_player_fixture(candidate))
+                .count(),
+            2
         );
     }
 }

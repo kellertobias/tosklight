@@ -503,14 +503,31 @@ export interface MediaServerFixture {
 	fixture_id: string;
 	fixture_number?: number | null;
 	name: string;
+	kind?: "media_server" | "audio_player";
 	endpoint: { protocol: "citp"; ip_address: string; port: number } | null;
 	native_action?: string | null;
-	layers: Array<{ fixture_id: string; head_index: number }>;
+	layers: Array<{
+		fixture_id: string;
+		head_index: number;
+		/** Attributes this logical head owns; controls outside it are shown disabled. */
+		attributes?: string[];
+	}>;
+	/** Attributes of the shared master head, addressed through the parent fixture. */
+	master_attributes?: string[];
 	status: {
 		online: boolean;
 		last_success: string | null;
 		last_error: string | null;
 	};
+	/** Live Internal Audio Player state; present only for `kind: "audio_player"`. */
+	audio?: {
+		folder: number;
+		file: number;
+		volume_percent: number;
+		transport: "play" | "pause" | "stop";
+		repeat: boolean;
+		source: string | null;
+	} | null;
 }
 
 export interface OutputRoute {

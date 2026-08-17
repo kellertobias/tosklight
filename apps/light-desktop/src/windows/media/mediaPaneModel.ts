@@ -31,6 +31,10 @@ export type MediaPreviewState = {
 			detail: string;
 	  }
 	| {
+			kind: "audio";
+			detail: string;
+	  }
+	| {
 			kind: "missing_patch";
 			detail: string;
 	  }
@@ -60,6 +64,8 @@ export interface MediaPaneLayer {
 	statusLabel?: string;
 	errorDetail?: string;
 	thumbnailSrc?: string;
+	/** Internal Audio Player voice: a music note with its live volume and source above it. */
+	audio?: { volumeLabel: string; sourceLabel: string };
 	liveSourceLabel?: string;
 	opacityPercent?: number;
 	maskLabel?: string;

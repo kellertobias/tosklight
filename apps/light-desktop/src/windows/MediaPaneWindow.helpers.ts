@@ -53,6 +53,18 @@ export function mediaLibraryMutations(
 	];
 }
 
+/** Internal Audio Player folder/file addressing, which is not a CITP media library. */
+export function audioLibraryMutations(
+	fixtureId: string,
+	folder: number,
+	file: number,
+) {
+	return [
+		mediaMutation(fixtureId, "audio.folder", folder),
+		mediaMutation(fixtureId, "audio.file", file),
+	];
+}
+
 function mediaMutation(fixtureId: string, attribute: string, value: number) {
 	return {
 		action: "set_fixture" as const,

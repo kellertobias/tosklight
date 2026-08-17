@@ -126,11 +126,15 @@ function serverChoices(input: BuildMediaPaneModelInput) {
 				server.fixture_number == null
 					? server.fixture_id
 					: String(server.fixture_number),
-			statusLabel: !server.endpoint
-				? "Not configured"
-				: server.status.online
-					? "Online"
-					: "Offline",
+			statusLabel: isAudioPlayer(server)
+				? server.status.online
+					? "Internal"
+					: "Unavailable"
+				: !server.endpoint
+					? "Not configured"
+					: server.status.online
+						? "Online"
+						: "Offline",
 		})),
 	];
 }
@@ -140,6 +144,13 @@ function previewState(input: BuildMediaPaneModelInput): MediaPreviewState {
 		return {
 			kind: "missing_patch",
 			detail: "No media server is patched.",
+		};
+	if (isAudioPlayer(input.selectedServer))
+		return {
+			kind: "audio",
+			detail:
+				input.selectedServer.status.last_error ??
+				audioSourceLabel(input.selectedServer),
 		};
 	if (!input.selectedServer.endpoint)
 		return {
@@ -172,7 +183,49 @@ function previewState(input: BuildMediaPaneModelInput): MediaPreviewState {
 			};
 }
 
+/** The desk-local Internal Audio Player has no CITP endpoint and no advertised library. */
+function isAudioPlayer(server: MediaServerFixture | undefined) {
+	return server?.kind === "audio_player";
+}
+
+function audioSourceLabel(server: MediaServerFixture) {
+	const folder = server.audio?.folder ?? 0;
+	const file = server.audio?.file ?? 0;
+	if (!folder || !file) return "No audio source selected";
+	return server.audio?.source ?? `${pad(folder)} / ${pad(file)}`;
+}
+
+function pad(value: number) {
+	return String(value).padStart(3, "0");
+}
+
+function audioLayerModels(server: MediaServerFixture): MediaPaneLayer[] {
+	const audio = server.audio;
+	const failed = Boolean(server.status.last_error);
+	return server.layers.map((head, index) => ({
+		id: head.fixture_id,
+		number: String(index + 1),
+		name: "Player",
+		status: failed ? "failed" : "online",
+		statusLabel: failed
+			? "Failed"
+			: audio?.transport === "play"
+				? "Playing"
+				: audio?.transport === "pause"
+					? "Paused"
+					: "Stopped",
+		errorDetail: server.status.last_error ?? undefined,
+		audio: {
+			volumeLabel: `${audio?.volume_percent ?? 0}%`,
+			sourceLabel: `${pad(audio?.folder ?? 0)} / ${pad(audio?.file ?? 0)}`,
+		},
+		liveSourceLabel: audioSourceLabel(server),
+	}));
+}
+
 function layerModels(input: BuildMediaPaneModelInput): MediaPaneLayer[] {
+	if (isAudioPlayer(input.selectedServer) && input.selectedServer)
+		return audioLayerModels(input.selectedServer);
 	return (input.selectedServer?.layers ?? []).map((head, citpLayer) => {
 		const status = input.inspection.layers.find(
 			(layer) => layer.layer === citpLayer,
@@ -302,6 +355,42 @@ function selectionModel(
 	};
 }
 
+/**
+ * The attributes the addressed head actually carries. An unknown set (a personality that does not
+ * report one) keeps every control enabled rather than greying out a working desk.
+ */
+function ownedAttributes(
+	input: BuildMediaPaneModelInput,
+	selectedMaster: boolean,
+): ReadonlySet<string> | null {
+	const attributes = selectedMaster
+		? input.selectedServer?.master_attributes
+		: input.selectedServer?.layers.find(
+				(layer) => layer.fixture_id === input.selectedLayerId,
+			)?.attributes;
+	return attributes?.length ? new Set(attributes) : null;
+}
+
+const COLOUR_COMPONENTS = [
+	"color.tint",
+	"color.red",
+	"color.green",
+	"color.blue",
+	"color.cyan",
+	"color.magenta",
+	"color.yellow",
+];
+
+function attributeIsOwned(
+	owned: ReadonlySet<string> | null,
+	attribute: string,
+): boolean {
+	if (!owned) return true;
+	if (attribute === "color.tint")
+		return COLOUR_COMPONENTS.some((component) => owned.has(component));
+	return owned.has(attribute);
+}
+
 function controlSections(
 	input: BuildMediaPaneModelInput,
 	controls: Array<{ attribute: string }>,
@@ -322,13 +411,15 @@ function controlSections(
 			.filter((control) => !standardAttributes.has(control.attribute))
 			.map((control) => [control.attribute, control]),
 	);
+	const owned = ownedAttributes(input, selectedMaster);
 	const sections: MediaControlSection[] = groups.map((group) => ({
 		id: group.id,
 		label: group.label,
 		capability: "supported" as const,
-		controls: group.attributes.map((attribute) =>
-			advertisedControl(input, attribute),
-		),
+		controls: group.attributes.map((attribute) => ({
+			...advertisedControl(input, attribute),
+			disabled: !attributeIsOwned(owned, attribute),
+		})),
 	}));
 	if (remaining.size) {
 		sections.push({
