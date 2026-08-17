@@ -147,12 +147,7 @@ fn requested_generic_and_venue_packages_have_exact_portable_contracts() {
                 .as_deref()
                 .is_some_and(|asset| asset.starts_with("data:image/png;base64,"))
         );
-        assert!(
-            profile
-                .stage_icon_asset
-                .as_deref()
-                .is_some_and(|asset| asset.starts_with("data:image/png;base64,"))
-        );
+        assert!(profile.stage_icon_asset.is_none());
         assert!(
             profile
                 .model_asset
@@ -165,6 +160,61 @@ fn requested_generic_and_venue_packages_have_exact_portable_contracts() {
                 footprint: 0
             }]
             && mode.channels.is_empty()));
+    }
+
+    for filename in [
+        "venue--four-point-truss.toskfixture",
+        "venue--three-point-truss.toskfixture",
+        "venue--two-point-truss.toskfixture",
+        "venue--one-point-truss-pipe.toskfixture",
+    ] {
+        assert_eq!(shipped_profile(filename).fixture_type, "rigging");
+    }
+}
+
+#[test]
+fn shipped_fixture_library_uses_built_in_type_icons() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../..")
+        .join("assets/fixture-library");
+    for entry in fs::read_dir(root).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().and_then(|extension| extension.to_str()) != Some("toskfixture") {
+            continue;
+        }
+        let profile = read_fixture_package(&fs::read(&path).unwrap()).unwrap();
+        assert!(
+            profile.stage_icon_asset.is_none(),
+            "{} must use its built-in fixture type icon",
+            path.display()
+        );
+    }
+}
+
+#[test]
+fn shipped_control_fixtures_leave_models_to_renderer_defaults() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../..")
+        .join("assets/fixture-library");
+    for entry in fs::read_dir(root).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().and_then(|extension| extension.to_str()) != Some("toskfixture") {
+            continue;
+        }
+        let profile = read_fixture_package(&fs::read(&path).unwrap()).unwrap();
+        if profile.patch_policy == PatchPolicy::VisualOnly {
+            continue;
+        }
+        assert!(
+            profile.model_asset.is_none(),
+            "{} must use the renderer-owned default model selected from fixture semantics",
+            path.display()
+        );
+        assert!(
+            profile.projection_assets.is_none(),
+            "{} must derive plan views from that renderer-owned default model",
+            path.display()
+        );
     }
 }
 
@@ -369,7 +419,7 @@ fn assert_moving_lamp_geometry(filename: &str) {
 #[test]
 fn robe_dls_profile_exposes_canonical_framing_controls() {
     let profile = shipped_profile("robe--robin-dls-profile.toskfixture");
-    assert_eq!(profile.revision, 3);
+    assert_eq!(profile.revision, 4);
     assert!(profile.notes.contains("DMX protocol version 1.0"));
     assert!(profile.notes.contains("user manual version 1.3"));
     assert_eq!(
@@ -1174,7 +1224,7 @@ fn tosklight_media_server_package_exposes_complete_multi_head_personalities() {
     let profile = shipped_profile("tosklight--media-server.toskfixture");
     assert_eq!(profile.manufacturer, "ToskLight");
     assert_eq!(profile.name, "Media Server");
-    assert_eq!(profile.revision, 2);
+    assert_eq!(profile.revision, 4);
     assert_eq!(
         profile.direct_control_protocols,
         vec![crate::DirectControlProtocol::Citp],
@@ -1183,8 +1233,8 @@ fn tosklight_media_server_package_exposes_complete_multi_head_personalities() {
     assert_eq!(profile.modes.len(), 2);
 
     for (mode, layer_count, footprint) in [
-        (&profile.modes[0], 2_usize, 75_u16),
-        (&profile.modes[1], 8_usize, 279_u16),
+        (&profile.modes[0], 2_usize, 89_u16),
+        (&profile.modes[1], 8_usize, 323_u16),
     ] {
         assert_eq!(
             mode.splits,
@@ -1229,7 +1279,7 @@ fn tosklight_media_server_package_exposes_complete_multi_head_personalities() {
             ("media.folder", layer_count),
             ("media.file", layer_count),
             ("media.mask.folder", layer_count),
-            ("media.mask.file", layer_count),
+            ("media.mask.file", layer_count + 1),
         ] {
             assert_eq!(
                 mode.channels
@@ -1240,10 +1290,89 @@ fn tosklight_media_server_package_exposes_complete_multi_head_personalities() {
                 "{attribute} must use the desk's canonical programmer attribute"
             );
         }
+
+        for head in &mode.heads {
+            let channels = mode
+                .channels
+                .iter()
+                .filter(|channel| channel.head_id == head.id)
+                .collect::<Vec<_>>();
+            let channel = |attribute: &str| {
+                channels
+                    .iter()
+                    .copied()
+                    .find(|channel| channel.attribute.0 == attribute)
+                    .unwrap_or_else(|| panic!("{} is missing {attribute}", head.name))
+            };
+            let intensity = channel("intensity");
+            assert_eq!(
+                intensity.default_raw,
+                if head.master_shared { 255 } else { 0 },
+                "{} intensity must home at the expected level (master_shared={})",
+                head.name,
+                head.master_shared,
+            );
+            assert_eq!(intensity.highlight_raw, 255);
+            assert!(intensity.reacts_to_sequence_master);
+            assert!(intensity.reacts_to_group_master);
+            assert!(intensity.reacts_to_grand_master);
+            assert_eq!(channel("volume").default_raw, 255);
+            for attribute in ["media.mask.position.x", "media.mask.position.y"] {
+                assert_eq!(channel(attribute).default_raw, 32_768);
+            }
+            for attribute in ["color.red", "color.green", "color.blue"] {
+                assert_eq!(channel(attribute).default_raw, 0);
+            }
+            assert!(
+                mode.color_systems
+                    .iter()
+                    .any(|system| system.head_id == head.id)
+            );
+        }
+
+        for attribute in [
+            "media.play_mode",
+            "media.playback_speed",
+            "media.playback_bpm",
+            "media.scaling_mode",
+            "media.position.x",
+            "media.position.y",
+            "media.scale.x",
+            "media.scale.y",
+            "position.rotation",
+            "media.mask.scale.x",
+            "media.mask.scale.y",
+            "media.mask.invert",
+            "media.mask.opacity",
+            "media.effect.1",
+            "media.effect.2",
+            "media.effect.3",
+            "media.effect.4",
+        ] {
+            assert_eq!(
+                mode.channels
+                    .iter()
+                    .filter(|channel| channel.attribute.0 == attribute)
+                    .count(),
+                layer_count,
+                "every layer must expose canonical {attribute} encoder ownership"
+            );
+        }
+        for attribute in ["media.mask.position.x", "media.mask.position.y"] {
+            assert_eq!(
+                mode.channels
+                    .iter()
+                    .filter(|channel| channel.attribute.0 == attribute)
+                    .count(),
+                layer_count + 1,
+                "every layer and the master must expose canonical {attribute} encoder ownership"
+            );
+        }
     }
 
     assert!(profile.notes.contains("Legacy Media Server Layer"));
     assert!(profile.notes.contains("existing show snapshots"));
+    assert!(profile.notes.contains("must repatch this personality"));
 }
 
 #[test]
@@ -1859,8 +1988,8 @@ fn shipped_fresnel_round_trips_without_identity_or_asset_loss() {
             .map(|mode| mode.id)
             .collect::<Vec<_>>()
     );
-    assert!(restored.stage_icon_asset.is_some());
-    assert!(restored.model_asset.is_some());
+    assert!(restored.stage_icon_asset.is_none());
+    assert!(restored.model_asset.is_none());
 }
 
 #[test]

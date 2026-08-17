@@ -28,6 +28,8 @@ import {
 	useText,
 	useVisualizers,
 } from "../../shared/api/queries";
+import { textPreviewUrl } from "../text-sources/TextSourcesPage";
+import { visualizerPreviewUrl } from "../visualizers/preview";
 
 const CATALOG_POLL_MS = 15_000;
 
@@ -184,6 +186,7 @@ function MediaPanePageContent() {
 			kind: "file",
 			name: slot.name,
 			detail: slot.kind,
+			thumbnailSrc: textPreviewUrl(slot, previewAspectRatio(previewSize)),
 		});
 		generatedFolders.set(slot.address.folder, entry);
 	}
@@ -197,6 +200,7 @@ function MediaPanePageContent() {
 			kind: "file",
 			name: visualizer.name,
 			detail: visualizer.kind,
+			thumbnailSrc: visualizerPreviewUrl(visualizer),
 		});
 		generatedFolders.set(visualizer.address.folder, entry);
 	}
@@ -409,6 +413,15 @@ function MediaPanePageContent() {
 										"",
 										1,
 									),
+									valueControl(
+										"blur",
+										"Blur",
+										selected.layer.blur * 100,
+										0,
+										100,
+										!takeover,
+										"%",
+									),
 								],
 							},
 							{
@@ -498,6 +511,22 @@ function MediaPanePageContent() {
 								id: "mask-controls",
 								label: "Mask",
 								controls: [
+									valueControl(
+										"mask-position-x",
+										"Mask position X",
+										selected.layer.mask.positionX,
+										-2,
+										2,
+										!takeover,
+									),
+									valueControl(
+										"mask-position-y",
+										"Mask position Y",
+										selected.layer.mask.positionY,
+										-2,
+										2,
+										!takeover,
+									),
 									valueControl(
 										"mask-scale-x",
 										"Mask scale X",
@@ -663,6 +692,10 @@ function sourceFilterForFolder(folder: number): MediaSourceFilter {
 	return "media";
 }
 
+function previewAspectRatio(size?: { width: number; height: number }) {
+	return size && size.height > 0 ? size.width / size.height : 16 / 9;
+}
+
 const PLAY_MODES: Array<[number, string]> = [
 	[0, "Loop"],
 	[20, "Reverse"],
@@ -731,7 +764,7 @@ function tintChange(value: string) {
 function layerChange(id: string, value: string | number): UpdateLayer {
 	const number = Number(value);
 	const effect =
-		/^effect-(\d+)-(type|enabled|mix|tv-curvature|distortion|image-grain|compression-damage|block-size|tile-displacement|chroma-damage|glitching|cycle-interval|blur-amount|feedback-amount|feedback-motion|feedback-direction|beat-move-amount|beat-move-direction|beat-move-decay|kaleidoscope-repetitions|kaleidoscope-angle|rasterize-mode|rasterize-dot-size|beat-scan-width|beat-scan-edge|beat-scan-falloff|beat-scan-duration|beat-scale-amount|beat-turn-enabled|beat-turn-rotation|beat-scale-decay|beat-grid-density|beat-grid-height|beat-grid-duration|beat-grid-origin|beat-grid-hue|beat-grid-brightness|beat-form-enlargement|beat-form-lifetime|beat-form-density|beat-form-variation|drawn-strength|drawn-line-detail)$/.exec(
+		/^effect-(\d+)-(type|enabled|mix|tv-curvature|distortion|image-grain|compression-damage|block-size|tile-displacement|chroma-damage|glitching|cycle-interval|beat-move-amount|beat-move-direction|beat-move-decay|kaleidoscope-repetitions|kaleidoscope-angle|rasterize-mode|rasterize-dot-size|beat-scan-width|beat-scan-edge|beat-scan-falloff|beat-scan-duration|beat-scale-amount|beat-turn-enabled|beat-turn-rotation|beat-scale-decay|beat-grid-density|beat-grid-height|beat-grid-duration|beat-grid-origin|beat-grid-hue|beat-grid-brightness|beat-form-enlargement|beat-form-lifetime|beat-form-density|beat-form-variation|drawn-strength|drawn-line-detail)$/.exec(
 			id,
 		);
 	if (effect) {
@@ -761,14 +794,6 @@ function layerChange(id: string, value: string | number): UpdateLayer {
 				return { effectSlot, effectGlitching: number / 100 };
 			case "cycle-interval":
 				return { effectSlot, cycleInterval: String(value) };
-			case "blur-amount":
-				return { effectSlot, blurAmount: number / 100 };
-			case "feedback-amount":
-				return { effectSlot, feedbackAmount: number / 100 };
-			case "feedback-motion":
-				return { effectSlot, feedbackMotion: number / 100 };
-			case "feedback-direction":
-				return { effectSlot, feedbackDirection: String(value) };
 			case "beat-move-amount":
 				return { effectSlot, beatMoveAmount: number / 100 };
 			case "beat-move-direction":
@@ -852,10 +877,16 @@ function layerChange(id: string, value: string | number): UpdateLayer {
 			return tintChange(String(value));
 		case "grayscale":
 			return { grayscale: number / 100 };
+		case "blur":
+			return { blur: number / 100 };
 		case "mask-scale-x":
 			return { maskScaleX: number };
 		case "mask-scale-y":
 			return { maskScaleY: number };
+		case "mask-position-x":
+			return { maskPositionX: number };
+		case "mask-position-y":
+			return { maskPositionY: number };
 		case "mask-invert":
 			return { maskInvert: value === "true" };
 		case "mask-opacity":
@@ -886,8 +917,6 @@ function effectControls(
 					{ value: "analog-tv", label: "Analog TV" },
 					{ value: "digital-tv", label: "Digital TV" },
 					{ value: "opacity-cycle", label: "Layer opacity cycle" },
-					{ value: "blur", label: "Blur" },
-					{ value: "feedback", label: "Feedback" },
 					{ value: "beat-move", label: "Beat Move" },
 					{ value: "kaleidoscope", label: "Kaleidoscope" },
 					{ value: "rasterize", label: "Rasterized Print" },
@@ -1841,6 +1870,10 @@ function masterChange(id: string, value: string | number): UpdateMaster {
 			return { positionY: number };
 		case "master-rotation":
 			return { rotation: number };
+		case "master-mask-position-x":
+			return { maskPositionX: number };
+		case "master-mask-position-y":
+			return { maskPositionY: number };
 		case "shaper-left":
 			return { shaperLeft: number / 100 };
 		case "shaper-right":
@@ -1952,6 +1985,28 @@ function masterSections(
 					],
 					disabled: !takeover,
 				},
+			],
+		},
+		{
+			id: "mask-controls",
+			label: "Mask position",
+			controls: [
+				valueControl(
+					"master-mask-position-x",
+					"Mask position X",
+					output.master.maskPositionX,
+					-2,
+					2,
+					!takeover,
+				),
+				valueControl(
+					"master-mask-position-y",
+					"Mask position Y",
+					output.master.maskPositionY,
+					-2,
+					2,
+					!takeover,
+				),
 			],
 		},
 		{

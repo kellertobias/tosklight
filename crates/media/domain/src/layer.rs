@@ -65,6 +65,12 @@ pub struct MaskState {
     pub address: MediaAddress,
     pub scale_x: f32,
     pub scale_y: f32,
+    /// Horizontal mask centre in half-layer units (`0` centred, `1` at the right edge).
+    #[serde(default)]
+    pub position_x: f32,
+    /// Vertical mask centre in half-layer units (`0` centred, `1` at the bottom edge).
+    #[serde(default)]
+    pub position_y: f32,
     pub invert: bool,
     /// Blends between the unmasked layer and the masked result.
     pub opacity: f32,
@@ -77,6 +83,8 @@ impl Default for MaskState {
             address: MediaAddress::BLANK,
             scale_x: 1.0,
             scale_y: 1.0,
+            position_x: 0.0,
+            position_y: 0.0,
             invert: false,
             opacity: 0.0,
             source: MaskSource::default(),
@@ -1357,6 +1365,8 @@ pub struct LayerState {
     pub speed_multiplier: SpeedMultiplier,
     /// The per-layer DMX target tempo, used only when the output's tempo source is the channel.
     pub playback_bpm: Option<u8>,
+    /// Blur amount from the dedicated playback fader and DMX channel.
+    pub blur: f32,
     pub source_status: SourceStatus,
     /// Incremented to restart media without changing the selected address.
     pub reset_trigger_id: u32,
@@ -1381,6 +1391,7 @@ impl Default for LayerState {
             effects: Default::default(),
             speed_multiplier: SpeedMultiplier::default(),
             playback_bpm: None,
+            blur: 0.0,
             source_status: SourceStatus::default(),
             reset_trigger_id: 0,
         }

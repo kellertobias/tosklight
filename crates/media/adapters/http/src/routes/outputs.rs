@@ -14,14 +14,13 @@ use media_application::MediaConfiguration;
 use media_application::configuration::{load, save};
 use media_domain::{
     ANALOG_TV_EFFECT, Applied, BEAT_FORM_FLASH_EFFECT, BEAT_GRID_WAVE_EFFECT, BEAT_MOVE_EFFECT,
-    BEAT_SCALE_TURN_EFFECT, BEAT_SCAN_EFFECT, BLUR_EFFECT, BeatFormFlashParameters,
-    BeatGridWaveOrigin, BeatGridWaveParameters, BeatMoveDirection, BeatMoveParameters,
-    BeatScaleTurnParameters, BeatScanEdge, BeatScanParameters, BlurParameters, Command,
-    CommandKind, CommandSource, DIGITAL_TV_EFFECT, DRAWN_IMAGE_EFFECT, DrawnImageParameters,
-    EffectSlot, FEEDBACK_EFFECT, FeedbackMotion, FeedbackParameters, FlipMirror,
-    KALEIDOSCOPE_EFFECT, KaleidoscopeParameters, LayerControls, MasterControls, MasterShaper,
-    MediaAddress, MediaState, OPACITY_CYCLE_EFFECT, OpacityCycleInterval, OutputId,
-    RASTERIZE_EFFECT, RasterizeMode, RasterizeParameters, ScalingMode, Timestamp, Tint, apply,
+    BEAT_SCALE_TURN_EFFECT, BEAT_SCAN_EFFECT, BeatFormFlashParameters, BeatGridWaveOrigin,
+    BeatGridWaveParameters, BeatMoveDirection, BeatMoveParameters, BeatScaleTurnParameters,
+    BeatScanEdge, BeatScanParameters, Command, CommandKind, CommandSource, DIGITAL_TV_EFFECT,
+    DRAWN_IMAGE_EFFECT, DrawnImageParameters, EffectSlot, FlipMirror, KALEIDOSCOPE_EFFECT,
+    KaleidoscopeParameters, LayerControls, MasterControls, MasterShaper, MediaAddress, MediaState,
+    OPACITY_CYCLE_EFFECT, OpacityCycleInterval, OutputId, RASTERIZE_EFFECT, RasterizeMode,
+    RasterizeParameters, ScalingMode, Timestamp, Tint, apply,
 };
 
 use crate::error::ApiError;
@@ -210,6 +209,30 @@ pub(super) async fn update_layer(
     Path((output, layer)): Path<(String, usize)>,
     TolerantJson(body): TolerantJson<UpdateLayer>,
 ) -> Result<Response, ApiError> {
+    update_layer_inner(state, output, layer, body, false).await
+}
+
+pub(super) async fn update_native_effects(
+    State(state): State<ApiState>,
+    Path((output, layer)): Path<(String, usize)>,
+    TolerantJson(body): TolerantJson<UpdateLayer>,
+) -> Result<Response, ApiError> {
+    if !body.changes_effect() || body.changes_non_effect() || body.effect_mix.is_some() {
+        return Err(ApiError::bad_request(
+            "native-effect-configuration-only",
+            "native effect configuration accepts effect type, state, and typed parameters; control effect amount through DMX",
+        ));
+    }
+    update_layer_inner(state, output, layer, body, true).await
+}
+
+async fn update_layer_inner(
+    state: ApiState,
+    output: String,
+    layer: usize,
+    body: UpdateLayer,
+    native_effect_configuration: bool,
+) -> Result<Response, ApiError> {
     let id = parse_output(&output)?;
     let now = (state.now)();
 
@@ -240,9 +263,7 @@ pub(super) async fn update_layer(
         ("tileDisplacement", body.tile_displacement),
         ("chromaDamage", body.chroma_damage),
         ("effectGlitching", body.effect_glitching),
-        ("blurAmount", body.blur_amount),
-        ("feedbackAmount", body.feedback_amount),
-        ("feedbackMotion", body.feedback_motion),
+        ("blur", body.blur),
         ("beatMoveAmount", body.beat_move_amount),
         ("beatScanFalloff", body.beat_scan_falloff),
         ("beatScaleAmount", body.beat_scale_amount),
@@ -257,6 +278,8 @@ pub(super) async fn update_layer(
         ("rotation", body.rotation, -360.0, 360.0),
         ("maskScaleX", body.mask_scale_x, 0.0, 2.0),
         ("maskScaleY", body.mask_scale_y, 0.0, 2.0),
+        ("maskPositionX", body.mask_position_x, -2.0, 2.0),
+        ("maskPositionY", body.mask_position_y, -2.0, 2.0),
         ("beatMoveDecay", body.beat_move_decay, 0.05, 5.0),
         ("kaleidoscopeAngle", body.kaleidoscope_angle, -180.0, 180.0),
         ("rasterizeDotSize", body.rasterize_dot_size, 2.0, 32.0),
@@ -307,8 +330,6 @@ pub(super) async fn update_layer(
                 ANALOG_TV_EFFECT => EffectSlot::analog_tv(),
                 DIGITAL_TV_EFFECT => EffectSlot::digital_tv(),
                 OPACITY_CYCLE_EFFECT => EffectSlot::opacity_cycle(),
-                BLUR_EFFECT => EffectSlot::blur(),
-                FEEDBACK_EFFECT => EffectSlot::feedback(),
                 BEAT_MOVE_EFFECT => EffectSlot::beat_move(),
                 KALEIDOSCOPE_EFFECT => EffectSlot::kaleidoscope(),
                 RASTERIZE_EFFECT => EffectSlot::rasterize(),
@@ -374,17 +395,6 @@ pub(super) async fn update_layer(
                 }
             };
             effect.parameters = vec![interval.parameter()];
-        }
-        if let Some(amount) = body.blur_amount {
-            if effect.effect_type.as_deref() != Some(BLUR_EFFECT) {
-                return Err(ApiError::bad_request(
-                    "blur-amount-effect",
-                    "choose the Blur effect before setting blurAmount",
-                ));
-            }
-            let mut parameters = BlurParameters::from_normalized(&effect.parameters);
-            parameters.amount = amount;
-            effect.parameters = parameters.as_array().to_vec();
         }
         if body.beat_move_amount.is_some()
             || body.beat_move_direction.is_some()
@@ -558,29 +568,6 @@ pub(super) async fn update_layer(
             parameters.line_detail = body.drawn_line_detail.unwrap_or(parameters.line_detail);
             effect.parameters = parameters.as_array().to_vec();
         }
-        if body.feedback_amount.is_some()
-            || body.feedback_motion.is_some()
-            || body.feedback_direction.is_some()
-        {
-            if effect.effect_type.as_deref() != Some(FEEDBACK_EFFECT) {
-                return Err(ApiError::bad_request(
-                    "feedback-parameters-effect",
-                    "choose the Feedback effect before changing its controls",
-                ));
-            }
-            let mut parameters = FeedbackParameters::from_normalized(&effect.parameters);
-            parameters.amount = body.feedback_amount.unwrap_or(parameters.amount);
-            parameters.motion = body.feedback_motion.unwrap_or(parameters.motion);
-            if let Some(direction) = body.feedback_direction.as_deref() {
-                parameters.direction = FeedbackMotion::parse(direction).ok_or_else(|| {
-                    ApiError::bad_request(
-                        "feedback-direction-invalid",
-                        "feedbackDirection must be top, bottom, left, right, rotate-left, or rotate-right",
-                    )
-                })?;
-            }
-            effect.parameters = parameters.as_array().to_vec();
-        }
         let changes_parameters = body.tv_curvature.is_some()
             || body.effect_distortion.is_some()
             || body.image_grain.is_some()
@@ -637,9 +624,14 @@ pub(super) async fn update_layer(
     } else {
         None
     };
-    submit(
-        &state,
-        vec![CommandKind::SetLayerControls {
+    let command = if native_effect_configuration {
+        CommandKind::ConfigureLayerEffects {
+            output: id,
+            layer,
+            effects: Box::new(effects.expect("native effect configuration has effects")),
+        }
+    } else {
+        CommandKind::SetLayerControls {
             output: id,
             layer,
             controls: Box::new(LayerControls {
@@ -660,17 +652,20 @@ pub(super) async fn update_layer(
                 mask_address,
                 mask_scale_x: body.mask_scale_x,
                 mask_scale_y: body.mask_scale_y,
+                mask_position_x: body.mask_position_x,
+                mask_position_y: body.mask_position_y,
                 mask_invert: body.mask_invert,
                 mask_opacity: body.mask_opacity,
                 speed_multiplier: body
                     .speed_multiplier_dmx
                     .map(media_domain::SpeedMultiplier::from_dmx),
                 playback_bpm: body.playback_bpm.map(|value| (value != 0).then_some(value)),
+                blur: body.blur,
                 effects,
             }),
-        }],
-        now,
-    )?;
+        }
+    };
+    submit(&state, vec![command], now)?;
     let media = state.state.load();
     let found = media.output(id).ok_or_else(|| unknown_output(id))?;
     Ok(axum::Json(view_of(&state, found, now)).into_response())
@@ -703,6 +698,8 @@ pub(super) async fn update_master(
         ("scaleY", body.scale_y, 0.0, 4.0),
         ("positionX", body.position_x, -2.0, 2.0),
         ("positionY", body.position_y, -2.0, 2.0),
+        ("maskPositionX", body.mask_position_x, -2.0, 2.0),
+        ("maskPositionY", body.mask_position_y, -2.0, 2.0),
         ("rotation", body.rotation, -180.0, 180.0),
         ("shaperLeft", body.shaper_left, 0.0, 1.0),
         ("shaperRight", body.shaper_right, 0.0, 1.0),
@@ -788,6 +785,8 @@ pub(super) async fn update_master(
                 tint,
                 flip_mirror,
                 mask,
+                mask_position_x: body.mask_position_x,
+                mask_position_y: body.mask_position_y,
                 scale_x: body.scale_x,
                 scale_y: body.scale_y,
                 scaling_mode,
@@ -1062,7 +1061,7 @@ mod tests {
         assert_eq!(body["outputName"], "Main");
         assert_eq!(body["personality"], "twoLayers");
         assert_eq!(body["layerCount"], 2);
-        assert_eq!(body["channels"].as_array().unwrap().len(), 75);
+        assert_eq!(body["channels"].as_array().unwrap().len(), 77);
         assert_eq!(body["channels"][0]["absoluteChannel"], 1);
         assert_eq!(body["channels"][0]["name"], "Folder");
         assert_eq!(body["channels"][68]["group"]["kind"], "master");
@@ -1252,20 +1251,24 @@ mod tests {
         let (_, layer) = send(
             &bench.router,
             post(format!("/api/v2/outputs/{}/layers/0/update", bench.output),
-                r#"{"playModeDmx":236,"scaleX":10,"scaleY":2,"scalingMode":"stretch","positionX":-2,"positionY":2,"rotation":360,"volume":0.4,"tintRed":0.2,"tintGreen":0.3,"tintBlue":0.4,"grayscale":0.5,"maskFolder":2,"maskFile":3,"maskScaleX":2,"maskScaleY":1.5,"maskInvert":true,"maskOpacity":0.8,"speedMultiplierDmx":255,"playbackBpm":120}"#),
+                r#"{"playModeDmx":236,"scaleX":10,"scaleY":2,"scalingMode":"stretch","positionX":-2,"positionY":2,"rotation":360,"volume":0.4,"tintRed":0.2,"tintGreen":0.3,"tintBlue":0.4,"grayscale":0.5,"maskFolder":2,"maskFile":3,"maskScaleX":2,"maskScaleY":1.5,"maskPositionX":-0.75,"maskPositionY":1.25,"maskInvert":true,"maskOpacity":0.8,"speedMultiplierDmx":255,"playbackBpm":120}"#),
         ).await;
         assert_eq!(layer["layers"][0]["playMode"], "Pause");
         assert_eq!(layer["layers"][0]["scalingMode"], "stretch");
         assert_eq!(layer["layers"][0]["speedMultiplier"], "16×");
         assert_eq!(layer["layers"][0]["mask"]["address"]["file"], 3);
+        assert_eq!(layer["layers"][0]["mask"]["positionX"], -0.75);
+        assert_eq!(layer["layers"][0]["mask"]["positionY"], 1.25);
 
         let (_, master) = send(
             &bench.router,
             post(format!("/api/v2/outputs/{}/master/update", bench.output),
-                r#"{"dimmer":0.4,"volume":0.5,"tintRed":0.6,"tintGreen":0.7,"tintBlue":0.8,"flipMirror":"both","maskFolder":4,"maskFile":5,"scaleX":1.5,"scaleY":0.75,"scalingMode":"fill","positionX":0.5,"positionY":-0.5,"rotation":30,"shaperLeft":0.1,"shaperRight":0.2,"shaperTop":0.3,"shaperBottom":0.4,"shaperLeftRotation":10,"shaperRightRotation":-10,"shaperTopRotation":20,"shaperBottomRotation":-20,"shaperRotation":15}"#),
+                r#"{"dimmer":0.4,"volume":0.5,"tintRed":0.6,"tintGreen":0.7,"tintBlue":0.8,"flipMirror":"both","maskFolder":4,"maskFile":5,"maskPositionX":0.75,"maskPositionY":-1.25,"scaleX":1.5,"scaleY":0.75,"scalingMode":"fill","positionX":0.5,"positionY":-0.5,"rotation":30,"shaperLeft":0.1,"shaperRight":0.2,"shaperTop":0.3,"shaperBottom":0.4,"shaperLeftRotation":10,"shaperRightRotation":-10,"shaperTopRotation":20,"shaperBottomRotation":-20,"shaperRotation":15}"#),
         ).await;
         assert_eq!(master["master"]["flipMirror"], "both");
         assert_eq!(master["master"]["mask"]["file"], 5);
+        assert_eq!(master["master"]["maskPositionX"], 0.75);
+        assert_eq!(master["master"]["maskPositionY"], -1.25);
         assert_eq!(master["master"]["scaleX"], 1.5);
         assert_eq!(master["master"]["scalingMode"], "fill");
         assert_eq!(master["master"]["positionY"], -0.5);
@@ -1951,6 +1954,42 @@ mod tests {
         .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["dmxActive"], true);
+    }
+
+    #[tokio::test]
+    async fn a_live_native_desk_can_configure_an_effect_without_taking_over_dmx() {
+        let bench = bench();
+        let mut next = MediaState::clone(&bench.state.load());
+        next.outputs[0]
+            .ownership
+            .observe_dmx(CommandSource::ArtNet, Timestamp::from_millis(0));
+        bench.state.store(Arc::new(next));
+        let uri = format!(
+            "/api/v2/outputs/{}/layers/0/native-effects/update",
+            bench.output
+        );
+
+        let (status, body) = send(
+            &bench.router,
+            post(
+                uri.clone(),
+                r#"{"effectSlot":0,"effectType":"blur","blurAmount":0.7}"#,
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["dmxActive"], true);
+        assert_eq!(body["playbackTakeover"], false);
+        assert_eq!(body["layers"][0]["effects"][0]["effectType"], "blur");
+
+        for payload in [
+            r#"{"effectSlot":0,"effectMix":0.7}"#,
+            r#"{"effectSlot":0,"effectEnabled":true,"folder":2}"#,
+        ] {
+            let (status, body) = send(&bench.router, post(uri.clone(), payload)).await;
+            assert_eq!(status, StatusCode::BAD_REQUEST);
+            assert_eq!(body["code"], "native-effect-configuration-only");
+        }
     }
 
     #[tokio::test]

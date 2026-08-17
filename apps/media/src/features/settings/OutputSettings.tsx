@@ -370,26 +370,36 @@ function PictureFields({
 
 function DmxInputFields({
 	personality,
+	personalityLayout,
 	protocol,
 	universe,
 	startAddress,
 	setPersonality,
+	setPersonalityLayout,
 	setProtocol,
 	setUniverse,
 	setStartAddress,
 }: {
 	personality: OutputConfigurationView["personality"];
+	personalityLayout: OutputConfigurationView["personalityLayout"];
 	protocol: OutputConfigurationView["protocol"];
 	universe: number;
 	startAddress: number;
 	setPersonality: Dispatch<
 		SetStateAction<OutputConfigurationView["personality"]>
 	>;
+	setPersonalityLayout: Dispatch<
+		SetStateAction<OutputConfigurationView["personalityLayout"]>
+	>;
 	setProtocol: Dispatch<SetStateAction<OutputConfigurationView["protocol"]>>;
 	setUniverse: Dispatch<SetStateAction<number>>;
 	setStartAddress: Dispatch<SetStateAction<number>>;
 }) {
-	const highestStartAddress = personality === "two-layers" ? 438 : 234;
+	const slotsPerLayer = personalityLayout === "legacy" ? 34 : 39;
+	const masterSlots = personalityLayout === "legacy" ? 7 : 11;
+	const footprint =
+		(personality === "two-layers" ? 2 : 8) * slotsPerLayer + masterSlots;
+	const highestStartAddress = 513 - footprint;
 	return (
 		<fieldset>
 			<legend>DMX input</legend>
@@ -397,10 +407,19 @@ function DmxInputFields({
 				label="Personality"
 				value={personality}
 				options={[
-					{ value: "two-layers", label: "2 layers (75 slots)" },
-					{ value: "eight-layers", label: "8 layers (279 slots)" },
+					{ value: "two-layers", label: "2 layers (89 slots)" },
+					{ value: "eight-layers", label: "8 layers (323 slots)" },
 				]}
 				onChange={setPersonality}
+			/>
+			<SelectField
+				label="Channel layout"
+				value={personalityLayout}
+				options={[
+					{ value: "legacy", label: "Legacy (existing desk patches)" },
+					{ value: "current", label: "Current (mask positioning)" },
+				]}
+				onChange={setPersonalityLayout}
 			/>
 			<SelectField
 				label="Protocol"
@@ -421,7 +440,7 @@ function DmxInputFields({
 			/>
 			<NumberField
 				label="Start address"
-				description={`1 to ${highestStartAddress}; the complete ${personality === "two-layers" ? "75" : "279"}-slot personality must fit in one universe.`}
+				description={`1 to ${highestStartAddress}; the complete ${footprint}-slot personality must fit in one universe.`}
 				min={1}
 				max={highestStartAddress}
 				step={1}
@@ -513,6 +532,9 @@ export function OutputEditor({
 		output.soundOutputName ?? "",
 	);
 	const [personality, setPersonality] = useState(output.personality);
+	const [personalityLayout, setPersonalityLayout] = useState(
+		output.personalityLayout,
+	);
 	const [protocol, setProtocol] = useState(output.protocol);
 	const [universe, setUniverse] = useState(output.universe);
 	const [startAddress, setStartAddress] = useState(output.startAddress);
@@ -547,6 +569,7 @@ export function OutputEditor({
 		soundOutputKind,
 		soundOutputName,
 		personality,
+		personalityLayout,
 		protocol,
 		universe,
 		startAddress,
@@ -583,6 +606,7 @@ export function OutputEditor({
 				if (mode === "all" || mode === "dmx") {
 					Object.assign(edit, {
 						personality,
+						personalityLayout,
 						protocol,
 						universe,
 						startAddress,
@@ -666,10 +690,12 @@ export function OutputEditor({
 				<DmxInputFields
 					{...{
 						personality,
+						personalityLayout,
 						protocol,
 						universe,
 						startAddress,
 						setPersonality,
+						setPersonalityLayout,
 						setProtocol,
 						setUniverse,
 						setStartAddress,
@@ -742,6 +768,7 @@ function revertOutputEdit(
 	if (mode === "all" || mode === "dmx") {
 		Object.assign(edit, {
 			personality: active.personality,
+			personalityLayout: active.personalityLayout,
 			protocol: active.protocol,
 			universe: active.universe,
 			startAddress: active.startAddress,
@@ -754,7 +781,7 @@ function outputEditorKey(
 	output: OutputConfigurationView,
 	mode: "all" | "picture" | "sound" | "dmx",
 ): string {
-	return `${mode}:${output.targetKind}:${output.monitorBy}:${output.monitorValue}:${output.fullscreen}:${output.width}:${output.height}:${output.presentation}:${output.framesPerSecond}:${output.soundOutputKind}:${output.soundOutputName}:${output.personality}:${output.protocol}:${output.universe}:${output.startAddress}`;
+	return `${mode}:${output.targetKind}:${output.monitorBy}:${output.monitorValue}:${output.fullscreen}:${output.width}:${output.height}:${output.presentation}:${output.framesPerSecond}:${output.soundOutputKind}:${output.soundOutputName}:${output.personality}:${output.personalityLayout}:${output.protocol}:${output.universe}:${output.startAddress}`;
 }
 
 function monitorOptions(

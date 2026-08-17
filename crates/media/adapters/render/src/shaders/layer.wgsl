@@ -18,10 +18,11 @@ struct Layer {
     tint: vec4<f32>,
     // x: grayscale amount. y, z, w: reserved for the effect slice.
     controls: vec4<f32>,
+    blur: vec4<f32>,
     // x, y: the mask's own scale about the layer centre. z: 1 when inverted. w: mask opacity,
     // which is zero when the layer has no mask at all.
     mask: vec4<f32>,
-    // x: 1 when the mask reads its strength from alpha rather than luminance.
+    // x: 1 when the mask reads alpha rather than luminance. yz: mask position in half-layer units.
     mask_source: vec4<f32>,
     // 0: none/unsupported, 1: Analog TV, 2: Digital TV, 3: Blur, 4: Kaleidoscope,
     // 5: Rasterized Print, 6: Beat Scan, 7: Beat Grid Wave, 8: Beat Form Flash,
@@ -280,7 +281,8 @@ fn mask_strength(uv: vec2<f32>) -> f32 {
     }
 
     let scale = max(layer.mask.xy, vec2<f32>(0.0001));
-    let centred = (uv - vec2<f32>(0.5)) / scale + vec2<f32>(0.5);
+    let offset = layer.mask_source.yz * 0.5;
+    let centred = (uv - vec2<f32>(0.5) - offset) / scale + vec2<f32>(0.5);
     var strength = 0.0;
     if centred.x >= 0.0 && centred.x <= 1.0 && centred.y >= 0.0 && centred.y <= 1.0 {
         let sampled = textureSample(mask, source_sampler, centred);
@@ -364,10 +366,12 @@ fn rasterized_source(
     );
     let colour = textureSample(source, source_sampler, centre_uv);
     var printed: vec3<f32>;
+    var ink_coverage: f32;
     if mode < 0.5 {
         let darkness = 1.0 - dot(colour.rgb, LUMINANCE);
         let ink = print_dot(darkness, grid, vec2<f32>(0.0));
         printed = vec3<f32>(1.0 - ink);
+        ink_coverage = ink;
     } else {
         let cmy = vec3<f32>(1.0) - colour.rgb;
         let black = min(cmy.r, min(cmy.g, cmy.b));
@@ -380,8 +384,14 @@ fn rasterized_source(
             (1.0 - magenta) * (1.0 - key),
             (1.0 - yellow) * (1.0 - key),
         );
+        ink_coverage = 1.0 - min(printed.r, min(printed.g, printed.b));
     }
-    return vec4<f32>(mix(original.rgb, printed, effect_mix), original.a);
+    // Paper is transparent: only the printed dots replace the layer beneath. Preserve the
+    // source alpha on ink so a transparent source cannot manufacture opaque print.
+    return vec4<f32>(
+        mix(original.rgb, printed, effect_mix),
+        mix(original.a, original.a * ink_coverage, effect_mix),
+    );
 }
 
 fn beat_scan_source(
@@ -568,13 +578,7 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
 
     var sampled = textureSample(source, source_sampler, coordinates.uv);
     for (var slot = 0u; slot < 4u; slot += 1u) {
-        if layer.effect_types[slot] == 3u {
-            sampled = blurred_source(
-                coordinates.uv,
-                layer.effect_parameters[slot].x,
-                layer.effect_mixes[slot],
-            );
-        } else if layer.effect_types[slot] == 5u {
+        if layer.effect_types[slot] == 5u {
             sampled = rasterized_source(
                 coordinates.uv,
                 layer.effect_parameters[slot].x,
@@ -611,6 +615,7 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
             sampled = drawn_image_source(coordinates.uv, layer.effect_parameters[slot], layer.effect_mixes[slot]);
         }
     }
+    sampled = blurred_source(coordinates.uv, layer.blur.x, 1.0);
     for (var slot = 0u; slot < 4u; slot += 1u) {
         if layer.effect_types[slot] == 1u {
             sampled = analog_colour(

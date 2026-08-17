@@ -169,6 +169,9 @@ pub fn apply(state: &mut MediaState, command: &Command) -> Applied {
             assign!(grayscale);
             assign!(speed_multiplier);
             assign!(playback_bpm);
+            if let Some(value) = controls.blur {
+                changed |= replace(&mut target.blur, value.clamp(0.0, 1.0));
+            }
             if let Some(value) = controls.effects.clone() {
                 changed |= replace(&mut target.effects, value);
             }
@@ -181,6 +184,12 @@ pub fn apply(state: &mut MediaState, command: &Command) -> Applied {
             if let Some(value) = controls.mask_scale_y {
                 changed |= replace(&mut target.mask.scale_y, value);
             }
+            if let Some(value) = controls.mask_position_x {
+                changed |= replace(&mut target.mask.position_x, value.clamp(-2.0, 2.0));
+            }
+            if let Some(value) = controls.mask_position_y {
+                changed |= replace(&mut target.mask.position_y, value.clamp(-2.0, 2.0));
+            }
             if let Some(value) = controls.mask_invert {
                 changed |= replace(&mut target.mask.invert, value);
             }
@@ -188,6 +197,12 @@ pub fn apply(state: &mut MediaState, command: &Command) -> Applied {
                 changed |= replace(&mut target.mask.opacity, value);
             }
             changed_or_not(changed)
+        }
+        CommandKind::ConfigureLayerEffects { layer, effects, .. } => {
+            let Some(target) = output.layers.get_mut(*layer) else {
+                return Applied::RejectedUnknownLayer;
+            };
+            changed_or_not(replace(&mut target.effects, effects.as_ref().clone()))
         }
         CommandKind::SetMasterControls { controls, .. } => {
             let mut next: MasterState = output.master;
@@ -205,6 +220,12 @@ pub fn apply(state: &mut MediaState, command: &Command) -> Applied {
             }
             if let Some(value) = controls.mask {
                 next.mask = value;
+            }
+            if let Some(value) = controls.mask_position_x {
+                next.mask_position_x = value.clamp(-2.0, 2.0);
+            }
+            if let Some(value) = controls.mask_position_y {
+                next.mask_position_y = value.clamp(-2.0, 2.0);
             }
             if let Some(value) = controls.scale_x {
                 next.scale_x = value;

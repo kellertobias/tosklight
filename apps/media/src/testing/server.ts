@@ -335,6 +335,10 @@ export function stubServer(
 					layer.mask.address.file = body.maskFile;
 				if (body.maskScaleX !== undefined) layer.mask.scaleX = body.maskScaleX;
 				if (body.maskScaleY !== undefined) layer.mask.scaleY = body.maskScaleY;
+				if (body.maskPositionX !== undefined)
+					layer.mask.positionX = body.maskPositionX;
+				if (body.maskPositionY !== undefined)
+					layer.mask.positionY = body.maskPositionY;
 				if (body.maskInvert !== undefined) layer.mask.invert = body.maskInvert;
 				if (body.maskOpacity !== undefined)
 					layer.mask.opacity = body.maskOpacity;
@@ -528,6 +532,8 @@ export function stubServer(
 					"positionX",
 					"positionY",
 					"rotation",
+					"maskPositionX",
+					"maskPositionY",
 					"shaperLeft",
 					"shaperRight",
 					"shaperTop",
@@ -805,6 +811,8 @@ export function anOutput(overrides: Partial<OutputView> = {}): OutputView {
 			positionX: 0,
 			positionY: 0,
 			rotation: 0,
+			maskPositionX: 0,
+			maskPositionY: 0,
 			shaperLeft: 0,
 			shaperRight: 0,
 			shaperTop: 0,
@@ -837,6 +845,7 @@ export function anOutputConfiguration(
 		soundOutputKind: "disabled",
 		soundOutputName: null,
 		personality: "two-layers",
+		personalityLayout: "current",
 		protocol: "art-net",
 		universe: 1,
 		startAddress: 1,
@@ -877,11 +886,14 @@ export function aLayer(index: number): OutputView["layers"][number] {
 		speedMultiplier: "1×",
 		speedMultiplierDmx: 127,
 		playbackBpm: null,
+		blur: 0,
 		sourceStatus: { state: "ready", failure: null },
 		mask: {
 			address: { folder: 0, file: 0, class: "blank" },
 			scaleX: 1,
 			scaleY: 1,
+			positionX: 0,
+			positionY: 0,
 			invert: false,
 			opacity: 0,
 			source: "luminance",

@@ -16,6 +16,7 @@ function input(
 		selectedServerId: "",
 		selectedLayerId: "master",
 		browserMode: "media",
+		selectedControlSectionId: "playback",
 		mainSectionId: "content",
 		rightPaneVisible: false,
 		draftFolderId: "0",
@@ -42,7 +43,18 @@ describe("Media pane disconnected configuration", () => {
 		});
 		expect(model.maskBrowser).toBe("supported");
 		expect(model.libraryFolders).toHaveLength(199);
-		expect(model.libraryFiles).toHaveLength(256);
+		expect(model.libraryFiles).toHaveLength(254);
+		expect(model.libraryFiles[0]).toMatchObject({
+			id: "1",
+			name: "Empty",
+			empty: true,
+		});
+		expect(model.libraryFiles.at(-1)).toMatchObject({
+			id: "254",
+			name: "Empty",
+			empty: true,
+		});
+		expect(model.libraryFiles.some((file) => file.id === "0")).toBe(false);
 		expect(model.libraryFolders[0]).toMatchObject({
 			id: "1",
 			name: "Folder 1",
@@ -51,6 +63,52 @@ describe("Media pane disconnected configuration", () => {
 			id: "199",
 			name: "Folder 199",
 		});
+	});
+
+	it("scopes thumbnails and empty slot labels to the selected source folder", () => {
+		const visualizers = buildMediaPaneModel(
+			input({
+				inspection: {
+					...EMPTY_MEDIA_INSPECTION,
+					files: [
+						{
+							id: 1,
+							folder_id: 250,
+							name: "Bars",
+							width: 128,
+							height: 72,
+							length_frames: 1,
+							fps: 25,
+						},
+					],
+				},
+				sourceFilter: "visualizers",
+				draftFolderId: "250",
+				thumbnailUrls: {
+					"1:1": "blob:media-one",
+					"250:1": "blob:visualizer-one",
+				},
+			}),
+		);
+		expect(visualizers.libraryFiles[0]).toMatchObject({
+			name: "Bars",
+			empty: false,
+			thumbnailSrc: "blob:visualizer-one",
+		});
+
+		const text = buildMediaPaneModel(
+			input({
+				sourceFilter: "text",
+				draftFolderId: "200",
+				thumbnailUrls: { "250:1": "blob:visualizer-one" },
+			}),
+		);
+		expect(text.libraryFiles[0]).toMatchObject({
+			name: "Empty",
+			detail: "Text slot · not advertised",
+			empty: true,
+		});
+		expect(text.libraryFiles[0]?.thumbnailSrc).toBeUndefined();
 	});
 
 	it("keeps an unconfigured patched server and its logical layers selectable", () => {
@@ -114,11 +172,15 @@ describe("Media pane disconnected configuration", () => {
 			id: "8",
 			name: "Folder 8",
 		});
-		expect(model.libraryFiles[19]).toMatchObject({
+		expect(model.libraryFiles[18]).toMatchObject({
 			id: "19",
 			name: "Opening loop",
 		});
-		expect(model.libraryFiles[20]).toMatchObject({ id: "20", name: "File 20" });
+		expect(model.libraryFiles[19]).toMatchObject({
+			id: "20",
+			name: "Empty",
+			empty: true,
+		});
 	});
 
 	it("projects stable visualizer and text address ranges independently", () => {
@@ -224,7 +286,10 @@ describe("Media pane disconnected configuration", () => {
 				ip_address: "127.0.0.1",
 				port: 4809,
 			},
-			layers: [{ fixture_id: "layer-1", head_index: 0 }],
+			layers: [
+				{ fixture_id: "layer-1", head_index: 1 },
+				{ fixture_id: "layer-2", head_index: 2 },
+			],
 			status: { online: true, last_success: null, last_error: null },
 		};
 		const inspection = {
@@ -265,9 +330,399 @@ describe("Media pane disconnected configuration", () => {
 		);
 
 		expect(model.layers[0]).toMatchObject({
+			number: "1",
 			thumbnailSrc: "blob:live-layer",
 			status: "failed",
 			errorDetail: expect.stringContaining("could not render"),
+		});
+		expect(model.layers[1]).toMatchObject({
+			number: "2",
+			status: "unsupported",
+		});
+	});
+
+	it("preserves the Media Server control grouping instead of flattening the layer", () => {
+		const server = {
+			fixture_id: "server-1",
+			name: "ToskLight Media Server",
+			endpoint: {
+				protocol: "citp" as const,
+				ip_address: "127.0.0.1",
+				port: 4809,
+			},
+			layers: [{ fixture_id: "layer-1", head_index: 0 }],
+			status: { online: true, last_success: null, last_error: null },
+		};
+		const attributes = [
+			"media.play_mode",
+			"intensity",
+			"media.scale.x",
+			"media.position.y",
+			"color.cyan",
+			"media.mask.opacity",
+			"media.effect.1",
+		];
+		const inspection = {
+			...EMPTY_MEDIA_INSPECTION,
+			capabilities: {
+				...EMPTY_MEDIA_INSPECTION.capabilities,
+				layers: [
+					{
+						layer: 0,
+						content_library: true,
+						mask_library: true,
+						secondary_controls: attributes.map((attribute) => ({ attribute })),
+					},
+				],
+			},
+		};
+		const model = buildMediaPaneModel(
+			input({
+				inspection,
+				servers: [server],
+				selectedServer: server,
+				selectedServerId: server.fixture_id,
+				selectedLayerId: "layer-1",
+				selectedControlSectionId: "frame",
+			}),
+		);
+
+		expect(
+			model.controlSections.map(({ id, label }) => ({ id, label })),
+		).toEqual([
+			{ id: "playback", label: "Playback" },
+			{ id: "frame", label: "Frame" },
+			{ id: "colour", label: "Colour" },
+			{ id: "mask-controls", label: "Mask" },
+			{ id: "effects", label: "Effects" },
+		]);
+		expect(model.selectedControlSectionId).toBe("frame");
+		expect(model.controlSections[0]?.controls).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					id: "media.play_mode",
+					label: "Play mode",
+				}),
+				expect.objectContaining({
+					id: "intensity",
+					label: "Dimmer",
+				}),
+			]),
+		);
+		expect(model.controlSections[1]?.controls).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					id: "media.scale.x",
+					label: "Scale X",
+					value: 1,
+				}),
+				expect.objectContaining({
+					id: "media.scale.y",
+					label: "Scale Y",
+					value: 1,
+				}),
+			]),
+		);
+		expect(model.controlSections[2]?.controls[0]).toMatchObject({
+			id: "color.tint",
+			label: "Colour",
+			kind: "color",
+			value: "#ffffff",
+		});
+	});
+
+	it("shows regular media fixture attributes without a CITP endpoint", () => {
+		const server = {
+			fixture_id: "server-1",
+			name: "Patched Media Server",
+			endpoint: null,
+			layers: [{ fixture_id: "layer-1", head_index: 1 }],
+			status: { online: false, last_success: null, last_error: null },
+		};
+		const model = buildMediaPaneModel(
+			input({
+				servers: [server],
+				selectedServer: server,
+				selectedServerId: server.fixture_id,
+				selectedLayerId: "layer-1",
+			}),
+		);
+
+		expect(model.controlSections.map((section) => section.id)).toEqual([
+			"playback",
+			"frame",
+			"colour",
+			"mask-controls",
+			"effects",
+		]);
+		expect(
+			model.controlSections.every((section) => section.controls.length > 0),
+		).toBe(true);
+	});
+
+	it("keeps Master fixture controls visible with its live-output defaults", () => {
+		const server = {
+			fixture_id: "server-1",
+			name: "Patched Media Server",
+			endpoint: null,
+			layers: [{ fixture_id: "layer-1", head_index: 0 }],
+			status: { online: false, last_success: null, last_error: null },
+		};
+		const model = buildMediaPaneModel(
+			input({
+				servers: [server],
+				selectedServer: server,
+				selectedServerId: server.fixture_id,
+				selectedLayerId: "master",
+				browserMode: "mask",
+				mainSectionId: "mask",
+				draftFolderId: "1",
+			}),
+		);
+
+		expect(model.controlSections.map((section) => section.id)).toEqual([
+			"playback",
+			"frame",
+			"colour",
+			"mask-controls",
+		]);
+		expect(model.controlSections[0]?.controls).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					id: "intensity",
+					value: 100,
+					display: "100%",
+				}),
+				expect.objectContaining({
+					id: "volume",
+					value: 100,
+					display: "100%",
+				}),
+			]),
+		);
+		expect(model.controlSections[2]?.controls[0]).toMatchObject({
+			id: "color.tint",
+			kind: "color",
+			value: "#ffffff",
+		});
+		expect(model.libraryFolders.map((folder) => folder.id)).toEqual(["1"]);
+	});
+
+	it("starts every media layer with zero intensity", () => {
+		const server = {
+			fixture_id: "server-1",
+			name: "Patched Media Server",
+			endpoint: null,
+			layers: [{ fixture_id: "layer-1", head_index: 0 }],
+			status: { online: false, last_success: null, last_error: null },
+		};
+		const model = buildMediaPaneModel(
+			input({
+				servers: [server],
+				selectedServer: server,
+				selectedServerId: server.fixture_id,
+				selectedLayerId: "layer-1",
+			}),
+		);
+
+		expect(
+			model.controlSections[0]?.controls.find(
+				(control) => control.id === "intensity",
+			),
+		).toMatchObject({ value: 0, display: "0%" });
+	});
+
+	it("maps centered frame attributes onto their physical operator ranges", () => {
+		const server = {
+			fixture_id: "server-1",
+			name: "Patched Media Server",
+			endpoint: null,
+			layers: [{ fixture_id: "layer-1", head_index: 1 }],
+			status: { online: false, last_success: null, last_error: null },
+		};
+		const values = [
+			["media.scale.x", 1],
+			["media.position.x", 0.5],
+			["media.mask.position.x", 0.5],
+			["position.rotation", 0.5],
+		] as const;
+		const model = buildMediaPaneModel(
+			input({
+				servers: [server],
+				selectedServer: server,
+				selectedServerId: server.fixture_id,
+				selectedLayerId: "layer-1",
+				liveProgrammer: values.map(([attribute, value], programmerOrder) => ({
+					fixtureId: "layer-1",
+					attribute,
+					value: { kind: "normalized", value },
+					programmerOrder,
+					fade: false,
+					fadeMillis: null,
+					delayMillis: null,
+				})),
+			}),
+		);
+		const controls = model.controlSections[1]?.controls ?? [];
+
+		expect(
+			controls.find((control) => control.id === "media.scale.x"),
+		).toMatchObject({ value: 10, minimum: 0, maximum: 10, display: "10.00×" });
+		expect(
+			controls.find((control) => control.id === "media.position.x"),
+		).toMatchObject({ value: 0, minimum: -2, maximum: 2, display: "0.00" });
+		const maskControls = model.controlSections.find(
+			(section) => section.id === "mask-controls",
+		)?.controls;
+		expect(
+			maskControls?.find((control) => control.id === "media.mask.position.x"),
+		).toMatchObject({ value: 0, minimum: -2, maximum: 2, display: "0.00" });
+		expect(
+			controls.find((control) => control.id === "position.rotation"),
+		).toMatchObject({ value: 0, minimum: -360, maximum: 360, display: "0°" });
+	});
+
+	it("projects subtractive fixture values through one RGB colour picker", () => {
+		const server = {
+			fixture_id: "server-1",
+			name: "Patched Media Server",
+			endpoint: null,
+			layers: [{ fixture_id: "layer-1", head_index: 1 }],
+			status: { online: false, last_success: null, last_error: null },
+		};
+		const model = buildMediaPaneModel(
+			input({
+				servers: [server],
+				selectedServer: server,
+				selectedServerId: server.fixture_id,
+				selectedLayerId: "layer-1",
+				liveProgrammer: [
+					["color.red", 1],
+					["color.green", 0.5],
+					["color.blue", 0],
+				].map(([attribute, value], programmerOrder) => ({
+					fixtureId: "layer-1",
+					attribute: String(attribute),
+					value: { kind: "normalized" as const, value: Number(value) },
+					programmerOrder,
+					fade: false,
+					fadeMillis: null,
+					delayMillis: null,
+				})),
+			}),
+		);
+
+		expect(model.controlSections[2]?.controls[0]).toMatchObject({
+			id: "color.tint",
+			kind: "color",
+			value: "#ff8000",
+		});
+	});
+
+	it("places native server effect controls inside their Effect slot", () => {
+		const server = {
+			fixture_id: "server-1",
+			name: "ToskLight Media Server",
+			endpoint: null,
+			native_action: "tosklight_media_v2",
+			layers: [{ fixture_id: "layer-1", head_index: 1 }],
+			status: { online: false, last_success: null, last_error: null },
+		};
+		const model = buildMediaPaneModel(
+			input({
+				servers: [server],
+				selectedServer: server,
+				selectedServerId: server.fixture_id,
+				selectedLayerId: "layer-1",
+				nativeEffects: [
+					{
+						index: 0,
+						effectType: "blur",
+						label: "Blur",
+						enabled: true,
+						mix: 0.5,
+						supported: true,
+						capabilityDetail: null,
+						parameters: [
+							{
+								id: "blur-amount",
+								label: "Blur amount",
+								value: 0.8,
+								defaultValue: 0.5,
+							},
+						],
+					},
+				],
+			}),
+		);
+
+		expect(model.controlSections.map((section) => section.id)).not.toContain(
+			"native",
+		);
+		expect(model.controlSections.at(-1)).toMatchObject({
+			id: "effects",
+			controls: expect.arrayContaining([
+				expect.objectContaining({ id: "effect-0-type", kind: "choice" }),
+				expect.objectContaining({ id: "effect-0-blur-amount", kind: "value" }),
+			]),
+		});
+	});
+
+	it("shows percentage controls as percentages instead of raw DMX bytes", () => {
+		const server = {
+			fixture_id: "server-1",
+			name: "ToskLight Media Server",
+			endpoint: {
+				protocol: "citp" as const,
+				ip_address: "127.0.0.1",
+				port: 4809,
+			},
+			layers: [{ fixture_id: "layer-1", head_index: 1 }],
+			status: { online: true, last_success: null, last_error: null },
+		};
+		const inspection = {
+			...EMPTY_MEDIA_INSPECTION,
+			capabilities: {
+				...EMPTY_MEDIA_INSPECTION.capabilities,
+				layers: [
+					{
+						layer: 1,
+						content_library: true,
+						mask_library: true,
+						secondary_controls: [{ attribute: "intensity" }],
+					},
+				],
+			},
+		};
+		const model = buildMediaPaneModel(
+			input({
+				inspection,
+				servers: [server],
+				selectedServer: server,
+				selectedServerId: server.fixture_id,
+				selectedLayerId: "layer-1",
+				liveProgrammer: [
+					{
+						fixtureId: "layer-1",
+						attribute: "intensity",
+						value: { kind: "normalized", value: 1 },
+						programmerOrder: 0,
+						fade: false,
+						fadeMillis: null,
+						delayMillis: null,
+					},
+				],
+			}),
+		);
+
+		expect(
+			model.controlSections[0]?.controls.find(
+				(control) => control.id === "intensity",
+			),
+		).toMatchObject({
+			value: 100,
+			maximum: 100,
+			display: "100%",
 		});
 	});
 });

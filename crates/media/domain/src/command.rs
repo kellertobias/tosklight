@@ -39,10 +39,14 @@ pub struct LayerControls {
     pub mask_address: Option<MediaAddress>,
     pub mask_scale_x: Option<f32>,
     pub mask_scale_y: Option<f32>,
+    pub mask_position_x: Option<f32>,
+    pub mask_position_y: Option<f32>,
     pub mask_invert: Option<bool>,
     pub mask_opacity: Option<f32>,
     pub speed_multiplier: Option<SpeedMultiplier>,
     pub playback_bpm: Option<Option<u8>>,
+    /// A direct playback value, independent of the configurable effect slots.
+    pub blur: Option<f32>,
     /// Replaces the complete ordered effect chain after the HTTP adapter has applied one
     /// intent-shaped slot edit to the current state.
     pub effects: Option<[EffectSlot; 4]>,
@@ -56,6 +60,8 @@ pub struct MasterControls {
     pub tint: Option<Tint>,
     pub flip_mirror: Option<FlipMirror>,
     pub mask: Option<MediaAddress>,
+    pub mask_position_x: Option<f32>,
+    pub mask_position_y: Option<f32>,
     pub scale_x: Option<f32>,
     pub scale_y: Option<f32>,
     pub scaling_mode: Option<ScalingMode>,
@@ -158,6 +164,12 @@ pub enum CommandKind {
         layer: usize,
         controls: Box<LayerControls>,
     },
+    /// Configures the effect implementation behind the four DMX-controlled mix slots.
+    ConfigureLayerEffects {
+        output: OutputId,
+        layer: usize,
+        effects: Box<[EffectSlot; 4]>,
+    },
     SetMasterControls {
         output: OutputId,
         controls: Box<MasterControls>,
@@ -182,6 +194,7 @@ impl CommandKind {
             | Self::SelectMedia { output, .. }
             | Self::SetLayerDimmer { output, .. }
             | Self::SetLayerControls { output, .. }
+            | Self::ConfigureLayerEffects { output, .. }
             | Self::SetMasterControls { output, .. }
             | Self::ResetLayer { output, .. }
             | Self::TakeOverPlayback { output, .. }

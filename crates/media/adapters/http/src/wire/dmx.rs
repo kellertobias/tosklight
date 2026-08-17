@@ -5,10 +5,10 @@
 //! route and the frontend never carry a second personality definition.
 
 use media_application::OutputConfiguration;
+use media_domain::personality::LayerPersonality;
 use media_domain::personality::channels::{
     ChannelSpec, ChannelValueSet, LAYER_CHANNELS, MASTER_CHANNELS, Resolution,
 };
-use media_domain::personality::{LAYER_SLOTS, LayerPersonality};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -62,30 +62,43 @@ pub struct DmxMapView {
 
 impl DmxMapView {
     pub fn of(output: &OutputConfiguration) -> Self {
-        let mut channels = Vec::with_capacity(usize::from(output.personality.footprint().total()));
+        let footprint = output.personality.footprint_for(output.personality_layout);
+        let layer_slots = output.personality_layout.layer_slots();
+        let master_slots = output.personality_layout.master_slots();
+        let mut channels = Vec::with_capacity(usize::from(footprint.total()));
 
         for layer_index in 0..output.personality.layer_count() {
-            let block_offset = layer_index * LAYER_SLOTS;
-            channels.extend(LAYER_CHANNELS.iter().map(|spec| {
-                DmxChannelView::of(
-                    spec,
-                    output.start_address + block_offset + spec.offset,
-                    DmxChannelGroupView::Layer {
-                        // The operator-facing layer number is one-based.
-                        number: layer_index + 1,
-                    },
-                )
-            }));
+            let block_offset = layer_index * layer_slots;
+            channels.extend(
+                LAYER_CHANNELS
+                    .iter()
+                    .filter(|spec| spec.offset < layer_slots)
+                    .map(|spec| {
+                        DmxChannelView::of(
+                            spec,
+                            output.start_address + block_offset + spec.offset,
+                            DmxChannelGroupView::Layer {
+                                // The operator-facing layer number is one-based.
+                                number: layer_index + 1,
+                            },
+                        )
+                    }),
+            );
         }
 
-        let master_offset = output.personality.footprint().master_offset();
-        channels.extend(MASTER_CHANNELS.iter().map(|spec| {
-            DmxChannelView::of(
-                spec,
-                output.start_address + master_offset + spec.offset,
-                DmxChannelGroupView::Master,
-            )
-        }));
+        let master_offset = footprint.master_offset();
+        channels.extend(
+            MASTER_CHANNELS
+                .iter()
+                .filter(|spec| spec.offset < master_slots)
+                .map(|spec| {
+                    DmxChannelView::of(
+                        spec,
+                        output.start_address + master_offset + spec.offset,
+                        DmxChannelGroupView::Master,
+                    )
+                }),
+        );
 
         Self {
             output_id: output.id.to_string(),

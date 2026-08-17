@@ -9,6 +9,8 @@ struct Master {
     transform: vec4<f32>,
     // xy: cosine/sine of master rotation. zw: cosine/sine of whole-shaper rotation.
     rotation: vec4<f32>,
+    // xy: master-mask position in half-output units.
+    mask_transform: vec4<f32>,
     // Left, right, top and bottom inward edge positions, normalized to the master rectangle.
     shaper_edges: vec4<f32>,
     // Tangents of the corresponding edge rotations.
@@ -77,8 +79,12 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     // it shapes the whole image rather than one layer's contribution to it.
     var strength = 1.0;
     if master.flip_mask.z > 0.0 {
-        let read = textureSample(mask, program_sampler, in.uv);
-        let value = dot(read.rgb, LUMINANCE);
+        let mask_uv = in.uv - master.mask_transform.xy * 0.5;
+        var value = 0.0;
+        if mask_uv.x >= 0.0 && mask_uv.x <= 1.0 && mask_uv.y >= 0.0 && mask_uv.y <= 1.0 {
+            let read = textureSample(mask, program_sampler, mask_uv);
+            value = dot(read.rgb, LUMINANCE);
+        }
         strength = mix(1.0, clamp(value, 0.0, 1.0), master.flip_mask.z);
     }
 

@@ -23,6 +23,7 @@ export const parameterFamilies = {
 		"media.play_mode",
 		"media.playback_speed",
 		"media.playback_bpm",
+		"media.playback.blur",
 		"media.scaling_mode",
 	],
 	Media: [
@@ -36,6 +37,11 @@ export const parameterFamilies = {
 		"media.mask.folder",
 		"media.mask.file",
 		"media.mask.invert",
+		"media.flip_mirror",
+		"media.mask.scale.x",
+		"media.mask.scale.y",
+		"media.mask.position.x",
+		"media.mask.position.y",
 	],
 } as const;
 
@@ -83,6 +89,7 @@ export const parameterLabels: Record<string, string> = {
 	"media.play_mode": "Play Mode",
 	"media.playback_speed": "Playback Speed",
 	"media.playback_bpm": "Playback BPM",
+	"media.playback.blur": "Blur",
 	"media.scaling_mode": "Scaling Mode",
 	"media.folder": "Media Folder",
 	"media.file": "Media File",
@@ -94,6 +101,11 @@ export const parameterLabels: Record<string, string> = {
 	"media.mask.folder": "Mask Folder",
 	"media.mask.file": "Mask File",
 	"media.mask.invert": "Invert Mask",
+	"media.flip_mirror": "Flip / Mirror",
+	"media.mask.scale.x": "Mask Scale X",
+	"media.mask.scale.y": "Mask Scale Y",
+	"media.mask.position.x": "Mask Position X",
+	"media.mask.position.y": "Mask Position Y",
 };
 
 export const specialParameterFamilies = new Set<SpecialParameterFamily>([

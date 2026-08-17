@@ -1,6 +1,6 @@
 //! The canonical v2 channel table.
 //!
-//! One layer occupies 34 consecutive slots; the master occupies 7. Fine channels are big-endian
+//! One layer occupies 39 consecutive slots; the master occupies 11. Fine channels are big-endian
 //! coarse/fine pairs. This table is the single source the receivers, the API, UI metadata, the
 //! tests, and the GDTF export all read — nothing restates it.
 
@@ -217,7 +217,7 @@ layer_channels! {
     11 "Position Y fine"       Fine       0, ValueKind::Continuous, IMPLEMENTED;
     12 "Rotation"              Coarse 32768, ValueKind::Continuous, IMPLEMENTED;
     13 "Rotation fine"         Fine       0, ValueKind::Continuous, IMPLEMENTED;
-    14 "Dimmer"                Byte     255, ValueKind::Continuous, IMPLEMENTED;
+    14 "Dimmer"                Byte       0, ValueKind::Continuous, IMPLEMENTED;
     15 "Volume"                Byte     255, ValueKind::Continuous, IMPLEMENTED;
     16 "Cyan"                  Byte       0, ValueKind::Continuous, IMPLEMENTED;
     17 "Magenta"               Byte       0, ValueKind::Continuous, IMPLEMENTED;
@@ -237,6 +237,13 @@ layer_channels! {
     31 "Effect 4"              Byte       0, ValueKind::Continuous, IMPLEMENTED;
     32 "Speed multiplier"      Byte     127, ValueKind::SpeedMultiplier, IMPLEMENTED;
     33 "Playback BPM"          Byte       0, ValueKind::PlaybackBpm, IMPLEMENTED;
+    34 "Blur"                  Byte       0, ValueKind::Continuous, IMPLEMENTED;
+    // New controls append to the published block. Existing desks therefore keep sending every
+    // pre-existing control, especially playback speed, at the slot they originally patched.
+    35 "Mask position X"       Coarse 32768, ValueKind::Continuous, IMPLEMENTED;
+    36 "Mask position X fine"  Fine       0, ValueKind::Continuous, IMPLEMENTED;
+    37 "Mask position Y"       Coarse 32768, ValueKind::Continuous, IMPLEMENTED;
+    38 "Mask position Y fine"  Fine       0, ValueKind::Continuous, IMPLEMENTED;
 }
 
 /// The master section, beginning immediately after the controlled layers.
@@ -297,6 +304,38 @@ pub const MASTER_CHANNELS: &[ChannelSpec] = &[
         values: ValueKind::Continuous,
         implementation: IMPLEMENTED,
     },
+    ChannelSpec {
+        offset: 7,
+        name: "Master mask position X",
+        resolution: Resolution::Coarse,
+        default_value: 32_768,
+        values: ValueKind::Continuous,
+        implementation: IMPLEMENTED,
+    },
+    ChannelSpec {
+        offset: 8,
+        name: "Master mask position X fine",
+        resolution: Resolution::Fine,
+        default_value: 0,
+        values: ValueKind::Continuous,
+        implementation: IMPLEMENTED,
+    },
+    ChannelSpec {
+        offset: 9,
+        name: "Master mask position Y",
+        resolution: Resolution::Coarse,
+        default_value: 32_768,
+        values: ValueKind::Continuous,
+        implementation: IMPLEMENTED,
+    },
+    ChannelSpec {
+        offset: 10,
+        name: "Master mask position Y fine",
+        resolution: Resolution::Fine,
+        default_value: 0,
+        values: ValueKind::Continuous,
+        implementation: IMPLEMENTED,
+    },
 ];
 
 /// Zero-based layer offsets, named so the decoder reads as the published table does.
@@ -325,6 +364,9 @@ pub mod layer {
     pub const EFFECT_1: usize = 28;
     pub const SPEED_MULTIPLIER: usize = 32;
     pub const PLAYBACK_BPM: usize = 33;
+    pub const BLUR: usize = 34;
+    pub const MASK_POSITION_X: usize = 35;
+    pub const MASK_POSITION_Y: usize = 37;
 }
 
 /// Zero-based master offsets.
@@ -336,6 +378,8 @@ pub mod master {
     pub const YELLOW: usize = 4;
     pub const FLIP_MIRROR: usize = 5;
     pub const MASK: usize = 6;
+    pub const MASK_POSITION_X: usize = 7;
+    pub const MASK_POSITION_Y: usize = 9;
 }
 
 #[cfg(test)]
@@ -358,47 +402,51 @@ mod tests {
 
     #[test]
     fn every_coarse_channel_is_followed_by_its_fine_byte() {
-        for (index, channel) in LAYER_CHANNELS.iter().enumerate() {
-            if channel.resolution != Resolution::Coarse {
-                continue;
+        for table in [LAYER_CHANNELS, MASTER_CHANNELS] {
+            for (index, channel) in table.iter().enumerate() {
+                if channel.resolution != Resolution::Coarse {
+                    continue;
+                }
+                let fine = table.get(index + 1).unwrap_or_else(|| {
+                    panic!("{} is the last slot and has no fine byte", channel.name)
+                });
+                assert_eq!(
+                    fine.resolution,
+                    Resolution::Fine,
+                    "{} is not followed by a fine byte",
+                    channel.name
+                );
             }
-            let fine = LAYER_CHANNELS.get(index + 1).unwrap_or_else(|| {
-                panic!("{} is the last slot and has no fine byte", channel.name)
-            });
-            assert_eq!(
-                fine.resolution,
-                Resolution::Fine,
-                "{} is not followed by a fine byte",
-                channel.name
-            );
         }
     }
 
     #[test]
     fn no_fine_byte_stands_alone() {
-        for (index, channel) in LAYER_CHANNELS.iter().enumerate() {
-            if channel.resolution != Resolution::Fine {
-                continue;
+        for table in [LAYER_CHANNELS, MASTER_CHANNELS] {
+            for (index, channel) in table.iter().enumerate() {
+                if channel.resolution != Resolution::Fine {
+                    continue;
+                }
+                let coarse = table[index - 1];
+                assert_eq!(
+                    coarse.resolution,
+                    Resolution::Coarse,
+                    "{} has no coarse byte",
+                    channel.name
+                );
             }
-            let coarse = LAYER_CHANNELS[index - 1];
-            assert_eq!(
-                coarse.resolution,
-                Resolution::Coarse,
-                "{} has no coarse byte",
-                channel.name
-            );
         }
     }
 
     #[test]
-    fn there_are_seven_sixteen_bit_pairs_per_layer() {
+    fn there_are_nine_sixteen_bit_pairs_per_layer() {
         let pairs = LAYER_CHANNELS
             .iter()
             .filter(|channel| channel.resolution == Resolution::Coarse)
             .count();
         assert_eq!(
-            pairs, 7,
-            "scale X/Y, position X/Y, rotation, and both mask axes"
+            pairs, 9,
+            "scale X/Y, position X/Y, rotation, and mask scale plus position axes"
         );
     }
 
@@ -408,12 +456,31 @@ mod tests {
         assert_eq!(LAYER_CHANNELS[layer::PLAY_MODE].name, "Play mode");
         assert_eq!(LAYER_CHANNELS[layer::MASK_SCALE_Y].name, "Mask scale Y");
         assert_eq!(
+            LAYER_CHANNELS[layer::MASK_POSITION_X].name,
+            "Mask position X"
+        );
+        assert_eq!(
             LAYER_CHANNELS[layer::SPEED_MULTIPLIER].name,
             "Speed multiplier"
         );
         assert_eq!(LAYER_CHANNELS[layer::PLAYBACK_BPM].name, "Playback BPM");
         assert_eq!(MASTER_CHANNELS[master::FLIP_MIRROR].name, "Flip/mirror");
         assert_eq!(MASTER_CHANNELS[master::MASK].name, "Master mask");
+        assert_eq!(
+            MASTER_CHANNELS[master::MASK_POSITION_Y].name,
+            "Master mask position Y"
+        );
+    }
+
+    #[test]
+    fn adding_mask_position_does_not_move_existing_playback_controls() {
+        assert_eq!(layer::MASK_INVERT, 26);
+        assert_eq!(layer::EFFECT_1, 28);
+        assert_eq!(layer::SPEED_MULTIPLIER, 32);
+        assert_eq!(layer::PLAYBACK_BPM, 33);
+        assert_eq!(layer::BLUR, 34);
+        assert_eq!(layer::MASK_POSITION_X, 35);
+        assert_eq!(layer::MASK_POSITION_Y, 37);
     }
 
     #[test]
@@ -514,7 +581,7 @@ mod tests {
         }
 
         assert_eq!(LAYER_CHANNELS[layer::SCALE_X].default_value, 32_768);
-        assert_eq!(LAYER_CHANNELS[layer::DIMMER].default_value, 255);
+        assert_eq!(LAYER_CHANNELS[layer::DIMMER].default_value, 0);
         assert_eq!(LAYER_CHANNELS[layer::CYAN].default_value, 0);
         assert_eq!(LAYER_CHANNELS[layer::SPEED_MULTIPLIER].default_value, 127);
         assert_eq!(MASTER_CHANNELS[master::DIMMER].default_value, 255);

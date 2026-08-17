@@ -97,6 +97,12 @@ mod canonical_migration_tests {
             ("color.cyan", "color.red"),
             ("color.magenta", "color.green"),
             ("color.yellow", "color.blue"),
+            ("media.layer.cyan", "color.red"),
+            ("media.layer.magenta", "color.green"),
+            ("media.layer.yellow", "color.blue"),
+            ("media.master.master.cyan", "color.red"),
+            ("media.master.master.magenta", "color.green"),
+            ("media.master.master.yellow", "color.blue"),
         ] {
             assert_eq!(
                 canonical_attribute_migration(&AttributeKey(source.into())),
@@ -156,6 +162,38 @@ mod canonical_migration_tests {
             ("media.opacity", "intensity"),
             ("media.rotation", "position.rotation"),
             ("media.tint", "color"),
+            ("media.layer.folder", "media.folder"),
+            ("media.layer.file", "media.file"),
+            ("media.layer.play.mode", "media.play_mode"),
+            ("media.layer.scale.x", "media.scale.x"),
+            ("media.layer.scale.y", "media.scale.y"),
+            ("media.layer.scaling.mode", "media.scaling_mode"),
+            ("media.layer.position.x", "media.position.x"),
+            ("media.layer.position.y", "media.position.y"),
+            ("media.layer.rotation", "position.rotation"),
+            ("media.layer.dimmer", "intensity"),
+            ("media.master.master.dimmer", "intensity"),
+            ("media.layer.volume", "volume"),
+            ("media.master.master.volume", "volume"),
+            ("media.layer.grayscale", "media.grayscale"),
+            ("media.layer.mask.folder", "media.mask.folder"),
+            ("media.layer.mask.file", "media.mask.file"),
+            ("media.master.master.mask", "media.mask.file"),
+            ("media.layer.mask.scale.x", "media.mask.scale.x"),
+            ("media.layer.mask.scale.y", "media.mask.scale.y"),
+            ("media.layer.mask.position.x", "media.mask.position.x"),
+            ("media.layer.mask.position.y", "media.mask.position.y"),
+            ("media.master.mask.position.x", "media.mask.position.x"),
+            ("media.master.mask.position.y", "media.mask.position.y"),
+            ("media.layer.mask.invert", "media.mask.invert"),
+            ("media.layer.mask.opacity", "media.mask.opacity"),
+            ("media.layer.effect.1", "media.effect.1"),
+            ("media.layer.effect.2", "media.effect.2"),
+            ("media.layer.effect.3", "media.effect.3"),
+            ("media.layer.effect.4", "media.effect.4"),
+            ("media.layer.speed.multiplier", "media.playback_speed"),
+            ("media.layer.playback.bpm", "media.playback_bpm"),
+            ("media.master.flip.mirror", "media.flip_mirror"),
             ("pan.continuous", "pan"),
             ("tilt.continuous", "tilt"),
         ] {
@@ -476,7 +514,7 @@ mod attribute_registry_tests {
         );
         assert_eq!(
             upgraded.placement_for(&AttributeKey("vendor.media_surface".into())),
-            Some(EncoderPlacement::new(EncoderGroup::Media, 4, 1))
+            Some(EncoderPlacement::new(EncoderGroup::Media, 6, 1))
         );
         assert_eq!(
             upgraded
@@ -825,7 +863,7 @@ mod attribute_registry_tests {
     }
 
     #[test]
-    fn position_page_uses_the_accepted_four_control_geometry() {
+    fn position_page_uses_the_accepted_layer_and_fixture_geometry() {
         let recommended = AttributeConfiguration::recommended();
         for (attribute, slot) in [
             ("pan", 1),
@@ -845,6 +883,12 @@ mod attribute_registry_tests {
                     .is_none()
             );
             assert!(attribute_descriptor(&AttributeKey(compatibility_only.into())).built_in);
+        }
+        for (attribute, slot) in [("media.position.x", 5), ("media.position.y", 6)] {
+            assert_eq!(
+                recommended.placement_for(&AttributeKey(attribute.into())),
+                Some(EncoderPlacement::new(EncoderGroup::Position, 1, slot))
+            );
         }
     }
 

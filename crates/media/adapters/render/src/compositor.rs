@@ -7,7 +7,6 @@ use bytemuck::{Pod, Zeroable};
 use media_domain::geometry::{Size, layer_transform};
 use media_domain::{LayerState, MaskSource, MasterState, OutputId, Timestamp, geometry};
 
-use crate::feedback::FeedbackProcessor;
 use crate::gpu::Gpu;
 use crate::texture::SourceTexture;
 
@@ -38,6 +37,7 @@ struct LayerUniform {
     output: [f32; 2],
     tint: [f32; 4],
     controls: [f32; 4],
+    blur: [f32; 4],
     mask: [f32; 4],
     mask_source: [f32; 4],
     effect_types: [u32; 4],
@@ -89,10 +89,6 @@ impl LayerUniform {
                 effect_parameters[index].copy_from_slice(&values[..4]);
                 effect_parameter_tail[index] = values[4];
                 effect_seeds[index] = effect_seed(output_id, effect.seed, index);
-            } else if let Some(parameters) = effect.blur_parameters() {
-                effect_types[index] = 3;
-                effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
-                effect_parameters[index][0] = parameters.amount;
             } else if let Some(parameters) = effect.kaleidoscope_parameters() {
                 effect_types[index] = 4;
                 effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
@@ -153,6 +149,7 @@ impl LayerUniform {
                 layer.dimmer,
             ],
             controls: [layer.grayscale, 0.0, 0.0, 0.0],
+            blur: [layer.blur.clamp(0.0, 1.0), 0.0, 0.0, 0.0],
             // A mask that is selected but not loaded reports no opacity, so the layer draws
             // unmasked rather than vanishing while its mask is on its way.
             mask: [
@@ -167,8 +164,8 @@ impl LayerUniform {
             ],
             mask_source: [
                 f32::from(u8::from(layer.mask.source == MaskSource::Alpha)),
-                0.0,
-                0.0,
+                layer.mask.position_x,
+                layer.mask.position_y,
                 0.0,
             ],
             effect_types,
@@ -212,6 +209,7 @@ struct MasterUniform {
     flip_mask: [f32; 4],
     transform: [f32; 4],
     rotation: [f32; 4],
+    mask_transform: [f32; 4],
     shaper_edges: [f32; 4],
     shaper_edge_tangents: [f32; 4],
 }
@@ -244,6 +242,7 @@ impl MasterUniform {
                 master.shaper.rotation.to_radians().cos(),
                 master.shaper.rotation.to_radians().sin(),
             ],
+            mask_transform: [master.mask_position_x, master.mask_position_y, 0.0, 0.0],
             shaper_edges: [
                 master.shaper.left,
                 master.shaper.right,
@@ -273,7 +272,6 @@ pub struct Compositor {
     master_pipeline: wgpu::RenderPipeline,
     master_layout: wgpu::BindGroupLayout,
     master_uniform: wgpu::Buffer,
-    feedback: FeedbackProcessor,
     /// Stands in wherever a mask is not selected. Opaque white: read as luminance or as alpha it
     /// says "let everything through", so a shader needs no branch for the common case.
     no_mask: SourceTexture,
@@ -345,7 +343,6 @@ impl Compositor {
             master_pipeline,
             master_layout,
             master_uniform,
-            feedback: FeedbackProcessor::new(gpu),
             no_mask,
         }
     }
@@ -424,15 +421,12 @@ impl Compositor {
         output_id: OutputId,
         now: Timestamp,
         preserve_alpha: bool,
-        advance_feedback: bool,
+        _advance_feedback: bool,
     ) {
         let device = &self.gpu.device;
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("media-frame"),
         });
-        if advance_feedback {
-            self.feedback.advance(&mut encoder, layers, now);
-        }
 
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -480,7 +474,7 @@ impl Compositor {
                     device,
                     &self.layer_layout,
                     &self.layer_uniforms[index],
-                    self.feedback.source(layer),
+                    &layer.source.view,
                     &self.sampler,
                     &layer.mask.unwrap_or(&self.no_mask).view,
                 );
@@ -714,6 +708,11 @@ mod tests {
             dimmer: 0.5,
             tint: Tint::new(1.0, 0.0, 0.0),
             grayscale: 0.25,
+            mask: media_domain::MaskState {
+                position_x: 0.5,
+                position_y: -0.75,
+                ..Default::default()
+            },
             ..Default::default()
         };
         let source = Size::new(100, 50);
@@ -745,12 +744,13 @@ mod tests {
             "dimmer rides in the tint's alpha"
         );
         assert_eq!(uniform.controls[0], 0.25);
+        assert_eq!(&uniform.mask_source[1..3], &[0.5, -0.75]);
     }
 
     #[test]
     fn the_uniforms_are_the_size_the_shaders_declare() {
-        assert_eq!(std::mem::size_of::<LayerUniform>(), 1264);
-        assert_eq!(std::mem::size_of::<MasterUniform>(), 96);
+        assert_eq!(std::mem::size_of::<LayerUniform>(), 1280);
+        assert_eq!(std::mem::size_of::<MasterUniform>(), 112);
     }
 
     #[test]
@@ -774,6 +774,8 @@ mod tests {
             scale_y: 0.75,
             scaling_mode: media_domain::ScalingMode::Stretch,
             rotation: 90.0,
+            mask_position_x: -0.5,
+            mask_position_y: 0.75,
             shaper: media_domain::MasterShaper {
                 left: 0.1,
                 right: 0.2,
@@ -789,6 +791,7 @@ mod tests {
         };
         let uniform = MasterUniform::new(&master, None, false);
         assert_eq!(uniform.transform, [0.25, -0.5, 1.5, 0.75]);
+        assert_eq!(&uniform.mask_transform[..2], &[-0.5, 0.75]);
         assert_eq!(uniform.shaper_edges, [0.1, 0.2, 0.3, 0.4]);
         assert!((uniform.rotation[0]).abs() < 1e-6);
         assert!((uniform.rotation[1] - 1.0).abs() < 1e-6);

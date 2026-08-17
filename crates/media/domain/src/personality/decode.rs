@@ -12,9 +12,9 @@ use crate::playback::PlayMode;
 use crate::speed::SpeedMultiplier;
 
 use super::channels::{layer, master};
-use super::{LAYER_SLOTS, LayerPersonality, MASTER_SLOTS};
+use super::{LAYER_SLOTS, LayerPersonality, MASTER_SLOTS, PersonalityLayout};
 
-/// One layer's 34 slots.
+/// One layer's 35 slots.
 pub type LayerSlots = [u8; LAYER_SLOTS as usize];
 /// The master's 7 slots.
 pub type MasterSlots = [u8; MASTER_SLOTS as usize];
@@ -23,8 +23,14 @@ pub type MasterSlots = [u8; MASTER_SLOTS as usize];
 ///
 /// Every value that is not on the wire keeps the state a fresh layer has, so a short or padded
 /// frame can never invent a selection.
-pub fn layer_state(slots: &LayerSlots) -> LayerState {
+pub fn layer_state(slots: &[u8]) -> LayerState {
     let sixteen = |offset: usize| dmx::sixteen_bit(slots[offset], slots[offset + 1]);
+    let optional_position = |offset: usize| {
+        slots
+            .get(offset..=offset + 1)
+            .map(|pair| dmx::position(dmx::sixteen_bit(pair[0], pair[1])))
+            .unwrap_or_default()
+    };
 
     LayerState {
         address: MediaAddress::new(slots[layer::FOLDER], slots[layer::FILE]),
@@ -47,6 +53,8 @@ pub fn layer_state(slots: &LayerSlots) -> LayerState {
             address: MediaAddress::new(slots[layer::MASK_FOLDER], slots[layer::MASK_FILE]),
             scale_x: dmx::mask_scale(sixteen(layer::MASK_SCALE_X)),
             scale_y: dmx::mask_scale(sixteen(layer::MASK_SCALE_Y)),
+            position_x: optional_position(layer::MASK_POSITION_X),
+            position_y: optional_position(layer::MASK_POSITION_Y),
             invert: slots[layer::MASK_INVERT] >= 128,
             opacity: dmx::unit(slots[layer::MASK_OPACITY]),
             ..MaskState::default()
@@ -58,12 +66,23 @@ pub fn layer_state(slots: &LayerSlots) -> LayerState {
         }),
         speed_multiplier: SpeedMultiplier::from_dmx(slots[layer::SPEED_MULTIPLIER]),
         playback_bpm: dmx::playback_bpm(slots[layer::PLAYBACK_BPM]),
+        blur: slots
+            .get(layer::BLUR)
+            .copied()
+            .map(dmx::unit)
+            .unwrap_or_default(),
         ..LayerState::default()
     }
 }
 
 /// Decodes the master's slots.
-pub fn master_state(slots: &MasterSlots) -> MasterState {
+pub fn master_state(slots: &[u8]) -> MasterState {
+    let optional_position = |offset: usize| {
+        slots
+            .get(offset..=offset + 1)
+            .map(|pair| dmx::position(dmx::sixteen_bit(pair[0], pair[1])))
+            .unwrap_or_default()
+    };
     MasterState {
         dimmer: dmx::unit(slots[master::DIMMER]),
         volume: dmx::unit(slots[master::VOLUME]),
@@ -76,6 +95,8 @@ pub fn master_state(slots: &MasterSlots) -> MasterState {
         // The master mask selects an output-level library mask by file number within the
         // library's own mask folder, so folder zero here would mean "no mask" on every byte.
         mask: MediaAddress::new(1, slots[master::MASK]),
+        mask_position_x: optional_position(master::MASK_POSITION_X),
+        mask_position_y: optional_position(master::MASK_POSITION_Y),
         ..MasterState::default()
     }
 }
@@ -107,10 +128,11 @@ pub struct DecodedFrame {
 /// offset happens exactly here.
 pub fn frame(
     personality: LayerPersonality,
+    layout: PersonalityLayout,
     start_address: u16,
     payload: &[u8],
 ) -> Result<DecodedFrame, FrameError> {
-    let footprint = personality.footprint();
+    let footprint = personality.footprint_for(layout);
     let offset = usize::from(super::SlotFootprint::payload_offset(start_address));
     let available = payload.len().saturating_sub(offset);
     if available < usize::from(footprint.total()) {
@@ -124,18 +146,14 @@ pub fn frame(
     let block = &payload[offset..offset + usize::from(footprint.total())];
     let layers = (0..usize::from(personality.layer_count()))
         .map(|index| {
-            let base = index * usize::from(LAYER_SLOTS);
-            let slots: LayerSlots = block[base..base + usize::from(LAYER_SLOTS)]
-                .try_into()
-                .expect("the block is exactly the footprint's size");
-            layer_state(&slots)
+            let layer_slots = usize::from(layout.layer_slots());
+            let base = index * layer_slots;
+            layer_state(&block[base..base + layer_slots])
         })
         .collect();
 
     let master_base = usize::from(footprint.master_offset());
-    let master_slots: MasterSlots = block[master_base..master_base + usize::from(MASTER_SLOTS)]
-        .try_into()
-        .expect("the block is exactly the footprint's size");
+    let master_slots = &block[master_base..master_base + usize::from(layout.master_slots())];
 
     Ok(DecodedFrame {
         layers,
@@ -158,6 +176,8 @@ mod tests {
         slots[layer::ROTATION] = 0x80;
         slots[layer::MASK_SCALE_X] = 0x80;
         slots[layer::MASK_SCALE_Y] = 0x80;
+        slots[layer::MASK_POSITION_X] = 0x80;
+        slots[layer::MASK_POSITION_Y] = 0x80;
         slots[layer::DIMMER] = 255;
         slots[layer::VOLUME] = 255;
         slots[layer::SPEED_MULTIPLIER] = 127;
@@ -179,6 +199,33 @@ mod tests {
         assert_eq!(decoded.speed_multiplier, expected.speed_multiplier);
         assert_eq!(decoded.play_mode, expected.play_mode);
         assert_eq!(decoded.address, expected.address);
+        assert_eq!(decoded.mask.position_x, expected.mask.position_x);
+        assert_eq!(decoded.mask.position_y, expected.mask.position_y);
+    }
+
+    #[test]
+    fn the_legacy_layout_keeps_speed_and_layer_boundaries_at_their_published_slots() {
+        let personality = LayerPersonality::TwoLayers;
+        let footprint = personality.footprint_for(PersonalityLayout::Legacy);
+        let mut payload = vec![0; usize::from(footprint.total())];
+        payload[layer::SPEED_MULTIPLIER] = 127;
+        let second = usize::from(PersonalityLayout::Legacy.layer_slots());
+        payload[second + layer::FOLDER] = 12;
+        payload[second + layer::FILE] = 34;
+        payload[second + layer::SPEED_MULTIPLIER] = 135;
+        let master = usize::from(footprint.master_offset());
+        payload[master + master::DIMMER] = 255;
+
+        let decoded = frame(personality, PersonalityLayout::Legacy, 1, &payload).unwrap();
+
+        assert_eq!(decoded.layers[0].speed_multiplier, SpeedMultiplier::Unity);
+        assert_eq!(decoded.layers[0].mask.position_x, 0.0);
+        assert_eq!(decoded.layers[0].mask.position_y, 0.0);
+        assert_eq!(decoded.layers[1].address, MediaAddress::new(12, 34));
+        assert_eq!(decoded.layers[1].speed_multiplier.label(), "2×");
+        assert_eq!(decoded.master.dimmer, 1.0);
+        assert_eq!(decoded.master.mask_position_x, 0.0);
+        assert_eq!(decoded.master.mask_position_y, 0.0);
     }
 
     #[test]
@@ -194,6 +241,8 @@ mod tests {
         slots[layer::MASK_FILE] = 9;
         slots[layer::MASK_INVERT] = 128;
         slots[layer::MASK_OPACITY] = 255;
+        slots[layer::MASK_POSITION_X] = 0x40;
+        slots[layer::MASK_POSITION_Y] = 0xc0;
         slots[layer::EFFECT_1 + 2] = 255;
         slots[layer::PLAYBACK_BPM] = 120;
 
@@ -211,6 +260,8 @@ mod tests {
         assert_eq!(layer.mask.address, MediaAddress::new(7, 9));
         assert!(layer.mask.invert);
         assert_eq!(layer.mask.opacity, 1.0);
+        assert!(layer.mask.position_x < 0.0);
+        assert!(layer.mask.position_y > 0.0);
         assert_eq!(layer.effects[2].mix, 1.0);
         assert_eq!(layer.effects[0].mix, 0.0);
         assert_eq!(layer.playback_bpm, Some(120));
@@ -250,6 +301,8 @@ mod tests {
         slots[master::MAGENTA] = 255;
         slots[master::FLIP_MIRROR] = 3;
         slots[master::MASK] = 5;
+        slots[master::MASK_POSITION_X] = 0x40;
+        slots[master::MASK_POSITION_Y] = 0xc0;
 
         let decoded = master_state(&slots);
         assert_eq!(decoded.dimmer, 1.0);
@@ -257,6 +310,8 @@ mod tests {
         assert_eq!(decoded.flip_mirror, FlipMirror::Both);
         assert!(decoded.has_mask());
         assert_eq!(decoded.mask.file, 5);
+        assert!(decoded.mask_position_x < 0.0);
+        assert!(decoded.mask_position_y > 0.0);
     }
 
     fn universe(personality: LayerPersonality, start_address: u16) -> Vec<u8> {
@@ -278,7 +333,7 @@ mod tests {
     fn an_eight_layer_frame_decodes_eight_layers_and_one_master() {
         let personality = LayerPersonality::EightLayers;
         let payload = universe(personality, 1);
-        let decoded = frame(personality, 1, &payload).unwrap();
+        let decoded = frame(personality, PersonalityLayout::Current, 1, &payload).unwrap();
 
         assert_eq!(decoded.layers.len(), 8);
         for (index, layer) in decoded.layers.iter().enumerate() {
@@ -291,7 +346,7 @@ mod tests {
     fn a_two_layer_frame_reads_only_its_own_slots() {
         let personality = LayerPersonality::TwoLayers;
         let payload = universe(personality, 1);
-        let decoded = frame(personality, 1, &payload).unwrap();
+        let decoded = frame(personality, PersonalityLayout::Current, 1, &payload).unwrap();
         assert_eq!(decoded.layers.len(), 2);
         assert_eq!(decoded.master.dimmer, 1.0);
     }
@@ -300,10 +355,10 @@ mod tests {
     fn the_start_address_is_one_based() {
         let personality = LayerPersonality::TwoLayers;
         let payload = universe(personality, 100);
-        let decoded = frame(personality, 100, &payload).unwrap();
+        let decoded = frame(personality, PersonalityLayout::Current, 100, &payload).unwrap();
         assert_eq!(decoded.layers[0].address, MediaAddress::new(1, 1));
 
-        let shifted = frame(personality, 99, &payload).unwrap();
+        let shifted = frame(personality, PersonalityLayout::Current, 99, &payload).unwrap();
         assert_ne!(
             shifted.layers[0].address,
             MediaAddress::new(1, 1),
@@ -315,13 +370,13 @@ mod tests {
     fn a_frame_that_ends_before_the_footprint_is_refused() {
         let personality = LayerPersonality::EightLayers;
         let payload = vec![0u8; 512];
-        let error = frame(personality, 300, &payload).unwrap_err();
+        let error = frame(personality, PersonalityLayout::Current, 300, &payload).unwrap_err();
         assert_eq!(
             error,
             FrameError::TooShort {
                 offset: 300,
                 available: 213,
-                required: 279
+                required: 323
             }
         );
     }
@@ -332,8 +387,8 @@ mod tests {
         // stands in for that here; the adapters own no mapping logic of their own.
         let personality = LayerPersonality::EightLayers;
         let payload = universe(personality, 45);
-        let art_net = frame(personality, 45, &payload).unwrap();
-        let sacn = frame(personality, 45, &payload).unwrap();
+        let art_net = frame(personality, PersonalityLayout::Current, 45, &payload).unwrap();
+        let sacn = frame(personality, PersonalityLayout::Current, 45, &payload).unwrap();
         assert_eq!(art_net, sacn);
     }
 }

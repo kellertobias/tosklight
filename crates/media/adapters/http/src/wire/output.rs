@@ -5,12 +5,12 @@ use media_application::configuration::{
 };
 use media_domain::{
     ANALOG_TV_EFFECT, AnalogTvParameters, BEAT_FORM_FLASH_EFFECT, BEAT_GRID_WAVE_EFFECT,
-    BEAT_MOVE_EFFECT, BEAT_SCALE_TURN_EFFECT, BEAT_SCAN_EFFECT, BLUR_EFFECT,
-    BeatFormFlashParameters, BeatGridWaveParameters, BeatMoveParameters, BeatScaleTurnParameters,
-    BeatScanParameters, BlurParameters, DIGITAL_TV_EFFECT, DRAWN_IMAGE_EFFECT, DigitalTvParameters,
-    DrawnImageParameters, EffectSlot, FEEDBACK_EFFECT, FeedbackParameters, KALEIDOSCOPE_EFFECT,
-    KaleidoscopeParameters, LayerState, MaskSource, MaskState, MasterState, MediaAddress,
-    OPACITY_CYCLE_EFFECT, OpacityCycleInterval, OutputState, RASTERIZE_EFFECT, RasterizeParameters,
+    BEAT_MOVE_EFFECT, BEAT_SCALE_TURN_EFFECT, BEAT_SCAN_EFFECT, BeatFormFlashParameters,
+    BeatGridWaveParameters, BeatMoveParameters, BeatScaleTurnParameters, BeatScanParameters,
+    DIGITAL_TV_EFFECT, DRAWN_IMAGE_EFFECT, DigitalTvParameters, DrawnImageParameters, EffectSlot,
+    KALEIDOSCOPE_EFFECT, KaleidoscopeParameters, LayerState, MaskSource, MaskState, MasterState,
+    MediaAddress, OPACITY_CYCLE_EFFECT, OpacityCycleInterval, OutputState, RASTERIZE_EFFECT,
+    RasterizeParameters,
 };
 use media_domain::{LayerPersonality, PresentationMode};
 use serde::{Deserialize, Serialize};
@@ -28,6 +28,8 @@ pub struct MaskView {
     pub address: AddressView,
     pub scale_x: f32,
     pub scale_y: f32,
+    pub position_x: f32,
+    pub position_y: f32,
     pub invert: bool,
     pub opacity: f32,
     /// `alpha` or `luminance`.
@@ -42,6 +44,8 @@ impl MaskView {
             address: AddressView::of(mask.address),
             scale_x: mask.scale_x,
             scale_y: mask.scale_y,
+            position_x: mask.position_x,
+            position_y: mask.position_y,
             invert: mask.invert,
             opacity: mask.opacity,
             source: match mask.source {
@@ -83,8 +87,6 @@ impl EffectSlotView {
         let analog = effect.effect_type.as_deref() == Some(ANALOG_TV_EFFECT);
         let digital = effect.effect_type.as_deref() == Some(DIGITAL_TV_EFFECT);
         let opacity_cycle = effect.effect_type.as_deref() == Some(OPACITY_CYCLE_EFFECT);
-        let blur = effect.effect_type.as_deref() == Some(BLUR_EFFECT);
-        let feedback = effect.effect_type.as_deref() == Some(FEEDBACK_EFFECT);
         let beat_move = effect.effect_type.as_deref() == Some(BEAT_MOVE_EFFECT);
         let kaleidoscope = effect.effect_type.as_deref() == Some(KALEIDOSCOPE_EFFECT);
         let rasterize = effect.effect_type.as_deref() == Some(RASTERIZE_EFFECT);
@@ -121,37 +123,6 @@ impl EffectSlotView {
                     .parameter(),
                 default_value: OpacityCycleInterval::EveryBeat.parameter(),
             }]
-        } else if blur {
-            let value = effect.blur_parameters().unwrap_or_default().amount;
-            vec![EffectParameterView {
-                id: "blur-amount".to_owned(),
-                label: "Blur amount".to_owned(),
-                value,
-                default_value: BlurParameters::default().amount,
-            }]
-        } else if feedback {
-            let defaults = FeedbackParameters::default();
-            let values = effect.feedback_parameters().unwrap_or(defaults);
-            vec![
-                EffectParameterView {
-                    id: "feedback-amount".to_owned(),
-                    label: "Feedback amount".to_owned(),
-                    value: values.amount,
-                    default_value: defaults.amount,
-                },
-                EffectParameterView {
-                    id: "feedback-motion".to_owned(),
-                    label: "Motion speed".to_owned(),
-                    value: values.motion,
-                    default_value: defaults.motion,
-                },
-                EffectParameterView {
-                    id: "feedback-direction".to_owned(),
-                    label: "Motion direction".to_owned(),
-                    value: values.direction.parameter(),
-                    default_value: defaults.direction.parameter(),
-                },
-            ]
         } else if beat_move {
             let defaults = BeatMoveParameters::default().as_array();
             let values = BeatMoveParameters::from_parameters(&effect.parameters).as_array();
@@ -233,8 +204,6 @@ impl EffectSlotView {
             label: if analog
                 || digital
                 || opacity_cycle
-                || blur
-                || feedback
                 || beat_move
                 || kaleidoscope
                 || rasterize
@@ -250,10 +219,6 @@ impl EffectSlotView {
                     "Digital TV"
                 } else if opacity_cycle {
                     "Layer opacity cycle"
-                } else if blur {
-                    "Blur"
-                } else if feedback {
-                    "Feedback"
                 } else if beat_move {
                     "Beat Move"
                 } else if kaleidoscope {
@@ -281,8 +246,6 @@ impl EffectSlotView {
                 || analog
                 || digital
                 || opacity_cycle
-                || blur
-                || feedback
                 || beat_move
                 || kaleidoscope
                 || rasterize
@@ -294,8 +257,6 @@ impl EffectSlotView {
             capability_detail: (!analog
                 && !digital
                 && !opacity_cycle
-                && !blur
-                && !feedback
                 && !beat_move
                 && !kaleidoscope
                 && !rasterize
@@ -358,6 +319,7 @@ pub struct LayerView {
     pub speed_multiplier: String,
     pub speed_multiplier_dmx: u8,
     pub playback_bpm: Option<u8>,
+    pub blur: f32,
     pub source_status: SourceStatusView,
     pub mask: MaskView,
     pub effects: Vec<EffectSlotView>,
@@ -397,6 +359,7 @@ impl LayerView {
                 })
                 .unwrap_or(127),
             playback_bpm: layer.playback_bpm,
+            blur: layer.blur,
             source_status: SourceStatusView::of(layer.source_status),
             mask: MaskView::of(&layer.mask),
             effects: layer
@@ -421,6 +384,8 @@ pub struct MasterView {
     pub tint_blue: f32,
     pub flip_mirror: String,
     pub mask: AddressView,
+    pub mask_position_x: f32,
+    pub mask_position_y: f32,
     pub scale_x: f32,
     pub scale_y: f32,
     pub scaling_mode: String,
@@ -454,6 +419,8 @@ impl MasterView {
             }
             .to_owned(),
             mask: AddressView::of(master.mask),
+            mask_position_x: master.mask_position_x,
+            mask_position_y: master.mask_position_y,
             scale_x: master.scale_x,
             scale_y: master.scale_y,
             scaling_mode: match master.scaling_mode {
@@ -546,6 +513,8 @@ pub struct OutputConfigurationView {
     pub available_sound_outputs: Vec<String>,
     /// `two-layers` or `eight-layers`.
     pub personality: String,
+    /// `legacy` preserves the original 35/7-slot blocks; `current` includes mask positioning.
+    pub personality_layout: String,
     /// `art-net` or `sacn`.
     pub protocol: String,
     pub universe: u16,
@@ -573,6 +542,7 @@ pub struct OutputConfigurationValuesView {
     pub sound_output_kind: String,
     pub sound_output_name: Option<String>,
     pub personality: String,
+    pub personality_layout: String,
     pub protocol: String,
     pub universe: u16,
     pub start_address: u16,
@@ -626,6 +596,7 @@ impl OutputConfigurationView {
                 .collect(),
             available_sound_outputs,
             personality: values.personality.clone(),
+            personality_layout: values.personality_layout.clone(),
             protocol: values.protocol.clone(),
             universe: values.universe,
             start_address: values.start_address,
@@ -685,6 +656,11 @@ impl OutputConfigurationValuesView {
                 LayerPersonality::EightLayers => "eight-layers",
             }
             .to_owned(),
+            personality_layout: match output.personality_layout {
+                media_domain::PersonalityLayout::Legacy => "legacy",
+                media_domain::PersonalityLayout::Current => "current",
+            }
+            .to_owned(),
             protocol: match output.protocol {
                 DmxProtocol::ArtNet => "art-net",
                 DmxProtocol::Sacn => "sacn",
@@ -713,6 +689,7 @@ impl OutputConfigurationValuesView {
 
     fn dmx_differs(&self, active: &Self) -> bool {
         self.personality != active.personality
+            || self.personality_layout != active.personality_layout
             || self.protocol != active.protocol
             || self.universe != active.universe
             || self.start_address != active.start_address
@@ -749,6 +726,8 @@ pub struct UpdateOutputConfiguration {
     pub sound_output_name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub personality: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub personality_layout: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub protocol: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -809,6 +788,13 @@ impl UpdateOutputConfiguration {
             next.personality = match personality.trim() {
                 "two-layers" => LayerPersonality::TwoLayers,
                 "eight-layers" => LayerPersonality::EightLayers,
+                _ => return Err(OutputConfigurationEditError::Personality),
+            };
+        }
+        if let Some(layout) = self.personality_layout.as_deref() {
+            next.personality_layout = match layout.trim() {
+                "legacy" => media_domain::PersonalityLayout::Legacy,
+                "current" => media_domain::PersonalityLayout::Current,
                 _ => return Err(OutputConfigurationEditError::Personality),
             };
         }
@@ -1028,6 +1014,10 @@ pub struct UpdateLayer {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mask_scale_y: Option<f32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mask_position_x: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mask_position_y: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mask_invert: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mask_opacity: Option<f32>,
@@ -1036,6 +1026,8 @@ pub struct UpdateLayer {
     /// Zero disables the per-layer BPM target; 1..=255 selects a target.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub playback_bpm: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blur: Option<f32>,
     /// The ordered slot changed by the following typed effect fields, `0..=3`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effect_slot: Option<u8>,
@@ -1065,14 +1057,6 @@ pub struct UpdateLayer {
     /// `every-beat`, `every-half-beat`, or `every-second` for the opacity cycle effect.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cycle_interval: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub blur_amount: Option<f32>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub feedback_amount: Option<f32>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub feedback_motion: Option<f32>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub feedback_direction: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub beat_move_amount: Option<f32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1167,10 +1151,6 @@ impl UpdateLayer {
             || self.chroma_damage.is_some()
             || self.effect_glitching.is_some()
             || self.cycle_interval.is_some()
-            || self.blur_amount.is_some()
-            || self.feedback_amount.is_some()
-            || self.feedback_motion.is_some()
-            || self.feedback_direction.is_some()
             || self.beat_move_amount.is_some()
             || self.beat_move_direction.is_some()
             || self.beat_move_decay.is_some()
@@ -1200,6 +1180,35 @@ impl UpdateLayer {
             || self.drawn_line_detail.is_some()
             || self.visualizer_parameters.is_some()
     }
+
+    pub const fn changes_non_effect(&self) -> bool {
+        self.folder.is_some()
+            || self.file.is_some()
+            || self.dimmer.is_some()
+            || self.play_mode_dmx.is_some()
+            || self.scale_x.is_some()
+            || self.scale_y.is_some()
+            || self.scaling_mode.is_some()
+            || self.position_x.is_some()
+            || self.position_y.is_some()
+            || self.rotation.is_some()
+            || self.volume.is_some()
+            || self.tint_red.is_some()
+            || self.tint_green.is_some()
+            || self.tint_blue.is_some()
+            || self.grayscale.is_some()
+            || self.mask_folder.is_some()
+            || self.mask_file.is_some()
+            || self.mask_scale_x.is_some()
+            || self.mask_scale_y.is_some()
+            || self.mask_position_x.is_some()
+            || self.mask_position_y.is_some()
+            || self.mask_invert.is_some()
+            || self.mask_opacity.is_some()
+            || self.speed_multiplier_dmx.is_some()
+            || self.playback_bpm.is_some()
+            || self.blur.is_some()
+    }
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, TS)]
@@ -1221,6 +1230,10 @@ pub struct UpdateMaster {
     pub mask_folder: Option<u8>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mask_file: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mask_position_x: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mask_position_y: Option<f32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scale_x: Option<f32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

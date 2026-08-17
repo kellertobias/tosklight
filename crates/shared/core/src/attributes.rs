@@ -399,6 +399,57 @@ pub fn canonical_attribute_migration_id(
         "media.opacity" => ("intensity", CanonicalAttributeTransform::Identity),
         "media.rotation" => ("position.rotation", CanonicalAttributeTransform::Identity),
         "media.tint" => ("color", CanonicalAttributeTransform::Identity),
+        "media.layer.folder" => ("media.folder", CanonicalAttributeTransform::Identity),
+        "media.layer.file" => ("media.file", CanonicalAttributeTransform::Identity),
+        "media.layer.play.mode" => ("media.play_mode", CanonicalAttributeTransform::Identity),
+        "media.layer.scale.x" => ("media.scale.x", CanonicalAttributeTransform::Identity),
+        "media.layer.scale.y" => ("media.scale.y", CanonicalAttributeTransform::Identity),
+        "media.layer.scaling.mode" => ("media.scaling_mode", CanonicalAttributeTransform::Identity),
+        "media.layer.position.x" => ("media.position.x", CanonicalAttributeTransform::Identity),
+        "media.layer.position.y" => ("media.position.y", CanonicalAttributeTransform::Identity),
+        "media.layer.rotation" => ("position.rotation", CanonicalAttributeTransform::Identity),
+        "media.layer.dimmer" | "media.master.master.dimmer" => {
+            ("intensity", CanonicalAttributeTransform::Identity)
+        }
+        "media.layer.volume" | "media.master.master.volume" => {
+            ("volume", CanonicalAttributeTransform::Identity)
+        }
+        "media.layer.cyan" | "media.master.master.cyan" => {
+            ("color.red", CanonicalAttributeTransform::InvertNormalized)
+        }
+        "media.layer.magenta" | "media.master.master.magenta" => {
+            ("color.green", CanonicalAttributeTransform::InvertNormalized)
+        }
+        "media.layer.yellow" | "media.master.master.yellow" => {
+            ("color.blue", CanonicalAttributeTransform::InvertNormalized)
+        }
+        "media.layer.grayscale" => ("media.grayscale", CanonicalAttributeTransform::Identity),
+        "media.layer.mask.folder" => ("media.mask.folder", CanonicalAttributeTransform::Identity),
+        "media.layer.mask.file" | "media.master.master.mask" => {
+            ("media.mask.file", CanonicalAttributeTransform::Identity)
+        }
+        "media.layer.mask.scale.x" => ("media.mask.scale.x", CanonicalAttributeTransform::Identity),
+        "media.layer.mask.scale.y" => ("media.mask.scale.y", CanonicalAttributeTransform::Identity),
+        "media.layer.mask.position.x" | "media.master.mask.position.x" => (
+            "media.mask.position.x",
+            CanonicalAttributeTransform::Identity,
+        ),
+        "media.layer.mask.position.y" | "media.master.mask.position.y" => (
+            "media.mask.position.y",
+            CanonicalAttributeTransform::Identity,
+        ),
+        "media.layer.mask.invert" => ("media.mask.invert", CanonicalAttributeTransform::Identity),
+        "media.layer.mask.opacity" => ("media.mask.opacity", CanonicalAttributeTransform::Identity),
+        "media.layer.effect.1" => ("media.effect.1", CanonicalAttributeTransform::Identity),
+        "media.layer.effect.2" => ("media.effect.2", CanonicalAttributeTransform::Identity),
+        "media.layer.effect.3" => ("media.effect.3", CanonicalAttributeTransform::Identity),
+        "media.layer.effect.4" => ("media.effect.4", CanonicalAttributeTransform::Identity),
+        "media.layer.speed.multiplier" => (
+            "media.playback_speed",
+            CanonicalAttributeTransform::Identity,
+        ),
+        "media.layer.playback.bpm" => ("media.playback_bpm", CanonicalAttributeTransform::Identity),
+        "media.master.flip.mirror" => ("media.flip_mirror", CanonicalAttributeTransform::Identity),
         "pan.continuous" => ("pan", CanonicalAttributeTransform::Identity),
         "pan.time" | "tilt.time" | "position.time" | "position.speed" => {
             ("position.movement", CanonicalAttributeTransform::Identity)

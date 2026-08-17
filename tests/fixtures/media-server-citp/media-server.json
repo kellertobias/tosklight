@@ -24,6 +24,7 @@
         "presentation": "display-synchronized",
         "soundOutput": { "kind": "disabled" },
         "personality": "two-layers",
+        "personalityLayout": "current",
         "protocol": "art-net",
         "universe": 1,
         "startAddress": 1,

@@ -20,7 +20,7 @@ const MASTER_ID: uuid::Uuid = uuid::Uuid::from_u128(0x746f_736b_6c69_6768_745f_6
 
 const MANUFACTURER: &str = "ToskLight";
 
-/// The layer fixture: the 34 slots one media layer occupies.
+/// The layer fixture: the 39 slots one media layer occupies.
 pub fn layer_fixture() -> FixtureType {
     FixtureType {
         name: "ToskLight Media Layer".into(),
@@ -37,7 +37,7 @@ pub fn layer_fixture() -> FixtureType {
     }
 }
 
-/// The master fixture: the 7 slots that begin immediately after the controlled layers.
+/// The master fixture: the 11 slots that begin immediately after the controlled layers.
 pub fn master_fixture() -> FixtureType {
     FixtureType {
         name: "ToskLight Media Master".into(),

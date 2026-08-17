@@ -1,12 +1,21 @@
-import type { ReactNode } from "react";
-import type { MediaServerInspection } from "../../api/client/mediaOutput";
+import type {
+	MediaServerInspection,
+	NativeMediaEffectParameter,
+	NativeMediaEffectSlot,
+} from "../../api/client/mediaOutput";
 import type { MediaServerFixture } from "../../api/types";
 import type { ProgrammerFixtureValue } from "../../features/programmerValues/contracts";
+import {
+	isMediaPercentAttribute,
+	mediaControlDefaultNormalized,
+	mediaControlOperatorValue,
+} from "./mediaControlValue";
 import type {
 	MediaControlSection,
 	MediaPaneLayer,
 	MediaPaneModel,
 	MediaPreviewState,
+	MediaSecondaryControl,
 	MediaSourceFilter,
 } from "./mediaPaneModel";
 
@@ -19,6 +28,7 @@ export interface BuildMediaPaneModelInput {
 	selectedLayerId: string;
 	browserMode: MediaPaneModel["browserMode"];
 	sourceFilter?: MediaSourceFilter;
+	selectedControlSectionId: string;
 	mainSectionId: string;
 	rightPaneVisible: boolean;
 	draftFolderId: string;
@@ -26,7 +36,8 @@ export interface BuildMediaPaneModelInput {
 	thumbnailUrls: Record<string, string>;
 	previewUrls: Record<string, string>;
 	liveProgrammer: readonly ProgrammerFixtureValue[] | undefined;
-	nativeControls?: ReactNode;
+	nativeEffects?: NativeMediaEffectSlot[];
+	nativeEffectsError?: string | null;
 }
 
 export function buildMediaPaneModel(
@@ -35,10 +46,11 @@ export function buildMediaPaneModel(
 	const selectedLayer = input.selectedServer?.layers.find(
 		(layer) => layer.fixture_id === input.selectedLayerId,
 	);
+	const selectedCitpLayer = input.selectedServer?.layers.findIndex(
+		(layer) => layer.fixture_id === input.selectedLayerId,
+	);
 	const selectedStatus = selectedLayer
-		? input.inspection.layers.find(
-				(layer) => layer.layer === selectedLayer.head_index,
-			)
+		? input.inspection.layers.find((layer) => layer.layer === selectedCitpLayer)
 		: undefined;
 	const capabilities = selectedLayer
 		? input.inspection.capabilities.layers.find(
@@ -51,6 +63,10 @@ export function buildMediaPaneModel(
 	const liveFile =
 		normalizedAttribute(input.liveProgrammer, "media.file") ??
 		selectedStatus?.file;
+	const sections = controlSections(
+		input,
+		capabilities?.secondary_controls ?? [],
+	);
 	return {
 		hasPatchedServer: input.servers.length > 0,
 		hasCitpEndpoint: Boolean(input.selectedServer?.endpoint),
@@ -65,15 +81,20 @@ export function buildMediaPaneModel(
 		maskBrowser: "supported",
 		...libraryModel(input),
 		...selectionModel(input, liveFolder, liveFile),
-		controlSections: controlSections(
-			input,
-			capabilities?.secondary_controls ?? [],
-		),
-		selectedControlSectionId: capabilities?.secondary_controls.length
-			? "advertised"
-			: "",
+		controlSections: sections,
+		selectedControlSectionId: sections.some(
+			(section) => section.id === input.selectedControlSectionId,
+		)
+			? input.selectedControlSectionId
+			: (sections.find((section) => section.id !== "native")?.id ??
+				sections[0]?.id ??
+				""),
 		mainSectionId: input.mainSectionId,
 		rightPaneVisible: input.rightPaneVisible,
+		nativeManagementUrl:
+			input.selectedServer?.native_action && input.selectedServer.endpoint
+				? `http://${input.selectedServer.endpoint.ip_address}:8080`
+				: undefined,
 	};
 }
 
@@ -152,17 +173,17 @@ function previewState(input: BuildMediaPaneModelInput): MediaPreviewState {
 }
 
 function layerModels(input: BuildMediaPaneModelInput): MediaPaneLayer[] {
-	return (input.selectedServer?.layers ?? []).map((head) => {
+	return (input.selectedServer?.layers ?? []).map((head, citpLayer) => {
 		const status = input.inspection.layers.find(
-			(layer) => layer.layer === head.head_index,
+			(layer) => layer.layer === citpLayer,
 		);
 		const source = input.inspection.preview_sources.find(
-			(candidate) => candidate.layer === status?.layer,
+			(candidate) => candidate.layer === citpLayer,
 		);
 		return {
 			id: head.fixture_id,
-			number: String(status?.layer ?? head.head_index),
-			name: status?.name || `Layer ${head.head_index + 1}`,
+			number: String(citpLayer + 1),
+			name: status?.name || `Layer ${citpLayer + 1}`,
 			status:
 				status?.flags && status.flags & 0x8
 					? "failed"
@@ -205,11 +226,13 @@ function libraryModel(input: BuildMediaPaneModelInput) {
 			.map((file) => [file.id, file]),
 	);
 	const [firstFolder, lastFolder] =
-		sourceFilter === "media"
-			? [1, 199]
-			: sourceFilter === "text"
-				? [200, 249]
-				: [250, 255];
+		input.selectedServer && input.selectedLayerId === "master"
+			? [1, 1]
+			: sourceFilter === "media"
+				? [1, 199]
+				: sourceFilter === "text"
+					? [200, 249]
+					: [250, 255];
 	return {
 		libraryFolders: Array.from(
 			{ length: lastFolder - firstFolder + 1 },
@@ -226,16 +249,24 @@ function libraryModel(input: BuildMediaPaneModelInput) {
 				};
 			},
 		),
-		libraryFiles: Array.from({ length: 256 }, (_, id) => {
+		libraryFiles: Array.from({ length: 254 }, (_, index) => {
+			const id = index + 1;
 			const file = advertisedFiles.get(id);
+			const slotType =
+				input.sourceFilter === "visualizers"
+					? "Visualizer"
+					: input.sourceFilter === "text"
+						? "Text"
+						: "Media";
 			return {
 				id: String(id),
 				kind: "file" as const,
-				name: file?.name || `File ${id}`,
+				name: file?.name || "Empty",
 				detail: file
 					? `${file.width}×${file.height}`
-					: "Configurable slot · not advertised",
-				thumbnailSrc: input.thumbnailUrls[String(id)],
+					: `${slotType} slot · not advertised`,
+				thumbnailSrc: input.thumbnailUrls[`${draftFolder}:${id}`],
+				empty: !file,
 			};
 		}),
 	};
@@ -275,41 +306,544 @@ function controlSections(
 	input: BuildMediaPaneModelInput,
 	controls: Array<{ attribute: string }>,
 ): MediaControlSection[] {
-	if (!input.selectedServer) return [];
-	const sections: MediaControlSection[] = [];
-	if (input.inspection.capabilities.native_action && input.nativeControls) {
+	const selectedMaster = input.selectedLayerId === "master";
+	const selectedLayer = input.selectedServer?.layers.some(
+		(layer) => layer.fixture_id === input.selectedLayerId,
+	);
+	if (!selectedLayer && !selectedMaster) return [];
+	const groups = selectedMaster ? MASTER_CONTROL_GROUPS : MEDIA_CONTROL_GROUPS;
+	const standardAttributes = new Set<string>(
+		groups.flatMap((group) => [...group.attributes]),
+	);
+	for (const component of ["red", "green", "blue", "cyan", "magenta", "yellow"])
+		standardAttributes.add(`color.${component}`);
+	const remaining = new Map(
+		(selectedMaster ? [] : controls)
+			.filter((control) => !standardAttributes.has(control.attribute))
+			.map((control) => [control.attribute, control]),
+	);
+	const sections: MediaControlSection[] = groups.map((group) => ({
+		id: group.id,
+		label: group.label,
+		capability: "supported" as const,
+		controls: group.attributes.map((attribute) =>
+			advertisedControl(input, attribute),
+		),
+	}));
+	if (remaining.size) {
 		sections.push({
-			id: "native",
-			label: "ToskLight",
+			id: "other",
+			label: "Other",
 			capability: "supported",
-			controls: [
-				{
-					id: "native-controls",
-					label: "Native Media controls",
-					kind: "readout",
-					value: input.nativeControls,
-				},
-			],
+			controls: [...remaining.values()].map((control) =>
+				advertisedControl(input, control.attribute),
+			),
 		});
 	}
-	if (controls.length) {
-		sections.push({
-			id: "advertised",
-			label: "Layer controls",
-			capability: "supported",
-			controls: controls.map((control) => ({
-				id: control.attribute,
-				label: control.attribute,
-				kind: "value",
-				value:
-					normalizedAttribute(input.liveProgrammer, control.attribute) ?? 0,
-				minimum: 0,
-				maximum: 255,
-				step: 1,
-			})),
+	const effects = sections.find((section) => section.id === "effects");
+	if (effects && input.nativeEffects?.length)
+		effects.controls.push(...nativeEffectControls(input.nativeEffects));
+	if (effects && input.nativeEffectsError)
+		effects.controls.push({
+			id: "native-effects-error",
+			label: "Native effect controls unavailable",
+			kind: "readout",
+			value: input.nativeEffectsError,
 		});
-	}
 	return sections;
+}
+
+const NATIVE_EFFECT_TYPES = [
+	["none", "None"],
+	["analog-tv", "Analog TV"],
+	["digital-tv", "Digital TV"],
+	["opacity-cycle", "Layer opacity cycle"],
+	["blur", "Blur"],
+	["feedback", "Feedback"],
+	["beat-move", "Beat Move"],
+	["kaleidoscope", "Kaleidoscope"],
+	["rasterize", "Rasterized Print"],
+	["beat-scan", "Beat Scan"],
+	["beat-scale-turn", "Beat Scale and Turn"],
+	["beat-grid-wave", "Beat Grid Wave"],
+	["beat-form-flash", "Beat Form Flash"],
+	["drawn-image", "Drawn Image"],
+] as const;
+
+function nativeEffectControls(slots: NativeMediaEffectSlot[]) {
+	return slots.flatMap((slot): MediaSecondaryControl[] => {
+		const prefix = `effect-${slot.index}`;
+		const controls: MediaSecondaryControl[] = [
+			{
+				id: `${prefix}-type`,
+				kind: "choice",
+				label: "Effect",
+				value: slot.effectType ?? "none",
+				options: NATIVE_EFFECT_TYPES.map(([value, label]) => ({
+					value,
+					label,
+				})),
+				disabled: !slot.supported,
+			},
+		];
+		if (!slot.effectType) return controls;
+		controls.push(
+			{
+				id: `${prefix}-enabled`,
+				kind: "choice",
+				label: "State",
+				value: String(slot.enabled),
+				options: [
+					{ value: "true", label: "Enabled" },
+					{ value: "false", label: "Bypassed" },
+				],
+			},
+			...slot.parameters.map((parameter) =>
+				nativeEffectParameterControl(prefix, parameter),
+			),
+		);
+		return controls;
+	});
+}
+
+const NATIVE_PARAMETER_CHOICES: Record<
+	string,
+	Array<{ value: string; label: string }>
+> = {
+	"cycle-interval": [
+		{ value: "every-beat", label: "Every beat" },
+		{ value: "every-half-beat", label: "Every half beat" },
+		{ value: "every-second", label: "Every second" },
+	],
+	"feedback-direction": [
+		"top",
+		"bottom",
+		"left",
+		"right",
+		"rotate-left",
+		"rotate-right",
+	].map((value) => ({ value, label: value.replaceAll("-", " ") })),
+	"beat-move-direction": ["up", "down", "left", "right"].map((value) => ({
+		value,
+		label: value,
+	})),
+	"rasterize-mode": [
+		{ value: "black-and-white", label: "Black and White" },
+		{ value: "cmyk", label: "CMYK" },
+	],
+	"beat-scan-edge": [
+		{ value: "sharp", label: "Sharp" },
+		{ value: "soft", label: "Soft" },
+	],
+	"beat-turn-enabled": [
+		{ value: "false", label: "Off" },
+		{ value: "true", label: "On" },
+	],
+	"beat-grid-origin": ["centre", "top", "right", "bottom", "left"].map(
+		(value) => ({ value, label: value }),
+	),
+};
+
+function nativeEffectParameterControl(
+	prefix: string,
+	parameter: NativeMediaEffectParameter,
+): MediaSecondaryControl {
+	const choices = NATIVE_PARAMETER_CHOICES[parameter.id];
+	if (choices) {
+		const index = Math.max(
+			0,
+			Math.min(choices.length - 1, Math.round(parameter.value)),
+		);
+		return {
+			id: `${prefix}-${parameter.id}`,
+			kind: "choice",
+			label: parameter.label,
+			value: choices[index]?.value ?? choices[0]?.value ?? "",
+			options: choices,
+		};
+	}
+	const range = nativeEffectParameterRange(parameter.id);
+	const { percent, ...bounds } = range;
+	return {
+		id: `${prefix}-${parameter.id}`,
+		kind: "value",
+		label: parameter.label,
+		value: parameter.value,
+		...bounds,
+		display: percent
+			? `${Math.round(parameter.value * 100)}%`
+			: String(Number(parameter.value.toFixed(2))),
+	};
+}
+
+function nativeEffectParameterRange(id: string) {
+	if (id === "kaleidoscope-repetitions")
+		return { minimum: 1, maximum: 16, step: 1, percent: false };
+	if (id.includes("angle") || id.includes("rotation"))
+		return { minimum: -180, maximum: 360, step: 1, percent: false };
+	if (
+		id.includes("duration") ||
+		id.includes("decay") ||
+		id.includes("lifetime")
+	)
+		return { minimum: 0.05, maximum: 5, step: 0.05, percent: false };
+	if (id.includes("density"))
+		return { minimum: 1, maximum: 64, step: 1, percent: false };
+	if (id === "rasterize-dot-size")
+		return { minimum: 2, maximum: 32, step: 1, percent: false };
+	return { minimum: 0, maximum: 1, step: 0.01, percent: true };
+}
+
+const MEDIA_CONTROL_GROUPS = [
+	{
+		id: "playback",
+		label: "Playback",
+		attributes: [
+			"media.play_mode",
+			"intensity",
+			"volume",
+			"media.playback_speed",
+			"media.playback_bpm",
+			"media.playback.blur",
+		],
+	},
+	{
+		id: "frame",
+		label: "Frame",
+		attributes: [
+			"media.scale.x",
+			"media.scale.y",
+			"media.scaling_mode",
+			"media.position.x",
+			"media.position.y",
+			"position.rotation",
+		],
+	},
+	{
+		id: "colour",
+		label: "Colour",
+		attributes: ["color.tint", "media.grayscale"],
+	},
+	{
+		id: "mask-controls",
+		label: "Mask",
+		attributes: [
+			"media.mask.position.x",
+			"media.mask.position.y",
+			"media.mask.scale.x",
+			"media.mask.scale.y",
+			"media.mask.invert",
+			"media.mask.opacity",
+		],
+	},
+	{
+		id: "effects",
+		label: "Effects",
+		attributes: [
+			"media.effect.1",
+			"media.effect.2",
+			"media.effect.3",
+			"media.effect.4",
+		],
+	},
+] as const;
+
+const MASTER_CONTROL_GROUPS = [
+	{
+		id: "playback",
+		label: "Output",
+		attributes: ["intensity", "volume"],
+	},
+	{
+		id: "frame",
+		label: "Frame",
+		attributes: ["media.flip_mirror"],
+	},
+	{
+		id: "colour",
+		label: "Colour",
+		attributes: ["color.tint"],
+	},
+	{
+		id: "mask-controls",
+		label: "Mask position",
+		attributes: ["media.mask.position.x", "media.mask.position.y"],
+	},
+] as const;
+
+function advertisedControl(
+	input: BuildMediaPaneModelInput,
+	attribute: string,
+): MediaControlSection["controls"][number] {
+	const normalized =
+		normalizedValue(input.liveProgrammer, attribute) ??
+		(attribute === "intensity"
+			? input.selectedLayerId === "master"
+				? 1
+				: 0
+			: mediaControlDefaultNormalized(attribute));
+	const rawValue = Math.round(normalized * 255);
+	if (attribute === "color.tint")
+		return {
+			id: attribute,
+			label: "Colour",
+			kind: "color",
+			value: mediaRgbFromComponents(
+				normalizedValue(input.liveProgrammer, "color.red") ?? 1,
+				normalizedValue(input.liveProgrammer, "color.green") ?? 1,
+				normalizedValue(input.liveProgrammer, "color.blue") ?? 1,
+			),
+		};
+	if (attribute === "media.play_mode")
+		return {
+			id: attribute,
+			label: "Play mode",
+			kind: "choice",
+			value: String(rawValue),
+			options: PLAY_MODE_OPTIONS,
+			quickActions: [
+				{ value: "216", label: "Stop" },
+				{ value: "60", label: "Play" },
+				{ value: "0", label: "Play looped" },
+			],
+		};
+	if (attribute === "media.scaling_mode")
+		return {
+			id: attribute,
+			label: "Scaling mode",
+			kind: "choice",
+			value: String(rawValue),
+			options: [
+				{ value: "0", label: "Fit" },
+				{ value: "64", label: "Fill" },
+				{ value: "128", label: "Original" },
+				{ value: "192", label: "Stretch" },
+			],
+		};
+	if (attribute === "media.mask.invert")
+		return {
+			id: attribute,
+			label: "Invert",
+			kind: "choice",
+			value: rawValue < 128 ? "0" : "255",
+			options: [
+				{ value: "0", label: "Normal" },
+				{ value: "255", label: "Invert" },
+			],
+		};
+	if (attribute === "media.playback_speed")
+		return {
+			id: attribute,
+			label: "Speed",
+			kind: "choice",
+			value: String(rawValue),
+			options: SPEED_OPTIONS,
+		};
+	if (attribute === "media.playback_bpm") {
+		return {
+			id: attribute,
+			label: "Playback BPM",
+			kind: "value",
+			value: rawValue,
+			minimum: 0,
+			maximum: 255,
+			step: 1,
+			display: rawValue === 0 ? "Off" : `${rawValue} BPM`,
+		};
+	}
+	if (attribute === "media.playback.blur")
+		return {
+			id: attribute,
+			label: "Blur",
+			kind: "value",
+			value: rawValue,
+			minimum: 0,
+			maximum: 255,
+			step: 1,
+			display: `${Math.round((rawValue / 255) * 100)}%`,
+		};
+	if (attribute === "media.flip_mirror")
+		return {
+			id: attribute,
+			label: "Flip / Mirror",
+			kind: "choice",
+			value: String(rawValue % 4),
+			options: [
+				{ value: "0", label: "None" },
+				{ value: "1", label: "Horizontal" },
+				{ value: "2", label: "Vertical" },
+				{ value: "3", label: "Both" },
+			],
+		};
+	const value = mediaControlOperatorValue(attribute, normalized);
+	if (isMediaPercentAttribute(attribute)) {
+		const percent = Math.round(value);
+		return {
+			id: attribute,
+			label: MEDIA_CONTROL_LABELS[attribute] ?? readableAttribute(attribute),
+			kind: "value",
+			value: percent,
+			minimum: 0,
+			maximum: 100,
+			step: 1,
+			display: `${percent}%`,
+		};
+	}
+	if (attribute === "media.scale.x" || attribute === "media.scale.y")
+		return valueControl(attribute, value, 0, 10, 0.01, `${value.toFixed(2)}×`);
+	if (attribute === "media.mask.scale.x" || attribute === "media.mask.scale.y")
+		return valueControl(attribute, value, 0, 2, 0.01, `${value.toFixed(2)}×`);
+	if (
+		attribute === "media.position.x" ||
+		attribute === "media.position.y" ||
+		attribute === "media.mask.position.x" ||
+		attribute === "media.mask.position.y"
+	)
+		return valueControl(attribute, value, -2, 2, 0.01, value.toFixed(2));
+	if (attribute === "position.rotation")
+		return valueControl(
+			attribute,
+			value,
+			-360,
+			360,
+			1,
+			`${Math.round(value)}°`,
+		);
+	return {
+		id: attribute,
+		label: MEDIA_CONTROL_LABELS[attribute] ?? readableAttribute(attribute),
+		kind: "value",
+		value,
+		minimum: 0,
+		maximum: 255,
+		step: 1,
+	};
+}
+
+function valueControl(
+	attribute: string,
+	value: number,
+	minimum: number,
+	maximum: number,
+	step: number,
+	display: string,
+): MediaControlSection["controls"][number] {
+	return {
+		id: attribute,
+		label: MEDIA_CONTROL_LABELS[attribute] ?? readableAttribute(attribute),
+		kind: "value",
+		value,
+		minimum,
+		maximum,
+		step,
+		display,
+	};
+}
+
+const SPEED_OPTIONS = [
+	...Array.from({ length: 15 }, (_, index) => ({
+		value: String(index * 8),
+		label: `/${16 - index}`,
+	})),
+	{ value: "127", label: "1×" },
+	...Array.from({ length: 15 }, (_, index) => {
+		const multiplier = index + 2;
+		const raw = Math.ceil(135 + (index * 121) / 15);
+		return { value: String(raw), label: `${multiplier}×` };
+	}),
+];
+
+const PLAY_MODE_OPTIONS = [
+	[0, "Loop"],
+	[20, "Reverse"],
+	[40, "Bounce"],
+	[60, "Once — Hold"],
+	[68, "Once — Black"],
+	[76, "Once — Transparent"],
+	[84, "Reverse Once — Hold"],
+	[92, "Reverse Once — Black"],
+	[100, "Reverse Once — Transparent"],
+	[108, "Loop Synced"],
+	[128, "Reverse Synced"],
+	[148, "Bounce Synced"],
+	[168, "Once Synced — Hold"],
+	[176, "Once Synced — Black"],
+	[184, "Once Synced — Transparent"],
+	[192, "Reverse Once Synced — Hold"],
+	[200, "Reverse Once Synced — Black"],
+	[208, "Reverse Once Synced — Transparent"],
+	[216, "Stop"],
+	[236, "Pause"],
+].map(([value, label]) => ({ value: String(value), label: String(label) }));
+
+const MEDIA_CONTROL_LABELS: Record<string, string> = {
+	intensity: "Dimmer",
+	volume: "Volume",
+	"media.play_mode": "Play mode",
+	"media.playback_speed": "Speed",
+	"media.playback_bpm": "Playback BPM",
+	"media.playback.blur": "Blur",
+	"media.scale.x": "Scale X",
+	"media.scale.y": "Scale Y",
+	"media.scaling_mode": "Scaling mode",
+	"media.position.x": "Position X",
+	"media.position.y": "Position Y",
+	"position.rotation": "Rotation",
+	"color.tint": "Colour",
+	"media.grayscale": "Grayscale",
+	"media.mask.scale.x": "Mask scale X",
+	"media.mask.scale.y": "Mask scale Y",
+	"media.mask.position.x": "Mask position X",
+	"media.mask.position.y": "Mask position Y",
+	"media.mask.invert": "Invert",
+	"media.mask.opacity": "Mask opacity",
+	"media.effect.1": "Effect 1",
+	"media.effect.2": "Effect 2",
+	"media.effect.3": "Effect 3",
+	"media.effect.4": "Effect 4",
+	"media.flip_mirror": "Flip / Mirror",
+	"media.layer.play.mode": "Play mode",
+	"media.layer.dimmer": "Dimmer",
+	"media.layer.volume": "Volume",
+	"media.layer.speed.multiplier": "Speed",
+	"media.layer.playback.bpm": "Playback BPM",
+	"media.layer.scale.x": "Scale X",
+	"media.layer.scale.y": "Scale Y",
+	"media.layer.scaling.mode": "Scaling mode",
+	"media.layer.position.x": "Position X",
+	"media.layer.position.y": "Position Y",
+	"media.layer.rotation": "Rotation",
+	"media.layer.tint": "Colour",
+	"media.layer.grayscale": "Grayscale",
+	"media.layer.mask.scale.x": "Mask scale X",
+	"media.layer.mask.scale.y": "Mask scale Y",
+	"media.layer.mask.position.x": "Mask position X",
+	"media.layer.mask.position.y": "Mask position Y",
+	"media.layer.mask.invert": "Invert",
+	"media.layer.mask.opacity": "Mask opacity",
+	"media.layer.effect.1": "Effect 1",
+	"media.layer.effect.2": "Effect 2",
+	"media.layer.effect.3": "Effect 3",
+	"media.layer.effect.4": "Effect 4",
+};
+
+function mediaRgbFromComponents(red: number, green: number, blue: number) {
+	return `#${[red, green, blue]
+		.map((component) =>
+			Math.round(Math.max(0, Math.min(1, component)) * 255)
+				.toString(16)
+				.padStart(2, "0"),
+		)
+		.join("")}`;
+}
+
+function readableAttribute(attribute: string) {
+	const words = attribute.split(".").slice(2);
+	return words
+		.map((word, index) =>
+			index === 0 ? `${word.charAt(0).toUpperCase()}${word.slice(1)}` : word,
+		)
+		.join(" ");
 }
 
 function normalizedAttribute(
@@ -321,5 +855,17 @@ function normalizedAttribute(
 	)?.value;
 	return value?.kind === "normalized" && typeof value.value === "number"
 		? Math.round(value.value * 255)
+		: undefined;
+}
+
+function normalizedValue(
+	values: readonly ProgrammerFixtureValue[] | undefined,
+	attribute: string,
+) {
+	const value = values?.find(
+		(candidate) => candidate.attribute === attribute,
+	)?.value;
+	return value?.kind === "normalized" && typeof value.value === "number"
+		? value.value
 		: undefined;
 }

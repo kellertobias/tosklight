@@ -54,6 +54,12 @@ pub struct MasterState {
     pub flip_mirror: FlipMirror,
     /// An output-level library mask applied to the completed composite.
     pub mask: MediaAddress,
+    /// Horizontal master-mask centre in half-output units.
+    #[serde(default)]
+    pub mask_position_x: f32,
+    /// Vertical master-mask centre in half-output units.
+    #[serde(default)]
+    pub mask_position_y: f32,
     #[serde(default = "one")]
     pub scale_x: f32,
     #[serde(default = "one")]
@@ -82,6 +88,8 @@ impl Default for MasterState {
             tint: Tint::WHITE,
             flip_mirror: FlipMirror::default(),
             mask: MediaAddress::BLANK,
+            mask_position_x: 0.0,
+            mask_position_y: 0.0,
             scale_x: 1.0,
             scale_y: 1.0,
             scaling_mode: ScalingMode::default(),
@@ -132,6 +140,7 @@ mod tests {
         assert_eq!(master.tint, Tint::WHITE);
         assert_eq!(master.flip_mirror, FlipMirror::None);
         assert!(!master.has_mask());
+        assert_eq!((master.mask_position_x, master.mask_position_y), (0.0, 0.0));
         assert_eq!((master.scale_x, master.scale_y), (1.0, 1.0));
         assert_eq!(master.shaper, MasterShaper::default());
     }

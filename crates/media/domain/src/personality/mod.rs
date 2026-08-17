@@ -15,15 +15,18 @@ pub use decode::{DecodedFrame, FrameError};
 
 use serde::{Deserialize, Serialize};
 
-/// Slots one layer occupies in the v2 personality.
+/// Slots one layer occupies in the current personality.
 ///
-/// The legacy personality used 32. v2 spends two more so both mask axes can be 16-bit without
-/// dropping an effect or playback control.
-pub const LAYER_SLOTS: u16 = 34;
+/// Mask position uses the same 16-bit centred representation as layer position, and Blur has a
+/// dedicated playback channel rather than consuming an effect slot.
+pub const LAYER_SLOTS: u16 = 39;
 
-/// Slots the master section occupies: dimmer, volume, cyan/magenta/yellow, flip/mirror, and the
-/// output-level master mask.
-pub const MASTER_SLOTS: u16 = 7;
+/// Slots the master section occupies, including 16-bit X/Y position for its output-level mask.
+pub const MASTER_SLOTS: u16 = 11;
+
+/// The original published block before Blur and mask-position controls were appended.
+pub const LEGACY_LAYER_SLOTS: u16 = 34;
+pub const LEGACY_MASTER_SLOTS: u16 = 7;
 
 /// Slots in one DMX universe.
 pub const UNIVERSE_SLOTS: u16 = 512;
@@ -38,6 +41,31 @@ pub enum LayerPersonality {
     TwoLayers,
     #[default]
     EightLayers,
+}
+
+/// Which immutable channel layout a configured output decodes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum PersonalityLayout {
+    Legacy,
+    #[default]
+    Current,
+}
+
+impl PersonalityLayout {
+    pub const fn layer_slots(self) -> u16 {
+        match self {
+            Self::Legacy => LEGACY_LAYER_SLOTS,
+            Self::Current => LAYER_SLOTS,
+        }
+    }
+
+    pub const fn master_slots(self) -> u16 {
+        match self {
+            Self::Legacy => LEGACY_MASTER_SLOTS,
+            Self::Current => MASTER_SLOTS,
+        }
+    }
 }
 
 impl LayerPersonality {
@@ -55,9 +83,13 @@ impl LayerPersonality {
 
     /// The contiguous slot footprint this personality needs, layers followed by the master.
     pub const fn footprint(self) -> SlotFootprint {
+        self.footprint_for(PersonalityLayout::Current)
+    }
+
+    pub const fn footprint_for(self, layout: PersonalityLayout) -> SlotFootprint {
         SlotFootprint {
-            layer_slots: self.layer_count() * LAYER_SLOTS,
-            master_slots: MASTER_SLOTS,
+            layer_slots: self.layer_count() * layout.layer_slots(),
+            master_slots: layout.master_slots(),
         }
     }
 }
@@ -71,13 +103,13 @@ pub struct SlotFootprint {
 }
 
 impl SlotFootprint {
-    /// A single-layer GDTF export: 34 slots, no master.
+    /// A single-layer GDTF export: one complete current layer, no master.
     pub const SINGLE_LAYER: Self = Self {
         layer_slots: LAYER_SLOTS,
         master_slots: 0,
     };
 
-    /// A master-only GDTF export: 7 slots, no layers.
+    /// A master-only GDTF export: one complete current master, no layers.
     pub const MASTER_ONLY: Self = Self {
         layer_slots: 0,
         master_slots: MASTER_SLOTS,
@@ -94,7 +126,7 @@ impl SlotFootprint {
 
     /// Validates a one-based DMX start address as the operator and the configuration file state
     /// it. The footprint must fit one universe: configuration never spans universes, so an
-    /// eight-layer output needs a start address leaving 279 contiguous slots.
+    /// eight-layer output needs a start address leaving 287 contiguous slots.
     pub const fn validate_start_address(self, start_address: u16) -> Result<(), StartAddressError> {
         if start_address == 0 || start_address > UNIVERSE_SLOTS {
             return Err(StartAddressError::OutOfRange { start_address });
@@ -141,25 +173,25 @@ mod tests {
         let two = LayerPersonality::TwoLayers.footprint();
         assert_eq!(
             (two.layer_slots, two.master_slots, two.total()),
-            (68, 7, 75)
+            (78, 11, 89)
         );
 
         let eight = LayerPersonality::EightLayers.footprint();
         assert_eq!(
             (eight.layer_slots, eight.master_slots, eight.total()),
-            (272, 7, 279)
+            (312, 11, 323)
         );
 
-        assert_eq!(SlotFootprint::SINGLE_LAYER.total(), 34);
-        assert_eq!(SlotFootprint::MASTER_ONLY.total(), 7);
+        assert_eq!(SlotFootprint::SINGLE_LAYER.total(), 39);
+        assert_eq!(SlotFootprint::MASTER_ONLY.total(), 11);
     }
 
     #[test]
     fn the_master_begins_after_the_controlled_layers() {
-        assert_eq!(LayerPersonality::TwoLayers.footprint().master_offset(), 68);
+        assert_eq!(LayerPersonality::TwoLayers.footprint().master_offset(), 78);
         assert_eq!(
             LayerPersonality::EightLayers.footprint().master_offset(),
-            272
+            312
         );
     }
 
@@ -167,13 +199,13 @@ mod tests {
     fn an_eight_layer_output_must_fit_one_universe() {
         let eight = LayerPersonality::EightLayers.footprint();
         assert_eq!(eight.validate_start_address(1), Ok(()));
-        assert_eq!(eight.validate_start_address(234), Ok(()));
+        assert_eq!(eight.validate_start_address(190), Ok(()));
         assert_eq!(
-            eight.validate_start_address(235),
+            eight.validate_start_address(191),
             Err(StartAddressError::ExceedsUniverse {
-                start_address: 235,
-                required_slots: 279,
-                highest_valid_start_address: 234,
+                start_address: 191,
+                required_slots: 323,
+                highest_valid_start_address: 190,
             })
         );
     }
@@ -194,9 +226,8 @@ mod tests {
     }
 
     #[test]
-    fn a_layer_is_thirty_four_slots() {
-        // The C++ application's layer was 32. There is one personality now — nothing stores or
-        // reads a version, because no installation was ever patched against the old one.
-        assert_eq!(LAYER_SLOTS, 34);
+    fn the_current_blocks_include_mask_position() {
+        assert_eq!(LAYER_SLOTS, 39);
+        assert_eq!(MASTER_SLOTS, 11);
     }
 }

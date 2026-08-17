@@ -8,6 +8,7 @@ describe("parameter family fallback vocabulary", () => {
 			"media.play_mode",
 			"media.playback_speed",
 			"media.playback_bpm",
+			"media.playback.blur",
 			"media.scaling_mode",
 		]);
 		expect(parameterFamilies.Media).toEqual([
@@ -21,6 +22,11 @@ describe("parameter family fallback vocabulary", () => {
 			"media.mask.folder",
 			"media.mask.file",
 			"media.mask.invert",
+			"media.flip_mirror",
+			"media.mask.scale.x",
+			"media.mask.scale.y",
+			"media.mask.position.x",
+			"media.mask.position.y",
 		]);
 		expect(parameterFamilies.Control).not.toContain("control.mode");
 		expect(parameterFamilies.Control).not.toContain("control.speed");

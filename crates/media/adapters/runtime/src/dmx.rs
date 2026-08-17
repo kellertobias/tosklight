@@ -79,6 +79,7 @@ struct Route {
     protocol: DmxProtocol,
     start_address: u16,
     personality: media_domain::LayerPersonality,
+    personality_layout: media_domain::PersonalityLayout,
 }
 
 /// Builds the routing table from configuration.
@@ -93,6 +94,7 @@ fn routes(configuration: &MediaConfiguration) -> Vec<Route> {
             protocol: output.protocol,
             start_address: output.start_address,
             personality: output.personality,
+            personality_layout: output.personality_layout,
         })
         .collect()
 }
@@ -129,7 +131,12 @@ fn apply_frame_with_diagnostics(
 
     for route in matching {
         let start = usize::from(route.start_address.saturating_sub(1));
-        let end = start.saturating_add(usize::from(route.personality.footprint().total()));
+        let end = start.saturating_add(usize::from(
+            route
+                .personality
+                .footprint_for(route.personality_layout)
+                .total(),
+        ));
         if let Some(slots) = frame.slots.get(start..end)
             && let Ok(mut samples) = diagnostics.lock()
         {
@@ -152,7 +159,12 @@ fn apply_frame_with_diagnostics(
                 },
             );
         }
-        match decode::frame(route.personality, route.start_address, &frame.slots) {
+        match decode::frame(
+            route.personality,
+            route.personality_layout,
+            route.start_address,
+            &frame.slots,
+        ) {
             Ok(decoded) => {
                 let command = Command::new(
                     CommandKind::SetDmxFrame {
@@ -467,7 +479,15 @@ mod tests {
         assert_eq!(live[0].output, id);
         assert_eq!(live[0].source, "10.0.0.8");
         assert_eq!(live[0].slots[0], 7);
-        assert_eq!(live[0].slots.len(), 75);
+        assert_eq!(
+            live[0].slots.len(),
+            usize::from(
+                configuration.outputs[0]
+                    .personality
+                    .footprint_for(configuration.outputs[0].personality_layout)
+                    .total()
+            )
+        );
         assert!((live[0].frames_per_second - 25.0).abs() < f32::EPSILON);
         assert!(live[0].active);
 

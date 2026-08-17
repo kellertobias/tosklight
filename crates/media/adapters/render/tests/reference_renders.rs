@@ -1688,6 +1688,39 @@ fn a_mask_carries_its_own_scale_rather_than_the_layer_s() {
 }
 
 #[test]
+fn a_layer_mask_position_moves_the_mask_without_moving_the_layer() {
+    let mut bench = Bench::new();
+    let source = bench.solid(Size::new(4, 4), RED);
+    let mask = half_and_half(&bench.gpu);
+    let state = ready(LayerState {
+        mask: MaskState {
+            address: MediaAddress::new(1, 2),
+            opacity: 1.0,
+            position_x: 0.5,
+            ..Default::default()
+        },
+        ..Default::default()
+    });
+
+    let image = bench.render(
+        &[LayerDraw {
+            state: &state,
+            source: &source,
+            mask: Some(&mask),
+        }],
+        &MasterState::default(),
+    );
+
+    assert_eq!(
+        image.at(8, 32),
+        BLACK,
+        "the mask moved away from the left edge"
+    );
+    assert_eq!(image.at(40, 32), RED, "the mask's bright half moved right");
+    assert_eq!(image.at(56, 32), BLACK, "the layer itself did not move");
+}
+
+#[test]
 fn the_master_mask_shapes_the_whole_composite_after_every_layer_has_landed() {
     let mut bench = Bench::new();
     let lower = bench.solid(Size::new(4, 4), RED);
@@ -1726,5 +1759,44 @@ fn the_master_mask_shapes_the_whole_composite_after_every_layer_has_landed() {
         image.at(56, 32),
         BLACK,
         "and the whole composite is held back where it does not"
+    );
+}
+
+#[test]
+fn the_master_mask_position_moves_only_the_final_composite_mask() {
+    let mut bench = Bench::new();
+    let source = bench.solid(Size::new(4, 4), RED);
+    let mask = half_and_half(&bench.gpu);
+    let layer = ready(LayerState::default());
+    let master = MasterState {
+        mask: MediaAddress::new(1, 3),
+        mask_position_x: 0.5,
+        ..Default::default()
+    };
+
+    let image = bench.render_masked(
+        &[LayerDraw {
+            state: &layer,
+            source: &source,
+            mask: None,
+        }],
+        &master,
+        Some(&mask),
+    );
+
+    assert_eq!(
+        image.at(8, 32),
+        BLACK,
+        "the master mask moved away from the edge"
+    );
+    assert_eq!(
+        image.at(40, 32),
+        RED,
+        "the bright half moved across the composite"
+    );
+    assert_eq!(
+        image.at(56, 32),
+        BLACK,
+        "the composed source stayed in place"
     );
 }
