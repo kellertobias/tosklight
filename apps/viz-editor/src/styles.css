@@ -633,6 +633,8 @@ body {
 }
 
 .viz-renderer-settings-grid .horizontal-touch-fader {
+	box-sizing: border-box;
+	max-width: 100%;
 	width: 100%;
 }
 

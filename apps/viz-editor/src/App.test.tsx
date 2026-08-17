@@ -11,6 +11,7 @@ import { ModalProvider } from "@tosklight/ui/modals";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
+import "./styles.css";
 
 /** One profile, shaped as the document core returns it. */
 const PROFILE_ID = "11111111-1111-4111-8111-111111111111";
@@ -780,9 +781,15 @@ describe("the Viz editor window", () => {
 		expect(
 			screen.queryByRole("button", { name: "Discard changes" }),
 		).not.toBeInTheDocument();
-		expect(screen.getByRole("slider", { name: "Fog amount" })).toHaveClass(
-			"ui-native-control",
-		);
+		const fogAmount = screen.getByRole("slider", { name: "Fog amount" });
+		expect(fogAmount).toHaveClass("ui-native-control");
+		const fogFader = fogAmount.closest(".horizontal-touch-fader");
+		if (!fogFader) throw new Error("Fog amount fader was not rendered");
+		expect(getComputedStyle(fogFader)).toMatchObject({
+			boxSizing: "border-box",
+			maxWidth: "100%",
+			width: "100%",
+		});
 		fireEvent.click(within(sharedTitle).getByRole("tab", { name: "Picture" }));
 		expect(
 			screen.getByRole("heading", { name: "Picture" }),
