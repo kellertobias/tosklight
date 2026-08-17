@@ -251,7 +251,7 @@ fn schema_v2_fixture(
 }
 
 fn test_cue_list(name: &str, changes: Vec<CueChange>) -> CueList {
-    let mut cue = Cue::new(1.0);
+    let mut cue = Cue::new(1_u16.into());
     cue.changes = changes;
     CueList {
         id: light_core::CueListId::new(),
@@ -348,10 +348,10 @@ fn moving_fixture(address: u16, enabled: bool, delay_millis: u64) -> (PatchedFix
 }
 
 fn mib_snapshot(fixtures: Vec<PatchedFixture>, fixture_ids: &[FixtureId]) -> EngineSnapshot {
-    let mut first = Cue::new(1.0);
-    let mut dark = Cue::new(2.0);
+    let mut first = Cue::new(1_u16.into());
+    let mut dark = Cue::new(2_u16.into());
     dark.fade_millis = 2_000;
-    let mut lit = Cue::new(3.0);
+    let mut lit = Cue::new(3_u16.into());
     for fixture_id in fixture_ids {
         first.changes.push(CueChange::set(
             *fixture_id,

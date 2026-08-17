@@ -157,7 +157,7 @@ fn cue_group_spread_re_resolves_against_current_membership_on_recall() {
     let programmers = ProgrammerRegistry::default();
     let (patched, logical) = dimmer_rig(6);
     let list_id = light_core::CueListId::new();
-    let mut cue = light_playback::Cue::new(1.0);
+    let mut cue = light_playback::Cue::new(1_u16.into());
     cue.group_changes.push(light_playback::GroupCueChange {
         group_id: "wave".into(),
         attribute: AttributeKey::intensity(),
@@ -227,7 +227,7 @@ fn cue_group_spread_re_resolves_against_current_membership_on_recall() {
 fn cue_group_spread_uses_shared_spatial_ranks() {
     let (patched, logical) = dimmer_rig(4);
     let list_id = light_core::CueListId::new();
-    let mut cue = light_playback::Cue::new(1.0);
+    let mut cue = light_playback::Cue::new(1_u16.into());
     cue.group_changes.push(light_playback::GroupCueChange {
         group_id: "mapped".into(),
         attribute: AttributeKey::intensity(),

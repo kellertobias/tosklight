@@ -228,7 +228,7 @@ fn session_group_programmer_remains_live_across_membership_changes() {
 fn explicit_cue_change_wins_when_group_expansion_targets_same_attribute() {
     let programmers = ProgrammerRegistry::default();
     let (fixture, logical) = fixture();
-    let mut cue = light_playback::Cue::new(1.0);
+    let mut cue = light_playback::Cue::new(1_u16.into());
     cue.changes.push(light_playback::CueChange::set(
         logical,
         AttributeKey::intensity(),

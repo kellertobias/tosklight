@@ -495,6 +495,8 @@ fn demo_playback_for_groups(group_ids: &[String]) -> (CueList, PlaybackDefinitio
         delay_millis: 0,
         out_fade_millis: None,
         out_delay_millis: None,
+        out_fade_link: None,
+        out_delay_link: None,
         trigger: CueTrigger::Manual,
         cue_only: false,
         actions: vec![],

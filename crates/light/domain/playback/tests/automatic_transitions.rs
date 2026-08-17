@@ -35,7 +35,7 @@ fn only_transition(transitions: Vec<AutomaticPlaybackTransition>) -> AutomaticPl
 
 #[test]
 fn delayed_chaser_tick_emits_one_final_state_transition() {
-    let mut list = cue_list((1..=4).map(|number| Cue::new(f64::from(number))).collect());
+    let mut list = cue_list((1_u16..=4).map(|number| Cue::new(number.into())).collect());
     list.mode = CueListMode::Chaser;
     list.wrap_mode = Some(WrapMode::Reset);
     let id = list.id;
@@ -51,16 +51,16 @@ fn delayed_chaser_tick_emits_one_final_state_transition() {
     );
 
     assert_eq!(event.cause, AutomaticPlaybackTransitionCause::Chaser);
-    assert_eq!(event.previous.number, 1.0);
-    assert_eq!(event.current.number, 4.0);
+    assert_eq!(event.previous.number, 1_u16.into());
+    assert_eq!(event.current.number, 4_u16.into());
     assert_eq!(event.advanced_steps, 7);
 }
 
 #[test]
 fn follow_trigger_emits_its_cause_after_completion_and_delay() {
-    let mut next = Cue::new(2.0);
+    let mut next = Cue::new(2_u16.into());
     next.trigger = CueTrigger::Follow { delay_millis: 100 };
-    let list = cue_list(vec![Cue::new(1.0), next]);
+    let list = cue_list(vec![Cue::new(1_u16.into()), next]);
     let id = list.id;
     let started = Utc::now();
     let mut playback = PlaybackEngine::default();
@@ -84,9 +84,9 @@ fn follow_trigger_emits_its_cause_after_completion_and_delay() {
 
 #[test]
 fn time_trigger_counts_from_the_preceding_cues_go() {
-    let mut first = Cue::new(1.0);
+    let mut first = Cue::new(1_u16.into());
     first.fade_millis = 100;
-    let mut next = Cue::new(2.0);
+    let mut next = Cue::new(2_u16.into());
     next.trigger = CueTrigger::Wait { delay_millis: 25 };
     let list = cue_list(vec![first, next]);
     let id = list.id;
@@ -107,14 +107,14 @@ fn time_trigger_counts_from_the_preceding_cues_go() {
             .transitions,
     );
     assert_eq!(event.cause, AutomaticPlaybackTransitionCause::Wait);
-    assert_eq!(event.current.number, 2.0);
+    assert_eq!(event.current.number, 2_u16.into());
 }
 
 #[test]
 fn looping_time_trigger_starts_cue_one_from_cue_twos_go() {
-    let mut first = Cue::new(1.0);
+    let mut first = Cue::new(1_u16.into());
     first.trigger = CueTrigger::Wait { delay_millis: 25 };
-    let list = cue_list(vec![first, Cue::new(2.0)]);
+    let list = cue_list(vec![first, Cue::new(2_u16.into())]);
     let mut list = list;
     list.wrap_mode = Some(WrapMode::Reset);
     let id = list.id;
@@ -136,17 +136,17 @@ fn looping_time_trigger_starts_cue_one_from_cue_twos_go() {
             .transitions,
     );
     assert_eq!(event.cause, AutomaticPlaybackTransitionCause::Wait);
-    assert_eq!(event.previous.number, 2.0);
-    assert_eq!(event.current.number, 1.0);
+    assert_eq!(event.previous.number, 2_u16.into());
+    assert_eq!(event.current.number, 1_u16.into());
 }
 
 #[test]
 fn timecode_jump_reports_the_number_of_crossed_cues() {
-    let mut second = Cue::new(2.0);
+    let mut second = Cue::new(2_u16.into());
     second.trigger = CueTrigger::Timecode { frame: 100 };
-    let mut third = Cue::new(3.0);
+    let mut third = Cue::new(3_u16.into());
     third.trigger = CueTrigger::Timecode { frame: 200 };
-    let list = cue_list(vec![Cue::new(1.0), second, third]);
+    let list = cue_list(vec![Cue::new(1_u16.into()), second, third]);
     let id = list.id;
     let started = Utc::now();
     let mut playback = PlaybackEngine::default();
@@ -155,7 +155,7 @@ fn timecode_jump_reports_the_number_of_crossed_cues() {
 
     let event = only_transition(playback.tick(started, Some(200)).transitions);
     assert_eq!(event.cause, AutomaticPlaybackTransitionCause::Timecode);
-    assert_eq!(event.previous.number, 1.0);
-    assert_eq!(event.current.number, 3.0);
+    assert_eq!(event.previous.number, 1_u16.into());
+    assert_eq!(event.current.number, 3_u16.into());
     assert_eq!(event.advanced_steps, 2);
 }

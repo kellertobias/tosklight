@@ -16,9 +16,9 @@ fn render_returns_automatic_transitions_after_releasing_playback_state() {
     let started = Utc::now();
     let clock = Arc::new(ManualClock::new(started));
     let engine = Engine::new(ProgrammerRegistry::with_clock(clock.clone()));
-    let mut next = Cue::new(2.0);
+    let mut next = Cue::new(2_u16.into());
     next.trigger = CueTrigger::Follow { delay_millis: 100 };
-    let cue_list = cue_list(vec![Cue::new(1.0), next]);
+    let cue_list = cue_list(vec![Cue::new(1_u16.into()), next]);
     let id = cue_list.id;
     engine
         .replace_snapshot(EngineSnapshot {
@@ -51,9 +51,9 @@ fn render_applies_a_link_destination_in_the_same_output_frame() {
     let started = Utc::now();
     let clock = Arc::new(ManualClock::new(started));
     let engine = Engine::new(ProgrammerRegistry::with_clock(clock.clone()));
-    let mut source = Cue::new(1.0);
-    let skipped = Cue::new(2.0);
-    let destination = Cue::new(12.0);
+    let mut source = Cue::new(1_u16.into());
+    let skipped = Cue::new(2_u16.into());
+    let destination = Cue::new(12_u16.into());
     source.trigger = CueTrigger::Link {
         cue_id: destination.id,
         delay_millis: 50,

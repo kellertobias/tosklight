@@ -7,7 +7,7 @@ fn active_group_cue_survives_snapshot_swap_and_gains_new_members() {
     let (mut second, second_logical) = fixture();
     second.address = Some(2);
     let list_id = light_core::CueListId::new();
-    let mut cue = light_playback::Cue::new(1.0);
+    let mut cue = light_playback::Cue::new(1_u16.into());
     cue.group_changes.push(light_playback::GroupCueChange {
         group_id: "live".into(),
         attribute: AttributeKey::intensity(),

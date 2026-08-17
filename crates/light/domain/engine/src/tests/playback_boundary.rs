@@ -130,13 +130,13 @@ fn activation_provenance_is_atomic_stable_on_noop_and_cleared_on_release() {
     replacement.revision += 1;
     Arc::make_mut(&mut replacement.cue_lists)[0]
         .cues
-        .push(Cue::new(2.0));
+        .push(Cue::new(2_u16.into()));
     engine.replace_snapshot(replacement).unwrap();
     engine
         .execute_pool_playback_with_activation(1, PoolPlaybackAction::Go, &[], Some(second))
         .unwrap();
     let advanced = playback_runtime(&engine, 1);
-    assert_eq!(advanced.current_cue_number, Some(2.0));
+    assert_eq!(advanced.current_cue_number, Some(2_u16.into()));
     assert_eq!(advanced.activation.as_ref(), Some(&recorded));
 
     let repeated = engine
@@ -346,12 +346,12 @@ fn pool_mutations_report_durable_transient_and_exact_noop_effects() {
     );
     assert_pool_effect(
         &engine,
-        PoolPlaybackAction::Load(1.0),
+        PoolPlaybackAction::Load(1_u16.into()),
         PlaybackRuntimeEffect::Durable,
     );
     assert_pool_effect(
         &engine,
-        PoolPlaybackAction::Load(1.0),
+        PoolPlaybackAction::Load(1_u16.into()),
         PlaybackRuntimeEffect::None,
     );
     assert_pool_effect(
@@ -473,7 +473,7 @@ fn peer_only_auto_off_batch_does_not_retime_the_addressed_playback() {
 #[test]
 fn exclusion_does_not_clean_up_an_inactive_loaded_peer() {
     let engine = playback_engine_with_numbers(&[1, 2]);
-    execute_pool(&engine, 2, PoolPlaybackAction::Load(1.0));
+    execute_pool(&engine, 2, PoolPlaybackAction::Load(1_u16.into()));
     let loaded_id = playback_runtime(&engine, 2).loaded_cue_id;
     assert!(loaded_id.is_some());
 
