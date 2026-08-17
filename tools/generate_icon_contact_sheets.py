@@ -261,35 +261,6 @@ def render_group(group: str, paths: list[Path]) -> Image.Image:
     return sheet
 
 
-def render_complete(
-    groups: dict[str, list[Path]],
-    rendered_groups: dict[str, Image.Image],
-) -> Image.Image:
-    gap = 24
-    header_height = 64
-    width = max(sheet.width for sheet in rendered_groups.values())
-    height = header_height + sum(
-        sheet.height + (gap if index else 0)
-        for index, sheet in enumerate(rendered_groups.values())
-    )
-    sheet = Image.new("RGBA", (width, height), BACKGROUND)
-    draw = ImageDraw.Draw(sheet)
-    count = sum(len(paths) for paths in groups.values())
-    centered_text(
-        draw,
-        (0, 0, width, header_height),
-        f"Complete ToskLight icon library · {count} icons",
-        font(26),
-    )
-    top = header_height
-    for index, group_sheet in enumerate(rendered_groups.values()):
-        if index:
-            top += gap
-        sheet.alpha_composite(group_sheet, (0, top))
-        top += group_sheet.height
-    return sheet
-
-
 def generated_manifest(
     sources: dict[str, dict[str, str]],
     expanded: dict[str, dict[str, str]],
@@ -309,18 +280,16 @@ def generate() -> None:
     expanded_files = generate_expanded_icons()
     expanded = expanded_manifest(groups, expanded_files)
     OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
-    expected = {f"{group}.png" for group in groups} | {"complete-library.png"}
+    expected = {f"{group}.png" for group in groups}
     HELP_OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
     for directory in (OUTPUT_ROOT, HELP_OUTPUT_ROOT):
         for stale in directory.iterdir():
             if stale.is_file() and stale.name not in expected and stale != MANIFEST:
                 stale.unlink()
     output_hashes: dict[str, str] = {}
-    rendered_groups: dict[str, Image.Image] = {}
     for group, paths in groups.items():
         destination = OUTPUT_ROOT / f"{group}.png"
-        rendered_groups[group] = render_group(group, paths)
-        rendered_groups[group].convert("RGB").save(
+        render_group(group, paths).convert("RGB").save(
             destination,
             format="PNG",
             optimize=True,
@@ -328,18 +297,6 @@ def generate() -> None:
         )
         output_hashes[destination.name] = sha256(destination.read_bytes())
         print(f"Rendered {display_path(destination)} from {len(paths)} icons")
-    complete = OUTPUT_ROOT / "complete-library.png"
-    render_complete(groups, rendered_groups).convert("RGB").save(
-        complete,
-        format="PNG",
-        optimize=True,
-        compress_level=9,
-    )
-    output_hashes[complete.name] = sha256(complete.read_bytes())
-    print(
-        f"Rendered {display_path(complete)} from "
-        f"{sum(len(paths) for paths in groups.values())} icons"
-    )
     for name in sorted(expected):
         shutil.copy2(OUTPUT_ROOT / name, HELP_OUTPUT_ROOT / name)
     MANIFEST.write_text(
@@ -361,7 +318,7 @@ def check() -> None:
     if not MANIFEST.is_file():
         raise ValueError(f"missing {MANIFEST.relative_to(ROOT)}")
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
-    expected_names = {f"{group}.png" for group in groups} | {"complete-library.png"}
+    expected_names = {f"{group}.png" for group in groups}
     actual_names = {path.name for path in OUTPUT_ROOT.glob("*.png")}
     if actual_names != expected_names:
         raise ValueError(

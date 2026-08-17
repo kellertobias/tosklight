@@ -21,6 +21,13 @@ def verify(path: Path) -> None:
     reader = PdfReader(str(path))
     if len(reader.pages) < 20:
         fail(f"manual has only {len(reader.pages)} pages")
+    expected_width = 595.28
+    expected_height = 841.89
+    for number, page in enumerate(reader.pages, start=1):
+        width = float(page.mediabox.width)
+        height = float(page.mediabox.height)
+        if abs(width - expected_width) > 0.75 or abs(height - expected_height) > 0.75:
+            fail(f"page {number} is {width:.2f} x {height:.2f} pt instead of A4")
     metadata = reader.metadata
     if metadata.title != "ToskLight Operator Manual":
         fail(f"unexpected PDF title: {metadata.title!r}")
@@ -29,15 +36,13 @@ def verify(path: Path) -> None:
     required = [
         "Contents",
         "Quick Start",
-        "ToskLight Desk",
+        "ToskLight Control",
         "Show Setup and Patching",
         "Programmer and Cues",
         "Windows and Panes",
-        "ToskLight PreViz",
-        "ToskLight Media Server",
+        "ToskLight Architect",
+        "ToskLight Pixel",
         "Protocols",
-        "Development and Future Features",
-        "Index",
     ]
     missing = [title for title in required if title not in full_text]
     if missing:
@@ -45,8 +50,8 @@ def verify(path: Path) -> None:
     positions = [full_text.index(title) for title in required]
     if positions != sorted(positions):
         fail("manual sections are not in the required order")
-    if "Dynamics pane is the numbered pool" not in full_text:
-        fail("manual text is missing: Dynamics pane is the numbered pool")
+    if "[!danger]" in full_text or "Missing graphic" not in full_text:
+        fail("Obsidian danger callouts were not rendered correctly")
     if not reader.outline:
         fail("manual has no PDF outline/bookmarks")
     image_count = 0
@@ -58,11 +63,10 @@ def verify(path: Path) -> None:
                 image_count += 1
     if image_count < 50:
         fail(f"manual contains only {image_count} embedded images")
-    # Cover is unnumbered. Every later page must expose its logical footer number.
+    # Cover is unnumbered. React-PDF exposes physical page and total page count in every later footer.
     for physical, page_text in enumerate(text_by_page[1:], start=2):
-        logical = physical - 1
-        if str(logical) not in page_text.splitlines():
-            fail(f"logical page number {logical} is missing from physical page {physical}")
+        if f"{physical} / {len(reader.pages)}" not in page_text:
+            fail(f"page number {physical} of {len(reader.pages)} is missing from physical page {physical}")
         if "ToskLight v" not in page_text or "Operator Manual" not in page_text:
             fail(f"software revision footer is missing from physical page {physical}")
     with pdfplumber.open(path) as pdf:
@@ -70,7 +74,7 @@ def verify(path: Path) -> None:
             for char in page.chars:
                 if char["x0"] < -0.5 or char["x1"] > page.width + 0.5 or char["top"] < -0.5 or char["bottom"] > page.height + 0.5:
                     fail(f"text escapes the media box on page {number}")
-    print(f"Verified {path}: {len(reader.pages)} pages, {image_count} embedded images, bookmarks, numbering, contents, and index")
+    print(f"Verified {path}: {len(reader.pages)} pages, {image_count} embedded images, bookmarks, numbering, and contents")
 
 
 def main() -> int:

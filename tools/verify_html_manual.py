@@ -24,9 +24,12 @@ class ManualParser(HTMLParser):
         self.articles = 0
         self.title = ""
         self._in_title = False
+        self._svg_depth = 0
 
     def handle_starttag(self, tag: str, attrs) -> None:
         values = dict(attrs)
+        if tag == "svg":
+            self._svg_depth += 1
         if identifier := values.get("id"):
             self.ids.append(identifier)
         if tag == "a" and (href := values.get("href")):
@@ -37,7 +40,7 @@ class ManualParser(HTMLParser):
             source = values.get("src") or values.get("href")
             if source and source.startswith(("http://", "https://", "//")):
                 self.external_resources.append(source)
-        if tag == "style":
+        if tag == "style" and self._svg_depth == 0:
             self.styles += 1
         if tag == "script":
             self.scripts += 1
@@ -49,6 +52,8 @@ class ManualParser(HTMLParser):
     def handle_endtag(self, tag: str) -> None:
         if tag == "title":
             self._in_title = False
+        if tag == "svg":
+            self._svg_depth = max(0, self._svg_depth - 1)
 
     def handle_data(self, data: str) -> None:
         if self._in_title:
@@ -83,15 +88,13 @@ def verify(site: Path, archive: Path) -> None:
         "ToskLight Operator Manual",
         "Search the manual",
         "Quick Start",
-        "ToskLight Desk",
+        "ToskLight Control",
         "Show Setup and Patching",
         "Programmer and Cues",
         "Windows and Panes",
-        "ToskLight PreViz",
-        "ToskLight Media Server",
+        "ToskLight Architect",
+        "ToskLight Pixel",
         "Protocols",
-        "Dynamics pane is the numbered pool",
-        "Development and Future Features",
     ]
     missing = [text for text in required if text not in source]
     if missing:
@@ -105,8 +108,12 @@ def verify(site: Path, archive: Path) -> None:
             fail(f"unsafe image path: {image}")
         if not (site / image).is_file():
             fail(f"missing HTML manual image: {image}")
-    if not all(marker in source for marker in ('desk-key-number', 'desk-key-clear', 'desk-key-record', 'keyboard-key')):
+    if not all(marker in source for marker in ('manual-key-record', 'manual-key-clear', 'manual-key-preload', 'manual-key-keyboard', 'manual-command-line', 'manual-control-sequence')):
         fail("HTML manual keycap variants are incomplete")
+    if "[!danger]" in source or 'class="callout callout-danger ' not in source:
+        fail("HTML manual did not render Obsidian danger callouts")
+    if source.count('class="manual-section-divider"') != 6:
+        fail("HTML manual does not contain the six top-level section dividers")
     if not archive.is_file() or archive.stat().st_size < 100_000:
         fail(f"HTML deployment archive is missing or unexpectedly small: {archive}")
     site_files = sorted(path.relative_to(site).as_posix() for path in site.rglob("*") if path.is_file())

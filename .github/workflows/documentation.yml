@@ -162,6 +162,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       LIGHT_MANUAL_VERSION: ${{ needs.release-metadata.outputs.version }}
+      LIGHT_MANUAL_RENDERER_PACKAGE: "@tobisk/markdown-manuals@1.3.4"
       RELEASE_TAG: ${{ needs.release-metadata.outputs.tag }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4

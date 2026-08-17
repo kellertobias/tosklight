@@ -1,0 +1,86 @@
+{
+  "title": "ToskLight Operator Manual",
+  "subtitle": "Control / Architect / Pixel",
+  "description": "Operator manual for the ToskLight show-lighting suite.",
+  "author": "ToskLight contributors",
+  "language": "en",
+  "version": "${LIGHT_MANUAL_VERSION}",
+  "logo": "../../apps/light-desktop/src-tauri/icons/icon.png",
+  "chapterIndexNames": ["index.md", "index.markdown"],
+  "hookModules": ["manual-hooks.mjs"],
+  "layout": {
+    "columns": 1,
+    "columnGap": 18,
+    "hierarchyHeadings": true,
+    "maxHeadingDepth": 6,
+    "justifyText": true
+  },
+  "inlineTokens": [
+    {
+      "pattern": "\\[KBD:([^\\]\\n]+)\\]",
+      "kind": "keyboard",
+      "labelGroup": 1
+    },
+    {
+      "pattern": "\\[\\s*(\\^(?:[A-Z0-9.][A-Z0-9._ ←-]*[+*]?)?|<--|[+\\-−.]|[A-Z0-9.][A-Z0-9._ ←-]*[+*]?)\\s*\\]",
+      "kind": "desk-key",
+      "labelGroup": 1
+    },
+    {
+      "pattern": "<([a-z][a-z0-9._+-]*\\*?)>",
+      "kind": "placeholder",
+      "labelGroup": 1
+    }
+  ],
+  "output": {
+    "htmlDir": "../../.artifacts/generated/manual/html/tosklight-manual",
+    "htmlArchive": "../../.artifacts/generated/manual/html/tosklight-manual-html.zip",
+    "pdf": "../../.artifacts/generated/manual/pdf/tosklight-manual.pdf"
+  },
+  "pdf": {
+    "pageSize": "A4",
+    "header": "{chapter}",
+    "footer": "ToskLight v${LIGHT_MANUAL_VERSION} - Operator Manual",
+    "contentsDepth": 3,
+    "margins": {
+      "top": 54,
+      "right": 50,
+      "bottom": 54,
+      "left": 50
+    }
+  },
+  "mermaid": {
+    "theme": "base",
+    "backgroundColor": "transparent",
+    "width": 1400,
+    "height": 900,
+    "scale": 2,
+    "themeVariables": {
+      "primaryColor": "#d7f3ef",
+      "primaryTextColor": "#17202a",
+      "primaryBorderColor": "#0f8f82",
+      "secondaryColor": "#eef8f8",
+      "tertiaryColor": "#f7f6f1",
+      "lineColor": "#425466",
+      "edgeLabelBackground": "#ffffff",
+      "fontFamily": "Inter, Arial, sans-serif"
+    }
+  },
+  "theme": {
+    "accent": "#0f8f82",
+    "accentContrast": "#ffffff",
+    "background": "#f7f6f1",
+    "ink": "#17202a",
+    "muted": "#64748b",
+    "navigationBackground": "#071621",
+    "navigationInk": "#ffffff",
+    "codeBackground": "#071621",
+    "calloutDanger": "#b42318",
+    "calloutInfo": "#087f8c",
+    "callouts": {
+      "warning": "#b7791f",
+      "tip": "#2f855a",
+      "example": "#6b46c1"
+    }
+  }
+}

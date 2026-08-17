@@ -15,6 +15,8 @@ FIXTURE_LIBRARY_DIR="$ROOT/assets/fixture-library"
 MANUAL_REQUIREMENTS="$ROOT/docs/help/.tooling/requirements.txt"
 MANUAL_VENV_DIR="$LIGHT_ARTIFACTS_DIR/cache/manual-venv"
 MANUAL_PYTHON="$MANUAL_VENV_DIR/bin/python"
+MANUAL_CONFIG="$ROOT/docs/help/manual.config.json"
+MANUAL_RENDERER_PACKAGE="${LIGHT_MANUAL_RENDERER_PACKAGE:-@tobisk/markdown-manuals@1.3.4}"
 CONTROL_TAURI_CONFIG="$LIGHT_TMP_DIR/tauri-control-artifacts.json"
 HARDWARE_TAURI_CONFIG="$LIGHT_TMP_DIR/tauri-hardware-artifacts.json"
 DEV_SERVER_LABEL="de.tokenet.tosklight.dev-server"
@@ -67,15 +69,32 @@ EOF
 
 build_manual() {
   ensure_manual_dependencies
+  generate_attribute_reference
   "$MANUAL_PYTHON" "$ROOT/tools/generate_icon_contact_sheets.py"
-  PYTHONPATH="${LIGHT_MANUAL_PYTHONPATH:-}" LIGHT_MANUAL_KEYCAP_DIR="$LIGHT_MANUAL_ROOT/pdf/.manual-keycaps" \
-    "$MANUAL_PYTHON" "$ROOT/tools/build_manual.py" --output "$LIGHT_MANUAL_PDF"
+  run_manual_renderer build \
+    --source "$ROOT/docs/help" \
+    --config "$MANUAL_CONFIG" \
+    --allowed-env-vars LIGHT_MANUAL_VERSION \
+    --html-dir "$LIGHT_MANUAL_HTML_DIR" \
+    --html-archive "$LIGHT_MANUAL_HTML_ARCHIVE" \
+    --pdf "$LIGHT_MANUAL_PDF"
   PYTHONPATH="${LIGHT_MANUAL_PYTHONPATH:-}" "$MANUAL_PYTHON" "$ROOT/tools/verify_manual.py" "$LIGHT_MANUAL_PDF"
-  PYTHONPATH="${LIGHT_MANUAL_PYTHONPATH:-}" "$MANUAL_PYTHON" "$ROOT/tools/build_html_manual.py" \
-    --site "$LIGHT_MANUAL_HTML_DIR" --archive "$LIGHT_MANUAL_HTML_ARCHIVE"
   PYTHONPATH="${LIGHT_MANUAL_PYTHONPATH:-}" "$MANUAL_PYTHON" "$ROOT/tools/verify_html_manual.py" \
     "$LIGHT_MANUAL_HTML_DIR" \
     "$LIGHT_MANUAL_HTML_ARCHIVE"
+}
+
+generate_attribute_reference() {
+  light_with_cargo_command_lock "generate attribute reference" \
+    cargo run --locked --quiet --package light-core --example generate_attribute_reference -- \
+      "$ROOT/docs/help/99-Appendix/02-default-attributes.md"
+}
+
+run_manual_renderer() {
+  require npx
+  require node
+  LIGHT_MANUAL_VERSION="${LIGHT_MANUAL_VERSION:-$(node -p "require(process.argv[1]).version" "$ROOT/package.json")}" \
+    npx --yes --package "$MANUAL_RENDERER_PACKAGE" markdown-manual "$@"
 }
 
 build_icon_contact_sheets() {
@@ -106,7 +125,11 @@ render_stage_models() {
   blender --background --factory-startup --python "$ROOT/tools/render_stage_models.py" -- \
     --models "$ROOT/assets/models" \
     --images "$ROOT/docs/help/assets/models" \
-    --page "$ROOT/docs/help/20-ToskLight-PreViz/02-model-catalogue.md"
+    --page "$ROOT/docs/help/99-Appendix/01-model-catalogue.md"
+  python3 "$ROOT/tools/generate_model_catalogue.py" \
+    --models "$ROOT/assets/models" \
+    --images "$ROOT/docs/help/assets/models" \
+    --page "$ROOT/docs/help/99-Appendix/01-model-catalogue.md"
   "$MANUAL_PYTHON" "$ROOT/tools/optimise_model_images.py" "$ROOT/docs/help/assets/models"
 }
 
