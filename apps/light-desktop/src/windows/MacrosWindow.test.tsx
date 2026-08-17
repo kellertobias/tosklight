@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
 	objects: vi.fn(),
 	runtime: vi.fn(),
 	copy: vi.fn(),
+	cancel: vi.fn(),
 }));
 
 vi.mock("../components/control/commandLine/useCommandLineSurface", () => ({
@@ -34,6 +35,7 @@ vi.mock("../features/macros/MacroActionsContext", () => ({
 		macros: {
 			runtime: mocks.runtime,
 			copy: mocks.copy,
+			cancel: mocks.cancel,
 			run: vi.fn(),
 		},
 		showObjects: { objects: mocks.objects },
@@ -69,6 +71,11 @@ beforeEach(() => {
 	mocks.objects.mockResolvedValue([existing]);
 	mocks.runtime.mockResolvedValue({ active: [], recent: [] });
 	mocks.copy.mockResolvedValue({});
+	mocks.cancel.mockReset().mockResolvedValue({
+		execution_id: "execution-1",
+		macro_id: existing.id,
+		state: "cancelled",
+	});
 });
 
 afterEach(() => {
@@ -77,6 +84,48 @@ afterEach(() => {
 });
 
 describe("MacrosWindow external Copy command", () => {
+	it("uses OFF then the actual Macro tile to cancel its running execution", async () => {
+		mocks.command.text = "OFF";
+		mocks.runtime.mockResolvedValue({
+			active: [
+				{
+					execution_id: "execution-1",
+					macro_id: existing.id,
+					state: "running",
+				},
+			],
+			recent: [],
+		});
+		render(<MacrosWindow />);
+
+		fireEvent.click(
+			await screen.findByRole("button", {
+				name: "Cancel Macro 1 Front wash",
+			}),
+		);
+
+		await waitFor(() =>
+			expect(mocks.cancel).toHaveBeenCalledWith("show-a", "execution-1"),
+		);
+		expect(mocks.command.reset).toHaveBeenCalledOnce();
+		expect(mocks.copy).not.toHaveBeenCalled();
+	});
+
+	it("consumes OFF without a cancel request when the Macro is already stopped", async () => {
+		mocks.command.text = "OFF";
+		mocks.runtime.mockResolvedValue({ active: [], recent: [] });
+		render(<MacrosWindow />);
+
+		fireEvent.click(
+			await screen.findByRole("button", {
+				name: "Cancel Macro 1 Front wash",
+			}),
+		);
+
+		await waitFor(() => expect(mocks.command.reset).toHaveBeenCalledOnce());
+		expect(mocks.cancel).not.toHaveBeenCalled();
+	});
+
 	it("addresses an occupied source card without opening the editor", async () => {
 		render(<MacrosWindow />);
 		const source = await screen.findByRole("button", {
@@ -85,11 +134,11 @@ describe("MacrosWindow external Copy command", () => {
 
 		fireEvent.click(source);
 
-		expect(mocks.command.replace).toHaveBeenCalledWith("COPY 1 AT");
+		expect(mocks.command.replace).toHaveBeenCalledWith("COPY MACRO 1 AT");
 	});
 
 	it("copies the saved Macro into an empty destination and resets the command", async () => {
-		mocks.command.text = "COPY 1 AT";
+		mocks.command.text = "COPY MACRO 1 AT";
 		render(<MacrosWindow />);
 		const destination = await screen.findByRole("button", {
 			name: "Empty Macro 2",

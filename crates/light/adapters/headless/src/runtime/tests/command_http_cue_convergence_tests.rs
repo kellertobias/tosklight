@@ -474,7 +474,7 @@ async fn real_osc_off_touch_uses_internal_off_for_current_and_explicit_page_targ
                 &format!("off-target-map-{playback}"),
                 light_wire::v2::live_action::LiveAction::CommandLineExecute(
                     light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
-                        value: format!("SET {playback} AT {page} . 7"),
+                        value: format!("ASSIGN CUELIST {playback} AT PBK {page} . 7"),
                     },
                 ),
             ),

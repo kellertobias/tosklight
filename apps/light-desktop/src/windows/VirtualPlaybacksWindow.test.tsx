@@ -124,6 +124,7 @@ const mocks = vi.hoisted(() => {
 		looped: false,
 	};
 	return {
+		commandText: "",
 		dispatch: vi.fn(),
 		recordCue: vi.fn(),
 		resetCommand: vi.fn(),
@@ -251,7 +252,11 @@ vi.mock("../features/cueRecording/CueRecordingProvider", () => ({
 	useCueRecording: () => ({ record: mocks.recordCue }),
 }));
 vi.mock("../components/control/commandLine/useCommandLineSurface", () => ({
-	useCommandLineSurface: () => ({ reset: mocks.resetCommand }),
+	useCommandLineSurface: () => ({
+		text: mocks.commandText,
+		read: () => ({ text: mocks.commandText }),
+		reset: mocks.resetCommand,
+	}),
 }));
 vi.mock("../api/ServerContext", () => ({ useServer: mocks.useServer }));
 vi.mock("../features/playbackTopology/PlaybackTopologyView", () => ({
@@ -334,6 +339,8 @@ beforeEach(() => {
 	mocks.clearVirtual.mockReset().mockResolvedValue({ status: "changed" });
 	mocks.topologyActionError = null;
 	mocks.poolPlaybackAction.mockReset().mockResolvedValue(null);
+	mocks.commandText = "";
+	mocks.resetCommand.mockReset().mockResolvedValue(undefined);
 	mocks.zoneSurfaces.clear();
 	mocks.zoneSaving.clear();
 	mocks.zoneListeners.clear();
@@ -393,6 +400,27 @@ beforeEach(() => {
 });
 
 describe("VirtualPlaybacksWindow", () => {
+	it("uses OFF then the actual Virtual Playback tile as one authoritative Off target", async () => {
+		mocks.commandText = "OFF";
+		mocks.virtualPlayback.buttons = ["flash", "none", "none"];
+		mocks.poolPlaybackAction.mockResolvedValue({ status: "no_change" });
+		render(<VirtualPlaybacksWindow paneId="virtual-1" />);
+
+		const target = screen.getByRole("button", {
+			name: "Turn off Virtual playback 1001 page 1 cell 1 Front Wash",
+		});
+		fireEvent.pointerDown(target, { pointerId: 4 });
+		fireEvent.click(target);
+
+		await waitFor(() =>
+			expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(7, "off", {
+				surface: "virtual",
+			}),
+		);
+		expect(mocks.resetCommand).toHaveBeenCalledOnce();
+		expect(mocks.poolPlaybackAction).toHaveBeenCalledTimes(1);
+	});
+
 	it("uses only scoped page topology and emits virtual runtime metadata", () => {
 		render(<VirtualPlaybacksWindow paneId="virtual-1" />);
 		const cell = screen.getByRole("button", {
@@ -490,9 +518,9 @@ describe("VirtualPlaybacksWindow", () => {
 				name: "Virtual playback 1001 page 1 cell 1 Front Wash",
 			}),
 		);
-		expect(screen.getByRole("dialog", { name: "Record Cue choice" })).toHaveTextContent(
-			"Add CueMerge CueOverwrite Cue",
-		);
+		expect(
+			screen.getByRole("dialog", { name: "Record Cue choice" }),
+		).toHaveTextContent("Add CueMerge CueOverwrite Cue");
 		fireEvent.click(screen.getByRole("button", { name: "Merge Cue" }));
 
 		await waitFor(() =>

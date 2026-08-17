@@ -43,6 +43,7 @@ export interface VirtualPlaybackBoxViewModel {
 	configurationTarget?: boolean;
 	assignmentTarget?: boolean;
 	updateTarget?: boolean;
+	offTarget?: boolean;
 	exclusionMember?: boolean;
 	exclusionZones?: readonly string[];
 	exclusionFence?: VirtualPlaybackExclusionFence;
@@ -70,6 +71,7 @@ export interface VirtualPlaybackGridCallbacks {
 	): void;
 	onAssign?(slot: number, position: number): void;
 	onUpdate?(slot: number, position: number): void;
+	onOff?(slot: number, position: number): void;
 	onZoneSelection?(slot: number, position: number): void;
 }
 
@@ -241,7 +243,10 @@ function VirtualizedPlaybackGrid({
 	} = virtualWindow(viewport, rows, columns, minimumBoxWidth);
 	const rangeKey = positions.join(",");
 	const [settledPositions, setSettledPositions] = useState(positions);
-	const retainedPositions = retainedVirtualPositions(settledPositions, positions);
+	const retainedPositions = retainedVirtualPositions(
+		settledPositions,
+		positions,
+	);
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: rangeKey owns semantic array equality while scrolling.
 	useEffect(() => {
@@ -423,7 +428,8 @@ function VirtualPlaybackBox({
 			}) === true
 		)
 			return;
-		if (box.updateTarget) callbacks.onUpdate?.(box.slot, box.position);
+		if (box.offTarget) callbacks.onOff?.(box.slot, box.position);
+		else if (box.updateTarget) callbacks.onUpdate?.(box.slot, box.position);
 		else if (box.selectingExclusionZone)
 			callbacks.onZoneSelection?.(box.slot, box.position);
 		else if (box.configurationTarget)
@@ -468,6 +474,7 @@ function VirtualPlaybackBox({
 				box.configurationTarget && !unavailable && "configuration-armed",
 				box.assignmentTarget && !unavailable && "assignment-pending",
 				box.updateTarget && "update-target",
+				box.offTarget && assigned && "command-target-off",
 				box.exclusionMember && "exclusion-member",
 				box.exclusionFence?.top && "exclusion-fence-top",
 				box.exclusionFence?.right && "exclusion-fence-right",
@@ -498,13 +505,16 @@ function VirtualPlaybackBox({
 						: box.exclusionSelected
 							? "Exclusion selected"
 							: undefined,
-				workflow: box.configurationTarget && !unavailable
-					? "Set"
-					: box.assignmentTarget && !unavailable
-						? "Set"
-						: box.updateTarget
-							? "Update"
-							: undefined,
+				workflow:
+					box.offTarget && assigned
+						? "Off"
+						: box.configurationTarget && !unavailable
+							? "Set"
+							: box.assignmentTarget && !unavailable
+								? "Set"
+								: box.updateTarget
+									? "Update"
+									: undefined,
 				states,
 			}}
 			style={{ ...boxStyle(box), ...box.poolPresentation?.style }}
@@ -566,9 +576,13 @@ function virtualPlaybackStates(
 }
 
 function boxLabel(page: number, box: VirtualPlaybackBoxViewModel) {
-	return `Virtual playback ${box.number ?? box.slot} page ${page} cell ${box.slot}${
-		box.availability === "assigned" ? ` ${box.label ?? ""}` : " empty"
-	}`.trim();
+	const label =
+		`Virtual playback ${box.number ?? box.slot} page ${page} cell ${box.slot}${
+			box.availability === "assigned" ? ` ${box.label ?? ""}` : " empty"
+		}`.trim();
+	return box.offTarget && box.availability === "assigned"
+		? `Turn off ${label}`
+		: label;
 }
 
 function boxStyle(box: VirtualPlaybackBoxViewModel) {

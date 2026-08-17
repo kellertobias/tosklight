@@ -122,6 +122,32 @@ export function MacrosWindow({ active = true, compact = false }: WindowProps) {
 			setBusy(false);
 		}
 	};
+	const turnOff = async (macro: MacroObject) => {
+		if (!showId || busy || !/^OFF$/iu.test(command.read().text.trim())) return;
+		setBusy(true);
+		setError(null);
+		try {
+			const active = executions.filter(
+				(execution) =>
+					execution.macro_id === macro.id &&
+					["queued", "validating", "running"].includes(execution.state),
+			);
+			const cancelled = await Promise.all(
+				active.map((execution) =>
+					actions.macros.cancel(showId, execution.execution_id),
+				),
+			);
+			if (cancelled.length)
+				setExecutions((current) =>
+					cancelled.reduce(upsertMacroExecution, current),
+				);
+			await command.reset();
+		} catch (reason) {
+			setError(`Macro Off failed: ${String(reason)}`);
+		} finally {
+			setBusy(false);
+		}
+	};
 
 	const open = async (macro: MacroObject) => {
 		setEditing(macro);
@@ -140,10 +166,13 @@ export function MacrosWindow({ active = true, compact = false }: WindowProps) {
 			return false;
 		if (mutationTarget.phase === "source") {
 			if (!byNumber.has(number)) return false;
-			await command.replace(`COPY ${number} AT`);
+			await command.replace(`COPY MACRO ${number} AT`);
 			return true;
 		}
-		const source = byNumber.get(Number(mutationTarget.source));
+		const sourceNumber = /^MACRO\s+(\d+)$/iu.exec(mutationTarget.source)?.[1];
+		const source = sourceNumber
+			? byNumber.get(Number(sourceNumber))
+			: undefined;
 		if (!source) {
 			setError(`Macro ${mutationTarget.source} does not exist.`);
 			return true;
@@ -180,6 +209,7 @@ export function MacrosWindow({ active = true, compact = false }: WindowProps) {
 	}));
 	const setClick = /^SET$/i.test(command.read().text.trim());
 	const assignClick = /^ASSIGN$/i.test(command.read().text.trim());
+	const offPending = /^OFF$/iu.test(command.read().text.trim());
 
 	return editing ? (
 		<MacroEditor
@@ -212,6 +242,7 @@ export function MacrosWindow({ active = true, compact = false }: WindowProps) {
 					running={running}
 					setClick={setClick}
 					assignClick={assignClick}
+					offPending={offPending}
 					mutationTarget={mutationTarget}
 					onCreate={(number) => setEditing(newMacro(number))}
 					onCopyTarget={(number) => void copyFromCommand(number)}
@@ -220,6 +251,7 @@ export function MacrosWindow({ active = true, compact = false }: WindowProps) {
 						void command.replace(`ASSIGN MACRO ${macro.body.number}`)
 					}
 					onRun={(macro) => void run(macro)}
+					onOff={(macro) => void turnOff(macro)}
 				/>
 			</WindowScrollArea>
 		</section>
@@ -233,12 +265,14 @@ function MacroPool({
 	running,
 	setClick,
 	assignClick,
+	offPending,
 	mutationTarget,
 	onCreate,
 	onCopyTarget,
 	onOpen,
 	onAssign,
 	onRun,
+	onOff,
 }: {
 	macros: MacroObject[];
 	slots: PoolSlotViewModel<number>[];
@@ -246,12 +280,14 @@ function MacroPool({
 	running: Set<string>;
 	setClick: boolean;
 	assignClick: boolean;
+	offPending: boolean;
 	mutationTarget: ReturnType<typeof poolMutationTarget>;
 	onCreate(number: number): void;
 	onCopyTarget(number: number): void;
 	onOpen(macro: MacroObject): void;
 	onAssign(macro: MacroObject): void;
 	onRun(macro: MacroObject): void;
+	onOff(macro: MacroObject): void;
 }) {
 	return (
 		<PoolGrid
@@ -274,19 +310,27 @@ function MacroPool({
 					<PoolCard
 						key={number}
 						aria-label={
-							macro
-								? `Macro ${number} ${macro.body.name}`
-								: `Empty Macro ${number}`
+							macro && offPending
+								? `Cancel Macro ${number} ${macro.body.name}`
+								: macro
+									? `Macro ${number} ${macro.body.name}`
+									: `Empty Macro ${number}`
 						}
 						aria-pressed={macro ? running.has(macro.id) : undefined}
+						className={offPending && macro ? "command-target-off" : undefined}
 						model={macroPoolCard(
 							number,
 							macro,
 							running,
 							setClick,
 							mutationTarget,
+							offPending,
 						)}
 						onClick={() => {
+							if (offPending && macro) {
+								onOff(macro);
+								return;
+							}
 							if (mutationTarget?.operation === "copy") {
 								onCopyTarget(number);
 								return;
@@ -319,13 +363,17 @@ function macroPoolCard(
 	running: Set<string>,
 	setClick: boolean,
 	mutationTarget: ReturnType<typeof poolMutationTarget> = null,
+	offPending = false,
 ) {
 	return {
 		number,
 		primary: macro?.body.name ?? "Empty",
 		secondary: macro
-			? `${macro.body.source.split("\n").filter((line) => line.trim()).length} lines`
+			? offPending
+				? "Tap to cancel Macro"
+				: `${macro.body.source.split("\n").filter((line) => line.trim()).length} lines`
 			: "Tap to create",
+		workflow: macro && offPending ? "Off" : undefined,
 		icon: macro?.body.presentation.icon,
 		color: macro?.body.presentation.color ?? MACRO_COLOR,
 		states: [

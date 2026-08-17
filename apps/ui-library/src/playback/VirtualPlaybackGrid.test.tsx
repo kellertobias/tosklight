@@ -254,6 +254,35 @@ describe("VirtualPlaybackGridView", () => {
 		expect(box?.querySelector(".pool-card-workflow")).toBeNull();
 	});
 
+	it("renders and routes an explicit Off target before its normal action", () => {
+		const onOff = vi.fn();
+		const onAction = vi.fn();
+		renderGrid({
+			boxes: [
+				{
+					slot: 1,
+					position: 0,
+					availability: "assigned",
+					label: "Main",
+					offTarget: true,
+				},
+			],
+			callbacks: { onOff, onAction },
+		});
+
+		const target = screen.getByRole("button", {
+			name: "Turn off Virtual playback 1 page 1 cell 1 Main",
+		});
+		expect(target).toHaveClass("command-target-off");
+		expect(target.querySelector(".pool-card-workflow")).toHaveTextContent(
+			"Off",
+		);
+		fireEvent.click(target);
+
+		expect(onOff).toHaveBeenCalledWith(1, 0);
+		expect(onAction).not.toHaveBeenCalled();
+	});
+
 	it("opens playback configuration from the context menu", () => {
 		const onConfigure = vi.fn();
 		renderGrid({ callbacks: { onConfigure } });

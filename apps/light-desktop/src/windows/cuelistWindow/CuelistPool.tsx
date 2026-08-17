@@ -33,7 +33,10 @@ import {
 import { useCueRecording } from "../../features/cueRecording/CueRecordingProvider";
 import { useActiveShowId } from "../../features/deskSnapshot/DeskSnapshotState";
 import { runtimeMaster } from "../../features/playbackRuntime/legacy";
-import { usePlaybackProjectionMap } from "../../features/playbackRuntime/PlaybackRuntimeView";
+import {
+	usePlaybackProjectionMap,
+	usePlaybackRuntimeActions,
+} from "../../features/playbackRuntime/PlaybackRuntimeView";
 import {
 	poolSurfaceKey,
 	resolveConfiguredPoolPresentation,
@@ -71,6 +74,7 @@ interface PoolSlotProps {
 	storeArmed: boolean;
 	updateArmed: boolean;
 	setTarget: boolean;
+	offPending: boolean;
 	onPointerDown: () => void;
 	onPointerEnd: () => void;
 	onClick: () => void;
@@ -88,16 +92,18 @@ function CuelistPoolSlot(props: PoolSlotProps) {
 			<PoolCard
 				data-pool-slot-id={number}
 				data-pool-position={props.poolPosition}
-				className={`cuelist-card ${props.presentation.className} ${runtimeMaster != null ? "running" : ""}`}
+				className={`cuelist-card ${props.presentation.className} ${runtimeMaster != null ? "running" : ""} ${props.offPending && playback ? "command-target-off" : ""}`}
 				style={props.presentation.style}
 				aria-pressed={props.selectedCuelist === number && Boolean(playback)}
 				model={{
 					number,
 					primary: playback?.name ?? "Empty",
 					secondary: playback
-						? props.updateArmed
-							? "Touch to choose Update mode"
-							: `Cuelist · ${runtimeMaster != null ? `${Math.round(runtimeMaster * 100)}%` : "Off"}`
+						? props.offPending
+							? "Tap to release Cuelist"
+							: props.updateArmed
+								? "Touch to choose Update mode"
+								: `Cuelist · ${runtimeMaster != null ? `${Math.round(runtimeMaster * 100)}%` : "Off"}`
 						: props.updateArmed
 							? "Touch to check Update eligibility"
 							: props.storeArmed
@@ -124,6 +130,7 @@ function CuelistPoolSlot(props: PoolSlotProps) {
 							? `Active · ${Math.round(runtimeMaster * 100)}%`
 							: undefined,
 					states: props.presentation.states,
+					workflow: props.offPending && playback ? "Off" : undefined,
 				}}
 				onPointerDown={props.onPointerDown}
 				onPointerUp={props.onPointerEnd}
@@ -158,6 +165,7 @@ function useCuelistPoolActions(props: CuelistPoolProps) {
 		observeCommand: true,
 	});
 	const cueRecording = useCueRecording();
+	const runtimeActions = usePlaybackRuntimeActions();
 	const cueLists = useCueLists();
 	const { state, dispatch } = useApp();
 	const [recordChoice, setRecordChoice] = useState<{
@@ -168,12 +176,13 @@ function useCuelistPoolActions(props: CuelistPoolProps) {
 	const holdTimer = useRef<number | null>(null);
 	const held = useRef(false);
 	const mutationTarget = poolMutationTarget(command.text);
+	const offPending = /^OFF$/iu.test(command.text.trim());
 	const clearHold = () => {
 		if (holdTimer.current) window.clearTimeout(holdTimer.current);
 		holdTimer.current = null;
 	};
 	const startHold = (number: number, playback: PlaybackDefinition | null) => {
-		if (!playback || state.updateArmed) return;
+		if (!playback || state.updateArmed || offPending) return;
 		held.current = false;
 		holdTimer.current = window.setTimeout(() => {
 			held.current = true;
@@ -244,6 +253,34 @@ function useCuelistPoolActions(props: CuelistPoolProps) {
 			held.current = false;
 			return;
 		}
+		if (offPending) {
+			if (!playback || playback.target.type !== "cue_list") return;
+			if (!runtimeActions) {
+				props.onMessage(
+					"Cuelist Off is unavailable while Playback authority is loading.",
+				);
+				return;
+			}
+			void runtimeActions
+				.releaseCueListSource({
+					identity: {
+						kind: "playback",
+						playback_number: playback.number,
+					},
+					cueListId: playback.target.cue_list_id,
+				})
+				.then(async (outcome) => {
+					if (outcome) {
+						props.onMessage("");
+						await command.reset();
+					} else {
+						props.onMessage(
+							"Cuelist Off was rejected; the OFF target remains armed.",
+						);
+					}
+				});
+			return;
+		}
 		if (state.updateArmed) {
 			const objectId =
 				playback?.target.type === "cue_list"
@@ -303,6 +340,7 @@ function useCuelistPoolActions(props: CuelistPoolProps) {
 	};
 	return {
 		state,
+		offPending,
 		assignArmed: /^ASSIGN$/i.test(command.read().text.trim()),
 		mutationTarget,
 		clearHold,
@@ -435,6 +473,7 @@ function CuelistPoolCards({
 	setTarget,
 	setArmed,
 	mutationTarget,
+	offPending,
 	startHold,
 	clearHold,
 	click,
@@ -452,6 +491,7 @@ function CuelistPoolCards({
 	setTarget: number | null;
 	setArmed: boolean;
 	mutationTarget: ReturnType<typeof poolMutationTarget>;
+	offPending: boolean;
 	startHold: (number: number, playback: PlaybackDefinition | null) => void;
 	clearHold: () => void;
 	click: (number: number, playback: PlaybackDefinition | null) => void;
@@ -485,6 +525,7 @@ function CuelistPoolCards({
 				storeArmed={storeArmed}
 				updateArmed={updateArmed}
 				setTarget={isSetTarget}
+				offPending={offPending}
 				onPointerDown={() => startHold(slot.number, slot.playback)}
 				onPointerEnd={clearHold}
 				onClick={() => click(slot.number, slot.playback)}
@@ -600,6 +641,7 @@ export function CuelistPool(props: CuelistPoolProps) {
 		resolveRecordChoice,
 		assignArmed,
 		mutationTarget,
+		offPending,
 	} = useCuelistPoolActions(props);
 	const [search, setSearch] = useState("");
 	const [preview, setPreview] = useState<{
@@ -658,6 +700,7 @@ export function CuelistPool(props: CuelistPoolProps) {
 				setTarget={state.cueListSetTarget}
 				setArmed={state.cueListSetArmed || assignArmed}
 				mutationTarget={mutationTarget}
+				offPending={offPending}
 				startHold={startHold}
 				clearHold={clearHold}
 				click={click}

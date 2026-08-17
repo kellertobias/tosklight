@@ -125,6 +125,22 @@ export function TimecodeRuntimeWindow({
 		},
 		[api, showId],
 	);
+	const stop = useCallback(
+		async (item: TimecodeObjectRecord) => {
+			if (!showId || !/^OFF$/iu.test(command.read().text.trim())) return;
+			try {
+				const snapshot = await api.transportAction(showId, item.definition.id, {
+					type: "stop",
+				});
+				setRuntime((current) => mergeTimecodeSnapshots(current, [snapshot]));
+				setError(null);
+				await command.reset();
+			} catch (reason) {
+				setError(`Timecode Off failed: ${String(reason)}`);
+			}
+		},
+		[api, command, showId],
+	);
 
 	const refresh = useCallback(async () => {
 		if (!showId) return;
@@ -195,6 +211,7 @@ export function TimecodeRuntimeWindow({
 		position: object.definition.number - 1,
 		card: { number: object.definition.number, primary: object.definition.name },
 	}));
+	const offPending = /^OFF$/iu.test(command.text.trim());
 	return (
 		<section className="timecode-window">
 			{!compact && (
@@ -228,18 +245,23 @@ export function TimecodeRuntimeWindow({
 							<PoolCard
 								key={number}
 								aria-label={
-									item
-										? `Timecode ${number} ${item.definition.name}`
-										: `Empty Timecode ${number}`
+									item && offPending
+										? `Turn off Timecode ${number} ${item.definition.name}`
+										: item
+											? `Timecode ${number} ${item.definition.name}`
+											: `Empty Timecode ${number}`
 								}
 								model={{
 									number,
 									primary: item?.definition.name ?? "Empty",
-									secondary: snapshot
-										? `${formatFrame(snapshot.frame)} · ${snapshot.state}`
-										: item
-											? "Not running"
-											: "Tap to create",
+									secondary:
+										item && offPending
+											? "Tap to stop Timecode"
+											: snapshot
+												? `${formatFrame(snapshot.frame)} · ${snapshot.state}`
+												: item
+													? "Not running"
+													: "Tap to create",
 									color: "#9365d8",
 									states: [
 										...(!item ? ["empty" as const] : []),
@@ -247,10 +269,15 @@ export function TimecodeRuntimeWindow({
 											? ["active" as const]
 											: []),
 									],
+									workflow: item && offPending ? "Off" : undefined,
 								}}
+								className={
+									item && offPending ? "command-target-off" : undefined
+								}
 								onClick={() => {
 									const commandText = command.read().text.trim();
-									if (item && /^ASSIGN$/i.test(commandText))
+									if (item && /^OFF$/iu.test(commandText)) void stop(item);
+									else if (item && /^ASSIGN$/i.test(commandText))
 										void command.replace(`ASSIGN TIMECODE ${number}`);
 									else if (item && /^SET$/i.test(commandText)) setEditing(item);
 									else if (item) void start(item);

@@ -45,6 +45,8 @@ const mocks = vi.hoisted(() => ({
 	setCommandLine: vi.fn(),
 	refresh: vi.fn(),
 	resetCommandLine: vi.fn(),
+	commandText: "",
+	applyPlaybackAction: vi.fn(),
 	showObjectView: vi.fn(),
 	showObjectKindsView: vi.fn(),
 	state: {
@@ -140,6 +142,15 @@ vi.mock("../../features/server/useShowObjectsState", () => ({
 }));
 vi.mock("../../state/AppContext", () => ({
 	useApp: () => ({ state: mocks.state, dispatch: mocks.dispatch }),
+}));
+vi.mock("../../components/control/commandLine/useCommandLineSurface", () => ({
+	useCommandLineSurface: () => ({
+		text: mocks.commandText,
+		read: () => ({ text: mocks.commandText, pristine: false }),
+		reset: mocks.resetCommandLine,
+		replace: mocks.setCommandLine,
+		execute: mocks.executeCommandLine,
+	}),
 }));
 vi.mock("../stage3dScene", () => ({
 	cueVisualization: vi.fn(),
@@ -329,6 +340,7 @@ function renderCuelistWindow(
 			store={store}
 			transport={authority.transport}
 			loadSnapshot={authority.loadSnapshot}
+			applyAction={mocks.applyPlaybackAction}
 		>
 			{child}
 		</PlaybackRuntimeViewProvider>
@@ -357,6 +369,35 @@ beforeEach(() => {
 	mocks.resetCommandLine.mockResolvedValue(true);
 	mocks.executeCommandLine.mockResolvedValue(true);
 	mocks.refresh.mockResolvedValue(undefined);
+	mocks.commandText = "";
+	mocks.applyPlaybackAction
+		.mockReset()
+		.mockImplementation(async (_showId, _deskId, request) => {
+			const projection = authority.playbackProjection(1);
+			if (
+				!projection ||
+				projection.target !== "cue_list" ||
+				!projection.runtime
+			)
+				throw new Error("missing Cuelist projection");
+			return {
+				request_id: request.request_id,
+				correlation_id: "55555555-5555-4555-8555-555555555555",
+				requested: request.address,
+				resolved: { kind: "playback", playback_number: 1, page: 1, slot: 1 },
+				outcome: { status: "applied" },
+				durability: "durable",
+				projection: {
+					...projection,
+					runtime: { ...projection.runtime, enabled: false, master: 0 },
+				},
+				related: [],
+				desk: null,
+				event_sequence: 50,
+				desk_event_sequence: null,
+				replayed: false,
+			};
+		});
 	mocks.state.storeArmed = false;
 	mocks.state.updateArmed = false;
 	mocks.state.cueListSetArmed = false;
@@ -614,6 +655,34 @@ describe("Cuelist Pool master authority", () => {
 });
 
 describe("Cuelist Pool workflows over scoped authority", () => {
+	it("uses OFF then the actual Cuelist tile to release only that Cuelist", async () => {
+		mocks.commandText = "OFF";
+		authority.cuelists.set(MAIN_CUE_LIST, {
+			playbackNumber: 1,
+			cueIndex: 0,
+			master: 1,
+		});
+		const view = renderCuelistWindow(
+			<CuelistWindow compact cueListTab="pool" />,
+		);
+		await settle();
+		const ui = within(view.container);
+		const { fireEvent } = await import("@testing-library/react");
+
+		fireEvent.click(ui.getByText("Main").closest("button")!);
+
+		await waitFor(() =>
+			expect(mocks.applyPlaybackAction).toHaveBeenCalledOnce(),
+		);
+		expect(mocks.applyPlaybackAction.mock.calls[0]?.[2]).toMatchObject({
+			address: { kind: "playback", playback_number: 1 },
+			action: { type: "release" },
+			surface: "virtual",
+		});
+		expect(mocks.resetCommandLine).toHaveBeenCalledOnce();
+		expect(mocks.recordCue).not.toHaveBeenCalled();
+	});
+
 	it("offers exact one-Cue recording choices for a Cuelist tile", async () => {
 		mocks.state.storeArmed = true;
 		const view = renderCuelistWindow(

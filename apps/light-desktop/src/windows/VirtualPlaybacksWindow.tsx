@@ -24,7 +24,11 @@ import type { WindowProps } from "./windowTypes";
 export function VirtualPlaybacksWindow({ paneId, active = true }: WindowProps) {
 	const controller = useVirtualPlaybackController(paneId, active);
 	const cueRecording = useCueRecording();
-	const command = useCommandLineSurface({ enabled: active, observeCommand: false });
+	const command = useCommandLineSurface({
+		enabled: active,
+		observeCommand: true,
+	});
+	const offPending = /^OFF$/iu.test((command.text ?? "").trim());
 	const [recordChoice, setRecordChoice] = useState<{
 		slot: number;
 		cueNumber: string;
@@ -60,6 +64,20 @@ export function VirtualPlaybacksWindow({ paneId, active = true }: WindowProps) {
 		if (!outcome) return;
 		controller.dispatch({ type: "SET_STORE_ARMED", value: false });
 		await command.reset();
+	};
+	const turnOffVirtual = async (slot: number) => {
+		if (controller.pageNumber == null || !offPending) return;
+		const playbackNumber = virtualPlaybackNumber(controller.pageNumber, slot);
+		const playback =
+			controller.page?.virtual_playbacks?.[String(playbackNumber)] ?? null;
+		if (!playback) return;
+		const outcome = await controller.runtimeActions?.virtualPlaybackAction(
+			controller.pageNumber,
+			playback.number,
+			"off",
+			{ surface: "virtual" },
+		);
+		if (outcome) await command.reset();
 	};
 	const requestVirtualRecord = (slot: number) => {
 		if (controller.pageNumber == null) return;
@@ -102,11 +120,13 @@ export function VirtualPlaybacksWindow({ paneId, active = true }: WindowProps) {
 	});
 	useEffect(() => {
 		const openRequested = (event: Event) => {
-			const detail = (event as CustomEvent<{
-				addressing: string;
-				page?: number | null;
-				playback?: number | null;
-			}>).detail;
+			const detail = (
+				event as CustomEvent<{
+					addressing: string;
+					page?: number | null;
+					playback?: number | null;
+				}>
+			).detail;
 			if (
 				detail.addressing !== "virtual" ||
 				detail.page == null ||
@@ -178,9 +198,11 @@ export function VirtualPlaybacksWindow({ paneId, active = true }: WindowProps) {
 				configurationArmed={controller.configurationArmed}
 				storeArmed={controller.state.storeArmed}
 				updateArmed={controller.state.updateArmed}
+				offPending={offPending}
 				shiftArmed={controller.state.shiftArmed}
 				onConfigure={controller.openConfiguration}
 				onRecord={requestVirtualRecord}
+				onOff={(slot) => void turnOffVirtual(slot)}
 				onToggleZone={controller.toggleZoneSlot}
 				paneId={paneId}
 			/>

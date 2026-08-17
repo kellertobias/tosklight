@@ -47,9 +47,11 @@ interface VirtualPlaybackGridProps {
 	configurationArmed: boolean;
 	storeArmed?: boolean;
 	updateArmed: boolean;
+	offPending?: boolean;
 	shiftArmed: boolean;
 	onConfigure(playback: PlaybackDefinition | null, slot: number): void;
 	onRecord?(slot: number): void;
+	onOff?(slot: number): void;
 	onToggleZone(slot: number): void;
 	paneId?: string;
 }
@@ -103,6 +105,10 @@ export function VirtualPlaybackGrid(props: VirtualPlaybackGridProps) {
 			}
 			callbacks={{
 				onClick: (slot, _position, interaction) => {
+					if (props.offPending && playbackAt(slot)) {
+						props.onOff?.(slot);
+						return true;
+					}
 					if (props.storeArmed) {
 						props.onRecord?.(slot);
 						return true;
@@ -138,6 +144,7 @@ export function VirtualPlaybackGrid(props: VirtualPlaybackGridProps) {
 					props.onConfigure(playbackAt(slot), slot);
 				},
 				onUpdate: (slot) => requestPlaybackUpdate(props, slot),
+				onOff: props.onOff,
 				onZoneSelection: props.onToggleZone,
 			}}
 		/>
@@ -220,7 +227,7 @@ function boxViewModel(
 			playback && action !== "none"
 				? action.replaceAll("_", " ").toUpperCase()
 				: undefined,
-		heldAction: action === "flash" || action === "swap",
+		heldAction: !props.offPending && (action === "flash" || action === "swap"),
 		running: runtime?.enabled === true,
 		currentCue:
 			runtime?.cue_index == null
@@ -229,6 +236,7 @@ function boxViewModel(
 		configurationTarget: setTargetArmed && available,
 		assignmentTarget: props.storeArmed && available,
 		updateTarget: props.updateArmed,
+		offTarget: props.offPending && playback !== null,
 		exclusionMember: containingZones.length > 0,
 		exclusionZones: containingZones.map((zone) => zone.name),
 		exclusionFence,
