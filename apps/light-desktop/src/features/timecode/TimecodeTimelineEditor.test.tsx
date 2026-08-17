@@ -8,6 +8,7 @@ import {
 } from "@testing-library/react";
 import { act, createRef, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { CueList } from "../../api/types";
 import type { TimecodeDefinition } from "../../api/types/timecode";
 import {
 	TIMECODE_LANE_HEADER_WIDTH,
@@ -1011,5 +1012,161 @@ describe("TimecodeTimelineEditor", () => {
 		expect(view.getByTitle(/Main audio volume · 80%/)).toBeTruthy();
 		fireEvent.click(screen.getByRole("button", { name: "Delete Keyframe" }));
 		expect(view.queryByTitle(/Main audio volume · 80%/)).toBeNull();
+	});
+
+	it("renders every Cue inside a clip and saves nested fade drags through CueList authority", async () => {
+		const cueList: CueList = {
+			id: "cue-list",
+			name: "Opening",
+			mode: "sequence",
+			priority: 0,
+			looped: false,
+			cues: [
+				{
+					id: "cue-1",
+					number: "1",
+					name: "First",
+					fade_millis: 2_000,
+					delay_millis: 0,
+					trigger: { type: "wait", delay_millis: 3_000 },
+					changes: [],
+				},
+				{
+					id: "cue-2",
+					number: "2",
+					name: "Second",
+					fade_millis: 1_000,
+					delay_millis: 0,
+					trigger: { type: "follow", delay_millis: 0 },
+					changes: [],
+				},
+			],
+		};
+		const clipDefinition: TimecodeDefinition = {
+			...definition,
+			lanes: [
+				{
+					id: "lane-1",
+					name: "Opening",
+					content: {
+						kind: "cue_list",
+						cue_list_id: cueList.id,
+						clips: [
+							{
+								id: "clip-1",
+								start_frame: 44,
+								end_frame: 396,
+								start_cue_id: "cue-1",
+								end_cue_id: "cue-2",
+								start_behavior: "state",
+								end_behavior: "release",
+							},
+						],
+					},
+				},
+			],
+		};
+		const onSaveCueList = vi.fn(async (_id: string, body: CueList) => body);
+		const onPreview = vi.fn();
+		const view = render(
+			<TimecodeTimelineEditor
+				definition={clipDefinition}
+				frame={0}
+				fps={44}
+				cueLists={[
+					{
+						id: cueList.id,
+						name: cueList.name,
+						cues: cueList.cues,
+						body: cueList,
+					},
+				]}
+				audioPlayers={[]}
+				onScrub={vi.fn()}
+				onCommit={vi.fn()}
+				onPreview={onPreview}
+				onBeginGesture={vi.fn()}
+				onEndGesture={vi.fn()}
+				onSaveCueList={onSaveCueList}
+			/>,
+		);
+		expect(view.getByTitle("Cue 1 start · 00:00:01.00")).toBeTruthy();
+		expect(view.getByTitle("Cue 2 start · 00:00:03.00")).toBeTruthy();
+		expect(view.getByTitle("Cue 1 In fade")).toBeTruthy();
+		expect(view.getByTitle("Cue 1 Out fade")).toBeTruthy();
+		const canvas = view.container.querySelector<HTMLElement>(
+			".timecode-timeline-canvas",
+		);
+		const pixelsPerFrame = Number(canvas?.dataset.pixelsPerFrame);
+		const handle = view.getByRole("slider", {
+			name: "Cue 1 In fade start",
+		});
+		fireEvent.pointerDown(handle, { pointerId: 20, clientX: 100 });
+		fireEvent.pointerMove(window, {
+			pointerId: 20,
+			clientX: 100 + 44 * pixelsPerFrame,
+		});
+		fireEvent.pointerUp(window, { pointerId: 20 });
+		await vi.waitFor(() => expect(onSaveCueList).toHaveBeenCalledTimes(1));
+		expect(onSaveCueList.mock.calls[0]?.[1].cues[0]).toMatchObject({
+			delay_millis: 1_000,
+			fade_millis: 1_000,
+		});
+		expect(onPreview).not.toHaveBeenCalled();
+	});
+
+	it("shows the authoritative Cue List clip execution status and message", () => {
+		const view = render(
+			<TimecodeTimelineEditor
+				definition={{
+					...definition,
+					lanes: [
+						{
+							id: "lane-1",
+							name: "Opening",
+							content: {
+								kind: "cue_list",
+								cue_list_id: "cue-list",
+								clips: [
+									{
+										id: "clip-1",
+										start_frame: 44,
+										end_frame: 176,
+										start_cue_id: "cue-1",
+										end_cue_id: "cue-1",
+										start_behavior: "state",
+										end_behavior: "release",
+									},
+								],
+							},
+						},
+					],
+				}}
+				frame={44}
+				fps={44}
+				cueLists={[]}
+				audioPlayers={[]}
+				clipStatuses={[
+					{
+						lane_id: "lane-1",
+						cue_list_id: "cue-list",
+						clip_id: "clip-1",
+						state: "unable",
+						cue_id: null,
+						cue_start_frame: null,
+						message: "Cue 1 cannot resolve its Link target.",
+					},
+				]}
+				onScrub={vi.fn()}
+				onCommit={vi.fn()}
+				onPreview={vi.fn()}
+				onBeginGesture={vi.fn()}
+				onEndGesture={vi.fn()}
+			/>,
+		);
+		expect(view.getByText("Unable")).toBeTruthy();
+		expect(
+			view.getByText("Cue 1 cannot resolve its Link target."),
+		).toBeTruthy();
 	});
 });

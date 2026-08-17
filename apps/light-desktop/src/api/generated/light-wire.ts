@@ -1154,4 +1154,6 @@ export type TimecodePatch = { number?: number | null, name?: string | null, dura
 export type TimecodeTransportAction = { "type": "go" } | { "type": "pause" } | { "type": "stop" } | { "type": "rewind" } | { "type": "seek", frame: number, };
 export type TimecodeTransportActionRequest = { timecode_id: string, action: TimecodeTransportAction, };
 export type TimecodeTransportState = "stopped" | "playing" | "paused";
-export type TimecodeTransportSnapshot = { timecode_id: string, revision: number, state: TimecodeTransportState, frame: number, duration_frame: number, audio_linked: boolean, };
+export type TimecodeCueListClipExecutionState = "armed" | "active" | "held" | "released" | "unable";
+export type TimecodeCueListClipExecution = { lane_id: string, cue_list_id: string, clip_id: string, state: TimecodeCueListClipExecutionState, cue_id: string | null, cue_start_frame: number | null, message: string | null, };
+export type TimecodeTransportSnapshot = { timecode_id: string, revision: number, state: TimecodeTransportState, frame: number, duration_frame: number, audio_linked: boolean, cue_list_clips: Array<TimecodeCueListClipExecution>, };

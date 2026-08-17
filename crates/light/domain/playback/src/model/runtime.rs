@@ -128,6 +128,9 @@ pub struct ActivePlayback {
     /// Fast navigation bypasses Cue and per-attribute delay/fade for only this transition.
     #[serde(default)]
     pub transition_timing_bypassed: bool,
+    /// Suppresses discrete Cue actions for state reconstruction without bypassing fade timing.
+    #[serde(default)]
+    pub discrete_cue_actions_suppressed: bool,
     /// A one-transition fallback supplied by an atomic Preload GO. Explicit Cue and
     /// per-attribute timings remain authoritative; this replaces only the Cue Fade master.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -419,6 +422,7 @@ pub(crate) fn new_active_playback(
         fader_zero_auto_off_armed: false,
         flash_restore_off: false,
         transition_timing_bypassed: false,
+        discrete_cue_actions_suppressed: false,
         transition_fade_fallback_millis: None,
         external_completion_millis: 0,
         manual_xfade_position: 0.0,

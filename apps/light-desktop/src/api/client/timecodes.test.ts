@@ -46,6 +46,17 @@ describe("TimecodesApiClient", () => {
 				frame: 0,
 				duration_frame: 440,
 				audio_linked: false,
+				cue_list_clips: [
+					{
+						lane_id: "lane-a",
+						cue_list_id: "cue-list-a",
+						clip_id: "clip-a",
+						state: "unable",
+						cue_id: null,
+						cue_start_frame: null,
+						message: "start Cue does not exist",
+					},
+				],
 			})
 			.mockResolvedValueOnce({ peaks: [] });
 		wire.sendAction.mockResolvedValueOnce({
@@ -55,11 +66,12 @@ describe("TimecodesApiClient", () => {
 			frame: 220,
 			duration_frame: 440,
 			audio_linked: false,
+			cue_list_clips: [],
 		});
 		const client = new TimecodesApiClient(wire);
 		await client.objects("show-a");
 		await client.runtime("show-a");
-		await client.snapshot("show-a", "timecode/a");
+		const snapshot = await client.snapshot("show-a", "timecode/a");
 		await client.waveform("show-a", "timecode/a");
 		await client.transportAction("show-a", "timecode/a", {
 			type: "seek",
@@ -78,6 +90,10 @@ describe("TimecodesApiClient", () => {
 				timecode_id: "timecode/a",
 				action: { type: "seek", frame: 220 },
 			},
+		});
+		expect(snapshot.cue_list_clips[0]).toMatchObject({
+			state: "unable",
+			message: "start Cue does not exist",
 		});
 	});
 

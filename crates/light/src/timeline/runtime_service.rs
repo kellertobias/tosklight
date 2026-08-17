@@ -1,11 +1,13 @@
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, HashMap, HashSet},
     sync::{Arc, Mutex},
     time::Instant,
 };
 
+use light_engine::{CueListPlaybackAction, Engine, EnginePlaybackCommand};
 use light_playback::{
-    TimecodeDefinition, TimecodeFrame, TimecodeFrameRate, TimecodeId, TimecodeReconstructedState,
+    TimecodeCueListClipExecution, TimecodeCueListClipExecutionKind, TimecodeDefinition,
+    TimecodeFrame, TimecodeFrameRate, TimecodeId, TimecodeReconstructedState,
     TimecodeTransportAction, TimecodeTransportState,
 };
 
@@ -45,6 +47,7 @@ pub enum TimecodeRuntimeChangeCause {
     Action(TimecodeTransportAction),
     ExternalSync { transport_frame: TimecodeFrame },
     Tick { completed_loops: u64 },
+    CueListExecution,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -55,6 +58,7 @@ pub struct TimecodeRuntimeSnapshot {
     pub frame: TimecodeFrame,
     pub duration: TimecodeFrame,
     pub reconstructed: TimecodeReconstructedState,
+    pub cue_list_clips: Vec<TimecodeCueListClipExecution>,
     pub audio_linked: bool,
 }
 
@@ -90,6 +94,7 @@ pub struct TimecodeRuntimeService {
     rate: TimecodeFrameRate,
     runtimes: Arc<Mutex<BTreeMap<TimecodeId, Runtime>>>,
     audio: Option<Arc<TimecodeAudioService>>,
+    cue_list_runtime: Arc<Mutex<CueListRuntime>>,
 }
 
 impl TimecodeRuntimeService {
@@ -108,6 +113,7 @@ impl TimecodeRuntimeService {
             rate,
             runtimes: Arc::new(Mutex::new(BTreeMap::new())),
             audio: None,
+            cue_list_runtime: Arc::new(Mutex::new(CueListRuntime::default())),
         }
     }
 
@@ -184,6 +190,122 @@ impl TimecodeRuntimeService {
             .collect()
     }
 
+    /// Reconciles every running Timecode's Cuelist clips into the one shared playback runtime.
+    /// Stable source ownership prevents one Timecode from releasing a Cuelist still owned by
+    /// another active or held clip.
+    pub fn reconcile_cue_lists(&self, engine: &Engine) {
+        let installed = self
+            .runtimes
+            .lock()
+            .expect("Timecode runtime lock poisoned")
+            .values()
+            .map(|runtime| {
+                (
+                    runtime.definition.clone(),
+                    runtime.state,
+                    runtime.frame,
+                    runtime.cue_list_reconcile_mode,
+                )
+            })
+            .collect::<Vec<_>>();
+        let cue_lists = engine.snapshot().cue_lists.as_ref().clone();
+        let (sequence_fade_millis, release_fade_millis) = engine.cue_timing_masters();
+        let cue_timing = light_playback::TimecodeCueTimingDefaults {
+            frame_rate: self.rate,
+            sequence_fade_millis,
+            release_fade_millis,
+        };
+        let mut statuses = BTreeMap::<TimecodeId, Vec<TimecodeCueListClipExecution>>::new();
+        let mut desired = HashMap::new();
+        for (definition, transport, frame, reconcile_mode) in installed {
+            let resolved =
+                definition.cue_list_clip_execution(&cue_lists, frame, transport, cue_timing);
+            for clip in &resolved {
+                if matches!(
+                    clip.kind,
+                    TimecodeCueListClipExecutionKind::Active
+                        | TimecodeCueListClipExecutionKind::Held
+                ) && let Some(cue_id) = clip.cue_id
+                {
+                    desired.insert(
+                        clip.cue_list_id,
+                        AppliedCueListClip {
+                            source: CueListClipSource::from(clip),
+                            cue_id,
+                            cue_start_frame: clip.cue_start_frame.unwrap_or(frame),
+                            start_behavior: clip.start_behavior,
+                            transport,
+                            reconcile_mode,
+                            frame,
+                            frame_rate: self.rate,
+                        },
+                    );
+                }
+            }
+            statuses.insert(definition.id, resolved);
+        }
+
+        let mut runtime = self
+            .cue_list_runtime
+            .lock()
+            .expect("Timecode Cuelist runtime lock poisoned");
+        let previous = runtime.applied.clone();
+        let mut cue_list_ids = previous
+            .keys()
+            .chain(desired.keys())
+            .copied()
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>();
+        cue_list_ids.sort_by_key(|id| id.0);
+        for cue_list_id in cue_list_ids {
+            let before = previous.get(&cue_list_id);
+            let next = desired.get(&cue_list_id);
+            let result = match next {
+                None => engine.execute_playback(EnginePlaybackCommand::CueList {
+                    id: cue_list_id,
+                    action: CueListPlaybackAction::Release,
+                }),
+                Some(next) => reconcile_desired_cue_list(engine, cue_list_id, before, next),
+            };
+            if let Err(message) = result {
+                if let Some(next) = next
+                    && let Some(clips) = statuses.get_mut(&next.source.timecode_id)
+                    && let Some(status) = clips.iter_mut().find(|clip| {
+                        clip.lane_id == next.source.lane_id && clip.clip_id == next.source.clip_id
+                    })
+                {
+                    status.kind = TimecodeCueListClipExecutionKind::Unable;
+                    status.message = Some(message);
+                }
+                desired.remove(&cue_list_id);
+            }
+        }
+        runtime.applied = desired;
+        drop(runtime);
+        let mut runtimes = self
+            .runtimes
+            .lock()
+            .expect("Timecode runtime lock poisoned");
+        let mut changes = Vec::new();
+        for (id, clips) in statuses {
+            if let Some(runtime) = runtimes.get_mut(&id)
+                && runtime.cue_list_clips != clips
+            {
+                runtime.cue_list_clips = clips;
+                runtime.revision = runtime.revision.saturating_add(1);
+                changes.push(TimecodeRuntimeChange {
+                    cause: TimecodeRuntimeChangeCause::CueListExecution,
+                    snapshot: runtime.snapshot(self.audio.as_deref()),
+                });
+            }
+        }
+        drop(runtimes);
+        for change in changes {
+            self.publisher.publish(&change);
+        }
+    }
+
     /// Removes stale runtime state after a portable Timecode is deleted or becomes unrunnable.
     pub fn uninstall(&self, id: TimecodeId) -> bool {
         self.runtimes
@@ -221,6 +343,15 @@ impl TimecodeRuntimeService {
             let before = runtime.operator_state();
             runtime.synchronize(now, self.rate);
             let action_changed = runtime.apply(action, now);
+            if action_changed {
+                runtime.cue_list_reconcile_mode = match action {
+                    TimecodeTransportAction::Go if before.0 == TimecodeTransportState::Stopped => {
+                        CueListReconcileMode::Enter
+                    }
+                    TimecodeTransportAction::Pause => runtime.cue_list_reconcile_mode,
+                    _ => CueListReconcileMode::Reconstruct,
+                };
+            }
             let changed = action_changed || runtime.operator_state() != before;
             if changed {
                 runtime.revision = runtime.revision.saturating_add(1);
@@ -277,6 +408,11 @@ impl TimecodeRuntimeService {
                 .values_mut()
                 .filter_map(|runtime| {
                     let advance = runtime.synchronize(now, self.rate)?;
+                    runtime.cue_list_reconcile_mode = if advance.completed_loops == 0 {
+                        CueListReconcileMode::Forward
+                    } else {
+                        CueListReconcileMode::Reconstruct
+                    };
                     runtime.revision = runtime.revision.saturating_add(1);
                     Some(TimecodeRuntimeChange {
                         cause: TimecodeRuntimeChangeCause::Tick {
@@ -347,6 +483,7 @@ impl TimecodeRuntimeService {
                         }
                     }
                     runtime.frame = TimecodeFrame(local.0 % runtime.duration.0);
+                    runtime.cue_list_reconcile_mode = CueListReconcileMode::Reconstruct;
                     // This anchor is dormant while an external source is locked, then gives
                     // Continue Internal a seamless takeover point if that source is lost.
                     runtime.start(now);
@@ -393,6 +530,78 @@ impl TimecodeRuntimeService {
     }
 }
 
+fn reconcile_desired_cue_list(
+    engine: &Engine,
+    cue_list_id: light_core::CueListId,
+    before: Option<&AppliedCueListClip>,
+    next: &AppliedCueListClip,
+) -> Result<light_engine::EnginePlaybackOutcome, String> {
+    let actual = engine.playback_runtime_status_for_cue_list(cue_list_id);
+    let desired_changed =
+        before.is_none_or(|before| before.source != next.source || before.cue_id != next.cue_id);
+    let actual_drifted = actual
+        .as_ref()
+        .is_none_or(|status| status.playback.current_cue_id != Some(next.cue_id));
+    let reconstruct_timing_changed = next.reconcile_mode == CueListReconcileMode::Reconstruct
+        && before.is_some_and(|before| before.frame != next.frame);
+    let changed_cue = desired_changed || actual_drifted || reconstruct_timing_changed;
+    let mut outcome = if changed_cue {
+        let entering = before.is_none_or(|before| before.source != next.source);
+        let execute = desired_changed
+            && match next.reconcile_mode {
+                CueListReconcileMode::Forward => {
+                    !entering || next.start_behavior == light_playback::TimecodeClipStart::Cue
+                }
+                CueListReconcileMode::Enter => {
+                    entering && next.start_behavior == light_playback::TimecodeClipStart::Cue
+                }
+                CueListReconcileMode::Reconstruct => false,
+            };
+        let action = if execute {
+            CueListPlaybackAction::ExecuteCueId(next.cue_id)
+        } else {
+            CueListPlaybackAction::ReconstructCueId {
+                cue_id: next.cue_id,
+                elapsed_millis: frames_to_millis(
+                    next.frame.0.saturating_sub(next.cue_start_frame.0),
+                    next.frame_rate,
+                ),
+            }
+        };
+        engine.execute_playback(EnginePlaybackCommand::CueList {
+            id: cue_list_id,
+            action,
+        })?
+    } else {
+        light_engine::EnginePlaybackOutcome::Applied
+    };
+    if next.transport == TimecodeTransportState::Paused
+        && (changed_cue || actual.as_ref().is_none_or(|status| !status.playback.paused))
+    {
+        outcome = engine.execute_playback(EnginePlaybackCommand::CueList {
+            id: cue_list_id,
+            action: CueListPlaybackAction::Pause,
+        })?;
+    } else if !changed_cue
+        && next.transport == TimecodeTransportState::Playing
+        && actual.as_ref().is_some_and(|status| status.playback.paused)
+    {
+        outcome = engine.execute_playback(EnginePlaybackCommand::CueList {
+            id: cue_list_id,
+            action: CueListPlaybackAction::Resume,
+        })?;
+    }
+    Ok(outcome)
+}
+
+fn frames_to_millis(frames: u64, rate: TimecodeFrameRate) -> u64 {
+    let numerator = u128::from(frames)
+        .saturating_mul(u128::from(rate.denominator()))
+        .saturating_mul(1_000);
+    let denominator = u128::from(rate.numerator());
+    u64::try_from((numerator.saturating_add(denominator / 2)) / denominator).unwrap_or(u64::MAX)
+}
+
 #[derive(Clone)]
 struct Runtime {
     definition: TimecodeDefinition,
@@ -402,6 +611,49 @@ struct Runtime {
     frame: TimecodeFrame,
     running: Option<RunningAnchor>,
     external_armed: bool,
+    cue_list_clips: Vec<TimecodeCueListClipExecution>,
+    cue_list_reconcile_mode: CueListReconcileMode,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct CueListClipSource {
+    timecode_id: TimecodeId,
+    lane_id: light_playback::TimecodeLaneId,
+    clip_id: light_playback::TimecodeClipId,
+}
+
+impl From<&TimecodeCueListClipExecution> for CueListClipSource {
+    fn from(value: &TimecodeCueListClipExecution) -> Self {
+        Self {
+            timecode_id: value.timecode_id,
+            lane_id: value.lane_id,
+            clip_id: value.clip_id,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct AppliedCueListClip {
+    source: CueListClipSource,
+    cue_id: uuid::Uuid,
+    cue_start_frame: TimecodeFrame,
+    start_behavior: light_playback::TimecodeClipStart,
+    transport: TimecodeTransportState,
+    reconcile_mode: CueListReconcileMode,
+    frame: TimecodeFrame,
+    frame_rate: TimecodeFrameRate,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CueListReconcileMode {
+    Enter,
+    Forward,
+    Reconstruct,
+}
+
+#[derive(Default)]
+struct CueListRuntime {
+    applied: HashMap<light_core::CueListId, AppliedCueListClip>,
 }
 
 #[derive(Clone, Copy)]
@@ -428,6 +680,8 @@ impl Runtime {
             frame: TimecodeFrame::ZERO,
             running: None,
             external_armed,
+            cue_list_clips: Vec::new(),
+            cue_list_reconcile_mode: CueListReconcileMode::Reconstruct,
         }
     }
 
@@ -439,6 +693,7 @@ impl Runtime {
             frame: self.frame,
             duration: self.duration,
             reconstructed: self.definition.state_at(self.frame),
+            cue_list_clips: self.cue_list_clips.clone(),
             audio_linked: audio.is_some_and(|audio| audio.is_prepared(self.definition.id)),
         }
     }

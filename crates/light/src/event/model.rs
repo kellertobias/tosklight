@@ -479,7 +479,8 @@ impl EventDraft {
             desk_id: None,
             class: match change.cause {
                 crate::timeline::TimecodeRuntimeChangeCause::Tick { .. }
-                | crate::timeline::TimecodeRuntimeChangeCause::ExternalSync { .. } => {
+                | crate::timeline::TimecodeRuntimeChangeCause::ExternalSync { .. }
+                | crate::timeline::TimecodeRuntimeChangeCause::CueListExecution => {
                     EventClass::Projection
                 }
                 crate::timeline::TimecodeRuntimeChangeCause::Installed
@@ -496,6 +497,7 @@ impl EventDraft {
                 change.cause,
                 crate::timeline::TimecodeRuntimeChangeCause::Tick { .. }
                     | crate::timeline::TimecodeRuntimeChangeCause::ExternalSync { .. }
+                    | crate::timeline::TimecodeRuntimeChangeCause::CueListExecution
             ) {
                 DeliveryPolicy::Replaceable
             } else {

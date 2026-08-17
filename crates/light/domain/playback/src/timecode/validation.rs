@@ -69,9 +69,9 @@ impl TimecodeDefinition {
                                 "Cuelist clips on one lane must not overlap",
                             ));
                         }
-                        if clip.end_frame.0 < clip.start_frame.0 {
+                        if clip.end_frame.0 <= clip.start_frame.0 {
                             return Err(TimecodeValidationError::new(
-                                "Cuelist clip end precedes its start",
+                                "Cuelist clip end must follow its start",
                             ));
                         }
                         if clip.start_cue_id.is_nil() || clip.end_cue_id.is_nil() {

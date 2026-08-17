@@ -45,7 +45,13 @@ pub enum CueListPlaybackAction {
     GoAt(DateTime<Utc>),
     Back,
     Jump(CueNumber),
+    ExecuteCueId(uuid::Uuid),
+    ReconstructCueId {
+        cue_id: uuid::Uuid,
+        elapsed_millis: u64,
+    },
     Pause,
+    Resume,
     Release,
 }
 
@@ -648,12 +654,28 @@ fn execute_cue_list(
             .cloned()
             .map(Box::new)
             .map(EnginePlaybackOutcome::Active),
+        CueListPlaybackAction::ExecuteCueId(cue_id) => playback
+            .execute_timeline_cue_id(id, cue_id)
+            .cloned()
+            .map(Box::new)
+            .map(EnginePlaybackOutcome::Active),
+        CueListPlaybackAction::ReconstructCueId {
+            cue_id,
+            elapsed_millis,
+        } => playback
+            .reconstruct_to_cue_id(id, cue_id, elapsed_millis)
+            .cloned()
+            .map(Box::new)
+            .map(EnginePlaybackOutcome::Active),
         CueListPlaybackAction::Pause => {
             let effect = playback.pause_mutation(id)?.effect;
             Ok(EnginePlaybackOutcome::ActiveList {
                 active: playback.active(),
                 effect,
             })
+        }
+        CueListPlaybackAction::Resume => {
+            playback.resume(id).map(|()| EnginePlaybackOutcome::Applied)
         }
         CueListPlaybackAction::Release => Ok(EnginePlaybackOutcome::Changed(addressed_effect(
             durable_effect(playback.release(id)),

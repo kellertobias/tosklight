@@ -167,6 +167,7 @@ describe("LightClientRuntime", () => {
 				frame: 88,
 				duration_frame: 440,
 				audio_linked: true,
+				cue_list_clips: [],
 			},
 		} satisfies EventPayload;
 

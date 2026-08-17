@@ -30,8 +30,13 @@ import {
 	type TimecodeTransportAction,
 	type TimecodeTransportSnapshot,
 } from "../api/client/timecodes";
+import type { CueList } from "../api/types";
 import { useCommandLineSurface } from "../components/control/commandLine/useCommandLineSurface";
 import { RootConfinedFilePickerButton } from "../components/files/RootConfinedFilePickerButton";
+import {
+	useReleaseFadeMillis,
+	useSequenceMasterFadeMillis,
+} from "../features/configuration/ConfigurationState";
 import {
 	consumeObjectEditorRequest,
 	currentObjectEditorRequest,
@@ -39,6 +44,10 @@ import {
 } from "../features/controlSurfaceInteraction/objectEditorRequest";
 import { useActiveShowId } from "../features/deskSnapshot/DeskSnapshotState";
 import { usePatchedFixturesView } from "../features/patch/PatchState";
+import {
+	type SaveCueListTopology,
+	useCueListTopologyWriter,
+} from "../features/playbackTopology/useCueListTopologyWriter";
 import { useCueLists } from "../features/showObjects/ShowObjectsState";
 import { useShowObjectView } from "../features/showObjects/ShowObjectsView";
 import {
@@ -49,6 +58,7 @@ import { useTimecodeActions } from "../features/timecode/TimecodeActionsContext"
 import { TimecodeAutosaveWriter } from "../features/timecode/TimecodeAutosaveWriter";
 import {
 	type TimecodeAudioPlayerOption,
+	type TimecodeCueListOption,
 	TimecodeTimelineEditor,
 	type TimecodeTimelineEditorHandle,
 } from "../features/timecode/TimecodeTimelineEditor";
@@ -70,6 +80,9 @@ export function TimecodeRuntimeWindow({
 		observeCommand: true,
 	});
 	const cueLists = useCueLists(active);
+	const saveCueList = useCueListTopologyWriter();
+	const sequenceFadeMillis = useSequenceMasterFadeMillis() ?? 3_000;
+	const releaseFadeMillis = useReleaseFadeMillis() ?? 3_000;
 	const patchedFixtures = usePatchedFixturesView(active);
 	const audioPlayers = useMemo<TimecodeAudioPlayerOption[]>(
 		() =>
@@ -92,9 +105,10 @@ export function TimecodeRuntimeWindow({
 			cueLists.map((cueList) => ({
 				id: cueList.body.id,
 				name: cueList.body.name,
-				cues: cueList.body.cues.flatMap((cue) =>
-					cue.id ? [{ id: cue.id, number: cue.number, name: cue.name }] : [],
-				),
+				cues: cueList.body.cues,
+				objectId: cueList.id,
+				revision: cueList.revision,
+				body: cueList.body,
 			})),
 		[cueLists],
 	);
@@ -194,6 +208,8 @@ export function TimecodeRuntimeWindow({
 				api={api}
 				snapshot={runtime.get(editing.definition.id)}
 				cueLists={timelineCueLists}
+				saveCueList={saveCueList}
+				timingDefaults={{ sequenceFadeMillis, releaseFadeMillis }}
 				audioPlayers={audioPlayers}
 				onClose={async () => {
 					await refresh();
@@ -362,18 +378,21 @@ export function TimecodeEditor({
 	snapshot,
 	cueLists,
 	audioPlayers,
+	saveCueList,
+	timingDefaults = { sequenceFadeMillis: 3_000, releaseFadeMillis: 3_000 },
 	onClose,
 }: {
 	showId: string | null;
 	item: TimecodeObjectRecord | NewTimecode;
 	api: TimecodesApiClient;
 	snapshot?: TimecodeTransportSnapshot;
-	cueLists: Array<{
-		id: string;
-		name: string;
-		cues: Array<{ id: string; number: string; name: string }>;
-	}>;
+	cueLists: TimecodeCueListOption[];
 	audioPlayers: TimecodeAudioPlayerOption[];
+	saveCueList?: SaveCueListTopology;
+	timingDefaults?: {
+		sequenceFadeMillis: number;
+		releaseFadeMillis: number;
+	};
 	onClose(): Promise<void>;
 }) {
 	const {
@@ -394,12 +413,34 @@ export function TimecodeEditor({
 	const [error, setError] = useState<string | null>(null);
 	const [actionBusy, setActionBusy] = useState(false);
 	const [audioImporting, setAudioImporting] = useState(false);
+	const [cueTimingSaving, setCueTimingSaving] = useState(false);
+	const cueTimingSavingRef = useRef(false);
+	const [cueListOverrides, setCueListOverrides] = useState<
+		Map<string, (typeof cueLists)[number]>
+	>(new Map());
 	const [settingsAnchor, setSettingsAnchor] = useState<DOMRect | null>(null);
 	const [settingsOpen, setSettingsOpen] = useState(false);
 	const [markersLocked, setMarkersLocked] = useState(false);
 	const [csvMode, setCsvMode] = useState<"append" | "replace">("append");
 	const [csvError, setCsvError] = useState<string | null>(null);
 	const timelineRef = useRef<TimecodeTimelineEditorHandle>(null);
+	const effectiveCueLists = cueLists.map(
+		(cueList) => cueListOverrides.get(cueList.id) ?? cueList,
+	);
+	useEffect(() => {
+		setCueListOverrides((current) => {
+			let changed = false;
+			const next = new Map(current);
+			for (const cueList of cueLists) {
+				const local = next.get(cueList.id);
+				if (local && (cueList.revision ?? 0) >= (local.revision ?? 0)) {
+					next.delete(cueList.id);
+					changed = true;
+				}
+			}
+			return changed ? next : current;
+		});
+	}, [cueLists]);
 	const initialRecord = "isNew" in item ? null : item;
 	const writer = useMemo(
 		() =>
@@ -444,7 +485,47 @@ export function TimecodeEditor({
 	}, [waveformError]);
 	const duration = draft.duration_frame ?? 0;
 	const frame = Math.min(editorFrame, duration);
-	const busy = saving || actionBusy;
+	const busy = saving || actionBusy || cueTimingSaving;
+	const saveCueTiming = async (cueListId: string, body: CueList) => {
+		if (cueTimingSavingRef.current)
+			throw new Error("Another Cue timing edit is still saving.");
+		const source = effectiveCueLists.find(
+			(cueList) => cueList.id === cueListId,
+		);
+		if (!source?.objectId || source.revision === undefined || !saveCueList)
+			throw new Error("The authoritative Cue List writer is unavailable.");
+		cueTimingSavingRef.current = true;
+		setCueTimingSaving(true);
+		try {
+			const saved = await saveCueList(
+				{
+					cueListId,
+					expectedRevision: source.revision,
+					expectedObjectId: source.objectId,
+				},
+				body,
+			);
+			if (!saved)
+				throw new Error("The desk did not return the saved Cue List.");
+			setCueListOverrides((current) => {
+				const next = new Map(current);
+				next.set(cueListId, {
+					id: saved.body.id,
+					name: saved.body.name,
+					cues: saved.body.cues,
+					objectId: saved.id,
+					revision: saved.revision,
+					body: saved.body,
+				});
+				return next;
+			});
+			setError(null);
+			return saved.body;
+		} finally {
+			cueTimingSavingRef.current = false;
+			setCueTimingSaving(false);
+		}
+	};
 	const act = async (action: TimecodeTransportAction) => {
 		if (!showId || !record) return;
 		setActionBusy(true);
@@ -552,7 +633,7 @@ export function TimecodeEditor({
 	const addAction = useTimecodeAddAction({
 		timelineRef,
 		draft,
-		cueLists,
+		cueLists: effectiveCueLists,
 		audioPlayers,
 		onError: setError,
 	});
@@ -652,15 +733,19 @@ export function TimecodeEditor({
 				definition={draft}
 				frame={frame}
 				fps={FPS}
-				cueLists={cueLists}
+				cueLists={effectiveCueLists}
 				audioPlayers={audioPlayers}
 				waveformPeaks={waveformPeaks}
 				markersLocked={markersLocked}
+				clipStatuses={snapshot?.cue_list_clips}
 				onScrub={setEditorFrame}
 				onCommit={setDraft}
 				onPreview={previewDraft}
 				onBeginGesture={beginGesture}
 				onEndGesture={endGesture}
+				timingDefaults={timingDefaults}
+				onSaveCueList={saveCueTiming}
+				onCueTimingError={setError}
 			/>
 		</section>
 	);

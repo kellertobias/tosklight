@@ -100,6 +100,9 @@ impl PlaybackEngine {
         });
         let mut transitions = Vec::with_capacity(keys.len());
         for key in keys {
+            if matches!(key, PlaybackKey::CueList(id) if self.timeline_controlled.contains(&id)) {
+                continue;
+            }
             let transition_source = self.transition_source_at(key, now);
             let Some(playback) = self.active.get_mut(&key) else {
                 continue;

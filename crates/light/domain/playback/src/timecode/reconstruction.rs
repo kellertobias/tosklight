@@ -26,7 +26,9 @@ impl TimecodeDefinition {
             match &lane.content {
                 TimecodeLaneContent::CueList { cue_list_id, clips } => {
                     let mut lane_state = None;
-                    for clip in clips {
+                    let mut ordered = clips.iter().collect::<Vec<_>>();
+                    ordered.sort_by_key(|clip| (clip.start_frame, clip.end_frame, clip.id));
+                    for clip in ordered {
                         if frame.0 < clip.start_frame.0 {
                             break;
                         }

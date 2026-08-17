@@ -1,3 +1,5 @@
+import type { TimecodeCueListClipExecution as WireTimecodeCueListClipExecution } from "../generated/light-wire";
+
 export interface TimecodeDefinition {
 	id: string;
 	number: number;
@@ -122,7 +124,10 @@ export interface TimecodeTransportSnapshot {
 	frame: number;
 	duration_frame: number;
 	audio_linked: boolean;
+	cue_list_clips: TimecodeCueListClipStatus[];
 }
+
+export type TimecodeCueListClipStatus = WireTimecodeCueListClipExecution;
 
 export interface TimecodeAudioOutputDevices {
 	devices: string[];

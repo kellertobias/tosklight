@@ -1,11 +1,14 @@
 use std::sync::{Arc, Mutex};
 
 use light_core::CueListId;
+use light_engine::{CueListPlaybackAction, Engine, EnginePlaybackCommand, EngineSnapshot};
 use light_playback::{
-    TimecodeClipEnd, TimecodeClipId, TimecodeClipStart, TimecodeCueListClip, TimecodeFrame,
-    TimecodeFrameRate, TimecodeId, TimecodeLane, TimecodeLaneContent, TimecodeLaneId,
-    TimecodeTransportAction, TimecodeTransportState,
+    Cue, CueList, CueListMode, CueNumber, CueTrigger, IntensityPriorityMode, RestartMode,
+    TimecodeClipEnd, TimecodeClipId, TimecodeClipStart, TimecodeCueListClip,
+    TimecodeCueListClipExecutionKind, TimecodeFrame, TimecodeFrameRate, TimecodeId, TimecodeLane,
+    TimecodeLaneContent, TimecodeLaneId, TimecodeTransportAction, TimecodeTransportState, WrapMode,
 };
+use light_programmer::ProgrammerRegistry;
 use uuid::Uuid;
 
 use super::*;
@@ -102,6 +105,303 @@ fn service() -> (
         clock,
         publisher,
     )
+}
+
+fn execution_cue_list() -> CueList {
+    let mut first = Cue::new(CueNumber::try_from_legacy_f64(1.0).unwrap());
+    first.trigger = CueTrigger::Manual;
+    let mut second = Cue::new(CueNumber::try_from_legacy_f64(2.0).unwrap());
+    second.trigger = CueTrigger::Timecode { frame: 10 };
+    CueList {
+        id: CueListId(Uuid::from_u128(3)),
+        name: "Timeline".into(),
+        priority: 0,
+        mode: CueListMode::Sequence,
+        looped: false,
+        intensity_priority_mode: IntensityPriorityMode::Htp,
+        wrap_mode: Some(WrapMode::Off),
+        restart_mode: RestartMode::FirstCue,
+        force_cue_timing: false,
+        disable_cue_timing: false,
+        auto_off_at_zero: false,
+        auto_off_flash_release: false,
+        chaser_step_millis: 1_000,
+        chaser_xfade_millis: 0,
+        chaser_xfade_percent: Some(0),
+        speed_group: None,
+        speed_multiplier: 1.0,
+        cues: vec![first, second],
+    }
+}
+
+fn execution_engine(cue_list: &CueList) -> Engine {
+    let engine = Engine::new(ProgrammerRegistry::default());
+    engine
+        .replace_snapshot(EngineSnapshot {
+            cue_lists: vec![cue_list.clone()].into(),
+            revision: 1,
+            ..EngineSnapshot::default()
+        })
+        .unwrap();
+    engine
+}
+
+fn execution_definition(cue_list: &CueList) -> light_playback::TimecodeDefinition {
+    let mut value = definition();
+    value.lanes[0].content = TimecodeLaneContent::CueList {
+        cue_list_id: cue_list.id,
+        clips: vec![TimecodeCueListClip {
+            id: TimecodeClipId(Uuid::from_u128(4)),
+            start_frame: TimecodeFrame::ZERO,
+            end_frame: TimecodeFrame(20),
+            start_cue_id: cue_list.cues[0].id,
+            end_cue_id: cue_list.cues[1].id,
+            start_behavior: TimecodeClipStart::State,
+            end_behavior: TimecodeClipEnd::Release,
+        }],
+    };
+    value
+}
+
+#[test]
+fn cue_list_reconciliation_seeks_pauses_resumes_and_repairs_operator_drift() {
+    let (service, _, _) = service();
+    let cue_list = execution_cue_list();
+    let engine = execution_engine(&cue_list);
+    let definition = execution_definition(&cue_list);
+    service.install(definition.clone(), None).unwrap();
+    service
+        .handle(definition.id, TimecodeTransportAction::Go)
+        .unwrap();
+    service.reconcile_cue_lists(&engine);
+    assert_eq!(
+        engine
+            .playback_runtime_status_for_cue_list(cue_list.id)
+            .unwrap()
+            .playback
+            .current_cue_id,
+        Some(cue_list.cues[0].id)
+    );
+
+    service
+        .handle(definition.id, TimecodeTransportAction::Pause)
+        .unwrap();
+    service.reconcile_cue_lists(&engine);
+    let paused = engine
+        .playback_runtime_status_for_cue_list(cue_list.id)
+        .unwrap();
+    assert!(paused.playback.paused);
+    let paused_cue = paused.playback.current_cue_id;
+    service
+        .handle(definition.id, TimecodeTransportAction::Pause)
+        .unwrap();
+    service.reconcile_cue_lists(&engine);
+    let resumed = engine
+        .playback_runtime_status_for_cue_list(cue_list.id)
+        .unwrap();
+    assert!(!resumed.playback.paused);
+    assert_eq!(resumed.playback.current_cue_id, paused_cue);
+
+    engine
+        .execute_playback(EnginePlaybackCommand::CueList {
+            id: cue_list.id,
+            action: CueListPlaybackAction::Go,
+        })
+        .unwrap();
+    assert_eq!(
+        engine
+            .playback_runtime_status_for_cue_list(cue_list.id)
+            .unwrap()
+            .playback
+            .current_cue_id,
+        Some(cue_list.cues[1].id)
+    );
+    service.reconcile_cue_lists(&engine);
+    assert_eq!(
+        engine
+            .playback_runtime_status_for_cue_list(cue_list.id)
+            .unwrap()
+            .playback
+            .current_cue_id,
+        Some(cue_list.cues[0].id)
+    );
+
+    service
+        .handle(
+            definition.id,
+            TimecodeTransportAction::Seek {
+                frame: TimecodeFrame(10),
+            },
+        )
+        .unwrap();
+    service.reconcile_cue_lists(&engine);
+    assert_eq!(
+        engine
+            .playback_runtime_status_for_cue_list(cue_list.id)
+            .unwrap()
+            .playback
+            .current_cue_id,
+        Some(cue_list.cues[1].id)
+    );
+}
+
+#[test]
+fn cue_list_reconciliation_publishes_current_unable_status() {
+    let (service, _, publisher) = service();
+    let definition = definition();
+    let engine = Engine::new(ProgrammerRegistry::default());
+    service.install(definition.clone(), None).unwrap();
+    service
+        .handle(definition.id, TimecodeTransportAction::Go)
+        .unwrap();
+    service.reconcile_cue_lists(&engine);
+
+    let snapshot = service.snapshot(definition.id).unwrap();
+    assert_eq!(
+        snapshot.cue_list_clips[0].kind,
+        TimecodeCueListClipExecutionKind::Unable
+    );
+    let changes = publisher.changes();
+    let published = changes.last().unwrap();
+    assert_eq!(
+        published.cause,
+        TimecodeRuntimeChangeCause::CueListExecution
+    );
+    assert_eq!(published.snapshot.cue_list_clips, snapshot.cue_list_clips);
+}
+
+#[test]
+fn state_start_reconstructs_entry_but_forward_crossing_executes_the_next_cue() {
+    let (service, clock, _) = service();
+    let cue_list = execution_cue_list();
+    let engine = execution_engine(&cue_list);
+    let definition = execution_definition(&cue_list);
+    service.install(definition.clone(), None).unwrap();
+    service
+        .handle(definition.id, TimecodeTransportAction::Go)
+        .unwrap();
+    service.reconcile_cue_lists(&engine);
+    assert!(
+        engine
+            .playback_runtime_status_for_cue_list(cue_list.id)
+            .unwrap()
+            .playback
+            .discrete_cue_actions_suppressed
+    );
+
+    clock.advance(400_000);
+    service.tick();
+    service.reconcile_cue_lists(&engine);
+    let crossed = engine
+        .playback_runtime_status_for_cue_list(cue_list.id)
+        .unwrap();
+    assert_eq!(crossed.playback.current_cue_id, Some(cue_list.cues[1].id));
+    assert!(!crossed.playback.discrete_cue_actions_suppressed);
+}
+
+#[test]
+fn cue_start_executes_once_and_same_cue_seek_reconstructs_fade_progress() {
+    let (service, _, _) = service();
+    let cue_list = execution_cue_list();
+    let engine = execution_engine(&cue_list);
+    let mut definition = execution_definition(&cue_list);
+    let TimecodeLaneContent::CueList { clips, .. } = &mut definition.lanes[0].content else {
+        unreachable!()
+    };
+    clips[0].start_behavior = TimecodeClipStart::Cue;
+    service.install(definition.clone(), None).unwrap();
+    service
+        .handle(definition.id, TimecodeTransportAction::Go)
+        .unwrap();
+    service.reconcile_cue_lists(&engine);
+    let entered = engine
+        .playback_runtime_status_for_cue_list(cue_list.id)
+        .unwrap();
+    assert!(!entered.playback.discrete_cue_actions_suppressed);
+    let ordinal = entered.playback.transition_ordinal;
+    service.reconcile_cue_lists(&engine);
+    assert_eq!(
+        engine
+            .playback_runtime_status_for_cue_list(cue_list.id)
+            .unwrap()
+            .playback
+            .transition_ordinal,
+        ordinal
+    );
+
+    service
+        .handle(
+            definition.id,
+            TimecodeTransportAction::Seek {
+                frame: TimecodeFrame(4),
+            },
+        )
+        .unwrap();
+    service.reconcile_cue_lists(&engine);
+    let first_seek = engine
+        .playback_runtime_status_for_cue_list(cue_list.id)
+        .unwrap();
+    assert!(first_seek.playback.discrete_cue_actions_suppressed);
+    assert!(!first_seek.playback.transition_timing_bypassed);
+    let first_activation = first_seek.playback.activated_at;
+
+    service
+        .handle(
+            definition.id,
+            TimecodeTransportAction::Seek {
+                frame: TimecodeFrame(5),
+            },
+        )
+        .unwrap();
+    service.reconcile_cue_lists(&engine);
+    let second_seek = engine
+        .playback_runtime_status_for_cue_list(cue_list.id)
+        .unwrap();
+    assert!(second_seek.playback.discrete_cue_actions_suppressed);
+    assert!(!second_seek.playback.transition_timing_bypassed);
+    assert!((first_activation - second_seek.playback.activated_at).num_milliseconds() >= 35);
+}
+
+#[test]
+fn stopping_one_timecode_does_not_release_another_timecodes_cue_list() {
+    let (service, _, _) = service();
+    let cue_list = execution_cue_list();
+    let engine = execution_engine(&cue_list);
+    let first = execution_definition(&cue_list);
+    let mut second = first.clone();
+    second.id = TimecodeId(Uuid::from_u128(20));
+    service.install(first.clone(), None).unwrap();
+    service.install(second.clone(), None).unwrap();
+    service
+        .handle(first.id, TimecodeTransportAction::Go)
+        .unwrap();
+    service
+        .handle(second.id, TimecodeTransportAction::Go)
+        .unwrap();
+    service.reconcile_cue_lists(&engine);
+
+    service
+        .handle(second.id, TimecodeTransportAction::Stop)
+        .unwrap();
+    service.reconcile_cue_lists(&engine);
+    assert_eq!(
+        engine
+            .playback_runtime_status_for_cue_list(cue_list.id)
+            .unwrap()
+            .playback
+            .current_cue_id,
+        Some(cue_list.cues[0].id)
+    );
+
+    service
+        .handle(first.id, TimecodeTransportAction::Stop)
+        .unwrap();
+    service.reconcile_cue_lists(&engine);
+    assert!(
+        engine
+            .playback_runtime_status_for_cue_list(cue_list.id)
+            .is_none()
+    );
 }
 
 #[test]

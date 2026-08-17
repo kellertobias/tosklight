@@ -273,6 +273,28 @@ pub enum TimecodeTransportState {
     Paused,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum TimecodeCueListClipExecutionState {
+    Armed,
+    Active,
+    Held,
+    Released,
+    Unable,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct TimecodeCueListClipExecution {
+    pub lane_id: Uuid,
+    pub cue_list_id: Uuid,
+    pub clip_id: Uuid,
+    pub state: TimecodeCueListClipExecutionState,
+    pub cue_id: Option<Uuid>,
+    #[ts(type = "number | null")]
+    pub cue_start_frame: Option<u64>,
+    pub message: Option<String>,
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 pub struct TimecodeTransportSnapshot {
     pub timecode_id: Uuid,
@@ -284,6 +306,7 @@ pub struct TimecodeTransportSnapshot {
     #[ts(type = "number")]
     pub duration_frame: u64,
     pub audio_linked: bool,
+    pub cue_list_clips: Vec<TimecodeCueListClipExecution>,
 }
 
 #[cfg(test)]

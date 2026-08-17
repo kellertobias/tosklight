@@ -358,6 +358,7 @@ impl PlaybackEngine {
                     cuelist_swap_states: HashMap::new(),
                     temporary: HashMap::new(),
                     swap_held: HashSet::new(),
+                    timeline_controlled: self.timeline_controlled.clone(),
                     dynamics_paused_at: None,
                     speed_groups_bpm: self.speed_groups_bpm,
                     speed_groups_paused: self.speed_groups_paused,

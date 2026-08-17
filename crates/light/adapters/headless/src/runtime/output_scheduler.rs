@@ -228,6 +228,7 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
         let Ok(_activation) = runtime.activation.try_acquire() else {
             return send_retained_output(&runtime).await;
         };
+        runtime.timecodes.reconcile_cue_lists(&runtime.engine);
         let visualization_scope = VisualizationScope {
             show_id: runtime.active_show.current().map(|show| show.id.0),
         };
@@ -402,6 +403,11 @@ fn dispatch_automatic_cue_actions(
     };
     let snapshot = engine.snapshot();
     for status in engine.playback_runtime_status() {
+        if status.playback.transition_timing_bypassed
+            || status.playback.discrete_cue_actions_suppressed
+        {
+            continue;
+        }
         let cue_list_id = status.playback.cue_list_id;
         let Some(current) = status
             .playback
@@ -487,6 +493,7 @@ pub(super) async fn render_test_tick(state: AppState) -> io::Result<u64> {
         .collect::<HashMap<_, _>>();
     let (rendered, semantic_timing, visualization_scope) = {
         let _activation = state.active_show.acquire_shared().await;
+        state.timecodes.reconcile_cue_lists(state.output.engine());
         let visualization_scope = VisualizationScope {
             show_id: state.active_show.current().map(|show| show.id.0),
         };

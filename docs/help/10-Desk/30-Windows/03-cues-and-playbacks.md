@@ -68,8 +68,27 @@ for playback use.
 The Timecode Pool stores portable timelines. The editor has transport, seek, a complete overview,
 markers, and Cuelist, Speed, and Audio lanes; select an item to edit its timing and properties.
 Markers label positions but do not execute output. The timeline and its optional audio run from one
-authoritative clock, so reopening the editor restores the live position. Configure the source,
-frame rate, loss behavior, audio device, and latency trim in Desk Setup. See
+authoritative clock, so reopening the editor restores the live position.
+
+A Cuelist clip contains the individual Cues in its selected Cue range. Each Cue shows its start
+position, its **In fade** across the top of the lane, and its **Out fade** across the bottom. The
+start and end handles of each range snap to Timecode frames. Moving a start handle changes the
+corresponding delay boundary; moving an end handle changes when that fade completes. The desk saves
+the resulting delay and fade duration on the authoritative Cue in the Cuelist. The clip retains only
+its Timecode placement, Cue range, and State Start or Cue Start plus Hold or Release behavior; it
+does not keep a second private copy of Cue timing. A linked timing range names its source; dragging
+one of its handles is the operator's explicit choice to replace that link with the displayed
+independent timing.
+
+Playing Timecode drives that shared Cuelist runtime and shows which clip and Cue are executing.
+Pause freezes Cue timing and output. Seeking, moving backwards, resuming, and looping reconstruct the
+same current Cue, tracked state, timing progress, and output that uninterrupted playback produces at
+the same frame. **Hold** retains the clip's final Cue until it is superseded; **Release** removes the
+clip's Cuelist ownership at its end frame. A missing Cuelist or Cue, invalid Cue range, unsupported
+Cue kind, or rejected timing remains visible with a concrete recovery cause. The editor never shows
+a clip as executing merely because the Timecode transport is Playing.
+
+Configure the source, frame rate, loss behavior, audio device, and latency trim in Desk Setup. See
 [Triggers, Chasers, and Speed Groups](../20-Programmer-and-Cues/13-triggers-chasers-and-speed.md)
 for timing and trigger behavior.
 

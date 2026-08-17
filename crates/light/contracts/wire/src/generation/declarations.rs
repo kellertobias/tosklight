@@ -118,6 +118,8 @@ fn timecode(config: &Config) -> Vec<String> {
         TimecodeTransportAction::decl(config),
         TimecodeTransportActionRequest::decl(config),
         TimecodeTransportState::decl(config),
+        TimecodeCueListClipExecutionState::decl(config),
+        TimecodeCueListClipExecution::decl(config),
         TimecodeTransportSnapshot::decl(config),
     ]
 }

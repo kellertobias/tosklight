@@ -975,7 +975,12 @@ pub(super) fn apply_transport_request(
     let timecode_id = request.timecode_id;
     let id = TimecodeId(timecode_id);
     ensure_installed(state, show_id, id)?;
-    let outcome = apply_transport_action(state, id, domain_action(request.action))?;
+    let mut outcome = apply_transport_action(state, id, domain_action(request.action))?;
+    state.timecodes.reconcile_cue_lists(state.output.engine());
+    outcome.snapshot = state
+        .timecodes
+        .snapshot(id)
+        .map_err(|error| ApiError::bad_request(error.message))?;
     emit(
         state,
         "timecode_runtime_changed",
@@ -1216,6 +1221,35 @@ pub(super) fn wire_snapshot(
         frame: snapshot.frame.0,
         duration_frame: snapshot.duration.0,
         audio_linked: snapshot.audio_linked,
+        cue_list_clips: snapshot
+            .cue_list_clips
+            .into_iter()
+            .map(|clip| wire::TimecodeCueListClipExecution {
+                lane_id: clip.lane_id.0,
+                cue_list_id: clip.cue_list_id.0,
+                clip_id: clip.clip_id.0,
+                state: match clip.kind {
+                    light_playback::TimecodeCueListClipExecutionKind::Armed => {
+                        wire::TimecodeCueListClipExecutionState::Armed
+                    }
+                    light_playback::TimecodeCueListClipExecutionKind::Active => {
+                        wire::TimecodeCueListClipExecutionState::Active
+                    }
+                    light_playback::TimecodeCueListClipExecutionKind::Held => {
+                        wire::TimecodeCueListClipExecutionState::Held
+                    }
+                    light_playback::TimecodeCueListClipExecutionKind::Released => {
+                        wire::TimecodeCueListClipExecutionState::Released
+                    }
+                    light_playback::TimecodeCueListClipExecutionKind::Unable => {
+                        wire::TimecodeCueListClipExecutionState::Unable
+                    }
+                },
+                cue_id: clip.cue_id,
+                cue_start_frame: clip.cue_start_frame.map(|frame| frame.0),
+                message: clip.message,
+            })
+            .collect(),
     }
 }
 

@@ -587,6 +587,144 @@
 	border-color: #618d51;
 	background: #1f4027;
 }
+.timecode-cue-clip-contents {
+	position: absolute;
+	inset: 0;
+	display: block;
+	overflow: hidden;
+	border-radius: inherit;
+	pointer-events: none;
+}
+.timecode-cue-clip-status {
+	position: absolute;
+	z-index: 8;
+	top: 0.2rem;
+	right: 0.2rem;
+	display: flex;
+	max-width: calc(100% - 0.4rem);
+	align-items: baseline;
+	gap: 0.3rem;
+	overflow: hidden;
+	padding: 0.12rem 0.28rem;
+	border: 1px solid #81a875;
+	border-radius: 0.2rem;
+	background: rgb(14 32 19 / 92%);
+	color: #d7f5cc;
+	pointer-events: none;
+}
+.timecode-cue-clip-status small {
+	overflow: hidden;
+	color: inherit;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.timecode-cue-clip-status.active {
+	border-color: #58d4ef;
+	background: rgb(10 46 57 / 94%);
+	color: #b7f2ff;
+}
+.timecode-cue-clip-status.held {
+	border-color: #f5c451;
+	background: rgb(61 45 10 / 94%);
+	color: #ffe8a3;
+}
+.timecode-cue-clip-status.unable {
+	border-color: #ff6a62;
+	background: rgb(71 20 24 / 96%);
+	color: #ffb5af;
+}
+.timecode-cue-start-marker {
+	position: absolute;
+	z-index: 4;
+	top: 50%;
+	bottom: 0;
+	width: 2px;
+	border-left: 2px solid #fff;
+	color: #fff;
+	font-size: 0.62rem;
+	font-variant-numeric: tabular-nums;
+	line-height: 1;
+	pointer-events: none;
+}
+.timecode-cue-start-marker::before {
+	position: absolute;
+	top: -0.8rem;
+	left: 2px;
+	padding: 0.08rem 0.16rem;
+	background: rgb(17 18 26 / 88%);
+	content: attr(title);
+	white-space: nowrap;
+}
+.timecode-cue-fade-range {
+	position: absolute;
+	z-index: 3;
+	height: calc(50% - 5px);
+	min-width: 2px;
+	border-radius: 2px;
+	pointer-events: none;
+}
+.timecode-cue-fade-range.in {
+	top: 3px;
+	background: #58d4ef;
+}
+.timecode-cue-fade-range.out {
+	bottom: 3px;
+	background: #f39a4a;
+}
+.timecode-cue-fade-handle {
+	position: absolute;
+	top: 50%;
+	width: 44px;
+	height: 44px;
+	transform: translate(-50%, -50%);
+	cursor: ew-resize;
+	touch-action: none;
+	pointer-events: auto;
+}
+.timecode-cue-fade-handle::after {
+	position: absolute;
+	top: 12px;
+	bottom: 12px;
+	left: 21px;
+	width: 3px;
+	border-radius: 2px;
+	background: #fff;
+	box-shadow: 0 0 0 1px rgb(0 0 0 / 65%);
+	content: "";
+}
+.timecode-cue-fade-handle.start {
+	left: 0;
+}
+.timecode-cue-fade-handle.end {
+	left: 100%;
+}
+.timecode-cue-fade-handle:focus-visible::after {
+	outline: 2px solid #fff;
+	outline-offset: 2px;
+}
+.timecode-cue-timing.unsupported .timecode-cue-start-marker {
+	border-color: #ff6a62;
+	color: #ff6a62;
+}
+.timecode-cue-timing.unsupported .timecode-cue-fade-range {
+	opacity: 0.3;
+}
+.timecode-cue-clip-diagnostic,
+.timecode-cue-diagnostic {
+	position: absolute;
+	z-index: 6;
+	right: 0.2rem;
+	bottom: 0.15rem;
+	max-width: calc(100% - 0.4rem);
+	overflow: hidden;
+	padding: 0.1rem 0.2rem;
+	background: rgb(71 20 24 / 92%);
+	color: #ffb5af;
+	font-size: 0.62rem;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	pointer-events: none;
+}
 .timecode-clip-edge {
 	position: absolute;
 	top: 0;

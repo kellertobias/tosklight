@@ -323,3 +323,170 @@ fn validation_accepts_non_overlapping_cuelist_clips_in_any_persisted_order() {
 
     timecode.validate().unwrap();
 }
+
+fn execution_cue_list() -> crate::CueList {
+    let mut cues = (1..=4)
+        .map(|number| {
+            crate::Cue::new(crate::CueNumber::try_from_legacy_f64(f64::from(number)).unwrap())
+        })
+        .collect::<Vec<_>>();
+    cues[0].fade_millis = 100;
+    cues[0].trigger = crate::CueTrigger::Manual;
+    cues[1].fade_millis = 100;
+    cues[1].trigger = crate::CueTrigger::Follow { delay_millis: 100 };
+    cues[2].fade_millis = 100;
+    cues[2].trigger = crate::CueTrigger::Wait { delay_millis: 200 };
+    cues[3].trigger = crate::CueTrigger::Follow { delay_millis: 0 };
+    crate::CueList {
+        id: CueListId(id(30)),
+        name: "Timeline".into(),
+        priority: 0,
+        mode: crate::CueListMode::Sequence,
+        looped: false,
+        intensity_priority_mode: crate::IntensityPriorityMode::Htp,
+        wrap_mode: Some(crate::WrapMode::Off),
+        restart_mode: crate::RestartMode::FirstCue,
+        force_cue_timing: false,
+        disable_cue_timing: false,
+        auto_off_at_zero: false,
+        auto_off_flash_release: false,
+        chaser_step_millis: 1_000,
+        chaser_xfade_millis: 0,
+        chaser_xfade_percent: Some(0),
+        speed_group: None,
+        speed_multiplier: 1.0,
+        cues,
+    }
+}
+
+fn execution_definition(cue_list: &crate::CueList) -> TimecodeDefinition {
+    TimecodeDefinition {
+        id: TimecodeId(id(31)),
+        number: 31,
+        name: "Timeline".into(),
+        duration: Some(TimecodeFrame(300)),
+        transport_offset: TimecodeFrame::ZERO,
+        auto_start: false,
+        audio: None,
+        markers: vec![],
+        lanes: vec![TimecodeLane {
+            id: TimecodeLaneId(id(32)),
+            name: "Cues".into(),
+            content: TimecodeLaneContent::CueList {
+                cue_list_id: cue_list.id,
+                clips: vec![TimecodeCueListClip {
+                    id: TimecodeClipId(id(33)),
+                    start_frame: TimecodeFrame(100),
+                    end_frame: TimecodeFrame(200),
+                    start_cue_id: cue_list.cues[0].id,
+                    end_cue_id: cue_list.cues[3].id,
+                    start_behavior: TimecodeClipStart::State,
+                    end_behavior: TimecodeClipEnd::Release,
+                }],
+            },
+        }],
+    }
+}
+
+fn execution_at(
+    definition: &TimecodeDefinition,
+    cue_list: &crate::CueList,
+    frame: u64,
+) -> TimecodeCueListClipExecution {
+    definition
+        .cue_list_clip_execution(
+            std::slice::from_ref(cue_list),
+            TimecodeFrame(frame),
+            TimecodeTransportState::Playing,
+            TimecodeCueTimingDefaults {
+                frame_rate: TimecodeFrameRate::whole_frames(44).unwrap(),
+                sequence_fade_millis: 0,
+                release_fade_millis: 0,
+            },
+        )
+        .remove(0)
+}
+
+#[test]
+fn cuelist_clip_seek_matches_follow_and_wait_schedule() {
+    let cue_list = execution_cue_list();
+    let definition = execution_definition(&cue_list);
+    assert_eq!(
+        execution_at(&definition, &cue_list, 107).cue_id,
+        Some(cue_list.cues[0].id)
+    );
+    assert_eq!(
+        execution_at(&definition, &cue_list, 108).cue_id,
+        Some(cue_list.cues[1].id)
+    );
+    assert_eq!(
+        execution_at(&definition, &cue_list, 117).cue_id,
+        Some(cue_list.cues[2].id)
+    );
+    assert_eq!(
+        execution_at(&definition, &cue_list, 121).cue_id,
+        Some(cue_list.cues[3].id)
+    );
+}
+
+#[test]
+fn cuelist_clip_seek_follows_a_stable_link_destination() {
+    let mut cue_list = execution_cue_list();
+    let destination = cue_list.cues[3].id;
+    cue_list.cues[0].trigger = crate::CueTrigger::Link {
+        cue_id: destination,
+        delay_millis: 100,
+    };
+    let definition = execution_definition(&cue_list);
+
+    assert_eq!(
+        execution_at(&definition, &cue_list, 107).cue_id,
+        Some(cue_list.cues[0].id)
+    );
+    assert_eq!(
+        execution_at(&definition, &cue_list, 108).cue_id,
+        Some(destination)
+    );
+}
+
+#[test]
+fn cuelist_clip_reports_manual_advance_and_missing_cue_as_unable() {
+    let mut cue_list = execution_cue_list();
+    cue_list.cues[1].trigger = crate::CueTrigger::Manual;
+    let mut definition = execution_definition(&cue_list);
+    let unable = execution_at(&definition, &cue_list, 100);
+    assert_eq!(unable.kind, TimecodeCueListClipExecutionKind::Unable);
+    assert!(unable.message.unwrap().contains("manual GO"));
+
+    let TimecodeLaneContent::CueList { clips, .. } = &mut definition.lanes[0].content else {
+        unreachable!()
+    };
+    clips[0].start_cue_id = Uuid::new_v4();
+    let missing = execution_at(&definition, &cue_list, 100);
+    assert_eq!(missing.kind, TimecodeCueListClipExecutionKind::Unable);
+    assert_eq!(missing.message.as_deref(), Some("start Cue does not exist"));
+}
+
+#[test]
+fn valid_unsorted_clips_reconstruct_in_frame_order_and_zero_length_is_rejected() {
+    let mut timecode = definition();
+    let first_start = {
+        let TimecodeLaneContent::CueList { clips, .. } = &mut timecode.lanes[0].content else {
+            unreachable!()
+        };
+        clips.reverse();
+        clips[0].start_frame
+    };
+    assert_eq!(
+        timecode.state_at(TimecodeFrame(150)).cue_lists[0].clip_id,
+        TimecodeClipId(id(4))
+    );
+    let TimecodeLaneContent::CueList { clips, .. } = &mut timecode.lanes[0].content else {
+        unreachable!()
+    };
+    clips[0].end_frame = first_start;
+    assert_eq!(
+        timecode.validate().unwrap_err().message,
+        "Cuelist clip end must follow its start"
+    );
+}

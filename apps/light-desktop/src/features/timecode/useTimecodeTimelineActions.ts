@@ -14,7 +14,7 @@ import {
 interface CueListOption {
 	id: string;
 	name: string;
-	cues: readonly { id: string; number: string; name: string }[];
+	cues: readonly { id?: string; number: string; name: string }[];
 }
 
 interface DragState {
@@ -279,7 +279,7 @@ export function useTimelineActions({
 		);
 		const first = cueList?.cues[0];
 		const last = cueList?.cues.at(-1);
-		if (!first || !last) return;
+		if (!first?.id || !last?.id) return;
 		onCommit(
 			addClipToDefinition(definition, laneId, {
 				id,

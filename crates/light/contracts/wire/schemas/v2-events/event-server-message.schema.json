@@ -7598,11 +7598,77 @@
         "manual_fallback"
       ]
     },
+    "TimecodeCueListClipExecution": {
+      "type": "object",
+      "properties": {
+        "clip_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "cue_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "cue_list_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "cue_start_frame": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "lane_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "message": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "$ref": "#/$defs/TimecodeCueListClipExecutionState"
+        }
+      },
+      "required": [
+        "lane_id",
+        "cue_list_id",
+        "clip_id",
+        "state",
+        "cue_id",
+        "cue_start_frame",
+        "message"
+      ]
+    },
+    "TimecodeCueListClipExecutionState": {
+      "type": "string",
+      "enum": [
+        "armed",
+        "active",
+        "held",
+        "released",
+        "unable"
+      ]
+    },
     "TimecodeTransportSnapshot": {
       "type": "object",
       "properties": {
         "audio_linked": {
           "type": "boolean"
+        },
+        "cue_list_clips": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TimecodeCueListClipExecution"
+          }
         },
         "duration_frame": {
           "type": "integer",
@@ -7633,7 +7699,8 @@
         "state",
         "frame",
         "duration_frame",
-        "audio_linked"
+        "audio_linked",
+        "cue_list_clips"
       ]
     },
     "TimecodeTransportState": {

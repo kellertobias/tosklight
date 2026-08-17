@@ -492,6 +492,7 @@ fn inactive_playback(number: u16, cue_list_id: CueListId, now: DateTime<Utc>) ->
         fader_zero_auto_off_armed: false,
         flash_restore_off: false,
         transition_timing_bypassed: false,
+        discrete_cue_actions_suppressed: false,
         transition_fade_fallback_millis: None,
         external_completion_millis: 0,
         manual_xfade_position: 0.0,

@@ -54,6 +54,13 @@ struct DynamicProgrammerCache {
 }
 
 impl Engine {
+    pub fn cue_timing_masters(&self) -> (u64, u64) {
+        (
+            self.sequence_master_fade_millis.load(Ordering::Relaxed),
+            self.release_fade_millis.load(Ordering::Relaxed),
+        )
+    }
+
     pub fn new(programmers: ProgrammerRegistry) -> Self {
         let clock = programmers.clock();
         let playback = PlaybackEngine::with_clock(Arc::clone(&clock));

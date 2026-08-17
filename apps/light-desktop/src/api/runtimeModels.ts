@@ -43,6 +43,7 @@ export interface TimecodeRuntime {
 	frame: number;
 	duration_frame: number;
 	audio_linked: boolean;
+	cue_list_clips?: WireTimecodeTransportSnapshot["cue_list_clips"];
 }
 
 export interface RunningTimecodeDefinition {

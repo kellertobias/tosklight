@@ -7,7 +7,7 @@ import {
 	within,
 } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { ShowObjectActionOutcome } from "../api/types";
+import type { CueList, ShowObjectActionOutcome } from "../api/types";
 import type { TimecodeDefinition, TimecodePatch } from "../api/types/timecode";
 import { TimecodeEditor } from "./TimecodeRuntimeWindow";
 
@@ -49,6 +49,7 @@ describe("TimecodeEditor title and settings", () => {
 					frame: 44,
 					duration_frame: 440,
 					audio_linked: false,
+					cue_list_clips: [],
 				}}
 				onClose={vi.fn()}
 			/>
@@ -200,6 +201,7 @@ describe("TimecodeEditor title and settings", () => {
 					frame: 44,
 					duration_frame: 440,
 					audio_linked: false,
+					cue_list_clips: [],
 				}}
 				onClose={vi.fn()}
 			/>,
@@ -308,6 +310,116 @@ describe("TimecodeEditor title and settings", () => {
 				markers: [expect.objectContaining({ frame: 44, name: "Marker 1" })],
 			}),
 		);
+	});
+
+	it("uses the CueList revision writer and reports a rejected nested timing edit", async () => {
+		const cueList: CueList = {
+			id: "00000000-0000-4000-8000-000000000170",
+			name: "Opening",
+			mode: "sequence",
+			priority: 0,
+			looped: false,
+			cues: [
+				{
+					id: "00000000-0000-4000-8000-000000000171",
+					number: "1",
+					name: "First",
+					fade_millis: 2_000,
+					delay_millis: 0,
+					trigger: { type: "wait", delay_millis: 0 },
+					changes: [],
+				},
+			],
+		};
+		const cueId = cueList.cues[0]?.id;
+		if (!cueId) throw new Error("expected Cue identity");
+		const timecode = {
+			...definition(),
+			lanes: [
+				{
+					id: "lane-1",
+					name: "Opening",
+					content: {
+						kind: "cue_list" as const,
+						cue_list_id: cueList.id,
+						clips: [
+							{
+								id: "clip-1",
+								start_frame: 44,
+								end_frame: 396,
+								start_cue_id: cueId,
+								end_cue_id: cueId,
+								start_behavior: "state" as const,
+								end_behavior: "release" as const,
+							},
+						],
+					},
+				},
+			],
+		};
+		const saveCueList = vi.fn(async (_basis: unknown, _body: CueList) => {
+			throw new Error("Cue List changed on another desk");
+		});
+		render(
+			<TimecodeEditor
+				showId={SHOW_ID}
+				item={{ revision: 4, definition: timecode }}
+				api={
+					{
+						create: vi.fn(),
+						update: vi.fn(),
+						delete: vi.fn(),
+						objects: vi.fn(),
+						transportAction: vi.fn(),
+						importAudio: vi.fn(),
+						waveform: vi.fn(),
+					} as never
+				}
+				cueLists={[
+					{
+						id: cueList.id,
+						name: cueList.name,
+						cues: cueList.cues,
+						objectId: "cue-list-object",
+						revision: 9,
+						body: cueList,
+					},
+				]}
+				audioPlayers={[]}
+				saveCueList={saveCueList}
+				onClose={vi.fn()}
+			/>,
+		);
+		await waitFor(() =>
+			expect(screen.getAllByText("Saved").length).toBeGreaterThan(0),
+		);
+		const canvas = document.querySelector<HTMLElement>(
+			".timecode-timeline-canvas",
+		);
+		const pixelsPerFrame = Number(canvas?.dataset.pixelsPerFrame);
+		const handle = screen.getByRole("slider", {
+			name: "Cue 1 In fade end",
+		});
+		fireEvent.pointerDown(handle, { pointerId: 30, clientX: 100 });
+		fireEvent.pointerMove(window, {
+			pointerId: 30,
+			clientX: 100 + 44 * pixelsPerFrame,
+		});
+		fireEvent.pointerUp(window, { pointerId: 30 });
+		await waitFor(() => expect(saveCueList).toHaveBeenCalledTimes(1));
+		expect(saveCueList.mock.calls[0]?.[0]).toEqual({
+			cueListId: cueList.id,
+			expectedRevision: 9,
+			expectedObjectId: "cue-list-object",
+		});
+		await waitFor(() =>
+			expect(screen.getByRole("alert")).toHaveTextContent(
+				"Cue 1 In fade was not saved: Cue List changed on another desk",
+			),
+		);
+		expect(
+			screen.getByRole("slider", { name: "Cue 1 In fade end" }),
+		).toHaveAttribute("aria-valuenow", "132");
 	});
 });
 
