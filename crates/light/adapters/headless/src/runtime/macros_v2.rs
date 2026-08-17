@@ -836,11 +836,27 @@ fn analyze_source(source: &str, cursor: Option<u32>) -> wire::MacroValidation {
                 {
                     continue;
                 }
-                let expanded = expand_statement_for_validation(statement, &definitions);
-                let result = expanded
-                    .as_deref()
-                    .map_err(Clone::clone)
-                    .and_then(tokenize_programmer_command);
+                let expanded = match expand_statement_for_validation(statement, &definitions) {
+                    Ok(expanded) => expanded,
+                    Err(error) => {
+                        status = wire::MacroLineStatus::Invalid;
+                        message = error;
+                        break;
+                    }
+                };
+                match light_application::parse_macro_delay_millis(&expanded) {
+                    Ok(Some(delay_millis)) => {
+                        message = format!("Macro delay · {} s", delay_millis as f64 / 1_000.0);
+                        continue;
+                    }
+                    Ok(None) => {}
+                    Err(error) => {
+                        status = wire::MacroLineStatus::Invalid;
+                        message = error;
+                        break;
+                    }
+                }
+                let result = tokenize_programmer_command(&expanded);
                 match result {
                     Ok((tokens, _)) if tokens.is_empty() => {
                         status = wire::MacroLineStatus::Invalid;
@@ -907,7 +923,11 @@ fn analyze_source_for_context(
     let executable = light_application::compile_macro_source(source)
         .expect("valid Macro source compiles")
         .lines;
-    let commands = executable
+    let ordinary = executable
+        .iter()
+        .filter(|line| line.delay_millis.is_none())
+        .collect::<Vec<_>>();
+    let commands = ordinary
         .iter()
         .map(|line| line.command.as_str())
         .collect::<Vec<_>>();
@@ -924,7 +944,7 @@ fn analyze_source_for_context(
         &initial_selection,
         context,
     ) {
-        if let Some(line) = executable.get(index)
+        if let Some(line) = ordinary.get(index)
             && let Some(diagnostic) = validation
                 .diagnostics
                 .iter_mut()
@@ -1141,6 +1161,7 @@ fn suggestion_choices(
 ) -> Vec<(&'static str, &'static str, &'static str)> {
     match context {
         MacroSuggestionContext::CommandStart => vec![
+            ("DELAY", "DELAY ", "Wait before the next Macro source line"),
             ("FIXTURE", "FIXTURE ", "Select fixtures by number or range"),
             ("GROUP", "GROUP ", "Address a stored Group"),
             ("PRESET", "PRESET ", "Recall or address a Preset"),
@@ -1242,21 +1263,27 @@ impl light_application::CommandMacroExecutionHost for ServerMacroExecutionHost {
             .join("\n");
         let validation = analyze_source(&source, None);
         if validation.valid {
-            let commands = lines
+            let ordinary = lines
                 .iter()
-                .map(|line| line.command.as_str())
+                .filter(|line| line.delay_millis.is_none())
                 .collect::<Vec<_>>();
-            if let Err((index, error)) = super::prevalidate_macro_commands_from(
-                &self.state,
-                &self.session,
-                &commands,
-                &self.initial_selection,
-                &self.context,
-            ) {
-                let line = lines.get(index).map_or(0, |line| line.number);
-                return Err(light_application::CommandMacroExecutionError::new(format!(
-                    "Macro line {line} cannot run: {error}"
-                )));
+            if !ordinary.is_empty() {
+                let commands = ordinary
+                    .iter()
+                    .map(|line| line.command.as_str())
+                    .collect::<Vec<_>>();
+                if let Err((index, error)) = super::prevalidate_macro_commands_from(
+                    &self.state,
+                    &self.session,
+                    &commands,
+                    &self.initial_selection,
+                    &self.context,
+                ) {
+                    let line = ordinary.get(index).map_or(0, |line| line.number);
+                    return Err(light_application::CommandMacroExecutionError::new(format!(
+                        "Macro line {line} cannot run: {error}"
+                    )));
+                }
             }
             return Ok(());
         }
@@ -1299,7 +1326,9 @@ impl light_application::CommandMacroExecutionHost for ServerMacroExecutionHost {
             "macro:{execution_id}:{macro_id}:{macro_revision}:{}:{}",
             line.number, line.statement
         ));
-        let command = if line
+        let command = if line.delay_millis.is_some() {
+            light_application::ProgrammingCommand::MacroDelayNoOp
+        } else if line
             .command
             .eq_ignore_ascii_case(light_application::RESTORE_SELECTION_COMMAND)
         {
@@ -1373,7 +1402,9 @@ impl light_application::CommandMacroExecutionHost for ServerMacroExecutionHost {
                     "macro:{execution_id}:{macro_id}:{macro_revision}:{}:{}",
                     line.number, line.statement
                 ));
-                let command = if line
+                let command = if line.delay_millis.is_some() {
+                    light_application::ProgrammingCommand::MacroDelayNoOp
+                } else if line
                     .command
                     .eq_ignore_ascii_case(light_application::RESTORE_SELECTION_COMMAND)
                 {
@@ -1401,6 +1432,11 @@ impl light_application::CommandMacroExecutionHost for ServerMacroExecutionHost {
                 }
                 if let Some(line) = lines.get(index) {
                     on_line(line);
+                    if let Some(delay_millis) = line.delay_millis
+                        && !light_application::wait_for_macro_delay(delay_millis, is_cancelled)
+                    {
+                        return false;
+                    }
                 }
                 index += 1;
                 true
@@ -1570,6 +1606,33 @@ mod tests {
                 .map(|suggestion| suggestion.label.as_str())
                 .collect::<Vec<_>>(),
             ["FULL"]
+        );
+    }
+
+    #[test]
+    fn validation_recognizes_macro_delay_and_offers_it_at_command_start() {
+        let validation = analyze_source("DELAY 1.25", Some(0));
+        assert!(validation.valid, "{:?}", validation.diagnostics);
+        assert_eq!(validation.diagnostics[0].message, "Macro delay · 1.25 s");
+        assert!(
+            validation.diagnostics[0]
+                .tokens
+                .iter()
+                .any(|token| token.kind == wire::MacroTokenKind::Timing)
+        );
+
+        let suggestions = analyze_source("D", Some(1));
+        assert!(suggestions.suggestions.iter().any(|suggestion| {
+            suggestion.label == "DELAY"
+                && suggestion.detail == "Wait before the next Macro source line"
+        }));
+
+        let invalid = analyze_source("DELAY 1; FIXTURE 1", None);
+        assert!(!invalid.valid);
+        assert!(
+            invalid.diagnostics[0]
+                .message
+                .contains("own executable Macro line")
         );
     }
 

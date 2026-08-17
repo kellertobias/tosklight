@@ -211,3 +211,143 @@ async fn macro_run_restores_its_initiating_selection_before_the_next_statement()
     );
     drop(scenario);
 }
+
+#[tokio::test]
+async fn macro_delay_is_visible_and_cancellable_through_the_authoritative_http_runtime() {
+    let scenario = OperationalScenario::new().await;
+    scenario.seed_and_open_show().await;
+    let session = authenticate_token(&scenario.state, &scenario.token).unwrap();
+    let show_id = scenario.state.active_show.current().unwrap().id;
+    let mut output = (*scenario.state.output.snapshot()).clone();
+    let mut fixture = output.fixtures[0].clone();
+    fixture.fixture_number = Some(1);
+    output.fixtures = vec![fixture].into();
+    scenario.state.output.replace_snapshot(output).unwrap();
+    scenario
+        .state
+        .programming
+        .programmers()
+        .select(session.id, []);
+
+    let macro_id = Uuid::from_u128(161);
+    let created = scenario
+        .app
+        .clone()
+        .oneshot(
+            Request::post("/api/v2/macros/actions")
+                .header(header::AUTHORIZATION, format!("Bearer {}", scenario.token))
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("x-tosk-show", show_id.0.to_string())
+                .body(Body::from(
+                    serde_json::json!({
+                        "request_id": "create-delay-macro",
+                        "action": {
+                            "type": "create",
+                            "definition": {
+                                "id": macro_id,
+                                "number": 161,
+                                "name": "Cancellable delay",
+                                "source": "DELAY 5\nFIXTURE 1",
+                                "presentation": {}
+                            }
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(created.status(), StatusCode::OK, "{}", json(created).await);
+
+    let started = scenario
+        .app
+        .clone()
+        .oneshot(
+            Request::post(format!("/api/v2/macros/{macro_id}/run"))
+                .header(header::AUTHORIZATION, format!("Bearer {}", scenario.token))
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("x-tosk-show", show_id.0.to_string())
+                .header("x-tosk-desk", session.desk.id.to_string())
+                .body(Body::from(
+                    serde_json::json!({"trigger": {"type": "http"}}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(started.status(), StatusCode::OK);
+    let started = json(started).await;
+    let execution_id = Uuid::parse_str(started["execution_id"].as_str().unwrap()).unwrap();
+
+    for _ in 0..100 {
+        if scenario
+            .state
+            .macros
+            .execution(session.desk.id, execution_id)
+            .is_some_and(|execution| execution.command.as_deref() == Some("DELAY 5"))
+        {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    let waiting = scenario
+        .state
+        .macros
+        .execution(session.desk.id, execution_id)
+        .unwrap();
+    assert_eq!(
+        waiting.command.as_deref(),
+        Some("DELAY 5"),
+        "state={:?} message={:?}",
+        waiting.state,
+        waiting.message
+    );
+
+    let cancelled_at = std::time::Instant::now();
+    let cancelled = scenario
+        .app
+        .clone()
+        .oneshot(
+            Request::post("/api/v2/macros/executions/cancel")
+                .header(header::AUTHORIZATION, format!("Bearer {}", scenario.token))
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("x-tosk-show", show_id.0.to_string())
+                .header("x-tosk-desk", session.desk.id.to_string())
+                .body(Body::from(
+                    serde_json::json!({"execution_id": execution_id}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(cancelled.status(), StatusCode::OK);
+
+    for _ in 0..50 {
+        if scenario
+            .state
+            .macros
+            .execution(session.desk.id, execution_id)
+            .is_some_and(|execution| execution.state.is_terminal())
+        {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    let finished = scenario
+        .state
+        .macros
+        .execution(session.desk.id, execution_id)
+        .unwrap();
+    assert_eq!(
+        finished.state,
+        light_application::CommandMacroExecutionState::Cancelled
+    );
+    assert!(cancelled_at.elapsed() < std::time::Duration::from_millis(250));
+    assert_eq!(
+        scenario.state.programming.get(session.id).unwrap().selected,
+        Vec::<light_core::FixtureId>::new(),
+        "FIXTURE 1 after the delay must not run"
+    );
+    drop(scenario);
+}

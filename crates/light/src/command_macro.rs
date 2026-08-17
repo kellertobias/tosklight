@@ -101,6 +101,7 @@ pub struct CommandMacroLine<'a> {
 pub struct CommandMacroCompiledLine {
     pub number: usize,
     pub command: String,
+    pub delay_millis: Option<u64>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -171,6 +172,15 @@ pub fn compile_macro_source(
             ));
         }
     }
+    let executable_per_line =
+        segments
+            .iter()
+            .fold(BTreeMap::new(), |mut counts, (line, command)| {
+                if !starts_with_keyword(command, "DEFINE") {
+                    *counts.entry(*line).or_insert(0usize) += 1;
+                }
+                counts
+            });
     let mut lines = Vec::new();
     for (line, command) in segments {
         if starts_with_keyword(command, "DEFINE") {
@@ -183,9 +193,18 @@ pub fn compile_macro_source(
                 format!("expanded command exceeds {MAX_MACRO_LINE_BYTES} UTF-8 bytes"),
             ));
         }
+        let delay_millis =
+            parse_macro_delay_millis(&expanded).map_err(|message| compile_error(line, message))?;
+        if delay_millis.is_some() && executable_per_line.get(&line).copied() != Some(1) {
+            return Err(compile_error(
+                line,
+                "DELAY must occupy its own executable Macro line",
+            ));
+        }
         lines.push(CommandMacroCompiledLine {
             number: line,
             command: expanded,
+            delay_millis,
         });
     }
     Ok(CommandMacroCompilation {
@@ -201,6 +220,48 @@ pub fn compile_macro_source(
             )
             .collect(),
     })
+}
+
+/// Parses a Macro-only delay expressed as non-negative seconds with up to millisecond precision.
+/// Ordinary Programmer/Cue timing remains owned by the command parser.
+pub fn parse_macro_delay_millis(command: &str) -> Result<Option<u64>, String> {
+    let tokens = command.split_whitespace().collect::<Vec<_>>();
+    if !tokens
+        .first()
+        .is_some_and(|token| token.eq_ignore_ascii_case("DELAY"))
+    {
+        return Ok(None);
+    }
+    if tokens.len() != 2 {
+        return Err("DELAY requires exactly one duration in seconds".into());
+    }
+    let value = tokens[1];
+    if value.starts_with('-') {
+        return Err("DELAY duration must be non-negative".into());
+    }
+    let (whole, fraction) = value.split_once('.').unwrap_or((value, ""));
+    if whole.is_empty()
+        || !whole.bytes().all(|byte| byte.is_ascii_digit())
+        || (value.contains('.') && fraction.is_empty())
+        || !fraction.bytes().all(|byte| byte.is_ascii_digit())
+        || fraction.len() > 3
+    {
+        return Err("DELAY duration must be seconds with at most three decimal places".into());
+    }
+    let seconds = whole
+        .parse::<u64>()
+        .map_err(|_| "DELAY duration is too large".to_owned())?;
+    let fractional_millis = match fraction.len() {
+        0 => 0,
+        1 => fraction.parse::<u64>().unwrap_or(0) * 100,
+        2 => fraction.parse::<u64>().unwrap_or(0) * 10,
+        _ => fraction.parse::<u64>().unwrap_or(0),
+    };
+    seconds
+        .checked_mul(1_000)
+        .and_then(|millis| millis.checked_add(fractional_millis))
+        .map(Some)
+        .ok_or_else(|| "DELAY duration is too large".to_owned())
 }
 
 fn starts_with_keyword(command: &str, keyword: &str) -> bool {
@@ -346,10 +407,12 @@ mod tests {
                 CommandMacroCompiledLine {
                     number: 2,
                     command: "FIXTURE 1 THRU 4 AT 50".into(),
+                    delay_millis: None,
                 },
                 CommandMacroCompiledLine {
                     number: 2,
                     command: RESTORE_SELECTION_COMMAND.into(),
+                    delay_millis: None,
                 },
             ]
         );
@@ -362,6 +425,43 @@ mod tests {
     fn define_cycles_are_rejected() {
         let error = compile_macro_source("DEFINE _a _b\nDEFINE _b _a\n_a").unwrap_err();
         assert!(error.message.contains("cycle"));
+    }
+
+    #[test]
+    fn macro_delay_uses_non_negative_seconds_with_millisecond_precision() {
+        assert_eq!(parse_macro_delay_millis("FIXTURE 1").unwrap(), None);
+        assert_eq!(parse_macro_delay_millis("DELAY 0").unwrap(), Some(0));
+        assert_eq!(parse_macro_delay_millis("delay 1.5").unwrap(), Some(1_500));
+        assert_eq!(parse_macro_delay_millis("DELAY 0.025").unwrap(), Some(25));
+
+        for source in [
+            "DELAY",
+            "DELAY -1",
+            "DELAY 1s",
+            "DELAY 1.",
+            "DELAY .5",
+            "DELAY 1.0001",
+            "DELAY 1 2",
+        ] {
+            assert!(
+                parse_macro_delay_millis(source).is_err(),
+                "{source} must be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn macro_delay_must_occupy_its_own_executable_source_line() {
+        let compiled = compile_macro_source("# note\nDELAY 1.25\n// note\nFIXTURE 1").unwrap();
+        assert_eq!(compiled.lines[0].delay_millis, Some(1_250));
+        assert_eq!(compiled.lines[1].delay_millis, None);
+
+        let error = compile_macro_source("DELAY 1; FIXTURE 1").unwrap_err();
+        assert_eq!(error.line, 1);
+        assert_eq!(
+            error.message,
+            "DELAY must occupy its own executable Macro line"
+        );
     }
 
     #[test]

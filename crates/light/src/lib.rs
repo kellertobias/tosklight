@@ -47,13 +47,13 @@ pub use command_macro::{
     CommandMacroCompilation, CommandMacroCompileError, CommandMacroCompiledLine,
     CommandMacroDefinition, CommandMacroDefinitionExpansion, CommandMacroLine,
     MAX_MACRO_LINE_BYTES, MAX_MACRO_NAME_BYTES, MAX_MACRO_NUMBER, MAX_MACRO_SOURCE_BYTES,
-    MacroPresentation, RESTORE_SELECTION_COMMAND, compile_macro_source,
+    MacroPresentation, RESTORE_SELECTION_COMMAND, compile_macro_source, parse_macro_delay_millis,
 };
 pub use command_macro_runtime::{
     CommandMacroExecutionError, CommandMacroExecutionHost, CommandMacroExecutionService,
     CommandMacroExecutionSnapshot, CommandMacroExecutionState, CommandMacroOwnedLine,
     CommandMacroRunRequest, CommandMacroRuntimeSnapshot, CommandMacroSequenceOutcome,
-    CommandMacroTrigger, DEFAULT_MACRO_HISTORY_LIMIT,
+    CommandMacroTrigger, DEFAULT_MACRO_HISTORY_LIMIT, wait_for_macro_delay,
 };
 pub use dynamics::{
     DynamicControllerUpdate, DynamicFixAtBatchCommand, DynamicFixAtCommand, DynamicFixAtValue,

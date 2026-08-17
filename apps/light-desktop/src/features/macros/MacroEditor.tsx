@@ -736,6 +736,10 @@ export const MACRO_HELP_COMMANDS = [
 	["RECORD / UPDATE", "Store or update through the desk command grammar."],
 	["DELETE / MOVE / COPY", "Change stored show objects."],
 	["SET", "Open or address configuration."],
+	[
+		"DELAY seconds",
+		"Wait before the next Macro line; use up to three decimal places.",
+	],
 	["DEFINE _name …", "Define a reusable command expansion."],
 	[
 		"RESTORE SELECTION",
@@ -752,6 +756,10 @@ function MacroHelpSidebar() {
 			<p>
 				Write one desk command per line, or separate commands with a semicolon.
 				The last semicolon is optional.
+			</p>
+			<p>
+				<code>DELAY seconds</code> pauses Macro execution and must occupy its
+				own source line. Output and fades continue while it waits.
 			</p>
 			<p>
 				Validation follows the caret: an unfinished current line stays neutral

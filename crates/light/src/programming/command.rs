@@ -41,6 +41,9 @@ pub enum ProgrammingCommand {
     RestoreSelection {
         fixtures: Vec<FixtureId>,
     },
+    /// Internal Macro sequencing placeholder. The adapter performs the cancellable wait while
+    /// the Programming interaction gate is held; this command records an accepted no-op only.
+    MacroDelayNoOp,
     ApplySelectionGesture {
         source: SelectionGestureSource,
         remove: bool,

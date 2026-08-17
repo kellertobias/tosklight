@@ -11,6 +11,7 @@ use std::{
         atomic::{AtomicBool, Ordering},
         mpsc::{self, SyncSender},
     },
+    time::Duration,
 };
 
 use uuid::Uuid;
@@ -135,10 +136,31 @@ pub trait CommandMacroExecutionHost: Send + Sync + 'static {
                 return Ok(CommandMacroSequenceOutcome::Cancelled);
             }
             on_line(line);
+            if let Some(delay_millis) = line.delay_millis {
+                if !wait_for_macro_delay(delay_millis, is_cancelled) {
+                    return Ok(CommandMacroSequenceOutcome::Cancelled);
+                }
+                continue;
+            }
             self.execute(execution_id, macro_id, macro_revision, line)?;
         }
         Ok(CommandMacroSequenceOutcome::Succeeded)
     }
+}
+
+/// Waits on the caller's Macro worker while polling cancellation. The caller retains any desk
+/// interaction gate it already owns; output and dynamic engines continue on their own workers.
+pub fn wait_for_macro_delay(delay_millis: u64, is_cancelled: &dyn Fn() -> bool) -> bool {
+    let mut remaining = delay_millis;
+    while remaining > 0 {
+        if is_cancelled() {
+            return false;
+        }
+        let slice = remaining.min(10);
+        std::thread::sleep(Duration::from_millis(slice));
+        remaining -= slice;
+    }
+    !is_cancelled()
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -152,6 +174,7 @@ pub struct CommandMacroOwnedLine {
     pub number: u32,
     pub statement: u32,
     pub command: String,
+    pub delay_millis: Option<u64>,
 }
 
 #[derive(Clone)]
@@ -374,6 +397,7 @@ fn selected_lines(
             number: line.number as u32,
             statement: statement as u32 + 1,
             command: line.command,
+            delay_millis: line.delay_millis,
         })
         .collect::<Vec<_>>();
     let Some(only_line) = request.only_line else {
@@ -649,6 +673,19 @@ mod tests {
     }
 
     #[test]
+    fn invalid_macro_delay_reports_its_source_line_before_the_run_is_queued() {
+        let service = CommandMacroExecutionService::new(10);
+        let host = Arc::new(RecordingHost::default());
+        let error = service
+            .start(request("FIRST\nDELAY -1\nTHIRD"), host.clone())
+            .unwrap_err();
+
+        assert!(error.message.contains("Macro line 2"), "{}", error.message);
+        assert!(error.message.contains("non-negative"), "{}", error.message);
+        assert!(host.events().is_empty());
+    }
+
+    #[test]
     fn fifo_execution_fails_fast_without_rolling_back_prior_lines() {
         let service = CommandMacroExecutionService::new(10);
         let first = Arc::new(RecordingHost::default());
@@ -683,6 +720,51 @@ mod tests {
         assert_eq!(finished.line, Some(1));
         assert_eq!(finished.statement, Some(2));
         assert_eq!(host.events(), ["validate:2", "FIRST", "SECOND"]);
+    }
+
+    #[test]
+    fn macro_delay_waits_without_dispatching_a_programmer_command() {
+        let service = CommandMacroExecutionService::new(10);
+        let host = Arc::new(RecordingHost::default());
+        let started_at = Instant::now();
+        let started = service
+            .start(request("FIRST\nDELAY 0.03\nTHIRD"), host.clone())
+            .unwrap();
+        let finished = wait_terminal(&service, started.execution_id);
+
+        assert_eq!(finished.state, CommandMacroExecutionState::Succeeded);
+        assert!(started_at.elapsed() >= Duration::from_millis(25));
+        assert_eq!(host.events(), ["validate:3", "FIRST", "THIRD"]);
+    }
+
+    #[test]
+    fn cancellation_interrupts_a_macro_delay_before_the_next_line() {
+        let service = CommandMacroExecutionService::new(10);
+        let host = Arc::new(RecordingHost::default());
+        let started = service
+            .start(request("FIRST\nDELAY 1\nMUST NOT RUN"), host.clone())
+            .unwrap();
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            let snapshot = service
+                .execution(Uuid::from_u128(1), started.execution_id)
+                .unwrap();
+            if snapshot.command.as_deref() == Some("DELAY 1") {
+                break;
+            }
+            assert!(Instant::now() < deadline, "Macro delay did not start");
+            std::thread::yield_now();
+        }
+
+        let cancelled_at = Instant::now();
+        service
+            .cancel(Uuid::from_u128(1), started.execution_id)
+            .unwrap();
+        let finished = wait_terminal(&service, started.execution_id);
+
+        assert_eq!(finished.state, CommandMacroExecutionState::Cancelled);
+        assert!(cancelled_at.elapsed() < Duration::from_millis(250));
+        assert_eq!(host.events(), ["validate:3", "FIRST"]);
     }
 
     #[test]

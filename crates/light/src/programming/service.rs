@@ -326,6 +326,7 @@ impl ProgrammingService {
             ProgrammingCommand::Preload { capture_programmer } => {
                 self.preload(session, *capture_programmer, &action.context, ports)?
             }
+            ProgrammingCommand::MacroDelayNoOp => accepted(ProgrammingAction::NoChange, None, None),
             command @ (ProgrammingCommand::ReplaceSelection { .. }
             | ProgrammingCommand::RestoreSelection { .. }
             | ProgrammingCommand::ApplySelectionGesture { .. }
