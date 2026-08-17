@@ -42,7 +42,7 @@ export const builtInLabels: Readonly<Record<BuiltInPaneType, string>> = {
 	[PaneType.Stage]: "Stage",
 	[PaneType.Fixtures]: "Fixtures",
 	[PaneType.Presets]: "Presets",
-	[PaneType.Cuelists]: "Cuelists",
+	[PaneType.Cuelists]: "Cue Lists",
 	[PaneType.Dynamics]: "Dynamics",
 	[PaneType.Channels]: "Channels",
 };

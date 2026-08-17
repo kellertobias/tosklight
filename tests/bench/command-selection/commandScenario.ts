@@ -151,8 +151,23 @@ export class BrowserKeypad {
 			"KEYPAD",
 			`Press ${keys.map((key) => `[${key}]`).join(" ")} in exact order.`,
 		);
-		for (const key of keys)
-			await this.desk.click(keypadLocator(this.browser(), key));
+		let flipped = false;
+		try {
+			for (const key of keys) {
+				const locator = keypadLocator(this.browser(), key);
+				// The programmer surface can be showing its other face, where this key is not on
+				// screen at all. The operator reaches it by flipping the surface, so the bench does
+				// too, and leaves the surface the way it found it.
+				if (!(await locator.isVisible())) {
+					await this.desk.click(this.browser().locator(".mode-toggle"));
+					flipped = !flipped;
+					await expect(locator).toBeVisible();
+				}
+				await this.desk.click(locator);
+			}
+		} finally {
+			if (flipped) await this.desk.click(this.browser().locator(".mode-toggle"));
+		}
 	}
 
 	private browser(): Page {

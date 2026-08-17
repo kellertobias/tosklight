@@ -14,7 +14,7 @@ scenario(
 
 		await t.special.position.returnHome();
 		await t.special.position.expectAtHome();
-		await t.keypad.press(["UND"]);
+		await t.keypad.press(["SHIFT", "ESC", "SHIFT"]);
 		await t.special.position.expectBeforeReturnHome();
 
 		await t.hardware.connect();
@@ -41,11 +41,11 @@ scenario(
 		await t.special.color.prepareRangeContract();
 
 		await t.special.color.setUniform();
-		await t.keypad.press(["UND"]);
+		await t.keypad.press(["SHIFT", "ESC", "SHIFT"]);
 		await t.special.color.expectPrior();
 
 		await t.special.color.applyRangeWithShift();
-		await t.keypad.press(["UND"]);
+		await t.keypad.press(["SHIFT", "ESC", "SHIFT"]);
 		await t.special.color.expectPrior();
 		await t.special.color.cancelRangeWithShift();
 
