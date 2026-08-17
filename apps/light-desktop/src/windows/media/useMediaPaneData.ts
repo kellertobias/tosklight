@@ -167,6 +167,14 @@ export function useMediaPaneData({
 
 	const initializeLayer = useCallback(
 		(nextLayerId: string) => {
+			if (nextLayerId === "master") {
+				setDraftFolderId("1");
+				setDraftFileId(null);
+				initializedDraftScope.current = fixtureId
+					? `${fixtureId}:${nextLayerId}`
+					: null;
+				return;
+			}
 			const draft = mediaDraftForLayer(
 				inspection,
 				serverLayers.current,
@@ -240,6 +248,12 @@ export function useMediaPaneData({
 		[draftFolder, inspection.files],
 	);
 	useEffect(() => {
+		setThumbnailUrls((current) => {
+			for (const url of Object.values(current)) URL.revokeObjectURL(url);
+			return {};
+		});
+	}, [draftFolder, fixtureId]);
+	useEffect(() => {
 		if (
 			!active ||
 			!hasRefreshThumbnails ||
@@ -264,7 +278,10 @@ export function useMediaPaneData({
 						file.id,
 					);
 					if (!blob) throw new Error("Media thumbnail loading is unavailable");
-					return [String(file.id), URL.createObjectURL(blob)] as const;
+					return [
+						`${file.folder_id}:${file.id}`,
+						URL.createObjectURL(blob),
+					] as const;
 				}),
 			);
 			if (disposed) {

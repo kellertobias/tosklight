@@ -32,7 +32,7 @@ describe("the Media Server operator surface", () => {
 		).toBeInTheDocument();
 		expect(dock.querySelector(".media-operator-mark img")).toHaveAttribute(
 			"src",
-			expect.stringContaining("tosklight-media-icon.svg"),
+			expect.stringContaining("ToskLight%20Pixel.svg"),
 		);
 		expect(dock.querySelector("time")).toHaveAttribute(
 			"datetime",

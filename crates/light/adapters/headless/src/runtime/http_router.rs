@@ -81,6 +81,10 @@ fn media_and_output_routes() -> Router<AppState> {
             post(update_native_media_text),
         )
         .route(
+            "/api/v2/media-servers/{fixture_id}/native/layers/{layer}/effects/update",
+            post(update_native_media_effect),
+        )
+        .route(
             "/api/v2/media-servers/{fixture_id}/library-selection",
             post(apply_media_library_selection),
         )

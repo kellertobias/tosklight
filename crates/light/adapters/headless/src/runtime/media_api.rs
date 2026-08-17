@@ -35,6 +35,39 @@ struct NativeMediaTextResponse {
 
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct NativeMediaEffectParameterResponse {
+    id: String,
+    label: String,
+    value: f32,
+    default_value: f32,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct NativeMediaEffectSlotResponse {
+    index: usize,
+    effect_type: Option<String>,
+    label: String,
+    enabled: bool,
+    mix: f32,
+    supported: bool,
+    capability_detail: Option<String>,
+    parameters: Vec<NativeMediaEffectParameterResponse>,
+}
+
+#[derive(Deserialize)]
+struct NativeMediaLayerResponse {
+    effects: Vec<NativeMediaEffectSlotResponse>,
+}
+
+#[derive(Deserialize)]
+struct NativeMediaOutputResponse {
+    id: String,
+    layers: Vec<NativeMediaLayerResponse>,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct NativeMediaOutputSummary {
     id: String,
 }
@@ -371,12 +404,13 @@ pub(super) async fn native_media_snapshot(
     let endpoint = native_media_endpoint(&state, fixture_id)?;
     let base = format!("http://{endpoint}/api/v2");
     let health_url = format!("{base}/health");
-    let text_url = format!("{base}/text");
+    let outputs_url = format!("{base}/outputs");
     let client = native_media_client()?;
-    let (health, text_slots) = tokio::try_join!(
+    let (health, outputs) = tokio::try_join!(
         native_media_get::<NativeMediaHealth>(&client, &health_url),
-        native_media_get::<Vec<NativeMediaTextResponse>>(&client, &text_url),
+        native_media_get::<Vec<NativeMediaOutputResponse>>(&client, &outputs_url),
     )?;
+    let output = outputs.into_iter().next();
     Ok(Json(light_wire::v2::output_control::NativeMediaSnapshot {
         endpoint: format!("http://{endpoint}"),
         status: health.status,
@@ -384,11 +418,218 @@ pub(super) async fn native_media_snapshot(
         outputs: health.outputs,
         catalog_revision: health.catalog_revision,
         catalog_items: health.catalog_items,
-        text_slots: text_slots.into_iter().map(native_text_slot).collect(),
-        // The Media Server currently declares effect DMX channels but does not expose an
-        // implemented effect-parameter edit API. Report that honestly instead of inventing one.
-        effect_controls_available: false,
+        text_slots: Vec::new(),
+        effect_controls_available: output.is_some(),
+        output_id: output.as_ref().map(|output| output.id.clone()),
+        effect_layers: output
+            .map(|output| {
+                output
+                    .layers
+                    .into_iter()
+                    .map(|layer| layer.effects.into_iter().map(native_effect_slot).collect())
+                    .collect()
+            })
+            .unwrap_or_default(),
     }))
+}
+
+pub(super) async fn update_native_media_effect(
+    State(state): State<AppState>,
+    Path((fixture_id, layer)): Path<(light_core::FixtureId, u8)>,
+    show: ShowContext,
+    headers: HeaderMap,
+    TolerantJson(input): TolerantJson<
+        light_wire::v2::output_control::NativeMediaEffectUpdateRequest,
+    >,
+) -> Result<Json<Vec<light_wire::v2::output_control::NativeMediaEffectSlot>>, ApiError> {
+    let _session = authenticate(&state, &headers)?;
+    show.verify(&state)?;
+    if input.request_id.trim().is_empty() {
+        return Err(ApiError::bad_request(
+            "native Media effect request_id is required",
+        ));
+    }
+    let endpoint = native_media_endpoint(&state, fixture_id)?;
+    let base = format!("http://{endpoint}/api/v2");
+    let client = native_media_client()?;
+    let outputs =
+        native_media_get::<Vec<NativeMediaOutputResponse>>(&client, &format!("{base}/outputs"))
+            .await?;
+    let output = outputs
+        .first()
+        .ok_or_else(|| ApiError::unavailable("Media Server has no configured output"))?;
+    if usize::from(layer) >= output.layers.len() {
+        return Err(ApiError::bad_request("Media Server layer is unavailable"));
+    }
+    let update = native_effect_update(&input)?;
+    let response = client
+        .post(format!(
+            "{base}/outputs/{}/layers/{layer}/native-effects/update",
+            output.id
+        ))
+        .json(&update)
+        .send()
+        .await
+        .map_err(native_media_unavailable)?;
+    let response = native_media_response(response).await?;
+    let updated = response
+        .json::<NativeMediaOutputResponse>()
+        .await
+        .map_err(|_| ApiError::unavailable("Media Server returned invalid effect state"))?;
+    let layer = updated
+        .layers
+        .get(usize::from(layer))
+        .ok_or_else(|| ApiError::unavailable("Media Server returned an invalid layer state"))?;
+    Ok(Json(
+        layer
+            .effects
+            .clone()
+            .into_iter()
+            .map(native_effect_slot)
+            .collect(),
+    ))
+}
+
+fn native_effect_slot(
+    slot: NativeMediaEffectSlotResponse,
+) -> light_wire::v2::output_control::NativeMediaEffectSlot {
+    light_wire::v2::output_control::NativeMediaEffectSlot {
+        index: slot.index,
+        effect_type: slot.effect_type,
+        label: slot.label,
+        enabled: slot.enabled,
+        mix: slot.mix,
+        supported: slot.supported,
+        capability_detail: slot.capability_detail,
+        parameters: slot
+            .parameters
+            .into_iter()
+            .map(
+                |parameter| light_wire::v2::output_control::NativeMediaEffectParameter {
+                    id: parameter.id,
+                    label: parameter.label,
+                    value: parameter.value,
+                    default_value: parameter.default_value,
+                },
+            )
+            .collect(),
+    }
+}
+
+fn native_effect_update(
+    input: &light_wire::v2::output_control::NativeMediaEffectUpdateRequest,
+) -> Result<serde_json::Value, ApiError> {
+    let mut parts = input.control_id.split('-');
+    if parts.next() != Some("effect") {
+        return Err(ApiError::bad_request("invalid native effect control"));
+    }
+    let slot = parts
+        .next()
+        .and_then(|value| value.parse::<u8>().ok())
+        .filter(|value| *value < 4)
+        .ok_or_else(|| ApiError::bad_request("invalid native effect slot"))?;
+    let control = parts.collect::<Vec<_>>().join("-");
+    let field = match control.as_str() {
+        "type" => "effectType",
+        "enabled" => "effectEnabled",
+        "tv-curvature" => "tvCurvature",
+        "distortion" => "effectDistortion",
+        "image-grain" => "imageGrain",
+        "compression-damage" => "compressionDamage",
+        "block-size" => "blockSize",
+        "tile-displacement" => "tileDisplacement",
+        "chroma-damage" => "chromaDamage",
+        "glitching" => "effectGlitching",
+        "cycle-interval" => "cycleInterval",
+        "blur-amount" => "blurAmount",
+        "feedback-amount" => "feedbackAmount",
+        "feedback-motion" => "feedbackMotion",
+        "feedback-direction" => "feedbackDirection",
+        "beat-move-amount" => "beatMoveAmount",
+        "beat-move-direction" => "beatMoveDirection",
+        "beat-move-decay" => "beatMoveDecay",
+        "kaleidoscope-repetitions" => "kaleidoscopeRepetitions",
+        "kaleidoscope-angle" => "kaleidoscopeAngle",
+        "rasterize-mode" => "rasterizeMode",
+        "rasterize-dot-size" => "rasterizeDotSize",
+        "beat-scan-width" => "beatScanWidth",
+        "beat-scan-edge" => "beatScanEdge",
+        "beat-scan-falloff" => "beatScanFalloff",
+        "beat-scan-duration" => "beatScanDuration",
+        "beat-scale-amount" => "beatScaleAmount",
+        "beat-turn-enabled" => "beatTurnEnabled",
+        "beat-turn-rotation" => "beatTurnRotation",
+        "beat-scale-decay" => "beatScaleDecay",
+        "beat-grid-density" => "beatGridDensity",
+        "beat-grid-height" => "beatGridHeight",
+        "beat-grid-duration" => "beatGridDuration",
+        "beat-grid-origin" => "beatGridOrigin",
+        "beat-grid-hue" => "beatGridHue",
+        "beat-grid-brightness" => "beatGridBrightness",
+        "beat-form-enlargement" => "beatFormEnlargement",
+        "beat-form-lifetime" => "beatFormLifetime",
+        "beat-form-density" => "beatFormDensity",
+        "beat-form-variation" => "beatFormVariation",
+        "drawn-strength" => "drawnStrength",
+        "drawn-line-detail" => "drawnLineDetail",
+        _ => return Err(ApiError::bad_request("unknown native effect control")),
+    };
+    let value = match (
+        input.number_value,
+        input.string_value.as_ref(),
+        input.boolean_value,
+    ) {
+        (Some(value), None, None) => serde_json::json!(value),
+        (None, Some(value), None) => serde_json::json!(value),
+        (None, None, Some(value)) => serde_json::json!(value),
+        _ => return Err(ApiError::bad_request("native effect value is invalid")),
+    };
+    Ok(serde_json::json!({"effectSlot": slot, (field): value}))
+}
+
+#[cfg(test)]
+mod native_effect_update_tests {
+    use super::native_effect_update;
+    use light_wire::v2::output_control::NativeMediaEffectUpdateRequest;
+
+    fn request(control_id: &str) -> NativeMediaEffectUpdateRequest {
+        NativeMediaEffectUpdateRequest {
+            request_id: "request-1".into(),
+            control_id: control_id.into(),
+            number_value: None,
+            string_value: None,
+            boolean_value: None,
+        }
+    }
+
+    #[test]
+    fn translates_a_typed_effect_parameter_for_the_selected_slot() {
+        let mut input = request("effect-2-blur-amount");
+        input.number_value = Some(0.8);
+
+        let update = native_effect_update(&input).expect("valid native effect update");
+        assert_eq!(update["effectSlot"], 2);
+        assert!((update["blurAmount"].as_f64().expect("number") - 0.8).abs() < 0.000_001);
+    }
+
+    #[test]
+    fn translates_boolean_effect_controls_without_treating_them_as_text() {
+        let mut input = request("effect-1-enabled");
+        input.boolean_value = Some(false);
+
+        assert_eq!(
+            native_effect_update(&input).expect("valid native effect update"),
+            serde_json::json!({"effectSlot": 1, "effectEnabled": false})
+        );
+    }
+
+    #[test]
+    fn rejects_text_source_controls_from_the_effect_path() {
+        let mut input = request("clock-format");
+        input.string_value = Some("HH:mm".into());
+
+        assert!(native_effect_update(&input).is_err());
+    }
 }
 
 pub(super) async fn update_native_media_text(

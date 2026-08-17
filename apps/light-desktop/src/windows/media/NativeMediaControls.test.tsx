@@ -1,72 +1,105 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { NativeMediaControls } from "./NativeMediaControls";
+import { useNativeMediaEffects } from "./NativeMediaControls";
 
-describe("Native Media controls", () => {
-	it("shows native status and saves static text through the fixture-scoped action", async () => {
-		const load = vi.fn().mockResolvedValue({
-			endpoint: "http://10.0.0.8:8080",
-			status: "ok",
-			instance: "media-a",
-			outputs: 2,
-			catalogRevision: 7,
-			catalogItems: 42,
-			textSlots: [
-				{
-					folder: 200,
-					file: 3,
-					name: "Interval",
-					enabled: true,
-					kind: "static",
-					text: "House open",
-				},
-			],
-			effectControlsAvailable: false,
-		});
-		const updateText = vi.fn().mockResolvedValue({
-			folder: 200,
-			file: 3,
-			name: "Interval",
-			enabled: true,
-			kind: "static",
-			text: "Stand by",
-		});
+const blur = {
+	index: 0,
+	effectType: "blur",
+	label: "Blur",
+	enabled: true,
+	mix: 0.5,
+	supported: true,
+	capabilityDetail: null,
+	parameters: [
+		{
+			id: "blur-amount",
+			label: "Blur amount",
+			value: 0.8,
+			defaultValue: 0.5,
+		},
+	],
+};
 
-		render(
-			<NativeMediaControls
-				fixtureId="fixture-1"
-				load={load}
-				updateText={updateText}
-			/>,
+describe("native Media effect controls", () => {
+	it("loads only the selected layer and does not reload when callback identities change", async () => {
+		const load = vi.fn().mockResolvedValue({ effectLayers: [[blur], []] });
+		const update = vi.fn();
+		const { result, rerender } = renderHook(
+			({ loadAction }) =>
+				useNativeMediaEffects({
+					active: true,
+					fixtureId: "fixture-1",
+					layer: 0,
+					load: loadAction,
+					update,
+				}),
+			{ initialProps: { loadAction: load } },
 		);
+		await waitFor(() => expect(result.current.slots).toEqual([blur]));
+		rerender({ loadAction: vi.fn().mockResolvedValue({ effectLayers: [[]] }) });
+		expect(load).toHaveBeenCalledTimes(1);
+		expect(result.current.slots).toEqual([blur]);
+	});
 
-		expect(await screen.findByText("Media Server online")).toBeInTheDocument();
-		expect(screen.getByText("http://10.0.0.8:8080")).toBeInTheDocument();
-		expect(screen.getByText("Effect controls unavailable")).toBeInTheDocument();
-		fireEvent.change(screen.getByLabelText("200.3 · Interval"), {
-			target: { value: "Stand by" },
-		});
-		fireEvent.click(screen.getByRole("button", { name: "Save text" }));
-		await waitFor(() =>
-			expect(updateText).toHaveBeenCalledWith(
-				"fixture-1",
-				200,
-				3,
-				"Stand by",
-			),
+	it("updates the selected layer without clearing the visible controls", async () => {
+		const updated = { ...blur, mix: 0.75 };
+		const update = vi.fn().mockResolvedValue([updated]);
+		const { result } = renderHook(() =>
+			useNativeMediaEffects({
+				active: true,
+				fixtureId: "fixture-1",
+				layer: 0,
+				load: vi.fn().mockResolvedValue({ effectLayers: [[blur]] }),
+				update,
+			}),
+		);
+		await waitFor(() => expect(result.current.slots).toEqual([blur]));
+		act(() => result.current.change("effect-0-blur-amount", 0.75));
+		expect(result.current.slots).toEqual([blur]);
+		await waitFor(() => expect(result.current.slots).toEqual([updated]));
+		expect(update).toHaveBeenCalledWith(
+			"fixture-1",
+			0,
+			"effect-0-blur-amount",
+			0.75,
 		);
 	});
 
-	it("keeps native failures actionable", async () => {
-		render(
-			<NativeMediaControls
-				fixtureId="fixture-1"
-				load={vi.fn().mockRejectedValue(new Error("Media Server is offline"))}
-				updateText={vi.fn()}
-			/>,
+	it("ignores an older response after a newer native effect change", async () => {
+		let resolveFirst: ((slots: (typeof blur)[]) => void) | undefined;
+		let resolveSecond: ((slots: (typeof blur)[]) => void) | undefined;
+		const update = vi
+			.fn()
+			.mockImplementationOnce(
+				() =>
+					new Promise<(typeof blur)[]>((resolve) => {
+						resolveFirst = resolve;
+					}),
+			)
+			.mockImplementationOnce(
+				() =>
+					new Promise<(typeof blur)[]>((resolve) => {
+						resolveSecond = resolve;
+					}),
+			);
+		const { result } = renderHook(() =>
+			useNativeMediaEffects({
+				active: true,
+				fixtureId: "fixture-1",
+				layer: 0,
+				load: vi.fn().mockResolvedValue({ effectLayers: [[blur]] }),
+				update,
+			}),
 		);
-		expect(await screen.findByText("Native controls unavailable")).toBeInTheDocument();
-		expect(screen.getByText("Media Server is offline")).toBeInTheDocument();
-		expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+		await waitFor(() => expect(result.current.slots).toEqual([blur]));
+		act(() => {
+			result.current.change("effect-0-blur-amount", 0.6);
+			result.current.change("effect-0-blur-amount", 0.9);
+		});
+		const newest = { ...blur, mix: 0.9 };
+		await act(async () => resolveSecond?.([newest]));
+		expect(result.current.slots).toEqual([newest]);
+		await act(async () => resolveFirst?.([{ ...blur, mix: 0.6 }]));
+		expect(result.current.slots).toEqual([newest]);
 	});
 });

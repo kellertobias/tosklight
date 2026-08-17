@@ -10,12 +10,14 @@ import type {
 	HighlightActionRequest,
 	MediaLibrarySelectionOutcome,
 	MediaLibrarySelectionRequest,
+	MediaPreviewRefreshRequest,
 	MediaServerDiscovery,
+	MediaThumbnailRefreshRequest,
+	NativeMediaEffectSlot as NativeMediaEffectSlotWire,
+	NativeMediaEffectUpdateRequest,
 	NativeMediaSnapshot as NativeMediaSnapshotWire,
 	NativeMediaTextSlot as NativeMediaTextSlotWire,
 	NativeMediaTextUpdateRequest,
-	MediaPreviewRefreshRequest,
-	MediaThumbnailRefreshRequest,
 	PatchPreviewHighlightRequest,
 } from "../generated/light-wire";
 export type {
@@ -63,6 +65,26 @@ export interface NativeMediaSnapshot {
 	catalogItems: number;
 	textSlots: NativeMediaTextSlot[];
 	effectControlsAvailable: boolean;
+	outputId: string | null;
+	effectLayers: NativeMediaEffectSlot[][];
+}
+
+export interface NativeMediaEffectParameter {
+	id: string;
+	label: string;
+	value: number;
+	defaultValue: number;
+}
+
+export interface NativeMediaEffectSlot {
+	index: number;
+	effectType: string | null;
+	label: string;
+	enabled: boolean;
+	mix: number;
+	supported: boolean;
+	capabilityDetail: string | null;
+	parameters: NativeMediaEffectParameter[];
 }
 
 export interface MediaServerInspection {
@@ -167,10 +189,37 @@ export class MediaOutputApiClient {
 			request_id: crypto.randomUUID(),
 			text,
 		};
-		return this.transport.request<NativeMediaTextSlotWire>(
-			`/api/v2/media-servers/${fixtureId}/native/text/${folder}/${file}/update`,
-			jsonRequest("POST", request),
-		).then(mapNativeMediaTextSlot);
+		return this.transport
+			.request<NativeMediaTextSlotWire>(
+				`/api/v2/media-servers/${fixtureId}/native/text/${folder}/${file}/update`,
+				jsonRequest("POST", request),
+			)
+			.then(mapNativeMediaTextSlot);
+	}
+
+	updateNativeMediaEffect(
+		fixtureId: string,
+		layer: number,
+		controlId: string,
+		value: string | number | boolean,
+	): Promise<NativeMediaEffectSlot[]> {
+		const typedValue =
+			controlId.endsWith("-enabled") && typeof value === "string"
+				? value === "true"
+				: value;
+		const request: NativeMediaEffectUpdateRequest = {
+			request_id: crypto.randomUUID(),
+			control_id: controlId,
+			number_value: typeof typedValue === "number" ? typedValue : null,
+			string_value: typeof typedValue === "string" ? typedValue : null,
+			boolean_value: typeof typedValue === "boolean" ? typedValue : null,
+		};
+		return this.transport
+			.request<NativeMediaEffectSlotWire[]>(
+				`/api/v2/media-servers/${fixtureId}/native/layers/${layer}/effects/update`,
+				jsonRequest("POST", request),
+			)
+			.then((slots) => slots.map(mapNativeMediaEffectSlot));
 	}
 
 	applyMediaLibrarySelection(
@@ -299,11 +348,15 @@ export class MediaOutputApiClient {
 	}
 }
 
-function mapNativeMediaTextSlot(slot: NativeMediaTextSlotWire): NativeMediaTextSlot {
+function mapNativeMediaTextSlot(
+	slot: NativeMediaTextSlotWire,
+): NativeMediaTextSlot {
 	return { ...slot, text: slot.text ?? null };
 }
 
-function mapNativeMediaSnapshot(snapshot: NativeMediaSnapshotWire): NativeMediaSnapshot {
+function mapNativeMediaSnapshot(
+	snapshot: NativeMediaSnapshotWire,
+): NativeMediaSnapshot {
 	return {
 		endpoint: snapshot.endpoint,
 		status: snapshot.status,
@@ -313,5 +366,29 @@ function mapNativeMediaSnapshot(snapshot: NativeMediaSnapshotWire): NativeMediaS
 		catalogItems: snapshot.catalog_items,
 		textSlots: snapshot.text_slots.map(mapNativeMediaTextSlot),
 		effectControlsAvailable: snapshot.effect_controls_available,
+		outputId: snapshot.output_id ?? null,
+		effectLayers: (snapshot.effect_layers ?? []).map((layer) =>
+			layer.map(mapNativeMediaEffectSlot),
+		),
+	};
+}
+
+function mapNativeMediaEffectSlot(
+	slot: NativeMediaEffectSlotWire,
+): NativeMediaEffectSlot {
+	return {
+		index: slot.index,
+		effectType: slot.effect_type ?? null,
+		label: slot.label,
+		enabled: slot.enabled,
+		mix: slot.mix,
+		supported: slot.supported,
+		capabilityDetail: slot.capability_detail ?? null,
+		parameters: slot.parameters.map((parameter) => ({
+			id: parameter.id,
+			label: parameter.label,
+			value: parameter.value,
+			defaultValue: parameter.default_value,
+		})),
 	};
 }

@@ -142,6 +142,7 @@ fn run_inner() -> anyhow::Result<()> {
             &configuration,
             state.clone(),
             catalog.clone(),
+            live.clone(),
             previews.clone(),
             shutdown.clone(),
             console_identity,

@@ -223,6 +223,10 @@ pub fn router(state: ApiState) -> Router {
             post(outputs::update_layer),
         )
         .route(
+            "/api/v2/outputs/{output}/layers/{layer}/native-effects/update",
+            post(outputs::update_native_effects),
+        )
+        .route(
             "/api/v2/outputs/{output}/master/update",
             post(outputs::update_master),
         )

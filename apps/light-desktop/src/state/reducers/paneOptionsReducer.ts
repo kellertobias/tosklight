@@ -99,6 +99,8 @@ export function reducePaneOptions(
 				mediaServerId: action.state.serverId,
 				mediaLayerId: action.state.layerId,
 				mediaBrowserMode: action.state.browserMode,
+				mediaSourceFilter: action.state.sourceFilter,
+				mediaControlSectionId: action.state.controlSectionId,
 				mediaMainSectionId: action.state.mainSectionId,
 				mediaRightPaneVisible: action.state.rightPaneVisible,
 			}));

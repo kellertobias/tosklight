@@ -7,11 +7,17 @@ export function mediaDraftForLayer(
 ): { folderId: string; fileId: string } | null {
 	const head = layers.find((candidate) => candidate.fixture_id === layerId);
 	if (!head) return null;
+	const citpLayer = layers.findIndex(
+		(candidate) => candidate.fixture_id === layerId,
+	);
 	const status = inspection.layers.find(
-		(candidate) => candidate.layer === head.head_index,
+		(candidate) => candidate.layer === citpLayer,
 	);
 	return status
-		? { folderId: String(status.folder), fileId: String(status.file) }
+		? {
+				folderId: String(status.folder === 0 ? 1 : status.folder),
+				fileId: String(status.file),
+			}
 		: null;
 }
 

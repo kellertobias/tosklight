@@ -99,7 +99,7 @@ describe("Media pane programmer transaction", () => {
 			preview_sources: [],
 			layers: [
 				{
-					layer: 7,
+					layer: 0,
 					physical_output: 1,
 					folder: 2,
 					file: 19,
@@ -130,5 +130,41 @@ describe("Media pane programmer transaction", () => {
 				"master",
 			),
 		).toBeNull();
+	});
+
+	it("starts an empty advertised layer in folder one so file touches stay valid", () => {
+		const inspection = {
+			library_revision: "citp-test",
+			server: { name: "Server", layer_count: 1 },
+			folders: [],
+			files: [],
+			preview_sources: [],
+			layers: [
+				{
+					layer: 0,
+					physical_output: 1,
+					folder: 0,
+					file: 0,
+					name: "Layer 1",
+					position_frames: 0,
+					length_frames: 0,
+					fps: 25,
+					flags: 0,
+				},
+			],
+			capabilities: {
+				provider: "citp_msex",
+				native_action: null,
+				layers: [],
+			},
+		};
+
+		expect(
+			mediaDraftForLayer(
+				inspection,
+				[{ fixture_id: "layer-1", head_index: 1 }],
+				"layer-1",
+			),
+		).toEqual({ folderId: "1", fileId: "0" });
 	});
 });

@@ -47,33 +47,33 @@ export function Pane({
 					{
 						id: "stage-view",
 						actions: [
-						{
-							id: "follow",
-							label: "Follow Preload",
-							active: Boolean(pane.followPreload),
-							onPress: () => {
-								const now = performance.now();
-								if (now - lastFollowToggle.current < 400) return;
-								lastFollowToggle.current = now;
-								dispatch({
-									type: "SET_PANE_STAGE_OPTION",
-									id: pane.id,
-									option: "followPreload",
-									value: !pane.followPreload,
-								});
+							{
+								id: "follow",
+								label: "Follow Preload",
+								active: Boolean(pane.followPreload),
+								onPress: () => {
+									const now = performance.now();
+									if (now - lastFollowToggle.current < 400) return;
+									lastFollowToggle.current = now;
+									dispatch({
+										type: "SET_PANE_STAGE_OPTION",
+										id: pane.id,
+										option: "followPreload",
+										value: !pane.followPreload,
+									});
+								},
 							},
-						},
 						],
 					},
 					{
 						id: "stage-navigation",
 						actions: [
-						{
-							id: "groups",
-							label: "Groups",
-							onPress: () =>
-								dispatch({ type: "OPEN_GROUPS_FROM_STAGE", origin: "desk" }),
-						},
+							{
+								id: "groups",
+								label: "Groups",
+								onPress: () =>
+									dispatch({ type: "OPEN_GROUPS_FROM_STAGE", origin: "desk" }),
+							},
 						],
 					},
 				]
@@ -214,6 +214,8 @@ function PaneContent({
 					serverId: pane.mediaServerId,
 					layerId: pane.mediaLayerId,
 					browserMode: pane.mediaBrowserMode,
+					sourceFilter: pane.mediaSourceFilter,
+					controlSectionId: pane.mediaControlSectionId,
 					mainSectionId: pane.mediaMainSectionId,
 					rightPaneVisible: pane.mediaRightPaneVisible,
 				}}

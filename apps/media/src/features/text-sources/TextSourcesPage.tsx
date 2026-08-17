@@ -328,7 +328,10 @@ function TextDetail({
 	);
 }
 
-function textPreviewUrl(slot: TextSlotView, aspectRatio: number): string {
+export function textPreviewUrl(
+	slot: TextSlotView,
+	aspectRatio: number,
+): string {
 	const width = 640;
 	const height = Math.max(180, Math.round(width / aspectRatio));
 	const words = escapeSvg(formatDraftPreview(draftOf(slot), Date.now()));

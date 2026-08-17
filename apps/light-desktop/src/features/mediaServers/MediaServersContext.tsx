@@ -1,6 +1,7 @@
 import { createContext, type PropsWithChildren, useContext } from "react";
 import type {
 	MediaServerInspection,
+	NativeMediaEffectSlot,
 	NativeMediaSnapshot,
 	NativeMediaTextSlot,
 	MediaServerDiscovery,
@@ -36,6 +37,12 @@ export interface MediaServersState {
 		file: number,
 		text: string,
 	) => Promise<NativeMediaTextSlot>;
+	updateNativeMediaEffect: (
+		fixtureId: string,
+		layer: number,
+		controlId: string,
+		value: string | number | boolean,
+	) => Promise<NativeMediaEffectSlot[]>;
 	applyMediaLibrarySelection: (
 		fixtureId: string,
 		input: {

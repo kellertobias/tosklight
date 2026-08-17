@@ -3,6 +3,9 @@
 The runnable Media Server: the `media-server` executable and the React administration interface
 it serves. Media is a web application, not a Tauri application.
 
+ToskLight Pixel uses the approved `assets/branding/ToskLight Pixel.svg` and `.png` artwork in its
+browser administration surface, output windows, standby picture, and packaged application bundle.
+
 This package is a composition root only. It owns process lifecycle, HTTP bootstrap, and asset
 embedding; reusable behavior belongs in `crates/media`. Shared React components come from
 `apps/ui-library` through the `@tosklight/ui` workspace package rather than a competing local

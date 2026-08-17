@@ -12,12 +12,12 @@ use media_citp::message::{LibraryElement, LibraryFolder, Thumbnail, ThumbnailReq
 use media_citp::server::{Identity, Library, Sessions};
 use media_citp::{MULTICAST_GROUP, packet};
 use media_domain::catalog::CatalogSnapshot;
-use media_domain::{MediaAddress, SourceStatus};
+use media_domain::{Countdown, MediaAddress, Size, SourceStatus, VisualizerKind};
 use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 use tokio::net::{TcpListener, UdpSocket};
 
 use crate::dmx::SharedState;
-use crate::presentation::SharedCatalog;
+use crate::presentation::{SharedCatalog, SharedConfiguration};
 use crate::shutdown::Shutdown;
 
 /// How often a media server announces itself, matching what consoles expect to hear.
@@ -73,11 +73,14 @@ impl ConsoleIdentity {
 struct PublishedLibrary {
     catalog: Arc<CatalogSnapshot>,
     storage: media_library::LibraryStorage,
+    configuration: SharedConfiguration,
+    fonts: Arc<Mutex<Option<media_text::Fonts>>>,
 }
 
 impl Library for PublishedLibrary {
     fn folders(&self) -> Vec<LibraryFolder> {
-        self.catalog
+        let mut folders = self
+            .catalog
             .folders
             .iter()
             .filter(|folder| folder.folder <= 199)
@@ -89,34 +92,122 @@ impl Library for PublishedLibrary {
                     .unwrap_or_else(|| format!("Folder {:03}", folder.folder)),
                 element_count: folder.items.len().min(255) as u8,
             })
-            .collect()
+            .collect::<Vec<_>>();
+        let configuration = self.configuration.load();
+        for folder in 200..=249 {
+            let count = configuration
+                .text
+                .slots
+                .iter()
+                .filter(|slot| slot.address.folder == folder)
+                .count();
+            if count > 0 {
+                folders.push(LibraryFolder {
+                    number: folder,
+                    name: format!("Text {folder:03}"),
+                    element_count: count.min(255) as u8,
+                });
+            }
+        }
+        for folder in 250..=255 {
+            let count = configuration
+                .visualizers
+                .entries
+                .iter()
+                .filter(|entry| entry.address.folder == folder)
+                .count();
+            if count > 0 {
+                folders.push(LibraryFolder {
+                    number: folder,
+                    name: format!("Visualizers {folder:03}"),
+                    element_count: count.min(255) as u8,
+                });
+            }
+        }
+        folders
     }
 
     fn elements(&self, folder: u8) -> Vec<LibraryElement> {
-        self.catalog
-            .folder(u16::from(folder))
-            .map_or_else(Vec::new, |found| {
-                found
-                    .items
-                    .iter()
-                    .map(|item| LibraryElement {
-                        number: item.file,
-                        name: item.name.clone(),
-                        width: item.width.min(u32::from(u16::MAX)) as u16,
-                        height: item.height.min(u32::from(u16::MAX)) as u16,
-                        length_frames: item.frames.unwrap_or(0),
-                        fps: 25,
-                    })
-                    .collect()
+        if folder <= 199 {
+            return self
+                .catalog
+                .folder(u16::from(folder))
+                .map_or_else(Vec::new, |found| {
+                    found
+                        .items
+                        .iter()
+                        .map(|item| LibraryElement {
+                            number: item.file,
+                            name: item.name.clone(),
+                            width: item.width.min(u32::from(u16::MAX)) as u16,
+                            height: item.height.min(u32::from(u16::MAX)) as u16,
+                            length_frames: item.frames.unwrap_or(0),
+                            fps: 25,
+                        })
+                        .collect()
+                });
+        }
+        let configuration = self.configuration.load();
+        let dimensions = configuration.outputs.first().map_or((640, 360), |output| {
+            (
+                output.resolution.width.min(u32::from(u16::MAX)) as u16,
+                output.resolution.height.min(u32::from(u16::MAX)) as u16,
+            )
+        });
+        if folder <= 249 {
+            return configuration
+                .text
+                .slots
+                .iter()
+                .filter(|slot| slot.address.folder == folder)
+                .map(|slot| LibraryElement {
+                    number: slot.address.file,
+                    name: slot.name.clone(),
+                    width: dimensions.0,
+                    height: dimensions.1,
+                    length_frames: 1,
+                    fps: 25,
+                })
+                .collect();
+        }
+        configuration
+            .visualizers
+            .entries
+            .iter()
+            .filter(|entry| entry.address.folder == folder)
+            .map(|entry| LibraryElement {
+                number: entry.address.file,
+                name: entry.configuration.name.clone(),
+                width: dimensions.0,
+                height: dimensions.1,
+                length_frames: 1,
+                fps: 25,
             })
+            .collect()
     }
 
     fn thumbnail(
         &self,
         folder: u8,
         element: Option<u8>,
-        _request: &ThumbnailRequest,
+        request: &ThumbnailRequest,
     ) -> Option<Thumbnail> {
+        if folder >= 250 {
+            let configuration = self.configuration.load();
+            let entry = configuration.visualizers.entries.iter().find(|entry| {
+                entry.address.folder == folder
+                    && element.is_none_or(|file| entry.address.file == file)
+            })?;
+            return visualizer_thumbnail(entry.configuration.kind, request);
+        }
+        if folder >= 200 {
+            let configuration = self.configuration.load();
+            let slot = configuration.text.slots.iter().find(|slot| {
+                slot.address.folder == folder
+                    && element.is_none_or(|file| slot.address.file == file)
+            })?;
+            return text_thumbnail(slot, request, &self.fonts);
+        }
         // A folder's own picture is its first item's, which is what an operator recognises the
         // folder by. Resizing to the console's exact request would need a decoder in the request
         // path; CITP carries the real dimensions, so the stored thumbnail is sent as it is.
@@ -168,6 +259,135 @@ fn jpeg_size(jpeg: &[u8]) -> Option<(u16, u16)> {
     None
 }
 
+fn visualizer_thumbnail(kind: VisualizerKind, request: &ThumbnailRequest) -> Option<Thumbnail> {
+    let decoder = png::Decoder::new(std::io::Cursor::new(visualizer_preview_png(kind)));
+    let mut reader = decoder.read_info().ok()?;
+    let mut pixels = vec![0; reader.output_buffer_size()?];
+    let info = reader.next_frame(&mut pixels).ok()?;
+    let pixels = &pixels[..info.buffer_size()];
+    let rgba = match info.color_type {
+        png::ColorType::Rgba => pixels.to_vec(),
+        png::ColorType::Rgb => pixels
+            .chunks_exact(3)
+            .flat_map(|pixel| [pixel[0], pixel[1], pixel[2], 255])
+            .collect(),
+        _ => return None,
+    };
+    crate::preview::encode(
+        &rgba,
+        Size::new(info.width, info.height),
+        thumbnail_size(request, info.width, info.height),
+    )
+    .ok()
+}
+
+fn text_thumbnail(
+    slot: &media_domain::TextSlot,
+    request: &ThumbnailRequest,
+    fonts: &Arc<Mutex<Option<media_text::Fonts>>>,
+) -> Option<Thumbnail> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?
+        .as_millis() as i64;
+    let words = media_domain::text::render(&slot.entry, &Countdown::new(), now, 0)?;
+    let mut fonts = fonts.lock().ok()?;
+    let rendered = media_text::render_line(fonts.as_mut()?, &words, &slot.style, 320, 180).ok()?;
+    crate::preview::encode(
+        &rendered.pixels,
+        Size::new(rendered.width, rendered.height),
+        thumbnail_size(request, 320, 180),
+    )
+    .ok()
+}
+
+fn thumbnail_size(request: &ThumbnailRequest, width: u32, height: u32) -> Size {
+    let requested = Size::new(u32::from(request.width), u32::from(request.height));
+    if !request.preserve_aspect || width == 0 || height == 0 {
+        return requested;
+    }
+    let scale =
+        (requested.width as f64 / width as f64).min(requested.height as f64 / height as f64);
+    Size::new(
+        (width as f64 * scale).round().max(1.0) as u32,
+        (height as f64 * scale).round().max(1.0) as u32,
+    )
+}
+
+fn visualizer_preview_png(kind: VisualizerKind) -> &'static [u8] {
+    match kind {
+        VisualizerKind::EqualizerBars => include_bytes!(
+            "../../../../../apps/media/src/features/visualizers/previews/000-equalizer-bars.png"
+        ),
+        VisualizerKind::WaveformOscilloscope => include_bytes!(
+            "../../../../../apps/media/src/features/visualizers/previews/001-waveform-oscilloscope.png"
+        ),
+        VisualizerKind::CircularSpectrum => include_bytes!(
+            "../../../../../apps/media/src/features/visualizers/previews/002-circular-spectrum.png"
+        ),
+        VisualizerKind::WaveTerrain => include_bytes!(
+            "../../../../../apps/media/src/features/visualizers/previews/003-wave-terrain.png"
+        ),
+        VisualizerKind::PulsingCircles => include_bytes!(
+            "../../../../../apps/media/src/features/visualizers/previews/010-pulsing-circles.png"
+        ),
+        VisualizerKind::MorphingPolygon => include_bytes!(
+            "../../../../../apps/media/src/features/visualizers/previews/011-morphing-polygon.png"
+        ),
+        VisualizerKind::MinimalistShapes => include_bytes!(
+            "../../../../../apps/media/src/features/visualizers/previews/012-minimalist-shapes.png"
+        ),
+        VisualizerKind::Kaleidoscope => include_bytes!(
+            "../../../../../apps/media/src/features/visualizers/previews/013-kaleidoscope.png"
+        ),
+        VisualizerKind::BeatExplosions => include_bytes!(
+            "../../../../../apps/media/src/features/visualizers/previews/020-beat-explosions.png"
+        ),
+        VisualizerKind::DancingSwarm => include_bytes!(
+            "../../../../../apps/media/src/features/visualizers/previews/021-dancing-swarm.png"
+        ),
+        VisualizerKind::Starfield => include_bytes!(
+            "../../../../../apps/media/src/features/visualizers/previews/022-starfield.png"
+        ),
+        VisualizerKind::LightningTendrils => include_bytes!(
+            "../../../../../apps/media/src/features/visualizers/previews/023-lightning-tendrils.png"
+        ),
+        VisualizerKind::RadiatingRays => include_bytes!(
+            "../../../../../apps/media/src/features/visualizers/previews/030-radiating-rays.png"
+        ),
+        VisualizerKind::StrobeFlash => include_bytes!(
+            "../../../../../apps/media/src/features/visualizers/previews/031-strobe-flash.png"
+        ),
+        VisualizerKind::ColorCycling => include_bytes!(
+            "../../../../../apps/media/src/features/visualizers/previews/032-color-cycling.png"
+        ),
+        VisualizerKind::CrossingLines => include_bytes!(
+            "../../../../../apps/media/src/features/visualizers/previews/033-crossing-lines.png"
+        ),
+        VisualizerKind::DigitalGlitch => include_bytes!(
+            "../../../../../apps/media/src/features/visualizers/previews/040-digital-glitch.png"
+        ),
+        VisualizerKind::CrtScanline => include_bytes!(
+            "../../../../../apps/media/src/features/visualizers/previews/041-crt-scanline.png"
+        ),
+        VisualizerKind::MatrixDigitalRain => include_bytes!(
+            "../../../../../apps/media/src/features/visualizers/previews/042-matrix-digital-rain.png"
+        ),
+        VisualizerKind::RotatingShape => include_bytes!(
+            "../../../../../apps/media/src/features/visualizers/previews/050-rotating-3d-shape.png"
+        ),
+        VisualizerKind::FractalMorph => include_bytes!(
+            "../../../../../apps/media/src/features/visualizers/previews/051-fractal-morph.png"
+        ),
+        VisualizerKind::CityTunnel => include_bytes!(
+            "../../../../../apps/media/src/features/visualizers/previews/052-city-tunnel.png"
+        ),
+        VisualizerKind::GridLandscape => include_bytes!(
+            "../../../../../apps/media/src/features/visualizers/previews/053-grid-landscape.png"
+        ),
+    }
+}
+
 /// Everything the CITP tasks share.
 #[derive(Clone)]
 struct Service {
@@ -176,7 +396,9 @@ struct Service {
     previews: crate::preview::SharedPreviews,
     state: SharedState,
     catalog: SharedCatalog,
+    configuration: SharedConfiguration,
     storage: media_library::LibraryStorage,
+    fonts: Arc<Mutex<Option<media_text::Fonts>>>,
     layers: u8,
     preview_sources: Vec<media_citp::VideoSource>,
 }
@@ -194,7 +416,9 @@ impl Service {
     fn library(&self) -> PublishedLibrary {
         PublishedLibrary {
             catalog: Arc::clone(&self.catalog.load_full()),
+            configuration: Arc::clone(&self.configuration),
             storage: self.storage.clone(),
+            fonts: Arc::clone(&self.fonts),
         }
     }
 
@@ -240,6 +464,7 @@ pub fn spawn(
     configuration: &MediaConfiguration,
     state: SharedState,
     catalog: SharedCatalog,
+    live_configuration: SharedConfiguration,
     previews: crate::preview::SharedPreviews,
     shutdown: Shutdown,
     console_identity: ConsoleIdentity,
@@ -252,7 +477,9 @@ pub fn spawn(
         previews,
         state,
         catalog,
+        configuration: live_configuration,
         storage: media_library::LibraryStorage::new(configuration.library.root.clone()),
+        fonts: Arc::new(Mutex::new(media_text::Fonts::load().ok())),
         layers: configuration
             .outputs
             .iter()
@@ -492,6 +719,13 @@ async fn serve_console(
                 for source in active.difference(&subscribed_sources) {
                     if let Some(preview) = service.previews.for_source(*source) {
                         preview.subscribed(true, sessions.requested_size_for(*source, now));
+                        if let Some((sequence, _)) = preview.latest() {
+                            // A browser refresh asks for one frame at a time. Do not satisfy that
+                            // request with the cached frame from before it subscribed; wait for
+                            // the renderer capture triggered above so moving output stays live.
+                            sessions.acknowledge_cached_sequence(*source, sequence);
+                            sent_sequences.insert(*source, sequence);
+                        }
                     }
                 }
                 for source in &active {
@@ -568,6 +802,40 @@ mod tests {
         assert_eq!(jpeg_size(&jpeg), Some((16, 8)));
     }
 
+    #[test]
+    fn generated_text_and_visualizers_are_real_citp_library_entries() {
+        let configuration = MediaConfiguration::default();
+        let library = PublishedLibrary {
+            catalog: Arc::new(CatalogSnapshot::default()),
+            storage: media_library::LibraryStorage::new(std::path::PathBuf::new()),
+            configuration: Arc::new(arc_swap::ArcSwap::from_pointee(configuration)),
+            fonts: Arc::new(Mutex::new(media_text::Fonts::load().ok())),
+        };
+
+        let folders = library.folders();
+        assert!(folders.iter().any(|folder| folder.number == 200));
+        assert!(folders.iter().any(|folder| folder.number == 250));
+        assert_eq!(library.elements(200)[0].name, "Clock");
+        assert_eq!(library.elements(250)[0].name, "Equalizer Bars");
+
+        let thumbnail = library
+            .thumbnail(
+                250,
+                Some(1),
+                &ThumbnailRequest {
+                    width: 160,
+                    height: 90,
+                    preserve_aspect: true,
+                    folder: 250,
+                    elements: vec![1],
+                    folders: Vec::new(),
+                },
+            )
+            .expect("a rendered built-in visualizer has a CITP thumbnail");
+        assert_eq!((thumbnail.width, thumbnail.height), (160, 90));
+        assert_eq!(&thumbnail.jpeg[..2], &[0xFF, 0xD8]);
+    }
+
     #[tokio::test]
     async fn light_desk_client_drives_and_reads_the_real_media_server() {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -596,6 +864,7 @@ mod tests {
         let catalog: SharedCatalog = Arc::new(arc_swap::ArcSwap::from_pointee(
             media_library::discover(&configuration.library.root).unwrap(),
         ));
+        let live_configuration = Arc::new(arc_swap::ArcSwap::from_pointee(configuration.clone()));
         let previews = crate::preview::SharedPreviews::configured(&configuration);
         let shutdown = Shutdown::new();
         crate::dmx::spawn(
@@ -610,6 +879,7 @@ mod tests {
             &configuration,
             state.clone(),
             catalog.clone(),
+            live_configuration.clone(),
             previews.clone(),
             shutdown.clone(),
             ConsoleIdentity::default(),
@@ -620,7 +890,7 @@ mod tests {
             let shared = crate::presentation::Shared {
                 state: state.clone(),
                 catalog,
-                configuration: Arc::new(arc_swap::ArcSwap::from_pointee(configuration.clone())),
+                configuration: live_configuration,
                 analysis: Arc::new(arc_swap::ArcSwap::from_pointee(
                     media_audio::AnalysisSnapshot::default(),
                 )),
@@ -659,10 +929,10 @@ mod tests {
             std::fs::read(configuration.library.root.join("001/.thumbs/001-thumb.jpg")).unwrap();
         assert_eq!(thumbnail[0].1.bytes, expected_thumbnail);
 
-        let mut slots = vec![0_u8; 75];
+        let mut slots = vec![0_u8; 77];
         for layer in 0..2 {
             for channel in media_domain::personality::LAYER_CHANNELS {
-                slots[layer * 34 + usize::from(channel.offset)] = match channel.resolution {
+                slots[layer * 35 + usize::from(channel.offset)] = match channel.resolution {
                     media_domain::personality::Resolution::Coarse => {
                         (channel.default_value >> 8) as u8
                     }

@@ -10,6 +10,7 @@ export function createMediaActions(
 	| "inspectMediaServer"
 	| "nativeMedia"
 	| "updateNativeMediaText"
+	| "updateNativeMediaEffect"
 	| "applyMediaLibrarySelection"
 	| "mediaThumbnail"
 	| "discoverMediaServers"
@@ -72,6 +73,13 @@ export function createMediaActions(
 		nativeMedia: (fixtureId) => api.mediaOutput.nativeMedia(fixtureId),
 		updateNativeMediaText: (fixtureId, folder, file, text) =>
 			api.mediaOutput.updateNativeMediaText(fixtureId, folder, file, text),
+		updateNativeMediaEffect: (fixtureId, layer, controlId, value) =>
+			api.mediaOutput.updateNativeMediaEffect(
+				fixtureId,
+				layer,
+				controlId,
+				value,
+			),
 		applyMediaLibrarySelection: (fixtureId, input) =>
 			api.mediaOutput.applyMediaLibrarySelection(fixtureId, input),
 		mediaThumbnail: (fixtureId, folder, element) =>

@@ -10,7 +10,6 @@
 //! control-source ownership. It takes state and textures and presents an image.
 
 pub mod compositor;
-mod feedback;
 pub mod gpu;
 pub mod offscreen;
 pub mod texture;

@@ -138,6 +138,21 @@ impl Sessions {
         self.subscriptions.push(subscription);
     }
 
+    /// Makes a newly connected console wait for a frame captured after its request.
+    ///
+    /// The renderer deliberately keeps its last frame while nobody is subscribed. Sending that
+    /// cached frame immediately would make repeated one-frame browser requests look permanently
+    /// frozen even while the output is playing.
+    pub fn acknowledge_cached_sequence(&mut self, source: u16, sequence: u64) {
+        if let Some(subscription) = self
+            .subscriptions
+            .iter_mut()
+            .find(|subscription| subscription.source == source)
+        {
+            subscription.last_sequence = sequence;
+        }
+    }
+
     /// The frames to send for one newly captured preview.
     ///
     /// A subscription that has already seen this sequence is skipped, and a single-frame request
@@ -676,6 +691,31 @@ mod tests {
             1,
             "a new frame is sent"
         );
+    }
+
+    #[test]
+    fn a_new_single_frame_request_waits_for_a_frame_captured_after_subscription() {
+        let mut sessions = Sessions::new();
+        sessions.subscribe(
+            &StreamRequest {
+                source: 2,
+                format: FORMAT_JPEG,
+                width: 160,
+                height: 90,
+                fps: 1,
+                timeout_seconds: 0,
+            },
+            0,
+        );
+        let preview = Thumbnail {
+            width: 160,
+            height: 90,
+            jpeg: vec![9; 10],
+        };
+
+        sessions.acknowledge_cached_sequence(2, 7);
+        assert_eq!(sessions.frames_for_source(2, &preview, 7, 0).len(), 0);
+        assert_eq!(sessions.frames_for_source(2, &preview, 8, 100).len(), 1);
     }
 
     #[test]

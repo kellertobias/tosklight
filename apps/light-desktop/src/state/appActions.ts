@@ -107,6 +107,8 @@ export type Action =
 				serverId?: string;
 				layerId?: string;
 				browserMode?: "media" | "mask";
+				sourceFilter?: "media" | "visualizers" | "text";
+				controlSectionId?: string;
 				mainSectionId?: string;
 				rightPaneVisible?: boolean;
 			};

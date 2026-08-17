@@ -106,6 +106,30 @@ pub struct NativeMediaTextSlot {
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct NativeMediaEffectParameter {
+    pub id: String,
+    pub label: String,
+    pub value: f32,
+    pub default_value: f32,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct NativeMediaEffectSlot {
+    pub index: usize,
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub effect_type: Option<String>,
+    pub label: String,
+    pub enabled: bool,
+    pub mix: f32,
+    pub supported: bool,
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub capability_detail: Option<String>,
+    pub parameters: Vec<NativeMediaEffectParameter>,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct NativeMediaSnapshot {
     pub endpoint: String,
     pub status: String,
@@ -116,6 +140,26 @@ pub struct NativeMediaSnapshot {
     pub catalog_items: usize,
     pub text_slots: Vec<NativeMediaTextSlot>,
     pub effect_controls_available: bool,
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub output_id: Option<String>,
+    #[serde(default)]
+    pub effect_layers: Vec<Vec<NativeMediaEffectSlot>>,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct NativeMediaEffectUpdateRequest {
+    pub request_id: String,
+    pub control_id: String,
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub number_value: Option<f32>,
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub string_value: Option<String>,
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub boolean_value: Option<bool>,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]

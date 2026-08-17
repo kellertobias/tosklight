@@ -8,6 +8,7 @@ import type {
 } from "../../api/client/fixtures";
 import type {
 	MediaServerInspection,
+	NativeMediaEffectSlot,
 	NativeMediaSnapshot,
 	NativeMediaTextSlot,
 	MediaServerDiscovery,
@@ -41,6 +42,12 @@ export interface ServerFixtureContext {
 		file: number,
 		text: string,
 	) => Promise<NativeMediaTextSlot>;
+	updateNativeMediaEffect: (
+		fixtureId: string,
+		layer: number,
+		controlId: string,
+		value: string | number | boolean,
+	) => Promise<NativeMediaEffectSlot[]>;
 	applyMediaLibrarySelection: (
 		fixtureId: string,
 		input: {
