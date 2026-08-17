@@ -173,6 +173,7 @@ describe("MediaPaneSurface control state", () => {
 		const thumbnail = view.container.querySelector(".media-layer-thumbnail");
 		expect(thumbnail).toHaveClass("is-empty");
 		expect(thumbnail?.querySelector("img")).not.toBeInTheDocument();
+		expect(view.getByText("Dimmer 100%")).toBeInTheDocument();
 	});
 
 	it("keeps live preview transport failures visible on both master and layer", () => {
@@ -307,14 +308,26 @@ describe("MediaPaneSurface control state", () => {
 		);
 		const shortcuts = within(view.container).getByLabelText("Media servers");
 		expect(shortcuts).toBeInTheDocument();
+		expect(shortcuts.querySelector(".pool-window-grid")).toHaveClass(
+			"media-server-pool",
+		);
 		expect(
 			within(shortcuts).getByRole("button", {
-				name: /Video Server\s*1001\s*Online/,
+				name: /1001\s*Video Server/,
 			}),
-		).toHaveAttribute("aria-pressed", "true");
+		).toHaveClass("preset-card", "selected");
+		expect(
+			within(shortcuts).getAllByRole("button", { hidden: true }),
+		).toHaveLength(6);
+		expect(
+			within(shortcuts).getAllByRole("button", { name: /Empty/ }),
+		).toHaveLength(4);
+		expect(
+			within(shortcuts).getAllByRole("button", { name: /Empty/ })[0],
+		).toBeDisabled();
 		await userEvent.click(
 			within(shortcuts).getByRole("button", {
-				name: /Internal Audio\s*1002\s*Not configured/,
+				name: /1002\s*Internal Audio/,
 			}),
 		);
 		expect(onSelectServer).toHaveBeenCalledWith("internal");
@@ -411,7 +424,7 @@ describe("MediaPaneSurface control state", () => {
 		expect(onChangeControl).not.toHaveBeenCalled();
 	});
 
-	it("collapses more than four modes into a dropdown with visible quick actions", async () => {
+	it("opens play mode in a grouped modal with visible quick actions", async () => {
 		const onChangeControl = vi.fn();
 		const view = renderSurface(
 			{ kind: "ready" },
@@ -447,12 +460,155 @@ describe("MediaPaneSurface control state", () => {
 
 		const surface = within(view.container);
 		expect(surface.queryByRole("radiogroup", { name: "Play mode" })).toBeNull();
-		expect(surface.getByRole("button", { name: "loop" })).toHaveAttribute(
-			"aria-haspopup",
-			"listbox",
+		await userEvent.click(surface.getByRole("button", { name: "Play mode" }));
+		const dialog = screen.getByRole("dialog", { name: "Choose Play mode" });
+		expect(within(dialog).getByText("Continuous playback")).toBeInTheDocument();
+		await userEvent.click(
+			within(dialog).getByRole("button", { name: /bounce/iu }),
 		);
+		expect(onChangeControl).toHaveBeenCalledWith("play-mode", "bounce");
 		await userEvent.click(surface.getByRole("button", { name: "Stop" }));
 		expect(onChangeControl).toHaveBeenCalledWith("play-mode", "stop");
+	});
+
+	it("opens speed in a grouped modal and selects an exact DMX band", async () => {
+		const onChangeControl = vi.fn();
+		const view = renderSurface(
+			{ kind: "ready" },
+			[],
+			{
+				controlSections: [
+					{
+						id: "playback",
+						label: "Playback",
+						controls: [
+							{
+								id: "speed",
+								kind: "value",
+								label: "Speed",
+								value: 127,
+								display: "1×",
+							},
+						],
+					},
+				],
+				selectedControlSectionId: "playback",
+				mainSectionId: "playback",
+			},
+			onChangeControl,
+		);
+
+		await userEvent.click(
+			within(view.container).getByRole("button", { name: "Speed" }),
+		);
+		const dialog = screen.getByRole("dialog", { name: "Choose Speed" });
+		expect(within(dialog).getByText("Slower")).toBeInTheDocument();
+		expect(within(dialog).getByText("Faster")).toBeInTheDocument();
+		await userEvent.click(within(dialog).getByRole("button", { name: /^2×/u }));
+		expect(onChangeControl).toHaveBeenCalledWith("speed", 135);
+		expect(screen.queryByRole("dialog", { name: "Choose Speed" })).toBeNull();
+	});
+
+	it("offers a reset beside each editable media control", async () => {
+		const onResetControl = vi.fn();
+		renderSurface(
+			{ kind: "ready" },
+			[],
+			{
+				controlSections: [
+					{
+						id: "frame",
+						label: "Frame",
+						controls: [
+							{
+								id: "media.layer.scale.x",
+								kind: "value",
+								label: "Scale X",
+								value: 1,
+							},
+						],
+					},
+				],
+				selectedControlSectionId: "frame",
+				mainSectionId: "frame",
+			},
+			vi.fn(),
+			vi.fn(),
+			undefined,
+			{ onResetControl },
+		);
+
+		await userEvent.click(
+			screen.getByRole("button", { name: "Reset Scale X" }),
+		);
+		expect(onResetControl).toHaveBeenCalledWith("media.layer.scale.x");
+	});
+
+	it("groups effect amounts into four selectable effect slots", async () => {
+		const onChangeControl = vi.fn();
+		const view = renderSurface(
+			{ kind: "ready" },
+			[],
+			{
+				controlSections: [
+					{
+						id: "effects",
+						label: "Effects",
+						controls: [1, 2, 3, 4].map((slot) => ({
+							id: `media.layer.effect.${slot}`,
+							kind: "value" as const,
+							label: `Effect ${slot}`,
+							value: slot * 10,
+						})),
+					},
+				],
+				selectedControlSectionId: "effects",
+				mainSectionId: "effects",
+			},
+			onChangeControl,
+		);
+		const surface = within(view.container);
+		const tabs = surface.getByRole("tablist", { name: "Effect slot" });
+		expect(within(tabs).getAllByRole("tab")).toHaveLength(4);
+		expect(surface.getByText("10%")).toBeInTheDocument();
+		expect(surface.queryByText("20%")).toBeNull();
+
+		await userEvent.click(within(tabs).getByRole("tab", { name: "Effect 2" }));
+		expect(surface.queryByText("10%")).toBeNull();
+		expect(surface.getByText("20%")).toBeInTheDocument();
+		expect(surface.getByText("Amount")).toBeInTheDocument();
+	});
+
+	it("opens the selected native Media Server controls and content in place", async () => {
+		let view = renderSurface({ kind: "ready" }, [], {
+			nativeManagementUrl: "http://192.0.2.44:8080",
+		});
+		await userEvent.click(
+			within(view.container).getByRole("button", { name: "Settings" }),
+		);
+		const showContent = screen
+			.getAllByRole("button", { name: "Show content" })
+			.at(-1);
+		expect(showContent).toBeDefined();
+		await userEvent.click(showContent as HTMLElement);
+		const content = within(view.container).getByTitle("Media Server content");
+		expect(content).toHaveAttribute("src", "http://192.0.2.44:8080/library");
+
+		view.unmount();
+		view = renderSurface({ kind: "ready" }, [], {
+			nativeManagementUrl: "http://192.0.2.44:8080",
+		});
+		await userEvent.click(
+			within(view.container).getByRole("button", { name: "Settings" }),
+		);
+		const showControls = screen
+			.getAllByRole("button", { name: "Show controls" })
+			.at(-1);
+		expect(showControls).toBeDefined();
+		await userEvent.click(showControls as HTMLElement);
+		expect(
+			within(view.container).getByTitle("Media Server controls"),
+		).toHaveAttribute("src", "http://192.0.2.44:8080/media");
 	});
 
 	it("shows native source filters and prevents Master content browsing", async () => {
@@ -588,6 +744,25 @@ describe("MediaPaneSurface control state", () => {
 			view.unmount();
 		}
 	});
+
+	it("marks the selected media folder and file with the shared selected state", () => {
+		const view = renderSurface({ kind: "ready" }, [], {
+			libraryFolders: [{ id: "1", kind: "folder", name: "Looks" }],
+			libraryFiles: [{ id: "7", kind: "file", name: "Loop" }],
+			draftFolderId: "1",
+			draftFileId: "7",
+		});
+
+		const browser = within(view.container).getByLabelText(
+			"Media library browser",
+		);
+		expect(
+			within(browser).getByRole("button", { name: /001Looks/iu }),
+		).toHaveClass("selected");
+		expect(
+			within(browser).getByRole("button", { name: /007Loop/iu }),
+		).toHaveClass("selected");
+	});
 });
 
 function renderSurface(
@@ -646,6 +821,7 @@ function renderSurface(
 			onBrowseItem={callbacks.onBrowseItem ?? vi.fn()}
 			onSelectControlSection={vi.fn()}
 			onChangeControl={onChangeControl}
+			onResetControl={callbacks.onResetControl}
 			onSetRightPaneVisible={vi.fn()}
 		/>,
 	);

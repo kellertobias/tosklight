@@ -81,6 +81,7 @@ export interface MediaLibraryItem {
 	name: string;
 	detail?: string;
 	thumbnailSrc?: string;
+	empty?: boolean;
 	disabled?: boolean;
 }
 
@@ -157,6 +158,7 @@ export interface MediaPaneModel {
 	selectedControlSectionId: string;
 	mainSectionId: string;
 	rightPaneVisible: boolean;
+	nativeManagementUrl?: string;
 }
 
 export interface MediaPaneUiCallbacks {
@@ -168,6 +170,7 @@ export interface MediaPaneUiCallbacks {
 	onBrowseItem(mode: MediaBrowserMode, item: MediaLibraryItem): void;
 	onSelectControlSection(sectionId: string): void;
 	onChangeControl(controlId: string, value: string | number): void;
+	onResetControl?(controlId: string): void;
 	onSetRightPaneVisible(visible: boolean): void;
 }
 

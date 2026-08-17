@@ -1,6 +1,7 @@
 import {
 	Button,
 	ColorPickerField,
+	GroupedSelectionField,
 	HorizontalFader,
 	MultiValueToggle,
 	SelectField,
@@ -51,14 +52,47 @@ export function MediaPaneSurface({
 	onBrowseItem,
 	onSelectControlSection,
 	onChangeControl,
+	onResetControl,
 	onSetRightPaneVisible,
 }: MediaPaneSurfaceProps) {
+	const [nativeManagementView, setNativeManagementView] = useState<
+		"controls" | "content" | null
+	>(null);
+	useEffect(() => setNativeManagementView(null), [model.nativeManagementUrl]);
 	const hasPatchedServer = model.servers.some(
 		(server) => server.id.trim() !== "",
 	);
 	const patchedServers = model.servers.filter(
 		(server) => server.id.trim() !== "" && !server.disabled,
 	);
+	const serverPoolSlots: PoolSlotViewModel<string>[] = [
+		...patchedServers.map<PoolSlotViewModel<string>>((server, position) => ({
+			id: server.id,
+			position,
+			card: {
+				number: server.fixtureLabel ?? "—",
+				primary: server.name,
+				kind: "preset" as const,
+				states: server.id === model.selectedServerId ? ["selected"] : [],
+			},
+		})),
+		...Array.from(
+			{ length: Math.max(0, 6 - patchedServers.length) },
+			(_, emptyIndex): PoolSlotViewModel<string> => {
+				const position = patchedServers.length + emptyIndex;
+				return {
+					id: `empty-server-${position}`,
+					position,
+					card: {
+						number: position + 1,
+						primary: "Empty",
+						kind: "preset" as const,
+						states: ["empty", "disabled"],
+					},
+				};
+			},
+		),
+	];
 	const mainShowsBrowser =
 		model.rightPaneVisible ||
 		model.mainSectionId === "content" ||
@@ -149,22 +183,55 @@ export function MediaPaneSurface({
 								id: "pane",
 								label: "Pane",
 								content: (
-									<SwitchField
-										label="Right pane"
-										offLabel="Hidden"
-										onLabel="Visible"
-										checked={model.rightPaneVisible}
-										onChange={(event) =>
-											onSetRightPaneVisible(event.target.checked)
-										}
-									/>
+									<div className="media-pane-settings">
+										<SwitchField
+											label="Right pane"
+											offLabel="Hidden"
+											onLabel="Visible"
+											checked={model.rightPaneVisible}
+											onChange={(event) =>
+												onSetRightPaneVisible(event.target.checked)
+											}
+										/>
+										{model.nativeManagementUrl ? (
+											<div className="ui-window-action-group">
+												<Button
+													onClick={() => setNativeManagementView("controls")}
+												>
+													Show controls
+												</Button>
+												<Button
+													onClick={() => setNativeManagementView("content")}
+												>
+													Show content
+												</Button>
+											</div>
+										) : null}
+									</div>
 								),
 							},
 						]
 					: []
 			}
 		>
-			{!hasPatchedServer ? (
+			{nativeManagementView && model.nativeManagementUrl ? (
+				<section className="media-native-management">
+					<header>
+						<strong>
+							{nativeManagementView === "content"
+								? "Media Server content"
+								: "Media Server controls"}
+						</strong>
+						<Button onClick={() => setNativeManagementView(null)}>Close</Button>
+					</header>
+					<iframe
+						title={`Media Server ${nativeManagementView}`}
+						src={`${model.nativeManagementUrl}${
+							nativeManagementView === "content" ? "/library" : "/media"
+						}`}
+					/>
+				</section>
+			) : !hasPatchedServer ? (
 				<div className="media-pane-empty" role="status">
 					<strong>No media server is patched</strong>
 					{onOpenPatch ? (
@@ -182,24 +249,26 @@ export function MediaPaneSurface({
 							className="media-server-shortcuts"
 							aria-label="Media servers"
 						>
-							{patchedServers.map((server) => (
-								<Button
-									key={server.id}
-									className={
-										server.id === model.selectedServerId
-											? "selected"
-											: undefined
-									}
-									aria-pressed={server.id === model.selectedServerId}
-									onClick={() => onSelectServer(server.id)}
-								>
-									<span className="media-server-card-heading">
-										<strong>{server.name}</strong>
-										<b>{server.fixtureLabel}</b>
-									</span>
-									<small>{server.statusLabel}</small>
-								</Button>
-							))}
+							<PoolGrid
+								className="media-server-pool"
+								columns={1}
+								fillEmptySlots={false}
+								minimumCardWidth={100}
+								slots={serverPoolSlots}
+								emptySlot={(position) => ({
+									id: `empty-${position}`,
+									position,
+									card: {
+										number: position + 1,
+										primary: "Empty",
+										states: ["empty"],
+									},
+								})}
+								onSlotClick={(serverId) => {
+									if (patchedServers.some((server) => server.id === serverId))
+										onSelectServer(serverId);
+								}}
+							/>
 						</section>
 					) : null}
 					<section className="media-pane-overview" aria-label="Media output">
@@ -251,6 +320,7 @@ export function MediaPaneSurface({
 									model.rightPaneVisible ? controlSectionId : mainSectionId
 								}
 								onChange={onChangeControl}
+								onReset={onResetControl}
 							/>
 						)}
 					</section>
@@ -522,6 +592,7 @@ function MediaLayerStrip({
 										title={`Opacity ${opacity}%`}
 									>
 										<i aria-hidden="true" style={{ opacity: opacity / 100 }} />
+										<small>Dimmer {opacity}%</small>
 									</span>
 									<small className="media-layer-mask">
 										<strong>Mask:</strong> {layer.maskLabel ?? "None / None"}
@@ -678,6 +749,7 @@ function mediaPoolSlots(
 					? { src: item.thumbnailSrc, alt: "" }
 					: undefined,
 			states: [
+				...(item.empty ? (["empty"] as const) : []),
 				...(item.id === selectedId ? (["selected"] as const) : []),
 				...(item.disabled ? (["disabled"] as const) : []),
 			],
@@ -729,11 +801,14 @@ function MediaSecondaryControls({
 	sections,
 	selectedSectionId,
 	onChange,
+	onReset,
 }: {
 	sections: MediaControlSection[];
 	selectedSectionId: string;
 	onChange(controlId: string, value: string | number): void;
+	onReset?(controlId: string): void;
 }) {
+	const [effectSlot, setEffectSlot] = useState(0);
 	const section =
 		sections.find((candidate) => candidate.id === selectedSectionId) ??
 		sections[0];
@@ -760,20 +835,51 @@ function MediaSecondaryControls({
 								</span>
 							)}
 						</header>
+						{section.id === "effects" ? (
+							<div
+								className="media-effect-tabs"
+								role="tablist"
+								aria-label="Effect slot"
+							>
+								{[0, 1, 2, 3].map((slot) => (
+									<Button
+										key={slot}
+										role="tab"
+										aria-selected={effectSlot === slot}
+										active={effectSlot === slot}
+										onClick={() => setEffectSlot(slot)}
+									>
+										Effect {slot + 1}
+									</Button>
+								))}
+							</div>
+						) : null}
 						<div className="media-control-grid">
-							{section.controls.map((control, index) => (
-								<Fragment key={control.id}>
-									{control.group &&
-										control.group !== section.controls[index - 1]?.group && (
-											<h3>{control.group}</h3>
-										)}
-									<MediaControl
-										control={control}
-										sectionDisabled={section.capability === "unsupported"}
-										onChange={onChange}
-									/>
-								</Fragment>
-							))}
+							{section.controls
+								.filter(
+									(control) =>
+										section.id !== "effects" ||
+										effectControlBelongsToSlot(control.id, effectSlot),
+								)
+								.map((control, index, visibleControls) => (
+									<Fragment key={control.id}>
+										{control.group &&
+											control.group !== visibleControls[index - 1]?.group && (
+												<h3>{control.group}</h3>
+											)}
+										<MediaControl
+											control={
+												section.id === "effects" &&
+												control.id === `media.layer.effect.${effectSlot + 1}`
+													? { ...control, label: "Amount" }
+													: control
+											}
+											sectionDisabled={section.capability === "unsupported"}
+											onChange={onChange}
+											onReset={onReset}
+										/>
+									</Fragment>
+								))}
 						</div>
 					</div>
 				)}
@@ -782,16 +888,115 @@ function MediaSecondaryControls({
 	);
 }
 
+function effectControlBelongsToSlot(controlId: string, slot: number) {
+	return (
+		controlId === "native-effects-error" ||
+		controlId === `media.layer.effect.${slot + 1}` ||
+		controlId.startsWith(`effect-${slot}-`) ||
+		(slot === 0 && controlId.startsWith("visualizer-"))
+	);
+}
+
 function MediaControl({
 	control,
 	sectionDisabled,
 	onChange,
+	onReset,
 }: {
 	control: MediaSecondaryControl;
 	sectionDisabled: boolean;
 	onChange(controlId: string, value: string | number): void;
+	onReset?(controlId: string): void;
 }) {
 	const disabled = sectionDisabled || control.disabled;
+	if (control.kind === "readout")
+		return (
+			<div className={`media-control-readout ${disabled ? "disabled" : ""}`}>
+				<span>{control.label}</span>
+				<strong>{control.value}</strong>
+				{control.description && <small>{control.description}</small>}
+			</div>
+		);
+	return (
+		<div className="media-control-with-reset">
+			<MediaControlEditor
+				control={control}
+				disabled={Boolean(disabled)}
+				onChange={onChange}
+			/>
+			{onReset ? (
+				<Button
+					className="media-control-reset"
+					disabled={disabled}
+					aria-label={`Reset ${control.label}`}
+					onClick={() => onReset(control.id)}
+				>
+					Reset
+				</Button>
+			) : null}
+		</div>
+	);
+}
+
+function MediaControlEditor({
+	control,
+	disabled,
+	onChange,
+}: {
+	control: Exclude<MediaSecondaryControl, { kind: "readout" }>;
+	disabled: boolean;
+	onChange(controlId: string, value: string | number): void;
+}) {
+	if (control.kind === "choice" && isPlayModeControl(control))
+		return (
+			<div className={`media-choice-control ${disabled ? "disabled" : ""}`}>
+				{control.quickActions?.length ? (
+					<div
+						className="media-choice-quick-actions"
+						role="toolbar"
+						aria-label="Play mode quick actions"
+					>
+						{control.quickActions.map((action) => (
+							<Button
+								key={action.value}
+								disabled={disabled}
+								active={control.value === action.value}
+								onClick={() => onChange(control.id, action.value)}
+							>
+								{action.label}
+							</Button>
+						))}
+					</div>
+				) : null}
+				<GroupedSelectionField
+					label={control.label}
+					ariaLabel={control.label}
+					dialogTitle={`Choose ${control.label}`}
+					value={playModeRepresentative(control)}
+					groups={playModeGroups(control)}
+					disabled={disabled}
+					onChange={(value) => onChange(control.id, value)}
+				/>
+				{control.description && <small>{control.description}</small>}
+			</div>
+		);
+	if (isSpeedControl(control)) {
+		const options = speedOptions(control);
+		return (
+			<div className={`media-choice-control ${disabled ? "disabled" : ""}`}>
+				<GroupedSelectionField
+					label={control.label}
+					ariaLabel={control.label}
+					dialogTitle={`Choose ${control.label}`}
+					value={speedRepresentative(control, options)}
+					groups={speedGroups(options)}
+					disabled={disabled}
+					onChange={(value) => onChange(control.id, Number(value))}
+				/>
+				{control.description && <small>{control.description}</small>}
+			</div>
+		);
+	}
 	if (control.kind === "choice" && control.options.length > 4)
 		return (
 			<div className={`media-choice-control ${disabled ? "disabled" : ""}`}>
@@ -866,11 +1071,155 @@ function MediaControl({
 				onChange={(value) => onChange(control.id, value)}
 			/>
 		);
+	return null;
+}
+
+const SPEED_SELECTION_OPTIONS = [
+	...Array.from({ length: 15 }, (_, index) => ({
+		value: String(index * 8),
+		label: `/${16 - index}`,
+	})),
+	{ value: "127", label: "1×" },
+	...Array.from({ length: 15 }, (_, index) => ({
+		value: String(Math.ceil(135 + (index * 121) / 15)),
+		label: `${index + 2}×`,
+	})),
+];
+
+function isPlayModeControl(
+	control: Exclude<MediaSecondaryControl, { kind: "readout" }>,
+) {
 	return (
-		<div className={`media-control-readout ${disabled ? "disabled" : ""}`}>
-			<span>{control.label}</span>
-			<strong>{control.value}</strong>
-			{control.description && <small>{control.description}</small>}
-		</div>
+		control.kind === "choice" &&
+		["play-mode", "media.play_mode", "media.layer.play.mode"].includes(
+			control.id,
+		)
 	);
+}
+
+function isSpeedControl(
+	control: Exclude<MediaSecondaryControl, { kind: "readout" }>,
+) {
+	return [
+		"speed",
+		"media.playback_speed",
+		"media.layer.speed.multiplier",
+	].includes(control.id);
+}
+
+function playModeRepresentative(
+	control: Extract<MediaSecondaryControl, { kind: "choice" }>,
+) {
+	const raw = Number(control.value);
+	if (!Number.isFinite(raw)) return control.value;
+	return (
+		[...control.options]
+			.filter((option) => Number(option.value) <= raw)
+			.sort((left, right) => Number(right.value) - Number(left.value))[0]
+			?.value ??
+		control.options[0]?.value ??
+		control.value
+	);
+}
+
+function playModeGroups(
+	control: Extract<MediaSecondaryControl, { kind: "choice" }>,
+) {
+	const option = (candidate: (typeof control.options)[number]) => ({
+		...candidate,
+		description: playModeDescription(candidate.label),
+	});
+	const continuous = control.options.filter(
+		(candidate) =>
+			!["Once", "Synced", "Stop", "Pause"].some((word) =>
+				candidate.label.includes(word),
+			),
+	);
+	const synced = control.options.filter(
+		(candidate) =>
+			candidate.label.includes("Synced") && !candidate.label.includes("Once"),
+	);
+	const once = control.options.filter(
+		(candidate) =>
+			candidate.label.includes("Once") && !candidate.label.includes("Synced"),
+	);
+	const onceSynced = control.options.filter(
+		(candidate) =>
+			candidate.label.includes("Once") && candidate.label.includes("Synced"),
+	);
+	const transport = control.options.filter((candidate) =>
+		["Stop", "Pause"].includes(candidate.label),
+	);
+	return [
+		{ label: "Continuous playback", options: continuous.map(option) },
+		{ label: "Synchronized playback", options: synced.map(option) },
+		{ label: "Play once", options: once.map(option) },
+		{ label: "Synchronized play once", options: onceSynced.map(option) },
+		{ label: "Transport", options: transport.map(option) },
+	].filter((group) => group.options.length > 0);
+}
+
+function playModeDescription(label: string) {
+	if (label === "Stop") return "Stop playback and return to the start.";
+	if (label === "Pause") return "Hold the current playback frame.";
+	if (label.includes("Transparent"))
+		return "Finish this pass, then make the layer transparent.";
+	if (label.includes("Black")) return "Finish this pass, then output black.";
+	if (label.includes("Hold"))
+		return "Finish this pass, then hold the final frame.";
+	if (label.includes("Bounce"))
+		return "Alternate forward and reverse playback.";
+	if (label.includes("Reverse")) return "Play in reverse.";
+	return "Play continuously from the beginning after each pass.";
+}
+
+function speedOptions(
+	control: Exclude<MediaSecondaryControl, { kind: "readout" }>,
+) {
+	return control.kind === "choice" ? control.options : SPEED_SELECTION_OPTIONS;
+}
+
+function speedRepresentative(
+	control: Exclude<MediaSecondaryControl, { kind: "readout" }>,
+	options: Array<{ value: string; label: string; disabled?: boolean }>,
+) {
+	const raw = Number(control.value);
+	const label =
+		raw <= 119
+			? `/${16 - Math.floor(Math.max(0, raw) / 8)}`
+			: raw < 135
+				? "1×"
+				: `${Math.min(16, Math.floor(((raw - 135) * 15) / 121) + 2)}×`;
+	return options.find((option) => option.label === label)?.value ?? "127";
+}
+
+function speedGroups(
+	options: Array<{ value: string; label: string; disabled?: boolean }>,
+) {
+	const describe = (candidate: (typeof options)[number]) => ({
+		...candidate,
+		description: candidate.label.startsWith("/")
+			? `Play at one ${candidate.label.slice(1)}th of normal speed.`
+			: candidate.label === "1×"
+				? "Play at normal speed."
+				: `Play at ${candidate.label} normal speed.`,
+	});
+	return [
+		{
+			label: "Slower",
+			options: options
+				.filter((option) => option.label.startsWith("/"))
+				.map(describe),
+		},
+		{
+			label: "Normal",
+			options: options.filter((option) => option.label === "1×").map(describe),
+		},
+		{
+			label: "Faster",
+			options: options
+				.filter((option) => option.label.endsWith("×") && option.label !== "1×")
+				.map(describe),
+		},
+	];
 }

@@ -1,16 +1,20 @@
 import {
 	fireEvent,
-	render,
+	render as rtlRender,
 	screen,
 	waitFor,
 	within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { ModalProvider } from "@tosklight/ui/modals";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { KEYS } from "../../shared/api/queries";
 import { writeResource } from "../../shared/api/resource";
 import { anOutput, stubServer } from "../../testing/server";
 import { MediaPanePage } from "./MediaPanePage";
+
+const render = (ui: Parameters<typeof rtlRender>[0]) =>
+	rtlRender(ui, { wrapper: ModalProvider });
 
 afterEach(() => {
 	document.getElementById("media-playback-dock-action")?.remove();
@@ -223,23 +227,27 @@ describe("the production Media pane", () => {
 		).toHaveLength(1);
 	});
 
-	it("serializes fractional speed and BPM gestures as bounded integers", async () => {
+	it("selects an exact speed band and serializes fractional BPM as an integer", async () => {
 		const server = stubServer();
 		render(<MediaPanePage />);
 		await userEvent.click(
 			await screen.findByRole("switch", { name: "Take over playback" }),
 		);
-		const speed = screen.getByLabelText("Speed");
 		const bpm = screen.getByLabelText("Playback BPM");
-		expect(speed).toHaveAttribute("step", "1");
 		expect(bpm).toHaveAttribute("step", "1");
-		fireEvent.input(speed, { target: { value: "127.6" } });
+		await userEvent.click(screen.getByRole("button", { name: "Speed" }));
+		await userEvent.click(
+			within(screen.getByRole("dialog", { name: "Choose Speed" })).getByRole(
+				"button",
+				{ name: /^2×/u },
+			),
+		);
 		fireEvent.input(bpm, { target: { value: "120.1" } });
 
 		await waitFor(() =>
 			expect(server.writeBodies).toEqual(
 				expect.arrayContaining([
-					expect.objectContaining({ speedMultiplierDmx: 128 }),
+					expect.objectContaining({ speedMultiplierDmx: 135 }),
 					expect.objectContaining({ playbackBpm: 120 }),
 				]),
 			),
@@ -325,6 +333,17 @@ describe("the production Media pane", () => {
 			expect(second.master.scaleY).toBe(1.5);
 			expect(second.master.rotation).toBe(30);
 		});
+		await userEvent.click(screen.getByRole("tab", { name: "Mask position" }));
+		fireEvent.input(screen.getByLabelText("Mask position X"), {
+			target: { value: "-0.75" },
+		});
+		fireEvent.input(screen.getByLabelText("Mask position Y"), {
+			target: { value: "1.25" },
+		});
+		await waitFor(() => {
+			expect(second.master.maskPositionX).toBe(-0.75);
+			expect(second.master.maskPositionY).toBe(1.25);
+		});
 		await userEvent.click(screen.getByRole("tab", { name: "Shapers" }));
 		fireEvent.input(screen.getByLabelText("Left"), {
 			target: { value: "25" },
@@ -339,6 +358,23 @@ describe("the production Media pane", () => {
 			expect(second.master.shaperLeft).toBe(0.25);
 			expect(second.master.shaperLeftRotation).toBe(12);
 			expect(second.master.shaperRotation).toBe(15);
+		});
+
+		await userEvent.click(
+			screen.getByRole("button", { name: /Layer 1 Second/iu }),
+		);
+		const maskControlTab = screen.getAllByRole("tab", { name: "Mask" }).at(-1);
+		expect(maskControlTab).toBeTruthy();
+		await userEvent.click(maskControlTab as HTMLButtonElement);
+		fireEvent.input(screen.getByLabelText("Mask position X"), {
+			target: { value: "0.5" },
+		});
+		fireEvent.input(screen.getByLabelText("Mask position Y"), {
+			target: { value: "-1" },
+		});
+		await waitFor(() => {
+			expect(second.layers[0].mask.positionX).toBe(0.5);
+			expect(second.layers[0].mask.positionY).toBe(-1);
 		});
 	});
 
@@ -943,9 +979,15 @@ describe("the production Media pane", () => {
 		expect(
 			screen.getByRole("button", { name: /250Visualizers/iu }),
 		).toBeInTheDocument();
+		expect(
+			document.querySelector('img[src*="/visualizers/previews/"]'),
+		).toBeInTheDocument();
 		await userEvent.click(screen.getByRole("tab", { name: "Text" }));
 		expect(
 			screen.getByRole("button", { name: /200Text/iu }),
+		).toBeInTheDocument();
+		expect(
+			document.querySelector('img[src^="data:image/svg+xml"]'),
 		).toBeInTheDocument();
 		expect(server.writes).toHaveLength(writes);
 	});
@@ -976,7 +1018,7 @@ describe("the production Media pane", () => {
 		const server = stubServer();
 		render(<MediaPanePage />);
 		await userEvent.click(await screen.findByRole("tab", { name: "Playback" }));
-		expect(screen.getByRole("button", { name: "Loop" })).toBeDisabled();
+		expect(screen.getByRole("button", { name: "Play mode" })).toBeDisabled();
 		for (const action of ["Stop", "Play", "Play looped"])
 			expect(screen.getByRole("button", { name: action })).toBeDisabled();
 		expect(
@@ -1125,6 +1167,7 @@ function deferred() {
 }
 
 async function chooseEffect(slot: number, name: string) {
+	await userEvent.click(screen.getByRole("tab", { name: `Effect ${slot}` }));
 	await chooseNamedChoice(`Slot ${slot} effect`, name);
 }
 
@@ -1134,6 +1177,7 @@ async function chooseNamedChoice(labelText: string, name: string) {
 		'button[aria-haspopup="listbox"]',
 	);
 	expect(trigger).toBeTruthy();
-	await userEvent.click(trigger as HTMLButtonElement);
-	await userEvent.click(screen.getByRole("option", { name }));
+	await waitFor(() => expect(trigger).toBeEnabled());
+	fireEvent.click(trigger as HTMLButtonElement);
+	fireEvent.click(screen.getByRole("option", { name }));
 }
