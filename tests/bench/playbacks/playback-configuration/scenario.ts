@@ -21,6 +21,7 @@ import {
 	chooseSelect,
 	expectConfigurationModal,
 	openPlaybackMode,
+	optionRadio,
 	playbackCard,
 	playbackSlider,
 } from "./ui";
@@ -121,7 +122,7 @@ export class BrowserPlaybackConfiguration {
 	): Promise<void> {
 		await this.open(slot);
 		const modal = await expectConfigurationModal(this.page, 1, slot);
-		await modal.getByRole("radio", { name, exact: true }).click();
+		await optionRadio(modal, this.page, name).click();
 		await choosePlaybackColor(this.page, modal, color);
 		await this.apply(modal);
 	}
@@ -154,9 +155,7 @@ export class BrowserPlaybackConfiguration {
 		await modal
 			.getByRole("radio", { name: "Group Master", exact: true })
 			.click();
-		await modal
-			.getByRole("radio", { name: `Group ${group}`, exact: true })
-			.click();
+		await optionRadio(modal, this.page, `Group ${group}`).click();
 		await this.apply(modal);
 		await expect
 			.poll(async () => (await playbackAt(this.api, 1, slot)).body.target)
@@ -167,9 +166,7 @@ export class BrowserPlaybackConfiguration {
 		await this.open(slot);
 		const modal = await expectConfigurationModal(this.page, 1, slot);
 		await modal.getByRole("radio", { name: "Special", exact: true }).click();
-		await modal
-			.getByRole("radio", { name: "Grand Master", exact: true })
-			.click();
+		await optionRadio(modal, this.page, "Grand Master").click();
 		await this.apply(modal);
 		await expect
 			.poll(async () => (await playbackAt(this.api, 1, slot)).body.target)

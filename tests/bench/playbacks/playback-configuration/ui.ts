@@ -33,6 +33,23 @@ export async function expectConfigurationModal(
 	return modal;
 }
 
+/**
+ * One option in the configuration modal's Options group, by the name the operator reads.
+ *
+ * The function radios — Cue List, Group Master, Special — are named outright, but an option
+ * radio carries its identity in the card it wraps: a number beside a name. Matching that name is
+ * what an operator picking "Cuelist 2" out of the list actually does.
+ */
+export function optionRadio(
+	container: Locator,
+	page: Page,
+	label: string,
+): Locator {
+	return container
+		.getByRole("radio")
+		.filter({ has: page.getByText(label, { exact: true }) });
+}
+
 export function selectTrigger(container: Locator, label: string): Locator {
 	const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 	return container

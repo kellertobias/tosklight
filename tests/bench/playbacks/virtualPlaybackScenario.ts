@@ -7,6 +7,7 @@ import type {
 	PaneHandle,
 } from "../window-system/desktopScenario";
 import type { PaneType } from "../window-system/paneTypes";
+import { optionRadio } from "./playback-configuration/ui";
 import { PlaybackButton } from "./playbackScenario";
 
 type VirtualPlaybackPane = PaneHandle<PaneType.VirtualPlaybacks>;
@@ -166,10 +167,7 @@ export class BrowserVirtualPlaybacks {
 		await expect(modal).toBeVisible();
 		await modal.getByLabel("Playback name").fill(sourceName);
 		await this.desk.click(
-			modal.getByRole("radio", {
-				name: sourceCueList.body.name,
-				exact: true,
-			}),
+			optionRadio(modal, this.page, sourceCueList.body.name),
 		);
 		await this.desk.click(
 			modal.getByRole("button", { name: "Layout", exact: true }),
