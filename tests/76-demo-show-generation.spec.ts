@@ -9,6 +9,10 @@ import {
 	startPlannedDemoBenchmarkLook,
 } from "./support/plannedDemoBenchmark";
 import { generatePlannedDemo } from "./support/plannedDemoGenerator";
+import {
+	PLANNED_DEMO_CONTROL_FIXTURES,
+	PLANNED_DEMO_PHYSICAL_INSTANCES,
+} from "./support/plannedDemoManifest";
 import { PLANNED_DEMO_VIRTUAL_PLAYBACK_EXCLUSION_ZONES } from "./support/plannedDemoVirtualPlaybackZones";
 
 const DEMO_SHOW_ASSET = process.env.LIGHT_DEMO_SHOW_OUTPUT
@@ -55,12 +59,12 @@ test("DEMO-GENERATOR-001 @api › installs the one overall Desk and PreViz demo 
 	expect(await api.showObjects(showId, "route")).toHaveLength(9);
 	const generated = generatedShow.patch;
 	expect(generated).toMatchObject({
-		fixtureRecords: 253,
-		physicalInstances: 286,
+		fixtureRecords: PLANNED_DEMO_CONTROL_FIXTURES,
+		physicalInstances: PLANNED_DEMO_PHYSICAL_INSTANCES,
 		firstUniverse: 1,
 	});
 	expect(generated.lastUniverse).toBeGreaterThan(1);
-	expect(generated.occupiedSlots).toBe(3_463);
+	expect(generated.occupiedSlots).toBe(3_464);
 	const frontLights = generated.fixtures.filter(
 		(fixture) => fixture.fixture_number >= 1 && fixture.fixture_number <= 8,
 	);
@@ -72,13 +76,15 @@ test("DEMO-GENERATOR-001 @api › installs the one overall Desk and PreViz demo 
 	).toEqual(Array.from({ length: 8 }, (_, index) => [1, index + 1]));
 	expect(generatedShow.scenery).toHaveLength(43);
 	const completePatch = await api.patch();
-	expect(completePatch.fixtures).toHaveLength(296);
+	expect(completePatch.fixtures).toHaveLength(
+		PLANNED_DEMO_CONTROL_FIXTURES + generatedShow.scenery.length,
+	);
 	expect(
 		completePatch.fixtures.reduce(
 			(count, fixture) => count + 1 + fixture.multipatch.length,
 			0,
 		),
-	).toBe(344);
+	).toBe(345);
 
 	const demoFixtures = (first: number, last: number) =>
 		generated.fixtures.filter(
@@ -132,7 +138,9 @@ test("DEMO-GENERATOR-001 @api › installs the one overall Desk and PreViz demo 
 			(fixture) => fixture.definition.model === "Robin LEDBeam 150",
 		),
 	).toBe(true);
-	expect(demoFixtures(1401, 1401)).toEqual([]);
+	expect(demoFixtures(1401, 1401).map((fixture) => fixture.name)).toEqual([
+		"Kabuki Curtain",
+	]);
 
 	const storedLayers = await api.showObjects<any>(showId, "patch_layer");
 	const layerNameById = new Map(
@@ -154,6 +162,7 @@ test("DEMO-GENERATOR-001 @api › installs the one overall Desk and PreViz demo 
 		[1101, 1103, "Lasers"],
 		[1201, 1206, "Sparklers"],
 		[1301, 1303, "Flame Jets"],
+		[1401, 1401, "Kabuki Curtain"],
 	] as const) {
 		expect(
 			demoFixtures(first, last).every(

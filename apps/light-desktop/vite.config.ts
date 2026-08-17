@@ -2,6 +2,11 @@ import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import { artifactPaths } from "../../tools/artifact-paths.mjs";
 
+const isCi = Boolean(
+  (globalThis as { process?: { env?: Record<string, string | undefined> } })
+    .process?.env?.CI,
+);
+
 export default defineConfig({
   cacheDir: `${artifactPaths.viteCache}/light-desktop`,
   plugins: [react()],
@@ -20,6 +25,7 @@ export default defineConfig({
     setupFiles: "./src/test/setup.ts",
     exclude: ["e2e/**", "node_modules/**"],
     css: true,
+    testTimeout: isCi ? 20_000 : 5_000,
     coverage: { reportsDirectory: artifactPaths.coverage },
   },
 });

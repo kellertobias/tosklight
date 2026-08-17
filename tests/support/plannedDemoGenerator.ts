@@ -90,6 +90,7 @@ const LAYER_NAMES = [
 	"Lasers",
 	"Sparklers",
 	"Flame Jets",
+	"Kabuki Curtain",
 ] as const;
 
 export async function ensurePlannedDemoLayers(
