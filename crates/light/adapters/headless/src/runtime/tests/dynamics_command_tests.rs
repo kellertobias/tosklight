@@ -1274,6 +1274,52 @@ fn preload_controller_edit_updates_projection_without_touching_live_runtime() {
     );
     let _ = std::fs::remove_dir_all(data_dir);
 }
+
+#[test]
+fn target_bound_dynamic_command_uses_its_stored_targets_over_the_current_selection() {
+    let (state, data_dir) = test_state();
+    let user = state.installation.users().unwrap().remove(0);
+    let session = Session {
+        id: SessionId::new(),
+        user: user.clone(),
+        token: "target-bound-dynamic-command".into(),
+        connected: true,
+        desk: test_control_desk(),
+    };
+    state.programming.start(session.id, user.id);
+    let selected_fixture = light_core::FixtureId::new();
+    let stored_target = light_core::FixtureId::new();
+    state.programming.select(session.id, [selected_fixture]);
+
+    let dynamic_id = uuid::Uuid::new_v4();
+    let mut definition = command_test_dynamic(dynamic_id, 13);
+    definition.target_binding = light_dynamics::DynamicTargetBinding::FrozenTargets {
+        targets: vec![stored_target],
+    };
+    let mut stored_fixture = operational_fixture(stored_target);
+    stored_fixture.address = Some(2);
+    let mut snapshot = light_engine::EngineSnapshot::default();
+    snapshot.fixtures = vec![operational_fixture(selected_fixture), stored_fixture].into();
+    snapshot.dynamics = vec![definition].into();
+    state.output.replace_snapshot(snapshot).unwrap();
+
+    let context = operator_action_context(&session, light_application::ActionSource::Keyboard);
+    assert_eq!(
+        execute_programmer_command_from(&state, &session, "DYNAMIC 13", &context).unwrap(),
+        1
+    );
+
+    let runtime = state.output.dynamic_runtime_snapshot();
+    assert_eq!(runtime.instances.len(), 1);
+    assert_eq!(runtime.instances[0].targets, vec![stored_target]);
+    let programmer = state.programming.get(session.id).unwrap();
+    assert_eq!(programmer.selected, vec![selected_fixture]);
+    assert_eq!(programmer.dynamic_values.len(), 1);
+    assert_eq!(programmer.dynamic_values[0].fixture_id, stored_target);
+
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
 fn command_test_dynamic(id: uuid::Uuid, pool_number: u16) -> light_dynamics::DynamicDefinition {
     serde_json::from_value(serde_json::json!({
         "id": id,

@@ -221,7 +221,7 @@ The full Channels window has previous/next controls and a page picker with at le
 
 The Dynamics pane is the numbered pool for animated values. Tap a populated tile to toggle that
 Dynamic on the current ordered selection. A target-bound Dynamic always uses its stored target
-scope; an explicit selection must match that scope exactly. Shift-click a populated tile to open
+scope, even while another selection is active. Shift-click a populated tile to open
 the production editor. With Set armed, touching a Dynamic and then a Playback assigns that Dynamic
 to the Playback instead of starting it.
 

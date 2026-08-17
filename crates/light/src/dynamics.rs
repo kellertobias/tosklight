@@ -28,7 +28,8 @@ use uuid::Uuid;
 #[derive(Clone, Debug, PartialEq)]
 pub struct DynamicStartCommand {
     pub dynamic_id: Uuid,
-    /// Explicit ordered target scope. Empty means resolve from the definition/selection.
+    /// Explicit ordered target scope for a targetless Dynamic. A target-bound Dynamic always
+    /// resolves its stored Group or frozen targets instead.
     pub targets: Vec<FixtureId>,
     pub overrides: DynamicInstanceOverrides,
     pub timing: DynamicValueTiming,

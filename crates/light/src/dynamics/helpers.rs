@@ -214,12 +214,6 @@ pub(super) fn resolve_targets(
         DynamicTargetBinding::Targetless => None,
     };
     if let Some((targets, inherited_spatial_mapping)) = bound {
-        if !explicit.is_empty() && explicit != targets {
-            return Err(ActionError::new(
-                ActionErrorKind::Invalid,
-                "explicit selection does not match the Dynamic target scope",
-            ));
-        }
         if targets.is_empty() {
             return Err(ActionError::new(
                 ActionErrorKind::Invalid,
