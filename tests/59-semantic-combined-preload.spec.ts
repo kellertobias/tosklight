@@ -110,7 +110,7 @@ scenario(
 		await t.virtualPlayback.expect.runtime(virtualPlayback, {
 			runtime: {
 				enabled: true,
-				current: { number: 1 },
+				current: { number: "1" },
 			},
 		});
 

@@ -114,7 +114,7 @@ scenario(
 				playback_number: 1001,
 			},
 			target: "cue_list",
-			runtime: { enabled: true, current: { number: 1 } },
+			runtime: { enabled: true, current: { number: "1" } },
 		});
 		await t.virtualPlayback.expect.runtime(secondPlayback, {
 			requested: {
@@ -123,7 +123,7 @@ scenario(
 				playback_number: 1301,
 			},
 			target: "cue_list",
-			runtime: { enabled: true, current: { number: 1 } },
+			runtime: { enabled: true, current: { number: "1" } },
 		});
 		await t.virtualPlayback.expect.physicalRuntimeAbsent(firstSource);
 		await t.virtualPlayback.expect.physicalRuntimeAbsent(secondSource);

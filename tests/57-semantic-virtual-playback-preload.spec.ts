@@ -118,7 +118,7 @@ scenario(
 				playback_number: 1001,
 			},
 			target: "cue_list",
-			runtime: { enabled: true, current: { number: 1 } },
+			runtime: { enabled: true, current: { number: "1" } },
 		});
 		await t.virtualPlayback.expect.runtime(virtualToggle, {
 			requested: {
@@ -127,7 +127,7 @@ scenario(
 				playback_number: 1002,
 			},
 			target: "cue_list",
-			runtime: { enabled: true, current: { number: 1 } },
+			runtime: { enabled: true, current: { number: "1" } },
 		});
 		await t.clock.advanceBy("2500ms");
 		await t.expectFixtureValue(fixture(3), { intensity: 1 });
