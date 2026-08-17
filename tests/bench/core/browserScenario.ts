@@ -632,17 +632,29 @@ export class BrowserScreens {
 		const control = await this.desk.enableControllableDesktop();
 		if (configuration.display) control.setDisplays([configuration.display]);
 		await this.openSetup();
-		const before = await this.page.locator(".screen-settings-card").count();
+		// Only a real screen card carries a screen identity: the encoder-placement block beside
+		// them shares the class without being a screen.
+		const cards = this.page.locator(".screen-settings-card[data-screen-id]");
+		const before = await cards.count();
 		await this.page
 			.getByRole("button", { name: "+ Add screen", exact: true })
 			.click();
-		const card = this.page.locator(".screen-settings-card").nth(before);
+		const card = cards.nth(before);
 		await expect(card).toBeVisible();
 		const runtimeId = await card.getAttribute("data-screen-id");
 		if (!runtimeId) throw new Error("Created screen has no runtime identity");
 		await card.getByLabel("Screen name").fill(configuration.name);
+		// A screen card is a summary row; everything else lives in its configuration modal, whose
+		// Layout tab opens first and whose Placement tab owns the physical display.
+		await card
+			.getByRole("button", { name: "Configure screen", exact: true })
+			.click();
+		const settings = this.page.getByRole("dialog", {
+			name: `Configure ${configuration.name}`,
+		});
+		await expect(settings).toBeVisible();
 		if (configuration.fixedPane) {
-			await chooseOption(this.page, card, "Content", "Fixed full-screen pane");
+			await chooseOption(this.page, settings, "Content", "Fixed full-screen pane");
 			const fixedPaneLabels: Record<FixedScreenPane["type"], string> = {
 				fixture_sheet: "Fixture Sheet",
 				stage_2d: "Stage - 2D",
@@ -652,23 +664,24 @@ export class BrowserScreens {
 			};
 			await chooseOption(
 				this.page,
-				card,
+				settings,
 				"Pane",
 				fixedPaneLabels[configuration.fixedPane],
 			);
 		} else if (configuration.desktop)
-			await chooseOption(this.page, card, "Desktop", configuration.desktop);
-		await setSwitch(card, "Dock", configuration.showDock);
-		await setSwitch(card, "Playbacks", configuration.showPlaybacks);
-		await setSwitch(card, "Page controls", configuration.showPageControls);
+			await chooseOption(this.page, settings, "Desktop", configuration.desktop);
+		await setSwitch(settings, "Dock", configuration.showDock);
+		await setSwitch(settings, "Playbacks", configuration.showPlaybacks);
+		await setSwitch(settings, "Page controls", configuration.showPageControls);
+		await settings.getByRole("tab", { name: "Placement", exact: true }).click();
 		if (configuration.display)
 			await chooseOption(
 				this.page,
-				card,
+				settings,
 				"Physical Display",
 				configuration.display.name,
 			);
-		await setSwitch(card, "Window mode", configuration.fullscreen);
+		await setSwitch(settings, "Window mode", configuration.fullscreen);
 		if (configuration.bounds) {
 			for (const [label, value] of [
 				["Window X", configuration.bounds.x],
@@ -676,12 +689,18 @@ export class BrowserScreens {
 				["Window width", configuration.bounds.width],
 				["Window height", configuration.bounds.height],
 			] as const) {
-				await card.getByLabel(label).fill(String(value));
-				await card.getByLabel(label).blur();
+				await settings.getByLabel(label).fill(String(value));
+				await settings.getByLabel(label).blur();
 			}
 		}
-		if (configuration.playbacks)
-			await this.configurePlaybacks(card, configuration.playbacks);
+		if (configuration.playbacks) {
+			await settings
+				.getByRole("tab", { name: "Playbacks", exact: true })
+				.click();
+			await this.configurePlaybacks(settings, runtimeId, configuration.playbacks);
+		}
+		await settings.getByRole("button", { name: /^Close/ }).first().click();
+		await expect(settings).toBeHidden();
 		const handle = new BrowserScreenHandle(
 			configuration.name,
 			runtimeId,
@@ -708,6 +727,7 @@ export class BrowserScreens {
 
 	private async configurePlaybacks(
 		card: Locator,
+		screenId: string,
 		playback: NonNullable<ScreenConfigurationIntent["playbacks"]>,
 	): Promise<void> {
 		await card.getByRole("button", { name: "Configure Playbacks" }).click();
@@ -738,8 +758,6 @@ export class BrowserScreens {
 		}
 		await dialog.getByRole("button", { name: "Save", exact: true }).click();
 		await expect(dialog).toBeHidden();
-		const screenId = await card.getAttribute("data-screen-id");
-		if (!screenId) throw new Error("Configured screen has no runtime identity");
 		await expect
 			.poll(async () => {
 				const snapshot = await this.api.request<{
