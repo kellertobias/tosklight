@@ -358,7 +358,11 @@ export function registerPbk001PhysicalControlsScenario(): void {
 
 		await desk.open(bench.baseUrl);
 		await openPlaybackMode(page);
-		await desk.click(page.locator('[data-keypad-key="OFF"]:visible').first());
+		// OFF is on the programmer face of the surface, not the playback face the faders live on.
+		const off = page.locator('[data-keypad-key="OFF"]:visible').first();
+		if (!(await off.isVisible().catch(() => false)))
+			await page.locator(".mode-toggle").click();
+		await desk.click(off);
 		await expect(page.getByLabel("Command line")).toHaveValue("OFF");
 		await page.getByRole("button", { name: "Turn off OFF target" }).click();
 
