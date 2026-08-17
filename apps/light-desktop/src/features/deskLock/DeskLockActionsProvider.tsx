@@ -4,6 +4,7 @@ import {
 	useContext,
 	useMemo,
 } from "react";
+import { ApiRequestError } from "../../api/ApiRequestError";
 import type { DeskLockInput } from "../../api/client/deskManagement";
 import type { DeskLockState } from "../../api/types";
 import type { DeskLockStore } from "./store";
@@ -60,7 +61,14 @@ export function DeskLockActionsProvider({
 					await apply(unlock(pin));
 					return true;
 				} catch (reason) {
-					onError(asMessage(reason));
+					// A refused PIN is the lock doing its job, and the lock screen says so itself.
+					// Raising it as a desk failure would cover the desk with an alert the operator
+					// answers by simply typing the right PIN.
+					if (
+						!(reason instanceof ApiRequestError) ||
+						reason.status !== 401
+					)
+						onError(asMessage(reason));
 					return false;
 				}
 			},
