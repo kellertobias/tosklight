@@ -170,3 +170,15 @@ export const paneLabels: Readonly<Record<PaneType, string>> = {
 	[PaneType.FileManager]: "File Manager",
 	[PaneType.TextEditor]: "Text Editor",
 };
+
+/**
+ * What a pane's card is called in the Open Window catalog, where that differs from the pane's
+ * own title. The catalog groups its cards into tabs and names each card after both the window
+ * and what it is for, so the bench searches the tabs rather than assuming either.
+ */
+export const paneCatalogTitles: Readonly<Partial<Record<PaneType, string>>> = {
+	[PaneType.Cues]: "Cues",
+	[PaneType.CuelistPool]: "Cuelists",
+	[PaneType.CueList]: "Cuelists",
+	[PaneType.PlaybackPool]: "Virtual Playbacks",
+};

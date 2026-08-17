@@ -6,6 +6,7 @@ import type {
 } from "./paneTypes";
 import {
 	PresetFamily,
+	paneCatalogTitles,
 	paneLabels,
 	type StageRenderQuality,
 	StageView,
@@ -444,6 +445,29 @@ export class BrowserDesktops {
 		return this.page.locator(`[data-pane-id="${binding.runtimeId}"]`);
 	}
 
+	/**
+	 * Open one window from the catalog the way an operator does: find the tab that files it,
+	 * then press its card. The card names the window and describes it, so it is matched on the
+	 * window name alone rather than on the whole card.
+	 */
+	private async openCatalogCard(type: PaneType): Promise<void> {
+		const title = paneCatalogTitles[type] ?? paneLabels[type];
+		const dialog = this.page.getByRole("dialog", { name: "Open Window" });
+		const card = dialog
+			.getByRole("button")
+			.filter({ has: this.page.getByText(title, { exact: true }) });
+		const tabs = await dialog.getByRole("tab").all();
+		for (const tab of tabs) {
+			await tab.click();
+			await this.pause();
+			if (await card.count()) {
+				await card.first().click();
+				return;
+			}
+		}
+		throw new Error(`The Open Window catalog offers no "${title}" window`);
+	}
+
 	private async addPane(definition: PaneDefinition): Promise<void> {
 		const before = await this.page
 			.locator("[data-pane-id]")
@@ -459,10 +483,7 @@ export class BrowserDesktops {
 			box.y + ((definition.placement.row - 0.5) * box.height) / GRID_ROWS;
 		await grid.click({ position: { x: x - box.x, y: y - box.y } });
 		await this.pause();
-		await this.page
-			.getByRole("dialog", { name: "Open Window" })
-			.getByRole("button", { name: paneLabels[definition.type], exact: true })
-			.click();
+		await this.openCatalogCard(definition.type);
 		await this.pause();
 		await expect(this.page.locator("[data-pane-id]")).toHaveCount(
 			before.length + 1,
