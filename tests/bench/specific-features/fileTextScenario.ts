@@ -403,9 +403,9 @@ export class BrowserFiles {
 	}
 
 	private async choose(editor: Locator, name: string): Promise<void> {
-		await this.desk.click(
-			editor.getByRole("button", { name: "Refresh", exact: true }),
-		);
+		// The editor toolbar offers Refresh only while it already holds a file association.
+		const refresh = editor.getByRole("button", { name: "Refresh", exact: true });
+		if (await refresh.count()) await this.desk.click(refresh);
 		const quickChoice = editor.getByRole("button", {
 			name: "Choose File…",
 			exact: true,
