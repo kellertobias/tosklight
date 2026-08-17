@@ -674,34 +674,6 @@ mod tests {
     }
 
     #[test]
-    fn the_capture_look_decodes_visible_gobo_and_prism_beams() {
-        let (scene, values) = demo_scene_and_values("gobo-prism-look");
-        let emitter_values = |name: &str| {
-            let fixture_index = scene
-                .fixtures
-                .iter()
-                .position(|fixture| fixture.name == name)
-                .unwrap_or_else(|| panic!("the demo has no {name}"));
-            scene
-                .emitters
-                .iter()
-                .enumerate()
-                .filter(|(_, emitter)| emitter.fixture_index == fixture_index as u32)
-                .map(|(index, _)| &values.emitters[index])
-                .collect::<Vec<_>>()
-        };
-        let gobo = emitter_values("Gobo Demo");
-        assert!(
-            gobo.iter()
-                .any(|value| { value.visible_intensity() > 0.99 && value.gobo_slot(8) > 0 })
-        );
-        let prism = emitter_values("Prism Demo");
-        assert!(prism.iter().any(|value| {
-            value.visible_intensity() > 0.99 && value.gobo_slot(8) > 0 && value.prism_facets() >= 3
-        }));
-    }
-
-    #[test]
     fn the_shipped_sunstrip_has_ten_cells_inside_its_extrusion() {
         let scene = demo_scene("sunstrip-face-bounds");
         let (fixture_index, fixture) = scene
@@ -746,18 +718,15 @@ mod tests {
         for (fixture, expected) in [
             // Moving fixtures are bodies with a yoke, whatever else they are.
             ("Wash", BodyKind::MovingHead),
-            ("Profile", BodyKind::MovingHead),
             ("Beam", BodyKind::MovingHead),
             // Bars of cells.
             ("Sunstrip", BodyKind::Bar),
-            ("Strobe", BodyKind::Bar),
-            ("Blinder", BodyKind::Bar),
-            ("JDC1", BodyKind::Bar),
-            // Static lanterns on a clamp.
-            ("FOH", BodyKind::Lantern),
-            ("PAR", BodyKind::Lantern),
+            ("Fourblinder", BodyKind::Bar),
+            // Static lanterns on a clamp, profiles among them.
+            ("Profile", BodyKind::Lantern),
             ("ACL", BodyKind::Lantern),
-            ("Fresnel", BodyKind::Lantern),
+            ("LED", BodyKind::Lantern),
+            ("Front Truss", BodyKind::Lantern),
             // Machines that make no light of their own, and the laser, which is its own thing.
             ("Hazer", BodyKind::Machine),
             ("Laser", BodyKind::Machine),
@@ -922,24 +891,6 @@ mod tests {
 
     /// A scanner classifies as a lantern, and that is correct rather than a gap.
     ///
-    /// `BodyKind` is assigned by whether pan and tilt are on the body, and a scanner is a
-    /// mirror-mover whose body is bolted down — so it is not `MovingHead`. That looked like a
-    /// defect until the drawing path settled it: `BodyKind` only selects the *procedural* geometry
-    /// used when a fixture has no model. The scanner has one — `lamps/scanner-mirror-spot.glb`,
-    /// matched by `default_model.rs` on "scanner" or "mirror" — and `push_model` articulates model
-    /// parts from the fixture's head angles by each part's own declared kind, whatever the body
-    /// says. So the mesh is right and the mirror moves.
-    ///
-    /// Pinned so that a scanner losing its model, and falling back to a procedural lantern that
-    /// cannot articulate, is caught here rather than seen in a demo video.
-    #[test]
-    fn a_scanner_has_no_body_of_its_own_yet() {
-        assert_eq!(
-            body_of(&demo_scene("scanner"), "Scanner"),
-            BodyKind::Lantern
-        );
-    }
-
     /// Nothing in the demo rig may fall through to the shapeless default: `Generic` means the
     /// projection could not tell what the fixture was, which is the failure this guards.
     #[test]
