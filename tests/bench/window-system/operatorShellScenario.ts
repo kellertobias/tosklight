@@ -316,7 +316,9 @@ export class BrowserOperatorShell {
 			.getByRole("button", { name: `${allowedName}, file`, exact: true })
 			.click();
 		await expect(select).toBeEnabled();
-		await picker.getByRole("button", { name: "Cancel", exact: true }).click();
+		await picker
+			.getByRole("button", { name: "Close File Manager", exact: true })
+			.click();
 		await expect(picker).toHaveCount(0);
 	}
 }

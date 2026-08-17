@@ -540,12 +540,14 @@ export class BrowserProgrammerSpecials {
 				exact: true,
 			}),
 		);
-		const dialog = this.page
-			.getByRole("heading", {
+		// The card, not the heading's wrapper: the title bar nests its heading beside the
+		// actions, so the element above the heading holds no dialog body at all.
+		const dialog = this.page.locator(".modal-card").filter({
+			has: this.page.getByRole("heading", {
 				name: `${family} · Special Dialog`,
 				exact: true,
-			})
-			.locator("..");
+			}),
+		});
 		await expect(dialog).toBeVisible();
 		return dialog;
 	}
@@ -562,7 +564,9 @@ export class BrowserProgrammerSpecials {
 	}
 
 	private async closeDialog(dialog: Locator): Promise<void> {
-		await this.desk.click(dialog.getByRole("button", { name: "×" }));
+		await this.desk.click(
+			dialog.getByRole("button", { name: "Close modal", exact: true }),
+		);
 		await expect(dialog).toBeHidden();
 	}
 }

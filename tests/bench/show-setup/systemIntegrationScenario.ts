@@ -38,9 +38,8 @@ export class BrowserSystemIntegrations {
 	async expectMatterBridgeToggle(): Promise<void> {
 		await this.enterSetup();
 		await this.openSetupSection("Network & Inputs");
-		await this.page
-			.getByRole("button", { name: "Bridges", exact: true })
-			.click();
+		// Network & Inputs files its sections as title-bar tabs.
+		await this.page.getByRole("tab", { name: "Bridges", exact: true }).click();
 		const settings = this.page.getByLabel("Matter bridge settings");
 		await expect(
 			settings.getByText(

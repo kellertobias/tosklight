@@ -2181,7 +2181,9 @@ async function buildPresetSetup(
 		colorBox.x + colorBox.width * 0.78,
 		colorBox.y + colorBox.height * 0.3,
 	);
-	await desk.click(colorDialog.getByRole("button", { name: "×", exact: true }));
+	await desk.click(
+		colorDialog.getByRole("button", { name: "Close modal", exact: true }),
+	);
 	await desk.click(keypad.getByRole("button", { name: "RECORD", exact: true }));
 	await desk.click(presetTile(presets, "2.2"));
 	await desk.fastForward(
