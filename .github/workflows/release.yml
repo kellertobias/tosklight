@@ -250,7 +250,8 @@ jobs:
           sudo apt-get install -y \
             libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf \
             libgtk-3-dev libsoup-3.0-dev libudev-dev libasound2-dev libxdo-dev \
-            mesa-vulkan-drivers build-essential pkg-config
+            mesa-vulkan-drivers build-essential pkg-config \
+            fonts-dejavu-core
 
       - name: Run the GPU-less Rust workspace suite
         env:
