@@ -110,7 +110,7 @@ describe("the CITP media library", () => {
 			name: "Opening haze",
 			intrinsicBpm: 128,
 		});
-	}, 15_000);
+	});
 
 	it("frames the larger inspector preview at the configured output ratio", async () => {
 		render(
@@ -166,7 +166,7 @@ describe("the CITP media library", () => {
 		await vi.waitFor(() =>
 			expect(server.catalog.folders[0].icon).toBe(catalogIcon.value),
 		);
-	}, 15_000);
+	});
 
 	it("uploads, replaces, and removes a folder picture", async () => {
 		const server = stubServer();
@@ -194,7 +194,7 @@ describe("the CITP media library", () => {
 		await vi.waitFor(() =>
 			expect(server.folderPresentations.folders[0].pictureUrl).toBeNull(),
 		);
-	}, 15_000);
+	});
 
 	it("uses Playback's responsive media-card grid without losing draggable slots", () => {
 		const { container } = render(

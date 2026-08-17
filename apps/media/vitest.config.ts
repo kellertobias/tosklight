@@ -10,5 +10,6 @@ export default defineConfig({
 		environment: "jsdom",
 		setupFiles: "./src/testing/setup.ts",
 		css: true,
+		testTimeout: process.env.CI ? 20_000 : 5_000,
 	},
 });

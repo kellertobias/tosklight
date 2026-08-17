@@ -376,7 +376,7 @@ describe("the production Media pane", () => {
 			expect(second.layers[0].mask.positionX).toBe(0.5);
 			expect(second.layers[0].mask.positionY).toBe(-1);
 		});
-	}, 15_000);
+	});
 
 	it("switches from Master back to a layer without leaving an invalid active tab", async () => {
 		stubServer();
