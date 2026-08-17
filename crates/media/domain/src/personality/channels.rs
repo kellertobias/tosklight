@@ -1,6 +1,6 @@
 //! The canonical v2 channel table.
 //!
-//! One layer occupies 39 consecutive slots; the master occupies 11. Fine channels are big-endian
+//! One layer occupies 39 consecutive slots; the complete master occupies 40. Fine channels are big-endian
 //! coarse/fine pairs. This table is the single source the receivers, the API, UI metadata, the
 //! tests, and the GDTF export all read — nothing restates it.
 
@@ -336,6 +336,238 @@ pub const MASTER_CHANNELS: &[ChannelSpec] = &[
         values: ValueKind::Continuous,
         implementation: IMPLEMENTED,
     },
+    ChannelSpec {
+        offset: 11,
+        name: "Master scale X",
+        resolution: Resolution::Coarse,
+        default_value: 32_768,
+        values: ValueKind::Continuous,
+        implementation: IMPLEMENTED,
+    },
+    ChannelSpec {
+        offset: 12,
+        name: "Master scale X fine",
+        resolution: Resolution::Fine,
+        default_value: 0,
+        values: ValueKind::Continuous,
+        implementation: IMPLEMENTED,
+    },
+    ChannelSpec {
+        offset: 13,
+        name: "Master scale Y",
+        resolution: Resolution::Coarse,
+        default_value: 32_768,
+        values: ValueKind::Continuous,
+        implementation: IMPLEMENTED,
+    },
+    ChannelSpec {
+        offset: 14,
+        name: "Master scale Y fine",
+        resolution: Resolution::Fine,
+        default_value: 0,
+        values: ValueKind::Continuous,
+        implementation: IMPLEMENTED,
+    },
+    ChannelSpec {
+        offset: 15,
+        name: "Master scaling mode",
+        resolution: Resolution::Byte,
+        default_value: 0,
+        values: ValueKind::ScalingMode,
+        implementation: IMPLEMENTED,
+    },
+    ChannelSpec {
+        offset: 16,
+        name: "Master position X",
+        resolution: Resolution::Coarse,
+        default_value: 32_768,
+        values: ValueKind::Continuous,
+        implementation: IMPLEMENTED,
+    },
+    ChannelSpec {
+        offset: 17,
+        name: "Master position X fine",
+        resolution: Resolution::Fine,
+        default_value: 0,
+        values: ValueKind::Continuous,
+        implementation: IMPLEMENTED,
+    },
+    ChannelSpec {
+        offset: 18,
+        name: "Master position Y",
+        resolution: Resolution::Coarse,
+        default_value: 32_768,
+        values: ValueKind::Continuous,
+        implementation: IMPLEMENTED,
+    },
+    ChannelSpec {
+        offset: 19,
+        name: "Master position Y fine",
+        resolution: Resolution::Fine,
+        default_value: 0,
+        values: ValueKind::Continuous,
+        implementation: IMPLEMENTED,
+    },
+    ChannelSpec {
+        offset: 20,
+        name: "Master rotation",
+        resolution: Resolution::Coarse,
+        default_value: 32_768,
+        values: ValueKind::Continuous,
+        implementation: IMPLEMENTED,
+    },
+    ChannelSpec {
+        offset: 21,
+        name: "Master rotation fine",
+        resolution: Resolution::Fine,
+        default_value: 0,
+        values: ValueKind::Continuous,
+        implementation: IMPLEMENTED,
+    },
+    ChannelSpec {
+        offset: 22,
+        name: "Shaper left",
+        resolution: Resolution::Coarse,
+        default_value: 0,
+        values: ValueKind::Continuous,
+        implementation: IMPLEMENTED,
+    },
+    ChannelSpec {
+        offset: 23,
+        name: "Shaper left fine",
+        resolution: Resolution::Fine,
+        default_value: 0,
+        values: ValueKind::Continuous,
+        implementation: IMPLEMENTED,
+    },
+    ChannelSpec {
+        offset: 24,
+        name: "Shaper right",
+        resolution: Resolution::Coarse,
+        default_value: 0,
+        values: ValueKind::Continuous,
+        implementation: IMPLEMENTED,
+    },
+    ChannelSpec {
+        offset: 25,
+        name: "Shaper right fine",
+        resolution: Resolution::Fine,
+        default_value: 0,
+        values: ValueKind::Continuous,
+        implementation: IMPLEMENTED,
+    },
+    ChannelSpec {
+        offset: 26,
+        name: "Shaper top",
+        resolution: Resolution::Coarse,
+        default_value: 0,
+        values: ValueKind::Continuous,
+        implementation: IMPLEMENTED,
+    },
+    ChannelSpec {
+        offset: 27,
+        name: "Shaper top fine",
+        resolution: Resolution::Fine,
+        default_value: 0,
+        values: ValueKind::Continuous,
+        implementation: IMPLEMENTED,
+    },
+    ChannelSpec {
+        offset: 28,
+        name: "Shaper bottom",
+        resolution: Resolution::Coarse,
+        default_value: 0,
+        values: ValueKind::Continuous,
+        implementation: IMPLEMENTED,
+    },
+    ChannelSpec {
+        offset: 29,
+        name: "Shaper bottom fine",
+        resolution: Resolution::Fine,
+        default_value: 0,
+        values: ValueKind::Continuous,
+        implementation: IMPLEMENTED,
+    },
+    ChannelSpec {
+        offset: 30,
+        name: "Shaper left rotation",
+        resolution: Resolution::Coarse,
+        default_value: 32_768,
+        values: ValueKind::Continuous,
+        implementation: IMPLEMENTED,
+    },
+    ChannelSpec {
+        offset: 31,
+        name: "Shaper left rotation fine",
+        resolution: Resolution::Fine,
+        default_value: 0,
+        values: ValueKind::Continuous,
+        implementation: IMPLEMENTED,
+    },
+    ChannelSpec {
+        offset: 32,
+        name: "Shaper right rotation",
+        resolution: Resolution::Coarse,
+        default_value: 32_768,
+        values: ValueKind::Continuous,
+        implementation: IMPLEMENTED,
+    },
+    ChannelSpec {
+        offset: 33,
+        name: "Shaper right rotation fine",
+        resolution: Resolution::Fine,
+        default_value: 0,
+        values: ValueKind::Continuous,
+        implementation: IMPLEMENTED,
+    },
+    ChannelSpec {
+        offset: 34,
+        name: "Shaper top rotation",
+        resolution: Resolution::Coarse,
+        default_value: 32_768,
+        values: ValueKind::Continuous,
+        implementation: IMPLEMENTED,
+    },
+    ChannelSpec {
+        offset: 35,
+        name: "Shaper top rotation fine",
+        resolution: Resolution::Fine,
+        default_value: 0,
+        values: ValueKind::Continuous,
+        implementation: IMPLEMENTED,
+    },
+    ChannelSpec {
+        offset: 36,
+        name: "Shaper bottom rotation",
+        resolution: Resolution::Coarse,
+        default_value: 32_768,
+        values: ValueKind::Continuous,
+        implementation: IMPLEMENTED,
+    },
+    ChannelSpec {
+        offset: 37,
+        name: "Shaper bottom rotation fine",
+        resolution: Resolution::Fine,
+        default_value: 0,
+        values: ValueKind::Continuous,
+        implementation: IMPLEMENTED,
+    },
+    ChannelSpec {
+        offset: 38,
+        name: "Shaper rotation",
+        resolution: Resolution::Coarse,
+        default_value: 32_768,
+        values: ValueKind::Continuous,
+        implementation: IMPLEMENTED,
+    },
+    ChannelSpec {
+        offset: 39,
+        name: "Shaper rotation fine",
+        resolution: Resolution::Fine,
+        default_value: 0,
+        values: ValueKind::Continuous,
+        implementation: IMPLEMENTED,
+    },
 ];
 
 /// Zero-based layer offsets, named so the decoder reads as the published table does.
@@ -380,6 +612,21 @@ pub mod master {
     pub const MASK: usize = 6;
     pub const MASK_POSITION_X: usize = 7;
     pub const MASK_POSITION_Y: usize = 9;
+    pub const SCALE_X: usize = 11;
+    pub const SCALE_Y: usize = 13;
+    pub const SCALING_MODE: usize = 15;
+    pub const POSITION_X: usize = 16;
+    pub const POSITION_Y: usize = 18;
+    pub const ROTATION: usize = 20;
+    pub const SHAPER_LEFT: usize = 22;
+    pub const SHAPER_RIGHT: usize = 24;
+    pub const SHAPER_TOP: usize = 26;
+    pub const SHAPER_BOTTOM: usize = 28;
+    pub const SHAPER_LEFT_ROTATION: usize = 30;
+    pub const SHAPER_RIGHT_ROTATION: usize = 32;
+    pub const SHAPER_TOP_ROTATION: usize = 34;
+    pub const SHAPER_BOTTOM_ROTATION: usize = 36;
+    pub const SHAPER_ROTATION: usize = 38;
 }
 
 #[cfg(test)]

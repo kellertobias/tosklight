@@ -684,6 +684,7 @@ impl OutputConfigurationValuesView {
             personality_layout: match output.personality_layout {
                 media_domain::PersonalityLayout::Legacy => "legacy",
                 media_domain::PersonalityLayout::Current => "current",
+                media_domain::PersonalityLayout::Extended => "extended",
             }
             .to_owned(),
             protocol: match output.protocol {
@@ -820,6 +821,7 @@ impl UpdateOutputConfiguration {
             next.personality_layout = match layout.trim() {
                 "legacy" => media_domain::PersonalityLayout::Legacy,
                 "current" => media_domain::PersonalityLayout::Current,
+                "extended" => media_domain::PersonalityLayout::Extended,
                 _ => return Err(OutputConfigurationEditError::Personality),
             };
         }

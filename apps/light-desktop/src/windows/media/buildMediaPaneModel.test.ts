@@ -483,8 +483,9 @@ describe("Media pane disconnected configuration", () => {
 		expect(model.controlSections.map((section) => section.id)).toEqual([
 			"playback",
 			"frame",
-			"colour",
 			"mask-controls",
+			"shapers",
+			"colour",
 		]);
 		expect(model.controlSections[0]?.controls).toEqual(
 			expect.arrayContaining([
@@ -500,11 +501,34 @@ describe("Media pane disconnected configuration", () => {
 				}),
 			]),
 		);
-		expect(model.controlSections[2]?.controls[0]).toMatchObject({
+		expect(model.controlSections[4]?.controls[0]).toMatchObject({
 			id: "color.tint",
 			kind: "color",
 			value: "#ffffff",
 		});
+		expect(model.controlSections[1]?.controls).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({ id: "media.scale.x", maximum: 4 }),
+				expect.objectContaining({ id: "media.position.x", value: 0 }),
+				expect.objectContaining({ id: "position.rotation", maximum: 180 }),
+			]),
+		);
+		expect(model.controlSections[3]?.controls).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					id: "shaper.blade.1.position",
+					label: "Left",
+				}),
+				expect.objectContaining({
+					id: "shaper.blade.4.angle",
+					label: "Bottom rotation",
+				}),
+				expect.objectContaining({
+					id: "shaper.rotation",
+					label: "Module rotation",
+				}),
+			]),
+		);
 		expect(model.libraryFolders.map((folder) => folder.id)).toEqual(["1"]);
 	});
 

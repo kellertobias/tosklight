@@ -1224,7 +1224,7 @@ fn tosklight_media_server_package_exposes_complete_multi_head_personalities() {
     let profile = shipped_profile("tosklight--media-server.toskfixture");
     assert_eq!(profile.manufacturer, "ToskLight");
     assert_eq!(profile.name, "Media Server");
-    assert_eq!(profile.revision, 4);
+    assert_eq!(profile.revision, 5);
     assert_eq!(
         profile.direct_control_protocols,
         vec![crate::DirectControlProtocol::Citp],
@@ -1233,8 +1233,8 @@ fn tosklight_media_server_package_exposes_complete_multi_head_personalities() {
     assert_eq!(profile.modes.len(), 2);
 
     for (mode, layer_count, footprint) in [
-        (&profile.modes[0], 2_usize, 89_u16),
-        (&profile.modes[1], 8_usize, 323_u16),
+        (&profile.modes[0], 2_usize, 118_u16),
+        (&profile.modes[1], 8_usize, 352_u16),
     ] {
         assert_eq!(
             mode.splits,
@@ -1328,18 +1328,42 @@ fn tosklight_media_server_package_exposes_complete_multi_head_personalities() {
                     .iter()
                     .any(|system| system.head_id == head.id)
             );
+            if head.master_shared {
+                for attribute in [
+                    "media.scale.x",
+                    "media.scale.y",
+                    "media.scaling_mode",
+                    "media.position.x",
+                    "media.position.y",
+                    "position.rotation",
+                    "shaper.blade.1.position",
+                    "shaper.blade.1.angle",
+                    "shaper.blade.2.position",
+                    "shaper.blade.2.angle",
+                    "shaper.blade.3.position",
+                    "shaper.blade.3.angle",
+                    "shaper.blade.4.position",
+                    "shaper.blade.4.angle",
+                    "shaper.rotation",
+                ] {
+                    let control = channel(attribute);
+                    if attribute == "media.scaling_mode" {
+                        assert_eq!(control.resolution, ChannelResolution::U8);
+                        assert_eq!(control.default_raw, 0);
+                    } else {
+                        assert_eq!(control.resolution, ChannelResolution::U16);
+                        let inserted_edge = attribute.starts_with("shaper.blade")
+                            && attribute.ends_with(".position");
+                        assert_eq!(control.default_raw, if inserted_edge { 0 } else { 32_768 });
+                    }
+                }
+            }
         }
 
         for attribute in [
             "media.play_mode",
             "media.playback_speed",
             "media.playback_bpm",
-            "media.scaling_mode",
-            "media.position.x",
-            "media.position.y",
-            "media.scale.x",
-            "media.scale.y",
-            "position.rotation",
             "media.mask.scale.x",
             "media.mask.scale.y",
             "media.mask.invert",
@@ -1356,6 +1380,23 @@ fn tosklight_media_server_package_exposes_complete_multi_head_personalities() {
                     .count(),
                 layer_count,
                 "every layer must expose canonical {attribute} encoder ownership"
+            );
+        }
+        for attribute in [
+            "media.scaling_mode",
+            "media.position.x",
+            "media.position.y",
+            "media.scale.x",
+            "media.scale.y",
+            "position.rotation",
+        ] {
+            assert_eq!(
+                mode.channels
+                    .iter()
+                    .filter(|channel| channel.attribute.0 == attribute)
+                    .count(),
+                layer_count + 1,
+                "every layer and the master must expose canonical {attribute} encoder ownership"
             );
         }
         for attribute in ["media.mask.position.x", "media.mask.position.y"] {

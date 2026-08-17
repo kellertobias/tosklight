@@ -60,7 +60,7 @@ test("DEMO-GENERATOR-001 @api › installs the one overall Desk and PreViz demo 
 		firstUniverse: 1,
 	});
 	expect(generated.lastUniverse).toBeGreaterThan(1);
-	expect(generated.occupiedSlots).toBe(3_377);
+	expect(generated.occupiedSlots).toBe(3_463);
 	const frontLights = generated.fixtures.filter(
 		(fixture) => fixture.fixture_number >= 1 && fixture.fixture_number <= 8,
 	);

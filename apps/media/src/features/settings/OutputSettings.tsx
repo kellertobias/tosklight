@@ -396,10 +396,20 @@ function DmxInputFields({
 	setStartAddress: Dispatch<SetStateAction<number>>;
 }) {
 	const slotsPerLayer = personalityLayout === "legacy" ? 34 : 39;
-	const masterSlots = personalityLayout === "legacy" ? 7 : 11;
+	const masterSlots =
+		personalityLayout === "legacy"
+			? 7
+			: personalityLayout === "current"
+				? 11
+				: 40;
 	const footprint =
 		(personality === "two-layers" ? 2 : 8) * slotsPerLayer + masterSlots;
 	const highestStartAddress = 513 - footprint;
+	const personalityLabel =
+		personalityLayout === "extended"
+			? (layers: number) => `${layers} layers (${layers * 39 + 40} slots)`
+			: (layers: number) =>
+					`${layers} layers (${layers * slotsPerLayer + masterSlots} slots)`;
 	return (
 		<fieldset>
 			<legend>DMX input</legend>
@@ -407,8 +417,8 @@ function DmxInputFields({
 				label="Personality"
 				value={personality}
 				options={[
-					{ value: "two-layers", label: "2 layers (89 slots)" },
-					{ value: "eight-layers", label: "8 layers (323 slots)" },
+					{ value: "two-layers", label: personalityLabel(2) },
+					{ value: "eight-layers", label: personalityLabel(8) },
 				]}
 				onChange={setPersonality}
 			/>
@@ -417,7 +427,8 @@ function DmxInputFields({
 				value={personalityLayout}
 				options={[
 					{ value: "legacy", label: "Legacy (existing desk patches)" },
-					{ value: "current", label: "Current (mask positioning)" },
+					{ value: "current", label: "Mask positioning (v2)" },
+					{ value: "extended", label: "Full master controls" },
 				]}
 				onChange={setPersonalityLayout}
 			/>

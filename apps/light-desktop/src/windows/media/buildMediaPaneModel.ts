@@ -556,18 +556,41 @@ const MASTER_CONTROL_GROUPS = [
 	},
 	{
 		id: "frame",
-		label: "Frame",
-		attributes: ["media.flip_mirror"],
-	},
-	{
-		id: "colour",
-		label: "Colour",
-		attributes: ["color.tint"],
+		label: "Geometry",
+		attributes: [
+			"media.scale.x",
+			"media.scale.y",
+			"media.scaling_mode",
+			"media.position.x",
+			"media.position.y",
+			"position.rotation",
+			"media.flip_mirror",
+		],
 	},
 	{
 		id: "mask-controls",
 		label: "Mask position",
 		attributes: ["media.mask.position.x", "media.mask.position.y"],
+	},
+	{
+		id: "shapers",
+		label: "Shapers",
+		attributes: [
+			"shaper.blade.1.position",
+			"shaper.blade.1.angle",
+			"shaper.blade.2.position",
+			"shaper.blade.2.angle",
+			"shaper.blade.3.position",
+			"shaper.blade.3.angle",
+			"shaper.blade.4.position",
+			"shaper.blade.4.angle",
+			"shaper.rotation",
+		],
+	},
+	{
+		id: "colour",
+		label: "Colour",
+		attributes: ["color.tint"],
 	},
 ] as const;
 
@@ -675,7 +698,12 @@ function advertisedControl(
 				{ value: "3", label: "Both" },
 			],
 		};
-	const value = mediaControlOperatorValue(attribute, normalized);
+	const selectedMaster = input.selectedLayerId === "master";
+	const value = mediaControlOperatorValue(
+		attribute,
+		normalized,
+		selectedMaster,
+	);
 	if (isMediaPercentAttribute(attribute)) {
 		const percent = Math.round(value);
 		return {
@@ -690,7 +718,14 @@ function advertisedControl(
 		};
 	}
 	if (attribute === "media.scale.x" || attribute === "media.scale.y")
-		return valueControl(attribute, value, 0, 10, 0.01, `${value.toFixed(2)}×`);
+		return valueControl(
+			attribute,
+			value,
+			0,
+			selectedMaster ? 4 : 10,
+			0.01,
+			`${value.toFixed(2)}×`,
+		);
 	if (attribute === "media.mask.scale.x" || attribute === "media.mask.scale.y")
 		return valueControl(attribute, value, 0, 2, 0.01, `${value.toFixed(2)}×`);
 	if (
@@ -700,15 +735,19 @@ function advertisedControl(
 		attribute === "media.mask.position.y"
 	)
 		return valueControl(attribute, value, -2, 2, 0.01, value.toFixed(2));
-	if (attribute === "position.rotation")
+	if (attribute === "position.rotation" || attribute === "shaper.rotation")
 		return valueControl(
 			attribute,
 			value,
-			-360,
-			360,
+			selectedMaster ? -180 : -360,
+			selectedMaster ? 180 : 360,
 			1,
 			`${Math.round(value)}°`,
 		);
+	if (/^shaper\.blade\.[1-4]\.position$/u.test(attribute))
+		return valueControl(attribute, value, 0, 100, 1, `${Math.round(value)}%`);
+	if (/^shaper\.blade\.[1-4]\.angle$/u.test(attribute))
+		return valueControl(attribute, value, -45, 45, 1, `${Math.round(value)}°`);
 	return {
 		id: attribute,
 		label: MEDIA_CONTROL_LABELS[attribute] ?? readableAttribute(attribute),
@@ -802,6 +841,15 @@ const MEDIA_CONTROL_LABELS: Record<string, string> = {
 	"media.effect.3": "Effect 3",
 	"media.effect.4": "Effect 4",
 	"media.flip_mirror": "Flip / Mirror",
+	"shaper.blade.1.position": "Left",
+	"shaper.blade.1.angle": "Left rotation",
+	"shaper.blade.2.position": "Right",
+	"shaper.blade.2.angle": "Right rotation",
+	"shaper.blade.3.position": "Top",
+	"shaper.blade.3.angle": "Top rotation",
+	"shaper.blade.4.position": "Bottom",
+	"shaper.blade.4.angle": "Bottom rotation",
+	"shaper.rotation": "Module rotation",
 	"media.layer.play.mode": "Play mode",
 	"media.layer.dimmer": "Dimmer",
 	"media.layer.volume": "Volume",

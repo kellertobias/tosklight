@@ -47,6 +47,11 @@ pub fn layer_scale(value: u16) -> f32 {
     piecewise(value, 0.0, 1.0, 10.0)
 }
 
+/// Master output scale: `0 → 0×`, `32768 → 1×`, `65535 → 4×`.
+pub fn master_scale(value: u16) -> f32 {
+    piecewise(value, 0.0, 1.0, 4.0)
+}
+
 /// Mask scale: `0 → 0×`, `32768 → 1×`, `65535 → 2×`.
 pub fn mask_scale(value: u16) -> f32 {
     piecewise(value, 0.0, 1.0, 2.0)
@@ -63,6 +68,21 @@ pub fn position(value: u16) -> f32 {
 /// Layer rotation in degrees: `-360°` to `+360°`, with `0°` at the midpoint.
 pub fn rotation(value: u16) -> f32 {
     piecewise(value, -360.0, 0.0, 360.0)
+}
+
+/// Master geometry and complete-shaper rotation: `-180°..=180°`.
+pub fn master_rotation(value: u16) -> f32 {
+    piecewise(value, -180.0, 0.0, 180.0)
+}
+
+/// A master shaper edge's inward travel as a `0.0..=1.0` fraction.
+pub fn shaper_position(value: u16) -> f32 {
+    f32::from(value) / f32::from(u16::MAX)
+}
+
+/// Individual master shaper edge rotation: `-45°..=45°`.
+pub fn shaper_angle(value: u16) -> f32 {
+    piecewise(value, -45.0, 0.0, 45.0)
 }
 
 /// One subtractive tint component. DMX sends cyan, magenta, and yellow; the domain holds red,
@@ -109,6 +129,13 @@ mod tests {
     }
 
     #[test]
+    fn master_scale_pins_one_times_to_the_midpoint() {
+        assert_eq!(master_scale(0), 0.0);
+        assert_eq!(master_scale(MIDPOINT), 1.0);
+        assert_eq!(master_scale(u16::MAX), 4.0);
+    }
+
+    #[test]
     fn mask_scale_tops_out_at_two_times() {
         assert_eq!(mask_scale(0), 0.0);
         assert_eq!(mask_scale(MIDPOINT), 1.0);
@@ -132,6 +159,20 @@ mod tests {
         assert_eq!(rotation(MIDPOINT), 0.0);
         assert_eq!(rotation(u16::MAX), 360.0);
         assert!(close(rotation(MIDPOINT / 2), -180.0));
+    }
+
+    #[test]
+    fn master_geometry_and_shapers_use_operator_neutral_values() {
+        assert_eq!(master_rotation(0), -180.0);
+        assert_eq!(master_rotation(MIDPOINT), 0.0);
+        assert_eq!(master_rotation(u16::MAX), 180.0);
+
+        assert_eq!(shaper_position(0), 0.0);
+        assert_eq!(shaper_position(u16::MAX), 1.0);
+
+        assert_eq!(shaper_angle(0), -45.0);
+        assert_eq!(shaper_angle(MIDPOINT), 0.0);
+        assert_eq!(shaper_angle(u16::MAX), 45.0);
     }
 
     #[test]

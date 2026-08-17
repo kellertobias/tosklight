@@ -7,7 +7,7 @@ use crate::address::MediaAddress;
 use crate::color::{FlipMirror, Tint};
 use crate::dmx;
 use crate::layer::{LayerState, MaskState, ScalingMode};
-use crate::master::MasterState;
+use crate::master::{MasterShaper, MasterState};
 use crate::playback::PlayMode;
 use crate::speed::SpeedMultiplier;
 
@@ -16,7 +16,7 @@ use super::{LAYER_SLOTS, LayerPersonality, MASTER_SLOTS, PersonalityLayout};
 
 /// One layer's 35 slots.
 pub type LayerSlots = [u8; LAYER_SLOTS as usize];
-/// The master's 7 slots.
+/// The complete master's slots.
 pub type MasterSlots = [u8; MASTER_SLOTS as usize];
 
 /// Decodes one layer's slots.
@@ -83,6 +83,11 @@ pub fn master_state(slots: &[u8]) -> MasterState {
             .map(|pair| dmx::position(dmx::sixteen_bit(pair[0], pair[1])))
             .unwrap_or_default()
     };
+    let optional_sixteen = |offset: usize| {
+        slots
+            .get(offset..=offset + 1)
+            .map(|pair| dmx::sixteen_bit(pair[0], pair[1]))
+    };
     MasterState {
         dimmer: dmx::unit(slots[master::DIMMER]),
         volume: dmx::unit(slots[master::VOLUME]),
@@ -97,6 +102,51 @@ pub fn master_state(slots: &[u8]) -> MasterState {
         mask: MediaAddress::new(1, slots[master::MASK]),
         mask_position_x: optional_position(master::MASK_POSITION_X),
         mask_position_y: optional_position(master::MASK_POSITION_Y),
+        scale_x: optional_sixteen(master::SCALE_X)
+            .map(dmx::master_scale)
+            .unwrap_or(1.0),
+        scale_y: optional_sixteen(master::SCALE_Y)
+            .map(dmx::master_scale)
+            .unwrap_or(1.0),
+        scaling_mode: slots
+            .get(master::SCALING_MODE)
+            .copied()
+            .map(ScalingMode::from_dmx)
+            .unwrap_or_default(),
+        position_x: optional_position(master::POSITION_X),
+        position_y: optional_position(master::POSITION_Y),
+        rotation: optional_sixteen(master::ROTATION)
+            .map(dmx::master_rotation)
+            .unwrap_or_default(),
+        shaper: MasterShaper {
+            left: optional_sixteen(master::SHAPER_LEFT)
+                .map(dmx::shaper_position)
+                .unwrap_or_default(),
+            right: optional_sixteen(master::SHAPER_RIGHT)
+                .map(dmx::shaper_position)
+                .unwrap_or_default(),
+            top: optional_sixteen(master::SHAPER_TOP)
+                .map(dmx::shaper_position)
+                .unwrap_or_default(),
+            bottom: optional_sixteen(master::SHAPER_BOTTOM)
+                .map(dmx::shaper_position)
+                .unwrap_or_default(),
+            left_rotation: optional_sixteen(master::SHAPER_LEFT_ROTATION)
+                .map(dmx::shaper_angle)
+                .unwrap_or_default(),
+            right_rotation: optional_sixteen(master::SHAPER_RIGHT_ROTATION)
+                .map(dmx::shaper_angle)
+                .unwrap_or_default(),
+            top_rotation: optional_sixteen(master::SHAPER_TOP_ROTATION)
+                .map(dmx::shaper_angle)
+                .unwrap_or_default(),
+            bottom_rotation: optional_sixteen(master::SHAPER_BOTTOM_ROTATION)
+                .map(dmx::shaper_angle)
+                .unwrap_or_default(),
+            rotation: optional_sixteen(master::SHAPER_ROTATION)
+                .map(dmx::master_rotation)
+                .unwrap_or_default(),
+        },
         ..MasterState::default()
     }
 }
@@ -303,6 +353,21 @@ mod tests {
         slots[master::MASK] = 5;
         slots[master::MASK_POSITION_X] = 0x40;
         slots[master::MASK_POSITION_Y] = 0xc0;
+        slots[master::SCALE_X] = 0x80;
+        slots[master::SCALE_Y] = 0xff;
+        slots[master::SCALE_Y + 1] = 0xff;
+        slots[master::SCALING_MODE] = 64;
+        slots[master::POSITION_X] = 0x40;
+        slots[master::POSITION_Y] = 0xc0;
+        slots[master::ROTATION] = 0xff;
+        slots[master::ROTATION + 1] = 0xff;
+        slots[master::SHAPER_LEFT] = 0x80;
+        slots[master::SHAPER_RIGHT] = 0xff;
+        slots[master::SHAPER_RIGHT + 1] = 0xff;
+        slots[master::SHAPER_LEFT_ROTATION] = 0;
+        slots[master::SHAPER_RIGHT_ROTATION] = 0xff;
+        slots[master::SHAPER_RIGHT_ROTATION + 1] = 0xff;
+        slots[master::SHAPER_ROTATION] = 0x80;
 
         let decoded = master_state(&slots);
         assert_eq!(decoded.dimmer, 1.0);
@@ -312,6 +377,17 @@ mod tests {
         assert_eq!(decoded.mask.file, 5);
         assert!(decoded.mask_position_x < 0.0);
         assert!(decoded.mask_position_y > 0.0);
+        assert_eq!(decoded.scale_x, 1.0);
+        assert_eq!(decoded.scale_y, 4.0);
+        assert_eq!(decoded.scaling_mode, ScalingMode::Fill);
+        assert!(decoded.position_x < 0.0);
+        assert!(decoded.position_y > 0.0);
+        assert_eq!(decoded.rotation, 180.0);
+        assert!(decoded.shaper.left > 0.49 && decoded.shaper.left < 0.51);
+        assert_eq!(decoded.shaper.right, 1.0);
+        assert_eq!(decoded.shaper.left_rotation, -45.0);
+        assert_eq!(decoded.shaper.right_rotation, 45.0);
+        assert_eq!(decoded.shaper.rotation, 0.0);
     }
 
     fn universe(personality: LayerPersonality, start_address: u16) -> Vec<u8> {
@@ -323,8 +399,13 @@ mod tests {
             payload[base + layer::FOLDER] = 1;
             payload[base + layer::FILE] = index as u8 + 1;
         }
-        let master_base =
-            offset + usize::from(personality.footprint().master_offset()) + master::DIMMER;
+        let master_base = offset
+            + usize::from(
+                personality
+                    .footprint_for(PersonalityLayout::Current)
+                    .master_offset(),
+            )
+            + master::DIMMER;
         payload[master_base] = 255;
         payload
     }

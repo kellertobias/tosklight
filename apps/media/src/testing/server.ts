@@ -845,7 +845,7 @@ export function anOutputConfiguration(
 		soundOutputKind: "disabled",
 		soundOutputName: null,
 		personality: "two-layers",
-		personalityLayout: "current",
+		personalityLayout: "extended",
 		protocol: "art-net",
 		universe: 1,
 		startAddress: 1,

@@ -161,7 +161,7 @@ describe("the settings page", () => {
 		expect(
 			screen.queryByText(/Saved output changes take effect/u),
 		).not.toBeInTheDocument();
-		await choose("8 layers (279 slots)", "2 layers (75 slots)");
+		await choose("8 layers (352 slots)", "2 layers (118 slots)");
 		await choose("Art-Net", "sACN");
 		await replaceNumber("Universe", "12");
 		await replaceNumber("Start address", "101");

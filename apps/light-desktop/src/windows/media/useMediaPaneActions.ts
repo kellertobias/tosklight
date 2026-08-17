@@ -3,10 +3,17 @@ import { useCallback } from "react";
 import type { MediaServerInspection } from "../../api/client/mediaOutput";
 import type { MediaServerFixture } from "../../api/types";
 import type { MediaServersState } from "../../features/mediaServers/MediaServersContext";
-import type { useProgrammerValuesActions } from "../../features/programmerValues/ProgrammerValuesView";
+import {
+	type ProgrammerValuesMutationQueueController,
+	programmerValuesMutationKey,
+} from "../../features/programmerValues/useProgrammerValuesMutationQueue";
 import type { useProgrammingSelectionActions } from "../../features/programmingInteraction/ProgrammingInteractionView";
 import type { PersistedMediaPaneState } from "../MediaPaneWindow";
 import { mediaLibraryMutations } from "../MediaPaneWindow.helpers";
+import {
+	mediaCmyFromRgb,
+	mediaControlNormalizedValue,
+} from "./mediaControlValue";
 import type {
 	MediaBrowserMode,
 	MediaLibraryItem,
@@ -17,20 +24,27 @@ interface MediaPaneActionsInput {
 	servers: MediaServerFixture[];
 	selectedServer: MediaServerFixture | undefined;
 	selectedLayer: MediaServerFixture["layers"][number] | undefined;
+	selectedFixtureId: string | undefined;
 	selectedLayerId: string;
 	browserMode: MediaBrowserMode;
+	browserModeByLayer: Record<string, MediaBrowserMode>;
 	sourceFilter: MediaSourceFilter;
+	selectedControlSectionId: string;
 	mainSectionId: string;
 	rightPaneVisible: boolean;
 	inspection: MediaServerInspection;
 	draftFolder: number;
 	applySelection: MediaServersState["applyMediaLibrarySelection"] | undefined;
 	selectionActions: ReturnType<typeof useProgrammingSelectionActions>;
-	valuesActions: ReturnType<typeof useProgrammerValuesActions>;
+	valuesQueue: ProgrammerValuesMutationQueueController;
 	setSelectedServerId: Dispatch<SetStateAction<string>>;
 	setSelectedLayerId: Dispatch<SetStateAction<string>>;
 	setBrowserMode: Dispatch<SetStateAction<MediaBrowserMode>>;
+	setBrowserModeByLayer: Dispatch<
+		SetStateAction<Record<string, MediaBrowserMode>>
+	>;
 	setSourceFilter: Dispatch<SetStateAction<MediaSourceFilter>>;
+	setSelectedControlSectionId: Dispatch<SetStateAction<string>>;
 	setMainSectionId: Dispatch<SetStateAction<string>>;
 	setRightPaneVisible: Dispatch<SetStateAction<boolean>>;
 	setDraftFolderId: Dispatch<SetStateAction<string>>;
@@ -48,7 +62,9 @@ export function useMediaPaneActions(input: MediaPaneActionsInput) {
 				serverId: input.selectedServer?.fixture_id,
 				layerId: input.selectedLayerId,
 				browserMode: input.browserMode,
+				browserModeByLayer: input.browserModeByLayer,
 				sourceFilter: input.sourceFilter,
+				controlSectionId: input.selectedControlSectionId,
 				mainSectionId: input.mainSectionId,
 				rightPaneVisible: input.rightPaneVisible,
 				...next,
@@ -57,9 +73,27 @@ export function useMediaPaneActions(input: MediaPaneActionsInput) {
 	);
 	const onSelectLayer = useCallback(
 		(layerId: string) => {
+			const rememberedModes =
+				input.selectedLayerId === "master"
+					? input.browserModeByLayer
+					: {
+							...input.browserModeByLayer,
+							[input.selectedLayerId]: input.browserMode,
+						};
+			const nextMode =
+				layerId === "master" ? "mask" : (rememberedModes[layerId] ?? "media");
+			const nextMainSection = nextMode === "mask" ? "mask" : "content";
 			input.setSelectedLayerId(layerId);
 			input.initializeLayer(layerId);
-			persist({ layerId });
+			input.setBrowserModeByLayer(rememberedModes);
+			input.setBrowserMode(nextMode);
+			input.setMainSectionId(nextMainSection);
+			persist({
+				layerId,
+				browserMode: nextMode,
+				browserModeByLayer: rememberedModes,
+				mainSectionId: nextMainSection,
+			});
 			const fixtureId =
 				layerId === "master" ? input.selectedServer?.fixture_id : layerId;
 			if (fixtureId)
@@ -75,8 +109,28 @@ export function useMediaPaneActions(input: MediaPaneActionsInput) {
 				return;
 			}
 			input.setDraftFileId(item.id);
-			if (!input.selectedLayer || !Number.isFinite(input.draftFolder)) return;
+			if (!input.selectedFixtureId || !Number.isFinite(input.draftFolder))
+				return;
 			const file = Number(item.id);
+			if (input.selectedLayerId === "master") {
+				if (mode !== "mask") return;
+				const operation = input.valuesQueue.submitBarrier([
+					{
+						action: "set_fixture",
+						fixtureId: input.selectedFixtureId,
+						attribute: "media.mask.file",
+						value: { kind: "normalized", value: file / 255 },
+						timing: { fade: false, fadeMillis: null, delayMillis: null },
+					},
+				]);
+				void operation.catch((cause) =>
+					input.setInspectionError(
+						cause instanceof Error ? cause.message : String(cause),
+					),
+				);
+				return;
+			}
+			if (!input.selectedLayer) return;
 			const advertised = input.inspection.files.some(
 				(candidate) =>
 					candidate.folder_id === input.draftFolder && candidate.id === file,
@@ -101,15 +155,14 @@ export function useMediaPaneActions(input: MediaPaneActionsInput) {
 							folder: input.draftFolder,
 							file,
 						})
-					: input.valuesActions?.batch({
-							requestId: crypto.randomUUID(),
-							mutations: mediaLibraryMutations(
+					: input.valuesQueue.submitBarrier(
+							mediaLibraryMutations(
 								input.selectedLayer.fixture_id,
 								mode,
 								input.draftFolder,
 								file,
 							),
-						});
+						);
 			if (!operation) return;
 			void operation.catch((cause) =>
 				input.setInspectionError(
@@ -127,16 +180,34 @@ export function useMediaPaneActions(input: MediaPaneActionsInput) {
 				(candidate) => candidate.fixture_id === serverId,
 			);
 			const layerId = server?.layers[0]?.fixture_id ?? "master";
+			const nextMode =
+				layerId === "master"
+					? "mask"
+					: (input.browserModeByLayer[layerId] ?? "media");
 			input.setSelectedServerId(serverId);
 			input.setSelectedLayerId(layerId);
+			input.setBrowserMode(nextMode);
+			input.setMainSectionId(nextMode === "mask" ? "mask" : "content");
 			input.resetMediaData();
-			persist({ serverId, layerId });
+			persist({
+				serverId,
+				layerId,
+				browserMode: nextMode,
+				mainSectionId: nextMode === "mask" ? "mask" : "content",
+			});
 		},
 		onSelectBrowserMode: (mode: MediaBrowserMode) => {
+			if (input.selectedLayerId === "master" && mode === "media") return;
+			const rememberedModes =
+				input.selectedLayerId === "master"
+					? input.browserModeByLayer
+					: { ...input.browserModeByLayer, [input.selectedLayerId]: mode };
 			input.setBrowserMode(mode);
+			input.setBrowserModeByLayer(rememberedModes);
 			input.setMainSectionId(mode === "media" ? "content" : "mask");
 			persist({
 				browserMode: mode,
+				browserModeByLayer: rememberedModes,
 				mainSectionId: mode === "media" ? "content" : "mask",
 			});
 		},
@@ -149,27 +220,108 @@ export function useMediaPaneActions(input: MediaPaneActionsInput) {
 			persist({ sourceFilter: filter });
 		},
 		onSelectControlSection: (sectionId: string) => {
+			input.setSelectedControlSectionId(sectionId);
 			input.setMainSectionId(sectionId);
-			persist({ mainSectionId: sectionId });
+			persist({ controlSectionId: sectionId, mainSectionId: sectionId });
 		},
 		onChangeControl: (attribute: string, value: string | number) => {
-			if (!input.selectedLayer || typeof value !== "number") return;
-			void input.valuesActions?.setFixtureValue({
-				requestId: crypto.randomUUID(),
-				fixtureId: input.selectedLayer.fixture_id,
-				attribute,
-				value: {
-					kind: "normalized",
-					value: Math.max(0, Math.min(255, value)) / 255,
+			if (!input.selectedFixtureId) return;
+			const fixtureId = input.selectedFixtureId;
+			if (attribute === "color.tint" && typeof value === "string") {
+				const rgb = mediaRgbFromHex(value);
+				if (!rgb) return;
+				const mutations = ["red", "green", "blue"].map((component, index) => ({
+					action: "set_fixture" as const,
+					fixtureId,
+					attribute: `color.${component}`,
+					value: { kind: "normalized" as const, value: rgb[index] ?? 0 },
+					timing: { fade: false, fadeMillis: null, delayMillis: null },
+				}));
+				void input.valuesQueue.submitLatest(
+					programmerValuesMutationKey(mutations),
+					mutations,
+				);
+				return;
+			}
+			if (attribute === "media.layer.tint" && typeof value === "string") {
+				const cmy = mediaCmyFromRgb(value);
+				if (!cmy) return;
+				const mutations = ["cyan", "magenta", "yellow"].map(
+					(component, index) => ({
+						action: "set_fixture" as const,
+						fixtureId,
+						attribute: `media.layer.${component}`,
+						value: { kind: "normalized" as const, value: cmy[index] ?? 0 },
+						timing: { fade: false, fadeMillis: null, delayMillis: null },
+					}),
+				);
+				void input.valuesQueue.submitLatest(
+					programmerValuesMutationKey(mutations),
+					mutations,
+				);
+				return;
+			}
+			const raw = Number(value);
+			if (!Number.isFinite(raw)) return;
+			const mutations = [
+				{
+					action: "set_fixture" as const,
+					fixtureId,
+					attribute,
+					value: {
+						kind: "normalized" as const,
+						value: mediaControlNormalizedValue(
+							attribute,
+							raw,
+							input.selectedLayerId === "master",
+						),
+					},
+					timing: { fade: false, fadeMillis: null, delayMillis: null },
 				},
-				fade: false,
-				fadeMillis: null,
-				delayMillis: null,
-			});
+			];
+			void input.valuesQueue.submitLatest(
+				programmerValuesMutationKey(mutations),
+				mutations,
+			);
+		},
+		onResetControl: (attribute: string) => {
+			if (!input.selectedFixtureId) return;
+			const fixtureId = input.selectedFixtureId;
+			if (attribute === "color.tint") {
+				void input.valuesQueue.submitBarrier(
+					["red", "green", "blue"].map((component) => ({
+						action: "release_fixture" as const,
+						fixtureId,
+						attribute: `color.${component}`,
+					})),
+				);
+				return;
+			}
+			if (attribute === "media.layer.tint") {
+				void input.valuesQueue.submitBarrier(
+					["cyan", "magenta", "yellow"].map((component) => ({
+						action: "release_fixture" as const,
+						fixtureId,
+						attribute: `media.layer.${component}`,
+					})),
+				);
+				return;
+			}
+			void input.valuesQueue.submitBarrier([
+				{ action: "release_fixture", fixtureId, attribute },
+			]);
 		},
 		onSetRightPaneVisible: (visible: boolean) => {
 			input.setRightPaneVisible(visible);
 			persist({ rightPaneVisible: visible });
 		},
 	};
+}
+
+function mediaRgbFromHex(value: string): [number, number, number] | null {
+	const match = /^#([0-9a-f]{6})$/iu.exec(value);
+	if (!match) return null;
+	return [0, 2, 4].map(
+		(offset) => Number.parseInt(match[1].slice(offset, offset + 2), 16) / 255,
+	) as [number, number, number];
 }

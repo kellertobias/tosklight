@@ -37,7 +37,7 @@ pub fn layer_fixture() -> FixtureType {
     }
 }
 
-/// The master fixture: the 11 slots that begin immediately after the controlled layers.
+/// The complete 40-slot master fixture that begins immediately after the controlled layers.
 pub fn master_fixture() -> FixtureType {
     FixtureType {
         name: "ToskLight Media Master".into(),
@@ -227,7 +227,7 @@ mod tests {
 
         assert_eq!(by_name("Folder"), 0, "nothing is selected");
         assert_eq!(by_name("File"), 0);
-        assert_eq!(by_name("Dimmer"), 255, "but a selection appears at once");
+        assert_eq!(by_name("Dimmer"), 0, "a fresh layer remains transparent");
         assert_eq!(by_name("Scale X"), 32_768, "at its neutral scale");
         assert_eq!(by_name("Mask opacity"), 0, "and unmasked");
         assert_eq!(by_name("Cyan"), 0, "colour defaults match the decoder");
