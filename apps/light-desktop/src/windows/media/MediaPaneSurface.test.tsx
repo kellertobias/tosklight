@@ -1,7 +1,8 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { MediaPaneSurface, SafePreviewImage } from "./MediaPaneSurface";
+import { SafePreviewImage } from "./MediaPanePreview";
+import { MediaPaneSurface } from "./MediaPaneSurface";
 import type { MediaPaneModel, MediaPaneUiCallbacks } from "./mediaPaneModel";
 
 describe("MediaPaneSurface control state", () => {

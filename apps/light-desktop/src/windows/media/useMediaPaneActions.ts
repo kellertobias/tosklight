@@ -68,6 +68,98 @@ function usesLegacyAudioAddressing(
 	);
 }
 
+/** Everything a library click does, kept out of the hook so the hook stays a wiring layer. */
+function browseMediaItem(
+	input: MediaPaneActionsInput,
+	mode: MediaBrowserMode,
+	item: MediaLibraryItem,
+) {
+	if (item.kind === "folder") {
+		input.setDraftFolderId(item.id);
+		input.setDraftFileId(null);
+		return;
+	}
+	input.setDraftFileId(item.id);
+	if (!input.selectedFixtureId || !Number.isFinite(input.draftFolder))
+		return;
+	const file = Number(item.id);
+	if (usesLegacyAudioAddressing(input.selectedLayer)) {
+		// An Audio Player patched before TL-367 keeps its own folder/file attributes and
+		// advertises no CITP library to select from.
+		if (!input.selectedLayer) return;
+		const operation = input.valuesQueue.submitBarrier(
+			audioLibraryMutations(
+				input.selectedLayer.fixture_id,
+				input.draftFolder,
+				file,
+			),
+		);
+		void operation?.catch((cause) =>
+			input.setInspectionError(
+				cause instanceof Error ? cause.message : String(cause),
+			),
+		);
+		return;
+	}
+	if (input.selectedLayerId === "master") {
+		if (mode !== "mask") return;
+		const operation = input.valuesQueue.submitBarrier([
+			{
+				action: "set_fixture",
+				fixtureId: input.selectedFixtureId,
+				attribute: "media.mask.file",
+				value: { kind: "normalized", value: file / 255 },
+				timing: { fade: false, fadeMillis: null, delayMillis: null },
+			},
+		]);
+		void operation.catch((cause) =>
+			input.setInspectionError(
+				cause instanceof Error ? cause.message : String(cause),
+			),
+		);
+		return;
+	}
+	if (!input.selectedLayer) return;
+	const advertised = input.inspection.files.some(
+		(candidate) =>
+			candidate.folder_id === input.draftFolder && candidate.id === file,
+	);
+	const capabilities = input.inspection.capabilities.layers.find(
+		(candidate) => candidate.layer === input.selectedLayer?.head_index,
+	);
+	const libraryAdvertised =
+		mode === "mask"
+			? capabilities?.mask_library
+			: capabilities?.content_library;
+	const operation =
+		input.applySelection &&
+		input.selectedServer &&
+		input.inspection.library_revision &&
+		advertised &&
+		libraryAdvertised
+			? input.applySelection(input.selectedServer.fixture_id, {
+					expected_library_revision: input.inspection.library_revision,
+					layer_fixture_id: input.selectedLayer.fixture_id,
+					kind: mode === "mask" ? "mask" : "content",
+					folder: input.draftFolder,
+					file,
+				})
+			: input.valuesQueue.submitBarrier(
+					mediaLibraryMutations(
+						input.selectedLayer.fixture_id,
+						mode,
+						input.draftFolder,
+						file,
+					),
+				);
+	if (!operation) return;
+	void operation.catch((cause) =>
+		input.setInspectionError(
+			cause instanceof Error ? cause.message : String(cause),
+		),
+	);
+}
+
 export function useMediaPaneActions(input: MediaPaneActionsInput) {
 	const persist = useCallback(
 		(next: Partial<PersistedMediaPaneState>) =>
@@ -115,92 +207,8 @@ export function useMediaPaneActions(input: MediaPaneActionsInput) {
 		[input, persist],
 	);
 	const onBrowseItem = useCallback(
-		(mode: MediaBrowserMode, item: MediaLibraryItem) => {
-			if (item.kind === "folder") {
-				input.setDraftFolderId(item.id);
-				input.setDraftFileId(null);
-				return;
-			}
-			input.setDraftFileId(item.id);
-			if (!input.selectedFixtureId || !Number.isFinite(input.draftFolder))
-				return;
-			const file = Number(item.id);
-			if (usesLegacyAudioAddressing(input.selectedLayer)) {
-				// An Audio Player patched before TL-367 keeps its own folder/file attributes and
-				// advertises no CITP library to select from.
-				if (!input.selectedLayer) return;
-				const operation = input.valuesQueue.submitBarrier(
-					audioLibraryMutations(
-						input.selectedLayer.fixture_id,
-						input.draftFolder,
-						file,
-					),
-				);
-				void operation?.catch((cause) =>
-					input.setInspectionError(
-						cause instanceof Error ? cause.message : String(cause),
-					),
-				);
-				return;
-			}
-			if (input.selectedLayerId === "master") {
-				if (mode !== "mask") return;
-				const operation = input.valuesQueue.submitBarrier([
-					{
-						action: "set_fixture",
-						fixtureId: input.selectedFixtureId,
-						attribute: "media.mask.file",
-						value: { kind: "normalized", value: file / 255 },
-						timing: { fade: false, fadeMillis: null, delayMillis: null },
-					},
-				]);
-				void operation.catch((cause) =>
-					input.setInspectionError(
-						cause instanceof Error ? cause.message : String(cause),
-					),
-				);
-				return;
-			}
-			if (!input.selectedLayer) return;
-			const advertised = input.inspection.files.some(
-				(candidate) =>
-					candidate.folder_id === input.draftFolder && candidate.id === file,
-			);
-			const capabilities = input.inspection.capabilities.layers.find(
-				(candidate) => candidate.layer === input.selectedLayer?.head_index,
-			);
-			const libraryAdvertised =
-				mode === "mask"
-					? capabilities?.mask_library
-					: capabilities?.content_library;
-			const operation =
-				input.applySelection &&
-				input.selectedServer &&
-				input.inspection.library_revision &&
-				advertised &&
-				libraryAdvertised
-					? input.applySelection(input.selectedServer.fixture_id, {
-							expected_library_revision: input.inspection.library_revision,
-							layer_fixture_id: input.selectedLayer.fixture_id,
-							kind: mode === "mask" ? "mask" : "content",
-							folder: input.draftFolder,
-							file,
-						})
-					: input.valuesQueue.submitBarrier(
-							mediaLibraryMutations(
-								input.selectedLayer.fixture_id,
-								mode,
-								input.draftFolder,
-								file,
-							),
-						);
-			if (!operation) return;
-			void operation.catch((cause) =>
-				input.setInspectionError(
-					cause instanceof Error ? cause.message : String(cause),
-				),
-			);
-		},
+		(mode: MediaBrowserMode, item: MediaLibraryItem) =>
+			browseMediaItem(input, mode, item),
 		[input],
 	);
 	return {
