@@ -4,7 +4,7 @@ import remarkGfm from "remark-gfm";
 import type { HelpCatalog, HelpCatalogEntry, HelpTopic } from "../api/types";
 import { createLightApi } from "../api/client/api";
 import type { WindowProps } from "./windowTypes";
-import { prepareHelpMarkdown, safeHelpUrl } from "./helpMarkdown";
+import { prepareHelpMarkdown, remarkObsidianCallouts, safeHelpUrl } from "./helpMarkdown";
 import { WindowHeader, WindowScrollArea } from "@tosklight/ui/window-kit";
 import { Button } from "@tosklight/ui";
 
@@ -33,6 +33,21 @@ function HelpWarningIcon() {
   </svg>;
 }
 
+function HelpDeskKey({ label }: { label: string }) {
+  const category = /^(?:\d|0-9|\.)$/.test(label)
+    ? "number"
+    : label === "CLR"
+      ? "clear"
+      : label === "REC"
+        ? "record"
+        : label === "PRELD"
+          ? "preload"
+          : label === "Shift"
+            ? "shift"
+            : "command";
+  return <span className={`help-key desk-key desk-key-${category}`}><kbd>{category === "shift" && <span className="help-shift-icon" aria-hidden="true">^</span>}{label}</kbd></span>;
+}
+
 export function HelpMarkdown({
   markdown,
   topicId,
@@ -45,7 +60,7 @@ export function HelpMarkdown({
   urlTransform?: HelpUrlTransform;
 }) {
   return <ReactMarkdown
-    remarkPlugins={[remarkGfm]}
+    remarkPlugins={[remarkGfm, remarkObsidianCallouts]}
     urlTransform={(url, key) =>
       (urlTransform === safeHelpUrl
         ? safeHelpUrl(url, key === "src" ? "image" : "link", topicId)
@@ -59,11 +74,13 @@ export function HelpMarkdown({
         }
         if (!className && value.startsWith("help-key:")) {
           const key = value.slice(9);
+          if (key.startsWith("^") && key.length > 1) {
+            return <span className="help-key-sequence"><HelpDeskKey label="Shift"/><span className="help-key-plus">+</span><HelpDeskKey label={key.slice(1)}/></span>;
+          }
           const modifier = key.length > 1 ? key.at(-1) : undefined;
           const state = modifier === "+" ? "held" : modifier === "*" ? "optional" : "";
           const label = state ? key.slice(0, -1) : key;
-          const category = /^(?:\d|0-9|\.)$/.test(label) ? "number" : label === "CLR" ? "clear" : label === "REC" ? "record" : "command";
-          return <span className={`help-key desk-key desk-key-${category} ${state}`.trim()}><kbd>{label}</kbd>{state && <small>{state === "held" ? "hold" : "optional"}</small>}</span>;
+          return <span className={`help-key ${state}`.trim()}><HelpDeskKey label={label}/>{state && <small>{state === "held" ? "hold" : "optional"}</small>}</span>;
         }
         if (!className && value.startsWith("help-placeholder:")) return <span className="help-placeholder">&lt;{value.slice(17)}&gt;</span>;
         return <code className={className} {...props}>{children}</code>;

@@ -75,6 +75,7 @@ def make_styles():
     styles.add(ParagraphStyle(name="ManualH4", fontName=SANS_BOLD, fontSize=9.5, leading=13, textColor=INK, spaceBefore=8, spaceAfter=4, keepWithNext=True))
     styles.add(ParagraphStyle(name="ManualCode", fontName=MONO, fontSize=7.4, leading=10.5, textColor=colors.HexColor("#d9f7f4"), backColor=NAVY, borderPadding=8, spaceBefore=5, spaceAfter=8))
     styles.add(ParagraphStyle(name="ManualQuote", parent=styles["ManualBody"], leftIndent=12, borderWidth=0, borderColor=TEAL, borderPadding=(2, 0, 2, 9), textColor=colors.HexColor("#475569"), backColor=colors.HexColor("#eaf7f5")))
+    styles.add(ParagraphStyle(name="ManualDanger", parent=styles["ManualQuote"], borderColor=colors.HexColor("#b42318"), textColor=colors.HexColor("#7f1d1d"), backColor=colors.HexColor("#fff0ee")))
     styles.add(ParagraphStyle(name="ManualFutureFeature", fontName=SANS_BOLD, fontSize=22, leading=29, alignment=TA_CENTER, textColor=colors.black, backColor=colors.white, borderWidth=1, borderColor=colors.black, borderPadding=20, keepTogether=True))
     styles.add(ParagraphStyle(name="ManualCaption", fontName=SANS_ITALIC, fontSize=7.5, leading=10, alignment=TA_CENTER, textColor=MUTED, spaceBefore=3, spaceAfter=10))
     styles.add(ParagraphStyle(name="ManualTable", fontName=SANS, fontSize=7.1, leading=9.4, textColor=INK))

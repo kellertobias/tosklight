@@ -37,6 +37,28 @@ fn discovery_adapters_cover_macos_linux_and_windows_mount_layouts() {
 }
 
 #[test]
+fn macos_discovery_accepts_usb_media_but_rejects_backup_and_internal_volumes() {
+    assert!(macos_disk_is_user_removable(&serde_json::json!({
+        "Internal": false,
+        "RemovableMedia": false,
+        "BusProtocol": "USB",
+        "APFSVolumeRole": [],
+    })));
+    assert!(!macos_disk_is_user_removable(&serde_json::json!({
+        "Internal": false,
+        "RemovableMedia": false,
+        "BusProtocol": "USB",
+        "APFSVolumeRole": "Backup",
+    })));
+    assert!(!macos_disk_is_user_removable(&serde_json::json!({
+        "Internal": true,
+        "RemovableMedia": false,
+        "BusProtocol": "PCI-Express",
+        "APFSVolumeRole": [],
+    })));
+}
+
+#[test]
 fn keep_both_copy_and_replace_are_safe() {
     let root = temporary_root("conflicts");
     let source = root.join("source.txt");

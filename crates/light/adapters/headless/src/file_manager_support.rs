@@ -17,7 +17,8 @@ pub(crate) use platform::{
 };
 #[cfg(test)]
 use platform::{
-    discover_directories_under, linux_removable_mount_paths, windows_removable_drive_paths,
+    discover_directories_under, linux_removable_mount_paths, macos_disk_is_user_removable,
+    windows_removable_drive_paths,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

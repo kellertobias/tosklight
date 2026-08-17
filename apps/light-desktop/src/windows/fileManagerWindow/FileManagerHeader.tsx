@@ -209,6 +209,7 @@ function HeaderMenu({ controller }: { controller: FileManagerController }) {
 	const { state } = controller;
 	const menu = state.headerMenu;
 	if (!menu) return null;
+	if (controller.picker && menu.kind !== "location") return null;
 	const close = () => state.setHeaderMenu(null);
 	const act: MenuAction = (action) => {
 		close();
@@ -287,33 +288,37 @@ export function FileManagerHeader({
 					{controller.picker.selectLabel ?? "Select"}
 				</Button>
 			)}
-			<Button
-				aria-label="Edit"
-				aria-haspopup="menu"
-				aria-expanded={state.headerMenu?.kind === "edit"}
-				onClick={(event) => openMenu("edit", event)}
-			>
-				<span>Edit</span>
-				<FileMenuIcon name="chevron" />
-			</Button>
-			<Button
-				aria-label="New"
-				aria-haspopup="menu"
-				aria-expanded={state.headerMenu?.kind === "create"}
-				onClick={(event) => openMenu("create", event)}
-			>
-				<span>New</span>
-				<FileMenuIcon name="chevron" />
-			</Button>
-			<Button
-				aria-label="View"
-				aria-haspopup="menu"
-				aria-expanded={state.headerMenu?.kind === "view"}
-				onClick={(event) => openMenu("view", event)}
-			>
-				<span>View</span>
-				<FileMenuIcon name="chevron" />
-			</Button>
+			{!controller.picker && (
+				<>
+					<Button
+						aria-label="Edit"
+						aria-haspopup="menu"
+						aria-expanded={state.headerMenu?.kind === "edit"}
+						onClick={(event) => openMenu("edit", event)}
+					>
+						<span>Edit</span>
+						<FileMenuIcon name="chevron" />
+					</Button>
+					<Button
+						aria-label="New"
+						aria-haspopup="menu"
+						aria-expanded={state.headerMenu?.kind === "create"}
+						onClick={(event) => openMenu("create", event)}
+					>
+						<span>New</span>
+						<FileMenuIcon name="chevron" />
+					</Button>
+					<Button
+						aria-label="View"
+						aria-haspopup="menu"
+						aria-expanded={state.headerMenu?.kind === "view"}
+						onClick={(event) => openMenu("view", event)}
+					>
+						<span>View</span>
+						<FileMenuIcon name="chevron" />
+					</Button>
+				</>
+			)}
 			<Button
 				aria-label="Back"
 				disabled={state.historyIndex <= 0}

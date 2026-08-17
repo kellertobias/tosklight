@@ -50,13 +50,16 @@ describe("help key rendering", () => {
   });
 
   it("renders normal and numeric-range keys as keycaps", () => {
-    const { container } = render(<HelpMarkdown markdown={"[AT] [+] [0-9] [.] [CLR] [REC]"}/>);
+    const { container } = render(<HelpMarkdown markdown={"[AT] [+] [0-9] [.] [CLR] [REC] [PRELD] [^GRP]"}/>);
     expect(screen.getByText("AT", { selector: "kbd" })).toBeInTheDocument();
     expect(screen.getByText("+", { selector: "kbd" })).toBeInTheDocument();
     expect(screen.getByText("0-9", { selector: "kbd" })).toBeInTheDocument();
     expect(container.querySelectorAll(".desk-key-number")).toHaveLength(2);
     expect(container.querySelector(".desk-key-clear kbd")).toHaveTextContent("CLR");
     expect(container.querySelector(".desk-key-record kbd")).toHaveTextContent("REC");
+    expect(container.querySelector(".desk-key-preload kbd")).toHaveTextContent("PRELD");
+    expect(container.querySelector(".desk-key-shift kbd")).toHaveTextContent("Shift");
+    expect(container.querySelector(".help-key-sequence")).toHaveTextContent("Shift+GRP");
     expect(container.querySelector(".desk-key-command kbd")).toHaveTextContent("AT");
   });
 
@@ -76,6 +79,15 @@ describe("help key rendering", () => {
     expect(within(keyboard).getByText("keyboard")).toBeInTheDocument();
     expect(within(keyboard).getByText("ENTER", { selector: "kbd" })).toBeInTheDocument();
     expect(screen.getByText("ENT", { selector: "kbd" })).toBeInTheDocument();
+  });
+
+  it("renders Obsidian danger blocks as labelled callouts", () => {
+    const { container } = render(<HelpMarkdown markdown={"> [!warning] Missing graphic\n> Add an ownership diagram with **labels**."}/>);
+    const callout = container.querySelector("aside.help-callout-danger") as HTMLElement;
+    expect(callout).toHaveAttribute("data-callout", "danger");
+    expect(within(callout).getByText("Missing graphic", { selector: "strong" })).toBeInTheDocument();
+    expect(within(callout).getByText(/Add an ownership diagram with/)).toBeInTheDocument();
+    expect(callout).not.toHaveTextContent("[!danger]");
   });
 });
 

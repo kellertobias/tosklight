@@ -222,7 +222,14 @@ pub(crate) fn discover_removable_paths() -> Vec<PathBuf> {
     {
         discover_directories_under(Path::new("/Volumes"), false)
             .into_iter()
+            .filter(|path| {
+                path.file_name()
+                    .is_some_and(|name| !name.to_string_lossy().starts_with('.'))
+            })
             .filter(|path| fs::canonicalize(path).ok().as_deref() != Some(Path::new("/")))
+            .filter(|path| {
+                macos_disk_info(path).is_some_and(|info| macos_disk_is_user_removable(&info))
+            })
             .collect()
     }
     #[cfg(target_os = "linux")]
@@ -254,6 +261,61 @@ pub(crate) fn discover_removable_paths() -> Vec<PathBuf> {
     }
     #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     Vec::new()
+}
+
+#[cfg(target_os = "macos")]
+fn macos_disk_info(path: &Path) -> Option<serde_json::Value> {
+    use std::{io::Write as _, process::Stdio};
+
+    let plist = Command::new("/usr/sbin/diskutil")
+        .args(["info", "-plist"])
+        .arg(path)
+        .output()
+        .ok()?;
+    if !plist.status.success() {
+        return None;
+    }
+    let mut conversion = Command::new("/usr/bin/plutil")
+        .args(["-convert", "json", "-o", "-", "-"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .ok()?;
+    conversion.stdin.take()?.write_all(&plist.stdout).ok()?;
+    let json = conversion.wait_with_output().ok()?;
+    if !json.status.success() {
+        return None;
+    }
+    serde_json::from_slice(&json.stdout).ok()
+}
+
+#[cfg(any(target_os = "macos", test))]
+pub(super) fn macos_disk_is_user_removable(info: &serde_json::Value) -> bool {
+    let backup_role = info
+        .get("APFSVolumeRole")
+        .into_iter()
+        .flat_map(|value| {
+            value
+                .as_array()
+                .map(Vec::as_slice)
+                .unwrap_or_else(|| std::slice::from_ref(value))
+        })
+        .filter_map(serde_json::Value::as_str)
+        .any(|role| role.eq_ignore_ascii_case("backup"));
+    if backup_role {
+        return false;
+    }
+
+    let removable_media = info
+        .get("RemovableMedia")
+        .and_then(serde_json::Value::as_bool)
+        == Some(true);
+    let external_usb = info.get("Internal").and_then(serde_json::Value::as_bool) == Some(false)
+        && info
+            .get("BusProtocol")
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|protocol| protocol.eq_ignore_ascii_case("usb"));
+    removable_media || external_usb
 }
 
 #[cfg(target_os = "linux")]

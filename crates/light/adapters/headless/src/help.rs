@@ -358,7 +358,10 @@ mod tests {
         let (topics, errors) = build_catalog(vec![
             ("00-Quick-Start/index.md".into(), "# Quick Start".into()),
             ("10-Desk/index.md".into(), "# ToskLight Desk".into()),
-            ("10-Desk/10-Show-Setup/index.md".into(), "# Show Setup and Patching".into()),
+            (
+                "10-Desk/10-Show-Setup/index.md".into(),
+                "# Show Setup and Patching".into(),
+            ),
             ("10-Desk/10-Show-Setup/01-patch.md".into(), "# Patch".into()),
             ("99-Development/index.md".into(), "# Development".into()),
             (
@@ -378,6 +381,9 @@ mod tests {
     }
     #[test]
     fn embedded_help_contains_nested_command_line_topic() {
-        assert!(EmbeddedHelp::iter().any(|path| path == "10-Desk/20-Programmer-and-Cues/01-command-line.md"));
+        assert!(
+            EmbeddedHelp::iter()
+                .any(|path| path == "10-Desk/20-Programmer-and-Cues/01-command-line.md")
+        );
     }
 }

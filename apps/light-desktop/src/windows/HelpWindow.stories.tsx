@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
-import quickStartImage from "../../../../assets/branding/tosklight-app-icon.png?url";
+import quickStartImage from "../../../../assets/branding/ToskLight Control.png?url";
 import {
   emptyHelpCatalog,
   helpCatalog,

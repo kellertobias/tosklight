@@ -507,6 +507,11 @@ describe("FileManager picker contracts", () => {
 		expect(
 			screen.getByRole("button", { name: "Close File Manager" }),
 		).toBeVisible();
+		for (const unavailableAction of ["Edit", "New", "View"]) {
+			expect(
+				screen.queryByRole("button", { name: unavailableAction }),
+			).not.toBeInTheDocument();
+		}
 		expect(select).toBeDisabled();
 		fireEvent.click(
 			await screen.findByRole("button", { name: "alpha.txt, file" }),

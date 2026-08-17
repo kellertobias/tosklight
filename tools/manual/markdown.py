@@ -291,8 +291,17 @@ class StoryParser:
         while self.index < len(self.lines) and self.lines[self.index].strip().startswith(">"):
             lines.append(self.lines[self.index].strip()[1:].strip())
             self.index += 1
-        text = " ".join(lines)
-        self.story.append(paragraph(text, "ManualQuote", self.page, self.bookmarks))
+        marker = re.match(r"^\[!([a-z0-9_-]+)\][+-]?(?:\s+(.+))?$", lines[0], re.IGNORECASE)
+        if marker:
+            kind = marker.group(1).lower()
+            title = marker.group(2) or kind.title()
+            body = " ".join(lines[1:])
+            text = f"**{title}**"
+            if body:
+                text += f"<br>{body}"
+            self.story.append(paragraph(text, "ManualDanger" if kind == "danger" else "ManualQuote", self.page, self.bookmarks))
+        else:
+            self.story.append(paragraph(" ".join(lines), "ManualQuote", self.page, self.bookmarks))
         return True
 
     def body_paragraph(self) -> None:
