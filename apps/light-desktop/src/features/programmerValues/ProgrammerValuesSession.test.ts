@@ -18,8 +18,7 @@ import {
 } from "./transport";
 
 function createHarness(
-	transport: ProgrammerValuesEventTransport | null =
-		new FakeProgrammerValuesTransport(),
+	transport: ProgrammerValuesEventTransport | null = new FakeProgrammerValuesTransport(),
 ) {
 	const store = new ProgrammerValuesStore();
 	const loadSnapshot = vi.fn(async () => valuesSnapshot());
@@ -198,6 +197,48 @@ describe("ProgrammerValuesSession authority and repair", () => {
 			repairRequired: false,
 			projection: { revision: 3 },
 		});
+		expect(harness.onError).not.toHaveBeenCalledWith(
+			expect.objectContaining({ message: expect.stringContaining("gap") }),
+		);
+	});
+
+	it("repairs a skipped delta revision without showing an operator error", async () => {
+		const harness = createHarness();
+		const transport = harness.transport as FakeProgrammerValuesTransport;
+		harness.session.activate();
+		await settleProgrammerValuesSession();
+		harness.loadSnapshot.mockResolvedValueOnce(
+			valuesSnapshot({ cursor: 20, revision: 3 }),
+		);
+
+		transport.emit({
+			type: "event",
+			sequence: 19,
+			correlationId: "coalesced-write",
+			change: {
+				userId: USER_ID,
+				revision: 3,
+				fixtureValues: [],
+				removedFixtureValues: [],
+				groupValues: [],
+				removedGroupValues: [],
+				dynamicValues: [],
+				removedDynamicValues: [],
+			},
+		});
+		await settleProgrammerValuesSession();
+
+		expect(transport.subscriptions[0].repair).toHaveBeenCalledWith(20);
+		expect(harness.onError).not.toHaveBeenCalledWith(
+			expect.objectContaining({
+				message: "Programmer values delta revision is not contiguous",
+			}),
+		);
+		expect(harness.store.getSnapshot()).toMatchObject({
+			status: "ready",
+			repairRequired: false,
+			projection: { revision: 3 },
+		});
 	});
 
 	it("repairs malformed transport input without opening a second stream", async () => {
@@ -247,7 +288,8 @@ describe("ProgrammerValuesSession authority and repair", () => {
 		});
 		await settleProgrammerValuesSession();
 
-		const value = harness.store.getSnapshot().projection?.fixtureValues[0]?.value;
+		const value =
+			harness.store.getSnapshot().projection?.fixtureValues[0]?.value;
 		expect(value).toEqual({ kind: "normalized", value: 0.9 });
 		expect(transport.subscriptions[0].repair).toHaveBeenCalledWith(15);
 		expect(harness.store.getSnapshot().repairRequired).toBe(false);

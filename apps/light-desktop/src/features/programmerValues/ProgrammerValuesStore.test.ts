@@ -153,7 +153,37 @@ describe("ProgrammerValuesStore authority", () => {
 				12,
 			),
 		).toThrow(/not contiguous/);
-		expect(store.getSnapshot().repairRequired).toBe(true);
+		expect(store.getSnapshot()).toMatchObject({
+			status: "loading",
+			error: null,
+			repairRequired: true,
+		});
+	});
+
+	it("ignores a streamed delta already covered by a newer mutation outcome", () => {
+		const store = readyStore(valuesProjection({ revision: 3 }));
+
+		expect(
+			store.applyChange(
+				{
+					userId: USER_ID,
+					revision: 2,
+					fixtureValues: [fixtureValue(0.9)],
+					removedFixtureValues: [],
+					groupValues: [],
+					removedGroupValues: [],
+					dynamicValues: [],
+					removedDynamicValues: [],
+				},
+				11,
+			),
+		).toBe(true);
+		expect(fixtureLevel(store)).toBe(0.25);
+		expect(store.getSnapshot()).toMatchObject({
+			status: "ready",
+			repairRequired: false,
+			projection: { revision: 3 },
+		});
 	});
 
 	it("canonicalizes order and publishes deeply immutable views", () => {

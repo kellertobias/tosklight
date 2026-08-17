@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { parameterSemanticDisplay } from "./parameterProgrammerState";
+import {
+	normalizedParameterDisplay,
+	parameterSemanticDisplay,
+} from "./parameterProgrammerState";
 import type { ParameterProjection } from "./useParameterProjection";
 
 function projection(
@@ -48,5 +51,48 @@ describe("parameter Programmer semantic display", () => {
 				),
 			).toBe("FixAT");
 		}
+	});
+});
+
+describe("media address encoder display", () => {
+	it("shows byte-addressed files and folders instead of percentages", () => {
+		const mediaProjection = {
+			selectedGroupId: null,
+			selectedFixtureIds: ["fixture-1"],
+			programmerValues: [],
+			groupProgrammerValues: [],
+			normalizedByFixture: new Map([
+				[
+					"fixture-1",
+					new Map([
+						["media.file", 3 / 255],
+						["media.folder", 1 / 255],
+					]),
+				],
+			]),
+		} as unknown as ParameterProjection;
+
+		expect(normalizedParameterDisplay(mediaProjection, "media.file")).toBe(
+			"File 3",
+		);
+		expect(normalizedParameterDisplay(mediaProjection, "media.folder")).toBe(
+			"Folder 1",
+		);
+	});
+
+	it("calls address zero No file", () => {
+		const mediaProjection = {
+			selectedGroupId: null,
+			selectedFixtureIds: ["fixture-1"],
+			programmerValues: [],
+			groupProgrammerValues: [],
+			normalizedByFixture: new Map([
+				["fixture-1", new Map([["media.file", 0]])],
+			]),
+		} as unknown as ParameterProjection;
+
+		expect(normalizedParameterDisplay(mediaProjection, "media.file")).toBe(
+			"No file",
+		);
 	});
 });

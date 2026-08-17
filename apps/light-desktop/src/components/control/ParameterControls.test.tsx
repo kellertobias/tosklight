@@ -13,15 +13,15 @@ import type {
 	VisualizationSnapshot,
 } from "../../api/types";
 import { DynamicEditorSessionProvider } from "../../features/dynamics/DynamicEditorSessionContext";
-import {
-	clearTimecodeEncoderDeck,
-	publishTimecodeEncoderDeck,
-} from "../../features/timecode/timecodeEncoderBridge";
 import { selectFixturesForSelection } from "../../features/patch/selectors";
 import type {
 	ProgrammerFixtureValue,
 	ProgrammerGroupValue,
 } from "../../features/programmerValues/contracts";
+import {
+	clearTimecodeEncoderDeck,
+	publishTimecodeEncoderDeck,
+} from "../../features/timecode/timecodeEncoderBridge";
 import { ParameterControls } from "./ParameterControls";
 import { VisibleEncoderCountProvider } from "./parameterControls/VisibleEncoderCount";
 
@@ -311,36 +311,36 @@ describe("ParameterControls projection lifecycle", () => {
 		render(<ParameterControls />);
 
 		expect(
-			screen.getByRole("button", { name: "Timecode Timeline" }),
+			screen.getByRole("button", { name: "Selected Keyframe" }),
 		).toHaveClass("is-active");
-		expect(
-			screen.getByRole("group", { name: "Enc 1 · Timeline zoom" }),
-		).toHaveTextContent("100%");
-		expect(screen.queryByRole("button", { name: "Intensity" })).toBeNull();
-
-		fireEvent.click(screen.getByRole("button", { name: "Selected Keyframe" }));
 		expect(
 			screen.getByRole("group", { name: "Enc 1 · Volume" }),
 		).toHaveTextContent("80%");
+		expect(screen.queryByRole("button", { name: "Intensity" })).toBeNull();
+
+		fireEvent.click(screen.getByRole("button", { name: "Timecode Timeline" }));
+		expect(
+			screen.getByRole("group", { name: "Enc 1 · Timeline zoom" }),
+		).toHaveTextContent("100%");
 	});
 
 	it("routes hardware encoder turns to the active Timecode deck", () => {
 		const set = vi.fn();
 		publishTimecodeEncoderDeck(timecodeEncoderOwner, {
-			timeline: [
+			timeline: [],
+			keyframe: [
 				{
-					id: "zoom",
-					label: "Timeline zoom",
-					display: "100%",
+					id: "position",
+					label: "Keyframe position",
+					display: "00:00:01.00",
 					value: 1,
-					minimum: 1,
-					maximum: 4,
-					fineStep: 0.05,
-					coarseStep: 0.25,
+					minimum: 0,
+					maximum: 440,
+					fineStep: 1,
+					coarseStep: 44,
 					set,
 				},
 			],
-			keyframe: [],
 		});
 		state.builtIn = "timecode";
 		server.bootstrap.hardware_connected = true;
@@ -352,7 +352,36 @@ describe("ParameterControls projection lifecycle", () => {
 			}),
 		);
 
-		expect(set).toHaveBeenCalledWith(1.05);
+		expect(set).toHaveBeenCalledWith(2);
+	});
+
+	it("labels the selected encoder page for a marker", () => {
+		publishTimecodeEncoderDeck(timecodeEncoderOwner, {
+			timeline: [],
+			keyframe: [
+				{
+					id: "marker-position",
+					label: "Marker position",
+					display: "00:00:02.00",
+					value: 88,
+					minimum: 0,
+					maximum: 440,
+					fineStep: 1,
+					coarseStep: 44,
+					set: vi.fn(),
+				},
+			],
+			selectionLabel: "Selected Marker",
+		});
+		state.builtIn = "timecode";
+		render(<ParameterControls />);
+
+		expect(
+			screen.getByRole("button", { name: "Selected Marker" }),
+		).toHaveClass("is-active");
+		expect(
+			screen.getByRole("group", { name: "Enc 1 · Marker position" }),
+		).toHaveTextContent("00:00:02.00");
 	});
 
 	it("shows fixture-profile Color defaults before a programmer value exists", () => {

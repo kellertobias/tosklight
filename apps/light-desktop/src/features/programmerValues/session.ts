@@ -8,6 +8,7 @@ import {
 	type ProgrammerValuesEventStream,
 	type ProgrammerValuesEventTransport,
 	ProgrammerValuesProtocolError,
+	ProgrammerValuesRepairNotice,
 } from "./transport";
 
 export interface ProgrammerValuesSessionOptions {
@@ -189,7 +190,7 @@ export class ProgrammerValuesSession {
 		if (message.type === "gap") {
 			void this.repair(
 				generation,
-				new ProgrammerValuesProtocolError(
+				new ProgrammerValuesRepairNotice(
 					"Programmer values event history has a gap",
 					message.afterSequence,
 				),
@@ -241,8 +242,12 @@ export class ProgrammerValuesSession {
 	}
 
 	private async performRepair(generation: number, error: Error) {
-		this.store.setRepairRequired(error, this.expectedStoreScope());
-		this.onError?.(error);
+		if (error instanceof ProgrammerValuesRepairNotice)
+			this.store.setRepairing(this.expectedStoreScope());
+		else {
+			this.store.setRepairRequired(error, this.expectedStoreScope());
+			this.onError?.(error);
+		}
 		try {
 			const snapshot = await this.loadSnapshot();
 			if (!this.isCurrent(generation)) return;

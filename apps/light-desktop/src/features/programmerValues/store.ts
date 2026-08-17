@@ -20,7 +20,10 @@ import {
 	type ProgrammerValuesSettlement,
 	type ProgrammerValuesState,
 } from "./storeState";
-import { ProgrammerValuesProtocolError } from "./transport";
+import {
+	ProgrammerValuesProtocolError,
+	ProgrammerValuesRepairNotice,
+} from "./transport";
 
 export type {
 	ProgrammerValuesOptimisticReducer,
@@ -136,9 +139,20 @@ export class ProgrammerValuesStore {
 			);
 		try {
 			assertCursor(sequence);
+			if (change.revision <= this.authoritative.revision) {
+				if (
+					this.state.eventSequence === null ||
+					sequence > this.state.eventSequence
+				)
+					this.publishSessionState({ eventSequence: sequence }, expectedScope);
+				return true;
+			}
 			if (change.revision !== this.authoritative.revision + 1)
-				throw new ProgrammerValuesProtocolError(
-					"Programmer values delta revision is not contiguous",
+				return this.rejectSilentRepair(
+					new ProgrammerValuesRepairNotice(
+						"Programmer values delta revision is not contiguous",
+						sequence,
+					),
 					sequence,
 				);
 			const fixtureValues = mergeAddressValues(
@@ -172,6 +186,7 @@ export class ProgrammerValuesStore {
 				true,
 			);
 		} catch (reason) {
+			if (reason instanceof ProgrammerValuesRepairNotice) throw reason;
 			return this.rejectProtocol(reason, sequence);
 		}
 	}
@@ -299,6 +314,13 @@ export class ProgrammerValuesStore {
 	setRepairRequired(error: Error, expectedScope = this.scope) {
 		return this.publishSessionState(
 			{ status: "error", error, repairRequired: true },
+			expectedScope,
+		);
+	}
+
+	setRepairing(expectedScope = this.scope) {
+		return this.publishSessionState(
+			{ status: "loading", error: null, repairRequired: true },
 			expectedScope,
 		);
 	}
@@ -445,6 +467,17 @@ export class ProgrammerValuesStore {
 
 	private rejectProtocol(reason: unknown, sequence: number | null): never {
 		throw this.markProtocolRepair(reason, sequence);
+	}
+
+	private rejectSilentRepair(reason: unknown, sequence: number | null): never {
+		const error = reason instanceof Error ? reason : new Error(String(reason));
+		this.publishRendered(this.renderProjection(), {
+			eventSequence: sequence,
+			status: "loading",
+			error: null,
+			repairRequired: true,
+		});
+		throw error;
 	}
 
 	private markProtocolRepair(reason: unknown, sequence: number | null) {

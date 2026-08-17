@@ -27,6 +27,9 @@ export class ProgrammerValuesProtocolError extends Error {
 	}
 }
 
+/** A recoverable stream ordering gap is repaired silently from an authoritative snapshot. */
+export class ProgrammerValuesRepairNotice extends ProgrammerValuesProtocolError {}
+
 export interface ProgrammerValuesEventTransport {
 	subscribe(
 		scope: ProgrammerValuesScope,

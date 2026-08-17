@@ -75,6 +75,25 @@ export function normalizedParameterDisplay(
 	projection: ParameterProjection,
 	attribute: string,
 ) {
+	const mediaAddressLabel =
+		attribute === "media.file" || attribute === "media.mask.file"
+			? "File"
+			: attribute === "media.folder" || attribute === "media.mask.folder"
+				? "Folder"
+				: null;
+	const formatMediaAddresses = (values: number[]) => {
+		if (!mediaAddressLabel || !values.length) return undefined;
+		const addresses = values.map((value) =>
+			Math.max(0, Math.min(255, Math.round(value * 255))),
+		);
+		const minimum = Math.min(...addresses);
+		const maximum = Math.max(...addresses);
+		if (minimum === maximum) {
+			if (mediaAddressLabel === "File" && minimum === 0) return "No file";
+			return `${mediaAddressLabel} ${minimum}`;
+		}
+		return `${mediaAddressLabel} ${minimum}…${maximum}`;
+	};
 	const format = (value: string) => {
 		if (attribute === "position.movement")
 			return formatPositionMovement(value, projection.movementRepresentation);
@@ -86,18 +105,20 @@ export function normalizedParameterDisplay(
 	};
 	if (projection.selectedGroupId) {
 		const target = normalizedParameterTarget(projection, attribute);
-		return target == null ? undefined : format(formatNormalizedValue(target));
+		return target == null
+			? undefined
+			: (formatMediaAddresses([target]) ??
+					format(formatNormalizedValue(target)));
 	}
-	const range = formatNormalizedRange(
-		projection.selectedFixtureIds.flatMap((fixtureId) => {
-			const target = normalizedProgrammerTarget(
-				fixtureEntry(projection, fixtureId, attribute)?.value,
-			);
-			const value =
-				target ?? projection.normalizedByFixture.get(fixtureId)?.get(attribute);
-			return value == null ? [] : [value];
-		}),
-	);
+	const values = projection.selectedFixtureIds.flatMap((fixtureId) => {
+		const target = normalizedProgrammerTarget(
+			fixtureEntry(projection, fixtureId, attribute)?.value,
+		);
+		const value =
+			target ?? projection.normalizedByFixture.get(fixtureId)?.get(attribute);
+		return value == null ? [] : [value];
+	});
+	const range = formatMediaAddresses(values) ?? formatNormalizedRange(values);
 	return range == null ? undefined : format(range);
 }
 

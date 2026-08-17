@@ -34,11 +34,18 @@ interface EncoderUndoGroup {
 
 const ENCODER_UNDO_GROUP_IDLE_MILLIS = 250;
 
-function encoderDelta(value: string | undefined) {
-	if (value === "up") return 0.01;
-	if (value === "down") return -0.01;
-	if (value === "right") return 0.1;
-	if (value === "left") return -0.1;
+export function encoderDelta(attribute: string, value: string | undefined) {
+	const addressStep =
+		attribute === "media.folder" ||
+		attribute === "media.file" ||
+		attribute === "media.mask.folder" ||
+		attribute === "media.mask.file"
+			? 1 / 255
+			: null;
+	if (value === "up") return addressStep ?? 0.01;
+	if (value === "down") return -(addressStep ?? 0.01);
+	if (value === "right") return addressStep ?? 0.1;
+	if (value === "left") return -(addressStep ?? 0.1);
 }
 
 function targetKey(projection: ParameterProjection, attribute: string) {
@@ -99,7 +106,7 @@ export function useHardwareParameterEncoders(
 				pushTurnAttribute && (value === "left" || value === "right")
 					? pushTurnAttribute
 					: primaryAttribute;
-			const delta = encoderDelta(value);
+			const delta = attribute ? encoderDelta(attribute, value) : undefined;
 			if (!attribute || delta == null) return;
 			if (
 				actions.programmerDiscreteTarget(attribute) ??
