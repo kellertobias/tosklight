@@ -109,22 +109,21 @@ impl Engine {
             let mut playback = generation.playback().write();
             let PlaybackTickResult { transitions } =
                 playback.tick(now, (timecode != u64::MAX).then_some(timecode));
-            return playback_resolution(generation, &playback, now, transitions, sampled);
+            return playback_resolution(&playback, now, transitions, sampled);
         }
         let playback = generation.playback().read();
-        playback_resolution(generation, &playback, now, Vec::new(), sampled)
+        playback_resolution(&playback, now, Vec::new(), sampled)
     }
 }
 
 fn playback_resolution(
-    generation: &RuntimeGeneration,
     playback: &PlaybackEngine,
     now: DateTime<Utc>,
     transitions: Vec<AutomaticPlaybackTransition>,
     sampled: &[ContributionBatch],
 ) -> PlaybackResolution {
-    let mut contributions = playback.contributions_with_context_at(now, |fixture_id, attribute| {
-        generation.attribute_is_snap(fixture_id, attribute)
+    let mut contributions = playback.contributions_with_context_at(now, |_, attribute| {
+        light_playback::attribute_uses_snap_transition(attribute)
     });
     if sampled.iter().any(ContributionBatch::has_replacements) {
         contributions.retain(|contribution| {

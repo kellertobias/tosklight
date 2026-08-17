@@ -394,7 +394,9 @@ impl Engine {
             .load()
             .playback()
             .read()
-            .contributions_with_context_at(at, |_, _| false)
+            .contributions_with_context_at(at, |_, attribute| {
+                light_playback::attribute_uses_snap_transition(attribute)
+            })
     }
 
     pub fn playback_dynamics(&self) -> PlaybackDynamicsProjection {

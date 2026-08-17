@@ -17,7 +17,9 @@ impl PlaybackEngine {
     }
 
     pub fn contributions_at(&self, now: DateTime<Utc>) -> Vec<TimedValue> {
-        self.contributions_at_with_snap(now, |_, _| false)
+        self.contributions_at_with_snap(now, |_, attribute| {
+            attribute_uses_snap_transition(attribute)
+        })
     }
 
     pub(crate) fn transition_source_at(
@@ -30,7 +32,9 @@ impl PlaybackEngine {
             return None;
         }
         let values = self
-            .contributions_with_context_at(now, |_, _| false)
+            .contributions_with_context_at(now, |_, attribute| {
+                attribute_uses_snap_transition(attribute)
+            })
             .into_iter()
             .filter(|contribution| {
                 contribution.source.cue_list_id == playback.cue_list_id

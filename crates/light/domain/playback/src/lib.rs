@@ -31,6 +31,7 @@ pub use model::CueNumber;
 pub use model::{cue::*, playback::*, runtime::*};
 pub use runtime::PlaybackTelemetrySample;
 pub use timecode::*;
+pub use transition::attribute_uses_snap_transition;
 
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use light_core::{

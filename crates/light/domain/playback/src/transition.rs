@@ -1,5 +1,17 @@
 use crate::*;
 
+/// Whether a Cue transition must snap instead of interpolate.
+///
+/// Cue timing follows the canonical attribute registry. Fixture-profile channel flags still
+/// govern profile-local behavior such as Programmer fades and signal-loss handling, but they do
+/// not redefine the operator-facing value type stored in a Cue.
+pub fn attribute_uses_snap_transition(attribute: &AttributeKey) -> bool {
+    matches!(
+        light_core::attribute_descriptor(attribute).value_type,
+        light_core::AttributeValueType::Indexed | light_core::AttributeValueType::Control
+    )
+}
+
 pub(crate) fn interpolate(
     from: Option<&AttributeValue>,
     to: Option<&AttributeValue>,
@@ -69,5 +81,26 @@ mod tests {
         assert!((midpoint.y - 0.3).abs() < 0.000_001);
         assert!((midpoint.z - 0.8).abs() < 0.000_001);
         assert_eq!(interpolate(Some(&from), Some(&to), 1.0), Some(to));
+    }
+
+    #[test]
+    fn registry_value_type_is_the_cue_transition_boundary() {
+        for attribute in [
+            "focus",
+            "media.mask.opacity",
+            "media.playback.blur",
+            "color",
+        ] {
+            assert!(
+                !attribute_uses_snap_transition(&AttributeKey(attribute.into())),
+                "{attribute} must interpolate"
+            );
+        }
+        for attribute in ["media.play_mode", "color.wheel.1", "control"] {
+            assert!(
+                attribute_uses_snap_transition(&AttributeKey(attribute.into())),
+                "{attribute} must snap"
+            );
+        }
     }
 }
