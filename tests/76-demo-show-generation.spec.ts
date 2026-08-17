@@ -23,6 +23,9 @@ test("DEMO-GENERATOR-001 @api › installs the one overall Desk and PreViz demo 
 	api,
 	bench,
 }) => {
+	// Generating the whole shipped demo show is hundreds of authored objects, not one operator
+	// interaction, and it runs close to the default budget on an unloaded machine.
+	test.setTimeout(90_000);
 	await loadCanonicalCopy(api, bench, "plan-76-generator", "default-stage");
 	const showId = await activeShowId(api);
 	const layerNames = [

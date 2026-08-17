@@ -9,13 +9,18 @@ const destination = process.argv[3];
 const releaseVersion = process.env.LIGHT_RELEASE_VERSION;
 const desktopSidecarDirectory = process.env.LIGHT_DESKTOP_SIDECAR_DIR;
 const desktopSidecarTarget = process.env.LIGHT_DESKTOP_SIDECAR_TARGET;
-const frontendDist = {
+const frontendDirectory = {
 	control: artifactPaths.controlFrontend,
 	hardware: artifactPaths.hardwareFrontend,
 	"viz-editor": artifactPaths.vizEditorFrontend,
 }[application];
+const crateDirectory = {
+	control: "apps/light-desktop/src-tauri",
+	hardware: "apps/light-hardware-controls/src-tauri",
+	"viz-editor": "apps/viz-editor/src-tauri",
+}[application];
 
-if (!frontendDist || !destination) {
+if (!frontendDirectory || !destination) {
 	console.error(
 		"usage: write-tauri-artifact-config.mjs {control|hardware|viz-editor} OUTPUT",
 	);
@@ -77,6 +82,13 @@ if (application === "control" && desktopSidecarDirectory) {
 		}
 	}
 }
+// Relative to the crate, with forward slashes, exactly like the checked-in configs. Tauri reads
+// frontendDist as a URL when it can, and a Windows absolute path is a URL: `D:\...` parses as the
+// `d:` scheme, so the build embeds nothing and the window opens on a bare file:// directory.
+const frontendDist = path
+	.relative(path.join(repositoryRoot, crateDirectory), frontendDirectory)
+	.split(path.sep)
+	.join("/");
 const config = {
 	...(releaseVersion ? { version: releaseVersion } : {}),
 	...bundle,

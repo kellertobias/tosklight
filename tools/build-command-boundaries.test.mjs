@@ -162,6 +162,35 @@ test("the control Tauri overlay resolves both target-specific sidecars", () => {
 	}
 });
 
+test("every Tauri overlay names a frontend Tauri can embed", () => {
+	const temporaryParent = path.join(repositoryRoot, ".artifacts", "tmp");
+	fs.mkdirSync(temporaryParent, { recursive: true });
+	const temporary = fs.mkdtempSync(
+		path.join(temporaryParent, "tauri-frontend-contract."),
+	);
+	try {
+		for (const application of ["control", "hardware", "viz-editor"]) {
+			const output = path.join(temporary, `${application}.json`);
+			execFileSync(process.execPath, [
+				path.join(repositoryRoot, "tools/write-tauri-artifact-config.mjs"),
+				application,
+				output,
+			]);
+			const { frontendDist } = JSON.parse(fs.readFileSync(output, "utf8")).build;
+			// An absolute Windows path is a URL — `D:\...` parses as the `d:` scheme — so Tauri
+			// embeds nothing and the packaged window opens white on Windows alone.
+			assert.doesNotMatch(
+				frontendDist,
+				/^(?:[A-Za-z]:|\/|[A-Za-z][A-Za-z\d+.-]*:)/u,
+				`${application} must name its frontend relative to its crate`,
+			);
+			assert.doesNotMatch(frontendDist, /\\/u);
+		}
+	} finally {
+		fs.rmSync(temporary, { recursive: true, force: true });
+	}
+});
+
 test("release Desk bundles both supervised helpers before packaging", () => {
 	const workflow = read(".github/workflows/release.yml");
 	const sidecarBuild = workflow.indexOf(
