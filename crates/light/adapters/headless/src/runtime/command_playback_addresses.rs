@@ -30,13 +30,14 @@ pub(super) fn page_playback(snapshot: &EngineSnapshot, page: u8, slot: u8) -> Re
 
 pub(super) fn parse_playback_address(
     tokens: &[String],
-    require_set: bool,
+    require_playback_token: bool,
     snapshot: &EngineSnapshot,
 ) -> Result<(CommandPlaybackAddress, usize), String> {
     let mut index = 0;
-    if require_set {
-        if tokens.get(index).is_none_or(|token| token != "SET") {
-            return Err("playback address must start with SET".into());
+    if require_playback_token {
+        // The manual addresses a playback with PBK. SET edits a value or opens a configuration.
+        if tokens.get(index).is_none_or(|token| token != "PBK") {
+            return Err("playback address must start with PBK".into());
         }
         index += 1;
     }
@@ -97,12 +98,12 @@ pub(super) fn parse_update_playback_address(
     current_page: u8,
     snapshot: &EngineSnapshot,
 ) -> Result<CommandPlaybackAddress, String> {
-    if tokens.first().is_none_or(|token| token != "SET") {
-        return Err("playback address must start with SET".into());
+    if tokens.first().is_none_or(|token| token != "PBK") {
+        return Err("playback address must start with PBK".into());
     }
 
-    // Update follows the control-surface playback model: SET <slot> addresses
-    // that slot on this desk's current page, while SET <page> . <slot> keeps an
+    // Update follows the control-surface playback model: PBK <slot> addresses
+    // that slot on this desk's current page, while PBK <page> . <slot> keeps an
     // explicit page stable when the operator changes pages.
     let (explicit, current_slot) = if tokens.get(2).is_some_and(|token| token == ".") {
         (tokens.to_vec(), None)
@@ -116,7 +117,7 @@ pub(super) fn parse_update_playback_address(
             return Err("playback number must be within 1-127".into());
         }
         let mut explicit = vec![
-            "SET".to_string(),
+            "PBK".to_string(),
             current_page.to_string(),
             ".".to_string(),
             slot.to_string(),

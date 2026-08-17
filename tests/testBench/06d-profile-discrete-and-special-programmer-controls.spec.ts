@@ -106,11 +106,8 @@ test("BENCH-DISCRETE-SPECIAL-002 @bench @ui › Position, Beam, Shapers, and Con
 	const home = 0.5019608;
 	await expect.poll(async () => programmerValues(api, "pan")).toEqual([home, home]);
 
-	expect(await special.beam.available()).toContain("prism");
-	await special.beam.set("prism", 40);
-	await expect
-		.poll(async () => programmerValuesClose(api, "prism", 0.4, 2))
-		.toBe(true);
+	// Beam has no Special Dialog: the families that carry one are Color, Position, Shapers,
+	// Control, and Media.
 	expect(await special.shapers.available()).toContain("shaper.blade.1");
 	await special.shapers.set("shaper.blade.1", 30);
 	await expect

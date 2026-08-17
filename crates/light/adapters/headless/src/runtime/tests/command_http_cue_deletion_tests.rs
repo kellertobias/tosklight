@@ -111,7 +111,7 @@ async fn atomic_command_deletes_once_preserves_runtime_hold_and_replays_without_
     let history = history_len(&scenario);
 
     let response = scenario
-        .execute("typed-cue-delete", Some("DELETE SET 1 CUE 2"))
+        .execute("typed-cue-delete", Some("DELETE PBK 1 CUE 2"))
         .await;
     assert_eq!(response.status(), StatusCode::OK);
     let response = json(response).await;
@@ -135,7 +135,7 @@ async fn atomic_command_deletes_once_preserves_runtime_hold_and_replays_without_
     );
 
     let replay = scenario
-        .execute("typed-cue-delete", Some("DELETE SET 1 CUE 2"))
+        .execute("typed-cue-delete", Some("DELETE PBK 1 CUE 2"))
         .await;
     assert_eq!(replay.status(), StatusCode::OK);
     assert_eq!(json(replay).await["outcome"], "accepted");
@@ -143,7 +143,7 @@ async fn atomic_command_deletes_once_preserves_runtime_hold_and_replays_without_
     assert_eq!(history_len(&scenario), history + 1);
 
     let missing = scenario
-        .execute("missing-after-delete", Some("DELETE SET 1 CUE 2"))
+        .execute("missing-after-delete", Some("DELETE PBK 1 CUE 2"))
         .await;
     assert_eq!(missing.status(), StatusCode::OK);
     let missing = json(missing).await;
@@ -298,7 +298,7 @@ async fn multiplexed_websocket_uses_typed_delete_and_emits_one_exact_facade_noti
             "compatibility-cue-delete",
             light_wire::v2::live_action::LiveAction::CommandLineExecute(
                 light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
-                    value: "DELETE SET 1 . 2 CUE 2".into(),
+                    value: "DELETE PBK 1 . 2 CUE 2".into(),
                 },
             ),
         ),

@@ -154,15 +154,15 @@ describe("TimecodeEditor title and settings", () => {
 		await screen.findByText("Saved");
 
 		expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
-		for (const label of ["Revert to beginning", "Stop", "Play", "Pause"])
+		for (const label of ["Rewind to start", "Stop", "Play", "Pause"])
 			expect(screen.getByRole("button", { name: label })).toHaveClass(
 				"timecode-transport-action",
 			);
 		expect(
-			screen.getByRole("button", { name: "Revert to beginning" }),
+			screen.getByRole("button", { name: "Rewind to start" }),
 		).toHaveTextContent("▏▶");
 		fireEvent.click(
-			screen.getByRole("button", { name: "Revert to beginning" }),
+			screen.getByRole("button", { name: "Rewind to start" }),
 		);
 		await waitFor(() =>
 			expect(api.transportAction).toHaveBeenCalledWith(SHOW_ID, TIMECODE_ID, {

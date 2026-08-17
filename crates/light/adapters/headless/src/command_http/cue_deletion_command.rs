@@ -9,7 +9,7 @@ pub(crate) struct ParsedCueDeletionCommand {
 pub(crate) fn is_cue_deletion(command: &str) -> bool {
     let tokens = tokens(command);
     matches!(tokens.first().map(String::as_str), Some("DELETE" | "DEL"))
-        && tokens.get(1).is_some_and(|token| token == "SET")
+        && tokens.get(1).is_some_and(|token| token == "PBK")
 }
 
 pub(crate) fn parse(command: &str) -> Result<Option<ParsedCueDeletionCommand>, String> {
@@ -83,13 +83,13 @@ mod tests {
 
     #[test]
     fn parses_pool_and_explicit_page_without_live_resolution() {
-        let pool = parse("DEL SET 7 CUE 2,5").unwrap().unwrap();
+        let pool = parse("DEL PBK 7 CUE 2,5").unwrap().unwrap();
         assert!(matches!(
             pool.address,
             ProgrammingCueDeletionAddress::Pool { playback_number: 7 }
         ));
         assert_eq!(pool.cue_number.to_string(), "2.5");
-        let page = parse("DELETE SET 2 . 3 CUE 4").unwrap().unwrap();
+        let page = parse("DELETE PBK 2 . 3 CUE 4").unwrap().unwrap();
         assert!(matches!(
             page.address,
             ProgrammingCueDeletionAddress::PageSlot { page: 2, slot: 3 }
@@ -97,17 +97,17 @@ mod tests {
     }
 
     #[test]
-    fn claims_malformed_delete_set_but_not_other_delete_families() {
-        assert!(is_cue_deletion("DELETE SET"));
+    fn claims_malformed_delete_playback_but_not_other_delete_families() {
+        assert!(is_cue_deletion("DELETE PBK"));
         assert!(!is_cue_deletion("DELETE GROUP 4"));
         assert!(!is_cue_deletion("DELETE PRESET 2 . 1"));
-        assert!(parse("DELETE SET 1").is_err());
-        assert!(parse("DELETE SET 1 CUE 01").is_err());
+        assert!(parse("DELETE PBK 1").is_err());
+        assert!(parse("DELETE PBK 1 CUE 01").is_err());
     }
 
     #[test]
     fn preserves_deep_cue_paths() {
-        let parsed = parse("DELETE SET 1 CUE 2.0.15").unwrap().unwrap();
+        let parsed = parse("DELETE PBK 1 CUE 2.0.15").unwrap().unwrap();
         assert_eq!(parsed.cue_number.to_string(), "2.0.15");
     }
 }

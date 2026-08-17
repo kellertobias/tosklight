@@ -16,7 +16,8 @@ export type ControlSemantic =
 	| "fan_low"
 	| "fan_high"
 	| "fan_max";
-export type BeamSpecialFamily = "Beam" | "Shapers";
+/** Beam carries no Special Dialog; Shapers is the family that uses this shape of one. */
+export type BeamSpecialFamily = "Shapers";
 
 type PositionAssignment = {
 	fixture_id: string;
@@ -74,7 +75,6 @@ export class BrowserProgrammerSpecials {
 		expectRange: () => this.expectColorAssignments("range"),
 		expectSelectionPreserved: () => this.expectColorSelection(),
 	};
-	readonly beam = new BrowserBeamSpecial(this, "Beam");
 	readonly shapers = new BrowserBeamSpecial(this, "Shapers");
 	readonly control = {
 		invoke: (semantic: ControlSemantic) => this.controlAction(semantic),

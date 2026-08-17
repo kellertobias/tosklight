@@ -51,7 +51,7 @@ fn atomic_family_filter_owns_typed_cue_navigation() {
     );
     // Whole-Cue deletion is owned by its typed action family.
     assert_eq!(
-        compatibility_only_family("DELETE SET 1 CUE 2").unwrap(),
+        compatibility_only_family("DELETE PBK 1 CUE 2").unwrap(),
         None
     );
 }

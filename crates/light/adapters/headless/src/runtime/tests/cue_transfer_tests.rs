@@ -542,27 +542,27 @@ fn cue_addresses_use_cue_for_pool_and_page_playbacks() {
         }].into(),
         ..Default::default()
     };
-    let pool = ["SET", "25", "CUE", "2", ".", "5"].map(String::from);
+    let pool = ["PBK", "25", "CUE", "2", ".", "5"].map(String::from);
     let (address, used) = parse_playback_address(&pool, true, &snapshot).unwrap();
     assert_eq!((address.playback, address.cue.clone(), used), (25, Some(cue("2.5")), 6));
     assert_eq!(
         address.application_address(),
         light_application::PlaybackAddress::Pool(25)
     );
-    let pool_only = ["SET", "25"].map(String::from);
+    let pool_only = ["PBK", "25"].map(String::from);
     let (address, used) = parse_playback_address(&pool_only, true, &snapshot).unwrap();
     assert_eq!((address.playback, address.cue, used), (25, None, 2));
-    let page = ["SET", "4", ".", "7", "CUE", "12"].map(String::from);
+    let page = ["PBK", "4", ".", "7", "CUE", "12"].map(String::from);
     let (address, used) = parse_playback_address(&page, true, &snapshot).unwrap();
     assert_eq!((address.playback, address.cue.clone(), used), (25, Some(cue("12")), 6));
     assert_eq!(
         address.application_address(),
         light_application::PlaybackAddress::ExplicitPage { page: 4, slot: 7 }
     );
-    let page_only = ["SET", "4", ".", "7"].map(String::from);
+    let page_only = ["PBK", "4", ".", "7"].map(String::from);
     let (address, used) = parse_playback_address(&page_only, true, &snapshot).unwrap();
     assert_eq!((address.playback, address.cue, used), (25, None, 4));
-    let old_entangled = ["SET", "4", "SET", "7", ".", "12"].map(String::from);
+    let old_entangled = ["PBK", "4", "PBK", "7", ".", "12"].map(String::from);
     let (_, used) = parse_playback_address(&old_entangled, true, &snapshot).unwrap();
     assert_ne!(used, old_entangled.len());
 }
@@ -586,8 +586,8 @@ fn update_addresses_keep_current_page_and_explicit_page_distinct() {
         ].into(),
         ..Default::default()
     };
-    let current = ["SET", "7", "CUE", "2", ".", "5"].map(String::from);
-    let explicit = ["SET", "1", ".", "7", "CUE", "2", ".", "5"].map(String::from);
+    let current = ["PBK", "7", "CUE", "2", ".", "5"].map(String::from);
+    let explicit = ["PBK", "1", ".", "7", "CUE", "2", ".", "5"].map(String::from);
 
     let page_one = parse_update_playback_address(&current, 1, &snapshot).unwrap();
     let page_four = parse_update_playback_address(&current, 4, &snapshot).unwrap();

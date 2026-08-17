@@ -273,7 +273,7 @@ test.describe("docs/testing/15-macros-and-timecode.md", () => {
 		await expect(
 			page.getByRole("button", { name: "Save", exact: true }),
 		).toHaveCount(0);
-		for (const label of ["Play", "Pause", "Stop", "Rewind"])
+		for (const label of ["Play", "Pause", "Rewind to start", "Stop"])
 			await expect(
 				page.getByRole("button", { name: label, exact: true }),
 			).toBeVisible();

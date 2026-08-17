@@ -597,7 +597,7 @@ export function TimecodeEditor({
 					<span className="timecode-reversed-play">▶</span>
 				</span>
 			),
-			ariaLabel: "Revert to beginning",
+			ariaLabel: "Rewind to start",
 			onPress: () => {
 				setEditorFrame(0);
 				void act({ type: "seek", frame: 0 });
