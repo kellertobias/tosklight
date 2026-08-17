@@ -589,6 +589,19 @@ describe("VirtualPlaybacksWindow", () => {
 		expect(mocks.poolPlaybackAction).not.toHaveBeenCalled();
 	});
 
+	it("opens the same configuration for a command-line ASSIGN VPBK request", () => {
+		render(<VirtualPlaybacksWindow />);
+		fireEvent(
+			window,
+			new CustomEvent("light:playback-configuration", {
+				detail: { addressing: "virtual", page: 1, playback: 1001 },
+			}),
+		);
+		expect(
+			screen.getByRole("dialog", { name: "Playback Configuration" }),
+		).toBeInTheDocument();
+	});
+
 	it("drops an open configuration when the scoped page changes", () => {
 		mocks.state.playbackSetArmed = true;
 		const rendered = render(<VirtualPlaybacksWindow paneId="virtual-1" />);

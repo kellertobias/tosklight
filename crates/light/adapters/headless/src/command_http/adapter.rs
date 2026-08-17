@@ -99,7 +99,7 @@ pub(crate) fn prevalidate_external_command(
             .ok_or_else(|| "SPD GRP command is invalid".into()),
         Some(
             "RECORD" | "REC" | "UPDATE" | "DELETE" | "DEL" | "MOVE" | "MOV" | "COPY" | "CPY"
-            | "SET",
+            | "SET" | "ASSIGN",
         ) => {
             if tokens.len() < 2 {
                 Err(format!("{} requires a target", tokens[0]))
@@ -303,7 +303,7 @@ fn atomic_policy_error(command: &str, policy: ExistingCommandPolicy) -> Option<S
     }
     match compatibility_only_family(command) {
         Err(error) => Some(error),
-        Ok(Some("UPDATE")) => None,
+        Ok(Some("UPDATE" | "ASSIGN")) => None,
         Ok(Some(family)) => Some(format!(
             "{family} commands are not yet available through the atomic command-line HTTP API"
         )),
@@ -371,8 +371,10 @@ fn execute_with_policy(
     policy: ExistingCommandPolicy,
 ) -> Result<super::super::ProgrammerCommandExecution, String> {
     let policy = if matches!(policy, ExistingCommandPolicy::AtomicProgrammer)
-        && matches!(compatibility_only_family(command)?, Some("UPDATE"))
-    {
+        && matches!(
+            compatibility_only_family(command)?,
+            Some("UPDATE" | "ASSIGN")
+        ) {
         // Update owns an atomic show-object transaction and must read the authoritative live
         // Programmer. A staged Programmer clone would make the show mutation external to the
         // staging commit and could replace newer live Programmer state afterwards.
@@ -510,6 +512,7 @@ pub(super) fn compatibility_only_family(command: &str) -> Result<Option<&'static
         "MOVE" | "MOV" => Some("MOVE"),
         "COPY" | "CPY" => Some("COPY"),
         "SET" => Some("SET"),
+        "ASSIGN" => Some("ASSIGN"),
         "DYNAMIC" => Some("DYNAMIC"),
         _ => None,
     })
@@ -682,6 +685,13 @@ mod tests {
         assert!(
             atomic_policy_error(
                 "UPDATE ALL GROUP 3",
+                ExistingCommandPolicy::AtomicProgrammer
+            )
+            .is_none()
+        );
+        assert!(
+            atomic_policy_error(
+                "ASSIGN GROUP 3 AT PBK 6",
                 ExistingCommandPolicy::AtomicProgrammer
             )
             .is_none()

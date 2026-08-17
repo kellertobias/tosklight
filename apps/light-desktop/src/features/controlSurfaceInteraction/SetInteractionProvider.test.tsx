@@ -11,6 +11,7 @@ import {
 const mocks = vi.hoisted(() => ({
 	replace: vi.fn(),
 	reset: vi.fn(),
+	execute: vi.fn(),
 	assignGroupMaster: vi.fn(),
 	assignVirtualGroupMaster: vi.fn(),
 	command: { text: "" },
@@ -29,6 +30,7 @@ vi.mock("../programmingInteraction/ProgrammingInteractionView", () => ({
 	useProgrammingCommandLineActions: () => ({
 		replace: mocks.replace,
 		reset: mocks.reset,
+		execute: mocks.execute,
 	}),
 	useProgrammingCommandLineView: () => mocks.command,
 }));
@@ -62,13 +64,7 @@ function View({ children }: PropsWithChildren) {
 	);
 }
 
-function ScopedView({
-	deskId,
-	showId,
-}: {
-	deskId: string;
-	showId: string;
-}) {
+function ScopedView({ deskId, showId }: { deskId: string; showId: string }) {
 	return (
 		<SetInteractionProvider deskId={deskId} showId={showId}>
 			<Probe />
@@ -86,12 +82,13 @@ const playback = {
 	playbackObjectRevision: 8,
 };
 
-describe("desk SET interaction owner", () => {
+describe("desk ASSIGN interaction owner", () => {
 	afterEach(() => cleanup());
 	beforeEach(() => {
 		controller = null;
 		mocks.replace.mockReset().mockResolvedValue(undefined);
 		mocks.reset.mockReset().mockResolvedValue(undefined);
+		mocks.execute.mockReset().mockResolvedValue({ executed: true });
 		mocks.assignGroupMaster
 			.mockReset()
 			.mockResolvedValue({ status: "changed" });
@@ -139,7 +136,7 @@ describe("desk SET interaction owner", () => {
 		await act(async () => {
 			await controller?.arm("hardware");
 		});
-		expect(mocks.replace).toHaveBeenLastCalledWith("SET");
+		expect(mocks.replace).toHaveBeenLastCalledWith("ASSIGN");
 
 		await act(async () => {
 			await controller?.chooseGroup(
@@ -147,7 +144,7 @@ describe("desk SET interaction owner", () => {
 				"touch",
 			);
 		});
-		expect(mocks.replace).toHaveBeenLastCalledWith("SET GROUP 4");
+		expect(mocks.replace).toHaveBeenLastCalledWith("ASSIGN GROUP 4");
 
 		await act(async () => {
 			await controller?.choosePlayback(playback, "hardware");
@@ -161,7 +158,7 @@ describe("desk SET interaction owner", () => {
 		expect(controller?.state?.phase).toBe("idle");
 	});
 
-	it("routes bare SET plus Playback as explicit settings without consulting selection", async () => {
+	it("routes bare ASSIGN plus Playback as explicit settings without consulting selection", async () => {
 		const opened = vi.fn();
 		const release = registerControlSurfaceTarget({
 			id: "playback-settings-test",
@@ -191,12 +188,33 @@ describe("desk SET interaction owner", () => {
 		release();
 	});
 
+	it("executes an object source against the exact touched Playback address", async () => {
+		const view = render(<View />);
+		await act(async () => {
+			await controller?.arm("touch");
+		});
+		mocks.command.text = "ASSIGN TIMECODE 7";
+		view.rerender(<View />);
+		await waitFor(() =>
+			expect(controller?.state?.phase).toBe("object_source_pending"),
+		);
+		await act(async () => {
+			await controller?.choosePlayback(
+				{ ...playback, addressing: "explicit_page" },
+				"hardware",
+			);
+		});
+		expect(mocks.execute).toHaveBeenCalledWith(
+			"ASSIGN TIMECODE 7 AT PBK 2 . 3",
+		);
+	});
+
 	it("promotes explicit command text to a pending Group and Clear cancels it", async () => {
 		const view = render(<View />);
 		await act(async () => {
 			await controller?.arm("keyboard");
 		});
-		mocks.command.text = "SET GROUP 4";
+		mocks.command.text = "ASSIGN GROUP 4";
 		view.rerender(<View />);
 		await waitFor(() =>
 			expect(controller?.state).toMatchObject({
@@ -273,8 +291,8 @@ describe("desk SET interaction owner", () => {
 		release();
 	});
 
-	it("leaves an extended SET Group command for normal command execution", async () => {
-		mocks.command.text = "SET GROUP 4 AT 1 . 2";
+	it("leaves an extended ASSIGN Group command for normal command execution", async () => {
+		mocks.command.text = "ASSIGN GROUP 4 AT PBK 1 . 2";
 		render(<View />);
 		let consumed = true;
 		await act(async () => {

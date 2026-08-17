@@ -10,11 +10,11 @@ pub use model::{
     EventSource, FileInputNotification, FileOperationItemNotification, FileOperationNotification,
     FixtureLibraryNotification, FixtureLibraryNotificationKind, GroupConfigurationNotification,
     HardwareConnectionNotification, HighlightChange, MediaNotification, MediaNotificationKind,
-    NotificationRevision, OperatorNotification, OutputEvent, PlaybackEvent, ProgrammingEvent,
-    ScreenNotification, ScreenNotificationKind, ShowEvent, ShowLibraryNotification,
-    ShowLibraryNotificationKind, SystemEvent, UpdateTargetFamilyNotification,
-    UpdateTargetNotification, UpdateWorkflowNotification, VirtualPlaybackExclusionZonesChange,
-    VisualizerConnectionNotification,
+    NotificationRevision, OperatorNotification, OutputEvent, PlaybackConfigurationNotification,
+    PlaybackEvent, ProgrammingEvent, ScreenNotification, ScreenNotificationKind, ShowEvent,
+    ShowLibraryNotification, ShowLibraryNotificationKind, SystemEvent,
+    UpdateTargetFamilyNotification, UpdateTargetNotification, UpdateWorkflowNotification,
+    VirtualPlaybackExclusionZonesChange, VisualizerConnectionNotification,
 };
 pub use subscription::{
     EventFilter, EventReplay, ReplaceableEventRateLimit, SequenceGap, SubscriptionDelivery,

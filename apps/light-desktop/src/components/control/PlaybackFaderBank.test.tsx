@@ -665,6 +665,20 @@ describe("PlaybackFaderBank layout and configuration surfaces", () => {
 		expect(mocks.clearPlaybackSlot).not.toHaveBeenCalled();
 	});
 
+	it("opens the same configuration for a command-line ASSIGN PBK request", () => {
+		assignPlayback();
+		render(<PlaybackFaderBank count={1} />);
+		fireEvent(
+			window,
+			new CustomEvent("light:playback-configuration", {
+				detail: { addressing: "current_page", slot: 1 },
+			}),
+		);
+		expect(
+			screen.getByRole("dialog", { name: "Playback Configuration" }),
+		).toHaveAttribute("data-slot", "1");
+	});
+
 	it.each([
 		["card label", () => screen.getByText("Front Wash")],
 		["top button", () => screen.getByRole("button", { name: "GO +" })],
@@ -788,7 +802,7 @@ describe("PlaybackFaderBank layout and configuration surfaces", () => {
 			cueListSetArmed: false,
 			playbackSetArmed: false,
 		});
-		mocks.commandLine = "SET GROUP 21";
+		mocks.commandLine = "ASSIGN GROUP 21";
 		render(<PlaybackFaderBank count={1} />);
 
 		fireEvent.click(

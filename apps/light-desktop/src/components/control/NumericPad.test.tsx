@@ -73,6 +73,13 @@ const selectionActions = {
 const programmerActions = {
 	toggleFixtureFreeze: vi.fn().mockResolvedValue(undefined),
 };
+const assignInteraction = {
+	arm: vi.fn().mockResolvedValue(true),
+	clear: vi.fn().mockResolvedValue(false),
+	cancel: vi.fn().mockResolvedValue(false),
+	enter: vi.fn().mockResolvedValue(false),
+};
+let assignInteractionEnabled = false;
 const preloadLifecycle = {
 	ready: true,
 	armed: false,
@@ -145,6 +152,13 @@ vi.mock("../../features/playbackRuntime/PlaybackRuntimeView", () => ({
 	usePlaybackRuntimeStatus: () => ({ status: runtimeStatus, error: null }),
 }));
 vi.mock(
+	"../../features/controlSurfaceInteraction/SetInteractionProvider",
+	() => ({
+		useSetInteraction: () =>
+			assignInteractionEnabled ? assignInteraction : null,
+	}),
+);
+vi.mock(
 	"../../features/programmingInteraction/ProgrammingInteractionView",
 	async (importOriginal) => ({
 		...(await importOriginal()),
@@ -169,6 +183,7 @@ afterEach(() => {
 	commandProjection.text = "FIXTURE";
 	commandProjection.pristine = true;
 	state.shiftArmed = false;
+	assignInteractionEnabled = false;
 	preloadLifecycle.ready = true;
 	preloadLifecycle.armed = false;
 	preloadLifecycle.active = false;
@@ -498,6 +513,18 @@ describe("NumericPad layout and Shift routing", () => {
 });
 
 describe("NumericPad Shift routing", () => {
+	it("arms ASSIGN only from shifted SET", () => {
+		assignInteractionEnabled = true;
+		const { rerender } = render(<NumericPad inputMode="touch" />);
+		fireEvent.click(screen.getByRole("button", { name: "SET" }));
+		expect(assignInteraction.arm).not.toHaveBeenCalled();
+
+		fireEvent.click(screen.getByRole("button", { name: "SHIFT" }));
+		rerender(<NumericPad inputMode="touch" />);
+		fireEvent.click(screen.getByRole("button", { name: "SET, Shift: ASSIGN" }));
+		expect(assignInteraction.arm).toHaveBeenCalledWith("touch");
+	});
+
 	it("keeps touch Shift latched and routes current shifted actions", () => {
 		const { rerender } = render(<NumericPad inputMode="touch" />);
 		fireEvent.click(screen.getByRole("button", { name: "SHIFT" }));
@@ -553,12 +580,18 @@ describe("NumericPad double presses", () => {
 			fireEvent.click(group);
 		};
 		hold();
-		expect(dispatch).toHaveBeenCalledWith({ type: "OPEN_BUILTIN", kind: "groups" });
+		expect(dispatch).toHaveBeenCalledWith({
+			type: "OPEN_BUILTIN",
+			kind: "groups",
+		});
 		expect(commandActions.replace).not.toHaveBeenCalled();
 		state.shiftArmed = true;
 		rerender(<NumericPad inputMode="touch" />);
 		hold();
-		expect(dispatch).toHaveBeenCalledWith({ type: "OPEN_BUILTIN", kind: "fixtures" });
+		expect(dispatch).toHaveBeenCalledWith({
+			type: "OPEN_BUILTIN",
+			kind: "fixtures",
+		});
 		vi.useRealTimers();
 	});
 

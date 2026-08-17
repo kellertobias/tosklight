@@ -51,7 +51,7 @@ function chooseGroup() {
 	});
 }
 
-describe("scoped SET interaction", () => {
+describe("scoped ASSIGN interaction", () => {
 	it("keeps a chosen Group pending until Enter opens its settings", () => {
 		const chosen = chooseGroup();
 
@@ -108,7 +108,7 @@ describe("scoped SET interaction", () => {
 		});
 	});
 
-	it("opens Playback settings from SET without reading an incidental Group", () => {
+	it("opens Playback settings from ASSIGN without reading an incidental Group", () => {
 		const opened = transitionSetInteraction(arm(), {
 			type: "choose_playback",
 			source: "touch",
@@ -123,6 +123,33 @@ describe("scoped SET interaction", () => {
 			playback: currentPlayback,
 		});
 		expect(opened.state.phase).toBe("idle");
+	});
+
+	it("keeps a non-Group source pending across input surfaces", () => {
+		const chosen = transitionSetInteraction(arm(), {
+			type: "choose_object",
+			source: "touch",
+			scope,
+			sourceCommand: "ASSIGN TIMECODE 7",
+		});
+		expect(chosen.state).toEqual({
+			phase: "object_source_pending",
+			scope,
+			sourceCommand: "ASSIGN TIMECODE 7",
+		});
+		const assigned = transitionSetInteraction(chosen.state, {
+			type: "choose_playback",
+			source: "hardware",
+			scope,
+			playback: explicitPlayback,
+		});
+		expect(assigned.intent).toEqual({
+			type: "assign_object",
+			source: "hardware",
+			scope,
+			sourceCommand: "ASSIGN TIMECODE 7",
+			playback: explicitPlayback,
+		});
 	});
 
 	it.each([
@@ -174,7 +201,7 @@ describe("scoped SET interaction", () => {
 		});
 	});
 
-	it("treats bare SET Enter as a mutation-free cancel", () => {
+	it("treats bare ASSIGN Enter as a mutation-free cancel", () => {
 		const entered = transitionSetInteraction(arm(), {
 			type: "enter",
 			source: "keyboard",
@@ -203,7 +230,7 @@ describe("scoped SET interaction", () => {
 		expect(direct.state.phase).toBe("idle");
 	});
 
-	it("rejects Group or Playback choices that were not preceded by SET", () => {
+	it("rejects Group or Playback choices that were not preceded by ASSIGN", () => {
 		const idle = initialSetInteractionState(scope);
 		for (const event of [
 			{ type: "choose_group" as const, source: "touch" as const, scope, group },

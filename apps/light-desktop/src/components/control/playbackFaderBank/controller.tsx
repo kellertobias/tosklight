@@ -158,13 +158,14 @@ export function usePlaybackBankController({
 		assignmentPending: state.cueListSetTarget != null,
 		selectionPending: /^SELECT\s*$/i.test(commandLine?.text ?? ""),
 		offPending: /^OFF\s*$/i.test(commandLine?.text ?? ""),
-		dynamicAssignmentPending: /^SET\s+DYNAMIC\s+\d+\s*$/i.test(
+		dynamicAssignmentPending: /^ASSIGN\s+DYNAMIC\s+\d+\s*$/i.test(
 			commandLine?.text ?? "",
 		),
 		groupAssignmentPending:
 			setInteraction?.state?.phase === "group_source_pending" ||
+			setInteraction?.state?.phase === "object_source_pending" ||
 			(!setInteraction &&
-				/^SET\s+GROUP\s+\S+\s*$/i.test(commandLine?.text ?? "")),
+				/^ASSIGN\s+GROUP\s+\S+\s*$/i.test(commandLine?.text ?? "")),
 		setInteractionArmed: setInteraction?.state?.phase === "set_armed",
 		playbackAddressing:
 			pageNumber == null

@@ -5,7 +5,7 @@ import {
 	ModalTitleBar,
 	TextField,
 } from "@tosklight/ui";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import {
 	virtualPlaybackBankStart,
@@ -100,6 +100,29 @@ export function VirtualPlaybacksWindow({ paneId, active = true }: WindowProps) {
 			);
 		},
 	});
+	useEffect(() => {
+		const openRequested = (event: Event) => {
+			const detail = (event as CustomEvent<{
+				addressing: string;
+				page?: number | null;
+				playback?: number | null;
+			}>).detail;
+			if (
+				detail.addressing !== "virtual" ||
+				detail.page == null ||
+				detail.page !== controller.pageNumber ||
+				detail.playback == null
+			)
+				return;
+			controller.openConfiguration(
+				controller.page?.virtual_playbacks?.[String(detail.playback)] ?? null,
+				detail.playback - virtualPlaybackBankStart(detail.page) + 1,
+			);
+		};
+		window.addEventListener("light:playback-configuration", openRequested);
+		return () =>
+			window.removeEventListener("light:playback-configuration", openRequested);
+	}, [controller]);
 	if (!controller.authorityReady || controller.pageNumber == null)
 		return (
 			<section className="virtual-playback-pane" aria-busy="true">

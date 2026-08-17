@@ -67,6 +67,29 @@ export const PlaybackFaderBank = memo<PlaybackFaderBankProps>(
 					openPlaybackConfiguration(controller, slotData.playback, slot);
 			},
 		});
+		useEffect(() => {
+			const openRequested = (event: Event) => {
+				const detail = (event as CustomEvent<{
+					addressing: string;
+					page?: number | null;
+					slot?: number | null;
+				}>).detail;
+				if (detail.addressing === "virtual" || detail.slot == null) return;
+				if (
+					detail.addressing === "explicit_page" &&
+					detail.page !== controller.activePageNumber
+				)
+					return;
+				const slotData = controller.slots.find(
+					(candidate) => candidate.slot === detail.slot,
+				);
+				if (slotData)
+					openPlaybackConfiguration(controller, slotData.playback, detail.slot);
+			};
+			window.addEventListener("light:playback-configuration", openRequested);
+			return () =>
+				window.removeEventListener("light:playback-configuration", openRequested);
+		}, [controller]);
 		// Once the grid has rendered for a ready topology, transient projection refetches
 		// (hardware connect, layout changes) must not tear the slot elements down — only a
 		// topology-scope reset returns the bank to its loading placeholder.

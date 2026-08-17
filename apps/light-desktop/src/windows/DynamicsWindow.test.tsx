@@ -657,16 +657,16 @@ describe("DynamicsWindow", () => {
 		await vi.waitFor(() => expect(resetCommand).toHaveBeenCalled());
 	});
 
-	it("outlines and targets an occupied Dynamic from the bare SET command", () => {
+	it("outlines and targets an occupied Dynamic from the bare ASSIGN command", () => {
 		dynamics = [dynamicObject()];
-		commandText = "SET";
+		commandText = "ASSIGN";
 		renderWindow();
 
 		const tile = screen.getByRole("button", { name: /Pulse/i });
 		expect(tile).toHaveClass("set-target");
-		expect(tile).toHaveTextContent("Set");
+		expect(tile).toHaveTextContent("Assign");
 		fireEvent.click(tile);
-		expect(replaceCommand).toHaveBeenCalledWith("SET DYNAMIC 1");
+		expect(replaceCommand).toHaveBeenCalledWith("ASSIGN DYNAMIC 1");
 	});
 
 	it.each([

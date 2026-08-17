@@ -339,6 +339,15 @@ pub struct GroupConfigurationNotification {
     pub desk_id: String,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize)]
+pub struct PlaybackConfigurationNotification {
+    pub desk_id: String,
+    pub addressing: String,
+    pub page: Option<u8>,
+    pub slot: Option<u8>,
+    pub playback: Option<u16>,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum UpdateTargetFamilyNotification {
@@ -396,6 +405,10 @@ pub enum OperatorNotification {
     GroupConfiguration {
         revision: u64,
         notification: GroupConfigurationNotification,
+    },
+    PlaybackConfiguration {
+        revision: u64,
+        notification: PlaybackConfigurationNotification,
     },
     UpdateWorkflow {
         revision: u64,

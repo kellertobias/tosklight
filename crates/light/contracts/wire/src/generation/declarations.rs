@@ -873,6 +873,7 @@ fn event_payload(config: &Config) -> Vec<String> {
         FileOperationItemNotification::decl(config),
         FileOperationNotification::decl(config),
         GroupConfigurationNotification::decl(config),
+        PlaybackConfigurationNotification::decl(config),
         UpdateTargetFamilyNotification::decl(config),
         UpdateTargetNotification::decl(config),
         UpdateWorkflowNotification::decl(config),

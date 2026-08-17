@@ -78,10 +78,17 @@ export type AssignGroupMaster = ScopedTerminalIntent & {
 	playback: PlaybackInteractionIdentity;
 };
 
+export type AssignObject = ScopedTerminalIntent & {
+	type: "assign_object";
+	sourceCommand: string;
+	playback: PlaybackInteractionIdentity;
+};
+
 export type SetInteractionTerminalIntent =
 	| SelectGroupLive
 	| SelectGroupFrozen
 	| OpenGroupSettings
 	| OpenPlaybackSettings
 	| ChooseGroupMasterSource
-	| AssignGroupMaster;
+	| AssignGroupMaster
+	| AssignObject;

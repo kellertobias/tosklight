@@ -67,11 +67,12 @@ pub use event::{
     FileOperationItemNotification, FileOperationNotification, FixtureLibraryNotification,
     FixtureLibraryNotificationKind, GroupConfigurationNotification, HardwareConnectionNotification,
     HighlightChange, MediaNotification, MediaNotificationKind, NotificationRevision,
-    OperatorNotification, OutputEvent, PlaybackEvent, ProgrammingEvent, ReplaceableEventRateLimit,
-    ScreenNotification, ScreenNotificationKind, SequenceGap, ShowEvent, ShowLibraryNotification,
-    ShowLibraryNotificationKind, SubscriptionDelivery, SubscriptionOptions, SystemEvent,
-    UpdateTargetFamilyNotification, UpdateTargetNotification, UpdateWorkflowNotification,
-    VirtualPlaybackExclusionZonesChange, VisualizerConnectionNotification,
+    OperatorNotification, OutputEvent, PlaybackConfigurationNotification, PlaybackEvent,
+    ProgrammingEvent, ReplaceableEventRateLimit, ScreenNotification, ScreenNotificationKind,
+    SequenceGap, ShowEvent, ShowLibraryNotification, ShowLibraryNotificationKind,
+    SubscriptionDelivery, SubscriptionOptions, SystemEvent, UpdateTargetFamilyNotification,
+    UpdateTargetNotification, UpdateWorkflowNotification, VirtualPlaybackExclusionZonesChange,
+    VisualizerConnectionNotification,
 };
 pub use fixture_position::{
     FixturePositionCommand, FixturePositionExecution, FixturePositionOutcome, FixturePositionPorts,

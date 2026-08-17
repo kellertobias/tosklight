@@ -285,6 +285,17 @@ function routeGroupConfiguration(
 		);
 }
 
+function routePlaybackConfiguration(
+	event: Extract<OperatorNotification, { type: "playback_configuration" }>,
+	session: SessionResponse,
+) {
+	const payload = event.notification;
+	if (payload.desk_id === session.desk.id)
+		window.dispatchEvent(
+			new CustomEvent("light:playback-configuration", { detail: payload }),
+		);
+}
+
 function routeUpdateWorkflow(
 	event: UpdateWorkflowNotification,
 	session: SessionResponse,
@@ -373,6 +384,9 @@ export function routeOperatorEvent(
 			return;
 		case "group_configuration":
 			routeGroupConfiguration(notification, session);
+			return;
+		case "playback_configuration":
+			routePlaybackConfiguration(notification, session);
 			return;
 		case "update_workflow":
 			routeUpdateWorkflow(notification.notification, session);

@@ -618,6 +618,45 @@ describe("server event routing", () => {
 		release();
 	});
 
+	it("routes command-line Playback configuration only to the originating desk", () => {
+		const received: unknown[] = [];
+		const listener = (event: Event) =>
+			received.push((event as CustomEvent).detail);
+		window.addEventListener("light:playback-configuration", listener);
+		try {
+			for (const deskId of [session.desk.id, "other-desk"])
+				routeOperatorEvent(
+					{
+						type: "operator_notification",
+						notification: {
+							type: "playback_configuration",
+							revision: 1,
+							notification: {
+								desk_id: deskId,
+								addressing: "explicit_page",
+								page: 2,
+								slot: 6,
+								playback: null,
+							},
+						},
+					},
+					session,
+					{} as ServerState,
+				);
+			expect(received).toEqual([
+				{
+					desk_id: session.desk.id,
+					addressing: "explicit_page",
+					page: 2,
+					slot: 6,
+					playback: null,
+				},
+			]);
+		} finally {
+			window.removeEventListener("light:playback-configuration", listener);
+		}
+	});
+
 	it("does not broad-reload Playback runtime for typed Programmer events", async () => {
 		const harness = createHarness();
 		harness.route(event("programming_values_changed", {}));

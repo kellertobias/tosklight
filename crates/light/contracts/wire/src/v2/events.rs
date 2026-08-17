@@ -421,6 +421,15 @@ pub struct GroupConfigurationNotification {
     pub desk_id: String,
 }
 
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PlaybackConfigurationNotification {
+    pub desk_id: String,
+    pub addressing: String,
+    pub page: Option<u8>,
+    pub slot: Option<u8>,
+    pub playback: Option<u16>,
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(rename_all = "snake_case")]
 pub enum UpdateTargetFamilyNotification {
@@ -484,6 +493,11 @@ pub enum OperatorNotification {
         #[ts(type = "number")]
         revision: u64,
         notification: GroupConfigurationNotification,
+    },
+    PlaybackConfiguration {
+        #[ts(type = "number")]
+        revision: u64,
+        notification: PlaybackConfigurationNotification,
     },
     UpdateWorkflow {
         #[ts(type = "number")]

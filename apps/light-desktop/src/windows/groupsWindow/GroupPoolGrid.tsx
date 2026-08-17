@@ -142,7 +142,7 @@ function groupSetSourceChooser(
 ) {
 	return async (group: Group) => {
 		if (!setInteraction?.state) {
-			await command.replace(`SET GROUP ${group.id}`, false);
+			await command.replace(`ASSIGN GROUP ${group.id}`, false);
 			dispatch({ type: "SET_PLAYBACK_SET_ARMED", value: false });
 			return;
 		}
@@ -238,9 +238,9 @@ export function GroupPoolGrid({
 			if (
 				group &&
 				state.controlMode === "playbacks" &&
-				(state.playbackSetArmed || /^SET$/i.test(commandText))
+				(state.playbackSetArmed || /^ASSIGN$/i.test(commandText))
 			) {
-				void command.replace(`SET GROUP ${group.id}`, false);
+				void command.replace(`ASSIGN GROUP ${group.id}`, false);
 				dispatch({ type: "SET_PLAYBACK_SET_ARMED", value: false });
 				return;
 			}

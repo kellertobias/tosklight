@@ -209,9 +209,7 @@ function useCuelistPoolActions(props: CuelistPoolProps) {
 	) => {
 		const settings = loadRecordSettings();
 		const cueListId =
-			playback?.target.type === "cue_list"
-				? playback.target.cue_list_id
-				: null;
+			playback?.target.type === "cue_list" ? playback.target.cue_list_id : null;
 		const cueList =
 			cueListId !== null
 				? cueLists.find((item) => item.body.id === cueListId)?.body
@@ -269,6 +267,16 @@ function useCuelistPoolActions(props: CuelistPoolProps) {
 			record(number, playback, "add");
 			return;
 		}
+		if (/^ASSIGN$/i.test(command.read().text.trim())) {
+			if (!playback) {
+				props.onMessage(
+					`Cuelist ${number} is empty · record it before assigning it to a playback.`,
+				);
+				return;
+			}
+			void command.replace(`ASSIGN CUELIST ${number}`);
+			return;
+		}
 		if (state.cueListSetArmed) {
 			selectSetSource(number, playback);
 			return;
@@ -279,6 +287,7 @@ function useCuelistPoolActions(props: CuelistPoolProps) {
 	};
 	return {
 		state,
+		assignArmed: /^ASSIGN$/i.test(command.read().text.trim()),
 		clearHold,
 		startHold,
 		click,
@@ -559,8 +568,8 @@ export function CuelistPool(props: CuelistPoolProps) {
 		openContextSettings,
 		recordChoice,
 		resolveRecordChoice,
-	} =
-		useCuelistPoolActions(props);
+		assignArmed,
+	} = useCuelistPoolActions(props);
 	const [search, setSearch] = useState("");
 	const [preview, setPreview] = useState<{
 		number: number;
@@ -616,7 +625,7 @@ export function CuelistPool(props: CuelistPoolProps) {
 				storeArmed={state.storeArmed}
 				updateArmed={state.updateArmed}
 				setTarget={state.cueListSetTarget}
-				setArmed={state.cueListSetArmed}
+				setArmed={state.cueListSetArmed || assignArmed}
 				startHold={startHold}
 				clearHold={clearHold}
 				click={click}
@@ -644,12 +653,18 @@ export function CuelistPool(props: CuelistPoolProps) {
 								<ModalTitleBar title={`Record Cue ${recordChoice.cueNumber}`} />
 								<p>This Cuelist contains one Cue. Choose how to record it.</p>
 								<div className="command-choice-actions">
-									<Button onClick={() => resolveRecordChoice("add")}>Add Cue</Button>
-									<Button onClick={() => resolveRecordChoice("merge")}>Merge Cue</Button>
+									<Button onClick={() => resolveRecordChoice("add")}>
+										Add Cue
+									</Button>
+									<Button onClick={() => resolveRecordChoice("merge")}>
+										Merge Cue
+									</Button>
 									<Button onClick={() => resolveRecordChoice("overwrite")}>
 										Overwrite Cue
 									</Button>
-									<Button onClick={() => resolveRecordChoice(null)}>Cancel</Button>
+									<Button onClick={() => resolveRecordChoice(null)}>
+										Cancel
+									</Button>
 								</div>
 							</section>
 						</div>

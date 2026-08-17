@@ -104,12 +104,7 @@ export function DynamicsWindow({
 			attribute.normalized_min != null &&
 			attribute.normalized_max != null,
 	);
-	const { runtime } = useDynamicsRuntime(
-		active,
-		showId,
-		api,
-		setError,
-	);
+	const { runtime } = useDynamicsRuntime(active, showId, api, setError);
 	const run = useBusyOperation(setBusy, setError);
 	const { create, mutate } = useDynamicsMutations({
 		showId,
@@ -173,7 +168,11 @@ export function DynamicsWindow({
 			onToggle={(dynamic) => {
 				const current = command.read();
 				void command.execute(
-					dynamicPoolCommand(current.text, current.pristine, dynamic.body.pool_number),
+					dynamicPoolCommand(
+						current.text,
+						current.pristine,
+						dynamic.body.pool_number,
+					),
 				);
 			}}
 			onCreate={create}
@@ -199,14 +198,15 @@ export function DynamicsWindow({
 				})
 			}
 			onSet={(poolNumber) => {
-				void command.replace(`SET DYNAMIC ${poolNumber}`);
+				void command.replace(`ASSIGN DYNAMIC ${poolNumber}`);
 				dispatch({ type: "SET_PLAYBACK_SET_ARMED", value: false });
 			}}
 			shiftArmed={appState.shiftArmed}
 			updateArmed={appState.updateArmed}
 			storeArmed={appState.storeArmed}
 			setArmed={
-				appState.playbackSetArmed || /^SET$/i.test(command.read().text.trim())
+				appState.playbackSetArmed ||
+				/^ASSIGN$/i.test(command.read().text.trim())
 			}
 			onClearShift={() => dispatch({ type: "SET_SHIFT_ARMED", value: false })}
 		/>
@@ -643,6 +643,7 @@ function DynamicPoolTile({
 				iconColor: dynamic?.body.color ?? "#4edcff",
 				color: dynamic?.body.color ?? "#4edcff",
 				kind: "generic",
+				workflow: actions.setArmed ? "Assign" : undefined,
 				states: [
 					...(!dynamic ? (["empty"] as const) : []),
 					...(dynamic && actions.setArmed ? (["set-target"] as const) : []),

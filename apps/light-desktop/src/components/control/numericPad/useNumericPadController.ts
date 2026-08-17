@@ -22,8 +22,8 @@ import {
 import { openUpdateSettings } from "../updateWorkflow";
 import {
 	applyGestureCommand,
-	resolveCommandKeyGesture,
 	type CommandKeyGestureIntent,
+	resolveCommandKeyGesture,
 } from "./commandKeyGesture";
 
 export function useNumericPadController() {
@@ -43,7 +43,10 @@ export function useNumericPadController() {
 	const hasSelection = command.selected.length > 0;
 	const deskLock = useDeskLock();
 	const deskLockActions = useDeskLockActions();
-	const gesture = useRef<{ key: SoftwareKey | null; at: number }>({ key: null, at: 0 });
+	const gesture = useRef<{ key: SoftwareKey | null; at: number }>({
+		key: null,
+		at: 0,
+	});
 	const hasProgrammerValues = values.ready && values.valueCount > 0;
 	const context = {
 		programmerActions,
@@ -142,7 +145,9 @@ function pressKey(
 	const { state, dispatch, command, programmerActions } = context;
 	const currentCommand = command.read();
 	const now = performance.now();
-	const repeated = context.gesture.current.key === key && now - context.gesture.current.at <= 450;
+	const repeated =
+		context.gesture.current.key === key &&
+		now - context.gesture.current.at <= 450;
 	context.gesture.current = { key, at: now };
 	if (key === "SHIFT") {
 		dispatch({ type: "SET_SHIFT_ARMED", value: !state.shiftArmed });
@@ -176,6 +181,10 @@ function handleShiftedKey(
 	repeated: boolean,
 ) {
 	const { command } = context;
+	if (key === "SET" && context.setInteraction) {
+		void context.setInteraction.arm("touch");
+		return true;
+	}
 	if (/^\s*(?:FREEZE|UNFREEZE)\b/i.test(text) && /^[1-4]$/.test(key)) {
 		selectFixtureFreezeFamily(command, key as "1" | "2" | "3" | "4");
 		return true;
@@ -257,9 +266,7 @@ function applyGestureIntent(
 	return true;
 }
 
-function advanceFixtureFreezeCommand(
-	command: NumericPadContext["command"],
-) {
+function advanceFixtureFreezeCommand(command: NumericPadContext["command"]) {
 	const current = command.read().text.trim();
 	const next = /^FREEZE\b/i.test(current)
 		? current.replace(/^FREEZE\b/i, "UNFREEZE")

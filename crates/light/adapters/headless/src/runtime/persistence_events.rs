@@ -339,6 +339,9 @@ fn typed_capability_event(
         "group_configuration_requested" => {
             EventDraft::system_event(operator_group_configuration(revision, payload)?)
         }
+        "playback_configuration_requested" => {
+            EventDraft::system_event(operator_playback_configuration(revision, payload)?)
+        }
         "update_armed"
         | "update_target_requested"
         | "update_target_rejected"
@@ -412,6 +415,18 @@ fn operator_group_configuration(
 ) -> Option<light_application::SystemEvent> {
     Some(light_application::SystemEvent::Operator(
         light_application::OperatorNotification::GroupConfiguration {
+            revision,
+            notification: decode(payload)?,
+        },
+    ))
+}
+
+fn operator_playback_configuration(
+    revision: u64,
+    payload: &serde_json::Value,
+) -> Option<light_application::SystemEvent> {
+    Some(light_application::SystemEvent::Operator(
+        light_application::OperatorNotification::PlaybackConfiguration {
             revision,
             notification: decode(payload)?,
         },

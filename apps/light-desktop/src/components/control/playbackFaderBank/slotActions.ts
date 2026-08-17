@@ -210,7 +210,7 @@ export function createSlotInterceptors(
 		if (controller.dynamicAssignmentPending && playback) {
 			event.preventDefault();
 			event.stopPropagation();
-			void assignDynamicPlayback(controller, playback);
+			void assignDynamicPlayback(controller, slot);
 			return;
 		}
 		if (!controller.hardware) {

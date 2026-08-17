@@ -179,6 +179,7 @@ export function MacrosWindow({ active = true, compact = false }: WindowProps) {
 		card: { number: macro.body.number, primary: macro.body.name },
 	}));
 	const setClick = /^SET$/i.test(command.read().text.trim());
+	const assignClick = /^ASSIGN$/i.test(command.read().text.trim());
 
 	return editing ? (
 		<MacroEditor
@@ -210,10 +211,14 @@ export function MacrosWindow({ active = true, compact = false }: WindowProps) {
 					byNumber={byNumber}
 					running={running}
 					setClick={setClick}
+					assignClick={assignClick}
 					mutationTarget={mutationTarget}
 					onCreate={(number) => setEditing(newMacro(number))}
 					onCopyTarget={(number) => void copyFromCommand(number)}
 					onOpen={(macro) => void open(macro)}
+					onAssign={(macro) =>
+						void command.replace(`ASSIGN MACRO ${macro.body.number}`)
+					}
 					onRun={(macro) => void run(macro)}
 				/>
 			</WindowScrollArea>
@@ -227,10 +232,12 @@ function MacroPool({
 	byNumber,
 	running,
 	setClick,
+	assignClick,
 	mutationTarget,
 	onCreate,
 	onCopyTarget,
 	onOpen,
+	onAssign,
 	onRun,
 }: {
 	macros: MacroObject[];
@@ -238,10 +245,12 @@ function MacroPool({
 	byNumber: Map<number, MacroObject>;
 	running: Set<string>;
 	setClick: boolean;
+	assignClick: boolean;
 	mutationTarget: ReturnType<typeof poolMutationTarget>;
 	onCreate(number: number): void;
 	onCopyTarget(number: number): void;
 	onOpen(macro: MacroObject): void;
+	onAssign(macro: MacroObject): void;
 	onRun(macro: MacroObject): void;
 }) {
 	return (
@@ -280,6 +289,10 @@ function MacroPool({
 						onClick={() => {
 							if (mutationTarget?.operation === "copy") {
 								onCopyTarget(number);
+								return;
+							}
+							if (assignClick && macro) {
+								onAssign(macro);
 								return;
 							}
 							const outcome = gesture(false);

@@ -30,6 +30,7 @@ import {
 	type TimecodeTransportAction,
 	type TimecodeTransportSnapshot,
 } from "../api/client/timecodes";
+import { useCommandLineSurface } from "../components/control/commandLine/useCommandLineSurface";
 import { RootConfinedFilePickerButton } from "../components/files/RootConfinedFilePickerButton";
 import {
 	consumeObjectEditorRequest,
@@ -62,6 +63,10 @@ export function TimecodeRuntimeWindow({
 	compact = false,
 }: WindowProps) {
 	const showId = useActiveShowId();
+	const command = useCommandLineSurface({
+		enabled: active,
+		observeCommand: true,
+	});
 	const cueLists = useCueLists(active);
 	const patchedFixtures = usePatchedFixturesView(active);
 	const audioPlayers = useMemo<TimecodeAudioPlayerOption[]>(
@@ -242,7 +247,11 @@ export function TimecodeRuntimeWindow({
 									],
 								}}
 								onClick={() => {
-									if (item) void start(item);
+									const commandText = command.read().text.trim();
+									if (item && /^ASSIGN$/i.test(commandText))
+										void command.replace(`ASSIGN TIMECODE ${number}`);
+									else if (item && /^SET$/i.test(commandText)) setEditing(item);
+									else if (item) void start(item);
 									else setEditing(newTimecode(number));
 								}}
 								onContextMenu={(event) => {

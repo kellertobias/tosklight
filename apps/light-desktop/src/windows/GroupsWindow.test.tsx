@@ -450,14 +450,14 @@ describe("GroupsWindow action routing", () => {
 		).toBeNull();
 	});
 
-	it("routes SET plus a group tile into playback assignment in Playback mode", async () => {
+	it("routes ASSIGN plus a group tile into playback assignment in Playback mode", async () => {
 		mocks.state.controlMode = "playbacks";
 		mocks.state.playbackSetArmed = true;
 		render(<GroupsWindow />);
 		fireEvent.click(buttonForText("Stored Empty"));
 
 		await waitFor(() =>
-			expect(mocks.replaceCommand).toHaveBeenCalledWith("SET GROUP 4", false),
+			expect(mocks.replaceCommand).toHaveBeenCalledWith("ASSIGN GROUP 4", false),
 		);
 		expect(mocks.dispatch).toHaveBeenCalledWith({
 			type: "SET_PLAYBACK_SET_ARMED",

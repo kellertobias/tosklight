@@ -13,6 +13,11 @@ export type SetInteractionState =
 			phase: "group_source_pending";
 			scope: ControlSurfaceInteractionScope;
 			group: GroupInteractionIdentity;
+	  }
+	| {
+			phase: "object_source_pending";
+			scope: ControlSurfaceInteractionScope;
+			sourceCommand: string;
 	  };
 
 interface ScopedEvent {
@@ -29,6 +34,7 @@ export type SetInteractionEvent =
 			type: "choose_group";
 			group: GroupInteractionIdentity;
 	  })
+	| (SourcedEvent & { type: "choose_object"; sourceCommand: string })
 	| (SourcedEvent & {
 			type: "choose_playback";
 			playback: PlaybackInteractionIdentity;
@@ -54,7 +60,7 @@ export function initialSetInteractionState(
 }
 
 /**
- * Pure desk/show/surface-scoped SET state machine. It carries only explicit object
+ * Pure desk/show/surface-scoped ASSIGN state machine. It carries only explicit object
  * identities and cannot inspect Programmer selection or any incidental UI state.
  */
 export function transitionSetInteraction(
@@ -101,6 +107,15 @@ export function transitionSetInteraction(
 		);
 	}
 
+	if (event.type === "choose_object") {
+		if (state.phase !== "set_armed") return invalid(state);
+		return transitioned({
+			phase: "object_source_pending",
+			scope: state.scope,
+			sourceCommand: event.sourceCommand,
+		});
+	}
+
 	if (event.type === "choose_playback") {
 		if (state.phase === "set_armed")
 			return transitioned(idle(state.scope), {
@@ -115,6 +130,14 @@ export function transitionSetInteraction(
 				source: event.source,
 				scope: state.scope,
 				group: state.group,
+				playback: event.playback,
+			});
+		if (state.phase === "object_source_pending")
+			return transitioned(idle(state.scope), {
+				type: "assign_object",
+				source: event.source,
+				scope: state.scope,
+				sourceCommand: state.sourceCommand,
 				playback: event.playback,
 			});
 		return invalid(state);

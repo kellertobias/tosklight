@@ -39,18 +39,21 @@ fn repeated_group_command_freezes_membership_while_live_reference_refreshes() {
             name: "Group 1".into(),
             fixtures: members,
             ..Default::default()
-        }].into(),
+        }]
+        .into(),
         ..Default::default()
     };
     state
-        .output.replace_snapshot(snapshot(vec![first, second]))
+        .output
+        .replace_snapshot(snapshot(vec![first, second]))
         .unwrap();
     assert_eq!(
         execute_programmer_command(&state, &session, "DEGROUP 1").unwrap(),
         2
     );
     state
-        .output.replace_snapshot(snapshot(vec![first, second, third]))
+        .output
+        .replace_snapshot(snapshot(vec![first, second, third]))
         .unwrap();
     assert_eq!(
         state.programming.get(session.id).unwrap().selected,
@@ -71,7 +74,8 @@ fn repeated_group_command_freezes_membership_while_live_reference_refreshes() {
     );
     execute_programmer_command(&state, &session, "GROUP 1").unwrap();
     state
-        .output.replace_snapshot(snapshot(vec![third]))
+        .output
+        .replace_snapshot(snapshot(vec![third]))
         .unwrap();
     assert_eq!(
         state.programming.get(session.id).unwrap().selected,
@@ -157,8 +161,7 @@ fn mixed_selection_sources_dereference_only_the_addressed_term_and_replay_left_t
         }
     );
 
-    std::sync::Arc::make_mut(&mut snapshot.groups)[1].fixtures =
-        vec![fixtures[8], fixtures[4]];
+    std::sync::Arc::make_mut(&mut snapshot.groups)[1].fixtures = vec![fixtures[8], fixtures[4]];
     state.output.replace_snapshot(snapshot).unwrap();
     assert_eq!(
         state.programming.get(session.id).unwrap().selected,
@@ -193,12 +196,14 @@ fn set_group_requests_properties_only_for_the_originating_desk() {
     };
     state.programming.start(session.id, user.id);
     state
-        .output.replace_snapshot(EngineSnapshot {
+        .output
+        .replace_snapshot(EngineSnapshot {
             groups: vec![light_programmer::GroupDefinition {
                 id: "4".into(),
                 name: "Center Spot".into(),
                 ..Default::default()
-            }].into(),
+            }]
+            .into(),
             ..Default::default()
         })
         .unwrap();
@@ -213,11 +218,29 @@ fn set_group_requests_properties_only_for_the_originating_desk() {
     assert_eq!(event.payload["desk_id"], session.desk.id.to_string());
     assert!(execute_programmer_command(&state, &session, "SET GROUP 99").is_err());
     assert!(execute_programmer_command(&state, &session, "SET GROUP 4 EXTRA").is_err());
+
+    assert_eq!(
+        execute_programmer_command(&state, &session, "ASSIGN PBK 6").unwrap(),
+        0
+    );
+    let event = state.events.audit_events().last().cloned().unwrap();
+    assert_eq!(event.kind, "playback_configuration_requested");
+    assert_eq!(event.payload["addressing"], "current_page");
+    assert_eq!(event.payload["slot"], 6);
+    assert_eq!(event.payload["desk_id"], session.desk.id.to_string());
+
+    assert_eq!(
+        execute_programmer_command(&state, &session, "ASSIGN VPBK 1001").unwrap(),
+        0
+    );
+    let event = state.events.audit_events().last().cloned().unwrap();
+    assert_eq!(event.payload["addressing"], "virtual");
+    assert_eq!(event.payload["playback"], 1001);
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
 #[test]
-fn set_group_at_page_slot_assigns_a_group_master() {
+fn assign_group_at_page_slot_assigns_a_group_master_and_set_rejects_assignment() {
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
@@ -266,8 +289,11 @@ fn set_group_at_page_slot_assigns_a_group_master() {
         .replace_snapshot(load_engine_snapshot(&entry).unwrap())
         .unwrap();
 
+    let rejected =
+        execute_programmer_command(&state, &session, "SET GROUP 4 AT 1 . 2").unwrap_err();
+    assert!(rejected.contains("use ASSIGN"));
     assert_eq!(
-        execute_programmer_command(&state, &session, "SET GROUP 4 AT 1 . 2").unwrap(),
+        execute_programmer_command(&state, &session, "ASSIGN GROUP 4 AT PBK 1 . 2").unwrap(),
         1
     );
 
@@ -304,6 +330,155 @@ fn set_group_at_page_slot_assigns_a_group_master() {
         "Group Master assignment must not mutate Group data",
     );
     assert_eq!(page.slots.get(&2), Some(&playback_number));
+
+    assert_eq!(
+        execute_programmer_command(&state, &session, "ASSIGN GROUP 4 AT VPBK 1001").unwrap(),
+        1
+    );
+    let virtual_page = ShowStore::open(&show_path)
+        .unwrap()
+        .objects("playback_page")
+        .unwrap()
+        .into_iter()
+        .find(|object| object.id == "1")
+        .map(|object| serde_json::from_value::<light_playback::PlaybackPage>(object.body).unwrap())
+        .unwrap();
+    assert!(matches!(
+        virtual_page
+            .virtual_playbacks
+            .get(&1001)
+            .map(|playback| &playback.target),
+        Some(light_playback::PlaybackTarget::Group { group_id, .. }) if group_id == "4"
+    ));
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
+fn assign_cuelist_uses_pool_identity_for_physical_and_virtual_targets() {
+    let (state, data_dir) = test_state();
+    let user = state.installation.users().unwrap().remove(0);
+    let session = Session {
+        id: SessionId::new(),
+        user: user.clone(),
+        token: "test".into(),
+        connected: true,
+        desk: test_control_desk(),
+    };
+    state.sessions.insert_session(session.clone());
+    state.programming.start(session.id, user.id);
+    let show_path = data_dir.join("shows/assign-cuelist-command.show");
+    let show_id = initialise_show(&show_path, "Assign Cuelist Command").unwrap();
+    let entry = ShowEntry {
+        id: show_id,
+        name: "Assign Cuelist Command".into(),
+        path: show_path.display().to_string(),
+        revision: 0,
+        updated_at: String::new(),
+        revision_copy: None,
+    };
+    let store = ShowStore::open(&show_path).unwrap();
+    let cue_list = light_playback::CueList {
+        id: light_core::CueListId::new(),
+        name: "Main".into(),
+        priority: 0,
+        mode: light_playback::CueListMode::Sequence,
+        looped: false,
+        chaser_step_millis: 1_000,
+        speed_group: None,
+        intensity_priority_mode: light_playback::IntensityPriorityMode::Htp,
+        wrap_mode: Some(light_playback::WrapMode::Off),
+        restart_mode: light_playback::RestartMode::FirstCue,
+        force_cue_timing: false,
+        disable_cue_timing: false,
+        auto_off_at_zero: false,
+        auto_off_flash_release: false,
+        chaser_xfade_millis: 0,
+        chaser_xfade_percent: Some(0),
+        speed_multiplier: 1.0,
+        cues: vec![light_playback::Cue::new(cue("1"))],
+    };
+    store
+        .put_object(
+            "cue_list",
+            &cue_list.id.0.to_string(),
+            &serde_json::to_value(&cue_list).unwrap(),
+            0,
+        )
+        .unwrap();
+    let target = light_playback::PlaybackTarget::CueList {
+        cue_list_id: cue_list.id,
+    };
+    let source = light_playback::PlaybackDefinition {
+        number: 4,
+        name: "Main".into(),
+        buttons: light_playback::PlaybackDefinition::default_buttons(&target),
+        button_count: 3,
+        fader: light_playback::PlaybackFaderMode::Master,
+        has_fader: true,
+        footprint: light_playback::PlaybackFootprint::Normal,
+        go_activates: true,
+        auto_off: true,
+        xfade_millis: 0,
+        color: "#123456".into(),
+        flash_release: light_playback::FlashReleaseMode::default(),
+        protect_from_swap: false,
+        presentation_icon: None,
+        presentation_image: None,
+        target,
+    };
+    store
+        .put_object("playback", "4", &serde_json::to_value(&source).unwrap(), 0)
+        .unwrap();
+    state.active_show.replace_current(Some(entry.clone()));
+    state
+        .output
+        .replace_snapshot(load_engine_snapshot(&entry).unwrap())
+        .unwrap();
+
+    assert_eq!(
+        execute_programmer_command(&state, &session, "ASSIGN CUELIST 4 AT PBK 2 . 6").unwrap(),
+        1
+    );
+    assert_eq!(
+        execute_programmer_command(&state, &session, "ASSIGN CUELIST 4 AT VPBK 1001").unwrap(),
+        1
+    );
+    let pages = ShowStore::open(&show_path)
+        .unwrap()
+        .objects("playback_page")
+        .unwrap();
+    let physical_page: light_playback::PlaybackPage = serde_json::from_value(
+        pages
+            .iter()
+            .find(|object| object.id == "2")
+            .unwrap()
+            .body
+            .clone(),
+    )
+    .unwrap();
+    let physical_number = physical_page.slots[&6];
+    let playback: light_playback::PlaybackDefinition = serde_json::from_value(
+        ShowStore::open(&show_path)
+            .unwrap()
+            .objects("playback")
+            .unwrap()
+            .into_iter()
+            .find(|object| object.id == physical_number.to_string())
+            .unwrap()
+            .body,
+    )
+    .unwrap();
+    assert_eq!(playback.target, source.target);
+    let virtual_page: light_playback::PlaybackPage = serde_json::from_value(
+        pages
+            .iter()
+            .find(|object| object.id == "1")
+            .unwrap()
+            .body
+            .clone(),
+    )
+    .unwrap();
+    assert_eq!(virtual_page.virtual_playbacks[&1001].target, source.target);
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
@@ -339,11 +514,11 @@ fn record_group_supports_overwrite_merge_subtract_and_empty_source_delete() {
             "3",
             &{
                 let mut group = serde_json::to_value(light_programmer::GroupDefinition {
-                id: "3".into(),
-                name: "Kept name".into(),
-                fixtures: fixtures[..2].to_vec(),
-                ..Default::default()
-            })
+                    id: "3".into(),
+                    name: "Kept name".into(),
+                    fixtures: fixtures[..2].to_vec(),
+                    ..Default::default()
+                })
                 .unwrap();
                 group["master"] = serde_json::json!(0.4);
                 group
@@ -353,7 +528,8 @@ fn record_group_supports_overwrite_merge_subtract_and_empty_source_delete() {
         .unwrap();
     state.active_show.replace_current(Some(entry.clone()));
     state
-        .output.replace_snapshot(load_engine_snapshot(&entry).unwrap())
+        .output
+        .replace_snapshot(load_engine_snapshot(&entry).unwrap())
         .unwrap();
 
     state.programming.select_expression(
@@ -415,7 +591,8 @@ fn record_group_supports_overwrite_merge_subtract_and_empty_source_delete() {
         )
         .unwrap();
     state
-        .output.replace_snapshot(load_engine_snapshot(&entry).unwrap())
+        .output
+        .replace_snapshot(load_engine_snapshot(&entry).unwrap())
         .unwrap();
     state.programming.select_expression(
         session.id,
@@ -503,13 +680,15 @@ fn multi_point_spread_with_more_points_than_selection_is_rejected_without_mutati
     let first = light_core::FixtureId::new();
     let second = light_core::FixtureId::new();
     state
-        .output.replace_snapshot(EngineSnapshot {
+        .output
+        .replace_snapshot(EngineSnapshot {
             groups: vec![light_programmer::GroupDefinition {
                 id: "1".into(),
                 name: "Group 1".into(),
                 fixtures: vec![first, second],
                 ..Default::default()
-            }].into(),
+            }]
+            .into(),
             ..Default::default()
         })
         .unwrap();

@@ -147,10 +147,10 @@ function useCommandGroupRouting({
 	apply: ApplySetEvent;
 }) {
 	useEffect(() => {
-		if (!scope || !groupsReady || state?.phase !== "set_armed") return;
+		if (!scope || state?.phase !== "set_armed") return;
 		const commandText = text?.trim() ?? "";
-		const match = commandText.match(/^SET\s+GROUP\s+(\S+)$/i);
-		if (match) {
+		const match = commandText.match(/^ASSIGN\s+GROUP\s+(\S+)$/i);
+		if (match && groupsReady) {
 			const group = groups.find((candidate) => candidate.id === match[1]);
 			if (group)
 				void chooseGroup(
@@ -159,7 +159,18 @@ function useCommandGroupRouting({
 				);
 			return;
 		}
-		if (commandText && !/^SET(?:\s+GROUP(?:\s+\S*)?)?$/i.test(commandText))
+		if (
+			/^ASSIGN\s+(?:CUELIST|DYNAMIC|MACRO|TIMECODE)\s+\d+$/i.test(commandText)
+		) {
+			apply({
+				type: "choose_object",
+				source: "keyboard",
+				scope,
+				sourceCommand: commandText.toUpperCase(),
+			});
+			return;
+		}
+		if (commandText && !/^ASSIGN(?:\s+GROUP(?:\s+\S*)?)?$/i.test(commandText))
 			apply({ type: "cancel", scope });
 	}, [apply, chooseGroup, groups, groupsReady, scope, state?.phase, text]);
 }
@@ -170,12 +181,14 @@ function useChoosePlayback({
 	apply,
 	writeVisibleState,
 	topology,
+	command,
 }: {
 	scope: ControlSurfaceInteractionScope | null;
 	stateRef: MutableRefObject<SetInteractionState | null>;
 	apply: ApplySetEvent;
 	writeVisibleState: WriteVisibleState;
 	topology: ReturnType<typeof usePlaybackTopologyActions>;
+	command: ReturnType<typeof useProgrammingCommandLineActions>;
 }) {
 	return useCallback(
 		async (
@@ -189,6 +202,13 @@ function useChoosePlayback({
 				source,
 				scope,
 			});
+			if (intent?.type === "assign_object") {
+				const address =
+					intent.playback.addressing === "virtual"
+						? `VPBK ${intent.playback.playbackNumber}`
+						: `PBK ${intent.playback.addressing === "explicit_page" ? `${intent.playback.pageNumber} . ` : ""}${intent.playback.slot}`;
+				await command?.execute(`${intent.sourceCommand} AT ${address}`);
+			}
 			if (intent && stateRef.current) await writeVisibleState(stateRef.current);
 			if (intent?.type === "assign_group_master") {
 				const options = {
@@ -220,7 +240,7 @@ function useChoosePlayback({
 				routeControlSurfaceIntentWithFeedback(intent);
 			return intent;
 		},
-		[apply, scope, stateRef, topology, writeVisibleState],
+		[apply, command, scope, stateRef, topology, writeVisibleState],
 	);
 }
 
@@ -250,12 +270,12 @@ function useEnterSetInteraction({
 				current.phase === "group_source_pending" &&
 				commandText !== "" &&
 				commandText.toUpperCase() !==
-					`SET GROUP ${current.group.objectId}`.toUpperCase()
+					`ASSIGN GROUP ${current.group.objectId}`.toUpperCase()
 			)
 				return false;
 			if (current.phase === "set_armed") {
-				if (commandText.toUpperCase() !== "SET") {
-					const match = commandText.match(/^SET\s+GROUP\s+(\S+)$/i);
+				if (commandText.toUpperCase() !== "ASSIGN") {
+					const match = commandText.match(/^ASSIGN\s+GROUP\s+(\S+)$/i);
 					const group =
 						groupsReady && match
 							? groups.find((candidate) => candidate.id === match[1])
@@ -325,11 +345,15 @@ export function SetInteractionProvider({
 		async (next: SetInteractionState) => {
 			if (!command) return false;
 			if (next.phase === "set_armed") {
-				await command.replace("SET");
+				await command.replace("ASSIGN");
 				return true;
 			}
 			if (next.phase === "group_source_pending") {
-				await command.replace(`SET GROUP ${next.group.objectId}`);
+				await command.replace(`ASSIGN GROUP ${next.group.objectId}`);
+				return true;
+			}
+			if (next.phase === "object_source_pending") {
+				await command.replace(next.sourceCommand);
 				return true;
 			}
 			await command.reset();
@@ -382,6 +406,7 @@ export function SetInteractionProvider({
 		apply,
 		writeVisibleState,
 		topology,
+		command,
 	});
 
 	const enter = useEnterSetInteraction({

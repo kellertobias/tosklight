@@ -3,7 +3,17 @@ use super::*;
 fn show_command(token: &str) -> bool {
     matches!(
         token,
-        "RECORD" | "REC" | "UPDATE" | "DELETE" | "DEL" | "MOVE" | "MOV" | "COPY" | "CPY" | "SET"
+        "RECORD"
+            | "REC"
+            | "UPDATE"
+            | "DELETE"
+            | "DEL"
+            | "MOVE"
+            | "MOV"
+            | "COPY"
+            | "CPY"
+            | "SET"
+            | "ASSIGN"
     )
 }
 

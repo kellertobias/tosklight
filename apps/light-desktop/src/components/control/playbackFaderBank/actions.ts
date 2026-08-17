@@ -95,15 +95,17 @@ export async function offPlayback(
 
 export async function assignDynamicPlayback(
 	controller: PlaybackBankController,
-	playback: PlaybackDefinition,
+	slot: number,
 ) {
 	const command = controller.commandLineActions;
 	if (!command || !controller.dynamicAssignmentPending) return false;
 	const prefix = controller.commandLine?.text.trim();
 	if (!prefix) return false;
-	const outcome = await command.execute(
-		`${prefix} PLAYBACK ${playback.number}`,
-	);
+	const address =
+		controller.playbackAddressing === "explicit_page"
+			? `${controller.activePageNumber} . ${slot}`
+			: String(slot);
+	const outcome = await command.execute(`${prefix} AT PBK ${address}`);
 	return outcome.executed;
 }
 
@@ -119,7 +121,7 @@ export async function assignGroupPlayback(
 	if (!controller.setInteraction) {
 		const match = controller.commandLine?.text
 			.trim()
-			.match(/^SET\s+GROUP\s+(\S+)$/i);
+			.match(/^ASSIGN\s+GROUP\s+(\S+)$/i);
 		if (!match) return false;
 		const groupId = match[1];
 		const fallbackButtons = Math.max(
@@ -229,7 +231,7 @@ export async function activateHardwareCard(
 	event.preventDefault();
 	event.stopPropagation();
 	if (controller.dynamicAssignmentPending) {
-		await assignDynamicPlayback(controller, playback);
+		await assignDynamicPlayback(controller, slot);
 		return;
 	}
 	if (isPlaybackSetClickArmed(controller)) {

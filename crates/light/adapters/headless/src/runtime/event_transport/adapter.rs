@@ -575,6 +575,19 @@ fn wire_operator_notification(
                 desk_id: notification.desk_id.clone(),
             },
         },
+        App::PlaybackConfiguration {
+            revision,
+            notification,
+        } => wire::OperatorNotification::PlaybackConfiguration {
+            revision: *revision,
+            notification: wire::PlaybackConfigurationNotification {
+                desk_id: notification.desk_id.clone(),
+                addressing: notification.addressing.clone(),
+                page: notification.page,
+                slot: notification.slot,
+                playback: notification.playback,
+            },
+        },
         App::UpdateWorkflow {
             revision,
             notification,

@@ -856,27 +856,32 @@ fn assign_virtual_group_master(
         ),
     };
     let desired = page.virtual_playbacks.get(&playback_number).map_or_else(
-        || PlaybackDefinition {
-            number: playback_number,
-            name: group.typed.name.clone(),
-            buttons: PlaybackDefinition::default_buttons(&target),
-            button_count: 1,
-            fader: PlaybackFaderMode::Master,
-            has_fader: false,
-            footprint: light_playback::PlaybackFootprint::Normal,
-            go_activates: true,
-            auto_off: true,
-            xfade_millis: 0,
-            color: group
-                .typed
-                .color
-                .clone()
-                .unwrap_or_else(|| "#20c997".into()),
-            flash_release: FlashReleaseMode::default(),
-            protect_from_swap: false,
-            presentation_icon: group.typed.icon.clone(),
-            presentation_image: None,
-            target: target.clone(),
+        || {
+            let mut buttons = PlaybackDefinition::default_buttons(&target);
+            buttons[1] = light_playback::PlaybackButtonAction::None;
+            buttons[2] = light_playback::PlaybackButtonAction::None;
+            PlaybackDefinition {
+                number: playback_number,
+                name: group.typed.name.clone(),
+                buttons,
+                button_count: 1,
+                fader: PlaybackFaderMode::Master,
+                has_fader: false,
+                footprint: light_playback::PlaybackFootprint::Normal,
+                go_activates: true,
+                auto_off: true,
+                xfade_millis: 0,
+                color: group
+                    .typed
+                    .color
+                    .clone()
+                    .unwrap_or_else(|| "#20c997".into()),
+                flash_release: FlashReleaseMode::default(),
+                protect_from_swap: false,
+                presentation_icon: group.typed.icon.clone(),
+                presentation_image: None,
+                target: target.clone(),
+            }
         },
         |existing| {
             let mut desired = existing.clone();

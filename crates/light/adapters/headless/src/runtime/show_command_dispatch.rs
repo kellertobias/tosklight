@@ -34,6 +34,7 @@ pub(super) fn execute_show_command(
             execute_record_show_command(state, session, parsed.body, timing, &snapshot, context)
         }
         "SET" => execute_set_command(state, session, parsed.body, context),
+        "ASSIGN" => execute_assign_command(state, session, parsed.body, context),
         operation => {
             if operation == "DELETE" && parsed.body.first().is_some_and(|token| token == "GROUP") {
                 delete_group_command(state, parsed.body, context)
